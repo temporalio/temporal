@@ -687,9 +687,10 @@ type StartWorkflowResponse struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	RunId                  string                 `protobuf:"bytes,1,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	RealStartTime          *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=real_start_time,json=realStartTime,proto3" json:"real_start_time,omitempty"`
-	DidLocalRateLimitSleep bool                   `protobuf:"varint,3,opt,name=did_local_rate_limit_sleep,json=didLocalRateLimitSleep,proto3" json:"did_local_rate_limit_sleep,omitempty"`
+	RunId         string                 `protobuf:"bytes,1,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	RealStartTime *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=real_start_time,json=realStartTime,proto3" json:"real_start_time,omitempty"`
+	// Only applicable to the workflow scheduler implementation.
+	DidLocalRateLimitSleep bool `protobuf:"varint,3,opt,name=did_local_rate_limit_sleep,json=didLocalRateLimitSleep,proto3" json:"did_local_rate_limit_sleep,omitempty"`
 }
 
 func (x *StartWorkflowResponse) Reset() {
