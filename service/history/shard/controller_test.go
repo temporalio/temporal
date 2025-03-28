@@ -878,17 +878,16 @@ func (s *controllerSuite) TestShardCounter() {
 }
 
 type readinessMockState struct {
-	ownership   map[int32]bool
-	assertError map[int32]error
-	assertDelay map[int32]time.Duration
+	ownership   sync.Map
+	assertError sync.Map
+	assertDelay sync.Map
 }
 
 func (s *controllerSuite) setupMocksForReadiness() *readinessMockState {
-	state := &readinessMockState{
-		ownership:   map[int32]bool{1: true, 3: true, 5: true},
-		assertError: map[int32]error{},
-		assertDelay: map[int32]time.Duration{},
-	}
+	state := &readinessMockState{}
+	state.ownership.Store(1, true)
+	state.ownership.Store(3, true)
+	state.ownership.Store(5, true)
 
 	s.config.NumberOfShards = 5
 
@@ -896,17 +895,18 @@ func (s *controllerSuite) setupMocksForReadiness() *readinessMockState {
 	s.mockServiceResolver.EXPECT().Lookup(gomock.Any()).DoAndReturn(func(key string) (membership.HostInfo, error) {
 		if i, err := strconv.Atoi(key); err != nil {
 			return nil, err
-		} else if state.ownership[int32(i)] {
+		} else if owned, ok := state.ownership.Load(i); ok && owned.(bool) {
 			return s.hostInfo, nil
 		}
 		return other, nil
 	}).AnyTimes()
 
-	for shardID, owned := range state.ownership {
-		if owned {
-			s.setupMockForReadiness(shardID, state)
+	state.ownership.Range(func(shardID, owned any) bool {
+		if owned.(bool) {
+			s.setupMockForReadiness(int32(shardID.(int)), state)
 		}
-	}
+		return true
+	})
 
 	return state
 }
@@ -944,8 +944,13 @@ func (s *controllerSuite) setupMockForReadiness(shardID int32, state *readinessM
 		ShardID: shardID,
 		RangeID: 6,
 	}).DoAndReturn(func(context.Context, *persistence.AssertShardOwnershipRequest) error {
-		time.Sleep(state.assertDelay[shardID])
-		return state.assertError[shardID]
+		if delay, ok := state.assertDelay.Load(int(shardID)); ok {
+			time.Sleep(delay.(time.Duration))
+		}
+		if err, ok := state.assertError.Load(int(shardID)); ok {
+			return err.(error)
+		}
+		return nil
 	}).MinTimes(1)
 }
 
@@ -970,7 +975,7 @@ func (s *controllerSuite) TestReadiness_Error() {
 	state := s.setupMocksForReadiness()
 
 	// use an error that will not cause controller to re-acquire
-	state.assertError[3] = serviceerror.NewResourceExhausted(0, "")
+	state.assertError.Store(3, serviceerror.NewResourceExhausted(0, ""))
 
 	// acquire
 	s.shardController.acquireShards(context.Background())
@@ -981,7 +986,7 @@ func (s *controllerSuite) TestReadiness_Error() {
 	s.ErrorIs(s.shardController.InitialShardsAcquired(ctx), context.DeadlineExceeded)
 
 	// fix error and try again
-	state.assertError[3] = nil
+	state.assertError.Delete(3)
 	s.shardController.acquireShards(context.Background())
 
 	// now should be ready
@@ -994,7 +999,7 @@ func (s *controllerSuite) TestReadiness_Blocked() {
 	s.config.ShardIOConcurrency = dynamicconfig.GetIntPropertyFn(10) // allow second assert to run while first is blocked
 	state := s.setupMocksForReadiness()
 
-	state.assertDelay[3] = time.Hour
+	state.assertDelay.Store(3, time.Hour)
 
 	// acquire
 	s.shardController.acquireShards(context.Background())
@@ -1005,7 +1010,7 @@ func (s *controllerSuite) TestReadiness_Blocked() {
 	s.ErrorIs(s.shardController.InitialShardsAcquired(ctx), context.DeadlineExceeded)
 
 	// acquire again (e.g. membership changed)
-	state.assertDelay[3] = time.Microsecond
+	state.assertDelay.Delete(3)
 	s.shardController.acquireShards(context.Background())
 
 	// now should be ready
@@ -1017,7 +1022,7 @@ func (s *controllerSuite) TestReadiness_Blocked() {
 func (s *controllerSuite) TestReadiness_MembershipChanged() {
 	state := s.setupMocksForReadiness()
 
-	state.assertDelay[3] = time.Hour
+	state.assertDelay.Store(3, time.Hour)
 
 	// acquire
 	s.shardController.acquireShards(context.Background())
@@ -1028,7 +1033,10 @@ func (s *controllerSuite) TestReadiness_MembershipChanged() {
 	s.ErrorIs(s.shardController.InitialShardsAcquired(ctx), context.DeadlineExceeded)
 
 	// change membership, now we own 2, 4, and 5, we don't care about 3 anymore
-	state.ownership = map[int32]bool{2: true, 4: true, 5: true}
+	state.ownership.Clear()
+	state.ownership.Store(2, true)
+	state.ownership.Store(4, true)
+	state.ownership.Store(5, true)
 	s.setupMockForReadiness(2, state)
 	s.setupMockForReadiness(4, state)
 
