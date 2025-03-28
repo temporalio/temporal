@@ -45,6 +45,7 @@ import (
 type MockTask struct {
 	ctrl     *gomock.Controller
 	recorder *MockTaskMockRecorder
+	isgomock struct{}
 }
 
 // MockTaskMockRecorder is the mock recorder for MockTask.
@@ -204,6 +205,7 @@ func (mr *MockTaskMockRecorder) SetVisibilityTime(timestamp any) *gomock.Call {
 type MockHasVersion struct {
 	ctrl     *gomock.Controller
 	recorder *MockHasVersionMockRecorder
+	isgomock struct{}
 }
 
 // MockHasVersionMockRecorder is the mock recorder for MockHasVersion.
@@ -241,6 +243,7 @@ func (mr *MockHasVersionMockRecorder) GetVersion() *gomock.Call {
 type MockHasStateMachineTaskType struct {
 	ctrl     *gomock.Controller
 	recorder *MockHasStateMachineTaskTypeMockRecorder
+	isgomock struct{}
 }
 
 // MockHasStateMachineTaskTypeMockRecorder is the mock recorder for MockHasStateMachineTaskType.
@@ -278,6 +281,7 @@ func (mr *MockHasStateMachineTaskTypeMockRecorder) StateMachineTaskType() *gomoc
 type MockHasDestination struct {
 	ctrl     *gomock.Controller
 	recorder *MockHasDestinationMockRecorder
+	isgomock struct{}
 }
 
 // MockHasDestinationMockRecorder is the mock recorder for MockHasDestination.

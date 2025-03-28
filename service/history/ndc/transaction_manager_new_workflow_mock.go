@@ -44,6 +44,7 @@ import (
 type MocktransactionMgrForNewWorkflow struct {
 	ctrl     *gomock.Controller
 	recorder *MocktransactionMgrForNewWorkflowMockRecorder
+	isgomock struct{}
 }
 
 // MocktransactionMgrForNewWorkflowMockRecorder is the mock recorder for MocktransactionMgrForNewWorkflow.

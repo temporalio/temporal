@@ -44,6 +44,7 @@ import (
 type MockAuthorizer struct {
 	ctrl     *gomock.Controller
 	recorder *MockAuthorizerMockRecorder
+	isgomock struct{}
 }
 
 // MockAuthorizerMockRecorder is the mock recorder for MockAuthorizer.
@@ -82,6 +83,7 @@ func (mr *MockAuthorizerMockRecorder) Authorize(ctx, caller, target any) *gomock
 type MockhasNamespace struct {
 	ctrl     *gomock.Controller
 	recorder *MockhasNamespaceMockRecorder
+	isgomock struct{}
 }
 
 // MockhasNamespaceMockRecorder is the mock recorder for MockhasNamespace.

@@ -46,6 +46,7 @@ import (
 type MockWorker struct {
 	ctrl     *gomock.Controller
 	recorder *MockWorkerMockRecorder
+	isgomock struct{}
 }
 
 // MockWorkerMockRecorder is the mock recorder for MockWorker.
@@ -66,27 +67,27 @@ func (m *MockWorker) EXPECT() *MockWorkerMockRecorder {
 }
 
 // RegisterActivity mocks base method.
-func (m *MockWorker) RegisterActivity(arg0 any) {
+func (m *MockWorker) RegisterActivity(a any) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "RegisterActivity", arg0)
+	m.ctrl.Call(m, "RegisterActivity", a)
 }
 
 // RegisterActivity indicates an expected call of RegisterActivity.
-func (mr *MockWorkerMockRecorder) RegisterActivity(arg0 any) *gomock.Call {
+func (mr *MockWorkerMockRecorder) RegisterActivity(a any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterActivity", reflect.TypeOf((*MockWorker)(nil).RegisterActivity), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterActivity", reflect.TypeOf((*MockWorker)(nil).RegisterActivity), a)
 }
 
 // RegisterActivityWithOptions mocks base method.
-func (m *MockWorker) RegisterActivityWithOptions(arg0 any, arg1 activity.RegisterOptions) {
+func (m *MockWorker) RegisterActivityWithOptions(a any, options activity.RegisterOptions) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "RegisterActivityWithOptions", arg0, arg1)
+	m.ctrl.Call(m, "RegisterActivityWithOptions", a, options)
 }
 
 // RegisterActivityWithOptions indicates an expected call of RegisterActivityWithOptions.
-func (mr *MockWorkerMockRecorder) RegisterActivityWithOptions(arg0, arg1 any) *gomock.Call {
+func (mr *MockWorkerMockRecorder) RegisterActivityWithOptions(a, options any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterActivityWithOptions", reflect.TypeOf((*MockWorker)(nil).RegisterActivityWithOptions), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterActivityWithOptions", reflect.TypeOf((*MockWorker)(nil).RegisterActivityWithOptions), a, options)
 }
 
 // RegisterNexusService mocks base method.
@@ -102,41 +103,41 @@ func (mr *MockWorkerMockRecorder) RegisterNexusService(arg0 any) *gomock.Call {
 }
 
 // RegisterWorkflow mocks base method.
-func (m *MockWorker) RegisterWorkflow(arg0 any) {
+func (m *MockWorker) RegisterWorkflow(w any) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "RegisterWorkflow", arg0)
+	m.ctrl.Call(m, "RegisterWorkflow", w)
 }
 
 // RegisterWorkflow indicates an expected call of RegisterWorkflow.
-func (mr *MockWorkerMockRecorder) RegisterWorkflow(arg0 any) *gomock.Call {
+func (mr *MockWorkerMockRecorder) RegisterWorkflow(w any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterWorkflow", reflect.TypeOf((*MockWorker)(nil).RegisterWorkflow), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterWorkflow", reflect.TypeOf((*MockWorker)(nil).RegisterWorkflow), w)
 }
 
 // RegisterWorkflowWithOptions mocks base method.
-func (m *MockWorker) RegisterWorkflowWithOptions(arg0 any, arg1 workflow.RegisterOptions) {
+func (m *MockWorker) RegisterWorkflowWithOptions(w any, options workflow.RegisterOptions) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "RegisterWorkflowWithOptions", arg0, arg1)
+	m.ctrl.Call(m, "RegisterWorkflowWithOptions", w, options)
 }
 
 // RegisterWorkflowWithOptions indicates an expected call of RegisterWorkflowWithOptions.
-func (mr *MockWorkerMockRecorder) RegisterWorkflowWithOptions(arg0, arg1 any) *gomock.Call {
+func (mr *MockWorkerMockRecorder) RegisterWorkflowWithOptions(w, options any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterWorkflowWithOptions", reflect.TypeOf((*MockWorker)(nil).RegisterWorkflowWithOptions), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterWorkflowWithOptions", reflect.TypeOf((*MockWorker)(nil).RegisterWorkflowWithOptions), w, options)
 }
 
 // Run mocks base method.
-func (m *MockWorker) Run(arg0 <-chan any) error {
+func (m *MockWorker) Run(interruptCh <-chan any) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Run", arg0)
+	ret := m.ctrl.Call(m, "Run", interruptCh)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Run indicates an expected call of Run.
-func (mr *MockWorkerMockRecorder) Run(arg0 any) *gomock.Call {
+func (mr *MockWorkerMockRecorder) Run(interruptCh any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Run", reflect.TypeOf((*MockWorker)(nil).Run), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Run", reflect.TypeOf((*MockWorker)(nil).Run), interruptCh)
 }
 
 // Start mocks base method.

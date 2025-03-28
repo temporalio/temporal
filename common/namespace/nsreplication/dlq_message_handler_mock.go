@@ -45,6 +45,7 @@ import (
 type MockDLQMessageHandler struct {
 	ctrl     *gomock.Controller
 	recorder *MockDLQMessageHandlerMockRecorder
+	isgomock struct{}
 }
 
 // MockDLQMessageHandlerMockRecorder is the mock recorder for MockDLQMessageHandler.

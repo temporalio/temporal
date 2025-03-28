@@ -48,6 +48,7 @@ import (
 type MockHistoryEventsHandler struct {
 	ctrl     *gomock.Controller
 	recorder *MockHistoryEventsHandlerMockRecorder
+	isgomock struct{}
 }
 
 // MockHistoryEventsHandlerMockRecorder is the mock recorder for MockHistoryEventsHandler.

@@ -48,6 +48,7 @@ import (
 type MockBean struct {
 	ctrl     *gomock.Controller
 	recorder *MockBeanMockRecorder
+	isgomock struct{}
 }
 
 // MockBeanMockRecorder is the mock recorder for MockBean.

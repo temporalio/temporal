@@ -49,6 +49,7 @@ import (
 type MockWorkflowContext struct {
 	ctrl     *gomock.Controller
 	recorder *MockWorkflowContextMockRecorder
+	isgomock struct{}
 }
 
 // MockWorkflowContextMockRecorder is the mock recorder for MockWorkflowContext.

@@ -46,6 +46,7 @@ import (
 type MockBatchableTask struct {
 	ctrl     *gomock.Controller
 	recorder *MockBatchableTaskMockRecorder
+	isgomock struct{}
 }
 
 // MockBatchableTaskMockRecorder is the mock recorder for MockBatchableTask.

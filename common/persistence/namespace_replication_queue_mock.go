@@ -45,6 +45,7 @@ import (
 type MockNamespaceReplicationQueue struct {
 	ctrl     *gomock.Controller
 	recorder *MockNamespaceReplicationQueueMockRecorder
+	isgomock struct{}
 }
 
 // MockNamespaceReplicationQueueMockRecorder is the mock recorder for MockNamespaceReplicationQueue.

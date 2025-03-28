@@ -46,6 +46,7 @@ import (
 type MockOperatorServiceClient struct {
 	ctrl     *gomock.Controller
 	recorder *MockOperatorServiceClientMockRecorder
+	isgomock struct{}
 }
 
 // MockOperatorServiceClientMockRecorder is the mock recorder for MockOperatorServiceClient.
@@ -66,10 +67,10 @@ func (m *MockOperatorServiceClient) EXPECT() *MockOperatorServiceClientMockRecor
 }
 
 // AddOrUpdateRemoteCluster mocks base method.
-func (m *MockOperatorServiceClient) AddOrUpdateRemoteCluster(arg0 context.Context, arg1 *operatorservice.AddOrUpdateRemoteClusterRequest, arg2 ...grpc.CallOption) (*operatorservice.AddOrUpdateRemoteClusterResponse, error) {
+func (m *MockOperatorServiceClient) AddOrUpdateRemoteCluster(ctx context.Context, in *operatorservice.AddOrUpdateRemoteClusterRequest, opts ...grpc.CallOption) (*operatorservice.AddOrUpdateRemoteClusterResponse, error) {
 	m.ctrl.T.Helper()
-	varargs := []any{arg0, arg1}
-	for _, a := range arg2 {
+	varargs := []any{ctx, in}
+	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "AddOrUpdateRemoteCluster", varargs...)
@@ -79,17 +80,17 @@ func (m *MockOperatorServiceClient) AddOrUpdateRemoteCluster(arg0 context.Contex
 }
 
 // AddOrUpdateRemoteCluster indicates an expected call of AddOrUpdateRemoteCluster.
-func (mr *MockOperatorServiceClientMockRecorder) AddOrUpdateRemoteCluster(arg0, arg1 any, arg2 ...any) *gomock.Call {
+func (mr *MockOperatorServiceClientMockRecorder) AddOrUpdateRemoteCluster(ctx, in any, opts ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{arg0, arg1}, arg2...)
+	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddOrUpdateRemoteCluster", reflect.TypeOf((*MockOperatorServiceClient)(nil).AddOrUpdateRemoteCluster), varargs...)
 }
 
 // AddSearchAttributes mocks base method.
-func (m *MockOperatorServiceClient) AddSearchAttributes(arg0 context.Context, arg1 *operatorservice.AddSearchAttributesRequest, arg2 ...grpc.CallOption) (*operatorservice.AddSearchAttributesResponse, error) {
+func (m *MockOperatorServiceClient) AddSearchAttributes(ctx context.Context, in *operatorservice.AddSearchAttributesRequest, opts ...grpc.CallOption) (*operatorservice.AddSearchAttributesResponse, error) {
 	m.ctrl.T.Helper()
-	varargs := []any{arg0, arg1}
-	for _, a := range arg2 {
+	varargs := []any{ctx, in}
+	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "AddSearchAttributes", varargs...)
@@ -99,17 +100,17 @@ func (m *MockOperatorServiceClient) AddSearchAttributes(arg0 context.Context, ar
 }
 
 // AddSearchAttributes indicates an expected call of AddSearchAttributes.
-func (mr *MockOperatorServiceClientMockRecorder) AddSearchAttributes(arg0, arg1 any, arg2 ...any) *gomock.Call {
+func (mr *MockOperatorServiceClientMockRecorder) AddSearchAttributes(ctx, in any, opts ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{arg0, arg1}, arg2...)
+	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddSearchAttributes", reflect.TypeOf((*MockOperatorServiceClient)(nil).AddSearchAttributes), varargs...)
 }
 
 // CreateNexusEndpoint mocks base method.
-func (m *MockOperatorServiceClient) CreateNexusEndpoint(arg0 context.Context, arg1 *operatorservice.CreateNexusEndpointRequest, arg2 ...grpc.CallOption) (*operatorservice.CreateNexusEndpointResponse, error) {
+func (m *MockOperatorServiceClient) CreateNexusEndpoint(ctx context.Context, in *operatorservice.CreateNexusEndpointRequest, opts ...grpc.CallOption) (*operatorservice.CreateNexusEndpointResponse, error) {
 	m.ctrl.T.Helper()
-	varargs := []any{arg0, arg1}
-	for _, a := range arg2 {
+	varargs := []any{ctx, in}
+	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "CreateNexusEndpoint", varargs...)
@@ -119,17 +120,17 @@ func (m *MockOperatorServiceClient) CreateNexusEndpoint(arg0 context.Context, ar
 }
 
 // CreateNexusEndpoint indicates an expected call of CreateNexusEndpoint.
-func (mr *MockOperatorServiceClientMockRecorder) CreateNexusEndpoint(arg0, arg1 any, arg2 ...any) *gomock.Call {
+func (mr *MockOperatorServiceClientMockRecorder) CreateNexusEndpoint(ctx, in any, opts ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{arg0, arg1}, arg2...)
+	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateNexusEndpoint", reflect.TypeOf((*MockOperatorServiceClient)(nil).CreateNexusEndpoint), varargs...)
 }
 
 // DeleteNamespace mocks base method.
-func (m *MockOperatorServiceClient) DeleteNamespace(arg0 context.Context, arg1 *operatorservice.DeleteNamespaceRequest, arg2 ...grpc.CallOption) (*operatorservice.DeleteNamespaceResponse, error) {
+func (m *MockOperatorServiceClient) DeleteNamespace(ctx context.Context, in *operatorservice.DeleteNamespaceRequest, opts ...grpc.CallOption) (*operatorservice.DeleteNamespaceResponse, error) {
 	m.ctrl.T.Helper()
-	varargs := []any{arg0, arg1}
-	for _, a := range arg2 {
+	varargs := []any{ctx, in}
+	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "DeleteNamespace", varargs...)
@@ -139,17 +140,17 @@ func (m *MockOperatorServiceClient) DeleteNamespace(arg0 context.Context, arg1 *
 }
 
 // DeleteNamespace indicates an expected call of DeleteNamespace.
-func (mr *MockOperatorServiceClientMockRecorder) DeleteNamespace(arg0, arg1 any, arg2 ...any) *gomock.Call {
+func (mr *MockOperatorServiceClientMockRecorder) DeleteNamespace(ctx, in any, opts ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{arg0, arg1}, arg2...)
+	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteNamespace", reflect.TypeOf((*MockOperatorServiceClient)(nil).DeleteNamespace), varargs...)
 }
 
 // DeleteNexusEndpoint mocks base method.
-func (m *MockOperatorServiceClient) DeleteNexusEndpoint(arg0 context.Context, arg1 *operatorservice.DeleteNexusEndpointRequest, arg2 ...grpc.CallOption) (*operatorservice.DeleteNexusEndpointResponse, error) {
+func (m *MockOperatorServiceClient) DeleteNexusEndpoint(ctx context.Context, in *operatorservice.DeleteNexusEndpointRequest, opts ...grpc.CallOption) (*operatorservice.DeleteNexusEndpointResponse, error) {
 	m.ctrl.T.Helper()
-	varargs := []any{arg0, arg1}
-	for _, a := range arg2 {
+	varargs := []any{ctx, in}
+	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "DeleteNexusEndpoint", varargs...)
@@ -159,17 +160,17 @@ func (m *MockOperatorServiceClient) DeleteNexusEndpoint(arg0 context.Context, ar
 }
 
 // DeleteNexusEndpoint indicates an expected call of DeleteNexusEndpoint.
-func (mr *MockOperatorServiceClientMockRecorder) DeleteNexusEndpoint(arg0, arg1 any, arg2 ...any) *gomock.Call {
+func (mr *MockOperatorServiceClientMockRecorder) DeleteNexusEndpoint(ctx, in any, opts ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{arg0, arg1}, arg2...)
+	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteNexusEndpoint", reflect.TypeOf((*MockOperatorServiceClient)(nil).DeleteNexusEndpoint), varargs...)
 }
 
 // GetNexusEndpoint mocks base method.
-func (m *MockOperatorServiceClient) GetNexusEndpoint(arg0 context.Context, arg1 *operatorservice.GetNexusEndpointRequest, arg2 ...grpc.CallOption) (*operatorservice.GetNexusEndpointResponse, error) {
+func (m *MockOperatorServiceClient) GetNexusEndpoint(ctx context.Context, in *operatorservice.GetNexusEndpointRequest, opts ...grpc.CallOption) (*operatorservice.GetNexusEndpointResponse, error) {
 	m.ctrl.T.Helper()
-	varargs := []any{arg0, arg1}
-	for _, a := range arg2 {
+	varargs := []any{ctx, in}
+	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "GetNexusEndpoint", varargs...)
@@ -179,17 +180,17 @@ func (m *MockOperatorServiceClient) GetNexusEndpoint(arg0 context.Context, arg1 
 }
 
 // GetNexusEndpoint indicates an expected call of GetNexusEndpoint.
-func (mr *MockOperatorServiceClientMockRecorder) GetNexusEndpoint(arg0, arg1 any, arg2 ...any) *gomock.Call {
+func (mr *MockOperatorServiceClientMockRecorder) GetNexusEndpoint(ctx, in any, opts ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{arg0, arg1}, arg2...)
+	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNexusEndpoint", reflect.TypeOf((*MockOperatorServiceClient)(nil).GetNexusEndpoint), varargs...)
 }
 
 // ListClusters mocks base method.
-func (m *MockOperatorServiceClient) ListClusters(arg0 context.Context, arg1 *operatorservice.ListClustersRequest, arg2 ...grpc.CallOption) (*operatorservice.ListClustersResponse, error) {
+func (m *MockOperatorServiceClient) ListClusters(ctx context.Context, in *operatorservice.ListClustersRequest, opts ...grpc.CallOption) (*operatorservice.ListClustersResponse, error) {
 	m.ctrl.T.Helper()
-	varargs := []any{arg0, arg1}
-	for _, a := range arg2 {
+	varargs := []any{ctx, in}
+	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "ListClusters", varargs...)
@@ -199,17 +200,17 @@ func (m *MockOperatorServiceClient) ListClusters(arg0 context.Context, arg1 *ope
 }
 
 // ListClusters indicates an expected call of ListClusters.
-func (mr *MockOperatorServiceClientMockRecorder) ListClusters(arg0, arg1 any, arg2 ...any) *gomock.Call {
+func (mr *MockOperatorServiceClientMockRecorder) ListClusters(ctx, in any, opts ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{arg0, arg1}, arg2...)
+	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListClusters", reflect.TypeOf((*MockOperatorServiceClient)(nil).ListClusters), varargs...)
 }
 
 // ListNexusEndpoints mocks base method.
-func (m *MockOperatorServiceClient) ListNexusEndpoints(arg0 context.Context, arg1 *operatorservice.ListNexusEndpointsRequest, arg2 ...grpc.CallOption) (*operatorservice.ListNexusEndpointsResponse, error) {
+func (m *MockOperatorServiceClient) ListNexusEndpoints(ctx context.Context, in *operatorservice.ListNexusEndpointsRequest, opts ...grpc.CallOption) (*operatorservice.ListNexusEndpointsResponse, error) {
 	m.ctrl.T.Helper()
-	varargs := []any{arg0, arg1}
-	for _, a := range arg2 {
+	varargs := []any{ctx, in}
+	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "ListNexusEndpoints", varargs...)
@@ -219,17 +220,17 @@ func (m *MockOperatorServiceClient) ListNexusEndpoints(arg0 context.Context, arg
 }
 
 // ListNexusEndpoints indicates an expected call of ListNexusEndpoints.
-func (mr *MockOperatorServiceClientMockRecorder) ListNexusEndpoints(arg0, arg1 any, arg2 ...any) *gomock.Call {
+func (mr *MockOperatorServiceClientMockRecorder) ListNexusEndpoints(ctx, in any, opts ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{arg0, arg1}, arg2...)
+	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListNexusEndpoints", reflect.TypeOf((*MockOperatorServiceClient)(nil).ListNexusEndpoints), varargs...)
 }
 
 // ListSearchAttributes mocks base method.
-func (m *MockOperatorServiceClient) ListSearchAttributes(arg0 context.Context, arg1 *operatorservice.ListSearchAttributesRequest, arg2 ...grpc.CallOption) (*operatorservice.ListSearchAttributesResponse, error) {
+func (m *MockOperatorServiceClient) ListSearchAttributes(ctx context.Context, in *operatorservice.ListSearchAttributesRequest, opts ...grpc.CallOption) (*operatorservice.ListSearchAttributesResponse, error) {
 	m.ctrl.T.Helper()
-	varargs := []any{arg0, arg1}
-	for _, a := range arg2 {
+	varargs := []any{ctx, in}
+	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "ListSearchAttributes", varargs...)
@@ -239,17 +240,17 @@ func (m *MockOperatorServiceClient) ListSearchAttributes(arg0 context.Context, a
 }
 
 // ListSearchAttributes indicates an expected call of ListSearchAttributes.
-func (mr *MockOperatorServiceClientMockRecorder) ListSearchAttributes(arg0, arg1 any, arg2 ...any) *gomock.Call {
+func (mr *MockOperatorServiceClientMockRecorder) ListSearchAttributes(ctx, in any, opts ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{arg0, arg1}, arg2...)
+	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListSearchAttributes", reflect.TypeOf((*MockOperatorServiceClient)(nil).ListSearchAttributes), varargs...)
 }
 
 // RemoveRemoteCluster mocks base method.
-func (m *MockOperatorServiceClient) RemoveRemoteCluster(arg0 context.Context, arg1 *operatorservice.RemoveRemoteClusterRequest, arg2 ...grpc.CallOption) (*operatorservice.RemoveRemoteClusterResponse, error) {
+func (m *MockOperatorServiceClient) RemoveRemoteCluster(ctx context.Context, in *operatorservice.RemoveRemoteClusterRequest, opts ...grpc.CallOption) (*operatorservice.RemoveRemoteClusterResponse, error) {
 	m.ctrl.T.Helper()
-	varargs := []any{arg0, arg1}
-	for _, a := range arg2 {
+	varargs := []any{ctx, in}
+	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "RemoveRemoteCluster", varargs...)
@@ -259,17 +260,17 @@ func (m *MockOperatorServiceClient) RemoveRemoteCluster(arg0 context.Context, ar
 }
 
 // RemoveRemoteCluster indicates an expected call of RemoveRemoteCluster.
-func (mr *MockOperatorServiceClientMockRecorder) RemoveRemoteCluster(arg0, arg1 any, arg2 ...any) *gomock.Call {
+func (mr *MockOperatorServiceClientMockRecorder) RemoveRemoteCluster(ctx, in any, opts ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{arg0, arg1}, arg2...)
+	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveRemoteCluster", reflect.TypeOf((*MockOperatorServiceClient)(nil).RemoveRemoteCluster), varargs...)
 }
 
 // RemoveSearchAttributes mocks base method.
-func (m *MockOperatorServiceClient) RemoveSearchAttributes(arg0 context.Context, arg1 *operatorservice.RemoveSearchAttributesRequest, arg2 ...grpc.CallOption) (*operatorservice.RemoveSearchAttributesResponse, error) {
+func (m *MockOperatorServiceClient) RemoveSearchAttributes(ctx context.Context, in *operatorservice.RemoveSearchAttributesRequest, opts ...grpc.CallOption) (*operatorservice.RemoveSearchAttributesResponse, error) {
 	m.ctrl.T.Helper()
-	varargs := []any{arg0, arg1}
-	for _, a := range arg2 {
+	varargs := []any{ctx, in}
+	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "RemoveSearchAttributes", varargs...)
@@ -279,17 +280,17 @@ func (m *MockOperatorServiceClient) RemoveSearchAttributes(arg0 context.Context,
 }
 
 // RemoveSearchAttributes indicates an expected call of RemoveSearchAttributes.
-func (mr *MockOperatorServiceClientMockRecorder) RemoveSearchAttributes(arg0, arg1 any, arg2 ...any) *gomock.Call {
+func (mr *MockOperatorServiceClientMockRecorder) RemoveSearchAttributes(ctx, in any, opts ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{arg0, arg1}, arg2...)
+	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveSearchAttributes", reflect.TypeOf((*MockOperatorServiceClient)(nil).RemoveSearchAttributes), varargs...)
 }
 
 // UpdateNexusEndpoint mocks base method.
-func (m *MockOperatorServiceClient) UpdateNexusEndpoint(arg0 context.Context, arg1 *operatorservice.UpdateNexusEndpointRequest, arg2 ...grpc.CallOption) (*operatorservice.UpdateNexusEndpointResponse, error) {
+func (m *MockOperatorServiceClient) UpdateNexusEndpoint(ctx context.Context, in *operatorservice.UpdateNexusEndpointRequest, opts ...grpc.CallOption) (*operatorservice.UpdateNexusEndpointResponse, error) {
 	m.ctrl.T.Helper()
-	varargs := []any{arg0, arg1}
-	for _, a := range arg2 {
+	varargs := []any{ctx, in}
+	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "UpdateNexusEndpoint", varargs...)
@@ -299,8 +300,8 @@ func (m *MockOperatorServiceClient) UpdateNexusEndpoint(arg0 context.Context, ar
 }
 
 // UpdateNexusEndpoint indicates an expected call of UpdateNexusEndpoint.
-func (mr *MockOperatorServiceClientMockRecorder) UpdateNexusEndpoint(arg0, arg1 any, arg2 ...any) *gomock.Call {
+func (mr *MockOperatorServiceClientMockRecorder) UpdateNexusEndpoint(ctx, in any, opts ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{arg0, arg1}, arg2...)
+	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateNexusEndpoint", reflect.TypeOf((*MockOperatorServiceClient)(nil).UpdateNexusEndpoint), varargs...)
 }

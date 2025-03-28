@@ -44,6 +44,7 @@ import (
 type MockTaskHandler[C any, T any] struct {
 	ctrl     *gomock.Controller
 	recorder *MockTaskHandlerMockRecorder[C, T]
+	isgomock struct{}
 }
 
 // MockTaskHandlerMockRecorder is the mock recorder for MockTaskHandler.

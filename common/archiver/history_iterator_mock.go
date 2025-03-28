@@ -45,6 +45,7 @@ import (
 type MockHistoryIterator struct {
 	ctrl     *gomock.Controller
 	recorder *MockHistoryIteratorMockRecorder
+	isgomock struct{}
 }
 
 // MockHistoryIteratorMockRecorder is the mock recorder for MockHistoryIterator.
@@ -112,6 +113,7 @@ func (mr *MockHistoryIteratorMockRecorder) Next(arg0 any) *gomock.Call {
 type MockSizeEstimator struct {
 	ctrl     *gomock.Controller
 	recorder *MockSizeEstimatorMockRecorder
+	isgomock struct{}
 }
 
 // MockSizeEstimatorMockRecorder is the mock recorder for MockSizeEstimator.
