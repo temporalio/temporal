@@ -45,7 +45,6 @@ import (
 type MockWorkerComponent struct {
 	ctrl     *gomock.Controller
 	recorder *MockWorkerComponentMockRecorder
-	isgomock struct{}
 }
 
 // MockWorkerComponentMockRecorder is the mock recorder for MockWorkerComponent.
@@ -121,7 +120,6 @@ func (mr *MockWorkerComponentMockRecorder) RegisterWorkflow(registry any) *gomoc
 type MockPerNSWorkerComponent struct {
 	ctrl     *gomock.Controller
 	recorder *MockPerNSWorkerComponentMockRecorder
-	isgomock struct{}
 }
 
 // MockPerNSWorkerComponentMockRecorder is the mock recorder for MockPerNSWorkerComponent.

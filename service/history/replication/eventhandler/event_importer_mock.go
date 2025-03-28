@@ -45,7 +45,6 @@ import (
 type MockEventImporter struct {
 	ctrl     *gomock.Controller
 	recorder *MockEventImporterMockRecorder
-	isgomock struct{}
 }
 
 // MockEventImporterMockRecorder is the mock recorder for MockEventImporter.

@@ -45,7 +45,6 @@ import (
 type MockSourceTaskConverter struct {
 	ctrl     *gomock.Controller
 	recorder *MockSourceTaskConverterMockRecorder
-	isgomock struct{}
 }
 
 // MockSourceTaskConverterMockRecorder is the mock recorder for MockSourceTaskConverter.

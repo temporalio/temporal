@@ -46,7 +46,6 @@ import (
 type MockS3API struct {
 	ctrl     *gomock.Controller
 	recorder *MockS3APIMockRecorder
-	isgomock struct{}
 }
 
 // MockS3APIMockRecorder is the mock recorder for MockS3API.

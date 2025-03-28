@@ -46,7 +46,6 @@ import (
 type MockClock struct {
 	ctrl     *gomock.Controller
 	recorder *MockClockMockRecorder
-	isgomock struct{}
 }
 
 // MockClockMockRecorder is the mock recorder for MockClock.
@@ -84,7 +83,6 @@ func (mr *MockClockMockRecorder) Now() *gomock.Call {
 type MockPersistence struct {
 	ctrl     *gomock.Controller
 	recorder *MockPersistenceMockRecorder
-	isgomock struct{}
 }
 
 // MockPersistenceMockRecorder is the mock recorder for MockPersistence.

@@ -44,7 +44,6 @@ import (
 type MockTaskFetcherFactory struct {
 	ctrl     *gomock.Controller
 	recorder *MockTaskFetcherFactoryMockRecorder
-	isgomock struct{}
 }
 
 // MockTaskFetcherFactoryMockRecorder is the mock recorder for MockTaskFetcherFactory.
@@ -106,7 +105,6 @@ func (mr *MockTaskFetcherFactoryMockRecorder) Stop() *gomock.Call {
 type MocktaskFetcher struct {
 	ctrl     *gomock.Controller
 	recorder *MocktaskFetcherMockRecorder
-	isgomock struct{}
 }
 
 // MocktaskFetcherMockRecorder is the mock recorder for MocktaskFetcher.

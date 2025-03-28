@@ -46,7 +46,6 @@ import (
 type MockClient struct {
 	ctrl     *gomock.Controller
 	recorder *MockClientMockRecorder
-	isgomock struct{}
 }
 
 // MockClientMockRecorder is the mock recorder for MockClient.
@@ -338,7 +337,6 @@ func (mr *MockClientMockRecorder) WaitForYellowStatus(ctx, index any) *gomock.Ca
 type MockCLIClient struct {
 	ctrl     *gomock.Controller
 	recorder *MockCLIClientMockRecorder
-	isgomock struct{}
 }
 
 // MockCLIClientMockRecorder is the mock recorder for MockCLIClient.
@@ -644,7 +642,6 @@ func (mr *MockCLIClientMockRecorder) WaitForYellowStatus(ctx, index any) *gomock
 type MockIntegrationTestsClient struct {
 	ctrl     *gomock.Controller
 	recorder *MockIntegrationTestsClientMockRecorder
-	isgomock struct{}
 }
 
 // MockIntegrationTestsClientMockRecorder is the mock recorder for MockIntegrationTestsClient.

@@ -44,7 +44,6 @@ import (
 type MockEngineFactory struct {
 	ctrl     *gomock.Controller
 	recorder *MockEngineFactoryMockRecorder
-	isgomock struct{}
 }
 
 // MockEngineFactoryMockRecorder is the mock recorder for MockEngineFactory.

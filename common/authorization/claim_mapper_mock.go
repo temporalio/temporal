@@ -43,7 +43,6 @@ import (
 type MockClaimMapper struct {
 	ctrl     *gomock.Controller
 	recorder *MockClaimMapperMockRecorder
-	isgomock struct{}
 }
 
 // MockClaimMapperMockRecorder is the mock recorder for MockClaimMapper.
@@ -82,7 +81,6 @@ func (mr *MockClaimMapperMockRecorder) GetClaims(authInfo any) *gomock.Call {
 type MockClaimMapperWithAuthInfoRequired struct {
 	ctrl     *gomock.Controller
 	recorder *MockClaimMapperWithAuthInfoRequiredMockRecorder
-	isgomock struct{}
 }
 
 // MockClaimMapperWithAuthInfoRequiredMockRecorder is the mock recorder for MockClaimMapperWithAuthInfoRequired.

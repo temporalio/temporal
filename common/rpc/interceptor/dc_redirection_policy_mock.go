@@ -45,7 +45,6 @@ import (
 type MockDCRedirectionPolicy struct {
 	ctrl     *gomock.Controller
 	recorder *MockDCRedirectionPolicyMockRecorder
-	isgomock struct{}
 }
 
 // MockDCRedirectionPolicyMockRecorder is the mock recorder for MockDCRedirectionPolicy.

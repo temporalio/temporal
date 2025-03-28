@@ -44,7 +44,6 @@ import (
 type MockRescheduler struct {
 	ctrl     *gomock.Controller
 	recorder *MockReschedulerMockRecorder
-	isgomock struct{}
 }
 
 // MockReschedulerMockRecorder is the mock recorder for MockRescheduler.

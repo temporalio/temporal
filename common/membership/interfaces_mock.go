@@ -46,7 +46,6 @@ import (
 type MockMonitor struct {
 	ctrl     *gomock.Controller
 	recorder *MockMonitorMockRecorder
-	isgomock struct{}
 }
 
 // MockMonitorMockRecorder is the mock recorder for MockMonitor.
@@ -183,7 +182,6 @@ func (mr *MockMonitorMockRecorder) WaitUntilInitialized(arg0 any) *gomock.Call {
 type MockServiceResolver struct {
 	ctrl     *gomock.Controller
 	recorder *MockServiceResolverMockRecorder
-	isgomock struct{}
 }
 
 // MockServiceResolverMockRecorder is the mock recorder for MockServiceResolver.
@@ -332,7 +330,6 @@ func (mr *MockServiceResolverMockRecorder) RequestRefresh() *gomock.Call {
 type MockHostInfoProvider struct {
 	ctrl     *gomock.Controller
 	recorder *MockHostInfoProviderMockRecorder
-	isgomock struct{}
 }
 
 // MockHostInfoProviderMockRecorder is the mock recorder for MockHostInfoProvider.

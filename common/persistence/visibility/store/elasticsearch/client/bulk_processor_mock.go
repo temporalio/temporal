@@ -43,7 +43,6 @@ import (
 type MockBulkProcessor struct {
 	ctrl     *gomock.Controller
 	recorder *MockBulkProcessorMockRecorder
-	isgomock struct{}
 }
 
 // MockBulkProcessorMockRecorder is the mock recorder for MockBulkProcessor.
