@@ -42,8 +42,6 @@ type ProcessBufferTask struct {
 // BufferedStarts. The BufferedStarts field is appended to the Invoker's queue.
 // For retrying execution, use EventRetry.
 type EventEnqueue struct {
-	Node *hsm.Node
-
 	BufferedStarts []*schedulespb.BufferedStart
 }
 
@@ -101,8 +99,6 @@ type ExecuteTask struct{}
 // will have their Attempt count set to 1, allowing ExecuteTask to begin their
 // execution.
 type EventFinishProcessing struct {
-	Node *hsm.Node
-
 	LastProcessedTime time.Time
 	processBufferResult
 }
@@ -115,8 +111,6 @@ type EventFinishProcessing struct {
 // backoff timer, which may be earlier than the start specified on this event's
 // BufferedStart.
 type EventRetryProcessing struct {
-	Node *hsm.Node
-
 	LastProcessedTime time.Time
 	processBufferResult
 }
@@ -126,8 +120,6 @@ type EventRetryProcessing struct {
 //
 // See also EventRecordAction.
 type EventRecordExecution struct {
-	Node *hsm.Node
-
 	executeResult
 }
 

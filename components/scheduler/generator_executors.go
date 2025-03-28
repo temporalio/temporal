@@ -61,7 +61,7 @@ func RegisterGeneratorExecutors(registry *hsm.Registry, options GeneratorTaskExe
 
 func (e generatorTaskExecutor) executeBufferTask(env hsm.Environment, node *hsm.Node, task BufferTask) error {
 	schedulerNode := node.Parent
-	scheduler, err := loadScheduler(schedulerNode)
+	scheduler, err := loadScheduler(schedulerNode, false)
 	if err != nil {
 		return err
 	}
@@ -114,7 +114,6 @@ func (e generatorTaskExecutor) executeBufferTask(env hsm.Environment, node *hsm.
 	}
 	err = hsm.MachineTransition(invokerNode, func(e Invoker) (hsm.TransitionOutput, error) {
 		return TransitionEnqueue.Apply(e, EventEnqueue{
-			Node:           invokerNode,
 			BufferedStarts: res.BufferedStarts,
 		})
 	})

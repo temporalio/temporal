@@ -1171,7 +1171,7 @@ var (
 	)
 	ScheduleActionErrors = NewCounterDef(
 		"schedule_action_errors",
-		WithDescription("The number of schedule actions that failed to start"),
+		WithDescription("The number of failed attempts from starting schedule actions"),
 	)
 	ScheduleCancelWorkflowErrors = NewCounterDef(
 		"schedule_cancel_workflow_errors",
@@ -1184,6 +1184,10 @@ var (
 	ScheduleActionDelay = NewTimerDef(
 		"schedule_action_delay",
 		WithDescription("Delay between when scheduled actions should/actually happen"),
+	)
+	ScheduleActionDropped = NewCounterDef(
+		"schedule_action_dropped",
+		WithDescription("The number of schedule actions that failed to start"),
 	)
 
 	// Force replication
