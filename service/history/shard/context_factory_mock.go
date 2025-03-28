@@ -44,6 +44,7 @@ import (
 type MockContextFactory struct {
 	ctrl     *gomock.Controller
 	recorder *MockContextFactoryMockRecorder
+	isgomock struct{}
 }
 
 // MockContextFactoryMockRecorder is the mock recorder for MockContextFactory.
