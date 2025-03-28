@@ -152,6 +152,30 @@ func (s *nodeSuite) TestSetValue_TypeData() {
 	s.Nil(node.serializedValue.GetData(), "node serialized value must not have data before serialize is called")
 }
 
+func (s *nodeSuite) TestDeserializeNode_EmptyPersistence() {
+	var serializedNodes map[string]*persistencespb.ChasmNode
+
+	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(1)).Times(1) // for InitialVersionedTransition
+	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(1)).Times(1)
+
+	node, err := NewTree(serializedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+	s.NoError(err)
+	s.Nil(node.value)
+	s.NotNil(node.serializedValue)
+
+	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(1)).Times(1) // for InitialVersionedTransition
+	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(1)).Times(1)
+
+	err = node.deserialize(reflect.TypeOf(&TestComponent{}))
+	s.NoError(err)
+	s.NotNil(node.value)
+	s.IsType(&TestComponent{}, node.value)
+	tc := node.value.(*TestComponent)
+	s.Nil(tc.SubComponent1.Internal.node)
+	s.Nil(tc.SubComponent1.Internal.value)
+	s.Nil(tc.ComponentData)
+}
+
 func (s *nodeSuite) TestDeserializeNode_ComponentAttributes() {
 	serializedNodes := testComponentSerializedNodes()
 

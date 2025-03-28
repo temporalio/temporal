@@ -57,8 +57,12 @@ type (
 		nodeName string           // key of this node in parent's children map.
 
 		// Type of attributes controls the type of the node.
-		serializedValue *persistencespb.ChasmNode // serialized component | data | collection
+		serializedValue *persistencespb.ChasmNode // serialized component | data | collection with metadata
 		value           any                       // deserialized component | data | collection
+
+		// TODO: synced flag need to be added here and it should be cleared
+		//   when values serializedValue anc value got in-sync.
+		//   And deserialization/serialization can be skipped if synced flag is true.
 
 		// TODO: add other necessary fields here, e.g.
 		//
@@ -136,6 +140,16 @@ func NewTree(
 	}
 
 	root := newNode(base, nil, "")
+	if len(serializedNodes) == 0 {
+		// If serializedNodes is empty, it means that this new tree.
+		// Create empty node with nil value and empty serializedValue.
+		err := root.setValue(nil, fieldTypeComponent)
+		if err != nil {
+			return nil, err
+		}
+		return root, nil
+	}
+
 	for encodedPath, serializedNode := range serializedNodes {
 		nodePath, err := pathEncoder.Decode(encodedPath)
 		if err != nil {
@@ -208,8 +222,11 @@ func validateValueType(v any) error {
 }
 
 func validateType(t reflect.Type) error {
-	// TODO: for component, interface should also be supported.
-	if t.Kind() != reflect.Ptr && t.Elem().Kind() != reflect.Struct {
+	if t == nil {
+		return nil
+	}
+
+	if t.Kind() != reflect.Ptr || t.Elem().Kind() != reflect.Struct {
 		return serviceerror.NewInternal("only pointer to struct is supported for tree node value")
 	}
 	return nil
@@ -250,11 +267,6 @@ func (n *Node) deserialize(
 		return err
 	}
 
-	if n.parent == nil {
-		// Top level node is always component.
-		return n.deserializeComponentNode(valueT)
-	}
-
 	switch n.serializedValue.GetMetadata().GetAttributes().(type) {
 	case *persistencespb.ChasmNodeMetadata_ComponentAttributes:
 		return n.deserializeComponentNode(valueT)
@@ -273,8 +285,9 @@ func (n *Node) deserializeComponentNode(
 ) error {
 	// TODO: use n.serializedValue.GetComponentAttributes().GetType() instead to support deserialization to interface.
 	valueV := reflect.New(valueT.Elem())
-	if n.serializedValue == nil {
-		// Nothing to deserialize. Create an empty value and return.
+	if n.serializedValue == nil || n.serializedValue.GetData() == nil {
+		// Nothing to deserialize || serializedValue is empty (has only metadata).
+		// Set an empty value and return.
 		return n.setValue(valueV.Interface(), fieldTypeComponent)
 	}
 
