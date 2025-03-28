@@ -27,6 +27,7 @@ package config
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -42,6 +43,10 @@ import (
 	"go.temporal.io/server/common/telemetry"
 	"google.golang.org/grpc/keepalive"
 	"gopkg.in/yaml.v3"
+)
+
+const (
+	infinity = time.Duration(math.MaxInt64)
 )
 
 type (
@@ -688,12 +693,11 @@ func (p *JWTKeyProvider) HasSourceURIsConfigured() bool {
 }
 
 func (k *KeepAliveServerConfig) GetKeepAliveServerParameters() keepalive.ServerParameters {
-	// 0 are treated as default values in grpc: https://github.com/grpc/grpc-go/blob/43a4a84abcd406230e7471062dd2ee5c7ba2485d/internal/transport/http2_server.go#L215-L225
 	// the default config is same as grpc default config, same for the below client config and enforcement policy
 	defaultConfig := keepalive.ServerParameters{
-		MaxConnectionIdle:     0 * time.Minute,
-		MaxConnectionAge:      0,
-		MaxConnectionAgeGrace: 0 * time.Second,
+		MaxConnectionIdle:     infinity,
+		MaxConnectionAge:      infinity,
+		MaxConnectionAgeGrace: infinity,
 		Time:                  2 * time.Hour,
 		Timeout:               20 * time.Second,
 	}
@@ -721,9 +725,9 @@ func (k *KeepAliveServerConfig) GetKeepAliveServerParameters() keepalive.ServerP
 
 func (c *ClientConnectionConfig) GetKeepAliveClientParameters() keepalive.ClientParameters {
 	defaultConfig := keepalive.ClientParameters{
-		Time:                0,
+		Time:                infinity,
 		Timeout:             20 * time.Second,
-		PermitWithoutStream: true,
+		PermitWithoutStream: false,
 	}
 
 	if c == nil || c.KeepAliveClientConfig == nil {
