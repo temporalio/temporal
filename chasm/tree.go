@@ -57,11 +57,11 @@ type (
 		nodeName string           // key of this node in parent's children map.
 
 		// Type of attributes controls the type of the node.
-		serializedValue *persistencespb.ChasmNode // serialized component | data | collection with metadata
-		value           any                       // deserialized component | data | collection
+		serializedNode *persistencespb.ChasmNode // serialized component | data | collection with metadata
+		value          any                       // deserialized component | data | collection
 
 		// TODO: synced flag need to be added here and it should be cleared
-		//   when values serializedValue anc value got in-sync.
+		//   when values serializedNode anc value got in-sync.
 		//   And deserialization/serialization can be skipped if synced flag is true.
 
 		// TODO: add other necessary fields here, e.g.
@@ -142,7 +142,7 @@ func NewTree(
 	root := newNode(base, nil, "")
 	if len(serializedNodes) == 0 {
 		// If serializedNodes is empty, it means that this new tree.
-		// Create empty node with nil value and empty serializedValue.
+		// Create empty node with nil value and empty serializedNode.
 		err := root.setValue(nil, fieldTypeComponent)
 		if err != nil {
 			return nil, err
@@ -155,7 +155,7 @@ func NewTree(
 		if err != nil {
 			return nil, err
 		}
-		root.setSerializedValue(nodePath, serializedNode)
+		root.setSerializedNode(nodePath, serializedNode)
 	}
 
 	return root, nil
@@ -178,7 +178,7 @@ func NewEmptyTree(
 	return root
 }
 
-// setValue sets node value field and initialize serializedValue field with empty attributes based on fieldType.
+// setValue sets node value field and initialize serializedNode field with empty attributes based on fieldType.
 func (n *Node) setValue(v any, ft fieldType) error {
 	if err := validateValueType(v); err != nil {
 		return err
@@ -188,7 +188,7 @@ func (n *Node) setValue(v any, ft fieldType) error {
 
 	switch ft {
 	case fieldTypeData:
-		n.serializedValue = &persistencespb.ChasmNode{
+		n.serializedNode = &persistencespb.ChasmNode{
 			Metadata: &persistencespb.ChasmNodeMetadata{
 				InitialVersionedTransition: &persistencespb.VersionedTransition{
 					TransitionCount:          n.backend.NextTransitionCount(),
@@ -200,7 +200,7 @@ func (n *Node) setValue(v any, ft fieldType) error {
 			},
 		}
 	case fieldTypeComponent:
-		n.serializedValue = &persistencespb.ChasmNode{
+		n.serializedNode = &persistencespb.ChasmNode{
 			Metadata: &persistencespb.ChasmNodeMetadata{
 				InitialVersionedTransition: &persistencespb.VersionedTransition{
 					TransitionCount:          n.backend.NextTransitionCount(),
@@ -239,12 +239,12 @@ func fieldName(f reflect.StructField) string {
 	return f.Name
 }
 
-func (n *Node) setSerializedValue(
+func (n *Node) setSerializedNode(
 	nodePath []string,
 	serializedNode *persistencespb.ChasmNode,
 ) {
 	if len(nodePath) == 0 {
-		n.serializedValue = serializedNode
+		n.serializedNode = serializedNode
 		return
 	}
 
@@ -254,10 +254,10 @@ func (n *Node) setSerializedValue(
 		childNode = newNode(n.nodeBase, n, childName)
 		n.children[childName] = childNode
 	}
-	childNode.setSerializedValue(nodePath[1:], serializedNode)
+	childNode.setSerializedNode(nodePath[1:], serializedNode)
 }
 
-// deserialize initializes the node's value from its serializedValue.
+// deserialize initializes the node's value from its serializedNode.
 // If value is of component type, it initializes every chasm.Field of it and sets node field but not value field
 // i.e. it doesn't deserialize recursively and must be called on every node separately.
 func (n *Node) deserialize(
@@ -267,7 +267,7 @@ func (n *Node) deserialize(
 		return err
 	}
 
-	switch n.serializedValue.GetMetadata().GetAttributes().(type) {
+	switch n.serializedNode.GetMetadata().GetAttributes().(type) {
 	case *persistencespb.ChasmNodeMetadata_ComponentAttributes:
 		return n.deserializeComponentNode(valueT)
 	case *persistencespb.ChasmNodeMetadata_DataAttributes:
@@ -283,11 +283,10 @@ func (n *Node) deserialize(
 func (n *Node) deserializeComponentNode(
 	valueT reflect.Type,
 ) error {
-	// TODO: use n.serializedValue.GetComponentAttributes().GetType() instead to support deserialization to interface.
+	// TODO: use n.serializedNode.GetComponentAttributes().GetType() instead to support deserialization to interface.
 	valueV := reflect.New(valueT.Elem())
-	if n.serializedValue == nil || n.serializedValue.GetData() == nil {
-		// Nothing to deserialize || serializedValue is empty (has only metadata).
-		// Set an empty value and return.
+	if n.serializedNode.GetData() == nil {
+		// serializedNode is empty (has only metadata) => clear value and return.
 		return n.setValue(valueV.Interface(), fieldTypeComponent)
 	}
 
@@ -306,7 +305,7 @@ func (n *Node) deserializeComponentNode(
 			}
 			protoMessageFound = true
 
-			value, err := n.unmarshalProto(n.serializedValue.GetData(), fieldT)
+			value, err := n.unmarshalProto(n.serializedNode.GetData(), fieldT)
 			if err != nil {
 				return err
 			}
@@ -325,7 +324,7 @@ func (n *Node) deserializeComponentNode(
 		case chasmFieldTypePrefix:
 			if childNode, found := n.children[fieldN]; found {
 				// TODO: support chasm.Field[interface], type should go from registry
-				//  using childNode.serializedValue.GetComponentAttributes().GetType()
+				//  using childNode.serializedNode.GetComponentAttributes().GetType()
 				chasmFieldV := reflect.New(fieldT).Elem()
 				internalValue := reflect.ValueOf(fieldInternal{
 					node: childNode,
@@ -355,7 +354,7 @@ func (n *Node) deserializeComponentNode(
 func (n *Node) deserializeDataNode(
 	valueT reflect.Type,
 ) error {
-	value, err := n.unmarshalProto(n.serializedValue.GetData(), valueT)
+	value, err := n.unmarshalProto(n.serializedNode.GetData(), valueT)
 	if err != nil {
 		return err
 	}
@@ -461,12 +460,12 @@ func (n *Node) snapshotInternal(
 		return
 	}
 
-	if transitionhistory.Compare(n.serializedValue.Metadata.LastUpdateVersionedTransition, exclusiveMinVT) > 0 {
+	if transitionhistory.Compare(n.serializedNode.Metadata.LastUpdateVersionedTransition, exclusiveMinVT) > 0 {
 		encodedPath, err := n.pathEncoder.Encode(n, currentPath)
 		if !softassert.That(n.logger, err == nil, "chasm path encoding should always succeed on clean tree") {
 			panic(fmt.Sprintf("failed to encode chasm path on clean tree: %v", err))
 		}
-		nodes[encodedPath] = n.serializedValue
+		nodes[encodedPath] = n.serializedNode
 	}
 
 	for childName, childNode := range n.children {
@@ -576,17 +575,17 @@ func (n *Node) applyUpdates(
 		node, ok := n.getNodeByPath(path)
 		if !ok {
 			// Node doesn't exist, we need to create it.
-			n.setSerializedValue(path, updatedNode)
+			n.setSerializedNode(path, updatedNode)
 			n.mutation.UpdatedNodes[encodedPath] = updatedNode
 			continue
 		}
 
 		if transitionhistory.Compare(
-			node.serializedValue.Metadata.LastUpdateVersionedTransition,
+			node.serializedNode.Metadata.LastUpdateVersionedTransition,
 			updatedNode.Metadata.LastUpdateVersionedTransition,
 		) != 0 {
 			n.mutation.UpdatedNodes[encodedPath] = updatedNode
-			node.serializedValue = updatedNode
+			node.serializedNode = updatedNode
 			node.value = nil
 
 			// Clearing decoded value for ancestor nodes is not necessary because the value field is not referenced directly.

@@ -131,8 +131,8 @@ func (s *nodeSuite) TestSetValue_TypeComponent() {
 
 	// Assert that tree is constructed.
 	s.Equal(component, node.value)
-	s.NotNil(node.serializedValue.GetMetadata().GetComponentAttributes(), "node serialized value must have attributes created")
-	s.Nil(node.serializedValue.GetData(), "node serialized value must not have data before serialize is called")
+	s.NotNil(node.serializedNode.GetMetadata().GetComponentAttributes(), "node serializedNode must have attributes created")
+	s.Nil(node.serializedNode.GetData(), "node serializedNode must not have data before serialize is called")
 }
 
 func (s *nodeSuite) TestSetValue_TypeData() {
@@ -148,8 +148,8 @@ func (s *nodeSuite) TestSetValue_TypeData() {
 	s.NoError(err)
 	s.NotNil(node)
 	s.Equal(component, node.value)
-	s.NotNil(node.serializedValue.GetMetadata().GetDataAttributes(), "node serialized value must have attributes created")
-	s.Nil(node.serializedValue.GetData(), "node serialized value must not have data before serialize is called")
+	s.NotNil(node.serializedNode.GetMetadata().GetDataAttributes(), "node serializedNode must have attributes created")
+	s.Nil(node.serializedNode.GetData(), "node serializedNode must not have data before serialize is called")
 }
 
 func (s *nodeSuite) TestDeserializeNode_EmptyPersistence() {
@@ -161,7 +161,7 @@ func (s *nodeSuite) TestDeserializeNode_EmptyPersistence() {
 	node, err := NewTree(serializedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
 	s.NoError(err)
 	s.Nil(node.value)
-	s.NotNil(node.serializedValue)
+	s.NotNil(node.serializedNode)
 
 	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(1)).Times(1) // for InitialVersionedTransition
 	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(1)).Times(1)
@@ -182,7 +182,7 @@ func (s *nodeSuite) TestDeserializeNode_ComponentAttributes() {
 	node, err := NewTree(serializedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
 	s.NoError(err)
 	s.Nil(node.value)
-	s.NotNil(node.serializedValue)
+	s.NotNil(node.serializedNode)
 
 	err = node.deserialize(reflect.TypeOf(&TestComponent{}))
 	s.NoError(err)
@@ -206,7 +206,7 @@ func (s *nodeSuite) TestDeserializeNode_DataAttributes() {
 	node, err := NewTree(serializedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
 	s.NoError(err)
 	s.Nil(node.value)
-	s.NotNil(node.serializedValue)
+	s.NotNil(node.serializedNode)
 
 	err = node.deserialize(reflect.TypeOf(&TestComponent{}))
 	s.NoError(err)
@@ -340,13 +340,13 @@ func (s *nodeSuite) TestApplyMutation() {
 	// Validate the "child" node got updated.
 	childNode, ok := root.children["child"]
 	s.True(ok)
-	s.Equal(updatedChild, childNode.serializedValue)
+	s.Equal(updatedChild, childNode.serializedNode)
 	s.Nil(childNode.value) // value should be reset after mutation
 
 	// Validate the "newchild" node is added.
 	newChildNode, ok := root.children["newchild"]
 	s.True(ok)
-	s.Equal(newChild, newChildNode.serializedValue)
+	s.Equal(newChild, newChildNode.serializedNode)
 
 	// Validate the "grandchild" node is deleted.
 	s.Empty(childNode.children)
@@ -453,7 +453,7 @@ func (s *nodeSuite) preorderAndAssertParent(
 	s.Equal(parent, n.parent)
 
 	var nodes []*persistencespb.ChasmNode
-	nodes = append(nodes, n.serializedValue)
+	nodes = append(nodes, n.serializedNode)
 
 	childNames := make([]string, 0, len(n.children))
 	for childName := range n.children {
