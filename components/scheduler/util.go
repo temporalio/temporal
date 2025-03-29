@@ -28,6 +28,7 @@ import (
 	"fmt"
 	"time"
 
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/service/history/consts"
@@ -91,14 +92,23 @@ func newTaggedLogger(baseLogger log.Logger, scheduler Scheduler) log.Logger {
 	)
 }
 
-// loadScheduler loads the Scheduler's persisted state.
-func loadScheduler(node *hsm.Node) (Scheduler, error) {
+// loadScheduler loads the Scheduler's persisted state. When clone is true,
+// mutable structs are cloned before being returned. Set clone to true unless the
+// caller is already holding the workflow lock.
+func loadScheduler(node *hsm.Node, clone bool) (Scheduler, error) {
 	prevScheduler, err := hsm.MachineData[Scheduler](node)
 	if err != nil {
 		return Scheduler{}, err
 	}
 
+	schedulerInternal := prevScheduler.SchedulerInternal
+	if clone {
+		schedulerInternal = common.CloneProto(schedulerInternal)
+	}
+
 	return Scheduler{
-		SchedulerInternal: prevScheduler.SchedulerInternal,
+		SchedulerInternal:  schedulerInternal,
+		cacheConflictToken: prevScheduler.cacheConflictToken,
+		compiledSpec:       prevScheduler.compiledSpec,
 	}, nil
 }
