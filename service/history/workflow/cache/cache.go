@@ -119,6 +119,7 @@ func NewHostLevelCache(
 		config.HistoryCacheNonUserContextLockTimeout(),
 		logger,
 		handler,
+		config.WorkflowCacheEnabled(),
 	)
 }
 
@@ -137,6 +138,7 @@ func NewShardLevelCache(
 		config.HistoryCacheNonUserContextLockTimeout(),
 		logger,
 		handler,
+		config.WorkflowCacheEnabled(),
 	)
 }
 
@@ -146,6 +148,7 @@ func newCache(
 	nonUserContextLockTimeout time.Duration,
 	logger log.Logger,
 	handler metrics.Handler,
+	cacheEnabled bool,
 ) Cache {
 	opts := &cache.Options{
 		TTL: ttl,
@@ -187,7 +190,7 @@ func newCache(
 		},
 	}
 
-	withMetrics := cache.NewWithMetrics(size, opts, handler.WithTags(metrics.CacheTypeTag(metrics.MutableStateCacheTypeTagValue)))
+	withMetrics := cache.NewWithMetrics(size, opts, handler.WithTags(metrics.CacheTypeTag(metrics.MutableStateCacheTypeTagValue)), cacheEnabled)
 
 	return &cacheImpl{
 		Cache:                     withMetrics,
