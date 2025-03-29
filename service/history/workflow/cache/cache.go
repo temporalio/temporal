@@ -118,6 +118,9 @@ func NewHostLevelCache(
 	return newCache(
 		maxSize,
 		config.HistoryCacheTTL(),
+		config.EnableHistoryChacheActiveEviction(),
+		config.HistoryChacheActiveEvictionInterval(),
+		config.HistoryChacheActiveEvictionMaxElements(),
 		config.HistoryCacheNonUserContextLockTimeout(),
 		logger,
 		handler,
@@ -136,6 +139,9 @@ func NewShardLevelCache(
 	return newCache(
 		maxSize,
 		config.HistoryCacheTTL(),
+		config.EnableHistoryChacheActiveEviction(),
+		config.HistoryChacheActiveEvictionInterval(),
+		config.HistoryChacheActiveEvictionMaxElements(),
 		config.HistoryCacheNonUserContextLockTimeout(),
 		logger,
 		handler,
@@ -145,13 +151,19 @@ func NewShardLevelCache(
 func newCache(
 	size int,
 	ttl time.Duration,
+	activeEviction bool,
+	activeEvictionInterval time.Duration,
+	activeEvictionMaxElements int,
 	nonUserContextLockTimeout time.Duration,
 	logger log.Logger,
 	handler metrics.Handler,
 ) Cache {
 	opts := &cache.Options{
-		TTL: ttl,
-		Pin: true,
+		TTL:                       ttl,
+		ActiveEviction:            activeEviction,
+		ActiveEvictionInterval:    activeEvictionInterval,
+		ActiveEvictionMaxElements: activeEvictionMaxElements,
+		Pin:                       true,
 		OnPut: func(val any) {
 			//revive:disable-next-line:unchecked-type-assertion
 			item := val.(*cacheItem)
