@@ -96,7 +96,7 @@ func NewHTTPAPIServer(
 	grpcListener net.Listener,
 	tlsConfigProvider encryption.TLSConfigProvider,
 	handler Handler,
-	operatorHandler *OperatorHandlerImpl,
+	operatorHandler OperatorHandler,
 	interceptors []grpc.UnaryServerInterceptor,
 	metricsHandler metrics.Handler,
 	router *mux.Router,
