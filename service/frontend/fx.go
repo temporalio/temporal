@@ -657,7 +657,6 @@ func AdminHandlerProvider(
 		metricsHandler,
 		namespaceRegistry,
 		saProvider,
-		saManager,
 		saMapperProvider,
 		clusterMetadata,
 		healthServer,

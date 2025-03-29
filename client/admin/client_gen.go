@@ -43,16 +43,6 @@ func (c *clientImpl) AddOrUpdateRemoteCluster(
 	return c.client.AddOrUpdateRemoteCluster(ctx, request, opts...)
 }
 
-func (c *clientImpl) AddSearchAttributes(
-	ctx context.Context,
-	request *adminservice.AddSearchAttributesRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.AddSearchAttributesResponse, error) {
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return c.client.AddSearchAttributes(ctx, request, opts...)
-}
-
 func (c *clientImpl) AddTasks(
 	ctx context.Context,
 	request *adminservice.AddTasksRequest,
@@ -233,16 +223,6 @@ func (c *clientImpl) GetReplicationMessages(
 	return c.client.GetReplicationMessages(ctx, request, opts...)
 }
 
-func (c *clientImpl) GetSearchAttributes(
-	ctx context.Context,
-	request *adminservice.GetSearchAttributesRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.GetSearchAttributesResponse, error) {
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return c.client.GetSearchAttributes(ctx, request, opts...)
-}
-
 func (c *clientImpl) GetShard(
 	ctx context.Context,
 	request *adminservice.GetShardRequest,
@@ -411,16 +391,6 @@ func (c *clientImpl) RemoveRemoteCluster(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.RemoveRemoteCluster(ctx, request, opts...)
-}
-
-func (c *clientImpl) RemoveSearchAttributes(
-	ctx context.Context,
-	request *adminservice.RemoveSearchAttributesRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.RemoveSearchAttributesResponse, error) {
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return c.client.RemoveSearchAttributes(ctx, request, opts...)
 }
 
 func (c *clientImpl) RemoveTask(
