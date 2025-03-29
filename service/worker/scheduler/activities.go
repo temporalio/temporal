@@ -88,7 +88,8 @@ var (
 func (e errFollow) Error() string { return string(e) }
 
 func (a *activities) StartWorkflow(ctx context.Context, req *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
-	if err := a.waitForRateLimiterPermission(req); err != nil {
+	didLocalRateLimitSleep, err := a.waitForRateLimiterPermission(req)
+	if err != nil {
 		return nil, err
 	}
 
@@ -104,28 +105,31 @@ func (a *activities) StartWorkflow(ctx context.Context, req *schedulespb.StartWo
 	now := time.Now()
 
 	return &schedulespb.StartWorkflowResponse{
-		RunId:         res.RunId,
-		RealStartTime: timestamppb.New(now),
+		RunId:                  res.RunId,
+		RealStartTime:          timestamppb.New(now),
+		DidLocalRateLimitSleep: didLocalRateLimitSleep,
 	}, nil
 }
 
-func (a *activities) waitForRateLimiterPermission(req *schedulespb.StartWorkflowRequest) error {
+func (a *activities) waitForRateLimiterPermission(req *schedulespb.StartWorkflowRequest) (bool, error) {
 	if req.CompletedRateLimitSleep {
-		return nil
+		return false, nil
 	}
 	reservation := a.startWorkflowRateLimiter.Reserve()
 	if !reservation.OK() {
-		return translateError(errBlocked, "StartWorkflowExecution")
+		return false, translateError(errBlocked, "StartWorkflowExecution")
 	}
 	delay := reservation.Delay()
-	if delay > a.localActivitySleepLimit() {
+	if delay <= 0 {
+		return false, nil
+	} else if delay > a.localActivitySleepLimit() {
 		// for a long sleep, ask the workflow to do it in workflow logic
-		return temporal.NewNonRetryableApplicationError(
+		return false, temporal.NewNonRetryableApplicationError(
 			rateLimitedErrorType, rateLimitedErrorType, nil, rateLimitedDetails{Delay: delay})
 	}
 	// short sleep can be done in-line
 	time.Sleep(delay)
-	return nil
+	return true, nil
 }
 
 func (a *activities) tryWatchWorkflow(ctx context.Context, req *schedulespb.WatchWorkflowRequest) (*schedulespb.WatchWorkflowResponse, error) {

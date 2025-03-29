@@ -1364,6 +1364,9 @@ func (s *scheduler) startWorkflow(
 		if err != nil {
 			return nil, err
 		}
+		if res.DidLocalRateLimitSleep {
+			s.metrics.Counter(metrics.ScheduleRateLimited.Name()).Inc(1)
+		}
 
 		if !start.Manual {
 			// record metric only for _scheduled_ actions, not trigger/backfill, otherwise it's not meaningful
