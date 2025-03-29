@@ -245,7 +245,6 @@ func (c *TemporalImpl) Start() error {
 	if err := c.createSystemNamespace(); err != nil {
 		return err
 	}
-
 	c.startMatching()
 	c.startHistory()
 	c.startFrontend()
@@ -427,6 +426,7 @@ func (c *TemporalImpl) startHistory() {
 				serviceName,
 				c.mockAdminClient,
 			),
+			fx.Provide(c.configProvider),
 			fx.Provide(c.GetMetricsHandler),
 			fx.Provide(func() listenHostPort { return listenHostPort(host) }),
 			fx.Provide(func() httpPort { return mustPortFromAddress(c.FrontendHTTPAddress()) }),
@@ -488,6 +488,7 @@ func (c *TemporalImpl) startMatching() {
 				serviceName,
 				c.mockAdminClient,
 			),
+			fx.Provide(c.configProvider),
 			fx.Provide(c.GetMetricsHandler),
 			fx.Provide(func() listenHostPort { return listenHostPort(host) }),
 			fx.Provide(func() httpPort { return mustPortFromAddress(c.FrontendHTTPAddress()) }),
@@ -545,11 +546,13 @@ func (c *TemporalImpl) startWorker() {
 		var namespaceRegistry namespace.Registry
 		logger := log.With(c.logger, tag.Host(host))
 		app := fx.New(
+
 			fx.Supply(
 				c.copyPersistenceConfig(),
 				serviceName,
 				c.mockAdminClient,
 			),
+			fx.Provide(c.configProvider),
 			fx.Provide(c.GetMetricsHandler),
 			fx.Provide(func() listenHostPort { return listenHostPort(host) }),
 			fx.Provide(func() httpPort { return mustPortFromAddress(c.FrontendHTTPAddress()) }),
@@ -656,6 +659,16 @@ func (c *TemporalImpl) frontendConfigProvider() *config.Config {
 	}
 }
 
+func (c *TemporalImpl) configProvider(serviceName primitives.ServiceName) *config.Config {
+	return &config.Config{
+		Services: map[string]config.Service{
+			string(serviceName): {
+				RPC: config.RPC{},
+			},
+		},
+	}
+}
+
 func (c *TemporalImpl) newRPCFactory(
 	sn primitives.ServiceName,
 	grpcHostPort listenHostPort,
@@ -684,8 +697,16 @@ func (c *TemporalImpl) newRPCFactory(
 	if tracingStatsHandler != nil {
 		options = append(options, grpc.WithStatsHandler(tracingStatsHandler))
 	}
+	rpcConfig := config.RPC{BindOnIP: host, GRPCPort: port, HTTPPort: int(httpPort)}
+	cfg := &config.Config{
+		Services: map[string]config.Service{
+			string(sn): {
+				RPC: rpcConfig,
+			},
+		},
+	}
 	return rpc.NewFactory(
-		&config.RPC{BindOnIP: host, GRPCPort: port, HTTPPort: int(httpPort)},
+		cfg,
 		sn,
 		logger,
 		tlsConfigProvider,

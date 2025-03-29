@@ -128,7 +128,6 @@ func (cf *rpcClientFactory) NewHistoryClientWithTimeout(timeout time.Duration) (
 	if err != nil {
 		return nil, err
 	}
-
 	client := history.NewClient(
 		cf.dynConfig,
 		resolver,
@@ -155,7 +154,7 @@ func (cf *rpcClientFactory) NewMatchingClientWithTimeout(
 
 	keyResolver := newServiceKeyResolver(resolver)
 	clientProvider := func(clientKey string) (interface{}, error) {
-		connection := cf.rpcFactory.CreateInternodeGRPCConnection(clientKey)
+		connection := cf.rpcFactory.CreateMatchingGRPCConnection(clientKey)
 		return matchingservice.NewMatchingServiceClient(connection), nil
 	}
 	client := matching.NewClient(

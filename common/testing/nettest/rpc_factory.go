@@ -74,7 +74,11 @@ func (f *RPCFactory) CreateLocalFrontendHTTPClient() (*common.FrontendHTTPClient
 	panic("unimplemented in the nettest package")
 }
 
-func (f *RPCFactory) CreateInternodeGRPCConnection(rpcAddress string) *grpc.ClientConn {
+func (f *RPCFactory) CreateHistoryGRPCConnection(rpcAddress string) *grpc.ClientConn {
+	return f.dial(rpcAddress)
+}
+
+func (f *RPCFactory) CreateMatchingGRPCConnection(rpcAddress string) *grpc.ClientConn {
 	return f.dial(rpcAddress)
 }
 
