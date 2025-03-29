@@ -26,7 +26,10 @@
 
 package chasm
 
-import "context"
+import (
+	"context"
+	"reflect"
+)
 
 type Component interface {
 	LifecycleState() LifecycleState
@@ -50,6 +53,8 @@ func (UnimplementedComponent) LifecycleState() LifecycleState {
 // func (UnimplementedComponent) Terminate() {}
 
 func (UnimplementedComponent) mustEmbedUnimplementedComponent() {}
+
+var UnimplementedComponentT = reflect.TypeFor[UnimplementedComponent]()
 
 // Shall it be named ComponentLifecycleState?
 type LifecycleState int
