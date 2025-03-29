@@ -32,8 +32,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-	commonpb "go.temporal.io/api/common/v1"
-	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
@@ -77,18 +75,6 @@ type (
 		//   when values serializedNode anc value got in-sync.
 		//   And deserialization/serialization can be skipped if synced flag is true.
 		valueSynced bool
-	}
-
-	// nodeBase is a set of dependencies and states shared by all nodes in a CHASM tree.
-	nodeBase struct {
-		registry    *Registry
-		timeSource  clock.TimeSource
-		backend     NodeBackend
-		pathEncoder NodePathEncoder
-		logger      log.Logger
-
-		// Mutations accumulated so far in this transaction.
-		mutation NodesMutation
 	}
 
 	// NodesMutation is a set of mutations for all nodes rooted at a given node n,
@@ -359,7 +345,7 @@ func (n *Node) setSerializedNode(
 
 // serialize sets or updates serializedValue field of the node n with serialized value.
 func (n *Node) serialize() error {
-	switch n.serializedValue.GetMetadata().GetAttributes().(type) {
+	switch n.serializedNode.GetMetadata().GetAttributes().(type) {
 	case *persistencespb.ChasmNodeMetadata_ComponentAttributes:
 		return n.serializeComponentNode()
 	case *persistencespb.ChasmNodeMetadata_DataAttributes:
@@ -405,14 +391,14 @@ func (n *Node) serializeComponentNode() error {
 			return serviceerror.NewInternal(fmt.Sprintf("component type %s is not registered", nodeValueT.String()))
 		}
 
-		n.serializedValue.Data = blob
-		n.serializedValue.GetMetadata().GetComponentAttributes().Type = rc.Type()
+		n.serializedNode.Data = blob
+		n.serializedNode.GetMetadata().GetComponentAttributes().Type = rc.Type()
 
-		if n.serializedValue.GetMetadata().GetLastUpdateVersionedTransition() == nil {
-			n.serializedValue.GetMetadata().LastUpdateVersionedTransition = &persistencespb.VersionedTransition{}
+		if n.serializedNode.GetMetadata().GetLastUpdateVersionedTransition() == nil {
+			n.serializedNode.GetMetadata().LastUpdateVersionedTransition = &persistencespb.VersionedTransition{}
 		}
-		n.serializedValue.GetMetadata().GetLastUpdateVersionedTransition().TransitionCount = n.backend.NextTransitionCount()
-		n.serializedValue.GetMetadata().GetLastUpdateVersionedTransition().NamespaceFailoverVersion = n.backend.GetCurrentVersion()
+		n.serializedNode.GetMetadata().GetLastUpdateVersionedTransition().TransitionCount = n.backend.NextTransitionCount()
+		n.serializedNode.GetMetadata().GetLastUpdateVersionedTransition().NamespaceFailoverVersion = n.backend.GetCurrentVersion()
 	}
 	return nil
 }
@@ -523,13 +509,13 @@ func (n *Node) serializeDataNode() error {
 		return err
 	}
 
-	n.serializedValue.Data = blob
+	n.serializedNode.Data = blob
 
-	if n.serializedValue.GetMetadata().GetLastUpdateVersionedTransition() == nil {
-		n.serializedValue.GetMetadata().LastUpdateVersionedTransition = &persistencespb.VersionedTransition{}
+	if n.serializedNode.GetMetadata().GetLastUpdateVersionedTransition() == nil {
+		n.serializedNode.GetMetadata().LastUpdateVersionedTransition = &persistencespb.VersionedTransition{}
 	}
-	n.serializedValue.GetMetadata().GetLastUpdateVersionedTransition().TransitionCount = n.backend.NextTransitionCount()
-	n.serializedValue.GetMetadata().GetLastUpdateVersionedTransition().NamespaceFailoverVersion = n.backend.GetCurrentVersion()
+	n.serializedNode.GetMetadata().GetLastUpdateVersionedTransition().TransitionCount = n.backend.NextTransitionCount()
+	n.serializedNode.GetMetadata().GetLastUpdateVersionedTransition().NamespaceFailoverVersion = n.backend.GetCurrentVersion()
 
 	return nil
 }
@@ -938,7 +924,6 @@ func newNode(
 	nodeName string,
 ) *Node {
 	return &Node{
-		dirty:    false,
 		nodeBase: base,
 		parent:   parent,
 		children: make(map[string]*Node),
