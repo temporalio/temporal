@@ -190,14 +190,14 @@ func TestActivityInfoMatchEvaluator_Basic(t *testing.T) {
 			expectedError: false,
 		},
 		{
-			name:          "activity status",
-			query:         fmt.Sprintf("%s = 'Started'", activityStatusColName),
+			name:          "activity state",
+			query:         fmt.Sprintf("%s = 'Started'", activityStateColName),
 			expectedMatch: true,
 			expectedError: false,
 		},
 		{
-			name:          "activity status - negative",
-			query:         fmt.Sprintf("%s = 'Terminated'", activityStatusColName),
+			name:          "activity state - negative",
+			query:         fmt.Sprintf("%s = 'Terminated'", activityStateColName),
 			expectedMatch: false,
 			expectedError: false,
 		},

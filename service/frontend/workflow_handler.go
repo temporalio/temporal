@@ -5736,7 +5736,7 @@ func (wh *WorkflowHandler) UpdateActivityOptions(
 	defer log.CapturePanic(wh.logger, &retError)
 
 	if !wh.config.ActivityAPIsEnabled(request.GetNamespace()) {
-		return nil, status.Errorf(codes.Unimplemented, "method UpdateActivityOptions not implemented")
+		return nil, serviceerror.NewUnimplemented("method UpdateActivityOptions not implemented")
 	}
 
 	if request == nil {
@@ -5775,7 +5775,7 @@ func (wh *WorkflowHandler) PauseActivity(
 	defer log.CapturePanic(wh.logger, &retError)
 
 	if !wh.config.ActivityAPIsEnabled(request.GetNamespace()) {
-		return nil, status.Errorf(codes.Unimplemented, "method PauseActivity not implemented")
+		return nil, serviceerror.NewUnimplemented("method PauseActivity not implemented")
 	}
 
 	if request == nil {
@@ -5811,7 +5811,7 @@ func (wh *WorkflowHandler) UnpauseActivity(
 	defer log.CapturePanic(wh.logger, &retError)
 
 	if !wh.config.ActivityAPIsEnabled(request.GetNamespace()) {
-		return nil, status.Errorf(codes.Unimplemented, "method UnpauseActivity not implemented")
+		return nil, serviceerror.NewUnimplemented("method UnpauseActivity not implemented")
 	}
 
 	if request == nil {
@@ -5847,7 +5847,7 @@ func (wh *WorkflowHandler) ResetActivity(
 	defer log.CapturePanic(wh.logger, &retError)
 
 	if !wh.config.ActivityAPIsEnabled(request.GetNamespace()) {
-		return nil, status.Errorf(codes.Unimplemented, "method ResetActivity not implemented")
+		return nil, serviceerror.NewUnimplemented("method ResetActivity not implemented")
 	}
 
 	if request == nil {
@@ -5875,4 +5875,111 @@ func (wh *WorkflowHandler) ResetActivity(
 	}
 
 	return &workflowservice.ResetActivityResponse{}, nil
+}
+
+func (wh *WorkflowHandler) CreateWorkflowRule(
+	ctx context.Context,
+	request *workflowservice.CreateWorkflowRuleRequest,
+) (_ *workflowservice.CreateWorkflowRuleResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if !wh.config.WorkflowRulesAPIsEnabled(request.GetNamespace()) {
+		return nil, serviceerror.NewUnimplemented("method CreateWorkflowRule not supported")
+	}
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	if request.GetSpec() == nil {
+		return nil, serviceerror.NewInvalidArgument("Rule Specification is not set.")
+	}
+
+	if request.GetSpec().GetId() == "" {
+		return nil, serviceerror.NewInvalidArgument("Workflow Rule ID is not set.")
+	}
+
+	if len(request.GetSpec().GetId()) > wh.config.MaxIDLengthLimit() {
+		return nil, errWorkflowRuleIDTooLong
+	}
+
+	rule, err := wh.namespaceHandler.CreateWorkflowRule(ctx, request.GetSpec(), request.GetNamespace())
+	if err != nil {
+		return nil, err
+	}
+
+	response := &workflowservice.CreateWorkflowRuleResponse{
+		Rule: rule,
+	}
+
+	return response, nil
+}
+
+func (wh *WorkflowHandler) DescribeWorkflowRule(
+	ctx context.Context,
+	request *workflowservice.DescribeWorkflowRuleRequest,
+) (_ *workflowservice.DescribeWorkflowRuleResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if !wh.config.WorkflowRulesAPIsEnabled(request.GetNamespace()) {
+		return nil, serviceerror.NewUnimplemented("method DescribeWorkflowRule not supported")
+	}
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	if request.GetRuleId() == "" {
+		return nil, serviceerror.NewInvalidArgument("Workflow Rule ID is not set.")
+	}
+
+	rule, err := wh.namespaceHandler.DescribeWorkflowRule(ctx, request.GetRuleId(), request.GetNamespace())
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.DescribeWorkflowRuleResponse{Rule: rule}, nil
+}
+
+func (wh *WorkflowHandler) DeleteWorkflowRule(
+	ctx context.Context,
+	request *workflowservice.DeleteWorkflowRuleRequest,
+) (_ *workflowservice.DeleteWorkflowRuleResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if !wh.config.WorkflowRulesAPIsEnabled(request.GetNamespace()) {
+		return nil, serviceerror.NewUnimplemented("method DeleteWorkflowRule not supported")
+	}
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	if request.GetRuleId() == "" {
+		return nil, serviceerror.NewInvalidArgument("Workflow Rule ID is not set.")
+	}
+
+	err := wh.namespaceHandler.DeleteWorkflowRule(ctx, request.GetRuleId(), request.GetNamespace())
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.DeleteWorkflowRuleResponse{}, nil
+}
+
+func (wh *WorkflowHandler) ListWorkflowRules(
+	ctx context.Context,
+	request *workflowservice.ListWorkflowRulesRequest,
+) (_ *workflowservice.ListWorkflowRulesResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if !wh.config.WorkflowRulesAPIsEnabled(request.GetNamespace()) {
+		return nil, serviceerror.NewUnimplemented("method ListWorkflowRules not supported")
+	}
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	workflowRules, err := wh.namespaceHandler.ListWorkflowRules(ctx, request.GetNamespace())
+	if err != nil {
+		return nil, err
+	}
+	return &workflowservice.ListWorkflowRulesResponse{Rules: workflowRules}, nil
 }
