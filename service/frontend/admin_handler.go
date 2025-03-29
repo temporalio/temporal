@@ -55,7 +55,6 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	serverClient "go.temporal.io/server/client"
-	"go.temporal.io/server/client/admin"
 	"go.temporal.io/server/client/frontend"
 	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/common"
@@ -1117,40 +1116,7 @@ func (adh *AdminHandler) DescribeCluster(
 	}, nil
 }
 
-// ListClusters return information about temporal clusters
-// TODO: Remove this API after migrate tctl to use operator handler
-func (adh *AdminHandler) ListClusters(
-	ctx context.Context,
-	request *adminservice.ListClustersRequest,
-) (_ *adminservice.ListClustersResponse, retError error) {
-	defer log.CapturePanic(adh.logger, &retError)
-	if request == nil {
-		return nil, errRequestNotSet
-	}
-	if request.GetPageSize() <= 0 {
-		request.PageSize = listClustersPageSize
-	}
-
-	resp, err := adh.clusterMetadataManager.ListClusterMetadata(ctx, &persistence.ListClusterMetadataRequest{
-		PageSize:      int(request.GetPageSize()),
-		NextPageToken: request.GetNextPageToken(),
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	var clusterMetadataList []*persistencespb.ClusterMetadata
-	for _, clusterResp := range resp.ClusterMetadata {
-		clusterMetadataList = append(clusterMetadataList, clusterResp.ClusterMetadata)
-	}
-	return &adminservice.ListClustersResponse{
-		Clusters:      clusterMetadataList,
-		NextPageToken: resp.NextPageToken,
-	}, nil
-}
-
 // ListClusterMembers
-// TODO: Remove this API after migrate tctl to use operator handler
 func (adh *AdminHandler) ListClusterMembers(
 	ctx context.Context,
 	request *adminservice.ListClusterMembersRequest,
@@ -1204,88 +1170,6 @@ func (adh *AdminHandler) ListClusterMembers(
 		ActiveMembers: activeMembers,
 		NextPageToken: resp.NextPageToken,
 	}, nil
-}
-
-// AddOrUpdateRemoteCluster
-// TODO: Remove this API after migrate tctl to use operator handler
-func (adh *AdminHandler) AddOrUpdateRemoteCluster(
-	ctx context.Context,
-	request *adminservice.AddOrUpdateRemoteClusterRequest,
-) (_ *adminservice.AddOrUpdateRemoteClusterResponse, retError error) {
-	defer log.CapturePanic(adh.logger, &retError)
-
-	adminClient := adh.clientFactory.NewRemoteAdminClientWithTimeout(
-		request.GetFrontendAddress(),
-		admin.DefaultTimeout,
-		admin.DefaultLargeTimeout,
-	)
-
-	// Fetch cluster metadata from remote cluster
-	resp, err := adminClient.DescribeCluster(ctx, &adminservice.DescribeClusterRequest{})
-	if err != nil {
-		return nil, err
-	}
-
-	err = adh.validateRemoteClusterMetadata(resp)
-	if err != nil {
-		return nil, err
-	}
-
-	var updateRequestVersion int64 = 0
-	clusterMetadataMrg := adh.clusterMetadataManager
-	clusterData, err := clusterMetadataMrg.GetClusterMetadata(
-		ctx,
-		&persistence.GetClusterMetadataRequest{ClusterName: resp.GetClusterName()},
-	)
-	switch err.(type) {
-	case nil:
-		updateRequestVersion = clusterData.Version
-	case *serviceerror.NotFound:
-		updateRequestVersion = 0
-	default:
-		return nil, err
-	}
-
-	applied, err := clusterMetadataMrg.SaveClusterMetadata(ctx, &persistence.SaveClusterMetadataRequest{
-		ClusterMetadata: &persistencespb.ClusterMetadata{
-			ClusterName:              resp.GetClusterName(),
-			HistoryShardCount:        resp.GetHistoryShardCount(),
-			ClusterId:                resp.GetClusterId(),
-			ClusterAddress:           request.GetFrontendAddress(),
-			HttpAddress:              resp.GetHttpAddress(),
-			FailoverVersionIncrement: resp.GetFailoverVersionIncrement(),
-			InitialFailoverVersion:   resp.GetInitialFailoverVersion(),
-			IsGlobalNamespaceEnabled: resp.GetIsGlobalNamespaceEnabled(),
-			IsConnectionEnabled:      request.GetEnableRemoteClusterConnection(),
-			Tags:                     resp.GetTags(),
-		},
-		Version: updateRequestVersion,
-	})
-	if err != nil {
-		return nil, err
-	}
-	if !applied {
-		return nil, serviceerror.NewInvalidArgument(
-			"Cannot update remote cluster due to update immutable fields")
-	}
-	return &adminservice.AddOrUpdateRemoteClusterResponse{}, nil
-}
-
-// RemoveRemoteCluster
-// TODO: Remove this API after migrate tctl to use operator handler
-func (adh *AdminHandler) RemoveRemoteCluster(
-	ctx context.Context,
-	request *adminservice.RemoveRemoteClusterRequest,
-) (_ *adminservice.RemoveRemoteClusterResponse, retError error) {
-	defer log.CapturePanic(adh.logger, &retError)
-
-	if err := adh.clusterMetadataManager.DeleteClusterMetadata(
-		ctx,
-		&persistence.DeleteClusterMetadataRequest{ClusterName: request.GetClusterName()},
-	); err != nil {
-		return nil, err
-	}
-	return &adminservice.RemoveRemoteClusterResponse{}, nil
 }
 
 // GetReplicationMessages returns new replication tasks since the read level provided in the token.

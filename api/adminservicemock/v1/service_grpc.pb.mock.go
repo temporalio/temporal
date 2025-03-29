@@ -67,26 +67,6 @@ func (m *MockAdminServiceClient) EXPECT() *MockAdminServiceClientMockRecorder {
 	return m.recorder
 }
 
-// AddOrUpdateRemoteCluster mocks base method.
-func (m *MockAdminServiceClient) AddOrUpdateRemoteCluster(ctx context.Context, in *adminservice.AddOrUpdateRemoteClusterRequest, opts ...grpc.CallOption) (*adminservice.AddOrUpdateRemoteClusterResponse, error) {
-	m.ctrl.T.Helper()
-	varargs := []any{ctx, in}
-	for _, a := range opts {
-		varargs = append(varargs, a)
-	}
-	ret := m.ctrl.Call(m, "AddOrUpdateRemoteCluster", varargs...)
-	ret0, _ := ret[0].(*adminservice.AddOrUpdateRemoteClusterResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// AddOrUpdateRemoteCluster indicates an expected call of AddOrUpdateRemoteCluster.
-func (mr *MockAdminServiceClientMockRecorder) AddOrUpdateRemoteCluster(ctx, in any, opts ...any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{ctx, in}, opts...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddOrUpdateRemoteCluster", reflect.TypeOf((*MockAdminServiceClient)(nil).AddOrUpdateRemoteCluster), varargs...)
-}
-
 // AddSearchAttributes mocks base method.
 func (m *MockAdminServiceClient) AddSearchAttributes(ctx context.Context, in *adminservice.AddSearchAttributesRequest, opts ...grpc.CallOption) (*adminservice.AddSearchAttributesResponse, error) {
 	m.ctrl.T.Helper()
@@ -607,26 +587,6 @@ func (mr *MockAdminServiceClientMockRecorder) ListClusterMembers(ctx, in any, op
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListClusterMembers", reflect.TypeOf((*MockAdminServiceClient)(nil).ListClusterMembers), varargs...)
 }
 
-// ListClusters mocks base method.
-func (m *MockAdminServiceClient) ListClusters(ctx context.Context, in *adminservice.ListClustersRequest, opts ...grpc.CallOption) (*adminservice.ListClustersResponse, error) {
-	m.ctrl.T.Helper()
-	varargs := []any{ctx, in}
-	for _, a := range opts {
-		varargs = append(varargs, a)
-	}
-	ret := m.ctrl.Call(m, "ListClusters", varargs...)
-	ret0, _ := ret[0].(*adminservice.ListClustersResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ListClusters indicates an expected call of ListClusters.
-func (mr *MockAdminServiceClientMockRecorder) ListClusters(ctx, in any, opts ...any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{ctx, in}, opts...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListClusters", reflect.TypeOf((*MockAdminServiceClient)(nil).ListClusters), varargs...)
-}
-
 // ListHistoryTasks mocks base method.
 func (m *MockAdminServiceClient) ListHistoryTasks(ctx context.Context, in *adminservice.ListHistoryTasksRequest, opts ...grpc.CallOption) (*adminservice.ListHistoryTasksResponse, error) {
 	m.ctrl.T.Helper()
@@ -805,26 +765,6 @@ func (mr *MockAdminServiceClientMockRecorder) RefreshWorkflowTasks(ctx, in any, 
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshWorkflowTasks", reflect.TypeOf((*MockAdminServiceClient)(nil).RefreshWorkflowTasks), varargs...)
-}
-
-// RemoveRemoteCluster mocks base method.
-func (m *MockAdminServiceClient) RemoveRemoteCluster(ctx context.Context, in *adminservice.RemoveRemoteClusterRequest, opts ...grpc.CallOption) (*adminservice.RemoveRemoteClusterResponse, error) {
-	m.ctrl.T.Helper()
-	varargs := []any{ctx, in}
-	for _, a := range opts {
-		varargs = append(varargs, a)
-	}
-	ret := m.ctrl.Call(m, "RemoveRemoteCluster", varargs...)
-	ret0, _ := ret[0].(*adminservice.RemoveRemoteClusterResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// RemoveRemoteCluster indicates an expected call of RemoveRemoteCluster.
-func (mr *MockAdminServiceClientMockRecorder) RemoveRemoteCluster(ctx, in any, opts ...any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{ctx, in}, opts...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveRemoteCluster", reflect.TypeOf((*MockAdminServiceClient)(nil).RemoveRemoteCluster), varargs...)
 }
 
 // RemoveSearchAttributes mocks base method.
@@ -1087,21 +1027,6 @@ func NewMockAdminServiceServer(ctrl *gomock.Controller) *MockAdminServiceServer 
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockAdminServiceServer) EXPECT() *MockAdminServiceServerMockRecorder {
 	return m.recorder
-}
-
-// AddOrUpdateRemoteCluster mocks base method.
-func (m *MockAdminServiceServer) AddOrUpdateRemoteCluster(arg0 context.Context, arg1 *adminservice.AddOrUpdateRemoteClusterRequest) (*adminservice.AddOrUpdateRemoteClusterResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddOrUpdateRemoteCluster", arg0, arg1)
-	ret0, _ := ret[0].(*adminservice.AddOrUpdateRemoteClusterResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// AddOrUpdateRemoteCluster indicates an expected call of AddOrUpdateRemoteCluster.
-func (mr *MockAdminServiceServerMockRecorder) AddOrUpdateRemoteCluster(arg0, arg1 any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddOrUpdateRemoteCluster", reflect.TypeOf((*MockAdminServiceServer)(nil).AddOrUpdateRemoteCluster), arg0, arg1)
 }
 
 // AddSearchAttributes mocks base method.
@@ -1494,21 +1419,6 @@ func (mr *MockAdminServiceServerMockRecorder) ListClusterMembers(arg0, arg1 any)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListClusterMembers", reflect.TypeOf((*MockAdminServiceServer)(nil).ListClusterMembers), arg0, arg1)
 }
 
-// ListClusters mocks base method.
-func (m *MockAdminServiceServer) ListClusters(arg0 context.Context, arg1 *adminservice.ListClustersRequest) (*adminservice.ListClustersResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ListClusters", arg0, arg1)
-	ret0, _ := ret[0].(*adminservice.ListClustersResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ListClusters indicates an expected call of ListClusters.
-func (mr *MockAdminServiceServerMockRecorder) ListClusters(arg0, arg1 any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListClusters", reflect.TypeOf((*MockAdminServiceServer)(nil).ListClusters), arg0, arg1)
-}
-
 // ListHistoryTasks mocks base method.
 func (m *MockAdminServiceServer) ListHistoryTasks(arg0 context.Context, arg1 *adminservice.ListHistoryTasksRequest) (*adminservice.ListHistoryTasksResponse, error) {
 	m.ctrl.T.Helper()
@@ -1642,21 +1552,6 @@ func (m *MockAdminServiceServer) RefreshWorkflowTasks(arg0 context.Context, arg1
 func (mr *MockAdminServiceServerMockRecorder) RefreshWorkflowTasks(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshWorkflowTasks", reflect.TypeOf((*MockAdminServiceServer)(nil).RefreshWorkflowTasks), arg0, arg1)
-}
-
-// RemoveRemoteCluster mocks base method.
-func (m *MockAdminServiceServer) RemoveRemoteCluster(arg0 context.Context, arg1 *adminservice.RemoveRemoteClusterRequest) (*adminservice.RemoveRemoteClusterResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RemoveRemoteCluster", arg0, arg1)
-	ret0, _ := ret[0].(*adminservice.RemoveRemoteClusterResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// RemoveRemoteCluster indicates an expected call of RemoveRemoteCluster.
-func (mr *MockAdminServiceServerMockRecorder) RemoveRemoteCluster(arg0, arg1 any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveRemoteCluster", reflect.TypeOf((*MockAdminServiceServer)(nil).RemoveRemoteCluster), arg0, arg1)
 }
 
 // RemoveSearchAttributes mocks base method.
