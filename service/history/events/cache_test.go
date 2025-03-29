@@ -90,6 +90,9 @@ func (s *eventsCacheSuite) newTestEventsCache() *CacheImpl {
 		s.logger,
 		32,
 		time.Minute,
+		false,
+		0,
+		0,
 		false)
 }
 

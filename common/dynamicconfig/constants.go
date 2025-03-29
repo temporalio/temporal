@@ -1467,6 +1467,21 @@ This can help reduce effects of shard movement.`,
 		time.Hour,
 		`EventsCacheTTL is TTL of events cache`,
 	)
+	EnableEventsChacheActiveEviction = NewGlobalBoolSetting(
+		"history.enableEventsCacheActiveEviction",
+		false,
+		`EnableEventsChacheActiveEviction controls if active eviction enabled for events cache`,
+	)
+	EventsCacheActiveEvictionInterval = NewGlobalDurationSetting(
+		"history.eventsCacheActiveEvictionInterval",
+		5*time.Second,
+		`EventsCacheActiveEvictionInterval is interval of expire element eviction for events cache`,
+	)
+	EventsCacheActiveEvictionMaxElements = NewGlobalIntSetting(
+		"history.eventsCacheActiveEvictionMaxElements",
+		32,
+		`EventsCacheActiveEvictionMaxElements is max number of expired elements to be evicted from events cache on active eviction iteration`,
+	)
 	EnableHostLevelEventsCache = NewGlobalBoolSetting(
 		"history.enableHostLevelEventsCache",
 		false,

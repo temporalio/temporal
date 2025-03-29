@@ -89,8 +89,11 @@ type Config struct {
 
 	// EventsCache settings
 	// Change of these configs require shard restart
-	EventsShardLevelCacheMaxSizeBytes dynamicconfig.IntPropertyFn
-	EventsCacheTTL                    dynamicconfig.DurationPropertyFn
+	EventsShardLevelCacheMaxSizeBytes     dynamicconfig.IntPropertyFn
+	EventsCacheTTL                        dynamicconfig.DurationPropertyFn
+	EnableEventsChacheActiveEviction      dynamicconfig.BoolPropertyFn
+	EventsChacheActiveEvictionInterval    dynamicconfig.DurationPropertyFn
+	EventsChacheActiveEvictionMaxElements dynamicconfig.IntPropertyFn
 	// Change of these configs require service restart
 	EnableHostLevelEventsCache       dynamicconfig.BoolPropertyFn
 	EventsHostLevelCacheMaxSizeBytes dynamicconfig.IntPropertyFn
@@ -441,10 +444,13 @@ func NewConfig(
 		EnableTransitionHistory:               dynamicconfig.EnableTransitionHistory.Get(dc),
 		MaxCallbacksPerWorkflow:               dynamicconfig.MaxCallbacksPerWorkflow.Get(dc),
 
-		EventsShardLevelCacheMaxSizeBytes: dynamicconfig.EventsCacheMaxSizeBytes.Get(dc),          // 512KB
-		EventsHostLevelCacheMaxSizeBytes:  dynamicconfig.EventsHostLevelCacheMaxSizeBytes.Get(dc), // 256MB
-		EventsCacheTTL:                    dynamicconfig.EventsCacheTTL.Get(dc),
-		EnableHostLevelEventsCache:        dynamicconfig.EnableHostLevelEventsCache.Get(dc),
+		EventsShardLevelCacheMaxSizeBytes:     dynamicconfig.EventsCacheMaxSizeBytes.Get(dc),          // 512KB
+		EventsHostLevelCacheMaxSizeBytes:      dynamicconfig.EventsHostLevelCacheMaxSizeBytes.Get(dc), // 256MB
+		EventsCacheTTL:                        dynamicconfig.EventsCacheTTL.Get(dc),
+		EnableEventsChacheActiveEviction:      dynamicconfig.EnableEventsChacheActiveEviction.Get(dc),
+		EventsChacheActiveEvictionInterval:    dynamicconfig.EventsCacheActiveEvictionInterval.Get(dc),
+		EventsChacheActiveEvictionMaxElements: dynamicconfig.EventsCacheActiveEvictionMaxElements.Get(dc),
+		EnableHostLevelEventsCache:            dynamicconfig.EnableHostLevelEventsCache.Get(dc),
 
 		RangeSizeBits: 20, // 20 bits for sequencer, 2^20 sequence number for any range
 

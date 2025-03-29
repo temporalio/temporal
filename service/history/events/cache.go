@@ -85,7 +85,17 @@ func NewHostLevelEventsCache(
 	logger log.Logger,
 	disabled bool,
 ) Cache {
-	return newEventsCache(executionManager, handler, logger, config.EventsHostLevelCacheMaxSizeBytes(), config.EventsCacheTTL(), disabled)
+	return newEventsCache(
+		executionManager,
+		handler,
+		logger,
+		config.EventsHostLevelCacheMaxSizeBytes(),
+		config.EventsCacheTTL(),
+		config.EnableEventsChacheActiveEviction(),
+		config.EventsChacheActiveEvictionInterval(),
+		config.EventsChacheActiveEvictionMaxElements(),
+		disabled,
+	)
 }
 
 func NewShardLevelEventsCache(
@@ -95,7 +105,17 @@ func NewShardLevelEventsCache(
 	logger log.Logger,
 	disabled bool,
 ) Cache {
-	return newEventsCache(executionManager, handler, logger, config.EventsShardLevelCacheMaxSizeBytes(), config.EventsCacheTTL(), disabled)
+	return newEventsCache(
+		executionManager,
+		handler,
+		logger,
+		config.EventsShardLevelCacheMaxSizeBytes(),
+		config.EventsCacheTTL(),
+		config.EnableEventsChacheActiveEviction(),
+		config.EventsChacheActiveEvictionInterval(),
+		config.EventsChacheActiveEvictionMaxElements(),
+		disabled,
+	)
 }
 
 func newEventsCache(
@@ -104,10 +124,17 @@ func newEventsCache(
 	logger log.Logger,
 	maxSize int,
 	ttl time.Duration,
+	activeEviction bool,
+	activeEvictionInterval time.Duration,
+	ActiveEvictionMaxElements int,
 	disabled bool,
 ) *CacheImpl {
-	opts := &cache.Options{}
-	opts.TTL = ttl
+	opts := &cache.Options{
+		TTL:                       ttl,
+		ActiveEviction:            activeEviction,
+		ActiveEvictionInterval:    activeEvictionInterval,
+		ActiveEvictionMaxElements: ActiveEvictionMaxElements,
+	}
 
 	taggedMetricHandler := metricsHandler.WithTags(metrics.CacheTypeTag(metrics.EventsCacheTypeTagValue))
 	return &CacheImpl{
