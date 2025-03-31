@@ -481,6 +481,7 @@ func (c *ControllerImpl) acquireShards(ctx context.Context) {
 	_ = sem.Acquire(ctx, concurrency)
 
 	c.RLock()
+	// note that this count includes lingering shards
 	numOfOwnedShards := len(c.historyShards)
 	c.RUnlock()
 	metrics.NumShardsGauge.With(c.taggedMetricsHandler).Record(float64(numOfOwnedShards))
