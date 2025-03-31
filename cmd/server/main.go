@@ -158,7 +158,7 @@ func buildCLI() *cli.App {
 					c.String("zone"),
 				)
 				if err != nil {
-					return fmt.Errorf("failed to load config: %w", err)
+					return cli.Exit(fmt.Errorf("failed to load config: %w", err), 1)
 				}
 				fmt.Println(cfg.String())
 				return nil
