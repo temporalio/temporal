@@ -195,7 +195,8 @@ BUF := $(LOCALBIN)/buf-$(BUF_VER)
 $(BUF): | $(LOCALBIN)
 	$(call go-install-tool,$(BUF),github.com/bufbuild/buf/cmd/buf,$(BUF_VER))
 
-GO_API_VER := v1.46.0
+GO_API_VER = $(shell go list -m -f '{{.Version}}' go.temporal.io/api \
+	|| (echo "failed to fetch version for go.temporal.io/api" >&2))
 PROTOGEN := $(LOCALBIN)/protogen-$(GO_API_VER)
 $(PROTOGEN): | $(LOCALBIN)
 	$(call go-install-tool,$(PROTOGEN),go.temporal.io/api/cmd/protogen,$(GO_API_VER))
