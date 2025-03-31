@@ -129,28 +129,6 @@ func buildCLI() *cli.App {
 			Name:      "render-config",
 			Usage:     "Render server config template",
 			ArgsUsage: " ",
-			Flags: []cli.Flag{
-				&cli.StringFlag{
-					Name:    "config",
-					Aliases: []string{"c"},
-					Value:   "config",
-					Usage:   "config dir path relative to root",
-					EnvVars: []string{config.EnvKeyConfigDir},
-				},
-				&cli.StringFlag{
-					Name:    "env",
-					Aliases: []string{"e"},
-					Value:   "development",
-					Usage:   "runtime environment",
-					EnvVars: []string{config.EnvKeyEnvironment},
-				},
-				&cli.StringFlag{
-					Name:    "zone",
-					Aliases: []string{"az"},
-					Usage:   "availability zone",
-					EnvVars: []string{config.EnvKeyAvailabilityZone, config.EnvKeyAvailabilityZoneTypo},
-				},
-			},
 			Action: func(c *cli.Context) error {
 				cfg, err := config.LoadConfig(
 					c.String("env"),
@@ -158,7 +136,7 @@ func buildCLI() *cli.App {
 					c.String("zone"),
 				)
 				if err != nil {
-					return cli.Exit(fmt.Errorf("failed to load config: %w", err), 1)
+					return cli.Exit(fmt.Errorf("Unable to load configuration: %w", err), 1)
 				}
 				fmt.Println(cfg.String())
 				return nil

@@ -31,6 +31,7 @@ import (
 	"io"
 	stdlog "log"
 	"os"
+	"path/filepath"
 	"strings"
 	"text/template"
 
@@ -116,15 +117,15 @@ func Load(env string, configDir string, zone string, config interface{}) error {
 		}
 
 		if templating {
-			tpl, err := template.New("config").Funcs(templateFuncs).Parse(string(data))
+			tpl, err := template.New(filepath.Base(f)).Funcs(templateFuncs).Parse(string(data))
 			if err != nil {
-				return fmt.Errorf("template parsing error: %w", err)
+				return err
 			}
 
 			var rendered bytes.Buffer
 			err = tpl.Execute(&rendered, nil)
 			if err != nil {
-				return fmt.Errorf("template execution error: %w", err)
+				return err
 			}
 			data = rendered.Bytes()
 		}
