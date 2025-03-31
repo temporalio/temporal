@@ -46,7 +46,7 @@ func TestRegistry_RegisterComponents_Success(t *testing.T) {
 	lib := chasm.NewMockLibrary(ctrl)
 	lib.EXPECT().Name().Return("TestLibrary").AnyTimes()
 	lib.EXPECT().Components().Return([]*chasm.RegistrableComponent{
-		chasm.NewRegistrableComponent[*chasm.MockComponent]("Component1", lib),
+		chasm.NewRegistrableComponent[*chasm.MockComponent]("Component1"),
 	})
 
 	lib.EXPECT().Tasks().Return(nil)
@@ -81,8 +81,8 @@ func TestRegistry_RegisterTasks_Success(t *testing.T) {
 	lib.EXPECT().Components().Return(nil)
 
 	lib.EXPECT().Tasks().Return([]*chasm.RegistrableTask{
-		chasm.NewRegistrableTask[*chasm.MockComponent, testTask1]("Task1", lib, chasm.NewMockTaskHandler[*chasm.MockComponent, testTask1](ctrl)),
-		chasm.NewRegistrableTask[testTaskComponentInterface, testTask2]("Task2", lib, chasm.NewMockTaskHandler[testTaskComponentInterface, testTask2](ctrl)),
+		chasm.NewRegistrableTask[*chasm.MockComponent, testTask1]("Task1", chasm.NewMockTaskHandler[*chasm.MockComponent, testTask1](ctrl)),
+		chasm.NewRegistrableTask[testTaskComponentInterface, testTask2]("Task2", chasm.NewMockTaskHandler[testTaskComponentInterface, testTask2](ctrl)),
 	})
 
 	err := r.Register(lib)
@@ -135,7 +135,7 @@ func TestRegistry_RegisterComponents_Error(t *testing.T) {
 
 	t.Run("component name must not be empty", func(t *testing.T) {
 		lib.EXPECT().Components().Return([]*chasm.RegistrableComponent{
-			chasm.NewRegistrableComponent[*chasm.MockComponent]("", lib),
+			chasm.NewRegistrableComponent[*chasm.MockComponent](""),
 		})
 		r := chasm.NewRegistry()
 		err := r.Register(lib)
@@ -145,7 +145,7 @@ func TestRegistry_RegisterComponents_Error(t *testing.T) {
 
 	t.Run("component name must follow rules", func(t *testing.T) {
 		lib.EXPECT().Components().Return([]*chasm.RegistrableComponent{
-			chasm.NewRegistrableComponent[*chasm.MockComponent]("bad.component.name", lib),
+			chasm.NewRegistrableComponent[*chasm.MockComponent]("bad.component.name"),
 		})
 		r := chasm.NewRegistry()
 		err := r.Register(lib)
@@ -155,8 +155,8 @@ func TestRegistry_RegisterComponents_Error(t *testing.T) {
 
 	t.Run("component is already registered by name", func(t *testing.T) {
 		lib.EXPECT().Components().Return([]*chasm.RegistrableComponent{
-			chasm.NewRegistrableComponent[*chasm.MockComponent]("Component1", lib),
-			chasm.NewRegistrableComponent[*chasm.MockComponent]("Component1", lib),
+			chasm.NewRegistrableComponent[*chasm.MockComponent]("Component1"),
+			chasm.NewRegistrableComponent[*chasm.MockComponent]("Component1"),
 		})
 		r := chasm.NewRegistry()
 		err := r.Register(lib)
@@ -166,8 +166,8 @@ func TestRegistry_RegisterComponents_Error(t *testing.T) {
 
 	t.Run("component is already registered by type", func(t *testing.T) {
 		lib.EXPECT().Components().Return([]*chasm.RegistrableComponent{
-			chasm.NewRegistrableComponent[*chasm.MockComponent]("Component1", lib),
-			chasm.NewRegistrableComponent[*chasm.MockComponent]("Component2", lib),
+			chasm.NewRegistrableComponent[*chasm.MockComponent]("Component1"),
+			chasm.NewRegistrableComponent[*chasm.MockComponent]("Component2"),
 		})
 		r := chasm.NewRegistry()
 
@@ -176,9 +176,32 @@ func TestRegistry_RegisterComponents_Error(t *testing.T) {
 		require.Contains(t, err.Error(), "is already registered")
 	})
 
+	t.Run("component is already registered in another library", func(t *testing.T) {
+		lib2 := chasm.NewMockLibrary(ctrl)
+		lib2.EXPECT().Name().Return("TestLibrary2").AnyTimes()
+
+		component := chasm.NewRegistrableComponent[*chasm.MockComponent]("Component1")
+		lib2.EXPECT().Components().Return([]*chasm.RegistrableComponent{
+			component,
+		})
+		lib2.EXPECT().Tasks().Return(nil)
+		r2 := chasm.NewRegistry()
+		err := r2.Register(lib2)
+		require.NoError(t, err)
+
+		lib.EXPECT().Components().Return([]*chasm.RegistrableComponent{
+			component,
+		})
+		r := chasm.NewRegistry()
+
+		err = r.Register(lib)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "is already registered in library TestLibrary2")
+	})
+
 	t.Run("component must be a struct", func(t *testing.T) {
 		lib.EXPECT().Components().Return([]*chasm.RegistrableComponent{
-			chasm.NewRegistrableComponent[chasm.Component]("Component1", lib),
+			chasm.NewRegistrableComponent[chasm.Component]("Component1"),
 		})
 		r := chasm.NewRegistry()
 
@@ -198,7 +221,7 @@ func TestRegistry_RegisterTasks_Error(t *testing.T) {
 	t.Run("task name must not be empty", func(t *testing.T) {
 		r := chasm.NewRegistry()
 		lib.EXPECT().Tasks().Return([]*chasm.RegistrableTask{
-			chasm.NewRegistrableTask[*chasm.MockComponent, testTask1]("", lib, chasm.NewMockTaskHandler[*chasm.MockComponent, testTask1](ctrl)),
+			chasm.NewRegistrableTask[*chasm.MockComponent, testTask1]("", chasm.NewMockTaskHandler[*chasm.MockComponent, testTask1](ctrl)),
 		})
 		err := r.Register(lib)
 		require.Error(t, err)
@@ -207,7 +230,7 @@ func TestRegistry_RegisterTasks_Error(t *testing.T) {
 
 	t.Run("task name must follow rules", func(t *testing.T) {
 		lib.EXPECT().Tasks().Return([]*chasm.RegistrableTask{
-			chasm.NewRegistrableTask[*chasm.MockComponent, testTask1]("bad.task.name", lib, chasm.NewMockTaskHandler[*chasm.MockComponent, testTask1](ctrl)),
+			chasm.NewRegistrableTask[*chasm.MockComponent, testTask1]("bad.task.name", chasm.NewMockTaskHandler[*chasm.MockComponent, testTask1](ctrl)),
 		})
 		r := chasm.NewRegistry()
 		err := r.Register(lib)
@@ -217,8 +240,8 @@ func TestRegistry_RegisterTasks_Error(t *testing.T) {
 
 	t.Run("task is already registered by name", func(t *testing.T) {
 		lib.EXPECT().Tasks().Return([]*chasm.RegistrableTask{
-			chasm.NewRegistrableTask[*chasm.MockComponent, testTask1]("Task1", lib, chasm.NewMockTaskHandler[*chasm.MockComponent, testTask1](ctrl)),
-			chasm.NewRegistrableTask[*chasm.MockComponent, testTask1]("Task1", lib, chasm.NewMockTaskHandler[*chasm.MockComponent, testTask1](ctrl)),
+			chasm.NewRegistrableTask[*chasm.MockComponent, testTask1]("Task1", chasm.NewMockTaskHandler[*chasm.MockComponent, testTask1](ctrl)),
+			chasm.NewRegistrableTask[*chasm.MockComponent, testTask1]("Task1", chasm.NewMockTaskHandler[*chasm.MockComponent, testTask1](ctrl)),
 		})
 		r := chasm.NewRegistry()
 		err := r.Register(lib)
@@ -228,8 +251,8 @@ func TestRegistry_RegisterTasks_Error(t *testing.T) {
 
 	t.Run("task is already registered by type", func(t *testing.T) {
 		lib.EXPECT().Tasks().Return([]*chasm.RegistrableTask{
-			chasm.NewRegistrableTask[*chasm.MockComponent, testTask1]("Task1", lib, chasm.NewMockTaskHandler[*chasm.MockComponent, testTask1](ctrl)),
-			chasm.NewRegistrableTask[*chasm.MockComponent, testTask1]("Task2", lib, chasm.NewMockTaskHandler[*chasm.MockComponent, testTask1](ctrl)),
+			chasm.NewRegistrableTask[*chasm.MockComponent, testTask1]("Task1", chasm.NewMockTaskHandler[*chasm.MockComponent, testTask1](ctrl)),
+			chasm.NewRegistrableTask[*chasm.MockComponent, testTask1]("Task2", chasm.NewMockTaskHandler[*chasm.MockComponent, testTask1](ctrl)),
 		})
 		r := chasm.NewRegistry()
 		err := r.Register(lib)
@@ -240,7 +263,7 @@ func TestRegistry_RegisterTasks_Error(t *testing.T) {
 	t.Run("task component struct must implement Component", func(t *testing.T) {
 		lib.EXPECT().Tasks().Return([]*chasm.RegistrableTask{
 			// MockComponent has only pointer receivers and therefore does not implement Component interface.
-			chasm.NewRegistrableTask[chasm.MockComponent, testTask1]("Task1", lib, chasm.NewMockTaskHandler[chasm.MockComponent, testTask1](ctrl)),
+			chasm.NewRegistrableTask[chasm.MockComponent, testTask1]("Task1", chasm.NewMockTaskHandler[chasm.MockComponent, testTask1](ctrl)),
 		})
 		r := chasm.NewRegistry()
 		err := r.Register(lib)
@@ -248,9 +271,28 @@ func TestRegistry_RegisterTasks_Error(t *testing.T) {
 		require.Contains(t, err.Error(), "struct that implements Component interface")
 	})
 
+	t.Run("component is already registered in another library", func(t *testing.T) {
+		lib2 := chasm.NewMockLibrary(ctrl)
+		lib2.EXPECT().Name().Return("TestLibrary2").AnyTimes()
+
+		lib2.EXPECT().Components().Return(nil)
+		task := chasm.NewRegistrableTask[*chasm.MockComponent, testTask1]("Task1", chasm.NewMockTaskHandler[*chasm.MockComponent, testTask1](ctrl))
+		lib2.EXPECT().Tasks().Return([]*chasm.RegistrableTask{task})
+		r2 := chasm.NewRegistry()
+		err := r2.Register(lib2)
+		require.NoError(t, err)
+
+		lib.EXPECT().Tasks().Return([]*chasm.RegistrableTask{task})
+		r := chasm.NewRegistry()
+
+		err = r.Register(lib)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "is already registered in library TestLibrary2")
+	})
+
 	t.Run("task must be struct", func(t *testing.T) {
 		lib.EXPECT().Tasks().Return([]*chasm.RegistrableTask{
-			chasm.NewRegistrableTask[*chasm.MockComponent, string]("Task1", lib, chasm.NewMockTaskHandler[*chasm.MockComponent, string](ctrl)),
+			chasm.NewRegistrableTask[*chasm.MockComponent, string]("Task1", chasm.NewMockTaskHandler[*chasm.MockComponent, string](ctrl)),
 		})
 		r := chasm.NewRegistry()
 		err := r.Register(lib)

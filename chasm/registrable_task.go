@@ -43,13 +43,11 @@ type (
 // NOTE: C is not Component but any.
 func NewRegistrableTask[C any, T any](
 	taskType string,
-	lib Namer,
 	handler TaskHandler[C, T],
 	opts ...RegistrableTaskOption,
 ) *RegistrableTask {
 	rt := &RegistrableTask{
 		taskType:        taskType,
-		library:         lib,
 		goType:          reflect.TypeFor[T](),
 		componentGoType: reflect.TypeFor[C](),
 		handler:         handler,
@@ -63,6 +61,10 @@ func NewRegistrableTask[C any, T any](
 // Type returns the fully qualified name of the task, which is a combination of
 // the library name and the task type. This is used to uniquely identify
 // the task in the registry.
-func (rc RegistrableTask) Type() string {
-	return fullyQualifiedName(rc.library.Name(), rc.taskType)
+func (rt RegistrableTask) Type() string {
+	if rt.library == nil {
+		// this should never happen because the task is only accessible from the library.
+		panic("task is not registered to a library")
+	}
+	return fullyQualifiedName(rt.library.Name(), rt.taskType)
 }
