@@ -28,7 +28,6 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
-	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -47,7 +46,6 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/configs"
 	historyi "go.temporal.io/server/service/history/interfaces"
-	expmaps "golang.org/x/exp/maps"
 	"golang.org/x/sync/semaphore"
 	"golang.org/x/time/rate"
 )
@@ -370,13 +368,6 @@ func (c *ControllerImpl) endLinger(shard historyi.ControllableContext) {
 	delete(c.lingerState.shards, shard)
 }
 
-func (c *ControllerImpl) isLingering(shard historyi.ControllableContext) bool {
-	c.lingerState.Lock()
-	defer c.lingerState.Unlock()
-	_, ok := c.lingerState.shards[shard]
-	return ok
-}
-
 func (c *ControllerImpl) doLinger(ctx context.Context, shard historyi.ControllableContext) {
 	startTime := time.Now()
 	// Enforce a max limit to ensure we close the shard in a reasonable time,
@@ -422,12 +413,23 @@ func (c *ControllerImpl) acquireShards(ctx context.Context) {
 
 	ctx = headers.SetCallerInfo(ctx, headers.SystemBackgroundCallerInfo)
 
+	// Readiness check: if we haven't marked readiness yet, then we need to set up a context to
+	// run the readiness check on owned shards.
+	var readinessCtx context.Context
+	var readinessCancel context.CancelFunc
+	if !c.initialShardsAcquired.Ready() {
+		readinessCtx, readinessCancel = context.WithCancel(ctx)
+	} else {
+		readinessCancel = func() {} // we need a non-nil func for Swap
+	}
 	// Cancel previous readiness check to ensure that the readiness check is always running on
 	// the most recent set of owned shards (e.g. after a membership change).
-	readinessCtx, readinessCancel := context.WithCancel(ctx)
 	if prevCancel := c.shardReadinessCancel.Swap(readinessCancel); prevCancel != nil {
 		prevCancel.(context.CancelFunc)()
 	}
+
+	var ownedShardsLock sync.Mutex
+	var ownedShards []int32 // only populated if we are doing a readiness check
 
 	tryAcquire := func(shardID int32) {
 		if err := c.ownership.verifyOwnership(shardID); err != nil {
@@ -440,6 +442,12 @@ func (c *ControllerImpl) acquireShards(ctx context.Context) {
 				}
 			}
 			return
+		}
+
+		if readinessCtx != nil {
+			ownedShardsLock.Lock()
+			ownedShards = append(ownedShards, shardID)
+			ownedShardsLock.Unlock()
 		}
 
 		shard, err := c.GetShardByID(shardID)
@@ -473,45 +481,46 @@ func (c *ControllerImpl) acquireShards(ctx context.Context) {
 	_ = sem.Acquire(ctx, concurrency)
 
 	c.RLock()
-
 	numOfOwnedShards := len(c.historyShards)
+	c.RUnlock()
+	metrics.NumShardsGauge.With(c.taggedMetricsHandler).Record(float64(numOfOwnedShards))
+	c.publishShardCountUpdate(numOfOwnedShards)
+
 	// Readiness check: We should set initialShardsAcquired when:
 	// 1. It's not already set.
 	// 2. We should own at least one shard (i.e. not before we join membership).
 	// 3. We have ownership of all the shards we're supposed to own.
-	if !c.initialShardsAcquired.Ready() && numOfOwnedShards > 0 {
-		ownedShards := expmaps.Values(c.historyShards)
-		ownedShards = slices.DeleteFunc(ownedShards, c.isLingering)
-		go func() {
-			defer readinessCancel()
-			c.checkShardReadiness(readinessCtx, ownedShards)
-		}()
-	} else {
-		readinessCancel()
+	if readinessCtx != nil {
+		if len(ownedShards) > 0 {
+			go func() {
+				defer readinessCancel()
+				c.checkShardReadiness(readinessCtx, ownedShards)
+			}()
+		} else {
+			readinessCancel()
+		}
 	}
-
-	c.RUnlock()
-	metrics.NumShardsGauge.With(c.taggedMetricsHandler).Record(float64(numOfOwnedShards))
-	c.publishShardCountUpdate(numOfOwnedShards)
 }
 
 func (c *ControllerImpl) checkShardReadiness(
 	ctx context.Context,
-	shards []historyi.ControllableContext,
+	shards []int32,
 ) {
 	concurrency := int64(max(c.config.AcquireShardConcurrency(), 1))
 	sem := semaphore.NewWeighted(concurrency)
 	var ready atomic.Int32
-	for _, shard := range shards {
+	for _, shardID := range shards {
 		if sem.Acquire(ctx, 1) != nil {
 			return
 		}
 		go func() {
 			defer sem.Release(1)
-			// Note that AssertOwnership uses a detached context for the actual persistence op
-			// so we can't cancel it. If context is canceled, the final Acquire will fail and
-			// we won't do anything.
-			if _, err := shard.GetEngine(ctx); err != nil {
+			// Note that AssertOwnership uses a detached context for the actual persistence
+			// op so we can't cancel it. If context is canceled, the final Acquire will
+			// fail and we won't do anything.
+			if shard, err := c.GetShardByID(shardID); err != nil {
+				return
+			} else if _, err := shard.GetEngine(ctx); err != nil {
 				return
 			} else if shard.AssertOwnership(ctx) != nil {
 				return
