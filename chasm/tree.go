@@ -64,15 +64,15 @@ type (
 		serializedNode *persistencespb.ChasmNode // serialized component | data | collection with metadata
 		value          any                       // deserialized component | data | collection
 
-		// TODO: synced flag need to be added here and it should be cleared
-		//   when values serializedNode anc value got in-sync.
-		//   And deserialization/serialization can be skipped if synced flag is true.
-
 		// If valueSynced is false, the value field is not in sync with the persistence field.
 		// The field is only meaningful when value field is not nil.
 		//
 		// NOTE: This is a different concept from the IsDirty() method needed by MutableState which means
 		// if the state in memory matches the state in DB.
+		//
+		// TODO: synced flag should be cleared
+		//   when values serializedNode anc value got in-sync.
+		//   And deserialization/serialization can be skipped if synced flag is true.
 		valueSynced bool
 	}
 
@@ -183,6 +183,86 @@ func NewEmptyTree(
 	}
 	root := newNode(base, nil, "")
 	return root
+}
+
+// Component retrieves a component from the tree rooted at node n
+// using the provided component reference
+// It also performs access rule, and task validation checks
+// (for task processing requests) before returning the component.
+func (n *Node) Component(
+	chasmContext Context,
+	ref ComponentRef,
+) (Component, error) {
+	node, ok := n.getNodeByPath(ref.componentPath)
+	if !ok {
+		return nil, errComponentNotFound
+	}
+
+	metadata := node.serializedNode.Metadata
+	if ref.componentInitialVT != nil && transitionhistory.Compare(
+		ref.componentInitialVT,
+		metadata.InitialVersionedTransition,
+	) != 0 {
+		return nil, errComponentNotFound
+	}
+
+	value, err := node.prepareComponentValue(chasmContext)
+	if err != nil {
+		return nil, err
+	}
+
+	componentValue, ok := value.(Component)
+	if !ok {
+		return nil, serviceerror.NewInternal(
+			fmt.Sprintf("component value is not of type Component: %v", reflect.TypeOf(node.value)),
+		)
+	}
+
+	// TODO: perform access rule check based on the operation intent
+	// and lifecycle state of all ancenstor nodes.
+	//
+	// intent := operationIntentFromContext(chasmContext.getContext())
+	// if intent != OperationIntentUnspecified {
+	// 	...
+	// }
+
+	if ref.validationFn != nil {
+		if err := ref.validationFn(chasmContext, componentValue); err != nil {
+			return nil, err
+		}
+	}
+
+	return componentValue, nil
+}
+
+func (n *Node) prepareComponentValue(
+	chasmContext Context,
+) (any, error) {
+	metadata := n.serializedNode.Metadata
+	componentAttr := metadata.GetComponentAttributes()
+	if componentAttr == nil {
+		return nil, serviceerror.NewInternal(
+			fmt.Sprintf("expect chasm node to have ComponentAttributes, actual attributes: %v", metadata.Attributes),
+		)
+	}
+
+	if n.value == nil {
+		registrableComponent, ok := n.registry.component(componentAttr.GetType())
+		if !ok {
+			return nil, serviceerror.NewInternal(fmt.Sprintf("component type name not registered: %v", componentAttr.GetType()))
+		}
+
+		if err := n.deserialize(registrableComponent.goType); err != nil {
+			return nil, fmt.Errorf("failed to deserialize component: %w", err)
+		}
+	}
+
+	// For now, we assume if a node is accessed with a MutableContext,
+	// its value will be mutated and no longer in sync with the serializedNode.
+	_, ok := chasmContext.(MutableContext)
+	n.valueSynced = !ok
+
+	return n.value, nil
 }
 
 // setValue sets node value field and initialize serializedNode field with empty attributes based on fieldType.
@@ -385,93 +465,6 @@ func (n *Node) unmarshalProto(
 	}
 
 	return value, nil
-}
-
-// Component retrieves a component from the tree rooted at node n
-// using the provided component reference
-// It also performs access rule, and task validation checks
-// (for task processing requests) before returning the component.
-func (n *Node) Component(
-	chasmContext Context,
-	ref ComponentRef,
-) (Component, error) {
-	node, ok := n.getNodeByPath(ref.componentPath)
-	if !ok {
-		return nil, errComponentNotFound
-	}
-
-	metadata := node.persistence.Metadata
-	if ref.componentInitialVT != nil && transitionhistory.Compare(
-		ref.componentInitialVT,
-		metadata.InitialVersionedTransition,
-	) != 0 {
-		return nil, errComponentNotFound
-	}
-
-	value, err := node.prepareComponentValue(chasmContext)
-	if err != nil {
-		return nil, err
-	}
-
-	componentValue, ok := value.(Component)
-	if !ok {
-		return nil, serviceerror.NewInternal(
-			fmt.Sprintf("component value is not of type Component: %v", reflect.TypeOf(node.value)),
-		)
-	}
-
-	// TODO: perform access rule check based on the operation intent
-	// and lifecycle state of all ancenstor nodes.
-	//
-	// intent := operationIntentFromContext(chasmContext.getContext())
-	// if intent != OperationIntentUnspecified {
-	// 	...
-	// }
-
-	if ref.validationFn != nil {
-		if err := ref.validationFn(chasmContext, componentValue); err != nil {
-			return nil, err
-		}
-	}
-
-	return componentValue, nil
-}
-
-func (n *Node) prepareComponentValue(
-	chasmContext Context,
-) (any, error) {
-	metadata := n.persistence.Metadata
-	componentAttr := metadata.GetComponentAttributes()
-	if componentAttr == nil {
-		return nil, serviceerror.NewInternal(
-			fmt.Sprintf("expect chasm node to have ComponentAttributes, actual attributes: %v", metadata.Attributes),
-		)
-	}
-
-	if n.value == nil {
-		registrableComponent, ok := n.registry.component(componentAttr.GetType())
-		if !ok {
-			return nil, serviceerror.NewInternal(fmt.Sprintf("component type name not registered: %v", componentAttr.GetType()))
-		}
-
-		if err := n.deserialize(registrableComponent.goType); err != nil {
-			return nil, fmt.Errorf("failed to deserialize component: %w", err)
-		}
-	}
-
-	// For now, we assume if a node is accessed with a MutableContext,
-	// its value will be mutated and no longer in sync with the persistence.
-	_, ok := chasmContext.(MutableContext)
-	n.valueSynced = !ok
-
-	return n.value, nil
-}
-
-func (n *Node) deserialize(
-	valueT reflect.Type,
-) error {
-	// This is implemented in PR 7409.
-	panic("not implemented")
 }
 
 // Ref implements the CHASM Context interface
