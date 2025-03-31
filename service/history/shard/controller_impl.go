@@ -28,6 +28,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -284,8 +285,8 @@ func (c *ControllerImpl) getOrCreateShardContext(shardID int32) (historyi.Contro
 		return nil, err
 	}
 
-	hostInfo := c.hostInfoProvider.HostInfo()
 	if atomic.LoadInt32(&c.status) == common.DaemonStatusStopped {
+		hostInfo := c.hostInfoProvider.HostInfo()
 		return nil, fmt.Errorf("ControllerImpl for host '%v' shutting down", hostInfo.Identity())
 	}
 
@@ -369,6 +370,13 @@ func (c *ControllerImpl) endLinger(shard historyi.ControllableContext) {
 	delete(c.lingerState.shards, shard)
 }
 
+func (c *ControllerImpl) isLingering(shard historyi.ControllableContext) bool {
+	c.lingerState.Lock()
+	defer c.lingerState.Unlock()
+	_, ok := c.lingerState.shards[shard]
+	return ok
+}
+
 func (c *ControllerImpl) doLinger(ctx context.Context, shard historyi.ControllableContext) {
 	startTime := time.Now()
 	// Enforce a max limit to ensure we close the shard in a reasonable time,
@@ -414,7 +422,8 @@ func (c *ControllerImpl) acquireShards(ctx context.Context) {
 
 	ctx = headers.SetCallerInfo(ctx, headers.SystemBackgroundCallerInfo)
 
-	// cancel previous readiness check goroutine
+	// Cancel previous readiness check to ensure that the readiness check is always running on
+	// the most recent set of owned shards (e.g. after a membership change).
 	readinessCtx, readinessCancel := context.WithCancel(ctx)
 	if prevCancel := c.shardReadinessCancel.Swap(readinessCancel); prevCancel != nil {
 		prevCancel.(context.CancelFunc)()
@@ -471,9 +480,11 @@ func (c *ControllerImpl) acquireShards(ctx context.Context) {
 	// 2. We should own at least one shard (i.e. not before we join membership).
 	// 3. We have ownership of all the shards we're supposed to own.
 	if !c.initialShardsAcquired.Ready() && numOfOwnedShards > 0 {
+		ownedShards := expmaps.Values(c.historyShards)
+		ownedShards = slices.DeleteFunc(ownedShards, c.isLingering)
 		go func() {
 			defer readinessCancel()
-			c.checkShardReadiness(readinessCtx, expmaps.Values(c.historyShards))
+			c.checkShardReadiness(readinessCtx, ownedShards)
 		}()
 	} else {
 		readinessCancel()
