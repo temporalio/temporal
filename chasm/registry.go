@@ -92,10 +92,6 @@ func (r *Registry) taskFor(taskInstance any) (*RegistrableTask, bool) {
 	return rt, ok
 }
 
-func (r *Registry) fqn(libName, name string) string {
-	return libName + "." + name
-}
-
 func (r *Registry) registerComponent(
 	libName string,
 	rc *RegistrableComponent,
@@ -103,7 +99,7 @@ func (r *Registry) registerComponent(
 	if err := r.validateName(rc.componentType); err != nil {
 		return err
 	}
-	fqn := r.fqn(libName, rc.componentType)
+	fqn := fullyQualifiedName(libName, rc.componentType)
 	if _, ok := r.componentByType[fqn]; ok {
 		return fmt.Errorf("component %s is already registered", fqn)
 	}
@@ -127,7 +123,7 @@ func (r *Registry) registerTask(
 	if err := r.validateName(rt.taskType); err != nil {
 		return err
 	}
-	fqn := r.fqn(libName, rt.taskType)
+	fqn := fullyQualifiedName(libName, rt.taskType)
 	if _, ok := r.taskByType[fqn]; ok {
 		return fmt.Errorf("task %s is already registered", fqn)
 	}

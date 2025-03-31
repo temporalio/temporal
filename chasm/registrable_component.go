@@ -31,6 +31,7 @@ import (
 type (
 	RegistrableComponent struct {
 		componentType string
+		library       Namer
 		goType        reflect.Type
 
 		ephemeral     bool
@@ -43,10 +44,12 @@ type (
 
 func NewRegistrableComponent[C Component](
 	componentType string,
+	lib Namer,
 	opts ...RegistrableComponentOption,
 ) *RegistrableComponent {
 	rc := &RegistrableComponent{
 		componentType: componentType,
+		library:       lib,
 		goType:        reflect.TypeFor[C](),
 		shardingFn:    defaultShardingFn,
 	}
@@ -77,6 +80,9 @@ func WithShardingFn(
 	}
 }
 
+// Type returns the fully qualified name of the component, which is a combination of
+// the library name and the component type. This is used to uniquely identify
+// the component in the registry.
 func (rc RegistrableComponent) Type() string {
-	return rc.componentType
+	return fullyQualifiedName(rc.library.Name(), rc.componentType)
 }

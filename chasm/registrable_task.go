@@ -31,6 +31,7 @@ import (
 type (
 	RegistrableTask struct {
 		taskType        string
+		library         Namer
 		goType          reflect.Type
 		componentGoType reflect.Type // It is not clear how this one is used.
 		handler         any
@@ -42,11 +43,13 @@ type (
 // NOTE: C is not Component but any.
 func NewRegistrableTask[C any, T any](
 	taskType string,
+	lib Namer,
 	handler TaskHandler[C, T],
 	opts ...RegistrableTaskOption,
 ) *RegistrableTask {
 	rt := &RegistrableTask{
 		taskType:        taskType,
+		library:         lib,
 		goType:          reflect.TypeFor[T](),
 		componentGoType: reflect.TypeFor[C](),
 		handler:         handler,
@@ -57,6 +60,9 @@ func NewRegistrableTask[C any, T any](
 	return rt
 }
 
-func (rt RegistrableTask) Type() string {
-	return rt.taskType
+// Type returns the fully qualified name of the task, which is a combination of
+// the library name and the task type. This is used to uniquely identify
+// the task in the registry.
+func (rc RegistrableTask) Type() string {
+	return fullyQualifiedName(rc.library.Name(), rc.taskType)
 }

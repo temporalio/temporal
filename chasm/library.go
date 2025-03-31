@@ -28,7 +28,7 @@ package chasm
 
 type (
 	Library interface {
-		Name() string
+		Namer
 		Components() []*RegistrableComponent
 		Tasks() []*RegistrableTask
 		// Service()
@@ -37,6 +37,10 @@ type (
 	}
 
 	UnimplementedLibrary struct{}
+
+	Namer interface {
+		Name() string
+	}
 )
 
 func (UnimplementedLibrary) Components() []*RegistrableComponent {
@@ -48,3 +52,7 @@ func (UnimplementedLibrary) Tasks() []*RegistrableTask {
 }
 
 func (UnimplementedLibrary) mustEmbedUnimplementedLibrary() {}
+
+func fullyQualifiedName(libName, name string) string {
+	return libName + "." + name
+}
