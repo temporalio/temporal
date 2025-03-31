@@ -30,6 +30,7 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/quotas"
@@ -83,7 +84,11 @@ func (ni *NamespaceRateLimitInterceptorImpl) Intercept(
 	handler grpc.UnaryHandler,
 ) (interface{}, error) {
 	if ns := MustGetNamespaceName(ni.namespaceRegistry, req); ns != namespace.EmptyName {
-		if err := ni.Allow(ns, info.FullMethod, headers.NewGRPCHeaderGetter(ctx)); err != nil {
+		method := info.FullMethod
+		if IsLongPollGetHistoryRequest(req) {
+			method = "/temporal.api.workflowservice.v1.WorkflowService/GetWorkflowExecutionHistory_LongPoll"
+		}
+		if err := ni.Allow(ns, method, headers.NewGRPCHeaderGetter(ctx)); err != nil {
 			return nil, err
 		}
 	}
@@ -108,4 +113,14 @@ func (ni *NamespaceRateLimitInterceptorImpl) Allow(namespaceName namespace.Name,
 		return ErrNamespaceRateLimitServerBusy
 	}
 	return nil
+}
+
+func IsLongPollGetHistoryRequest(
+	req interface{},
+) bool {
+	switch request := req.(type) {
+	case *workflowservice.GetWorkflowExecutionHistoryRequest:
+		return request.GetWaitNewEvent()
+	}
+	return false
 }
