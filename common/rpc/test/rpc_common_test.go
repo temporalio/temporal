@@ -76,6 +76,13 @@ var (
 		MembershipPort: 7600,
 		BindOnIP:       localhostIPv4,
 	}
+	cfg = &config.Config{
+		Services: map[string]config.Service{
+			"frontend": {
+				RPC: *rpcTestCfgDefault,
+			},
+		},
+	}
 	serverCfgInsecure = &config.Global{
 		Membership: config.Membership{
 			MaxJoinDuration:  5,
