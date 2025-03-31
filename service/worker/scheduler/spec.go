@@ -32,15 +32,16 @@ import (
 	"time"
 
 	"github.com/dgryski/go-farm"
-	schedpb "go.temporal.io/api/schedule/v1"
+	schedulepb "go.temporal.io/api/schedule/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/util"
 )
 
 type (
 	CompiledSpec struct {
-		spec     *schedpb.ScheduleSpec
+		spec     *schedulepb.ScheduleSpec
 		tz       *time.Location
 		calendar []*compiledCalendar
 		excludes []*compiledCalendar
@@ -76,7 +77,7 @@ func NewSpecBuilder() *SpecBuilder {
 	}
 }
 
-func (b *SpecBuilder) NewCompiledSpec(spec *schedpb.ScheduleSpec) (*CompiledSpec, error) {
+func (b *SpecBuilder) NewCompiledSpec(spec *schedulepb.ScheduleSpec) (*CompiledSpec, error) {
 	spec, err := canonicalizeSpec(spec)
 	if err != nil {
 		return nil, err
@@ -111,8 +112,8 @@ func (b *SpecBuilder) NewCompiledSpec(spec *schedpb.ScheduleSpec) (*CompiledSpec
 }
 
 // CleanSpec sets default values in ranges.
-func CleanSpec(spec *schedpb.ScheduleSpec) {
-	cleanRanges := func(ranges []*schedpb.Range) {
+func CleanSpec(spec *schedulepb.ScheduleSpec) {
+	cleanRanges := func(ranges []*schedulepb.Range) {
 		for _, r := range ranges {
 			if r.End < r.Start {
 				r.End = r.Start
@@ -122,7 +123,7 @@ func CleanSpec(spec *schedpb.ScheduleSpec) {
 			}
 		}
 	}
-	cleanCal := func(structured *schedpb.StructuredCalendarSpec) {
+	cleanCal := func(structured *schedulepb.StructuredCalendarSpec) {
 		cleanRanges(structured.Second)
 		cleanRanges(structured.Minute)
 		cleanRanges(structured.Hour)
@@ -139,7 +140,8 @@ func CleanSpec(spec *schedpb.ScheduleSpec) {
 	}
 }
 
-func canonicalizeSpec(spec *schedpb.ScheduleSpec) (*schedpb.ScheduleSpec, error) {
+//revive:disable-next-line:cognitive-complexity
+func canonicalizeSpec(spec *schedulepb.ScheduleSpec) (*schedulepb.ScheduleSpec, error) {
 	// make copy so we can change some fields
 	spec = common.CloneProto(spec)
 
@@ -212,20 +214,20 @@ func canonicalizeSpec(spec *schedpb.ScheduleSpec) (*schedpb.ScheduleSpec, error)
 	return spec, nil
 }
 
-func validateStructuredCalendar(scs *schedpb.StructuredCalendarSpec) error {
+func validateStructuredCalendar(scs *schedulepb.StructuredCalendarSpec) error {
 	var errs []string
 
-	checkRanges := func(ranges []*schedpb.Range, field string, min, max int32) {
+	checkRanges := func(ranges []*schedulepb.Range, field string, minVal, maxVal int32) {
 		for _, r := range ranges {
 			if r == nil { // shouldn't happen
 				errs = append(errs, "range is nil")
 				continue
 			}
-			if r.Start < min || r.Start > max {
-				errs = append(errs, fmt.Sprintf("%s Start is not in range [%d-%d]", field, min, max))
+			if r.Start < minVal || r.Start > maxVal {
+				errs = append(errs, fmt.Sprintf("%s Start is not in range [%d-%d]", field, minVal, maxVal))
 			}
-			if r.End != 0 && (r.End < r.Start || r.End > max) {
-				errs = append(errs, fmt.Sprintf("%s End is before Start or not in range [%d-%d]", field, min, max))
+			if r.End != 0 && (r.End < r.Start || r.End > maxVal) {
+				errs = append(errs, fmt.Sprintf("%s End is before Start or not in range [%d-%d]", field, minVal, maxVal))
 			}
 			if r.Step < 0 {
 				errs = append(errs, fmt.Sprintf("%s has invalid Step", field))
@@ -251,11 +253,11 @@ func validateStructuredCalendar(scs *schedpb.StructuredCalendarSpec) error {
 	return nil
 }
 
-func validateInterval(i *schedpb.IntervalSpec) error {
+func validateInterval(i *schedulepb.IntervalSpec) error {
 	if i == nil {
 		return errors.New("interval is nil")
 	}
-	// TODO: use timestamp.ValidateProtoDuration after switching to state machine based implementation.
+	// TODO: use timestamp.ValidateAndCapProtoDuration after switching to state machine based implementation.
 	// 	Not adding it to workflow based implementation to avoid potential non-determinism errors.
 	iv, phase := timestamp.DurationValue(i.Interval), timestamp.DurationValue(i.Phase)
 	if iv < time.Second {
@@ -268,7 +270,7 @@ func validateInterval(i *schedpb.IntervalSpec) error {
 	return nil
 }
 
-func (b *SpecBuilder) loadTimezone(spec *schedpb.ScheduleSpec) (*time.Location, error) {
+func (b *SpecBuilder) loadTimezone(spec *schedulepb.ScheduleSpec) (*time.Location, error) {
 	if spec.TimezoneData != nil {
 		return time.LoadLocationFromTZData(spec.TimezoneName, spec.TimezoneData)
 	}
@@ -284,7 +286,7 @@ func (b *SpecBuilder) loadTimezone(spec *schedpb.ScheduleSpec) (*time.Location, 
 	return loc, err
 }
 
-func (cs *CompiledSpec) CanonicalForm() *schedpb.ScheduleSpec {
+func (cs *CompiledSpec) CanonicalForm() *schedulepb.ScheduleSpec {
 	return cs.spec
 }
 
@@ -294,9 +296,8 @@ func (cs *CompiledSpec) CanonicalForm() *schedpb.ScheduleSpec {
 func (cs *CompiledSpec) GetNextTime(jitterSeed string, after time.Time) GetNextTimeResult {
 	// If we're starting before the schedule's allowed time range, jump up to right before
 	// it (so that we can still return the first second of the range if it happens to match).
-	if cs.spec.StartTime != nil && after.Before(timestamp.TimeValue(cs.spec.StartTime)) {
-		after = cs.spec.StartTime.AsTime().Add(-time.Second)
-	}
+	// note: AsTime returns unix epoch on nil StartTime
+	after = util.MaxTime(after, cs.spec.StartTime.AsTime().Add(-time.Second))
 
 	pastEndTime := func(t time.Time) bool {
 		return cs.spec.EndTime != nil && t.After(cs.spec.EndTime.AsTime())
@@ -349,7 +350,7 @@ func (cs *CompiledSpec) rawNextTime(after time.Time) (nominal time.Time) {
 }
 
 // Returns the next matching time for a single interval spec.
-func (cs *CompiledSpec) nextIntervalTime(iv *schedpb.IntervalSpec, ts int64) int64 {
+func (cs *CompiledSpec) nextIntervalTime(iv *schedulepb.IntervalSpec, ts int64) int64 {
 	interval := int64(timestamp.DurationValue(iv.Interval) / time.Second)
 	if interval < 1 {
 		interval = 1

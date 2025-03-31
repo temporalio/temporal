@@ -38,14 +38,14 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/api"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/ndc"
-	"go.temporal.io/server/service/history/shard"
 )
 
 func Invoke(
 	ctx context.Context,
 	resetRequest *historyservice.ResetWorkflowExecutionRequest,
-	shard shard.Context,
+	shardContext historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (_ *historyservice.ResetWorkflowExecutionResponse, retError error) {
 	namespaceID := namespace.ID(resetRequest.GetNamespaceId())
@@ -115,7 +115,7 @@ func Invoke(
 
 	// dedup by requestID
 	if currentWorkflowLease.GetMutableState().GetExecutionState().CreateRequestId == request.GetRequestId() {
-		shard.GetLogger().Info("Duplicated reset request",
+		shardContext.GetLogger().Info("Duplicated reset request",
 			tag.WorkflowID(workflowID),
 			tag.WorkflowRunID(currentRunID),
 			tag.WorkflowNamespaceID(namespaceID.String()))
@@ -137,11 +137,22 @@ func Invoke(
 	}
 	baseCurrentBranchToken := baseCurrentVersionHistory.GetBranchToken()
 	baseNextEventID := baseMutableState.GetNextEventID()
+	baseWorkflow := ndc.NewWorkflow(
+		shardContext.GetClusterMetadata(),
+		baseWorkflowLease.GetContext(),
+		baseWorkflowLease.GetMutableState(),
+		baseWorkflowLease.GetReleaseFn(),
+	)
 
+	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespaceID)
+	if err != nil {
+		return nil, err
+	}
+	allowResetWithPendingChildren := shardContext.GetConfig().AllowResetWithPendingChildren(namespaceEntry.Name().String())
 	if err := ndc.NewWorkflowResetter(
-		shard,
+		shardContext,
 		workflowConsistencyChecker.GetWorkflowCache(),
-		shard.GetLogger(),
+		shardContext.GetLogger(),
 	).ResetWorkflow(
 		ctx,
 		namespaceID,
@@ -153,8 +164,9 @@ func Invoke(
 		baseNextEventID,
 		resetRunID,
 		request.GetRequestId(),
+		baseWorkflow,
 		ndc.NewWorkflow(
-			shard.GetClusterMetadata(),
+			shardContext.GetClusterMetadata(),
 			currentWorkflowLease.GetContext(),
 			currentWorkflowLease.GetMutableState(),
 			currentWorkflowLease.GetReleaseFn(),
@@ -162,6 +174,7 @@ func Invoke(
 		request.GetReason(),
 		nil,
 		GetResetReapplyExcludeTypes(request.GetResetReapplyExcludeTypes(), request.GetResetReapplyType()),
+		allowResetWithPendingChildren,
 	); err != nil {
 		return nil, err
 	}

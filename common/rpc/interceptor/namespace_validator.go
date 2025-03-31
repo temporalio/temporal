@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/tasktoken"
 	"google.golang.org/grpc"
 )
 
@@ -47,7 +48,7 @@ type (
 	// NamespaceValidatorInterceptor contains NamespaceValidateIntercept and StateValidationIntercept
 	NamespaceValidatorInterceptor struct {
 		namespaceRegistry               namespace.Registry
-		tokenSerializer                 common.TaskTokenSerializer
+		tokenSerializer                 *tasktoken.Serializer
 		enableTokenNamespaceEnforcement dynamicconfig.BoolPropertyFn
 		maxNamespaceLength              dynamicconfig.IntPropertyFn
 	}
@@ -76,32 +77,35 @@ var (
 	// that have `namespace` or `task_token` field in the request object.
 	allowedNamespaceStatesDefault = []enumspb.NamespaceState{enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED}
 
+	// DO NOT allow workflow data read during namespace handover to prevent read-after-write inconsistency.
 	allowedMethodsDuringHandover = map[string]struct{}{
-		"DescribeNamespace":                  {},
-		"UpdateNamespace":                    {},
-		"GetReplicationMessages":             {},
-		"ReplicateEventsV2":                  {},
-		"GetWorkflowExecutionRawHistory":     {},
-		"GetWorkflowExecutionRawHistoryV2":   {},
-		"GetWorkflowExecutionHistory":        {},
-		"GetWorkflowExecutionHistoryReverse": {},
-		"DescribeWorkflowExecution":          {},
-		"DescribeTaskQueue":                  {},
-		"ListTaskQueuePartitions":            {},
-		"ListOpenWorkflowExecutions":         {},
-		"ListClosedWorkflowExecutions":       {},
-		"ListWorkflowExecutions":             {},
-		"ListArchivedWorkflowExecutions":     {},
-		"ScanWorkflowExecutions":             {},
-		"CountWorkflowExecutions":            {},
-		"DescribeSchedule":                   {},
-		"ListScheduleMatchingTimes":          {},
-		"ListSchedules":                      {},
-		"GetWorkerBuildIdCompatibility":      {},
-		"GetWorkerVersioningRules":           {},
-		"GetWorkerTaskReachability":          {},
-		"DescribeBatchOperation":             {},
-		"ListBatchOperations":                {},
+		// System
+		"GetSystemInfo":       {},
+		"GetSearchAttributes": {},
+		"GetClusterInfo":      {},
+		// Namespace APIs
+		"DeprecateNamespace": {},
+		"DescribeNamespace":  {},
+		"UpdateNamespace":    {},
+		"ListNamespaces":     {},
+		"RegisterNamespace":  {},
+		// Replication APIs
+		"GetReplicationMessages":           {},
+		"ReplicateEventsV2":                {},
+		"GetWorkflowExecutionRawHistory":   {},
+		"GetWorkflowExecutionRawHistoryV2": {},
+		// Visibility APIs
+		"ListTaskQueuePartitions":        {},
+		"ListOpenWorkflowExecutions":     {},
+		"ListClosedWorkflowExecutions":   {},
+		"ListWorkflowExecutions":         {},
+		"ListArchivedWorkflowExecutions": {},
+		"ScanWorkflowExecutions":         {},
+		"CountWorkflowExecutions":        {},
+		"ListSchedules":                  {},
+		"ListBatchOperations":            {},
+		// Matching
+		"ShutdownWorker": {},
 	}
 )
 
@@ -115,7 +119,7 @@ func NewNamespaceValidatorInterceptor(
 ) *NamespaceValidatorInterceptor {
 	return &NamespaceValidatorInterceptor{
 		namespaceRegistry:               namespaceRegistry,
-		tokenSerializer:                 common.NewProtoTaskTokenSerializer(),
+		tokenSerializer:                 tasktoken.NewSerializer(),
 		enableTokenNamespaceEnforcement: enableTokenNamespaceEnforcement,
 		maxNamespaceLength:              maxNamespaceLength,
 	}

@@ -1,0 +1,74 @@
+{{ $decorator := (or .Vars.DecoratorName (printf "telemetry%s" .Interface.Name)) }}
+
+// {{$decorator}} implements {{.Interface.Name}} interface instrumented with OpenTelemetry.
+type {{$decorator}} struct {
+    {{.Interface.Type}}
+    tracer trace.Tracer
+    logger log.Logger
+    debugMode bool
+}
+
+// new{{upFirst $decorator}} returns {{$decorator}}.
+func new{{upFirst $decorator}} (
+    base {{.Interface.Type}},
+    logger log.Logger,
+    tracer trace.Tracer,
+) {{$decorator}} {
+    return {{$decorator}} {
+        {{.Interface.Name}}: base,
+        tracer: tracer,
+        debugMode: telemetry.DebugMode(),
+    }
+}
+
+{{range $method := .Interface.Methods}}
+    {{if $method.AcceptsContext}}
+        {{ $methodIdent := (printf "%s.%s" $.Interface.Name $method.Name) }}
+        // {{$method.Name}} wraps {{ (printf "%s.%s" $.Interface.Name $method.Name) }}.
+        func (d {{$decorator}}) {{$method.Declaration}} {
+            ctx, span := d.tracer.Start(
+                ctx,
+                "{{ printf "persistence.%s/%s" $.Interface.Name $method.Name }}",
+                trace.WithAttributes(
+                    attribute.Key("persistence.store").String("{{ $.Interface.Name }}"),
+                    attribute.Key("persistence.method").String("{{ $method.Name }}"),
+                ))
+            defer span.End()
+
+            if deadline, ok := ctx.Deadline(); ok {
+                span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+                span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
+            }
+
+            {{$method.ResultsNames}} = d.{{$.Interface.Name}}.{{$method.Call}}
+            {{- if $method.ReturnsError}}
+            if err != nil {
+              span.RecordError(err)
+            }
+            {{end}}
+
+            if d.debugMode {
+                {{- if (gt (len $method.Params) 1) }}
+                {{ $request := (index $method.Params 1) }}
+                requestPayload, err := json.MarshalIndent({{ $request.Name }}, "", "    ")
+                if err != nil {
+                    d.logger.Error("failed to serialize {{$request.Type}} for OTEL span", tag.Error(err))
+                } else {
+                    span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+                }
+                {{end}}
+                {{- if (gt (len $method.Results) 1) }}
+                {{ $result := (index $method.Results 0) }}
+                responsePayload, err := json.MarshalIndent({{ $result.Name }}, "", "    ")
+                if err != nil {
+                    d.logger.Error("failed to serialize {{$result.Type}} for OTEL span", tag.Error(err))
+                } else {
+                    span.SetAttributes(attribute.Key("persistence.response.payload").String(string(responsePayload)))
+                }
+                {{end}}
+            }
+
+            return
+        }
+    {{end}}
+{{end}}

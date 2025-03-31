@@ -31,7 +31,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/api/enums/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/persistencetest"
@@ -172,7 +172,7 @@ func testHappyPath(
 	require.NoError(t, err)
 	assert.Equal(t, 0, len(response.Messages))
 
-	encodingType := enums.ENCODING_TYPE_JSON
+	encodingType := enumspb.ENCODING_TYPE_JSON
 	_, err = persistencetest.EnqueueMessage(ctx, queue, queueType, queueName)
 	require.NoError(t, err)
 

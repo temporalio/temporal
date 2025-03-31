@@ -36,7 +36,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/api/persistence/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/shuffle"
 	"go.temporal.io/server/common/testing/protorequire"
@@ -359,7 +359,7 @@ func (s *taskSerializerSuite) TestSyncVersionedTransitionTask() {
 		FirstEventID:        rand.Int63(),
 		NextEventID:         rand.Int63(),
 		NewRunID:            uuid.New().String(),
-		VersionedTransition: &persistence.VersionedTransition{
+		VersionedTransition: &persistencespb.VersionedTransition{
 			NamespaceFailoverVersion: rand.Int63(),
 			TransitionCount:          rand.Int63(),
 		},
@@ -436,23 +436,23 @@ func (s *taskSerializerSuite) TestStateMachineOutboundTask() {
 			WorkflowKey:         s.workflowKey,
 			VisibilityTimestamp: time.Now().UTC(),
 			TaskID:              rand.Int63(),
-			Info: &persistence.StateMachineTaskInfo{
-				Ref: &persistence.StateMachineRef{
-					Path: []*persistence.StateMachineKey{
+			Info: &persistencespb.StateMachineTaskInfo{
+				Ref: &persistencespb.StateMachineRef{
+					Path: []*persistencespb.StateMachineKey{
 						{
 							Type: "some-type",
 							Id:   "some-id",
 						},
 					},
-					MutableStateVersionedTransition: &persistence.VersionedTransition{
+					MutableStateVersionedTransition: &persistencespb.VersionedTransition{
 						NamespaceFailoverVersion: rand.Int63(),
 						TransitionCount:          rand.Int63(),
 					},
-					MachineInitialVersionedTransition: &persistence.VersionedTransition{
+					MachineInitialVersionedTransition: &persistencespb.VersionedTransition{
 						NamespaceFailoverVersion: rand.Int63(),
 						TransitionCount:          rand.Int63(),
 					},
-					MachineLastUpdateVersionedTransition: &persistence.VersionedTransition{
+					MachineLastUpdateVersionedTransition: &persistencespb.VersionedTransition{
 						NamespaceFailoverVersion: rand.Int63(),
 						TransitionCount:          rand.Int63(),
 					},

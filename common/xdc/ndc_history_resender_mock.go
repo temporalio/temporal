@@ -45,6 +45,7 @@ import (
 type MockNDCHistoryResender struct {
 	ctrl     *gomock.Controller
 	recorder *MockNDCHistoryResenderMockRecorder
+	isgomock struct{}
 }
 
 // MockNDCHistoryResenderMockRecorder is the mock recorder for MockNDCHistoryResender.

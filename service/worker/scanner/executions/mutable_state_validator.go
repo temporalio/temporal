@@ -30,7 +30,7 @@ import (
 	"time"
 
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/server/api/enums/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -246,9 +246,9 @@ func (v *mutableStateValidator) validateID(
 
 func (v *mutableStateValidator) validateRetention(
 	executionInfo *persistencespb.WorkflowExecutionInfo,
-	executionState enums.WorkflowExecutionState,
+	executionState enumsspb.WorkflowExecutionState,
 ) (*MutableStateValidationResult, error) {
-	if executionState != enums.WORKFLOW_EXECUTION_STATE_COMPLETED {
+	if executionState != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		return nil, nil
 	}
 	// We don't use the close time here because some old workflows do not have the close time.

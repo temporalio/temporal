@@ -29,6 +29,7 @@ import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
 
 import "temporal/api/common/v1/message.proto";
+import "temporal/api/deployment/v1/message.proto";
 import "temporal/api/enums/v1/task_queue.proto";
 import "temporal/api/history/v1/message.proto";
 import "temporal/api/taskqueue/v1/message.proto";
@@ -36,6 +37,7 @@ import "temporal/api/query/v1/message.proto";
 import "temporal/api/protocol/v1/message.proto";
 
 import "temporal/server/api/clock/v1/message.proto";
+import "temporal/server/api/deployment/v1/message.proto";
 import "temporal/server/api/history/v1/message.proto";
 import "temporal/server/api/persistence/v1/nexus.proto";
 import "temporal/server/api/persistence/v1/task_queues.proto";
@@ -75,6 +77,7 @@ message PollWorkflowTaskQueueResponse {
     // a workflow task. Sticky query tasks will not include any history.
     temporal.api.history.v1.History history = 19;
     bytes next_page_token = 20;
+    temporal.api.taskqueue.v1.PollerScalingDecision poller_scaling_decision = 21;
 }
 
 message PollActivityTaskQueueRequest {
@@ -105,6 +108,8 @@ message PollActivityTaskQueueResponse {
     temporal.api.common.v1.WorkflowType workflow_type = 14;
     string workflow_namespace = 15;
     temporal.api.common.v1.Header header = 16;
+    temporal.api.taskqueue.v1.PollerScalingDecision poller_scaling_decision = 17;
+    temporal.api.common.v1.Priority priority = 18;
 }
 
 message AddWorkflowTaskRequest {
@@ -120,10 +125,12 @@ message AddWorkflowTaskRequest {
     // for TaskVersionDirective, which is unversioned.)
     temporal.server.api.taskqueue.v1.TaskVersionDirective version_directive = 10;
     temporal.server.api.taskqueue.v1.TaskForwardInfo forward_info = 11;
+    temporal.api.common.v1.Priority priority = 12;
 }
 
 message AddWorkflowTaskResponse {
     // When present, it means that the task is spooled to a versioned queue of this build ID
+    // Deprecated. [cleanup-old-wv]
     string assigned_build_id = 1;
 }
 
@@ -141,12 +148,13 @@ message AddActivityTaskRequest {
     // for TaskVersionDirective, which is unversioned.)
     temporal.server.api.taskqueue.v1.TaskVersionDirective version_directive = 10;
     temporal.server.api.taskqueue.v1.TaskForwardInfo forward_info = 11;
-
     int32 stamp = 12;
+    temporal.api.common.v1.Priority priority = 13;
 }
 
 message AddActivityTaskResponse {
     // When present, it means that the task is spooled to a versioned queue of this build ID
+    // Deprecated. [cleanup-old-wv]
     string assigned_build_id = 1;
 }
 
@@ -158,6 +166,7 @@ message QueryWorkflowRequest {
     // for TaskVersionDirective, which is unversioned.)
     temporal.server.api.taskqueue.v1.TaskVersionDirective version_directive = 5;
     temporal.server.api.taskqueue.v1.TaskForwardInfo forward_info = 6;
+    temporal.api.common.v1.Priority priority = 7;
 }
 
 message QueryWorkflowResponse {
@@ -287,6 +296,7 @@ message GetWorkerBuildIdCompatibilityRequest {
     string namespace_id = 1;
     temporal.api.workflowservice.v1.GetWorkerBuildIdCompatibilityRequest request = 2;
 }
+
 message GetWorkerBuildIdCompatibilityResponse {
     temporal.api.workflowservice.v1.GetWorkerBuildIdCompatibilityResponse response = 1;
 }
@@ -296,8 +306,6 @@ message GetTaskQueueUserDataRequest {
     // The task queue to fetch data from. The task queue is always considered as a normal
     // queue, since sticky queues have no user data.
     string task_queue = 2;
-    // Normally task queue type should always be TASK_QUEUE_TYPE_WORKFLOW here, but querying
-    // activity task queues is useful for testing.
     temporal.api.enums.v1.TaskQueueType task_queue_type = 5;
     // The value of the last known user data version.
     // If the requester has no data, it should set this to 0.
@@ -306,12 +314,44 @@ message GetTaskQueueUserDataRequest {
     // If set and last_known_user_data_version is the current version, block until new data is
     // available (or timeout).
     bool wait_new_data = 4;
+    // If set, do not load task queue if unloaded. (Returns FailedPrecondition error in that case.)
+    bool only_if_loaded = 6;
 }
+
 message GetTaskQueueUserDataResponse {
     reserved 1;
     // Versioned user data, set if the task queue has user data and the request's last_known_user_data_version is less
     // than the version cached in the root partition.
     temporal.server.api.persistence.v1.VersionedTaskQueueUserData user_data = 2;
+}
+
+message SyncDeploymentUserDataRequest {
+    string namespace_id = 1;
+    string task_queue = 2;
+    // Note: this is the task queue type being modified, but this field should not be used for
+    // routing, the user data is owned by the WORKFLOW task queue.
+    // Deprecated. Use `task_queue_types`.
+    temporal.api.enums.v1.TaskQueueType task_queue_type = 3;
+    repeated temporal.api.enums.v1.TaskQueueType task_queue_types = 8;
+
+    // This is the deployment being modified.
+    // Deprecated.
+    temporal.api.deployment.v1.Deployment deployment = 4;
+    // Data for this deployment.
+    // Deprecated.
+    temporal.server.api.deployment.v1.TaskQueueData data = 5;
+
+    oneof operation {
+        // The deployment version and its data that is being updated.
+        temporal.server.api.deployment.v1.DeploymentVersionData update_version_data = 6;
+        // The version whose data should be cleaned from the task queue.
+        temporal.server.api.deployment.v1.WorkerDeploymentVersion forget_version = 7;
+    }
+}
+
+message SyncDeploymentUserDataResponse {
+    // New task queue user data version. Can be used to wait for propagation.
+    int64 version = 1;
 }
 
 message ApplyTaskQueueUserDataReplicationEventRequest {
@@ -389,6 +429,15 @@ message ReplicateTaskQueueUserDataRequest {
 }
 
 message ReplicateTaskQueueUserDataResponse {
+}
+
+message CheckTaskQueueUserDataPropagationRequest {
+    string namespace_id = 1;
+    string task_queue = 2;
+    int64 version = 3;
+}
+
+message CheckTaskQueueUserDataPropagationResponse {
 }
 
 message DispatchNexusTaskRequest {

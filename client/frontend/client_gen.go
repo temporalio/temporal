@@ -63,6 +63,26 @@ func (c *clientImpl) DeleteSchedule(
 	return c.client.DeleteSchedule(ctx, request, opts...)
 }
 
+func (c *clientImpl) DeleteWorkerDeployment(
+	ctx context.Context,
+	request *workflowservice.DeleteWorkerDeploymentRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.DeleteWorkerDeploymentResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.DeleteWorkerDeployment(ctx, request, opts...)
+}
+
+func (c *clientImpl) DeleteWorkerDeploymentVersion(
+	ctx context.Context,
+	request *workflowservice.DeleteWorkerDeploymentVersionRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.DeleteWorkerDeploymentVersionResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.DeleteWorkerDeploymentVersion(ctx, request, opts...)
+}
+
 func (c *clientImpl) DeleteWorkflowExecution(
 	ctx context.Context,
 	request *workflowservice.DeleteWorkflowExecutionRequest,
@@ -91,6 +111,16 @@ func (c *clientImpl) DescribeBatchOperation(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.DescribeBatchOperation(ctx, request, opts...)
+}
+
+func (c *clientImpl) DescribeDeployment(
+	ctx context.Context,
+	request *workflowservice.DescribeDeploymentRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.DescribeDeploymentResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.DescribeDeployment(ctx, request, opts...)
 }
 
 func (c *clientImpl) DescribeNamespace(
@@ -123,6 +153,26 @@ func (c *clientImpl) DescribeTaskQueue(
 	return c.client.DescribeTaskQueue(ctx, request, opts...)
 }
 
+func (c *clientImpl) DescribeWorkerDeployment(
+	ctx context.Context,
+	request *workflowservice.DescribeWorkerDeploymentRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.DescribeWorkerDeploymentResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.DescribeWorkerDeployment(ctx, request, opts...)
+}
+
+func (c *clientImpl) DescribeWorkerDeploymentVersion(
+	ctx context.Context,
+	request *workflowservice.DescribeWorkerDeploymentVersionRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.DescribeWorkerDeploymentVersionResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.DescribeWorkerDeploymentVersion(ctx, request, opts...)
+}
+
 func (c *clientImpl) DescribeWorkflowExecution(
 	ctx context.Context,
 	request *workflowservice.DescribeWorkflowExecutionRequest,
@@ -151,6 +201,26 @@ func (c *clientImpl) GetClusterInfo(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.GetClusterInfo(ctx, request, opts...)
+}
+
+func (c *clientImpl) GetCurrentDeployment(
+	ctx context.Context,
+	request *workflowservice.GetCurrentDeploymentRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.GetCurrentDeploymentResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.GetCurrentDeployment(ctx, request, opts...)
+}
+
+func (c *clientImpl) GetDeploymentReachability(
+	ctx context.Context,
+	request *workflowservice.GetDeploymentReachabilityRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.GetDeploymentReachabilityResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.GetDeploymentReachability(ctx, request, opts...)
 }
 
 func (c *clientImpl) GetSearchAttributes(
@@ -253,6 +323,16 @@ func (c *clientImpl) ListClosedWorkflowExecutions(
 	return c.client.ListClosedWorkflowExecutions(ctx, request, opts...)
 }
 
+func (c *clientImpl) ListDeployments(
+	ctx context.Context,
+	request *workflowservice.ListDeploymentsRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.ListDeploymentsResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.ListDeployments(ctx, request, opts...)
+}
+
 func (c *clientImpl) ListNamespaces(
 	ctx context.Context,
 	request *workflowservice.ListNamespacesRequest,
@@ -303,6 +383,16 @@ func (c *clientImpl) ListTaskQueuePartitions(
 	return c.client.ListTaskQueuePartitions(ctx, request, opts...)
 }
 
+func (c *clientImpl) ListWorkerDeployments(
+	ctx context.Context,
+	request *workflowservice.ListWorkerDeploymentsRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.ListWorkerDeploymentsResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.ListWorkerDeployments(ctx, request, opts...)
+}
+
 func (c *clientImpl) ListWorkflowExecutions(
 	ctx context.Context,
 	request *workflowservice.ListWorkflowExecutionsRequest,
@@ -321,6 +411,16 @@ func (c *clientImpl) PatchSchedule(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.PatchSchedule(ctx, request, opts...)
+}
+
+func (c *clientImpl) PauseActivity(
+	ctx context.Context,
+	request *workflowservice.PauseActivityRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.PauseActivityResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.PauseActivity(ctx, request, opts...)
 }
 
 func (c *clientImpl) PollActivityTaskQueue(
@@ -411,6 +511,16 @@ func (c *clientImpl) RequestCancelWorkflowExecution(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.RequestCancelWorkflowExecution(ctx, request, opts...)
+}
+
+func (c *clientImpl) ResetActivity(
+	ctx context.Context,
+	request *workflowservice.ResetActivityRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.ResetActivityResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.ResetActivity(ctx, request, opts...)
 }
 
 func (c *clientImpl) ResetStickyTaskQueue(
@@ -553,6 +663,36 @@ func (c *clientImpl) ScanWorkflowExecutions(
 	return c.client.ScanWorkflowExecutions(ctx, request, opts...)
 }
 
+func (c *clientImpl) SetCurrentDeployment(
+	ctx context.Context,
+	request *workflowservice.SetCurrentDeploymentRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.SetCurrentDeploymentResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.SetCurrentDeployment(ctx, request, opts...)
+}
+
+func (c *clientImpl) SetWorkerDeploymentCurrentVersion(
+	ctx context.Context,
+	request *workflowservice.SetWorkerDeploymentCurrentVersionRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.SetWorkerDeploymentCurrentVersionResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.SetWorkerDeploymentCurrentVersion(ctx, request, opts...)
+}
+
+func (c *clientImpl) SetWorkerDeploymentRampingVersion(
+	ctx context.Context,
+	request *workflowservice.SetWorkerDeploymentRampingVersionRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.SetWorkerDeploymentRampingVersionResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.SetWorkerDeploymentRampingVersion(ctx, request, opts...)
+}
+
 func (c *clientImpl) ShutdownWorker(
 	ctx context.Context,
 	request *workflowservice.ShutdownWorkerRequest,
@@ -623,14 +763,24 @@ func (c *clientImpl) TerminateWorkflowExecution(
 	return c.client.TerminateWorkflowExecution(ctx, request, opts...)
 }
 
-func (c *clientImpl) UpdateActivityOptionsById(
+func (c *clientImpl) UnpauseActivity(
 	ctx context.Context,
-	request *workflowservice.UpdateActivityOptionsByIdRequest,
+	request *workflowservice.UnpauseActivityRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.UpdateActivityOptionsByIdResponse, error) {
+) (*workflowservice.UnpauseActivityResponse, error) {
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return c.client.UpdateActivityOptionsById(ctx, request, opts...)
+	return c.client.UnpauseActivity(ctx, request, opts...)
+}
+
+func (c *clientImpl) UpdateActivityOptions(
+	ctx context.Context,
+	request *workflowservice.UpdateActivityOptionsRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.UpdateActivityOptionsResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.UpdateActivityOptions(ctx, request, opts...)
 }
 
 func (c *clientImpl) UpdateNamespace(
@@ -663,6 +813,16 @@ func (c *clientImpl) UpdateWorkerBuildIdCompatibility(
 	return c.client.UpdateWorkerBuildIdCompatibility(ctx, request, opts...)
 }
 
+func (c *clientImpl) UpdateWorkerDeploymentVersionMetadata(
+	ctx context.Context,
+	request *workflowservice.UpdateWorkerDeploymentVersionMetadataRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.UpdateWorkerDeploymentVersionMetadataResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.UpdateWorkerDeploymentVersionMetadata(ctx, request, opts...)
+}
+
 func (c *clientImpl) UpdateWorkerVersioningRules(
 	ctx context.Context,
 	request *workflowservice.UpdateWorkerVersioningRulesRequest,
@@ -681,4 +841,14 @@ func (c *clientImpl) UpdateWorkflowExecution(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.UpdateWorkflowExecution(ctx, request, opts...)
+}
+
+func (c *clientImpl) UpdateWorkflowExecutionOptions(
+	ctx context.Context,
+	request *workflowservice.UpdateWorkflowExecutionOptionsRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.UpdateWorkflowExecutionOptionsResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.UpdateWorkflowExecutionOptions(ctx, request, opts...)
 }

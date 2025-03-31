@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc/codes"
@@ -52,8 +53,18 @@ func TestMaskUnknownOrInternalErrors(t *testing.T) {
 }
 
 func testMaskUnknownOrInternalErrors(t *testing.T, st *status.Status, expectRelpace bool) {
+	controller := gomock.NewController(t)
+	mockRegistry := namespace.NewMockRegistry(controller)
+	mockLogger := log.NewMockLogger(controller)
+	dc := dynamicconfig.NewNoopCollection()
+	errorMaskInterceptor := NewMaskInternalErrorDetailsInterceptor(
+		dynamicconfig.FrontendMaskInternalErrorDetails.Get(dc), mockRegistry, mockLogger)
+
 	err := serviceerror.FromStatus(st)
-	errorMessage := maskUnknownOrInternalErrors(err)
+	if expectRelpace {
+		mockLogger.EXPECT().Error(gomock.Any(), gomock.Any()).Times(1)
+	}
+	errorMessage := errorMaskInterceptor.maskUnknownOrInternalErrors(nil, "test", err)
 	if expectRelpace {
 		errorHash := common.ErrorHash(err)
 		expectedMessage := fmt.Sprintf("rpc error: code = %s desc = %s (%s)", st.Message(), errorFrontendMasked, errorHash)
@@ -70,9 +81,13 @@ func testMaskUnknownOrInternalErrors(t *testing.T, st *status.Status, expectRelp
 
 func TestMaskInternalErrorDetailsInterceptor(t *testing.T) {
 
-	mockRegistry := namespace.NewMockRegistry(gomock.NewController(t))
+	controller := gomock.NewController(t)
+	mockRegistry := namespace.NewMockRegistry(controller)
 	dc := dynamicconfig.NewNoopCollection()
-	errorMask := NewMaskInternalErrorDetailsInterceptor(dynamicconfig.FrontendMaskInternalErrorDetails.Get(dc), mockRegistry)
+	mockLogger := log.NewMockLogger(controller)
+
+	errorMask := NewMaskInternalErrorDetailsInterceptor(
+		dynamicconfig.FrontendMaskInternalErrorDetails.Get(dc), mockRegistry, mockLogger)
 
 	test_namespace := "test-namespace"
 	req := &workflowservice.StartWorkflowExecutionRequest{Namespace: test_namespace}

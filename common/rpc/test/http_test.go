@@ -34,7 +34,6 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/rpc"
 	"go.uber.org/mock/gomock"
-	"google.golang.org/grpc"
 )
 
 func TestCreateLocalFrontendHTTPClient_UsingMembership(t *testing.T) {
@@ -62,7 +61,7 @@ func TestCreateLocalFrontendHTTPClient_UsingMembership(t *testing.T) {
 		membership.GRPCResolverURLForTesting(monitor, primitives.FrontendService),
 		int(port),
 		nil, // No TLS
-		[]grpc.UnaryClientInterceptor{},
+		nil,
 		monitor,
 	)
 
@@ -92,7 +91,7 @@ func TestCreateLocalFrontendHTTPClient_UsingFixedHostPort(t *testing.T) {
 		addr.String(),
 		0,   // Port is unused
 		nil, // No TLS
-		[]grpc.UnaryClientInterceptor{},
+		nil,
 		nil, // monitor should not be used
 	)
 
@@ -123,7 +122,7 @@ func TestCreateLocalFrontendHTTPClient_UsingFixedHostPort_AndTLS(t *testing.T) {
 		addr.String(),
 		0, // Port is unused
 		tlsConfig,
-		[]grpc.UnaryClientInterceptor{},
+		nil,
 		nil, // monitor should not be used
 	)
 

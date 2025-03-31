@@ -45,10 +45,8 @@ import (
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/api/pollupdate"
-	"go.temporal.io/server/service/history/shard"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tests"
-	"go.temporal.io/server/service/history/workflow"
-	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.temporal.io/server/service/history/workflow/update"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -67,8 +65,8 @@ type (
 
 	mockWorkflowLeaseCtx struct {
 		api.WorkflowLease
-		GetContextFn   func() workflow.Context
-		GetReleaseFnFn func() wcache.ReleaseCacheFunc
+		GetContextFn   func() historyi.WorkflowContext
+		GetReleaseFnFn func() historyi.ReleaseWorkflowContextFunc
 	}
 
 	mockReg struct {
@@ -94,11 +92,11 @@ func (m mockWFConsistencyChecker) GetWorkflowLease(
 	return m.GetWorkflowContextFunc(ctx, clock, wfKey, prio)
 }
 
-func (m mockWorkflowLeaseCtx) GetReleaseFn() wcache.ReleaseCacheFunc {
+func (m mockWorkflowLeaseCtx) GetReleaseFn() historyi.ReleaseWorkflowContextFunc {
 	return m.GetReleaseFnFn()
 }
 
-func (m mockWorkflowLeaseCtx) GetContext() workflow.Context {
+func (m mockWorkflowLeaseCtx) GetContext() historyi.WorkflowContext {
 	return m.GetContextFn()
 }
 
@@ -115,13 +113,13 @@ func TestPollOutcome(t *testing.T) {
 
 	mockController := gomock.NewController(t)
 
-	wfCtx := workflow.NewMockContext(mockController)
+	wfCtx := historyi.NewMockWorkflowContext(mockController)
 	wfCtx.EXPECT().GetWorkflowKey().Return(definition.WorkflowKey{NamespaceID: namespaceId, WorkflowID: workflowId, RunID: runId}).AnyTimes()
-	wfCtx.EXPECT().UpdateRegistry(gomock.Any(), gomock.Any()).Return(reg).AnyTimes()
+	wfCtx.EXPECT().UpdateRegistry(gomock.Any()).Return(reg).AnyTimes()
 
 	apiCtx := mockWorkflowLeaseCtx{
-		GetReleaseFnFn: func() wcache.ReleaseCacheFunc { return func(error) {} },
-		GetContextFn: func() workflow.Context {
+		GetReleaseFnFn: func() historyi.ReleaseWorkflowContextFunc { return func(error) {} },
+		GetContextFn: func() historyi.WorkflowContext {
 			return wfCtx
 		},
 	}
@@ -139,7 +137,7 @@ func TestPollOutcome(t *testing.T) {
 	serverImposedTimeout := 10 * time.Millisecond
 	mockNamespaceRegistry := namespace.NewMockRegistry(mockController)
 	mockNamespaceRegistry.EXPECT().GetNamespaceByID(gomock.Any()).Return(tests.GlobalNamespaceEntry, nil).AnyTimes()
-	shardContext := shard.NewMockContext(mockController)
+	shardContext := historyi.NewMockShardContext(mockController)
 	mockConfig := tests.NewDynamicConfig()
 	mockConfig.LongPollExpirationInterval = func(_ string) time.Duration { return serverImposedTimeout }
 	shardContext.EXPECT().GetConfig().Return(mockConfig).AnyTimes()

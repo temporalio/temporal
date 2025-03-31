@@ -33,7 +33,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/api/persistence/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/cluster/clustertest"
@@ -43,9 +43,8 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
-	"go.temporal.io/server/service/history/shard"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tests"
-	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.uber.org/mock/gomock"
 )
@@ -56,14 +55,14 @@ type (
 		*require.Assertions
 
 		controller        *gomock.Controller
-		shardContext      *shard.MockContext
+		shardContext      *historyi.MockShardContext
 		namespaceRegistry *namespace.MockRegistry
 
 		workflowCache              *wcache.MockCache
 		workflowConsistencyChecker api.WorkflowConsistencyChecker
 
-		currentContext      *workflow.MockContext
-		currentMutableState *workflow.MockMutableState
+		currentContext      *historyi.MockWorkflowContext
+		currentMutableState *historyi.MockMutableState
 	}
 )
 
@@ -85,7 +84,7 @@ func (s *signalWorkflowSuite) SetupTest() {
 	s.namespaceRegistry = namespace.NewMockRegistry(s.controller)
 	s.namespaceRegistry.EXPECT().GetNamespaceByID(tests.GlobalNamespaceEntry.ID()).Return(tests.GlobalNamespaceEntry, nil).AnyTimes()
 
-	s.shardContext = shard.NewMockContext(s.controller)
+	s.shardContext = historyi.NewMockShardContext(s.controller)
 	s.shardContext.EXPECT().GetConfig().Return(tests.NewDynamicConfig()).AnyTimes()
 	s.shardContext.EXPECT().GetLogger().Return(log.NewTestLogger()).AnyTimes()
 	s.shardContext.EXPECT().GetThrottledLogger().Return(log.NewTestLogger()).AnyTimes()
@@ -94,16 +93,16 @@ func (s *signalWorkflowSuite) SetupTest() {
 	s.shardContext.EXPECT().GetNamespaceRegistry().Return(s.namespaceRegistry).AnyTimes()
 	s.shardContext.EXPECT().GetClusterMetadata().Return(clustertest.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(true, true))).AnyTimes()
 
-	s.currentMutableState = workflow.NewMockMutableState(s.controller)
+	s.currentMutableState = historyi.NewMockMutableState(s.controller)
 	s.currentMutableState.EXPECT().GetNamespaceEntry().Return(tests.GlobalNamespaceEntry).AnyTimes()
-	s.currentMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
+	s.currentMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		WorkflowId: tests.WorkflowID,
 	}).AnyTimes()
-	s.currentMutableState.EXPECT().GetExecutionState().Return(&persistence.WorkflowExecutionState{
+	s.currentMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: tests.RunID,
 	}).AnyTimes()
 
-	s.currentContext = workflow.NewMockContext(s.controller)
+	s.currentContext = historyi.NewMockWorkflowContext(s.controller)
 	s.currentContext.EXPECT().LoadMutableState(gomock.Any(), s.shardContext).Return(s.currentMutableState, nil).AnyTimes()
 
 	s.workflowCache = wcache.NewMockCache(s.controller)

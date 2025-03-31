@@ -1,0 +1,154 @@
+2025/01/22 16:29:06 bla bla bla
+panic: test timed out after 5s
+        running tests:
+                TestActivityApiResetClientTestSuite (5s)
+                TestNDCFuncTestSuite (5s)
+
+goroutine 53 [running]:
+testing.(*M).startAlarm.func1()
+        /golang/1.23.2/packages/pkg/mod/golang.org/toolchain@v0.0.1-go1.23.4.darwin-arm64/src/testing/testing.go:2373 +0x1dc
+created by time.goFunc
+        /golang/1.23.2/packages/pkg/mod/golang.org/toolchain@v0.0.1-go1.23.4.darwin-arm64/src/time/sleep.go:215 +0x44
+
+goroutine 1 [chan receive]:
+testing.(*T).Run(0xc000358340, {0x105740b8d, 0x23}, 0x1068381a0)
+        /golang/1.23.2/packages/pkg/mod/golang.org/toolchain@v0.0.1-go1.23.4.darwin-arm64/src/testing/testing.go:1751 +0x600
+testing.runTests.func1(0xc000358340)
+        /golang/1.23.2/packages/pkg/mod/golang.org/toolchain@v0.0.1-go1.23.4.darwin-arm64/src/testing/testing.go:2168 +0x84
+testing.tRunner(0xc000358340, 0xc000d0fad8)
+        /golang/1.23.2/packages/pkg/mod/golang.org/toolchain@v0.0.1-go1.23.4.darwin-arm64/src/testing/testing.go:1690 +0x188
+testing.runTests(0xc000e20360, {0x10883edc0, 0x3d, 0x3d}, {0x2?, 0x1021d4320?, 0x108868860?})
+        /golang/1.23.2/packages/pkg/mod/golang.org/toolchain@v0.0.1-go1.23.4.darwin-arm64/src/testing/testing.go:2166 +0x6e4
+testing.(*M).Run(0xc0008e3180)
+        /golang/1.23.2/packages/pkg/mod/golang.org/toolchain@v0.0.1-go1.23.4.darwin-arm64/src/testing/testing.go:2034 +0xb78
+main.main()
+        _testmain.go:165 +0x114
+
+goroutine 5 [select]:
+go.opencensus.io/stats/view.(*worker).start(0xc000b02800)
+        /golang/1.23.2/packages/pkg/mod/go.opencensus.io@v0.24.0/stats/view/worker.go:292 +0x128
+created by go.opencensus.io/stats/view.init.0 in goroutine 1
+        /golang/1.23.2/packages/pkg/mod/go.opencensus.io@v0.24.0/stats/view/worker.go:34 +0xf4
+
+goroutine 8 [chan receive]:
+go.temporal.io/server/tests/testcore.init.1.func1()
+        /temporal/tests/testcore/timeout.go:66 +0x48
+created by go.temporal.io/server/tests/testcore.init.1 in goroutine 1
+        /temporal/tests/testcore/timeout.go:62 +0x2c
+
+goroutine 9 [chan receive]:
+testing.(*T).Parallel(0xc0003584e0)
+        /golang/1.23.2/packages/pkg/mod/golang.org/toolchain@v0.0.1-go1.23.4.darwin-arm64/src/testing/testing.go:1484 +0x364
+go.temporal.io/server/tests.TestWorkflowVisibilityTestSuite(0xc0003584e0)
+        /temporal/tests/workflow_visibility_test.go:50 +0x2c
+testing.tRunner(0xc0003584e0, 0x106838360)
+        /golang/1.23.2/packages/pkg/mod/golang.org/toolchain@v0.0.1-go1.23.4.darwin-arm64/src/testing/testing.go:1690 +0x188
+created by testing.(*T).Run in goroutine 1
+        /golang/1.23.2/packages/pkg/mod/golang.org/toolchain@v0.0.1-go1.23.4.darwin-arm64/src/testing/testing.go:1743 +0x5e4
+
+goroutine 10 [chan receive]:
+testing.(*T).Parallel(0xc000358680)
+        /golang/1.23.2/packages/pkg/mod/golang.org/toolchain@v0.0.1-go1.23.4.darwin-arm64/src/testing/testing.go:1484 +0x364
+go.temporal.io/server/tests.TestNexusWorkflowTestSuite(0xc000358680)
+        /temporal/tests/nexus_workflow_test.go:74 +0x2c
+testing.tRunner(0xc000358680, 0x106838288)
+        /golang/1.23.2/packages/pkg/mod/golang.org/toolchain@v0.0.1-go1.23.4.darwin-arm64/src/testing/testing.go:1690 +0x188
+created by testing.(*T).Run in goroutine 1
+        /golang/1.23.2/packages/pkg/mod/golang.org/toolchain@v0.0.1-go1.23.4.darwin-arm64/src/testing/testing.go:1743 +0x5e4
+
+goroutine 11 [select]:
+go.temporal.io/server/common/backoff.ThrottleRetryContext({0x10687a7a0, 0x1088989a0}, 0xc000064cb0, {0x10684ffe0, 0xc000f214d0}, 0x0)
+        /temporal/common/backoff/retry.go:110 +0x354
+go.temporal.io/server/common/backoff.ThrottleRetry(0xc000064e48, {0x10684ffe0, 0xc000f214d0}, 0x0)
+        /temporal/common/backoff/retry.go:63 +0x7c
+go.temporal.io/server/common/persistence/cassandra.(*TestCluster).CreateSession(0xc00011ce00, {0x1056e6869, 0x6})
+        /temporal/common/persistence/cassandra/test.go:165 +0x174
+go.temporal.io/server/common/persistence/cassandra.(*TestCluster).SetupTestDatabase(0xc00011ce00)
+        /temporal/common/persistence/cassandra/test.go:109 +0x3c
+go.temporal.io/server/common/persistence/persistence-tests.(*TestBase).Setup(0xc000b98480, 0xc000763a80)
+        /temporal/common/persistence/persistence-tests/persistence_test_base.go:214 +0x1bc
+go.temporal.io/server/tests/testcore.newClusterWithPersistenceTestBaseFactory(0xc000358820, 0xc0002ec580, {0x106887830, 0xc000b00f30}, {0x106850020, 0x1088989a0})
+        /temporal/tests/testcore/test_cluster.go:251 +0xd80
+go.temporal.io/server/tests/testcore.(*defaultTestClusterFactory).NewCluster(0xc000b01960, 0xc000358820, 0xc0002ec580, {0x106887830, 0xc000b00f30})
+        /temporal/tests/testcore/test_cluster.go:148 +0x60
+go.temporal.io/server/tests/testcore.(*FunctionalTestBase).SetupSuiteWithCluster(0xc000b98180, {0x1057245de, 0x1c}, {0xc000065be0, 0x1, 0x105fd808c?})
+        /temporal/tests/testcore/functional_test_base.go:224 +0x750
+go.temporal.io/server/tests/testcore.(*FunctionalTestSdkSuite).SetupSuite(0xc000b98180)
+        /temporal/tests/testcore/functional_test_sdk_suite.go:84 +0x7ac
+github.com/stretchr/testify/suite.Run(0xc000358820, {0x106873688, 0xc000b98180})
+        /golang/1.23.2/packages/pkg/mod/github.com/stretchr/testify@v1.10.0/suite/suite.go:157 +0x4a8
+go.temporal.io/server/tests.TestActivityApiResetClientTestSuite(0xc000358820)
+        /temporal/tests/activity_api_reset_test.go:58 +0x44
+testing.tRunner(0xc000358820, 0x1068381a0)
+        /golang/1.23.2/packages/pkg/mod/golang.org/toolchain@v0.0.1-go1.23.4.darwin-arm64/src/testing/testing.go:1690 +0x188
+created by testing.(*T).Run in goroutine 1
+        /golang/1.23.2/packages/pkg/mod/golang.org/toolchain@v0.0.1-go1.23.4.darwin-arm64/src/testing/testing.go:1743 +0x5e4
+FAIL    go.temporal.io/server/tests     6.390s
+FAIL
+-test.shuffle 1737591386906516000
+2025/01/22 16:16:26 gocql: unable to dial control conn 127.0.0.1:9042: dial tcp 127.0.0.1:9042: connect: connection refused
+2025/01/22 16:16:27 gocql: unable to dial control conn 127.0.0.1:9042: dial tcp 127.0.0.1:9042: connect: connection refused
+2025/01/22 16:16:29 gocql: unable to dial control conn 127.0.0.1:9042: dial tcp 127.0.0.1:9042: connect: connection refused
+panic: test timed out after 5s
+        running tests:
+                TestActivityApiStateReplicationSuite (5s)
+
+goroutine 37 [running]:
+testing.(*M).startAlarm.func1()
+        /golang/1.23.2/packages/pkg/mod/golang.org/toolchain@v0.0.1-go1.23.4.darwin-arm64/src/testing/testing.go:2373 +0x1dc
+created by time.goFunc
+        /golang/1.23.2/packages/pkg/mod/golang.org/toolchain@v0.0.1-go1.23.4.darwin-arm64/src/time/sleep.go:215 +0x44
+
+goroutine 1 [chan receive]:
+testing.(*T).Run(0xc000bbe340, {0x1052c76a9, 0x14}, 0x10629e300)
+        /golang/1.23.2/packages/pkg/mod/golang.org/toolchain@v0.0.1-go1.23.4.darwin-arm64/src/testing/testing.go:1751 +0x600
+testing.runTests.func1(0xc000bbe340)
+        /golang/1.23.2/packages/pkg/mod/golang.org/toolchain@v0.0.1-go1.23.4.darwin-arm64/src/testing/testing.go:2168 +0x84
+testing.tRunner(0xc000bbe340, 0xc001087ad8)
+        /golang/1.23.2/packages/pkg/mod/golang.org/toolchain@v0.0.1-go1.23.4.darwin-arm64/src/testing/testing.go:1690 +0x188
+testing.runTests(0xc00000c870, {0x107d71920, 0x3, 0x3}, {0x2?, 0x10265d5d0?, 0x107da8c60?})
+        /golang/1.23.2/packages/pkg/mod/golang.org/toolchain@v0.0.1-go1.23.4.darwin-arm64/src/testing/testing.go:2166 +0x6e4
+testing.(*M).Run(0xc0005f6320)
+        /golang/1.23.2/packages/pkg/mod/golang.org/toolchain@v0.0.1-go1.23.4.darwin-arm64/src/testing/testing.go:2034 +0xb78
+main.main()
+        _testmain.go:49 +0x114
+
+goroutine 9 [select]:
+go.opencensus.io/stats/view.(*worker).start(0xc0001a0a00)
+        /golang/1.23.2/packages/pkg/mod/go.opencensus.io@v0.24.0/stats/view/worker.go:292 +0x128
+created by go.opencensus.io/stats/view.init.0 in goroutine 1
+        /golang/1.23.2/packages/pkg/mod/go.opencensus.io@v0.24.0/stats/view/worker.go:34 +0xf4
+
+goroutine 13 [chan receive]:
+go.temporal.io/server/tests/testcore.init.1.func1()
+        /temporal/tests/testcore/timeout.go:66 +0x48
+created by go.temporal.io/server/tests/testcore.init.1 in goroutine 1
+        /temporal/tests/testcore/timeout.go:62 +0x2c
+
+goroutine 14 [select]:
+go.temporal.io/server/common/backoff.ThrottleRetryContext({0x1062dcf60, 0x107dd8da0}, 0xc000064cc0, {0x1062b1060, 0xc0011a28a0}, 0x0)
+        /temporal/common/backoff/retry.go:110 +0x354
+go.temporal.io/server/common/backoff.ThrottleRetry(0xc000064e58, {0x1062b1060, 0xc0011a28a0}, 0x0)
+        /temporal/common/backoff/retry.go:63 +0x7c
+go.temporal.io/server/common/persistence/cassandra.(*TestCluster).CreateSession(0xc0001b8c00, {0x1052a9f10, 0x6})
+        /temporal/common/persistence/cassandra/test.go:165 +0x174
+go.temporal.io/server/common/persistence/cassandra.(*TestCluster).SetupTestDatabase(0xc0001b8c00)
+        /temporal/common/persistence/cassandra/test.go:109 +0x3c
+go.temporal.io/server/common/persistence/persistence-tests.(*TestBase).Setup(0xc000bd4780, 0xc000d99a00)
+        /temporal/common/persistence/persistence-tests/persistence_test_base.go:214 +0x1bc
+go.temporal.io/server/tests/testcore.newClusterWithPersistenceTestBaseFactory(0xc000bbe4e0, 0xc000a04160, {0x1062e9850, 0xc0009b1310}, {0x1062b1000, 0x107dd8da0})
+        /temporal/tests/testcore/test_cluster.go:251 +0xd80
+go.temporal.io/server/tests/testcore.(*defaultTestClusterFactory).NewCluster(0xc000a03f30, 0xc000bbe4e0, 0xc000a04160, {0x1062e9850, 0xc0009b1310})
+        /temporal/tests/testcore/test_cluster.go:148 +0x60
+go.temporal.io/server/tests/ndc.(*NDCFunctionalTestSuite).SetupSuite(0xc0011832c0)
+        /temporal/tests/ndc/ndc_test.go:160 +0x1528
+github.com/stretchr/testify/suite.Run(0xc000bbe4e0, {0x1062d6090, 0xc0011832c0})
+        /golang/1.23.2/packages/pkg/mod/github.com/stretchr/testify@v1.10.0/suite/suite.go:157 +0x4a8
+go.temporal.io/server/tests/ndc.TestNDCFuncTestSuite(0xc000bbe4e0)
+        /temporal/tests/ndc/ndc_test.go:105 +0x44
+testing.tRunner(0xc000bbe4e0, 0x10629e300)
+        /golang/1.23.2/packages/pkg/mod/golang.org/toolchain@v0.0.1-go1.23.4.darwin-arm64/src/testing/testing.go:1690 +0x188
+created by testing.(*T).Run in goroutine 1
+        /golang/1.23.2/packages/pkg/mod/golang.org/toolchain@v0.0.1-go1.23.4.darwin-arm64/src/testing/testing.go:1743 +0x5e4
+FAIL    go.temporal.io/server/tests/ndc 6.311s
+FAIL

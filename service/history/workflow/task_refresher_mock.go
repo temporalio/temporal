@@ -38,6 +38,7 @@ import (
 	reflect "reflect"
 
 	persistence "go.temporal.io/server/api/persistence/v1"
+	interfaces "go.temporal.io/server/service/history/interfaces"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -45,6 +46,7 @@ import (
 type MockTaskRefresher struct {
 	ctrl     *gomock.Controller
 	recorder *MockTaskRefresherMockRecorder
+	isgomock struct{}
 }
 
 // MockTaskRefresherMockRecorder is the mock recorder for MockTaskRefresher.
@@ -65,7 +67,7 @@ func (m *MockTaskRefresher) EXPECT() *MockTaskRefresherMockRecorder {
 }
 
 // PartialRefresh mocks base method.
-func (m *MockTaskRefresher) PartialRefresh(ctx context.Context, mutableState MutableState, minVersionedTransition *persistence.VersionedTransition) error {
+func (m *MockTaskRefresher) PartialRefresh(ctx context.Context, mutableState interfaces.MutableState, minVersionedTransition *persistence.VersionedTransition) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "PartialRefresh", ctx, mutableState, minVersionedTransition)
 	ret0, _ := ret[0].(error)
@@ -79,7 +81,7 @@ func (mr *MockTaskRefresherMockRecorder) PartialRefresh(ctx, mutableState, minVe
 }
 
 // Refresh mocks base method.
-func (m *MockTaskRefresher) Refresh(ctx context.Context, mutableState MutableState) error {
+func (m *MockTaskRefresher) Refresh(ctx context.Context, mutableState interfaces.MutableState) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Refresh", ctx, mutableState)
 	ret0, _ := ret[0].(error)

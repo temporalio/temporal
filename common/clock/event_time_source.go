@@ -27,6 +27,8 @@ package clock
 import (
 	"sync"
 	"time"
+
+	"go.temporal.io/server/common/util"
 )
 
 type (
@@ -37,6 +39,7 @@ type (
 		mu     sync.RWMutex
 		now    time.Time
 		timers []*fakeTimer
+		async  bool
 	}
 
 	// fakeTimer is a fake implementation of [Timer].
@@ -63,6 +66,15 @@ func NewEventTimeSource() *EventTimeSource {
 	return &EventTimeSource{
 		now: time.Unix(0, 0),
 	}
+}
+
+// Some clients depend on the fact that the runtime's timers do _not_ run synchronously.
+// If UseAsyncTimers(true) is called, then EventTimeSource will behave that way also.
+func (ts *EventTimeSource) UseAsyncTimers(async bool) {
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+
+	ts.async = async
 }
 
 // Now return the current time.
@@ -135,12 +147,35 @@ func (ts *EventTimeSource) Advance(d time.Duration) {
 	ts.fireTimers()
 }
 
+// AdvanceNext advances to the next timer.
+func (ts *EventTimeSource) AdvanceNext() {
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+
+	if len(ts.timers) == 0 {
+		return
+	}
+	// just do linear search, this is efficient enough for now
+	tmin := ts.timers[0].deadline
+	for _, t := range ts.timers[1:] {
+		tmin = util.MinTime(tmin, t.deadline)
+	}
+	ts.now = tmin
+	ts.fireTimers()
+}
+
 // NumTimers returns the number of outstanding timers.
 func (ts *EventTimeSource) NumTimers() int {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
 
 	return len(ts.timers)
+}
+
+// Sleep is a convenience function for waiting on a new timer.
+func (ts *EventTimeSource) Sleep(d time.Duration) {
+	t, _ := ts.NewTimer(d)
+	<-t
 }
 
 // fireTimers fires all timers that are ready.
@@ -152,7 +187,11 @@ func (ts *EventTimeSource) fireTimers() {
 			t.index = n
 			n++
 		} else {
-			t.callback()
+			if ts.async {
+				go t.callback()
+			} else {
+				t.callback()
+			}
 			t.done = true
 		}
 	}

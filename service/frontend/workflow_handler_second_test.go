@@ -29,9 +29,9 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/api/schedule/v1"
+	schedulepb "go.temporal.io/api/schedule/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
-	schedspb "go.temporal.io/server/api/schedule/v1"
+	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/searchattribute"
@@ -77,7 +77,7 @@ func TestDescribeScheduleAnnotatesScheduledWorkflowWithTypes(t *testing.T) {
 
 func assertScheduledWorkflowSearchAttributeHasAssociatedTypeOf(
 	t *testing.T,
-	response *schedspb.DescribeResponse,
+	response *schedulespb.DescribeResponse,
 	searchAttribute string,
 	expectedType enumspb.IndexedValueType,
 ) {
@@ -94,8 +94,8 @@ func assertScheduledWorkflowSearchAttributeHasAssociatedTypeOf(
 	}
 }
 
-func getScheduledWorkflowSearchAttributes(response *schedspb.DescribeResponse) *commonpb.SearchAttributes {
-	return response.Schedule.Action.Action.(*schedule.ScheduleAction_StartWorkflow).StartWorkflow.SearchAttributes
+func getScheduledWorkflowSearchAttributes(response *schedulespb.DescribeResponse) *commonpb.SearchAttributes {
+	return response.Schedule.Action.Action.(*schedulepb.ScheduleAction_StartWorkflow).StartWorkflow.SearchAttributes
 }
 
 func makeSearchAttributesProviderStub(
@@ -114,7 +114,7 @@ func makeVisibilityManagerStub(controller *gomock.Controller) *manager.MockVisib
 	return visibilityManager
 }
 
-func makeResponseWithScheduledWorkflowAttributes(nameValueMap map[string]string) *schedspb.DescribeResponse {
+func makeResponseWithScheduledWorkflowAttributes(nameValueMap map[string]string) *schedulespb.DescribeResponse {
 	attributes := commonpb.SearchAttributes{
 		IndexedFields: map[string]*commonpb.Payload{},
 	}
@@ -122,10 +122,10 @@ func makeResponseWithScheduledWorkflowAttributes(nameValueMap map[string]string)
 		attributes.IndexedFields["AliasFor"+name] = payload.EncodeString(value)
 	}
 
-	response := schedspb.DescribeResponse{
-		Schedule: &schedule.Schedule{
-			Action: &schedule.ScheduleAction{
-				Action: &schedule.ScheduleAction_StartWorkflow{
+	response := schedulespb.DescribeResponse{
+		Schedule: &schedulepb.Schedule{
+			Action: &schedulepb.ScheduleAction{
+				Action: &schedulepb.ScheduleAction_StartWorkflow{
 					StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
 						SearchAttributes: &attributes,
 					},

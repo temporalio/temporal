@@ -81,6 +81,7 @@ func (s *VisibilityManagerSuite) SetupTest() {
 		dynamicconfig.GetIntPropertyFn(1),
 		dynamicconfig.GetIntPropertyFn(1),
 		dynamicconfig.GetFloatPropertyFn(0.2),
+		dynamicconfig.GetDurationPropertyFn(time.Second),
 		s.metricsHandler,
 		metrics.VisibilityPluginNameTag(s.visibilityStore.GetName()),
 		metrics.VisibilityIndexNameTag(s.visibilityStore.GetIndexName()),

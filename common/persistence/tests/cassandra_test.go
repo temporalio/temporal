@@ -37,7 +37,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
-	"go.temporal.io/api/enums/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
@@ -246,6 +246,19 @@ func TestCassandraTaskQueueTaskSuite(t *testing.T) {
 	}
 
 	s := NewTaskQueueTaskSuite(t, taskQueueStore, testData.Logger)
+	suite.Run(t, s)
+}
+
+func TestCassandraTaskQueueUserDataSuite(t *testing.T) {
+	testData, tearDown := setUpCassandraTest(t)
+	defer tearDown()
+
+	taskQueueStore, err := testData.Factory.NewTaskStore()
+	if err != nil {
+		t.Fatalf("unable to create Cassandra DB: %v", err)
+	}
+
+	s := NewTaskQueueUserDataSuite(t, taskQueueStore, testData.Logger)
 	suite.Run(t, s)
 }
 
@@ -772,9 +785,9 @@ func testCassandraQueueV2ErrInvalidPayload(t *testing.T, cluster *cassandra.Test
 		cassandra.TemplateCreateQueueQuery,
 		queueType,
 		queueName,
-		[]byte("invalid-payload"),           // payload
-		enums.ENCODING_TYPE_PROTO3.String(), // payload encoding type
-		0,                                   // version
+		[]byte("invalid-payload"),             // payload
+		enumspb.ENCODING_TYPE_PROTO3.String(), // payload encoding type
+		0,                                     // version
 	).Exec()
 	require.NoError(t, err)
 	_, err = q.ReadMessages(context.Background(), &persistence.InternalReadMessagesRequest{
@@ -1203,9 +1216,9 @@ func insertQueueMetadataWithMultiplePartitions(
 		cassandra.TemplateCreateQueueQuery,
 		queueType,
 		queueName,
-		bytes,                               // payload
-		enums.ENCODING_TYPE_PROTO3.String(), // payload encoding type
-		0,                                   // version
+		bytes,                                 // payload
+		enumspb.ENCODING_TYPE_PROTO3.String(), // payload encoding type
+		0,                                     // version
 	).Exec()
 	require.NoError(t, err)
 }
@@ -1273,7 +1286,7 @@ func testCassandraNexusEndpointStoreConcurrentCreate(t *testing.T, store persist
 					Version: 0,
 					Data: &commonpb.DataBlob{
 						Data:         []byte("some dummy endpoint data"),
-						EncodingType: enums.ENCODING_TYPE_PROTO3,
+						EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 					}},
 			})
 			if err != nil {
@@ -1301,7 +1314,7 @@ func testCassandraNexusEndpointStoreConcurrentUpdate(t *testing.T, store persist
 		Version: 0,
 		Data: &commonpb.DataBlob{
 			Data:         []byte("some dummy endpoint data"),
-			EncodingType: enums.ENCODING_TYPE_PROTO3,
+			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 		}}
 
 	// Create an endpoint
@@ -1353,7 +1366,7 @@ func testCassandraNexusEndpointStoreConcurrentCreateAndUpdate(t *testing.T, stor
 		Version: 0,
 		Data: &commonpb.DataBlob{
 			Data:         []byte("some dummy endpoint data"),
-			EncodingType: enums.ENCODING_TYPE_PROTO3,
+			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 		}}
 
 	// Create an endpoint
@@ -1382,7 +1395,7 @@ func testCassandraNexusEndpointStoreConcurrentCreateAndUpdate(t *testing.T, stor
 				Version: 0,
 				Data: &commonpb.DataBlob{
 					Data:         []byte("some dummy endpoint data"),
-					EncodingType: enums.ENCODING_TYPE_PROTO3,
+					EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 				}},
 		})
 		if createErr != nil {
@@ -1423,7 +1436,7 @@ func testCassandraNexusEndpointStoreConcurrentUpdateAndDelete(t *testing.T, stor
 		Version: 0,
 		Data: &commonpb.DataBlob{
 			Data:         []byte("some dummy endpoint data"),
-			EncodingType: enums.ENCODING_TYPE_PROTO3,
+			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 		}}
 
 	// Create an endpoint
@@ -1492,7 +1505,7 @@ func testCassandraNexusEndpointStoreDeleteWhilePaging(t *testing.T, store persis
 				Version: 0,
 				Data: &commonpb.DataBlob{
 					Data:         []byte("some dummy endpoint data"),
-					EncodingType: enums.ENCODING_TYPE_PROTO3,
+					EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 				}},
 		})
 		require.NoError(t, err)

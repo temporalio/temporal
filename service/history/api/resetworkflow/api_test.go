@@ -26,7 +26,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/suite"
-	"go.temporal.io/api/enums/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 )
 
 type (
@@ -43,62 +43,62 @@ func TestResetWorkflowSuite(t *testing.T) {
 func (s *resetWorkflowSuite) TestGetResetReapplyExcludeTypes() {
 	// Include all with no exclusions => no exclusions
 	s.Equal(
-		map[enums.ResetReapplyExcludeType]struct{}{},
+		map[enumspb.ResetReapplyExcludeType]struct{}{},
 		GetResetReapplyExcludeTypes(
-			[]enums.ResetReapplyExcludeType{},
-			enums.RESET_REAPPLY_TYPE_ALL_ELIGIBLE,
+			[]enumspb.ResetReapplyExcludeType{},
+			enumspb.RESET_REAPPLY_TYPE_ALL_ELIGIBLE,
 		),
 	)
 	// Include all with one exclusion => one exclusion (honor exclude in presence of default value of deprecated option)
 	s.Equal(
-		map[enums.ResetReapplyExcludeType]struct{}{enums.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL: {}},
+		map[enumspb.ResetReapplyExcludeType]struct{}{enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL: {}},
 		GetResetReapplyExcludeTypes(
-			[]enums.ResetReapplyExcludeType{enums.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL},
-			enums.RESET_REAPPLY_TYPE_ALL_ELIGIBLE,
+			[]enumspb.ResetReapplyExcludeType{enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL},
+			enumspb.RESET_REAPPLY_TYPE_ALL_ELIGIBLE,
 		),
 	)
 	// Include signal with no exclusions => exclude updates
 	// (honor non-default value of deprecated option in presence of default value of non-deprecated option)
 	s.Equal(
-		map[enums.ResetReapplyExcludeType]struct{}{enums.RESET_REAPPLY_EXCLUDE_TYPE_UPDATE: {}},
+		map[enumspb.ResetReapplyExcludeType]struct{}{enumspb.RESET_REAPPLY_EXCLUDE_TYPE_UPDATE: {}},
 		GetResetReapplyExcludeTypes(
-			[]enums.ResetReapplyExcludeType{},
-			enums.RESET_REAPPLY_TYPE_SIGNAL,
+			[]enumspb.ResetReapplyExcludeType{},
+			enumspb.RESET_REAPPLY_TYPE_SIGNAL,
 		),
 	)
 	// Include signal with exclude signal => include signal means they want to exclude updates, and then the explicit
 	// exclusion of signal trumps the deprecated inclusion
 	s.Equal(
-		map[enums.ResetReapplyExcludeType]struct{}{
-			enums.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL: {},
-			enums.RESET_REAPPLY_EXCLUDE_TYPE_UPDATE: {},
+		map[enumspb.ResetReapplyExcludeType]struct{}{
+			enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL: {},
+			enumspb.RESET_REAPPLY_EXCLUDE_TYPE_UPDATE: {},
 		},
 		GetResetReapplyExcludeTypes(
-			[]enums.ResetReapplyExcludeType{enums.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL},
-			enums.RESET_REAPPLY_TYPE_SIGNAL,
+			[]enumspb.ResetReapplyExcludeType{enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL},
+			enumspb.RESET_REAPPLY_TYPE_SIGNAL,
 		),
 	)
 	// Include none with no exclusions => all excluded
 	// (honor non-default value of deprecated option in presence of default value of non-deprecated option)
 	s.Equal(
-		map[enums.ResetReapplyExcludeType]struct{}{
-			enums.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL: {},
-			enums.RESET_REAPPLY_EXCLUDE_TYPE_UPDATE: {},
+		map[enumspb.ResetReapplyExcludeType]struct{}{
+			enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL: {},
+			enumspb.RESET_REAPPLY_EXCLUDE_TYPE_UPDATE: {},
 		},
 		GetResetReapplyExcludeTypes(
-			[]enums.ResetReapplyExcludeType{},
-			enums.RESET_REAPPLY_TYPE_NONE,
+			[]enumspb.ResetReapplyExcludeType{},
+			enumspb.RESET_REAPPLY_TYPE_NONE,
 		),
 	)
 	// Include none with exclude signal is all excluded
 	s.Equal(
-		map[enums.ResetReapplyExcludeType]struct{}{
-			enums.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL: {},
-			enums.RESET_REAPPLY_EXCLUDE_TYPE_UPDATE: {},
+		map[enumspb.ResetReapplyExcludeType]struct{}{
+			enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL: {},
+			enumspb.RESET_REAPPLY_EXCLUDE_TYPE_UPDATE: {},
 		},
 		GetResetReapplyExcludeTypes(
-			[]enums.ResetReapplyExcludeType{enums.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL},
-			enums.RESET_REAPPLY_TYPE_NONE,
+			[]enumspb.ResetReapplyExcludeType{enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL},
+			enumspb.RESET_REAPPLY_TYPE_NONE,
 		),
 	)
 }

@@ -48,9 +48,10 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/service/history/consts"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
-	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -65,7 +66,7 @@ type (
 		mockShard           *shard.ContextTest
 		mockNamespaceCache  *namespace.MockRegistry
 		mockClusterMetadata *cluster.MockMetadata
-		mockMutableState    *workflow.MockMutableState
+		mockMutableState    *historyi.MockMutableState
 
 		mockExecutionMgr *persistence.MockExecutionManager
 
@@ -93,7 +94,7 @@ func (s *activityReplicatorStateSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockMutableState = workflow.NewMockMutableState(s.controller)
+	s.mockMutableState = historyi.NewMockMutableState(s.controller)
 	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&persistencespb.ShardInfo{
@@ -129,33 +130,60 @@ func (s *activityReplicatorStateSuite) TearDownTest() {
 func (s *activityReplicatorStateSuite) TestActivity_LocalVersionLarger() {
 	version := int64(123)
 	attempt := int32(1)
+	stamp := int32(1)
 	lastHeartbeatTime := time.Now()
 	localActivityInfo := &persistencespb.ActivityInfo{
 		Version: version + 1,
 		Attempt: attempt,
+		Stamp:   stamp,
 	}
 
 	apply := s.nDCActivityStateReplicator.compareActivity(
 		version,
 		attempt,
+		localActivityInfo.Stamp,
 		lastHeartbeatTime,
 		localActivityInfo,
 	)
 	s.False(apply)
 }
 
-func (s *activityReplicatorStateSuite) TestActivity_IncomingVersionLarger() {
+func (s *activityReplicatorStateSuite) TestActivity_DifferentStamp() {
 	version := int64(123)
 	attempt := int32(1)
+	stamp := int32(1)
 	lastHeartbeatTime := time.Now()
 	localActivityInfo := &persistencespb.ActivityInfo{
-		Version: version - 1,
+		Version: version,
 		Attempt: attempt,
+		Stamp:   stamp - 1,
 	}
 
 	apply := s.nDCActivityStateReplicator.compareActivity(
 		version,
 		attempt,
+		stamp,
+		lastHeartbeatTime,
+		localActivityInfo,
+	)
+	s.True(apply)
+}
+
+func (s *activityReplicatorStateSuite) TestActivity_IncomingVersionLarger() {
+	version := int64(123)
+	attempt := int32(1)
+	stamp := int32(1)
+	lastHeartbeatTime := time.Now()
+	localActivityInfo := &persistencespb.ActivityInfo{
+		Version: version - 1,
+		Attempt: attempt,
+		Stamp:   stamp,
+	}
+
+	apply := s.nDCActivityStateReplicator.compareActivity(
+		version,
+		attempt,
+		stamp,
 		lastHeartbeatTime,
 		localActivityInfo,
 	)
@@ -165,15 +193,18 @@ func (s *activityReplicatorStateSuite) TestActivity_IncomingVersionLarger() {
 func (s *activityReplicatorStateSuite) TestActivity_SameVersion_LocalAttemptLarger() {
 	version := int64(123)
 	attempt := int32(1)
+	stamp := int32(1)
 	lastHeartbeatTime := time.Now()
 	localActivityInfo := &persistencespb.ActivityInfo{
 		Version: version,
 		Attempt: attempt + 1,
+		Stamp:   stamp,
 	}
 
 	apply := s.nDCActivityStateReplicator.compareActivity(
 		version,
 		attempt,
+		stamp,
 		lastHeartbeatTime,
 		localActivityInfo,
 	)
@@ -183,15 +214,18 @@ func (s *activityReplicatorStateSuite) TestActivity_SameVersion_LocalAttemptLarg
 func (s *activityReplicatorStateSuite) TestActivity_SameVersion_IncomingAttemptLarger() {
 	version := int64(123)
 	attempt := int32(1)
+	stamp := int32(1)
 	lastHeartbeatTime := time.Now()
 	localActivityInfo := &persistencespb.ActivityInfo{
 		Version: version,
 		Attempt: attempt - 1,
+		Stamp:   stamp,
 	}
 
 	apply := s.nDCActivityStateReplicator.compareActivity(
 		version,
 		attempt,
+		stamp,
 		lastHeartbeatTime,
 		localActivityInfo,
 	)
@@ -201,16 +235,19 @@ func (s *activityReplicatorStateSuite) TestActivity_SameVersion_IncomingAttemptL
 func (s *activityReplicatorStateSuite) TestActivity_SameVersion_SameAttempt_LocalHeartbeatLater() {
 	version := int64(123)
 	attempt := int32(1)
+	stamp := int32(1)
 	lastHeartbeatTime := time.Now()
 	localActivityInfo := &persistencespb.ActivityInfo{
 		Version:                 version,
 		Attempt:                 attempt,
+		Stamp:                   stamp,
 		LastHeartbeatUpdateTime: timestamppb.New(lastHeartbeatTime.Add(time.Second)),
 	}
 
 	apply := s.nDCActivityStateReplicator.compareActivity(
 		version,
 		attempt,
+		stamp,
 		lastHeartbeatTime,
 		localActivityInfo,
 	)
@@ -220,16 +257,19 @@ func (s *activityReplicatorStateSuite) TestActivity_SameVersion_SameAttempt_Loca
 func (s *activityReplicatorStateSuite) TestActivity_SameVersion_SameAttempt_IncomingHeartbeatLater() {
 	version := int64(123)
 	attempt := int32(1)
+	stamp := int32(1)
 	lastHeartbeatTime := time.Now()
 	localActivityInfo := &persistencespb.ActivityInfo{
 		Version:                 version,
 		Attempt:                 attempt,
+		Stamp:                   stamp,
 		LastHeartbeatUpdateTime: timestamppb.New(lastHeartbeatTime.Add(-time.Second)),
 	}
 
 	apply := s.nDCActivityStateReplicator.compareActivity(
 		version,
 		attempt,
+		stamp,
 		lastHeartbeatTime,
 		localActivityInfo,
 	)
@@ -619,9 +659,10 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_WorkflowClosed() {
 		WorkflowKey: definition.NewWorkflowKey(namespaceID.String(), workflowID, runID),
 		ShardUUID:   s.mockShard.GetOwner(),
 	}
-	weContext := workflow.NewMockContext(s.controller)
+	weContext := historyi.NewMockWorkflowContext(s.controller)
 	weContext.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(s.mockMutableState, nil)
 	weContext.EXPECT().Lock(gomock.Any(), locks.PriorityHigh).Return(nil)
+	weContext.EXPECT().Clear().AnyTimes()
 	weContext.EXPECT().Unlock()
 	weContext.EXPECT().IsDirty().Return(false).AnyTimes()
 
@@ -660,7 +701,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_WorkflowClosed() {
 	).AnyTimes()
 
 	err = s.nDCActivityStateReplicator.SyncActivityState(context.Background(), request)
-	s.Nil(err)
+	s.Error(err)
 }
 
 func (s *activityReplicatorStateSuite) TestSyncActivities_WorkflowClosed() {
@@ -698,11 +739,12 @@ func (s *activityReplicatorStateSuite) TestSyncActivities_WorkflowClosed() {
 		WorkflowKey: definition.NewWorkflowKey(namespaceID.String(), workflowID, runID),
 		ShardUUID:   s.mockShard.GetOwner(),
 	}
-	weContext := workflow.NewMockContext(s.controller)
+	weContext := historyi.NewMockWorkflowContext(s.controller)
 	weContext.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(s.mockMutableState, nil)
 	weContext.EXPECT().Lock(gomock.Any(), locks.PriorityHigh).Return(nil)
 	weContext.EXPECT().Unlock()
 	weContext.EXPECT().IsDirty().Return(false).AnyTimes()
+	weContext.EXPECT().Clear().AnyTimes()
 
 	err := wcache.PutContextIfNotExist(s.workflowCache, key, weContext)
 	s.NoError(err)
@@ -743,7 +785,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivities_WorkflowClosed() {
 	).AnyTimes()
 
 	err = s.nDCActivityStateReplicator.SyncActivitiesState(context.Background(), request)
-	s.Nil(err)
+	s.ErrorIs(err, consts.ErrDuplicate)
 }
 
 func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityNotFound() {
@@ -781,9 +823,10 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityNotFound() {
 		WorkflowKey: definition.NewWorkflowKey(namespaceID.String(), workflowID, runID),
 		ShardUUID:   s.mockShard.GetOwner(),
 	}
-	weContext := workflow.NewMockContext(s.controller)
+	weContext := historyi.NewMockWorkflowContext(s.controller)
 	weContext.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(s.mockMutableState, nil)
 	weContext.EXPECT().Lock(gomock.Any(), locks.PriorityHigh).Return(nil)
+	weContext.EXPECT().Clear().AnyTimes()
 	weContext.EXPECT().Unlock()
 	weContext.EXPECT().IsDirty().Return(false).AnyTimes()
 
@@ -823,7 +866,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityNotFound() {
 	).AnyTimes()
 
 	err = s.nDCActivityStateReplicator.SyncActivityState(context.Background(), request)
-	s.Nil(err)
+	s.ErrorIs(err, consts.ErrDuplicate)
 }
 
 func (s *activityReplicatorStateSuite) TestSyncActivities_ActivityNotFound() {
@@ -861,11 +904,12 @@ func (s *activityReplicatorStateSuite) TestSyncActivities_ActivityNotFound() {
 		WorkflowKey: definition.NewWorkflowKey(namespaceID.String(), workflowID, runID),
 		ShardUUID:   s.mockShard.GetOwner(),
 	}
-	weContext := workflow.NewMockContext(s.controller)
+	weContext := historyi.NewMockWorkflowContext(s.controller)
 	weContext.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(s.mockMutableState, nil)
 	weContext.EXPECT().Lock(gomock.Any(), locks.PriorityHigh).Return(nil)
 	weContext.EXPECT().Unlock()
 	weContext.EXPECT().IsDirty().Return(false).AnyTimes()
+	weContext.EXPECT().Clear().AnyTimes()
 
 	err := wcache.PutContextIfNotExist(s.workflowCache, key, weContext)
 	s.NoError(err)
@@ -907,7 +951,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivities_ActivityNotFound() {
 	).AnyTimes()
 
 	err = s.nDCActivityStateReplicator.SyncActivitiesState(context.Background(), request)
-	s.Nil(err)
+	s.ErrorIs(err, consts.ErrDuplicate)
 }
 
 func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityFound_Zombie() {
@@ -945,7 +989,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityFound_Zombie() {
 		WorkflowKey: definition.NewWorkflowKey(namespaceID.String(), workflowID, runID),
 		ShardUUID:   s.mockShard.GetOwner(),
 	}
-	weContext := workflow.NewMockContext(s.controller)
+	weContext := historyi.NewMockWorkflowContext(s.controller)
 	weContext.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(s.mockMutableState, nil)
 	weContext.EXPECT().Lock(gomock.Any(), locks.PriorityHigh).Return(nil)
 	weContext.EXPECT().Unlock()
@@ -995,10 +1039,10 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityFound_Zombie() {
 		gomock.Any(),
 		s.mockShard,
 		persistence.UpdateWorkflowModeBypassCurrent,
-		workflow.Context(nil),
-		workflow.MutableState(nil),
-		workflow.TransactionPolicyPassive,
-		(*workflow.TransactionPolicy)(nil),
+		historyi.WorkflowContext(nil),
+		historyi.MutableState(nil),
+		historyi.TransactionPolicyPassive,
+		(*historyi.TransactionPolicy)(nil),
 	).Return(nil)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
@@ -1055,7 +1099,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivities_ActivityFound_Zombie()
 		WorkflowKey: definition.NewWorkflowKey(namespaceID.String(), workflowID, runID),
 		ShardUUID:   s.mockShard.GetOwner(),
 	}
-	weContext := workflow.NewMockContext(s.controller)
+	weContext := historyi.NewMockWorkflowContext(s.controller)
 	weContext.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(s.mockMutableState, nil)
 	weContext.EXPECT().Lock(gomock.Any(), locks.PriorityHigh).Return(nil)
 	weContext.EXPECT().Unlock()
@@ -1108,10 +1152,10 @@ func (s *activityReplicatorStateSuite) TestSyncActivities_ActivityFound_Zombie()
 		gomock.Any(),
 		s.mockShard,
 		persistence.UpdateWorkflowModeBypassCurrent,
-		workflow.Context(nil),
-		workflow.MutableState(nil),
-		workflow.TransactionPolicyPassive,
-		(*workflow.TransactionPolicy)(nil),
+		historyi.WorkflowContext(nil),
+		historyi.MutableState(nil),
+		historyi.TransactionPolicyPassive,
+		(*historyi.TransactionPolicy)(nil),
 	).Return(nil)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
@@ -1168,7 +1212,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityFound_NonZombie(
 		WorkflowKey: definition.NewWorkflowKey(namespaceID.String(), workflowID, runID),
 		ShardUUID:   s.mockShard.GetOwner(),
 	}
-	weContext := workflow.NewMockContext(s.controller)
+	weContext := historyi.NewMockWorkflowContext(s.controller)
 	weContext.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(s.mockMutableState, nil)
 	weContext.EXPECT().Lock(gomock.Any(), locks.PriorityHigh).Return(nil)
 	weContext.EXPECT().Unlock()
@@ -1217,10 +1261,10 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityFound_NonZombie(
 		gomock.Any(),
 		s.mockShard,
 		persistence.UpdateWorkflowModeUpdateCurrent,
-		workflow.Context(nil),
-		workflow.MutableState(nil),
-		workflow.TransactionPolicyPassive,
-		(*workflow.TransactionPolicy)(nil),
+		historyi.WorkflowContext(nil),
+		historyi.MutableState(nil),
+		historyi.TransactionPolicyPassive,
+		(*historyi.TransactionPolicy)(nil),
 	).Return(nil)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
@@ -1277,7 +1321,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivities_ActivityFound_NonZombi
 		WorkflowKey: definition.NewWorkflowKey(namespaceID.String(), workflowID, runID),
 		ShardUUID:   s.mockShard.GetOwner(),
 	}
-	weContext := workflow.NewMockContext(s.controller)
+	weContext := historyi.NewMockWorkflowContext(s.controller)
 	weContext.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(s.mockMutableState, nil)
 	weContext.EXPECT().Lock(gomock.Any(), locks.PriorityHigh).Return(nil)
 	weContext.EXPECT().Unlock()
@@ -1330,10 +1374,10 @@ func (s *activityReplicatorStateSuite) TestSyncActivities_ActivityFound_NonZombi
 		gomock.Any(),
 		s.mockShard,
 		persistence.UpdateWorkflowModeUpdateCurrent,
-		workflow.Context(nil),
-		workflow.MutableState(nil),
-		workflow.TransactionPolicyPassive,
-		(*workflow.TransactionPolicy)(nil),
+		historyi.WorkflowContext(nil),
+		historyi.MutableState(nil),
+		historyi.TransactionPolicyPassive,
+		(*historyi.TransactionPolicy)(nil),
 	).Return(nil)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(

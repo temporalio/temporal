@@ -97,6 +97,9 @@ func (r *RuntimeMetricsReporter) report() {
 	MemoryHeapInuseGauge.With(r.handler).Record(float64(memStats.HeapInuse))
 	MemoryStackGauge.With(r.handler).Record(float64(memStats.StackInuse))
 
+	NumGCGauge.With(r.handler).Record(float64(memStats.NumGC))
+	GcPauseNsTotal.With(r.handler).Record(float64(memStats.PauseTotalNs))
+
 	// memStats.NumGC is a perpetually incrementing counter (unless it wraps at 2^32)
 	num := memStats.NumGC
 	lastNum := atomic.SwapUint32(&r.lastNumGC, num) // reset for the next iteration

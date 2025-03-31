@@ -32,6 +32,7 @@ import (
 	"net"
 	"net/http"
 	"reflect"
+	"regexp"
 	"strings"
 	"time"
 
@@ -41,6 +42,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -49,7 +51,6 @@ import (
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/rpc/interceptor"
-	"go.temporal.io/server/common/utf8validator"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
@@ -67,6 +68,7 @@ type HTTPAPIServer struct {
 	logger                        log.Logger
 	serveMux                      *runtime.ServeMux
 	stopped                       chan struct{}
+	allowedHosts                  *dynamicconfig.GlobalCachedTypedValue[*regexp.Regexp]
 	matchAdditionalHeaders        map[string]bool
 	matchAdditionalHeaderPrefixes []string
 }
@@ -131,9 +133,10 @@ func NewHTTPAPIServer(
 	}
 
 	h := &HTTPAPIServer{
-		listener: listener,
-		logger:   logger,
-		stopped:  make(chan struct{}),
+		listener:     listener,
+		logger:       logger,
+		stopped:      make(chan struct{}),
+		allowedHosts: serviceConfig.HTTPAllowedHosts,
 	}
 
 	// Build 4 possible marshalers in order based on content type
@@ -160,6 +163,7 @@ func NewHTTPAPIServer(
 		}
 	}
 
+	opts = append(opts, runtime.WithMiddlewares(h.allowedHostsMiddleware))
 	opts = append(opts, runtime.WithIncomingHeaderMatcher(h.incomingHeaderMatcher))
 
 	// Create inline client connection
@@ -291,6 +295,19 @@ func (h *HTTPAPIServer) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	h.serveMux.ServeHTTP(w, r)
 }
 
+func (h *HTTPAPIServer) allowedHostsMiddleware(hf runtime.HandlerFunc) runtime.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request, pathParams map[string]string) {
+		allowedHosts := h.allowedHosts.Get()
+		if allowedHosts.MatchString(r.Host) {
+			hf(w, r, pathParams)
+			return
+		}
+		w.WriteHeader(http.StatusForbidden)
+		// PermissionDenied gRPC code is 7.
+		_, _ = w.Write([]byte(`{"code": 7, "message": "Host not allowed"}`))
+	}
+}
+
 func (h *HTTPAPIServer) errorHandler(
 	ctx context.Context,
 	mux *runtime.ServeMux,
@@ -311,11 +328,7 @@ func (h *HTTPAPIServer) errorHandler(
 	w.Header().Set("Content-Type", marshaler.ContentType(struct{}{}))
 
 	sProto := s.Proto()
-	var buf []byte
-	merr := utf8validator.Validate(sProto, utf8validator.SourceRPCResponse)
-	if merr == nil {
-		buf, merr = marshaler.Marshal(sProto)
-	}
+	buf, merr := marshaler.Marshal(sProto)
 	if merr != nil {
 		h.logger.Warn("Failed to marshal error message", tag.Error(merr))
 		w.Header().Set("Content-Type", "application/json")

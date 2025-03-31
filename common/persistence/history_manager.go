@@ -45,6 +45,7 @@ const (
 
 	// TrimHistoryBranch will only dump metadata, relatively cheap
 	trimHistoryBranchPageSize = 1000
+	dataLossMsg               = "Potential data loss"
 	errNonContiguousEventID   = "corrupted history event batch, eventID is not contiguous"
 	errWrongVersion           = "corrupted history event batch, wrong version and IDs"
 	errEmptyEvents            = "corrupted history event batch, empty events"
@@ -823,7 +824,6 @@ func (m *executionManagerImpl) readRawHistoryBranchAndFilter(
 		token.LastNodeID = lastNode.NodeID
 		token.LastTransactionID = lastNode.TransactionID
 	}
-
 	return dataBlobs, transactionIDs, nodeIDs, token, dataSize, nil
 }
 
@@ -930,36 +930,43 @@ func (m *executionManagerImpl) readHistoryBranch(
 	historyEvents := make([]*historypb.HistoryEvent, 0, request.PageSize)
 	historyEventBatches := make([]*historypb.History, 0, request.PageSize)
 
+	var firstEvent, lastEvent *historypb.HistoryEvent
+	var eventCount int
+
+	dataLossTags := func(cause string) []tag.Tag {
+		return []tag.Tag{
+			tag.Cause(cause),
+			tag.WorkflowBranchToken(request.BranchToken),
+			tag.WorkflowFirstEventID(firstEvent.GetEventId()),
+			tag.FirstEventVersion(firstEvent.GetVersion()),
+			tag.WorkflowNextEventID(lastEvent.GetEventId()),
+			tag.LastEventVersion(lastEvent.GetVersion()),
+			tag.Counter(eventCount),
+			tag.TokenLastEventID(token.LastEventID),
+		}
+	}
+
 	for _, batch := range dataBlobs {
 		events, err := m.serializer.DeserializeEvents(batch)
 		if err != nil {
 			return nil, nil, nil, nil, dataSize, err
 		}
 		if len(events) == 0 {
-			m.logger.Error(errEmptyEvents)
+			m.logger.Error(dataLossMsg, dataLossTags(errEmptyEvents)...)
 			return nil, nil, nil, nil, dataSize, serviceerror.NewDataLoss(errEmptyEvents)
 		}
 
-		firstEvent := events[0]           // first
-		eventCount := len(events)         // length
-		lastEvent := events[eventCount-1] // last
+		firstEvent = events[0]
+		eventCount = len(events)
+		lastEvent = events[eventCount-1]
 
 		if firstEvent.GetVersion() != lastEvent.GetVersion() || firstEvent.GetEventId()+int64(eventCount-1) != lastEvent.GetEventId() {
 			// in a single batch, version should be the same, and ID should be contiguous
-			m.logger.Error("Potential data loss",
-				tag.Cause(errWrongVersion),
-				tag.FirstEventVersion(firstEvent.GetVersion()), tag.WorkflowFirstEventID(firstEvent.GetEventId()),
-				tag.LastEventVersion(lastEvent.GetVersion()), tag.WorkflowNextEventID(lastEvent.GetEventId()),
-				tag.Counter(eventCount))
+			m.logger.Error(dataLossMsg, dataLossTags(errWrongVersion)...)
 			return historyEvents, historyEventBatches, transactionIDs, nil, dataSize, serviceerror.NewDataLoss(errWrongVersion)
 		}
 		if firstEvent.GetEventId() != token.LastEventID+1 {
-			m.logger.Error("Potential data loss",
-				tag.Cause(errNonContiguousEventID),
-				tag.WorkflowFirstEventID(firstEvent.GetEventId()),
-				tag.WorkflowNextEventID(lastEvent.GetEventId()),
-				tag.TokenLastEventID(token.LastEventID),
-				tag.Counter(eventCount))
+			m.logger.Error(dataLossMsg, dataLossTags(errNonContiguousEventID)...)
 			return historyEvents, historyEventBatches, transactionIDs, nil, dataSize, serviceerror.NewDataLoss(errNonContiguousEventID)
 		}
 
@@ -990,34 +997,43 @@ func (m *executionManagerImpl) readHistoryBranchReverse(
 
 	historyEvents := make([]*historypb.HistoryEvent, 0, request.PageSize)
 
+	var firstEvent, lastEvent *historypb.HistoryEvent
+	var eventCount int
+
+	datalossTags := func(cause string) []tag.Tag {
+		return []tag.Tag{
+			tag.Cause(cause),
+			tag.WorkflowBranchToken(request.BranchToken),
+			tag.WorkflowFirstEventID(firstEvent.GetEventId()),
+			tag.FirstEventVersion(firstEvent.GetVersion()),
+			tag.WorkflowNextEventID(lastEvent.GetEventId()),
+			tag.LastEventVersion(lastEvent.GetVersion()),
+			tag.Counter(eventCount),
+			tag.TokenLastEventID(token.LastEventID),
+		}
+	}
+
 	for _, batch := range dataBlobs {
 		events, err := m.serializer.DeserializeEvents(batch)
 		if err != nil {
 			return nil, nil, nil, dataSize, err
 		}
 		if len(events) == 0 {
-			m.logger.Error(errEmptyEvents)
+			m.logger.Error(dataLossMsg, datalossTags(errEmptyEvents)...)
 			return nil, nil, nil, dataSize, serviceerror.NewDataLoss(errEmptyEvents)
 		}
 
-		firstEvent := events[0]           // first
-		eventCount := len(events)         // length
-		lastEvent := events[eventCount-1] // last
+		firstEvent = events[0]
+		eventCount = len(events)
+		lastEvent = events[eventCount-1]
 
 		if firstEvent.GetVersion() != lastEvent.GetVersion() || firstEvent.GetEventId()+int64(eventCount-1) != lastEvent.GetEventId() {
 			// in a single batch, version should be the same, and ID should be contiguous
-			m.logger.Error(errWrongVersion,
-				tag.FirstEventVersion(firstEvent.GetVersion()), tag.WorkflowFirstEventID(firstEvent.GetEventId()),
-				tag.LastEventVersion(lastEvent.GetVersion()), tag.WorkflowNextEventID(lastEvent.GetEventId()),
-				tag.Counter(eventCount))
+			m.logger.Error(dataLossMsg, datalossTags(errWrongVersion)...)
 			return historyEvents, transactionIDs, nil, dataSize, serviceerror.NewDataLoss(errWrongVersion)
 		}
 		if (token.LastEventID != common.EmptyEventID) && (lastEvent.GetEventId() != token.LastEventID-1) {
-			m.logger.Error(errNonContiguousEventID,
-				tag.WorkflowFirstEventID(firstEvent.GetEventId()),
-				tag.WorkflowNextEventID(lastEvent.GetEventId()),
-				tag.TokenLastEventID(token.LastEventID),
-				tag.Counter(eventCount))
+			m.logger.Error(dataLossMsg, datalossTags(errNonContiguousEventID)...)
 			return historyEvents, transactionIDs, nil, dataSize, serviceerror.NewDataLoss(errNonContiguousEventID)
 		}
 

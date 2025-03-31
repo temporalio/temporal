@@ -212,7 +212,7 @@ func (m *MetadataStore) CreateNamespaceInV2Table(
 				}
 			}
 
-			msg := fmt.Sprintf("Namespace already exists.  NamespaceId: %v", existingID)
+			msg := fmt.Sprintf("Namespace already exists. Name: %q, NamespaceId: %v", request.Name, existingID)
 			return nil, serviceerror.NewNamespaceAlreadyExists(msg)
 
 		}

@@ -49,10 +49,11 @@ func init() {
 	flag.StringVar(&TestFlags.FaultInjectionConfigFile, "FaultInjectionConfigFile", "", "fault injection config file location")
 }
 
-func UsingSQLAdvancedVisibility() bool {
+func UseSQLVisibility() bool {
 	switch TestFlags.PersistenceDriver {
 	case mysql.PluginName, postgresql.PluginName, postgresql.PluginNamePGX, sqlite.PluginName:
 		return true
+	// If the main storage is Cassandra, Elasticsearch is used for visibility.
 	default:
 		return false
 	}

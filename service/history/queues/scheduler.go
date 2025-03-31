@@ -70,9 +70,10 @@ type (
 	ChannelWeightFn  = tasks.ChannelWeightFn[TaskChannelKey]
 
 	SchedulerOptions struct {
-		WorkerCount             dynamicconfig.TypedSubscribable[int]
-		ActiveNamespaceWeights  dynamicconfig.MapPropertyFnWithNamespaceFilter
-		StandbyNamespaceWeights dynamicconfig.MapPropertyFnWithNamespaceFilter
+		WorkerCount                    dynamicconfig.TypedSubscribable[int]
+		ActiveNamespaceWeights         dynamicconfig.MapPropertyFnWithNamespaceFilter
+		StandbyNamespaceWeights        dynamicconfig.MapPropertyFnWithNamespaceFilter
+		InactiveNamespaceDeletionDelay dynamicconfig.DurationPropertyFn
 	}
 
 	RateLimitedSchedulerOptions struct {
@@ -142,9 +143,10 @@ func NewScheduler(
 
 	scheduler = tasks.NewInterleavedWeightedRoundRobinScheduler(
 		tasks.InterleavedWeightedRoundRobinSchedulerOptions[Executable, TaskChannelKey]{
-			TaskChannelKeyFn:      taskChannelKeyFn,
-			ChannelWeightFn:       channelWeightFn,
-			ChannelWeightUpdateCh: channelWeightUpdateCh,
+			TaskChannelKeyFn:             taskChannelKeyFn,
+			ChannelWeightFn:              channelWeightFn,
+			ChannelWeightUpdateCh:        channelWeightUpdateCh,
+			InactiveChannelDeletionDelay: options.InactiveNamespaceDeletionDelay,
 		},
 		tasks.Scheduler[Executable](tasks.NewFIFOScheduler[Executable](
 			fifoSchedulerOptions,
@@ -236,7 +238,7 @@ func NewRateLimitedScheduler(
 		return quotas.NewRequest("", taskSchedulerToken, namespaceName.String(), tasks.PriorityName[e.GetPriority()], 0, "")
 	}
 	taskMetricsTagsFn := func(e Executable) []metrics.Tag {
-		return append(EstimateTaskMetricTag(e, namespaceRegistry, currentClusterName), metrics.TaskPriorityTag(e.GetPriority().String()))
+		return append(estimateTaskMetricTag(e.GetTask(), namespaceRegistry, currentClusterName), metrics.TaskPriorityTag(e.GetPriority().String()))
 	}
 
 	rateLimitedScheduler := tasks.NewRateLimitedScheduler[Executable](

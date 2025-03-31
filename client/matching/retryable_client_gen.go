@@ -95,6 +95,21 @@ func (c *retryableClient) CancelOutstandingPoll(
 	return resp, err
 }
 
+func (c *retryableClient) CheckTaskQueueUserDataPropagation(
+	ctx context.Context,
+	request *matchingservice.CheckTaskQueueUserDataPropagationRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.CheckTaskQueueUserDataPropagationResponse, error) {
+	var resp *matchingservice.CheckTaskQueueUserDataPropagationResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.CheckTaskQueueUserDataPropagation(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) CreateNexusEndpoint(
 	ctx context.Context,
 	request *matchingservice.CreateNexusEndpointRequest,
@@ -419,6 +434,21 @@ func (c *retryableClient) RespondQueryTaskCompleted(
 	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.RespondQueryTaskCompleted(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) SyncDeploymentUserData(
+	ctx context.Context,
+	request *matchingservice.SyncDeploymentUserDataRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.SyncDeploymentUserDataResponse, error) {
+	var resp *matchingservice.SyncDeploymentUserDataResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.SyncDeploymentUserData(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)

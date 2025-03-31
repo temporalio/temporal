@@ -23,9 +23,11 @@
 package tasks
 
 import (
+	"fmt"
 	"time"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/definition"
 )
@@ -39,10 +41,12 @@ type (
 		TaskID              int64
 		Priority            enumsspb.TaskPriority
 
-		VersionedTransition *persistencespb.VersionedTransition
-		FirstEventID        int64
-		NextEventID         int64
-		NewRunID            string
+		VersionedTransition    *persistencespb.VersionedTransition
+		FirstEventVersion      int64
+		FirstEventID           int64                          // First event ID of version transition
+		NextEventID            int64                          // Next event ID after version transition
+		LastVersionHistoryItem *historyspb.VersionHistoryItem // Last version history item of version transition when version transition does not have associated events
+		NewRunID               string
 
 		TaskEquivalents []Task
 	}
@@ -74,4 +78,9 @@ func (a *SyncVersionedTransitionTask) GetCategory() Category {
 
 func (a *SyncVersionedTransitionTask) GetType() enumsspb.TaskType {
 	return enumsspb.TASK_TYPE_REPLICATION_SYNC_VERSIONED_TRANSITION
+}
+
+func (a *SyncVersionedTransitionTask) String() string {
+	return fmt.Sprintf("SyncVersionedTransitionTask{WorkflowKey: %v, TaskID: %v, Priority: %v, VersionedTransition: %v, FirstEventID: %v, FirstEventVersion: %v, NextEventID: %v, NewRunID: %v}",
+		a.WorkflowKey, a.TaskID, a.Priority, a.VersionedTransition, a.FirstEventID, a.FirstEventVersion, a.NextEventID, a.NewRunID)
 }

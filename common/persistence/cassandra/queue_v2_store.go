@@ -29,7 +29,7 @@ import (
 	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
-	"go.temporal.io/api/enums/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
@@ -194,12 +194,12 @@ func (s *queueV2Store) ReadMessages(
 		if !iter.Scan(&messageID, &messagePayload, &messageEncoding) {
 			break
 		}
-		encoding, err := enums.EncodingTypeFromString(messageEncoding)
+		encoding, err := enumspb.EncodingTypeFromString(messageEncoding)
 		if err != nil {
 			return nil, serialization.NewUnknownEncodingTypeError(messageEncoding)
 		}
 
-		encodingType := enums.EncodingType(encoding)
+		encodingType := enumspb.EncodingType(encoding)
 
 		message := persistence.QueueV2Message{
 			MetaData: persistence.MessageMetadata{ID: messageID},
@@ -241,7 +241,7 @@ func (s *queueV2Store) CreateQueue(
 		queueType,
 		queueName,
 		bytes,
-		enums.ENCODING_TYPE_PROTO3.String(),
+		enumspb.ENCODING_TYPE_PROTO3.String(),
 		0,
 	).WithContext(ctx).MapScanCAS(make(map[string]interface{}))
 	if err != nil {
@@ -333,7 +333,7 @@ func (s *queueV2Store) updateQueue(
 	applied, err := s.session.Query(
 		TemplateUpdateQueueMetadataQuery,
 		bytes,
-		enums.ENCODING_TYPE_PROTO3.String(),
+		enumspb.ENCODING_TYPE_PROTO3.String(),
 		nextVersion,
 		queueType,
 		queueName,
@@ -426,10 +426,10 @@ func getQueueFromMetadata(
 	queueEncodingStr string,
 	version int64,
 ) (*Queue, error) {
-	if queueEncodingStr != enums.ENCODING_TYPE_PROTO3.String() {
+	if queueEncodingStr != enumspb.ENCODING_TYPE_PROTO3.String() {
 		return nil, fmt.Errorf(
 			"%w: invalid queue encoding type: queue with type %v and name %v has invalid encoding",
-			serialization.NewUnknownEncodingTypeError(queueEncodingStr, enums.ENCODING_TYPE_PROTO3),
+			serialization.NewUnknownEncodingTypeError(queueEncodingStr, enumspb.ENCODING_TYPE_PROTO3),
 			queueType,
 			queueName,
 		)
@@ -439,7 +439,7 @@ func getQueueFromMetadata(
 	err := q.Unmarshal(queueBytes)
 	if err != nil {
 		return nil, serialization.NewDeserializationError(
-			enums.ENCODING_TYPE_PROTO3,
+			enumspb.ENCODING_TYPE_PROTO3,
 			fmt.Errorf("%w: unmarshal queue payload: failed for queue with type %v and name %v",
 				err, queueType, queueName),
 		)

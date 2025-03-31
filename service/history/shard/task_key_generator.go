@@ -106,6 +106,8 @@ func (a *taskKeyGenerator) setTaskKeys(
 							tag.WorkflowNamespaceID(task.GetNamespaceID()),
 							tag.WorkflowID(task.GetWorkflowID()),
 							tag.WorkflowRunID(task.GetRunID()),
+							tag.TaskType(task.GetType()),
+							tag.TaskID(id),
 							tag.Timestamp(taskScheduledTime),
 							tag.CursorTimestamp(a.taskMinScheduledTime),
 							tag.ValueShardAllocateTimerBeforeRead,

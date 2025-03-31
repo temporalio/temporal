@@ -25,6 +25,7 @@
 package interceptor
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -32,7 +33,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	protocolpb "go.temporal.io/api/protocol/v1"
-	"go.temporal.io/api/query/v1"
+	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -42,13 +43,15 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
 const (
-	startWorkflow = "StartWorkflowExecution"
+	startWorkflow   = "StartWorkflowExecution"
+	executeMultiOps = "ExecuteMultiOperation"
 )
 
 func TestEmitActionMetric(t *testing.T) {
@@ -77,6 +80,70 @@ func TestEmitActionMetric(t *testing.T) {
 			fullName:          api.WorkflowServicePrefix + startWorkflow,
 			resp:              &workflowservice.StartWorkflowExecutionResponse{Started: true},
 			expectEmitMetrics: true,
+		},
+		{
+			methodName: executeMultiOps,
+			fullName:   api.WorkflowServicePrefix + executeMultiOps,
+			resp: &workflowservice.ExecuteMultiOperationResponse{
+				Responses: []*workflowservice.ExecuteMultiOperationResponse_Response{
+					{
+						Response: &workflowservice.ExecuteMultiOperationResponse_Response_StartWorkflow{
+							StartWorkflow: &workflowservice.StartWorkflowExecutionResponse{
+								Started: false,
+							},
+						},
+					},
+					{
+						Response: &workflowservice.ExecuteMultiOperationResponse_Response_UpdateWorkflow{
+							UpdateWorkflow: &workflowservice.UpdateWorkflowExecutionResponse{},
+						},
+					},
+				},
+			},
+		},
+		{
+			methodName: executeMultiOps,
+			fullName:   api.WorkflowServicePrefix + executeMultiOps,
+			resp: &workflowservice.ExecuteMultiOperationResponse{
+				Responses: []*workflowservice.ExecuteMultiOperationResponse_Response{
+					{
+						Response: &workflowservice.ExecuteMultiOperationResponse_Response_StartWorkflow{
+							StartWorkflow: &workflowservice.StartWorkflowExecutionResponse{
+								Started: true,
+							},
+						},
+					},
+					{
+						Response: &workflowservice.ExecuteMultiOperationResponse_Response_UpdateWorkflow{
+							UpdateWorkflow: &workflowservice.UpdateWorkflowExecutionResponse{},
+						},
+					},
+				},
+			},
+			expectEmitMetrics: true,
+		},
+		{
+			methodName: executeMultiOps,
+			fullName:   api.WorkflowServicePrefix + executeMultiOps,
+			resp: &workflowservice.ExecuteMultiOperationResponse{
+				Responses: []*workflowservice.ExecuteMultiOperationResponse_Response{
+					// missing start response
+					{
+						Response: &workflowservice.ExecuteMultiOperationResponse_Response_UpdateWorkflow{
+							UpdateWorkflow: &workflowservice.UpdateWorkflowExecutionResponse{},
+						},
+					},
+				},
+			},
+		},
+		{
+			methodName: executeMultiOps,
+			fullName:   api.WorkflowServicePrefix + executeMultiOps,
+			resp: &workflowservice.ExecuteMultiOperationResponse{
+				Responses: []*workflowservice.ExecuteMultiOperationResponse_Response{
+					// no responses
+				},
+			},
 		},
 		{
 			methodName: queryWorkflow,
@@ -143,7 +210,7 @@ func TestEmitActionMetric(t *testing.T) {
 			methodName: queryWorkflow,
 			fullName:   api.WorkflowServicePrefix + queryWorkflow,
 			req: &workflowservice.QueryWorkflowRequest{
-				Query: &query.WorkflowQuery{
+				Query: &querypb.WorkflowQuery{
 					QueryType: "some_type",
 				},
 			},
@@ -153,7 +220,7 @@ func TestEmitActionMetric(t *testing.T) {
 			methodName: queryWorkflow,
 			fullName:   api.WorkflowServicePrefix + queryWorkflow,
 			req: &workflowservice.QueryWorkflowRequest{
-				Query: &query.WorkflowQuery{
+				Query: &querypb.WorkflowQuery{
 					QueryType: "__temporal_workflow_metadata",
 				},
 			},
@@ -260,22 +327,57 @@ func TestHandleError(t *testing.T) {
 			logAllErrors:              dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
 		},
 		{
-			name:                      "resource-exhausted",
-			err:                       serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_UNSPECIFIED, "resource exhausted"),
-			expectLogging:             true,
-			ServiceFailuresCount:      0,
+			name: "resource-exhausted-system",
+			err: &serviceerror.ResourceExhausted{
+				Message: "resource exhausted",
+				Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_UNSPECIFIED,
+				Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM,
+			},
+			expectLogging:             false,
+			ServiceFailuresCount:      1,
 			ResourceExhaustedCount:    1,
 			ServiceErrorWithTypeCount: 1,
 			logAllErrors:              dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 		},
 		{
-			name:                      "resource-exhausted",
-			err:                       serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_UNSPECIFIED, "resource exhausted"),
+			name: "resource-exhausted-namespace",
+			err: &serviceerror.ResourceExhausted{
+				Message: "resource exhausted",
+				Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_UNSPECIFIED,
+				Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+			},
 			expectLogging:             true,
 			ServiceFailuresCount:      0,
 			ResourceExhaustedCount:    1,
 			ServiceErrorWithTypeCount: 1,
 			logAllErrors:              dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+		},
+		{
+			name:                      "canceled",
+			err:                       context.Canceled,
+			expectLogging:             false,
+			ServiceFailuresCount:      0,
+			ResourceExhaustedCount:    0,
+			ServiceErrorWithTypeCount: 1,
+			logAllErrors:              dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+		},
+		{
+			name:                      "deadline-exceeded",
+			err:                       context.DeadlineExceeded,
+			expectLogging:             true,
+			ServiceFailuresCount:      1,
+			ResourceExhaustedCount:    0,
+			ServiceErrorWithTypeCount: 1,
+			logAllErrors:              dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+		},
+		{
+			name:                      "shard-ownership-lost",
+			err:                       serviceerrors.NewShardOwnershipLost("shard ownership lost", "hostname"),
+			expectLogging:             true,
+			ServiceFailuresCount:      1,
+			ResourceExhaustedCount:    0,
+			ServiceErrorWithTypeCount: 1,
+			logAllErrors:              dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 		},
 	}
 
@@ -307,14 +409,6 @@ func TestHandleError(t *testing.T) {
 }
 
 func TestOperationOverwrite(t *testing.T) {
-	controller := gomock.NewController(t)
-	register := namespace.NewMockRegistry(controller)
-	metricsHandler := metrics.NewMockHandler(controller)
-	telemetry := NewTelemetryInterceptor(register,
-		metricsHandler,
-		log.NewNoopLogger(),
-		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false))
-
 	testCases := []struct {
 		methodName        string
 		fullName          string
@@ -339,20 +433,13 @@ func TestOperationOverwrite(t *testing.T) {
 
 	for _, tt := range testCases {
 		t.Run(tt.methodName, func(t *testing.T) {
-			operation := telemetry.overrideOperationTag(tt.fullName, tt.methodName)
+			operation := telemetryOverrideOperationTag(tt.fullName, tt.methodName)
 			assert.Equal(t, tt.expectedOperation, operation)
 		})
 	}
 }
 
 func TestOperationOverride(t *testing.T) {
-	controller := gomock.NewController(t)
-	register := namespace.NewMockRegistry(controller)
-	metricsHandler := metrics.NewMockHandler(controller)
-	telemetry := NewTelemetryInterceptor(register, metricsHandler,
-		log.NewNoopLogger(),
-		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false))
-
 	wid := "test_workflow_id"
 	rid := "test_run_id"
 
@@ -418,7 +505,7 @@ func TestOperationOverride(t *testing.T) {
 
 	for _, tt := range testCases {
 		t.Run(tt.methodName, func(t *testing.T) {
-			operation := telemetry.unaryOverrideOperationTag(tt.fullName, tt.methodName, tt.req)
+			operation := telemetryUnaryOverrideOperationTag(tt.fullName, tt.methodName, tt.req)
 			assert.Equal(t, tt.expectedOperation, operation)
 		})
 	}

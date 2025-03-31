@@ -36,6 +36,14 @@ frontend.workerVersioningDataAPIs:
   - value: true
 frontend.workerVersioningWorkflowAPIs:
   - value: true
+system.enableDeployments:
+  - value: true
+system.enableDeploymentVersions:
+  - value: true
+frontend.workerVersioningRuleAPIs:
+  - value: true
+frontend.enableExecuteMultiOperation:
+  - value: true
 system.enableNexus:
   - value: true
 component.nexusoperations.callback.endpoint.template:
@@ -47,8 +55,6 @@ component.callbacks.allowedAddresses:
 matching.queryWorkflowTaskTimeoutLogRate:
   - value: 1.0
 history.ReplicationEnableUpdateWithNewTaskMerge:
-  - value: true
-history.enableWorkflowExecutionTimeoutTimer:
   - value: true
 history.hostLevelCacheMaxSize:
   - value: 8192

@@ -38,10 +38,12 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
-	"go.temporal.io/server/service/history/shard"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
@@ -50,19 +52,19 @@ type (
 	HSMStateReplicator interface {
 		SyncHSMState(
 			ctx context.Context,
-			request *shard.SyncHSMRequest,
+			request *historyi.SyncHSMRequest,
 		) error
 	}
 
 	HSMStateReplicatorImpl struct {
-		shardContext  shard.Context
+		shardContext  historyi.ShardContext
 		workflowCache wcache.Cache
 		logger        log.Logger
 	}
 )
 
 func NewHSMStateReplicator(
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	workflowCache wcache.Cache,
 	logger log.Logger,
 ) *HSMStateReplicatorImpl {
@@ -76,7 +78,7 @@ func NewHSMStateReplicator(
 
 func (r *HSMStateReplicatorImpl) SyncHSMState(
 	ctx context.Context,
-	request *shard.SyncHSMRequest,
+	request *historyi.SyncHSMRequest,
 ) (retError error) {
 	namespaceID := namespace.ID(request.WorkflowKey.GetNamespaceID())
 	execution := &commonpb.WorkflowExecution{
@@ -119,8 +121,11 @@ func (r *HSMStateReplicatorImpl) SyncHSMState(
 	}
 
 	synced, err := r.syncHSMNode(mutableState, request)
-	if err != nil || !synced {
+	if err != nil {
 		return err
+	}
+	if !synced {
+		return consts.ErrDuplicate
 	}
 
 	state, _ := mutableState.GetWorkflowStateStatus()
@@ -128,7 +133,7 @@ func (r *HSMStateReplicatorImpl) SyncHSMState(
 		return workflowContext.SubmitClosedWorkflowSnapshot(
 			ctx,
 			r.shardContext,
-			workflow.TransactionPolicyPassive,
+			historyi.TransactionPolicyPassive,
 		)
 	}
 
@@ -143,14 +148,14 @@ func (r *HSMStateReplicatorImpl) SyncHSMState(
 		updateMode,
 		nil, // no new workflow
 		nil, // no new workflow
-		workflow.TransactionPolicyPassive,
+		historyi.TransactionPolicyPassive,
 		nil,
 	)
 }
 
 func (r *HSMStateReplicatorImpl) syncHSMNode(
-	mutableState workflow.MutableState,
-	request *shard.SyncHSMRequest,
+	mutableState historyi.MutableState,
+	request *historyi.SyncHSMRequest,
 ) (bool, error) {
 
 	shouldSync, err := r.compareVersionHistory(mutableState, request.EventVersionHistory)
@@ -183,10 +188,13 @@ func (r *HSMStateReplicatorImpl) syncHSMNode(
 		incomingNodePath := incomingNode.Path()
 		currentNode, err := currentHSM.Child(incomingNodePath)
 		if err != nil {
-			// 1. Already done history resend if needed before,
-			// and node creation today always associated with an event
-			// 2. Node deletion is not supported right now.
-			// Based on 1 and 2, node should always be found here.
+			// The node may not be found if the state machine was deleted in terminal a state and this cluster is
+			// syncing from an older cluster that doesn't delete the state machine on completion.
+			// Both state machine creation and deletion are always associated with an event, so any missing state
+			// machine must have a corresponding event in history.
+			if errors.Is(err, hsm.ErrStateMachineNotFound) {
+				return nil
+			}
 			return err
 		}
 
@@ -213,7 +221,7 @@ func (r *HSMStateReplicatorImpl) shouldSyncNode(
 	incomingLastUpdated := incomingNode.InternalRepr().LastUpdateVersionedTransition
 
 	if currentLastUpdated.TransitionCount != 0 && incomingLastUpdated.TransitionCount != 0 {
-		return workflow.CompareVersionedTransition(currentLastUpdated, incomingLastUpdated) < 0, nil
+		return transitionhistory.Compare(currentLastUpdated, incomingLastUpdated) < 0, nil
 	}
 
 	if currentLastUpdated.NamespaceFailoverVersion == incomingLastUpdated.NamespaceFailoverVersion {
@@ -225,7 +233,7 @@ func (r *HSMStateReplicatorImpl) shouldSyncNode(
 }
 
 func (r *HSMStateReplicatorImpl) compareVersionHistory(
-	mutableState workflow.MutableState,
+	mutableState historyi.MutableState,
 	incomingVersionHistory *historyspb.VersionHistory,
 ) (bool, error) {
 	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(

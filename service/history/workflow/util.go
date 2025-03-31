@@ -26,20 +26,24 @@ package workflow
 
 import (
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/effect"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/internal/effect"
+	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/consts"
+	"go.temporal.io/server/service/history/hsm"
+	historyi "go.temporal.io/server/service/history/interfaces"
 )
 
 func failWorkflowTask(
-	mutableState MutableState,
-	workflowTask *WorkflowTaskInfo,
+	mutableState historyi.MutableState,
+	workflowTask *historyi.WorkflowTaskInfo,
 	workflowTaskFailureCause enumspb.WorkflowTaskFailedCause,
 ) (*historypb.HistoryEvent, error) {
 
@@ -64,7 +68,7 @@ func failWorkflowTask(
 }
 
 func ScheduleWorkflowTask(
-	mutableState MutableState,
+	mutableState historyi.MutableState,
 ) error {
 
 	if mutableState.HasPendingWorkflowTask() {
@@ -79,7 +83,7 @@ func ScheduleWorkflowTask(
 }
 
 func TimeoutWorkflow(
-	mutableState MutableState,
+	mutableState historyi.MutableState,
 	retryState enumspb.RetryState,
 	continuedRunID string,
 ) error {
@@ -113,7 +117,7 @@ func TimeoutWorkflow(
 // event must fall within an existing event batch (for example, if you've already
 // failed a workflow task via `failWorkflowTask` and have an event batch ID).
 func TerminateWorkflow(
-	mutableState MutableState,
+	mutableState historyi.MutableState,
 	terminateReason string,
 	terminateDetails *commonpb.Payloads,
 	terminateIdentity string,
@@ -179,7 +183,7 @@ func FindAutoResetPoint(
 	return "", nil
 }
 
-func WithEffects(effects effect.Controller, ms MutableState) MutableStateWithEffects {
+func WithEffects(effects effect.Controller, ms historyi.MutableState) MutableStateWithEffects {
 	return MutableStateWithEffects{
 		MutableState: ms,
 		Controller:   effects,
@@ -187,11 +191,85 @@ func WithEffects(effects effect.Controller, ms MutableState) MutableStateWithEff
 }
 
 type MutableStateWithEffects struct {
-	MutableState
+	historyi.MutableState
 	effect.Controller
 }
 
 func (mse MutableStateWithEffects) CanAddEvent() bool {
 	// Event can be added to the history if workflow is still running.
 	return mse.MutableState.IsWorkflowExecutionRunning()
+}
+
+// GetEffectiveDeployment returns the effective deployment in the following order:
+//  1. DeploymentVersionTransition.Deployment: this is returned when the wf is transitioning to a
+//     new deployment
+//  2. VersioningOverride.Deployment: this is returned when user has set a PINNED override
+//     at wf start time, or later via UpdateWorkflowExecutionOptions.
+//  3. Deployment: this is returned when there is no transition and no override (the most
+//     common case). Deployment is set based on the worker-sent deployment in the latest WFT
+//     completion. Exception: if Deployment is set but the workflow's effective behavior is
+//     UNSPECIFIED, it means the workflow is unversioned, so effective deployment will be nil.
+//
+// Note: Deployment objects are immutable, never change their fields.
+//
+//nolint:revive // cognitive complexity to reduce after old code clean up
+func GetEffectiveDeployment(versioningInfo *workflowpb.WorkflowExecutionVersioningInfo) *deploymentpb.Deployment {
+	if versioningInfo == nil {
+		return nil
+	} else if transition := versioningInfo.GetVersionTransition(); transition != nil {
+		v, _ := worker_versioning.WorkerDeploymentVersionFromString(transition.GetVersion())
+		return worker_versioning.DeploymentFromDeploymentVersion(v)
+	} else if transition := versioningInfo.GetDeploymentTransition(); transition != nil {
+		return transition.GetDeployment()
+	} else if override := versioningInfo.GetVersioningOverride(); override != nil &&
+		override.GetBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED {
+		if pinned := override.GetPinnedVersion(); pinned != "" {
+			v, _ := worker_versioning.WorkerDeploymentVersionFromString(pinned)
+			return worker_versioning.DeploymentFromDeploymentVersion(v)
+		}
+		return override.GetDeployment()
+	} else if GetEffectiveVersioningBehavior(versioningInfo) != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
+		//nolint:revive // nesting will be reduced after old code clean up
+		if v := versioningInfo.GetVersion(); v != "" {
+			dv, _ := worker_versioning.WorkerDeploymentVersionFromString(v)
+			return worker_versioning.DeploymentFromDeploymentVersion(dv)
+		}
+		return versioningInfo.GetDeployment()
+	}
+	return nil
+}
+
+// GetEffectiveVersioningBehavior returns the effective versioning behavior in the following
+// order:
+//  1. VersioningOverride.Behavior: this is returned when user has set a behavior override
+//     at wf start time, or later via UpdateWorkflowExecutionOptions.
+//  2. Behavior: this is returned when there is no override (most common case). Behavior is
+//     set based on the worker-sent deployment in the latest WFT completion.
+func GetEffectiveVersioningBehavior(versioningInfo *workflowpb.WorkflowExecutionVersioningInfo) enumspb.VersioningBehavior {
+	if versioningInfo == nil {
+		return enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED
+	} else if override := versioningInfo.GetVersioningOverride(); override != nil {
+		return override.GetBehavior()
+	}
+	return versioningInfo.GetBehavior()
+}
+
+// shouldReapplyEvent returns true if the event should be reapplied to the workflow execution.
+func shouldReapplyEvent(stateMachineRegistry *hsm.Registry, event *historypb.HistoryEvent) bool {
+	switch event.GetEventType() { // nolint:exhaustive
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCEL_REQUESTED,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED:
+		return true
+	}
+
+	// events registered in the hsm framework that are potentially cherry-pickable
+	if _, ok := stateMachineRegistry.EventDefinition(event.GetEventType()); ok {
+		return true
+	}
+
+	return false
 }

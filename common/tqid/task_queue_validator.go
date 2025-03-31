@@ -29,7 +29,7 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/api/taskqueue/v1"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/common/enums"
 )
 
@@ -53,7 +53,7 @@ const (
 //
 // Returns an error if validation fails, nil otherwise.
 func NormalizeAndValidatePartition(
-	partition *taskqueue.TaskQueue,
+	partition *taskqueuepb.TaskQueue,
 	defaultName string,
 	maxIDLengthLimit int,
 ) error {
@@ -76,7 +76,7 @@ func NormalizeAndValidatePartition(
 //
 // Returns an error if validation fails, nil otherwise.
 func NormalizeAndValidate(
-	taskQueue *taskqueue.TaskQueue,
+	taskQueue *taskqueuepb.TaskQueue,
 	defaultName string,
 	maxIDLengthLimit int,
 ) error {
@@ -84,7 +84,7 @@ func NormalizeAndValidate(
 }
 
 func normalizeAndValidate(
-	taskQueue *taskqueue.TaskQueue,
+	taskQueue *taskqueuepb.TaskQueue,
 	defaultName string,
 	maxIDLengthLimit int,
 	expectRootPartition bool,

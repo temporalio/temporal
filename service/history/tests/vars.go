@@ -184,9 +184,7 @@ func NewDynamicConfig() *configs.Config {
 	config.EnableActivityEagerExecution = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
 	config.EnableEagerWorkflowStart = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
 	config.NamespaceCacheRefreshInterval = dynamicconfig.GetDurationPropertyFn(time.Second)
-	config.EnableNexus = dynamicconfig.GetBoolPropertyFn(true)
 	config.ReplicationEnableUpdateWithNewTaskMerge = dynamicconfig.GetBoolPropertyFn(true)
-	config.EnableWorkflowExecutionTimeoutTimer = dynamicconfig.GetBoolPropertyFn(true)
 	config.EnableWorkflowIdReuseStartTimeValidation = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
 	return config
 }

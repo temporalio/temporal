@@ -194,10 +194,9 @@ func GetTimerStateMachineTaskTypeTagValue(taskType string, isActive bool) string
 }
 
 func getTaskTypeTagValue(
-	executable Executable,
+	task tasks.Task,
 	isActive bool,
 ) string {
-	task := executable.GetTask()
 	switch task.GetCategory() {
 	case tasks.CategoryTransfer:
 		if isActive {

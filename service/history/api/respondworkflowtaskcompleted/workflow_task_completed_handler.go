@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/effect"
 	"go.temporal.io/server/common/enums"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -51,13 +52,12 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/protocol"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/tasktoken"
-	"go.temporal.io/server/internal/effect"
-	"go.temporal.io/server/internal/protocol"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/configs"
-	"go.temporal.io/server/service/history/shard"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/update"
 	"google.golang.org/protobuf/proto"
@@ -78,9 +78,9 @@ type (
 		hasBufferedEventsOrMessages     bool
 		workflowTaskFailedCause         *workflowTaskFailedCause
 		activityNotStartedCancelled     bool
-		newMutableState                 workflow.MutableState
+		newMutableState                 historyi.MutableState
 		stopProcessing                  bool // should stop processing any more commands
-		mutableState                    workflow.MutableState
+		mutableState                    historyi.MutableState
 		effects                         effect.Controller
 		initiatedChildExecutionsInBatch map[string]struct{} // Set of initiated child executions in the workflow task
 		updateRegistry                  update.Registry
@@ -94,8 +94,8 @@ type (
 		namespaceRegistry      namespace.Registry
 		metricsHandler         metrics.Handler
 		config                 *configs.Config
-		shard                  shard.Context
-		tokenSerializer        common.TaskTokenSerializer
+		shard                  historyi.ShardContext
+		tokenSerializer        *tasktoken.Serializer
 		commandHandlerRegistry *workflow.CommandHandlerRegistry
 	}
 
@@ -122,7 +122,7 @@ type (
 func newWorkflowTaskCompletedHandler(
 	identity string,
 	workflowTaskCompletedID int64,
-	mutableState workflow.MutableState,
+	mutableState historyi.MutableState,
 	updateRegistry update.Registry,
 	effects effect.Controller,
 	attrValidator *api.CommandAttrValidator,
@@ -131,7 +131,7 @@ func newWorkflowTaskCompletedHandler(
 	namespaceRegistry namespace.Registry,
 	metricsHandler metrics.Handler,
 	config *configs.Config,
-	shard shard.Context,
+	shard historyi.ShardContext,
 	searchAttributesMapperProvider searchattribute.MapperProvider,
 	hasBufferedEventsOrMessages bool,
 	commandHandlerRegistry *workflow.CommandHandlerRegistry,
@@ -164,7 +164,7 @@ func newWorkflowTaskCompletedHandler(
 		),
 		config:                 config,
 		shard:                  shard,
-		tokenSerializer:        common.NewProtoTaskTokenSerializer(),
+		tokenSerializer:        tasktoken.NewSerializer(),
 		commandHandlerRegistry: commandHandlerRegistry,
 	}
 }
@@ -229,34 +229,30 @@ func (handler *workflowTaskCompletedHandler) rejectUnprocessedUpdates(
 	wtHeartbeat bool,
 	wfKey definition.WorkflowKey,
 	workerIdentity string,
-) error {
+) {
 
 	// If server decided to fail WT (instead of completing), don't reject updates.
 	// New WT will be created, and it will deliver these updates again to the worker.
 	// Worker will do full history replay, and updates should be delivered again.
 	if handler.workflowTaskFailedCause != nil {
-		return nil
+		return
 	}
 
 	// If WT is a heartbeat WT, then it doesn't have to have messages.
 	if wtHeartbeat {
-		return nil
+		return
 	}
 
 	// If worker has just completed workflow with one of the WF completion command,
 	// then it might skip processing some updates. In this case, it doesn't indicate old SDK or bug.
-	// All unprocessed updates will be rejected with "workflow is closing" reason though.
+	// All unprocessed updates will be aborted later though.
 	if !handler.mutableState.IsWorkflowExecutionRunning() {
-		return nil
+		return
 	}
 
-	rejectedUpdateIDs, err := handler.updateRegistry.RejectUnprocessed(
+	rejectedUpdateIDs := handler.updateRegistry.RejectUnprocessed(
 		ctx,
 		handler.effects)
-
-	if err != nil {
-		return err
-	}
 
 	if len(rejectedUpdateIDs) > 0 {
 		handler.logger.Warn(
@@ -272,7 +268,6 @@ func (handler *workflowTaskCompletedHandler) rejectUnprocessedUpdates(
 
 	// At this point there must not be any updates in a Sent state.
 	// All updates which were sent on this WT are processed by worker or rejected by server.
-	return nil
 }
 
 //revive:disable:cyclomatic grandfathered
@@ -481,7 +476,11 @@ func (handler *workflowTaskCompletedHandler) handleCommandScheduleActivity(
 
 	namespace := handler.mutableState.GetNamespaceEntry().Name().String()
 
-	oldVersioningUsed := handler.mutableState.GetMostRecentWorkerVersionStamp().GetUseVersioning()
+	// TODO: versioning 3 allows eager activity dispatch for both pinned and unpinned workflows, no
+	// special consideration is need. Remove the versioning logic from here. [cleanup-old-wv]
+	oldVersioningUsed := handler.mutableState.GetMostRecentWorkerVersionStamp().GetUseVersioning() &&
+		// for V3 versioning it's ok to dispatch eager activities
+		handler.mutableState.GetEffectiveVersioningBehavior() == enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED
 	newVersioningUsed := handler.mutableState.GetExecutionInfo().GetAssignedBuildId() != ""
 	versioningUsed := oldVersioningUsed || newVersioningUsed
 
@@ -544,6 +543,7 @@ func (handler *workflowTaskCompletedHandler) handlePostCommandEagerExecuteActivi
 		uuid.New(),
 		handler.identity,
 		stamp,
+		nil,
 		nil,
 	); err != nil {
 		return nil, err
@@ -1329,6 +1329,7 @@ func (handler *workflowTaskCompletedHandler) handleRetry(
 		newMutableState,
 		newRunID,
 		startAttr,
+		startEvent.Links,
 		nil,
 		failure,
 		backoffInterval,
@@ -1388,6 +1389,7 @@ func (handler *workflowTaskCompletedHandler) handleCron(
 		newMutableState,
 		newRunID,
 		startAttr,
+		startEvent.Links,
 		lastCompletionResult,
 		failure,
 		backoffInterval,

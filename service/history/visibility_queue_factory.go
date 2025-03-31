@@ -29,8 +29,9 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/telemetry"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
-	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.uber.org/fx"
@@ -64,9 +65,10 @@ func NewVisibilityQueueFactory(
 			HostScheduler: queues.NewScheduler(
 				params.ClusterMetadata.GetCurrentClusterName(),
 				queues.SchedulerOptions{
-					WorkerCount:             params.Config.VisibilityProcessorSchedulerWorkerCount,
-					ActiveNamespaceWeights:  params.Config.VisibilityProcessorSchedulerActiveRoundRobinWeights,
-					StandbyNamespaceWeights: params.Config.VisibilityProcessorSchedulerStandbyRoundRobinWeights,
+					WorkerCount:                    params.Config.VisibilityProcessorSchedulerWorkerCount,
+					ActiveNamespaceWeights:         params.Config.VisibilityProcessorSchedulerActiveRoundRobinWeights,
+					StandbyNamespaceWeights:        params.Config.VisibilityProcessorSchedulerStandbyRoundRobinWeights,
+					InactiveNamespaceDeletionDelay: params.Config.TaskSchedulerInactiveChannelDeletionDelay,
 				},
 				params.NamespaceRegistry,
 				params.Logger,
@@ -80,12 +82,13 @@ func NewVisibilityQueueFactory(
 				),
 				int64(params.Config.VisibilityQueueMaxReaderCount()),
 			),
+			Tracer: params.TracerProvider.Tracer(telemetry.ComponentQueueVisibility),
 		},
 	}
 }
 
 func (f *visibilityQueueFactory) CreateQueue(
-	shard shard.Context,
+	shard historyi.ShardContext,
 	workflowCache wcache.Cache,
 ) queues.Queue {
 	logger := log.With(shard.GetLogger(), tag.ComponentVisibilityQueue)
@@ -139,6 +142,7 @@ func (f *visibilityQueueFactory) CreateQueue(
 		shard.GetClusterMetadata(),
 		logger,
 		metricsHandler,
+		f.Tracer,
 		f.DLQWriter,
 		f.Config.TaskDLQEnabled,
 		f.Config.TaskDLQUnexpectedErrorAttempts,

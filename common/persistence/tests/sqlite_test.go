@@ -25,6 +25,8 @@
 package tests
 
 import (
+	"context"
+	gosql "database/sql"
 	"os"
 	"path"
 	"testing"
@@ -238,6 +240,28 @@ func TestSQLiteTaskQueueTaskSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
+func TestSQLiteTaskQueueUserDataSuite(t *testing.T) {
+	cfg := NewSQLiteMemoryConfig()
+	logger := log.NewNoopLogger()
+	factory := sql.NewFactory(
+		*cfg,
+		resolver.NewNoopResolver(),
+		testSQLiteClusterName,
+		logger,
+		metrics.NoopMetricsHandler,
+	)
+	taskQueueStore, err := factory.NewTaskStore()
+	if err != nil {
+		t.Fatalf("unable to create SQLite DB: %v", err)
+	}
+	defer func() {
+		factory.Close()
+	}()
+
+	s := NewTaskQueueUserDataSuite(t, taskQueueStore, logger)
+	suite.Run(t, s)
+}
+
 func TestSQLiteFileExecutionMutableStateStoreSuite(t *testing.T) {
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
@@ -386,6 +410,32 @@ func TestSQLiteFileTaskQueueTaskSuite(t *testing.T) {
 	}()
 
 	s := NewTaskQueueTaskSuite(t, taskQueueStore, logger)
+	suite.Run(t, s)
+}
+
+func TestSQLiteFileTaskQueueUserDataSuite(t *testing.T) {
+	cfg := NewSQLiteFileConfig()
+	SetupSQLiteDatabase(t, cfg)
+	defer func() {
+		assert.NoError(t, os.Remove(cfg.DatabaseName))
+	}()
+	logger := log.NewNoopLogger()
+	factory := sql.NewFactory(
+		*cfg,
+		resolver.NewNoopResolver(),
+		testSQLiteClusterName,
+		logger,
+		metrics.NoopMetricsHandler,
+	)
+	taskQueueStore, err := factory.NewTaskStore()
+	if err != nil {
+		t.Fatalf("unable to create SQLite DB: %v", err)
+	}
+	defer func() {
+		factory.Close()
+	}()
+
+	s := NewTaskQueueUserDataSuite(t, taskQueueStore, logger)
 	suite.Run(t, s)
 }
 
@@ -721,6 +771,20 @@ func TestSQLiteHistoryExecutionTimerSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
+func TestSQLiteHistoryExecutionChasmSuite(t *testing.T) {
+	cfg := NewSQLiteMemoryConfig()
+	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
+	if err != nil {
+		t.Fatalf("unable to create SQLite DB: %v", err)
+	}
+	defer func() {
+		_ = store.Close()
+	}()
+
+	s := sqltests.NewHistoryExecutionChasmSuite(t, store)
+	suite.Run(t, s)
+}
+
 func TestSQLiteHistoryExecutionRequestCancelSuite(t *testing.T) {
 	cfg := NewSQLiteMemoryConfig()
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
@@ -1024,6 +1088,19 @@ func TestSQLiteFileHistoryExecutionTimerSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
+func TestSQLiteFileHistoryExecutionChasmSuite(t *testing.T) {
+	cfg := NewSQLiteFileConfig()
+	SetupSQLiteDatabase(t, cfg)
+	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
+	if err != nil {
+		t.Fatalf("unable to create SQLite DB: %v", err)
+	}
+	defer os.Remove(cfg.DatabaseName)
+
+	s := sqltests.NewHistoryExecutionChasmSuite(t, store)
+	suite.Run(t, s)
+}
+
 func TestSQLiteFileHistoryExecutionRequestCancelSuite(t *testing.T) {
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
@@ -1110,4 +1187,40 @@ func TestSQLiteNexusEndpointPersistence(t *testing.T) {
 		assert.NoError(t, os.Remove(cfg.DatabaseName))
 	})
 	RunNexusEndpointTestSuiteForSQL(t, factory)
+}
+
+// Go sql library will close the connection when a context is cancelled during a transaction. Since we only have one
+// connection to the sqlite database, we will lose the db in this case. We fixed this by extending the driver in
+// modernc.org/sqlite. This test verifies that fix.
+func TestSQLiteTransactionContextCancellation(t *testing.T) {
+	cfg := NewSQLiteMemoryConfig()
+	db, err := sql.NewSQLDB(sqlplugin.DbKindVisibility, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
+	if err != nil {
+		t.Fatalf("unable to create SQLite DB: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	tx, err := db.BeginTx(ctx)
+	assert.NoError(t, err)
+	_, err = tx.InsertIntoTaskQueues(ctx, &sqlplugin.TaskQueuesRow{
+		RangeHash:   0,
+		TaskQueueID: []byte("test-queue"),
+		RangeID:     0,
+		Data:        []byte("test-data"),
+	})
+	assert.NoError(t, err)
+
+	// Cancel the context before the transaction has finished.
+	cancel()
+
+	err = tx.Commit()
+	assert.ErrorIs(t, err, context.Canceled)
+
+	// Check if we still have a connection to the db.
+	_, err = db.LockTaskQueues(context.Background(), sqlplugin.TaskQueuesFilter{
+		RangeHash:   0,
+		TaskQueueID: []byte("test-queue"),
+	})
+	assert.NotContains(t, err.Error(), "no such table")
+	assert.ErrorAs(t, err, &gosql.ErrNoRows)
 }

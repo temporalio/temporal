@@ -26,7 +26,7 @@ package serviceerror
 
 import (
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/server/api/errordetails/v1"
+	errordetailsspb "go.temporal.io/server/api/errordetails/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -42,32 +42,36 @@ func FromStatus(st *status.Status) error {
 	switch st.Code() {
 	case codes.InvalidArgument:
 		switch errDetails := errDetails.(type) {
-		case *errordetails.CurrentBranchChangedFailure:
+		case *errordetailsspb.CurrentBranchChangedFailure:
 			return newCurrentBranchChanged(st, errDetails)
 		}
 	case codes.AlreadyExists:
 		switch errDetails.(type) {
-		case *errordetails.TaskAlreadyStartedFailure:
+		case *errordetailsspb.TaskAlreadyStartedFailure:
 			return newTaskAlreadyStarted(st)
 		}
 	case codes.Aborted:
 		switch errDetails := errDetails.(type) {
-		case *errordetails.ShardOwnershipLostFailure:
+		case *errordetailsspb.ShardOwnershipLostFailure:
 			return newShardOwnershipLost(st, errDetails)
-		case *errordetails.RetryReplicationFailure:
+		case *errordetailsspb.RetryReplicationFailure:
 			return newRetryReplication(st, errDetails)
-		case *errordetails.SyncStateFailure:
+		case *errordetailsspb.SyncStateFailure:
 			return newSyncState(st, errDetails)
 		}
 	case codes.Unavailable:
 		switch errDetails.(type) {
-		case *errordetails.StickyWorkerUnavailableFailure:
+		case *errordetailsspb.StickyWorkerUnavailableFailure:
 			return newStickyWorkerUnavailable(st)
 		}
 	case codes.FailedPrecondition:
 		switch errDetails.(type) {
-		case *errordetails.ObsoleteDispatchBuildIdFailure:
+		case *errordetailsspb.ObsoleteDispatchBuildIdFailure:
 			return newObsoleteDispatchBuildId(st)
+		case *errordetailsspb.ObsoleteMatchingTaskFailure:
+			return newObsoleteMatchingTask(st)
+		case *errordetailsspb.ActivityStartDuringTransitionFailure:
+			return newActivityStartDuringTransition(st)
 		}
 	}
 

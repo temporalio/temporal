@@ -43,7 +43,8 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/rpc"
-	"go.temporal.io/server/internal/nettest"
+	"go.temporal.io/server/common/rpc/interceptor"
+	"go.temporal.io/server/common/testing/nettest"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -249,7 +250,7 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 			// Create a gRPC server for the fake workflow service.
 			svc := &testSvc{}
 			server := grpc.NewServer(grpc.ChainUnaryInterceptor(
-				rpc.ServiceErrorInterceptor,
+				interceptor.ServiceErrorInterceptor,
 				rpc.NewFrontendServiceErrorInterceptor(log.NewTestLogger()),
 				rateLimitInterceptor.Intercept,
 			))
@@ -381,11 +382,11 @@ func TestNamespaceRateLimitInterceptorProvider(t *testing.T) {
 			expectRateLimit:                   false,
 		},
 		{
-			name:                              "namespace burst ratio does not apply for values < 1",
+			name:                              "namespace burst hit when burst ratio is 0.5",
 			maxNamespaceRPSPerInstance:        10,
 			maxNamespaceBurstRatioPerInstance: 0.5,
-			numRequests:                       10,
-			expectRateLimit:                   false,
+			numRequests:                       6,
+			expectRateLimit:                   true,
 		},
 		{
 			name:                              "namespace burst allow when burst ratio is 1 and global limit is set",
@@ -420,7 +421,7 @@ func TestNamespaceRateLimitInterceptorProvider(t *testing.T) {
 			globalNamespaceRPS:                5,
 			maxNamespaceRPSPerInstance:        10,
 			maxNamespaceBurstRatioPerInstance: 1.5,
-			numRequests:                       8,
+			numRequests:                       9,
 			expectRateLimit:                   true,
 		},
 		{
@@ -459,11 +460,11 @@ func TestNamespaceRateLimitInterceptorProvider(t *testing.T) {
 			expectRateLimit:                             false,
 		},
 		{
-			name:                                 "visibility burst ratio does not apply for values < 1",
+			name:                                 "visibility burst hit when burst ratio is 0.5",
 			maxNamespaceVisibilityRPSPerInstance: 10,
 			maxNamespaceVisibilityBurstRatioPerInstance: 0.5,
-			numVisibilityRequests:                       10,
-			expectRateLimit:                             false,
+			numVisibilityRequests:                       6,
+			expectRateLimit:                             true,
 		},
 		{
 			name:                                 "visibility burst allow when burst ratio is 1 and global limit is set",
@@ -498,7 +499,7 @@ func TestNamespaceRateLimitInterceptorProvider(t *testing.T) {
 			globalNamespaceVisibilityRPS:         5,
 			maxNamespaceVisibilityRPSPerInstance: 10,
 			maxNamespaceVisibilityBurstRatioPerInstance: 1.5,
-			numVisibilityRequests:                       8,
+			numVisibilityRequests:                       9,
 			expectRateLimit:                             true,
 		},
 		{
@@ -537,11 +538,11 @@ func TestNamespaceRateLimitInterceptorProvider(t *testing.T) {
 			expectRateLimit:                                                   false,
 		},
 		{
-			name: "replication inducing op burst ratio does not apply for values < 1",
+			name: "replication inducing op burst hit when burst ratio is 0.5",
 			maxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance:        10,
 			maxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance: 0.5,
-			numReplicationInducingRequests:                                    10,
-			expectRateLimit:                                                   false,
+			numReplicationInducingRequests:                                    6,
+			expectRateLimit:                                                   true,
 		},
 		{
 			name:                 "replication inducing op burst allow when burst ratio is 1 and global limit is set",
@@ -576,7 +577,7 @@ func TestNamespaceRateLimitInterceptorProvider(t *testing.T) {
 			globalNamespaceNamespaceReplicationInducingAPIsRPS:                5,
 			maxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance:        10,
 			maxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance: 1.5,
-			numReplicationInducingRequests:                                    8,
+			numReplicationInducingRequests:                                    9,
 			expectRateLimit:                                                   true,
 		},
 	}
@@ -605,7 +606,7 @@ func TestNamespaceRateLimitInterceptorProvider(t *testing.T) {
 			// Create a gRPC server for the fake workflow service.
 			svc := &testSvc{}
 			server := grpc.NewServer(grpc.ChainUnaryInterceptor(
-				rpc.ServiceErrorInterceptor,
+				interceptor.ServiceErrorInterceptor,
 				rpc.NewFrontendServiceErrorInterceptor(log.NewTestLogger()),
 				rateLimitInterceptor.Intercept,
 			))
@@ -792,7 +793,7 @@ func TestNamespaceRateLimitMetrics(t *testing.T) {
 			// Create a gRPC server for the fake workflow service.
 			svc := &testSvc{}
 			server := grpc.NewServer(grpc.ChainUnaryInterceptor(
-				rpc.ServiceErrorInterceptor,
+				interceptor.ServiceErrorInterceptor,
 				rpc.NewFrontendServiceErrorInterceptor(log.NewTestLogger()),
 				rateLimitInterceptor.Intercept,
 			))

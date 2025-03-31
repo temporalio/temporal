@@ -33,7 +33,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
-	persistencepb "go.temporal.io/server/api/persistence/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/cluster"
@@ -45,6 +45,7 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
@@ -114,10 +115,10 @@ func (s *executableSyncHSMTaskSuite) SetupTest() {
 				{EventId: 10, Version: 20},
 			},
 		},
-		StateMachineNode: &persistencepb.StateMachineNode{
-			Children: map[string]*persistencepb.StateMachineMap{
+		StateMachineNode: &persistencespb.StateMachineNode{
+			Children: map[string]*persistencespb.StateMachineMap{
 				"test": {
-					MachinesById: map[string]*persistencepb.StateMachineNode{
+					MachinesById: map[string]*persistencespb.StateMachineNode{
 						"machine1": {
 							Data: []byte("machine1 data"),
 						},
@@ -176,14 +177,14 @@ func (s *executableSyncHSMTaskSuite) TestExecute_Process() {
 		uuid.NewString(), true, nil,
 	).AnyTimes()
 
-	shardContext := shard.NewMockContext(s.controller)
-	engine := shard.NewMockEngine(s.controller)
+	shardContext := historyi.NewMockShardContext(s.controller)
+	engine := historyi.NewMockEngine(s.controller)
 	s.shardController.EXPECT().GetShardByNamespaceWorkflow(
 		namespace.ID(s.task.NamespaceID),
 		s.task.WorkflowID,
 	).Return(shardContext, nil).AnyTimes()
 	shardContext.EXPECT().GetEngine(gomock.Any()).Return(engine, nil).AnyTimes()
-	engine.EXPECT().SyncHSM(gomock.Any(), &shard.SyncHSMRequest{
+	engine.EXPECT().SyncHSM(gomock.Any(), &historyi.SyncHSMRequest{
 		WorkflowKey: definition.WorkflowKey{
 			NamespaceID: s.task.NamespaceID,
 			WorkflowID:  s.task.WorkflowID,
@@ -229,8 +230,8 @@ func (s *executableSyncHSMTaskSuite) TestHandleErr_Resend_Success() {
 	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID).Return(
 		uuid.NewString(), true, nil,
 	).AnyTimes()
-	shardContext := shard.NewMockContext(s.controller)
-	engine := shard.NewMockEngine(s.controller)
+	shardContext := historyi.NewMockShardContext(s.controller)
+	engine := historyi.NewMockEngine(s.controller)
 	s.shardController.EXPECT().GetShardByNamespaceWorkflow(
 		namespace.ID(s.task.NamespaceID),
 		s.task.WorkflowID,
@@ -285,7 +286,7 @@ func (s *executableSyncHSMTaskSuite) TestMarkPoisonPill() {
 	err := s.task.MarkPoisonPill()
 	s.NoError(err)
 
-	s.Equal(&persistencepb.ReplicationTaskInfo{
+	s.Equal(&persistencespb.ReplicationTaskInfo{
 		NamespaceId:    s.task.NamespaceID,
 		WorkflowId:     s.task.WorkflowID,
 		RunId:          s.task.RunID,

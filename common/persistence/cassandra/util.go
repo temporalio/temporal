@@ -124,6 +124,18 @@ func applyWorkflowMutationBatch(
 		return err
 	}
 
+	if err := updateChasmNodes(
+		batch,
+		workflowMutation.UpsertChasmNodes,
+		workflowMutation.DeleteChasmNodes,
+		shardID,
+		namespaceID,
+		workflowID,
+		runID,
+	); err != nil {
+		return err
+	}
+
 	updateSignalsRequested(
 		batch,
 		workflowMutation.UpsertSignalRequestedIDs,
@@ -237,6 +249,17 @@ func applyWorkflowSnapshotBatchAsReset(
 		return err
 	}
 
+	if err := resetChasmNodes(
+		batch,
+		workflowSnapshot.ChasmNodes,
+		shardID,
+		namespaceID,
+		workflowID,
+		runID,
+	); err != nil {
+		return err
+	}
+
 	resetSignalRequested(
 		batch,
 		workflowSnapshot.SignalRequestedIDs,
@@ -330,6 +353,18 @@ func applyWorkflowSnapshotBatchAsNew(
 	if err := updateSignalInfos(
 		batch,
 		workflowSnapshot.SignalInfos,
+		nil,
+		shardID,
+		namespaceID,
+		workflowID,
+		runID,
+	); err != nil {
+		return err
+	}
+
+	if err := updateChasmNodes(
+		batch,
+		workflowSnapshot.ChasmNodes,
 		nil,
 		shardID,
 		namespaceID,
@@ -660,8 +695,7 @@ func resetActivityInfos(
 	workflowID string,
 	runID string,
 ) error {
-
-	infoMap, encoding, err := resetActivityInfoMap(activityInfos)
+	infoMap, encoding, err := convertBlobMapToByteMap(activityInfos)
 	if err != nil {
 		return err
 	}
@@ -676,6 +710,7 @@ func resetActivityInfos(
 		runID,
 		defaultVisibilityTimestamp,
 		rowTypeExecutionTaskID)
+
 	return nil
 }
 
@@ -725,8 +760,7 @@ func resetTimerInfos(
 	workflowID string,
 	runID string,
 ) error {
-
-	timerMap, timerMapEncoding, err := resetTimerInfoMap(timerInfos)
+	timerMap, timerMapEncoding, err := convertBlobMapToByteMap(timerInfos)
 	if err != nil {
 		return err
 	}
@@ -791,11 +825,11 @@ func resetChildExecutionInfos(
 	workflowID string,
 	runID string,
 ) error {
-
-	infoMap, encoding, err := resetChildExecutionInfoMap(childExecutionInfos)
+	infoMap, encoding, err := convertBlobMapToByteMap(childExecutionInfos)
 	if err != nil {
 		return err
 	}
+
 	batch.Query(templateResetChildExecutionInfoQuery,
 		infoMap,
 		encoding.String(),
@@ -806,6 +840,7 @@ func resetChildExecutionInfos(
 		runID,
 		defaultVisibilityTimestamp,
 		rowTypeExecutionTaskID)
+
 	return nil
 }
 
@@ -855,9 +890,7 @@ func resetRequestCancelInfos(
 	workflowID string,
 	runID string,
 ) error {
-
-	rciMap, rciMapEncoding, err := resetRequestCancelInfoMap(requestCancelInfos)
-
+	rciMap, rciMapEncoding, err := convertBlobMapToByteMap(requestCancelInfos)
 	if err != nil {
 		return err
 	}
@@ -922,8 +955,7 @@ func resetSignalInfos(
 	workflowID string,
 	runID string,
 ) error {
-	sMap, sMapEncoding, err := resetSignalInfoMap(signalInfos)
-
+	sMap, sMapEncoding, err := convertBlobMapToByteMap(signalInfos)
 	if err != nil {
 		return err
 	}
@@ -938,6 +970,73 @@ func resetSignalInfos(
 		runID,
 		defaultVisibilityTimestamp,
 		rowTypeExecutionTaskID)
+
+	return nil
+}
+
+func resetChasmNodes(
+	batch *gocql.Batch,
+	nodes map[string]p.InternalChasmNode,
+	shardID int32,
+	namespaceID string,
+	workflowID string,
+	runID string,
+) error {
+	blobMap := make(map[string][]byte, len(nodes))
+	var encoding enumspb.EncodingType
+	for path, node := range nodes {
+		blobMap[path] = node.CassandraBlob.Data
+		encoding = node.CassandraBlob.EncodingType // TODO - we only support a single encoding
+	}
+
+	batch.Query(templateResetChasmNodeQuery,
+		blobMap,
+		encoding.String(),
+		shardID,
+		rowTypeExecution,
+		namespaceID,
+		workflowID,
+		runID,
+		defaultVisibilityTimestamp,
+		rowTypeExecutionTaskID)
+
+	return nil
+}
+
+func updateChasmNodes(
+	batch *gocql.Batch,
+	upsertNodes map[string]p.InternalChasmNode,
+	deleteNodes map[string]struct{},
+	shardID int32,
+	namespaceID string,
+	workflowID string,
+	runID string,
+) error {
+	for deletePath := range deleteNodes {
+		batch.Query(templateDeleteChasmNodeQuery,
+			deletePath,
+			shardID,
+			rowTypeExecution,
+			namespaceID,
+			workflowID,
+			runID,
+			defaultVisibilityTimestamp,
+			rowTypeExecutionTaskID)
+	}
+
+	for upsertPath, node := range upsertNodes {
+		batch.Query(templateUpdateChasmNodeQuery,
+			upsertPath,
+			node.CassandraBlob.Data,
+			node.CassandraBlob.EncodingType.String(),
+			shardID,
+			rowTypeExecution,
+			namespaceID,
+			workflowID,
+			runID,
+			defaultVisibilityTimestamp,
+			rowTypeExecutionTaskID)
+	}
 
 	return nil
 }
@@ -1034,71 +1133,15 @@ func updateBufferedEvents(
 	}
 }
 
-func resetActivityInfoMap(
-	activityInfos map[int64]*commonpb.DataBlob,
-) (map[int64][]byte, enumspb.EncodingType, error) {
+func convertBlobMapToByteMap[T comparable](
+	input map[T]*commonpb.DataBlob,
+) (map[T][]byte, enumspb.EncodingType, error) {
+	sMap := make(map[T][]byte)
 
-	encoding := enumspb.ENCODING_TYPE_UNSPECIFIED
-	aMap := make(map[int64][]byte)
-	for scheduledEventID, blob := range activityInfos {
-		aMap[scheduledEventID] = blob.Data
-		encoding = blob.EncodingType
-	}
-
-	return aMap, encoding, nil
-}
-
-func resetTimerInfoMap(
-	timerInfos map[string]*commonpb.DataBlob,
-) (map[string][]byte, enumspb.EncodingType, error) {
-
-	tMap := make(map[string][]byte)
 	var encoding enumspb.EncodingType
-	for timerID, blob := range timerInfos {
+	for key, blob := range input {
 		encoding = blob.EncodingType
-		tMap[timerID] = blob.Data
-	}
-
-	return tMap, encoding, nil
-}
-
-func resetChildExecutionInfoMap(
-	childExecutionInfos map[int64]*commonpb.DataBlob,
-) (map[int64][]byte, enumspb.EncodingType, error) {
-
-	cMap := make(map[int64][]byte)
-	encoding := enumspb.ENCODING_TYPE_UNSPECIFIED
-	for initiatedID, blob := range childExecutionInfos {
-		cMap[initiatedID] = blob.Data
-		encoding = blob.EncodingType
-	}
-
-	return cMap, encoding, nil
-}
-
-func resetRequestCancelInfoMap(
-	requestCancelInfos map[int64]*commonpb.DataBlob,
-) (map[int64][]byte, enumspb.EncodingType, error) {
-
-	rcMap := make(map[int64][]byte)
-	var encoding enumspb.EncodingType
-	for initiatedID, blob := range requestCancelInfos {
-		encoding = blob.EncodingType
-		rcMap[initiatedID] = blob.Data
-	}
-
-	return rcMap, encoding, nil
-}
-
-func resetSignalInfoMap(
-	signalInfos map[int64]*commonpb.DataBlob,
-) (map[int64][]byte, enumspb.EncodingType, error) {
-
-	sMap := make(map[int64][]byte)
-	var encoding enumspb.EncodingType
-	for initiatedID, blob := range signalInfos {
-		encoding = blob.EncodingType
-		sMap[initiatedID] = blob.Data
+		sMap[key] = blob.Data
 	}
 
 	return sMap, encoding, nil

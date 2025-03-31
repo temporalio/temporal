@@ -31,7 +31,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-	persistencepb "go.temporal.io/server/api/persistence/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/quotas"
@@ -1121,7 +1121,7 @@ func (p *nexusEndpointRateLimitedPersistenceClient) Close() {
 func (p *nexusEndpointRateLimitedPersistenceClient) GetNexusEndpoint(
 	ctx context.Context,
 	request *GetNexusEndpointRequest,
-) (*persistencepb.NexusEndpointEntry, error) {
+) (*persistencespb.NexusEndpointEntry, error) {
 	if err := allow(ctx, "GetNexusEndpoint", CallerSegmentMissing, p.systemRateLimiter, p.namespaceRateLimiter, p.shardRateLimiter); err != nil {
 		return nil, err
 	}

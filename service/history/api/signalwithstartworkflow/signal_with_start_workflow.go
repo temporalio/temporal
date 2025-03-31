@@ -39,13 +39,12 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/api"
-	"go.temporal.io/server/service/history/shard"
-	"go.temporal.io/server/service/history/workflow"
+	historyi "go.temporal.io/server/service/history/interfaces"
 )
 
 func SignalWithStartWorkflow(
 	ctx context.Context,
-	shard shard.Context,
+	shard historyi.ShardContext,
 	namespaceEntry *namespace.Namespace,
 	currentWorkflowLease api.WorkflowLease,
 	startRequest *historyservice.StartWorkflowExecutionRequest,
@@ -80,7 +79,7 @@ func SignalWithStartWorkflow(
 
 func startAndSignalWorkflow(
 	ctx context.Context,
-	shard shard.Context,
+	shard historyi.ShardContext,
 	namespaceEntry *namespace.Namespace,
 	currentWorkflowLease api.WorkflowLease,
 	startRequest *historyservice.StartWorkflowExecutionRequest,
@@ -89,7 +88,7 @@ func startAndSignalWorkflow(
 	workflowID := signalWithStartRequest.GetWorkflowId()
 	runID := uuid.New().String()
 	// TODO(bergundy): Support eager workflow task
-	newWorkflowLease, err := api.NewWorkflowWithSignal(
+	newMutableState, err := api.NewWorkflowWithSignal(
 		shard,
 		namespaceEntry,
 		workflowID,
@@ -100,10 +99,16 @@ func startAndSignalWorkflow(
 	if err != nil {
 		return "", false, err
 	}
+
+	newWorkflowLease, err := api.NewWorkflowLeaseAndContext(nil, shard, newMutableState)
+	if err != nil {
+		return "", false, err
+	}
+
 	if err = api.ValidateSignal(
 		ctx,
 		shard,
-		newWorkflowLease.GetMutableState(),
+		newMutableState,
 		signalWithStartRequest.GetSignalInput().Size(),
 		"SignalWithStartWorkflowExecution",
 	); err != nil {
@@ -147,7 +152,7 @@ func startAndSignalWorkflow(
 }
 
 func createWorkflowMutationFunction(
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	currentWorkflowLease api.WorkflowLease,
 	namespaceEntry *namespace.Namespace,
 	newRunID string,
@@ -176,10 +181,12 @@ func createWorkflowMutationFunction(
 		newRunID,
 		currentExecutionState.State,
 		currentExecutionState.Status,
-		currentExecutionState.CreateRequestId,
+		currentExecutionState.RequestIds,
 		workflowIDReusePolicy,
 		workflowIDConflictPolicy,
 		currentWorkflowStartTime,
+		nil,
+		false,
 	)
 	return workflowMutationFunc, err
 }
@@ -204,7 +211,7 @@ func createVersionedRunID(currentWorkflowLease api.WorkflowLease) (*api.Versione
 
 func startAndSignalWithCurrentWorkflow(
 	ctx context.Context,
-	shard shard.Context,
+	shard historyi.ShardContext,
 	currentWorkflowLease api.WorkflowLease,
 	currentWorkflowUpdateAction api.UpdateWorkflowActionFunc,
 	newWorkflowLease api.WorkflowLease,
@@ -214,7 +221,7 @@ func startAndSignalWithCurrentWorkflow(
 		ctx,
 		currentWorkflowLease,
 		currentWorkflowUpdateAction,
-		func() (workflow.Context, workflow.MutableState, error) {
+		func() (historyi.WorkflowContext, historyi.MutableState, error) {
 			return newWorkflowLease.GetContext(), newWorkflowLease.GetMutableState(), nil
 		},
 	)
@@ -227,13 +234,13 @@ func startAndSignalWithCurrentWorkflow(
 
 func startAndSignalWithoutCurrentWorkflow(
 	ctx context.Context,
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	vrid *api.VersionedRunID,
 	newWorkflowLease api.WorkflowLease,
 	requestID string,
 ) (string, bool, error) {
 	newWorkflow, newWorkflowEventsSeq, err := newWorkflowLease.GetMutableState().CloseTransactionAsSnapshot(
-		workflow.TransactionPolicyActive,
+		historyi.TransactionPolicyActive,
 	)
 	if err != nil {
 		return "", false, err
@@ -272,7 +279,7 @@ func startAndSignalWithoutCurrentWorkflow(
 	case nil:
 		return newWorkflowLease.GetContext().GetWorkflowKey().RunID, true, nil
 	case *persistence.CurrentWorkflowConditionFailedError:
-		if failedErr.RequestID == requestID {
+		if _, ok := failedErr.RequestIDs[requestID]; ok {
 			return failedErr.RunID, false, nil
 		}
 		return "", false, err
@@ -283,7 +290,7 @@ func startAndSignalWithoutCurrentWorkflow(
 
 func signalWorkflow(
 	ctx context.Context,
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	workflowLease api.WorkflowLease,
 	request *workflowservice.SignalWithStartWorkflowExecutionRequest,
 ) error {
@@ -316,14 +323,13 @@ func signalWorkflow(
 		request.GetSignalInput(),
 		request.GetIdentity(),
 		request.GetHeader(),
-		request.GetSkipGenerateWorkflowTask(),
 		request.GetLinks(),
 	); err != nil {
 		return err
 	}
 
 	// Create a transfer task to schedule a workflow task
-	if !mutableState.HasPendingWorkflowTask() && !request.GetSkipGenerateWorkflowTask() {
+	if !mutableState.HasPendingWorkflowTask() {
 
 		executionInfo := mutableState.GetExecutionInfo()
 		executionState := mutableState.GetExecutionState()

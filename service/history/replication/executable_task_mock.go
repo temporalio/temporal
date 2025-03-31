@@ -50,6 +50,7 @@ import (
 type MockExecutableTask struct {
 	ctrl     *gomock.Controller
 	recorder *MockExecutableTaskMockRecorder
+	isgomock struct{}
 }
 
 // MockExecutableTaskMockRecorder is the mock recorder for MockExecutableTask.
@@ -105,6 +106,20 @@ func (m *MockExecutableTask) Attempt() int {
 func (mr *MockExecutableTaskMockRecorder) Attempt() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Attempt", reflect.TypeOf((*MockExecutableTask)(nil).Attempt))
+}
+
+// BackFillEvents mocks base method.
+func (m *MockExecutableTask) BackFillEvents(ctx context.Context, remoteCluster string, workflowKey definition.WorkflowKey, startEventId, startEventVersion, endEventId, endEventVersion int64, newRunId string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "BackFillEvents", ctx, remoteCluster, workflowKey, startEventId, startEventVersion, endEventId, endEventVersion, newRunId)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// BackFillEvents indicates an expected call of BackFillEvents.
+func (mr *MockExecutableTaskMockRecorder) BackFillEvents(ctx, remoteCluster, workflowKey, startEventId, startEventVersion, endEventId, endEventVersion, newRunId any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BackFillEvents", reflect.TypeOf((*MockExecutableTask)(nil).BackFillEvents), ctx, remoteCluster, workflowKey, startEventId, startEventVersion, endEventId, endEventVersion, newRunId)
 }
 
 // Cancel mocks base method.
@@ -175,6 +190,18 @@ func (m *MockExecutableTask) MarkPoisonPill() error {
 func (mr *MockExecutableTaskMockRecorder) MarkPoisonPill() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkPoisonPill", reflect.TypeOf((*MockExecutableTask)(nil).MarkPoisonPill))
+}
+
+// MarkTaskDuplicated mocks base method.
+func (m *MockExecutableTask) MarkTaskDuplicated() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "MarkTaskDuplicated")
+}
+
+// MarkTaskDuplicated indicates an expected call of MarkTaskDuplicated.
+func (mr *MockExecutableTaskMockRecorder) MarkTaskDuplicated() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkTaskDuplicated", reflect.TypeOf((*MockExecutableTask)(nil).MarkTaskDuplicated))
 }
 
 // Nack mocks base method.

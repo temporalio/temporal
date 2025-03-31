@@ -30,7 +30,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	persistencepb "go.temporal.io/server/api/persistence/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.uber.org/mock/gomock"
@@ -79,7 +79,7 @@ func (s *executorSuite) TestExecute_Active() {
 	executable := NewMockExecutable(s.ctrl)
 	executable.EXPECT().GetNamespaceID().Return("namespace_id")
 	executable.EXPECT().GetTask().Return(nil)
-	ns := namespace.NewGlobalNamespaceForTest(nil, nil, &persistencepb.NamespaceReplicationConfig{
+	ns := namespace.NewGlobalNamespaceForTest(nil, nil, &persistencespb.NamespaceReplicationConfig{
 		ActiveClusterName: currentCluster,
 		Clusters:          []string{currentCluster},
 	}, 1)
@@ -98,7 +98,7 @@ func (s *executorSuite) TestExecute_Standby() {
 	executable := NewMockExecutable(s.ctrl)
 	executable.EXPECT().GetNamespaceID().Return("namespace_id")
 	executable.EXPECT().GetTask().Return(nil)
-	ns := namespace.NewGlobalNamespaceForTest(nil, nil, &persistencepb.NamespaceReplicationConfig{
+	ns := namespace.NewGlobalNamespaceForTest(nil, nil, &persistencespb.NamespaceReplicationConfig{
 		ActiveClusterName: nonCurrentCluster,
 		Clusters:          []string{currentCluster, nonCurrentCluster},
 	}, 1)

@@ -33,17 +33,17 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/api/adminservice/v1"
-	enumspb "go.temporal.io/server/api/enums/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -58,8 +58,8 @@ import (
 type (
 	// AddTasksSuite is a separate suite because we need to override the history service's executable wrapper.
 	AddTasksSuite struct {
-		testcore.FunctionalTestBase
-		*require.Assertions
+		testcore.FunctionalTestSuite
+
 		shardController *faultyShardController
 		worker          worker.Worker
 		sdkClient       sdkclient.Client
@@ -74,7 +74,7 @@ type (
 		s *AddTasksSuite
 	}
 	faultyShardContext struct {
-		shard.Context
+		historyi.ShardContext
 		suite *AddTasksSuite
 	}
 	// executorWrapper is used to wrap any [queues.Executable] that the history service makes so that we can intercept
@@ -95,20 +95,20 @@ func TestAddTasksSuite(t *testing.T) {
 	suite.Run(t, new(AddTasksSuite))
 }
 
-func (c *faultyShardController) GetShardByID(shardID int32) (shard.Context, error) {
+func (c *faultyShardController) GetShardByID(shardID int32) (historyi.ShardContext, error) {
 	ctx, err := c.Controller.GetShardByID(shardID)
 	if err != nil {
 		return nil, err
 	}
-	return &faultyShardContext{Context: ctx, suite: c.s}, nil
+	return &faultyShardContext{ShardContext: ctx, suite: c.s}, nil
 }
 
-func (c *faultyShardContext) GetEngine(ctx context.Context) (shard.Engine, error) {
+func (c *faultyShardContext) GetEngine(ctx context.Context) (historyi.Engine, error) {
 	err := c.suite.getEngineErr.Load()
 	if err != nil && *err != nil {
 		return nil, *err
 	}
-	return c.Context.GetEngine(ctx)
+	return c.ShardContext.GetEngine(ctx)
 }
 
 // Wrap a [queues.Executable] with the noopExecutor.
@@ -136,31 +136,27 @@ func (e *noopExecutor) Execute(ctx context.Context, executable queues.Executable
 func (e *noopExecutor) shouldExecute(task tasks.Task) bool {
 	suiteWorkflowID := e.suite.workflowID.Load()
 	return (suiteWorkflowID != nil && task.GetWorkflowID() != *suiteWorkflowID) ||
-		task.GetType() != enumspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK ||
+		task.GetType() != enumsspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK ||
 		!e.suite.shouldSkip.Load()
 }
 
 // SetupSuite creates the test cluster and registers the executorWrapper with the history service.
 func (s *AddTasksSuite) SetupSuite() {
-	// We do this here and in SetupTest because we need assertions in the SetupSuite method as well as the individual
-	// tests, but this is called before SetupTest, and the s.T() value will change when SetupTest is called.
-	s.Assertions = require.New(s.T())
 	// Set up the test cluster and register our executable wrapper.
-	s.FunctionalTestBase.SetupSuite("testdata/es_cluster.yaml",
-		testcore.WithFxOptionsForService(
-			primitives.HistoryService,
-			fx.Provide(
-				func() queues.ExecutorWrapper {
-					return &executorWrapper{s: s}
-				},
-			),
-			fx.Decorate(
-				func(c shard.Controller) shard.Controller {
-					s.shardController = &faultyShardController{Controller: c, s: s}
-					return s.shardController
-				},
-			),
+	s.FunctionalTestBase.SetupSuiteWithDefaultCluster(testcore.WithFxOptionsForService(
+		primitives.HistoryService,
+		fx.Provide(
+			func() queues.ExecutorWrapper {
+				return &executorWrapper{s: s}
+			},
 		),
+		fx.Decorate(
+			func(c shard.Controller) shard.Controller {
+				s.shardController = &faultyShardController{Controller: c, s: s}
+				return s.shardController
+			},
+		),
+	),
 	)
 	// Get an SDK client so that we can call ExecuteWorkflow.
 	s.sdkClient = s.newSDKClient()
@@ -169,12 +165,6 @@ func (s *AddTasksSuite) SetupSuite() {
 func (s *AddTasksSuite) TearDownSuite() {
 	s.sdkClient.Close()
 	s.FunctionalTestBase.TearDownSuite()
-}
-
-func (s *AddTasksSuite) SetupTest() {
-	s.FunctionalTestBase.SetupTest()
-
-	s.Assertions = require.New(s.T())
 }
 
 func (s *AddTasksSuite) TestAddTasks_Ok() {
@@ -282,8 +272,8 @@ func (s *AddTasksSuite) TestAddTasks_GetEngineErr() {
 func (s *AddTasksSuite) newSDKClient() sdkclient.Client {
 	client, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.FrontendGRPCAddress(),
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 	})
-	s.NoError(err)
+	s.Require().NoError(err)
 	return client
 }

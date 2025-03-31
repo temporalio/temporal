@@ -37,7 +37,7 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/api/history/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
@@ -51,6 +51,7 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
@@ -124,7 +125,7 @@ func (s *executableActivityStateTaskSuite) SetupTest() {
 		LastFailure:        &failurepb.Failure{},
 		LastWorkerIdentity: uuid.NewString(),
 		BaseExecutionInfo:  &workflowspb.BaseExecutionInfo{},
-		VersionHistory:     &history.VersionHistory{},
+		VersionHistory:     &historyspb.VersionHistory{},
 	}
 	s.sourceClusterName = cluster.TestCurrentClusterName
 	s.sourceShardKey = ClusterShardKey{
@@ -168,8 +169,8 @@ func (s *executableActivityStateTaskSuite) TestExecute_Process() {
 		uuid.NewString(), true, nil,
 	).AnyTimes()
 
-	shardContext := shard.NewMockContext(s.controller)
-	engine := shard.NewMockEngine(s.controller)
+	shardContext := historyi.NewMockShardContext(s.controller)
+	engine := historyi.NewMockEngine(s.controller)
 	s.shardController.EXPECT().GetShardByNamespaceWorkflow(
 		namespace.ID(s.task.NamespaceID),
 		s.task.WorkflowID,
@@ -229,8 +230,8 @@ func (s *executableActivityStateTaskSuite) TestHandleErr_Resend_Success() {
 	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID).Return(
 		uuid.NewString(), true, nil,
 	).AnyTimes()
-	shardContext := shard.NewMockContext(s.controller)
-	engine := shard.NewMockEngine(s.controller)
+	shardContext := historyi.NewMockShardContext(s.controller)
+	engine := historyi.NewMockEngine(s.controller)
 	s.shardController.EXPECT().GetShardByNamespaceWorkflow(
 		namespace.ID(s.task.NamespaceID),
 		s.task.WorkflowID,
@@ -390,8 +391,8 @@ func (s *executableActivityStateTaskSuite) TestBatchedTask_ShouldBatchTogether_A
 	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), namespaceId).Return(
 		uuid.NewString(), true, nil,
 	).AnyTimes()
-	shardContext := shard.NewMockContext(s.controller)
-	engine := shard.NewMockEngine(s.controller)
+	shardContext := historyi.NewMockShardContext(s.controller)
+	engine := historyi.NewMockEngine(s.controller)
 	s.shardController.EXPECT().GetShardByNamespaceWorkflow(
 		namespace.ID(namespaceId),
 		workflowId,
@@ -479,7 +480,7 @@ func (s *executableActivityStateTaskSuite) generateReplicationAttribute(
 		LastFailure:        &failurepb.Failure{},
 		LastWorkerIdentity: uuid.NewString(),
 		BaseExecutionInfo:  &workflowspb.BaseExecutionInfo{},
-		VersionHistory:     &history.VersionHistory{},
+		VersionHistory:     &historyspb.VersionHistory{},
 	}
 }
 

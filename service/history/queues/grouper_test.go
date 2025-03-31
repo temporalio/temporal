@@ -27,7 +27,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/server/api/persistence/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/service/history/tasks"
 )
@@ -49,7 +49,7 @@ func TestGrouperStateMachineNamespaceIDAndDestination_Key(t *testing.T) {
 	task := &tasks.StateMachineOutboundTask{
 		StateMachineTask: tasks.StateMachineTask{
 			WorkflowKey: definition.NewWorkflowKey("nid", "", ""),
-			Info: &persistence.StateMachineTaskInfo{
+			Info: &persistencespb.StateMachineTaskInfo{
 				Type: "3",
 			},
 		},

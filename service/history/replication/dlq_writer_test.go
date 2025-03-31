@@ -31,7 +31,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	enumspb "go.temporal.io/server/api/enums/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -78,17 +78,17 @@ func TestNewDLQWriterAdapter(t *testing.T) {
 
 	for _, tc := range []struct {
 		name      string
-		taskType  enumspb.TaskType
+		taskType  enumsspb.TaskType
 		expectErr bool
 	}{
 		{
 			name:      "history replication task",
-			taskType:  enumspb.TASK_TYPE_REPLICATION_HISTORY,
+			taskType:  enumsspb.TASK_TYPE_REPLICATION_HISTORY,
 			expectErr: false,
 		},
 		{
 			name:      "unspecified task type",
-			taskType:  enumspb.TASK_TYPE_UNSPECIFIED,
+			taskType:  enumsspb.TASK_TYPE_UNSPECIFIED,
 			expectErr: true,
 		},
 	} {

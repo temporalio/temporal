@@ -41,7 +41,7 @@ import (
 )
 
 type RelayTaskTestSuite struct {
-	testcore.FunctionalSuite
+	testcore.FunctionalTestSuite
 }
 
 func TestRelayTaskTestSuite(t *testing.T) {
@@ -58,7 +58,7 @@ func (s *RelayTaskTestSuite) TestRelayWorkflowTaskTimeout() {
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
-		Namespace:           s.Namespace(),
+		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -96,7 +96,7 @@ func (s *RelayTaskTestSuite) TestRelayWorkflowTaskTimeout() {
 
 	poller := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
-		Namespace:           s.Namespace(),
+		Namespace:           s.Namespace().String(),
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
@@ -120,7 +120,7 @@ func (s *RelayTaskTestSuite) TestRelayWorkflowTaskTimeout() {
 	time.Sleep(time.Second * 2) // wait 2s for relay workflow task to timeout
 	workflowTaskTimeout := false
 	for i := 0; i < 3; i++ {
-		events := s.GetHistory(s.Namespace(), workflowExecution)
+		events := s.GetHistory(s.Namespace().String(), workflowExecution)
 		if len(events) == 8 {
 			s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted

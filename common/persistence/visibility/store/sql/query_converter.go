@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/sqlquery"
 )
 
 type (
@@ -594,7 +595,7 @@ func (c *QueryConverter) parseSQLVal(
 	default:
 		sqlValue = string(expr.Val)
 	}
-	value, err := query.ParseSqlValue(sqlValue)
+	value, err := sqlquery.ParseValue(sqlValue)
 	if err != nil {
 		return nil, err
 	}
@@ -670,13 +671,18 @@ func (c *QueryConverter) convertIsExpr(exprRef *sqlparser.Expr) error {
 	if !ok {
 		return query.NewConverterError("`%s` is not an 'IS' expression", sqlparser.String(*exprRef))
 	}
-	_, err := c.convertColName(&expr.Expr)
+
+	colName, err := c.convertColName(&expr.Expr)
 	if err != nil {
 		return err
 	}
+
 	switch expr.Operator {
 	case sqlparser.IsNullStr, sqlparser.IsNotNullStr:
-		// no-op
+		if colName == closeTimeSaColName {
+			// avoid coalescing close time when checking for null
+			expr.Expr = closeTimeSaColName
+		}
 	default:
 		return query.NewConverterError(
 			"%s: 'IS' operator can only be used with 'NULL' or 'NOT NULL'",

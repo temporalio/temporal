@@ -34,7 +34,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
-	"go.temporal.io/api/enums/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -53,12 +53,14 @@ import (
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/hsm/hsmtest"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -71,7 +73,7 @@ type (
 		controller         *gomock.Controller
 		shardContext       *shard.ContextTest
 		workflowCache      *wcache.MockCache
-		mockEngine         *shard.MockEngine
+		mockEngine         *historyi.MockEngine
 		progressCache      *MockProgressCache
 		executionManager   *persistence.MockExecutionManager
 		syncStateRetriever *MockSyncStateRetriever
@@ -81,15 +83,15 @@ type (
 		workflowID  string
 
 		runID           string
-		workflowContext *workflow.MockContext
-		mutableState    *workflow.MockMutableState
-		releaseFn       wcache.ReleaseCacheFunc
+		workflowContext *historyi.MockWorkflowContext
+		mutableState    *historyi.MockMutableState
+		releaseFn       historyi.ReleaseWorkflowContextFunc
 		lockReleased    bool
 
 		newRunID           string
-		newWorkflowContext *workflow.MockContext
-		newMutableState    *workflow.MockMutableState
-		newReleaseFn       wcache.ReleaseCacheFunc
+		newWorkflowContext *historyi.MockWorkflowContext
+		newMutableState    *historyi.MockMutableState
+		newReleaseFn       historyi.ReleaseWorkflowContextFunc
 
 		replicationMultipleBatches bool
 	}
@@ -148,7 +150,7 @@ func (s *rawTaskConverterSuite) SetupTest() {
 	s.executionManager = s.shardContext.Resource.ExecutionMgr
 	s.logger = s.shardContext.GetLogger()
 
-	s.mockEngine = shard.NewMockEngine(s.controller)
+	s.mockEngine = historyi.NewMockEngine(s.controller)
 	s.mockEngine.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
 	s.mockEngine.EXPECT().Stop().AnyTimes()
 	s.shardContext.SetEngineForTesting(s.mockEngine)
@@ -160,13 +162,13 @@ func (s *rawTaskConverterSuite) SetupTest() {
 	s.workflowID = uuid.New()
 
 	s.runID = uuid.New()
-	s.workflowContext = workflow.NewMockContext(s.controller)
-	s.mutableState = workflow.NewMockMutableState(s.controller)
+	s.workflowContext = historyi.NewMockWorkflowContext(s.controller)
+	s.mutableState = historyi.NewMockMutableState(s.controller)
 	s.releaseFn = func(error) { s.lockReleased = true }
 
 	s.newRunID = uuid.New()
-	s.newWorkflowContext = workflow.NewMockContext(s.controller)
-	s.newMutableState = workflow.NewMockMutableState(s.controller)
+	s.newWorkflowContext = historyi.NewMockWorkflowContext(s.controller)
+	s.newMutableState = historyi.NewMockMutableState(s.controller)
 	s.newReleaseFn = func(error) { s.lockReleased = true }
 	s.syncStateRetriever = NewMockSyncStateRetriever(s.controller)
 }
@@ -359,26 +361,30 @@ func (s *rawTaskConverterSuite) TestConvertActivityStateReplicationTask_Activity
 	result, err := convertActivityStateReplicationTask(ctx, s.shardContext, task, s.workflowCache)
 	s.NoError(err)
 	s.NotNil(result)
+	retryInitialInterval := &durationpb.Duration{
+		Nanos: 0,
+	}
 	s.ProtoEqual(&replicationspb.ReplicationTask{
 		SourceTaskId: taskID,
 		TaskType:     enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK,
 		Attributes: &replicationspb.ReplicationTask_SyncActivityTaskAttributes{
 			SyncActivityTaskAttributes: &replicationspb.SyncActivityTaskAttributes{
-				NamespaceId:        s.namespaceID,
-				WorkflowId:         s.workflowID,
-				RunId:              s.runID,
-				Version:            activityVersion,
-				ScheduledEventId:   activityScheduledEventID,
-				ScheduledTime:      timestamppb.New(activityScheduledTime),
-				StartedEventId:     activityStartedEventID,
-				StartedTime:        nil,
-				LastHeartbeatTime:  nil,
-				Details:            activityDetails,
-				Attempt:            activityAttempt,
-				LastFailure:        activityLastFailure,
-				LastWorkerIdentity: activityLastWorkerIdentity,
-				BaseExecutionInfo:  baseWorkflowInfo,
-				VersionHistory:     versionHistory,
+				NamespaceId:          s.namespaceID,
+				WorkflowId:           s.workflowID,
+				RunId:                s.runID,
+				Version:              activityVersion,
+				ScheduledEventId:     activityScheduledEventID,
+				ScheduledTime:        timestamppb.New(activityScheduledTime),
+				StartedEventId:       activityStartedEventID,
+				StartedTime:          nil,
+				LastHeartbeatTime:    nil,
+				Details:              activityDetails,
+				Attempt:              activityAttempt,
+				LastFailure:          activityLastFailure,
+				LastWorkerIdentity:   activityLastWorkerIdentity,
+				BaseExecutionInfo:    baseWorkflowInfo,
+				VersionHistory:       versionHistory,
+				RetryInitialInterval: retryInitialInterval,
 			},
 		},
 		VisibilityTime: timestamppb.New(task.VisibilityTimestamp),
@@ -465,26 +471,30 @@ func (s *rawTaskConverterSuite) TestConvertActivityStateReplicationTask_Activity
 
 	result, err := convertActivityStateReplicationTask(ctx, s.shardContext, task, s.workflowCache)
 	s.NoError(err)
+	retryInitialInterval := &durationpb.Duration{
+		Nanos: 0,
+	}
 	s.ProtoEqual(&replicationspb.ReplicationTask{
 		SourceTaskId: taskID,
 		TaskType:     enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK,
 		Attributes: &replicationspb.ReplicationTask_SyncActivityTaskAttributes{
 			SyncActivityTaskAttributes: &replicationspb.SyncActivityTaskAttributes{
-				NamespaceId:        s.namespaceID,
-				WorkflowId:         s.workflowID,
-				RunId:              s.runID,
-				Version:            activityVersion,
-				ScheduledEventId:   activityScheduledEventID,
-				ScheduledTime:      timestamppb.New(activityScheduledTime),
-				StartedEventId:     activityStartedEventID,
-				StartedTime:        timestamppb.New(activityStartedTime),
-				LastHeartbeatTime:  timestamppb.New(activityHeartbeatTime),
-				Details:            activityDetails,
-				Attempt:            activityAttempt,
-				LastFailure:        activityLastFailure,
-				LastWorkerIdentity: activityLastWorkerIdentity,
-				BaseExecutionInfo:  baseWorkflowInfo,
-				VersionHistory:     versionHistory,
+				NamespaceId:          s.namespaceID,
+				WorkflowId:           s.workflowID,
+				RunId:                s.runID,
+				Version:              activityVersion,
+				ScheduledEventId:     activityScheduledEventID,
+				ScheduledTime:        timestamppb.New(activityScheduledTime),
+				StartedEventId:       activityStartedEventID,
+				StartedTime:          timestamppb.New(activityStartedTime),
+				LastHeartbeatTime:    timestamppb.New(activityHeartbeatTime),
+				Details:              activityDetails,
+				Attempt:              activityAttempt,
+				LastFailure:          activityLastFailure,
+				LastWorkerIdentity:   activityLastWorkerIdentity,
+				BaseExecutionInfo:    baseWorkflowInfo,
+				VersionHistory:       versionHistory,
+				RetryInitialInterval: retryInitialInterval,
 			},
 		},
 		VisibilityTime: timestamppb.New(task.VisibilityTimestamp),
@@ -517,7 +527,7 @@ func (s *rawTaskConverterSuite) TestConvertWorkflowStateReplicationTask_Workflow
 		locks.PriorityLow,
 	).Return(s.workflowContext, s.releaseFn, nil)
 	s.workflowContext.EXPECT().LoadMutableState(gomock.Any(), s.shardContext).Return(s.mutableState, nil)
-	s.mutableState.EXPECT().GetWorkflowStateStatus().Return(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enums.WORKFLOW_EXECUTION_STATUS_RUNNING).AnyTimes()
+	s.mutableState.EXPECT().GetWorkflowStateStatus().Return(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING).AnyTimes()
 
 	result, err := convertWorkflowStateReplicationTask(ctx, s.shardContext, task, s.workflowCache)
 	s.NoError(err)
@@ -561,17 +571,16 @@ func (s *rawTaskConverterSuite) TestConvertWorkflowStateReplicationTask_Workflow
 		ExecutionState: &persistencespb.WorkflowExecutionState{
 			RunId:  s.runID,
 			State:  enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
-			Status: enums.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 		},
 	}).AnyTimes()
-	s.mutableState.EXPECT().GetWorkflowStateStatus().Return(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, enums.WORKFLOW_EXECUTION_STATUS_COMPLETED).AnyTimes()
+	s.mutableState.EXPECT().GetWorkflowStateStatus().Return(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED).AnyTimes()
 
 	result, err := convertWorkflowStateReplicationTask(ctx, s.shardContext, task, s.workflowCache)
 	s.NoError(err)
 
 	sanitizedMutableState := s.mutableState.CloneToProto()
-	err = workflow.SanitizeMutableState(sanitizedMutableState)
-	s.NoError(err)
+	workflow.SanitizeMutableState(sanitizedMutableState)
 	s.ProtoEqual(&replicationspb.ReplicationTask{
 		TaskType:     enumsspb.REPLICATION_TASK_TYPE_SYNC_WORKFLOW_STATE_TASK,
 		SourceTaskId: task.TaskID,
@@ -665,7 +674,7 @@ func (s *rawTaskConverterSuite) TestConvertHistoryReplicationTask_WithNewRun() {
 		},
 	}
 	events := &commonpb.DataBlob{
-		EncodingType: enums.ENCODING_TYPE_PROTO3,
+		EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 		Data:         []byte("data"),
 	}
 	s.workflowCache.EXPECT().GetOrCreateWorkflowExecution(
@@ -712,7 +721,7 @@ func (s *rawTaskConverterSuite) TestConvertHistoryReplicationTask_WithNewRun() {
 		},
 	}
 	newEvents := &commonpb.DataBlob{
-		EncodingType: enums.ENCODING_TYPE_PROTO3,
+		EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 		Data:         []byte("new data"),
 	}
 	s.workflowCache.EXPECT().GetOrCreateWorkflowExecution(
@@ -829,7 +838,7 @@ func (s *rawTaskConverterSuite) TestConvertHistoryReplicationTask_WithoutNewRun(
 		},
 	}
 	events := &commonpb.DataBlob{
-		EncodingType: enums.ENCODING_TYPE_PROTO3,
+		EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 		Data:         []byte("data"),
 	}
 	s.workflowCache.EXPECT().GetOrCreateWorkflowExecution(
@@ -1091,6 +1100,7 @@ func (s *rawTaskConverterSuite) TestConvertSyncVersionedTransitionTask_Backfill(
 		VisibilityTimestamp: time.Now().UTC(),
 		TaskID:              taskID,
 		FirstEventID:        firstEventID,
+		FirstEventVersion:   version,
 		NextEventID:         nextEventID,
 		NewRunID:            s.newRunID,
 		VersionedTransition: &persistencespb.VersionedTransition{
@@ -1116,7 +1126,7 @@ func (s *rawTaskConverterSuite) TestConvertSyncVersionedTransitionTask_Backfill(
 		},
 	}
 	events := &commonpb.DataBlob{
-		EncodingType: enums.ENCODING_TYPE_PROTO3,
+		EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 		Data:         []byte("data"),
 	}
 
@@ -1168,7 +1178,7 @@ func (s *rawTaskConverterSuite) TestConvertSyncVersionedTransitionTask_Backfill(
 		},
 	}
 	newEvents := &commonpb.DataBlob{
-		EncodingType: enums.ENCODING_TYPE_PROTO3,
+		EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 		Data:         []byte("new data"),
 	}
 	s.workflowCache.EXPECT().GetOrCreateWorkflowExecution(
@@ -1446,6 +1456,7 @@ func (s *rawTaskConverterSuite) TestConvertSyncVersionedTransitionTask_Mutation(
 		VersionHistories:  versionHistories,
 		TransitionHistory: transitionHistory,
 	}).Times(2)
+	s.mutableState.EXPECT().HasBufferedEvents().Return(false).Times(1)
 
 	s.progressCache.EXPECT().Get(
 		s.runID,
@@ -1508,4 +1519,57 @@ func (s *rawTaskConverterSuite) TestConvertSyncVersionedTransitionTask_Mutation(
 		VisibilityTime:      timestamppb.New(task.VisibilityTimestamp),
 	}, result)
 	s.True(s.lockReleased)
+}
+
+func (s *rawTaskConverterSuite) TestConvertSyncVersionedTransitionTask_HasBufferedEvent_Nil() {
+	ctx := context.Background()
+	targetClusterID := int32(3)
+	firstEventID := int64(999)
+	nextEventID := int64(1911)
+	version := int64(1)
+	taskID := int64(1444)
+	task := &tasks.SyncVersionedTransitionTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			s.namespaceID,
+			s.workflowID,
+			s.runID,
+		),
+		VisibilityTimestamp: time.Now().UTC(),
+		TaskID:              taskID,
+		FirstEventID:        firstEventID,
+		NextEventID:         nextEventID,
+		VersionedTransition: &persistencespb.VersionedTransition{
+			NamespaceFailoverVersion: version,
+			TransitionCount:          3,
+		},
+	}
+	transitionHistory := []*persistencespb.VersionedTransition{
+		{NamespaceFailoverVersion: 1, TransitionCount: 3},
+		{NamespaceFailoverVersion: 3, TransitionCount: 6},
+	}
+
+	s.workflowCache.EXPECT().GetOrCreateWorkflowExecution(
+		gomock.Any(),
+		s.shardContext,
+		namespace.ID(s.namespaceID),
+		&commonpb.WorkflowExecution{
+			WorkflowId: s.workflowID,
+			RunId:      s.runID,
+		},
+		locks.PriorityLow,
+	).Return(s.workflowContext, s.releaseFn, nil)
+	s.workflowContext.EXPECT().LoadMutableState(gomock.Any(), s.shardContext).Return(s.mutableState, nil).Times(1)
+	s.mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+		TransitionHistory: transitionHistory,
+	}).Times(2)
+	s.mutableState.EXPECT().HasBufferedEvents().Return(true).Times(1)
+	s.progressCache.EXPECT().Get(
+		s.runID,
+		targetClusterID,
+	).Return(nil)
+
+	converter := newSyncVersionedTransitionTaskConverter(s.shardContext, s.workflowCache, nil, s.progressCache, s.executionManager, s.syncStateRetriever, s.logger)
+	result, err := convertSyncVersionedTransitionTask(ctx, task, targetClusterID, converter)
+	s.NoError(err)
+	s.Nil(result)
 }

@@ -36,6 +36,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/primitives/timestamp"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -76,14 +77,14 @@ type (
 	}
 
 	timerSequenceImpl struct {
-		mutableState MutableState
+		mutableState historyi.MutableState
 	}
 )
 
 var _ TimerSequence = (*timerSequenceImpl)(nil)
 
 func NewTimerSequence(
-	mutableState MutableState,
+	mutableState historyi.MutableState,
 ) *timerSequenceImpl {
 	return &timerSequenceImpl{
 		mutableState: mutableState,
@@ -117,7 +118,7 @@ func (t *timerSequenceImpl) CreateNextUserTimer() (bool, error) {
 	// mark timer task mask as indication that timer task is generated
 	// here TaskID is misleading attr, should be called timer created flag or something
 	timerInfo.TaskStatus = TimerTaskStatusCreated
-	if err := t.mutableState.UpdateUserTimer(timerInfo); err != nil {
+	if err := t.mutableState.UpdateUserTimerTaskStatus(timerInfo.TimerId, TimerTaskStatusCreated); err != nil {
 		return false, err
 	}
 	t.mutableState.AddTasks(&tasks.UserTimerTask{
@@ -155,13 +156,12 @@ func (t *timerSequenceImpl) CreateNextActivityTimer() (bool, error) {
 	}
 	// mark timer task mask as indication that timer task is generated
 	activityInfo.TimerTaskStatus |= timerTypeToTimerMask(firstTimerTask.TimerType)
-
 	var err error
+	var timerTaskStamp *time.Time
 	if firstTimerTask.TimerType == enumspb.TIMEOUT_TYPE_HEARTBEAT {
-		err = t.mutableState.UpdateActivityWithTimerHeartbeat(activityInfo, firstTimerTask.Timestamp)
-	} else {
-		err = t.mutableState.UpdateActivity(activityInfo)
+		timerTaskStamp = &firstTimerTask.Timestamp
 	}
+	err = t.mutableState.UpdateActivityTaskStatusWithTimerHeartbeat(activityInfo.ScheduledEventId, activityInfo.TimerTaskStatus, timerTaskStamp)
 
 	if err != nil {
 		return false, err
@@ -203,7 +203,10 @@ func (t *timerSequenceImpl) LoadAndSortActivityTimers() []TimerSequenceID {
 	activityTimers := make(TimerSequenceIDs, 0, len(pendingActivities)*4)
 
 	for _, activityInfo := range pendingActivities {
-
+		// skip activities that are paused
+		if activityInfo.Paused {
+			continue
+		}
 		if sequenceID := t.getActivityScheduleToCloseTimeout(
 			activityInfo,
 		); sequenceID != nil {

@@ -35,7 +35,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/rpc/interceptor"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"google.golang.org/grpc"
@@ -83,7 +82,7 @@ const (
 // The hostName syntax is defined in
 // https://github.com/grpc/grpc/blob/master/doc/naming.md.
 // dns resolver is used by default
-func Dial(hostName string, tlsConfig *tls.Config, logger log.Logger, interceptors ...grpc.UnaryClientInterceptor) (*grpc.ClientConn, error) {
+func Dial(hostName string, tlsConfig *tls.Config, logger log.Logger, opts ...grpc.DialOption) (*grpc.ClientConn, error) {
 	var grpcSecureOpt grpc.DialOption
 	if tlsConfig == nil {
 		grpcSecureOpt = grpc.WithTransportCredentials(insecure.NewCredentials())
@@ -106,12 +105,9 @@ func Dial(hostName string, tlsConfig *tls.Config, logger log.Logger, interceptor
 		grpcSecureOpt,
 		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(maxInternodeRecvPayloadSize)),
 		grpc.WithChainUnaryInterceptor(
-			append(
-				interceptors,
-				headersInterceptor,
-				metrics.NewClientMetricsTrailerPropagatorInterceptor(logger),
-				errorInterceptor,
-			)...,
+			headersInterceptor,
+			metrics.NewClientMetricsTrailerPropagatorInterceptor(logger),
+			errorInterceptor,
 		),
 		grpc.WithChainStreamInterceptor(
 			interceptor.StreamErrorInterceptor,
@@ -120,6 +116,7 @@ func Dial(hostName string, tlsConfig *tls.Config, logger log.Logger, interceptor
 		grpc.WithDisableServiceConfig(),
 		grpc.WithConnectParams(cp),
 	}
+	dialOptions = append(dialOptions, opts...)
 
 	return grpc.NewClient(hostName, dialOptions...)
 }
@@ -147,24 +144,6 @@ func headersInterceptor(
 ) error {
 	ctx = headers.Propagate(ctx)
 	return invoker(ctx, method, req, reply, cc, opts...)
-}
-
-func ServiceErrorInterceptor(
-	ctx context.Context,
-	req interface{},
-	_ *grpc.UnaryServerInfo,
-	handler grpc.UnaryHandler,
-) (interface{}, error) {
-
-	resp, err := handler(ctx, req)
-
-	var deserializationError *serialization.DeserializationError
-	var serializationError *serialization.SerializationError
-	// convert serialization errors to be captured as serviceerrors across gRPC calls
-	if errors.As(err, &deserializationError) || errors.As(err, &serializationError) {
-		err = serviceerror.NewDataLoss(err.Error())
-	}
-	return resp, serviceerror.ToStatus(err).Err()
 }
 
 func NewFrontendServiceErrorInterceptor(

@@ -9,13 +9,20 @@ bins: temporal-server temporal-cassandra-tool temporal-sql-tool tdbg
 all: clean proto bins check test
 
 # Used in CI
-ci-build-misc: print-go-version proto go-generate buf-breaking shell-check copyright-check goimports gomodtidy ensure-no-changes
+ci-build-misc: \
+	print-go-version \
+	clean-tools \
+	proto \
+	go-generate \
+	buf-breaking \
+	shell-check \
+	copyright-check \
+	goimports \
+	gomodtidy \
+	ensure-no-changes
 
 # Delete all build artifacts
-clean: clean-bins clean-test-results
-	rm -rf $(STAMPDIR)
-	rm -rf $(TEST_OUTPUT_ROOT)
-	rm -rf $(LOCALBIN)
+clean: clean-bins clean-tools clean-test-output
 
 # Recompile proto files.
 proto: lint-protos lint-api protoc proto-codegen
@@ -38,10 +45,8 @@ PERSISTENCE_DRIVER ?= cassandra
 TEMPORAL_DB ?= temporal
 VISIBILITY_DB ?= temporal_visibility
 
-# Always use "protolegacy" tag to allow disabling utf-8 validation on proto messages
-# during proto library transition.
-ALL_BUILD_TAGS := protolegacy,$(BUILD_TAG)
-ALL_TEST_TAGS := $(ALL_BUILD_TAGS),$(TEST_TAG)
+ALL_BUILD_TAGS := $(BUILD_TAG),
+ALL_TEST_TAGS := $(ALL_BUILD_TAGS),test_dep,$(TEST_TAG)
 BUILD_TAG_FLAG := -tags $(ALL_BUILD_TAGS)
 TEST_TAG_FLAG := -tags $(ALL_TEST_TAGS)
 
@@ -49,11 +54,9 @@ TEST_TAG_FLAG := -tags $(ALL_TEST_TAGS)
 # If you change this, also change .github/workflows/run-tests.yml!
 # The timeout in the GH workflow must be larger than this to avoid GH timing out the action,
 # which causes the a job run to not produce any logs and hurts the debugging experience.
-TEST_TIMEOUT ?= 20m
+TEST_TIMEOUT ?= 25m
 
 # Number of retries for *-coverage targets.
-# NOTE: This is incompatible with TEST_ARGS which specify the `-run` flag due to how gotestsum selects which tests to
-# retry.
 FAILED_TEST_RETRIES ?= 2
 
 # Whether or not to test with the race detector. All of (1 on y yes t true) are true values.
@@ -75,6 +78,14 @@ LOCALBIN := .bin
 STAMPDIR := .stamp
 export PATH := $(ROOT)/$(LOCALBIN):$(PATH)
 GOINSTALL := GOBIN=$(ROOT)/$(LOCALBIN) go install
+
+OTEL ?= false
+ifeq ($(OTEL),true)
+	export OTEL_BSP_SCHEDULE_DELAY=100 # in ms
+	export OTEL_EXPORTER_OTLP_TRACES_INSECURE=true
+	export OTEL_TRACES_EXPORTER=otlp
+	export TEMPORAL_OTEL_DEBUG=true
+endif
 
 MODULE_ROOT := $(lastword $(shell grep -e "^module " go.mod))
 COLOR := "\e[1;36m%s\e[0m\n"
@@ -107,33 +118,27 @@ FUNCTIONAL_TEST_XDC_ROOT      := ./tests/xdc
 FUNCTIONAL_TEST_NDC_ROOT      := ./tests/ndc
 DB_INTEGRATION_TEST_ROOT      := ./common/persistence/tests
 DB_TOOL_INTEGRATION_TEST_ROOT := ./tools/tests
-INTEGRATION_TEST_DIRS := $(DB_INTEGRATION_TEST_ROOT) $(DB_TOOL_INTEGRATION_TEST_ROOT) ./temporaltest ./internal/temporalite
+INTEGRATION_TEST_DIRS := $(DB_INTEGRATION_TEST_ROOT) $(DB_TOOL_INTEGRATION_TEST_ROOT) ./temporaltest
 ifeq ($(UNIT_TEST_DIRS),)
-UNIT_TEST_DIRS := $(filter-out $(FUNCTIONAL_TEST_ROOT)% $(FUNCTIONAL_TEST_XDC_ROOT)% $(FUNCTIONAL_TEST_NDC_ROOT)% $(DB_INTEGRATION_TEST_ROOT)% $(DB_TOOL_INTEGRATION_TEST_ROOT)% ./temporaltest% ./internal/temporalite%,$(TEST_DIRS))
+UNIT_TEST_DIRS := $(filter-out $(FUNCTIONAL_TEST_ROOT)% $(FUNCTIONAL_TEST_XDC_ROOT)% $(FUNCTIONAL_TEST_NDC_ROOT)% $(DB_INTEGRATION_TEST_ROOT)% $(DB_TOOL_INTEGRATION_TEST_ROOT)% ./temporaltest%,$(TEST_DIRS))
 endif
 
-# github.com/urfave/cli/v2@v2.4.0             - needs to accept comma in values before unlocking https://github.com/urfave/cli/pull/1241.
+# Pinning modernc.org/sqlite to this version until https://gitlab.com/cznic/sqlite/-/issues/196 is resolved.
+# Pinning google.golang.org/grpc/examples to prevent IDE errors.
 PINNED_DEPENDENCIES := \
-	github.com/go-sql-driver/mysql@v1.5.0 \
-	github.com/urfave/cli/v2@v2.4.0
+	modernc.org/sqlite@v1.34.1 \
+	modernc.org/libc@v1.55.3 \
+	google.golang.org/grpc/examples@v0.0.0-20250219164421-42fc25a9b496
 
 # Code coverage & test report output files.
 TEST_OUTPUT_ROOT        := ./.testoutput
-NEW_COVER_PROFILE       = $(TEST_OUTPUT_ROOT)/$(shell xxd -p -l 16 /dev/urandom).cover.out   # generates a new filename each time it's substituted
-SUMMARY_COVER_PROFILE  := $(TEST_OUTPUT_ROOT)/summary.cover.out
-NEW_REPORT              = $(TEST_OUTPUT_ROOT)/$(shell xxd -p -l 16 /dev/urandom).junit.xml   # generates a new filename each time it's substituted
+NEW_COVER_PROFILE       = $(TEST_OUTPUT_ROOT)/coverage.$(shell xxd -p -l 16 /dev/urandom).out   # generates a new filename each time it's substituted
+NEW_REPORT              = $(TEST_OUTPUT_ROOT)/junit.$(shell xxd -p -l 16 /dev/urandom).xml   # generates a new filename each time it's substituted
+COVERPKG_FLAG 		    = -coverpkg=$(shell go list ./... | paste -sd "," -)
 
 # DB
 SQL_USER ?= temporal
 SQL_PASSWORD ?= temporal
-
-# Need the following option to have integration and functional tests count towards coverage. godoc below:
-# -coverpkg pkg1,pkg2,pkg3
-#   Apply coverage analysis in each test to the given list of packages.
-#   The default is for each test to analyze only the package being tested.
-#   Packages are specified as import paths.
-INTEGRATION_TEST_COVERPKG := -coverpkg="$(MODULE_ROOT)/common/persistence/..."
-FUNCTIONAL_TEST_COVERPKG := -coverpkg="$(MODULE_ROOT)/client/...,$(MODULE_ROOT)/common/...,$(MODULE_ROOT)/service/...,$(MODULE_ROOT)/temporal/..."
 
 # Only prints output if the exit code is non-zero
 define silent_exec
@@ -149,6 +154,11 @@ endef
 print-go-version:
 	@go version
 
+clean-tools:
+	@printf $(COLOR) "Delete tools..."
+	@rm -rf $(STAMPDIR)
+	@rm -rf $(LOCALBIN)
+
 $(STAMPDIR):
 	@mkdir -p $(STAMPDIR)
 
@@ -159,18 +169,18 @@ $(LOCALBIN):
 .PHONY: golangci-lint
 GOLANGCI_LINT_BASE_REV ?= $(MAIN_BRANCH)
 GOLANGCI_LINT_FIX ?= true
-GOLANGCI_LINT_VERSION := v1.60.3
+GOLANGCI_LINT_VERSION := v1.64.8
 GOLANGCI_LINT := $(LOCALBIN)/golangci-lint-$(GOLANGCI_LINT_VERSION)
 $(GOLANGCI_LINT): $(LOCALBIN)
 	$(call go-install-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/cmd/golangci-lint,$(GOLANGCI_LINT_VERSION))
-	
+
 # Don't get confused, there is a single linter called gci, which is a part of the mega linter we use is called golangci-lint.
-GCI_VERSION := v0.13.4
+GCI_VERSION := v0.13.6
 GCI := $(LOCALBIN)/gci-$(GCI_VERSION)
 $(GCI): $(LOCALBIN)
 	$(call go-install-tool,$(GCI),github.com/daixiang0/gci,$(GCI_VERSION))
 
-GOTESTSUM_VER := v1.11
+GOTESTSUM_VER := v1.12.1
 GOTESTSUM := $(LOCALBIN)/gotestsum-$(GOTESTSUM_VER)
 $(GOTESTSUM): | $(LOCALBIN)
 	$(call go-install-tool,$(GOTESTSUM),gotest.tools/gotestsum,$(GOTESTSUM_VER))
@@ -190,29 +200,36 @@ PROTOGEN := $(LOCALBIN)/protogen-$(GO_API_VER)
 $(PROTOGEN): | $(LOCALBIN)
 	$(call go-install-tool,$(PROTOGEN),go.temporal.io/api/cmd/protogen,$(GO_API_VER))
 
-ACTIONLINT_VER := v1.6.27
+ACTIONLINT_VER := v1.7.7
 ACTIONLINT := $(LOCALBIN)/actionlint-$(ACTIONLINT_VER)
 $(ACTIONLINT): | $(LOCALBIN)
 	$(call go-install-tool,$(ACTIONLINT),github.com/rhysd/actionlint/cmd/actionlint,$(ACTIONLINT_VER))
 
 # The following tools need to have a consistent name, so we use a versioned stamp file to ensure the version we want is installed
 # while installing to an unversioned binary name.
-GOIMPORTS_VER := v0.20.0
+GOIMPORTS_VER := v0.31.0
 GOIMPORTS := $(LOCALBIN)/goimports
 $(STAMPDIR)/goimports-$(GOIMPORTS_VER): | $(STAMPDIR) $(LOCALBIN)
 	$(call go-install-tool,$(GOIMPORTS),golang.org/x/tools/cmd/goimports,$(GOIMPORTS_VER))
 	@touch $@
 $(GOIMPORTS): $(STAMPDIR)/goimports-$(GOIMPORTS_VER)
 
+GOWRAP_VER := v1.4.2
+GOWRAP := $(LOCALBIN)/gowrap
+$(STAMPDIR)/gowrap-$(GOWRAP_VER): | $(STAMPDIR) $(LOCALBIN)
+	$(call go-install-tool,$(GOWRAP),github.com/hexdigest/gowrap/cmd/gowrap,$(GOWRAP_VER))
+	@touch $@
+$(GOWRAP): $(STAMPDIR)/gowrap-$(GOWRAP_VER)
+
 # Mockgen is called by name throughout the codebase, so we need to keep the binary name consistent
-MOCKGEN_VER := v0.4.0
+MOCKGEN_VER := v0.5.0
 MOCKGEN := $(LOCALBIN)/mockgen
 $(STAMPDIR)/mockgen-$(MOCKGEN_VER): | $(STAMPDIR) $(LOCALBIN)
 	$(call go-install-tool,$(MOCKGEN),go.uber.org/mock/mockgen,$(MOCKGEN_VER))
 	@touch $@
 $(MOCKGEN): $(STAMPDIR)/mockgen-$(MOCKGEN_VER)
 
-STRINGER_VER := v0.21.0
+STRINGER_VER := v0.31.0
 STRINGER := $(LOCALBIN)/stringer
 $(STAMPDIR)/stringer-$(STRINGER_VER): | $(STAMPDIR) $(LOCALBIN)
 	$(call go-install-tool,$(STRINGER),golang.org/x/tools/cmd/stringer,$(STRINGER_VER))
@@ -321,7 +338,6 @@ copyright:
 	@printf $(COLOR) "Fix license header..."
 	@go run ./cmd/tools/copyright/licensegen.go
 
-
 goimports: fmt-imports
 	@printf $(COLOR) "Run goimports for all files..."
 	@UNGENERATED_FILES=$$(find . -type f -name '*.go' -print0 | xargs -0 grep -L -e "Code generated by .* DO NOT EDIT." || true) && \
@@ -333,7 +349,7 @@ lint-actions: $(ACTIONLINT)
 
 lint-code: $(GOLANGCI_LINT)
 	@printf $(COLOR) "Linting code..."
-	@$(GOLANGCI_LINT) run --verbose --timeout 10m --fix=$(GOLANGCI_LINT_FIX) --new-from-rev=$(GOLANGCI_LINT_BASE_REV) --config=.golangci.yml
+	@$(GOLANGCI_LINT) run --verbose --build-tags $(ALL_TEST_TAGS) --timeout 10m --fix=$(GOLANGCI_LINT_FIX) --new-from-rev=$(GOLANGCI_LINT_BASE_REV) --config=.golangci.yml
 
 fmt-imports: $(GCI) # Don't get confused, there is a single linter called gci, which is a part of the mega linter we use is called golangci-lint.
 	@printf $(COLOR) "Formatting imports..."
@@ -362,32 +378,33 @@ shell-check:
 check: copyright-check lint shell-check
 
 ##### Tests #####
-clean-test-results:
-	@rm -f test.log $(TEST_OUTPUT_ROOT)/*
+clean-test-output:
+	@printf $(COLOR) "Delete test output..."
+	@rm -rf $(TEST_OUTPUT_ROOT)
 	@go clean -testcache
 
 build-tests:
 	@printf $(COLOR) "Build tests..."
 	@go test $(TEST_TAG_FLAG) -exec="true" -count=0 $(TEST_DIRS)
 
-unit-test: clean-test-results
+unit-test: clean-test-output
 	@printf $(COLOR) "Run unit tests..."
 	@go test $(UNIT_TEST_DIRS) $(COMPILED_TEST_ARGS) 2>&1 | tee -a test.log
 	@! grep -q "^--- FAIL" test.log
 
-integration-test: clean-test-results
+integration-test: clean-test-output
 	@printf $(COLOR) "Run integration tests..."
 	@go test $(INTEGRATION_TEST_DIRS) $(COMPILED_TEST_ARGS) 2>&1 | tee -a test.log
 	@! grep -q "^--- FAIL" test.log
 
-functional-test: clean-test-results
+functional-test: clean-test-output
 	@printf $(COLOR) "Run functional tests..."
 	@go test $(FUNCTIONAL_TEST_ROOT) $(COMPILED_TEST_ARGS) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
 	@go test $(FUNCTIONAL_TEST_NDC_ROOT) $(COMPILED_TEST_ARGS) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
 	@go test $(FUNCTIONAL_TEST_XDC_ROOT) $(COMPILED_TEST_ARGS) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
 	@! grep -q "^--- FAIL" test.log
 
-functional-with-fault-injection-test: clean-test-results
+functional-with-fault-injection-test: clean-test-output
 	@printf $(COLOR) "Run integration tests with fault injection..."
 	@go test $(FUNCTIONAL_TEST_ROOT) $(COMPILED_TEST_ARGS) -FaultInjectionConfigFile=testdata/fault_injection.yaml -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
 	@go test $(FUNCTIONAL_TEST_NDC_ROOT) $(COMPILED_TEST_ARGS) -FaultInjectionConfigFile=testdata/fault_injection.yaml -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
@@ -404,57 +421,35 @@ prepare-coverage-test: $(GOTESTSUM) $(TEST_OUTPUT_ROOT)
 
 unit-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run unit tests with coverage..."
-	$(GOTESTSUM) --rerun-fails=$(FAILED_TEST_RETRIES) --rerun-fails-max-failures=10 --junitfile $(NEW_REPORT) --packages $(UNIT_TEST_DIRS) -- \
-		$(COMPILED_TEST_ARGS) \
-		-coverprofile=$(NEW_COVER_PROFILE)
+	go run ./cmd/tools/test-runner $(GOTESTSUM) --retries=$(FAILED_TEST_RETRIES) --junitfile=$(NEW_REPORT) -- \
+		$(COMPILED_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE) $(UNIT_TEST_DIRS)
 
 integration-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run integration tests with coverage..."
-	$(GOTESTSUM) --rerun-fails=$(FAILED_TEST_RETRIES) --rerun-fails-max-failures=10 --junitfile $(NEW_REPORT) --packages $(INTEGRATION_TEST_DIRS) -- \
-		$(COMPILED_TEST_ARGS) \
-		-coverprofile=$(NEW_COVER_PROFILE) $(INTEGRATION_TEST_COVERPKG)
+	go run ./cmd/tools/test-runner $(GOTESTSUM) --retries=$(FAILED_TEST_RETRIES) --junitfile=$(NEW_REPORT) -- \
+		$(COMPILED_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE) $(INTEGRATION_TEST_DIRS)
 
 # This should use the same build flags as functional-test-coverage and functional-test-{xdc,ndc}-coverage for best build caching.
 pre-build-functional-test-coverage: prepare-coverage-test
-	go test -c -o /dev/null $(FUNCTIONAL_TEST_ROOT) $(TEST_ARGS) $(TEST_TAG_FLAG) $(FUNCTIONAL_TEST_COVERPKG)
+	go test -c -cover -o /dev/null $(FUNCTIONAL_TEST_ROOT) $(TEST_ARGS) $(TEST_TAG_FLAG) $(COVERPKG_FLAG)
 
 functional-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional tests with coverage with $(PERSISTENCE_DRIVER) driver..."
-	$(GOTESTSUM) --rerun-fails=$(FAILED_TEST_RETRIES) --rerun-fails-max-failures=10 --junitfile $(NEW_REPORT) --packages $(FUNCTIONAL_TEST_ROOT) -- \
-		$(COMPILED_TEST_ARGS) \
-		-coverprofile=$(NEW_COVER_PROFILE) $(FUNCTIONAL_TEST_COVERPKG) \
+	go run ./cmd/tools/test-runner $(GOTESTSUM) --retries=$(FAILED_TEST_RETRIES) --junitfile=$(NEW_REPORT) -- \
+		$(COMPILED_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE) $(COVERPKG_FLAG) $(FUNCTIONAL_TEST_ROOT) \
 		-args -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER)
 
 functional-test-xdc-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional test for cross DC with coverage with $(PERSISTENCE_DRIVER) driver..."
-	$(GOTESTSUM) --rerun-fails=$(FAILED_TEST_RETRIES) --rerun-fails-max-failures=10 --junitfile $(NEW_REPORT) --packages $(FUNCTIONAL_TEST_XDC_ROOT) -- \
-		$(COMPILED_TEST_ARGS) \
-		-coverprofile=$(NEW_COVER_PROFILE) $(FUNCTIONAL_TEST_COVERPKG) \
+	go run ./cmd/tools/test-runner $(GOTESTSUM) --retries=$(FAILED_TEST_RETRIES) --junitfile=$(NEW_REPORT) -- \
+		$(COMPILED_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE) $(COVERPKG_FLAG) $(FUNCTIONAL_TEST_XDC_ROOT) \
 		-args -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER)
 
 functional-test-ndc-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional test for NDC with coverage with $(PERSISTENCE_DRIVER) driver..."
-	$(GOTESTSUM) --rerun-fails=$(FAILED_TEST_RETRIES) --rerun-fails-max-failures=10 --junitfile $(NEW_REPORT) --packages $(FUNCTIONAL_TEST_NDC_ROOT) -- \
-		$(COMPILED_TEST_ARGS) \
-		-coverprofile=$(NEW_COVER_PROFILE) $(FUNCTIONAL_TEST_COVERPKG) \
+	go run ./cmd/tools/test-runner $(GOTESTSUM) --retries=$(FAILED_TEST_RETRIES) --junitfile=$(NEW_REPORT) -- \
+		$(COMPILED_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE) $(COVERPKG_FLAG) $(FUNCTIONAL_TEST_NDC_ROOT) \
 		-args -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER)
-
-.PHONY: $(SUMMARY_COVER_PROFILE)
-$(SUMMARY_COVER_PROFILE):
-	@printf $(COLOR) "Combine coverage reports to $(SUMMARY_COVER_PROFILE)..."
-	@rm -f $(SUMMARY_COVER_PROFILE) $(SUMMARY_COVER_PROFILE).html
-	@if [ -z "$(wildcard $(TEST_OUTPUT_ROOT)/*.cover.out)" ]; then \
-		echo "No coverage data, aborting!" && exit 1; \
-	fi
-	@echo "mode: atomic" > $(SUMMARY_COVER_PROFILE)
-	$(foreach COVER_PROFILE,$(wildcard $(TEST_OUTPUT_ROOT)/*.cover.out),\
-		@printf "Add %s...\n" $(COVER_PROFILE); \
-		@grep -v -e "[Mm]ocks\?.go" -e "^mode: \w\+" $(COVER_PROFILE) >> $(SUMMARY_COVER_PROFILE) || true \
-	$(NEWLINE))
-
-coverage-report: $(SUMMARY_COVER_PROFILE)
-	@printf $(COLOR) "Generate HTML report from $(SUMMARY_COVER_PROFILE) to $(SUMMARY_COVER_PROFILE).html..."
-	@go tool cover -html=$(SUMMARY_COVER_PROFILE) -o $(SUMMARY_COVER_PROFILE).html
 
 ##### Schema #####
 install-schema-cass-es: temporal-cassandra-tool install-schema-es
@@ -570,6 +565,9 @@ start-postgres12: temporal-server
 start-sqlite: temporal-server
 	./temporal-server --env development-sqlite --allow-no-auth start
 
+start-sqlite-file: temporal-server
+	./temporal-server --env development-sqlite-file --allow-no-auth start
+
 start-xdc-cluster-a: temporal-server
 	./temporal-server --env development-cluster-a --allow-no-auth start
 
@@ -594,9 +592,10 @@ update-dependencies:
 	@go get -u -t $(PINNED_DEPENDENCIES) ./...
 	@go mod tidy
 
-go-generate: $(MOCKGEN) $(GOIMPORTS) $(STRINGER)
+go-generate: $(MOCKGEN) $(GOIMPORTS) $(STRINGER) $(GOWRAP)
 	@printf $(COLOR) "Process go:generate directives..."
 	@go generate ./...
+	$(MAKE) copyright
 
 ensure-no-changes:
 	@printf $(COLOR) "Check for local changes..."

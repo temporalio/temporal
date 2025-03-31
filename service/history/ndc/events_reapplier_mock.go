@@ -38,7 +38,7 @@ import (
 	reflect "reflect"
 
 	history "go.temporal.io/api/history/v1"
-	workflow "go.temporal.io/server/service/history/workflow"
+	interfaces "go.temporal.io/server/service/history/interfaces"
 	update "go.temporal.io/server/service/history/workflow/update"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -47,6 +47,7 @@ import (
 type MockEventsReapplier struct {
 	ctrl     *gomock.Controller
 	recorder *MockEventsReapplierMockRecorder
+	isgomock struct{}
 }
 
 // MockEventsReapplierMockRecorder is the mock recorder for MockEventsReapplier.
@@ -67,7 +68,7 @@ func (m *MockEventsReapplier) EXPECT() *MockEventsReapplierMockRecorder {
 }
 
 // ReapplyEvents mocks base method.
-func (m *MockEventsReapplier) ReapplyEvents(ctx context.Context, ms workflow.MutableState, updateRegistry update.Registry, historyEvents []*history.HistoryEvent, runID string) ([]*history.HistoryEvent, error) {
+func (m *MockEventsReapplier) ReapplyEvents(ctx context.Context, ms interfaces.MutableState, updateRegistry update.Registry, historyEvents []*history.HistoryEvent, runID string) ([]*history.HistoryEvent, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ReapplyEvents", ctx, ms, updateRegistry, historyEvents, runID)
 	ret0, _ := ret[0].([]*history.HistoryEvent)

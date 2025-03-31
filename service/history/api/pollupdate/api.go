@@ -37,14 +37,14 @@ import (
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/api"
-	"go.temporal.io/server/service/history/shard"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow/update"
 )
 
 func Invoke(
 	ctx context.Context,
 	req *historyservice.PollWorkflowExecutionUpdateRequest,
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	ctxLookup api.WorkflowConsistencyChecker,
 ) (*historyservice.PollWorkflowExecutionUpdateResponse, error) {
 	waitStage := req.GetRequest().GetWaitPolicy().GetLifecycleStage()
@@ -67,7 +67,7 @@ func Invoke(
 		release := workflowLease.GetReleaseFn()
 		defer release(nil)
 		wfCtx := workflowLease.GetContext()
-		upd := wfCtx.UpdateRegistry(ctx, nil).Find(ctx, updateRef.UpdateId)
+		upd := wfCtx.UpdateRegistry(ctx).Find(ctx, updateRef.UpdateId)
 		wfKey := wfCtx.GetWorkflowKey()
 		return &wfKey, upd, nil
 	}()

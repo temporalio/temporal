@@ -35,6 +35,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/namespace"
 )
 
 const (
@@ -119,7 +120,7 @@ func (s *collectionSuite) TestGetStringPropertyFnFilteredByNamespace() {
 
 func (s *collectionSuite) TestGetStringPropertyFnFilteredByNamespaceID() {
 	setting := dynamicconfig.NewNamespaceIDStringSetting(testGetStringPropertyFilteredByNamespaceIDKey, "abc", "")
-	namespaceID := "testNamespaceID"
+	namespaceID := namespace.ID("testNamespaceID")
 	value := setting.Get(s.cln)
 	s.Equal("abc", value(namespaceID))
 	s.client.SetValue(testGetStringPropertyFilteredByNamespaceIDKey, "efg")
@@ -158,7 +159,7 @@ func (s *collectionSuite) TestGetBoolProperty() {
 
 func (s *collectionSuite) TestGetBoolPropertyFilteredByNamespaceID() {
 	setting := dynamicconfig.NewNamespaceIDBoolSetting(testGetBoolPropertyFilteredByNamespaceIDKey, true, "")
-	namespaceID := "testNamespaceID"
+	namespaceID := namespace.ID("testNamespaceID")
 	value := setting.Get(s.cln)
 	s.Equal(true, value(namespaceID))
 	s.client.SetValue(testGetBoolPropertyFilteredByNamespaceIDKey, false)

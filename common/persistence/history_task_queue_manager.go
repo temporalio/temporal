@@ -34,7 +34,7 @@ import (
 	"strings"
 
 	commonpb "go.temporal.io/api/common/v1"
-	"go.temporal.io/api/enums/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/persistence/serialization"
 )
@@ -99,7 +99,7 @@ func (m *HistoryTaskQueueManagerImpl) EnqueueTask(
 	}
 	taskBytes, _ := task.Marshal()
 	blob = &commonpb.DataBlob{
-		EncodingType: enums.ENCODING_TYPE_PROTO3,
+		EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 		Data:         taskBytes,
 	}
 	queueKey := QueueKey{
@@ -177,7 +177,7 @@ func (m *HistoryTaskQueueManagerImpl) ReadTasks(ctx context.Context, request *Re
 	for i, rawTask := range response.Tasks {
 		blob := rawTask.Payload.Blob
 		if blob == nil {
-			return nil, serialization.NewDeserializationError(enums.ENCODING_TYPE_PROTO3, ErrHistoryTaskBlobIsNil)
+			return nil, serialization.NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, ErrHistoryTaskBlobIsNil)
 		}
 
 		task, err := m.serializer.DeserializeTask(request.QueueKey.Category, blob)

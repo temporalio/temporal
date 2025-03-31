@@ -27,6 +27,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/workflow"
@@ -164,7 +165,7 @@ func TestCompareVersionedTransition(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			require.Equal(t, tc.expectedResult, workflow.CompareVersionedTransition(tc.a, b))
+			require.Equal(t, tc.expectedResult, transitionhistory.Compare(tc.a, b))
 		})
 	}
 }

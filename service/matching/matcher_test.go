@@ -89,19 +89,23 @@ func (t *MatcherTestSuite) SetupTest() {
 	tlCfg.forwarderConfig = forwarderConfig{
 		ForwarderMaxOutstandingPolls: func() int { return 1 },
 		ForwarderMaxOutstandingTasks: func() int { return 1 },
-		ForwarderMaxRatePerSecond:    func() int { return 2 },
+		ForwarderMaxRatePerSecond:    func() float64 { return 2 },
 		ForwarderMaxChildrenPerNode:  func() int { return 20 },
 	}
 	t.childConfig = tlCfg
 	t.fwdr, err = newForwarder(&t.childConfig.forwarderConfig, t.queue, t.client)
 	t.Assert().NoError(err)
 	t.childMatcher = newTaskMatcher(tlCfg, t.fwdr, metrics.NoopMetricsHandler)
+	t.childMatcher.Start()
 
 	t.rootConfig = newTaskQueueConfig(prtn.TaskQueue(), cfg, "test-namespace")
 	t.rootMatcher = newTaskMatcher(t.rootConfig, nil, metrics.NoopMetricsHandler)
+	t.rootMatcher.Start()
 }
 
 func (t *MatcherTestSuite) TearDownTest() {
+	t.childMatcher.Stop()
+	t.rootMatcher.Stop()
 	t.controller.Finish()
 }
 
@@ -422,36 +426,36 @@ func (t *MatcherTestSuite) TestAvoidForwardingWhenBacklogIsOldButReconsider() {
 func (t *MatcherTestSuite) TestBacklogAge() {
 	t.Equal(emptyBacklogAge, t.rootMatcher.getBacklogAge())
 
-	youngBacklogTask := newInternalTaskFromBacklog(randomTaskInfoWithAge(time.Second), nil)
-
 	intruptC := make(chan struct{})
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 
+	youngBacklogTask := newInternalTaskFromBacklog(randomTaskInfoWithAge(time.Second), nil)
 	go t.rootMatcher.MustOffer(ctx, youngBacklogTask, intruptC) //nolint:errcheck
+	time.Sleep(time.Millisecond * 10)                           //nolint:forbidigo
+	t.InDelta(t.rootMatcher.getBacklogAge(), time.Second, float64(100*time.Millisecond))
 
-	time.Sleep(time.Millisecond)
-	t.InDelta(t.rootMatcher.getBacklogAge(), time.Second, float64(10*time.Millisecond))
-
-	// offering the same task twice to make sure of correct counting
-	go t.rootMatcher.MustOffer(ctx, youngBacklogTask, intruptC) //nolint:errcheck
-	time.Sleep(time.Millisecond)
-	t.InDelta(t.rootMatcher.getBacklogAge(), time.Second, float64(10*time.Millisecond))
+	middleBacklogTask := newInternalTaskFromBacklog(randomTaskInfoWithAge(time.Second), nil)
+	// offering a task with the exact creation to make sure of correct counting for each creation time
+	middleBacklogTask.event.Data.CreateTime = youngBacklogTask.event.Data.CreateTime
+	go t.rootMatcher.MustOffer(ctx, middleBacklogTask, intruptC) //nolint:errcheck
+	time.Sleep(time.Millisecond * 10)                            //nolint:forbidigo
+	t.InDelta(t.rootMatcher.getBacklogAge(), time.Second, float64(100*time.Millisecond))
 
 	oldBacklogTask := newInternalTaskFromBacklog(randomTaskInfoWithAge(time.Minute), nil)
 	go t.rootMatcher.MustOffer(ctx, oldBacklogTask, intruptC) //nolint:errcheck
-	time.Sleep(time.Millisecond)
-	t.InDelta(t.rootMatcher.getBacklogAge(), time.Minute, float64(10*time.Millisecond))
+	time.Sleep(time.Millisecond * 10)                         //nolint:forbidigo
+	t.InDelta(t.rootMatcher.getBacklogAge(), time.Minute, float64(100*time.Millisecond))
 
 	task, _ := t.rootMatcher.Poll(ctx, &pollMetadata{})
-	time.Sleep(time.Millisecond)
+	time.Sleep(time.Millisecond * 10) //nolint:forbidigo
 	t.NotNil(task)
 	t.NotEqual(emptyBacklogAge, t.rootMatcher.getBacklogAge())
 	task, _ = t.rootMatcher.Poll(ctx, &pollMetadata{})
-	time.Sleep(time.Millisecond)
+	time.Sleep(time.Millisecond * 10) //nolint:forbidigo
 	t.NotNil(task)
 	t.NotEqual(emptyBacklogAge, t.rootMatcher.getBacklogAge())
 	task, _ = t.rootMatcher.Poll(ctx, &pollMetadata{})
-	time.Sleep(time.Millisecond)
+	time.Sleep(time.Millisecond * 10) //nolint:forbidigo
 	t.NotNil(task)
 	t.Equal(emptyBacklogAge, t.rootMatcher.getBacklogAge())
 
@@ -748,7 +752,7 @@ func (t *MatcherTestSuite) TestMustOfferRemoteMatch() {
 	}()
 
 	taskCompleted := false
-	completionFunc := func(*persistencespb.AllocatedTaskInfo, error) {
+	completionFunc := func(*internalTask, taskResponse) {
 		taskCompleted = true
 	}
 

@@ -33,7 +33,7 @@ import (
 
 	"github.com/dgryski/go-farm"
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/api/taskqueue/v1"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -309,9 +309,9 @@ func CommitBuildID(timestamp *hlc.Clock,
 	}
 
 	data.AssignmentRules = append(data.GetAssignmentRules(), &persistencespb.AssignmentRule{
-		Rule: &taskqueue.BuildIdAssignmentRule{
+		Rule: &taskqueuepb.BuildIdAssignmentRule{
 			TargetBuildId: target,
-			Ramp:          &taskqueue.BuildIdAssignmentRule_PercentageRamp{PercentageRamp: &taskqueue.RampByPercentage{RampPercentage: 100}},
+			Ramp:          &taskqueuepb.BuildIdAssignmentRule_PercentageRamp{PercentageRamp: &taskqueuepb.RampByPercentage{RampPercentage: 100}},
 		},
 		CreateTimestamp: timestamp,
 	})
@@ -330,19 +330,19 @@ func GetTimestampedWorkerVersioningRules(
 	if cT, err = clk.Marshal(); err != nil {
 		return nil, serviceerror.NewInternal("error generating conflict token")
 	}
-	activeAssignmentRules := make([]*taskqueue.TimestampedBuildIdAssignmentRule, 0)
+	activeAssignmentRules := make([]*taskqueuepb.TimestampedBuildIdAssignmentRule, 0)
 	for _, ar := range versioningData.GetAssignmentRules() {
 		if ar.GetDeleteTimestamp() == nil {
-			activeAssignmentRules = append(activeAssignmentRules, &taskqueue.TimestampedBuildIdAssignmentRule{
+			activeAssignmentRules = append(activeAssignmentRules, &taskqueuepb.TimestampedBuildIdAssignmentRule{
 				Rule:       ar.GetRule(),
 				CreateTime: hlc.ProtoTimestamp(ar.GetCreateTimestamp()),
 			})
 		}
 	}
-	activeRedirectRules := make([]*taskqueue.TimestampedCompatibleBuildIdRedirectRule, 0)
+	activeRedirectRules := make([]*taskqueuepb.TimestampedCompatibleBuildIdRedirectRule, 0)
 	for _, rr := range versioningData.GetRedirectRules() {
 		if rr.GetDeleteTimestamp() == nil {
-			activeRedirectRules = append(activeRedirectRules, &taskqueue.TimestampedCompatibleBuildIdRedirectRule{
+			activeRedirectRules = append(activeRedirectRules, &taskqueuepb.TimestampedCompatibleBuildIdRedirectRule{
 				Rule:       rr.GetRule(),
 				CreateTime: hlc.ProtoTimestamp(rr.GetCreateTimestamp()),
 			})
@@ -495,20 +495,20 @@ func given2ActualIdx(idx int32, rules []*persistencespb.AssignmentRule) int {
 }
 
 // handleAssignmentRuleNilRamp mutates and returns rule object to convert nil ramp to 100%
-func handleAssignmentRuleNilRamp(rule *taskqueue.BuildIdAssignmentRule) *taskqueue.BuildIdAssignmentRule {
+func handleAssignmentRuleNilRamp(rule *taskqueuepb.BuildIdAssignmentRule) *taskqueuepb.BuildIdAssignmentRule {
 	if rule.GetRamp() == nil {
-		rule.Ramp = &taskqueue.BuildIdAssignmentRule_PercentageRamp{PercentageRamp: &taskqueue.RampByPercentage{RampPercentage: 100}}
+		rule.Ramp = &taskqueuepb.BuildIdAssignmentRule_PercentageRamp{PercentageRamp: &taskqueuepb.RampByPercentage{RampPercentage: 100}}
 	}
 	return rule
 }
 
 // hasValidRamp returns true if the rule has a ramp percentage within [0, 100] or a ramp of nil
-func hasValidRamp(rule *taskqueue.BuildIdAssignmentRule) bool {
+func hasValidRamp(rule *taskqueuepb.BuildIdAssignmentRule) bool {
 	return rule.GetRamp() == nil || (rule.GetPercentageRamp().GetRampPercentage() >= 0 && rule.GetPercentageRamp().GetRampPercentage() <= 100)
 }
 
 // isFullyRamped returns true if the rule has a ramp percentage of 100 or a ramp of nil
-func isFullyRamped(rule *taskqueue.BuildIdAssignmentRule) bool {
+func isFullyRamped(rule *taskqueuepb.BuildIdAssignmentRule) bool {
 	return rule.GetRamp() == nil || rule.GetPercentageRamp().GetRampPercentage() == 100
 }
 

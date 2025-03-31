@@ -48,6 +48,7 @@ import (
 type MockAckManager struct {
 	ctrl     *gomock.Controller
 	recorder *MockAckManagerMockRecorder
+	isgomock struct{}
 }
 
 // MockAckManagerMockRecorder is the mock recorder for MockAckManager.
@@ -170,18 +171,18 @@ func (mr *MockAckManagerMockRecorder) NotifyNewTasks(tasks any) *gomock.Call {
 }
 
 // SubscribeNotification mocks base method.
-func (m *MockAckManager) SubscribeNotification() (<-chan struct{}, string) {
+func (m *MockAckManager) SubscribeNotification(arg0 string) (<-chan struct{}, string) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SubscribeNotification")
+	ret := m.ctrl.Call(m, "SubscribeNotification", arg0)
 	ret0, _ := ret[0].(<-chan struct{})
 	ret1, _ := ret[1].(string)
 	return ret0, ret1
 }
 
 // SubscribeNotification indicates an expected call of SubscribeNotification.
-func (mr *MockAckManagerMockRecorder) SubscribeNotification() *gomock.Call {
+func (mr *MockAckManagerMockRecorder) SubscribeNotification(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubscribeNotification", reflect.TypeOf((*MockAckManager)(nil).SubscribeNotification))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubscribeNotification", reflect.TypeOf((*MockAckManager)(nil).SubscribeNotification), arg0)
 }
 
 // UnsubscribeNotification mocks base method.

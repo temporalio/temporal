@@ -26,9 +26,9 @@ import (
 	"context"
 	"fmt"
 
-	"go.temporal.io/api/enums/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-	persistencepb "go.temporal.io/server/api/persistence/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -73,7 +73,7 @@ func (m *nexusEndpointManagerImpl) Close() {
 func (m *nexusEndpointManagerImpl) GetNexusEndpoint(
 	ctx context.Context,
 	request *GetNexusEndpointRequest,
-) (*persistencepb.NexusEndpointEntry, error) {
+) (*persistencespb.NexusEndpointEntry, error) {
 	internalEndpoint, err := m.persistence.GetNexusEndpoint(ctx, request)
 	if err != nil {
 		return nil, err
@@ -85,7 +85,7 @@ func (m *nexusEndpointManagerImpl) GetNexusEndpoint(
 		return nil, err
 	}
 
-	return &persistencepb.NexusEndpointEntry{
+	return &persistencespb.NexusEndpointEntry{
 		Id:       internalEndpoint.ID,
 		Version:  internalEndpoint.Version,
 		Endpoint: endpoint,
@@ -110,14 +110,14 @@ func (m *nexusEndpointManagerImpl) ListNexusEndpoints(
 		return result, err
 	}
 
-	entries := make([]*persistencepb.NexusEndpointEntry, len(resp.Endpoints))
+	entries := make([]*persistencespb.NexusEndpointEntry, len(resp.Endpoints))
 	for i, entry := range resp.Endpoints {
 		endpoint, err := m.serializer.NexusEndpointFromBlob(entry.Data)
 		if err != nil {
 			m.logger.Error(fmt.Sprintf("error deserializing nexus endpoint with ID: %v", entry.ID), tag.Error(err))
 			return nil, err
 		}
-		entries[i] = &persistencepb.NexusEndpointEntry{
+		entries[i] = &persistencespb.NexusEndpointEntry{
 			Id:       entry.ID,
 			Version:  entry.Version,
 			Endpoint: endpoint,
@@ -133,7 +133,7 @@ func (m *nexusEndpointManagerImpl) CreateOrUpdateNexusEndpoint(
 	ctx context.Context,
 	request *CreateOrUpdateNexusEndpointRequest,
 ) (*CreateOrUpdateNexusEndpointResponse, error) {
-	blob, err := m.serializer.NexusEndpointToBlob(request.Entry.Endpoint, enums.ENCODING_TYPE_PROTO3)
+	blob, err := m.serializer.NexusEndpointToBlob(request.Entry.Endpoint, enumspb.ENCODING_TYPE_PROTO3)
 	if err != nil {
 		return nil, err
 	}

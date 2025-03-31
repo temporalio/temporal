@@ -368,7 +368,6 @@ func parseRpcName(rpcName string) (string, int, error) {
 		suffixOff := strings.LastIndex(rpcName, partitionDelimiter)
 		if suffixOff <= len(nonRootPartitionPrefix) {
 			return "", 0, serviceerror.NewInvalidArgument("invalid task queue partition name " + rpcName)
-			// nolint:goerr113
 		}
 		baseName = rpcName[len(nonRootPartitionPrefix):suffixOff]
 		suffix := rpcName[suffixOff+1:]

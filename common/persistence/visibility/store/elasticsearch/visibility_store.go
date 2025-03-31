@@ -52,6 +52,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/util"
 )
 
 const (
@@ -295,14 +296,11 @@ func GetDocID(workflowID string, runID string) string {
 	const maxDocIDLength = 512
 	// Generally runID is guid and this should never be the case.
 	if len(runID)+len(delimiter) >= maxDocIDLength {
-		if len(runID) >= maxDocIDLength {
-			return runID[0:maxDocIDLength]
-		}
-		return runID[0 : maxDocIDLength-len(delimiter)]
+		return util.TruncateUTF8(runID, maxDocIDLength)
 	}
 
 	if len(workflowID)+len(runID)+len(delimiter) > maxDocIDLength {
-		workflowID = workflowID[0 : maxDocIDLength-len(runID)-len(delimiter)]
+		workflowID = util.TruncateUTF8(workflowID, maxDocIDLength-len(runID)-len(delimiter))
 	}
 
 	return workflowID + delimiter + runID
@@ -925,7 +923,7 @@ func (s *VisibilityStore) GenerateESDoc(
 	// If it's only invalid values error, then silently continue without them.
 	searchAttributes, err = s.ValidateCustomSearchAttributes(searchAttributes)
 	if err != nil {
-		if _, ok := err.(*store.VisibilityStoreInvalidValuesError); !ok {
+		if _, ok := err.(*serviceerror.InvalidArgument); !ok {
 			return nil, err
 		}
 	}
@@ -1453,7 +1451,7 @@ func parsePageTokenValue(
 func validateDatetime(value time.Time) error {
 	if value.Before(minTime) || value.After(maxTime) {
 		return serviceerror.NewInvalidArgument(
-			fmt.Sprintf("Date not supported in Elasticsearch: %v", value),
+			fmt.Sprintf("invalid search attribute date: %v, supported range: [%v, %v]", value, minTime, maxTime),
 		)
 	}
 	return nil
@@ -1463,7 +1461,7 @@ func validateString(value string) error {
 	if len(value) > maxStringLength {
 		return serviceerror.NewInvalidArgument(
 			fmt.Sprintf(
-				"strings with more than %d bytes are not supported in Elasticsearch (got string of len %d)",
+				"strings with more than %d bytes are not supported (got string of len %d)",
 				maxStringLength,
 				len(value),
 			),

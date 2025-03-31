@@ -44,6 +44,7 @@ import (
 type MockRPCFactory struct {
 	ctrl     *gomock.Controller
 	recorder *MockRPCFactoryMockRecorder
+	isgomock struct{}
 }
 
 // MockRPCFactoryMockRecorder is the mock recorder for MockRPCFactory.
@@ -81,6 +82,7 @@ func (mr *MockRPCFactoryMockRecorder) CreateInternodeGRPCConnection(rpcAddress a
 type MockconnectionPool struct {
 	ctrl     *gomock.Controller
 	recorder *MockconnectionPoolMockRecorder
+	isgomock struct{}
 }
 
 // MockconnectionPoolMockRecorder is the mock recorder for MockconnectionPool.

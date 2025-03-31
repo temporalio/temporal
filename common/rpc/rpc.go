@@ -62,10 +62,10 @@ type RPCFactory struct {
 	frontendHTTPPort  int
 	frontendTLSConfig *tls.Config
 
-	grpcListener       func() net.Listener
-	tlsFactory         encryption.TLSConfigProvider
-	clientInterceptors []grpc.UnaryClientInterceptor
-	monitor            membership.Monitor
+	grpcListener func() net.Listener
+	tlsFactory   encryption.TLSConfigProvider
+	dialOptions  []grpc.DialOption
+	monitor      membership.Monitor
 	// A OnceValues wrapper for createLocalFrontendHTTPClient.
 	localFrontendClient      func() (*common.FrontendHTTPClient, error)
 	interNodeGrpcConnections cache.Cache
@@ -82,20 +82,20 @@ func NewFactory(
 	frontendHTTPURL string,
 	frontendHTTPPort int,
 	frontendTLSConfig *tls.Config,
-	clientInterceptors []grpc.UnaryClientInterceptor,
+	dialOptions []grpc.DialOption,
 	monitor membership.Monitor,
 ) *RPCFactory {
 	f := &RPCFactory{
-		config:             cfg,
-		serviceName:        sName,
-		logger:             logger,
-		frontendURL:        frontendURL,
-		frontendHTTPURL:    frontendHTTPURL,
-		frontendHTTPPort:   frontendHTTPPort,
-		frontendTLSConfig:  frontendTLSConfig,
-		tlsFactory:         tlsProvider,
-		clientInterceptors: clientInterceptors,
-		monitor:            monitor,
+		config:            cfg,
+		serviceName:       sName,
+		logger:            logger,
+		frontendURL:       frontendURL,
+		frontendHTTPURL:   frontendHTTPURL,
+		frontendHTTPPort:  frontendHTTPPort,
+		frontendTLSConfig: frontendTLSConfig,
+		tlsFactory:        tlsProvider,
+		dialOptions:       dialOptions,
+		monitor:           monitor,
 	}
 	f.grpcListener = sync.OnceValue(f.createGRPCListener)
 	f.localFrontendClient = sync.OnceValues(f.createLocalFrontendHTTPClient)
@@ -168,9 +168,8 @@ func (d *RPCFactory) GetGRPCListener() net.Listener {
 
 func (d *RPCFactory) createGRPCListener() net.Listener {
 	hostAddress := net.JoinHostPort(getListenIP(d.config, d.logger).String(), convert.IntToString(d.config.GRPCPort))
-	var err error
-	grpcListener, err := net.Listen("tcp", hostAddress)
 
+	grpcListener, err := net.Listen("tcp", hostAddress)
 	if err != nil || grpcListener == nil || grpcListener.Addr() == nil {
 		d.logger.Fatal("Failed to start gRPC listener", tag.Error(err), tag.Service(d.serviceName), tag.Address(hostAddress))
 	}
@@ -250,7 +249,7 @@ func (d *RPCFactory) CreateInternodeGRPCConnection(hostName string) *grpc.Client
 }
 
 func (d *RPCFactory) dial(hostName string, tlsClientConfig *tls.Config) *grpc.ClientConn {
-	connection, err := Dial(hostName, tlsClientConfig, d.logger, d.clientInterceptors...)
+	connection, err := Dial(hostName, tlsClientConfig, d.logger, d.dialOptions...)
 	if err != nil {
 		d.logger.Fatal("Failed to create gRPC connection", tag.Error(err))
 		return nil

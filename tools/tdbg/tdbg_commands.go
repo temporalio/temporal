@@ -59,7 +59,7 @@ func getCommands(
 		},
 		{
 			Name:        "history-host",
-			Aliases:     []string{"h"},
+			Aliases:     []string{"hh"},
 			Usage:       "Run admin operation on history host",
 			Subcommands: newAdminHistoryHostCommands(clientFactory),
 		},
@@ -272,11 +272,6 @@ func newAdminShardManagementCommands(clientFactory ClientFactory, taskCategoryRe
 	// which is required and does not have a default. The second is the task category
 	// for the remove-task command, which is optional and defaults to transfer.
 	taskCategoryFlag := getTaskCategoryFlag(taskCategoryRegistry)
-	listTasksCategory := *taskCategoryFlag
-	listTasksCategory.Required = true
-	removeTaskCategory := *taskCategoryFlag
-	removeTaskCategory.Value = tasks.CategoryTransfer.Name()
-
 	return []*cli.Command{
 		{
 			Name:    "describe",
@@ -310,7 +305,7 @@ func newAdminShardManagementCommands(clientFactory ClientFactory, taskCategoryRe
 					Usage:    "The ID of the shard",
 					Required: true,
 				},
-				&listTasksCategory,
+				taskCategoryFlag,
 				&cli.Int64Flag{
 					Name:  FlagMinTaskID,
 					Usage: "Inclusive min taskID. Optional for transfer, replication, visibility tasks. Can't be specified for timer task",
@@ -362,14 +357,16 @@ func newAdminShardManagementCommands(clientFactory ClientFactory, taskCategoryRe
 			Usage:   "remove a task based on shardId, task category, taskId, and task visibility timestamp",
 			Flags: []cli.Flag{
 				&cli.IntFlag{
-					Name:  FlagShardID,
-					Usage: "shardId",
+					Name:     FlagShardID,
+					Usage:    "shardId",
+					Required: true,
 				},
 				&cli.Int64Flag{
-					Name:  FlagTaskID,
-					Usage: "taskId",
+					Name:     FlagTaskID,
+					Usage:    "taskId",
+					Required: true,
 				},
-				&removeTaskCategory,
+				taskCategoryFlag,
 				&cli.Int64Flag{
 					Name:  FlagTaskVisibilityTimestamp,
 					Usage: "task visibility timestamp in nano (required for removing timer task)",
@@ -389,8 +386,9 @@ func getTaskCategoryFlag(taskCategoryRegistry tasks.TaskCategoryRegistry) *cli.S
 		options = append(options, category.Name())
 	}
 	flag := &cli.StringFlag{
-		Name:  FlagTaskCategory,
-		Usage: "Task category: " + strings.Join(options, ", "),
+		Name:     FlagTaskCategory,
+		Usage:    "Task category: " + strings.Join(options, ", "),
+		Required: true,
 	}
 	return flag
 }

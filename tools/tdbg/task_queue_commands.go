@@ -30,7 +30,7 @@ import (
 
 	"github.com/urfave/cli/v2"
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/api/taskqueue/v1"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/api/adminservice/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 )
@@ -182,7 +182,7 @@ func AdminDescribeTaskQueuePartition(c *cli.Context, clientFactory ClientFactory
 	req := &adminservice.DescribeTaskQueuePartitionRequest{
 		Namespace:          namespace,
 		TaskQueuePartition: tqPartition,
-		BuildIds: &taskqueue.TaskQueueVersionSelection{
+		BuildIds: &taskqueuepb.TaskQueueVersionSelection{
 			BuildIds:    buildIDs,
 			Unversioned: unversioned,
 			AllActive:   allActive,

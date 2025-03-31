@@ -30,11 +30,11 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/common/cache"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
 const (
 	pollerHistoryInitMaxSize = 1000
-	pollerHistoryTTL         = 5 * time.Minute
 )
 
 type (
@@ -51,7 +51,7 @@ type pollerHistory struct {
 	history cache.Cache
 }
 
-func newPollerHistory() *pollerHistory {
+func newPollerHistory(pollerHistoryTTL time.Duration) *pollerHistory {
 	opts := &cache.Options{
 		TTL: pollerHistoryTTL,
 		Pin: false,
@@ -80,8 +80,9 @@ func (pollers *pollerHistory) getPollerInfo(earliestAccessTime time.Time) []*tas
 			result = append(result, &taskqueuepb.PollerInfo{
 				Identity:                  string(key),
 				LastAccessTime:            timestamppb.New(lastAccessTime),
-				RatePerSecond:             defaultValue(value.ratePerSecond, defaultTaskDispatchRPS),
+				RatePerSecond:             defaultRPS(value.taskQueueMetadata.GetMaxTasksPerSecond()),
 				WorkerVersionCapabilities: value.workerVersionCapabilities,
+				DeploymentOptions:         value.deploymentOptions,
 			})
 		}
 	}
@@ -89,9 +90,9 @@ func (pollers *pollerHistory) getPollerInfo(earliestAccessTime time.Time) []*tas
 	return result
 }
 
-func defaultValue[T any, P ~*T](p P, def T) T {
-	if p == nil {
-		return def
+func defaultRPS(wrapper *wrapperspb.DoubleValue) float64 {
+	if wrapper != nil {
+		return wrapper.Value
 	}
-	return *p
+	return defaultTaskDispatchRPS
 }

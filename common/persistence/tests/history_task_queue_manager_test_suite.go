@@ -32,7 +32,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
-	"go.temporal.io/api/enums/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/client/history/historytest"
 	"go.temporal.io/server/common"
@@ -307,7 +307,7 @@ func enqueueAndDeserializeBlob(
 		QueueType: queueType,
 		QueueName: queueName,
 		Blob: &commonpb.DataBlob{
-			EncodingType: enums.ENCODING_TYPE_PROTO3,
+			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 			Data:         historyTaskBytes,
 		},
 	})

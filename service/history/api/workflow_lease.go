@@ -25,20 +25,19 @@
 package api
 
 import (
-	"go.temporal.io/server/service/history/workflow"
-	wcache "go.temporal.io/server/service/history/workflow/cache"
+	historyi "go.temporal.io/server/service/history/interfaces"
 )
 
 type WorkflowLease interface {
-	GetContext() workflow.Context
-	GetMutableState() workflow.MutableState
-	GetReleaseFn() wcache.ReleaseCacheFunc
+	GetContext() historyi.WorkflowContext
+	GetMutableState() historyi.MutableState
+	GetReleaseFn() historyi.ReleaseWorkflowContextFunc
 }
 
 type workflowLease struct {
-	context      workflow.Context
-	mutableState workflow.MutableState
-	releaseFn    wcache.ReleaseCacheFunc
+	context      historyi.WorkflowContext
+	mutableState historyi.MutableState
+	releaseFn    historyi.ReleaseWorkflowContextFunc
 }
 
 type UpdateWorkflowAction struct {
@@ -66,25 +65,25 @@ type UpdateWorkflowActionFunc func(WorkflowLease) (*UpdateWorkflowAction, error)
 var _ WorkflowLease = (*workflowLease)(nil)
 
 func NewWorkflowLease(
-	context workflow.Context,
-	releaseFn wcache.ReleaseCacheFunc,
-	mutableState workflow.MutableState,
+	wfContext historyi.WorkflowContext,
+	releaseFn historyi.ReleaseWorkflowContextFunc,
+	mutableState historyi.MutableState,
 ) WorkflowLease {
 	return &workflowLease{
-		context:      context,
+		context:      wfContext,
 		releaseFn:    releaseFn,
 		mutableState: mutableState,
 	}
 }
 
-func (w *workflowLease) GetContext() workflow.Context {
+func (w *workflowLease) GetContext() historyi.WorkflowContext {
 	return w.context
 }
 
-func (w *workflowLease) GetMutableState() workflow.MutableState {
+func (w *workflowLease) GetMutableState() historyi.MutableState {
 	return w.mutableState
 }
 
-func (w *workflowLease) GetReleaseFn() wcache.ReleaseCacheFunc {
+func (w *workflowLease) GetReleaseFn() historyi.ReleaseWorkflowContextFunc {
 	return w.releaseFn
 }

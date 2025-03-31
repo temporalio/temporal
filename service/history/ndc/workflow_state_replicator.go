@@ -41,10 +41,10 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/api/history/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	repication "go.temporal.io/server/api/replication/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
@@ -55,12 +55,13 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/historybuilder"
-	"go.temporal.io/server/service/history/shard"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
@@ -73,13 +74,13 @@ type (
 		) error
 		ReplicateVersionedTransition(
 			ctx context.Context,
-			versionedTransition *repication.VersionedTransitionArtifact,
+			versionedTransition *replicationspb.VersionedTransitionArtifact,
 			sourceClusterName string,
 		) error
 	}
 
 	WorkflowStateReplicatorImpl struct {
-		shardContext      shard.Context
+		shardContext      historyi.ShardContext
 		namespaceRegistry namespace.Registry
 		workflowCache     wcache.Cache
 		clusterMetadata   cluster.Metadata
@@ -92,7 +93,7 @@ type (
 )
 
 func NewWorkflowStateReplicator(
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	workflowCache wcache.Cache,
 	eventsReapplier EventsReapplier,
 	eventSerializer serialization.Serializer,
@@ -153,6 +154,9 @@ func (r *WorkflowStateReplicatorImpl) SyncWorkflowState(
 	case *serviceerror.NotFound:
 		// no-op, continue to replicate workflow state
 	case nil:
+		if len(request.WorkflowState.ExecutionInfo.TransitionHistory) != 0 {
+			return r.applySnapshotWhenWorkflowExist(ctx, namespaceID, wid, rid, wfCtx, releaseFn, ms, request.WorkflowState, nil, nil, request.RemoteCluster)
+		}
 		// workflow exists, do resend if version histories are not match.
 		localVersionHistory, err := versionhistory.GetCurrentVersionHistory(ms.GetExecutionInfo().GetVersionHistories())
 		if err != nil {
@@ -192,7 +196,7 @@ func (r *WorkflowStateReplicatorImpl) SyncWorkflowState(
 		}
 
 		// we don't care about activity state here as activity can't run after workflow is closed.
-		return engine.SyncHSM(ctx, &shard.SyncHSMRequest{
+		return engine.SyncHSM(ctx, &historyi.SyncHSMRequest{
 			WorkflowKey: ms.GetWorkflowKey(),
 			StateMachineNode: &persistencespb.StateMachineNode{
 				Children: executionInfo.SubStateMachinesByType,
@@ -208,18 +212,18 @@ func (r *WorkflowStateReplicatorImpl) SyncWorkflowState(
 //nolint:revive // cognitive complexity 37 (> max enabled 25)
 func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 	ctx context.Context,
-	versionedTransition *repication.VersionedTransitionArtifact,
+	versionedTransition *replicationspb.VersionedTransitionArtifact,
 	sourceClusterName string,
 ) (retError error) {
 	if versionedTransition.StateAttributes == nil {
 		return serviceerror.NewInvalidArgument("both snapshot and mutation are nil")
 	}
-	var mutation *repication.SyncWorkflowStateMutationAttributes
-	var snapshot *repication.SyncWorkflowStateSnapshotAttributes
+	var mutation *replicationspb.SyncWorkflowStateMutationAttributes
+	var snapshot *replicationspb.SyncWorkflowStateSnapshotAttributes
 	switch artifactType := versionedTransition.StateAttributes.(type) {
-	case *repication.VersionedTransitionArtifact_SyncWorkflowStateSnapshotAttributes:
+	case *replicationspb.VersionedTransitionArtifact_SyncWorkflowStateSnapshotAttributes:
 		snapshot = versionedTransition.GetSyncWorkflowStateSnapshotAttributes()
-	case *repication.VersionedTransitionArtifact_SyncWorkflowStateMutationAttributes:
+	case *replicationspb.VersionedTransitionArtifact_SyncWorkflowStateMutationAttributes:
 		mutation = versionedTransition.GetSyncWorkflowStateMutationAttributes()
 	default:
 		return serviceerror.NewInvalidArgument(fmt.Sprintf("unknown artifact type %T", artifactType))
@@ -267,7 +271,7 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 			// TODO: Revisit these logic when working on roll out/back plan
 			if snapshot == nil {
 				return serviceerrors.NewSyncState(
-					"failed to apply mutation due to missing mutable state",
+					"failed to apply versioned transition due to missing snapshot",
 					namespaceID.String(),
 					wid,
 					rid,
@@ -296,24 +300,25 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 			if err != nil {
 				return err
 			}
-			sourceLastWriteVersion := sourceTransitionHistory[len(sourceTransitionHistory)-1].NamespaceFailoverVersion
+			sourceLastWriteVersion := transitionhistory.LastVersionedTransition(sourceTransitionHistory).NamespaceFailoverVersion
 
 			if localLastWriteVersion > sourceLastWriteVersion {
 				// local is newer, try backfill events
-				return r.backFillEvents(ctx, namespaceID, wid, rid, executionInfo.VersionHistories, versionedTransition.EventBatches, versionedTransition.NewRunInfo, sourceClusterName, sourceTransitionHistory[len(sourceTransitionHistory)-1])
+				releaseFn(nil)
+				return r.backFillEvents(ctx, namespaceID, wid, rid, executionInfo.VersionHistories, versionedTransition.EventBatches, versionedTransition.NewRunInfo, sourceClusterName, transitionhistory.LastVersionedTransition(sourceTransitionHistory))
 			}
 			if localLastWriteVersion < sourceLastWriteVersion ||
 				localLastHistoryItem.GetEventId() <= sourceLastHistoryItem.EventId {
 				return r.applySnapshot(ctx, namespaceID, wid, rid, wfCtx, releaseFn, ms, versionedTransition, sourceClusterName)
 			}
-			return nil
+			return consts.ErrDuplicate
 		}
 
 		sourceTransitionHistory := executionInfo.TransitionHistory
-		err = workflow.TransitionHistoryStalenessCheck(localTransitionHistory, sourceTransitionHistory[len(sourceTransitionHistory)-1])
+		err = workflow.TransitionHistoryStalenessCheck(localTransitionHistory, transitionhistory.LastVersionedTransition(sourceTransitionHistory))
 		switch {
 		case err == nil:
-			// verify tasks
+			return consts.ErrDuplicate
 		case errors.Is(err, consts.ErrStaleState):
 			// local is stale, try to apply mutable state update
 			if snapshot != nil {
@@ -321,14 +326,14 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 			}
 			return r.applyMutation(ctx, namespaceID, wid, rid, wfCtx, ms, releaseFn, versionedTransition, sourceClusterName)
 		case errors.Is(err, consts.ErrStaleReference):
-			return r.backFillEvents(ctx, namespaceID, wid, rid, executionInfo.VersionHistories, versionedTransition.EventBatches, versionedTransition.NewRunInfo, sourceClusterName, sourceTransitionHistory[len(sourceTransitionHistory)-1])
+			releaseFn(nil)
+			return r.backFillEvents(ctx, namespaceID, wid, rid, executionInfo.VersionHistories, versionedTransition.EventBatches, versionedTransition.NewRunInfo, sourceClusterName, transitionhistory.LastVersionedTransition(sourceTransitionHistory))
 		default:
 			return err
 		}
 	default:
 		return err
 	}
-	return nil
 }
 
 func (r *WorkflowStateReplicatorImpl) applyMutation(
@@ -336,10 +341,10 @@ func (r *WorkflowStateReplicatorImpl) applyMutation(
 	namespaceID namespace.ID,
 	workflowID string,
 	runID string,
-	wfCtx workflow.Context,
-	localMutableState workflow.MutableState,
-	releaseFn wcache.ReleaseCacheFunc,
-	versionedTransition *repication.VersionedTransitionArtifact,
+	wfCtx historyi.WorkflowContext,
+	localMutableState historyi.MutableState,
+	releaseFn historyi.ReleaseWorkflowContextFunc,
+	versionedTransition *replicationspb.VersionedTransitionArtifact,
 	sourceClusterName string,
 ) error {
 	mutation := versionedTransition.GetSyncWorkflowStateMutationAttributes()
@@ -348,7 +353,7 @@ func (r *WorkflowStateReplicatorImpl) applyMutation(
 	}
 	if localMutableState == nil {
 		return serviceerrors.NewSyncState(
-			"failed to apply mutation due to missing mutable state",
+			"failed to apply mutation due to missing local mutable state",
 			namespaceID.String(),
 			workflowID,
 			runID,
@@ -356,18 +361,19 @@ func (r *WorkflowStateReplicatorImpl) applyMutation(
 			nil,
 		)
 	}
-	localTransitionHistory := workflow.CopyVersionedTransitions(localMutableState.GetExecutionInfo().TransitionHistory)
+	localTransitionHistory := transitionhistory.CopyVersionedTransitions(localMutableState.GetExecutionInfo().TransitionHistory)
+	localVersionedTransition := transitionhistory.LastVersionedTransition(localTransitionHistory)
 	sourceTransitionHistory := mutation.StateMutation.ExecutionInfo.TransitionHistory
 
 	// make sure mutation range is extension of local range
 	if workflow.TransitionHistoryStalenessCheck(localTransitionHistory, mutation.ExclusiveStartVersionedTransition) != nil ||
-		workflow.TransitionHistoryStalenessCheck(sourceTransitionHistory, localTransitionHistory[len(localTransitionHistory)-1]) != nil {
+		workflow.TransitionHistoryStalenessCheck(sourceTransitionHistory, localVersionedTransition) != nil {
 		return serviceerrors.NewSyncState(
 			fmt.Sprintf("Failed to apply mutation due to version check failed. local transition history: %v, source transition history: %v", localTransitionHistory, sourceTransitionHistory),
 			namespaceID.String(),
 			workflowID,
 			runID,
-			localTransitionHistory[len(localTransitionHistory)-1],
+			localVersionedTransition,
 			localMutableState.GetExecutionInfo().VersionHistories,
 		)
 	}
@@ -399,7 +405,7 @@ func (r *WorkflowStateReplicatorImpl) applyMutation(
 		}
 	}
 
-	err = r.taskRefresher.PartialRefresh(ctx, localMutableState, localTransitionHistory[len(localTransitionHistory)-1])
+	err = r.taskRefresher.PartialRefresh(ctx, localMutableState, localVersionedTransition)
 	if err != nil {
 		return err
 	}
@@ -423,20 +429,20 @@ func (r *WorkflowStateReplicatorImpl) applySnapshot(
 	namespaceID namespace.ID,
 	workflowID string,
 	runID string,
-	wfCtx workflow.Context,
-	releaseFn wcache.ReleaseCacheFunc,
-	localMutableState workflow.MutableState,
-	versionedTransition *repication.VersionedTransitionArtifact,
+	wfCtx historyi.WorkflowContext,
+	releaseFn historyi.ReleaseWorkflowContextFunc,
+	localMutableState historyi.MutableState,
+	versionedTransition *replicationspb.VersionedTransitionArtifact,
 	sourceClusterName string,
 ) error {
 	attribute := versionedTransition.GetSyncWorkflowStateSnapshotAttributes()
 	if attribute == nil || attribute.State == nil {
-		var versionHistories *history.VersionHistories
+		var versionHistories *historyspb.VersionHistories
 		if localMutableState != nil {
 			versionHistories = localMutableState.GetExecutionInfo().VersionHistories
 		}
 		return serviceerrors.NewSyncState(
-			"failed to apply mutation due to missing mutable state",
+			"failed to apply mutation due to missing task snapshot",
 			namespaceID.String(),
 			workflowID,
 			runID,
@@ -448,12 +454,30 @@ func (r *WorkflowStateReplicatorImpl) applySnapshot(
 	if localMutableState == nil {
 		return r.applySnapshotWhenWorkflowNotExist(ctx, namespaceID, workflowID, runID, wfCtx, releaseFn, snapshot, sourceClusterName, versionedTransition.NewRunInfo, true)
 	}
+	return r.applySnapshotWhenWorkflowExist(ctx, namespaceID, workflowID, runID, wfCtx, releaseFn, localMutableState, snapshot, versionedTransition.EventBatches, versionedTransition.NewRunInfo, sourceClusterName)
+}
+
+func (r *WorkflowStateReplicatorImpl) applySnapshotWhenWorkflowExist(
+	ctx context.Context,
+	namespaceID namespace.ID,
+	workflowID string,
+	runID string,
+	wfCtx historyi.WorkflowContext,
+	releaseFn historyi.ReleaseWorkflowContextFunc,
+	localMutableState historyi.MutableState,
+	sourceMutableState *persistencespb.WorkflowMutableState,
+	eventBlobs []*commonpb.DataBlob,
+	newRunInfo *replicationspb.NewRunInfo,
+	sourceClusterName string,
+) error {
 	var isBranchSwitched bool
 	var localTransitionHistory []*persistencespb.VersionedTransition
+	var localVersionedTransition *persistencespb.VersionedTransition
 	if len(localMutableState.GetExecutionInfo().TransitionHistory) != 0 {
-		localTransitionHistory = workflow.CopyVersionedTransitions(localMutableState.GetExecutionInfo().TransitionHistory)
-		sourceTransitionHistory := snapshot.ExecutionInfo.TransitionHistory
-		err := workflow.TransitionHistoryStalenessCheck(sourceTransitionHistory, localTransitionHistory[len(localTransitionHistory)-1])
+		localTransitionHistory = transitionhistory.CopyVersionedTransitions(localMutableState.GetExecutionInfo().TransitionHistory)
+		localVersionedTransition = transitionhistory.LastVersionedTransition(localTransitionHistory)
+		sourceTransitionHistory := sourceMutableState.ExecutionInfo.TransitionHistory
+		err := workflow.TransitionHistoryStalenessCheck(sourceTransitionHistory, localVersionedTransition)
 		switch {
 		case err == nil:
 			// no branch switch
@@ -463,7 +487,7 @@ func (r *WorkflowStateReplicatorImpl) applySnapshot(
 				namespaceID.String(),
 				workflowID,
 				runID,
-				localTransitionHistory[len(localTransitionHistory)-1],
+				localVersionedTransition,
 				localMutableState.GetExecutionInfo().VersionHistories,
 			)
 		case errors.Is(err, consts.ErrStaleReference):
@@ -477,7 +501,7 @@ func (r *WorkflowStateReplicatorImpl) applySnapshot(
 		if err != nil {
 			return err
 		}
-		sourceCurrentHistory, err := versionhistory.GetCurrentVersionHistory(snapshot.ExecutionInfo.VersionHistories)
+		sourceCurrentHistory, err := versionhistory.GetCurrentVersionHistory(sourceMutableState.ExecutionInfo.VersionHistories)
 		if err != nil {
 			return err
 		}
@@ -494,22 +518,21 @@ func (r *WorkflowStateReplicatorImpl) applySnapshot(
 		sourceClusterName,
 		wfCtx,
 		localMutableState,
-		snapshot.ExecutionInfo.VersionHistories,
-		versionedTransition.EventBatches,
+		sourceMutableState.ExecutionInfo.VersionHistories,
+		eventBlobs,
 	)
 	if err != nil {
 		return err
 	}
 
-	err = localMutableState.ApplySnapshot(snapshot)
+	err = localMutableState.ApplySnapshot(sourceMutableState)
 	if err != nil {
 		return err
 	}
-	localMutableState.PopTasks() // tasks are refreshed manually below
 
 	var newRunWorkflow Workflow
-	if versionedTransition.NewRunInfo != nil {
-		newRunWorkflow, err = r.getNewRunWorkflow(ctx, namespaceID, workflowID, localMutableState, versionedTransition.NewRunInfo)
+	if newRunInfo != nil {
+		newRunWorkflow, err = r.getNewRunWorkflow(ctx, namespaceID, workflowID, localMutableState, newRunInfo)
 		if err != nil {
 			return err
 		}
@@ -527,7 +550,7 @@ func (r *WorkflowStateReplicatorImpl) applySnapshot(
 			return err
 		}
 	} else {
-		err = r.taskRefresher.PartialRefresh(ctx, localMutableState, localTransitionHistory[len(localTransitionHistory)-1])
+		err = r.taskRefresher.PartialRefresh(ctx, localMutableState, localVersionedTransition)
 		if err != nil {
 			return err
 		}
@@ -546,9 +569,9 @@ func (r *WorkflowStateReplicatorImpl) backFillEvents(
 	namespaceID namespace.ID,
 	workflowID string,
 	runID string,
-	sourceVersionHistories *history.VersionHistories,
+	sourceVersionHistories *historyspb.VersionHistories,
 	eventBatches []*commonpb.DataBlob,
-	newRunInfo *repication.NewRunInfo,
+	newRunInfo *replicationspb.NewRunInfo,
 	sourceClusterName string,
 	destinationVersionedTransition *persistencespb.VersionedTransition,
 ) error {
@@ -568,6 +591,9 @@ func (r *WorkflowStateReplicatorImpl) backFillEvents(
 		}
 		events = append(events, e)
 	}
+	if len(events) == 0 {
+		return nil
+	}
 	var newRunEvents []*historypb.HistoryEvent
 	var newRunID string
 	if newRunInfo != nil {
@@ -577,7 +603,7 @@ func (r *WorkflowStateReplicatorImpl) backFillEvents(
 		}
 		newRunID = newRunInfo.RunId
 	}
-	return engine.BackfillHistoryEvents(ctx, &shard.BackfillHistoryEventsRequest{
+	return engine.BackfillHistoryEvents(ctx, &historyi.BackfillHistoryEventsRequest{
 		WorkflowKey:         definition.NewWorkflowKey(namespaceID.String(), workflowID, runID),
 		SourceClusterName:   sourceClusterName,
 		VersionedHistory:    destinationVersionedTransition,
@@ -592,8 +618,8 @@ func (r *WorkflowStateReplicatorImpl) getNewRunWorkflow(
 	ctx context.Context,
 	namespaceID namespace.ID,
 	workflowID string,
-	originalMutableState workflow.MutableState,
-	newRunInfo *repication.NewRunInfo,
+	originalMutableState historyi.MutableState,
+	newRunInfo *replicationspb.NewRunInfo,
 ) (Workflow, error) {
 	// TODO: Refactor. Copied from mutableStateRebuilder.applyNewRunHistory
 	newMutableState, err := r.getNewRunMutableState(ctx, namespaceID, workflowID, newRunInfo.RunId, originalMutableState, newRunInfo.EventBatch, true)
@@ -627,10 +653,10 @@ func (r *WorkflowStateReplicatorImpl) getNewRunMutableState(
 	namespaceID namespace.ID,
 	workflowID string,
 	newRunID string,
-	originalMutableState workflow.MutableState,
+	originalMutableState historyi.MutableState,
 	newRunEventsBlob *commonpb.DataBlob,
 	isStateBased bool,
-) (workflow.MutableState, error) {
+) (historyi.MutableState, error) {
 	newRunHistory, err := r.historySerializer.DeserializeEvents(newRunEventsBlob)
 	if err != nil {
 		return nil, err
@@ -642,7 +668,7 @@ func (r *WorkflowStateReplicatorImpl) getNewRunMutableState(
 		sameWorkflowChain = newRunFirstRunID == originalMutableState.GetExecutionInfo().FirstExecutionRunId
 	}
 
-	var newRunMutableState workflow.MutableState
+	var newRunMutableState historyi.MutableState
 	if sameWorkflowChain {
 		newRunMutableState, err = workflow.NewMutableStateInChain(
 			r.shardContext,
@@ -706,9 +732,9 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 	workflowID string,
 	runID string,
 	sourceClusterName string,
-	wfCtx workflow.Context,
-	localMutableState workflow.MutableState,
-	sourceVersionHistories *history.VersionHistories,
+	wfCtx historyi.WorkflowContext,
+	localMutableState historyi.MutableState,
+	sourceVersionHistories *historyspb.VersionHistories,
 	eventBlobs []*commonpb.DataBlob,
 ) error {
 	sourceVersionHistory, err := versionhistory.GetCurrentVersionHistory(sourceVersionHistories)
@@ -746,7 +772,7 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 
 		return newVersionHistoryIndex, true, nil
 	}()
-
+	localVersionHistories.CurrentVersionHistoryIndex = index
 	if err != nil {
 		return err
 	}
@@ -763,6 +789,7 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 		return err
 	}
 	if versionhistory.IsEqualVersionHistoryItem(localLastItem, sourceLastItem) {
+		localMutableState.SetHistoryBuilder(historybuilder.NewImmutableForUpdateNextEventID(sourceLastItem))
 		return nil
 	}
 
@@ -806,6 +833,13 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 			if err != nil {
 				return err
 			}
+			events, err := r.historySerializer.DeserializeEvents(historyBlob.rawHistory)
+			if err != nil {
+				return err
+			}
+			for _, event := range events {
+				localMutableState.AddReapplyCandidateEvent(event)
+			}
 			_, err = r.executionMgr.AppendRawHistoryNodes(ctx, &persistence.AppendRawHistoryNodesRequest{
 				ShardID:           r.shardContext.GetShardID(),
 				IsNewBranch:       isNewBranch,
@@ -825,6 +859,7 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 			}
 			prevTxnID = txnID
 			isNewBranch = false
+
 			localMutableState.GetExecutionInfo().ExecutionStats.HistorySize += int64(len(historyBlob.rawHistory.Data))
 		}
 		return nil
@@ -850,6 +885,9 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 		txnID, err := r.shardContext.GenerateTaskID()
 		if err != nil {
 			return err
+		}
+		for _, event := range events {
+			localMutableState.AddReapplyCandidateEvent(event)
 		}
 		_, err = r.executionMgr.AppendRawHistoryNodes(ctx, &persistence.AppendRawHistoryNodesRequest{
 			ShardID:           r.shardContext.GetShardID(),
@@ -891,11 +929,11 @@ func (r *WorkflowStateReplicatorImpl) applySnapshotWhenWorkflowNotExist(
 	namespaceID namespace.ID,
 	workflowID string,
 	runID string,
-	wfCtx workflow.Context,
-	releaseFn wcache.ReleaseCacheFunc,
+	wfCtx historyi.WorkflowContext,
+	releaseFn historyi.ReleaseWorkflowContextFunc,
 	sourceMutableState *persistencespb.WorkflowMutableState,
 	sourceCluster string,
-	newRunInfo *repication.NewRunInfo,
+	newRunInfo *replicationspb.NewRunInfo,
 	isStateBased bool,
 ) error {
 	executionInfo := sourceMutableState.ExecutionInfo
@@ -931,24 +969,6 @@ func (r *WorkflowStateReplicatorImpl) applySnapshotWhenWorkflowNotExist(
 		return err
 	}
 
-	lastFirstTxnID, err := r.backfillHistory(
-		ctx,
-		sourceCluster,
-		namespaceID,
-		workflowID,
-		runID,
-		// TODO: The original run id is in the workflow started history event but not in mutable state.
-		// Use the history tree id to be the original run id.
-		// https://github.com/temporalio/temporal/issues/6501
-		branchInfo.GetTreeId(),
-		lastEventItem.GetEventId(),
-		lastEventItem.GetVersion(),
-		newHistoryBranchToken,
-	)
-	if err != nil {
-		return err
-	}
-
 	ns, err := r.namespaceRegistry.GetNamespaceByID(namespaceID)
 	if err != nil {
 		return err
@@ -960,17 +980,40 @@ func (r *WorkflowStateReplicatorImpl) applySnapshotWhenWorkflowNotExist(
 		r.logger,
 		ns,
 		sourceMutableState,
-		lastFirstTxnID,
+		common.EmptyEventTaskID, // will be updated below
 		lastEventItem.GetVersion(),
 	)
 	if err != nil {
 		return err
 	}
 
+	lastFirstTxnID, err := r.backfillHistory(
+		ctx,
+		sourceCluster,
+		namespaceID,
+		workflowID,
+		runID,
+		// TODO: The original run id is in the workflow started history event but not in mutable state.
+		// Use the history tree id to be the original run id.
+		// https://github.com/temporalio/temporal/issues/6501
+		branchInfo.GetTreeId(),
+		mutableState,
+		lastEventItem.GetEventId(),
+		lastEventItem.GetVersion(),
+		newHistoryBranchToken,
+		isStateBased,
+	)
+	if err != nil {
+		return err
+	}
+
+	mutableState.GetExecutionInfo().LastFirstEventTxnId = lastFirstTxnID
+
 	err = mutableState.SetCurrentBranchToken(newHistoryBranchToken)
 	if err != nil {
 		return err
 	}
+
 	if newRunInfo != nil {
 		err = r.createNewRunWorkflow(
 			ctx,
@@ -1005,8 +1048,8 @@ func (r *WorkflowStateReplicatorImpl) createNewRunWorkflow(
 	ctx context.Context,
 	namespaceID namespace.ID,
 	workflowID string,
-	newRunInfo *repication.NewRunInfo,
-	originalMutableState workflow.MutableState,
+	newRunInfo *replicationspb.NewRunInfo,
+	originalMutableState historyi.MutableState,
 	isStateBased bool,
 ) error {
 	newRunWfContext, newRunReleaseFn, newRunErr := r.workflowCache.GetOrCreateWorkflowExecution(
@@ -1068,9 +1111,11 @@ func (r *WorkflowStateReplicatorImpl) backfillHistory(
 	workflowID string,
 	runID string,
 	originalRunID string,
+	mutableState *workflow.MutableStateImpl,
 	lastEventID int64,
 	lastEventVersion int64,
 	branchToken []byte,
+	isStateBased bool,
 ) (taskID int64, retError error) {
 
 	if runID != originalRunID {
@@ -1148,6 +1193,18 @@ BackfillLoop:
 			return common.EmptyEventTaskID, err
 		}
 
+		if isStateBased {
+			// If backfill suceeds but later event reapply fails, during task's next retry,
+			// we still need to reapply events that have been stored in local DB.
+			events, err := r.historySerializer.DeserializeEvents(historyBlob.rawHistory)
+			if err != nil {
+				return common.EmptyEventTaskID, err
+			}
+			for _, event := range events {
+				mutableState.AddReapplyCandidateEvent(event)
+			}
+		}
+
 		if historyBlob.nodeID <= lastBatchNodeID {
 			// The history batch already in DB.
 			if len(sortedAncestors) > sortedAncestorsIdx {
@@ -1201,6 +1258,7 @@ BackfillLoop:
 		if err != nil {
 			return common.EmptyEventTaskID, err
 		}
+
 		_, err = r.executionMgr.AppendRawHistoryNodes(ctx, &persistence.AppendRawHistoryNodesRequest{
 			ShardID:           r.shardContext.GetShardID(),
 			IsNewBranch:       prevBranchID != branchID,

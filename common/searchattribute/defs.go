@@ -47,7 +47,6 @@ const (
 	StateTransitionCount  = "StateTransitionCount"
 	TemporalChangeVersion = "TemporalChangeVersion"
 	BinaryChecksums       = "BinaryChecksums"
-	BuildIds              = "BuildIds"
 	BatcherNamespace      = "BatcherNamespace"
 	BatcherUser           = "BatcherUser"
 	HistorySizeBytes      = "HistorySizeBytes"
@@ -81,6 +80,42 @@ const (
 	// define a custom ScheduleId search attribute, in which case the query using the ScheduleId would operate just like
 	// any other custom search attribute.
 	ScheduleID = "ScheduleId"
+
+	// TemporalPauseInfo is a search attribute that stores the information about paused entities in the workflow.
+	// Format of a single paused entity: "<key>:<value>".
+	//  * <key> is something that can be used to identify the filtering condition
+	//  * <value> is the value of the corresponding filtering condition.
+	// examples:
+	//   - for paused activities, manual pause, we may have 2 <key>:<value> pairs:
+	//     * "Activity:MyCoolActivityType"
+	//     * "Reason:ManualActivityPause"
+	//     * or
+	//     * "Policy:<some policy id>"
+	//   - for paused workflows, we may have the following <key>:<value> pairs:
+	//     * "Workflow:WorkflowID"
+	//     * "Reason:ManualWorkflowPause"
+	TemporalPauseInfo = "TemporalPauseInfo"
+
+	// BuildIds is a KeywordList that holds information about current and past build ids
+	// used by the workflow. Used for Worker Versioning
+	BuildIds = "BuildIds"
+
+	// TemporalWorkerDeploymentVersion stores the current Worker Deployment Version
+	// associated with the execution. It is updated at workflow task completion when
+	// the SDK says what Version completed the workflow task. It can have a value for
+	// unversioned workflows, if they are processed by an unversioned deployment.
+	TemporalWorkerDeploymentVersion = "TemporalWorkerDeploymentVersion"
+
+	// TemporalWorkerDeployment stores the current Worker Deployment associated with
+	// the execution. It is updated at workflow task completion when the SDK says what
+	// Worker Deployment completed the workflow task. It can have a value for
+	// unversioned workflows, if they are processed by an unversioned deployment.
+	TemporalWorkerDeployment = "TemporalWorkerDeployment"
+
+	// TemporalWorkflowVersioningBehavior stores the current Versioning Behavior of the
+	// execution. It is updated at workflow task completion when the server gets the
+	// behavior (`auto_upgrade` or `pinned`) from the SDK. Empty for unversioned workflows.
+	TemporalWorkflowVersioningBehavior = "TemporalWorkflowVersioningBehavior"
 )
 
 var (
@@ -106,15 +141,19 @@ var (
 
 	// predefined are internal search attributes which are passed and stored in SearchAttributes object together with custom search attributes.
 	predefined = map[string]enumspb.IndexedValueType{
-		TemporalChangeVersion:      enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
-		BinaryChecksums:            enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
-		BuildIds:                   enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
-		BatcherNamespace:           enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		BatcherUser:                enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		TemporalScheduledStartTime: enumspb.INDEXED_VALUE_TYPE_DATETIME,
-		TemporalScheduledById:      enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		TemporalSchedulePaused:     enumspb.INDEXED_VALUE_TYPE_BOOL,
-		TemporalNamespaceDivision:  enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		TemporalChangeVersion:              enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		BinaryChecksums:                    enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		BuildIds:                           enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		BatcherNamespace:                   enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		BatcherUser:                        enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		TemporalScheduledStartTime:         enumspb.INDEXED_VALUE_TYPE_DATETIME,
+		TemporalScheduledById:              enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		TemporalSchedulePaused:             enumspb.INDEXED_VALUE_TYPE_BOOL,
+		TemporalNamespaceDivision:          enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		TemporalPauseInfo:                  enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		TemporalWorkerDeploymentVersion:    enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		TemporalWorkflowVersioningBehavior: enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		TemporalWorkerDeployment:           enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	}
 
 	// reserved are internal field names that can't be used as search attribute names.

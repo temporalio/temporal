@@ -29,6 +29,8 @@ import (
 )
 
 const (
+	// Deprecated.
+	// TODO: Remove after 1.27 release.
 	defaultDeleteActivityRPS                    = 100
 	defaultPageSize                             = 1000
 	defaultPagesPerExecution                    = 256
@@ -38,8 +40,8 @@ const (
 
 type (
 	DeleteExecutionsConfig struct {
-		// RPS per every parallel delete executions activity.
-		// Total RPS is equal to DeleteActivityRPS * ConcurrentDeleteExecutionsActivities.
+		// Deprecated.
+		// TODO: Remove after 1.27 release. RPS is now read directly by activity from config.
 		DeleteActivityRPS int
 		// Page size to read executions from visibility.
 		PageSize int
@@ -73,7 +75,7 @@ func (cfg *DeleteExecutionsConfig) ApplyDefaults() {
 	}
 }
 
-func (cfg DeleteExecutionsConfig) String() string {
+func (cfg *DeleteExecutionsConfig) String() string {
 	cfgBytes, _ := json.Marshal(cfg)
 	return string(cfgBytes)
 }

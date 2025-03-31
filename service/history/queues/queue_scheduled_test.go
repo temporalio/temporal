@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/predicates"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/timer"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -139,6 +140,7 @@ func (s *scheduledQueueSuite) SetupTest() {
 		s.mockShard.GetClusterMetadata(),
 		logger,
 		metrics.NoopMetricsHandler,
+		telemetry.NoopTracer,
 		nil,
 		func() bool {
 			return false
@@ -173,7 +175,7 @@ func (s *scheduledQueueSuite) TearDownTest() {
 	s.controller.Finish()
 }
 
-func (s *scheduledQueueSuite) TestPaginationFnProvider() {
+func (s *scheduledQueueSuite) TestPaginationFnProvider_Success() {
 	paginationFnProvider := s.scheduledQueue.paginationFnProvider
 
 	r := NewRandomRange()
@@ -237,6 +239,21 @@ func (s *scheduledQueueSuite) TestPaginationFnProvider() {
 	} else {
 		s.Nil(actualNextPageToken)
 	}
+}
+
+func (s *scheduledQueueSuite) TestPaginationFnProvider_ShardOwnershipLost() {
+	paginationFnProvider := s.scheduledQueue.paginationFnProvider
+
+	s.mockExecutionManager.EXPECT().GetHistoryTasks(gomock.Any(), gomock.Any()).Return(nil, &persistence.ShardOwnershipLostError{
+		ShardID: s.mockShard.GetShardID(),
+	}).Times(1)
+
+	paginationFn := paginationFnProvider(NewRandomRange())
+	_, _, err := paginationFn(nil)
+	s.True(shard.IsShardOwnershipLostError(err))
+
+	// make sure shard is also marked as invalid
+	s.False(s.mockShard.IsValid())
 }
 
 func (s *scheduledQueueSuite) TestLookAheadTask_HasLookAheadTask() {

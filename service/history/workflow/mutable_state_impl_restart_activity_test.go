@@ -393,6 +393,7 @@ func (s *retryActivitySuite) makeActivityAndPutIntoFailingState() *persistencesp
 		"worker-identity",
 		nil,
 		nil,
+		nil,
 	)
 	s.NoError(err)
 

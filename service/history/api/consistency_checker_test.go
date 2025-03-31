@@ -34,16 +34,15 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/server/api/clock/v1"
+	clockspb "go.temporal.io/server/api/clock/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/testing/protomock"
 	"go.temporal.io/server/service/history/configs"
-	"go.temporal.io/server/service/history/shard"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tests"
-	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.uber.org/mock/gomock"
 )
@@ -54,7 +53,7 @@ type (
 		*require.Assertions
 
 		controller    *gomock.Controller
-		shardContext  *shard.MockContext
+		shardContext  *historyi.MockShardContext
 		workflowCache *wcache.MockCache
 		config        *configs.Config
 
@@ -82,7 +81,7 @@ func (s *workflowConsistencyCheckerSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.shardContext = shard.NewMockContext(s.controller)
+	s.shardContext = historyi.NewMockShardContext(s.controller)
 	s.workflowCache = wcache.NewMockCache(s.controller)
 	s.config = tests.NewDynamicConfig()
 
@@ -104,8 +103,8 @@ func (s *workflowConsistencyCheckerSuite) TearDownTest() {
 func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck_Success_PassCheck() {
 	ctx := context.Background()
 
-	wfContext := workflow.NewMockContext(s.controller)
-	mutableState := workflow.NewMockMutableState(s.controller)
+	wfContext := historyi.NewMockWorkflowContext(s.controller)
+	mutableState := historyi.NewMockMutableState(s.controller)
 	released := false
 	releaseFn := func(err error) { released = true }
 
@@ -190,14 +189,14 @@ func (s *workflowConsistencyCheckerSuite) Test_clockConsistencyCheck() {
 	err := s.checker.clockConsistencyCheck(nil)
 	s.NoError(err)
 
-	reqClock := &clock.VectorClock{
+	reqClock := &clockspb.VectorClock{
 		ShardId:   1,
 		Clock:     10,
 		ClusterId: 1,
 	}
 
 	// not compatible - different shard id
-	differentShardClock := &clock.VectorClock{
+	differentShardClock := &clockspb.VectorClock{
 		ShardId:   2,
 		Clock:     1,
 		ClusterId: 1,
@@ -207,7 +206,7 @@ func (s *workflowConsistencyCheckerSuite) Test_clockConsistencyCheck() {
 	s.NoError(err)
 
 	// not compatible - different cluster id
-	differentClusterClock := &clock.VectorClock{
+	differentClusterClock := &clockspb.VectorClock{
 		ShardId:   1,
 		Clock:     1,
 		ClusterId: 2,
@@ -222,7 +221,7 @@ func (s *workflowConsistencyCheckerSuite) Test_clockConsistencyCheck() {
 	s.NoError(err)
 
 	// shard clock ahead
-	shardClock := &clock.VectorClock{
+	shardClock := &clockspb.VectorClock{
 		ShardId:   1,
 		Clock:     20,
 		ClusterId: 1,
@@ -232,7 +231,7 @@ func (s *workflowConsistencyCheckerSuite) Test_clockConsistencyCheck() {
 	s.NoError(err)
 
 	// shard clock behind
-	shardClock = &clock.VectorClock{
+	shardClock = &clockspb.VectorClock{
 		ShardId:   1,
 		Clock:     1,
 		ClusterId: 1,

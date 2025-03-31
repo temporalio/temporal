@@ -34,7 +34,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"go.temporal.io/api/enums/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/backoff"
@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
@@ -62,7 +63,7 @@ type (
 		mockShardManager     *persistence.MockShardManager
 		mockExecutionManager *persistence.MockExecutionManager
 		mockNamespaceCache   *namespace.MockRegistry
-		mockHistoryEngine    *MockEngine
+		mockHistoryEngine    *historyi.MockEngine
 
 		timeSource *clock.EventTimeSource
 	}
@@ -103,7 +104,7 @@ func (s *contextSuite) SetupTest() {
 
 	s.mockExecutionManager = shardContext.Resource.ExecutionMgr
 	s.mockShardManager = shardContext.Resource.ShardMgr
-	s.mockHistoryEngine = NewMockEngine(s.controller)
+	s.mockHistoryEngine = historyi.NewMockEngine(s.controller)
 	shardContext.engineFuture.Set(s.mockHistoryEngine, nil)
 }
 
@@ -444,7 +445,7 @@ func (s *contextSuite) TestHandoverNamespace() {
 				cluster.TestCurrentClusterName,
 				cluster.TestAlternativeClusterName,
 			},
-			State: enums.REPLICATION_STATE_HANDOVER,
+			State: enumspb.REPLICATION_STATE_HANDOVER,
 		},
 		tests.Version,
 	)

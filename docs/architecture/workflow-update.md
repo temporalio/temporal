@@ -169,18 +169,19 @@ An Update is aborted when:
 
 Full "Update state" and "Abort reason" matrix is the following:
 
-| Update State / Abort Reason             | (1) RegistryCleared        | (2) WorkflowCompleted                    | (3) WorkflowContinuing                   |
-|-----------------------------------------|----------------------------|------------------------------------------|------------------------------------------|
-| **Created**                             | `WorkflowUpdateAbortedErr` | `ErrWorkflowCompleted`                   | `ErrWorkflowClosing`                     |
-| **ProvisionallyAdmitted**               | `WorkflowUpdateAbortedErr` | `ErrWorkflowCompleted`                   | `ErrWorkflowClosing`                     |
-| **Admitted**                            | `WorkflowUpdateAbortedErr` | `ErrWorkflowCompleted`                   | `ErrWorkflowClosing`                     |
-| **Sent**                                | `WorkflowUpdateAbortedErr` | `ErrWorkflowCompleted`                   | `ErrWorkflowClosing`                     |
-| **ProvisionallyAccepted**               | `WorkflowUpdateAbortedErr` | `acceptedUpdateCompletedWorkflowFailure` | `acceptedUpdateCompletedWorkflowFailure` |
-| **Accepted**                            | `WorkflowUpdateAbortedErr` | `acceptedUpdateCompletedWorkflowFailure` | `acceptedUpdateCompletedWorkflowFailure` |
-| **ProvisionallyCompleted**              | `WorkflowUpdateAbortedErr` | `acceptedUpdateCompletedWorkflowFailure` | `acceptedUpdateCompletedWorkflowFailure` |
-| **ProvisionallyCompletedAfterAccepted** | `WorkflowUpdateAbortedErr` | `acceptedUpdateCompletedWorkflowFailure` | `acceptedUpdateCompletedWorkflowFailure` |
-| **Completed**                           | `nil`                      | `nil`                                    | `nil`                                    |
-| **Aborted**                             | `nil`                      | `nil`                                    | `nil`                                    |
+| Update State ↓ / Abort Reason →         | (1) RegistryCleared                             | (2) WorkflowCompleted                    | (3) WorkflowContinuing                   |
+|-----------------------------------------|-------------------------------------------------|------------------------------------------|------------------------------------------|
+| **Created**                             | `registryClearedErr`→`WorkflowUpdateAbortedErr` | `ErrWorkflowCompleted`                   | `ErrWorkflowClosing`                     |
+| **ProvisionallyAdmitted**               | `registryClearedErr`→`WorkflowUpdateAbortedErr` | `ErrWorkflowCompleted`                   | `ErrWorkflowClosing`                     |
+| **Admitted**                            | `registryClearedErr`→`WorkflowUpdateAbortedErr` | `ErrWorkflowCompleted`                   | `ErrWorkflowClosing`                     |
+| **Sent**                                | `registryClearedErr`→`WorkflowUpdateAbortedErr` | `ErrWorkflowCompleted`                   | `ErrWorkflowClosing`                     |
+| **ProvisionallyAccepted**               | `registryClearedErr`→`WorkflowUpdateAbortedErr` | `acceptedUpdateCompletedWorkflowFailure` | `acceptedUpdateCompletedWorkflowFailure` |
+| **Accepted**                            | `registryClearedErr`→`nil`                      | `acceptedUpdateCompletedWorkflowFailure` | `acceptedUpdateCompletedWorkflowFailure` |
+| **ProvisionallyCompleted**              | `registryClearedErr`→`nil`                      | `acceptedUpdateCompletedWorkflowFailure` | `acceptedUpdateCompletedWorkflowFailure` |
+| **ProvisionallyCompletedAfterAccepted** | `registryClearedErr`→`nil`                      | `acceptedUpdateCompletedWorkflowFailure` | `acceptedUpdateCompletedWorkflowFailure` |
+| **Completed**                           | `nil`                                           | `nil`                                    | `nil`                                    |
+| **ProvisionallyAborted**                | `nil`                                           | `nil`                                    | `nil`                                    |
+| **Aborted**                             | `nil`                                           | `nil`                                    | `nil`                                    |
 
 When the Workflow performs a final completion, all in-flight Updates are aborted: admitted Updates get
 `ErrWorkflowCompleted` error on both `accepted` and `completed` futures. Accepted Updates
@@ -196,8 +197,12 @@ was running haven't been seen by the Workflow yet, they can be safely retried on
 It also provides a better experience for API callers since they will not notice that the Workflow
 started a new run.
 
-`WorkflowUpdateAbortedErr` is also retried internally by the server providing a better experience
-to the API caller: they will not notice that the Update was lost.
+`WorkflowUpdateAbortedErr` error is also retried internally by the server providing a better experience
+to the API caller: they will not notice that the Update was lost. Internally this case is communicated
+via `registryClearedErr` error which is set on Update futures every time the Registry is cleared.
+But if Update was already accepted, it is converted to `ACCEPTED` stage (with `nil` error) which is 
+returned to the API caller instead of `WorkflowUpdateAbortedErr` error.
+See `WaitLifecycleStage` methods for details.
 
 `Aborted` is a terminal state. Updates remain in the `Aborted` state in the Registry even after
 the Update Registry is reconstructed from the history.
@@ -213,7 +218,7 @@ Update to the worker. This Workflow Task is always speculative, unless there is 
 already-scheduled-but-not-yet-started Workflow Task present.
 
 Later, when handling a worker response in the `RespondWorkflowTaskCompleted` API handler, the server
-might write or drop events for this Workflow Task. Read
+might write or discard events for this Workflow Task. Read
 [Speculative Workflow Tasks](./speculative-workflow-task.md) for more details.
 
 ### Lifecycle Stage
@@ -316,13 +321,19 @@ lock while waiting for Update to be processed because `RespondWorkflowTaskComple
 to process the Update response from the worker at the same time.
 
 ### Limits
-There are currently two limits: 
+There are these limits: 
+- `history.maxTotalUpdates`: maximum total Updates per Workflow run (excludes rejections)
 - `history.maxInFlightUpdates`: maximum in-flight Updates (i.e., not completed Updates)
-- `history.maxTotalUpdates`: maximum total Updates per Workflow run
+- `history.maxInFlightUpdatePayloads`: maximum total payload size of in-flight Updates (in bytes)
 
 There are two exceptions when the `maxInFlightUpdates` limit is ignored and can be exceeded:
 1. Update is resurrected (see "Update Resurrection" below).
 2. Update is reapplied (see "Reapply Updates" below). All reapplied Updates become in-flight.
+
+Furthermore, to prevent a workflow from reaching the `maxTotalUpdates` limit, the server will
+annotate the next `WorkflowTaskStarted` event with `SuggestContinueAsNew: true` when 90% of the
+limit is reached. This will instruct the SDK to consider Continue-As-New. This threshold can be
+configured with `history.maxTotalUpdates.suggestContinueAsNewThreshold`.
 
 ## Processing Updates in `RespondWorkflowTaskCompleted`
 The Server receives the Update `updatepb.Acceptance` and `updatepb.Response`
@@ -425,11 +436,19 @@ rollback - the transition after successful persistence write. Check the
 If a Workflow Update is accepted and completed in the same Workflow Task, it goes through the
 following chain of state transitions:
 ```
-Sent -> ProvisionalyAccepted -> ProvisionalyCompleted -> ProvisionalyCompletedAfterAccepted -> Completed
+Sent -> ProvisionallyAccepted -> ProvisionallyCompleted -> ProvisionallyCompletedAfterAccepted -> Completed
 ```
-The `ProvisionalyCompletedAfterAccepted` in-between state is necessary to unblock `completed` future before
+The `ProvisionallyCompletedAfterAccepted` in-between state is necessary to unblock `completed` future before
 `accepted`. This allows returning Update results to the API caller even it was waiting for `ACCEPTED`
 stage.
+
+If a Workflow Update is accepted and the **Workflow** is completed in the same Workflow Task, it goes through a
+similar chain of state transitions:
+```
+Sent -> ProvisionallyAccepted -> ProvisionallyAborted -> ProvisionallyCompletedAfterAccepted -> Aborted
+```
+The `ProvisionallyCompletedAfterAccepted` state is reused here as `ProvisionallyAbortedAfterAccepted` because
+behavior is exactly the same.
 
 > #### NOTE
 > Because the `Cancel()` method is called in a `defer` block in case of error, the `Apply()` method

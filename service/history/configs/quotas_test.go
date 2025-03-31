@@ -25,17 +25,14 @@
 package configs
 
 import (
-	"reflect"
 	"slices"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/quotas"
-	"go.temporal.io/server/common/testing/temporalapi"
 )
 
 type (
@@ -63,8 +60,8 @@ func (s *quotasSuite) SetupTest() {
 func (s *quotasSuite) TearDownTest() {
 }
 
-func (s *quotasSuite) TestAPIToPriorityMapping() {
-	for _, priority := range APIToPriority {
+func (s *quotasSuite) TestCallerTypeToPriorityMapping() {
+	for _, priority := range CallerTypeToPriority {
 		index := slices.Index(APIPrioritiesOrdered, priority)
 		s.NotEqual(-1, index)
 	}
@@ -74,16 +71,6 @@ func (s *quotasSuite) TestAPIPrioritiesOrdered() {
 	for idx := range APIPrioritiesOrdered[1:] {
 		s.True(APIPrioritiesOrdered[idx] < APIPrioritiesOrdered[idx+1])
 	}
-}
-
-func (s *quotasSuite) TestAPIs() {
-	var service historyservice.HistoryServiceServer
-	apiToPriority := make(map[string]int)
-	temporalapi.WalkExportedMethods(&service, func(m reflect.Method) {
-		fullName := "/temporal.server.api.historyservice.v1.HistoryService/" + m.Name
-		apiToPriority[fullName] = APIToPriority[fullName]
-	})
-	s.Equal(apiToPriority, APIToPriority)
 }
 
 func (s *quotasSuite) TestOperatorPrioritized() {

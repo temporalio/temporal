@@ -61,6 +61,11 @@ type (
 		// Each value in values list will white-list tag values to be reported as usual.
 		ExcludeTags map[string][]string `yaml:"excludeTags"`
 		// Prefix sets the prefix to all outgoing metrics
+		// When migrating from tally to opentelemetry and to be backward compatible with the existing metric names,
+		// if the prefix has a "_" suffix, add an additional "_" at the end.
+		// i.e. "temporal" -> "temporal", but "temporal_" -> "temporal__", "temporal__" -> "temporal___".
+		// This is because tally implementation blindly adds "_" as the separator between the prefix
+		// and the metric name, while opentelemetry implementation only adds it if it's not already there.
 		Prefix string `yaml:"prefix"`
 
 		// DefaultHistogramBoundaries defines the default histogram bucket
@@ -72,6 +77,20 @@ type (
 		// - "milliseconds"
 		// - "bytes"
 		PerUnitHistogramBoundaries map[string][]float64 `yaml:"perUnitHistogramBoundaries"`
+
+		// Following configs are added for backwards compatibility when switching from tally to opentelemetry
+		// All configs should be set to true when using opentelemetry framework to have the same behavior as tally.
+
+		// WithoutUnitSuffix controls the additional of unit suffixes to metric names.
+		// This config only takes effect when using opentelemetry framework.
+		WithoutUnitSuffix bool `yaml:"withoutUnitSuffix"`
+		// WithoutCounterSuffix controls the additional of _total suffixes to counter metric names.
+		// This config only takes effect when using opentelemetry framework.
+		WithoutCounterSuffix bool `yaml:"withoutCounterSuffix"`
+		// RecordTimerInSeconds controls if Timer metric should be emitted as number of seconds
+		// (instead of milliseconds).
+		// This config only takes effect when using opentelemetry framework.
+		RecordTimerInSeconds bool `yaml:"recordTimerInSeconds"`
 	}
 
 	// StatsdConfig contains the config items for statsd metrics reporter
@@ -389,6 +408,12 @@ func setDefaultPerUnitHistogramBoundaries(clientConfig *ClientConfig) {
 		buckets[Bytes] = bucket
 	}
 
+	bucketInSeconds := make([]float64, len(buckets[Milliseconds]))
+	for idx, boundary := range buckets[Milliseconds] {
+		bucketInSeconds[idx] = boundary / float64(time.Second/time.Millisecond)
+	}
+	buckets[Seconds] = bucketInSeconds
+
 	clientConfig.PerUnitHistogramBoundaries = buckets
 }
 
@@ -462,7 +487,8 @@ func MetricsHandlerFromConfig(logger log.Logger, c *Config) (Handler, error) {
 	setDefaultPerUnitHistogramBoundaries(&c.ClientConfig)
 
 	if c.Prometheus != nil && c.Prometheus.Framework == FrameworkOpentelemetry {
-		otelProvider, err := NewOpenTelemetryProvider(logger, c.Prometheus, &c.ClientConfig)
+		fatalOnListenerError := true
+		otelProvider, err := NewOpenTelemetryProvider(logger, c.Prometheus, &c.ClientConfig, fatalOnListenerError)
 		if err != nil {
 			logger.Fatal(err.Error())
 		}
