@@ -65,6 +65,8 @@ type MutableContext interface {
 type ContextImpl struct {
 	ctx context.Context
 
+	// Not embedding the Node here to avoid exposing AddTask() method on Node,
+	// so that ContextImpl won't implement MutableContext interface.
 	root *Node
 }
 
