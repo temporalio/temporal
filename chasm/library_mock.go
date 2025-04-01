@@ -116,3 +116,41 @@ func (mr *MockLibraryMockRecorder) mustEmbedUnimplementedLibrary() *gomock.Call 
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "mustEmbedUnimplementedLibrary", reflect.TypeOf((*MockLibrary)(nil).mustEmbedUnimplementedLibrary))
 }
+
+// Mocknamer is a mock of namer interface.
+type Mocknamer struct {
+	ctrl     *gomock.Controller
+	recorder *MocknamerMockRecorder
+	isgomock struct{}
+}
+
+// MocknamerMockRecorder is the mock recorder for Mocknamer.
+type MocknamerMockRecorder struct {
+	mock *Mocknamer
+}
+
+// NewMocknamer creates a new mock instance.
+func NewMocknamer(ctrl *gomock.Controller) *Mocknamer {
+	mock := &Mocknamer{ctrl: ctrl}
+	mock.recorder = &MocknamerMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *Mocknamer) EXPECT() *MocknamerMockRecorder {
+	return m.recorder
+}
+
+// Name mocks base method.
+func (m *Mocknamer) Name() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Name")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// Name indicates an expected call of Name.
+func (mr *MocknamerMockRecorder) Name() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Name", reflect.TypeOf((*Mocknamer)(nil).Name))
+}
