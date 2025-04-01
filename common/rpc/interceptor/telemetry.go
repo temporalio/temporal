@@ -79,11 +79,12 @@ var (
 )
 
 var (
-	respondWorkflowTaskCompleted = "RespondWorkflowTaskCompleted"
-	pollActivityTaskQueue        = "PollActivityTaskQueue"
-	startWorkflowExecution       = "StartWorkflowExecution"
-	executeMultiOperation        = "ExecuteMultiOperation"
-	queryWorkflow                = "QueryWorkflow"
+	respondWorkflowTaskCompleted   = "RespondWorkflowTaskCompleted"
+	pollActivityTaskQueue          = "PollActivityTaskQueue"
+	startWorkflowExecution         = "StartWorkflowExecution"
+	executeMultiOperation          = "ExecuteMultiOperation"
+	queryWorkflow                  = "QueryWorkflow"
+	updateWorkflowExecutionOptions = "UpdateWorkflowExecutionOptions"
 
 	grpcActions = map[string]struct{}{
 		startWorkflowExecution:             {},
@@ -91,6 +92,7 @@ var (
 		respondWorkflowTaskCompleted:       {},
 		pollActivityTaskQueue:              {},
 		queryWorkflow:                      {},
+		updateWorkflowExecutionOptions:     {},
 		"RecordActivityTaskHeartbeat":      {},
 		"RecordActivityTaskHeartbeatById":  {},
 		"ResetWorkflowExecution":           {},
@@ -255,14 +257,6 @@ func (ti *TelemetryInterceptor) emitActionMetric(
 	}
 
 	switch methodName {
-	case startWorkflowExecution:
-		resp, ok := result.(*workflowservice.StartWorkflowExecutionResponse)
-		if !ok {
-			return
-		}
-		if resp.Started {
-			metrics.ActionCounter.With(metricsHandler).Record(1, metrics.ActionType("grpc_"+methodName))
-		}
 	case executeMultiOperation:
 		resp, ok := result.(*workflowservice.ExecuteMultiOperationResponse)
 		if !ok {
