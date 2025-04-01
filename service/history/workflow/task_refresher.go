@@ -98,17 +98,6 @@ func (r *TaskRefresherImpl) PartialRefresh(
 	mutableState historyi.MutableState,
 	minVersionedTransition *persistencespb.VersionedTransition,
 ) error {
-	if transitionhistory.Compare(minVersionedTransition, EmptyVersionedTransition) != 0 {
-		// Perform a sanity check to make sure that the minVersionedTransition, if provided,
-		// is on the current branch of transition history.
-		if err := TransitionHistoryStalenessCheck(
-			mutableState.GetExecutionInfo().TransitionHistory,
-			minVersionedTransition,
-		); err != nil {
-			return err
-		}
-	}
-
 	taskGenerator := r.taskGeneratorProvider.NewTaskGenerator(
 		r.shard,
 		mutableState,
@@ -278,7 +267,7 @@ func (r *TaskRefresherImpl) refreshTasksForWorkflowClose(
 	if err != nil {
 		return err
 	}
-
+	
 	return taskGenerator.GenerateWorkflowCloseTasks(
 		closeEventTime,
 		false,
@@ -605,7 +594,6 @@ func (r *TaskRefresherImpl) refreshTasksForWorkflowSearchAttr(
 	) < 0 {
 		return nil
 	}
-
 	return taskGenerator.GenerateUpsertVisibilityTask()
 }
 
