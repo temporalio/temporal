@@ -1241,8 +1241,8 @@ var (
 	MemoryHeapIdleGauge    = NewGaugeDef("memory_heapidle")
 	MemoryHeapInuseGauge   = NewGaugeDef("memory_heapinuse")
 	MemoryStackGauge       = NewGaugeDef("memory_stack")
-	MemoryMallocs          = NewGaugeDef("memory_mallocs")
-	MemoryFrees            = NewGaugeDef("memory_frees")
+	MemoryMallocsGauge     = NewGaugeDef("memory_mallocs")
+	MemoryFreesGauge       = NewGaugeDef("memory_frees")
 	NumGCCounter           = NewBytesHistogramDef("memory_num_gc")
 	GcPauseMsTimer         = NewTimerDef("memory_gc_pause_ms")
 	NumGCGauge             = NewGaugeDef("memory_num_gc_last",
