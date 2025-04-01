@@ -75,6 +75,7 @@ type (
 		mockServiceResolver *membership.MockServiceResolver
 
 		hostInfo          membership.HostInfo
+		otherHostInfo     membership.HostInfo
 		mockShardManager  *persistence.MockShardManager
 		mockEngineFactory *MockEngineFactory
 
@@ -142,6 +143,7 @@ func (s *controllerSuite) SetupTest() {
 	s.mockServiceResolver = s.mockResource.HistoryServiceResolver
 	s.mockClusterMetadata = s.mockResource.ClusterMetadata
 	s.hostInfo = s.mockResource.GetHostInfo()
+	s.otherHostInfo = membership.NewHostInfoFromAddress("other")
 	s.mockHostInfoProvider = s.mockResource.HostInfoProvider
 	s.mockHostInfoProvider.EXPECT().HostInfo().Return(s.hostInfo).AnyTimes()
 
@@ -360,11 +362,10 @@ func (s *controllerSuite) TestHistoryEngineClosed() {
 
 	workerWG.Wait()
 
-	differentHostInfo := membership.NewHostInfoFromAddress("another-host")
 	for shardID := int32(1); shardID <= 2; shardID++ {
 		mockEngine := historyEngines[shardID]
 		mockEngine.EXPECT().Stop().Return()
-		s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).Return(differentHostInfo, nil).AnyTimes()
+		s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).Return(s.otherHostInfo, nil).AnyTimes()
 		s.shardController.CloseShardByID(shardID)
 	}
 
@@ -851,25 +852,47 @@ func (s *controllerSuite) TestShardLingerSuccess() {
 // TestShardCounter verifies that we can subscribe to shard count updates, receive them when shards are acquired, and
 // unsubscribe from the updates when needed.
 func (s *controllerSuite) TestShardCounter() {
+	const totalShards = 5
+	s.config.NumberOfShards = totalShards
+
+	var ownedShards atomic.Int32
+	s.mockServiceResolver.EXPECT().Lookup(gomock.Any()).DoAndReturn(func(key string) (membership.HostInfo, error) {
+		if i, err := strconv.Atoi(key); err != nil {
+			return nil, err
+		} else if i <= int(ownedShards.Load()) {
+			return s.hostInfo, nil
+		}
+		return s.otherHostInfo, nil
+	}).AnyTimes()
+
+	mockEngine := historyi.NewMockEngine(s.controller)
+	for i := range totalShards {
+		s.setupMocksForAcquireShard(int32(i+1), mockEngine, 5, 6, false)
+	}
+
 	// subscribe to shard count updates
 	sub1 := s.shardController.SubscribeShardCount()
 
 	// validate that we get the initial shard count
 	s.Empty(sub1.ShardCount(), "Should not publish shard count before acquiring shards")
-	s.setupAndAcquireShards(2)
+	ownedShards.Store(2)
+	s.shardController.acquireShards(context.Background())
 	s.Equal(2, <-sub1.ShardCount(), "Should publish shard count after acquiring shards")
 	s.Empty(sub1.ShardCount(), "Shard count channel should be drained")
 
 	// acquire shards twice to validate that this does not block even if there's no capacity left on the channel
-	s.setupAndAcquireShards(3)
-	s.setupAndAcquireShards(4)
+	ownedShards.Store(3)
+	s.shardController.acquireShards(context.Background())
+	ownedShards.Store(4)
+	s.shardController.acquireShards(context.Background())
 	s.Equal(3, <-sub1.ShardCount(), "Shard count is buffered, so we should only get the first value")
 	s.Empty(sub1.ShardCount(), "Shard count channel should be drained")
 
 	// unsubscribe and validate that the channel is closed, but the other subscriber is still receiving updates
 	sub2 := s.shardController.SubscribeShardCount()
 	sub1.Unsubscribe()
-	s.setupAndAcquireShards(4)
+	ownedShards.Store(4)
+	s.shardController.acquireShards(context.Background())
 	_, ok := <-sub1.ShardCount()
 	s.False(ok, "Channel should be closed because sub1 is canceled")
 	sub1.Unsubscribe() // should not panic if called twice
@@ -891,14 +914,13 @@ func (s *controllerSuite) setupMocksForReadiness() *readinessMockState {
 
 	s.config.NumberOfShards = 5
 
-	other := membership.NewHostInfoFromAddress("other")
 	s.mockServiceResolver.EXPECT().Lookup(gomock.Any()).DoAndReturn(func(key string) (membership.HostInfo, error) {
 		if i, err := strconv.Atoi(key); err != nil {
 			return nil, err
 		} else if owned, ok := state.ownership.Load(i); ok && owned.(bool) {
 			return s.hostInfo, nil
 		}
-		return other, nil
+		return s.otherHostInfo, nil
 	}).AnyTimes()
 
 	state.ownership.Range(func(shardID, owned any) bool {
@@ -1047,17 +1069,6 @@ func (s *controllerSuite) TestReadiness_MembershipChanged() {
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	s.NoError(s.shardController.InitialShardsAcquired(ctx))
-}
-
-// setupAndAcquireShards sets up the mocks for acquiring the given number of shards and then calls acquireShards. It is
-// safe to call this multiple times throughout a test.
-func (s *controllerSuite) setupAndAcquireShards(numShards int) {
-	s.config.NumberOfShards = int32(numShards)
-	mockEngine := historyi.NewMockEngine(s.controller)
-	for shardID := 1; shardID <= numShards; shardID++ {
-		s.setupMocksForAcquireShard(int32(shardID), mockEngine, 5, 6, false)
-	}
-	s.shardController.acquireShards(context.Background())
 }
 
 func (s *controllerSuite) setupMocksForAcquireShard(
