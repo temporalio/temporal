@@ -495,7 +495,9 @@ func (c *ControllerImpl) acquireShards(ctx context.Context) {
 		if len(ownedShards) > 0 {
 			go func() {
 				defer readinessCancel()
-				c.checkShardReadiness(readinessCtx, ownedShards)
+				if c.checkShardReadiness(readinessCtx, ownedShards) {
+					c.initialShardsAcquired.SetIfNotReady(struct{}{}, nil)
+				}
 			}()
 		} else {
 			readinessCancel()
@@ -506,13 +508,13 @@ func (c *ControllerImpl) acquireShards(ctx context.Context) {
 func (c *ControllerImpl) checkShardReadiness(
 	ctx context.Context,
 	shards []int32,
-) {
+) bool {
 	concurrency := int64(max(c.config.AcquireShardConcurrency(), 1))
 	sem := semaphore.NewWeighted(concurrency)
 	var ready atomic.Int32
 	for _, shardID := range shards {
 		if sem.Acquire(ctx, 1) != nil {
-			return
+			return false
 		}
 		go func() {
 			defer sem.Release(1)
@@ -530,16 +532,16 @@ func (c *ControllerImpl) checkShardReadiness(
 		}()
 	}
 	if sem.Acquire(ctx, concurrency) != nil {
-		return
+		return false
 	}
 
 	if ready.Load() != int32(len(shards)) {
 		c.contextTaggedLogger.Info("initial shards not ready",
 			tag.NewInt32("ready", ready.Load()), tag.NewInt("total", len(shards)))
-		return
+		return false
 	}
 	c.contextTaggedLogger.Info("initial shards ready", tag.NewInt("total", len(shards)))
-	c.initialShardsAcquired.SetIfNotReady(struct{}{}, nil)
+	return true
 }
 
 // publishShardCountUpdate publishes the current number of shards that this controller owns to all shard count
