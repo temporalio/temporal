@@ -100,6 +100,7 @@ var (
 		"UpdateSchedule":                   {},
 		"DeleteSchedule":                   {},
 		"PatchSchedule":                    {},
+		"UpdateWorkflowExecutionOptions":   {},
 	}
 
 	// commandActions is a subset of all the commands that are counted as actions.
