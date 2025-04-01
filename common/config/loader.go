@@ -25,10 +25,12 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	stdlog "log"
 	"os"
 
+	"go.temporal.io/server/common/dynamicconfig"
 	"gopkg.in/validator.v2"
 	"gopkg.in/yaml.v3"
 )
@@ -71,7 +73,7 @@ const (
 //	base.yaml
 //	    env.yaml   -- environment is one of the input params ex-development
 //	      env_az.yaml -- zone is another input param
-func Load(env string, configDir string, zone string, config interface{}) error {
+func Load(env string, configDir string, zone string, config *Config) error {
 	if len(env) == 0 {
 		env = envDevelopment
 	}
@@ -101,6 +103,21 @@ func Load(env string, configDir string, zone string, config interface{}) error {
 		if err != nil {
 			return err
 		}
+	}
+
+	// Inject self-dynamic-config-client if dynamicConfig section present.
+	if config.DynamicConfig != nil {
+		if config.DynamicConfigClient == nil {
+			config.DynamicConfigClient = &dynamicconfig.FileBasedClientConfig{}
+		}
+		if config.DynamicConfigClient.Filepath != "" {
+			return errors.New("dynamicConfig can't be used with dynamicConfigClient.filepath")
+		} else if len(files) > 1 {
+			return errors.New("dynamicConfig can't be used when merging mulitple static config files")
+		}
+
+		config.DynamicConfigClient.Filepath = files[0]
+		config.DynamicConfigClient.BelowDynamicConfigKey = true
 	}
 
 	return validator.Validate(config)
