@@ -267,7 +267,7 @@ func (r *TaskRefresherImpl) refreshTasksForWorkflowClose(
 	if err != nil {
 		return err
 	}
-	
+
 	return taskGenerator.GenerateWorkflowCloseTasks(
 		closeEventTime,
 		false,
@@ -399,13 +399,8 @@ func (r *TaskRefresherImpl) refreshTasksForActivity(
 			continue
 		}
 
-		scheduleEvent, err := mutableState.GetActivityScheduledEvent(ctx, activityInfo.ScheduledEventId)
-		if err != nil {
-			return err
-		}
-
 		if err := taskGenerator.GenerateActivityTasks(
-			scheduleEvent.GetEventId(),
+			activityInfo.ScheduledEventId,
 		); err != nil {
 			return err
 		}
