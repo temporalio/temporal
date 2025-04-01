@@ -35,6 +35,7 @@ import (
 	protocolpb "go.temporal.io/api/protocol/v1"
 	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/api"
@@ -71,14 +72,9 @@ func TestEmitActionMetric(t *testing.T) {
 		resp              any
 	}{
 		{
-			methodName: startWorkflow,
-			fullName:   api.WorkflowServicePrefix + startWorkflow,
-			resp:       &workflowservice.StartWorkflowExecutionResponse{Started: false},
-		},
-		{
 			methodName:        startWorkflow,
 			fullName:          api.WorkflowServicePrefix + startWorkflow,
-			resp:              &workflowservice.StartWorkflowExecutionResponse{Started: true},
+			resp:              &workflowservice.StartWorkflowExecutionResponse{},
 			expectEmitMetrics: true,
 		},
 		{
@@ -212,6 +208,24 @@ func TestEmitActionMetric(t *testing.T) {
 			req: &workflowservice.QueryWorkflowRequest{
 				Query: &querypb.WorkflowQuery{
 					QueryType: "some_type",
+				},
+			},
+			expectEmitMetrics: true,
+		},
+		{
+			methodName: updateWorkflowExecutionOptions,
+			fullName:   api.WorkflowServicePrefix + updateWorkflowExecutionOptions,
+			req: &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+				Namespace: "test-namespace",
+				WorkflowExecution: &commonpb.WorkflowExecution{
+					WorkflowId: "test-workflow-id",
+					RunId:      "test-run-id",
+				},
+				WorkflowExecutionOptions: &workflow.WorkflowExecutionOptions{
+					VersioningOverride: &workflow.VersioningOverride{
+						Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED,
+						PinnedVersion: "fake-version",
+					},
 				},
 			},
 			expectEmitMetrics: true,
