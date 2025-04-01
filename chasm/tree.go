@@ -77,6 +77,17 @@ type (
 		valueSynced bool
 	}
 
+	// nodeBase is a set of dependencies and states shared by all nodes in a CHASM tree.
+	nodeBase struct {
+		registry    *Registry
+		timeSource  clock.TimeSource
+		backend     NodeBackend
+		pathEncoder NodePathEncoder
+		logger      log.Logger
+		// Mutations accumulated so far in this transaction.
+		mutation NodesMutation
+	}
+
 	// NodesMutation is a set of mutations for all nodes rooted at a given node n,
 	// including the node n itself.
 	//
@@ -392,7 +403,7 @@ func (n *Node) serializeComponentNode() error {
 		}
 
 		n.serializedNode.Data = blob
-		n.serializedNode.GetMetadata().GetComponentAttributes().Type = rc.Type()
+		n.serializedNode.GetMetadata().GetComponentAttributes().Type = rc.fqType()
 
 		if n.serializedNode.GetMetadata().GetLastUpdateVersionedTransition() == nil {
 			n.serializedNode.GetMetadata().LastUpdateVersionedTransition = &persistencespb.VersionedTransition{}
