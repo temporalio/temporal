@@ -31,7 +31,7 @@ import (
 type (
 	RegistrableComponent struct {
 		componentType string
-		library       Namer
+		library       namer
 		goType        reflect.Type
 
 		ephemeral     bool
@@ -78,10 +78,10 @@ func WithShardingFn(
 	}
 }
 
-// Type returns the fully qualified name of the component, which is a combination of
+// fqType returns the fully qualified name of the component, which is a combination of
 // the library name and the component type. This is used to uniquely identify
 // the component in the registry.
-func (rc RegistrableComponent) Type() string {
+func (rc RegistrableComponent) fqType() string {
 	if rc.library == nil {
 		// this should never happen because the component is only accessible from the library.
 		panic("component is not registered to a library")

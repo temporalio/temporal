@@ -31,7 +31,7 @@ import (
 type (
 	RegistrableTask struct {
 		taskType        string
-		library         Namer
+		library         namer
 		goType          reflect.Type
 		componentGoType reflect.Type // It is not clear how this one is used.
 		handler         any
@@ -58,10 +58,10 @@ func NewRegistrableTask[C any, T any](
 	return rt
 }
 
-// Type returns the fully qualified name of the task, which is a combination of
+// fqType returns the fully qualified name of the task, which is a combination of
 // the library name and the task type. This is used to uniquely identify
 // the task in the registry.
-func (rt RegistrableTask) Type() string {
+func (rt RegistrableTask) fqType() string {
 	if rt.library == nil {
 		// this should never happen because the task is only accessible from the library.
 		panic("task is not registered to a library")

@@ -28,7 +28,7 @@ package chasm
 
 type (
 	Library interface {
-		Namer
+		Name() string
 		Components() []*RegistrableComponent
 		Tasks() []*RegistrableTask
 		// Service()
@@ -38,7 +38,7 @@ type (
 
 	UnimplementedLibrary struct{}
 
-	Namer interface {
+	namer interface {
 		Name() string
 	}
 )

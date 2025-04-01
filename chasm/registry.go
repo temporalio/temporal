@@ -93,7 +93,7 @@ func (r *Registry) taskFor(taskInstance any) (*RegistrableTask, bool) {
 }
 
 func (r *Registry) registerComponent(
-	lib Namer,
+	lib namer,
 	rc *RegistrableComponent,
 ) error {
 	if err := r.validateName(rc.componentType); err != nil {
@@ -122,7 +122,7 @@ func (r *Registry) registerComponent(
 	return nil
 }
 func (r *Registry) registerTask(
-	lib Namer,
+	lib namer,
 	rt *RegistrableTask,
 ) error {
 	if err := r.validateName(rt.taskType); err != nil {
