@@ -30,6 +30,7 @@ import "google/protobuf/timestamp.proto";
 
 import "temporal/api/enums/v1/namespace.proto";
 import "temporal/api/namespace/v1/message.proto";
+import "temporal/api/rules/v1/message.proto";
 
 // detail column
 message NamespaceDetail {
@@ -60,6 +61,7 @@ message NamespaceConfig {
     temporal.api.enums.v1.ArchivalState visibility_archival_state = 6;
     string visibility_archival_uri = 7;
     map<string, string> custom_search_attribute_aliases = 8;
+    map<string, temporal.api.rules.v1.WorkflowRule> workflow_rules = 9;
 }
 
 message NamespaceReplicationConfig {
