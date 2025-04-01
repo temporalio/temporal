@@ -31,7 +31,6 @@ package clock
 import (
 	reflect "reflect"
 	sync "sync"
-	unsafe "unsafe"
 
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -45,19 +44,22 @@ const (
 )
 
 type VectorClock struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ShardId       int32                  `protobuf:"varint,1,opt,name=shard_id,json=shardId,proto3" json:"shard_id,omitempty"`
-	Clock         int64                  `protobuf:"varint,2,opt,name=clock,proto3" json:"clock,omitempty"`
-	ClusterId     int64                  `protobuf:"varint,3,opt,name=cluster_id,json=clusterId,proto3" json:"cluster_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
+	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	ShardId   int32 `protobuf:"varint,1,opt,name=shard_id,json=shardId,proto3" json:"shard_id,omitempty"`
+	Clock     int64 `protobuf:"varint,2,opt,name=clock,proto3" json:"clock,omitempty"`
+	ClusterId int64 `protobuf:"varint,3,opt,name=cluster_id,json=clusterId,proto3" json:"cluster_id,omitempty"`
 }
 
 func (x *VectorClock) Reset() {
 	*x = VectorClock{}
-	mi := &file_temporal_server_api_clock_v1_message_proto_msgTypes[0]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
+	if protoimpl.UnsafeEnabled {
+		mi := &file_temporal_server_api_clock_v1_message_proto_msgTypes[0]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
 }
 
 func (x *VectorClock) String() string {
@@ -68,7 +70,7 @@ func (*VectorClock) ProtoMessage() {}
 
 func (x *VectorClock) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_clock_v1_message_proto_msgTypes[0]
-	if x != nil {
+	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -107,7 +109,10 @@ func (x *VectorClock) GetClusterId() int64 {
 // A Hybrid Logical Clock timestamp.
 // Guarantees strict total ordering for conflict resolution purposes.
 type HybridLogicalClock struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
 	// Wall clock - A single time source MUST guarantee that 2 consecutive timestamps are monotonically non-decreasing.
 	// e.g. by storing the last wall clock and returning max(gettimeofday(), lastWallClock).
 	WallClock int64 `protobuf:"varint,1,opt,name=wall_clock,json=wallClock,proto3" json:"wall_clock,omitempty"`
@@ -116,16 +121,16 @@ type HybridLogicalClock struct {
 	Version int32 `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
 	// The cluster version ID as described in the XDC docs - used as a tie breaker.
 	// See: https://github.com/uber/cadence/blob/master/docs/design/2290-cadence-ndc.md
-	ClusterId     int64 `protobuf:"varint,3,opt,name=cluster_id,json=clusterId,proto3" json:"cluster_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	ClusterId int64 `protobuf:"varint,3,opt,name=cluster_id,json=clusterId,proto3" json:"cluster_id,omitempty"`
 }
 
 func (x *HybridLogicalClock) Reset() {
 	*x = HybridLogicalClock{}
-	mi := &file_temporal_server_api_clock_v1_message_proto_msgTypes[1]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
+	if protoimpl.UnsafeEnabled {
+		mi := &file_temporal_server_api_clock_v1_message_proto_msgTypes[1]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
 }
 
 func (x *HybridLogicalClock) String() string {
@@ -136,7 +141,7 @@ func (*HybridLogicalClock) ProtoMessage() {}
 
 func (x *HybridLogicalClock) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_clock_v1_message_proto_msgTypes[1]
-	if x != nil {
+	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -174,35 +179,44 @@ func (x *HybridLogicalClock) GetClusterId() int64 {
 
 var File_temporal_server_api_clock_v1_message_proto protoreflect.FileDescriptor
 
-const file_temporal_server_api_clock_v1_message_proto_rawDesc = "" +
-	"\n" +
-	"*temporal/server/api/clock/v1/message.proto\x12\x1ctemporal.server.api.clock.v1\"]\n" +
-	"\vVectorClock\x12\x19\n" +
-	"\bshard_id\x18\x01 \x01(\x05R\ashardId\x12\x14\n" +
-	"\x05clock\x18\x02 \x01(\x03R\x05clock\x12\x1d\n" +
-	"\n" +
-	"cluster_id\x18\x03 \x01(\x03R\tclusterId\"l\n" +
-	"\x12HybridLogicalClock\x12\x1d\n" +
-	"\n" +
-	"wall_clock\x18\x01 \x01(\x03R\twallClock\x12\x18\n" +
-	"\aversion\x18\x02 \x01(\x05R\aversion\x12\x1d\n" +
-	"\n" +
-	"cluster_id\x18\x03 \x01(\x03R\tclusterIdB*Z(go.temporal.io/server/api/clock/v1;clockb\x06proto3"
+var file_temporal_server_api_clock_v1_message_proto_rawDesc = []byte{
+	0x0a, 0x2a, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2f, 0x73, 0x65, 0x72, 0x76, 0x65,
+	0x72, 0x2f, 0x61, 0x70, 0x69, 0x2f, 0x63, 0x6c, 0x6f, 0x63, 0x6b, 0x2f, 0x76, 0x31, 0x2f, 0x6d,
+	0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x12, 0x1c, 0x74, 0x65,
+	0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x61, 0x70,
+	0x69, 0x2e, 0x63, 0x6c, 0x6f, 0x63, 0x6b, 0x2e, 0x76, 0x31, 0x22, 0x5d, 0x0a, 0x0b, 0x56, 0x65,
+	0x63, 0x74, 0x6f, 0x72, 0x43, 0x6c, 0x6f, 0x63, 0x6b, 0x12, 0x19, 0x0a, 0x08, 0x73, 0x68, 0x61,
+	0x72, 0x64, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x05, 0x52, 0x07, 0x73, 0x68, 0x61,
+	0x72, 0x64, 0x49, 0x64, 0x12, 0x14, 0x0a, 0x05, 0x63, 0x6c, 0x6f, 0x63, 0x6b, 0x18, 0x02, 0x20,
+	0x01, 0x28, 0x03, 0x52, 0x05, 0x63, 0x6c, 0x6f, 0x63, 0x6b, 0x12, 0x1d, 0x0a, 0x0a, 0x63, 0x6c,
+	0x75, 0x73, 0x74, 0x65, 0x72, 0x5f, 0x69, 0x64, 0x18, 0x03, 0x20, 0x01, 0x28, 0x03, 0x52, 0x09,
+	0x63, 0x6c, 0x75, 0x73, 0x74, 0x65, 0x72, 0x49, 0x64, 0x22, 0x6c, 0x0a, 0x12, 0x48, 0x79, 0x62,
+	0x72, 0x69, 0x64, 0x4c, 0x6f, 0x67, 0x69, 0x63, 0x61, 0x6c, 0x43, 0x6c, 0x6f, 0x63, 0x6b, 0x12,
+	0x1d, 0x0a, 0x0a, 0x77, 0x61, 0x6c, 0x6c, 0x5f, 0x63, 0x6c, 0x6f, 0x63, 0x6b, 0x18, 0x01, 0x20,
+	0x01, 0x28, 0x03, 0x52, 0x09, 0x77, 0x61, 0x6c, 0x6c, 0x43, 0x6c, 0x6f, 0x63, 0x6b, 0x12, 0x18,
+	0x0a, 0x07, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x18, 0x02, 0x20, 0x01, 0x28, 0x05, 0x52,
+	0x07, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x12, 0x1d, 0x0a, 0x0a, 0x63, 0x6c, 0x75, 0x73,
+	0x74, 0x65, 0x72, 0x5f, 0x69, 0x64, 0x18, 0x03, 0x20, 0x01, 0x28, 0x03, 0x52, 0x09, 0x63, 0x6c,
+	0x75, 0x73, 0x74, 0x65, 0x72, 0x49, 0x64, 0x42, 0x2a, 0x5a, 0x28, 0x67, 0x6f, 0x2e, 0x74, 0x65,
+	0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x69, 0x6f, 0x2f, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72,
+	0x2f, 0x61, 0x70, 0x69, 0x2f, 0x63, 0x6c, 0x6f, 0x63, 0x6b, 0x2f, 0x76, 0x31, 0x3b, 0x63, 0x6c,
+	0x6f, 0x63, 0x6b, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+}
 
 var (
 	file_temporal_server_api_clock_v1_message_proto_rawDescOnce sync.Once
-	file_temporal_server_api_clock_v1_message_proto_rawDescData []byte
+	file_temporal_server_api_clock_v1_message_proto_rawDescData = file_temporal_server_api_clock_v1_message_proto_rawDesc
 )
 
 func file_temporal_server_api_clock_v1_message_proto_rawDescGZIP() []byte {
 	file_temporal_server_api_clock_v1_message_proto_rawDescOnce.Do(func() {
-		file_temporal_server_api_clock_v1_message_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_api_clock_v1_message_proto_rawDesc), len(file_temporal_server_api_clock_v1_message_proto_rawDesc)))
+		file_temporal_server_api_clock_v1_message_proto_rawDescData = protoimpl.X.CompressGZIP(file_temporal_server_api_clock_v1_message_proto_rawDescData)
 	})
 	return file_temporal_server_api_clock_v1_message_proto_rawDescData
 }
 
 var file_temporal_server_api_clock_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
-var file_temporal_server_api_clock_v1_message_proto_goTypes = []any{
+var file_temporal_server_api_clock_v1_message_proto_goTypes = []interface{}{
 	(*VectorClock)(nil),        // 0: temporal.server.api.clock.v1.VectorClock
 	(*HybridLogicalClock)(nil), // 1: temporal.server.api.clock.v1.HybridLogicalClock
 }
@@ -219,11 +233,37 @@ func file_temporal_server_api_clock_v1_message_proto_init() {
 	if File_temporal_server_api_clock_v1_message_proto != nil {
 		return
 	}
+	if !protoimpl.UnsafeEnabled {
+		file_temporal_server_api_clock_v1_message_proto_msgTypes[0].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*VectorClock); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_temporal_server_api_clock_v1_message_proto_msgTypes[1].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*HybridLogicalClock); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_api_clock_v1_message_proto_rawDesc), len(file_temporal_server_api_clock_v1_message_proto_rawDesc)),
+			RawDescriptor: file_temporal_server_api_clock_v1_message_proto_rawDesc,
 			NumEnums:      0,
 			NumMessages:   2,
 			NumExtensions: 0,
@@ -234,6 +274,7 @@ func file_temporal_server_api_clock_v1_message_proto_init() {
 		MessageInfos:      file_temporal_server_api_clock_v1_message_proto_msgTypes,
 	}.Build()
 	File_temporal_server_api_clock_v1_message_proto = out.File
+	file_temporal_server_api_clock_v1_message_proto_rawDesc = nil
 	file_temporal_server_api_clock_v1_message_proto_goTypes = nil
 	file_temporal_server_api_clock_v1_message_proto_depIdxs = nil
 }

@@ -341,7 +341,9 @@ func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_RetryActivity() {
 	}, 5*time.Second, 200*time.Millisecond)
 
 	// Let activity fail
-	util.InterruptibleSleep(ctx, 1*time.Second)
+	err = util.InterruptibleSleep(ctx, 1*time.Second)
+	s.NoError(err)
+
 	testWorkflow.activityFailedCn <- struct{}{}
 
 	// check that activity was paused by the rule
