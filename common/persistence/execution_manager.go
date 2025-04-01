@@ -1198,7 +1198,7 @@ func (m *executionManagerImpl) makeInternalChasmNodeMap(
 	nodes map[string]*persistencespb.ChasmNode,
 ) (map[string]InternalChasmNode, error) {
 	res := make(map[string]InternalChasmNode, len(nodes))
-	isCassandra := strings.Contains(m.GetName(), "cassandra")
+	isCassandra := strings.Contains(m.GetName(), "cassandra") || strings.Contains(m.GetName(), "cds")
 
 	for path, node := range nodes {
 		var internal InternalChasmNode
