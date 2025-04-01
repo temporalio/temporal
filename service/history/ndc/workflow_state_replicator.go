@@ -405,11 +405,9 @@ func (r *WorkflowStateReplicatorImpl) applyMutation(
 			return err
 		}
 	}
-	exclusiveVs := &persistencespb.VersionedTransition{
-		NamespaceFailoverVersion: localVersionedTransition.NamespaceFailoverVersion,
-		TransitionCount:          localVersionedTransition.TransitionCount + 1,
-	}
-	err = r.taskRefresher.PartialRefresh(ctx, localMutableState, exclusiveVs)
+	nextVersionedTransition := transitionhistory.CopyVersionedTransition(localVersionedTransition)
+	nextVersionedTransition.TransitionCount++
+	err = r.taskRefresher.PartialRefresh(ctx, localMutableState, nextVersionedTransition)
 	if err != nil {
 		return err
 	}
@@ -554,11 +552,9 @@ func (r *WorkflowStateReplicatorImpl) applySnapshotWhenWorkflowExist(
 			return err
 		}
 	} else {
-		exclusiveVs := &persistencespb.VersionedTransition{
-			NamespaceFailoverVersion: localVersionedTransition.NamespaceFailoverVersion,
-			TransitionCount:          localVersionedTransition.TransitionCount + 1,
-		}
-		err = r.taskRefresher.PartialRefresh(ctx, localMutableState, exclusiveVs)
+		nextVersionedTransition := transitionhistory.CopyVersionedTransition(localVersionedTransition)
+		nextVersionedTransition.TransitionCount++
+		err = r.taskRefresher.PartialRefresh(ctx, localMutableState, nextVersionedTransition)
 		if err != nil {
 			return err
 		}
