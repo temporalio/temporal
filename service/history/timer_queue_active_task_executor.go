@@ -44,7 +44,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/priorities"
 	"go.temporal.io/server/common/resource"
@@ -914,14 +913,9 @@ func (t *timerQueueActiveTaskExecutor) processActivityWorkflowRules(
 		}
 
 		// need to update mutable state
-		err := weContext.UpdateWorkflowExecutionWithNew(
+		err := weContext.UpdateWorkflowExecutionAsActive(
 			ctx,
 			t.shardContext,
-			persistence.UpdateWorkflowModeUpdateCurrent,
-			nil,
-			nil,
-			historyi.TransactionPolicyActive,
-			nil,
 		)
 		if err != nil {
 			return err
