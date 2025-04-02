@@ -520,12 +520,6 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 		return consts.ErrActivityTaskNotFound
 	}
 
-	err = t.processActivityWorkflowRules(ctx, weContext, mutableState, activityInfo)
-	if err != nil {
-		release(nil) // release(nil) so mutable state is not unloaded from cache
-		return err
-	}
-
 	if task.Stamp != activityInfo.Stamp || activityInfo.Paused {
 		// if retry task event is from an old stamp of if activity is paused we should ignore the event.
 		release(nil) // release(nil) so mutable state is not unloaded from cache
@@ -553,6 +547,19 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 	if !mutableState.IsWorkflowExecutionRunning() {
 		release(nil) // release(nil) so mutable state is not unloaded from cache
 		return consts.ErrWorkflowCompleted
+	}
+
+	err = t.processActivityWorkflowRules(ctx, weContext, mutableState, activityInfo)
+	if err != nil {
+		release(err)
+		return err
+	}
+
+	// task can be paused as the result of processing activity workflow rules, so we need to check again
+	if task.Stamp != activityInfo.Stamp || activityInfo.Paused {
+		// if retry task event is from an old stamp of if activity is paused we should ignore the event.
+		release(nil) // release(nil) so mutable state is not unloaded from cache
+		return consts.ErrActivityTaskNotFound
 	}
 
 	taskQueue := &taskqueuepb.TaskQueue{
