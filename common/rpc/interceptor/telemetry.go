@@ -257,6 +257,14 @@ func (ti *TelemetryInterceptor) emitActionMetric(
 	}
 
 	switch methodName {
+	case startWorkflowExecution:
+		resp, ok := result.(*workflowservice.StartWorkflowExecutionResponse)
+		if !ok {
+			return
+		}
+		if resp.Started {
+			metrics.ActionCounter.With(metricsHandler).Record(1, metrics.ActionType("grpc_"+methodName))
+		}
 	case executeMultiOperation:
 		resp, ok := result.(*workflowservice.ExecuteMultiOperationResponse)
 		if !ok {
