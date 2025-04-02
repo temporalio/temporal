@@ -31,6 +31,7 @@ package persistence
 import (
 	reflect "reflect"
 	sync "sync"
+	unsafe "unsafe"
 
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -45,20 +46,17 @@ const (
 
 // data column
 type QueueMetadata struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	ClusterAckLevels map[string]int64 `protobuf:"bytes,1,rep,name=cluster_ack_levels,json=clusterAckLevels,proto3" json:"cluster_ack_levels,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"varint,2,opt,name=value,proto3"`
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	ClusterAckLevels map[string]int64       `protobuf:"bytes,1,rep,name=cluster_ack_levels,json=clusterAckLevels,proto3" json:"cluster_ack_levels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *QueueMetadata) Reset() {
 	*x = QueueMetadata{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_persistence_v1_queue_metadata_proto_msgTypes[0]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_persistence_v1_queue_metadata_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *QueueMetadata) String() string {
@@ -69,7 +67,7 @@ func (*QueueMetadata) ProtoMessage() {}
 
 func (x *QueueMetadata) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_persistence_v1_queue_metadata_proto_msgTypes[0]
-	if protoimpl.UnsafeEnabled && x != nil {
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -93,46 +91,29 @@ func (x *QueueMetadata) GetClusterAckLevels() map[string]int64 {
 
 var File_temporal_server_api_persistence_v1_queue_metadata_proto protoreflect.FileDescriptor
 
-var file_temporal_server_api_persistence_v1_queue_metadata_proto_rawDesc = []byte{
-	0x0a, 0x37, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2f, 0x73, 0x65, 0x72, 0x76, 0x65,
-	0x72, 0x2f, 0x61, 0x70, 0x69, 0x2f, 0x70, 0x65, 0x72, 0x73, 0x69, 0x73, 0x74, 0x65, 0x6e, 0x63,
-	0x65, 0x2f, 0x76, 0x31, 0x2f, 0x71, 0x75, 0x65, 0x75, 0x65, 0x5f, 0x6d, 0x65, 0x74, 0x61, 0x64,
-	0x61, 0x74, 0x61, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x12, 0x22, 0x74, 0x65, 0x6d, 0x70, 0x6f,
-	0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x70,
-	0x65, 0x72, 0x73, 0x69, 0x73, 0x74, 0x65, 0x6e, 0x63, 0x65, 0x2e, 0x76, 0x31, 0x22, 0xcb, 0x01,
-	0x0a, 0x0d, 0x51, 0x75, 0x65, 0x75, 0x65, 0x4d, 0x65, 0x74, 0x61, 0x64, 0x61, 0x74, 0x61, 0x12,
-	0x75, 0x0a, 0x12, 0x63, 0x6c, 0x75, 0x73, 0x74, 0x65, 0x72, 0x5f, 0x61, 0x63, 0x6b, 0x5f, 0x6c,
-	0x65, 0x76, 0x65, 0x6c, 0x73, 0x18, 0x01, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x47, 0x2e, 0x74, 0x65,
-	0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x61, 0x70,
-	0x69, 0x2e, 0x70, 0x65, 0x72, 0x73, 0x69, 0x73, 0x74, 0x65, 0x6e, 0x63, 0x65, 0x2e, 0x76, 0x31,
-	0x2e, 0x51, 0x75, 0x65, 0x75, 0x65, 0x4d, 0x65, 0x74, 0x61, 0x64, 0x61, 0x74, 0x61, 0x2e, 0x43,
-	0x6c, 0x75, 0x73, 0x74, 0x65, 0x72, 0x41, 0x63, 0x6b, 0x4c, 0x65, 0x76, 0x65, 0x6c, 0x73, 0x45,
-	0x6e, 0x74, 0x72, 0x79, 0x52, 0x10, 0x63, 0x6c, 0x75, 0x73, 0x74, 0x65, 0x72, 0x41, 0x63, 0x6b,
-	0x4c, 0x65, 0x76, 0x65, 0x6c, 0x73, 0x1a, 0x43, 0x0a, 0x15, 0x43, 0x6c, 0x75, 0x73, 0x74, 0x65,
-	0x72, 0x41, 0x63, 0x6b, 0x4c, 0x65, 0x76, 0x65, 0x6c, 0x73, 0x45, 0x6e, 0x74, 0x72, 0x79, 0x12,
-	0x10, 0x0a, 0x03, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x03, 0x6b, 0x65,
-	0x79, 0x12, 0x14, 0x0a, 0x05, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x03,
-	0x52, 0x05, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x3a, 0x02, 0x38, 0x01, 0x42, 0x36, 0x5a, 0x34, 0x67,
-	0x6f, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x69, 0x6f, 0x2f, 0x73, 0x65,
-	0x72, 0x76, 0x65, 0x72, 0x2f, 0x61, 0x70, 0x69, 0x2f, 0x70, 0x65, 0x72, 0x73, 0x69, 0x73, 0x74,
-	0x65, 0x6e, 0x63, 0x65, 0x2f, 0x76, 0x31, 0x3b, 0x70, 0x65, 0x72, 0x73, 0x69, 0x73, 0x74, 0x65,
-	0x6e, 0x63, 0x65, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
-}
+const file_temporal_server_api_persistence_v1_queue_metadata_proto_rawDesc = "" +
+	"\n" +
+	"7temporal/server/api/persistence/v1/queue_metadata.proto\x12\"temporal.server.api.persistence.v1\"\xcb\x01\n" +
+	"\rQueueMetadata\x12u\n" +
+	"\x12cluster_ack_levels\x18\x01 \x03(\v2G.temporal.server.api.persistence.v1.QueueMetadata.ClusterAckLevelsEntryR\x10clusterAckLevels\x1aC\n" +
+	"\x15ClusterAckLevelsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\x03R\x05value:\x028\x01B6Z4go.temporal.io/server/api/persistence/v1;persistenceb\x06proto3"
 
 var (
 	file_temporal_server_api_persistence_v1_queue_metadata_proto_rawDescOnce sync.Once
-	file_temporal_server_api_persistence_v1_queue_metadata_proto_rawDescData = file_temporal_server_api_persistence_v1_queue_metadata_proto_rawDesc
+	file_temporal_server_api_persistence_v1_queue_metadata_proto_rawDescData []byte
 )
 
 func file_temporal_server_api_persistence_v1_queue_metadata_proto_rawDescGZIP() []byte {
 	file_temporal_server_api_persistence_v1_queue_metadata_proto_rawDescOnce.Do(func() {
-		file_temporal_server_api_persistence_v1_queue_metadata_proto_rawDescData = protoimpl.X.CompressGZIP(file_temporal_server_api_persistence_v1_queue_metadata_proto_rawDescData)
+		file_temporal_server_api_persistence_v1_queue_metadata_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_api_persistence_v1_queue_metadata_proto_rawDesc), len(file_temporal_server_api_persistence_v1_queue_metadata_proto_rawDesc)))
 	})
 	return file_temporal_server_api_persistence_v1_queue_metadata_proto_rawDescData
 }
 
 var file_temporal_server_api_persistence_v1_queue_metadata_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
-var file_temporal_server_api_persistence_v1_queue_metadata_proto_goTypes = []interface{}{
+var file_temporal_server_api_persistence_v1_queue_metadata_proto_goTypes = []any{
 	(*QueueMetadata)(nil), // 0: temporal.server.api.persistence.v1.QueueMetadata
 	nil,                   // 1: temporal.server.api.persistence.v1.QueueMetadata.ClusterAckLevelsEntry
 }
@@ -150,25 +131,11 @@ func file_temporal_server_api_persistence_v1_queue_metadata_proto_init() {
 	if File_temporal_server_api_persistence_v1_queue_metadata_proto != nil {
 		return
 	}
-	if !protoimpl.UnsafeEnabled {
-		file_temporal_server_api_persistence_v1_queue_metadata_proto_msgTypes[0].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*QueueMetadata); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: file_temporal_server_api_persistence_v1_queue_metadata_proto_rawDesc,
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_api_persistence_v1_queue_metadata_proto_rawDesc), len(file_temporal_server_api_persistence_v1_queue_metadata_proto_rawDesc)),
 			NumEnums:      0,
 			NumMessages:   2,
 			NumExtensions: 0,
@@ -179,7 +146,6 @@ func file_temporal_server_api_persistence_v1_queue_metadata_proto_init() {
 		MessageInfos:      file_temporal_server_api_persistence_v1_queue_metadata_proto_msgTypes,
 	}.Build()
 	File_temporal_server_api_persistence_v1_queue_metadata_proto = out.File
-	file_temporal_server_api_persistence_v1_queue_metadata_proto_rawDesc = nil
 	file_temporal_server_api_persistence_v1_queue_metadata_proto_goTypes = nil
 	file_temporal_server_api_persistence_v1_queue_metadata_proto_depIdxs = nil
 }
