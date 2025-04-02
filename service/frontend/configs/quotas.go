@@ -36,6 +36,8 @@ import (
 const (
 	// OperatorPriority is used to give precedence to calls coming from web UI or tctl
 	OperatorPriority = 0
+	// PollWorkflowHistoryAPIName is used instead of GetWorkflowExecutionHistory if WaitNewEvent is true in request.
+	PollWorkflowHistoryAPIName = "/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowExecutionHistory"
 )
 
 const (
@@ -160,7 +162,7 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/ShutdownWorker":                     5,
 		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkflowExecutionHistoryReverse": 5,
 		// GetWorkflowExecutionHistory with WaitNewEvent set to true is a long poll API. Consider it as any other poll API.
-		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkflowExecutionHistory_LongPoll": 5,
+		PollWorkflowHistoryAPIName: 5,
 
 		// P6: Informational API that aren't required for the temporal service to function
 		OpenAPIV3APIName: 6,
