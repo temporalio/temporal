@@ -551,7 +551,6 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 
 	err = t.processActivityWorkflowRules(ctx, weContext, mutableState, activityInfo)
 	if err != nil {
-		release(err)
 		return err
 	}
 
