@@ -1516,6 +1516,12 @@ shard ownership information, instead of checking membership for each request.
 Only inspected when an instance first creates a history client, so changes
 to this require a restart to take effect.`,
 	)
+	HistoryClientOwnershipCachingStaleTTL = NewGlobalDurationSetting(
+		"history.clientOwnershipCachingUnusedTTL",
+		30*time.Second,
+		`HistoryClientOwnershipCachingStaleTTL, if non-zero, configures the TTL
+for cached shard ownership entries after a membership update.`,
+	)
 	ShardIOConcurrency = NewGlobalIntSetting(
 		"history.shardIOConcurrency",
 		1,
