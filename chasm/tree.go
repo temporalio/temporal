@@ -30,6 +30,7 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock"
@@ -71,7 +72,7 @@ type (
 		// if the state in memory matches the state in DB.
 		//
 		// TODO: synced flag should be cleared
-		//   when values serializedNode anc value got in-sync.
+		//   when values serializedNode and value got in-sync.
 		//   And deserialization/serialization can be skipped if synced flag is true.
 		valueSynced bool
 	}
@@ -83,7 +84,6 @@ type (
 		backend     NodeBackend
 		pathEncoder NodePathEncoder
 		logger      log.Logger
-
 		// Mutations accumulated so far in this transaction.
 		mutation NodesMutation
 	}
@@ -149,11 +149,8 @@ func NewTree(
 	root := newNode(base, nil, "")
 	if len(serializedNodes) == 0 {
 		// If serializedNodes is empty, it means that this new tree.
-		// Create empty node with nil value and empty serializedNode.
-		err := root.setValue(nil, fieldTypeComponent)
-		if err != nil {
-			return nil, err
-		}
+		// Initialize empty serializedNode.
+		root.initSerializedNode(fieldTypeComponent)
 		return root, nil
 	}
 
@@ -265,14 +262,35 @@ func (n *Node) prepareComponentValue(
 	return n.value, nil
 }
 
-// setValue sets node value field and initialize serializedNode field with empty attributes based on fieldType.
-func (n *Node) setValue(v any, ft fieldType) error {
-	if err := validateValueType(v); err != nil {
-		return err
+// deduceFieldType returns fieldTypeData if v's type implements proto.Message and fieldTypeComponent otherwise.
+func deduceFieldType(v any) fieldType {
+	fieldT := reflect.TypeOf(v)
+	if fieldT.AssignableTo(protoMessageT) {
+		return fieldTypeData
+	}
+	// TODO: what's about ComponentPointer?
+	return fieldTypeComponent
+}
+
+func validateType(t reflect.Type) error {
+	if t == nil {
+		return nil
 	}
 
-	n.value = v
+	if t.Kind() != reflect.Ptr || t.Elem().Kind() != reflect.Struct {
+		return serviceerror.NewInternal("only pointer to struct is supported for tree node value")
+	}
+	return nil
+}
 
+func fieldName(f reflect.StructField) string {
+	if tagName := f.Tag.Get(fieldNameTag); tagName != "" {
+		return tagName
+	}
+	return f.Name
+}
+
+func (n *Node) initSerializedNode(ft fieldType) {
 	switch ft {
 	case fieldTypeData:
 		n.serializedNode = &persistencespb.ChasmNode{
@@ -301,29 +319,6 @@ func (n *Node) setValue(v any, ft fieldType) error {
 	case fieldTypeComponentPointer:
 		panic("not implemented")
 	}
-	return nil
-}
-
-func validateValueType(v any) error {
-	return validateType(reflect.TypeOf(v))
-}
-
-func validateType(t reflect.Type) error {
-	if t == nil {
-		return nil
-	}
-
-	if t.Kind() != reflect.Ptr || t.Elem().Kind() != reflect.Struct {
-		return serviceerror.NewInternal("only pointer to struct is supported for tree node value")
-	}
-	return nil
-}
-
-func fieldName(f reflect.StructField) string {
-	if tagName := f.Tag.Get(fieldNameTag); tagName != "" {
-		return tagName
-	}
-	return f.Name
 }
 
 func (n *Node) setSerializedNode(
@@ -342,6 +337,181 @@ func (n *Node) setSerializedNode(
 		n.children[childName] = childNode
 	}
 	childNode.setSerializedNode(nodePath[1:], serializedNode)
+}
+
+// serialize sets or updates serializedValue field of the node n with serialized value.
+func (n *Node) serialize() error {
+	switch n.serializedNode.GetMetadata().GetAttributes().(type) {
+	case *persistencespb.ChasmNodeMetadata_ComponentAttributes:
+		return n.serializeComponentNode()
+	case *persistencespb.ChasmNodeMetadata_DataAttributes:
+		return n.serializeDataNode()
+	case *persistencespb.ChasmNodeMetadata_CollectionAttributes:
+		panic("not implemented")
+	case *persistencespb.ChasmNodeMetadata_PointerAttributes:
+		panic("not implemented")
+	default:
+		return serviceerror.NewInternal("unknown node type")
+	}
+}
+
+func (n *Node) serializeComponentNode() error {
+	nodeValueT := reflect.TypeOf(n.value)
+	nodeValueV := reflect.ValueOf(n.value)
+
+	protoMessageFound := false
+	// TODO: consider using walker pattern to unify walking over reflected fields.
+	for i := 0; i < nodeValueT.Elem().NumField(); i++ {
+		fieldV := nodeValueV.Elem().Field(i)
+		if !fieldV.Type().AssignableTo(protoMessageT) {
+			continue
+		}
+
+		if protoMessageFound {
+			return serviceerror.NewInternal("only one proto field allowed in component")
+		}
+		protoMessageFound = true
+
+		var blob *commonpb.DataBlob
+		if !fieldV.IsNil() {
+			var err error
+			if blob, err = serialization.ProtoEncodeBlob(fieldV.Interface().(proto.Message), enumspb.ENCODING_TYPE_PROTO3); err != nil {
+				return err
+			}
+		}
+
+		rc, ok := n.registry.componentFor(n.value)
+		if !ok {
+			return serviceerror.NewInternal(fmt.Sprintf("component type %s is not registered", nodeValueT.String()))
+		}
+
+		n.serializedNode.Data = blob
+		n.serializedNode.GetMetadata().GetComponentAttributes().Type = rc.fqType()
+		n.updateLastUpdateVersionedTransition()
+	}
+	return nil
+}
+
+// Sync the entire tree recursively starting from node n from the underlining component value:
+//   - Create:
+//     -- if child node is nil but subcomponent is not empty, a new node with subcomponent value is created.
+//   - Delete:
+//     -- if subcomponent is empty, the corresponding child is removed from the tree,
+//     -- if subcomponent is no longer in a component, the corresponding child is removed from the tree,
+//     -- when a child is removed, all its children are removed too.
+//
+// All removed paths are added to mutation.DeletedNodes (which is shared between all nodes in the tree).
+func (n *Node) syncSubComponents() error {
+	if n.parent != nil {
+		return serviceerror.NewInternal("syncSubComponents must be called on root node")
+	}
+	n.mutation.DeletedNodes = make(map[string]struct{})
+	return n.syncSubComponentsInternal(nil)
+}
+
+func (n *Node) syncSubComponentsInternal(
+	nodePath []string,
+) error {
+	nodeValueT := reflect.TypeOf(n.value)
+	nodeValueV := reflect.ValueOf(n.value)
+
+	childrenToKeep := make(map[string]struct{})
+	for i := 0; i < nodeValueT.Elem().NumField(); i++ {
+		fieldV := nodeValueV.Elem().Field(i)
+		fieldT := fieldV.Type()
+
+		if fieldT == UnimplementedComponentT {
+			continue
+		}
+
+		if fieldT.Kind() == reflect.Ptr {
+			continue
+		}
+
+		fieldN := fieldName(nodeValueT.Elem().Field(i))
+
+		switch genericTypePrefix(fieldT) {
+		case chasmFieldTypePrefix:
+			internalV := fieldV.FieldByName(internalFieldName)
+			//nolint:revive // Internal field is guaranteed to be of type fieldInternal.
+			internal := internalV.Interface().(fieldInternal)
+			if internal.IsEmpty() {
+				continue
+			}
+			if internal.node == nil && internal.value != nil {
+				// Field is not empty but tree node is not set. It means this is a new field, and a node must be created.
+				childNode := newNode(n.nodeBase, n, fieldN)
+
+				if err := validateType(reflect.TypeOf(internal.value)); err != nil {
+					return err
+				}
+				childNode.value = internal.value
+				childNode.initSerializedNode(deduceFieldType(internal.value))
+
+				n.children[fieldN] = childNode
+				internal.node = childNode
+				// TODO: this line can be remove if Internal becomes a *fieldInternal.
+				internalV.Set(reflect.ValueOf(internal))
+			}
+			if err := internal.node.syncSubComponentsInternal(append(nodePath, fieldN)); err != nil {
+				return err
+			}
+
+			childrenToKeep[fieldN] = struct{}{}
+		case chasmCollectionTypePrefix:
+			childrenToKeep[fieldN] = struct{}{}
+			// TODO: need to go over every item in collection and update children for it.
+			panic("not implemented")
+		}
+	}
+
+	err := n.deleteChildren(childrenToKeep, nodePath)
+	return err
+}
+
+func (n *Node) deleteChildren(childrenToKeep map[string]struct{}, currentPath []string) error {
+	for childName, childNode := range n.children {
+		if _, childToKeep := childrenToKeep[childName]; !childToKeep {
+			if err := childNode.deleteChildren(nil, append(currentPath, childName)); err != nil {
+				return err
+			}
+			path, err := n.pathEncoder.Encode(childNode, append(currentPath, childName))
+			if err != nil {
+				return err
+			}
+			n.mutation.DeletedNodes[path] = struct{}{}
+			// If parent is about to be removed, it must not have any children.
+			// TODO: softassert: len(childNode.children)==0
+			delete(n.children, childName)
+		}
+	}
+	return nil
+}
+
+func (n *Node) serializeDataNode() error {
+	protoValue, ok := n.value.(proto.Message)
+	if !ok {
+		return serviceerror.NewInternal("only support proto.Message as chasm data")
+	}
+
+	var blob *commonpb.DataBlob
+	if protoValue != nil {
+		var err error
+		if blob, err = serialization.ProtoEncodeBlob(protoValue, enumspb.ENCODING_TYPE_PROTO3); err != nil {
+			return err
+		}
+	}
+	n.serializedNode.Data = blob
+	n.updateLastUpdateVersionedTransition()
+	return nil
+}
+
+func (n *Node) updateLastUpdateVersionedTransition() {
+	if n.serializedNode.GetMetadata().GetLastUpdateVersionedTransition() == nil {
+		n.serializedNode.GetMetadata().LastUpdateVersionedTransition = &persistencespb.VersionedTransition{}
+	}
+	n.serializedNode.GetMetadata().GetLastUpdateVersionedTransition().TransitionCount = n.backend.NextTransitionCount()
+	n.serializedNode.GetMetadata().GetLastUpdateVersionedTransition().NamespaceFailoverVersion = n.backend.GetCurrentVersion()
 }
 
 // deserialize initializes the node's value from its serializedNode.
@@ -373,8 +543,10 @@ func (n *Node) deserializeComponentNode(
 	// TODO: use n.serializedNode.GetComponentAttributes().GetType() instead to support deserialization to interface.
 	valueV := reflect.New(valueT.Elem())
 	if n.serializedNode.GetData() == nil {
-		// serializedNode is empty (has only metadata) => clear value and return.
-		return n.setValue(valueV.Interface(), fieldTypeComponent)
+		// serializedNode is empty (has only metadata) => use constructed value of valueT type as value and return.
+		// deserialize method acts as component constructor.
+		n.value = valueV.Interface()
+		return nil
 	}
 
 	protoMessageFound := false
