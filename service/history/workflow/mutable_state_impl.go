@@ -226,6 +226,9 @@ type (
 		activityInfosUserDataUpdated map[int64]struct{}
 		timerInfosUserDataUpdated    map[string]struct{}
 
+		// isResetStateUpdated is used to track if resetRunID is updated.
+		isResetStateUpdated bool
+
 		// in memory fields to track potential reapply events that needs to be reapplied during workflow update
 		// should only be used in the state based replication as state based replication does not have
 		// event inside history builder. This is only for x-run reapply (from zombie wf to current wf)
@@ -822,6 +825,7 @@ func (ms *MutableStateImpl) SetBaseWorkflow(
 }
 
 func (ms *MutableStateImpl) UpdateResetRunID(runID string) {
+	ms.isResetStateUpdated = true
 	ms.executionInfo.ResetRunId = runID
 }
 
@@ -839,6 +843,7 @@ func (ms *MutableStateImpl) IsResetRun() bool {
 
 func (ms *MutableStateImpl) SetChildrenInitializedPostResetPoint(children map[string]*persistencespb.ResetChildInfo) {
 	ms.executionInfo.ChildrenInitializedPostResetPoint = children
+	ms.isResetStateUpdated = true
 }
 
 func (ms *MutableStateImpl) GetChildrenInitializedPostResetPoint() map[string]*persistencespb.ResetChildInfo {
@@ -5785,7 +5790,8 @@ func (ms *MutableStateImpl) isStateDirty() bool {
 		ms.executionStateUpdated ||
 		ms.workflowTaskUpdated ||
 		(ms.stateMachineNode != nil && ms.stateMachineNode.Dirty()) ||
-		ms.chasmTree.IsDirty()
+		ms.chasmTree.IsDirty() ||
+		ms.isResetStateUpdated
 }
 
 func (ms *MutableStateImpl) IsTransitionHistoryEnabled() bool {
@@ -6521,6 +6527,7 @@ func (ms *MutableStateImpl) cleanupTransaction() error {
 	ms.visibilityUpdated = false
 	ms.executionStateUpdated = false
 	ms.workflowTaskUpdated = false
+	ms.isResetStateUpdated = false
 	ms.updateInfoUpdated = make(map[string]struct{})
 	ms.timerInfosUserDataUpdated = make(map[string]struct{})
 	ms.activityInfosUserDataUpdated = make(map[int64]struct{})
