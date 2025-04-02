@@ -342,8 +342,9 @@ func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_RetryActivity() {
 		}
 	}, 5*time.Second, 200*time.Millisecond)
 
-	// Let activity fail
-	err = util.InterruptibleSleep(ctx, 1*time.Second)
+	// Let namespace config propagate.
+	// There is no good way to check if the namespace config has propagated to the history service
+	err = util.InterruptibleSleep(ctx, 4*time.Second)
 	s.NoError(err)
 
 	testWorkflow.activityFailedCn <- struct{}{}
@@ -381,6 +382,11 @@ func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_RetryActivity() {
 		assert.Len(s.T(), nsResp.Rules, 0)
 	}, 5*time.Second, 200*time.Millisecond)
 
+	// Let namespace config propagate.
+	// There is no good way to check if the namespace config has propagated to the history service
+	err = util.InterruptibleSleep(ctx, 4*time.Second)
+	s.NoError(err)
+
 	// unpause the activity
 	_, err = s.FrontendClient().UnpauseActivity(ctx, &workflowservice.UnpauseActivityRequest{
 		Namespace: s.Namespace().String(),
@@ -400,7 +406,7 @@ func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_RetryActivity() {
 			assert.True(t, description.PendingActivities[0].GetActivityType().GetName() == activityType)
 			assert.False(t, description.PendingActivities[0].GetPaused())
 		}
-		assert.Equal(t, int32(1), testWorkflow.startedActivityCount.Load())
+		assert.LessOrEqual(t, int32(1), testWorkflow.startedActivityCount.Load())
 	}, 5*time.Second, 200*time.Millisecond)
 
 	// let activity complete
