@@ -79,11 +79,12 @@ var (
 )
 
 var (
-	respondWorkflowTaskCompleted = "RespondWorkflowTaskCompleted"
-	pollActivityTaskQueue        = "PollActivityTaskQueue"
-	startWorkflowExecution       = "StartWorkflowExecution"
-	executeMultiOperation        = "ExecuteMultiOperation"
-	queryWorkflow                = "QueryWorkflow"
+	respondWorkflowTaskCompleted   = "RespondWorkflowTaskCompleted"
+	pollActivityTaskQueue          = "PollActivityTaskQueue"
+	startWorkflowExecution         = "StartWorkflowExecution"
+	executeMultiOperation          = "ExecuteMultiOperation"
+	queryWorkflow                  = "QueryWorkflow"
+	updateWorkflowExecutionOptions = "UpdateWorkflowExecutionOptions"
 
 	grpcActions = map[string]struct{}{
 		startWorkflowExecution:             {},
@@ -91,6 +92,7 @@ var (
 		respondWorkflowTaskCompleted:       {},
 		pollActivityTaskQueue:              {},
 		queryWorkflow:                      {},
+		updateWorkflowExecutionOptions:     {},
 		"RecordActivityTaskHeartbeat":      {},
 		"RecordActivityTaskHeartbeatById":  {},
 		"ResetWorkflowExecution":           {},

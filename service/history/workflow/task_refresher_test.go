@@ -613,31 +613,6 @@ func (s *taskRefresherSuite) TestRefreshActivityTasks() {
 				10,
 			)
 			s.NoError(err)
-
-			for _, eventID := range tc.getActivityScheduledEventIDs {
-				// only the first activity will actually refresh the transfer activity task
-				scheduledEvent := &historypb.HistoryEvent{
-					EventId:   eventID,
-					Version:   common.EmptyVersion,
-					EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
-					Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{
-						ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{},
-					},
-				}
-				s.mockShard.MockEventsCache.EXPECT().GetEvent(
-					gomock.Any(),
-					s.mockShard.GetShardID(),
-					events.EventKey{
-						NamespaceID: tests.NamespaceID,
-						WorkflowID:  tests.WorkflowID,
-						RunID:       tests.RunID,
-						EventID:     eventID,
-						Version:     common.EmptyVersion,
-					},
-					int64(4),
-					branchToken,
-				).Return(scheduledEvent, nil).Times(1)
-			}
 			for _, eventID := range tc.generateActivityTaskIDs {
 				s.mockTaskGenerator.EXPECT().GenerateActivityTasks(int64(eventID)).Return(nil).Times(1)
 			}
