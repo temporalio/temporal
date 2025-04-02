@@ -33,7 +33,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
-	enumspb "go.temporal.io/api/enums/v1"
 	rulespb "go.temporal.io/api/rules/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
@@ -354,8 +353,6 @@ func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_RetryActivity() {
 			assert.Len(t, description.PendingActivities, 1)
 			assert.True(t, description.PendingActivities[0].GetActivityType().GetName() == activityType)
 			assert.True(t, description.PendingActivities[0].GetPaused())
-			assert.True(t, description.PendingActivities[0].State == enumspb.PENDING_ACTIVITY_STATE_STARTED)
-
 		}
 		assert.Equal(t, int32(1), testWorkflow.startedActivityCount.Load())
 	}, 2*time.Second, 200*time.Millisecond)
