@@ -162,6 +162,7 @@ var (
 		"DescribeWorkflowRule":                  {Scope: ScopeNamespace, Access: AccessReadOnly},
 		"DeleteWorkflowRule":                    {Scope: ScopeNamespace, Access: AccessWrite},
 		"ListWorkflowRules":                     {Scope: ScopeNamespace, Access: AccessReadOnly},
+		"TriggerWorkflowRule":                   {Scope: ScopeNamespace, Access: AccessWrite},
 	}
 	operatorServiceMetadata = map[string]MethodMetadata{
 		"AddSearchAttributes":      {Scope: ScopeNamespace, Access: AccessAdmin},

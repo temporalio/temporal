@@ -151,6 +151,7 @@ var (
 		"DescribeWorkflowRule": func() any { return &workflowservice.DescribeWorkflowRuleResponse{} },
 		"DeleteWorkflowRule":   func() any { return &workflowservice.DeleteWorkflowRuleResponse{} },
 		"ListWorkflowRules":    func() any { return &workflowservice.ListWorkflowRulesResponse{} },
+		"TriggerWorkflowRule":  func() any { return &workflowservice.TriggerWorkflowRuleResponse{} },
 	}
 )
 

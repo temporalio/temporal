@@ -206,6 +206,7 @@ func (s *redirectionInterceptorSuite) TestGlobalAPI() {
 		"DescribeWorkflowRule":                  {},
 		"DeleteWorkflowRule":                    {},
 		"ListWorkflowRules":                     {},
+		"TriggerWorkflowRule":                   {},
 	}, apis)
 }
 
