@@ -476,6 +476,7 @@ func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_RetryTask() {
 	// Let namespace config propagate.
 	// There is no good way to check if the namespace config has propagated to the history service
 	err = util.InterruptibleSleep(ctx, 2*time.Second)
+	s.NoError(err)
 
 	// 5. wait for activity to be paused by rule. This should happen in the activity retry task
 	s.EventuallyWithT(func(t *assert.CollectT) {
