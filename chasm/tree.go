@@ -72,7 +72,7 @@ type (
 		// if the state in memory matches the state in DB.
 		//
 		// TODO: synced flag should be cleared
-		//   when values serializedNode anc value got in-sync.
+		//   when values serializedNode and value got in-sync.
 		//   And deserialization/serialization can be skipped if synced flag is true.
 		valueSynced bool
 	}
@@ -149,11 +149,8 @@ func NewTree(
 	root := newNode(base, nil, "")
 	if len(serializedNodes) == 0 {
 		// If serializedNodes is empty, it means that this new tree.
-		// Create empty node with nil value and empty serializedNode.
-		err := root.setValue(nil, fieldTypeComponent)
-		if err != nil {
-			return nil, err
-		}
+		// Initialize empty serializedNode.
+		root.initSerializedNode(fieldTypeComponent)
 		return root, nil
 	}
 
@@ -265,14 +262,35 @@ func (n *Node) prepareComponentValue(
 	return n.value, nil
 }
 
-// setValue sets node value field and initialize serializedNode field with empty attributes based on fieldType.
-func (n *Node) setValue(v any, ft fieldType) error {
-	if err := validateValueType(v); err != nil {
-		return err
+// deduceFieldType returns fieldTypeData if v's type implements proto.Message and fieldTypeComponent otherwise.
+func deduceFieldType(v any) fieldType {
+	fieldT := reflect.TypeOf(v)
+	if fieldT.AssignableTo(protoMessageT) {
+		return fieldTypeData
+	}
+	// TODO: what's about ComponentPointer?
+	return fieldTypeComponent
+}
+
+func validateType(t reflect.Type) error {
+	if t == nil {
+		return nil
 	}
 
-	n.value = v
+	if t.Kind() != reflect.Ptr || t.Elem().Kind() != reflect.Struct {
+		return serviceerror.NewInternal("only pointer to struct is supported for tree node value")
+	}
+	return nil
+}
 
+func fieldName(f reflect.StructField) string {
+	if tagName := f.Tag.Get(fieldNameTag); tagName != "" {
+		return tagName
+	}
+	return f.Name
+}
+
+func (n *Node) initSerializedNode(ft fieldType) {
 	switch ft {
 	case fieldTypeData:
 		n.serializedNode = &persistencespb.ChasmNode{
@@ -301,39 +319,6 @@ func (n *Node) setValue(v any, ft fieldType) error {
 	case fieldTypeComponentPointer:
 		panic("not implemented")
 	}
-	return nil
-}
-
-// deduceFieldType returns fieldTypeData if v's type implements proto.Message and fieldTypeComponent otherwise.
-func deduceFieldType(v any) fieldType {
-	fieldT := reflect.TypeOf(v)
-	if fieldT.AssignableTo(protoMessageT) {
-		return fieldTypeData
-	}
-	// TODO: what's about ComponentPointer?
-	return fieldTypeComponent
-}
-
-func validateValueType(v any) error {
-	return validateType(reflect.TypeOf(v))
-}
-
-func validateType(t reflect.Type) error {
-	if t == nil {
-		return nil
-	}
-
-	if t.Kind() != reflect.Ptr || t.Elem().Kind() != reflect.Struct {
-		return serviceerror.NewInternal("only pointer to struct is supported for tree node value")
-	}
-	return nil
-}
-
-func fieldName(f reflect.StructField) string {
-	if tagName := f.Tag.Get(fieldNameTag); tagName != "" {
-		return tagName
-	}
-	return f.Name
 }
 
 func (n *Node) setSerializedNode(
@@ -378,12 +363,7 @@ func (n *Node) serializeComponentNode() error {
 	// TODO: consider using walker pattern to unify walking over reflected fields.
 	for i := 0; i < nodeValueT.Elem().NumField(); i++ {
 		fieldV := nodeValueV.Elem().Field(i)
-		fieldT := fieldV.Type()
-		if !fieldT.AssignableTo(protoMessageT) {
-			continue
-		}
-
-		if fieldV.IsNil() {
+		if !fieldV.Type().AssignableTo(protoMessageT) {
 			continue
 		}
 
@@ -392,9 +372,12 @@ func (n *Node) serializeComponentNode() error {
 		}
 		protoMessageFound = true
 
-		blob, err := serialization.ProtoEncodeBlob(fieldV.Interface().(proto.Message), enumspb.ENCODING_TYPE_PROTO3)
-		if err != nil {
-			return err
+		var blob *commonpb.DataBlob
+		if !fieldV.IsNil() {
+			var err error
+			if blob, err = serialization.ProtoEncodeBlob(fieldV.Interface().(proto.Message), enumspb.ENCODING_TYPE_PROTO3); err != nil {
+				return err
+			}
 		}
 
 		rc, ok := n.registry.componentFor(n.value)
@@ -404,12 +387,7 @@ func (n *Node) serializeComponentNode() error {
 
 		n.serializedNode.Data = blob
 		n.serializedNode.GetMetadata().GetComponentAttributes().Type = rc.fqType()
-
-		if n.serializedNode.GetMetadata().GetLastUpdateVersionedTransition() == nil {
-			n.serializedNode.GetMetadata().LastUpdateVersionedTransition = &persistencespb.VersionedTransition{}
-		}
-		n.serializedNode.GetMetadata().GetLastUpdateVersionedTransition().TransitionCount = n.backend.NextTransitionCount()
-		n.serializedNode.GetMetadata().GetLastUpdateVersionedTransition().NamespaceFailoverVersion = n.backend.GetCurrentVersion()
+		n.updateLastUpdateVersionedTransition()
 	}
 	return nil
 }
@@ -463,12 +441,16 @@ func (n *Node) syncSubComponentsInternal(
 			if internal.IsEmpty() {
 				continue
 			}
-			if internal.node == nil {
+			if internal.node == nil && internal.value != nil {
 				// Field is not empty but tree node is not set. It means this is a new field, and a node must be created.
 				childNode := newNode(n.nodeBase, n, fieldN)
-				if err := childNode.setValue(internal.value, deduceFieldType(internal.value)); err != nil {
+
+				if err := validateType(reflect.TypeOf(internal.value)); err != nil {
 					return err
 				}
+				childNode.value = internal.value
+				childNode.initSerializedNode(deduceFieldType(internal.value))
+
 				n.children[fieldN] = childNode
 				internal.node = childNode
 				// TODO: this line can be remove if Internal becomes a *fieldInternal.
@@ -515,20 +497,24 @@ func (n *Node) serializeDataNode() error {
 		return serviceerror.NewInternal("only support proto.Message as chasm data")
 	}
 
-	blob, err := serialization.ProtoEncodeBlob(protoValue, enumspb.ENCODING_TYPE_PROTO3)
-	if err != nil {
-		return err
+	var blob *commonpb.DataBlob
+	if protoValue != nil {
+		var err error
+		if blob, err = serialization.ProtoEncodeBlob(protoValue, enumspb.ENCODING_TYPE_PROTO3); err != nil {
+			return err
+		}
 	}
-
 	n.serializedNode.Data = blob
+	n.updateLastUpdateVersionedTransition()
+	return nil
+}
 
+func (n *Node) updateLastUpdateVersionedTransition() {
 	if n.serializedNode.GetMetadata().GetLastUpdateVersionedTransition() == nil {
 		n.serializedNode.GetMetadata().LastUpdateVersionedTransition = &persistencespb.VersionedTransition{}
 	}
 	n.serializedNode.GetMetadata().GetLastUpdateVersionedTransition().TransitionCount = n.backend.NextTransitionCount()
 	n.serializedNode.GetMetadata().GetLastUpdateVersionedTransition().NamespaceFailoverVersion = n.backend.GetCurrentVersion()
-
-	return nil
 }
 
 // deserialize initializes the node's value from its serializedNode.
@@ -560,8 +546,10 @@ func (n *Node) deserializeComponentNode(
 	// TODO: use n.serializedNode.GetComponentAttributes().GetType() instead to support deserialization to interface.
 	valueV := reflect.New(valueT.Elem())
 	if n.serializedNode.GetData() == nil {
-		// serializedNode is empty (has only metadata) => clear value and return.
-		return n.setValue(valueV.Interface(), fieldTypeComponent)
+		// serializedNode is empty (has only metadata) => use constructed value of valueT type as value and return.
+		// deserialize method acts as component constructor.
+		n.value = valueV.Interface()
+		return nil
 	}
 
 	protoMessageFound := false
