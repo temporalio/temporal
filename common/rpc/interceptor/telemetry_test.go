@@ -72,9 +72,14 @@ func TestEmitActionMetric(t *testing.T) {
 		resp              any
 	}{
 		{
+			methodName: startWorkflow,
+			fullName:   api.WorkflowServicePrefix + startWorkflow,
+			resp:       &workflowservice.StartWorkflowExecutionResponse{Started: false},
+		},
+		{
 			methodName:        startWorkflow,
 			fullName:          api.WorkflowServicePrefix + startWorkflow,
-			resp:              &workflowservice.StartWorkflowExecutionResponse{},
+			resp:              &workflowservice.StartWorkflowExecutionResponse{Started: true},
 			expectEmitMetrics: true,
 		},
 		{
