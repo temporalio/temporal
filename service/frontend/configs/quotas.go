@@ -46,6 +46,8 @@ const (
 	DispatchNexusTaskByNamespaceAndTaskQueueAPIName = "/temporal.api.nexusservice.v1.NexusService/DispatchByNamespaceAndTaskQueue"
 	DispatchNexusTaskByEndpointAPIName              = "/temporal.api.nexusservice.v1.NexusService/DispatchByEndpoint"
 	CompleteNexusOperation                          = "/temporal.api.nexusservice.v1.NexusService/CompleteNexusOperation"
+	// PollWorkflowHistoryAPIName is used instead of GetWorkflowExecutionHistory if WaitNewEvent is true in request.
+	PollWorkflowHistoryAPIName = "/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowExecutionHistory"
 )
 
 var (
@@ -164,6 +166,8 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/ResetStickyTaskQueue":               5,
 		"/temporal.api.workflowservice.v1.WorkflowService/ShutdownWorker":                     5,
 		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkflowExecutionHistoryReverse": 5,
+		// GetWorkflowExecutionHistory with WaitNewEvent set to true is a long poll API. Consider it as any other poll API.
+		PollWorkflowHistoryAPIName: 5,
 
 		// P6: Informational API that aren't required for the temporal service to function
 		OpenAPIV3APIName: 6,

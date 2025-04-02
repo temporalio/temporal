@@ -732,6 +732,9 @@ func getTestConfig(tc namespaceRateLimitInterceptorTestCase) Config {
 		MaxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance: func(namespace string) float64 {
 			return getOrDefaultLimit(tc.maxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance)
 		},
+		ReducePollWorkflowHistoryRequestPriority: func() bool {
+			return true
+		},
 	}
 }
 

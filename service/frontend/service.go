@@ -87,6 +87,7 @@ type Config struct {
 	MaxNamespaceRPSPerInstance                                        dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxNamespaceBurstRatioPerInstance                                 dynamicconfig.FloatPropertyFnWithNamespaceFilter
 	MaxConcurrentLongRunningRequestsPerInstance                       dynamicconfig.IntPropertyFnWithNamespaceFilter
+	ReducePollWorkflowHistoryRequestPriority                          dynamicconfig.BoolPropertyFn
 	MaxGlobalConcurrentLongRunningRequests                            dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxNamespaceVisibilityRPSPerInstance                              dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxNamespaceVisibilityBurstRatioPerInstance                       dynamicconfig.FloatPropertyFnWithNamespaceFilter
@@ -273,6 +274,7 @@ func NewConfig(
 		MaxNamespaceRPSPerInstance:                                        dynamicconfig.FrontendMaxNamespaceRPSPerInstance.Get(dc),
 		MaxNamespaceBurstRatioPerInstance:                                 dynamicconfig.FrontendMaxNamespaceBurstRatioPerInstance.Get(dc),
 		MaxConcurrentLongRunningRequestsPerInstance:                       dynamicconfig.FrontendMaxConcurrentLongRunningRequestsPerInstance.Get(dc),
+		ReducePollWorkflowHistoryRequestPriority:                          dynamicconfig.ReducePollWorkflowHistoryRequestPriority.Get(dc),
 		MaxGlobalConcurrentLongRunningRequests:                            dynamicconfig.FrontendGlobalMaxConcurrentLongRunningRequests.Get(dc),
 		MaxNamespaceVisibilityRPSPerInstance:                              dynamicconfig.FrontendMaxNamespaceVisibilityRPSPerInstance.Get(dc),
 		MaxNamespaceVisibilityBurstRatioPerInstance:                       dynamicconfig.FrontendMaxNamespaceVisibilityBurstRatioPerInstance.Get(dc),
