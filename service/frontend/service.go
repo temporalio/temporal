@@ -233,7 +233,8 @@ type Config struct {
 
 	EnableEagerWorkflowStart dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
-	ActivityAPIsEnabled dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	ActivityAPIsEnabled      dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	WorkflowRulesAPIsEnabled dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	HTTPAllowedHosts *dynamicconfig.GlobalCachedTypedValue[*regexp.Regexp]
 }
@@ -381,6 +382,7 @@ func NewConfig(
 		LogAllReqErrors:            dynamicconfig.LogAllReqErrors.Get(dc),
 		EnableEagerWorkflowStart:   dynamicconfig.EnableEagerWorkflowStart.Get(dc),
 		ActivityAPIsEnabled:        dynamicconfig.ActivityAPIsEnabled.Get(dc),
+		WorkflowRulesAPIsEnabled:   dynamicconfig.WorkflowRulesAPIsEnabled.Get(dc),
 
 		HTTPAllowedHosts: dynamicconfig.NewGlobalCachedTypedValue(dc, dynamicconfig.FrontendHTTPAllowedHosts, func(patterns []string) (*regexp.Regexp, error) {
 			if len(patterns) == 0 {
