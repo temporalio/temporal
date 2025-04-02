@@ -394,25 +394,22 @@ func (n *Node) serializeComponentNode() error {
 
 // Sync the entire tree recursively starting from node n from the underlining component value:
 //   - Create:
-//   - if child node is nil but subcomponent is not empty, a new node with subcomponent value is created.
+//     -- if child node is nil but subcomponent is not empty, a new node with subcomponent value is created.
 //   - Delete:
-//   - if subcomponent is empty, the corresponding child is removed from the tree,
-//   - if subcomponent is no longer in a component, the corresponding child is removed from the tree,
-//   - when a child is removed, all its children are removed too.
+//     -- if subcomponent is empty, the corresponding child is removed from the tree,
+//     -- if subcomponent is no longer in a component, the corresponding child is removed from the tree,
+//     -- when a child is removed, all its children are removed too.
 //
-// Returns slice of paths to removed nodes.
-func (n *Node) syncSubComponents() ([]string, error) {
+// All removed paths are added to mutation.DeletedNodes (which is shared between all nodes in the tree).
+func (n *Node) syncSubComponents() error {
 	if n.parent != nil {
-		return nil, serviceerror.NewInternal("syncSubComponents must be called on root node")
+		return serviceerror.NewInternal("syncSubComponents must be called on root node")
 	}
-
-	var removedPaths []string
-	err := n.syncSubComponentsInternal(&removedPaths, nil)
-	return removedPaths, err
+	n.mutation.DeletedNodes = make(map[string]struct{})
+	return n.syncSubComponentsInternal(nil)
 }
 
 func (n *Node) syncSubComponentsInternal(
-	removedPaths *[]string,
 	nodePath []string,
 ) error {
 	nodeValueT := reflect.TypeOf(n.value)
@@ -456,7 +453,7 @@ func (n *Node) syncSubComponentsInternal(
 				// TODO: this line can be remove if Internal becomes a *fieldInternal.
 				internalV.Set(reflect.ValueOf(internal))
 			}
-			if err := internal.node.syncSubComponentsInternal(removedPaths, append(nodePath, fieldN)); err != nil {
+			if err := internal.node.syncSubComponentsInternal(append(nodePath, fieldN)); err != nil {
 				return err
 			}
 
@@ -468,21 +465,21 @@ func (n *Node) syncSubComponentsInternal(
 		}
 	}
 
-	err := n.deleteChildren(removedPaths, childrenToKeep, nodePath)
+	err := n.deleteChildren(childrenToKeep, nodePath)
 	return err
 }
 
-func (n *Node) deleteChildren(removedPaths *[]string, childrenToKeep map[string]struct{}, currentPath []string) error {
+func (n *Node) deleteChildren(childrenToKeep map[string]struct{}, currentPath []string) error {
 	for childName, childNode := range n.children {
 		if _, childToKeep := childrenToKeep[childName]; !childToKeep {
-			if err := childNode.deleteChildren(removedPaths, nil, append(currentPath, childName)); err != nil {
+			if err := childNode.deleteChildren(nil, append(currentPath, childName)); err != nil {
 				return err
 			}
 			path, err := n.pathEncoder.Encode(childNode, append(currentPath, childName))
 			if err != nil {
 				return err
 			}
-			*removedPaths = append(*removedPaths, path)
+			n.mutation.DeletedNodes[path] = struct{}{}
 			// If parent is about to be removed, it must not have any children.
 			// TODO: softassert: len(childNode.children)==0
 			delete(n.children, childName)

@@ -113,7 +113,7 @@ func (s *nodeSuite) TestNewTree() {
 		persistenceNodes["child2/grandchild1"],
 	}
 
-	root, err := NewTree(persistenceNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, log.NewTestLogger())
+	root, err := NewTree(persistenceNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
 	s.NoError(err)
 	s.NotNil(root)
 
@@ -195,9 +195,9 @@ func (s *nodeSuite) TestSerializeNode_ClearSubDataField() {
 	sd1Node := node.children["SubData1"]
 	s.NotNil(sd1Node)
 
-	rp, err := node.syncSubComponents()
+	err := node.syncSubComponents()
 	s.NoError(err)
-	s.Len(rp, 1)
+	s.Len(node.mutation.DeletedNodes, 1)
 
 	sd1Node = node.children["SubData1"]
 	s.Nil(sd1Node)
@@ -241,11 +241,11 @@ func (s *nodeSuite) TestSyncSubComponents_DeleteLeafNode() {
 	component.SubComponent1.Internal.value.(*TestSubComponent1).SubComponent11 = NewEmptyField[*TestSubComponent11]()
 	s.NotNil(node.children["SubComponent1"].children["SubComponent11"])
 
-	rps, err := node.syncSubComponents()
+	err := node.syncSubComponents()
 	s.NoError(err)
 
-	s.Len(rps, 1)
-	s.Equal("SubComponent1/SubComponent11", rps[0])
+	s.Len(node.mutation.DeletedNodes, 1)
+	s.NotNil(node.mutation.DeletedNodes["SubComponent1/SubComponent11"])
 	s.Nil(node.children["SubComponent1"].children["SubComponent11"])
 }
 
@@ -258,13 +258,13 @@ func (s *nodeSuite) TestSyncSubComponents_DeleteMiddleNode() {
 	component.SubComponent1 = NewEmptyField[*TestSubComponent1]()
 	s.NotNil(node.children["SubComponent1"])
 
-	rps, err := node.syncSubComponents()
+	err := node.syncSubComponents()
 	s.NoError(err)
 
-	s.Len(rps, 3)
-	s.Contains(rps, "SubComponent1/SubComponent11")
-	s.Contains(rps, "SubComponent1/SubData11")
-	s.Contains(rps, "SubComponent1")
+	s.Len(node.mutation.DeletedNodes, 3)
+	s.NotNil(node.mutation.DeletedNodes["SubComponent1/SubComponent11"])
+	s.NotNil(node.mutation.DeletedNodes["SubComponent1/SubData11"])
+	s.NotNil(node.mutation.DeletedNodes["SubComponent1"])
 
 	s.Nil(node.children["SubComponent1"])
 }
@@ -776,9 +776,9 @@ func (s *nodeSuite) testComponentTree() *Node {
 	// Sync tree with subcomponents of TestComponent.
 	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(1)).Times(4) // for InitialVersionedTransition of children.
 	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(1)).Times(4)
-	rps, err := node.syncSubComponents()
+	err = node.syncSubComponents()
 	s.NoError(err)
-	s.Empty(rps)
+	s.Empty(node.mutation.DeletedNodes)
 
 	return node
 }
