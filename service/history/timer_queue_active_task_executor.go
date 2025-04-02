@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/priorities"
 	"go.temporal.io/server/common/resource"
@@ -520,6 +521,12 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 		return consts.ErrActivityTaskNotFound
 	}
 
+	err = t.processActivityWorkflowRules(ctx, weContext, mutableState, activityInfo)
+	if err != nil {
+		release(nil) // release(nil) so mutable state is not unloaded from cache
+		return err
+	}
+
 	if task.Stamp != activityInfo.Stamp || activityInfo.Paused {
 		// if retry task event is from an old stamp of if activity is paused we should ignore the event.
 		release(nil) // release(nil) so mutable state is not unloaded from cache
@@ -879,4 +886,47 @@ func (t *timerQueueActiveTaskExecutor) emitTimeoutMetricScopeWithNamespaceTag(
 	case enumspb.TIMEOUT_TYPE_HEARTBEAT:
 		metrics.HeartbeatTimeoutCounter.With(metricsScope).Record(1)
 	}
+}
+
+func (t *timerQueueActiveTaskExecutor) processActivityWorkflowRules(
+	ctx context.Context,
+	weContext historyi.WorkflowContext,
+	ms historyi.MutableState,
+	ai *persistencespb.ActivityInfo,
+) error {
+	if ai.Paused {
+		return nil
+	}
+
+	activityChanged := workflow.ActivityMatchWorkflowRules(ms, t.logger, ai)
+	if !activityChanged {
+		return nil
+	}
+	if ai.Paused {
+		// need to update activity
+		if err := ms.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ historyi.MutableState) error {
+			activityInfo.StartedEventId = common.EmptyEventID
+			activityInfo.StartedTime = nil
+			activityInfo.RequestId = ""
+			return nil
+		}); err != nil {
+			return err
+		}
+
+		// need to update mutable state
+		err := weContext.UpdateWorkflowExecutionWithNew(
+			ctx,
+			t.shardContext,
+			persistence.UpdateWorkflowModeUpdateCurrent,
+			nil,
+			nil,
+			historyi.TransactionPolicyActive,
+			nil,
+		)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
