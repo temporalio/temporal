@@ -2167,37 +2167,9 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 	// for other fields as well.
 	runTimeout := command.GetWorkflowRunTimeout()
 
-	cbColl := callbacks.MachineCollection(previousExecutionState.HSM())
-	completionCallbacks := make([]*commonpb.Callback, 0, cbColl.Size())
-	for _, node := range cbColl.List() {
-		cb, err := cbColl.Data(node.Key.ID)
-		if err != nil {
-			return nil, err
-		}
-		if _, ok := cb.Trigger.Variant.(*persistencespb.CallbackInfo_Trigger_WorkflowClosed); !ok {
-			continue
-		}
-		cbSpec := &commonpb.Callback{}
-		switch variant := cb.Callback.Variant.(type) {
-		case *persistencespb.Callback_Nexus_:
-			cbSpec.Variant = &commonpb.Callback_Nexus_{
-				Nexus: &commonpb.Callback_Nexus{
-					Url:    variant.Nexus.GetUrl(),
-					Header: variant.Nexus.GetHeader(),
-				},
-			}
-		default:
-			data, err := proto.Marshal(cb.Callback)
-			if err != nil {
-				return nil, err
-			}
-			cbSpec.Variant = &commonpb.Callback_Internal_{
-				Internal: &commonpb.Callback_Internal{
-					Data: data,
-				},
-			}
-		}
-		completionCallbacks = append(completionCallbacks, cbSpec)
+	completionCallbacks, err := getCompletionCallbacksAsProtoSlice(previousExecutionState)
+	if err != nil {
+		return nil, err
 	}
 
 	createRequest := &workflowservice.StartWorkflowExecutionRequest{
@@ -3863,7 +3835,12 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionFailedEvent(
 	ms.executionInfo.CloseTime = event.GetEventTime()
 	ms.ClearStickyTaskQueue()
 	ms.writeEventToCache(event)
-	return ms.processCloseCallbacks()
+
+	attrs := event.GetWorkflowExecutionFailedEventAttributes()
+	if attrs.RetryState != enumspb.RETRY_STATE_IN_PROGRESS {
+		return ms.processCloseCallbacks()
+	}
+	return nil
 }
 
 func (ms *MutableStateImpl) AddTimeoutWorkflowEvent(
@@ -3905,7 +3882,12 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionTimedoutEvent(
 	ms.executionInfo.CloseTime = event.GetEventTime()
 	ms.ClearStickyTaskQueue()
 	ms.writeEventToCache(event)
-	return ms.processCloseCallbacks()
+
+	attrs := event.GetWorkflowExecutionTimedOutEventAttributes()
+	if attrs.RetryState != enumspb.RETRY_STATE_IN_PROGRESS {
+		return ms.processCloseCallbacks()
+	}
+	return nil
 }
 
 func (ms *MutableStateImpl) AddWorkflowExecutionCancelRequestedEvent(
@@ -5665,8 +5647,7 @@ func (ms *MutableStateImpl) AddHistorySize(size int64) {
 // processCloseCallbacks triggers "WorkflowClosed" callbacks, applying the state machine transition that schedules
 // callback tasks.
 func (ms *MutableStateImpl) processCloseCallbacks() error {
-	continuedAsNew := ms.GetExecutionInfo().NewExecutionRunId != ""
-	if continuedAsNew || ms.GetExecutionInfo().GetWorkflowWasReset() {
+	if ms.GetExecutionInfo().GetWorkflowWasReset() {
 		return nil
 	}
 
