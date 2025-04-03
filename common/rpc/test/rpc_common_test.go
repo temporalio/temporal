@@ -32,20 +32,26 @@ import (
 	"strings"
 
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/server/api/testservice/v1"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/rpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/examples/helloworld/helloworld"
 	"google.golang.org/grpc/peer"
 )
 
-// HelloServer is used to implement helloworld.GreeterServer.
-type HelloServer struct {
-	helloworld.UnimplementedGreeterServer
-}
+var (
+	_ testservice.TestServiceServer = (*TestServiceServerHandler)(nil)
+)
+
+type (
+	// TestServiceServerHandler - gRPC handler interface for test service
+	TestServiceServerHandler struct {
+		testservice.UnimplementedTestServiceServer
+	}
+)
 
 type ServerUsageType int32
 
@@ -65,9 +71,9 @@ type TestFactory struct {
 	serverUsage ServerUsageType
 }
 
-// SayHello implements helloworld.GreeterServer
-func (s *HelloServer) SayHello(ctx context.Context, in *helloworld.HelloRequest) (*helloworld.HelloReply, error) {
-	return &helloworld.HelloReply{Message: "Hello " + in.Name}, nil
+// SendHello implements testservice.TestServiceServer
+func (s *TestServiceServerHandler) SendHello(ctx context.Context, in *testservice.SendHelloRequest) (*testservice.SendHelloResponse, error) {
+	return &testservice.SendHelloResponse{Message: "Hello " + in.Name}, nil
 }
 
 var (
@@ -91,7 +97,7 @@ var (
 	}
 )
 
-func startHelloWorldServer(s *suite.Suite, factory *TestFactory) (*grpc.Server, string) {
+func startTestServiceServer(s *suite.Suite, factory *TestFactory) (*grpc.Server, string) {
 	var opts []grpc.ServerOption
 	var err error
 	if factory.serverUsage == Internode {
@@ -102,8 +108,8 @@ func startHelloWorldServer(s *suite.Suite, factory *TestFactory) (*grpc.Server, 
 	s.NoError(err)
 
 	server := grpc.NewServer(opts...)
-	greeter := &HelloServer{}
-	helloworld.RegisterGreeterServer(server, greeter)
+	testServiceHandler := &TestServiceServerHandler{}
+	testservice.RegisterTestServiceServer(server, testServiceHandler)
 
 	listener := factory.GetGRPCListener()
 
@@ -116,8 +122,8 @@ func startHelloWorldServer(s *suite.Suite, factory *TestFactory) (*grpc.Server, 
 	return server, port
 }
 
-func runHelloWorldTest(s *suite.Suite, host string, serverFactory *TestFactory, clientFactory *TestFactory, isValid bool) {
-	server, port := startHelloWorldServer(s, serverFactory)
+func runTestServerTest(s *suite.Suite, host string, serverFactory *TestFactory, clientFactory *TestFactory, isValid bool) {
+	server, port := startTestServiceServer(s, serverFactory)
 	defer server.Stop()
 	err := dialHello(s, host+":"+port, clientFactory, serverFactory.serverUsage)
 
@@ -128,7 +134,7 @@ func runHelloWorldTest(s *suite.Suite, host string, serverFactory *TestFactory, 
 	}
 }
 
-func runHelloWorldMultipleDials(
+func runTestServerMultipleDials(
 	s *suite.Suite,
 	host string,
 	serverFactory *TestFactory,
@@ -137,21 +143,21 @@ func runHelloWorldMultipleDials(
 	validator func(*credentials.TLSInfo, error),
 ) {
 
-	server, port := startHelloWorldServer(s, serverFactory)
+	server, port := startTestServiceServer(s, serverFactory)
 	defer server.Stop()
 
 	for i := 0; i < nDials; i++ {
-		tlsInfo, err := dialHelloAndGetTLSInfo(s, host+":"+port, clientFactory, serverFactory.serverUsage)
+		tlsInfo, err := dialTestServiceAndGetTLSInfo(s, host+":"+port, clientFactory, serverFactory.serverUsage)
 		validator(tlsInfo, err)
 	}
 }
 
 func dialHello(s *suite.Suite, hostport string, clientFactory *TestFactory, serverType ServerUsageType) error {
-	_, err := dialHelloAndGetTLSInfo(s, hostport, clientFactory, serverType)
+	_, err := dialTestServiceAndGetTLSInfo(s, hostport, clientFactory, serverType)
 	return err
 }
 
-func dialHelloAndGetTLSInfo(
+func dialTestServiceAndGetTLSInfo(
 	s *suite.Suite,
 	hostport string,
 	clientFactory *TestFactory,
@@ -178,12 +184,12 @@ func dialHelloAndGetTLSInfo(
 	clientConn, err := rpc.Dial(hostport, cfg, logger)
 	s.NoError(err)
 
-	client := helloworld.NewGreeterClient(clientConn)
+	client := testservice.NewTestServiceClient(clientConn)
 
-	request := &helloworld.HelloRequest{Name: convert.Uint64ToString(rand.Uint64())}
-	var reply *helloworld.HelloReply
+	request := &testservice.SendHelloRequest{Name: convert.Uint64ToString(rand.Uint64())}
+	var reply *testservice.SendHelloResponse
 	peer := new(peer.Peer)
-	reply, err = client.SayHello(context.Background(), request, grpc.Peer(peer))
+	reply, err = client.SendHello(context.Background(), request, grpc.Peer(peer))
 	tlsInfo, _ := peer.AuthInfo.(credentials.TLSInfo)
 
 	if err == nil {
