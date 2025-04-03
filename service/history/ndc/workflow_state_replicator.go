@@ -229,6 +229,15 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 	default:
 		return serviceerror.NewInvalidArgument(fmt.Sprintf("unknown artifact type %T", artifactType))
 	}
+	if mutation != nil && mutation.ExclusiveStartVersionedTransition == workflow.EmptyVersionedTransition {
+		// this is the first replication task for this workflow
+		err := r.handleFirstReplicationTask(ctx, versionedTransition, sourceClusterName)
+		if !errors.Is(err, consts.ErrDuplicate) {
+			// if ErrDuplicate is returned from creation, it means the workflow is already existed, continue to apply mutation
+			return err
+		}
+	}
+
 	executionState, executionInfo := func() (*persistencespb.WorkflowExecutionState, *persistencespb.WorkflowExecutionInfo) {
 		if snapshot != nil {
 			return snapshot.State.ExecutionState, snapshot.State.ExecutionInfo
@@ -335,6 +344,131 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 	default:
 		return err
 	}
+}
+
+func (r *WorkflowStateReplicatorImpl) handleFirstReplicationTask(
+	ctx context.Context,
+	versionedTransition *replicationspb.VersionedTransitionArtifact,
+	sourceClusterName string,
+) (retErr error) {
+	mutation := versionedTransition.GetSyncWorkflowStateMutationAttributes()
+	executionInfo := mutation.StateMutation.ExecutionInfo
+	executionState := mutation.StateMutation.ExecutionState
+	sourceVersionHistories := mutation.StateMutation.ExecutionInfo.VersionHistories
+	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(sourceVersionHistories)
+	if err != nil {
+		return err
+	}
+	lastVersionHistoryItem, err := versionhistory.GetLastVersionHistoryItem(currentVersionHistory)
+	if err != nil {
+		return err
+	}
+
+	var events [][]*historypb.HistoryEvent
+	for _, blob := range versionedTransition.EventBatches {
+		e, err := r.historySerializer.DeserializeEvents(blob)
+		if err != nil {
+			return err
+		}
+		events = append(events, e)
+	}
+	lastBatch := events[len(events)-1]
+	lastEvent := lastBatch[len(lastBatch)-1]
+	if lastEvent.EventId < lastVersionHistoryItem.EventId {
+		remoteHistoryIterator := collection.NewPagingIterator(r.getHistoryFromRemotePaginationFn(
+			ctx,
+			sourceClusterName,
+			namespace.ID(executionInfo.NamespaceId),
+			executionInfo.WorkflowId,
+			executionState.RunId,
+			lastEvent.EventId,
+			lastEvent.Version,
+			lastVersionHistoryItem.EventId+1,
+			lastVersionHistoryItem.Version),
+		)
+		for remoteHistoryIterator.HasNext() {
+			batch, err := remoteHistoryIterator.Next()
+			if err != nil {
+				return err
+			}
+			sourceEvents, err := r.historySerializer.DeserializeEvents(batch.rawHistory)
+			if err != nil {
+				return err
+			}
+			events = append(events, sourceEvents)
+		}
+	}
+
+	wfCtx, releaseFn, err := r.workflowCache.GetOrCreateWorkflowExecution(
+		ctx,
+		r.shardContext,
+		namespace.ID(executionInfo.NamespaceId),
+		&commonpb.WorkflowExecution{
+			WorkflowId: executionInfo.WorkflowId,
+			RunId:      executionState.RunId,
+		},
+		locks.PriorityLow,
+	)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if rec := recover(); rec != nil {
+			releaseFn(errPanic)
+			panic(rec)
+		}
+		releaseFn(retErr)
+	}()
+
+	nsEntry, err := r.namespaceRegistry.GetNamespaceByID(namespace.ID(executionInfo.NamespaceId))
+	if err != nil {
+		return err
+	}
+	mutableState := workflow.NewMutableState(
+		r.shardContext,
+		r.shardContext.GetEventsCache(),
+		r.logger,
+		nsEntry,
+		executionInfo.WorkflowId,
+		executionState.RunId,
+		timestamp.TimeValue(executionState.StartTime),
+	)
+	err = mutableState.ApplyMutation(mutation.StateMutation)
+	mutableState.GetExecutionInfo().VersionHistories = nil // reset for all other case? as we only have current branch
+	if err != nil {
+		return err
+	}
+
+	mutableState.SetHistoryBuilder(historybuilder.NewImmutable(events...))
+
+	if versionedTransition.NewRunInfo != nil {
+		err = r.createNewRunWorkflow(
+			ctx,
+			namespace.ID(executionInfo.NamespaceId),
+			executionInfo.WorkflowId,
+			versionedTransition.NewRunInfo,
+			mutableState,
+			true,
+		)
+		if err != nil {
+			return err
+		}
+	}
+
+	taskRefresher := workflow.NewTaskRefresher(r.shardContext)
+	err = taskRefresher.Refresh(ctx, mutableState)
+	if err != nil {
+		return err
+	}
+	return r.transactionMgr.CreateWorkflow(
+		ctx,
+		NewWorkflow(
+			r.clusterMetadata,
+			wfCtx,
+			mutableState,
+			releaseFn,
+		),
+	)
 }
 
 func (r *WorkflowStateReplicatorImpl) applyMutation(

@@ -6471,6 +6471,10 @@ func (ms *MutableStateImpl) closeTransactionPrepareReplicationTasks(
 						TaskEquivalents:        replicationTasks,
 						LastVersionHistoryItem: lastVersionHistoryItem,
 					}
+					
+					if ms.dbRecordVersion == 0 {
+						syncVersionedTransitionTask.IsFirstTask = true
+					}
 
 					// versioned transition updated in the transaction
 					ms.InsertTasks[tasks.CategoryReplication] = append(

@@ -48,7 +48,6 @@ import (
 type MockSyncStateRetriever struct {
 	ctrl     *gomock.Controller
 	recorder *MockSyncStateRetrieverMockRecorder
-	isgomock struct{}
 }
 
 // MockSyncStateRetrieverMockRecorder is the mock recorder for MockSyncStateRetriever.
@@ -98,11 +97,25 @@ func (mr *MockSyncStateRetrieverMockRecorder) GetSyncWorkflowStateArtifactFromMu
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSyncWorkflowStateArtifactFromMutableState", reflect.TypeOf((*MockSyncStateRetriever)(nil).GetSyncWorkflowStateArtifactFromMutableState), ctx, namespaceID, execution, mutableState, targetVersionedTransition, targetVersionHistories, releaseFunc)
 }
 
+// GetSyncWorkflowStateArtifactFromMutableStateForNewWorkflow mocks base method.
+func (m *MockSyncStateRetriever) GetSyncWorkflowStateArtifactFromMutableStateForNewWorkflow(ctx context.Context, namespaceID string, execution *common.WorkflowExecution, mutableState interfaces.MutableState, releaseFunc interfaces.ReleaseWorkflowContextFunc) (*SyncStateResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetSyncWorkflowStateArtifactFromMutableStateForNewWorkflow", ctx, namespaceID, execution, mutableState, releaseFunc)
+	ret0, _ := ret[0].(*SyncStateResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetSyncWorkflowStateArtifactFromMutableStateForNewWorkflow indicates an expected call of GetSyncWorkflowStateArtifactFromMutableStateForNewWorkflow.
+func (mr *MockSyncStateRetrieverMockRecorder) GetSyncWorkflowStateArtifactFromMutableStateForNewWorkflow(ctx, namespaceID, execution, mutableState, releaseFunc any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSyncWorkflowStateArtifactFromMutableStateForNewWorkflow", reflect.TypeOf((*MockSyncStateRetriever)(nil).GetSyncWorkflowStateArtifactFromMutableStateForNewWorkflow), ctx, namespaceID, execution, mutableState, releaseFunc)
+}
+
 // MocklastUpdatedStateTransitionGetter is a mock of lastUpdatedStateTransitionGetter interface.
 type MocklastUpdatedStateTransitionGetter struct {
 	ctrl     *gomock.Controller
 	recorder *MocklastUpdatedStateTransitionGetterMockRecorder
-	isgomock struct{}
 }
 
 // MocklastUpdatedStateTransitionGetterMockRecorder is the mock recorder for MocklastUpdatedStateTransitionGetter.
