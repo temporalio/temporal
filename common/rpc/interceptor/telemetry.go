@@ -279,6 +279,16 @@ func (ti *TelemetryInterceptor) emitActionMetric(
 			if startResp := resp.GetResponses()[0].GetStartWorkflow(); startResp != nil {
 				if startResp.Started {
 					metrics.ActionCounter.With(metricsHandler).Record(1, metrics.ActionType("grpc_"+methodName))
+				} else {
+					typedReq, ok := req.(*workflowservice.ExecuteMultiOperationRequest)
+					if !ok || typedReq == nil {
+						return
+					}
+
+					if typedReq.GetOperations()[0].GetStartWorkflow().GetWorkflowIdConflictPolicy() == enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING &&
+						typedReq.GetOperations()[0].GetStartWorkflow().GetOnConflictOptions() != nil {
+						metrics.ActionCounter.With(metricsHandler).Record(1, metrics.ActionType("grpc_"+methodName+"_UpdateWorkflowExecutionOptions"))
+					}
 				}
 			}
 		}

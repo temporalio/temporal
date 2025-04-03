@@ -139,6 +139,36 @@ func TestEmitActionMetric(t *testing.T) {
 			fullName:   api.WorkflowServicePrefix + executeMultiOps,
 			resp: &workflowservice.ExecuteMultiOperationResponse{
 				Responses: []*workflowservice.ExecuteMultiOperationResponse_Response{
+					{
+						Response: &workflowservice.ExecuteMultiOperationResponse_Response_StartWorkflow{
+							StartWorkflow: &workflowservice.StartWorkflowExecutionResponse{
+								Started: false,
+							},
+						},
+					},
+				},
+			},
+			req: &workflowservice.ExecuteMultiOperationRequest{
+				Namespace: "test-namespace",
+				Operations: []*workflowservice.ExecuteMultiOperationRequest_Operation{
+					{
+						Operation: &workflowservice.ExecuteMultiOperationRequest_Operation_StartWorkflow{
+							StartWorkflow: &workflowservice.StartWorkflowExecutionRequest{
+								Namespace:                "test-namespace",
+								OnConflictOptions:        &workflowpb.OnConflictOptions{},
+								WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
+							},
+						},
+					},
+				},
+			},
+			expectEmitMetrics: true,
+		},
+		{
+			methodName: executeMultiOps,
+			fullName:   api.WorkflowServicePrefix + executeMultiOps,
+			resp: &workflowservice.ExecuteMultiOperationResponse{
+				Responses: []*workflowservice.ExecuteMultiOperationResponse_Response{
 					// missing start response
 					{
 						Response: &workflowservice.ExecuteMultiOperationResponse_Response_UpdateWorkflow{
