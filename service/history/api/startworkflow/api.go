@@ -117,16 +117,9 @@ func NewStarter(
 		return nil, err
 	}
 
-	metricsHandler := workflow.GetPerTaskQueueFamilyScope(
-		shardContext.GetMetricsHandler(),
-		namespaceEntry.Name(),
-		request.StartRequest.TaskQueue.Name,
-		shardContext.GetConfig(),
-		metrics.WorkflowTypeTag(request.StartRequest.WorkflowType.Name),
-	)
-
 	return &Starter{
-		metricsHandler:             metricsHandler,
+		// metricsHandler is lazily created when needed in Starter.getMetricsHandler
+		metricsHandler:             nil,
 		shardContext:               shardContext,
 		workflowConsistencyChecker: workflowConsistencyChecker,
 		tokenSerializer:            tokenSerializer,
@@ -164,20 +157,34 @@ func (s *Starter) prepare(ctx context.Context) error {
 	}
 
 	if request.RequestEagerExecution {
-		metrics.WorkflowEagerExecutionCounter.With(s.metricsHandler).Record(1)
+		metricsHandler := s.getMetricsHandler()
+		metrics.WorkflowEagerExecutionCounter.With(metricsHandler).Record(1)
 
 		// Override to false to avoid having to look up the dynamic config throughout the different code paths.
 		if !s.shardContext.GetConfig().EnableEagerWorkflowStart(s.namespace.Name().String()) {
-			metrics.WorkflowEagerExecutionDeniedCounter.With(s.metricsHandler).
+			metrics.WorkflowEagerExecutionDeniedCounter.With(metricsHandler).
 				Record(1, metrics.ReasonTag(eagerStartDeniedReasonDynamicConfigDisabled))
 			request.RequestEagerExecution = false
 		} else if s.request.FirstWorkflowTaskBackoff.AsDuration() > 0 {
-			metrics.WorkflowEagerExecutionDeniedCounter.With(s.metricsHandler).
+			metrics.WorkflowEagerExecutionDeniedCounter.With(metricsHandler).
 				Record(1, metrics.ReasonTag(eagerStartDeniedReasonFirstWorkflowTaskBackoff))
 			request.RequestEagerExecution = false
 		}
 	}
 	return nil
+}
+
+func (s *Starter) getMetricsHandler() metrics.Handler {
+	if s.metricsHandler == nil {
+		s.metricsHandler = workflow.GetPerTaskQueueFamilyScope(
+			s.shardContext.GetMetricsHandler(),
+			s.namespace.Name(),
+			s.request.StartRequest.TaskQueue.Name,
+			s.shardContext.GetConfig(),
+			metrics.WorkflowTypeTag(s.request.StartRequest.WorkflowType.Name),
+		)
+	}
+	return s.metricsHandler
 }
 
 func (s *Starter) requestEagerStart() bool {
@@ -316,7 +323,7 @@ func (s *Starter) handleConflict(
 	request := s.request.StartRequest
 	currentWorkflowRequestIDs := currentWorkflowConditionFailed.RequestIDs
 	if requestIDInfo, ok := currentWorkflowRequestIDs[request.GetRequestId()]; ok {
-		metrics.StartWorkflowRequestDeduped.With(s.metricsHandler).Record(1)
+		metrics.StartWorkflowRequestDeduped.With(s.getMetricsHandler()).Record(1)
 
 		if requestIDInfo.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
 			resp, err := s.respondToRetriedRequest(ctx, currentWorkflowConditionFailed.RunID)
@@ -536,7 +543,7 @@ func (s *Starter) respondToRetriedRequest(
 	// The current workflow task is not started or not the first task or we exceeded the first attempt and fell back to
 	// matching based dispatch.
 	if mutableStateInfo.workflowTask == nil || mutableStateInfo.workflowTask.StartedEventID != 3 || mutableStateInfo.workflowTask.Attempt > 1 {
-		metrics.WorkflowEagerExecutionDeniedCounter.With(s.metricsHandler).
+		metrics.WorkflowEagerExecutionDeniedCounter.With(s.getMetricsHandler()).
 			Record(1, metrics.ReasonTag(eagerStartDeniedReasonTaskAlreadyDispatched))
 
 		return &historyservice.StartWorkflowExecutionResponse{
