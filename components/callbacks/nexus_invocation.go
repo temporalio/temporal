@@ -36,6 +36,7 @@ import (
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -109,6 +110,7 @@ func (n nexusInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e 
 	for k, v := range n.nexus.Header {
 		request.Header.Set(k, v)
 	}
+	request.Header.Set(headers.CallerTypeHeaderName, headers.CallerTypeAPI)
 
 	caller := e.HTTPCallerProvider(queues.NamespaceIDAndDestination{
 		NamespaceID: ns.ID().String(),
