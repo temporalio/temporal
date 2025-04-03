@@ -83,6 +83,17 @@ func TestEmitActionMetric(t *testing.T) {
 			expectEmitMetrics: true,
 		},
 		{
+			methodName: startWorkflow,
+			fullName:   api.WorkflowServicePrefix + startWorkflow,
+			req: &workflowservice.StartWorkflowExecutionRequest{
+				Namespace:                "test-namespace",
+				OnConflictOptions:        &workflowpb.OnConflictOptions{},
+				WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
+			},
+			resp:              &workflowservice.StartWorkflowExecutionResponse{Started: false},
+			expectEmitMetrics: true,
+		},
+		{
 			methodName: executeMultiOps,
 			fullName:   api.WorkflowServicePrefix + executeMultiOps,
 			resp: &workflowservice.ExecuteMultiOperationResponse{
@@ -117,6 +128,36 @@ func TestEmitActionMetric(t *testing.T) {
 					{
 						Response: &workflowservice.ExecuteMultiOperationResponse_Response_UpdateWorkflow{
 							UpdateWorkflow: &workflowservice.UpdateWorkflowExecutionResponse{},
+						},
+					},
+				},
+			},
+			expectEmitMetrics: true,
+		},
+		{
+			methodName: executeMultiOps,
+			fullName:   api.WorkflowServicePrefix + executeMultiOps,
+			resp: &workflowservice.ExecuteMultiOperationResponse{
+				Responses: []*workflowservice.ExecuteMultiOperationResponse_Response{
+					{
+						Response: &workflowservice.ExecuteMultiOperationResponse_Response_StartWorkflow{
+							StartWorkflow: &workflowservice.StartWorkflowExecutionResponse{
+								Started: false,
+							},
+						},
+					},
+				},
+			},
+			req: &workflowservice.ExecuteMultiOperationRequest{
+				Namespace: "test-namespace",
+				Operations: []*workflowservice.ExecuteMultiOperationRequest_Operation{
+					{
+						Operation: &workflowservice.ExecuteMultiOperationRequest_Operation_StartWorkflow{
+							StartWorkflow: &workflowservice.StartWorkflowExecutionRequest{
+								Namespace:                "test-namespace",
+								OnConflictOptions:        &workflowpb.OnConflictOptions{},
+								WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
+							},
 						},
 					},
 				},
