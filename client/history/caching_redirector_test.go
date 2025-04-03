@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
@@ -66,14 +67,25 @@ func (s *cachingRedirectorSuite) SetupTest() {
 	s.connections = NewMockconnectionPool(s.controller)
 	s.logger = log.NewNoopLogger()
 	s.resolver = membership.NewMockServiceResolver(s.controller)
+	s.resolver.EXPECT().AddListener(cachingRedirectorListener, gomock.Any()).Return(nil).AnyTimes()
+	s.resolver.EXPECT().RemoveListener(cachingRedirectorListener).Return(nil).AnyTimes()
 }
 
 func (s *cachingRedirectorSuite) TearDownTest() {
 	s.controller.Finish()
 }
 
+func (s *cachingRedirectorSuite) newCachingDirector(staleTTL time.Duration) *cachingRedirector {
+	return newCachingRedirector(
+		s.connections,
+		s.resolver,
+		s.logger,
+		dynamicconfig.GetDurationPropertyFn(staleTTL),
+	)
+}
+
 func (s *cachingRedirectorSuite) TestShardCheck() {
-	r := newCachingRedirector(s.connections, s.resolver, s.logger, 0)
+	r := s.newCachingDirector(0)
 	defer r.stop()
 
 	invalErr := &serviceerror.InvalidArgument{}
@@ -114,7 +126,7 @@ func cacheRetainingTest(s *cachingRedirectorSuite, opErr error, verify func(erro
 		}
 		return opErr
 	}
-	r := newCachingRedirector(s.connections, s.resolver, s.logger, 0)
+	r := newCachingRedirector(s.connections, s.resolver, s.logger, dynamicconfig.GetDurationPropertyFn(0))
 	defer r.stop()
 
 	for i := 0; i < 3; i++ {
@@ -162,7 +174,7 @@ func hostDownErrorTest(s *cachingRedirectorSuite, clientOp clientOperation, veri
 		resetConnectBackoff(clientConn).
 		Times(1)
 
-	r := newCachingRedirector(s.connections, s.resolver, s.logger, 0)
+	r := s.newCachingDirector(0)
 	defer r.stop()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
@@ -206,7 +218,7 @@ func (s *cachingRedirectorSuite) TestShardOwnershipLostErrors() {
 	mockClient1 := historyservicemock.NewMockHistoryServiceClient(s.controller)
 	mockClient2 := historyservicemock.NewMockHistoryServiceClient(s.controller)
 
-	r := newCachingRedirector(s.connections, s.resolver, s.logger, 0)
+	r := s.newCachingDirector(0)
 	defer r.stop()
 	opCalls := 1
 	doExecute := func() error {
@@ -349,7 +361,7 @@ func (s *cachingRedirectorSuite) TestClientForTargetByShard() {
 		resetConnectBackoff(clientConn).
 		Times(1)
 
-	r := newCachingRedirector(s.connections, s.resolver, s.logger, 0)
+	r := s.newCachingDirector(0)
 	defer r.stop()
 	cli, err := r.clientForShardID(shardID)
 	s.NoError(err)
@@ -368,11 +380,9 @@ func (s *cachingRedirectorSuite) TestStaleTTL() {
 	clientConn1 := clientConnection{
 		historyClient: mockClient1,
 	}
-	s.resolver.EXPECT().AddListener(cachingRedirectorListener, gomock.Any()).Return(nil).Times(1)
-	s.resolver.EXPECT().RemoveListener(cachingRedirectorListener).Return(nil).AnyTimes()
 
 	staleTTL := 500 * time.Millisecond
-	r := newCachingRedirector(s.connections, s.resolver, s.logger, staleTTL)
+	r := s.newCachingDirector(staleTTL)
 	defer r.stop()
 
 	// Trigger the creation of a cache entry for the shard.

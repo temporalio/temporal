@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/goro"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -64,7 +65,7 @@ type (
 		historyServiceResolver membership.ServiceResolver
 		logger                 log.Logger
 		membershipUpdateCh     chan *membership.ChangedEvent
-		staleTTL               time.Duration
+		staleTTL               dynamicconfig.DurationPropertyFn
 	}
 )
 
@@ -74,7 +75,7 @@ func newCachingRedirector(
 	connections connectionPool,
 	historyServiceResolver membership.ServiceResolver,
 	logger log.Logger,
-	staleTTL time.Duration,
+	staleTTL dynamicconfig.DurationPropertyFn,
 ) *cachingRedirector {
 	r := &cachingRedirector{
 		connections:            connections,
@@ -85,12 +86,7 @@ func newCachingRedirector(
 	}
 	r.mu.cache = make(map[int32]cacheEntry)
 
-	if r.staleTTL > 0 {
-		r.goros.Go(func(ctx context.Context) error {
-			r.eventLoop(ctx)
-			return nil
-		})
-	}
+	r.goros.Go(r.eventLoop)
 
 	return r
 }
@@ -247,7 +243,7 @@ func maybeHostDownError(opErr error) bool {
 	return common.IsContextDeadlineExceededErr(opErr)
 }
 
-func (r *cachingRedirector) eventLoop(ctx context.Context) {
+func (r *cachingRedirector) eventLoop(ctx context.Context) error {
 	if err := r.historyServiceResolver.AddListener(cachingRedirectorListener, r.membershipUpdateCh); err != nil {
 		r.logger.Fatal("Error adding listener", tag.Error(err))
 	}
@@ -260,17 +256,15 @@ func (r *cachingRedirector) eventLoop(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			return
-		case _ = <-r.membershipUpdateCh:
+			return nil
+		case <-r.membershipUpdateCh:
 			r.staleCheck()
 		}
 	}
 }
 
 func (r *cachingRedirector) staleCheck() {
-	if r.staleTTL == 0 {
-		return
-	}
+	staleTTL := r.staleTTL()
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -283,10 +277,12 @@ func (r *cachingRedirector) staleCheck() {
 			}
 			continue
 		}
-		addr, err := shardLookup(r.historyServiceResolver, shardID)
-		if err != nil || addr != entry.address {
-			entry.staleAt = now.Add(r.staleTTL)
-			r.mu.cache[shardID] = entry
+		if staleTTL > 0 {
+			addr, err := shardLookup(r.historyServiceResolver, shardID)
+			if err != nil || addr != entry.address {
+				entry.staleAt = now.Add(staleTTL)
+				r.mu.cache[shardID] = entry
+			}
 		}
 	}
 }

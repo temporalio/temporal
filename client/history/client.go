@@ -81,8 +81,12 @@ func NewClient(
 	var redirector redirector
 	if dynamicconfig.HistoryClientOwnershipCachingEnabled.Get(dc)() {
 		logger.Info("historyClient: ownership caching enabled")
-		staleTTL := dynamicconfig.HistoryClientOwnershipCachingStaleTTL.Get(dc)()
-		redirector = newCachingRedirector(connections, historyServiceResolver, logger, staleTTL)
+		redirector = newCachingRedirector(
+			connections,
+			historyServiceResolver,
+			logger,
+			dynamicconfig.HistoryClientOwnershipCachingStaleTTL.Get(dc),
+		)
 	} else {
 		logger.Info("historyClient: ownership caching disabled")
 		redirector = newBasicRedirector(connections, historyServiceResolver)
