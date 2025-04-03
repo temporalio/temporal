@@ -34,6 +34,7 @@ import (
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
@@ -74,7 +75,9 @@ func Invoke(
 				return nil, consts.ErrWorkflowCompleted
 			}
 
-			response, startedTransition, err = recordActivityTaskStarted(ctx, shardContext, mutableState, request, matchingClient)
+			response, startedTransition, err = recordActivityTaskStarted(
+				ctx, shardContext, workflowLease.GetContext(), mutableState, request, matchingClient,
+			)
 			if err != nil {
 				return nil, err
 			}
@@ -107,6 +110,7 @@ func Invoke(
 func recordActivityTaskStarted(
 	ctx context.Context,
 	shardContext historyi.ShardContext,
+	weContext historyi.WorkflowContext,
 	mutableState historyi.MutableState,
 	request *historyservice.RecordActivityTaskStartedRequest,
 	matchingClient matchingservice.MatchingServiceClient,
@@ -160,6 +164,11 @@ func recordActivityTaskStarted(
 		// Looks like ActivityTask already started as a result of another call.
 		// It is OK to drop the task at this point.
 		return nil, false, serviceerrors.NewTaskAlreadyStarted("Activity")
+	}
+
+	err = processActivityWorkflowRules(ctx, shardContext, weContext, mutableState, ai)
+	if err != nil {
+		return nil, false, err
 	}
 
 	if ai.Stamp != request.Stamp {
@@ -280,4 +289,50 @@ func getDeploymentVersionForWorkflowId(
 	}
 	current, ramping := worker_versioning.CalculateTaskQueueVersioningInfo(tqData.GetDeploymentData())
 	return worker_versioning.FindDeploymentVersionForWorkflowID(current, ramping, workflowId), nil
+}
+
+func processActivityWorkflowRules(
+	ctx context.Context,
+	shardContext historyi.ShardContext,
+	weContext historyi.WorkflowContext,
+	ms historyi.MutableState,
+	ai *persistencespb.ActivityInfo,
+) error {
+	if ai.Paused {
+		return nil
+	}
+
+	// This is an attempt to reduce the number of workflow rules calls.
+	// We only need to process the first invocation of an activity.
+	// Other invocations should be blocked by either RetryActivity or retryTask.
+	if ai.Attempt > 1 {
+		return nil
+	}
+
+	activityChanged := workflow.ActivityMatchWorkflowRules(ms, shardContext.GetLogger(), ai)
+	if !activityChanged {
+		return nil
+	}
+	if ai.Paused {
+		// need to update activity
+		if err := ms.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ historyi.MutableState) error {
+			activityInfo.StartedEventId = common.EmptyEventID
+			activityInfo.StartedTime = nil
+			activityInfo.RequestId = ""
+			return nil
+		}); err != nil {
+			return err
+		}
+
+		// need to update mutable state
+		err := weContext.UpdateWorkflowExecutionAsActive(
+			ctx,
+			shardContext,
+		)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
