@@ -33,9 +33,9 @@ import (
 const (
 	CallerTypeOperator     = "operator"
 	CallerTypeAPI          = "api"
+	CallerTypeMatchingTask = "matching_task"
 	CallerTypeBackground   = "background"
 	CallerTypePreemptable  = "preemptable"
-	CallerTypeMatchingTask = "matching_task"
 
 	CallerNameSystem = "system"
 )
