@@ -281,7 +281,7 @@ func (ti *TelemetryInterceptor) emitActionMetric(
 					metrics.ActionCounter.With(metricsHandler).Record(1, metrics.ActionType("grpc_"+methodName))
 				} else {
 					typedReq, ok := req.(*workflowservice.ExecuteMultiOperationRequest)
-					if !ok || typedReq == nil {
+					if !ok || typedReq == nil || len(typedReq.Operations) == 0 {
 						return
 					}
 
