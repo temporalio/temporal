@@ -762,6 +762,9 @@ message NexusOperationCancellationInfo {
     temporal.api.failure.v1.Failure last_attempt_failure = 5;
     // The time when the next attempt is scheduled.
     google.protobuf.Timestamp next_attempt_schedule_time = 6;
+
+    // The event ID of the NEXUS_OPERATION_CANCEL_REQUESTED event for this cancelation.
+    int64 requested_event_id = 7;
 }
 
 // ResetChildInfo contains the state and actions to be performed on children when a parent workflow resumes after reset.
