@@ -73,7 +73,10 @@ func TestNewServerWithOTEL(t *testing.T) {
 
 func startAndStopServer(t *testing.T) {
 	cfg := loadConfig(t)
-	cfg.Global.Metrics.Prometheus.ListenAddress = ":0" // prometheus reporter does not shut down in-between test runs
+	// The prometheus reporter does not shut down in-between test runs.
+	// This will assign a random port to the prometheus reporter,
+	// so that it doesn't conflict with other tests.
+	cfg.Global.Metrics.Prometheus.ListenAddress = ":0"
 	logDetector := newErrorLogDetector(t, log.NewTestLogger())
 	logDetector.Start()
 
