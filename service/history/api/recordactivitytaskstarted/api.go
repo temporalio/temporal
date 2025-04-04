@@ -125,7 +125,7 @@ func Invoke(
 	if rejectCode == rejected_modified {
 		// Rejecting the activity start because activity was modified.
 		// Matching can drop the task. New activity will be scheduled once activity is resumed.
-		errorMessage := fmt.Sprintf("Activity task with this stamp not found: %s", request.Stamp)
+		errorMessage := fmt.Sprintf("Activity task with this stamp not found: %v", request.Stamp)
 		return nil, serviceerror.NewNotFound(errorMessage)
 	}
 
