@@ -31,11 +31,10 @@ import (
 )
 
 const (
-	CallerTypeOperator     = "operator"
-	CallerTypeAPI          = "api"
-	CallerTypeMatchingTask = "matching_task"
-	CallerTypeBackground   = "background"
-	CallerTypePreemptable  = "preemptable"
+	CallerTypeOperator    = "operator"
+	CallerTypeAPI         = "api"
+	CallerTypeBackground  = "background"
+	CallerTypePreemptable = "preemptable"
 
 	CallerNameSystem = "system"
 )

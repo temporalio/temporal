@@ -2643,7 +2643,7 @@ func (e *matchingEngineImpl) recordWorkflowTaskStarted(
 			API:        "RecordWorkflowTaskStarted",
 			Token:      1,
 			Caller:     pollReq.Namespace,
-			CallerType: headers.CallerTypeMatchingTask,
+			CallerType: headers.CallerTypeAPI,
 		})
 		if err != nil {
 			return nil, err
@@ -2693,7 +2693,7 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 			API:        "RecordActivityTaskStarted",
 			Token:      1,
 			Caller:     pollReq.Namespace,
-			CallerType: headers.CallerTypeMatchingTask,
+			CallerType: headers.CallerTypeAPI,
 		})
 		if err != nil {
 			return nil, err
