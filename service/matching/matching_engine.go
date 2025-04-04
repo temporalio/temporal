@@ -610,7 +610,6 @@ func (e *matchingEngineImpl) PollWorkflowTaskQueue(
 	pollerID := req.GetPollerId()
 	request := req.PollRequest
 	taskQueueName := request.TaskQueue.GetName()
-
 	ns, err := e.namespaceRegistry.GetNamespaceName(namespace.ID(req.GetNamespaceId()))
 	if err != nil {
 		return nil, err
@@ -871,7 +870,6 @@ func (e *matchingEngineImpl) PollActivityTaskQueue(
 	pollerID := req.GetPollerId()
 	request := req.PollRequest
 	taskQueueName := request.TaskQueue.GetName()
-	
 	ns, err := e.namespaceRegistry.GetNamespaceName(namespace.ID(req.GetNamespaceId()))
 	if err != nil {
 		return nil, err
