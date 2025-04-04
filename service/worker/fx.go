@@ -54,6 +54,7 @@ import (
 	"go.temporal.io/server/service/worker/dlq"
 	"go.temporal.io/server/service/worker/migration"
 	"go.temporal.io/server/service/worker/scheduler"
+	"go.temporal.io/server/service/worker/systemconfig"
 	"go.temporal.io/server/service/worker/workerdeployment"
 	"go.uber.org/fx"
 )
@@ -69,6 +70,7 @@ var Module = fx.Options(
 	workerdeployment.Module,
 	dlq.Module,
 	dynamicconfig.Module,
+	systemconfig.Module,
 	fx.Provide(
 		func(c resource.HistoryClient) dlq.HistoryClient {
 			return c
