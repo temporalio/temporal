@@ -610,12 +610,16 @@ func (e *matchingEngineImpl) PollWorkflowTaskQueue(
 	pollerID := req.GetPollerId()
 	request := req.PollRequest
 	taskQueueName := request.TaskQueue.GetName()
-	ns, err := e.namespaceRegistry.GetNamespaceName(namespace.ID(req.GetNamespaceId()))
-	if err != nil {
-		return nil, err
-	}
+
 	// Namespace field is not populated for forwarded requests.
-	request.Namespace = ns.String()
+	if len(request.Namespace) == 0 {
+		ns, err := e.namespaceRegistry.GetNamespaceName(namespace.ID(req.GetNamespaceId()))
+		if err != nil {
+			return nil, err
+		}
+		request.Namespace = ns.String()
+	}
+
 pollLoop:
 	for {
 		err := common.IsValidContext(ctx)
@@ -870,12 +874,16 @@ func (e *matchingEngineImpl) PollActivityTaskQueue(
 	pollerID := req.GetPollerId()
 	request := req.PollRequest
 	taskQueueName := request.TaskQueue.GetName()
-	ns, err := e.namespaceRegistry.GetNamespaceName(namespace.ID(req.GetNamespaceId()))
-	if err != nil {
-		return nil, err
-	}
+
 	// Namespace field is not populated for forwarded requests.
-	request.Namespace = ns.String()
+	if len(request.Namespace) == 0 {
+		ns, err := e.namespaceRegistry.GetNamespaceName(namespace.ID(req.GetNamespaceId()))
+		if err != nil {
+			return nil, err
+		}
+		request.Namespace = ns.String()
+	}
+
 pollLoop:
 	for {
 		err := common.IsValidContext(ctx)
