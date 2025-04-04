@@ -434,7 +434,12 @@ func (r *WorkflowStateReplicatorImpl) handleFirstReplicationTask(
 		timestamp.TimeValue(executionState.StartTime),
 	)
 	err = mutableState.ApplyMutation(mutation.StateMutation)
-	mutableState.GetExecutionInfo().VersionHistories = nil // reset for all other case? as we only have current branch
+	mutableState.SetHistoryTree(executionInfo.WorkflowExecutionTimeout, executionInfo.WorkflowRunTimeout, executionState.RunId)
+	localCurrentVersionHistory, err := versionhistory.GetCurrentVersionHistory(executionInfo.VersionHistories)
+	if err != nil {
+		return err
+	}
+	localCurrentVersionHistory.Items = versionhistory.CopyVersionHistoryItems(currentVersionHistory.Items)
 	if err != nil {
 		return err
 	}
