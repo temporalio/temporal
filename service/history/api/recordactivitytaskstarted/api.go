@@ -324,7 +324,9 @@ func processActivityWorkflowRules(
 			return err
 		}
 
-		// need to update mutable state
+		// if activity was paused we need to update mutable state
+		// this is because we need to return an error to the caller.
+		// as the result mutable state will not be updated.
 		err := weContext.UpdateWorkflowExecutionAsActive(
 			ctx,
 			shardContext,
