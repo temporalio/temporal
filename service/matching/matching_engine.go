@@ -2620,7 +2620,7 @@ func (e *matchingEngineImpl) recordWorkflowTaskStarted(
 ) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
 	if e.rateLimiter != nil {
 		err := e.rateLimiter.Wait(ctx, quotas.Request{
-			API:        "RecordWorkflowTaskCompleted",
+			API:        "RecordWorkflowTaskStarted",
 			Token:      1,
 			Caller:     pollReq.Namespace,
 			CallerType: headers.CallerTypeMatchingTask,
@@ -2670,7 +2670,7 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 ) (*historyservice.RecordActivityTaskStartedResponse, error) {
 	if e.rateLimiter != nil {
 		err := e.rateLimiter.Wait(ctx, quotas.Request{
-			API:        "RecordActivityTaskCompleted",
+			API:        "RecordActivityTaskStarted",
 			Token:      1,
 			Caller:     pollReq.Namespace,
 			CallerType: headers.CallerTypeMatchingTask,
