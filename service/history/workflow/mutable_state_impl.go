@@ -5564,6 +5564,16 @@ func (ms *MutableStateImpl) UpdateActivity(scheduledEventId int64, updater histo
 		if err != nil {
 			return err
 		}
+
+		if ai.Paused {
+			metrics.PausedActivitiesCounter.With(
+				ms.metricsHandler.WithTags(
+					metrics.NamespaceTag(ms.namespaceEntry.Name().String()),
+					metrics.WorkflowTypeTag(ms.GetExecutionInfo().WorkflowTypeName),
+					metrics.ActivityTypeTag(ai.ActivityType.Name),
+				),
+			).Record(1)
+		}
 	}
 
 	ms.approximateSize += ai.Size() - originalSize
