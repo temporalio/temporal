@@ -24,6 +24,7 @@ package workflow
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -164,6 +165,80 @@ func (s *activitySuite) TestGetPendingActivityInfoAcceptance() {
 	pi, err := GetPendingActivityInfo(context.Background(), s.mockShard, s.mockMutableState, ai)
 	s.NoError(err)
 	s.NotNil(pi)
+}
+
+func (s *activitySuite) TestGetPendingActivityInfo_ActivityState() {
+	testCases := []struct {
+		paused          bool
+		cancelRequested bool
+		startedEventId  int64
+		expectedState   enumspb.PendingActivityState
+	}{
+		{
+			paused:          false,
+			cancelRequested: false,
+			startedEventId:  common.EmptyEventID,
+			expectedState:   enumspb.PENDING_ACTIVITY_STATE_SCHEDULED,
+		},
+		{
+			paused:          false,
+			cancelRequested: false,
+			startedEventId:  1,
+			expectedState:   enumspb.PENDING_ACTIVITY_STATE_STARTED,
+		},
+		{
+			paused:          false,
+			cancelRequested: true,
+			startedEventId:  1,
+			expectedState:   enumspb.PENDING_ACTIVITY_STATE_CANCEL_REQUESTED,
+		},
+		{
+			paused:          true,
+			cancelRequested: false,
+			startedEventId:  common.EmptyEventID,
+			expectedState:   enumspb.PENDING_ACTIVITY_STATE_PAUSED,
+		},
+		{
+			paused:          true,
+			cancelRequested: false,
+			startedEventId:  1,
+			expectedState:   enumspb.PENDING_ACTIVITY_STATE_PAUSE_REQUESTED,
+		},
+		{
+			paused:          true,
+			cancelRequested: true,
+			startedEventId:  1,
+			expectedState:   enumspb.PENDING_ACTIVITY_STATE_CANCEL_REQUESTED,
+		},
+	}
+
+	now := s.mockShard.GetTimeSource().Now().UTC().Round(time.Hour)
+	activityType := commonpb.ActivityType{
+		Name: "activityType",
+	}
+	ai := &persistencespb.ActivityInfo{
+		ActivityType:            &activityType,
+		ActivityId:              "activityID",
+		CancelRequested:         false,
+		StartedEventId:          1,
+		Attempt:                 2,
+		ScheduledTime:           timestamppb.New(now),
+		LastAttemptCompleteTime: timestamppb.New(now.Add(-1 * time.Hour)),
+		HasRetryPolicy:          false,
+	}
+
+	for _, tc := range testCases {
+		ai.Paused = tc.paused
+		ai.CancelRequested = tc.cancelRequested
+		ai.StartedEventId = tc.startedEventId
+
+		s.mockMutableState.EXPECT().GetActivityType(gomock.Any(), gomock.Any()).Return(&activityType, nil).Times(1)
+		pi, err := GetPendingActivityInfo(context.Background(), s.mockShard, s.mockMutableState, ai)
+		s.NoError(err)
+		s.NotNil(pi)
+
+		s.Equal(tc.expectedState, pi.State, fmt.Sprintf("failed for paused: %v, cancelRequested: %v, startedEventId: %v", tc.paused, tc.cancelRequested, tc.startedEventId))
+	}
 }
 
 func (s *activitySuite) TestGetPendingActivityInfoNoRetryPolicy() {
