@@ -201,11 +201,11 @@ func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_CRUD() {
 		nsResp, err := s.FrontendClient().ListWorkflowRules(ctx, &workflowservice.ListWorkflowRulesRequest{
 			Namespace: s.Namespace().String(),
 		})
-		assert.NoError(s.T(), err)
-		assert.NotNil(s.T(), nsResp)
-		assert.NotNil(s.T(), nsResp.Rules)
-		if assert.Len(s.T(), nsResp.Rules, 1) {
-			assert.Equal(s.T(), ruleID1, nsResp.Rules[0].Spec.Id)
+		assert.NoError(t, err)
+		assert.NotNil(t, nsResp)
+		assert.NotNil(t, nsResp.Rules)
+		if assert.Len(t, nsResp.Rules, 1) {
+			assert.Equal(t, ruleID1, nsResp.Rules[0].Spec.Id)
 		}
 	}, 5*time.Second, 200*time.Millisecond)
 
@@ -228,13 +228,13 @@ func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_CRUD() {
 		nsResp, err := s.FrontendClient().ListWorkflowRules(ctx, &workflowservice.ListWorkflowRulesRequest{
 			Namespace: s.Namespace().String(),
 		})
-		assert.NoError(s.T(), err)
-		assert.NotNil(s.T(), nsResp)
-		assert.NotNil(s.T(), nsResp.Rules)
-		if assert.Len(s.T(), nsResp.Rules, 2) {
+		assert.NoError(t, err)
+		assert.NotNil(t, nsResp)
+		assert.NotNil(t, nsResp.Rules)
+		if assert.Len(t, nsResp.Rules, 2) {
 			// we can't guarantee the order of the rules
-			assert.True(s.T(), nsResp.Rules[0].Spec.Id == ruleID1 || nsResp.Rules[1].Spec.Id == ruleID1)
-			assert.True(s.T(), nsResp.Rules[0].Spec.Id == ruleID2 || nsResp.Rules[1].Spec.Id == ruleID2)
+			assert.True(t, nsResp.Rules[0].Spec.Id == ruleID1 || nsResp.Rules[1].Spec.Id == ruleID1)
+			assert.True(t, nsResp.Rules[0].Spec.Id == ruleID2 || nsResp.Rules[1].Spec.Id == ruleID2)
 		}
 	}, 5*time.Second, 200*time.Millisecond)
 
@@ -268,12 +268,12 @@ func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_CRUD() {
 		nsResp, err := s.FrontendClient().ListWorkflowRules(ctx, &workflowservice.ListWorkflowRulesRequest{
 			Namespace: s.Namespace().String(),
 		})
-		assert.NoError(s.T(), err)
-		assert.NotNil(s.T(), nsResp)
-		assert.NotNil(s.T(), nsResp.Rules)
-		if assert.Len(s.T(), nsResp.Rules, 1) {
+		assert.NoError(t, err)
+		assert.NotNil(t, nsResp)
+		assert.NotNil(t, nsResp.Rules)
+		if assert.Len(t, nsResp.Rules, 1) {
 			// we can't guarantee the order of the rules
-			assert.Equal(s.T(), ruleID2, nsResp.Rules[0].Spec.Id)
+			assert.Equal(t, ruleID2, nsResp.Rules[0].Spec.Id)
 		}
 	}, 5*time.Second, 200*time.Millisecond)
 
@@ -290,9 +290,9 @@ func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_CRUD() {
 		nsResp, err := s.FrontendClient().ListWorkflowRules(ctx, &workflowservice.ListWorkflowRulesRequest{
 			Namespace: s.Namespace().String(),
 		})
-		assert.NoError(s.T(), err)
-		assert.NotNil(s.T(), nsResp)
-		assert.Len(s.T(), nsResp.Rules, 0)
+		assert.NoError(t, err)
+		assert.NotNil(t, nsResp)
+		assert.Len(t, nsResp.Rules, 0)
 	}, 5*time.Second, 200*time.Millisecond)
 }
 
@@ -324,12 +324,12 @@ func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_RetryActivity() {
 		nsResp, err := s.FrontendClient().ListWorkflowRules(ctx, &workflowservice.ListWorkflowRulesRequest{
 			Namespace: s.Namespace().String(),
 		})
-		assert.NoError(s.T(), err)
-		assert.NotNil(s.T(), nsResp)
-		assert.NotNil(s.T(), nsResp.Rules)
+		assert.NoError(t, err)
+		assert.NotNil(t, nsResp)
+		assert.NotNil(t, nsResp.Rules)
 		if nsResp.GetRules() != nil {
-			assert.Len(s.T(), nsResp.Rules, 1)
-			assert.Equal(s.T(), ruleID, nsResp.Rules[0].Spec.Id)
+			assert.Len(t, nsResp.Rules, 1)
+			assert.Equal(t, ruleID, nsResp.Rules[0].Spec.Id)
 		}
 	}, 5*time.Second, 200*time.Millisecond)
 
@@ -368,9 +368,9 @@ func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_RetryActivity() {
 		nsResp, err := s.FrontendClient().ListWorkflowRules(ctx, &workflowservice.ListWorkflowRulesRequest{
 			Namespace: s.Namespace().String(),
 		})
-		assert.NoError(s.T(), err)
-		assert.NotNil(s.T(), nsResp)
-		assert.Len(s.T(), nsResp.Rules, 0)
+		assert.NoError(t, err)
+		assert.NotNil(t, nsResp)
+		assert.Len(t, nsResp.Rules, 0)
 	}, 5*time.Second, 200*time.Millisecond)
 
 	// Let namespace config propagate.
@@ -461,12 +461,12 @@ func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_RetryTask() {
 		nsResp, err := s.FrontendClient().ListWorkflowRules(ctx, &workflowservice.ListWorkflowRulesRequest{
 			Namespace: s.Namespace().String(),
 		})
-		assert.NoError(s.T(), err)
-		assert.NotNil(s.T(), nsResp)
-		assert.NotNil(s.T(), nsResp.Rules)
+		assert.NoError(t, err)
+		assert.NotNil(t, nsResp)
+		assert.NotNil(t, nsResp.Rules)
 		if nsResp.GetRules() != nil {
-			assert.Len(s.T(), nsResp.Rules, 1)
-			assert.Equal(s.T(), ruleID, nsResp.Rules[0].Spec.Id)
+			assert.Len(t, nsResp.Rules, 1)
+			assert.Equal(t, ruleID, nsResp.Rules[0].Spec.Id)
 		}
 	}, 5*time.Second, 200*time.Millisecond)
 
@@ -503,9 +503,9 @@ func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_RetryTask() {
 		nsResp, err := s.FrontendClient().ListWorkflowRules(ctx, &workflowservice.ListWorkflowRulesRequest{
 			Namespace: s.Namespace().String(),
 		})
-		assert.NoError(s.T(), err)
-		assert.NotNil(s.T(), nsResp)
-		assert.Len(s.T(), nsResp.Rules, 0)
+		assert.NoError(t, err)
+		assert.NotNil(t, nsResp)
+		assert.Len(t, nsResp.Rules, 0)
 	}, 5*time.Second, 200*time.Millisecond)
 
 	// Let namespace config propagate.
@@ -579,12 +579,12 @@ func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_PrePause() {
 		nsResp, err := s.FrontendClient().ListWorkflowRules(ctx, &workflowservice.ListWorkflowRulesRequest{
 			Namespace: s.Namespace().String(),
 		})
-		assert.NoError(s.T(), err)
-		assert.NotNil(s.T(), nsResp)
-		assert.NotNil(s.T(), nsResp.Rules)
+		assert.NoError(t, err)
+		assert.NotNil(t, nsResp)
+		assert.NotNil(t, nsResp.Rules)
 		if nsResp.GetRules() != nil {
-			assert.Len(s.T(), nsResp.Rules, 1)
-			assert.Equal(s.T(), ruleID, nsResp.Rules[0].Spec.Id)
+			assert.Len(t, nsResp.Rules, 1)
+			assert.Equal(t, ruleID, nsResp.Rules[0].Spec.Id)
 		}
 	}, 5*time.Second, 200*time.Millisecond)
 
@@ -622,9 +622,9 @@ func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_PrePause() {
 		nsResp, err := s.FrontendClient().ListWorkflowRules(ctx, &workflowservice.ListWorkflowRulesRequest{
 			Namespace: s.Namespace().String(),
 		})
-		assert.NoError(s.T(), err)
-		assert.NotNil(s.T(), nsResp)
-		assert.Len(s.T(), nsResp.Rules, 0)
+		assert.NoError(t, err)
+		assert.NotNil(t, nsResp)
+		assert.Len(t, nsResp.Rules, 0)
 	}, 5*time.Second, 200*time.Millisecond)
 
 	// 8. Let namespace config changes propagate to the history service.
