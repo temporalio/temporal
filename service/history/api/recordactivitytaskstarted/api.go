@@ -49,6 +49,17 @@ import (
 	"go.temporal.io/server/service/history/workflow"
 )
 
+type RejectCode int32
+
+const (
+	reject_code_undefined       RejectCode = 0
+	activity_accepted           RejectCode = 1
+	rejected_stamp              RejectCode = 2
+	rejected_with_error         RejectCode = 3
+	rejected_modified           RejectCode = 4
+	rejected_started_transition RejectCode = 5
+)
+
 func Invoke(
 	ctx context.Context,
 	request *historyservice.RecordActivityTaskStartedRequest,
@@ -60,6 +71,7 @@ func Invoke(
 	var err error
 	response := &historyservice.RecordActivityTaskStartedResponse{}
 	var startedTransition bool
+	var rejectCode RejectCode
 
 	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
@@ -75,11 +87,16 @@ func Invoke(
 				return nil, consts.ErrWorkflowCompleted
 			}
 
-			response, startedTransition, err = recordActivityTaskStarted(
+			response, rejectCode, err = recordActivityTaskStarted(
 				ctx, shardContext, workflowLease.GetContext(), mutableState, request, matchingClient,
 			)
 			if err != nil {
 				return nil, err
+			}
+
+			startedTransition = false
+			if rejectCode == rejected_started_transition {
+				startedTransition = true
 			}
 
 			return &api.UpdateWorkflowAction{
@@ -99,11 +116,19 @@ func Invoke(
 		return nil, err
 	}
 
-	if startedTransition {
+	if rejectCode == rejected_started_transition {
 		// Rejecting the activity start because the workflow is now in transition. Matching can drop
 		// the task, new activity task will be scheduled after transition completion.
 		return nil, serviceerrors.NewActivityStartDuringTransition()
 	}
+
+	if rejectCode == rejected_modified {
+		// Rejecting the activity start because activity was modified.
+		// Matching can drop the task. New activity will be scheduled once activity is resumed.
+		errorMessage := fmt.Sprintf("Activity task with this stamp not found: %s", request.Stamp)
+		return nil, serviceerror.NewNotFound(errorMessage)
+	}
+
 	return response, err
 }
 
@@ -114,10 +139,10 @@ func recordActivityTaskStarted(
 	mutableState historyi.MutableState,
 	request *historyservice.RecordActivityTaskStartedRequest,
 	matchingClient matchingservice.MatchingServiceClient,
-) (*historyservice.RecordActivityTaskStartedResponse, bool, error) {
+) (*historyservice.RecordActivityTaskStartedResponse, RejectCode, error) {
 	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(request.GetNamespaceId()))
 	if err != nil {
-		return nil, false, err
+		return nil, rejected_with_error, err
 	}
 	namespaceName := namespaceEntry.Name().String()
 
@@ -131,7 +156,7 @@ func recordActivityTaskStarted(
 	// some extreme cassandra failure cases.
 	if !isRunning && scheduledEventID >= mutableState.GetNextEventID() {
 		metrics.StaleMutableStateCounter.With(taggedMetrics).Record(1)
-		return nil, false, consts.ErrStaleState
+		return nil, rejected_with_error, consts.ErrStaleState
 	}
 
 	// Check execution state to make sure task is in the list of outstanding tasks and it is not yet started.  If
@@ -139,12 +164,12 @@ func recordActivityTaskStarted(
 	if !isRunning {
 		// Looks like ActivityTask already completed as a result of another call.
 		// It is OK to drop the task at this point.
-		return nil, false, consts.ErrActivityTaskNotFound
+		return nil, rejected_with_error, consts.ErrActivityTaskNotFound
 	}
 
 	scheduledEvent, err := mutableState.GetActivityScheduledEvent(ctx, scheduledEventID)
 	if err != nil {
-		return nil, false, err
+		return nil, rejected_with_error, err
 	}
 
 	response := &historyservice.RecordActivityTaskStartedResponse{
@@ -158,17 +183,22 @@ func recordActivityTaskStarted(
 		if ai.RequestId == requestID {
 			response.StartedTime = ai.StartedTime
 			response.Attempt = ai.Attempt
-			return response, false, nil
+			return response, activity_accepted, nil
 		}
 
 		// Looks like ActivityTask already started as a result of another call.
 		// It is OK to drop the task at this point.
-		return nil, false, serviceerrors.NewTaskAlreadyStarted("Activity")
+		return nil, rejected_with_error, serviceerrors.NewTaskAlreadyStarted("Activity")
 	}
 
-	err = processActivityWorkflowRules(ctx, shardContext, weContext, mutableState, ai)
+	activityModified, err := processActivityWorkflowRules(shardContext, mutableState, ai)
 	if err != nil {
-		return nil, false, err
+		return nil, rejected_with_error, err
+	}
+
+	if activityModified && ai.Stamp != request.Stamp {
+		// This is a special case where the activity has been modified and the stamp has changed.
+		return nil, rejected_modified, nil
 	}
 
 	if ai.Stamp != request.Stamp {
@@ -177,7 +207,7 @@ func recordActivityTaskStarted(
 		errorMessage := fmt.Sprintf(
 			"Activity task with this stamp not found. Id: %s,: type: %s, current stamp: %d",
 			ai.ActivityId, ai.ActivityType.Name, ai.Stamp)
-		return nil, false, serviceerror.NewNotFound(errorMessage)
+		return nil, rejected_stamp, serviceerror.NewNotFound(errorMessage)
 	}
 
 	wfBehavior := mutableState.GetEffectiveVersioningBehavior()
@@ -186,13 +216,13 @@ func recordActivityTaskStarted(
 	pollerDeployment := worker_versioning.DeploymentFromCapabilities(request.PollRequest.WorkerVersionCapabilities, request.PollRequest.DeploymentOptions)
 	err = worker_versioning.ValidateTaskVersionDirective(request.GetVersionDirective(), wfBehavior, wfDeployment, request.ScheduledDeployment)
 	if err != nil {
-		return nil, false, err
+		return nil, rejected_with_error, err
 	}
 
 	if mutableState.GetDeploymentTransition() != nil {
 		// Can't start activity during a redirect. We reject this request so Matching drops
 		// the task. The activity will be rescheduled when the redirect completes/fails.
-		return nil, false, serviceerrors.NewActivityStartDuringTransition()
+		return nil, rejected_with_error, serviceerrors.NewActivityStartDuringTransition()
 	}
 
 	if !pollerDeployment.Equal(wfDeployment) &&
@@ -211,7 +241,7 @@ func recordActivityTaskStarted(
 		)
 		if err != nil {
 			// Let matching retry
-			return nil, false, err
+			return nil, rejected_with_error, err
 		}
 		if pollerDeployment.Equal(worker_versioning.DeploymentFromDeploymentVersion(wftDepVer)) {
 			if err := mutableState.StartDeploymentTransition(pollerDeployment); err != nil {
@@ -220,13 +250,13 @@ func recordActivityTaskStarted(
 					// now pinned so can't transition. Matching can drop the task safely.
 					// TODO (shahab): remove this special error check because it is not
 					// expected to happen once scheduledBehavior is always populated. see TODOs above.
-					return nil, false, serviceerrors.NewObsoleteMatchingTask(err.Error())
+					return nil, rejected_with_error, serviceerrors.NewObsoleteMatchingTask(err.Error())
 				}
-				return nil, false, err
+				return nil, rejected_with_error, err
 			}
 			// This activity started a transition, make sure the MS changes are written but
 			// reject the activity task.
-			return nil, true, nil
+			return nil, rejected_started_transition, nil
 		}
 	}
 
@@ -235,7 +265,7 @@ func recordActivityTaskStarted(
 		ai, scheduledEventID, requestID, request.PollRequest.GetIdentity(),
 		versioningStamp, pollerDeployment, request.GetBuildIdRedirectInfo(),
 	); err != nil {
-		return nil, false, err
+		return nil, rejected_with_error, err
 	}
 
 	scheduleToStartLatency := ai.GetStartedTime().AsTime().Sub(ai.GetScheduledTime().AsTime())
@@ -260,7 +290,7 @@ func recordActivityTaskStarted(
 	response.WorkflowType = mutableState.GetWorkflowType()
 	response.WorkflowNamespace = namespaceName
 
-	return response, false, nil
+	return response, activity_accepted, nil
 }
 
 // TODO (Shahab): move this method to a better place
@@ -292,49 +322,36 @@ func getDeploymentVersionForWorkflowId(
 }
 
 func processActivityWorkflowRules(
-	ctx context.Context,
 	shardContext historyi.ShardContext,
-	weContext historyi.WorkflowContext,
 	ms historyi.MutableState,
 	ai *persistencespb.ActivityInfo,
-) error {
+) (bool, error) {
 	if ai.Paused {
-		return nil
+		return false, nil
 	}
 
 	// This is an attempt to reduce the number of workflow rules calls.
 	// We only need to process the first invocation of an activity.
 	// Other invocations should be blocked by either RetryActivity or retryTask.
 	if ai.Attempt > 1 {
+		return false, nil
+	}
+
+	ruleMatched := workflow.ActivityMatchWorkflowRules(ms, shardContext.GetLogger(), ai)
+	if !ruleMatched || !ai.Paused {
+		return false, nil
+	}
+
+	// activity was paused, need to update activity
+	if err := ms.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ historyi.MutableState) error {
+		activityInfo.StartedEventId = common.EmptyEventID
+		activityInfo.StartedTime = nil
+		activityInfo.RequestId = ""
 		return nil
+	}); err != nil {
+		return false, err
 	}
 
-	activityChanged := workflow.ActivityMatchWorkflowRules(ms, shardContext.GetLogger(), ai)
-	if !activityChanged {
-		return nil
-	}
-	if ai.Paused {
-		// need to update activity
-		if err := ms.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ historyi.MutableState) error {
-			activityInfo.StartedEventId = common.EmptyEventID
-			activityInfo.StartedTime = nil
-			activityInfo.RequestId = ""
-			return nil
-		}); err != nil {
-			return err
-		}
-
-		// if activity was paused we need to update mutable state
-		// this is because we need to return an error to the caller.
-		// as the result mutable state will not be updated.
-		err := weContext.UpdateWorkflowExecutionAsActive(
-			ctx,
-			shardContext,
-		)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
+	// if activity was paused we will need to update mutable state
+	return true, nil
 }
