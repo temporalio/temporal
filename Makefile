@@ -220,6 +220,13 @@ $(STAMPDIR)/gowrap-$(GOWRAP_VER): | $(STAMPDIR) $(LOCALBIN)
 	@touch $@
 $(GOWRAP): $(STAMPDIR)/gowrap-$(GOWRAP_VER)
 
+GOMAJOR_VER := v0.14.0
+GOMAJOR := $(LOCALBIN)/gomajor
+$(STAMPDIR)/gomajor-$(GOMAJOR_VER): | $(STAMPDIR) $(LOCALBIN)
+	$(call go-install-tool,$(GOMAJOR),github.com/icholy/gomajor,$(GOMAJOR_VER))
+	@touch $@
+$(GOMAJOR): $(STAMPDIR)/gomajor-$(GOMAJOR_VER)
+
 # Mockgen is called by name throughout the codebase, so we need to keep the binary name consistent
 MOCKGEN_VER := v0.5.0
 MOCKGEN := $(LOCALBIN)/mockgen
@@ -587,8 +594,16 @@ gomodtidy:
 	@go mod tidy
 
 update-dependencies:
-	@printf $(COLOR) "Update dependencies..."
+	@printf $(COLOR) "Update dependencies (minor versions only) ..."
 	@go get -u -t $(PINNED_DEPENDENCIES) ./...
+	@go mod tidy
+
+update-dependencies-major: $(GOMAJOR)
+	@printf $(COLOR) "Major version upgrades available:"
+	@$(GOMAJOR) list -major
+	@echo ""
+	@printf $(COLOR) "Update dependencies (major versions only) ..."
+	@$(GOMAJOR) get -major all
 	@go mod tidy
 
 go-generate: $(MOCKGEN) $(GOIMPORTS) $(STRINGER) $(GOWRAP)
