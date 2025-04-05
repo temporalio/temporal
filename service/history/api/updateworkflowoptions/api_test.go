@@ -30,7 +30,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	enumspb "go.temporal.io/api/enums/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
-	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
 
@@ -57,65 +56,76 @@ var (
 
 func TestMergeOptions_VersionOverrideMask(t *testing.T) {
 	updateMask := &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}}
-	opts := &workflowpb.WorkflowExecutionOptions{}
+	input := emptyOptions
 
 	// Merge unpinned into empty options
-	opts, err := applyWorkflowExecutionOptions(opts, unpinnedOverrideOptions, updateMask)
+	merged, err := applyWorkflowExecutionOptions(input, unpinnedOverrideOptions, updateMask)
 	if err != nil {
 		t.Error(err)
 	}
-	assert.True(t, proto.Equal(unpinnedOverrideOptions, opts))
+	assert.EqualExportedValues(t, unpinnedOverrideOptions, merged)
 
 	// Merge pinned_A into unpinned options
-	opts, err = applyWorkflowExecutionOptions(opts, pinnedOverrideOptionsA, updateMask)
+	merged, err = applyWorkflowExecutionOptions(input, pinnedOverrideOptionsA, updateMask)
 	if err != nil {
 		t.Error(err)
 	}
-	assert.True(t, proto.Equal(pinnedOverrideOptionsA, opts))
+	assert.EqualExportedValues(t, pinnedOverrideOptionsA, merged)
 
 	// Merge pinned_B into pinned_A options
-	opts, err = applyWorkflowExecutionOptions(opts, pinnedOverrideOptionsB, updateMask)
+	merged, err = applyWorkflowExecutionOptions(input, pinnedOverrideOptionsB, updateMask)
 	if err != nil {
 		t.Error(err)
 	}
-	assert.True(t, proto.Equal(pinnedOverrideOptionsB, opts))
+	assert.EqualExportedValues(t, pinnedOverrideOptionsB, merged)
 
 	// Unset versioning override
-	opts, err = applyWorkflowExecutionOptions(opts, emptyOptions, updateMask)
+	merged, err = applyWorkflowExecutionOptions(input, emptyOptions, updateMask)
 	if err != nil {
 		t.Error(err)
 	}
-	assert.True(t, proto.Equal(emptyOptions, opts))
+	assert.EqualExportedValues(t, emptyOptions, merged)
 }
 
-func TestMergeOptions_PartialUpdateMask(t *testing.T) {
+func TestMergeOptions_PartialMask(t *testing.T) {
 	bothUpdateMask := &fieldmaskpb.FieldMask{Paths: []string{"versioning_override.behavior", "versioning_override.deployment"}}
 	behaviorOnlyUpdateMask := &fieldmaskpb.FieldMask{Paths: []string{"versioning_override.behavior"}}
 	deploymentOnlyUpdateMask := &fieldmaskpb.FieldMask{Paths: []string{"versioning_override.deployment"}}
-	_, err := applyWorkflowExecutionOptions(&workflowpb.WorkflowExecutionOptions{}, unpinnedOverrideOptions, behaviorOnlyUpdateMask)
+
+	_, err := applyWorkflowExecutionOptions(emptyOptions, unpinnedOverrideOptions, behaviorOnlyUpdateMask)
 	assert.Error(t, err)
-	_, err = applyWorkflowExecutionOptions(&workflowpb.WorkflowExecutionOptions{}, unpinnedOverrideOptions, deploymentOnlyUpdateMask)
+
+	_, err = applyWorkflowExecutionOptions(emptyOptions, unpinnedOverrideOptions, deploymentOnlyUpdateMask)
 	assert.Error(t, err)
-	opts, err := applyWorkflowExecutionOptions(&workflowpb.WorkflowExecutionOptions{}, unpinnedOverrideOptions, bothUpdateMask)
+
+	merged, err := applyWorkflowExecutionOptions(emptyOptions, unpinnedOverrideOptions, bothUpdateMask)
 	assert.NoError(t, err)
-	assert.True(t, proto.Equal(unpinnedOverrideOptions, opts))
+	assert.EqualExportedValues(t, unpinnedOverrideOptions, merged)
 }
 
-func TestMergeOptions_EmptyPathsMask(t *testing.T) {
+func TestMergeOptions_EmptyMask(t *testing.T) {
 	emptyUpdateMask := &fieldmaskpb.FieldMask{Paths: []string{}}
-	opts, err := applyWorkflowExecutionOptions(&workflowpb.WorkflowExecutionOptions{}, unpinnedOverrideOptions, emptyUpdateMask)
+	input := pinnedOverrideOptionsB
+
+	// Don't merge anything
+	merged, err := applyWorkflowExecutionOptions(input, pinnedOverrideOptionsA, emptyUpdateMask)
 	assert.NoError(t, err)
-	assert.True(t, proto.Equal(emptyOptions, opts))
+	assert.EqualExportedValues(t, input, merged)
+
+	// Don't merge anything
+	merged, err = applyWorkflowExecutionOptions(input, nil, emptyUpdateMask)
+	assert.NoError(t, err)
+	assert.EqualExportedValues(t, input, merged)
 }
 
 func TestMergeOptions_AsteriskMask(t *testing.T) {
 	asteriskUpdateMask := &fieldmaskpb.FieldMask{Paths: []string{"*"}}
-	_, err := applyWorkflowExecutionOptions(&workflowpb.WorkflowExecutionOptions{}, unpinnedOverrideOptions, asteriskUpdateMask)
+	_, err := applyWorkflowExecutionOptions(emptyOptions, unpinnedOverrideOptions, asteriskUpdateMask)
 	assert.Error(t, err)
 }
 
 func TestMergeOptions_FooMask(t *testing.T) {
 	fooUpdateMask := &fieldmaskpb.FieldMask{Paths: []string{"foo"}}
-	_, err := applyWorkflowExecutionOptions(&workflowpb.WorkflowExecutionOptions{}, unpinnedOverrideOptions, fooUpdateMask)
+	_, err := applyWorkflowExecutionOptions(emptyOptions, unpinnedOverrideOptions, fooUpdateMask)
 	assert.Error(t, err)
 }
