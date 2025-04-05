@@ -601,6 +601,7 @@ type (
 		// Signing key provider for validating JWT tokens
 		JWTKeyProvider       JWTKeyProvider `yaml:"jwtKeyProvider"`
 		PermissionsClaimName string         `yaml:"permissionsClaimName"`
+		PermissionsPattern   string         `yaml:"permissionsPattern"`
 		// Empty string for noopAuthorizer or "default" for defaultAuthorizer
 		Authorizer string `yaml:"authorizer"`
 		// Empty string for noopClaimMapper or "default" for defaultJWTClaimMapper
