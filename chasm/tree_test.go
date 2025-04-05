@@ -770,8 +770,10 @@ func (s *nodeSuite) testComponentTree() *Node {
 	s.NoError(err)
 	s.NotNil(node.value)
 
-	// Create subcommponents by assigning fileds to TestComponent instance.
+	// Create subcomponents by assigning fields to TestComponent instance.
 	setTestComponentFields(node.value.(*TestComponent))
+	// TODO: remove this when Field.Get is implemented.
+	node.valueSynced = false
 
 	// Sync tree with subcomponents of TestComponent.
 	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(1)).Times(4) // for InitialVersionedTransition of children.
