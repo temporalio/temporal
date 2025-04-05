@@ -152,6 +152,7 @@ func (s *nodeSuite) TestSerializeNode_ComponentAttributes() {
 	s.NotNil(node.serializedNode)
 	s.NotNil(node.serializedNode.GetData(), "node serialized value must have data after serialize is called")
 	s.Equal("TestLibrary.test_component", node.serializedNode.GetMetadata().GetComponentAttributes().GetType(), "node serialized value must have type set")
+	s.True(node.valueSynced)
 
 	// Serialize subcomponents (there are 2 subcomponents).
 	sc1Node := node.children["SubComponent1"]
@@ -162,6 +163,7 @@ func (s *nodeSuite) TestSerializeNode_ComponentAttributes() {
 	for _, childNode := range node.children {
 		err = childNode.serialize()
 		s.NoError(err)
+		s.True(childNode.valueSynced)
 	}
 	s.NotNil(sc1Node.serializedNode.GetData(), "child node serialized value must have data after serialize is called")
 	s.Equal("TestLibrary.test_sub_component_1", sc1Node.serializedNode.GetMetadata().GetComponentAttributes().GetType(), "node serialized value must have type set")
@@ -185,6 +187,7 @@ func (s *nodeSuite) TestSerializeNode_ClearComponentData() {
 	s.NotNil(node.serializedNode.GetMetadata().GetComponentAttributes(), "metadata must have component attributes")
 	s.Nil(node.serializedNode.GetData(), "data field must cleared to nil")
 	s.Equal("TestLibrary.test_component", node.serializedNode.GetMetadata().GetComponentAttributes().GetType(), "type must present")
+	s.True(node.valueSynced)
 }
 
 func (s *nodeSuite) TestSerializeNode_ClearSubDataField() {
@@ -230,6 +233,7 @@ func (s *nodeSuite) TestSerializeNode_DataAttributes() {
 	s.NoError(err)
 	s.NotNil(node.serializedNode.GetData(), "child node serialized value must have data after serialize is called")
 	s.Equal([]byte{0x42, 0x2, 0x32, 0x32}, node.serializedNode.GetData().GetData())
+	s.True(node.valueSynced)
 }
 
 func (s *nodeSuite) TestSyncSubComponents_DeleteLeafNode() {
@@ -285,6 +289,7 @@ func (s *nodeSuite) TestDeserializeNode_EmptyPersistence() {
 	s.NotNil(node.value)
 	s.IsType(&TestComponent{}, node.value)
 	tc := node.value.(*TestComponent)
+	s.True(node.valueSynced)
 	s.Nil(tc.SubComponent1.Internal.node)
 	s.Nil(tc.SubComponent1.Internal.value)
 	s.Nil(tc.ComponentData)
@@ -297,6 +302,7 @@ func (s *nodeSuite) TestDeserializeNode_ComponentAttributes() {
 	s.NoError(err)
 	s.Nil(node.value)
 	s.NotNil(node.serializedNode)
+	s.False(node.valueSynced)
 
 	err = node.deserialize(reflect.TypeOf(&TestComponent{}))
 	s.NoError(err)
@@ -305,13 +311,16 @@ func (s *nodeSuite) TestDeserializeNode_ComponentAttributes() {
 	tc := node.value.(*TestComponent)
 	s.Equal(tc.SubComponent1.Internal.node, node.children["SubComponent1"])
 	s.Equal(tc.ComponentData.ActivityId, "component-data")
+	s.True(node.valueSynced)
 
 	s.Nil(tc.SubComponent1.Internal.value)
+	s.False(tc.SubComponent1.Internal.node.valueSynced)
 	err = tc.SubComponent1.Internal.node.deserialize(reflect.TypeOf(&TestSubComponent1{}))
 	s.NoError(err)
 	s.NotNil(tc.SubComponent1.Internal.node.value)
 	s.IsType(&TestSubComponent1{}, tc.SubComponent1.Internal.node.value)
 	s.Equal("sub-component1-data", tc.SubComponent1.Internal.node.value.(*TestSubComponent1).SubComponent1Data.ActivityId)
+	s.True(tc.SubComponent1.Internal.node.valueSynced)
 }
 
 func (s *nodeSuite) TestDeserializeNode_DataAttributes() {
@@ -325,6 +334,8 @@ func (s *nodeSuite) TestDeserializeNode_DataAttributes() {
 	err = node.deserialize(reflect.TypeOf(&TestComponent{}))
 	s.NoError(err)
 	s.NotNil(node.value)
+	s.True(node.valueSynced)
+
 	s.IsType(&TestComponent{}, node.value)
 	tc := node.value.(*TestComponent)
 
@@ -334,6 +345,7 @@ func (s *nodeSuite) TestDeserializeNode_DataAttributes() {
 	err = tc.SubData1.Internal.node.deserialize(reflect.TypeOf(&protoMessageType{}))
 	s.NoError(err)
 	s.NotNil(tc.SubData1.Internal.node.value)
+	s.True(tc.SubData1.Internal.node.valueSynced)
 	s.IsType(&protoMessageType{}, tc.SubData1.Internal.node.value)
 	s.Equal("sub-data1", tc.SubData1.Internal.node.value.(*protoMessageType).ActivityId)
 }
@@ -769,6 +781,7 @@ func (s *nodeSuite) testComponentTree() *Node {
 	err = node.deserialize(reflect.TypeOf(&TestComponent{}))
 	s.NoError(err)
 	s.NotNil(node.value)
+	s.True(node.valueSynced)
 
 	// Create subcomponents by assigning fields to TestComponent instance.
 	setTestComponentFields(node.value.(*TestComponent))
