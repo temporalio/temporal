@@ -32,8 +32,10 @@ import (
 )
 
 var Module = fx.Options(
-	fx.Provide(func(config *configs.Config, logger log.Logger, handler metrics.Handler) Cache {
-		return NewHostLevelCache(config, logger, handler)
+	fx.Provide(func(config *configs.Config, logger log.Logger, handler metrics.Handler, lc fx.Lifecycle) Cache {
+		cache := NewHostLevelCache(config, logger, handler)
+		lc.Append(fx.StopHook(cache.Close))
+		return cache
 	}),
 	fx.Provide(NewCacheFnProvider),
 )

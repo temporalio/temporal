@@ -92,6 +92,11 @@ func (e *simpleEntry) CreateTime() time.Time {
 	return DummyCreateTime
 }
 
+// ExpireTime is not implemented for simple cache entries
+func (e *simpleEntry) ExpireTime() time.Time {
+	return DummyCreateTime
+}
+
 // NewSimple creates a new simple cache with given options.
 // Simple cache will never evict entries and it will never reorder the elements.
 // Simple cache also does not have the concept of pinning that LRU cache has.
@@ -106,6 +111,10 @@ func NewSimple(opts *SimpleOptions) Cache {
 		accessMap:   make(map[interface{}]*list.Element),
 		rmFunc:      opts.RemovedFunc,
 	}
+}
+
+func (c *simple) Close() {
+	// Nothing to do.
 }
 
 // Get retrieves the value stored under the given key

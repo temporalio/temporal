@@ -89,7 +89,12 @@ type (
 var Module = fx.Options(
 	fx.Provide(NewResult),
 	fx.Provide(NewSpecBuilder),
+	fx.Invoke(SpecBuilderLifetimeHooks),
 )
+
+func SpecBuilderLifetimeHooks(sb *SpecBuilder, lc fx.Lifecycle) {
+	lc.Append(fx.StopHook(sb.Close))
+}
 
 func NewResult(
 	dc *dynamicconfig.Collection,

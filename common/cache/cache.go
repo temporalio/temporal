@@ -56,6 +56,9 @@ type Cache interface {
 	// Size returns current size of the Cache, the size definition is implementation of SizeGetter interface
 	// for the entry size, if the entry does not implement SizeGetter interface, the size is 1
 	Size() int
+
+	// Close releases underlying resources of the Cache, such as background workers etc.
+	Close()
 }
 
 // Options control the behavior of the cache.
@@ -69,6 +72,18 @@ type Options struct {
 
 	// TimeSource is an optional clock to use for time-skipping and testing. If this is nil, a real clock will be used.
 	TimeSource clock.TimeSource
+
+	// ActiveEviction creates background worker that will periodically remove expired elements from cache.
+	// Once true, caller must call Close() on cache wen it's no more used to avoid memory leaks.
+	ActiveEviction bool
+
+	// ActiveEvictionInterval sets interval between eviction runs.
+	// Defaults to [DefaultActiveEvictionInterval] if not set.
+	ActiveEvictionInterval time.Duration
+
+	// ActiveEvictionMaxElements sets maximum count of elements to be removed via single eviction iteration.
+	// Defaults to [DefaultActiveEvictionMaxElements] if not set.
+	ActiveEvictionMaxElements int
 
 	OnPut func(val any)
 
@@ -107,4 +122,6 @@ type Entry interface {
 	Value() interface{}
 	// CreateTime represents the time when the entry is created
 	CreateTime() time.Time
+	// ExpireTime represent the time when emtry will be considered expired
+	ExpireTime() time.Time
 }

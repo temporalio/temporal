@@ -65,6 +65,18 @@ func (m *MockProgressCache) EXPECT() *MockProgressCacheMockRecorder {
 	return m.recorder
 }
 
+// Close mocks base method.
+func (m *MockProgressCache) Close() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Close")
+}
+
+// Close indicates an expected call of Close.
+func (mr *MockProgressCacheMockRecorder) Close() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockProgressCache)(nil).Close))
+}
+
 // Get mocks base method.
 func (m *MockProgressCache) Get(runID string, targetClusterID int32) *ReplicationProgress {
 	m.ctrl.T.Helper()

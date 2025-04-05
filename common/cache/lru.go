@@ -26,12 +26,14 @@ package cache
 
 import (
 	"container/list"
+	"context"
 	"sync"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/goro"
 	"go.temporal.io/server/common/metrics"
 )
 
@@ -46,23 +48,29 @@ var (
 	ErrCacheItemTooLarge = serviceerror.NewInternal("cache item size is larger than max cache capacity")
 )
 
-const emptyEntrySize = 0
+const (
+	emptyEntrySize = 0
+
+	DefaultActiveEvictionInterval    = 5 * time.Second
+	DefaultActiveEvictionMaxElements = 32
+)
 
 // lru is a concurrent fixed size cache that evicts elements in lru order
 type (
 	lru struct {
-		mut            sync.Mutex
-		byAccess       *list.List
-		byKey          map[interface{}]*list.Element
-		maxSize        int
-		currSize       int
-		pinnedSize     int
-		onPut          func(val any)
-		onEvict        func(val any)
-		ttl            time.Duration
-		pin            bool
-		timeSource     clock.TimeSource
-		metricsHandler metrics.Handler
+		mut                  sync.Mutex
+		byAccess             *list.List
+		byKey                map[interface{}]*list.Element
+		maxSize              int
+		currSize             int
+		pinnedSize           int
+		onPut                func(val any)
+		onEvict              func(val any)
+		ttl                  time.Duration
+		pin                  bool
+		timeSource           clock.TimeSource
+		metricsHandler       metrics.Handler
+		activeEvictionWorker *goro.Handle
 	}
 
 	iteratorImpl struct {
@@ -74,6 +82,7 @@ type (
 	entryImpl struct {
 		key        interface{}
 		createTime time.Time
+		expireTime time.Time
 		value      interface{}
 		refCount   int
 		size       int
@@ -152,6 +161,10 @@ func (entry *entryImpl) CreateTime() time.Time {
 	return entry.createTime
 }
 
+func (entry *entryImpl) ExpireTime() time.Time {
+	return entry.expireTime
+}
+
 // New creates a new cache with the given options
 func New(maxSize int, opts *Options) Cache {
 	return NewWithMetrics(maxSize, opts, metrics.NoopMetricsHandler)
@@ -170,7 +183,7 @@ func NewWithMetrics(maxSize int, opts *Options, handler metrics.Handler) Cache {
 
 	metrics.CacheSize.With(handler).Record(float64(maxSize))
 	metrics.CacheTtl.With(handler).Record(opts.TTL)
-	return &lru{
+	cache := &lru{
 		byAccess:       list.New(),
 		byKey:          make(map[interface{}]*list.Element),
 		ttl:            opts.TTL,
@@ -182,12 +195,24 @@ func NewWithMetrics(maxSize int, opts *Options, handler metrics.Handler) Cache {
 		timeSource:     timeSource,
 		metricsHandler: handler,
 	}
+	if opts.ActiveEviction {
+		cache.activeEvictionWorker = cache.startActiveEvictionWorker(opts.ActiveEvictionInterval, opts.ActiveEvictionMaxElements)
+	}
+	return cache
 }
 
 // NewLRU creates a new LRU cache of the given size, setting initial capacity
 // to the max size
 func NewLRU(maxSize int, handler metrics.Handler) Cache {
 	return New(maxSize, nil)
+}
+
+// Close must be called to stop active evication worker if it was enabled
+func (c *lru) Close() {
+	if worker := c.activeEvictionWorker; worker != nil {
+		worker.Cancel()
+		<-worker.Done()
+	}
 }
 
 // Get retrieves the value stored under the given key
@@ -213,6 +238,7 @@ func (c *lru) Get(key interface{}) interface{} {
 		return nil
 	}
 
+	c.updateEntryTTL(entry)
 	c.updateEntryRefCount(entry)
 	c.byAccess.MoveToFront(element)
 	return entry.value
@@ -359,9 +385,10 @@ func (c *lru) putInternal(key interface{}, value interface{}, allowUpdate bool) 
 	}
 
 	entry := &entryImpl{
-		key:   key,
-		value: value,
-		size:  newEntrySize,
+		key:        key,
+		value:      value,
+		size:       newEntrySize,
+		createTime: c.timeSource.Now().UTC(),
 	}
 	c.updateEntryTTL(entry)
 	c.updateEntryRefCount(entry)
@@ -430,12 +457,12 @@ func (c *lru) tryEvictAndGetPreviousElement(entry *entryImpl, element *list.Elem
 }
 
 func (c *lru) isEntryExpired(entry *entryImpl, currentTime time.Time) bool {
-	return entry.refCount == 0 && !entry.createTime.IsZero() && currentTime.After(entry.createTime.Add(c.ttl))
+	return entry.refCount == 0 && !entry.expireTime.IsZero() && currentTime.After(entry.expireTime)
 }
 
 func (c *lru) updateEntryTTL(entry *entryImpl) {
 	if c.ttl != 0 {
-		entry.createTime = c.timeSource.Now().UTC()
+		entry.expireTime = c.timeSource.Now().UTC().Add(c.ttl)
 	}
 }
 
@@ -446,5 +473,46 @@ func (c *lru) updateEntryRefCount(entry *entryImpl) {
 			c.pinnedSize += entry.Size()
 			metrics.CachePinnedUsage.With(c.metricsHandler).Record(float64(c.pinnedSize))
 		}
+	}
+}
+
+func (c *lru) startActiveEvictionWorker(interval time.Duration, maxElements int) *goro.Handle {
+	if interval <= 0 {
+		interval = DefaultActiveEvictionInterval
+	}
+	if maxElements <= 0 {
+		maxElements = DefaultActiveEvictionMaxElements
+	}
+	return goro.NewHandle(context.Background()).Go(func(ctx context.Context) error {
+		t := time.NewTicker(interval)
+		defer t.Stop()
+
+		for {
+			select {
+			case <-t.C:
+				c.evictExpired(maxElements)
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
+	})
+}
+
+func (c *lru) evictExpired(maxElements int) {
+	c.mut.Lock()
+	defer c.mut.Unlock()
+
+	now := c.timeSource.Now().UTC()
+	element := c.byAccess.Back()
+	for i := 0; i < maxElements; i++ {
+		//nolint:revive // It's always *entryImpl, no need to check that explicitly.
+		entry := element.Value.(*entryImpl)
+		if !c.isEntryExpired(entry, now) {
+			break
+		}
+
+		prev := element.Prev()
+		c.deleteInternal(element)
+		element = prev
 	}
 }

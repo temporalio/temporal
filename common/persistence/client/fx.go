@@ -104,12 +104,15 @@ func ClusterNameProvider(config *cluster.Config) ClusterName {
 func EventBlobCacheProvider(
 	dc *dynamicconfig.Collection,
 	logger log.Logger,
+	lc fx.Lifecycle,
 ) persistence.XDCCache {
-	return persistence.NewEventsBlobCache(
+	c := persistence.NewEventsBlobCache(
 		dynamicconfig.XDCCacheMaxSizeBytes.Get(dc)(),
 		20*time.Second,
 		logger,
 	)
+	lc.Append(fx.StopHook(c.Close))
+	return c
 }
 
 func FactoryProvider(

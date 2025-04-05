@@ -57,6 +57,7 @@ type (
 	XDCCache interface {
 		Put(key XDCCacheKey, value XDCCacheValue)
 		Get(key XDCCacheKey) (XDCCacheValue, bool)
+		Close()
 	}
 
 	XDCCacheImpl struct {
@@ -157,6 +158,10 @@ func (e *XDCCacheImpl) Get(key XDCCacheKey) (XDCCacheValue, bool) {
 		return XDCCacheValue{}, false
 	}
 	return value.(XDCCacheValue), true
+}
+
+func (e *XDCCacheImpl) Close() {
+	e.cache.Close()
 }
 
 func GetXDCCacheValue(

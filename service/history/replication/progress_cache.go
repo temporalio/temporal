@@ -53,6 +53,7 @@ type (
 			versionedTransitions []*persistencespb.VersionedTransition,
 			eventVersionHistoryItems []*historyspb.VersionHistoryItem,
 		) error
+		Close()
 	}
 
 	progressCacheImpl struct {
@@ -197,6 +198,10 @@ func (c *progressCacheImpl) Update(
 		c.cache.Put(cacheKey, item)
 	}
 	return nil
+}
+
+func (c *progressCacheImpl) Close() {
+	c.cache.Close()
 }
 
 func (c *ReplicationProgress) LastSyncedTransition() *persistencespb.VersionedTransition {
