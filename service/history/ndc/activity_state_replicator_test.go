@@ -1035,15 +1035,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityFound_Zombie() {
 		}).Return(false)
 	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(map[int64]*persistencespb.ActivityInfo{})
 
-	weContext.EXPECT().UpdateWorkflowExecutionWithNew(
-		gomock.Any(),
-		s.mockShard,
-		persistence.UpdateWorkflowModeBypassCurrent,
-		historyi.WorkflowContext(nil),
-		historyi.MutableState(nil),
-		historyi.TransactionPolicyPassive,
-		(*historyi.TransactionPolicy)(nil),
-	).Return(nil)
+	weContext.EXPECT().UpdateWorkflowExecutionAsPassive(gomock.Any(), s.mockShard).Return(nil)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
 		namespace.NewGlobalNamespaceForTest(
@@ -1148,15 +1140,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivities_ActivityFound_Zombie()
 		}).Return(false)
 	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(map[int64]*persistencespb.ActivityInfo{})
 
-	weContext.EXPECT().UpdateWorkflowExecutionWithNew(
-		gomock.Any(),
-		s.mockShard,
-		persistence.UpdateWorkflowModeBypassCurrent,
-		historyi.WorkflowContext(nil),
-		historyi.MutableState(nil),
-		historyi.TransactionPolicyPassive,
-		(*historyi.TransactionPolicy)(nil),
-	).Return(nil)
+	weContext.EXPECT().UpdateWorkflowExecutionAsPassive(gomock.Any(), s.mockShard).Return(nil)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
 		namespace.NewGlobalNamespaceForTest(
@@ -1257,15 +1241,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityFound_NonZombie(
 		}).Return(false)
 	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(map[int64]*persistencespb.ActivityInfo{})
 
-	weContext.EXPECT().UpdateWorkflowExecutionWithNew(
-		gomock.Any(),
-		s.mockShard,
-		persistence.UpdateWorkflowModeUpdateCurrent,
-		historyi.WorkflowContext(nil),
-		historyi.MutableState(nil),
-		historyi.TransactionPolicyPassive,
-		(*historyi.TransactionPolicy)(nil),
-	).Return(nil)
+	weContext.EXPECT().UpdateWorkflowExecutionAsPassive(gomock.Any(), s.mockShard).Return(nil)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
 		namespace.NewGlobalNamespaceForTest(
@@ -1370,15 +1346,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivities_ActivityFound_NonZombi
 		}).Return(false)
 	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(map[int64]*persistencespb.ActivityInfo{})
 
-	weContext.EXPECT().UpdateWorkflowExecutionWithNew(
-		gomock.Any(),
-		s.mockShard,
-		persistence.UpdateWorkflowModeUpdateCurrent,
-		historyi.WorkflowContext(nil),
-		historyi.MutableState(nil),
-		historyi.TransactionPolicyPassive,
-		(*historyi.TransactionPolicy)(nil),
-	).Return(nil)
+	weContext.EXPECT().UpdateWorkflowExecutionAsPassive(gomock.Any(), s.mockShard).Return(nil)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
 		namespace.NewGlobalNamespaceForTest(
