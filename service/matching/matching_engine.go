@@ -68,6 +68,7 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
@@ -96,8 +97,9 @@ const (
 )
 
 type (
-	pollerIDCtxKey string
-	identityCtxKey string
+	TaskDispatchRateLimiter quotas.RequestRateLimiter
+	pollerIDCtxKey          string
+	identityCtxKey          string
 
 	taskQueueCounterKey struct {
 		namespaceID   string
@@ -180,6 +182,8 @@ type (
 		userDataUpdateBatchers collection.SyncMap[namespace.ID, *stream_batcher.Batcher[*userDataUpdate, error]]
 		// Stores results of reachability queries to visibility
 		reachabilityCache reachabilityCache
+		// Rate limiter to limit the task dispatch
+		rateLimiter TaskDispatchRateLimiter
 	}
 )
 
@@ -229,6 +233,7 @@ func NewEngine(
 	testHooks testhooks.TestHooks,
 	saProvider searchattribute.Provider,
 	saMapperProvider searchattribute.MapperProvider,
+	rateLimiter TaskDispatchRateLimiter,
 ) Engine {
 	scopedMetricsHandler := metricsHandler.WithTags(metrics.OperationTag(metrics.MatchingEngineScope))
 	e := &matchingEngineImpl{
@@ -269,6 +274,7 @@ func NewEngine(
 		outstandingPollers:        collection.NewSyncMap[string, context.CancelFunc](),
 		namespaceReplicationQueue: namespaceReplicationQueue,
 		userDataUpdateBatchers:    collection.NewSyncMap[namespace.ID, *stream_batcher.Batcher[*userDataUpdate, error]](),
+		rateLimiter:               rateLimiter,
 	}
 	e.reachabilityCache = newReachabilityCache(
 		metrics.NoopMetricsHandler,
@@ -604,6 +610,16 @@ func (e *matchingEngineImpl) PollWorkflowTaskQueue(
 	pollerID := req.GetPollerId()
 	request := req.PollRequest
 	taskQueueName := request.TaskQueue.GetName()
+
+	// Namespace field is not populated for forwarded requests.
+	if len(request.Namespace) == 0 {
+		ns, err := e.namespaceRegistry.GetNamespaceName(namespace.ID(req.GetNamespaceId()))
+		if err != nil {
+			return nil, err
+		}
+		request.Namespace = ns.String()
+	}
+
 pollLoop:
 	for {
 		err := common.IsValidContext(ctx)
@@ -858,6 +874,16 @@ func (e *matchingEngineImpl) PollActivityTaskQueue(
 	pollerID := req.GetPollerId()
 	request := req.PollRequest
 	taskQueueName := request.TaskQueue.GetName()
+
+	// Namespace field is not populated for forwarded requests.
+	if len(request.Namespace) == 0 {
+		ns, err := e.namespaceRegistry.GetNamespaceName(namespace.ID(req.GetNamespaceId()))
+		if err != nil {
+			return nil, err
+		}
+		request.Namespace = ns.String()
+	}
+
 pollLoop:
 	for {
 		err := common.IsValidContext(ctx)
@@ -2612,6 +2638,18 @@ func (e *matchingEngineImpl) recordWorkflowTaskStarted(
 	pollReq *workflowservice.PollWorkflowTaskQueueRequest,
 	task *internalTask,
 ) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
+	if e.rateLimiter != nil {
+		err := e.rateLimiter.Wait(ctx, quotas.Request{
+			API:        "RecordWorkflowTaskStarted",
+			Token:      1,
+			Caller:     pollReq.Namespace,
+			CallerType: headers.CallerTypeAPI,
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	ctx, cancel := newRecordTaskStartedContext(ctx, task)
 	defer cancel()
 
@@ -2650,6 +2688,18 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 	pollReq *workflowservice.PollActivityTaskQueueRequest,
 	task *internalTask,
 ) (*historyservice.RecordActivityTaskStartedResponse, error) {
+	if e.rateLimiter != nil {
+		err := e.rateLimiter.Wait(ctx, quotas.Request{
+			API:        "RecordActivityTaskStarted",
+			Token:      1,
+			Caller:     pollReq.Namespace,
+			CallerType: headers.CallerTypeAPI,
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	ctx, cancel := newRecordTaskStartedContext(ctx, task)
 	defer cancel()
 
