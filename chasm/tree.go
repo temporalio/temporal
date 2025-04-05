@@ -151,6 +151,10 @@ func NewTree(
 		// If serializedNodes is empty, it means that this new tree.
 		// Initialize empty serializedNode.
 		root.initSerializedNode(fieldTypeComponent)
+		// Although both value and serializedNode.Data are nil, they are considered NOT synced
+		// because value has no type but serializedNode does.
+		// deserialize method should set value when called.
+		root.valueSynced = false
 		return root, nil
 	}
 
@@ -216,7 +220,7 @@ func (n *Node) Component(
 	}
 
 	// TODO: perform access rule check based on the operation intent
-	// and lifecycle state of all ancenstor nodes.
+	// and lifecycle state of all ancestor nodes.
 	//
 	// intent := operationIntentFromContext(chasmContext.getContext())
 	// if intent != OperationIntentUnspecified {
@@ -243,7 +247,7 @@ func (n *Node) prepareComponentValue(
 		)
 	}
 
-	if n.value == nil {
+	if !n.valueSynced {
 		registrableComponent, ok := n.registry.component(componentAttr.GetType())
 		if !ok {
 			return nil, serviceerror.NewInternal(fmt.Sprintf("component type name not registered: %v", componentAttr.GetType()))
@@ -256,8 +260,8 @@ func (n *Node) prepareComponentValue(
 
 	// For now, we assume if a node is accessed with a MutableContext,
 	// its value will be mutated and no longer in sync with the serializedNode.
-	_, ok := chasmContext.(MutableContext)
-	n.valueSynced = !ok
+	_, componentCanBeMutated := chasmContext.(MutableContext)
+	n.valueSynced = !componentCanBeMutated
 
 	return n.value, nil
 }
@@ -327,6 +331,7 @@ func (n *Node) setSerializedNode(
 ) {
 	if len(nodePath) == 0 {
 		n.serializedNode = serializedNode
+		n.valueSynced = false
 		return
 	}
 
@@ -341,6 +346,10 @@ func (n *Node) setSerializedNode(
 
 // serialize sets or updates serializedValue field of the node n with serialized value.
 func (n *Node) serialize() error {
+	if n.valueSynced {
+		return nil
+	}
+
 	switch n.serializedNode.GetMetadata().GetAttributes().(type) {
 	case *persistencespb.ChasmNodeMetadata_ComponentAttributes:
 		return n.serializeComponentNode()
@@ -388,6 +397,7 @@ func (n *Node) serializeComponentNode() error {
 		n.serializedNode.Data = blob
 		n.serializedNode.GetMetadata().GetComponentAttributes().Type = rc.fqType()
 		n.updateLastUpdateVersionedTransition()
+		n.valueSynced = true
 	}
 	return nil
 }
@@ -447,6 +457,7 @@ func (n *Node) syncSubComponentsInternal(
 				}
 				childNode.value = internal.value
 				childNode.initSerializedNode(deduceFieldType(internal.value))
+				childNode.valueSynced = false
 
 				n.children[fieldN] = childNode
 				internal.node = childNode
@@ -503,6 +514,8 @@ func (n *Node) serializeDataNode() error {
 	}
 	n.serializedNode.Data = blob
 	n.updateLastUpdateVersionedTransition()
+	n.valueSynced = true
+
 	return nil
 }
 
@@ -522,6 +535,10 @@ func (n *Node) deserialize(
 ) error {
 	if err := validateType(valueT); err != nil {
 		return err
+	}
+
+	if n.valueSynced {
+		return nil
 	}
 
 	switch n.serializedNode.GetMetadata().GetAttributes().(type) {
@@ -546,6 +563,7 @@ func (n *Node) deserializeComponentNode(
 		// serializedNode is empty (has only metadata) => use constructed value of valueT type as value and return.
 		// deserialize method acts as component constructor.
 		n.value = valueV.Interface()
+		n.valueSynced = true
 		return nil
 	}
 
@@ -607,6 +625,7 @@ func (n *Node) deserializeComponentNode(
 	}
 
 	n.value = valueV.Interface()
+	n.valueSynced = true
 	return nil
 }
 
@@ -619,6 +638,7 @@ func (n *Node) deserializeDataNode(
 	}
 
 	n.value = value.Interface()
+	n.valueSynced = true
 	return nil
 }
 
@@ -835,6 +855,7 @@ func (n *Node) applyUpdates(
 			n.mutation.UpdatedNodes[encodedPath] = updatedNode
 			node.serializedNode = updatedNode
 			node.value = nil
+			n.valueSynced = false
 
 			// Clearing decoded value for ancestor nodes is not necessary because the value field is not referenced directly.
 			// Parent node is pointing to the Node struct.
@@ -901,7 +922,7 @@ func (n *Node) IsDirty() bool {
 }
 
 func (n *Node) isValueSynced() bool {
-	if n.value != nil && !n.valueSynced {
+	if !n.valueSynced {
 		return false
 	}
 
