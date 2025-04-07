@@ -470,7 +470,7 @@ func (s *DeploymentSuite) TestGetDeploymentReachability_OverrideUnversioned() {
 	updateResp, err := s.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
 		Namespace:                s.Namespace().String(),
 		WorkflowExecution:        unversionedWFExec,
-		WorkflowExecutionOptions: updateOpts,
+		WorkflowExecutionOptions: nil,
 		UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
 	})
 	s.NoError(err)

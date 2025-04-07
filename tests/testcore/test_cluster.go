@@ -42,6 +42,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	workflowserviceinc "go.temporal.io/server/api/workflowservice/v1"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/filestore"
 	"go.temporal.io/server/common/archiver/provider"
@@ -568,6 +569,10 @@ func (tc *TestCluster) ArchiverBase() *ArchiverBase {
 
 func (tc *TestCluster) FrontendClient() workflowservice.WorkflowServiceClient {
 	return tc.host.FrontendClient()
+}
+
+func (tc *TestCluster) FrontendIncClient() workflowserviceinc.WorkflowIncubationServiceClient {
+	return tc.host.FrontendIncClient()
 }
 
 func (tc *TestCluster) AdminClient() adminservice.AdminServiceClient {

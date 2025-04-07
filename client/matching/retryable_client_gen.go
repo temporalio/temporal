@@ -245,6 +245,36 @@ func (c *retryableClient) GetBuildIdTaskQueueMapping(
 	return resp, err
 }
 
+func (c *retryableClient) GetTaskQueuePartitionStats(
+	ctx context.Context,
+	request *matchingservice.GetTaskQueuePartitionStatsRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.GetTaskQueuePartitionStatsResponse, error) {
+	var resp *matchingservice.GetTaskQueuePartitionStatsResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.GetTaskQueuePartitionStats(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) GetTaskQueueStats(
+	ctx context.Context,
+	request *matchingservice.GetTaskQueueStatsRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.GetTaskQueueStatsResponse, error) {
+	var resp *matchingservice.GetTaskQueueStatsResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.GetTaskQueueStats(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) GetTaskQueueUserData(
 	ctx context.Context,
 	request *matchingservice.GetTaskQueueUserDataRequest,

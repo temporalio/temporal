@@ -46,6 +46,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	workflowserviceinc "go.temporal.io/server/api/workflowservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -145,6 +146,10 @@ func (s *FunctionalTestBase) GetTestClusterConfig() *TestClusterConfig {
 
 func (s *FunctionalTestBase) FrontendClient() workflowservice.WorkflowServiceClient {
 	return s.testCluster.FrontendClient()
+}
+
+func (s *FunctionalTestBase) FrontendIncClient() workflowserviceinc.WorkflowIncubationServiceClient {
+	return s.testCluster.FrontendIncClient()
 }
 
 func (s *FunctionalTestBase) AdminClient() adminservice.AdminServiceClient {

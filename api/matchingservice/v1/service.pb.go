@@ -47,7 +47,7 @@ var File_temporal_server_api_matchingservice_v1_service_proto protoreflect.FileD
 
 const file_temporal_server_api_matchingservice_v1_service_proto_rawDesc = "" +
 	"\n" +
-	"4temporal/server/api/matchingservice/v1/service.proto\x12&temporal.server.api.matchingservice.v1\x1a=temporal/server/api/matchingservice/v1/request_response.proto2\xdf+\n" +
+	"4temporal/server/api/matchingservice/v1/service.proto\x12&temporal.server.api.matchingservice.v1\x1a=temporal/server/api/matchingservice/v1/request_response.proto2\xb4.\n" +
 	"\x0fMatchingService\x12\xa6\x01\n" +
 	"\x15PollWorkflowTaskQueue\x12D.temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueRequest\x1aE.temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse\"\x00\x12\xa6\x01\n" +
 	"\x15PollActivityTaskQueue\x12D.temporal.server.api.matchingservice.v1.PollActivityTaskQueueRequest\x1aE.temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse\"\x00\x12\x94\x01\n" +
@@ -68,7 +68,9 @@ const file_temporal_server_api_matchingservice_v1_service_proto_rawDesc = "" +
 	"\x14GetTaskQueueUserData\x12C.temporal.server.api.matchingservice.v1.GetTaskQueueUserDataRequest\x1aD.temporal.server.api.matchingservice.v1.GetTaskQueueUserDataResponse\"\x00\x12\xb8\x01\n" +
 	"\x1bUpdateWorkerVersioningRules\x12J.temporal.server.api.matchingservice.v1.UpdateWorkerVersioningRulesRequest\x1aK.temporal.server.api.matchingservice.v1.UpdateWorkerVersioningRulesResponse\"\x00\x12\xaf\x01\n" +
 	"\x18GetWorkerVersioningRules\x12G.temporal.server.api.matchingservice.v1.GetWorkerVersioningRulesRequest\x1aH.temporal.server.api.matchingservice.v1.GetWorkerVersioningRulesResponse\"\x00\x12\xa9\x01\n" +
-	"\x16SyncDeploymentUserData\x12E.temporal.server.api.matchingservice.v1.SyncDeploymentUserDataRequest\x1aF.temporal.server.api.matchingservice.v1.SyncDeploymentUserDataResponse\"\x00\x12\xd9\x01\n" +
+	"\x16SyncDeploymentUserData\x12E.temporal.server.api.matchingservice.v1.SyncDeploymentUserDataRequest\x1aF.temporal.server.api.matchingservice.v1.SyncDeploymentUserDataResponse\"\x00\x12\x9a\x01\n" +
+	"\x11GetTaskQueueStats\x12@.temporal.server.api.matchingservice.v1.GetTaskQueueStatsRequest\x1aA.temporal.server.api.matchingservice.v1.GetTaskQueueStatsResponse\"\x00\x12\xb5\x01\n" +
+	"\x1aGetTaskQueuePartitionStats\x12I.temporal.server.api.matchingservice.v1.GetTaskQueuePartitionStatsRequest\x1aJ.temporal.server.api.matchingservice.v1.GetTaskQueuePartitionStatsResponse\"\x00\x12\xd9\x01\n" +
 	"&ApplyTaskQueueUserDataReplicationEvent\x12U.temporal.server.api.matchingservice.v1.ApplyTaskQueueUserDataReplicationEventRequest\x1aV.temporal.server.api.matchingservice.v1.ApplyTaskQueueUserDataReplicationEventResponse\"\x00\x12\xb5\x01\n" +
 	"\x1aGetBuildIdTaskQueueMapping\x12I.temporal.server.api.matchingservice.v1.GetBuildIdTaskQueueMappingRequest\x1aJ.temporal.server.api.matchingservice.v1.GetBuildIdTaskQueueMappingResponse\"\x00\x12\xb8\x01\n" +
 	"\x1bForceLoadTaskQueuePartition\x12J.temporal.server.api.matchingservice.v1.ForceLoadTaskQueuePartitionRequest\x1aK.temporal.server.api.matchingservice.v1.ForceLoadTaskQueuePartitionResponse\"\x00\x12\xa3\x01\n" +
@@ -103,50 +105,54 @@ var file_temporal_server_api_matchingservice_v1_service_proto_goTypes = []any{
 	(*UpdateWorkerVersioningRulesRequest)(nil),             // 17: temporal.server.api.matchingservice.v1.UpdateWorkerVersioningRulesRequest
 	(*GetWorkerVersioningRulesRequest)(nil),                // 18: temporal.server.api.matchingservice.v1.GetWorkerVersioningRulesRequest
 	(*SyncDeploymentUserDataRequest)(nil),                  // 19: temporal.server.api.matchingservice.v1.SyncDeploymentUserDataRequest
-	(*ApplyTaskQueueUserDataReplicationEventRequest)(nil),  // 20: temporal.server.api.matchingservice.v1.ApplyTaskQueueUserDataReplicationEventRequest
-	(*GetBuildIdTaskQueueMappingRequest)(nil),              // 21: temporal.server.api.matchingservice.v1.GetBuildIdTaskQueueMappingRequest
-	(*ForceLoadTaskQueuePartitionRequest)(nil),             // 22: temporal.server.api.matchingservice.v1.ForceLoadTaskQueuePartitionRequest
-	(*ForceUnloadTaskQueueRequest)(nil),                    // 23: temporal.server.api.matchingservice.v1.ForceUnloadTaskQueueRequest
-	(*ForceUnloadTaskQueuePartitionRequest)(nil),           // 24: temporal.server.api.matchingservice.v1.ForceUnloadTaskQueuePartitionRequest
-	(*UpdateTaskQueueUserDataRequest)(nil),                 // 25: temporal.server.api.matchingservice.v1.UpdateTaskQueueUserDataRequest
-	(*ReplicateTaskQueueUserDataRequest)(nil),              // 26: temporal.server.api.matchingservice.v1.ReplicateTaskQueueUserDataRequest
-	(*CheckTaskQueueUserDataPropagationRequest)(nil),       // 27: temporal.server.api.matchingservice.v1.CheckTaskQueueUserDataPropagationRequest
-	(*CreateNexusEndpointRequest)(nil),                     // 28: temporal.server.api.matchingservice.v1.CreateNexusEndpointRequest
-	(*UpdateNexusEndpointRequest)(nil),                     // 29: temporal.server.api.matchingservice.v1.UpdateNexusEndpointRequest
-	(*DeleteNexusEndpointRequest)(nil),                     // 30: temporal.server.api.matchingservice.v1.DeleteNexusEndpointRequest
-	(*ListNexusEndpointsRequest)(nil),                      // 31: temporal.server.api.matchingservice.v1.ListNexusEndpointsRequest
-	(*PollWorkflowTaskQueueResponse)(nil),                  // 32: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse
-	(*PollActivityTaskQueueResponse)(nil),                  // 33: temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse
-	(*AddWorkflowTaskResponse)(nil),                        // 34: temporal.server.api.matchingservice.v1.AddWorkflowTaskResponse
-	(*AddActivityTaskResponse)(nil),                        // 35: temporal.server.api.matchingservice.v1.AddActivityTaskResponse
-	(*QueryWorkflowResponse)(nil),                          // 36: temporal.server.api.matchingservice.v1.QueryWorkflowResponse
-	(*RespondQueryTaskCompletedResponse)(nil),              // 37: temporal.server.api.matchingservice.v1.RespondQueryTaskCompletedResponse
-	(*DispatchNexusTaskResponse)(nil),                      // 38: temporal.server.api.matchingservice.v1.DispatchNexusTaskResponse
-	(*PollNexusTaskQueueResponse)(nil),                     // 39: temporal.server.api.matchingservice.v1.PollNexusTaskQueueResponse
-	(*RespondNexusTaskCompletedResponse)(nil),              // 40: temporal.server.api.matchingservice.v1.RespondNexusTaskCompletedResponse
-	(*RespondNexusTaskFailedResponse)(nil),                 // 41: temporal.server.api.matchingservice.v1.RespondNexusTaskFailedResponse
-	(*CancelOutstandingPollResponse)(nil),                  // 42: temporal.server.api.matchingservice.v1.CancelOutstandingPollResponse
-	(*DescribeTaskQueueResponse)(nil),                      // 43: temporal.server.api.matchingservice.v1.DescribeTaskQueueResponse
-	(*DescribeTaskQueuePartitionResponse)(nil),             // 44: temporal.server.api.matchingservice.v1.DescribeTaskQueuePartitionResponse
-	(*ListTaskQueuePartitionsResponse)(nil),                // 45: temporal.server.api.matchingservice.v1.ListTaskQueuePartitionsResponse
-	(*UpdateWorkerBuildIdCompatibilityResponse)(nil),       // 46: temporal.server.api.matchingservice.v1.UpdateWorkerBuildIdCompatibilityResponse
-	(*GetWorkerBuildIdCompatibilityResponse)(nil),          // 47: temporal.server.api.matchingservice.v1.GetWorkerBuildIdCompatibilityResponse
-	(*GetTaskQueueUserDataResponse)(nil),                   // 48: temporal.server.api.matchingservice.v1.GetTaskQueueUserDataResponse
-	(*UpdateWorkerVersioningRulesResponse)(nil),            // 49: temporal.server.api.matchingservice.v1.UpdateWorkerVersioningRulesResponse
-	(*GetWorkerVersioningRulesResponse)(nil),               // 50: temporal.server.api.matchingservice.v1.GetWorkerVersioningRulesResponse
-	(*SyncDeploymentUserDataResponse)(nil),                 // 51: temporal.server.api.matchingservice.v1.SyncDeploymentUserDataResponse
-	(*ApplyTaskQueueUserDataReplicationEventResponse)(nil), // 52: temporal.server.api.matchingservice.v1.ApplyTaskQueueUserDataReplicationEventResponse
-	(*GetBuildIdTaskQueueMappingResponse)(nil),             // 53: temporal.server.api.matchingservice.v1.GetBuildIdTaskQueueMappingResponse
-	(*ForceLoadTaskQueuePartitionResponse)(nil),            // 54: temporal.server.api.matchingservice.v1.ForceLoadTaskQueuePartitionResponse
-	(*ForceUnloadTaskQueueResponse)(nil),                   // 55: temporal.server.api.matchingservice.v1.ForceUnloadTaskQueueResponse
-	(*ForceUnloadTaskQueuePartitionResponse)(nil),          // 56: temporal.server.api.matchingservice.v1.ForceUnloadTaskQueuePartitionResponse
-	(*UpdateTaskQueueUserDataResponse)(nil),                // 57: temporal.server.api.matchingservice.v1.UpdateTaskQueueUserDataResponse
-	(*ReplicateTaskQueueUserDataResponse)(nil),             // 58: temporal.server.api.matchingservice.v1.ReplicateTaskQueueUserDataResponse
-	(*CheckTaskQueueUserDataPropagationResponse)(nil),      // 59: temporal.server.api.matchingservice.v1.CheckTaskQueueUserDataPropagationResponse
-	(*CreateNexusEndpointResponse)(nil),                    // 60: temporal.server.api.matchingservice.v1.CreateNexusEndpointResponse
-	(*UpdateNexusEndpointResponse)(nil),                    // 61: temporal.server.api.matchingservice.v1.UpdateNexusEndpointResponse
-	(*DeleteNexusEndpointResponse)(nil),                    // 62: temporal.server.api.matchingservice.v1.DeleteNexusEndpointResponse
-	(*ListNexusEndpointsResponse)(nil),                     // 63: temporal.server.api.matchingservice.v1.ListNexusEndpointsResponse
+	(*GetTaskQueueStatsRequest)(nil),                       // 20: temporal.server.api.matchingservice.v1.GetTaskQueueStatsRequest
+	(*GetTaskQueuePartitionStatsRequest)(nil),              // 21: temporal.server.api.matchingservice.v1.GetTaskQueuePartitionStatsRequest
+	(*ApplyTaskQueueUserDataReplicationEventRequest)(nil),  // 22: temporal.server.api.matchingservice.v1.ApplyTaskQueueUserDataReplicationEventRequest
+	(*GetBuildIdTaskQueueMappingRequest)(nil),              // 23: temporal.server.api.matchingservice.v1.GetBuildIdTaskQueueMappingRequest
+	(*ForceLoadTaskQueuePartitionRequest)(nil),             // 24: temporal.server.api.matchingservice.v1.ForceLoadTaskQueuePartitionRequest
+	(*ForceUnloadTaskQueueRequest)(nil),                    // 25: temporal.server.api.matchingservice.v1.ForceUnloadTaskQueueRequest
+	(*ForceUnloadTaskQueuePartitionRequest)(nil),           // 26: temporal.server.api.matchingservice.v1.ForceUnloadTaskQueuePartitionRequest
+	(*UpdateTaskQueueUserDataRequest)(nil),                 // 27: temporal.server.api.matchingservice.v1.UpdateTaskQueueUserDataRequest
+	(*ReplicateTaskQueueUserDataRequest)(nil),              // 28: temporal.server.api.matchingservice.v1.ReplicateTaskQueueUserDataRequest
+	(*CheckTaskQueueUserDataPropagationRequest)(nil),       // 29: temporal.server.api.matchingservice.v1.CheckTaskQueueUserDataPropagationRequest
+	(*CreateNexusEndpointRequest)(nil),                     // 30: temporal.server.api.matchingservice.v1.CreateNexusEndpointRequest
+	(*UpdateNexusEndpointRequest)(nil),                     // 31: temporal.server.api.matchingservice.v1.UpdateNexusEndpointRequest
+	(*DeleteNexusEndpointRequest)(nil),                     // 32: temporal.server.api.matchingservice.v1.DeleteNexusEndpointRequest
+	(*ListNexusEndpointsRequest)(nil),                      // 33: temporal.server.api.matchingservice.v1.ListNexusEndpointsRequest
+	(*PollWorkflowTaskQueueResponse)(nil),                  // 34: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse
+	(*PollActivityTaskQueueResponse)(nil),                  // 35: temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse
+	(*AddWorkflowTaskResponse)(nil),                        // 36: temporal.server.api.matchingservice.v1.AddWorkflowTaskResponse
+	(*AddActivityTaskResponse)(nil),                        // 37: temporal.server.api.matchingservice.v1.AddActivityTaskResponse
+	(*QueryWorkflowResponse)(nil),                          // 38: temporal.server.api.matchingservice.v1.QueryWorkflowResponse
+	(*RespondQueryTaskCompletedResponse)(nil),              // 39: temporal.server.api.matchingservice.v1.RespondQueryTaskCompletedResponse
+	(*DispatchNexusTaskResponse)(nil),                      // 40: temporal.server.api.matchingservice.v1.DispatchNexusTaskResponse
+	(*PollNexusTaskQueueResponse)(nil),                     // 41: temporal.server.api.matchingservice.v1.PollNexusTaskQueueResponse
+	(*RespondNexusTaskCompletedResponse)(nil),              // 42: temporal.server.api.matchingservice.v1.RespondNexusTaskCompletedResponse
+	(*RespondNexusTaskFailedResponse)(nil),                 // 43: temporal.server.api.matchingservice.v1.RespondNexusTaskFailedResponse
+	(*CancelOutstandingPollResponse)(nil),                  // 44: temporal.server.api.matchingservice.v1.CancelOutstandingPollResponse
+	(*DescribeTaskQueueResponse)(nil),                      // 45: temporal.server.api.matchingservice.v1.DescribeTaskQueueResponse
+	(*DescribeTaskQueuePartitionResponse)(nil),             // 46: temporal.server.api.matchingservice.v1.DescribeTaskQueuePartitionResponse
+	(*ListTaskQueuePartitionsResponse)(nil),                // 47: temporal.server.api.matchingservice.v1.ListTaskQueuePartitionsResponse
+	(*UpdateWorkerBuildIdCompatibilityResponse)(nil),       // 48: temporal.server.api.matchingservice.v1.UpdateWorkerBuildIdCompatibilityResponse
+	(*GetWorkerBuildIdCompatibilityResponse)(nil),          // 49: temporal.server.api.matchingservice.v1.GetWorkerBuildIdCompatibilityResponse
+	(*GetTaskQueueUserDataResponse)(nil),                   // 50: temporal.server.api.matchingservice.v1.GetTaskQueueUserDataResponse
+	(*UpdateWorkerVersioningRulesResponse)(nil),            // 51: temporal.server.api.matchingservice.v1.UpdateWorkerVersioningRulesResponse
+	(*GetWorkerVersioningRulesResponse)(nil),               // 52: temporal.server.api.matchingservice.v1.GetWorkerVersioningRulesResponse
+	(*SyncDeploymentUserDataResponse)(nil),                 // 53: temporal.server.api.matchingservice.v1.SyncDeploymentUserDataResponse
+	(*GetTaskQueueStatsResponse)(nil),                      // 54: temporal.server.api.matchingservice.v1.GetTaskQueueStatsResponse
+	(*GetTaskQueuePartitionStatsResponse)(nil),             // 55: temporal.server.api.matchingservice.v1.GetTaskQueuePartitionStatsResponse
+	(*ApplyTaskQueueUserDataReplicationEventResponse)(nil), // 56: temporal.server.api.matchingservice.v1.ApplyTaskQueueUserDataReplicationEventResponse
+	(*GetBuildIdTaskQueueMappingResponse)(nil),             // 57: temporal.server.api.matchingservice.v1.GetBuildIdTaskQueueMappingResponse
+	(*ForceLoadTaskQueuePartitionResponse)(nil),            // 58: temporal.server.api.matchingservice.v1.ForceLoadTaskQueuePartitionResponse
+	(*ForceUnloadTaskQueueResponse)(nil),                   // 59: temporal.server.api.matchingservice.v1.ForceUnloadTaskQueueResponse
+	(*ForceUnloadTaskQueuePartitionResponse)(nil),          // 60: temporal.server.api.matchingservice.v1.ForceUnloadTaskQueuePartitionResponse
+	(*UpdateTaskQueueUserDataResponse)(nil),                // 61: temporal.server.api.matchingservice.v1.UpdateTaskQueueUserDataResponse
+	(*ReplicateTaskQueueUserDataResponse)(nil),             // 62: temporal.server.api.matchingservice.v1.ReplicateTaskQueueUserDataResponse
+	(*CheckTaskQueueUserDataPropagationResponse)(nil),      // 63: temporal.server.api.matchingservice.v1.CheckTaskQueueUserDataPropagationResponse
+	(*CreateNexusEndpointResponse)(nil),                    // 64: temporal.server.api.matchingservice.v1.CreateNexusEndpointResponse
+	(*UpdateNexusEndpointResponse)(nil),                    // 65: temporal.server.api.matchingservice.v1.UpdateNexusEndpointResponse
+	(*DeleteNexusEndpointResponse)(nil),                    // 66: temporal.server.api.matchingservice.v1.DeleteNexusEndpointResponse
+	(*ListNexusEndpointsResponse)(nil),                     // 67: temporal.server.api.matchingservice.v1.ListNexusEndpointsResponse
 }
 var file_temporal_server_api_matchingservice_v1_service_proto_depIdxs = []int32{
 	0,  // 0: temporal.server.api.matchingservice.v1.MatchingService.PollWorkflowTaskQueue:input_type -> temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueRequest
@@ -169,52 +175,56 @@ var file_temporal_server_api_matchingservice_v1_service_proto_depIdxs = []int32{
 	17, // 17: temporal.server.api.matchingservice.v1.MatchingService.UpdateWorkerVersioningRules:input_type -> temporal.server.api.matchingservice.v1.UpdateWorkerVersioningRulesRequest
 	18, // 18: temporal.server.api.matchingservice.v1.MatchingService.GetWorkerVersioningRules:input_type -> temporal.server.api.matchingservice.v1.GetWorkerVersioningRulesRequest
 	19, // 19: temporal.server.api.matchingservice.v1.MatchingService.SyncDeploymentUserData:input_type -> temporal.server.api.matchingservice.v1.SyncDeploymentUserDataRequest
-	20, // 20: temporal.server.api.matchingservice.v1.MatchingService.ApplyTaskQueueUserDataReplicationEvent:input_type -> temporal.server.api.matchingservice.v1.ApplyTaskQueueUserDataReplicationEventRequest
-	21, // 21: temporal.server.api.matchingservice.v1.MatchingService.GetBuildIdTaskQueueMapping:input_type -> temporal.server.api.matchingservice.v1.GetBuildIdTaskQueueMappingRequest
-	22, // 22: temporal.server.api.matchingservice.v1.MatchingService.ForceLoadTaskQueuePartition:input_type -> temporal.server.api.matchingservice.v1.ForceLoadTaskQueuePartitionRequest
-	23, // 23: temporal.server.api.matchingservice.v1.MatchingService.ForceUnloadTaskQueue:input_type -> temporal.server.api.matchingservice.v1.ForceUnloadTaskQueueRequest
-	24, // 24: temporal.server.api.matchingservice.v1.MatchingService.ForceUnloadTaskQueuePartition:input_type -> temporal.server.api.matchingservice.v1.ForceUnloadTaskQueuePartitionRequest
-	25, // 25: temporal.server.api.matchingservice.v1.MatchingService.UpdateTaskQueueUserData:input_type -> temporal.server.api.matchingservice.v1.UpdateTaskQueueUserDataRequest
-	26, // 26: temporal.server.api.matchingservice.v1.MatchingService.ReplicateTaskQueueUserData:input_type -> temporal.server.api.matchingservice.v1.ReplicateTaskQueueUserDataRequest
-	27, // 27: temporal.server.api.matchingservice.v1.MatchingService.CheckTaskQueueUserDataPropagation:input_type -> temporal.server.api.matchingservice.v1.CheckTaskQueueUserDataPropagationRequest
-	28, // 28: temporal.server.api.matchingservice.v1.MatchingService.CreateNexusEndpoint:input_type -> temporal.server.api.matchingservice.v1.CreateNexusEndpointRequest
-	29, // 29: temporal.server.api.matchingservice.v1.MatchingService.UpdateNexusEndpoint:input_type -> temporal.server.api.matchingservice.v1.UpdateNexusEndpointRequest
-	30, // 30: temporal.server.api.matchingservice.v1.MatchingService.DeleteNexusEndpoint:input_type -> temporal.server.api.matchingservice.v1.DeleteNexusEndpointRequest
-	31, // 31: temporal.server.api.matchingservice.v1.MatchingService.ListNexusEndpoints:input_type -> temporal.server.api.matchingservice.v1.ListNexusEndpointsRequest
-	32, // 32: temporal.server.api.matchingservice.v1.MatchingService.PollWorkflowTaskQueue:output_type -> temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse
-	33, // 33: temporal.server.api.matchingservice.v1.MatchingService.PollActivityTaskQueue:output_type -> temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse
-	34, // 34: temporal.server.api.matchingservice.v1.MatchingService.AddWorkflowTask:output_type -> temporal.server.api.matchingservice.v1.AddWorkflowTaskResponse
-	35, // 35: temporal.server.api.matchingservice.v1.MatchingService.AddActivityTask:output_type -> temporal.server.api.matchingservice.v1.AddActivityTaskResponse
-	36, // 36: temporal.server.api.matchingservice.v1.MatchingService.QueryWorkflow:output_type -> temporal.server.api.matchingservice.v1.QueryWorkflowResponse
-	37, // 37: temporal.server.api.matchingservice.v1.MatchingService.RespondQueryTaskCompleted:output_type -> temporal.server.api.matchingservice.v1.RespondQueryTaskCompletedResponse
-	38, // 38: temporal.server.api.matchingservice.v1.MatchingService.DispatchNexusTask:output_type -> temporal.server.api.matchingservice.v1.DispatchNexusTaskResponse
-	39, // 39: temporal.server.api.matchingservice.v1.MatchingService.PollNexusTaskQueue:output_type -> temporal.server.api.matchingservice.v1.PollNexusTaskQueueResponse
-	40, // 40: temporal.server.api.matchingservice.v1.MatchingService.RespondNexusTaskCompleted:output_type -> temporal.server.api.matchingservice.v1.RespondNexusTaskCompletedResponse
-	41, // 41: temporal.server.api.matchingservice.v1.MatchingService.RespondNexusTaskFailed:output_type -> temporal.server.api.matchingservice.v1.RespondNexusTaskFailedResponse
-	42, // 42: temporal.server.api.matchingservice.v1.MatchingService.CancelOutstandingPoll:output_type -> temporal.server.api.matchingservice.v1.CancelOutstandingPollResponse
-	43, // 43: temporal.server.api.matchingservice.v1.MatchingService.DescribeTaskQueue:output_type -> temporal.server.api.matchingservice.v1.DescribeTaskQueueResponse
-	44, // 44: temporal.server.api.matchingservice.v1.MatchingService.DescribeTaskQueuePartition:output_type -> temporal.server.api.matchingservice.v1.DescribeTaskQueuePartitionResponse
-	45, // 45: temporal.server.api.matchingservice.v1.MatchingService.ListTaskQueuePartitions:output_type -> temporal.server.api.matchingservice.v1.ListTaskQueuePartitionsResponse
-	46, // 46: temporal.server.api.matchingservice.v1.MatchingService.UpdateWorkerBuildIdCompatibility:output_type -> temporal.server.api.matchingservice.v1.UpdateWorkerBuildIdCompatibilityResponse
-	47, // 47: temporal.server.api.matchingservice.v1.MatchingService.GetWorkerBuildIdCompatibility:output_type -> temporal.server.api.matchingservice.v1.GetWorkerBuildIdCompatibilityResponse
-	48, // 48: temporal.server.api.matchingservice.v1.MatchingService.GetTaskQueueUserData:output_type -> temporal.server.api.matchingservice.v1.GetTaskQueueUserDataResponse
-	49, // 49: temporal.server.api.matchingservice.v1.MatchingService.UpdateWorkerVersioningRules:output_type -> temporal.server.api.matchingservice.v1.UpdateWorkerVersioningRulesResponse
-	50, // 50: temporal.server.api.matchingservice.v1.MatchingService.GetWorkerVersioningRules:output_type -> temporal.server.api.matchingservice.v1.GetWorkerVersioningRulesResponse
-	51, // 51: temporal.server.api.matchingservice.v1.MatchingService.SyncDeploymentUserData:output_type -> temporal.server.api.matchingservice.v1.SyncDeploymentUserDataResponse
-	52, // 52: temporal.server.api.matchingservice.v1.MatchingService.ApplyTaskQueueUserDataReplicationEvent:output_type -> temporal.server.api.matchingservice.v1.ApplyTaskQueueUserDataReplicationEventResponse
-	53, // 53: temporal.server.api.matchingservice.v1.MatchingService.GetBuildIdTaskQueueMapping:output_type -> temporal.server.api.matchingservice.v1.GetBuildIdTaskQueueMappingResponse
-	54, // 54: temporal.server.api.matchingservice.v1.MatchingService.ForceLoadTaskQueuePartition:output_type -> temporal.server.api.matchingservice.v1.ForceLoadTaskQueuePartitionResponse
-	55, // 55: temporal.server.api.matchingservice.v1.MatchingService.ForceUnloadTaskQueue:output_type -> temporal.server.api.matchingservice.v1.ForceUnloadTaskQueueResponse
-	56, // 56: temporal.server.api.matchingservice.v1.MatchingService.ForceUnloadTaskQueuePartition:output_type -> temporal.server.api.matchingservice.v1.ForceUnloadTaskQueuePartitionResponse
-	57, // 57: temporal.server.api.matchingservice.v1.MatchingService.UpdateTaskQueueUserData:output_type -> temporal.server.api.matchingservice.v1.UpdateTaskQueueUserDataResponse
-	58, // 58: temporal.server.api.matchingservice.v1.MatchingService.ReplicateTaskQueueUserData:output_type -> temporal.server.api.matchingservice.v1.ReplicateTaskQueueUserDataResponse
-	59, // 59: temporal.server.api.matchingservice.v1.MatchingService.CheckTaskQueueUserDataPropagation:output_type -> temporal.server.api.matchingservice.v1.CheckTaskQueueUserDataPropagationResponse
-	60, // 60: temporal.server.api.matchingservice.v1.MatchingService.CreateNexusEndpoint:output_type -> temporal.server.api.matchingservice.v1.CreateNexusEndpointResponse
-	61, // 61: temporal.server.api.matchingservice.v1.MatchingService.UpdateNexusEndpoint:output_type -> temporal.server.api.matchingservice.v1.UpdateNexusEndpointResponse
-	62, // 62: temporal.server.api.matchingservice.v1.MatchingService.DeleteNexusEndpoint:output_type -> temporal.server.api.matchingservice.v1.DeleteNexusEndpointResponse
-	63, // 63: temporal.server.api.matchingservice.v1.MatchingService.ListNexusEndpoints:output_type -> temporal.server.api.matchingservice.v1.ListNexusEndpointsResponse
-	32, // [32:64] is the sub-list for method output_type
-	0,  // [0:32] is the sub-list for method input_type
+	20, // 20: temporal.server.api.matchingservice.v1.MatchingService.GetTaskQueueStats:input_type -> temporal.server.api.matchingservice.v1.GetTaskQueueStatsRequest
+	21, // 21: temporal.server.api.matchingservice.v1.MatchingService.GetTaskQueuePartitionStats:input_type -> temporal.server.api.matchingservice.v1.GetTaskQueuePartitionStatsRequest
+	22, // 22: temporal.server.api.matchingservice.v1.MatchingService.ApplyTaskQueueUserDataReplicationEvent:input_type -> temporal.server.api.matchingservice.v1.ApplyTaskQueueUserDataReplicationEventRequest
+	23, // 23: temporal.server.api.matchingservice.v1.MatchingService.GetBuildIdTaskQueueMapping:input_type -> temporal.server.api.matchingservice.v1.GetBuildIdTaskQueueMappingRequest
+	24, // 24: temporal.server.api.matchingservice.v1.MatchingService.ForceLoadTaskQueuePartition:input_type -> temporal.server.api.matchingservice.v1.ForceLoadTaskQueuePartitionRequest
+	25, // 25: temporal.server.api.matchingservice.v1.MatchingService.ForceUnloadTaskQueue:input_type -> temporal.server.api.matchingservice.v1.ForceUnloadTaskQueueRequest
+	26, // 26: temporal.server.api.matchingservice.v1.MatchingService.ForceUnloadTaskQueuePartition:input_type -> temporal.server.api.matchingservice.v1.ForceUnloadTaskQueuePartitionRequest
+	27, // 27: temporal.server.api.matchingservice.v1.MatchingService.UpdateTaskQueueUserData:input_type -> temporal.server.api.matchingservice.v1.UpdateTaskQueueUserDataRequest
+	28, // 28: temporal.server.api.matchingservice.v1.MatchingService.ReplicateTaskQueueUserData:input_type -> temporal.server.api.matchingservice.v1.ReplicateTaskQueueUserDataRequest
+	29, // 29: temporal.server.api.matchingservice.v1.MatchingService.CheckTaskQueueUserDataPropagation:input_type -> temporal.server.api.matchingservice.v1.CheckTaskQueueUserDataPropagationRequest
+	30, // 30: temporal.server.api.matchingservice.v1.MatchingService.CreateNexusEndpoint:input_type -> temporal.server.api.matchingservice.v1.CreateNexusEndpointRequest
+	31, // 31: temporal.server.api.matchingservice.v1.MatchingService.UpdateNexusEndpoint:input_type -> temporal.server.api.matchingservice.v1.UpdateNexusEndpointRequest
+	32, // 32: temporal.server.api.matchingservice.v1.MatchingService.DeleteNexusEndpoint:input_type -> temporal.server.api.matchingservice.v1.DeleteNexusEndpointRequest
+	33, // 33: temporal.server.api.matchingservice.v1.MatchingService.ListNexusEndpoints:input_type -> temporal.server.api.matchingservice.v1.ListNexusEndpointsRequest
+	34, // 34: temporal.server.api.matchingservice.v1.MatchingService.PollWorkflowTaskQueue:output_type -> temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse
+	35, // 35: temporal.server.api.matchingservice.v1.MatchingService.PollActivityTaskQueue:output_type -> temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse
+	36, // 36: temporal.server.api.matchingservice.v1.MatchingService.AddWorkflowTask:output_type -> temporal.server.api.matchingservice.v1.AddWorkflowTaskResponse
+	37, // 37: temporal.server.api.matchingservice.v1.MatchingService.AddActivityTask:output_type -> temporal.server.api.matchingservice.v1.AddActivityTaskResponse
+	38, // 38: temporal.server.api.matchingservice.v1.MatchingService.QueryWorkflow:output_type -> temporal.server.api.matchingservice.v1.QueryWorkflowResponse
+	39, // 39: temporal.server.api.matchingservice.v1.MatchingService.RespondQueryTaskCompleted:output_type -> temporal.server.api.matchingservice.v1.RespondQueryTaskCompletedResponse
+	40, // 40: temporal.server.api.matchingservice.v1.MatchingService.DispatchNexusTask:output_type -> temporal.server.api.matchingservice.v1.DispatchNexusTaskResponse
+	41, // 41: temporal.server.api.matchingservice.v1.MatchingService.PollNexusTaskQueue:output_type -> temporal.server.api.matchingservice.v1.PollNexusTaskQueueResponse
+	42, // 42: temporal.server.api.matchingservice.v1.MatchingService.RespondNexusTaskCompleted:output_type -> temporal.server.api.matchingservice.v1.RespondNexusTaskCompletedResponse
+	43, // 43: temporal.server.api.matchingservice.v1.MatchingService.RespondNexusTaskFailed:output_type -> temporal.server.api.matchingservice.v1.RespondNexusTaskFailedResponse
+	44, // 44: temporal.server.api.matchingservice.v1.MatchingService.CancelOutstandingPoll:output_type -> temporal.server.api.matchingservice.v1.CancelOutstandingPollResponse
+	45, // 45: temporal.server.api.matchingservice.v1.MatchingService.DescribeTaskQueue:output_type -> temporal.server.api.matchingservice.v1.DescribeTaskQueueResponse
+	46, // 46: temporal.server.api.matchingservice.v1.MatchingService.DescribeTaskQueuePartition:output_type -> temporal.server.api.matchingservice.v1.DescribeTaskQueuePartitionResponse
+	47, // 47: temporal.server.api.matchingservice.v1.MatchingService.ListTaskQueuePartitions:output_type -> temporal.server.api.matchingservice.v1.ListTaskQueuePartitionsResponse
+	48, // 48: temporal.server.api.matchingservice.v1.MatchingService.UpdateWorkerBuildIdCompatibility:output_type -> temporal.server.api.matchingservice.v1.UpdateWorkerBuildIdCompatibilityResponse
+	49, // 49: temporal.server.api.matchingservice.v1.MatchingService.GetWorkerBuildIdCompatibility:output_type -> temporal.server.api.matchingservice.v1.GetWorkerBuildIdCompatibilityResponse
+	50, // 50: temporal.server.api.matchingservice.v1.MatchingService.GetTaskQueueUserData:output_type -> temporal.server.api.matchingservice.v1.GetTaskQueueUserDataResponse
+	51, // 51: temporal.server.api.matchingservice.v1.MatchingService.UpdateWorkerVersioningRules:output_type -> temporal.server.api.matchingservice.v1.UpdateWorkerVersioningRulesResponse
+	52, // 52: temporal.server.api.matchingservice.v1.MatchingService.GetWorkerVersioningRules:output_type -> temporal.server.api.matchingservice.v1.GetWorkerVersioningRulesResponse
+	53, // 53: temporal.server.api.matchingservice.v1.MatchingService.SyncDeploymentUserData:output_type -> temporal.server.api.matchingservice.v1.SyncDeploymentUserDataResponse
+	54, // 54: temporal.server.api.matchingservice.v1.MatchingService.GetTaskQueueStats:output_type -> temporal.server.api.matchingservice.v1.GetTaskQueueStatsResponse
+	55, // 55: temporal.server.api.matchingservice.v1.MatchingService.GetTaskQueuePartitionStats:output_type -> temporal.server.api.matchingservice.v1.GetTaskQueuePartitionStatsResponse
+	56, // 56: temporal.server.api.matchingservice.v1.MatchingService.ApplyTaskQueueUserDataReplicationEvent:output_type -> temporal.server.api.matchingservice.v1.ApplyTaskQueueUserDataReplicationEventResponse
+	57, // 57: temporal.server.api.matchingservice.v1.MatchingService.GetBuildIdTaskQueueMapping:output_type -> temporal.server.api.matchingservice.v1.GetBuildIdTaskQueueMappingResponse
+	58, // 58: temporal.server.api.matchingservice.v1.MatchingService.ForceLoadTaskQueuePartition:output_type -> temporal.server.api.matchingservice.v1.ForceLoadTaskQueuePartitionResponse
+	59, // 59: temporal.server.api.matchingservice.v1.MatchingService.ForceUnloadTaskQueue:output_type -> temporal.server.api.matchingservice.v1.ForceUnloadTaskQueueResponse
+	60, // 60: temporal.server.api.matchingservice.v1.MatchingService.ForceUnloadTaskQueuePartition:output_type -> temporal.server.api.matchingservice.v1.ForceUnloadTaskQueuePartitionResponse
+	61, // 61: temporal.server.api.matchingservice.v1.MatchingService.UpdateTaskQueueUserData:output_type -> temporal.server.api.matchingservice.v1.UpdateTaskQueueUserDataResponse
+	62, // 62: temporal.server.api.matchingservice.v1.MatchingService.ReplicateTaskQueueUserData:output_type -> temporal.server.api.matchingservice.v1.ReplicateTaskQueueUserDataResponse
+	63, // 63: temporal.server.api.matchingservice.v1.MatchingService.CheckTaskQueueUserDataPropagation:output_type -> temporal.server.api.matchingservice.v1.CheckTaskQueueUserDataPropagationResponse
+	64, // 64: temporal.server.api.matchingservice.v1.MatchingService.CreateNexusEndpoint:output_type -> temporal.server.api.matchingservice.v1.CreateNexusEndpointResponse
+	65, // 65: temporal.server.api.matchingservice.v1.MatchingService.UpdateNexusEndpoint:output_type -> temporal.server.api.matchingservice.v1.UpdateNexusEndpointResponse
+	66, // 66: temporal.server.api.matchingservice.v1.MatchingService.DeleteNexusEndpoint:output_type -> temporal.server.api.matchingservice.v1.DeleteNexusEndpointResponse
+	67, // 67: temporal.server.api.matchingservice.v1.MatchingService.ListNexusEndpoints:output_type -> temporal.server.api.matchingservice.v1.ListNexusEndpointsResponse
+	34, // [34:68] is the sub-list for method output_type
+	0,  // [0:34] is the sub-list for method input_type
 	0,  // [0:0] is the sub-list for extension type_name
 	0,  // [0:0] is the sub-list for extension extendee
 	0,  // [0:0] is the sub-list for field type_name
