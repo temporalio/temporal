@@ -26,6 +26,7 @@ package matching
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -300,6 +301,7 @@ func (task *internalTask) finishForward(forwardRes any, forwardErr error, wasVal
 }
 
 func (task *internalTask) finishInternal(res taskResponse, wasValid bool) {
+	fmt.Printf("CDF finishing task, valid = %v, recycleToken nil? = %v \n", wasValid, task.recycleToken == nil)
 	if !wasValid && task.recycleToken != nil {
 		task.recycleToken(task)
 	}

@@ -27,6 +27,7 @@ package matching
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math"
 	"strconv"
 	"sync"
@@ -172,6 +173,7 @@ func (tm *TaskMatcher) Offer(ctx context.Context, task *internalTask) (bool, err
 	}
 
 	if !task.isForwarded() {
+		fmt.Println("offer waiting")
 		if err := tm.rateLimiter.Wait(ctx); err != nil {
 			metrics.SyncThrottlePerTaskQueueCounter.With(tm.metricsHandler).Record(1)
 			return false, err
@@ -324,6 +326,7 @@ func (tm *TaskMatcher) MustOffer(ctx context.Context, task *internalTask, interr
 	tm.registerBacklogTask(task)
 	defer tm.unregisterBacklogTask(task)
 
+	fmt.Println("mustoffer waiting")
 	if err := tm.rateLimiter.Wait(ctx); err != nil {
 		return err
 	}

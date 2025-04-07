@@ -32,6 +32,16 @@
 #  - value: true
 # matching.PollerHistoryTTL:
 #   - value: 1s
+#matching.forwarderMaxRatePerSecond:
+#  - value: 1000 # default = 10
+matching.useNewMatcher:
+  - value: true
+matching.numTaskqueueWritePartitions:
+  - value: 4
+matching.numTaskqueueReadPartitions:
+  - value: 4
+admin.matchingNamespaceTaskqueueToPartitionDispatchRate:
+  - value: 1
 system.enableEagerWorkflowStart:
   - value: true
 limit.maxIDLength:

@@ -41,6 +41,7 @@ type (
 	// MultiRateLimiterImpl is a wrapper around the limiter interface
 	MultiRateLimiterImpl struct {
 		rateLimiters []RateLimiter
+		recycleCh    chan struct{}
 	}
 )
 
@@ -55,6 +56,7 @@ func NewMultiRateLimiter(
 	}
 	return &MultiRateLimiterImpl{
 		rateLimiters: rateLimiters,
+		recycleCh:    make(chan struct{}),
 	}
 }
 
@@ -137,6 +139,7 @@ func (rl *MultiRateLimiterImpl) WaitN(ctx context.Context, numToken int) error {
 
 	delay := reservation.DelayFrom(now)
 	if delay == 0 {
+		fmt.Printf("CDF delay = 0, returning\n")
 		return nil
 	}
 	waitLimit := InfDuration
@@ -152,12 +155,37 @@ func (rl *MultiRateLimiterImpl) WaitN(ctx context.Context, numToken int) error {
 	defer t.Stop()
 	select {
 	case <-t.C:
+		fmt.Printf("CDF delay = %v over, returning\n", delay.String())
 		return nil
 
 	case <-ctx.Done():
 		reservation.CancelAt(time.Now())
 		return ctx.Err()
+		//case <-rl.recycleCh:
+		//	fmt.Printf("CDF (4) RECEIVED FROM recycleCh\n")
+		//	if numToken > 1 {
+		//		fmt.Printf("CDF (5) NOT RECYCLING TOKEN BECAUSE REQUEST > 1\n")
+		//		break // recycling 1 token to a process requesting >1 tokens is a no-op
+		//	}
+		//
+		//	// Cancel() reverses the effects of this Reservation on the rate limit as much as possible,
+		//	// considering that other reservations may have already been made. Normally, Cancel() indicates
+		//	// that the reservation holder will not perform the reserved action, so it would make the most
+		//	// sense to cancel the reservation whose token was just recycled. However, we don't have access
+		//	// to the recycled reservation anymore, and even if we did, Cancel on a reservation that
+		//	// has fully waited is a no-op, so instead we cancel the current reservation as a proxy.
+		//	//
+		//	// Since Cancel() just restores tokens to the rate limiter, cancelling the current 1-token
+		//	// reservation should have approximately the same effect on the actual rate as cancelling the
+		//	// recycled reservation.
+		//	//
+		//	// If the recycled reservation was for >1 token, cancelling the current 1-token reservation will
+		//	// lead to a slower actual rate than cancelling the original, so the approximation is conservative.
+		//	reservation.Cancel()
+		//	fmt.Printf("CDF (6) CANCELLED TOKEN RESERVATION\n")
+		//	return nil
 	}
+	//return nil
 }
 
 // Rate returns the minimum rate per second for this rate limiter
@@ -192,10 +220,17 @@ func (rl *MultiRateLimiterImpl) TokensAt(t time.Time) int {
 	return tokens
 }
 
-// RecycleToken returns a token to each sub-rate-limiter, unblocking each
-// sub-rate-limiter's WaitN callers.
+// RecycleToken for most rate limiters, recycle token is implemented in the base level ClockedRateLimiter,
+// but because MultiRateLimiter implements WaitN by calling ReserveN on all its sub-rate-limiters, there is no
+// one waiting on ClockedRateLimiter's recycle token channel. So MultiRateLimiter needs its own recycle channel.
 func (rl *MultiRateLimiterImpl) RecycleToken() {
 	for _, rateLimiter := range rl.rateLimiters {
 		rateLimiter.RecycleToken()
 	}
+	//select {
+	//case rl.recycleCh <- struct{}{}:
+	//	fmt.Printf("CDF RECYCLED\n")
+	//default:
+	//	fmt.Printf("CDF RECYCLE CHANNEL FULL\n")
+	//}
 }

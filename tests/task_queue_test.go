@@ -54,13 +54,102 @@ func TestTaskQueueSuite(t *testing.T) {
 
 func (s *TaskQueueSuite) SetupSuite() {
 	dynamicConfigOverrides := map[dynamicconfig.Key]any{
-		dynamicconfig.MatchingUseNewMatcher.Key():     true,
-		dynamicconfig.MatchingGetTasksBatchSize.Key(): 20,
+		dynamicconfig.MatchingUseNewMatcher.Key():                                  true,
+		dynamicconfig.MatchingForwarderMaxRatePerSecond.Key():                      1000,
+		dynamicconfig.MatchingUseNewMatcher.Key():                                  true,
+		dynamicconfig.MatchingNumTaskqueueWritePartitions.Key():                    4,
+		dynamicconfig.MatchingNumTaskqueueReadPartitions.Key():                     4,
+		dynamicconfig.AdminMatchingNamespaceTaskqueueToPartitionDispatchRate.Key(): 1,
 	}
 	s.FunctionalTestSuite.SetupSuiteWithDefaultCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 }
 
-func (s *TaskQueueSuite) TestPriority_Activity_Basic() {
+// func (s *FunctionalTestBase) RunTestWithMatchingBehavior(subtest func()) {
+//	for _, forcePollForward := range []bool{false, true} {
+//		for _, forceTaskForward := range []bool{false, true} {
+//			for _, forceAsync := range []bool{false, true} {
+//				name := "NoTaskForward"
+//				if forceTaskForward {
+//					// force two levels of forwarding
+//					name = "ForceTaskForward"
+//				}
+//				if forcePollForward {
+//					name += "ForcePollForward"
+//				} else {
+//					name += "NoPollForward"
+//				}
+//				if forceAsync {
+//					name += "ForceAsync"
+//				} else {
+//					name += "AllowSync"
+//				}
+//
+//				s.Run(
+//					name, func() {
+//						if forceTaskForward {
+//							s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 13)
+//							s.InjectHook(testhooks.MatchingLBForceWritePartition, 11)
+//						} else {
+//							s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
+//						}
+//						if forcePollForward {
+//							s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 13)
+//							s.InjectHook(testhooks.MatchingLBForceReadPartition, 5)
+//						} else {
+//							s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
+//						}
+//						if forceAsync {
+//							s.InjectHook(testhooks.MatchingDisableSyncMatch, true)
+//						} else {
+//							s.InjectHook(testhooks.MatchingDisableSyncMatch, false)
+//						}
+//
+//						subtest()
+//					},
+//				)
+//			}
+//		}
+//	}
+//}
+
+//	for _, nPartitions := range []int{1, 4, 8} {
+//		for _, nWorkers := range []int{1, 4, 8, 16} {
+//
+//		}
+//	}
+
+func (s *TaskQueueSuite) TestTaskQueueRateLimit_1Partition_1Worker() {
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
+
+	const nWorkflows = 1000
+
+	tv := testvars.New(s.T())
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	for wfidx := range nWorkflows {
+		_, err := s.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+			Namespace:    s.Namespace().String(),
+			WorkflowId:   fmt.Sprintf("wf%d", wfidx),
+			WorkflowType: tv.WorkflowType(),
+			TaskQueue:    tv.TaskQueue(),
+		})
+		s.NoError(err)
+	}
+
+}
+
+func (s *TaskQueueSuite) testTaskQueueRateLimitName(nPartitions, nWorkers int) string {
+	return fmt.Sprintf("TestTaskQueueRateLimit_%vPartitions_%vWorkers", nPartitions, nWorkers)
+}
+
+func (s *TaskQueueSuite) testTaskQueueRateLimit(nPartitions, nWorkers, nBackloggedTasks int, timeToDrain time.Duration) {
+	s.Run()
+
+	s.OverrideDynamicConfig(dynamicconfig.MatchingMaxVersionsInDeployment, 1)
+
 	const N = 100
 	const Levels = 5
 
