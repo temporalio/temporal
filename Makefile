@@ -584,9 +584,12 @@ start-xdc-cluster-c: temporal-server
 	./temporal-server --env development-cluster-c --allow-no-auth start
 
 ##### Grafana #####
+DASHBOARD_DIR := develop/docker-compose/grafana/provisioning/temporalio-dashboards
 update-dashboards:
-	@printf $(COLOR) "Update dashboards submodule from remote..."
-	git submodule update --force --init --remote develop/docker-compose/grafana/provisioning/temporalio-dashboards
+	@printf $(COLOR) "Update dashboards ..."
+	@rm -rf $(DASHBOARD_DIR) && \
+		mkdir $(DASHBOARD_DIR) && \
+		curl -L https://api.github.com/repos/temporalio/dashboards/tarball | tar -x --strip 1 -C $(DASHBOARD_DIR)
 
 ##### Auxiliary #####
 gomodtidy:

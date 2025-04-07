@@ -1,3 +1,0 @@
-[submodule "develop/docker-compose/grafana/provisioning/temporalio-dashboards"]
-	path = develop/docker-compose/grafana/provisioning/temporalio-dashboards
-	url = https://github.com/temporalio/dashboards
