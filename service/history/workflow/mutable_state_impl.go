@@ -5447,6 +5447,7 @@ func (ms *MutableStateImpl) RetryActivity(
 			activityInfo.StartedEventId = common.EmptyEventID
 			activityInfo.StartedTime = nil
 			activityInfo.RequestId = ""
+			activityInfo.RetryLastFailure = ms.truncateRetryableActivityFailure(activityFailure)
 			return nil
 		}); err != nil {
 			return enumspb.RETRY_STATE_INTERNAL_SERVER_ERROR, err
