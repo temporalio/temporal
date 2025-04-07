@@ -1402,6 +1402,21 @@ HistoryCacheSizeBasedLimit is set to true.`,
 		time.Hour,
 		`HistoryCacheTTL is TTL of history cache`,
 	)
+	EnableHistoryChacheActiveEviction = NewGlobalBoolSetting(
+		"history.enableCacheActiveEviction",
+		false,
+		`EnableHistoryChacheActiveEviction controls if active eviction enabled for history cache`,
+	)
+	HistoryCacheActiveEvictionInterval = NewGlobalDurationSetting(
+		"history.cacheActiveEvictionInterval",
+		5*time.Second,
+		`HistoryCacheActiveEvictionInterval is interval of expire element eviction for history cache`,
+	)
+	HistoryCacheActiveEvictionMaxElements = NewGlobalIntSetting(
+		"history.cacheActiveEvictionMaxElements",
+		32,
+		`HistoryCacheActiveEvictionMaxElements is max number of expired elements to be evicted from history cache on active eviction iteration`,
+	)
 	HistoryCacheNonUserContextLockTimeout = NewGlobalDurationSetting(
 		"history.cacheNonUserContextLockTimeout",
 		500*time.Millisecond,
@@ -1472,6 +1487,21 @@ This can help reduce effects of shard movement.`,
 		"history.eventsCacheTTL",
 		time.Hour,
 		`EventsCacheTTL is TTL of events cache`,
+	)
+	EnableEventsChacheActiveEviction = NewGlobalBoolSetting(
+		"history.enableEventsCacheActiveEviction",
+		false,
+		`EnableEventsChacheActiveEviction controls if active eviction enabled for events cache`,
+	)
+	EventsCacheActiveEvictionInterval = NewGlobalDurationSetting(
+		"history.eventsCacheActiveEvictionInterval",
+		5*time.Second,
+		`EventsCacheActiveEvictionInterval is interval of expire element eviction for events cache`,
+	)
+	EventsCacheActiveEvictionMaxElements = NewGlobalIntSetting(
+		"history.eventsCacheActiveEvictionMaxElements",
+		32,
+		`EventsCacheActiveEvictionMaxElements is max number of expired elements to be evicted from events cache on active eviction iteration`,
 	)
 	EnableHostLevelEventsCache = NewGlobalBoolSetting(
 		"history.enableHostLevelEventsCache",

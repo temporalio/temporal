@@ -207,6 +207,7 @@ func (r *registry) Stop() {
 	defer atomic.StoreInt32(&r.status, stopped)
 	r.refresher.Cancel()
 	<-r.refresher.Done()
+	r.readthroughNotFoundCache.Close()
 }
 
 func (r *registry) GetPingChecks() []pingable.Check {

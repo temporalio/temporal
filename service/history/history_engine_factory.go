@@ -25,8 +25,11 @@
 package history
 
 import (
+	"context"
+
 	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/server/client"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
@@ -85,6 +88,13 @@ func (f *historyEngineFactory) CreateEngine(
 		wfCache = f.WorkflowCache
 	} else {
 		wfCache = f.NewCacheFn(shard.GetConfig(), shard.GetLogger(), shard.GetMetricsHandler())
+		err := shard.GetFinalizer().Register("wfCache", func(ctx context.Context) error {
+			wfCache.Close()
+			return nil
+		})
+		if err != nil {
+			shard.GetLogger().Debug("failed to register finalizer for shard workflow cache", tag.Error(err))
+		}
 	}
 
 	workflowConsistencyChecker := api.NewWorkflowConsistencyChecker(shard, wfCache)

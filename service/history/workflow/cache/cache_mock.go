@@ -68,6 +68,18 @@ func (m *MockCache) EXPECT() *MockCacheMockRecorder {
 	return m.recorder
 }
 
+// Close mocks base method.
+func (m *MockCache) Close() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Close")
+}
+
+// Close indicates an expected call of Close.
+func (mr *MockCacheMockRecorder) Close() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockCache)(nil).Close))
+}
+
 // GetOrCreateCurrentWorkflowExecution mocks base method.
 func (m *MockCache) GetOrCreateCurrentWorkflowExecution(ctx context.Context, shardContext interfaces.ShardContext, namespaceID namespace.ID, workflowID string, lockPriority locks.Priority) (interfaces.ReleaseWorkflowContextFunc, error) {
 	m.ctrl.T.Helper()
