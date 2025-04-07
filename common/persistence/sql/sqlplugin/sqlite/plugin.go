@@ -80,34 +80,13 @@ func (p *plugin) CreateDB(
 	r resolver.ServiceResolver,
 	_ log.Logger,
 	_ metrics.Handler,
-) (sqlplugin.DB, error) {
+) (any, error) {
 	conn, err := p.connPool.Allocate(cfg, r, p.createDBConnection)
 	if err != nil {
 		return nil, err
 	}
-
 	db := newDB(dbKind, cfg.DatabaseName, conn, nil)
 	db.OnClose(func() { p.connPool.Close(cfg) }) // remove reference
-
-	return db, nil
-}
-
-// CreateAdminDB initialize the db object
-func (p *plugin) CreateAdminDB(
-	dbKind sqlplugin.DbKind,
-	cfg *config.SQL,
-	r resolver.ServiceResolver,
-	_ log.Logger,
-	_ metrics.Handler,
-) (sqlplugin.AdminDB, error) {
-	conn, err := p.connPool.Allocate(cfg, r, p.createDBConnection)
-	if err != nil {
-		return nil, err
-	}
-
-	db := newDB(dbKind, cfg.DatabaseName, conn, nil)
-	db.OnClose(func() { p.connPool.Close(cfg) }) // remove reference
-
 	return db, nil
 }
 
@@ -155,7 +134,6 @@ func (p *plugin) createDBConnection(
 			_ = db.Close()
 			return nil, err
 		}
-
 	}
 
 	return db, nil

@@ -63,7 +63,6 @@ var _ sqlplugin.Plugin = (*plugin)(nil)
 func init() {
 	sql.RegisterPlugin(PluginName, &plugin{&driver.PQDriver{}})
 	sql.RegisterPlugin(PluginNamePGX, &plugin{&driver.PGXDriver{}})
-
 }
 
 // CreateDB initialize the db object
@@ -73,27 +72,7 @@ func (d *plugin) CreateDB(
 	r resolver.ServiceResolver,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
-) (sqlplugin.DB, error) {
-	connect := func() (*sqlx.DB, error) {
-		if cfg.Connect != nil {
-			return cfg.Connect(cfg)
-		}
-		return d.createDBConnection(cfg, r)
-	}
-	needsRefresh := d.d.IsConnNeedsRefreshError
-	handle := sqlplugin.NewDatabaseHandle(connect, needsRefresh, logger, metricsHandler, clock.NewRealTimeSource())
-	db := newDB(dbKind, cfg.DatabaseName, d.d, handle, nil)
-	return db, nil
-}
-
-// CreateAdminDB initialize the adminDB object
-func (d *plugin) CreateAdminDB(
-	dbKind sqlplugin.DbKind,
-	cfg *config.SQL,
-	r resolver.ServiceResolver,
-	logger log.Logger,
-	metricsHandler metrics.Handler,
-) (sqlplugin.AdminDB, error) {
+) (any, error) {
 	connect := func() (*sqlx.DB, error) {
 		if cfg.Connect != nil {
 			return cfg.Connect(cfg)

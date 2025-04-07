@@ -54,8 +54,7 @@ type VersionedBlob struct {
 type (
 	// Plugin defines the interface for any SQL database that needs to implement
 	Plugin interface {
-		CreateDB(dbKind DbKind, cfg *config.SQL, r resolver.ServiceResolver, l log.Logger, mh metrics.Handler) (DB, error)
-		CreateAdminDB(dbKind DbKind, cfg *config.SQL, r resolver.ServiceResolver, l log.Logger, mh metrics.Handler) (AdminDB, error)
+		CreateDB(dbKind DbKind, cfg *config.SQL, r resolver.ServiceResolver, l log.Logger, mh metrics.Handler) (any, error)
 	}
 
 	// TableCRUD defines the API for interacting with the database tables
@@ -121,7 +120,6 @@ type (
 	// DB defines the API for regular SQL operations of a Temporal server
 	DB interface {
 		TableCRUD
-
 		BeginTx(ctx context.Context) (Tx, error)
 		PluginName() string
 		DbName() string

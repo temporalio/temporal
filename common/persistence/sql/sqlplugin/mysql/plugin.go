@@ -56,26 +56,7 @@ func (p *plugin) CreateDB(
 	r resolver.ServiceResolver,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
-) (sqlplugin.DB, error) {
-	connect := func() (*sqlx.DB, error) {
-		if cfg.Connect != nil {
-			return cfg.Connect(cfg)
-		}
-		return p.createDBConnection(dbKind, cfg, r)
-	}
-	handle := sqlplugin.NewDatabaseHandle(connect, isConnNeedsRefreshError, logger, metricsHandler, clock.NewRealTimeSource())
-	db := newDB(dbKind, cfg.DatabaseName, handle, nil)
-	return db, nil
-}
-
-// CreateAdminDB initialize the db object
-func (p *plugin) CreateAdminDB(
-	dbKind sqlplugin.DbKind,
-	cfg *config.SQL,
-	r resolver.ServiceResolver,
-	logger log.Logger,
-	metricsHandler metrics.Handler,
-) (sqlplugin.AdminDB, error) {
+) (any, error) {
 	connect := func() (*sqlx.DB, error) {
 		if cfg.Connect != nil {
 			return cfg.Connect(cfg)
