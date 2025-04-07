@@ -29,7 +29,6 @@ package queues
 import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -237,15 +236,7 @@ func NewRateLimitedScheduler(
 			namespaceName = namespace.EmptyName
 		}
 
-		var callerType string
-		switch e.GetPriority() {
-		case tasks.PriorityHigh:
-			callerType = headers.CallerTypeBackground
-		default:
-			callerType = headers.CallerTypePreemptable
-		}
-
-		return quotas.NewRequest(e.GetType().String(), taskSchedulerToken, namespaceName.String(), callerType, 0, "")
+		return quotas.NewRequest(e.GetType().String(), taskSchedulerToken, namespaceName.String(), e.GetPriority().CallerType(), 0, "")
 	}
 	taskMetricsTagsFn := func(e Executable) []metrics.Tag {
 		return append(estimateTaskMetricTag(e.GetTask(), namespaceRegistry, currentClusterName), metrics.TaskPriorityTag(e.GetPriority().String()))
