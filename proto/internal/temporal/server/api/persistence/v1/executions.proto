@@ -450,6 +450,19 @@ message OutboundTaskInfo {
     StateMachineTaskInfo state_machine_info = 8;
 }
 
+message ChasmTransferTaskInfo {
+    string namespace_id = 1;
+    string workflow_id = 2;
+    string run_id = 3;
+
+    temporal.server.api.enums.v1.TaskType task_type = 4;
+    int64 task_id = 5;
+    google.protobuf.Timestamp visibility_time = 6;
+
+    // Additional metadata for the CHASM component responsible for this task.
+    ChasmTaskInfo chasm_info = 7;
+}
+
 message NexusInvocationTaskInfo {
     int32 attempt = 1;
 }
