@@ -132,8 +132,10 @@ const (
 	taskQueueUserDataReplicationDoneSignalType = "task-queue-user-data-replication-done"
 	taskQueueUserDataReplicationVersionMarker  = "replicate-task-queue-user-data"
 
+	defaultOverallRps                              = 300.0
+	defaultConcurrentActivityCount                 = 20
 	defaultListWorkflowsPageSize                   = 1000
-	defaultPageCountPerExecution                   = 200
+	defaultPageCountPerExecution                   = 50
 	maxPageCountPerExecution                       = 1000
 	defaultPageSizeForTaskQueueUserDataReplication = 20
 	defaultRPSForTaskQueueUserDataReplication      = 1.0
@@ -293,11 +295,11 @@ func validateAndSetForceReplicationParams(params *ForceReplicationParams) error 
 	}
 
 	if params.ConcurrentActivityCount <= 0 {
-		params.ConcurrentActivityCount = 1
+		params.ConcurrentActivityCount = defaultConcurrentActivityCount
 	}
 
 	if params.OverallRps <= 0 {
-		params.OverallRps = float64(params.ConcurrentActivityCount)
+		params.OverallRps = defaultOverallRps
 	}
 	if params.GetParentInfoRPS <= 0 {
 		params.GetParentInfoRPS = float64(params.ConcurrentActivityCount)
