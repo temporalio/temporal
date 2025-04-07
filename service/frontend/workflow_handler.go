@@ -3363,7 +3363,7 @@ func (wh *WorkflowHandler) DescribeWorkerDeploymentVersion(ctx context.Context, 
 	}
 
 	if !wh.config.EnableDeploymentVersions(request.Namespace) {
-		return nil, errDeploymentsNotAllowed
+		return nil, errDeploymentVersionsNotAllowed
 	}
 
 	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
@@ -3392,7 +3392,7 @@ func (wh *WorkflowHandler) SetWorkerDeploymentCurrentVersion(ctx context.Context
 	}
 
 	if !wh.config.EnableDeploymentVersions(request.Namespace) {
-		return nil, errDeploymentsNotAllowed
+		return nil, errDeploymentVersionsNotAllowed
 	}
 
 	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
@@ -3426,7 +3426,7 @@ func (wh *WorkflowHandler) SetWorkerDeploymentRampingVersion(ctx context.Context
 	}
 
 	if !wh.config.EnableDeploymentVersions(request.Namespace) {
-		return nil, errDeploymentsNotAllowed
+		return nil, errDeploymentVersionsNotAllowed
 	}
 
 	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
@@ -3467,7 +3467,7 @@ func (wh *WorkflowHandler) ListWorkerDeployments(ctx context.Context, request *w
 	}
 
 	if !wh.config.EnableDeploymentVersions(request.Namespace) {
-		return nil, errDeploymentsNotAllowed
+		return nil, errDeploymentVersionsNotAllowed
 	}
 
 	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
@@ -4268,7 +4268,7 @@ func (wh *WorkflowHandler) UpdateWorkerBuildIdCompatibility(ctx context.Context,
 	}
 
 	if !wh.config.EnableWorkerVersioningData(request.Namespace) {
-		return nil, errWorkerVersioningNotAllowed
+		return nil, errWorkerVersioningV1_0NotAllowed
 	}
 
 	if err := wh.validateBuildIdCompatibilityUpdate(request); err != nil {
@@ -4310,7 +4310,7 @@ func (wh *WorkflowHandler) GetWorkerBuildIdCompatibility(ctx context.Context, re
 	}
 
 	if !wh.config.EnableWorkerVersioningData(request.Namespace) {
-		return nil, errWorkerVersioningNotAllowed
+		return nil, errWorkerVersioningV1_0NotAllowed
 	}
 
 	taskQueue := &taskqueuepb.TaskQueue{Name: request.GetTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
@@ -4343,7 +4343,7 @@ func (wh *WorkflowHandler) UpdateWorkerVersioningRules(ctx context.Context, requ
 	}
 
 	if !wh.config.EnableWorkerVersioningRules(request.Namespace) {
-		return nil, errWorkerVersioningNotAllowed
+		return nil, errWorkerVersioningV2_0NotAllowed
 	}
 
 	if err := wh.validateVersionRuleBuildId(request); err != nil {
@@ -4383,7 +4383,7 @@ func (wh *WorkflowHandler) GetWorkerVersioningRules(ctx context.Context, request
 	}
 
 	if !wh.config.EnableWorkerVersioningRules(request.Namespace) {
-		return nil, errWorkerVersioningNotAllowed
+		return nil, errWorkerVersioningV2_0NotAllowed
 	}
 
 	taskQueue := &taskqueuepb.TaskQueue{Name: request.GetTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
@@ -4422,7 +4422,7 @@ func (wh *WorkflowHandler) GetWorkerTaskReachability(ctx context.Context, reques
 	}
 
 	if !wh.config.EnableWorkerVersioningData(request.Namespace) {
-		return nil, errWorkerVersioningNotAllowed
+		return nil, errWorkerVersioningV2_0NotAllowed
 	}
 
 	if len(request.GetBuildIds()) == 0 {
@@ -5260,7 +5260,7 @@ type buildIdAndFlag interface {
 
 func (wh *WorkflowHandler) validateVersioningInfo(nsName string, id buildIdAndFlag, tq *taskqueuepb.TaskQueue) error {
 	if id.GetUseVersioning() && !wh.config.EnableWorkerVersioningWorkflow(nsName) {
-		return errWorkerVersioningNotAllowed
+		return errWorkerVersioningWorkflowAPIsNotAllowed
 	}
 	if id.GetUseVersioning() && tq.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY && len(tq.GetNormalName()) == 0 {
 		return errUseVersioningWithoutNormalName
@@ -5736,7 +5736,7 @@ func (wh *WorkflowHandler) UpdateActivityOptions(
 	defer log.CapturePanic(wh.logger, &retError)
 
 	if !wh.config.ActivityAPIsEnabled(request.GetNamespace()) {
-		return nil, serviceerror.NewUnimplemented("method UpdateActivityOptions not implemented")
+		return nil, status.Errorf(codes.Unimplemented, "method UpdateActivityOptions not implemented")
 	}
 
 	if request == nil {
@@ -5775,7 +5775,7 @@ func (wh *WorkflowHandler) PauseActivity(
 	defer log.CapturePanic(wh.logger, &retError)
 
 	if !wh.config.ActivityAPIsEnabled(request.GetNamespace()) {
-		return nil, serviceerror.NewUnimplemented("method PauseActivity not implemented")
+		return nil, status.Errorf(codes.Unimplemented, "method PauseActivity not implemented")
 	}
 
 	if request == nil {
@@ -5811,7 +5811,7 @@ func (wh *WorkflowHandler) UnpauseActivity(
 	defer log.CapturePanic(wh.logger, &retError)
 
 	if !wh.config.ActivityAPIsEnabled(request.GetNamespace()) {
-		return nil, serviceerror.NewUnimplemented("method UnpauseActivity not implemented")
+		return nil, status.Errorf(codes.Unimplemented, "method UnpauseActivity not implemented")
 	}
 
 	if request == nil {
@@ -5847,7 +5847,7 @@ func (wh *WorkflowHandler) ResetActivity(
 	defer log.CapturePanic(wh.logger, &retError)
 
 	if !wh.config.ActivityAPIsEnabled(request.GetNamespace()) {
-		return nil, serviceerror.NewUnimplemented("method ResetActivity not implemented")
+		return nil, status.Errorf(codes.Unimplemented, "method ResetActivity not implemented")
 	}
 
 	if request == nil {
@@ -5875,111 +5875,4 @@ func (wh *WorkflowHandler) ResetActivity(
 	}
 
 	return &workflowservice.ResetActivityResponse{}, nil
-}
-
-func (wh *WorkflowHandler) CreateWorkflowRule(
-	ctx context.Context,
-	request *workflowservice.CreateWorkflowRuleRequest,
-) (_ *workflowservice.CreateWorkflowRuleResponse, retError error) {
-	defer log.CapturePanic(wh.logger, &retError)
-
-	if !wh.config.WorkflowRulesAPIsEnabled(request.GetNamespace()) {
-		return nil, serviceerror.NewUnimplemented("method CreateWorkflowRule not supported")
-	}
-
-	if request == nil {
-		return nil, errRequestNotSet
-	}
-	if request.GetSpec() == nil {
-		return nil, serviceerror.NewInvalidArgument("Rule Specification is not set.")
-	}
-
-	if request.GetSpec().GetId() == "" {
-		return nil, serviceerror.NewInvalidArgument("Workflow Rule ID is not set.")
-	}
-
-	if len(request.GetSpec().GetId()) > wh.config.MaxIDLengthLimit() {
-		return nil, errWorkflowRuleIDTooLong
-	}
-
-	rule, err := wh.namespaceHandler.CreateWorkflowRule(ctx, request.GetSpec(), request.GetNamespace())
-	if err != nil {
-		return nil, err
-	}
-
-	response := &workflowservice.CreateWorkflowRuleResponse{
-		Rule: rule,
-	}
-
-	return response, nil
-}
-
-func (wh *WorkflowHandler) DescribeWorkflowRule(
-	ctx context.Context,
-	request *workflowservice.DescribeWorkflowRuleRequest,
-) (_ *workflowservice.DescribeWorkflowRuleResponse, retError error) {
-	defer log.CapturePanic(wh.logger, &retError)
-
-	if !wh.config.WorkflowRulesAPIsEnabled(request.GetNamespace()) {
-		return nil, serviceerror.NewUnimplemented("method DescribeWorkflowRule not supported")
-	}
-
-	if request == nil {
-		return nil, errRequestNotSet
-	}
-	if request.GetRuleId() == "" {
-		return nil, serviceerror.NewInvalidArgument("Workflow Rule ID is not set.")
-	}
-
-	rule, err := wh.namespaceHandler.DescribeWorkflowRule(ctx, request.GetRuleId(), request.GetNamespace())
-	if err != nil {
-		return nil, err
-	}
-
-	return &workflowservice.DescribeWorkflowRuleResponse{Rule: rule}, nil
-}
-
-func (wh *WorkflowHandler) DeleteWorkflowRule(
-	ctx context.Context,
-	request *workflowservice.DeleteWorkflowRuleRequest,
-) (_ *workflowservice.DeleteWorkflowRuleResponse, retError error) {
-	defer log.CapturePanic(wh.logger, &retError)
-
-	if !wh.config.WorkflowRulesAPIsEnabled(request.GetNamespace()) {
-		return nil, serviceerror.NewUnimplemented("method DeleteWorkflowRule not supported")
-	}
-	if request == nil {
-		return nil, errRequestNotSet
-	}
-	if request.GetRuleId() == "" {
-		return nil, serviceerror.NewInvalidArgument("Workflow Rule ID is not set.")
-	}
-
-	err := wh.namespaceHandler.DeleteWorkflowRule(ctx, request.GetRuleId(), request.GetNamespace())
-	if err != nil {
-		return nil, err
-	}
-
-	return &workflowservice.DeleteWorkflowRuleResponse{}, nil
-}
-
-func (wh *WorkflowHandler) ListWorkflowRules(
-	ctx context.Context,
-	request *workflowservice.ListWorkflowRulesRequest,
-) (_ *workflowservice.ListWorkflowRulesResponse, retError error) {
-	defer log.CapturePanic(wh.logger, &retError)
-
-	if !wh.config.WorkflowRulesAPIsEnabled(request.GetNamespace()) {
-		return nil, serviceerror.NewUnimplemented("method ListWorkflowRules not supported")
-	}
-
-	if request == nil {
-		return nil, errRequestNotSet
-	}
-
-	workflowRules, err := wh.namespaceHandler.ListWorkflowRules(ctx, request.GetNamespace())
-	if err != nil {
-		return nil, err
-	}
-	return &workflowservice.ListWorkflowRulesResponse{Rules: workflowRules}, nil
 }
