@@ -1042,14 +1042,18 @@ var (
 	TaskQueueStoppedCounter                           = NewCounterDef("task_queue_stopped")
 	TaskWriteThrottlePerTaskQueueCounter              = NewCounterDef("task_write_throttle_count")
 	TaskWriteLatencyPerTaskQueue                      = NewTimerDef("task_write_latency")
-	TaskLagPerTaskQueueGauge                          = NewGaugeDef("task_lag_per_tl")
-	NoRecentPollerTasksPerTaskQueueCounter            = NewCounterDef("no_poller_tasks")
-	UnknownBuildPollsCounter                          = NewCounterDef("unknown_build_polls")
-	UnknownBuildTasksCounter                          = NewCounterDef("unknown_build_tasks")
-	TaskDispatchLatencyPerTaskQueue                   = NewTimerDef("task_dispatch_latency")
-	ApproximateBacklogCount                           = NewGaugeDef("approximate_backlog_count")
-	ApproximateBacklogAgeSeconds                      = NewGaugeDef("approximate_backlog_age_seconds")
-	NonRetryableTasks                                 = NewCounterDef(
+	TaskRewrites                                      = NewCounterDef(
+		"task_rewrites",
+		WithDescription("Number of times tasks are rewritten to persistence after failing to process"),
+	)
+	TaskLagPerTaskQueueGauge               = NewGaugeDef("task_lag_per_tl")
+	NoRecentPollerTasksPerTaskQueueCounter = NewCounterDef("no_poller_tasks")
+	UnknownBuildPollsCounter               = NewCounterDef("unknown_build_polls")
+	UnknownBuildTasksCounter               = NewCounterDef("unknown_build_tasks")
+	TaskDispatchLatencyPerTaskQueue        = NewTimerDef("task_dispatch_latency")
+	ApproximateBacklogCount                = NewGaugeDef("approximate_backlog_count")
+	ApproximateBacklogAgeSeconds           = NewGaugeDef("approximate_backlog_age_seconds")
+	NonRetryableTasks                      = NewCounterDef(
 		"non_retryable_tasks",
 		WithDescription("The number of non-retryable matching tasks which are dropped due to specific errors"))
 

@@ -254,6 +254,7 @@ func (c *backlogManagerImpl) completeTask(itask *internalTask, err error) {
 		// We handle this by writing the task back to persistence with a higher taskID.
 		// This will allow subsequent tasks to make progress, and hopefully by the time this task is picked-up
 		// again the underlying reason for failing to start will be resolved.
+		metrics.TaskRewrites.With(c.metricsHandler).Record(1)
 		err = executeWithRetry(context.Background(), func(_ context.Context) error {
 			return c.taskWriter.appendTask(task.Data)
 		})
