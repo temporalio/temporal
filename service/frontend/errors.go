@@ -134,7 +134,7 @@ var (
 	errListNotAllowed      = serviceerror.NewPermissionDenied("List is disabled on this namespace.", "")
 	errSchedulesNotAllowed = serviceerror.NewPermissionDenied("Schedules are disabled on this namespace.", "")
 
-	errDeploymentsNotAllowed        = serviceerror.NewPermissionDenied("Deployments are disabled on this namespace.", "")
+	errDeploymentsNotAllowed        = serviceerror.NewPermissionDenied("Deployments (deprecated) are disabled on this namespace.", "")
 	errDeploymentVersionsNotAllowed = serviceerror.NewPermissionDenied("Worker Deployment Versions are disabled on this namespace.", "")
 
 	errBatchAPINotAllowed                = serviceerror.NewPermissionDenied("Batch operation feature are disabled on this namespace.", "")
