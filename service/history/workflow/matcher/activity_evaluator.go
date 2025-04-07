@@ -29,15 +29,15 @@ import (
 	"github.com/temporalio/sqlparser"
 	enumspb "go.temporal.io/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/sqlquery"
-	"go.temporal.io/server/service/history/workflow"
 )
 
 // Supported Fields
 const (
 	activityIDColName              = "ActivityId"
 	activityTypeNameColName        = "ActivityType"
-	activityStatusColName          = "ActivityStatus"
+	activityStateColName           = "ActivityState"
 	activityAttemptsColName        = "Attempts"
 	activityBackoffIntervalColName = "BackoffInterval"
 	activityLastFailureColName     = "LastFailure"
@@ -152,12 +152,12 @@ func (m *activityMatchEvaluator) evaluateComparison(expr *sqlparser.ComparisonEx
 			return false, err
 		}
 		return m.compareActivityId(val, expr.Operator)
-	case activityStatusColName:
+	case activityStateColName:
 		val, err := sqlquery.ExtractStringValue(valStr)
 		if err != nil {
 			return false, err
 		}
-		return m.compareActivityStatus(val, expr.Operator)
+		return m.compareActivityState(val, expr.Operator)
 	case activityAttemptsColName:
 		val, err := sqlquery.ExtractIntValue(valStr)
 		if err != nil {
@@ -237,18 +237,18 @@ func (m *activityMatchEvaluator) compareActivityId(activityId string, operation 
 	return compareQueryString(activityId, existingActivityId, operation, workflowIDColName)
 }
 
-func (m *activityMatchEvaluator) compareActivityStatus(status string, operator string) (bool, error) {
+func (m *activityMatchEvaluator) compareActivityState(status string, operator string) (bool, error) {
 	if m.ai.Paused {
-		return compareQueryString(status, "Paused", operator, activityStatusColName)
+		return compareQueryString(status, "Paused", operator, activityStateColName)
 	}
-	activityState := workflow.GetActivityState(m.ai)
-	switch activityState { //nolint:exhaustive
+
+	switch activityState := getActivityState(m.ai); activityState { //nolint:exhaustive
 	case enumspb.PENDING_ACTIVITY_STATE_CANCEL_REQUESTED:
-		return compareQueryString(status, activityState.String(), operator, activityStatusColName)
+		return compareQueryString(status, activityState.String(), operator, activityStateColName)
 	case enumspb.PENDING_ACTIVITY_STATE_STARTED:
-		return compareQueryString(status, activityState.String(), operator, activityStatusColName)
+		return compareQueryString(status, activityState.String(), operator, activityStateColName)
 	case enumspb.PENDING_ACTIVITY_STATE_SCHEDULED:
-		return compareQueryString(status, activityState.String(), operator, activityStatusColName)
+		return compareQueryString(status, activityState.String(), operator, activityStateColName)
 	default:
 		return false, NewMatcherError("unknown or unsupported activity status: %s", status)
 	}
@@ -314,4 +314,15 @@ func (m *activityMatchEvaluator) compareStartTimeBetween(fromTime time.Time, toT
 	}
 	startTime := m.ai.GetStartedTime().AsTime()
 	return startTime.Compare(fromTime) >= 0 && startTime.Compare(toTime) <= 0, nil
+}
+
+func getActivityState(ai *persistencespb.ActivityInfo) enumspb.PendingActivityState {
+	activityState := enumspb.PENDING_ACTIVITY_STATE_SCHEDULED
+	if ai.CancelRequested {
+		activityState = enumspb.PENDING_ACTIVITY_STATE_CANCEL_REQUESTED
+	}
+	if ai.StartedEventId != common.EmptyEventID {
+		activityState = enumspb.PENDING_ACTIVITY_STATE_STARTED
+	}
+	return activityState
 }

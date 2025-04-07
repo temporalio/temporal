@@ -60,6 +60,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/consts"
+	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/historybuilder"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow"
@@ -404,8 +405,9 @@ func (r *WorkflowStateReplicatorImpl) applyMutation(
 			return err
 		}
 	}
-
-	err = r.taskRefresher.PartialRefresh(ctx, localMutableState, localVersionedTransition)
+	nextVersionedTransition := transitionhistory.CopyVersionedTransition(localVersionedTransition)
+	nextVersionedTransition.TransitionCount++
+	err = r.taskRefresher.PartialRefresh(ctx, localMutableState, nextVersionedTransition)
 	if err != nil {
 		return err
 	}
@@ -550,7 +552,9 @@ func (r *WorkflowStateReplicatorImpl) applySnapshotWhenWorkflowExist(
 			return err
 		}
 	} else {
-		err = r.taskRefresher.PartialRefresh(ctx, localMutableState, localVersionedTransition)
+		nextVersionedTransition := transitionhistory.CopyVersionedTransition(localVersionedTransition)
+		nextVersionedTransition.TransitionCount++
+		err = r.taskRefresher.PartialRefresh(ctx, localMutableState, nextVersionedTransition)
 		if err != nil {
 			return err
 		}
@@ -839,6 +843,7 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 			}
 			for _, event := range events {
 				localMutableState.AddReapplyCandidateEvent(event)
+				r.addEventToCache(localMutableState.GetWorkflowKey(), event)
 			}
 			_, err = r.executionMgr.AppendRawHistoryNodes(ctx, &persistence.AppendRawHistoryNodesRequest{
 				ShardID:           r.shardContext.GetShardID(),
@@ -888,6 +893,7 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 		}
 		for _, event := range events {
 			localMutableState.AddReapplyCandidateEvent(event)
+			r.addEventToCache(localMutableState.GetWorkflowKey(), event)
 		}
 		_, err = r.executionMgr.AppendRawHistoryNodes(ctx, &persistence.AppendRawHistoryNodesRequest{
 			ShardID:           r.shardContext.GetShardID(),
@@ -1202,6 +1208,7 @@ BackfillLoop:
 			}
 			for _, event := range events {
 				mutableState.AddReapplyCandidateEvent(event)
+				r.addEventToCache(mutableState.GetWorkflowKey(), event)
 			}
 		}
 
@@ -1346,6 +1353,37 @@ func (r *WorkflowStateReplicatorImpl) getHistoryFromRemotePaginationFn(
 		}
 		return batches, response.NextPageToken, nil
 	}
+}
+
+func (r *WorkflowStateReplicatorImpl) addEventToCache(
+	workflowKey definition.WorkflowKey,
+	event *historypb.HistoryEvent,
+) {
+	switch event.EventType {
+	case enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
+		enumspb.EVENT_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_INITIATED,
+		enumspb.EVENT_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_INITIATED,
+		enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED:
+		r.shardContext.GetEventsCache().PutEvent(
+			events.EventKey{
+				NamespaceID: namespace.ID(workflowKey.NamespaceID),
+				WorkflowID:  workflowKey.WorkflowID,
+				RunID:       workflowKey.RunID,
+				EventID:     event.GetEventId(),
+				Version:     event.GetVersion(),
+			},
+			event,
+		)
+	default:
+	}
+
 }
 
 func sortAncestors(ans []*persistencespb.HistoryBranchRange) []*persistencespb.HistoryBranchRange {

@@ -43,6 +43,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
+	rulespb "go.temporal.io/api/rules/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
@@ -224,6 +225,9 @@ type (
 		// non-user data change
 		activityInfosUserDataUpdated map[int64]struct{}
 		timerInfosUserDataUpdated    map[string]struct{}
+
+		// isResetStateUpdated is used to track if resetRunID is updated.
+		isResetStateUpdated bool
 
 		// in memory fields to track potential reapply events that needs to be reapplied during workflow update
 		// should only be used in the state based replication as state based replication does not have
@@ -821,6 +825,7 @@ func (ms *MutableStateImpl) SetBaseWorkflow(
 }
 
 func (ms *MutableStateImpl) UpdateResetRunID(runID string) {
+	ms.isResetStateUpdated = true
 	ms.executionInfo.ResetRunId = runID
 }
 
@@ -838,6 +843,7 @@ func (ms *MutableStateImpl) IsResetRun() bool {
 
 func (ms *MutableStateImpl) SetChildrenInitializedPostResetPoint(children map[string]*persistencespb.ResetChildInfo) {
 	ms.executionInfo.ChildrenInitializedPostResetPoint = children
+	ms.isResetStateUpdated = true
 }
 
 func (ms *MutableStateImpl) GetChildrenInitializedPostResetPoint() map[string]*persistencespb.ResetChildInfo {
@@ -2166,37 +2172,9 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 	// for other fields as well.
 	runTimeout := command.GetWorkflowRunTimeout()
 
-	cbColl := callbacks.MachineCollection(previousExecutionState.HSM())
-	completionCallbacks := make([]*commonpb.Callback, 0, cbColl.Size())
-	for _, node := range cbColl.List() {
-		cb, err := cbColl.Data(node.Key.ID)
-		if err != nil {
-			return nil, err
-		}
-		if _, ok := cb.Trigger.Variant.(*persistencespb.CallbackInfo_Trigger_WorkflowClosed); !ok {
-			continue
-		}
-		cbSpec := &commonpb.Callback{}
-		switch variant := cb.Callback.Variant.(type) {
-		case *persistencespb.Callback_Nexus_:
-			cbSpec.Variant = &commonpb.Callback_Nexus_{
-				Nexus: &commonpb.Callback_Nexus{
-					Url:    variant.Nexus.GetUrl(),
-					Header: variant.Nexus.GetHeader(),
-				},
-			}
-		default:
-			data, err := proto.Marshal(cb.Callback)
-			if err != nil {
-				return nil, err
-			}
-			cbSpec.Variant = &commonpb.Callback_Internal_{
-				Internal: &commonpb.Callback_Internal{
-					Data: data,
-				},
-			}
-		}
-		completionCallbacks = append(completionCallbacks, cbSpec)
+	completionCallbacks, err := getCompletionCallbacksAsProtoSlice(previousExecutionState)
+	if err != nil {
+		return nil, err
 	}
 
 	createRequest := &workflowservice.StartWorkflowExecutionRequest{
@@ -3862,7 +3840,12 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionFailedEvent(
 	ms.executionInfo.CloseTime = event.GetEventTime()
 	ms.ClearStickyTaskQueue()
 	ms.writeEventToCache(event)
-	return ms.processCloseCallbacks()
+
+	attrs := event.GetWorkflowExecutionFailedEventAttributes()
+	if attrs.RetryState != enumspb.RETRY_STATE_IN_PROGRESS {
+		return ms.processCloseCallbacks()
+	}
+	return nil
 }
 
 func (ms *MutableStateImpl) AddTimeoutWorkflowEvent(
@@ -3904,7 +3887,12 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionTimedoutEvent(
 	ms.executionInfo.CloseTime = event.GetEventTime()
 	ms.ClearStickyTaskQueue()
 	ms.writeEventToCache(event)
-	return ms.processCloseCallbacks()
+
+	attrs := event.GetWorkflowExecutionTimedOutEventAttributes()
+	if attrs.RetryState != enumspb.RETRY_STATE_IN_PROGRESS {
+		return ms.processCloseCallbacks()
+	}
+	return nil
 }
 
 func (ms *MutableStateImpl) AddWorkflowExecutionCancelRequestedEvent(
@@ -5447,6 +5435,11 @@ func (ms *MutableStateImpl) RetryActivity(
 		return enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE, nil
 	}
 
+	// check workflow rules
+	if !ai.Paused {
+		ActivityMatchWorkflowRules(ms, ms.logger, ai)
+	}
+
 	// if activity is paused
 	if ai.Paused {
 		// need to update activity
@@ -5571,6 +5564,16 @@ func (ms *MutableStateImpl) UpdateActivity(scheduledEventId int64, updater histo
 		if err != nil {
 			return err
 		}
+
+		if ai.Paused {
+			metrics.PausedActivitiesCounter.With(
+				ms.metricsHandler.WithTags(
+					metrics.NamespaceTag(ms.namespaceEntry.Name().String()),
+					metrics.WorkflowTypeTag(ms.GetExecutionInfo().WorkflowTypeName),
+					metrics.ActivityTypeTag(ai.ActivityType.Name),
+				),
+			).Record(1)
+		}
 	}
 
 	ms.approximateSize += ai.Size() - originalSize
@@ -5659,8 +5662,7 @@ func (ms *MutableStateImpl) AddHistorySize(size int64) {
 // processCloseCallbacks triggers "WorkflowClosed" callbacks, applying the state machine transition that schedules
 // callback tasks.
 func (ms *MutableStateImpl) processCloseCallbacks() error {
-	continuedAsNew := ms.GetExecutionInfo().NewExecutionRunId != ""
-	if continuedAsNew || ms.GetExecutionInfo().GetWorkflowWasReset() {
+	if ms.GetExecutionInfo().GetWorkflowWasReset() {
 		return nil
 	}
 
@@ -5754,6 +5756,9 @@ func (ms *MutableStateImpl) UpdateWorkflowStateStatus(
 	state enumsspb.WorkflowExecutionState,
 	status enumspb.WorkflowExecutionStatus,
 ) error {
+	if state == ms.executionState.State && status == ms.executionState.Status {
+		return nil
+	}
 	if state != enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
 		ms.executionStateUpdated = true
 		ms.visibilityUpdated = true // workflow status & state change triggers visibility change as well
@@ -5795,7 +5800,8 @@ func (ms *MutableStateImpl) isStateDirty() bool {
 		ms.executionStateUpdated ||
 		ms.workflowTaskUpdated ||
 		(ms.stateMachineNode != nil && ms.stateMachineNode.Dirty()) ||
-		ms.chasmTree.IsDirty()
+		ms.chasmTree.IsDirty() ||
+		ms.isResetStateUpdated
 }
 
 func (ms *MutableStateImpl) IsTransitionHistoryEnabled() bool {
@@ -6531,6 +6537,7 @@ func (ms *MutableStateImpl) cleanupTransaction() error {
 	ms.visibilityUpdated = false
 	ms.executionStateUpdated = false
 	ms.workflowTaskUpdated = false
+	ms.isResetStateUpdated = false
 	ms.updateInfoUpdated = make(map[string]struct{})
 	ms.timerInfosUserDataUpdated = make(map[string]struct{})
 	ms.activityInfosUserDataUpdated = make(map[int64]struct{})
@@ -7166,10 +7173,7 @@ func (ms *MutableStateImpl) logWarn(msg string, tags ...tag.Tag) {
 }
 
 func (ms *MutableStateImpl) logError(msg string, tags ...tag.Tag) {
-	tags = append(tags, tag.WorkflowID(ms.executionInfo.WorkflowId))
-	tags = append(tags, tag.WorkflowRunID(ms.executionState.RunId))
-	tags = append(tags, tag.WorkflowNamespaceID(ms.executionInfo.NamespaceId))
-	ms.logger.Error(msg, tags...)
+	logError(ms.logger, msg, ms.executionInfo, ms.executionState, tags...)
 }
 
 func (ms *MutableStateImpl) logDataInconsistency() {
@@ -7857,4 +7861,59 @@ func (ms *MutableStateImpl) GetReapplyCandidateEvents() []*historypb.HistoryEven
 
 func (ms *MutableStateImpl) IsSubStateMachineDeleted() bool {
 	return ms.subStateMachineDeleted
+}
+
+// ActivityMatchWorkflowRules checks if the activity matches any of the workflow rules
+// and takes action based on the matched rule.
+// If activity is changed in the result, it should be updated in the mutable state.
+// In this case this function return true.
+// If activity was not changed it will return false.
+func ActivityMatchWorkflowRules(
+	ms historyi.MutableState,
+	logger log.Logger,
+	ai *persistencespb.ActivityInfo) bool {
+
+	workflowRules := ms.GetNamespaceEntry().GetWorkflowRules()
+
+	activityChanged := false
+
+	for _, rule := range workflowRules {
+		match, err := MatchWorkflowRule(ms.GetExecutionInfo(), ms.GetExecutionState(), ai, rule.GetSpec())
+		if err != nil {
+			logError(logger, "error matching workflow rule", ms.GetExecutionInfo(), ms.GetExecutionState(), tag.Error(err))
+			continue
+		}
+		if !match {
+			continue
+		}
+
+		// activity matched
+		for _, action := range rule.GetSpec().Actions {
+			switch action.Variant.(type) {
+			case *rulespb.WorkflowRuleAction_ActivityPause:
+				// pause the activity
+				if !ai.Paused {
+					if err = PauseActivity(ms, ai.ActivityId); err != nil {
+						logError(logger, "error pausing activity", ms.GetExecutionInfo(), ms.GetExecutionState(), tag.Error(err))
+					}
+					activityChanged = true
+				}
+			}
+		}
+	}
+
+	return activityChanged
+}
+
+func logError(
+	logger log.Logger,
+	msg string,
+	executionInfo *persistencespb.WorkflowExecutionInfo,
+	executionState *persistencespb.WorkflowExecutionState,
+	tags ...tag.Tag,
+) {
+	tags = append(tags, tag.WorkflowID(executionInfo.WorkflowId))
+	tags = append(tags, tag.WorkflowRunID(executionState.RunId))
+	tags = append(tags, tag.WorkflowNamespaceID(executionInfo.NamespaceId))
+	logger.Error(msg, tags...)
 }

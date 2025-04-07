@@ -23,7 +23,7 @@
 package matcher
 
 import (
-	historyi "go.temporal.io/server/service/history/interfaces"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 )
 
 /*
@@ -52,7 +52,11 @@ Different fields can support different operators:
 
 Returns true if the query matches the mutable state, false otherwise, or error if the query is invalid.
 */
-func MatchMutableState(ms historyi.MutableState, query string) (bool, error) {
-	evaluator := newMutableStateMatchEvaluator(ms)
+func MatchMutableState(
+	executionInfo *persistencespb.WorkflowExecutionInfo,
+	executionState *persistencespb.WorkflowExecutionState,
+	query string,
+) (bool, error) {
+	evaluator := newMutableStateMatchEvaluator(executionInfo, executionState)
 	return evaluator.Evaluate(query)
 }

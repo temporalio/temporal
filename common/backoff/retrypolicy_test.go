@@ -47,7 +47,8 @@ type (
 // maximum interval of 10 seconds. Keep in mind that there is a random jitter in these times, so they are not exactly
 // what you'd expect.
 func ExampleExponentialRetryPolicy_WithMaximumInterval() {
-	rand.Seed(42)
+	jitterRand.Store(rand.New(rand.NewSource(42)))
+
 	p1 := NewExponentialRetryPolicy(time.Second).
 		WithBackoffCoefficient(2.0).
 		WithMaximumInterval(0).

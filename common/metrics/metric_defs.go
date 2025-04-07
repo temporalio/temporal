@@ -851,6 +851,7 @@ var (
 	// Timeouts and failures are not counted in this metric.
 	// This metric has a "reason" tag attached to it to understand why eager start was denied.
 	WorkflowEagerExecutionDeniedCounter           = NewCounterDef("workflow_eager_execution_denied")
+	StartWorkflowRequestDeduped                   = NewCounterDef("start_workflow_request_deduped")
 	EmptyCompletionCommandsCounter                = NewCounterDef("empty_completion_commands")
 	MultipleCompletionCommandsCounter             = NewCounterDef("multiple_completion_commands")
 	FailedWorkflowTasksCounter                    = NewCounterDef("failed_workflow_tasks")
@@ -999,6 +1000,7 @@ var (
 	DynamicWorkerPoolSchedulerEnqueuedTasks = NewCounterDef("dynamic_worker_pool_scheduler_enqueued_tasks")
 	DynamicWorkerPoolSchedulerDequeuedTasks = NewCounterDef("dynamic_worker_pool_scheduler_dequeued_tasks")
 	DynamicWorkerPoolSchedulerRejectedTasks = NewCounterDef("dynamic_worker_pool_scheduler_rejected_tasks")
+	PausedActivitiesCounter                 = NewCounterDef("paused_activities")
 
 	// Deadlock detector latency metrics
 	DDClusterMetadataLockLatency         = NewTimerDef("dd_cluster_metadata_lock_latency")
@@ -1236,17 +1238,20 @@ var (
 	PersistenceSessionRefreshAttempts      = NewCounterDef("persistence_session_refresh_attempts")
 
 	// Common service base metrics
-	RestartCount         = NewCounterDef("restarts")
-	NumGoRoutinesGauge   = NewGaugeDef("num_goroutines")
-	GoMaxProcsGauge      = NewGaugeDef("gomaxprocs")
-	MemoryAllocatedGauge = NewGaugeDef("memory_allocated")
-	MemoryHeapGauge      = NewGaugeDef("memory_heap")
-	MemoryHeapIdleGauge  = NewGaugeDef("memory_heapidle")
-	MemoryHeapInuseGauge = NewGaugeDef("memory_heapinuse")
-	MemoryStackGauge     = NewGaugeDef("memory_stack")
-	NumGCCounter         = NewBytesHistogramDef("memory_num_gc")
-	GcPauseMsTimer       = NewTimerDef("memory_gc_pause_ms")
-	NumGCGauge           = NewGaugeDef("memory_num_gc_last",
+	RestartCount           = NewCounterDef("restarts")
+	NumGoRoutinesGauge     = NewGaugeDef("num_goroutines")
+	GoMaxProcsGauge        = NewGaugeDef("gomaxprocs")
+	MemoryAllocatedGauge   = NewGaugeDef("memory_allocated")
+	MemoryHeapGauge        = NewGaugeDef("memory_heap")
+	MemoryHeapObjectsGauge = NewGaugeDef("memory_heap_objects")
+	MemoryHeapIdleGauge    = NewGaugeDef("memory_heapidle")
+	MemoryHeapInuseGauge   = NewGaugeDef("memory_heapinuse")
+	MemoryStackGauge       = NewGaugeDef("memory_stack")
+	MemoryMallocsGauge     = NewGaugeDef("memory_mallocs")
+	MemoryFreesGauge       = NewGaugeDef("memory_frees")
+	NumGCCounter           = NewBytesHistogramDef("memory_num_gc")
+	GcPauseMsTimer         = NewTimerDef("memory_gc_pause_ms")
+	NumGCGauge             = NewGaugeDef("memory_num_gc_last",
 		WithDescription("Last runtime.MemStats.NumGC"),
 	)
 	GcPauseNsTotal = NewGaugeDef("memory_pause_total_ns_last",
