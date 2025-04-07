@@ -31,6 +31,7 @@ import (
 	"maps"
 	"os"
 	"sync/atomic"
+	"time"
 
 	"github.com/pborman/uuid"
 	"go.opentelemetry.io/otel"
@@ -978,7 +979,17 @@ var ServiceTracingModule = fx.Options(
 				otel.SetErrorHandler(otel.ErrorHandlerFunc(func(err error) {
 					// ignore errors during shutdown
 				}))
-				return tp.Shutdown(ctx)
+
+				shutdownCtx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+				defer cancel()
+
+				err := tp.Shutdown(shutdownCtx)
+				if errors.Is(err, context.DeadlineExceeded) {
+					// Ignore timeouts since it's okay to drop OTEL traces on shutdown.
+					// Either there's no collector, or there are too many traces left to export.
+					return nil
+				}
+				return err
 			}})
 		return tp
 	}),
@@ -1005,10 +1016,15 @@ func startAll(exporters []otelsdktrace.SpanExporter) func(ctx context.Context) e
 
 func shutdownAll(exporters []otelsdktrace.SpanExporter) func(ctx context.Context) error {
 	return func(ctx context.Context) error {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+		defer cancel()
+
 		for _, e := range exporters {
-			err := e.Shutdown(ctx)
-			if err != nil {
-				return err
+			err := e.Shutdown(shutdownCtx)
+			if errors.Is(err, context.DeadlineExceeded) {
+				// Ignore timeouts since it's okay to drop OTEL traces on shutdown.
+				// Either there's no collector, or there are too many traces left to export.
+				return nil
 			}
 		}
 		return nil
