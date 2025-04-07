@@ -347,6 +347,7 @@ func (c *priBacklogManagerImpl) respoolTaskAfterError(task *persistencespb.TaskI
 	// This will allow subsequent tasks to make progress, and hopefully by the time this task is picked-up
 	// again the underlying reason for failing to start will be resolved.
 	// Note the task may get written to a different subqueue than it came from.
+	metrics.TaskRewrites.With(c.metricsHandler).Record(1)
 	err := backoff.ThrottleRetryContext(c.tqCtx, func(context.Context) error {
 		return c.SpoolTask(task)
 	}, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)

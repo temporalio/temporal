@@ -3312,6 +3312,75 @@ func (s *matchingEngineSuite) TestNotifyNexusEndpointsOwnershipLost() {
 	// If the channel is unblocked the test passed.
 }
 
+func (s *matchingEngineSuite) TestPollActivityTaskQueueWithRateLimiterError() {
+	mockRateLimiter := quotas.NewMockRequestRateLimiter(s.controller)
+	rateLimiterErr := serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT, "rate limit exceeded")
+	s.matchingEngine.rateLimiter = mockRateLimiter
+
+	namespaceId := uuid.New()
+	tl := "queue"
+	taskQueue := &taskqueuepb.TaskQueue{Name: "queue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+
+	addRequest := matchingservice.AddActivityTaskRequest{
+		NamespaceId:      namespaceId,
+		Execution:        &commonpb.WorkflowExecution{WorkflowId: "workflowID", RunId: uuid.NewRandom().String()},
+		ScheduledEventId: int64(5),
+		TaskQueue:        taskQueue,
+	}
+
+	_, _, err := s.matchingEngine.AddActivityTask(context.Background(), &addRequest)
+	s.NoError(err)
+	s.EqualValues(s.taskManager.getTaskCount(newUnversionedRootQueueKey(namespaceId, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)), 1)
+
+	mockRateLimiter.EXPECT().
+		Wait(gomock.Any(), gomock.Any()).
+		Return(rateLimiterErr).Times(1)
+	s.matchingEngine.rateLimiter = mockRateLimiter
+
+	_, err = s.matchingEngine.PollActivityTaskQueue(context.Background(), &matchingservice.PollActivityTaskQueueRequest{
+		NamespaceId: namespaceId,
+		PollRequest: &workflowservice.PollActivityTaskQueueRequest{
+			TaskQueue: taskQueue,
+			Identity:  "identity",
+		},
+	}, metrics.NoopMetricsHandler)
+	s.ErrorIs(err, rateLimiterErr)
+}
+
+func (s *matchingEngineSuite) TestPollWorkflowTaskQueueWithRateLimiterError() {
+	mockRateLimiter := quotas.NewMockRequestRateLimiter(s.controller)
+	rateLimiterErr := serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT, "rate limit exceeded")
+
+	namespaceId := uuid.New()
+	tl := "queue"
+	taskQueue := &taskqueuepb.TaskQueue{Name: "queue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+
+	addRequest := matchingservice.AddWorkflowTaskRequest{
+		NamespaceId:      namespaceId,
+		Execution:        &commonpb.WorkflowExecution{WorkflowId: "workflowID", RunId: uuid.NewRandom().String()},
+		ScheduledEventId: int64(5),
+		TaskQueue:        taskQueue,
+	}
+
+	_, _, err := s.matchingEngine.AddWorkflowTask(context.Background(), &addRequest)
+	s.NoError(err)
+	s.EqualValues(s.taskManager.getTaskCount(newUnversionedRootQueueKey(namespaceId, tl, enumspb.TASK_QUEUE_TYPE_WORKFLOW)), 1)
+
+	mockRateLimiter.EXPECT().
+		Wait(gomock.Any(), gomock.Any()).
+		Return(rateLimiterErr).Times(1)
+	s.matchingEngine.rateLimiter = mockRateLimiter
+
+	_, err = s.matchingEngine.PollWorkflowTaskQueue(context.Background(), &matchingservice.PollWorkflowTaskQueueRequest{
+		NamespaceId: namespaceId,
+		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
+			TaskQueue: taskQueue,
+			Identity:  "identity",
+		},
+	}, metrics.NoopMetricsHandler)
+	s.ErrorIs(err, rateLimiterErr)
+}
+
 func (s *matchingEngineSuite) setupRecordActivityTaskStartedMock(tlName string) {
 	activityTypeName := "activity1"
 	activityID := "activityId1"
