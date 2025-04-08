@@ -34,8 +34,8 @@
 #   - value: 1s
 #matching.forwarderMaxRatePerSecond:
 #  - value: 1000 # default = 10
-matching.useNewMatcher:
-  - value: true
+#matching.useNewMatcher:
+#  - value: true
 matching.numTaskqueueWritePartitions:
   - value: 4
 matching.numTaskqueueReadPartitions:

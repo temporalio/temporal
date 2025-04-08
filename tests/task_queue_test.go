@@ -25,26 +25,24 @@ package tests
 import (
 	"context"
 	"fmt"
-	"math/rand"
+	"go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/sdk/worker"
+	"go.temporal.io/sdk/workflow"
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/suite"
-	commandpb "go.temporal.io/api/command/v1"
-	commonpb "go.temporal.io/api/common/v1"
-	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/api/workflowservice/v1"
+	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/payloads"
-	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
-	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type TaskQueueSuite struct {
 	testcore.FunctionalTestSuite
+	sdkClient sdkclient.Client
 }
 
 func TestTaskQueueSuite(t *testing.T) {
@@ -54,281 +52,141 @@ func TestTaskQueueSuite(t *testing.T) {
 
 func (s *TaskQueueSuite) SetupSuite() {
 	dynamicConfigOverrides := map[dynamicconfig.Key]any{
-		dynamicconfig.MatchingUseNewMatcher.Key():                                  true,
-		dynamicconfig.MatchingForwarderMaxRatePerSecond.Key():                      1000,
-		dynamicconfig.MatchingUseNewMatcher.Key():                                  true,
-		dynamicconfig.MatchingNumTaskqueueWritePartitions.Key():                    4,
-		dynamicconfig.MatchingNumTaskqueueReadPartitions.Key():                     4,
-		dynamicconfig.AdminMatchingNamespaceTaskqueueToPartitionDispatchRate.Key(): 1,
+		dynamicconfig.MatchingNumTaskqueueWritePartitions.Key(): 4,
+		dynamicconfig.MatchingNumTaskqueueReadPartitions.Key():  4,
 	}
 	s.FunctionalTestSuite.SetupSuiteWithDefaultCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 }
 
-// func (s *FunctionalTestBase) RunTestWithMatchingBehavior(subtest func()) {
-//	for _, forcePollForward := range []bool{false, true} {
-//		for _, forceTaskForward := range []bool{false, true} {
-//			for _, forceAsync := range []bool{false, true} {
-//				name := "NoTaskForward"
-//				if forceTaskForward {
-//					// force two levels of forwarding
-//					name = "ForceTaskForward"
-//				}
-//				if forcePollForward {
-//					name += "ForcePollForward"
-//				} else {
-//					name += "NoPollForward"
-//				}
-//				if forceAsync {
-//					name += "ForceAsync"
-//				} else {
-//					name += "AllowSync"
-//				}
-//
-//				s.Run(
-//					name, func() {
-//						if forceTaskForward {
-//							s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 13)
-//							s.InjectHook(testhooks.MatchingLBForceWritePartition, 11)
-//						} else {
-//							s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
-//						}
-//						if forcePollForward {
-//							s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 13)
-//							s.InjectHook(testhooks.MatchingLBForceReadPartition, 5)
-//						} else {
-//							s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
-//						}
-//						if forceAsync {
-//							s.InjectHook(testhooks.MatchingDisableSyncMatch, true)
-//						} else {
-//							s.InjectHook(testhooks.MatchingDisableSyncMatch, false)
-//						}
-//
-//						subtest()
-//					},
-//				)
-//			}
-//		}
-//	}
-//}
+func (s *TaskQueueSuite) SetupTest() {
+	s.FunctionalTestSuite.SetupTest()
 
-//	for _, nPartitions := range []int{1, 4, 8} {
-//		for _, nWorkers := range []int{1, 4, 8, 16} {
-//
-//		}
-//	}
+	var err error
+	s.sdkClient, err = sdkclient.Dial(sdkclient.Options{
+		HostPort:  s.FrontendGRPCAddress(),
+		Namespace: s.Namespace().String(),
+	})
+	s.NoError(err)
+}
 
-func (s *TaskQueueSuite) TestTaskQueueRateLimit_1Partition_1Worker() {
-	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
-	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
+func (s *TaskQueueSuite) TearDownTest() {
+	if s.sdkClient != nil {
+		s.sdkClient.Close()
+	}
+	s.FunctionalTestBase.TearDownTest()
+}
 
-	const nWorkflows = 1000
+// Not using RunTestWithMatchingBehavior because I want to pass different expected drain times for different configurations
+func (s *TaskQueueSuite) TestTaskQueueRateLimit() {
+	s.RunTaskQueueRateLimitTest(1, 1, 2*time.Second, true)  // ~0.75s avg
+	s.RunTaskQueueRateLimitTest(1, 1, 2*time.Second, false) // ~1.1s avg
 
+	// Testing multiple partitions with insufficient pollers is too flaky, because token recycling
+	// depends on a process being available to accept the token, so I'm not testing it
+	s.RunTaskQueueRateLimitTest(4, 8, 4*time.Second, true)   // ~1.6s avg
+	s.RunTaskQueueRateLimitTest(4, 8, 12*time.Second, false) // ~6s avg
+}
+
+func (s *TaskQueueSuite) RunTaskQueueRateLimitTest(nPartitions, nWorkers int, timeToDrain time.Duration, useNewMatching bool) {
+	s.Run(s.testTaskQueueRateLimitName(nPartitions, nWorkers, useNewMatching), func() { s.taskQueueRateLimitTest(nPartitions, nWorkers, timeToDrain, useNewMatching) })
+}
+
+func (s *TaskQueueSuite) taskQueueRateLimitTest(nPartitions, nWorkers int, timeToDrain time.Duration, useNewMatching bool) {
+	if useNewMatching {
+		s.OverrideDynamicConfig(dynamicconfig.MatchingUseNewMatcher, true)
+	}
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, nPartitions)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, nPartitions)
+
+	// 30 tasks at 1 task per second is 30 seconds.
+	// if invalid tasks are NOT using the rate limit, then this should take well below that long.
+	// task forwarding between task queue partitions is rate-limited by default to 10 rps.
+	s.OverrideDynamicConfig(dynamicconfig.AdminMatchingNamespaceTaskqueueToPartitionDispatchRate, 1)
+	s.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 0)
+
+	const maxBacklog = 30
 	tv := testvars.New(s.T())
+
+	helloRateLimitTest := func(ctx workflow.Context, name string) (string, error) {
+		return "Hello " + name + " !", nil
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	for wfidx := range nWorkflows {
-		_, err := s.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
-			Namespace:    s.Namespace().String(),
-			WorkflowId:   fmt.Sprintf("wf%d", wfidx),
-			WorkflowType: tv.WorkflowType(),
-			TaskQueue:    tv.TaskQueue(),
+	// start workflows to create a backlog
+	for wfidx := 0; wfidx < maxBacklog; wfidx++ {
+		_, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+			TaskQueue: tv.TaskQueue().GetName(),
+			ID:        fmt.Sprintf("wf%d", wfidx),
+		}, helloRateLimitTest, "Donna")
+		s.NoError(err)
+	}
+
+	// wait for backlog to be >= maxBacklog
+	wfBacklogCount := int64(0)
+	s.Eventually(
+		func() bool {
+			resp, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+				Namespace:   s.Namespace().String(),
+				TaskQueue:   tv.TaskQueue(),
+				ApiMode:     enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED,
+				ReportStats: true,
+			})
+			s.NoError(err)
+			wfBacklogCount = resp.GetVersionsInfo()[""].GetTypesInfo()[sdkclient.TaskQueueTypeWorkflow].GetStats().GetApproximateBacklogCount()
+			return wfBacklogCount >= maxBacklog
+		},
+		1*time.Second,
+		200*time.Millisecond,
+	)
+
+	// terminate all those workflow executions so that all the tasks in the backlog are invalid
+	listResp, err := s.FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+		Namespace: s.Namespace().String(),
+		Query:     fmt.Sprintf("TaskQueue = '%s'", tv.TaskQueue().GetName()),
+	})
+	s.NoError(err)
+	for _, exec := range listResp.GetExecutions() {
+		_, err = s.FrontendClient().TerminateWorkflowExecution(ctx, &workflowservice.TerminateWorkflowExecutionRequest{
+			Namespace:         s.Namespace().String(),
+			WorkflowExecution: &common.WorkflowExecution{WorkflowId: exec.GetExecution().GetWorkflowId(), RunId: exec.GetExecution().GetRunId()},
+			Reason:            "test",
+			Identity:          tv.ClientIdentity(),
 		})
 		s.NoError(err)
 	}
 
+	// start some workers
+	workers := make([]worker.Worker, nWorkers)
+	for i := 0; i < nWorkers; i++ {
+		workers[i] = worker.New(s.sdkClient, tv.TaskQueue().GetName(), worker.Options{})
+		workers[i].RegisterWorkflow(helloRateLimitTest)
+		err := workers[i].Start()
+		s.NoError(err)
+	}
+
+	// wait for backlog to be 0
+	s.Eventually(
+		func() bool {
+			resp, err := s.sdkClient.DescribeTaskQueueEnhanced(ctx, sdkclient.DescribeTaskQueueEnhancedOptions{
+				TaskQueue:   tv.TaskQueue().GetName(),
+				ReportStats: true,
+			})
+			s.NoError(err)
+			wfBacklogCount = resp.VersionsInfo[""].TypesInfo[sdkclient.TaskQueueTypeWorkflow].Stats.ApproximateBacklogCount
+			return wfBacklogCount == 0
+		},
+		timeToDrain,
+		200*time.Millisecond,
+	)
+
 }
 
-func (s *TaskQueueSuite) testTaskQueueRateLimitName(nPartitions, nWorkers int) string {
-	return fmt.Sprintf("TestTaskQueueRateLimit_%vPartitions_%vWorkers", nPartitions, nWorkers)
-}
-
-func (s *TaskQueueSuite) testTaskQueueRateLimit(nPartitions, nWorkers, nBackloggedTasks int, timeToDrain time.Duration) {
-	s.Run()
-
-	s.OverrideDynamicConfig(dynamicconfig.MatchingMaxVersionsInDeployment, 1)
-
-	const N = 100
-	const Levels = 5
-
-	tv := testvars.New(s.T())
-
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
-
-	for wfidx := range N {
-		_, err := s.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
-			Namespace:    s.Namespace().String(),
-			WorkflowId:   fmt.Sprintf("wf%d", wfidx),
-			WorkflowType: tv.WorkflowType(),
-			TaskQueue:    tv.TaskQueue(),
-		})
-		s.NoError(err)
+func (s *TaskQueueSuite) testTaskQueueRateLimitName(nPartitions, nWorkers int, useNewMatching bool) string {
+	ret := fmt.Sprintf("%vPartitions_%vWorkers", nPartitions, nWorkers)
+	if useNewMatching {
+		return "NewMatching_" + ret
 	}
-
-	// process workflow tasks
-	for range N {
-		_, err := s.TaskPoller.PollAndHandleWorkflowTask(
-			tv,
-			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-				s.Equal(3, len(task.History.Events))
-
-				var wfidx int
-				_, err := fmt.Sscanf(task.WorkflowExecution.WorkflowId, "wf%d", &wfidx)
-				s.NoError(err)
-
-				var commands []*commandpb.Command
-
-				for i, pri := range rand.Perm(Levels) {
-					input, err := payloads.Encode(wfidx, pri+1)
-					s.NoError(err)
-					commands = append(commands, &commandpb.Command{
-						CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
-						Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{
-							ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-								ActivityId:             fmt.Sprintf("act%d", i),
-								ActivityType:           tv.ActivityType(),
-								TaskQueue:              tv.TaskQueue(),
-								ScheduleToCloseTimeout: durationpb.New(time.Minute),
-								Priority: &commonpb.Priority{
-									PriorityKey: int32(pri + 1),
-								},
-								Input: input,
-							},
-						},
-					})
-				}
-
-				return &workflowservice.RespondWorkflowTaskCompletedRequest{Commands: commands}, nil
-			},
-			taskpoller.WithContext(ctx),
-		)
-		s.NoError(err)
-	}
-
-	// process activity tasks
-	var runs []int
-	for range N * Levels {
-		_, err := s.TaskPoller.PollAndHandleActivityTask(
-			tv,
-			func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
-				var wfidx, pri int
-				s.NoError(payloads.Decode(task.Input, &wfidx, &pri))
-				// s.T().Log("activity", "pri", pri, "wfidx", wfidx)
-				runs = append(runs, pri)
-				nothing, err := payloads.Encode()
-				s.NoError(err)
-				return &workflowservice.RespondActivityTaskCompletedRequest{Result: nothing}, nil
-			},
-			taskpoller.WithContext(ctx),
-		)
-		s.NoError(err)
-	}
-
-	w := wrongorderness(runs)
-	s.T().Log("wrongorderness:", w)
-	s.Less(w, 0.15)
-}
-
-func (s *MatchingSuite) TestSubqueue_Migration() {
-	tv := testvars.New(s.T())
-
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
-
-	// start with old matcher
-	s.OverrideDynamicConfig(dynamicconfig.MatchingUseNewMatcher, false)
-
-	// start 100 workflows
-	for range 100 {
-		_, err := s.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
-			Namespace:    s.Namespace().String(),
-			WorkflowId:   uuid.NewString(),
-			WorkflowType: tv.WorkflowType(),
-			TaskQueue:    tv.TaskQueue(),
-		})
-		s.NoError(err)
-	}
-
-	// process workflow tasks and create 300 activities
-	for range 100 {
-		_, err := s.TaskPoller.PollAndHandleWorkflowTask(
-			tv,
-			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-				s.Equal(3, len(task.History.Events))
-
-				var commands []*commandpb.Command
-
-				for i := range 3 {
-					input, err := payloads.Encode(i)
-					s.NoError(err)
-					commands = append(commands, &commandpb.Command{
-						CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
-						Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{
-							ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-								ActivityId:             fmt.Sprintf("act%d", i),
-								ActivityType:           tv.ActivityType(),
-								TaskQueue:              tv.TaskQueue(),
-								ScheduleToCloseTimeout: durationpb.New(time.Minute),
-								Input:                  input,
-							},
-						},
-					})
-				}
-
-				return &workflowservice.RespondWorkflowTaskCompletedRequest{Commands: commands}, nil
-			},
-			taskpoller.WithContext(ctx),
-		)
-		s.NoError(err)
-	}
-
-	processActivity := func() {
-		_, err := s.TaskPoller.PollAndHandleActivityTask(
-			tv,
-			func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
-				nothing, err := payloads.Encode()
-				s.NoError(err)
-				return &workflowservice.RespondActivityTaskCompletedRequest{Result: nothing}, nil
-			},
-			taskpoller.WithContext(ctx),
-		)
-		s.NoError(err)
-	}
-
-	s.T().Log("process first 100 activities")
-	for range 100 {
-		processActivity()
-	}
-
-	s.T().Log("switching to new matcher")
-	s.OverrideDynamicConfig(dynamicconfig.MatchingUseNewMatcher, true)
-
-	s.T().Log("processing next 100 activities")
-	for range 100 {
-		processActivity()
-	}
-
-	s.T().Log("switching back to old matcher")
-	s.OverrideDynamicConfig(dynamicconfig.MatchingUseNewMatcher, false)
-
-	s.T().Log("processing last 100 activities")
-	for range 100 {
-		processActivity()
-	}
-}
-
-func wrongorderness(vs []int) float64 {
-	l := len(vs)
-	wrong := 0
-	for i, v := range vs[:l-1] {
-		for _, w := range vs[i+1:] {
-			if v > w {
-				wrong++
-			}
-		}
-	}
-	return float64(wrong) / float64(l*(l-1)/2)
+	return "OldMatching_" + ret
 }
