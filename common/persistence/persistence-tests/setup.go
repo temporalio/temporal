@@ -29,6 +29,7 @@ import (
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/tidb"
 	"go.temporal.io/server/environment"
 )
 
@@ -46,6 +47,10 @@ const (
 	testSQLiteMode      = "memory"
 	testSQLiteCache     = "private"
 	testSQLiteSchemaDir = "schema/sqlite/v3" // specify if mode is not "memory"
+
+	testTiDBUser      = "temporal"
+	testTiDBPassword  = "temporal"
+	testTiDBSchemaDir = "schema/tidb/v8"
 )
 
 // GetMySQLTestClusterOption return test options
@@ -112,5 +117,18 @@ func GetSQLiteMemoryTestClusterOption() *TestBaseOptions {
 		SchemaDir:         "",
 		StoreType:         config.StoreTypeSQL,
 		ConnectAttributes: map[string]string{"mode": testSQLiteMode, "cache": testSQLiteCache},
+	}
+}
+
+// GetTiDBTestClusterOption return test options
+func GetTiDBTestClusterOption() *TestBaseOptions {
+	return &TestBaseOptions{
+		SQLDBPluginName: tidb.PluginName,
+		DBUsername:      testTiDBUser,
+		DBPassword:      testTiDBPassword,
+		DBHost:          environment.GetTiDBAddress(),
+		DBPort:          environment.GetTiDBPort(),
+		SchemaDir:       testTiDBSchemaDir,
+		StoreType:       config.StoreTypeSQL,
 	}
 }
