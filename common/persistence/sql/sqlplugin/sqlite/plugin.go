@@ -80,7 +80,7 @@ func (p *plugin) CreateDB(
 	r resolver.ServiceResolver,
 	_ log.Logger,
 	_ metrics.Handler,
-) (any, error) {
+) (sqlplugin.GenericDB, error) {
 	conn, err := p.connPool.Allocate(cfg, r, p.createDBConnection)
 	if err != nil {
 		return nil, err

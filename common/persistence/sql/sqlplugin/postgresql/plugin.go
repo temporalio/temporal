@@ -72,7 +72,7 @@ func (d *plugin) CreateDB(
 	r resolver.ServiceResolver,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
-) (any, error) {
+) (sqlplugin.GenericDB, error) {
 	connect := func() (*sqlx.DB, error) {
 		if cfg.Connect != nil {
 			return cfg.Connect(cfg)
