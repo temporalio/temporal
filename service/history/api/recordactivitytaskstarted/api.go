@@ -182,9 +182,11 @@ func recordActivityTaskStarted(
 		return nil, rejectCodeUndefined, serviceerrors.NewTaskAlreadyStarted("Activity")
 	}
 
-	code, err := processActivityWorkflowRules(shardContext, mutableState, ai)
-	if err != nil || code == rejectCodePaused {
-		return nil, code, err
+	if ai.Stamp == request.Stamp {
+		code, err := processActivityWorkflowRules(shardContext, mutableState, ai)
+		if err != nil || code == rejectCodePaused {
+			return nil, code, err
+		}
 	}
 
 	if ai.Stamp != request.Stamp {
