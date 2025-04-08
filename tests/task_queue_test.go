@@ -78,13 +78,13 @@ func (s *TaskQueueSuite) TearDownTest() {
 
 // Not using RunTestWithMatchingBehavior because I want to pass different expected drain times for different configurations
 func (s *TaskQueueSuite) TestTaskQueueRateLimit() {
-	s.RunTaskQueueRateLimitTest(1, 1, 2*time.Second, true)  // ~0.75s avg
-	s.RunTaskQueueRateLimitTest(1, 1, 2*time.Second, false) // ~1.1s avg
+	s.RunTaskQueueRateLimitTest(1, 1, 12*time.Second, true)  // ~0.75s avg
+	s.RunTaskQueueRateLimitTest(1, 1, 12*time.Second, false) // ~1.1s avg
 
 	// Testing multiple partitions with insufficient pollers is too flaky, because token recycling
 	// depends on a process being available to accept the token, so I'm not testing it
-	s.RunTaskQueueRateLimitTest(4, 8, 4*time.Second, true)   // ~1.6s avg
-	s.RunTaskQueueRateLimitTest(4, 8, 12*time.Second, false) // ~6s avg
+	s.RunTaskQueueRateLimitTest(4, 8, 24*time.Second, true)  // ~1.6s avg
+	s.RunTaskQueueRateLimitTest(4, 8, 24*time.Second, false) // ~6s avg
 }
 
 func (s *TaskQueueSuite) RunTaskQueueRateLimitTest(nPartitions, nWorkers int, timeToDrain time.Duration, useNewMatching bool) {
@@ -97,6 +97,9 @@ func (s *TaskQueueSuite) taskQueueRateLimitTest(nPartitions, nWorkers int, timeT
 	}
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, nPartitions)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, nPartitions)
+
+	// exclude the effect of the default forwarding rate limit (10)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingForwarderMaxRatePerSecond, 1000)
 
 	// 30 tasks at 1 task per second is 30 seconds.
 	// if invalid tasks are NOT using the rate limit, then this should take well below that long.
@@ -166,7 +169,7 @@ func (s *TaskQueueSuite) taskQueueRateLimitTest(nPartitions, nWorkers int, timeT
 			return wfBacklogCount == 0
 		},
 		timeToDrain,
-		200*time.Millisecond,
+		500*time.Millisecond,
 	)
 
 }
