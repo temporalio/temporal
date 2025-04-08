@@ -3363,7 +3363,7 @@ func (wh *WorkflowHandler) DescribeWorkerDeploymentVersion(ctx context.Context, 
 	}
 
 	if !wh.config.EnableDeploymentVersions(request.Namespace) {
-		return nil, errDeploymentsNotAllowed
+		return nil, errDeploymentVersionsNotAllowed
 	}
 
 	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
@@ -3392,7 +3392,7 @@ func (wh *WorkflowHandler) SetWorkerDeploymentCurrentVersion(ctx context.Context
 	}
 
 	if !wh.config.EnableDeploymentVersions(request.Namespace) {
-		return nil, errDeploymentsNotAllowed
+		return nil, errDeploymentVersionsNotAllowed
 	}
 
 	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
@@ -3426,7 +3426,7 @@ func (wh *WorkflowHandler) SetWorkerDeploymentRampingVersion(ctx context.Context
 	}
 
 	if !wh.config.EnableDeploymentVersions(request.Namespace) {
-		return nil, errDeploymentsNotAllowed
+		return nil, errDeploymentVersionsNotAllowed
 	}
 
 	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
@@ -3467,7 +3467,7 @@ func (wh *WorkflowHandler) ListWorkerDeployments(ctx context.Context, request *w
 	}
 
 	if !wh.config.EnableDeploymentVersions(request.Namespace) {
-		return nil, errDeploymentsNotAllowed
+		return nil, errDeploymentVersionsNotAllowed
 	}
 
 	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
@@ -4268,7 +4268,7 @@ func (wh *WorkflowHandler) UpdateWorkerBuildIdCompatibility(ctx context.Context,
 	}
 
 	if !wh.config.EnableWorkerVersioningData(request.Namespace) {
-		return nil, errWorkerVersioningNotAllowed
+		return nil, errWorkerVersioningV1_0NotAllowed
 	}
 
 	if err := wh.validateBuildIdCompatibilityUpdate(request); err != nil {
@@ -4310,7 +4310,7 @@ func (wh *WorkflowHandler) GetWorkerBuildIdCompatibility(ctx context.Context, re
 	}
 
 	if !wh.config.EnableWorkerVersioningData(request.Namespace) {
-		return nil, errWorkerVersioningNotAllowed
+		return nil, errWorkerVersioningV1_0NotAllowed
 	}
 
 	taskQueue := &taskqueuepb.TaskQueue{Name: request.GetTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
@@ -4343,7 +4343,7 @@ func (wh *WorkflowHandler) UpdateWorkerVersioningRules(ctx context.Context, requ
 	}
 
 	if !wh.config.EnableWorkerVersioningRules(request.Namespace) {
-		return nil, errWorkerVersioningNotAllowed
+		return nil, errWorkerVersioningV2_0NotAllowed
 	}
 
 	if err := wh.validateVersionRuleBuildId(request); err != nil {
@@ -4383,7 +4383,7 @@ func (wh *WorkflowHandler) GetWorkerVersioningRules(ctx context.Context, request
 	}
 
 	if !wh.config.EnableWorkerVersioningRules(request.Namespace) {
-		return nil, errWorkerVersioningNotAllowed
+		return nil, errWorkerVersioningV2_0NotAllowed
 	}
 
 	taskQueue := &taskqueuepb.TaskQueue{Name: request.GetTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
@@ -4422,7 +4422,7 @@ func (wh *WorkflowHandler) GetWorkerTaskReachability(ctx context.Context, reques
 	}
 
 	if !wh.config.EnableWorkerVersioningData(request.Namespace) {
-		return nil, errWorkerVersioningNotAllowed
+		return nil, errWorkerVersioningV2_0NotAllowed
 	}
 
 	if len(request.GetBuildIds()) == 0 {
@@ -5260,7 +5260,7 @@ type buildIdAndFlag interface {
 
 func (wh *WorkflowHandler) validateVersioningInfo(nsName string, id buildIdAndFlag, tq *taskqueuepb.TaskQueue) error {
 	if id.GetUseVersioning() && !wh.config.EnableWorkerVersioningWorkflow(nsName) {
-		return errWorkerVersioningNotAllowed
+		return errWorkerVersioningWorkflowAPIsNotAllowed
 	}
 	if id.GetUseVersioning() && tq.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY && len(tq.GetNormalName()) == 0 {
 		return errUseVersioningWithoutNormalName
