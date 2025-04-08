@@ -80,7 +80,7 @@ var (
 		"ReplicationSyncHsm":                 30,
 		"ReplicationSyncVersionedTransition": 31,
 		"ChasmPure":                          32,
-		"ChasmTransfer":                      33,
+		"Chasm":                              33,
 	}
 )
 
