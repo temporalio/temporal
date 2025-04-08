@@ -23,6 +23,9 @@
 package chasm
 
 import (
+	"context"
+	"errors"
+	"reflect"
 	"sort"
 	"strings"
 	"testing"
@@ -32,6 +35,9 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/testing/protoassert"
+	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/common/testing/testlogger"
 	"go.uber.org/mock/gomock"
 )
 
@@ -39,6 +45,7 @@ type (
 	nodeSuite struct {
 		suite.Suite
 		*require.Assertions
+		protorequire.ProtoAssertions
 
 		controller  *gomock.Controller
 		nodeBackend *MockNodeBackend
@@ -46,6 +53,7 @@ type (
 		registry        *Registry
 		timeSource      *clock.EventTimeSource
 		nodePathEncoder NodePathEncoder
+		logger          log.Logger
 	}
 )
 
@@ -55,13 +63,18 @@ func TestNodeSuite(t *testing.T) {
 
 func (s *nodeSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
+	s.ProtoAssertions = protorequire.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
 	s.nodeBackend = NewMockNodeBackend(s.controller)
 
 	s.registry = NewRegistry()
+	err := s.registry.Register(newTestLibrary())
+	s.NoError(err)
+
 	s.timeSource = clock.NewEventTimeSource()
 	s.nodePathEncoder = &testNodePathEncoder{}
+	s.logger = testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
 }
 
 func (s *nodeSuite) TestNewTree() {
@@ -100,13 +113,260 @@ func (s *nodeSuite) TestNewTree() {
 		persistenceNodes["child2/grandchild1"],
 	}
 
-	root, err := NewTree(s.registry, persistenceNodes, s.timeSource, s.nodeBackend, s.nodePathEncoder, log.NewTestLogger())
+	root, err := NewTree(persistenceNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
 	s.NoError(err)
 	s.NotNil(root)
 
 	preorderNodes := s.preorderAndAssertParent(root, nil)
 	s.Len(preorderNodes, 5)
 	s.Equal(expectedPreorderNodes, preorderNodes)
+}
+
+func (s *nodeSuite) TestInitSerializedNode_TypeComponent() {
+	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(1)).Times(1)
+	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(1)).Times(1)
+
+	node := newNode(s.nodeBase(), nil, "")
+	node.initSerializedNode(fieldTypeComponent)
+
+	s.NotNil(node.serializedNode.GetMetadata().GetComponentAttributes(), "node serializedNode must have attributes created")
+	s.Nil(node.serializedNode.GetData(), "node serializedNode must not have data before serialize is called")
+}
+
+func (s *nodeSuite) TestSerializeNode_ComponentAttributes() {
+	node := s.testComponentTree()
+
+	s.Len(node.children, 2)
+	s.NotNil(node.children["SubComponent1"].value)
+	s.Len(node.children["SubComponent1"].children, 2)
+	s.NotNil(node.children["SubComponent1"].children["SubComponent11"].value)
+	s.Empty(node.children["SubComponent1"].children["SubComponent11"].children)
+
+	// Serialize root component.
+	s.NotNil(node.serializedNode.GetMetadata().GetComponentAttributes())
+	s.Nil(node.serializedNode.GetData())
+	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(2)).Times(1) // for LastUpdatesVersionedTransition for TestComponent
+	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(2)).Times(1)
+	err := node.serialize()
+	s.NoError(err)
+	s.NotNil(node.serializedNode)
+	s.NotNil(node.serializedNode.GetData(), "node serialized value must have data after serialize is called")
+	s.Equal("TestLibrary.test_component", node.serializedNode.GetMetadata().GetComponentAttributes().GetType(), "node serialized value must have type set")
+
+	// Serialize subcomponents (there are 2 subcomponents).
+	sc1Node := node.children["SubComponent1"]
+	s.NotNil(sc1Node.serializedNode.GetMetadata().GetComponentAttributes())
+	s.Nil(sc1Node.serializedNode.GetData())
+	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(2)).Times(2) // for LastUpdatesVersionedTransition of TestSubComponent1
+	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(2)).Times(2)
+	for _, childNode := range node.children {
+		err = childNode.serialize()
+		s.NoError(err)
+	}
+	s.NotNil(sc1Node.serializedNode.GetData(), "child node serialized value must have data after serialize is called")
+	s.Equal("TestLibrary.test_sub_component_1", sc1Node.serializedNode.GetMetadata().GetComponentAttributes().GetType(), "node serialized value must have type set")
+
+	// Check SubData too.
+	sd1Node := node.children["SubData1"]
+	s.NoError(err)
+	s.NotNil(sd1Node.serializedNode.GetData(), "child node serialized value must have data after serialize is called")
+}
+
+func (s *nodeSuite) TestSerializeNode_ClearComponentData() {
+	node := s.testComponentTree()
+
+	node.value.(*TestComponent).ComponentData = nil
+
+	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(2)).Times(1) // for LastUpdatesVersionedTransition for TestComponent
+	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(2)).Times(1)
+	err := node.serialize()
+	s.NoError(err)
+	s.NotNil(node.serializedNode, "node serialized value must be not nil after serialize is called")
+	s.NotNil(node.serializedNode.GetMetadata().GetComponentAttributes(), "metadata must have component attributes")
+	s.Nil(node.serializedNode.GetData(), "data field must cleared to nil")
+	s.Equal("TestLibrary.test_component", node.serializedNode.GetMetadata().GetComponentAttributes().GetType(), "type must present")
+}
+
+func (s *nodeSuite) TestSerializeNode_ClearSubDataField() {
+	node := s.testComponentTree()
+
+	node.value.(*TestComponent).SubData1.Internal.value = nil
+
+	sd1Node := node.children["SubData1"]
+	s.NotNil(sd1Node)
+
+	err := node.syncSubComponents()
+	s.NoError(err)
+	s.Len(node.mutation.DeletedNodes, 1)
+
+	sd1Node = node.children["SubData1"]
+	s.Nil(sd1Node)
+}
+
+func (s *nodeSuite) TestInitSerializedNode_TypeData() {
+	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(1)).Times(1) // for InitialVersionedTransition
+	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(1)).Times(1)
+
+	node := newNode(s.nodeBase(), nil, "")
+	node.initSerializedNode(fieldTypeData)
+	s.NotNil(node.serializedNode.GetMetadata().GetDataAttributes(), "node serializedNode must have attributes created")
+	s.Nil(node.serializedNode.GetData(), "node serializedNode must not have data before serialize is called")
+}
+func (s *nodeSuite) TestSerializeNode_DataAttributes() {
+	component := &protoMessageType{
+		ActivityId: "22",
+	}
+
+	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(1)).Times(1) // for InitialVersionedTransition
+	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(1)).Times(1)
+
+	node := newNode(s.nodeBase(), nil, "")
+	node.initSerializedNode(fieldTypeData)
+	node.value = component
+
+	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(1)).Times(1)
+	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(1)).Times(1)
+	err := node.serialize()
+	s.NoError(err)
+	s.NotNil(node.serializedNode.GetData(), "child node serialized value must have data after serialize is called")
+	s.Equal([]byte{0x42, 0x2, 0x32, 0x32}, node.serializedNode.GetData().GetData())
+}
+
+func (s *nodeSuite) TestSyncSubComponents_DeleteLeafNode() {
+	node := s.testComponentTree()
+
+	component := node.value.(*TestComponent)
+
+	// Set very leaf node to empty.
+	component.SubComponent1.Internal.value.(*TestSubComponent1).SubComponent11 = NewEmptyField[*TestSubComponent11]()
+	s.NotNil(node.children["SubComponent1"].children["SubComponent11"])
+
+	err := node.syncSubComponents()
+	s.NoError(err)
+
+	s.Len(node.mutation.DeletedNodes, 1)
+	s.NotNil(node.mutation.DeletedNodes["SubComponent1/SubComponent11"])
+	s.Nil(node.children["SubComponent1"].children["SubComponent11"])
+}
+
+func (s *nodeSuite) TestSyncSubComponents_DeleteMiddleNode() {
+	node := s.testComponentTree()
+
+	component := node.value.(*TestComponent)
+
+	// Set subcomponent at middle node to nil.
+	component.SubComponent1 = NewEmptyField[*TestSubComponent1]()
+	s.NotNil(node.children["SubComponent1"])
+
+	err := node.syncSubComponents()
+	s.NoError(err)
+
+	s.Len(node.mutation.DeletedNodes, 3)
+	s.NotNil(node.mutation.DeletedNodes["SubComponent1/SubComponent11"])
+	s.NotNil(node.mutation.DeletedNodes["SubComponent1/SubData11"])
+	s.NotNil(node.mutation.DeletedNodes["SubComponent1"])
+
+	s.Nil(node.children["SubComponent1"])
+}
+
+func (s *nodeSuite) TestDeserializeNode_EmptyPersistence() {
+	var serializedNodes map[string]*persistencespb.ChasmNode
+
+	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(1)).Times(1) // for InitialVersionedTransition
+	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(1)).Times(1)
+
+	node, err := NewTree(serializedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+	s.NoError(err)
+	s.Nil(node.value)
+	s.NotNil(node.serializedNode)
+
+	err = node.deserialize(reflect.TypeOf(&TestComponent{}))
+	s.NoError(err)
+	s.NotNil(node.value)
+	s.IsType(&TestComponent{}, node.value)
+	tc := node.value.(*TestComponent)
+	s.Nil(tc.SubComponent1.Internal.node)
+	s.Nil(tc.SubComponent1.Internal.value)
+	s.Nil(tc.ComponentData)
+}
+
+func (s *nodeSuite) TestDeserializeNode_ComponentAttributes() {
+	serializedNodes := testComponentSerializedNodes()
+
+	node, err := NewTree(serializedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+	s.NoError(err)
+	s.Nil(node.value)
+	s.NotNil(node.serializedNode)
+
+	err = node.deserialize(reflect.TypeOf(&TestComponent{}))
+	s.NoError(err)
+	s.NotNil(node.value)
+	s.IsType(&TestComponent{}, node.value)
+	tc := node.value.(*TestComponent)
+	s.Equal(tc.SubComponent1.Internal.node, node.children["SubComponent1"])
+	s.Equal(tc.ComponentData.ActivityId, "component-data")
+
+	s.Nil(tc.SubComponent1.Internal.value)
+	err = tc.SubComponent1.Internal.node.deserialize(reflect.TypeOf(&TestSubComponent1{}))
+	s.NoError(err)
+	s.NotNil(tc.SubComponent1.Internal.node.value)
+	s.IsType(&TestSubComponent1{}, tc.SubComponent1.Internal.node.value)
+	s.Equal("sub-component1-data", tc.SubComponent1.Internal.node.value.(*TestSubComponent1).SubComponent1Data.ActivityId)
+}
+
+func (s *nodeSuite) TestDeserializeNode_DataAttributes() {
+	serializedNodes := testComponentSerializedNodes()
+
+	node, err := NewTree(serializedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+	s.NoError(err)
+	s.Nil(node.value)
+	s.NotNil(node.serializedNode)
+
+	err = node.deserialize(reflect.TypeOf(&TestComponent{}))
+	s.NoError(err)
+	s.NotNil(node.value)
+	s.IsType(&TestComponent{}, node.value)
+	tc := node.value.(*TestComponent)
+
+	s.Equal(tc.SubData1.Internal.node, node.children["SubData1"])
+
+	s.Nil(tc.SubData1.Internal.value)
+	err = tc.SubData1.Internal.node.deserialize(reflect.TypeOf(&protoMessageType{}))
+	s.NoError(err)
+	s.NotNil(tc.SubData1.Internal.node.value)
+	s.IsType(&protoMessageType{}, tc.SubData1.Internal.node.value)
+	s.Equal("sub-data1", tc.SubData1.Internal.node.value.(*protoMessageType).ActivityId)
+}
+
+func (s *nodeSuite) TestGenerateSerializedNodes() {
+	s.T().Skip("This test is used to generate serialized nodes for other tests.")
+
+	node := s.testComponentTree()
+
+	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(2)).Times(1) // for LastUpdatesVersionedTransition for TestComponent
+	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(2)).Times(1)
+	err := node.serialize()
+	s.NoError(err)
+	serializedNodes := map[string]*persistencespb.ChasmNode{}
+	serializedNodes[""] = node.serializedNode
+
+	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(2)).Times(2) // for LastUpdatesVersionedTransition of TestSubComponent1
+	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(2)).Times(2)
+	for childName, childNode := range node.children {
+		err = childNode.serialize()
+		s.NoError(err)
+		serializedNodes[childName] = childNode.serializedNode
+	}
+
+	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(2)).Times(2) // for LastUpdatesVersionedTransition of TestSubComponent1
+	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(2)).Times(2)
+	for childName, childNode := range node.children["SubComponent1"].children {
+		err = childNode.serialize()
+		s.NoError(err)
+		serializedNodes["SubComponent1/"+childName] = childNode.serializedNode
+	}
+
+	generateMapInit(serializedNodes, "serializedNodes")
 }
 
 func (s *nodeSuite) TestNodeSnapshot() {
@@ -143,7 +403,7 @@ func (s *nodeSuite) TestNodeSnapshot() {
 		},
 	}
 
-	root, err := NewTree(s.registry, persistenceNodes, s.timeSource, s.nodeBackend, s.nodePathEncoder, log.NewTestLogger())
+	root, err := NewTree(persistenceNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
 	s.NoError(err)
 	s.NotNil(root)
 
@@ -190,7 +450,7 @@ func (s *nodeSuite) TestApplyMutation() {
 			},
 		},
 	}
-	root, err := NewTree(s.registry, persistenceNodes, s.timeSource, s.nodeBackend, s.nodePathEncoder, log.NewTestLogger())
+	root, err := NewTree(persistenceNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
 	s.NoError(err)
 
 	// This decoded value should be reset after applying the mutation
@@ -225,13 +485,13 @@ func (s *nodeSuite) TestApplyMutation() {
 	// Validate the "child" node got updated.
 	childNode, ok := root.children["child"]
 	s.True(ok)
-	s.Equal(updatedChild, childNode.persistence)
+	s.Equal(updatedChild, childNode.serializedNode)
 	s.Nil(childNode.value) // value should be reset after mutation
 
 	// Validate the "newchild" node is added.
 	newChildNode, ok := root.children["newchild"]
 	s.True(ok)
-	s.Equal(newChild, newChildNode.persistence)
+	s.Equal(newChild, newChildNode.serializedNode)
 
 	// Validate the "grandchild" node is deleted.
 	s.Empty(childNode.children)
@@ -279,7 +539,7 @@ func (s *nodeSuite) TestApplySnapshot() {
 			},
 		},
 	}
-	root, err := NewTree(s.registry, persistenceNodes, s.timeSource, s.nodeBackend, s.nodePathEncoder, log.NewTestLogger())
+	root, err := NewTree(persistenceNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
 	s.NoError(err)
 
 	// Set a decoded value that should be reset after applying the snapshot.
@@ -331,6 +591,118 @@ func (s *nodeSuite) TestApplySnapshot() {
 	s.Equal(expectedMutation, root.mutation)
 }
 
+func (s *nodeSuite) TestComponent() {
+	root, err := NewTree(
+		testComponentSerializedNodes(),
+		s.registry,
+		s.timeSource,
+		s.nodeBackend,
+		s.nodePathEncoder,
+		s.logger,
+	)
+	s.NoError(err)
+
+	errValidation := errors.New("some random validation error")
+	expectedTestComponent := &TestComponent{}
+	setTestComponentFields(expectedTestComponent)
+	assertTestComponent := func(component Component) {
+		testComponent, ok := component.(*TestComponent)
+		s.True(ok)
+		protoassert.ProtoEqual(s.T(), expectedTestComponent.ComponentData, testComponent.ComponentData)
+
+		// TODO: Can we assert other fields?
+		// Right now the chasm Field generated by setTestComponentFields() doesn't have a backing node.
+	}
+
+	testCases := []struct {
+		name            string
+		chasmContext    Context
+		ref             ComponentRef
+		expectedErr     error
+		valueSynced     bool
+		assertComponent func(Component)
+	}{
+		{
+			name:         "path not found",
+			chasmContext: NewContext(context.Background(), root),
+			ref: ComponentRef{
+				componentPath: []string{"unknownComponent"},
+			},
+			expectedErr: errComponentNotFound,
+		},
+		{
+			name:         "initialVT mismatch",
+			chasmContext: NewContext(context.Background(), root),
+			ref: ComponentRef{
+				componentPath: []string{"SubComponent1", "SubComponent11"},
+				// should be (1, 1) but we set it to (2, 2)
+				componentInitialVT: &persistencespb.VersionedTransition{
+					NamespaceFailoverVersion: 2,
+					TransitionCount:          2,
+				},
+			},
+			expectedErr: errComponentNotFound,
+		},
+		{
+			name:         "validation failure",
+			chasmContext: NewContext(context.Background(), root),
+			ref: ComponentRef{
+				componentPath: []string{"SubComponent1"},
+				componentInitialVT: &persistencespb.VersionedTransition{
+					NamespaceFailoverVersion: 1,
+					TransitionCount:          1,
+				},
+				validationFn: func(_ Context, _ Component) error {
+					return errValidation
+				},
+			},
+			expectedErr: errValidation,
+		},
+		{
+			name:         "success readonly access",
+			chasmContext: NewContext(context.Background(), root),
+			ref: ComponentRef{
+				componentPath: []string{}, // root
+				componentInitialVT: &persistencespb.VersionedTransition{
+					NamespaceFailoverVersion: 1,
+					TransitionCount:          1,
+				},
+				validationFn: func(_ Context, _ Component) error {
+					return nil
+				},
+			},
+			expectedErr:     nil,
+			valueSynced:     true,
+			assertComponent: assertTestComponent,
+		},
+		{
+			name:         "success mutable access",
+			chasmContext: NewMutableContext(context.Background(), root),
+			ref: ComponentRef{
+				componentPath: []string{}, // root
+			},
+			expectedErr:     nil,
+			valueSynced:     false,
+			assertComponent: assertTestComponent,
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			component, err := root.Component(tc.chasmContext, tc.ref)
+			s.Equal(tc.expectedErr, err)
+			if tc.expectedErr == nil {
+				// s.Equal(tc.expectedComponent, component)
+
+				node, ok := root.getNodeByPath(tc.ref.componentPath)
+				s.True(ok)
+				s.Equal(component, node.value)
+				s.Equal(tc.valueSynced, node.valueSynced)
+			}
+		})
+	}
+}
+
 func (s *nodeSuite) preorderAndAssertParent(
 	n *Node,
 	parent *Node,
@@ -338,7 +710,7 @@ func (s *nodeSuite) preorderAndAssertParent(
 	s.Equal(parent, n.parent)
 
 	var nodes []*persistencespb.ChasmNode
-	nodes = append(nodes, n.persistence)
+	nodes = append(nodes, n.serializedNode)
 
 	childNames := make([]string, 0, len(n.children))
 	for childName := range n.children {
@@ -371,4 +743,42 @@ func (e *testNodePathEncoder) Decode(
 		return []string{}, nil
 	}
 	return strings.Split(encodedPath, "/"), nil
+}
+
+func (s *nodeSuite) nodeBase() *nodeBase {
+	return &nodeBase{
+		registry:    s.registry,
+		timeSource:  s.timeSource,
+		backend:     s.nodeBackend,
+		pathEncoder: s.nodePathEncoder,
+	}
+}
+
+// Helper method to create a test tree for TestComponent.
+func (s *nodeSuite) testComponentTree() *Node {
+	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(1)).Times(1) // for InitialVersionedTransition of the root component.
+	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(1)).Times(1)
+
+	var nilSerializedNodes map[string]*persistencespb.ChasmNode
+	// Create an empty tree.
+	node, err := NewTree(nilSerializedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+	s.NoError(err)
+	s.Nil(node.value)
+
+	// Get an empty top level component from the empty tree.
+	err = node.deserialize(reflect.TypeOf(&TestComponent{}))
+	s.NoError(err)
+	s.NotNil(node.value)
+
+	// Create subcommponents by assigning fileds to TestComponent instance.
+	setTestComponentFields(node.value.(*TestComponent))
+
+	// Sync tree with subcomponents of TestComponent.
+	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(1)).Times(4) // for InitialVersionedTransition of children.
+	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(1)).Times(4)
+	err = node.syncSubComponents()
+	s.NoError(err)
+	s.Empty(node.mutation.DeletedNodes)
+
+	return node
 }

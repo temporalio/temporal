@@ -98,17 +98,6 @@ func (r *TaskRefresherImpl) PartialRefresh(
 	mutableState historyi.MutableState,
 	minVersionedTransition *persistencespb.VersionedTransition,
 ) error {
-	if transitionhistory.Compare(minVersionedTransition, EmptyVersionedTransition) != 0 {
-		// Perform a sanity check to make sure that the minVersionedTransition, if provided,
-		// is on the current branch of transition history.
-		if err := TransitionHistoryStalenessCheck(
-			mutableState.GetExecutionInfo().TransitionHistory,
-			minVersionedTransition,
-		); err != nil {
-			return err
-		}
-	}
-
 	taskGenerator := r.taskGeneratorProvider.NewTaskGenerator(
 		r.shard,
 		mutableState,
@@ -410,13 +399,8 @@ func (r *TaskRefresherImpl) refreshTasksForActivity(
 			continue
 		}
 
-		scheduleEvent, err := mutableState.GetActivityScheduledEvent(ctx, activityInfo.ScheduledEventId)
-		if err != nil {
-			return err
-		}
-
 		if err := taskGenerator.GenerateActivityTasks(
-			scheduleEvent.GetEventId(),
+			activityInfo.ScheduledEventId,
 		); err != nil {
 			return err
 		}
@@ -605,7 +589,6 @@ func (r *TaskRefresherImpl) refreshTasksForWorkflowSearchAttr(
 	) < 0 {
 		return nil
 	}
-
 	return taskGenerator.GenerateUpsertVisibilityTask()
 }
 

@@ -155,6 +155,7 @@ func newOperationContext(options contextOptions) *operationContext {
 		nil,
 		mockRateLimiter{options.namespaceRateLimitAllow},
 		make(map[string]int),
+		func() bool { return true },
 	)
 	oc.rateLimitInterceptor = interceptor.NewRateLimitInterceptor(
 		mockRateLimiter{options.rateLimitAllow},

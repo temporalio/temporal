@@ -31,6 +31,7 @@ package deployment
 import (
 	reflect "reflect"
 	sync "sync"
+	unsafe "unsafe"
 
 	v12 "go.temporal.io/api/common/v1"
 	v1 "go.temporal.io/api/deployment/v1"
@@ -50,24 +51,21 @@ const (
 // Identifies a Worker Deployment Version. The combination of `deployment_name` and `build_id`
 // serve as the identifier.
 type WorkerDeploymentVersion struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
+	state protoimpl.MessageState `protogen:"open.v1"`
 	// The name of the Deployment this version belongs too.
 	DeploymentName string `protobuf:"bytes,1,opt,name=deployment_name,json=deploymentName,proto3" json:"deployment_name,omitempty"`
 	// Build ID uniquely identifies the Deployment Version within a Deployment, but the same Build
 	// ID can be used in multiple Deployments.
-	BuildId string `protobuf:"bytes,2,opt,name=build_id,json=buildId,proto3" json:"build_id,omitempty"`
+	BuildId       string `protobuf:"bytes,2,opt,name=build_id,json=buildId,proto3" json:"build_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *WorkerDeploymentVersion) Reset() {
 	*x = WorkerDeploymentVersion{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[0]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *WorkerDeploymentVersion) String() string {
@@ -78,7 +76,7 @@ func (*WorkerDeploymentVersion) ProtoMessage() {}
 
 func (x *WorkerDeploymentVersion) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[0]
-	if protoimpl.UnsafeEnabled && x != nil {
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -110,10 +108,7 @@ func (x *WorkerDeploymentVersion) GetBuildId() string {
 // The source of truth for this data is in the WorkerDeployment entity workflows, which is
 // synced to all TQs whenever the source changes.
 type DeploymentVersionData struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
+	state protoimpl.MessageState `protogen:"open.v1"`
 	// Nil means unversioned.
 	Version *WorkerDeploymentVersion `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`
 	// Last time `current_since_time`, `ramping_since_time, or `ramp_percentage` of this version changed.
@@ -133,15 +128,15 @@ type DeploymentVersionData struct {
 	// Range: [0, 100]. Must be zero if the version is not ramping (i.e. `ramping_since_time` is nil).
 	// Can be in the range [0, 100] if the version is ramping.
 	RampPercentage float32 `protobuf:"fixed32,5,opt,name=ramp_percentage,json=rampPercentage,proto3" json:"ramp_percentage,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *DeploymentVersionData) Reset() {
 	*x = DeploymentVersionData{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[1]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *DeploymentVersionData) String() string {
@@ -152,7 +147,7 @@ func (*DeploymentVersionData) ProtoMessage() {}
 
 func (x *DeploymentVersionData) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[1]
-	if protoimpl.UnsafeEnabled && x != nil {
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -204,10 +199,7 @@ func (x *DeploymentVersionData) GetRampPercentage() float32 {
 
 // Local state for Worker Deployment Version
 type VersionLocalState struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
+	state      protoimpl.MessageState   `protogen:"open.v1"`
 	Version    *WorkerDeploymentVersion `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`
 	CreateTime *timestamppb.Timestamp   `protobuf:"bytes,2,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
 	// Last time `current_since_time`, `ramping_since_time, or `ramp_percentage` of this version changed.
@@ -245,16 +237,16 @@ type VersionLocalState struct {
 	Metadata                  *v1.VersionMetadata `protobuf:"bytes,8,opt,name=metadata,proto3" json:"metadata,omitempty"`
 	StartedDeploymentWorkflow bool                `protobuf:"varint,9,opt,name=started_deployment_workflow,json=startedDeploymentWorkflow,proto3" json:"started_deployment_workflow,omitempty"`
 	// Key: Task Queue Name
-	TaskQueueFamilies map[string]*VersionLocalState_TaskQueueFamilyData `protobuf:"bytes,10,rep,name=task_queue_families,json=taskQueueFamilies,proto3" json:"task_queue_families,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+	TaskQueueFamilies map[string]*VersionLocalState_TaskQueueFamilyData `protobuf:"bytes,10,rep,name=task_queue_families,json=taskQueueFamilies,proto3" json:"task_queue_families,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *VersionLocalState) Reset() {
 	*x = VersionLocalState{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[2]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *VersionLocalState) String() string {
@@ -265,7 +257,7 @@ func (*VersionLocalState) ProtoMessage() {}
 
 func (x *VersionLocalState) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[2]
-	if protoimpl.UnsafeEnabled && x != nil {
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -352,18 +344,16 @@ func (x *VersionLocalState) GetTaskQueueFamilies() map[string]*VersionLocalState
 
 // Data specific to a task queue, from the perspective of a worker deployment version.
 type TaskQueueVersionData struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *TaskQueueVersionData) Reset() {
 	*x = TaskQueueVersionData{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[3]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *TaskQueueVersionData) String() string {
@@ -374,7 +364,7 @@ func (*TaskQueueVersionData) ProtoMessage() {}
 
 func (x *TaskQueueVersionData) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[3]
-	if protoimpl.UnsafeEnabled && x != nil {
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -391,22 +381,19 @@ func (*TaskQueueVersionData) Descriptor() ([]byte, []int) {
 
 // used as Worker Deployment Version workflow input:
 type WorkerDeploymentVersionWorkflowArgs struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	NamespaceName string                 `protobuf:"bytes,1,opt,name=namespace_name,json=namespaceName,proto3" json:"namespace_name,omitempty"`
+	NamespaceId   string                 `protobuf:"bytes,2,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
+	VersionState  *VersionLocalState     `protobuf:"bytes,3,opt,name=version_state,json=versionState,proto3" json:"version_state,omitempty"`
 	unknownFields protoimpl.UnknownFields
-
-	NamespaceName string             `protobuf:"bytes,1,opt,name=namespace_name,json=namespaceName,proto3" json:"namespace_name,omitempty"`
-	NamespaceId   string             `protobuf:"bytes,2,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	VersionState  *VersionLocalState `protobuf:"bytes,3,opt,name=version_state,json=versionState,proto3" json:"version_state,omitempty"`
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *WorkerDeploymentVersionWorkflowArgs) Reset() {
 	*x = WorkerDeploymentVersionWorkflowArgs{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[4]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *WorkerDeploymentVersionWorkflowArgs) String() string {
@@ -417,7 +404,7 @@ func (*WorkerDeploymentVersionWorkflowArgs) ProtoMessage() {}
 
 func (x *WorkerDeploymentVersionWorkflowArgs) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[4]
-	if protoimpl.UnsafeEnabled && x != nil {
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -455,23 +442,20 @@ func (x *WorkerDeploymentVersionWorkflowArgs) GetVersionState() *VersionLocalSta
 
 // used as Worker Deployment workflow input:
 type WorkerDeploymentWorkflowArgs struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
+	state          protoimpl.MessageState      `protogen:"open.v1"`
 	NamespaceName  string                      `protobuf:"bytes,1,opt,name=namespace_name,json=namespaceName,proto3" json:"namespace_name,omitempty"`
 	NamespaceId    string                      `protobuf:"bytes,2,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
 	DeploymentName string                      `protobuf:"bytes,3,opt,name=deployment_name,json=deploymentName,proto3" json:"deployment_name,omitempty"`
 	State          *WorkerDeploymentLocalState `protobuf:"bytes,4,opt,name=state,proto3" json:"state,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *WorkerDeploymentWorkflowArgs) Reset() {
 	*x = WorkerDeploymentWorkflowArgs{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[5]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *WorkerDeploymentWorkflowArgs) String() string {
@@ -482,7 +466,7 @@ func (*WorkerDeploymentWorkflowArgs) ProtoMessage() {}
 
 func (x *WorkerDeploymentWorkflowArgs) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[5]
-	if protoimpl.UnsafeEnabled && x != nil {
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -527,22 +511,19 @@ func (x *WorkerDeploymentWorkflowArgs) GetState() *WorkerDeploymentLocalState {
 
 // used as drainage workflow input:
 type DrainageWorkflowArgs struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
+	state         protoimpl.MessageState   `protogen:"open.v1"`
 	NamespaceName string                   `protobuf:"bytes,1,opt,name=namespace_name,json=namespaceName,proto3" json:"namespace_name,omitempty"`
 	Version       *WorkerDeploymentVersion `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
 	IsCan         bool                     `protobuf:"varint,3,opt,name=is_can,json=isCan,proto3" json:"is_can,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *DrainageWorkflowArgs) Reset() {
 	*x = DrainageWorkflowArgs{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[6]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *DrainageWorkflowArgs) String() string {
@@ -553,7 +534,7 @@ func (*DrainageWorkflowArgs) ProtoMessage() {}
 
 func (x *DrainageWorkflowArgs) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[6]
-	if protoimpl.UnsafeEnabled && x != nil {
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -591,25 +572,22 @@ func (x *DrainageWorkflowArgs) GetIsCan() bool {
 
 // Local state for Worker Deployment
 type WorkerDeploymentLocalState struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
+	state      protoimpl.MessageState `protogen:"open.v1"`
 	CreateTime *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
 	// Encapsulates task routing information for this deployment.
 	RoutingConfig        *v1.RoutingConfig                          `protobuf:"bytes,2,opt,name=routing_config,json=routingConfig,proto3" json:"routing_config,omitempty"`
-	Versions             map[string]*WorkerDeploymentVersionSummary `protobuf:"bytes,3,rep,name=versions,proto3" json:"versions,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+	Versions             map[string]*WorkerDeploymentVersionSummary `protobuf:"bytes,3,rep,name=versions,proto3" json:"versions,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	ConflictToken        []byte                                     `protobuf:"bytes,4,opt,name=conflict_token,json=conflictToken,proto3" json:"conflict_token,omitempty"`
 	LastModifierIdentity string                                     `protobuf:"bytes,5,opt,name=last_modifier_identity,json=lastModifierIdentity,proto3" json:"last_modifier_identity,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *WorkerDeploymentLocalState) Reset() {
 	*x = WorkerDeploymentLocalState{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[7]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *WorkerDeploymentLocalState) String() string {
@@ -620,7 +598,7 @@ func (*WorkerDeploymentLocalState) ProtoMessage() {}
 
 func (x *WorkerDeploymentLocalState) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[7]
-	if protoimpl.UnsafeEnabled && x != nil {
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -671,22 +649,19 @@ func (x *WorkerDeploymentLocalState) GetLastModifierIdentity() string {
 }
 
 type WorkerDeploymentVersionSummary struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
+	state          protoimpl.MessageState    `protogen:"open.v1"`
 	Version        string                    `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`
 	CreateTime     *timestamppb.Timestamp    `protobuf:"bytes,2,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
 	DrainageStatus v11.VersionDrainageStatus `protobuf:"varint,3,opt,name=drainage_status,json=drainageStatus,proto3,enum=temporal.api.enums.v1.VersionDrainageStatus" json:"drainage_status,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *WorkerDeploymentVersionSummary) Reset() {
 	*x = WorkerDeploymentVersionSummary{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[8]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *WorkerDeploymentVersionSummary) String() string {
@@ -697,7 +672,7 @@ func (*WorkerDeploymentVersionSummary) ProtoMessage() {}
 
 func (x *WorkerDeploymentVersionSummary) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[8]
-	if protoimpl.UnsafeEnabled && x != nil {
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -735,23 +710,20 @@ func (x *WorkerDeploymentVersionSummary) GetDrainageStatus() v11.VersionDrainage
 
 // used as Worker Deployment Version workflow update input:
 type RegisterWorkerInVersionArgs struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TaskQueueName string                 `protobuf:"bytes,1,opt,name=task_queue_name,json=taskQueueName,proto3" json:"task_queue_name,omitempty"`
+	TaskQueueType v11.TaskQueueType      `protobuf:"varint,2,opt,name=task_queue_type,json=taskQueueType,proto3,enum=temporal.api.enums.v1.TaskQueueType" json:"task_queue_type,omitempty"`
+	MaxTaskQueues int32                  `protobuf:"varint,3,opt,name=max_task_queues,json=maxTaskQueues,proto3" json:"max_task_queues,omitempty"`
+	Version       string                 `protobuf:"bytes,4,opt,name=version,proto3" json:"version,omitempty"`
 	unknownFields protoimpl.UnknownFields
-
-	TaskQueueName string            `protobuf:"bytes,1,opt,name=task_queue_name,json=taskQueueName,proto3" json:"task_queue_name,omitempty"`
-	TaskQueueType v11.TaskQueueType `protobuf:"varint,2,opt,name=task_queue_type,json=taskQueueType,proto3,enum=temporal.api.enums.v1.TaskQueueType" json:"task_queue_type,omitempty"`
-	MaxTaskQueues int32             `protobuf:"varint,3,opt,name=max_task_queues,json=maxTaskQueues,proto3" json:"max_task_queues,omitempty"`
-	Version       string            `protobuf:"bytes,4,opt,name=version,proto3" json:"version,omitempty"`
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *RegisterWorkerInVersionArgs) Reset() {
 	*x = RegisterWorkerInVersionArgs{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[9]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *RegisterWorkerInVersionArgs) String() string {
@@ -762,7 +734,7 @@ func (*RegisterWorkerInVersionArgs) ProtoMessage() {}
 
 func (x *RegisterWorkerInVersionArgs) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[9]
-	if protoimpl.UnsafeEnabled && x != nil {
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -807,23 +779,20 @@ func (x *RegisterWorkerInVersionArgs) GetVersion() string {
 
 // used as Worker Deployment workflow update input:
 type RegisterWorkerInWorkerDeploymentArgs struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
+	state         protoimpl.MessageState   `protogen:"open.v1"`
 	TaskQueueName string                   `protobuf:"bytes,1,opt,name=task_queue_name,json=taskQueueName,proto3" json:"task_queue_name,omitempty"`
 	TaskQueueType v11.TaskQueueType        `protobuf:"varint,2,opt,name=task_queue_type,json=taskQueueType,proto3,enum=temporal.api.enums.v1.TaskQueueType" json:"task_queue_type,omitempty"`
 	MaxTaskQueues int32                    `protobuf:"varint,3,opt,name=max_task_queues,json=maxTaskQueues,proto3" json:"max_task_queues,omitempty"`
 	Version       *WorkerDeploymentVersion `protobuf:"bytes,4,opt,name=version,proto3" json:"version,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *RegisterWorkerInWorkerDeploymentArgs) Reset() {
 	*x = RegisterWorkerInWorkerDeploymentArgs{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[10]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *RegisterWorkerInWorkerDeploymentArgs) String() string {
@@ -834,7 +803,7 @@ func (*RegisterWorkerInWorkerDeploymentArgs) ProtoMessage() {}
 
 func (x *RegisterWorkerInWorkerDeploymentArgs) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[10]
-	if protoimpl.UnsafeEnabled && x != nil {
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -877,12 +846,99 @@ func (x *RegisterWorkerInWorkerDeploymentArgs) GetVersion() *WorkerDeploymentVer
 	return nil
 }
 
+// used as Worker Deployment workflow activity input:
+type DescribeVersionFromWorkerDeploymentActivityArgs struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Version       string                 `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DescribeVersionFromWorkerDeploymentActivityArgs) Reset() {
+	*x = DescribeVersionFromWorkerDeploymentActivityArgs{}
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DescribeVersionFromWorkerDeploymentActivityArgs) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DescribeVersionFromWorkerDeploymentActivityArgs) ProtoMessage() {}
+
+func (x *DescribeVersionFromWorkerDeploymentActivityArgs) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DescribeVersionFromWorkerDeploymentActivityArgs.ProtoReflect.Descriptor instead.
+func (*DescribeVersionFromWorkerDeploymentActivityArgs) Descriptor() ([]byte, []int) {
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *DescribeVersionFromWorkerDeploymentActivityArgs) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
+type DescribeVersionFromWorkerDeploymentActivityResult struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// All the Task Queues that have ever polled from this Deployment version.
+	TaskQueueInfos []*v1.WorkerDeploymentVersionInfo_VersionTaskQueueInfo `protobuf:"bytes,1,rep,name=task_queue_infos,json=taskQueueInfos,proto3" json:"task_queue_infos,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *DescribeVersionFromWorkerDeploymentActivityResult) Reset() {
+	*x = DescribeVersionFromWorkerDeploymentActivityResult{}
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DescribeVersionFromWorkerDeploymentActivityResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DescribeVersionFromWorkerDeploymentActivityResult) ProtoMessage() {}
+
+func (x *DescribeVersionFromWorkerDeploymentActivityResult) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DescribeVersionFromWorkerDeploymentActivityResult.ProtoReflect.Descriptor instead.
+func (*DescribeVersionFromWorkerDeploymentActivityResult) Descriptor() ([]byte, []int) {
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *DescribeVersionFromWorkerDeploymentActivityResult) GetTaskQueueInfos() []*v1.WorkerDeploymentVersionInfo_VersionTaskQueueInfo {
+	if x != nil {
+		return x.TaskQueueInfos
+	}
+	return nil
+}
+
 // used as Worker Deployment workflow update input (sent from Worker Deployment workflow):
 type SyncVersionStateUpdateArgs struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
+	state protoimpl.MessageState `protogen:"open.v1"`
 	// Last time `current_since_time`, `ramping_since_time, or `ramp_percentage` of this version changed.
 	RoutingUpdateTime *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=routing_update_time,json=routingUpdateTime,proto3" json:"routing_update_time,omitempty"`
 	// (-- api-linter: core::0140::prepositions=disabled
@@ -900,15 +956,15 @@ type SyncVersionStateUpdateArgs struct {
 	// Range: [0, 100]. Must be zero if the version is not ramping (i.e. `ramping_since_time` is nil).
 	// Can be in the range [0, 100] if the version is ramping.
 	RampPercentage float32 `protobuf:"fixed32,4,opt,name=ramp_percentage,json=rampPercentage,proto3" json:"ramp_percentage,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *SyncVersionStateUpdateArgs) Reset() {
 	*x = SyncVersionStateUpdateArgs{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[11]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *SyncVersionStateUpdateArgs) String() string {
@@ -918,8 +974,8 @@ func (x *SyncVersionStateUpdateArgs) String() string {
 func (*SyncVersionStateUpdateArgs) ProtoMessage() {}
 
 func (x *SyncVersionStateUpdateArgs) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[11]
-	if protoimpl.UnsafeEnabled && x != nil {
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[13]
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -931,7 +987,7 @@ func (x *SyncVersionStateUpdateArgs) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SyncVersionStateUpdateArgs.ProtoReflect.Descriptor instead.
 func (*SyncVersionStateUpdateArgs) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{11}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *SyncVersionStateUpdateArgs) GetRoutingUpdateTime() *timestamppb.Timestamp {
@@ -964,20 +1020,17 @@ func (x *SyncVersionStateUpdateArgs) GetRampPercentage() float32 {
 
 // used as Worker Deployment workflow update response (sent from Worker Deployment workflow):
 type SyncVersionStateResponse struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	VersionState  *VersionLocalState     `protobuf:"bytes,1,opt,name=version_state,json=versionState,proto3" json:"version_state,omitempty"`
 	unknownFields protoimpl.UnknownFields
-
-	VersionState *VersionLocalState `protobuf:"bytes,1,opt,name=version_state,json=versionState,proto3" json:"version_state,omitempty"`
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SyncVersionStateResponse) Reset() {
 	*x = SyncVersionStateResponse{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[12]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *SyncVersionStateResponse) String() string {
@@ -987,8 +1040,8 @@ func (x *SyncVersionStateResponse) String() string {
 func (*SyncVersionStateResponse) ProtoMessage() {}
 
 func (x *SyncVersionStateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[12]
-	if protoimpl.UnsafeEnabled && x != nil {
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[14]
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -1000,7 +1053,7 @@ func (x *SyncVersionStateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SyncVersionStateResponse.ProtoReflect.Descriptor instead.
 func (*SyncVersionStateResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{12}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *SyncVersionStateResponse) GetVersionState() *VersionLocalState {
@@ -1012,21 +1065,18 @@ func (x *SyncVersionStateResponse) GetVersionState() *VersionLocalState {
 
 // Sent from Version workflow to Worker Deployment workflow
 type AddVersionUpdateArgs struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Version       string                 `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`
+	CreateTime    *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
 	unknownFields protoimpl.UnknownFields
-
-	Version    string                 `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`
-	CreateTime *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *AddVersionUpdateArgs) Reset() {
 	*x = AddVersionUpdateArgs{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[13]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *AddVersionUpdateArgs) String() string {
@@ -1036,8 +1086,8 @@ func (x *AddVersionUpdateArgs) String() string {
 func (*AddVersionUpdateArgs) ProtoMessage() {}
 
 func (x *AddVersionUpdateArgs) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[13]
-	if protoimpl.UnsafeEnabled && x != nil {
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[15]
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -1049,7 +1099,7 @@ func (x *AddVersionUpdateArgs) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddVersionUpdateArgs.ProtoReflect.Descriptor instead.
 func (*AddVersionUpdateArgs) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{13}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *AddVersionUpdateArgs) GetVersion() string {
@@ -1068,20 +1118,17 @@ func (x *AddVersionUpdateArgs) GetCreateTime() *timestamppb.Timestamp {
 
 // Sent from Drainage child workflow to Version parent
 type SyncDrainageInfoSignalArgs struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
+	state         protoimpl.MessageState  `protogen:"open.v1"`
+	DrainageInfo  *v1.VersionDrainageInfo `protobuf:"bytes,1,opt,name=drainage_info,json=drainageInfo,proto3" json:"drainage_info,omitempty"`
 	unknownFields protoimpl.UnknownFields
-
-	DrainageInfo *v1.VersionDrainageInfo `protobuf:"bytes,1,opt,name=drainage_info,json=drainageInfo,proto3" json:"drainage_info,omitempty"`
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SyncDrainageInfoSignalArgs) Reset() {
 	*x = SyncDrainageInfoSignalArgs{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[14]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *SyncDrainageInfoSignalArgs) String() string {
@@ -1091,8 +1138,8 @@ func (x *SyncDrainageInfoSignalArgs) String() string {
 func (*SyncDrainageInfoSignalArgs) ProtoMessage() {}
 
 func (x *SyncDrainageInfoSignalArgs) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[14]
-	if protoimpl.UnsafeEnabled && x != nil {
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[16]
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -1104,7 +1151,7 @@ func (x *SyncDrainageInfoSignalArgs) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SyncDrainageInfoSignalArgs.ProtoReflect.Descriptor instead.
 func (*SyncDrainageInfoSignalArgs) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{14}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *SyncDrainageInfoSignalArgs) GetDrainageInfo() *v1.VersionDrainageInfo {
@@ -1116,21 +1163,18 @@ func (x *SyncDrainageInfoSignalArgs) GetDrainageInfo() *v1.VersionDrainageInfo {
 
 // Sent from Version workflow to Worker Deployment workflow
 type SyncDrainageStatusSignalArgs struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
+	state          protoimpl.MessageState    `protogen:"open.v1"`
 	Version        string                    `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`
 	DrainageStatus v11.VersionDrainageStatus `protobuf:"varint,2,opt,name=drainage_status,json=drainageStatus,proto3,enum=temporal.api.enums.v1.VersionDrainageStatus" json:"drainage_status,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *SyncDrainageStatusSignalArgs) Reset() {
 	*x = SyncDrainageStatusSignalArgs{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[15]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *SyncDrainageStatusSignalArgs) String() string {
@@ -1140,8 +1184,8 @@ func (x *SyncDrainageStatusSignalArgs) String() string {
 func (*SyncDrainageStatusSignalArgs) ProtoMessage() {}
 
 func (x *SyncDrainageStatusSignalArgs) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[15]
-	if protoimpl.UnsafeEnabled && x != nil {
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[17]
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -1153,7 +1197,7 @@ func (x *SyncDrainageStatusSignalArgs) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SyncDrainageStatusSignalArgs.ProtoReflect.Descriptor instead.
 func (*SyncDrainageStatusSignalArgs) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{15}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *SyncDrainageStatusSignalArgs) GetVersion() string {
@@ -1172,20 +1216,17 @@ func (x *SyncDrainageStatusSignalArgs) GetDrainageStatus() v11.VersionDrainageSt
 
 // used as Worker Deployment Version workflow query response:
 type QueryDescribeVersionResponse struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	VersionState  *VersionLocalState     `protobuf:"bytes,1,opt,name=version_state,json=versionState,proto3" json:"version_state,omitempty"`
 	unknownFields protoimpl.UnknownFields
-
-	VersionState *VersionLocalState `protobuf:"bytes,1,opt,name=version_state,json=versionState,proto3" json:"version_state,omitempty"`
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *QueryDescribeVersionResponse) Reset() {
 	*x = QueryDescribeVersionResponse{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[16]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *QueryDescribeVersionResponse) String() string {
@@ -1195,8 +1236,8 @@ func (x *QueryDescribeVersionResponse) String() string {
 func (*QueryDescribeVersionResponse) ProtoMessage() {}
 
 func (x *QueryDescribeVersionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[16]
-	if protoimpl.UnsafeEnabled && x != nil {
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[18]
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -1208,7 +1249,7 @@ func (x *QueryDescribeVersionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QueryDescribeVersionResponse.ProtoReflect.Descriptor instead.
 func (*QueryDescribeVersionResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{16}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *QueryDescribeVersionResponse) GetVersionState() *VersionLocalState {
@@ -1220,20 +1261,17 @@ func (x *QueryDescribeVersionResponse) GetVersionState() *VersionLocalState {
 
 // used as Worker Deployment Version workflow query response:
 type QueryDescribeWorkerDeploymentResponse struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
+	state         protoimpl.MessageState      `protogen:"open.v1"`
+	State         *WorkerDeploymentLocalState `protobuf:"bytes,1,opt,name=state,proto3" json:"state,omitempty"`
 	unknownFields protoimpl.UnknownFields
-
-	State *WorkerDeploymentLocalState `protobuf:"bytes,1,opt,name=state,proto3" json:"state,omitempty"`
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *QueryDescribeWorkerDeploymentResponse) Reset() {
 	*x = QueryDescribeWorkerDeploymentResponse{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[17]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *QueryDescribeWorkerDeploymentResponse) String() string {
@@ -1243,8 +1281,8 @@ func (x *QueryDescribeWorkerDeploymentResponse) String() string {
 func (*QueryDescribeWorkerDeploymentResponse) ProtoMessage() {}
 
 func (x *QueryDescribeWorkerDeploymentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[17]
-	if protoimpl.UnsafeEnabled && x != nil {
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[19]
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -1256,7 +1294,7 @@ func (x *QueryDescribeWorkerDeploymentResponse) ProtoReflect() protoreflect.Mess
 
 // Deprecated: Use QueryDescribeWorkerDeploymentResponse.ProtoReflect.Descriptor instead.
 func (*QueryDescribeWorkerDeploymentResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{17}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *QueryDescribeWorkerDeploymentResponse) GetState() *WorkerDeploymentLocalState {
@@ -1268,21 +1306,18 @@ func (x *QueryDescribeWorkerDeploymentResponse) GetState() *WorkerDeploymentLoca
 
 // used as Worker Deployment Version workflow activity input:
 type StartWorkerDeploymentRequest struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	DeploymentName string `protobuf:"bytes,1,opt,name=deployment_name,json=deploymentName,proto3" json:"deployment_name,omitempty"`
-	RequestId      string `protobuf:"bytes,2,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	DeploymentName string                 `protobuf:"bytes,1,opt,name=deployment_name,json=deploymentName,proto3" json:"deployment_name,omitempty"`
+	RequestId      string                 `protobuf:"bytes,2,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *StartWorkerDeploymentRequest) Reset() {
 	*x = StartWorkerDeploymentRequest{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[18]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *StartWorkerDeploymentRequest) String() string {
@@ -1292,8 +1327,8 @@ func (x *StartWorkerDeploymentRequest) String() string {
 func (*StartWorkerDeploymentRequest) ProtoMessage() {}
 
 func (x *StartWorkerDeploymentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[18]
-	if protoimpl.UnsafeEnabled && x != nil {
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[20]
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -1305,7 +1340,7 @@ func (x *StartWorkerDeploymentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartWorkerDeploymentRequest.ProtoReflect.Descriptor instead.
 func (*StartWorkerDeploymentRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{18}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *StartWorkerDeploymentRequest) GetDeploymentName() string {
@@ -1324,23 +1359,20 @@ func (x *StartWorkerDeploymentRequest) GetRequestId() string {
 
 // used as Worker Deployment Version workflow activity input:
 type SyncDeploymentVersionUserDataRequest struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
+	state   protoimpl.MessageState                               `protogen:"open.v1"`
 	Version *WorkerDeploymentVersion                             `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`
 	Sync    []*SyncDeploymentVersionUserDataRequest_SyncUserData `protobuf:"bytes,2,rep,name=sync,proto3" json:"sync,omitempty"`
 	// if true, the version will be forgotten from the task queue user data.
 	ForgetVersion bool `protobuf:"varint,3,opt,name=forget_version,json=forgetVersion,proto3" json:"forget_version,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SyncDeploymentVersionUserDataRequest) Reset() {
 	*x = SyncDeploymentVersionUserDataRequest{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[19]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *SyncDeploymentVersionUserDataRequest) String() string {
@@ -1350,8 +1382,8 @@ func (x *SyncDeploymentVersionUserDataRequest) String() string {
 func (*SyncDeploymentVersionUserDataRequest) ProtoMessage() {}
 
 func (x *SyncDeploymentVersionUserDataRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[19]
-	if protoimpl.UnsafeEnabled && x != nil {
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[21]
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -1363,7 +1395,7 @@ func (x *SyncDeploymentVersionUserDataRequest) ProtoReflect() protoreflect.Messa
 
 // Deprecated: Use SyncDeploymentVersionUserDataRequest.ProtoReflect.Descriptor instead.
 func (*SyncDeploymentVersionUserDataRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{19}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *SyncDeploymentVersionUserDataRequest) GetVersion() *WorkerDeploymentVersion {
@@ -1389,20 +1421,17 @@ func (x *SyncDeploymentVersionUserDataRequest) GetForgetVersion() bool {
 
 // used as Worker Deployment Version workflow activity output:
 type SyncDeploymentVersionUserDataResponse struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	TaskQueueMaxVersions map[string]int64 `protobuf:"bytes,1,rep,name=task_queue_max_versions,json=taskQueueMaxVersions,proto3" json:"task_queue_max_versions,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"varint,2,opt,name=value,proto3"`
+	state                protoimpl.MessageState `protogen:"open.v1"`
+	TaskQueueMaxVersions map[string]int64       `protobuf:"bytes,1,rep,name=task_queue_max_versions,json=taskQueueMaxVersions,proto3" json:"task_queue_max_versions,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *SyncDeploymentVersionUserDataResponse) Reset() {
 	*x = SyncDeploymentVersionUserDataResponse{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[20]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *SyncDeploymentVersionUserDataResponse) String() string {
@@ -1412,8 +1441,8 @@ func (x *SyncDeploymentVersionUserDataResponse) String() string {
 func (*SyncDeploymentVersionUserDataResponse) ProtoMessage() {}
 
 func (x *SyncDeploymentVersionUserDataResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[20]
-	if protoimpl.UnsafeEnabled && x != nil {
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[22]
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -1425,7 +1454,7 @@ func (x *SyncDeploymentVersionUserDataResponse) ProtoReflect() protoreflect.Mess
 
 // Deprecated: Use SyncDeploymentVersionUserDataResponse.ProtoReflect.Descriptor instead.
 func (*SyncDeploymentVersionUserDataResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{20}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *SyncDeploymentVersionUserDataResponse) GetTaskQueueMaxVersions() map[string]int64 {
@@ -1437,20 +1466,17 @@ func (x *SyncDeploymentVersionUserDataResponse) GetTaskQueueMaxVersions() map[st
 
 // used as Worker Deployment Version workflow activity input:
 type CheckWorkerDeploymentUserDataPropagationRequest struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	TaskQueueMaxVersions map[string]int64 `protobuf:"bytes,1,rep,name=task_queue_max_versions,json=taskQueueMaxVersions,proto3" json:"task_queue_max_versions,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"varint,2,opt,name=value,proto3"`
+	state                protoimpl.MessageState `protogen:"open.v1"`
+	TaskQueueMaxVersions map[string]int64       `protobuf:"bytes,1,rep,name=task_queue_max_versions,json=taskQueueMaxVersions,proto3" json:"task_queue_max_versions,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *CheckWorkerDeploymentUserDataPropagationRequest) Reset() {
 	*x = CheckWorkerDeploymentUserDataPropagationRequest{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[21]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *CheckWorkerDeploymentUserDataPropagationRequest) String() string {
@@ -1460,8 +1486,8 @@ func (x *CheckWorkerDeploymentUserDataPropagationRequest) String() string {
 func (*CheckWorkerDeploymentUserDataPropagationRequest) ProtoMessage() {}
 
 func (x *CheckWorkerDeploymentUserDataPropagationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[21]
-	if protoimpl.UnsafeEnabled && x != nil {
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[23]
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -1473,7 +1499,7 @@ func (x *CheckWorkerDeploymentUserDataPropagationRequest) ProtoReflect() protore
 
 // Deprecated: Use CheckWorkerDeploymentUserDataPropagationRequest.ProtoReflect.Descriptor instead.
 func (*CheckWorkerDeploymentUserDataPropagationRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{21}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *CheckWorkerDeploymentUserDataPropagationRequest) GetTaskQueueMaxVersions() map[string]int64 {
@@ -1485,21 +1511,18 @@ func (x *CheckWorkerDeploymentUserDataPropagationRequest) GetTaskQueueMaxVersion
 
 // used as Worker Deployment workflow activity input:
 type SyncUnversionedRampActivityArgs struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
+	state          protoimpl.MessageState      `protogen:"open.v1"`
 	CurrentVersion string                      `protobuf:"bytes,1,opt,name=current_version,json=currentVersion,proto3" json:"current_version,omitempty"`
 	UpdateArgs     *SyncVersionStateUpdateArgs `protobuf:"bytes,2,opt,name=update_args,json=updateArgs,proto3" json:"update_args,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *SyncUnversionedRampActivityArgs) Reset() {
 	*x = SyncUnversionedRampActivityArgs{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[22]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *SyncUnversionedRampActivityArgs) String() string {
@@ -1509,8 +1532,8 @@ func (x *SyncUnversionedRampActivityArgs) String() string {
 func (*SyncUnversionedRampActivityArgs) ProtoMessage() {}
 
 func (x *SyncUnversionedRampActivityArgs) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[22]
-	if protoimpl.UnsafeEnabled && x != nil {
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[24]
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -1522,7 +1545,7 @@ func (x *SyncUnversionedRampActivityArgs) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SyncUnversionedRampActivityArgs.ProtoReflect.Descriptor instead.
 func (*SyncUnversionedRampActivityArgs) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{22}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *SyncUnversionedRampActivityArgs) GetCurrentVersion() string {
@@ -1541,20 +1564,17 @@ func (x *SyncUnversionedRampActivityArgs) GetUpdateArgs() *SyncVersionStateUpdat
 
 // used as Worker Deployment workflow activity output:
 type SyncUnversionedRampActivityResponse struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	TaskQueueMaxVersions map[string]int64 `protobuf:"bytes,1,rep,name=task_queue_max_versions,json=taskQueueMaxVersions,proto3" json:"task_queue_max_versions,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"varint,2,opt,name=value,proto3"`
+	state                protoimpl.MessageState `protogen:"open.v1"`
+	TaskQueueMaxVersions map[string]int64       `protobuf:"bytes,1,rep,name=task_queue_max_versions,json=taskQueueMaxVersions,proto3" json:"task_queue_max_versions,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *SyncUnversionedRampActivityResponse) Reset() {
 	*x = SyncUnversionedRampActivityResponse{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[23]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *SyncUnversionedRampActivityResponse) String() string {
@@ -1564,8 +1584,8 @@ func (x *SyncUnversionedRampActivityResponse) String() string {
 func (*SyncUnversionedRampActivityResponse) ProtoMessage() {}
 
 func (x *SyncUnversionedRampActivityResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[23]
-	if protoimpl.UnsafeEnabled && x != nil {
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[25]
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -1577,7 +1597,7 @@ func (x *SyncUnversionedRampActivityResponse) ProtoReflect() protoreflect.Messag
 
 // Deprecated: Use SyncUnversionedRampActivityResponse.ProtoReflect.Descriptor instead.
 func (*SyncUnversionedRampActivityResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{23}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *SyncUnversionedRampActivityResponse) GetTaskQueueMaxVersions() map[string]int64 {
@@ -1589,22 +1609,19 @@ func (x *SyncUnversionedRampActivityResponse) GetTaskQueueMaxVersions() map[stri
 
 // used as Worker Deployment Version workflow update input:
 type UpdateVersionMetadataArgs struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	UpsertEntries map[string]*v12.Payload `protobuf:"bytes,1,rep,name=upsert_entries,json=upsertEntries,proto3" json:"upsert_entries,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+	state         protoimpl.MessageState  `protogen:"open.v1"`
+	UpsertEntries map[string]*v12.Payload `protobuf:"bytes,1,rep,name=upsert_entries,json=upsertEntries,proto3" json:"upsert_entries,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	RemoveEntries []string                `protobuf:"bytes,2,rep,name=remove_entries,json=removeEntries,proto3" json:"remove_entries,omitempty"`
 	Identity      string                  `protobuf:"bytes,3,opt,name=identity,proto3" json:"identity,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *UpdateVersionMetadataArgs) Reset() {
 	*x = UpdateVersionMetadataArgs{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[24]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *UpdateVersionMetadataArgs) String() string {
@@ -1614,8 +1631,8 @@ func (x *UpdateVersionMetadataArgs) String() string {
 func (*UpdateVersionMetadataArgs) ProtoMessage() {}
 
 func (x *UpdateVersionMetadataArgs) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[24]
-	if protoimpl.UnsafeEnabled && x != nil {
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[26]
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -1627,7 +1644,7 @@ func (x *UpdateVersionMetadataArgs) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateVersionMetadataArgs.ProtoReflect.Descriptor instead.
 func (*UpdateVersionMetadataArgs) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{24}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *UpdateVersionMetadataArgs) GetUpsertEntries() map[string]*v12.Payload {
@@ -1653,20 +1670,17 @@ func (x *UpdateVersionMetadataArgs) GetIdentity() string {
 
 // used as Worker Deployment Version workflow update response:
 type UpdateVersionMetadataResponse struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Metadata      *v1.VersionMetadata    `protobuf:"bytes,1,opt,name=metadata,proto3" json:"metadata,omitempty"`
 	unknownFields protoimpl.UnknownFields
-
-	Metadata *v1.VersionMetadata `protobuf:"bytes,1,opt,name=metadata,proto3" json:"metadata,omitempty"`
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *UpdateVersionMetadataResponse) Reset() {
 	*x = UpdateVersionMetadataResponse{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[25]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *UpdateVersionMetadataResponse) String() string {
@@ -1676,8 +1690,8 @@ func (x *UpdateVersionMetadataResponse) String() string {
 func (*UpdateVersionMetadataResponse) ProtoMessage() {}
 
 func (x *UpdateVersionMetadataResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[25]
-	if protoimpl.UnsafeEnabled && x != nil {
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[27]
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -1689,7 +1703,7 @@ func (x *UpdateVersionMetadataResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateVersionMetadataResponse.ProtoReflect.Descriptor instead.
 func (*UpdateVersionMetadataResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{25}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *UpdateVersionMetadataResponse) GetMetadata() *v1.VersionMetadata {
@@ -1701,23 +1715,20 @@ func (x *UpdateVersionMetadataResponse) GetMetadata() *v1.VersionMetadata {
 
 // used as Worker Deployment workflow update input:
 type SetCurrentVersionArgs struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	Identity                string `protobuf:"bytes,1,opt,name=identity,proto3" json:"identity,omitempty"`
-	Version                 string `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
-	IgnoreMissingTaskQueues bool   `protobuf:"varint,3,opt,name=ignore_missing_task_queues,json=ignoreMissingTaskQueues,proto3" json:"ignore_missing_task_queues,omitempty"`
-	ConflictToken           []byte `protobuf:"bytes,4,opt,name=conflict_token,json=conflictToken,proto3" json:"conflict_token,omitempty"`
+	state                   protoimpl.MessageState `protogen:"open.v1"`
+	Identity                string                 `protobuf:"bytes,1,opt,name=identity,proto3" json:"identity,omitempty"`
+	Version                 string                 `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
+	IgnoreMissingTaskQueues bool                   `protobuf:"varint,3,opt,name=ignore_missing_task_queues,json=ignoreMissingTaskQueues,proto3" json:"ignore_missing_task_queues,omitempty"`
+	ConflictToken           []byte                 `protobuf:"bytes,4,opt,name=conflict_token,json=conflictToken,proto3" json:"conflict_token,omitempty"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
 }
 
 func (x *SetCurrentVersionArgs) Reset() {
 	*x = SetCurrentVersionArgs{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[26]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *SetCurrentVersionArgs) String() string {
@@ -1727,8 +1738,8 @@ func (x *SetCurrentVersionArgs) String() string {
 func (*SetCurrentVersionArgs) ProtoMessage() {}
 
 func (x *SetCurrentVersionArgs) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[26]
-	if protoimpl.UnsafeEnabled && x != nil {
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[28]
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -1740,7 +1751,7 @@ func (x *SetCurrentVersionArgs) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetCurrentVersionArgs.ProtoReflect.Descriptor instead.
 func (*SetCurrentVersionArgs) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{26}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *SetCurrentVersionArgs) GetIdentity() string {
@@ -1773,21 +1784,18 @@ func (x *SetCurrentVersionArgs) GetConflictToken() []byte {
 
 // used as Worker Deployment update response:
 type SetCurrentVersionResponse struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	PreviousVersion string `protobuf:"bytes,1,opt,name=previous_version,json=previousVersion,proto3" json:"previous_version,omitempty"`
-	ConflictToken   []byte `protobuf:"bytes,2,opt,name=conflict_token,json=conflictToken,proto3" json:"conflict_token,omitempty"`
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	PreviousVersion string                 `protobuf:"bytes,1,opt,name=previous_version,json=previousVersion,proto3" json:"previous_version,omitempty"`
+	ConflictToken   []byte                 `protobuf:"bytes,2,opt,name=conflict_token,json=conflictToken,proto3" json:"conflict_token,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *SetCurrentVersionResponse) Reset() {
 	*x = SetCurrentVersionResponse{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[27]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *SetCurrentVersionResponse) String() string {
@@ -1797,8 +1805,8 @@ func (x *SetCurrentVersionResponse) String() string {
 func (*SetCurrentVersionResponse) ProtoMessage() {}
 
 func (x *SetCurrentVersionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[27]
-	if protoimpl.UnsafeEnabled && x != nil {
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[29]
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -1810,7 +1818,7 @@ func (x *SetCurrentVersionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetCurrentVersionResponse.ProtoReflect.Descriptor instead.
 func (*SetCurrentVersionResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{27}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *SetCurrentVersionResponse) GetPreviousVersion() string {
@@ -1829,22 +1837,19 @@ func (x *SetCurrentVersionResponse) GetConflictToken() []byte {
 
 // used as Worker Deployment workflow update input:
 type DeleteVersionArgs struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Identity      string                 `protobuf:"bytes,1,opt,name=identity,proto3" json:"identity,omitempty"`
+	Version       string                 `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
+	SkipDrainage  bool                   `protobuf:"varint,3,opt,name=skip_drainage,json=skipDrainage,proto3" json:"skip_drainage,omitempty"`
 	unknownFields protoimpl.UnknownFields
-
-	Identity     string `protobuf:"bytes,1,opt,name=identity,proto3" json:"identity,omitempty"`
-	Version      string `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
-	SkipDrainage bool   `protobuf:"varint,3,opt,name=skip_drainage,json=skipDrainage,proto3" json:"skip_drainage,omitempty"`
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *DeleteVersionArgs) Reset() {
 	*x = DeleteVersionArgs{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[28]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *DeleteVersionArgs) String() string {
@@ -1854,8 +1859,8 @@ func (x *DeleteVersionArgs) String() string {
 func (*DeleteVersionArgs) ProtoMessage() {}
 
 func (x *DeleteVersionArgs) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[28]
-	if protoimpl.UnsafeEnabled && x != nil {
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[30]
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -1867,7 +1872,7 @@ func (x *DeleteVersionArgs) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteVersionArgs.ProtoReflect.Descriptor instead.
 func (*DeleteVersionArgs) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{28}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *DeleteVersionArgs) GetIdentity() string {
@@ -1893,24 +1898,21 @@ func (x *DeleteVersionArgs) GetSkipDrainage() bool {
 
 // used as Worker Deployment Activity input:
 type DeleteVersionActivityArgs struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	Identity       string `protobuf:"bytes,1,opt,name=identity,proto3" json:"identity,omitempty"`
-	DeploymentName string `protobuf:"bytes,2,opt,name=deployment_name,json=deploymentName,proto3" json:"deployment_name,omitempty"`
-	Version        string `protobuf:"bytes,3,opt,name=version,proto3" json:"version,omitempty"`
-	RequestId      string `protobuf:"bytes,4,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
-	SkipDrainage   bool   `protobuf:"varint,5,opt,name=skip_drainage,json=skipDrainage,proto3" json:"skip_drainage,omitempty"`
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Identity       string                 `protobuf:"bytes,1,opt,name=identity,proto3" json:"identity,omitempty"`
+	DeploymentName string                 `protobuf:"bytes,2,opt,name=deployment_name,json=deploymentName,proto3" json:"deployment_name,omitempty"`
+	Version        string                 `protobuf:"bytes,3,opt,name=version,proto3" json:"version,omitempty"`
+	RequestId      string                 `protobuf:"bytes,4,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	SkipDrainage   bool                   `protobuf:"varint,5,opt,name=skip_drainage,json=skipDrainage,proto3" json:"skip_drainage,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *DeleteVersionActivityArgs) Reset() {
 	*x = DeleteVersionActivityArgs{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[29]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *DeleteVersionActivityArgs) String() string {
@@ -1920,8 +1922,8 @@ func (x *DeleteVersionActivityArgs) String() string {
 func (*DeleteVersionActivityArgs) ProtoMessage() {}
 
 func (x *DeleteVersionActivityArgs) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[29]
-	if protoimpl.UnsafeEnabled && x != nil {
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[31]
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -1933,7 +1935,7 @@ func (x *DeleteVersionActivityArgs) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteVersionActivityArgs.ProtoReflect.Descriptor instead.
 func (*DeleteVersionActivityArgs) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{29}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *DeleteVersionActivityArgs) GetIdentity() string {
@@ -1973,22 +1975,19 @@ func (x *DeleteVersionActivityArgs) GetSkipDrainage() bool {
 
 // used as Worker Deployment Activity input:
 type CheckTaskQueuesHavePollersActivityArgs struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
+	state protoimpl.MessageState `protogen:"open.v1"`
 	// Key: Task Queue Name
-	TaskQueuesAndTypes      map[string]*CheckTaskQueuesHavePollersActivityArgs_TaskQueueTypes `protobuf:"bytes,1,rep,name=task_queues_and_types,json=taskQueuesAndTypes,proto3" json:"task_queues_and_types,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+	TaskQueuesAndTypes      map[string]*CheckTaskQueuesHavePollersActivityArgs_TaskQueueTypes `protobuf:"bytes,1,rep,name=task_queues_and_types,json=taskQueuesAndTypes,proto3" json:"task_queues_and_types,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	WorkerDeploymentVersion *WorkerDeploymentVersion                                          `protobuf:"bytes,2,opt,name=worker_deployment_version,json=workerDeploymentVersion,proto3" json:"worker_deployment_version,omitempty"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
 }
 
 func (x *CheckTaskQueuesHavePollersActivityArgs) Reset() {
 	*x = CheckTaskQueuesHavePollersActivityArgs{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[30]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[32]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *CheckTaskQueuesHavePollersActivityArgs) String() string {
@@ -1998,8 +1997,8 @@ func (x *CheckTaskQueuesHavePollersActivityArgs) String() string {
 func (*CheckTaskQueuesHavePollersActivityArgs) ProtoMessage() {}
 
 func (x *CheckTaskQueuesHavePollersActivityArgs) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[30]
-	if protoimpl.UnsafeEnabled && x != nil {
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[32]
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -2011,7 +2010,7 @@ func (x *CheckTaskQueuesHavePollersActivityArgs) ProtoReflect() protoreflect.Mes
 
 // Deprecated: Use CheckTaskQueuesHavePollersActivityArgs.ProtoReflect.Descriptor instead.
 func (*CheckTaskQueuesHavePollersActivityArgs) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{30}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *CheckTaskQueuesHavePollersActivityArgs) GetTaskQueuesAndTypes() map[string]*CheckTaskQueuesHavePollersActivityArgs_TaskQueueTypes {
@@ -2030,20 +2029,17 @@ func (x *CheckTaskQueuesHavePollersActivityArgs) GetWorkerDeploymentVersion() *W
 
 // used as Worker Deployment workflow update input:
 type DeleteDeploymentArgs struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Identity      string                 `protobuf:"bytes,1,opt,name=identity,proto3" json:"identity,omitempty"`
 	unknownFields protoimpl.UnknownFields
-
-	Identity string `protobuf:"bytes,1,opt,name=identity,proto3" json:"identity,omitempty"`
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *DeleteDeploymentArgs) Reset() {
 	*x = DeleteDeploymentArgs{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[31]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[33]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *DeleteDeploymentArgs) String() string {
@@ -2053,8 +2049,8 @@ func (x *DeleteDeploymentArgs) String() string {
 func (*DeleteDeploymentArgs) ProtoMessage() {}
 
 func (x *DeleteDeploymentArgs) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[31]
-	if protoimpl.UnsafeEnabled && x != nil {
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[33]
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -2066,7 +2062,7 @@ func (x *DeleteDeploymentArgs) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteDeploymentArgs.ProtoReflect.Descriptor instead.
 func (*DeleteDeploymentArgs) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{31}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *DeleteDeploymentArgs) GetIdentity() string {
@@ -2078,22 +2074,19 @@ func (x *DeleteDeploymentArgs) GetIdentity() string {
 
 // used as Worker Deployment update response:
 type SetRampingVersionResponse struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	PreviousVersion    string  `protobuf:"bytes,1,opt,name=previous_version,json=previousVersion,proto3" json:"previous_version,omitempty"`
-	PreviousPercentage float32 `protobuf:"fixed32,2,opt,name=previous_percentage,json=previousPercentage,proto3" json:"previous_percentage,omitempty"`
-	ConflictToken      []byte  `protobuf:"bytes,3,opt,name=conflict_token,json=conflictToken,proto3" json:"conflict_token,omitempty"`
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	PreviousVersion    string                 `protobuf:"bytes,1,opt,name=previous_version,json=previousVersion,proto3" json:"previous_version,omitempty"`
+	PreviousPercentage float32                `protobuf:"fixed32,2,opt,name=previous_percentage,json=previousPercentage,proto3" json:"previous_percentage,omitempty"`
+	ConflictToken      []byte                 `protobuf:"bytes,3,opt,name=conflict_token,json=conflictToken,proto3" json:"conflict_token,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *SetRampingVersionResponse) Reset() {
 	*x = SetRampingVersionResponse{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[32]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[34]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *SetRampingVersionResponse) String() string {
@@ -2103,8 +2096,8 @@ func (x *SetRampingVersionResponse) String() string {
 func (*SetRampingVersionResponse) ProtoMessage() {}
 
 func (x *SetRampingVersionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[32]
-	if protoimpl.UnsafeEnabled && x != nil {
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[34]
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -2116,7 +2109,7 @@ func (x *SetRampingVersionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetRampingVersionResponse.ProtoReflect.Descriptor instead.
 func (*SetRampingVersionResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{32}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *SetRampingVersionResponse) GetPreviousVersion() string {
@@ -2142,24 +2135,21 @@ func (x *SetRampingVersionResponse) GetConflictToken() []byte {
 
 // used as Worker Deployment workflow update input:
 type SetRampingVersionArgs struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	Identity                string  `protobuf:"bytes,1,opt,name=identity,proto3" json:"identity,omitempty"`
-	Version                 string  `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
-	Percentage              float32 `protobuf:"fixed32,3,opt,name=percentage,proto3" json:"percentage,omitempty"`
-	IgnoreMissingTaskQueues bool    `protobuf:"varint,4,opt,name=ignore_missing_task_queues,json=ignoreMissingTaskQueues,proto3" json:"ignore_missing_task_queues,omitempty"`
-	ConflictToken           []byte  `protobuf:"bytes,5,opt,name=conflict_token,json=conflictToken,proto3" json:"conflict_token,omitempty"`
+	state                   protoimpl.MessageState `protogen:"open.v1"`
+	Identity                string                 `protobuf:"bytes,1,opt,name=identity,proto3" json:"identity,omitempty"`
+	Version                 string                 `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
+	Percentage              float32                `protobuf:"fixed32,3,opt,name=percentage,proto3" json:"percentage,omitempty"`
+	IgnoreMissingTaskQueues bool                   `protobuf:"varint,4,opt,name=ignore_missing_task_queues,json=ignoreMissingTaskQueues,proto3" json:"ignore_missing_task_queues,omitempty"`
+	ConflictToken           []byte                 `protobuf:"bytes,5,opt,name=conflict_token,json=conflictToken,proto3" json:"conflict_token,omitempty"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
 }
 
 func (x *SetRampingVersionArgs) Reset() {
 	*x = SetRampingVersionArgs{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[33]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[35]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *SetRampingVersionArgs) String() string {
@@ -2169,8 +2159,8 @@ func (x *SetRampingVersionArgs) String() string {
 func (*SetRampingVersionArgs) ProtoMessage() {}
 
 func (x *SetRampingVersionArgs) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[33]
-	if protoimpl.UnsafeEnabled && x != nil {
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[35]
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -2182,7 +2172,7 @@ func (x *SetRampingVersionArgs) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetRampingVersionArgs.ProtoReflect.Descriptor instead.
 func (*SetRampingVersionArgs) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{33}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *SetRampingVersionArgs) GetIdentity() string {
@@ -2222,24 +2212,21 @@ func (x *SetRampingVersionArgs) GetConflictToken() []byte {
 
 // used as Worker Deployment activity input:
 type SyncVersionStateActivityArgs struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	DeploymentName string `protobuf:"bytes,1,opt,name=deployment_name,json=deploymentName,proto3" json:"deployment_name,omitempty"`
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	DeploymentName string                 `protobuf:"bytes,1,opt,name=deployment_name,json=deploymentName,proto3" json:"deployment_name,omitempty"`
 	// <deployment_name>.<build_id> or possibly just <version_id> in the future
-	Version    string                      `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
-	UpdateArgs *SyncVersionStateUpdateArgs `protobuf:"bytes,3,opt,name=update_args,json=updateArgs,proto3" json:"update_args,omitempty"`
-	RequestId  string                      `protobuf:"bytes,4,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	Version       string                      `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
+	UpdateArgs    *SyncVersionStateUpdateArgs `protobuf:"bytes,3,opt,name=update_args,json=updateArgs,proto3" json:"update_args,omitempty"`
+	RequestId     string                      `protobuf:"bytes,4,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SyncVersionStateActivityArgs) Reset() {
 	*x = SyncVersionStateActivityArgs{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[34]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[36]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *SyncVersionStateActivityArgs) String() string {
@@ -2249,8 +2236,8 @@ func (x *SyncVersionStateActivityArgs) String() string {
 func (*SyncVersionStateActivityArgs) ProtoMessage() {}
 
 func (x *SyncVersionStateActivityArgs) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[34]
-	if protoimpl.UnsafeEnabled && x != nil {
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[36]
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -2262,7 +2249,7 @@ func (x *SyncVersionStateActivityArgs) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SyncVersionStateActivityArgs.ProtoReflect.Descriptor instead.
 func (*SyncVersionStateActivityArgs) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{34}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *SyncVersionStateActivityArgs) GetDeploymentName() string {
@@ -2295,20 +2282,17 @@ func (x *SyncVersionStateActivityArgs) GetRequestId() string {
 
 // used as Worker Deployment activity result:
 type SyncVersionStateActivityResult struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	VersionState  *VersionLocalState     `protobuf:"bytes,1,opt,name=version_state,json=versionState,proto3" json:"version_state,omitempty"`
 	unknownFields protoimpl.UnknownFields
-
-	VersionState *VersionLocalState `protobuf:"bytes,1,opt,name=version_state,json=versionState,proto3" json:"version_state,omitempty"`
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SyncVersionStateActivityResult) Reset() {
 	*x = SyncVersionStateActivityResult{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[35]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[37]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *SyncVersionStateActivityResult) String() string {
@@ -2318,8 +2302,8 @@ func (x *SyncVersionStateActivityResult) String() string {
 func (*SyncVersionStateActivityResult) ProtoMessage() {}
 
 func (x *SyncVersionStateActivityResult) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[35]
-	if protoimpl.UnsafeEnabled && x != nil {
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[37]
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -2331,7 +2315,7 @@ func (x *SyncVersionStateActivityResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SyncVersionStateActivityResult.ProtoReflect.Descriptor instead.
 func (*SyncVersionStateActivityResult) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{35}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *SyncVersionStateActivityResult) GetVersionState() *VersionLocalState {
@@ -2343,21 +2327,18 @@ func (x *SyncVersionStateActivityResult) GetVersionState() *VersionLocalState {
 
 // used as Worker Deployment activity input:
 type IsVersionMissingTaskQueuesArgs struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	PrevCurrentVersion string `protobuf:"bytes,1,opt,name=prev_current_version,json=prevCurrentVersion,proto3" json:"prev_current_version,omitempty"`
-	NewCurrentVersion  string `protobuf:"bytes,2,opt,name=new_current_version,json=newCurrentVersion,proto3" json:"new_current_version,omitempty"`
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	PrevCurrentVersion string                 `protobuf:"bytes,1,opt,name=prev_current_version,json=prevCurrentVersion,proto3" json:"prev_current_version,omitempty"`
+	NewCurrentVersion  string                 `protobuf:"bytes,2,opt,name=new_current_version,json=newCurrentVersion,proto3" json:"new_current_version,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *IsVersionMissingTaskQueuesArgs) Reset() {
 	*x = IsVersionMissingTaskQueuesArgs{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[36]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[38]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *IsVersionMissingTaskQueuesArgs) String() string {
@@ -2367,8 +2348,8 @@ func (x *IsVersionMissingTaskQueuesArgs) String() string {
 func (*IsVersionMissingTaskQueuesArgs) ProtoMessage() {}
 
 func (x *IsVersionMissingTaskQueuesArgs) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[36]
-	if protoimpl.UnsafeEnabled && x != nil {
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[38]
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -2380,7 +2361,7 @@ func (x *IsVersionMissingTaskQueuesArgs) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IsVersionMissingTaskQueuesArgs.ProtoReflect.Descriptor instead.
 func (*IsVersionMissingTaskQueuesArgs) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{36}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *IsVersionMissingTaskQueuesArgs) GetPrevCurrentVersion() string {
@@ -2399,20 +2380,17 @@ func (x *IsVersionMissingTaskQueuesArgs) GetNewCurrentVersion() string {
 
 // used as Worker Deployment activity output:
 type IsVersionMissingTaskQueuesResult struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	IsMissingTaskQueues bool `protobuf:"varint,1,opt,name=is_missing_task_queues,json=isMissingTaskQueues,proto3" json:"is_missing_task_queues,omitempty"`
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	IsMissingTaskQueues bool                   `protobuf:"varint,1,opt,name=is_missing_task_queues,json=isMissingTaskQueues,proto3" json:"is_missing_task_queues,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *IsVersionMissingTaskQueuesResult) Reset() {
 	*x = IsVersionMissingTaskQueuesResult{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[37]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[39]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *IsVersionMissingTaskQueuesResult) String() string {
@@ -2422,8 +2400,8 @@ func (x *IsVersionMissingTaskQueuesResult) String() string {
 func (*IsVersionMissingTaskQueuesResult) ProtoMessage() {}
 
 func (x *IsVersionMissingTaskQueuesResult) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[37]
-	if protoimpl.UnsafeEnabled && x != nil {
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[39]
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -2435,7 +2413,7 @@ func (x *IsVersionMissingTaskQueuesResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IsVersionMissingTaskQueuesResult.ProtoReflect.Descriptor instead.
 func (*IsVersionMissingTaskQueuesResult) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{37}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *IsVersionMissingTaskQueuesResult) GetIsMissingTaskQueues() bool {
@@ -2447,22 +2425,19 @@ func (x *IsVersionMissingTaskQueuesResult) GetIsMissingTaskQueues() bool {
 
 // used as Worker Deployment workflow memo:
 type WorkerDeploymentWorkflowMemo struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
+	state          protoimpl.MessageState `protogen:"open.v1"`
 	DeploymentName string                 `protobuf:"bytes,1,opt,name=deployment_name,json=deploymentName,proto3" json:"deployment_name,omitempty"`
 	CreateTime     *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
 	RoutingConfig  *v1.RoutingConfig      `protobuf:"bytes,3,opt,name=routing_config,json=routingConfig,proto3" json:"routing_config,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *WorkerDeploymentWorkflowMemo) Reset() {
 	*x = WorkerDeploymentWorkflowMemo{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[38]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[40]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *WorkerDeploymentWorkflowMemo) String() string {
@@ -2472,8 +2447,8 @@ func (x *WorkerDeploymentWorkflowMemo) String() string {
 func (*WorkerDeploymentWorkflowMemo) ProtoMessage() {}
 
 func (x *WorkerDeploymentWorkflowMemo) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[38]
-	if protoimpl.UnsafeEnabled && x != nil {
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[40]
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -2485,7 +2460,7 @@ func (x *WorkerDeploymentWorkflowMemo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WorkerDeploymentWorkflowMemo.ProtoReflect.Descriptor instead.
 func (*WorkerDeploymentWorkflowMemo) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{38}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *WorkerDeploymentWorkflowMemo) GetDeploymentName() string {
@@ -2511,22 +2486,19 @@ func (x *WorkerDeploymentWorkflowMemo) GetRoutingConfig() *v1.RoutingConfig {
 
 // Subset of fields of WorkerDeploymentInfo returned in ListWorkerDeploymentsResponse
 type WorkerDeploymentSummary struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
+	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	CreateTime    *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
 	RoutingConfig *v1.RoutingConfig      `protobuf:"bytes,3,opt,name=routing_config,json=routingConfig,proto3" json:"routing_config,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *WorkerDeploymentSummary) Reset() {
 	*x = WorkerDeploymentSummary{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[39]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[41]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *WorkerDeploymentSummary) String() string {
@@ -2536,8 +2508,8 @@ func (x *WorkerDeploymentSummary) String() string {
 func (*WorkerDeploymentSummary) ProtoMessage() {}
 
 func (x *WorkerDeploymentSummary) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[39]
-	if protoimpl.UnsafeEnabled && x != nil {
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[41]
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -2549,7 +2521,7 @@ func (x *WorkerDeploymentSummary) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WorkerDeploymentSummary.ProtoReflect.Descriptor instead.
 func (*WorkerDeploymentSummary) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{39}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *WorkerDeploymentSummary) GetName() string {
@@ -2575,22 +2547,19 @@ func (x *WorkerDeploymentSummary) GetRoutingConfig() *v1.RoutingConfig {
 
 // Used as Worker Deployment Version workflow activity input:
 type AddVersionToWorkerDeploymentRequest struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	DeploymentName string                `protobuf:"bytes,1,opt,name=deployment_name,json=deploymentName,proto3" json:"deployment_name,omitempty"`
-	UpdateArgs     *AddVersionUpdateArgs `protobuf:"bytes,2,opt,name=update_args,json=updateArgs,proto3" json:"update_args,omitempty"`
-	RequestId      string                `protobuf:"bytes,3,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	DeploymentName string                 `protobuf:"bytes,1,opt,name=deployment_name,json=deploymentName,proto3" json:"deployment_name,omitempty"`
+	UpdateArgs     *AddVersionUpdateArgs  `protobuf:"bytes,2,opt,name=update_args,json=updateArgs,proto3" json:"update_args,omitempty"`
+	RequestId      string                 `protobuf:"bytes,3,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *AddVersionToWorkerDeploymentRequest) Reset() {
 	*x = AddVersionToWorkerDeploymentRequest{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[40]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[42]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *AddVersionToWorkerDeploymentRequest) String() string {
@@ -2600,8 +2569,8 @@ func (x *AddVersionToWorkerDeploymentRequest) String() string {
 func (*AddVersionToWorkerDeploymentRequest) ProtoMessage() {}
 
 func (x *AddVersionToWorkerDeploymentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[40]
-	if protoimpl.UnsafeEnabled && x != nil {
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[42]
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -2613,7 +2582,7 @@ func (x *AddVersionToWorkerDeploymentRequest) ProtoReflect() protoreflect.Messag
 
 // Deprecated: Use AddVersionToWorkerDeploymentRequest.ProtoReflect.Descriptor instead.
 func (*AddVersionToWorkerDeploymentRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{40}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *AddVersionToWorkerDeploymentRequest) GetDeploymentName() string {
@@ -2639,18 +2608,16 @@ func (x *AddVersionToWorkerDeploymentRequest) GetRequestId() string {
 
 // Used as Worker Deployment Version workflow activity output:
 type AddVersionToWorkerDeploymentResponse struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *AddVersionToWorkerDeploymentResponse) Reset() {
 	*x = AddVersionToWorkerDeploymentResponse{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[41]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[43]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *AddVersionToWorkerDeploymentResponse) String() string {
@@ -2660,8 +2627,8 @@ func (x *AddVersionToWorkerDeploymentResponse) String() string {
 func (*AddVersionToWorkerDeploymentResponse) ProtoMessage() {}
 
 func (x *AddVersionToWorkerDeploymentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[41]
-	if protoimpl.UnsafeEnabled && x != nil {
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[43]
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -2673,7 +2640,7 @@ func (x *AddVersionToWorkerDeploymentResponse) ProtoReflect() protoreflect.Messa
 
 // Deprecated: Use AddVersionToWorkerDeploymentResponse.ProtoReflect.Descriptor instead.
 func (*AddVersionToWorkerDeploymentResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{41}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{43}
 }
 
 // ////////////////////////////////////////////////////////////////////////
@@ -2682,21 +2649,18 @@ func (*AddVersionToWorkerDeploymentResponse) Descriptor() ([]byte, []int) {
 // Data for each deployment+task queue pair. This is stored in each deployment (for each task
 // queue), and synced to task queue user data (for each deployment).
 type TaskQueueData struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
+	state                 protoimpl.MessageState `protogen:"open.v1"`
 	FirstPollerTime       *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=first_poller_time,json=firstPollerTime,proto3" json:"first_poller_time,omitempty"`
 	LastBecameCurrentTime *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=last_became_current_time,json=lastBecameCurrentTime,proto3" json:"last_became_current_time,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
 }
 
 func (x *TaskQueueData) Reset() {
 	*x = TaskQueueData{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[42]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[44]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *TaskQueueData) String() string {
@@ -2706,8 +2670,8 @@ func (x *TaskQueueData) String() string {
 func (*TaskQueueData) ProtoMessage() {}
 
 func (x *TaskQueueData) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[42]
-	if protoimpl.UnsafeEnabled && x != nil {
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[44]
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -2719,7 +2683,7 @@ func (x *TaskQueueData) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TaskQueueData.ProtoReflect.Descriptor instead.
 func (*TaskQueueData) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{42}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *TaskQueueData) GetFirstPollerTime() *timestamppb.Timestamp {
@@ -2737,26 +2701,23 @@ func (x *TaskQueueData) GetLastBecameCurrentTime() *timestamppb.Timestamp {
 }
 
 type DeploymentLocalState struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
+	state                 protoimpl.MessageState                               `protogen:"open.v1"`
 	Deployment            *v1.Deployment                                       `protobuf:"bytes,1,opt,name=deployment,proto3" json:"deployment,omitempty"`
-	TaskQueueFamilies     map[string]*DeploymentLocalState_TaskQueueFamilyData `protobuf:"bytes,2,rep,name=task_queue_families,json=taskQueueFamilies,proto3" json:"task_queue_families,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+	TaskQueueFamilies     map[string]*DeploymentLocalState_TaskQueueFamilyData `protobuf:"bytes,2,rep,name=task_queue_families,json=taskQueueFamilies,proto3" json:"task_queue_families,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	IsCurrent             bool                                                 `protobuf:"varint,3,opt,name=is_current,json=isCurrent,proto3" json:"is_current,omitempty"`
 	LastBecameCurrentTime *timestamppb.Timestamp                               `protobuf:"bytes,6,opt,name=last_became_current_time,json=lastBecameCurrentTime,proto3" json:"last_became_current_time,omitempty"`
 	CreateTime            *timestamppb.Timestamp                               `protobuf:"bytes,4,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
-	Metadata              map[string]*v12.Payload                              `protobuf:"bytes,5,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+	Metadata              map[string]*v12.Payload                              `protobuf:"bytes,5,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	StartedSeriesWorkflow bool                                                 `protobuf:"varint,7,opt,name=started_series_workflow,json=startedSeriesWorkflow,proto3" json:"started_series_workflow,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
 }
 
 func (x *DeploymentLocalState) Reset() {
 	*x = DeploymentLocalState{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[43]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[45]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *DeploymentLocalState) String() string {
@@ -2766,8 +2727,8 @@ func (x *DeploymentLocalState) String() string {
 func (*DeploymentLocalState) ProtoMessage() {}
 
 func (x *DeploymentLocalState) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[43]
-	if protoimpl.UnsafeEnabled && x != nil {
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[45]
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -2779,7 +2740,7 @@ func (x *DeploymentLocalState) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeploymentLocalState.ProtoReflect.Descriptor instead.
 func (*DeploymentLocalState) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{43}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *DeploymentLocalState) GetDeployment() *v1.Deployment {
@@ -2833,22 +2794,19 @@ func (x *DeploymentLocalState) GetStartedSeriesWorkflow() bool {
 
 // used as deployment workflow input:
 type DeploymentWorkflowArgs struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	NamespaceName string                 `protobuf:"bytes,1,opt,name=namespace_name,json=namespaceName,proto3" json:"namespace_name,omitempty"`
+	NamespaceId   string                 `protobuf:"bytes,2,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
+	State         *DeploymentLocalState  `protobuf:"bytes,3,opt,name=state,proto3" json:"state,omitempty"`
 	unknownFields protoimpl.UnknownFields
-
-	NamespaceName string                `protobuf:"bytes,1,opt,name=namespace_name,json=namespaceName,proto3" json:"namespace_name,omitempty"`
-	NamespaceId   string                `protobuf:"bytes,2,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	State         *DeploymentLocalState `protobuf:"bytes,3,opt,name=state,proto3" json:"state,omitempty"`
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *DeploymentWorkflowArgs) Reset() {
 	*x = DeploymentWorkflowArgs{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[44]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[46]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *DeploymentWorkflowArgs) String() string {
@@ -2858,8 +2816,8 @@ func (x *DeploymentWorkflowArgs) String() string {
 func (*DeploymentWorkflowArgs) ProtoMessage() {}
 
 func (x *DeploymentWorkflowArgs) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[44]
-	if protoimpl.UnsafeEnabled && x != nil {
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[46]
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -2871,7 +2829,7 @@ func (x *DeploymentWorkflowArgs) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeploymentWorkflowArgs.ProtoReflect.Descriptor instead.
 func (*DeploymentWorkflowArgs) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{44}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *DeploymentWorkflowArgs) GetNamespaceName() string {
@@ -2897,23 +2855,20 @@ func (x *DeploymentWorkflowArgs) GetState() *DeploymentLocalState {
 
 // used as deployment series workflow input:
 type DeploymentSeriesWorkflowArgs struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	NamespaceName string                 `protobuf:"bytes,1,opt,name=namespace_name,json=namespaceName,proto3" json:"namespace_name,omitempty"`
+	NamespaceId   string                 `protobuf:"bytes,2,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
+	SeriesName    string                 `protobuf:"bytes,3,opt,name=series_name,json=seriesName,proto3" json:"series_name,omitempty"`
+	State         *SeriesLocalState      `protobuf:"bytes,4,opt,name=state,proto3" json:"state,omitempty"`
 	unknownFields protoimpl.UnknownFields
-
-	NamespaceName string            `protobuf:"bytes,1,opt,name=namespace_name,json=namespaceName,proto3" json:"namespace_name,omitempty"`
-	NamespaceId   string            `protobuf:"bytes,2,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	SeriesName    string            `protobuf:"bytes,3,opt,name=series_name,json=seriesName,proto3" json:"series_name,omitempty"`
-	State         *SeriesLocalState `protobuf:"bytes,4,opt,name=state,proto3" json:"state,omitempty"`
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *DeploymentSeriesWorkflowArgs) Reset() {
 	*x = DeploymentSeriesWorkflowArgs{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[45]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[47]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *DeploymentSeriesWorkflowArgs) String() string {
@@ -2923,8 +2878,8 @@ func (x *DeploymentSeriesWorkflowArgs) String() string {
 func (*DeploymentSeriesWorkflowArgs) ProtoMessage() {}
 
 func (x *DeploymentSeriesWorkflowArgs) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[45]
-	if protoimpl.UnsafeEnabled && x != nil {
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[47]
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -2936,7 +2891,7 @@ func (x *DeploymentSeriesWorkflowArgs) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeploymentSeriesWorkflowArgs.ProtoReflect.Descriptor instead.
 func (*DeploymentSeriesWorkflowArgs) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{45}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *DeploymentSeriesWorkflowArgs) GetNamespaceName() string {
@@ -2968,21 +2923,18 @@ func (x *DeploymentSeriesWorkflowArgs) GetState() *SeriesLocalState {
 }
 
 type SeriesLocalState struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
+	state              protoimpl.MessageState `protogen:"open.v1"`
 	CurrentBuildId     string                 `protobuf:"bytes,1,opt,name=current_build_id,json=currentBuildId,proto3" json:"current_build_id,omitempty"`
 	CurrentChangedTime *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=current_changed_time,json=currentChangedTime,proto3" json:"current_changed_time,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *SeriesLocalState) Reset() {
 	*x = SeriesLocalState{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[46]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[48]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *SeriesLocalState) String() string {
@@ -2992,8 +2944,8 @@ func (x *SeriesLocalState) String() string {
 func (*SeriesLocalState) ProtoMessage() {}
 
 func (x *SeriesLocalState) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[46]
-	if protoimpl.UnsafeEnabled && x != nil {
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[48]
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -3005,7 +2957,7 @@ func (x *SeriesLocalState) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SeriesLocalState.ProtoReflect.Descriptor instead.
 func (*SeriesLocalState) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{46}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *SeriesLocalState) GetCurrentBuildId() string {
@@ -3024,23 +2976,20 @@ func (x *SeriesLocalState) GetCurrentChangedTime() *timestamppb.Timestamp {
 
 // used as deployment workflow update input:
 type RegisterWorkerInDeploymentArgs struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
+	state           protoimpl.MessageState `protogen:"open.v1"`
 	TaskQueueName   string                 `protobuf:"bytes,1,opt,name=task_queue_name,json=taskQueueName,proto3" json:"task_queue_name,omitempty"`
 	TaskQueueType   v11.TaskQueueType      `protobuf:"varint,2,opt,name=task_queue_type,json=taskQueueType,proto3,enum=temporal.api.enums.v1.TaskQueueType" json:"task_queue_type,omitempty"`
 	FirstPollerTime *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=first_poller_time,json=firstPollerTime,proto3" json:"first_poller_time,omitempty"`
 	MaxTaskQueues   int32                  `protobuf:"varint,4,opt,name=max_task_queues,json=maxTaskQueues,proto3" json:"max_task_queues,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *RegisterWorkerInDeploymentArgs) Reset() {
 	*x = RegisterWorkerInDeploymentArgs{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[47]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[49]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *RegisterWorkerInDeploymentArgs) String() string {
@@ -3050,8 +2999,8 @@ func (x *RegisterWorkerInDeploymentArgs) String() string {
 func (*RegisterWorkerInDeploymentArgs) ProtoMessage() {}
 
 func (x *RegisterWorkerInDeploymentArgs) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[47]
-	if protoimpl.UnsafeEnabled && x != nil {
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[49]
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -3063,7 +3012,7 @@ func (x *RegisterWorkerInDeploymentArgs) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegisterWorkerInDeploymentArgs.ProtoReflect.Descriptor instead.
 func (*RegisterWorkerInDeploymentArgs) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{47}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *RegisterWorkerInDeploymentArgs) GetTaskQueueName() string {
@@ -3096,23 +3045,20 @@ func (x *RegisterWorkerInDeploymentArgs) GetMaxTaskQueues() int32 {
 
 // used as deployment series workflow update input (sent from series workflow):
 type SyncDeploymentStateArgs struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
+	state      protoimpl.MessageState              `protogen:"open.v1"`
 	SetCurrent *SyncDeploymentStateArgs_SetCurrent `protobuf:"bytes,1,opt,name=set_current,json=setCurrent,proto3" json:"set_current,omitempty"`
 	// currently, update_metadata will only be set if set_current.last_became_current_time is
 	// present. this could change in the future.
 	UpdateMetadata *v1.UpdateDeploymentMetadata `protobuf:"bytes,2,opt,name=update_metadata,json=updateMetadata,proto3" json:"update_metadata,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *SyncDeploymentStateArgs) Reset() {
 	*x = SyncDeploymentStateArgs{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[48]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[50]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *SyncDeploymentStateArgs) String() string {
@@ -3122,8 +3068,8 @@ func (x *SyncDeploymentStateArgs) String() string {
 func (*SyncDeploymentStateArgs) ProtoMessage() {}
 
 func (x *SyncDeploymentStateArgs) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[48]
-	if protoimpl.UnsafeEnabled && x != nil {
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[50]
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -3135,7 +3081,7 @@ func (x *SyncDeploymentStateArgs) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SyncDeploymentStateArgs.ProtoReflect.Descriptor instead.
 func (*SyncDeploymentStateArgs) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{48}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *SyncDeploymentStateArgs) GetSetCurrent() *SyncDeploymentStateArgs_SetCurrent {
@@ -3154,20 +3100,17 @@ func (x *SyncDeploymentStateArgs) GetUpdateMetadata() *v1.UpdateDeploymentMetada
 
 // used as deployment series workflow update response (sent from series workflow):
 type SyncDeploymentStateResponse struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	DeploymentLocalState *DeploymentLocalState `protobuf:"bytes,1,opt,name=deployment_local_state,json=deploymentLocalState,proto3" json:"deployment_local_state,omitempty"`
+	state                protoimpl.MessageState `protogen:"open.v1"`
+	DeploymentLocalState *DeploymentLocalState  `protobuf:"bytes,1,opt,name=deployment_local_state,json=deploymentLocalState,proto3" json:"deployment_local_state,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *SyncDeploymentStateResponse) Reset() {
 	*x = SyncDeploymentStateResponse{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[49]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[51]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *SyncDeploymentStateResponse) String() string {
@@ -3177,8 +3120,8 @@ func (x *SyncDeploymentStateResponse) String() string {
 func (*SyncDeploymentStateResponse) ProtoMessage() {}
 
 func (x *SyncDeploymentStateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[49]
-	if protoimpl.UnsafeEnabled && x != nil {
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[51]
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -3190,7 +3133,7 @@ func (x *SyncDeploymentStateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SyncDeploymentStateResponse.ProtoReflect.Descriptor instead.
 func (*SyncDeploymentStateResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{49}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *SyncDeploymentStateResponse) GetDeploymentLocalState() *DeploymentLocalState {
@@ -3202,20 +3145,17 @@ func (x *SyncDeploymentStateResponse) GetDeploymentLocalState() *DeploymentLocal
 
 // used as deployment workflow query response:
 type QueryDescribeDeploymentResponse struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	DeploymentLocalState *DeploymentLocalState `protobuf:"bytes,1,opt,name=deployment_local_state,json=deploymentLocalState,proto3" json:"deployment_local_state,omitempty"`
+	state                protoimpl.MessageState `protogen:"open.v1"`
+	DeploymentLocalState *DeploymentLocalState  `protobuf:"bytes,1,opt,name=deployment_local_state,json=deploymentLocalState,proto3" json:"deployment_local_state,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *QueryDescribeDeploymentResponse) Reset() {
 	*x = QueryDescribeDeploymentResponse{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[50]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[52]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *QueryDescribeDeploymentResponse) String() string {
@@ -3225,8 +3165,8 @@ func (x *QueryDescribeDeploymentResponse) String() string {
 func (*QueryDescribeDeploymentResponse) ProtoMessage() {}
 
 func (x *QueryDescribeDeploymentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[50]
-	if protoimpl.UnsafeEnabled && x != nil {
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[52]
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -3238,7 +3178,7 @@ func (x *QueryDescribeDeploymentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QueryDescribeDeploymentResponse.ProtoReflect.Descriptor instead.
 func (*QueryDescribeDeploymentResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{50}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *QueryDescribeDeploymentResponse) GetDeploymentLocalState() *DeploymentLocalState {
@@ -3250,22 +3190,19 @@ func (x *QueryDescribeDeploymentResponse) GetDeploymentLocalState() *DeploymentL
 
 // used as deployment workflow memo:
 type DeploymentWorkflowMemo struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
+	state               protoimpl.MessageState `protogen:"open.v1"`
 	Deployment          *v1.Deployment         `protobuf:"bytes,1,opt,name=deployment,proto3" json:"deployment,omitempty"`
 	CreateTime          *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
 	IsCurrentDeployment bool                   `protobuf:"varint,3,opt,name=is_current_deployment,json=isCurrentDeployment,proto3" json:"is_current_deployment,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *DeploymentWorkflowMemo) Reset() {
 	*x = DeploymentWorkflowMemo{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[51]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[53]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *DeploymentWorkflowMemo) String() string {
@@ -3275,8 +3212,8 @@ func (x *DeploymentWorkflowMemo) String() string {
 func (*DeploymentWorkflowMemo) ProtoMessage() {}
 
 func (x *DeploymentWorkflowMemo) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[51]
-	if protoimpl.UnsafeEnabled && x != nil {
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[53]
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -3288,7 +3225,7 @@ func (x *DeploymentWorkflowMemo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeploymentWorkflowMemo.ProtoReflect.Descriptor instead.
 func (*DeploymentWorkflowMemo) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{51}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *DeploymentWorkflowMemo) GetDeployment() *v1.Deployment {
@@ -3314,21 +3251,18 @@ func (x *DeploymentWorkflowMemo) GetIsCurrentDeployment() bool {
 
 // used as deployment workflow activity input:
 type StartDeploymentSeriesRequest struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SeriesName    string                 `protobuf:"bytes,1,opt,name=series_name,json=seriesName,proto3" json:"series_name,omitempty"`
+	RequestId     string                 `protobuf:"bytes,2,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
-
-	SeriesName string `protobuf:"bytes,1,opt,name=series_name,json=seriesName,proto3" json:"series_name,omitempty"`
-	RequestId  string `protobuf:"bytes,2,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *StartDeploymentSeriesRequest) Reset() {
 	*x = StartDeploymentSeriesRequest{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[52]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[54]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *StartDeploymentSeriesRequest) String() string {
@@ -3338,8 +3272,8 @@ func (x *StartDeploymentSeriesRequest) String() string {
 func (*StartDeploymentSeriesRequest) ProtoMessage() {}
 
 func (x *StartDeploymentSeriesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[52]
-	if protoimpl.UnsafeEnabled && x != nil {
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[54]
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -3351,7 +3285,7 @@ func (x *StartDeploymentSeriesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartDeploymentSeriesRequest.ProtoReflect.Descriptor instead.
 func (*StartDeploymentSeriesRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{52}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{54}
 }
 
 func (x *StartDeploymentSeriesRequest) GetSeriesName() string {
@@ -3370,21 +3304,18 @@ func (x *StartDeploymentSeriesRequest) GetRequestId() string {
 
 // used as deployment workflow activity input:
 type SyncUserDataRequest struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
+	state         protoimpl.MessageState              `protogen:"open.v1"`
+	Deployment    *v1.Deployment                      `protobuf:"bytes,1,opt,name=deployment,proto3" json:"deployment,omitempty"`
+	Sync          []*SyncUserDataRequest_SyncUserData `protobuf:"bytes,2,rep,name=sync,proto3" json:"sync,omitempty"`
 	unknownFields protoimpl.UnknownFields
-
-	Deployment *v1.Deployment                      `protobuf:"bytes,1,opt,name=deployment,proto3" json:"deployment,omitempty"`
-	Sync       []*SyncUserDataRequest_SyncUserData `protobuf:"bytes,2,rep,name=sync,proto3" json:"sync,omitempty"`
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SyncUserDataRequest) Reset() {
 	*x = SyncUserDataRequest{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[53]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[55]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *SyncUserDataRequest) String() string {
@@ -3394,8 +3325,8 @@ func (x *SyncUserDataRequest) String() string {
 func (*SyncUserDataRequest) ProtoMessage() {}
 
 func (x *SyncUserDataRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[53]
-	if protoimpl.UnsafeEnabled && x != nil {
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[55]
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -3407,7 +3338,7 @@ func (x *SyncUserDataRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SyncUserDataRequest.ProtoReflect.Descriptor instead.
 func (*SyncUserDataRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{53}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{55}
 }
 
 func (x *SyncUserDataRequest) GetDeployment() *v1.Deployment {
@@ -3426,20 +3357,17 @@ func (x *SyncUserDataRequest) GetSync() []*SyncUserDataRequest_SyncUserData {
 
 // used as deployment workflow activity output:
 type SyncUserDataResponse struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	TaskQueueMaxVersions map[string]int64 `protobuf:"bytes,1,rep,name=task_queue_max_versions,json=taskQueueMaxVersions,proto3" json:"task_queue_max_versions,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"varint,2,opt,name=value,proto3"`
+	state                protoimpl.MessageState `protogen:"open.v1"`
+	TaskQueueMaxVersions map[string]int64       `protobuf:"bytes,1,rep,name=task_queue_max_versions,json=taskQueueMaxVersions,proto3" json:"task_queue_max_versions,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *SyncUserDataResponse) Reset() {
 	*x = SyncUserDataResponse{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[54]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[56]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *SyncUserDataResponse) String() string {
@@ -3449,8 +3377,8 @@ func (x *SyncUserDataResponse) String() string {
 func (*SyncUserDataResponse) ProtoMessage() {}
 
 func (x *SyncUserDataResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[54]
-	if protoimpl.UnsafeEnabled && x != nil {
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[56]
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -3462,7 +3390,7 @@ func (x *SyncUserDataResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SyncUserDataResponse.ProtoReflect.Descriptor instead.
 func (*SyncUserDataResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{54}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{56}
 }
 
 func (x *SyncUserDataResponse) GetTaskQueueMaxVersions() map[string]int64 {
@@ -3474,20 +3402,17 @@ func (x *SyncUserDataResponse) GetTaskQueueMaxVersions() map[string]int64 {
 
 // used as deployment workflow activity input:
 type CheckUserDataPropagationRequest struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	TaskQueueMaxVersions map[string]int64 `protobuf:"bytes,1,rep,name=task_queue_max_versions,json=taskQueueMaxVersions,proto3" json:"task_queue_max_versions,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"varint,2,opt,name=value,proto3"`
+	state                protoimpl.MessageState `protogen:"open.v1"`
+	TaskQueueMaxVersions map[string]int64       `protobuf:"bytes,1,rep,name=task_queue_max_versions,json=taskQueueMaxVersions,proto3" json:"task_queue_max_versions,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *CheckUserDataPropagationRequest) Reset() {
 	*x = CheckUserDataPropagationRequest{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[55]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[57]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *CheckUserDataPropagationRequest) String() string {
@@ -3497,8 +3422,8 @@ func (x *CheckUserDataPropagationRequest) String() string {
 func (*CheckUserDataPropagationRequest) ProtoMessage() {}
 
 func (x *CheckUserDataPropagationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[55]
-	if protoimpl.UnsafeEnabled && x != nil {
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[57]
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -3510,7 +3435,7 @@ func (x *CheckUserDataPropagationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CheckUserDataPropagationRequest.ProtoReflect.Descriptor instead.
 func (*CheckUserDataPropagationRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{55}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{57}
 }
 
 func (x *CheckUserDataPropagationRequest) GetTaskQueueMaxVersions() map[string]int64 {
@@ -3522,23 +3447,20 @@ func (x *CheckUserDataPropagationRequest) GetTaskQueueMaxVersions() map[string]i
 
 // used as deployment series workflow update input:
 type SetCurrentDeploymentArgs struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
+	state          protoimpl.MessageState       `protogen:"open.v1"`
 	Identity       string                       `protobuf:"bytes,1,opt,name=identity,proto3" json:"identity,omitempty"`
 	BuildId        string                       `protobuf:"bytes,2,opt,name=build_id,json=buildId,proto3" json:"build_id,omitempty"`
 	UpdateMetadata *v1.UpdateDeploymentMetadata `protobuf:"bytes,3,opt,name=update_metadata,json=updateMetadata,proto3" json:"update_metadata,omitempty"`
 	RequestId      string                       `protobuf:"bytes,4,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *SetCurrentDeploymentArgs) Reset() {
 	*x = SetCurrentDeploymentArgs{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[56]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[58]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *SetCurrentDeploymentArgs) String() string {
@@ -3548,8 +3470,8 @@ func (x *SetCurrentDeploymentArgs) String() string {
 func (*SetCurrentDeploymentArgs) ProtoMessage() {}
 
 func (x *SetCurrentDeploymentArgs) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[56]
-	if protoimpl.UnsafeEnabled && x != nil {
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[58]
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -3561,7 +3483,7 @@ func (x *SetCurrentDeploymentArgs) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetCurrentDeploymentArgs.ProtoReflect.Descriptor instead.
 func (*SetCurrentDeploymentArgs) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{56}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{58}
 }
 
 func (x *SetCurrentDeploymentArgs) GetIdentity() string {
@@ -3594,21 +3516,18 @@ func (x *SetCurrentDeploymentArgs) GetRequestId() string {
 
 // used as deployment series update response:
 type SetCurrentDeploymentResponse struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	CurrentDeploymentState  *DeploymentLocalState `protobuf:"bytes,1,opt,name=current_deployment_state,json=currentDeploymentState,proto3" json:"current_deployment_state,omitempty"`
-	PreviousDeploymentState *DeploymentLocalState `protobuf:"bytes,2,opt,name=previous_deployment_state,json=previousDeploymentState,proto3" json:"previous_deployment_state,omitempty"`
+	state                   protoimpl.MessageState `protogen:"open.v1"`
+	CurrentDeploymentState  *DeploymentLocalState  `protobuf:"bytes,1,opt,name=current_deployment_state,json=currentDeploymentState,proto3" json:"current_deployment_state,omitempty"`
+	PreviousDeploymentState *DeploymentLocalState  `protobuf:"bytes,2,opt,name=previous_deployment_state,json=previousDeploymentState,proto3" json:"previous_deployment_state,omitempty"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
 }
 
 func (x *SetCurrentDeploymentResponse) Reset() {
 	*x = SetCurrentDeploymentResponse{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[57]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[59]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *SetCurrentDeploymentResponse) String() string {
@@ -3618,8 +3537,8 @@ func (x *SetCurrentDeploymentResponse) String() string {
 func (*SetCurrentDeploymentResponse) ProtoMessage() {}
 
 func (x *SetCurrentDeploymentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[57]
-	if protoimpl.UnsafeEnabled && x != nil {
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[59]
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -3631,7 +3550,7 @@ func (x *SetCurrentDeploymentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetCurrentDeploymentResponse.ProtoReflect.Descriptor instead.
 func (*SetCurrentDeploymentResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{57}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{59}
 }
 
 func (x *SetCurrentDeploymentResponse) GetCurrentDeploymentState() *DeploymentLocalState {
@@ -3650,22 +3569,19 @@ func (x *SetCurrentDeploymentResponse) GetPreviousDeploymentState() *DeploymentL
 
 // used as deployment series activity input:
 type SyncDeploymentStateActivityArgs struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
+	state         protoimpl.MessageState   `protogen:"open.v1"`
+	Deployment    *v1.Deployment           `protobuf:"bytes,1,opt,name=deployment,proto3" json:"deployment,omitempty"`
+	Args          *SyncDeploymentStateArgs `protobuf:"bytes,2,opt,name=args,proto3" json:"args,omitempty"`
+	RequestId     string                   `protobuf:"bytes,3,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
-
-	Deployment *v1.Deployment           `protobuf:"bytes,1,opt,name=deployment,proto3" json:"deployment,omitempty"`
-	Args       *SyncDeploymentStateArgs `protobuf:"bytes,2,opt,name=args,proto3" json:"args,omitempty"`
-	RequestId  string                   `protobuf:"bytes,3,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SyncDeploymentStateActivityArgs) Reset() {
 	*x = SyncDeploymentStateActivityArgs{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[58]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[60]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *SyncDeploymentStateActivityArgs) String() string {
@@ -3675,8 +3591,8 @@ func (x *SyncDeploymentStateActivityArgs) String() string {
 func (*SyncDeploymentStateActivityArgs) ProtoMessage() {}
 
 func (x *SyncDeploymentStateActivityArgs) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[58]
-	if protoimpl.UnsafeEnabled && x != nil {
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[60]
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -3688,7 +3604,7 @@ func (x *SyncDeploymentStateActivityArgs) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SyncDeploymentStateActivityArgs.ProtoReflect.Descriptor instead.
 func (*SyncDeploymentStateActivityArgs) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{58}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{60}
 }
 
 func (x *SyncDeploymentStateActivityArgs) GetDeployment() *v1.Deployment {
@@ -3714,20 +3630,17 @@ func (x *SyncDeploymentStateActivityArgs) GetRequestId() string {
 
 // used as deployment series activity result:
 type SyncDeploymentStateActivityResult struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	State         *DeploymentLocalState  `protobuf:"bytes,1,opt,name=state,proto3" json:"state,omitempty"`
 	unknownFields protoimpl.UnknownFields
-
-	State *DeploymentLocalState `protobuf:"bytes,1,opt,name=state,proto3" json:"state,omitempty"`
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SyncDeploymentStateActivityResult) Reset() {
 	*x = SyncDeploymentStateActivityResult{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[59]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[61]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *SyncDeploymentStateActivityResult) String() string {
@@ -3737,8 +3650,8 @@ func (x *SyncDeploymentStateActivityResult) String() string {
 func (*SyncDeploymentStateActivityResult) ProtoMessage() {}
 
 func (x *SyncDeploymentStateActivityResult) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[59]
-	if protoimpl.UnsafeEnabled && x != nil {
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[61]
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -3750,7 +3663,7 @@ func (x *SyncDeploymentStateActivityResult) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use SyncDeploymentStateActivityResult.ProtoReflect.Descriptor instead.
 func (*SyncDeploymentStateActivityResult) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{59}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{61}
 }
 
 func (x *SyncDeploymentStateActivityResult) GetState() *DeploymentLocalState {
@@ -3762,22 +3675,19 @@ func (x *SyncDeploymentStateActivityResult) GetState() *DeploymentLocalState {
 
 // used as deployment series workflow memo:
 type DeploymentSeriesWorkflowMemo struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
+	state              protoimpl.MessageState `protogen:"open.v1"`
 	SeriesName         string                 `protobuf:"bytes,1,opt,name=series_name,json=seriesName,proto3" json:"series_name,omitempty"`
 	CurrentBuildId     string                 `protobuf:"bytes,2,opt,name=current_build_id,json=currentBuildId,proto3" json:"current_build_id,omitempty"`
 	CurrentChangedTime *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=current_changed_time,json=currentChangedTime,proto3" json:"current_changed_time,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *DeploymentSeriesWorkflowMemo) Reset() {
 	*x = DeploymentSeriesWorkflowMemo{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[60]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[62]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *DeploymentSeriesWorkflowMemo) String() string {
@@ -3787,8 +3697,8 @@ func (x *DeploymentSeriesWorkflowMemo) String() string {
 func (*DeploymentSeriesWorkflowMemo) ProtoMessage() {}
 
 func (x *DeploymentSeriesWorkflowMemo) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[60]
-	if protoimpl.UnsafeEnabled && x != nil {
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[62]
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -3800,7 +3710,7 @@ func (x *DeploymentSeriesWorkflowMemo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeploymentSeriesWorkflowMemo.ProtoReflect.Descriptor instead.
 func (*DeploymentSeriesWorkflowMemo) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{60}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{62}
 }
 
 func (x *DeploymentSeriesWorkflowMemo) GetSeriesName() string {
@@ -3825,21 +3735,18 @@ func (x *DeploymentSeriesWorkflowMemo) GetCurrentChangedTime() *timestamppb.Time
 }
 
 type VersionLocalState_TaskQueueFamilyData struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
+	state protoimpl.MessageState `protogen:"open.v1"`
 	// Key: Task Queue Type
-	TaskQueues map[int32]*TaskQueueVersionData `protobuf:"bytes,1,rep,name=task_queues,json=taskQueues,proto3" json:"task_queues,omitempty" protobuf_key:"varint,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+	TaskQueues    map[int32]*TaskQueueVersionData `protobuf:"bytes,1,rep,name=task_queues,json=taskQueues,proto3" json:"task_queues,omitempty" protobuf_key:"varint,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *VersionLocalState_TaskQueueFamilyData) Reset() {
 	*x = VersionLocalState_TaskQueueFamilyData{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[62]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[64]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *VersionLocalState_TaskQueueFamilyData) String() string {
@@ -3849,8 +3756,8 @@ func (x *VersionLocalState_TaskQueueFamilyData) String() string {
 func (*VersionLocalState_TaskQueueFamilyData) ProtoMessage() {}
 
 func (x *VersionLocalState_TaskQueueFamilyData) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[62]
-	if protoimpl.UnsafeEnabled && x != nil {
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[64]
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -3873,22 +3780,19 @@ func (x *VersionLocalState_TaskQueueFamilyData) GetTaskQueues() map[int32]*TaskQ
 }
 
 type SyncDeploymentVersionUserDataRequest_SyncUserData struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Types         []v11.TaskQueueType    `protobuf:"varint,2,rep,packed,name=types,proto3,enum=temporal.api.enums.v1.TaskQueueType" json:"types,omitempty"`
+	Data          *DeploymentVersionData `protobuf:"bytes,3,opt,name=data,proto3" json:"data,omitempty"`
 	unknownFields protoimpl.UnknownFields
-
-	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Types []v11.TaskQueueType    `protobuf:"varint,2,rep,packed,name=types,proto3,enum=temporal.api.enums.v1.TaskQueueType" json:"types,omitempty"`
-	Data  *DeploymentVersionData `protobuf:"bytes,3,opt,name=data,proto3" json:"data,omitempty"`
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SyncDeploymentVersionUserDataRequest_SyncUserData) Reset() {
 	*x = SyncDeploymentVersionUserDataRequest_SyncUserData{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[65]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[67]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *SyncDeploymentVersionUserDataRequest_SyncUserData) String() string {
@@ -3898,8 +3802,8 @@ func (x *SyncDeploymentVersionUserDataRequest_SyncUserData) String() string {
 func (*SyncDeploymentVersionUserDataRequest_SyncUserData) ProtoMessage() {}
 
 func (x *SyncDeploymentVersionUserDataRequest_SyncUserData) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[65]
-	if protoimpl.UnsafeEnabled && x != nil {
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[67]
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -3911,7 +3815,7 @@ func (x *SyncDeploymentVersionUserDataRequest_SyncUserData) ProtoReflect() proto
 
 // Deprecated: Use SyncDeploymentVersionUserDataRequest_SyncUserData.ProtoReflect.Descriptor instead.
 func (*SyncDeploymentVersionUserDataRequest_SyncUserData) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{19, 0}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{21, 0}
 }
 
 func (x *SyncDeploymentVersionUserDataRequest_SyncUserData) GetName() string {
@@ -3936,20 +3840,17 @@ func (x *SyncDeploymentVersionUserDataRequest_SyncUserData) GetData() *Deploymen
 }
 
 type CheckTaskQueuesHavePollersActivityArgs_TaskQueueTypes struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Types         []v11.TaskQueueType    `protobuf:"varint,1,rep,packed,name=types,proto3,enum=temporal.api.enums.v1.TaskQueueType" json:"types,omitempty"`
 	unknownFields protoimpl.UnknownFields
-
-	Types []v11.TaskQueueType `protobuf:"varint,1,rep,packed,name=types,proto3,enum=temporal.api.enums.v1.TaskQueueType" json:"types,omitempty"`
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CheckTaskQueuesHavePollersActivityArgs_TaskQueueTypes) Reset() {
 	*x = CheckTaskQueuesHavePollersActivityArgs_TaskQueueTypes{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[71]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[73]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *CheckTaskQueuesHavePollersActivityArgs_TaskQueueTypes) String() string {
@@ -3959,8 +3860,8 @@ func (x *CheckTaskQueuesHavePollersActivityArgs_TaskQueueTypes) String() string 
 func (*CheckTaskQueuesHavePollersActivityArgs_TaskQueueTypes) ProtoMessage() {}
 
 func (x *CheckTaskQueuesHavePollersActivityArgs_TaskQueueTypes) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[71]
-	if protoimpl.UnsafeEnabled && x != nil {
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[73]
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -3972,7 +3873,7 @@ func (x *CheckTaskQueuesHavePollersActivityArgs_TaskQueueTypes) ProtoReflect() p
 
 // Deprecated: Use CheckTaskQueuesHavePollersActivityArgs_TaskQueueTypes.ProtoReflect.Descriptor instead.
 func (*CheckTaskQueuesHavePollersActivityArgs_TaskQueueTypes) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{30, 1}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{32, 1}
 }
 
 func (x *CheckTaskQueuesHavePollersActivityArgs_TaskQueueTypes) GetTypes() []v11.TaskQueueType {
@@ -3983,23 +3884,20 @@ func (x *CheckTaskQueuesHavePollersActivityArgs_TaskQueueTypes) GetTypes() []v11
 }
 
 type DeploymentLocalState_TaskQueueFamilyData struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
+	state protoimpl.MessageState `protogen:"open.v1"`
 	// Key: enums.TaskQueueType, Value: TaskQueueData
 	// All fields in TaskQueueData are valid except last_became_current_time, the source of
 	// truth for that is the value at the root of DeploymentLocalState.
-	TaskQueues map[int32]*TaskQueueData `protobuf:"bytes,1,rep,name=task_queues,json=taskQueues,proto3" json:"task_queues,omitempty" protobuf_key:"varint,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+	TaskQueues    map[int32]*TaskQueueData `protobuf:"bytes,1,rep,name=task_queues,json=taskQueues,proto3" json:"task_queues,omitempty" protobuf_key:"varint,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *DeploymentLocalState_TaskQueueFamilyData) Reset() {
 	*x = DeploymentLocalState_TaskQueueFamilyData{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[74]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[76]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *DeploymentLocalState_TaskQueueFamilyData) String() string {
@@ -4009,8 +3907,8 @@ func (x *DeploymentLocalState_TaskQueueFamilyData) String() string {
 func (*DeploymentLocalState_TaskQueueFamilyData) ProtoMessage() {}
 
 func (x *DeploymentLocalState_TaskQueueFamilyData) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[74]
-	if protoimpl.UnsafeEnabled && x != nil {
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[76]
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -4022,7 +3920,7 @@ func (x *DeploymentLocalState_TaskQueueFamilyData) ProtoReflect() protoreflect.M
 
 // Deprecated: Use DeploymentLocalState_TaskQueueFamilyData.ProtoReflect.Descriptor instead.
 func (*DeploymentLocalState_TaskQueueFamilyData) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{43, 2}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{45, 2}
 }
 
 func (x *DeploymentLocalState_TaskQueueFamilyData) GetTaskQueues() map[int32]*TaskQueueData {
@@ -4033,23 +3931,20 @@ func (x *DeploymentLocalState_TaskQueueFamilyData) GetTaskQueues() map[int32]*Ta
 }
 
 type SyncDeploymentStateArgs_SetCurrent struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
+	state protoimpl.MessageState `protogen:"open.v1"`
 	// If last_became_current_time is present, then set the deployment's
 	// last_became_current_time to it and set is_current true. If it's missing,
 	// set is_current false.
 	LastBecameCurrentTime *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=last_became_current_time,json=lastBecameCurrentTime,proto3" json:"last_became_current_time,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
 }
 
 func (x *SyncDeploymentStateArgs_SetCurrent) Reset() {
 	*x = SyncDeploymentStateArgs_SetCurrent{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[76]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[78]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *SyncDeploymentStateArgs_SetCurrent) String() string {
@@ -4059,8 +3954,8 @@ func (x *SyncDeploymentStateArgs_SetCurrent) String() string {
 func (*SyncDeploymentStateArgs_SetCurrent) ProtoMessage() {}
 
 func (x *SyncDeploymentStateArgs_SetCurrent) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[76]
-	if protoimpl.UnsafeEnabled && x != nil {
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[78]
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -4072,7 +3967,7 @@ func (x *SyncDeploymentStateArgs_SetCurrent) ProtoReflect() protoreflect.Message
 
 // Deprecated: Use SyncDeploymentStateArgs_SetCurrent.ProtoReflect.Descriptor instead.
 func (*SyncDeploymentStateArgs_SetCurrent) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{48, 0}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{50, 0}
 }
 
 func (x *SyncDeploymentStateArgs_SetCurrent) GetLastBecameCurrentTime() *timestamppb.Timestamp {
@@ -4083,22 +3978,19 @@ func (x *SyncDeploymentStateArgs_SetCurrent) GetLastBecameCurrentTime() *timesta
 }
 
 type SyncUserDataRequest_SyncUserData struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Type          v11.TaskQueueType      `protobuf:"varint,2,opt,name=type,proto3,enum=temporal.api.enums.v1.TaskQueueType" json:"type,omitempty"`
+	Data          *TaskQueueData         `protobuf:"bytes,3,opt,name=data,proto3" json:"data,omitempty"`
 	unknownFields protoimpl.UnknownFields
-
-	Name string            `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Type v11.TaskQueueType `protobuf:"varint,2,opt,name=type,proto3,enum=temporal.api.enums.v1.TaskQueueType" json:"type,omitempty"`
-	Data *TaskQueueData    `protobuf:"bytes,3,opt,name=data,proto3" json:"data,omitempty"`
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SyncUserDataRequest_SyncUserData) Reset() {
 	*x = SyncUserDataRequest_SyncUserData{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[77]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[79]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *SyncUserDataRequest_SyncUserData) String() string {
@@ -4108,8 +4000,8 @@ func (x *SyncUserDataRequest_SyncUserData) String() string {
 func (*SyncUserDataRequest_SyncUserData) ProtoMessage() {}
 
 func (x *SyncUserDataRequest_SyncUserData) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[77]
-	if protoimpl.UnsafeEnabled && x != nil {
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[79]
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -4121,7 +4013,7 @@ func (x *SyncUserDataRequest_SyncUserData) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SyncUserDataRequest_SyncUserData.ProtoReflect.Descriptor instead.
 func (*SyncUserDataRequest_SyncUserData) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{53, 0}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{55, 0}
 }
 
 func (x *SyncUserDataRequest_SyncUserData) GetName() string {
@@ -4147,1118 +4039,534 @@ func (x *SyncUserDataRequest_SyncUserData) GetData() *TaskQueueData {
 
 var File_temporal_server_api_deployment_v1_message_proto protoreflect.FileDescriptor
 
-var file_temporal_server_api_deployment_v1_message_proto_rawDesc = []byte{
-	0x0a, 0x2f, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2f, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72,
-	0x2f, 0x61, 0x70, 0x69, 0x2f, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x2f, 0x76,
-	0x31, 0x2f, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x12, 0x21,
-	0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x61,
-	0x70, 0x69, 0x2e, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x2e, 0x76, 0x31, 0x1a,
-	0x26, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2f, 0x61, 0x70, 0x69, 0x2f, 0x65, 0x6e, 0x75,
-	0x6d, 0x73, 0x2f, 0x76, 0x31, 0x2f, 0x74, 0x61, 0x73, 0x6b, 0x5f, 0x71, 0x75, 0x65, 0x75, 0x65, 0x2e,
-	0x70, 0x72, 0x6f, 0x74, 0x6f, 0x1a, 0x26, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2f,
-	0x61, 0x70, 0x69, 0x2f, 0x65, 0x6e, 0x75, 0x6d, 0x73, 0x2f, 0x76, 0x31, 0x2f, 0x64, 0x65, 0x70, 0x6c,
-	0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x1a, 0x1f, 0x67, 0x6f, 0x6f,
-	0x67, 0x6c, 0x65, 0x2f, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2f, 0x74, 0x69, 0x6d, 0x65,
-	0x73, 0x74, 0x61, 0x6d, 0x70, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x1a, 0x28, 0x74, 0x65, 0x6d, 0x70,
-	0x6f, 0x72, 0x61, 0x6c, 0x2f, 0x61, 0x70, 0x69, 0x2f, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65,
-	0x6e, 0x74, 0x2f, 0x76, 0x31, 0x2f, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x2e, 0x70, 0x72, 0x6f,
-	0x74, 0x6f, 0x1a, 0x24, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2f, 0x61, 0x70, 0x69, 0x2f,
-	0x63, 0x6f, 0x6d, 0x6d, 0x6f, 0x6e, 0x2f, 0x76, 0x31, 0x2f, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67,
-	0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x22, 0x65, 0x0a, 0x17, 0x57, 0x6f, 0x72, 0x6b, 0x65, 0x72,
-	0x44, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e,
-	0x12, 0x2b, 0x0a, 0x0f, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x5f, 0x6e, 0x61,
-	0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0e, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d,
-	0x65, 0x6e, 0x74, 0x4e, 0x61, 0x6d, 0x65, 0x42, 0x02, 0x68, 0x00, 0x12, 0x1d, 0x0a, 0x08, 0x62, 0x75,
-	0x69, 0x6c, 0x64, 0x5f, 0x69, 0x64, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x07, 0x62, 0x75, 0x69,
-	0x6c, 0x64, 0x49, 0x64, 0x42, 0x02, 0x68, 0x00, 0x22, 0x8a, 0x03, 0x0a, 0x15, 0x44, 0x65, 0x70,
-	0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x44, 0x61, 0x74,
-	0x61, 0x12, 0x58, 0x0a, 0x07, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x18, 0x01, 0x20, 0x01, 0x28,
-	0x0b, 0x32, 0x3a, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76,
-	0x65, 0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74,
-	0x2e, 0x76, 0x31, 0x2e, 0x57, 0x6f, 0x72, 0x6b, 0x65, 0x72, 0x44, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d,
-	0x65, 0x6e, 0x74, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x52, 0x07, 0x76, 0x65, 0x72, 0x73, 0x69,
-	0x6f, 0x6e, 0x42, 0x02, 0x68, 0x00, 0x12, 0x4e, 0x0a, 0x13, 0x72, 0x6f, 0x75, 0x74, 0x69, 0x6e, 0x67,
-	0x5f, 0x75, 0x70, 0x64, 0x61, 0x74, 0x65, 0x5f, 0x74, 0x69, 0x6d, 0x65, 0x18, 0x02, 0x20, 0x01,
-	0x28, 0x0b, 0x32, 0x1a, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f,
-	0x62, 0x75, 0x66, 0x2e, 0x54, 0x69, 0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x52, 0x11, 0x72, 0x6f,
-	0x75, 0x74, 0x69, 0x6e, 0x67, 0x55, 0x70, 0x64, 0x61, 0x74, 0x65, 0x54, 0x69, 0x6d, 0x65, 0x42, 0x02,
-	0x68, 0x00, 0x12, 0x4c, 0x0a, 0x12, 0x63, 0x75, 0x72, 0x72, 0x65, 0x6e, 0x74, 0x5f, 0x73, 0x69, 0x6e,
-	0x63, 0x65, 0x5f, 0x74, 0x69, 0x6d, 0x65, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1a, 0x2e, 0x67,
-	0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x54, 0x69,
-	0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x52, 0x10, 0x63, 0x75, 0x72, 0x72, 0x65, 0x6e, 0x74,
-	0x53, 0x69, 0x6e, 0x63, 0x65, 0x54, 0x69, 0x6d, 0x65, 0x42, 0x02, 0x68, 0x00, 0x12, 0x4c, 0x0a, 0x12,
-	0x72, 0x61, 0x6d, 0x70, 0x69, 0x6e, 0x67, 0x5f, 0x73, 0x69, 0x6e, 0x63, 0x65, 0x5f, 0x74, 0x69, 0x6d,
-	0x65, 0x18, 0x04, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1a, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e,
-	0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x54, 0x69, 0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d,
-	0x70, 0x52, 0x10, 0x72, 0x61, 0x6d, 0x70, 0x69, 0x6e, 0x67, 0x53, 0x69, 0x6e, 0x63, 0x65, 0x54, 0x69,
-	0x6d, 0x65, 0x42, 0x02, 0x68, 0x00, 0x12, 0x2b, 0x0a, 0x0f, 0x72, 0x61, 0x6d, 0x70, 0x5f, 0x70, 0x65,
-	0x72, 0x63, 0x65, 0x6e, 0x74, 0x61, 0x67, 0x65, 0x18, 0x05, 0x20, 0x01, 0x28, 0x02, 0x52, 0x0e, 0x72,
-	0x61, 0x6d, 0x70, 0x50, 0x65, 0x72, 0x63, 0x65, 0x6e, 0x74, 0x61, 0x67, 0x65, 0x42, 0x02, 0x68,
-	0x00, 0x22, 0xe3, 0x09, 0x0a, 0x11, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x4c, 0x6f, 0x63, 0x61,
-	0x6c, 0x53, 0x74, 0x61, 0x74, 0x65, 0x12, 0x58, 0x0a, 0x07, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e,
-	0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x3a, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c,
-	0x2e, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x64, 0x65, 0x70, 0x6c, 0x6f,
-	0x79, 0x6d, 0x65, 0x6e, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x57, 0x6f, 0x72, 0x6b, 0x65, 0x72, 0x44, 0x65,
-	0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x52, 0x07,
-	0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x42, 0x02, 0x68, 0x00, 0x12, 0x3f, 0x0a, 0x0b, 0x63,
-	0x72, 0x65, 0x61, 0x74, 0x65, 0x5f, 0x74, 0x69, 0x6d, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32,
-	0x1a, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66,
-	0x2e, 0x54, 0x69, 0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x52, 0x0a, 0x63, 0x72, 0x65, 0x61, 0x74,
-	0x65, 0x54, 0x69, 0x6d, 0x65, 0x42, 0x02, 0x68, 0x00, 0x12, 0x4e, 0x0a, 0x13, 0x72, 0x6f, 0x75, 0x74,
-	0x69, 0x6e, 0x67, 0x5f, 0x75, 0x70, 0x64, 0x61, 0x74, 0x65, 0x5f, 0x74, 0x69, 0x6d, 0x65, 0x18, 0x03,
-	0x20, 0x01, 0x28, 0x0b, 0x32, 0x1a, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f,
-	0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x54, 0x69, 0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x52, 0x11,
-	0x72, 0x6f, 0x75, 0x74, 0x69, 0x6e, 0x67, 0x55, 0x70, 0x64, 0x61, 0x74, 0x65, 0x54, 0x69, 0x6d,
-	0x65, 0x42, 0x02, 0x68, 0x00, 0x12, 0x4c, 0x0a, 0x12, 0x63, 0x75, 0x72, 0x72, 0x65, 0x6e, 0x74, 0x5f,
-	0x73, 0x69, 0x6e, 0x63, 0x65, 0x5f, 0x74, 0x69, 0x6d, 0x65, 0x18, 0x04, 0x20, 0x01, 0x28, 0x0b, 0x32,
-	0x1a, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66,
-	0x2e, 0x54, 0x69, 0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x52, 0x10, 0x63, 0x75, 0x72, 0x72, 0x65,
-	0x6e, 0x74, 0x53, 0x69, 0x6e, 0x63, 0x65, 0x54, 0x69, 0x6d, 0x65, 0x42, 0x02, 0x68, 0x00, 0x12, 0x4c,
-	0x0a, 0x12, 0x72, 0x61, 0x6d, 0x70, 0x69, 0x6e, 0x67, 0x5f, 0x73, 0x69, 0x6e, 0x63, 0x65, 0x5f, 0x74,
-	0x69, 0x6d, 0x65, 0x18, 0x05, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1a, 0x2e, 0x67, 0x6f, 0x6f, 0x67,
-	0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x54, 0x69, 0x6d, 0x65, 0x73,
-	0x74, 0x61, 0x6d, 0x70, 0x52, 0x10, 0x72, 0x61, 0x6d, 0x70, 0x69, 0x6e, 0x67, 0x53, 0x69, 0x6e, 0x63,
-	0x65, 0x54, 0x69, 0x6d, 0x65, 0x42, 0x02, 0x68, 0x00, 0x12, 0x2b, 0x0a, 0x0f, 0x72, 0x61, 0x6d, 0x70,
-	0x5f, 0x70, 0x65, 0x72, 0x63, 0x65, 0x6e, 0x74, 0x61, 0x67, 0x65, 0x18, 0x06, 0x20, 0x01, 0x28, 0x02,
-	0x52, 0x0e, 0x72, 0x61, 0x6d, 0x70, 0x50, 0x65, 0x72, 0x63, 0x65, 0x6e, 0x74, 0x61, 0x67, 0x65, 0x42,
-	0x02, 0x68, 0x00, 0x12, 0x58, 0x0a, 0x0d, 0x64, 0x72, 0x61, 0x69, 0x6e, 0x61, 0x67, 0x65, 0x5f, 0x69,
-	0x6e, 0x66, 0x6f, 0x18, 0x07, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x2f, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f,
-	0x72, 0x61, 0x6c, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65,
-	0x6e, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x44, 0x72, 0x61, 0x69,
-	0x6e, 0x61, 0x67, 0x65, 0x49, 0x6e, 0x66, 0x6f, 0x52, 0x0c, 0x64, 0x72, 0x61, 0x69, 0x6e, 0x61, 0x67,
-	0x65, 0x49, 0x6e, 0x66, 0x6f, 0x42, 0x02, 0x68, 0x00, 0x12, 0x4b, 0x0a, 0x08, 0x6d, 0x65, 0x74, 0x61,
-	0x64, 0x61, 0x74, 0x61, 0x18, 0x08, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x2b, 0x2e, 0x74, 0x65, 0x6d, 0x70,
-	0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65,
-	0x6e, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x4d, 0x65, 0x74, 0x61,
-	0x64, 0x61, 0x74, 0x61, 0x52, 0x08, 0x6d, 0x65, 0x74, 0x61, 0x64, 0x61, 0x74, 0x61, 0x42, 0x02,
-	0x68, 0x00, 0x12, 0x42, 0x0a, 0x1b, 0x73, 0x74, 0x61, 0x72, 0x74, 0x65, 0x64, 0x5f, 0x64, 0x65, 0x70,
-	0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x5f, 0x77, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x18,
-	0x09, 0x20, 0x01, 0x28, 0x08, 0x52, 0x19, 0x73, 0x74, 0x61, 0x72, 0x74, 0x65, 0x64, 0x44, 0x65, 0x70,
-	0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x57, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x42, 0x02,
-	0x68, 0x00, 0x12, 0x7f, 0x0a, 0x13, 0x74, 0x61, 0x73, 0x6b, 0x5f, 0x71, 0x75, 0x65, 0x75, 0x65, 0x5f,
-	0x66, 0x61, 0x6d, 0x69, 0x6c, 0x69, 0x65, 0x73, 0x18, 0x0a, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x4b, 0x2e,
-	0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x61,
-	0x70, 0x69, 0x2e, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x2e, 0x76, 0x31,
-	0x2e, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x4c, 0x6f, 0x63, 0x61, 0x6c, 0x53, 0x74, 0x61, 0x74,
-	0x65, 0x2e, 0x54, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x46, 0x61, 0x6d, 0x69, 0x6c, 0x69,
-	0x65, 0x73, 0x45, 0x6e, 0x74, 0x72, 0x79, 0x52, 0x11, 0x74, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75,
-	0x65, 0x46, 0x61, 0x6d, 0x69, 0x6c, 0x69, 0x65, 0x73, 0x42, 0x02, 0x68, 0x00, 0x1a, 0x96, 0x01, 0x0a,
-	0x16, 0x54, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x46, 0x61, 0x6d, 0x69, 0x6c, 0x69, 0x65,
-	0x73, 0x45, 0x6e, 0x74, 0x72, 0x79, 0x12, 0x14, 0x0a, 0x03, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01,
-	0x28, 0x09, 0x52, 0x03, 0x6b, 0x65, 0x79, 0x42, 0x02, 0x68, 0x00, 0x12, 0x62, 0x0a, 0x05, 0x76,
-	0x61, 0x6c, 0x75, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x48, 0x2e, 0x74, 0x65, 0x6d, 0x70,
-	0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x64,
-	0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x56, 0x65, 0x72, 0x73,
-	0x69, 0x6f, 0x6e, 0x4c, 0x6f, 0x63, 0x61, 0x6c, 0x53, 0x74, 0x61, 0x74, 0x65, 0x2e, 0x54, 0x61, 0x73,
-	0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x46, 0x61, 0x6d, 0x69, 0x6c, 0x79, 0x44, 0x61, 0x74, 0x61, 0x52,
-	0x05, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x42, 0x02, 0x68, 0x00, 0x3a, 0x02, 0x38, 0x01, 0x1a, 0x94, 0x02,
-	0x0a, 0x13, 0x54, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x46, 0x61, 0x6d, 0x69, 0x6c, 0x79,
-	0x44, 0x61, 0x74, 0x61, 0x12, 0x7d, 0x0a, 0x0b, 0x74, 0x61, 0x73, 0x6b, 0x5f, 0x71, 0x75, 0x65,
-	0x75, 0x65, 0x73, 0x18, 0x01, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x58, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f,
-	0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x64, 0x65,
-	0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x56, 0x65, 0x72, 0x73, 0x69,
-	0x6f, 0x6e, 0x4c, 0x6f, 0x63, 0x61, 0x6c, 0x53, 0x74, 0x61, 0x74, 0x65, 0x2e, 0x54, 0x61, 0x73, 0x6b,
-	0x51, 0x75, 0x65, 0x75, 0x65, 0x46, 0x61, 0x6d, 0x69, 0x6c, 0x79, 0x44, 0x61, 0x74, 0x61, 0x2e, 0x54,
-	0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x73, 0x45, 0x6e, 0x74, 0x72, 0x79, 0x52, 0x0a, 0x74,
-	0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x73, 0x42, 0x02, 0x68, 0x00, 0x1a, 0x7e, 0x0a,
-	0x0f, 0x54, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x73, 0x45, 0x6e, 0x74, 0x72, 0x79, 0x12,
-	0x14, 0x0a, 0x03, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x05, 0x52, 0x03, 0x6b, 0x65, 0x79,
-	0x42, 0x02, 0x68, 0x00, 0x12, 0x51, 0x0a, 0x05, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x18, 0x02, 0x20, 0x01,
-	0x28, 0x0b, 0x32, 0x37, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72,
-	0x76, 0x65, 0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e,
-	0x74, 0x2e, 0x76, 0x31, 0x2e, 0x54, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x56, 0x65, 0x72,
-	0x73, 0x69, 0x6f, 0x6e, 0x44, 0x61, 0x74, 0x61, 0x52, 0x05, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x42, 0x02,
-	0x68, 0x00, 0x3a, 0x02, 0x38, 0x01, 0x22, 0x16, 0x0a, 0x14, 0x54, 0x61, 0x73, 0x6b, 0x51, 0x75,
-	0x65, 0x75, 0x65, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x44, 0x61, 0x74, 0x61, 0x22, 0xd6, 0x01,
-	0x0a, 0x23, 0x57, 0x6f, 0x72, 0x6b, 0x65, 0x72, 0x44, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e,
-	0x74, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x57, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x41,
-	0x72, 0x67, 0x73, 0x12, 0x29, 0x0a, 0x0e, 0x6e, 0x61, 0x6d, 0x65, 0x73, 0x70, 0x61, 0x63, 0x65, 0x5f,
-	0x6e, 0x61, 0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0d, 0x6e, 0x61, 0x6d, 0x65, 0x73,
-	0x70, 0x61, 0x63, 0x65, 0x4e, 0x61, 0x6d, 0x65, 0x42, 0x02, 0x68, 0x00, 0x12, 0x25, 0x0a, 0x0c, 0x6e,
-	0x61, 0x6d, 0x65, 0x73, 0x70, 0x61, 0x63, 0x65, 0x5f, 0x69, 0x64, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09,
-	0x52, 0x0b, 0x6e, 0x61, 0x6d, 0x65, 0x73, 0x70, 0x61, 0x63, 0x65, 0x49, 0x64, 0x42, 0x02, 0x68,
-	0x00, 0x12, 0x5d, 0x0a, 0x0d, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x5f, 0x73, 0x74, 0x61, 0x74,
-	0x65, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x34, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61,
-	0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x64, 0x65, 0x70, 0x6c,
-	0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e,
-	0x4c, 0x6f, 0x63, 0x61, 0x6c, 0x53, 0x74, 0x61, 0x74, 0x65, 0x52, 0x0c, 0x76, 0x65, 0x72, 0x73, 0x69,
-	0x6f, 0x6e, 0x53, 0x74, 0x61, 0x74, 0x65, 0x42, 0x02, 0x68, 0x00, 0x22, 0xf6, 0x01, 0x0a, 0x1c, 0x57,
-	0x6f, 0x72, 0x6b, 0x65, 0x72, 0x44, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x57,
-	0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x41, 0x72, 0x67, 0x73, 0x12, 0x29, 0x0a, 0x0e, 0x6e, 0x61,
-	0x6d, 0x65, 0x73, 0x70, 0x61, 0x63, 0x65, 0x5f, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28,
-	0x09, 0x52, 0x0d, 0x6e, 0x61, 0x6d, 0x65, 0x73, 0x70, 0x61, 0x63, 0x65, 0x4e, 0x61, 0x6d, 0x65, 0x42,
-	0x02, 0x68, 0x00, 0x12, 0x25, 0x0a, 0x0c, 0x6e, 0x61, 0x6d, 0x65, 0x73, 0x70, 0x61, 0x63, 0x65, 0x5f,
-	0x69, 0x64, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0b, 0x6e, 0x61, 0x6d, 0x65, 0x73, 0x70, 0x61,
-	0x63, 0x65, 0x49, 0x64, 0x42, 0x02, 0x68, 0x00, 0x12, 0x2b, 0x0a, 0x0f, 0x64, 0x65, 0x70, 0x6c, 0x6f,
-	0x79, 0x6d, 0x65, 0x6e, 0x74, 0x5f, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x03, 0x20, 0x01, 0x28, 0x09, 0x52,
-	0x0e, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x4e, 0x61, 0x6d, 0x65, 0x42,
-	0x02, 0x68, 0x00, 0x12, 0x57, 0x0a, 0x05, 0x73, 0x74, 0x61, 0x74, 0x65, 0x18, 0x04, 0x20, 0x01, 0x28,
-	0x0b, 0x32, 0x3d, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76,
-	0x65, 0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74,
-	0x2e, 0x76, 0x31, 0x2e, 0x57, 0x6f, 0x72, 0x6b, 0x65, 0x72, 0x44, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d,
-	0x65, 0x6e, 0x74, 0x4c, 0x6f, 0x63, 0x61, 0x6c, 0x53, 0x74, 0x61, 0x74, 0x65, 0x52, 0x05, 0x73, 0x74,
-	0x61, 0x74, 0x65, 0x42, 0x02, 0x68, 0x00, 0x22, 0xb6, 0x01, 0x0a, 0x14, 0x44, 0x72, 0x61, 0x69, 0x6e,
-	0x61, 0x67, 0x65, 0x57, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x41, 0x72, 0x67, 0x73, 0x12,
-	0x29, 0x0a, 0x0e, 0x6e, 0x61, 0x6d, 0x65, 0x73, 0x70, 0x61, 0x63, 0x65, 0x5f, 0x6e, 0x61, 0x6d, 0x65,
-	0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0d, 0x6e, 0x61, 0x6d, 0x65, 0x73, 0x70, 0x61, 0x63, 0x65,
-	0x4e, 0x61, 0x6d, 0x65, 0x42, 0x02, 0x68, 0x00, 0x12, 0x58, 0x0a, 0x07, 0x76, 0x65, 0x72, 0x73, 0x69,
-	0x6f, 0x6e, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x3a, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72,
-	0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x64, 0x65, 0x70,
-	0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x57, 0x6f, 0x72, 0x6b, 0x65, 0x72,
-	0x44, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e,
-	0x52, 0x07, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x42, 0x02, 0x68, 0x00, 0x12, 0x19, 0x0a,
-	0x06, 0x69, 0x73, 0x5f, 0x63, 0x61, 0x6e, 0x18, 0x03, 0x20, 0x01, 0x28, 0x08, 0x52, 0x05, 0x69, 0x73,
-	0x43, 0x61, 0x6e, 0x42, 0x02, 0x68, 0x00, 0x22, 0x8e, 0x04, 0x0a, 0x1a, 0x57, 0x6f, 0x72, 0x6b, 0x65,
-	0x72, 0x44, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x4c, 0x6f, 0x63, 0x61, 0x6c, 0x53,
-	0x74, 0x61, 0x74, 0x65, 0x12, 0x3f, 0x0a, 0x0b, 0x63, 0x72, 0x65, 0x61, 0x74, 0x65, 0x5f, 0x74, 0x69,
-	0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1a, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65,
-	0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x54, 0x69, 0x6d, 0x65, 0x73, 0x74, 0x61,
-	0x6d, 0x70, 0x52, 0x0a, 0x63, 0x72, 0x65, 0x61, 0x74, 0x65, 0x54, 0x69, 0x6d, 0x65, 0x42, 0x02,
-	0x68, 0x00, 0x12, 0x54, 0x0a, 0x0e, 0x72, 0x6f, 0x75, 0x74, 0x69, 0x6e, 0x67, 0x5f, 0x63, 0x6f, 0x6e,
-	0x66, 0x69, 0x67, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x29, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f,
-	0x72, 0x61, 0x6c, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e,
-	0x74, 0x2e, 0x76, 0x31, 0x2e, 0x52, 0x6f, 0x75, 0x74, 0x69, 0x6e, 0x67, 0x43, 0x6f, 0x6e, 0x66, 0x69,
-	0x67, 0x52, 0x0d, 0x72, 0x6f, 0x75, 0x74, 0x69, 0x6e, 0x67, 0x43, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x42,
-	0x02, 0x68, 0x00, 0x12, 0x6b, 0x0a, 0x08, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x73, 0x18, 0x03,
-	0x20, 0x03, 0x28, 0x0b, 0x32, 0x4b, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73,
-	0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79,
-	0x6d, 0x65, 0x6e, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x57, 0x6f, 0x72, 0x6b, 0x65, 0x72, 0x44, 0x65, 0x70,
-	0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x4c, 0x6f, 0x63, 0x61, 0x6c, 0x53, 0x74, 0x61, 0x74, 0x65,
-	0x2e, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x73, 0x45, 0x6e, 0x74, 0x72, 0x79, 0x52, 0x08, 0x76,
-	0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x73, 0x42, 0x02, 0x68, 0x00, 0x12, 0x29, 0x0a, 0x0e, 0x63, 0x6f,
-	0x6e, 0x66, 0x6c, 0x69, 0x63, 0x74, 0x5f, 0x74, 0x6f, 0x6b, 0x65, 0x6e, 0x18, 0x04, 0x20, 0x01, 0x28,
-	0x0c, 0x52, 0x0d, 0x63, 0x6f, 0x6e, 0x66, 0x6c, 0x69, 0x63, 0x74, 0x54, 0x6f, 0x6b, 0x65, 0x6e, 0x42,
-	0x02, 0x68, 0x00, 0x12, 0x38, 0x0a, 0x16, 0x6c, 0x61, 0x73, 0x74, 0x5f, 0x6d, 0x6f, 0x64, 0x69,
-	0x66, 0x69, 0x65, 0x72, 0x5f, 0x69, 0x64, 0x65, 0x6e, 0x74, 0x69, 0x74, 0x79, 0x18, 0x05, 0x20, 0x01,
-	0x28, 0x09, 0x52, 0x14, 0x6c, 0x61, 0x73, 0x74, 0x4d, 0x6f, 0x64, 0x69, 0x66, 0x69, 0x65, 0x72, 0x49,
-	0x64, 0x65, 0x6e, 0x74, 0x69, 0x74, 0x79, 0x42, 0x02, 0x68, 0x00, 0x1a, 0x86, 0x01, 0x0a, 0x0d, 0x56,
-	0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x73, 0x45, 0x6e, 0x74, 0x72, 0x79, 0x12, 0x14, 0x0a, 0x03, 0x6b,
-	0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x03, 0x6b, 0x65, 0x79, 0x42, 0x02, 0x68, 0x00,
-	0x12, 0x5b, 0x0a, 0x05, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x41,
-	0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e,
-	0x61, 0x70, 0x69, 0x2e, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x2e, 0x76,
-	0x31, 0x2e, 0x57, 0x6f, 0x72, 0x6b, 0x65, 0x72, 0x44, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e,
-	0x74, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x53, 0x75, 0x6d, 0x6d, 0x61, 0x72, 0x79, 0x52, 0x05,
-	0x76, 0x61, 0x6c, 0x75, 0x65, 0x42, 0x02, 0x68, 0x00, 0x3a, 0x02, 0x38, 0x01, 0x22, 0xda, 0x01, 0x0a,
-	0x1e, 0x57, 0x6f, 0x72, 0x6b, 0x65, 0x72, 0x44, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74,
-	0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x53, 0x75, 0x6d, 0x6d, 0x61, 0x72, 0x79, 0x12, 0x1c, 0x0a,
-	0x07, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x07, 0x76,
-	0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x42, 0x02, 0x68, 0x00, 0x12, 0x3f, 0x0a, 0x0b, 0x63, 0x72,
-	0x65, 0x61, 0x74, 0x65, 0x5f, 0x74, 0x69, 0x6d, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1a,
-	0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e,
-	0x54, 0x69, 0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x52, 0x0a, 0x63, 0x72, 0x65, 0x61, 0x74, 0x65,
-	0x54, 0x69, 0x6d, 0x65, 0x42, 0x02, 0x68, 0x00, 0x12, 0x59, 0x0a, 0x0f, 0x64, 0x72, 0x61, 0x69, 0x6e,
-	0x61, 0x67, 0x65, 0x5f, 0x73, 0x74, 0x61, 0x74, 0x75, 0x73, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0e, 0x32,
-	0x2c, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x65, 0x6e,
-	0x75, 0x6d, 0x73, 0x2e, 0x76, 0x31, 0x2e, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x44, 0x72, 0x61,
-	0x69, 0x6e, 0x61, 0x67, 0x65, 0x53, 0x74, 0x61, 0x74, 0x75, 0x73, 0x52, 0x0e, 0x64, 0x72, 0x61,
-	0x69, 0x6e, 0x61, 0x67, 0x65, 0x53, 0x74, 0x61, 0x74, 0x75, 0x73, 0x42, 0x02, 0x68, 0x00, 0x22, 0xe5,
-	0x01, 0x0a, 0x1b, 0x52, 0x65, 0x67, 0x69, 0x73, 0x74, 0x65, 0x72, 0x57, 0x6f, 0x72, 0x6b, 0x65, 0x72,
-	0x49, 0x6e, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x41, 0x72, 0x67, 0x73, 0x12, 0x2a, 0x0a, 0x0f,
-	0x74, 0x61, 0x73, 0x6b, 0x5f, 0x71, 0x75, 0x65, 0x75, 0x65, 0x5f, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x01,
-	0x20, 0x01, 0x28, 0x09, 0x52, 0x0d, 0x74, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x4e, 0x61,
-	0x6d, 0x65, 0x42, 0x02, 0x68, 0x00, 0x12, 0x50, 0x0a, 0x0f, 0x74, 0x61, 0x73, 0x6b, 0x5f, 0x71, 0x75,
-	0x65, 0x75, 0x65, 0x5f, 0x74, 0x79, 0x70, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0e, 0x32, 0x24,
-	0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x65, 0x6e, 0x75,
-	0x6d, 0x73, 0x2e, 0x76, 0x31, 0x2e, 0x54, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x54, 0x79,
-	0x70, 0x65, 0x52, 0x0d, 0x74, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x54, 0x79, 0x70, 0x65,
-	0x42, 0x02, 0x68, 0x00, 0x12, 0x2a, 0x0a, 0x0f, 0x6d, 0x61, 0x78, 0x5f, 0x74, 0x61, 0x73, 0x6b, 0x5f,
-	0x71, 0x75, 0x65, 0x75, 0x65, 0x73, 0x18, 0x03, 0x20, 0x01, 0x28, 0x05, 0x52, 0x0d, 0x6d, 0x61, 0x78,
-	0x54, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x73, 0x42, 0x02, 0x68, 0x00, 0x12, 0x1c, 0x0a,
-	0x07, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x18, 0x04, 0x20, 0x01, 0x28, 0x09, 0x52, 0x07, 0x76,
-	0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x42, 0x02, 0x68, 0x00, 0x22, 0xaa, 0x02, 0x0a, 0x24, 0x52,
-	0x65, 0x67, 0x69, 0x73, 0x74, 0x65, 0x72, 0x57, 0x6f, 0x72, 0x6b, 0x65, 0x72, 0x49, 0x6e, 0x57, 0x6f,
-	0x72, 0x6b, 0x65, 0x72, 0x44, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x41, 0x72, 0x67,
-	0x73, 0x12, 0x2a, 0x0a, 0x0f, 0x74, 0x61, 0x73, 0x6b, 0x5f, 0x71, 0x75, 0x65, 0x75, 0x65, 0x5f, 0x6e,
-	0x61, 0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0d, 0x74, 0x61, 0x73, 0x6b, 0x51, 0x75,
-	0x65, 0x75, 0x65, 0x4e, 0x61, 0x6d, 0x65, 0x42, 0x02, 0x68, 0x00, 0x12, 0x50, 0x0a, 0x0f, 0x74, 0x61,
-	0x73, 0x6b, 0x5f, 0x71, 0x75, 0x65, 0x75, 0x65, 0x5f, 0x74, 0x79, 0x70, 0x65, 0x18, 0x02, 0x20, 0x01,
-	0x28, 0x0e, 0x32, 0x24, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x61, 0x70,
-	0x69, 0x2e, 0x65, 0x6e, 0x75, 0x6d, 0x73, 0x2e, 0x76, 0x31, 0x2e, 0x54, 0x61, 0x73, 0x6b, 0x51, 0x75,
-	0x65, 0x75, 0x65, 0x54, 0x79, 0x70, 0x65, 0x52, 0x0d, 0x74, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75,
-	0x65, 0x54, 0x79, 0x70, 0x65, 0x42, 0x02, 0x68, 0x00, 0x12, 0x2a, 0x0a, 0x0f, 0x6d, 0x61, 0x78, 0x5f,
-	0x74, 0x61, 0x73, 0x6b, 0x5f, 0x71, 0x75, 0x65, 0x75, 0x65, 0x73, 0x18, 0x03, 0x20, 0x01, 0x28, 0x05,
-	0x52, 0x0d, 0x6d, 0x61, 0x78, 0x54, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x73, 0x42, 0x02,
-	0x68, 0x00, 0x12, 0x58, 0x0a, 0x07, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x18, 0x04, 0x20, 0x01,
-	0x28, 0x0b, 0x32, 0x3a, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72,
-	0x76, 0x65, 0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65,
-	0x6e, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x57, 0x6f, 0x72, 0x6b, 0x65, 0x72, 0x44, 0x65, 0x70, 0x6c, 0x6f,
-	0x79, 0x6d, 0x65, 0x6e, 0x74, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x52, 0x07, 0x76, 0x65, 0x72,
-	0x73, 0x69, 0x6f, 0x6e, 0x42, 0x02, 0x68, 0x00, 0x22, 0xb5, 0x02, 0x0a, 0x1a, 0x53, 0x79, 0x6e, 0x63,
-	0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x53, 0x74, 0x61, 0x74, 0x65, 0x55, 0x70, 0x64, 0x61, 0x74,
-	0x65, 0x41, 0x72, 0x67, 0x73, 0x12, 0x4e, 0x0a, 0x13, 0x72, 0x6f, 0x75, 0x74, 0x69, 0x6e, 0x67, 0x5f,
-	0x75, 0x70, 0x64, 0x61, 0x74, 0x65, 0x5f, 0x74, 0x69, 0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b,
-	0x32, 0x1a, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75,
-	0x66, 0x2e, 0x54, 0x69, 0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x52, 0x11, 0x72, 0x6f, 0x75,
-	0x74, 0x69, 0x6e, 0x67, 0x55, 0x70, 0x64, 0x61, 0x74, 0x65, 0x54, 0x69, 0x6d, 0x65, 0x42, 0x02, 0x68,
-	0x00, 0x12, 0x4c, 0x0a, 0x12, 0x63, 0x75, 0x72, 0x72, 0x65, 0x6e, 0x74, 0x5f, 0x73, 0x69, 0x6e, 0x63,
-	0x65, 0x5f, 0x74, 0x69, 0x6d, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1a, 0x2e, 0x67, 0x6f,
-	0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x54, 0x69, 0x6d,
-	0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x52, 0x10, 0x63, 0x75, 0x72, 0x72, 0x65, 0x6e, 0x74, 0x53, 0x69,
-	0x6e, 0x63, 0x65, 0x54, 0x69, 0x6d, 0x65, 0x42, 0x02, 0x68, 0x00, 0x12, 0x4c, 0x0a, 0x12, 0x72, 0x61,
-	0x6d, 0x70, 0x69, 0x6e, 0x67, 0x5f, 0x73, 0x69, 0x6e, 0x63, 0x65, 0x5f, 0x74, 0x69, 0x6d, 0x65,
-	0x18, 0x03, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1a, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70,
-	0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x54, 0x69, 0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d, 0x70,
-	0x52, 0x10, 0x72, 0x61, 0x6d, 0x70, 0x69, 0x6e, 0x67, 0x53, 0x69, 0x6e, 0x63, 0x65, 0x54, 0x69, 0x6d,
-	0x65, 0x42, 0x02, 0x68, 0x00, 0x12, 0x2b, 0x0a, 0x0f, 0x72, 0x61, 0x6d, 0x70, 0x5f, 0x70, 0x65, 0x72,
-	0x63, 0x65, 0x6e, 0x74, 0x61, 0x67, 0x65, 0x18, 0x04, 0x20, 0x01, 0x28, 0x02, 0x52, 0x0e, 0x72, 0x61,
-	0x6d, 0x70, 0x50, 0x65, 0x72, 0x63, 0x65, 0x6e, 0x74, 0x61, 0x67, 0x65, 0x42, 0x02, 0x68, 0x00, 0x22,
-	0x79, 0x0a, 0x18, 0x53, 0x79, 0x6e, 0x63, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x53, 0x74, 0x61,
-	0x74, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x5d, 0x0a, 0x0d, 0x76, 0x65,
-	0x72, 0x73, 0x69, 0x6f, 0x6e, 0x5f, 0x73, 0x74, 0x61, 0x74, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b,
-	0x32, 0x34, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65,
-	0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x2e,
-	0x76, 0x31, 0x2e, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x4c, 0x6f, 0x63, 0x61, 0x6c, 0x53, 0x74,
-	0x61, 0x74, 0x65, 0x52, 0x0c, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x53, 0x74, 0x61, 0x74, 0x65,
-	0x42, 0x02, 0x68, 0x00, 0x22, 0x75, 0x0a, 0x14, 0x41, 0x64, 0x64, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f,
-	0x6e, 0x55, 0x70, 0x64, 0x61, 0x74, 0x65, 0x41, 0x72, 0x67, 0x73, 0x12, 0x1c, 0x0a, 0x07, 0x76,
-	0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x07, 0x76, 0x65, 0x72,
-	0x73, 0x69, 0x6f, 0x6e, 0x42, 0x02, 0x68, 0x00, 0x12, 0x3f, 0x0a, 0x0b, 0x63, 0x72, 0x65, 0x61, 0x74,
-	0x65, 0x5f, 0x74, 0x69, 0x6d, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1a, 0x2e, 0x67, 0x6f,
-	0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x54, 0x69, 0x6d,
-	0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x52, 0x0a, 0x63, 0x72, 0x65, 0x61, 0x74, 0x65, 0x54, 0x69, 0x6d,
-	0x65, 0x42, 0x02, 0x68, 0x00, 0x22, 0x76, 0x0a, 0x1a, 0x53, 0x79, 0x6e, 0x63, 0x44, 0x72, 0x61, 0x69,
-	0x6e, 0x61, 0x67, 0x65, 0x49, 0x6e, 0x66, 0x6f, 0x53, 0x69, 0x67, 0x6e, 0x61, 0x6c, 0x41, 0x72, 0x67,
-	0x73, 0x12, 0x58, 0x0a, 0x0d, 0x64, 0x72, 0x61, 0x69, 0x6e, 0x61, 0x67, 0x65, 0x5f, 0x69, 0x6e,
-	0x66, 0x6f, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x2f, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72,
-	0x61, 0x6c, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74,
-	0x2e, 0x76, 0x31, 0x2e, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x44, 0x72, 0x61, 0x69, 0x6e, 0x61,
-	0x67, 0x65, 0x49, 0x6e, 0x66, 0x6f, 0x52, 0x0c, 0x64, 0x72, 0x61, 0x69, 0x6e, 0x61, 0x67, 0x65, 0x49,
-	0x6e, 0x66, 0x6f, 0x42, 0x02, 0x68, 0x00, 0x22, 0x97, 0x01, 0x0a, 0x1c, 0x53, 0x79, 0x6e, 0x63, 0x44,
-	0x72, 0x61, 0x69, 0x6e, 0x61, 0x67, 0x65, 0x53, 0x74, 0x61, 0x74, 0x75, 0x73, 0x53, 0x69, 0x67, 0x6e,
-	0x61, 0x6c, 0x41, 0x72, 0x67, 0x73, 0x12, 0x1c, 0x0a, 0x07, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f,
-	0x6e, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x07, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x42,
-	0x02, 0x68, 0x00, 0x12, 0x59, 0x0a, 0x0f, 0x64, 0x72, 0x61, 0x69, 0x6e, 0x61, 0x67, 0x65, 0x5f, 0x73,
-	0x74, 0x61, 0x74, 0x75, 0x73, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0e, 0x32, 0x2c, 0x2e, 0x74, 0x65, 0x6d,
-	0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x65, 0x6e, 0x75, 0x6d, 0x73, 0x2e, 0x76,
-	0x31, 0x2e, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x44, 0x72, 0x61, 0x69, 0x6e, 0x61, 0x67, 0x65,
-	0x53, 0x74, 0x61, 0x74, 0x75, 0x73, 0x52, 0x0e, 0x64, 0x72, 0x61, 0x69, 0x6e, 0x61, 0x67, 0x65, 0x53,
-	0x74, 0x61, 0x74, 0x75, 0x73, 0x42, 0x02, 0x68, 0x00, 0x22, 0x7d, 0x0a, 0x1c, 0x51, 0x75, 0x65, 0x72,
-	0x79, 0x44, 0x65, 0x73, 0x63, 0x72, 0x69, 0x62, 0x65, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e,
-	0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x5d, 0x0a, 0x0d, 0x76, 0x65, 0x72, 0x73, 0x69,
-	0x6f, 0x6e, 0x5f, 0x73, 0x74, 0x61, 0x74, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x34, 0x2e,
-	0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x61,
-	0x70, 0x69, 0x2e, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x2e, 0x76, 0x31, 0x2e,
-	0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x4c, 0x6f, 0x63, 0x61, 0x6c, 0x53, 0x74, 0x61, 0x74, 0x65,
-	0x52, 0x0c, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x53, 0x74, 0x61, 0x74, 0x65, 0x42, 0x02, 0x68,
-	0x00, 0x22, 0x80, 0x01, 0x0a, 0x25, 0x51, 0x75, 0x65, 0x72, 0x79, 0x44, 0x65, 0x73, 0x63, 0x72,
-	0x69, 0x62, 0x65, 0x57, 0x6f, 0x72, 0x6b, 0x65, 0x72, 0x44, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65,
-	0x6e, 0x74, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x57, 0x0a, 0x05, 0x73, 0x74, 0x61,
-	0x74, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x3d, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72,
-	0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x64, 0x65, 0x70,
-	0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x57, 0x6f, 0x72, 0x6b, 0x65, 0x72,
-	0x44, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x4c, 0x6f, 0x63, 0x61, 0x6c, 0x53, 0x74,
-	0x61, 0x74, 0x65, 0x52, 0x05, 0x73, 0x74, 0x61, 0x74, 0x65, 0x42, 0x02, 0x68, 0x00, 0x22, 0x6e, 0x0a,
-	0x1c, 0x53, 0x74, 0x61, 0x72, 0x74, 0x57, 0x6f, 0x72, 0x6b, 0x65, 0x72, 0x44, 0x65, 0x70, 0x6c,
-	0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x2b, 0x0a, 0x0f,
-	0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x5f, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x01,
-	0x20, 0x01, 0x28, 0x09, 0x52, 0x0e, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x4e,
-	0x61, 0x6d, 0x65, 0x42, 0x02, 0x68, 0x00, 0x12, 0x21, 0x0a, 0x0a, 0x72, 0x65, 0x71, 0x75, 0x65, 0x73,
-	0x74, 0x5f, 0x69, 0x64, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x09, 0x72, 0x65, 0x71, 0x75, 0x65,
-	0x73, 0x74, 0x49, 0x64, 0x42, 0x02, 0x68, 0x00, 0x22, 0xd4, 0x03, 0x0a, 0x24, 0x53, 0x79, 0x6e, 0x63,
-	0x44, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f,
-	0x6e, 0x55, 0x73, 0x65, 0x72, 0x44, 0x61, 0x74, 0x61, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12,
-	0x58, 0x0a, 0x07, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32,
-	0x3a, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72,
-	0x2e, 0x61, 0x70, 0x69, 0x2e, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x2e, 0x76,
-	0x31, 0x2e, 0x57, 0x6f, 0x72, 0x6b, 0x65, 0x72, 0x44, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e,
-	0x74, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x52, 0x07, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e,
-	0x42, 0x02, 0x68, 0x00, 0x12, 0x6c, 0x0a, 0x04, 0x73, 0x79, 0x6e, 0x63, 0x18, 0x02, 0x20, 0x03, 0x28,
-	0x0b, 0x32, 0x54, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72,
-	0x76, 0x65, 0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e,
-	0x74, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x79, 0x6e, 0x63, 0x44, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65,
-	0x6e, 0x74, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x55, 0x73, 0x65, 0x72, 0x44, 0x61, 0x74, 0x61,
-	0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x2e, 0x53, 0x79, 0x6e, 0x63, 0x55, 0x73, 0x65, 0x72, 0x44,
-	0x61, 0x74, 0x61, 0x52, 0x04, 0x73, 0x79, 0x6e, 0x63, 0x42, 0x02, 0x68, 0x00, 0x12, 0x29, 0x0a, 0x0e,
-	0x66, 0x6f, 0x72, 0x67, 0x65, 0x74, 0x5f, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x18, 0x03, 0x20,
-	0x01, 0x28, 0x08, 0x52, 0x0d, 0x66, 0x6f, 0x72, 0x67, 0x65, 0x74, 0x56, 0x65, 0x72, 0x73, 0x69,
-	0x6f, 0x6e, 0x42, 0x02, 0x68, 0x00, 0x1a, 0xb8, 0x01, 0x0a, 0x0c, 0x53, 0x79, 0x6e, 0x63, 0x55, 0x73,
-	0x65, 0x72, 0x44, 0x61, 0x74, 0x61, 0x12, 0x16, 0x0a, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x01, 0x20,
-	0x01, 0x28, 0x09, 0x52, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x42, 0x02, 0x68, 0x00, 0x12, 0x3e, 0x0a, 0x05,
-	0x74, 0x79, 0x70, 0x65, 0x73, 0x18, 0x02, 0x20, 0x03, 0x28, 0x0e, 0x32, 0x24, 0x2e, 0x74, 0x65, 0x6d,
-	0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x65, 0x6e, 0x75, 0x6d, 0x73, 0x2e, 0x76,
-	0x31, 0x2e, 0x54, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x54, 0x79, 0x70, 0x65, 0x52, 0x05,
-	0x74, 0x79, 0x70, 0x65, 0x73, 0x42, 0x02, 0x68, 0x00, 0x12, 0x50, 0x0a, 0x04, 0x64, 0x61, 0x74, 0x61,
-	0x18, 0x03, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x38, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61,
-	0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x64, 0x65, 0x70, 0x6c,
-	0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x44, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d,
-	0x65, 0x6e, 0x74, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x44, 0x61, 0x74, 0x61, 0x52, 0x04, 0x64,
-	0x61, 0x74, 0x61, 0x42, 0x02, 0x68, 0x00, 0x22, 0x98, 0x02, 0x0a, 0x25, 0x53, 0x79, 0x6e, 0x63, 0x44,
-	0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x55,
-	0x73, 0x65, 0x72, 0x44, 0x61, 0x74, 0x61, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x9d,
-	0x01, 0x0a, 0x17, 0x74, 0x61, 0x73, 0x6b, 0x5f, 0x71, 0x75, 0x65, 0x75, 0x65, 0x5f, 0x6d, 0x61,
-	0x78, 0x5f, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x73, 0x18, 0x01, 0x20, 0x03, 0x28, 0x0b, 0x32,
-	0x62, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72,
-	0x2e, 0x61, 0x70, 0x69, 0x2e, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x2e, 0x76,
-	0x31, 0x2e, 0x53, 0x79, 0x6e, 0x63, 0x44, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x56,
-	0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x55, 0x73, 0x65, 0x72, 0x44, 0x61, 0x74, 0x61, 0x52, 0x65, 0x73,
-	0x70, 0x6f, 0x6e, 0x73, 0x65, 0x2e, 0x54, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x4d, 0x61,
-	0x78, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x73, 0x45, 0x6e, 0x74, 0x72, 0x79, 0x52, 0x14, 0x74,
-	0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x4d, 0x61, 0x78, 0x56, 0x65, 0x72, 0x73, 0x69,
-	0x6f, 0x6e, 0x73, 0x42, 0x02, 0x68, 0x00, 0x1a, 0x4f, 0x0a, 0x19, 0x54, 0x61, 0x73, 0x6b, 0x51, 0x75,
-	0x65, 0x75, 0x65, 0x4d, 0x61, 0x78, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x73, 0x45, 0x6e, 0x74,
-	0x72, 0x79, 0x12, 0x14, 0x0a, 0x03, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x03,
-	0x6b, 0x65, 0x79, 0x42, 0x02, 0x68, 0x00, 0x12, 0x18, 0x0a, 0x05, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x18,
-	0x02, 0x20, 0x01, 0x28, 0x03, 0x52, 0x05, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x42, 0x02, 0x68, 0x00, 0x3a,
-	0x02, 0x38, 0x01, 0x22, 0xac, 0x02, 0x0a, 0x2f, 0x43, 0x68, 0x65, 0x63, 0x6b, 0x57, 0x6f, 0x72, 0x6b,
-	0x65, 0x72, 0x44, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x55, 0x73, 0x65, 0x72, 0x44,
-	0x61, 0x74, 0x61, 0x50, 0x72, 0x6f, 0x70, 0x61, 0x67, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x52, 0x65,
-	0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0xa7, 0x01, 0x0a, 0x17, 0x74, 0x61, 0x73, 0x6b, 0x5f, 0x71, 0x75,
-	0x65, 0x75, 0x65, 0x5f, 0x6d, 0x61, 0x78, 0x5f, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x73, 0x18,
-	0x01, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x6c, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e,
-	0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79,
-	0x6d, 0x65, 0x6e, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x43, 0x68, 0x65, 0x63, 0x6b, 0x57, 0x6f, 0x72, 0x6b,
-	0x65, 0x72, 0x44, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x55, 0x73, 0x65, 0x72, 0x44,
-	0x61, 0x74, 0x61, 0x50, 0x72, 0x6f, 0x70, 0x61, 0x67, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x52, 0x65,
-	0x71, 0x75, 0x65, 0x73, 0x74, 0x2e, 0x54, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x4d, 0x61,
-	0x78, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x73, 0x45, 0x6e, 0x74, 0x72, 0x79, 0x52, 0x14, 0x74,
-	0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x4d, 0x61, 0x78, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f,
-	0x6e, 0x73, 0x42, 0x02, 0x68, 0x00, 0x1a, 0x4f, 0x0a, 0x19, 0x54, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65,
-	0x75, 0x65, 0x4d, 0x61, 0x78, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x73, 0x45, 0x6e, 0x74, 0x72,
-	0x79, 0x12, 0x14, 0x0a, 0x03, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x03, 0x6b,
-	0x65, 0x79, 0x42, 0x02, 0x68, 0x00, 0x12, 0x18, 0x0a, 0x05, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x18, 0x02,
-	0x20, 0x01, 0x28, 0x03, 0x52, 0x05, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x42, 0x02, 0x68, 0x00, 0x3a,
-	0x02, 0x38, 0x01, 0x22, 0xb2, 0x01, 0x0a, 0x1f, 0x53, 0x79, 0x6e, 0x63, 0x55, 0x6e, 0x76, 0x65, 0x72,
-	0x73, 0x69, 0x6f, 0x6e, 0x65, 0x64, 0x52, 0x61, 0x6d, 0x70, 0x41, 0x63, 0x74, 0x69, 0x76, 0x69, 0x74,
-	0x79, 0x41, 0x72, 0x67, 0x73, 0x12, 0x2b, 0x0a, 0x0f, 0x63, 0x75, 0x72, 0x72, 0x65, 0x6e, 0x74, 0x5f,
-	0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0e, 0x63, 0x75,
-	0x72, 0x72, 0x65, 0x6e, 0x74, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x42, 0x02, 0x68, 0x00, 0x12,
-	0x62, 0x0a, 0x0b, 0x75, 0x70, 0x64, 0x61, 0x74, 0x65, 0x5f, 0x61, 0x72, 0x67, 0x73, 0x18, 0x02, 0x20,
-	0x01, 0x28, 0x0b, 0x32, 0x3d, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73,
-	0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d,
-	0x65, 0x6e, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x79, 0x6e, 0x63, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f,
-	0x6e, 0x53, 0x74, 0x61, 0x74, 0x65, 0x55, 0x70, 0x64, 0x61, 0x74, 0x65, 0x41, 0x72, 0x67, 0x73, 0x52,
-	0x0a, 0x75, 0x70, 0x64, 0x61, 0x74, 0x65, 0x41, 0x72, 0x67, 0x73, 0x42, 0x02, 0x68, 0x00, 0x22, 0x94,
-	0x02, 0x0a, 0x23, 0x53, 0x79, 0x6e, 0x63, 0x55, 0x6e, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x65,
-	0x64, 0x52, 0x61, 0x6d, 0x70, 0x41, 0x63, 0x74, 0x69, 0x76, 0x69, 0x74, 0x79, 0x52, 0x65, 0x73, 0x70,
-	0x6f, 0x6e, 0x73, 0x65, 0x12, 0x9b, 0x01, 0x0a, 0x17, 0x74, 0x61, 0x73, 0x6b, 0x5f, 0x71, 0x75, 0x65,
-	0x75, 0x65, 0x5f, 0x6d, 0x61, 0x78, 0x5f, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x73, 0x18,
-	0x01, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x60, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e,
-	0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79,
-	0x6d, 0x65, 0x6e, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x79, 0x6e, 0x63, 0x55, 0x6e, 0x76, 0x65, 0x72,
-	0x73, 0x69, 0x6f, 0x6e, 0x65, 0x64, 0x52, 0x61, 0x6d, 0x70, 0x41, 0x63, 0x74, 0x69, 0x76, 0x69, 0x74,
-	0x79, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x2e, 0x54, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65,
-	0x75, 0x65, 0x4d, 0x61, 0x78, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x73, 0x45, 0x6e, 0x74, 0x72,
-	0x79, 0x52, 0x14, 0x74, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x4d, 0x61, 0x78, 0x56,
-	0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x73, 0x42, 0x02, 0x68, 0x00, 0x1a, 0x4f, 0x0a, 0x19, 0x54, 0x61,
-	0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x4d, 0x61, 0x78, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e,
-	0x73, 0x45, 0x6e, 0x74, 0x72, 0x79, 0x12, 0x14, 0x0a, 0x03, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01,
-	0x28, 0x09, 0x52, 0x03, 0x6b, 0x65, 0x79, 0x42, 0x02, 0x68, 0x00, 0x12, 0x18, 0x0a, 0x05, 0x76, 0x61,
-	0x6c, 0x75, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x03, 0x52, 0x05, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x42,
-	0x02, 0x68, 0x00, 0x3a, 0x02, 0x38, 0x01, 0x22, 0xcd, 0x02, 0x0a, 0x19, 0x55, 0x70, 0x64, 0x61, 0x74,
-	0x65, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x4d, 0x65, 0x74, 0x61, 0x64, 0x61, 0x74, 0x61, 0x41,
-	0x72, 0x67, 0x73, 0x12, 0x7a, 0x0a, 0x0e, 0x75, 0x70, 0x73, 0x65, 0x72, 0x74, 0x5f, 0x65, 0x6e,
-	0x74, 0x72, 0x69, 0x65, 0x73, 0x18, 0x01, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x4f, 0x2e, 0x74, 0x65, 0x6d,
-	0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e,
-	0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x55, 0x70, 0x64,
-	0x61, 0x74, 0x65, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x4d, 0x65, 0x74, 0x61, 0x64, 0x61, 0x74,
-	0x61, 0x41, 0x72, 0x67, 0x73, 0x2e, 0x55, 0x70, 0x73, 0x65, 0x72, 0x74, 0x45, 0x6e, 0x74, 0x72, 0x69,
-	0x65, 0x73, 0x45, 0x6e, 0x74, 0x72, 0x79, 0x52, 0x0d, 0x75, 0x70, 0x73, 0x65, 0x72, 0x74, 0x45, 0x6e,
-	0x74, 0x72, 0x69, 0x65, 0x73, 0x42, 0x02, 0x68, 0x00, 0x12, 0x29, 0x0a, 0x0e, 0x72, 0x65, 0x6d,
-	0x6f, 0x76, 0x65, 0x5f, 0x65, 0x6e, 0x74, 0x72, 0x69, 0x65, 0x73, 0x18, 0x02, 0x20, 0x03, 0x28, 0x09,
-	0x52, 0x0d, 0x72, 0x65, 0x6d, 0x6f, 0x76, 0x65, 0x45, 0x6e, 0x74, 0x72, 0x69, 0x65, 0x73, 0x42, 0x02,
-	0x68, 0x00, 0x12, 0x1e, 0x0a, 0x08, 0x69, 0x64, 0x65, 0x6e, 0x74, 0x69, 0x74, 0x79, 0x18, 0x03, 0x20,
-	0x01, 0x28, 0x09, 0x52, 0x08, 0x69, 0x64, 0x65, 0x6e, 0x74, 0x69, 0x74, 0x79, 0x42, 0x02, 0x68, 0x00,
-	0x1a, 0x69, 0x0a, 0x12, 0x55, 0x70, 0x73, 0x65, 0x72, 0x74, 0x45, 0x6e, 0x74, 0x72, 0x69, 0x65, 0x73,
-	0x45, 0x6e, 0x74, 0x72, 0x79, 0x12, 0x14, 0x0a, 0x03, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28,
-	0x09, 0x52, 0x03, 0x6b, 0x65, 0x79, 0x42, 0x02, 0x68, 0x00, 0x12, 0x39, 0x0a, 0x05, 0x76, 0x61, 0x6c,
-	0x75, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1f, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f,
-	0x72, 0x61, 0x6c, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x63, 0x6f, 0x6d, 0x6d, 0x6f, 0x6e, 0x2e, 0x76, 0x31,
-	0x2e, 0x50, 0x61, 0x79, 0x6c, 0x6f, 0x61, 0x64, 0x52, 0x05, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x42, 0x02,
-	0x68, 0x00, 0x3a, 0x02, 0x38, 0x01, 0x22, 0x6c, 0x0a, 0x1d, 0x55, 0x70, 0x64, 0x61, 0x74, 0x65, 0x56,
-	0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x4d, 0x65, 0x74, 0x61, 0x64, 0x61, 0x74, 0x61, 0x52, 0x65, 0x73,
-	0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x4b, 0x0a, 0x08, 0x6d, 0x65, 0x74, 0x61, 0x64, 0x61, 0x74, 0x61,
-	0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x2b, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c,
-	0x2e, 0x61, 0x70, 0x69, 0x2e, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x2e,
-	0x76, 0x31, 0x2e, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x4d, 0x65, 0x74, 0x61, 0x64, 0x61, 0x74,
-	0x61, 0x52, 0x08, 0x6d, 0x65, 0x74, 0x61, 0x64, 0x61, 0x74, 0x61, 0x42, 0x02, 0x68, 0x00, 0x22, 0xc1,
-	0x01, 0x0a, 0x15, 0x53, 0x65, 0x74, 0x43, 0x75, 0x72, 0x72, 0x65, 0x6e, 0x74, 0x56, 0x65, 0x72, 0x73,
-	0x69, 0x6f, 0x6e, 0x41, 0x72, 0x67, 0x73, 0x12, 0x1e, 0x0a, 0x08, 0x69, 0x64, 0x65, 0x6e, 0x74, 0x69,
-	0x74, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x08, 0x69, 0x64, 0x65, 0x6e, 0x74, 0x69, 0x74,
-	0x79, 0x42, 0x02, 0x68, 0x00, 0x12, 0x1c, 0x0a, 0x07, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x18,
-	0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x07, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x42, 0x02, 0x68,
-	0x00, 0x12, 0x3f, 0x0a, 0x1a, 0x69, 0x67, 0x6e, 0x6f, 0x72, 0x65, 0x5f, 0x6d, 0x69, 0x73, 0x73,
-	0x69, 0x6e, 0x67, 0x5f, 0x74, 0x61, 0x73, 0x6b, 0x5f, 0x71, 0x75, 0x65, 0x75, 0x65, 0x73, 0x18, 0x03,
-	0x20, 0x01, 0x28, 0x08, 0x52, 0x17, 0x69, 0x67, 0x6e, 0x6f, 0x72, 0x65, 0x4d, 0x69, 0x73, 0x73, 0x69,
-	0x6e, 0x67, 0x54, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x73, 0x42, 0x02, 0x68, 0x00, 0x12,
-	0x29, 0x0a, 0x0e, 0x63, 0x6f, 0x6e, 0x66, 0x6c, 0x69, 0x63, 0x74, 0x5f, 0x74, 0x6f, 0x6b, 0x65, 0x6e,
-	0x18, 0x04, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x0d, 0x63, 0x6f, 0x6e, 0x66, 0x6c, 0x69, 0x63, 0x74, 0x54,
-	0x6f, 0x6b, 0x65, 0x6e, 0x42, 0x02, 0x68, 0x00, 0x22, 0x75, 0x0a, 0x19, 0x53, 0x65, 0x74, 0x43, 0x75,
-	0x72, 0x72, 0x65, 0x6e, 0x74, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x52, 0x65, 0x73, 0x70,
-	0x6f, 0x6e, 0x73, 0x65, 0x12, 0x2d, 0x0a, 0x10, 0x70, 0x72, 0x65, 0x76, 0x69, 0x6f, 0x75, 0x73, 0x5f,
-	0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0f, 0x70, 0x72,
-	0x65, 0x76, 0x69, 0x6f, 0x75, 0x73, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x42, 0x02, 0x68, 0x00,
-	0x12, 0x29, 0x0a, 0x0e, 0x63, 0x6f, 0x6e, 0x66, 0x6c, 0x69, 0x63, 0x74, 0x5f, 0x74, 0x6f, 0x6b, 0x65,
-	0x6e, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x0d, 0x63, 0x6f, 0x6e, 0x66, 0x6c, 0x69, 0x63, 0x74,
-	0x54, 0x6f, 0x6b, 0x65, 0x6e, 0x42, 0x02, 0x68, 0x00, 0x22, 0x7a, 0x0a, 0x11, 0x44, 0x65, 0x6c, 0x65,
-	0x74, 0x65, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x41, 0x72, 0x67, 0x73, 0x12, 0x1e, 0x0a, 0x08,
-	0x69, 0x64, 0x65, 0x6e, 0x74, 0x69, 0x74, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x08,
-	0x69, 0x64, 0x65, 0x6e, 0x74, 0x69, 0x74, 0x79, 0x42, 0x02, 0x68, 0x00, 0x12, 0x1c, 0x0a, 0x07, 0x76,
-	0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x07, 0x76, 0x65, 0x72,
-	0x73, 0x69, 0x6f, 0x6e, 0x42, 0x02, 0x68, 0x00, 0x12, 0x27, 0x0a, 0x0d, 0x73, 0x6b, 0x69, 0x70, 0x5f,
-	0x64, 0x72, 0x61, 0x69, 0x6e, 0x61, 0x67, 0x65, 0x18, 0x03, 0x20, 0x01, 0x28, 0x08, 0x52, 0x0c, 0x73,
-	0x6b, 0x69, 0x70, 0x44, 0x72, 0x61, 0x69, 0x6e, 0x61, 0x67, 0x65, 0x42, 0x02, 0x68, 0x00, 0x22, 0xd2,
-	0x01, 0x0a, 0x19, 0x44, 0x65, 0x6c, 0x65, 0x74, 0x65, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x41,
-	0x63, 0x74, 0x69, 0x76, 0x69, 0x74, 0x79, 0x41, 0x72, 0x67, 0x73, 0x12, 0x1e, 0x0a, 0x08, 0x69,
-	0x64, 0x65, 0x6e, 0x74, 0x69, 0x74, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x08, 0x69, 0x64,
-	0x65, 0x6e, 0x74, 0x69, 0x74, 0x79, 0x42, 0x02, 0x68, 0x00, 0x12, 0x2b, 0x0a, 0x0f, 0x64, 0x65, 0x70,
-	0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x5f, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28,
-	0x09, 0x52, 0x0e, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x4e, 0x61, 0x6d, 0x65,
-	0x42, 0x02, 0x68, 0x00, 0x12, 0x1c, 0x0a, 0x07, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x18, 0x03,
-	0x20, 0x01, 0x28, 0x09, 0x52, 0x07, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x42, 0x02, 0x68, 0x00,
-	0x12, 0x21, 0x0a, 0x0a, 0x72, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x5f, 0x69, 0x64, 0x18, 0x04, 0x20,
-	0x01, 0x28, 0x09, 0x52, 0x09, 0x72, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x49, 0x64, 0x42, 0x02,
-	0x68, 0x00, 0x12, 0x27, 0x0a, 0x0d, 0x73, 0x6b, 0x69, 0x70, 0x5f, 0x64, 0x72, 0x61, 0x69, 0x6e, 0x61,
-	0x67, 0x65, 0x18, 0x05, 0x20, 0x01, 0x28, 0x08, 0x52, 0x0c, 0x73, 0x6b, 0x69, 0x70, 0x44, 0x72, 0x61,
-	0x69, 0x6e, 0x61, 0x67, 0x65, 0x42, 0x02, 0x68, 0x00, 0x22, 0xbb, 0x04, 0x0a, 0x26, 0x43, 0x68, 0x65,
-	0x63, 0x6b, 0x54, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x73, 0x48, 0x61, 0x76, 0x65, 0x50,
-	0x6f, 0x6c, 0x6c, 0x65, 0x72, 0x73, 0x41, 0x63, 0x74, 0x69, 0x76, 0x69, 0x74, 0x79, 0x41, 0x72, 0x67,
-	0x73, 0x12, 0x98, 0x01, 0x0a, 0x15, 0x74, 0x61, 0x73, 0x6b, 0x5f, 0x71, 0x75, 0x65, 0x75, 0x65, 0x73,
-	0x5f, 0x61, 0x6e, 0x64, 0x5f, 0x74, 0x79, 0x70, 0x65, 0x73, 0x18, 0x01, 0x20, 0x03, 0x28, 0x0b, 0x32,
-	0x61, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65,
-	0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x2e,
-	0x76, 0x31, 0x2e, 0x43, 0x68, 0x65, 0x63, 0x6b, 0x54, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65,
-	0x73, 0x48, 0x61, 0x76, 0x65, 0x50, 0x6f, 0x6c, 0x6c, 0x65, 0x72, 0x73, 0x41, 0x63, 0x74, 0x69, 0x76,
-	0x69, 0x74, 0x79, 0x41, 0x72, 0x67, 0x73, 0x2e, 0x54, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65,
-	0x73, 0x41, 0x6e, 0x64, 0x54, 0x79, 0x70, 0x65, 0x73, 0x45, 0x6e, 0x74, 0x72, 0x79, 0x52, 0x12, 0x74,
-	0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x73, 0x41, 0x6e, 0x64, 0x54, 0x79, 0x70, 0x65, 0x73,
-	0x42, 0x02, 0x68, 0x00, 0x12, 0x7a, 0x0a, 0x19, 0x77, 0x6f, 0x72, 0x6b, 0x65, 0x72, 0x5f, 0x64,
-	0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x5f, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e,
-	0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x3a, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c,
-	0x2e, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x64, 0x65, 0x70, 0x6c, 0x6f,
-	0x79, 0x6d, 0x65, 0x6e, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x57, 0x6f, 0x72, 0x6b, 0x65, 0x72, 0x44, 0x65,
-	0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x52, 0x17,
-	0x77, 0x6f, 0x72, 0x6b, 0x65, 0x72, 0x44, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x56,
-	0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x42, 0x02, 0x68, 0x00, 0x1a, 0xa7, 0x01, 0x0a, 0x17, 0x54, 0x61,
-	0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x73, 0x41, 0x6e, 0x64, 0x54, 0x79, 0x70, 0x65, 0x73,
-	0x45, 0x6e, 0x74, 0x72, 0x79, 0x12, 0x14, 0x0a, 0x03, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28,
-	0x09, 0x52, 0x03, 0x6b, 0x65, 0x79, 0x42, 0x02, 0x68, 0x00, 0x12, 0x72, 0x0a, 0x05, 0x76, 0x61, 0x6c,
-	0x75, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x58, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72,
-	0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x64, 0x65, 0x70,
-	0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x43, 0x68, 0x65, 0x63, 0x6b, 0x54,
-	0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x73, 0x48, 0x61, 0x76, 0x65, 0x50, 0x6f, 0x6c, 0x6c,
-	0x65, 0x72, 0x73, 0x41, 0x63, 0x74, 0x69, 0x76, 0x69, 0x74, 0x79, 0x41, 0x72, 0x67, 0x73, 0x2e,
-	0x54, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x54, 0x79, 0x70, 0x65, 0x73, 0x52, 0x05, 0x76,
-	0x61, 0x6c, 0x75, 0x65, 0x42, 0x02, 0x68, 0x00, 0x3a, 0x02, 0x38, 0x01, 0x1a, 0x50, 0x0a, 0x0e, 0x54,
-	0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x54, 0x79, 0x70, 0x65, 0x73, 0x12, 0x3e, 0x0a, 0x05,
-	0x74, 0x79, 0x70, 0x65, 0x73, 0x18, 0x01, 0x20, 0x03, 0x28, 0x0e, 0x32, 0x24, 0x2e, 0x74, 0x65, 0x6d,
-	0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x65, 0x6e, 0x75, 0x6d, 0x73, 0x2e, 0x76,
-	0x31, 0x2e, 0x54, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x54, 0x79, 0x70, 0x65, 0x52, 0x05,
-	0x74, 0x79, 0x70, 0x65, 0x73, 0x42, 0x02, 0x68, 0x00, 0x22, 0x36, 0x0a, 0x14, 0x44, 0x65, 0x6c, 0x65,
-	0x74, 0x65, 0x44, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x41, 0x72, 0x67, 0x73,
-	0x12, 0x1e, 0x0a, 0x08, 0x69, 0x64, 0x65, 0x6e, 0x74, 0x69, 0x74, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28,
-	0x09, 0x52, 0x08, 0x69, 0x64, 0x65, 0x6e, 0x74, 0x69, 0x74, 0x79, 0x42, 0x02, 0x68, 0x00, 0x22, 0xaa,
-	0x01, 0x0a, 0x19, 0x53, 0x65, 0x74, 0x52, 0x61, 0x6d, 0x70, 0x69, 0x6e, 0x67, 0x56, 0x65, 0x72, 0x73,
-	0x69, 0x6f, 0x6e, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x2d, 0x0a, 0x10, 0x70, 0x72,
-	0x65, 0x76, 0x69, 0x6f, 0x75, 0x73, 0x5f, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x18, 0x01, 0x20,
-	0x01, 0x28, 0x09, 0x52, 0x0f, 0x70, 0x72, 0x65, 0x76, 0x69, 0x6f, 0x75, 0x73, 0x56, 0x65, 0x72, 0x73,
-	0x69, 0x6f, 0x6e, 0x42, 0x02, 0x68, 0x00, 0x12, 0x33, 0x0a, 0x13, 0x70, 0x72, 0x65, 0x76, 0x69,
-	0x6f, 0x75, 0x73, 0x5f, 0x70, 0x65, 0x72, 0x63, 0x65, 0x6e, 0x74, 0x61, 0x67, 0x65, 0x18, 0x02, 0x20,
-	0x01, 0x28, 0x02, 0x52, 0x12, 0x70, 0x72, 0x65, 0x76, 0x69, 0x6f, 0x75, 0x73, 0x50, 0x65, 0x72, 0x63,
-	0x65, 0x6e, 0x74, 0x61, 0x67, 0x65, 0x42, 0x02, 0x68, 0x00, 0x12, 0x29, 0x0a, 0x0e, 0x63, 0x6f, 0x6e,
-	0x66, 0x6c, 0x69, 0x63, 0x74, 0x5f, 0x74, 0x6f, 0x6b, 0x65, 0x6e, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0c,
-	0x52, 0x0d, 0x63, 0x6f, 0x6e, 0x66, 0x6c, 0x69, 0x63, 0x74, 0x54, 0x6f, 0x6b, 0x65, 0x6e, 0x42, 0x02,
-	0x68, 0x00, 0x22, 0xe5, 0x01, 0x0a, 0x15, 0x53, 0x65, 0x74, 0x52, 0x61, 0x6d, 0x70, 0x69, 0x6e, 0x67,
-	0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x41, 0x72, 0x67, 0x73, 0x12, 0x1e, 0x0a, 0x08, 0x69, 0x64,
-	0x65, 0x6e, 0x74, 0x69, 0x74, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x08, 0x69, 0x64,
-	0x65, 0x6e, 0x74, 0x69, 0x74, 0x79, 0x42, 0x02, 0x68, 0x00, 0x12, 0x1c, 0x0a, 0x07, 0x76, 0x65, 0x72,
-	0x73, 0x69, 0x6f, 0x6e, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x07, 0x76, 0x65, 0x72, 0x73, 0x69,
-	0x6f, 0x6e, 0x42, 0x02, 0x68, 0x00, 0x12, 0x22, 0x0a, 0x0a, 0x70, 0x65, 0x72, 0x63, 0x65, 0x6e, 0x74,
-	0x61, 0x67, 0x65, 0x18, 0x03, 0x20, 0x01, 0x28, 0x02, 0x52, 0x0a, 0x70, 0x65, 0x72, 0x63, 0x65, 0x6e,
-	0x74, 0x61, 0x67, 0x65, 0x42, 0x02, 0x68, 0x00, 0x12, 0x3f, 0x0a, 0x1a, 0x69, 0x67, 0x6e, 0x6f, 0x72,
-	0x65, 0x5f, 0x6d, 0x69, 0x73, 0x73, 0x69, 0x6e, 0x67, 0x5f, 0x74, 0x61, 0x73, 0x6b, 0x5f, 0x71, 0x75,
-	0x65, 0x75, 0x65, 0x73, 0x18, 0x04, 0x20, 0x01, 0x28, 0x08, 0x52, 0x17, 0x69, 0x67, 0x6e, 0x6f,
-	0x72, 0x65, 0x4d, 0x69, 0x73, 0x73, 0x69, 0x6e, 0x67, 0x54, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75,
-	0x65, 0x73, 0x42, 0x02, 0x68, 0x00, 0x12, 0x29, 0x0a, 0x0e, 0x63, 0x6f, 0x6e, 0x66, 0x6c, 0x69, 0x63,
-	0x74, 0x5f, 0x74, 0x6f, 0x6b, 0x65, 0x6e, 0x18, 0x05, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x0d, 0x63, 0x6f,
-	0x6e, 0x66, 0x6c, 0x69, 0x63, 0x74, 0x54, 0x6f, 0x6b, 0x65, 0x6e, 0x42, 0x02, 0x68, 0x00, 0x22, 0xf0,
-	0x01, 0x0a, 0x1c, 0x53, 0x79, 0x6e, 0x63, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x53, 0x74, 0x61,
-	0x74, 0x65, 0x41, 0x63, 0x74, 0x69, 0x76, 0x69, 0x74, 0x79, 0x41, 0x72, 0x67, 0x73, 0x12, 0x2b, 0x0a,
-	0x0f, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x5f, 0x6e, 0x61, 0x6d, 0x65, 0x18,
-	0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0e, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e,
-	0x74, 0x4e, 0x61, 0x6d, 0x65, 0x42, 0x02, 0x68, 0x00, 0x12, 0x1c, 0x0a, 0x07, 0x76, 0x65, 0x72, 0x73,
-	0x69, 0x6f, 0x6e, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x07, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f,
-	0x6e, 0x42, 0x02, 0x68, 0x00, 0x12, 0x62, 0x0a, 0x0b, 0x75, 0x70, 0x64, 0x61, 0x74, 0x65, 0x5f, 0x61,
-	0x72, 0x67, 0x73, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x3d, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f,
-	0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x64, 0x65,
-	0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x79, 0x6e, 0x63, 0x56,
-	0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x53, 0x74, 0x61, 0x74, 0x65, 0x55, 0x70, 0x64, 0x61, 0x74,
-	0x65, 0x41, 0x72, 0x67, 0x73, 0x52, 0x0a, 0x75, 0x70, 0x64, 0x61, 0x74, 0x65, 0x41, 0x72, 0x67, 0x73,
-	0x42, 0x02, 0x68, 0x00, 0x12, 0x21, 0x0a, 0x0a, 0x72, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x5f, 0x69,
-	0x64, 0x18, 0x04, 0x20, 0x01, 0x28, 0x09, 0x52, 0x09, 0x72, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x49,
-	0x64, 0x42, 0x02, 0x68, 0x00, 0x22, 0x7f, 0x0a, 0x1e, 0x53, 0x79, 0x6e, 0x63, 0x56, 0x65, 0x72, 0x73,
-	0x69, 0x6f, 0x6e, 0x53, 0x74, 0x61, 0x74, 0x65, 0x41, 0x63, 0x74, 0x69, 0x76, 0x69, 0x74, 0x79, 0x52,
-	0x65, 0x73, 0x75, 0x6c, 0x74, 0x12, 0x5d, 0x0a, 0x0d, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x5f,
-	0x73, 0x74, 0x61, 0x74, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x34, 0x2e, 0x74, 0x65, 0x6d,
-	0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x61, 0x70, 0x69,
-	0x2e, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x56, 0x65,
-	0x72, 0x73, 0x69, 0x6f, 0x6e, 0x4c, 0x6f, 0x63, 0x61, 0x6c, 0x53, 0x74, 0x61, 0x74, 0x65, 0x52, 0x0c,
-	0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x53, 0x74, 0x61, 0x74, 0x65, 0x42, 0x02, 0x68, 0x00, 0x22,
-	0x8a, 0x01, 0x0a, 0x1e, 0x49, 0x73, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x4d, 0x69, 0x73, 0x73,
-	0x69, 0x6e, 0x67, 0x54, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x73, 0x41, 0x72, 0x67, 0x73,
-	0x12, 0x34, 0x0a, 0x14, 0x70, 0x72, 0x65, 0x76, 0x5f, 0x63, 0x75, 0x72, 0x72, 0x65, 0x6e, 0x74, 0x5f,
-	0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x12, 0x70,
-	0x72, 0x65, 0x76, 0x43, 0x75, 0x72, 0x72, 0x65, 0x6e, 0x74, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e,
-	0x42, 0x02, 0x68, 0x00, 0x12, 0x32, 0x0a, 0x13, 0x6e, 0x65, 0x77, 0x5f, 0x63, 0x75, 0x72, 0x72, 0x65,
-	0x6e, 0x74, 0x5f, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52,
-	0x11, 0x6e, 0x65, 0x77, 0x43, 0x75, 0x72, 0x72, 0x65, 0x6e, 0x74, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f,
-	0x6e, 0x42, 0x02, 0x68, 0x00, 0x22, 0x5b, 0x0a, 0x20, 0x49, 0x73, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f,
-	0x6e, 0x4d, 0x69, 0x73, 0x73, 0x69, 0x6e, 0x67, 0x54, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65,
-	0x73, 0x52, 0x65, 0x73, 0x75, 0x6c, 0x74, 0x12, 0x37, 0x0a, 0x16, 0x69, 0x73, 0x5f, 0x6d, 0x69, 0x73,
-	0x73, 0x69, 0x6e, 0x67, 0x5f, 0x74, 0x61, 0x73, 0x6b, 0x5f, 0x71, 0x75, 0x65, 0x75, 0x65, 0x73,
-	0x18, 0x01, 0x20, 0x01, 0x28, 0x08, 0x52, 0x13, 0x69, 0x73, 0x4d, 0x69, 0x73, 0x73, 0x69, 0x6e, 0x67,
-	0x54, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x73, 0x42, 0x02, 0x68, 0x00, 0x22, 0xe2, 0x01,
-	0x0a, 0x1c, 0x57, 0x6f, 0x72, 0x6b, 0x65, 0x72, 0x44, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e,
-	0x74, 0x57, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x4d, 0x65, 0x6d, 0x6f, 0x12, 0x2b, 0x0a, 0x0f,
-	0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x5f, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x01,
-	0x20, 0x01, 0x28, 0x09, 0x52, 0x0e, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x4e,
-	0x61, 0x6d, 0x65, 0x42, 0x02, 0x68, 0x00, 0x12, 0x3f, 0x0a, 0x0b, 0x63, 0x72, 0x65, 0x61, 0x74,
-	0x65, 0x5f, 0x74, 0x69, 0x6d, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1a, 0x2e, 0x67, 0x6f,
-	0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x54, 0x69, 0x6d,
-	0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x52, 0x0a, 0x63, 0x72, 0x65, 0x61, 0x74, 0x65, 0x54, 0x69, 0x6d,
-	0x65, 0x42, 0x02, 0x68, 0x00, 0x12, 0x54, 0x0a, 0x0e, 0x72, 0x6f, 0x75, 0x74, 0x69, 0x6e, 0x67, 0x5f,
-	0x63, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x29, 0x2e, 0x74, 0x65,
-	0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79,
-	0x6d, 0x65, 0x6e, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x52, 0x6f, 0x75, 0x74, 0x69, 0x6e, 0x67, 0x43, 0x6f,
-	0x6e, 0x66, 0x69, 0x67, 0x52, 0x0d, 0x72, 0x6f, 0x75, 0x74, 0x69, 0x6e, 0x67, 0x43, 0x6f, 0x6e,
-	0x66, 0x69, 0x67, 0x42, 0x02, 0x68, 0x00, 0x22, 0xc8, 0x01, 0x0a, 0x17, 0x57, 0x6f, 0x72, 0x6b, 0x65,
-	0x72, 0x44, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x53, 0x75, 0x6d, 0x6d, 0x61, 0x72,
-	0x79, 0x12, 0x16, 0x0a, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04,
-	0x6e, 0x61, 0x6d, 0x65, 0x42, 0x02, 0x68, 0x00, 0x12, 0x3f, 0x0a, 0x0b, 0x63, 0x72, 0x65, 0x61, 0x74,
-	0x65, 0x5f, 0x74, 0x69, 0x6d, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1a, 0x2e, 0x67, 0x6f,
-	0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x54, 0x69, 0x6d,
-	0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x52, 0x0a, 0x63, 0x72, 0x65, 0x61, 0x74, 0x65, 0x54, 0x69, 0x6d,
-	0x65, 0x42, 0x02, 0x68, 0x00, 0x12, 0x54, 0x0a, 0x0e, 0x72, 0x6f, 0x75, 0x74, 0x69, 0x6e, 0x67,
-	0x5f, 0x63, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x29, 0x2e, 0x74,
-	0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x64, 0x65, 0x70, 0x6c, 0x6f,
-	0x79, 0x6d, 0x65, 0x6e, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x52, 0x6f, 0x75, 0x74, 0x69, 0x6e, 0x67, 0x43,
-	0x6f, 0x6e, 0x66, 0x69, 0x67, 0x52, 0x0d, 0x72, 0x6f, 0x75, 0x74, 0x69, 0x6e, 0x67, 0x43, 0x6f, 0x6e,
-	0x66, 0x69, 0x67, 0x42, 0x02, 0x68, 0x00, 0x22, 0xd3, 0x01, 0x0a, 0x23, 0x41, 0x64, 0x64, 0x56, 0x65,
-	0x72, 0x73, 0x69, 0x6f, 0x6e, 0x54, 0x6f, 0x57, 0x6f, 0x72, 0x6b, 0x65, 0x72, 0x44, 0x65, 0x70, 0x6c,
-	0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x2b, 0x0a,
-	0x0f, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x5f, 0x6e, 0x61, 0x6d, 0x65, 0x18,
-	0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0e, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74,
-	0x4e, 0x61, 0x6d, 0x65, 0x42, 0x02, 0x68, 0x00, 0x12, 0x5c, 0x0a, 0x0b, 0x75, 0x70, 0x64, 0x61, 0x74,
-	0x65, 0x5f, 0x61, 0x72, 0x67, 0x73, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x37, 0x2e, 0x74, 0x65,
-	0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x61, 0x70, 0x69,
-	0x2e, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x41, 0x64,
-	0x64, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x55, 0x70, 0x64, 0x61, 0x74, 0x65, 0x41, 0x72, 0x67,
-	0x73, 0x52, 0x0a, 0x75, 0x70, 0x64, 0x61, 0x74, 0x65, 0x41, 0x72, 0x67, 0x73, 0x42, 0x02, 0x68,
-	0x00, 0x12, 0x21, 0x0a, 0x0a, 0x72, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x5f, 0x69, 0x64, 0x18, 0x03,
-	0x20, 0x01, 0x28, 0x09, 0x52, 0x09, 0x72, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x49, 0x64, 0x42, 0x02,
-	0x68, 0x00, 0x22, 0x26, 0x0a, 0x24, 0x41, 0x64, 0x64, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x54,
-	0x6f, 0x57, 0x6f, 0x72, 0x6b, 0x65, 0x72, 0x44, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74,
-	0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0xb4, 0x01, 0x0a, 0x0d, 0x54, 0x61, 0x73, 0x6b,
-	0x51, 0x75, 0x65, 0x75, 0x65, 0x44, 0x61, 0x74, 0x61, 0x12, 0x4a, 0x0a, 0x11, 0x66, 0x69, 0x72, 0x73,
-	0x74, 0x5f, 0x70, 0x6f, 0x6c, 0x6c, 0x65, 0x72, 0x5f, 0x74, 0x69, 0x6d, 0x65, 0x18, 0x01, 0x20,
-	0x01, 0x28, 0x0b, 0x32, 0x1a, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74,
-	0x6f, 0x62, 0x75, 0x66, 0x2e, 0x54, 0x69, 0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x52, 0x0f, 0x66,
-	0x69, 0x72, 0x73, 0x74, 0x50, 0x6f, 0x6c, 0x6c, 0x65, 0x72, 0x54, 0x69, 0x6d, 0x65, 0x42, 0x02, 0x68,
-	0x00, 0x12, 0x57, 0x0a, 0x18, 0x6c, 0x61, 0x73, 0x74, 0x5f, 0x62, 0x65, 0x63, 0x61, 0x6d, 0x65, 0x5f,
-	0x63, 0x75, 0x72, 0x72, 0x65, 0x6e, 0x74, 0x5f, 0x74, 0x69, 0x6d, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28,
-	0x0b, 0x32, 0x1a, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62,
-	0x75, 0x66, 0x2e, 0x54, 0x69, 0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x52, 0x15, 0x6c, 0x61, 0x73,
-	0x74, 0x42, 0x65, 0x63, 0x61, 0x6d, 0x65, 0x43, 0x75, 0x72, 0x72, 0x65, 0x6e, 0x74, 0x54, 0x69,
-	0x6d, 0x65, 0x42, 0x02, 0x68, 0x00, 0x22, 0xdd, 0x08, 0x0a, 0x14, 0x44, 0x65, 0x70, 0x6c, 0x6f, 0x79,
-	0x6d, 0x65, 0x6e, 0x74, 0x4c, 0x6f, 0x63, 0x61, 0x6c, 0x53, 0x74, 0x61, 0x74, 0x65, 0x12, 0x4a, 0x0a,
-	0x0a, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b,
-	0x32, 0x26, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x64,
-	0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x44, 0x65, 0x70, 0x6c,
-	0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x52, 0x0a, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e,
-	0x74, 0x42, 0x02, 0x68, 0x00, 0x12, 0x82, 0x01, 0x0a, 0x13, 0x74, 0x61, 0x73, 0x6b, 0x5f, 0x71,
-	0x75, 0x65, 0x75, 0x65, 0x5f, 0x66, 0x61, 0x6d, 0x69, 0x6c, 0x69, 0x65, 0x73, 0x18, 0x02, 0x20, 0x03,
-	0x28, 0x0b, 0x32, 0x4e, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72,
-	0x76, 0x65, 0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e,
-	0x74, 0x2e, 0x76, 0x31, 0x2e, 0x44, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x4c, 0x6f,
-	0x63, 0x61, 0x6c, 0x53, 0x74, 0x61, 0x74, 0x65, 0x2e, 0x54, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75,
-	0x65, 0x46, 0x61, 0x6d, 0x69, 0x6c, 0x69, 0x65, 0x73, 0x45, 0x6e, 0x74, 0x72, 0x79, 0x52, 0x11, 0x74,
-	0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x46, 0x61, 0x6d, 0x69, 0x6c, 0x69, 0x65, 0x73, 0x42,
-	0x02, 0x68, 0x00, 0x12, 0x21, 0x0a, 0x0a, 0x69, 0x73, 0x5f, 0x63, 0x75, 0x72, 0x72, 0x65, 0x6e,
-	0x74, 0x18, 0x03, 0x20, 0x01, 0x28, 0x08, 0x52, 0x09, 0x69, 0x73, 0x43, 0x75, 0x72, 0x72, 0x65, 0x6e,
-	0x74, 0x42, 0x02, 0x68, 0x00, 0x12, 0x57, 0x0a, 0x18, 0x6c, 0x61, 0x73, 0x74, 0x5f, 0x62, 0x65, 0x63,
-	0x61, 0x6d, 0x65, 0x5f, 0x63, 0x75, 0x72, 0x72, 0x65, 0x6e, 0x74, 0x5f, 0x74, 0x69, 0x6d, 0x65, 0x18,
-	0x06, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1a, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72,
-	0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x54, 0x69, 0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x52,
-	0x15, 0x6c, 0x61, 0x73, 0x74, 0x42, 0x65, 0x63, 0x61, 0x6d, 0x65, 0x43, 0x75, 0x72, 0x72, 0x65, 0x6e,
-	0x74, 0x54, 0x69, 0x6d, 0x65, 0x42, 0x02, 0x68, 0x00, 0x12, 0x3f, 0x0a, 0x0b, 0x63, 0x72, 0x65,
-	0x61, 0x74, 0x65, 0x5f, 0x74, 0x69, 0x6d, 0x65, 0x18, 0x04, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1a, 0x2e,
-	0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x54,
-	0x69, 0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x52, 0x0a, 0x63, 0x72, 0x65, 0x61, 0x74, 0x65, 0x54,
-	0x69, 0x6d, 0x65, 0x42, 0x02, 0x68, 0x00, 0x12, 0x65, 0x0a, 0x08, 0x6d, 0x65, 0x74, 0x61, 0x64, 0x61,
-	0x74, 0x61, 0x18, 0x05, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x45, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72,
-	0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x64, 0x65, 0x70,
-	0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x44, 0x65, 0x70, 0x6c, 0x6f, 0x79,
-	0x6d, 0x65, 0x6e, 0x74, 0x4c, 0x6f, 0x63, 0x61, 0x6c, 0x53, 0x74, 0x61, 0x74, 0x65, 0x2e, 0x4d,
-	0x65, 0x74, 0x61, 0x64, 0x61, 0x74, 0x61, 0x45, 0x6e, 0x74, 0x72, 0x79, 0x52, 0x08, 0x6d, 0x65, 0x74,
-	0x61, 0x64, 0x61, 0x74, 0x61, 0x42, 0x02, 0x68, 0x00, 0x12, 0x3a, 0x0a, 0x17, 0x73, 0x74, 0x61, 0x72,
-	0x74, 0x65, 0x64, 0x5f, 0x73, 0x65, 0x72, 0x69, 0x65, 0x73, 0x5f, 0x77, 0x6f, 0x72, 0x6b, 0x66, 0x6c,
-	0x6f, 0x77, 0x18, 0x07, 0x20, 0x01, 0x28, 0x08, 0x52, 0x15, 0x73, 0x74, 0x61, 0x72, 0x74, 0x65, 0x64,
-	0x53, 0x65, 0x72, 0x69, 0x65, 0x73, 0x57, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x42, 0x02, 0x68,
-	0x00, 0x1a, 0x99, 0x01, 0x0a, 0x16, 0x54, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x46, 0x61,
-	0x6d, 0x69, 0x6c, 0x69, 0x65, 0x73, 0x45, 0x6e, 0x74, 0x72, 0x79, 0x12, 0x14, 0x0a, 0x03, 0x6b,
-	0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x03, 0x6b, 0x65, 0x79, 0x42, 0x02, 0x68, 0x00,
-	0x12, 0x65, 0x0a, 0x05, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x4b,
-	0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e,
-	0x61, 0x70, 0x69, 0x2e, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x2e, 0x76, 0x31,
-	0x2e, 0x44, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x4c, 0x6f, 0x63, 0x61, 0x6c, 0x53,
-	0x74, 0x61, 0x74, 0x65, 0x2e, 0x54, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x46, 0x61, 0x6d,
-	0x69, 0x6c, 0x79, 0x44, 0x61, 0x74, 0x61, 0x52, 0x05, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x42, 0x02, 0x68,
-	0x00, 0x3a, 0x02, 0x38, 0x01, 0x1a, 0x64, 0x0a, 0x0d, 0x4d, 0x65, 0x74, 0x61, 0x64, 0x61, 0x74,
-	0x61, 0x45, 0x6e, 0x74, 0x72, 0x79, 0x12, 0x14, 0x0a, 0x03, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01,
-	0x28, 0x09, 0x52, 0x03, 0x6b, 0x65, 0x79, 0x42, 0x02, 0x68, 0x00, 0x12, 0x39, 0x0a, 0x05, 0x76, 0x61,
-	0x6c, 0x75, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1f, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f,
-	0x72, 0x61, 0x6c, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x63, 0x6f, 0x6d, 0x6d, 0x6f, 0x6e, 0x2e, 0x76, 0x31,
-	0x2e, 0x50, 0x61, 0x79, 0x6c, 0x6f, 0x61, 0x64, 0x52, 0x05, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x42, 0x02,
-	0x68, 0x00, 0x3a, 0x02, 0x38, 0x01, 0x1a, 0x91, 0x02, 0x0a, 0x13, 0x54, 0x61, 0x73, 0x6b, 0x51, 0x75,
-	0x65, 0x75, 0x65, 0x46, 0x61, 0x6d, 0x69, 0x6c, 0x79, 0x44, 0x61, 0x74, 0x61, 0x12, 0x80, 0x01,
-	0x0a, 0x0b, 0x74, 0x61, 0x73, 0x6b, 0x5f, 0x71, 0x75, 0x65, 0x75, 0x65, 0x73, 0x18, 0x01, 0x20, 0x03,
-	0x28, 0x0b, 0x32, 0x5b, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72,
-	0x76, 0x65, 0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e,
-	0x74, 0x2e, 0x76, 0x31, 0x2e, 0x44, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x4c, 0x6f,
-	0x63, 0x61, 0x6c, 0x53, 0x74, 0x61, 0x74, 0x65, 0x2e, 0x54, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75,
-	0x65, 0x46, 0x61, 0x6d, 0x69, 0x6c, 0x79, 0x44, 0x61, 0x74, 0x61, 0x2e, 0x54, 0x61, 0x73, 0x6b, 0x51,
-	0x75, 0x65, 0x75, 0x65, 0x73, 0x45, 0x6e, 0x74, 0x72, 0x79, 0x52, 0x0a, 0x74, 0x61, 0x73, 0x6b, 0x51,
-	0x75, 0x65, 0x75, 0x65, 0x73, 0x42, 0x02, 0x68, 0x00, 0x1a, 0x77, 0x0a, 0x0f, 0x54, 0x61, 0x73,
-	0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x73, 0x45, 0x6e, 0x74, 0x72, 0x79, 0x12, 0x14, 0x0a, 0x03, 0x6b,
-	0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x05, 0x52, 0x03, 0x6b, 0x65, 0x79, 0x42, 0x02, 0x68, 0x00,
-	0x12, 0x4a, 0x0a, 0x05, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x30,
-	0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e,
-	0x61, 0x70, 0x69, 0x2e, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x2e, 0x76, 0x31,
-	0x2e, 0x54, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x44, 0x61, 0x74, 0x61, 0x52, 0x05, 0x76,
-	0x61, 0x6c, 0x75, 0x65, 0x42, 0x02, 0x68, 0x00, 0x3a, 0x02, 0x38, 0x01, 0x22, 0xbd, 0x01, 0x0a,
-	0x16, 0x44, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x57, 0x6f, 0x72, 0x6b, 0x66, 0x6c,
-	0x6f, 0x77, 0x41, 0x72, 0x67, 0x73, 0x12, 0x29, 0x0a, 0x0e, 0x6e, 0x61, 0x6d, 0x65, 0x73, 0x70, 0x61,
-	0x63, 0x65, 0x5f, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0d, 0x6e, 0x61,
-	0x6d, 0x65, 0x73, 0x70, 0x61, 0x63, 0x65, 0x4e, 0x61, 0x6d, 0x65, 0x42, 0x02, 0x68, 0x00, 0x12, 0x25,
-	0x0a, 0x0c, 0x6e, 0x61, 0x6d, 0x65, 0x73, 0x70, 0x61, 0x63, 0x65, 0x5f, 0x69, 0x64, 0x18, 0x02, 0x20,
-	0x01, 0x28, 0x09, 0x52, 0x0b, 0x6e, 0x61, 0x6d, 0x65, 0x73, 0x70, 0x61, 0x63, 0x65, 0x49, 0x64, 0x42,
-	0x02, 0x68, 0x00, 0x12, 0x51, 0x0a, 0x05, 0x73, 0x74, 0x61, 0x74, 0x65, 0x18, 0x03, 0x20, 0x01, 0x28,
-	0x0b, 0x32, 0x37, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72,
-	0x76, 0x65, 0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e,
-	0x74, 0x2e, 0x76, 0x31, 0x2e, 0x44, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x4c, 0x6f,
-	0x63, 0x61, 0x6c, 0x53, 0x74, 0x61, 0x74, 0x65, 0x52, 0x05, 0x73, 0x74, 0x61, 0x74, 0x65, 0x42, 0x02,
-	0x68, 0x00, 0x22, 0xe4, 0x01, 0x0a, 0x1c, 0x44, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74,
-	0x53, 0x65, 0x72, 0x69, 0x65, 0x73, 0x57, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x41, 0x72, 0x67,
-	0x73, 0x12, 0x29, 0x0a, 0x0e, 0x6e, 0x61, 0x6d, 0x65, 0x73, 0x70, 0x61, 0x63, 0x65, 0x5f, 0x6e, 0x61,
-	0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0d, 0x6e, 0x61, 0x6d, 0x65, 0x73, 0x70, 0x61,
-	0x63, 0x65, 0x4e, 0x61, 0x6d, 0x65, 0x42, 0x02, 0x68, 0x00, 0x12, 0x25, 0x0a, 0x0c, 0x6e, 0x61,
-	0x6d, 0x65, 0x73, 0x70, 0x61, 0x63, 0x65, 0x5f, 0x69, 0x64, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52,
-	0x0b, 0x6e, 0x61, 0x6d, 0x65, 0x73, 0x70, 0x61, 0x63, 0x65, 0x49, 0x64, 0x42, 0x02, 0x68, 0x00, 0x12,
-	0x23, 0x0a, 0x0b, 0x73, 0x65, 0x72, 0x69, 0x65, 0x73, 0x5f, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x03, 0x20,
-	0x01, 0x28, 0x09, 0x52, 0x0a, 0x73, 0x65, 0x72, 0x69, 0x65, 0x73, 0x4e, 0x61, 0x6d, 0x65, 0x42, 0x02,
-	0x68, 0x00, 0x12, 0x4d, 0x0a, 0x05, 0x73, 0x74, 0x61, 0x74, 0x65, 0x18, 0x04, 0x20, 0x01, 0x28, 0x0b,
-	0x32, 0x33, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65,
-	0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74,
-	0x2e, 0x76, 0x31, 0x2e, 0x53, 0x65, 0x72, 0x69, 0x65, 0x73, 0x4c, 0x6f, 0x63, 0x61, 0x6c, 0x53, 0x74,
-	0x61, 0x74, 0x65, 0x52, 0x05, 0x73, 0x74, 0x61, 0x74, 0x65, 0x42, 0x02, 0x68, 0x00, 0x22, 0x92, 0x01,
-	0x0a, 0x10, 0x53, 0x65, 0x72, 0x69, 0x65, 0x73, 0x4c, 0x6f, 0x63, 0x61, 0x6c, 0x53, 0x74, 0x61, 0x74,
-	0x65, 0x12, 0x2c, 0x0a, 0x10, 0x63, 0x75, 0x72, 0x72, 0x65, 0x6e, 0x74, 0x5f, 0x62, 0x75, 0x69, 0x6c,
-	0x64, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0e, 0x63, 0x75, 0x72, 0x72, 0x65,
-	0x6e, 0x74, 0x42, 0x75, 0x69, 0x6c, 0x64, 0x49, 0x64, 0x42, 0x02, 0x68, 0x00, 0x12, 0x50, 0x0a, 0x14,
-	0x63, 0x75, 0x72, 0x72, 0x65, 0x6e, 0x74, 0x5f, 0x63, 0x68, 0x61, 0x6e, 0x67, 0x65, 0x64, 0x5f, 0x74,
-	0x69, 0x6d, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1a, 0x2e, 0x67, 0x6f, 0x6f, 0x67,
-	0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x54, 0x69, 0x6d, 0x65, 0x73,
-	0x74, 0x61, 0x6d, 0x70, 0x52, 0x12, 0x63, 0x75, 0x72, 0x72, 0x65, 0x6e, 0x74, 0x43, 0x68, 0x61, 0x6e,
-	0x67, 0x65, 0x64, 0x54, 0x69, 0x6d, 0x65, 0x42, 0x02, 0x68, 0x00, 0x22, 0x96, 0x02, 0x0a, 0x1e, 0x52,
-	0x65, 0x67, 0x69, 0x73, 0x74, 0x65, 0x72, 0x57, 0x6f, 0x72, 0x6b, 0x65, 0x72, 0x49, 0x6e, 0x44, 0x65,
-	0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x41, 0x72, 0x67, 0x73, 0x12, 0x2a, 0x0a, 0x0f, 0x74,
-	0x61, 0x73, 0x6b, 0x5f, 0x71, 0x75, 0x65, 0x75, 0x65, 0x5f, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x01, 0x20,
-	0x01, 0x28, 0x09, 0x52, 0x0d, 0x74, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x4e, 0x61,
-	0x6d, 0x65, 0x42, 0x02, 0x68, 0x00, 0x12, 0x50, 0x0a, 0x0f, 0x74, 0x61, 0x73, 0x6b, 0x5f, 0x71, 0x75,
-	0x65, 0x75, 0x65, 0x5f, 0x74, 0x79, 0x70, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0e, 0x32, 0x24, 0x2e,
-	0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x65, 0x6e, 0x75, 0x6d,
-	0x73, 0x2e, 0x76, 0x31, 0x2e, 0x54, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x54, 0x79, 0x70,
-	0x65, 0x52, 0x0d, 0x74, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x54, 0x79, 0x70, 0x65, 0x42,
-	0x02, 0x68, 0x00, 0x12, 0x4a, 0x0a, 0x11, 0x66, 0x69, 0x72, 0x73, 0x74, 0x5f, 0x70, 0x6f, 0x6c, 0x6c,
-	0x65, 0x72, 0x5f, 0x74, 0x69, 0x6d, 0x65, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1a, 0x2e, 0x67,
-	0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x54,
-	0x69, 0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x52, 0x0f, 0x66, 0x69, 0x72, 0x73, 0x74, 0x50, 0x6f,
-	0x6c, 0x6c, 0x65, 0x72, 0x54, 0x69, 0x6d, 0x65, 0x42, 0x02, 0x68, 0x00, 0x12, 0x2a, 0x0a, 0x0f, 0x6d,
-	0x61, 0x78, 0x5f, 0x74, 0x61, 0x73, 0x6b, 0x5f, 0x71, 0x75, 0x65, 0x75, 0x65, 0x73, 0x18, 0x04, 0x20,
-	0x01, 0x28, 0x05, 0x52, 0x0d, 0x6d, 0x61, 0x78, 0x54, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65,
-	0x73, 0x42, 0x02, 0x68, 0x00, 0x22, 0xcf, 0x02, 0x0a, 0x17, 0x53, 0x79, 0x6e, 0x63, 0x44, 0x65, 0x70,
-	0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x53, 0x74, 0x61, 0x74, 0x65, 0x41, 0x72, 0x67, 0x73, 0x12,
-	0x6a, 0x0a, 0x0b, 0x73, 0x65, 0x74, 0x5f, 0x63, 0x75, 0x72, 0x72, 0x65, 0x6e, 0x74, 0x18, 0x01,
-	0x20, 0x01, 0x28, 0x0b, 0x32, 0x45, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73,
-	0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d,
-	0x65, 0x6e, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x79, 0x6e, 0x63, 0x44, 0x65, 0x70, 0x6c, 0x6f, 0x79,
-	0x6d, 0x65, 0x6e, 0x74, 0x53, 0x74, 0x61, 0x74, 0x65, 0x41, 0x72, 0x67, 0x73, 0x2e, 0x53, 0x65, 0x74,
-	0x43, 0x75, 0x72, 0x72, 0x65, 0x6e, 0x74, 0x52, 0x0a, 0x73, 0x65, 0x74, 0x43, 0x75, 0x72, 0x72, 0x65,
-	0x6e, 0x74, 0x42, 0x02, 0x68, 0x00, 0x12, 0x61, 0x0a, 0x0f, 0x75, 0x70, 0x64, 0x61, 0x74, 0x65, 0x5f,
-	0x6d, 0x65, 0x74, 0x61, 0x64, 0x61, 0x74, 0x61, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x34, 0x2e,
-	0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x64, 0x65, 0x70,
-	0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x55, 0x70, 0x64, 0x61, 0x74, 0x65,
-	0x44, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x4d, 0x65, 0x74, 0x61, 0x64, 0x61, 0x74,
-	0x61, 0x52, 0x0e, 0x75, 0x70, 0x64, 0x61, 0x74, 0x65, 0x4d, 0x65, 0x74, 0x61, 0x64, 0x61, 0x74, 0x61,
-	0x42, 0x02, 0x68, 0x00, 0x1a, 0x65, 0x0a, 0x0a, 0x53, 0x65, 0x74, 0x43, 0x75, 0x72, 0x72, 0x65, 0x6e,
-	0x74, 0x12, 0x57, 0x0a, 0x18, 0x6c, 0x61, 0x73, 0x74, 0x5f, 0x62, 0x65, 0x63, 0x61, 0x6d, 0x65, 0x5f,
-	0x63, 0x75, 0x72, 0x72, 0x65, 0x6e, 0x74, 0x5f, 0x74, 0x69, 0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28,
-	0x0b, 0x32, 0x1a, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f,
-	0x62, 0x75, 0x66, 0x2e, 0x54, 0x69, 0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x52, 0x15, 0x6c, 0x61,
-	0x73, 0x74, 0x42, 0x65, 0x63, 0x61, 0x6d, 0x65, 0x43, 0x75, 0x72, 0x72, 0x65, 0x6e, 0x74, 0x54, 0x69,
-	0x6d, 0x65, 0x42, 0x02, 0x68, 0x00, 0x22, 0x90, 0x01, 0x0a, 0x1b, 0x53, 0x79, 0x6e, 0x63, 0x44, 0x65,
-	0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x53, 0x74, 0x61, 0x74, 0x65, 0x52, 0x65, 0x73, 0x70,
-	0x6f, 0x6e, 0x73, 0x65, 0x12, 0x71, 0x0a, 0x16, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e,
-	0x74, 0x5f, 0x6c, 0x6f, 0x63, 0x61, 0x6c, 0x5f, 0x73, 0x74, 0x61, 0x74, 0x65, 0x18, 0x01, 0x20, 0x01,
-	0x28, 0x0b, 0x32, 0x37, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72,
-	0x76, 0x65, 0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65,
-	0x6e, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x44, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x4c,
-	0x6f, 0x63, 0x61, 0x6c, 0x53, 0x74, 0x61, 0x74, 0x65, 0x52, 0x14, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79,
-	0x6d, 0x65, 0x6e, 0x74, 0x4c, 0x6f, 0x63, 0x61, 0x6c, 0x53, 0x74, 0x61, 0x74, 0x65, 0x42, 0x02, 0x68,
-	0x00, 0x22, 0x94, 0x01, 0x0a, 0x1f, 0x51, 0x75, 0x65, 0x72, 0x79, 0x44, 0x65, 0x73, 0x63, 0x72, 0x69,
-	0x62, 0x65, 0x44, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x52, 0x65, 0x73, 0x70, 0x6f,
-	0x6e, 0x73, 0x65, 0x12, 0x71, 0x0a, 0x16, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74,
-	0x5f, 0x6c, 0x6f, 0x63, 0x61, 0x6c, 0x5f, 0x73, 0x74, 0x61, 0x74, 0x65, 0x18, 0x01, 0x20, 0x01,
-	0x28, 0x0b, 0x32, 0x37, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72,
-	0x76, 0x65, 0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e,
-	0x74, 0x2e, 0x76, 0x31, 0x2e, 0x44, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x4c, 0x6f,
-	0x63, 0x61, 0x6c, 0x53, 0x74, 0x61, 0x74, 0x65, 0x52, 0x14, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d,
-	0x65, 0x6e, 0x74, 0x4c, 0x6f, 0x63, 0x61, 0x6c, 0x53, 0x74, 0x61, 0x74, 0x65, 0x42, 0x02, 0x68, 0x00,
-	0x22, 0xdd, 0x01, 0x0a, 0x16, 0x44, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x57, 0x6f,
-	0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x4d, 0x65, 0x6d, 0x6f, 0x12, 0x4a, 0x0a, 0x0a, 0x64, 0x65, 0x70,
-	0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x26, 0x2e,
-	0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x64, 0x65, 0x70, 0x6c,
-	0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x44, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d,
-	0x65, 0x6e, 0x74, 0x52, 0x0a, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x42, 0x02,
-	0x68, 0x00, 0x12, 0x3f, 0x0a, 0x0b, 0x63, 0x72, 0x65, 0x61, 0x74, 0x65, 0x5f, 0x74, 0x69, 0x6d, 0x65,
-	0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1a, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70,
-	0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x54, 0x69, 0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d, 0x70,
-	0x52, 0x0a, 0x63, 0x72, 0x65, 0x61, 0x74, 0x65, 0x54, 0x69, 0x6d, 0x65, 0x42, 0x02, 0x68, 0x00,
-	0x12, 0x36, 0x0a, 0x15, 0x69, 0x73, 0x5f, 0x63, 0x75, 0x72, 0x72, 0x65, 0x6e, 0x74, 0x5f, 0x64, 0x65,
-	0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x18, 0x03, 0x20, 0x01, 0x28, 0x08, 0x52, 0x13, 0x69,
-	0x73, 0x43, 0x75, 0x72, 0x72, 0x65, 0x6e, 0x74, 0x44, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e,
-	0x74, 0x42, 0x02, 0x68, 0x00, 0x22, 0x66, 0x0a, 0x1c, 0x53, 0x74, 0x61, 0x72, 0x74, 0x44, 0x65, 0x70,
-	0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x53, 0x65, 0x72, 0x69, 0x65, 0x73, 0x52, 0x65, 0x71, 0x75,
-	0x65, 0x73, 0x74, 0x12, 0x23, 0x0a, 0x0b, 0x73, 0x65, 0x72, 0x69, 0x65, 0x73, 0x5f, 0x6e, 0x61, 0x6d,
-	0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0a, 0x73, 0x65, 0x72, 0x69, 0x65, 0x73, 0x4e, 0x61,
-	0x6d, 0x65, 0x42, 0x02, 0x68, 0x00, 0x12, 0x21, 0x0a, 0x0a, 0x72, 0x65, 0x71, 0x75, 0x65, 0x73,
-	0x74, 0x5f, 0x69, 0x64, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x09, 0x72, 0x65, 0x71, 0x75, 0x65,
-	0x73, 0x74, 0x49, 0x64, 0x42, 0x02, 0x68, 0x00, 0x22, 0xef, 0x02, 0x0a, 0x13, 0x53, 0x79, 0x6e, 0x63,
-	0x55, 0x73, 0x65, 0x72, 0x44, 0x61, 0x74, 0x61, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x4a,
-	0x0a, 0x0a, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x18, 0x01, 0x20, 0x01, 0x28,
-	0x0b, 0x32, 0x26, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x61, 0x70, 0x69, 0x2e,
-	0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x44, 0x65, 0x70,
-	0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x52, 0x0a, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d,
-	0x65, 0x6e, 0x74, 0x42, 0x02, 0x68, 0x00, 0x12, 0x5b, 0x0a, 0x04, 0x73, 0x79, 0x6e, 0x63, 0x18, 0x02,
-	0x20, 0x03, 0x28, 0x0b, 0x32, 0x43, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73,
-	0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d,
-	0x65, 0x6e, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x79, 0x6e, 0x63, 0x55, 0x73, 0x65, 0x72, 0x44, 0x61,
-	0x74, 0x61, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x2e, 0x53, 0x79, 0x6e, 0x63, 0x55, 0x73, 0x65,
-	0x72, 0x44, 0x61, 0x74, 0x61, 0x52, 0x04, 0x73, 0x79, 0x6e, 0x63, 0x42, 0x02, 0x68, 0x00, 0x1a, 0xae,
-	0x01, 0x0a, 0x0c, 0x53, 0x79, 0x6e, 0x63, 0x55, 0x73, 0x65, 0x72, 0x44, 0x61, 0x74, 0x61, 0x12, 0x16,
-	0x0a, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x6e, 0x61,
-	0x6d, 0x65, 0x42, 0x02, 0x68, 0x00, 0x12, 0x3c, 0x0a, 0x04, 0x74, 0x79, 0x70, 0x65, 0x18, 0x02, 0x20,
-	0x01, 0x28, 0x0e, 0x32, 0x24, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x61, 0x70,
-	0x69, 0x2e, 0x65, 0x6e, 0x75, 0x6d, 0x73, 0x2e, 0x76, 0x31, 0x2e, 0x54, 0x61, 0x73, 0x6b, 0x51, 0x75,
-	0x65, 0x75, 0x65, 0x54, 0x79, 0x70, 0x65, 0x52, 0x04, 0x74, 0x79, 0x70, 0x65, 0x42, 0x02, 0x68, 0x00,
-	0x12, 0x48, 0x0a, 0x04, 0x64, 0x61, 0x74, 0x61, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x30, 0x2e,
-	0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x61,
-	0x70, 0x69, 0x2e, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x2e, 0x76, 0x31, 0x2e,
-	0x54, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x44, 0x61, 0x74, 0x61, 0x52, 0x04, 0x64,
-	0x61, 0x74, 0x61, 0x42, 0x02, 0x68, 0x00, 0x22, 0xf6, 0x01, 0x0a, 0x14, 0x53, 0x79, 0x6e, 0x63, 0x55,
-	0x73, 0x65, 0x72, 0x44, 0x61, 0x74, 0x61, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x8c,
-	0x01, 0x0a, 0x17, 0x74, 0x61, 0x73, 0x6b, 0x5f, 0x71, 0x75, 0x65, 0x75, 0x65, 0x5f, 0x6d, 0x61, 0x78,
-	0x5f, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x73, 0x18, 0x01, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x51,
-	0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e,
-	0x61, 0x70, 0x69, 0x2e, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x2e, 0x76, 0x31,
-	0x2e, 0x53, 0x79, 0x6e, 0x63, 0x55, 0x73, 0x65, 0x72, 0x44, 0x61, 0x74, 0x61, 0x52, 0x65, 0x73,
-	0x70, 0x6f, 0x6e, 0x73, 0x65, 0x2e, 0x54, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x4d, 0x61,
-	0x78, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x73, 0x45, 0x6e, 0x74, 0x72, 0x79, 0x52, 0x14, 0x74,
-	0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x4d, 0x61, 0x78, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f,
-	0x6e, 0x73, 0x42, 0x02, 0x68, 0x00, 0x1a, 0x4f, 0x0a, 0x19, 0x54, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65,
-	0x75, 0x65, 0x4d, 0x61, 0x78, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x73, 0x45, 0x6e, 0x74, 0x72,
-	0x79, 0x12, 0x14, 0x0a, 0x03, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x03, 0x6b,
-	0x65, 0x79, 0x42, 0x02, 0x68, 0x00, 0x12, 0x18, 0x0a, 0x05, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x18, 0x02,
-	0x20, 0x01, 0x28, 0x03, 0x52, 0x05, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x42, 0x02, 0x68, 0x00, 0x3a,
-	0x02, 0x38, 0x01, 0x22, 0x8c, 0x02, 0x0a, 0x1f, 0x43, 0x68, 0x65, 0x63, 0x6b, 0x55, 0x73, 0x65, 0x72,
-	0x44, 0x61, 0x74, 0x61, 0x50, 0x72, 0x6f, 0x70, 0x61, 0x67, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x52, 0x65,
-	0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x97, 0x01, 0x0a, 0x17, 0x74, 0x61, 0x73, 0x6b, 0x5f, 0x71, 0x75,
-	0x65, 0x75, 0x65, 0x5f, 0x6d, 0x61, 0x78, 0x5f, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x73, 0x18,
-	0x01, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x5c, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e,
-	0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79,
-	0x6d, 0x65, 0x6e, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x43, 0x68, 0x65, 0x63, 0x6b, 0x55, 0x73, 0x65,
-	0x72, 0x44, 0x61, 0x74, 0x61, 0x50, 0x72, 0x6f, 0x70, 0x61, 0x67, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x52,
-	0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x2e, 0x54, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x4d,
-	0x61, 0x78, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x73, 0x45, 0x6e, 0x74, 0x72, 0x79, 0x52, 0x14,
-	0x74, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x4d, 0x61, 0x78, 0x56, 0x65, 0x72, 0x73, 0x69,
-	0x6f, 0x6e, 0x73, 0x42, 0x02, 0x68, 0x00, 0x1a, 0x4f, 0x0a, 0x19, 0x54, 0x61, 0x73, 0x6b, 0x51, 0x75,
-	0x65, 0x75, 0x65, 0x4d, 0x61, 0x78, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x73, 0x45, 0x6e, 0x74,
-	0x72, 0x79, 0x12, 0x14, 0x0a, 0x03, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x03,
-	0x6b, 0x65, 0x79, 0x42, 0x02, 0x68, 0x00, 0x12, 0x18, 0x0a, 0x05, 0x76, 0x61, 0x6c, 0x75, 0x65,
-	0x18, 0x02, 0x20, 0x01, 0x28, 0x03, 0x52, 0x05, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x42, 0x02, 0x68, 0x00,
-	0x3a, 0x02, 0x38, 0x01, 0x22, 0xdf, 0x01, 0x0a, 0x18, 0x53, 0x65, 0x74, 0x43, 0x75, 0x72, 0x72, 0x65,
-	0x6e, 0x74, 0x44, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x41, 0x72, 0x67, 0x73, 0x12,
-	0x1e, 0x0a, 0x08, 0x69, 0x64, 0x65, 0x6e, 0x74, 0x69, 0x74, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09,
-	0x52, 0x08, 0x69, 0x64, 0x65, 0x6e, 0x74, 0x69, 0x74, 0x79, 0x42, 0x02, 0x68, 0x00, 0x12, 0x1d, 0x0a,
-	0x08, 0x62, 0x75, 0x69, 0x6c, 0x64, 0x5f, 0x69, 0x64, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x07,
-	0x62, 0x75, 0x69, 0x6c, 0x64, 0x49, 0x64, 0x42, 0x02, 0x68, 0x00, 0x12, 0x61, 0x0a, 0x0f, 0x75,
-	0x70, 0x64, 0x61, 0x74, 0x65, 0x5f, 0x6d, 0x65, 0x74, 0x61, 0x64, 0x61, 0x74, 0x61, 0x18, 0x03, 0x20,
-	0x01, 0x28, 0x0b, 0x32, 0x34, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x61, 0x70,
-	0x69, 0x2e, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x55,
-	0x70, 0x64, 0x61, 0x74, 0x65, 0x44, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x4d, 0x65,
-	0x74, 0x61, 0x64, 0x61, 0x74, 0x61, 0x52, 0x0e, 0x75, 0x70, 0x64, 0x61, 0x74, 0x65, 0x4d, 0x65, 0x74,
-	0x61, 0x64, 0x61, 0x74, 0x61, 0x42, 0x02, 0x68, 0x00, 0x12, 0x21, 0x0a, 0x0a, 0x72, 0x65, 0x71, 0x75,
-	0x65, 0x73, 0x74, 0x5f, 0x69, 0x64, 0x18, 0x04, 0x20, 0x01, 0x28, 0x09, 0x52, 0x09, 0x72, 0x65, 0x71,
-	0x75, 0x65, 0x73, 0x74, 0x49, 0x64, 0x42, 0x02, 0x68, 0x00, 0x22, 0x8e, 0x02, 0x0a, 0x1c, 0x53,
-	0x65, 0x74, 0x43, 0x75, 0x72, 0x72, 0x65, 0x6e, 0x74, 0x44, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65,
-	0x6e, 0x74, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x75, 0x0a, 0x18, 0x63, 0x75, 0x72,
-	0x72, 0x65, 0x6e, 0x74, 0x5f, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x5f, 0x73,
-	0x74, 0x61, 0x74, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x37, 0x2e, 0x74, 0x65, 0x6d, 0x70,
-	0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x64,
-	0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x44, 0x65, 0x70, 0x6c,
-	0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x4c, 0x6f, 0x63, 0x61, 0x6c, 0x53, 0x74, 0x61, 0x74, 0x65,
-	0x52, 0x16, 0x63, 0x75, 0x72, 0x72, 0x65, 0x6e, 0x74, 0x44, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65,
-	0x6e, 0x74, 0x53, 0x74, 0x61, 0x74, 0x65, 0x42, 0x02, 0x68, 0x00, 0x12, 0x77, 0x0a, 0x19, 0x70, 0x72,
-	0x65, 0x76, 0x69, 0x6f, 0x75, 0x73, 0x5f, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74,
-	0x5f, 0x73, 0x74, 0x61, 0x74, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x37, 0x2e, 0x74, 0x65,
-	0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x61, 0x70, 0x69,
-	0x2e, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x44, 0x65,
-	0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x4c, 0x6f, 0x63, 0x61, 0x6c, 0x53, 0x74, 0x61, 0x74,
-	0x65, 0x52, 0x17, 0x70, 0x72, 0x65, 0x76, 0x69, 0x6f, 0x75, 0x73, 0x44, 0x65, 0x70, 0x6c, 0x6f,
-	0x79, 0x6d, 0x65, 0x6e, 0x74, 0x53, 0x74, 0x61, 0x74, 0x65, 0x42, 0x02, 0x68, 0x00, 0x22, 0xe4, 0x01,
-	0x0a, 0x1f, 0x53, 0x79, 0x6e, 0x63, 0x44, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x53,
-	0x74, 0x61, 0x74, 0x65, 0x41, 0x63, 0x74, 0x69, 0x76, 0x69, 0x74, 0x79, 0x41, 0x72, 0x67, 0x73, 0x12,
-	0x4a, 0x0a, 0x0a, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x18, 0x01, 0x20, 0x01,
-	0x28, 0x0b, 0x32, 0x26, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x61, 0x70, 0x69,
-	0x2e, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x44, 0x65,
-	0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x52, 0x0a, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79,
-	0x6d, 0x65, 0x6e, 0x74, 0x42, 0x02, 0x68, 0x00, 0x12, 0x52, 0x0a, 0x04, 0x61, 0x72, 0x67, 0x73, 0x18,
-	0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x3a, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e,
-	0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79,
-	0x6d, 0x65, 0x6e, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x79, 0x6e, 0x63, 0x44, 0x65, 0x70, 0x6c, 0x6f,
-	0x79, 0x6d, 0x65, 0x6e, 0x74, 0x53, 0x74, 0x61, 0x74, 0x65, 0x41, 0x72, 0x67, 0x73, 0x52, 0x04, 0x61,
-	0x72, 0x67, 0x73, 0x42, 0x02, 0x68, 0x00, 0x12, 0x21, 0x0a, 0x0a, 0x72, 0x65, 0x71, 0x75, 0x65, 0x73,
-	0x74, 0x5f, 0x69, 0x64, 0x18, 0x03, 0x20, 0x01, 0x28, 0x09, 0x52, 0x09, 0x72, 0x65, 0x71, 0x75, 0x65,
-	0x73, 0x74, 0x49, 0x64, 0x42, 0x02, 0x68, 0x00, 0x22, 0x76, 0x0a, 0x21, 0x53, 0x79, 0x6e, 0x63,
-	0x44, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x53, 0x74, 0x61, 0x74, 0x65, 0x41, 0x63,
-	0x74, 0x69, 0x76, 0x69, 0x74, 0x79, 0x52, 0x65, 0x73, 0x75, 0x6c, 0x74, 0x12, 0x51, 0x0a, 0x05, 0x73,
-	0x74, 0x61, 0x74, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x37, 0x2e, 0x74, 0x65, 0x6d, 0x70,
-	0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x64,
-	0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x44, 0x65, 0x70, 0x6c,
-	0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x4c, 0x6f, 0x63, 0x61, 0x6c, 0x53, 0x74, 0x61, 0x74, 0x65, 0x52,
-	0x05, 0x73, 0x74, 0x61, 0x74, 0x65, 0x42, 0x02, 0x68, 0x00, 0x22, 0xc3, 0x01, 0x0a, 0x1c, 0x44,
-	0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x53, 0x65, 0x72, 0x69, 0x65, 0x73, 0x57, 0x6f,
-	0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x4d, 0x65, 0x6d, 0x6f, 0x12, 0x23, 0x0a, 0x0b, 0x73, 0x65, 0x72,
-	0x69, 0x65, 0x73, 0x5f, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0a, 0x73,
-	0x65, 0x72, 0x69, 0x65, 0x73, 0x4e, 0x61, 0x6d, 0x65, 0x42, 0x02, 0x68, 0x00, 0x12, 0x2c, 0x0a, 0x10,
-	0x63, 0x75, 0x72, 0x72, 0x65, 0x6e, 0x74, 0x5f, 0x62, 0x75, 0x69, 0x6c, 0x64, 0x5f, 0x69, 0x64, 0x18,
-	0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0e, 0x63, 0x75, 0x72, 0x72, 0x65, 0x6e, 0x74, 0x42, 0x75, 0x69,
-	0x6c, 0x64, 0x49, 0x64, 0x42, 0x02, 0x68, 0x00, 0x12, 0x50, 0x0a, 0x14, 0x63, 0x75, 0x72, 0x72, 0x65,
-	0x6e, 0x74, 0x5f, 0x63, 0x68, 0x61, 0x6e, 0x67, 0x65, 0x64, 0x5f, 0x74, 0x69, 0x6d, 0x65, 0x18,
-	0x03, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1a, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72,
-	0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x54, 0x69, 0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x52,
-	0x12, 0x63, 0x75, 0x72, 0x72, 0x65, 0x6e, 0x74, 0x43, 0x68, 0x61, 0x6e, 0x67, 0x65, 0x64, 0x54, 0x69,
-	0x6d, 0x65, 0x42, 0x02, 0x68, 0x00, 0x42, 0x34, 0x5a, 0x32, 0x67, 0x6f, 0x2e, 0x74, 0x65, 0x6d, 0x70,
-	0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x69, 0x6f, 0x2f, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2f, 0x61, 0x70,
-	0x69, 0x2f, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x2f, 0x76, 0x31, 0x3b, 0x64,
-	0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f,
-	0x33,
-}
+const file_temporal_server_api_deployment_v1_message_proto_rawDesc = "" +
+	"\n" +
+	"/temporal/server/api/deployment/v1/message.proto\x12!temporal.server.api.deployment.v1\x1a&temporal/api/enums/v1/task_queue.proto\x1a&temporal/api/enums/v1/deployment.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a(temporal/api/deployment/v1/message.proto\x1a$temporal/api/common/v1/message.proto\"]\n" +
+	"\x17WorkerDeploymentVersion\x12'\n" +
+	"\x0fdeployment_name\x18\x01 \x01(\tR\x0edeploymentName\x12\x19\n" +
+	"\bbuild_id\x18\x02 \x01(\tR\abuildId\"\xf6\x02\n" +
+	"\x15DeploymentVersionData\x12T\n" +
+	"\aversion\x18\x01 \x01(\v2:.temporal.server.api.deployment.v1.WorkerDeploymentVersionR\aversion\x12J\n" +
+	"\x13routing_update_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x11routingUpdateTime\x12H\n" +
+	"\x12current_since_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x10currentSinceTime\x12H\n" +
+	"\x12ramping_since_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x10rampingSinceTime\x12'\n" +
+	"\x0framp_percentage\x18\x05 \x01(\x02R\x0erampPercentage\"\xa7\t\n" +
+	"\x11VersionLocalState\x12T\n" +
+	"\aversion\x18\x01 \x01(\v2:.temporal.server.api.deployment.v1.WorkerDeploymentVersionR\aversion\x12;\n" +
+	"\vcreate_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"createTime\x12J\n" +
+	"\x13routing_update_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x11routingUpdateTime\x12H\n" +
+	"\x12current_since_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x10currentSinceTime\x12H\n" +
+	"\x12ramping_since_time\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\x10rampingSinceTime\x12'\n" +
+	"\x0framp_percentage\x18\x06 \x01(\x02R\x0erampPercentage\x12T\n" +
+	"\rdrainage_info\x18\a \x01(\v2/.temporal.api.deployment.v1.VersionDrainageInfoR\fdrainageInfo\x12G\n" +
+	"\bmetadata\x18\b \x01(\v2+.temporal.api.deployment.v1.VersionMetadataR\bmetadata\x12>\n" +
+	"\x1bstarted_deployment_workflow\x18\t \x01(\bR\x19startedDeploymentWorkflow\x12{\n" +
+	"\x13task_queue_families\x18\n" +
+	" \x03(\v2K.temporal.server.api.deployment.v1.VersionLocalState.TaskQueueFamiliesEntryR\x11taskQueueFamilies\x1a\x8e\x01\n" +
+	"\x16TaskQueueFamiliesEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12^\n" +
+	"\x05value\x18\x02 \x01(\v2H.temporal.server.api.deployment.v1.VersionLocalState.TaskQueueFamilyDataR\x05value:\x028\x01\x1a\x88\x02\n" +
+	"\x13TaskQueueFamilyData\x12y\n" +
+	"\vtask_queues\x18\x01 \x03(\v2X.temporal.server.api.deployment.v1.VersionLocalState.TaskQueueFamilyData.TaskQueuesEntryR\n" +
+	"taskQueues\x1av\n" +
+	"\x0fTaskQueuesEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\x05R\x03key\x12M\n" +
+	"\x05value\x18\x02 \x01(\v27.temporal.server.api.deployment.v1.TaskQueueVersionDataR\x05value:\x028\x01\"\x16\n" +
+	"\x14TaskQueueVersionData\"\xca\x01\n" +
+	"#WorkerDeploymentVersionWorkflowArgs\x12%\n" +
+	"\x0enamespace_name\x18\x01 \x01(\tR\rnamespaceName\x12!\n" +
+	"\fnamespace_id\x18\x02 \x01(\tR\vnamespaceId\x12Y\n" +
+	"\rversion_state\x18\x03 \x01(\v24.temporal.server.api.deployment.v1.VersionLocalStateR\fversionState\"\xe6\x01\n" +
+	"\x1cWorkerDeploymentWorkflowArgs\x12%\n" +
+	"\x0enamespace_name\x18\x01 \x01(\tR\rnamespaceName\x12!\n" +
+	"\fnamespace_id\x18\x02 \x01(\tR\vnamespaceId\x12'\n" +
+	"\x0fdeployment_name\x18\x03 \x01(\tR\x0edeploymentName\x12S\n" +
+	"\x05state\x18\x04 \x01(\v2=.temporal.server.api.deployment.v1.WorkerDeploymentLocalStateR\x05state\"\xaa\x01\n" +
+	"\x14DrainageWorkflowArgs\x12%\n" +
+	"\x0enamespace_name\x18\x01 \x01(\tR\rnamespaceName\x12T\n" +
+	"\aversion\x18\x02 \x01(\v2:.temporal.server.api.deployment.v1.WorkerDeploymentVersionR\aversion\x12\x15\n" +
+	"\x06is_can\x18\x03 \x01(\bR\x05isCan\"\xf1\x03\n" +
+	"\x1aWorkerDeploymentLocalState\x12;\n" +
+	"\vcreate_time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"createTime\x12P\n" +
+	"\x0erouting_config\x18\x02 \x01(\v2).temporal.api.deployment.v1.RoutingConfigR\rroutingConfig\x12g\n" +
+	"\bversions\x18\x03 \x03(\v2K.temporal.server.api.deployment.v1.WorkerDeploymentLocalState.VersionsEntryR\bversions\x12%\n" +
+	"\x0econflict_token\x18\x04 \x01(\fR\rconflictToken\x124\n" +
+	"\x16last_modifier_identity\x18\x05 \x01(\tR\x14lastModifierIdentity\x1a~\n" +
+	"\rVersionsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12W\n" +
+	"\x05value\x18\x02 \x01(\v2A.temporal.server.api.deployment.v1.WorkerDeploymentVersionSummaryR\x05value:\x028\x01\"\xce\x01\n" +
+	"\x1eWorkerDeploymentVersionSummary\x12\x18\n" +
+	"\aversion\x18\x01 \x01(\tR\aversion\x12;\n" +
+	"\vcreate_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"createTime\x12U\n" +
+	"\x0fdrainage_status\x18\x03 \x01(\x0e2,.temporal.api.enums.v1.VersionDrainageStatusR\x0edrainageStatus\"\xd5\x01\n" +
+	"\x1bRegisterWorkerInVersionArgs\x12&\n" +
+	"\x0ftask_queue_name\x18\x01 \x01(\tR\rtaskQueueName\x12L\n" +
+	"\x0ftask_queue_type\x18\x02 \x01(\x0e2$.temporal.api.enums.v1.TaskQueueTypeR\rtaskQueueType\x12&\n" +
+	"\x0fmax_task_queues\x18\x03 \x01(\x05R\rmaxTaskQueues\x12\x18\n" +
+	"\aversion\x18\x04 \x01(\tR\aversion\"\x9a\x02\n" +
+	"$RegisterWorkerInWorkerDeploymentArgs\x12&\n" +
+	"\x0ftask_queue_name\x18\x01 \x01(\tR\rtaskQueueName\x12L\n" +
+	"\x0ftask_queue_type\x18\x02 \x01(\x0e2$.temporal.api.enums.v1.TaskQueueTypeR\rtaskQueueType\x12&\n" +
+	"\x0fmax_task_queues\x18\x03 \x01(\x05R\rmaxTaskQueues\x12T\n" +
+	"\aversion\x18\x04 \x01(\v2:.temporal.server.api.deployment.v1.WorkerDeploymentVersionR\aversion\"K\n" +
+	"/DescribeVersionFromWorkerDeploymentActivityArgs\x12\x18\n" +
+	"\aversion\x18\x01 \x01(\tR\aversion\"\xab\x01\n" +
+	"1DescribeVersionFromWorkerDeploymentActivityResult\x12v\n" +
+	"\x10task_queue_infos\x18\x01 \x03(\v2L.temporal.api.deployment.v1.WorkerDeploymentVersionInfo.VersionTaskQueueInfoR\x0etaskQueueInfos\"\xa5\x02\n" +
+	"\x1aSyncVersionStateUpdateArgs\x12J\n" +
+	"\x13routing_update_time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x11routingUpdateTime\x12H\n" +
+	"\x12current_since_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x10currentSinceTime\x12H\n" +
+	"\x12ramping_since_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x10rampingSinceTime\x12'\n" +
+	"\x0framp_percentage\x18\x04 \x01(\x02R\x0erampPercentage\"u\n" +
+	"\x18SyncVersionStateResponse\x12Y\n" +
+	"\rversion_state\x18\x01 \x01(\v24.temporal.server.api.deployment.v1.VersionLocalStateR\fversionState\"m\n" +
+	"\x14AddVersionUpdateArgs\x12\x18\n" +
+	"\aversion\x18\x01 \x01(\tR\aversion\x12;\n" +
+	"\vcreate_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"createTime\"r\n" +
+	"\x1aSyncDrainageInfoSignalArgs\x12T\n" +
+	"\rdrainage_info\x18\x01 \x01(\v2/.temporal.api.deployment.v1.VersionDrainageInfoR\fdrainageInfo\"\x8f\x01\n" +
+	"\x1cSyncDrainageStatusSignalArgs\x12\x18\n" +
+	"\aversion\x18\x01 \x01(\tR\aversion\x12U\n" +
+	"\x0fdrainage_status\x18\x02 \x01(\x0e2,.temporal.api.enums.v1.VersionDrainageStatusR\x0edrainageStatus\"y\n" +
+	"\x1cQueryDescribeVersionResponse\x12Y\n" +
+	"\rversion_state\x18\x01 \x01(\v24.temporal.server.api.deployment.v1.VersionLocalStateR\fversionState\"|\n" +
+	"%QueryDescribeWorkerDeploymentResponse\x12S\n" +
+	"\x05state\x18\x01 \x01(\v2=.temporal.server.api.deployment.v1.WorkerDeploymentLocalStateR\x05state\"f\n" +
+	"\x1cStartWorkerDeploymentRequest\x12'\n" +
+	"\x0fdeployment_name\x18\x01 \x01(\tR\x0edeploymentName\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\x02 \x01(\tR\trequestId\"\xbc\x03\n" +
+	"$SyncDeploymentVersionUserDataRequest\x12T\n" +
+	"\aversion\x18\x01 \x01(\v2:.temporal.server.api.deployment.v1.WorkerDeploymentVersionR\aversion\x12h\n" +
+	"\x04sync\x18\x02 \x03(\v2T.temporal.server.api.deployment.v1.SyncDeploymentVersionUserDataRequest.SyncUserDataR\x04sync\x12%\n" +
+	"\x0eforget_version\x18\x03 \x01(\bR\rforgetVersion\x1a\xac\x01\n" +
+	"\fSyncUserData\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12:\n" +
+	"\x05types\x18\x02 \x03(\x0e2$.temporal.api.enums.v1.TaskQueueTypeR\x05types\x12L\n" +
+	"\x04data\x18\x03 \x01(\v28.temporal.server.api.deployment.v1.DeploymentVersionDataR\x04data\"\x8c\x02\n" +
+	"%SyncDeploymentVersionUserDataResponse\x12\x99\x01\n" +
+	"\x17task_queue_max_versions\x18\x01 \x03(\v2b.temporal.server.api.deployment.v1.SyncDeploymentVersionUserDataResponse.TaskQueueMaxVersionsEntryR\x14taskQueueMaxVersions\x1aG\n" +
+	"\x19TaskQueueMaxVersionsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\x03R\x05value:\x028\x01\"\xa0\x02\n" +
+	"/CheckWorkerDeploymentUserDataPropagationRequest\x12\xa3\x01\n" +
+	"\x17task_queue_max_versions\x18\x01 \x03(\v2l.temporal.server.api.deployment.v1.CheckWorkerDeploymentUserDataPropagationRequest.TaskQueueMaxVersionsEntryR\x14taskQueueMaxVersions\x1aG\n" +
+	"\x19TaskQueueMaxVersionsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\x03R\x05value:\x028\x01\"\xaa\x01\n" +
+	"\x1fSyncUnversionedRampActivityArgs\x12'\n" +
+	"\x0fcurrent_version\x18\x01 \x01(\tR\x0ecurrentVersion\x12^\n" +
+	"\vupdate_args\x18\x02 \x01(\v2=.temporal.server.api.deployment.v1.SyncVersionStateUpdateArgsR\n" +
+	"updateArgs\"\x88\x02\n" +
+	"#SyncUnversionedRampActivityResponse\x12\x97\x01\n" +
+	"\x17task_queue_max_versions\x18\x01 \x03(\v2`.temporal.server.api.deployment.v1.SyncUnversionedRampActivityResponse.TaskQueueMaxVersionsEntryR\x14taskQueueMaxVersions\x1aG\n" +
+	"\x19TaskQueueMaxVersionsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\x03R\x05value:\x028\x01\"\xb9\x02\n" +
+	"\x19UpdateVersionMetadataArgs\x12v\n" +
+	"\x0eupsert_entries\x18\x01 \x03(\v2O.temporal.server.api.deployment.v1.UpdateVersionMetadataArgs.UpsertEntriesEntryR\rupsertEntries\x12%\n" +
+	"\x0eremove_entries\x18\x02 \x03(\tR\rremoveEntries\x12\x1a\n" +
+	"\bidentity\x18\x03 \x01(\tR\bidentity\x1aa\n" +
+	"\x12UpsertEntriesEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x125\n" +
+	"\x05value\x18\x02 \x01(\v2\x1f.temporal.api.common.v1.PayloadR\x05value:\x028\x01\"h\n" +
+	"\x1dUpdateVersionMetadataResponse\x12G\n" +
+	"\bmetadata\x18\x01 \x01(\v2+.temporal.api.deployment.v1.VersionMetadataR\bmetadata\"\xb1\x01\n" +
+	"\x15SetCurrentVersionArgs\x12\x1a\n" +
+	"\bidentity\x18\x01 \x01(\tR\bidentity\x12\x18\n" +
+	"\aversion\x18\x02 \x01(\tR\aversion\x12;\n" +
+	"\x1aignore_missing_task_queues\x18\x03 \x01(\bR\x17ignoreMissingTaskQueues\x12%\n" +
+	"\x0econflict_token\x18\x04 \x01(\fR\rconflictToken\"m\n" +
+	"\x19SetCurrentVersionResponse\x12)\n" +
+	"\x10previous_version\x18\x01 \x01(\tR\x0fpreviousVersion\x12%\n" +
+	"\x0econflict_token\x18\x02 \x01(\fR\rconflictToken\"n\n" +
+	"\x11DeleteVersionArgs\x12\x1a\n" +
+	"\bidentity\x18\x01 \x01(\tR\bidentity\x12\x18\n" +
+	"\aversion\x18\x02 \x01(\tR\aversion\x12#\n" +
+	"\rskip_drainage\x18\x03 \x01(\bR\fskipDrainage\"\xbe\x01\n" +
+	"\x19DeleteVersionActivityArgs\x12\x1a\n" +
+	"\bidentity\x18\x01 \x01(\tR\bidentity\x12'\n" +
+	"\x0fdeployment_name\x18\x02 \x01(\tR\x0edeploymentName\x12\x18\n" +
+	"\aversion\x18\x03 \x01(\tR\aversion\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\x04 \x01(\tR\trequestId\x12#\n" +
+	"\rskip_drainage\x18\x05 \x01(\bR\fskipDrainage\"\xa7\x04\n" +
+	"&CheckTaskQueuesHavePollersActivityArgs\x12\x94\x01\n" +
+	"\x15task_queues_and_types\x18\x01 \x03(\v2a.temporal.server.api.deployment.v1.CheckTaskQueuesHavePollersActivityArgs.TaskQueuesAndTypesEntryR\x12taskQueuesAndTypes\x12v\n" +
+	"\x19worker_deployment_version\x18\x02 \x01(\v2:.temporal.server.api.deployment.v1.WorkerDeploymentVersionR\x17workerDeploymentVersion\x1a\x9f\x01\n" +
+	"\x17TaskQueuesAndTypesEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12n\n" +
+	"\x05value\x18\x02 \x01(\v2X.temporal.server.api.deployment.v1.CheckTaskQueuesHavePollersActivityArgs.TaskQueueTypesR\x05value:\x028\x01\x1aL\n" +
+	"\x0eTaskQueueTypes\x12:\n" +
+	"\x05types\x18\x01 \x03(\x0e2$.temporal.api.enums.v1.TaskQueueTypeR\x05types\"2\n" +
+	"\x14DeleteDeploymentArgs\x12\x1a\n" +
+	"\bidentity\x18\x01 \x01(\tR\bidentity\"\x9e\x01\n" +
+	"\x19SetRampingVersionResponse\x12)\n" +
+	"\x10previous_version\x18\x01 \x01(\tR\x0fpreviousVersion\x12/\n" +
+	"\x13previous_percentage\x18\x02 \x01(\x02R\x12previousPercentage\x12%\n" +
+	"\x0econflict_token\x18\x03 \x01(\fR\rconflictToken\"\xd1\x01\n" +
+	"\x15SetRampingVersionArgs\x12\x1a\n" +
+	"\bidentity\x18\x01 \x01(\tR\bidentity\x12\x18\n" +
+	"\aversion\x18\x02 \x01(\tR\aversion\x12\x1e\n" +
+	"\n" +
+	"percentage\x18\x03 \x01(\x02R\n" +
+	"percentage\x12;\n" +
+	"\x1aignore_missing_task_queues\x18\x04 \x01(\bR\x17ignoreMissingTaskQueues\x12%\n" +
+	"\x0econflict_token\x18\x05 \x01(\fR\rconflictToken\"\xe0\x01\n" +
+	"\x1cSyncVersionStateActivityArgs\x12'\n" +
+	"\x0fdeployment_name\x18\x01 \x01(\tR\x0edeploymentName\x12\x18\n" +
+	"\aversion\x18\x02 \x01(\tR\aversion\x12^\n" +
+	"\vupdate_args\x18\x03 \x01(\v2=.temporal.server.api.deployment.v1.SyncVersionStateUpdateArgsR\n" +
+	"updateArgs\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\x04 \x01(\tR\trequestId\"{\n" +
+	"\x1eSyncVersionStateActivityResult\x12Y\n" +
+	"\rversion_state\x18\x01 \x01(\v24.temporal.server.api.deployment.v1.VersionLocalStateR\fversionState\"\x82\x01\n" +
+	"\x1eIsVersionMissingTaskQueuesArgs\x120\n" +
+	"\x14prev_current_version\x18\x01 \x01(\tR\x12prevCurrentVersion\x12.\n" +
+	"\x13new_current_version\x18\x02 \x01(\tR\x11newCurrentVersion\"W\n" +
+	" IsVersionMissingTaskQueuesResult\x123\n" +
+	"\x16is_missing_task_queues\x18\x01 \x01(\bR\x13isMissingTaskQueues\"\xd6\x01\n" +
+	"\x1cWorkerDeploymentWorkflowMemo\x12'\n" +
+	"\x0fdeployment_name\x18\x01 \x01(\tR\x0edeploymentName\x12;\n" +
+	"\vcreate_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"createTime\x12P\n" +
+	"\x0erouting_config\x18\x03 \x01(\v2).temporal.api.deployment.v1.RoutingConfigR\rroutingConfig\"\xbc\x01\n" +
+	"\x17WorkerDeploymentSummary\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12;\n" +
+	"\vcreate_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"createTime\x12P\n" +
+	"\x0erouting_config\x18\x03 \x01(\v2).temporal.api.deployment.v1.RoutingConfigR\rroutingConfig\"\xc7\x01\n" +
+	"#AddVersionToWorkerDeploymentRequest\x12'\n" +
+	"\x0fdeployment_name\x18\x01 \x01(\tR\x0edeploymentName\x12X\n" +
+	"\vupdate_args\x18\x02 \x01(\v27.temporal.server.api.deployment.v1.AddVersionUpdateArgsR\n" +
+	"updateArgs\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\x03 \x01(\tR\trequestId\"&\n" +
+	"$AddVersionToWorkerDeploymentResponse\"\xac\x01\n" +
+	"\rTaskQueueData\x12F\n" +
+	"\x11first_poller_time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x0ffirstPollerTime\x12S\n" +
+	"\x18last_became_current_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x15lastBecameCurrentTime\"\xa3\b\n" +
+	"\x14DeploymentLocalState\x12F\n" +
+	"\n" +
+	"deployment\x18\x01 \x01(\v2&.temporal.api.deployment.v1.DeploymentR\n" +
+	"deployment\x12~\n" +
+	"\x13task_queue_families\x18\x02 \x03(\v2N.temporal.server.api.deployment.v1.DeploymentLocalState.TaskQueueFamiliesEntryR\x11taskQueueFamilies\x12\x1d\n" +
+	"\n" +
+	"is_current\x18\x03 \x01(\bR\tisCurrent\x12S\n" +
+	"\x18last_became_current_time\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\x15lastBecameCurrentTime\x12;\n" +
+	"\vcreate_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"createTime\x12a\n" +
+	"\bmetadata\x18\x05 \x03(\v2E.temporal.server.api.deployment.v1.DeploymentLocalState.MetadataEntryR\bmetadata\x126\n" +
+	"\x17started_series_workflow\x18\a \x01(\bR\x15startedSeriesWorkflow\x1a\x91\x01\n" +
+	"\x16TaskQueueFamiliesEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12a\n" +
+	"\x05value\x18\x02 \x01(\v2K.temporal.server.api.deployment.v1.DeploymentLocalState.TaskQueueFamilyDataR\x05value:\x028\x01\x1a\\\n" +
+	"\rMetadataEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x125\n" +
+	"\x05value\x18\x02 \x01(\v2\x1f.temporal.api.common.v1.PayloadR\x05value:\x028\x01\x1a\x84\x02\n" +
+	"\x13TaskQueueFamilyData\x12|\n" +
+	"\vtask_queues\x18\x01 \x03(\v2[.temporal.server.api.deployment.v1.DeploymentLocalState.TaskQueueFamilyData.TaskQueuesEntryR\n" +
+	"taskQueues\x1ao\n" +
+	"\x0fTaskQueuesEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\x05R\x03key\x12F\n" +
+	"\x05value\x18\x02 \x01(\v20.temporal.server.api.deployment.v1.TaskQueueDataR\x05value:\x028\x01\"\xb1\x01\n" +
+	"\x16DeploymentWorkflowArgs\x12%\n" +
+	"\x0enamespace_name\x18\x01 \x01(\tR\rnamespaceName\x12!\n" +
+	"\fnamespace_id\x18\x02 \x01(\tR\vnamespaceId\x12M\n" +
+	"\x05state\x18\x03 \x01(\v27.temporal.server.api.deployment.v1.DeploymentLocalStateR\x05state\"\xd4\x01\n" +
+	"\x1cDeploymentSeriesWorkflowArgs\x12%\n" +
+	"\x0enamespace_name\x18\x01 \x01(\tR\rnamespaceName\x12!\n" +
+	"\fnamespace_id\x18\x02 \x01(\tR\vnamespaceId\x12\x1f\n" +
+	"\vseries_name\x18\x03 \x01(\tR\n" +
+	"seriesName\x12I\n" +
+	"\x05state\x18\x04 \x01(\v23.temporal.server.api.deployment.v1.SeriesLocalStateR\x05state\"\x8a\x01\n" +
+	"\x10SeriesLocalState\x12(\n" +
+	"\x10current_build_id\x18\x01 \x01(\tR\x0ecurrentBuildId\x12L\n" +
+	"\x14current_changed_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x12currentChangedTime\"\x86\x02\n" +
+	"\x1eRegisterWorkerInDeploymentArgs\x12&\n" +
+	"\x0ftask_queue_name\x18\x01 \x01(\tR\rtaskQueueName\x12L\n" +
+	"\x0ftask_queue_type\x18\x02 \x01(\x0e2$.temporal.api.enums.v1.TaskQueueTypeR\rtaskQueueType\x12F\n" +
+	"\x11first_poller_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x0ffirstPollerTime\x12&\n" +
+	"\x0fmax_task_queues\x18\x04 \x01(\x05R\rmaxTaskQueues\"\xc3\x02\n" +
+	"\x17SyncDeploymentStateArgs\x12f\n" +
+	"\vset_current\x18\x01 \x01(\v2E.temporal.server.api.deployment.v1.SyncDeploymentStateArgs.SetCurrentR\n" +
+	"setCurrent\x12]\n" +
+	"\x0fupdate_metadata\x18\x02 \x01(\v24.temporal.api.deployment.v1.UpdateDeploymentMetadataR\x0eupdateMetadata\x1aa\n" +
+	"\n" +
+	"SetCurrent\x12S\n" +
+	"\x18last_became_current_time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x15lastBecameCurrentTime\"\x8c\x01\n" +
+	"\x1bSyncDeploymentStateResponse\x12m\n" +
+	"\x16deployment_local_state\x18\x01 \x01(\v27.temporal.server.api.deployment.v1.DeploymentLocalStateR\x14deploymentLocalState\"\x90\x01\n" +
+	"\x1fQueryDescribeDeploymentResponse\x12m\n" +
+	"\x16deployment_local_state\x18\x01 \x01(\v27.temporal.server.api.deployment.v1.DeploymentLocalStateR\x14deploymentLocalState\"\xd1\x01\n" +
+	"\x16DeploymentWorkflowMemo\x12F\n" +
+	"\n" +
+	"deployment\x18\x01 \x01(\v2&.temporal.api.deployment.v1.DeploymentR\n" +
+	"deployment\x12;\n" +
+	"\vcreate_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"createTime\x122\n" +
+	"\x15is_current_deployment\x18\x03 \x01(\bR\x13isCurrentDeployment\"^\n" +
+	"\x1cStartDeploymentSeriesRequest\x12\x1f\n" +
+	"\vseries_name\x18\x01 \x01(\tR\n" +
+	"seriesName\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\x02 \x01(\tR\trequestId\"\xdb\x02\n" +
+	"\x13SyncUserDataRequest\x12F\n" +
+	"\n" +
+	"deployment\x18\x01 \x01(\v2&.temporal.api.deployment.v1.DeploymentR\n" +
+	"deployment\x12W\n" +
+	"\x04sync\x18\x02 \x03(\v2C.temporal.server.api.deployment.v1.SyncUserDataRequest.SyncUserDataR\x04sync\x1a\xa2\x01\n" +
+	"\fSyncUserData\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x128\n" +
+	"\x04type\x18\x02 \x01(\x0e2$.temporal.api.enums.v1.TaskQueueTypeR\x04type\x12D\n" +
+	"\x04data\x18\x03 \x01(\v20.temporal.server.api.deployment.v1.TaskQueueDataR\x04data\"\xea\x01\n" +
+	"\x14SyncUserDataResponse\x12\x88\x01\n" +
+	"\x17task_queue_max_versions\x18\x01 \x03(\v2Q.temporal.server.api.deployment.v1.SyncUserDataResponse.TaskQueueMaxVersionsEntryR\x14taskQueueMaxVersions\x1aG\n" +
+	"\x19TaskQueueMaxVersionsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\x03R\x05value:\x028\x01\"\x80\x02\n" +
+	"\x1fCheckUserDataPropagationRequest\x12\x93\x01\n" +
+	"\x17task_queue_max_versions\x18\x01 \x03(\v2\\.temporal.server.api.deployment.v1.CheckUserDataPropagationRequest.TaskQueueMaxVersionsEntryR\x14taskQueueMaxVersions\x1aG\n" +
+	"\x19TaskQueueMaxVersionsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\x03R\x05value:\x028\x01\"\xcf\x01\n" +
+	"\x18SetCurrentDeploymentArgs\x12\x1a\n" +
+	"\bidentity\x18\x01 \x01(\tR\bidentity\x12\x19\n" +
+	"\bbuild_id\x18\x02 \x01(\tR\abuildId\x12]\n" +
+	"\x0fupdate_metadata\x18\x03 \x01(\v24.temporal.api.deployment.v1.UpdateDeploymentMetadataR\x0eupdateMetadata\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\x04 \x01(\tR\trequestId\"\x86\x02\n" +
+	"\x1cSetCurrentDeploymentResponse\x12q\n" +
+	"\x18current_deployment_state\x18\x01 \x01(\v27.temporal.server.api.deployment.v1.DeploymentLocalStateR\x16currentDeploymentState\x12s\n" +
+	"\x19previous_deployment_state\x18\x02 \x01(\v27.temporal.server.api.deployment.v1.DeploymentLocalStateR\x17previousDeploymentState\"\xd8\x01\n" +
+	"\x1fSyncDeploymentStateActivityArgs\x12F\n" +
+	"\n" +
+	"deployment\x18\x01 \x01(\v2&.temporal.api.deployment.v1.DeploymentR\n" +
+	"deployment\x12N\n" +
+	"\x04args\x18\x02 \x01(\v2:.temporal.server.api.deployment.v1.SyncDeploymentStateArgsR\x04args\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\x03 \x01(\tR\trequestId\"r\n" +
+	"!SyncDeploymentStateActivityResult\x12M\n" +
+	"\x05state\x18\x01 \x01(\v27.temporal.server.api.deployment.v1.DeploymentLocalStateR\x05state\"\xb7\x01\n" +
+	"\x1cDeploymentSeriesWorkflowMemo\x12\x1f\n" +
+	"\vseries_name\x18\x01 \x01(\tR\n" +
+	"seriesName\x12(\n" +
+	"\x10current_build_id\x18\x02 \x01(\tR\x0ecurrentBuildId\x12L\n" +
+	"\x14current_changed_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x12currentChangedTimeB4Z2go.temporal.io/server/api/deployment/v1;deploymentb\x06proto3"
 
 var (
 	file_temporal_server_api_deployment_v1_message_proto_rawDescOnce sync.Once
-	file_temporal_server_api_deployment_v1_message_proto_rawDescData = file_temporal_server_api_deployment_v1_message_proto_rawDesc
+	file_temporal_server_api_deployment_v1_message_proto_rawDescData []byte
 )
 
 func file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP() []byte {
 	file_temporal_server_api_deployment_v1_message_proto_rawDescOnce.Do(func() {
-		file_temporal_server_api_deployment_v1_message_proto_rawDescData = protoimpl.X.CompressGZIP(file_temporal_server_api_deployment_v1_message_proto_rawDescData)
+		file_temporal_server_api_deployment_v1_message_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_api_deployment_v1_message_proto_rawDesc), len(file_temporal_server_api_deployment_v1_message_proto_rawDesc)))
 	})
 	return file_temporal_server_api_deployment_v1_message_proto_rawDescData
 }
 
-var file_temporal_server_api_deployment_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 80)
-var file_temporal_server_api_deployment_v1_message_proto_goTypes = []interface{}{
-	(*WorkerDeploymentVersion)(nil),                         // 0: temporal.server.api.deployment.v1.WorkerDeploymentVersion
-	(*DeploymentVersionData)(nil),                           // 1: temporal.server.api.deployment.v1.DeploymentVersionData
-	(*VersionLocalState)(nil),                               // 2: temporal.server.api.deployment.v1.VersionLocalState
-	(*TaskQueueVersionData)(nil),                            // 3: temporal.server.api.deployment.v1.TaskQueueVersionData
-	(*WorkerDeploymentVersionWorkflowArgs)(nil),             // 4: temporal.server.api.deployment.v1.WorkerDeploymentVersionWorkflowArgs
-	(*WorkerDeploymentWorkflowArgs)(nil),                    // 5: temporal.server.api.deployment.v1.WorkerDeploymentWorkflowArgs
-	(*DrainageWorkflowArgs)(nil),                            // 6: temporal.server.api.deployment.v1.DrainageWorkflowArgs
-	(*WorkerDeploymentLocalState)(nil),                      // 7: temporal.server.api.deployment.v1.WorkerDeploymentLocalState
-	(*WorkerDeploymentVersionSummary)(nil),                  // 8: temporal.server.api.deployment.v1.WorkerDeploymentVersionSummary
-	(*RegisterWorkerInVersionArgs)(nil),                     // 9: temporal.server.api.deployment.v1.RegisterWorkerInVersionArgs
-	(*RegisterWorkerInWorkerDeploymentArgs)(nil),            // 10: temporal.server.api.deployment.v1.RegisterWorkerInWorkerDeploymentArgs
-	(*SyncVersionStateUpdateArgs)(nil),                      // 11: temporal.server.api.deployment.v1.SyncVersionStateUpdateArgs
-	(*SyncVersionStateResponse)(nil),                        // 12: temporal.server.api.deployment.v1.SyncVersionStateResponse
-	(*AddVersionUpdateArgs)(nil),                            // 13: temporal.server.api.deployment.v1.AddVersionUpdateArgs
-	(*SyncDrainageInfoSignalArgs)(nil),                      // 14: temporal.server.api.deployment.v1.SyncDrainageInfoSignalArgs
-	(*SyncDrainageStatusSignalArgs)(nil),                    // 15: temporal.server.api.deployment.v1.SyncDrainageStatusSignalArgs
-	(*QueryDescribeVersionResponse)(nil),                    // 16: temporal.server.api.deployment.v1.QueryDescribeVersionResponse
-	(*QueryDescribeWorkerDeploymentResponse)(nil),           // 17: temporal.server.api.deployment.v1.QueryDescribeWorkerDeploymentResponse
-	(*StartWorkerDeploymentRequest)(nil),                    // 18: temporal.server.api.deployment.v1.StartWorkerDeploymentRequest
-	(*SyncDeploymentVersionUserDataRequest)(nil),            // 19: temporal.server.api.deployment.v1.SyncDeploymentVersionUserDataRequest
-	(*SyncDeploymentVersionUserDataResponse)(nil),           // 20: temporal.server.api.deployment.v1.SyncDeploymentVersionUserDataResponse
-	(*CheckWorkerDeploymentUserDataPropagationRequest)(nil), // 21: temporal.server.api.deployment.v1.CheckWorkerDeploymentUserDataPropagationRequest
-	(*SyncUnversionedRampActivityArgs)(nil),                 // 22: temporal.server.api.deployment.v1.SyncUnversionedRampActivityArgs
-	(*SyncUnversionedRampActivityResponse)(nil),             // 23: temporal.server.api.deployment.v1.SyncUnversionedRampActivityResponse
-	(*UpdateVersionMetadataArgs)(nil),                       // 24: temporal.server.api.deployment.v1.UpdateVersionMetadataArgs
-	(*UpdateVersionMetadataResponse)(nil),                   // 25: temporal.server.api.deployment.v1.UpdateVersionMetadataResponse
-	(*SetCurrentVersionArgs)(nil),                           // 26: temporal.server.api.deployment.v1.SetCurrentVersionArgs
-	(*SetCurrentVersionResponse)(nil),                       // 27: temporal.server.api.deployment.v1.SetCurrentVersionResponse
-	(*DeleteVersionArgs)(nil),                               // 28: temporal.server.api.deployment.v1.DeleteVersionArgs
-	(*DeleteVersionActivityArgs)(nil),                       // 29: temporal.server.api.deployment.v1.DeleteVersionActivityArgs
-	(*CheckTaskQueuesHavePollersActivityArgs)(nil),          // 30: temporal.server.api.deployment.v1.CheckTaskQueuesHavePollersActivityArgs
-	(*DeleteDeploymentArgs)(nil),                            // 31: temporal.server.api.deployment.v1.DeleteDeploymentArgs
-	(*SetRampingVersionResponse)(nil),                       // 32: temporal.server.api.deployment.v1.SetRampingVersionResponse
-	(*SetRampingVersionArgs)(nil),                           // 33: temporal.server.api.deployment.v1.SetRampingVersionArgs
-	(*SyncVersionStateActivityArgs)(nil),                    // 34: temporal.server.api.deployment.v1.SyncVersionStateActivityArgs
-	(*SyncVersionStateActivityResult)(nil),                  // 35: temporal.server.api.deployment.v1.SyncVersionStateActivityResult
-	(*IsVersionMissingTaskQueuesArgs)(nil),                  // 36: temporal.server.api.deployment.v1.IsVersionMissingTaskQueuesArgs
-	(*IsVersionMissingTaskQueuesResult)(nil),                // 37: temporal.server.api.deployment.v1.IsVersionMissingTaskQueuesResult
-	(*WorkerDeploymentWorkflowMemo)(nil),                    // 38: temporal.server.api.deployment.v1.WorkerDeploymentWorkflowMemo
-	(*WorkerDeploymentSummary)(nil),                         // 39: temporal.server.api.deployment.v1.WorkerDeploymentSummary
-	(*AddVersionToWorkerDeploymentRequest)(nil),             // 40: temporal.server.api.deployment.v1.AddVersionToWorkerDeploymentRequest
-	(*AddVersionToWorkerDeploymentResponse)(nil),            // 41: temporal.server.api.deployment.v1.AddVersionToWorkerDeploymentResponse
-	(*TaskQueueData)(nil),                                   // 42: temporal.server.api.deployment.v1.TaskQueueData
-	(*DeploymentLocalState)(nil),                            // 43: temporal.server.api.deployment.v1.DeploymentLocalState
-	(*DeploymentWorkflowArgs)(nil),                          // 44: temporal.server.api.deployment.v1.DeploymentWorkflowArgs
-	(*DeploymentSeriesWorkflowArgs)(nil),                    // 45: temporal.server.api.deployment.v1.DeploymentSeriesWorkflowArgs
-	(*SeriesLocalState)(nil),                                // 46: temporal.server.api.deployment.v1.SeriesLocalState
-	(*RegisterWorkerInDeploymentArgs)(nil),                  // 47: temporal.server.api.deployment.v1.RegisterWorkerInDeploymentArgs
-	(*SyncDeploymentStateArgs)(nil),                         // 48: temporal.server.api.deployment.v1.SyncDeploymentStateArgs
-	(*SyncDeploymentStateResponse)(nil),                     // 49: temporal.server.api.deployment.v1.SyncDeploymentStateResponse
-	(*QueryDescribeDeploymentResponse)(nil),                 // 50: temporal.server.api.deployment.v1.QueryDescribeDeploymentResponse
-	(*DeploymentWorkflowMemo)(nil),                          // 51: temporal.server.api.deployment.v1.DeploymentWorkflowMemo
-	(*StartDeploymentSeriesRequest)(nil),                    // 52: temporal.server.api.deployment.v1.StartDeploymentSeriesRequest
-	(*SyncUserDataRequest)(nil),                             // 53: temporal.server.api.deployment.v1.SyncUserDataRequest
-	(*SyncUserDataResponse)(nil),                            // 54: temporal.server.api.deployment.v1.SyncUserDataResponse
-	(*CheckUserDataPropagationRequest)(nil),                 // 55: temporal.server.api.deployment.v1.CheckUserDataPropagationRequest
-	(*SetCurrentDeploymentArgs)(nil),                        // 56: temporal.server.api.deployment.v1.SetCurrentDeploymentArgs
-	(*SetCurrentDeploymentResponse)(nil),                    // 57: temporal.server.api.deployment.v1.SetCurrentDeploymentResponse
-	(*SyncDeploymentStateActivityArgs)(nil),                 // 58: temporal.server.api.deployment.v1.SyncDeploymentStateActivityArgs
-	(*SyncDeploymentStateActivityResult)(nil),               // 59: temporal.server.api.deployment.v1.SyncDeploymentStateActivityResult
-	(*DeploymentSeriesWorkflowMemo)(nil),                    // 60: temporal.server.api.deployment.v1.DeploymentSeriesWorkflowMemo
-	nil,                                                     // 61: temporal.server.api.deployment.v1.VersionLocalState.TaskQueueFamiliesEntry
-	(*VersionLocalState_TaskQueueFamilyData)(nil),           // 62: temporal.server.api.deployment.v1.VersionLocalState.TaskQueueFamilyData
-	nil, // 63: temporal.server.api.deployment.v1.VersionLocalState.TaskQueueFamilyData.TaskQueuesEntry
-	nil, // 64: temporal.server.api.deployment.v1.WorkerDeploymentLocalState.VersionsEntry
-	(*SyncDeploymentVersionUserDataRequest_SyncUserData)(nil), // 65: temporal.server.api.deployment.v1.SyncDeploymentVersionUserDataRequest.SyncUserData
-	nil, // 66: temporal.server.api.deployment.v1.SyncDeploymentVersionUserDataResponse.TaskQueueMaxVersionsEntry
-	nil, // 67: temporal.server.api.deployment.v1.CheckWorkerDeploymentUserDataPropagationRequest.TaskQueueMaxVersionsEntry
-	nil, // 68: temporal.server.api.deployment.v1.SyncUnversionedRampActivityResponse.TaskQueueMaxVersionsEntry
-	nil, // 69: temporal.server.api.deployment.v1.UpdateVersionMetadataArgs.UpsertEntriesEntry
-	nil, // 70: temporal.server.api.deployment.v1.CheckTaskQueuesHavePollersActivityArgs.TaskQueuesAndTypesEntry
-	(*CheckTaskQueuesHavePollersActivityArgs_TaskQueueTypes)(nil), // 71: temporal.server.api.deployment.v1.CheckTaskQueuesHavePollersActivityArgs.TaskQueueTypes
-	nil, // 72: temporal.server.api.deployment.v1.DeploymentLocalState.TaskQueueFamiliesEntry
-	nil, // 73: temporal.server.api.deployment.v1.DeploymentLocalState.MetadataEntry
-	(*DeploymentLocalState_TaskQueueFamilyData)(nil), // 74: temporal.server.api.deployment.v1.DeploymentLocalState.TaskQueueFamilyData
-	nil, // 75: temporal.server.api.deployment.v1.DeploymentLocalState.TaskQueueFamilyData.TaskQueuesEntry
-	(*SyncDeploymentStateArgs_SetCurrent)(nil), // 76: temporal.server.api.deployment.v1.SyncDeploymentStateArgs.SetCurrent
-	(*SyncUserDataRequest_SyncUserData)(nil),   // 77: temporal.server.api.deployment.v1.SyncUserDataRequest.SyncUserData
-	nil,                                        // 78: temporal.server.api.deployment.v1.SyncUserDataResponse.TaskQueueMaxVersionsEntry
-	nil,                                        // 79: temporal.server.api.deployment.v1.CheckUserDataPropagationRequest.TaskQueueMaxVersionsEntry
-	(*timestamppb.Timestamp)(nil),              // 80: google.protobuf.Timestamp
-	(*v1.VersionDrainageInfo)(nil),             // 81: temporal.api.deployment.v1.VersionDrainageInfo
-	(*v1.VersionMetadata)(nil),                 // 82: temporal.api.deployment.v1.VersionMetadata
-	(*v1.RoutingConfig)(nil),                   // 83: temporal.api.deployment.v1.RoutingConfig
-	(v11.VersionDrainageStatus)(0),             // 84: temporal.api.enums.v1.VersionDrainageStatus
-	(v11.TaskQueueType)(0),                     // 85: temporal.api.enums.v1.TaskQueueType
-	(*v1.Deployment)(nil),                      // 86: temporal.api.deployment.v1.Deployment
-	(*v1.UpdateDeploymentMetadata)(nil),        // 87: temporal.api.deployment.v1.UpdateDeploymentMetadata
-	(*v12.Payload)(nil),                        // 88: temporal.api.common.v1.Payload
+var file_temporal_server_api_deployment_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 82)
+var file_temporal_server_api_deployment_v1_message_proto_goTypes = []any{
+	(*WorkerDeploymentVersion)(nil),                           // 0: temporal.server.api.deployment.v1.WorkerDeploymentVersion
+	(*DeploymentVersionData)(nil),                             // 1: temporal.server.api.deployment.v1.DeploymentVersionData
+	(*VersionLocalState)(nil),                                 // 2: temporal.server.api.deployment.v1.VersionLocalState
+	(*TaskQueueVersionData)(nil),                              // 3: temporal.server.api.deployment.v1.TaskQueueVersionData
+	(*WorkerDeploymentVersionWorkflowArgs)(nil),               // 4: temporal.server.api.deployment.v1.WorkerDeploymentVersionWorkflowArgs
+	(*WorkerDeploymentWorkflowArgs)(nil),                      // 5: temporal.server.api.deployment.v1.WorkerDeploymentWorkflowArgs
+	(*DrainageWorkflowArgs)(nil),                              // 6: temporal.server.api.deployment.v1.DrainageWorkflowArgs
+	(*WorkerDeploymentLocalState)(nil),                        // 7: temporal.server.api.deployment.v1.WorkerDeploymentLocalState
+	(*WorkerDeploymentVersionSummary)(nil),                    // 8: temporal.server.api.deployment.v1.WorkerDeploymentVersionSummary
+	(*RegisterWorkerInVersionArgs)(nil),                       // 9: temporal.server.api.deployment.v1.RegisterWorkerInVersionArgs
+	(*RegisterWorkerInWorkerDeploymentArgs)(nil),              // 10: temporal.server.api.deployment.v1.RegisterWorkerInWorkerDeploymentArgs
+	(*DescribeVersionFromWorkerDeploymentActivityArgs)(nil),   // 11: temporal.server.api.deployment.v1.DescribeVersionFromWorkerDeploymentActivityArgs
+	(*DescribeVersionFromWorkerDeploymentActivityResult)(nil), // 12: temporal.server.api.deployment.v1.DescribeVersionFromWorkerDeploymentActivityResult
+	(*SyncVersionStateUpdateArgs)(nil),                        // 13: temporal.server.api.deployment.v1.SyncVersionStateUpdateArgs
+	(*SyncVersionStateResponse)(nil),                          // 14: temporal.server.api.deployment.v1.SyncVersionStateResponse
+	(*AddVersionUpdateArgs)(nil),                              // 15: temporal.server.api.deployment.v1.AddVersionUpdateArgs
+	(*SyncDrainageInfoSignalArgs)(nil),                        // 16: temporal.server.api.deployment.v1.SyncDrainageInfoSignalArgs
+	(*SyncDrainageStatusSignalArgs)(nil),                      // 17: temporal.server.api.deployment.v1.SyncDrainageStatusSignalArgs
+	(*QueryDescribeVersionResponse)(nil),                      // 18: temporal.server.api.deployment.v1.QueryDescribeVersionResponse
+	(*QueryDescribeWorkerDeploymentResponse)(nil),             // 19: temporal.server.api.deployment.v1.QueryDescribeWorkerDeploymentResponse
+	(*StartWorkerDeploymentRequest)(nil),                      // 20: temporal.server.api.deployment.v1.StartWorkerDeploymentRequest
+	(*SyncDeploymentVersionUserDataRequest)(nil),              // 21: temporal.server.api.deployment.v1.SyncDeploymentVersionUserDataRequest
+	(*SyncDeploymentVersionUserDataResponse)(nil),             // 22: temporal.server.api.deployment.v1.SyncDeploymentVersionUserDataResponse
+	(*CheckWorkerDeploymentUserDataPropagationRequest)(nil),   // 23: temporal.server.api.deployment.v1.CheckWorkerDeploymentUserDataPropagationRequest
+	(*SyncUnversionedRampActivityArgs)(nil),                   // 24: temporal.server.api.deployment.v1.SyncUnversionedRampActivityArgs
+	(*SyncUnversionedRampActivityResponse)(nil),               // 25: temporal.server.api.deployment.v1.SyncUnversionedRampActivityResponse
+	(*UpdateVersionMetadataArgs)(nil),                         // 26: temporal.server.api.deployment.v1.UpdateVersionMetadataArgs
+	(*UpdateVersionMetadataResponse)(nil),                     // 27: temporal.server.api.deployment.v1.UpdateVersionMetadataResponse
+	(*SetCurrentVersionArgs)(nil),                             // 28: temporal.server.api.deployment.v1.SetCurrentVersionArgs
+	(*SetCurrentVersionResponse)(nil),                         // 29: temporal.server.api.deployment.v1.SetCurrentVersionResponse
+	(*DeleteVersionArgs)(nil),                                 // 30: temporal.server.api.deployment.v1.DeleteVersionArgs
+	(*DeleteVersionActivityArgs)(nil),                         // 31: temporal.server.api.deployment.v1.DeleteVersionActivityArgs
+	(*CheckTaskQueuesHavePollersActivityArgs)(nil),            // 32: temporal.server.api.deployment.v1.CheckTaskQueuesHavePollersActivityArgs
+	(*DeleteDeploymentArgs)(nil),                              // 33: temporal.server.api.deployment.v1.DeleteDeploymentArgs
+	(*SetRampingVersionResponse)(nil),                         // 34: temporal.server.api.deployment.v1.SetRampingVersionResponse
+	(*SetRampingVersionArgs)(nil),                             // 35: temporal.server.api.deployment.v1.SetRampingVersionArgs
+	(*SyncVersionStateActivityArgs)(nil),                      // 36: temporal.server.api.deployment.v1.SyncVersionStateActivityArgs
+	(*SyncVersionStateActivityResult)(nil),                    // 37: temporal.server.api.deployment.v1.SyncVersionStateActivityResult
+	(*IsVersionMissingTaskQueuesArgs)(nil),                    // 38: temporal.server.api.deployment.v1.IsVersionMissingTaskQueuesArgs
+	(*IsVersionMissingTaskQueuesResult)(nil),                  // 39: temporal.server.api.deployment.v1.IsVersionMissingTaskQueuesResult
+	(*WorkerDeploymentWorkflowMemo)(nil),                      // 40: temporal.server.api.deployment.v1.WorkerDeploymentWorkflowMemo
+	(*WorkerDeploymentSummary)(nil),                           // 41: temporal.server.api.deployment.v1.WorkerDeploymentSummary
+	(*AddVersionToWorkerDeploymentRequest)(nil),               // 42: temporal.server.api.deployment.v1.AddVersionToWorkerDeploymentRequest
+	(*AddVersionToWorkerDeploymentResponse)(nil),              // 43: temporal.server.api.deployment.v1.AddVersionToWorkerDeploymentResponse
+	(*TaskQueueData)(nil),                                     // 44: temporal.server.api.deployment.v1.TaskQueueData
+	(*DeploymentLocalState)(nil),                              // 45: temporal.server.api.deployment.v1.DeploymentLocalState
+	(*DeploymentWorkflowArgs)(nil),                            // 46: temporal.server.api.deployment.v1.DeploymentWorkflowArgs
+	(*DeploymentSeriesWorkflowArgs)(nil),                      // 47: temporal.server.api.deployment.v1.DeploymentSeriesWorkflowArgs
+	(*SeriesLocalState)(nil),                                  // 48: temporal.server.api.deployment.v1.SeriesLocalState
+	(*RegisterWorkerInDeploymentArgs)(nil),                    // 49: temporal.server.api.deployment.v1.RegisterWorkerInDeploymentArgs
+	(*SyncDeploymentStateArgs)(nil),                           // 50: temporal.server.api.deployment.v1.SyncDeploymentStateArgs
+	(*SyncDeploymentStateResponse)(nil),                       // 51: temporal.server.api.deployment.v1.SyncDeploymentStateResponse
+	(*QueryDescribeDeploymentResponse)(nil),                   // 52: temporal.server.api.deployment.v1.QueryDescribeDeploymentResponse
+	(*DeploymentWorkflowMemo)(nil),                            // 53: temporal.server.api.deployment.v1.DeploymentWorkflowMemo
+	(*StartDeploymentSeriesRequest)(nil),                      // 54: temporal.server.api.deployment.v1.StartDeploymentSeriesRequest
+	(*SyncUserDataRequest)(nil),                               // 55: temporal.server.api.deployment.v1.SyncUserDataRequest
+	(*SyncUserDataResponse)(nil),                              // 56: temporal.server.api.deployment.v1.SyncUserDataResponse
+	(*CheckUserDataPropagationRequest)(nil),                   // 57: temporal.server.api.deployment.v1.CheckUserDataPropagationRequest
+	(*SetCurrentDeploymentArgs)(nil),                          // 58: temporal.server.api.deployment.v1.SetCurrentDeploymentArgs
+	(*SetCurrentDeploymentResponse)(nil),                      // 59: temporal.server.api.deployment.v1.SetCurrentDeploymentResponse
+	(*SyncDeploymentStateActivityArgs)(nil),                   // 60: temporal.server.api.deployment.v1.SyncDeploymentStateActivityArgs
+	(*SyncDeploymentStateActivityResult)(nil),                 // 61: temporal.server.api.deployment.v1.SyncDeploymentStateActivityResult
+	(*DeploymentSeriesWorkflowMemo)(nil),                      // 62: temporal.server.api.deployment.v1.DeploymentSeriesWorkflowMemo
+	nil,                                                       // 63: temporal.server.api.deployment.v1.VersionLocalState.TaskQueueFamiliesEntry
+	(*VersionLocalState_TaskQueueFamilyData)(nil),             // 64: temporal.server.api.deployment.v1.VersionLocalState.TaskQueueFamilyData
+	nil, // 65: temporal.server.api.deployment.v1.VersionLocalState.TaskQueueFamilyData.TaskQueuesEntry
+	nil, // 66: temporal.server.api.deployment.v1.WorkerDeploymentLocalState.VersionsEntry
+	(*SyncDeploymentVersionUserDataRequest_SyncUserData)(nil), // 67: temporal.server.api.deployment.v1.SyncDeploymentVersionUserDataRequest.SyncUserData
+	nil, // 68: temporal.server.api.deployment.v1.SyncDeploymentVersionUserDataResponse.TaskQueueMaxVersionsEntry
+	nil, // 69: temporal.server.api.deployment.v1.CheckWorkerDeploymentUserDataPropagationRequest.TaskQueueMaxVersionsEntry
+	nil, // 70: temporal.server.api.deployment.v1.SyncUnversionedRampActivityResponse.TaskQueueMaxVersionsEntry
+	nil, // 71: temporal.server.api.deployment.v1.UpdateVersionMetadataArgs.UpsertEntriesEntry
+	nil, // 72: temporal.server.api.deployment.v1.CheckTaskQueuesHavePollersActivityArgs.TaskQueuesAndTypesEntry
+	(*CheckTaskQueuesHavePollersActivityArgs_TaskQueueTypes)(nil), // 73: temporal.server.api.deployment.v1.CheckTaskQueuesHavePollersActivityArgs.TaskQueueTypes
+	nil, // 74: temporal.server.api.deployment.v1.DeploymentLocalState.TaskQueueFamiliesEntry
+	nil, // 75: temporal.server.api.deployment.v1.DeploymentLocalState.MetadataEntry
+	(*DeploymentLocalState_TaskQueueFamilyData)(nil), // 76: temporal.server.api.deployment.v1.DeploymentLocalState.TaskQueueFamilyData
+	nil, // 77: temporal.server.api.deployment.v1.DeploymentLocalState.TaskQueueFamilyData.TaskQueuesEntry
+	(*SyncDeploymentStateArgs_SetCurrent)(nil), // 78: temporal.server.api.deployment.v1.SyncDeploymentStateArgs.SetCurrent
+	(*SyncUserDataRequest_SyncUserData)(nil),   // 79: temporal.server.api.deployment.v1.SyncUserDataRequest.SyncUserData
+	nil,                                        // 80: temporal.server.api.deployment.v1.SyncUserDataResponse.TaskQueueMaxVersionsEntry
+	nil,                                        // 81: temporal.server.api.deployment.v1.CheckUserDataPropagationRequest.TaskQueueMaxVersionsEntry
+	(*timestamppb.Timestamp)(nil),              // 82: google.protobuf.Timestamp
+	(*v1.VersionDrainageInfo)(nil),             // 83: temporal.api.deployment.v1.VersionDrainageInfo
+	(*v1.VersionMetadata)(nil),                 // 84: temporal.api.deployment.v1.VersionMetadata
+	(*v1.RoutingConfig)(nil),                   // 85: temporal.api.deployment.v1.RoutingConfig
+	(v11.VersionDrainageStatus)(0),             // 86: temporal.api.enums.v1.VersionDrainageStatus
+	(v11.TaskQueueType)(0),                     // 87: temporal.api.enums.v1.TaskQueueType
+	(*v1.WorkerDeploymentVersionInfo_VersionTaskQueueInfo)(nil), // 88: temporal.api.deployment.v1.WorkerDeploymentVersionInfo.VersionTaskQueueInfo
+	(*v1.Deployment)(nil),               // 89: temporal.api.deployment.v1.Deployment
+	(*v1.UpdateDeploymentMetadata)(nil), // 90: temporal.api.deployment.v1.UpdateDeploymentMetadata
+	(*v12.Payload)(nil),                 // 91: temporal.api.common.v1.Payload
 }
 var file_temporal_server_api_deployment_v1_message_proto_depIdxs = []int32{
 	0,  // 0: temporal.server.api.deployment.v1.DeploymentVersionData.version:type_name -> temporal.server.api.deployment.v1.WorkerDeploymentVersion
-	80, // 1: temporal.server.api.deployment.v1.DeploymentVersionData.routing_update_time:type_name -> google.protobuf.Timestamp
-	80, // 2: temporal.server.api.deployment.v1.DeploymentVersionData.current_since_time:type_name -> google.protobuf.Timestamp
-	80, // 3: temporal.server.api.deployment.v1.DeploymentVersionData.ramping_since_time:type_name -> google.protobuf.Timestamp
+	82, // 1: temporal.server.api.deployment.v1.DeploymentVersionData.routing_update_time:type_name -> google.protobuf.Timestamp
+	82, // 2: temporal.server.api.deployment.v1.DeploymentVersionData.current_since_time:type_name -> google.protobuf.Timestamp
+	82, // 3: temporal.server.api.deployment.v1.DeploymentVersionData.ramping_since_time:type_name -> google.protobuf.Timestamp
 	0,  // 4: temporal.server.api.deployment.v1.VersionLocalState.version:type_name -> temporal.server.api.deployment.v1.WorkerDeploymentVersion
-	80, // 5: temporal.server.api.deployment.v1.VersionLocalState.create_time:type_name -> google.protobuf.Timestamp
-	80, // 6: temporal.server.api.deployment.v1.VersionLocalState.routing_update_time:type_name -> google.protobuf.Timestamp
-	80, // 7: temporal.server.api.deployment.v1.VersionLocalState.current_since_time:type_name -> google.protobuf.Timestamp
-	80, // 8: temporal.server.api.deployment.v1.VersionLocalState.ramping_since_time:type_name -> google.protobuf.Timestamp
-	81, // 9: temporal.server.api.deployment.v1.VersionLocalState.drainage_info:type_name -> temporal.api.deployment.v1.VersionDrainageInfo
-	82, // 10: temporal.server.api.deployment.v1.VersionLocalState.metadata:type_name -> temporal.api.deployment.v1.VersionMetadata
-	61, // 11: temporal.server.api.deployment.v1.VersionLocalState.task_queue_families:type_name -> temporal.server.api.deployment.v1.VersionLocalState.TaskQueueFamiliesEntry
+	82, // 5: temporal.server.api.deployment.v1.VersionLocalState.create_time:type_name -> google.protobuf.Timestamp
+	82, // 6: temporal.server.api.deployment.v1.VersionLocalState.routing_update_time:type_name -> google.protobuf.Timestamp
+	82, // 7: temporal.server.api.deployment.v1.VersionLocalState.current_since_time:type_name -> google.protobuf.Timestamp
+	82, // 8: temporal.server.api.deployment.v1.VersionLocalState.ramping_since_time:type_name -> google.protobuf.Timestamp
+	83, // 9: temporal.server.api.deployment.v1.VersionLocalState.drainage_info:type_name -> temporal.api.deployment.v1.VersionDrainageInfo
+	84, // 10: temporal.server.api.deployment.v1.VersionLocalState.metadata:type_name -> temporal.api.deployment.v1.VersionMetadata
+	63, // 11: temporal.server.api.deployment.v1.VersionLocalState.task_queue_families:type_name -> temporal.server.api.deployment.v1.VersionLocalState.TaskQueueFamiliesEntry
 	2,  // 12: temporal.server.api.deployment.v1.WorkerDeploymentVersionWorkflowArgs.version_state:type_name -> temporal.server.api.deployment.v1.VersionLocalState
 	7,  // 13: temporal.server.api.deployment.v1.WorkerDeploymentWorkflowArgs.state:type_name -> temporal.server.api.deployment.v1.WorkerDeploymentLocalState
 	0,  // 14: temporal.server.api.deployment.v1.DrainageWorkflowArgs.version:type_name -> temporal.server.api.deployment.v1.WorkerDeploymentVersion
-	80, // 15: temporal.server.api.deployment.v1.WorkerDeploymentLocalState.create_time:type_name -> google.protobuf.Timestamp
-	83, // 16: temporal.server.api.deployment.v1.WorkerDeploymentLocalState.routing_config:type_name -> temporal.api.deployment.v1.RoutingConfig
-	64, // 17: temporal.server.api.deployment.v1.WorkerDeploymentLocalState.versions:type_name -> temporal.server.api.deployment.v1.WorkerDeploymentLocalState.VersionsEntry
-	80, // 18: temporal.server.api.deployment.v1.WorkerDeploymentVersionSummary.create_time:type_name -> google.protobuf.Timestamp
-	84, // 19: temporal.server.api.deployment.v1.WorkerDeploymentVersionSummary.drainage_status:type_name -> temporal.api.enums.v1.VersionDrainageStatus
-	85, // 20: temporal.server.api.deployment.v1.RegisterWorkerInVersionArgs.task_queue_type:type_name -> temporal.api.enums.v1.TaskQueueType
-	85, // 21: temporal.server.api.deployment.v1.RegisterWorkerInWorkerDeploymentArgs.task_queue_type:type_name -> temporal.api.enums.v1.TaskQueueType
+	82, // 15: temporal.server.api.deployment.v1.WorkerDeploymentLocalState.create_time:type_name -> google.protobuf.Timestamp
+	85, // 16: temporal.server.api.deployment.v1.WorkerDeploymentLocalState.routing_config:type_name -> temporal.api.deployment.v1.RoutingConfig
+	66, // 17: temporal.server.api.deployment.v1.WorkerDeploymentLocalState.versions:type_name -> temporal.server.api.deployment.v1.WorkerDeploymentLocalState.VersionsEntry
+	82, // 18: temporal.server.api.deployment.v1.WorkerDeploymentVersionSummary.create_time:type_name -> google.protobuf.Timestamp
+	86, // 19: temporal.server.api.deployment.v1.WorkerDeploymentVersionSummary.drainage_status:type_name -> temporal.api.enums.v1.VersionDrainageStatus
+	87, // 20: temporal.server.api.deployment.v1.RegisterWorkerInVersionArgs.task_queue_type:type_name -> temporal.api.enums.v1.TaskQueueType
+	87, // 21: temporal.server.api.deployment.v1.RegisterWorkerInWorkerDeploymentArgs.task_queue_type:type_name -> temporal.api.enums.v1.TaskQueueType
 	0,  // 22: temporal.server.api.deployment.v1.RegisterWorkerInWorkerDeploymentArgs.version:type_name -> temporal.server.api.deployment.v1.WorkerDeploymentVersion
-	80, // 23: temporal.server.api.deployment.v1.SyncVersionStateUpdateArgs.routing_update_time:type_name -> google.protobuf.Timestamp
-	80, // 24: temporal.server.api.deployment.v1.SyncVersionStateUpdateArgs.current_since_time:type_name -> google.protobuf.Timestamp
-	80, // 25: temporal.server.api.deployment.v1.SyncVersionStateUpdateArgs.ramping_since_time:type_name -> google.protobuf.Timestamp
-	2,  // 26: temporal.server.api.deployment.v1.SyncVersionStateResponse.version_state:type_name -> temporal.server.api.deployment.v1.VersionLocalState
-	80, // 27: temporal.server.api.deployment.v1.AddVersionUpdateArgs.create_time:type_name -> google.protobuf.Timestamp
-	81, // 28: temporal.server.api.deployment.v1.SyncDrainageInfoSignalArgs.drainage_info:type_name -> temporal.api.deployment.v1.VersionDrainageInfo
-	84, // 29: temporal.server.api.deployment.v1.SyncDrainageStatusSignalArgs.drainage_status:type_name -> temporal.api.enums.v1.VersionDrainageStatus
-	2,  // 30: temporal.server.api.deployment.v1.QueryDescribeVersionResponse.version_state:type_name -> temporal.server.api.deployment.v1.VersionLocalState
-	7,  // 31: temporal.server.api.deployment.v1.QueryDescribeWorkerDeploymentResponse.state:type_name -> temporal.server.api.deployment.v1.WorkerDeploymentLocalState
-	0,  // 32: temporal.server.api.deployment.v1.SyncDeploymentVersionUserDataRequest.version:type_name -> temporal.server.api.deployment.v1.WorkerDeploymentVersion
-	65, // 33: temporal.server.api.deployment.v1.SyncDeploymentVersionUserDataRequest.sync:type_name -> temporal.server.api.deployment.v1.SyncDeploymentVersionUserDataRequest.SyncUserData
-	66, // 34: temporal.server.api.deployment.v1.SyncDeploymentVersionUserDataResponse.task_queue_max_versions:type_name -> temporal.server.api.deployment.v1.SyncDeploymentVersionUserDataResponse.TaskQueueMaxVersionsEntry
-	67, // 35: temporal.server.api.deployment.v1.CheckWorkerDeploymentUserDataPropagationRequest.task_queue_max_versions:type_name -> temporal.server.api.deployment.v1.CheckWorkerDeploymentUserDataPropagationRequest.TaskQueueMaxVersionsEntry
-	11, // 36: temporal.server.api.deployment.v1.SyncUnversionedRampActivityArgs.update_args:type_name -> temporal.server.api.deployment.v1.SyncVersionStateUpdateArgs
-	68, // 37: temporal.server.api.deployment.v1.SyncUnversionedRampActivityResponse.task_queue_max_versions:type_name -> temporal.server.api.deployment.v1.SyncUnversionedRampActivityResponse.TaskQueueMaxVersionsEntry
-	69, // 38: temporal.server.api.deployment.v1.UpdateVersionMetadataArgs.upsert_entries:type_name -> temporal.server.api.deployment.v1.UpdateVersionMetadataArgs.UpsertEntriesEntry
-	82, // 39: temporal.server.api.deployment.v1.UpdateVersionMetadataResponse.metadata:type_name -> temporal.api.deployment.v1.VersionMetadata
-	70, // 40: temporal.server.api.deployment.v1.CheckTaskQueuesHavePollersActivityArgs.task_queues_and_types:type_name -> temporal.server.api.deployment.v1.CheckTaskQueuesHavePollersActivityArgs.TaskQueuesAndTypesEntry
-	0,  // 41: temporal.server.api.deployment.v1.CheckTaskQueuesHavePollersActivityArgs.worker_deployment_version:type_name -> temporal.server.api.deployment.v1.WorkerDeploymentVersion
-	11, // 42: temporal.server.api.deployment.v1.SyncVersionStateActivityArgs.update_args:type_name -> temporal.server.api.deployment.v1.SyncVersionStateUpdateArgs
-	2,  // 43: temporal.server.api.deployment.v1.SyncVersionStateActivityResult.version_state:type_name -> temporal.server.api.deployment.v1.VersionLocalState
-	80, // 44: temporal.server.api.deployment.v1.WorkerDeploymentWorkflowMemo.create_time:type_name -> google.protobuf.Timestamp
-	83, // 45: temporal.server.api.deployment.v1.WorkerDeploymentWorkflowMemo.routing_config:type_name -> temporal.api.deployment.v1.RoutingConfig
-	80, // 46: temporal.server.api.deployment.v1.WorkerDeploymentSummary.create_time:type_name -> google.protobuf.Timestamp
-	83, // 47: temporal.server.api.deployment.v1.WorkerDeploymentSummary.routing_config:type_name -> temporal.api.deployment.v1.RoutingConfig
-	13, // 48: temporal.server.api.deployment.v1.AddVersionToWorkerDeploymentRequest.update_args:type_name -> temporal.server.api.deployment.v1.AddVersionUpdateArgs
-	80, // 49: temporal.server.api.deployment.v1.TaskQueueData.first_poller_time:type_name -> google.protobuf.Timestamp
-	80, // 50: temporal.server.api.deployment.v1.TaskQueueData.last_became_current_time:type_name -> google.protobuf.Timestamp
-	86, // 51: temporal.server.api.deployment.v1.DeploymentLocalState.deployment:type_name -> temporal.api.deployment.v1.Deployment
-	72, // 52: temporal.server.api.deployment.v1.DeploymentLocalState.task_queue_families:type_name -> temporal.server.api.deployment.v1.DeploymentLocalState.TaskQueueFamiliesEntry
-	80, // 53: temporal.server.api.deployment.v1.DeploymentLocalState.last_became_current_time:type_name -> google.protobuf.Timestamp
-	80, // 54: temporal.server.api.deployment.v1.DeploymentLocalState.create_time:type_name -> google.protobuf.Timestamp
-	73, // 55: temporal.server.api.deployment.v1.DeploymentLocalState.metadata:type_name -> temporal.server.api.deployment.v1.DeploymentLocalState.MetadataEntry
-	43, // 56: temporal.server.api.deployment.v1.DeploymentWorkflowArgs.state:type_name -> temporal.server.api.deployment.v1.DeploymentLocalState
-	46, // 57: temporal.server.api.deployment.v1.DeploymentSeriesWorkflowArgs.state:type_name -> temporal.server.api.deployment.v1.SeriesLocalState
-	80, // 58: temporal.server.api.deployment.v1.SeriesLocalState.current_changed_time:type_name -> google.protobuf.Timestamp
-	85, // 59: temporal.server.api.deployment.v1.RegisterWorkerInDeploymentArgs.task_queue_type:type_name -> temporal.api.enums.v1.TaskQueueType
-	80, // 60: temporal.server.api.deployment.v1.RegisterWorkerInDeploymentArgs.first_poller_time:type_name -> google.protobuf.Timestamp
-	76, // 61: temporal.server.api.deployment.v1.SyncDeploymentStateArgs.set_current:type_name -> temporal.server.api.deployment.v1.SyncDeploymentStateArgs.SetCurrent
-	87, // 62: temporal.server.api.deployment.v1.SyncDeploymentStateArgs.update_metadata:type_name -> temporal.api.deployment.v1.UpdateDeploymentMetadata
-	43, // 63: temporal.server.api.deployment.v1.SyncDeploymentStateResponse.deployment_local_state:type_name -> temporal.server.api.deployment.v1.DeploymentLocalState
-	43, // 64: temporal.server.api.deployment.v1.QueryDescribeDeploymentResponse.deployment_local_state:type_name -> temporal.server.api.deployment.v1.DeploymentLocalState
-	86, // 65: temporal.server.api.deployment.v1.DeploymentWorkflowMemo.deployment:type_name -> temporal.api.deployment.v1.Deployment
-	80, // 66: temporal.server.api.deployment.v1.DeploymentWorkflowMemo.create_time:type_name -> google.protobuf.Timestamp
-	86, // 67: temporal.server.api.deployment.v1.SyncUserDataRequest.deployment:type_name -> temporal.api.deployment.v1.Deployment
-	77, // 68: temporal.server.api.deployment.v1.SyncUserDataRequest.sync:type_name -> temporal.server.api.deployment.v1.SyncUserDataRequest.SyncUserData
-	78, // 69: temporal.server.api.deployment.v1.SyncUserDataResponse.task_queue_max_versions:type_name -> temporal.server.api.deployment.v1.SyncUserDataResponse.TaskQueueMaxVersionsEntry
-	79, // 70: temporal.server.api.deployment.v1.CheckUserDataPropagationRequest.task_queue_max_versions:type_name -> temporal.server.api.deployment.v1.CheckUserDataPropagationRequest.TaskQueueMaxVersionsEntry
-	87, // 71: temporal.server.api.deployment.v1.SetCurrentDeploymentArgs.update_metadata:type_name -> temporal.api.deployment.v1.UpdateDeploymentMetadata
-	43, // 72: temporal.server.api.deployment.v1.SetCurrentDeploymentResponse.current_deployment_state:type_name -> temporal.server.api.deployment.v1.DeploymentLocalState
-	43, // 73: temporal.server.api.deployment.v1.SetCurrentDeploymentResponse.previous_deployment_state:type_name -> temporal.server.api.deployment.v1.DeploymentLocalState
-	86, // 74: temporal.server.api.deployment.v1.SyncDeploymentStateActivityArgs.deployment:type_name -> temporal.api.deployment.v1.Deployment
-	48, // 75: temporal.server.api.deployment.v1.SyncDeploymentStateActivityArgs.args:type_name -> temporal.server.api.deployment.v1.SyncDeploymentStateArgs
-	43, // 76: temporal.server.api.deployment.v1.SyncDeploymentStateActivityResult.state:type_name -> temporal.server.api.deployment.v1.DeploymentLocalState
-	80, // 77: temporal.server.api.deployment.v1.DeploymentSeriesWorkflowMemo.current_changed_time:type_name -> google.protobuf.Timestamp
-	62, // 78: temporal.server.api.deployment.v1.VersionLocalState.TaskQueueFamiliesEntry.value:type_name -> temporal.server.api.deployment.v1.VersionLocalState.TaskQueueFamilyData
-	63, // 79: temporal.server.api.deployment.v1.VersionLocalState.TaskQueueFamilyData.task_queues:type_name -> temporal.server.api.deployment.v1.VersionLocalState.TaskQueueFamilyData.TaskQueuesEntry
-	3,  // 80: temporal.server.api.deployment.v1.VersionLocalState.TaskQueueFamilyData.TaskQueuesEntry.value:type_name -> temporal.server.api.deployment.v1.TaskQueueVersionData
-	8,  // 81: temporal.server.api.deployment.v1.WorkerDeploymentLocalState.VersionsEntry.value:type_name -> temporal.server.api.deployment.v1.WorkerDeploymentVersionSummary
-	85, // 82: temporal.server.api.deployment.v1.SyncDeploymentVersionUserDataRequest.SyncUserData.types:type_name -> temporal.api.enums.v1.TaskQueueType
-	1,  // 83: temporal.server.api.deployment.v1.SyncDeploymentVersionUserDataRequest.SyncUserData.data:type_name -> temporal.server.api.deployment.v1.DeploymentVersionData
-	88, // 84: temporal.server.api.deployment.v1.UpdateVersionMetadataArgs.UpsertEntriesEntry.value:type_name -> temporal.api.common.v1.Payload
-	71, // 85: temporal.server.api.deployment.v1.CheckTaskQueuesHavePollersActivityArgs.TaskQueuesAndTypesEntry.value:type_name -> temporal.server.api.deployment.v1.CheckTaskQueuesHavePollersActivityArgs.TaskQueueTypes
-	85, // 86: temporal.server.api.deployment.v1.CheckTaskQueuesHavePollersActivityArgs.TaskQueueTypes.types:type_name -> temporal.api.enums.v1.TaskQueueType
-	74, // 87: temporal.server.api.deployment.v1.DeploymentLocalState.TaskQueueFamiliesEntry.value:type_name -> temporal.server.api.deployment.v1.DeploymentLocalState.TaskQueueFamilyData
-	88, // 88: temporal.server.api.deployment.v1.DeploymentLocalState.MetadataEntry.value:type_name -> temporal.api.common.v1.Payload
-	75, // 89: temporal.server.api.deployment.v1.DeploymentLocalState.TaskQueueFamilyData.task_queues:type_name -> temporal.server.api.deployment.v1.DeploymentLocalState.TaskQueueFamilyData.TaskQueuesEntry
-	42, // 90: temporal.server.api.deployment.v1.DeploymentLocalState.TaskQueueFamilyData.TaskQueuesEntry.value:type_name -> temporal.server.api.deployment.v1.TaskQueueData
-	80, // 91: temporal.server.api.deployment.v1.SyncDeploymentStateArgs.SetCurrent.last_became_current_time:type_name -> google.protobuf.Timestamp
-	85, // 92: temporal.server.api.deployment.v1.SyncUserDataRequest.SyncUserData.type:type_name -> temporal.api.enums.v1.TaskQueueType
-	42, // 93: temporal.server.api.deployment.v1.SyncUserDataRequest.SyncUserData.data:type_name -> temporal.server.api.deployment.v1.TaskQueueData
-	94, // [94:94] is the sub-list for method output_type
-	94, // [94:94] is the sub-list for method input_type
-	94, // [94:94] is the sub-list for extension type_name
-	94, // [94:94] is the sub-list for extension extendee
-	0,  // [0:94] is the sub-list for field type_name
+	88, // 23: temporal.server.api.deployment.v1.DescribeVersionFromWorkerDeploymentActivityResult.task_queue_infos:type_name -> temporal.api.deployment.v1.WorkerDeploymentVersionInfo.VersionTaskQueueInfo
+	82, // 24: temporal.server.api.deployment.v1.SyncVersionStateUpdateArgs.routing_update_time:type_name -> google.protobuf.Timestamp
+	82, // 25: temporal.server.api.deployment.v1.SyncVersionStateUpdateArgs.current_since_time:type_name -> google.protobuf.Timestamp
+	82, // 26: temporal.server.api.deployment.v1.SyncVersionStateUpdateArgs.ramping_since_time:type_name -> google.protobuf.Timestamp
+	2,  // 27: temporal.server.api.deployment.v1.SyncVersionStateResponse.version_state:type_name -> temporal.server.api.deployment.v1.VersionLocalState
+	82, // 28: temporal.server.api.deployment.v1.AddVersionUpdateArgs.create_time:type_name -> google.protobuf.Timestamp
+	83, // 29: temporal.server.api.deployment.v1.SyncDrainageInfoSignalArgs.drainage_info:type_name -> temporal.api.deployment.v1.VersionDrainageInfo
+	86, // 30: temporal.server.api.deployment.v1.SyncDrainageStatusSignalArgs.drainage_status:type_name -> temporal.api.enums.v1.VersionDrainageStatus
+	2,  // 31: temporal.server.api.deployment.v1.QueryDescribeVersionResponse.version_state:type_name -> temporal.server.api.deployment.v1.VersionLocalState
+	7,  // 32: temporal.server.api.deployment.v1.QueryDescribeWorkerDeploymentResponse.state:type_name -> temporal.server.api.deployment.v1.WorkerDeploymentLocalState
+	0,  // 33: temporal.server.api.deployment.v1.SyncDeploymentVersionUserDataRequest.version:type_name -> temporal.server.api.deployment.v1.WorkerDeploymentVersion
+	67, // 34: temporal.server.api.deployment.v1.SyncDeploymentVersionUserDataRequest.sync:type_name -> temporal.server.api.deployment.v1.SyncDeploymentVersionUserDataRequest.SyncUserData
+	68, // 35: temporal.server.api.deployment.v1.SyncDeploymentVersionUserDataResponse.task_queue_max_versions:type_name -> temporal.server.api.deployment.v1.SyncDeploymentVersionUserDataResponse.TaskQueueMaxVersionsEntry
+	69, // 36: temporal.server.api.deployment.v1.CheckWorkerDeploymentUserDataPropagationRequest.task_queue_max_versions:type_name -> temporal.server.api.deployment.v1.CheckWorkerDeploymentUserDataPropagationRequest.TaskQueueMaxVersionsEntry
+	13, // 37: temporal.server.api.deployment.v1.SyncUnversionedRampActivityArgs.update_args:type_name -> temporal.server.api.deployment.v1.SyncVersionStateUpdateArgs
+	70, // 38: temporal.server.api.deployment.v1.SyncUnversionedRampActivityResponse.task_queue_max_versions:type_name -> temporal.server.api.deployment.v1.SyncUnversionedRampActivityResponse.TaskQueueMaxVersionsEntry
+	71, // 39: temporal.server.api.deployment.v1.UpdateVersionMetadataArgs.upsert_entries:type_name -> temporal.server.api.deployment.v1.UpdateVersionMetadataArgs.UpsertEntriesEntry
+	84, // 40: temporal.server.api.deployment.v1.UpdateVersionMetadataResponse.metadata:type_name -> temporal.api.deployment.v1.VersionMetadata
+	72, // 41: temporal.server.api.deployment.v1.CheckTaskQueuesHavePollersActivityArgs.task_queues_and_types:type_name -> temporal.server.api.deployment.v1.CheckTaskQueuesHavePollersActivityArgs.TaskQueuesAndTypesEntry
+	0,  // 42: temporal.server.api.deployment.v1.CheckTaskQueuesHavePollersActivityArgs.worker_deployment_version:type_name -> temporal.server.api.deployment.v1.WorkerDeploymentVersion
+	13, // 43: temporal.server.api.deployment.v1.SyncVersionStateActivityArgs.update_args:type_name -> temporal.server.api.deployment.v1.SyncVersionStateUpdateArgs
+	2,  // 44: temporal.server.api.deployment.v1.SyncVersionStateActivityResult.version_state:type_name -> temporal.server.api.deployment.v1.VersionLocalState
+	82, // 45: temporal.server.api.deployment.v1.WorkerDeploymentWorkflowMemo.create_time:type_name -> google.protobuf.Timestamp
+	85, // 46: temporal.server.api.deployment.v1.WorkerDeploymentWorkflowMemo.routing_config:type_name -> temporal.api.deployment.v1.RoutingConfig
+	82, // 47: temporal.server.api.deployment.v1.WorkerDeploymentSummary.create_time:type_name -> google.protobuf.Timestamp
+	85, // 48: temporal.server.api.deployment.v1.WorkerDeploymentSummary.routing_config:type_name -> temporal.api.deployment.v1.RoutingConfig
+	15, // 49: temporal.server.api.deployment.v1.AddVersionToWorkerDeploymentRequest.update_args:type_name -> temporal.server.api.deployment.v1.AddVersionUpdateArgs
+	82, // 50: temporal.server.api.deployment.v1.TaskQueueData.first_poller_time:type_name -> google.protobuf.Timestamp
+	82, // 51: temporal.server.api.deployment.v1.TaskQueueData.last_became_current_time:type_name -> google.protobuf.Timestamp
+	89, // 52: temporal.server.api.deployment.v1.DeploymentLocalState.deployment:type_name -> temporal.api.deployment.v1.Deployment
+	74, // 53: temporal.server.api.deployment.v1.DeploymentLocalState.task_queue_families:type_name -> temporal.server.api.deployment.v1.DeploymentLocalState.TaskQueueFamiliesEntry
+	82, // 54: temporal.server.api.deployment.v1.DeploymentLocalState.last_became_current_time:type_name -> google.protobuf.Timestamp
+	82, // 55: temporal.server.api.deployment.v1.DeploymentLocalState.create_time:type_name -> google.protobuf.Timestamp
+	75, // 56: temporal.server.api.deployment.v1.DeploymentLocalState.metadata:type_name -> temporal.server.api.deployment.v1.DeploymentLocalState.MetadataEntry
+	45, // 57: temporal.server.api.deployment.v1.DeploymentWorkflowArgs.state:type_name -> temporal.server.api.deployment.v1.DeploymentLocalState
+	48, // 58: temporal.server.api.deployment.v1.DeploymentSeriesWorkflowArgs.state:type_name -> temporal.server.api.deployment.v1.SeriesLocalState
+	82, // 59: temporal.server.api.deployment.v1.SeriesLocalState.current_changed_time:type_name -> google.protobuf.Timestamp
+	87, // 60: temporal.server.api.deployment.v1.RegisterWorkerInDeploymentArgs.task_queue_type:type_name -> temporal.api.enums.v1.TaskQueueType
+	82, // 61: temporal.server.api.deployment.v1.RegisterWorkerInDeploymentArgs.first_poller_time:type_name -> google.protobuf.Timestamp
+	78, // 62: temporal.server.api.deployment.v1.SyncDeploymentStateArgs.set_current:type_name -> temporal.server.api.deployment.v1.SyncDeploymentStateArgs.SetCurrent
+	90, // 63: temporal.server.api.deployment.v1.SyncDeploymentStateArgs.update_metadata:type_name -> temporal.api.deployment.v1.UpdateDeploymentMetadata
+	45, // 64: temporal.server.api.deployment.v1.SyncDeploymentStateResponse.deployment_local_state:type_name -> temporal.server.api.deployment.v1.DeploymentLocalState
+	45, // 65: temporal.server.api.deployment.v1.QueryDescribeDeploymentResponse.deployment_local_state:type_name -> temporal.server.api.deployment.v1.DeploymentLocalState
+	89, // 66: temporal.server.api.deployment.v1.DeploymentWorkflowMemo.deployment:type_name -> temporal.api.deployment.v1.Deployment
+	82, // 67: temporal.server.api.deployment.v1.DeploymentWorkflowMemo.create_time:type_name -> google.protobuf.Timestamp
+	89, // 68: temporal.server.api.deployment.v1.SyncUserDataRequest.deployment:type_name -> temporal.api.deployment.v1.Deployment
+	79, // 69: temporal.server.api.deployment.v1.SyncUserDataRequest.sync:type_name -> temporal.server.api.deployment.v1.SyncUserDataRequest.SyncUserData
+	80, // 70: temporal.server.api.deployment.v1.SyncUserDataResponse.task_queue_max_versions:type_name -> temporal.server.api.deployment.v1.SyncUserDataResponse.TaskQueueMaxVersionsEntry
+	81, // 71: temporal.server.api.deployment.v1.CheckUserDataPropagationRequest.task_queue_max_versions:type_name -> temporal.server.api.deployment.v1.CheckUserDataPropagationRequest.TaskQueueMaxVersionsEntry
+	90, // 72: temporal.server.api.deployment.v1.SetCurrentDeploymentArgs.update_metadata:type_name -> temporal.api.deployment.v1.UpdateDeploymentMetadata
+	45, // 73: temporal.server.api.deployment.v1.SetCurrentDeploymentResponse.current_deployment_state:type_name -> temporal.server.api.deployment.v1.DeploymentLocalState
+	45, // 74: temporal.server.api.deployment.v1.SetCurrentDeploymentResponse.previous_deployment_state:type_name -> temporal.server.api.deployment.v1.DeploymentLocalState
+	89, // 75: temporal.server.api.deployment.v1.SyncDeploymentStateActivityArgs.deployment:type_name -> temporal.api.deployment.v1.Deployment
+	50, // 76: temporal.server.api.deployment.v1.SyncDeploymentStateActivityArgs.args:type_name -> temporal.server.api.deployment.v1.SyncDeploymentStateArgs
+	45, // 77: temporal.server.api.deployment.v1.SyncDeploymentStateActivityResult.state:type_name -> temporal.server.api.deployment.v1.DeploymentLocalState
+	82, // 78: temporal.server.api.deployment.v1.DeploymentSeriesWorkflowMemo.current_changed_time:type_name -> google.protobuf.Timestamp
+	64, // 79: temporal.server.api.deployment.v1.VersionLocalState.TaskQueueFamiliesEntry.value:type_name -> temporal.server.api.deployment.v1.VersionLocalState.TaskQueueFamilyData
+	65, // 80: temporal.server.api.deployment.v1.VersionLocalState.TaskQueueFamilyData.task_queues:type_name -> temporal.server.api.deployment.v1.VersionLocalState.TaskQueueFamilyData.TaskQueuesEntry
+	3,  // 81: temporal.server.api.deployment.v1.VersionLocalState.TaskQueueFamilyData.TaskQueuesEntry.value:type_name -> temporal.server.api.deployment.v1.TaskQueueVersionData
+	8,  // 82: temporal.server.api.deployment.v1.WorkerDeploymentLocalState.VersionsEntry.value:type_name -> temporal.server.api.deployment.v1.WorkerDeploymentVersionSummary
+	87, // 83: temporal.server.api.deployment.v1.SyncDeploymentVersionUserDataRequest.SyncUserData.types:type_name -> temporal.api.enums.v1.TaskQueueType
+	1,  // 84: temporal.server.api.deployment.v1.SyncDeploymentVersionUserDataRequest.SyncUserData.data:type_name -> temporal.server.api.deployment.v1.DeploymentVersionData
+	91, // 85: temporal.server.api.deployment.v1.UpdateVersionMetadataArgs.UpsertEntriesEntry.value:type_name -> temporal.api.common.v1.Payload
+	73, // 86: temporal.server.api.deployment.v1.CheckTaskQueuesHavePollersActivityArgs.TaskQueuesAndTypesEntry.value:type_name -> temporal.server.api.deployment.v1.CheckTaskQueuesHavePollersActivityArgs.TaskQueueTypes
+	87, // 87: temporal.server.api.deployment.v1.CheckTaskQueuesHavePollersActivityArgs.TaskQueueTypes.types:type_name -> temporal.api.enums.v1.TaskQueueType
+	76, // 88: temporal.server.api.deployment.v1.DeploymentLocalState.TaskQueueFamiliesEntry.value:type_name -> temporal.server.api.deployment.v1.DeploymentLocalState.TaskQueueFamilyData
+	91, // 89: temporal.server.api.deployment.v1.DeploymentLocalState.MetadataEntry.value:type_name -> temporal.api.common.v1.Payload
+	77, // 90: temporal.server.api.deployment.v1.DeploymentLocalState.TaskQueueFamilyData.task_queues:type_name -> temporal.server.api.deployment.v1.DeploymentLocalState.TaskQueueFamilyData.TaskQueuesEntry
+	44, // 91: temporal.server.api.deployment.v1.DeploymentLocalState.TaskQueueFamilyData.TaskQueuesEntry.value:type_name -> temporal.server.api.deployment.v1.TaskQueueData
+	82, // 92: temporal.server.api.deployment.v1.SyncDeploymentStateArgs.SetCurrent.last_became_current_time:type_name -> google.protobuf.Timestamp
+	87, // 93: temporal.server.api.deployment.v1.SyncUserDataRequest.SyncUserData.type:type_name -> temporal.api.enums.v1.TaskQueueType
+	44, // 94: temporal.server.api.deployment.v1.SyncUserDataRequest.SyncUserData.data:type_name -> temporal.server.api.deployment.v1.TaskQueueData
+	95, // [95:95] is the sub-list for method output_type
+	95, // [95:95] is the sub-list for method input_type
+	95, // [95:95] is the sub-list for extension type_name
+	95, // [95:95] is the sub-list for extension extendee
+	0,  // [0:95] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_api_deployment_v1_message_proto_init() }
@@ -5266,819 +4574,13 @@ func file_temporal_server_api_deployment_v1_message_proto_init() {
 	if File_temporal_server_api_deployment_v1_message_proto != nil {
 		return
 	}
-	if !protoimpl.UnsafeEnabled {
-		file_temporal_server_api_deployment_v1_message_proto_msgTypes[0].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*WorkerDeploymentVersion); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_deployment_v1_message_proto_msgTypes[1].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*DeploymentVersionData); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_deployment_v1_message_proto_msgTypes[2].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*VersionLocalState); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_deployment_v1_message_proto_msgTypes[3].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*TaskQueueVersionData); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_deployment_v1_message_proto_msgTypes[4].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*WorkerDeploymentVersionWorkflowArgs); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_deployment_v1_message_proto_msgTypes[5].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*WorkerDeploymentWorkflowArgs); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_deployment_v1_message_proto_msgTypes[6].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*DrainageWorkflowArgs); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_deployment_v1_message_proto_msgTypes[7].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*WorkerDeploymentLocalState); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_deployment_v1_message_proto_msgTypes[8].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*WorkerDeploymentVersionSummary); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_deployment_v1_message_proto_msgTypes[9].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*RegisterWorkerInVersionArgs); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_deployment_v1_message_proto_msgTypes[10].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*RegisterWorkerInWorkerDeploymentArgs); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_deployment_v1_message_proto_msgTypes[11].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*SyncVersionStateUpdateArgs); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_deployment_v1_message_proto_msgTypes[12].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*SyncVersionStateResponse); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_deployment_v1_message_proto_msgTypes[13].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*AddVersionUpdateArgs); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_deployment_v1_message_proto_msgTypes[14].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*SyncDrainageInfoSignalArgs); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_deployment_v1_message_proto_msgTypes[15].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*SyncDrainageStatusSignalArgs); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_deployment_v1_message_proto_msgTypes[16].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*QueryDescribeVersionResponse); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_deployment_v1_message_proto_msgTypes[17].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*QueryDescribeWorkerDeploymentResponse); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_deployment_v1_message_proto_msgTypes[18].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*StartWorkerDeploymentRequest); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_deployment_v1_message_proto_msgTypes[19].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*SyncDeploymentVersionUserDataRequest); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_deployment_v1_message_proto_msgTypes[20].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*SyncDeploymentVersionUserDataResponse); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_deployment_v1_message_proto_msgTypes[21].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*CheckWorkerDeploymentUserDataPropagationRequest); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_deployment_v1_message_proto_msgTypes[22].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*SyncUnversionedRampActivityArgs); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_deployment_v1_message_proto_msgTypes[23].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*SyncUnversionedRampActivityResponse); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_deployment_v1_message_proto_msgTypes[24].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*UpdateVersionMetadataArgs); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_deployment_v1_message_proto_msgTypes[25].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*UpdateVersionMetadataResponse); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_deployment_v1_message_proto_msgTypes[26].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*SetCurrentVersionArgs); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_deployment_v1_message_proto_msgTypes[27].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*SetCurrentVersionResponse); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_deployment_v1_message_proto_msgTypes[28].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*DeleteVersionArgs); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_deployment_v1_message_proto_msgTypes[29].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*DeleteVersionActivityArgs); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_deployment_v1_message_proto_msgTypes[30].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*CheckTaskQueuesHavePollersActivityArgs); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_deployment_v1_message_proto_msgTypes[31].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*DeleteDeploymentArgs); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_deployment_v1_message_proto_msgTypes[32].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*SetRampingVersionResponse); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_deployment_v1_message_proto_msgTypes[33].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*SetRampingVersionArgs); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_deployment_v1_message_proto_msgTypes[34].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*SyncVersionStateActivityArgs); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_deployment_v1_message_proto_msgTypes[35].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*SyncVersionStateActivityResult); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_deployment_v1_message_proto_msgTypes[36].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*IsVersionMissingTaskQueuesArgs); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_deployment_v1_message_proto_msgTypes[37].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*IsVersionMissingTaskQueuesResult); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_deployment_v1_message_proto_msgTypes[38].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*WorkerDeploymentWorkflowMemo); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_deployment_v1_message_proto_msgTypes[39].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*WorkerDeploymentSummary); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_deployment_v1_message_proto_msgTypes[40].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*AddVersionToWorkerDeploymentRequest); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_deployment_v1_message_proto_msgTypes[41].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*AddVersionToWorkerDeploymentResponse); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_deployment_v1_message_proto_msgTypes[42].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*TaskQueueData); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_deployment_v1_message_proto_msgTypes[43].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*DeploymentLocalState); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_deployment_v1_message_proto_msgTypes[44].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*DeploymentWorkflowArgs); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_deployment_v1_message_proto_msgTypes[45].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*DeploymentSeriesWorkflowArgs); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_deployment_v1_message_proto_msgTypes[46].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*SeriesLocalState); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_deployment_v1_message_proto_msgTypes[47].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*RegisterWorkerInDeploymentArgs); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_deployment_v1_message_proto_msgTypes[48].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*SyncDeploymentStateArgs); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_deployment_v1_message_proto_msgTypes[49].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*SyncDeploymentStateResponse); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_deployment_v1_message_proto_msgTypes[50].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*QueryDescribeDeploymentResponse); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_deployment_v1_message_proto_msgTypes[51].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*DeploymentWorkflowMemo); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_deployment_v1_message_proto_msgTypes[52].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*StartDeploymentSeriesRequest); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_deployment_v1_message_proto_msgTypes[53].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*SyncUserDataRequest); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_deployment_v1_message_proto_msgTypes[54].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*SyncUserDataResponse); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_deployment_v1_message_proto_msgTypes[55].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*CheckUserDataPropagationRequest); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_deployment_v1_message_proto_msgTypes[56].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*SetCurrentDeploymentArgs); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_deployment_v1_message_proto_msgTypes[57].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*SetCurrentDeploymentResponse); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_deployment_v1_message_proto_msgTypes[58].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*SyncDeploymentStateActivityArgs); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_deployment_v1_message_proto_msgTypes[59].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*SyncDeploymentStateActivityResult); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_deployment_v1_message_proto_msgTypes[60].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*DeploymentSeriesWorkflowMemo); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_deployment_v1_message_proto_msgTypes[62].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*VersionLocalState_TaskQueueFamilyData); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_deployment_v1_message_proto_msgTypes[65].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*SyncDeploymentVersionUserDataRequest_SyncUserData); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_deployment_v1_message_proto_msgTypes[71].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*CheckTaskQueuesHavePollersActivityArgs_TaskQueueTypes); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_deployment_v1_message_proto_msgTypes[74].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*DeploymentLocalState_TaskQueueFamilyData); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_deployment_v1_message_proto_msgTypes[76].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*SyncDeploymentStateArgs_SetCurrent); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_deployment_v1_message_proto_msgTypes[77].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*SyncUserDataRequest_SyncUserData); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: file_temporal_server_api_deployment_v1_message_proto_rawDesc,
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_api_deployment_v1_message_proto_rawDesc), len(file_temporal_server_api_deployment_v1_message_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   80,
+			NumMessages:   82,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
@@ -6087,7 +4589,6 @@ func file_temporal_server_api_deployment_v1_message_proto_init() {
 		MessageInfos:      file_temporal_server_api_deployment_v1_message_proto_msgTypes,
 	}.Build()
 	File_temporal_server_api_deployment_v1_message_proto = out.File
-	file_temporal_server_api_deployment_v1_message_proto_rawDesc = nil
 	file_temporal_server_api_deployment_v1_message_proto_goTypes = nil
 	file_temporal_server_api_deployment_v1_message_proto_depIdxs = nil
 }

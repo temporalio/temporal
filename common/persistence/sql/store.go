@@ -50,9 +50,9 @@ func RegisterPlugin(pluginName string, plugin sqlplugin.Plugin) {
 }
 
 // NewSQLDB creates a returns a reference to a logical connection to the
-// underlying SQL database. The returned object is to tied to a single
+// underlying SQL database. The returned object is tied to a single
 // SQL database and the object can be used to perform CRUD operations on
-// the tables in the database
+// the tables in the database.
 func NewSQLDB(
 	dbKind sqlplugin.DbKind,
 	cfg *config.SQL,
@@ -60,14 +60,10 @@ func NewSQLDB(
 	logger log.Logger,
 	mh metrics.Handler,
 ) (sqlplugin.DB, error) {
-	plugin, err := getPlugin(cfg.PluginName)
-	if err != nil {
-		return nil, err
-	}
-	return plugin.CreateDB(dbKind, cfg, r, logger, mh)
+	return createDB[sqlplugin.DB](dbKind, cfg, r, logger, mh)
 }
 
-// NewSQLAdminDB returns a AdminDB
+// NewSQLAdminDB returns a AdminDB.
 func NewSQLAdminDB(
 	dbKind sqlplugin.DbKind,
 	cfg *config.SQL,
@@ -75,11 +71,28 @@ func NewSQLAdminDB(
 	logger log.Logger,
 	mh metrics.Handler,
 ) (sqlplugin.AdminDB, error) {
+	return createDB[sqlplugin.AdminDB](dbKind, cfg, r, logger, mh)
+}
+
+func createDB[T any](
+	dbKind sqlplugin.DbKind,
+	cfg *config.SQL,
+	r resolver.ServiceResolver,
+	logger log.Logger,
+	mh metrics.Handler,
+) (T, error) {
+	var res T
 	plugin, err := getPlugin(cfg.PluginName)
 	if err != nil {
-		return nil, err
+		return res, err
 	}
-	return plugin.CreateAdminDB(dbKind, cfg, r, logger, mh)
+	db, err := plugin.CreateDB(dbKind, cfg, r, logger, mh)
+	if err != nil {
+		return res, err
+	}
+	//revive:disable-next-line:unchecked-type-assertion
+	res = db.(T)
+	return res, err
 }
 
 func getPlugin(pluginName string) (sqlplugin.Plugin, error) {

@@ -30,9 +30,12 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/service/frontend/configs"
 	"google.golang.org/grpc"
 )
 
@@ -55,9 +58,10 @@ type (
 	}
 
 	NamespaceRateLimitInterceptorImpl struct {
-		namespaceRegistry namespace.Registry
-		rateLimiter       quotas.RequestRateLimiter
-		tokens            map[string]int
+		namespaceRegistry                 namespace.Registry
+		rateLimiter                       quotas.RequestRateLimiter
+		tokens                            map[string]int
+		reducePollWorkflowHistoryPriority dynamicconfig.BoolPropertyFn
 	}
 )
 
@@ -68,11 +72,13 @@ func NewNamespaceRateLimitInterceptor(
 	namespaceRegistry namespace.Registry,
 	rateLimiter quotas.RequestRateLimiter,
 	tokens map[string]int,
+	reducePollWorkflowHistoryPriority dynamicconfig.BoolPropertyFn,
 ) NamespaceRateLimitInterceptor {
 	return &NamespaceRateLimitInterceptorImpl{
-		namespaceRegistry: namespaceRegistry,
-		rateLimiter:       rateLimiter,
-		tokens:            tokens,
+		namespaceRegistry:                 namespaceRegistry,
+		rateLimiter:                       rateLimiter,
+		tokens:                            tokens,
+		reducePollWorkflowHistoryPriority: reducePollWorkflowHistoryPriority,
 	}
 }
 
@@ -83,7 +89,11 @@ func (ni *NamespaceRateLimitInterceptorImpl) Intercept(
 	handler grpc.UnaryHandler,
 ) (interface{}, error) {
 	if ns := MustGetNamespaceName(ni.namespaceRegistry, req); ns != namespace.EmptyName {
-		if err := ni.Allow(ns, info.FullMethod, headers.NewGRPCHeaderGetter(ctx)); err != nil {
+		method := info.FullMethod
+		if ni.reducePollWorkflowHistoryPriority() && isLongPollGetHistoryRequest(req) {
+			method = configs.PollWorkflowHistoryAPIName
+		}
+		if err := ni.Allow(ns, method, headers.NewGRPCHeaderGetter(ctx)); err != nil {
 			return nil, err
 		}
 	}
@@ -108,4 +118,14 @@ func (ni *NamespaceRateLimitInterceptorImpl) Allow(namespaceName namespace.Name,
 		return ErrNamespaceRateLimitServerBusy
 	}
 	return nil
+}
+
+func isLongPollGetHistoryRequest(
+	req interface{},
+) bool {
+	switch request := req.(type) {
+	case *workflowservice.GetWorkflowExecutionHistoryRequest:
+		return request.GetWaitNewEvent()
+	}
+	return false
 }

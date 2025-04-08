@@ -51,11 +51,19 @@ func TestRPCFactory_GetInternodeGRPCServerOptions(t *testing.T) {
 	assert.Empty(t, opts)
 }
 
-func TestRPCFactory_CreateInternodeGRPCConnection(t *testing.T) {
+func TestRPCFactory_CreateHistoryGRPCConnection(t *testing.T) {
 	t.Parallel()
 
 	testDialer(t, "localhost", func(rpcFactory *nettest.RPCFactory) *grpc.ClientConn {
-		return rpcFactory.CreateInternodeGRPCConnection("localhost")
+		return rpcFactory.CreateHistoryGRPCConnection("localhost")
+	})
+}
+
+func TestRPCFactory_CreateMatchingGRPCConnection(t *testing.T) {
+	t.Parallel()
+
+	testDialer(t, "localhost", func(rpcFactory *nettest.RPCFactory) *grpc.ClientConn {
+		return rpcFactory.CreateMatchingGRPCConnection("localhost")
 	})
 }
 
