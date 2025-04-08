@@ -52,10 +52,10 @@ import (
 type rejectCode int32
 
 const (
-	rejectCodeUndefined         rejectCode = iota
-	rejectCodeAccepted          rejectCode = 1
-	rejectCodePaused            rejectCode = 2
-	rejectCodeStartedTransition rejectCode = 3
+	rejectCodeUndefined rejectCode = iota
+	rejectCodeAccepted
+	rejectCodePaused
+	rejectCodeStartedTransition
 )
 
 func Invoke(
@@ -68,7 +68,6 @@ func Invoke(
 
 	var err error
 	response := &historyservice.RecordActivityTaskStartedResponse{}
-	var startedTransition bool
 	var rejectCode rejectCode
 
 	err = api.GetAndUpdateWorkflowWithNew(
@@ -92,17 +91,12 @@ func Invoke(
 				return nil, err
 			}
 
-			startedTransition = false
-			if rejectCode == rejectCodeStartedTransition {
-				startedTransition = true
-			}
-
 			return &api.UpdateWorkflowAction{
 				Noop: false,
 				// Create new wft if a transition started with this activity.
 				// StartDeploymentTransition rescheduled pending wft, but this creates new
 				// one if there is no pending wft.
-				CreateWorkflowTask: startedTransition,
+				CreateWorkflowTask: rejectCode == rejectCodeStartedTransition,
 			}, nil
 		},
 		nil,
