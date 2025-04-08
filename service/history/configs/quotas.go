@@ -63,7 +63,6 @@ func NewPriorityRateLimiter(
 			return priority
 		}
 		// unknown caller type, default to api to be consistent with existing behavior
-		// TODO: this happens for CompleteNexusOperation right now. Need to fix it.
 		return CallerTypeToPriority[headers.CallerTypeAPI]
 	}, rateLimiters)
 }

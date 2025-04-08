@@ -405,6 +405,15 @@ func (e *executableImpl) writeToDLQ(ctx context.Context) error {
 	return err
 }
 
+func (e *executableImpl) isUserError(err error) bool {
+	// All namespace level resource exhausted errors are considered user errors.
+	var resourceExhaustedErr *serviceerror.ResourceExhausted
+	if ok := errors.As(err, &resourceExhaustedErr); !ok {
+		return false
+	}
+	return resourceExhaustedErr.Scope == enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE
+}
+
 func (e *executableImpl) isSafeToDropError(err error) bool {
 	if errors.Is(err, consts.ErrStaleReference) {
 		// The task is stale and is safe to be dropped.
@@ -519,9 +528,8 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 	}
 
 	defer func() {
-		if !errors.Is(retErr, consts.ErrResourceExhaustedBusyWorkflow) &&
-			!errors.Is(retErr, consts.ErrResourceExhaustedAPSLimit) {
-			// if err is due to workflow busy or APS limit, do not take any latency related to this attempt into account
+		// If err is due to user error, do not take any latency related to this attempt into account
+		if !e.isUserError(retErr) {
 			e.inMemoryNoUserLatency += e.scheduleLatency + e.attemptNoUserLatency
 		}
 	}()
@@ -683,8 +691,8 @@ func (e *executableImpl) Nack(err error) {
 
 	if !submitted {
 		backoffDuration := e.backoffDuration(err, e.Attempt())
-		if !errors.Is(err, consts.ErrResourceExhaustedBusyWorkflow) &&
-			!errors.Is(err, consts.ErrResourceExhaustedAPSLimit) {
+		// If err is due to user error, do not take any latency related to this attempt into account
+		if !e.isUserError(err) {
 			e.inMemoryNoUserLatency += backoffDuration
 		}
 
