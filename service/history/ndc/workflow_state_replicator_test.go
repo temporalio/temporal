@@ -878,6 +878,103 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_SameBranch_S
 	s.NoError(err)
 }
 
+func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_FirstTask_SyncMutation() {
+	workflowStateReplicator := NewWorkflowStateReplicator(
+		s.mockShard,
+		s.mockWorkflowCache,
+		nil,
+		serialization.NewSerializer(),
+		s.logger,
+	)
+	mockTransactionManager := NewMockTransactionManager(s.controller)
+	mockTaskRefresher := workflow.NewMockTaskRefresher(s.controller)
+	workflowStateReplicator.transactionMgr = mockTransactionManager
+	workflowStateReplicator.taskRefresher = mockTaskRefresher
+	namespaceID := uuid.New()
+	s.workflowStateReplicator.transactionMgr = NewMockTransactionManager(s.controller)
+	versionHistories := &historyspb.VersionHistories{
+		CurrentVersionHistoryIndex: 0,
+		Histories: []*historyspb.VersionHistory{
+			{
+				BranchToken: []byte("branchToken"),
+				Items: []*historyspb.VersionHistoryItem{
+					{
+						EventId: int64(4),
+						Version: int64(2),
+					},
+				},
+			},
+		},
+	}
+	eventBatches := []*historypb.HistoryEvent{
+		{EventId: 1, Version: 2}, {EventId: 2, Version: 2},
+		{EventId: 3, Version: 2}, {EventId: 4, Version: 2},
+	}
+	eventBatchBlob, err := serialization.NewSerializer().SerializeEvents(eventBatches, enumspb.ENCODING_TYPE_PROTO3)
+	s.NoError(err)
+	transitionHistory := []*persistencespb.VersionedTransition{
+		{NamespaceFailoverVersion: 2, TransitionCount: 10},
+	}
+	versionedTransitionArtifact := &replicationspb.VersionedTransitionArtifact{
+		StateAttributes: &replicationspb.VersionedTransitionArtifact_SyncWorkflowStateMutationAttributes{
+			SyncWorkflowStateMutationAttributes: &replicationspb.SyncWorkflowStateMutationAttributes{
+				StateMutation: &persistencespb.WorkflowMutableStateMutation{
+					ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+						WorkflowId:        s.workflowID,
+						NamespaceId:       namespaceID,
+						VersionHistories:  versionHistories,
+						TransitionHistory: transitionHistory,
+					},
+					ExecutionState: &persistencespb.WorkflowExecutionState{
+						RunId:  s.runID,
+						State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+						Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+					},
+				},
+				ExclusiveStartVersionedTransition: &persistencespb.VersionedTransition{
+					NamespaceFailoverVersion: 2, TransitionCount: 0,
+				},
+			},
+		},
+		EventBatches: []*commonpb.DataBlob{eventBatchBlob},
+	}
+	mockWeCtx := historyi.NewMockWorkflowContext(s.controller)
+	s.mockWorkflowCache.EXPECT().GetOrCreateWorkflowExecution(
+		gomock.Any(),
+		s.mockShard,
+		namespace.ID(namespaceID),
+		&commonpb.WorkflowExecution{
+			WorkflowId: s.workflowID,
+			RunId:      s.runID,
+		},
+		locks.PriorityLow,
+	).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespace.NewNamespaceForTest(
+		&persistencespb.NamespaceInfo{},
+		nil,
+		false,
+		nil,
+		int64(100),
+	), nil).AnyTimes()
+	mockTaskRefresher.EXPECT().Refresh(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+
+	mockTransactionManager.EXPECT().CreateWorkflow(
+		gomock.Any(),
+		gomock.AssignableToTypeOf(&WorkflowImpl{}),
+	).DoAndReturn(func(ctx context.Context, wf Workflow) error {
+		// Capture localMutableState from the workflow
+		localMutableState := wf.GetMutableState()
+
+		// Perform your comparisons here
+		s.Equal(localMutableState.GetExecutionInfo().TransitionHistory, transitionHistory)
+
+		return nil
+	}).Times(1)
+	err = workflowStateReplicator.ReplicateVersionedTransition(context.Background(), versionedTransitionArtifact, "test")
+	s.NoError(err)
+
+}
+
 func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_MutationProvidedWithGap_ReturnSyncStateError() {
 	workflowStateReplicator := NewWorkflowStateReplicator(
 		s.mockShard,

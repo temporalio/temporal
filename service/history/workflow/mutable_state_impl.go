@@ -6471,8 +6471,8 @@ func (ms *MutableStateImpl) closeTransactionPrepareReplicationTasks(
 						TaskEquivalents:        replicationTasks,
 						LastVersionHistoryItem: lastVersionHistoryItem,
 					}
-					
-					if ms.dbRecordVersion == 0 {
+
+					if ms.dbRecordVersion == 1 {
 						syncVersionedTransitionTask.IsFirstTask = true
 					}
 

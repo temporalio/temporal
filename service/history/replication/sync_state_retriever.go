@@ -87,6 +87,7 @@ type (
 			execution *commonpb.WorkflowExecution,
 			mutableState historyi.MutableState,
 			releaseFunc historyi.ReleaseWorkflowContextFunc,
+			taskVersionedTransition *persistencespb.VersionedTransition,
 		) (*SyncStateResult, error)
 	}
 
@@ -191,6 +192,7 @@ func (s *SyncStateRetrieverImpl) GetSyncWorkflowStateArtifactFromMutableStateFor
 	execution *commonpb.WorkflowExecution,
 	mu historyi.MutableState,
 	releaseFunc historyi.ReleaseWorkflowContextFunc,
+	taskVersionedTransition *persistencespb.VersionedTransition,
 ) (_ *SyncStateResult, retError error) {
 	versionedTransitionArtifact := &replicationspb.VersionedTransitionArtifact{}
 	mutation, err := s.getMutation(mu, workflow.EmptyVersionedTransition)
@@ -199,10 +201,14 @@ func (s *SyncStateRetrieverImpl) GetSyncWorkflowStateArtifactFromMutableStateFor
 	}
 	versionedTransitionArtifact.StateAttributes = &replicationspb.VersionedTransitionArtifact_SyncWorkflowStateMutationAttributes{
 		SyncWorkflowStateMutationAttributes: &replicationspb.SyncWorkflowStateMutationAttributes{
-			StateMutation:                     mutation,
-			ExclusiveStartVersionedTransition: workflow.EmptyVersionedTransition,
+			StateMutation: mutation,
+			ExclusiveStartVersionedTransition: &persistencespb.VersionedTransition{
+				NamespaceFailoverVersion: taskVersionedTransition.NamespaceFailoverVersion,
+				TransitionCount:          0,
+			},
 		},
 	}
+
 	newRunId := mu.GetExecutionInfo().NewExecutionRunId
 	sourceVersionHistories := versionhistory.CopyVersionHistories(mu.GetExecutionInfo().VersionHistories)
 	sourceTransitionHistory := transitionhistory.CopyVersionedTransitions(mu.GetExecutionInfo().TransitionHistory)

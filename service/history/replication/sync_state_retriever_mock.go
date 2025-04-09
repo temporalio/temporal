@@ -98,18 +98,18 @@ func (mr *MockSyncStateRetrieverMockRecorder) GetSyncWorkflowStateArtifactFromMu
 }
 
 // GetSyncWorkflowStateArtifactFromMutableStateForNewWorkflow mocks base method.
-func (m *MockSyncStateRetriever) GetSyncWorkflowStateArtifactFromMutableStateForNewWorkflow(ctx context.Context, namespaceID string, execution *common.WorkflowExecution, mutableState interfaces.MutableState, releaseFunc interfaces.ReleaseWorkflowContextFunc) (*SyncStateResult, error) {
+func (m *MockSyncStateRetriever) GetSyncWorkflowStateArtifactFromMutableStateForNewWorkflow(ctx context.Context, namespaceID string, execution *common.WorkflowExecution, mutableState interfaces.MutableState, releaseFunc interfaces.ReleaseWorkflowContextFunc, taskVersionedTransition *persistence.VersionedTransition) (*SyncStateResult, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetSyncWorkflowStateArtifactFromMutableStateForNewWorkflow", ctx, namespaceID, execution, mutableState, releaseFunc)
+	ret := m.ctrl.Call(m, "GetSyncWorkflowStateArtifactFromMutableStateForNewWorkflow", ctx, namespaceID, execution, mutableState, releaseFunc, taskVersionedTransition)
 	ret0, _ := ret[0].(*SyncStateResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetSyncWorkflowStateArtifactFromMutableStateForNewWorkflow indicates an expected call of GetSyncWorkflowStateArtifactFromMutableStateForNewWorkflow.
-func (mr *MockSyncStateRetrieverMockRecorder) GetSyncWorkflowStateArtifactFromMutableStateForNewWorkflow(ctx, namespaceID, execution, mutableState, releaseFunc any) *gomock.Call {
+func (mr *MockSyncStateRetrieverMockRecorder) GetSyncWorkflowStateArtifactFromMutableStateForNewWorkflow(ctx, namespaceID, execution, mutableState, releaseFunc, taskVersionedTransition any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSyncWorkflowStateArtifactFromMutableStateForNewWorkflow", reflect.TypeOf((*MockSyncStateRetriever)(nil).GetSyncWorkflowStateArtifactFromMutableStateForNewWorkflow), ctx, namespaceID, execution, mutableState, releaseFunc)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSyncWorkflowStateArtifactFromMutableStateForNewWorkflow", reflect.TypeOf((*MockSyncStateRetriever)(nil).GetSyncWorkflowStateArtifactFromMutableStateForNewWorkflow), ctx, namespaceID, execution, mutableState, releaseFunc, taskVersionedTransition)
 }
 
 // MocklastUpdatedStateTransitionGetter is a mock of lastUpdatedStateTransitionGetter interface.

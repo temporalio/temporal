@@ -698,6 +698,7 @@ func (c *syncVersionedTransitionTaskConverter) convert(
 			},
 			mutableState,
 			releaseFunc,
+			taskInfo.VersionedTransition,
 		)
 	} else {
 		syncStateResult, err = c.syncStateRetriever.GetSyncWorkflowStateArtifactFromMutableState(
