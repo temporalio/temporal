@@ -3590,8 +3590,10 @@ type NexusOperationCancellationInfo struct {
 	LastAttemptFailure *v17.Failure `protobuf:"bytes,5,opt,name=last_attempt_failure,json=lastAttemptFailure,proto3" json:"last_attempt_failure,omitempty"`
 	// The time when the next attempt is scheduled.
 	NextAttemptScheduleTime *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=next_attempt_schedule_time,json=nextAttemptScheduleTime,proto3" json:"next_attempt_schedule_time,omitempty"`
-	unknownFields           protoimpl.UnknownFields
-	sizeCache               protoimpl.SizeCache
+	// The event ID of the NEXUS_OPERATION_CANCEL_REQUESTED event for this cancelation.
+	RequestedEventId int64 `protobuf:"varint,7,opt,name=requested_event_id,json=requestedEventId,proto3" json:"requested_event_id,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *NexusOperationCancellationInfo) Reset() {
@@ -3664,6 +3666,13 @@ func (x *NexusOperationCancellationInfo) GetNextAttemptScheduleTime() *timestamp
 		return x.NextAttemptScheduleTime
 	}
 	return nil
+}
+
+func (x *NexusOperationCancellationInfo) GetRequestedEventId() int64 {
+	if x != nil {
+		return x.RequestedEventId
+	}
+	return 0
 }
 
 // ResetChildInfo contains the state and actions to be performed on children when a parent workflow resumes after reset.
@@ -4468,14 +4477,15 @@ const file_temporal_server_api_persistence_v1_executions_proto_rawDesc = "" +
 	"\x14last_attempt_failure\x18\r \x01(\v2 .temporal.api.failure.v1.FailureR\x12lastAttemptFailure\x12W\n" +
 	"\x1anext_attempt_schedule_time\x18\x0e \x01(\v2\x1a.google.protobuf.TimestampR\x17nextAttemptScheduleTime\x12\x1f\n" +
 	"\vendpoint_id\x18\x0f \x01(\tR\n" +
-	"endpointIdJ\x04\b\x04\x10\x05\"\xd1\x03\n" +
+	"endpointIdJ\x04\b\x04\x10\x05\"\xff\x03\n" +
 	"\x1eNexusOperationCancellationInfo\x12A\n" +
 	"\x0erequested_time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\rrequestedTime\x12L\n" +
 	"\x05state\x18\x02 \x01(\x0e26.temporal.api.enums.v1.NexusOperationCancellationStateR\x05state\x12\x18\n" +
 	"\aattempt\x18\x03 \x01(\x05R\aattempt\x12W\n" +
 	"\x1alast_attempt_complete_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x17lastAttemptCompleteTime\x12R\n" +
 	"\x14last_attempt_failure\x18\x05 \x01(\v2 .temporal.api.failure.v1.FailureR\x12lastAttemptFailure\x12W\n" +
-	"\x1anext_attempt_schedule_time\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\x17nextAttemptScheduleTime\"M\n" +
+	"\x1anext_attempt_schedule_time\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\x17nextAttemptScheduleTime\x12,\n" +
+	"\x12requested_event_id\x18\a \x01(\x03R\x10requestedEventId\"M\n" +
 	"\x0eResetChildInfo\x12;\n" +
 	"\x1ashould_terminate_and_start\x18\x01 \x01(\bR\x17shouldTerminateAndStartB6Z4go.temporal.io/server/api/persistence/v1;persistenceb\x06proto3"
 

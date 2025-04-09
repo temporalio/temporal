@@ -81,6 +81,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelation() {
 	taskQueue := testcore.RandomizeStr(s.T().Name())
 	endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
 
+	errSent := false
 	h := nexustest.Handler{
 		OnStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
 			if service != "service" {
@@ -89,6 +90,11 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelation() {
 			return &nexus.HandlerStartOperationResultAsync{OperationToken: "test"}, nil
 		},
 		OnCancelOperation: func(ctx context.Context, service, operation, token string, options nexus.CancelOperationOptions) error {
+			if !errSent {
+				// Fail cancel request once to test NexusOperationCancelRequestFailed event is recorded and request is retried.
+				errSent = true
+				return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "intentional cancel error for test")
+			}
 			return nil
 		},
 	}
@@ -203,11 +209,18 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelation() {
 		assert.Equal(t, "operation", op.Operation)
 		assert.Equal(t, enumspb.PENDING_NEXUS_OPERATION_STATE_STARTED, op.State)
 		assert.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SUCCEEDED, op.CancellationInfo.State)
-
 	}, time.Second*10, time.Millisecond*30)
 
 	err = s.SdkClient().TerminateWorkflow(ctx, run.GetID(), run.GetRunID(), "test")
 	s.NoError(err)
+
+	hist := s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{
+		WorkflowId: run.GetID(),
+		RunId:      run.GetRunID(),
+	})
+	s.ContainsHistoryEvents(`
+NexusOperationCancelRequestFailed
+NexusOperationCancelRequestCompleted`, hist)
 }
 
 func (s *NexusWorkflowTestSuite) TestNexusOperationSyncCompletion() {
@@ -1514,6 +1527,15 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelBeforeStarted_Cancelati
 	// Terminate the workflow for good measure.
 	err = s.SdkClient().TerminateWorkflow(ctx, run.GetID(), run.GetRunID(), "test")
 	s.NoError(err)
+
+	// Assert that we did not send a cancel request until after the operation was started.
+	hist := s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{
+		WorkflowId: run.GetID(),
+		RunId:      run.GetRunID(),
+	})
+	s.ContainsHistoryEvents(`
+NexusOperationCancelRequested
+NexusOperationStarted`, hist)
 }
 
 func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionAfterReset() {

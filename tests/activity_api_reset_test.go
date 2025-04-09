@@ -396,7 +396,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_KeepPaused() {
 		assert.NotNil(t, description)
 		if description.GetPendingActivities() != nil {
 			assert.Len(t, description.GetPendingActivities(), 1)
-			assert.Equal(t, enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, description.PendingActivities[0].State)
+			assert.Equal(t, enumspb.PENDING_ACTIVITY_STATE_PAUSED, description.PendingActivities[0].State)
 			// also verify that the number of attempts was not reset
 			assert.True(t, description.PendingActivities[0].Attempt > 1)
 			assert.True(t, description.PendingActivities[0].Paused)
@@ -423,7 +423,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_KeepPaused() {
 		assert.NotNil(t, description)
 		if description.GetPendingActivities() != nil {
 			assert.Len(t, description.GetPendingActivities(), 1)
-			assert.Equal(t, enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, description.PendingActivities[0].State)
+			assert.Equal(t, enumspb.PENDING_ACTIVITY_STATE_PAUSED, description.PendingActivities[0].State)
 			// also verify that the number of attempts was reset
 			assert.Equal(t, int32(1), description.PendingActivities[0].Attempt)
 		}

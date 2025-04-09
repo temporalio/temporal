@@ -24,7 +24,11 @@
 
 package tasks
 
-import "strconv"
+import (
+	"strconv"
+
+	"go.temporal.io/server/common/headers"
+)
 
 type (
 	Priority int
@@ -61,6 +65,16 @@ var (
 		"high": PriorityHigh,
 		"low":  PriorityLow,
 	}
+
+	CallerTypeToPriority = map[string]Priority{
+		headers.CallerTypeBackground:  PriorityHigh,
+		headers.CallerTypePreemptable: PriorityLow,
+	}
+
+	PriorityToCallerType = map[Priority]string{
+		PriorityHigh: headers.CallerTypeBackground,
+		PriorityLow:  headers.CallerTypePreemptable,
+	}
 )
 
 func (p Priority) String() string {
@@ -69,6 +83,14 @@ func (p Priority) String() string {
 		return s
 	}
 	return strconv.Itoa(int(p))
+}
+
+func (p Priority) CallerType() string {
+	s, ok := PriorityToCallerType[p]
+	if ok {
+		return s
+	}
+	return headers.CallerTypePreemptable
 }
 
 func getPriority(

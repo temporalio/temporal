@@ -1,12 +1,24 @@
+<div class="title-block" style="text-align: center;" align="center">
+
+# Temporal—durable execution platform
+
+<p><img title="temporal logo" src="https://avatars.githubusercontent.com/u/56493103?s=320" width="320" height="320"></p>
+
 [![GitHub Release](https://img.shields.io/github/v/release/temporalio/temporal)](https://github.com/temporalio/temporal/releases/latest)
+[![GitHub License](https://img.shields.io/github/license/temporalio/temporal)](https://github.com/temporalio/temporal/blob/main/LICENSE)
 [![Code Coverage](https://img.shields.io/badge/codecov-report-blue)](https://app.codecov.io/gh/temporalio/temporal)
 [![Community](https://img.shields.io/static/v1?label=community&message=get%20help&color=informational)](https://community.temporal.io)
-[![Go Report Card][go-report-image]][go-report-url]
+[![Go Report Card](https://goreportcard.com/badge/github.com/temporalio/temporal)](https://goreportcard.com/report/github.com/temporalio/temporal)
 
-[go-report-image]: https://goreportcard.com/badge/github.com/temporalio/temporal
-[go-report-url]: https://goreportcard.com/report/github.com/temporalio/temporal
+**[Introduction](#introduction) &nbsp;&nbsp;&bull;&nbsp;&nbsp;**
+**[Getting Started](#getting-started) &nbsp;&nbsp;&bull;&nbsp;&nbsp;**
+**[Contributing](#contributing) &nbsp;&nbsp;&bull;&nbsp;&nbsp;**
+**[Temporal Docs](https://docs.temporal.io/) &nbsp;&nbsp;&bull;&nbsp;&nbsp;**
+**[Temporal 101](https://learn.temporal.io/courses/temporal_101/)**
 
-# Temporal
+</div>
+
+## Introduction
 
 Temporal is a durable execution platform that enables developers to build scalable applications without sacrificing productivity or reliability.
 The Temporal server executes units of application logic called Workflows in a resilient manner that automatically handles intermittent failures, and retries failed operations.
@@ -15,12 +27,6 @@ Temporal is a mature technology that originated as a fork of Uber's Cadence.
 It is developed by [Temporal Technologies](https://temporal.io/), a startup by the creators of Cadence.
 
 [![image](https://github.com/temporalio/temporal/assets/251288/693d18b5-01de-4a3b-b47b-96347b84f610)](https://youtu.be/wIpz4ioK0gI 'Getting to know Temporal')
-
-Learn more:
-
-- [Courses](https://learn.temporal.io/courses/temporal_101/)
-- [Docs](https://docs.temporal.io)
-- Internal architecture: [docs/](./docs/architecture/README.md)
 
 ## Getting Started
 
