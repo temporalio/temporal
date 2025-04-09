@@ -106,28 +106,28 @@ func (r *WorkflowImpl) GetVectorClock() (int64, int64, error) {
 		}
 	}
 
-	lastEventTaskID := r.mutableState.GetExecutionInfo().LastEventTaskId
-	return version, lastEventTaskID, nil
+	lastUpdateClock := r.mutableState.GetExecutionInfo().LastUpdateClock
+	return version, lastUpdateClock, nil
 }
 
 func (r *WorkflowImpl) HappensAfter(
 	that Workflow,
 ) (bool, error) {
 
-	thisLastWriteVersion, thisLastEventTaskID, err := r.GetVectorClock()
+	thisLastWriteVersion, thisLastUpdateClock, err := r.GetVectorClock()
 	if err != nil {
 		return false, err
 	}
-	thatLastWriteVersion, thatLastEventTaskID, err := that.GetVectorClock()
+	thatLastWriteVersion, thatLastUpdateClock, err := that.GetVectorClock()
 	if err != nil {
 		return false, err
 	}
 
 	return WorkflowHappensAfter(
 		thisLastWriteVersion,
-		thisLastEventTaskID,
+		thisLastUpdateClock,
 		thatLastWriteVersion,
-		thatLastEventTaskID,
+		thatLastUpdateClock,
 	), nil
 }
 
@@ -140,6 +140,8 @@ func (r *WorkflowImpl) Revive() error {
 		// workflow already finished
 		return nil
 	}
+
+	// TODO: this method assumes mutable state is always a workflow
 
 	// workflow is in zombie state, need to set the state correctly accordingly
 	state = enumsspb.WORKFLOW_EXECUTION_STATE_CREATED
@@ -163,20 +165,20 @@ func (r *WorkflowImpl) SuppressBy(
 	// if the workflow to be suppressed has last write version being remote active
 	//  then turn this workflow into a zombie
 
-	lastWriteVersion, lastEventTaskID, err := r.GetVectorClock()
+	lastWriteVersion, lastUpdateClock, err := r.GetVectorClock()
 	if err != nil {
 		return historyi.TransactionPolicyActive, err
 	}
-	incomingLastWriteVersion, incomingLastEventTaskID, err := incomingWorkflow.GetVectorClock()
+	incomingLastWriteVersion, incomingLastUpdateClock, err := incomingWorkflow.GetVectorClock()
 	if err != nil {
 		return historyi.TransactionPolicyActive, err
 	}
 
 	if WorkflowHappensAfter(
 		lastWriteVersion,
-		lastEventTaskID,
+		lastUpdateClock,
 		incomingLastWriteVersion,
-		incomingLastEventTaskID,
+		incomingLastUpdateClock,
 	) {
 		return historyi.TransactionPolicyActive, serviceerror.NewInternal("Workflow cannot suppress workflow by older workflow")
 	}
@@ -199,6 +201,9 @@ func (r *WorkflowImpl) SuppressBy(
 }
 
 func (r *WorkflowImpl) FlushBufferedEvents() error {
+
+	// although this is workflow specific, non-workflow implementation will never have buffered events,
+	// so not an issue.
 
 	if !r.mutableState.IsWorkflowExecutionRunning() {
 		return nil
@@ -274,6 +279,8 @@ func (r *WorkflowImpl) terminateWorkflow(
 	incomingLastWriteVersion int64,
 ) error {
 
+	// TODO: this method assumes mutable state is always a workflow
+
 	eventBatchFirstEventID := r.GetMutableState().GetNextEventID()
 	wtFailedEvent, err := r.failWorkflowTask(lastWriteVersion)
 	if err != nil {
@@ -309,9 +316,9 @@ func (r *WorkflowImpl) terminateWorkflow(
 
 func WorkflowHappensAfter(
 	thisLastWriteVersion int64,
-	thisLastEventTaskID int64,
+	thisLastUpdateClock int64,
 	thatLastWriteVersion int64,
-	thatLastEventTaskID int64,
+	thatLastUpdateClock int64,
 ) bool {
 
 	if thisLastWriteVersion != thatLastWriteVersion {
@@ -319,5 +326,5 @@ func WorkflowHappensAfter(
 	}
 
 	// thisLastWriteVersion == thatLastWriteVersion
-	return thisLastEventTaskID > thatLastEventTaskID
+	return thisLastUpdateClock > thatLastUpdateClock
 }

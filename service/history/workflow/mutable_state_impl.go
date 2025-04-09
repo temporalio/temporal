@@ -910,7 +910,12 @@ func (ms *MutableStateImpl) UpdateCurrentVersion(
 }
 
 func (ms *MutableStateImpl) GetCurrentVersion() int64 {
+	// TODO: can we always return ms.currentVersion?
 	if ms.executionInfo.VersionHistories != nil {
+		return ms.currentVersion
+	}
+
+	if ms.transitionHistoryEnabled && len(ms.executionInfo.TransitionHistory) != 0 {
 		return ms.currentVersion
 	}
 
@@ -938,22 +943,32 @@ func (ms *MutableStateImpl) GetStartVersion() (int64, error) {
 		if err != nil {
 			return 0, err
 		}
-		firstItem, err := versionhistory.GetFirstVersionHistoryItem(versionHistory)
-		if err != nil {
-			return 0, err
+
+		if !versionhistory.IsEmptyVersionHistory(versionHistory) {
+			firstItem, err := versionhistory.GetFirstVersionHistoryItem(versionHistory)
+			if err != nil {
+				return 0, err
+			}
+			return firstItem.GetVersion(), nil
 		}
-		return firstItem.GetVersion(), nil
+	}
+
+	// We can't check TransitionHistory before VersionHistories because old workflows (mutable state) may
+	// have transition history enabled while they are running, so the first item in the transition history
+	// is not the actual start version.
+	if ms.transitionHistoryEnabled && len(ms.executionInfo.TransitionHistory) != 0 {
+		return ms.executionInfo.TransitionHistory[0].GetNamespaceFailoverVersion(), nil
 	}
 
 	return common.EmptyVersion, nil
 }
 
 func (ms *MutableStateImpl) GetCloseVersion() (int64, error) {
-	if ms.IsWorkflowExecutionRunning() {
+	// Do NOT use ms.IsWorkflowExecutionRunning() for the check.
+	// Zombie workflow is not considered running but also not closed.
+	if ms.executionState.State != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		return common.EmptyVersion, serviceerror.NewInternal("GetCloseVersion: workflow is still running")
 	}
-
-	// here we assume that closing a workflow must generate an event
 
 	// if workflow is closing in the current transation,
 	// then the last event is closed event and the event version is the close version
@@ -961,7 +976,30 @@ func (ms *MutableStateImpl) GetCloseVersion() (int64, error) {
 		return lastEventVersion, nil
 	}
 
-	return ms.GetLastEventVersion()
+	if ms.executionInfo.VersionHistories != nil {
+		isEmpty, err := versionhistory.IsCurrentVersionHistoryEmpty(ms.executionInfo.VersionHistories)
+		if err != nil {
+			return common.EmptyVersion, err
+		}
+		if !isEmpty {
+			return ms.GetLastEventVersion()
+		}
+	}
+
+	if ms.transitionHistoryEnabled {
+		if ms.executionStateUpdated {
+			// closing in the current transaction
+			return ms.GetCurrentVersion(), nil
+		}
+
+		// once the mutable state is closed, the execution state will no longer be updated.
+		// so the last update version is the close version.
+		if ms.executionState.LastUpdateVersionedTransition != nil {
+			return ms.executionState.LastUpdateVersionedTransition.NamespaceFailoverVersion, nil
+		}
+	}
+
+	return common.EmptyVersion, nil
 }
 
 func (ms *MutableStateImpl) GetLastWriteVersion() (int64, error) {
@@ -5988,13 +6026,11 @@ func (ms *MutableStateImpl) closeTransaction(
 		return closeTransactionResult{}, err
 	}
 
-	if ms.isStateDirty() {
-		if err := ms.closeTransactionUpdateTransitionHistory(
-			transactionPolicy,
-		); err != nil {
-			return closeTransactionResult{}, err
-		}
-		ms.closeTransactionHandleUnknownVersionedTransition()
+	isStateDirty := ms.isStateDirty()
+
+	workflowEventsSeq, eventBatches, bufferEvents, clearBuffer, err := ms.closeTransactionPrepareEvents(transactionPolicy)
+	if err != nil {
+		return closeTransactionResult{}, err
 	}
 
 	// TODO: update approximateSize once chasm.NodesMutation returns size change as well.
@@ -6003,14 +6039,19 @@ func (ms *MutableStateImpl) closeTransaction(
 		return closeTransactionResult{}, err
 	}
 
+	if isStateDirty {
+		if err := ms.closeTransactionUpdateTransitionHistory(
+			transactionPolicy,
+			workflowEventsSeq,
+		); err != nil {
+			return closeTransactionResult{}, err
+		}
+		ms.closeTransactionHandleUnknownVersionedTransition()
+	}
+
 	ms.closeTransactionTrackLastUpdateVersionedTransition(
 		transactionPolicy,
 	)
-
-	workflowEventsSeq, eventBatches, bufferEvents, clearBuffer, err := ms.closeTransactionPrepareEvents(transactionPolicy)
-	if err != nil {
-		return closeTransactionResult{}, err
-	}
 
 	ms.closeTransactionTrackTombstones(transactionPolicy, chasmNodesMutation)
 
@@ -6110,6 +6151,7 @@ func (ms *MutableStateImpl) closeTransactionHandleSpeculativeWorkflowTask(
 
 func (ms *MutableStateImpl) closeTransactionUpdateTransitionHistory(
 	transactionPolicy historyi.TransactionPolicy,
+	workflowEventsSeq []*persistence.WorkflowEvents,
 ) error {
 	if transactionPolicy != historyi.TransactionPolicyActive {
 		// TODO: replication/standby logic will need a different way for updating transition history
@@ -6131,6 +6173,10 @@ func (ms *MutableStateImpl) closeTransactionUpdateTransitionHistory(
 		ms.executionInfo.TransitionHistory,
 		ms.GetCurrentVersion(),
 	)
+
+	if len(workflowEventsSeq) == 0 {
+		ms.executionInfo.LastUpdateClock = ms.shard.CurrentVectorClock().GetClock()
+	}
 
 	return nil
 }
@@ -6451,7 +6497,9 @@ func (ms *MutableStateImpl) closeTransactionPrepareReplicationTasks(
 					ms.executionInfo.WorkflowId,
 					ms.executionState.RunId,
 				)
-				var firstEventID, firstEventVersion, nextEventID int64
+				firstEventID := common.EmptyEventID
+				firstEventVersion := common.EmptyVersion
+				nextEventID := common.EmptyEventID
 				var lastVersionHistoryItem *historyspb.VersionHistoryItem
 				if len(eventBatches) > 0 {
 					firstEventID = eventBatches[0][0].EventId
@@ -6463,15 +6511,15 @@ func (ms *MutableStateImpl) closeTransactionPrepareReplicationTasks(
 					if err != nil {
 						return err
 					}
-					item, err := versionhistory.GetLastVersionHistoryItem(currentHistory)
-					if err != nil {
-						return err
+					if !versionhistory.IsEmptyVersionHistory(currentHistory) {
+						item, err := versionhistory.GetLastVersionHistoryItem(currentHistory)
+						if err != nil {
+							return err
+						}
+						lastVersionHistoryItem = versionhistory.CopyVersionHistoryItem(item)
 					}
-					firstEventID = common.EmptyEventID
-					firstEventVersion = common.EmptyVersion
-					nextEventID = common.EmptyEventID
-					lastVersionHistoryItem = versionhistory.CopyVersionHistoryItem(item)
 				}
+
 				currentVersionedTransition := ms.CurrentVersionedTransition()
 				if currentVersionedTransition != nil && transitionhistory.Compare(
 					ms.versionedTransitionInDB,
@@ -6763,7 +6811,7 @@ func (ms *MutableStateImpl) updateWithLastWriteEvent(
 	)); err != nil {
 		return err
 	}
-	ms.executionInfo.LastEventTaskId = lastEvent.GetTaskId()
+	ms.executionInfo.LastUpdateClock = lastEvent.GetTaskId()
 
 	return nil
 }

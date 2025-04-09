@@ -737,10 +737,10 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Multiple
 			s.Equal(1, len(input.UpdateWorkflowMutation.UpsertActivityInfos))
 			mutableState.GetExecutionInfo().LastUpdateTime = input.UpdateWorkflowMutation.ExecutionInfo.LastUpdateTime
 			input.RangeID = 0
-			input.UpdateWorkflowMutation.ExecutionInfo.LastEventTaskId = 0
+			input.UpdateWorkflowMutation.ExecutionInfo.LastUpdateClock = 0
 			input.UpdateWorkflowMutation.ExecutionInfo.LastFirstEventTxnId = 0
 			input.UpdateWorkflowMutation.ExecutionInfo.StateTransitionCount = 0
-			mutableState.GetExecutionInfo().LastEventTaskId = 0
+			mutableState.GetExecutionInfo().LastUpdateClock = 0
 			mutableState.GetExecutionInfo().LastFirstEventTxnId = 0
 			mutableState.GetExecutionInfo().StateTransitionCount = 0
 			mutableState.GetExecutionInfo().WorkflowTaskOriginalScheduledTime = input.UpdateWorkflowMutation.ExecutionInfo.WorkflowTaskOriginalScheduledTime

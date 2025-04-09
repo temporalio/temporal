@@ -382,6 +382,8 @@ func (c *ContextImpl) UpdateWorkflowExecutionAsActive(
 	shardContext historyi.ShardContext,
 ) error {
 
+	// TODO: folowing size checks assumes it's a workflow and always add terminated event
+
 	// We only perform this check on active cluster for the namespace
 	historySizeForceTerminate, err := c.enforceHistorySizeCheck(ctx, shardContext)
 	if err != nil {
