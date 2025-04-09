@@ -348,6 +348,7 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 	}
 }
 
+//nolint:revive // cognitive complexity 35 (> max enabled 25)
 func (r *WorkflowStateReplicatorImpl) handleFirstReplicationTask(
 	ctx context.Context,
 	versionedTransition *replicationspb.VersionedTransitionArtifact,

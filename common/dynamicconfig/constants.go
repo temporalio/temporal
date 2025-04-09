@@ -1432,7 +1432,7 @@ timeout timer when execution timeout is specified when starting a workflow.`,
 	)
 	EnableTransitionHistory = NewGlobalBoolSetting(
 		"history.enableTransitionHistory",
-		true,
+		false,
 		`EnableTransitionHistory controls whether to enable the new logic for recording the history for each state transition.
 This feature is still under development and should NOT be enabled.`,
 	)
