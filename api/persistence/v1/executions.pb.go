@@ -2155,7 +2155,7 @@ type OutboundTaskInfo_StateMachineInfo struct {
 
 type OutboundTaskInfo_ChasmTaskInfo struct {
 	// If the task addresses a CHASM component, this field will be set.
-	ChasmTaskInfo *ChasmTaskInfo `protobuf:"bytes,17,opt,name=chasm_task_info,json=chasmTaskInfo,proto3,oneof"`
+	ChasmTaskInfo *ChasmTaskInfo `protobuf:"bytes,9,opt,name=chasm_task_info,json=chasmTaskInfo,proto3,oneof"`
 }
 
 func (*OutboundTaskInfo_StateMachineInfo) isOutboundTaskInfo_TaskDetails() {}
@@ -4323,7 +4323,7 @@ const file_temporal_server_api_persistence_v1_executions_proto_rawDesc = "" +
 	"\x0fvisibility_time\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\x0evisibilityTime\x12 \n" +
 	"\vdestination\x18\a \x01(\tR\vdestination\x12h\n" +
 	"\x12state_machine_info\x18\b \x01(\v28.temporal.server.api.persistence.v1.StateMachineTaskInfoH\x00R\x10stateMachineInfo\x12[\n" +
-	"\x0fchasm_task_info\x18\x11 \x01(\v21.temporal.server.api.persistence.v1.ChasmTaskInfoH\x00R\rchasmTaskInfoB\x0e\n" +
+	"\x0fchasm_task_info\x18\t \x01(\v21.temporal.server.api.persistence.v1.ChasmTaskInfoH\x00R\rchasmTaskInfoB\x0e\n" +
 	"\ftask_details\"3\n" +
 	"\x17NexusInvocationTaskInfo\x12\x18\n" +
 	"\aattempt\x18\x01 \x01(\x05R\aattempt\"4\n" +

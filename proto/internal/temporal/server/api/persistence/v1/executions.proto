@@ -461,7 +461,7 @@ message OutboundTaskInfo {
         StateMachineTaskInfo state_machine_info = 8;
 
         // If the task addresses a CHASM component, this field will be set.
-        ChasmTaskInfo chasm_task_info = 17;
+        ChasmTaskInfo chasm_task_info = 9;
     }
 }
 
