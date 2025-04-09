@@ -182,11 +182,9 @@ func recordActivityTaskStarted(
 		return nil, rejectCodeUndefined, serviceerrors.NewTaskAlreadyStarted("Activity")
 	}
 
-	if ai.Stamp == request.Stamp {
-		code, err := processActivityWorkflowRules(shardContext, mutableState, ai)
-		if err != nil || code == rejectCodePaused {
-			return nil, code, err
-		}
+	code, err := processActivityWorkflowRules(shardContext, request, mutableState, ai)
+	if err != nil || code == rejectCodePaused {
+		return nil, code, err
 	}
 
 	if ai.Stamp != request.Stamp {
@@ -311,10 +309,22 @@ func getDeploymentVersionForWorkflowId(
 
 func processActivityWorkflowRules(
 	shardContext historyi.ShardContext,
+	request *historyservice.RecordActivityTaskStartedRequest,
 	ms historyi.MutableState,
 	ai *persistencespb.ActivityInfo,
 ) (rejectCode, error) {
-	if ai.Paused {
+	if ai.Stamp == request.Stamp && ai.Paused {
+		// this shouldn't happen. For now log an error
+		shardContext.GetLogger().Error(
+			fmt.Sprintf(
+				"Activity is paused, but new task was schedulled. Activity ID: %v, Stamp: %v, event ID: %v",
+				ai.ActivityId, request.Stamp, ai.StartedEventId),
+		)
+	}
+
+	// if activity is already paused or Stamp is not the same as the one in the request we shouldn't process workflow rules
+	// this is a no-op
+	if ai.Stamp != request.Stamp || ai.Paused {
 		return rejectCodeUndefined, nil
 	}
 
