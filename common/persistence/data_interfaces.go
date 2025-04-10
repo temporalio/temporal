@@ -82,12 +82,12 @@ const (
 	// UpdateWorkflowModeBypassCurrent update workflow, without current record
 	// NOTE: current record CANNOT point to the workflow to be updated
 	UpdateWorkflowModeBypassCurrent
-	// UpdateWorkflowModeSkipCurrent update workflow, without checking or update current record
-	// This mode should only be used when we don't know if the workflow being updated is the current workflow or not.
+	// UpdateWorkflowModeIgnoreCurrent update workflow, without checking or update current record.
+	// This mode should only be used when we don't know if the workflow being updated is the current workflow or not in DB.
 	// For example, when updating a closed workflow, it may or may not be the current workflow.
 	// This is similar to SetWorkflowExecution, but UpdateWorkflowExecution with this mode persists the workflow as a mutation,
 	// instead of a snapshot.
-	UpdateWorkflowModeSkipCurrent
+	UpdateWorkflowModeIgnoreCurrent
 )
 
 // ConflictResolveWorkflowMode conflict resolve mode

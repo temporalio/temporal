@@ -1430,11 +1430,11 @@ HistoryCacheSizeBasedLimit is set to true.`,
 		`EnableWorkflowExecutionTimeoutTimer controls whether to enable the new logic for generating a workflow execution
 timeout timer when execution timeout is specified when starting a workflow.`,
 	)
-	EnableUpdateClosedWorkflowByMutation = NewGlobalBoolSetting(
-		"history.enableUpdateClosedWorkflowByMutation",
+	EnableUpdateWorkflowModeIgnoreCurrent = NewGlobalBoolSetting(
+		"history.enableUpdateWorkflowModeIgnoreCurrent",
 		true,
-		`EnableUpdateClosedWorkflowByMutation controls whether to enable the new logic for updating closed workflow execution
-by mutation using UpdateWorkflowModeSkipCurrent`,
+		`EnableUpdateWorkflowModeIgnoreCurrent controls whether to enable the new logic for updating closed workflow execution
+by mutation using UpdateWorkflowModeIgnoreCurrent`,
 	)
 	EnableTransitionHistory = NewGlobalBoolSetting(
 		"history.enableTransitionHistory",

@@ -626,7 +626,7 @@ func (d *MutableStateStore) UpdateWorkflowExecution(
 	shardID := request.ShardID
 
 	switch request.Mode {
-	case p.UpdateWorkflowModeSkipCurrent:
+	case p.UpdateWorkflowModeIgnoreCurrent:
 		// noop
 
 	case p.UpdateWorkflowModeBypassCurrent:

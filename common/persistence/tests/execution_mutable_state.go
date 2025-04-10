@@ -875,7 +875,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_ClosedWorkflow_IsCurrent() {
 	_, err := s.ExecutionManager.UpdateWorkflowExecution(s.Ctx, &p.UpdateWorkflowExecutionRequest{
 		ShardID: s.ShardID,
 		RangeID: s.RangeID,
-		Mode:    p.UpdateWorkflowModeSkipCurrent,
+		Mode:    p.UpdateWorkflowModeIgnoreCurrent,
 
 		UpdateWorkflowMutation: *currentMutation,
 		UpdateWorkflowEvents:   nil,
@@ -943,7 +943,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_ClosedWorkflow_IsNonCurrent() {
 	_, err = s.ExecutionManager.UpdateWorkflowExecution(s.Ctx, &p.UpdateWorkflowExecutionRequest{
 		ShardID: s.ShardID,
 		RangeID: s.RangeID,
-		Mode:    p.UpdateWorkflowModeSkipCurrent,
+		Mode:    p.UpdateWorkflowModeIgnoreCurrent,
 
 		UpdateWorkflowMutation: *nonCurrentMutation,
 		UpdateWorkflowEvents:   nil,

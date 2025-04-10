@@ -147,7 +147,7 @@ func ValidateUpdateWorkflowModeState(
 		}
 		return nil
 
-	case UpdateWorkflowModeSkipCurrent:
+	case UpdateWorkflowModeIgnoreCurrent:
 		// Cannot have new workflow when skipping current workflow check
 		if newWorkflowState != nil {
 			return newInvalidUpdateWorkflowWithNewMode(

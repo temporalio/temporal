@@ -645,7 +645,7 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_IncomingStateNewer_WorkflowClosed(
 
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
-			s.Equal(persistence.UpdateWorkflowModeSkipCurrent, request.Mode)
+			s.Equal(persistence.UpdateWorkflowModeIgnoreCurrent, request.Mode)
 			subStateMachineByType := request.UpdateWorkflowMutation.ExecutionInfo.SubStateMachinesByType
 			s.Len(subStateMachineByType, 1)
 			machines := subStateMachineByType[s.stateMachineDef.Type()]

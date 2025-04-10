@@ -84,7 +84,7 @@ type Config struct {
 	EnableHostLevelHistoryCache           dynamicconfig.BoolPropertyFn
 	EnableNexus                           dynamicconfig.BoolPropertyFn
 	EnableWorkflowExecutionTimeoutTimer   dynamicconfig.BoolPropertyFn
-	EnableUpdateClosedWorkflowByMutation  dynamicconfig.BoolPropertyFn
+	EnableUpdateWorkflowModeIgnoreCurrent dynamicconfig.BoolPropertyFn
 	EnableTransitionHistory               dynamicconfig.BoolPropertyFn
 	MaxCallbacksPerWorkflow               dynamicconfig.IntPropertyFnWithNamespaceFilter
 
@@ -439,7 +439,7 @@ func NewConfig(
 		EnableHostLevelHistoryCache:           dynamicconfig.EnableHostHistoryCache.Get(dc),
 		EnableNexus:                           dynamicconfig.EnableNexus.Get(dc),
 		EnableWorkflowExecutionTimeoutTimer:   dynamicconfig.EnableWorkflowExecutionTimeoutTimer.Get(dc),
-		EnableUpdateClosedWorkflowByMutation:  dynamicconfig.EnableUpdateClosedWorkflowByMutation.Get(dc),
+		EnableUpdateWorkflowModeIgnoreCurrent: dynamicconfig.EnableUpdateWorkflowModeIgnoreCurrent.Get(dc),
 		EnableTransitionHistory:               dynamicconfig.EnableTransitionHistory.Get(dc),
 		MaxCallbacksPerWorkflow:               dynamicconfig.MaxCallbacksPerWorkflow.Get(dc),
 

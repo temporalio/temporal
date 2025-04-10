@@ -545,7 +545,7 @@ func (s *contextSuite) TestRefreshTask() {
 				mockShard.Resource.ExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(_ context.Context, request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
 						s.NotEmpty(request.UpdateWorkflowMutation.Tasks)
-						s.Equal(persistence.UpdateWorkflowModeSkipCurrent, request.Mode)
+						s.Equal(persistence.UpdateWorkflowModeIgnoreCurrent, request.Mode)
 						return tests.UpdateWorkflowExecutionResponse, nil
 					}).Times(1)
 			},

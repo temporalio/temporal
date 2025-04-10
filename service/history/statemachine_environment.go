@@ -396,11 +396,11 @@ func (e *stateMachineEnvironment) Access(ctx context.Context, ref hsm.Ref, acces
 		return nil
 	}
 
-	if e.shardContext.GetConfig().EnableUpdateClosedWorkflowByMutation() {
+	if e.shardContext.GetConfig().EnableUpdateWorkflowModeIgnoreCurrent() {
 		return wfCtx.UpdateWorkflowExecutionAsActive(ctx, e.shardContext)
 	}
 
-	// TODO: remove following code once EnableUpdateClosedWorkflowByMutation config is deprecated.
+	// TODO: remove following code once EnableUpdateWorkflowModeIgnoreCurrent config is deprecated.
 	if ms.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		// Can't use UpdateWorkflowExecutionAsActive since it updates the current run, and we are operating on closed
 		// workflows.

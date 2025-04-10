@@ -743,7 +743,7 @@ func (c *ContextImpl) updateWorkflowExecutionEventReapply(
 	eventBatch1 []*persistence.WorkflowEvents,
 	eventBatch2 []*persistence.WorkflowEvents,
 ) error {
-	if updateMode == persistence.UpdateWorkflowModeSkipCurrent {
+	if updateMode == persistence.UpdateWorkflowModeIgnoreCurrent {
 		if len(eventBatch1) != 0 || len(eventBatch2) != 0 {
 			return serviceerror.NewInternal("encountered events reapplication without knowing if workflow is current. Events generated for a close workflow?")
 		}
@@ -780,11 +780,11 @@ func (c *ContextImpl) conflictResolveEventReapply(
 
 func (c *ContextImpl) updateWorkflowMode() persistence.UpdateWorkflowMode {
 	updateMode := persistence.UpdateWorkflowModeUpdateCurrent
-	if !c.config.EnableUpdateClosedWorkflowByMutation() {
+	if !c.config.EnableUpdateWorkflowModeIgnoreCurrent() {
 		return persistence.UpdateWorkflowModeUpdateCurrent
 	}
 
-	updateMode = persistence.UpdateWorkflowModeSkipCurrent
+	updateMode = persistence.UpdateWorkflowModeIgnoreCurrent
 	if c.MutableState.IsCurrentWorkflowGuaranteed() {
 		updateMode = persistence.UpdateWorkflowModeUpdateCurrent
 	}
@@ -899,11 +899,11 @@ func (c *ContextImpl) RefreshTasks(
 		return err
 	}
 
-	if c.config.EnableUpdateClosedWorkflowByMutation() {
+	if c.config.EnableUpdateWorkflowModeIgnoreCurrent() {
 		return c.UpdateWorkflowExecutionAsPassive(ctx, shardContext)
 	}
 
-	// TODO: remove following code once EnableUpdateClosedWorkflowByMutation config is deprecated.
+	// TODO: remove following code once EnableUpdateWorkflowModeIgnoreCurrent config is deprecated.
 	if !mutableState.IsWorkflowExecutionRunning() {
 		// Can't use UpdateWorkflowExecutionAsPassive since it updates the current run,
 		// and we are operating on a closed workflow.
