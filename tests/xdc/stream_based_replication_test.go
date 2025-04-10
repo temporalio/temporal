@@ -503,6 +503,7 @@ func (s *streamBasedReplicationTestSuite) TestForceReplicateResetWorkflow_BaseWo
 		},
 	})
 	s.Error(err)
+	fmt.Println("????? what is the error????", err)
 
 	_, err = s.clusters[0].HistoryClient().GenerateLastHistoryReplicationTasks(testcore.NewContext(), &historyservice.GenerateLastHistoryReplicationTasksRequest{
 		NamespaceId: resp.NamespaceInfo.GetId(),
