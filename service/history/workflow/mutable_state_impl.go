@@ -6332,7 +6332,7 @@ func (ms *MutableStateImpl) closeTransactionUpdateLastRunningClock(
 	if len(workflowEventsSeq) > 0 {
 		lastEvents := workflowEventsSeq[len(workflowEventsSeq)-1].Events
 		lastEvent := lastEvents[len(lastEvents)-1]
-		ms.executionInfo.LastUpdateClock = lastEvent.GetTaskId()
+		ms.executionInfo.LastRunningClock = lastEvent.GetTaskId()
 		return
 	}
 
@@ -6343,7 +6343,7 @@ func (ms *MutableStateImpl) closeTransactionUpdateLastRunningClock(
 		return
 	}
 
-	ms.executionInfo.LastUpdateClock = ms.shard.CurrentVectorClock().GetClock()
+	ms.executionInfo.LastRunningClock = ms.shard.CurrentVectorClock().GetClock()
 }
 
 func (ms *MutableStateImpl) closeTransactionTrackTombstones(

@@ -106,28 +106,28 @@ func (r *WorkflowImpl) GetVectorClock() (int64, int64, error) {
 		}
 	}
 
-	lastUpdateClock := r.mutableState.GetExecutionInfo().LastUpdateClock
-	return version, lastUpdateClock, nil
+	lastRunningClock := r.mutableState.GetExecutionInfo().LastRunningClock
+	return version, lastRunningClock, nil
 }
 
 func (r *WorkflowImpl) HappensAfter(
 	that Workflow,
 ) (bool, error) {
 
-	thisLastWriteVersion, thisLastUpdateClock, err := r.GetVectorClock()
+	thisLastWriteVersion, thisLastRunningClock, err := r.GetVectorClock()
 	if err != nil {
 		return false, err
 	}
-	thatLastWriteVersion, thatLastUpdateClock, err := that.GetVectorClock()
+	thatLastWriteVersion, thatLastRunningClock, err := that.GetVectorClock()
 	if err != nil {
 		return false, err
 	}
 
 	return WorkflowHappensAfter(
 		thisLastWriteVersion,
-		thisLastUpdateClock,
+		thisLastRunningClock,
 		thatLastWriteVersion,
-		thatLastUpdateClock,
+		thatLastRunningClock,
 	), nil
 }
 
@@ -170,20 +170,20 @@ func (r *WorkflowImpl) SuppressBy(
 		return historyi.TransactionPolicyPassive, nil
 	}
 
-	lastWriteVersion, lastUpdateClock, err := r.GetVectorClock()
+	lastWriteVersion, lastRunningClock, err := r.GetVectorClock()
 	if err != nil {
 		return historyi.TransactionPolicyActive, err
 	}
-	incomingLastWriteVersion, incomingLastUpdateClock, err := incomingWorkflow.GetVectorClock()
+	incomingLastWriteVersion, incomingLastRunningClock, err := incomingWorkflow.GetVectorClock()
 	if err != nil {
 		return historyi.TransactionPolicyActive, err
 	}
 
 	if WorkflowHappensAfter(
 		lastWriteVersion,
-		lastUpdateClock,
+		lastRunningClock,
 		incomingLastWriteVersion,
-		incomingLastUpdateClock,
+		incomingLastRunningClock,
 	) {
 		return historyi.TransactionPolicyActive, serviceerror.NewInternal("Workflow cannot suppress workflow by older workflow")
 	}
@@ -316,9 +316,9 @@ func (r *WorkflowImpl) terminateWorkflow(
 
 func WorkflowHappensAfter(
 	thisLastWriteVersion int64,
-	thisLastUpdateClock int64,
+	thisLastRunningClock int64,
 	thatLastWriteVersion int64,
-	thatLastUpdateClock int64,
+	thatLastRunningClock int64,
 ) bool {
 
 	if thisLastWriteVersion != thatLastWriteVersion {
@@ -326,5 +326,5 @@ func WorkflowHappensAfter(
 	}
 
 	// thisLastWriteVersion == thatLastWriteVersion
-	return thisLastUpdateClock > thatLastUpdateClock
+	return thisLastRunningClock > thatLastRunningClock
 }

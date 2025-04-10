@@ -4194,7 +4194,7 @@ func (s *mutableStateSuite) verifyExecutionInfo(current, target, origin *persist
 	s.True(proto.Equal(target.WorkflowExecutionTimeout, current.WorkflowExecutionTimeout), "WorkflowExecutionTimeout mismatch")
 	s.True(proto.Equal(target.WorkflowRunTimeout, current.WorkflowRunTimeout), "WorkflowRunTimeout mismatch")
 	s.True(proto.Equal(target.DefaultWorkflowTaskTimeout, current.DefaultWorkflowTaskTimeout), "DefaultWorkflowTaskTimeout mismatch")
-	s.Equal(target.LastUpdateClock, current.LastUpdateClock, "LastUpdateClock mismatch")
+	s.Equal(target.LastRunningClock, current.LastRunningClock, "LastRunningClock mismatch")
 	s.Equal(target.LastFirstEventId, current.LastFirstEventId, "LastFirstEventId mismatch")
 	s.Equal(target.LastCompletedWorkflowTaskStartedEventId, current.LastCompletedWorkflowTaskStartedEventId, "LastCompletedWorkflowTaskStartedEventId mismatch")
 	s.True(proto.Equal(target.StartTime, current.StartTime), "StartTime mismatch")
