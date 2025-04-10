@@ -351,10 +351,10 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 //nolint:revive // cognitive complexity 35 (> max enabled 25)
 func (r *WorkflowStateReplicatorImpl) handleFirstReplicationTask(
 	ctx context.Context,
-	versionedTransition *replicationspb.VersionedTransitionArtifact,
+	versionedTransitionArtifact *replicationspb.VersionedTransitionArtifact,
 	sourceClusterName string,
 ) (retErr error) {
-	mutation := versionedTransition.GetSyncWorkflowStateMutationAttributes()
+	mutation := versionedTransitionArtifact.GetSyncWorkflowStateMutationAttributes()
 	executionInfo := mutation.StateMutation.ExecutionInfo
 	executionState := mutation.StateMutation.ExecutionState
 	sourceVersionHistories := mutation.StateMutation.ExecutionInfo.VersionHistories
@@ -368,7 +368,7 @@ func (r *WorkflowStateReplicatorImpl) handleFirstReplicationTask(
 	}
 
 	var historyEventBatchs [][]*historypb.HistoryEvent
-	for _, blob := range versionedTransition.EventBatches {
+	for _, blob := range versionedTransitionArtifact.EventBatches {
 		e, err := r.historySerializer.DeserializeEvents(blob)
 		if err != nil {
 			return err
@@ -479,12 +479,12 @@ func (r *WorkflowStateReplicatorImpl) handleFirstReplicationTask(
 			}, historyEvent)
 		}
 	}
-	if versionedTransition.NewRunInfo != nil {
+	if versionedTransitionArtifact.NewRunInfo != nil {
 		err = r.createNewRunWorkflow(
 			ctx,
 			namespace.ID(executionInfo.NamespaceId),
 			executionInfo.WorkflowId,
-			versionedTransition.NewRunInfo,
+			versionedTransitionArtifact.NewRunInfo,
 			localMutableState,
 			true,
 		)
@@ -496,7 +496,6 @@ func (r *WorkflowStateReplicatorImpl) handleFirstReplicationTask(
 	err = r.taskRefresher.Refresh(ctx, localMutableState)
 
 	if err != nil {
-		println(err.Error())
 		return err
 	}
 
