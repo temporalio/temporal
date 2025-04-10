@@ -134,7 +134,8 @@ var (
 	errListNotAllowed      = serviceerror.NewPermissionDenied("List is disabled on this namespace.", "")
 	errSchedulesNotAllowed = serviceerror.NewPermissionDenied("Schedules are disabled on this namespace.", "")
 
-	errDeploymentsNotAllowed = serviceerror.NewPermissionDenied("Deployments are disabled on this namespace.", "")
+	errDeploymentsNotAllowed        = serviceerror.NewPermissionDenied("Deployments (deprecated) are disabled on this namespace.", "")
+	errDeploymentVersionsNotAllowed = serviceerror.NewPermissionDenied("Worker Deployment Versions are disabled on this namespace.", "")
 
 	errBatchAPINotAllowed                = serviceerror.NewPermissionDenied("Batch operation feature are disabled on this namespace.", "")
 	errBatchOpsWorkflowFilterNotSet      = serviceerror.NewInvalidArgument("Workflow executions and visibility filter are not set on request.")
@@ -146,7 +147,9 @@ var (
 	errUpdateWorkflowExecutionAsyncAdmittedNotAllowed = serviceerror.NewPermissionDenied("UpdateWorkflowExecution issued asynchronously and waiting on update admitted is not supported.", "")
 	errMultiOperationAPINotAllowed                    = serviceerror.NewPermissionDenied("ExecuteMultiOperation API is disabled on this namespace.", "")
 
-	errWorkerVersioningNotAllowed = serviceerror.NewPermissionDenied("Worker versioning is disabled on this namespace.", "")
+	errWorkerVersioningV1_0NotAllowed         = serviceerror.NewPermissionDenied("Worker versioning v0.1 (Version Set-based, deprecated) is disabled on this namespace.", "")
+	errWorkerVersioningV2_0NotAllowed         = serviceerror.NewPermissionDenied("Worker versioning v0.2 (Rules-based, deprecated) is disabled on this namespace.", "")
+	errWorkerVersioningWorkflowAPIsNotAllowed = serviceerror.NewPermissionDenied("Worker versioning in workflow progress APIs is disabled on this namespace.", "")
 
 	errListHistoryTasksNotAllowed = serviceerror.NewPermissionDenied("ListHistoryTasks feature is disabled on this cluster.", "")
 )

@@ -851,6 +851,7 @@ var (
 	// Timeouts and failures are not counted in this metric.
 	// This metric has a "reason" tag attached to it to understand why eager start was denied.
 	WorkflowEagerExecutionDeniedCounter           = NewCounterDef("workflow_eager_execution_denied")
+	StartWorkflowRequestDeduped                   = NewCounterDef("start_workflow_request_deduped")
 	EmptyCompletionCommandsCounter                = NewCounterDef("empty_completion_commands")
 	MultipleCompletionCommandsCounter             = NewCounterDef("multiple_completion_commands")
 	FailedWorkflowTasksCounter                    = NewCounterDef("failed_workflow_tasks")
@@ -999,6 +1000,7 @@ var (
 	DynamicWorkerPoolSchedulerEnqueuedTasks = NewCounterDef("dynamic_worker_pool_scheduler_enqueued_tasks")
 	DynamicWorkerPoolSchedulerDequeuedTasks = NewCounterDef("dynamic_worker_pool_scheduler_dequeued_tasks")
 	DynamicWorkerPoolSchedulerRejectedTasks = NewCounterDef("dynamic_worker_pool_scheduler_rejected_tasks")
+	PausedActivitiesCounter                 = NewCounterDef("paused_activities")
 
 	// Deadlock detector latency metrics
 	DDClusterMetadataLockLatency         = NewTimerDef("dd_cluster_metadata_lock_latency")
@@ -1042,14 +1044,18 @@ var (
 	TaskQueueStoppedCounter                           = NewCounterDef("task_queue_stopped")
 	TaskWriteThrottlePerTaskQueueCounter              = NewCounterDef("task_write_throttle_count")
 	TaskWriteLatencyPerTaskQueue                      = NewTimerDef("task_write_latency")
-	TaskLagPerTaskQueueGauge                          = NewGaugeDef("task_lag_per_tl")
-	NoRecentPollerTasksPerTaskQueueCounter            = NewCounterDef("no_poller_tasks")
-	UnknownBuildPollsCounter                          = NewCounterDef("unknown_build_polls")
-	UnknownBuildTasksCounter                          = NewCounterDef("unknown_build_tasks")
-	TaskDispatchLatencyPerTaskQueue                   = NewTimerDef("task_dispatch_latency")
-	ApproximateBacklogCount                           = NewGaugeDef("approximate_backlog_count")
-	ApproximateBacklogAgeSeconds                      = NewGaugeDef("approximate_backlog_age_seconds")
-	NonRetryableTasks                                 = NewCounterDef(
+	TaskRewrites                                      = NewCounterDef(
+		"task_rewrites",
+		WithDescription("Number of times tasks are rewritten to persistence after failing to process"),
+	)
+	TaskLagPerTaskQueueGauge               = NewGaugeDef("task_lag_per_tl")
+	NoRecentPollerTasksPerTaskQueueCounter = NewCounterDef("no_poller_tasks")
+	UnknownBuildPollsCounter               = NewCounterDef("unknown_build_polls")
+	UnknownBuildTasksCounter               = NewCounterDef("unknown_build_tasks")
+	TaskDispatchLatencyPerTaskQueue        = NewTimerDef("task_dispatch_latency")
+	ApproximateBacklogCount                = NewGaugeDef("approximate_backlog_count")
+	ApproximateBacklogAgeSeconds           = NewGaugeDef("approximate_backlog_age_seconds")
+	NonRetryableTasks                      = NewCounterDef(
 		"non_retryable_tasks",
 		WithDescription("The number of non-retryable matching tasks which are dropped due to specific errors"))
 

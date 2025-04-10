@@ -30,8 +30,8 @@ import (
 
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
-	"go.temporal.io/server/environment"
 	postgresqlversionV12 "go.temporal.io/server/schema/postgresql/v12"
+	"go.temporal.io/server/temporal/environment"
 	"go.temporal.io/server/tools/sql/clitest"
 )
 

@@ -44,6 +44,7 @@ import (
 	namespacepb "go.temporal.io/api/namespace/v1"
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/sdk/worker"
 	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -62,7 +63,7 @@ import (
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/testing/updateutils"
-	"go.temporal.io/server/environment"
+	"go.temporal.io/server/temporal/environment"
 	"go.uber.org/fx"
 	"gopkg.in/yaml.v3"
 )
@@ -101,6 +102,13 @@ type (
 	}
 	TestClusterOption func(params *TestClusterParams)
 )
+
+func init() {
+	// By default, the SDK worker will calculate a checksum of the binary and use that as an identifier.
+	// But given the size of the test binary, that has a significant performance impact (100 ms or more).
+	// By specifying a checksum here, we can avoid that overhead.
+	worker.SetBinaryChecksum("oss-server-test")
+}
 
 // WithFxOptionsForService returns an Option which, when passed as an argument to setupSuite, will append the given list
 // of fx options to the end of the arguments to the fx.New call for the given service. For example, if you want to

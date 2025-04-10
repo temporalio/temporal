@@ -549,6 +549,18 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 		return consts.ErrWorkflowCompleted
 	}
 
+	err = t.processActivityWorkflowRules(ctx, weContext, mutableState, activityInfo)
+	if err != nil {
+		return err
+	}
+
+	// task can be paused as the result of processing activity workflow rules, so we need to check again
+	if task.Stamp != activityInfo.Stamp || activityInfo.Paused {
+		// if retry task event is from an old stamp of if activity is paused we should ignore the event.
+		release(nil) // release(nil) so mutable state is not unloaded from cache
+		return consts.ErrActivityTaskNotFound
+	}
+
 	taskQueue := &taskqueuepb.TaskQueue{
 		Name: activityInfo.TaskQueue,
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
@@ -879,4 +891,42 @@ func (t *timerQueueActiveTaskExecutor) emitTimeoutMetricScopeWithNamespaceTag(
 	case enumspb.TIMEOUT_TYPE_HEARTBEAT:
 		metrics.HeartbeatTimeoutCounter.With(metricsScope).Record(1)
 	}
+}
+
+func (t *timerQueueActiveTaskExecutor) processActivityWorkflowRules(
+	ctx context.Context,
+	weContext historyi.WorkflowContext,
+	ms historyi.MutableState,
+	ai *persistencespb.ActivityInfo,
+) error {
+	if ai.Paused {
+		return nil
+	}
+
+	activityChanged := workflow.ActivityMatchWorkflowRules(ms, t.logger, ai)
+	if !activityChanged {
+		return nil
+	}
+	if ai.Paused {
+		// need to update activity
+		if err := ms.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ historyi.MutableState) error {
+			activityInfo.StartedEventId = common.EmptyEventID
+			activityInfo.StartedTime = nil
+			activityInfo.RequestId = ""
+			return nil
+		}); err != nil {
+			return err
+		}
+
+		// need to update mutable state
+		err := weContext.UpdateWorkflowExecutionAsActive(
+			ctx,
+			t.shardContext,
+		)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

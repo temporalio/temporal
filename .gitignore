@@ -9,6 +9,7 @@
 .DS_Store
 .coverage
 .testoutput
+develop/docker-compose/grafana/provisioning/temporalio-dashboards
 
 *.out
 *.test

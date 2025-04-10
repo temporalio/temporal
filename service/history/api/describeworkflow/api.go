@@ -161,6 +161,7 @@ func Invoke(
 			RunExpirationTime:       executionInfo.WorkflowRunExpirationTime,
 			OriginalStartTime:       startEvent.EventTime,
 			CancelRequested:         executionInfo.CancelRequested,
+			ResetRunId:              executionInfo.ResetRunId,
 		},
 	}
 

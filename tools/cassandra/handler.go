@@ -33,7 +33,7 @@ import (
 	c "go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/environment"
+	"go.temporal.io/server/temporal/environment"
 	"go.temporal.io/server/tools/common/schema"
 )
 
