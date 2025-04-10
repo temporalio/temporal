@@ -242,8 +242,8 @@ func (s *SyncStateRetrieverImpl) GetSyncWorkflowStateArtifactFromMutableStateFor
 	versionedTransitionArtifact.EventBatches = events
 	result := &SyncStateResult{
 		VersionedTransitionArtifact: versionedTransitionArtifact,
-		VersionedTransitionHistory: sourceTransitionHistory,
-		SyncedVersionHistory: sourceHistory,
+		VersionedTransitionHistory:  sourceTransitionHistory,
+		SyncedVersionHistory:        sourceHistory,
 	}
 	return result, nil
 }
