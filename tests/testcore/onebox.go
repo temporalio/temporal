@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	workflowserviceinc "go.temporal.io/server/api/workflowservice/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	carchiver "go.temporal.io/server/common/archiver"
@@ -94,11 +95,12 @@ type (
 		frontendMembershipAddress string
 
 		// These are routing/load balancing clients but do not do retries:
-		adminClient    adminservice.AdminServiceClient
-		frontendClient workflowservice.WorkflowServiceClient
-		operatorClient operatorservice.OperatorServiceClient
-		historyClient  historyservice.HistoryServiceClient
-		matchingClient matchingservice.MatchingServiceClient
+		adminClient       adminservice.AdminServiceClient
+		frontendClient    workflowservice.WorkflowServiceClient
+		frontendIncClient workflowserviceinc.WorkflowIncubationServiceClient
+		operatorClient    operatorservice.OperatorServiceClient
+		historyClient     historyservice.HistoryServiceClient
+		matchingClient    matchingservice.MatchingServiceClient
 
 		dcClient                         *dynamicconfig.MemoryClient
 		testHooks                        testhooks.TestHooks
@@ -301,6 +303,10 @@ func (c *TemporalImpl) FrontendClient() workflowservice.WorkflowServiceClient {
 	return c.frontendClient
 }
 
+func (c *TemporalImpl) FrontendIncClient() workflowserviceinc.WorkflowIncubationServiceClient {
+	return c.frontendIncClient
+}
+
 func (c *TemporalImpl) HistoryClient() historyservice.HistoryServiceClient {
 	return c.historyClient
 }
@@ -403,6 +409,7 @@ func (c *TemporalImpl) startFrontend() {
 	// This connection/clients uses membership to find frontends and load-balance among them.
 	connection := rpcFactory.CreateLocalFrontendGRPCConnection()
 	c.frontendClient = workflowservice.NewWorkflowServiceClient(connection)
+	c.frontendIncClient = workflowserviceinc.NewWorkflowIncubationServiceClient(connection)
 	c.adminClient = adminservice.NewAdminServiceClient(connection)
 	c.operatorClient = operatorservice.NewOperatorServiceClient(connection)
 

@@ -519,7 +519,7 @@ message UpdateNexusEndpointRequest {
     string id = 1;
     // Version of the endpoint, used for optimistic concurrency. Must match current version in persistence or the
     // request will fail a FAILED_PRECONDITION error.
-    int64 version = 2; 
+    int64 version = 2;
     temporal.server.api.persistence.v1.NexusEndpointSpec spec = 3;
 }
 
@@ -562,4 +562,24 @@ message ListNexusEndpointsResponse {
     bytes next_page_token = 1;
     int64 table_version = 2;
     repeated temporal.server.api.persistence.v1.NexusEndpointEntry entries = 3;
+}
+
+message GetTaskQueueStatsRequest {
+    string namespace_id = 1;
+    string task_queue = 2;
+    temporal.api.enums.v1.TaskQueueType task_queue_type = 3;
+    string deployment_version = 4;
+}
+
+message GetTaskQueueStatsResponse {
+    int64 backlog_count_hint = 1;
+}
+
+message GetTaskQueuePartitionStatsRequest {
+    string namespace_id = 1;
+    temporal.server.api.taskqueue.v1.TaskQueuePartition task_queue_partition = 2;
+    string deployment_version = 3;
+}
+
+message GetTaskQueuePartitionStatsResponse {
 }

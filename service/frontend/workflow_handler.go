@@ -53,6 +53,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
+	workflowserviceinc "go.temporal.io/server/api/workflowservice/v1"
 	"go.temporal.io/server/client/frontend"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
@@ -119,6 +120,7 @@ type (
 	// WorkflowHandler - gRPC handler interface for workflowservice
 	WorkflowHandler struct {
 		workflowservice.UnimplementedWorkflowServiceServer
+		workflowserviceinc.UnimplementedWorkflowIncubationServiceServer
 		status int32
 
 		tokenSerializer                               *tasktoken.Serializer
@@ -3226,6 +3228,55 @@ func (wh *WorkflowHandler) GetCurrentDeployment(ctx context.Context, request *wo
 	return &workflowservice.GetCurrentDeploymentResponse{
 		CurrentDeploymentInfo: describeDeploymentResponse,
 	}, nil
+}
+
+func (wh *WorkflowHandler) GetDeploymentStats(
+	ctx context.Context,
+	request *workflowserviceinc.GetDeploymentStatsRequest,
+) (_ *workflowserviceinc.GetDeploymentStatsResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	if len(request.Namespace) == 0 {
+		return nil, errNamespaceNotSet
+	}
+	if !wh.config.EnableDeploymentVersions(request.Namespace) {
+		return nil, errDeploymentsNotAllowed
+	}
+	// TODO: more validation
+
+	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO: support deployment version
+	versionInfo, err := wh.workerDeploymentClient.DescribeVersion(ctx, namespaceEntry, request.GetDeploymentVersion())
+	if err != nil {
+		return nil, err
+	}
+
+	var stats []*taskqueuespb.DetailedTaskQueueStats
+	for _, tq := range versionInfo.TaskQueueInfos {
+		tqStats, err := wh.matchingClient.GetTaskQueueStats(ctx,
+			&matchingservice.GetTaskQueueStatsRequest{
+				NamespaceId:   namespaceEntry.ID().String(),
+				TaskQueue:     tq.Name,
+				TaskQueueType: tq.Type,
+			})
+		if err != nil {
+			return nil, err
+		}
+		stats = append(stats,
+			&taskqueuespb.DetailedTaskQueueStats{
+				TaskQueue:        &taskqueuepb.TaskQueue{Name: tq.Name, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				TaskQueueType:    tq.Type,
+				BacklogCountHint: tqStats.BacklogCountHint,
+			})
+	}
+
+	return &workflowserviceinc.GetDeploymentStatsResponse{TaskQueueStats: stats}, nil
 }
 
 // [cleanup-wv-pre-release]

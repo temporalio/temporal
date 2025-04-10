@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
+	workflowserviceinc "go.temporal.io/server/api/workflowservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -450,6 +451,7 @@ func (s *Service) Start() {
 
 	healthpb.RegisterHealthServer(s.server, s.healthServer)
 	workflowservice.RegisterWorkflowServiceServer(s.server, s.handler)
+	workflowserviceinc.RegisterWorkflowIncubationServiceServer(s.server, s.handler)
 	adminservice.RegisterAdminServiceServer(s.server, s.adminHandler)
 	operatorservice.RegisterOperatorServiceServer(s.server, s.operatorHandler)
 

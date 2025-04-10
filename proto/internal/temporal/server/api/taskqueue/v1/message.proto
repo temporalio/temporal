@@ -122,3 +122,10 @@ message TaskForwardInfo {
     // Deprecated. [cleanup-old-wv]
     string dispatch_version_set = 5;
 }
+
+// TODO
+message DetailedTaskQueueStats {
+    temporal.api.taskqueue.v1.TaskQueue task_queue = 1;
+    temporal.api.enums.v1.TaskQueueType task_queue_type = 2;
+    int64 backlog_count_hint = 3;
+}

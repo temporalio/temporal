@@ -1,8 +1,6 @@
 // The MIT License
 //
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2017 Uber Technologies, Inc.
+// Copyright (c) 2019 Temporal Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -22,34 +20,13 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package frontend
+syntax = "proto3";
 
-import (
-	"go.temporal.io/api/operatorservice/v1"
-	"go.temporal.io/api/workflowservice/v1"
-	workflowserviceinc "go.temporal.io/server/api/workflowservice/v1"
-)
+package temporal.server.api.workflowservice.v1;
+option go_package = "go.temporal.io/server/api/workflowservice/v1;workflowservice";
 
-const (
-	WorkflowServiceName = "temporal.api.workflowservice.v1.WorkflowService"
-	OperatorServiceName = "temporal.api.operatorservice.v1.OperatorService"
-	AdminServiceName    = "temporal.api.adminservice.v1.AdminService"
-)
+import "temporal/server/api/workflowservice/v1/request_response.proto";
 
-type (
-	// Handler is interface wrapping frontend workflow handler
-	Handler interface {
-		workflowservice.WorkflowServiceServer
-		workflowserviceinc.WorkflowIncubationServiceServer
-		GetConfig() *Config
-		Start()
-		Stop()
-	}
-
-	// OperatorHandler is interface wrapping frontend workflow handler
-	OperatorHandler interface {
-		operatorservice.OperatorServiceServer
-		Start()
-		Stop()
-	}
-)
+service WorkflowIncubationService {
+    rpc GetDeploymentStats (GetDeploymentStatsRequest) returns (GetDeploymentStatsResponse) {}
+}

@@ -34,8 +34,12 @@ import (
 	"time"
 
 	"github.com/dgryski/go-farm"
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -43,11 +47,14 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkworker "go.temporal.io/sdk/worker"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
+	workflowserviceinc "go.temporal.io/server/api/workflowservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/worker/workerdeployment"
 	"go.temporal.io/server/tests/testcore"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -1596,6 +1603,112 @@ func (s *WorkerDeploymentSuite) TestDeleteWorkerDeployment_InvalidDelete() {
 		Identity:       tv1.ClientIdentity(),
 	})
 	s.Error(err)
+}
+
+func (s *WorkerDeploymentSuite) TestDeploymentStats() {
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
+
+	ctx, cancel := context.WithTimeout(testcore.NewContext(), time.Second*10)
+	defer cancel()
+	tv := testvars.New(s)
+
+	sortStats := func(resp *workflowserviceinc.GetDeploymentStatsResponse) {
+		slices.SortFunc(resp.TaskQueueStats, func(l, r *taskqueuespb.DetailedTaskQueueStats) int {
+			if cmp := strings.Compare(l.TaskQueue.GetName(), r.TaskQueue.GetName()); cmp != 0 {
+				return cmp
+			}
+			return strings.Compare(l.TaskQueueType.String(), r.TaskQueueType.String())
+		})
+	}
+	verifyStats := func(expected *workflowserviceinc.GetDeploymentStatsResponse) {
+		sortStats(expected)
+		s.EventuallyWithT(func(t *assert.CollectT) {
+			actual, err := s.FrontendIncClient().GetDeploymentStats(ctx,
+				&workflowserviceinc.GetDeploymentStatsRequest{
+					Namespace:         s.Namespace().String(),
+					DeploymentVersion: tv.DeploymentVersionString(),
+				})
+			s.NoError(err)
+			sortStats(actual)
+			require.Empty(t, cmp.Diff(actual.TaskQueueStats, expected.TaskQueueStats))
+		}, time.Second*5, time.Millisecond*200)
+	}
+
+	s.startVersionWorkflow(ctx, tv)
+
+	// generate workflow backlog
+	workflowCount := 10
+	for i := 0; i < workflowCount; i++ {
+		_, err := s.FrontendClient().StartWorkflowExecution(
+			ctx,
+			&workflowservice.StartWorkflowExecutionRequest{
+				Namespace:           s.Namespace().String(),
+				RequestId:           uuid.NewString(),
+				WorkflowId:          uuid.NewString(),
+				WorkflowType:        tv.WorkflowType(),
+				TaskQueue:           tv.TaskQueue(),
+				WorkflowRunTimeout:  durationpb.New(10 * time.Minute),
+				WorkflowTaskTimeout: durationpb.New(10 * time.Minute),
+				Identity:            tv.ClientIdentity(),
+			})
+		s.NoError(err)
+	}
+
+	verifyStats(&workflowserviceinc.GetDeploymentStatsResponse{
+		TaskQueueStats: []*taskqueuespb.DetailedTaskQueueStats{
+			{
+				TaskQueue:        tv.TaskQueue(),
+				TaskQueueType:    enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+				BacklogCountHint: int64(workflowCount),
+			},
+		},
+	})
+
+	// generate activity backlog
+	for i := 0; i < workflowCount; {
+		resp, err := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: tv.TaskQueue(),
+			Identity:  tv.ClientIdentity(),
+		})
+		s.NoError(err)
+		if resp == nil || resp.GetAttempt() < 1 {
+			continue // poll again on empty responses
+		}
+		i++
+		_, err = s.FrontendClient().RespondWorkflowTaskCompleted(testcore.NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Namespace: s.Namespace().String(),
+			Identity:  tv.ClientIdentity(),
+			TaskToken: resp.TaskToken,
+			Commands: []*commandpb.Command{
+				{
+					CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+					Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{
+						ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+							ActivityId:            "activity1",
+							ActivityType:          &commonpb.ActivityType{Name: "activity_type1"},
+							TaskQueue:             tv.TaskQueue(),
+							StartToCloseTimeout:   durationpb.New(time.Minute),
+							RequestEagerExecution: false,
+						},
+					},
+				},
+			},
+		})
+		s.NoError(err)
+	}
+
+	verifyStats(&workflowserviceinc.GetDeploymentStatsResponse{
+		TaskQueueStats: []*taskqueuespb.DetailedTaskQueueStats{
+			{
+				TaskQueue:        tv.TaskQueue(),
+				TaskQueueType:    enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+				BacklogCountHint: int64(workflowCount),
+			},
+		},
+	})
+	// TODO
 }
 
 func (s *WorkerDeploymentSuite) tryDeleteVersion(
