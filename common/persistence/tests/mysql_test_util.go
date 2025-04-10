@@ -40,7 +40,7 @@ import (
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/shuffle"
-	"go.temporal.io/server/environment"
+	"go.temporal.io/server/temporal/environment"
 	"go.uber.org/zap/zaptest"
 )
 

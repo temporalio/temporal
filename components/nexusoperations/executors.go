@@ -206,9 +206,10 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 
 	if e.HTTPTraceProvider != nil {
 		traceLogger := log.With(e.Logger,
+			tag.Operation("StartOperation"),
 			tag.WorkflowNamespace(ns.Name().String()),
 			tag.RequestID(args.requestID),
-			tag.Operation(args.operation),
+			tag.NexusOperation(args.operation),
 			tag.Endpoint(args.endpointName),
 			tag.WorkflowID(ref.WorkflowKey.WorkflowID),
 			tag.WorkflowRunID(ref.WorkflowKey.RunID),
@@ -423,7 +424,7 @@ func (e taskExecutor) handleStartOperationError(env hsm.Environment, node *hsm.N
 	var opFailedErr *nexus.OperationError
 
 	if errors.As(callErr, &opFailedErr) {
-		return handleUnsuccessfulOperationError(node, operation, opFailedErr)
+		return handleOperationError(node, operation, opFailedErr)
 	} else if errors.As(callErr, &handlerErr) {
 		if !handlerErr.Retryable() {
 			// The StartOperation request got an unexpected response that is not retryable, fail the operation.
@@ -576,9 +577,10 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 
 	if e.HTTPTraceProvider != nil {
 		traceLogger := log.With(e.Logger,
+			tag.Operation("CancelOperation"),
 			tag.WorkflowNamespace(ns.Name().String()),
 			tag.RequestID(args.requestID),
-			tag.Operation(args.operation),
+			tag.NexusOperation(args.operation),
 			tag.Endpoint(args.endpointName),
 			tag.WorkflowID(ref.WorkflowKey.WorkflowID),
 			tag.WorkflowRunID(ref.WorkflowKey.RunID),
@@ -661,6 +663,17 @@ func (e taskExecutor) saveCancelationResult(ctx context.Context, env hsm.Environ
 				if err != nil {
 					return hsm.TransitionOutput{}, err
 				}
+				n.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUEST_FAILED, func(e *historypb.HistoryEvent) {
+					// nolint:revive // We must mutate here even if the linter doesn't like it.
+					e.Attributes = &historypb.HistoryEvent_NexusOperationCancelRequestFailedEventAttributes{
+						NexusOperationCancelRequestFailedEventAttributes: &historypb.NexusOperationCancelRequestFailedEventAttributes{
+							RequestedEventId: c.RequestedEventId,
+							Failure:          failure,
+						},
+					}
+					// nolint:revive // We must mutate here even if the linter doesn't like it.
+					e.WorkerMayIgnore = true // For compatibility with older SDKs.
+				})
 				if !isRetryable {
 					return TransitionCancelationFailed.Apply(c, EventCancelationFailed{
 						Time:    env.Now(),
@@ -678,6 +691,16 @@ func (e taskExecutor) saveCancelationResult(ctx context.Context, env hsm.Environ
 			// Cancelation request transmitted successfully.
 			// The operation is not yet canceled and may ignore our request, the outcome will be known via the
 			// completion callback.
+			n.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUEST_COMPLETED, func(e *historypb.HistoryEvent) {
+				// nolint:revive // We must mutate here even if the linter doesn't like it.
+				e.Attributes = &historypb.HistoryEvent_NexusOperationCancelRequestCompletedEventAttributes{
+					NexusOperationCancelRequestCompletedEventAttributes: &historypb.NexusOperationCancelRequestCompletedEventAttributes{
+						RequestedEventId: c.RequestedEventId,
+					},
+				}
+				// nolint:revive // We must mutate here even if the linter doesn't like it.
+				e.WorkerMayIgnore = true // For compatibility with older SDKs.
+			})
 			return TransitionCancelationSucceeded.Apply(c, EventCancelationSucceeded{
 				Time: env.Now(),
 				Node: n,
@@ -816,7 +839,19 @@ func callErrToFailure(callErr error, retryable bool) (*failurepb.Failure, error)
 			if err != nil {
 				return nil, err
 			}
+		} else {
+			cause := handlerErr.Cause
+			if cause == nil {
+				cause = errors.New("unknown cause")
+			}
+			failure.Cause = &failurepb.Failure{
+				Message: cause.Error(),
+				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+					ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{},
+				},
+			}
 		}
+
 		return failure, nil
 	}
 

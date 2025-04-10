@@ -49,6 +49,7 @@ import (
 type MockExecutable struct {
 	ctrl     *gomock.Controller
 	recorder *MockExecutableMockRecorder
+	isgomock struct{}
 }
 
 // MockExecutableMockRecorder is the mock recorder for MockExecutable.
@@ -406,6 +407,7 @@ func (mr *MockExecutableMockRecorder) State() *gomock.Call {
 type MockExecutor struct {
 	ctrl     *gomock.Controller
 	recorder *MockExecutorMockRecorder
+	isgomock struct{}
 }
 
 // MockExecutorMockRecorder is the mock recorder for MockExecutor.
@@ -443,6 +445,7 @@ func (mr *MockExecutorMockRecorder) Execute(arg0, arg1 any) *gomock.Call {
 type MockExecutorWrapper struct {
 	ctrl     *gomock.Controller
 	recorder *MockExecutorWrapperMockRecorder
+	isgomock struct{}
 }
 
 // MockExecutorWrapperMockRecorder is the mock recorder for MockExecutorWrapper.
@@ -480,6 +483,7 @@ func (mr *MockExecutorWrapperMockRecorder) Wrap(delegate any) *gomock.Call {
 type MockMaybeTerminalTaskError struct {
 	ctrl     *gomock.Controller
 	recorder *MockMaybeTerminalTaskErrorMockRecorder
+	isgomock struct{}
 }
 
 // MockMaybeTerminalTaskErrorMockRecorder is the mock recorder for MockMaybeTerminalTaskError.

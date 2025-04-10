@@ -28,6 +28,7 @@ import (
 	"context"
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
@@ -46,7 +47,7 @@ import (
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/api/resetstickytaskqueue"
 	"go.temporal.io/server/service/history/consts"
-	"go.temporal.io/server/service/history/shard"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow"
 )
 
@@ -56,7 +57,7 @@ const failQueryWorkflowTaskAttemptCount = 3
 func Invoke(
 	ctx context.Context,
 	request *historyservice.QueryWorkflowRequest,
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	rawMatchingClient matchingservice.MatchingServiceClient,
 	matchingClient matchingservice.MatchingServiceClient,
@@ -150,6 +151,8 @@ func Invoke(
 		return nil, serviceerror.NewWorkflowNotReady("Unable to query workflow due to Workflow Task in failed state.")
 	}
 
+	priority := mutableState.GetExecutionInfo().Priority
+
 	// There are two ways in which queries get dispatched to workflow worker. First, queries can be dispatched on workflow tasks.
 	// These workflow tasks potentially contain new events and queries. The events are treated as coming before the query in time.
 	// The second way in which queries are dispatched to workflow worker is directly through matching; in this approach queries can be
@@ -170,7 +173,7 @@ func Invoke(
 			if err != nil {
 				return nil, err
 			}
-			workflowLease.GetReleaseFn()(nil)
+			workflowLease.GetReleaseFn()(nil) // release the lock - no access to mutable state beyond this point!
 			req.Execution.RunId = msResp.Execution.RunId
 			return queryDirectlyThroughMatching(
 				ctx,
@@ -182,6 +185,7 @@ func Invoke(
 				rawMatchingClient,
 				matchingClient,
 				scope,
+				priority,
 			)
 		}
 	}
@@ -198,7 +202,7 @@ func Invoke(
 	}
 	queryID, completionCh := queryReg.BufferQuery(req.GetQuery())
 	defer queryReg.RemoveQuery(queryID)
-	workflowLease.GetReleaseFn()(nil)
+	workflowLease.GetReleaseFn()(nil) // release the lock - no access to mutable state beyond this point!
 	select {
 	case <-completionCh:
 		completionState, err := queryReg.GetCompletionState(queryID)
@@ -238,6 +242,7 @@ func Invoke(
 				rawMatchingClient,
 				matchingClient,
 				scope,
+				priority,
 			)
 		case workflow.QueryCompletionTypeFailed:
 			return nil, completionState.Err
@@ -252,7 +257,7 @@ func Invoke(
 }
 
 func queryWillTimeoutsBeforeFirstWorkflowTaskStart(
-	ctx context.Context, mutableState workflow.MutableState,
+	ctx context.Context, mutableState historyi.MutableState,
 ) (bool, error) {
 	startEvent, err := mutableState.GetStartEvent(ctx)
 	if err != nil {
@@ -280,11 +285,12 @@ func queryDirectlyThroughMatching(
 	msResp *historyservice.GetMutableStateResponse,
 	namespaceID string,
 	queryRequest *workflowservice.QueryWorkflowRequest,
-	shard shard.Context,
+	shard historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	rawMatchingClient matchingservice.MatchingServiceClient,
 	matchingClient matchingservice.MatchingServiceClient,
 	metricsHandler metrics.Handler,
+	priority *commonpb.Priority,
 ) (*historyservice.QueryWorkflowResponse, error) {
 
 	startTime := time.Now().UTC()
@@ -310,6 +316,7 @@ func queryDirectlyThroughMatching(
 			QueryRequest:     queryRequest,
 			TaskQueue:        msResp.GetStickyTaskQueue(),
 			VersionDirective: directive,
+			Priority:         priority,
 		}
 
 		// using a clean new context in case customer provide a context which has
@@ -356,6 +363,7 @@ func queryDirectlyThroughMatching(
 		QueryRequest:     queryRequest,
 		TaskQueue:        msResp.TaskQueue,
 		VersionDirective: directive,
+		Priority:         priority,
 	}
 
 	nonStickyStartTime := time.Now().UTC()

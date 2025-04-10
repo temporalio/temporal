@@ -50,7 +50,7 @@ import (
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/circuitbreakerpool"
 	"go.temporal.io/server/service/history/hsm"
-	"go.temporal.io/server/service/history/shard"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -80,7 +80,7 @@ func clonePayloadMap(source map[string]*commonpb.Payload) map[string]*commonpb.P
 func Invoke(
 	ctx context.Context,
 	req *historyservice.DescribeWorkflowExecutionRequest,
-	shard shard.Context,
+	shard historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	persistenceVisibilityMgr manager.VisibilityManager,
 	outboundQueueCBPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool,
@@ -154,12 +154,14 @@ func Invoke(
 			InheritedBuildId:             executionInfo.InheritedBuildId,
 			FirstRunId:                   executionInfo.FirstExecutionRunId,
 			VersioningInfo:               executionInfo.VersioningInfo,
+			Priority:                     executionInfo.Priority,
 		},
 		WorkflowExtendedInfo: &workflowpb.WorkflowExecutionExtendedInfo{
 			ExecutionExpirationTime: executionInfo.WorkflowExecutionExpirationTime,
 			RunExpirationTime:       executionInfo.WorkflowRunExpirationTime,
 			OriginalStartTime:       startEvent.EventTime,
 			CancelRequested:         executionInfo.CancelRequested,
+			ResetRunId:              executionInfo.ResetRunId,
 		},
 	}
 

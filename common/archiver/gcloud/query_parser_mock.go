@@ -43,6 +43,7 @@ import (
 type MockQueryParser struct {
 	ctrl     *gomock.Controller
 	recorder *MockQueryParserMockRecorder
+	isgomock struct{}
 }
 
 // MockQueryParserMockRecorder is the mock recorder for MockQueryParser.

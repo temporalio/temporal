@@ -24,6 +24,7 @@ package replication
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	historypb "go.temporal.io/api/history/v1"
@@ -38,7 +39,8 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	ctasks "go.temporal.io/server/common/tasks"
-	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/consts"
+	historyi "go.temporal.io/server/service/history/interfaces"
 )
 
 type (
@@ -138,7 +140,7 @@ func (e *ExecutableBackfillHistoryEventsTask) Execute() error {
 		return err
 	}
 
-	return engine.BackfillHistoryEvents(ctx, &shard.BackfillHistoryEventsRequest{
+	return engine.BackfillHistoryEvents(ctx, &historyi.BackfillHistoryEventsRequest{
 		WorkflowKey:         e.WorkflowKey,
 		SourceClusterName:   e.SourceClusterName(),
 		VersionedHistory:    e.ReplicationTask().VersionedTransition,
@@ -151,6 +153,10 @@ func (e *ExecutableBackfillHistoryEventsTask) Execute() error {
 }
 
 func (e *ExecutableBackfillHistoryEventsTask) HandleErr(err error) error {
+	if errors.Is(err, consts.ErrDuplicate) {
+		e.MarkTaskDuplicated()
+		return nil
+	}
 	e.Logger.Error("BackFillHistoryEvent replication task encountered error",
 		tag.WorkflowNamespaceID(e.NamespaceID),
 		tag.WorkflowID(e.WorkflowID),

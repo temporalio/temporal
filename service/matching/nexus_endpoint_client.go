@@ -39,10 +39,10 @@ import (
 	"go.temporal.io/server/common/clock"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/goro"
 	"go.temporal.io/server/common/headers"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/util"
-	"go.temporal.io/server/internal/goro"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 

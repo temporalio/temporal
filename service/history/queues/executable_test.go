@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/telemetry"
@@ -174,8 +175,33 @@ func (s *executableSuite) TestExecute_InMemoryNoUserLatency_SingleAttempt() {
 			expectBackoff:                false,
 		},
 		{
-			name:                         "ResourceExhaustedError",
+			name:                         "BusyWorkflowError",
 			taskErr:                      consts.ErrResourceExhaustedBusyWorkflow,
+			expectError:                  true,
+			expectedAttemptNoUserLatency: 0,
+			expectBackoff:                false,
+		},
+		{
+			name:                         "APSLimitError",
+			taskErr:                      consts.ErrResourceExhaustedBusyWorkflow,
+			expectError:                  true,
+			expectedAttemptNoUserLatency: 0,
+			expectBackoff:                false,
+		},
+		{
+			name: "OPSLimitError",
+			taskErr: &serviceerror.ResourceExhausted{
+				Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_OPS_LIMIT,
+				Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+				Message: "Namespace Max OPS Limit Reached.",
+			},
+			expectError:                  true,
+			expectedAttemptNoUserLatency: 0,
+			expectBackoff:                false,
+		},
+		{
+			name:                         "PersistenceNamespaceLimitExceeded",
+			taskErr:                      persistence.ErrPersistenceNamespaceLimitExceeded,
 			expectError:                  true,
 			expectedAttemptNoUserLatency: 0,
 			expectBackoff:                false,

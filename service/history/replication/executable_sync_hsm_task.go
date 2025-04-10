@@ -24,6 +24,7 @@ package replication
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
@@ -37,7 +38,8 @@ import (
 	"go.temporal.io/server/common/namespace"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	ctasks "go.temporal.io/server/common/tasks"
-	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/consts"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -133,7 +135,7 @@ func (e *ExecutableSyncHSMTask) Execute() error {
 	if err != nil {
 		return err
 	}
-	return engine.SyncHSM(ctx, &shard.SyncHSMRequest{
+	return engine.SyncHSM(ctx, &historyi.SyncHSMRequest{
 		WorkflowKey:         e.WorkflowKey,
 		StateMachineNode:    e.taskAttr.StateMachineNode,
 		EventVersionHistory: e.taskAttr.VersionHistory,
@@ -142,6 +144,10 @@ func (e *ExecutableSyncHSMTask) Execute() error {
 }
 
 func (e *ExecutableSyncHSMTask) HandleErr(err error) error {
+	if errors.Is(err, consts.ErrDuplicate) {
+		e.MarkTaskDuplicated()
+		return nil
+	}
 	switch retryErr := err.(type) {
 	case nil, *serviceerror.NotFound:
 		return nil

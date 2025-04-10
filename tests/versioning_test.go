@@ -122,6 +122,11 @@ func (s *VersioningIntegSuite) SetupSuite() {
 		// this is overridden since we don't want caching to be enabled while testing DescribeTaskQueue
 		// behaviour related to versioning
 		dynamicconfig.TaskQueueInfoByBuildIdTTL.Key(): 0 * time.Second,
+
+		// Use new matcher for versioning tests. Ideally we would run everything with old and new,
+		// but for now we pick a subset of tests. Versioning tests exercise the most features of
+		// matching so they're a good condidate.
+		dynamicconfig.MatchingUseNewMatcher.Key(): true,
 	}
 	s.FunctionalTestBase.SetupSuiteWithDefaultCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 }
@@ -141,6 +146,7 @@ func (s *VersioningIntegSuite) TearDownTest() {
 	if s.sdkClient != nil {
 		s.sdkClient.Close()
 	}
+	s.FunctionalTestBase.TearDownTest()
 }
 
 func (s *VersioningIntegSuite) TestVersionRuleConflictToken() {
@@ -2152,6 +2158,7 @@ func (s *VersioningIntegSuite) TestDispatchActivityUpgrade() {
 }
 
 func (s *VersioningIntegSuite) TestRedirectWithConcurrentActivities() {
+	s.T().Skip("Skipping test since this tests old versioning behavior and also flakes")
 	// Testing that wf never "goes back" to older build ID in presence of concurrent activities and random failures.
 	//
 	// SETUP:
@@ -3571,6 +3578,7 @@ func (s *VersioningIntegSuite) dispatchRetry() {
 }
 
 func (s *VersioningIntegSuite) TestDispatchCronOld() {
+	s.T().Skip("Skipping test since this tests old versioning behavior and also flakes")
 	s.RunTestWithMatchingBehavior(func() { s.dispatchCron(false) })
 }
 

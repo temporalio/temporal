@@ -454,7 +454,7 @@ func TestCancel(t *testing.T) {
 		Node: root,
 	})
 	require.NoError(t, err)
-	_, err = op.Cancel(root, time.Now())
+	_, err = op.Cancel(root, time.Now(), 0)
 	require.NoError(t, err)
 	require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_STARTED, op.State())
 	node, err := root.Child([]hsm.Key{nexusoperations.CancelationMachineKey})
@@ -478,7 +478,7 @@ func TestCancelationValidTransitions(t *testing.T) {
 		})
 	}))
 	require.NoError(t, hsm.MachineTransition(root, func(op nexusoperations.Operation) (hsm.TransitionOutput, error) {
-		return op.Cancel(root, time.Now())
+		return op.Cancel(root, time.Now(), 0)
 	}))
 	node, err := root.Child([]hsm.Key{nexusoperations.CancelationMachineKey})
 	require.NoError(t, err)
@@ -577,7 +577,7 @@ func TestCancelationBeforeStarted(t *testing.T) {
 	backend := &hsmtest.NodeBackend{}
 	root := newOperationNode(t, backend, mustNewScheduledEvent(time.Now(), 0))
 	require.NoError(t, hsm.MachineTransition(root, func(op nexusoperations.Operation) (hsm.TransitionOutput, error) {
-		return op.Cancel(root, time.Now())
+		return op.Cancel(root, time.Now(), 0)
 	}))
 	opLog, err := root.Parent.OpLog()
 	require.NoError(t, err)

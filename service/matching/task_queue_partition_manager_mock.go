@@ -51,6 +51,7 @@ import (
 type MocktaskQueuePartitionManager struct {
 	ctrl     *gomock.Controller
 	recorder *MocktaskQueuePartitionManagerMockRecorder
+	isgomock struct{}
 }
 
 // MocktaskQueuePartitionManagerMockRecorder is the mock recorder for MocktaskQueuePartitionManager.
@@ -68,6 +69,20 @@ func NewMocktaskQueuePartitionManager(ctrl *gomock.Controller) *MocktaskQueuePar
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MocktaskQueuePartitionManager) EXPECT() *MocktaskQueuePartitionManagerMockRecorder {
 	return m.recorder
+}
+
+// AddSpooledTask mocks base method.
+func (m *MocktaskQueuePartitionManager) AddSpooledTask(ctx context.Context, task *internalTask, backlogQueue *PhysicalTaskQueueKey) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AddSpooledTask", ctx, task, backlogQueue)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// AddSpooledTask indicates an expected call of AddSpooledTask.
+func (mr *MocktaskQueuePartitionManagerMockRecorder) AddSpooledTask(ctx, task, backlogQueue any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddSpooledTask", reflect.TypeOf((*MocktaskQueuePartitionManager)(nil).AddSpooledTask), ctx, task, backlogQueue)
 }
 
 // AddTask mocks base method.
@@ -322,20 +337,6 @@ func (m *MocktaskQueuePartitionManager) Stop(arg0 unloadCause) {
 func (mr *MocktaskQueuePartitionManagerMockRecorder) Stop(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*MocktaskQueuePartitionManager)(nil).Stop), arg0)
-}
-
-// String mocks base method.
-func (m *MocktaskQueuePartitionManager) String() string {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "String")
-	ret0, _ := ret[0].(string)
-	return ret0
-}
-
-// String indicates an expected call of String.
-func (mr *MocktaskQueuePartitionManagerMockRecorder) String() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "String", reflect.TypeOf((*MocktaskQueuePartitionManager)(nil).String))
 }
 
 // TimeSinceLastFanOut mocks base method.

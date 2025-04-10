@@ -48,22 +48,20 @@ import (
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
-	"go.temporal.io/server/service/history/shard"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow"
-	"go.temporal.io/server/service/history/workflow/cache"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
-	eagerStartDeniedReason metrics.ReasonString
-	BeforeCreateHookFunc   func(lease api.WorkflowLease) error
-	StartOutcome           int
+	BeforeCreateHookFunc func(lease api.WorkflowLease) error
+	StartOutcome         int
 )
 
 const (
-	eagerStartDeniedReasonDynamicConfigDisabled    eagerStartDeniedReason = "dynamic_config_disabled"
-	eagerStartDeniedReasonFirstWorkflowTaskBackoff eagerStartDeniedReason = "first_workflow_task_backoff"
-	eagerStartDeniedReasonTaskAlreadyDispatched    eagerStartDeniedReason = "task_already_dispatched"
+	eagerStartDeniedReasonDynamicConfigDisabled    metrics.ReasonString = "dynamic_config_disabled"
+	eagerStartDeniedReasonFirstWorkflowTaskBackoff metrics.ReasonString = "first_workflow_task_backoff"
+	eagerStartDeniedReasonTaskAlreadyDispatched    metrics.ReasonString = "task_already_dispatched"
 )
 
 const (
@@ -75,7 +73,8 @@ const (
 
 // Starter starts a new workflow execution.
 type Starter struct {
-	shardContext                                  shard.Context
+	metricsHandler                                metrics.Handler
+	shardContext                                  historyi.ShardContext
 	workflowConsistencyChecker                    api.WorkflowConsistencyChecker
 	tokenSerializer                               *tasktoken.Serializer
 	visibilityManager                             manager.VisibilityManager
@@ -91,7 +90,7 @@ type creationParams struct {
 	workflowID           string
 	runID                string
 	workflowLease        api.WorkflowLease
-	workflowTaskInfo     *workflow.WorkflowTaskInfo
+	workflowTaskInfo     *historyi.WorkflowTaskInfo
 	workflowSnapshot     *persistence.WorkflowSnapshot
 	workflowEventBatches []*persistence.WorkflowEvents
 }
@@ -101,12 +100,12 @@ type creationParams struct {
 type mutableStateInfo struct {
 	branchToken  []byte
 	lastEventID  int64
-	workflowTask *workflow.WorkflowTaskInfo
+	workflowTask *historyi.WorkflowTaskInfo
 }
 
 // NewStarter creates a new starter, fails if getting the active namespace fails.
 func NewStarter(
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	tokenSerializer *tasktoken.Serializer,
 	visibilityManager manager.VisibilityManager,
@@ -119,6 +118,8 @@ func NewStarter(
 	}
 
 	return &Starter{
+		// metricsHandler is lazily created when needed in Starter.getMetricsHandler
+		metricsHandler:             nil,
 		shardContext:               shardContext,
 		workflowConsistencyChecker: workflowConsistencyChecker,
 		tokenSerializer:            tokenSerializer,
@@ -133,7 +134,6 @@ func NewStarter(
 // prepare applies request overrides, validates the request, and records eager execution metrics.
 func (s *Starter) prepare(ctx context.Context) error {
 	request := s.request.StartRequest
-	metricsHandler := s.shardContext.GetMetricsHandler()
 
 	// TODO: remove this call in 1.25
 	enums.SetDefaultWorkflowIdConflictPolicy(
@@ -144,7 +144,12 @@ func (s *Starter) prepare(ctx context.Context) error {
 		&request.WorkflowIdReusePolicy,
 		&request.WorkflowIdConflictPolicy)
 
-	api.OverrideStartWorkflowExecutionRequest(request, metrics.HistoryStartWorkflowExecutionScope, s.shardContext, metricsHandler)
+	api.OverrideStartWorkflowExecutionRequest(
+		request,
+		metrics.HistoryStartWorkflowExecutionScope,
+		s.shardContext,
+		s.shardContext.GetMetricsHandler(),
+	)
 
 	err := api.ValidateStartWorkflowExecutionRequest(ctx, request, s.shardContext, s.namespace, "StartWorkflowExecution")
 	if err != nil {
@@ -152,35 +157,34 @@ func (s *Starter) prepare(ctx context.Context) error {
 	}
 
 	if request.RequestEagerExecution {
-		metrics.WorkflowEagerExecutionCounter.With(
-			workflow.GetPerTaskQueueFamilyScope(
-				metricsHandler, s.namespace.Name(), request.TaskQueue.Name, s.shardContext.GetConfig(),
-				metrics.WorkflowTypeTag(request.WorkflowType.Name),
-			),
-		).Record(1)
+		metricsHandler := s.getMetricsHandler()
+		metrics.WorkflowEagerExecutionCounter.With(metricsHandler).Record(1)
 
 		// Override to false to avoid having to look up the dynamic config throughout the different code paths.
 		if !s.shardContext.GetConfig().EnableEagerWorkflowStart(s.namespace.Name().String()) {
-			s.recordEagerDenied(eagerStartDeniedReasonDynamicConfigDisabled)
+			metrics.WorkflowEagerExecutionDeniedCounter.With(metricsHandler).
+				Record(1, metrics.ReasonTag(eagerStartDeniedReasonDynamicConfigDisabled))
 			request.RequestEagerExecution = false
-		}
-		if s.request.FirstWorkflowTaskBackoff != nil && s.request.FirstWorkflowTaskBackoff.AsDuration() > 0 {
-			s.recordEagerDenied(eagerStartDeniedReasonFirstWorkflowTaskBackoff)
+		} else if s.request.FirstWorkflowTaskBackoff.AsDuration() > 0 {
+			metrics.WorkflowEagerExecutionDeniedCounter.With(metricsHandler).
+				Record(1, metrics.ReasonTag(eagerStartDeniedReasonFirstWorkflowTaskBackoff))
 			request.RequestEagerExecution = false
 		}
 	}
 	return nil
 }
 
-func (s *Starter) recordEagerDenied(reason eagerStartDeniedReason) {
-	metricsHandler := s.shardContext.GetMetricsHandler()
-	metrics.WorkflowEagerExecutionDeniedCounter.With(
-		workflow.GetPerTaskQueueFamilyScope(
-			metricsHandler, s.namespace.Name(), s.request.StartRequest.TaskQueue.Name, s.shardContext.GetConfig(),
+func (s *Starter) getMetricsHandler() metrics.Handler {
+	if s.metricsHandler == nil {
+		s.metricsHandler = workflow.GetPerTaskQueueFamilyScope(
+			s.shardContext.GetMetricsHandler(),
+			s.namespace.Name(),
+			s.request.StartRequest.TaskQueue.Name,
+			s.shardContext.GetConfig(),
 			metrics.WorkflowTypeTag(s.request.StartRequest.WorkflowType.Name),
-			metrics.ReasonTag(metrics.ReasonString(reason)),
-		),
-	).Record(1)
+		)
+	}
+	return s.metricsHandler
 }
 
 func (s *Starter) requestEagerStart() bool {
@@ -235,7 +239,7 @@ func (s *Starter) Invoke(
 
 func (s *Starter) lockCurrentWorkflowExecution(
 	ctx context.Context,
-) (cache.ReleaseCacheFunc, error) {
+) (historyi.ReleaseWorkflowContextFunc, error) {
 	currentRelease, err := s.workflowConsistencyChecker.GetWorkflowCache().GetOrCreateCurrentWorkflowExecution(
 		ctx,
 		s.shardContext,
@@ -275,7 +279,7 @@ func (s *Starter) prepareNewWorkflow(workflowID string) (*creationParams, error)
 		return nil, serviceerror.NewInternal("unexpected error: mutable state did not have a started workflow task")
 	}
 	workflowSnapshot, eventBatches, err := mutableState.CloseTransactionAsSnapshot(
-		workflow.TransactionPolicyActive,
+		historyi.TransactionPolicyActive,
 	)
 	if err != nil {
 		return nil, err
@@ -319,6 +323,8 @@ func (s *Starter) handleConflict(
 	request := s.request.StartRequest
 	currentWorkflowRequestIDs := currentWorkflowConditionFailed.RequestIDs
 	if requestIDInfo, ok := currentWorkflowRequestIDs[request.GetRequestId()]; ok {
+		metrics.StartWorkflowRequestDeduped.With(s.getMetricsHandler()).Record(1)
+
 		if requestIDInfo.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
 			resp, err := s.respondToRetriedRequest(ctx, currentWorkflowConditionFailed.RunID)
 			return resp, StartDeduped, err
@@ -452,7 +458,7 @@ func (s *Starter) resolveDuplicateWorkflowID(
 		nil,
 		workflowKey,
 		currentExecutionUpdateAction,
-		func() (workflow.Context, workflow.MutableState, error) {
+		func() (historyi.WorkflowContext, historyi.MutableState, error) {
 			newMutableState, err := api.NewWorkflowWithSignal(
 				s.shardContext,
 				s.namespace,
@@ -537,7 +543,9 @@ func (s *Starter) respondToRetriedRequest(
 	// The current workflow task is not started or not the first task or we exceeded the first attempt and fell back to
 	// matching based dispatch.
 	if mutableStateInfo.workflowTask == nil || mutableStateInfo.workflowTask.StartedEventID != 3 || mutableStateInfo.workflowTask.Attempt > 1 {
-		s.recordEagerDenied(eagerStartDeniedReasonTaskAlreadyDispatched)
+		metrics.WorkflowEagerExecutionDeniedCounter.With(s.getMetricsHandler()).
+			Record(1, metrics.ReasonTag(eagerStartDeniedReasonTaskAlreadyDispatched))
+
 		return &historyservice.StartWorkflowExecutionResponse{
 			RunId:   runID,
 			Started: true,
@@ -577,7 +585,7 @@ func (s *Starter) getMutableStateInfo(ctx context.Context, runID string) (_ *mut
 }
 
 // extractMutableStateInfo extracts the relevant information to generate a start response with an eager workflow task.
-func extractMutableStateInfo(mutableState workflow.MutableState) (*mutableStateInfo, error) {
+func extractMutableStateInfo(mutableState historyi.MutableState) (*mutableStateInfo, error) {
 	branchToken, err := mutableState.GetCurrentBranchToken()
 	if err != nil {
 		return nil, err
@@ -587,7 +595,7 @@ func extractMutableStateInfo(mutableState workflow.MutableState) (*mutableStateI
 	workflowTaskSource := mutableState.GetStartedWorkflowTask()
 	// The workflowTask returned from the mutable state call is generated on the fly and technically doesn't require
 	// cloning. We clone here just in case that changes.
-	var workflowTask workflow.WorkflowTaskInfo
+	var workflowTask historyi.WorkflowTaskInfo
 	if workflowTaskSource != nil {
 		workflowTask = *workflowTaskSource
 	}
@@ -715,7 +723,7 @@ func extractHistoryEvents(persistenceEvents []*persistence.WorkflowEvents) []*hi
 // requests.
 func (s *Starter) generateResponse(
 	runID string,
-	workflowTaskInfo *workflow.WorkflowTaskInfo,
+	workflowTaskInfo *historyi.WorkflowTaskInfo,
 	historyEvents []*historypb.HistoryEvent,
 ) (*historyservice.StartWorkflowExecutionResponse, error) {
 	shardCtx := s.shardContext
@@ -731,11 +739,10 @@ func (s *Starter) generateResponse(
 	}
 
 	if err := api.ProcessOutgoingSearchAttributes(
-		shardCtx.GetNamespaceRegistry(),
 		shardCtx.GetSearchAttributesProvider(),
 		shardCtx.GetSearchAttributesMapperProvider(),
 		historyEvents,
-		s.namespace.ID(),
+		s.namespace.Name(),
 		s.visibilityManager); err != nil {
 		return nil, err
 	}

@@ -56,29 +56,48 @@ func convertSyncActivityInfos(
 
 func SanitizeMutableState(
 	workflowMutableState *persistencespb.WorkflowMutableState,
-) error {
+) {
 	// Some values stored in mutable state are cluster or shard specific.
 	// E.g task status (if task is created or not), taskID (derived from shard rangeID), txnID (derived from shard rangeID), etc.
 	// Those fields should not be replicated across clusters and should be sanitized.
-	workflowMutableState.ExecutionInfo.WorkflowExecutionTimerTaskStatus = TimerTaskStatusNone
-	workflowMutableState.ExecutionInfo.LastFirstEventTxnId = common.EmptyEventTaskID
-	workflowMutableState.ExecutionInfo.CloseVisibilityTaskId = common.EmptyEventTaskID
-	workflowMutableState.ExecutionInfo.CloseTransferTaskId = common.EmptyEventTaskID
-	// TODO: after adding cluster to clock info, no need to reset clock here
-	workflowMutableState.ExecutionInfo.ParentClock = nil
-	for _, childExecutionInfo := range workflowMutableState.ChildExecutionInfos {
-		childExecutionInfo.Clock = nil
-	}
-	// Timer tasks are generated locally, do not sync them.
-	workflowMutableState.ExecutionInfo.StateMachineTimers = nil
-	workflowMutableState.ExecutionInfo.TaskGenerationShardClockTimestamp = common.EmptyEventTaskID
+	sanitizeExecutionInfo(workflowMutableState.ExecutionInfo)
+
+	sanitizeChildExecutionInfo(workflowMutableState.ChildExecutionInfos)
 
 	rootNode := persistencespb.StateMachineNode{
 		Children: workflowMutableState.ExecutionInfo.SubStateMachinesByType,
 	}
 	SanitizeStateMachineNode(&rootNode)
+}
 
-	return nil
+func SanitizeMutableStateMutation(
+	mutableStateMutation *persistencespb.WorkflowMutableStateMutation,
+) {
+	sanitizeExecutionInfo(mutableStateMutation.ExecutionInfo)
+	sanitizeChildExecutionInfo(mutableStateMutation.UpdatedChildExecutionInfos)
+}
+
+func sanitizeExecutionInfo(
+	executionInfo *persistencespb.WorkflowExecutionInfo,
+) {
+	executionInfo.WorkflowExecutionTimerTaskStatus = TimerTaskStatusNone
+	executionInfo.LastFirstEventTxnId = common.EmptyEventTaskID
+	executionInfo.CloseVisibilityTaskId = common.EmptyEventTaskID
+	executionInfo.CloseTransferTaskId = common.EmptyEventTaskID
+	// TODO: after adding cluster to clock info, no need to reset clock here
+	executionInfo.ParentClock = nil
+
+	// Timer tasks are generated locally, do not sync them.
+	executionInfo.StateMachineTimers = nil
+	executionInfo.TaskGenerationShardClockTimestamp = common.EmptyEventTaskID
+}
+
+func sanitizeChildExecutionInfo(
+	pendingChildInfo map[int64]*persistencespb.ChildExecutionInfo,
+) {
+	for _, childExecutionInfo := range pendingChildInfo {
+		childExecutionInfo.Clock = nil
+	}
 }
 
 func SanitizeStateMachineNode(

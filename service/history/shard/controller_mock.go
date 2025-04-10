@@ -34,10 +34,12 @@
 package shard
 
 import (
+	context "context"
 	reflect "reflect"
 
 	namespace "go.temporal.io/server/common/namespace"
 	pingable "go.temporal.io/server/common/pingable"
+	interfaces "go.temporal.io/server/service/history/interfaces"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -45,6 +47,7 @@ import (
 type MockController struct {
 	ctrl     *gomock.Controller
 	recorder *MockControllerMockRecorder
+	isgomock struct{}
 }
 
 // MockControllerMockRecorder is the mock recorder for MockController.
@@ -91,10 +94,10 @@ func (mr *MockControllerMockRecorder) GetPingChecks() *gomock.Call {
 }
 
 // GetShardByID mocks base method.
-func (m *MockController) GetShardByID(shardID int32) (Context, error) {
+func (m *MockController) GetShardByID(shardID int32) (interfaces.ShardContext, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetShardByID", shardID)
-	ret0, _ := ret[0].(Context)
+	ret0, _ := ret[0].(interfaces.ShardContext)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -106,10 +109,10 @@ func (mr *MockControllerMockRecorder) GetShardByID(shardID any) *gomock.Call {
 }
 
 // GetShardByNamespaceWorkflow mocks base method.
-func (m *MockController) GetShardByNamespaceWorkflow(namespaceID namespace.ID, workflowID string) (Context, error) {
+func (m *MockController) GetShardByNamespaceWorkflow(namespaceID namespace.ID, workflowID string) (interfaces.ShardContext, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetShardByNamespaceWorkflow", namespaceID, workflowID)
-	ret0, _ := ret[0].(Context)
+	ret0, _ := ret[0].(interfaces.ShardContext)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -118,6 +121,20 @@ func (m *MockController) GetShardByNamespaceWorkflow(namespaceID namespace.ID, w
 func (mr *MockControllerMockRecorder) GetShardByNamespaceWorkflow(namespaceID, workflowID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetShardByNamespaceWorkflow", reflect.TypeOf((*MockController)(nil).GetShardByNamespaceWorkflow), namespaceID, workflowID)
+}
+
+// InitialShardsAcquired mocks base method.
+func (m *MockController) InitialShardsAcquired(arg0 context.Context) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "InitialShardsAcquired", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// InitialShardsAcquired indicates an expected call of InitialShardsAcquired.
+func (mr *MockControllerMockRecorder) InitialShardsAcquired(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InitialShardsAcquired", reflect.TypeOf((*MockController)(nil).InitialShardsAcquired), arg0)
 }
 
 // ShardIDs mocks base method.

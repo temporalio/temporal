@@ -62,7 +62,7 @@ func handleSuccessfulOperationResult(
 	return CompletedEventDefinition{}.Apply(node.Parent, event)
 }
 
-func handleUnsuccessfulOperationError(
+func handleOperationError(
 	node *hsm.Node,
 	operation Operation,
 	opFailedError *nexus.OperationError,
@@ -170,7 +170,7 @@ func CompletionHandler(
 	isRetryableNotFoundErr := requestID != ""
 	err := env.Access(ctx, ref, hsm.AccessWrite, func(node *hsm.Node) error {
 		if err := node.CheckRunning(); err != nil {
-			return serviceerror.NewNotFound("operation not found")
+			return err
 		}
 		if err := fabricateStartedEventIfMissing(node, requestID, operationToken, startTime, links); err != nil {
 			return err
@@ -184,7 +184,7 @@ func CompletionHandler(
 			return serviceerror.NewNotFound("operation not found")
 		}
 		if opFailedError != nil {
-			err = handleUnsuccessfulOperationError(node, operation, opFailedError)
+			err = handleOperationError(node, operation, opFailedError)
 		} else {
 			err = handleSuccessfulOperationResult(node, operation, result, nil)
 		}

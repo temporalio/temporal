@@ -28,6 +28,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -577,6 +578,9 @@ func (m *executionManagerImpl) SerializeWorkflowMutation( // unexport
 		UpsertSignalInfos: make(map[int64]*commonpb.DataBlob, len(input.UpsertSignalInfos)),
 		DeleteSignalInfos: input.DeleteSignalInfos,
 
+		UpsertChasmNodes: make(map[string]InternalChasmNode, len(input.UpsertChasmNodes)),
+		DeleteChasmNodes: input.DeleteChasmNodes,
+
 		UpsertSignalRequestedIDs: input.UpsertSignalRequestedIDs,
 		DeleteSignalRequestedIDs: input.DeleteSignalRequestedIDs,
 
@@ -642,6 +646,12 @@ func (m *executionManagerImpl) SerializeWorkflowMutation( // unexport
 		result.UpsertSignalInfos[key] = blob
 	}
 
+	nodeMap, err := m.makeInternalChasmNodeMap(input.UpsertChasmNodes)
+	if err != nil {
+		return nil, err
+	}
+	result.UpsertChasmNodes = nodeMap
+
 	if len(input.NewBufferedEvents) > 0 {
 		result.NewBufferedEvents, err = m.serializer.SerializeEvents(input.NewBufferedEvents, enumspb.ENCODING_TYPE_PROTO3)
 		if err != nil {
@@ -680,6 +690,7 @@ func (m *executionManagerImpl) SerializeWorkflowSnapshot( // unexport
 		ChildExecutionInfos: make(map[int64]*commonpb.DataBlob, len(input.ChildExecutionInfos)),
 		RequestCancelInfos:  make(map[int64]*commonpb.DataBlob, len(input.RequestCancelInfos)),
 		SignalInfos:         make(map[int64]*commonpb.DataBlob, len(input.SignalInfos)),
+		ChasmNodes:          make(map[string]InternalChasmNode, len(input.ChasmNodes)),
 
 		ExecutionInfo:      input.ExecutionInfo,
 		ExecutionState:     input.ExecutionState,
@@ -743,6 +754,11 @@ func (m *executionManagerImpl) SerializeWorkflowSnapshot( // unexport
 	for key := range input.SignalRequestedIDs {
 		result.SignalRequestedIDs[key] = struct{}{}
 	}
+	nodeMap, err := m.makeInternalChasmNodeMap(input.ChasmNodes)
+	if err != nil {
+		return nil, err
+	}
+	result.ChasmNodes = nodeMap
 
 	result.Checksum, err = m.serializer.ChecksumToBlob(input.Checksum, enumspb.ENCODING_TYPE_PROTO3)
 	if err != nil {
@@ -1010,6 +1026,7 @@ func (m *executionManagerImpl) toWorkflowMutableState(internState *InternalWorkf
 		ChildExecutionInfos: make(map[int64]*persistencespb.ChildExecutionInfo),
 		RequestCancelInfos:  make(map[int64]*persistencespb.RequestCancelInfo),
 		SignalInfos:         make(map[int64]*persistencespb.SignalInfo),
+		ChasmNodes:          make(map[string]*persistencespb.ChasmNode),
 		SignalRequestedIds:  internState.SignalRequestedIDs,
 		NextEventId:         internState.NextEventID,
 		BufferedEvents:      make([]*historypb.HistoryEvent, len(internState.BufferedEvents)),
@@ -1048,6 +1065,21 @@ func (m *executionManagerImpl) toWorkflowMutableState(internState *InternalWorkf
 			return nil, err
 		}
 		state.SignalInfos[key] = info
+	}
+	for key, internal := range internState.ChasmNodes {
+		var node *persistencespb.ChasmNode
+		var err error
+
+		if internal.CassandraBlob != nil {
+			node, err = m.serializer.ChasmNodeFromBlob(internal.CassandraBlob)
+		} else {
+			node, err = m.serializer.ChasmNodeFromBlobs(internal.Metadata, internal.Data)
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		state.ChasmNodes[key] = node
 	}
 	var err error
 	state.ExecutionInfo, err = m.serializer.WorkflowExecutionInfoFromBlob(internState.ExecutionInfo)
@@ -1160,4 +1192,40 @@ func validateTaskRange(
 	}
 
 	return nil
+}
+
+func (m *executionManagerImpl) makeInternalChasmNodeMap(
+	nodes map[string]*persistencespb.ChasmNode,
+) (map[string]InternalChasmNode, error) {
+	res := make(map[string]InternalChasmNode, len(nodes))
+	isCassandra := strings.Contains(m.GetName(), "cassandra")
+
+	for path, node := range nodes {
+		var internal InternalChasmNode
+
+		// If we're running on Cassandra, set a single blob since that's how we store it.
+		if isCassandra {
+			blob, err := m.serializer.ChasmNodeToBlob(node, enumspb.ENCODING_TYPE_PROTO3)
+			if err != nil {
+				return nil, err
+			}
+			internal = InternalChasmNode{
+				CassandraBlob: blob,
+			}
+		} else {
+			// Otherwise, split the node into separate blobs.
+			metadata, data, err := m.serializer.ChasmNodeToBlobs(node, enumspb.ENCODING_TYPE_PROTO3)
+			if err != nil {
+				return nil, err
+			}
+			internal = InternalChasmNode{
+				Metadata: metadata,
+				Data:     data,
+			}
+		}
+
+		res[path] = internal
+	}
+
+	return res, nil
 }

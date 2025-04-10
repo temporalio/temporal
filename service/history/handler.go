@@ -26,6 +26,7 @@ package history
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"sync"
@@ -350,7 +351,7 @@ func (h *Handler) RecordActivityTaskStarted(ctx context.Context, request *histor
 }
 
 // RecordWorkflowTaskStarted - Record Workflow Task started.
-func (h *Handler) RecordWorkflowTaskStarted(ctx context.Context, request *historyservice.RecordWorkflowTaskStartedRequest) (_ *historyservice.RecordWorkflowTaskStartedResponse, retError error) {
+func (h *Handler) RecordWorkflowTaskStarted(ctx context.Context, request *historyservice.RecordWorkflowTaskStartedRequest) (_ *historyservice.RecordWorkflowTaskStartedResponseWithRawHistory, retError error) {
 	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
 	h.startWG.Wait()
 
@@ -692,14 +693,14 @@ func (h *Handler) DescribeHistoryHost(_ context.Context, req *historyservice.Des
 		}
 	}
 
-	itemsInCacheByIDCount, itemsInCacheByNameCount := h.namespaceRegistry.GetCacheSize()
+	itemsInRegistryByIDCount, itemsInRegistryByNameCount := h.namespaceRegistry.GetRegistrySize()
 	ownedShardIDs := h.controller.ShardIDs()
 	resp := &historyservice.DescribeHistoryHostResponse{
 		ShardsNumber: int32(len(ownedShardIDs)),
 		ShardIds:     ownedShardIDs,
 		NamespaceCache: &namespacespb.NamespaceCacheInfo{
-			ItemsInCacheByIdCount:   itemsInCacheByIDCount,
-			ItemsInCacheByNameCount: itemsInCacheByNameCount,
+			ItemsInCacheByIdCount:   itemsInRegistryByIDCount,
+			ItemsInCacheByNameCount: itemsInRegistryByNameCount,
 		},
 		Address: h.hostInfoProvider.HostInfo().GetAddress(),
 	}
@@ -1509,11 +1510,10 @@ func (h *Handler) ReplicateEventsV2(ctx context.Context, request *historyservice
 	}
 
 	err2 := engine.ReplicateEventsV2(ctx, request)
-	if err2 != nil {
-		return nil, h.convertError(err2)
+	if err2 == nil || errors.Is(err2, consts.ErrDuplicate) {
+		return &historyservice.ReplicateEventsV2Response{}, nil
 	}
-
-	return &historyservice.ReplicateEventsV2Response{}, nil
+	return nil, h.convertError(err2)
 }
 
 // ReplicateWorkflowState is called by processor to replicate workflow state for passive namespaces
@@ -1542,10 +1542,10 @@ func (h *Handler) ReplicateWorkflowState(
 	}
 
 	err = engine.ReplicateWorkflowState(ctx, request)
-	if err != nil {
-		return nil, err
+	if err == nil || errors.Is(err, consts.ErrDuplicate) {
+		return &historyservice.ReplicateWorkflowStateResponse{}, nil
 	}
-	return &historyservice.ReplicateWorkflowStateResponse{}, nil
+	return nil, err
 }
 
 // SyncShardStatus is called by processor to sync history shard information from another cluster
@@ -2141,8 +2141,8 @@ func (h *Handler) StreamWorkflowReplicationMessages(
 		replication.NewClusterShardKey(serverClusterShardID.ClusterID, serverClusterShardID.ShardID),
 		h.config,
 	)
-	h.streamReceiverMonitor.RegisterInboundStream(streamSender)
 	streamSender.Start()
+	h.streamReceiverMonitor.RegisterInboundStream(streamSender)
 	defer streamSender.Stop()
 	streamSender.Wait()
 	return nil

@@ -34,8 +34,10 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+	clockspb "go.temporal.io/server/api/clock/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
@@ -46,9 +48,9 @@ import (
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/hsm/hsmtest"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
-	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.uber.org/mock/gomock"
 )
@@ -63,8 +65,8 @@ type (
 		mockShard                  *shard.ContextTest
 		controller                 *gomock.Controller
 		releaseFunc                func(err error)
-		workflowContext            *workflow.MockContext
-		newRunWorkflowContext      *workflow.MockContext
+		workflowContext            *historyi.MockWorkflowContext
+		newRunWorkflowContext      *historyi.MockWorkflowContext
 		namespaceID                string
 		execution                  *commonpb.WorkflowExecution
 		newRunId                   string
@@ -83,8 +85,8 @@ func (s *syncWorkflowStateSuite) SetupSuite() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.workflowContext = workflow.NewMockContext(s.controller)
-	s.newRunWorkflowContext = workflow.NewMockContext(s.controller)
+	s.workflowContext = historyi.NewMockWorkflowContext(s.controller)
+	s.newRunWorkflowContext = historyi.NewMockWorkflowContext(s.controller)
 	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&persistencespb.ShardInfo{
@@ -128,7 +130,7 @@ func (s *syncWorkflowStateSuite) TearDownTest() {
 }
 
 func (s *syncWorkflowStateSuite) TestSyncWorkflowState_TransitionHistoryDisabled() {
-	mu := workflow.NewMockMutableState(s.controller)
+	mu := historyi.NewMockMutableState(s.controller)
 	s.workflowConsistencyChecker.EXPECT().GetWorkflowLeaseWithConsistencyCheck(gomock.Any(), nil, gomock.Any(), definition.WorkflowKey{
 		NamespaceID: s.namespaceID,
 		WorkflowID:  s.execution.WorkflowId,
@@ -154,7 +156,7 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_TransitionHistoryDisabled
 }
 
 func (s *syncWorkflowStateSuite) TestSyncWorkflowState_UnFlushedBufferedEvents() {
-	mu := workflow.NewMockMutableState(s.controller)
+	mu := historyi.NewMockMutableState(s.controller)
 	s.workflowConsistencyChecker.EXPECT().GetWorkflowLeaseWithConsistencyCheck(gomock.Any(), nil, gomock.Any(), definition.WorkflowKey{
 		NamespaceID: s.namespaceID,
 		WorkflowID:  s.execution.WorkflowId,
@@ -176,7 +178,7 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_UnFlushedBufferedEvents()
 }
 
 func (s *syncWorkflowStateSuite) TestSyncWorkflowState_ReturnMutation() {
-	mu := workflow.NewMockMutableState(s.controller)
+	mu := historyi.NewMockMutableState(s.controller)
 	s.workflowConsistencyChecker.EXPECT().GetWorkflowLeaseWithConsistencyCheck(gomock.Any(), nil, gomock.Any(), definition.WorkflowKey{
 		NamespaceID: s.namespaceID,
 		WorkflowID:  s.execution.WorkflowId,
@@ -205,14 +207,46 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_ReturnMutation() {
 				VersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 12},
 			},
 		},
-		VersionHistories: versionHistories,
+		VersionHistories:    versionHistories,
+		LastFirstEventTxnId: 1234, // some state that should be sanitized
 	}
 	mu.EXPECT().HasBufferedEvents().Return(false)
 	mu.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
-	mu.EXPECT().CloneToProto().Return(&persistencespb.WorkflowMutableState{
-		ExecutionInfo: executionInfo,
+	mu.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{})
+	mu.EXPECT().GetPendingActivityInfos().Return(map[int64]*persistencespb.ActivityInfo{})
+	mu.EXPECT().GetPendingTimerInfos().Return(map[string]*persistencespb.TimerInfo{
+		// should not be included in the mutation
+		"timerID": {LastUpdateVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 8}},
+	})
+	mu.EXPECT().GetPendingChildExecutionInfos().Return(map[int64]*persistencespb.ChildExecutionInfo{
+		// should be included in the mutation
+		13: {
+			LastUpdateVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 2, TransitionCount: 13},
+			Clock:                         &clockspb.VectorClock{ShardId: s.mockShard.GetShardID(), Clock: 1234},
+		},
+	})
+	mu.EXPECT().GetPendingRequestCancelExternalInfos().Return(map[int64]*persistencespb.RequestCancelInfo{
+		// should not be included in the mutation
+		5: {LastUpdateVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 5}},
+	})
+	mu.EXPECT().GetPendingSignalExternalInfos().Return(map[int64]*persistencespb.SignalInfo{
+		// should be included in the mutation
+		15: {LastUpdateVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 2, TransitionCount: 15}},
 	})
 	mu.EXPECT().HSM().Return(nil)
+	mockChasmTree := historyi.NewMockChasmTree(s.controller)
+	mockChasmTree.EXPECT().Snapshot(&persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 12}).
+		Return(chasm.NodesSnapshot{
+			Nodes: map[string]*persistencespb.ChasmNode{
+				"node-path": {
+					Metadata: &persistencespb.ChasmNodeMetadata{
+						LastUpdateVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 2, TransitionCount: 13},
+					},
+				},
+			},
+		})
+	mu.EXPECT().ChasmTree().Return(mockChasmTree)
+
 	result, err := s.syncStateRetriever.GetSyncWorkflowStateArtifact(
 		context.Background(),
 		s.namespaceID,
@@ -224,7 +258,24 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_ReturnMutation() {
 		versionHistories)
 	s.NoError(err)
 	s.NotNil(result)
+	syncAttributes := result.VersionedTransitionArtifact.GetSyncWorkflowStateMutationAttributes()
 	s.NotNil(result.VersionedTransitionArtifact.GetSyncWorkflowStateMutationAttributes())
+
+	mutation := syncAttributes.StateMutation
+	// ensure it's a copy by checking the pointers are pointing to different memory addresses
+	s.True(executionInfo != mutation.ExecutionInfo)
+	s.Nil(mutation.ExecutionInfo.UpdateInfos)
+	s.Nil(mutation.ExecutionInfo.SubStateMachinesByType)
+	s.Nil(mutation.ExecutionInfo.SubStateMachineTombstoneBatches)
+	s.Zero(mutation.ExecutionInfo.LastFirstEventTxnId) // field should be sanitized
+	s.Empty(mutation.UpdatedActivityInfos)
+	s.Len(mutation.UpdatedTimerInfos, 0)
+	s.Len(mutation.UpdatedChildExecutionInfos, 1)
+	s.Len(mutation.UpdatedRequestCancelInfos, 0)
+	s.Len(mutation.UpdatedSignalInfos, 1)
+	s.Len(mutation.UpdatedChasmNodes, 1)
+	s.Nil(mutation.UpdatedChildExecutionInfos[13].Clock) // field should be sanitized
+
 	s.Nil(result.VersionedTransitionArtifact.EventBatches)
 	s.Nil(result.VersionedTransitionArtifact.NewRunInfo)
 }
@@ -308,7 +359,7 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_ReturnSnapshot() {
 	}
 	for _, tc := range testCases {
 		s.T().Run(tc.name, func(t *testing.T) {
-			mu := workflow.NewMockMutableState(s.controller)
+			mu := historyi.NewMockMutableState(s.controller)
 			s.workflowConsistencyChecker.EXPECT().GetWorkflowLeaseWithConsistencyCheck(gomock.Any(), nil, gomock.Any(), definition.WorkflowKey{
 				NamespaceID: s.namespaceID,
 				WorkflowID:  s.execution.WorkflowId,
@@ -346,7 +397,7 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_ReturnSnapshot() {
 }
 
 func (s *syncWorkflowStateSuite) TestSyncWorkflowState_NoVersionTransitionProvided_ReturnSnapshot() {
-	mu := workflow.NewMockMutableState(s.controller)
+	mu := historyi.NewMockMutableState(s.controller)
 	s.workflowConsistencyChecker.EXPECT().GetWorkflowLeaseWithConsistencyCheck(gomock.Any(), nil, gomock.Any(), definition.WorkflowKey{
 		NamespaceID: s.namespaceID,
 		WorkflowID:  s.execution.WorkflowId,
@@ -396,7 +447,7 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_NoVersionTransitionProvid
 }
 
 func (s *syncWorkflowStateSuite) TestGetNewRunInfo() {
-	mu := workflow.NewMockMutableState(s.controller)
+	mu := historyi.NewMockMutableState(s.controller)
 	versionHistories := &historyspb.VersionHistories{
 		CurrentVersionHistoryIndex: 0,
 		Histories: []*historyspb.VersionHistory{
@@ -446,7 +497,7 @@ func (s *syncWorkflowStateSuite) TestGetNewRunInfo() {
 }
 
 func (s *syncWorkflowStateSuite) TestGetNewRunInfo_NotFound() {
-	mu := workflow.NewMockMutableState(s.controller)
+	mu := historyi.NewMockMutableState(s.controller)
 	versionHistories := &historyspb.VersionHistories{
 		CurrentVersionHistoryIndex: 0,
 		Histories: []*historyspb.VersionHistory{

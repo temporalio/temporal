@@ -31,6 +31,7 @@ package commonspb
 import (
 	reflect "reflect"
 	sync "sync"
+	unsafe "unsafe"
 
 	v1 "go.temporal.io/api/common/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -45,22 +46,19 @@ const (
 )
 
 type HistoryTask struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
+	state protoimpl.MessageState `protogen:"open.v1"`
 	// shard_id is included to avoid having to deserialize the task blob.
-	ShardId int32        `protobuf:"varint,1,opt,name=shard_id,json=shardId,proto3" json:"shard_id,omitempty"`
-	Blob    *v1.DataBlob `protobuf:"bytes,2,opt,name=blob,proto3" json:"blob,omitempty"`
+	ShardId       int32        `protobuf:"varint,1,opt,name=shard_id,json=shardId,proto3" json:"shard_id,omitempty"`
+	Blob          *v1.DataBlob `protobuf:"bytes,2,opt,name=blob,proto3" json:"blob,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *HistoryTask) Reset() {
 	*x = HistoryTask{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_common_v1_dlq_proto_msgTypes[0]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_common_v1_dlq_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *HistoryTask) String() string {
@@ -71,7 +69,7 @@ func (*HistoryTask) ProtoMessage() {}
 
 func (x *HistoryTask) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_common_v1_dlq_proto_msgTypes[0]
-	if protoimpl.UnsafeEnabled && x != nil {
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -101,21 +99,18 @@ func (x *HistoryTask) GetBlob() *v1.DataBlob {
 }
 
 type HistoryDLQTaskMetadata struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
+	state protoimpl.MessageState `protogen:"open.v1"`
 	// message_id is the zero-indexed sequence number of the message in the queue that contains this history task.
-	MessageId int64 `protobuf:"varint,1,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"`
+	MessageId     int64 `protobuf:"varint,1,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *HistoryDLQTaskMetadata) Reset() {
 	*x = HistoryDLQTaskMetadata{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_common_v1_dlq_proto_msgTypes[1]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_common_v1_dlq_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *HistoryDLQTaskMetadata) String() string {
@@ -126,7 +121,7 @@ func (*HistoryDLQTaskMetadata) ProtoMessage() {}
 
 func (x *HistoryDLQTaskMetadata) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_common_v1_dlq_proto_msgTypes[1]
-	if protoimpl.UnsafeEnabled && x != nil {
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -151,22 +146,19 @@ func (x *HistoryDLQTaskMetadata) GetMessageId() int64 {
 // HistoryDLQTask is a history task that has been moved to the DLQ, so it also has a message ID (index within that
 // queue).
 type HistoryDLQTask struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
+	state    protoimpl.MessageState  `protogen:"open.v1"`
 	Metadata *HistoryDLQTaskMetadata `protobuf:"bytes,1,opt,name=metadata,proto3" json:"metadata,omitempty"`
 	// This is named payload to prevent stuttering (e.g. task.Task).
-	Payload *HistoryTask `protobuf:"bytes,2,opt,name=payload,proto3" json:"payload,omitempty"`
+	Payload       *HistoryTask `protobuf:"bytes,2,opt,name=payload,proto3" json:"payload,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *HistoryDLQTask) Reset() {
 	*x = HistoryDLQTask{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_common_v1_dlq_proto_msgTypes[2]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_common_v1_dlq_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *HistoryDLQTask) String() string {
@@ -177,7 +169,7 @@ func (*HistoryDLQTask) ProtoMessage() {}
 
 func (x *HistoryDLQTask) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_common_v1_dlq_proto_msgTypes[2]
-	if protoimpl.UnsafeEnabled && x != nil {
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -208,10 +200,7 @@ func (x *HistoryDLQTask) GetPayload() *HistoryTask {
 
 // HistoryDLQKey is a compound key that identifies a history DLQ.
 type HistoryDLQKey struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
+	state protoimpl.MessageState `protogen:"open.v1"`
 	// task_category is the category of the task. The default values are defined in the TaskCategory enum. However, there
 	// may also be other categories registered at runtime with the history/tasks package. As a result, the category here
 	// is an integer instead of an enum to support both the default values and custom values.
@@ -222,15 +211,15 @@ type HistoryDLQKey struct {
 	// current cluster.
 	SourceCluster string `protobuf:"bytes,2,opt,name=source_cluster,json=sourceCluster,proto3" json:"source_cluster,omitempty"`
 	TargetCluster string `protobuf:"bytes,3,opt,name=target_cluster,json=targetCluster,proto3" json:"target_cluster,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *HistoryDLQKey) Reset() {
 	*x = HistoryDLQKey{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_common_v1_dlq_proto_msgTypes[3]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_common_v1_dlq_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *HistoryDLQKey) String() string {
@@ -241,7 +230,7 @@ func (*HistoryDLQKey) ProtoMessage() {}
 
 func (x *HistoryDLQKey) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_common_v1_dlq_proto_msgTypes[3]
-	if protoimpl.UnsafeEnabled && x != nil {
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -279,63 +268,37 @@ func (x *HistoryDLQKey) GetTargetCluster() string {
 
 var File_temporal_server_api_common_v1_dlq_proto protoreflect.FileDescriptor
 
-var file_temporal_server_api_common_v1_dlq_proto_rawDesc = []byte{
-	0x0a, 0x27, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2f, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72,
-	0x2f, 0x61, 0x70, 0x69, 0x2f, 0x63, 0x6f, 0x6d, 0x6d, 0x6f, 0x6e, 0x2f, 0x76, 0x31, 0x2f, 0x64, 0x6c,
-	0x71, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x12, 0x1d, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c,
-	0x2e, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x63, 0x6f, 0x6d, 0x6d, 0x6f,
-	0x6e, 0x2e, 0x76, 0x31, 0x1a, 0x24, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2f, 0x61, 0x70,
-	0x69, 0x2f, 0x63, 0x6f, 0x6d, 0x6d, 0x6f, 0x6e, 0x2f, 0x76, 0x31, 0x2f, 0x6d, 0x65, 0x73, 0x73,
-	0x61, 0x67, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x22, 0x66, 0x0a, 0x0b, 0x48, 0x69, 0x73, 0x74,
-	0x6f, 0x72, 0x79, 0x54, 0x61, 0x73, 0x6b, 0x12, 0x1d, 0x0a, 0x08, 0x73, 0x68, 0x61, 0x72, 0x64, 0x5f,
-	0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x05, 0x52, 0x07, 0x73, 0x68, 0x61, 0x72, 0x64, 0x49, 0x64,
-	0x42, 0x02, 0x68, 0x00, 0x12, 0x38, 0x0a, 0x04, 0x62, 0x6c, 0x6f, 0x62, 0x18, 0x02, 0x20, 0x01, 0x28,
-	0x0b, 0x32, 0x20, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x61, 0x70, 0x69, 0x2e,
-	0x63, 0x6f, 0x6d, 0x6d, 0x6f, 0x6e, 0x2e, 0x76, 0x31, 0x2e, 0x44, 0x61, 0x74, 0x61, 0x42, 0x6c,
-	0x6f, 0x62, 0x52, 0x04, 0x62, 0x6c, 0x6f, 0x62, 0x42, 0x02, 0x68, 0x00, 0x22, 0x3b, 0x0a, 0x16, 0x48,
-	0x69, 0x73, 0x74, 0x6f, 0x72, 0x79, 0x44, 0x4c, 0x51, 0x54, 0x61, 0x73, 0x6b, 0x4d, 0x65, 0x74, 0x61,
-	0x64, 0x61, 0x74, 0x61, 0x12, 0x21, 0x0a, 0x0a, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x5f, 0x69,
-	0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x03, 0x52, 0x09, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x49,
-	0x64, 0x42, 0x02, 0x68, 0x00, 0x22, 0xb1, 0x01, 0x0a, 0x0e, 0x48, 0x69, 0x73, 0x74, 0x6f, 0x72,
-	0x79, 0x44, 0x4c, 0x51, 0x54, 0x61, 0x73, 0x6b, 0x12, 0x55, 0x0a, 0x08, 0x6d, 0x65, 0x74, 0x61, 0x64,
-	0x61, 0x74, 0x61, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x35, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f,
-	0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x63, 0x6f,
-	0x6d, 0x6d, 0x6f, 0x6e, 0x2e, 0x76, 0x31, 0x2e, 0x48, 0x69, 0x73, 0x74, 0x6f, 0x72, 0x79, 0x44, 0x4c,
-	0x51, 0x54, 0x61, 0x73, 0x6b, 0x4d, 0x65, 0x74, 0x61, 0x64, 0x61, 0x74, 0x61, 0x52, 0x08, 0x6d, 0x65,
-	0x74, 0x61, 0x64, 0x61, 0x74, 0x61, 0x42, 0x02, 0x68, 0x00, 0x12, 0x48, 0x0a, 0x07, 0x70, 0x61,
-	0x79, 0x6c, 0x6f, 0x61, 0x64, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x2a, 0x2e, 0x74, 0x65, 0x6d,
-	0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e,
-	0x63, 0x6f, 0x6d, 0x6d, 0x6f, 0x6e, 0x2e, 0x76, 0x31, 0x2e, 0x48, 0x69, 0x73, 0x74, 0x6f, 0x72, 0x79,
-	0x54, 0x61, 0x73, 0x6b, 0x52, 0x07, 0x70, 0x61, 0x79, 0x6c, 0x6f, 0x61, 0x64, 0x42, 0x02, 0x68, 0x00,
-	0x22, 0x8e, 0x01, 0x0a, 0x0d, 0x48, 0x69, 0x73, 0x74, 0x6f, 0x72, 0x79, 0x44, 0x4c, 0x51, 0x4b,
-	0x65, 0x79, 0x12, 0x27, 0x0a, 0x0d, 0x74, 0x61, 0x73, 0x6b, 0x5f, 0x63, 0x61, 0x74, 0x65, 0x67, 0x6f,
-	0x72, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x05, 0x52, 0x0c, 0x74, 0x61, 0x73, 0x6b, 0x43, 0x61, 0x74,
-	0x65, 0x67, 0x6f, 0x72, 0x79, 0x42, 0x02, 0x68, 0x00, 0x12, 0x29, 0x0a, 0x0e, 0x73, 0x6f, 0x75, 0x72,
-	0x63, 0x65, 0x5f, 0x63, 0x6c, 0x75, 0x73, 0x74, 0x65, 0x72, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52,
-	0x0d, 0x73, 0x6f, 0x75, 0x72, 0x63, 0x65, 0x43, 0x6c, 0x75, 0x73, 0x74, 0x65, 0x72, 0x42, 0x02, 0x68,
-	0x00, 0x12, 0x29, 0x0a, 0x0e, 0x74, 0x61, 0x72, 0x67, 0x65, 0x74, 0x5f, 0x63, 0x6c, 0x75, 0x73,
-	0x74, 0x65, 0x72, 0x18, 0x03, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0d, 0x74, 0x61, 0x72, 0x67, 0x65, 0x74,
-	0x43, 0x6c, 0x75, 0x73, 0x74, 0x65, 0x72, 0x42, 0x02, 0x68, 0x00, 0x42, 0x2f, 0x5a, 0x2d, 0x67, 0x6f,
-	0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x69, 0x6f, 0x2f, 0x73, 0x65, 0x72, 0x76,
-	0x65, 0x72, 0x2f, 0x61, 0x70, 0x69, 0x2f, 0x63, 0x6f, 0x6d, 0x6d, 0x6f, 0x6e, 0x2f, 0x76, 0x31, 0x3b,
-	0x63, 0x6f, 0x6d, 0x6d, 0x6f, 0x6e, 0x73, 0x70, 0x62, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f,
-	0x33,
-}
+const file_temporal_server_api_common_v1_dlq_proto_rawDesc = "" +
+	"\n" +
+	"'temporal/server/api/common/v1/dlq.proto\x12\x1dtemporal.server.api.common.v1\x1a$temporal/api/common/v1/message.proto\"^\n" +
+	"\vHistoryTask\x12\x19\n" +
+	"\bshard_id\x18\x01 \x01(\x05R\ashardId\x124\n" +
+	"\x04blob\x18\x02 \x01(\v2 .temporal.api.common.v1.DataBlobR\x04blob\"7\n" +
+	"\x16HistoryDLQTaskMetadata\x12\x1d\n" +
+	"\n" +
+	"message_id\x18\x01 \x01(\x03R\tmessageId\"\xa9\x01\n" +
+	"\x0eHistoryDLQTask\x12Q\n" +
+	"\bmetadata\x18\x01 \x01(\v25.temporal.server.api.common.v1.HistoryDLQTaskMetadataR\bmetadata\x12D\n" +
+	"\apayload\x18\x02 \x01(\v2*.temporal.server.api.common.v1.HistoryTaskR\apayload\"\x82\x01\n" +
+	"\rHistoryDLQKey\x12#\n" +
+	"\rtask_category\x18\x01 \x01(\x05R\ftaskCategory\x12%\n" +
+	"\x0esource_cluster\x18\x02 \x01(\tR\rsourceCluster\x12%\n" +
+	"\x0etarget_cluster\x18\x03 \x01(\tR\rtargetClusterB/Z-go.temporal.io/server/api/common/v1;commonspbb\x06proto3"
 
 var (
 	file_temporal_server_api_common_v1_dlq_proto_rawDescOnce sync.Once
-	file_temporal_server_api_common_v1_dlq_proto_rawDescData = file_temporal_server_api_common_v1_dlq_proto_rawDesc
+	file_temporal_server_api_common_v1_dlq_proto_rawDescData []byte
 )
 
 func file_temporal_server_api_common_v1_dlq_proto_rawDescGZIP() []byte {
 	file_temporal_server_api_common_v1_dlq_proto_rawDescOnce.Do(func() {
-		file_temporal_server_api_common_v1_dlq_proto_rawDescData = protoimpl.X.CompressGZIP(file_temporal_server_api_common_v1_dlq_proto_rawDescData)
+		file_temporal_server_api_common_v1_dlq_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_api_common_v1_dlq_proto_rawDesc), len(file_temporal_server_api_common_v1_dlq_proto_rawDesc)))
 	})
 	return file_temporal_server_api_common_v1_dlq_proto_rawDescData
 }
 
 var file_temporal_server_api_common_v1_dlq_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
-var file_temporal_server_api_common_v1_dlq_proto_goTypes = []interface{}{
+var file_temporal_server_api_common_v1_dlq_proto_goTypes = []any{
 	(*HistoryTask)(nil),            // 0: temporal.server.api.common.v1.HistoryTask
 	(*HistoryDLQTaskMetadata)(nil), // 1: temporal.server.api.common.v1.HistoryDLQTaskMetadata
 	(*HistoryDLQTask)(nil),         // 2: temporal.server.api.common.v1.HistoryDLQTask
@@ -358,61 +321,11 @@ func file_temporal_server_api_common_v1_dlq_proto_init() {
 	if File_temporal_server_api_common_v1_dlq_proto != nil {
 		return
 	}
-	if !protoimpl.UnsafeEnabled {
-		file_temporal_server_api_common_v1_dlq_proto_msgTypes[0].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*HistoryTask); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_common_v1_dlq_proto_msgTypes[1].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*HistoryDLQTaskMetadata); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_common_v1_dlq_proto_msgTypes[2].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*HistoryDLQTask); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_common_v1_dlq_proto_msgTypes[3].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*HistoryDLQKey); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: file_temporal_server_api_common_v1_dlq_proto_rawDesc,
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_api_common_v1_dlq_proto_rawDesc), len(file_temporal_server_api_common_v1_dlq_proto_rawDesc)),
 			NumEnums:      0,
 			NumMessages:   4,
 			NumExtensions: 0,
@@ -423,7 +336,6 @@ func file_temporal_server_api_common_v1_dlq_proto_init() {
 		MessageInfos:      file_temporal_server_api_common_v1_dlq_proto_msgTypes,
 	}.Build()
 	File_temporal_server_api_common_v1_dlq_proto = out.File
-	file_temporal_server_api_common_v1_dlq_proto_rawDesc = nil
 	file_temporal_server_api_common_v1_dlq_proto_goTypes = nil
 	file_temporal_server_api_common_v1_dlq_proto_depIdxs = nil
 }

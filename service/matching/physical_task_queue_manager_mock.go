@@ -49,6 +49,7 @@ import (
 type MockphysicalTaskQueueManager struct {
 	ctrl     *gomock.Controller
 	recorder *MockphysicalTaskQueueManagerMockRecorder
+	isgomock struct{}
 }
 
 // MockphysicalTaskQueueManagerMockRecorder is the mock recorder for MockphysicalTaskQueueManager.
@@ -66,6 +67,32 @@ func NewMockphysicalTaskQueueManager(ctrl *gomock.Controller) *MockphysicalTaskQ
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockphysicalTaskQueueManager) EXPECT() *MockphysicalTaskQueueManagerMockRecorder {
 	return m.recorder
+}
+
+// AddSpooledTask mocks base method.
+func (m *MockphysicalTaskQueueManager) AddSpooledTask(task *internalTask) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AddSpooledTask", task)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// AddSpooledTask indicates an expected call of AddSpooledTask.
+func (mr *MockphysicalTaskQueueManagerMockRecorder) AddSpooledTask(task any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddSpooledTask", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).AddSpooledTask), task)
+}
+
+// AddSpooledTaskToMatcher mocks base method.
+func (m *MockphysicalTaskQueueManager) AddSpooledTaskToMatcher(task *internalTask) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "AddSpooledTaskToMatcher", task)
+}
+
+// AddSpooledTaskToMatcher indicates an expected call of AddSpooledTaskToMatcher.
+func (mr *MockphysicalTaskQueueManagerMockRecorder) AddSpooledTaskToMatcher(task any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddSpooledTaskToMatcher", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).AddSpooledTaskToMatcher), task)
 }
 
 // DispatchNexusTask mocks base method.
@@ -127,10 +154,10 @@ func (mr *MockphysicalTaskQueueManagerMockRecorder) GetAllPollerInfo() *gomock.C
 }
 
 // GetInternalTaskQueueStatus mocks base method.
-func (m *MockphysicalTaskQueueManager) GetInternalTaskQueueStatus() *taskqueue0.InternalTaskQueueStatus {
+func (m *MockphysicalTaskQueueManager) GetInternalTaskQueueStatus() []*taskqueue0.InternalTaskQueueStatus {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetInternalTaskQueueStatus")
-	ret0, _ := ret[0].(*taskqueue0.InternalTaskQueueStatus)
+	ret0, _ := ret[0].([]*taskqueue0.InternalTaskQueueStatus)
 	return ret0
 }
 
@@ -180,6 +207,20 @@ func (m *MockphysicalTaskQueueManager) LegacyDescribeTaskQueue(includeTaskQueueS
 func (mr *MockphysicalTaskQueueManagerMockRecorder) LegacyDescribeTaskQueue(includeTaskQueueStatus any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LegacyDescribeTaskQueue", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).LegacyDescribeTaskQueue), includeTaskQueueStatus)
+}
+
+// MakePollerScalingDecision mocks base method.
+func (m *MockphysicalTaskQueueManager) MakePollerScalingDecision(pollStartTime time.Time) *taskqueue.PollerScalingDecision {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MakePollerScalingDecision", pollStartTime)
+	ret0, _ := ret[0].(*taskqueue.PollerScalingDecision)
+	return ret0
+}
+
+// MakePollerScalingDecision indicates an expected call of MakePollerScalingDecision.
+func (mr *MockphysicalTaskQueueManagerMockRecorder) MakePollerScalingDecision(pollStartTime any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MakePollerScalingDecision", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).MakePollerScalingDecision), pollStartTime)
 }
 
 // MarkAlive mocks base method.
@@ -237,20 +278,6 @@ func (mr *MockphysicalTaskQueueManagerMockRecorder) QueueKey() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueueKey", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).QueueKey))
 }
 
-// ShouldEmitGauges mocks base method.
-func (m *MockphysicalTaskQueueManager) ShouldEmitGauges() bool {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ShouldEmitGauges")
-	ret0, _ := ret[0].(bool)
-	return ret0
-}
-
-// ShouldEmitGauges indicates an expected call of ShouldEmitGauges.
-func (mr *MockphysicalTaskQueueManagerMockRecorder) ShouldEmitGauges() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ShouldEmitGauges", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).ShouldEmitGauges))
-}
-
 // SpoolTask mocks base method.
 func (m *MockphysicalTaskQueueManager) SpoolTask(taskInfo *persistence.TaskInfo) error {
 	m.ctrl.T.Helper()
@@ -287,20 +314,6 @@ func (m *MockphysicalTaskQueueManager) Stop(arg0 unloadCause) {
 func (mr *MockphysicalTaskQueueManagerMockRecorder) Stop(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).Stop), arg0)
-}
-
-// String mocks base method.
-func (m *MockphysicalTaskQueueManager) String() string {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "String")
-	ret0, _ := ret[0].(string)
-	return ret0
-}
-
-// String indicates an expected call of String.
-func (mr *MockphysicalTaskQueueManagerMockRecorder) String() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "String", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).String))
 }
 
 // TrySyncMatch mocks base method.
@@ -340,6 +353,18 @@ func (m *MockphysicalTaskQueueManager) UpdatePollerInfo(arg0 pollerIdentity, arg
 func (mr *MockphysicalTaskQueueManagerMockRecorder) UpdatePollerInfo(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdatePollerInfo", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).UpdatePollerInfo), arg0, arg1)
+}
+
+// UserDataChanged mocks base method.
+func (m *MockphysicalTaskQueueManager) UserDataChanged() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "UserDataChanged")
+}
+
+// UserDataChanged indicates an expected call of UserDataChanged.
+func (mr *MockphysicalTaskQueueManagerMockRecorder) UserDataChanged() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UserDataChanged", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).UserDataChanged))
 }
 
 // WaitUntilInitialized mocks base method.

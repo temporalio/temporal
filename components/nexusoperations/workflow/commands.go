@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/hsm"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -50,7 +51,7 @@ type commandHandler struct {
 
 func (ch *commandHandler) HandleScheduleCommand(
 	ctx context.Context,
-	ms workflow.MutableState,
+	ms historyi.MutableState,
 	validator workflow.CommandValidator,
 	workflowTaskCompletedEventID int64,
 	command *commandpb.Command,
@@ -111,7 +112,7 @@ func (ch *commandHandler) HandleScheduleCommand(
 		}
 	}
 
-	if err := timestamp.ValidateProtoDuration(attrs.ScheduleToCloseTimeout); err != nil {
+	if err := timestamp.ValidateAndCapProtoDuration(attrs.ScheduleToCloseTimeout); err != nil {
 		return workflow.FailWorkflowTaskError{
 			Cause: enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
 			Message: fmt.Sprintf(
@@ -130,7 +131,7 @@ func (ch *commandHandler) HandleScheduleCommand(
 	headerLength := 0
 	for k, v := range attrs.NexusHeader {
 		headerLength += len(k) + len(v)
-		if slices.Contains(ch.config.DisallowedOperationHeaders(nsName), strings.ToLower(k)) {
+		if slices.Contains(ch.config.DisallowedOperationHeaders(), strings.ToLower(k)) {
 			return workflow.FailWorkflowTaskError{
 				Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
 				Message: fmt.Sprintf("ScheduleNexusOperationCommandAttributes.NexusHeader contains a disallowed header key: %q", k),
@@ -190,7 +191,7 @@ func (ch *commandHandler) HandleScheduleCommand(
 
 func (ch *commandHandler) HandleCancelCommand(
 	ctx context.Context,
-	ms workflow.MutableState,
+	ms historyi.MutableState,
 	validator workflow.CommandValidator,
 	workflowTaskCompletedEventID int64,
 	command *commandpb.Command,

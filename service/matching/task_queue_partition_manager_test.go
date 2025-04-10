@@ -32,7 +32,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
@@ -45,10 +44,14 @@ import (
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 const (
@@ -59,36 +62,54 @@ const (
 
 type PartitionManagerTestSuite struct {
 	suite.Suite
+	protorequire.ProtoAssertions
+
+	newMatcher   bool
 	controller   *gomock.Controller
 	userDataMgr  *mockUserDataManager
 	partitionMgr *taskQueuePartitionManagerImpl
 }
 
-func TestPartitionManagerSuite(t *testing.T) {
-	suite.Run(t, new(PartitionManagerTestSuite))
+// TODO(pri): cleanup; delete this
+func TestTaskQueuePartitionManagerSuite(t *testing.T) {
+	t.Parallel()
+	suite.Run(t, &PartitionManagerTestSuite{newMatcher: false})
+}
+
+func TestTaskQueuePartitionManagerWithNewMatcherSuite(t *testing.T) {
+	t.Parallel()
+	suite.Run(t, &PartitionManagerTestSuite{newMatcher: true})
 }
 
 func (s *PartitionManagerTestSuite) SetupTest() {
+	s.ProtoAssertions = protorequire.New(s.T())
 	s.controller = gomock.NewController(s.T())
+	logger := testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
+
 	ns, registry := createMockNamespaceCache(s.controller, namespace.Name(namespaceName))
 	config := NewConfig(dynamicconfig.NewNoopCollection())
+	if s.newMatcher {
+		useNewMatcher(config)
+	}
+
 	matchingClientMock := matchingservicemock.NewMockMatchingServiceClient(s.controller)
-	me := createTestMatchingEngine(s.controller, config, matchingClientMock, registry)
+	engine := createTestMatchingEngine(logger, s.controller, config, matchingClientMock, registry)
+
 	f, err := tqid.NewTaskQueueFamily(namespaceId, taskQueueName)
-	s.Assert().NoError(err)
+	s.NoError(err)
 	partition := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition()
-	tqConfig := newTaskQueueConfig(partition.TaskQueue(), me.config, ns.Name())
+	tqConfig := newTaskQueueConfig(partition.TaskQueue(), engine.config, ns.Name())
 	s.userDataMgr = &mockUserDataManager{}
-	logger, _, metricsHandler := me.loggerAndMetricsForPartition(namespace.Name(namespaceName), partition, tqConfig)
-	pm, err := newTaskQueuePartitionManager(me, ns, partition, tqConfig, logger, logger, metricsHandler, s.userDataMgr)
-	s.Assert().NoError(err)
+
+	pm, err := newTaskQueuePartitionManager(engine, ns, partition, tqConfig, logger, logger, metrics.NoopMetricsHandler, s.userDataMgr)
+	s.NoError(err)
 	s.partitionMgr = pm
-	me.Start()
+	engine.Start()
 	pm.Start()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel()
 	err = pm.WaitUntilInitialized(ctx)
-	s.Assert().NoError(err)
+	s.NoError(err)
 }
 
 func (s *PartitionManagerTestSuite) TestAddTask_Forwarded() {
@@ -100,7 +121,7 @@ func (s *PartitionManagerTestSuite) TestAddTask_Forwarded() {
 		},
 		forwardInfo: &taskqueuespb.TaskForwardInfo{SourcePartition: "another-partition"},
 	})
-	s.Assert().Equal(errRemoteSyncMatchFailed, err)
+	s.Equal(errRemoteSyncMatchFailed, err)
 }
 
 func (s *PartitionManagerTestSuite) TestAddTaskNoRules_NoVersionDirective() {
@@ -122,7 +143,7 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_MultipleBuild
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
-	// adding multiple tasks to queues with different buildId's
+	// adding multiple tasks to queues with different buildIds
 	bld1 := "build1"
 	bld2 := "build2"
 	s.validateAddTask("", false, nil, worker_versioning.MakeBuildIdDirective(bld1))
@@ -137,17 +158,26 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_MultipleBuild
 	s.Equal(2, len(resp.VersionsInfoInternal))
 
 	// validate PhysicalTaskQueueInfo structures
-	s.NotNil(resp.VersionsInfoInternal[bld1].PhysicalTaskQueueInfo)
-	s.NotNil(resp.VersionsInfoInternal[bld2].PhysicalTaskQueueInfo)
+	info1 := resp.VersionsInfoInternal[bld1].GetPhysicalTaskQueueInfo()
+	s.NotNil(info1)
+	info2 := resp.VersionsInfoInternal[bld2].GetPhysicalTaskQueueInfo()
+	s.NotNil(info2)
+	// check rate manually
+	s.Greater(info1.TaskQueueStats.TasksAddRate, float32(0))
+	s.Greater(info2.TaskQueueStats.TasksAddRate, float32(0))
+	// reset so we can compare the rest exactly
+	info1.TaskQueueStats.TasksAddRate = 0
+	info2.TaskQueueStats.TasksAddRate = 0
+
 	expectedPhysicalTQInfo := &taskqueuespb.PhysicalTaskQueueInfo{
 		Pollers: nil, // no pollers polling
 		TaskQueueStats: &taskqueuepb.TaskQueueStats{
+			ApproximateBacklogAge:   durationpb.New(0),
 			ApproximateBacklogCount: 1,
-			TasksDispatchRate:       0,
 		},
 	}
-	s.validatePhysicalTaskQueueInfo(expectedPhysicalTQInfo, resp.VersionsInfoInternal[bld1].GetPhysicalTaskQueueInfo())
-	s.validatePhysicalTaskQueueInfo(expectedPhysicalTQInfo, resp.VersionsInfoInternal[bld2].GetPhysicalTaskQueueInfo())
+	s.ProtoEqual(expectedPhysicalTQInfo, resp.VersionsInfoInternal[bld1].PhysicalTaskQueueInfo)
+	s.ProtoEqual(expectedPhysicalTQInfo, resp.VersionsInfoInternal[bld2].PhysicalTaskQueueInfo)
 
 	// adding pollers
 	s.validatePollTask(bld1, true)
@@ -158,42 +188,26 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_MultipleBuild
 	s.NoError(err)
 
 	// validate TQ internal statistics (not exposed via public API)
-	expectedInternalStatsInfo := &taskqueuespb.InternalTaskQueueStatus{
-		ReadLevel: 1,
-		AckLevel:  0,
-		TaskIdBlock: &taskqueuepb.TaskIdBlock{
-			StartId: 2,
-			EndId:   1000,
+	expectedInternalStatsInfo := []*taskqueuespb.InternalTaskQueueStatus{
+		&taskqueuespb.InternalTaskQueueStatus{
+			ReadLevel: 1,
+			AckLevel:  0,
+			TaskIdBlock: &taskqueuepb.TaskIdBlock{
+				StartId: 2,
+				EndId:   100000,
+			},
+			LoadedTasks:             1,
+			MaxReadLevel:            1,
+			ApproximateBacklogCount: 1,
 		},
-		ReadBufferLength: 0,
 	}
 
-	s.validateInternalTaskQueueStatus(expectedInternalStatsInfo, resp.VersionsInfoInternal[bld1].PhysicalTaskQueueInfo.GetInternalTaskQueueStatus())
-	s.validateInternalTaskQueueStatus(expectedInternalStatsInfo, resp.VersionsInfoInternal[bld2].PhysicalTaskQueueInfo.GetInternalTaskQueueStatus())
-
-}
-
-// validateTQStats is a helper to validate if the right metrics are being returned during the getStats call
-func (s *PartitionManagerTestSuite) validatePhysicalTaskQueueInfo(expectedPhysicalTQInfo *taskqueuespb.PhysicalTaskQueueInfo, actualPhysicalTQInfo *taskqueuespb.PhysicalTaskQueueInfo) {
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := assert.New(t)
-		a.Equal(expectedPhysicalTQInfo.Pollers, actualPhysicalTQInfo.Pollers)
-		a.Equal(expectedPhysicalTQInfo.TaskQueueStats.ApproximateBacklogCount, actualPhysicalTQInfo.TaskQueueStats.ApproximateBacklogCount)
-		a.Equal(expectedPhysicalTQInfo.TaskQueueStats.TasksDispatchRate, actualPhysicalTQInfo.TaskQueueStats.TasksDispatchRate)
-		a.NotNil(actualPhysicalTQInfo.TaskQueueStats.TasksAddRate)
-		a.NotNil(actualPhysicalTQInfo.TaskQueueStats.ApproximateBacklogAge)
-	}, time.Second*10, 200*time.Millisecond)
-}
-
-// validateInternalTaskQueueStatus is a helper to validate if the right internal task queue stats are being returned during the GetInternalTaskQueueStatus call
-func (s *PartitionManagerTestSuite) validateInternalTaskQueueStatus(expectedInternalTaskQueueStatus *taskqueuespb.InternalTaskQueueStatus, actualInternalTaskQueueStatus *taskqueuespb.InternalTaskQueueStatus) {
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := assert.New(t)
-		a.Equal(expectedInternalTaskQueueStatus.ReadLevel, actualInternalTaskQueueStatus.ReadLevel)
-		a.Equal(expectedInternalTaskQueueStatus.AckLevel, actualInternalTaskQueueStatus.AckLevel)
-		a.Equal(expectedInternalTaskQueueStatus.ReadBufferLength, actualInternalTaskQueueStatus.ReadBufferLength)
-		a.NotNil(actualInternalTaskQueueStatus.TaskIdBlock)
-	}, time.Second*10, 200*time.Millisecond)
+	status1 := resp.VersionsInfoInternal[bld1].PhysicalTaskQueueInfo.GetInternalTaskQueueStatus()
+	s.Equal(1, len(status1))
+	s.ProtoEqual(expectedInternalStatsInfo[0], status1[0])
+	status2 := resp.VersionsInfoInternal[bld2].PhysicalTaskQueueInfo.GetInternalTaskQueueStatus()
+	s.Equal(1, len(status2))
+	s.ProtoEqual(expectedInternalStatsInfo[0], status2[0])
 }
 
 func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_UnloadedVersionedQueues() {
@@ -208,8 +222,8 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_UnloadedVersi
 
 	// task is backlogged in the source queue so it is loaded by now
 	sourceQ, err := s.partitionMgr.getVersionedQueue(ctx, "", bld, nil, false)
-	s.Assert().NoError(err)
-	s.Assert().NotNil(sourceQ)
+	s.NoError(err)
+	s.NotNil(sourceQ)
 
 	// unload sourceQ
 	s.partitionMgr.unloadPhysicalQueue(sourceQ, unloadCauseUnspecified)
@@ -254,7 +268,7 @@ func (s *PartitionManagerTestSuite) TestPollWithRedirectRules() {
 			UseVersioning: true,
 		},
 	})
-	s.Assert().Equal(serviceerror.NewNewerBuildExists(target), err)
+	s.Equal(serviceerror.NewNewerBuildExists(target), err)
 }
 
 func (s *PartitionManagerTestSuite) TestRedirectRuleLoadUpstream() {
@@ -277,8 +291,8 @@ func (s *PartitionManagerTestSuite) TestRedirectRuleLoadUpstream() {
 
 	// task is backlogged in the source queue so it is loaded by now
 	sourceQ, err := s.partitionMgr.getVersionedQueue(ctx, "", source, nil, false)
-	s.Assert().NoError(err)
-	s.Assert().NotNil(sourceQ)
+	s.NoError(err)
+	s.NotNil(sourceQ)
 
 	// unload sourceQ
 	s.partitionMgr.unloadPhysicalQueue(sourceQ, unloadCauseUnspecified)
@@ -288,8 +302,8 @@ func (s *PartitionManagerTestSuite) TestRedirectRuleLoadUpstream() {
 
 	// polling from target should've loaded the source as well
 	sourceQ, err = s.partitionMgr.getVersionedQueue(ctx, "", source, nil, false)
-	s.Assert().NoError(err)
-	s.Assert().NotNil(sourceQ)
+	s.NoError(err)
+	s.NotNil(sourceQ)
 }
 
 func (s *PartitionManagerTestSuite) TestAddTaskWithAssignmentRules_NoVersionDirective() {
@@ -331,7 +345,7 @@ func (s *PartitionManagerTestSuite) TestAddTaskWithAssignmentRulesAndVersionSets
 
 	s.validateAddTask("", false, versioningData, nil)
 	// make sure version set queue is not loaded
-	s.Assert().Nil(s.partitionMgr.versionedQueues[PhysicalTaskQueueVersion{versionSet: vs.SetIds[0]}])
+	s.Nil(s.partitionMgr.versionedQueues[PhysicalTaskQueueVersion{versionSet: vs.SetIds[0]}])
 	s.validatePollTask("", false)
 }
 
@@ -346,13 +360,13 @@ func (s *PartitionManagerTestSuite) TestAddTaskWithAssignmentRulesAndVersionSets
 	taskBld := "task-bld"
 	s.validateAddTask("", false, versioningData, worker_versioning.MakeBuildIdDirective(taskBld))
 	// make sure version set queue is not loaded
-	s.Assert().Nil(s.partitionMgr.versionedQueues[PhysicalTaskQueueVersion{versionSet: vs.SetIds[0]}])
+	s.Nil(s.partitionMgr.versionedQueues[PhysicalTaskQueueVersion{versionSet: vs.SetIds[0]}])
 	s.validatePollTask(taskBld, true)
 
 	// now use the version set build ID
 	s.validateAddTask("", false, versioningData, worker_versioning.MakeBuildIdDirective(vs.BuildIds[0].Id))
 	// make sure version set queue is loaded
-	s.Assert().NotNil(s.partitionMgr.versionedQueues[PhysicalTaskQueueVersion{versionSet: vs.SetIds[0]}])
+	s.NotNil(s.partitionMgr.versionedQueues[PhysicalTaskQueueVersion{versionSet: vs.SetIds[0]}])
 	s.validatePollTask(vs.BuildIds[0].Id, true)
 }
 
@@ -365,91 +379,93 @@ func (s *PartitionManagerTestSuite) TestAddTaskWithAssignmentRulesAndVersionSets
 	}
 	s.validateAddTask(ruleBld, false, versioningData, worker_versioning.MakeUseAssignmentRulesDirective())
 	// make sure version set queue is not loaded
-	s.Assert().Nil(s.partitionMgr.versionedQueues[PhysicalTaskQueueVersion{versionSet: vs.SetIds[0]}])
+	s.Nil(s.partitionMgr.versionedQueues[PhysicalTaskQueueVersion{versionSet: vs.SetIds[0]}])
 	s.validatePollTask(ruleBld, true)
 }
 
 func (s *PartitionManagerTestSuite) TestGetAllPollerInfo() {
 	// no pollers
 	pollers := s.partitionMgr.GetAllPollerInfo()
-	s.Assert().True(len(pollers) == 0)
+	s.True(len(pollers) == 0)
 
 	// one unversioned poller
 	s.pollWithIdentity("uv", "", false, false)
 	pollers = s.partitionMgr.GetAllPollerInfo()
-	s.Assert().True(len(pollers) == 1)
+	s.True(len(pollers) == 1)
 
 	// one versioned poller
 	s.pollWithIdentity("v", "bid", true, false)
 	pollers = s.partitionMgr.GetAllPollerInfo()
-	s.Assert().True(len(pollers) == 2)
+	s.True(len(pollers) == 2)
 
 	// one unversioned poller with deployment options
 	s.pollWithIdentity("uvdo", "bid", false, true)
 	pollers = s.partitionMgr.GetAllPollerInfo()
-	s.Assert().True(len(pollers) == 3)
+	s.True(len(pollers) == 3)
 
 	for _, p := range pollers {
+		//nolint:staticcheck // SA1019 deprecated GetWorkerVersionCapabilities
+		workerVersionCapabilities := p.GetWorkerVersionCapabilities()
 		switch p.GetIdentity() {
 		case "uv":
-			s.Assert().False(p.GetWorkerVersionCapabilities().GetUseVersioning())
+			s.False(workerVersionCapabilities.GetUseVersioning())
 		case "v":
-			s.Assert().True(p.GetWorkerVersionCapabilities().GetUseVersioning())
-			s.Assert().Equal("bid", p.GetWorkerVersionCapabilities().GetBuildId())
+			s.True(workerVersionCapabilities.GetUseVersioning())
+			s.Equal("bid", workerVersionCapabilities.GetBuildId())
 		case "uvdo":
-			s.Assert().NotNil(p.GetDeploymentOptions())
-			s.Assert().Equal("bid", p.GetDeploymentOptions().GetBuildId())
+			s.NotNil(p.GetDeploymentOptions())
+			s.Equal("bid", p.GetDeploymentOptions().GetBuildId())
 		}
 	}
 }
 
 func (s *PartitionManagerTestSuite) TestHasAnyPollerAfter() {
 	// no pollers
-	s.Assert().False(s.partitionMgr.HasAnyPollerAfter(time.Now().Add(-5 * time.Minute)))
+	s.False(s.partitionMgr.HasAnyPollerAfter(time.Now().Add(-5 * time.Minute)))
 
 	// one unversioned poller
 	s.pollWithIdentity("uv", "", false, false)
-	s.Assert().True(s.partitionMgr.HasAnyPollerAfter(time.Now().Add(-100 * time.Microsecond)))
+	s.True(s.partitionMgr.HasAnyPollerAfter(time.Now().Add(-100 * time.Microsecond)))
 	time.Sleep(time.Millisecond)
-	s.Assert().False(s.partitionMgr.HasAnyPollerAfter(time.Now().Add(-100 * time.Microsecond)))
+	s.False(s.partitionMgr.HasAnyPollerAfter(time.Now().Add(-100 * time.Microsecond)))
 
 	// one versioned poller
 	s.pollWithIdentity("v", "bid", true, false)
-	s.Assert().True(s.partitionMgr.HasAnyPollerAfter(time.Now().Add(-100 * time.Microsecond)))
+	s.True(s.partitionMgr.HasAnyPollerAfter(time.Now().Add(-100 * time.Microsecond)))
 	time.Sleep(time.Millisecond)
-	s.Assert().False(s.partitionMgr.HasAnyPollerAfter(time.Now().Add(-100 * time.Microsecond)))
+	s.False(s.partitionMgr.HasAnyPollerAfter(time.Now().Add(-100 * time.Microsecond)))
 }
 
 func (s *PartitionManagerTestSuite) TestHasPollerAfter_Unversioned() {
 	// no pollers
-	s.Assert().False(s.partitionMgr.HasPollerAfter("", time.Now().Add(-5*time.Minute)))
+	s.False(s.partitionMgr.HasPollerAfter("", time.Now().Add(-5*time.Minute)))
 
 	// one unversioned poller
 	s.pollWithIdentity("uv", "", false, false)
-	s.Assert().True(s.partitionMgr.HasAnyPollerAfter(time.Now().Add(-500 * time.Microsecond)))
-	s.Assert().True(s.partitionMgr.HasPollerAfter("", time.Now().Add(-500*time.Microsecond)))
+	s.True(s.partitionMgr.HasAnyPollerAfter(time.Now().Add(-500 * time.Microsecond)))
+	s.True(s.partitionMgr.HasPollerAfter("", time.Now().Add(-500*time.Microsecond)))
 	time.Sleep(time.Millisecond)
-	s.Assert().False(s.partitionMgr.HasPollerAfter("", time.Now().Add(-100*time.Microsecond)))
+	s.False(s.partitionMgr.HasPollerAfter("", time.Now().Add(-100*time.Microsecond)))
 
 	// one versioned poller
 	s.pollWithIdentity("v", "bid", true, false)
-	s.Assert().False(s.partitionMgr.HasPollerAfter("", time.Now().Add(-100*time.Microsecond)))
+	s.False(s.partitionMgr.HasPollerAfter("", time.Now().Add(-100*time.Microsecond)))
 }
 
 func (s *PartitionManagerTestSuite) TestHasPollerAfter_Versioned() {
 	// no pollers
-	s.Assert().False(s.partitionMgr.HasAnyPollerAfter(time.Now().Add(-5 * time.Minute)))
+	s.False(s.partitionMgr.HasAnyPollerAfter(time.Now().Add(-5 * time.Minute)))
 
 	// one version-set poller
 	bid := "bid"
 	s.pollWithIdentity("v", bid, true, false)
-	s.Assert().True(s.partitionMgr.HasPollerAfter(bid, time.Now().Add(-100*time.Microsecond)))
+	s.True(s.partitionMgr.HasPollerAfter(bid, time.Now().Add(-100*time.Microsecond)))
 	time.Sleep(time.Millisecond)
-	s.Assert().False(s.partitionMgr.HasPollerAfter(bid, time.Now().Add(-100*time.Microsecond)))
+	s.False(s.partitionMgr.HasPollerAfter(bid, time.Now().Add(-100*time.Microsecond)))
 
 	// one unversioned poller
 	s.pollWithIdentity("uv", "", false, true)
-	s.Assert().False(s.partitionMgr.HasPollerAfter(bid, time.Now().Add(-100*time.Microsecond)))
+	s.False(s.partitionMgr.HasPollerAfter(bid, time.Now().Add(-100*time.Microsecond)))
 }
 
 func (s *PartitionManagerTestSuite) TestLegacyDescribeTaskQueue() {
@@ -457,27 +473,29 @@ func (s *PartitionManagerTestSuite) TestLegacyDescribeTaskQueue() {
 	// no pollers
 	resp, err := s.partitionMgr.LegacyDescribeTaskQueue(false)
 	s.NoError(err)
-	s.Assert().Equal(0, len(resp.DescResponse.GetPollers()))
+	s.Equal(0, len(resp.DescResponse.GetPollers()))
 
 	// one unversioned poller
 	s.pollWithIdentity("uv", "", false, false)
 	resp, err = s.partitionMgr.LegacyDescribeTaskQueue(false)
 	s.NoError(err)
-	s.Assert().Equal(1, len(resp.DescResponse.GetPollers()))
+	s.Equal(1, len(resp.DescResponse.GetPollers()))
 
 	// one versioned poller
 	s.pollWithIdentity("v", "bid", true, false)
 	resp, err = s.partitionMgr.LegacyDescribeTaskQueue(false)
 	s.NoError(err)
-	s.Assert().Equal(2, len(resp.DescResponse.GetPollers()))
+	s.Equal(2, len(resp.DescResponse.GetPollers()))
 
 	for _, p := range resp.DescResponse.GetPollers() {
+		//nolint:staticcheck // SA1019 deprecated GetWorkerVersionCapabilities
+		workerVersionCapabilities := p.GetWorkerVersionCapabilities()
 		switch p.GetIdentity() {
 		case "uv":
-			s.Assert().False(p.GetWorkerVersionCapabilities().GetUseVersioning())
+			s.False(workerVersionCapabilities.GetUseVersioning())
 		case "v":
-			s.Assert().True(p.GetWorkerVersionCapabilities().GetUseVersioning())
-			s.Assert().Equal("bid", p.GetWorkerVersionCapabilities().GetBuildId())
+			s.True(workerVersionCapabilities.GetUseVersioning())
+			s.Equal("bid", workerVersionCapabilities.GetBuildId())
 		}
 	}
 }
@@ -500,9 +518,9 @@ func (s *PartitionManagerTestSuite) validateAddTask(expectedBuildId string, expe
 			VersionDirective: directive,
 		},
 	})
-	s.Assert().NoError(err)
-	s.Assert().Equal(expectedSyncMatch, syncMatch)
-	s.Assert().Equal(expectedBuildId, buildId)
+	s.NoError(err)
+	s.Equal(expectedSyncMatch, syncMatch)
+	s.Equal(expectedBuildId, buildId)
 }
 
 func (s *PartitionManagerTestSuite) validatePollTaskSyncMatch(buildId string, useVersioning bool) {
@@ -518,9 +536,9 @@ func (s *PartitionManagerTestSuite) validatePollTaskSyncMatch(buildId string, us
 				},
 			},
 		)
-		s.Assert().NoError(err)
-		s.Assert().NotNil(task)
-		s.Assert().NotNil(task.responseC)
+		s.NoError(err)
+		s.NotNil(task)
+		s.NotNil(task.responseC)
 		close(task.responseC)
 	}()
 	// give time for poller to start polling before resuming execution
@@ -528,8 +546,8 @@ func (s *PartitionManagerTestSuite) validatePollTaskSyncMatch(buildId string, us
 }
 
 // Poll task and assert no error and that a non-nil task is returned
-func (s *PartitionManagerTestSuite) validatePollTask(buildId string, useVersioning bool) {
-	ctx, cancel := context.WithTimeout(context.Background(), 1000000*time.Millisecond)
+func (s *PartitionManagerTestSuite) validatePollTask(buildId string, useVersioning bool) *internalTask {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	task, _, err := s.partitionMgr.PollTask(ctx, &pollMetadata{
@@ -538,8 +556,10 @@ func (s *PartitionManagerTestSuite) validatePollTask(buildId string, useVersioni
 			UseVersioning: useVersioning,
 		},
 	})
-	s.Assert().NoError(err)
-	s.Assert().NotNil(task)
+	s.NoError(err)
+	s.NotNil(task)
+
+	return task
 }
 
 // UpdatePollerData is a no-op if the poller context has no identity, so we need a context with identity for any tests that check poller info

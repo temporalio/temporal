@@ -44,14 +44,14 @@ import (
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/effect"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace/nsregistry"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/internal/effect"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/configs"
-	"go.temporal.io/server/service/history/shard"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/update"
@@ -64,7 +64,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 	t.Parallel()
 
 	type testconf struct {
-		ms      *workflow.MockMutableState
+		ms      *historyi.MockMutableState
 		updates update.Registry
 		handler *workflowTaskCompletedHandler
 	}
@@ -83,10 +83,10 @@ func TestCommandProtocolMessage(t *testing.T) {
 	}
 
 	setup := func(t *testing.T, out *testconf, blobSizeLimit int) {
-		shardCtx := shard.NewMockContext(gomock.NewController(t))
+		shardCtx := historyi.NewMockShardContext(gomock.NewController(t))
 		logger := log.NewNoopLogger()
 		metricsHandler := metrics.NoopMetricsHandler
-		out.ms = workflow.NewMockMutableState(gomock.NewController(t))
+		out.ms = historyi.NewMockMutableState(gomock.NewController(t))
 		out.ms.EXPECT().VisitUpdates(gomock.Any())
 		out.ms.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry)
 		out.ms.EXPECT().GetCurrentVersion().Return(tests.LocalNamespaceEntry.FailoverVersion())

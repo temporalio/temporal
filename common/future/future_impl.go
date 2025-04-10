@@ -96,6 +96,26 @@ func (f *FutureImpl[T]) Set(
 	close(f.readyCh)
 }
 
+// Sets the value of the future, if it has not been set already. Returns true if this call set the value.
+func (f *FutureImpl[T]) SetIfNotReady(
+	value T,
+	err error,
+) bool {
+	if !atomic.CompareAndSwapInt32(
+		&f.status,
+		pending,
+		setting,
+	) {
+		return false
+	}
+
+	f.value = value
+	f.err = err
+	atomic.CompareAndSwapInt32(&f.status, setting, ready)
+	close(f.readyCh)
+	return true
+}
+
 func (f *FutureImpl[T]) Ready() bool {
 	return atomic.LoadInt32(&f.status) == ready
 }

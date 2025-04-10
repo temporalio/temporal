@@ -44,6 +44,8 @@ const (
 	httpStatusTagName           = "http_status"
 	nexusMethodTagName          = "method"
 	nexusEndpointTagName        = "nexus_endpoint"
+	nexusServiceTagName         = "nexus_service"
+	nexusOperationTagName       = "nexus_operation"
 	outcomeTagName              = "outcome"
 	versionedTagName            = "versioned"
 	resourceExhaustedTag        = "resource_exhausted_cause"
@@ -599,10 +601,16 @@ var (
 		"service_requests",
 		WithDescription("The number of RPC requests received by the service."),
 	)
-	ServicePendingRequests                   = NewGaugeDef("service_pending_requests")
-	ServiceFailures                          = NewCounterDef("service_errors")
-	ServicePanic                             = NewCounterDef("service_panics")
-	ServiceErrorWithType                     = NewCounterDef("service_error_with_type")
+	ServicePendingRequests = NewGaugeDef("service_pending_requests")
+	ServiceFailures        = NewCounterDef(
+		"service_errors",
+		WithDescription("The number of unexpected service request errors."),
+	)
+	ServicePanic         = NewCounterDef("service_panics")
+	ServiceErrorWithType = NewCounterDef(
+		"service_error_with_type",
+		WithDescription("The number of all service request errors by error type."),
+	)
 	ServiceLatency                           = NewTimerDef("service_latency")
 	ServiceLatencyNoUserLatency              = NewTimerDef("service_latency_nouserlatency")
 	ServiceLatencyUserLatency                = NewTimerDef("service_latency_userlatency")
@@ -697,6 +705,7 @@ var (
 	)
 	HostRPSLimit          = NewGaugeDef("host_rps_limit")
 	NamespaceHostRPSLimit = NewGaugeDef("namespace_host_rps_limit")
+	HandoverWaitLatency   = NewTimerDef("handover_wait_latency")
 
 	// History
 	CacheRequests                                = NewCounterDef("cache_requests")
@@ -842,6 +851,7 @@ var (
 	// Timeouts and failures are not counted in this metric.
 	// This metric has a "reason" tag attached to it to understand why eager start was denied.
 	WorkflowEagerExecutionDeniedCounter           = NewCounterDef("workflow_eager_execution_denied")
+	StartWorkflowRequestDeduped                   = NewCounterDef("start_workflow_request_deduped")
 	EmptyCompletionCommandsCounter                = NewCounterDef("empty_completion_commands")
 	MultipleCompletionCommandsCounter             = NewCounterDef("multiple_completion_commands")
 	FailedWorkflowTasksCounter                    = NewCounterDef("failed_workflow_tasks")
@@ -890,6 +900,7 @@ var (
 	SignalInfoSize                        = NewBytesHistogramDef("signal_info_size")
 	SignalRequestIDSize                   = NewBytesHistogramDef("signal_request_id_size")
 	BufferedEventsSize                    = NewBytesHistogramDef("buffered_events_size")
+	ChasmTotalSize                        = NewBytesHistogramDef("chasm_total_size")
 	ActivityInfoCount                     = NewDimensionlessHistogramDef("activity_info_count")
 	TimerInfoCount                        = NewDimensionlessHistogramDef("timer_info_count")
 	ChildInfoCount                        = NewDimensionlessHistogramDef("child_info_count")
@@ -920,23 +931,34 @@ var (
 	ReplicationServiceError               = NewCounterDef("replication_service_error")
 	ReplicationStreamStuck                = NewCounterDef("replication_stream_stuck")
 	ReplicationTasksSend                  = NewCounterDef("replication_tasks_send")
+	ReplicationTaskSendAttempt            = NewDimensionlessHistogramDef("replication_task_send_attempt")
+	ReplicationTaskSendError              = NewCounterDef("replication_task_send_error")
+	ReplicationTaskGenerationLatency      = NewTimerDef("replication_task_generation_latency")
+	ReplicationTaskLoadLatency            = NewTimerDef("replication_task_load_latency")
+	ReplicationTaskLoadSize               = NewDimensionlessHistogramDef("replication_task_load_size")
+	ReplicationTaskSendLatency            = NewTimerDef("replication_task_send_latency")
+	ReplicationTaskSendBacklog            = NewDimensionlessHistogramDef("replication_task_send_backlog")
 	ReplicationTasksRecv                  = NewCounterDef("replication_tasks_recv")
 	ReplicationTasksRecvBacklog           = NewDimensionlessHistogramDef("replication_tasks_recv_backlog")
 	ReplicationTasksSkipped               = NewCounterDef("replication_tasks_skipped")
 	ReplicationTasksApplied               = NewCounterDef("replication_tasks_applied")
 	ReplicationTasksFailed                = NewCounterDef("replication_tasks_failed")
+	ReplicationTasksBackFill              = NewCounterDef("replication_tasks_back_fill")
+	ReplicationTasksBackFillLatency       = NewTimerDef("replication_tasks_back_fill_latency")
 	// ReplicationTasksLag is a heuristic for how far behind the remote DC is for a given cluster. It measures the
 	// difference between task IDs so its unit should be "tasks".
 	ReplicationTasksLag = NewDimensionlessHistogramDef("replication_tasks_lag")
 	// ReplicationTasksFetched records the number of tasks fetched by the poller.
 	ReplicationTasksFetched                        = NewDimensionlessHistogramDef("replication_tasks_fetched")
 	ReplicationLatency                             = NewTimerDef("replication_latency")
+	ReplicationTaskProcessingLatency               = NewTimerDef("replication_task_processing_latency")
 	ReplicationTaskTransmissionLatency             = NewTimerDef("replication_task_transmission_latency")
 	ReplicationDLQFailed                           = NewCounterDef("replication_dlq_enqueue_failed")
 	ReplicationDLQMaxLevelGauge                    = NewGaugeDef("replication_dlq_max_level")
 	ReplicationDLQAckLevelGauge                    = NewGaugeDef("replication_dlq_ack_level")
 	ReplicationNonEmptyDLQCount                    = NewCounterDef("replication_dlq_non_empty")
 	ReplicationOutlierNamespace                    = NewCounterDef("replication_outlier_namespace")
+	ReplicationDuplicatedTaskCount                 = NewCounterDef("replication_duplicated_task")
 	EventReapplySkippedCount                       = NewCounterDef("event_reapply_skipped_count")
 	DirectQueryDispatchLatency                     = NewTimerDef("direct_query_dispatch_latency")
 	DirectQueryDispatchStickyLatency               = NewTimerDef("direct_query_dispatch_sticky_latency")
@@ -978,6 +1000,7 @@ var (
 	DynamicWorkerPoolSchedulerEnqueuedTasks = NewCounterDef("dynamic_worker_pool_scheduler_enqueued_tasks")
 	DynamicWorkerPoolSchedulerDequeuedTasks = NewCounterDef("dynamic_worker_pool_scheduler_dequeued_tasks")
 	DynamicWorkerPoolSchedulerRejectedTasks = NewCounterDef("dynamic_worker_pool_scheduler_rejected_tasks")
+	PausedActivitiesCounter                 = NewCounterDef("paused_activities")
 
 	// Deadlock detector latency metrics
 	DDClusterMetadataLockLatency         = NewTimerDef("dd_cluster_metadata_lock_latency")
@@ -1021,14 +1044,18 @@ var (
 	TaskQueueStoppedCounter                           = NewCounterDef("task_queue_stopped")
 	TaskWriteThrottlePerTaskQueueCounter              = NewCounterDef("task_write_throttle_count")
 	TaskWriteLatencyPerTaskQueue                      = NewTimerDef("task_write_latency")
-	TaskLagPerTaskQueueGauge                          = NewGaugeDef("task_lag_per_tl")
-	NoRecentPollerTasksPerTaskQueueCounter            = NewCounterDef("no_poller_tasks")
-	UnknownBuildPollsCounter                          = NewCounterDef("unknown_build_polls")
-	UnknownBuildTasksCounter                          = NewCounterDef("unknown_build_tasks")
-	TaskDispatchLatencyPerTaskQueue                   = NewTimerDef("task_dispatch_latency")
-	ApproximateBacklogCount                           = NewGaugeDef("approximate_backlog_count")
-	ApproximateBacklogAgeSeconds                      = NewGaugeDef("approximate_backlog_age_seconds")
-	NonRetryableTasks                                 = NewCounterDef(
+	TaskRewrites                                      = NewCounterDef(
+		"task_rewrites",
+		WithDescription("Number of times tasks are rewritten to persistence after failing to process"),
+	)
+	TaskLagPerTaskQueueGauge               = NewGaugeDef("task_lag_per_tl")
+	NoRecentPollerTasksPerTaskQueueCounter = NewCounterDef("no_poller_tasks")
+	UnknownBuildPollsCounter               = NewCounterDef("unknown_build_polls")
+	UnknownBuildTasksCounter               = NewCounterDef("unknown_build_tasks")
+	TaskDispatchLatencyPerTaskQueue        = NewTimerDef("task_dispatch_latency")
+	ApproximateBacklogCount                = NewGaugeDef("approximate_backlog_count")
+	ApproximateBacklogAgeSeconds           = NewGaugeDef("approximate_backlog_age_seconds")
+	NonRetryableTasks                      = NewCounterDef(
 		"non_retryable_tasks",
 		WithDescription("The number of non-retryable matching tasks which are dropped due to specific errors"))
 
@@ -1211,17 +1238,20 @@ var (
 	PersistenceSessionRefreshAttempts      = NewCounterDef("persistence_session_refresh_attempts")
 
 	// Common service base metrics
-	RestartCount         = NewCounterDef("restarts")
-	NumGoRoutinesGauge   = NewGaugeDef("num_goroutines")
-	GoMaxProcsGauge      = NewGaugeDef("gomaxprocs")
-	MemoryAllocatedGauge = NewGaugeDef("memory_allocated")
-	MemoryHeapGauge      = NewGaugeDef("memory_heap")
-	MemoryHeapIdleGauge  = NewGaugeDef("memory_heapidle")
-	MemoryHeapInuseGauge = NewGaugeDef("memory_heapinuse")
-	MemoryStackGauge     = NewGaugeDef("memory_stack")
-	NumGCCounter         = NewBytesHistogramDef("memory_num_gc")
-	GcPauseMsTimer       = NewTimerDef("memory_gc_pause_ms")
-	NumGCGauge           = NewGaugeDef("memory_num_gc_last",
+	RestartCount           = NewCounterDef("restarts")
+	NumGoRoutinesGauge     = NewGaugeDef("num_goroutines")
+	GoMaxProcsGauge        = NewGaugeDef("gomaxprocs")
+	MemoryAllocatedGauge   = NewGaugeDef("memory_allocated")
+	MemoryHeapGauge        = NewGaugeDef("memory_heap")
+	MemoryHeapObjectsGauge = NewGaugeDef("memory_heap_objects")
+	MemoryHeapIdleGauge    = NewGaugeDef("memory_heapidle")
+	MemoryHeapInuseGauge   = NewGaugeDef("memory_heapinuse")
+	MemoryStackGauge       = NewGaugeDef("memory_stack")
+	MemoryMallocsGauge     = NewGaugeDef("memory_mallocs")
+	MemoryFreesGauge       = NewGaugeDef("memory_frees")
+	NumGCCounter           = NewBytesHistogramDef("memory_num_gc")
+	GcPauseMsTimer         = NewTimerDef("memory_gc_pause_ms")
+	NumGCGauge             = NewGaugeDef("memory_num_gc_last",
 		WithDescription("Last runtime.MemStats.NumGC"),
 	)
 	GcPauseNsTotal = NewGaugeDef("memory_pause_total_ns_last",

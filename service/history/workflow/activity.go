@@ -31,12 +31,14 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
+	rulespb "go.temporal.io/api/rules/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/service/history/consts"
-	"go.temporal.io/server/service/history/shard"
+	historyi "go.temporal.io/server/service/history/interfaces"
+	"go.temporal.io/server/service/history/workflow/matcher"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -61,20 +63,6 @@ func makeBackoffAlgorithm(requestedDelay *time.Duration) BackoffCalculatorAlgori
 	}
 }
 
-func nextRetryDelayFrom(failure *failurepb.Failure) *time.Duration {
-	var delay *time.Duration
-	afi, ok := failure.GetFailureInfo().(*failurepb.Failure_ApplicationFailureInfo)
-	if !ok {
-		return delay
-	}
-	p := afi.ApplicationFailureInfo.GetNextRetryDelay()
-	if p != nil {
-		d := p.AsDuration()
-		delay = &d
-	}
-	return delay
-}
-
 func UpdateActivityInfoForRetries(
 	ai *persistencespb.ActivityInfo,
 	version int64,
@@ -97,8 +85,8 @@ func UpdateActivityInfoForRetries(
 
 func GetPendingActivityInfo(
 	ctx context.Context, // only used as a passthrough to GetActivityType
-	shardContext shard.Context,
-	mutableState MutableState,
+	shardContext historyi.ShardContext,
+	mutableState historyi.MutableState,
 	ai *persistencespb.ActivityInfo,
 ) (*workflowpb.PendingActivityInfo, error) {
 	now := shardContext.GetTimeSource().Now().UTC()
@@ -106,6 +94,7 @@ func GetPendingActivityInfo(
 	p := &workflowpb.PendingActivityInfo{
 		ActivityId:                  ai.ActivityId,
 		LastWorkerDeploymentVersion: ai.LastWorkerDeploymentVersion,
+		Priority:                    ai.Priority,
 	}
 	if ai.GetUseWorkflowBuildIdInfo() != nil {
 		p.AssignedBuildId = &workflowpb.PendingActivityInfo_UseWorkflowBuildId{UseWorkflowBuildId: &emptypb.Empty{}}
@@ -162,6 +151,19 @@ func GetPendingActivityInfo(
 		}
 	}
 
+	// adjust activity state for paused activities
+	if ai.Paused {
+		if p.State == enumspb.PENDING_ACTIVITY_STATE_SCHEDULED {
+			// this state means activity is not running on the worker
+			// if activity is paused on server and not running on worker - mark it as PAUSED
+			p.State = enumspb.PENDING_ACTIVITY_STATE_PAUSED
+		} else if p.State == enumspb.PENDING_ACTIVITY_STATE_STARTED {
+			// this state means activity is running on the worker
+			// if activity is paused on server, but still running on worker - mark it as PAUSE_REQUESTED
+			p.State = enumspb.PENDING_ACTIVITY_STATE_PAUSE_REQUESTED
+		} // if state is CANCEL_REQUESTEd - it is not modified
+	}
+
 	return p, nil
 }
 
@@ -188,7 +190,7 @@ func GetNextScheduledTime(ai *persistencespb.ActivityInfo) time.Time {
 	return nextScheduledTime
 }
 
-func PauseActivity(mutableState MutableState, activityId string) error {
+func PauseActivity(mutableState historyi.MutableState, activityId string) error {
 	if !mutableState.IsWorkflowExecutionRunning() {
 		return consts.ErrWorkflowCompleted
 	}
@@ -204,7 +206,7 @@ func PauseActivity(mutableState MutableState, activityId string) error {
 		return nil
 	}
 
-	return mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ MutableState) error {
+	return mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ historyi.MutableState) error {
 		// note - we are not increasing the stamp of the activity if it is running.
 		// this is because if activity is actually running we should let it finish
 		if GetActivityState(activityInfo) == enumspb.PENDING_ACTIVITY_STATE_SCHEDULED {
@@ -216,8 +218,8 @@ func PauseActivity(mutableState MutableState, activityId string) error {
 }
 
 func ResetActivity(
-	shardContext shard.Context,
-	mutableState MutableState,
+	shardContext historyi.ShardContext,
+	mutableState historyi.MutableState,
 	activityId string,
 	resetHeartbeats bool,
 	keepPaused bool,
@@ -232,7 +234,7 @@ func ResetActivity(
 		return consts.ErrActivityNotFound
 	}
 
-	return mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, ms MutableState) error {
+	return mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, ms historyi.MutableState) error {
 		// reset the number of attempts
 		ai.Attempt = 1
 
@@ -268,14 +270,14 @@ func ResetActivity(
 }
 
 func UnpauseActivity(
-	shardContext shard.Context,
-	mutableState MutableState,
+	shardContext historyi.ShardContext,
+	mutableState historyi.MutableState,
 	ai *persistencespb.ActivityInfo,
 	resetAttempts bool,
 	resetHeartbeat bool,
 	jitter time.Duration,
 ) error {
-	if err := mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, ms MutableState) error {
+	if err := mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, ms historyi.MutableState) error {
 		activityInfo.Paused = false
 		activityInfo.Stamp++
 
@@ -308,14 +310,14 @@ func UnpauseActivity(
 }
 
 func UnpauseActivityWithResume(
-	shardContext shard.Context,
-	mutableState MutableState,
+	shardContext historyi.ShardContext,
+	mutableState historyi.MutableState,
 	ai *persistencespb.ActivityInfo,
 	scheduleNewRun bool,
 	jitter time.Duration,
 ) (*historyservice.UnpauseActivityResponse, error) {
 
-	if err := mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, ms MutableState) error {
+	if err := mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, ms historyi.MutableState) error {
 		activityInfo.Stamp++
 		activityInfo.Paused = false
 
@@ -334,14 +336,14 @@ func UnpauseActivityWithResume(
 }
 
 func UnpauseActivityWithReset(
-	shardContext shard.Context,
-	mutableState MutableState,
+	shardContext historyi.ShardContext,
+	mutableState historyi.MutableState,
 	ai *persistencespb.ActivityInfo,
 	scheduleNewRun bool,
 	resetHeartbeats bool,
 	jitter time.Duration,
 ) (*historyservice.UnpauseActivityResponse, error) {
-	if err := mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, ms MutableState) error {
+	if err := mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, ms historyi.MutableState) error {
 		activityInfo.Paused = false
 		activityInfo.Stamp++
 
@@ -370,8 +372,8 @@ func regenerateActivityRetryTask(
 	activityInfo *persistencespb.ActivityInfo,
 	scheduleNewRun bool,
 	jitter time.Duration,
-	ms MutableState,
-	shardContext shard.Context) error {
+	ms historyi.MutableState,
+	shardContext historyi.ShardContext) error {
 	scheduleTime := activityInfo.ScheduledTime.AsTime()
 	if scheduleNewRun {
 		scheduleTime = shardContext.GetTimeSource().Now().UTC()
@@ -409,4 +411,27 @@ func needRegenerateRetryTask(ai *persistencespb.ActivityInfo, scheduleNewRun boo
 	// activity is running, scheduleNewRun flag is NOT provided
 	// in this case we don't need to do anything
 	return false
+}
+
+func MatchWorkflowRule(
+	executionInfo *persistencespb.WorkflowExecutionInfo,
+	executionState *persistencespb.WorkflowExecutionState,
+	ai *persistencespb.ActivityInfo,
+	rule *rulespb.WorkflowRuleSpec,
+) (bool, error) {
+	// match visibility query
+	visibilityQuery := rule.GetVisibilityQuery()
+	if visibilityQuery != "" {
+		match, err := matcher.MatchMutableState(executionInfo, executionState, rule.GetVisibilityQuery())
+		if err != nil || !match {
+			return false, err
+		}
+	}
+
+	// match activity query
+	activityTrigger := rule.GetActivityStart()
+	if activityTrigger == nil {
+		return false, nil
+	}
+	return matcher.MatchActivity(ai, activityTrigger.GetPredicate())
 }

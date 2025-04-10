@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/effect"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
@@ -54,13 +55,12 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/tasktoken"
-	"go.temporal.io/server/internal/effect"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/api/recordworkflowtaskstarted"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
-	"go.temporal.io/server/service/history/shard"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/update"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -69,7 +69,7 @@ import (
 type (
 	WorkflowTaskCompletedHandler struct {
 		config                         *configs.Config
-		shardContext                   shard.Context
+		shardContext                   historyi.ShardContext
 		workflowConsistencyChecker     api.WorkflowConsistencyChecker
 		timeSource                     clock.TimeSource
 		namespaceRegistry              namespace.Registry
@@ -87,7 +87,7 @@ type (
 )
 
 func NewWorkflowTaskCompletedHandler(
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	tokenSerializer *tasktoken.Serializer,
 	eventNotifier events.Notifier,
 	commandHandlerRegistry *workflow.CommandHandlerRegistry,
@@ -143,7 +143,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 	workflowLease, err := handler.workflowConsistencyChecker.GetWorkflowLeaseWithConsistencyCheck(
 		ctx,
 		token.Clock,
-		func(mutableState workflow.MutableState) bool {
+		func(mutableState historyi.MutableState) bool {
 			workflowTask := mutableState.GetWorkflowTaskByID(token.GetScheduledEventId())
 			if workflowTask == nil && token.GetScheduledEventId() >= mutableState.GetNextEventID() {
 				metrics.StaleMutableStateCounter.With(handler.metricsHandler).Record(
@@ -264,7 +264,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 	}
 
 	nsName := namespaceEntry.Name().String()
-	limits := workflow.WorkflowTaskCompletionLimits{
+	limits := historyi.WorkflowTaskCompletionLimits{
 		MaxResetPoints:              handler.config.MaxAutoResetPoints(nsName),
 		MaxSearchAttributeValueSize: handler.config.SearchAttributesSizeOfValueLimit(nsName),
 	}
@@ -340,7 +340,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 	var (
 		wtFailedCause               *workflowTaskFailedCause
 		activityNotStartedCancelled bool
-		newMutableState             workflow.MutableState
+		newMutableState             historyi.MutableState
 		responseMutations           []workflowTaskResponseMutation
 	)
 	updateRegistry := weContext.UpdateRegistry(ctx)
@@ -448,6 +448,11 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 	wtFailedShouldCreateNewTask := false
 	if wtFailedCause != nil {
 		effects.Cancel(ctx)
+
+		// Abort all Updates with explicit reason, to prevent them to be aborted with generic
+		// registryClearedErr, which may lead to continuous retries of UpdateWorkflowExecution API.
+		updateRegistry.Abort(update.AbortReasonWorkflowTaskFailed)
+
 		metrics.FailedWorkflowTasksCounter.With(handler.metricsHandler).Record(
 			1,
 			metrics.OperationTag(metrics.HistoryRespondWorkflowTaskCompletedScope))
@@ -519,7 +524,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		newWorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_NORMAL
 	}
 
-	var newWorkflowTask *workflow.WorkflowTaskInfo
+	var newWorkflowTask *historyi.WorkflowTaskInfo
 
 	// Speculative workflow task will be created after mutable state is persisted.
 	if newWorkflowTaskType == enumsspb.WORKFLOW_TASK_TYPE_NORMAL {
@@ -901,7 +906,7 @@ func (handler *WorkflowTaskCompletedHandler) withNewWorkflowTask(
 }
 
 func (handler *WorkflowTaskCompletedHandler) handleBufferedQueries(
-	ms workflow.MutableState,
+	ms historyi.MutableState,
 	queryResults map[string]*querypb.WorkflowQueryResult,
 	createNewWorkflowTask bool,
 	namespaceEntry *namespace.Namespace,
@@ -942,7 +947,7 @@ func (handler *WorkflowTaskCompletedHandler) handleBufferedQueries(
 				tag.WorkflowRunID(runID),
 				tag.QueryID(id),
 				tag.Error(err))
-			failedCompletionState := &workflow.QueryCompletionState{
+			failedCompletionState := &historyi.QueryCompletionState{
 				Type: workflow.QueryCompletionTypeFailed,
 				Err:  err,
 			}
@@ -957,7 +962,7 @@ func (handler *WorkflowTaskCompletedHandler) handleBufferedQueries(
 				metrics.QueryRegistryInvalidStateCount.With(scope).Record(1)
 			}
 		} else {
-			succeededCompletionState := &workflow.QueryCompletionState{
+			succeededCompletionState := &historyi.QueryCompletionState{
 				Type:   workflow.QueryCompletionTypeSucceeded,
 				Result: result,
 			}
@@ -979,7 +984,7 @@ func (handler *WorkflowTaskCompletedHandler) handleBufferedQueries(
 	if !createNewWorkflowTask {
 		buffered := queryRegistry.GetBufferedIDs()
 		for _, id := range buffered {
-			unblockCompletionState := &workflow.QueryCompletionState{
+			unblockCompletionState := &historyi.QueryCompletionState{
 				Type: workflow.QueryCompletionTypeUnblocked,
 			}
 			if err := queryRegistry.SetCompletionState(id, unblockCompletionState); err != nil {
@@ -998,12 +1003,12 @@ func (handler *WorkflowTaskCompletedHandler) handleBufferedQueries(
 
 func failWorkflowTask(
 	ctx context.Context,
-	shardContext shard.Context,
-	wfContext workflow.Context,
-	workflowTask *workflow.WorkflowTaskInfo,
+	shardContext historyi.ShardContext,
+	wfContext historyi.WorkflowContext,
+	workflowTask *historyi.WorkflowTaskInfo,
 	wtFailedCause *workflowTaskFailedCause,
 	request *workflowservice.RespondWorkflowTaskCompletedRequest,
-) (workflow.MutableState, int64, error) {
+) (historyi.MutableState, int64, error) {
 
 	// clear any updates we have accumulated so far
 	wfContext.Clear()
@@ -1041,7 +1046,7 @@ func failWorkflowTask(
 	return mutableState, wtFailedEventID, nil
 }
 
-func (handler *WorkflowTaskCompletedHandler) clearStickyTaskQueue(ctx context.Context, wfContext workflow.Context) error {
+func (handler *WorkflowTaskCompletedHandler) clearStickyTaskQueue(ctx context.Context, wfContext historyi.WorkflowContext) error {
 
 	// Clear all changes in the workflow context that was made already.
 	wfContext.Clear()

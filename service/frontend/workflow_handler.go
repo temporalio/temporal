@@ -765,21 +765,19 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 		return nil, err
 	}
 
-	if !wh.config.SendRawWorkflowHistory(request.Namespace) {
-		isCloseEventOnly := request.HistoryEventFilterType == enumspb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT
-		if isCloseEventOnly {
-			if len(response.Response.History.GetEvents()) > 0 {
-				response.Response.History.Events = response.Response.History.Events[len(response.Response.History.Events)-1:]
-			}
-		}
-		err = api.ProcessOutgoingSearchAttributes(wh.namespaceRegistry, wh.saProvider, wh.saMapperProvider, response.Response.History.Events, namespaceID, wh.visibilityMgr)
-		if err != nil {
-			return nil, err
-		}
-		err = fixFollowEvents(ctx, wh.versionChecker, isCloseEventOnly, response.Response.History)
-		if err != nil {
-			return nil, err
-		}
+	isCloseEventOnly := request.HistoryEventFilterType == enumspb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT
+	err = api.ProcessInternalRawHistory(
+		ctx,
+		wh.saProvider,
+		wh.saMapperProvider,
+		response,
+		wh.visibilityMgr,
+		wh.versionChecker,
+		namespace.Name(request.GetNamespace()),
+		isCloseEventOnly,
+	)
+	if err != nil {
+		return nil, err
 	}
 	return response.Response, nil
 }
@@ -934,6 +932,7 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 		StartedTime:                matchingResp.StartedTime,
 		Queries:                    matchingResp.Queries,
 		Messages:                   matchingResp.Messages,
+		PollerScalingDecision:      matchingResp.PollerScalingDecision,
 	}, nil
 }
 
@@ -1164,6 +1163,8 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 		WorkflowType:                matchingResponse.WorkflowType,
 		WorkflowNamespace:           matchingResponse.WorkflowNamespace,
 		Header:                      matchingResponse.Header,
+		PollerScalingDecision:       matchingResponse.PollerScalingDecision,
+		Priority:                    matchingResponse.Priority,
 	}, nil
 }
 
@@ -3091,6 +3092,7 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
 		Memo:                     request.Memo,
 		SearchAttributes:         sa,
+		Priority:                 &commonpb.Priority{}, // ie default priority
 	}
 	_, err = wh.historyClient.StartWorkflowExecution(
 		ctx,
@@ -3361,7 +3363,7 @@ func (wh *WorkflowHandler) DescribeWorkerDeploymentVersion(ctx context.Context, 
 	}
 
 	if !wh.config.EnableDeploymentVersions(request.Namespace) {
-		return nil, errDeploymentsNotAllowed
+		return nil, errDeploymentVersionsNotAllowed
 	}
 
 	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
@@ -3390,7 +3392,7 @@ func (wh *WorkflowHandler) SetWorkerDeploymentCurrentVersion(ctx context.Context
 	}
 
 	if !wh.config.EnableDeploymentVersions(request.Namespace) {
-		return nil, errDeploymentsNotAllowed
+		return nil, errDeploymentVersionsNotAllowed
 	}
 
 	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
@@ -3424,7 +3426,7 @@ func (wh *WorkflowHandler) SetWorkerDeploymentRampingVersion(ctx context.Context
 	}
 
 	if !wh.config.EnableDeploymentVersions(request.Namespace) {
-		return nil, errDeploymentsNotAllowed
+		return nil, errDeploymentVersionsNotAllowed
 	}
 
 	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
@@ -3465,7 +3467,7 @@ func (wh *WorkflowHandler) ListWorkerDeployments(ctx context.Context, request *w
 	}
 
 	if !wh.config.EnableDeploymentVersions(request.Namespace) {
-		return nil, errDeploymentsNotAllowed
+		return nil, errDeploymentVersionsNotAllowed
 	}
 
 	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
@@ -4266,7 +4268,7 @@ func (wh *WorkflowHandler) UpdateWorkerBuildIdCompatibility(ctx context.Context,
 	}
 
 	if !wh.config.EnableWorkerVersioningData(request.Namespace) {
-		return nil, errWorkerVersioningNotAllowed
+		return nil, errWorkerVersioningV1_0NotAllowed
 	}
 
 	if err := wh.validateBuildIdCompatibilityUpdate(request); err != nil {
@@ -4308,7 +4310,7 @@ func (wh *WorkflowHandler) GetWorkerBuildIdCompatibility(ctx context.Context, re
 	}
 
 	if !wh.config.EnableWorkerVersioningData(request.Namespace) {
-		return nil, errWorkerVersioningNotAllowed
+		return nil, errWorkerVersioningV1_0NotAllowed
 	}
 
 	taskQueue := &taskqueuepb.TaskQueue{Name: request.GetTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
@@ -4341,7 +4343,7 @@ func (wh *WorkflowHandler) UpdateWorkerVersioningRules(ctx context.Context, requ
 	}
 
 	if !wh.config.EnableWorkerVersioningRules(request.Namespace) {
-		return nil, errWorkerVersioningNotAllowed
+		return nil, errWorkerVersioningV2_0NotAllowed
 	}
 
 	if err := wh.validateVersionRuleBuildId(request); err != nil {
@@ -4381,7 +4383,7 @@ func (wh *WorkflowHandler) GetWorkerVersioningRules(ctx context.Context, request
 	}
 
 	if !wh.config.EnableWorkerVersioningRules(request.Namespace) {
-		return nil, errWorkerVersioningNotAllowed
+		return nil, errWorkerVersioningV2_0NotAllowed
 	}
 
 	taskQueue := &taskqueuepb.TaskQueue{Name: request.GetTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
@@ -4420,7 +4422,7 @@ func (wh *WorkflowHandler) GetWorkerTaskReachability(ctx context.Context, reques
 	}
 
 	if !wh.config.EnableWorkerVersioningData(request.Namespace) {
-		return nil, errWorkerVersioningNotAllowed
+		return nil, errWorkerVersioningV2_0NotAllowed
 	}
 
 	if len(request.GetBuildIds()) == 0 {
@@ -4656,6 +4658,7 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
 		Memo:                     memo,
 		SearchAttributes:         searchAttributes,
+		Priority:                 &commonpb.Priority{}, // ie default priority
 	}
 
 	_, err = wh.historyClient.StartWorkflowExecution(
@@ -5127,7 +5130,13 @@ func (wh *WorkflowHandler) validateWorkflowIdReusePolicy(
 	return nil
 }
 
-func (wh *WorkflowHandler) validateOnConflictOptions(_ *workflowpb.OnConflictOptions) error {
+func (wh *WorkflowHandler) validateOnConflictOptions(opts *workflowpb.OnConflictOptions) error {
+	if opts == nil {
+		return nil
+	}
+	if opts.AttachCompletionCallbacks && !opts.AttachRequestId {
+		return serviceerror.NewInvalidArgument("attaching request ID is required for attaching completion callbacks")
+	}
 	return nil
 }
 
@@ -5251,7 +5260,7 @@ type buildIdAndFlag interface {
 
 func (wh *WorkflowHandler) validateVersioningInfo(nsName string, id buildIdAndFlag, tq *taskqueuepb.TaskQueue) error {
 	if id.GetUseVersioning() && !wh.config.EnableWorkerVersioningWorkflow(nsName) {
-		return errWorkerVersioningNotAllowed
+		return errWorkerVersioningWorkflowAPIsNotAllowed
 	}
 	if id.GetUseVersioning() && tq.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY && len(tq.GetNormalName()) == 0 {
 		return errUseVersioningWithoutNormalName
@@ -5497,15 +5506,15 @@ func validateRequestId(requestID *string, lenLimit int) error {
 func (wh *WorkflowHandler) validateStartWorkflowTimeouts(
 	request *workflowservice.StartWorkflowExecutionRequest,
 ) error {
-	if err := timestamp.ValidateProtoDuration(request.GetWorkflowExecutionTimeout()); err != nil {
+	if err := timestamp.ValidateAndCapProtoDuration(request.GetWorkflowExecutionTimeout()); err != nil {
 		return fmt.Errorf("%w cause: %v", errInvalidWorkflowExecutionTimeoutSeconds, err)
 	}
 
-	if err := timestamp.ValidateProtoDuration(request.GetWorkflowRunTimeout()); err != nil {
+	if err := timestamp.ValidateAndCapProtoDuration(request.GetWorkflowRunTimeout()); err != nil {
 		return fmt.Errorf("%w cause: %v", errInvalidWorkflowRunTimeoutSeconds, err)
 	}
 
-	if err := timestamp.ValidateProtoDuration(request.GetWorkflowTaskTimeout()); err != nil {
+	if err := timestamp.ValidateAndCapProtoDuration(request.GetWorkflowTaskTimeout()); err != nil {
 		return fmt.Errorf("%w cause: %v", errInvalidWorkflowTaskTimeoutSeconds, err)
 	}
 
@@ -5515,15 +5524,15 @@ func (wh *WorkflowHandler) validateStartWorkflowTimeouts(
 func (wh *WorkflowHandler) validateSignalWithStartWorkflowTimeouts(
 	request *workflowservice.SignalWithStartWorkflowExecutionRequest,
 ) error {
-	if err := timestamp.ValidateProtoDuration(request.GetWorkflowExecutionTimeout()); err != nil {
+	if err := timestamp.ValidateAndCapProtoDuration(request.GetWorkflowExecutionTimeout()); err != nil {
 		return fmt.Errorf("%w cause: %v", errInvalidWorkflowExecutionTimeoutSeconds, err)
 	}
 
-	if err := timestamp.ValidateProtoDuration(request.GetWorkflowRunTimeout()); err != nil {
+	if err := timestamp.ValidateAndCapProtoDuration(request.GetWorkflowRunTimeout()); err != nil {
 		return fmt.Errorf("%w cause: %v", errInvalidWorkflowRunTimeoutSeconds, err)
 	}
 
-	if err := timestamp.ValidateProtoDuration(request.GetWorkflowTaskTimeout()); err != nil {
+	if err := timestamp.ValidateAndCapProtoDuration(request.GetWorkflowTaskTimeout()); err != nil {
 		return fmt.Errorf("%w cause: %v", errInvalidWorkflowTaskTimeoutSeconds, err)
 	}
 
@@ -5538,7 +5547,7 @@ func (wh *WorkflowHandler) validateWorkflowStartDelay(
 		return errCronAndStartDelaySet
 	}
 
-	if err := timestamp.ValidateProtoDuration(startDelay); err != nil {
+	if err := timestamp.ValidateAndCapProtoDuration(startDelay); err != nil {
 		return fmt.Errorf("%w cause: %v", errInvalidWorkflowStartDelaySeconds, err)
 	}
 
@@ -5727,7 +5736,7 @@ func (wh *WorkflowHandler) UpdateActivityOptions(
 	defer log.CapturePanic(wh.logger, &retError)
 
 	if !wh.config.ActivityAPIsEnabled(request.GetNamespace()) {
-		return nil, status.Errorf(codes.Unimplemented, "method UpdateActivityOptions not implemented")
+		return nil, serviceerror.NewUnimplemented("method UpdateActivityOptions not implemented")
 	}
 
 	if request == nil {
@@ -5766,7 +5775,7 @@ func (wh *WorkflowHandler) PauseActivity(
 	defer log.CapturePanic(wh.logger, &retError)
 
 	if !wh.config.ActivityAPIsEnabled(request.GetNamespace()) {
-		return nil, status.Errorf(codes.Unimplemented, "method PauseActivity not implemented")
+		return nil, serviceerror.NewUnimplemented("method PauseActivity not implemented")
 	}
 
 	if request == nil {
@@ -5802,7 +5811,7 @@ func (wh *WorkflowHandler) UnpauseActivity(
 	defer log.CapturePanic(wh.logger, &retError)
 
 	if !wh.config.ActivityAPIsEnabled(request.GetNamespace()) {
-		return nil, status.Errorf(codes.Unimplemented, "method UnpauseActivity not implemented")
+		return nil, serviceerror.NewUnimplemented("method UnpauseActivity not implemented")
 	}
 
 	if request == nil {
@@ -5838,7 +5847,7 @@ func (wh *WorkflowHandler) ResetActivity(
 	defer log.CapturePanic(wh.logger, &retError)
 
 	if !wh.config.ActivityAPIsEnabled(request.GetNamespace()) {
-		return nil, status.Errorf(codes.Unimplemented, "method ResetActivity not implemented")
+		return nil, serviceerror.NewUnimplemented("method ResetActivity not implemented")
 	}
 
 	if request == nil {
@@ -5868,90 +5877,109 @@ func (wh *WorkflowHandler) ResetActivity(
 	return &workflowservice.ResetActivityResponse{}, nil
 }
 
-func fixFollowEvents(
+func (wh *WorkflowHandler) CreateWorkflowRule(
 	ctx context.Context,
-	versionChecker headers.VersionChecker,
-	isCloseEventOnly bool,
-	history *historypb.History,
-) error {
-	// Backwards-compatibility fix for retry events after #1866: older SDKs don't know how to "follow"
-	// subsequent runs linked in WorkflowExecutionFailed or TimedOut events, so they'll get the wrong result
-	// when trying to "get" the result of a workflow run. (This applies to cron runs also but "get" on a cron
-	// workflow isn't really sensible.)
-	//
-	// To handle this in a backwards-compatible way, we'll pretend the completion event is actually
-	// ContinuedAsNew, if it's Failed or TimedOut. We want to do this only when the client is looking for a
-	// completion event, and not when it's getting the history to display for other purposes. The best signal
-	// for that purpose is `isCloseEventOnly`. (We can't use `isLongPoll` also because in some cases, older
-	// versions of the Java SDK don't set that flag.)
-	//
-	// TODO: We can remove this once we no longer support SDK versions prior to around September 2021.
-	// Revisit this once we have an SDK deprecation policy.
-	followsNextRunId := versionChecker.ClientSupportsFeature(ctx, headers.FeatureFollowsNextRunID)
-	if isCloseEventOnly && !followsNextRunId && len(history.Events) > 0 {
-		lastEvent := history.Events[len(history.Events)-1]
-		fakeEvent, err := makeFakeContinuedAsNewEvent(ctx, lastEvent)
-		if err != nil {
-			return err
-		}
-		if fakeEvent != nil {
-			history.Events[len(history.Events)-1] = fakeEvent
-		}
+	request *workflowservice.CreateWorkflowRuleRequest,
+) (_ *workflowservice.CreateWorkflowRuleResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if !wh.config.WorkflowRulesAPIsEnabled(request.GetNamespace()) {
+		return nil, serviceerror.NewUnimplemented("method CreateWorkflowRule not supported")
 	}
-	return nil
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	if request.GetSpec() == nil {
+		return nil, serviceerror.NewInvalidArgument("Rule Specification is not set.")
+	}
+
+	if request.GetSpec().GetId() == "" {
+		return nil, serviceerror.NewInvalidArgument("Workflow Rule ID is not set.")
+	}
+
+	if len(request.GetSpec().GetId()) > wh.config.MaxIDLengthLimit() {
+		return nil, errWorkflowRuleIDTooLong
+	}
+
+	rule, err := wh.namespaceHandler.CreateWorkflowRule(ctx, request.GetSpec(), request.GetNamespace())
+	if err != nil {
+		return nil, err
+	}
+
+	response := &workflowservice.CreateWorkflowRuleResponse{
+		Rule: rule,
+	}
+
+	return response, nil
 }
 
-func makeFakeContinuedAsNewEvent(
-	_ context.Context,
-	lastEvent *historypb.HistoryEvent,
-) (*historypb.HistoryEvent, error) {
-	//nolint:exhaustive
-	switch lastEvent.EventType {
-	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:
-		if lastEvent.GetWorkflowExecutionCompletedEventAttributes().GetNewExecutionRunId() == "" {
-			return nil, nil
-		}
-	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED:
-		if lastEvent.GetWorkflowExecutionFailedEventAttributes().GetNewExecutionRunId() == "" {
-			return nil, nil
-		}
-	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT:
-		if lastEvent.GetWorkflowExecutionTimedOutEventAttributes().GetNewExecutionRunId() == "" {
-			return nil, nil
-		}
-	default:
-		return nil, nil
+func (wh *WorkflowHandler) DescribeWorkflowRule(
+	ctx context.Context,
+	request *workflowservice.DescribeWorkflowRuleRequest,
+) (_ *workflowservice.DescribeWorkflowRuleResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if !wh.config.WorkflowRulesAPIsEnabled(request.GetNamespace()) {
+		return nil, serviceerror.NewUnimplemented("method DescribeWorkflowRule not supported")
 	}
 
-	// We need to replace the last event with a continued-as-new event that has at least the
-	// NewExecutionRunId field. We don't actually need any other fields, since that's the only one
-	// the client looks at in this case, but copy the last result or failure from the real completed
-	// event just so it's clear what the result was.
-	newAttrs := &historypb.WorkflowExecutionContinuedAsNewEventAttributes{}
-	//nolint:exhaustive
-	switch lastEvent.EventType {
-	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:
-		attrs := lastEvent.GetWorkflowExecutionCompletedEventAttributes()
-		newAttrs.NewExecutionRunId = attrs.NewExecutionRunId
-		newAttrs.LastCompletionResult = attrs.Result
-	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED:
-		attrs := lastEvent.GetWorkflowExecutionFailedEventAttributes()
-		newAttrs.NewExecutionRunId = attrs.NewExecutionRunId
-		newAttrs.Failure = attrs.Failure
-	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT:
-		attrs := lastEvent.GetWorkflowExecutionTimedOutEventAttributes()
-		newAttrs.NewExecutionRunId = attrs.NewExecutionRunId
-		newAttrs.Failure = failure.NewTimeoutFailure("workflow timeout", enumspb.TIMEOUT_TYPE_START_TO_CLOSE)
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	if request.GetRuleId() == "" {
+		return nil, serviceerror.NewInvalidArgument("Workflow Rule ID is not set.")
 	}
 
-	return &historypb.HistoryEvent{
-		EventId:   lastEvent.EventId,
-		EventTime: lastEvent.EventTime,
-		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW,
-		Version:   lastEvent.Version,
-		TaskId:    lastEvent.TaskId,
-		Attributes: &historypb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{
-			WorkflowExecutionContinuedAsNewEventAttributes: newAttrs,
-		},
-	}, nil
+	rule, err := wh.namespaceHandler.DescribeWorkflowRule(ctx, request.GetRuleId(), request.GetNamespace())
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.DescribeWorkflowRuleResponse{Rule: rule}, nil
+}
+
+func (wh *WorkflowHandler) DeleteWorkflowRule(
+	ctx context.Context,
+	request *workflowservice.DeleteWorkflowRuleRequest,
+) (_ *workflowservice.DeleteWorkflowRuleResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if !wh.config.WorkflowRulesAPIsEnabled(request.GetNamespace()) {
+		return nil, serviceerror.NewUnimplemented("method DeleteWorkflowRule not supported")
+	}
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	if request.GetRuleId() == "" {
+		return nil, serviceerror.NewInvalidArgument("Workflow Rule ID is not set.")
+	}
+
+	err := wh.namespaceHandler.DeleteWorkflowRule(ctx, request.GetRuleId(), request.GetNamespace())
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.DeleteWorkflowRuleResponse{}, nil
+}
+
+func (wh *WorkflowHandler) ListWorkflowRules(
+	ctx context.Context,
+	request *workflowservice.ListWorkflowRulesRequest,
+) (_ *workflowservice.ListWorkflowRulesResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if !wh.config.WorkflowRulesAPIsEnabled(request.GetNamespace()) {
+		return nil, serviceerror.NewUnimplemented("method ListWorkflowRules not supported")
+	}
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	workflowRules, err := wh.namespaceHandler.ListWorkflowRules(ctx, request.GetNamespace())
+	if err != nil {
+		return nil, err
+	}
+	return &workflowservice.ListWorkflowRulesResponse{Rules: workflowRules}, nil
 }

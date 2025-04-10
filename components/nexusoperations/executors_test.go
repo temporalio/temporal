@@ -380,6 +380,8 @@ func TestProcessInvocationTask(t *testing.T) {
 				failure := events[0].GetNexusOperationFailedEventAttributes().Failure.Cause
 				require.NotNil(t, failure.GetNexusHandlerFailureInfo())
 				require.Equal(t, "handler error (NOT_FOUND): endpoint not registered", failure.Message)
+				require.NotNil(t, failure.Cause.GetApplicationFailureInfo())
+				require.Equal(t, "endpoint not registered", failure.Cause.Message)
 			},
 		},
 		{
@@ -461,7 +463,7 @@ func TestProcessInvocationTask(t *testing.T) {
 			if tc.cancelBeforeStart {
 				op, err := hsm.MachineData[nexusoperations.Operation](node)
 				require.NoError(t, err)
-				_, err = op.Cancel(node, time.Now())
+				_, err = op.Cancel(node, time.Now(), 0)
 				require.NoError(t, err)
 				c, err := op.Cancelation(node)
 				require.NoError(t, err)
@@ -757,7 +759,7 @@ func TestProcessCancelationTask(t *testing.T) {
 				Node: node,
 			})
 			require.NoError(t, err)
-			_, err = op.Cancel(node, time.Now())
+			_, err = op.Cancel(node, time.Now(), 0)
 			require.NoError(t, err)
 			node, err = node.Child([]hsm.Key{nexusoperations.CancelationMachineKey})
 			require.NoError(t, err)
@@ -864,7 +866,7 @@ func TestProcessCancelationTask_OperationCompleted(t *testing.T) {
 		Node: node,
 	})
 	require.NoError(t, err)
-	_, err = op.Cancel(node, time.Now())
+	_, err = op.Cancel(node, time.Now(), 0)
 	require.NoError(t, err)
 	_, err = nexusoperations.TransitionSucceeded.Apply(op, nexusoperations.EventSucceeded{
 		Node: node,
@@ -923,7 +925,7 @@ func TestProcessCancelationBackoffTask(t *testing.T) {
 		Node: node,
 	})
 	require.NoError(t, err)
-	_, err = op.Cancel(node, time.Now())
+	_, err = op.Cancel(node, time.Now(), 0)
 	require.NoError(t, err)
 
 	node, err = node.Child([]hsm.Key{nexusoperations.CancelationMachineKey})

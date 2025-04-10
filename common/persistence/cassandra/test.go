@@ -41,7 +41,7 @@ import (
 	commongocql "go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resolver"
-	"go.temporal.io/server/environment"
+	"go.temporal.io/server/temporal/environment"
 	"go.temporal.io/server/tests/testutils"
 )
 

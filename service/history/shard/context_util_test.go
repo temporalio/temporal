@@ -31,6 +31,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
 )
@@ -88,9 +89,9 @@ func (s *contextUtilSuite) TestReplicationReaderIDConversion_Int32Max() {
 	s.Equal(expectedShardID, actualShardID)
 }
 
-func (s *contextUtilSuite) newMockContext() *MockContext {
+func (s *contextUtilSuite) newMockContext() *historyi.MockShardContext {
 	controller := gomock.NewController(s.T())
-	mockContext := NewMockContext(controller)
+	mockContext := historyi.NewMockShardContext(controller)
 	mockContext.EXPECT().GetShardID().Return(int32(1)).AnyTimes()
 	mockContext.EXPECT().GetConfig().Return(tests.NewDynamicConfig()).AnyTimes()
 	return mockContext

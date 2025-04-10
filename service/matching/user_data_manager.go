@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/future"
+	"go.temporal.io/server/common/goro"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -48,7 +49,6 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/util"
-	"go.temporal.io/server/internal/goro"
 )
 
 const (
@@ -58,7 +58,7 @@ const (
 	userDataClosed
 )
 
-const maxFastUserDataFetches = 10
+const maxFastUserDataFetches = 5
 
 type (
 	userDataManager interface {
@@ -97,12 +97,13 @@ type (
 	// to/from the persistence layer passes through userDataManager of the owning partition.
 	// All other partitions long-poll the latest user data from the owning partition.
 	userDataManagerImpl struct {
-		lock            sync.Mutex
-		onFatalErr      func(unloadCause)
-		partition       tqid.Partition
-		userData        *persistencespb.VersionedTaskQueueUserData
-		userDataChanged chan struct{}
-		userDataState   userDataState
+		lock              sync.Mutex
+		onFatalErr        func(unloadCause)
+		onUserDataChanged func() // if set, call this in new goroutine when user data changes
+		partition         tqid.Partition
+		userData          *persistencespb.VersionedTaskQueueUserData
+		userDataChanged   chan struct{}
+		userDataState     userDataState
 		// only set if this partition owns user data of its task queue
 		store             persistence.TaskManager
 		config            *taskQueueConfig
@@ -132,6 +133,7 @@ func newUserDataManager(
 	store persistence.TaskManager,
 	matchingClient matchingservice.MatchingServiceClient,
 	onFatalErr func(unloadCause),
+	onUserDataChanged func(),
 	partition tqid.Partition,
 	config *taskQueueConfig,
 	logger log.Logger,
@@ -139,6 +141,7 @@ func newUserDataManager(
 ) *userDataManagerImpl {
 	m := &userDataManagerImpl{
 		onFatalErr:        onFatalErr,
+		onUserDataChanged: onUserDataChanged,
 		partition:         partition,
 		userDataChanged:   make(chan struct{}),
 		config:            config,
@@ -199,6 +202,9 @@ func (m *userDataManagerImpl) setUserDataLocked(userData *persistencespb.Version
 	m.userData = userData
 	close(m.userDataChanged)
 	m.userDataChanged = make(chan struct{})
+	if m.onUserDataChanged != nil {
+		go m.onUserDataChanged()
+	}
 }
 
 // Sets user data enabled/disabled and marks the future ready (if it's not ready yet).
@@ -288,9 +294,11 @@ func (m *userDataManagerImpl) fetchUserData(ctx context.Context) error {
 	// hasFetchedUserData is true if we have gotten a successful reply to GetTaskQueueUserData.
 	// It's used to control whether we do a long poll or a simple get.
 	hasFetchedUserData := false
+	userDataVersionChanged := false
 
 	op := func(ctx context.Context) error {
 		knownUserData, _, _ := m.GetUserData()
+		userDataVersionChanged = false
 
 		callCtx, cancel := context.WithTimeout(ctx, m.config.GetUserDataLongPollTimeout())
 		defer cancel()
@@ -323,6 +331,7 @@ func (m *userDataManagerImpl) fetchUserData(ctx context.Context) error {
 		// nil inner fields.
 		if res.GetUserData() != nil {
 			m.setUserDataForNonOwningPartition(res.GetUserData())
+			userDataVersionChanged = res.GetUserData().GetVersion() != knownUserData.GetVersion()
 			m.logNewUserData("fetched user data from parent", res.GetUserData())
 		} else {
 			m.logger.Debug("fetched user data from parent, no change")
@@ -344,7 +353,8 @@ func (m *userDataManagerImpl) fetchUserData(ctx context.Context) error {
 		// one. But if the remote is broken and returns success immediately, we might end up
 		// spinning. So enforce a minimum wait time that increases as long as we keep getting
 		// very fast replies.
-		if elapsed < m.config.GetUserDataMinWaitTime {
+		// If the user data version changed it means new data was received so we skip this check.
+		if !userDataVersionChanged && elapsed < m.config.GetUserDataMinWaitTime {
 			if fastResponseCounter >= maxFastUserDataFetches {
 				// maxFastUserDataFetches or more consecutive fast responses, let's throttle!
 				util.InterruptibleSleep(ctx, minWaitTime-elapsed)
@@ -575,7 +585,28 @@ func (m *userDataManagerImpl) HandleGetUserDataRequest(
 		} else if err != nil {
 			return nil, err
 		}
-		if req.WaitNewData && userData.GetVersion() == version {
+		if userData.GetVersion() > version {
+			resp.UserData = userData
+			m.logger.Info("returning user data",
+				tag.NewBoolTag("long-poll", req.WaitNewData),
+				tag.NewInt64("request-known-version", version),
+				tag.UserDataVersion(userData.Version),
+			)
+		} else if userData != nil && userData.Version < version && m.store != nil {
+			// When m.store == nil it means this is a non-owner partition, so it is possible
+			// for the requested version to be greater than the known version if there are
+			// concurrent user data updates in flight. We do not log an error in that case.
+
+			// This is highly unlikely to happen in the owner/root partition but may happen
+			// due to an edge case in during ownership transfer.
+			// We rely on client retries in this case to let the system eventually self-heal.
+			m.logger.Error("requested task queue user data for version greater than known version",
+				tag.NewInt64("request-known-version", version),
+				tag.UserDataVersion(userData.Version),
+			)
+			return nil, errRequestedVersionTooLarge
+		}
+		if req.WaitNewData && userData.GetVersion() <= version {
 			// long-poll: wait for data to change/appear
 			select {
 			case <-ctx.Done():
@@ -590,31 +621,7 @@ func (m *userDataManagerImpl) HandleGetUserDataRequest(
 				continue
 			}
 		}
-		if userData != nil {
-			if userData.Version > version {
-				resp.UserData = userData
-				m.logger.Info("returning user data",
-					tag.NewBoolTag("long-poll", req.WaitNewData),
-					tag.NewInt64("request-known-version", version),
-					tag.UserDataVersion(userData.Version),
-				)
-			} else if userData.Version < version {
-				if m.store != nil {
-					// When m.store == nil it means this is a non-owner partition, so it is possible
-					// for the requested version to be greater than the known version if there are
-					// concurrent user data updates in flight. We do not log an error in that case.
-
-					// This is highly unlikely to happen in the owner/root partition but may happen
-					// due to an edge case in during ownership transfer.
-					// We rely on client retries in this case to let the system eventually self-heal.
-					m.logger.Error("requested task queue user data for version greater than known version",
-						tag.NewInt64("request-known-version", version),
-						tag.UserDataVersion(userData.Version),
-					)
-				}
-				return nil, errRequestedVersionTooLarge
-			}
-		} else {
+		if userData == nil {
 			m.logger.Debug("returning empty user data (no data)", tag.NewBoolTag("long-poll", req.WaitNewData))
 		}
 		return resp, nil

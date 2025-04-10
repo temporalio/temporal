@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/primitives/timestamp"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
@@ -47,7 +48,7 @@ type (
 		*require.Assertions
 
 		controller       *gomock.Controller
-		mockMutableState *MockMutableState
+		mockMutableState *historyi.MockMutableState
 
 		workflowKey   definition.WorkflowKey
 		timerSequence *timerSequenceImpl
@@ -71,7 +72,7 @@ func (s *timerSequenceSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockMutableState = NewMockMutableState(s.controller)
+	s.mockMutableState = historyi.NewMockMutableState(s.controller)
 
 	s.workflowKey = definition.NewWorkflowKey(
 		tests.NamespaceID.String(),

@@ -40,13 +40,14 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/priorities"
 	"go.temporal.io/server/service/history/consts"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
-	"go.temporal.io/server/service/history/workflow"
 )
 
 type (
-	standbyActionFn     func(context.Context, workflow.Context, workflow.MutableState) (interface{}, error)
+	standbyActionFn     func(context.Context, historyi.WorkflowContext, historyi.MutableState) (interface{}, error)
 	standbyPostActionFn func(context.Context, tasks.Task, interface{}, log.Logger) error
 
 	standbyCurrentTimeFn func() time.Time
@@ -155,6 +156,7 @@ type (
 		taskQueue                          string
 		activityTaskScheduleToStartTimeout time.Duration
 		versionDirective                   *taskqueuespb.TaskVersionDirective
+		priority                           *commonpb.Priority
 	}
 
 	verifyCompletionRecordedPostActionInfo struct {
@@ -165,11 +167,12 @@ type (
 		workflowTaskScheduleToStartTimeout time.Duration
 		taskqueue                          *taskqueuepb.TaskQueue
 		versionDirective                   *taskqueuespb.TaskVersionDirective
+		priority                           *commonpb.Priority
 	}
 )
 
 func newExecutionTimerPostActionInfo(
-	mutableState workflow.MutableState,
+	mutableState historyi.MutableState,
 ) (*executionTimerPostActionInfo, error) {
 	return &executionTimerPostActionInfo{
 		currentRunID: mutableState.GetExecutionState().RunId,
@@ -177,43 +180,49 @@ func newExecutionTimerPostActionInfo(
 }
 
 func newActivityTaskPostActionInfo(
-	mutableState workflow.MutableState,
+	mutableState historyi.MutableState,
 	activityInfo *persistencespb.ActivityInfo,
 ) (*activityTaskPostActionInfo, error) {
 	directive := MakeDirectiveForActivityTask(mutableState, activityInfo)
+	priority := priorities.Merge(mutableState.GetExecutionInfo().Priority, activityInfo.Priority)
 
 	return &activityTaskPostActionInfo{
 		activityTaskScheduleToStartTimeout: activityInfo.ScheduleToStartTimeout.AsDuration(),
 		versionDirective:                   directive,
+		priority:                           priority,
 	}, nil
 }
 
 func newActivityRetryTimePostActionInfo(
-	mutableState workflow.MutableState,
+	mutableState historyi.MutableState,
 	taskQueue string,
 	activityScheduleToStartTimeout time.Duration,
 	activityInfo *persistencespb.ActivityInfo,
 ) (*activityTaskPostActionInfo, error) {
 	directive := MakeDirectiveForActivityTask(mutableState, activityInfo)
+	priority := priorities.Merge(mutableState.GetExecutionInfo().Priority, activityInfo.Priority)
 
 	return &activityTaskPostActionInfo{
 		taskQueue:                          taskQueue,
 		activityTaskScheduleToStartTimeout: activityScheduleToStartTimeout,
 		versionDirective:                   directive,
+		priority:                           priority,
 	}, nil
 }
 
 func newWorkflowTaskPostActionInfo(
-	mutableState workflow.MutableState,
+	mutableState historyi.MutableState,
 	workflowTaskScheduleToStartTimeout time.Duration,
 	taskqueue *taskqueuepb.TaskQueue,
 ) (*workflowTaskPostActionInfo, error) {
 	directive := MakeDirectiveForWorkflowTask(mutableState)
+	priority := mutableState.GetExecutionInfo().Priority
 
 	return &workflowTaskPostActionInfo{
 		workflowTaskScheduleToStartTimeout: workflowTaskScheduleToStartTimeout,
 		taskqueue:                          taskqueue,
 		versionDirective:                   directive,
+		priority:                           priority,
 	}, nil
 }
 

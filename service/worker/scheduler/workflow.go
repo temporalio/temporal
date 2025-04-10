@@ -84,6 +84,8 @@ const (
 	AccurateFutureActionTimes = 9
 	// include WorkflowExecutionStatus in ScheduleActionResult
 	ActionResultIncludesStatus = 10
+	// limit the ScheduleSpec specs and exclusions to only 10 entries
+	LimitMemoSpecSize = 11
 )
 
 const (
@@ -172,6 +174,7 @@ type (
 		AllowZeroSleep                    bool                     // Whether to allow a zero-length timer. Used for workflow compatibility.
 		ReuseTimer                        bool                     // Whether to reuse timer. Used for workflow compatibility.
 		NextTimeCacheV2Size               int                      // Size of next time cache (v2)
+		SpecFieldLengthLimit              int                      // item limit per spec field on the ScheduleInfo memo
 		Version                           SchedulerWorkflowVersion // Used to keep track of schedules version to release new features and for backward compatibility
 		// version 0 corresponds to the schedule version that comes before introducing the Version parameter
 
@@ -221,6 +224,7 @@ var (
 		AllowZeroSleep:                    true,
 		ReuseTimer:                        true,
 		NextTimeCacheV2Size:               14, // see note below
+		SpecFieldLengthLimit:              10,
 		Version:                           ActionResultIncludesStatus,
 	}
 
@@ -1038,6 +1042,14 @@ func (s *scheduler) getListInfo(inWorkflowContext bool) *schedulepb.ScheduleList
 	// clear fields that are too large/not useful for the list view
 	spec.TimezoneData = nil
 
+	if s.hasMinVersion(LimitMemoSpecSize) {
+		// Limit the number of specs and exclusions stored on the memo.
+		limit := s.tweakables.SpecFieldLengthLimit
+		spec.ExcludeStructuredCalendar = util.SliceHead(spec.ExcludeStructuredCalendar, limit)
+		spec.Interval = util.SliceHead(spec.Interval, limit)
+		spec.StructuredCalendar = util.SliceHead(spec.StructuredCalendar, limit)
+	}
+
 	return &schedulepb.ScheduleListInfo{
 		Spec:              spec,
 		WorkflowType:      s.Schedule.Action.GetStartWorkflow().GetWorkflowType(),
@@ -1335,6 +1347,7 @@ func (s *scheduler) startWorkflow(
 			LastCompletionResult:     lastCompletionResult,
 			ContinuedFailure:         continuedFailure,
 			UserMetadata:             newWorkflow.UserMetadata,
+			Priority:                 newWorkflow.Priority,
 		},
 	}
 	for {

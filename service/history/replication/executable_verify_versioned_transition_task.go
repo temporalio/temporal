@@ -24,6 +24,7 @@ package replication
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -43,6 +44,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	ctasks "go.temporal.io/server/common/tasks"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/workflow"
 )
 
@@ -154,7 +156,7 @@ func (e *ExecutableVerifyVersionedTransitionTask) Execute() error {
 	}
 
 	// case 2: verify task has newer VersionedTransition, need to sync state
-	if workflow.CompareVersionedTransition(e.ReplicationTask().VersionedTransition, transitionhistory.LastVersionedTransition(transitionHistory)) > 0 {
+	if transitionhistory.Compare(e.ReplicationTask().VersionedTransition, transitionhistory.LastVersionedTransition(transitionHistory)) > 0 {
 		return serviceerrors.NewSyncState(
 			"mutable state not up to date",
 			e.NamespaceID,
@@ -249,6 +251,10 @@ func (e *ExecutableVerifyVersionedTransitionTask) getMutableState(ctx context.Co
 }
 
 func (e *ExecutableVerifyVersionedTransitionTask) HandleErr(err error) error {
+	if errors.Is(err, consts.ErrDuplicate) {
+		e.MarkTaskDuplicated()
+		return nil
+	}
 	e.Logger.Error("VerifyVersionedTransition replication task encountered error",
 		tag.WorkflowNamespaceID(e.NamespaceID),
 		tag.WorkflowID(e.WorkflowID),

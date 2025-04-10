@@ -52,6 +52,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/namespace/nsregistry"
+	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -129,6 +130,7 @@ var Module = fx.Options(
 	deadlock.Module,
 	config.Module,
 	testhooks.Module,
+	fx.Provide(commonnexus.NewLoggedHTTPClientTraceProvider),
 )
 
 var DefaultOptions = fx.Options(
@@ -393,7 +395,6 @@ func RPCFactoryProvider(
 	tracingStatsHandler telemetry.ClientStatsHandler,
 	monitor membership.Monitor,
 ) (common.RPCFactory, error) {
-	svcCfg := cfg.Services[string(svcName)]
 	frontendURL, frontendHTTPURL, frontendHTTPPort, frontendTLSConfig, err := getFrontendConnectionDetails(cfg, tlsConfigProvider, resolver)
 	if err != nil {
 		return nil, err
@@ -403,9 +404,8 @@ func RPCFactoryProvider(
 	if tracingStatsHandler != nil {
 		options = append(options, grpc.WithStatsHandler(tracingStatsHandler))
 	}
-
 	return rpc.NewFactory(
-		&svcCfg.RPC,
+		cfg,
 		svcName,
 		logger,
 		tlsConfigProvider,

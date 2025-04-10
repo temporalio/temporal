@@ -47,6 +47,7 @@ import (
 type MockHistoryServiceClient struct {
 	ctrl     *gomock.Controller
 	recorder *MockHistoryServiceClientMockRecorder
+	isgomock struct{}
 }
 
 // MockHistoryServiceClientMockRecorder is the mock recorder for MockHistoryServiceClient.
@@ -1490,6 +1491,7 @@ func (mr *MockHistoryServiceClientMockRecorder) VerifyFirstWorkflowTaskScheduled
 type MockHistoryService_StreamWorkflowReplicationMessagesClient struct {
 	ctrl     *gomock.Controller
 	recorder *MockHistoryService_StreamWorkflowReplicationMessagesClientMockRecorder
+	isgomock struct{}
 }
 
 // MockHistoryService_StreamWorkflowReplicationMessagesClientMockRecorder is the mock recorder for MockHistoryService_StreamWorkflowReplicationMessagesClient.
@@ -1627,6 +1629,7 @@ func (mr *MockHistoryService_StreamWorkflowReplicationMessagesClientMockRecorder
 type MockHistoryServiceServer struct {
 	ctrl     *gomock.Controller
 	recorder *MockHistoryServiceServerMockRecorder
+	isgomock struct{}
 }
 
 // MockHistoryServiceServerMockRecorder is the mock recorder for MockHistoryServiceServer.
@@ -2726,6 +2729,7 @@ func (mr *MockHistoryServiceServerMockRecorder) mustEmbedUnimplementedHistorySer
 type MockUnsafeHistoryServiceServer struct {
 	ctrl     *gomock.Controller
 	recorder *MockUnsafeHistoryServiceServerMockRecorder
+	isgomock struct{}
 }
 
 // MockUnsafeHistoryServiceServerMockRecorder is the mock recorder for MockUnsafeHistoryServiceServer.
@@ -2761,6 +2765,7 @@ func (mr *MockUnsafeHistoryServiceServerMockRecorder) mustEmbedUnimplementedHist
 type MockHistoryService_StreamWorkflowReplicationMessagesServer struct {
 	ctrl     *gomock.Controller
 	recorder *MockHistoryService_StreamWorkflowReplicationMessagesServerMockRecorder
+	isgomock struct{}
 }
 
 // MockHistoryService_StreamWorkflowReplicationMessagesServerMockRecorder is the mock recorder for MockHistoryService_StreamWorkflowReplicationMessagesServer.

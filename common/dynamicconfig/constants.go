@@ -152,6 +152,11 @@ values in system search attributes.`,
 		`EnableNamespaceNotActiveAutoForwarding whether enabling DC auto forwarding to active cluster
 for signal / start / signal with start API if namespace is not active`,
 	)
+	EnableNamespaceHandoverWait = NewNamespaceBoolSetting(
+		"system.enableNamespaceHandoverWait",
+		false,
+		`EnableNamespaceHandoverWait whether waiting for namespace replication state update before serve the request`,
+	)
 	TransactionSizeLimit = NewGlobalIntSetting(
 		"system.transactionSizeLimit",
 		primitives.DefaultTransactionSizeLimit,
@@ -452,6 +457,12 @@ to exceed this number will fail with a FailedPrecondition error.`,
 		`MatchingDeletedRuleRetentionTime is the length of time that deleted Version Assignment Rules and
 Deleted Redirect Rules will be kept in the DB (with DeleteTimestamp). After this time, the tombstones are deleted at the next time update of versioning data for the task queue.`,
 	)
+	PollerHistoryTTL = NewNamespaceDurationSetting(
+		"matching.PollerHistoryTTL",
+		5*time.Minute,
+		`PollerHistoryTTL is the time to live for poller histories in the pollerHistory cache of a physical task queue. Poller histories are fetched when
+		requiring a list of pollers that polled a given task queue.`,
+	)
 	ReachabilityBuildIdVisibilityGracePeriod = NewNamespaceDurationSetting(
 		"matching.wv.ReachabilityBuildIdVisibilityGracePeriod",
 		3*time.Minute,
@@ -463,7 +474,7 @@ recently-current deployment can arrive in visibility.`,
 	VersionDrainageStatusVisibilityGracePeriod = NewNamespaceDurationSetting(
 		"matching.wv.VersionDrainageStatusVisibilityGracePeriod",
 		3*time.Minute,
-		`VersionDrainageStatusVisibilityGracePeriod is the time period for which non-current / non-ramping worker deployment versions 
+		`VersionDrainageStatusVisibilityGracePeriod is the time period for which non-current / non-ramping worker deployment versions
 are still considered active to account for the delay in updating the build id field in visibility.`,
 	)
 	VersionDrainageStatusRefreshInterval = NewNamespaceDurationSetting(
@@ -638,6 +649,12 @@ long-running requests to fail. The name 'frontend.namespaceCount' is kept for ba
 existing deployments even though it is a bit of a misnomer. This does not limit the number of namespaces; it is a
 per-_namespace_ limit on the _count_ of long-running requests. Requests are only throttled when the limit is
 exceeded, not when it is only reached.`,
+	)
+	ReducePollWorkflowHistoryRequestPriority = NewGlobalBoolSetting(
+		"frontend.reducePollWorkflowRequestPriority",
+		true,
+		`ReducePollWorkflowRequestPriority decides whether to reduce the priority of GetWorkflowExecutionHistory
+requests if WaitNewEvent is true.`,
 	)
 	FrontendGlobalMaxConcurrentLongRunningRequests = NewNamespaceIntSetting(
 		"frontend.globalNamespaceCount",
@@ -1050,13 +1067,19 @@ See DynamicRateLimitingParams comments for more details.`,
 	MatchingGetTasksBatchSize = NewTaskQueueIntSetting(
 		"matching.getTasksBatchSize",
 		1000,
-		`MatchingGetTasksBatchSize is the maximum batch size to fetch from the task buffer`,
+		`How many backlog tasks to read from persistence at once`,
+	)
+	MatchingGetTasksReloadAt = NewTaskQueueIntSetting(
+		"matching.getTasksReloadAt",
+		100,
+		`Reload a batch of tasks when there are this many remaining. Must be less than MatchingGetTasksBatchSize. (Requires new matcher.)`,
 	)
 	MatchingLongPollExpirationInterval = NewTaskQueueDurationSetting(
 		"matching.longPollExpirationInterval",
 		time.Minute,
 		`MatchingLongPollExpirationInterval is the long poll expiration interval in the matching service`,
 	)
+	// TODO(pri): old matcher cleanup
 	MatchingSyncMatchWaitDuration = NewTaskQueueDurationSetting(
 		"matching.syncMatchWaitDuration",
 		200*time.Millisecond,
@@ -1104,6 +1127,11 @@ Note: this should be greater than matching.longPollExpirationInterval and matchi
 		"matching.maxTaskDeleteBatchSize",
 		100,
 		`MatchingMaxTaskDeleteBatchSize is the max batch size for range deletion of tasks`,
+	)
+	MatchingTaskDeleteInterval = NewTaskQueueDurationSetting(
+		"matching.taskDeleteInterval",
+		15*time.Second,
+		`MatchingTaskDeleteInterval is the minimum interval between task range deletions`,
 	)
 	MatchingThrottledLogRPS = NewGlobalIntSetting(
 		"matching.throttledLogRPS",
@@ -1154,7 +1182,7 @@ for VERSIONED queues.`,
 		1,
 		`MatchingForwarderMaxOutstandingTasks is the max number of inflight addTask/queryTask from the forwarder`,
 	)
-	MatchingForwarderMaxRatePerSecond = NewTaskQueueIntSetting(
+	MatchingForwarderMaxRatePerSecond = NewTaskQueueFloatSetting(
 		"matching.forwarderMaxRatePerSecond",
 		10,
 		`MatchingForwarderMaxRatePerSecond is the max rate at which add/query can be forwarded`,
@@ -1253,6 +1281,39 @@ these log lines can be noisy, we want to be able to turn on and sample selective
 		"matching.maxTaskQueuesInDeploymentVersion",
 		100,
 		`MatchingMaxTaskQueuesInDeployment represents the maximum number of task-queues that can be registered in a single worker deployment version`,
+	)
+	MatchingPollerScalingBacklogAgeScaleUp = NewTaskQueueDurationSetting(
+		"matching.pollerScalingMinimumBacklog",
+		200*time.Millisecond,
+		`MatchingPollerScalingBacklogAgeScaleUp is the minimum backlog age that must be accumulated before 
+a decision to scale up the number of pollers will be issued`,
+	)
+	MatchingPollerScalingWaitTime = NewTaskQueueDurationSetting(
+		"matching.pollerScalingWaitTime",
+		1*time.Second,
+		`MatchingPollerScalingWaitTime is the duration a sync-matched poller must exceed before
+a decision to scale down the number of pollers will be issued`,
+	)
+	MatchingPollerScalingDecisionsPerSecond = NewTaskQueueFloatSetting(
+		"matching.pollerScalingDecisionsPerSecond",
+		10,
+		`MatchingPollerScalingDecisionsPerSecond is the maximum number of scaling decisions that will be issued per
+second per poller by one physical queue manager`,
+	)
+	MatchingUseNewMatcher = NewTaskQueueBoolSetting(
+		"matching.useNewMatcher",
+		false,
+		`Use priority-enabled TaskMatcher`,
+	)
+	MatchingPriorityLevels = NewTaskQueueIntSetting(
+		"matching.priorityLevels",
+		5,
+		`Number of simple priority levels (requires new matcher)`,
+	)
+	MatchingBacklogTaskForwardTimeout = NewTaskQueueDurationSetting(
+		"matching.backlogTaskForwardTimeout",
+		60*time.Second,
+		`Timeout for forwarded backlog task (requires new matcher)`,
 	)
 
 	// keys for history
@@ -1365,11 +1426,9 @@ HistoryCacheSizeBasedLimit is set to true.`,
 	)
 	EnableWorkflowExecutionTimeoutTimer = NewGlobalBoolSetting(
 		"history.enableWorkflowExecutionTimeoutTimer",
-		false,
+		true,
 		`EnableWorkflowExecutionTimeoutTimer controls whether to enable the new logic for generating a workflow execution
-timeout timer when execution timeout is specified when starting a workflow.
-For backward compatibility, this feature is disabled by default and should only be enabled after server version
-containing this flag is deployed to all history service nodes in the cluster.`,
+timeout timer when execution timeout is specified when starting a workflow.`,
 	)
 	EnableTransitionHistory = NewGlobalBoolSetting(
 		"history.enableTransitionHistory",
@@ -1456,6 +1515,12 @@ to cleanup any of its associated data, such as workflow contexts. If set to zero
 shard ownership information, instead of checking membership for each request.
 Only inspected when an instance first creates a history client, so changes
 to this require a restart to take effect.`,
+	)
+	HistoryClientOwnershipCachingStaleTTL = NewGlobalDurationSetting(
+		"history.clientOwnershipCachingUnusedTTL",
+		30*time.Second,
+		`HistoryClientOwnershipCachingStaleTTL, if non-zero, configures the TTL
+for cached shard ownership entries after a membership update.`,
 	)
 	ShardIOConcurrency = NewGlobalIntSetting(
 		"history.shardIOConcurrency",
@@ -1992,7 +2057,7 @@ archivalQueueProcessor`,
 
 	ReplicatorTaskBatchSize = NewGlobalIntSetting(
 		"history.replicatorTaskBatchSize",
-		25,
+		100,
 		`ReplicatorTaskBatchSize is batch size for ReplicatorProcessor`,
 	)
 	ReplicatorMaxSkipTaskCount = NewGlobalIntSetting(
@@ -2080,7 +2145,7 @@ This configuration will be become the default behavior in the next release and r
 	)
 	AllowResetWithPendingChildren = NewNamespaceBoolSetting(
 		"history.allowResetWithPendingChildren",
-		false,
+		true,
 		`Allows resetting of workflows with pending children when set to true`,
 	)
 	HistoryMaxAutoResetPoints = NewNamespaceIntSetting(
@@ -2101,7 +2166,7 @@ the number of children greater than or equal to this threshold`,
 	)
 	NumParentClosePolicySystemWorkflows = NewGlobalIntSetting(
 		"history.numParentClosePolicySystemWorkflows",
-		10,
+		1000,
 		`NumParentClosePolicySystemWorkflows is key for number of parentClosePolicy system workflows running in total`,
 	)
 	HistoryThrottledLogRPS = NewGlobalIntSetting(
@@ -2376,6 +2441,11 @@ that task will be sent to DLQ.`,
 		0.90,
 		"History service health check on persistence error ratio",
 	)
+	SendRawHistoryBetweenInternalServices = NewGlobalBoolSetting(
+		"history.sendRawHistoryBetweenInternalServices",
+		false,
+		`SendRawHistoryBetweenInternalServices is whether to send raw history events between internal temporal services`,
+	)
 
 	// keys for worker
 
@@ -2591,7 +2661,7 @@ If the service configures with archival feature enabled, update worker.historySc
 	)
 	SchedulerLocalActivitySleepLimit = NewNamespaceDurationSetting(
 		"worker.schedulerLocalActivitySleepLimit",
-		1*time.Second,
+		5*time.Second,
 		`How long to sleep within a local activity before pushing to workflow level sleep (don't make this
 close to or more than the workflow task timeout)`,
 	)
@@ -2625,5 +2695,11 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		"frontend.activityAPIsEnabled",
 		false,
 		`ActivityAPIsEnabled is a "feature enable" flag. `,
+	)
+
+	WorkflowRulesAPIsEnabled = NewNamespaceBoolSetting(
+		"frontend.workflowRulesAPIsEnabled",
+		false,
+		`WorkflowRulesAPIsEnabled is a "feature enable" flag. `,
 	)
 )

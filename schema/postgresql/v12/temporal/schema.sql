@@ -57,7 +57,7 @@ CREATE TABLE current_executions(
   last_write_version BIGINT NOT NULL,
   -- `data` contains the WorkflowExecutionState (same as in `executions.state` above)
   data BYTEA NULL,
-  data_encoding VARCHAR(16) NULL,
+  data_encoding VARCHAR(16) NOT NULL DEFAULT '',
   PRIMARY KEY (shard_id, namespace_id, workflow_id)
 );
 
@@ -249,6 +249,20 @@ CREATE TABLE signals_requested_sets (
   signal_id VARCHAR(255) NOT NULL,
   --
   PRIMARY KEY (shard_id, namespace_id, workflow_id, run_id, signal_id)
+);
+
+CREATE TABLE chasm_node_maps (
+  shard_id INTEGER NOT NULL,
+  namespace_id BYTEA NOT NULL,
+  workflow_id VARCHAR(255) NOT NULL,
+  run_id BYTEA NOT NULL,
+  chasm_path BYTEA NOT NULL,
+--
+  metadata BYTEA NOT NULL,
+  metadata_encoding VARCHAR(16),
+  data BYTEA,
+  data_encoding VARCHAR(16),
+  PRIMARY KEY (shard_id, namespace_id, workflow_id, run_id, chasm_path)
 );
 
 -- history eventsV2: history_node stores history event data

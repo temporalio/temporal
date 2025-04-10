@@ -35,6 +35,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
@@ -303,4 +304,81 @@ func (s *temporalSerializerSuite) TestSerializeWorkflowExecutionState() {
 	s.NoError(err)
 	s.NotNil(deserializedState)
 	s.ProtoEqual(state, deserializedState)
+}
+
+// HistoryService returns a different GetWorkflowExecutionHistoryResponse GetWorkflowExecutionHistoryResponseWithRaw to
+// WorkflowHandler. Since HistoryClient is defined with the response type GetWorkflowExecutionHistoryResponse, grpc
+// will deserialize this message to GetWorkflowExecutionHistoryResponse. This is done to avoid the extra CPU usage in
+// history service to deserialize event blobs to []*HistoryEvent. This test ensures that
+// GetWorkflowExecutionHistoryResponseWithRaw is correctly deserialized to GetWorkflowExecutionHistoryResponse.
+func (s *temporalSerializerSuite) TestGetWorkflowExecutionHistoryResponseWithRawHistoryEvents() {
+	// Create history events and batches
+	fullHistory := &historypb.History{
+		Events: []*historypb.HistoryEvent{
+			{
+				EventId:   1,
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+				Version:   100,
+			},
+			{
+				EventId:   2,
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
+				Version:   101,
+			},
+			{
+				EventId:   3,
+				EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED,
+				Version:   102,
+			},
+			{
+				EventId:   4,
+				EventType: enumspb.EVENT_TYPE_TIMER_FIRED,
+				Version:   103,
+			},
+		},
+	}
+
+	batch1 := &historypb.History{
+		Events: fullHistory.Events[:2],
+	}
+
+	batch2 := &historypb.History{
+		Events: fullHistory.Events[2:],
+	}
+
+	// Marshal each batch
+	rawHistory1, err := batch1.Marshal()
+	s.Require().NoError(err)
+
+	db1 := &commonpb.DataBlob{
+		EncodingType: enumspb.ENCODING_TYPE_PROTO3,
+		Data:         rawHistory1,
+	}
+
+	rawHistory2, err := batch2.Marshal()
+	s.Require().NoError(err)
+
+	db2 := &commonpb.DataBlob{
+		EncodingType: enumspb.ENCODING_TYPE_PROTO3,
+		Data:         rawHistory2,
+	}
+
+	rawResp := &historyservice.GetWorkflowExecutionHistoryResponseWithRaw{
+		History: [][]byte{db1.Data, db2.Data},
+	}
+
+	serializedRawResp, err := rawResp.Marshal()
+	s.Require().NoError(err)
+
+	resp := &historyservice.GetWorkflowExecutionHistoryResponse{}
+	err = resp.Unmarshal(serializedRawResp)
+	s.Require().NoError(err)
+
+	// Verify resp has same list of history events as fullHistory
+	for i, event := range resp.History.Events {
+		s.Equal(fullHistory.Events[i].EventId, event.EventId)
+		s.Equal(fullHistory.Events[i].Version, event.Version)
+		s.Equal(fullHistory.Events[i].EventType, event.EventType)
+		s.Nil(event.Attributes)
+	}
 }

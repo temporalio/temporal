@@ -99,6 +99,7 @@ var Module = fx.Options(
 	fx.Provide(MuxRouterProvider),
 	fx.Provide(ConfigProvider),
 	fx.Provide(NamespaceLogInterceptorProvider),
+	fx.Provide(NamespaceHandoverInterceptorProvider),
 	fx.Provide(RedirectionInterceptorProvider),
 	fx.Provide(TelemetryInterceptorProvider),
 	fx.Provide(RetryableInterceptorProvider),
@@ -215,9 +216,10 @@ func GrpcServerOptionsProvider(
 	serviceName primitives.ServiceName,
 	rpcFactory common.RPCFactory,
 	namespaceLogInterceptor *interceptor.NamespaceLogInterceptor,
-	namespaceRateLimiterInterceptor *interceptor.NamespaceRateLimitInterceptor,
+	namespaceRateLimiterInterceptor interceptor.NamespaceRateLimitInterceptor,
 	namespaceCountLimiterInterceptor *interceptor.ConcurrentRequestLimitInterceptor,
 	namespaceValidatorInterceptor *interceptor.NamespaceValidatorInterceptor,
+	namespaceHandoverInterceptor *interceptor.NamespaceHandoverInterceptor,
 	redirectionInterceptor *interceptor.Redirection,
 	telemetryInterceptor *interceptor.TelemetryInterceptor,
 	retryableInterceptor *interceptor.RetryableInterceptor,
@@ -260,12 +262,15 @@ func GrpcServerOptionsProvider(
 		// Mask error interceptor should be the most outer interceptor since it handle the errors format
 		// Service Error Interceptor should be the next most outer interceptor on error handling
 		maskInternalErrorDetailsInterceptor.Intercept,
-		rpc.ServiceErrorInterceptor,
+		interceptor.ServiceErrorInterceptor,
 		rpc.NewFrontendServiceErrorInterceptor(logger),
 		namespaceValidatorInterceptor.NamespaceValidateIntercept,
 		namespaceLogInterceptor.Intercept, // TODO: Deprecate this with a outer custom interceptor
 		metrics.NewServerMetricsContextInjectorInterceptor(),
 		authInterceptor.Intercept,
+		// Handover interceptor has to above redirection because the request will route to the correct cluster after handover completed.
+		// And retry cannot be performed before customInterceptors.
+		namespaceHandoverInterceptor.Intercept,
 		redirectionInterceptor.Intercept,
 		telemetryInterceptor.UnaryIntercept,
 		healthInterceptor.Intercept,
@@ -352,6 +357,22 @@ func RedirectionInterceptorProvider(
 	)
 }
 
+func NamespaceHandoverInterceptorProvider(
+	dc *dynamicconfig.Collection,
+	namespaceCache namespace.Registry,
+	logger log.Logger,
+	metricsHandler metrics.Handler,
+	timeSource clock.TimeSource,
+) *interceptor.NamespaceHandoverInterceptor {
+	return interceptor.NewNamespaceHandoverInterceptor(
+		dc,
+		namespaceCache,
+		metricsHandler,
+		logger,
+		timeSource,
+	)
+}
+
 func TelemetryInterceptorProvider(
 	logger log.Logger,
 	metricsHandler metrics.Handler,
@@ -409,11 +430,12 @@ func RateLimitInterceptorProvider(
 }
 
 func MaskInternalErrorDetailsInterceptorProvider(
+	logger log.Logger,
 	serviceConfig *Config,
 	namespaceRegistry namespace.Registry,
 ) *interceptor.MaskInternalErrorDetailsInterceptor {
 	return interceptor.NewMaskInternalErrorDetailsInterceptor(
-		serviceConfig.MaskInternalErrorDetails, namespaceRegistry,
+		serviceConfig.MaskInternalErrorDetails, namespaceRegistry, logger,
 	)
 }
 
@@ -423,7 +445,7 @@ func NamespaceRateLimitInterceptorProvider(
 	namespaceRegistry namespace.Registry,
 	frontendServiceResolver membership.ServiceResolver,
 	logger log.SnTaggedLogger,
-) *interceptor.NamespaceRateLimitInterceptor {
+) interceptor.NamespaceRateLimitInterceptor {
 	var globalNamespaceRPS, globalNamespaceVisibilityRPS, globalNamespaceNamespaceReplicationInducingAPIsRPS dynamicconfig.IntPropertyFnWithNamespaceFilter
 
 	switch serviceName {
@@ -474,7 +496,7 @@ func NamespaceRateLimitInterceptorProvider(
 			)
 		},
 	)
-	return interceptor.NewNamespaceRateLimitInterceptor(namespaceRegistry, namespaceRateLimiter, map[string]int{})
+	return interceptor.NewNamespaceRateLimitInterceptor(namespaceRegistry, namespaceRateLimiter, map[string]int{}, serviceConfig.ReducePollWorkflowHistoryRequestPriority)
 }
 
 func NamespaceCountLimitInterceptorProvider(
@@ -756,12 +778,13 @@ func RegisterNexusHTTPHandler(
 	authInterceptor *authorization.Interceptor,
 	telemetryInterceptor *interceptor.TelemetryInterceptor,
 	redirectionInterceptor *interceptor.Redirection,
-	namespaceRateLimiterInterceptor *interceptor.NamespaceRateLimitInterceptor,
+	namespaceRateLimiterInterceptor interceptor.NamespaceRateLimitInterceptor,
 	namespaceCountLimiterInterceptor *interceptor.ConcurrentRequestLimitInterceptor,
 	namespaceValidatorInterceptor *interceptor.NamespaceValidatorInterceptor,
 	rateLimitInterceptor *interceptor.RateLimitInterceptor,
 	logger log.Logger,
 	router *mux.Router,
+	httpTraceProvider nexus.HTTPClientTraceProvider,
 ) {
 	h := NewNexusHTTPHandler(
 		serviceConfig,
@@ -779,6 +802,7 @@ func RegisterNexusHTTPHandler(
 		namespaceCountLimiterInterceptor,
 		rateLimitInterceptor,
 		logger,
+		httpTraceProvider,
 	)
 	h.RegisterRoutes(router)
 }

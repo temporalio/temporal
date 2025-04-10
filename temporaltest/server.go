@@ -38,8 +38,8 @@ import (
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/internal/temporalite"
 	"go.temporal.io/server/temporal"
+	temporalite "go.temporal.io/server/temporaltest/internal"
 )
 
 // A TestServer is a Temporal server listening on a system-chosen port on the

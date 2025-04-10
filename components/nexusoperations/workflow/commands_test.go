@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/server/components/nexusoperations"
 	opsworkflow "go.temporal.io/server/components/nexusoperations/workflow"
 	"go.temporal.io/server/service/history/hsm"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
 	"go.uber.org/mock/gomock"
@@ -60,7 +61,7 @@ func (v commandValidator) IsValidPayloadSize(size int) bool {
 
 type testContext struct {
 	execInfo        *persistencespb.WorkflowExecutionInfo
-	ms              *workflow.MockMutableState
+	ms              *historyi.MockMutableState
 	scheduleHandler workflow.CommandHandler
 	cancelHandler   workflow.CommandHandler
 	history         *historypb.History
@@ -72,7 +73,7 @@ var defaultConfig = &nexusoperations.Config{
 	MaxOperationNameLength:             dynamicconfig.GetIntPropertyFnFilteredByNamespace(len("op")),
 	MaxConcurrentOperations:            dynamicconfig.GetIntPropertyFnFilteredByNamespace(2),
 	MaxOperationHeaderSize:             dynamicconfig.GetIntPropertyFnFilteredByNamespace(20),
-	DisallowedOperationHeaders:         dynamicconfig.GetTypedPropertyFnFilteredByNamespace([]string{"request-timeout"}),
+	DisallowedOperationHeaders:         dynamicconfig.GetTypedPropertyFn([]string{"request-timeout"}),
 	MaxOperationScheduleToCloseTimeout: dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Hour * 24),
 	EndpointNotFoundAlwaysNonRetryable: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 }
@@ -93,7 +94,7 @@ func newTestContext(t *testing.T, cfg *nexusoperations.Config) testContext {
 	require.NoError(t, workflow.RegisterStateMachine(smReg))
 	require.NoError(t, nexusoperations.RegisterStateMachines(smReg))
 	require.NoError(t, nexusoperations.RegisterEventDefinitions(smReg))
-	ms := workflow.NewMockMutableState(gomock.NewController(t))
+	ms := historyi.NewMockMutableState(gomock.NewController(t))
 	node, err := hsm.NewRoot(smReg, workflow.StateMachineType, ms, make(map[string]*persistencespb.StateMachineMap), ms)
 	require.NoError(t, err)
 	ms.EXPECT().IsTransitionHistoryEnabled().Return(false).AnyTimes()

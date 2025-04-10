@@ -32,6 +32,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/common"
@@ -50,14 +51,15 @@ const (
 	WorkerDeploymentNamespaceDivision = "TemporalWorkerDeployment"
 
 	// Updates
-	RegisterWorkerInDeployment   = "register-task-queue-worker"       // for Worker Deployment Version wf
-	SyncVersionState             = "sync-version-state"               // for Worker Deployment Version wfs
-	UpdateVersionMetadata        = "update-version-metadata"          // for Worker Deployment Version wfs
-	SetCurrentVersion            = "set-current-version"              // for Worker Deployment wfs
-	SetRampingVersion            = "set-ramping-version"              // for Worker Deployment wfs
-	AddVersionToWorkerDeployment = "add-version-to-worker-deployment" // for Worker Deployment wfs
-	DeleteVersion                = "delete-version"                   // for WorkerDeployment wfs
-	DeleteDeployment             = "delete-deployment"                // for WorkerDeployment wfs
+	RegisterWorkerInDeploymentVersion = "register-task-queue-worker"       // for Worker Deployment Version wf
+	SyncVersionState                  = "sync-version-state"               // for Worker Deployment Version wfs
+	UpdateVersionMetadata             = "update-version-metadata"          // for Worker Deployment Version wfs
+	RegisterWorkerInWorkerDeployment  = "register-worker-in-deployment"    // for Worker Deployment wfs
+	SetCurrentVersion                 = "set-current-version"              // for Worker Deployment wfs
+	SetRampingVersion                 = "set-ramping-version"              // for Worker Deployment wfs
+	AddVersionToWorkerDeployment      = "add-version-to-worker-deployment" // for Worker Deployment wfs
+	DeleteVersion                     = "delete-version"                   // for WorkerDeployment wfs
+	DeleteDeployment                  = "delete-deployment"                // for WorkerDeployment wfs
 
 	// Signals
 	ForceCANSignalName       = "force-continue-as-new" // for Worker Deployment Version _and_ Worker Deployment wfs
@@ -86,11 +88,13 @@ const (
 	errVersionAlreadyExistsType   = "errVersionAlreadyExists"
 	errMaxTaskQueuesInVersionType = "errMaxTaskQueuesInVersion"
 	errVersionAlreadyCurrentType  = "errVersionAlreadyCurrent"
-	errVersionNotDrained          = "Version cannot be deleted since it is not drained."
+	errVersionIsDraining          = "Version cannot be deleted since it is draining."
 	errVersionNotFound            = "Version not found in deployment"
 	errVersionHasPollers          = "Version cannot be deleted since it has active pollers."
 	errVersionIsCurrentOrRamping  = "Version cannot be deleted since it is current or ramping."
 	errConflictTokenMismatchType  = "errConflictTokenMismatch"
+
+	syncBatchSize = 25
 )
 
 var (
@@ -105,10 +109,18 @@ var (
 	)
 )
 
+var (
+	defaultActivityOptions = workflow.ActivityOptions{
+		StartToCloseTimeout: 1 * time.Minute,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval: 100 * time.Millisecond,
+			MaximumAttempts: 5,
+		},
+	}
+)
+
 // validateVersionWfParams is a helper that verifies if the fields used for generating
 // Worker Deployment Version related workflowID's are valid
-// todo (Shivam): update with latest checks
-
 func validateVersionWfParams(fieldName string, field string, maxIDLengthLimit int) error {
 	// Length checks
 	if field == "" {

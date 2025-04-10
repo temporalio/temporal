@@ -31,7 +31,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/internal/effect"
+	"go.temporal.io/server/common/effect"
 	"go.temporal.io/server/service/history/workflow/update"
 )
 

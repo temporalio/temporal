@@ -45,6 +45,7 @@ import (
 type MockworkflowRebuilder struct {
 	ctrl     *gomock.Controller
 	recorder *MockworkflowRebuilderMockRecorder
+	isgomock struct{}
 }
 
 // MockworkflowRebuilderMockRecorder is the mock recorder for MockworkflowRebuilder.

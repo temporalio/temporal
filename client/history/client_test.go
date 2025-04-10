@@ -36,7 +36,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
-	"go.temporal.io/server/internal/nettest"
+	"go.temporal.io/server/common/testing/nettest"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 )
@@ -185,7 +185,7 @@ func (s *testHistoryService) DeleteDLQTasks(
 	return &historyservice.DeleteDLQTasksResponse{}, nil
 }
 
-func (t *testRPCFactory) CreateInternodeGRPCConnection(rpcAddress string) *grpc.ClientConn {
+func (t *testRPCFactory) CreateHistoryGRPCConnection(rpcAddress string) *grpc.ClientConn {
 	t.dialedAddresses = append(t.dialedAddresses, rpcAddress)
-	return t.base.CreateInternodeGRPCConnection(rpcAddress)
+	return t.base.CreateHistoryGRPCConnection(rpcAddress)
 }

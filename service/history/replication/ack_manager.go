@@ -47,7 +47,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/configs"
-	"go.temporal.io/server/service/history/shard"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -60,7 +60,7 @@ type (
 		GetTasks(ctx context.Context, pollingCluster string, queryMessageID int64) (*replicationspb.ReplicationMessages, error)
 		GetTask(ctx context.Context, taskInfo *replicationspb.ReplicationTaskInfo) (*replicationspb.ReplicationTask, error)
 
-		SubscribeNotification() (<-chan struct{}, string)
+		SubscribeNotification(string) (<-chan struct{}, string)
 		UnsubscribeNotification(string)
 		ConvertTask(
 			ctx context.Context,
@@ -81,7 +81,7 @@ type (
 
 	ackMgrImpl struct {
 		currentClusterName                   string
-		shardContext                         shard.Context
+		shardContext                         historyi.ShardContext
 		config                               *configs.Config
 		workflowCache                        wcache.Cache
 		eventBlobCache                       persistence.XDCCache
@@ -102,7 +102,13 @@ type (
 		sanityCheckTime            time.Time
 
 		subscriberLock sync.Mutex
-		subscribers    map[string]chan struct{}
+		subscribers    map[string]channelMetadata
+	}
+
+	channelMetadata struct {
+		notifyCh     chan struct{}
+		clusterName  string
+		backlogCount int64
 	}
 )
 
@@ -111,7 +117,7 @@ var (
 )
 
 func NewAckManager(
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	workflowCache wcache.Cache,
 	eventBlobCache persistence.XDCCache,
 	replicationProgressCache ProgressCache,
@@ -146,7 +152,7 @@ func NewAckManager(
 		maxTaskID:       nil,
 		sanityCheckTime: time.Time{},
 
-		subscribers: make(map[string]chan struct{}),
+		subscribers: make(map[string]channelMetadata),
 	}
 }
 
@@ -168,7 +174,7 @@ func (p *ackMgrImpl) NotifyNewTasks(
 		}
 	}
 
-	defer p.broadcast()
+	defer p.broadcast(len(tasks))
 
 	p.Lock()
 	defer p.Unlock()
@@ -486,7 +492,7 @@ func (p *ackMgrImpl) ConvertTaskByCluster(
 	}
 }
 
-func (p *ackMgrImpl) SubscribeNotification() (<-chan struct{}, string) {
+func (p *ackMgrImpl) SubscribeNotification(clusterName string) (<-chan struct{}, string) {
 	subscriberID := uuid.New().String()
 
 	p.subscriberLock.Lock()
@@ -495,7 +501,11 @@ func (p *ackMgrImpl) SubscribeNotification() (<-chan struct{}, string) {
 	for {
 		if _, ok := p.subscribers[subscriberID]; !ok {
 			channel := make(chan struct{}, 1)
-			p.subscribers[subscriberID] = channel
+			p.subscribers[subscriberID] = channelMetadata{
+				notifyCh:     channel,
+				clusterName:  clusterName,
+				backlogCount: 0,
+			}
 			return channel, subscriberID
 		}
 		subscriberID = uuid.New().String()
@@ -509,14 +519,21 @@ func (p *ackMgrImpl) UnsubscribeNotification(subscriberID string) {
 	delete(p.subscribers, subscriberID)
 }
 
-func (p *ackMgrImpl) broadcast() {
+func (p *ackMgrImpl) broadcast(taskCount int) {
 	p.subscriberLock.Lock()
 	defer p.subscriberLock.Unlock()
 
-	for _, channel := range p.subscribers {
+	for _, notification := range p.subscribers {
 		select {
-		case channel <- struct{}{}:
+		case notification.notifyCh <- struct{}{}:
+			// This tells the backlog between two notifications. This is the best effort to know lagging task count.
+			if notification.backlogCount > 0 {
+				metrics.ReplicationTaskSendBacklog.With(p.metricsHandler).
+					Record(notification.backlogCount, metrics.TargetClusterTag(notification.clusterName))
+			}
+			notification.backlogCount = 0
 		default:
+			notification.backlogCount += int64(taskCount)
 			// noop
 		}
 	}
@@ -542,6 +559,7 @@ func (p *ackMgrImpl) GetReplicationTasksIter(
 		if err != nil {
 			return nil, nil, err
 		}
+		metrics.ReplicationTaskLoadSize.With(p.metricsHandler).Record(int64(len(response.Tasks)))
 		return response.Tasks, response.NextPageToken, nil
 	}), nil
 }

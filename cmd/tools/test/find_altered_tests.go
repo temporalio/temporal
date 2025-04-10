@@ -58,7 +58,7 @@ import (
 // UNIT_TEST_DIRS
 var CategoryDirs = map[string][]string{
 	"unit":           {"./client", "./common", "./internal", "./service", "./temporal", "./tools", "./cmd"},
-	"integration":    {"./common/persistence/tests", "./tools/tests", "./temporaltest", "./internal/temporalite"},
+	"integration":    {"./common/persistence/tests", "./tools/tests", "./temporaltest"},
 	"functional":     {"./tests"},
 	"functional_ndc": {"./tests/ndc"},
 	"functional_xdc": {"./tests/xdc"},

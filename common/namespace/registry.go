@@ -46,7 +46,7 @@ type (
 		GetNamespaceByIDWithOptions(id ID, opts GetNamespaceOptions) (*Namespace, error)
 		GetNamespaceID(name Name) (ID, error)
 		GetNamespaceName(id ID) (Name, error)
-		GetCacheSize() (sizeOfCacheByName int64, sizeOfCacheByID int64)
+		GetRegistrySize() (sizeOfCacheByName int64, sizeOfCacheByID int64)
 		// Registers callback for namespace state changes.
 		// StateChangeCallbackFn will be invoked for a new/deleted namespace or namespace that has
 		// State, ReplicationState, ActiveCluster, or isGlobalNamespace config changed.

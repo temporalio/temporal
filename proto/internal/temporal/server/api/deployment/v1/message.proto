@@ -150,6 +150,7 @@ message WorkerDeploymentLocalState {
     temporal.api.deployment.v1.RoutingConfig routing_config = 2;
     map<string, WorkerDeploymentVersionSummary> versions = 3;
     bytes conflict_token = 4;
+    string last_modifier_identity = 5;
 }
 
 message WorkerDeploymentVersionSummary {
@@ -163,7 +164,27 @@ message RegisterWorkerInVersionArgs {
     string task_queue_name = 1;
     temporal.api.enums.v1.TaskQueueType task_queue_type = 2;
     int32 max_task_queues = 3;
+    string version = 4;
 }
+
+// used as Worker Deployment workflow update input:
+message RegisterWorkerInWorkerDeploymentArgs {
+    string task_queue_name = 1;
+    temporal.api.enums.v1.TaskQueueType task_queue_type = 2;
+    int32 max_task_queues = 3;
+    WorkerDeploymentVersion version = 4;
+}
+
+// used as Worker Deployment workflow activity input:
+message DescribeVersionFromWorkerDeploymentActivityArgs {
+    string version = 1;
+}
+
+message DescribeVersionFromWorkerDeploymentActivityResult {
+    // All the Task Queues that have ever polled from this Deployment version.
+    repeated temporal.api.deployment.v1.WorkerDeploymentVersionInfo.VersionTaskQueueInfo task_queue_infos = 1;
+}
+
 
 // used as Worker Deployment workflow update input (sent from Worker Deployment workflow):
 message SyncVersionStateUpdateArgs {
@@ -337,7 +358,7 @@ message SetRampingVersionArgs {
 // used as Worker Deployment activity input:
 message SyncVersionStateActivityArgs {
     string deployment_name = 1;
-    // <deployment_name>/<build_id> or possibly just <version_id> in the future
+    // <deployment_name>.<build_id> or possibly just <version_id> in the future
     string version = 2;
     SyncVersionStateUpdateArgs update_args = 3;
     string request_id = 4;

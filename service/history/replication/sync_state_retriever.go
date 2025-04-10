@@ -48,7 +48,7 @@ import (
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
-	"go.temporal.io/server/service/history/shard"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
@@ -76,15 +76,15 @@ type (
 			ctx context.Context,
 			namespaceID string,
 			execution *commonpb.WorkflowExecution,
-			mutableState workflow.MutableState,
+			mutableState historyi.MutableState,
 			targetVersionedTransition *persistencespb.VersionedTransition,
 			targetVersionHistories [][]*historyspb.VersionHistoryItem,
-			releaseFunc wcache.ReleaseCacheFunc,
+			releaseFunc historyi.ReleaseWorkflowContextFunc,
 		) (*SyncStateResult, error)
 	}
 
 	SyncStateRetrieverImpl struct {
-		shardContext               shard.Context
+		shardContext               historyi.ShardContext
 		workflowCache              wcache.Cache
 		workflowConsistencyChecker api.WorkflowConsistencyChecker
 		eventBlobCache             persistence.XDCCache
@@ -96,7 +96,7 @@ type (
 )
 
 func NewSyncStateRetriever(
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	workflowCache wcache.Cache,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	eventBlobCache persistence.XDCCache,
@@ -121,7 +121,7 @@ func (s *SyncStateRetrieverImpl) GetSyncWorkflowStateArtifact(
 	wfLease, err := s.workflowConsistencyChecker.GetWorkflowLeaseWithConsistencyCheck(
 		ctx,
 		nil,
-		func(mutableState workflow.MutableState) bool {
+		func(mutableState historyi.MutableState) bool {
 			if targetCurrentVersionedTransition == nil {
 				return true
 			}
@@ -170,10 +170,10 @@ func (s *SyncStateRetrieverImpl) GetSyncWorkflowStateArtifactFromMutableState(
 	ctx context.Context,
 	namespaceID string,
 	execution *commonpb.WorkflowExecution,
-	mu workflow.MutableState,
+	mu historyi.MutableState,
 	targetCurrentVersionedTransition *persistencespb.VersionedTransition,
 	targetVersionHistories [][]*historyspb.VersionHistoryItem,
-	releaseFunc wcache.ReleaseCacheFunc,
+	releaseFunc historyi.ReleaseWorkflowContextFunc,
 ) (_ *SyncStateResult, retError error) {
 	return s.getSyncStateResult(ctx, namespaceID, execution, mu, targetCurrentVersionedTransition, targetVersionHistories, releaseFunc)
 }
@@ -182,10 +182,10 @@ func (s *SyncStateRetrieverImpl) getSyncStateResult(
 	ctx context.Context,
 	namespaceID string,
 	execution *commonpb.WorkflowExecution,
-	mutableState workflow.MutableState,
+	mutableState historyi.MutableState,
 	targetCurrentVersionedTransition *persistencespb.VersionedTransition,
 	targetVersionHistories [][]*historyspb.VersionHistoryItem,
-	cacheReleaseFunc wcache.ReleaseCacheFunc,
+	cacheReleaseFunc historyi.ReleaseWorkflowContextFunc,
 ) (_ *SyncStateResult, retError error) {
 	shouldReturnMutation := func() bool {
 		if targetCurrentVersionedTransition == nil {
@@ -201,10 +201,10 @@ func (s *SyncStateRetrieverImpl) getSyncStateResult(
 		}
 		if mutableState.GetExecutionInfo().LastTransitionHistoryBreakPoint != nil &&
 			// the target transition falls into the previous break point, need to send snapshot
-			workflow.CompareVersionedTransition(mutableState.GetExecutionInfo().LastTransitionHistoryBreakPoint, targetCurrentVersionedTransition) >= 0 {
+			transitionhistory.Compare(mutableState.GetExecutionInfo().LastTransitionHistoryBreakPoint, targetCurrentVersionedTransition) >= 0 {
 			return false
 		}
-		if workflow.CompareVersionedTransition(tombstoneBatch[0].VersionedTransition, targetCurrentVersionedTransition) <= 0 {
+		if transitionhistory.Compare(tombstoneBatch[0].VersionedTransition, targetCurrentVersionedTransition) <= 0 {
 			return true
 		}
 
@@ -350,58 +350,61 @@ func (s *SyncStateRetrieverImpl) getNewRunInfo(ctx context.Context, namespaceId 
 	}, nil
 }
 
-func (s *SyncStateRetrieverImpl) getMutation(mutableState workflow.MutableState, versionedTransition *persistencespb.VersionedTransition) (*persistencespb.WorkflowMutableStateMutation, error) {
+func (s *SyncStateRetrieverImpl) getMutation(
+	mutableState historyi.MutableState,
+	exclusiveMinVT *persistencespb.VersionedTransition,
+) (*persistencespb.WorkflowMutableStateMutation, error) {
 	rootNode := mutableState.HSM()
-	updatedStateMachine, err := s.getUpdatedSubStateMachine(rootNode, versionedTransition)
+	updatedStateMachine, err := s.getUpdatedSubStateMachine(rootNode, exclusiveMinVT)
 	if err != nil {
 		return nil, err
 	}
-	mutableStateClone := mutableState.CloneToProto()
-	err = workflow.SanitizeMutableState(mutableStateClone)
-	if err != nil {
-		return nil, err
-	}
-	if err := common.DiscardUnknownProto(mutableStateClone); err != nil {
-		return nil, err
-	}
-	tombstoneBatch := mutableStateClone.GetExecutionInfo().SubStateMachineTombstoneBatches
+
+	executionInfo := mutableState.GetExecutionInfo()
+	tombstoneBatch := executionInfo.SubStateMachineTombstoneBatches
 	var tombstones []*persistencespb.StateMachineTombstoneBatch
 	for i, tombstone := range tombstoneBatch {
-		if workflow.CompareVersionedTransition(tombstone.VersionedTransition, versionedTransition) > 0 {
+		if transitionhistory.Compare(tombstone.VersionedTransition, exclusiveMinVT) > 0 {
 			tombstones = tombstoneBatch[i:]
 			break
 		}
 	}
 
 	var signalRequestedIds []string
-	if workflow.CompareVersionedTransition(mutableStateClone.ExecutionInfo.SignalRequestIdsLastUpdateVersionedTransition, versionedTransition) > 0 {
-		signalRequestedIds = mutableStateClone.SignalRequestedIds
+	if transitionhistory.Compare(executionInfo.SignalRequestIdsLastUpdateVersionedTransition, exclusiveMinVT) > 0 {
+		signalRequestedIds = mutableState.GetPendingSignalRequestedIds()
 	}
+
 	mutation := &persistencespb.WorkflowMutableStateMutation{
-		UpdatedActivityInfos:            getUpdatedInfo(mutableStateClone.ActivityInfos, versionedTransition),
-		UpdatedTimerInfos:               getUpdatedInfo(mutableStateClone.TimerInfos, versionedTransition),
-		UpdatedChildExecutionInfos:      getUpdatedInfo(mutableStateClone.ChildExecutionInfos, versionedTransition),
-		UpdatedRequestCancelInfos:       getUpdatedInfo(mutableStateClone.RequestCancelInfos, versionedTransition),
-		UpdatedSignalInfos:              getUpdatedInfo(mutableStateClone.SignalInfos, versionedTransition),
-		UpdatedUpdateInfos:              getUpdatedInfo(mutableStateClone.ExecutionInfo.UpdateInfos, versionedTransition),
+		UpdatedActivityInfos:            getUpdatedInfo(mutableState.GetPendingActivityInfos(), exclusiveMinVT),
+		UpdatedTimerInfos:               getUpdatedInfo(mutableState.GetPendingTimerInfos(), exclusiveMinVT),
+		UpdatedChildExecutionInfos:      getUpdatedInfo(mutableState.GetPendingChildExecutionInfos(), exclusiveMinVT),
+		UpdatedRequestCancelInfos:       getUpdatedInfo(mutableState.GetPendingRequestCancelExternalInfos(), exclusiveMinVT),
+		UpdatedSignalInfos:              getUpdatedInfo(mutableState.GetPendingSignalExternalInfos(), exclusiveMinVT),
+		UpdatedUpdateInfos:              getUpdatedInfo(executionInfo.UpdateInfos, exclusiveMinVT),
+		UpdatedChasmNodes:               mutableState.ChasmTree().Snapshot(exclusiveMinVT).Nodes,
 		UpdatedSubStateMachines:         updatedStateMachine,
 		SubStateMachineTombstoneBatches: tombstones,
 		SignalRequestedIds:              signalRequestedIds,
-		ExecutionInfo:                   mutableStateClone.ExecutionInfo,
-		ExecutionState:                  mutableStateClone.ExecutionState,
+		ExecutionInfo:                   executionInfo,
+		ExecutionState:                  mutableState.GetExecutionState(),
 	}
-	mutableStateClone.ExecutionInfo.UpdateInfos = nil
-	mutableStateClone.ExecutionInfo.SubStateMachinesByType = nil
-	mutableStateClone.ExecutionInfo.SubStateMachineTombstoneBatches = nil
+
+	mutation = common.CloneProto(mutation)
+	workflow.SanitizeMutableStateMutation(mutation)
+	if err := common.DiscardUnknownProto(mutation); err != nil {
+		return nil, err
+	}
+
+	mutation.ExecutionInfo.UpdateInfos = nil
+	mutation.ExecutionInfo.SubStateMachinesByType = nil
+	mutation.ExecutionInfo.SubStateMachineTombstoneBatches = nil
 	return mutation, nil
 }
 
-func (s *SyncStateRetrieverImpl) getSnapshot(mutableState workflow.MutableState) (*persistencespb.WorkflowMutableState, error) {
+func (s *SyncStateRetrieverImpl) getSnapshot(mutableState historyi.MutableState) (*persistencespb.WorkflowMutableState, error) {
 	mutableStateProto := mutableState.CloneToProto()
-	err := workflow.SanitizeMutableState(mutableStateProto)
-	if err != nil {
-		return nil, err
-	}
+	workflow.SanitizeMutableState(mutableStateProto)
 	if err := common.DiscardUnknownProto(mutableStateProto); err != nil {
 		return nil, err
 	}
@@ -494,7 +497,7 @@ func isInfoUpdated(subStateMachine lastUpdatedStateTransitionGetter, versionedTr
 		return false
 	}
 	lastUpdate := subStateMachine.GetLastUpdateVersionedTransition()
-	return workflow.CompareVersionedTransition(lastUpdate, versionedTransition) > 0
+	return transitionhistory.Compare(lastUpdate, versionedTransition) > 0
 }
 
 func getUpdatedInfo[K comparable, V lastUpdatedStateTransitionGetter](subStateMachine map[K]V, versionedTransition *persistencespb.VersionedTransition) map[K]V {

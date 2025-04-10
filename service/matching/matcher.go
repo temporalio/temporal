@@ -76,9 +76,8 @@ type TaskMatcher struct {
 }
 
 const (
-	defaultTaskDispatchRPS                  = 100000.0
-	defaultTaskDispatchRPSTTL               = time.Minute
-	emptyBacklogAge           time.Duration = -1
+	defaultTaskDispatchRPS    = 100000.0
+	defaultTaskDispatchRPSTTL = time.Minute
 )
 
 var (
@@ -122,8 +121,15 @@ func newTaskMatcher(config *taskQueueConfig, fwdr *Forwarder, metricsHandler met
 	}
 }
 
+func (tm *TaskMatcher) Start() {
+}
+
 func (tm *TaskMatcher) Stop() {
 	close(tm.closeC)
+}
+
+func (tm *TaskMatcher) recycleToken(*internalTask) {
+	tm.rateLimiter.RecycleToken()
 }
 
 // Offer offers a task to a potential consumer (poller)
@@ -174,7 +180,7 @@ func (tm *TaskMatcher) Offer(ctx context.Context, task *internalTask) (bool, err
 		// attach the rate limiter's RecycleToken func to the task
 		// so that if the task is later determined to be invalid,
 		// we can recycle the token it used.
-		task.recycleToken = tm.rateLimiter.RecycleToken
+		task.recycleToken = tm.recycleToken
 	}
 
 	select {
@@ -184,10 +190,10 @@ func (tm *TaskMatcher) Offer(ctx context.Context, task *internalTask) (bool, err
 			// and return error if the response contains error
 			err := <-task.responseC
 
-			if err == nil && !task.isForwarded() {
+			if err.startErr == nil && !task.isForwarded() {
 				tm.emitDispatchLatency(task, false)
 			}
-			return true, err
+			return true, err.startErr
 		}
 		return false, nil
 	default:
@@ -222,7 +228,7 @@ func (tm *TaskMatcher) offerOrTimeout(ctx context.Context, task *internalTask) (
 		if task.responseC != nil {
 			select {
 			case err := <-task.responseC:
-				return true, err
+				return true, err.startErr
 			case <-ctx.Done():
 				return false, nil
 			}
@@ -326,7 +332,7 @@ func (tm *TaskMatcher) MustOffer(ctx context.Context, task *internalTask, interr
 	// attach the rate limiter's RecycleToken func to the task
 	// so that if the task is later determined to be invalid,
 	// we can recycle the token it used.
-	task.recycleToken = tm.rateLimiter.RecycleToken
+	task.recycleToken = tm.recycleToken
 
 	// attempt a match with local poller first. When that
 	// doesn't succeed, try both local match and remote match
@@ -446,13 +452,12 @@ func (tm *TaskMatcher) PollForQuery(ctx context.Context, pollMetadata *pollMetad
 	return task, err
 }
 
-// UpdateRatelimit updates the task dispatch rate
-func (tm *TaskMatcher) UpdateRatelimit(rpsPtr *float64) {
-	if rpsPtr == nil {
-		return
-	}
+func (tm *TaskMatcher) ReprocessAllTasks() {
+	// unused in old matcher
+}
 
-	rps := *rpsPtr
+// UpdateRatelimit updates the task dispatch rate
+func (tm *TaskMatcher) UpdateRatelimit(rps float64) {
 	nPartitions := float64(tm.numPartitions())
 	if nPartitions > 0 {
 		// divide the rate equally across all partitions

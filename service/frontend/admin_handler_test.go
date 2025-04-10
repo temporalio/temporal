@@ -1808,15 +1808,15 @@ func (s *adminHandlerSuite) TestDescribeTaskQueuePartition() {
 			TasksAddRate:            0,
 			TasksDispatchRate:       0,
 		},
-		InternalTaskQueueStatus: &taskqueuespb.InternalTaskQueueStatus{
+		InternalTaskQueueStatus: []*taskqueuespb.InternalTaskQueueStatus{&taskqueuespb.InternalTaskQueueStatus{
 			ReadLevel: 0,
 			AckLevel:  0,
 			TaskIdBlock: &taskqueuepb.TaskIdBlock{
 				StartId: 0,
 				EndId:   0,
 			},
-			ReadBufferLength: 0,
-		},
+			LoadedTasks: 0,
+		}},
 	}
 	versionedPhysicalTaskQueueInfo := &taskqueuespb.PhysicalTaskQueueInfo{
 		Pollers: []*taskqueuepb.PollerInfo(nil),
@@ -1826,15 +1826,15 @@ func (s *adminHandlerSuite) TestDescribeTaskQueuePartition() {
 			TasksAddRate:            10.21,
 			TasksDispatchRate:       10.50,
 		},
-		InternalTaskQueueStatus: &taskqueuespb.InternalTaskQueueStatus{
+		InternalTaskQueueStatus: []*taskqueuespb.InternalTaskQueueStatus{&taskqueuespb.InternalTaskQueueStatus{
 			ReadLevel: 1,
 			AckLevel:  1,
 			TaskIdBlock: &taskqueuepb.TaskIdBlock{
 				StartId: 1,
 				EndId:   1000,
 			},
-			ReadBufferLength: 10,
-		},
+			LoadedTasks: 10,
+		}},
 	}
 
 	matchingMockResponse := &matchingservice.DescribeTaskQueuePartitionResponse{

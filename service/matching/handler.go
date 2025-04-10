@@ -42,10 +42,12 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/service/worker/deployment"
 	"go.temporal.io/server/service/worker/workerdeployment"
+	"go.uber.org/fx"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
@@ -63,6 +65,31 @@ type (
 		throttledLogger   log.Logger
 		namespaceRegistry namespace.Registry
 	}
+
+	HandlerParams struct {
+		fx.In
+
+		Config                        *Config
+		Logger                        log.Logger
+		ThrottledLogger               log.Logger
+		TaskManager                   persistence.TaskManager
+		HistoryClient                 resource.HistoryClient
+		MatchingRawClient             resource.MatchingRawClient
+		DeploymentStoreClient         deployment.DeploymentStoreClient
+		WorkerDeploymentClient        workerdeployment.Client
+		HostInfoProvider              membership.HostInfoProvider
+		MatchingServiceResolver       membership.ServiceResolver
+		MetricsHandler                metrics.Handler
+		NamespaceRegistry             namespace.Registry
+		ClusterMetadata               cluster.Metadata
+		NamespaceReplicationQueue     persistence.NamespaceReplicationQueue
+		VisibilityManager             manager.VisibilityManager
+		NexusEndpointManager          persistence.NexusEndpointManager
+		TestHooks                     testhooks.TestHooks
+		SearchAttributeProvider       searchattribute.Provider
+		SearchAttributeMapperProvider searchattribute.MapperProvider
+		RateLimiter                   TaskDispatchRateLimiter `optional:"true"`
+	}
 )
 
 const (
@@ -75,49 +102,36 @@ var (
 
 // NewHandler creates a gRPC handler for the matchingservice
 func NewHandler(
-	config *Config,
-	logger log.Logger,
-	throttledLogger log.Logger,
-	taskManager persistence.TaskManager,
-	historyClient resource.HistoryClient,
-	matchingRawClient resource.MatchingRawClient,
-	deploymentStoreClient deployment.DeploymentStoreClient,
-	workerDeploymentClient workerdeployment.Client,
-	hostInfoProvider membership.HostInfoProvider,
-	matchingServiceResolver membership.ServiceResolver,
-	metricsHandler metrics.Handler,
-	namespaceRegistry namespace.Registry,
-	clusterMetadata cluster.Metadata,
-	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
-	visibilityManager manager.VisibilityManager,
-	nexusEndpointManager persistence.NexusEndpointManager,
-	testHooks testhooks.TestHooks,
+	params HandlerParams,
 ) *Handler {
 	handler := &Handler{
-		config:          config,
-		metricsHandler:  metricsHandler,
-		logger:          logger,
-		throttledLogger: throttledLogger,
+		config:          params.Config,
+		metricsHandler:  params.MetricsHandler,
+		logger:          params.Logger,
+		throttledLogger: params.ThrottledLogger,
 		engine: NewEngine(
-			taskManager,
-			historyClient,
-			matchingRawClient, // Use non retry client inside matching
-			deploymentStoreClient,
-			workerDeploymentClient,
-			config,
-			logger,
-			throttledLogger,
-			metricsHandler,
-			namespaceRegistry,
-			hostInfoProvider,
-			matchingServiceResolver,
-			clusterMetadata,
-			namespaceReplicationQueue,
-			visibilityManager,
-			nexusEndpointManager,
-			testHooks,
+			params.TaskManager,
+			params.HistoryClient,
+			params.MatchingRawClient, // Use non retry client inside matching
+			params.DeploymentStoreClient,
+			params.WorkerDeploymentClient,
+			params.Config,
+			params.Logger,
+			params.ThrottledLogger,
+			params.MetricsHandler,
+			params.NamespaceRegistry,
+			params.HostInfoProvider,
+			params.MatchingServiceResolver,
+			params.ClusterMetadata,
+			params.NamespaceReplicationQueue,
+			params.VisibilityManager,
+			params.NexusEndpointManager,
+			params.TestHooks,
+			params.SearchAttributeProvider,
+			params.SearchAttributeMapperProvider,
+			params.RateLimiter,
 		),
-		namespaceRegistry: namespaceRegistry,
+		namespaceRegistry: params.NamespaceRegistry,
 	}
 
 	// prevent from serving requests before matching engine is started and ready

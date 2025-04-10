@@ -37,7 +37,7 @@ import (
 	context "context"
 	reflect "reflect"
 
-	workflow "go.temporal.io/server/service/history/workflow"
+	interfaces "go.temporal.io/server/service/history/interfaces"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -45,6 +45,7 @@ import (
 type MockConflictResolver struct {
 	ctrl     *gomock.Controller
 	recorder *MockConflictResolverMockRecorder
+	isgomock struct{}
 }
 
 // MockConflictResolverMockRecorder is the mock recorder for MockConflictResolver.
@@ -65,10 +66,10 @@ func (m *MockConflictResolver) EXPECT() *MockConflictResolverMockRecorder {
 }
 
 // GetOrRebuildCurrentMutableState mocks base method.
-func (m *MockConflictResolver) GetOrRebuildCurrentMutableState(ctx context.Context, branchIndex int32, incomingVersion int64) (workflow.MutableState, bool, error) {
+func (m *MockConflictResolver) GetOrRebuildCurrentMutableState(ctx context.Context, branchIndex int32, incomingVersion int64) (interfaces.MutableState, bool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetOrRebuildCurrentMutableState", ctx, branchIndex, incomingVersion)
-	ret0, _ := ret[0].(workflow.MutableState)
+	ret0, _ := ret[0].(interfaces.MutableState)
 	ret1, _ := ret[1].(bool)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2
@@ -81,10 +82,10 @@ func (mr *MockConflictResolverMockRecorder) GetOrRebuildCurrentMutableState(ctx,
 }
 
 // GetOrRebuildMutableState mocks base method.
-func (m *MockConflictResolver) GetOrRebuildMutableState(ctx context.Context, branchIndex int32) (workflow.MutableState, bool, error) {
+func (m *MockConflictResolver) GetOrRebuildMutableState(ctx context.Context, branchIndex int32) (interfaces.MutableState, bool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetOrRebuildMutableState", ctx, branchIndex)
-	ret0, _ := ret[0].(workflow.MutableState)
+	ret0, _ := ret[0].(interfaces.MutableState)
 	ret1, _ := ret[1].(bool)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2

@@ -26,6 +26,7 @@ package replication
 
 import (
 	"context"
+	"errors"
 	"math/rand"
 	"strconv"
 
@@ -44,6 +45,8 @@ import (
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/consts"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/replication/eventhandler"
 	"go.temporal.io/server/service/history/shard"
@@ -112,8 +115,8 @@ func replicationTaskConverterFactoryProvider(
 	config *configs.Config,
 ) SourceTaskConverterProvider {
 	return func(
-		historyEngine shard.Engine,
-		shardContext shard.Context,
+		historyEngine historyi.Engine,
+		shardContext historyi.ShardContext,
 		clientClusterName string,
 		serializer serialization.Serializer,
 	) SourceTaskConverter {
@@ -305,7 +308,7 @@ func ndcHistoryResenderProvider(
 			if err != nil {
 				return err
 			}
-			return engine.ReplicateHistoryEvents(
+			err = engine.ReplicateHistoryEvents(
 				ctx,
 				definition.WorkflowKey{
 					NamespaceID: namespaceId.String(),
@@ -318,6 +321,10 @@ func ndcHistoryResenderProvider(
 				nil,
 				"",
 			)
+			if errors.Is(err, consts.ErrDuplicate) {
+				return nil
+			}
+			return err
 		},
 		serializer,
 		config.StandbyTaskReReplicationContextTimeout,
@@ -342,7 +349,7 @@ func resendHandlerProvider(
 		clientBean,
 		serializer,
 		clusterMetadata,
-		func(ctx context.Context, namespaceId namespace.ID, workflowId string) (shard.Engine, error) {
+		func(ctx context.Context, namespaceId namespace.ID, workflowId string) (historyi.Engine, error) {
 			shardContext, err := shardController.GetShardByNamespaceWorkflow(
 				namespaceId,
 				workflowId,
@@ -367,7 +374,7 @@ func eventImporterProvider(
 ) eventhandler.EventImporter {
 	return eventhandler.NewEventImporter(
 		historyFetcher,
-		func(ctx context.Context, namespaceId namespace.ID, workflowId string) (shard.Engine, error) {
+		func(ctx context.Context, namespaceId namespace.ID, workflowId string) (historyi.Engine, error) {
 			shardContext, err := shardController.GetShardByNamespaceWorkflow(
 				namespaceId,
 				workflowId,

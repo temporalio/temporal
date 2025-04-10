@@ -75,6 +75,7 @@ import (
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/worker/batcher"
 	"go.temporal.io/server/service/worker/scheduler"
@@ -2081,7 +2082,16 @@ func (s *WorkflowHandlerSuite) TestVerifyHistoryIsComplete() {
 	}
 
 	for i, tc := range testCases {
-		err := persistence.VerifyHistoryIsComplete(tc.events, tc.firstEventID, tc.lastEventID, tc.isFirstPage, tc.isLastPage, tc.pageSize)
+		err := api.VerifyHistoryIsComplete(
+			tc.events[0],
+			tc.events[len(tc.events)-1],
+			len(tc.events),
+			tc.firstEventID,
+			tc.lastEventID,
+			tc.isFirstPage,
+			tc.isLastPage,
+			tc.pageSize,
+		)
 		if tc.isResultErr {
 			s.Error(err, "testcase %v failed", i)
 		} else {
@@ -2804,15 +2814,18 @@ func (s *WorkflowHandlerSuite) TestListBatchOperations_InvalidRerquest() {
 	s.ErrorAs(err, &invalidArgumentErr)
 }
 
-func (s *WorkflowHandlerSuite) TestGetWorkflowExecutionHistory_FailedConvertedToContinueAsNew() {
+// This test is to make sure that GetWorkflowExecutionHistory returns the correct history when history service sends
+// History events in the field response.History. This happens when history.sendRawHistoryBetweenInternalServices is enabled.
+// This test verifies that HistoryEventFilterType is applied and EVENT_TYPE_WORKFLOW_EXECUTION_FAILED is converted to
+// EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW for older SDKs.
+func (s *WorkflowHandlerSuite) TestGetWorkflowExecutionHistory_InternalRawHistoryEnabled() {
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
 	we := commonpb.WorkflowExecution{WorkflowId: "wid1", RunId: uuid.New().String()}
 	newRunID := uuid.New().String()
 
-	s.mockNamespaceCache.EXPECT().GetNamespaceID(tests.Namespace).Return(tests.NamespaceID, nil).AnyTimes()
-	s.mockNamespaceCache.EXPECT().GetNamespaceName(tests.NamespaceID).Return(tests.Namespace, nil).AnyTimes()
-	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), gomock.Any()).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(tests.Namespace).Return(tests.NamespaceID, nil).Times(2)
+	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), gomock.Any()).Return(searchattribute.TestNameTypeMap, nil).Times(2)
 
 	req := &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace:              tests.Namespace.String(),
@@ -2826,18 +2839,28 @@ func (s *WorkflowHandlerSuite) TestGetWorkflowExecutionHistory_FailedConvertedTo
 		Request:     req,
 	}).Return(&historyservice.GetWorkflowExecutionHistoryResponse{
 		Response: &workflowservice.GetWorkflowExecutionHistoryResponse{
-			History: &historypb.History{
-				Events: []*historypb.HistoryEvent{
-					{
-						EventId:   int64(5),
-						EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED,
-						Attributes: &historypb.HistoryEvent_WorkflowExecutionFailedEventAttributes{
-							WorkflowExecutionFailedEventAttributes: &historypb.WorkflowExecutionFailedEventAttributes{
-								Failure:                      &failurepb.Failure{Message: "this workflow failed"},
-								RetryState:                   enumspb.RETRY_STATE_IN_PROGRESS,
-								WorkflowTaskCompletedEventId: 4,
-								NewExecutionRunId:            newRunID,
-							},
+			History: &historypb.History{},
+		},
+		History: &historypb.History{
+			Events: []*historypb.HistoryEvent{
+				{
+					EventId:   int64(5),
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED,
+					Attributes: &historypb.HistoryEvent_WorkflowTaskFailedEventAttributes{
+						WorkflowTaskFailedEventAttributes: &historypb.WorkflowTaskFailedEventAttributes{
+							Failure: &failurepb.Failure{Message: "this workflow task failed"},
+						},
+					},
+				},
+				{
+					EventId:   int64(5),
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED,
+					Attributes: &historypb.HistoryEvent_WorkflowExecutionFailedEventAttributes{
+						WorkflowExecutionFailedEventAttributes: &historypb.WorkflowExecutionFailedEventAttributes{
+							Failure:                      &failurepb.Failure{Message: "this workflow failed"},
+							RetryState:                   enumspb.RETRY_STATE_IN_PROGRESS,
+							WorkflowTaskCompletedEventId: 4,
+							NewExecutionRunId:            newRunID,
 						},
 					},
 				},
@@ -3311,84 +3334,5 @@ func (s *WorkflowHandlerSuite) TestShutdownWorker() {
 	})
 	if err != nil {
 		s.Fail("ShutdownWorker failed:", err)
-	}
-}
-
-// HistoryService returns a different GetWorkflowExecutionHistoryResponse GetWorkflowExecutionHistoryResponseWithRaw to
-// WorkflowHandler. Since HistoryClient is defined with the response type GetWorkflowExecutionHistoryResponse, grpc
-// will deserialize this message to GetWorkflowExecutionHistoryResponse. This is done to avoid the extra CPU usage in
-// history service to deserialize event blobs to []*HistoryEvent. This test ensures that
-// GetWorkflowExecutionHistoryResponseWithRaw is correctly deserialized to GetWorkflowExecutionHistoryResponse.
-func (s *WorkflowHandlerSuite) TestGetWorkflowExecutionHistoryResponseWithRawHistoryEvents() {
-	// Create history events and batches
-	fullHistory := &historypb.History{
-		Events: []*historypb.HistoryEvent{
-			{
-				EventId:   1,
-				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
-				Version:   100,
-			},
-			{
-				EventId:   2,
-				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
-				Version:   101,
-			},
-			{
-				EventId:   3,
-				EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED,
-				Version:   102,
-			},
-			{
-				EventId:   4,
-				EventType: enumspb.EVENT_TYPE_TIMER_FIRED,
-				Version:   103,
-			},
-		},
-	}
-
-	batch1 := &historypb.History{
-		Events: fullHistory.Events[:2],
-	}
-
-	batch2 := &historypb.History{
-		Events: fullHistory.Events[2:],
-	}
-
-	// Marshal each batch
-	rawHistory1, err := batch1.Marshal()
-	s.Require().NoError(err)
-
-	db1 := &commonpb.DataBlob{
-		EncodingType: enumspb.ENCODING_TYPE_PROTO3,
-		Data:         rawHistory1,
-	}
-
-	rawHistory2, err := batch2.Marshal()
-	s.Require().NoError(err)
-
-	db2 := &commonpb.DataBlob{
-		EncodingType: enumspb.ENCODING_TYPE_PROTO3,
-		Data:         rawHistory2,
-	}
-
-	// Create a GetWorkflowExecutionHistoryResponse with raw history blobs. This should be wire compatible with
-	// workflowservice.GetWorkflowExecutionHistoryResponse which has repeated HistoryEvent field instead of repeated bytes.
-	rawResp := &historyspb.GetWorkflowExecutionHistoryResponse{
-		History: [][]byte{db1.Data, db2.Data},
-	}
-
-	serializedRawResp, err := rawResp.Marshal()
-	s.Require().NoError(err)
-
-	resp := &workflowservice.GetWorkflowExecutionHistoryResponse{}
-	err = resp.Unmarshal(serializedRawResp)
-	s.Require().NoError(err)
-
-	// Verify resp has same list of history events as fullHistory
-	for i, event := range resp.History.Events {
-		s.Equal(fullHistory.Events[i].EventId, event.EventId)
-		s.Equal(fullHistory.Events[i].Version, event.Version)
-		s.Equal(fullHistory.Events[i].EventType, event.EventType)
-		s.Nil(event.Attributes)
 	}
 }

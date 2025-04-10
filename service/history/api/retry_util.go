@@ -30,7 +30,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/consts"
-	"go.temporal.io/server/service/history/workflow"
+	historyi "go.temporal.io/server/service/history/interfaces"
 )
 
 func IsRetryableError(err error) bool {
@@ -42,7 +42,7 @@ func IsRetryableError(err error) bool {
 }
 
 func IsHistoryEventOnCurrentBranch(
-	mutableState workflow.MutableState,
+	mutableState historyi.MutableState,
 	eventID int64,
 	eventVersion int64,
 ) (bool, error) {

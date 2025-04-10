@@ -39,6 +39,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -51,6 +52,13 @@ import (
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 )
+
+type tqmTestOpts struct {
+	config              *Config
+	dbq                 *PhysicalTaskQueueKey
+	matchingClientMock  *matchingservicemock.MockMatchingServiceClient
+	expectUserDataError bool
+}
 
 func createUserDataManager(
 	t *testing.T,
@@ -82,7 +90,7 @@ func createUserDataManager(
 		onFatalErr = func(unloadCause) { t.Fatal("user data manager called onFatalErr") }
 	}
 
-	return newUserDataManager(tm, testOpts.matchingClientMock, onFatalErr, testOpts.dbq.Partition(), newTaskQueueConfig(testOpts.dbq.Partition().TaskQueue(), testOpts.config, ns), logger, mockNamespaceCache)
+	return newUserDataManager(tm, testOpts.matchingClientMock, onFatalErr, nil, testOpts.dbq.Partition(), newTaskQueueConfig(testOpts.dbq.Partition().TaskQueue(), testOpts.config, ns), logger, mockNamespaceCache)
 }
 
 func TestUserData_LoadOnInit(t *testing.T) {
@@ -331,7 +339,7 @@ func TestUserData_FetchesOnInit(t *testing.T) {
 		}).
 		Return(&matchingservice.GetTaskQueueUserDataResponse{
 			UserData: data1,
-		}, nil).MaxTimes(maxFastUserDataFetches)
+		}, nil).MaxTimes(maxFastUserDataFetches + 1)
 
 	m := createUserDataManager(t, controller, tqCfg)
 	m.config.GetUserDataMinWaitTime = 10 * time.Second // only one fetch
@@ -468,7 +476,9 @@ func TestUserData_RetriesFetchOnUnavailable(t *testing.T) {
 		}).
 		Return(&matchingservice.GetTaskQueueUserDataResponse{
 			UserData: data1,
-		}, nil).MaxTimes(maxFastUserDataFetches)
+		}, nil).
+		// +3 because the counter resets when version changes so the calls with error do not count
+		MaxTimes(maxFastUserDataFetches + 3)
 
 	m := createUserDataManager(t, controller, tqCfg)
 	m.config.GetUserDataMinWaitTime = 10 * time.Second // wait on success
@@ -552,7 +562,9 @@ func TestUserData_RetriesFetchOnUnImplemented(t *testing.T) {
 		}).
 		Return(&matchingservice.GetTaskQueueUserDataResponse{
 			UserData: data1,
-		}, nil).MaxTimes(maxFastUserDataFetches)
+		}, nil).
+		// +3 because the counter resets when version changes so the calls with error do not count
+		MaxTimes(maxFastUserDataFetches + 3)
 
 	m := createUserDataManager(t, controller, tqCfg)
 	m.config.GetUserDataMinWaitTime = 10 * time.Second // wait on success
@@ -621,7 +633,7 @@ func TestUserData_FetchesUpTree(t *testing.T) {
 		}).
 		Return(&matchingservice.GetTaskQueueUserDataResponse{
 			UserData: data1,
-		}, nil).MaxTimes(maxFastUserDataFetches)
+		}, nil).MaxTimes(maxFastUserDataFetches + 1)
 
 	m := createUserDataManager(t, controller, tqCfg)
 	m.config.GetUserDataMinWaitTime = 10 * time.Second // wait on success
@@ -672,7 +684,7 @@ func TestUserData_FetchesActivityToWorkflow(t *testing.T) {
 		}).
 		Return(&matchingservice.GetTaskQueueUserDataResponse{
 			UserData: data1,
-		}, nil).MaxTimes(maxFastUserDataFetches)
+		}, nil).MaxTimes(maxFastUserDataFetches + 1)
 
 	m := createUserDataManager(t, controller, tqCfg)
 	m.config.GetUserDataMinWaitTime = 10 * time.Second // wait on success
@@ -727,7 +739,7 @@ func TestUserData_FetchesStickyToNormal(t *testing.T) {
 		}).
 		Return(&matchingservice.GetTaskQueueUserDataResponse{
 			UserData: data1,
-		}, nil).MaxTimes(maxFastUserDataFetches)
+		}, nil).MaxTimes(maxFastUserDataFetches + 1)
 
 	m := createUserDataManager(t, controller, tqCfg)
 	m.config.GetUserDataMinWaitTime = 10 * time.Second // wait on success
@@ -966,4 +978,12 @@ func TestUserData_CheckPropagation(t *testing.T) {
 			return false
 		}
 	}, 100*time.Millisecond, 5*time.Millisecond, "CheckTaskQueueUserDataPropagation did not return fast enough")
+}
+
+func defaultTqmTestOpts(controller *gomock.Controller) *tqmTestOpts {
+	return &tqmTestOpts{
+		config:             defaultTestConfig(),
+		dbq:                defaultTqId(),
+		matchingClientMock: matchingservicemock.NewMockMatchingServiceClient(controller),
+	}
 }

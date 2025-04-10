@@ -61,6 +61,7 @@ import (
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -74,6 +75,7 @@ import (
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -322,7 +324,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 		},
 	}
 
-	expectedResponse := historyservice.RecordWorkflowTaskStartedResponse{}
+	expectedResponse := historyservice.RecordWorkflowTaskStartedResponseWithRawHistory{}
 	expectedResponse.WorkflowType = ms.GetWorkflowType()
 	executionInfo = ms.GetExecutionInfo()
 	if executionInfo.LastCompletedWorkflowTaskStartedEventId != common.EmptyEventID {
@@ -343,6 +345,116 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 	s.NoError(err)
 	expectedResponse.BranchToken = currentBranchTokken
 	expectedResponse.History = &historypb.History{Events: fakeHistory}
+	expectedResponse.NextPageToken = nil
+
+	response, err := s.historyEngine.RecordWorkflowTaskStarted(metrics.AddMetricsContext(context.Background()), &request)
+	s.Nil(err)
+	s.NotNil(response)
+	s.True(response.StartedTime.AsTime().After(expectedResponse.ScheduledTime.AsTime()))
+	expectedResponse.StartedTime = response.StartedTime
+	s.Equal(&expectedResponse, response)
+}
+
+func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled_WithInternalRawHistory() {
+	s.config.SendRawHistoryBetweenInternalServices = func() bool { return true }
+	serializer := serialization.NewSerializer()
+	fakeHistory := []*historypb.HistoryEvent{
+		{
+			EventId:   int64(1),
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
+		},
+		{
+			EventId:   int64(2),
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+			Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
+				WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
+					SearchAttributes: &commonpb.SearchAttributes{
+						IndexedFields: map[string]*commonpb.Payload{
+							"CustomKeywordField":    payload.EncodeString("random-keyword"),
+							"TemporalChangeVersion": payload.EncodeString("random-data"),
+						},
+					},
+				},
+			},
+		},
+		{
+			EventId:   int64(3),
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
+		},
+	}
+	historyBlob, err := serializer.SerializeEvents(fakeHistory, enumspb.ENCODING_TYPE_PROTO3)
+	s.NoError(err)
+
+	s.mockExecutionMgr.EXPECT().ReadRawHistoryBranch(gomock.Any(), gomock.Any()).Return(&persistence.ReadRawHistoryBranchResponse{
+		HistoryEventBlobs: []*commonpb.DataBlob{
+			{
+				EncodingType: enumspb.ENCODING_TYPE_PROTO3,
+				Data:         historyBlob.Data,
+			},
+		},
+		NextPageToken: []byte{},
+		Size:          1,
+	}, nil)
+
+	namespaceID := tests.NamespaceID
+	we := &commonpb.WorkflowExecution{
+		WorkflowId: "wId",
+		RunId:      tests.RunID,
+	}
+	tl := "testTaskQueue"
+	stickyTl := "stickyTaskQueue"
+	identity := "testIdentity"
+
+	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.mockEventsCache, tests.LocalNamespaceEntry,
+		we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	executionInfo := ms.GetExecutionInfo()
+	executionInfo.LastUpdateTime = timestamp.TimeNowPtrUtc()
+	executionInfo.StickyTaskQueue = stickyTl
+
+	addWorkflowExecutionStartedEvent(ms, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
+	wt := addWorkflowTaskScheduledEvent(ms)
+
+	wfMs := workflow.TestCloneToProto(ms)
+
+	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
+
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
+	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
+
+	request := historyservice.RecordWorkflowTaskStartedRequest{
+		NamespaceId:       namespaceID.String(),
+		WorkflowExecution: we,
+		ScheduledEventId:  2,
+		RequestId:         "reqId",
+		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name: stickyTl,
+			},
+			Identity: identity,
+		},
+	}
+
+	expectedResponse := historyservice.RecordWorkflowTaskStartedResponseWithRawHistory{}
+	expectedResponse.WorkflowType = ms.GetWorkflowType()
+	executionInfo = ms.GetExecutionInfo()
+	if executionInfo.LastCompletedWorkflowTaskStartedEventId != common.EmptyEventID {
+		expectedResponse.PreviousStartedEventId = executionInfo.LastCompletedWorkflowTaskStartedEventId
+	}
+	expectedResponse.Version = tests.GlobalNamespaceEntry.FailoverVersion()
+	expectedResponse.ScheduledEventId = wt.ScheduledEventID
+	expectedResponse.ScheduledTime = timestamppb.New(wt.ScheduledTime)
+	expectedResponse.StartedEventId = wt.ScheduledEventID + 1
+	expectedResponse.StickyExecutionEnabled = true
+	expectedResponse.NextEventId = ms.GetNextEventID() + 1
+	expectedResponse.Attempt = wt.Attempt
+	expectedResponse.WorkflowExecutionTaskQueue = &taskqueuepb.TaskQueue{
+		Name: executionInfo.TaskQueue,
+		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+	}
+	currentBranchTokken, err := ms.GetCurrentBranchToken()
+	s.NoError(err)
+	expectedResponse.BranchToken = currentBranchTokken
+	expectedResponse.RawHistory = [][]byte{historyBlob.Data}
 	expectedResponse.NextPageToken = nil
 
 	response, err := s.historyEngine.RecordWorkflowTaskStarted(metrics.AddMetricsContext(context.Background()), &request)
@@ -598,6 +710,108 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccess() {
 	s.mockShard.Resource.SearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap, nil)
 	s.mockShard.Resource.SearchAttributesMapperProvider.EXPECT().GetMapper(tests.Namespace).
 		Return(&searchattribute.TestMapper{Namespace: tests.Namespace.String()}, nil).AnyTimes()
+
+	namespaceID := tests.NamespaceID
+	workflowExecution := &commonpb.WorkflowExecution{
+		WorkflowId: "wId",
+		RunId:      tests.RunID,
+	}
+
+	tl := "testTaskQueue"
+	identity := "testIdentity"
+
+	ms := s.createExecutionStartedState(workflowExecution, tl, identity, true, false)
+	wfMs := workflow.TestCloneToProto(ms)
+	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
+	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
+
+	// load mutable state such that it already exists in memory when respond workflow task is called
+	// this enables us to set query registry on it
+	ctx, release, err := s.workflowCache.GetOrCreateWorkflowExecution(
+		metrics.AddMetricsContext(context.Background()),
+		s.mockShard,
+		tests.NamespaceID,
+		workflowExecution,
+		locks.PriorityHigh,
+	)
+	s.NoError(err)
+	loadedMS, err := ctx.LoadMutableState(context.Background(), s.mockShard)
+	s.NoError(err)
+	qr := workflow.NewQueryRegistry()
+	id1, _ := qr.BufferQuery(&querypb.WorkflowQuery{})
+	id2, _ := qr.BufferQuery(&querypb.WorkflowQuery{})
+	id3, _ := qr.BufferQuery(&querypb.WorkflowQuery{})
+	loadedMS.(*workflow.MutableStateImpl).QueryRegistry = qr
+	release(nil)
+
+	response, err := s.historyEngine.RecordWorkflowTaskStarted(metrics.AddMetricsContext(context.Background()), &historyservice.RecordWorkflowTaskStartedRequest{
+		NamespaceId:       namespaceID.String(),
+		WorkflowExecution: workflowExecution,
+		ScheduledEventId:  2,
+		RequestId:         "reqId",
+		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name: tl,
+			},
+			Identity: identity,
+		},
+	})
+
+	s.Nil(err)
+	s.NotNil(response)
+	s.Equal("wType", response.WorkflowType.Name)
+	s.True(response.PreviousStartedEventId == 0)
+	s.Equal(int64(3), response.StartedEventId)
+	expectedQueryMap := map[string]*querypb.WorkflowQuery{
+		id1: {},
+		id2: {},
+		id3: {},
+	}
+	s.Equal(expectedQueryMap, response.Queries)
+}
+
+func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessWithInternalRawHistory() {
+	s.config.SendRawHistoryBetweenInternalServices = func() bool { return true }
+	fakeHistory := historypb.History{
+		Events: []*historypb.HistoryEvent{
+			{
+				EventId:   int64(1),
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
+			},
+			{
+				EventId:   int64(2),
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+				Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
+					WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
+						SearchAttributes: &commonpb.SearchAttributes{
+							IndexedFields: map[string]*commonpb.Payload{
+								"CustomKeywordField":    payload.EncodeString("random-keyword"),
+								"TemporalChangeVersion": payload.EncodeString("random-data"),
+							},
+						},
+					},
+				},
+			},
+			{
+				EventId:   int64(3),
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
+			},
+		},
+	}
+	historyBlob, err := fakeHistory.Marshal()
+	s.NoError(err)
+
+	s.mockExecutionMgr.EXPECT().ReadRawHistoryBranch(gomock.Any(), gomock.Any()).Return(&persistence.ReadRawHistoryBranchResponse{
+		HistoryEventBlobs: []*commonpb.DataBlob{
+			{
+				EncodingType: enumspb.ENCODING_TYPE_PROTO3,
+				Data:         historyBlob,
+			},
+		},
+		NextPageToken: []byte{},
+		Size:          1,
+	}, nil)
 
 	namespaceID := tests.NamespaceID
 	workflowExecution := &commonpb.WorkflowExecution{
@@ -926,15 +1140,15 @@ func (s *engine2Suite) TestTerminateWorkflowExecution_ParentMismatch() {
 	s.Equal(consts.ErrWorkflowParent, err)
 }
 
-func (s *engine2Suite) createExecutionStartedState(we *commonpb.WorkflowExecution, tl string, identity string, scheduleWorkflowTask bool, startWorkflowTask bool) workflow.MutableState {
+func (s *engine2Suite) createExecutionStartedState(we *commonpb.WorkflowExecution, tl string, identity string, scheduleWorkflowTask bool, startWorkflowTask bool) historyi.MutableState {
 	return s.createExecutionStartedStateWithParent(we, tl, nil, identity, scheduleWorkflowTask, startWorkflowTask)
 }
 
-func (s *engine2Suite) createExecutionStartedStateWithParent(we *commonpb.WorkflowExecution, tl string, parentInfo *workflowspb.ParentExecutionInfo, identity string, scheduleWorkflowTask bool, startWorkflowTask bool) workflow.MutableState {
+func (s *engine2Suite) createExecutionStartedStateWithParent(we *commonpb.WorkflowExecution, tl string, parentInfo *workflowspb.ParentExecutionInfo, identity string, scheduleWorkflowTask bool, startWorkflowTask bool) historyi.MutableState {
 	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.mockEventsCache, tests.LocalNamespaceEntry,
 		we.GetWorkflowId(), we.GetRunId(), s.logger)
 	addWorkflowExecutionStartedEventWithParent(ms, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, parentInfo, identity)
-	var wt *workflow.WorkflowTaskInfo
+	var wt *historyi.WorkflowTaskInfo
 	if scheduleWorkflowTask {
 		wt = addWorkflowTaskScheduledEvent(ms)
 	}
@@ -1993,6 +2207,7 @@ func (s *engine2Suite) TestRecordChildExecutionCompleted() {
 		tests.ChildNamespace, tests.ChildNamespaceID, childWorkflowID, childWorkflowType, childTaskQueueName, nil, 1*time.Second, 1*time.Second, 1*time.Second, enumspb.PARENT_CLOSE_POLICY_TERMINATE)
 	request.ParentInitiatedId = initiatedEvent.GetEventId()
 	request.ParentInitiatedVersion = initiatedEvent.GetVersion()
+	request.ChildFirstExecutionRunId = childRunID
 
 	// add child started event
 	addChildWorkflowExecutionStartedEvent(ms, initiatedEvent.GetEventId(), childWorkflowID, childRunID, childWorkflowType, nil)
@@ -2003,6 +2218,99 @@ func (s *engine2Suite) TestRecordChildExecutionCompleted() {
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
 	_, err = s.historyEngine.RecordChildExecutionCompleted(metrics.AddMetricsContext(context.Background()), request)
 	s.NoError(err)
+}
+
+func (s *engine2Suite) TestRecordChildExecutionCompleted_ChildFirstRunId() {
+	childWorkflowID := "some random child workflow ID"
+	childRunID := uuid.New()
+	childWorkflowType := "some random child workflow type"
+	childTaskQueueName := "some random child task queue"
+
+	testcases := []struct {
+		name            string
+		childFirstRunID string
+		expectedError   error
+	}{
+		{
+			name:            "empty child first run id",
+			childFirstRunID: "",
+		},
+		{
+			name:            "child first run id is set",
+			childFirstRunID: childRunID,
+		},
+		{
+			name:            "child first run id doesnt match",
+			childFirstRunID: "wrong_run_id",
+			expectedError:   consts.ErrChildExecutionNotFound,
+		},
+	}
+
+	for _, tc := range testcases {
+		s.Run(tc.name, func() {
+			request := &historyservice.RecordChildExecutionCompletedRequest{
+				NamespaceId: tests.NamespaceID.String(),
+				ParentExecution: &commonpb.WorkflowExecution{
+					WorkflowId: tests.WorkflowID,
+					RunId:      tests.RunID,
+				},
+				ChildExecution: &commonpb.WorkflowExecution{
+					WorkflowId: childWorkflowID,
+					RunId:      childRunID,
+				},
+				CompletionEvent: &historypb.HistoryEvent{
+					EventId:   456,
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
+					Attributes: &historypb.HistoryEvent_WorkflowExecutionCompletedEventAttributes{
+						WorkflowExecutionCompletedEventAttributes: &historypb.WorkflowExecutionCompletedEventAttributes{},
+					},
+				},
+				ParentInitiatedId:      123,
+				ParentInitiatedVersion: 100,
+			}
+
+			ms := workflow.TestGlobalMutableState(s.historyEngine.shardContext, s.mockEventsCache, log.NewTestLogger(), tests.Version, tests.WorkflowID, tests.RunID)
+			addWorkflowExecutionStartedEvent(ms, &commonpb.WorkflowExecution{
+				WorkflowId: tests.WorkflowID,
+				RunId:      tests.RunID,
+			}, "wType", "testTaskQueue", payloads.EncodeString("input"), 25*time.Second, 20*time.Second, 200*time.Second, "identity")
+			wfMs := workflow.TestCloneToProto(ms)
+			gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
+
+			// reload mutable state due to potential stale mutable state (initiated event not found)
+			s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil).Times(2)
+			_, err := s.historyEngine.RecordChildExecutionCompleted(metrics.AddMetricsContext(context.Background()), request)
+			s.IsType(&serviceerror.NotFound{}, err)
+
+			// add child init event
+			wt := addWorkflowTaskScheduledEvent(ms)
+			workflowTasksStartEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, "testTaskQueue", uuid.New())
+			wt.StartedEventID = workflowTasksStartEvent.GetEventId()
+			workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
+
+			initiatedEvent, _ := addStartChildWorkflowExecutionInitiatedEvent(ms, workflowTaskCompletedEvent.GetEventId(), uuid.New(),
+				tests.ChildNamespace, tests.ChildNamespaceID, childWorkflowID, childWorkflowType, childTaskQueueName, nil, 1*time.Second, 1*time.Second, 1*time.Second, enumspb.PARENT_CLOSE_POLICY_TERMINATE)
+			request.ParentInitiatedId = initiatedEvent.GetEventId()
+			request.ParentInitiatedVersion = initiatedEvent.GetVersion()
+			request.ChildFirstExecutionRunId = tc.childFirstRunID
+
+			// add child started event
+			addChildWorkflowExecutionStartedEvent(ms, initiatedEvent.GetEventId(), childWorkflowID, childRunID, childWorkflowType, nil)
+
+			wfMs = workflow.TestCloneToProto(ms)
+			gwmsResponse = &persistence.GetWorkflowExecutionResponse{State: wfMs}
+			s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
+			if tc.expectedError == nil {
+				s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
+			}
+			_, err = s.historyEngine.RecordChildExecutionCompleted(metrics.AddMetricsContext(context.Background()), request)
+			if tc.expectedError != nil {
+				s.Equal(tc.expectedError, err)
+			} else {
+				s.NoError(err)
+			}
+		})
+	}
 }
 
 func (s *engine2Suite) TestRecordChildExecutionCompleted_MissingChildStartedEvent() {
@@ -2050,6 +2358,7 @@ func (s *engine2Suite) TestRecordChildExecutionCompleted_MissingChildStartedEven
 		tests.ChildNamespace, tests.ChildNamespaceID, childWorkflowID, childWorkflowType, childTaskQueueName, nil, 1*time.Second, 1*time.Second, 1*time.Second, enumspb.PARENT_CLOSE_POLICY_TERMINATE)
 	request.ParentInitiatedId = initiatedEvent.GetEventId()
 	request.ParentInitiatedVersion = initiatedEvent.GetVersion()
+	request.ChildFirstExecutionRunId = childRunID
 
 	// started event not found, should automatically be added
 	wfMs = workflow.TestCloneToProto(ms)
@@ -2059,6 +2368,85 @@ func (s *engine2Suite) TestRecordChildExecutionCompleted_MissingChildStartedEven
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
 	_, err := s.historyEngine.RecordChildExecutionCompleted(metrics.AddMetricsContext(context.Background()), request)
 	s.NoError(err)
+}
+
+func (s *engine2Suite) TestRecordChildExecutionCompleted_MissingChildStartedEvent_ChildFirstRunId() {
+	childWorkflowID := "some random child workflow ID"
+	childRunID := uuid.New()
+	childWorkflowType := "some random child workflow type"
+	childTaskQueueName := "some random child task queue"
+
+	testcases := []struct {
+		name            string
+		childFirstRunID string
+	}{
+		{
+			name:            "empty child first run id",
+			childFirstRunID: "",
+		},
+		{
+			name:            "child first run id is same as current run id",
+			childFirstRunID: childRunID,
+		},
+		{
+			name:            "child first run id is different",
+			childFirstRunID: "wrong_run_id",
+		},
+	}
+
+	for _, tc := range testcases {
+		s.Run(tc.name, func() {
+			request := &historyservice.RecordChildExecutionCompletedRequest{
+				NamespaceId: tests.NamespaceID.String(),
+				ParentExecution: &commonpb.WorkflowExecution{
+					WorkflowId: tests.WorkflowID,
+					RunId:      tests.RunID,
+				},
+				ChildExecution: &commonpb.WorkflowExecution{
+					WorkflowId: childWorkflowID,
+					RunId:      childRunID,
+				},
+				CompletionEvent: &historypb.HistoryEvent{
+					EventId:   456,
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
+					Attributes: &historypb.HistoryEvent_WorkflowExecutionCompletedEventAttributes{
+						WorkflowExecutionCompletedEventAttributes: &historypb.WorkflowExecutionCompletedEventAttributes{},
+					},
+				},
+				ParentInitiatedId:      123,
+				ParentInitiatedVersion: 100,
+			}
+
+			ms := workflow.TestGlobalMutableState(s.historyEngine.shardContext, s.mockEventsCache, log.NewTestLogger(), tests.Version, tests.WorkflowID, tests.RunID)
+			addWorkflowExecutionStartedEvent(ms, &commonpb.WorkflowExecution{
+				WorkflowId: tests.WorkflowID,
+				RunId:      tests.RunID,
+			}, "wType", "testTaskQueue", payloads.EncodeString("input"), 25*time.Second, 20*time.Second, 200*time.Second, "identity")
+			wfMs := workflow.TestCloneToProto(ms)
+			gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
+
+			// add child init event
+			wt := addWorkflowTaskScheduledEvent(ms)
+			workflowTasksStartEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, "testTaskQueue", uuid.New())
+			wt.StartedEventID = workflowTasksStartEvent.GetEventId()
+			workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
+
+			initiatedEvent, _ := addStartChildWorkflowExecutionInitiatedEvent(ms, workflowTaskCompletedEvent.GetEventId(), uuid.New(),
+				tests.ChildNamespace, tests.ChildNamespaceID, childWorkflowID, childWorkflowType, childTaskQueueName, nil, 1*time.Second, 1*time.Second, 1*time.Second, enumspb.PARENT_CLOSE_POLICY_TERMINATE)
+			request.ParentInitiatedId = initiatedEvent.GetEventId()
+			request.ParentInitiatedVersion = initiatedEvent.GetVersion()
+			request.ChildFirstExecutionRunId = tc.childFirstRunID
+
+			// started event not found, should automatically be added
+			wfMs = workflow.TestCloneToProto(ms)
+			gwmsResponse = &persistence.GetWorkflowExecutionResponse{State: wfMs}
+			s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
+			s.mockEventsCache.EXPECT().GetEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(initiatedEvent, nil)
+			s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
+			_, err := s.historyEngine.RecordChildExecutionCompleted(metrics.AddMetricsContext(context.Background()), request)
+			s.NoError(err)
+		})
+	}
 }
 
 func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_WorkflowNotExist() {
@@ -2325,7 +2713,7 @@ func (s *engine2Suite) TestRefreshWorkflowTasks() {
 	s.NoError(err)
 }
 
-func (s *engine2Suite) getMutableState(namespaceID namespace.ID, we *commonpb.WorkflowExecution) workflow.MutableState {
+func (s *engine2Suite) getMutableState(namespaceID namespace.ID, we *commonpb.WorkflowExecution) historyi.MutableState {
 	weContext, release, err := s.workflowCache.GetOrCreateWorkflowExecution(
 		metrics.AddMetricsContext(context.Background()),
 		s.mockShard,

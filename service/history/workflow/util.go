@@ -32,17 +32,21 @@ import (
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/effect"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/worker_versioning"
-	"go.temporal.io/server/internal/effect"
+	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
+	historyi "go.temporal.io/server/service/history/interfaces"
+	"google.golang.org/protobuf/proto"
 )
 
 func failWorkflowTask(
-	mutableState MutableState,
-	workflowTask *WorkflowTaskInfo,
+	mutableState historyi.MutableState,
+	workflowTask *historyi.WorkflowTaskInfo,
 	workflowTaskFailureCause enumspb.WorkflowTaskFailedCause,
 ) (*historypb.HistoryEvent, error) {
 
@@ -67,7 +71,7 @@ func failWorkflowTask(
 }
 
 func ScheduleWorkflowTask(
-	mutableState MutableState,
+	mutableState historyi.MutableState,
 ) error {
 
 	if mutableState.HasPendingWorkflowTask() {
@@ -82,7 +86,7 @@ func ScheduleWorkflowTask(
 }
 
 func TimeoutWorkflow(
-	mutableState MutableState,
+	mutableState historyi.MutableState,
 	retryState enumspb.RetryState,
 	continuedRunID string,
 ) error {
@@ -116,7 +120,7 @@ func TimeoutWorkflow(
 // event must fall within an existing event batch (for example, if you've already
 // failed a workflow task via `failWorkflowTask` and have an event batch ID).
 func TerminateWorkflow(
-	mutableState MutableState,
+	mutableState historyi.MutableState,
 	terminateReason string,
 	terminateDetails *commonpb.Payloads,
 	terminateIdentity string,
@@ -182,7 +186,7 @@ func FindAutoResetPoint(
 	return "", nil
 }
 
-func WithEffects(effects effect.Controller, ms MutableState) MutableStateWithEffects {
+func WithEffects(effects effect.Controller, ms historyi.MutableState) MutableStateWithEffects {
 	return MutableStateWithEffects{
 		MutableState: ms,
 		Controller:   effects,
@@ -190,7 +194,7 @@ func WithEffects(effects effect.Controller, ms MutableState) MutableStateWithEff
 }
 
 type MutableStateWithEffects struct {
-	MutableState
+	historyi.MutableState
 	effect.Controller
 }
 
@@ -271,4 +275,40 @@ func shouldReapplyEvent(stateMachineRegistry *hsm.Registry, event *historypb.His
 	}
 
 	return false
+}
+
+func getCompletionCallbacksAsProtoSlice(ms historyi.MutableState) ([]*commonpb.Callback, error) {
+	coll := callbacks.MachineCollection(ms.HSM())
+	result := make([]*commonpb.Callback, 0, coll.Size())
+	for _, node := range coll.List() {
+		cb, err := coll.Data(node.Key.ID)
+		if err != nil {
+			return nil, err
+		}
+		if _, ok := cb.Trigger.Variant.(*persistencespb.CallbackInfo_Trigger_WorkflowClosed); !ok {
+			continue
+		}
+		cbSpec := &commonpb.Callback{}
+		switch variant := cb.Callback.Variant.(type) {
+		case *persistencespb.Callback_Nexus_:
+			cbSpec.Variant = &commonpb.Callback_Nexus_{
+				Nexus: &commonpb.Callback_Nexus{
+					Url:    variant.Nexus.GetUrl(),
+					Header: variant.Nexus.GetHeader(),
+				},
+			}
+		default:
+			data, err := proto.Marshal(cb.Callback)
+			if err != nil {
+				return nil, err
+			}
+			cbSpec.Variant = &commonpb.Callback_Internal_{
+				Internal: &commonpb.Callback_Internal{
+					Data: data,
+				},
+			}
+		}
+		result = append(result, cbSpec)
+	}
+	return result, nil
 }

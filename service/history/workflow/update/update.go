@@ -35,9 +35,9 @@ import (
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/effect"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/internal/effect"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 )
@@ -273,8 +273,9 @@ func (u *Update) abort(
 	reason AbortReason,
 	effects effect.Controller,
 ) {
-	const terminalStates = stateSet(stateCompleted | stateProvisionallyAborted | stateAborted)
-	if u.state.Matches(terminalStates) {
+	abortFailure, abortErr := reason.FailureError(u.state)
+	if abortFailure == nil && abortErr == nil {
+		// If both failure and err are nil, then it means that Update in this state can't be aborted.
 		return
 	}
 
@@ -285,7 +286,6 @@ func (u *Update) abort(
 		if !u.state.Matches(stateSet(stateProvisionallyAborted | stateProvisionallyCompletedAfterAccepted)) {
 			return
 		}
-		abortFailure, abortErr := reason.FailureError(prevState)
 		var abortOutcome *updatepb.Outcome
 		if abortFailure != nil {
 			abortOutcome = &updatepb.Outcome{Value: &updatepb.Outcome_Failure{Failure: abortFailure}}

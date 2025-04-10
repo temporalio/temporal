@@ -26,6 +26,7 @@ package history
 
 import (
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/config"
@@ -35,7 +36,6 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	commonnexus "go.temporal.io/server/common/nexus"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
@@ -70,6 +70,7 @@ import (
 var Module = fx.Options(
 	resource.Module,
 	fx.Provide(hsm.NewRegistry),
+	fx.Provide(chasm.NewRegistry),
 	workflow.Module,
 	shard.Module,
 	events.Module,
@@ -94,7 +95,6 @@ var Module = fx.Options(
 	fx.Provide(ServerProvider),
 	fx.Provide(NewService),
 	fx.Provide(ReplicationProgressCacheProvider),
-	fx.Provide(commonnexus.NewLoggedHTTPClientTraceProvider),
 	fx.Invoke(ServiceLifetimeHooks),
 
 	callbacks.Module,

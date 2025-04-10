@@ -46,7 +46,8 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
-	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/consts"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
@@ -70,14 +71,14 @@ type (
 	}
 
 	ActivityStateReplicatorImpl struct {
-		shardContext  shard.Context
+		shardContext  historyi.ShardContext
 		workflowCache wcache.Cache
 		logger        log.Logger
 	}
 )
 
 func NewActivityStateReplicator(
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	workflowCache wcache.Cache,
 	logger log.Logger,
 ) *ActivityStateReplicatorImpl {
@@ -165,7 +166,7 @@ func (r *ActivityStateReplicatorImpl) SyncActivityState(
 		return err
 	}
 	if !applied {
-		return nil
+		return consts.ErrDuplicate
 	}
 
 	// passive logic need to explicitly call create timer
@@ -186,7 +187,7 @@ func (r *ActivityStateReplicatorImpl) SyncActivityState(
 		updateMode,
 		nil, // no new workflow
 		nil, // no new workflow
-		workflow.TransactionPolicyPassive,
+		historyi.TransactionPolicyPassive,
 		nil,
 	)
 }
@@ -251,7 +252,7 @@ func (r *ActivityStateReplicatorImpl) SyncActivitiesState(
 		anyEventApplied = anyEventApplied || applied
 	}
 	if !anyEventApplied {
-		return nil
+		return consts.ErrDuplicate
 	}
 
 	// passive logic need to explicitly call create timer
@@ -272,14 +273,14 @@ func (r *ActivityStateReplicatorImpl) SyncActivitiesState(
 		updateMode,
 		nil, // no new workflow
 		nil, // no new workflow
-		workflow.TransactionPolicyPassive,
+		historyi.TransactionPolicyPassive,
 		nil,
 	)
 }
 
 func (r *ActivityStateReplicatorImpl) syncSingleActivityState(
 	workflowKey *definition.WorkflowKey,
-	mutableState workflow.MutableState,
+	mutableState historyi.MutableState,
 	activitySyncInfo *historyservice.ActivitySyncInfo,
 ) (applied bool, retError error) {
 	scheduledEventID := activitySyncInfo.GetScheduledEventId()
@@ -397,7 +398,7 @@ func (r *ActivityStateReplicatorImpl) compareVersionHistory(
 	workflowID string,
 	runID string,
 	scheduledEventID int64,
-	mutableState workflow.MutableState,
+	mutableState historyi.MutableState,
 	incomingVersionHistory *historyspb.VersionHistory,
 ) (bool, error) {
 

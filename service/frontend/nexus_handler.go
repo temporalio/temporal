@@ -27,6 +27,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/http/httptrace"
 	"net/url"
 	"regexp"
 	"runtime/debug"
@@ -52,6 +53,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/rpc/interceptor"
+	"go.temporal.io/server/components/nexusoperations"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -70,7 +72,7 @@ type nexusContext struct {
 	endpointName                         string
 	claims                               *authorization.Claims
 	namespaceValidationInterceptor       *interceptor.NamespaceValidatorInterceptor
-	namespaceRateLimitInterceptor        *interceptor.NamespaceRateLimitInterceptor
+	namespaceRateLimitInterceptor        interceptor.NamespaceRateLimitInterceptor
 	namespaceConcurrencyLimitInterceptor *interceptor.ConcurrentRequestLimitInterceptor
 	rateLimitInterceptor                 *interceptor.RateLimitInterceptor
 	responseHeaders                      map[string]string
@@ -94,6 +96,7 @@ type operationContext struct {
 	redirectionInterceptor        *interceptor.Redirection
 	forwardingEnabledForNamespace dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	headersBlacklist              *dynamicconfig.GlobalCachedTypedValue[*regexp.Regexp]
+	metricTagConfig               *dynamicconfig.GlobalCachedTypedValue[*nexusoperations.NexusMetricTagConfig]
 	cleanupFunctions              []func(map[string]string, error)
 }
 
@@ -145,13 +148,16 @@ func (c *operationContext) augmentContext(ctx context.Context, header nexus.Head
 	if userAgent, ok := header[headerUserAgent]; ok {
 		parts := strings.Split(userAgent, clientNameVersionDelim)
 		if len(parts) == 2 {
-			return metadata.NewIncomingContext(ctx, metadata.New(map[string]string{
-				headers.ClientNameHeaderName:    parts[0],
-				headers.ClientVersionHeaderName: parts[1],
-			}))
+			mdIncoming, ok := metadata.FromIncomingContext(ctx)
+			if !ok {
+				mdIncoming = metadata.MD{}
+			}
+			mdIncoming.Set(headers.ClientNameHeaderName, parts[0])
+			mdIncoming.Set(headers.ClientVersionHeaderName, parts[1])
+			ctx = metadata.NewIncomingContext(ctx, mdIncoming)
 		}
 	}
-	return ctx
+	return headers.Propagate(ctx)
 }
 
 func (c *operationContext) interceptRequest(
@@ -273,6 +279,32 @@ func (c *operationContext) shouldForwardRequest(ctx context.Context, header nexu
 		c.forwardingEnabledForNamespace(c.namespaceName)
 }
 
+// enrichNexusOperationMetrics enhances metrics with additional Nexus operation context based on configuration.
+func (c *operationContext) enrichNexusOperationMetrics(service, operation string, requestHeader nexus.Header) {
+	conf := c.metricTagConfig.Get()
+	if conf == nil {
+		return
+	}
+
+	var tags []metrics.Tag
+
+	if conf.IncludeServiceTag {
+		tags = append(tags, metrics.NexusServiceTag(service))
+	}
+
+	if conf.IncludeOperationTag {
+		tags = append(tags, metrics.NexusOperationTag(operation))
+	}
+
+	for _, mapping := range conf.HeaderTagMappings {
+		tags = append(tags, metrics.StringTag(mapping.TargetTag, requestHeader.Get(mapping.SourceHeader)))
+	}
+
+	if len(tags) > 0 {
+		c.metricsHandler = c.metricsHandler.WithTags(tags...)
+	}
+}
+
 // Key to extract a nexusContext object from a context.Context.
 type nexusContextKey struct{}
 
@@ -292,6 +324,8 @@ type nexusHandler struct {
 	forwardingClients             *cluster.FrontendHTTPClientCache
 	payloadSizeLimit              dynamicconfig.IntPropertyFnWithNamespaceFilter
 	headersBlacklist              *dynamicconfig.GlobalCachedTypedValue[*regexp.Regexp]
+	metricTagConfig               *dynamicconfig.GlobalCachedTypedValue[*nexusoperations.NexusMetricTagConfig]
+	httpTraceProvider             commonnexus.HTTPClientTraceProvider
 }
 
 // Extracts a nexusContext from the given ctx and returns an operationContext with tagged metrics and logging.
@@ -311,6 +345,7 @@ func (h *nexusHandler) getOperationContext(ctx context.Context, method string) (
 		redirectionInterceptor:        h.redirectionInterceptor,
 		forwardingEnabledForNamespace: h.forwardingEnabledForNamespace,
 		headersBlacklist:              h.headersBlacklist,
+		metricTagConfig:               h.metricTagConfig,
 		cleanupFunctions:              make([]func(map[string]string, error), 0),
 	}
 	oc.metricsHandlerForInterceptors = h.metricsHandler.WithTags(
@@ -355,6 +390,7 @@ func (h *nexusHandler) StartOperation(
 		return nil, err
 	}
 	ctx = oc.augmentContext(ctx, options.Header)
+	oc.enrichNexusOperationMetrics(service, operation, options.Header)
 	defer oc.capturePanicAndRecordMetrics(&ctx, &retErr)
 
 	var links []*nexuspb.Link
@@ -498,6 +534,22 @@ func (h *nexusHandler) forwardStartOperation(
 		return nil, err
 	}
 
+	if h.httpTraceProvider != nil {
+		traceLogger := log.With(h.logger,
+			tag.Operation(oc.method),
+			tag.WorkflowNamespace(oc.namespaceName),
+			tag.RequestID(options.RequestID),
+			tag.NexusOperation(operation),
+			tag.Endpoint(oc.endpointName),
+			tag.AttemptStart(time.Now().UTC()),
+			tag.SourceCluster(h.clusterMetadata.GetCurrentClusterName()),
+			tag.TargetCluster(oc.namespace.ActiveClusterName()),
+		)
+		if trace := h.httpTraceProvider.NewForwardingTrace(traceLogger); trace != nil {
+			ctx = httptrace.WithClientTrace(ctx, trace)
+		}
+	}
+
 	resp, err := client.StartOperation(ctx, operation, input.Reader, options)
 	if err != nil {
 		oc.logger.Error("received error from remote cluster for forwarded Nexus start operation request.", tag.Error(err))
@@ -517,6 +569,8 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 	if err != nil {
 		return err
 	}
+	ctx = oc.augmentContext(ctx, options.Header)
+	oc.enrichNexusOperationMetrics(service, operation, options.Header)
 	defer oc.capturePanicAndRecordMetrics(&ctx, &retErr)
 
 	request := oc.matchingRequest(&nexuspb.Request{
@@ -591,6 +645,21 @@ func (h *nexusHandler) forwardCancelOperation(
 	if err != nil {
 		oc.logger.Warn("invalid Nexus cancel operation.", tag.Error(err))
 		return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid operation")
+	}
+
+	if h.httpTraceProvider != nil {
+		traceLogger := log.With(h.logger,
+			tag.Operation(oc.method),
+			tag.WorkflowNamespace(oc.namespaceName),
+			tag.NexusOperation(operation),
+			tag.Endpoint(oc.endpointName),
+			tag.AttemptStart(time.Now().UTC()),
+			tag.SourceCluster(h.clusterMetadata.GetCurrentClusterName()),
+			tag.TargetCluster(oc.namespace.ActiveClusterName()),
+		)
+		if trace := h.httpTraceProvider.NewForwardingTrace(traceLogger); trace != nil {
+			ctx = httptrace.WithClientTrace(ctx, trace)
+		}
 	}
 
 	err = handle.Cancel(ctx, options)
