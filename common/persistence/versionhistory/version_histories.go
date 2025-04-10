@@ -195,6 +195,10 @@ func GetCurrentVersionHistory(h *historyspb.VersionHistories) (*historyspb.Versi
 
 // IsCurrentVersionHistoryEmpty checks if the current VersionHistory is empty.
 func IsCurrentVersionHistoryEmpty(h *historyspb.VersionHistories) (bool, error) {
+	if len(h.Histories) == 0 {
+		return true, nil
+	}
+
 	currentVersionHistory, err := GetCurrentVersionHistory(h)
 	if err != nil {
 		return false, err

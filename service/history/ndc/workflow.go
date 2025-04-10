@@ -165,6 +165,11 @@ func (r *WorkflowImpl) SuppressBy(
 	// if the workflow to be suppressed has last write version being remote active
 	//  then turn this workflow into a zombie
 
+	// if workflow is in zombie or finished state, keep as is
+	if !r.mutableState.IsWorkflowExecutionRunning() {
+		return historyi.TransactionPolicyPassive, nil
+	}
+
 	lastWriteVersion, lastUpdateClock, err := r.GetVectorClock()
 	if err != nil {
 		return historyi.TransactionPolicyActive, err
@@ -181,11 +186,6 @@ func (r *WorkflowImpl) SuppressBy(
 		incomingLastUpdateClock,
 	) {
 		return historyi.TransactionPolicyActive, serviceerror.NewInternal("Workflow cannot suppress workflow by older workflow")
-	}
-
-	// if workflow is in zombie or finished state, keep as is
-	if !r.mutableState.IsWorkflowExecutionRunning() {
-		return historyi.TransactionPolicyPassive, nil
 	}
 
 	lastWriteCluster := r.clusterMetadata.ClusterNameForFailoverVersion(true, lastWriteVersion)
