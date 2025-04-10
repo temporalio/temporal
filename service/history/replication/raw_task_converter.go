@@ -687,25 +687,40 @@ func (c *syncVersionedTransitionTaskConverter) convert(
 		return nil, err
 	}
 	currentHistoryCopy := versionhistory.CopyVersionHistory(currentHistory)
+	var syncStateResult *SyncStateResult
+	if taskInfo.IsFirstTask {
+		syncStateResult, err = c.syncStateRetriever.GetSyncWorkflowStateArtifactFromMutableStateForNewWorkflow(
+			ctx,
+			taskInfo.NamespaceID,
+			&commonpb.WorkflowExecution{
+				WorkflowId: taskInfo.WorkflowID,
+				RunId:      taskInfo.RunID,
+			},
+			mutableState,
+			releaseFunc,
+			taskInfo.VersionedTransition,
+		)
+	} else {
+		syncStateResult, err = c.syncStateRetriever.GetSyncWorkflowStateArtifactFromMutableState(
+			ctx,
+			taskInfo.NamespaceID,
+			&commonpb.WorkflowExecution{
+				WorkflowId: taskInfo.WorkflowID,
+				RunId:      taskInfo.RunID,
+			},
+			mutableState,
+			progress.LastSyncedTransition(),
+			targetHistoryItems,
+			releaseFunc,
+		)
+	}
 
-	result, err := c.syncStateRetriever.GetSyncWorkflowStateArtifactFromMutableState(
-		ctx,
-		taskInfo.NamespaceID,
-		&commonpb.WorkflowExecution{
-			WorkflowId: taskInfo.WorkflowID,
-			RunId:      taskInfo.RunID,
-		},
-		mutableState,
-		progress.LastSyncedTransition(),
-		targetHistoryItems,
-		releaseFunc,
-	)
 	if err != nil {
 		return nil, err
 	}
 	// do not access mutable state after this point
 
-	err = c.replicationCache.Update(taskInfo.RunID, targetClusterID, result.VersionedTransitionHistory, currentHistoryCopy.Items)
+	err = c.replicationCache.Update(taskInfo.RunID, targetClusterID, syncStateResult.VersionedTransitionHistory, currentHistoryCopy.Items)
 	if err != nil {
 		return nil, err
 	}
@@ -714,7 +729,7 @@ func (c *syncVersionedTransitionTaskConverter) convert(
 		SourceTaskId: taskInfo.TaskID,
 		Attributes: &replicationspb.ReplicationTask_SyncVersionedTransitionTaskAttributes{
 			SyncVersionedTransitionTaskAttributes: &replicationspb.SyncVersionedTransitionTaskAttributes{
-				VersionedTransitionArtifact: result.VersionedTransitionArtifact,
+				VersionedTransitionArtifact: syncStateResult.VersionedTransitionArtifact,
 				NamespaceId:                 taskInfo.NamespaceID,
 				WorkflowId:                  taskInfo.WorkflowID,
 				RunId:                       taskInfo.RunID,

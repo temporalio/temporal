@@ -47,6 +47,7 @@ type (
 		NextEventID            int64                          // Next event ID after version transition
 		LastVersionHistoryItem *historyspb.VersionHistoryItem // Last version history item of version transition when version transition does not have associated events
 		NewRunID               string
+		IsFirstTask            bool
 
 		TaskEquivalents []Task
 	}

@@ -229,6 +229,17 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 	default:
 		return serviceerror.NewInvalidArgument(fmt.Sprintf("unknown artifact type %T", artifactType))
 	}
+
+	if mutation != nil && mutation.ExclusiveStartVersionedTransition.TransitionCount == 0 {
+		// this is the first replication task for this workflow
+		// TODO: Handle reset case to reduce the amount of history events write
+		err := r.handleFirstReplicationTask(ctx, versionedTransition, sourceClusterName)
+		if !errors.Is(err, consts.ErrDuplicate) {
+			// if ErrDuplicate is returned from creation, it means the workflow is already existed, continue to apply mutation
+			return err
+		}
+	}
+
 	executionState, executionInfo := func() (*persistencespb.WorkflowExecutionState, *persistencespb.WorkflowExecutionInfo) {
 		if snapshot != nil {
 			return snapshot.State.ExecutionState, snapshot.State.ExecutionInfo
@@ -337,6 +348,168 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 	}
 }
 
+//nolint:revive // cognitive complexity 35 (> max enabled 25)
+func (r *WorkflowStateReplicatorImpl) handleFirstReplicationTask(
+	ctx context.Context,
+	versionedTransitionArtifact *replicationspb.VersionedTransitionArtifact,
+	sourceClusterName string,
+) (retErr error) {
+	mutation := versionedTransitionArtifact.GetSyncWorkflowStateMutationAttributes()
+	executionInfo := mutation.StateMutation.ExecutionInfo
+	executionState := mutation.StateMutation.ExecutionState
+	sourceVersionHistories := mutation.StateMutation.ExecutionInfo.VersionHistories
+	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(sourceVersionHistories)
+	if err != nil {
+		return err
+	}
+	lastVersionHistoryItem, err := versionhistory.GetLastVersionHistoryItem(currentVersionHistory)
+	if err != nil {
+		return err
+	}
+
+	var historyEventBatchs [][]*historypb.HistoryEvent
+	for _, blob := range versionedTransitionArtifact.EventBatches {
+		e, err := r.historySerializer.DeserializeEvents(blob)
+		if err != nil {
+			return err
+		}
+		historyEventBatchs = append(historyEventBatchs, e)
+	}
+	lastBatch := historyEventBatchs[len(historyEventBatchs)-1]
+	lastEvent := lastBatch[len(lastBatch)-1]
+	if lastEvent.EventId < lastVersionHistoryItem.EventId {
+		remoteHistoryIterator := collection.NewPagingIterator(r.getHistoryFromRemotePaginationFn(
+			ctx,
+			sourceClusterName,
+			namespace.ID(executionInfo.NamespaceId),
+			executionInfo.WorkflowId,
+			executionState.RunId,
+			lastEvent.EventId,
+			lastEvent.Version,
+			lastVersionHistoryItem.EventId+1,
+			lastVersionHistoryItem.Version),
+		)
+		for remoteHistoryIterator.HasNext() {
+			batch, err := remoteHistoryIterator.Next()
+			if err != nil {
+				return err
+			}
+			sourceEvents, err := r.historySerializer.DeserializeEvents(batch.rawHistory)
+			if err != nil {
+				return err
+			}
+			historyEventBatchs = append(historyEventBatchs, sourceEvents)
+		}
+	}
+
+	wfCtx, releaseFn, err := r.workflowCache.GetOrCreateWorkflowExecution(
+		ctx,
+		r.shardContext,
+		namespace.ID(executionInfo.NamespaceId),
+		&commonpb.WorkflowExecution{
+			WorkflowId: executionInfo.WorkflowId,
+			RunId:      executionState.RunId,
+		},
+		locks.PriorityLow,
+	)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if rec := recover(); rec != nil {
+			releaseFn(errPanic)
+			panic(rec)
+		}
+		releaseFn(retErr)
+	}()
+
+	nsEntry, err := r.namespaceRegistry.GetNamespaceByID(namespace.ID(executionInfo.NamespaceId))
+	if err != nil {
+		return err
+	}
+	localMutableState := workflow.NewMutableState(
+		r.shardContext,
+		r.shardContext.GetEventsCache(),
+		r.logger,
+		nsEntry,
+		executionInfo.WorkflowId,
+		executionState.RunId,
+		timestamp.TimeValue(executionState.StartTime),
+	)
+	err = localMutableState.ApplyMutation(mutation.StateMutation)
+	if err != nil {
+		return err
+	}
+
+	err = localMutableState.SetHistoryTree(executionInfo.WorkflowExecutionTimeout, executionInfo.WorkflowRunTimeout, executionState.RunId)
+	if err != nil {
+		return nil
+	}
+	localCurrentVersionHistory, err := versionhistory.GetCurrentVersionHistory(localMutableState.GetExecutionInfo().VersionHistories)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if retErr != nil {
+			// if we fail to create workflow, we need to clean up the history branch
+			if err := r.shardContext.GetExecutionManager().DeleteHistoryBranch(ctx, &persistence.DeleteHistoryBranchRequest{
+				ShardID:     r.shardContext.GetShardID(),
+				BranchToken: localCurrentVersionHistory.BranchToken,
+			}); err != nil {
+				r.logger.Error("failed to clean up workflow execution", tag.Error(err))
+			}
+		}
+	}()
+	if err != nil {
+		return err
+	}
+
+	localCurrentVersionHistory.Items = versionhistory.CopyVersionHistoryItems(currentVersionHistory.Items)
+	if err != nil {
+		return err
+	}
+
+	localMutableState.SetHistoryBuilder(historybuilder.NewImmutable(historyEventBatchs...))
+	for _, historyEventBatch := range historyEventBatchs {
+		for _, historyEvent := range historyEventBatch {
+			r.addEventToCache(definition.WorkflowKey{
+				NamespaceID: executionInfo.NamespaceId,
+				WorkflowID:  executionInfo.WorkflowId,
+				RunID:       executionState.RunId,
+			}, historyEvent)
+		}
+	}
+	if versionedTransitionArtifact.NewRunInfo != nil {
+		err = r.createNewRunWorkflow(
+			ctx,
+			namespace.ID(executionInfo.NamespaceId),
+			executionInfo.WorkflowId,
+			versionedTransitionArtifact.NewRunInfo,
+			localMutableState,
+			true,
+		)
+		if err != nil {
+			return err
+		}
+	}
+
+	err = r.taskRefresher.Refresh(ctx, localMutableState)
+
+	if err != nil {
+		return err
+	}
+
+	return r.transactionMgr.CreateWorkflow(
+		ctx,
+		NewWorkflow(
+			r.clusterMetadata,
+			wfCtx,
+			localMutableState,
+			releaseFn,
+		),
+	)
+}
+
 func (r *WorkflowStateReplicatorImpl) applyMutation(
 	ctx context.Context,
 	namespaceID namespace.ID,
@@ -370,7 +543,8 @@ func (r *WorkflowStateReplicatorImpl) applyMutation(
 	if workflow.TransitionHistoryStalenessCheck(localTransitionHistory, mutation.ExclusiveStartVersionedTransition) != nil ||
 		workflow.TransitionHistoryStalenessCheck(sourceTransitionHistory, localVersionedTransition) != nil {
 		return serviceerrors.NewSyncState(
-			fmt.Sprintf("Failed to apply mutation due to version check failed. local transition history: %v, source transition history: %v", localTransitionHistory, sourceTransitionHistory),
+			fmt.Sprintf("Failed to apply mutation due to version check failed. local transition history: %v, source transition history: %v, exclusiveStartVersionedTransition: %v",
+				localTransitionHistory, sourceTransitionHistory, mutation.ExclusiveStartVersionedTransition),
 			namespaceID.String(),
 			workflowID,
 			runID,
