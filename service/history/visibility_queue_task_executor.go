@@ -461,6 +461,12 @@ func (t *visibilityQueueTaskExecutor) cleanupExecutionInfo(
 	executionInfo.Memo = nil
 	executionInfo.SearchAttributes = nil
 	executionInfo.RelocatableAttributesRemoved = true
+
+	if t.shardContext.GetConfig().EnableUpdateWorkflowModeIgnoreCurrent() {
+		return weContext.UpdateWorkflowExecutionAsPassive(ctx, t.shardContext)
+	}
+
+	// TODO: remove following code once EnableUpdateWorkflowModeIgnoreCurrent config is deprecated.
 	return weContext.SetWorkflowExecution(ctx, t.shardContext)
 }
 

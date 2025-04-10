@@ -128,6 +128,11 @@ func (r *HSMStateReplicatorImpl) SyncHSMState(
 		return consts.ErrDuplicate
 	}
 
+	if r.shardContext.GetConfig().EnableUpdateWorkflowModeIgnoreCurrent() {
+		return workflowContext.UpdateWorkflowExecutionAsPassive(ctx, r.shardContext)
+	}
+
+	// TODO: remove following code once EnableUpdateWorkflowModeIgnoreCurrent config is deprecated.
 	state, _ := mutableState.GetWorkflowStateStatus()
 	if state == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		return workflowContext.SubmitClosedWorkflowSnapshot(

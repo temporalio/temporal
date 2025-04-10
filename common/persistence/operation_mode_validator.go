@@ -147,6 +147,17 @@ func ValidateUpdateWorkflowModeState(
 		}
 		return nil
 
+	case UpdateWorkflowModeIgnoreCurrent:
+		// Cannot have new workflow when skipping current workflow check
+		if newWorkflowState != nil {
+			return newInvalidUpdateWorkflowWithNewMode(
+				mode,
+				currentWorkflowState,
+				*newWorkflowState,
+			)
+		}
+		return nil
+
 	default:
 		return serviceerror.NewInternal(fmt.Sprintf("unknown mode: %v", mode))
 	}
