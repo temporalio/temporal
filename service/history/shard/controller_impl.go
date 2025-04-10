@@ -185,7 +185,7 @@ func (c *ControllerImpl) InitialShardsAcquired(ctx context.Context) error {
 	return err
 }
 
-// GetShardByID returns a shard context for the given namespace and workflow.
+// GetShardByNamespaceWorkflow returns a shard context for the given namespace and workflow.
 // The shard context may not have acquired a rangeid lease yet.
 // Callers can use GetEngine on the shard to block on rangeid lease acquisition.
 func (c *ControllerImpl) GetShardByNamespaceWorkflow(
