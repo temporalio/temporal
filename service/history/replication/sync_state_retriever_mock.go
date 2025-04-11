@@ -48,6 +48,7 @@ import (
 type MockSyncStateRetriever struct {
 	ctrl     *gomock.Controller
 	recorder *MockSyncStateRetrieverMockRecorder
+	isgomock struct{}
 }
 
 // MockSyncStateRetrieverMockRecorder is the mock recorder for MockSyncStateRetriever.
@@ -116,6 +117,7 @@ func (mr *MockSyncStateRetrieverMockRecorder) GetSyncWorkflowStateArtifactFromMu
 type MocklastUpdatedStateTransitionGetter struct {
 	ctrl     *gomock.Controller
 	recorder *MocklastUpdatedStateTransitionGetterMockRecorder
+	isgomock struct{}
 }
 
 // MocklastUpdatedStateTransitionGetterMockRecorder is the mock recorder for MocklastUpdatedStateTransitionGetter.
