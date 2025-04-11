@@ -552,6 +552,7 @@ func (r *WorkflowStateReplicatorImpl) applyMutation(
 			localMutableState.GetExecutionInfo().VersionHistories,
 		)
 	}
+	localMutableState.FlushBufferedEvents()
 
 	err := r.bringLocalEventsUpToSourceCurrentBranch(
 		ctx,
@@ -685,6 +686,7 @@ func (r *WorkflowStateReplicatorImpl) applySnapshotWhenWorkflowExist(
 			isBranchSwitched = true
 		}
 	}
+	localMutableState.FlushBufferedEvents()
 
 	err := r.bringLocalEventsUpToSourceCurrentBranch(
 		ctx,
