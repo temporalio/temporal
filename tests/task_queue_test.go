@@ -25,15 +25,16 @@ package tests
 import (
 	"context"
 	"fmt"
+	commonpb "go.temporal.io/api/common/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
+	"go.temporal.io/sdk/worker"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/suite"
-	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
-	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/testing/testvars"
@@ -133,18 +134,28 @@ func (s *TaskQueueSuite) taskQueueRateLimitTest(nPartitions, nWorkers int, timeT
 			wfBacklogCount = s.getBacklogCount(ctx, tv)
 			return wfBacklogCount >= maxBacklog
 		},
-		1*time.Second,
+		5*time.Second,
 		200*time.Millisecond,
 	)
 
 	// terminate all those workflow executions so that all the tasks in the backlog are invalid
-	listResp, err := s.FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: s.Namespace().String(),
-		Query:     fmt.Sprintf("TaskQueue = '%s'", tv.TaskQueue().GetName()),
-	})
-	s.NoError(err)
-	for _, exec := range listResp.GetExecutions() {
-		_, err = s.FrontendClient().TerminateWorkflowExecution(ctx, &workflowservice.TerminateWorkflowExecutionRequest{
+	var wfList []*workflowpb.WorkflowExecutionInfo
+	s.Eventually(
+		func() bool {
+			listResp, err := s.FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+				Namespace: s.Namespace().String(),
+				Query:     fmt.Sprintf("TaskQueue = '%s'", tv.TaskQueue().GetName()),
+			})
+			s.NoError(err)
+			wfList = listResp.GetExecutions()
+			return len(wfList) == maxBacklog
+		},
+		5*time.Second,
+		200*time.Millisecond,
+	)
+
+	for _, exec := range wfList {
+		_, err := s.FrontendClient().TerminateWorkflowExecution(ctx, &workflowservice.TerminateWorkflowExecutionRequest{
 			Namespace:         s.Namespace().String(),
 			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: exec.GetExecution().GetWorkflowId(), RunId: exec.GetExecution().GetRunId()},
 			Reason:            "test",
