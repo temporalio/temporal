@@ -332,6 +332,7 @@ func (handler *workflowTaskCompletedHandler) handleCommand(
 		return nil, handler.handleCommandProtocolMessage(ctx, command.GetProtocolMessageCommandAttributes(), msgs)
 
 	default:
+		// Nexus command handlers are registered in /components/nexusoperations/workflow/commands.go
 		ch, ok := handler.commandHandlerRegistry.Handler(command.GetCommandType())
 		if !ok {
 			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Unknown command type: %v", command.GetCommandType()))
