@@ -41,9 +41,9 @@ func NewQueryConverter(
 	queryString string,
 ) *QueryConverter {
 	switch pluginName {
-	case mysql.PluginNameV8:
+	case mysql.PluginName:
 		return newMySQLQueryConverter(namespaceName, namespaceID, saTypeMap, saMapper, queryString)
-	case postgresql.PluginNameV12:
+	case postgresql.PluginName, postgresql.PluginNamePGX:
 		return newPostgreSQLQueryConverter(namespaceName, namespaceID, saTypeMap, saMapper, queryString)
 	case sqlite.PluginName:
 		return newSqliteQueryConverter(namespaceName, namespaceID, saTypeMap, saMapper, queryString)

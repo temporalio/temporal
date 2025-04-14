@@ -25,19 +25,20 @@
 package tdbg
 
 import (
+	"errors"
 	"fmt"
 	"os"
-	"strconv"
+	"strings"
 	"time"
 
 	"github.com/temporalio/tctl-kit/pkg/color"
 	"github.com/urfave/cli/v2"
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/api/history/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/codec"
@@ -46,10 +47,19 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history/tasks"
+	"google.golang.org/protobuf/encoding/prototext"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
+)
+
+const (
+	historyImportBlobSize = 16
+	historyImportPageSize = 256 * 1024 // 256K
 )
 
 // AdminShowWorkflow shows history
-func AdminShowWorkflow(c *cli.Context) error {
+func AdminShowWorkflow(c *cli.Context, clientFactory ClientFactory) error {
 	nsName, err := getRequiredOption(c, FlagNamespace)
 	if err != nil {
 		return err
@@ -65,107 +75,230 @@ func AdminShowWorkflow(c *cli.Context) error {
 	endEventVersion := int64(c.Int(FlagMaxEventVersion))
 	outputFileName := c.String(FlagOutputFilename)
 
-	client := cFactory.AdminClient(c)
+	client := clientFactory.AdminClient(c)
 
 	serializer := serialization.NewSerializer()
-	var history []*commonpb.DataBlob
 
 	ctx, cancel := newContext(c)
 	defer cancel()
 
-	nsID, err := getNamespaceID(c, namespace.Name(nsName))
+	nsID, err := getNamespaceID(c, clientFactory, namespace.Name(nsName))
 	if err != nil {
 		return err
 	}
 
-	resp, err := client.GetWorkflowExecutionRawHistoryV2(ctx, &adminservice.GetWorkflowExecutionRawHistoryV2Request{
-		NamespaceId: nsID.String(),
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: wid,
-			RunId:      rid,
-		},
-		StartEventId:      startEventId,
-		EndEventId:        endEventId,
-		StartEventVersion: startEventVerion,
-		EndEventVersion:   endEventVersion,
-		MaximumPageSize:   100,
-		NextPageToken:     nil,
-	})
-	if err != nil {
-		return fmt.Errorf("unable to read History Branch: %s", err)
+	var histories []*commonpb.DataBlob
+	var token []byte
+	for doContinue := true; doContinue; doContinue = len(token) != 0 {
+		resp, err := client.GetWorkflowExecutionRawHistoryV2(ctx, &adminservice.GetWorkflowExecutionRawHistoryV2Request{
+			NamespaceId: nsID.String(),
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: wid,
+				RunId:      rid,
+			},
+			StartEventId:      startEventId,
+			EndEventId:        endEventId,
+			StartEventVersion: startEventVerion,
+			EndEventVersion:   endEventVersion,
+			MaximumPageSize:   100,
+			NextPageToken:     token,
+		})
+		if err != nil {
+			return fmt.Errorf("unable to recv History Branch: %s", err)
+		}
+		histories = append(histories, resp.HistoryBatches...)
+		token = resp.NextPageToken
 	}
 
-	allEvents := &historypb.History{}
+	var historyBatches []*historypb.History
 	totalSize := 0
-	for idx, b := range resp.HistoryBatches {
+	var errs []error
+	for idx, b := range histories {
 		totalSize += len(b.Data)
-		fmt.Printf("======== batch %v, blob len: %v ======\n", idx+1, len(b.Data))
+		fmt.Fprintf(c.App.Writer, "======== batch %v, blob len: %v ======\n", idx+1, len(b.Data))
 		historyBatch, err := serializer.DeserializeEvents(b)
 		if err != nil {
-			return fmt.Errorf("unable to deserialize Events: %s", err)
+			err := fmt.Errorf("unable to deserialize Events: %s", err)
+			fmt.Fprintln(c.App.Writer, err)
+			errs = append(errs, err)
+			continue
 		}
-		allEvents.Events = append(allEvents.Events, historyBatch...)
+		historyBatches = append(historyBatches, &historypb.History{Events: historyBatch})
 		encoder := codec.NewJSONPBEncoder()
 		data, err := encoder.EncodeHistoryEvents(historyBatch)
 		if err != nil {
-			return fmt.Errorf("unable to encode History Events: %s", err)
+			err := fmt.Errorf("unable to encode History Events: %s", err)
+			fmt.Fprintln(c.App.Writer, err)
+			text, terr := prototext.Marshal(&historypb.History{Events: historyBatch})
+			if terr == nil {
+				fmt.Fprintln(c.App.Writer, "marshal to text:")
+				fmt.Fprintln(c.App.Writer, string(text))
+			}
+			errs = append(errs, err)
+			continue
 		}
-		fmt.Println(string(data))
+		fmt.Fprintln(c.App.Writer, string(data))
 	}
-	fmt.Printf("======== total batches %v, total blob len: %v ======\n", len(history), totalSize)
+	fmt.Fprintf(c.App.Writer, "======== total batches %v, total blob len: %v ======\n", len(histories), totalSize)
+
+	err = errors.Join(errs...)
+	if err != nil {
+		return err
+	}
 
 	if outputFileName != "" {
 		encoder := codec.NewJSONPBEncoder()
-		data, err := encoder.EncodeHistoryEvents(allEvents.Events)
+		data, err := encoder.EncodeHistories(historyBatches)
 		if err != nil {
 			return fmt.Errorf("unable to serialize History data: %s", err)
 		}
 		if err := os.WriteFile(outputFileName, data, 0666); err != nil {
-			return fmt.Errorf("unable to export History data file: %s", err)
+			return fmt.Errorf("unable to write History data file: %s", err)
 		}
+	}
+	return nil
+}
+
+// AdminImportWorkflow imports history
+func AdminImportWorkflow(c *cli.Context, clientFactory ClientFactory) error {
+	nsName, err := getRequiredOption(c, FlagNamespace)
+	if err != nil {
+		return err
+	}
+	wid, err := getRequiredOption(c, FlagWorkflowID)
+	if err != nil {
+		return err
+	}
+	rid, err := getRequiredOption(c, FlagRunID)
+	if err != nil {
+		return err
+	}
+	inputFileName := c.String(FlagInputFilename)
+
+	client := clientFactory.AdminClient(c)
+
+	serializer := serialization.NewSerializer()
+
+	ctx, cancel := newContext(c)
+	defer cancel()
+
+	data, err := os.ReadFile(inputFileName)
+	if err != nil {
+		return fmt.Errorf("unable to read History data file: %s", err)
+	}
+	encoder := codec.NewJSONPBEncoder()
+	historyBatches, err := encoder.DecodeHistories(data)
+	if err != nil {
+		return fmt.Errorf("unable to deserialize History data: %s", err)
+	}
+
+	versionHistory := &historyspb.VersionHistory{}
+	for _, historyBatch := range historyBatches {
+		for _, event := range historyBatch.Events {
+			item := versionhistory.NewVersionHistoryItem(event.EventId, event.Version)
+			if err := versionhistory.AddOrUpdateVersionHistoryItem(versionHistory, item); err != nil {
+				return fmt.Errorf("unable to generate version history: %s", err)
+			}
+		}
+	}
+
+	var token []byte
+	var blobs []*commonpb.DataBlob
+	blobSize := 0
+	for i := 0; i < len(historyBatches)+1; i++ {
+		if i < len(historyBatches) {
+			historyBatch := historyBatches[i]
+			blob, err := serializer.SerializeEvents(historyBatch.Events, enumspb.ENCODING_TYPE_PROTO3)
+			if err != nil {
+				return fmt.Errorf("unable to deserialize Events: %s", err)
+			}
+			blobSize += len(blob.Data)
+			blobs = append(blobs, blob)
+		}
+		if blobSize >= historyImportBlobSize ||
+			len(blobs) >= historyImportPageSize ||
+			(i == len(historyBatches) && len(blobs) > 0) {
+			resp, err := client.ImportWorkflowExecution(ctx, &adminservice.ImportWorkflowExecutionRequest{
+				Namespace: nsName,
+				Execution: &commonpb.WorkflowExecution{
+					WorkflowId: wid,
+					RunId:      rid,
+				},
+				HistoryBatches: blobs,
+				VersionHistory: versionHistory,
+				Token:          token,
+			})
+			if err != nil {
+				return fmt.Errorf("unable to send History Branch: %s", err)
+			}
+			token = resp.Token
+
+			blobs = []*commonpb.DataBlob{}
+			blobSize = 0
+		}
+	}
+	if len(blobs) != 0 {
+		return errors.New("unable to import workflow events, some events are not sent")
+	}
+	// call with empty history to commit
+	resp, err := client.ImportWorkflowExecution(ctx, &adminservice.ImportWorkflowExecutionRequest{
+		Namespace: nsName,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: wid,
+			RunId:      rid,
+		},
+		HistoryBatches: []*commonpb.DataBlob{},
+		VersionHistory: versionHistory,
+		Token:          token,
+	})
+	if err != nil {
+		return fmt.Errorf("unable to import workflow events: %s", err)
+	}
+	if len(resp.Token) != 0 {
+		return errors.New("unable to import workflow events, not committed")
 	}
 	return nil
 }
 
 // AdminDescribeWorkflow describe a new workflow execution for admin
-func AdminDescribeWorkflow(c *cli.Context) error {
-	resp, err := describeMutableState(c)
+func AdminDescribeWorkflow(c *cli.Context, clientFactory ClientFactory) error {
+	resp, err := describeMutableState(c, clientFactory)
 	if err != nil {
 		return err
 	}
 
 	if resp != nil {
-		fmt.Println(color.Green(c, "Cache mutable state:"))
+		fmt.Fprintln(c.App.Writer, color.Green(c, "Cache mutable state:"))
 		if resp.GetCacheMutableState() != nil {
-			prettyPrintJSONObject(resp.GetCacheMutableState())
+			prettyPrintJSONObject(c, resp.GetCacheMutableState())
 		}
-		fmt.Println(color.Green(c, "Database mutable state:"))
-		prettyPrintJSONObject(resp.GetDatabaseMutableState())
+		fmt.Fprintln(c.App.Writer, color.Green(c, "Database mutable state:"))
+		prettyPrintJSONObject(c, resp.GetDatabaseMutableState())
 
-		fmt.Println(color.Green(c, "Current branch token:"))
+		fmt.Fprintln(c.App.Writer, color.Green(c, "Current branch token:"))
 		versionHistories := resp.GetDatabaseMutableState().GetExecutionInfo().GetVersionHistories()
 		// if VersionHistories is set, then all branch infos are stored in VersionHistories
 		currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(versionHistories)
 		if err != nil {
-			fmt.Println(color.Red(c, "Unable to get current version history:"), err)
+			fmt.Fprintln(c.App.Writer, color.Red(c, "Unable to get current version history:"), err)
 		} else {
 			currentBranchToken := persistencespb.HistoryBranch{}
 			err := currentBranchToken.Unmarshal(currentVersionHistory.BranchToken)
 			if err != nil {
-				fmt.Println(color.Red(c, "Unable to unmarshal current branch token:"), err)
+				fmt.Fprintln(c.App.Writer, color.Red(c, "Unable to unmarshal current branch token:"), err)
 			} else {
-				prettyPrintJSONObject(currentBranchToken)
+				prettyPrintJSONObject(c, &currentBranchToken)
 			}
 		}
 
-		fmt.Printf("History service address: %s\n", resp.GetHistoryAddr())
-		fmt.Printf("Shard Id: %s\n", resp.GetShardId())
+		fmt.Fprintf(c.App.Writer, "History service address: %s\n", resp.GetHistoryAddr())
+		fmt.Fprintf(c.App.Writer, "Shard Id: %s\n", resp.GetShardId())
 	}
 	return nil
 }
 
-func describeMutableState(c *cli.Context) (*adminservice.DescribeMutableStateResponse, error) {
-	adminClient := cFactory.AdminClient(c)
+func describeMutableState(c *cli.Context, clientFactory ClientFactory) (*adminservice.DescribeMutableStateResponse, error) {
+	adminClient := clientFactory.AdminClient(c)
 
 	namespace, err := getRequiredOption(c, FlagNamespace)
 	if err != nil {
@@ -198,8 +331,8 @@ func describeMutableState(c *cli.Context) (*adminservice.DescribeMutableStateRes
 // It should only be used as a troubleshooting tool since no additional check will be done before the deletion.
 // (e.g. if a child workflow has recorded its result in the parent workflow)
 // Please use normal workflow delete command to gracefully delete a workflow execution.
-func AdminDeleteWorkflow(c *cli.Context) error {
-	adminClient := cFactory.AdminClient(c)
+func AdminDeleteWorkflow(c *cli.Context, clientFactory ClientFactory, prompter *Prompter) error {
+	adminClient := clientFactory.AdminClient(c)
 
 	namespace, err := getRequiredOption(c, FlagNamespace)
 	if err != nil {
@@ -211,8 +344,8 @@ func AdminDeleteWorkflow(c *cli.Context) error {
 	}
 	rid := c.String(FlagRunID)
 
-	msg := fmt.Sprintf("Namespace: %s WorkflowID: %s RunID: %s\nForce delete above workflow execution[Yes/No]?", namespace, wid, rid)
-	prompt(msg, c.Bool(FlagYes))
+	msg := fmt.Sprintf("Namespace: %s WorkflowID: %s RunID: %s\nForce delete above workflow execution?", namespace, wid, rid)
+	prompter.Prompt(msg)
 
 	ctx, cancel := newContext(c)
 	defer cancel()
@@ -229,14 +362,14 @@ func AdminDeleteWorkflow(c *cli.Context) error {
 	}
 
 	if len(resp.Warnings) != 0 {
-		fmt.Println("Warnings:")
+		fmt.Fprintln(c.App.Writer, "Warnings:")
 		for _, warning := range resp.Warnings {
-			fmt.Printf("- %s\n", warning)
+			fmt.Fprintf(c.App.Writer, "- %s\n", warning)
 		}
-		fmt.Println("")
+		fmt.Fprintln(c.App.Writer, "")
 	}
 
-	fmt.Println("Workflow execution deleted.")
+	fmt.Fprintln(c.App.Writer, "Workflow execution deleted.")
 
 	return nil
 }
@@ -254,28 +387,30 @@ func AdminGetShardID(c *cli.Context) error {
 		return fmt.Errorf("missing required parameter number of Shards")
 	}
 	shardID := common.WorkflowIDToHistoryShard(namespaceID, wid, numberOfShards)
-	fmt.Printf("ShardId for namespace, workflowId: %v, %v is %v \n", namespaceID, wid, shardID)
+	fmt.Fprintf(c.App.Writer, "ShardId for namespace, workflowId: %v, %v is %v \n", namespaceID, wid, shardID)
 	return nil
 }
 
-// AdminListShardTasks outputs a list of a tasks for given Shard and Task Category
-func AdminListShardTasks(c *cli.Context) error {
-	sid := int32(c.Int(FlagShardID))
-	categoryStr := c.String(FlagTaskType)
-	categoryValue, err := stringToEnum(categoryStr, enumsspb.TaskCategory_value)
-	if err != nil {
-		categoryInt, err := strconv.Atoi(categoryStr)
-		if err != nil {
-			return fmt.Errorf("unable to parse Task type: %s", err)
+// getCategory first searches the registry for the category by the [tasks.Category.Name].
+func getCategory(registry tasks.TaskCategoryRegistry, key string) (tasks.Category, error) {
+	for _, category := range registry.GetCategories() {
+		if strings.EqualFold(category.Name(), key) {
+			return category, nil
 		}
-		categoryValue = int32(categoryInt)
 	}
-	category := enumsspb.TaskCategory(categoryValue)
-	if category == enumsspb.TASK_CATEGORY_UNSPECIFIED {
-		return fmt.Errorf("missing required parameter Task type: %s", err)
+	return tasks.Category{}, fmt.Errorf("unknown task category %q", key)
+}
+
+// AdminListShardTasks outputs a list of a tasks for given Shard and Task Category
+func AdminListShardTasks(c *cli.Context, clientFactory ClientFactory, registry tasks.TaskCategoryRegistry) error {
+	sid := int32(c.Int(FlagShardID))
+	categoryStr := c.String(FlagTaskCategory)
+	category, err := getCategory(registry, categoryStr)
+	if err != nil {
+		return err
 	}
 
-	client := cFactory.AdminClient(c)
+	client := clientFactory.AdminClient(c)
 	pageSize := defaultPageSize
 	if c.IsSet(FlagPageSize) {
 		pageSize = c.Int(FlagPageSize)
@@ -291,14 +426,14 @@ func AdminListShardTasks(c *cli.Context) error {
 	}
 	req := &adminservice.ListHistoryTasksRequest{
 		ShardId:  sid,
-		Category: category,
-		TaskRange: &history.TaskRange{
-			InclusiveMinTaskKey: &history.TaskKey{
-				FireTime: timestamp.TimePtr(minFireTime),
+		Category: int32(category.ID()),
+		TaskRange: &historyspb.TaskRange{
+			InclusiveMinTaskKey: &historyspb.TaskKey{
+				FireTime: timestamppb.New(minFireTime),
 				TaskId:   c.Int64(FlagMinTaskID),
 			},
-			ExclusiveMaxTaskKey: &history.TaskKey{
-				FireTime: timestamp.TimePtr(maxFireTime),
+			ExclusiveMaxTaskKey: &historyspb.TaskKey{
+				FireTime: timestamppb.New(maxFireTime),
 				TaskId:   c.Int64(FlagMaxTaskID),
 			},
 		},
@@ -328,20 +463,24 @@ func AdminListShardTasks(c *cli.Context) error {
 }
 
 // AdminRemoveTask describes history host
-func AdminRemoveTask(c *cli.Context) error {
-	adminClient := cFactory.AdminClient(c)
+func AdminRemoveTask(
+	c *cli.Context,
+	clientFactory ClientFactory,
+	taskCategoryRegistry tasks.TaskCategoryRegistry,
+) error {
+	adminClient := clientFactory.AdminClient(c)
 	shardID := c.Int(FlagShardID)
 	taskID := c.Int64(FlagTaskID)
-	categoryInt, err := stringToEnum(c.String(FlagTaskType), enumsspb.TaskCategory_value)
+	category, err := getCategory(taskCategoryRegistry, c.String(FlagTaskCategory))
 	if err != nil {
-		return fmt.Errorf("unable to parse Task Type: %s", err)
-	}
-	category := enumsspb.TaskCategory(categoryInt)
-	if category == enumsspb.TASK_CATEGORY_UNSPECIFIED {
-		return fmt.Errorf("task type %s is currently not supported", category)
+		return err
 	}
 	var visibilityTimestamp int64
-	if category == enumsspb.TASK_CATEGORY_TIMER {
+	if category.Type() == tasks.CategoryTypeScheduled {
+		if !c.IsSet(FlagTaskVisibilityTimestamp) {
+			//nolint:errorlint
+			return fmt.Errorf("%s is required to remove %s tasks", FlagTaskVisibilityTimestamp, category.Name())
+		}
 		visibilityTimestamp = c.Int64(FlagTaskVisibilityTimestamp)
 	}
 
@@ -350,9 +489,9 @@ func AdminRemoveTask(c *cli.Context) error {
 
 	req := &adminservice.RemoveTaskRequest{
 		ShardId:        int32(shardID),
-		Category:       category,
+		Category:       int32(category.ID()),
 		TaskId:         taskID,
-		VisibilityTime: timestamp.TimePtr(timestamp.UnixOrZeroTime(visibilityTimestamp)),
+		VisibilityTime: timestamppb.New(timestamp.UnixOrZeroTime(visibilityTimestamp)),
 	}
 
 	_, err = adminClient.RemoveTask(ctx, req)
@@ -363,9 +502,9 @@ func AdminRemoveTask(c *cli.Context) error {
 }
 
 // AdminDescribeShard describes shard by shard id
-func AdminDescribeShard(c *cli.Context) error {
+func AdminDescribeShard(c *cli.Context, clientFactory ClientFactory) error {
 	sid := c.Int(FlagShardID)
-	adminClient := cFactory.AdminClient(c)
+	adminClient := clientFactory.AdminClient(c)
 	ctx, cancel := newContext(c)
 	defer cancel()
 	response, err := adminClient.GetShard(ctx, &adminservice.GetShardRequest{ShardId: int32(sid)})
@@ -374,13 +513,13 @@ func AdminDescribeShard(c *cli.Context) error {
 		return fmt.Errorf("unable to initialize Shard Manager: %s", err)
 	}
 
-	prettyPrintJSONObject(response.ShardInfo)
+	prettyPrintJSONObject(c, response.ShardInfo)
 	return nil
 }
 
 // AdminShardManagement describes history host
-func AdminShardManagement(c *cli.Context) error {
-	adminClient := cFactory.AdminClient(c)
+func AdminShardManagement(c *cli.Context, clientFactory ClientFactory) error {
+	adminClient := clientFactory.AdminClient(c)
 	sid := c.Int(FlagShardID)
 
 	ctx, cancel := newContext(c)
@@ -397,10 +536,10 @@ func AdminShardManagement(c *cli.Context) error {
 }
 
 // AdminListGossipMembers outputs a list of gossip members
-func AdminListGossipMembers(c *cli.Context) error {
+func AdminListGossipMembers(c *cli.Context, clientFactory ClientFactory) error {
 	roleFlag := c.String(FlagClusterMembershipRole)
 
-	adminClient := cFactory.AdminClient(c)
+	adminClient := clientFactory.AdminClient(c)
 	ctx, cancel := newContext(c)
 	defer cancel()
 	response, err := adminClient.DescribeCluster(ctx, &adminservice.DescribeClusterRequest{})
@@ -420,13 +559,13 @@ func AdminListGossipMembers(c *cli.Context) error {
 		}
 	}
 
-	prettyPrintJSONObject(members)
+	prettyPrintJSONObject(c, members)
 	return nil
 }
 
 // AdminListClusterMembers outputs a list of cluster members
-func AdminListClusterMembers(c *cli.Context) error {
-	role, _ := stringToEnum(c.String(FlagClusterMembershipRole), enumsspb.ClusterMemberRole_value)
+func AdminListClusterMembers(c *cli.Context, clientFactory ClientFactory) error {
+	role, _ := StringToEnum(c.String(FlagClusterMembershipRole), enumsspb.ClusterMemberRole_value)
 	// TODO: refactor this: parseTime shouldn't be used for duration.
 	heartbeatFlag, err := parseTime(c.String(FlagFrom), time.Time{}, time.Now().UTC())
 	if err != nil {
@@ -434,13 +573,13 @@ func AdminListClusterMembers(c *cli.Context) error {
 	}
 	heartbeat := time.Duration(heartbeatFlag.UnixNano())
 
-	adminClient := cFactory.AdminClient(c)
+	adminClient := clientFactory.AdminClient(c)
 	ctx, cancel := newContext(c)
 	defer cancel()
 
 	req := &adminservice.ListClusterMembersRequest{
 		Role:                enumsspb.ClusterMemberRole(role),
-		LastHeartbeatWithin: &heartbeat,
+		LastHeartbeatWithin: durationpb.New(heartbeat),
 	}
 
 	resp, err := adminClient.ListClusterMembers(ctx, req)
@@ -450,13 +589,13 @@ func AdminListClusterMembers(c *cli.Context) error {
 
 	members := resp.ActiveMembers
 
-	prettyPrintJSONObject(members)
+	prettyPrintJSONObject(c, members)
 	return nil
 }
 
 // AdminDescribeHistoryHost describes history host
-func AdminDescribeHistoryHost(c *cli.Context) error {
-	adminClient := cFactory.AdminClient(c)
+func AdminDescribeHistoryHost(c *cli.Context, clientFactory ClientFactory) error {
+	adminClient := clientFactory.AdminClient(c)
 
 	namespace := c.String(FlagNamespace)
 	workflowID := c.String(FlagWorkflowID)
@@ -499,13 +638,13 @@ func AdminDescribeHistoryHost(c *cli.Context) error {
 	if !printFully {
 		resp.ShardIds = nil
 	}
-	prettyPrintJSONObject(resp)
+	prettyPrintJSONObject(c, resp)
 	return nil
 }
 
 // AdminRefreshWorkflowTasks refreshes all the tasks of a workflow
-func AdminRefreshWorkflowTasks(c *cli.Context) error {
-	adminClient := cFactory.AdminClient(c)
+func AdminRefreshWorkflowTasks(c *cli.Context, clientFactory ClientFactory) error {
+	adminClient := clientFactory.AdminClient(c)
 
 	nsName, err := getRequiredOption(c, FlagNamespace)
 	if err != nil {
@@ -521,7 +660,7 @@ func AdminRefreshWorkflowTasks(c *cli.Context) error {
 	ctx, cancel := newContext(c)
 	defer cancel()
 
-	nsID, err := getNamespaceID(c, namespace.Name(nsName))
+	nsID, err := getNamespaceID(c, clientFactory, namespace.Name(nsName))
 	if err != nil {
 		return err
 	}
@@ -536,14 +675,14 @@ func AdminRefreshWorkflowTasks(c *cli.Context) error {
 	if err != nil {
 		return fmt.Errorf("unable to refresh Workflow Task: %s", err)
 	} else {
-		fmt.Println("Refresh workflow task succeeded.")
+		fmt.Fprintln(c.App.Writer, "Refresh workflow task succeeded.")
 	}
 	return nil
 }
 
 // AdminRebuildMutableState rebuild a workflow mutable state using persisted history events
-func AdminRebuildMutableState(c *cli.Context) error {
-	adminClient := cFactory.AdminClient(c)
+func AdminRebuildMutableState(c *cli.Context, clientFactory ClientFactory) error {
+	adminClient := clientFactory.AdminClient(c)
 
 	namespace, err := getRequiredOption(c, FlagNamespace)
 	if err != nil {
@@ -568,7 +707,43 @@ func AdminRebuildMutableState(c *cli.Context) error {
 	if err != nil {
 		return fmt.Errorf("rebuild mutable state failed: %s", err)
 	} else {
-		fmt.Println("rebuild mutable state succeeded.")
+		fmt.Fprintln(c.App.Writer, "rebuild mutable state succeeded.")
 	}
+	return nil
+}
+
+// AdminReplicateWorkflow force replicates a workflow by generating replication tasks
+func AdminReplicateWorkflow(
+	c *cli.Context,
+	clientFactory ClientFactory,
+) error {
+	adminClient := clientFactory.AdminClient(c)
+
+	nsName, err := getRequiredOption(c, FlagNamespace)
+	if err != nil {
+		return err
+	}
+
+	wid, err := getRequiredOption(c, FlagWorkflowID)
+	if err != nil {
+		return err
+	}
+	rid := c.String(FlagRunID)
+
+	ctx, cancel := newContext(c)
+	defer cancel()
+
+	_, err = adminClient.GenerateLastHistoryReplicationTasks(ctx, &adminservice.GenerateLastHistoryReplicationTasksRequest{
+		Namespace: nsName,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: wid,
+			RunId:      rid,
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("unable to replicate workflow: %w", err)
+	}
+
+	fmt.Fprintln(c.App.Writer, "Replication tasks generated successfully.")
 	return nil
 }

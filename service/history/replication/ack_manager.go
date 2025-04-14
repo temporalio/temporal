@@ -28,36 +28,29 @@ package replication
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sync"
 	"time"
 
-	commonpb "go.temporal.io/api/common/v1"
+	"github.com/google/uuid"
 	"go.temporal.io/api/serviceerror"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	historyspb "go.temporal.io/server/api/history/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/collection"
-	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/versionhistory"
-	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/configs"
-	"go.temporal.io/server/service/history/shard"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
-	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -66,28 +59,56 @@ type (
 		GetMaxTaskInfo() (int64, time.Time)
 		GetTasks(ctx context.Context, pollingCluster string, queryMessageID int64) (*replicationspb.ReplicationMessages, error)
 		GetTask(ctx context.Context, taskInfo *replicationspb.ReplicationTaskInfo) (*replicationspb.ReplicationTask, error)
-		Close()
+
+		SubscribeNotification(string) (<-chan struct{}, string)
+		UnsubscribeNotification(string)
+		ConvertTask(
+			ctx context.Context,
+			task tasks.Task,
+		) (*replicationspb.ReplicationTask, error)
+		ConvertTaskByCluster(
+			ctx context.Context,
+			task tasks.Task,
+			targetClusterID int32,
+		) (*replicationspb.ReplicationTask, error)
+		GetReplicationTasksIter(
+			ctx context.Context,
+			pollingCluster string,
+			minInclusiveTaskID int64,
+			maxExclusiveTaskID int64,
+		) (collection.Iterator[tasks.Task], error)
 	}
 
 	ackMgrImpl struct {
-		currentClusterName string
-		shard              shard.Context
-		config             *configs.Config
-		workflowCache      wcache.Cache
-		executionMgr       persistence.ExecutionManager
-		metricsHandler     metrics.Handler
-		logger             log.Logger
-		retryPolicy        backoff.RetryPolicy
-		namespaceRegistry  namespace.Registry
-		pageSize           dynamicconfig.IntPropertyFn
-		maxSkipTaskCount   dynamicconfig.IntPropertyFn
+		currentClusterName                   string
+		shardContext                         historyi.ShardContext
+		config                               *configs.Config
+		workflowCache                        wcache.Cache
+		eventBlobCache                       persistence.XDCCache
+		replicationProgressCache             ProgressCache
+		executionMgr                         persistence.ExecutionManager
+		metricsHandler                       metrics.Handler
+		logger                               log.Logger
+		retryPolicy                          backoff.RetryPolicy
+		namespaceRegistry                    namespace.Registry
+		syncVersionedTransitionTaskConverter *syncVersionedTransitionTaskConverter
+		pageSize                             dynamicconfig.IntPropertyFn
+		maxSkipTaskCount                     dynamicconfig.IntPropertyFn
 
 		sync.Mutex
 		// largest replication task ID generated
 		maxTaskID                  *int64
-		maxTaskVisibilityTimestamp *time.Time
+		maxTaskVisibilityTimestamp time.Time
 		sanityCheckTime            time.Time
-		registeredQueueReaders     map[int32]struct{}
+
+		subscriberLock sync.Mutex
+		subscribers    map[string]channelMetadata
+	}
+
+	channelMetadata struct {
+		notifyCh     chan struct{}
+		clusterName  string
+		backlogCount int64
 	}
 )
 
@@ -95,40 +116,43 @@ var (
 	errUnknownReplicationTask = serviceerror.NewInternal("unknown replication task")
 )
 
-var (
-	closeAckMangerTimeout = 10 * time.Second
-)
-
 func NewAckManager(
-	shard shard.Context,
+	shardContext historyi.ShardContext,
 	workflowCache wcache.Cache,
+	eventBlobCache persistence.XDCCache,
+	replicationProgressCache ProgressCache,
 	executionMgr persistence.ExecutionManager,
+	syncStateRetriever SyncStateRetriever,
 	logger log.Logger,
 ) AckManager {
 
-	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
-	config := shard.GetConfig()
+	currentClusterName := shardContext.GetClusterMetadata().GetCurrentClusterName()
+	config := shardContext.GetConfig()
 
 	retryPolicy := backoff.NewExponentialRetryPolicy(200 * time.Millisecond).
 		WithMaximumAttempts(5).
 		WithBackoffCoefficient(1)
 
 	return &ackMgrImpl{
-		currentClusterName: currentClusterName,
-		shard:              shard,
-		config:             shard.GetConfig(),
-		workflowCache:      workflowCache,
-		executionMgr:       executionMgr,
-		metricsHandler:     shard.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.ReplicatorQueueProcessorScope)),
-		logger:             log.With(logger, tag.ComponentReplicatorQueue),
-		retryPolicy:        retryPolicy,
-		namespaceRegistry:  shard.GetNamespaceRegistry(),
-		pageSize:           config.ReplicatorProcessorFetchTasksBatchSize,
-		maxSkipTaskCount:   config.ReplicatorProcessorMaxSkipTaskCount,
+		currentClusterName:                   currentClusterName,
+		shardContext:                         shardContext,
+		config:                               shardContext.GetConfig(),
+		workflowCache:                        workflowCache,
+		eventBlobCache:                       eventBlobCache,
+		replicationProgressCache:             replicationProgressCache,
+		executionMgr:                         executionMgr,
+		metricsHandler:                       shardContext.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.ReplicatorQueueProcessorScope)),
+		logger:                               log.With(logger, tag.ComponentReplicatorQueue),
+		retryPolicy:                          retryPolicy,
+		namespaceRegistry:                    shardContext.GetNamespaceRegistry(),
+		syncVersionedTransitionTaskConverter: newSyncVersionedTransitionTaskConverter(shardContext, workflowCache, eventBlobCache, replicationProgressCache, executionMgr, syncStateRetriever, logger),
+		pageSize:                             config.ReplicatorProcessorFetchTasksBatchSize,
+		maxSkipTaskCount:                     config.ReplicatorProcessorMaxSkipTaskCount,
 
-		maxTaskID:              nil,
-		sanityCheckTime:        time.Time{},
-		registeredQueueReaders: make(map[int32]struct{}),
+		maxTaskID:       nil,
+		sanityCheckTime: time.Time{},
+
+		subscribers: make(map[string]channelMetadata),
 	}
 }
 
@@ -150,13 +174,15 @@ func (p *ackMgrImpl) NotifyNewTasks(
 		}
 	}
 
+	defer p.broadcast(len(tasks))
+
 	p.Lock()
 	defer p.Unlock()
 	if p.maxTaskID == nil || *p.maxTaskID < maxTaskID {
 		p.maxTaskID = &maxTaskID
 	}
-	if p.maxTaskVisibilityTimestamp == nil || p.maxTaskVisibilityTimestamp.Before(maxVisibilityTimestamp) {
-		p.maxTaskVisibilityTimestamp = timestamp.TimePtr(maxVisibilityTimestamp)
+	if p.maxTaskVisibilityTimestamp.IsZero() || p.maxTaskVisibilityTimestamp.Before(maxVisibilityTimestamp) {
+		p.maxTaskVisibilityTimestamp = maxVisibilityTimestamp
 	}
 }
 
@@ -170,17 +196,19 @@ func (p *ackMgrImpl) GetMaxTaskInfo() (int64, time.Time) {
 		// use ImmediateTaskMaxReadLevel which is the max task id of any immediate task queues.
 		// ImmediateTaskMaxReadLevel will be the lower bound of new range_id if shard reload. Remote cluster will quickly (in
 		// a few seconds) ack to the latest ImmediateTaskMaxReadLevel if there is no replication tasks at all.
-		taskID := p.shard.GetImmediateQueueExclusiveHighReadWatermark().Prev().TaskID
+		taskID := p.shardContext.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Prev().TaskID
 		maxTaskID = &taskID
 	}
 	maxVisibilityTimestamp := p.maxTaskVisibilityTimestamp
-	if maxVisibilityTimestamp == nil {
-		maxVisibilityTimestamp = timestamp.TimePtr(p.shard.GetTimeSource().Now())
+	if maxVisibilityTimestamp.IsZero() {
+		maxVisibilityTimestamp = p.shardContext.GetTimeSource().Now()
 	}
 
-	return *maxTaskID, timestamp.TimeValue(maxVisibilityTimestamp)
+	return *maxTaskID, maxVisibilityTimestamp
 }
 
+// TODO: deprecate this method
+// It's only used by the replication DLQ v1 logic.
 func (p *ackMgrImpl) GetTask(
 	ctx context.Context,
 	taskInfo *replicationspb.ReplicationTaskInfo,
@@ -188,32 +216,7 @@ func (p *ackMgrImpl) GetTask(
 
 	switch taskInfo.TaskType {
 	case enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY:
-		return p.toReplicationTask(ctx, &tasks.SyncActivityTask{
-			WorkflowKey: definition.NewWorkflowKey(
-				taskInfo.GetNamespaceId(),
-				taskInfo.GetWorkflowId(),
-				taskInfo.GetRunId(),
-			),
-			VisibilityTimestamp: time.Unix(0, 0), // TODO add the missing attribute to proto definition
-			TaskID:              taskInfo.TaskId,
-			Version:             taskInfo.Version,
-			ScheduledEventID:    taskInfo.ScheduledEventId,
-		})
-	case enumsspb.TASK_TYPE_REPLICATION_HISTORY:
-		return p.toReplicationTask(ctx, &tasks.HistoryReplicationTask{
-			WorkflowKey: definition.NewWorkflowKey(
-				taskInfo.GetNamespaceId(),
-				taskInfo.GetWorkflowId(),
-				taskInfo.GetRunId(),
-			),
-			VisibilityTimestamp: time.Unix(0, 0), // TODO add the missing attribute to proto definition
-			TaskID:              taskInfo.TaskId,
-			Version:             taskInfo.Version,
-			FirstEventID:        taskInfo.FirstEventId,
-			NextEventID:         taskInfo.NextEventId,
-		})
-	case enumsspb.TASK_TYPE_REPLICATION_SYNC_WORKFLOW_STATE:
-		return p.toReplicationTask(ctx, &tasks.SyncWorkflowStateTask{
+		return p.ConvertTask(ctx, &tasks.SyncActivityTask{
 			WorkflowKey: definition.NewWorkflowKey(
 				taskInfo.GetNamespaceId(),
 				taskInfo.GetWorkflowId(),
@@ -222,6 +225,42 @@ func (p *ackMgrImpl) GetTask(
 			VisibilityTimestamp: time.Unix(0, 0),
 			TaskID:              taskInfo.TaskId,
 			Version:             taskInfo.Version,
+			ScheduledEventID:    taskInfo.ScheduledEventId,
+		})
+	case enumsspb.TASK_TYPE_REPLICATION_HISTORY:
+		return p.ConvertTask(ctx, &tasks.HistoryReplicationTask{
+			WorkflowKey: definition.NewWorkflowKey(
+				taskInfo.GetNamespaceId(),
+				taskInfo.GetWorkflowId(),
+				taskInfo.GetRunId(),
+			),
+			VisibilityTimestamp: time.Unix(0, 0),
+			TaskID:              taskInfo.TaskId,
+			Version:             taskInfo.Version,
+			FirstEventID:        taskInfo.FirstEventId,
+			NextEventID:         taskInfo.NextEventId,
+		})
+	case enumsspb.TASK_TYPE_REPLICATION_SYNC_WORKFLOW_STATE:
+		return p.ConvertTask(ctx, &tasks.SyncWorkflowStateTask{
+			WorkflowKey: definition.NewWorkflowKey(
+				taskInfo.GetNamespaceId(),
+				taskInfo.GetWorkflowId(),
+				taskInfo.GetRunId(),
+			),
+			VisibilityTimestamp: time.Unix(0, 0),
+			TaskID:              taskInfo.TaskId,
+			Version:             taskInfo.Version,
+			Priority:            taskInfo.GetPriority(),
+		})
+	case enumsspb.TASK_TYPE_REPLICATION_SYNC_HSM:
+		return p.ConvertTask(ctx, &tasks.SyncHSMTask{
+			WorkflowKey: definition.NewWorkflowKey(
+				taskInfo.GetNamespaceId(),
+				taskInfo.GetWorkflowId(),
+				taskInfo.GetRunId(),
+			),
+			VisibilityTimestamp: time.Unix(0, 0),
+			TaskID:              taskInfo.TaskId,
 		})
 	default:
 		return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown replication task type: %v", taskInfo.TaskType))
@@ -246,17 +285,16 @@ func (p *ackMgrImpl) GetTasks(
 	}
 
 	// Note this is a very rough indicator of how much the remote DC is behind on this shard.
-	p.metricsHandler.Histogram(metrics.ReplicationTasksLag.GetMetricName(), metrics.ReplicationTasksLag.GetMetricUnit()).Record(
+	metrics.ReplicationTasksLag.With(p.metricsHandler).Record(
 		maxTaskID-lastTaskID,
-		metrics.TargetClusterTag(pollingCluster))
+		metrics.TargetClusterTag(pollingCluster),
+		metrics.OperationTag(metrics.ReplicationTaskFetcherScope),
+	)
 
-	p.metricsHandler.Histogram(metrics.ReplicationTasksFetched.GetMetricName(), metrics.ReplicationTasksFetched.GetMetricUnit()).
+	metrics.ReplicationTasksFetched.With(p.metricsHandler).
 		Record(int64(len(replicationTasks)))
 
-	p.metricsHandler.Histogram(metrics.ReplicationTasksReturned.GetMetricName(), metrics.ReplicationTasksReturned.GetMetricUnit()).
-		Record(int64(len(replicationTasks)))
-
-	replicationEventTime := timestamp.TimePtr(p.shard.GetTimeSource().Now())
+	replicationEventTime := timestamppb.New(p.shardContext.GetTimeSource().Now())
 	if len(replicationTasks) > 0 {
 		replicationEventTime = replicationTasks[len(replicationTasks)-1].GetVisibilityTime()
 	}
@@ -268,32 +306,6 @@ func (p *ackMgrImpl) GetTasks(
 			StatusTime: replicationEventTime,
 		},
 	}, nil
-}
-
-func (p *ackMgrImpl) Close() {
-	p.Lock()
-	defer p.Unlock()
-
-	if p.registeredQueueReaders == nil {
-		// Close called multiple times
-		// should not happen
-		return
-	}
-
-	closeCtx, cancel := context.WithTimeout(context.Background(), closeAckMangerTimeout)
-	closeCtx = headers.SetCallerInfo(closeCtx, headers.SystemPreemptableCallerInfo)
-	defer cancel()
-
-	for readerID := range p.registeredQueueReaders {
-		p.executionMgr.UnregisterHistoryTaskReader(closeCtx, &persistence.UnregisterHistoryTaskReaderRequest{
-			ShardID:      p.shard.GetShardID(),
-			ShardOwner:   p.shard.GetOwner(),
-			TaskCategory: tasks.CategoryReplication,
-			ReaderID:     readerID,
-		})
-	}
-
-	p.registeredQueueReaders = nil
 }
 
 func (p *ackMgrImpl) getTasks(
@@ -308,15 +320,10 @@ func (p *ackMgrImpl) getTasks(
 		return nil, maxTaskID, nil
 	}
 
-	readerID, err := p.clusterToReaderID(ctx, pollingCluster)
-	if err != nil {
-		return nil, 0, err
-	}
-
 	replicationTasks := make([]*replicationspb.ReplicationTask, 0, p.pageSize())
 	skippedTaskCount := 0
 	lastTaskID := maxTaskID // If no tasks are returned, then it means there are no tasks bellow maxTaskID.
-	iter := collection.NewPagingIterator(p.getReplicationTasksFn(ctx, readerID, minTaskID, maxTaskID, p.pageSize()))
+	iter := collection.NewPagingIterator(p.getReplicationTasksFn(ctx, minTaskID, maxTaskID, p.pageSize()))
 	// iter.HasNext() should be the last check to avoid extra page read in case if replicationTasks is already full.
 	for len(replicationTasks) < p.pageSize() && skippedTaskCount <= p.maxSkipTaskCount() && iter.HasNext() {
 		task, err := iter.Next()
@@ -346,7 +353,7 @@ func (p *ackMgrImpl) getTasks(
 			continue
 		}
 
-		replicationTask, err := p.toReplicationTask(ctx, task)
+		replicationTask, err := p.ConvertTask(ctx, task)
 		if err != nil {
 			return p.swallowPartialResultsError(replicationTasks, lastTaskID, err)
 		} else if replicationTask == nil {
@@ -363,16 +370,14 @@ func (p *ackMgrImpl) getTasks(
 
 func (p *ackMgrImpl) getReplicationTasksFn(
 	ctx context.Context,
-	readerID int32,
 	minTaskID int64,
 	maxTaskID int64,
 	batchSize int,
 ) collection.PaginationFn[tasks.Task] {
 	return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
 		response, err := p.executionMgr.GetHistoryTasks(ctx, &persistence.GetHistoryTasksRequest{
-			ShardID:             p.shard.GetShardID(),
+			ShardID:             p.shardContext.GetShardID(),
 			TaskCategory:        tasks.CategoryReplication,
-			ReaderID:            readerID,
 			InclusiveMinTaskKey: tasks.NewImmediateKey(minTaskID + 1),
 			ExclusiveMaxTaskKey: tasks.NewImmediateKey(maxTaskID + 1),
 			BatchSize:           batchSize,
@@ -402,13 +407,13 @@ func (p *ackMgrImpl) taskIDsRange(
 	lastReadMessageID int64,
 ) (minTaskID int64, maxTaskID int64) {
 	minTaskID = lastReadMessageID
-	maxTaskID = p.shard.GetImmediateQueueExclusiveHighReadWatermark().Prev().TaskID
+	maxTaskID = p.shardContext.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Prev().TaskID
 
 	p.Lock()
 	defer p.Unlock()
-	defer func() { p.maxTaskID = convert.Int64Ptr(maxTaskID) }()
+	defer func() { p.maxTaskID = util.Ptr(maxTaskID) }()
 
-	now := p.shard.GetTimeSource().Now()
+	now := p.shardContext.GetTimeSource().Now()
 	if p.sanityCheckTime.IsZero() || p.sanityCheckTime.Before(now) {
 		p.sanityCheckTime = now.Add(backoff.Jitter(
 			p.config.ReplicatorProcessorMaxPollInterval(),
@@ -424,399 +429,137 @@ func (p *ackMgrImpl) taskIDsRange(
 	return minTaskID, maxTaskID
 }
 
-func (p *ackMgrImpl) toReplicationTask(
+// TODO split the ack manager into 2 components
+
+func (p *ackMgrImpl) ConvertTask(
 	ctx context.Context,
 	task tasks.Task,
 ) (*replicationspb.ReplicationTask, error) {
-
 	switch task := task.(type) {
 	case *tasks.SyncActivityTask:
-		return p.generateSyncActivityTask(ctx, task)
-	case *tasks.HistoryReplicationTask:
-		return p.generateHistoryReplicationTask(ctx, task)
+		return convertActivityStateReplicationTask(
+			ctx,
+			p.shardContext,
+			task,
+			p.workflowCache,
+		)
 	case *tasks.SyncWorkflowStateTask:
-		return p.generateSyncWorkflowStateTask(ctx, task)
+		return convertWorkflowStateReplicationTask(
+			ctx,
+			p.shardContext,
+			task,
+			p.workflowCache,
+		)
+	case *tasks.HistoryReplicationTask:
+		return convertHistoryReplicationTask(
+			ctx,
+			p.shardContext,
+			task,
+			p.shardContext.GetShardID(),
+			p.workflowCache,
+			p.eventBlobCache,
+			p.executionMgr,
+			p.logger,
+			p.config,
+		)
+	case *tasks.SyncHSMTask:
+		return convertSyncHSMReplicationTask(
+			ctx,
+			p.shardContext,
+			task,
+			p.workflowCache,
+		)
 	default:
 		return nil, errUnknownReplicationTask
 	}
 }
 
-func (p *ackMgrImpl) generateSyncActivityTask(
+func (p *ackMgrImpl) ConvertTaskByCluster(
 	ctx context.Context,
-	taskInfo *tasks.SyncActivityTask,
+	task tasks.Task,
+	targetClusterID int32,
 ) (*replicationspb.ReplicationTask, error) {
-	namespaceID := namespace.ID(taskInfo.NamespaceID)
-	workflowID := taskInfo.WorkflowID
-	runID := taskInfo.RunID
-	taskID := taskInfo.TaskID
-	return p.processReplication(
-		ctx,
-		false, // not necessary to send out sync activity task if workflow closed
-		namespaceID,
-		workflowID,
-		runID,
-		func(mutableState workflow.MutableState) (*replicationspb.ReplicationTask, error) {
-			activityInfo, ok := mutableState.GetActivityInfo(taskInfo.ScheduledEventID)
-			if !ok {
-				return nil, nil
-			}
-
-			// The activity may be in a scheduled state
-			var startedTime *time.Time
-			if activityInfo.StartedEventId != common.EmptyEventID {
-				startedTime = activityInfo.StartedTime
-			}
-
-			// Version history uses when replicate the sync activity task
-			versionHistories := mutableState.GetExecutionInfo().GetVersionHistories()
-			currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(versionHistories)
-			if err != nil {
-				return nil, err
-			}
-			return &replicationspb.ReplicationTask{
-				TaskType:     enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK,
-				SourceTaskId: taskID,
-				Attributes: &replicationspb.ReplicationTask_SyncActivityTaskAttributes{
-					SyncActivityTaskAttributes: &replicationspb.SyncActivityTaskAttributes{
-						NamespaceId:        namespaceID.String(),
-						WorkflowId:         workflowID,
-						RunId:              runID,
-						Version:            activityInfo.Version,
-						ScheduledEventId:   activityInfo.ScheduledEventId,
-						ScheduledTime:      activityInfo.ScheduledTime,
-						StartedEventId:     activityInfo.StartedEventId,
-						StartedTime:        startedTime,
-						LastHeartbeatTime:  activityInfo.LastHeartbeatUpdateTime,
-						Details:            activityInfo.LastHeartbeatDetails,
-						Attempt:            activityInfo.Attempt,
-						LastFailure:        activityInfo.RetryLastFailure,
-						LastWorkerIdentity: activityInfo.RetryLastWorkerIdentity,
-						VersionHistory:     versionhistory.CopyVersionHistory(currentVersionHistory),
-					},
-				},
-				VisibilityTime: &taskInfo.VisibilityTimestamp,
-			}, nil
-		},
-	)
-}
-
-func (p *ackMgrImpl) generateHistoryReplicationTask(
-	ctx context.Context,
-	taskInfo *tasks.HistoryReplicationTask,
-) (*replicationspb.ReplicationTask, error) {
-	namespaceID := namespace.ID(taskInfo.NamespaceID)
-	workflowID := taskInfo.WorkflowID
-	runID := taskInfo.RunID
-	taskID := taskInfo.TaskID
-	replicationTask, err := p.processReplication(
-		ctx,
-		true, // still necessary to send out history replication message if workflow closed
-		namespaceID,
-		workflowID,
-		runID,
-		func(mutableState workflow.MutableState) (*replicationspb.ReplicationTask, error) {
-			versionHistoryItems, branchToken, err := getVersionHistoryItems(
-				mutableState,
-				taskInfo.FirstEventID,
-				taskInfo.Version,
-			)
-			if err != nil {
-				return nil, err
-			}
-
-			eventsBlob, err := p.getEventsBlob(
-				ctx,
-				branchToken,
-				taskInfo.FirstEventID,
-				taskInfo.NextEventID,
-			)
-			if err != nil {
-				return nil, p.handleReadHistoryError(namespaceID, workflowID, runID, err)
-			}
-
-			replicationTask := &replicationspb.ReplicationTask{
-				TaskType:     enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK,
-				SourceTaskId: taskID,
-				Attributes: &replicationspb.ReplicationTask_HistoryTaskAttributes{
-					HistoryTaskAttributes: &replicationspb.HistoryTaskAttributes{
-						NamespaceId:         namespaceID.String(),
-						WorkflowId:          workflowID,
-						RunId:               runID,
-						VersionHistoryItems: versionHistoryItems,
-						Events:              eventsBlob,
-						// NewRunEvents will be set in processNewRunReplication
-					},
-				},
-				VisibilityTime: &taskInfo.VisibilityTimestamp,
-			}
-			return replicationTask, nil
-		},
-	)
-	if err != nil {
-		return replicationTask, err
+	switch task := task.(type) {
+	case *tasks.SyncVersionedTransitionTask:
+		return convertSyncVersionedTransitionTask(
+			ctx,
+			task,
+			targetClusterID,
+			p.syncVersionedTransitionTaskConverter,
+		)
+	default:
+		return p.ConvertTask(ctx, task)
 	}
-	return p.processNewRunReplication(
-		ctx,
-		namespaceID,
-		workflowID,
-		taskInfo.NewRunID,
-		taskInfo.NewRunBranchToken,
-		taskInfo.Version,
-		replicationTask,
-	)
 }
 
-func (p *ackMgrImpl) generateSyncWorkflowStateTask(
-	ctx context.Context,
-	taskInfo *tasks.SyncWorkflowStateTask,
-) (*replicationspb.ReplicationTask, error) {
-	namespaceID := namespace.ID(taskInfo.NamespaceID)
-	workflowID := taskInfo.WorkflowID
-	runID := taskInfo.RunID
-	taskID := taskInfo.TaskID
-	return p.processReplication(
-		ctx,
-		true,
-		namespaceID,
-		workflowID,
-		runID,
-		func(mutableState workflow.MutableState) (*replicationspb.ReplicationTask, error) {
-			return &replicationspb.ReplicationTask{
-				TaskType:     enumsspb.REPLICATION_TASK_TYPE_SYNC_WORKFLOW_STATE_TASK,
-				SourceTaskId: taskID,
-				Attributes: &replicationspb.ReplicationTask_SyncWorkflowStateTaskAttributes{
-					SyncWorkflowStateTaskAttributes: &replicationspb.SyncWorkflowStateTaskAttributes{
-						WorkflowState: mutableState.CloneToProto(),
-					},
-				},
-				VisibilityTime: &taskInfo.VisibilityTimestamp,
-			}, nil
-		},
-	)
-}
+func (p *ackMgrImpl) SubscribeNotification(clusterName string) (<-chan struct{}, string) {
+	subscriberID := uuid.New().String()
 
-func (p *ackMgrImpl) getEventsBlob(
-	ctx context.Context,
-	branchToken []byte,
-	firstEventID int64,
-	nextEventID int64,
-) (*commonpb.DataBlob, error) {
-
-	var eventBatchBlobs []*commonpb.DataBlob
-	var pageToken []byte
-	req := &persistence.ReadHistoryBranchRequest{
-		BranchToken:   branchToken,
-		MinEventID:    firstEventID,
-		MaxEventID:    nextEventID,
-		PageSize:      1,
-		NextPageToken: pageToken,
-		ShardID:       p.shard.GetShardID(),
-	}
+	p.subscriberLock.Lock()
+	defer p.subscriberLock.Unlock()
 
 	for {
-		resp, err := p.executionMgr.ReadRawHistoryBranch(ctx, req)
-		if err != nil {
-			return nil, err
+		if _, ok := p.subscribers[subscriberID]; !ok {
+			channel := make(chan struct{}, 1)
+			p.subscribers[subscriberID] = channelMetadata{
+				notifyCh:     channel,
+				clusterName:  clusterName,
+				backlogCount: 0,
+			}
+			return channel, subscriberID
 		}
-
-		req.NextPageToken = resp.NextPageToken
-		eventBatchBlobs = append(eventBatchBlobs, resp.HistoryEventBlobs...)
-
-		if len(req.NextPageToken) == 0 {
-			break
-		}
-	}
-
-	if len(eventBatchBlobs) != 1 {
-		return nil, serviceerror.NewInternal("replicatorQueueProcessor encountered more than 1 NDC raw event batch")
-	}
-
-	return eventBatchBlobs[0], nil
-}
-
-func (p *ackMgrImpl) processReplication(
-	ctx context.Context,
-	processTaskIfClosed bool,
-	namespaceID namespace.ID,
-	workflowID string,
-	runID string,
-	action func(workflow.MutableState) (*replicationspb.ReplicationTask, error),
-) (retReplicationTask *replicationspb.ReplicationTask, retError error) {
-
-	execution := commonpb.WorkflowExecution{
-		WorkflowId: workflowID,
-		RunId:      runID,
-	}
-
-	context, release, err := p.workflowCache.GetOrCreateWorkflowExecution(
-		ctx,
-		namespaceID,
-		execution,
-		workflow.CallerTypeTask,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { release(retError) }()
-
-	ms, err := context.LoadMutableState(ctx)
-	switch err.(type) {
-	case nil:
-		if !processTaskIfClosed && !ms.IsWorkflowExecutionRunning() {
-			// workflow already finished, no need to process the replication task
-			return nil, nil
-		}
-		return action(ms)
-	case *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
-		return nil, nil
-	default:
-		return nil, err
+		subscriberID = uuid.New().String()
 	}
 }
 
-func (p *ackMgrImpl) processNewRunReplication(
-	ctx context.Context,
-	namespaceID namespace.ID,
-	workflowID string,
-	newRunID string,
-	branchToken []byte,
-	taskVersion int64,
-	task *replicationspb.ReplicationTask,
-) (retReplicationTask *replicationspb.ReplicationTask, retError error) {
+func (p *ackMgrImpl) UnsubscribeNotification(subscriberID string) {
+	p.subscriberLock.Lock()
+	defer p.subscriberLock.Unlock()
 
-	if task == nil {
-		return nil, nil
-	}
-	attr, ok := task.Attributes.(*replicationspb.ReplicationTask_HistoryTaskAttributes)
-	if !ok {
-		return nil, serviceerror.NewInternal("Wrong replication task to process new run replication.")
-	}
-
-	var newRunBranchToken []byte
-	if len(newRunID) > 0 {
-		newRunContext, releaseFn, err := p.workflowCache.GetOrCreateWorkflowExecution(
-			ctx,
-			namespaceID,
-			commonpb.WorkflowExecution{
-				WorkflowId: workflowID,
-				RunId:      newRunID,
-			},
-			workflow.CallerTypeTask,
-		)
-		if err != nil {
-			return nil, err
-		}
-		defer func() { releaseFn(retError) }()
-
-		newRunMutableState, err := newRunContext.LoadMutableState(ctx)
-		if err != nil {
-			return nil, err
-		}
-		_, newRunBranchToken, err = getVersionHistoryItems(
-			newRunMutableState,
-			common.FirstEventID,
-			taskVersion,
-		)
-		if err != nil {
-			return nil, err
-		}
-	} else if len(branchToken) != 0 {
-		newRunBranchToken = branchToken
-	}
-
-	var newRunEventsBlob *commonpb.DataBlob
-	if len(newRunBranchToken) > 0 {
-		// only get the first batch
-		var err error
-		newRunEventsBlob, err = p.getEventsBlob(
-			ctx,
-			newRunBranchToken,
-			common.FirstEventID,
-			common.FirstEventID+1,
-		)
-		if err != nil {
-			return nil, p.handleReadHistoryError(namespaceID, workflowID, newRunID, err)
-		}
-	}
-	attr.HistoryTaskAttributes.NewRunEvents = newRunEventsBlob
-	return task, nil
+	delete(p.subscribers, subscriberID)
 }
 
-func getVersionHistoryItems(
-	mutableState workflow.MutableState,
-	eventID int64,
-	version int64,
-) ([]*historyspb.VersionHistoryItem, []byte, error) {
+func (p *ackMgrImpl) broadcast(taskCount int) {
+	p.subscriberLock.Lock()
+	defer p.subscriberLock.Unlock()
 
-	versionHistories := mutableState.GetExecutionInfo().GetVersionHistories()
-	versionHistoryIndex, err := versionhistory.FindFirstVersionHistoryIndexByVersionHistoryItem(
-		versionHistories,
-		versionhistory.NewVersionHistoryItem(
-			eventID,
-			version,
-		),
-	)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	versionHistoryBranch, err := versionhistory.GetVersionHistory(versionHistories, versionHistoryIndex)
-	if err != nil {
-		return nil, nil, err
-	}
-	return versionhistory.CopyVersionHistory(versionHistoryBranch).GetItems(), versionHistoryBranch.GetBranchToken(), nil
-}
-
-func (p *ackMgrImpl) handleReadHistoryError(
-	namespaceID namespace.ID,
-	workflowID string,
-	runID string,
-	err error,
-) error {
-	switch err.(type) {
-	case *serviceerror.NotFound, *serviceerror.DataLoss:
-		if p.config.ReplicationBypassCorruptedData(namespaceID.String()) {
-			// bypass this corrupted workflow to unblock the replication queue.
-			p.logger.Error("Cannot get history from corrupted workflow",
-				tag.WorkflowNamespaceID(namespaceID.String()),
-				tag.WorkflowID(workflowID),
-				tag.WorkflowRunID(runID),
-				tag.Error(err))
-			return nil
+	for _, notification := range p.subscribers {
+		select {
+		case notification.notifyCh <- struct{}{}:
+			// This tells the backlog between two notifications. This is the best effort to know lagging task count.
+			if notification.backlogCount > 0 {
+				metrics.ReplicationTaskSendBacklog.With(p.metricsHandler).
+					Record(notification.backlogCount, metrics.TargetClusterTag(notification.clusterName))
+			}
+			notification.backlogCount = 0
+		default:
+			notification.backlogCount += int64(taskCount)
+			// noop
 		}
-		return err
-	default:
-		return err
 	}
 }
 
-func (p *ackMgrImpl) clusterToReaderID(
+func (p *ackMgrImpl) GetReplicationTasksIter(
 	ctx context.Context,
 	pollingCluster string,
-) (int32, error) {
-	// TODO: need different readerID for different remote clusters
-	// e.g. use cluster's initial failover version
-	readerID := int32(common.DefaultQueueReaderID)
-
-	p.Lock()
-	defer p.Unlock()
-
-	if p.registeredQueueReaders == nil {
-		return readerID, errors.New("replication ack manager already closed")
-	}
-
-	if _, ok := p.registeredQueueReaders[readerID]; !ok {
-		err := p.executionMgr.RegisterHistoryTaskReader(ctx, &persistence.RegisterHistoryTaskReaderRequest{
-			ShardID:      p.shard.GetShardID(),
-			ShardOwner:   p.shard.GetOwner(),
-			TaskCategory: tasks.CategoryReplication,
-			ReaderID:     readerID,
+	minInclusiveTaskID int64,
+	maxExclusiveTaskID int64,
+) (collection.Iterator[tasks.Task], error) {
+	return collection.NewPagingIterator(func(paginationToken []byte) ([]tasks.Task, []byte, error) {
+		ctx1, cancel := context.WithTimeout(ctx, 30*time.Second)
+		defer cancel()
+		response, err := p.executionMgr.GetHistoryTasks(ctx1, &persistence.GetHistoryTasksRequest{
+			ShardID:             p.shardContext.GetShardID(),
+			TaskCategory:        tasks.CategoryReplication,
+			InclusiveMinTaskKey: tasks.NewImmediateKey(minInclusiveTaskID),
+			ExclusiveMaxTaskKey: tasks.NewImmediateKey(maxExclusiveTaskID),
+			BatchSize:           p.config.ReplicatorProcessorFetchTasksBatchSize(),
+			NextPageToken:       paginationToken,
 		})
 		if err != nil {
-			return readerID, err
+			return nil, nil, err
 		}
-		p.registeredQueueReaders[readerID] = struct{}{}
-	}
-
-	return readerID, nil
+		metrics.ReplicationTaskLoadSize.With(p.metricsHandler).Record(int64(len(response.Tasks)))
+		return response.Tasks, response.NextPageToken, nil
+	}), nil
 }

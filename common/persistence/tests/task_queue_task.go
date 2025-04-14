@@ -34,15 +34,14 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
-
 	clockspb "go.temporal.io/server/api/clock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/debug"
-
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
-	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/testing/protorequire"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -80,11 +79,9 @@ func NewTaskQueueTaskSuite(
 }
 
 func (s *TaskQueueTaskSuite) SetupSuite() {
-	rand.Seed(time.Now().UnixNano())
 }
 
 func (s *TaskQueueTaskSuite) TearDownSuite() {
-
 }
 
 func (s *TaskQueueTaskSuite) SetupTest() {
@@ -129,7 +126,7 @@ func (s *TaskQueueTaskSuite) TestCreateGet_Conflict() {
 		NextPageToken:      nil,
 	})
 	s.NoError(err)
-	s.Equal([]*persistencespb.AllocatedTaskInfo{}, resp.Tasks)
+	protorequire.ProtoSliceEqual(s.T(), []*persistencespb.AllocatedTaskInfo{}, resp.Tasks)
 	s.Nil(resp.NextPageToken)
 }
 
@@ -158,7 +155,7 @@ func (s *TaskQueueTaskSuite) TestCreateGet_One() {
 		NextPageToken:      nil,
 	})
 	s.NoError(err)
-	s.Equal([]*persistencespb.AllocatedTaskInfo{task}, resp.Tasks)
+	protorequire.ProtoSliceEqual(s.T(), []*persistencespb.AllocatedTaskInfo{task}, resp.Tasks)
 	s.Nil(resp.NextPageToken)
 }
 
@@ -207,46 +204,7 @@ func (s *TaskQueueTaskSuite) TestCreateGet_Multiple() {
 		token = resp.NextPageToken
 		actualTasks = append(actualTasks, resp.Tasks...)
 	}
-	s.Equal(expectedTasks, actualTasks)
-}
-
-func (s *TaskQueueTaskSuite) TestCreateDelete_One() {
-	rangeID := rand.Int63()
-	taskQueue := s.createTaskQueue(rangeID)
-
-	taskID := rand.Int63()
-	task := s.randomTask(taskID)
-	_, err := s.taskManager.CreateTasks(s.ctx, &p.CreateTasksRequest{
-		TaskQueueInfo: &p.PersistedTaskQueueInfo{
-			RangeID: rangeID,
-			Data:    taskQueue,
-		},
-		Tasks: []*persistencespb.AllocatedTaskInfo{task},
-	})
-	s.NoError(err)
-
-	err = s.taskManager.CompleteTask(s.ctx, &p.CompleteTaskRequest{
-		TaskQueue: &p.TaskQueueKey{
-			NamespaceID:   s.namespaceID,
-			TaskQueueName: s.taskQueueName,
-			TaskQueueType: s.taskQueueType,
-		},
-		TaskID: taskID,
-	})
-	s.NoError(err)
-
-	resp, err := s.taskManager.GetTasks(s.ctx, &p.GetTasksRequest{
-		NamespaceID:        s.namespaceID,
-		TaskQueue:          s.taskQueueName,
-		TaskType:           s.taskQueueType,
-		InclusiveMinTaskID: taskID,
-		ExclusiveMaxTaskID: taskID + 1,
-		PageSize:           100,
-		NextPageToken:      nil,
-	})
-	s.NoError(err)
-	s.Equal([]*persistencespb.AllocatedTaskInfo{}, resp.Tasks)
-	s.Nil(resp.NextPageToken)
+	protorequire.ProtoSliceEqual(s.T(), expectedTasks, actualTasks)
 }
 
 func (s *TaskQueueTaskSuite) TestCreateDelete_Multiple() {
@@ -295,7 +253,7 @@ func (s *TaskQueueTaskSuite) TestCreateDelete_Multiple() {
 		NextPageToken:      nil,
 	})
 	s.NoError(err)
-	s.Equal([]*persistencespb.AllocatedTaskInfo{}, resp.Tasks)
+	protorequire.ProtoSliceEqual(s.T(), []*persistencespb.AllocatedTaskInfo{}, resp.Tasks)
 	s.Nil(resp.NextPageToken)
 }
 
@@ -317,10 +275,10 @@ func (s *TaskQueueTaskSuite) createTaskQueue(
 func (s *TaskQueueTaskSuite) randomTaskQueueInfo(
 	taskQueueKind enumspb.TaskQueueKind,
 ) *persistencespb.TaskQueueInfo {
-	now := timestamp.TimePtr(time.Now().UTC())
-	var expiryTime *time.Time
+	now := time.Now().UTC()
+	var expiryTime *timestamppb.Timestamp
 	if taskQueueKind == enumspb.TASK_QUEUE_KIND_STICKY {
-		expiryTime = timestamp.TimePtr(now.Add(s.stickyTTL))
+		expiryTime = timestamppb.New(now.Add(s.stickyTTL))
 	}
 
 	return &persistencespb.TaskQueueInfo{
@@ -330,14 +288,14 @@ func (s *TaskQueueTaskSuite) randomTaskQueueInfo(
 		Kind:           taskQueueKind,
 		AckLevel:       rand.Int63(),
 		ExpiryTime:     expiryTime,
-		LastUpdateTime: now,
+		LastUpdateTime: timestamppb.New(now),
 	}
 }
 
 func (s *TaskQueueTaskSuite) randomTask(
 	taskID int64,
 ) *persistencespb.AllocatedTaskInfo {
-	now := timestamp.TimeNowPtrUtc()
+	now := time.Now().UTC()
 	return &persistencespb.AllocatedTaskInfo{
 		TaskId: taskID,
 		Data: &persistencespb.TaskInfo{
@@ -345,8 +303,8 @@ func (s *TaskQueueTaskSuite) randomTask(
 			WorkflowId:       uuid.New().String(),
 			RunId:            uuid.New().String(),
 			ScheduledEventId: rand.Int63(),
-			CreateTime:       now,
-			ExpiryTime:       timestamp.TimePtr(now.Add(s.taskTTL)),
+			CreateTime:       timestamppb.New(now),
+			ExpiryTime:       timestamppb.New(now.Add(s.taskTTL)),
 			Clock: &clockspb.VectorClock{
 				ClusterId: rand.Int63(),
 				ShardId:   rand.Int31(),

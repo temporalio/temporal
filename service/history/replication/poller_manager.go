@@ -77,6 +77,9 @@ func (p pollerManagerImpl) getSourceClusterShardIDs(sourceClusterName string) ([
 	return generateShardIDs(p.currentShardId, currentClusterInfo.ShardCount, remoteClusterInfo.ShardCount), nil
 }
 
+// NOTE generateShardIDs is different than common.MapShardID
+// common.MapShardID guarantee to return the corresponding shard IDs for give shard ID
+// this function however is only a helper function for polling & redirecting replication task,
 func generateShardIDs(localShardId int32, localShardCount int32, remoteShardCount int32) []int32 {
 	var pollingShards []int32
 	if remoteShardCount <= localShardCount {

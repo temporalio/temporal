@@ -1,1 +1,0 @@
-CREATE DATABASE temporal character set utf8;

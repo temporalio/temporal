@@ -30,11 +30,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
@@ -42,6 +40,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/shard"
+	"go.uber.org/mock/gomock"
 )
 
 type (
@@ -49,16 +48,18 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		controller         *gomock.Controller
-		clusterMetadata    *cluster.MockMetadata
-		clientBean         *client.MockBean
-		shardController    *shard.MockController
-		namespaceCache     *namespace.MockRegistry
-		ndcHistoryResender *xdc.MockNDCHistoryResender
-		metricsHandler     metrics.Handler
-		logger             log.Logger
+		controller              *gomock.Controller
+		clusterMetadata         *cluster.MockMetadata
+		clientBean              *client.MockBean
+		shardController         *shard.MockController
+		namespaceCache          *namespace.MockRegistry
+		ndcHistoryResender      *xdc.MockNDCHistoryResender
+		metricsHandler          metrics.Handler
+		logger                  log.Logger
+		eagerNamespaceRefresher *MockEagerNamespaceRefresher
 
-		task *ExecutableUnknownTask
+		taskID int64
+		task   *ExecutableUnknownTask
 	}
 )
 
@@ -84,18 +85,22 @@ func (s *executableUnknownTaskSuite) SetupTest() {
 	s.ndcHistoryResender = xdc.NewMockNDCHistoryResender(s.controller)
 	s.metricsHandler = metrics.NoopMetricsHandler
 	s.logger = log.NewNoopLogger()
+	s.eagerNamespaceRefresher = NewMockEagerNamespaceRefresher(s.controller)
 
+	s.taskID = rand.Int63()
 	s.task = NewExecutableUnknownTask(
 		ProcessToolBox{
-			ClusterMetadata:    s.clusterMetadata,
-			ClientBean:         s.clientBean,
-			ShardController:    s.shardController,
-			NamespaceCache:     s.namespaceCache,
-			NDCHistoryResender: s.ndcHistoryResender,
-			MetricsHandler:     s.metricsHandler,
-			Logger:             s.logger,
+			ClusterMetadata:         s.clusterMetadata,
+			ClientBean:              s.clientBean,
+			ShardController:         s.shardController,
+			NamespaceCache:          s.namespaceCache,
+			NDCHistoryResender:      s.ndcHistoryResender,
+			MetricsHandler:          s.metricsHandler,
+			Logger:                  s.logger,
+			EagerNamespaceRefresher: s.eagerNamespaceRefresher,
+			DLQWriter:               NoopDLQWriter{},
 		},
-		rand.Int63(),
+		s.taskID,
 		time.Unix(0, rand.Int63()),
 		nil,
 	)
@@ -116,4 +121,9 @@ func (s *executableUnknownTaskSuite) TestHandleErr() {
 
 	err = serviceerror.NewUnavailable("")
 	s.Equal(err, s.task.HandleErr(err))
+}
+
+func (s *executableUnknownTaskSuite) TestMarkPoisonPill() {
+	err := s.task.MarkPoisonPill()
+	s.NoError(err)
 }

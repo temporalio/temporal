@@ -1,0 +1,8 @@
+{
+  "CurrVersion": "0.5",
+  "MinCompatibleVersion": "0.1",
+  "Description": "Replace nexus_incoming_services and nexus_incoming_services_partition_status tables with nexus_endpoints and nexus_endpoints_partition_status tables",
+  "SchemaUpdateCqlFiles": [
+    "nexus_endpoints.sql"
+  ]
+}

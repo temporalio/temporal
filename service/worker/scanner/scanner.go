@@ -34,21 +34,23 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/sdk"
-
-	"go.temporal.io/server/common/backoff"
-	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/service/worker/scanner/build_ids"
 )
 
 type (
@@ -65,6 +67,8 @@ type (
 		Persistence *config.Persistence
 		// TaskQueueScannerEnabled indicates if taskQueue scanner should be started as part of scanner
 		TaskQueueScannerEnabled dynamicconfig.BoolPropertyFn
+		// BuildIdScavengerEnabled indicates if the build ID scavenger should be started as part of scanner
+		BuildIdScavengerEnabled dynamicconfig.BoolPropertyFn
 		// HistoryScannerEnabled indicates if history scanner should be started as part of scanner
 		HistoryScannerEnabled dynamicconfig.BoolPropertyFn
 		// ExecutionsScannerEnabled indicates if executions scanner should be started as part of scanner
@@ -82,20 +86,33 @@ type (
 		ExecutionDataDurationBuffer dynamicconfig.DurationPropertyFn
 		// ExecutionScannerWorkerCount is the execution scavenger task worker number
 		ExecutionScannerWorkerCount dynamicconfig.IntPropertyFn
+		// ExecutionScannerHistoryEventIdValidator indicates if the execution scavenger to validate history event id.
+		ExecutionScannerHistoryEventIdValidator dynamicconfig.BoolPropertyFn
+
+		// RemovableBuildIdDurationSinceDefault is the minimum duration since a build ID was last default in its
+		// containing set for it to be considered for removal.
+		RemovableBuildIdDurationSinceDefault dynamicconfig.DurationPropertyFn
+		// BuildIdScavengerVisibilityRPS is the rate limit for visibility calls from the build ID scavenger
+		BuildIdScavengerVisibilityRPS dynamicconfig.FloatPropertyFn
 	}
 
-	// scannerContext is the context object that get's
+	// scannerContext is the context object that gets
 	// passed around within the scanner workflows / activities
 	scannerContext struct {
-		cfg               *Config
-		logger            log.Logger
-		sdkClientFactory  sdk.ClientFactory
-		metricsHandler    metrics.Handler
-		executionManager  persistence.ExecutionManager
-		taskManager       persistence.TaskManager
-		historyClient     historyservice.HistoryServiceClient
-		adminClient       adminservice.AdminServiceClient
-		namespaceRegistry namespace.Registry
+		cfg                *Config
+		logger             log.Logger
+		sdkClientFactory   sdk.ClientFactory
+		metricsHandler     metrics.Handler
+		executionManager   persistence.ExecutionManager
+		taskManager        persistence.TaskManager
+		visibilityManager  manager.VisibilityManager
+		metadataManager    persistence.MetadataManager
+		historyClient      historyservice.HistoryServiceClient
+		matchingClient     matchingservice.MatchingServiceClient
+		adminClient        adminservice.AdminServiceClient
+		namespaceRegistry  namespace.Registry
+		currentClusterName string
+		hostInfo           membership.HostInfo
 	}
 
 	// Scanner is the background sub-system that does full scans
@@ -119,22 +136,32 @@ func New(
 	sdkClientFactory sdk.ClientFactory,
 	metricsHandler metrics.Handler,
 	executionManager persistence.ExecutionManager,
+	metadataManager persistence.MetadataManager,
+	visibilityManager manager.VisibilityManager,
 	taskManager persistence.TaskManager,
 	historyClient historyservice.HistoryServiceClient,
 	adminClient adminservice.AdminServiceClient,
+	matchingClient matchingservice.MatchingServiceClient,
 	registry namespace.Registry,
+	currentClusterName string,
+	hostInfo membership.HostInfo,
 ) *Scanner {
 	return &Scanner{
 		context: scannerContext{
-			cfg:               cfg,
-			sdkClientFactory:  sdkClientFactory,
-			logger:            logger,
-			metricsHandler:    metricsHandler,
-			executionManager:  executionManager,
-			taskManager:       taskManager,
-			historyClient:     historyClient,
-			adminClient:       adminClient,
-			namespaceRegistry: registry,
+			cfg:                cfg,
+			sdkClientFactory:   sdkClientFactory,
+			logger:             logger,
+			metricsHandler:     metricsHandler,
+			executionManager:   executionManager,
+			taskManager:        taskManager,
+			visibilityManager:  visibilityManager,
+			metadataManager:    metadataManager,
+			historyClient:      historyClient,
+			matchingClient:     matchingClient,
+			adminClient:        adminClient,
+			namespaceRegistry:  registry,
+			currentClusterName: currentClusterName,
+			hostInfo:           hostInfo,
 		},
 	}
 }
@@ -146,6 +173,7 @@ func (s *Scanner) Start() error {
 	ctx, s.lifecycleCancel = context.WithCancel(ctx)
 
 	workerOpts := worker.Options{
+		Identity:                               "temporal-system@" + s.context.hostInfo.Identity(),
 		MaxConcurrentActivityExecutionSize:     s.context.cfg.MaxConcurrentActivityExecutionSize(),
 		MaxConcurrentWorkflowTaskExecutionSize: s.context.cfg.MaxConcurrentWorkflowTaskExecutionSize(),
 		MaxConcurrentActivityTaskPollers:       s.context.cfg.MaxConcurrentActivityTaskPollers(),
@@ -173,6 +201,33 @@ func (s *Scanner) Start() error {
 		workerTaskQueueNames = append(workerTaskQueueNames, historyScannerTaskQueueName)
 	}
 
+	if s.context.cfg.BuildIdScavengerEnabled() {
+		s.wg.Add(1)
+		go s.startWorkflowWithRetry(ctx, build_ids.BuildIdScavengerWFStartOptions, build_ids.BuildIdScavangerWorkflowName)
+
+		buildIdsActivities := build_ids.NewActivities(
+			s.context.logger,
+			s.context.taskManager,
+			s.context.metadataManager,
+			s.context.visibilityManager,
+			s.context.namespaceRegistry,
+			s.context.matchingClient,
+			s.context.currentClusterName,
+			s.context.cfg.RemovableBuildIdDurationSinceDefault,
+			s.context.cfg.BuildIdScavengerVisibilityRPS,
+		)
+
+		work := s.context.sdkClientFactory.NewWorker(s.context.sdkClientFactory.GetSystemClient(), build_ids.BuildIdScavengerTaskQueueName, workerOpts)
+		work.RegisterWorkflowWithOptions(build_ids.BuildIdScavangerWorkflow, workflow.RegisterOptions{Name: build_ids.BuildIdScavangerWorkflowName})
+		work.RegisterActivityWithOptions(buildIdsActivities.ScavengeBuildIds, activity.RegisterOptions{Name: build_ids.BuildIdScavangerActivityName})
+
+		// TODO: Nothing is gracefully stopping these workers or listening for fatal errors.
+		if err := work.Start(); err != nil {
+			return err
+		}
+	}
+
+	// TODO: There's no reason to register all activities and workflows on every task queue.
 	for _, tl := range workerTaskQueueNames {
 		work := s.context.sdkClientFactory.NewWorker(s.context.sdkClientFactory.GetSystemClient(), tl, workerOpts)
 
@@ -183,6 +238,7 @@ func (s *Scanner) Start() error {
 		work.RegisterActivityWithOptions(HistoryScavengerActivity, activity.RegisterOptions{Name: historyScavengerActivityName})
 		work.RegisterActivityWithOptions(ExecutionsScavengerActivity, activity.RegisterOptions{Name: executionsScavengerActivityName})
 
+		// TODO: Nothing is gracefully stopping these workers or listening for fatal errors.
 		if err := work.Start(); err != nil {
 			return err
 		}

@@ -70,6 +70,7 @@ services:
       grpcPort: 7233
       membershipPort: 6933
       bindOnLocalHost: true
+      httpPort: 7243
 
   matching:
     rpc:
@@ -100,10 +101,10 @@ clusterMetadata:
       initialFailoverVersion: 1
       rpcName: "frontend"
       rpcAddress: "localhost:7233"
+      httpAddress: "localhost:7243"
 
 dcRedirectionPolicy:
   policy: "noop"
-  toDC: ""
 
 archival:
   history:

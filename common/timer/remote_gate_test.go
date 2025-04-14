@@ -42,7 +42,7 @@ type (
 	}
 )
 
-func TestRemoteTimerGeteSuite(t *testing.T) {
+func TestRemoteTimerGateSuite(t *testing.T) {
 	s := new(remoteGateSuite)
 	suite.Run(t, s)
 }
@@ -74,14 +74,14 @@ func (s *remoteGateSuite) TestTimerFire() {
 	s.remoteTimerGate.Update(newTimer)
 
 	select {
-	case <-s.remoteTimerGate.FireChan():
+	case <-s.remoteTimerGate.FireCh():
 		s.Fail("timer should not fire when current time not updated")
 	case <-time.NewTimer(deadline.Sub(now)).C:
 	}
 
 	s.remoteTimerGate.SetCurrentTime(deadline)
 	select {
-	case <-s.remoteTimerGate.FireChan():
+	case <-s.remoteTimerGate.FireCh():
 	default:
 		s.Fail("timer should fire")
 	}
@@ -95,14 +95,14 @@ func (s *remoteGateSuite) TestTimerFireAfterUpdate_Active_Updated_BeforeNow() {
 
 	s.remoteTimerGate.Update(newTimer)
 	select {
-	case <-s.remoteTimerGate.FireChan():
+	case <-s.remoteTimerGate.FireCh():
 		s.Fail("timer should not fire when current time not updated")
 	case <-time.NewTimer(deadline.Sub(now)).C:
 	}
 
 	s.True(s.remoteTimerGate.Update(updatedNewTimer))
 	select {
-	case <-s.remoteTimerGate.FireChan():
+	case <-s.remoteTimerGate.FireCh():
 	default:
 		s.Fail("timer should fire")
 	}
@@ -117,14 +117,14 @@ func (s *remoteGateSuite) TestTimerFireAfterUpdate_Active_Updated() {
 	s.True(s.remoteTimerGate.Update(updatedNewTimer))
 
 	select {
-	case <-s.remoteTimerGate.FireChan():
+	case <-s.remoteTimerGate.FireCh():
 		s.Fail("timer should not fire when current time not updated")
 	case <-time.NewTimer(deadline.Sub(now)).C:
 	}
 
 	s.remoteTimerGate.SetCurrentTime(updatedNewTimer)
 	select {
-	case <-s.remoteTimerGate.FireChan():
+	case <-s.remoteTimerGate.FireCh():
 	default:
 		s.Fail("timer should fire")
 	}
@@ -139,14 +139,14 @@ func (s *remoteGateSuite) TestTimerFireAfterUpdate_Active_NotUpdated() {
 	s.False(s.remoteTimerGate.Update(updatedNewTimer))
 
 	select {
-	case <-s.remoteTimerGate.FireChan():
+	case <-s.remoteTimerGate.FireCh():
 		s.Fail("timer should not fire when current time not updated")
 	case <-time.NewTimer(deadline.Sub(now)).C:
 	}
 
 	s.remoteTimerGate.SetCurrentTime(updatedNewTimer)
 	select {
-	case <-s.remoteTimerGate.FireChan():
+	case <-s.remoteTimerGate.FireCh():
 	default:
 		s.Fail("timer should fire")
 	}
@@ -160,19 +160,19 @@ func (s *remoteGateSuite) TestTimerFireAfterUpdate_NotActive_Updated() {
 
 	s.remoteTimerGate.Update(newTimer)
 	// this is to drain existing signal
-	<-s.remoteTimerGate.FireChan()
+	<-s.remoteTimerGate.FireCh()
 	// test setup up complete
 
 	s.True(s.remoteTimerGate.Update(updatedNewTimer))
 	select {
-	case <-s.remoteTimerGate.FireChan():
+	case <-s.remoteTimerGate.FireCh():
 		s.Fail("timer should not fire when current time not updated")
 	case <-time.NewTimer(deadline.Sub(now)).C:
 	}
 
 	s.remoteTimerGate.SetCurrentTime(updatedNewTimer)
 	select {
-	case <-s.remoteTimerGate.FireChan():
+	case <-s.remoteTimerGate.FireCh():
 	default:
 		s.Fail("timer should fire")
 	}
@@ -185,12 +185,12 @@ func (s *remoteGateSuite) TestTimerFireAfterUpdate_NotActive_NotUpdated() {
 
 	s.remoteTimerGate.Update(newTimer)
 	// this is to drain existing signal
-	<-s.remoteTimerGate.FireChan()
+	<-s.remoteTimerGate.FireCh()
 	// test setup up complete
 
 	s.True(s.remoteTimerGate.Update(updatedNewTimer))
 	select {
-	case <-s.remoteTimerGate.FireChan():
+	case <-s.remoteTimerGate.FireCh():
 	default:
 		s.Fail("timer should fire when new timer is in the past")
 	}
@@ -201,7 +201,7 @@ func (s *remoteGateSuite) TestTimerSetCurrentTime_NoUpdate() {
 	newCurrentTime := now.Add(-1 * time.Second)
 	s.False(s.remoteTimerGate.SetCurrentTime(newCurrentTime))
 	select {
-	case <-s.remoteTimerGate.FireChan():
+	case <-s.remoteTimerGate.FireCh():
 		s.Fail("timer should not fire")
 	default:
 	}
@@ -214,12 +214,12 @@ func (s *remoteGateSuite) TestTimerSetCurrentTime_Update_TimerAlreadyFired() {
 
 	s.remoteTimerGate.Update(newTimer)
 	// this is to drain existing signal
-	<-s.remoteTimerGate.FireChan()
+	<-s.remoteTimerGate.FireCh()
 	// test setup up complete
 
 	s.True(s.remoteTimerGate.SetCurrentTime(newCurrentTime))
 	select {
-	case <-s.remoteTimerGate.FireChan():
+	case <-s.remoteTimerGate.FireCh():
 		s.Fail("timer should not fire")
 	default:
 	}
@@ -233,7 +233,7 @@ func (s *remoteGateSuite) TestTimerSetCurrentTime_Update_TimerNotFired() {
 	s.remoteTimerGate.Update(newTimer)
 	s.True(s.remoteTimerGate.SetCurrentTime(newCurrentTime))
 	select {
-	case <-s.remoteTimerGate.FireChan():
+	case <-s.remoteTimerGate.FireCh():
 		s.Fail("timer should not fire")
 	default:
 	}
@@ -247,7 +247,7 @@ func (s *remoteGateSuite) TestTimerSetCurrentTime_Update_TimerFired() {
 	s.remoteTimerGate.Update(newTimer)
 	s.True(s.remoteTimerGate.SetCurrentTime(newCurrentTime))
 	select {
-	case <-s.remoteTimerGate.FireChan():
+	case <-s.remoteTimerGate.FireCh():
 	default:
 		s.Fail("timer should fire")
 	}
@@ -256,7 +256,7 @@ func (s *remoteGateSuite) TestTimerSetCurrentTime_Update_TimerFired() {
 	newCurrentTime = newCurrentTime.Add(1 * time.Second)
 	s.True(s.remoteTimerGate.SetCurrentTime(newCurrentTime))
 	select {
-	case <-s.remoteTimerGate.FireChan():
+	case <-s.remoteTimerGate.FireCh():
 		s.Fail("timer should not fire")
 	default:
 	}
@@ -272,10 +272,10 @@ func (s *remoteGateSuite) TestTimerWillFire_Active() {
 	now := s.currentTime
 	newTimer := now.Add(2 * time.Second)
 	timeBeforeNewTimer := now.Add(1 * time.Second)
-	timeAfterNewimer := now.Add(3 * time.Second)
+	timeAfterNewTimer := now.Add(3 * time.Second)
 	s.remoteTimerGate.Update(newTimer)
 	s.True(s.remoteTimerGate.FireAfter(timeBeforeNewTimer))
-	s.False(s.remoteTimerGate.FireAfter(timeAfterNewimer))
+	s.False(s.remoteTimerGate.FireAfter(timeAfterNewTimer))
 }
 
 func (s *remoteGateSuite) TestTimerWillFire_NotActive() {

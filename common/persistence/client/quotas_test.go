@@ -26,13 +26,16 @@ package client
 
 import (
 	"reflect"
+	"slices"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"golang.org/x/exp/slices"
-
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/testing/temporalapi"
 )
 
 type (
@@ -89,14 +92,122 @@ func (s *quotasSuite) TestRequestPrioritiesOrdered() {
 
 func (s *quotasSuite) TestCallOriginDefined() {
 	var service workflowservice.WorkflowServiceServer
-	t := reflect.TypeOf(&service).Elem()
-	definedAPIs := make(map[string]struct{}, t.NumMethod())
-	for i := 0; i < t.NumMethod(); i++ {
-		definedAPIs[t.Method(i).Name] = struct{}{}
-	}
+	definedAPIs := make(map[string]struct{})
+	temporalapi.WalkExportedMethods(&service, func(m reflect.Method) {
+		definedAPIs[m.Name] = struct{}{}
+	})
 
 	for api := range APITypeCallOriginPriorityOverride {
 		_, ok := definedAPIs[api]
 		s.True(ok)
 	}
+}
+
+func (s *quotasSuite) TestPriorityNamespaceRateLimiter_DoesLimit() {
+	namespaceMaxRPS := func(namespace string) int { return 1 }
+	hostMaxRPS := func() int { return 1 }
+	operatorRPSRatioFn := func() float64 { return 0.2 }
+	burstRatio := func() float64 { return 1 }
+
+	limiter := newPriorityNamespaceRateLimiter(
+		namespaceMaxRPS,
+		hostMaxRPS,
+		RequestPriorityFn,
+		operatorRPSRatioFn,
+		burstRatio,
+	)
+
+	request := quotas.NewRequest(
+		"test-api",
+		1,
+		"test-namespace",
+		"api",
+		-1,
+		"frontend",
+	)
+
+	requestTime := time.Now()
+	wasLimited := false
+
+	for i := 0; i < 2; i++ {
+		if !limiter.Allow(requestTime, request) {
+			wasLimited = true
+		}
+	}
+
+	s.True(wasLimited)
+}
+
+func (s *quotasSuite) TestPerShardNamespaceRateLimiter_DoesLimit() {
+	perShardNamespaceMaxRPS := func(namespace string) int { return 1 }
+	hostMaxRPS := func() int { return 1 }
+	operatorRPSRatioFn := func() float64 { return 0.2 }
+	burstRatio := func() float64 { return 1 }
+
+	limiter := newPerShardPerNamespacePriorityRateLimiter(
+		perShardNamespaceMaxRPS,
+		hostMaxRPS,
+		RequestPriorityFn,
+		operatorRPSRatioFn,
+		burstRatio,
+	)
+
+	request := quotas.NewRequest(
+		"test-api",
+		1,
+		"test-namespace",
+		"api",
+		1,
+		"frontend",
+	)
+
+	requestTime := time.Now()
+	wasLimited := false
+
+	for i := 0; i < 2; i++ {
+		if !limiter.Allow(requestTime, request) {
+			wasLimited = true
+		}
+	}
+
+	s.True(wasLimited)
+}
+
+func (s *quotasSuite) TestOperatorPrioritized() {
+	rateFn := func() float64 { return 5 }
+	operatorRPSRatioFn := func() float64 { return 0.2 }
+	burstRatio := func() float64 { return 1 }
+	limiter := newPriorityRateLimiter(
+		rateFn,
+		RequestPriorityFn,
+		operatorRPSRatioFn,
+		burstRatio,
+	)
+
+	operatorRequest := quotas.NewRequest(
+		"DescribeWorkflowExecution",
+		1,
+		"test-namespace",
+		headers.CallerTypeOperator,
+		-1,
+		"DescribeWorkflowExecution")
+
+	apiRequest := quotas.NewRequest(
+		"DescribeWorkflowExecution",
+		1,
+		"test-namespace",
+		headers.CallerTypeAPI,
+		-1,
+		"DescribeWorkflowExecution")
+
+	requestTime := time.Now()
+	wasLimited := false
+
+	for i := 0; i < 6; i++ {
+		if !limiter.Allow(requestTime, apiRequest) {
+			wasLimited = true
+			s.True(limiter.Allow(requestTime, operatorRequest))
+		}
+	}
+	s.True(wasLimited)
 }

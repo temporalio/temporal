@@ -26,22 +26,24 @@ package tests
 
 import (
 	"math/rand"
+	"strings"
+	"testing"
 	"time"
 
-	"github.com/brianvoe/gofakeit/v6"
 	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
-
-	enumspb "go.temporal.io/api/enums/v1"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	p "go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/shuffle"
+	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/testing/fakedata"
 	"go.temporal.io/server/service/history/tasks"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func RandomShardInfo(
@@ -49,26 +51,35 @@ func RandomShardInfo(
 	rangeID int64,
 ) *persistencespb.ShardInfo {
 	var shardInfo persistencespb.ShardInfo
-	_ = gofakeit.Struct(&shardInfo)
+	_ = fakedata.FakeStruct(&shardInfo)
 	shardInfo.ShardId = shardID
 	shardInfo.RangeId = rangeID
 	return &shardInfo
 }
 
 func RandomSnapshot(
+	t *testing.T,
 	namespaceID string,
 	workflowID string,
 	runID string,
+	eventID int64,
 	lastWriteVersion int64,
 	state enumsspb.WorkflowExecutionState,
 	status enumspb.WorkflowExecutionStatus,
 	dbRecordVersion int64,
-) *p.WorkflowSnapshot {
-	return &p.WorkflowSnapshot{
-		ExecutionInfo:  RandomExecutionInfo(namespaceID, workflowID, lastWriteVersion),
+	branchToken []byte,
+) (*p.WorkflowSnapshot, []*p.WorkflowEvents) {
+	// TODO - remove this branching when other persistence implementations land for CHASM
+	var chasmNodes map[string]*persistencespb.ChasmNode
+	if !strings.HasPrefix(t.Name(), "TestCDS") {
+		chasmNodes = RandomChasmNodeMap()
+	}
+
+	snapshot := &p.WorkflowSnapshot{
+		ExecutionInfo:  RandomExecutionInfo(namespaceID, workflowID, eventID, lastWriteVersion, branchToken),
 		ExecutionState: RandomExecutionState(runID, state, status),
 
-		NextEventID: rand.Int63(),
+		NextEventID: eventID + 1, // NOTE: RandomSnapshot generates a single history event, hence NextEventID is plus 1
 
 		ActivityInfos:       RandomInt64ActivityInfoMap(),
 		TimerInfos:          RandomStringTimerInfoMap(),
@@ -76,6 +87,7 @@ func RandomSnapshot(
 		RequestCancelInfos:  RandomInt64RequestCancelInfoMap(),
 		SignalInfos:         RandomInt64SignalInfoMap(),
 		SignalRequestedIDs:  map[string]struct{}{uuid.New().String(): {}},
+		ChasmNodes:          chasmNodes,
 
 		Tasks: map[tasks.Category][]tasks.Task{
 			tasks.CategoryTransfer:    {},
@@ -87,22 +99,40 @@ func RandomSnapshot(
 		Condition:       rand.Int63(),
 		DBRecordVersion: dbRecordVersion,
 	}
+	history := snapshot.ExecutionInfo.VersionHistories.Histories[0]
+	events := &p.WorkflowEvents{
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
+		RunID:       runID,
+		BranchToken: history.BranchToken,
+		Events:      []*historypb.HistoryEvent{RandomHistoryEvent(eventID, lastWriteVersion)},
+	}
+	return snapshot, []*p.WorkflowEvents{events}
 }
 
 func RandomMutation(
+	t *testing.T,
 	namespaceID string,
 	workflowID string,
 	runID string,
+	eventID int64,
 	lastWriteVersion int64,
 	state enumsspb.WorkflowExecutionState,
 	status enumspb.WorkflowExecutionStatus,
 	dbRecordVersion int64,
-) *p.WorkflowMutation {
+	branchToken []byte,
+) (*p.WorkflowMutation, []*p.WorkflowEvents) {
+	// TODO - remove this branching when other persistence implementations land for CHASM
+	var chasmNodes map[string]*persistencespb.ChasmNode
+	if !strings.HasPrefix(t.Name(), "TestCDS") {
+		chasmNodes = RandomChasmNodeMap()
+	}
+
 	mutation := &p.WorkflowMutation{
-		ExecutionInfo:  RandomExecutionInfo(namespaceID, workflowID, lastWriteVersion),
+		ExecutionInfo:  RandomExecutionInfo(namespaceID, workflowID, eventID, lastWriteVersion, branchToken),
 		ExecutionState: RandomExecutionState(runID, state, status),
 
-		NextEventID: rand.Int63(),
+		NextEventID: eventID + 1, // NOTE: RandomMutation generates a single history event, hence NextEventID is plus 1
 
 		UpsertActivityInfos:       RandomInt64ActivityInfoMap(),
 		DeleteActivityInfos:       map[int64]struct{}{rand.Int63(): {}},
@@ -116,6 +146,8 @@ func RandomMutation(
 		DeleteSignalInfos:         map[int64]struct{}{rand.Int63(): {}},
 		UpsertSignalRequestedIDs:  map[string]struct{}{uuid.New().String(): {}},
 		DeleteSignalRequestedIDs:  map[string]struct{}{uuid.New().String(): {}},
+		UpsertChasmNodes:          chasmNodes,
+		DeleteChasmNodes:          map[string]struct{}{uuid.New().String(): {}},
 		// NewBufferedEvents: see below
 		// ClearBufferedEvents: see below
 
@@ -139,23 +171,60 @@ func RandomMutation(
 		mutation.NewBufferedEvents = nil
 	case 2:
 		mutation.ClearBufferedEvents = false
-		mutation.NewBufferedEvents = []*historypb.HistoryEvent{RandomHistoryEvent()}
+		mutation.NewBufferedEvents = []*historypb.HistoryEvent{RandomHistoryEvent(eventID, lastWriteVersion)}
 	default:
 		panic("broken test")
 	}
-	return mutation
+
+	history := mutation.ExecutionInfo.VersionHistories.Histories[0]
+	events := &p.WorkflowEvents{
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
+		RunID:       runID,
+		BranchToken: history.BranchToken,
+		Events:      []*historypb.HistoryEvent{RandomHistoryEvent(eventID, lastWriteVersion)},
+	}
+
+	return mutation, []*p.WorkflowEvents{events}
+}
+
+func RandomChasmNodeMap() map[string]*persistencespb.ChasmNode {
+	return map[string]*persistencespb.ChasmNode{
+		uuid.New().String(): RandomChasmNode(),
+	}
+}
+
+func RandomChasmNode() *persistencespb.ChasmNode {
+	// Some arbitrary random data to ensure the chasm node's attributes are preserved.
+	var blobInfo persistencespb.WorkflowExecutionInfo
+	_ = fakedata.FakeStruct(&blobInfo)
+	blob, _ := serialization.ProtoEncodeBlob(&blobInfo, enumspb.ENCODING_TYPE_PROTO3)
+
+	var versionedTransition persistencespb.VersionedTransition
+	_ = fakedata.FakeStruct(&versionedTransition)
+
+	return &persistencespb.ChasmNode{
+		Metadata: &persistencespb.ChasmNodeMetadata{
+			InitialVersionedTransition:    &versionedTransition,
+			LastUpdateVersionedTransition: &versionedTransition,
+			Attributes:                    &persistencespb.ChasmNodeMetadata_DataAttributes{},
+		},
+		Data: blob,
+	}
 }
 
 func RandomExecutionInfo(
 	namespaceID string,
 	workflowID string,
+	eventID int64,
 	lastWriteVersion int64,
+	branchToken []byte,
 ) *persistencespb.WorkflowExecutionInfo {
 	var executionInfo persistencespb.WorkflowExecutionInfo
-	_ = gofakeit.Struct(&executionInfo)
+	_ = fakedata.FakeStruct(&executionInfo)
 	executionInfo.NamespaceId = namespaceID
 	executionInfo.WorkflowId = workflowID
-	executionInfo.VersionHistories = RandomVersionHistory(lastWriteVersion)
+	executionInfo.VersionHistories = RandomVersionHistory(eventID, lastWriteVersion, branchToken)
 	return &executionInfo
 }
 
@@ -164,11 +233,20 @@ func RandomExecutionState(
 	state enumsspb.WorkflowExecutionState,
 	status enumspb.WorkflowExecutionStatus,
 ) *persistencespb.WorkflowExecutionState {
+	createRequestID := uuid.NewString()
 	return &persistencespb.WorkflowExecutionState{
-		CreateRequestId: uuid.New().String(),
+		CreateRequestId: createRequestID,
 		RunId:           runID,
 		State:           state,
 		Status:          status,
+		RequestIds: map[string]*persistencespb.RequestIDInfo{
+			createRequestID: {
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+			},
+			uuid.NewString(): {
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+			},
+		},
 	}
 }
 
@@ -203,52 +281,40 @@ func RandomInt64SignalInfoMap() map[int64]*persistencespb.SignalInfo {
 }
 
 func RandomActivityInfo() *persistencespb.ActivityInfo {
-	// cannot use gofakeit due to RetryLastFailure is of type Failure
-	// and Failure can contain another Failure -> stack overflow
-	return &persistencespb.ActivityInfo{
-		Version:                rand.Int63(),
-		ScheduledEventBatchId:  rand.Int63(),
-		ScheduledTime:          RandomTime(),
-		StartedEventId:         rand.Int63(),
-		StartedTime:            RandomTime(),
-		ActivityId:             uuid.New().String(),
-		RequestId:              uuid.New().String(),
-		ScheduleToStartTimeout: RandomDuration(),
-		ScheduleToCloseTimeout: RandomDuration(),
-		StartToCloseTimeout:    RandomDuration(),
-		HeartbeatTimeout:       RandomDuration(),
-
-		// other fields omitted, above should be enough for tests
-	}
+	var activityInfo persistencespb.ActivityInfo
+	_ = fakedata.FakeStruct(&activityInfo)
+	return &activityInfo
 }
 
 func RandomTimerInfo() *persistencespb.TimerInfo {
 	var timerInfo persistencespb.TimerInfo
-	_ = gofakeit.Struct(&timerInfo)
+	_ = fakedata.FakeStruct(&timerInfo)
 	return &timerInfo
 }
 
 func RandomChildExecutionInfo() *persistencespb.ChildExecutionInfo {
 	var childExecutionInfo persistencespb.ChildExecutionInfo
-	_ = gofakeit.Struct(&childExecutionInfo)
+	_ = fakedata.FakeStruct(&childExecutionInfo)
 	return &childExecutionInfo
 }
 
 func RandomRequestCancelInfo() *persistencespb.RequestCancelInfo {
 	var requestCancelInfo persistencespb.RequestCancelInfo
-	_ = gofakeit.Struct(&requestCancelInfo)
+	_ = fakedata.FakeStruct(&requestCancelInfo)
 	return &requestCancelInfo
 }
 
 func RandomSignalInfo() *persistencespb.SignalInfo {
 	var signalInfo persistencespb.SignalInfo
-	_ = gofakeit.Struct(&signalInfo)
+	_ = fakedata.FakeStruct(&signalInfo)
 	return &signalInfo
 }
 
-func RandomHistoryEvent() *historypb.HistoryEvent {
+func RandomHistoryEvent(eventID int64, version int64) *historypb.HistoryEvent {
 	var historyEvent historypb.HistoryEvent
-	_ = gofakeit.Struct(&historyEvent)
+	_ = fakedata.FakeStruct(&historyEvent)
+	historyEvent.EventId = eventID
+	historyEvent.Version = version
 	return &historyEvent
 }
 
@@ -271,31 +337,51 @@ func RandomStringPayloadMap() map[string]*commonpb.Payload {
 
 func RandomPayload() *commonpb.Payload {
 	var payload commonpb.Payload
-	_ = gofakeit.Struct(&payload)
+	_ = fakedata.FakeStruct(&payload)
 	return &payload
 }
 
 func RandomVersionHistory(
+	eventID int64,
 	lastWriteVersion int64,
+	branchToken []byte,
 ) *historyspb.VersionHistories {
 	return &historyspb.VersionHistories{
 		CurrentVersionHistoryIndex: 0,
 		Histories: []*historyspb.VersionHistory{{
-			BranchToken: shuffle.Bytes([]byte("random branch token")),
+			BranchToken: branchToken,
 			Items: []*historyspb.VersionHistoryItem{{
-				EventId: rand.Int63(),
+				EventId: eventID,
 				Version: lastWriteVersion,
 			}},
 		}},
 	}
 }
 
-func RandomTime() *time.Time {
-	time := time.Unix(0, rand.Int63())
-	return &time
+func RandomBranchToken(
+	namespaceID string,
+	workflowID string,
+	runID string,
+	historyBranchUtil p.HistoryBranchUtil,
+) []byte {
+	branchToken, _ := historyBranchUtil.NewHistoryBranch(
+		namespaceID,
+		workflowID,
+		runID,
+		uuid.NewString(),
+		nil,
+		nil,
+		0,
+		0,
+		0,
+	)
+	return branchToken
 }
 
-func RandomDuration() *time.Duration {
-	duration := time.Duration(rand.Int63())
-	return &duration
+func RandomTime() *timestamppb.Timestamp {
+	return timestamppb.New(time.Unix(0, rand.Int63()))
+}
+
+func RandomDuration() *durationpb.Duration {
+	return durationpb.New(time.Duration(rand.Int63()))
 }

@@ -1,5 +1,4 @@
 // The MIT License
-
 //
 // Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
 //
@@ -27,79 +26,75 @@ package metrics
 
 // types used/defined by the package
 type (
-	// MetricName is the name of the metric
-	MetricName string
-
-	// MetricType is the type of the metric
-	MetricType int
-
-	MetricUnit string
-
-	// metricDefinition contains the definition for a metric
-	metricDefinition struct {
-		metricType MetricType // metric type
-		metricName MetricName // metric name
-		unit       MetricUnit
+	histogramDefinition struct {
+		metricDefinition
 	}
 
-	// ServiceIdx is an index that uniquely identifies the service
-	ServiceIdx int
+	counterDefinition struct {
+		metricDefinition
+	}
+
+	gaugeDefinition struct {
+		metricDefinition
+	}
+
+	timerDefinition struct {
+		metricDefinition
+	}
 )
 
-// MetricUnit supported values
-// Values are pulled from https://pkg.go.dev/golang.org/x/exp/event#Unit
-const (
-	Dimensionless = "1"
-	Milliseconds  = "ms"
-	Bytes         = "By"
-)
-
-// MetricTypes which are supported
-const (
-	Counter MetricType = iota
-	Timer
-	Gauge
-	Histogram
-)
-
-// Empty returns true if the metricName is an empty string
-func (mn MetricName) Empty() bool {
-	return mn == ""
+func NewTimerDef(name string, opts ...Option) timerDefinition {
+	// This line cannot be combined with others!
+	// This ensures the stack trace has information of the caller.
+	def := newMetricDefinition(name, opts...)
+	globalRegistry.register(def)
+	return timerDefinition{def}
 }
 
-// String returns string representation of this metric name
-func (mn MetricName) String() string {
-	return string(mn)
+func NewBytesHistogramDef(name string, opts ...Option) histogramDefinition {
+	// This line cannot be combined with others!
+	// This ensures the stack trace has information of the caller.
+	def := newMetricDefinition(name, append(opts, WithUnit(Bytes))...)
+	globalRegistry.register(def)
+	return histogramDefinition{def}
 }
 
-func (md metricDefinition) GetMetricType() MetricType {
-	return md.metricType
+func NewDimensionlessHistogramDef(name string, opts ...Option) histogramDefinition {
+	// This line cannot be combined with others!
+	// This ensures the stack trace has information of the caller.
+	def := newMetricDefinition(name, append(opts, WithUnit(Dimensionless))...)
+	globalRegistry.register(def)
+	return histogramDefinition{def}
 }
 
-func (md metricDefinition) GetMetricName() string {
-	return md.metricName.String()
+func NewCounterDef(name string, opts ...Option) counterDefinition {
+	// This line cannot be combined with others!
+	// This ensures the stack trace has information of the caller.
+	def := newMetricDefinition(name, opts...)
+	globalRegistry.register(def)
+	return counterDefinition{def}
 }
 
-func (md metricDefinition) GetMetricUnit() MetricUnit {
-	return md.unit
+func NewGaugeDef(name string, opts ...Option) gaugeDefinition {
+	// This line cannot be combined with others!
+	// This ensures the stack trace has information of the caller.
+	def := newMetricDefinition(name, opts...)
+	globalRegistry.register(def)
+	return gaugeDefinition{def}
 }
 
-func NewTimerDef(name string) metricDefinition {
-	return metricDefinition{metricName: MetricName(name), metricType: Timer, unit: Milliseconds}
+func (d histogramDefinition) With(handler Handler) HistogramIface {
+	return handler.Histogram(d.name, d.unit)
 }
 
-func NewBytesHistogramDef(name string) metricDefinition {
-	return metricDefinition{metricName: MetricName(name), metricType: Histogram, unit: Bytes}
+func (d counterDefinition) With(handler Handler) CounterIface {
+	return handler.Counter(d.name)
 }
 
-func NewDimensionlessHistogramDef(name string) metricDefinition {
-	return metricDefinition{metricName: MetricName(name), metricType: Histogram, unit: Dimensionless}
+func (d gaugeDefinition) With(handler Handler) GaugeIface {
+	return handler.Gauge(d.name)
 }
 
-func NewCounterDef(name string) metricDefinition {
-	return metricDefinition{metricName: MetricName(name), metricType: Counter}
-}
-
-func NewGaugeDef(name string) metricDefinition {
-	return metricDefinition{metricName: MetricName(name), metricType: Gauge}
+func (d timerDefinition) With(handler Handler) TimerIface {
+	return handler.Timer(d.name)
 }

@@ -33,10 +33,10 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/primitives/timestamp"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -149,7 +149,7 @@ func InitializeHistoryEventGenerator(
 				Name: taskQueue,
 				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 			},
-			StartToCloseTimeout: timestamp.DurationPtr(timeout),
+			StartToCloseTimeout: durationpb.New(timeout),
 			Attempt:             workflowTaskAttempts,
 		}}
 		return historyEvent
@@ -246,9 +246,9 @@ func InitializeHistoryEventGenerator(
 				Name: taskQueue,
 				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 			},
-			WorkflowExecutionTimeout: timestamp.DurationPtr(timeout),
-			WorkflowRunTimeout:       timestamp.DurationPtr(timeout),
-			WorkflowTaskTimeout:      timestamp.DurationPtr(timeout),
+			WorkflowExecutionTimeout: durationpb.New(timeout),
+			WorkflowRunTimeout:       durationpb.New(timeout),
+			WorkflowTaskTimeout:      durationpb.New(timeout),
 			Identity:                 identity,
 			FirstExecutionRunId:      uuid.New(),
 			Attempt:                  1,
@@ -296,8 +296,8 @@ func InitializeHistoryEventGenerator(
 				Name: taskQueue,
 				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 			},
-			WorkflowRunTimeout:           timestamp.DurationPtr(timeout),
-			WorkflowTaskTimeout:          timestamp.DurationPtr(timeout),
+			WorkflowRunTimeout:           durationpb.New(timeout),
+			WorkflowTaskTimeout:          durationpb.New(timeout),
 			WorkflowTaskCompletedEventId: eventID - 1,
 			Initiator:                    enumspb.CONTINUE_AS_NEW_INITIATOR_WORKFLOW,
 		}}
@@ -403,9 +403,9 @@ func InitializeHistoryEventGenerator(
 				Name: taskQueue,
 				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 			},
-			ScheduleToCloseTimeout:       timestamp.DurationPtr(timeout),
-			ScheduleToStartTimeout:       timestamp.DurationPtr(timeout),
-			StartToCloseTimeout:          timestamp.DurationPtr(timeout),
+			ScheduleToCloseTimeout:       durationpb.New(timeout),
+			ScheduleToStartTimeout:       durationpb.New(timeout),
+			StartToCloseTimeout:          durationpb.New(timeout),
 			WorkflowTaskCompletedEventId: lastEvent.EventId,
 		}}
 		return historyEvent
@@ -552,7 +552,7 @@ func InitializeHistoryEventGenerator(
 		historyEvent.EventType = enumspb.EVENT_TYPE_TIMER_STARTED
 		historyEvent.Attributes = &historypb.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &historypb.TimerStartedEventAttributes{
 			TimerId:                      uuid.New(),
-			StartToFireTimeout:           timestamp.DurationPtr(10 * time.Second),
+			StartToFireTimeout:           durationpb.New(10 * time.Second),
 			WorkflowTaskCompletedEventId: lastEvent.EventId,
 		}}
 		return historyEvent
@@ -616,9 +616,9 @@ func InitializeHistoryEventGenerator(
 				Name: taskQueue,
 				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 			},
-			WorkflowExecutionTimeout:     timestamp.DurationPtr(timeout),
-			WorkflowRunTimeout:           timestamp.DurationPtr(timeout),
-			WorkflowTaskTimeout:          timestamp.DurationPtr(timeout),
+			WorkflowExecutionTimeout:     durationpb.New(timeout),
+			WorkflowRunTimeout:           durationpb.New(timeout),
+			WorkflowTaskTimeout:          durationpb.New(timeout),
 			WorkflowTaskCompletedEventId: lastEvent.EventId,
 			WorkflowIdReusePolicy:        enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
 		}}
@@ -960,7 +960,7 @@ func getDefaultHistoryEvent(
 	globalTaskID++
 	return &historypb.HistoryEvent{
 		EventId:   eventID,
-		EventTime: timestamp.TimePtr(time.Now().UTC()),
+		EventTime: timestamppb.New(time.Now().UTC()),
 		TaskId:    globalTaskID,
 		Version:   version,
 	}

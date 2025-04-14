@@ -32,6 +32,7 @@ import (
 )
 
 func TestGetRepoRootDirectory(t *testing.T) {
+	t.Parallel()
 	t.Run("env var set", func(t *testing.T) {
 		directory := GetRepoRootDirectory(WithGetenv(func(s string) string {
 			assert.Equal(t, "TEMPORAL_ROOT", s)

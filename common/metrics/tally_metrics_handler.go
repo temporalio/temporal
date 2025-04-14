@@ -28,7 +28,6 @@ import (
 	"time"
 
 	"github.com/uber-go/tally/v4"
-
 	"go.temporal.io/server/common/log"
 )
 
@@ -67,43 +66,67 @@ func NewTallyMetricsHandler(cfg ClientConfig, scope tally.Scope) *tallyMetricsHa
 
 // WithTags creates a new MetricProvder with provided []Tag
 // Tags are merged with registered Tags from the source MetricsHandler
-func (tmp *tallyMetricsHandler) WithTags(tags ...Tag) Handler {
+func (tmh *tallyMetricsHandler) WithTags(tags ...Tag) Handler {
 	return &tallyMetricsHandler{
-		scope:          tmp.scope.Tagged(tagsToMap(tags, tmp.excludeTags)),
-		perUnitBuckets: tmp.perUnitBuckets,
-		excludeTags:    tmp.excludeTags,
+		scope:          tmh.scope.Tagged(tagsToMap(tags, tmh.excludeTags)),
+		perUnitBuckets: tmh.perUnitBuckets,
+		excludeTags:    tmh.excludeTags,
 	}
 }
 
-// Counter obtains a counter for the given name and MetricOptions.
-func (tmp *tallyMetricsHandler) Counter(counter string) CounterIface {
+// Counter obtains a counter for the given name.
+func (tmh *tallyMetricsHandler) Counter(counter string) CounterIface {
 	return CounterFunc(func(i int64, t ...Tag) {
-		tmp.scope.Tagged(tagsToMap(t, tmp.excludeTags)).Counter(counter).Inc(i)
+		scope := tmh.scope
+		if len(t) > 0 {
+			scope = tmh.scope.Tagged(tagsToMap(t, tmh.excludeTags))
+		}
+		scope.Counter(counter).Inc(i)
 	})
 }
 
-// Gauge obtains a gauge for the given name and MetricOptions.
-func (tmp *tallyMetricsHandler) Gauge(gauge string) GaugeIface {
+// Gauge obtains a gauge for the given name.
+func (tmh *tallyMetricsHandler) Gauge(gauge string) GaugeIface {
 	return GaugeFunc(func(f float64, t ...Tag) {
-		tmp.scope.Tagged(tagsToMap(t, tmp.excludeTags)).Gauge(gauge).Update(f)
+		scope := tmh.scope
+		if len(t) > 0 {
+			scope = tmh.scope.Tagged(tagsToMap(t, tmh.excludeTags))
+		}
+		scope.Gauge(gauge).Update(f)
 	})
 }
 
-// Timer obtains a timer for the given name and MetricOptions.
-func (tmp *tallyMetricsHandler) Timer(timer string) TimerIface {
-	return TimerFunc(func(d time.Duration, tag ...Tag) {
-		tmp.scope.Tagged(tagsToMap(tag, tmp.excludeTags)).Timer(timer).Record(d)
+// Timer obtains a timer for the given name.
+func (tmh *tallyMetricsHandler) Timer(timer string) TimerIface {
+	return TimerFunc(func(d time.Duration, t ...Tag) {
+		scope := tmh.scope
+		if len(t) > 0 {
+			scope = tmh.scope.Tagged(tagsToMap(t, tmh.excludeTags))
+		}
+		scope.Timer(timer).Record(d)
 	})
 }
 
-// Histogram obtains a histogram for the given name and MetricOptions.
-func (tmp *tallyMetricsHandler) Histogram(histogram string, unit MetricUnit) HistogramIface {
+// Histogram obtains a histogram for the given name.
+func (tmh *tallyMetricsHandler) Histogram(histogram string, unit MetricUnit) HistogramIface {
 	return HistogramFunc(func(i int64, t ...Tag) {
-		tmp.scope.Tagged(tagsToMap(t, tmp.excludeTags)).Histogram(histogram, tmp.perUnitBuckets[unit]).RecordValue(float64(i))
+		scope := tmh.scope
+		if len(t) > 0 {
+			scope = tmh.scope.Tagged(tagsToMap(t, tmh.excludeTags))
+		}
+		scope.Histogram(histogram, tmh.perUnitBuckets[unit]).RecordValue(float64(i))
 	})
 }
 
 func (*tallyMetricsHandler) Stop(log.Logger) {}
+
+func (*tallyMetricsHandler) Close() error {
+	return nil
+}
+
+func (tmh *tallyMetricsHandler) StartBatch(_ string) BatchHandler {
+	return tmh
+}
 
 func tagsToMap(t1 []Tag, e excludeTags) map[string]string {
 	if len(t1) == 0 {

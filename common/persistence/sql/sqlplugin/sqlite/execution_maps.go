@@ -33,7 +33,6 @@ import (
 	"strings"
 
 	"github.com/jmoiron/sqlx"
-
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 )
 
@@ -641,6 +640,87 @@ func (mdb *db) DeleteAllFromSignalsRequestedSets(
 ) (sql.Result, error) {
 	return mdb.conn.ExecContext(ctx,
 		deleteAllSignalsRequestedSetQry,
+		filter.ShardID,
+		filter.NamespaceID,
+		filter.WorkflowID,
+		filter.RunID,
+	)
+}
+
+var (
+	chasmNodeColumns = []string{
+		"metadata",
+		"metadata_encoding",
+		"data",
+		"data_encoding",
+	}
+	chasmNodeTableName = "chasm_node_maps"
+	chasmNodeKey       = "chasm_path"
+
+	deleteChasmNodeMapSQLQuery      = makeDeleteMapQry(chasmNodeTableName)
+	setKeyInChasmNodeMapSQLQuery    = makeSetKeyInMapQry(chasmNodeTableName, chasmNodeColumns, chasmNodeKey)
+	deleteKeyInChasmNodeMapSQLQuery = makeDeleteKeyInMapQry(chasmNodeTableName, chasmNodeKey)
+	getChasmNodeMapSQLQuery         = makeGetMapQryTemplate(chasmNodeTableName, chasmNodeColumns, chasmNodeKey)
+)
+
+func (mdb *db) SelectAllFromChasmNodeMaps(
+	ctx context.Context,
+	filter sqlplugin.ChasmNodeMapsAllFilter,
+) ([]sqlplugin.ChasmNodeMapsRow, error) {
+	var rows []sqlplugin.ChasmNodeMapsRow
+
+	if err := mdb.conn.SelectContext(ctx,
+		&rows,
+		getChasmNodeMapSQLQuery,
+		filter.ShardID,
+		filter.NamespaceID,
+		filter.WorkflowID,
+		filter.RunID,
+	); err != nil {
+		return nil, err
+	}
+
+	for i := range rows {
+		rows[i].ShardID = filter.ShardID
+		rows[i].NamespaceID = filter.NamespaceID
+		rows[i].WorkflowID = filter.WorkflowID
+		rows[i].RunID = filter.RunID
+	}
+
+	return rows, nil
+}
+
+func (mdb *db) ReplaceIntoChasmNodeMaps(
+	ctx context.Context,
+	rows []sqlplugin.ChasmNodeMapsRow,
+) (sql.Result, error) {
+	return mdb.conn.NamedExecContext(ctx,
+		setKeyInChasmNodeMapSQLQuery,
+		rows,
+	)
+}
+
+func (mdb *db) DeleteFromChasmNodeMaps(ctx context.Context, filter sqlplugin.ChasmNodeMapsFilter) (sql.Result, error) {
+	query, args, err := sqlx.In(
+		deleteKeyInChasmNodeMapSQLQuery,
+		filter.ShardID,
+		filter.NamespaceID,
+		filter.WorkflowID,
+		filter.RunID,
+		filter.ChasmPaths,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return mdb.conn.ExecContext(ctx,
+		mdb.conn.Rebind(query),
+		args...,
+	)
+}
+
+func (mdb *db) DeleteAllFromChasmNodeMaps(ctx context.Context, filter sqlplugin.ChasmNodeMapsAllFilter) (sql.Result, error) {
+	return mdb.conn.ExecContext(ctx,
+		deleteChasmNodeMapSQLQuery,
 		filter.ShardID,
 		filter.NamespaceID,
 		filter.WorkflowID,

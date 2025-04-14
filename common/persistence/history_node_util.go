@@ -29,7 +29,6 @@ import (
 	"sort"
 
 	"go.temporal.io/api/serviceerror"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 )

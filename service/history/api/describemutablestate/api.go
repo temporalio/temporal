@@ -29,16 +29,17 @@ import (
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/api"
-	"go.temporal.io/server/service/history/shard"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow"
 )
 
 func Invoke(
 	ctx context.Context,
 	req *historyservice.DescribeMutableStateRequest,
-	shard shard.Context,
+	shardContext historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (_ *historyservice.DescribeMutableStateResponse, retError error) {
 	namespaceID := namespace.ID(req.GetNamespaceId())
@@ -47,30 +48,30 @@ func Invoke(
 		return nil, err
 	}
 
-	weCtx, err := workflowConsistencyChecker.GetWorkflowContext(
+	workflowLease, err := workflowConsistencyChecker.GetWorkflowLease(
 		ctx,
 		nil,
-		api.BypassMutableStateConsistencyPredicate,
 		definition.NewWorkflowKey(
 			req.NamespaceId,
 			req.Execution.WorkflowId,
 			req.Execution.RunId,
 		),
+		locks.PriorityHigh,
 	)
 	if err != nil {
 		return nil, err
 	}
-	defer func() { weCtx.GetReleaseFn()(retError) }()
+	defer func() { workflowLease.GetReleaseFn()(retError) }()
 
 	response := &historyservice.DescribeMutableStateResponse{}
-	if weCtx.GetContext().(*workflow.ContextImpl).MutableState != nil {
-		msb := weCtx.GetContext().(*workflow.ContextImpl).MutableState
+	if workflowLease.GetContext().(*workflow.ContextImpl).MutableState != nil {
+		msb := workflowLease.GetContext().(*workflow.ContextImpl).MutableState
 		response.CacheMutableState = msb.CloneToProto()
 	}
 
 	// clear mutable state to force reload from persistence. This API returns both cached and persisted version.
-	weCtx.GetContext().Clear()
-	mutableState, err := weCtx.GetContext().LoadMutableState(ctx)
+	workflowLease.GetContext().Clear()
+	mutableState, err := workflowLease.GetContext().LoadMutableState(ctx, shardContext)
 	if err != nil {
 		return nil, err
 	}

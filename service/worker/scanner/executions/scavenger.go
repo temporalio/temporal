@@ -32,15 +32,14 @@ import (
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/quotas"
-
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/service/worker/scanner/executor"
 )
 
@@ -56,16 +55,17 @@ type (
 		numHistoryShards int32
 		activityContext  context.Context
 
-		executionManager            persistence.ExecutionManager
-		registry                    namespace.Registry
-		historyClient               historyservice.HistoryServiceClient
-		adminClient                 adminservice.AdminServiceClient
-		executor                    executor.Executor
-		rateLimiter                 quotas.RateLimiter
-		perShardQPS                 dynamicconfig.IntPropertyFn
-		executionDataDurationBuffer dynamicconfig.DurationPropertyFn
-		metricsHandler              metrics.Handler
-		logger                      log.Logger
+		executionManager              persistence.ExecutionManager
+		registry                      namespace.Registry
+		historyClient                 historyservice.HistoryServiceClient
+		adminClient                   adminservice.AdminServiceClient
+		executor                      executor.Executor
+		rateLimiter                   quotas.RateLimiter
+		perShardQPS                   dynamicconfig.IntPropertyFn
+		executionDataDurationBuffer   dynamicconfig.DurationPropertyFn
+		enableHistoryEventIDValidator dynamicconfig.BoolPropertyFn
+		metricsHandler                metrics.Handler
+		logger                        log.Logger
 
 		stopC  chan struct{}
 		stopWG sync.WaitGroup
@@ -89,6 +89,7 @@ func NewScavenger(
 	perShardQPS dynamicconfig.IntPropertyFn,
 	executionDataDurationBuffer dynamicconfig.DurationPropertyFn,
 	executionTaskWorker dynamicconfig.IntPropertyFn,
+	enableHistoryEventIDValidator dynamicconfig.BoolPropertyFn,
 	executionManager persistence.ExecutionManager,
 	registry namespace.Registry,
 	historyClient historyservice.HistoryServiceClient,
@@ -112,10 +113,11 @@ func NewScavenger(
 		rateLimiter: quotas.NewDefaultOutgoingRateLimiter(
 			func() float64 { return float64(perHostQPS()) },
 		),
-		perShardQPS:                 perShardQPS,
-		executionDataDurationBuffer: executionDataDurationBuffer,
-		metricsHandler:              metricsHandler.WithTags(metrics.OperationTag(metrics.ExecutionsScavengerScope)),
-		logger:                      logger,
+		perShardQPS:                   perShardQPS,
+		executionDataDurationBuffer:   executionDataDurationBuffer,
+		enableHistoryEventIDValidator: enableHistoryEventIDValidator,
+		metricsHandler:                metricsHandler.WithTags(metrics.OperationTag(metrics.ExecutionsScavengerScope)),
+		logger:                        logger,
 
 		stopC: make(chan struct{}),
 	}
@@ -134,7 +136,7 @@ func (s *Scavenger) Start() {
 	s.stopWG.Add(1)
 	s.executor.Start()
 	go s.run()
-	s.metricsHandler.Counter(metrics.StartedCount.GetMetricName()).Record(1)
+	metrics.StartedCount.With(s.metricsHandler).Record(1)
 	s.logger.Info("Executions scavenger started")
 }
 
@@ -147,7 +149,7 @@ func (s *Scavenger) Stop() {
 	) {
 		return
 	}
-	s.metricsHandler.Counter(metrics.StoppedCount.GetMetricName()).Record(1)
+	metrics.StoppedCount.With(s.metricsHandler).Record(1)
 	s.logger.Info("Executions scavenger stopping")
 	close(s.stopC)
 	s.executor.Stop()
@@ -185,6 +187,7 @@ func (s *Scavenger) run() {
 				s.rateLimiter,
 			}),
 			s.executionDataDurationBuffer,
+			s.enableHistoryEventIDValidator,
 		))
 		if !submitted {
 			s.logger.Error("unable to submit task to executor", tag.ShardID(shardID))
@@ -196,15 +199,17 @@ func (s *Scavenger) run() {
 
 func (s *Scavenger) awaitExecutor() {
 	// gauge value persists, so we want to reset it to 0
-	defer s.metricsHandler.Gauge(metrics.ExecutionsOutstandingCount.GetMetricName()).Record(float64(0))
+	defer metrics.ExecutionsOutstandingCount.With(s.metricsHandler).Record(float64(0))
 
 	outstanding := s.executor.TaskCount()
 	for outstanding > 0 {
+		timer := time.NewTimer(executorPollInterval)
 		select {
-		case <-time.After(executorPollInterval):
+		case <-timer.C:
 			outstanding = s.executor.TaskCount()
-			s.metricsHandler.Gauge(metrics.ExecutionsOutstandingCount.GetMetricName()).Record(float64(outstanding))
+			metrics.ExecutionsOutstandingCount.With(s.metricsHandler).Record(float64(outstanding))
 		case <-s.stopC:
+			timer.Stop()
 			return
 		}
 	}

@@ -1,0 +1,51 @@
+# https://d2lang.com
+# Generate SVG by running `make` inside of `docs/`.
+
+classes: {
+    invisible: {
+        style.opacity: 0
+        label: a
+    }
+    textonly: {
+        label: ""
+        style.stroke: transparent
+        style.fill: transparent
+    }
+}
+
+Client
+
+Server: {
+    label: ""
+    grid-columns: 3
+    horizontal-gap: 120
+    class: textonly
+
+    Frontend: {
+        grid-columns: 3
+        vertical-gap: 70
+
+        Interceptor: { label: "🔁 gRPC interceptor" }
+        Handlers: {
+            label: "..."
+            style.multiple: true
+        }
+        Client: { label: "🔁 History client" }
+    }
+    History: {
+        grid-columns: 2
+        vertical-gap: 70
+
+        Interceptor: { label: "🔁 gRPC interceptor" }
+        Handlers: {
+            label: "..."
+            style.multiple: true
+        }
+    }
+}
+
+Client -> Server.Frontend.Interceptor: gRPC call
+Server.Frontend.Interceptor -> Server.Frontend.Handlers
+Server.Frontend.Handlers -> Server.Frontend.Client
+Server.Frontend.Client -> Server.History.Interceptor: gRPC call
+Server.History.Interceptor -> Server.History.Handlers

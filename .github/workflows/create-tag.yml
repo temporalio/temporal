@@ -1,0 +1,149 @@
+name: "Create a tag"
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Branch to be tagged"
+        required: true
+      tag:
+        description: "Tag for new version (1.23.4)"
+        required: true
+      release_notes:
+        type: boolean
+        description: "Create draft release notes"
+        default: false
+      base_tag:
+        description: "Base tag to generate commit list for release notes"
+        required: false
+      update_deps:
+        type: boolean
+        description: "Create PR updating dependencies post-release"
+        default: false
+
+jobs:
+  create-tag:
+    name: "Create a tag"
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Generate token
+        id: generate_token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.TEMPORAL_CICD_APP_ID }}
+          private-key: ${{ secrets.TEMPORAL_CICD_PRIVATE_KEY }}
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+          token: ${{ steps.generate_token.outputs.token }}
+          ref: ${{ github.event.inputs.branch }}
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Set up Github credentials
+        run: |
+          git config --local user.name 'Temporal Data'
+          git config --local user.email 'commander-data@temporal.io'
+
+      - name: Get current version
+        id: get_current_version
+        run: |
+          CURRENT_VERSION=$(grep '^\s*ServerVersion = ".*"$' common/headers/version_checker.go | sed 's/^.*"\(.*\)"$/\1/')
+          [ -z "$CURRENT_VERSION" ] && exit 1
+          echo "CURRENT_VERSION=$CURRENT_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare new version string
+        id: new_version
+        env:
+          TAG: '${{ github.event.inputs.tag }}'
+        run: |
+          if [[ "${TAG}" =~ ^v.* ]]; then
+              echo "tag_with_v=${TAG}" >> "$GITHUB_OUTPUT"
+              echo "tag_no_v=${TAG#v}" >> "$GITHUB_OUTPUT"
+          else
+              echo "tag_with_v=v${TAG}" >> "$GITHUB_OUTPUT"
+              echo "tag_no_v=${TAG}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Update Server version
+        if: ${{ steps.get_current_version.outputs.CURRENT_VERSION != github.event.inputs.tag }}
+        env:
+          TAG: ${{ steps.new_version.outputs.tag_no_v }}
+          BRANCH: ${{ github.event.inputs.branch }}
+        run: |
+          sed -i -e "s/ServerVersion = \".*\"$/ServerVersion = \"$TAG\"/g" common/headers/version_checker.go
+          git add .
+          git commit -m "Bump Server version to $TAG"
+          git push origin "$BRANCH"
+
+      - name: Create and push tag
+        env:
+          TAG: ${{ steps.new_version.outputs.tag_with_v }}
+          BRANCH: ${{ github.event.inputs.branch }}
+        run: |
+          if [ -z "$(git tag -l "$TAG")" ]; then
+            git tag "$TAG"
+            git push origin "$TAG"
+          elif [ "$(git rev-list -n 1 "$TAG")" != "$(git rev-parse HEAD)" ]; then
+            echo "::error::Tag already exists and it doesn't reference current HEAD of branch $BRANCH"
+            exit 1
+          fi
+
+      - name: Create draft release notes
+        if: ${{ github.event.inputs.release_notes == 'true' }}
+        env:
+          GH_TOKEN: ${{ steps.generate_token.outputs.token }}
+          BASE_TAG: ${{ github.event.inputs.base_tag }}
+          TAG: ${{ steps.new_version.outputs.tag_with_v }}
+        run: |
+          if [ -z "$BASE_TAG" ] || [ -z "$(git tag -l "$BASE_TAG")" ]; then
+            echo "::error::Base tag not specified or does not exist"
+            exit 1
+          fi
+
+          TEMPFILE=$(mktemp)
+          cat > "$TEMPFILE" <<- EOF
+          ## Breaking Changes
+          Document them here, if any
+
+          ## Deprecation Announcements
+          Document them here, if any.
+
+          ## Release Highlights
+          Add highlights if any.
+
+          ### Helpful links to get you started with Temporal
+          [Temporal Docs](https://docs.temporal.io/)
+          [Server](https://github.com/temporalio/temporal)
+          [Docker Compose](https://github.com/temporalio/docker-compose)
+          [Helm Chart](https://github.com/temporalio/helm-charts)
+
+          ### Docker images for this release (use the tag \`${TAG#v}\`)
+          [Server](https://hub.docker.com/repository/docker/temporalio/server)
+          [Server With Auto Setup](https://hub.docker.com/repository/docker/temporalio/auto-setup) ([what is Auto-Setup?](https://docs.temporal.io/blog/auto-setup))
+          [Admin-Tools](https://hub.docker.com/repository/docker/temporalio/admin-tools)
+
+          **Full Changelog**: https://github.com/temporalio/temporal/compare/${BASE_TAG}...${TAG}
+          EOF
+
+          gh repo set-default ${{ github.repository }}
+          gh release create "$TAG" --verify-tag --draft --title "$TAG" -F "$TEMPFILE"
+
+      - name: Create PR updating dependencies
+        if: ${{ github.event.inputs.update_deps == 'true' }}
+        run: |
+          make update-dependencies
+          make go-generate
+          BRANCH="temporal-data/update-dependencies-$(git rev-parse --short HEAD)"
+          git checkout -b "${BRANCH}" main
+          git add .
+          git commit -m "Update dependencies" --author ${{ github.actor }}
+          git push origin "${BRANCH}"
+          gh pr create --fill --reviewer ${{ github.actor }},${{ github.triggering_actor }}

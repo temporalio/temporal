@@ -29,10 +29,9 @@ package membership
 import (
 	"context"
 	"errors"
+	"time"
 
 	"go.temporal.io/api/serviceerror"
-
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/primitives"
 )
 
@@ -49,67 +48,71 @@ var ErrListenerAlreadyExist = errors.New("listener already exist for the service
 var ErrIncorrectAddressFormat = errors.New("incorrect address format")
 
 type (
-
 	// ChangedEvent describes a change in membership
 	ChangedEvent struct {
 		HostsAdded   []HostInfo
 		HostsRemoved []HostInfo
+		HostsChanged []HostInfo
 	}
 
 	// Monitor provides membership information for all temporal services.
 	// It can be used to query which member host of a service is responsible for serving a given key.
 	Monitor interface {
-		common.Daemon
-
-		WhoAmI() (HostInfo, error)
+		// Start causes this service to join the membership ring. Services
+		// should not call Start until they are ready to receive requests from
+		// other cluster members.
+		Start()
 		// EvictSelf evicts this member from the membership ring. After this method is
 		// called, other members will discover that this node is no longer part of the
 		// ring. This primitive is useful to carry out graceful host shutdown during deployments.
 		EvictSelf() error
-		Lookup(service primitives.ServiceName, key string) (HostInfo, error)
+		// EvictSelfAt is similar to EvictSelf but causes the change to take effect on all
+		// hosts at that absolute time (assuming it's in the future). This process should stay
+		// alive for at least the returned duration after calling this, so that all membership
+		// information can be propagated correctly. The resolution of asOf is whole seconds.
+		EvictSelfAt(asOf time.Time) (time.Duration, error)
+		// GetResolver returns the service resolver for a service in the cluster.
 		GetResolver(service primitives.ServiceName) (ServiceResolver, error)
-		// AddListener adds a listener for this service.
-		// The listener will get notified on the given
-		// channel, whenever there is a membership change.
-		// @service: The service to be listened on
-		// @name: The name for identifying the listener
-		// @notifyChannel: The channel on which the caller receives notifications
-		AddListener(service primitives.ServiceName, name string, notifyChannel chan<- *ChangedEvent) error
-		// RemoveListener removes a listener for this service.
-		RemoveListener(service primitives.ServiceName, name string) error
-		// GetReachableMembers returns addresses of all members of the ring
+		// GetReachableMembers returns addresses of all members of the ring.
 		GetReachableMembers() ([]string, error)
-		// GetMemberCount returns the number of reachable members
-		// currently in this node's membership list for the given service
-		GetMemberCount(service primitives.ServiceName) (int, error)
 		// WaitUntilInitialized blocks until initialization is completed and returns the result
 		// of initialization. The current implementation does log.Fatal if it can't initialize,
 		// so currently this will never return non-nil, except for context cancel/timeout. A
 		// future implementation might return more errors.
 		WaitUntilInitialized(context.Context) error
+		// SetDraining sets the draining state (synchronized through ringpop)
+		SetDraining(draining bool) error
+		// ApproximateMaxPropagationTime returns an approximate upper bound on propagation time
+		// for updates to membership information. This is _not_ a guarantee! This value is only
+		// provided to help with startup/shutdown timing as a best-effort.
+		ApproximateMaxPropagationTime() time.Duration
 	}
 
 	// ServiceResolver provides membership information for a specific temporal service.
-	// It can be used to resolve which member host is responsible for serving a given key.
+	// It can also be used to determine the placement of resources across hosts.
 	ServiceResolver interface {
+		// Lookup looks up the host that currently owns the resource identified by the given key.
 		Lookup(key string) (HostInfo, error)
-		// AddListener adds a listener which will get notified on the given
-		// channel, whenever membership changes.
-		// @name: The name for identifying the listener
-		// @notifyChannel: The channel on which the caller receives notifications
+		// LookupN looks n hosts that owns the resource identified by the given key, if n greater than total number
+		// of hosts total number of hosts will be returned
+		LookupN(key string, n int) []HostInfo
+		// AddListener adds a listener which will get notified on the given channel whenever membership changes.
 		AddListener(name string, notifyChannel chan<- *ChangedEvent) error
 		// RemoveListener removes a listener for this service.
 		RemoveListener(name string) error
-		// MemberCount returns host count in hashring for any particular role
+		// MemberCount returns the number of known hosts running this service.
 		MemberCount() int
-		// Members returns all host addresses in hashring for any particular role
+		// AvailableMemberCount returns the number of hosts running this service that are accepting requests (not draining).
+		AvailableMemberCount() int
+		// Members returns all known hosts available for this service.
 		Members() []HostInfo
-		// Requests to rebuild the hash ring
+		// AvailableMembers returns all hosts available for this service that are accepting requests (not draining).
+		AvailableMembers() []HostInfo
+		// RequestRefresh requests that the membership information be refreshed.
 		RequestRefresh()
 	}
 
 	HostInfoProvider interface {
-		Start() error
 		HostInfo() HostInfo
 	}
 )

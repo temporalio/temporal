@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../LICENSE -package $GOPACKAGE -source $GOFILE -destination clientFactory_mock.go
+//go:generate mockgen -copyright_file ../LICENSE -package $GOPACKAGE -source $GOFILE -destination client_factory_mock.go
 
 package client
 
@@ -30,8 +30,6 @@ import (
 	"time"
 
 	"go.temporal.io/api/workflowservice/v1"
-	"google.golang.org/grpc"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -46,6 +44,8 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/testing/testhooks"
+	"google.golang.org/grpc"
 )
 
 type (
@@ -66,6 +66,7 @@ type (
 			monitor membership.Monitor,
 			metricsHandler metrics.Handler,
 			dc *dynamicconfig.Collection,
+			testHooks testhooks.TestHooks,
 			numberOfHistoryShards int32,
 			logger log.Logger,
 			throttledLogger log.Logger,
@@ -80,6 +81,7 @@ type (
 		monitor               membership.Monitor
 		metricsHandler        metrics.Handler
 		dynConfig             *dynamicconfig.Collection
+		testHooks             testhooks.TestHooks
 		numberOfHistoryShards int32
 		logger                log.Logger
 		throttledLogger       log.Logger
@@ -104,6 +106,7 @@ func (p *factoryProviderImpl) NewFactory(
 	monitor membership.Monitor,
 	metricsHandler metrics.Handler,
 	dc *dynamicconfig.Collection,
+	testHooks testhooks.TestHooks,
 	numberOfHistoryShards int32,
 	logger log.Logger,
 	throttledLogger log.Logger,
@@ -113,6 +116,7 @@ func (p *factoryProviderImpl) NewFactory(
 		monitor:               monitor,
 		metricsHandler:        metricsHandler,
 		dynConfig:             dc,
+		testHooks:             testHooks,
 		numberOfHistoryShards: numberOfHistoryShards,
 		logger:                logger,
 		throttledLogger:       throttledLogger,
@@ -124,14 +128,14 @@ func (cf *rpcClientFactory) NewHistoryClientWithTimeout(timeout time.Duration) (
 	if err != nil {
 		return nil, err
 	}
-
-	keyResolver := newServiceKeyResolver(resolver)
-	clientProvider := func(clientKey string) (interface{}, error) {
-		connection := cf.rpcFactory.CreateInternodeGRPCConnection(clientKey)
-		return historyservice.NewHistoryServiceClient(connection), nil
-	}
-	clientCache := common.NewClientCache(keyResolver, clientProvider)
-	client := history.NewClient(cf.numberOfHistoryShards, timeout, clientCache, cf.logger)
+	client := history.NewClient(
+		cf.dynConfig,
+		resolver,
+		cf.logger,
+		cf.numberOfHistoryShards,
+		cf.rpcFactory,
+		timeout,
+	)
 	if cf.metricsHandler != nil {
 		client = history.NewMetricClient(client, cf.metricsHandler, cf.logger, cf.throttledLogger)
 	}
@@ -150,14 +154,16 @@ func (cf *rpcClientFactory) NewMatchingClientWithTimeout(
 
 	keyResolver := newServiceKeyResolver(resolver)
 	clientProvider := func(clientKey string) (interface{}, error) {
-		connection := cf.rpcFactory.CreateInternodeGRPCConnection(clientKey)
+		connection := cf.rpcFactory.CreateMatchingGRPCConnection(clientKey)
 		return matchingservice.NewMatchingServiceClient(connection), nil
 	}
 	client := matching.NewClient(
 		timeout,
 		longPollTimeout,
 		common.NewClientCache(keyResolver, clientProvider),
-		matching.NewLoadBalancer(namespaceIDToName, cf.dynConfig),
+		cf.metricsHandler,
+		cf.logger,
+		matching.NewLoadBalancer(namespaceIDToName, cf.dynConfig, cf.testHooks),
 	)
 
 	if cf.metricsHandler != nil {

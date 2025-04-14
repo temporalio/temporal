@@ -31,5 +31,7 @@ import (
 )
 
 func main() {
-	_ = cassandra.RunTool(os.Args)
+	if err := cassandra.RunTool(os.Args); err != nil {
+		os.Exit(1)
+	}
 }

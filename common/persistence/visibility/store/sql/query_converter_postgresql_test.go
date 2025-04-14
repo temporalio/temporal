@@ -29,8 +29,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/suite"
-	"github.com/xwb1989/sqlparser"
-
+	"github.com/temporalio/sqlparser"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 )
 

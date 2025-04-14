@@ -31,14 +31,15 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/checksum"
 	"go.temporal.io/server/common/util"
-	"golang.org/x/exp/maps"
+	historyi "go.temporal.io/server/service/history/interfaces"
+	expmaps "golang.org/x/exp/maps"
 )
 
 const (
 	mutableStateChecksumPayloadV1 = int32(1)
 )
 
-func generateMutableStateChecksum(ms MutableState) (*persistencespb.Checksum, error) {
+func generateMutableStateChecksum(ms historyi.MutableState) (*persistencespb.Checksum, error) {
 	payload := newMutableStateChecksumPayload(ms)
 	csum, err := checksum.GenerateCRC32(payload, mutableStateChecksumPayloadV1)
 	if err != nil {
@@ -48,7 +49,7 @@ func generateMutableStateChecksum(ms MutableState) (*persistencespb.Checksum, er
 }
 
 func verifyMutableStateChecksum(
-	ms MutableState,
+	ms historyi.MutableState,
 	csum *persistencespb.Checksum,
 ) error {
 	if csum.Version != mutableStateChecksumPayloadV1 {
@@ -58,7 +59,7 @@ func verifyMutableStateChecksum(
 	return checksum.Verify(payload, csum)
 }
 
-func newMutableStateChecksumPayload(ms MutableState) *checksumspb.MutableStateChecksumPayload {
+func newMutableStateChecksumPayload(ms historyi.MutableState) *checksumspb.MutableStateChecksumPayload {
 	executionInfo := ms.GetExecutionInfo()
 	executionState := ms.GetExecutionState()
 	payload := &checksumspb.MutableStateChecksumPayload{
@@ -66,7 +67,12 @@ func newMutableStateChecksumPayload(ms MutableState) *checksumspb.MutableStateCh
 		State:                        executionState.State,
 		LastFirstEventId:             executionInfo.LastFirstEventId,
 		NextEventId:                  ms.GetNextEventID(),
-		LastProcessedEventId:         executionInfo.LastWorkflowTaskStartedEventId,
+		LastProcessedEventId:         executionInfo.LastCompletedWorkflowTaskStartedEventId,
+		ActivityCount:                executionInfo.ActivityCount,
+		ChildExecutionCount:          executionInfo.ChildExecutionCount,
+		UserTimerCount:               executionInfo.UserTimerCount,
+		RequestCancelExternalCount:   executionInfo.RequestCancelExternalCount,
+		SignalExternalCount:          executionInfo.SignalExternalCount,
 		SignalCount:                  executionInfo.SignalCount,
 		WorkflowTaskAttempt:          executionInfo.WorkflowTaskAttempt,
 		WorkflowTaskScheduledEventId: executionInfo.WorkflowTaskScheduledEventId,
@@ -85,20 +91,25 @@ func newMutableStateChecksumPayload(ms MutableState) *checksumspb.MutableStateCh
 	util.SortSlice(pendingTimerIDs)
 	payload.PendingTimerStartedEventIds = pendingTimerIDs
 
-	pendingActivityIDs := maps.Keys(ms.GetPendingActivityInfos())
+	pendingActivityIDs := expmaps.Keys(ms.GetPendingActivityInfos())
 	util.SortSlice(pendingActivityIDs)
 	payload.PendingActivityScheduledEventIds = pendingActivityIDs
 
-	pendingChildIDs := maps.Keys(ms.GetPendingChildExecutionInfos())
+	pendingChildIDs := expmaps.Keys(ms.GetPendingChildExecutionInfos())
 	util.SortSlice(pendingChildIDs)
 	payload.PendingChildInitiatedEventIds = pendingChildIDs
 
-	signalIDs := maps.Keys(ms.GetPendingSignalExternalInfos())
+	signalIDs := expmaps.Keys(ms.GetPendingSignalExternalInfos())
 	util.SortSlice(signalIDs)
 	payload.PendingSignalInitiatedEventIds = signalIDs
 
-	requestCancelIDs := maps.Keys(ms.GetPendingRequestCancelExternalInfos())
+	requestCancelIDs := expmaps.Keys(ms.GetPendingRequestCancelExternalInfos())
 	util.SortSlice(requestCancelIDs)
 	payload.PendingReqCancelInitiatedEventIds = requestCancelIDs
+
+	chasmNodePaths := expmaps.Keys(ms.ChasmTree().Snapshot(nil).Nodes)
+	util.SortSlice(chasmNodePaths)
+	payload.PendingChasmNodePaths = chasmNodePaths
+
 	return payload
 }

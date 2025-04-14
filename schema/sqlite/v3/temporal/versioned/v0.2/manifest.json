@@ -1,0 +1,6 @@
+{
+  "CurrVersion": "0.2",
+  "MinCompatibleVersion": "0.1",
+  "Description": "create task_queue_user_data table",
+  "SchemaUpdateCqlFiles": ["task_queue_user_data.sql"]
+}

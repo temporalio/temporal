@@ -1,6 +1,4 @@
 # Overrides for Mac/Darwin users.
-version: "3.5"
-
 services:
   prometheus:
     volumes:
@@ -12,6 +10,15 @@ services:
   grafana:
     ports:
       - "3000:3000"
+    networks:
+      - temporal-dev-network
+  tempo:
+    depends_on:
+      - grafana
+    ports:
+      - "3200:3200" # tempo
+      - "4317:4317" # otlp grpc
+      - "4318:4318" # otlp http
     networks:
       - temporal-dev-network
   temporal-ui:

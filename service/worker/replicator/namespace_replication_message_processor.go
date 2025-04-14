@@ -26,12 +26,14 @@ package replicator
 
 import (
 	"context"
+	"fmt"
 	"sync/atomic"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/api/adminservice/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
@@ -41,6 +43,7 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/rpc"
 )
@@ -60,10 +63,12 @@ func newNamespaceReplicationMessageProcessor(
 	logger log.Logger,
 	remotePeer adminservice.AdminServiceClient,
 	metricsHandler metrics.Handler,
-	taskExecutor namespace.ReplicationTaskExecutor,
+	namespaceTaskExecutor nsreplication.TaskExecutor,
 	hostInfo membership.HostInfo,
 	serviceResolver membership.ServiceResolver,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
+	matchingClient matchingservice.MatchingServiceClient,
+	namespaceRegistry namespace.Registry,
 ) *namespaceReplicationMessageProcessor {
 	retryPolicy := backoff.NewExponentialRetryPolicy(taskProcessorErrorRetryWait).
 		WithBackoffCoefficient(taskProcessorErrorRetryBackoffCoefficient).
@@ -77,13 +82,15 @@ func newNamespaceReplicationMessageProcessor(
 		sourceCluster:             sourceCluster,
 		logger:                    logger,
 		remotePeer:                remotePeer,
-		taskExecutor:              taskExecutor,
+		namespaceTaskExecutor:     namespaceTaskExecutor,
 		metricsHandler:            metricsHandler.WithTags(metrics.OperationTag(metrics.NamespaceReplicationTaskScope)),
 		retryPolicy:               retryPolicy,
 		lastProcessedMessageID:    -1,
 		lastRetrievedMessageID:    -1,
 		done:                      make(chan struct{}),
 		namespaceReplicationQueue: namespaceReplicationQueue,
+		matchingClient:            matchingClient,
+		namespaceRegistry:         namespaceRegistry,
 	}
 }
 
@@ -96,13 +103,15 @@ type (
 		sourceCluster             string
 		logger                    log.Logger
 		remotePeer                adminservice.AdminServiceClient
-		taskExecutor              namespace.ReplicationTaskExecutor
+		namespaceTaskExecutor     nsreplication.TaskExecutor
 		metricsHandler            metrics.Handler
 		retryPolicy               backoff.RetryPolicy
 		lastProcessedMessageID    int64
 		lastRetrievedMessageID    int64
 		done                      chan struct{}
 		namespaceReplicationQueue persistence.NamespaceReplicationQueue
+		matchingClient            matchingservice.MatchingServiceClient
+		namespaceRegistry         namespace.Registry
 	}
 )
 
@@ -172,7 +181,7 @@ func (p *namespaceReplicationMessageProcessor) getAndHandleNamespaceReplicationT
 		}, p.retryPolicy, isTransientRetryableError)
 
 		if err != nil {
-			p.metricsHandler.Counter(metrics.ReplicatorFailures.GetMetricName()).Record(1)
+			metrics.ReplicatorFailures.With(p.metricsHandler).Record(1)
 			p.logger.Error("Failed to apply namespace replication tasks", tag.Error(err))
 
 			dlqErr := backoff.ThrottleRetry(func() error {
@@ -181,7 +190,7 @@ func (p *namespaceReplicationMessageProcessor) getAndHandleNamespaceReplicationT
 			}, p.retryPolicy, isTransientRetryableError)
 			if dlqErr != nil {
 				p.logger.Error("Failed to put replication tasks to DLQ", tag.Error(dlqErr))
-				p.metricsHandler.Counter(metrics.ReplicatorDLQFailures.GetMetricName()).Record(1)
+				metrics.ReplicatorDLQFailures.With(p.metricsHandler).Record(1)
 				return
 			}
 		}
@@ -195,15 +204,28 @@ func (p *namespaceReplicationMessageProcessor) putNamespaceReplicationTaskToDLQ(
 	ctx context.Context,
 	task *replicationspb.ReplicationTask,
 ) error {
-
-	namespaceAttribute := task.GetNamespaceTaskAttributes()
-	if namespaceAttribute == nil {
+	switch task.TaskType {
+	case enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK:
+		metrics.NamespaceReplicationEnqueueDLQCount.With(p.metricsHandler).
+			Record(1,
+				metrics.ReplicationTaskTypeTag(task.TaskType),
+				metrics.NamespaceTag(task.GetNamespaceTaskAttributes().GetInfo().GetName()),
+			)
+	case enumsspb.REPLICATION_TASK_TYPE_TASK_QUEUE_USER_DATA:
+		ns, err := p.namespaceRegistry.GetNamespaceByID(namespace.ID(task.GetTaskQueueUserDataAttributes().GetNamespaceId()))
+		if err != nil {
+			return err
+		}
+		metrics.NamespaceReplicationEnqueueDLQCount.With(p.metricsHandler).
+			Record(1,
+				metrics.ReplicationTaskTypeTag(task.TaskType),
+				metrics.NamespaceTag(ns.Name().String()),
+			)
+	default:
 		return serviceerror.NewUnavailable(
-			"Namespace replication task does not set namespace task attribute",
+			fmt.Sprintf("Namespace replication task type not supported: %v", task.TaskType),
 		)
 	}
-	p.metricsHandler.Counter(metrics.NamespaceReplicationEnqueueDLQCount.GetMetricName()).
-		Record(1, metrics.NamespaceTag(namespaceAttribute.GetInfo().GetName()))
 	return p.namespaceReplicationQueue.PublishToDLQ(ctx, task)
 }
 
@@ -211,13 +233,61 @@ func (p *namespaceReplicationMessageProcessor) handleNamespaceReplicationTask(
 	ctx context.Context,
 	task *replicationspb.ReplicationTask,
 ) error {
-	p.metricsHandler.Counter(metrics.ReplicatorMessages.GetMetricName()).Record(1)
+	metricsTag := metrics.ReplicationTaskTypeTag(task.TaskType)
+	metrics.ReplicatorMessages.With(p.metricsHandler).Record(1, metricsTag)
 	startTime := time.Now().UTC()
 	defer func() {
-		p.metricsHandler.Timer(metrics.ReplicatorLatency.GetMetricName()).Record(time.Since(startTime))
+		metrics.ReplicatorLatency.With(p.metricsHandler).Record(time.Since(startTime), metricsTag)
 	}()
 
-	return p.taskExecutor.Execute(ctx, task.GetNamespaceTaskAttributes())
+	switch task.TaskType {
+	case enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK:
+		attr := task.GetNamespaceTaskAttributes()
+		err := p.namespaceTaskExecutor.Execute(ctx, attr)
+		if err != nil {
+			p.logger.Error("unable to process namespace replication task",
+				tag.WorkflowNamespaceID(attr.Id))
+		}
+		return err
+	case enumsspb.REPLICATION_TASK_TYPE_TASK_QUEUE_USER_DATA:
+		attr := task.GetTaskQueueUserDataAttributes()
+		err := p.handleTaskQueueUserDataReplicationTask(ctx, attr)
+		if err != nil {
+			p.logger.Error(fmt.Sprintf("unable to process task queue metadata replication task, %v", attr.TaskQueueName),
+				tag.WorkflowNamespaceID(attr.NamespaceId))
+		}
+		return err
+	default:
+		return fmt.Errorf("cannot handle replication task of type %v", task.TaskType)
+	}
+}
+
+func (p *namespaceReplicationMessageProcessor) handleTaskQueueUserDataReplicationTask(
+	ctx context.Context,
+	attrs *replicationspb.TaskQueueUserDataAttributes,
+) error {
+	_, err := p.namespaceRegistry.GetNamespaceByID(namespace.ID(attrs.GetNamespaceId()))
+	switch err.(type) {
+	case nil:
+	case *serviceerror.NamespaceNotFound:
+		// The namespace in the request isn't registered on this cluster, drop the replication task.
+		// This is okay and enables using the cluster-global replication queue to replicate different namespaces to
+		// different sets of clusters.
+		// When this cluster is added to the list of replicated clusters for this namespace on the origin cluster, the
+		// force replication workflow should be triggered to seed the namespace replication queue with all task queue
+		// user data entries for the namespace.
+		return nil
+	default:
+		// return the original err
+		return err
+	}
+
+	_, err = p.matchingClient.ApplyTaskQueueUserDataReplicationEvent(ctx, &matchingservice.ApplyTaskQueueUserDataReplicationEventRequest{
+		NamespaceId: attrs.GetNamespaceId(),
+		TaskQueue:   attrs.GetTaskQueueName(),
+		UserData:    attrs.GetUserData(),
+	})
+	return err
 }
 
 func (p *namespaceReplicationMessageProcessor) Stop() {

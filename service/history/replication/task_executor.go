@@ -32,11 +32,11 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -44,8 +44,7 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/deletemanager"
-	"go.temporal.io/server/service/history/shard"
-	"go.temporal.io/server/service/history/workflow"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
@@ -56,7 +55,7 @@ type (
 
 	TaskExecutorParams struct {
 		RemoteCluster   string // TODO: Remove this remote cluster from executor then it can use singleton.
-		Shard           shard.Context
+		Shard           historyi.ShardContext
 		HistoryResender xdc.NDCHistoryResender
 		DeleteManager   deletemanager.DeleteManager
 		WorkflowCache   wcache.Cache
@@ -67,7 +66,7 @@ type (
 	taskExecutorImpl struct {
 		currentCluster     string
 		remoteCluster      string
-		shardContext       shard.Context
+		shardContext       historyi.ShardContext
 		namespaceRegistry  namespace.Registry
 		nDCHistoryResender xdc.NDCHistoryResender
 		deleteManager      deletemanager.DeleteManager
@@ -81,7 +80,7 @@ type (
 // The executor uses by 1) DLQ replication task handler 2) history replication task processor
 func NewTaskExecutor(
 	remoteCluster string,
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	nDCHistoryResender xdc.NDCHistoryResender,
 	deleteManager deletemanager.DeleteManager,
 	workflowCache wcache.Cache,
@@ -117,7 +116,8 @@ func (e *taskExecutorImpl) Execute(
 	case enumsspb.REPLICATION_TASK_TYPE_SYNC_WORKFLOW_STATE_TASK:
 		err = e.handleSyncWorkflowStateTask(ctx, replicationTask, forceApply)
 	default:
-		e.logger.Error("Unknown task type.")
+		// NOTE: not handling SyncHSMTask in this deprecated code path, task will go to DLQ
+		e.logger.Error("Unknown replication task type.", tag.ReplicationTask(replicationTask))
 		err = ErrUnknownReplicationTask
 	}
 
@@ -138,29 +138,33 @@ func (e *taskExecutorImpl) handleActivityTask(
 
 	startTime := time.Now().UTC()
 	defer func() {
-		e.metricsHandler.Timer(metrics.ServiceLatency.GetMetricName()).Record(
+		metrics.ServiceLatency.With(e.metricsHandler).Record(
 			time.Since(startTime),
 			metrics.OperationTag(metrics.SyncActivityTaskScope),
+			metrics.NamespaceTag(attr.GetNamespaceId()),
 		)
 	}()
 
 	request := &historyservice.SyncActivityRequest{
-		NamespaceId:        attr.NamespaceId,
-		WorkflowId:         attr.WorkflowId,
-		RunId:              attr.RunId,
-		Version:            attr.Version,
-		ScheduledEventId:   attr.ScheduledEventId,
-		ScheduledTime:      attr.ScheduledTime,
-		StartedEventId:     attr.StartedEventId,
-		StartedTime:        attr.StartedTime,
-		LastHeartbeatTime:  attr.LastHeartbeatTime,
-		Details:            attr.Details,
-		Attempt:            attr.Attempt,
-		LastFailure:        attr.LastFailure,
-		LastWorkerIdentity: attr.LastWorkerIdentity,
-		VersionHistory:     attr.GetVersionHistory(),
+		NamespaceId:                attr.NamespaceId,
+		WorkflowId:                 attr.WorkflowId,
+		RunId:                      attr.RunId,
+		Version:                    attr.Version,
+		ScheduledEventId:           attr.ScheduledEventId,
+		ScheduledTime:              attr.ScheduledTime,
+		StartedEventId:             attr.StartedEventId,
+		StartedTime:                attr.StartedTime,
+		LastHeartbeatTime:          attr.LastHeartbeatTime,
+		Details:                    attr.Details,
+		Attempt:                    attr.Attempt,
+		LastFailure:                attr.LastFailure,
+		LastWorkerIdentity:         attr.LastWorkerIdentity,
+		LastStartedBuildId:         attr.LastStartedBuildId,
+		LastStartedRedirectCounter: attr.LastStartedRedirectCounter,
+		VersionHistory:             attr.GetVersionHistory(),
 	}
-	ctx, cancel := e.newTaskContext(ctx, attr.NamespaceId)
+	namespaceName, _ := e.namespaceRegistry.GetNamespaceName(namespace.ID(attr.NamespaceId))
+	ctx, cancel := e.newTaskContext(ctx, namespaceName)
 	defer cancel()
 
 	// This might be extra cost if the workflow belongs to local shard.
@@ -171,15 +175,19 @@ func (e *taskExecutorImpl) handleActivityTask(
 		return nil
 
 	case *serviceerrors.RetryReplication:
-		e.metricsHandler.Counter(metrics.ClientRequests.GetMetricName()).Record(
+		metrics.ClientRequests.With(e.metricsHandler).Record(
 			1,
 			metrics.OperationTag(metrics.HistoryRereplicationByActivityReplicationScope),
+			metrics.NamespaceTag(namespaceName.String()),
+			metrics.ServiceRoleTag(metrics.HistoryRoleTagValue),
 		)
 		startTime := time.Now().UTC()
 		defer func() {
-			e.metricsHandler.Timer(metrics.ClientLatency.GetMetricName()).Record(
+			metrics.ClientLatency.With(e.metricsHandler).Record(
 				time.Since(startTime),
 				metrics.OperationTag(metrics.HistoryRereplicationByActivityReplicationScope),
+				metrics.NamespaceTag(namespaceName.String()),
+				metrics.ServiceRoleTag(metrics.HistoryRoleTagValue),
 			)
 		}()
 
@@ -228,9 +236,10 @@ func (e *taskExecutorImpl) handleHistoryReplicationTask(
 
 	startTime := time.Now().UTC()
 	defer func() {
-		e.metricsHandler.Timer(metrics.ServiceLatency.GetMetricName()).Record(
+		metrics.ServiceLatency.With(e.metricsHandler).Record(
 			time.Since(startTime),
 			metrics.OperationTag(metrics.HistoryReplicationTaskScope),
+			metrics.NamespaceTag(attr.GetNamespaceId()),
 		)
 	}()
 
@@ -244,8 +253,10 @@ func (e *taskExecutorImpl) handleHistoryReplicationTask(
 		Events:              attr.Events,
 		// new run events does not need version history since there is no prior events
 		NewRunEvents: attr.NewRunEvents,
+		NewRunId:     attr.NewRunId,
 	}
-	ctx, cancel := e.newTaskContext(ctx, attr.NamespaceId)
+	namespaceName, _ := e.namespaceRegistry.GetNamespaceName(namespace.ID(attr.NamespaceId))
+	ctx, cancel := e.newTaskContext(ctx, namespaceName)
 	defer cancel()
 
 	// This might be extra cost if the workflow belongs to local shard.
@@ -256,15 +267,19 @@ func (e *taskExecutorImpl) handleHistoryReplicationTask(
 		return nil
 
 	case *serviceerrors.RetryReplication:
-		e.metricsHandler.Counter(metrics.ClientRequests.GetMetricName()).Record(
+		metrics.ClientRequests.With(e.metricsHandler).Record(
 			1,
 			metrics.OperationTag(metrics.HistoryRereplicationByHistoryReplicationScope),
+			metrics.NamespaceTag(namespaceName.String()),
+			metrics.ServiceRoleTag(metrics.HistoryRoleTagValue),
 		)
 		startTime := time.Now().UTC()
 		defer func() {
-			e.metricsHandler.Timer(metrics.ClientLatency.GetMetricName()).Record(
+			metrics.ClientLatency.With(e.metricsHandler).Record(
 				time.Since(startTime),
 				metrics.OperationTag(metrics.HistoryRereplicationByHistoryReplicationScope),
+				metrics.NamespaceTag(namespaceName.String()),
+				metrics.ServiceRoleTag(metrics.HistoryRoleTagValue),
 			)
 		}()
 
@@ -315,17 +330,47 @@ func (e *taskExecutorImpl) handleSyncWorkflowStateTask(
 		return err
 	}
 
-	ctx, cancel := e.newTaskContext(ctx, executionInfo.NamespaceId)
+	namespaceName, _ := e.namespaceRegistry.GetNamespaceName(namespace.ID(executionInfo.NamespaceId))
+	ctx, cancel := e.newTaskContext(ctx, namespaceName)
 	defer cancel()
 
 	// This might be extra cost if the workflow belongs to local shard.
 	// Add a wrapper of the history client to call history engine directly if it becomes an issue.
-	_, err = e.shardContext.GetHistoryClient().ReplicateWorkflowState(ctx, &historyservice.ReplicateWorkflowStateRequest{
+	request := &historyservice.ReplicateWorkflowStateRequest{
 		NamespaceId:   namespaceID.String(),
 		WorkflowState: attr.GetWorkflowState(),
 		RemoteCluster: e.remoteCluster,
-	})
-	return err
+	}
+	_, err = e.shardContext.GetHistoryClient().ReplicateWorkflowState(ctx, request)
+	switch retryErr := err.(type) {
+	case nil:
+		return nil
+	case *serviceerrors.RetryReplication:
+		resendErr := e.nDCHistoryResender.SendSingleWorkflowHistory(
+			ctx,
+			e.remoteCluster,
+			namespace.ID(retryErr.NamespaceId),
+			retryErr.WorkflowId,
+			retryErr.RunId,
+			retryErr.StartEventId,
+			retryErr.StartEventVersion,
+			retryErr.EndEventId,
+			retryErr.EndEventVersion,
+		)
+		switch resendErr.(type) {
+		case *serviceerror.NotFound:
+			// workflow is not found in source cluster, cleanup workflow in target cluster
+			return e.cleanupWorkflowExecution(ctx, retryErr.NamespaceId, retryErr.WorkflowId, retryErr.RunId)
+		case nil:
+			_, err = e.shardContext.GetHistoryClient().ReplicateWorkflowState(ctx, request)
+			return err
+		default:
+			e.logger.Error("error resend history for replicate workflow state", tag.Error(resendErr))
+			return err
+		}
+	default:
+		return err
+	}
 }
 
 func (e *taskExecutorImpl) filterTask(
@@ -363,12 +408,12 @@ func (e *taskExecutorImpl) cleanupWorkflowExecution(ctx context.Context, namespa
 		WorkflowId: workflowID,
 		RunId:      runID,
 	}
-	wfCtx, releaseFn, err := e.workflowCache.GetOrCreateWorkflowExecution(ctx, nsID, ex, workflow.CallerTypeTask)
+	wfCtx, releaseFn, err := e.workflowCache.GetOrCreateWorkflowExecution(ctx, e.shardContext, nsID, &ex, locks.PriorityLow)
 	if err != nil {
 		return err
 	}
 	defer func() { releaseFn(retErr) }()
-	mutableState, err := wfCtx.LoadMutableState(ctx)
+	mutableState, err := wfCtx.LoadMutableState(ctx, e.shardContext)
 	if err != nil {
 		return err
 	}
@@ -376,7 +421,7 @@ func (e *taskExecutorImpl) cleanupWorkflowExecution(ctx context.Context, namespa
 	return e.deleteManager.DeleteWorkflowExecution(
 		ctx,
 		nsID,
-		ex,
+		&ex,
 		wfCtx,
 		mutableState,
 		false,
@@ -386,12 +431,10 @@ func (e *taskExecutorImpl) cleanupWorkflowExecution(ctx context.Context, namespa
 
 func (e *taskExecutorImpl) newTaskContext(
 	parentCtx context.Context,
-	namespaceID string,
+	namespaceName namespace.Name,
 ) (context.Context, context.CancelFunc) {
 	ctx, cancel := context.WithTimeout(parentCtx, replicationTimeout)
-
-	namespace, _ := e.namespaceRegistry.GetNamespaceName(namespace.ID(namespaceID))
-	ctx = headers.SetCallerName(ctx, namespace.String())
+	ctx = headers.SetCallerName(ctx, namespaceName.String())
 
 	return ctx, cancel
 }

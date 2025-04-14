@@ -1,18 +1,18 @@
+## What changed?
 <!-- Describe what has changed in this PR -->
-**What changed?**
 
-
+## Why?
 <!-- Tell your future self why have you made these changes -->
-**Why?**
 
-
+## How did you test it?
 <!-- How have you verified this change? Tested locally? Added a unit test? Checked in staging env? -->
-**How did you test it?**
 
-
+## Potential risks
 <!-- Assuming the worst case, what can be broken when deploying this change to production? -->
-**Potential risks**
 
+## Documentation
+<!-- Have you made sure this change doesn't falsify anything currently stated in `docs/`? If significant
+new behavior is added, have you described that in `docs/`? -->
 
-<!-- Is this PR a hotfix candidate or require that a notification be sent to the broader community? (Yes/No) -->
-**Is hotfix candidate?**
+## Is hotfix candidate?
+<!-- Is this PR a hotfix candidate or does it require a notification to be sent to the broader community? (Yes/No) -->

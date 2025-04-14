@@ -29,18 +29,33 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-
 	"go.temporal.io/server/common/config"
+	"go.uber.org/mock/gomock"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 )
 
 var (
-	claimsNone          = Claims{}
-	claimsNamespaceOnly = Claims{
+	claimsNone           = Claims{}
+	claimsNamespaceAdmin = Claims{
+		Namespaces: map[string]Role{
+			testNamespace: RoleAdmin,
+		},
+	}
+	claimsNamespaceWriter = Claims{
 		Namespaces: map[string]Role{
 			testNamespace: RoleWriter,
+		},
+	}
+	claimsNamespaceReader = Claims{
+		Namespaces: map[string]Role{
+			testNamespace: RoleReader,
+		},
+	}
+	claimsBarAdmin = Claims{
+		Namespaces: map[string]Role{
+			"bar": RoleAdmin,
 		},
 	}
 	claimsSystemAdmin = Claims{
@@ -52,42 +67,33 @@ var (
 	claimsSystemReader = Claims{
 		System: RoleReader,
 	}
-	claimsSystemReaderNamespaceUndefined = Claims{
-		System: RoleReader,
-		Namespaces: map[string]Role{
-			"bar": RoleUndefined,
-		},
-	}
-	claimsSystemUndefinedNamespaceReader = Claims{
-		System: RoleUndefined,
-		Namespaces: map[string]Role{
-			"bar": RoleReader,
-		},
-	}
-
-	targetFooBar = CallTarget{
-		APIName:   "Foo",
+	targetNamespaceWriteBar = CallTarget{
+		APIName:   "/temporal.api.workflowservice.v1.WorkflowService/RespondWorkflowTaskCompleted",
 		Namespace: "bar",
 	}
-	targetFooBAR = CallTarget{
-		APIName:   "Foo",
+	targetNamespaceWriteBAR = CallTarget{
+		APIName:   "/temporal.api.workflowservice.v1.WorkflowService/RespondWorkflowTaskCompleted",
 		Namespace: "BAR",
 	}
-	targetListNamespaces = CallTarget{
-		APIName:   "/temporal.api.workflowservice.v1.WorkflowService/ListNamespaces",
-		Namespace: "BAR",
-	}
-	targetDescribeNamespace = CallTarget{
-		APIName:   "/temporal.api.workflowservice.v1.WorkflowService/DescribeNamespace",
-		Namespace: "BAR",
+	targetOperatorNamespaceRead = CallTarget{
+		APIName:   "/temporal.api.operatorservice.v1.OperatorService/ListSearchAttributes",
+		Namespace: testNamespace,
 	}
 	targetGrpcHealthCheck = CallTarget{
-		APIName:   "/grpc.health.v1.Health/Check",
+		APIName:   healthpb.Health_Check_FullMethodName,
 		Namespace: "",
 	}
 	targetGetSystemInfo = CallTarget{
 		APIName:   "/temporal.api.workflowservice.v1.WorkflowService/GetSystemInfo",
 		Namespace: "",
+	}
+	targetStartWorkflow = CallTarget{
+		APIName:   "/temporal.api.workflowservice.v1.WorkflowService/StartWorkflowExecution",
+		Namespace: testNamespace,
+	}
+	targetAdminAPI = CallTarget{
+		APIName:   "/temporal.server.api.adminservice.v1.AdminService/AddSearchAttributes",
+		Namespace: testNamespace,
 	}
 )
 
@@ -116,87 +122,60 @@ func (s *defaultAuthorizerSuite) TearDownTest() {
 	s.controller.Finish()
 }
 
-func (s *defaultAuthorizerSuite) TestSystemAdminAuthZ() {
-	result, err := s.authorizer.Authorize(context.TODO(), &claimsSystemAdmin, &targetFooBar)
-	s.NoError(err)
-	s.Equal(DecisionAllow, result.Decision)
-}
-func (s *defaultAuthorizerSuite) TestSystemWriterAuthZ() {
-	result, err := s.authorizer.Authorize(context.TODO(), &claimsSystemWriter, &targetFooBar)
-	s.NoError(err)
-	s.Equal(DecisionAllow, result.Decision)
-}
-func (s *defaultAuthorizerSuite) TestSystemReaderAuthZ() {
-	result, err := s.authorizer.Authorize(context.TODO(), &claimsSystemReader, &targetFooBar)
-	s.NoError(err)
-	s.Equal(DecisionDeny, result.Decision)
-}
-func (s *defaultAuthorizerSuite) TestSystemReaderBarUndefinedAuthZ() {
-	result, err := s.authorizer.Authorize(context.TODO(), &claimsSystemReaderNamespaceUndefined, &targetFooBar)
-	s.NoError(err)
-	s.Equal(DecisionDeny, result.Decision)
-}
-func (s *defaultAuthorizerSuite) TestSystemUndefinedNamespaceReaderAuthZ() {
-	result, err := s.authorizer.Authorize(context.TODO(), &claimsSystemUndefinedNamespaceReader, &targetFooBar)
-	s.NoError(err)
-	s.Equal(DecisionDeny, result.Decision)
-}
-func (s *defaultAuthorizerSuite) TestSystemUndefinedNamespaceCaseMismatch() {
-	result, err := s.authorizer.Authorize(context.TODO(), &claimsSystemUndefinedNamespaceReader, &targetFooBAR)
-	s.NoError(err)
-	s.Equal(DecisionDeny, result.Decision)
-}
-func (s *defaultAuthorizerSuite) TestSystemUndefinedNamespaceReaderListNamespaces() {
-	result, err := s.authorizer.Authorize(context.TODO(), &claimsSystemUndefinedNamespaceReader, &targetListNamespaces)
-	s.NoError(err)
-	s.Equal(DecisionDeny, result.Decision)
-}
-func (s *defaultAuthorizerSuite) TestSystemUndefinedNamespaceReaderDescribeNamespace() {
-	result, err := s.authorizer.Authorize(context.TODO(), &claimsSystemUndefinedNamespaceReader, &targetDescribeNamespace)
-	s.NoError(err)
-	s.Equal(DecisionAllow, result.Decision)
-}
-func (s *defaultAuthorizerSuite) TestSystemWriterDescribeNamespace() {
-	result, err := s.authorizer.Authorize(context.TODO(), &claimsSystemWriter, &targetDescribeNamespace)
-	s.NoError(err)
-	s.Equal(DecisionAllow, result.Decision)
-}
-func (s *defaultAuthorizerSuite) TestSystemWriterListNamespaces() {
-	result, err := s.authorizer.Authorize(context.TODO(), &claimsSystemWriter, &targetListNamespaces)
-	s.NoError(err)
-	s.Equal(DecisionAllow, result.Decision)
-}
-func (s *defaultAuthorizerSuite) TestSystemAdminDescribeNamespace() {
-	result, err := s.authorizer.Authorize(context.TODO(), &claimsSystemAdmin, &targetDescribeNamespace)
-	s.NoError(err)
-	s.Equal(DecisionAllow, result.Decision)
-}
-func (s *defaultAuthorizerSuite) TestSystemAdminListNamespaces() {
-	result, err := s.authorizer.Authorize(context.TODO(), &claimsSystemAdmin, &targetListNamespaces)
-	s.NoError(err)
-	s.Equal(DecisionAllow, result.Decision)
-}
-func (s *defaultAuthorizerSuite) TestNamespaceOnly() {
-	// don't need any system-level claims to do namespace-level apis
-	result, err := s.authorizer.Authorize(context.TODO(), &claimsNamespaceOnly, startWorkflowExecutionTarget)
-	s.NoError(err)
-	s.Equal(DecisionAllow, result.Decision)
-}
-func (s *defaultAuthorizerSuite) TestHealthChecks() {
-	// all health checks should work all the time
-	for _, claims := range []*Claims{
-		nil,
-		&claimsNone,
-		&claimsNamespaceOnly,
-	} {
-		for _, target := range []*CallTarget{
-			&targetGrpcHealthCheck,
-			&targetGetSystemInfo,
-		} {
-			result, err := s.authorizer.Authorize(context.TODO(), claims, target)
-			s.NoError(err)
-			s.Equal(DecisionAllow, result.Decision)
-		}
+func (s *defaultAuthorizerSuite) TestAuthorize() {
+	testCases := []struct {
+		Name     string
+		Claims   Claims
+		Target   CallTarget
+		Decision Decision
+	}{
+		// SystemAdmin is allowed on everything
+		{"SystemAdminOnFooBar", claimsSystemAdmin, targetNamespaceWriteBar, DecisionAllow},
+		{"SystemAdminOnAdminAPI", claimsSystemAdmin, targetAdminAPI, DecisionAllow},
+		{"SystemAdminOnStartWorkflow", claimsSystemAdmin, targetStartWorkflow, DecisionAllow},
+
+		// SystemWriter is allowed on all read only APIs and non-admin APIs on every namespaces
+		{"SystemWriterOnFooBar", claimsSystemWriter, targetNamespaceWriteBar, DecisionAllow},
+		{"SystemWriterOnAdminAPI", claimsSystemWriter, targetAdminAPI, DecisionDeny},
+		{"SystemWriterOnStartWorkflow", claimsSystemWriter, targetStartWorkflow, DecisionAllow},
+
+		// SystemReader is allowed on all read only APIs and blocked
+		{"SystemReaderOnFooBar", claimsSystemReader, targetNamespaceWriteBar, DecisionDeny},
+		{"SystemReaderOnAdminAPI", claimsSystemReader, targetAdminAPI, DecisionDeny},
+		{"SystemReaderOnStartWorkflow", claimsSystemReader, targetStartWorkflow, DecisionDeny},
+
+		// NamespaceAdmin is allowed on admin service to their own namespaces (test-namespace)
+		{"NamespaceAdminOnAdminAPI", claimsNamespaceAdmin, targetAdminAPI, DecisionDeny},
+		{"NamespaceAdminOnStartWorkflow", claimsNamespaceAdmin, targetStartWorkflow, DecisionAllow},
+		{"NamespaceAdminOnFooBar", claimsNamespaceAdmin, targetNamespaceWriteBar, DecisionDeny}, // namespace mismatch
+
+		{"BarAdminOnFooBar", claimsBarAdmin, targetNamespaceWriteBar, DecisionAllow},
+		{"BarAdminOnFooBAR", claimsBarAdmin, targetNamespaceWriteBAR, DecisionDeny}, // namespace case mismatch
+
+		// NamespaceWriter is not allowed on admin APIs
+		{"NamespaceWriterOnAdminAPI", claimsNamespaceWriter, targetAdminAPI, DecisionDeny},
+		{"NamespaceWriterOnStartWorkflow", claimsNamespaceWriter, targetStartWorkflow, DecisionAllow},
+		{"NamespaceWriterOnOperatorNamespaceRead", claimsNamespaceWriter, targetOperatorNamespaceRead, DecisionAllow},
+		{"NamespaceWriterOnFooBar", claimsNamespaceWriter, targetNamespaceWriteBar, DecisionDeny}, // namespace mismatch
+
+		// NamespaceReader is allowed on read-only APIs on non admin service
+		{"NamespaceReaderOnAdminAPI", claimsNamespaceReader, targetAdminAPI, DecisionDeny},
+		{"NamespaceReaderOnStartWorkflow", claimsNamespaceReader, targetStartWorkflow, DecisionDeny},
+		{"NamespaceReaderOnFooBar", claimsNamespaceReader, targetNamespaceWriteBar, DecisionDeny}, // namespace mismatch
+		{"NamespaceReaderOnListWorkflow", claimsNamespaceReader, targetGetSystemInfo, DecisionAllow},
+		{"NamespaceReaderOnOperatorNamespaceRead", claimsNamespaceReader, targetOperatorNamespaceRead, DecisionAllow},
+
+		// healthcheck allowed to everyone
+		{"RoleNoneOnGetSystemInfo", claimsNone, targetGetSystemInfo, DecisionAllow},
+		{"NamespaceReaderOnGetSystemInfo", claimsNamespaceReader, targetGetSystemInfo, DecisionAllow},
+		{"RoleNoneOnHealthCheck", claimsNone, targetGrpcHealthCheck, DecisionAllow},
+		{"NamespaceReaderOnHealthCheck", claimsNamespaceReader, targetGrpcHealthCheck, DecisionAllow},
+	}
+
+	for _, tt := range testCases {
+		result, err := s.authorizer.Authorize(context.TODO(), &tt.Claims, &tt.Target)
+		s.NoError(err)
+		s.Equal(tt.Decision, result.Decision, "Failed case: %v", tt.Name)
 	}
 }
 

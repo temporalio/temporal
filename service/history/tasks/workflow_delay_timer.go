@@ -38,6 +38,8 @@ type (
 		definition.WorkflowKey
 		VisibilityTimestamp time.Time
 		TaskID              int64
+		// TODO: this is not used right now, but we should check it
+		// against workflow start version in timer task executor
 		Version             int64
 		WorkflowBackoffType enumsspb.WorkflowBackoffType
 	}

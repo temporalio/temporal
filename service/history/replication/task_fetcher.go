@@ -27,11 +27,10 @@
 package replication
 
 import (
+	"maps"
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"golang.org/x/exp/maps"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
@@ -56,18 +55,17 @@ const (
 type (
 	// TaskFetcherFactory is a group of fetchers, one per source DC.
 	TaskFetcherFactory interface {
-		common.Daemon
-
 		GetOrCreateFetcher(clusterName string) taskFetcher
+		Start()
+		Stop()
 	}
 
 	// taskFetcher is responsible for fetching replication messages from remote DC.
 	taskFetcher interface {
-		common.Daemon
-
 		getSourceCluster() string
 		getRequestChan() chan<- *replicationTaskRequest
 		getRateLimiter() quotas.RateLimiter
+		Stop()
 	}
 
 	// taskFetcherFactoryImpl is a group of fetchers, one per source DC.
@@ -119,7 +117,6 @@ func NewTaskFetcherFactory(
 	clusterMetadata cluster.Metadata,
 	clientBean client.Bean,
 ) TaskFetcherFactory {
-
 	return &taskFetcherFactoryImpl{
 		clusterMetadata: clusterMetadata,
 		clientBean:      clientBean,

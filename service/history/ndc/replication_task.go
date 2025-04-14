@@ -25,24 +25,26 @@
 package ndc
 
 import (
+	"fmt"
 	"time"
-
-	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence/serialization"
-	"go.temporal.io/server/common/util"
 
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
-
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
+	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/consts"
 )
 
@@ -57,29 +59,35 @@ type (
 		getLastEvent() *historypb.HistoryEvent
 		getVersion() int64
 		getSourceCluster() string
-		getEvents() []*historypb.HistoryEvent
+		getEvents() [][]*historypb.HistoryEvent
 		getNewEvents() []*historypb.HistoryEvent
+		getNewRunID() string
+		getVersionedTransition() *persistencespb.VersionedTransition
 		getLogger() log.Logger
+		getBaseWorkflowInfo() *workflowspb.BaseExecutionInfo
 		getVersionHistory() *historyspb.VersionHistory
 		isWorkflowReset() bool
+		stateBased() bool
 
-		splitTask(taskStartTime time.Time) (replicationTask, replicationTask, error)
+		skipDuplicatedEvents(skipIndex int) error
+		splitTask() (replicationTask, replicationTask, error)
 	}
 
 	replicationTaskImpl struct {
-		sourceCluster  string
-		namespaceID    namespace.ID
-		execution      *commonpb.WorkflowExecution
-		version        int64
-		firstEvent     *historypb.HistoryEvent
-		lastEvent      *historypb.HistoryEvent
-		eventTime      time.Time
-		events         []*historypb.HistoryEvent
-		newEvents      []*historypb.HistoryEvent
-		versionHistory *historyspb.VersionHistory
-
-		startTime time.Time
-		logger    log.Logger
+		sourceCluster       string
+		workflowKey         definition.WorkflowKey
+		version             int64
+		firstEvent          *historypb.HistoryEvent
+		lastEvent           *historypb.HistoryEvent
+		eventTime           time.Time
+		baseWorkflowInfo    *workflowspb.BaseExecutionInfo
+		versionHistory      *historyspb.VersionHistory
+		events              [][]*historypb.HistoryEvent
+		newEvents           []*historypb.HistoryEvent
+		newRunID            string
+		versionedTransition *persistencespb.VersionedTransition
+		isStateBased        bool
+		logger              log.Logger
 	}
 )
 
@@ -96,14 +104,17 @@ var (
 	ErrEventVersionMismatch = serviceerror.NewInvalidArgument("event version mismatch")
 	// ErrNoNewRunHistory is returned if there is no new run history
 	ErrNoNewRunHistory = serviceerror.NewInvalidArgument("no new run history events")
-	// ErrLastEventIsNotContinueAsNew is returned if the last event is not continue as new
-	ErrLastEventIsNotContinueAsNew = serviceerror.NewInvalidArgument("last event is not continue as new")
+	// ErrNoNewRunID is returned if there is newRunHistory but no new runID
+	ErrNoNewRunID = serviceerror.NewInvalidArgument("no new run ID")
+	// ErrEmptyEventSlice is returned if any of event slice is empty
+	ErrEmptyEventSlice = serviceerror.NewInvalidArgument("event slice is empty")
+	// ErrEventSlicesNotConsecutive is returned if event slices are not consecutive
+	ErrEventSlicesNotConsecutive = serviceerror.NewInvalidArgument("event slices are not consecutive")
 )
 
-func newReplicationTask(
+func newReplicationTaskFromRequest(
 	clusterMetadata cluster.Metadata,
 	historySerializer serialization.Serializer,
-	taskStartTime time.Time,
 	logger log.Logger,
 	request *historyservice.ReplicateEventsV2Request,
 ) (*replicationTaskImpl, error) {
@@ -116,31 +127,119 @@ func newReplicationTask(
 		return nil, err
 	}
 
-	namespaceID := namespace.ID(request.GetNamespaceId())
-	execution := request.WorkflowExecution
-	versionHistory := &historyspb.VersionHistory{
-		BranchToken: nil,
-		Items:       request.VersionHistoryItems,
+	return newReplicationTask(
+		clusterMetadata,
+		logger,
+		definition.NewWorkflowKey(
+			request.GetNamespaceId(),
+			request.WorkflowExecution.WorkflowId,
+			request.WorkflowExecution.RunId,
+		),
+		request.BaseExecutionInfo,
+		request.VersionHistoryItems,
+		[][]*historypb.HistoryEvent{events},
+		newEvents,
+		request.NewRunId,
+		nil,
+		false,
+	)
+}
+
+func newReplicationTaskFromBatch(
+	clusterMetadata cluster.Metadata,
+	logger log.Logger,
+	workflowKey definition.WorkflowKey,
+	baseExecutionInfo *workflowspb.BaseExecutionInfo,
+	versionHistoryItems []*historyspb.VersionHistoryItem,
+	eventsSlice [][]*historypb.HistoryEvent,
+	newEvents []*historypb.HistoryEvent,
+	newRunID string,
+	versionedTransition *persistencespb.VersionedTransition,
+	isStateBased bool,
+) (*replicationTaskImpl, error) {
+
+	if len(eventsSlice) == 0 {
+		return nil, consts.ErrEmptyHistoryRawEventBatch
+	}
+	version, err := validateEventsSlice(eventsSlice...)
+	if err != nil {
+		return nil, err
+	}
+	if len(newEvents) != 0 {
+		newRunVersion, err := validateEvents(newEvents)
+		if err != nil {
+			return nil, err
+		}
+		if version != newRunVersion {
+			return nil, ErrEventVersionMismatch
+		}
 	}
 
-	firstEvent := events[0]
-	lastEvent := events[len(events)-1]
+	return newReplicationTask(
+		clusterMetadata,
+		logger,
+		workflowKey,
+		baseExecutionInfo,
+		versionHistoryItems,
+		eventsSlice,
+		newEvents,
+		newRunID,
+		versionedTransition,
+		isStateBased,
+	)
+}
+
+func newReplicationTask(
+	clusterMetadata cluster.Metadata,
+	logger log.Logger,
+	workflowKey definition.WorkflowKey,
+	baseExecutionInfo *workflowspb.BaseExecutionInfo,
+	versionHistoryItems []*historyspb.VersionHistoryItem,
+	eventsSlice [][]*historypb.HistoryEvent,
+	newEvents []*historypb.HistoryEvent,
+	newRunID string,
+	versionedTransition *persistencespb.VersionedTransition,
+	isStateBased bool,
+) (*replicationTaskImpl, error) {
+
+	versionHistory := &historyspb.VersionHistory{
+		BranchToken: nil,
+		Items:       versionHistoryItems,
+	}
+
+	firstBlob := eventsSlice[0]
+	lastBlob := eventsSlice[len(eventsSlice)-1]
+
+	firstEvent := firstBlob[0]
+	lastEvent := lastBlob[len(lastBlob)-1]
 	version := firstEvent.GetVersion()
 
 	sourceCluster := clusterMetadata.ClusterNameForFailoverVersion(true, version)
 
 	eventTime := time.Time{}
-	for _, event := range events {
-		eventTime = util.MaxTime(eventTime, timestamp.TimeValue(event.GetEventTime()))
+	for _, events := range eventsSlice {
+		for _, event := range events {
+			eventTime = util.MaxTime(eventTime, timestamp.TimeValue(event.GetEventTime()))
+		}
 	}
 	for _, event := range newEvents {
 		eventTime = util.MaxTime(eventTime, timestamp.TimeValue(event.GetEventTime()))
 	}
 
+	if len(newEvents) != 0 && newRunID == "" {
+		// This is for backward compatibility, old replication tasks generated for continuedAsNew case
+		// doesn't have newRunID field set. In that case, we need to get newRunID from the last event.
+		if lastEvent.GetEventType() != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW ||
+			lastEvent.GetWorkflowExecutionContinuedAsNewEventAttributes() == nil {
+			return nil, ErrNoNewRunID
+		}
+		newRunID = lastEvent.GetWorkflowExecutionContinuedAsNewEventAttributes().GetNewExecutionRunId()
+	}
+
 	logger = log.With(
 		logger,
-		tag.WorkflowID(execution.GetWorkflowId()),
-		tag.WorkflowRunID(execution.GetRunId()),
+		tag.WorkflowID(workflowKey.WorkflowID),
+		tag.WorkflowRunID(workflowKey.RunID),
 		tag.SourceCluster(sourceCluster),
 		tag.IncomingVersion(version),
 		tag.WorkflowFirstEventID(firstEvent.GetEventId()),
@@ -148,36 +247,41 @@ func newReplicationTask(
 	)
 
 	return &replicationTaskImpl{
-		sourceCluster:  sourceCluster,
-		namespaceID:    namespaceID,
-		execution:      execution,
-		version:        version,
-		firstEvent:     firstEvent,
-		lastEvent:      lastEvent,
-		eventTime:      eventTime,
-		events:         events,
-		newEvents:      newEvents,
-		versionHistory: versionHistory,
+		sourceCluster:       sourceCluster,
+		workflowKey:         workflowKey,
+		version:             version,
+		firstEvent:          firstEvent,
+		lastEvent:           lastEvent,
+		eventTime:           eventTime,
+		baseWorkflowInfo:    baseExecutionInfo,
+		versionHistory:      versionHistory,
+		events:              eventsSlice,
+		newEvents:           newEvents,
+		newRunID:            newRunID,
+		versionedTransition: versionedTransition,
+		isStateBased:        isStateBased,
 
-		startTime: taskStartTime,
-		logger:    logger,
+		logger: logger,
 	}, nil
 }
 
 func (t *replicationTaskImpl) getNamespaceID() namespace.ID {
-	return t.namespaceID
+	return namespace.ID(t.workflowKey.NamespaceID)
 }
 
 func (t *replicationTaskImpl) getExecution() *commonpb.WorkflowExecution {
-	return t.execution
+	return &commonpb.WorkflowExecution{
+		WorkflowId: t.workflowKey.WorkflowID,
+		RunId:      t.workflowKey.RunID,
+	}
 }
 
 func (t *replicationTaskImpl) getWorkflowID() string {
-	return t.execution.GetWorkflowId()
+	return t.workflowKey.WorkflowID
 }
 
 func (t *replicationTaskImpl) getRunID() string {
-	return t.execution.GetRunId()
+	return t.workflowKey.RunID
 }
 
 func (t *replicationTaskImpl) getEventTime() time.Time {
@@ -200,7 +304,7 @@ func (t *replicationTaskImpl) getSourceCluster() string {
 	return t.sourceCluster
 }
 
-func (t *replicationTaskImpl) getEvents() []*historypb.HistoryEvent {
+func (t *replicationTaskImpl) getEvents() [][]*historypb.HistoryEvent {
 	return t.events
 }
 
@@ -208,8 +312,20 @@ func (t *replicationTaskImpl) getNewEvents() []*historypb.HistoryEvent {
 	return t.newEvents
 }
 
+func (t *replicationTaskImpl) getNewRunID() string {
+	return t.newRunID
+}
+
 func (t *replicationTaskImpl) getLogger() log.Logger {
 	return t.logger
+}
+
+func (t *replicationTaskImpl) getVersionedTransition() *persistencespb.VersionedTransition {
+	return t.versionedTransition
+}
+
+func (t *replicationTaskImpl) getBaseWorkflowInfo() *workflowspb.BaseExecutionInfo {
+	return t.baseWorkflowInfo
 }
 
 func (t *replicationTaskImpl) getVersionHistory() *historyspb.VersionHistory {
@@ -217,41 +333,56 @@ func (t *replicationTaskImpl) getVersionHistory() *historyspb.VersionHistory {
 }
 
 func (t *replicationTaskImpl) isWorkflowReset() bool {
-	switch t.getFirstEvent().GetEventType() {
-	case enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED:
-		workflowTaskFailedEvent := t.getFirstEvent()
-		attr := workflowTaskFailedEvent.GetWorkflowTaskFailedEventAttributes()
-		baseRunID := attr.GetBaseRunId()
-		baseEventVersion := attr.GetForkEventVersion()
-		newRunID := attr.GetNewRunId()
-
-		return len(baseRunID) > 0 && baseEventVersion != 0 && len(newRunID) > 0
-
-	default:
-		return false
+	if t.baseWorkflowInfo != nil && t.baseWorkflowInfo.LowestCommonAncestorEventId+1 == t.firstEvent.EventId {
+		return true
 	}
+	return false
 }
 
-func (t *replicationTaskImpl) splitTask(
-	taskStartTime time.Time,
-) (replicationTask, replicationTask, error) {
+func (t *replicationTaskImpl) stateBased() bool {
+	return t.isStateBased
+}
+
+func (t *replicationTaskImpl) skipDuplicatedEvents(index int) error {
+	if index == 0 {
+		return nil
+	}
+	if index >= len(t.events) || index < 0 {
+		return serviceerror.NewInternal(fmt.Sprintf("Invalid skip index: Length=%v, skipIndex=%v", len(t.events), index))
+	}
+	t.events = t.events[index:]
+	t.firstEvent = t.events[0][0]
+	lastBlob := t.events[len(t.events)-1]
+	t.lastEvent = lastBlob[len(lastBlob)-1]
+
+	eventTime := time.Time{}
+	for _, events := range t.events {
+		for _, event := range events {
+			eventTime = util.MaxTime(eventTime, timestamp.TimeValue(event.GetEventTime()))
+		}
+	}
+	for _, event := range t.newEvents {
+		eventTime = util.MaxTime(eventTime, timestamp.TimeValue(event.GetEventTime()))
+	}
+	t.eventTime = eventTime
+	return nil
+}
+
+func (t *replicationTaskImpl) splitTask() (_ replicationTask, _ replicationTask, _ error) {
 
 	if len(t.newEvents) == 0 {
 		return nil, nil, ErrNoNewRunHistory
 	}
-	newHistoryEvents := t.newEvents
 
-	if t.getLastEvent().GetEventType() != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW ||
-		t.getLastEvent().GetWorkflowExecutionContinuedAsNewEventAttributes() == nil {
-		return nil, nil, ErrLastEventIsNotContinueAsNew
+	if len(t.newRunID) == 0 {
+		return nil, nil, ErrNoNewRunID
 	}
-	newRunID := t.getLastEvent().GetWorkflowExecutionContinuedAsNewEventAttributes().GetNewExecutionRunId()
 
-	newFirstEvent := newHistoryEvents[0]
-	newLastEvent := newHistoryEvents[len(newHistoryEvents)-1]
+	newFirstEvent := t.newEvents[0]
+	newLastEvent := t.newEvents[len(t.newEvents)-1]
 
 	newEventTime := time.Time{}
-	for _, event := range newHistoryEvents {
+	for _, event := range t.newEvents {
 		newEventTime = util.MaxTime(newEventTime, timestamp.TimeValue(event.GetEventTime()))
 	}
 
@@ -265,8 +396,8 @@ func (t *replicationTaskImpl) splitTask(
 
 	logger := log.With(
 		t.logger,
-		tag.WorkflowID(t.getExecution().GetWorkflowId()),
-		tag.WorkflowRunID(newRunID),
+		tag.WorkflowID(t.workflowKey.WorkflowID),
+		tag.WorkflowRunID(t.newRunID),
 		tag.SourceCluster(t.sourceCluster),
 		tag.IncomingVersion(t.version),
 		tag.WorkflowFirstEventID(newFirstEvent.GetEventId()),
@@ -275,23 +406,30 @@ func (t *replicationTaskImpl) splitTask(
 
 	newRunTask := &replicationTaskImpl{
 		sourceCluster: t.sourceCluster,
-		namespaceID:   t.namespaceID,
-		execution: &commonpb.WorkflowExecution{
-			WorkflowId: t.execution.WorkflowId,
-			RunId:      newRunID,
-		},
-		version:        t.version,
-		firstEvent:     newFirstEvent,
-		lastEvent:      newLastEvent,
-		eventTime:      newEventTime,
-		events:         newHistoryEvents,
-		newEvents:      []*historypb.HistoryEvent{},
-		versionHistory: newVersionHistory,
-
-		startTime: taskStartTime,
-		logger:    logger,
+		workflowKey: definition.NewWorkflowKey(
+			t.workflowKey.NamespaceID, t.workflowKey.WorkflowID, t.newRunID,
+		),
+		version:          t.version,
+		firstEvent:       newFirstEvent,
+		lastEvent:        newLastEvent,
+		eventTime:        newEventTime,
+		baseWorkflowInfo: nil,
+		versionHistory:   newVersionHistory,
+		events:           [][]*historypb.HistoryEvent{t.newEvents},
+		newEvents:        []*historypb.HistoryEvent{},
+		newRunID:         "",
+		logger:           logger,
 	}
+	if t.stateBased() {
+		newRunTask.versionedTransition = &persistencespb.VersionedTransition{
+			NamespaceFailoverVersion: t.newEvents[0].GetVersion(),
+			TransitionCount:          1,
+		}
+		newRunTask.isStateBased = true
+	}
+
 	t.newEvents = nil
+	t.newRunID = ""
 
 	return t, newRunTask, nil
 }
@@ -330,6 +468,10 @@ func validateReplicateEventsRequest(
 		return events, nil, nil
 	}
 
+	// validation on NewRunId is done in newReplicationTask,
+	// so that some backward compatiblity logic can be used by
+	// newReplicationTaskFromBatch
+
 	newRunEvents, err := deserializeBlob(historySerializer, request.NewRunEvents)
 	if err != nil {
 		return nil, nil, err
@@ -347,6 +489,35 @@ func validateReplicateEventsRequest(
 
 func validateUUID(input string) bool {
 	return uuid.Parse(input) != nil
+}
+
+func validateEventsSlice(eventsSlice ...[]*historypb.HistoryEvent) (int64, error) {
+	for _, slice := range eventsSlice {
+		if len(slice) == 0 {
+			return 0, ErrEmptyEventSlice
+		}
+	}
+
+	version, err := validateEvents(eventsSlice[0])
+	if err != nil {
+		return 0, err
+	}
+
+	prevSliceLastEventId := eventsSlice[0][len(eventsSlice[0])-1].GetEventId()
+	for i := 1; i < len(eventsSlice); i++ {
+		v, err := validateEvents(eventsSlice[i])
+		if err != nil {
+			return 0, err
+		}
+		if v != version {
+			return 0, ErrEventVersionMismatch
+		}
+		if eventsSlice[i][0].GetEventId() != prevSliceLastEventId+1 {
+			return 0, ErrEventSlicesNotConsecutive
+		}
+		prevSliceLastEventId = eventsSlice[i][len(eventsSlice[i])-1].GetEventId()
+	}
+	return version, nil
 }
 
 func validateEvents(events []*historypb.HistoryEvent) (int64, error) {
@@ -370,15 +541,29 @@ func deserializeBlob(
 	historySerializer serialization.Serializer,
 	blob *commonpb.DataBlob,
 ) ([]*historypb.HistoryEvent, error) {
-
 	if blob == nil {
 		return nil, nil
 	}
 
-	events, err := historySerializer.DeserializeEvents(&commonpb.DataBlob{
-		EncodingType: enumspb.ENCODING_TYPE_PROTO3,
-		Data:         blob.Data,
-	})
+	blob.EncodingType = enumspb.ENCODING_TYPE_PROTO3
+	return historySerializer.DeserializeEvents(blob)
+}
 
-	return events, err
+func DeserializeBlobs(
+	historySerializer serialization.Serializer,
+	blobs []*commonpb.DataBlob,
+) ([][]*historypb.HistoryEvent, error) {
+	eventBatches := make([][]*historypb.HistoryEvent, 0, len(blobs))
+	if blobs == nil {
+		return eventBatches, nil
+	}
+	for _, blob := range blobs {
+		blob.EncodingType = enumspb.ENCODING_TYPE_PROTO3
+		events, err := historySerializer.DeserializeEvents(blob)
+		if err != nil {
+			return nil, err
+		}
+		eventBatches = append(eventBatches, events)
+	}
+	return eventBatches, nil
 }

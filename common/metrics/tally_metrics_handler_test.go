@@ -41,8 +41,13 @@ var defaultConfig = ClientConfig{
 		"activityType": {},
 		"workflowType": {},
 	},
-	Prefix:                     "",
-	PerUnitHistogramBoundaries: map[string][]float64{Dimensionless: {0, 10, 100}, Bytes: {1024, 2048}, Milliseconds: {10, 500, 1000, 5000, 10000}},
+	Prefix: "",
+	PerUnitHistogramBoundaries: map[string][]float64{
+		Dimensionless: {0, 10, 100},
+		Bytes:         {1024, 2048},
+		Milliseconds:  {10, 500, 1000, 5000, 10000},
+		Seconds:       {0.01, 0.5, 1, 5, 10},
+	},
 }
 
 func TestTallyScope(t *testing.T) {
@@ -103,6 +108,6 @@ func recordTallyMetrics(h Handler) {
 	timer.Record(1248 * time.Millisecond)
 	timer.Record(5255 * time.Millisecond)
 	histogram.Record(1234567)
-	hitsTaggedCounter.Record(11, TaskQueueTag("__sticky__"))
-	hitsTaggedExcludedCounter.Record(14, TaskQueueTag("filtered"))
+	hitsTaggedCounter.Record(11, UnsafeTaskQueueTag("__sticky__"))
+	hitsTaggedExcludedCounter.Record(14, UnsafeTaskQueueTag("filtered"))
 }

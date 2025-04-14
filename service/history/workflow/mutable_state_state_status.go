@@ -29,7 +29,6 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 )
@@ -135,7 +134,7 @@ func setStateStatus(
 			}
 
 		case enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE:
-			if status == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+			if status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 				return invalidStateTransitionErr(e.GetState(), state, status)
 			}
 

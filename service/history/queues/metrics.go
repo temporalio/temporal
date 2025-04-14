@@ -29,6 +29,13 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 )
 
+// TODO: task type tag value should be generated from enums.TaskType,
+// but this is a non-trivial change, we will need to
+// 1. Standardize existing naming in enums.TaskType definition
+// 2. In release X, double emit metrics with both old and new values, with different tag names
+// 3. Update all metrics dashboards & alerts to use new tag name & values
+// 4. In release X+1, remove old tag name & values
+
 func GetActiveTransferTaskTypeTagValue(
 	task tasks.Task,
 ) string {
@@ -47,8 +54,10 @@ func GetActiveTransferTaskTypeTagValue(
 		return metrics.TaskTypeTransferActiveTaskStartChildExecution
 	case *tasks.ResetWorkflowTask:
 		return metrics.TaskTypeTransferActiveTaskResetWorkflow
+	case *tasks.DeleteExecutionTask:
+		return metrics.TaskTypeTransferActiveTaskDeleteExecution
 	default:
-		return ""
+		return "TransferActive" + task.GetType().String()
 	}
 }
 
@@ -70,23 +79,30 @@ func GetStandbyTransferTaskTypeTagValue(
 		return metrics.TaskTypeTransferStandbyTaskStartChildExecution
 	case *tasks.ResetWorkflowTask:
 		return metrics.TaskTypeTransferStandbyTaskResetWorkflow
+	case *tasks.DeleteExecutionTask:
+		return metrics.TaskTypeTransferStandbyTaskDeleteExecution
 	default:
-		return ""
+		return "TransferStandby" + task.GetType().String()
 	}
 }
 
 func GetActiveTimerTaskTypeTagValue(
 	task tasks.Task,
 ) string {
-	switch task.(type) {
+	switch t := task.(type) {
 	case *tasks.WorkflowTaskTimeoutTask:
+		if t.InMemory {
+			return metrics.TaskTypeTimerActiveTaskSpeculativeWorkflowTaskTimeout
+		}
 		return metrics.TaskTypeTimerActiveTaskWorkflowTaskTimeout
 	case *tasks.ActivityTimeoutTask:
 		return metrics.TaskTypeTimerActiveTaskActivityTimeout
 	case *tasks.UserTimerTask:
 		return metrics.TaskTypeTimerActiveTaskUserTimer
-	case *tasks.WorkflowTimeoutTask:
-		return metrics.TaskTypeTimerActiveTaskWorkflowTimeout
+	case *tasks.WorkflowRunTimeoutTask:
+		return metrics.TaskTypeTimerActiveTaskWorkflowRunTimeout
+	case *tasks.WorkflowExecutionTimeoutTask:
+		return metrics.TaskTypeTimerActiveTaskWorkflowExecutionTimeout
 	case *tasks.DeleteHistoryEventTask:
 		return metrics.TaskTypeTimerActiveTaskDeleteHistoryEvent
 	case *tasks.ActivityRetryTimerTask:
@@ -94,7 +110,7 @@ func GetActiveTimerTaskTypeTagValue(
 	case *tasks.WorkflowBackoffTimerTask:
 		return metrics.TaskTypeTimerActiveTaskWorkflowBackoffTimer
 	default:
-		return ""
+		return "TimerActive" + task.GetType().String()
 	}
 }
 
@@ -108,8 +124,10 @@ func GetStandbyTimerTaskTypeTagValue(
 		return metrics.TaskTypeTimerStandbyTaskActivityTimeout
 	case *tasks.UserTimerTask:
 		return metrics.TaskTypeTimerStandbyTaskUserTimer
-	case *tasks.WorkflowTimeoutTask:
-		return metrics.TaskTypeTimerStandbyTaskWorkflowTimeout
+	case *tasks.WorkflowRunTimeoutTask:
+		return metrics.TaskTypeTimerStandbyTaskWorkflowRunTimeout
+	case *tasks.WorkflowExecutionTimeoutTask:
+		return metrics.TaskTypeTimerStandbyTaskWorkflowExecutionTimeout
 	case *tasks.DeleteHistoryEventTask:
 		return metrics.TaskTypeTimerStandbyTaskDeleteHistoryEvent
 	case *tasks.ActivityRetryTimerTask:
@@ -117,7 +135,7 @@ func GetStandbyTimerTaskTypeTagValue(
 	case *tasks.WorkflowBackoffTimerTask:
 		return metrics.TaskTypeTimerStandbyTaskWorkflowBackoffTimer
 	default:
-		return ""
+		return "TimerStandby" + task.GetType().String()
 	}
 }
 
@@ -134,7 +152,7 @@ func GetVisibilityTaskTypeTagValue(
 	case *tasks.DeleteExecutionVisibilityTask:
 		return metrics.TaskTypeVisibilityTaskDeleteExecution
 	default:
-		return ""
+		return task.GetType().String()
 	}
 }
 
@@ -145,8 +163,34 @@ func GetArchivalTaskTypeTagValue(
 	case *tasks.ArchiveExecutionTask:
 		return metrics.TaskTypeArchivalTaskArchiveExecution
 	default:
-		return ""
+		return task.GetType().String()
 	}
+}
+
+func GetOutboundTaskTypeTagValue(task tasks.Task, isActive bool) string {
+	var prefix string
+	if isActive {
+		prefix = "OutboundActive"
+	} else {
+		prefix = "OutboundStandby"
+	}
+
+	outbound, ok := task.(*tasks.StateMachineOutboundTask)
+	if !ok {
+		return prefix + "Unknown"
+	}
+	return prefix + "." + outbound.StateMachineTaskType()
+}
+
+func GetTimerStateMachineTaskTypeTagValue(taskType string, isActive bool) string {
+	var prefix string
+	if isActive {
+		prefix = "TimerActive"
+	} else {
+		prefix = "TimerStandby"
+	}
+
+	return prefix + "." + taskType
 }
 
 func getTaskTypeTagValue(
@@ -168,6 +212,8 @@ func getTaskTypeTagValue(
 		return GetVisibilityTaskTypeTagValue(task)
 	case tasks.CategoryArchival:
 		return GetArchivalTaskTypeTagValue(task)
+	case tasks.CategoryOutbound:
+		return GetOutboundTaskTypeTagValue(task, isActive)
 	default:
 		return task.GetType().String()
 	}

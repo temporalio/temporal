@@ -30,7 +30,6 @@ import (
 
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
-
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -64,7 +63,7 @@ func (c *metricClient) startMetricsRecording(
 ) (metrics.Handler, time.Time) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	handler := c.metricsHandler.WithTags(metrics.OperationTag(operation), metrics.NamespaceTag(caller), metrics.ServiceRoleTag(metrics.FrontendRoleTagValue))
-	handler.Counter(metrics.ClientRequests.GetMetricName()).Record(1)
+	metrics.ClientRequests.With(handler).Record(1)
 	return handler, time.Now().UTC()
 }
 
@@ -84,9 +83,9 @@ func (c *metricClient) finishMetricsRecording(
 			*serviceerror.WorkflowExecutionAlreadyStarted:
 			// noop - not interest and too many logs
 		default:
-			c.throttledLogger.Info("frontend client encountered error", tag.Error(err), tag.ErrorType(err))
+			c.throttledLogger.Info("frontend client encountered error", tag.Error(err), tag.ServiceErrorType(err))
 		}
-		handler.Counter(metrics.ClientFailures.GetMetricName()).Record(1, metrics.ServiceErrorTypeTag(err))
+		metrics.ClientFailures.With(handler).Record(1, metrics.ServiceErrorTypeTag(err))
 	}
-	handler.Timer(metrics.ClientLatency.GetMetricName()).Record(time.Since(startTime))
+	metrics.ClientLatency.With(handler).Record(time.Since(startTime))
 }

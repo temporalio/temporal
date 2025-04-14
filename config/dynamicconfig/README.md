@@ -1,16 +1,17 @@
 Use `development-*.yaml` file to override the default dynamic config value (they are specified
 when creating the service config).
 
-Each key can have zero or more values and each value can have zero or more
-constraints. There are only three types of constraint:
-    1. namespace: string
-    2. taskQueueName: string
-    3. taskType: int (1:Workflow, 2:Activity)
+Each key can have zero or more values and each value can have zero or more constraints.
+There are only three types of constraint:
+- `namespace: string`
+- `taskQueueName: string`
+- `taskType: int` (1:Workflow, 2:Activity)
+
 A value will be selected and returned if all its has exactly the same constraints
 as the ones specified in query filters (including the number of constraints).
 
 Please use the following format:
-```
+```yaml
 testGetBoolPropertyKey:
   - value: false
   - value: true

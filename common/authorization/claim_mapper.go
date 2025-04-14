@@ -31,10 +31,9 @@ import (
 	"fmt"
 	"strings"
 
-	"google.golang.org/grpc/credentials"
-
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
+	"google.golang.org/grpc/credentials"
 )
 
 // @@@SNIPSTART temporal-common-authorization-authinfo
@@ -57,10 +56,18 @@ type ClaimMapper interface {
 
 // @@@SNIPEND
 
+// Normally, GetClaims will never be called without either an auth token or TLS metadata set in
+// AuthInfo. However, if you want your ClaimMapper to be called in all cases, you can implement
+// this additional interface and return false.
+type ClaimMapperWithAuthInfoRequired interface {
+	AuthInfoRequired() bool
+}
+
 // No-op claim mapper that gives system level admin permission to everybody
 type noopClaimMapper struct{}
 
 var _ ClaimMapper = (*noopClaimMapper)(nil)
+var _ ClaimMapperWithAuthInfoRequired = (*noopClaimMapper)(nil)
 
 func NewNoopClaimMapper() ClaimMapper {
 	return &noopClaimMapper{}
@@ -68,6 +75,11 @@ func NewNoopClaimMapper() ClaimMapper {
 
 func (*noopClaimMapper) GetClaims(_ *AuthInfo) (*Claims, error) {
 	return &Claims{System: RoleAdmin}, nil
+}
+
+// This implementation can run even without auth info.
+func (*noopClaimMapper) AuthInfoRequired() bool {
+	return false
 }
 
 func GetClaimMapperFromConfig(config *config.Authorization, logger log.Logger) (ClaimMapper, error) {

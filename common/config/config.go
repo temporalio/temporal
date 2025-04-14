@@ -27,11 +27,11 @@ package config
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
-	"gopkg.in/yaml.v3"
-
+	"github.com/jmoiron/sqlx"
 	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -41,6 +41,12 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/telemetry"
+	"google.golang.org/grpc/keepalive"
+	"gopkg.in/yaml.v3"
+)
+
+const (
+	infinity = time.Duration(math.MaxInt64)
 )
 
 type (
@@ -81,20 +87,65 @@ type (
 	PProf struct {
 		// Port is the port on which the PProf will bind to
 		Port int `yaml:"port"`
+		// Host defaults to `localhost` but can be overriden
+		// for instance in the case of dual stack IPv4/IPv6
+		Host string `yaml:"host"`
 	}
 
 	// RPC contains the rpc config items
 	RPC struct {
-		// GRPCPort is the port  on which gRPC will listen
+		// GRPCPort is the port on which gRPC will listen
 		GRPCPort int `yaml:"grpcPort"`
 		// Port used for membership listener
 		MembershipPort int `yaml:"membershipPort"`
 		// BindOnLocalHost is true if localhost is the bind address
+		// if neither BindOnLocalHost nor BindOnIP are set then an
+		// an attempt to discover an address is made
 		BindOnLocalHost bool `yaml:"bindOnLocalHost"`
-		// BindOnIP can be used to bind service on specific ip (eg. `0.0.0.0`) -
-		// check net.ParseIP for supported syntax, only IPv4 is supported,
+		// BindOnIP can be used to bind service on specific ip (eg. `0.0.0.0` or `::`)
+		// check net.ParseIP for supported syntax
 		// mutually exclusive with `BindOnLocalHost` option
 		BindOnIP string `yaml:"bindOnIP"`
+		// HTTPPort is the port on which HTTP will listen. If unset/0, HTTP will be
+		// disabled. This setting only applies to the frontend service.
+		HTTPPort int `yaml:"httpPort"`
+		// HTTPAdditionalForwardedHeaders adds additional headers to the default set
+		// forwarded from HTTP to gRPC. Any value with a trailing * will match the prefix before
+		// the asterisk (eg. `x-internal-*`)
+		HTTPAdditionalForwardedHeaders []string `yaml:"httpAdditionalForwardedHeaders"`
+		// KeepAliveServerConfig keep alive configuration for the server
+		KeepAliveServerConfig KeepAliveServerConfig `yaml:"keepAliveServerConfig"`
+		// ClientConnectionConfig defines the connection config used by other services
+		// when they create a gRPC client connection to this service.
+		ClientConnectionConfig ClientConnectionConfig `yaml:"clientConnectionConfig"`
+	}
+
+	KeepAliveServerParameters struct {
+		MaxConnectionIdle     *time.Duration `yaml:"maxConnectionIdle"`
+		MaxConnectionAge      *time.Duration `yaml:"maxConnectionAge"`
+		MaxConnectionAgeGrace *time.Duration `yaml:"maxConnectionAgeGrace"`
+		Time                  *time.Duration `yaml:"keepAliveTime"`
+		Timeout               *time.Duration `yaml:"keepAliveTimeout"`
+	}
+
+	KeepAliveClientParameters struct {
+		Time                *time.Duration `yaml:"keepAliveTime"`
+		Timeout             *time.Duration `yaml:"keepAliveTimeout"`
+		PermitWithoutStream *bool          `yaml:"keepAlivePermitWithoutStream"`
+	}
+
+	ClientConnectionConfig struct {
+		KeepAliveClientConfig *KeepAliveClientParameters `yaml:"keepAliveClientParameters"`
+	}
+
+	KeepAliveServerEnforcementPolicy struct {
+		MinTime             *time.Duration `yaml:"minTime"`
+		PermitWithoutStream *bool          `yaml:"permitWithoutStream"`
+	}
+
+	KeepAliveServerConfig struct {
+		KeepAliveServerParameters  *KeepAliveServerParameters        `yaml:"keepAliveServerParameters"`
+		KeepAliveEnforcementPolicy *KeepAliveServerEnforcementPolicy `yaml:"keepAliveEnforcementPolicy"`
 	}
 
 	// Global contains config items that apply process-wide to all services
@@ -219,8 +270,8 @@ type (
 		// MaxJoinDuration is the max wait time to join the gossip ring
 		MaxJoinDuration time.Duration `yaml:"maxJoinDuration"`
 		// BroadcastAddress is used as the address that is communicated to remote nodes to connect on.
-		// This is generally used when BindOnIP would be the same across several nodes (ie: 0.0.0.0)
-		// and for nat traversal scenarios. Check net.ParseIP for supported syntax, only IPv4 is supported.
+		// This is generally used when BindOnIP would be the same across several nodes (ie: `0.0.0.0` or `::`)
+		// and for nat traversal scenarios. Check net.ParseIP for supported syntax
 		BroadcastAddress string `yaml:"broadcastAddress"`
 	}
 
@@ -230,8 +281,8 @@ type (
 		DefaultStore string `yaml:"defaultStore" validate:"nonzero"`
 		// VisibilityStore is the name of the datastore to be used for visibility records
 		VisibilityStore string `yaml:"visibilityStore"`
-		// AdvancedVisibilityStore is the name of the datastore to be used for visibility records
-		AdvancedVisibilityStore string `yaml:"advancedVisibilityStore"`
+		// SecondaryVisibilityStore is the name of the secondary datastore to be used for visibility records
+		SecondaryVisibilityStore string `yaml:"secondaryVisibilityStore"`
 		// NumHistoryShards is the desired number of history shards. This config doesn't
 		// belong here, needs refactoring
 		NumHistoryShards int32 `yaml:"numHistoryShards" validate:"nonzero"`
@@ -256,15 +307,7 @@ type (
 	}
 
 	FaultInjection struct {
-		// Rate is the probability that we will return an error from any call to any datastore.
-		// The value should be between 0.0 and 1.0.
-		// The fault injector will inject different errors depending on the data store and method. See the
-		// implementation for details.
-		// This field is ignored if Targets is non-empty.
-		Rate float64 `yaml:"rate"`
-
 		// Targets is a mapping of data store name to a targeted fault injection config for that data store.
-		// If Targets is non-empty, then Rate is ignored.
 		// Here is an example config for targeted fault injection. This config will inject errors into the
 		// UpdateShard method of the ShardStore at a rate of 100%. No other methods will be affected.
 		/*
@@ -278,6 +321,7 @@ type (
 						ShardOwnershipLostError: 1.0 # all UpdateShard calls will fail with ShardOwnershipLostError
 		*/
 		// This will cause the UpdateShard method of the ShardStore to always return ShardOwnershipLostError.
+		// See config/development-cass-es-fi.yaml for a more detailed example.
 		Targets FaultInjectionTargets `yaml:"targets"`
 	}
 
@@ -332,6 +376,8 @@ type (
 		User string `yaml:"user"`
 		// Password is the cassandra password used for authentication by gocql client
 		Password string `yaml:"password"`
+		// AllowedAuthenticators is the optional list of authenticators the gocql client checks before approving the challenge request from the server.
+		AllowedAuthenticators []string `yaml:"allowedAuthenticators"`
 		// keyspace is the cassandra keyspace
 		Keyspace string `yaml:"keyspace" validate:"nonzero"`
 		// Datacenter is the data center filter arg for cassandra
@@ -340,6 +386,10 @@ type (
 		MaxConns int `yaml:"maxConns"`
 		// ConnectTimeout is a timeout for initial dial to cassandra server (default: 600 milliseconds)
 		ConnectTimeout time.Duration `yaml:"connectTimeout"`
+		// Timeout is a timeout for reads and, unless otherwise specified, writes. If not specified, ConnectTimeout is used.
+		Timeout time.Duration `yaml:"timeout"`
+		// WriteTimeout is a timeout for writing a query. If not specified, Timeout is used.
+		WriteTimeout time.Duration `yaml:"writeTimeout"`
 		// TLS configuration
 		TLS *auth.TLS `yaml:"tls"`
 		// Consistency configuration (defaults to LOCAL_QUORUM / LOCAL_SERIAL for all stores if this field not set)
@@ -374,6 +424,8 @@ type (
 
 	// SQL is the configuration for connecting to a SQL backed datastore
 	SQL struct {
+		// Connect is a function that returns a sql db connection. String based configuration is ignored if this is provided.
+		Connect func(sqlConfig *SQL) (*sqlx.DB, error) `yaml:"-" json:"-"`
 		// User is the username to be used for the conn
 		User string `yaml:"user"`
 		// Password is the password corresponding to the user name
@@ -423,7 +475,6 @@ type (
 	// DCRedirectionPolicy contains the frontend datacenter redirection policy
 	DCRedirectionPolicy struct {
 		Policy string `yaml:"policy"`
-		ToDC   string `yaml:"toDC"`
 	}
 
 	// Archival contains the config for archival
@@ -484,6 +535,7 @@ type (
 		Region           string  `yaml:"region"`
 		Endpoint         *string `yaml:"endpoint"`
 		S3ForcePathStyle bool    `yaml:"s3ForcePathStyle"`
+		LogLevel         uint    `yaml:"logLevel"`
 	}
 
 	// PublicClient is the config for internal nodes (history/matching/worker) connecting to
@@ -507,6 +559,9 @@ type (
 		// HostPort is the host port to connect on. Host can be DNS name. See the above
 		// comment: in many situations you can leave this empty.
 		HostPort string `yaml:"hostPort"`
+		// HTTPHostPort is the HTTP host port to connect on. Host can be DNS name. See the above
+		// comment: in many situations you can leave this empty.
+		HTTPHostPort string `yaml:"httpHostPort"`
 		// Force selection of either the "internode" or "frontend" TLS configs for these
 		// connections (only those two strings are valid).
 		ForceTLSConfig string `yaml:"forceTLSConfig"`
@@ -550,8 +605,14 @@ type (
 		Authorizer string `yaml:"authorizer"`
 		// Empty string for noopClaimMapper or "default" for defaultJWTClaimMapper
 		ClaimMapper string `yaml:"claimMapper"`
+
 		// Empty string unless using "http" Authorizer. The HTTP(s) endpoint which temporal will invoke for authorization decisions.
 		HttpAuthEndpoint string `yaml:"httpAuthEndpoint"`
+		// Name of main auth header to pass to ClaimMapper (as `AuthToken`). Defaults to `authorization`.
+		AuthHeaderName string `yaml:"authHeaderName"`
+		// Name of extra auth header to pass to ClaimMapper (as `ExtraData`). Defaults to `authorization-extras`.
+		AuthExtraHeaderName string `yaml:"authExtraHeaderName"`
+
 	}
 
 	// @@@SNIPSTART temporal-common-service-config-jwtkeyprovider
@@ -564,12 +625,14 @@ type (
 )
 
 const (
-	ShardStoreName     DataStoreName = "ShardStore"
-	TaskStoreName      DataStoreName = "TaskStore"
-	MetadataStoreName  DataStoreName = "MetadataStore"
-	ExecutionStoreName DataStoreName = "ExecutionStore"
-	QueueName          DataStoreName = "Queue"
-	ClusterMDStoreName DataStoreName = "ClusterMDStore"
+	ShardStoreName         DataStoreName = "ShardStore"
+	TaskStoreName          DataStoreName = "TaskStore"
+	MetadataStoreName      DataStoreName = "MetadataStore"
+	ExecutionStoreName     DataStoreName = "ExecutionStore"
+	QueueName              DataStoreName = "Queue"
+	QueueV2Name            DataStoreName = "QueueV2"
+	ClusterMDStoreName     DataStoreName = "ClusterMDStore"
+	NexusEndpointStoreName DataStoreName = "NexusEndpointStore"
 )
 
 const (
@@ -589,7 +652,7 @@ func (c *Config) Validate() error {
 	}
 
 	_, hasIFE := c.Services[string(primitives.InternalFrontendService)]
-	if hasIFE && (c.PublicClient.HostPort != "" || c.PublicClient.ForceTLSConfig != "") {
+	if hasIFE && (c.PublicClient.HostPort != "" || c.PublicClient.ForceTLSConfig != "" || c.PublicClient.HTTPHostPort != "") {
 		return fmt.Errorf("when using internal-frontend, publicClient must be empty")
 	}
 
@@ -631,4 +694,79 @@ func (p *JWTKeyProvider) HasSourceURIsConfigured() bool {
 		}
 	}
 	return false
+}
+
+func (k *KeepAliveServerConfig) GetKeepAliveServerParameters() keepalive.ServerParameters {
+	// the default config is same as grpc default config, same for the below client config and enforcement policy
+	defaultConfig := keepalive.ServerParameters{
+		MaxConnectionIdle:     infinity,
+		MaxConnectionAge:      infinity,
+		MaxConnectionAgeGrace: infinity,
+		Time:                  2 * time.Hour,
+		Timeout:               20 * time.Second,
+	}
+	if k == nil || k.KeepAliveServerParameters == nil {
+		return defaultConfig
+	}
+	kp := k.KeepAliveServerParameters
+	if kp.MaxConnectionIdle != nil {
+		defaultConfig.MaxConnectionIdle = *kp.MaxConnectionIdle
+	}
+	if kp.MaxConnectionAge != nil {
+		defaultConfig.MaxConnectionAge = *kp.MaxConnectionAge
+	}
+	if kp.MaxConnectionAgeGrace != nil {
+		defaultConfig.MaxConnectionAgeGrace = *kp.MaxConnectionAgeGrace
+	}
+	if kp.Time != nil {
+		defaultConfig.Time = *kp.Time
+	}
+	if kp.Timeout != nil {
+		defaultConfig.Timeout = *kp.Timeout
+	}
+	return defaultConfig
+}
+
+func (c *ClientConnectionConfig) GetKeepAliveClientParameters() keepalive.ClientParameters {
+	defaultConfig := keepalive.ClientParameters{
+		Time:                infinity,
+		Timeout:             20 * time.Second,
+		PermitWithoutStream: false,
+	}
+
+	if c == nil || c.KeepAliveClientConfig == nil {
+		return defaultConfig
+	}
+
+	if c.KeepAliveClientConfig.Time != nil {
+		defaultConfig.Time = *c.KeepAliveClientConfig.Time
+	}
+	if c.KeepAliveClientConfig.Timeout != nil {
+		defaultConfig.Timeout = *c.KeepAliveClientConfig.Timeout
+	}
+	if c.KeepAliveClientConfig.PermitWithoutStream != nil {
+		defaultConfig.PermitWithoutStream = *c.KeepAliveClientConfig.PermitWithoutStream
+	}
+
+	return defaultConfig
+}
+
+func (k *KeepAliveServerConfig) GetKeepAliveEnforcementPolicy() keepalive.EnforcementPolicy {
+	defaultConfig := keepalive.EnforcementPolicy{
+		MinTime:             5 * time.Minute,
+		PermitWithoutStream: false,
+	}
+
+	if k == nil || k.KeepAliveEnforcementPolicy == nil {
+		return defaultConfig
+	}
+
+	if k.KeepAliveEnforcementPolicy.MinTime != nil {
+		defaultConfig.MinTime = *k.KeepAliveEnforcementPolicy.MinTime
+	}
+	if k.KeepAliveEnforcementPolicy.PermitWithoutStream != nil {
+		defaultConfig.PermitWithoutStream = *k.KeepAliveEnforcementPolicy.PermitWithoutStream
+	}
+
+	return defaultConfig
 }

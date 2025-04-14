@@ -27,6 +27,7 @@ package session
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -34,11 +35,15 @@ import (
 	"github.com/go-sql-driver/mysql"
 	"github.com/iancoleman/strcase"
 	"github.com/jmoiron/sqlx"
-
 	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/resolver"
 )
+
+type Session struct {
+	*sqlx.DB
+}
 
 const (
 	driverName = "mysql"
@@ -48,22 +53,24 @@ const (
 	defaultIsolationLevel        = "'READ-COMMITTED'"
 	// customTLSName is the name used if a custom tls configuration is created
 	customTLSName = "tls-custom"
+
+	interpolateParamsAttr = "interpolateParams"
 )
 
-var dsnAttrOverrides = map[string]string{
-	"parseTime":       "true",
-	"clientFoundRows": "true",
-}
-
-type Session struct {
-	*sqlx.DB
-}
+var (
+	errVisInterpolateParamsNotSupported = errors.New("interpolateParams is not supported for mysql visibility stores")
+	dsnAttrOverrides                    = map[string]string{
+		"parseTime":       "true",
+		"clientFoundRows": "true",
+	}
+)
 
 func NewSession(
+	dbKind sqlplugin.DbKind,
 	cfg *config.SQL,
 	resolver resolver.ServiceResolver,
 ) (*Session, error) {
-	db, err := createConnection(cfg, resolver)
+	db, err := createConnection(dbKind, cfg, resolver)
 	if err != nil {
 		return nil, err
 	}
@@ -77,6 +84,7 @@ func (s *Session) Close() {
 }
 
 func createConnection(
+	dbKind sqlplugin.DbKind,
 	cfg *config.SQL,
 	resolver resolver.ServiceResolver,
 ) (*sqlx.DB, error) {
@@ -85,7 +93,12 @@ func createConnection(
 		return nil, err
 	}
 
-	db, err := sqlx.Connect(driverName, buildDSN(cfg, resolver))
+	dsn, err := buildDSN(dbKind, cfg, resolver)
+	if err != nil {
+		return nil, err
+	}
+
+	db, err := sqlx.Connect(driverName, dsn)
 	if err != nil {
 		return nil, err
 	}
@@ -104,7 +117,11 @@ func createConnection(
 	return db, nil
 }
 
-func buildDSN(cfg *config.SQL, r resolver.ServiceResolver) string {
+func buildDSN(
+	dbKind sqlplugin.DbKind,
+	cfg *config.SQL,
+	r resolver.ServiceResolver,
+) (string, error) {
 	mysqlConfig := mysql.NewConfig()
 
 	mysqlConfig.User = cfg.User
@@ -112,7 +129,11 @@ func buildDSN(cfg *config.SQL, r resolver.ServiceResolver) string {
 	mysqlConfig.Addr = r.Resolve(cfg.ConnectAddr)[0]
 	mysqlConfig.DBName = cfg.DatabaseName
 	mysqlConfig.Net = cfg.ConnectProtocol
-	mysqlConfig.Params = buildDSNAttrs(cfg)
+	var err error
+	mysqlConfig.Params, err = buildDSNAttrs(dbKind, cfg)
+	if err != nil {
+		return "", err
+	}
 
 	// https://github.com/go-sql-driver/mysql/blob/v1.5.0/dsn.go#L104-L106
 	// https://github.com/go-sql-driver/mysql/blob/v1.5.0/dsn.go#L182-L189
@@ -124,11 +145,19 @@ func buildDSN(cfg *config.SQL, r resolver.ServiceResolver) string {
 	// https://github.com/temporalio/temporal/issues/1703
 	mysqlConfig.RejectReadOnly = true
 
-	return mysqlConfig.FormatDSN()
+	return mysqlConfig.FormatDSN(), nil
 }
 
-func buildDSNAttrs(cfg *config.SQL) map[string]string {
+func paramInterpolationAllowed(dbKind sqlplugin.DbKind) bool {
+	return dbKind != sqlplugin.DbKindVisibility
+}
+
+func buildDSNAttrs(dbKind sqlplugin.DbKind, cfg *config.SQL) (map[string]string, error) {
 	attrs := make(map[string]string, len(dsnAttrOverrides)+len(cfg.ConnectAttributes)+1)
+	// Enable interpolation by default unless this is a mysql8 visibility store
+	if paramInterpolationAllowed(dbKind) {
+		attrs[interpolateParamsAttr] = "true"
+	}
 	for k, v := range cfg.ConnectAttributes {
 		k1, v1 := sanitizeAttr(k, v)
 		attrs[k1] = v1
@@ -145,7 +174,13 @@ func buildDSNAttrs(cfg *config.SQL) map[string]string {
 		attrs[k] = v
 	}
 
-	return attrs
+	if !paramInterpolationAllowed(dbKind) {
+		if _, ok := attrs[interpolateParamsAttr]; ok {
+			return nil, errVisInterpolateParamsNotSupported
+		}
+	}
+
+	return attrs, nil
 }
 
 func hasAttr(attrs map[string]string, key string) bool {

@@ -25,73 +25,53 @@
 package configs
 
 import (
+	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/quotas"
 )
 
+const (
+	// OperatorPriority is used to give precedence to calls coming from web UI or tctl
+	OperatorPriority = 0
+)
+
 var (
-	APIToPriority = map[string]int{
-		"CloseShard":                             0,
-		"GetShard":                               0,
-		"DeleteWorkflowExecution":                0,
-		"DescribeHistoryHost":                    0,
-		"DescribeMutableState":                   0,
-		"DescribeWorkflowExecution":              0,
-		"GetDLQMessages":                         0,
-		"GetDLQReplicationMessages":              0,
-		"GetMutableState":                        0,
-		"GetReplicationMessages":                 0,
-		"MergeDLQMessages":                       0,
-		"PollMutableState":                       0,
-		"PurgeDLQMessages":                       0,
-		"QueryWorkflow":                          0,
-		"ReapplyEvents":                          0,
-		"RebuildMutableState":                    0,
-		"RecordActivityTaskHeartbeat":            0,
-		"RecordActivityTaskStarted":              0,
-		"RecordChildExecutionCompleted":          0,
-		"VerifyChildExecutionCompletionRecorded": 0,
-		"RecordWorkflowTaskStarted":              0,
-		"RefreshWorkflowTasks":                   0,
-		"RemoveSignalMutableState":               0,
-		"RemoveTask":                             0,
-		"ReplicateEventsV2":                      0,
-		"ReplicateWorkflowState":                 0,
-		"RequestCancelWorkflowExecution":         0,
-		"ResetStickyTaskQueue":                   0,
-		"ResetWorkflowExecution":                 0,
-		"RespondActivityTaskCanceled":            0,
-		"RespondActivityTaskCompleted":           0,
-		"RespondActivityTaskFailed":              0,
-		"RespondWorkflowTaskCompleted":           0,
-		"RespondWorkflowTaskFailed":              0,
-		"ScheduleWorkflowTask":                   0,
-		"VerifyFirstWorkflowTaskScheduled":       0,
-		"SignalWithStartWorkflowExecution":       0,
-		"SignalWorkflowExecution":                0,
-		"StartWorkflowExecution":                 0,
-		"SyncActivity":                           0,
-		"SyncShardStatus":                        0,
-		"TerminateWorkflowExecution":             0,
-		"GenerateLastHistoryReplicationTasks":    0,
-		"GetReplicationStatus":                   0,
-		"DeleteWorkflowVisibilityRecord":         0,
-		"UpdateWorkflowExecution":                0,
+	CallerTypeToPriority = map[string]int{
+		headers.CallerTypeOperator:    OperatorPriority,
+		headers.CallerTypeAPI:         1,
+		headers.CallerTypeBackground:  2,
+		headers.CallerTypePreemptable: 3,
 	}
 
-	APIPrioritiesOrdered = []int{0}
+	APIPrioritiesOrdered = []int{OperatorPriority, 1, 2, 3}
 )
 
 func NewPriorityRateLimiter(
 	rateFn quotas.RateFn,
+	operatorRPSRatio dynamicconfig.FloatPropertyFn,
 ) quotas.RequestRateLimiter {
 	rateLimiters := make(map[int]quotas.RequestRateLimiter)
 	for priority := range APIPrioritiesOrdered {
-		rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultIncomingRateLimiter(rateFn))
+		if priority == OperatorPriority {
+			rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultIncomingRateLimiter(operatorRateFn(rateFn, operatorRPSRatio)))
+		} else {
+			rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultIncomingRateLimiter(rateFn))
+		}
 	}
 	return quotas.NewPriorityRateLimiter(func(req quotas.Request) int {
-		if priority, ok := APIToPriority[req.API]; ok {
+		if priority, ok := CallerTypeToPriority[req.CallerType]; ok {
 			return priority
 		}
-		return APIPrioritiesOrdered[len(APIPrioritiesOrdered)-1]
+		// unknown caller type, default to api to be consistent with existing behavior
+		return CallerTypeToPriority[headers.CallerTypeAPI]
 	}, rateLimiters)
+}
+
+func operatorRateFn(
+	rateFn quotas.RateFn,
+	operatorRPSRatio dynamicconfig.FloatPropertyFn,
+) quotas.RateFn {
+	return func() float64 {
+		return operatorRPSRatio() * rateFn()
+	}
 }

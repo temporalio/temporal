@@ -30,11 +30,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-
-	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/shuffle"
+	"go.temporal.io/server/common/util"
 )
 
 const (
@@ -51,13 +50,13 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		store sqlplugin.Namespace
+		store sqlplugin.DB
 	}
 )
 
 func NewNamespaceSuite(
 	t *testing.T,
-	store sqlplugin.Namespace,
+	store sqlplugin.DB,
 ) *namespaceSuite {
 	return &namespaceSuite{
 		Assertions: require.New(t),
@@ -285,7 +284,7 @@ func (s *namespaceSuite) TestInsertSelect_Pagination() {
 	// cleanup the namespace for pagination test
 	rowsPerPage, err := s.store.SelectFromNamespace(newExecutionContext(), sqlplugin.NamespaceFilter{
 		GreaterThanID: nil,
-		PageSize:      convert.IntPtr(1000000),
+		PageSize:      util.Ptr(1000000),
 	})
 	switch err {
 	case nil:
@@ -323,7 +322,7 @@ func (s *namespaceSuite) TestInsertSelect_Pagination() {
 	rows := map[string]*sqlplugin.NamespaceRow{}
 	filter := sqlplugin.NamespaceFilter{
 		GreaterThanID: nil,
-		PageSize:      convert.IntPtr(numNamespacePerPage),
+		PageSize:      util.Ptr(numNamespacePerPage),
 	}
 	for doContinue := true; doContinue; doContinue = filter.GreaterThanID != nil {
 		rowsPerPage, err := s.store.SelectFromNamespace(newExecutionContext(), filter)
@@ -353,11 +352,12 @@ func (s *namespaceSuite) TestSelectLockMetadata() {
 	row, err := s.store.SelectFromNamespaceMetadata(newExecutionContext())
 	s.NoError(err)
 
-	// NOTE: lock without transaction is equivalent to select
-	//  this test only test the select functionality
-	metadata, err := s.store.LockNamespaceMetadata(newExecutionContext())
+	tx, err := s.store.BeginTx(newExecutionContext())
+	s.NoError(err)
+	metadata, err := tx.LockNamespaceMetadata(newExecutionContext())
 	s.NoError(err)
 	s.Equal(row, metadata)
+	s.NoError(tx.Commit())
 }
 
 func (s *namespaceSuite) TestSelectUpdateSelectMetadata_Success() {

@@ -26,31 +26,38 @@ package replication
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"go.temporal.io/server/api/historyservice/v1"
+	historypb "go.temporal.io/api/history/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
-	deletemanager "go.temporal.io/server/service/history/deletemanager"
+	"go.temporal.io/server/service/history/consts"
+	"go.temporal.io/server/service/history/deletemanager"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 const (
-	clusterCallbackKey = "%s-%d" // <cluster name>-<polling shard id>
+	dlqSizeCheckInterval = time.Minute * 5
 )
 
 type (
@@ -58,9 +65,9 @@ type (
 	taskProcessorManagerImpl struct {
 		config                        *configs.Config
 		deleteMgr                     deletemanager.DeleteManager
-		engine                        shard.Engine
+		engine                        historyi.Engine
 		eventSerializer               serialization.Serializer
-		shard                         shard.Context
+		shard                         historyi.ShardContext
 		status                        int32
 		replicationTaskFetcherFactory TaskFetcherFactory
 		workflowCache                 wcache.Cache
@@ -69,7 +76,9 @@ type (
 		taskPollerManager             pollerManager
 		metricsHandler                metrics.Handler
 		logger                        log.Logger
+		dlqWriter                     DLQWriter
 
+		enableFetcher     bool
 		taskProcessorLock sync.RWMutex
 		taskProcessors    map[string][]TaskProcessor // cluster name - processor
 		minTxAckedTaskID  int64
@@ -77,18 +86,17 @@ type (
 	}
 )
 
-var _ common.Daemon = (*taskProcessorManagerImpl)(nil)
-
 func NewTaskProcessorManager(
 	config *configs.Config,
-	shard shard.Context,
-	engine shard.Engine,
+	shardContext historyi.ShardContext,
+	engine historyi.Engine,
 	workflowCache wcache.Cache,
 	workflowDeleteManager deletemanager.DeleteManager,
 	clientBean client.Bean,
 	eventSerializer serialization.Serializer,
 	replicationTaskFetcherFactory TaskFetcherFactory,
 	taskExecutorProvider TaskExecutorProvider,
+	dlqWriter DLQWriter,
 ) *taskProcessorManagerImpl {
 
 	return &taskProcessorManagerImpl{
@@ -96,26 +104,53 @@ func NewTaskProcessorManager(
 		deleteMgr:                     workflowDeleteManager,
 		engine:                        engine,
 		eventSerializer:               eventSerializer,
-		shard:                         shard,
+		shard:                         shardContext,
 		status:                        common.DaemonStatusInitialized,
 		replicationTaskFetcherFactory: replicationTaskFetcherFactory,
 		workflowCache:                 workflowCache,
 		resender: xdc.NewNDCHistoryResender(
-			shard.GetNamespaceRegistry(),
+			shardContext.GetNamespaceRegistry(),
 			clientBean,
-			func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
-				_, err := clientBean.GetHistoryClient().ReplicateEventsV2(ctx, request)
+			func(
+				ctx context.Context,
+				sourceClusterName string,
+				namespaceId namespace.ID,
+				workflowId string,
+				runId string,
+				events [][]*historypb.HistoryEvent,
+				versionHistory []*historyspb.VersionHistoryItem,
+			) error {
+				err := engine.ReplicateHistoryEvents(
+					ctx,
+					definition.WorkflowKey{
+						NamespaceID: namespaceId.String(),
+						WorkflowID:  workflowId,
+						RunID:       runId,
+					},
+					nil,
+					versionHistory,
+					events,
+					nil,
+					"",
+				)
+				if errors.Is(err, consts.ErrDuplicate) {
+					return nil
+				}
 				return err
 			},
-			shard.GetPayloadSerializer(),
-			shard.GetConfig().StandbyTaskReReplicationContextTimeout,
-			shard.GetLogger(),
+			shardContext.GetPayloadSerializer(),
+			shardContext.GetConfig().StandbyTaskReReplicationContextTimeout,
+			shardContext.GetLogger(),
+			config,
 		),
-		logger:               shard.GetLogger(),
-		metricsHandler:       shard.GetMetricsHandler(),
+		logger:         shardContext.GetLogger(),
+		metricsHandler: shardContext.GetMetricsHandler(),
+		dlqWriter:      dlqWriter,
+
+		enableFetcher:        !config.EnableReplicationStream(),
 		taskProcessors:       make(map[string][]TaskProcessor),
 		taskExecutorProvider: taskExecutorProvider,
-		taskPollerManager:    newPollerManager(shard.GetShardID(), shard.GetClusterMetadata()),
+		taskPollerManager:    newPollerManager(shardContext.GetShardID(), shardContext.GetClusterMetadata()),
 		minTxAckedTaskID:     persistence.EmptyQueueMessageID,
 		shutdownChan:         make(chan struct{}),
 	}
@@ -131,8 +166,11 @@ func (r *taskProcessorManagerImpl) Start() {
 	}
 
 	// Listen to cluster metadata and dynamically update replication processor for remote clusters.
-	r.listenToClusterMetadataChange()
+	if r.enableFetcher {
+		r.listenToClusterMetadataChange()
+	}
 	go r.completeReplicationTaskLoop()
+	go r.checkReplicationDLQEmptyLoop()
 }
 
 func (r *taskProcessorManagerImpl) Stop() {
@@ -146,7 +184,9 @@ func (r *taskProcessorManagerImpl) Stop() {
 
 	close(r.shutdownChan)
 
-	r.shard.GetClusterMetadata().UnRegisterMetadataChangeCallback(r)
+	if r.enableFetcher {
+		r.shard.GetClusterMetadata().UnRegisterMetadataChangeCallback(r)
+	}
 	r.taskProcessorLock.Lock()
 	for _, taskProcessors := range r.taskProcessors {
 		for _, processor := range taskProcessors {
@@ -217,6 +257,7 @@ func (r *taskProcessorManagerImpl) handleClusterMetadataUpdate(
 					WorkflowCache:   r.workflowCache,
 				}),
 				r.eventSerializer,
+				r.dlqWriter,
 			)
 			replicationTaskProcessor.Start()
 			processors = append(processors, replicationTaskProcessor)
@@ -237,7 +278,7 @@ func (r *taskProcessorManagerImpl) completeReplicationTaskLoop() {
 		case <-cleanupTimer.C:
 			if err := r.cleanupReplicationTasks(); err != nil {
 				r.logger.Error("Failed to clean up replication messages.", tag.Error(err))
-				r.metricsHandler.Counter(metrics.ReplicationTaskCleanupFailure.GetMetricName()).Record(
+				metrics.ReplicationTaskCleanupFailure.With(r.metricsHandler).Record(
 					1,
 					metrics.OperationTag(metrics.ReplicationTaskCleanupScope),
 				)
@@ -252,63 +293,132 @@ func (r *taskProcessorManagerImpl) completeReplicationTaskLoop() {
 	}
 }
 
-func (r *taskProcessorManagerImpl) cleanupReplicationTasks() error {
-	clusterMetadata := r.shard.GetClusterMetadata()
-	currentCluster := clusterMetadata.GetCurrentClusterName()
-	var minAckedTaskID *int64
-	for clusterName, clusterInfo := range clusterMetadata.GetAllClusterInfo() {
-		if !clusterInfo.Enabled {
-			continue
-		}
-
-		var ackLevel int64
-		if clusterName == currentCluster {
-			ackLevel = r.shard.GetImmediateQueueExclusiveHighReadWatermark().TaskID
-		} else {
-			ackLevel = r.shard.GetQueueClusterAckLevel(tasks.CategoryReplication, clusterName).TaskID
-		}
-
-		if minAckedTaskID == nil || ackLevel < *minAckedTaskID {
-			minAckedTaskID = &ackLevel
+func (r *taskProcessorManagerImpl) checkReplicationDLQEmptyLoop() {
+	for {
+		timer := time.NewTimer(backoff.FullJitter(dlqSizeCheckInterval))
+		select {
+		case <-timer.C:
+			if r.config.ReplicationEnableDLQMetrics() {
+				r.checkReplicationDLQSize()
+			}
+		case <-r.shutdownChan:
+			timer.Stop()
+			return
 		}
 	}
-	if minAckedTaskID == nil || *minAckedTaskID <= r.minTxAckedTaskID {
+}
+
+func (r *taskProcessorManagerImpl) cleanupReplicationTasks() error {
+	clusterMetadata := r.shard.GetClusterMetadata()
+	allClusterInfo := clusterMetadata.GetAllClusterInfo()
+	currentClusterName := clusterMetadata.GetCurrentClusterName()
+
+	minAckedTaskID := r.shard.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).TaskID - 1
+	queueStates, ok := r.shard.GetQueueState(tasks.CategoryReplication)
+	if !ok {
+		queueStates = &persistencespb.QueueState{
+			ExclusiveReaderHighWatermark: nil,
+			ReaderStates:                 make(map[int64]*persistencespb.QueueReaderState),
+		}
+	}
+	for _, readerID := range targetReaderIDs(
+		currentClusterName,
+		r.shard.GetShardID(),
+		allClusterInfo,
+	) {
+		readerState, ok := queueStates.ReaderStates[readerID]
+		if !ok {
+			minAckedTaskID = min(minAckedTaskID, 0)
+		} else {
+			minAckedTaskID = min(minAckedTaskID, readerState.Scopes[0].Range.InclusiveMin.TaskId-1)
+		}
+	}
+
+	if minAckedTaskID <= r.minTxAckedTaskID {
 		return nil
 	}
 
-	r.logger.Debug("cleaning up replication task queue", tag.ReadLevel(*minAckedTaskID))
-	r.metricsHandler.Counter(metrics.ReplicationTaskCleanupCount.GetMetricName()).Record(
+	r.logger.Debug("cleaning up replication task queue", tag.ReadLevel(minAckedTaskID))
+	metrics.ReplicationTaskCleanupCount.With(r.metricsHandler).Record(
 		1,
 		metrics.OperationTag(metrics.ReplicationTaskCleanupScope),
 	)
-	r.metricsHandler.Histogram(metrics.ReplicationTasksLag.GetMetricName(), metrics.ReplicationTasksLag.GetMetricUnit()).Record(
-		r.shard.GetImmediateQueueExclusiveHighReadWatermark().Prev().TaskID-*minAckedTaskID,
-		metrics.OperationTag(metrics.ReplicationTaskFetcherScope),
+	metrics.ReplicationTasksLag.With(r.metricsHandler).Record(
+		r.shard.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Prev().TaskID-minAckedTaskID,
+		metrics.TargetClusterTag(currentClusterName),
+		metrics.OperationTag(metrics.ReplicationTaskCleanupScope),
 	)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	ctx = headers.SetCallerInfo(ctx, headers.SystemPreemptableCallerInfo)
 	defer cancel()
 
-	inclusiveMinPendingTaskKey := tasks.NewImmediateKey(*minAckedTaskID + 1)
-	r.shard.GetExecutionManager().UpdateHistoryTaskReaderProgress(ctx, &persistence.UpdateHistoryTaskReaderProgressRequest{
-		ShardID:                    r.shard.GetShardID(),
-		ShardOwner:                 r.shard.GetOwner(),
-		TaskCategory:               tasks.CategoryReplication,
-		ReaderID:                   common.DefaultQueueReaderID,
-		InclusiveMinPendingTaskKey: inclusiveMinPendingTaskKey,
-	})
-
 	err := r.shard.GetExecutionManager().RangeCompleteHistoryTasks(
 		ctx,
 		&persistence.RangeCompleteHistoryTasksRequest{
 			ShardID:             r.shard.GetShardID(),
 			TaskCategory:        tasks.CategoryReplication,
-			ExclusiveMaxTaskKey: inclusiveMinPendingTaskKey,
+			ExclusiveMaxTaskKey: tasks.NewImmediateKey(minAckedTaskID + 1),
 		},
 	)
 	if err == nil {
-		r.minTxAckedTaskID = *minAckedTaskID
+		r.minTxAckedTaskID = minAckedTaskID
 	}
 	return err
+}
+
+func (r *taskProcessorManagerImpl) checkReplicationDLQSize() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	ctx = headers.SetCallerInfo(ctx, headers.SystemPreemptableCallerInfo)
+	defer cancel()
+	for clusterName := range r.shard.GetClusterMetadata().GetAllClusterInfo() {
+		if clusterName == r.shard.GetClusterMetadata().GetCurrentClusterName() {
+			continue
+		}
+
+		minTaskKey := r.shard.GetReplicatorDLQAckLevel(clusterName)
+		isEmpty, err := r.shard.GetExecutionManager().IsReplicationDLQEmpty(ctx, &persistence.GetReplicationTasksFromDLQRequest{
+			GetHistoryTasksRequest: persistence.GetHistoryTasksRequest{
+				ShardID:             r.shard.GetShardID(),
+				TaskCategory:        tasks.CategoryReplication,
+				InclusiveMinTaskKey: tasks.NewImmediateKey(minTaskKey),
+			},
+			SourceClusterName: clusterName,
+		})
+		if err != nil {
+			r.logger.Error("Failed to check replication DLQ size.", tag.Error(err))
+			return
+		}
+		if !isEmpty {
+			metrics.ReplicationNonEmptyDLQCount.With(r.metricsHandler).Record(1, metrics.OperationTag(metrics.ReplicationDLQStatsScope))
+			break
+		}
+	}
+}
+
+func targetReaderIDs(
+	currentClusterName string,
+	currentShardID int32,
+	allClusterInfo map[string]cluster.ClusterInformation,
+) []int64 {
+	currentShardCount := allClusterInfo[currentClusterName].ShardCount
+	var readerIDs []int64
+	for clusterName, clusterInfo := range allClusterInfo {
+		if clusterName == currentClusterName || !clusterInfo.Enabled {
+			continue
+		}
+
+		targetClusterID := allClusterInfo[clusterName].InitialFailoverVersion
+		targetShardCount := allClusterInfo[clusterName].ShardCount
+		for _, targetShardID := range common.MapShardID(
+			currentShardCount,
+			targetShardCount,
+			currentShardID,
+		) {
+			readerIDs = append(readerIDs, shard.ReplicationReaderIDFromClusterShardID(
+				targetClusterID, targetShardID,
+			))
+		}
+	}
+	return readerIDs
 }

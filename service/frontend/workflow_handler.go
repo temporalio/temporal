@@ -25,14 +25,16 @@
 package frontend
 
 import (
+	"cmp"
 	"context"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 	"sync/atomic"
 	"time"
-	"unicode/utf8"
 
 	"github.com/pborman/uuid"
 	batchpb "go.temporal.io/api/batch/v1"
@@ -41,26 +43,24 @@ import (
 	filterpb "go.temporal.io/api/filter/v1"
 	historypb "go.temporal.io/api/history/v1"
 	querypb "go.temporal.io/api/query/v1"
-	schedpb "go.temporal.io/api/schedule/v1"
+	schedulepb "go.temporal.io/api/schedule/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"google.golang.org/grpc/health"
-	healthpb "google.golang.org/grpc/health/grpc_health_v1"
-
-	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
-	schedspb "go.temporal.io/server/api/schedule/v1"
-	tokenspb "go.temporal.io/server/api/token/v1"
+	schedulespb "go.temporal.io/server/api/schedule/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
+	"go.temporal.io/server/client/frontend"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/enums"
 	"go.temporal.io/server/common/failure"
@@ -70,6 +70,7 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
@@ -78,12 +79,28 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/retrypolicy"
+	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/util"
+	"go.temporal.io/server/common/worker_versioning"
+	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/worker/batcher"
+	"go.temporal.io/server/service/worker/deployment"
 	"go.temporal.io/server/service/worker/scheduler"
+	"go.temporal.io/server/service/worker/workerdeployment"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/health"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/encoding/protowire"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
 
 var _ Handler = (*WorkflowHandler)(nil)
@@ -101,30 +118,39 @@ var (
 type (
 	// WorkflowHandler - gRPC handler interface for workflowservice
 	WorkflowHandler struct {
+		workflowservice.UnimplementedWorkflowServiceServer
 		status int32
 
-		tokenSerializer                 common.TaskTokenSerializer
-		config                          *Config
-		versionChecker                  headers.VersionChecker
-		namespaceHandler                NamespaceHandler
-		getDefaultWorkflowRetrySettings dynamicconfig.MapPropertyFnWithNamespaceFilter
-		visibilityMrg                   manager.VisibilityManager
-		logger                          log.Logger
-		throttledLogger                 log.Logger
-		persistenceExecutionManager     persistence.ExecutionManager
-		clusterMetadataManager          persistence.ClusterMetadataManager
-		historyClient                   historyservice.HistoryServiceClient
-		matchingClient                  matchingservice.MatchingServiceClient
-		archiverProvider                provider.ArchiverProvider
-		payloadSerializer               serialization.Serializer
-		namespaceRegistry               namespace.Registry
-		saMapperProvider                searchattribute.MapperProvider
-		saProvider                      searchattribute.Provider
-		saValidator                     *searchattribute.Validator
-		archivalMetadata                archiver.ArchivalMetadata
-		healthServer                    *health.Server
-		overrides                       *Overrides
-		membershipMonitor               membership.Monitor
+		tokenSerializer                               *tasktoken.Serializer
+		config                                        *Config
+		versionChecker                                headers.VersionChecker
+		namespaceHandler                              *namespaceHandler
+		getDefaultWorkflowRetrySettings               dynamicconfig.TypedPropertyFnWithNamespaceFilter[retrypolicy.DefaultRetrySettings]
+		followReusePolicyAfterConflictPolicyTerminate dynamicconfig.TypedPropertyFnWithNamespaceFilter[bool]
+		visibilityMgr                                 manager.VisibilityManager
+		logger                                        log.Logger
+		throttledLogger                               log.Logger
+		persistenceExecutionName                      string
+		clusterMetadataManager                        persistence.ClusterMetadataManager
+		clusterMetadata                               cluster.Metadata
+		historyClient                                 historyservice.HistoryServiceClient
+		matchingClient                                matchingservice.MatchingServiceClient
+		deploymentStoreClient                         deployment.DeploymentStoreClient
+		workerDeploymentClient                        workerdeployment.Client
+		archiverProvider                              provider.ArchiverProvider
+		payloadSerializer                             serialization.Serializer
+		namespaceRegistry                             namespace.Registry
+		saMapperProvider                              searchattribute.MapperProvider
+		saProvider                                    searchattribute.Provider
+		saValidator                                   *searchattribute.Validator
+		archivalMetadata                              archiver.ArchivalMetadata
+		healthServer                                  *health.Server
+		overrides                                     *Overrides
+		membershipMonitor                             membership.Monitor
+		healthInterceptor                             *interceptor.HealthInterceptor
+		scheduleSpecBuilder                           *scheduler.SpecBuilder
+		outstandingPollers                            collection.SyncMap[string, collection.SyncMap[string, context.CancelFunc]]
+		httpEnabled                                   bool
 	}
 )
 
@@ -132,14 +158,16 @@ type (
 func NewWorkflowHandler(
 	config *Config,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
-	visibilityMrg manager.VisibilityManager,
+	visibilityMgr manager.VisibilityManager,
 	logger log.Logger,
 	throttledLogger log.Logger,
-	persistenceExecutionManager persistence.ExecutionManager,
+	persistenceExecutionName string,
 	clusterMetadataManager persistence.ClusterMetadataManager,
 	persistenceMetadataManager persistence.MetadataManager,
 	historyClient historyservice.HistoryServiceClient,
 	matchingClient matchingservice.MatchingServiceClient,
+	deploymentStoreClient deployment.DeploymentStoreClient,
+	workerDeploymentClient workerdeployment.Client,
 	archiverProvider provider.ArchiverProvider,
 	payloadSerializer serialization.Serializer,
 	namespaceRegistry namespace.Registry,
@@ -150,50 +178,63 @@ func NewWorkflowHandler(
 	healthServer *health.Server,
 	timeSource clock.TimeSource,
 	membershipMonitor membership.Monitor,
+	healthInterceptor *interceptor.HealthInterceptor,
+	scheduleSpecBuilder *scheduler.SpecBuilder,
+	httpEnabled bool,
 ) *WorkflowHandler {
-
 	handler := &WorkflowHandler{
 		status:          common.DaemonStatusInitialized,
 		config:          config,
-		tokenSerializer: common.NewProtoTaskTokenSerializer(),
+		tokenSerializer: tasktoken.NewSerializer(),
 		versionChecker:  headers.NewDefaultVersionChecker(),
 		namespaceHandler: newNamespaceHandler(
-			config.MaxBadBinaries,
 			logger,
 			persistenceMetadataManager,
 			clusterMetadata,
-			namespace.NewNamespaceReplicator(namespaceReplicationQueue, logger),
+			nsreplication.NewReplicator(namespaceReplicationQueue, logger),
 			archivalMetadata,
 			archiverProvider,
-			config.EnableSchedules,
 			timeSource,
+			config,
 		),
-		getDefaultWorkflowRetrySettings: config.DefaultWorkflowRetryPolicy,
-		visibilityMrg:                   visibilityMrg,
-		logger:                          logger,
-		throttledLogger:                 throttledLogger,
-		persistenceExecutionManager:     persistenceExecutionManager,
-		clusterMetadataManager:          clusterMetadataManager,
-		historyClient:                   historyClient,
-		matchingClient:                  matchingClient,
-		archiverProvider:                archiverProvider,
-		payloadSerializer:               payloadSerializer,
-		namespaceRegistry:               namespaceRegistry,
-		saProvider:                      saProvider,
-		saMapperProvider:                saMapperProvider,
+		getDefaultWorkflowRetrySettings:               config.DefaultWorkflowRetryPolicy,
+		followReusePolicyAfterConflictPolicyTerminate: config.FollowReusePolicyAfterConflictPolicyTerminate,
+		visibilityMgr:            visibilityMgr,
+		logger:                   logger,
+		throttledLogger:          throttledLogger,
+		persistenceExecutionName: persistenceExecutionName,
+		clusterMetadataManager:   clusterMetadataManager,
+		clusterMetadata:          clusterMetadata,
+		historyClient:            historyClient,
+		matchingClient:           matchingClient,
+		deploymentStoreClient:    deploymentStoreClient,
+		workerDeploymentClient:   workerDeploymentClient,
+		archiverProvider:         archiverProvider,
+		payloadSerializer:        payloadSerializer,
+		namespaceRegistry:        namespaceRegistry,
+		saProvider:               saProvider,
+		saMapperProvider:         saMapperProvider,
 		saValidator: searchattribute.NewValidator(
 			saProvider,
 			saMapperProvider,
 			config.SearchAttributesNumberOfKeysLimit,
 			config.SearchAttributesSizeOfValueLimit,
 			config.SearchAttributesTotalSizeLimit,
-			visibilityMrg.GetIndexName(),
-			visibility.AllowListForValidation(visibilityMrg.GetStoreNames()),
+			visibilityMgr,
+			visibility.AllowListForValidation(
+				visibilityMgr.GetStoreNames(),
+				config.VisibilityAllowList,
+			),
+			config.SuppressErrorSetSystemSearchAttribute,
 		),
-		archivalMetadata:  archivalMetadata,
-		healthServer:      healthServer,
-		overrides:         NewOverrides(),
-		membershipMonitor: membershipMonitor,
+		archivalMetadata:    archivalMetadata,
+		healthServer:        healthServer,
+		overrides:           NewOverrides(),
+		membershipMonitor:   membershipMonitor,
+		healthInterceptor:   healthInterceptor,
+		scheduleSpecBuilder: scheduleSpecBuilder,
+		outstandingPollers:  collection.NewSyncMap[string, collection.SyncMap[string, context.CancelFunc]](),
+		httpEnabled:         httpEnabled,
 	}
 
 	return handler
@@ -211,8 +252,26 @@ func (wh *WorkflowHandler) Start() {
 		go func() {
 			_ = wh.membershipMonitor.WaitUntilInitialized(context.Background())
 			wh.healthServer.SetServingStatus(WorkflowServiceName, healthpb.HealthCheckResponse_SERVING)
+			wh.healthInterceptor.SetHealthy(true)
 			wh.logger.Info("Frontend is now healthy")
 		}()
+
+		wh.namespaceRegistry.RegisterStateChangeCallback(wh, func(ns *namespace.Namespace, deletedFromDb bool) {
+			if deletedFromDb {
+				return
+			}
+
+			if ns.IsGlobalNamespace() &&
+				ns.ReplicationPolicy() == namespace.ReplicationPolicyMultiCluster &&
+				ns.ActiveClusterName() != wh.clusterMetadata.GetCurrentClusterName() {
+				pollers, ok := wh.outstandingPollers.Get(ns.ID().String())
+				if ok {
+					for _, cancelFn := range pollers.PopAll() {
+						cancelFn()
+					}
+				}
+			}
+		})
 	}
 }
 
@@ -223,12 +282,10 @@ func (wh *WorkflowHandler) Stop() {
 		common.DaemonStatusStarted,
 		common.DaemonStatusStopped,
 	) {
+		wh.namespaceRegistry.UnregisterStateChangeCallback(wh)
 		wh.healthServer.SetServingStatus(WorkflowServiceName, healthpb.HealthCheckResponse_NOT_SERVING)
+		wh.healthInterceptor.SetHealthy(false)
 	}
-}
-
-func (wh *WorkflowHandler) isStopped() bool {
-	return atomic.LoadInt32(&wh.status) == common.DaemonStatusStopped
 }
 
 // GetConfig return config
@@ -242,10 +299,6 @@ func (wh *WorkflowHandler) GetConfig() *Config {
 // namespace.
 func (wh *WorkflowHandler) RegisterNamespace(ctx context.Context, request *workflowservice.RegisterNamespaceRequest) (_ *workflowservice.RegisterNamespaceResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
-
-	if wh.isStopped() {
-		return nil, errShuttingDown
-	}
 
 	if request == nil {
 		return nil, errRequestNotSet
@@ -267,10 +320,6 @@ func (wh *WorkflowHandler) RegisterNamespace(ctx context.Context, request *workf
 func (wh *WorkflowHandler) DescribeNamespace(ctx context.Context, request *workflowservice.DescribeNamespaceRequest) (_ *workflowservice.DescribeNamespaceResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
-	if wh.isStopped() {
-		return nil, errShuttingDown
-	}
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
@@ -286,10 +335,6 @@ func (wh *WorkflowHandler) DescribeNamespace(ctx context.Context, request *workf
 func (wh *WorkflowHandler) ListNamespaces(ctx context.Context, request *workflowservice.ListNamespacesRequest) (_ *workflowservice.ListNamespacesResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
-	if wh.isStopped() {
-		return nil, errShuttingDown
-	}
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
@@ -304,10 +349,6 @@ func (wh *WorkflowHandler) ListNamespaces(ctx context.Context, request *workflow
 // UpdateNamespace is used to update the information and configuration for a registered namespace.
 func (wh *WorkflowHandler) UpdateNamespace(ctx context.Context, request *workflowservice.UpdateNamespaceRequest) (_ *workflowservice.UpdateNamespaceResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
-
-	if wh.isStopped() {
-		return nil, errShuttingDown
-	}
 
 	if request == nil {
 		return nil, errRequestNotSet
@@ -327,10 +368,6 @@ func (wh *WorkflowHandler) UpdateNamespace(ctx context.Context, request *workflo
 func (wh *WorkflowHandler) DeprecateNamespace(ctx context.Context, request *workflowservice.DeprecateNamespaceRequest) (_ *workflowservice.DeprecateNamespaceResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
-	if wh.isStopped() {
-		return nil, errShuttingDown
-	}
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
@@ -342,17 +379,56 @@ func (wh *WorkflowHandler) DeprecateNamespace(ctx context.Context, request *work
 	return resp, err
 }
 
-// StartWorkflowExecution starts a new long running workflow instance.  It will create the instance with
+// StartWorkflowExecution starts a new workflow instance (a "workflow execution").  It will create the instance with
 // 'WorkflowExecutionStarted' event in history and also schedule the first WorkflowTask for the worker to make the
 // first workflow task for this instance.  It will return 'WorkflowExecutionAlreadyStartedError', if an instance already
 // exists with same workflowId.
-func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *workflowservice.StartWorkflowExecutionRequest) (_ *workflowservice.StartWorkflowExecutionResponse, retError error) {
+func (wh *WorkflowHandler) StartWorkflowExecution(
+	ctx context.Context,
+	request *workflowservice.StartWorkflowExecutionRequest,
+) (_ *workflowservice.StartWorkflowExecutionResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
-	if wh.isStopped() {
-		return nil, errShuttingDown
+	var err error
+	if request, err = wh.prepareStartWorkflowRequest(request); err != nil {
+		return nil, err
 	}
 
+	wh.logger.Debug("Received StartWorkflowExecution.", tag.WorkflowID(request.GetWorkflowId()))
+
+	namespaceName := namespace.Name(request.GetNamespace())
+
+	wh.logger.Debug("Start workflow execution request namespace.", tag.WorkflowNamespace(namespaceName.String()))
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
+	if err != nil {
+		return nil, err
+	}
+	wh.logger.Debug("Start workflow execution request namespaceID.", tag.WorkflowNamespaceID(namespaceID.String()))
+
+	resp, err := wh.historyClient.StartWorkflowExecution(
+		ctx,
+		common.CreateHistoryStartWorkflowRequest(
+			namespaceID.String(),
+			request,
+			nil,
+			nil,
+			time.Now().UTC(),
+		),
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &workflowservice.StartWorkflowExecutionResponse{
+		RunId:             resp.GetRunId(),
+		Started:           resp.Started,
+		EagerWorkflowTask: resp.GetEagerWorkflowTask(),
+	}, nil
+}
+
+// Validates the request and sets default values where they are missing.
+func (wh *WorkflowHandler) prepareStartWorkflowRequest(
+	request *workflowservice.StartWorkflowExecutionRequest,
+) (*workflowservice.StartWorkflowExecutionRequest, error) {
 	if request == nil {
 		return nil, errRequestNotSet
 	}
@@ -366,11 +442,13 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 		return nil, err
 	}
 
-	if err := backoff.ValidateSchedule(request.GetCronSchedule()); err != nil {
+	if err := wh.validateWorkflowStartDelay(request.GetCronSchedule(), request.WorkflowStartDelay); err != nil {
 		return nil, err
 	}
 
-	wh.logger.Debug("Received StartWorkflowExecution.", tag.WorkflowID(request.GetWorkflowId()))
+	if err := backoff.ValidateSchedule(request.GetCronSchedule()); err != nil {
+		return nil, err
+	}
 
 	if request.WorkflowType == nil || request.WorkflowType.GetName() == "" {
 		return nil, errWorkflowTypeNotSet
@@ -380,7 +458,11 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 		return nil, errWorkflowTypeTooLong
 	}
 
-	if err := wh.validateTaskQueue(request.TaskQueue); err != nil {
+	if err := common.ValidateUTF8String("WorkflowType", request.WorkflowType.GetName()); err != nil {
+		return nil, err
+	}
+
+	if err := tqid.NormalizeAndValidate(request.TaskQueue, "", wh.config.MaxIDLengthLimit()); err != nil {
 		return nil, err
 	}
 
@@ -388,48 +470,255 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 		return nil, err
 	}
 
-	if request.GetRequestId() == "" {
-		return nil, errRequestIDNotSet
-	}
-
-	if len(request.GetRequestId()) > wh.config.MaxIDLengthLimit() {
-		return nil, errRequestIDTooLong
-	}
-
-	request, err := wh.unaliasStartWorkflowExecutionRequestSearchAttributes(request, namespaceName)
-	if err != nil {
+	if err := validateRequestId(&request.RequestId, wh.config.MaxIDLengthLimit()); err != nil {
 		return nil, err
 	}
 
-	if err = wh.validateSearchAttributes(request.GetSearchAttributes(), namespaceName); err != nil {
+	if err := wh.validateWorkflowIdReusePolicy(
+		namespaceName,
+		request.WorkflowIdReusePolicy,
+		request.WorkflowIdConflictPolicy); err != nil {
 		return nil, err
 	}
 
 	enums.SetDefaultWorkflowIdReusePolicy(&request.WorkflowIdReusePolicy)
+	enums.SetDefaultWorkflowIdConflictPolicy(&request.WorkflowIdConflictPolicy, enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL)
 
-	wh.logger.Debug("Start workflow execution request namespace.", tag.WorkflowNamespace(namespaceName.String()))
+	if err := wh.validateOnConflictOptions(request.OnConflictOptions); err != nil {
+		return nil, err
+	}
+
+	sa, err := wh.unaliasedSearchAttributesFrom(request.GetSearchAttributes(), namespaceName)
+	if err != nil {
+		return nil, err
+	}
+	if sa != request.SearchAttributes {
+		// cloning here so in case of retry the field is set to the current search attributes
+		request = common.CloneProto(request)
+		request.SearchAttributes = sa
+	}
+
+	if err := wh.validateWorkflowCompletionCallbacks(namespaceName, request.GetCompletionCallbacks()); err != nil {
+		return nil, err
+	}
+
+	if err := wh.validateLinks(namespaceName, request.GetLinks()); err != nil {
+		return nil, err
+	}
+
+	return request, nil
+}
+
+func (wh *WorkflowHandler) unaliasedSearchAttributesFrom(
+	attributes *commonpb.SearchAttributes,
+	namespaceName namespace.Name,
+) (*commonpb.SearchAttributes, error) {
+	sa, err := searchattribute.UnaliasFields(wh.saMapperProvider, attributes, namespaceName.String())
+	if err != nil {
+		return nil, err
+	}
+
+	if err = wh.validateSearchAttributes(sa, namespaceName); err != nil {
+		return nil, err
+	}
+	return sa, nil
+}
+
+func (wh *WorkflowHandler) ExecuteMultiOperation(
+	ctx context.Context,
+	request *workflowservice.ExecuteMultiOperationRequest,
+) (_ *workflowservice.ExecuteMultiOperationResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	namespaceName := namespace.Name(request.Namespace)
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
 	if err != nil {
 		return nil, err
 	}
-	wh.logger.Debug("Start workflow execution request namespaceID.", tag.WorkflowNamespaceID(namespaceID.String()))
 
-	resp, err := wh.historyClient.StartWorkflowExecution(ctx, common.CreateHistoryStartWorkflowRequest(namespaceID.String(), request, nil, time.Now().UTC()))
+	if !wh.config.EnableExecuteMultiOperation(request.Namespace) {
+		return nil, errMultiOperationAPINotAllowed
+	}
 
+	// as a temporary limitation, the only allowed list of operations is exactly [Start, Update]
+	if len(request.Operations) != 2 {
+		return nil, errMultiOpNotStartAndUpdate
+	}
+	if request.Operations[0].GetStartWorkflow() == nil {
+		return nil, errMultiOpNotStartAndUpdate
+	}
+	if request.Operations[1].GetUpdateWorkflow() == nil {
+		return nil, errMultiOpNotStartAndUpdate
+	}
+
+	historyReq, err := wh.convertToHistoryMultiOperationRequest(namespaceID, request)
 	if err != nil {
 		return nil, err
 	}
-	return &workflowservice.StartWorkflowExecutionResponse{RunId: resp.GetRunId(), EagerWorkflowTask: resp.GetEagerWorkflowTask()}, nil
+
+	historyResp, err := wh.historyClient.ExecuteMultiOperation(ctx, historyReq)
+	if err != nil {
+		var multiErr *serviceerror.MultiOperationExecution
+		if errors.As(err, &multiErr) {
+			// Trim error message for end-users.
+			// The per-operation errors are embedded inside the error and unpacked by the SDK.
+			multiErr.Message = "MultiOperation could not be executed."
+		}
+		return nil, err
+	}
+
+	response, err := convertToMultiOperationResponse(historyResp)
+	if err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
+func (wh *WorkflowHandler) convertToHistoryMultiOperationRequest(
+	namespaceID namespace.ID,
+	request *workflowservice.ExecuteMultiOperationRequest,
+) (*historyservice.ExecuteMultiOperationRequest, error) {
+	var lastWorkflowID string
+	ops := make([]*historyservice.ExecuteMultiOperationRequest_Operation, len(request.Operations))
+
+	var hasError bool
+	errs := make([]error, len(request.Operations))
+
+	for i, op := range request.Operations {
+		convertedOp, opWorkflowID, err := wh.convertToHistoryMultiOperationItem(namespaceID, op)
+		if err != nil {
+			hasError = true
+		} else {
+			// set to default in case the whole MultOp request
+			err = errMultiOpAborted
+
+			switch {
+			case lastWorkflowID == "":
+				lastWorkflowID = opWorkflowID
+			case lastWorkflowID != opWorkflowID:
+				err = errMultiOpWorkflowIdInconsistent
+				hasError = true
+			}
+		}
+		errs[i] = err
+		ops[i] = convertedOp
+	}
+
+	if hasError {
+		return nil, serviceerror.NewMultiOperationExecution("MultiOperation could not be executed.", errs)
+	}
+
+	return &historyservice.ExecuteMultiOperationRequest{
+		NamespaceId: namespaceID.String(),
+		WorkflowId:  lastWorkflowID,
+		Operations:  ops,
+	}, nil
+}
+
+func (wh *WorkflowHandler) convertToHistoryMultiOperationItem(
+	namespaceID namespace.ID,
+	op *workflowservice.ExecuteMultiOperationRequest_Operation,
+) (*historyservice.ExecuteMultiOperationRequest_Operation, string, error) {
+	var workflowId string
+	var opReq *historyservice.ExecuteMultiOperationRequest_Operation
+
+	if startReq := op.GetStartWorkflow(); startReq != nil {
+		var err error
+		if startReq, err = wh.prepareStartWorkflowRequest(startReq); err != nil {
+			return nil, "", err
+		}
+		if len(startReq.CronSchedule) > 0 {
+			return nil, "", errMultiOpStartCronSchedule
+		}
+		if startReq.RequestEagerExecution {
+			return nil, "", errMultiOpEagerWorkflow
+		}
+		if timestamp.DurationValue(startReq.WorkflowStartDelay) > 0 {
+			return nil, "", errMultiOpStartDelay
+		}
+
+		workflowId = startReq.WorkflowId
+		opReq = &historyservice.ExecuteMultiOperationRequest_Operation{
+			Operation: &historyservice.ExecuteMultiOperationRequest_Operation_StartWorkflow{
+				StartWorkflow: common.CreateHistoryStartWorkflowRequest(
+					namespaceID.String(),
+					startReq,
+					nil,
+					nil,
+					time.Now().UTC(),
+				),
+			},
+		}
+	} else if updateReq := op.GetUpdateWorkflow(); updateReq != nil {
+		if err := wh.prepareUpdateWorkflowRequest(updateReq); err != nil {
+			return nil, "", err
+		}
+		if updateReq.FirstExecutionRunId != "" {
+			return nil, "", errMultiOpUpdateFirstExecutionRunId
+		}
+		if updateReq.WorkflowExecution.RunId != "" {
+			return nil, "", errMultiOpUpdateExecutionRunId
+		}
+
+		workflowId = updateReq.WorkflowExecution.WorkflowId
+		opReq = &historyservice.ExecuteMultiOperationRequest_Operation{
+			Operation: &historyservice.ExecuteMultiOperationRequest_Operation_UpdateWorkflow{
+				UpdateWorkflow: &historyservice.UpdateWorkflowExecutionRequest{
+					NamespaceId: namespaceID.String(),
+					Request:     updateReq,
+				},
+			},
+		}
+	} else {
+		return nil, "", serviceerror.NewInternal(fmt.Sprintf("unsupported operation: %T", op.Operation))
+	}
+
+	return opReq, workflowId, nil
+}
+
+func convertToMultiOperationResponse(
+	historyResp *historyservice.ExecuteMultiOperationResponse,
+) (*workflowservice.ExecuteMultiOperationResponse, error) {
+	resp := &workflowservice.ExecuteMultiOperationResponse{
+		Responses: make([]*workflowservice.ExecuteMultiOperationResponse_Response, len(historyResp.Responses)),
+	}
+	for i, op := range historyResp.Responses {
+		var opResp *workflowservice.ExecuteMultiOperationResponse_Response
+		if startResp := op.GetStartWorkflow(); startResp != nil {
+			opResp = &workflowservice.ExecuteMultiOperationResponse_Response{
+				Response: &workflowservice.ExecuteMultiOperationResponse_Response_StartWorkflow{
+					StartWorkflow: &workflowservice.StartWorkflowExecutionResponse{
+						RunId:   startResp.RunId,
+						Started: startResp.Started,
+					},
+				},
+			}
+		} else if updateResp := op.GetUpdateWorkflow(); updateResp != nil {
+			opResp = &workflowservice.ExecuteMultiOperationResponse_Response{
+				Response: &workflowservice.ExecuteMultiOperationResponse_Response_UpdateWorkflow{
+					UpdateWorkflow: &workflowservice.UpdateWorkflowExecutionResponse{
+						UpdateRef: updateResp.Response.UpdateRef,
+						Outcome:   updateResp.Response.Outcome,
+						Stage:     updateResp.Response.Stage,
+					},
+				},
+			}
+		} else {
+			return nil, serviceerror.NewInternal(fmt.Sprintf("unexpected operation result: %T", op.Response))
+		}
+		resp.Responses[i] = opResp
+	}
+	return resp, nil
 }
 
 // GetWorkflowExecutionHistory returns the history of specified workflow execution.  It fails with 'EntityNotExistError' if specified workflow
 // execution in unknown to the service.
 func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, request *workflowservice.GetWorkflowExecutionHistoryRequest) (_ *workflowservice.GetWorkflowExecutionHistoryResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
-
-	if wh.isStopped() {
-		return nil, errShuttingDown
-	}
 
 	if request == nil {
 		return nil, errRequestNotSet
@@ -451,12 +740,12 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 	}
 
 	// force limit page size if exceed
-	if request.GetMaximumPageSize() > common.GetHistoryMaxPageSize {
+	if request.GetMaximumPageSize() > primitives.GetHistoryMaxPageSize {
 		wh.throttledLogger.Warn("GetHistory page size is larger than threshold",
 			tag.WorkflowID(request.Execution.GetWorkflowId()),
 			tag.WorkflowRunID(request.Execution.GetRunId()),
 			tag.WorkflowNamespaceID(namespaceID.String()), tag.WorkflowSize(int64(request.GetMaximumPageSize())))
-		request.MaximumPageSize = common.GetHistoryMaxPageSize
+		request.MaximumPageSize = primitives.GetHistoryMaxPageSize
 	}
 
 	if !request.GetSkipArchival() {
@@ -467,257 +756,36 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 		}
 	}
 
-	// this function returns the following 7 things,
-	// 1. the current branch token (to use to retrieve history events)
-	// 2. the workflow run ID
-	// 3. the last first event ID (the event ID of the last batch of events in the history)
-	// 4. the last first event transaction id
-	// 5. the next event ID
-	// 6. whether the workflow is running
-	// 7. error if any
-	queryHistory := func(
-		namespaceUUID namespace.ID,
-		execution *commonpb.WorkflowExecution,
-		expectedNextEventID int64,
-		currentBranchToken []byte,
-	) ([]byte, string, int64, int64, bool, error) {
-		response, err := wh.historyClient.PollMutableState(ctx, &historyservice.PollMutableStateRequest{
-			NamespaceId:         namespaceUUID.String(),
-			Execution:           execution,
-			ExpectedNextEventId: expectedNextEventID,
-			CurrentBranchToken:  currentBranchToken,
+	response, err := wh.historyClient.GetWorkflowExecutionHistory(ctx,
+		&historyservice.GetWorkflowExecutionHistoryRequest{
+			NamespaceId: namespaceID.String(),
+			Request:     request,
 		})
-
-		if err != nil {
-			return nil, "", 0, 0, false, err
-		}
-		isWorkflowRunning := response.GetWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
-
-		return response.CurrentBranchToken,
-			response.Execution.GetRunId(),
-			response.GetLastFirstEventId(),
-			response.GetNextEventId(),
-			isWorkflowRunning,
-			nil
-	}
-
-	isLongPoll := request.GetWaitNewEvent()
-	isCloseEventOnly := request.GetHistoryEventFilterType() == enumspb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT
-	execution := request.Execution
-	var continuationToken *tokenspb.HistoryContinuation
-
-	var runID string
-	lastFirstEventID := common.FirstEventID
-	var nextEventID int64
-	var isWorkflowRunning bool
-
-	// process the token for paging
-	queryNextEventID := common.EndEventID
-	if request.NextPageToken != nil {
-		continuationToken, err = deserializeHistoryToken(request.NextPageToken)
-		if err != nil {
-			return nil, errInvalidNextPageToken
-		}
-		if execution.GetRunId() != "" && execution.GetRunId() != continuationToken.GetRunId() {
-			return nil, errNextPageTokenRunIDMismatch
-		}
-
-		execution.RunId = continuationToken.GetRunId()
-
-		// we need to update the current next event ID and whether workflow is running
-		if len(continuationToken.PersistenceToken) == 0 && isLongPoll && continuationToken.IsWorkflowRunning {
-			if !isCloseEventOnly {
-				queryNextEventID = continuationToken.GetNextEventId()
-			}
-			continuationToken.BranchToken, _, lastFirstEventID, nextEventID, isWorkflowRunning, err =
-				queryHistory(namespaceID, execution, queryNextEventID, continuationToken.BranchToken)
-			if err != nil {
-				return nil, err
-			}
-			continuationToken.FirstEventId = continuationToken.GetNextEventId()
-			continuationToken.NextEventId = nextEventID
-			continuationToken.IsWorkflowRunning = isWorkflowRunning
-		}
-	} else {
-		continuationToken = &tokenspb.HistoryContinuation{}
-		if !isCloseEventOnly {
-			queryNextEventID = common.FirstEventID
-		}
-		continuationToken.BranchToken, runID, lastFirstEventID, nextEventID, isWorkflowRunning, err =
-			queryHistory(namespaceID, execution, queryNextEventID, nil)
-		if err != nil {
-			return nil, err
-		}
-
-		execution.RunId = runID
-
-		continuationToken.RunId = runID
-		continuationToken.FirstEventId = common.FirstEventID
-		continuationToken.NextEventId = nextEventID
-		continuationToken.IsWorkflowRunning = isWorkflowRunning
-		continuationToken.PersistenceToken = nil
-	}
-
-	// TODO below is a temporal solution to guard against invalid event batch
-	//  when data inconsistency occurs
-	//  long term solution should check event batch pointing backwards within history store
-	defer func() {
-		if _, ok := retError.(*serviceerror.DataLoss); ok {
-			wh.trimHistoryNode(ctx, namespaceID.String(), execution.GetWorkflowId(), execution.GetRunId())
-		}
-	}()
-
-	rawHistoryQueryEnabled := wh.config.SendRawWorkflowHistory(request.GetNamespace())
-
-	history := &historypb.History{}
-	history.Events = []*historypb.HistoryEvent{}
-	var historyBlob []*commonpb.DataBlob
-	if isCloseEventOnly {
-		if !isWorkflowRunning {
-			if rawHistoryQueryEnabled {
-				historyBlob, _, err = wh.getRawHistory(
-					ctx,
-					wh.metricsScope(ctx),
-					namespaceID,
-					*execution,
-					lastFirstEventID,
-					nextEventID,
-					request.GetMaximumPageSize(),
-					nil,
-					continuationToken.TransientWorkflowTask,
-					continuationToken.BranchToken,
-				)
-				if err != nil {
-					return nil, err
-				}
-
-				// since getHistory func will not return empty history, so the below is safe
-				historyBlob = historyBlob[len(historyBlob)-1:]
-			} else {
-				history, _, err = wh.getHistory(
-					ctx,
-					wh.metricsScope(ctx),
-					namespaceID,
-					namespace.Name(request.GetNamespace()),
-					*execution,
-					lastFirstEventID,
-					nextEventID,
-					request.GetMaximumPageSize(),
-					nil,
-					continuationToken.TransientWorkflowTask,
-					continuationToken.BranchToken,
-				)
-				if err != nil {
-					return nil, err
-				}
-				// since getHistory func will not return empty history, so the below is safe
-				history.Events = history.Events[len(history.Events)-1 : len(history.Events)]
-			}
-			continuationToken = nil
-		} else if isLongPoll {
-			// set the persistence token to be nil so next time we will query history for updates
-			continuationToken.PersistenceToken = nil
-		} else {
-			continuationToken = nil
-		}
-	} else {
-		// return all events
-		if continuationToken.FirstEventId >= continuationToken.NextEventId {
-			// currently there is no new event
-			history.Events = []*historypb.HistoryEvent{}
-			if !isWorkflowRunning {
-				continuationToken = nil
-			}
-		} else {
-			if rawHistoryQueryEnabled {
-				historyBlob, continuationToken.PersistenceToken, err = wh.getRawHistory(
-					ctx,
-					wh.metricsScope(ctx),
-					namespaceID,
-					*execution,
-					continuationToken.FirstEventId,
-					continuationToken.NextEventId,
-					request.GetMaximumPageSize(),
-					continuationToken.PersistenceToken,
-					continuationToken.TransientWorkflowTask,
-					continuationToken.BranchToken,
-				)
-			} else {
-				history, continuationToken.PersistenceToken, err = wh.getHistory(
-					ctx,
-					wh.metricsScope(ctx),
-					namespaceID,
-					namespace.Name(request.GetNamespace()),
-					*execution,
-					continuationToken.FirstEventId,
-					continuationToken.NextEventId,
-					request.GetMaximumPageSize(),
-					continuationToken.PersistenceToken,
-					continuationToken.TransientWorkflowTask,
-					continuationToken.BranchToken,
-				)
-			}
-
-			if err != nil {
-				return nil, err
-			}
-
-			// here, for long pull on history events, we need to intercept the paging token from cassandra
-			// and do something clever
-			if len(continuationToken.PersistenceToken) == 0 && (!continuationToken.IsWorkflowRunning || !isLongPoll) {
-				// meaning, there is no more history to be returned
-				continuationToken = nil
-			}
-		}
-	}
-
-	nextToken, err := serializeHistoryToken(continuationToken)
 	if err != nil {
 		return nil, err
 	}
 
-	// Backwards-compatibility fix for retry events after #1866: older SDKs don't know how to "follow"
-	// subsequent runs linked in WorkflowExecutionFailed or TimedOut events, so they'll get the wrong result
-	// when trying to "get" the result of a workflow run. (This applies to cron runs also but "get" on a cron
-	// workflow isn't really sensible.)
-	//
-	// To handle this in a backwards-compatible way, we'll pretend the completion event is actually
-	// ContinuedAsNew, if it's Failed or TimedOut. We want to do this only when the client is looking for a
-	// completion event, and not when it's getting the history to display for other purposes. The best signal
-	// for that purpose is `isCloseEventOnly`. (We can't use `isLongPoll` also because in some cases, older
-	// versions of the Java SDK don't set that flag.)
-	//
-	// TODO: We can remove this once we no longer support SDK versions prior to around September 2021.
-	// Revisit this once we have an SDK deprecation policy.
-	if isCloseEventOnly &&
-		!wh.versionChecker.ClientSupportsFeature(ctx, headers.FeatureFollowsNextRunID) &&
-		len(history.Events) > 0 {
-		lastEvent := history.Events[len(history.Events)-1]
-		fakeEvent, err := wh.makeFakeContinuedAsNewEvent(ctx, lastEvent)
-		if err != nil {
-			return nil, err
-		}
-		if fakeEvent != nil {
-			history.Events[len(history.Events)-1] = fakeEvent
-		}
+	isCloseEventOnly := request.HistoryEventFilterType == enumspb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT
+	err = api.ProcessInternalRawHistory(
+		ctx,
+		wh.saProvider,
+		wh.saMapperProvider,
+		response,
+		wh.visibilityMgr,
+		wh.versionChecker,
+		namespace.Name(request.GetNamespace()),
+		isCloseEventOnly,
+	)
+	if err != nil {
+		return nil, err
 	}
-
-	return &workflowservice.GetWorkflowExecutionHistoryResponse{
-		History:       history,
-		RawHistory:    historyBlob,
-		NextPageToken: nextToken,
-		Archived:      false,
-	}, nil
+	return response.Response, nil
 }
 
 // GetWorkflowExecutionHistory returns the history of specified workflow execution.  It fails with 'EntityNotExistError' if specified workflow
 // execution in unknown to the service.
 func (wh *WorkflowHandler) GetWorkflowExecutionHistoryReverse(ctx context.Context, request *workflowservice.GetWorkflowExecutionHistoryReverseRequest) (_ *workflowservice.GetWorkflowExecutionHistoryReverseResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
-
-	if wh.isStopped() {
-		return nil, errShuttingDown
-	}
 
 	if request == nil {
 		return nil, errRequestNotSet
@@ -737,110 +805,23 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistoryReverse(ctx context.Contex
 	}
 
 	// force limit page size if exceed
-	if request.GetMaximumPageSize() > common.GetHistoryMaxPageSize {
+	if request.GetMaximumPageSize() > primitives.GetHistoryMaxPageSize {
 		wh.throttledLogger.Warn("GetHistory page size is larger than threshold",
 			tag.WorkflowID(request.Execution.GetWorkflowId()),
 			tag.WorkflowRunID(request.Execution.GetRunId()),
 			tag.WorkflowNamespaceID(namespaceID.String()), tag.WorkflowSize(int64(request.GetMaximumPageSize())))
-		request.MaximumPageSize = common.GetHistoryMaxPageSize
+		request.MaximumPageSize = primitives.GetHistoryMaxPageSize
 	}
 
-	queryMutableState := func(
-		namespaceUUID namespace.ID,
-		execution *commonpb.WorkflowExecution,
-		expectedNextEventID int64,
-		currentBranchToken []byte,
-	) ([]byte, string, int64, error) {
-		response, err := wh.historyClient.PollMutableState(ctx, &historyservice.PollMutableStateRequest{
-			NamespaceId:         namespaceUUID.String(),
-			Execution:           execution,
-			ExpectedNextEventId: expectedNextEventID,
-			CurrentBranchToken:  currentBranchToken,
+	response, err := wh.historyClient.GetWorkflowExecutionHistoryReverse(ctx,
+		&historyservice.GetWorkflowExecutionHistoryReverseRequest{
+			NamespaceId: namespaceID.String(),
+			Request:     request,
 		})
-
-		if err != nil {
-			return nil, "", 0, err
-		}
-
-		return response.CurrentBranchToken,
-			response.Execution.GetRunId(),
-			response.GetLastFirstEventTxnId(),
-			nil
-	}
-
-	execution := request.Execution
-	var continuationToken *tokenspb.HistoryContinuation
-
-	var runID string
-	var lastFirstTxnID int64
-
-	if request.NextPageToken == nil {
-		continuationToken = &tokenspb.HistoryContinuation{}
-		continuationToken.BranchToken, runID, lastFirstTxnID, err =
-			queryMutableState(namespaceID, execution, common.FirstEventID, nil)
-		if err != nil {
-			return nil, err
-		}
-
-		execution.RunId = runID
-		continuationToken.RunId = runID
-		continuationToken.FirstEventId = common.FirstEventID
-		continuationToken.NextEventId = common.EmptyEventID
-		continuationToken.PersistenceToken = nil
-	} else {
-		continuationToken, err = deserializeHistoryToken(request.NextPageToken)
-		if err != nil {
-			return nil, errInvalidNextPageToken
-		}
-		if execution.GetRunId() != "" && execution.GetRunId() != continuationToken.GetRunId() {
-			return nil, errNextPageTokenRunIDMismatch
-		}
-
-		execution.RunId = continuationToken.GetRunId()
-	}
-
-	// TODO below is a temporal solution to guard against invalid event batch
-	//  when data inconsistency occurs
-	//  long term solution should check event batch pointing backwards within history store
-	defer func() {
-		if _, ok := retError.(*serviceerror.DataLoss); ok {
-			wh.trimHistoryNode(ctx, namespaceID.String(), execution.GetWorkflowId(), execution.GetRunId())
-		}
-	}()
-
-	history := &historypb.History{}
-	history.Events = []*historypb.HistoryEvent{}
-	// return all events
-	history, continuationToken.PersistenceToken, continuationToken.NextEventId, err = wh.getHistoryReverse(
-		ctx,
-		wh.metricsScope(ctx),
-		namespaceID,
-		namespace.Name(request.GetNamespace()),
-		*execution,
-		continuationToken.NextEventId,
-		lastFirstTxnID,
-		request.GetMaximumPageSize(),
-		continuationToken.PersistenceToken,
-		continuationToken.BranchToken,
-	)
-
 	if err != nil {
 		return nil, err
 	}
-
-	if continuationToken.NextEventId < continuationToken.FirstEventId {
-		continuationToken = nil
-	}
-
-	nextToken, err := serializeHistoryToken(continuationToken)
-	if err != nil {
-		return nil, err
-	}
-
-	return &workflowservice.GetWorkflowExecutionHistoryReverseResponse{
-		History:       history,
-		NextPageToken: nextToken,
-	}, nil
+	return response.Response, nil
 }
 
 // PollWorkflowTaskQueue is called by application worker to process WorkflowTask from a specific task queue.  A
@@ -850,9 +831,6 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistoryReverse(ctx context.Contex
 // application worker.
 func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *workflowservice.PollWorkflowTaskQueueRequest) (_ *workflowservice.PollWorkflowTaskQueueResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
-
-	callTime := time.Now().UTC()
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
@@ -870,9 +848,22 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 		return nil, errIdentityTooLong
 	}
 
-	if err := wh.validateTaskQueue(request.TaskQueue); err != nil {
+	if err := wh.validateVersioningInfo(request.Namespace, request.WorkerVersionCapabilities, request.TaskQueue); err != nil {
 		return nil, err
 	}
+
+	if request.TaskQueue.GetKind() == enumspb.TASK_QUEUE_KIND_UNSPECIFIED {
+		wh.logger.Warn("Unspecified task queue kind",
+			tag.WorkflowTaskQueueName(request.TaskQueue.GetName()),
+			tag.WorkflowNamespace(namespace.Name(request.GetNamespace()).String()),
+		)
+	}
+
+	if err := tqid.NormalizeAndValidate(request.TaskQueue, "", wh.config.MaxIDLengthLimit()); err != nil {
+		return nil, err
+	}
+
+	callTime := time.Now().UTC()
 
 	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
 	if err != nil {
@@ -890,22 +881,31 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 	}
 
 	pollerID := uuid.New()
-	matchingResp, err := wh.matchingClient.PollWorkflowTaskQueue(ctx, &matchingservice.PollWorkflowTaskQueueRequest{
+	childCtx := wh.registerOutstandingPollContext(ctx, pollerID, namespaceID.String())
+	defer wh.unregisterOutstandingPollContext(pollerID, namespaceID.String())
+	matchingResp, err := wh.matchingClient.PollWorkflowTaskQueue(childCtx, &matchingservice.PollWorkflowTaskQueueRequest{
 		NamespaceId: namespaceID.String(),
 		PollerId:    pollerID,
 		PollRequest: request,
 	})
 	if err != nil {
-		contextWasCanceled := wh.cancelOutstandingPoll(ctx, namespaceID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, request.TaskQueue, pollerID)
+		contextWasCanceled := wh.cancelOutstandingPoll(childCtx, namespaceID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, request.TaskQueue, pollerID)
 		if contextWasCanceled {
 			// Clear error as we don't want to report context cancellation error to count against our SLA.
 			// It doesn't matter what to return here, client has already gone. But (nil,nil) is invalid gogo return pair.
 			return &workflowservice.PollWorkflowTaskQueueResponse{}, nil
 		}
 
+		// These errors are expected from some versioning situations. We should not log them, it'd be too noisy.
+		var newerBuild *serviceerror.NewerBuildExists      // expected when versioned poller is superceded
+		var failedPrecond *serviceerror.FailedPrecondition // expected when user data is disabled
+		if errors.As(err, &newerBuild) || errors.As(err, &failedPrecond) {
+			return nil, err
+		}
+
 		// For all other errors log an error and return it back to client.
 		ctxTimeout := "not-set"
-		ctxDeadline, ok := ctx.Deadline()
+		ctxDeadline, ok := childCtx.Deadline()
 		if ok {
 			ctxTimeout = ctxDeadline.Sub(callTime).String()
 		}
@@ -916,11 +916,24 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 		return nil, err
 	}
 
-	resp, err := wh.createPollWorkflowTaskQueueResponse(ctx, namespaceID, matchingResp, matchingResp.GetBranchToken())
-	if err != nil {
-		return nil, err
-	}
-	return resp, nil
+	return &workflowservice.PollWorkflowTaskQueueResponse{
+		TaskToken:                  matchingResp.TaskToken,
+		WorkflowExecution:          matchingResp.WorkflowExecution,
+		WorkflowType:               matchingResp.WorkflowType,
+		PreviousStartedEventId:     matchingResp.PreviousStartedEventId,
+		StartedEventId:             matchingResp.StartedEventId,
+		Query:                      matchingResp.Query,
+		BacklogCountHint:           matchingResp.BacklogCountHint,
+		Attempt:                    matchingResp.Attempt,
+		History:                    matchingResp.History,
+		NextPageToken:              matchingResp.NextPageToken,
+		WorkflowExecutionTaskQueue: matchingResp.WorkflowExecutionTaskQueue,
+		ScheduledTime:              matchingResp.ScheduledTime,
+		StartedTime:                matchingResp.StartedTime,
+		Queries:                    matchingResp.Queries,
+		Messages:                   matchingResp.Messages,
+		PollerScalingDecision:      matchingResp.PollerScalingDecision,
+	}, nil
 }
 
 func contextNearDeadline(ctx context.Context, tailroom time.Duration) bool {
@@ -940,12 +953,7 @@ func (wh *WorkflowHandler) RespondWorkflowTaskCompleted(
 	ctx context.Context,
 	request *workflowservice.RespondWorkflowTaskCompletedRequest,
 ) (_ *workflowservice.RespondWorkflowTaskCompletedResponse, retError error) {
-
 	defer log.CapturePanic(wh.logger, &retError)
-
-	if wh.isStopped() {
-		return nil, errShuttingDown
-	}
 
 	if request == nil {
 		return nil, errRequestNotSet
@@ -955,52 +963,36 @@ func (wh *WorkflowHandler) RespondWorkflowTaskCompleted(
 		return nil, errIdentityTooLong
 	}
 
-	taskToken, err := wh.tokenSerializer.Deserialize(request.TaskToken)
-	if err != nil {
+	if err := wh.validateVersioningInfo(
+		request.Namespace,
+		request.WorkerVersionStamp,
+		request.StickyAttributes.GetWorkerTaskQueue(),
+	); err != nil {
 		return nil, err
 	}
-	namespaceId := namespace.ID(taskToken.GetNamespaceId())
 
 	wh.overrides.DisableEagerActivityDispatchForBuggyClients(ctx, request)
 
-	histResp, err := wh.historyClient.RespondWorkflowTaskCompleted(ctx, &historyservice.RespondWorkflowTaskCompletedRequest{
-		NamespaceId:     namespaceId.String(),
-		CompleteRequest: request},
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	response, err := wh.historyClient.RespondWorkflowTaskCompleted(ctx,
+		&historyservice.RespondWorkflowTaskCompletedRequest{
+			NamespaceId:     namespaceID.String(),
+			CompleteRequest: request,
+		},
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	completedResp := &workflowservice.RespondWorkflowTaskCompletedResponse{
-		ActivityTasks:       histResp.ActivityTasks,
-		ResetHistoryEventId: histResp.ResetHistoryEventId,
-	}
-	if request.GetReturnNewWorkflowTask() && histResp != nil && histResp.StartedResponse != nil {
-		taskToken := &tokenspb.Task{
-			NamespaceId:      taskToken.GetNamespaceId(),
-			WorkflowId:       taskToken.GetWorkflowId(),
-			RunId:            taskToken.GetRunId(),
-			ScheduledEventId: histResp.StartedResponse.GetScheduledEventId(),
-			Attempt:          histResp.StartedResponse.GetAttempt(),
-		}
-		token, err := wh.tokenSerializer.Serialize(taskToken)
-		if err != nil {
-			return nil, err
-		}
-		workflowExecution := &commonpb.WorkflowExecution{
-			WorkflowId: taskToken.GetWorkflowId(),
-			RunId:      taskToken.GetRunId(),
-		}
-		matchingResp := common.CreateMatchingPollWorkflowTaskQueueResponse(histResp.StartedResponse, workflowExecution, token)
-
-		newWorkflowTask, err := wh.createPollWorkflowTaskQueueResponse(ctx, namespaceId, matchingResp, matchingResp.GetBranchToken())
-		if err != nil {
-			return nil, err
-		}
-		completedResp.WorkflowTask = newWorkflowTask
-	}
-
-	return completedResp, nil
+	return &workflowservice.RespondWorkflowTaskCompletedResponse{
+		WorkflowTask:        response.NewWorkflowTask,
+		ActivityTasks:       response.ActivityTasks,
+		ResetHistoryEventId: response.ResetHistoryEventId,
+	}, nil
 }
 
 // RespondWorkflowTaskFailed is called by application worker to indicate failure.  This results in
@@ -1014,17 +1006,13 @@ func (wh *WorkflowHandler) RespondWorkflowTaskFailed(
 
 	defer log.CapturePanic(wh.logger, &retError)
 
-	if wh.isStopped() {
-		return nil, errShuttingDown
-	}
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
 
 	taskToken, err := wh.tokenSerializer.Deserialize(request.TaskToken)
 	if err != nil {
-		return nil, err
+		return nil, errDeserializingToken
 	}
 	namespaceId := namespace.ID(taskToken.GetNamespaceId())
 	namespaceEntry, err := wh.namespaceRegistry.GetNamespaceByID(namespaceId)
@@ -1050,7 +1038,7 @@ func (wh *WorkflowHandler) RespondWorkflowTaskFailed(
 		wh.throttledLogger,
 		tag.BlobSizeViolationOperation("RespondWorkflowTaskFailed"),
 	); err != nil {
-		serverFailure := failure.NewServerFailure(common.FailureReasonFailureExceedsLimit, false)
+		serverFailure := failure.NewServerFailure(common.FailureReasonFailureExceedsLimit, true)
 		serverFailure.Cause = failure.Truncate(request.Failure, sizeLimitWarn)
 		request.Failure = serverFailure
 	}
@@ -1061,7 +1049,7 @@ func (wh *WorkflowHandler) RespondWorkflowTaskFailed(
 			tag.WorkflowID(taskToken.GetWorkflowId()),
 			tag.WorkflowRunID(taskToken.GetRunId()),
 		)
-		wh.metricsScope(ctx).Counter(metrics.ServiceErrNonDeterministicCounter.GetMetricName()).Record(1)
+		metrics.ServiceErrNonDeterministicCounter.With(wh.metricsScope(ctx)).Record(1)
 	}
 
 	_, err = wh.historyClient.RespondWorkflowTaskFailed(ctx, &historyservice.RespondWorkflowTaskFailedRequest{
@@ -1100,14 +1088,19 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 		return nil, err
 	}
 
-	if err := wh.validateTaskQueue(request.TaskQueue); err != nil {
+	namespaceName := namespace.Name(request.GetNamespace())
+	if err := tqid.NormalizeAndValidate(request.TaskQueue, "", wh.config.MaxIDLengthLimit()); err != nil {
 		return nil, err
 	}
 	if len(request.GetIdentity()) > wh.config.MaxIDLengthLimit() {
 		return nil, errIdentityTooLong
 	}
 
-	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err := wh.validateVersioningInfo(request.Namespace, request.WorkerVersionCapabilities, request.TaskQueue); err != nil {
+		return nil, err
+	}
+
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
 	if err != nil {
 		return nil, err
 	}
@@ -1117,22 +1110,31 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 	}
 
 	pollerID := uuid.New()
-	matchingResponse, err := wh.matchingClient.PollActivityTaskQueue(ctx, &matchingservice.PollActivityTaskQueueRequest{
+	childCtx := wh.registerOutstandingPollContext(ctx, pollerID, namespaceID.String())
+	defer wh.unregisterOutstandingPollContext(pollerID, namespaceID.String())
+	matchingResponse, err := wh.matchingClient.PollActivityTaskQueue(childCtx, &matchingservice.PollActivityTaskQueueRequest{
 		NamespaceId: namespaceID.String(),
 		PollerId:    pollerID,
 		PollRequest: request,
 	})
 	if err != nil {
-		contextWasCanceled := wh.cancelOutstandingPoll(ctx, namespaceID, enumspb.TASK_QUEUE_TYPE_ACTIVITY, request.TaskQueue, pollerID)
+		contextWasCanceled := wh.cancelOutstandingPoll(childCtx, namespaceID, enumspb.TASK_QUEUE_TYPE_ACTIVITY, request.TaskQueue, pollerID)
 		if contextWasCanceled {
 			// Clear error as we don't want to report context cancellation error to count against our SLA.
 			// It doesn't matter what to return here, client has already gone. But (nil,nil) is invalid gogo return pair.
 			return &workflowservice.PollActivityTaskQueueResponse{}, nil
 		}
 
+		// These errors are expected from some versioning situations. We should not log them, it'd be too noisy.
+		var newerBuild *serviceerror.NewerBuildExists      // expected when versioned poller is superceded
+		var failedPrecond *serviceerror.FailedPrecondition // expected when user data is disabled
+		if errors.As(err, &newerBuild) || errors.As(err, &failedPrecond) {
+			return nil, err
+		}
+
 		// For all other errors log an error and return it back to client.
 		ctxTimeout := "not-set"
-		ctxDeadline, ok := ctx.Deadline()
+		ctxDeadline, ok := childCtx.Deadline()
 		if ok {
 			ctxTimeout = ctxDeadline.Sub(callTime).String()
 		}
@@ -1161,6 +1163,8 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 		WorkflowType:                matchingResponse.WorkflowType,
 		WorkflowNamespace:           matchingResponse.WorkflowNamespace,
 		Header:                      matchingResponse.Header,
+		PollerScalingDecision:       matchingResponse.PollerScalingDecision,
+		Priority:                    matchingResponse.Priority,
 	}, nil
 }
 
@@ -1172,10 +1176,6 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 func (wh *WorkflowHandler) RecordActivityTaskHeartbeat(ctx context.Context, request *workflowservice.RecordActivityTaskHeartbeatRequest) (_ *workflowservice.RecordActivityTaskHeartbeatResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
-	if wh.isStopped() {
-		return nil, errShuttingDown
-	}
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
@@ -1183,7 +1183,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeat(ctx context.Context, requ
 	wh.logger.Debug("Received RecordActivityTaskHeartbeat")
 	taskToken, err := wh.tokenSerializer.Deserialize(request.TaskToken)
 	if err != nil {
-		return nil, err
+		return nil, errDeserializingToken
 	}
 	namespaceId := namespace.ID(taskToken.GetNamespaceId())
 	namespaceEntry, err := wh.namespaceRegistry.GetNamespaceByID(namespaceId)
@@ -1229,7 +1229,10 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeat(ctx context.Context, requ
 		return nil, err
 	}
 
-	return &workflowservice.RecordActivityTaskHeartbeatResponse{CancelRequested: resp.GetCancelRequested()}, nil
+	return &workflowservice.RecordActivityTaskHeartbeatResponse{
+		CancelRequested: resp.GetCancelRequested(),
+		ActivityPaused:  resp.GetActivityPaused(),
+	}, nil
 }
 
 // RecordActivityTaskHeartbeatById is called by application worker while it is processing an ActivityTask.  If worker fails
@@ -1239,10 +1242,6 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeat(ctx context.Context, requ
 // use Namespace, WorkflowID and ActivityID
 func (wh *WorkflowHandler) RecordActivityTaskHeartbeatById(ctx context.Context, request *workflowservice.RecordActivityTaskHeartbeatByIdRequest) (_ *workflowservice.RecordActivityTaskHeartbeatByIdResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
-
-	if wh.isStopped() {
-		return nil, errShuttingDown
-	}
 
 	if request == nil {
 		return nil, errRequestNotSet
@@ -1264,14 +1263,17 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatById(ctx context.Context, 
 		return nil, errActivityIDNotSet
 	}
 
-	taskToken := &tokenspb.Task{
-		NamespaceId:      namespaceID.String(),
-		RunId:            runID,
-		WorkflowId:       workflowID,
-		ScheduledEventId: common.EmptyEventID,
-		ActivityId:       activityID,
-		Attempt:          1,
-	}
+	taskToken := tasktoken.NewActivityTaskToken(
+		namespaceID.String(),
+		workflowID,
+		runID,
+		common.EmptyEventID,
+		activityID,
+		"",
+		1,
+		nil,
+		common.EmptyVersion,
+	)
 	token, err := wh.tokenSerializer.Serialize(taskToken)
 	if err != nil {
 		return nil, err
@@ -1325,7 +1327,10 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatById(ctx context.Context, 
 	if err != nil {
 		return nil, err
 	}
-	return &workflowservice.RecordActivityTaskHeartbeatByIdResponse{CancelRequested: resp.GetCancelRequested()}, nil
+	return &workflowservice.RecordActivityTaskHeartbeatByIdResponse{
+		CancelRequested: resp.GetCancelRequested(),
+		ActivityPaused:  resp.GetActivityPaused(),
+	}, nil
 }
 
 // RespondActivityTaskCompleted is called by application worker when it is done processing an ActivityTask.  It will
@@ -1340,16 +1345,12 @@ func (wh *WorkflowHandler) RespondActivityTaskCompleted(
 
 	defer log.CapturePanic(wh.logger, &retError)
 
-	if wh.isStopped() {
-		return nil, errShuttingDown
-	}
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
 	taskToken, err := wh.tokenSerializer.Deserialize(request.TaskToken)
 	if err != nil {
-		return nil, err
+		return nil, errDeserializingToken
 	}
 	namespaceId := namespace.ID(taskToken.GetNamespaceId())
 	namespaceEntry, err := wh.namespaceRegistry.GetNamespaceByID(namespaceId)
@@ -1409,10 +1410,6 @@ func (wh *WorkflowHandler) RespondActivityTaskCompleted(
 func (wh *WorkflowHandler) RespondActivityTaskCompletedById(ctx context.Context, request *workflowservice.RespondActivityTaskCompletedByIdRequest) (_ *workflowservice.RespondActivityTaskCompletedByIdResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
-	if wh.isStopped() {
-		return nil, errShuttingDown
-	}
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
@@ -1436,14 +1433,17 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedById(ctx context.Context,
 		return nil, errIdentityTooLong
 	}
 
-	taskToken := &tokenspb.Task{
-		NamespaceId:      namespaceID.String(),
-		RunId:            runID,
-		WorkflowId:       workflowID,
-		ScheduledEventId: common.EmptyEventID,
-		ActivityId:       activityID,
-		Attempt:          1,
-	}
+	taskToken := tasktoken.NewActivityTaskToken(
+		namespaceID.String(),
+		workflowID,
+		runID,
+		common.EmptyEventID,
+		activityID,
+		"",
+		1,
+		nil,
+		common.EmptyVersion,
+	)
 	token, err := wh.tokenSerializer.Serialize(taskToken)
 	if err != nil {
 		return nil, err
@@ -1512,17 +1512,13 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(
 
 	defer log.CapturePanic(wh.logger, &retError)
 
-	if wh.isStopped() {
-		return nil, errShuttingDown
-	}
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
 
 	taskToken, err := wh.tokenSerializer.Deserialize(request.TaskToken)
 	if err != nil {
-		return nil, err
+		return nil, errDeserializingToken
 	}
 	namespaceID := namespace.ID(taskToken.GetNamespaceId())
 	namespaceEntry, err := wh.namespaceRegistry.GetNamespaceByID(namespaceID)
@@ -1574,7 +1570,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(
 		wh.throttledLogger,
 		tag.BlobSizeViolationOperation("RespondActivityTaskFailed"),
 	); err != nil {
-		serverFailure := failure.NewServerFailure(common.FailureReasonFailureExceedsLimit, false)
+		serverFailure := failure.NewServerFailure(common.FailureReasonFailureExceedsLimit, true)
 		serverFailure.Cause = failure.Truncate(request.Failure, sizeLimitWarn)
 		request.Failure = serverFailure
 
@@ -1599,10 +1595,6 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(
 func (wh *WorkflowHandler) RespondActivityTaskFailedById(ctx context.Context, request *workflowservice.RespondActivityTaskFailedByIdRequest) (_ *workflowservice.RespondActivityTaskFailedByIdResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
-	if wh.isStopped() {
-		return nil, errShuttingDown
-	}
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
@@ -1625,14 +1617,17 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedById(ctx context.Context, re
 		return nil, errIdentityTooLong
 	}
 
-	taskToken := &tokenspb.Task{
-		NamespaceId:      namespaceID.String(),
-		RunId:            runID,
-		WorkflowId:       workflowID,
-		ScheduledEventId: common.EmptyEventID,
-		ActivityId:       activityID,
-		Attempt:          1,
-	}
+	taskToken := tasktoken.NewActivityTaskToken(
+		namespaceID.String(),
+		workflowID,
+		runID,
+		common.EmptyEventID,
+		activityID,
+		"",
+		1,
+		nil,
+		common.EmptyVersion,
+	)
 	token, err := wh.tokenSerializer.Serialize(taskToken)
 	if err != nil {
 		return nil, err
@@ -1679,7 +1674,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedById(ctx context.Context, re
 		wh.throttledLogger,
 		tag.BlobSizeViolationOperation("RespondActivityTaskFailedById"),
 	); err != nil {
-		serverFailure := failure.NewServerFailure(common.FailureReasonFailureExceedsLimit, false)
+		serverFailure := failure.NewServerFailure(common.FailureReasonFailureExceedsLimit, true)
 		serverFailure.Cause = failure.Truncate(request.Failure, sizeLimitWarn)
 		request.Failure = serverFailure
 
@@ -1710,17 +1705,13 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedById(ctx context.Context, re
 func (wh *WorkflowHandler) RespondActivityTaskCanceled(ctx context.Context, request *workflowservice.RespondActivityTaskCanceledRequest) (_ *workflowservice.RespondActivityTaskCanceledResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
-	if wh.isStopped() {
-		return nil, errShuttingDown
-	}
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
 
 	taskToken, err := wh.tokenSerializer.Deserialize(request.TaskToken)
 	if err != nil {
-		return nil, err
+		return nil, errDeserializingToken
 	}
 	namespaceID := namespace.ID(taskToken.GetNamespaceId())
 	namespaceEntry, err := wh.namespaceRegistry.GetNamespaceByID(namespaceID)
@@ -1780,10 +1771,6 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceled(ctx context.Context, requ
 func (wh *WorkflowHandler) RespondActivityTaskCanceledById(ctx context.Context, request *workflowservice.RespondActivityTaskCanceledByIdRequest) (_ *workflowservice.RespondActivityTaskCanceledByIdResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
-	if wh.isStopped() {
-		return nil, errShuttingDown
-	}
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
@@ -1806,14 +1793,17 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceledById(ctx context.Context, 
 		return nil, errIdentityTooLong
 	}
 
-	taskToken := &tokenspb.Task{
-		NamespaceId:      namespaceID.String(),
-		RunId:            runID,
-		WorkflowId:       workflowID,
-		ScheduledEventId: common.EmptyEventID,
-		ActivityId:       activityID,
-		Attempt:          1,
-	}
+	taskToken := tasktoken.NewActivityTaskToken(
+		namespaceID.String(),
+		workflowID,
+		runID,
+		common.EmptyEventID,
+		activityID,
+		"",
+		1,
+		nil,
+		common.EmptyVersion,
+	)
 	token, err := wh.tokenSerializer.Serialize(taskToken)
 	if err != nil {
 		return nil, err
@@ -1877,15 +1867,15 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceledById(ctx context.Context, 
 func (wh *WorkflowHandler) RequestCancelWorkflowExecution(ctx context.Context, request *workflowservice.RequestCancelWorkflowExecutionRequest) (_ *workflowservice.RequestCancelWorkflowExecutionResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
-	if wh.isStopped() {
-		return nil, errShuttingDown
-	}
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
 
 	if err := validateExecution(request.WorkflowExecution); err != nil {
+		return nil, err
+	}
+
+	if err := wh.validateLinks(namespace.Name(request.GetNamespace()), request.GetLinks()); err != nil {
 		return nil, err
 	}
 
@@ -1905,14 +1895,10 @@ func (wh *WorkflowHandler) RequestCancelWorkflowExecution(ctx context.Context, r
 	return &workflowservice.RequestCancelWorkflowExecutionResponse{}, nil
 }
 
-// SignalWorkflowExecution is used to send a signal event to running workflow execution.  This results in
-// WorkflowExecutionSignaled event recorded in the history and a workflow task being created for the execution.
+// SignalWorkflowExecution is used to send a signal event to running workflow execution. This results in
+// a WorkflowExecutionSignaled event recorded in the history and a workflow task being created for the execution.
 func (wh *WorkflowHandler) SignalWorkflowExecution(ctx context.Context, request *workflowservice.SignalWorkflowExecutionRequest) (_ *workflowservice.SignalWorkflowExecutionResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
-
-	if wh.isStopped() {
-		return nil, errShuttingDown
-	}
 
 	if request == nil {
 		return nil, errRequestNotSet
@@ -1923,7 +1909,7 @@ func (wh *WorkflowHandler) SignalWorkflowExecution(ctx context.Context, request 
 	}
 
 	if request.GetSignalName() == "" {
-		return nil, errSignalNameTooLong
+		return nil, errSignalNameNotSet
 	}
 
 	if len(request.GetSignalName()) > wh.config.MaxIDLengthLimit() {
@@ -1932,6 +1918,10 @@ func (wh *WorkflowHandler) SignalWorkflowExecution(ctx context.Context, request 
 
 	if len(request.GetRequestId()) > wh.config.MaxIDLengthLimit() {
 		return nil, errRequestIDTooLong
+	}
+
+	if err := wh.validateLinks(namespace.Name(request.GetNamespace()), request.GetLinks()); err != nil {
+		return nil, err
 	}
 
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
@@ -1974,10 +1964,6 @@ func (wh *WorkflowHandler) SignalWorkflowExecution(ctx context.Context, request 
 func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context, request *workflowservice.SignalWithStartWorkflowExecutionRequest) (_ *workflowservice.SignalWithStartWorkflowExecutionResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
-	if wh.isStopped() {
-		return nil, errShuttingDown
-	}
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
@@ -2002,37 +1988,64 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		return nil, errWorkflowTypeTooLong
 	}
 
-	if err := wh.validateTaskQueue(request.TaskQueue); err != nil {
+	if err := common.ValidateUTF8String("WorkflowType", request.WorkflowType.GetName()); err != nil {
+		return nil, err
+	}
+	namespaceName := namespace.Name(request.GetNamespace())
+	if err := tqid.NormalizeAndValidate(request.TaskQueue, "", wh.config.MaxIDLengthLimit()); err != nil {
 		return nil, err
 	}
 
-	if len(request.GetRequestId()) > wh.config.MaxIDLengthLimit() {
-		return nil, errRequestIDTooLong
+	if err := validateRequestId(&request.RequestId, wh.config.MaxIDLengthLimit()); err != nil {
+		return nil, err
 	}
 
 	if err := wh.validateSignalWithStartWorkflowTimeouts(request); err != nil {
 		return nil, err
 	}
 
-	namespaceName := namespace.Name(request.GetNamespace())
 	if err := wh.validateRetryPolicy(namespaceName, request.RetryPolicy); err != nil {
 		return nil, err
 	}
+
+	if err := wh.validateWorkflowStartDelay(request.GetCronSchedule(), request.WorkflowStartDelay); err != nil {
+		return nil, err
+	}
+
+	if err := wh.validateWorkflowIdReusePolicy(
+		namespaceName,
+		request.WorkflowIdReusePolicy,
+		request.WorkflowIdConflictPolicy,
+	); err != nil {
+		return nil, err
+	}
+
+	if request.WorkflowIdConflictPolicy == enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL {
+		// Signal-with-*Required*-Start is not supported
+		name := enumspb.WorkflowIdConflictPolicy_name[int32(request.WorkflowIdConflictPolicy.Number())]
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(errUnsupportedIDConflictPolicy, name))
+	}
+
+	enums.SetDefaultWorkflowIdReusePolicy(&request.WorkflowIdReusePolicy)
+	enums.SetDefaultWorkflowIdConflictPolicy(&request.WorkflowIdConflictPolicy, enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING)
 
 	if err := backoff.ValidateSchedule(request.GetCronSchedule()); err != nil {
 		return nil, err
 	}
 
-	request, err := wh.unaliasSignalWithStartWorkflowExecutionRequestSearchAttributes(request, namespaceName)
+	sa, err := wh.unaliasedSearchAttributesFrom(request.GetSearchAttributes(), namespaceName)
 	if err != nil {
 		return nil, err
 	}
-
-	if err = wh.validateSearchAttributes(request.GetSearchAttributes(), namespaceName); err != nil {
-		return nil, err
+	if sa != request.GetSearchAttributes() {
+		// cloning here so in case of retry the field is set to the current search attributes
+		request = common.CloneProto(request)
+		request.SearchAttributes = sa
 	}
 
-	enums.SetDefaultWorkflowIdReusePolicy(&request.WorkflowIdReusePolicy)
+	if err := wh.validateLinks(namespaceName, request.GetLinks()); err != nil {
+		return nil, err
+	}
 
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
 	if err != nil {
@@ -2048,17 +2061,16 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		return nil, err
 	}
 
-	return &workflowservice.SignalWithStartWorkflowExecutionResponse{RunId: resp.GetRunId()}, nil
+	return &workflowservice.SignalWithStartWorkflowExecutionResponse{
+		RunId:   resp.GetRunId(),
+		Started: resp.Started,
+	}, nil
 }
 
 // ResetWorkflowExecution reset an existing workflow execution to WorkflowTaskCompleted event(exclusive).
 // And it will immediately terminating the current execution instance.
 func (wh *WorkflowHandler) ResetWorkflowExecution(ctx context.Context, request *workflowservice.ResetWorkflowExecutionRequest) (_ *workflowservice.ResetWorkflowExecutionResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
-
-	if wh.isStopped() {
-		return nil, errShuttingDown
-	}
 
 	if request == nil {
 		return nil, errRequestNotSet
@@ -2100,15 +2112,15 @@ func (wh *WorkflowHandler) ResetWorkflowExecution(ctx context.Context, request *
 func (wh *WorkflowHandler) TerminateWorkflowExecution(ctx context.Context, request *workflowservice.TerminateWorkflowExecutionRequest) (_ *workflowservice.TerminateWorkflowExecutionResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
-	if wh.isStopped() {
-		return nil, errShuttingDown
-	}
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
 
 	if err := validateExecution(request.WorkflowExecution); err != nil {
+		return nil, err
+	}
+
+	if err := wh.validateLinks(namespace.Name(request.GetNamespace()), request.GetLinks()); err != nil {
 		return nil, err
 	}
 
@@ -2149,7 +2161,6 @@ func (wh *WorkflowHandler) DeleteWorkflowExecution(ctx context.Context, request 
 	_, err = wh.historyClient.DeleteWorkflowExecution(ctx, &historyservice.DeleteWorkflowExecutionRequest{
 		NamespaceId:        namespaceID.String(),
 		WorkflowExecution:  request.GetWorkflowExecution(),
-		WorkflowVersion:    common.EmptyVersion,
 		ClosedWorkflowOnly: false,
 	})
 	if err != nil {
@@ -2163,36 +2174,13 @@ func (wh *WorkflowHandler) DeleteWorkflowExecution(ctx context.Context, request 
 func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context, request *workflowservice.ListOpenWorkflowExecutionsRequest) (_ *workflowservice.ListOpenWorkflowExecutionsResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
-	if wh.isStopped() {
-		return nil, errShuttingDown
-	}
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
 
-	if request.StartTimeFilter == nil {
-		request.StartTimeFilter = &filterpb.StartTimeFilter{}
-	}
-
-	if timestamp.TimeValue(request.GetStartTimeFilter().GetEarliestTime()).IsZero() {
-		request.GetStartTimeFilter().EarliestTime = &minTime
-	}
-
-	if timestamp.TimeValue(request.GetStartTimeFilter().GetLatestTime()).IsZero() {
-		request.GetStartTimeFilter().LatestTime = &maxTime
-	}
-
-	if timestamp.TimeValue(request.StartTimeFilter.GetEarliestTime()).After(timestamp.TimeValue(request.StartTimeFilter.GetLatestTime())) {
-		return nil, errEarliestTimeIsGreaterThanLatestTime
-	}
-
-	if request.GetMaximumPageSize() <= 0 {
-		request.MaximumPageSize = int32(wh.config.VisibilityMaxPageSize(request.GetNamespace()))
-	}
-
-	if wh.isListRequestPageSizeTooLarge(request.GetMaximumPageSize(), request.GetNamespace()) {
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(errPageSizeTooBigMessage, wh.config.ESIndexMaxResultWindow()))
+	maxPageSize := int32(wh.config.VisibilityMaxPageSize(request.GetNamespace()))
+	if request.GetMaximumPageSize() <= 0 || request.GetMaximumPageSize() > maxPageSize {
+		request.MaximumPageSize = maxPageSize
 	}
 
 	namespaceName := namespace.Name(request.GetNamespace())
@@ -2201,43 +2189,77 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context, reque
 		return nil, err
 	}
 
-	baseReq := &manager.ListWorkflowExecutionsRequest{
-		NamespaceID:       namespaceID,
-		Namespace:         namespaceName,
-		PageSize:          int(request.GetMaximumPageSize()),
-		NextPageToken:     request.NextPageToken,
-		EarliestStartTime: timestamp.TimeValue(request.StartTimeFilter.GetEarliestTime()),
-		LatestStartTime:   timestamp.TimeValue(request.StartTimeFilter.GetLatestTime()),
+	if request.StartTimeFilter == nil {
+		request.StartTimeFilter = &filterpb.StartTimeFilter{}
 	}
 
-	var persistenceResp *manager.ListWorkflowExecutionsResponse
+	earliestTime := request.StartTimeFilter.GetEarliestTime()
+	latestTime := request.StartTimeFilter.GetLatestTime()
+	query := []string{}
+
+	query = append(query, fmt.Sprintf(
+		"%s = '%s'",
+		searchattribute.ExecutionStatus,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+	))
+
+	if earliestTime != nil && !earliestTime.AsTime().IsZero() &&
+		latestTime != nil && !latestTime.AsTime().IsZero() {
+		if earliestTime.AsTime().After(latestTime.AsTime()) {
+			return nil, errEarliestTimeIsGreaterThanLatestTime
+		}
+		query = append(query, fmt.Sprintf(
+			"%s BETWEEN '%s' AND '%s'",
+			searchattribute.StartTime,
+			earliestTime.AsTime().Format(time.RFC3339Nano),
+			latestTime.AsTime().Format(time.RFC3339Nano),
+		))
+	} else if earliestTime != nil && !earliestTime.AsTime().IsZero() {
+		query = append(query, fmt.Sprintf(
+			"%s >= '%s'",
+			searchattribute.StartTime,
+			earliestTime.AsTime().Format(time.RFC3339Nano),
+		))
+	} else if latestTime != nil && !latestTime.AsTime().IsZero() {
+		query = append(query, fmt.Sprintf(
+			"%s <= '%s'",
+			searchattribute.StartTime,
+			latestTime.AsTime().Format(time.RFC3339Nano),
+		))
+	}
+
 	if request.GetExecutionFilter() != nil {
 		if wh.config.DisableListVisibilityByFilter(namespaceName.String()) {
-			err = errListNotAllowed
-		} else {
-			persistenceResp, err = wh.visibilityMrg.ListOpenWorkflowExecutionsByWorkflowID(
-				ctx,
-				&manager.ListWorkflowExecutionsByWorkflowIDRequest{
-					ListWorkflowExecutionsRequest: baseReq,
-					WorkflowID:                    request.GetExecutionFilter().GetWorkflowId(),
-				})
+			return nil, errListNotAllowed
 		}
+		query = append(query, fmt.Sprintf(
+			"%s = '%s'",
+			searchattribute.WorkflowID,
+			request.GetExecutionFilter().GetWorkflowId()))
+
 		wh.logger.Debug("List open workflow with filter",
 			tag.WorkflowNamespace(request.GetNamespace()), tag.WorkflowListWorkflowFilterByID)
 	} else if request.GetTypeFilter() != nil {
 		if wh.config.DisableListVisibilityByFilter(namespaceName.String()) {
-			err = errListNotAllowed
-		} else {
-			persistenceResp, err = wh.visibilityMrg.ListOpenWorkflowExecutionsByType(ctx, &manager.ListWorkflowExecutionsByTypeRequest{
-				ListWorkflowExecutionsRequest: baseReq,
-				WorkflowTypeName:              request.GetTypeFilter().GetName(),
-			})
+			return nil, errListNotAllowed
 		}
+		query = append(query, fmt.Sprintf(
+			"%s = '%s'",
+			searchattribute.WorkflowType,
+			request.GetTypeFilter().GetName()))
+
 		wh.logger.Debug("List open workflow with filter",
 			tag.WorkflowNamespace(request.GetNamespace()), tag.WorkflowListWorkflowFilterByType)
-	} else {
-		persistenceResp, err = wh.visibilityMrg.ListOpenWorkflowExecutions(ctx, baseReq)
 	}
+
+	baseReq := &manager.ListWorkflowExecutionsRequestV2{
+		NamespaceID:   namespaceID,
+		Namespace:     namespaceName,
+		PageSize:      int(request.GetMaximumPageSize()),
+		NextPageToken: request.NextPageToken,
+		Query:         strings.Join(query, " AND "),
+	}
+	persistenceResp, err := wh.visibilityMgr.ListWorkflowExecutions(ctx, baseReq)
 
 	if err != nil {
 		return nil, err
@@ -2253,36 +2275,13 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context, reque
 func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, request *workflowservice.ListClosedWorkflowExecutionsRequest) (_ *workflowservice.ListClosedWorkflowExecutionsResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
-	if wh.isStopped() {
-		return nil, errShuttingDown
-	}
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
 
-	if request.StartTimeFilter == nil {
-		request.StartTimeFilter = &filterpb.StartTimeFilter{}
-	}
-
-	if timestamp.TimeValue(request.GetStartTimeFilter().GetEarliestTime()).IsZero() {
-		request.GetStartTimeFilter().EarliestTime = &minTime
-	}
-
-	if timestamp.TimeValue(request.GetStartTimeFilter().GetLatestTime()).IsZero() {
-		request.GetStartTimeFilter().LatestTime = &maxTime
-	}
-
-	if timestamp.TimeValue(request.StartTimeFilter.GetEarliestTime()).After(timestamp.TimeValue(request.StartTimeFilter.GetLatestTime())) {
-		return nil, errEarliestTimeIsGreaterThanLatestTime
-	}
-
-	if request.GetMaximumPageSize() <= 0 {
-		request.MaximumPageSize = int32(wh.config.VisibilityMaxPageSize(request.GetNamespace()))
-	}
-
-	if wh.isListRequestPageSizeTooLarge(request.GetMaximumPageSize(), request.GetNamespace()) {
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(errPageSizeTooBigMessage, wh.config.ESIndexMaxResultWindow()))
+	maxPageSize := int32(wh.config.VisibilityMaxPageSize(request.GetNamespace()))
+	if request.GetMaximumPageSize() <= 0 || request.GetMaximumPageSize() > maxPageSize {
+		request.MaximumPageSize = maxPageSize
 	}
 
 	namespaceName := namespace.Name(request.GetNamespace())
@@ -2291,58 +2290,91 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 		return nil, err
 	}
 
-	baseReq := &manager.ListWorkflowExecutionsRequest{
-		NamespaceID:       namespaceID,
-		Namespace:         namespaceName,
-		PageSize:          int(request.GetMaximumPageSize()),
-		NextPageToken:     request.NextPageToken,
-		EarliestStartTime: timestamp.TimeValue(request.StartTimeFilter.GetEarliestTime()),
-		LatestStartTime:   timestamp.TimeValue(request.StartTimeFilter.GetLatestTime()),
+	if request.StartTimeFilter == nil {
+		request.StartTimeFilter = &filterpb.StartTimeFilter{}
 	}
 
-	var persistenceResp *manager.ListWorkflowExecutionsResponse
+	earliestTime := request.StartTimeFilter.GetEarliestTime()
+	latestTime := request.StartTimeFilter.GetLatestTime()
+	query := []string{}
+
+	query = append(query, fmt.Sprintf(
+		"%s != '%s'",
+		searchattribute.ExecutionStatus,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+	))
+
+	if earliestTime != nil && !earliestTime.AsTime().IsZero() &&
+		latestTime != nil && !latestTime.AsTime().IsZero() {
+		if earliestTime.AsTime().After(latestTime.AsTime()) {
+			return nil, errEarliestTimeIsGreaterThanLatestTime
+		}
+		query = append(query, fmt.Sprintf(
+			"%s BETWEEN '%s' AND '%s'",
+			searchattribute.CloseTime,
+			earliestTime.AsTime().Format(time.RFC3339Nano),
+			latestTime.AsTime().Format(time.RFC3339Nano),
+		))
+	} else if earliestTime != nil && !earliestTime.AsTime().IsZero() {
+		query = append(query, fmt.Sprintf(
+			"%s >= '%s'",
+			searchattribute.CloseTime,
+			earliestTime.AsTime().Format(time.RFC3339Nano),
+		))
+	} else if latestTime != nil && !latestTime.AsTime().IsZero() {
+		query = append(query, fmt.Sprintf(
+			"%s <= '%s'",
+			searchattribute.CloseTime,
+			latestTime.AsTime().Format(time.RFC3339Nano),
+		))
+	}
+
 	if request.GetExecutionFilter() != nil {
 		if wh.config.DisableListVisibilityByFilter(namespaceName.String()) {
-			err = errListNotAllowed
-		} else {
-			persistenceResp, err = wh.visibilityMrg.ListClosedWorkflowExecutionsByWorkflowID(
-				ctx,
-				&manager.ListWorkflowExecutionsByWorkflowIDRequest{
-					ListWorkflowExecutionsRequest: baseReq,
-					WorkflowID:                    request.GetExecutionFilter().GetWorkflowId(),
-				})
+			return nil, errListNotAllowed
 		}
+		query = append(query, fmt.Sprintf(
+			"%s = '%s'",
+			searchattribute.WorkflowID,
+			request.GetExecutionFilter().GetWorkflowId()))
+
 		wh.logger.Debug("List closed workflow with filter",
 			tag.WorkflowNamespace(request.GetNamespace()), tag.WorkflowListWorkflowFilterByID)
 	} else if request.GetTypeFilter() != nil {
 		if wh.config.DisableListVisibilityByFilter(namespaceName.String()) {
-			err = errListNotAllowed
-		} else {
-			persistenceResp, err = wh.visibilityMrg.ListClosedWorkflowExecutionsByType(ctx, &manager.ListWorkflowExecutionsByTypeRequest{
-				ListWorkflowExecutionsRequest: baseReq,
-				WorkflowTypeName:              request.GetTypeFilter().GetName(),
-			})
+			return nil, errListNotAllowed
 		}
+		query = append(query, fmt.Sprintf(
+			"%s = '%s'",
+			searchattribute.WorkflowType,
+			request.GetTypeFilter().GetName()))
+
 		wh.logger.Debug("List closed workflow with filter",
 			tag.WorkflowNamespace(request.GetNamespace()), tag.WorkflowListWorkflowFilterByType)
 	} else if request.GetStatusFilter() != nil {
 		if wh.config.DisableListVisibilityByFilter(namespaceName.String()) {
-			err = errListNotAllowed
-		} else {
-			if request.GetStatusFilter().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED || request.GetStatusFilter().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-				err = errStatusFilterMustBeNotRunning
-			} else {
-				persistenceResp, err = wh.visibilityMrg.ListClosedWorkflowExecutionsByStatus(ctx, &manager.ListClosedWorkflowExecutionsByStatusRequest{
-					ListWorkflowExecutionsRequest: baseReq,
-					Status:                        request.GetStatusFilter().GetStatus(),
-				})
-			}
+			return nil, errListNotAllowed
 		}
+		if request.GetStatusFilter().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED || request.GetStatusFilter().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+			return nil, errStatusFilterMustBeNotRunning
+		}
+		query = append(query, fmt.Sprintf(
+			"%s = '%s'",
+			searchattribute.ExecutionStatus,
+			request.GetStatusFilter().GetStatus()))
+
 		wh.logger.Debug("List closed workflow with filter",
 			tag.WorkflowNamespace(request.GetNamespace()), tag.WorkflowListWorkflowFilterByStatus)
-	} else {
-		persistenceResp, err = wh.visibilityMrg.ListClosedWorkflowExecutions(ctx, baseReq)
 	}
+
+	baseReq := &manager.ListWorkflowExecutionsRequestV2{
+		NamespaceID:   namespaceID,
+		Namespace:     namespaceName,
+		PageSize:      int(request.GetMaximumPageSize()),
+		NextPageToken: request.NextPageToken,
+		Query:         strings.Join(query, " AND "),
+	}
+	persistenceResp, err := wh.visibilityMgr.ListWorkflowExecutions(ctx, baseReq)
 
 	if err != nil {
 		return nil, err
@@ -2358,20 +2390,13 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 func (wh *WorkflowHandler) ListWorkflowExecutions(ctx context.Context, request *workflowservice.ListWorkflowExecutionsRequest) (_ *workflowservice.ListWorkflowExecutionsResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
-	if wh.isStopped() {
-		return nil, errShuttingDown
-	}
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
 
-	if request.GetPageSize() <= 0 {
-		request.PageSize = int32(wh.config.VisibilityMaxPageSize(request.GetNamespace()))
-	}
-
-	if wh.isListRequestPageSizeTooLarge(request.GetPageSize(), request.GetNamespace()) {
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(errPageSizeTooBigMessage, wh.config.ESIndexMaxResultWindow()))
+	maxPageSize := int32(wh.config.VisibilityMaxPageSize(request.GetNamespace()))
+	if request.GetPageSize() <= 0 || request.GetPageSize() > maxPageSize {
+		request.PageSize = maxPageSize
 	}
 
 	namespaceName := namespace.Name(request.GetNamespace())
@@ -2387,7 +2412,7 @@ func (wh *WorkflowHandler) ListWorkflowExecutions(ctx context.Context, request *
 		NextPageToken: request.NextPageToken,
 		Query:         request.GetQuery(),
 	}
-	persistenceResp, err := wh.visibilityMrg.ListWorkflowExecutions(ctx, req)
+	persistenceResp, err := wh.visibilityMgr.ListWorkflowExecutions(ctx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -2402,20 +2427,14 @@ func (wh *WorkflowHandler) ListWorkflowExecutions(ctx context.Context, request *
 func (wh *WorkflowHandler) ListArchivedWorkflowExecutions(ctx context.Context, request *workflowservice.ListArchivedWorkflowExecutionsRequest) (_ *workflowservice.ListArchivedWorkflowExecutionsResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
-	if wh.isStopped() {
-		return nil, errShuttingDown
-	}
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
 
+	maxPageSize := int32(wh.config.VisibilityArchivalQueryMaxPageSize())
 	if request.GetPageSize() <= 0 {
-		request.PageSize = int32(wh.config.VisibilityMaxPageSize(request.GetNamespace()))
-	}
-
-	maxPageSize := wh.config.VisibilityArchivalQueryMaxPageSize()
-	if int(request.GetPageSize()) > maxPageSize {
+		request.PageSize = maxPageSize
+	} else if request.GetPageSize() > maxPageSize {
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(errPageSizeTooBigMessage, maxPageSize))
 	}
 
@@ -2453,7 +2472,7 @@ func (wh *WorkflowHandler) ListArchivedWorkflowExecutions(ctx context.Context, r
 		Query:         request.GetQuery(),
 	}
 
-	searchAttributes, err := wh.saProvider.GetSearchAttributes(wh.visibilityMrg.GetIndexName(), false)
+	searchAttributes, err := wh.saProvider.GetSearchAttributes(wh.visibilityMgr.GetIndexName(), false)
 	if err != nil {
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
 	}
@@ -2469,7 +2488,7 @@ func (wh *WorkflowHandler) ListArchivedWorkflowExecutions(ctx context.Context, r
 
 	// special handling of ExecutionTime for cron or retry
 	for _, execution := range archiverResponse.Executions {
-		if timestamp.TimeValue(execution.GetExecutionTime()).IsZero() {
+		if execution.ExecutionTime == nil || execution.ExecutionTime.AsTime().IsZero() {
 			execution.ExecutionTime = execution.GetStartTime()
 		}
 	}
@@ -2484,20 +2503,13 @@ func (wh *WorkflowHandler) ListArchivedWorkflowExecutions(ctx context.Context, r
 func (wh *WorkflowHandler) ScanWorkflowExecutions(ctx context.Context, request *workflowservice.ScanWorkflowExecutionsRequest) (_ *workflowservice.ScanWorkflowExecutionsResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
-	if wh.isStopped() {
-		return nil, errShuttingDown
-	}
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
 
-	if request.GetPageSize() <= 0 {
-		request.PageSize = int32(wh.config.VisibilityMaxPageSize(request.GetNamespace()))
-	}
-
-	if wh.isListRequestPageSizeTooLarge(request.GetPageSize(), request.GetNamespace()) {
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(errPageSizeTooBigMessage, wh.config.ESIndexMaxResultWindow()))
+	maxPageSize := int32(wh.config.VisibilityMaxPageSize(request.GetNamespace()))
+	if request.GetPageSize() <= 0 || request.GetPageSize() > maxPageSize {
+		request.PageSize = maxPageSize
 	}
 
 	namespaceName := namespace.Name(request.GetNamespace())
@@ -2513,7 +2525,7 @@ func (wh *WorkflowHandler) ScanWorkflowExecutions(ctx context.Context, request *
 		NextPageToken: request.NextPageToken,
 		Query:         request.GetQuery(),
 	}
-	persistenceResp, err := wh.visibilityMrg.ScanWorkflowExecutions(ctx, req)
+	persistenceResp, err := wh.visibilityMgr.ScanWorkflowExecutions(ctx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -2528,10 +2540,6 @@ func (wh *WorkflowHandler) ScanWorkflowExecutions(ctx context.Context, request *
 // CountWorkflowExecutions is a visibility API to count of workflow executions in a specific namespace.
 func (wh *WorkflowHandler) CountWorkflowExecutions(ctx context.Context, request *workflowservice.CountWorkflowExecutionsRequest) (_ *workflowservice.CountWorkflowExecutionsResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
-
-	if wh.isStopped() {
-		return nil, errShuttingDown
-	}
 
 	if request == nil {
 		return nil, errRequestNotSet
@@ -2548,13 +2556,14 @@ func (wh *WorkflowHandler) CountWorkflowExecutions(ctx context.Context, request 
 		Namespace:   namespaceName,
 		Query:       request.GetQuery(),
 	}
-	persistenceResp, err := wh.visibilityMrg.CountWorkflowExecutions(ctx, req)
+	persistenceResp, err := wh.visibilityMgr.CountWorkflowExecutions(ctx, req)
 	if err != nil {
 		return nil, err
 	}
 
 	resp := &workflowservice.CountWorkflowExecutionsResponse{
-		Count: persistenceResp.Count,
+		Count:  persistenceResp.Count,
+		Groups: persistenceResp.Groups,
 	}
 	return resp, nil
 }
@@ -2563,11 +2572,7 @@ func (wh *WorkflowHandler) CountWorkflowExecutions(ctx context.Context, request 
 func (wh *WorkflowHandler) GetSearchAttributes(ctx context.Context, _ *workflowservice.GetSearchAttributesRequest) (_ *workflowservice.GetSearchAttributesResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
-	if wh.isStopped() {
-		return nil, errShuttingDown
-	}
-
-	searchAttributes, err := wh.saProvider.GetSearchAttributes(wh.visibilityMrg.GetIndexName(), false)
+	searchAttributes, err := wh.saProvider.GetSearchAttributes(wh.visibilityMgr.GetIndexName(), false)
 	if err != nil {
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
 	}
@@ -2587,17 +2592,13 @@ func (wh *WorkflowHandler) RespondQueryTaskCompleted(
 
 	defer log.CapturePanic(wh.logger, &retError)
 
-	if wh.isStopped() {
-		return nil, errShuttingDown
-	}
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
 
 	queryTaskToken, err := wh.tokenSerializer.DeserializeQueryTaskToken(request.TaskToken)
 	if err != nil {
-		return nil, err
+		return nil, errDeserializingToken
 	}
 	if queryTaskToken.GetTaskQueue() == "" || queryTaskToken.GetTaskId() == "" {
 		return nil, errInvalidTaskToken
@@ -2654,10 +2655,6 @@ func (wh *WorkflowHandler) RespondQueryTaskCompleted(
 func (wh *WorkflowHandler) ResetStickyTaskQueue(ctx context.Context, request *workflowservice.ResetStickyTaskQueueRequest) (_ *workflowservice.ResetStickyTaskQueueResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
-	if wh.isStopped() {
-		return nil, errShuttingDown
-	}
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
@@ -2681,13 +2678,36 @@ func (wh *WorkflowHandler) ResetStickyTaskQueue(ctx context.Context, request *wo
 	return &workflowservice.ResetStickyTaskQueueResponse{}, nil
 }
 
+func (wh *WorkflowHandler) ShutdownWorker(ctx context.Context, request *workflowservice.ShutdownWorkerRequest) (_ *workflowservice.ShutdownWorkerResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	namespaceId, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO: update poller info to indicate poller was shut down (pass identity/reason along)
+	_, err = wh.matchingClient.ForceUnloadTaskQueuePartition(ctx, &matchingservice.ForceUnloadTaskQueuePartitionRequest{
+		NamespaceId: namespaceId.String(),
+		TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
+			TaskQueue:     request.GetStickyTaskQueue(),
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW, // sticky task queues are always workflow queues
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.ShutdownWorkerResponse{}, nil
+}
+
 // QueryWorkflow returns query result for a specified workflow execution
 func (wh *WorkflowHandler) QueryWorkflow(ctx context.Context, request *workflowservice.QueryWorkflowRequest) (_ *workflowservice.QueryWorkflowResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
-
-	if wh.isStopped() {
-		return nil, errShuttingDown
-	}
 
 	if wh.config.DisallowQuery(request.GetNamespace()) {
 		return nil, errQueryDisallowedForNamespace
@@ -2738,6 +2758,9 @@ func (wh *WorkflowHandler) QueryWorkflow(ctx context.Context, request *workflows
 	}
 	hResponse, err := wh.historyClient.QueryWorkflow(ctx, req)
 	if err != nil {
+		if common.IsContextDeadlineExceededErr(err) {
+			return nil, serviceerror.NewDeadlineExceeded("query timed out before a worker could process it")
+		}
 		return nil, err
 	}
 	return hResponse.GetResponse(), nil
@@ -2746,10 +2769,6 @@ func (wh *WorkflowHandler) QueryWorkflow(ctx context.Context, request *workflows
 // DescribeWorkflowExecution returns information about the specified workflow execution.
 func (wh *WorkflowHandler) DescribeWorkflowExecution(ctx context.Context, request *workflowservice.DescribeWorkflowExecutionRequest) (_ *workflowservice.DescribeWorkflowExecutionResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
-
-	if wh.isStopped() {
-		return nil, errShuttingDown
-	}
 
 	if request == nil {
 		return nil, errRequestNotSet
@@ -2774,7 +2793,7 @@ func (wh *WorkflowHandler) DescribeWorkflowExecution(ctx context.Context, reques
 	}
 
 	if response.GetWorkflowExecutionInfo().GetSearchAttributes() != nil {
-		saTypeMap, err := wh.saProvider.GetSearchAttributes(wh.visibilityMrg.GetIndexName(), false)
+		saTypeMap, err := wh.saProvider.GetSearchAttributes(wh.visibilityMgr.GetIndexName(), false)
 		if err != nil {
 			return nil, serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
 		}
@@ -2783,17 +2802,20 @@ func (wh *WorkflowHandler) DescribeWorkflowExecution(ctx context.Context, reques
 		if err != nil {
 			return nil, err
 		}
-		if aliasedSas != nil {
+		if aliasedSas != response.GetWorkflowExecutionInfo().GetSearchAttributes() {
 			response.GetWorkflowExecutionInfo().SearchAttributes = aliasedSas
 		}
 	}
 
 	return &workflowservice.DescribeWorkflowExecutionResponse{
-		ExecutionConfig:       response.GetExecutionConfig(),
-		WorkflowExecutionInfo: response.GetWorkflowExecutionInfo(),
-		PendingActivities:     response.GetPendingActivities(),
-		PendingChildren:       response.GetPendingChildren(),
-		PendingWorkflowTask:   response.GetPendingWorkflowTask(),
+		ExecutionConfig:        response.GetExecutionConfig(),
+		WorkflowExecutionInfo:  response.GetWorkflowExecutionInfo(),
+		PendingActivities:      response.GetPendingActivities(),
+		PendingChildren:        response.GetPendingChildren(),
+		PendingWorkflowTask:    response.GetPendingWorkflowTask(),
+		Callbacks:              response.GetCallbacks(),
+		PendingNexusOperations: response.GetPendingNexusOperations(),
+		WorkflowExtendedInfo:   response.GetWorkflowExtendedInfo(),
 	}, nil
 }
 
@@ -2802,21 +2824,48 @@ func (wh *WorkflowHandler) DescribeWorkflowExecution(ctx context.Context, reques
 func (wh *WorkflowHandler) DescribeTaskQueue(ctx context.Context, request *workflowservice.DescribeTaskQueueRequest) (_ *workflowservice.DescribeTaskQueueResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
-	if wh.isStopped() {
-		return nil, errShuttingDown
-	}
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
 
-	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	namespaceName := namespace.Name(request.GetNamespace())
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := wh.validateTaskQueue(request.TaskQueue); err != nil {
+	if request.ApiMode == enumspb.DESCRIBE_TASK_QUEUE_MODE_UNSPECIFIED {
+		err = tqid.NormalizeAndValidatePartition(request.TaskQueue, "", wh.config.MaxIDLengthLimit())
+	} else {
+		err = tqid.NormalizeAndValidate(request.TaskQueue, "", wh.config.MaxIDLengthLimit())
+	}
+	if err != nil {
 		return nil, err
+	}
+
+	if request.TaskQueueType == enumspb.TASK_QUEUE_TYPE_UNSPECIFIED || request.ApiMode == enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED {
+		request.TaskQueueType = enumspb.TASK_QUEUE_TYPE_WORKFLOW
+	}
+
+	if len(request.TaskQueueTypes) == 0 {
+		request.TaskQueueTypes = []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW, enumspb.TASK_QUEUE_TYPE_ACTIVITY}
+	}
+
+	if request.GetReportTaskReachability() &&
+		len(request.GetVersions().GetBuildIds()) > wh.config.ReachabilityQueryBuildIdLimit() {
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(
+			"Too many build ids queried at once with ReportTaskReachability==true, limit: %d", wh.config.ReachabilityQueryBuildIdLimit()))
+	}
+
+	if request.ApiMode == enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED {
+		if request.TaskQueue.Kind == enumspb.TASK_QUEUE_KIND_STICKY {
+			return nil, errUseEnhancedDescribeOnStickyQueue
+		}
+		if partition, err := tqid.PartitionFromProto(request.TaskQueue, namespaceID.String(), enumspb.TASK_QUEUE_TYPE_WORKFLOW); err != nil {
+			return nil, errTaskQueuePartitionInvalid
+		} else if !partition.IsRoot() {
+			return nil, errUseEnhancedDescribeOnNonRootQueue
+		}
 	}
 
 	matchingResponse, err := wh.matchingClient.DescribeTaskQueue(ctx, &matchingservice.DescribeTaskQueueRequest{
@@ -2827,10 +2876,48 @@ func (wh *WorkflowHandler) DescribeTaskQueue(ctx context.Context, request *workf
 		return nil, err
 	}
 
-	return &workflowservice.DescribeTaskQueueResponse{
-		Pollers:         matchingResponse.Pollers,
-		TaskQueueStatus: matchingResponse.TaskQueueStatus,
-	}, nil
+	resp := matchingResponse.DescResponse
+	// Manually parse unknown fields to handle proto incompatibility.
+	// TODO: remove this after 1.24.0-m3
+	if resp == nil {
+		resp = &workflowservice.DescribeTaskQueueResponse{}
+		unknown := []byte(matchingResponse.ProtoReflect().GetUnknown())
+		for len(unknown) > 0 {
+			num, typ, n := protowire.ConsumeTag(unknown)
+			if n < 0 {
+				break
+			}
+			unknown = unknown[n:]
+			if typ != protowire.BytesType {
+				break
+			}
+			msg, n := protowire.ConsumeBytes(unknown)
+			if n < 0 {
+				break
+			}
+			unknown = unknown[n:]
+			switch num {
+			case 1:
+				// msg is either a temporal.api.workflowservice.v1.DescribeTaskQueueResponse (new) or repeated temporal.api.taskqueue.v1.PollerInfo (old)
+				// try DescribeTaskQueueResponse first
+				var dtqr workflowservice.DescribeTaskQueueResponse
+				var pi taskqueuepb.PollerInfo
+				if err := proto.Unmarshal(msg, &dtqr); err == nil {
+					// merge this into the response, to avoid losing data in case this was a spurious success
+					proto.Merge(resp, &dtqr)
+				} else if err := proto.Unmarshal(msg, &pi); err == nil {
+					resp.Pollers = append(resp.Pollers, &pi)
+				}
+			case 2:
+				// msg should be a temporal.api.taskqueue.v1.TaskQueueStatus
+				var tqstatus taskqueuepb.TaskQueueStatus
+				if err := proto.Unmarshal(msg, &tqstatus); err == nil {
+					resp.TaskQueueStatus = &tqstatus
+				}
+			}
+		}
+	}
+	return resp, nil
 }
 
 // GetClusterInfo return information about Temporal deployment.
@@ -2849,18 +2936,14 @@ func (wh *WorkflowHandler) GetClusterInfo(ctx context.Context, _ *workflowservic
 		VersionInfo:       metadata.VersionInfo,
 		ClusterName:       metadata.ClusterName,
 		HistoryShardCount: metadata.HistoryShardCount,
-		PersistenceStore:  wh.persistenceExecutionManager.GetName(),
-		VisibilityStore:   strings.Join(wh.visibilityMrg.GetStoreNames(), ","),
+		PersistenceStore:  wh.persistenceExecutionName,
+		VisibilityStore:   strings.Join(wh.visibilityMgr.GetStoreNames(), ","),
 	}, nil
 }
 
 // GetSystemInfo returns information about the Temporal system.
 func (wh *WorkflowHandler) GetSystemInfo(ctx context.Context, request *workflowservice.GetSystemInfoRequest) (_ *workflowservice.GetSystemInfoResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
-
-	if wh.isStopped() {
-		return nil, errShuttingDown
-	}
 
 	if request == nil {
 		return nil, errRequestNotSet
@@ -2880,6 +2963,9 @@ func (wh *WorkflowHandler) GetSystemInfo(ctx context.Context, request *workflows
 			UpsertMemo:                      true,
 			EagerWorkflowStart:              true,
 			SdkMetadata:                     true,
+			BuildIdBasedVersioning:          true,
+			CountGroupByExecutionStatus:     true,
+			Nexus:                           wh.httpEnabled && wh.config.EnableNexusAPIs(),
 		},
 	}, nil
 }
@@ -2888,19 +2974,16 @@ func (wh *WorkflowHandler) GetSystemInfo(ctx context.Context, request *workflows
 func (wh *WorkflowHandler) ListTaskQueuePartitions(ctx context.Context, request *workflowservice.ListTaskQueuePartitionsRequest) (_ *workflowservice.ListTaskQueuePartitionsResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
-	if wh.isStopped() {
-		return nil, errShuttingDown
-	}
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
 
-	if err := wh.validateTaskQueue(request.TaskQueue); err != nil {
+	namespaceName := namespace.Name(request.GetNamespace())
+	if err := tqid.NormalizeAndValidate(request.TaskQueue, "", wh.config.MaxIDLengthLimit()); err != nil {
 		return nil, err
 	}
 
-	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
 	if err != nil {
 		return nil, err
 	}
@@ -2924,10 +3007,6 @@ func (wh *WorkflowHandler) ListTaskQueuePartitions(ctx context.Context, request 
 // Creates a new schedule.
 func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflowservice.CreateScheduleRequest) (_ *workflowservice.CreateScheduleResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
-
-	if wh.isStopped() {
-		return nil, errShuttingDown
-	}
 
 	if request == nil {
 		return nil, errRequestNotSet
@@ -2960,7 +3039,7 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 	}
 
 	if request.Schedule == nil {
-		request.Schedule = &schedpb.Schedule{}
+		request.Schedule = &schedulepb.Schedule{}
 	}
 	err = wh.canonicalizeScheduleSpec(request.Schedule)
 	if err != nil {
@@ -2970,12 +3049,7 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 	// Add namespace division before unaliasing search attributes.
 	searchattribute.AddSearchAttribute(&request.SearchAttributes, searchattribute.TemporalNamespaceDivision, payload.EncodeString(scheduler.NamespaceDivision))
 
-	request, err = wh.unaliasCreateScheduleRequestSearchAttributes(request, namespaceName)
-	if err != nil {
-		return nil, err
-	}
-
-	err = wh.validateSearchAttributes(request.GetSearchAttributes(), namespaceName)
+	sa, err := wh.unaliasedSearchAttributesFrom(request.GetSearchAttributes(), namespaceName)
 	if err != nil {
 		return nil, err
 	}
@@ -2989,10 +3063,10 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 	// doesn't exceed the limit, the started workflows should be safe as well.
 
 	// Set up input to scheduler workflow
-	input := &schedspb.StartScheduleArgs{
+	input := &schedulespb.StartScheduleArgs{
 		Schedule:     request.Schedule,
 		InitialPatch: request.InitialPatch,
-		State: &schedspb.InternalState{
+		State: &schedulespb.InternalState{
 			Namespace:     namespaceName.String(),
 			NamespaceId:   namespaceID.String(),
 			ScheduleId:    request.ScheduleId,
@@ -3007,18 +3081,29 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 	wh.addInitialScheduleMemo(request, input)
 	// Create StartWorkflowExecutionRequest
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
-		Namespace:             request.Namespace,
-		WorkflowId:            workflowID,
-		WorkflowType:          &commonpb.WorkflowType{Name: scheduler.WorkflowType},
-		TaskQueue:             &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
-		Input:                 inputPayloads,
-		Identity:              request.Identity,
-		RequestId:             request.RequestId,
-		WorkflowIdReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
-		Memo:                  request.Memo,
-		SearchAttributes:      request.SearchAttributes,
+		Namespace:                request.Namespace,
+		WorkflowId:               workflowID,
+		WorkflowType:             &commonpb.WorkflowType{Name: scheduler.WorkflowType},
+		TaskQueue:                &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
+		Input:                    inputPayloads,
+		Identity:                 request.Identity,
+		RequestId:                request.RequestId,
+		WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
+		Memo:                     request.Memo,
+		SearchAttributes:         sa,
+		Priority:                 &commonpb.Priority{}, // ie default priority
 	}
-	_, err = wh.historyClient.StartWorkflowExecution(ctx, common.CreateHistoryStartWorkflowRequest(namespaceID.String(), startReq, nil, time.Now().UTC()))
+	_, err = wh.historyClient.StartWorkflowExecution(
+		ctx,
+		common.CreateHistoryStartWorkflowRequest(
+			namespaceID.String(),
+			startReq,
+			nil,
+			nil,
+			time.Now().UTC(),
+		),
+	)
 
 	if err != nil {
 		return nil, err
@@ -3051,7 +3136,7 @@ func (wh *WorkflowHandler) validateStartWorkflowArgsForSchedule(
 		return errWorkflowTypeTooLong
 	}
 
-	if err := wh.validateTaskQueue(startWorkflow.TaskQueue); err != nil {
+	if err := tqid.NormalizeAndValidate(startWorkflow.TaskQueue, "", wh.config.MaxIDLengthLimit()); err != nil {
 		return err
 	}
 
@@ -3079,20 +3164,440 @@ func (wh *WorkflowHandler) validateStartWorkflowArgsForSchedule(
 	if err != nil {
 		return err
 	}
-	if err := wh.validateSearchAttributes(unaliasedStartWorkflowSas, namespaceName); err != nil {
-		return err
+	return wh.validateSearchAttributes(unaliasedStartWorkflowSas, namespaceName)
+}
+
+// TODO: move these to the proper order
+func (wh *WorkflowHandler) DescribeDeployment(ctx context.Context, request *workflowservice.DescribeDeploymentRequest) (_ *workflowservice.DescribeDeploymentResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
 	}
 
-	return nil
+	if len(request.Namespace) == 0 {
+		return nil, errNamespaceNotSet
+	}
+
+	if !wh.config.EnableDeployments(request.Namespace) {
+		return nil, errDeploymentsNotAllowed
+	}
+
+	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+	deploymentInfo, err := wh.deploymentStoreClient.DescribeDeployment(ctx, namespaceEntry, request.Deployment.GetSeriesName(), request.Deployment.GetBuildId())
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.DescribeDeploymentResponse{
+		DeploymentInfo: deploymentInfo,
+	}, nil
+}
+
+// [cleanup-wv-pre-release]
+func (wh *WorkflowHandler) GetCurrentDeployment(ctx context.Context, request *workflowservice.GetCurrentDeploymentRequest) (_ *workflowservice.GetCurrentDeploymentResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if len(request.Namespace) == 0 {
+		return nil, errNamespaceNotSet
+	}
+
+	if !wh.config.EnableDeployments(request.Namespace) {
+		return nil, errDeploymentsNotAllowed
+	}
+
+	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	describeDeploymentResponse, err := wh.deploymentStoreClient.GetCurrentDeployment(ctx, namespaceEntry, request.SeriesName)
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.GetCurrentDeploymentResponse{
+		CurrentDeploymentInfo: describeDeploymentResponse,
+	}, nil
+}
+
+// [cleanup-wv-pre-release]
+func (wh *WorkflowHandler) ListDeployments(
+	ctx context.Context,
+	request *workflowservice.ListDeploymentsRequest,
+) (_ *workflowservice.ListDeploymentsResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if len(request.Namespace) == 0 {
+		return nil, errNamespaceNotSet
+	}
+
+	if !wh.config.EnableDeployments(request.Namespace) {
+		return nil, errDeploymentsNotAllowed
+	}
+
+	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	if wh.config.DisableListVisibilityByFilter(namespaceEntry.Name().String()) {
+		return nil, errListNotAllowed
+	}
+
+	maxPageSize := int32(wh.config.VisibilityMaxPageSize(request.GetNamespace()))
+	if request.GetPageSize() <= 0 || request.GetPageSize() > maxPageSize {
+		request.PageSize = maxPageSize
+	}
+
+	deployments, nextPageToken, err := wh.deploymentStoreClient.ListDeployments(ctx, namespaceEntry, request.SeriesName, int(request.PageSize), request.NextPageToken)
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.ListDeploymentsResponse{
+		Deployments:   deployments,
+		NextPageToken: nextPageToken,
+	}, nil
+}
+
+// [cleanup-wv-pre-release]
+func (wh *WorkflowHandler) GetDeploymentReachability(
+	ctx context.Context,
+	request *workflowservice.GetDeploymentReachabilityRequest,
+) (_ *workflowservice.GetDeploymentReachabilityResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if len(request.Namespace) == 0 {
+		return nil, errNamespaceNotSet
+	}
+
+	if !wh.config.EnableDeployments(request.Namespace) {
+		return nil, errDeploymentsNotAllowed
+	}
+
+	if request.GetDeployment() == nil {
+		return nil, serviceerror.NewInvalidArgument("deployment is required")
+	}
+
+	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+	resp, err := wh.deploymentStoreClient.GetDeploymentReachability(ctx, namespaceEntry, request.Deployment.SeriesName, request.Deployment.BuildId)
+	if err != nil {
+		return nil, err
+	}
+
+	return resp, nil
+}
+
+// [cleanup-wv-pre-release]
+func (wh *WorkflowHandler) SetCurrentDeployment(ctx context.Context, request *workflowservice.SetCurrentDeploymentRequest) (_ *workflowservice.SetCurrentDeploymentResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if len(request.Namespace) == 0 {
+		return nil, errNamespaceNotSet
+	}
+
+	if !wh.config.EnableDeployments(request.Namespace) {
+		return nil, errDeploymentsNotAllowed
+	}
+
+	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO: should we get this from the request?
+	requestID := uuid.New()
+
+	current, previous, err := wh.deploymentStoreClient.SetCurrentDeployment(
+		ctx,
+		namespaceEntry,
+		request.Deployment,
+		request.UpdateMetadata,
+		request.Identity,
+		requestID,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.SetCurrentDeploymentResponse{
+		CurrentDeploymentInfo:  current,
+		PreviousDeploymentInfo: previous,
+	}, nil
+}
+
+// Versioning-3 Public-Preview API's
+
+func (wh *WorkflowHandler) DescribeWorkerDeploymentVersion(ctx context.Context, request *workflowservice.DescribeWorkerDeploymentVersionRequest) (_ *workflowservice.DescribeWorkerDeploymentVersionResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if len(request.Namespace) == 0 {
+		return nil, errNamespaceNotSet
+	}
+
+	if !wh.config.EnableDeploymentVersions(request.Namespace) {
+		return nil, errDeploymentVersionsNotAllowed
+	}
+
+	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+	workerDeploymentVersionInfo, err := wh.workerDeploymentClient.DescribeVersion(ctx, namespaceEntry, request.Version)
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.DescribeWorkerDeploymentVersionResponse{
+		WorkerDeploymentVersionInfo: workerDeploymentVersionInfo,
+	}, nil
+}
+
+func (wh *WorkflowHandler) SetWorkerDeploymentCurrentVersion(ctx context.Context, request *workflowservice.SetWorkerDeploymentCurrentVersionRequest) (_ *workflowservice.SetWorkerDeploymentCurrentVersionResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if len(request.Namespace) == 0 {
+		return nil, errNamespaceNotSet
+	}
+
+	if !wh.config.EnableDeploymentVersions(request.Namespace) {
+		return nil, errDeploymentVersionsNotAllowed
+	}
+
+	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	if request.GetVersion() == "" {
+		return nil, serviceerror.NewInvalidArgument("version cannot be empty")
+	}
+
+	resp, err := wh.workerDeploymentClient.SetCurrentVersion(ctx, namespaceEntry, request.DeploymentName, request.Version, request.Identity, request.IgnoreMissingTaskQueues, request.GetConflictToken())
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.SetWorkerDeploymentCurrentVersionResponse{
+		PreviousVersion: resp.PreviousVersion,
+	}, nil
+}
+
+func (wh *WorkflowHandler) SetWorkerDeploymentRampingVersion(ctx context.Context, request *workflowservice.SetWorkerDeploymentRampingVersionRequest) (_ *workflowservice.SetWorkerDeploymentRampingVersionResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if len(request.Namespace) == 0 {
+		return nil, errNamespaceNotSet
+	}
+
+	if !wh.config.EnableDeploymentVersions(request.Namespace) {
+		return nil, errDeploymentVersionsNotAllowed
+	}
+
+	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	if request.GetVersion() == "" {
+		if request.GetPercentage() != 0 {
+			return nil, serviceerror.NewInvalidArgument("Empty value for version must be paired with percentage=0")
+		}
+	}
+
+	if request.GetPercentage() < 0 || request.GetPercentage() > 100 {
+		return nil, serviceerror.NewInvalidArgument("Percentage must be between 0 and 100 (inclusive)")
+	}
+
+	resp, err := wh.workerDeploymentClient.SetRampingVersion(ctx, namespaceEntry, request.DeploymentName, request.Version, request.GetPercentage(), request.GetIdentity(), request.IgnoreMissingTaskQueues, request.GetConflictToken())
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.SetWorkerDeploymentRampingVersionResponse{
+		PreviousVersion:    resp.PreviousVersion,
+		PreviousPercentage: resp.PreviousPercentage,
+	}, nil
+}
+
+func (wh *WorkflowHandler) ListWorkerDeployments(ctx context.Context, request *workflowservice.ListWorkerDeploymentsRequest) (_ *workflowservice.ListWorkerDeploymentsResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if len(request.Namespace) == 0 {
+		return nil, errNamespaceNotSet
+	}
+
+	if !wh.config.EnableDeploymentVersions(request.Namespace) {
+		return nil, errDeploymentVersionsNotAllowed
+	}
+
+	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	if wh.config.DisableListVisibilityByFilter(namespaceEntry.Name().String()) {
+		return nil, errListNotAllowed
+	}
+
+	maxPageSize := int32(wh.config.VisibilityMaxPageSize(request.GetNamespace()))
+	if request.GetPageSize() <= 0 || request.GetPageSize() > maxPageSize {
+		request.PageSize = maxPageSize
+	}
+
+	resp, nextPageToken, err := wh.workerDeploymentClient.ListWorkerDeployments(ctx, namespaceEntry, int(request.PageSize), request.NextPageToken)
+	if err != nil {
+		return nil, err
+	}
+
+	workerDeployments := make([]*workflowservice.ListWorkerDeploymentsResponse_WorkerDeploymentSummary, len(resp))
+	for i, d := range resp {
+		workerDeployments[i] = &workflowservice.ListWorkerDeploymentsResponse_WorkerDeploymentSummary{
+			Name:          d.Name,
+			CreateTime:    d.CreateTime,
+			RoutingConfig: d.RoutingConfig,
+		}
+	}
+
+	return &workflowservice.ListWorkerDeploymentsResponse{
+		WorkerDeployments: workerDeployments,
+		NextPageToken:     nextPageToken,
+	}, nil
+}
+
+func (wh *WorkflowHandler) DescribeWorkerDeployment(ctx context.Context, request *workflowservice.DescribeWorkerDeploymentRequest) (_ *workflowservice.DescribeWorkerDeploymentResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	workerDeploymentInfo, cT, err := wh.workerDeploymentClient.DescribeWorkerDeployment(ctx, namespaceEntry, request.DeploymentName)
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.DescribeWorkerDeploymentResponse{
+		WorkerDeploymentInfo: workerDeploymentInfo,
+		ConflictToken:        cT,
+	}, nil
+}
+
+func (wh *WorkflowHandler) DeleteWorkerDeployment(ctx context.Context, request *workflowservice.DeleteWorkerDeploymentRequest) (_ *workflowservice.DeleteWorkerDeploymentResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	err = wh.workerDeploymentClient.DeleteWorkerDeployment(ctx, namespaceEntry, request.DeploymentName, request.Identity)
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.DeleteWorkerDeploymentResponse{}, nil
+}
+
+func (wh *WorkflowHandler) DeleteWorkerDeploymentVersion(ctx context.Context, request *workflowservice.DeleteWorkerDeploymentVersionRequest) (_ *workflowservice.DeleteWorkerDeploymentVersionResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	err = wh.workerDeploymentClient.DeleteWorkerDeploymentVersion(ctx, namespaceEntry, request.Version, request.SkipDrainage, request.Identity)
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.DeleteWorkerDeploymentVersionResponse{}, nil
+}
+
+func (wh *WorkflowHandler) UpdateWorkerDeploymentVersionMetadata(ctx context.Context, request *workflowservice.UpdateWorkerDeploymentVersionMetadataRequest) (_ *workflowservice.UpdateWorkerDeploymentVersionMetadataResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if request.RemoveEntries == nil && request.UpsertEntries == nil {
+		return nil, serviceerror.NewInvalidArgument("At least one of remove_entries or upsert_entries must be provided")
+	}
+
+	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	// todo (Shivam): Should we get identity from the request?
+	identity := uuid.New()
+	updatedMetadata, err := wh.workerDeploymentClient.UpdateVersionMetadata(ctx, namespaceEntry, request.Version, request.UpsertEntries, request.RemoveEntries, identity)
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.UpdateWorkerDeploymentVersionMetadataResponse{
+		Metadata: updatedMetadata,
+	}, nil
 }
 
 // Returns the schedule description and current state of an existing schedule.
 func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workflowservice.DescribeScheduleRequest) (_ *workflowservice.DescribeScheduleResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
-
-	if wh.isStopped() {
-		return nil, errShuttingDown
-	}
 
 	if request == nil {
 		return nil, errRequestNotSet
@@ -3131,7 +3636,7 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 
 	// map search attributes
 	if sas := executionInfo.GetSearchAttributes(); sas != nil {
-		saTypeMap, err := wh.saProvider.GetSearchAttributes(wh.visibilityMrg.GetIndexName(), false)
+		saTypeMap, err := wh.saProvider.GetSearchAttributes(wh.visibilityMgr.GetIndexName(), false)
 		if err != nil {
 			return nil, serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
 		}
@@ -3140,114 +3645,72 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 		if err != nil {
 			return nil, err
 		}
-		if aliasedSas != nil {
+		if aliasedSas != sas {
 			executionInfo.SearchAttributes = aliasedSas
 		}
 	}
 
 	// then query to get current state from the workflow itself
-	// TODO: turn the refresh path into a synchronous update so we don't have to retry in a loop
-	sentRefresh := make(map[commonpb.WorkflowExecution]struct{})
-	// limit how many signals we send, separate from the retry policy (which is used to retry
-	// the query if the signal was not received or processed yet)
-	signalsLeft := 1
-	var queryResponse schedspb.DescribeResponse
+	req := &historyservice.QueryWorkflowRequest{
+		NamespaceId: namespaceID.String(),
+		Request: &workflowservice.QueryWorkflowRequest{
+			Namespace: request.Namespace,
+			Execution: execution,
+			Query:     &querypb.WorkflowQuery{QueryType: scheduler.QueryNameDescribe},
+		},
+	}
+	res, err := wh.historyClient.QueryWorkflow(ctx, req)
+	if err != nil {
+		return nil, err
+	}
 
-	op := func(ctx context.Context) error {
-		req := &historyservice.QueryWorkflowRequest{
+	var queryResponse schedulespb.DescribeResponse
+	err = payloads.Decode(res.GetResponse().GetQueryResult(), &queryResponse)
+	if err != nil {
+		return nil, err
+	}
+
+	err = wh.annotateSearchAttributesOfScheduledWorkflow(&queryResponse, request.GetNamespace())
+	if err != nil {
+		return nil, serviceerror.NewInternal(fmt.Sprintf("describe schedule: %v", err))
+	}
+	// Search attributes in the Action are already in external ("aliased") form. Do not alias them here.
+
+	// for all running workflows started by the schedule, we should check that they're still running
+	origLen := len(queryResponse.Info.RunningWorkflows)
+	queryResponse.Info.RunningWorkflows = util.FilterSlice(queryResponse.Info.RunningWorkflows, func(ex *commonpb.WorkflowExecution) bool {
+		// we'll usually have just zero or one of these so we can just do them sequentially
+		msResponse, err := wh.historyClient.GetMutableState(ctx, &historyservice.GetMutableStateRequest{
 			NamespaceId: namespaceID.String(),
-			Request: &workflowservice.QueryWorkflowRequest{
-				Namespace: request.Namespace,
-				Execution: execution,
-				Query:     &querypb.WorkflowQuery{QueryType: scheduler.QueryNameDescribe},
-			},
-		}
-		res, err := wh.historyClient.QueryWorkflow(ctx, req)
-		if err != nil {
-			return err
-		}
-
-		queryResponse.Reset()
-		err = payloads.Decode(res.GetResponse().GetQueryResult(), &queryResponse)
-		if err != nil {
-			return err
-		}
-
-		// Search attributes in the Action are already in external ("aliased") form. Do not alias them here.
-
-		// for all running workflows started by the schedule, we should check that they're
-		// still running, and if not, poke the schedule to refresh
-		needRefresh := false
-		for _, ex := range queryResponse.GetInfo().GetRunningWorkflows() {
-			if _, ok := sentRefresh[*ex]; ok {
-				// we asked the schedule to refresh this one because it wasn't running, but
-				// it's still reporting it as running
-				return errWaitForRefresh
-			}
-
-			// we'll usually have just zero or one of these so we can just do them sequentially
-			if msResponse, err := wh.historyClient.GetMutableState(ctx, &historyservice.GetMutableStateRequest{
-				NamespaceId: namespaceID.String(),
-				// Note: do not send runid here so that we always get the latest one
-				Execution: &commonpb.WorkflowExecution{WorkflowId: ex.WorkflowId},
-			}); err != nil {
-				switch err.(type) {
-				case *serviceerror.NotFound:
-					// if it doesn't exist (past retention period?) it's certainly not running
-					needRefresh = true
-					sentRefresh[*ex] = struct{}{}
-				default:
-					return err
-				}
-			} else if msResponse.WorkflowStatus != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING ||
-				msResponse.FirstExecutionRunId != ex.RunId {
-				// there is no running execution of this workflow id, or there is a running
-				// execution, but it's not part of the chain that we started.
-				// either way, the workflow that we started is not running.
-				needRefresh = true
-				sentRefresh[*ex] = struct{}{}
-			}
-		}
-
-		if !needRefresh || signalsLeft == 0 {
-			return nil
-		}
-		signalsLeft--
-
-		// poke to refresh
-		_, err = wh.historyClient.SignalWorkflowExecution(ctx, &historyservice.SignalWorkflowExecutionRequest{
-			NamespaceId: namespaceID.String(),
-			SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{
-				Namespace:         request.Namespace,
-				WorkflowExecution: execution,
-				SignalName:        scheduler.SignalNameRefresh,
-				Identity:          "internal refresh from describe request",
-				RequestId:         uuid.New(),
-			},
+			// Note: do not send runid here so that we always get the latest one
+			Execution: &commonpb.WorkflowExecution{WorkflowId: ex.WorkflowId},
 		})
 		if err != nil {
-			return err
+			// if it's not found, it's certainly not running, so return false. if we got
+			// another error, we don't know the state so assume it's still running.
+			return !common.IsNotFoundError(err)
 		}
+		// return true if it is still running and is part of the chain the schedule started
+		return msResponse.WorkflowStatus == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING &&
+			msResponse.FirstExecutionRunId == ex.RunId
+	})
 
-		return errWaitForRefresh
-	}
-
-	// wait up to 4 seconds or rpc deadline minus 1 second, but at least 1 second
-	expiration := 4 * time.Second
-	if deadline, ok := ctx.Deadline(); ok {
-		remaining := time.Until(deadline) - 1*time.Second
-		expiration = util.Min(expiration, remaining)
-	}
-	expiration = util.Max(expiration, 1*time.Second)
-	policy := backoff.NewExponentialRetryPolicy(200 * time.Millisecond).
-		WithExpirationInterval(expiration)
-	isWaitErr := func(e error) bool { return e == errWaitForRefresh }
-
-	err = backoff.ThrottleRetryContext(ctx, op, policy, isWaitErr)
-	// if we still got errWaitForRefresh that means we used up our retries, just return
-	// whatever we have
-	if err != nil && err != errWaitForRefresh {
-		return nil, err
+	if len(queryResponse.Info.RunningWorkflows) < origLen {
+		// we noticed some "running workflows" aren't running anymore. poke the workflow to
+		// refresh, but don't wait for the state to change. ignore errors.
+		go func() {
+			disconnectedCtx := headers.SetCallerInfo(context.Background(), headers.NewBackgroundCallerInfo(request.Namespace))
+			_, _ = wh.historyClient.SignalWorkflowExecution(disconnectedCtx, &historyservice.SignalWorkflowExecutionRequest{
+				NamespaceId: namespaceID.String(),
+				SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{
+					Namespace:         request.Namespace,
+					WorkflowExecution: execution,
+					SignalName:        scheduler.SignalNameRefresh,
+					Identity:          "internal refresh from describe request",
+					RequestId:         uuid.New(),
+				},
+			})
+		}()
 	}
 
 	token := make([]byte, 8)
@@ -3259,6 +3722,8 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 	memo := describeResponse.GetWorkflowExecutionInfo().GetMemo()
 	memo = wh.cleanScheduleMemo(memo)
 
+	scheduler.CleanSpec(queryResponse.Schedule.Spec)
+
 	return &workflowservice.DescribeScheduleResponse{
 		Schedule:         queryResponse.Schedule,
 		Info:             queryResponse.Info,
@@ -3268,13 +3733,67 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 	}, nil
 }
 
-// Changes the configuration or state of an existing schedule.
-func (wh *WorkflowHandler) UpdateSchedule(ctx context.Context, request *workflowservice.UpdateScheduleRequest) (_ *workflowservice.UpdateScheduleResponse, retError error) {
-	defer log.CapturePanic(wh.logger, &retError)
-
-	if wh.isStopped() {
-		return nil, errShuttingDown
+func (wh *WorkflowHandler) annotateSearchAttributesOfScheduledWorkflow(
+	queryResponse *schedulespb.DescribeResponse,
+	nsName string,
+) error {
+	ei := wh.getScheduledWorkflowExecutionInfoFrom(queryResponse)
+	if ei == nil {
+		return nil
 	}
+	annotatedAttributes, err := wh.annotateSearchAttributes(ei.GetSearchAttributes(), nsName)
+	if err != nil {
+		return fmt.Errorf("annotate search attributes: %w", err)
+	}
+	ei.SearchAttributes = annotatedAttributes
+	return nil
+}
+
+func (wh *WorkflowHandler) getScheduledWorkflowExecutionInfoFrom(
+	queryResponse *schedulespb.DescribeResponse,
+) *workflowpb.NewWorkflowExecutionInfo {
+	action := queryResponse.GetSchedule().GetAction().GetAction()
+	startWorkflowAction, ok := action.(*schedulepb.ScheduleAction_StartWorkflow)
+	if !ok {
+		return nil
+	}
+	return startWorkflowAction.StartWorkflow
+}
+
+func (wh *WorkflowHandler) annotateSearchAttributes(
+	searchAttributes *commonpb.SearchAttributes,
+	nsName string,
+) (*commonpb.SearchAttributes, error) {
+	unaliasedSearchAttrs, err := searchattribute.UnaliasFields(
+		wh.saMapperProvider,
+		searchAttributes,
+		nsName,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create annotations: %w", err)
+	}
+	saTypeMap, err := wh.saProvider.GetSearchAttributes(wh.visibilityMgr.GetIndexName(), false)
+	if err != nil {
+		return nil, fmt.Errorf("create annotations: %w", err)
+	}
+	searchattribute.ApplyTypeMap(unaliasedSearchAttrs, saTypeMap)
+	annotatedAttributes, err := searchattribute.AliasFields(
+		wh.saMapperProvider,
+		unaliasedSearchAttrs,
+		nsName,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create annotations: %w", err)
+	}
+	return annotatedAttributes, nil
+}
+
+// Changes the configuration or state of an existing schedule.
+func (wh *WorkflowHandler) UpdateSchedule(
+	ctx context.Context,
+	request *workflowservice.UpdateScheduleRequest,
+) (_ *workflowservice.UpdateScheduleResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
 
 	if request == nil {
 		return nil, errRequestNotSet
@@ -3297,19 +3816,31 @@ func (wh *WorkflowHandler) UpdateSchedule(ctx context.Context, request *workflow
 	}
 
 	if request.Schedule == nil {
-		request.Schedule = &schedpb.Schedule{}
+		request.Schedule = &schedulepb.Schedule{}
 	}
 	err = wh.canonicalizeScheduleSpec(request.Schedule)
 	if err != nil {
 		return nil, err
 	}
 
-	if err = wh.validateStartWorkflowArgsForSchedule(namespaceName, request.GetSchedule().GetAction().GetStartWorkflow()); err != nil {
+	// Need to validate the custom search attributes, but need to pass the original
+	// custom search attributes map to FullUpdateRequest because it needs to call
+	// UpsertSearchAttributes which expects aliased names.
+	_, err = wh.unaliasedSearchAttributesFrom(request.GetSearchAttributes(), namespaceName)
+	if err != nil {
 		return nil, err
 	}
 
-	input := &schedspb.FullUpdateRequest{
-		Schedule: request.Schedule,
+	if err = wh.validateStartWorkflowArgsForSchedule(
+		namespaceName,
+		request.GetSchedule().GetAction().GetStartWorkflow(),
+	); err != nil {
+		return nil, err
+	}
+
+	input := &schedulespb.FullUpdateRequest{
+		Schedule:         request.Schedule,
+		SearchAttributes: request.SearchAttributes,
 	}
 	if len(request.ConflictToken) >= 8 {
 		input.ConflictToken = int64(binary.BigEndian.Uint64(request.ConflictToken))
@@ -3356,10 +3887,6 @@ func (wh *WorkflowHandler) UpdateSchedule(ctx context.Context, request *workflow
 // Makes a specific change to a schedule or triggers an immediate action.
 func (wh *WorkflowHandler) PatchSchedule(ctx context.Context, request *workflowservice.PatchScheduleRequest) (_ *workflowservice.PatchScheduleResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
-
-	if wh.isStopped() {
-		return nil, errShuttingDown
-	}
 
 	if request == nil {
 		return nil, errRequestNotSet
@@ -3428,10 +3955,6 @@ func (wh *WorkflowHandler) PatchSchedule(ctx context.Context, request *workflows
 func (wh *WorkflowHandler) ListScheduleMatchingTimes(ctx context.Context, request *workflowservice.ListScheduleMatchingTimesRequest) (_ *workflowservice.ListScheduleMatchingTimesResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
-	if wh.isStopped() {
-		return nil, errShuttingDown
-	}
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
@@ -3496,10 +4019,6 @@ func (wh *WorkflowHandler) ListScheduleMatchingTimes(ctx context.Context, reques
 func (wh *WorkflowHandler) DeleteSchedule(ctx context.Context, request *workflowservice.DeleteScheduleRequest) (_ *workflowservice.DeleteScheduleResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
-	if wh.isStopped() {
-		return nil, errShuttingDown
-	}
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
@@ -3532,12 +4051,11 @@ func (wh *WorkflowHandler) DeleteSchedule(ctx context.Context, request *workflow
 }
 
 // List all schedules in a namespace.
-func (wh *WorkflowHandler) ListSchedules(ctx context.Context, request *workflowservice.ListSchedulesRequest) (_ *workflowservice.ListSchedulesResponse, retError error) {
+func (wh *WorkflowHandler) ListSchedules(
+	ctx context.Context,
+	request *workflowservice.ListSchedulesRequest,
+) (_ *workflowservice.ListSchedulesResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
-
-	if wh.isStopped() {
-		return nil, errShuttingDown
-	}
 
 	if request == nil {
 		return nil, errRequestNotSet
@@ -3547,12 +4065,9 @@ func (wh *WorkflowHandler) ListSchedules(ctx context.Context, request *workflows
 		return nil, errSchedulesNotAllowed
 	}
 
-	if request.GetMaximumPageSize() <= 0 {
-		request.MaximumPageSize = int32(wh.config.VisibilityMaxPageSize(request.GetNamespace()))
-	}
-
-	if wh.isListRequestPageSizeTooLarge(request.GetMaximumPageSize(), request.GetNamespace()) {
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(errPageSizeTooBigMessage, wh.config.ESIndexMaxResultWindow()))
+	maxPageSize := int32(wh.config.VisibilityMaxPageSize(request.GetNamespace()))
+	if request.GetMaximumPageSize() <= 0 || request.GetMaximumPageSize() > maxPageSize {
+		request.MaximumPageSize = maxPageSize
 	}
 
 	namespaceName := namespace.Name(request.GetNamespace())
@@ -3565,30 +4080,47 @@ func (wh *WorkflowHandler) ListSchedules(ctx context.Context, request *workflows
 		return nil, errListNotAllowed
 	}
 
-	persistenceResp, err := wh.visibilityMrg.ListOpenWorkflowExecutionsByType(ctx, &manager.ListWorkflowExecutionsByTypeRequest{
-		ListWorkflowExecutionsRequest: &manager.ListWorkflowExecutionsRequest{
-			NamespaceID:       namespaceID,
-			Namespace:         namespaceName,
-			NamespaceDivision: scheduler.NamespaceDivision,
-			PageSize:          int(request.GetMaximumPageSize()),
-			NextPageToken:     request.NextPageToken,
-			EarliestStartTime: minTime,
-			LatestStartTime:   maxTime,
+	query := ""
+	if strings.TrimSpace(request.Query) != "" {
+		saNameType, err := wh.saProvider.GetSearchAttributes(wh.visibilityMgr.GetIndexName(), false)
+		if err != nil {
+			return nil, serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
+		}
+		if err := scheduler.ValidateVisibilityQuery(
+			namespaceName,
+			saNameType,
+			wh.saMapperProvider,
+			request.Query,
+		); err != nil {
+			return nil, err
+		}
+		query = fmt.Sprintf("%s AND (%s)", scheduler.VisibilityBaseListQuery, request.Query)
+	} else {
+		query = scheduler.VisibilityBaseListQuery
+	}
+
+	persistenceResp, err := wh.visibilityMgr.ListWorkflowExecutions(
+		ctx,
+		&manager.ListWorkflowExecutionsRequestV2{
+			NamespaceID:   namespaceID,
+			Namespace:     namespaceName,
+			PageSize:      int(request.GetMaximumPageSize()),
+			NextPageToken: request.NextPageToken,
+			Query:         query,
 		},
-		WorkflowTypeName: scheduler.WorkflowType,
-	})
+	)
 	if err != nil {
 		return nil, err
 	}
 
-	schedules := make([]*schedpb.ScheduleListEntry, len(persistenceResp.Executions))
+	schedules := make([]*schedulepb.ScheduleListEntry, len(persistenceResp.Executions))
 	for i, ex := range persistenceResp.Executions {
 		memo := ex.GetMemo()
 		info := wh.decodeScheduleListInfo(memo)
 		memo = wh.cleanScheduleMemo(memo)
 		workflowID := ex.GetExecution().GetWorkflowId()
 		scheduleID := strings.TrimPrefix(workflowID, scheduler.WorkflowIDPrefix)
-		schedules[i] = &schedpb.ScheduleListEntry{
+		schedules[i] = &schedulepb.ScheduleListEntry{
 			ScheduleId:       scheduleID,
 			Memo:             memo,
 			SearchAttributes: wh.cleanScheduleSearchAttributes(ex.GetSearchAttributes()),
@@ -3602,66 +4134,55 @@ func (wh *WorkflowHandler) ListSchedules(ctx context.Context, request *workflows
 	}, nil
 }
 
-func (wh *WorkflowHandler) UpdateWorkerBuildIdCompatability(ctx context.Context, request *workflowservice.UpdateWorkerBuildIdCompatabilityRequest) (_ *workflowservice.UpdateWorkerBuildIdCompatabilityResponse, retError error) {
-	defer log.CapturePanic(wh.logger, &retError)
-
-	if wh.isStopped() {
-		return nil, errShuttingDown
-	}
-
-	if request == nil {
-		return nil, errRequestNotSet
-	}
-
-	if err := wh.validateBuildIdCompatabilityUpdate(request); err != nil {
-		return nil, err
-	}
-
-	if err := wh.validateTaskQueue(&taskqueuepb.TaskQueue{Name: request.GetTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL}); err != nil {
-		return nil, err
-	}
-
-	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
-	if err != nil {
-		return nil, err
-	}
-
-	matchingResponse, err := wh.matchingClient.UpdateWorkerBuildIdCompatability(ctx, &matchingservice.UpdateWorkerBuildIdCompatabilityRequest{
-		NamespaceId: namespaceID.String(),
-		Request:     request,
-	})
-
-	if matchingResponse == nil {
-		return nil, err
-	}
-
-	return &workflowservice.UpdateWorkerBuildIdCompatabilityResponse{}, err
-}
-
 func (wh *WorkflowHandler) UpdateWorkflowExecution(
 	ctx context.Context,
 	request *workflowservice.UpdateWorkflowExecutionRequest,
 ) (_ *workflowservice.UpdateWorkflowExecutionResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
-	if wh.isStopped() {
-		return nil, errShuttingDown
-	}
-
-	if request == nil {
-		return nil, errRequestNotSet
-	}
-
-	if err := validateExecution(request.GetWorkflowExecution()); err != nil {
+	if err := wh.prepareUpdateWorkflowRequest(request); err != nil {
 		return nil, err
 	}
 
+	nsID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	switch request.WaitPolicy.LifecycleStage { // nolint:exhaustive
+	case enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED:
+		metrics.WorkflowExecutionUpdateWaitStageAccepted.With(wh.metricsScope(ctx)).Record(1)
+	case enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED:
+		metrics.WorkflowExecutionUpdateWaitStageCompleted.With(wh.metricsScope(ctx)).Record(1)
+	}
+
+	histResp, err := wh.historyClient.UpdateWorkflowExecution(ctx, &historyservice.UpdateWorkflowExecutionRequest{
+		NamespaceId: nsID.String(),
+		Request:     request,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return histResp.GetResponse(), nil
+}
+
+func (wh *WorkflowHandler) prepareUpdateWorkflowRequest(
+	request *workflowservice.UpdateWorkflowExecutionRequest,
+) error {
+	if request == nil {
+		return errRequestNotSet
+	}
+
+	if err := validateExecution(request.GetWorkflowExecution()); err != nil {
+		return err
+	}
+
 	if request.GetRequest().GetMeta() == nil {
-		return nil, errUpdateMetaNotSet
+		return errUpdateMetaNotSet
 	}
 
 	if len(request.GetRequest().GetMeta().GetUpdateId()) > wh.config.MaxIDLengthLimit() {
-		return nil, errUpdateIDTooLong
+		return errUpdateIDTooLong
 	}
 
 	if request.GetRequest().GetMeta().GetUpdateId() == "" {
@@ -3669,17 +4190,50 @@ func (wh *WorkflowHandler) UpdateWorkflowExecution(
 	}
 
 	if request.GetRequest().GetInput() == nil {
-		return nil, errUpdateInputNotSet
+		return errUpdateInputNotSet
 	}
 
 	if request.GetRequest().GetInput().GetName() == "" {
-		return nil, errUpdateNameNotSet
+		return errUpdateNameNotSet
 	}
 
 	if request.GetWaitPolicy() == nil {
 		request.WaitPolicy = &updatepb.WaitPolicy{}
 	}
+
+	if !wh.config.EnableUpdateWorkflowExecution(request.Namespace) {
+		return errUpdateWorkflowExecutionAPINotAllowed
+	}
+
 	enums.SetDefaultUpdateWorkflowExecutionLifecycleStage(&request.GetWaitPolicy().LifecycleStage)
+
+	if request.WaitPolicy.LifecycleStage == enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED {
+		return errUpdateWorkflowExecutionAsyncAdmittedNotAllowed
+	}
+
+	if request.WaitPolicy.LifecycleStage == enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED &&
+		!wh.config.EnableUpdateWorkflowExecutionAsyncAccepted(request.Namespace) {
+		return errUpdateWorkflowExecutionAsyncAcceptedNotAllowed
+	}
+
+	return nil
+}
+
+func (wh *WorkflowHandler) PollWorkflowExecutionUpdate(
+	ctx context.Context,
+	request *workflowservice.PollWorkflowExecutionUpdateRequest,
+) (_ *workflowservice.PollWorkflowExecutionUpdateResponse, retError error) {
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if request.GetUpdateRef() == nil {
+		return nil, errUpdateRefNotSet
+	}
+
+	if request.GetWaitPolicy() == nil {
+		request.WaitPolicy = &updatepb.WaitPolicy{}
+	}
 
 	nsID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
 	if err != nil {
@@ -3690,26 +4244,39 @@ func (wh *WorkflowHandler) UpdateWorkflowExecution(
 		return nil, errUpdateWorkflowExecutionAPINotAllowed
 	}
 
-	histResp, err := wh.historyClient.UpdateWorkflowExecution(ctx, &historyservice.UpdateWorkflowExecutionRequest{
-		NamespaceId: nsID.String(),
-		Request:     request,
-	})
+	ctx, cancel := context.WithTimeout(ctx, frontend.DefaultLongPollTimeout)
+	defer cancel()
 
-	return histResp.GetResponse(), err
+	histResp, err := wh.historyClient.PollWorkflowExecutionUpdate(
+		ctx,
+		&historyservice.PollWorkflowExecutionUpdateRequest{
+			NamespaceId: nsID.String(),
+			Request:     request,
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+	return histResp.GetResponse(), nil
 }
 
-func (wh *WorkflowHandler) GetWorkerBuildIdCompatability(ctx context.Context, request *workflowservice.GetWorkerBuildIdCompatabilityRequest) (_ *workflowservice.GetWorkerBuildIdCompatabilityResponse, retError error) {
+func (wh *WorkflowHandler) UpdateWorkerBuildIdCompatibility(ctx context.Context, request *workflowservice.UpdateWorkerBuildIdCompatibilityRequest) (_ *workflowservice.UpdateWorkerBuildIdCompatibilityResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
-
-	if wh.isStopped() {
-		return nil, errShuttingDown
-	}
 
 	if request == nil {
 		return nil, errRequestNotSet
 	}
 
-	if err := wh.validateTaskQueue(&taskqueuepb.TaskQueue{Name: request.GetTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL}); err != nil {
+	if !wh.config.EnableWorkerVersioningData(request.Namespace) {
+		return nil, errWorkerVersioningV1_0NotAllowed
+	}
+
+	if err := wh.validateBuildIdCompatibilityUpdate(request); err != nil {
+		return nil, err
+	}
+
+	taskQueue := &taskqueuepb.TaskQueue{Name: request.GetTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	if err := tqid.NormalizeAndValidate(taskQueue, "", wh.config.MaxIDLengthLimit()); err != nil {
 		return nil, err
 	}
 
@@ -3718,7 +4285,45 @@ func (wh *WorkflowHandler) GetWorkerBuildIdCompatability(ctx context.Context, re
 		return nil, err
 	}
 
-	matchingResponse, err := wh.matchingClient.GetWorkerBuildIdCompatability(ctx, &matchingservice.GetWorkerBuildIdCompatabilityRequest{
+	matchingResponse, err := wh.matchingClient.UpdateWorkerBuildIdCompatibility(ctx, &matchingservice.UpdateWorkerBuildIdCompatibilityRequest{
+		NamespaceId: namespaceID.String(),
+		TaskQueue:   request.GetTaskQueue(),
+		Operation: &matchingservice.UpdateWorkerBuildIdCompatibilityRequest_ApplyPublicRequest_{
+			ApplyPublicRequest: &matchingservice.UpdateWorkerBuildIdCompatibilityRequest_ApplyPublicRequest{
+				Request: request,
+			},
+		},
+	})
+
+	if matchingResponse == nil {
+		return nil, err
+	}
+
+	return &workflowservice.UpdateWorkerBuildIdCompatibilityResponse{}, err
+}
+
+func (wh *WorkflowHandler) GetWorkerBuildIdCompatibility(ctx context.Context, request *workflowservice.GetWorkerBuildIdCompatibilityRequest) (_ *workflowservice.GetWorkerBuildIdCompatibilityResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if !wh.config.EnableWorkerVersioningData(request.Namespace) {
+		return nil, errWorkerVersioningV1_0NotAllowed
+	}
+
+	taskQueue := &taskqueuepb.TaskQueue{Name: request.GetTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	if err := tqid.NormalizeAndValidate(taskQueue, "", wh.config.MaxIDLengthLimit()); err != nil {
+		return nil, err
+	}
+
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	matchingResponse, err := wh.matchingClient.GetWorkerBuildIdCompatibility(ctx, &matchingservice.GetWorkerBuildIdCompatibilityRequest{
 		NamespaceId: namespaceID.String(),
 		Request:     request,
 	})
@@ -3730,15 +4335,145 @@ func (wh *WorkflowHandler) GetWorkerBuildIdCompatability(ctx context.Context, re
 	return matchingResponse.Response, err
 }
 
+func (wh *WorkflowHandler) UpdateWorkerVersioningRules(ctx context.Context, request *workflowservice.UpdateWorkerVersioningRulesRequest) (_ *workflowservice.UpdateWorkerVersioningRulesResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if !wh.config.EnableWorkerVersioningRules(request.Namespace) {
+		return nil, errWorkerVersioningV2_0NotAllowed
+	}
+
+	if err := wh.validateVersionRuleBuildId(request); err != nil {
+		return nil, err
+	}
+
+	taskQueue := &taskqueuepb.TaskQueue{Name: request.GetTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	if err := tqid.NormalizeAndValidate(taskQueue, "", wh.config.MaxIDLengthLimit()); err != nil {
+		return nil, err
+	}
+
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	matchingResponse, err := wh.matchingClient.UpdateWorkerVersioningRules(ctx, &matchingservice.UpdateWorkerVersioningRulesRequest{
+		NamespaceId: namespaceID.String(),
+		TaskQueue:   request.GetTaskQueue(),
+		Command: &matchingservice.UpdateWorkerVersioningRulesRequest_Request{
+			Request: request,
+		},
+	})
+
+	if matchingResponse == nil {
+		return nil, err
+	}
+
+	return matchingResponse.Response, err
+}
+
+func (wh *WorkflowHandler) GetWorkerVersioningRules(ctx context.Context, request *workflowservice.GetWorkerVersioningRulesRequest) (_ *workflowservice.GetWorkerVersioningRulesResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if !wh.config.EnableWorkerVersioningRules(request.Namespace) {
+		return nil, errWorkerVersioningV2_0NotAllowed
+	}
+
+	taskQueue := &taskqueuepb.TaskQueue{Name: request.GetTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	if err := tqid.NormalizeAndValidate(taskQueue, "", wh.config.MaxIDLengthLimit()); err != nil {
+		return nil, err
+	}
+
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	matchingResponse, err := wh.matchingClient.GetWorkerVersioningRules(ctx, &matchingservice.GetWorkerVersioningRulesRequest{
+		NamespaceId: namespaceID.String(),
+		TaskQueue:   request.GetTaskQueue(),
+		Command: &matchingservice.GetWorkerVersioningRulesRequest_Request{
+			Request: &workflowservice.GetWorkerVersioningRulesRequest{
+				Namespace: request.GetNamespace(),
+				TaskQueue: request.GetTaskQueue(),
+			},
+		},
+	})
+
+	if matchingResponse == nil {
+		return nil, err
+	}
+
+	return matchingResponse.Response, err
+}
+
+func (wh *WorkflowHandler) GetWorkerTaskReachability(ctx context.Context, request *workflowservice.GetWorkerTaskReachabilityRequest) (_ *workflowservice.GetWorkerTaskReachabilityResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if !wh.config.EnableWorkerVersioningData(request.Namespace) {
+		return nil, errWorkerVersioningV2_0NotAllowed
+	}
+
+	if len(request.GetBuildIds()) == 0 {
+		return nil, serviceerror.NewInvalidArgument("Must query at least one build ID (or empty string for unversioned worker)")
+	}
+	if len(request.GetBuildIds()) > wh.config.ReachabilityQueryBuildIdLimit() {
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Too many build ids queried at once, limit: %d", wh.config.ReachabilityQueryBuildIdLimit()))
+	}
+	gotUnversionedRequest := false
+	for _, buildId := range request.GetBuildIds() {
+		if buildId == "" {
+			gotUnversionedRequest = true
+		}
+		if len(buildId) > wh.config.WorkerBuildIdSizeLimit() {
+			return nil, errBuildIdTooLong
+		}
+	}
+	if gotUnversionedRequest && len(request.GetTaskQueues()) == 0 {
+		return nil, serviceerror.NewInvalidArgument("Cannot get reachability of an unversioned worker without specifying at least one task queue (empty build ID is interpereted as unversioned)")
+	}
+
+	for _, taskQueue := range request.GetTaskQueues() {
+		taskQueue := &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+		if err := tqid.NormalizeAndValidate(taskQueue, "", wh.config.MaxIDLengthLimit()); err != nil {
+			return nil, err
+		}
+	}
+
+	ns, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	response, err := wh.getWorkerTaskReachabilityValidated(ctx, ns, request)
+	if err != nil {
+		var invalidArgument *serviceerror.InvalidArgument
+		if errors.As(err, &invalidArgument) {
+			return nil, err
+		}
+		// Intentionally treat all errors as internal errors
+		wh.logger.Error("Failed getting worker task reachability", tag.Error(err))
+		return nil, serviceerror.NewInternal("Internal error")
+	}
+	return response, nil
+}
+
 func (wh *WorkflowHandler) StartBatchOperation(
 	ctx context.Context,
 	request *workflowservice.StartBatchOperationRequest,
 ) (_ *workflowservice.StartBatchOperationResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
-
-	if wh.isStopped() {
-		return nil, errShuttingDown
-	}
 
 	if err := wh.versionChecker.ClientSupported(ctx); err != nil {
 		return nil, err
@@ -3775,6 +4510,7 @@ func (wh *WorkflowHandler) StartBatchOperation(
 	}
 
 	// Validate concurrent batch operation
+	maxConcurrentBatchOperation := wh.config.MaxConcurrentBatchOperation(request.GetNamespace())
 	countResp, err := wh.CountWorkflowExecutions(ctx, &workflowservice.CountWorkflowExecutionsRequest{
 		Namespace: request.GetNamespace(),
 		Query:     batcher.OpenBatchOperationQuery,
@@ -3782,9 +4518,17 @@ func (wh *WorkflowHandler) StartBatchOperation(
 	if err != nil {
 		return nil, err
 	}
-	if countResp.GetCount() >= int64(wh.config.MaxConcurrentBatchOperation(request.GetNamespace())) {
-		return nil, serviceerror.NewUnavailable("Max concurrent batch operations is reached")
+
+	openBatchOperationCount := int(countResp.GetCount())
+	if openBatchOperationCount >= maxConcurrentBatchOperation {
+		return nil, &serviceerror.ResourceExhausted{
+			Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT,
+			Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+			Message: "Max concurrent batch operations is reached",
+		}
 	}
+
+	visibilityQuery := request.GetVisibilityQuery()
 
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
 	if err != nil {
@@ -3793,6 +4537,9 @@ func (wh *WorkflowHandler) StartBatchOperation(
 	var identity string
 	var operationType string
 	var signalParams batcher.SignalParams
+	var resetParams batcher.ResetParams
+	var updateOptionsParams batcher.UpdateOptionsParams
+	var unpauseActivitiesParams batcher.UnpauseActivitiesParams
 	switch op := request.Operation.(type) {
 	case *workflowservice.StartBatchOperationRequest_TerminationOperation:
 		identity = op.TerminationOperation.GetIdentity()
@@ -3808,20 +4555,79 @@ func (wh *WorkflowHandler) StartBatchOperation(
 	case *workflowservice.StartBatchOperationRequest_DeletionOperation:
 		identity = op.DeletionOperation.GetIdentity()
 		operationType = batcher.BatchTypeDelete
+	case *workflowservice.StartBatchOperationRequest_ResetOperation:
+		identity = op.ResetOperation.GetIdentity()
+		operationType = batcher.BatchTypeReset
+		if op.ResetOperation.Options != nil {
+			if op.ResetOperation.Options.Target == nil {
+				return nil, serviceerror.NewInvalidArgument("batch reset missing target")
+			}
+			encoded, err := op.ResetOperation.Options.Marshal()
+			if err != nil {
+				return nil, err
+			}
+			resetParams.ResetOptions = encoded
+		} else {
+			// TODO: remove support for old fields later
+			resetType := op.ResetOperation.GetResetType()
+			if _, ok := enumspb.ResetType_name[int32(resetType)]; !ok || resetType == enumspb.RESET_TYPE_UNSPECIFIED {
+				return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("unknown batch reset type %v", resetType))
+			}
+			resetParams.ResetType = resetType
+			resetParams.ResetReapplyType = op.ResetOperation.GetResetReapplyType()
+		}
+	case *workflowservice.StartBatchOperationRequest_UpdateWorkflowOptionsOperation:
+		identity = op.UpdateWorkflowOptionsOperation.GetIdentity()
+		operationType = batcher.BatchTypeUpdateOptions
+		updateOptionsParams.WorkflowExecutionOptions = op.UpdateWorkflowOptionsOperation.GetWorkflowExecutionOptions()
+		updateOptionsParams.UpdateMask = op.UpdateWorkflowOptionsOperation.GetUpdateMask()
+	case *workflowservice.StartBatchOperationRequest_UnpauseActivitiesOperation:
+		operationType = batcher.BatchTypeUnpauseActivities
+		if op.UnpauseActivitiesOperation == nil {
+			return nil, serviceerror.NewInvalidArgument("unpause activities operation is not set")
+		}
+		if op.UnpauseActivitiesOperation.GetActivity() == nil {
+			return nil, serviceerror.NewInvalidArgument("activity filter must be set")
+		}
+
+		switch a := op.UnpauseActivitiesOperation.GetActivity().(type) {
+		case *batchpb.BatchOperationUnpauseActivities_Type:
+			if len(a.Type) == 0 {
+				return nil, serviceerror.NewInvalidArgument("Either activity type must be set, or match all should be set to true")
+			}
+			unpauseCause := fmt.Sprintf("%s = 'property:activityType=%s'", searchattribute.TemporalPauseInfo, a.Type)
+			visibilityQuery = fmt.Sprintf("(%s) AND (%s)", visibilityQuery, unpauseCause)
+			unpauseActivitiesParams.ActivityType = a.Type
+		case *batchpb.BatchOperationUnpauseActivities_MatchAll:
+			if a.MatchAll == false {
+				return nil, serviceerror.NewInvalidArgument("Either activity type must be set, or match all should be set to true")
+			}
+			wildCardUnpause := fmt.Sprintf("%s STARTS_WITH 'property:activityType='", searchattribute.TemporalPauseInfo)
+			visibilityQuery = fmt.Sprintf("(%s) AND (%s)", visibilityQuery, wildCardUnpause)
+			unpauseActivitiesParams.MatchAll = true
+		}
+
+		unpauseActivitiesParams.ResetAttempts = op.UnpauseActivitiesOperation.ResetAttempts
+		unpauseActivitiesParams.ResetHeartbeat = op.UnpauseActivitiesOperation.ResetHeartbeat
+		unpauseActivitiesParams.Jitter = op.UnpauseActivitiesOperation.Jitter.AsDuration()
 	default:
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("The operation type %T is not supported", op))
 	}
 
 	input := &batcher.BatchParams{
-		Namespace:       request.GetNamespace(),
-		Query:           request.GetVisibilityQuery(),
-		Executions:      request.GetExecutions(),
-		Reason:          request.GetReason(),
-		BatchType:       operationType,
-		TerminateParams: batcher.TerminateParams{},
-		CancelParams:    batcher.CancelParams{},
-		SignalParams:    signalParams,
-		DeleteParams:    batcher.DeleteParams{},
+		Namespace:               request.GetNamespace(),
+		Query:                   visibilityQuery,
+		Executions:              request.GetExecutions(),
+		Reason:                  request.GetReason(),
+		BatchType:               operationType,
+		RPS:                     float64(request.GetMaxOperationsPerSecond()),
+		TerminateParams:         batcher.TerminateParams{},
+		CancelParams:            batcher.CancelParams{},
+		SignalParams:            signalParams,
+		DeleteParams:            batcher.DeleteParams{},
+		ResetParams:             resetParams,
+		UpdateOptionsParams:     updateOptionsParams,
+		UnpauseActivitiesParams: unpauseActivitiesParams,
 	}
 	inputPayload, err := sdk.PreferProtoDataConverter.ToPayloads(input)
 	if err != nil {
@@ -3841,19 +4647,30 @@ func (wh *WorkflowHandler) StartBatchOperation(
 	searchattribute.AddSearchAttribute(&searchAttributes, searchattribute.TemporalNamespaceDivision, payload.EncodeString(batcher.NamespaceDivision))
 
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
-		Namespace:             request.Namespace,
-		WorkflowId:            request.GetJobId(),
-		WorkflowType:          &commonpb.WorkflowType{Name: batcher.BatchWFTypeName},
-		TaskQueue:             &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
-		Input:                 inputPayload,
-		Identity:              identity,
-		RequestId:             uuid.New(),
-		WorkflowIdReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
-		Memo:                  memo,
-		SearchAttributes:      searchAttributes,
+		Namespace:                request.Namespace,
+		WorkflowId:               request.GetJobId(),
+		WorkflowType:             &commonpb.WorkflowType{Name: batcher.BatchWFTypeName},
+		TaskQueue:                &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
+		Input:                    inputPayload,
+		Identity:                 identity,
+		RequestId:                uuid.New(),
+		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
+		WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
+		Memo:                     memo,
+		SearchAttributes:         searchAttributes,
+		Priority:                 &commonpb.Priority{}, // ie default priority
 	}
 
-	_, err = wh.historyClient.StartWorkflowExecution(ctx, common.CreateHistoryStartWorkflowRequest(namespaceID.String(), startReq, nil, time.Now().UTC()))
+	_, err = wh.historyClient.StartWorkflowExecution(
+		ctx,
+		common.CreateHistoryStartWorkflowRequest(
+			namespaceID.String(),
+			startReq,
+			nil,
+			nil,
+			time.Now().UTC(),
+		),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -3866,10 +4683,6 @@ func (wh *WorkflowHandler) StopBatchOperation(
 ) (_ *workflowservice.StopBatchOperationResponse, retError error) {
 
 	defer log.CapturePanic(wh.logger, &retError)
-
-	if wh.isStopped() {
-		return nil, errShuttingDown
-	}
 
 	if err := wh.versionChecker.ClientSupported(ctx); err != nil {
 		return nil, err
@@ -3913,10 +4726,6 @@ func (wh *WorkflowHandler) DescribeBatchOperation(
 	request *workflowservice.DescribeBatchOperationRequest,
 ) (_ *workflowservice.DescribeBatchOperationResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
-
-	if wh.isStopped() {
-		return nil, errShuttingDown
-	}
 
 	if err := wh.versionChecker.ClientSupported(ctx); err != nil {
 		return nil, err
@@ -3980,8 +4789,13 @@ func (wh *WorkflowHandler) DescribeBatchOperation(
 		operationType = enumspb.BATCH_OPERATION_TYPE_TERMINATE
 	case batcher.BatchTypeDelete:
 		operationType = enumspb.BATCH_OPERATION_TYPE_DELETE
+	case batcher.BatchTypeReset:
+		operationType = enumspb.BATCH_OPERATION_TYPE_RESET
+	case batcher.BatchTypeUpdateOptions:
+		operationType = enumspb.BATCH_OPERATION_TYPE_UPDATE_EXECUTION_OPTIONS
 	default:
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("The operation type %s is not supported", operationTypeString))
+		operationType = enumspb.BATCH_OPERATION_TYPE_UNSPECIFIED
+		wh.throttledLogger.Warn("Unknown batch operation type", tag.NewStringTag("batch-operation-type", operationTypeString))
 	}
 
 	batchOperationResp := &workflowservice.DescribeBatchOperationResponse{
@@ -4032,10 +4846,6 @@ func (wh *WorkflowHandler) ListBatchOperations(
 ) (_ *workflowservice.ListBatchOperationsResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
-	if wh.isStopped() {
-		return nil, errShuttingDown
-	}
-
 	if err := wh.versionChecker.ClientSupported(ctx); err != nil {
 		return nil, err
 	}
@@ -4052,11 +4862,16 @@ func (wh *WorkflowHandler) ListBatchOperations(
 		return nil, errBatchAPINotAllowed
 	}
 
+	maxPageSize := int32(wh.config.VisibilityMaxPageSize(request.GetNamespace()))
+	if request.GetPageSize() <= 0 || request.GetPageSize() > maxPageSize {
+		request.PageSize = maxPageSize
+	}
+
 	resp, err := wh.ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
 		Namespace:     request.GetNamespace(),
-		PageSize:      int32(wh.config.VisibilityMaxPageSize(request.GetNamespace())),
+		PageSize:      request.PageSize,
 		NextPageToken: request.GetNextPageToken(),
-		Query: fmt.Sprintf("%s = '%s' and %s='%s'",
+		Query: fmt.Sprintf("%s = '%s' and %s = '%s'",
 			searchattribute.WorkflowType,
 			batcher.BatchWFTypeName,
 			searchattribute.TemporalNamespaceDivision,
@@ -4082,285 +4897,396 @@ func (wh *WorkflowHandler) ListBatchOperations(
 	}, nil
 }
 
-func (wh *WorkflowHandler) getRawHistory(
-	ctx context.Context,
-	metricsHandler metrics.Handler,
-	namespaceID namespace.ID,
-	execution commonpb.WorkflowExecution,
-	firstEventID int64,
-	nextEventID int64,
-	pageSize int32,
-	nextPageToken []byte,
-	transientWorkflowTaskInfo *historyspb.TransientWorkflowTaskInfo,
-	branchToken []byte,
-) ([]*commonpb.DataBlob, []byte, error) {
-	var rawHistory []*commonpb.DataBlob
-	shardID := common.WorkflowIDToHistoryShard(namespaceID.String(), execution.GetWorkflowId(), wh.config.NumHistoryShards)
+func (wh *WorkflowHandler) PollNexusTaskQueue(ctx context.Context, request *workflowservice.PollNexusTaskQueueRequest) (_ *workflowservice.PollNexusTaskQueueResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
 
-	resp, err := wh.persistenceExecutionManager.ReadRawHistoryBranch(ctx, &persistence.ReadHistoryBranchRequest{
-		BranchToken:   branchToken,
-		MinEventID:    firstEventID,
-		MaxEventID:    nextEventID,
-		PageSize:      int(pageSize),
-		NextPageToken: nextPageToken,
-		ShardID:       shardID,
+	callTime := time.Now().UTC()
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	wh.logger.Debug("Received PollNexusTaskQueue")
+	if err := common.ValidateLongPollContextTimeout(ctx, "PollNexusTaskQueue", wh.throttledLogger); err != nil {
+		return nil, err
+	}
+
+	namespaceName := namespace.Name(request.GetNamespace())
+	if err := tqid.NormalizeAndValidate(request.TaskQueue, "", wh.config.MaxIDLengthLimit()); err != nil {
+		return nil, err
+	}
+	if len(request.GetIdentity()) > wh.config.MaxIDLengthLimit() {
+		return nil, errIdentityTooLong
+	}
+
+	if err := wh.validateVersioningInfo(request.Namespace, request.WorkerVersionCapabilities, request.TaskQueue); err != nil {
+		return nil, err
+	}
+
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
+	if err != nil {
+		return nil, err
+	}
+
+	if contextNearDeadline(ctx, longPollTailRoom) {
+		return &workflowservice.PollNexusTaskQueueResponse{}, nil
+	}
+
+	pollerID := uuid.New()
+	childCtx := wh.registerOutstandingPollContext(ctx, pollerID, namespaceID.String())
+	defer wh.unregisterOutstandingPollContext(pollerID, namespaceID.String())
+	matchingResponse, err := wh.matchingClient.PollNexusTaskQueue(childCtx, &matchingservice.PollNexusTaskQueueRequest{
+		NamespaceId: namespaceID.String(),
+		PollerId:    pollerID,
+		Request:     request,
 	})
 	if err != nil {
-		return nil, nil, err
-	}
-
-	for _, data := range resp.HistoryEventBlobs {
-		rawHistory = append(rawHistory, &commonpb.DataBlob{
-			EncodingType: data.EncodingType,
-			Data:         data.Data,
-		})
-	}
-
-	if len(resp.NextPageToken) == 0 && transientWorkflowTaskInfo != nil {
-		if err := wh.validateTransientWorkflowTaskEvents(nextEventID, transientWorkflowTaskInfo); err != nil {
-			metricsHandler.Counter(metrics.ServiceErrIncompleteHistoryCounter.GetMetricName()).Record(1)
-			wh.logger.Error("getHistory error",
-				tag.WorkflowNamespaceID(namespaceID.String()),
-				tag.WorkflowID(execution.GetWorkflowId()),
-				tag.WorkflowRunID(execution.GetRunId()),
-				tag.Error(err))
-			return nil, nil, err
+		contextWasCanceled := wh.cancelOutstandingPoll(childCtx, namespaceID, enumspb.TASK_QUEUE_TYPE_NEXUS, request.TaskQueue, pollerID)
+		if contextWasCanceled {
+			// Clear error as we don't want to report context cancellation error to count against our SLA.
+			return &workflowservice.PollNexusTaskQueueResponse{}, nil
 		}
 
-		for _, event := range transientWorkflowTaskInfo.HistorySuffix {
-			blob, err := wh.payloadSerializer.SerializeEvent(event, enumspb.ENCODING_TYPE_PROTO3)
-			if err != nil {
-				return nil, nil, err
-			}
-			rawHistory = append(rawHistory, &commonpb.DataBlob{
-				EncodingType: enumspb.ENCODING_TYPE_PROTO3,
-				Data:         blob.Data,
-			})
+		// These errors are expected from some versioning situations. We should not log them, it'd be too noisy.
+		var newerBuild *serviceerror.NewerBuildExists      // expected when versioned poller is superceded
+		var failedPrecond *serviceerror.FailedPrecondition // expected when user data is disabled
+		if errors.As(err, &newerBuild) || errors.As(err, &failedPrecond) {
+			return nil, err
 		}
-	}
 
-	return rawHistory, resp.NextPageToken, nil
-}
-
-func (wh *WorkflowHandler) getHistory(
-	ctx context.Context,
-	metricsHandler metrics.Handler,
-	namespaceID namespace.ID,
-	namespace namespace.Name,
-	execution commonpb.WorkflowExecution,
-	firstEventID int64,
-	nextEventID int64,
-	pageSize int32,
-	nextPageToken []byte,
-	transientWorkflowTaskInfo *historyspb.TransientWorkflowTaskInfo,
-	branchToken []byte,
-) (*historypb.History, []byte, error) {
-
-	var size int
-	isFirstPage := len(nextPageToken) == 0
-	shardID := common.WorkflowIDToHistoryShard(namespaceID.String(), execution.GetWorkflowId(), wh.config.NumHistoryShards)
-	var err error
-	var historyEvents []*historypb.HistoryEvent
-	historyEvents, size, nextPageToken, err = persistence.ReadFullPageEvents(ctx, wh.persistenceExecutionManager, &persistence.ReadHistoryBranchRequest{
-		BranchToken:   branchToken,
-		MinEventID:    firstEventID,
-		MaxEventID:    nextEventID,
-		PageSize:      int(pageSize),
-		NextPageToken: nextPageToken,
-		ShardID:       shardID,
-	})
-	switch err.(type) {
-	case nil:
-		// noop
-	case *serviceerror.DataLoss:
-		// log event
-		wh.logger.Error("encountered data loss event", tag.WorkflowNamespaceID(namespaceID.String()), tag.WorkflowID(execution.GetWorkflowId()), tag.WorkflowRunID(execution.GetRunId()))
-		return nil, nil, err
-	default:
-		return nil, nil, err
-	}
-
-	metricsHandler.Histogram(metrics.HistorySize.GetMetricName(), metrics.HistorySize.GetMetricUnit()).Record(int64(size))
-
-	isLastPage := len(nextPageToken) == 0
-	if err := wh.verifyHistoryIsComplete(
-		historyEvents,
-		firstEventID,
-		nextEventID-1,
-		isFirstPage,
-		isLastPage,
-		int(pageSize)); err != nil {
-		metricsHandler.Counter(metrics.ServiceErrIncompleteHistoryCounter.GetMetricName()).Record(1)
-		wh.logger.Error("getHistory: incomplete history",
-			tag.WorkflowNamespaceID(namespaceID.String()),
-			tag.WorkflowID(execution.GetWorkflowId()),
-			tag.WorkflowRunID(execution.GetRunId()),
+		// For all other errors log an error and return it back to client.
+		ctxTimeout := "not-set"
+		ctxDeadline, ok := childCtx.Deadline()
+		if ok {
+			ctxTimeout = ctxDeadline.Sub(callTime).String()
+		}
+		wh.logger.Error("Unable to call matching.PollNexusTaskQueue.",
+			tag.WorkflowTaskQueueName(request.GetTaskQueue().GetName()),
+			tag.Timeout(ctxTimeout),
 			tag.Error(err))
+
+		return nil, err
 	}
 
-	if len(nextPageToken) == 0 && transientWorkflowTaskInfo != nil {
-		if err := wh.validateTransientWorkflowTaskEvents(nextEventID, transientWorkflowTaskInfo); err != nil {
-			metricsHandler.Counter(metrics.ServiceErrIncompleteHistoryCounter.GetMetricName()).Record(1)
-			wh.logger.Error("getHistory error",
-				tag.WorkflowNamespaceID(namespaceID.String()),
-				tag.WorkflowID(execution.GetWorkflowId()),
-				tag.WorkflowRunID(execution.GetRunId()),
-				tag.Error(err))
+	return matchingResponse.GetResponse(), nil
+}
+
+func (wh *WorkflowHandler) RespondNexusTaskCompleted(ctx context.Context, request *workflowservice.RespondNexusTaskCompletedRequest) (_ *workflowservice.RespondNexusTaskCompletedResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if r := request.GetResponse().GetStartOperation().GetAsyncSuccess(); r != nil {
+		operationToken := r.OperationToken
+		if operationToken == "" && r.OperationId != "" { //nolint:staticcheck // SA1019 this field might be by old clients.
+			operationToken = r.OperationId //nolint:staticcheck // SA1019 this field might be set by old clients.
 		}
-		// Append the transient workflow task events once we are done enumerating everything from the events table
-		historyEvents = append(historyEvents, transientWorkflowTaskInfo.HistorySuffix...)
+		if operationToken == "" {
+			return nil, serviceerror.NewInvalidArgument("missing opration token in response")
+		}
+
+		tokenLimit := wh.config.MaxNexusOperationTokenLength(request.Namespace)
+		if len(operationToken) > tokenLimit {
+			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("operation token length exceeds allowed limit (%d/%d)", len(operationToken), tokenLimit))
+		}
 	}
 
-	if err := wh.processOutgoingSearchAttributes(historyEvents, namespace); err != nil {
-		return nil, nil, err
-	}
-
-	executionHistory := &historypb.History{
-		Events: historyEvents,
-	}
-	return executionHistory, nextPageToken, nil
-}
-
-func (wh *WorkflowHandler) getHistoryReverse(
-	ctx context.Context,
-	metricsHandler metrics.Handler,
-	namespaceID namespace.ID,
-	namespace namespace.Name,
-	execution commonpb.WorkflowExecution,
-	nextEventID int64,
-	lastFirstTxnID int64,
-	pageSize int32,
-	nextPageToken []byte,
-	branchToken []byte,
-) (*historypb.History, []byte, int64, error) {
-	var size int
-	shardID := common.WorkflowIDToHistoryShard(namespaceID.String(), execution.GetWorkflowId(), wh.config.NumHistoryShards)
-	var err error
-	var historyEvents []*historypb.HistoryEvent
-
-	historyEvents, size, nextPageToken, err = persistence.ReadFullPageEventsReverse(ctx, wh.persistenceExecutionManager, &persistence.ReadHistoryBranchReverseRequest{
-		BranchToken:            branchToken,
-		MaxEventID:             nextEventID,
-		LastFirstTransactionID: lastFirstTxnID,
-		PageSize:               int(pageSize),
-		NextPageToken:          nextPageToken,
-		ShardID:                shardID,
-	})
-
-	switch err.(type) {
-	case nil:
-		// noop
-	case *serviceerror.DataLoss:
-		// log event
-		wh.logger.Error("encountered data loss event", tag.WorkflowNamespaceID(namespaceID.String()), tag.WorkflowID(execution.GetWorkflowId()), tag.WorkflowRunID(execution.GetRunId()))
-		return nil, nil, 0, err
-	default:
-		return nil, nil, 0, err
-	}
-
-	metricsHandler.Histogram(metrics.HistorySize.GetMetricName(), metrics.HistorySize.GetMetricUnit()).Record(int64(size))
-
-	if err := wh.processOutgoingSearchAttributes(historyEvents, namespace); err != nil {
-		return nil, nil, 0, err
-	}
-
-	executionHistory := &historypb.History{
-		Events: historyEvents,
-	}
-
-	var newNextEventID int64
-	if len(historyEvents) > 0 {
-		newNextEventID = historyEvents[len(historyEvents)-1].EventId - 1
-	} else {
-		newNextEventID = nextEventID
-	}
-
-	return executionHistory, nextPageToken, newNextEventID, nil
-}
-
-func (wh *WorkflowHandler) processOutgoingSearchAttributes(events []*historypb.HistoryEvent, namespace namespace.Name) error {
-	saTypeMap, err := wh.saProvider.GetSearchAttributes(wh.visibilityMrg.GetIndexName(), false)
+	// Both the task token and the request have a reference to a namespace. We prefer using the namespace ID from
+	// the token as it is a more stable identifier.
+	// There's no need to validate that the namespace in the token and the request match,
+	// NamespaceValidatorInterceptor does this for us.
+	tt, err := wh.tokenSerializer.DeserializeNexusTaskToken(request.GetTaskToken())
 	if err != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
+		return nil, errDeserializingToken
 	}
-	for _, event := range events {
-		var searchAttributes *commonpb.SearchAttributes
-		switch event.EventType {
-		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED:
-			searchAttributes = event.GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes()
-		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW:
-			searchAttributes = event.GetWorkflowExecutionContinuedAsNewEventAttributes().GetSearchAttributes()
-		case enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED:
-			searchAttributes = event.GetStartChildWorkflowExecutionInitiatedEventAttributes().GetSearchAttributes()
-		case enumspb.EVENT_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:
-			searchAttributes = event.GetUpsertWorkflowSearchAttributesEventAttributes().GetSearchAttributes()
-		}
-		if searchAttributes != nil {
-			searchattribute.ApplyTypeMap(searchAttributes, saTypeMap)
-			aliasedSas, err := searchattribute.AliasFields(wh.saMapperProvider, searchAttributes, namespace.String())
-			if err != nil {
-				return err
-			}
-			if aliasedSas != nil {
-				searchAttributes.IndexedFields = aliasedSas.IndexedFields
-			}
-		}
+	if tt.GetTaskQueue() == "" || tt.GetTaskId() == "" {
+		return nil, errInvalidTaskToken
+	}
+	namespaceId := namespace.ID(tt.GetNamespaceId())
+
+	// NOTE: Not checking blob size limit here as we already enforce the 4 MB gRPC request limit and since this
+	// doesn't go into workflow history, and the Nexus request caller is unknown, there doesn't seem like there's a
+	// good reason to fail at this point.
+
+	if details := request.GetResponse().GetStartOperation().GetOperationError().GetFailure().GetDetails(); details != nil && !json.Valid(details) {
+		return nil, serviceerror.NewInvalidArgument("failure details must be JSON serializable")
 	}
 
-	return nil
+	matchingRequest := &matchingservice.RespondNexusTaskCompletedRequest{
+		NamespaceId: namespaceId.String(),
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: tt.GetTaskQueue(),
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+		TaskId:  tt.GetTaskId(),
+		Request: request,
+	}
+
+	_, err = wh.matchingClient.RespondNexusTaskCompleted(ctx, matchingRequest)
+	if err != nil {
+		return nil, err
+	}
+	return &workflowservice.RespondNexusTaskCompletedResponse{}, nil
+}
+
+func (wh *WorkflowHandler) RespondNexusTaskFailed(ctx context.Context, request *workflowservice.RespondNexusTaskFailedRequest) (_ *workflowservice.RespondNexusTaskFailedResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	// Both the task token and the request have a reference to a namespace. We prefer using the namespace ID from
+	// the token as it is a more stable identifier.
+	// There's no need to validate that the namespace in the token and the request match,
+	// NamespaceValidatorInterceptor does this for us.
+	tt, err := wh.tokenSerializer.DeserializeNexusTaskToken(request.GetTaskToken())
+	if err != nil {
+		return nil, errDeserializingToken
+	}
+	if tt.GetTaskQueue() == "" || tt.GetTaskId() == "" {
+		return nil, errInvalidTaskToken
+	}
+	namespaceId := namespace.ID(tt.GetNamespaceId())
+
+	if details := request.GetError().GetFailure().GetDetails(); details != nil && !json.Valid(details) {
+		return nil, serviceerror.NewInvalidArgument("failure details must be JSON serializable")
+	}
+
+	// NOTE: Not checking blob size limit here as we already enforce the 4 MB gRPC request limit and since this
+	// doesn't go into workflow history, and the Nexus request caller is unknown, there doesn't seem like there's a
+	// good reason to fail at this point.
+
+	matchingRequest := &matchingservice.RespondNexusTaskFailedRequest{
+		NamespaceId: namespaceId.String(),
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: tt.GetTaskQueue(),
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+		TaskId:  tt.GetTaskId(),
+		Request: request,
+	}
+
+	_, err = wh.matchingClient.RespondNexusTaskFailed(ctx, matchingRequest)
+	if err != nil {
+		return nil, err
+	}
+	return &workflowservice.RespondNexusTaskFailedResponse{}, nil
 }
 
 func (wh *WorkflowHandler) validateSearchAttributes(searchAttributes *commonpb.SearchAttributes, namespaceName namespace.Name) error {
 	if err := wh.saValidator.Validate(searchAttributes, namespaceName.String()); err != nil {
 		return err
 	}
-	if err := wh.saValidator.ValidateSize(searchAttributes, namespaceName.String()); err != nil {
-		return err
+	return wh.saValidator.ValidateSize(searchAttributes, namespaceName.String())
+}
+
+func (wh *WorkflowHandler) validateVersionRuleBuildId(request *workflowservice.UpdateWorkerVersioningRulesRequest) error {
+	validateBuildId := func(bid string) error {
+		if len(bid) > 255 {
+			return serviceerror.NewInvalidArgument(fmt.Sprintf("BuildId must be <= 255 characters, was %d", len(bid)))
+		}
+
+		return common.ValidateUTF8String("BuildId", bid)
+	}
+	switch request.GetOperation().(type) {
+	case *workflowservice.UpdateWorkerVersioningRulesRequest_InsertAssignmentRule:
+		return validateBuildId(request.GetInsertAssignmentRule().GetRule().GetTargetBuildId())
+	case *workflowservice.UpdateWorkerVersioningRulesRequest_ReplaceAssignmentRule:
+		return validateBuildId(request.GetReplaceAssignmentRule().GetRule().GetTargetBuildId())
+	case *workflowservice.UpdateWorkerVersioningRulesRequest_DeleteAssignmentRule:
+		return nil
+	case *workflowservice.UpdateWorkerVersioningRulesRequest_AddCompatibleRedirectRule:
+		return cmp.Or(
+			validateBuildId(request.GetAddCompatibleRedirectRule().GetRule().GetTargetBuildId()),
+			validateBuildId(request.GetAddCompatibleRedirectRule().GetRule().GetSourceBuildId()),
+		)
+	case *workflowservice.UpdateWorkerVersioningRulesRequest_ReplaceCompatibleRedirectRule:
+		return validateBuildId(request.GetReplaceCompatibleRedirectRule().GetRule().GetTargetBuildId())
+	case *workflowservice.UpdateWorkerVersioningRulesRequest_DeleteCompatibleRedirectRule:
+		return nil
+	case *workflowservice.UpdateWorkerVersioningRulesRequest_CommitBuildId_:
+		return validateBuildId(request.GetCommitBuildId().GetTargetBuildId())
 	}
 	return nil
 }
 
-func (wh *WorkflowHandler) validateTransientWorkflowTaskEvents(
-	eventIDOffset int64,
-	transientWorkflowTaskInfo *historyspb.TransientWorkflowTaskInfo,
+func (wh *WorkflowHandler) validateWorkflowIdReusePolicy(
+	namespaceName namespace.Name,
+	reusePolicy enumspb.WorkflowIdReusePolicy,
+	conflictPolicy enumspb.WorkflowIdConflictPolicy,
 ) error {
-	for i, event := range transientWorkflowTaskInfo.HistorySuffix {
-		expectedEventID := eventIDOffset + int64(i)
-		if event.GetEventId() != expectedEventID {
-			return serviceerror.NewInternal(
-				fmt.Sprintf(
-					"invalid transient workflow task at position %v; expected event ID %v, found event ID %v",
-					i,
-					expectedEventID,
-					event.GetEventId()))
+	if conflictPolicy != enumspb.WORKFLOW_ID_CONFLICT_POLICY_UNSPECIFIED &&
+		reusePolicy == enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING {
+		return errIncompatibleIDReusePolicyTerminateIfRunning
+	}
+	if conflictPolicy == enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING &&
+		reusePolicy == enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE &&
+		wh.followReusePolicyAfterConflictPolicyTerminate(namespaceName.String()) {
+		return errIncompatibleIDReusePolicyRejectDuplicate
+	}
+	return nil
+}
+
+func (wh *WorkflowHandler) validateOnConflictOptions(opts *workflowpb.OnConflictOptions) error {
+	if opts == nil {
+		return nil
+	}
+	if opts.AttachCompletionCallbacks && !opts.AttachRequestId {
+		return serviceerror.NewInvalidArgument("attaching request ID is required for attaching completion callbacks")
+	}
+	return nil
+}
+
+func (wh *WorkflowHandler) validateLinks(
+	ns namespace.Name,
+	links []*commonpb.Link,
+) error {
+	maxAllowedLinks := wh.config.MaxLinksPerRequest(ns.String())
+	if len(links) > maxAllowedLinks {
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("cannot attach more than %d links per request, got %d", maxAllowedLinks, len(links)))
+	}
+
+	maxSize := wh.config.LinkMaxSize(ns.String())
+	for _, l := range links {
+		if l.Size() > maxSize {
+			return serviceerror.NewInvalidArgument(fmt.Sprintf("link exceeds allowed size of %d, got %d", maxSize, l.Size()))
+		}
+		switch t := l.Variant.(type) {
+		case *commonpb.Link_WorkflowEvent_:
+			if t.WorkflowEvent.GetNamespace() == "" {
+				return serviceerror.NewInvalidArgument("workflow event link must not have an empty namespace field")
+			}
+			if t.WorkflowEvent.GetWorkflowId() == "" {
+				return serviceerror.NewInvalidArgument("workflow event link must not have an empty workflow ID field")
+			}
+			if t.WorkflowEvent.GetRunId() == "" {
+				return serviceerror.NewInvalidArgument("workflow event link must not have an empty run ID field")
+			}
+			if t.WorkflowEvent.GetEventRef().GetEventType() == enumspb.EVENT_TYPE_UNSPECIFIED && t.WorkflowEvent.GetEventRef().GetEventId() != 0 {
+				return serviceerror.NewInvalidArgument("workflow event link ref cannot have an unspecified event type and a non-zero event ID")
+			}
+		case *commonpb.Link_BatchJob_:
+			if t.BatchJob.GetJobId() == "" {
+				return serviceerror.NewInvalidArgument("batch job link must not have an empty job ID")
+			}
+		default:
+			return serviceerror.NewInvalidArgument("unsupported link variant")
 		}
 	}
-
 	return nil
 }
 
-func (wh *WorkflowHandler) validateTaskQueue(t *taskqueuepb.TaskQueue) error {
-	if t == nil || t.GetName() == "" {
-		return errTaskQueueNotSet
-	}
-	if len(t.GetName()) > wh.config.MaxIDLengthLimit() {
-		return errTaskQueueTooLong
+func (wh *WorkflowHandler) validateWorkflowCompletionCallbacks(
+	ns namespace.Name,
+	callbacks []*commonpb.Callback,
+) error {
+	if len(callbacks) > 0 && !wh.config.EnableNexusAPIs() {
+		return status.Error(
+			codes.InvalidArgument,
+			"attaching workflow callbacks is disabled for this namespace",
+		)
 	}
 
-	enums.SetDefaultTaskQueueKind(&t.Kind)
+	if len(callbacks) > wh.config.MaxCallbacksPerWorkflow(ns.String()) {
+		return status.Error(
+			codes.InvalidArgument,
+			fmt.Sprintf(
+				"cannot attach more than %d callbacks to a workflow",
+				wh.config.MaxCallbacksPerWorkflow(ns.String()),
+			),
+		)
+	}
+
+	for _, callback := range callbacks {
+		switch cb := callback.GetVariant().(type) {
+		case *commonpb.Callback_Nexus_:
+			if err := wh.validateCallbackURL(ns, cb.Nexus.GetUrl()); err != nil {
+				return err
+			}
+
+			headerSize := 0
+			for k, v := range cb.Nexus.GetHeader() {
+				headerSize += len(k) + len(v)
+			}
+			if headerSize > wh.config.CallbackHeaderMaxSize(ns.String()) {
+				return status.Error(
+					codes.InvalidArgument,
+					fmt.Sprintf(
+						"invalid header: header size longer than max allowed size of %d",
+						wh.config.CallbackHeaderMaxSize(ns.String()),
+					),
+				)
+			}
+		case *commonpb.Callback_Internal_:
+			// TODO(Tianyu): For now, there is nothing to validate given that this is an internal field.
+			continue
+		default:
+			return status.Error(codes.Unimplemented, fmt.Sprintf("unknown callback variant: %T", cb))
+		}
+	}
+	return nil
+}
+
+func (wh *WorkflowHandler) validateCallbackURL(ns namespace.Name, rawURL string) error {
+	if len(rawURL) > wh.config.CallbackURLMaxLength(ns.String()) {
+		return status.Errorf(codes.InvalidArgument, "invalid url: url length longer than max length allowed of %d", wh.config.CallbackURLMaxLength(ns.String()))
+	}
+
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return err
+	}
+	if !(u.Scheme == "http" || u.Scheme == "https") {
+		return status.Errorf(codes.InvalidArgument, "invalid url: unknown scheme: %v", u)
+	}
+	for _, cfg := range wh.config.CallbackEndpointConfigs(ns.String()) {
+		if cfg.Regexp.MatchString(u.Host) {
+			if u.Scheme == "http" && !cfg.AllowInsecure {
+				return status.Errorf(codes.InvalidArgument, "invalid url: callback address does not allow insecure connections: %v", u)
+			}
+			return nil
+		}
+	}
+	return status.Errorf(codes.InvalidArgument, "invalid url: url does not match any configured callback address: %v", u)
+}
+
+type buildIdAndFlag interface {
+	GetBuildId() string
+	GetUseVersioning() bool
+}
+
+func (wh *WorkflowHandler) validateVersioningInfo(nsName string, id buildIdAndFlag, tq *taskqueuepb.TaskQueue) error {
+	if id.GetUseVersioning() && !wh.config.EnableWorkerVersioningWorkflow(nsName) {
+		return errWorkerVersioningWorkflowAPIsNotAllowed
+	}
+	if id.GetUseVersioning() && tq.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY && len(tq.GetNormalName()) == 0 {
+		return errUseVersioningWithoutNormalName
+	}
+	if id.GetUseVersioning() && len(id.GetBuildId()) == 0 {
+		return errUseVersioningWithoutBuildId
+	}
+	if len(id.GetBuildId()) > wh.config.WorkerBuildIdSizeLimit() {
+		return errBuildIdTooLong
+	}
 	return nil
 }
 
 //nolint:revive // cyclomatic complexity
-func (wh *WorkflowHandler) validateBuildIdCompatabilityUpdate(
-	req *workflowservice.UpdateWorkerBuildIdCompatabilityRequest,
+func (wh *WorkflowHandler) validateBuildIdCompatibilityUpdate(
+	req *workflowservice.UpdateWorkerBuildIdCompatibilityRequest,
 ) error {
-	errDeets := []string{"request to update worker build id compatability requires: "}
+	errDeets := []string{"request to update worker build ID compatability requires: "}
 
 	checkIdLen := func(id string) {
 		if len(id) > wh.config.WorkerBuildIdSizeLimit() {
 			errDeets = append(errDeets, fmt.Sprintf(" Worker build IDs to be no larger than %v characters",
 				wh.config.WorkerBuildIdSizeLimit()))
+		}
+		if err := common.ValidateUTF8String("BuildId", id); err != nil {
+			errDeets = append(errDeets, err.Error())
 		}
 	}
 
@@ -4373,7 +5299,7 @@ func (wh *WorkflowHandler) validateBuildIdCompatabilityUpdate(
 	if req.GetOperation() == nil {
 		errDeets = append(errDeets, "an operation to be specified")
 	}
-	if op, ok := req.GetOperation().(*workflowservice.UpdateWorkerBuildIdCompatabilityRequest_AddNewCompatibleBuildId); ok {
+	if op, ok := req.GetOperation().(*workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewCompatibleBuildId); ok {
 		if op.AddNewCompatibleBuildId.GetNewBuildId() == "" {
 			errDeets = append(errDeets, "`add_new_compatible_version` to be set")
 		} else {
@@ -4382,19 +5308,19 @@ func (wh *WorkflowHandler) validateBuildIdCompatabilityUpdate(
 		if op.AddNewCompatibleBuildId.GetExistingCompatibleBuildId() == "" {
 			errDeets = append(errDeets, "`existing_compatible_version` to be set")
 		}
-	} else if op, ok := req.GetOperation().(*workflowservice.UpdateWorkerBuildIdCompatabilityRequest_AddNewBuildIdInNewDefaultSet); ok {
+	} else if op, ok := req.GetOperation().(*workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet); ok {
 		if op.AddNewBuildIdInNewDefaultSet == "" {
 			errDeets = append(errDeets, "`add_new_version_id_in_new_default_set` to be set")
 		} else {
 			checkIdLen(op.AddNewBuildIdInNewDefaultSet)
 		}
-	} else if op, ok := req.GetOperation().(*workflowservice.UpdateWorkerBuildIdCompatabilityRequest_PromoteSetByBuildId); ok {
+	} else if op, ok := req.GetOperation().(*workflowservice.UpdateWorkerBuildIdCompatibilityRequest_PromoteSetByBuildId); ok {
 		if op.PromoteSetByBuildId == "" {
 			errDeets = append(errDeets, "`promote_set_by_version_id` to be set")
 		} else {
 			checkIdLen(op.PromoteSetByBuildId)
 		}
-	} else if op, ok := req.GetOperation().(*workflowservice.UpdateWorkerBuildIdCompatabilityRequest_PromoteBuildIdWithinSet); ok {
+	} else if op, ok := req.GetOperation().(*workflowservice.UpdateWorkerBuildIdCompatibilityRequest_PromoteBuildIdWithinSet); ok {
 		if op.PromoteBuildIdWithinSet == "" {
 			errDeets = append(errDeets, "`promote_version_id_within_set` to be set")
 		} else {
@@ -4405,165 +5331,6 @@ func (wh *WorkflowHandler) validateBuildIdCompatabilityUpdate(
 		return serviceerror.NewInvalidArgument(strings.Join(errDeets, ", "))
 	}
 	return nil
-}
-
-func (wh *WorkflowHandler) createPollWorkflowTaskQueueResponse(
-	ctx context.Context,
-	namespaceID namespace.ID,
-	matchingResp *matchingservice.PollWorkflowTaskQueueResponse,
-	branchToken []byte,
-) (_ *workflowservice.PollWorkflowTaskQueueResponse, retError error) {
-
-	if matchingResp.WorkflowExecution == nil {
-		// this will happen if there is no workflow task to be send to worker / caller
-		return &workflowservice.PollWorkflowTaskQueueResponse{}, nil
-	}
-
-	var history *historypb.History
-	var continuation []byte
-	var err error
-
-	if matchingResp.GetStickyExecutionEnabled() && matchingResp.Query != nil {
-		// meaning sticky query, we should not return any events to worker
-		// since query task only check the current status
-		history = &historypb.History{
-			Events: []*historypb.HistoryEvent{},
-		}
-	} else {
-		// here we have 3 cases:
-		// 1. sticky && non query task
-		// 2. non sticky &&  non query task
-		// 3. non sticky && query task
-		// for 1, partial history have to be send back
-		// for 2 and 3, full history have to be send back
-
-		var persistenceToken []byte
-
-		firstEventID := common.FirstEventID
-		nextEventID := matchingResp.GetNextEventId()
-		if matchingResp.GetStickyExecutionEnabled() {
-			firstEventID = matchingResp.GetPreviousStartedEventId() + 1
-		}
-		namespaceEntry, dErr := wh.namespaceRegistry.GetNamespaceByID(namespaceID)
-		if dErr != nil {
-			return nil, dErr
-		}
-
-		// TODO below is a temporal solution to guard against invalid event batch
-		//  when data inconsistency occurs
-		//  long term solution should check event batch pointing backwards within history store
-		defer func() {
-			if _, ok := retError.(*serviceerror.DataLoss); ok {
-				wh.trimHistoryNode(ctx, namespaceID.String(), matchingResp.WorkflowExecution.GetWorkflowId(), matchingResp.WorkflowExecution.GetRunId())
-			}
-		}()
-		history, persistenceToken, err = wh.getHistory(
-			ctx,
-			wh.metricsScope(ctx),
-			namespaceID,
-			namespaceEntry.Name(),
-			*matchingResp.GetWorkflowExecution(),
-			firstEventID,
-			nextEventID,
-			int32(wh.config.HistoryMaxPageSize(namespaceEntry.Name().String())),
-			nil,
-			matchingResp.GetTransientWorkflowTask(),
-			branchToken,
-		)
-		if err != nil {
-			return nil, err
-		}
-
-		if len(persistenceToken) != 0 {
-			continuation, err = serializeHistoryToken(&tokenspb.HistoryContinuation{
-				RunId:                 matchingResp.WorkflowExecution.GetRunId(),
-				FirstEventId:          firstEventID,
-				NextEventId:           nextEventID,
-				PersistenceToken:      persistenceToken,
-				TransientWorkflowTask: matchingResp.GetTransientWorkflowTask(),
-				BranchToken:           branchToken,
-			})
-			if err != nil {
-				return nil, err
-			}
-		}
-	}
-
-	resp := &workflowservice.PollWorkflowTaskQueueResponse{
-		TaskToken:                  matchingResp.TaskToken,
-		WorkflowExecution:          matchingResp.WorkflowExecution,
-		WorkflowType:               matchingResp.WorkflowType,
-		PreviousStartedEventId:     matchingResp.PreviousStartedEventId,
-		StartedEventId:             matchingResp.StartedEventId,
-		Query:                      matchingResp.Query,
-		BacklogCountHint:           matchingResp.BacklogCountHint,
-		Attempt:                    matchingResp.Attempt,
-		History:                    history,
-		NextPageToken:              continuation,
-		WorkflowExecutionTaskQueue: matchingResp.WorkflowExecutionTaskQueue,
-		ScheduledTime:              matchingResp.ScheduledTime,
-		StartedTime:                matchingResp.StartedTime,
-		Queries:                    matchingResp.Queries,
-		Messages:                   matchingResp.Messages,
-	}
-
-	return resp, nil
-}
-
-func (wh *WorkflowHandler) verifyHistoryIsComplete(
-	events []*historypb.HistoryEvent,
-	expectedFirstEventID int64,
-	expectedLastEventID int64,
-	isFirstPage bool,
-	isLastPage bool,
-	pageSize int,
-) error {
-
-	nEvents := len(events)
-	if nEvents == 0 {
-		if isLastPage {
-			// we seem to be returning a non-nil pageToken on the lastPage which
-			// in turn cases the client to call getHistory again - only to find
-			// there are no more events to consume - bail out if this is the case here
-			return nil
-		}
-		return serviceerror.NewDataLoss("History contains zero events.")
-	}
-
-	firstEventID := events[0].GetEventId()
-	lastEventID := events[nEvents-1].GetEventId()
-
-	if !isFirstPage { // at least one page of history has been read previously
-		if firstEventID <= expectedFirstEventID {
-			// not first page and no events have been read in the previous pages - not possible
-			return serviceerror.NewDataLoss(fmt.Sprintf("Invalid history: expected first eventID to be > %v but got %v", expectedFirstEventID, firstEventID))
-		}
-		expectedFirstEventID = firstEventID
-	}
-
-	if !isLastPage {
-		// estimate lastEventID based on pageSize. This is a lower bound
-		// since the persistence layer counts "batch of events" as a single page
-		expectedLastEventID = expectedFirstEventID + int64(pageSize) - 1
-	}
-
-	nExpectedEvents := expectedLastEventID - expectedFirstEventID + 1
-
-	if firstEventID == expectedFirstEventID &&
-		((isLastPage && lastEventID == expectedLastEventID && int64(nEvents) == nExpectedEvents) ||
-			(!isLastPage && lastEventID >= expectedLastEventID && int64(nEvents) >= nExpectedEvents)) {
-		return nil
-	}
-
-	return serviceerror.NewDataLoss(fmt.Sprintf("Incomplete history: expected events [%v-%v] but got events [%v-%v] of length %v: isFirstPage=%v,isLastPage=%v,pageSize=%v",
-		expectedFirstEventID,
-		expectedLastEventID,
-		firstEventID,
-		lastEventID,
-		nEvents,
-		isFirstPage,
-		isLastPage,
-		pageSize))
 }
 
 func (wh *WorkflowHandler) historyArchived(ctx context.Context, request *workflowservice.GetWorkflowExecutionHistoryRequest, namespaceID namespace.ID) bool {
@@ -4637,26 +5404,30 @@ func (wh *WorkflowHandler) getArchivedHistory(
 	}, nil
 }
 
-func (wh *WorkflowHandler) isListRequestPageSizeTooLarge(pageSize int32, namespace string) bool {
-	return wh.config.EnableReadVisibilityFromES(namespace) &&
-		pageSize > int32(wh.config.ESIndexMaxResultWindow())
-}
-
 // cancelOutstandingPoll cancel outstanding poll if context was canceled and returns true. Otherwise returns false.
-func (wh *WorkflowHandler) cancelOutstandingPoll(ctx context.Context, namespaceID namespace.ID, taskQueueType enumspb.TaskQueueType,
-	taskQueue *taskqueuepb.TaskQueue, pollerID string) bool {
+func (wh *WorkflowHandler) cancelOutstandingPoll(
+	ctx context.Context,
+	namespaceID namespace.ID,
+	taskQueueType enumspb.TaskQueueType,
+	taskQueue *taskqueuepb.TaskQueue,
+	pollerID string,
+) bool {
 	// First check if this err is due to context cancellation.  This means client connection to frontend is closed.
-	if ctx.Err() != context.Canceled {
+	if !errors.Is(ctx.Err(), context.Canceled) {
 		return false
 	}
 	// Our rpc stack does not propagates context cancellation to the other service.  Lets make an explicit
 	// call to matching to notify this poller is gone to prevent any tasks being dispatched to zombie pollers.
-	_, err := wh.matchingClient.CancelOutstandingPoll(context.Background(), &matchingservice.CancelOutstandingPollRequest{
-		NamespaceId:   namespaceID.String(),
-		TaskQueueType: taskQueueType,
-		TaskQueue:     taskQueue,
-		PollerId:      pollerID,
-	})
+	// TODO: specify a reasonable timeout for CancelOutstandingPoll.
+	_, err := wh.matchingClient.CancelOutstandingPoll(
+		rpc.CopyContextValues(context.TODO(), ctx),
+		&matchingservice.CancelOutstandingPollRequest{
+			NamespaceId:   namespaceID.String(),
+			TaskQueueType: taskQueueType,
+			TaskQueue:     taskQueue,
+			PollerId:      pollerID,
+		},
+	)
 	// We can not do much if this call fails.  Just log the error and move on.
 	if err != nil {
 		wh.logger.Warn("Failed to cancel outstanding poller.",
@@ -4664,6 +5435,36 @@ func (wh *WorkflowHandler) cancelOutstandingPoll(ctx context.Context, namespaceI
 	}
 
 	return true
+}
+
+func (wh *WorkflowHandler) registerOutstandingPollContext(
+	ctx context.Context,
+	pollerID string,
+	namespaceID string,
+) context.Context {
+
+	if pollerID != "" {
+		nsPollers, ok := wh.outstandingPollers.Get(namespaceID)
+		if !ok {
+			nsPollers, _ = wh.outstandingPollers.GetOrSet(namespaceID, collection.NewSyncMap[string, context.CancelFunc]())
+		}
+		childCtx, cancel := context.WithCancel(ctx)
+		nsPollers.Set(pollerID, cancel)
+		return childCtx
+	}
+	return ctx
+}
+
+func (wh *WorkflowHandler) unregisterOutstandingPollContext(
+	pollerID string,
+	namespaceID string,
+) {
+	nsPollers, ok := wh.outstandingPollers.Get(namespaceID)
+	if ok {
+		if cancel, exist := nsPollers.Pop(pollerID); exist {
+			cancel()
+		}
+	}
 }
 
 func (wh *WorkflowHandler) checkBadBinary(namespaceEntry *namespace.Namespace, binaryChecksum string) error {
@@ -4679,24 +5480,42 @@ func (wh *WorkflowHandler) validateRetryPolicy(namespaceName namespace.Name, ret
 		return nil
 	}
 
-	defaultWorkflowRetrySettings := common.FromConfigToDefaultRetrySettings(wh.getDefaultWorkflowRetrySettings(namespaceName.String()))
-	common.EnsureRetryPolicyDefaults(retryPolicy, defaultWorkflowRetrySettings)
-	return common.ValidateRetryPolicy(retryPolicy)
+	defaultWorkflowRetrySettings := wh.getDefaultWorkflowRetrySettings(namespaceName.String())
+	retrypolicy.EnsureDefaults(retryPolicy, defaultWorkflowRetrySettings)
+	return retrypolicy.Validate(retryPolicy)
+}
+
+func validateRequestId(requestID *string, lenLimit int) error {
+	if requestID == nil {
+		// should never happen, but just in case.
+		return serviceerror.NewInvalidArgument("RequestId is nil")
+	}
+	if *requestID == "" {
+		// For easy direct API use, we default the request ID here but expect all
+		// SDKs and other auto-retrying clients to set it
+		*requestID = uuid.New()
+	}
+
+	if len(*requestID) > lenLimit {
+		return errRequestIDTooLong
+	}
+
+	return common.ValidateUTF8String("RequestId", *requestID)
 }
 
 func (wh *WorkflowHandler) validateStartWorkflowTimeouts(
 	request *workflowservice.StartWorkflowExecutionRequest,
 ) error {
-	if timestamp.DurationValue(request.GetWorkflowExecutionTimeout()) < 0 {
-		return errInvalidWorkflowExecutionTimeoutSeconds
+	if err := timestamp.ValidateAndCapProtoDuration(request.GetWorkflowExecutionTimeout()); err != nil {
+		return fmt.Errorf("%w cause: %v", errInvalidWorkflowExecutionTimeoutSeconds, err)
 	}
 
-	if timestamp.DurationValue(request.GetWorkflowRunTimeout()) < 0 {
-		return errInvalidWorkflowRunTimeoutSeconds
+	if err := timestamp.ValidateAndCapProtoDuration(request.GetWorkflowRunTimeout()); err != nil {
+		return fmt.Errorf("%w cause: %v", errInvalidWorkflowRunTimeoutSeconds, err)
 	}
 
-	if timestamp.DurationValue(request.GetWorkflowTaskTimeout()) < 0 {
-		return errInvalidWorkflowTaskTimeoutSeconds
+	if err := timestamp.ValidateAndCapProtoDuration(request.GetWorkflowTaskTimeout()); err != nil {
+		return fmt.Errorf("%w cause: %v", errInvalidWorkflowTaskTimeoutSeconds, err)
 	}
 
 	return nil
@@ -4705,16 +5524,31 @@ func (wh *WorkflowHandler) validateStartWorkflowTimeouts(
 func (wh *WorkflowHandler) validateSignalWithStartWorkflowTimeouts(
 	request *workflowservice.SignalWithStartWorkflowExecutionRequest,
 ) error {
-	if timestamp.DurationValue(request.GetWorkflowExecutionTimeout()) < 0 {
-		return errInvalidWorkflowExecutionTimeoutSeconds
+	if err := timestamp.ValidateAndCapProtoDuration(request.GetWorkflowExecutionTimeout()); err != nil {
+		return fmt.Errorf("%w cause: %v", errInvalidWorkflowExecutionTimeoutSeconds, err)
 	}
 
-	if timestamp.DurationValue(request.GetWorkflowRunTimeout()) < 0 {
-		return errInvalidWorkflowRunTimeoutSeconds
+	if err := timestamp.ValidateAndCapProtoDuration(request.GetWorkflowRunTimeout()); err != nil {
+		return fmt.Errorf("%w cause: %v", errInvalidWorkflowRunTimeoutSeconds, err)
 	}
 
-	if timestamp.DurationValue(request.GetWorkflowTaskTimeout()) < 0 {
-		return errInvalidWorkflowTaskTimeoutSeconds
+	if err := timestamp.ValidateAndCapProtoDuration(request.GetWorkflowTaskTimeout()); err != nil {
+		return fmt.Errorf("%w cause: %v", errInvalidWorkflowTaskTimeoutSeconds, err)
+	}
+
+	return nil
+}
+
+func (wh *WorkflowHandler) validateWorkflowStartDelay(
+	cronSchedule string,
+	startDelay *durationpb.Duration,
+) error {
+	if len(cronSchedule) > 0 && startDelay != nil {
+		return errCronAndStartDelaySet
+	}
+
+	if err := timestamp.ValidateAndCapProtoDuration(startDelay); err != nil {
+		return fmt.Errorf("%w cause: %v", errInvalidWorkflowStartDelaySeconds, err)
 	}
 
 	return nil
@@ -4724,63 +5558,10 @@ func (wh *WorkflowHandler) metricsScope(ctx context.Context) metrics.Handler {
 	return interceptor.GetMetricsHandlerFromContext(ctx, wh.logger)
 }
 
-func (wh *WorkflowHandler) makeFakeContinuedAsNewEvent(
-	_ context.Context,
-	lastEvent *historypb.HistoryEvent,
-) (*historypb.HistoryEvent, error) {
-	switch lastEvent.EventType {
-	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:
-		if lastEvent.GetWorkflowExecutionCompletedEventAttributes().GetNewExecutionRunId() == "" {
-			return nil, nil
-		}
-	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED:
-		if lastEvent.GetWorkflowExecutionFailedEventAttributes().GetNewExecutionRunId() == "" {
-			return nil, nil
-		}
-	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT:
-		if lastEvent.GetWorkflowExecutionTimedOutEventAttributes().GetNewExecutionRunId() == "" {
-			return nil, nil
-		}
-	default:
-		return nil, nil
-	}
-
-	// We need to replace the last event with a continued-as-new event that has at least the
-	// NewExecutionRunId field. We don't actually need any other fields, since that's the only one
-	// the client looks at in this case, but copy the last result or failure from the real completed
-	// event just so it's clear what the result was.
-	newAttrs := &historypb.WorkflowExecutionContinuedAsNewEventAttributes{}
-	switch lastEvent.EventType {
-	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:
-		attrs := lastEvent.GetWorkflowExecutionCompletedEventAttributes()
-		newAttrs.NewExecutionRunId = attrs.NewExecutionRunId
-		newAttrs.LastCompletionResult = attrs.Result
-	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED:
-		attrs := lastEvent.GetWorkflowExecutionFailedEventAttributes()
-		newAttrs.NewExecutionRunId = attrs.NewExecutionRunId
-		newAttrs.Failure = attrs.Failure
-	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT:
-		attrs := lastEvent.GetWorkflowExecutionTimedOutEventAttributes()
-		newAttrs.NewExecutionRunId = attrs.NewExecutionRunId
-		newAttrs.Failure = failure.NewTimeoutFailure("workflow timeout", enumspb.TIMEOUT_TYPE_START_TO_CLOSE)
-	}
-
-	return &historypb.HistoryEvent{
-		EventId:   lastEvent.EventId,
-		EventTime: lastEvent.EventTime,
-		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW,
-		Version:   lastEvent.Version,
-		TaskId:    lastEvent.TaskId,
-		Attributes: &historypb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{
-			WorkflowExecutionContinuedAsNewEventAttributes: newAttrs,
-		},
-	}, nil
-}
-
 func (wh *WorkflowHandler) validateNamespace(
 	namespace string,
 ) error {
-	if err := wh.validateUTF8String(namespace); err != nil {
+	if err := common.ValidateUTF8String("Namespace", namespace); err != nil {
 		return err
 	}
 	if len(namespace) > wh.config.MaxIDLengthLimit() {
@@ -4795,7 +5576,7 @@ func (wh *WorkflowHandler) validateWorkflowID(
 	if workflowID == "" {
 		return errWorkflowIDNotSet
 	}
-	if err := wh.validateUTF8String(workflowID); err != nil {
+	if err := common.ValidateUTF8String("WorkflowId", workflowID); err != nil {
 		return err
 	}
 	if len(workflowID) > wh.config.MaxIDLengthLimit() {
@@ -4804,54 +5585,11 @@ func (wh *WorkflowHandler) validateWorkflowID(
 	return nil
 }
 
-func (wh *WorkflowHandler) validateUTF8String(
-	str string,
-) error {
-	if !utf8.ValidString(str) {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("%v is not a valid UTF-8 string", str))
-	}
-	return nil
-}
-
-func (wh *WorkflowHandler) trimHistoryNode(
-	ctx context.Context,
-	namespaceID string,
-	workflowID string,
-	runID string,
-) {
-	response, err := wh.historyClient.GetMutableState(ctx, &historyservice.GetMutableStateRequest{
-		NamespaceId: namespaceID,
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: workflowID,
-			RunId:      runID,
-		},
-	})
-	if err != nil {
-		return // abort
-	}
-
-	_, err = wh.persistenceExecutionManager.TrimHistoryBranch(ctx, &persistence.TrimHistoryBranchRequest{
-		ShardID:       common.WorkflowIDToHistoryShard(namespaceID, workflowID, wh.config.NumHistoryShards),
-		BranchToken:   response.CurrentBranchToken,
-		NodeID:        response.GetLastFirstEventId(),
-		TransactionID: response.GetLastFirstEventTxnId(),
-	})
-	if err != nil {
-		// best effort
-		wh.logger.Error("unable to trim history branch",
-			tag.WorkflowNamespaceID(namespaceID),
-			tag.WorkflowID(workflowID),
-			tag.WorkflowRunID(runID),
-			tag.Error(err),
-		)
-	}
-}
-
-func (wh *WorkflowHandler) canonicalizeScheduleSpec(schedule *schedpb.Schedule) error {
+func (wh *WorkflowHandler) canonicalizeScheduleSpec(schedule *schedulepb.Schedule) error {
 	if schedule.Spec == nil {
-		schedule.Spec = &schedpb.ScheduleSpec{}
+		schedule.Spec = &schedulepb.ScheduleSpec{}
 	}
-	compiledSpec, err := scheduler.NewCompiledSpec(schedule.Spec)
+	compiledSpec, err := wh.scheduleSpecBuilder.NewCompiledSpec(schedule.Spec)
 	if err != nil {
 		return serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid schedule spec: %v", err))
 	}
@@ -4861,8 +5599,8 @@ func (wh *WorkflowHandler) canonicalizeScheduleSpec(schedule *schedpb.Schedule) 
 	return nil
 }
 
-func (wh *WorkflowHandler) decodeScheduleListInfo(memo *commonpb.Memo) *schedpb.ScheduleListInfo {
-	var listInfo schedpb.ScheduleListInfo
+func (wh *WorkflowHandler) decodeScheduleListInfo(memo *commonpb.Memo) *schedulepb.ScheduleListInfo {
+	var listInfo schedulepb.ScheduleListInfo
 	var listInfoBytes []byte
 	if p := memo.GetFields()[scheduler.MemoFieldInfo]; p == nil {
 		return nil
@@ -4873,6 +5611,7 @@ func (wh *WorkflowHandler) decodeScheduleListInfo(memo *commonpb.Memo) *schedpb.
 		wh.logger.Error("decoding schedule list info from payload", tag.Error(err))
 		return nil
 	}
+	scheduler.CleanSpec(listInfo.Spec)
 	return &listInfo
 }
 
@@ -4885,9 +5624,12 @@ func (wh *WorkflowHandler) cleanScheduleSearchAttributes(searchAttributes *commo
 
 	delete(fields, searchattribute.TemporalSchedulePaused)
 	delete(fields, "TemporalScheduleInfoJSON") // used by older version, clean this up if present
-	// this isn't schedule-related but isn't relevant to the user for
+	// these aren't schedule-related but they aren't relevant to the user for
 	// scheduler workflows since it's the server worker
 	delete(fields, searchattribute.BinaryChecksums)
+	delete(fields, searchattribute.BuildIds)
+	// all schedule workflows should be in this namespace division so there's no need to include it
+	delete(fields, searchattribute.TemporalNamespaceDivision)
 
 	if len(fields) == 0 {
 		return nil
@@ -4909,8 +5651,8 @@ func (wh *WorkflowHandler) cleanScheduleMemo(memo *commonpb.Memo) *commonpb.Memo
 }
 
 // This mutates request (but idempotent so safe for retries)
-func (wh *WorkflowHandler) addInitialScheduleMemo(request *workflowservice.CreateScheduleRequest, args *schedspb.StartScheduleArgs) {
-	info := scheduler.GetListInfoFromStartArgs(args)
+func (wh *WorkflowHandler) addInitialScheduleMemo(request *workflowservice.CreateScheduleRequest, args *schedulespb.StartScheduleArgs) {
+	info := scheduler.GetListInfoFromStartArgs(args, time.Now().UTC(), wh.scheduleSpecBuilder)
 	infoBytes, err := info.Marshal()
 	if err != nil {
 		wh.logger.Error("encoding initial schedule memo failed", tag.Error(err))
@@ -4943,52 +5685,301 @@ func getBatchOperationState(workflowState enumspb.WorkflowExecutionStatus) enums
 	return operationState
 }
 
-func (wh *WorkflowHandler) unaliasStartWorkflowExecutionRequestSearchAttributes(request *workflowservice.StartWorkflowExecutionRequest, namespaceName namespace.Name) (*workflowservice.StartWorkflowExecutionRequest, error) {
-	unaliasedSas, err := searchattribute.UnaliasFields(wh.saMapperProvider, request.GetSearchAttributes(), namespaceName.String())
+func (wh *WorkflowHandler) UpdateWorkflowExecutionOptions(
+	ctx context.Context,
+	request *workflowservice.UpdateWorkflowExecutionOptionsRequest,
+) (_ *workflowservice.UpdateWorkflowExecutionOptionsResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+	wh.logger.Debug("Received UpdateWorkflowExecutionOptions for ", tag.WorkflowID(request.GetWorkflowExecution().GetWorkflowId()))
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	if request.GetWorkflowExecution().GetWorkflowId() == "" {
+		return nil, errWorkflowIDNotSet
+	}
+	if request.GetUpdateMask() == nil {
+		return nil, serviceerror.NewInvalidArgument("UpdateMask is required")
+	}
+	opts := request.GetWorkflowExecutionOptions()
+	if opts == nil {
+		return nil, serviceerror.NewInvalidArgument("WorkflowExecutionOptions is required")
+	}
+	_, err := fieldmaskpb.New(opts, request.GetUpdateMask().GetPaths()...) // errors if paths are not valid for WorkflowExecutionOptions
+	if err != nil {
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("error parsing UpdateMask: %s", err.Error()))
+	}
+	if err := worker_versioning.ValidateVersioningOverride(opts.GetVersioningOverride()); err != nil {
+		return nil, err
+	}
+	namespaceId, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
 	if err != nil {
 		return nil, err
 	}
-	if unaliasedSas == nil {
-		return request, nil
+
+	response, err := wh.historyClient.UpdateWorkflowExecutionOptions(ctx, &historyservice.UpdateWorkflowExecutionOptionsRequest{
+		NamespaceId:   namespaceId.String(),
+		UpdateRequest: request,
+	})
+	if err != nil {
+		return nil, err
 	}
 
-	// Shallow copy request and replace SearchAttributes fields only.
-	newRequest := *request
-	newRequest.SearchAttributes = unaliasedSas
-	return &newRequest, nil
+	return &workflowservice.UpdateWorkflowExecutionOptionsResponse{
+		WorkflowExecutionOptions: response.WorkflowExecutionOptions,
+	}, nil
 }
 
-func (wh *WorkflowHandler) unaliasSignalWithStartWorkflowExecutionRequestSearchAttributes(request *workflowservice.SignalWithStartWorkflowExecutionRequest, namespaceName namespace.Name) (*workflowservice.SignalWithStartWorkflowExecutionRequest, error) {
-	unaliasedSas, err := searchattribute.UnaliasFields(wh.saMapperProvider, request.GetSearchAttributes(), namespaceName.String())
+func (wh *WorkflowHandler) UpdateActivityOptions(
+	ctx context.Context,
+	request *workflowservice.UpdateActivityOptionsRequest,
+) (_ *workflowservice.UpdateActivityOptionsResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if !wh.config.ActivityAPIsEnabled(request.GetNamespace()) {
+		return nil, serviceerror.NewUnimplemented("method UpdateActivityOptions not implemented")
+	}
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	if request.GetExecution().GetWorkflowId() == "" {
+		return nil, errWorkflowIDNotSet
+	}
+	if request.GetActivity() == nil {
+		return nil, errActivityIDOrTypeNotSet
+	}
+
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
 	if err != nil {
 		return nil, err
 	}
-	if unaliasedSas == nil {
-		return request, nil
+
+	response, err := wh.historyClient.UpdateActivityOptions(ctx, &historyservice.UpdateActivityOptionsRequest{
+		NamespaceId:   namespaceID.String(),
+		UpdateRequest: request,
+	})
+
+	if err != nil {
+		return nil, err
 	}
 
-	// Shallow copy request and replace SearchAttributes fields only.
-	newRequest := *request
-	newRequest.SearchAttributes = unaliasedSas
-	return &newRequest, nil
+	return &workflowservice.UpdateActivityOptionsResponse{
+		ActivityOptions: response.ActivityOptions,
+	}, nil
 }
 
-func (wh *WorkflowHandler) unaliasCreateScheduleRequestSearchAttributes(request *workflowservice.CreateScheduleRequest, namespaceName namespace.Name) (*workflowservice.CreateScheduleRequest, error) {
-	unaliasedSas, err := searchattribute.UnaliasFields(wh.saMapperProvider, request.GetSearchAttributes(), namespaceName.String())
+func (wh *WorkflowHandler) PauseActivity(
+	ctx context.Context,
+	request *workflowservice.PauseActivityRequest,
+) (_ *workflowservice.PauseActivityResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if !wh.config.ActivityAPIsEnabled(request.GetNamespace()) {
+		return nil, serviceerror.NewUnimplemented("method PauseActivity not implemented")
+	}
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	if request.GetExecution().GetWorkflowId() == "" {
+		return nil, errWorkflowIDNotSet
+	}
+	if request.GetActivity() == nil {
+		return nil, errActivityIDOrTypeNotSet
+	}
+
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
 	if err != nil {
 		return nil, err
 	}
 
-	if unaliasedSas == nil {
-		return request, nil
+	_, err = wh.historyClient.PauseActivity(ctx, &historyservice.PauseActivityRequest{
+		NamespaceId:     namespaceID.String(),
+		FrontendRequest: request,
+	})
+
+	if err != nil {
+		return nil, err
 	}
 
-	// Shallow copy request and replace SearchAttributes fields only.
-	newRequest := *request
+	return &workflowservice.PauseActivityResponse{}, nil
+}
 
-	if unaliasedSas != nil {
-		newRequest.SearchAttributes = unaliasedSas
+func (wh *WorkflowHandler) UnpauseActivity(
+	ctx context.Context, request *workflowservice.UnpauseActivityRequest,
+) (_ *workflowservice.UnpauseActivityResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if !wh.config.ActivityAPIsEnabled(request.GetNamespace()) {
+		return nil, serviceerror.NewUnimplemented("method UnpauseActivity not implemented")
 	}
 
-	return &newRequest, nil
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	if request.GetExecution().GetWorkflowId() == "" {
+		return nil, errWorkflowIDNotSet
+	}
+	if request.GetActivity() == nil {
+		return nil, errActivityIDOrTypeNotSet
+	}
+
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = wh.historyClient.UnpauseActivity(ctx, &historyservice.UnpauseActivityRequest{
+		NamespaceId:     namespaceID.String(),
+		FrontendRequest: request,
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.UnpauseActivityResponse{}, nil
+}
+
+func (wh *WorkflowHandler) ResetActivity(
+	ctx context.Context, request *workflowservice.ResetActivityRequest,
+) (_ *workflowservice.ResetActivityResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if !wh.config.ActivityAPIsEnabled(request.GetNamespace()) {
+		return nil, serviceerror.NewUnimplemented("method ResetActivity not implemented")
+	}
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	if request.GetExecution().GetWorkflowId() == "" {
+		return nil, errWorkflowIDNotSet
+	}
+	if request.GetActivity() == nil {
+		return nil, errActivityIDOrTypeNotSet
+	}
+
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = wh.historyClient.ResetActivity(ctx, &historyservice.ResetActivityRequest{
+		NamespaceId:     namespaceID.String(),
+		FrontendRequest: request,
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.ResetActivityResponse{}, nil
+}
+
+func (wh *WorkflowHandler) CreateWorkflowRule(
+	ctx context.Context,
+	request *workflowservice.CreateWorkflowRuleRequest,
+) (_ *workflowservice.CreateWorkflowRuleResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if !wh.config.WorkflowRulesAPIsEnabled(request.GetNamespace()) {
+		return nil, serviceerror.NewUnimplemented("method CreateWorkflowRule not supported")
+	}
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	if request.GetSpec() == nil {
+		return nil, serviceerror.NewInvalidArgument("Rule Specification is not set.")
+	}
+
+	if request.GetSpec().GetId() == "" {
+		return nil, serviceerror.NewInvalidArgument("Workflow Rule ID is not set.")
+	}
+
+	if len(request.GetSpec().GetId()) > wh.config.MaxIDLengthLimit() {
+		return nil, errWorkflowRuleIDTooLong
+	}
+
+	rule, err := wh.namespaceHandler.CreateWorkflowRule(ctx, request.GetSpec(), request.GetNamespace())
+	if err != nil {
+		return nil, err
+	}
+
+	response := &workflowservice.CreateWorkflowRuleResponse{
+		Rule: rule,
+	}
+
+	return response, nil
+}
+
+func (wh *WorkflowHandler) DescribeWorkflowRule(
+	ctx context.Context,
+	request *workflowservice.DescribeWorkflowRuleRequest,
+) (_ *workflowservice.DescribeWorkflowRuleResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if !wh.config.WorkflowRulesAPIsEnabled(request.GetNamespace()) {
+		return nil, serviceerror.NewUnimplemented("method DescribeWorkflowRule not supported")
+	}
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	if request.GetRuleId() == "" {
+		return nil, serviceerror.NewInvalidArgument("Workflow Rule ID is not set.")
+	}
+
+	rule, err := wh.namespaceHandler.DescribeWorkflowRule(ctx, request.GetRuleId(), request.GetNamespace())
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.DescribeWorkflowRuleResponse{Rule: rule}, nil
+}
+
+func (wh *WorkflowHandler) DeleteWorkflowRule(
+	ctx context.Context,
+	request *workflowservice.DeleteWorkflowRuleRequest,
+) (_ *workflowservice.DeleteWorkflowRuleResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if !wh.config.WorkflowRulesAPIsEnabled(request.GetNamespace()) {
+		return nil, serviceerror.NewUnimplemented("method DeleteWorkflowRule not supported")
+	}
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	if request.GetRuleId() == "" {
+		return nil, serviceerror.NewInvalidArgument("Workflow Rule ID is not set.")
+	}
+
+	err := wh.namespaceHandler.DeleteWorkflowRule(ctx, request.GetRuleId(), request.GetNamespace())
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.DeleteWorkflowRuleResponse{}, nil
+}
+
+func (wh *WorkflowHandler) ListWorkflowRules(
+	ctx context.Context,
+	request *workflowservice.ListWorkflowRulesRequest,
+) (_ *workflowservice.ListWorkflowRulesResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if !wh.config.WorkflowRulesAPIsEnabled(request.GetNamespace()) {
+		return nil, serviceerror.NewUnimplemented("method ListWorkflowRules not supported")
+	}
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	workflowRules, err := wh.namespaceHandler.ListWorkflowRules(ctx, request.GetNamespace())
+	if err != nil {
+		return nil, err
+	}
+	return &workflowservice.ListWorkflowRulesResponse{Rules: workflowRules}, nil
 }

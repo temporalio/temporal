@@ -36,7 +36,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/quotas"
-	hshard "go.temporal.io/server/service/history/shard"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -51,18 +51,18 @@ type (
 )
 
 func NewImmediateQueue(
-	shard hshard.Context,
+	shard historyi.ShardContext,
 	category tasks.Category,
 	scheduler Scheduler,
 	rescheduler Rescheduler,
-	priorityAssigner PriorityAssigner,
-	executor Executor,
 	options *Options,
 	hostRateLimiter quotas.RequestRateLimiter,
+	grouper Grouper,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
+	factory ExecutableFactory,
 ) *immediateQueue {
-	paginationFnProvider := func(readerID int32, r Range) collection.PaginationFn[tasks.Task] {
+	paginationFnProvider := func(r Range) collection.PaginationFn[tasks.Task] {
 		return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
 			ctx, cancel := newQueueIOContext()
 			defer cancel()
@@ -70,14 +70,13 @@ func NewImmediateQueue(
 			request := &persistence.GetHistoryTasksRequest{
 				ShardID:             shard.GetShardID(),
 				TaskCategory:        category,
-				ReaderID:            readerID,
 				InclusiveMinTaskKey: r.InclusiveMin,
 				ExclusiveMaxTaskKey: r.ExclusiveMax,
 				BatchSize:           options.BatchSize(),
 				NextPageToken:       paginationToken,
 			}
 
-			resp, err := shard.GetExecutionManager().GetHistoryTasks(ctx, request)
+			resp, err := shard.GetHistoryTasks(ctx, request)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -93,11 +92,11 @@ func NewImmediateQueue(
 			paginationFnProvider,
 			scheduler,
 			rescheduler,
-			priorityAssigner,
-			executor,
+			factory,
 			options,
 			hostRateLimiter,
 			NoopReaderCompletionFn,
+			grouper,
 			logger,
 			metricsHandler,
 		),

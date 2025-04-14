@@ -26,6 +26,8 @@ package cache
 
 import (
 	"time"
+
+	"go.temporal.io/server/common/clock"
 )
 
 // A Cache is a generalized interface to a cache.  See cache.LRU for a specific
@@ -51,28 +53,30 @@ type Cache interface {
 	// Iterator returns the iterator of the cache
 	Iterator() Iterator
 
-	// Size returns the number of entries currently stored in the Cache
+	// Size returns current size of the Cache, the size definition is implementation of SizeGetter interface
+	// for the entry size, if the entry does not implement SizeGetter interface, the size is 1
 	Size() int
 }
 
-// Options control the behavior of the cache
+// Options control the behavior of the cache.
 type Options struct {
 	// TTL controls the time-to-live for a given cache entry.  Cache entries that
 	// are older than the TTL will not be returned.
 	TTL time.Duration
 
-	// InitialCapacity controls the initial capacity of the cache
-	InitialCapacity int
-
 	// Pin prevents in-use objects from getting evicted.
 	Pin bool
+
+	// TimeSource is an optional clock to use for time-skipping and testing. If this is nil, a real clock will be used.
+	TimeSource clock.TimeSource
+
+	OnPut func(val any)
+
+	OnEvict func(val any)
 }
 
-// SimpleOptions provides options that can be used to configure SimpleCache
+// SimpleOptions provides options that can be used to configure SimpleCache.
 type SimpleOptions struct {
-	// InitialCapacity controls the initial capacity of the cache
-	InitialCapacity int
-
 	// RemovedFunc is an optional function called when an element
 	// is scheduled for deletion
 	RemovedFunc RemovedFunc
@@ -84,7 +88,7 @@ type SimpleOptions struct {
 // deletion, Cache calls go f(i)
 type RemovedFunc func(interface{})
 
-// Iterator represents the interface for cache iterators
+// Iterator represents the interface for cache iterators.
 type Iterator interface {
 	// Close closes the iterator
 	// and releases any allocated resources
@@ -95,7 +99,7 @@ type Iterator interface {
 	Next() Entry
 }
 
-// Entry represents a key-value entry within the map
+// Entry represents a key-value entry within the map.
 type Entry interface {
 	// Key represents the key
 	Key() interface{}

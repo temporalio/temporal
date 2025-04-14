@@ -31,16 +31,16 @@ import (
 
 	"github.com/golang-jwt/jwt/v4"
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/primitives"
 )
 
 const (
 	defaultPermissionsClaimName = "permissions"
 	authorizationBearer         = "bearer"
 	headerSubject               = "sub"
-	permissionScopeSystem       = "system"
+	permissionScopeSystem       = primitives.SystemLocalNamespace
 	permissionRead              = "read"
 	permissionWrite             = "write"
 	permissionWorker            = "worker"
@@ -110,8 +110,8 @@ func (a *defaultJWTClaimMapper) extractPermissions(permissions []interface{}, cl
 			a.logger.Warn(fmt.Sprintf("ignoring permission in unexpected format: %v", permission))
 			continue
 		}
-		namespace := strings.ToLower(parts[0])
-		if strings.EqualFold(namespace, permissionScopeSystem) {
+		namespace := parts[0]
+		if namespace == permissionScopeSystem {
 			claims.System |= permissionToRole(parts[1])
 		} else {
 			if claims.Namespaces == nil {

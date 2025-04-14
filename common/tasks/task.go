@@ -25,11 +25,20 @@
 package tasks
 
 import (
+	"context"
+
 	"go.temporal.io/server/common/backoff"
 )
 
 //go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination task_mock.go
 type (
+	Runnable interface {
+		// Run and handle errors, abort on context error.
+		Run(context.Context)
+		// Abort marks the task as aborted, usually means task scheduler shutdown.
+		Abort()
+	}
+
 	// Task is the interface for tasks which should be executed sequentially
 	Task interface {
 		// Execute process this task
@@ -40,7 +49,9 @@ type (
 		IsRetryableError(err error) bool
 		// RetryPolicy returns the retry policy for task processing
 		RetryPolicy() backoff.RetryPolicy
-		// Cancel requests cancellation for processing the task
+		// Abort marks the task as aborted, usually means task executor shutdown
+		Abort()
+		// Cancel marks the task as cancelled, usually by the task submitter
 		Cancel()
 		// Ack marks the task as successful completed
 		Ack()

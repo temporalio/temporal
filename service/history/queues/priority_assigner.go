@@ -37,9 +37,9 @@ type (
 
 	priorityAssignerImpl struct{}
 
-	// noopPriorityAssigner always assign high priority to tasks
-	// it should only be used in tests
-	noopPriorityAssigner struct{}
+	staticPriorityAssigner struct {
+		priority tasks.Priority
+	}
 )
 
 func NewPriorityAssigner() PriorityAssigner {
@@ -68,9 +68,13 @@ func (a *priorityAssignerImpl) Assign(executable Executable) tasks.Priority {
 }
 
 func NewNoopPriorityAssigner() PriorityAssigner {
-	return &noopPriorityAssigner{}
+	return NewStaticPriorityAssigner(tasks.PriorityHigh)
 }
 
-func (a *noopPriorityAssigner) Assign(_ Executable) tasks.Priority {
-	return tasks.PriorityHigh
+func NewStaticPriorityAssigner(priority tasks.Priority) PriorityAssigner {
+	return staticPriorityAssigner{priority: priority}
+}
+
+func (a staticPriorityAssigner) Assign(_ Executable) tasks.Priority {
+	return a.priority
 }

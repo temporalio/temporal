@@ -34,13 +34,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-jose/go-jose/v4"
 	"github.com/golang-jwt/jwt/v4"
-	"go.uber.org/multierr"
-	"gopkg.in/square/go-jose.v2"
-
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.uber.org/multierr"
 )
 
 // Default token key provider

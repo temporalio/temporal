@@ -25,12 +25,19 @@
 package sql
 
 import (
+	"errors"
 	"fmt"
+	"slices"
 
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/resolver"
+	expmaps "golang.org/x/exp/maps"
 )
+
+var ErrPluginNotSupported = errors.New("plugin not supported")
 
 var supportedPlugins = map[string]sqlplugin.Plugin{}
 
@@ -43,33 +50,62 @@ func RegisterPlugin(pluginName string, plugin sqlplugin.Plugin) {
 }
 
 // NewSQLDB creates a returns a reference to a logical connection to the
-// underlying SQL database. The returned object is to tied to a single
+// underlying SQL database. The returned object is tied to a single
 // SQL database and the object can be used to perform CRUD operations on
-// the tables in the database
+// the tables in the database.
 func NewSQLDB(
 	dbKind sqlplugin.DbKind,
 	cfg *config.SQL,
 	r resolver.ServiceResolver,
+	logger log.Logger,
+	mh metrics.Handler,
 ) (sqlplugin.DB, error) {
-	plugin, ok := supportedPlugins[cfg.PluginName]
-
-	if !ok {
-		return nil, fmt.Errorf("not supported plugin %v, only supported: %v", cfg.PluginName, supportedPlugins)
-	}
-
-	return plugin.CreateDB(dbKind, cfg, r)
+	return createDB[sqlplugin.DB](dbKind, cfg, r, logger, mh)
 }
 
-// NewSQLAdminDB returns a AdminDB
+// NewSQLAdminDB returns a AdminDB.
 func NewSQLAdminDB(
 	dbKind sqlplugin.DbKind,
 	cfg *config.SQL,
 	r resolver.ServiceResolver,
+	logger log.Logger,
+	mh metrics.Handler,
 ) (sqlplugin.AdminDB, error) {
-	plugin, ok := supportedPlugins[cfg.PluginName]
-	if !ok {
-		return nil, fmt.Errorf("not supported plugin %v, only supported: %v", cfg.PluginName, supportedPlugins)
-	}
+	return createDB[sqlplugin.AdminDB](dbKind, cfg, r, logger, mh)
+}
 
-	return plugin.CreateAdminDB(dbKind, cfg, r)
+func createDB[T any](
+	dbKind sqlplugin.DbKind,
+	cfg *config.SQL,
+	r resolver.ServiceResolver,
+	logger log.Logger,
+	mh metrics.Handler,
+) (T, error) {
+	var res T
+	plugin, err := getPlugin(cfg.PluginName)
+	if err != nil {
+		return res, err
+	}
+	db, err := plugin.CreateDB(dbKind, cfg, r, logger, mh)
+	if err != nil {
+		return res, err
+	}
+	//revive:disable-next-line:unchecked-type-assertion
+	res = db.(T)
+	return res, err
+}
+
+func getPlugin(pluginName string) (sqlplugin.Plugin, error) {
+	plugin, ok := supportedPlugins[pluginName]
+	if !ok {
+		keys := expmaps.Keys(supportedPlugins)
+		slices.Sort(keys)
+		return nil, fmt.Errorf(
+			"%w: unknown plugin %q, supported plugins: %v",
+			ErrPluginNotSupported,
+			pluginName,
+			keys,
+		)
+	}
+	return plugin, nil
 }

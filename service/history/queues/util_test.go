@@ -29,7 +29,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
@@ -39,7 +38,7 @@ func TestIsTaskAcked(t *testing.T) {
 	scopes := NewRandomScopes(5)
 	exclusiveReaderHighWatermark := scopes[len(scopes)-1].Range.ExclusiveMax.Next()
 	persistenceQueueState := ToPersistenceQueueState(&queueState{
-		readerScopes: map[int32][]Scope{
+		readerScopes: map[int64][]Scope{
 			DefaultReaderId: scopes,
 		},
 		exclusiveReaderHighWatermark: exclusiveReaderHighWatermark,

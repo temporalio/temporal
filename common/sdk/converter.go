@@ -24,7 +24,9 @@
 
 package sdk
 
-import "go.temporal.io/sdk/converter"
+import (
+	"go.temporal.io/sdk/converter"
+)
 
 var (
 	// PreferProtoDataConverter is like the default data converter defined in the SDK, except

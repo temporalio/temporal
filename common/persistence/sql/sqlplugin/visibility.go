@@ -29,15 +29,21 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"reflect"
 	"strings"
 	"time"
 
 	"github.com/iancoleman/strcase"
-
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/searchattribute"
+)
+
+var (
+	ErrInvalidKeywordListDataType = errors.New("Unexpected data type in keyword list")
+	VersionColumnName             = "_version"
 )
 
 type (
@@ -47,19 +53,31 @@ type (
 
 	// VisibilityRow represents a row in executions_visibility table
 	VisibilityRow struct {
-		NamespaceID      string
-		RunID            string
-		WorkflowTypeName string
-		WorkflowID       string
-		StartTime        time.Time
-		ExecutionTime    time.Time
-		Status           int32
-		CloseTime        *time.Time
-		HistoryLength    *int64
-		Memo             []byte
-		Encoding         string
-		TaskQueue        string
-		SearchAttributes *VisibilitySearchAttributes
+		NamespaceID          string
+		RunID                string
+		WorkflowTypeName     string
+		WorkflowID           string
+		StartTime            time.Time
+		ExecutionTime        time.Time
+		Status               int32
+		CloseTime            *time.Time
+		HistoryLength        *int64
+		HistorySizeBytes     *int64
+		ExecutionDuration    *time.Duration
+		StateTransitionCount *int64
+		Memo                 []byte
+		Encoding             string
+		TaskQueue            string
+		SearchAttributes     *VisibilitySearchAttributes
+		ParentWorkflowID     *string
+		ParentRunID          *string
+		RootWorkflowID       string
+		RootRunID            string
+
+		// Version must be at the end because the version column has to be the last column in the insert statement.
+		// Otherwise we may do partial updates as the version changes halfway through.
+		// This is because MySQL doesn't support row versioning in a way that prevents out-of-order updates.
+		Version int64 `db:"_version"`
 	}
 
 	// VisibilitySelectFilter contains the column names within executions_visibility table that
@@ -76,6 +94,7 @@ type (
 
 		Query     string
 		QueryArgs []interface{}
+		GroupBy   []string
 	}
 
 	VisibilityGetFilter struct {
@@ -86,6 +105,11 @@ type (
 	VisibilityDeleteFilter struct {
 		NamespaceID string
 		RunID       string
+	}
+
+	VisibilityCountRow struct {
+		GroupValues []any
+		Count       int64
 	}
 
 	Visibility interface {
@@ -106,6 +130,7 @@ type (
 		GetFromVisibility(ctx context.Context, filter VisibilityGetFilter) (*VisibilityRow, error)
 		DeleteFromVisibility(ctx context.Context, filter VisibilityDeleteFilter) (sql.Result, error)
 		CountFromVisibility(ctx context.Context, filter VisibilitySelectFilter) (int64, error)
+		CountGroupByFromVisibility(ctx context.Context, filter VisibilitySelectFilter) ([]VisibilityCountRow, error)
 	}
 )
 
@@ -132,7 +157,66 @@ func (vsa VisibilitySearchAttributes) Value() (driver.Value, error) {
 	if vsa == nil {
 		return nil, nil
 	}
-	return json.Marshal(vsa)
+	bs, err := json.Marshal(vsa)
+	if err != nil {
+		return nil, err
+	}
+	return string(bs), nil
+}
+
+func ParseCountGroupByRows(rows *sql.Rows, groupBy []string) ([]VisibilityCountRow, error) {
+	// Number of columns is number of group by fields plus the count column.
+	rowValues := make([]any, len(groupBy)+1)
+	for i := range rowValues {
+		rowValues[i] = new(any)
+	}
+
+	var res []VisibilityCountRow
+	for rows.Next() {
+		err := rows.Scan(rowValues...)
+		if err != nil {
+			return nil, err
+		}
+		groupValues := make([]any, len(groupBy))
+		for i := range groupBy {
+			groupValues[i], err = parseCountGroupByGroupValue(groupBy[i], *(rowValues[i].(*any)))
+			if err != nil {
+				return nil, err
+			}
+		}
+		count := *(rowValues[len(rowValues)-1].(*any))
+		res = append(res, VisibilityCountRow{
+			GroupValues: groupValues,
+			Count:       count.(int64),
+		})
+	}
+	return res, nil
+}
+
+func parseCountGroupByGroupValue(fieldName string, value any) (any, error) {
+	switch fieldName {
+	case searchattribute.ExecutionStatus:
+		switch typedValue := value.(type) {
+		case int:
+			return enumspb.WorkflowExecutionStatus(typedValue).String(), nil
+		case int32:
+			return enumspb.WorkflowExecutionStatus(typedValue).String(), nil
+		case int64:
+			return enumspb.WorkflowExecutionStatus(typedValue).String(), nil
+		default:
+			// This should never happen.
+			return nil, serviceerror.NewInternal(
+				fmt.Sprintf(
+					"Unable to parse %s value from DB (got: %v of type: %T, expected type: integer)",
+					searchattribute.ExecutionStatus,
+					value,
+					value,
+				),
+			)
+		}
+	default:
+		return value, nil
+	}
 }
 
 func getDbFields() []string {

@@ -28,6 +28,7 @@ package ndc
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -35,27 +36,39 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
-
+	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
-	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/failure"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/consts"
-	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/hsm"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
+	"go.temporal.io/server/service/history/workflow/update"
+	"google.golang.org/protobuf/types/known/timestamppb"
+)
+
+const (
+	maxChildrenInResetMutableState = 1000 // max number of children tracked in reset mutable state
+)
+
+var (
+	errWorkflowResetterMaxChildren = serviceerror.NewInvalidArgument(fmt.Sprintf("WorkflowResetter encountered max allowed children [%d] while resetting.", maxChildrenInResetMutableState))
 )
 
 type (
-	workflowResetReapplyEventsFn func(ctx context.Context, resetMutableState workflow.MutableState) error
+	workflowResetReapplyEventsFn func(ctx context.Context, resetMutableState historyi.MutableState) error
 
 	WorkflowResetter interface {
 		ResetWorkflow(
@@ -69,22 +82,22 @@ type (
 			baseNextEventID int64,
 			resetRunID string,
 			resetRequestID string,
+			baseWorkflow Workflow,
 			currentWorkflow Workflow,
 			resetReason string,
 			additionalReapplyEvents []*historypb.HistoryEvent,
-			resetReapplyType enumspb.ResetReapplyType,
+			resetReapplyExcludeTypes map[enumspb.ResetReapplyExcludeType]struct{},
+			allowResetWithPendingChildren bool,
 		) error
 	}
 
-	stateRebuilderProvider func() StateRebuilder
-
 	workflowResetterImpl struct {
-		shard             shard.Context
+		shardContext      historyi.ShardContext
 		namespaceRegistry namespace.Registry
 		clusterMetadata   cluster.Metadata
 		executionMgr      persistence.ExecutionManager
 		workflowCache     wcache.Cache
-		newStateRebuilder stateRebuilderProvider
+		stateRebuilder    StateRebuilder
 		transaction       workflow.Transaction
 		logger            log.Logger
 	}
@@ -93,24 +106,26 @@ type (
 var _ WorkflowResetter = (*workflowResetterImpl)(nil)
 
 func NewWorkflowResetter(
-	shard shard.Context,
+	shardContext historyi.ShardContext,
 	workflowCache wcache.Cache,
 	logger log.Logger,
 ) *workflowResetterImpl {
 	return &workflowResetterImpl{
-		shard:             shard,
-		namespaceRegistry: shard.GetNamespaceRegistry(),
-		clusterMetadata:   shard.GetClusterMetadata(),
-		executionMgr:      shard.GetExecutionManager(),
+		shardContext:      shardContext,
+		namespaceRegistry: shardContext.GetNamespaceRegistry(),
+		clusterMetadata:   shardContext.GetClusterMetadata(),
+		executionMgr:      shardContext.GetExecutionManager(),
 		workflowCache:     workflowCache,
-		newStateRebuilder: func() StateRebuilder {
-			return NewStateRebuilder(shard, logger)
-		},
-		transaction: workflow.NewTransaction(shard),
-		logger:      logger,
+		stateRebuilder:    NewStateRebuilder(shardContext, logger),
+		transaction:       workflow.NewTransaction(shardContext),
+		logger:            logger,
 	}
 }
 
+// ResetWorkflow resets the given base run and creates a new run that would start after baseNextEventID. It additionally does the following
+// - cherry-picks the relevant events from base run and reapplies them to the new run.
+// - Terminates the current run if one is running. Also cherry picks and reapplies any relevant events generated due to termination of current run.
+// - Performs other bookkeeping like linking base->new run, marking current as terminated due to reset etc.
 func (r *workflowResetterImpl) ResetWorkflow(
 	ctx context.Context,
 	namespaceID namespace.ID,
@@ -122,16 +137,22 @@ func (r *workflowResetterImpl) ResetWorkflow(
 	baseNextEventID int64,
 	resetRunID string,
 	resetRequestID string,
+	baseWorkflow Workflow,
 	currentWorkflow Workflow,
 	resetReason string,
 	additionalReapplyEvents []*historypb.HistoryEvent,
-	resetReapplyType enumspb.ResetReapplyType,
+	resetReapplyExcludeTypes map[enumspb.ResetReapplyExcludeType]struct{},
+	allowResetWithPendingChildren bool,
 ) (retError error) {
 
 	namespaceEntry, err := r.namespaceRegistry.GetNamespaceByID(namespaceID)
 	if err != nil {
 		return err
 	}
+
+	// update base workflow to point to new runID after the reset.
+	baseWorkflow.GetMutableState().UpdateResetRunID(resetRunID)
+
 	resetWorkflowVersion := namespaceEntry.FailoverVersion()
 
 	var currentWorkflowMutation *persistence.WorkflowMutation
@@ -139,6 +160,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 	var reapplyEventsFn workflowResetReapplyEventsFn
 	currentMutableState := currentWorkflow.GetMutableState()
 	if currentMutableState.IsWorkflowExecutionRunning() {
+		currentMutableState.GetExecutionInfo().WorkflowWasReset = true
 		if err := r.terminateWorkflow(
 			currentMutableState,
 			resetReason,
@@ -148,26 +170,25 @@ func (r *workflowResetterImpl) ResetWorkflow(
 		resetWorkflowVersion = currentMutableState.GetCurrentVersion()
 
 		currentWorkflowMutation, currentWorkflowEventsSeq, err = currentMutableState.CloseTransactionAsMutation(
-			r.shard.GetTimeSource().Now(),
-			workflow.TransactionPolicyActive,
+			historyi.TransactionPolicyActive,
 		)
 		if err != nil {
 			return err
 		}
-		currentWorkflowMutation.ExecutionInfo.ExecutionStats = &persistencespb.ExecutionStats{
-			HistorySize: currentWorkflow.GetContext().GetHistorySize(),
-		}
 
-		reapplyEventsFn = func(ctx context.Context, resetMutableState workflow.MutableState) error {
+		reapplyEventsFn = func(ctx context.Context, resetMutableState historyi.MutableState) error {
 			lastVisitedRunID, err := r.reapplyContinueAsNewWorkflowEvents(
 				ctx,
 				resetMutableState,
+				currentWorkflow,
 				namespaceID,
 				workflowID,
 				baseRunID,
 				baseBranchToken,
 				baseRebuildLastEventID+1,
 				baseNextEventID,
+				resetReapplyExcludeTypes,
+				allowResetWithPendingChildren,
 			)
 			if err != nil {
 				return err
@@ -175,7 +196,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 
 			if lastVisitedRunID == currentMutableState.GetExecutionState().RunId {
 				for _, event := range currentWorkflowEventsSeq {
-					if err := r.reapplyEvents(resetMutableState, event.Events); err != nil {
+					if _, err := r.reapplyEvents(ctx, resetMutableState, event.Events, resetReapplyExcludeTypes); err != nil {
 						return err
 					}
 				}
@@ -183,16 +204,19 @@ func (r *workflowResetterImpl) ResetWorkflow(
 			return nil
 		}
 	} else {
-		reapplyEventsFn = func(ctx context.Context, resetMutableState workflow.MutableState) error {
+		reapplyEventsFn = func(ctx context.Context, resetMutableState historyi.MutableState) error {
 			_, err := r.reapplyContinueAsNewWorkflowEvents(
 				ctx,
 				resetMutableState,
+				currentWorkflow,
 				namespaceID,
 				workflowID,
 				baseRunID,
 				baseBranchToken,
 				baseRebuildLastEventID+1,
 				baseNextEventID,
+				resetReapplyExcludeTypes,
+				allowResetWithPendingChildren,
 			)
 			return err
 		}
@@ -210,33 +234,39 @@ func (r *workflowResetterImpl) ResetWorkflow(
 		resetRequestID,
 		resetWorkflowVersion,
 		resetReason,
+		allowResetWithPendingChildren,
 	)
 	if err != nil {
 		return err
 	}
 	defer func() { resetWorkflow.GetReleaseFn()(retError) }()
 
-	if err := r.reapplyEventsToResetWorkflow(
-		ctx,
-		resetWorkflow.GetMutableState(),
-		resetReapplyType,
-		reapplyEventsFn,
-		additionalReapplyEvents,
-	); err != nil {
+	resetMS := resetWorkflow.GetMutableState()
+	if err := reapplyEventsFn(ctx, resetMS); err != nil {
+		return err
+	}
+	if _, err := r.reapplyEvents(ctx, resetMS, additionalReapplyEvents, nil); err != nil {
 		return err
 	}
 
-	if err := workflow.ScheduleWorkflowTask(resetWorkflow.GetMutableState()); err != nil {
+	if err := workflow.ScheduleWorkflowTask(resetMS); err != nil {
 		return err
 	}
 
-	return r.persistToDB(
+	if err = r.persistToDB(
 		ctx,
+		baseWorkflow,
 		currentWorkflow,
 		currentWorkflowMutation,
 		currentWorkflowEventsSeq,
 		resetWorkflow,
-	)
+	); err != nil {
+		return err
+	}
+
+	currentWorkflow.GetContext().UpdateRegistry(ctx).Abort(update.AbortReasonWorkflowCompleted)
+
+	return nil
 }
 
 func (r *workflowResetterImpl) prepareResetWorkflow(
@@ -251,6 +281,7 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
 	resetRequestID string,
 	resetWorkflowVersion int64,
 	resetReason string,
+	allowResetWithPendingChildren bool,
 ) (Workflow, error) {
 
 	resetWorkflow, err := r.replayResetWorkflow(
@@ -270,11 +301,13 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
 
 	// Reset expiration time
 	resetMutableState := resetWorkflow.GetMutableState()
-	executionInfo := resetMutableState.GetExecutionInfo()
 
-	weTimeout := timestamp.DurationValue(executionInfo.WorkflowExecutionTimeout)
-	if weTimeout > 0 {
-		executionInfo.WorkflowExecutionExpirationTime = timestamp.TimeNowPtrUtcAddDuration(weTimeout)
+	// if workflow was reset after it was expired - at this point expiration task will
+	// already be fired since it is (re)created from the event, and event has old expiration time
+	// generate workflow execution task. again. this time with proper expiration time
+
+	if err := resetMutableState.RefreshExpirationTimeoutTask(ctx); err != nil {
+		return nil, err
 	}
 
 	if resetMutableState.GetCurrentVersion() > resetWorkflowVersion {
@@ -287,7 +320,7 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
 		return nil, err
 	}
 
-	if len(resetMutableState.GetPendingChildExecutionInfos()) > 0 {
+	if !allowResetWithPendingChildren && len(resetMutableState.GetPendingChildExecutionInfos()) > 0 {
 		return nil, serviceerror.NewInvalidArgument("WorkflowResetter encountered pending child workflows.")
 	}
 
@@ -303,7 +336,7 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
 	}
 
 	if err := r.failInflightActivity(
-		*resetMutableState.GetExecutionInfo().StartTime,
+		resetMutableState.GetExecutionState().StartTime.AsTime(),
 		resetMutableState,
 		resetReason,
 	); err != nil {
@@ -313,56 +346,38 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
 	return resetWorkflow, nil
 }
 
-func (r *workflowResetterImpl) reapplyEventsToResetWorkflow(
-	ctx context.Context,
-	resetMutableState workflow.MutableState,
-	resetReapplyType enumspb.ResetReapplyType,
-	reapplyEventsApplier workflowResetReapplyEventsFn,
-	additionalReapplyEvents []*historypb.HistoryEvent,
-) error {
-	switch resetReapplyType {
-	case enumspb.RESET_REAPPLY_TYPE_SIGNAL:
-		if err := reapplyEventsApplier(
-			ctx,
-			resetMutableState,
-		); err != nil {
-			return err
-		}
-	case enumspb.RESET_REAPPLY_TYPE_NONE:
-		// noop
-	default:
-		panic(fmt.Sprintf("unknown reset reapply type: %v", resetReapplyType))
-	}
-
-	if err := r.reapplyEvents(resetMutableState, additionalReapplyEvents); err != nil {
-		return err
-	}
-
-	return nil
-}
-
 func (r *workflowResetterImpl) persistToDB(
 	ctx context.Context,
+	baseWorkflow Workflow,
 	currentWorkflow Workflow,
 	currentWorkflowMutation *persistence.WorkflowMutation,
 	currentWorkflowEventsSeq []*persistence.WorkflowEvents,
 	resetWorkflow Workflow,
 ) error {
-
-	now := r.shard.GetTimeSource().Now()
+	currentRunID := currentWorkflow.GetMutableState().GetExecutionState().GetRunId()
+	baseRunID := baseWorkflow.GetMutableState().GetExecutionState().GetRunId()
 	resetWorkflowSnapshot, resetWorkflowEventsSeq, err := resetWorkflow.GetMutableState().CloseTransactionAsSnapshot(
-		now,
-		workflow.TransactionPolicyActive,
+		historyi.TransactionPolicyActive,
 	)
 	if err != nil {
 		return err
 	}
-	resetWorkflowSnapshot.ExecutionInfo.ExecutionStats = &persistencespb.ExecutionStats{
-		HistorySize: resetWorkflow.GetContext().GetHistorySize(),
-	}
 
-	if currentWorkflowMutation != nil {
-		if currentWorkflowSizeDiff, resetWorkflowSizeDiff, err := r.transaction.UpdateWorkflowExecution(
+	if currentRunID == baseRunID {
+		// There are just 2 runs to update - base & new run.
+		// Additionally since base is the same as current, we should ensure that we prepare only one of them for transaction and do it only once (to avoid DBRecordVersion conflict)
+		// So check if current was already prepared for transaction. If not prepare the mutation for transaction.
+		if currentWorkflowMutation == nil {
+			currentWorkflowMutation, currentWorkflowEventsSeq, err = currentWorkflow.GetMutableState().CloseTransactionAsMutation(
+				historyi.TransactionPolicyActive,
+			)
+			if err != nil {
+				return err
+			}
+
+		}
+
+		if _, _, err := r.transaction.UpdateWorkflowExecution(
 			ctx,
 			persistence.UpdateWorkflowModeUpdateCurrent,
 			currentWorkflow.GetMutableState().GetCurrentVersion(),
@@ -373,30 +388,48 @@ func (r *workflowResetterImpl) persistToDB(
 			resetWorkflowEventsSeq,
 		); err != nil {
 			return err
-		} else {
-			currentWorkflow.GetContext().SetHistorySize(currentWorkflow.GetContext().GetHistorySize() + currentWorkflowSizeDiff)
-			resetWorkflow.GetContext().SetHistorySize(resetWorkflow.GetContext().GetHistorySize() + resetWorkflowSizeDiff)
 		}
 		return nil
+
 	}
 
-	currentMutableState := currentWorkflow.GetMutableState()
-	currentRunID := currentMutableState.GetExecutionState().GetRunId()
-	currentLastWriteVersion, err := currentMutableState.GetLastWriteVersion()
+	if currentWorkflowMutation == nil {
+		// We have 2 different runs to update here - the base run & the new run. There were no changes to current.
+		// However we are still preparing current for transaction only to be able to use transaction.ConflictResolveWorkflowExecution() method below.
+		currentWorkflowMutation, currentWorkflowEventsSeq, err = currentWorkflow.GetMutableState().CloseTransactionAsMutation(
+			historyi.TransactionPolicyActive,
+		)
+		if err != nil {
+			return err
+		}
+	}
+
+	// We have 3 different runs to update here. However we have to prepare the snapshot of the base for transaction to be used in transaction.ConflictResolveWorkflowExecution() method.
+	// We use this method since it allows us to commit changes from all 3 different runs in the same DB transaction.
+	baseSnapshot, baseEventsSeq, err := baseWorkflow.GetMutableState().CloseTransactionAsSnapshot(
+		historyi.TransactionPolicyActive,
+	)
 	if err != nil {
 		return err
 	}
-
-	return resetWorkflow.GetContext().CreateWorkflowExecution(
+	resetRunVersion := resetWorkflow.GetMutableState().GetCurrentVersion()
+	currentRunVerson := currentWorkflow.GetMutableState().GetCurrentVersion()
+	if _, _, _, err := r.transaction.ConflictResolveWorkflowExecution(
 		ctx,
-		now,
-		persistence.CreateWorkflowModeUpdateCurrent,
-		currentRunID,
-		currentLastWriteVersion,
-		resetWorkflow.GetMutableState(),
+		persistence.ConflictResolveWorkflowModeUpdateCurrent,
+		baseWorkflow.GetMutableState().GetCurrentVersion(),
+		baseSnapshot,
+		baseEventsSeq,
+		&resetRunVersion,
 		resetWorkflowSnapshot,
 		resetWorkflowEventsSeq,
-	)
+		&currentRunVerson,
+		currentWorkflowMutation,
+		currentWorkflowEventsSeq,
+	); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (r *workflowResetterImpl) replayResetWorkflow(
@@ -424,17 +457,20 @@ func (r *workflowResetterImpl) replayResetWorkflow(
 	}
 
 	resetContext := workflow.NewContext(
-		r.shard,
+		r.shardContext.GetConfig(),
 		definition.NewWorkflowKey(
 			namespaceID.String(),
 			workflowID,
 			resetRunID,
 		),
 		r.logger,
+		r.shardContext.GetLogger(),
+		r.shardContext.GetMetricsHandler(),
 	)
-	resetMutableState, resetHistorySize, err := r.newStateRebuilder().Rebuild(
+
+	resetMutableState, resetHistorySize, err := r.stateRebuilder.Rebuild(
 		ctx,
-		r.shard.GetTimeSource().Now(),
+		r.shardContext.GetTimeSource().Now(),
 		definition.NewWorkflowKey(
 			namespaceID.String(),
 			workflowID,
@@ -442,7 +478,7 @@ func (r *workflowResetterImpl) replayResetWorkflow(
 		),
 		baseBranchToken,
 		baseRebuildLastEventID,
-		convert.Int64Ptr(baseRebuildLastEventVersion),
+		util.Ptr(baseRebuildLastEventVersion),
 		definition.NewWorkflowKey(
 			namespaceID.String(),
 			workflowID,
@@ -455,10 +491,13 @@ func (r *workflowResetterImpl) replayResetWorkflow(
 		return nil, err
 	}
 
-	resetContext.SetHistorySize(resetHistorySize)
+	resetMutableState.SetBaseWorkflow(
+		baseRunID,
+		baseRebuildLastEventID,
+		baseRebuildLastEventVersion,
+	)
+	resetMutableState.AddHistorySize(resetHistorySize)
 	return NewWorkflow(
-		ctx,
-		r.namespaceRegistry,
 		r.clusterMetadata,
 		resetContext,
 		resetMutableState,
@@ -467,7 +506,7 @@ func (r *workflowResetterImpl) replayResetWorkflow(
 }
 
 func (r *workflowResetterImpl) failWorkflowTask(
-	resetMutableState workflow.MutableState,
+	resetMutableState historyi.MutableState,
 	baseRunID string,
 	baseRebuildLastEventID int64,
 	baseRebuildLastEventVersion int64,
@@ -494,6 +533,11 @@ func (r *workflowResetterImpl) failWorkflowTask(
 			workflowTask.RequestID,
 			workflowTask.TaskQueue,
 			consts.IdentityHistoryService,
+			nil,
+			nil,
+			nil,
+			// skipping versioning checks because this task is not actually dispatched but will fail immediately.
+			true,
 		)
 		if err != nil {
 			return err
@@ -505,6 +549,7 @@ func (r *workflowResetterImpl) failWorkflowTask(
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_RESET_WORKFLOW,
 		failure.NewResetWorkflowFailure(resetReason, nil),
 		consts.IdentityHistoryService,
+		nil,
 		"",
 		baseRunID,
 		resetRunID,
@@ -515,7 +560,7 @@ func (r *workflowResetterImpl) failWorkflowTask(
 
 func (r *workflowResetterImpl) failInflightActivity(
 	now time.Time,
-	mutableState workflow.MutableState,
+	mutableState historyi.MutableState,
 	terminateReason string,
 ) error {
 
@@ -523,9 +568,12 @@ func (r *workflowResetterImpl) failInflightActivity(
 		switch ai.StartedEventId {
 		case common.EmptyEventID:
 			// activity not started, noop
-			// override the activity time to now
-			ai.ScheduledTime = timestamp.TimePtr(now)
-			if err := mutableState.UpdateActivity(ai); err != nil {
+			if err := mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ historyi.MutableState) error {
+				// override the scheduled activity time to now
+				activityInfo.ScheduledTime = timestamppb.New(now)
+				activityInfo.FirstScheduledTime = timestamppb.New(now)
+				return nil
+			}); err != nil {
 				return err
 			}
 
@@ -541,6 +589,7 @@ func (r *workflowResetterImpl) failInflightActivity(
 				failure.NewResetWorkflowFailure(terminateReason, ai.LastHeartbeatDetails),
 				enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE,
 				ai.StartedIdentity,
+				nil,
 			); err != nil {
 				return err
 			}
@@ -558,13 +607,14 @@ func (r *workflowResetterImpl) forkAndGenerateBranchToken(
 	resetRunID string,
 ) ([]byte, error) {
 	// fork a new history branch
-	shardID := r.shard.GetShardID()
+	shardID := r.shardContext.GetShardID()
 	resp, err := r.executionMgr.ForkHistoryBranch(ctx, &persistence.ForkHistoryBranchRequest{
 		ForkBranchToken: forkBranchToken,
 		ForkNodeID:      forkNodeID,
 		Info:            persistence.BuildHistoryGarbageCleanupInfo(namespaceID.String(), workflowID, resetRunID),
 		ShardID:         shardID,
 		NamespaceID:     namespaceID.String(),
+		NewRunID:        resetRunID,
 	})
 	if err != nil {
 		return nil, err
@@ -574,44 +624,57 @@ func (r *workflowResetterImpl) forkAndGenerateBranchToken(
 }
 
 func (r *workflowResetterImpl) terminateWorkflow(
-	mutableState workflow.MutableState,
+	mutableState historyi.MutableState,
 	terminateReason string,
 ) error {
 
-	eventBatchFirstEventID := mutableState.GetNextEventID()
 	return workflow.TerminateWorkflow(
 		mutableState,
-		eventBatchFirstEventID,
 		terminateReason,
 		nil,
 		consts.IdentityResetter,
 		false,
+		nil, // No links necessary.
 	)
 }
 
 func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 	ctx context.Context,
-	resetMutableState workflow.MutableState,
+	resetMutableState historyi.MutableState,
+	currentWorkflow Workflow,
 	namespaceID namespace.ID,
 	workflowID string,
 	baseRunID string,
 	baseBranchToken []byte,
 	baseRebuildNextEventID int64,
 	baseNextEventID int64,
+	resetReapplyExcludeTypes map[enumspb.ResetReapplyExcludeType]struct{},
+	allowResetWithPendingChildren bool,
 ) (string, error) {
 
 	// TODO change this logic to fetching all workflow [baseWorkflow, currentWorkflow]
 	//  from visibility for better coverage of events eligible for re-application.
 
 	lastVisitedRunID := baseRunID
+	if r.shouldExcludeAllReapplyEvents(resetReapplyExcludeTypes) {
+		// All subsequent events should be excluded from being re-applied. So, do nothing and return.
+		return lastVisitedRunID, nil
+	}
 
-	// first special handling the remaining events for base workflow
-	nextRunID, err := r.reapplyWorkflowEvents(
+	// track the child workflows initiated after reset.
+	// This will be saved in the parent workflow (in execution info) and used by the parent later to determine how to start these child workflows again.
+	childrenInitializedAfterReset := make(map[string]*persistencespb.ResetChildInfo)
+
+	// First, special handling of remaining events for base workflow
+	nextRunID, err := r.reapplyEventsFromBranch(
 		ctx,
 		resetMutableState,
 		baseRebuildNextEventID,
 		baseNextEventID,
 		baseBranchToken,
+		resetReapplyExcludeTypes,
+		allowResetWithPendingChildren,
+		childrenInitializedAfterReset,
 	)
 	switch err.(type) {
 	case nil:
@@ -625,21 +688,30 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 	}
 
 	getNextEventIDBranchToken := func(runID string) (nextEventID int64, branchToken []byte, retError error) {
-		context, release, err := r.workflowCache.GetOrCreateWorkflowExecution(
-			ctx,
-			namespaceID,
-			commonpb.WorkflowExecution{
-				WorkflowId: workflowID,
-				RunId:      runID,
-			},
-			workflow.CallerTypeAPI,
-		)
-		if err != nil {
-			return 0, nil, err
-		}
-		defer func() { release(retError) }()
+		var wfCtx historyi.WorkflowContext
+		var err error
 
-		mutableState, err := context.LoadMutableState(ctx)
+		if runID == currentWorkflow.GetMutableState().GetWorkflowKey().RunID {
+			wfCtx = currentWorkflow.GetContext()
+		} else {
+			var release historyi.ReleaseWorkflowContextFunc
+			wfCtx, release, err = r.workflowCache.GetOrCreateWorkflowExecution(
+				ctx,
+				r.shardContext,
+				namespaceID,
+				&commonpb.WorkflowExecution{
+					WorkflowId: workflowID,
+					RunId:      runID,
+				},
+				locks.PriorityHigh,
+			)
+			if err != nil {
+				return 0, nil, err
+			}
+			defer func() { release(retError) }()
+		}
+
+		mutableState, err := wfCtx.LoadMutableState(ctx, r.shardContext)
 		if err != nil {
 			// no matter what error happen, we need to retry
 			return 0, nil, err
@@ -653,7 +725,7 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 		return nextEventID, branchToken, nil
 	}
 
-	// second for remaining continue as new workflow, reapply eligible events
+	// Second, for remaining continue as new workflow, reapply eligible events
 	for len(nextRunID) != 0 {
 		lastVisitedRunID = nextRunID
 		nextWorkflowNextEventID, nextWorkflowBranchToken, err := getNextEventIDBranchToken(nextRunID)
@@ -661,12 +733,15 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 			return "", err
 		}
 
-		nextRunID, err = r.reapplyWorkflowEvents(
+		nextRunID, err = r.reapplyEventsFromBranch(
 			ctx,
 			resetMutableState,
 			common.FirstEventID,
 			nextWorkflowNextEventID,
 			nextWorkflowBranchToken,
+			resetReapplyExcludeTypes,
+			allowResetWithPendingChildren,
+			childrenInitializedAfterReset,
 		)
 		switch err.(type) {
 		case nil:
@@ -679,15 +754,21 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 			return "", err
 		}
 	}
+	if len(childrenInitializedAfterReset) > 0 {
+		resetMutableState.SetChildrenInitializedPostResetPoint(childrenInitializedAfterReset)
+	}
 	return lastVisitedRunID, nil
 }
 
-func (r *workflowResetterImpl) reapplyWorkflowEvents(
+func (r *workflowResetterImpl) reapplyEventsFromBranch(
 	ctx context.Context,
-	mutableState workflow.MutableState,
+	mutableState historyi.MutableState,
 	firstEventID int64,
 	nextEventID int64,
 	branchToken []byte,
+	resetReapplyExcludeTypes map[enumspb.ResetReapplyExcludeType]struct{},
+	allowResetWithPendingChildren bool,
+	childrenInitializedAfterReset map[string]*persistencespb.ResetChildInfo,
 ) (string, error) {
 
 	// TODO change this logic to fetching all workflow [baseWorkflow, currentWorkflow]
@@ -710,9 +791,27 @@ func (r *workflowResetterImpl) reapplyWorkflowEvents(
 			return "", err
 		}
 		lastEvents = batch.Events
-		if err := r.reapplyEvents(mutableState, lastEvents); err != nil {
+		if _, err := r.reapplyEvents(ctx, mutableState, lastEvents, resetReapplyExcludeTypes); err != nil {
 			return "", err
 		}
+		// TODO: uncomment this code to enable phase 2 of reset workflow feature.
+		// track the child workflows initiated after reset-point
+		// if allowResetWithPendingChildren {
+		// 	for _, event := range lastEvents {
+		// 		if event.GetEventType() == enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED {
+		// 			attr := event.GetStartChildWorkflowExecutionInitiatedEventAttributes()
+		// 			// TODO: there is a possibility the childIDs constructed this way may not be unique. But the probability of that is very low.
+		// 			// Need to figure out a better way to track these child workflows.
+		// 			childID := fmt.Sprintf("%s:%s", attr.GetWorkflowType().Name, attr.GetWorkflowId())
+		// 			childrenInitializedAfterReset[childID] = &persistencespb.ResetChildInfo{
+		// 				ShouldTerminateAndStart: true,
+		// 			}
+		// 			if len(childrenInitializedAfterReset) > maxChildrenInResetMutableState {
+		// 				return "", errWorkflowResetterMaxChildren
+		// 			}
+		// 		}
+		// 	}
+		// }
 	}
 
 	if len(lastEvents) > 0 {
@@ -725,25 +824,294 @@ func (r *workflowResetterImpl) reapplyWorkflowEvents(
 }
 
 func (r *workflowResetterImpl) reapplyEvents(
-	mutableState workflow.MutableState,
+	ctx context.Context,
+	mutableState historyi.MutableState,
 	events []*historypb.HistoryEvent,
-) error {
+	resetReapplyExcludeTypes map[enumspb.ResetReapplyExcludeType]struct{},
+) ([]*historypb.HistoryEvent, error) {
+	// When reapplying events during WorkflowReset, we do not check for conflicting update IDs (they are not possible,
+	// since the workflow was in a consistent state before reset), and we do not perform deduplication (because we never
+	// did, before the refactoring that unified two code paths; see comment below.)
+	return reapplyEvents(ctx, mutableState, nil, r.shardContext.StateMachineRegistry(), events, resetReapplyExcludeTypes, "", true)
+}
 
+func reapplyEvents(
+	ctx context.Context,
+	mutableState historyi.MutableState,
+	targetBranchUpdateRegistry update.Registry,
+	stateMachineRegistry *hsm.Registry,
+	events []*historypb.HistoryEvent,
+	resetReapplyExcludeTypes map[enumspb.ResetReapplyExcludeType]struct{},
+	runIdForDeduplication string,
+	isReset bool,
+) ([]*historypb.HistoryEvent, error) {
+	// TODO (dan): This implementation is the result of unifying two previous implementations, one of which did
+	// deduplication. Can we always/never do this deduplication, or must it be decided by the caller?
+	isDuplicate := func(event *historypb.HistoryEvent) bool {
+		if runIdForDeduplication == "" {
+			return false
+		}
+		resource := definition.NewEventReappliedID(runIdForDeduplication, event.GetEventId(), event.GetVersion())
+		return mutableState.IsResourceDuplicated(resource)
+	}
+	_, excludeSignal := resetReapplyExcludeTypes[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL]
+	_, excludeUpdate := resetReapplyExcludeTypes[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_UPDATE]
+	var reappliedEvents []*historypb.HistoryEvent
 	for _, event := range events {
 		switch event.GetEventType() {
 		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
+			if excludeSignal || isDuplicate(event) {
+				continue
+			}
 			attr := event.GetWorkflowExecutionSignaledEventAttributes()
 			if _, err := mutableState.AddWorkflowExecutionSignaled(
 				attr.GetSignalName(),
 				attr.GetInput(),
 				attr.GetIdentity(),
 				attr.GetHeader(),
+				event.Links,
 			); err != nil {
-				return err
+				return reappliedEvents, err
+			}
+			reappliedEvents = append(reappliedEvents, event)
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED:
+			if excludeUpdate || isDuplicate(event) {
+				continue
+			}
+			attr := event.GetWorkflowExecutionUpdateAdmittedEventAttributes()
+			// targetBranchUpdateRegistry is a nil in a Reset case, and not nil in a conflict resolution case.
+			// If the Update with the same UpdateId is already present in the target branch (Find returns non-nil),
+			// it is skipped and not reapplied.
+			if targetBranchUpdateRegistry != nil && targetBranchUpdateRegistry.Find(ctx, attr.Request.Meta.UpdateId) != nil {
+				continue
+			}
+			if _, err := mutableState.AddWorkflowExecutionUpdateAdmittedEvent(
+				attr.GetRequest(),
+				attr.Origin,
+			); err != nil {
+				return reappliedEvents, err
+			}
+			reappliedEvents = append(reappliedEvents, event)
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED:
+			if excludeUpdate || isDuplicate(event) {
+				continue
+			}
+			attr := event.GetWorkflowExecutionUpdateAcceptedEventAttributes()
+			// targetBranchUpdateRegistry is a nil in a Reset case, and not nil in a conflict resolution case.
+			// If the Update with the same UpdateId is already present in the target branch (Find returns non-nil),
+			// it is skipped and not reapplied.
+			if targetBranchUpdateRegistry != nil && targetBranchUpdateRegistry.Find(ctx, attr.ProtocolInstanceId) != nil {
+				continue
+			}
+			request := attr.GetAcceptedRequest()
+			if request == nil {
+				// An UpdateAccepted event lacks a request payload if and only if it is preceded by an UpdateAdmitted
+				// event (these always have the payload). If an UpdateAccepted event has no preceding UpdateAdmitted
+				// event then we reapply it (converting it to UpdateAdmitted on the new branch). But if there is a
+				// preceding UpdateAdmitted event then we do not reapply the UpdateAccepted event.
+				continue
+			}
+			if _, err := mutableState.AddWorkflowExecutionUpdateAdmittedEvent(
+				request,
+				enumspb.UPDATE_ADMITTED_EVENT_ORIGIN_REAPPLY,
+			); err != nil {
+				return reappliedEvents, err
+			}
+			reappliedEvents = append(reappliedEvents, event)
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCEL_REQUESTED:
+			if isReset || isDuplicate(event) {
+				continue
+			}
+			if mutableState.IsCancelRequested() {
+				// This is a no-op because the cancel request is already recorded.
+				continue
+			}
+			attr := event.GetWorkflowExecutionCancelRequestedEventAttributes()
+			request := &historyservice.RequestCancelWorkflowExecutionRequest{
+				CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{
+					Reason:   attr.GetCause(),
+					Identity: attr.GetIdentity(),
+					Links:    event.Links,
+				},
+				ExternalInitiatedEventId:  attr.GetExternalInitiatedEventId(),
+				ExternalWorkflowExecution: attr.GetExternalWorkflowExecution(),
+			}
+			if _, err := mutableState.AddWorkflowExecutionCancelRequestedEvent(
+				request,
+			); err != nil {
+				return reappliedEvents, err
+			}
+			reappliedEvents = append(reappliedEvents, event)
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED:
+			if isDuplicate(event) {
+				continue
+			}
+			attr := event.GetWorkflowExecutionOptionsUpdatedEventAttributes()
+			if _, err := mutableState.AddWorkflowExecutionOptionsUpdatedEvent(
+				attr.GetVersioningOverride(),
+				attr.GetUnsetVersioningOverride(),
+				attr.GetAttachedRequestId(),
+				attr.GetAttachedCompletionCallbacks(),
+				event.Links,
+			); err != nil {
+				return reappliedEvents, err
+			}
+			reappliedEvents = append(reappliedEvents, event)
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED:
+			if isReset || isDuplicate(event) {
+				continue
+			}
+			attr := event.GetWorkflowExecutionTerminatedEventAttributes()
+			if attr.GetIdentity() == consts.IdentityHistoryService || attr.GetIdentity() == consts.IdentityResetter {
+				continue
+			}
+			if err := workflow.TerminateWorkflow(
+				mutableState,
+				attr.GetReason(),
+				attr.GetDetails(),
+				attr.GetIdentity(),
+				false,
+				event.Links,
+			); err != nil {
+				return reappliedEvents, err
+			}
+			reappliedEvents = append(reappliedEvents, event)
+		// Handle all non-init events for the child.
+		case enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_FAILED,
+			enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED,
+			enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED,
+			enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_FAILED,
+			enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_CANCELED,
+			enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TIMED_OUT,
+			enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TERMINATED:
+			if !isReset {
+				continue
+			}
+			err := reapplyChildEvents(mutableState, event)
+			if err != nil {
+				return nil, err
 			}
 		default:
-			// events other than signal will be ignored
+			root := mutableState.HSM()
+			def, ok := stateMachineRegistry.EventDefinition(event.GetEventType())
+			if !ok {
+				// Only reapply hardcoded events above or ones registered and are cherry-pickable in the HSM framework.
+				continue
+			}
+			if err := def.CherryPick(root, event, resetReapplyExcludeTypes); err != nil {
+				if errors.Is(err, hsm.ErrNotCherryPickable) || errors.Is(err, hsm.ErrStateMachineNotFound) || errors.Is(err, hsm.ErrInvalidTransition) {
+					continue
+				}
+				return reappliedEvents, err
+			}
+			mutableState.AddHistoryEvent(event.EventType, func(he *historypb.HistoryEvent) {
+				he.Attributes = event.Attributes
+			})
+			reappliedEvents = append(reappliedEvents, event)
 		}
+		if runIdForDeduplication != "" {
+			deDupResource := definition.NewEventReappliedID(runIdForDeduplication, event.GetEventId(), event.GetVersion())
+			mutableState.UpdateDuplicatedResource(deDupResource)
+		}
+	}
+	return reappliedEvents, nil
+}
+
+// reapplyChildEvents reapplies all child events except EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED.
+// This function is intended to pick up all the events for a child that was already initialized before the reset point.
+// Re-applying these events is needed to support reconnecting of the child with parent.
+func reapplyChildEvents(mutableState historyi.MutableState, event *historypb.HistoryEvent) error { // nolint:revive
+	switch event.GetEventType() { // nolint:exhaustive
+	case enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_FAILED:
+		childEventAttributes := event.GetStartChildWorkflowExecutionFailedEventAttributes()
+		_, childExists := mutableState.GetChildExecutionInfo(childEventAttributes.GetInitiatedEventId())
+		if !childExists {
+			return nil
+		}
+		attributes := &historypb.StartChildWorkflowExecutionInitiatedEventAttributes{
+			WorkflowId:   childEventAttributes.WorkflowId,
+			WorkflowType: childEventAttributes.WorkflowType,
+			Control:      childEventAttributes.Control,
+		}
+		if _, err := mutableState.AddStartChildWorkflowExecutionFailedEvent(childEventAttributes.GetInitiatedEventId(), childEventAttributes.Cause, attributes); err != nil {
+			return err
+		}
+
+	case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED:
+		childEventAttributes := event.GetChildWorkflowExecutionStartedEventAttributes()
+		ci, childExists := mutableState.GetChildExecutionInfo(childEventAttributes.GetInitiatedEventId())
+		if !childExists {
+			return nil
+		}
+		childClock := ci.Clock
+		if _, err := mutableState.AddChildWorkflowExecutionStartedEvent(
+			childEventAttributes.WorkflowExecution,
+			childEventAttributes.WorkflowType,
+			childEventAttributes.GetInitiatedEventId(),
+			childEventAttributes.Header,
+			childClock); err != nil {
+			return err
+		}
+	case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED:
+		childEventAttributes := event.GetChildWorkflowExecutionCompletedEventAttributes()
+		_, childExists := mutableState.GetChildExecutionInfo(childEventAttributes.GetInitiatedEventId())
+		if !childExists {
+			return nil
+		}
+		attributes := &historypb.WorkflowExecutionCompletedEventAttributes{
+			Result: childEventAttributes.Result,
+		}
+		if _, err := mutableState.AddChildWorkflowExecutionCompletedEvent(childEventAttributes.GetInitiatedEventId(), childEventAttributes.WorkflowExecution, attributes); err != nil {
+			return err
+		}
+	case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_FAILED:
+		childEventAttributes := event.GetChildWorkflowExecutionFailedEventAttributes()
+		_, childExists := mutableState.GetChildExecutionInfo(childEventAttributes.GetInitiatedEventId())
+		if !childExists {
+			return nil
+		}
+		attributes := &historypb.WorkflowExecutionFailedEventAttributes{
+			Failure:    childEventAttributes.Failure,
+			RetryState: childEventAttributes.RetryState,
+		}
+		if _, err := mutableState.AddChildWorkflowExecutionFailedEvent(childEventAttributes.GetInitiatedEventId(), childEventAttributes.WorkflowExecution, attributes); err != nil {
+			return err
+		}
+	case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_CANCELED:
+		childEventAttributes := event.GetChildWorkflowExecutionCanceledEventAttributes()
+		_, childExists := mutableState.GetChildExecutionInfo(childEventAttributes.GetInitiatedEventId())
+		if !childExists {
+			return nil
+		}
+		attributes := &historypb.WorkflowExecutionCanceledEventAttributes{
+			Details: childEventAttributes.Details,
+		}
+		if _, err := mutableState.AddChildWorkflowExecutionCanceledEvent(childEventAttributes.GetInitiatedEventId(), childEventAttributes.WorkflowExecution, attributes); err != nil {
+			return err
+		}
+	case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TIMED_OUT:
+		childEventAttributes := event.GetChildWorkflowExecutionTimedOutEventAttributes()
+		_, childExists := mutableState.GetChildExecutionInfo(childEventAttributes.GetInitiatedEventId())
+		if !childExists {
+			return nil
+		}
+		attributes := &historypb.WorkflowExecutionTimedOutEventAttributes{
+			RetryState: childEventAttributes.RetryState,
+		}
+		if _, err := mutableState.AddChildWorkflowExecutionTimedOutEvent(childEventAttributes.GetInitiatedEventId(), childEventAttributes.WorkflowExecution, attributes); err != nil {
+			return err
+		}
+	case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TERMINATED:
+		childEventAttributes := event.GetChildWorkflowExecutionTerminatedEventAttributes()
+		_, childExists := mutableState.GetChildExecutionInfo(childEventAttributes.GetInitiatedEventId())
+		if !childExists {
+			return nil
+		}
+		if _, err := mutableState.AddChildWorkflowExecutionTerminatedEvent(childEventAttributes.GetInitiatedEventId(), childEventAttributes.WorkflowExecution, nil); err != nil {
+			return err
+		}
+	default:
+		return serviceerror.NewInternal(fmt.Sprintf("WorkflowResetter encountered an unexpected child event: [%s]", event.GetEventType().String()))
 	}
 	return nil
 }
@@ -763,7 +1131,7 @@ func (r *workflowResetterImpl) getPaginationFn(
 			MaxEventID:    nextEventID,
 			PageSize:      defaultPageSize,
 			NextPageToken: paginationToken,
-			ShardID:       r.shard.GetShardID(),
+			ShardID:       r.shardContext.GetShardID(),
 		})
 		if err != nil {
 			return nil, nil, err
@@ -777,4 +1145,18 @@ func IsTerminatedByResetter(event *historypb.HistoryEvent) bool {
 		return true
 	}
 	return false
+}
+
+// shouldExcludeAllReapplyEvents returns true if the excludeTypes map contains all the elegible re-apply event types.
+func (r *workflowResetterImpl) shouldExcludeAllReapplyEvents(excludeTypes map[enumspb.ResetReapplyExcludeType]struct{}) bool {
+	for key := range enumspb.ResetReapplyExcludeType_name {
+		eventType := enumspb.ResetReapplyExcludeType(key)
+		if eventType == enumspb.RESET_REAPPLY_EXCLUDE_TYPE_UNSPECIFIED {
+			continue
+		}
+		if _, ok := excludeTypes[eventType]; !ok {
+			return false
+		}
+	}
+	return true
 }

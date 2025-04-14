@@ -25,13 +25,13 @@
 package searchattribute
 
 import (
+	"errors"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/converter"
-
 	"go.temporal.io/server/common/payload"
 )
 
@@ -371,4 +371,22 @@ func Test_EncodeValue(t *testing.T) {
 	s.Equal(`"`+expectedEncodedRepresentation+`"`, string(encodedPayload.GetData()),
 		"Datetime Search Attribute is expected to be encoded in RFC 3339 format")
 	s.Equal("Datetime", string(encodedPayload.Metadata["type"]))
+}
+
+func Test_ValidateStrings(t *testing.T) {
+	_, err := validateStrings("anything here", errors.New("test error"))
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "test error")
+
+	_, err = validateStrings("\x87\x01", nil)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "is not a valid UTF-8 string")
+
+	value, err := validateStrings("anything here", nil)
+	assert.Nil(t, err)
+	assert.Equal(t, "anything here", value)
+
+	_, err = validateStrings([]string{"abc", "\x87\x01"}, nil)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "is not a valid UTF-8 string")
 }

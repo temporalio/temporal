@@ -29,24 +29,24 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/util"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
+	"go.uber.org/mock/gomock"
 )
 
 type (
@@ -56,9 +56,9 @@ type (
 
 		controller              *gomock.Controller
 		mockShard               *shard.ContextTest
-		mockBaseMutableState    *workflow.MockMutableState
-		mockRebuiltMutableState *workflow.MockMutableState
-		mockTransactionMgr      *MocktransactionMgr
+		mockBaseMutableState    *historyi.MockMutableState
+		mockRebuiltMutableState *historyi.MockMutableState
+		mockTransactionMgr      *MockTransactionManager
 		mockStateBuilder        *MockStateRebuilder
 
 		logger          log.Logger
@@ -68,7 +68,7 @@ type (
 		namespace   namespace.Name
 		workflowID  string
 		baseRunID   string
-		newContext  workflow.Context
+		newContext  historyi.WorkflowContext
 		newRunID    string
 
 		workflowResetter *resetterImpl
@@ -84,9 +84,9 @@ func (s *resetterSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockBaseMutableState = workflow.NewMockMutableState(s.controller)
-	s.mockRebuiltMutableState = workflow.NewMockMutableState(s.controller)
-	s.mockTransactionMgr = NewMocktransactionMgr(s.controller)
+	s.mockBaseMutableState = historyi.NewMockMutableState(s.controller)
+	s.mockRebuiltMutableState = historyi.NewMockMutableState(s.controller)
+	s.mockTransactionMgr = NewMockTransactionManager(s.controller)
 	s.mockStateBuilder = NewMockStateRebuilder(s.controller)
 
 	s.mockShard = shard.NewTestContext(
@@ -107,13 +107,15 @@ func (s *resetterSuite) SetupTest() {
 	s.workflowID = "some random workflow ID"
 	s.baseRunID = uuid.New()
 	s.newContext = workflow.NewContext(
-		s.mockShard,
+		s.mockShard.GetConfig(),
 		definition.NewWorkflowKey(
 			s.namespaceID.String(),
 			s.workflowID,
 			s.newRunID,
 		),
 		s.logger,
+		s.mockShard.GetThrottledLogger(),
+		s.mockShard.GetMetricsHandler(),
 	)
 	s.newRunID = uuid.New()
 
@@ -159,7 +161,7 @@ func (s *resetterSuite) TestResetWorkflow_NoError() {
 	mockBaseWorkflow.EXPECT().GetMutableState().Return(s.mockBaseMutableState).AnyTimes()
 	mockBaseWorkflow.EXPECT().GetReleaseFn().Return(mockBaseWorkflowReleaseFn)
 
-	s.mockTransactionMgr.EXPECT().loadWorkflow(
+	s.mockTransactionMgr.EXPECT().LoadWorkflow(
 		ctx,
 		s.namespaceID,
 		s.workflowID,
@@ -176,7 +178,7 @@ func (s *resetterSuite) TestResetWorkflow_NoError() {
 		),
 		branchToken,
 		baseEventID,
-		convert.Int64Ptr(baseVersion),
+		util.Ptr(baseVersion),
 		definition.NewWorkflowKey(
 			s.namespaceID.String(),
 			s.workflowID,
@@ -185,6 +187,7 @@ func (s *resetterSuite) TestResetWorkflow_NoError() {
 		newBranchToken,
 		gomock.Any(),
 	).Return(s.mockRebuiltMutableState, rebuiltHistorySize, nil)
+	s.mockRebuiltMutableState.EXPECT().AddHistorySize(rebuiltHistorySize)
 
 	shardID := s.mockShard.GetShardID()
 	s.mockExecManager.EXPECT().ForkHistoryBranch(gomock.Any(), &persistence.ForkHistoryBranchRequest{
@@ -193,7 +196,10 @@ func (s *resetterSuite) TestResetWorkflow_NoError() {
 		Info:            persistence.BuildHistoryGarbageCleanupInfo(s.namespaceID.String(), s.workflowID, s.newRunID),
 		ShardID:         shardID,
 		NamespaceID:     s.namespaceID.String(),
+		NewRunID:        s.newRunID,
 	}).Return(&persistence.ForkHistoryBranchResponse{NewBranchToken: newBranchToken}, nil)
+
+	s.mockRebuiltMutableState.EXPECT().RefreshExpirationTimeoutTask(gomock.Any()).Return(nil)
 
 	rebuiltMutableState, err := s.workflowResetter.resetWorkflow(
 		ctx,
@@ -205,7 +211,6 @@ func (s *resetterSuite) TestResetWorkflow_NoError() {
 	)
 	s.NoError(err)
 	s.Equal(s.mockRebuiltMutableState, rebuiltMutableState)
-	s.Equal(s.newContext.GetHistorySize(), rebuiltHistorySize)
 	s.True(mockBaseWorkflowReleaseFnCalled)
 }
 
@@ -234,7 +239,7 @@ func (s *resetterSuite) TestResetWorkflow_Error() {
 	mockBaseWorkflow.EXPECT().GetMutableState().Return(s.mockBaseMutableState).AnyTimes()
 	mockBaseWorkflow.EXPECT().GetReleaseFn().Return(mockBaseWorkflowReleaseFn)
 
-	s.mockTransactionMgr.EXPECT().loadWorkflow(
+	s.mockTransactionMgr.EXPECT().LoadWorkflow(
 		ctx,
 		s.namespaceID,
 		s.workflowID,

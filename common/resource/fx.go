@@ -31,12 +31,7 @@ import (
 	"os"
 	"time"
 
-	"go.uber.org/fx"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/health"
-
 	"go.temporal.io/api/workflowservice/v1"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/client"
@@ -54,12 +49,14 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
-	"go.temporal.io/server/common/membership/ringpop"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/namespace/nsregistry"
+	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/pingable"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/rpc"
@@ -67,6 +64,10 @@ import (
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/telemetry"
+	"go.temporal.io/server/common/testing/testhooks"
+	"go.uber.org/fx"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/health"
 )
 
 type (
@@ -75,6 +76,9 @@ type (
 	HostName             string
 	InstanceID           string
 	ServiceNames         map[primitives.ServiceName]struct{}
+
+	HistoryRawClient historyservice.HistoryServiceClient
+	HistoryClient    historyservice.HistoryServiceClient
 
 	MatchingRawClient matchingservice.MatchingServiceClient
 	MatchingClient    matchingservice.MatchingServiceClient
@@ -100,9 +104,9 @@ var Module = fx.Options(
 	fx.Provide(SearchAttributeProviderProvider),
 	fx.Provide(SearchAttributeManagerProvider),
 	fx.Provide(NamespaceRegistryProvider),
-	namespace.RegistryLifetimeHooksModule,
+	nsregistry.RegistryLifetimeHooksModule,
 	fx.Provide(fx.Annotate(
-		func(p namespace.Registry) common.Pingable { return p },
+		func(p namespace.Registry) pingable.Pingable { return p },
 		fx.ResultTags(`group:"deadlockDetectorRoots"`),
 	)),
 	fx.Provide(serialization.NewSerializer),
@@ -114,19 +118,22 @@ var Module = fx.Options(
 	fx.Provide(GrpcListenerProvider),
 	fx.Provide(RuntimeMetricsReporterProvider),
 	metrics.RuntimeMetricsReporterLifetimeHooksModule,
+	fx.Provide(HistoryRawClientProvider),
 	fx.Provide(HistoryClientProvider),
 	fx.Provide(MatchingRawClientProvider),
 	fx.Provide(MatchingClientProvider),
-	membership.HostInfoProviderModule,
 	membership.GRPCResolverModule,
+	fx.Provide(FrontendHTTPClientCacheProvider),
 	fx.Invoke(RegisterBootstrapContainer),
 	fx.Provide(PersistenceConfigProvider),
 	fx.Provide(health.NewServer),
 	deadlock.Module,
+	config.Module,
+	testhooks.Module,
+	fx.Provide(commonnexus.NewLoggedHTTPClientTraceProvider),
 )
 
 var DefaultOptions = fx.Options(
-	ringpop.Module,
 	fx.Provide(RPCFactoryProvider),
 	fx.Provide(ArchivalMetadataProvider),
 	fx.Provide(ArchiverProviderProvider),
@@ -184,7 +191,7 @@ func SearchAttributeProviderProvider(
 	return searchattribute.NewManager(
 		timeSource,
 		cmMgr,
-		dynamicCollection.GetBoolProperty(dynamicconfig.ForceSearchAttributesCacheRefreshOnRead, false))
+		dynamicconfig.ForceSearchAttributesCacheRefreshOnRead.Get(dynamicCollection))
 }
 
 func SearchAttributeManagerProvider(
@@ -195,7 +202,7 @@ func SearchAttributeManagerProvider(
 	return searchattribute.NewManager(
 		timeSource,
 		cmMgr,
-		dynamicCollection.GetBoolProperty(dynamicconfig.ForceSearchAttributesCacheRefreshOnRead, false))
+		dynamicconfig.ForceSearchAttributesCacheRefreshOnRead.Get(dynamicCollection))
 }
 
 func NamespaceRegistryProvider(
@@ -205,10 +212,11 @@ func NamespaceRegistryProvider(
 	metadataManager persistence.MetadataManager,
 	dynamicCollection *dynamicconfig.Collection,
 ) namespace.Registry {
-	return namespace.NewRegistry(
+	return nsregistry.NewRegistry(
 		metadataManager,
 		clusterMetadata.IsGlobalNamespaceEnabled(),
-		dynamicCollection.GetDurationProperty(dynamicconfig.NamespaceCacheRefreshInterval, 10*time.Second),
+		dynamicconfig.NamespaceCacheRefreshInterval.Get(dynamicCollection),
+		dynamicconfig.ForceSearchAttributesCacheRefreshOnRead.Get(dynamicCollection),
 		metricsHandler,
 		logger,
 	)
@@ -220,6 +228,7 @@ func ClientFactoryProvider(
 	membershipMonitor membership.Monitor,
 	metricsHandler metrics.Handler,
 	dynamicCollection *dynamicconfig.Collection,
+	testHooks testhooks.TestHooks,
 	persistenceConfig *config.Persistence,
 	logger log.SnTaggedLogger,
 	throttledLogger log.ThrottledLogger,
@@ -229,6 +238,7 @@ func ClientFactoryProvider(
 		membershipMonitor,
 		metricsHandler,
 		dynamicCollection,
+		testHooks,
 		persistenceConfig.NumHistoryShards,
 		logger,
 		throttledLogger,
@@ -304,20 +314,22 @@ func RegisterBootstrapContainer(
 	)
 }
 
-func HistoryClientProvider(clientBean client.Bean) historyservice.HistoryServiceClient {
-	historyRawClient := clientBean.GetHistoryClient()
-	historyClient := history.NewRetryableClient(
+func HistoryRawClientProvider(clientBean client.Bean) HistoryRawClient {
+	return clientBean.GetHistoryClient()
+}
+
+func HistoryClientProvider(historyRawClient HistoryRawClient) HistoryClient {
+	return history.NewRetryableClient(
 		historyRawClient,
 		common.CreateHistoryClientRetryPolicy(),
 		common.IsServiceClientTransientError,
 	)
-	return historyClient
 }
 
-func MatchingRawClientProvider(clientBean client.Bean, namespaceRegistry namespace.Registry) (
-	MatchingRawClient,
-	error,
-) {
+func MatchingRawClientProvider(
+	clientBean client.Bean,
+	namespaceRegistry namespace.Registry,
+) (MatchingRawClient, error) {
 	return clientBean.GetMatchingClient(namespaceRegistry.GetNamespaceName)
 }
 
@@ -330,7 +342,7 @@ func MatchingClientProvider(matchingRawClient MatchingRawClient) MatchingClient 
 }
 
 func PersistenceConfigProvider(persistenceConfig config.Persistence, dc *dynamicconfig.Collection) *config.Persistence {
-	persistenceConfig.TransactionSizeLimit = dc.GetIntProperty(dynamicconfig.TransactionSizeLimit, common.DefaultTransactionSizeLimit)
+	persistenceConfig.TransactionSizeLimit = dynamicconfig.TransactionSizeLimit.Get(dc)
 	return &persistenceConfig
 }
 
@@ -354,10 +366,10 @@ func SdkClientFactoryProvider(
 	tlsConfigProvider encryption.TLSConfigProvider,
 	metricsHandler metrics.Handler,
 	logger log.SnTaggedLogger,
-	resolver membership.GRPCResolver,
+	resolver *membership.GRPCResolver,
 	dc *dynamicconfig.Collection,
 ) (sdk.ClientFactory, error) {
-	frontendURL, frontendTLSConfig, err := getFrontendConnectionDetails(cfg, tlsConfigProvider, resolver)
+	frontendURL, _, _, frontendTLSConfig, err := getFrontendConnectionDetails(cfg, tlsConfigProvider, resolver)
 	if err != nil {
 		return nil, err
 	}
@@ -366,7 +378,7 @@ func SdkClientFactoryProvider(
 		frontendTLSConfig,
 		metricsHandler,
 		logger,
-		dc.GetIntProperty(dynamicconfig.WorkerStickyCacheSize, 0),
+		dynamicconfig.WorkerStickyCacheSize.Get(dc),
 	), nil
 }
 
@@ -379,37 +391,48 @@ func RPCFactoryProvider(
 	svcName primitives.ServiceName,
 	logger log.Logger,
 	tlsConfigProvider encryption.TLSConfigProvider,
-	resolver membership.GRPCResolver,
-	traceInterceptor telemetry.ClientTraceInterceptor,
+	resolver *membership.GRPCResolver,
+	tracingStatsHandler telemetry.ClientStatsHandler,
+	monitor membership.Monitor,
 ) (common.RPCFactory, error) {
-	svcCfg := cfg.Services[string(svcName)]
-	frontendURL, frontendTLSConfig, err := getFrontendConnectionDetails(cfg, tlsConfigProvider, resolver)
+	frontendURL, frontendHTTPURL, frontendHTTPPort, frontendTLSConfig, err := getFrontendConnectionDetails(cfg, tlsConfigProvider, resolver)
 	if err != nil {
 		return nil, err
 	}
+
+	var options []grpc.DialOption
+	if tracingStatsHandler != nil {
+		options = append(options, grpc.WithStatsHandler(tracingStatsHandler))
+	}
 	return rpc.NewFactory(
-		&svcCfg.RPC,
+		cfg,
 		svcName,
 		logger,
 		tlsConfigProvider,
 		frontendURL,
+		frontendHTTPURL,
+		frontendHTTPPort,
 		frontendTLSConfig,
-		[]grpc.UnaryClientInterceptor{
-			grpc.UnaryClientInterceptor(traceInterceptor),
-		},
+		options,
+		monitor,
 	), nil
+}
+
+func FrontendHTTPClientCacheProvider(
+	metadata cluster.Metadata,
+	tlsConfigProvider encryption.TLSConfigProvider,
+) *cluster.FrontendHTTPClientCache {
+	return cluster.NewFrontendHTTPClientCache(metadata, tlsConfigProvider)
 }
 
 func getFrontendConnectionDetails(
 	cfg *config.Config,
 	tlsConfigProvider encryption.TLSConfigProvider,
-	resolver membership.GRPCResolver,
-) (string, *tls.Config, error) {
+	resolver *membership.GRPCResolver,
+) (string, string, int, *tls.Config, error) {
 	// To simplify the static config, we switch default values based on whether the config
 	// defines an "internal-frontend" service. The default for TLS config can be overridden
-	// with publicClient.forceTLSConfig, and the default for hostPort can be overridden by
-	// explicitly setting hostPort to "membership://internal-frontend" or
-	// "membership://frontend".
+	// with publicClient.forceTLSConfig.
 	_, hasIFE := cfg.Services[string(primitives.InternalFrontendService)]
 
 	forceTLS := cfg.PublicClient.ForceTLSConfig
@@ -432,7 +455,7 @@ func getFrontendConnectionDetails(
 		err = fmt.Errorf("invalid forceTLSConfig")
 	}
 	if err != nil {
-		return "", nil, fmt.Errorf("unable to load TLS configuration: %w", err)
+		return "", "", 0, nil, fmt.Errorf("unable to load TLS configuration: %w", err)
 	}
 
 	frontendURL := cfg.PublicClient.HostPort
@@ -443,6 +466,21 @@ func getFrontendConnectionDetails(
 			frontendURL = resolver.MakeURL(primitives.FrontendService)
 		}
 	}
+	frontendHTTPURL := cfg.PublicClient.HTTPHostPort
+	if frontendHTTPURL == "" {
+		if hasIFE {
+			frontendHTTPURL = resolver.MakeURL(primitives.InternalFrontendService)
+		} else {
+			frontendHTTPURL = resolver.MakeURL(primitives.FrontendService)
+		}
+	}
 
-	return frontendURL, frontendTLSConfig, nil
+	var frontendHTTPPort int
+	if hasIFE {
+		frontendHTTPPort = cfg.Services[string(primitives.InternalFrontendService)].RPC.HTTPPort
+	} else {
+		frontendHTTPPort = cfg.Services[string(primitives.FrontendService)].RPC.HTTPPort
+	}
+
+	return frontendURL, frontendHTTPURL, frontendHTTPPort, frontendTLSConfig, nil
 }

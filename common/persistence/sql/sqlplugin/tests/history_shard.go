@@ -30,7 +30,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/shuffle"
 )
@@ -40,7 +39,7 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		store sqlplugin.HistoryShard
+		store sqlplugin.DB
 	}
 )
 
@@ -54,7 +53,7 @@ var (
 
 func NewHistoryShardSuite(
 	t *testing.T,
-	store sqlplugin.HistoryShard,
+	store sqlplugin.DB,
 ) *historyShardSuite {
 	return &historyShardSuite{
 		Assertions: require.New(t),
@@ -195,14 +194,15 @@ func (s *historyShardSuite) TestInsertReadLock() {
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
-	// NOTE: lock without transaction is equivalent to select
-	//  this test only test the select functionality
+	tx, err := s.store.BeginTx(newExecutionContext())
+	s.NoError(err)
 	filter := sqlplugin.ShardsFilter{
 		ShardID: shardID,
 	}
-	shardRange, err := s.store.ReadLockShards(newExecutionContext(), filter)
+	shardRange, err := tx.ReadLockShards(newExecutionContext(), filter)
 	s.NoError(err)
 	s.Equal(rangeID, shardRange)
+	s.NoError(tx.Commit())
 }
 
 func (s *historyShardSuite) TestInsertWriteLock() {
@@ -216,14 +216,15 @@ func (s *historyShardSuite) TestInsertWriteLock() {
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
-	// NOTE: lock without transaction is equivalent to select
-	//  this test only test the select functionality
+	tx, err := s.store.BeginTx(newExecutionContext())
+	s.NoError(err)
 	filter := sqlplugin.ShardsFilter{
 		ShardID: shardID,
 	}
-	shardRange, err := s.store.WriteLockShards(newExecutionContext(), filter)
+	shardRange, err := tx.WriteLockShards(newExecutionContext(), filter)
 	s.NoError(err)
 	s.Equal(rangeID, shardRange)
+	s.NoError(tx.Commit())
 }
 
 func (s *historyShardSuite) newRandomShardRow(

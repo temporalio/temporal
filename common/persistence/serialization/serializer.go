@@ -30,16 +30,16 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/gogo/protobuf/proto"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/service/history/tasks"
+	"google.golang.org/protobuf/proto"
 )
 
 type (
@@ -51,6 +51,7 @@ type (
 
 		SerializeEvent(event *historypb.HistoryEvent, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
 		DeserializeEvent(data *commonpb.DataBlob) (*historypb.HistoryEvent, error)
+		DeserializeStrippedEvents(data *commonpb.DataBlob) ([]*historyspb.StrippedHistoryEvent, error)
 
 		SerializeClusterMetadata(icm *persistencespb.ClusterMetadata, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
 		DeserializeClusterMetadata(data *commonpb.DataBlob) (*persistencespb.ClusterMetadata, error)
@@ -94,6 +95,9 @@ type (
 		TaskQueueInfoToBlob(info *persistencespb.TaskQueueInfo, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
 		TaskQueueInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.TaskQueueInfo, error)
 
+		TaskQueueUserDataToBlob(info *persistencespb.TaskQueueUserData, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
+		TaskQueueUserDataFromBlob(data *commonpb.DataBlob) (*persistencespb.TaskQueueUserData, error)
+
 		ChecksumToBlob(checksum *persistencespb.Checksum, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
 		ChecksumFromBlob(data *commonpb.DataBlob) (*persistencespb.Checksum, error)
 
@@ -102,9 +106,26 @@ type (
 
 		ReplicationTaskToBlob(replicationTask *replicationspb.ReplicationTask, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
 		ReplicationTaskFromBlob(data *commonpb.DataBlob) (*replicationspb.ReplicationTask, error)
+		// ParseReplicationTask is unique among these methods in that it does not serialize or deserialize a type to or
+		// from a byte array. Instead, it takes a proto and "parses" it into a more structured type.
+		ParseReplicationTask(replicationTask *persistencespb.ReplicationTaskInfo) (tasks.Task, error)
+		// ParseReplicationTaskInfo is unique among these methods in that it does not serialize or deserialize a type to or
+		// from a byte array. Instead, it takes a structured type and "parses" it into proto
+		ParseReplicationTaskInfo(task tasks.Task) (*persistencespb.ReplicationTaskInfo, error)
 
-		SerializeTask(task tasks.Task) (commonpb.DataBlob, error)
-		DeserializeTask(category tasks.Category, blob commonpb.DataBlob) (tasks.Task, error)
+		SerializeTask(task tasks.Task) (*commonpb.DataBlob, error)
+		DeserializeTask(category tasks.Category, blob *commonpb.DataBlob) (tasks.Task, error)
+
+		NexusEndpointToBlob(endpoint *persistencespb.NexusEndpoint, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
+		NexusEndpointFromBlob(data *commonpb.DataBlob) (*persistencespb.NexusEndpoint, error)
+
+		// ChasmNodeToBlob returns a single encoded blob for the node.
+		ChasmNodeToBlob(node *persistencespb.ChasmNode, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
+		ChasmNodeFromBlob(blob *commonpb.DataBlob) (*persistencespb.ChasmNode, error)
+
+		// ChasmNodeToBlobs returns the metadata blob first, followed by the data blob.
+		ChasmNodeToBlobs(node *persistencespb.ChasmNode, encodingType enumspb.EncodingType) (*commonpb.DataBlob, *commonpb.DataBlob, error)
+		ChasmNodeFromBlobs(metadata *commonpb.DataBlob, data *commonpb.DataBlob) (*persistencespb.ChasmNode, error)
 	}
 
 	// SerializationError is an error type for serialization
@@ -121,12 +142,16 @@ type (
 
 	// UnknownEncodingTypeError is an error type for unknown or unsupported encoding type
 	UnknownEncodingTypeError struct {
-		encodingTypeStr     string
+		providedType        string
 		expectedEncodingStr []string
 	}
 
 	serializerImpl struct {
 		TaskSerializer
+	}
+
+	marshaler interface {
+		Marshal() ([]byte, error)
 	}
 )
 
@@ -157,7 +182,34 @@ func (t *serializerImpl) DeserializeEvents(data *commonpb.DataBlob) ([]*historyp
 		return nil, NewUnknownEncodingTypeError(data.EncodingType.String(), enumspb.ENCODING_TYPE_PROTO3)
 	}
 	if err != nil {
-		return nil, err
+		return nil, NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, err)
+	}
+	return events.Events, nil
+}
+
+func (t *serializerImpl) DeserializeStrippedEvents(data *commonpb.DataBlob) ([]*historyspb.StrippedHistoryEvent, error) {
+	if data == nil {
+		return nil, nil
+	}
+	if len(data.Data) == 0 {
+		return nil, nil
+	}
+
+	events := &historyspb.StrippedHistoryEvents{}
+	var err error
+	//nolint:exhaustive
+	switch data.EncodingType {
+	case enumspb.ENCODING_TYPE_PROTO3:
+		// Discard unknown fields to improve performance. StrippedHistoryEvents is usually deserialized from HistoryEvent
+		// which has extra fields that are not needed for this message.
+		err = proto.UnmarshalOptions{
+			DiscardUnknown: true,
+		}.Unmarshal(data.Data, events)
+	default:
+		return nil, NewUnknownEncodingTypeError(data.EncodingType.String(), enumspb.ENCODING_TYPE_PROTO3)
+	}
+	if err != nil {
+		return nil, NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, err)
 	}
 	return events.Events, nil
 }
@@ -186,9 +238,8 @@ func (t *serializerImpl) DeserializeEvent(data *commonpb.DataBlob) (*historypb.H
 	default:
 		return nil, NewUnknownEncodingTypeError(data.EncodingType.String(), enumspb.ENCODING_TYPE_PROTO3)
 	}
-
 	if err != nil {
-		return nil, err
+		return nil, NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, err)
 	}
 
 	return event, err
@@ -219,15 +270,14 @@ func (t *serializerImpl) DeserializeClusterMetadata(data *commonpb.DataBlob) (*p
 	default:
 		return nil, NewUnknownEncodingTypeError(data.EncodingType.String(), enumspb.ENCODING_TYPE_PROTO3)
 	}
-
 	if err != nil {
-		return nil, err
+		return nil, NewSerializationError(enumspb.ENCODING_TYPE_PROTO3, err)
 	}
 
 	return cm, err
 }
 
-func (t *serializerImpl) serialize(p proto.Marshaler, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
+func (t *serializerImpl) serialize(p marshaler, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
 	if p == nil {
 		return nil, nil
 	}
@@ -260,7 +310,7 @@ func (t *serializerImpl) serialize(p proto.Marshaler, encodingType enumspb.Encod
 
 // NewUnknownEncodingTypeError returns a new instance of encoding type error
 func NewUnknownEncodingTypeError(
-	encodingTypeStr string,
+	providedType string,
 	expectedEncoding ...enumspb.EncodingType,
 ) error {
 	if len(expectedEncoding) == 0 {
@@ -273,17 +323,21 @@ func NewUnknownEncodingTypeError(
 		expectedEncodingStr = append(expectedEncodingStr, encodingType.String())
 	}
 	return &UnknownEncodingTypeError{
-		encodingTypeStr:     encodingTypeStr,
+		providedType:        providedType,
 		expectedEncodingStr: expectedEncodingStr,
 	}
 }
 
 func (e *UnknownEncodingTypeError) Error() string {
 	return fmt.Sprintf("unknown or unsupported encoding type %v, supported types: %v",
-		e.encodingTypeStr,
+		e.providedType,
 		strings.Join(e.expectedEncodingStr, ","),
 	)
 }
+
+// IsTerminalTaskError informs our task processing subsystem that it is impossible
+// to retry this error
+func (e *UnknownEncodingTypeError) IsTerminalTaskError() bool { return true }
 
 // NewSerializationError returns a SerializationError
 func NewSerializationError(
@@ -323,6 +377,10 @@ func (e *DeserializationError) Unwrap() error {
 	return e.wrappedErr
 }
 
+// IsTerminalTaskError informs our task processing subsystem that it is impossible to
+// retry this error and that the task should be sent to a DLQ
+func (e *DeserializationError) IsTerminalTaskError() bool { return true }
+
 func (t *serializerImpl) ShardInfoToBlob(info *persistencespb.ShardInfo, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
 	return ProtoEncodeBlob(info, encodingType)
 }
@@ -339,21 +397,12 @@ func (t *serializerImpl) ShardInfoFromBlob(data *commonpb.DataBlob) (*persistenc
 		shardInfo.ReplicationDlqAckLevel = make(map[string]int64)
 	}
 
-	if shardInfo.GetQueueAckLevels() == nil {
-		shardInfo.QueueAckLevels = make(map[int32]*persistencespb.QueueAckLevel)
-	}
-	for _, queueAckLevel := range shardInfo.QueueAckLevels {
-		if queueAckLevel.ClusterAckLevel == nil {
-			queueAckLevel.ClusterAckLevel = make(map[string]int64)
-		}
-	}
-
 	if shardInfo.GetQueueStates() == nil {
 		shardInfo.QueueStates = make(map[int32]*persistencespb.QueueState)
 	}
 	for _, queueState := range shardInfo.QueueStates {
 		if queueState.ReaderStates == nil {
-			queueState.ReaderStates = make(map[int32]*persistencespb.QueueReaderState)
+			queueState.ReaderStates = make(map[int64]*persistencespb.QueueReaderState)
 		}
 		for _, readerState := range queueState.ReaderStates {
 			if readerState.Scopes == nil {
@@ -398,7 +447,15 @@ func (t *serializerImpl) WorkflowExecutionInfoToBlob(info *persistencespb.Workfl
 
 func (t *serializerImpl) WorkflowExecutionInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.WorkflowExecutionInfo, error) {
 	result := &persistencespb.WorkflowExecutionInfo{}
-	return result, ProtoDecodeBlob(data, result)
+	err := ProtoDecodeBlob(data, result)
+	if err != nil {
+		return nil, err
+	}
+	// Proto serialization replaces empty maps with nils, ensure this map is never nil.
+	if result.SubStateMachinesByType == nil {
+		result.SubStateMachinesByType = make(map[string]*persistencespb.StateMachineMap)
+	}
+	return result, nil
 }
 
 func (t *serializerImpl) WorkflowExecutionStateToBlob(info *persistencespb.WorkflowExecutionState, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
@@ -406,8 +463,7 @@ func (t *serializerImpl) WorkflowExecutionStateToBlob(info *persistencespb.Workf
 }
 
 func (t *serializerImpl) WorkflowExecutionStateFromBlob(data *commonpb.DataBlob) (*persistencespb.WorkflowExecutionState, error) {
-	result := &persistencespb.WorkflowExecutionState{}
-	return result, ProtoDecodeBlob(data, result)
+	return WorkflowExecutionStateFromBlob(data.GetData(), data.GetEncodingType().String())
 }
 
 func (t *serializerImpl) ActivityInfoToBlob(info *persistencespb.ActivityInfo, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
@@ -473,6 +529,15 @@ func (t *serializerImpl) TaskQueueInfoFromBlob(data *commonpb.DataBlob) (*persis
 	return result, ProtoDecodeBlob(data, result)
 }
 
+func (t *serializerImpl) TaskQueueUserDataToBlob(data *persistencespb.TaskQueueUserData, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
+	return ProtoEncodeBlob(data, encodingType)
+}
+
+func (t *serializerImpl) TaskQueueUserDataFromBlob(data *commonpb.DataBlob) (*persistencespb.TaskQueueUserData, error) {
+	result := &persistencespb.TaskQueueUserData{}
+	return result, ProtoDecodeBlob(data, result)
+}
+
 func (t *serializerImpl) ChecksumToBlob(checksum *persistencespb.Checksum, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
 	// nil is replaced with empty object because it is not supported for "checksum" field in DB.
 	if checksum == nil {
@@ -509,20 +574,48 @@ func (t *serializerImpl) ReplicationTaskFromBlob(data *commonpb.DataBlob) (*repl
 	return result, ProtoDecodeBlob(data, result)
 }
 
+func (t *serializerImpl) NexusEndpointToBlob(endpoint *persistencespb.NexusEndpoint, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
+	return ProtoEncodeBlob(endpoint, encodingType)
+}
+
+func (t *serializerImpl) NexusEndpointFromBlob(data *commonpb.DataBlob) (*persistencespb.NexusEndpoint, error) {
+	result := &persistencespb.NexusEndpoint{}
+	return result, ProtoDecodeBlob(data, result)
+}
+
+func (t *serializerImpl) ChasmNodeToBlobs(node *persistencespb.ChasmNode, encodingType enumspb.EncodingType) (*commonpb.DataBlob, *commonpb.DataBlob, error) {
+	metadata, err := ProtoEncodeBlob(node.Metadata, encodingType)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return metadata, node.Data, nil
+}
+
+func (t *serializerImpl) ChasmNodeFromBlobs(metadata *commonpb.DataBlob, data *commonpb.DataBlob) (*persistencespb.ChasmNode, error) {
+	result := &persistencespb.ChasmNode{
+		Metadata: &persistencespb.ChasmNodeMetadata{},
+		Data:     data,
+	}
+
+	return result, ProtoDecodeBlob(metadata, result.Metadata)
+}
+
+func (t *serializerImpl) ChasmNodeToBlob(node *persistencespb.ChasmNode, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
+	return ProtoEncodeBlob(node, encodingType)
+}
+
+func (t *serializerImpl) ChasmNodeFromBlob(blob *commonpb.DataBlob) (*persistencespb.ChasmNode, error) {
+	result := &persistencespb.ChasmNode{}
+	return result, ProtoDecodeBlob(blob, result)
+}
+
 func ProtoDecodeBlob(data *commonpb.DataBlob, result proto.Message) error {
 	if data == nil {
 		// TODO: should we return nil or error?
 		return NewDeserializationError(enumspb.ENCODING_TYPE_UNSPECIFIED, errors.New("cannot decode nil"))
 	}
-
-	if data.EncodingType != enumspb.ENCODING_TYPE_PROTO3 {
-		return NewUnknownEncodingTypeError(data.EncodingType.String(), enumspb.ENCODING_TYPE_PROTO3)
-	}
-
-	if err := proto.Unmarshal(data.Data, result); err != nil {
-		return NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, err)
-	}
-	return nil
+	return Proto3Decode(data.Data, data.EncodingType, result)
 }
 
 func decodeBlob(data *commonpb.DataBlob, result proto.Message) error {
@@ -582,12 +675,5 @@ func ProtoEncodeBlob(m proto.Message, encoding enumspb.EncodingType) (*commonpb.
 			EncodingType: encoding,
 		}, nil
 	}
-
-	blob := &commonpb.DataBlob{EncodingType: enumspb.ENCODING_TYPE_PROTO3}
-	data, err := proto.Marshal(m)
-	if err != nil {
-		return nil, NewSerializationError(enumspb.ENCODING_TYPE_PROTO3, err)
-	}
-	blob.Data = data
-	return blob, nil
+	return proto3Encode(m)
 }

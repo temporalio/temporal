@@ -33,7 +33,6 @@ import (
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
-
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/service/worker/scanner/executions"
 	"go.temporal.io/server/service/worker/scanner/history"
@@ -196,6 +195,7 @@ func ExecutionsScavengerActivity(
 		ctx.cfg.ExecutionScannerPerShardQPS,
 		ctx.cfg.ExecutionDataDurationBuffer,
 		ctx.cfg.ExecutionScannerWorkerCount,
+		ctx.cfg.ExecutionScannerHistoryEventIdValidator,
 		ctx.executionManager,
 		ctx.namespaceRegistry,
 		ctx.historyClient,

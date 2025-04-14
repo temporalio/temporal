@@ -30,10 +30,10 @@ import (
 	"os"
 	"path"
 	"strings"
+	"text/template"
 	_ "time/tzdata" // embed tzdata as a fallback
 
 	"github.com/urfave/cli/v2"
-
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/build"
 	"go.temporal.io/server/common/config"
@@ -46,6 +46,7 @@ import (
 	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql" // needed to load postgresql plugin
 	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"     // needed to load sqlite plugin
 	"go.temporal.io/server/temporal"
+	"go.uber.org/automaxprocs/maxprocs"
 )
 
 // main entry point for the temporal server
@@ -98,6 +99,50 @@ func buildCLI() *cli.App {
 
 	app.Commands = []*cli.Command{
 		{
+			Name:      "validate-dynamic-config",
+			Usage:     "Validate a dynamic config file[s] with known keys and types",
+			ArgsUsage: "<file> ...",
+			Action: func(c *cli.Context) error {
+				total := 0
+				for _, fileName := range c.Args().Slice() {
+					contents, err := os.ReadFile(fileName)
+					if err != nil {
+						return err
+					}
+					result := dynamicconfig.ValidateFile(contents)
+					total += len(result.Errors)
+					fmt.Println(fileName)
+					t := template.Must(template.New("").Parse(
+						"{{range .Errors}}  error: {{.}}\n" +
+							"{{end}}{{range .Warnings}}  warning: {{.}}\n" +
+							"{{end}}",
+					))
+					_ = t.Execute(os.Stdout, result)
+				}
+				if total > 0 {
+					return fmt.Errorf("%d total errors", total)
+				}
+				return nil
+			},
+		},
+		{
+			Name:      "render-config",
+			Usage:     "Render server config template",
+			ArgsUsage: " ",
+			Action: func(c *cli.Context) error {
+				cfg, err := config.LoadConfig(
+					c.String("env"),
+					c.String("config"),
+					c.String("zone"),
+				)
+				if err != nil {
+					return cli.Exit(fmt.Errorf("Unable to load configuration: %w", err), 1)
+				}
+				fmt.Println(cfg.String())
+				return nil
+			},
+		},
+		{
 			Name:      "start",
 			Usage:     "Start Temporal server",
 			ArgsUsage: " ",
@@ -118,6 +163,10 @@ func buildCLI() *cli.App {
 			Before: func(c *cli.Context) error {
 				if c.Args().Len() > 0 {
 					return cli.Exit("ERROR: start command doesn't support arguments. Use --service flag instead.", 1)
+				}
+
+				if _, err := maxprocs.Set(); err != nil {
+					stdlog.Println(fmt.Sprintf("WARNING: failed to set GOMAXPROCS: %v.", err))
 				}
 				return nil
 			},

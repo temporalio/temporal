@@ -30,32 +30,33 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 )
 
+var _ Action = (*actionReaderStuck)(nil)
+
 type (
 	actionReaderStuck struct {
-		attributes   *AlertAttributesReaderStuck
-		completionFn actionCompletionFn
-		logger       log.Logger
+		attributes *AlertAttributesReaderStuck
+		logger     log.Logger
 	}
 )
 
 func newReaderStuckAction(
 	attributes *AlertAttributesReaderStuck,
-	completionFn actionCompletionFn,
 	logger log.Logger,
 ) *actionReaderStuck {
 	return &actionReaderStuck{
-		attributes:   attributes,
-		completionFn: completionFn,
-		logger:       logger,
+		attributes: attributes,
+		logger:     logger,
 	}
 }
 
-func (a *actionReaderStuck) Run(readerGroup *ReaderGroup) {
-	defer a.completionFn()
+func (a *actionReaderStuck) Name() string {
+	return "reader-stuck"
+}
 
+func (a *actionReaderStuck) Run(readerGroup *ReaderGroup) {
 	reader, ok := readerGroup.ReaderByID(a.attributes.ReaderID)
 	if !ok {
-		a.logger.Error("Failed to get queue with readerID for reader stuck action", tag.QueueReaderID(a.attributes.ReaderID))
+		a.logger.Info("Failed to get queue with readerID for reader stuck action", tag.QueueReaderID(a.attributes.ReaderID))
 		return
 	}
 
@@ -103,11 +104,6 @@ func (a *actionReaderStuck) Run(readerGroup *ReaderGroup) {
 		return
 	}
 
-	nextReader, ok := readerGroup.ReaderByID(a.attributes.ReaderID + 1)
-	if ok {
-		nextReader.MergeSlices(splitSlices...)
-		return
-	}
-
-	readerGroup.NewReader(a.attributes.ReaderID+1, splitSlices...)
+	nextReader := readerGroup.GetOrCreateReader(a.attributes.ReaderID + 1)
+	nextReader.MergeSlices(splitSlices...)
 }

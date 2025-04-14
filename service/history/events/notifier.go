@@ -32,14 +32,17 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence/transitionhistory"
+	"go.temporal.io/server/common/persistence/versionhistory"
 )
 
 const (
@@ -48,10 +51,11 @@ const (
 
 type (
 	Notifier interface {
-		common.Daemon
 		NotifyNewHistoryEvent(event *Notification)
 		WatchHistoryEvent(identifier definition.WorkflowKey) (string, chan *Notification, error)
 		UnwatchHistoryEvent(identifier definition.WorkflowKey, subscriberID string) error
+		Start()
+		Stop()
 	}
 
 	Notification struct {
@@ -61,9 +65,10 @@ type (
 		NextEventID            int64
 		PreviousStartedEventID int64
 		Timestamp              time.Time
-		CurrentBranchToken     []byte
 		WorkflowState          enumsspb.WorkflowExecutionState
 		WorkflowStatus         enumspb.WorkflowExecutionStatus
+		VersionHistories       *historyspb.VersionHistories
+		TransitionHistory      []*persistencespb.VersionedTransition
 	}
 
 	NotifierImpl struct {
@@ -95,9 +100,10 @@ func NewNotification(
 	lastFirstEventTxnID int64,
 	nextEventID int64,
 	previousStartedEventID int64,
-	currentBranchToken []byte,
 	workflowState enumsspb.WorkflowExecutionState,
 	workflowStatus enumspb.WorkflowExecutionStatus,
+	versionHistories *historyspb.VersionHistories,
+	transitionHistory []*persistencespb.VersionedTransition,
 ) *Notification {
 
 	return &Notification{
@@ -110,9 +116,10 @@ func NewNotification(
 		LastFirstEventTxnID:    lastFirstEventTxnID,
 		NextEventID:            nextEventID,
 		PreviousStartedEventID: previousStartedEventID,
-		CurrentBranchToken:     currentBranchToken,
 		WorkflowState:          workflowState,
 		WorkflowStatus:         workflowStatus,
+		VersionHistories:       versionhistory.CopyVersionHistories(versionHistories),
+		TransitionHistory:      transitionhistory.CopyVersionedTransitions(transitionHistory),
 	}
 }
 
@@ -199,7 +206,7 @@ func (notifier *NotifierImpl) dispatchHistoryEventNotification(event *Notificati
 
 	startTime := time.Now().UTC()
 	defer func() {
-		notifier.metricsHandler.Timer(metrics.HistoryEventNotificationFanoutLatency.GetMetricName()).Record(time.Since(startTime))
+		metrics.HistoryEventNotificationFanoutLatency.With(notifier.metricsHandler).Record(time.Since(startTime))
 	}()
 	_, _, _ = notifier.eventsPubsubs.GetAndDo(identifier, func(key interface{}, value interface{}) error {
 		subscribers := value.(map[string]chan *Notification)
@@ -224,19 +231,19 @@ func (notifier *NotifierImpl) enqueueHistoryEventNotification(event *Notificatio
 	default:
 		// in case the channel is already filled with message
 		// this can be caused by high load
-		notifier.metricsHandler.Counter(metrics.HistoryEventNotificationFailDeliveryCount.GetMetricName()).Record(1)
+		metrics.HistoryEventNotificationFailDeliveryCount.With(notifier.metricsHandler).Record(1)
 	}
 }
 
 func (notifier *NotifierImpl) dequeueHistoryEventNotifications() {
 	for {
 		// send out metrics about the current number of messages in flight
-		notifier.metricsHandler.Gauge(metrics.HistoryEventNotificationInFlightMessageGauge.GetMetricName()).Record(float64(len(notifier.eventsChan)))
+		metrics.HistoryEventNotificationInFlightMessageGauge.With(notifier.metricsHandler).Record(float64(len(notifier.eventsChan)))
 		select {
 		case event := <-notifier.eventsChan:
 			// send out metrics about message processing delay
 			timeelapsed := time.Since(event.Timestamp)
-			notifier.metricsHandler.Timer(metrics.HistoryEventNotificationQueueingLatency.GetMetricName()).Record(timeelapsed)
+			metrics.HistoryEventNotificationQueueingLatency.With(notifier.metricsHandler).Record(timeelapsed)
 
 			notifier.dispatchHistoryEventNotification(event)
 		case <-notifier.closeChan:

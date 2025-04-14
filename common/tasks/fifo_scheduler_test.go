@@ -30,13 +30,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-
 	"go.temporal.io/server/common/backoff"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.uber.org/mock/gomock"
 )
 
 type (
@@ -49,8 +47,6 @@ type (
 		scheduler   *FIFOScheduler[*MockTask]
 		retryPolicy backoff.RetryPolicy
 	}
-
-	noopMonitor[T Task] struct{}
 )
 
 func TestFIFOSchedulerSuite(t *testing.T) {
@@ -118,7 +114,7 @@ func (s *fifoSchedulerSuite) TestSubmitProcess_Stopped_Submission() {
 	mockTask.EXPECT().Ack().Do(func() { testWaitGroup.Done() }).MaxTimes(1)
 
 	// if task get drained
-	mockTask.EXPECT().Reschedule().Do(func() { testWaitGroup.Done() }).MaxTimes(1)
+	mockTask.EXPECT().Abort().Do(func() { testWaitGroup.Done() }).MaxTimes(1)
 
 	s.scheduler.Submit(mockTask)
 
@@ -138,7 +134,7 @@ func (s *fifoSchedulerSuite) TestSubmitProcess_Stopped_FailExecution() {
 		return err
 	}).Times(1)
 	mockTask.EXPECT().IsRetryableError(executionErr).Return(true).MaxTimes(1)
-	mockTask.EXPECT().Reschedule().Do(func() { testWaitGroup.Done() }).Times(1)
+	mockTask.EXPECT().Abort().Do(func() { testWaitGroup.Done() }).Times(1)
 
 	s.scheduler.Submit(mockTask)
 
@@ -220,15 +216,12 @@ func (s *fifoSchedulerSuite) TestStartStopWorkers() {
 
 func (s *fifoSchedulerSuite) newTestProcessor() *FIFOScheduler[*MockTask] {
 	return NewFIFOScheduler[*MockTask](
-		&noopMonitor[*MockTask]{},
 		&FIFOSchedulerOptions{
-			QueueSize:   1,
-			WorkerCount: dynamicconfig.GetIntPropertyFn(1),
+			QueueSize: 1,
+			WorkerCount: func(_ func(int)) (v int, cancel func()) {
+				return 1, func() {}
+			},
 		},
 		log.NewNoopLogger(),
 	)
 }
-
-func (m *noopMonitor[T]) Start()        {}
-func (m *noopMonitor[T]) Stop()         {}
-func (m *noopMonitor[T]) RecordStart(T) {}

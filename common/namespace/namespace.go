@@ -26,23 +26,24 @@ package namespace
 
 import (
 	"fmt"
+	"maps"
 	"time"
 
 	"github.com/google/uuid"
-	"golang.org/x/exp/maps"
-
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
+	rulespb "go.temporal.io/api/rules/v1"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/util"
+	expmaps "golang.org/x/exp/maps"
 )
 
 type (
 	// Mutation changes a Namespace "in-flight" during a Clone operation.
 	Mutation interface {
-		apply(*persistence.GetNamespaceResponse)
+		apply(*Namespace)
 	}
 
 	// BadBinaryError is an error type carrying additional information about
@@ -63,9 +64,9 @@ type (
 
 	// Namespace contains the info and config for a namespace
 	Namespace struct {
-		info                        persistencespb.NamespaceInfo
-		config                      persistencespb.NamespaceConfig
-		replicationConfig           persistencespb.NamespaceReplicationConfig
+		info                        *persistencespb.NamespaceInfo
+		config                      *persistencespb.NamespaceConfig
+		replicationConfig           *persistencespb.NamespaceReplicationConfig
 		configVersion               int64
 		failoverVersion             int64
 		isGlobalNamespace           bool
@@ -79,52 +80,65 @@ type (
 		fieldToAlias map[string]string
 		aliasToField map[string]string
 	}
+
+	// ReplicationPolicy is the namespace's replication policy,
+	// derived from namespace's replication config
+	ReplicationPolicy int
 )
 
 const (
 	EmptyName Name = ""
 	EmptyID   ID   = ""
+
+	// ReplicationPolicyOneCluster indicate that workflows does not need to be replicated
+	// applicable to local namespace & global namespace with one cluster
+	ReplicationPolicyOneCluster ReplicationPolicy = 0
+	// ReplicationPolicyMultiCluster indicate that workflows need to be replicated
+	ReplicationPolicyMultiCluster ReplicationPolicy = 1
 )
 
 func NewID() ID {
 	return ID(uuid.NewString())
 }
 
-func FromPersistentState(record *persistence.GetNamespaceResponse) *Namespace {
-	return &Namespace{
-		info:                        *record.Namespace.Info,
-		config:                      *record.Namespace.Config,
-		replicationConfig:           *record.Namespace.ReplicationConfig,
-		configVersion:               record.Namespace.ConfigVersion,
-		failoverVersion:             record.Namespace.FailoverVersion,
-		isGlobalNamespace:           record.IsGlobalNamespace,
-		failoverNotificationVersion: record.Namespace.FailoverNotificationVersion,
-		notificationVersion:         record.NotificationVersion,
+func FromPersistentState(
+	detail *persistencespb.NamespaceDetail,
+	mutations ...Mutation,
+) *Namespace {
+	ns := &Namespace{
+		info:                        detail.Info,
+		config:                      detail.Config,
+		replicationConfig:           detail.ReplicationConfig,
+		configVersion:               detail.ConfigVersion,
+		failoverVersion:             detail.FailoverVersion,
+		failoverNotificationVersion: detail.FailoverNotificationVersion,
 		customSearchAttributesMapper: CustomSearchAttributesMapper{
-			fieldToAlias: record.Namespace.Config.CustomSearchAttributeAliases,
-			aliasToField: util.InverseMap(record.Namespace.Config.CustomSearchAttributeAliases),
+			fieldToAlias: detail.Config.CustomSearchAttributeAliases,
+			aliasToField: util.InverseMap(detail.Config.CustomSearchAttributeAliases),
 		},
 	}
+
+	for _, m := range mutations {
+		m.apply(ns)
+	}
+
+	return ns
 }
 
-func (ns *Namespace) Clone(ms ...Mutation) *Namespace {
-	newns := *ns
-	r := persistence.GetNamespaceResponse{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info:                        &newns.info,
-			Config:                      &newns.config,
-			ReplicationConfig:           &newns.replicationConfig,
-			ConfigVersion:               newns.configVersion,
-			FailoverNotificationVersion: newns.failoverNotificationVersion,
-			FailoverVersion:             newns.failoverVersion,
-		},
-		IsGlobalNamespace:   newns.isGlobalNamespace,
-		NotificationVersion: newns.notificationVersion,
+func (ns *Namespace) Clone(mutations ...Mutation) *Namespace {
+	detail := &persistencespb.NamespaceDetail{
+		Info:                        common.CloneProto(ns.info),
+		Config:                      common.CloneProto(ns.config),
+		ReplicationConfig:           common.CloneProto(ns.replicationConfig),
+		ConfigVersion:               ns.configVersion,
+		FailoverNotificationVersion: ns.failoverNotificationVersion,
+		FailoverVersion:             ns.failoverVersion,
 	}
-	for _, m := range ms {
-		m.apply(&r)
+	defaultMutations := []Mutation{
+		WithGlobalFlag(ns.isGlobalNamespace),
+		WithNotificationVersion(ns.notificationVersion),
 	}
-	return FromPersistentState(&r)
+	return FromPersistentState(detail, append(defaultMutations, mutations...)...)
 }
 
 // VisibilityArchivalState observes the visibility archive configuration (state
@@ -161,25 +175,40 @@ func (ns *Namespace) VerifyBinaryChecksum(cksum string) error {
 
 // ID observes this namespace's permanent unique identifier in string form.
 func (ns *Namespace) ID() ID {
+	if ns.info == nil {
+		return ID("")
+	}
 	return ID(ns.info.Id)
 }
 
 // Name observes this namespace's configured name.
 func (ns *Namespace) Name() Name {
+	if ns.info == nil {
+		return Name("")
+	}
 	return Name(ns.info.Name)
 }
 
 func (ns *Namespace) State() enumspb.NamespaceState {
+	if ns.info == nil {
+		return enumspb.NAMESPACE_STATE_UNSPECIFIED
+	}
 	return ns.info.State
 }
 
 func (ns *Namespace) ReplicationState() enumspb.ReplicationState {
+	if ns.replicationConfig == nil {
+		return enumspb.REPLICATION_STATE_UNSPECIFIED
+	}
 	return ns.replicationConfig.State
 }
 
 // ActiveClusterName observes the name of the cluster that is currently active
 // for this namspace.
 func (ns *Namespace) ActiveClusterName() string {
+	if ns.replicationConfig == nil {
+		return ""
+	}
 	return ns.replicationConfig.ActiveClusterName
 }
 
@@ -212,7 +241,9 @@ func (ns *Namespace) FailoverVersion() int64 {
 	return ns.failoverVersion
 }
 
-// IsGlobalNamespace return whether the namespace is a global namespace
+// IsGlobalNamespace returns whether the namespace is a global namespace.
+// Being a global namespace doesn't necessarily mean that there are multiple registered clusters for it, only that it
+// has a failover version. To determine whether operations should be replicated for a namespace, see ReplicationPolicy.
 func (ns *Namespace) IsGlobalNamespace() bool {
 	return ns.isGlobalNamespace
 }
@@ -262,11 +293,19 @@ func (ns *Namespace) Retention() time.Duration {
 		return 0
 	}
 
-	return *ns.config.Retention
+	return ns.config.Retention.AsDuration()
 }
 
+// CustomSearchAttributesMapper is a part of temporary solution. Do not use this method.
 func (ns *Namespace) CustomSearchAttributesMapper() CustomSearchAttributesMapper {
 	return ns.customSearchAttributesMapper
+}
+
+func (ns *Namespace) GetWorkflowRules() []*rulespb.WorkflowRule {
+	if ns.config.WorkflowRules == nil {
+		return nil
+	}
+	return expmaps.Values(ns.config.WorkflowRules)
 }
 
 // Error returns the reason associated with this bad binary.
@@ -286,7 +325,7 @@ func (e BadBinaryError) Operator() string {
 
 // Created returns the time at which this bad binary was declared to be bad.
 func (e BadBinaryError) Created() time.Time {
-	return *e.info.CreateTime
+	return e.info.CreateTime.AsTime()
 }
 
 // Checksum observes the binary checksum that caused this error.

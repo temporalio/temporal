@@ -1,3 +1,5 @@
+// The MIT License
+//
 // Copyright (c) 2019 Temporal Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -39,7 +41,13 @@ message MutableStateChecksumPayload {
     int64 last_first_event_id = 6;
     int64 next_event_id = 7;
     int64 last_processed_event_id = 8;
+
     int64 signal_count = 9;
+    int64 activity_count = 21;
+    int64 child_execution_count = 22;
+    int64 user_timer_count = 23;
+    int64 request_cancel_external_count = 24;
+    int64 signal_external_count = 25;
 
     int32 workflow_task_attempt = 10;
     int64 workflow_task_version = 11;
@@ -51,7 +59,9 @@ message MutableStateChecksumPayload {
     repeated int64 pending_signal_initiated_event_ids = 16;
     repeated int64 pending_req_cancel_initiated_event_ids = 17;
     repeated int64 pending_child_initiated_event_ids = 18;
+    repeated string pending_chasm_node_paths = 26;
 
     string sticky_task_queue_name = 19;
     temporal.server.api.history.v1.VersionHistories version_histories = 20;
+
 }

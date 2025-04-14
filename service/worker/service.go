@@ -26,17 +26,11 @@ package worker
 
 import (
 	"context"
-	"math/rand"
-	"sync/atomic"
-	"time"
 
 	"go.temporal.io/api/serviceerror"
-
-	"go.temporal.io/server/api/historyservice/v1"
+	sdkworker "go.temporal.io/sdk/worker"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/client"
-	"go.temporal.io/server/common"
-	carchiver "go.temporal.io/server/common/archiver"
-	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -45,14 +39,13 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
-	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
-	"go.temporal.io/server/service/worker/archiver"
-	"go.temporal.io/server/service/worker/batcher"
 	"go.temporal.io/server/service/worker/parentclosepolicy"
 	"go.temporal.io/server/service/worker/replicator"
 	"go.temporal.io/server/service/worker/scanner"
@@ -64,64 +57,62 @@ type (
 	// Archiver: Handles archival of workflow histories.
 	Service struct {
 		logger                 log.Logger
-		archivalMetadata       carchiver.ArchivalMetadata
 		clusterMetadata        cluster.Metadata
 		clientBean             client.Bean
 		clusterMetadataManager persistence.ClusterMetadataManager
 		metadataManager        persistence.MetadataManager
+		membershipMonitor      membership.Monitor
 		hostInfo               membership.HostInfo
 		executionManager       persistence.ExecutionManager
 		taskManager            persistence.TaskManager
-		historyClient          historyservice.HistoryServiceClient
+		historyClient          resource.HistoryClient
 		namespaceRegistry      namespace.Registry
 		workerServiceResolver  membership.ServiceResolver
 		visibilityManager      manager.VisibilityManager
 
-		archiverProvider provider.ArchiverProvider
-
 		namespaceReplicationQueue persistence.NamespaceReplicationQueue
-
-		persistenceBean persistenceClient.Bean
-
-		membershipMonitor membership.Monitor
 
 		metricsHandler metrics.Handler
 
-		status           int32
-		stopC            chan struct{}
 		sdkClientFactory sdk.ClientFactory
 		esClient         esclient.Client
 		config           *Config
 
-		workerManager             *workerManager
-		perNamespaceWorkerManager *perNamespaceWorkerManager
-		scanner                   *scanner.Scanner
+		workerManager                    *workerManager
+		perNamespaceWorkerManager        *perNamespaceWorkerManager
+		scanner                          *scanner.Scanner
+		matchingClient                   matchingservice.MatchingServiceClient
+		namespaceReplicationTaskExecutor nsreplication.TaskExecutor
 	}
 
 	// Config contains all the service config for worker
 	Config struct {
-		ArchiverConfig                        *archiver.Config
-		ScannerCfg                            *scanner.Config
-		ParentCloseCfg                        *parentclosepolicy.Config
-		ThrottledLogRPS                       dynamicconfig.IntPropertyFn
-		PersistenceMaxQPS                     dynamicconfig.IntPropertyFn
-		PersistenceGlobalMaxQPS               dynamicconfig.IntPropertyFn
-		PersistenceNamespaceMaxQPS            dynamicconfig.IntPropertyFnWithNamespaceFilter
-		EnablePersistencePriorityRateLimiting dynamicconfig.BoolPropertyFn
-		EnableBatcher                         dynamicconfig.BoolPropertyFn
-		BatcherRPS                            dynamicconfig.IntPropertyFnWithNamespaceFilter
-		BatcherConcurrency                    dynamicconfig.IntPropertyFnWithNamespaceFilter
-		EnableParentClosePolicyWorker         dynamicconfig.BoolPropertyFn
-		PerNamespaceWorkerCount               dynamicconfig.IntPropertyFnWithNamespaceFilter
-		PerNamespaceWorkerOptions             dynamicconfig.MapPropertyFnWithNamespaceFilter
+		ScannerCfg                           *scanner.Config
+		ParentCloseCfg                       *parentclosepolicy.Config
+		ThrottledLogRPS                      dynamicconfig.IntPropertyFn
+		PersistenceMaxQPS                    dynamicconfig.IntPropertyFn
+		PersistenceGlobalMaxQPS              dynamicconfig.IntPropertyFn
+		PersistenceNamespaceMaxQPS           dynamicconfig.IntPropertyFnWithNamespaceFilter
+		PersistenceGlobalNamespaceMaxQPS     dynamicconfig.IntPropertyFnWithNamespaceFilter
+		PersistencePerShardNamespaceMaxQPS   dynamicconfig.IntPropertyFnWithNamespaceFilter
+		PersistenceDynamicRateLimitingParams dynamicconfig.TypedPropertyFn[dynamicconfig.DynamicRateLimitingParams]
+		PersistenceQPSBurstRatio             dynamicconfig.FloatPropertyFn
+		OperatorRPSRatio                     dynamicconfig.FloatPropertyFn
+		EnableBatcher                        dynamicconfig.BoolPropertyFn
+		BatcherRPS                           dynamicconfig.IntPropertyFnWithNamespaceFilter
+		BatcherConcurrency                   dynamicconfig.IntPropertyFnWithNamespaceFilter
+		EnableParentClosePolicyWorker        dynamicconfig.BoolPropertyFn
+		PerNamespaceWorkerCount              dynamicconfig.TypedSubscribableWithNamespaceFilter[int]
+		PerNamespaceWorkerOptions            dynamicconfig.TypedSubscribableWithNamespaceFilter[sdkworker.Options]
+		PerNamespaceWorkerStartRate          dynamicconfig.FloatPropertyFn
 
-		StandardVisibilityPersistenceMaxReadQPS   dynamicconfig.IntPropertyFn
-		StandardVisibilityPersistenceMaxWriteQPS  dynamicconfig.IntPropertyFn
-		AdvancedVisibilityPersistenceMaxReadQPS   dynamicconfig.IntPropertyFn
-		AdvancedVisibilityPersistenceMaxWriteQPS  dynamicconfig.IntPropertyFn
-		EnableReadVisibilityFromES                dynamicconfig.BoolPropertyFnWithNamespaceFilter
-		EnableReadFromSecondaryAdvancedVisibility dynamicconfig.BoolPropertyFnWithNamespaceFilter
-		VisibilityDisableOrderByClause            dynamicconfig.BoolPropertyFn
+		VisibilityPersistenceMaxReadQPS         dynamicconfig.IntPropertyFn
+		VisibilityPersistenceMaxWriteQPS        dynamicconfig.IntPropertyFn
+		VisibilityPersistenceSlowQueryThreshold dynamicconfig.DurationPropertyFn
+		EnableReadFromSecondaryVisibility       dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		VisibilityEnableShadowReadMode          dynamicconfig.BoolPropertyFn
+		VisibilityDisableOrderByClause          dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		VisibilityEnableManualPagination        dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	}
 )
 
@@ -130,23 +121,23 @@ func NewService(
 	serviceConfig *Config,
 	sdkClientFactory sdk.ClientFactory,
 	esClient esclient.Client,
-	archivalMetadata carchiver.ArchivalMetadata,
 	clusterMetadata cluster.Metadata,
 	clientBean client.Bean,
 	clusterMetadataManager persistence.ClusterMetadataManager,
 	namespaceRegistry namespace.Registry,
 	executionManager persistence.ExecutionManager,
-	archiverProvider provider.ArchiverProvider,
-	persistenceBean persistenceClient.Bean,
 	membershipMonitor membership.Monitor,
+	hostInfoProvider membership.HostInfoProvider,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 	metricsHandler metrics.Handler,
 	metadataManager persistence.MetadataManager,
 	taskManager persistence.TaskManager,
-	historyClient historyservice.HistoryServiceClient,
+	historyClient resource.HistoryClient,
 	workerManager *workerManager,
 	perNamespaceWorkerManager *perNamespaceWorkerManager,
 	visibilityManager manager.VisibilityManager,
+	matchingClient resource.MatchingClient,
+	namespaceReplicationTaskExecutor nsreplication.TaskExecutor,
 ) (*Service, error) {
 	workerServiceResolver, err := membershipMonitor.GetResolver(primitives.WorkerService)
 	if err != nil {
@@ -154,22 +145,18 @@ func NewService(
 	}
 
 	s := &Service{
-		status:                    common.DaemonStatusInitialized,
 		config:                    serviceConfig,
 		sdkClientFactory:          sdkClientFactory,
 		esClient:                  esClient,
-		stopC:                     make(chan struct{}),
 		logger:                    logger,
-		archivalMetadata:          archivalMetadata,
 		clusterMetadata:           clusterMetadata,
 		clientBean:                clientBean,
 		clusterMetadataManager:    clusterMetadataManager,
 		namespaceRegistry:         namespaceRegistry,
 		executionManager:          executionManager,
-		persistenceBean:           persistenceBean,
 		workerServiceResolver:     workerServiceResolver,
 		membershipMonitor:         membershipMonitor,
-		archiverProvider:          archiverProvider,
+		hostInfo:                  hostInfoProvider.HostInfo(),
 		namespaceReplicationQueue: namespaceReplicationQueue,
 		metricsHandler:            metricsHandler,
 		metadataManager:           metadataManager,
@@ -177,8 +164,10 @@ func NewService(
 		historyClient:             historyClient,
 		visibilityManager:         visibilityManager,
 
-		workerManager:             workerManager,
-		perNamespaceWorkerManager: perNamespaceWorkerManager,
+		workerManager:                    workerManager,
+		perNamespaceWorkerManager:        perNamespaceWorkerManager,
+		matchingClient:                   matchingClient,
+		namespaceReplicationTaskExecutor: namespaceReplicationTaskExecutor,
 	}
 	if err := s.initScanner(); err != nil {
 		return nil, err
@@ -187,202 +176,80 @@ func NewService(
 }
 
 // NewConfig builds the new Config for worker service
-func NewConfig(dc *dynamicconfig.Collection, persistenceConfig *config.Persistence, enableReadFromES bool) *Config {
+func NewConfig(
+	dc *dynamicconfig.Collection,
+	persistenceConfig *config.Persistence,
+) *Config {
 	config := &Config{
-		ArchiverConfig: &archiver.Config{
-			MaxConcurrentActivityExecutionSize: dc.GetIntProperty(
-				dynamicconfig.WorkerArchiverMaxConcurrentActivityExecutionSize,
-				1000,
-			),
-			MaxConcurrentWorkflowTaskExecutionSize: dc.GetIntProperty(
-				dynamicconfig.WorkerArchiverMaxConcurrentWorkflowTaskExecutionSize,
-				1000,
-			),
-			MaxConcurrentActivityTaskPollers: dc.GetIntProperty(
-				dynamicconfig.WorkerArchiverMaxConcurrentActivityTaskPollers,
-				4,
-			),
-			MaxConcurrentWorkflowTaskPollers: dc.GetIntProperty(
-				dynamicconfig.WorkerArchiverMaxConcurrentWorkflowTaskPollers,
-				4,
-			),
-
-			ArchiverConcurrency: dc.GetIntProperty(
-				dynamicconfig.WorkerArchiverConcurrency,
-				50,
-			),
-			ArchivalsPerIteration: dc.GetIntProperty(
-				dynamicconfig.WorkerArchivalsPerIteration,
-				1000,
-			),
-			TimeLimitPerArchivalIteration: dc.GetDurationProperty(
-				dynamicconfig.WorkerTimeLimitPerArchivalIteration,
-				archiver.MaxArchivalIterationTimeout(),
-			),
-		},
-
 		ParentCloseCfg: &parentclosepolicy.Config{
-			MaxConcurrentActivityExecutionSize: dc.GetIntProperty(
-				dynamicconfig.WorkerParentCloseMaxConcurrentActivityExecutionSize,
-				1000,
-			),
-			MaxConcurrentWorkflowTaskExecutionSize: dc.GetIntProperty(
-				dynamicconfig.WorkerParentCloseMaxConcurrentWorkflowTaskExecutionSize,
-				1000,
-			),
-			MaxConcurrentActivityTaskPollers: dc.GetIntProperty(
-				dynamicconfig.WorkerParentCloseMaxConcurrentActivityTaskPollers,
-				4,
-			),
-			MaxConcurrentWorkflowTaskPollers: dc.GetIntProperty(
-				dynamicconfig.WorkerParentCloseMaxConcurrentWorkflowTaskPollers,
-				4,
-			),
-			NumParentClosePolicySystemWorkflows: dc.GetIntProperty(
-				dynamicconfig.NumParentClosePolicySystemWorkflows,
-				10,
-			),
+			MaxConcurrentActivityExecutionSize:     dynamicconfig.WorkerParentCloseMaxConcurrentActivityExecutionSize.Get(dc),
+			MaxConcurrentWorkflowTaskExecutionSize: dynamicconfig.WorkerParentCloseMaxConcurrentWorkflowTaskExecutionSize.Get(dc),
+			MaxConcurrentActivityTaskPollers:       dynamicconfig.WorkerParentCloseMaxConcurrentActivityTaskPollers.Get(dc),
+			MaxConcurrentWorkflowTaskPollers:       dynamicconfig.WorkerParentCloseMaxConcurrentWorkflowTaskPollers.Get(dc),
+			NumParentClosePolicySystemWorkflows:    dynamicconfig.NumParentClosePolicySystemWorkflows.Get(dc),
 		},
 		ScannerCfg: &scanner.Config{
-			MaxConcurrentActivityExecutionSize: dc.GetIntProperty(
-				dynamicconfig.WorkerScannerMaxConcurrentActivityExecutionSize,
-				10,
-			),
-			MaxConcurrentWorkflowTaskExecutionSize: dc.GetIntProperty(
-				dynamicconfig.WorkerScannerMaxConcurrentWorkflowTaskExecutionSize,
-				10,
-			),
-			MaxConcurrentActivityTaskPollers: dc.GetIntProperty(
-				dynamicconfig.WorkerScannerMaxConcurrentActivityTaskPollers,
-				8,
-			),
-			MaxConcurrentWorkflowTaskPollers: dc.GetIntProperty(
-				dynamicconfig.WorkerScannerMaxConcurrentWorkflowTaskPollers,
-				8,
-			),
+			MaxConcurrentActivityExecutionSize:     dynamicconfig.WorkerScannerMaxConcurrentActivityExecutionSize.Get(dc),
+			MaxConcurrentWorkflowTaskExecutionSize: dynamicconfig.WorkerScannerMaxConcurrentWorkflowTaskExecutionSize.Get(dc),
+			MaxConcurrentActivityTaskPollers:       dynamicconfig.WorkerScannerMaxConcurrentActivityTaskPollers.Get(dc),
+			MaxConcurrentWorkflowTaskPollers:       dynamicconfig.WorkerScannerMaxConcurrentWorkflowTaskPollers.Get(dc),
 
-			PersistenceMaxQPS: dc.GetIntProperty(
-				dynamicconfig.ScannerPersistenceMaxQPS,
-				100,
-			),
-			Persistence: persistenceConfig,
-			TaskQueueScannerEnabled: dc.GetBoolProperty(
-				dynamicconfig.TaskQueueScannerEnabled,
-				true,
-			),
-			HistoryScannerEnabled: dc.GetBoolProperty(
-				dynamicconfig.HistoryScannerEnabled,
-				true,
-			),
-			ExecutionsScannerEnabled: dc.GetBoolProperty(
-				dynamicconfig.ExecutionsScannerEnabled,
-				false,
-			),
-			HistoryScannerDataMinAge: dc.GetDurationProperty(
-				dynamicconfig.HistoryScannerDataMinAge,
-				60*24*time.Hour,
-			),
-			HistoryScannerVerifyRetention: dc.GetBoolProperty(
-				dynamicconfig.HistoryScannerVerifyRetention,
-				true,
-			),
-			ExecutionScannerPerHostQPS: dc.GetIntProperty(
-				dynamicconfig.ExecutionScannerPerHostQPS,
-				10,
-			),
-			ExecutionScannerPerShardQPS: dc.GetIntProperty(
-				dynamicconfig.ExecutionScannerPerShardQPS,
-				1,
-			),
-			ExecutionDataDurationBuffer: dc.GetDurationProperty(
-				dynamicconfig.ExecutionDataDurationBuffer,
-				time.Hour*24*90,
-			),
-			ExecutionScannerWorkerCount: dc.GetIntProperty(
-				dynamicconfig.ExecutionScannerWorkerCount,
-				8,
-			),
+			PersistenceMaxQPS:                       dynamicconfig.ScannerPersistenceMaxQPS.Get(dc),
+			Persistence:                             persistenceConfig,
+			TaskQueueScannerEnabled:                 dynamicconfig.TaskQueueScannerEnabled.Get(dc),
+			BuildIdScavengerEnabled:                 dynamicconfig.BuildIdScavengerEnabled.Get(dc),
+			HistoryScannerEnabled:                   dynamicconfig.HistoryScannerEnabled.Get(dc),
+			ExecutionsScannerEnabled:                dynamicconfig.ExecutionsScannerEnabled.Get(dc),
+			HistoryScannerDataMinAge:                dynamicconfig.HistoryScannerDataMinAge.Get(dc),
+			HistoryScannerVerifyRetention:           dynamicconfig.HistoryScannerVerifyRetention.Get(dc),
+			ExecutionScannerPerHostQPS:              dynamicconfig.ExecutionScannerPerHostQPS.Get(dc),
+			ExecutionScannerPerShardQPS:             dynamicconfig.ExecutionScannerPerShardQPS.Get(dc),
+			ExecutionDataDurationBuffer:             dynamicconfig.ExecutionDataDurationBuffer.Get(dc),
+			ExecutionScannerWorkerCount:             dynamicconfig.ExecutionScannerWorkerCount.Get(dc),
+			ExecutionScannerHistoryEventIdValidator: dynamicconfig.ExecutionScannerHistoryEventIdValidator.Get(dc),
+			RemovableBuildIdDurationSinceDefault:    dynamicconfig.RemovableBuildIdDurationSinceDefault.Get(dc),
+			BuildIdScavengerVisibilityRPS:           dynamicconfig.BuildIdScavengerVisibilityRPS.Get(dc),
 		},
-		EnableBatcher:      dc.GetBoolProperty(dynamicconfig.EnableBatcher, true),
-		BatcherRPS:         dc.GetIntPropertyFilteredByNamespace(dynamicconfig.BatcherRPS, batcher.DefaultRPS),
-		BatcherConcurrency: dc.GetIntPropertyFilteredByNamespace(dynamicconfig.BatcherConcurrency, batcher.DefaultConcurrency),
-		EnableParentClosePolicyWorker: dc.GetBoolProperty(
-			dynamicconfig.EnableParentClosePolicyWorker,
-			true,
-		),
-		PerNamespaceWorkerCount: dc.GetIntPropertyFilteredByNamespace(
-			dynamicconfig.WorkerPerNamespaceWorkerCount,
-			1,
-		),
-		PerNamespaceWorkerOptions: dc.GetMapPropertyFnWithNamespaceFilter(
-			dynamicconfig.WorkerPerNamespaceWorkerOptions,
-			map[string]any{},
-		),
-		ThrottledLogRPS: dc.GetIntProperty(
-			dynamicconfig.WorkerThrottledLogRPS,
-			20,
-		),
-		PersistenceMaxQPS: dc.GetIntProperty(
-			dynamicconfig.WorkerPersistenceMaxQPS,
-			500,
-		),
-		PersistenceGlobalMaxQPS: dc.GetIntProperty(
-			dynamicconfig.WorkerPersistenceGlobalMaxQPS,
-			0,
-		),
-		PersistenceNamespaceMaxQPS: dc.GetIntPropertyFilteredByNamespace(
-			dynamicconfig.WorkerPersistenceNamespaceMaxQPS,
-			0,
-		),
-		EnablePersistencePriorityRateLimiting: dc.GetBoolProperty(
-			dynamicconfig.WorkerEnablePersistencePriorityRateLimiting,
-			true,
-		),
+		BatcherRPS:                           dynamicconfig.BatcherRPS.Get(dc),
+		BatcherConcurrency:                   dynamicconfig.BatcherConcurrency.Get(dc),
+		EnableParentClosePolicyWorker:        dynamicconfig.EnableParentClosePolicyWorker.Get(dc),
+		PerNamespaceWorkerCount:              dynamicconfig.WorkerPerNamespaceWorkerCount.Subscribe(dc),
+		PerNamespaceWorkerOptions:            dynamicconfig.WorkerPerNamespaceWorkerOptions.Subscribe(dc),
+		PerNamespaceWorkerStartRate:          dynamicconfig.WorkerPerNamespaceWorkerStartRate.Get(dc),
+		ThrottledLogRPS:                      dynamicconfig.WorkerThrottledLogRPS.Get(dc),
+		PersistenceMaxQPS:                    dynamicconfig.WorkerPersistenceMaxQPS.Get(dc),
+		PersistenceGlobalMaxQPS:              dynamicconfig.WorkerPersistenceGlobalMaxQPS.Get(dc),
+		PersistenceNamespaceMaxQPS:           dynamicconfig.WorkerPersistenceNamespaceMaxQPS.Get(dc),
+		PersistenceGlobalNamespaceMaxQPS:     dynamicconfig.WorkerPersistenceGlobalNamespaceMaxQPS.Get(dc),
+		PersistencePerShardNamespaceMaxQPS:   dynamicconfig.DefaultPerShardNamespaceRPSMax,
+		PersistenceDynamicRateLimitingParams: dynamicconfig.WorkerPersistenceDynamicRateLimitingParams.Get(dc),
+		PersistenceQPSBurstRatio:             dynamicconfig.PersistenceQPSBurstRatio.Get(dc),
+		OperatorRPSRatio:                     dynamicconfig.OperatorRPSRatio.Get(dc),
 
-		StandardVisibilityPersistenceMaxReadQPS:   dc.GetIntProperty(dynamicconfig.StandardVisibilityPersistenceMaxReadQPS, 9000),
-		StandardVisibilityPersistenceMaxWriteQPS:  dc.GetIntProperty(dynamicconfig.StandardVisibilityPersistenceMaxWriteQPS, 9000),
-		AdvancedVisibilityPersistenceMaxReadQPS:   dc.GetIntProperty(dynamicconfig.AdvancedVisibilityPersistenceMaxReadQPS, 9000),
-		AdvancedVisibilityPersistenceMaxWriteQPS:  dc.GetIntProperty(dynamicconfig.AdvancedVisibilityPersistenceMaxWriteQPS, 9000),
-		EnableReadVisibilityFromES:                dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableReadVisibilityFromES, enableReadFromES),
-		EnableReadFromSecondaryAdvancedVisibility: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableReadFromSecondaryAdvancedVisibility, false),
-		VisibilityDisableOrderByClause:            dc.GetBoolProperty(dynamicconfig.VisibilityDisableOrderByClause, false),
+		VisibilityPersistenceMaxReadQPS:         dynamicconfig.VisibilityPersistenceMaxReadQPS.Get(dc),
+		VisibilityPersistenceMaxWriteQPS:        dynamicconfig.VisibilityPersistenceMaxWriteQPS.Get(dc),
+		VisibilityPersistenceSlowQueryThreshold: dynamicconfig.VisibilityPersistenceSlowQueryThreshold.Get(dc),
+		EnableReadFromSecondaryVisibility:       dynamicconfig.EnableReadFromSecondaryVisibility.Get(dc),
+		VisibilityEnableShadowReadMode:          dynamicconfig.VisibilityEnableShadowReadMode.Get(dc),
+		VisibilityDisableOrderByClause:          dynamicconfig.VisibilityDisableOrderByClause.Get(dc),
+		VisibilityEnableManualPagination:        dynamicconfig.VisibilityEnableManualPagination.Get(dc),
 	}
 	return config
 }
 
 // Start is called to start the service
 func (s *Service) Start() {
-	if !atomic.CompareAndSwapInt32(
-		&s.status,
-		common.DaemonStatusInitialized,
-		common.DaemonStatusStarted,
-	) {
-		return
-	}
-
 	s.logger.Info(
 		"worker starting",
 		tag.ComponentWorker,
 	)
 
-	s.metricsHandler.Counter(metrics.RestartCount).Record(1)
+	metrics.RestartCount.With(s.metricsHandler).Record(1)
 
 	s.clusterMetadata.Start()
-	s.membershipMonitor.Start()
 	s.namespaceRegistry.Start()
 
-	hostInfo, err := s.membershipMonitor.WhoAmI()
-	if err != nil {
-		s.logger.Fatal(
-			"fail to get host info from membership monitor",
-			tag.Error(err),
-		)
-	}
-	s.hostInfo = hostInfo
-
-	// The service is now started up
-	// seed the random generator once for this service
-	rand.Seed(time.Now().UnixNano())
+	s.membershipMonitor.Start()
 
 	s.ensureSystemNamespaceExists(context.TODO())
 	s.startScanner()
@@ -390,14 +257,8 @@ func (s *Service) Start() {
 	if s.clusterMetadata.IsGlobalNamespaceEnabled() {
 		s.startReplicator()
 	}
-	if s.archivalMetadata.GetHistoryConfig().ClusterConfiguredForArchival() {
-		s.startArchiver()
-	}
 	if s.config.EnableParentClosePolicyWorker() {
 		s.startParentClosePolicyProcessor()
-	}
-	if s.config.EnableBatcher() {
-		s.startBatcher()
 	}
 
 	s.workerManager.Start()
@@ -410,30 +271,17 @@ func (s *Service) Start() {
 	s.logger.Info(
 		"worker service started",
 		tag.ComponentWorker,
-		tag.Address(hostInfo.GetAddress()),
+		tag.Address(s.hostInfo.GetAddress()),
 	)
-	<-s.stopC
 }
 
 // Stop is called to stop the service
 func (s *Service) Stop() {
-	if !atomic.CompareAndSwapInt32(
-		&s.status,
-		common.DaemonStatusStarted,
-		common.DaemonStatusStopped,
-	) {
-		return
-	}
-
-	close(s.stopC)
-
 	s.scanner.Stop()
 	s.perNamespaceWorkerManager.Stop()
 	s.workerManager.Stop()
 	s.namespaceRegistry.Stop()
-	s.membershipMonitor.Stop()
 	s.clusterMetadata.Stop()
-	s.persistenceBean.Close()
 	s.visibilityManager.Close()
 
 	s.logger.Info(
@@ -451,26 +299,12 @@ func (s *Service) startParentClosePolicyProcessor() {
 		Logger:           s.logger,
 		ClientBean:       s.clientBean,
 		CurrentCluster:   s.clusterMetadata.GetCurrentClusterName(),
+		HostInfo:         s.hostInfo,
 	}
 	processor := parentclosepolicy.New(params)
 	if err := processor.Start(); err != nil {
 		s.logger.Fatal(
 			"error starting parentclosepolicy processor",
-			tag.Error(err),
-		)
-	}
-}
-
-func (s *Service) startBatcher() {
-	if err := batcher.New(
-		s.metricsHandler,
-		s.logger,
-		s.sdkClientFactory,
-		s.config.BatcherRPS,
-		s.config.BatcherConcurrency,
-	).Start(); err != nil {
-		s.logger.Fatal(
-			"error starting batcher worker",
 			tag.Error(err),
 		)
 	}
@@ -488,10 +322,15 @@ func (s *Service) initScanner() error {
 		s.sdkClientFactory,
 		s.metricsHandler,
 		s.executionManager,
+		s.metadataManager,
+		s.visibilityManager,
 		s.taskManager,
 		s.historyClient,
 		adminClient,
+		s.matchingClient,
 		s.namespaceRegistry,
+		currentCluster,
+		s.hostInfo,
 	)
 	return nil
 }
@@ -506,11 +345,6 @@ func (s *Service) startScanner() {
 }
 
 func (s *Service) startReplicator() {
-	namespaceReplicationTaskExecutor := namespace.NewReplicationTaskExecutor(
-		s.clusterMetadata.GetCurrentClusterName(),
-		s.metadataManager,
-		s.logger,
-	)
 	msgReplicator := replicator.NewReplicator(
 		s.clusterMetadata,
 		s.clientBean,
@@ -519,31 +353,11 @@ func (s *Service) startReplicator() {
 		s.hostInfo,
 		s.workerServiceResolver,
 		s.namespaceReplicationQueue,
-		namespaceReplicationTaskExecutor,
+		s.namespaceReplicationTaskExecutor,
+		s.matchingClient,
+		s.namespaceRegistry,
 	)
 	msgReplicator.Start()
-}
-
-func (s *Service) startArchiver() {
-	historyClient := s.clientBean.GetHistoryClient()
-	bc := &archiver.BootstrapContainer{
-		MetricsHandler:   s.metricsHandler,
-		Logger:           s.logger,
-		HistoryV2Manager: s.executionManager,
-		NamespaceCache:   s.namespaceRegistry,
-		Config:           s.config.ArchiverConfig,
-		ArchiverProvider: s.archiverProvider,
-		SdkClientFactory: s.sdkClientFactory,
-		HistoryClient:    historyClient,
-	}
-	clientWorker := archiver.NewClientWorker(bc)
-	if err := clientWorker.Start(); err != nil {
-		clientWorker.Stop()
-		s.logger.Fatal(
-			"failed to start archiver",
-			tag.Error(err),
-		)
-	}
 }
 
 func (s *Service) ensureSystemNamespaceExists(
@@ -564,9 +378,4 @@ func (s *Service) ensureSystemNamespaceExists(
 			tag.Error(err),
 		)
 	}
-}
-
-// This is intended for use by integration tests only.
-func (s *Service) RefreshPerNSWorkerManager() {
-	s.perNamespaceWorkerManager.refreshAll()
 }

@@ -28,6 +28,7 @@ import (
 	"github.com/gocql/gocql"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	commongocql "go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	"go.temporal.io/server/common/persistence/schema"
 	"go.temporal.io/server/common/resolver"
@@ -47,9 +48,6 @@ func VerifyCompatibleVersion(
 	if err := checkMainKeyspace(cfg, r); err != nil {
 		return err
 	}
-	if cfg.StandardVisibilityConfigExist() {
-		return checkVisibilityKeyspace(cfg, r)
-	}
 	return nil
 }
 
@@ -60,17 +58,6 @@ func checkMainKeyspace(
 	ds, ok := cfg.DataStores[cfg.DefaultStore]
 	if ok && ds.Cassandra != nil {
 		return CheckCompatibleVersion(*ds.Cassandra, r, cassandraschema.Version)
-	}
-	return nil
-}
-
-func checkVisibilityKeyspace(
-	cfg config.Persistence,
-	r resolver.ServiceResolver,
-) error {
-	ds, ok := cfg.DataStores[cfg.VisibilityStore]
-	if ok && ds.Cassandra != nil {
-		return CheckCompatibleVersion(*ds.Cassandra, r, cassandraschema.VisibilityVersion)
 	}
 	return nil
 }
@@ -87,6 +74,7 @@ func CheckCompatibleVersion(
 			return commongocql.NewCassandraCluster(cfg, r)
 		},
 		log.NewNoopLogger(),
+		metrics.NoopMetricsHandler,
 	)
 	if err != nil {
 		return err

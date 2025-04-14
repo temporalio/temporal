@@ -23,30 +23,35 @@
 // THE SOFTWARE.
 
 // Generates all three generated files in this package:
-//go:generate go run ../../cmd/tools/rpcwrappers -service history
+//go:generate go run ../../cmd/tools/genrpcwrappers -service history
 
 package history
 
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"sync"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
-	"google.golang.org/grpc"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/debug"
+	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/membership"
+	"go.temporal.io/server/common/tasktoken"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 )
 
-var _ historyservice.HistoryServiceClient = (*clientImpl)(nil)
+var (
+	_ historyservice.HistoryServiceClient = (*clientImpl)(nil)
+)
 
 const (
 	// DefaultTimeout is the default timeout used to make calls
@@ -54,27 +59,51 @@ const (
 )
 
 type clientImpl struct {
-	numberOfShards  int32
-	tokenSerializer common.TaskTokenSerializer
-	timeout         time.Duration
-	clients         common.ClientCache
+	connections     connectionPool
 	logger          log.Logger
+	numberOfShards  int32
+	redirector      redirector
+	timeout         time.Duration
+	tokenSerializer *tasktoken.Serializer
 }
 
 // NewClient creates a new history service gRPC client
 func NewClient(
-	numberOfShards int32,
-	timeout time.Duration,
-	clients common.ClientCache,
+	dc *dynamicconfig.Collection,
+	historyServiceResolver membership.ServiceResolver,
 	logger log.Logger,
+	numberOfShards int32,
+	rpcFactory RPCFactory,
+	timeout time.Duration,
 ) historyservice.HistoryServiceClient {
-	return &clientImpl{
-		numberOfShards:  numberOfShards,
-		tokenSerializer: common.NewProtoTaskTokenSerializer(),
-		timeout:         timeout,
-		clients:         clients,
-		logger:          logger,
+	connections := newConnectionPool(historyServiceResolver, rpcFactory)
+
+	var redirector redirector
+	if dynamicconfig.HistoryClientOwnershipCachingEnabled.Get(dc)() {
+		logger.Info("historyClient: ownership caching enabled")
+		redirector = newCachingRedirector(
+			connections,
+			historyServiceResolver,
+			logger,
+			dynamicconfig.HistoryClientOwnershipCachingStaleTTL.Get(dc),
+		)
+	} else {
+		logger.Info("historyClient: ownership caching disabled")
+		redirector = newBasicRedirector(connections, historyServiceResolver)
 	}
+
+	return &clientImpl{
+		connections:     connections,
+		logger:          logger,
+		numberOfShards:  numberOfShards,
+		redirector:      redirector,
+		timeout:         timeout,
+		tokenSerializer: tasktoken.NewSerializer(),
+	}
+}
+
+func (c *clientImpl) DeepHealthCheck(ctx context.Context, request *historyservice.DeepHealthCheckRequest, opts ...grpc.CallOption) (*historyservice.DeepHealthCheckResponse, error) {
+	return c.connections.getOrCreateClientConn(rpcAddress(request.GetHostAddress())).historyClient.DeepHealthCheck(ctx, request, opts...)
 }
 
 func (c *clientImpl) DescribeHistoryHost(
@@ -82,22 +111,14 @@ func (c *clientImpl) DescribeHistoryHost(
 	request *historyservice.DescribeHistoryHostRequest,
 	opts ...grpc.CallOption) (*historyservice.DescribeHistoryHostResponse, error) {
 
-	var err error
-	var client historyservice.HistoryServiceClient
-
+	var shardID int32
 	if request.GetShardId() != 0 {
-		client, err = c.getClientForShardID(request.GetShardId())
+		shardID = request.GetShardId()
 	} else if request.GetWorkflowExecution() != nil {
-		client, err = c.getClientForWorkflowID(request.GetNamespaceId(), request.GetWorkflowExecution().GetWorkflowId())
+		shardID = c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetWorkflowExecution().GetWorkflowId())
 	} else {
-		ret, err := c.clients.GetClientForClientKey(request.GetHostAddress())
-		if err != nil {
-			return nil, err
-		}
-		client = ret.(historyservice.HistoryServiceClient)
-	}
-	if err != nil {
-		return nil, err
+		clientConn := c.connections.getOrCreateClientConn(rpcAddress(request.GetHostAddress()))
+		return clientConn.historyClient.DescribeHistoryHost(ctx, request, opts...)
 	}
 
 	var response *historyservice.DescribeHistoryHostResponse
@@ -108,8 +129,7 @@ func (c *clientImpl) DescribeHistoryHost(
 		response, err = client.DescribeHistoryHost(ctx, request, opts...)
 		return err
 	}
-	err = c.executeWithRedirect(ctx, client, op)
-	if err != nil {
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
 		return nil, err
 	}
 	return response, nil
@@ -123,7 +143,7 @@ func (c *clientImpl) GetReplicationMessages(
 	requestsByClient := make(map[historyservice.HistoryServiceClient]*historyservice.GetReplicationMessagesRequest)
 
 	for _, token := range request.Tokens {
-		client, err := c.getClientForShardID(token.GetShardId())
+		client, err := c.redirector.clientForShardID(token.GetShardId())
 		if err != nil {
 			return nil, err
 		}
@@ -186,17 +206,13 @@ func (c *clientImpl) GetReplicationStatus(
 	request *historyservice.GetReplicationStatusRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.GetReplicationStatusResponse, error) {
-	clients, err := c.clients.GetAllClients()
-	if err != nil {
-		return nil, err
-	}
-
-	respChan := make(chan *historyservice.GetReplicationStatusResponse, len(clients))
+	clientConns := c.connections.getAllClientConns()
+	respChan := make(chan *historyservice.GetReplicationStatusResponse, len(clientConns))
 	errChan := make(chan error, 1)
 	var wg sync.WaitGroup
-	wg.Add(len(clients))
-	for _, client := range clients {
-		historyClient := client.(historyservice.HistoryServiceClient)
+	wg.Add(len(clientConns))
+	for _, client := range clientConns {
+		historyClient := client.historyClient
 		go func(client historyservice.HistoryServiceClient) {
 			defer wg.Done()
 			resp, err := historyClient.GetReplicationStatus(ctx, request, opts...)
@@ -220,54 +236,65 @@ func (c *clientImpl) GetReplicationStatus(
 	}
 
 	if len(errChan) > 0 {
-		err = <-errChan
+		err := <-errChan
 		return response, err
 	}
 
 	return response, nil
 }
 
+func (c *clientImpl) StreamWorkflowReplicationMessages(
+	ctx context.Context,
+	opts ...grpc.CallOption,
+) (historyservice.HistoryService_StreamWorkflowReplicationMessagesClient, error) {
+	ctxMetadata, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return nil, serviceerror.NewInvalidArgument("missing cluster & shard ID metadata")
+	}
+	_, targetClusterShardID, err := DecodeClusterShardMD(headers.NewGRPCHeaderGetter(ctx))
+	if err != nil {
+		return nil, err
+	}
+
+	var streamClient historyservice.HistoryService_StreamWorkflowReplicationMessagesClient
+	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
+		var err error
+		streamClient, err = client.StreamWorkflowReplicationMessages(
+			metadata.NewOutgoingContext(ctx, ctxMetadata),
+			opts...)
+		return err
+	}
+	if err := c.executeWithRedirect(ctx, targetClusterShardID.ShardID, op); err != nil {
+		return nil, err
+	}
+	return streamClient, nil
+}
+
+// getRandomShard returns a random shard ID for history APIs that are shard-agnostic (e.g. namespace or DLQ v2 APIs).
+func (c *clientImpl) getRandomShard() int32 {
+	// Add 1 at the end because shard IDs are 1-indexed.
+	return int32(rand.Intn(int(c.numberOfShards)) + 1)
+}
+
 func (c *clientImpl) createContext(parent context.Context) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(parent, c.timeout)
 }
 
-func (c *clientImpl) getClientForWorkflowID(namespaceID, workflowID string) (historyservice.HistoryServiceClient, error) {
-	key := common.WorkflowIDToHistoryShard(namespaceID, workflowID, c.numberOfShards)
-	return c.getClientForShardID(key)
+func (c *clientImpl) shardIDFromWorkflowID(namespaceID, workflowID string) int32 {
+	return common.WorkflowIDToHistoryShard(namespaceID, workflowID, c.numberOfShards)
 }
 
-func (c *clientImpl) getClientForShardID(shardID int32) (historyservice.HistoryServiceClient, error) {
+func checkShardID(shardID int32) error {
 	if shardID <= 0 {
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid ShardID: %d", shardID))
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid ShardID: %d", shardID))
 	}
-	client, err := c.clients.GetClientForKey(convert.Int32ToString(shardID))
-	if err != nil {
-		return nil, err
-	}
-	return client.(historyservice.HistoryServiceClient), nil
+	return nil
 }
 
-func (c *clientImpl) executeWithRedirect(ctx context.Context,
-	client historyservice.HistoryServiceClient,
-	op func(ctx context.Context, client historyservice.HistoryServiceClient) error,
+func (c *clientImpl) executeWithRedirect(
+	ctx context.Context,
+	shardID int32,
+	op clientOperation,
 ) error {
-
-	for {
-		err := common.IsValidContext(ctx)
-		if err != nil {
-			return err
-		}
-
-		err = op(ctx, client)
-		if s, ok := err.(*serviceerrors.ShardOwnershipLost); ok && len(s.OwnerHost) != 0 {
-			// TODO: consider emitting a metric for number of redirects
-			ret, err := c.clients.GetClientForClientKey(s.OwnerHost)
-			if err != nil {
-				return err
-			}
-			client = ret.(historyservice.HistoryServiceClient)
-		} else {
-			return err
-		}
-	}
+	return c.redirector.execute(ctx, shardID, op)
 }

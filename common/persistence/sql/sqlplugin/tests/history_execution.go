@@ -30,7 +30,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/shuffle"
@@ -41,7 +40,7 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		store sqlplugin.HistoryExecution
+		store sqlplugin.DB
 	}
 )
 
@@ -59,7 +58,7 @@ var (
 
 func NewHistoryExecutionSuite(
 	t *testing.T,
-	store sqlplugin.HistoryExecution,
+	store sqlplugin.DB,
 ) *historyExecutionSuite {
 	return &historyExecutionSuite{
 		Assertions: require.New(t),
@@ -285,16 +284,19 @@ func (s *historyExecutionSuite) TestReadLock() {
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
+	tx, err := s.store.BeginTx(newExecutionContext())
+	s.NoError(err)
 	filter := sqlplugin.ExecutionsFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
 	}
-	rowDBVersion, rowNextEventID, err := s.store.ReadLockExecutions(newExecutionContext(), filter)
+	rowDBVersion, rowNextEventID, err := tx.ReadLockExecutions(newExecutionContext(), filter)
 	s.NoError(err)
 	s.Equal(execution.DBRecordVersion, rowDBVersion)
 	s.Equal(execution.NextEventID, rowNextEventID)
+	s.NoError(tx.Commit())
 }
 
 func (s *historyExecutionSuite) TestWriteLock() {
@@ -312,16 +314,19 @@ func (s *historyExecutionSuite) TestWriteLock() {
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
+	tx, err := s.store.BeginTx(newExecutionContext())
+	s.NoError(err)
 	filter := sqlplugin.ExecutionsFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
 	}
-	rowDBVersion, rowNextEventID, err := s.store.WriteLockExecutions(newExecutionContext(), filter)
+	rowDBVersion, rowNextEventID, err := tx.WriteLockExecutions(newExecutionContext(), filter)
 	s.NoError(err)
 	s.Equal(execution.DBRecordVersion, rowDBVersion)
 	s.Equal(execution.NextEventID, rowNextEventID)
+	s.NoError(tx.Commit())
 }
 
 func (s *historyExecutionSuite) newRandomExecutionRow(

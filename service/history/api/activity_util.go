@@ -29,9 +29,9 @@ import (
 	"fmt"
 
 	"go.temporal.io/api/serviceerror"
-
 	tokenspb "go.temporal.io/server/api/token/v1"
-	"go.temporal.io/server/service/history/workflow"
+	"go.temporal.io/server/common/locks"
+	historyi "go.temporal.io/server/service/history/interfaces"
 )
 
 func SetActivityTaskRunID(
@@ -54,6 +54,7 @@ func SetActivityTaskRunID(
 		ctx,
 		token.NamespaceId,
 		token.WorkflowId,
+		locks.PriorityHigh,
 	)
 	if err != nil {
 		return err
@@ -64,7 +65,7 @@ func SetActivityTaskRunID(
 
 func GetActivityScheduledEventID(
 	activityID string,
-	mutableState workflow.MutableState,
+	mutableState historyi.MutableState,
 ) (int64, error) {
 
 	if activityID == "" {

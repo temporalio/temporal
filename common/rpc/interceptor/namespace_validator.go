@@ -31,12 +31,13 @@ import (
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
-	"google.golang.org/grpc"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/tasktoken"
+	"google.golang.org/grpc"
 )
 
 type (
@@ -47,7 +48,7 @@ type (
 	// NamespaceValidatorInterceptor contains NamespaceValidateIntercept and StateValidationIntercept
 	NamespaceValidatorInterceptor struct {
 		namespaceRegistry               namespace.Registry
-		tokenSerializer                 common.TaskTokenSerializer
+		tokenSerializer                 *tasktoken.Serializer
 		enableTokenNamespaceEnforcement dynamicconfig.BoolPropertyFn
 		maxNamespaceLength              dynamicconfig.IntPropertyFn
 	}
@@ -55,22 +56,56 @@ type (
 
 var (
 	errNamespaceNotSet            = serviceerror.NewInvalidArgument("Namespace not set on request.")
+	errBothNamespaceIDAndNameSet  = serviceerror.NewInvalidArgument("Only one of namespace name or Id should be set on request.")
 	errNamespaceTooLong           = serviceerror.NewInvalidArgument("Namespace length exceeds limit.")
 	errTaskTokenNotSet            = serviceerror.NewInvalidArgument("Task token not set on request.")
 	errTaskTokenNamespaceMismatch = serviceerror.NewInvalidArgument("Operation requested with a token from a different namespace.")
+	errDeserializingToken         = serviceerror.NewInvalidArgument("Error deserializing task token.")
 
-	allowedNamespaceStates = map[string][]enumspb.NamespaceState{
-		"StartWorkflowExecution":           {enumspb.NAMESPACE_STATE_REGISTERED},
-		"SignalWithStartWorkflowExecution": {enumspb.NAMESPACE_STATE_REGISTERED},
+	allowedNamespaceStatesPerAPI = map[string][]enumspb.NamespaceState{
+		api.WorkflowServicePrefix + "StartWorkflowExecution":           {enumspb.NAMESPACE_STATE_REGISTERED},
+		api.WorkflowServicePrefix + "SignalWithStartWorkflowExecution": {enumspb.NAMESPACE_STATE_REGISTERED},
+		api.OperatorServicePrefix + "DeleteNamespace":                  {enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED, enumspb.NAMESPACE_STATE_DELETED},
+		api.NexusServicePrefix + "DispatchNexusTask":                   {enumspb.NAMESPACE_STATE_REGISTERED},
 	}
-	// If API name is not in the map above, these are allowed states for all APIs that have `namespace` or `task_token` field in the request object.
-	defaultAllowedNamespaceStates = []enumspb.NamespaceState{enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED}
+	// If API name is not in the map above, these are allowed states for all APIs of specific service
+	// that have `namespace` or `task_token` field in the request object.
+	allowedNamespaceStatesPerService = map[string][]enumspb.NamespaceState{
+		api.AdminServicePrefix: {enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED, enumspb.NAMESPACE_STATE_DELETED},
+	}
+	// If service name is not in the map above, these are allowed states for all APIs
+	// that have `namespace` or `task_token` field in the request object.
+	allowedNamespaceStatesDefault = []enumspb.NamespaceState{enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED}
 
+	// DO NOT allow workflow data read during namespace handover to prevent read-after-write inconsistency.
 	allowedMethodsDuringHandover = map[string]struct{}{
-		"UpdateNamespace":                  {},
+		// System
+		"GetSystemInfo":       {},
+		"GetSearchAttributes": {},
+		"GetClusterInfo":      {},
+		// Namespace APIs
+		"DeprecateNamespace": {},
+		"DescribeNamespace":  {},
+		"UpdateNamespace":    {},
+		"ListNamespaces":     {},
+		"RegisterNamespace":  {},
+		// Replication APIs
 		"GetReplicationMessages":           {},
 		"ReplicateEventsV2":                {},
+		"GetWorkflowExecutionRawHistory":   {},
 		"GetWorkflowExecutionRawHistoryV2": {},
+		// Visibility APIs
+		"ListTaskQueuePartitions":        {},
+		"ListOpenWorkflowExecutions":     {},
+		"ListClosedWorkflowExecutions":   {},
+		"ListWorkflowExecutions":         {},
+		"ListArchivedWorkflowExecutions": {},
+		"ScanWorkflowExecutions":         {},
+		"CountWorkflowExecutions":        {},
+		"ListSchedules":                  {},
+		"ListBatchOperations":            {},
+		// Matching
+		"ShutdownWorker": {},
 	}
 )
 
@@ -84,7 +119,7 @@ func NewNamespaceValidatorInterceptor(
 ) *NamespaceValidatorInterceptor {
 	return &NamespaceValidatorInterceptor{
 		namespaceRegistry:               namespaceRegistry,
-		tokenSerializer:                 common.NewProtoTaskTokenSerializer(),
+		tokenSerializer:                 tasktoken.NewSerializer(),
 		enableTokenNamespaceEnforcement: enableTokenNamespaceEnforcement,
 		maxNamespaceLength:              maxNamespaceLength,
 	}
@@ -102,13 +137,20 @@ func (ni *NamespaceValidatorInterceptor) NamespaceValidateIntercept(
 	}
 	reqWithNamespace, hasNamespace := req.(NamespaceNameGetter)
 	if hasNamespace {
-		namespaceName := namespace.Name(reqWithNamespace.GetNamespace())
-		if len(namespaceName) > ni.maxNamespaceLength() {
-			return nil, errNamespaceTooLong
+		if err := ni.ValidateName(reqWithNamespace.GetNamespace()); err != nil {
+			return nil, err
 		}
 	}
 
 	return handler(ctx, req)
+}
+
+// ValidateName validates a namespace name (currently only a max length check).
+func (ni *NamespaceValidatorInterceptor) ValidateName(ns string) error {
+	if len(ns) > ni.maxNamespaceLength() {
+		return errNamespaceTooLong
+	}
+	return nil
 }
 
 func (ni *NamespaceValidatorInterceptor) setNamespaceIfNotPresent(
@@ -162,15 +204,18 @@ func (ni *NamespaceValidatorInterceptor) setNamespace(
 		if request.Namespace == "" {
 			request.Namespace = namespaceEntry.Name().String()
 		}
+	case *workflowservice.RespondNexusTaskCompletedRequest:
+		if request.Namespace == "" {
+			request.Namespace = namespaceEntry.Name().String()
+		}
+	case *workflowservice.RespondNexusTaskFailedRequest:
+		if request.Namespace == "" {
+			request.Namespace = namespaceEntry.Name().String()
+		}
 	}
 }
 
-// StateValidationIntercept validates:
-// 1. Namespace is specified in task token if there is a `task_token` field.
-// 2. Namespace is specified in request if there is a `namespace` field and no `task_token` field.
-// 3. Namespace exists.
-// 4. Namespace from request match namespace from task token, if check is enabled with dynamic config.
-// 5. Namespace is in correct state.
+// StateValidationIntercept runs ValidateState - see docstring for that method.
 func (ni *NamespaceValidatorInterceptor) StateValidationIntercept(
 	ctx context.Context,
 	req interface{},
@@ -182,16 +227,24 @@ func (ni *NamespaceValidatorInterceptor) StateValidationIntercept(
 		return nil, err
 	}
 
-	err = ni.checkNamespaceState(namespaceEntry, info.FullMethod)
-	if err != nil {
-		return nil, err
-	}
-	err = ni.checkReplicationState(namespaceEntry, info.FullMethod)
-	if err != nil {
+	if err := ni.ValidateState(namespaceEntry, info.FullMethod); err != nil {
 		return nil, err
 	}
 
 	return handler(ctx, req)
+}
+
+// ValidateState validates:
+// 1. Namespace is specified in task token if there is a `task_token` field.
+// 2. Namespace is specified in request if there is a `namespace` field and no `task_token` field.
+// 3. Namespace exists.
+// 4. Namespace from request match namespace from task token, if check is enabled with dynamic config.
+// 5. Namespace is in correct state.
+func (ni *NamespaceValidatorInterceptor) ValidateState(namespaceEntry *namespace.Namespace, fullMethod string) error {
+	if err := ni.checkNamespaceState(namespaceEntry, fullMethod); err != nil {
+		return err
+	}
+	return ni.checkReplicationState(namespaceEntry, fullMethod)
 }
 
 func (ni *NamespaceValidatorInterceptor) extractNamespace(req interface{}) (*namespace.Namespace, error) {
@@ -235,12 +288,34 @@ func (ni *NamespaceValidatorInterceptor) extractNamespaceFromRequest(req interfa
 			return nil, errNamespaceNotSet
 		}
 		return nil, nil
+	case *adminservice.GetNamespaceRequest:
+		// special case for Admin.GetNamespace API which accept either Namespace ID or Namespace name as input
+		if request.GetId() == "" && namespaceName.IsEmpty() {
+			return nil, errNamespaceNotSet
+		}
+		return nil, nil
 	case *workflowservice.RegisterNamespaceRequest:
 		// Special case for RegisterNamespace API. `namespaceName` is name of namespace that about to be registered.
 		// There is no namespace entry for it, therefore, it must bypass namespace registry and validator.
 		if namespaceName.IsEmpty() {
 			return nil, errNamespaceNotSet
 		}
+		return nil, nil
+	case *operatorservice.DeleteNamespaceRequest:
+		// special case for Operator.DeleteNamespace API which accept either Namespace ID or Namespace name as input
+		namespaceID := namespace.ID(request.GetNamespaceId())
+		if namespaceID.IsEmpty() && namespaceName.IsEmpty() {
+			return nil, errNamespaceNotSet
+		}
+		if !namespaceID.IsEmpty() && !namespaceName.IsEmpty() {
+			return nil, errBothNamespaceIDAndNameSet
+		}
+		if namespaceID != "" {
+			return ni.namespaceRegistry.GetNamespaceByID(namespaceID)
+		}
+		return ni.namespaceRegistry.GetNamespace(namespaceName)
+	case *adminservice.DescribeHistoryHostRequest:
+		// Special case for DescribeHistoryHost API which should run regardless of namespace state.
 		return nil, nil
 	case *adminservice.AddSearchAttributesRequest,
 		*adminservice.RemoveSearchAttributesRequest,
@@ -277,13 +352,13 @@ func (ni *NamespaceValidatorInterceptor) extractNamespaceFromTaskToken(req inter
 	if _, ok := req.(*workflowservice.RespondQueryTaskCompletedRequest); ok {
 		taskToken, err := ni.tokenSerializer.DeserializeQueryTaskToken(taskTokenBytes)
 		if err != nil {
-			return nil, err
+			return nil, errDeserializingToken
 		}
 		namespaceID = namespace.ID(taskToken.GetNamespaceId())
 	} else {
 		taskToken, err := ni.tokenSerializer.Deserialize(taskTokenBytes)
 		if err != nil {
-			return nil, err
+			return nil, errDeserializingToken
 		}
 		namespaceID = namespace.ID(taskToken.GetNamespaceId())
 	}
@@ -310,19 +385,20 @@ func (ni *NamespaceValidatorInterceptor) checkNamespaceState(namespaceEntry *nam
 		return nil
 	}
 
-	_, methodName := SplitMethodName(fullMethod)
-
-	allowedStates, allowedStatesDefined := allowedNamespaceStates[methodName]
-	if !allowedStatesDefined {
-		allowedStates = defaultAllowedNamespaceStates
+	allowedStates, allowedStatesPerAPIDefined := allowedNamespaceStatesPerAPI[fullMethod]
+	if !allowedStatesPerAPIDefined {
+		serviceName := api.ServiceName(fullMethod)
+		var allowedStatesPerServiceDefined bool
+		allowedStates, allowedStatesPerServiceDefined = allowedNamespaceStatesPerService[serviceName]
+		if !allowedStatesPerServiceDefined {
+			allowedStates = allowedNamespaceStatesDefault
+		}
 	}
-
 	for _, allowedState := range allowedStates {
 		if allowedState == namespaceEntry.State() {
 			return nil
 		}
 	}
-
 	return serviceerror.NewNamespaceInvalidState(namespaceEntry.Name().String(), namespaceEntry.State(), allowedStates)
 }
 
@@ -334,7 +410,7 @@ func (ni *NamespaceValidatorInterceptor) checkReplicationState(namespaceEntry *n
 		return nil
 	}
 
-	_, methodName := SplitMethodName(fullMethod)
+	methodName := api.MethodName(fullMethod)
 
 	if _, ok := allowedMethodsDuringHandover[methodName]; ok {
 		return nil

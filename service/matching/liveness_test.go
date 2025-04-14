@@ -29,98 +29,42 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
-
+	"github.com/stretchr/testify/assert"
 	"go.temporal.io/server/common/clock"
 )
 
-type (
-	livenessSuite struct {
-		suite.Suite
-		*require.Assertions
-
-		timeSource   *clock.EventTimeSource
-		ttl          time.Duration
-		shutdownFlag int32
-	}
-)
-
-func TestLivenessSuite(t *testing.T) {
-	s := new(livenessSuite)
-	suite.Run(t, s)
-}
-
-func (s *livenessSuite) SetupSuite() {
-}
-
-func (s *livenessSuite) TearDownSuite() {
-}
-
-func (s *livenessSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
-
-	s.ttl = 2 * time.Second
-	s.timeSource = clock.NewEventTimeSource()
-	s.timeSource.Update(time.Now())
-	atomic.StoreInt32(&s.shutdownFlag, 0)
-}
-
-func (s *livenessSuite) TearDownTest() {
-
-}
-
-func (s *livenessSuite) TestIsAlive_No() {
-	liveness := newLiveness(s.timeSource, s.ttl, func() { atomic.CompareAndSwapInt32(&s.shutdownFlag, 0, 1) })
-	s.timeSource.Update(time.Now().Add(s.ttl * 2))
-	alive := liveness.isAlive()
-	s.False(alive)
-}
-
-func (s *livenessSuite) TestIsAlive_Yes() {
-	liveness := newLiveness(s.timeSource, s.ttl, func() { atomic.CompareAndSwapInt32(&s.shutdownFlag, 0, 1) })
-	s.timeSource.Update(time.Now().Add(s.ttl / 2))
-	alive := liveness.isAlive()
-	s.True(alive)
-}
-
-func (s *livenessSuite) TestMarkAlive_Noop() {
-	liveness := newLiveness(s.timeSource, s.ttl, func() { atomic.CompareAndSwapInt32(&s.shutdownFlag, 0, 1) })
-	lastEventTime := liveness.lastEventTime
-	newEventTime := s.timeSource.Now().Add(-1)
-	liveness.markAlive(newEventTime)
-	s.Equal(lastEventTime, liveness.lastEventTime)
-}
-
-func (s *livenessSuite) TestMarkAlive_Updated() {
-	liveness := newLiveness(s.timeSource, s.ttl, func() { atomic.CompareAndSwapInt32(&s.shutdownFlag, 0, 1) })
-	newEventTime := s.timeSource.Now().Add(1)
-	liveness.markAlive(newEventTime)
-	s.Equal(newEventTime, liveness.lastEventTime)
-}
-
-func (s *livenessSuite) TestEventLoop_Noop() {
-	liveness := newLiveness(s.timeSource, s.ttl, func() { atomic.CompareAndSwapInt32(&s.shutdownFlag, 0, 1) })
+func TestLiveness(t *testing.T) {
+	t.Parallel()
+	var idleCalled atomic.Int32
+	ttl := func() time.Duration { return 2500 * time.Millisecond }
+	timeSource := clock.NewEventTimeSource()
+	liveness := newLiveness(timeSource, ttl, func() { idleCalled.Store(1) })
 	liveness.Start()
-
-	now := time.Now().Add(s.ttl * 4)
-	s.timeSource.Update(now)
-	liveness.markAlive(now)
-
-	timer := time.NewTimer(s.ttl * 2)
-	select {
-	case <-liveness.shutdownChan:
-		s.Fail("should not shutdown")
-	case <-timer.C:
-		s.Equal(int32(0), atomic.LoadInt32(&s.shutdownFlag))
-	}
+	timeSource.Advance(1 * time.Second)
+	assert.Equal(t, int32(0), idleCalled.Load())
+	liveness.markAlive()
+	timeSource.Advance(1 * time.Second)
+	assert.Equal(t, int32(0), idleCalled.Load())
+	liveness.markAlive()
+	timeSource.Advance(1 * time.Second)
+	assert.Equal(t, int32(0), idleCalled.Load())
+	timeSource.Advance(1 * time.Second)
+	assert.Equal(t, int32(0), idleCalled.Load())
+	timeSource.Advance(1 * time.Second)
+	assert.Equal(t, int32(1), idleCalled.Load())
+	liveness.Stop()
 }
 
-func (s *livenessSuite) TestEventLoop_Shutdown() {
-	liveness := newLiveness(s.timeSource, s.ttl, func() { atomic.CompareAndSwapInt32(&s.shutdownFlag, 0, 1) })
+func TestLivenessStop(t *testing.T) {
+	t.Parallel()
+	var idleCalled atomic.Int32
+	ttl := func() time.Duration { return 1000 * time.Millisecond }
+	timeSource := clock.NewEventTimeSource()
+	liveness := newLiveness(timeSource, ttl, func() { idleCalled.Store(1) })
 	liveness.Start()
-
-	s.timeSource.Update(time.Now().Add(s.ttl * 4))
-	<-liveness.shutdownChan
-	// pass
+	timeSource.Advance(500 * time.Millisecond)
+	liveness.Stop()
+	timeSource.Advance(1 * time.Second)
+	assert.Equal(t, int32(0), idleCalled.Load())
+	liveness.markAlive() // should not panic
 }

@@ -25,19 +25,20 @@
 package deleteexecutions
 
 import (
-	"fmt"
 	"time"
 
+	"go.temporal.io/sdk/log"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
-
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/service/worker/deletenamespace/errors"
 )
 
 const (
 	WorkflowName = "temporal-sys-delete-executions-workflow"
+	StatsQuery   = "stats"
 )
 
 type (
@@ -46,16 +47,33 @@ type (
 		NamespaceID namespace.ID
 		Config      DeleteExecutionsConfig
 
+		// Number of Workflow Executions to delete. Used in statistics computation.
+		// If not specified, then statistics are partially computed.
+		TotalExecutionsCount int
+
 		// To carry over progress results with ContinueAsNew.
 		PreviousSuccessCount int
 		PreviousErrorCount   int
 		ContinueAsNewCount   int
 		NextPageToken        []byte
+		// Time when the first run (in a chain of CANs) of DeleteExecutionsWorkflow has started.
+		FirstRunStartTime time.Time
 	}
 
 	DeleteExecutionsResult struct {
 		SuccessCount int
 		ErrorCount   int
+	}
+
+	DeleteExecutionsStats struct {
+		DeleteExecutionsResult
+		ContinueAsNewCount       int
+		TotalExecutionsCount     int
+		RemainingExecutionsCount int
+		AverageRPS               int
+		StartTime                time.Time
+		ApproximateTimeLeft      time.Duration
+		ApproximateEndTime       time.Time
 	}
 )
 
@@ -78,34 +96,67 @@ var (
 	}
 )
 
-func validateParams(params *DeleteExecutionsParams) error {
+func validateParams(ctx workflow.Context, params *DeleteExecutionsParams) error {
 	if params.NamespaceID.IsEmpty() {
-		return temporal.NewNonRetryableApplicationError("namespace ID is required", "", nil)
+		return errors.NewInvalidArgument("namespace ID is required", nil)
 	}
-
 	if params.Namespace.IsEmpty() {
-		return temporal.NewNonRetryableApplicationError("namespace is required", "", nil)
+		return errors.NewInvalidArgument("namespace is required", nil)
 	}
-
+	if params.FirstRunStartTime.IsZero() {
+		params.FirstRunStartTime = workflow.Now(ctx).UTC()
+	}
 	params.Config.ApplyDefaults()
-
 	return nil
 }
 
 func DeleteExecutionsWorkflow(ctx workflow.Context, params DeleteExecutionsParams) (DeleteExecutionsResult, error) {
-	logger := workflow.GetLogger(ctx)
-	logger.Info("Workflow started.", tag.WorkflowType(WorkflowName))
+	logger := log.With(
+		workflow.GetLogger(ctx),
+		tag.WorkflowType(WorkflowName),
+		tag.WorkflowNamespace(params.Namespace.String()),
+		tag.WorkflowNamespaceID(params.NamespaceID.String()))
+
+	logger.Info("Workflow started.")
 	result := DeleteExecutionsResult{
 		SuccessCount: params.PreviousSuccessCount,
 		ErrorCount:   params.PreviousErrorCount,
 	}
 
-	if err := validateParams(&params); err != nil {
+	if err := validateParams(ctx, &params); err != nil {
 		return result, err
 	}
 	logger.Info("Effective config.", tag.Value(params.Config.String()))
 
+	if err := workflow.SetQueryHandler(ctx, StatsQuery, func() (DeleteExecutionsStats, error) {
+		now := workflow.Now(ctx).UTC()
+		des := DeleteExecutionsStats{
+			DeleteExecutionsResult: result,
+			ContinueAsNewCount:     params.ContinueAsNewCount,
+			TotalExecutionsCount:   params.TotalExecutionsCount,
+			StartTime:              params.FirstRunStartTime,
+		}
+		if params.TotalExecutionsCount > 0 {
+			des.RemainingExecutionsCount = params.TotalExecutionsCount - (result.SuccessCount + result.ErrorCount)
+		}
+		secondsSinceStart := int(now.Sub(params.FirstRunStartTime).Seconds())
+		if secondsSinceStart > 0 {
+			des.AverageRPS = (result.SuccessCount + result.ErrorCount) / secondsSinceStart
+		}
+		if des.AverageRPS > 0 {
+			des.ApproximateTimeLeft = time.Duration(des.RemainingExecutionsCount/des.AverageRPS) * time.Second
+		}
+		des.ApproximateEndTime = now.Add(des.ApproximateTimeLeft)
+		return des, nil
+	}); err != nil {
+		return result, err
+	}
+
 	var a *Activities
+	var la *LocalActivities
+
+	ctx = workflow.WithTaskQueue(ctx, primitives.DeleteNamespaceActivityTQ)
+
 	nextPageToken := params.NextPageToken
 	runningDeleteExecutionsActivityCount := 0
 	runningDeleteExecutionsSelector := workflow.NewSelector(ctx)
@@ -128,14 +179,14 @@ func DeleteExecutionsWorkflow(ctx workflow.Context, params DeleteExecutionsParam
 		})
 
 		ctx2 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
-		err := workflow.ExecuteLocalActivity(ctx2, a.GetNextPageTokenActivity, GetNextPageTokenParams{
+		err := workflow.ExecuteLocalActivity(ctx2, la.GetNextPageTokenActivity, GetNextPageTokenParams{
 			NamespaceID:   params.NamespaceID,
 			Namespace:     params.Namespace,
 			PageSize:      params.Config.PageSize,
 			NextPageToken: nextPageToken,
 		}).Get(ctx, &nextPageToken)
 		if err != nil {
-			return result, fmt.Errorf("%w: GetNextPageTokenActivity: %v", errors.ErrUnableToExecuteActivity, err)
+			return result, err
 		}
 
 		runningDeleteExecutionsActivityCount++
@@ -155,7 +206,7 @@ func DeleteExecutionsWorkflow(ctx workflow.Context, params DeleteExecutionsParam
 			// Wait for one of running activities to complete.
 			runningDeleteExecutionsSelector.Select(ctx)
 			if lastDeleteExecutionsActivityErr != nil {
-				return result, fmt.Errorf("%w: DeleteExecutionsActivity: %v", errors.ErrUnableToExecuteActivity, lastDeleteExecutionsActivityErr)
+				return result, lastDeleteExecutionsActivityErr
 			}
 		}
 
@@ -168,16 +219,16 @@ func DeleteExecutionsWorkflow(ctx workflow.Context, params DeleteExecutionsParam
 	for runningDeleteExecutionsActivityCount > 0 {
 		runningDeleteExecutionsSelector.Select(ctx)
 		if lastDeleteExecutionsActivityErr != nil {
-			return result, fmt.Errorf("%w: DeleteExecutionsActivity: %v", errors.ErrUnableToExecuteActivity, lastDeleteExecutionsActivityErr)
+			return result, lastDeleteExecutionsActivityErr
 		}
 	}
 
 	// If nextPageToken is nil then there are no more workflow executions to delete.
 	if nextPageToken == nil {
 		if result.ErrorCount == 0 {
-			logger.Info("Successfully deleted workflow executions.", tag.WorkflowNamespace(params.Namespace.String()), tag.DeletedExecutionsCount(result.SuccessCount))
+			logger.Info("Successfully deleted workflow executions.", tag.DeletedExecutionsCount(result.SuccessCount))
 		} else {
-			logger.Error("Finish deleting workflow executions with some errors.", tag.WorkflowNamespace(params.Namespace.String()), tag.DeletedExecutionsCount(result.SuccessCount), tag.DeletedExecutionsErrorCount(result.ErrorCount))
+			logger.Error("Finish deleting workflow executions with some errors.", tag.DeletedExecutionsCount(result.SuccessCount), tag.DeletedExecutionsErrorCount(result.ErrorCount))
 		}
 		return result, nil
 	}
@@ -190,6 +241,6 @@ func DeleteExecutionsWorkflow(ctx workflow.Context, params DeleteExecutionsParam
 	params.ContinueAsNewCount++
 	params.NextPageToken = nextPageToken
 
-	logger.Info("There are more workflows to delete. Continuing workflow as new.", tag.WorkflowType(WorkflowName), tag.WorkflowNamespace(params.Namespace.String()), tag.DeletedExecutionsCount(result.SuccessCount), tag.DeletedExecutionsErrorCount(result.ErrorCount), tag.Counter(params.ContinueAsNewCount))
+	logger.Info("There are more workflows to delete. Continuing workflow as new.", tag.DeletedExecutionsCount(result.SuccessCount), tag.DeletedExecutionsErrorCount(result.ErrorCount), tag.Counter(params.ContinueAsNewCount))
 	return result, workflow.NewContinueAsNewError(ctx, DeleteExecutionsWorkflow, params)
 }

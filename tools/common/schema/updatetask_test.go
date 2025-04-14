@@ -31,10 +31,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"go.uber.org/zap/zaptest"
-
 	"go.temporal.io/server/common/log"
+	dbschemas "go.temporal.io/server/schema"
 	"go.temporal.io/server/tests/testutils"
+	"go.uber.org/zap/zaptest"
 )
 
 type UpdateTaskTestSuite struct {
@@ -70,31 +70,51 @@ func (s *UpdateTaskTestSuite) SetupSuite() {
 }
 
 func (s *UpdateTaskTestSuite) TestReadSchemaDir() {
-	ans, err := readSchemaDir(s.versionsDir, "0.5", "1.5", s.logger)
+	ans, err := readSchemaDir(os.DirFS(s.versionsDir), ".", "0.5", "1.5", s.logger)
 	s.NoError(err)
 	s.Equal([]string{"v1.5"}, ans)
 
-	ans, err = readSchemaDir(s.versionsDir, "0.4", "10.2", s.logger)
+	ans, err = readSchemaDir(os.DirFS(s.versionsDir), ".", "0.4", "10.2", s.logger)
 	s.NoError(err)
 	s.Equal([]string{"v0.5", "v1.5", "v2.5", "v2.5.1", "v2.5.2", "v2.7.17", "v3.5", "v10.2"}, ans)
 
-	ans, err = readSchemaDir(s.versionsDir, "0.5", "3.5", s.logger)
+	ans, err = readSchemaDir(os.DirFS(s.versionsDir), ".", "0.5", "3.5", s.logger)
 	s.NoError(err)
 	s.Equal([]string{"v1.5", "v2.5", "v2.5.1", "v2.5.2", "v2.7.17", "v3.5"}, ans)
 
 	// Start version found, no later versions. Return nothing.
-	ans, err = readSchemaDir(s.versionsDir, "10.2", "", s.logger)
+	ans, err = readSchemaDir(os.DirFS(s.versionsDir), ".", "10.2", "", s.logger)
 	s.NoError(err)
 	s.Equal(0, len(ans))
 
 	// Start version not found, no later versions. Return nothing.
-	ans, err = readSchemaDir(s.versionsDir, "10.3", "", s.logger)
+	ans, err = readSchemaDir(os.DirFS(s.versionsDir), ".", "10.3", "", s.logger)
 	s.NoError(err)
 	s.Equal(0, len(ans))
 
-	ans, err = readSchemaDir(s.versionsDir, "2.5.2", "", s.logger)
+	ans, err = readSchemaDir(os.DirFS(s.versionsDir), ".", "2.5.2", "", s.logger)
 	s.NoError(err)
 	s.Equal([]string{"v2.7.17", "v3.5", "v10.2"}, ans)
+}
+
+func (s *UpdateTaskTestSuite) TestReadSchemaDirEFS() {
+	fsys := dbschemas.Assets()
+	versionsDir := "mysql/v8/temporal/versioned"
+	versions := []string{"v1.0", "v1.1", "v1.2", "v1.3", "v1.4", "v1.5", "v1.6", "v1.7", "v1.8", "v1.9", "v1.10", "v1.11"}
+
+	ans, err := readSchemaDir(fsys, versionsDir, "1.0", "1.1", s.logger)
+	s.NoError(err)
+	s.Equal([]string{"v1.1"}, ans)
+
+	ans, err = readSchemaDir(fsys, versionsDir, "0.4", "1.11", s.logger)
+	s.NoError(err)
+	s.Equal(versions, ans)
+
+	ans, err = readSchemaDir(fsys, versionsDir, "0.5", "1.9", s.logger)
+	s.NoError(err)
+	s.Equal([]string{"v1.0", "v1.1", "v1.2", "v1.3", "v1.4", "v1.5", "v1.6", "v1.7", "v1.8", "v1.9"}, ans)
+
+	// Not running the tests with "no later versions" because they will break when we add more versions to the schema dir
 }
 
 func (s *UpdateTaskTestSuite) TestSortAndFilterVersionsWithEndLessThanStart_ReturnsError() {
@@ -105,28 +125,28 @@ func (s *UpdateTaskTestSuite) TestSortAndFilterVersionsWithEndLessThanStart_Retu
 
 func (s *UpdateTaskTestSuite) TestReadSchemaDirWithEndVersion_ReturnsErrorWhenNotFound() {
 	// No versions in range
-	_, err := readSchemaDir(s.versionsDir, "11.0", "11.2", s.logger)
+	_, err := readSchemaDir(os.DirFS(s.versionsDir), ".", "11.0", "11.2", s.logger)
 	s.Error(err)
 	assert.Containsf(s.T(), err.Error(), "specified but not found", "Unexpected error message")
 
 	// Versions in range, but nothing for v10.3
-	_, err = readSchemaDir(s.versionsDir, "0.5", "10.3", s.logger)
+	_, err = readSchemaDir(os.DirFS(s.versionsDir), ".", "0.5", "10.3", s.logger)
 	s.Error(err)
 	assert.Containsf(s.T(), err.Error(), "specified but not found", "Unexpected error message")
 }
 
 func (s *UpdateTaskTestSuite) TestReadSchemaDirWithSameStartAndEnd_ReturnsEmptyList() {
-	ans, err := readSchemaDir(s.versionsDir, "1.7", "1.7", s.logger)
+	ans, err := readSchemaDir(os.DirFS(s.versionsDir), ".", "1.7", "1.7", s.logger)
 	s.NoError(err)
 	assert.Equal(s.T(), 0, len(ans))
 }
 
 func (s *UpdateTaskTestSuite) TestReadSchemaDirWithEmptyDir_ReturnsError() {
-	_, err := readSchemaDir(s.emptyDir, "11.0", "", s.logger)
+	_, err := readSchemaDir(os.DirFS(s.emptyDir), ".", "11.0", "", s.logger)
 	s.Error(err)
 	assert.Containsf(s.T(), err.Error(), "contains no subDirs", "Unexpected error message")
 
-	_, err = readSchemaDir(s.emptyDir, "10.1", "", s.logger)
+	_, err = readSchemaDir(os.DirFS(s.emptyDir), ".", "10.1", "", s.logger)
 	s.Error(err)
 	assert.Containsf(s.T(), err.Error(), "contains no subDirs", "Unexpected error message")
 }
@@ -134,14 +154,33 @@ func (s *UpdateTaskTestSuite) TestReadSchemaDirWithEmptyDir_ReturnsError() {
 func (s *UpdateTaskTestSuite) TestReadManifest() {
 	tmpDir := testutils.MkdirTemp(s.T(), "", "update_schema_test")
 
-	input := `{
-		"CurrVersion": "0.4",
-		"MinCompatibleVersion": "0.1",
-		"Description": "base version of schema",
-		"SchemaUpdateCqlFiles": ["base1.cql", "base2.cql", "base3.cql"]
-	}`
-	files := []string{"base1.cql", "base2.cql", "base3.cql"}
-	s.runReadManifestTest(tmpDir, input, "0.4", "0.1", "base version of schema", files, false)
+	validCases := []struct {
+		schema string
+		files  []string
+	}{
+		{
+			schema: `{
+				"CurrVersion": "0.4",
+				"MinCompatibleVersion": "0.1",
+				"Description": "upgrade",
+				"SchemaUpdateCqlFiles": ["base1.cql", "base2.cql", "base3.cql"]
+			}`,
+
+			files: []string{"base1.cql", "base2.cql", "base3.cql"},
+		},
+		{
+			schema: `{
+				"CurrVersion": "0.4",
+				"MinCompatibleVersion": "0.1",
+				"Description": "upgrade",
+				"AllowNoCqlFiles": true
+			}`,
+			files: nil,
+		},
+	}
+	for _, c := range validCases {
+		s.runReadManifestTest(tmpDir, c.schema, "0.4", "0.1", "upgrade", c.files, false)
+	}
 
 	errInputs := []string{
 		`{
@@ -193,7 +232,7 @@ func (s *UpdateTaskTestSuite) runReadManifestTest(
 	err := os.WriteFile(file, []byte(input), os.FileMode(0644))
 	s.Nil(err)
 
-	m, err := readManifest(dir)
+	m, err := readManifest(os.DirFS(dir), ".")
 	if isErr {
 		s.Error(err)
 		return

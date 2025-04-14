@@ -26,27 +26,24 @@ package signalwithstartworkflow
 
 import (
 	"context"
-	"math/rand"
 	"testing"
-	"time"
 
-	"github.com/brianvoe/gofakeit/v6"
-	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"go.temporal.io/api/history/v1"
+	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/workflowservice/v1"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/api/persistence/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/testing/fakedata"
 	"go.temporal.io/server/service/history/api"
-	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/consts"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tests"
-	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
+	"go.uber.org/mock/gomock"
 )
 
 type (
@@ -55,13 +52,13 @@ type (
 		*require.Assertions
 
 		controller   *gomock.Controller
-		shardContext *shard.MockContext
+		shardContext *historyi.MockShardContext
 
 		namespaceID string
 		workflowID  string
 
-		currentContext      *workflow.MockContext
-		currentMutableState *workflow.MockMutableState
+		currentContext      *historyi.MockWorkflowContext
+		currentMutableState *historyi.MockMutableState
 		currentRunID        string
 	}
 )
@@ -72,7 +69,6 @@ func TestSignalWithStartWorkflowSuite(t *testing.T) {
 }
 
 func (s *signalWithStartWorkflowSuite) SetupSuite() {
-	rand.Seed(time.Now().UnixNano())
 }
 
 func (s *signalWithStartWorkflowSuite) TearDownSuite() {
@@ -82,13 +78,13 @@ func (s *signalWithStartWorkflowSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.shardContext = shard.NewMockContext(s.controller)
+	s.shardContext = historyi.NewMockShardContext(s.controller)
 
 	s.namespaceID = uuid.New().String()
 	s.workflowID = uuid.New().String()
 
-	s.currentContext = workflow.NewMockContext(s.controller)
-	s.currentMutableState = workflow.NewMockMutableState(s.controller)
+	s.currentContext = historyi.NewMockWorkflowContext(s.controller)
+	s.currentMutableState = historyi.NewMockMutableState(s.controller)
 	s.currentRunID = uuid.New().String()
 
 	s.shardContext.EXPECT().GetConfig().Return(tests.NewDynamicConfig()).AnyTimes()
@@ -97,10 +93,10 @@ func (s *signalWithStartWorkflowSuite) SetupTest() {
 	s.shardContext.EXPECT().GetTimeSource().Return(clock.NewRealTimeSource()).AnyTimes()
 
 	s.currentMutableState.EXPECT().GetNamespaceEntry().Return(tests.GlobalNamespaceEntry).AnyTimes()
-	s.currentMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
+	s.currentMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		WorkflowId: s.workflowID,
 	}).AnyTimes()
-	s.currentMutableState.EXPECT().GetExecutionState().Return(&persistence.WorkflowExecutionState{
+	s.currentMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: s.currentRunID,
 	}).AnyTimes()
 }
@@ -109,21 +105,43 @@ func (s *signalWithStartWorkflowSuite) TearDownTest() {
 	s.controller.Finish()
 }
 
-func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_Dedup() {
+func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_WorkflowCloseAttempted() {
 	ctx := context.Background()
-	currentWorkflowContext := api.NewWorkflowContext(
+	currentWorkflowLease := api.NewWorkflowLease(
 		s.currentContext,
 		wcache.NoopReleaseFn,
 		s.currentMutableState,
 	)
 	request := s.randomRequest()
 
+	s.currentMutableState.EXPECT().IsWorkflowCloseAttempted().Return(true)
+	s.currentMutableState.EXPECT().HasStartedWorkflowTask().Return(true)
+
+	err := signalWorkflow(
+		ctx,
+		s.shardContext,
+		currentWorkflowLease,
+		request,
+	)
+	s.Error(consts.ErrWorkflowClosing, err)
+}
+
+func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_Dedup() {
+	ctx := context.Background()
+	currentWorkflowLease := api.NewWorkflowLease(
+		s.currentContext,
+		wcache.NoopReleaseFn,
+		s.currentMutableState,
+	)
+	request := s.randomRequest()
+
+	s.currentMutableState.EXPECT().IsWorkflowCloseAttempted().Return(false)
 	s.currentMutableState.EXPECT().IsSignalRequested(request.GetRequestId()).Return(true)
 
 	err := signalWorkflow(
 		ctx,
 		s.shardContext,
-		currentWorkflowContext,
+		currentWorkflowLease,
 		request,
 	)
 	s.NoError(err)
@@ -131,13 +149,14 @@ func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_Dedup() {
 
 func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_NewWorkflowTask() {
 	ctx := context.Background()
-	currentWorkflowContext := api.NewWorkflowContext(
+	currentWorkflowLease := api.NewWorkflowLease(
 		s.currentContext,
 		wcache.NoopReleaseFn,
 		s.currentMutableState,
 	)
 	request := s.randomRequest()
 
+	s.currentMutableState.EXPECT().IsWorkflowCloseAttempted().Return(false)
 	s.currentMutableState.EXPECT().IsSignalRequested(request.GetRequestId()).Return(false)
 	s.currentMutableState.EXPECT().AddSignalRequested(request.GetRequestId())
 	s.currentMutableState.EXPECT().AddWorkflowExecutionSignaled(
@@ -145,15 +164,17 @@ func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_NewWorkflowTask() {
 		request.GetSignalInput(),
 		request.GetIdentity(),
 		request.GetHeader(),
-	).Return(&history.HistoryEvent{}, nil)
+		request.GetLinks(),
+	).Return(&historypb.HistoryEvent{}, nil)
 	s.currentMutableState.EXPECT().HasPendingWorkflowTask().Return(false)
-	s.currentMutableState.EXPECT().AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL).Return(&workflow.WorkflowTaskInfo{}, nil)
-	s.currentContext.EXPECT().UpdateWorkflowExecutionAsActive(ctx, gomock.Any()).Return(nil)
+	s.currentMutableState.EXPECT().HadOrHasWorkflowTask().Return(true)
+	s.currentMutableState.EXPECT().AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL).Return(&historyi.WorkflowTaskInfo{}, nil)
+	s.currentContext.EXPECT().UpdateWorkflowExecutionAsActive(ctx, s.shardContext).Return(nil)
 
 	err := signalWorkflow(
 		ctx,
 		s.shardContext,
-		currentWorkflowContext,
+		currentWorkflowLease,
 		request,
 	)
 	s.NoError(err)
@@ -161,13 +182,14 @@ func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_NewWorkflowTask() {
 
 func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_NoNewWorkflowTask() {
 	ctx := context.Background()
-	currentWorkflowContext := api.NewWorkflowContext(
+	currentWorkflowLease := api.NewWorkflowLease(
 		s.currentContext,
 		wcache.NoopReleaseFn,
 		s.currentMutableState,
 	)
 	request := s.randomRequest()
 
+	s.currentMutableState.EXPECT().IsWorkflowCloseAttempted().Return(false)
 	s.currentMutableState.EXPECT().IsSignalRequested(request.GetRequestId()).Return(false)
 	s.currentMutableState.EXPECT().AddSignalRequested(request.GetRequestId())
 	s.currentMutableState.EXPECT().AddWorkflowExecutionSignaled(
@@ -175,14 +197,15 @@ func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_NoNewWorkflowTask() {
 		request.GetSignalInput(),
 		request.GetIdentity(),
 		request.GetHeader(),
-	).Return(&history.HistoryEvent{}, nil)
+		request.GetLinks(),
+	).Return(&historypb.HistoryEvent{}, nil)
 	s.currentMutableState.EXPECT().HasPendingWorkflowTask().Return(true)
-	s.currentContext.EXPECT().UpdateWorkflowExecutionAsActive(ctx, gomock.Any()).Return(nil)
+	s.currentContext.EXPECT().UpdateWorkflowExecutionAsActive(ctx, s.shardContext).Return(nil)
 
 	err := signalWorkflow(
 		ctx,
 		s.shardContext,
-		currentWorkflowContext,
+		currentWorkflowLease,
 		request,
 	)
 	s.NoError(err)
@@ -190,6 +213,6 @@ func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_NoNewWorkflowTask() {
 
 func (s *signalWithStartWorkflowSuite) randomRequest() *workflowservice.SignalWithStartWorkflowExecutionRequest {
 	var request workflowservice.SignalWithStartWorkflowExecutionRequest
-	_ = gofakeit.Struct(&request)
+	_ = fakedata.FakeStruct(&request)
 	return &request
 }

@@ -25,54 +25,100 @@
 package tdbg
 
 import (
+	"fmt"
+	"io"
+	"os"
+	"strings"
+
 	"github.com/urfave/cli/v2"
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/service/history/tasks"
+	"go.uber.org/multierr"
 )
 
-var commands = []*cli.Command{
-	{
-		Name:        "workflow",
-		Aliases:     []string{"w"},
-		Usage:       "Run admin operation on workflow",
-		Subcommands: newAdminWorkflowCommands(),
-	},
-	{
-		Name:        "shard",
-		Aliases:     []string{"s"},
-		Usage:       "Run admin operation on specific shard",
-		Subcommands: newAdminShardManagementCommands(),
-	},
-	{
-		Name:        "history-host",
-		Aliases:     []string{"h"},
-		Usage:       "Run admin operation on history host",
-		Subcommands: newAdminHistoryHostCommands(),
-	},
-	{
-		Name:        "taskqueue",
-		Aliases:     []string{"tq"},
-		Usage:       "Run admin operation on taskQueue",
-		Subcommands: newAdminTaskQueueCommands(),
-	},
-	{
-		Name:        "membership",
-		Aliases:     []string{"m"},
-		Usage:       "Run admin operation on membership",
-		Subcommands: newAdminMembershipCommands(),
-	},
-	{
-		Name:        "dlq",
-		Usage:       "Run admin operation on DLQ",
-		Subcommands: newAdminDLQCommands(),
-	},
-	{
-		Name:        "decode",
-		Usage:       "Decode payload",
-		Subcommands: newDecodeCommands(),
-	},
+func getCommands(
+	clientFactory ClientFactory,
+	dlqServiceProvider *DLQServiceProvider,
+	taskCategoryRegistry tasks.TaskCategoryRegistry,
+	prompterFactory PrompterFactory,
+	taskBlobEncoder TaskBlobEncoder,
+) []*cli.Command {
+	return []*cli.Command{
+		{
+			Name:        "workflow",
+			Aliases:     []string{"w"},
+			Usage:       "Run admin operation on workflow",
+			Subcommands: newAdminWorkflowCommands(clientFactory, prompterFactory),
+		},
+		{
+			Name:        "shard",
+			Aliases:     []string{"s"},
+			Usage:       "Run admin operation on specific shard",
+			Subcommands: newAdminShardManagementCommands(clientFactory, taskCategoryRegistry),
+		},
+		{
+			Name:        "history-host",
+			Aliases:     []string{"hh"},
+			Usage:       "Run admin operation on history host",
+			Subcommands: newAdminHistoryHostCommands(clientFactory),
+		},
+		{
+			Name:        "taskqueue",
+			Aliases:     []string{"tq"},
+			Usage:       "Run admin operation on taskQueue",
+			Subcommands: newAdminTaskQueueCommands(clientFactory),
+		},
+		{
+			Name:        "membership",
+			Aliases:     []string{"m"},
+			Usage:       "Run admin operation on membership",
+			Subcommands: newAdminMembershipCommands(clientFactory),
+		},
+		{
+			Name:        "dlq",
+			Usage:       "Run admin operation on DLQ",
+			Subcommands: newAdminDLQCommands(dlqServiceProvider, taskCategoryRegistry),
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:  FlagDLQVersion,
+					Usage: "Version of DLQ to manage, options: v1, v2",
+					Value: "v2",
+				},
+			},
+		},
+		{
+			Name:        "decode",
+			Usage:       "Decode payload",
+			Subcommands: newDecodeCommands(taskBlobEncoder),
+		},
+	}
 }
 
-func newAdminWorkflowCommands() []*cli.Command {
+func newAdminWorkflowCommands(clientFactory ClientFactory, prompterFactory PrompterFactory) []*cli.Command {
 	return []*cli.Command{
+		{
+			Name:  "import",
+			Usage: "import workflow history to database",
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:    FlagWorkflowID,
+					Aliases: FlagWorkflowIDAlias,
+					Usage:   "Workflow ID",
+				},
+				&cli.StringFlag{
+					Name:    FlagRunID,
+					Aliases: FlagRunIDAlias,
+					Usage:   "Run ID",
+				},
+				&cli.StringFlag{
+					Name:  FlagInputFilename,
+					Usage: "input file",
+				}},
+			Action: func(c *cli.Context) error {
+				return AdminImportWorkflow(c, clientFactory)
+			},
+		},
 		{
 			Name:  "show",
 			Usage: "show workflow history from database",
@@ -109,7 +155,7 @@ func newAdminWorkflowCommands() []*cli.Command {
 					Usage: "output file",
 				}},
 			Action: func(c *cli.Context) error {
-				return AdminShowWorkflow(c)
+				return AdminShowWorkflow(c, clientFactory)
 			},
 		},
 		{
@@ -129,7 +175,7 @@ func newAdminWorkflowCommands() []*cli.Command {
 				},
 			},
 			Action: func(c *cli.Context) error {
-				return AdminDescribeWorkflow(c)
+				return AdminDescribeWorkflow(c, clientFactory)
 			},
 		},
 		{
@@ -149,7 +195,7 @@ func newAdminWorkflowCommands() []*cli.Command {
 				},
 			},
 			Action: func(c *cli.Context) error {
-				return AdminRefreshWorkflowTasks(c)
+				return AdminRefreshWorkflowTasks(c, clientFactory)
 			},
 		},
 		{
@@ -169,7 +215,27 @@ func newAdminWorkflowCommands() []*cli.Command {
 				},
 			},
 			Action: func(c *cli.Context) error {
-				return AdminRebuildMutableState(c)
+				return AdminRebuildMutableState(c, clientFactory)
+			},
+		},
+		{
+			Name:    "replicate",
+			Aliases: []string{},
+			Usage:   "Force replicate a workflow by generating replication tasks",
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:    FlagWorkflowID,
+					Aliases: FlagWorkflowIDAlias,
+					Usage:   "Workflow ID",
+				},
+				&cli.StringFlag{
+					Name:    FlagRunID,
+					Aliases: FlagRunIDAlias,
+					Usage:   "Run ID",
+				},
+			},
+			Action: func(c *cli.Context) error {
+				return AdminReplicateWorkflow(c, clientFactory)
 			},
 		},
 		{
@@ -189,13 +255,18 @@ func newAdminWorkflowCommands() []*cli.Command {
 				},
 			},
 			Action: func(c *cli.Context) error {
-				return AdminDeleteWorkflow(c)
+				return AdminDeleteWorkflow(c, clientFactory, prompterFactory(c))
 			},
 		},
 	}
 }
 
-func newAdminShardManagementCommands() []*cli.Command {
+func newAdminShardManagementCommands(clientFactory ClientFactory, taskCategoryRegistry tasks.TaskCategoryRegistry) []*cli.Command {
+	// There are two different categories for the task type, and they have slightly
+	// different semantics. The first is the task category for the list-tasks command,
+	// which is required and does not have a default. The second is the task category
+	// for the remove-task command, which is optional and defaults to transfer.
+	taskCategoryFlag := getTaskCategoryFlag(taskCategoryRegistry)
 	return []*cli.Command{
 		{
 			Name:    "describe",
@@ -208,12 +279,12 @@ func newAdminShardManagementCommands() []*cli.Command {
 				},
 			},
 			Action: func(c *cli.Context) error {
-				return AdminDescribeShard(c)
+				return AdminDescribeShard(c, clientFactory)
 			},
 		},
 		{
 			Name:  "list-tasks",
-			Usage: "List tasks for given shard ID and task type",
+			Usage: "List tasks for given shard ID and task category",
 			Flags: []cli.Flag{
 				&cli.BoolFlag{
 					Name:  FlagMore,
@@ -221,7 +292,7 @@ func newAdminShardManagementCommands() []*cli.Command {
 				},
 				&cli.IntFlag{
 					Name:  FlagPageSize,
-					Value: 10,
+					Value: defaultPageSize,
 					Usage: "Result page size",
 				},
 				&cli.IntFlag{
@@ -229,11 +300,7 @@ func newAdminShardManagementCommands() []*cli.Command {
 					Usage:    "The ID of the shard",
 					Required: true,
 				},
-				&cli.StringFlag{
-					Name:     FlagTaskType,
-					Usage:    "Task type: transfer, timer, replication, visibility",
-					Required: true,
-				},
+				taskCategoryFlag,
 				&cli.Int64Flag{
 					Name:  FlagMinTaskID,
 					Usage: "Inclusive min taskID. Optional for transfer, replication, visibility tasks. Can't be specified for timer task",
@@ -244,25 +311,26 @@ func newAdminShardManagementCommands() []*cli.Command {
 				},
 				&cli.StringFlag{
 					Name: FlagMinVisibilityTimestamp,
-					Usage: "Inclusive min task fire timestamp. Optional for timer task. Can't be specified for transfer, replication, visibility tasks." +
+					Usage: "Inclusive min task fire timestamp. Optional for timer task. Can't be specified for transfer, replication, visibility tasks. " +
 						"Supported formats are '2006-01-02T15:04:05+07:00', raw UnixNano and " +
 						"time range (N<duration>), where 0 < N < 1000000 and duration (full-notation/short-notation) can be second/s, " +
 						"minute/m, hour/h, day/d, week/w, month/M or year/y. For example, '15minute' or '15m' implies last 15 minutes.",
 				},
 				&cli.StringFlag{
 					Name: FlagMaxVisibilityTimestamp,
-					Usage: "Exclusive max task fire timestamp. Required for timer task. Can't be specified for transfer, replication, visibility tasks." +
+					Usage: "Exclusive max task fire timestamp. Required for timer task. Can't be specified for transfer, replication, visibility tasks. " +
 						"Supported formats are '2006-01-02T15:04:05+07:00', raw UnixNano and " +
 						"time range (N<duration>), where 0 < N < 1000000 and duration (full-notation/short-notation) can be second/s, " +
 						"minute/m, hour/h, day/d, week/w, month/M or year/y. For example, '15minute' or '15m' implies last 15 minutes.",
 				},
 				&cli.BoolFlag{
 					Name:  FlagPrintJSON,
+					Value: true,
 					Usage: "Print in raw json format",
 				},
 			},
 			Action: func(c *cli.Context) error {
-				return AdminListShardTasks(c)
+				return AdminListShardTasks(c, clientFactory, taskCategoryRegistry)
 			},
 		},
 		{
@@ -275,40 +343,52 @@ func newAdminShardManagementCommands() []*cli.Command {
 				},
 			},
 			Action: func(c *cli.Context) error {
-				return AdminShardManagement(c)
+				return AdminShardManagement(c, clientFactory)
 			},
 		},
 		{
 			Name:    "remove-task",
 			Aliases: []string{"rmtk"},
-			Usage:   "remove a task based on shardId, task type, taskId, and task visibility timestamp",
+			Usage:   "remove a task based on shardId, task category, taskId, and task visibility timestamp",
 			Flags: []cli.Flag{
 				&cli.IntFlag{
-					Name:  FlagShardID,
-					Usage: "shardId",
+					Name:     FlagShardID,
+					Usage:    "shardId",
+					Required: true,
 				},
 				&cli.Int64Flag{
-					Name:  FlagTaskID,
-					Usage: "taskId",
+					Name:     FlagTaskID,
+					Usage:    "taskId",
+					Required: true,
 				},
-				&cli.StringFlag{
-					Name:  FlagTaskType,
-					Value: "transfer",
-					Usage: "Task type: transfer (default), timer, replication",
-				},
+				taskCategoryFlag,
 				&cli.Int64Flag{
 					Name:  FlagTaskVisibilityTimestamp,
 					Usage: "task visibility timestamp in nano (required for removing timer task)",
 				},
 			},
 			Action: func(c *cli.Context) error {
-				return AdminRemoveTask(c)
+				return AdminRemoveTask(c, clientFactory, taskCategoryRegistry)
 			},
 		},
 	}
 }
 
-func newAdminMembershipCommands() []*cli.Command {
+func getTaskCategoryFlag(taskCategoryRegistry tasks.TaskCategoryRegistry) *cli.StringFlag {
+	categories := taskCategoryRegistry.GetCategories()
+	options := make([]string, 0, len(categories))
+	for _, category := range categories {
+		options = append(options, category.Name())
+	}
+	flag := &cli.StringFlag{
+		Name:     FlagTaskCategory,
+		Usage:    "Task category: " + strings.Join(options, ", "),
+		Required: true,
+	}
+	return flag
+}
+
+func newAdminMembershipCommands(clientFactory ClientFactory) []*cli.Command {
 	return []*cli.Command{
 		{
 			Name:  "list-gossip",
@@ -321,7 +401,7 @@ func newAdminMembershipCommands() []*cli.Command {
 				},
 			},
 			Action: func(c *cli.Context) error {
-				return AdminListGossipMembers(c)
+				return AdminListGossipMembers(c, clientFactory)
 			},
 		},
 		{
@@ -342,13 +422,13 @@ func newAdminMembershipCommands() []*cli.Command {
 				},
 			},
 			Action: func(c *cli.Context) error {
-				return AdminListClusterMembers(c)
+				return AdminListClusterMembers(c, clientFactory)
 			},
 		},
 	}
 }
 
-func newAdminHistoryHostCommands() []*cli.Command {
+func newAdminHistoryHostCommands(clientFactory ClientFactory) []*cli.Command {
 	return []*cli.Command{
 		{
 			Name:    "describe",
@@ -374,7 +454,7 @@ func newAdminHistoryHostCommands() []*cli.Command {
 				},
 			},
 			Action: func(c *cli.Context) error {
-				return AdminDescribeHistoryHost(c)
+				return AdminDescribeHistoryHost(c, clientFactory)
 			},
 		},
 		{
@@ -402,7 +482,7 @@ func newAdminHistoryHostCommands() []*cli.Command {
 	}
 }
 
-func newAdminTaskQueueCommands() []*cli.Command {
+func newAdminTaskQueueCommands(clientFactory ClientFactory) []*cli.Command {
 	return []*cli.Command{
 		{
 			Name:  "list-tasks",
@@ -441,104 +521,278 @@ func newAdminTaskQueueCommands() []*cli.Command {
 				},
 			},
 			Action: func(c *cli.Context) error {
-				return AdminListTaskQueueTasks(c)
+				return AdminListTaskQueueTasks(c, clientFactory)
+			},
+		},
+		{
+			Name:  "describe-task-queue-partition",
+			Usage: "Describe information related to a task queue partition",
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:  FlagNamespaceID,
+					Usage: "NamespaceId",
+					Value: "default",
+				},
+				&cli.StringFlag{
+					Name:     FlagTaskQueue,
+					Usage:    "Task Queue name",
+					Required: true,
+				},
+				&cli.StringFlag{
+					Name:  FlagTaskQueueType,
+					Value: "TASK_QUEUE_TYPE_WORKFLOW",
+					Usage: "Task Queue type: activity, workflow, nexus (experimental)",
+				},
+				&cli.Int64Flag{
+					Name:  FlagPartitionID,
+					Usage: "Partition ID",
+					Value: 0,
+				},
+				&cli.StringFlag{
+					Name:  FlagStickyName,
+					Usage: "Sticky Name for a task queue partition, if present",
+					Value: "",
+				},
+				&cli.StringSliceFlag{
+					Name:  FlagBuildIDs,
+					Value: &cli.StringSlice{},
+					Usage: "Build IDs",
+				},
+				&cli.BoolFlag{
+					Name:  FlagUnversioned,
+					Usage: "Unversioned task queue partition",
+					Value: true,
+				},
+				&cli.BoolFlag{
+					Name:  FlagAllActive,
+					Usage: "All active task queue versions",
+					Value: true,
+				},
+			},
+			Action: func(c *cli.Context) error {
+				return AdminDescribeTaskQueuePartition(c, clientFactory)
+			},
+		},
+		{
+			Name:  "force-unload-task-queue-partition",
+			Usage: "Forcefully unload a task queue partition",
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:  FlagNamespaceID,
+					Usage: "NamespaceId",
+					Value: "default",
+				},
+				&cli.StringFlag{
+					Name:     FlagTaskQueue,
+					Usage:    "Task Queue name",
+					Required: true,
+				},
+				&cli.StringFlag{
+					Name:  FlagTaskQueueType,
+					Value: "TASK_QUEUE_TYPE_WORKFLOW",
+					Usage: "Task Queue type: activity, workflow, nexus (experimental)",
+				},
+				&cli.Int64Flag{
+					Name:  FlagPartitionID,
+					Usage: "Partition ID",
+					Value: 0,
+				},
+				&cli.StringFlag{
+					Name:  FlagStickyName,
+					Usage: "Sticky Name for a task queue partition, if present",
+					Value: "",
+				},
+			},
+			Action: func(c *cli.Context) error {
+				return AdminForceUnloadTaskQueuePartition(c, clientFactory)
 			},
 		},
 	}
 }
 
-func newAdminDLQCommands() []*cli.Command {
+func newAdminDLQCommands(
+	dlqServiceProvider *DLQServiceProvider,
+	taskCategoryRegistry tasks.TaskCategoryRegistry,
+) []*cli.Command {
 	return []*cli.Command{
 		{
 			Name:    "read",
 			Aliases: []string{"r"},
 			Usage:   "Read DLQ Messages",
-			Flags: []cli.Flag{
-				&cli.StringFlag{
-					Name:  FlagDLQType,
-					Usage: "Type of DLQ to manage. (Options: namespace, history)",
-				},
-				&cli.StringFlag{
-					Name:  FlagCluster,
-					Usage: "Source cluster",
-				},
+			Flags: append(
+				getDLQFlags(taskCategoryRegistry),
 				&cli.IntFlag{
-					Name:  FlagShardID,
-					Usage: "ShardId",
-				},
-				&cli.IntFlag{
-					Name:  FlagMaxMessageCount,
-					Usage: "Max message size to fetch",
-				},
-				&cli.IntFlag{
-					Name:  FlagLastMessageID,
-					Usage: "The upper boundary of the read message",
+					Name: FlagMaxMessageCount,
+					Usage: fmt.Sprintf(
+						"Max message size to fetch, defaults to %d for v2 and nothing for v1",
+						dlqV2DefaultMaxMessageCount,
+					),
 				},
 				&cli.StringFlag{
 					Name:  FlagOutputFilename,
 					Usage: "Output file to write to, if not provided output is written to stdout",
 				},
-			},
+				&cli.IntFlag{
+					Name:  FlagPageSize,
+					Usage: "Page size to use when reading messages from the DB, v2 only",
+					Value: defaultPageSize,
+				},
+			),
 			Action: func(c *cli.Context) error {
-				return AdminGetDLQMessages(c)
+				ac, err := dlqServiceProvider.GetDLQService(c)
+				if err != nil {
+					return err
+				}
+				return ac.ReadMessages(c)
 			},
 		},
 		{
 			Name:    "purge",
 			Aliases: []string{"p"},
 			Usage:   "Delete DLQ messages with equal or smaller ids than the provided task id",
-			Flags: []cli.Flag{
-				&cli.StringFlag{
-					Name:  FlagDLQType,
-					Usage: "Type of DLQ to manage. (Options: namespace, history)",
-				},
-				&cli.StringFlag{
-					Name:  FlagCluster,
-					Usage: "Source cluster",
-				},
-				&cli.IntFlag{
-					Name:  FlagShardID,
-					Usage: "ShardId",
-				},
-				&cli.IntFlag{
-					Name:  FlagLastMessageID,
-					Usage: "The upper boundary of the read message",
-				},
-			},
+			Flags:   getDLQFlags(taskCategoryRegistry),
 			Action: func(c *cli.Context) error {
-				return AdminPurgeDLQMessages(c)
+				ac, err := dlqServiceProvider.GetDLQService(c)
+				if err != nil {
+					return err
+				}
+				return ac.PurgeMessages(c)
 			},
 		},
 		{
-			Name:    "merge",
-			Aliases: []string{"m"},
-			Usage:   "Merge DLQ messages with equal or smaller ids than the provided task id",
+			Name:        "merge",
+			Aliases:     []string{"m"},
+			Usage:       "Merge DLQ messages with equal or smaller ids than the provided task id",
+			Description: "This command will delete messages after they've been re-enqueued if using v2.",
+			Flags: append(getDLQFlags(taskCategoryRegistry),
+				&cli.IntFlag{
+					Name: FlagPageSize,
+					Usage: "Batch size to use when purging messages from the DB, v2 only. Will use server default if " +
+						"not provided.",
+				},
+			),
+			Action: func(c *cli.Context) error {
+				ac, err := dlqServiceProvider.GetDLQService(c)
+				if err != nil {
+					return err
+				}
+				return ac.MergeMessages(c)
+			},
+		},
+		{
+			Name:    "list",
+			Aliases: []string{"l"},
+			Usage:   "List all DLQs, only for v2",
 			Flags: []cli.Flag{
 				&cli.StringFlag{
-					Name:  FlagDLQType,
-					Usage: "Type of DLQ to manage. (Options: namespace, history)",
-				},
-				&cli.StringFlag{
-					Name:  FlagCluster,
-					Usage: "Source cluster",
+					Name:  FlagOutputFilename,
+					Usage: "Output file to write to, if not provided output is written to stdout",
 				},
 				&cli.IntFlag{
-					Name:  FlagShardID,
-					Usage: "ShardId",
+					Name:  FlagPageSize,
+					Usage: "Page size to use when listing queues from the DB",
+					Value: defaultPageSize,
 				},
-				&cli.IntFlag{
-					Name:  FlagLastMessageID,
-					Usage: "The upper boundary of the read message",
+				&cli.BoolFlag{
+					Name:  FlagPrintJSON,
+					Usage: "Print in raw json format",
 				},
 			},
 			Action: func(c *cli.Context) error {
-				return AdminMergeDLQMessages(c)
+				ac, err := dlqServiceProvider.GetDLQService(c)
+				if err != nil {
+					return err
+				}
+				return ac.ListQueues(c)
+			},
+		},
+		{
+			Name:        "job",
+			Usage:       "Run admin operation on DLQ Job",
+			Subcommands: newAdminDLQJobCommands(dlqServiceProvider),
+		},
+	}
+}
+
+func newAdminDLQJobCommands(
+	dlqServiceProvider *DLQServiceProvider,
+) []*cli.Command {
+	return []*cli.Command{
+		{
+			Name:        "describe",
+			Aliases:     []string{"d"},
+			Usage:       "Get details of the DLQ job with provided job token",
+			Description: "This command will get details of the DLQ job with provided job token if using v2",
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:     FlagJobToken,
+					Usage:    "Token of the DLQ job. This token will be printed in the output of merge and purge commands",
+					Required: true,
+				},
+			},
+			Action: func(c *cli.Context) error {
+				ac := dlqServiceProvider.GetDLQJobService()
+				return ac.DescribeJob(c)
+			},
+		},
+		{
+			Name:        "cancel",
+			Aliases:     []string{"c"},
+			Usage:       "Cancel the DLQ job with provided job token",
+			Description: "This command will cancel the DLQ job with provided job token",
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:     FlagJobToken,
+					Usage:    "Token of the DLQ job. This token will be printed in the output of merge and purge commands",
+					Required: true,
+				},
+				&cli.StringFlag{
+					Name:     FlagReason,
+					Usage:    "Reason for job cancellation",
+					Required: true,
+				},
+			},
+			Action: func(c *cli.Context) error {
+				ac := dlqServiceProvider.GetDLQJobService()
+				return ac.CancelJob(c)
 			},
 		},
 	}
 }
 
-func newDecodeCommands() []*cli.Command {
+func getDLQFlags(taskCategoryRegistry tasks.TaskCategoryRegistry) []cli.Flag {
+	categoriesString := getCategoriesList(taskCategoryRegistry)
+	return []cli.Flag{
+		&cli.StringFlag{
+			Name: FlagDLQType,
+			Usage: fmt.Sprintf(
+				"Type of DLQ to manage, options: namespace, history for v1; %s for v2",
+				categoriesString,
+			),
+		},
+		&cli.StringFlag{
+			Name:  FlagCluster,
+			Usage: "Source cluster",
+		},
+		&cli.IntFlag{
+			Name:  FlagShardID,
+			Usage: "ShardId, v1 only",
+		},
+		&cli.IntFlag{
+			Name: FlagLastMessageID,
+			Usage: "The upper boundary of messages to operate on. If not provided, all messages will be operated on. " +
+				"However, you will be prompted for confirmation unless the --yes flag is also provided.",
+		},
+		&cli.StringFlag{
+			Name:  FlagTargetCluster,
+			Usage: "Target cluster, v2 only. If not provided, current cluster is used.",
+		},
+	}
+}
+
+func newDecodeCommands(
+	taskBlobEncoder TaskBlobEncoder,
+) []*cli.Command {
 	return []*cli.Command{
 		{
 			Name:  "proto",
@@ -580,6 +834,54 @@ func newDecodeCommands() []*cli.Command {
 			},
 			Action: func(c *cli.Context) error {
 				return AdminDecodeBase64(c)
+			},
+		},
+		{
+			Name:  "task",
+			Usage: "Decode a history task blob into a JSON message.",
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:     FlagBinaryFile,
+					Usage:    "file with data in binary format.",
+					Required: true,
+				},
+				&cli.IntFlag{
+					Name:     FlagTaskCategoryID,
+					Usage:    "Task category ID (see the history/tasks package)",
+					Required: true,
+				},
+				&cli.StringFlag{
+					Name:     FlagEncoding,
+					Usage:    "Encoding type (see temporal.api.enums.v1.EncodingType)",
+					Required: true,
+				},
+			},
+			Action: func(c *cli.Context) (err error) {
+				encoding := c.String(FlagEncoding)
+				encodingType, err := enumspb.EncodingTypeFromString(encoding)
+				if err != nil {
+					return err
+				}
+				taskCategoryID := c.Int(FlagTaskCategoryID)
+				file, err := os.Open(c.String(FlagBinaryFile))
+				if err != nil {
+					return fmt.Errorf("failed to open file: %w", err)
+				}
+				defer func() {
+					err = multierr.Combine(err, file.Close())
+				}()
+				b, err := io.ReadAll(file)
+				if err != nil {
+					return fmt.Errorf("failed to read file: %w", err)
+				}
+				blob := commonpb.DataBlob{
+					EncodingType: encodingType,
+					Data:         b,
+				}
+				if err := taskBlobEncoder.Encode(c.App.Writer, taskCategoryID, &blob); err != nil {
+					return fmt.Errorf("failed to decode task blob: %w", err)
+				}
+				return nil
 			},
 		},
 	}

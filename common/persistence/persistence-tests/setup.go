@@ -29,19 +29,17 @@ import (
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
-	"go.temporal.io/server/environment"
+	"go.temporal.io/server/temporal/environment"
 )
 
 const (
-	testMySQLUser       = "temporal"
-	testMySQLPassword   = "temporal"
-	testMySQLSchemaDir  = "schema/mysql/v57"
-	testMySQL8SchemaDir = "schema/mysql/v8"
+	testMySQLUser      = "temporal"
+	testMySQLPassword  = "temporal"
+	testMySQLSchemaDir = "schema/mysql/v8"
 
-	testPostgreSQLUser        = "temporal"
-	testPostgreSQLPassword    = "temporal"
-	testPostgreSQLSchemaDir   = "schema/postgresql/v96"
-	testPostgreSQL12SchemaDir = "schema/postgresql/v12"
+	testPostgreSQLUser      = "temporal"
+	testPostgreSQLPassword  = "temporal"
+	testPostgreSQLSchemaDir = "schema/postgresql/v12"
 
 	testSQLiteUser      = ""
 	testSQLitePassword  = ""
@@ -63,19 +61,6 @@ func GetMySQLTestClusterOption() *TestBaseOptions {
 	}
 }
 
-// GetMySQL8TestClusterOption return test options
-func GetMySQL8TestClusterOption() *TestBaseOptions {
-	return &TestBaseOptions{
-		SQLDBPluginName: mysql.PluginNameV8,
-		DBUsername:      testMySQLUser,
-		DBPassword:      testMySQLPassword,
-		DBHost:          environment.GetMySQLAddress(),
-		DBPort:          environment.GetMySQLPort(),
-		SchemaDir:       testMySQL8SchemaDir,
-		StoreType:       config.StoreTypeSQL,
-	}
-}
-
 // GetPostgreSQLTestClusterOption return test options
 func GetPostgreSQLTestClusterOption() *TestBaseOptions {
 	return &TestBaseOptions{
@@ -89,26 +74,26 @@ func GetPostgreSQLTestClusterOption() *TestBaseOptions {
 	}
 }
 
-// GetPostgreSQL12TestClusterOption return test options
-func GetPostgreSQL12TestClusterOption() *TestBaseOptions {
+// GetPostgreSQLPGXTestClusterOption return test options
+func GetPostgreSQLPGXTestClusterOption() *TestBaseOptions {
 	return &TestBaseOptions{
-		SQLDBPluginName: postgresql.PluginName,
+		SQLDBPluginName: postgresql.PluginNamePGX,
 		DBUsername:      testPostgreSQLUser,
 		DBPassword:      testPostgreSQLPassword,
 		DBHost:          environment.GetPostgreSQLAddress(),
 		DBPort:          environment.GetPostgreSQLPort(),
-		SchemaDir:       testPostgreSQL12SchemaDir,
+		SchemaDir:       testPostgreSQLSchemaDir,
 		StoreType:       config.StoreTypeSQL,
 	}
 }
 
-// GetSQLiteTestClusterOption return test options
+// GetSQLiteFileTestClusterOption return test options
 func GetSQLiteFileTestClusterOption() *TestBaseOptions {
 	return &TestBaseOptions{
 		SQLDBPluginName:   sqlite.PluginName,
 		DBUsername:        testSQLiteUser,
 		DBPassword:        testSQLitePassword,
-		DBHost:            environment.Localhost,
+		DBHost:            environment.GetLocalhostIP(),
 		DBPort:            0,
 		SchemaDir:         testSQLiteSchemaDir,
 		StoreType:         config.StoreTypeSQL,
@@ -116,13 +101,13 @@ func GetSQLiteFileTestClusterOption() *TestBaseOptions {
 	}
 }
 
-// GetSQLiteTestClusterOption return test options
+// GetSQLiteMemoryTestClusterOption return test options
 func GetSQLiteMemoryTestClusterOption() *TestBaseOptions {
 	return &TestBaseOptions{
 		SQLDBPluginName:   sqlite.PluginName,
 		DBUsername:        testSQLiteUser,
 		DBPassword:        testSQLitePassword,
-		DBHost:            environment.Localhost,
+		DBHost:            environment.GetLocalhostIP(),
 		DBPort:            0,
 		SchemaDir:         "",
 		StoreType:         config.StoreTypeSQL,

@@ -52,7 +52,11 @@ CREATE TABLE current_executions(
 	create_request_id VARCHAR(255) NOT NULL,
 	state INT NOT NULL,
 	status INT NOT NULL,
+	start_time TIMESTAMP NULL,
 	last_write_version BIGINT NOT NULL,
+	-- `data` contains the WorkflowExecutionState (same as in `executions.state` above)
+	data MEDIUMBLOB NOT NULL,
+	data_encoding VARCHAR(16) NOT NULL DEFAULT '',
 	PRIMARY KEY (shard_id, namespace_id, workflow_id)
 );
 
@@ -78,6 +82,7 @@ CREATE TABLE tasks (
 	PRIMARY KEY (range_hash, task_queue_id, task_id)
 );
 
+-- Stores ephemeral task queue information such as ack levels and expiry times
 CREATE TABLE task_queues (
 	range_hash INT UNSIGNED NOT NULL,
 	task_queue_id VARBINARY(272) NOT NULL,
@@ -86,6 +91,24 @@ CREATE TABLE task_queues (
 	data MEDIUMBLOB NOT NULL,
 	data_encoding VARCHAR(16) NOT NULL,
 	PRIMARY KEY (range_hash, task_queue_id)
+);
+
+-- Stores task queue information such as user provided versioning data
+CREATE TABLE task_queue_user_data (
+  namespace_id    BINARY(16) NOT NULL,
+  task_queue_name VARCHAR(255) NOT NULL,
+  data            MEDIUMBLOB NOT NULL,  -- temporal.server.api.persistence.v1.TaskQueueUserData
+  data_encoding   VARCHAR(16) NOT NULL, -- Encoding type used for serialization, in practice this should always be proto3
+  version         BIGINT NOT NULL,      -- Version of this row, used for optimistic concurrency
+  PRIMARY KEY (namespace_id, task_queue_name)
+);
+
+-- Stores a mapping between build ids and task queues
+CREATE TABLE build_id_to_task_queue (
+  namespace_id    BINARY(16) NOT NULL,
+  build_id        VARCHAR(255) NOT NULL,
+  task_queue_name VARCHAR(255) NOT NULL,
+  PRIMARY KEY (namespace_id, build_id, task_queue_name)
 );
 
 CREATE TABLE history_immediate_tasks(
@@ -227,6 +250,20 @@ CREATE TABLE signals_requested_sets (
 	PRIMARY KEY (shard_id, namespace_id, workflow_id, run_id, signal_id)
 );
 
+CREATE TABLE chasm_node_maps (
+  shard_id INT NOT NULL,
+  namespace_id BINARY(16) NOT NULL,
+  workflow_id VARCHAR(255) NOT NULL,
+  run_id BINARY(16) NOT NULL,
+  chasm_path BINARY(1536) NOT NULL,
+--
+  metadata MEDIUMBLOB NOT NULL,
+  metadata_encoding VARCHAR(16),
+  data MEDIUMBLOB,
+  data_encoding VARCHAR(16),
+  PRIMARY KEY (shard_id, namespace_id, workflow_id, run_id, chasm_path)
+);
+
 -- history eventsV2: history_node stores history event data
 CREATE TABLE history_node (
 	shard_id INT NOT NULL,
@@ -293,4 +330,43 @@ CREATE TABLE cluster_membership
 --	INDEX (last_heartbeat),
 --	INDEX (record_expiry),
 	PRIMARY KEY (membership_partition, host_id)
+);
+
+CREATE TABLE queues (
+    queue_type INT NOT NULL,
+    queue_name VARCHAR(255) NOT NULL,
+    metadata_payload MEDIUMBLOB NOT NULL,
+    metadata_encoding VARCHAR(16) NOT NULL,
+    PRIMARY KEY (queue_type, queue_name)
+);
+
+CREATE TABLE queue_messages (
+    queue_type INT NOT NULL,
+    queue_name VARCHAR(255) NOT NULL,
+	queue_partition BIGINT NOT NULL,
+    message_id BIGINT NOT NULL,
+    message_payload MEDIUMBLOB NOT NULL,
+    message_encoding VARCHAR(16) NOT NULL,
+    PRIMARY KEY (
+        queue_type,
+        queue_name,
+        queue_partition,
+        message_id
+    )
+);
+
+-- Stores information about Nexus endpoints
+CREATE TABLE nexus_endpoints (
+    id             BINARY(16) NOT NULL,
+    data           MEDIUMBLOB NOT NULL,  -- temporal.server.api.persistence.v1.NexusEndpoint
+    data_encoding  VARCHAR(16) NOT NULL, -- Encoding type used for serialization, in practice this should always be proto3
+    version        BIGINT NOT NULL,      -- Version of this row, used for optimistic concurrency
+    PRIMARY KEY (id)
+);
+
+-- Stores the version of Nexus endpoints table as a whole
+CREATE TABLE nexus_endpoints_partition_status (
+    id      INT NOT NULL DEFAULT 0 CHECK (id = 0),  -- Restrict the primary key to a single value since it will only be used for enpoints
+    version BIGINT NOT NULL,                        -- Version of the nexus_endpoints table
+    PRIMARY KEY (id)
 );

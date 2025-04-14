@@ -29,8 +29,8 @@ import (
 
 	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/service/history/consts"
+	historyi "go.temporal.io/server/service/history/interfaces"
 )
 
 var (
@@ -38,26 +38,6 @@ var (
 )
 
 type (
-	QueryRegistry interface {
-		HasBufferedQuery() bool
-		GetBufferedIDs() []string
-		HasCompletedQuery() bool
-		GetCompletedIDs() []string
-		HasUnblockedQuery() bool
-		GetUnblockedIDs() []string
-		HasFailedQuery() bool
-		GetFailedIDs() []string
-
-		GetQueryCompletionCh(string) (<-chan struct{}, error)
-		GetQueryInput(string) (*querypb.WorkflowQuery, error)
-		GetCompletionState(string) (*QueryCompletionState, error)
-
-		BufferQuery(queryInput *querypb.WorkflowQuery) (string, <-chan struct{})
-		SetCompletionState(string, *QueryCompletionState) error
-		RemoveQuery(id string)
-		Clear()
-	}
-
 	queryRegistryImpl struct {
 		sync.RWMutex
 
@@ -68,7 +48,7 @@ type (
 	}
 )
 
-func NewQueryRegistry() QueryRegistry {
+func NewQueryRegistry() historyi.QueryRegistry {
 	return &queryRegistryImpl{
 		buffered:  make(map[string]query),
 		completed: make(map[string]query),
@@ -145,7 +125,7 @@ func (r *queryRegistryImpl) GetQueryInput(id string) (*querypb.WorkflowQuery, er
 	return q.getQueryInput(), nil
 }
 
-func (r *queryRegistryImpl) GetCompletionState(id string) (*QueryCompletionState, error) {
+func (r *queryRegistryImpl) GetCompletionState(id string) (*historyi.QueryCompletionState, error) {
 	r.RLock()
 	defer r.RUnlock()
 	q, err := r.getQueryNoLock(id)
@@ -164,7 +144,7 @@ func (r *queryRegistryImpl) BufferQuery(queryInput *querypb.WorkflowQuery) (stri
 	return id, q.getCompletionCh()
 }
 
-func (r *queryRegistryImpl) SetCompletionState(id string, completionState *QueryCompletionState) error {
+func (r *queryRegistryImpl) SetCompletionState(id string, completionState *historyi.QueryCompletionState) error {
 	r.Lock()
 	defer r.Unlock()
 	q, ok := r.buffered[id]
@@ -199,7 +179,7 @@ func (r *queryRegistryImpl) Clear() {
 	r.Lock()
 	defer r.Unlock()
 	for id, q := range r.buffered {
-		_ = q.setCompletionState(&QueryCompletionState{
+		_ = q.setCompletionState(&historyi.QueryCompletionState{
 			Type: QueryCompletionTypeFailed,
 			Err:  consts.ErrBufferedQueryCleared,
 		})

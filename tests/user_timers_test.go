@@ -28,40 +28,50 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"testing"
 	"time"
 
 	"github.com/pborman/uuid"
+	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
-	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/tests/testcore"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-func (s *integrationSuite) TestSequential_UserTimers() {
-	id := "integration-sequential-user-timers-test"
-	wt := "integration-sequential-user-timers-test-type"
-	tl := "integration-sequential-user-timers-test-taskqueue"
+type UserTimersTestSuite struct {
+	testcore.FunctionalTestSuite
+}
+
+func TestUserTimersTestSuite(t *testing.T) {
+	t.Parallel()
+	suite.Run(t, new(UserTimersTestSuite))
+}
+
+func (s *UserTimersTestSuite) TestUserTimers_Sequential() {
+	id := "functional-user-timers-sequential-test"
+	wt := "functional-user-timers-sequential-test-type"
+	tl := "functional-user-timers-sequential-test-taskqueue"
 	identity := "worker1"
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
-		Namespace:           s.namespace,
+		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
 
-	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -69,8 +79,7 @@ func (s *integrationSuite) TestSequential_UserTimers() {
 	workflowComplete := false
 	timerCount := int32(4)
 	timerCounter := int32(0)
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		if timerCounter < timerCount {
 			timerCounter++
 			buf := new(bytes.Buffer)
@@ -79,7 +88,7 @@ func (s *integrationSuite) TestSequential_UserTimers() {
 				CommandType: enumspb.COMMAND_TYPE_START_TIMER,
 				Attributes: &commandpb.Command_StartTimerCommandAttributes{StartTimerCommandAttributes: &commandpb.StartTimerCommandAttributes{
 					TimerId:            fmt.Sprintf("timer-id-%d", timerCounter),
-					StartToFireTimeout: timestamp.DurationPtr(1 * time.Second),
+					StartToFireTimeout: durationpb.New(1 * time.Second),
 				}},
 			}}, nil
 		}
@@ -93,10 +102,10 @@ func (s *integrationSuite) TestSequential_UserTimers() {
 		}}, nil
 	}
 
-	poller := &TaskPoller{
-		Engine:              s.engine,
-		Namespace:           s.namespace,
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+	poller := &testcore.TaskPoller{
+		Client:              s.FrontendClient(),
+		Namespace:           s.Namespace().String(),
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
 		ActivityTaskHandler: nil,
@@ -105,13 +114,13 @@ func (s *integrationSuite) TestSequential_UserTimers() {
 	}
 
 	for i := 0; i < 4; i++ {
-		_, err := poller.PollAndProcessWorkflowTask(false, false)
+		_, err := poller.PollAndProcessWorkflowTask()
 		s.Logger.Info("PollAndProcessWorkflowTask: completed")
 		s.NoError(err)
 	}
 
 	s.False(workflowComplete)
-	_, err := poller.PollAndProcessWorkflowTask(true, false)
+	_, err := poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory)
 	s.NoError(err)
 	s.True(workflowComplete)
 }

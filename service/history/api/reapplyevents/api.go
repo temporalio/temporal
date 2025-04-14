@@ -28,10 +28,8 @@ import (
 	"context"
 
 	"github.com/google/uuid"
-	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log/tag"
@@ -39,8 +37,8 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/api"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/ndc"
-	"go.temporal.io/server/service/history/shard"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
@@ -50,42 +48,44 @@ func Invoke(
 	workflowID string,
 	runID string,
 	reapplyEvents []*historypb.HistoryEvent,
-	shard shard.Context,
+	shardContext historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	workflowResetter ndc.WorkflowResetter,
 	eventsReapplier ndc.EventsReapplier,
 ) error {
-	if shard.GetConfig().SkipReapplicationByNamespaceID(namespaceUUID.String()) {
+	if shardContext.GetConfig().SkipReapplicationByNamespaceID(namespaceUUID) {
 		return nil
 	}
 
-	namespaceEntry, err := api.GetActiveNamespace(shard, namespace.ID(namespaceUUID.String()))
+	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(namespaceUUID.String()))
 	if err != nil {
 		return err
 	}
 	namespaceID := namespaceEntry.ID()
+	isGlobalNamespace := namespaceEntry.IsGlobalNamespace()
 
 	return api.GetAndUpdateWorkflowWithNew(
 		ctx,
 		nil,
-		api.BypassMutableStateConsistencyPredicate,
 		definition.NewWorkflowKey(
 			namespaceID.String(),
 			workflowID,
 			"",
 		),
-		func(workflowContext api.WorkflowContext) (*api.UpdateWorkflowAction, error) {
-			context := workflowContext.GetContext()
-			mutableState := workflowContext.GetMutableState()
+		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
+			context := workflowLease.GetContext()
+			mutableState := workflowLease.GetMutableState()
 			// Filter out reapply event from the same cluster
 			toReapplyEvents := make([]*historypb.HistoryEvent, 0, len(reapplyEvents))
-			lastWriteVersion, err := mutableState.GetLastWriteVersion()
-			if err != nil {
-				return nil, err
-			}
+
+			clusterMetadata := shardContext.GetClusterMetadata()
+			currentCluster := clusterMetadata.GetCurrentClusterName()
 
 			for _, event := range reapplyEvents {
-				if event.GetVersion() == lastWriteVersion {
+				if clusterMetadata.ClusterNameForFailoverVersion(
+					isGlobalNamespace,
+					event.GetVersion(),
+				) == currentCluster {
 					// The reapply is from the same cluster. Ignoring.
 					continue
 				}
@@ -109,16 +109,16 @@ func Invoke(
 				// to accept events to be reapplied
 				baseRunID := mutableState.GetExecutionState().GetRunId()
 				resetRunID := uuid.New()
-				baseRebuildLastEventID := mutableState.GetLastWorkflowTaskStartedEventID()
+				baseRebuildLastEventID := mutableState.GetLastCompletedWorkflowTaskStartedEventId()
 
 				// TODO when https://github.com/uber/cadence/issues/2420 is finished, remove this block,
 				//  since cannot reapply event to a finished workflow which had no workflow tasks started
 				if baseRebuildLastEventID == common.EmptyEventID {
-					shard.GetLogger().Warn("cannot reapply event to a finished workflow with no workflow task",
+					shardContext.GetLogger().Warn("cannot reapply event to a finished workflow with no workflow task",
 						tag.WorkflowNamespaceID(namespaceID.String()),
 						tag.WorkflowID(workflowID),
 					)
-					shard.GetMetricsHandler().Counter(metrics.EventReapplySkippedCount.GetMetricName()).Record(
+					metrics.EventReapplySkippedCount.With(shardContext.GetMetricsHandler()).Record(
 						1,
 						metrics.OperationTag(metrics.HistoryReapplyEventsScope))
 					return &api.UpdateWorkflowAction{
@@ -138,6 +138,12 @@ func Invoke(
 				}
 				baseCurrentBranchToken := baseCurrentVersionHistory.GetBranchToken()
 				baseNextEventID := mutableState.GetNextEventID()
+				baseWorkflow := ndc.NewWorkflow(
+					shardContext.GetClusterMetadata(),
+					context,
+					mutableState,
+					wcache.NoopReleaseFn,
+				)
 
 				err = workflowResetter.ResetWorkflow(
 					ctx,
@@ -150,22 +156,17 @@ func Invoke(
 					baseNextEventID,
 					resetRunID.String(),
 					uuid.New().String(),
-					ndc.NewWorkflow(
-						ctx,
-						shard.GetNamespaceRegistry(),
-						shard.GetClusterMetadata(),
-						context,
-						mutableState,
-						wcache.NoopReleaseFn,
-					),
+					baseWorkflow,
+					baseWorkflow,
 					ndc.EventsReapplicationResetWorkflowReason,
 					toReapplyEvents,
-					enumspb.RESET_REAPPLY_TYPE_SIGNAL,
+					nil,
+					false, // allowResetWithPendingChildren
 				)
 				switch err.(type) {
 				case *serviceerror.InvalidArgument:
 					// no-op. Usually this is due to reset workflow with pending child workflows
-					shard.GetLogger().Warn("Cannot reset workflow. Ignoring reapply events.", tag.Error(err))
+					shardContext.GetLogger().Warn("Cannot reset workflow. Ignoring reapply events.", tag.Error(err))
 				case nil:
 					// no-op
 				default:
@@ -177,22 +178,15 @@ func Invoke(
 				}, nil
 			}
 
-			postActions := &api.UpdateWorkflowAction{
-				Noop:               false,
-				CreateWorkflowTask: true,
-			}
-			if mutableState.IsWorkflowPendingOnWorkflowTaskBackoff() {
-				// Do not create workflow task when the workflow has first workflow task backoff and execution is not started yet
-				postActions.CreateWorkflowTask = false
-			}
 			reappliedEvents, err := eventsReapplier.ReapplyEvents(
 				ctx,
 				mutableState,
+				context.UpdateRegistry(ctx),
 				toReapplyEvents,
 				runID,
 			)
 			if err != nil {
-				shard.GetLogger().Error("failed to re-apply stale events", tag.Error(err))
+				shardContext.GetLogger().Error("failed to re-apply stale events", tag.Error(err))
 				return nil, err
 			}
 			if len(reappliedEvents) == 0 {
@@ -201,10 +195,13 @@ func Invoke(
 					CreateWorkflowTask: false,
 				}, nil
 			}
-			return postActions, nil
+			return &api.UpdateWorkflowAction{
+				Noop:               false,
+				CreateWorkflowTask: false,
+			}, nil
 		},
 		nil,
-		shard,
+		shardContext,
 		workflowConsistencyChecker,
 	)
 }

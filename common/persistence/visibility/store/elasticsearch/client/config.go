@@ -25,9 +25,13 @@
 package client
 
 import (
+	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
 	"time"
+
+	"go.temporal.io/server/common/auth"
 )
 
 const (
@@ -41,6 +45,7 @@ type (
 	Config struct {
 		Version                      string                    `yaml:"version"`
 		URL                          url.URL                   `yaml:"url"`
+		URLs                         []url.URL                 `yaml:"urls"`
 		Username                     string                    `yaml:"username"`
 		Password                     string                    `yaml:"password"`
 		Indices                      map[string]string         `yaml:"indices"`
@@ -49,6 +54,9 @@ type (
 		CloseIdleConnectionsInterval time.Duration             `yaml:"closeIdleConnectionsInterval"`
 		EnableSniff                  bool                      `yaml:"enableSniff"`
 		EnableHealthcheck            bool                      `yaml:"enableHealthcheck"`
+		TLS                          *auth.TLS                 `yaml:"tls"`
+		// httpClient is the awsHttpClient to be used for creating esClient
+		httpClient *http.Client
 	}
 
 	// ESAWSRequestSigningConfig represents configuration for signing ES requests to AWS
@@ -94,17 +102,26 @@ func (cfg *Config) GetSecondaryVisibilityIndex() string {
 	return cfg.Indices[SecondaryVisibilityAppName]
 }
 
-func (cfg *Config) Validate(storeName string) error {
+func (cfg *Config) SetHttpClient(httpClient *http.Client) {
+	cfg.httpClient = httpClient
+}
+
+func (cfg *Config) GetHttpClient() *http.Client {
 	if cfg == nil {
-		return fmt.Errorf("persistence config: advanced visibility datastore %q: must provide config for \"elasticsearch\"", storeName)
+		return nil
 	}
+	return cfg.httpClient
+}
 
+func (cfg *Config) Validate() error {
+	if cfg == nil {
+		return errors.New("elasticsearch config: config not found")
+	}
 	if len(cfg.Indices) < 1 {
-		return fmt.Errorf("persistence config: advanced visibility datastore %q: missing indices", storeName)
-
+		return errors.New("elasticsearch config: missing indices")
 	}
 	if cfg.Indices[VisibilityAppName] == "" {
-		return fmt.Errorf("persistence config: advanced visibility datastore %q indices configuration: missing %q key", storeName, VisibilityAppName)
+		return fmt.Errorf("elasticsearch config: indices configuration: missing %q key", VisibilityAppName)
 	}
 	return nil
 }

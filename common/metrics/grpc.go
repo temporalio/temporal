@@ -28,10 +28,9 @@ import (
 	"context"
 	"sync"
 
-	metricspb "go.temporal.io/server/api/metrics/v1"
+	metricsspb "go.temporal.io/server/api/metrics/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )
@@ -85,7 +84,7 @@ func NewClientMetricsTrailerPropagatorInterceptor(logger log.Logger) grpc.UnaryC
 
 		for _, baggageString := range baggageStrings {
 			baggageBytes := []byte(baggageString)
-			metricsBaggage := &metricspb.Baggage{}
+			metricsBaggage := &metricsspb.Baggage{}
 			unmarshalErr := metricsBaggage.Unmarshal(baggageBytes)
 			if unmarshalErr != nil {
 				logger.Error("unable to unmarshal metrics baggage from trailer", tag.Error(unmarshalErr))
@@ -123,7 +122,7 @@ func NewServerMetricsTrailerPropagatorInterceptor(logger log.Logger) grpc.UnaryS
 			return resp, err
 		}
 
-		metricsBaggage := &metricspb.Baggage{CountersInt: make(map[string]int64)}
+		metricsBaggage := &metricsspb.Baggage{CountersInt: make(map[string]int64)}
 
 		metricsCtx.Lock()
 		for k, v := range metricsCtx.CountersInt {

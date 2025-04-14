@@ -25,17 +25,17 @@
 package queues
 
 import (
-	"golang.org/x/exp/slices"
+	"slices"
 
-	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/tasks"
 )
 
+var _ Action = (*actionSliceCount)(nil)
+
 type (
 	actionSliceCount struct {
-		attributes   *AlertAttributesSlicesCount
-		monitor      Monitor
-		completionFn actionCompletionFn
+		attributes *AlertAttributesSlicesCount
+		monitor    Monitor
 	}
 
 	compactCandidate struct {
@@ -47,18 +47,18 @@ type (
 func newSliceCountAction(
 	attributes *AlertAttributesSlicesCount,
 	monitor Monitor,
-	completionFn actionCompletionFn,
-) Action {
+) *actionSliceCount {
 	return &actionSliceCount{
-		attributes:   attributes,
-		monitor:      monitor,
-		completionFn: completionFn,
+		attributes: attributes,
+		monitor:    monitor,
 	}
 }
 
-func (a *actionSliceCount) Run(readerGroup *ReaderGroup) {
-	defer a.completionFn()
+func (a *actionSliceCount) Name() string {
+	return "slice-count"
+}
 
+func (a *actionSliceCount) Run(readerGroup *ReaderGroup) {
 	// first check if the alert is still valid
 	if a.monitor.GetTotalSliceCount() <= a.attributes.CriticalSliceCount {
 		return
@@ -77,8 +77,8 @@ func (a *actionSliceCount) Run(readerGroup *ReaderGroup) {
 	// have to compact (force merge) slices to reduce slice count
 	preferredSliceCount := int(float64(a.attributes.CriticalSliceCount) * targetLoadFactor)
 
-	isDefaultReader := func(readerID int32) bool { return readerID == DefaultReaderId }
-	isNotDefaultReader := func(readerID int32) bool { return !isDefaultReader(readerID) }
+	isDefaultReader := func(readerID int64) bool { return readerID == DefaultReaderId }
+	isNotDefaultReader := func(readerID int64) bool { return !isDefaultReader(readerID) }
 	isUniversalPredicate := func(s Slice) bool { return tasks.IsUniverisalPredicate(s.Scope().Predicate) }
 	isNotUniversalPredicate := func(s Slice) bool { return !isUniversalPredicate(s) }
 
@@ -132,8 +132,8 @@ func (a *actionSliceCount) Run(readerGroup *ReaderGroup) {
 }
 
 func (a *actionSliceCount) findAndCompactCandidates(
-	readers map[int32]Reader,
-	readerPredicate func(int32) bool,
+	readers map[int64]Reader,
+	readerPredicate func(int64) bool,
 	slicePredicate SlicePredicate,
 	targetSliceCount int,
 ) bool {
@@ -201,12 +201,12 @@ func (a *actionSliceCount) pickCompactCandidates(
 	candidates []compactCandidate,
 	numSliceToCompact int,
 ) map[Slice]struct{} {
-	slices.SortFunc(candidates, func(this, that compactCandidate) bool {
-		return this.distance.CompareTo(that.distance) < 0
+	slices.SortFunc(candidates, func(this, that compactCandidate) int {
+		return this.distance.CompareTo(that.distance)
 	})
 
 	sliceToCompact := make(map[Slice]struct{}, numSliceToCompact)
-	for _, candidate := range candidates[:util.Min(numSliceToCompact, len(candidates))] {
+	for _, candidate := range candidates[:min(numSliceToCompact, len(candidates))] {
 		sliceToCompact[candidate.slice] = struct{}{}
 	}
 

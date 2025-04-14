@@ -26,10 +26,9 @@ package cassandra
 
 import (
 	"github.com/stretchr/testify/require"
-
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/environment"
+	"go.temporal.io/server/temporal/environment"
 	"go.temporal.io/server/tools/common/schema/test"
 )
 

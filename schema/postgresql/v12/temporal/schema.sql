@@ -53,7 +53,11 @@ CREATE TABLE current_executions(
   state INTEGER NOT NULL,
   status INTEGER NOT NULL,
   start_version BIGINT NOT NULL DEFAULT 0,
+  start_time TIMESTAMP NULL,
   last_write_version BIGINT NOT NULL,
+  -- `data` contains the WorkflowExecutionState (same as in `executions.state` above)
+  data BYTEA NULL,
+  data_encoding VARCHAR(16) NOT NULL DEFAULT '',
   PRIMARY KEY (shard_id, namespace_id, workflow_id)
 );
 
@@ -79,6 +83,7 @@ CREATE TABLE tasks (
   PRIMARY KEY (range_hash, task_queue_id, task_id)
 );
 
+-- Stores ephemeral task queue information such as ack levels and expiry times
 CREATE TABLE task_queues (
   range_hash BIGINT NOT NULL,
   task_queue_id BYTEA NOT NULL,
@@ -87,6 +92,24 @@ CREATE TABLE task_queues (
   data BYTEA NOT NULL,
   data_encoding VARCHAR(16) NOT NULL,
   PRIMARY KEY (range_hash, task_queue_id)
+);
+
+-- Stores task queue information such as user provided versioning data
+CREATE TABLE task_queue_user_data (
+  namespace_id    BYTEA NOT NULL,
+  task_queue_name VARCHAR(255) NOT NULL,
+  data            BYTEA NOT NULL,       -- temporal.server.api.persistence.v1.TaskQueueUserData
+  data_encoding   VARCHAR(16) NOT NULL, -- Encoding type used for serialization, in practice this should always be proto3
+  version         BIGINT NOT NULL,      -- Version of this row, used for optimistic concurrency
+  PRIMARY KEY (namespace_id, task_queue_name)
+);
+
+-- Stores a mapping between build ids and task queues
+CREATE TABLE build_id_to_task_queue (
+  namespace_id    BYTEA NOT NULL,
+  build_id        VARCHAR(255) NOT NULL,
+  task_queue_name VARCHAR(255) NOT NULL,
+  PRIMARY KEY (namespace_id, build_id, task_queue_name)
 );
 
 CREATE TABLE history_immediate_tasks(
@@ -228,6 +251,20 @@ CREATE TABLE signals_requested_sets (
   PRIMARY KEY (shard_id, namespace_id, workflow_id, run_id, signal_id)
 );
 
+CREATE TABLE chasm_node_maps (
+  shard_id INTEGER NOT NULL,
+  namespace_id BYTEA NOT NULL,
+  workflow_id VARCHAR(255) NOT NULL,
+  run_id BYTEA NOT NULL,
+  chasm_path BYTEA NOT NULL,
+--
+  metadata BYTEA NOT NULL,
+  metadata_encoding VARCHAR(16),
+  data BYTEA,
+  data_encoding VARCHAR(16),
+  PRIMARY KEY (shard_id, namespace_id, workflow_id, run_id, chasm_path)
+);
+
 -- history eventsV2: history_node stores history event data
 CREATE TABLE history_node (
   shard_id       INTEGER NOT NULL,
@@ -289,6 +326,45 @@ CREATE TABLE cluster_membership
     last_heartbeat       TIMESTAMP DEFAULT '1970-01-01 00:00:01+00:00',
     record_expiry        TIMESTAMP DEFAULT '1970-01-01 00:00:01+00:00',
     PRIMARY KEY (membership_partition, host_id)
+);
+
+CREATE TABLE queues (
+    queue_type INT NOT NULL,
+    queue_name VARCHAR(255) NOT NULL,
+    metadata_payload BYTEA NOT NULL,
+    metadata_encoding VARCHAR(16) NOT NULL,
+    PRIMARY KEY (queue_type, queue_name)
+);
+
+CREATE TABLE queue_messages (
+    queue_type INT NOT NULL,
+    queue_name VARCHAR(255) NOT NULL,
+    queue_partition BIGINT NOT NULL,
+    message_id BIGINT NOT NULL,
+    message_payload BYTEA NOT NULL,
+    message_encoding VARCHAR(16) NOT NULL,
+    PRIMARY KEY (
+        queue_type,
+        queue_name,
+        queue_partition,
+        message_id
+    )
+);
+
+-- Stores information about Nexus endpoints
+CREATE TABLE nexus_endpoints (
+    id            BYTEA NOT NULL,
+    data          BYTEA NOT NULL,  -- temporal.server.api.persistence.v1.NexusEndpoint
+    data_encoding VARCHAR(16) NOT NULL, -- Encoding type used for serialization, in practice this should always be proto3
+    version       BIGINT NOT NULL,      -- Version of this row, used for optimistic concurrency
+    PRIMARY KEY (id)
+);
+
+-- Stores the version of Nexus endpoints table as a whole
+CREATE TABLE nexus_endpoints_partition_status (
+    id      INT NOT NULL PRIMARY KEY DEFAULT 0,
+    version BIGINT NOT NULL,                -- Version of the nexus_endpoints table
+    CONSTRAINT only_one_row CHECK (id = 0)  -- Restrict the table to a single row since it will only be used for endpoints
 );
 
 CREATE UNIQUE INDEX cm_idx_rolehost ON cluster_membership (role, host_id);

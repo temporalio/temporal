@@ -184,6 +184,7 @@ func (d *ShardStore) AssertShardOwnership(
 	ctx context.Context,
 	request *p.AssertShardOwnershipRequest,
 ) error {
+	// AssertShardOwnership is not implemented for cassandra shard store
 	return nil
 }
 

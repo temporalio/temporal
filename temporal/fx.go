@@ -26,8 +26,11 @@ package temporal
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"strings"
+	"maps"
+	"os"
+	"sync/atomic"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -38,26 +41,25 @@ import (
 	otelsdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.10.0"
 	"go.opentelemetry.io/otel/trace"
-	"go.uber.org/fx"
-	"go.uber.org/fx/fxevent"
-	"google.golang.org/grpc"
-
+	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/client"
+	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/membership"
+	"go.temporal.io/server/common/membership/ringpop"
+	"go.temporal.io/server/common/membership/static"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/cassandra"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/sql"
+	"go.temporal.io/server/common/persistence/visibility"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/pprof"
 	"go.temporal.io/server/common/primitives"
@@ -69,17 +71,24 @@ import (
 	"go.temporal.io/server/service/frontend"
 	"go.temporal.io/server/service/history"
 	"go.temporal.io/server/service/history/replication"
-	"go.temporal.io/server/service/history/workflow"
+	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/matching"
 	"go.temporal.io/server/service/worker"
+	"go.uber.org/fx"
+	"go.uber.org/fx/fxevent"
+	expmaps "golang.org/x/exp/maps"
+	"google.golang.org/grpc"
+)
+
+var (
+	clusterMetadataInitErr           = errors.New("failed to initialize current cluster metadata")
+	missingCurrentClusterMetadataErr = errors.New("missing current cluster metadata under clusterMetadata.ClusterInformation")
+	missingServiceInStaticHosts      = errors.New("hosts are missing in static hosts for service: ")
 )
 
 type (
-	ServiceStopFn func()
-
 	ServicesGroupOut struct {
 		fx.Out
-
 		Services *ServicesMetadata `group:"services"`
 	}
 
@@ -89,19 +98,22 @@ type (
 	}
 
 	ServicesMetadata struct {
-		App           *fx.App // Added for info. ServiceStopFn is enough.
-		ServiceName   primitives.ServiceName
-		ServiceStopFn ServiceStopFn
+		app         *fx.App
+		serviceName primitives.ServiceName
+		logger      log.Logger
 	}
 
 	ServerFx struct {
-		app *fx.App
+		app                        *fx.App
+		startupSynchronizationMode synchronizationModeParams
+		logger                     log.Logger
 	}
 
 	serverOptionsProvider struct {
 		fx.Out
-		ServerOptions *serverOptions
-		StopChan      chan interface{}
+		ServerOptions              *serverOptions
+		StopChan                   chan interface{}
+		StartupSynchronizationMode synchronizationModeParams
 
 		Config      *config.Config
 		PProfConfig *config.PProf
@@ -112,48 +124,61 @@ type (
 
 		ServiceResolver        resolver.ServiceResolver
 		CustomDataStoreFactory persistenceClient.AbstractDataStoreFactory
+		CustomVisibilityStore  visibility.VisibilityStoreFactory
 
-		SearchAttributesMapper searchattribute.Mapper
-		CustomInterceptors     []grpc.UnaryServerInterceptor
-		Authorizer             authorization.Authorizer
-		ClaimMapper            authorization.ClaimMapper
-		AudienceGetter         authorization.JWTAudienceMapper
+		SearchAttributesMapper     searchattribute.Mapper
+		CustomFrontendInterceptors []grpc.UnaryServerInterceptor
+		Authorizer                 authorization.Authorizer
+		ClaimMapper                authorization.ClaimMapper
+		AudienceGetter             authorization.JWTAudienceMapper
+		ServiceHosts               map[primitives.ServiceName]static.Hosts
 
 		// below are things that could be over write by server options or may have default if not supplied by serverOptions.
-		Logger                  log.Logger
-		ClientFactoryProvider   client.FactoryProvider
-		DynamicConfigClient     dynamicconfig.Client
-		DynamicConfigCollection *dynamicconfig.Collection
-		TLSConfigProvider       encryption.TLSConfigProvider
-		EsConfig                *esclient.Config
-		EsClient                esclient.Client
-		MetricsHandler          metrics.Handler
+		Logger                log.Logger
+		ClientFactoryProvider client.FactoryProvider
+		DynamicConfigClient   dynamicconfig.Client
+		TLSConfigProvider     encryption.TLSConfigProvider
+		EsConfig              *esclient.Config
+		EsClient              esclient.Client
+		MetricsHandler        metrics.Handler
 	}
 )
 
-func NewServerFx(opts ...ServerOption) (*ServerFx, error) {
-	app := fx.New(
+var (
+	TopLevelModule = fx.Options(
+		fx.Provide(
+			NewServerFxImpl,
+			ServerOptionsProvider,
+			resource.ArchivalMetadataProvider,
+			TaskCategoryRegistryProvider,
+			PersistenceFactoryProvider,
+			HistoryServiceProvider,
+			MatchingServiceProvider,
+			FrontendServiceProvider,
+			InternalFrontendServiceProvider,
+			WorkerServiceProvider,
+			ApplyClusterMetadataConfigProvider,
+		),
+		dynamicconfig.Module,
 		pprof.Module,
-		ServerFxImplModule,
-		fx.Supply(opts),
-		fx.Provide(ServerOptionsProvider),
 		TraceExportModule,
-
-		fx.Provide(PersistenceFactoryProvider),
-		fx.Provide(HistoryServiceProvider),
-		fx.Provide(MatchingServiceProvider),
-		fx.Provide(FrontendServiceProvider),
-		fx.Provide(InternalFrontendServiceProvider),
-		fx.Provide(WorkerServiceProvider),
-
-		fx.Provide(ApplyClusterMetadataConfigProvider),
-		fx.Invoke(ServerLifetimeHooks),
 		FxLogAdapter,
+		fx.Invoke(ServerLifetimeHooks),
 	)
-	s := &ServerFx{
-		app,
+)
+
+func NewServerFx(topLevelModule fx.Option, opts ...ServerOption) (*ServerFx, error) {
+	var s ServerFx
+	s.app = fx.New(
+		topLevelModule,
+		fx.Supply(opts),
+		fx.Populate(&s.startupSynchronizationMode),
+		fx.Populate(&s.logger),
+	)
+	if err := s.app.Err(); err != nil {
+		return nil, err
 	}
-	return s, app.Err()
+	return &s, nil
 }
 
 func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
@@ -164,14 +189,10 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		return serverOptionsProvider{}, err
 	}
 
-	err = verifyPersistenceCompatibleVersion(so.config.Persistence, so.persistenceServiceResolver)
+	persistenceConfig := so.config.Persistence
+	err = verifyPersistenceCompatibleVersion(persistenceConfig, so.persistenceServiceResolver)
 	if err != nil {
 		return serverOptionsProvider{}, err
-	}
-
-	err = membership.ValidateConfig(&so.config.Global.Membership)
-	if err != nil {
-		return serverOptionsProvider{}, fmt.Errorf("ringpop config validation error: %w", err)
 	}
 
 	stopChan := make(chan interface{})
@@ -191,7 +212,10 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 	// MetricsHandler
 	metricHandler := so.metricHandler
 	if metricHandler == nil {
-		metricHandler = metrics.MetricsHandlerFromConfig(logger, so.config.Global.Metrics)
+		metricHandler, err = metrics.MetricsHandlerFromConfig(logger, so.config.Global.Metrics)
+		if err != nil {
+			return serverOptionsProvider{}, fmt.Errorf("unable to create metrics handler: %w", err)
+		}
 	}
 
 	// DynamicConfigClient
@@ -222,81 +246,105 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 	// EsConfig / EsClient
 	var esConfig *esclient.Config
 	var esClient esclient.Client
-	if so.config.Persistence.AdvancedVisibilityConfigExist() {
-		advancedVisibilityStore, ok := so.config.Persistence.DataStores[so.config.Persistence.AdvancedVisibilityStore]
-		if !ok {
-			return serverOptionsProvider{}, fmt.Errorf("persistence config: advanced visibility datastore %q: missing config", so.config.Persistence.AdvancedVisibilityStore)
-		}
 
+	if persistenceConfig.VisibilityConfigExist() &&
+		persistenceConfig.DataStores[persistenceConfig.VisibilityStore].Elasticsearch != nil {
+		esConfig = persistenceConfig.DataStores[persistenceConfig.VisibilityStore].Elasticsearch
+	} else if persistenceConfig.SecondaryVisibilityConfigExist() &&
+		persistenceConfig.DataStores[persistenceConfig.SecondaryVisibilityStore].Elasticsearch != nil {
+		esConfig = persistenceConfig.DataStores[persistenceConfig.SecondaryVisibilityStore].Elasticsearch
+	}
+
+	if esConfig != nil {
 		esHttpClient := so.elasticsearchHttpClient
+		esConfig.SetHttpClient(esHttpClient)
 		if esHttpClient == nil {
 			var err error
-			esHttpClient, err = esclient.NewAwsHttpClient(advancedVisibilityStore.Elasticsearch.AWSRequestSigning)
+			esHttpClient, err = esclient.NewAwsHttpClient(esConfig.AWSRequestSigning)
 			if err != nil {
 				return serverOptionsProvider{}, fmt.Errorf("unable to create AWS HTTP client for Elasticsearch: %w", err)
 			}
 		}
 
-		esConfig = advancedVisibilityStore.Elasticsearch
-
 		esClient, err = esclient.NewClient(esConfig, esHttpClient, logger)
 		if err != nil {
-			return serverOptionsProvider{}, fmt.Errorf("unable to create Elasticsearch client: %w", err)
+			return serverOptionsProvider{}, fmt.Errorf("unable to create Elasticsearch client (URL = %v, username = %q): %w",
+				esConfig.URL.Redacted(), esConfig.Username, err)
+		}
+	}
+
+	// check that when static hosts are defined, they are defined for all required hosts
+	if len(so.hostsByService) > 0 {
+		for _, service := range DefaultServices {
+			hosts := so.hostsByService[primitives.ServiceName(service)]
+			if len(hosts.All) == 0 {
+				return serverOptionsProvider{}, fmt.Errorf("%w: %v", missingServiceInStaticHosts, service)
+			}
 		}
 	}
 
 	return serverOptionsProvider{
-		ServerOptions: so,
-		StopChan:      stopChan,
+		ServerOptions:              so,
+		StopChan:                   stopChan,
+		StartupSynchronizationMode: so.startupSynchronizationMode,
 
 		Config:      so.config,
 		PProfConfig: &so.config.Global.PProf,
 		LogConfig:   so.config.Log,
 
 		ServiceNames:    so.serviceNames,
+		ServiceHosts:    so.hostsByService,
 		NamespaceLogger: so.namespaceLogger,
 
 		ServiceResolver:        so.persistenceServiceResolver,
 		CustomDataStoreFactory: so.customDataStoreFactory,
+		CustomVisibilityStore:  so.customVisibilityStoreFactory,
 
-		SearchAttributesMapper: so.searchAttributesMapper,
-		CustomInterceptors:     so.customInterceptors,
-		Authorizer:             so.authorizer,
-		ClaimMapper:            so.claimMapper,
-		AudienceGetter:         so.audienceGetter,
+		SearchAttributesMapper:     so.searchAttributesMapper,
+		CustomFrontendInterceptors: so.customFrontendInterceptors,
+		Authorizer:                 so.authorizer,
+		ClaimMapper:                so.claimMapper,
+		AudienceGetter:             so.audienceGetter,
 
-		Logger:                  logger,
-		ClientFactoryProvider:   clientFactoryProvider,
-		DynamicConfigClient:     dcClient,
-		DynamicConfigCollection: dynamicconfig.NewCollection(dcClient, logger),
-		TLSConfigProvider:       tlsConfigProvider,
-		EsConfig:                esConfig,
-		EsClient:                esClient,
-		MetricsHandler:          metricHandler,
+		Logger:                logger,
+		ClientFactoryProvider: clientFactoryProvider,
+		DynamicConfigClient:   dcClient,
+		TLSConfigProvider:     tlsConfigProvider,
+		EsConfig:              esConfig,
+		EsClient:              esClient,
+		MetricsHandler:        metricHandler,
 	}, nil
 }
 
-func (s ServerFx) Start() error {
-	return s.app.Start(context.Background())
+// Start temporal server.
+// This function should be called only once, Server doesn't support multiple restarts.
+func (s *ServerFx) Start() error {
+	err := s.app.Start(context.Background())
+	if err != nil {
+		return err
+	}
+
+	if s.startupSynchronizationMode.blockingStart {
+		// If s.so.interruptCh is nil this will wait forever.
+		interruptSignal := <-s.startupSynchronizationMode.interruptCh
+		s.logger.Info("Received interrupt signal, stopping the server.", tag.Value(interruptSignal))
+		return s.Stop()
+	}
+
+	return nil
 }
 
-func (s ServerFx) Stop() error {
+// Stop stops the server.
+func (s *ServerFx) Stop() error {
 	return s.app.Stop(context.Background())
 }
 
-func StopService(logger log.Logger, app *fx.App, svcName primitives.ServiceName, stopChan chan struct{}) {
-	stopCtx, cancelFunc := context.WithTimeout(context.Background(), serviceStopTimeout)
-	err := app.Stop(stopCtx)
-	cancelFunc()
+func (svc *ServicesMetadata) Stop(ctx context.Context) {
+	stopCtx, cancelFunc := context.WithTimeout(ctx, serviceStopTimeout)
+	defer cancelFunc()
+	err := svc.app.Stop(stopCtx)
 	if err != nil {
-		logger.Error("Failed to stop service", tag.Service(svcName), tag.Error(err))
-	}
-
-	// verify "Start" goroutine returned
-	select {
-	case <-stopChan:
-	case <-time.After(time.Minute):
-		logger.Error("Timed out (1 minute) waiting for service to stop.", tag.Service(svcName))
+		svc.logger.Error("Failed to stop service", tag.Service(svc.serviceName), tag.Error(err))
 	}
 }
 
@@ -320,14 +368,120 @@ type (
 		PersistenceServiceResolver resolver.ServiceResolver
 		PersistenceFactoryProvider persistenceClient.FactoryProviderFn
 		SearchAttributesMapper     searchattribute.Mapper
-		CustomInterceptors         []grpc.UnaryServerInterceptor
+		CustomFrontendInterceptors []grpc.UnaryServerInterceptor
 		Authorizer                 authorization.Authorizer
 		ClaimMapper                authorization.ClaimMapper
 		DataStoreFactory           persistenceClient.AbstractDataStoreFactory
+		VisibilityStoreFactory     visibility.VisibilityStoreFactory
 		SpanExporters              []otelsdktrace.SpanExporter
-		InstanceID                 resource.InstanceID `optional:"true"`
+		InstanceID                 resource.InstanceID                     `optional:"true"`
+		StaticServiceHosts         map[primitives.ServiceName]static.Hosts `optional:"true"`
+		TaskCategoryRegistry       tasks.TaskCategoryRegistry
 	}
 )
+
+// GetCommonServiceOptions returns an fx.Option which combines all the common dependencies for a service. Why do we need
+// this? We are propagating dependencies from one fx graph to another. This is not ideal, since we should instead either
+// have one shared fx graph, or propagate the individual fx options. So, in the server graph, dependencies exist as fx
+// providers, and, in the process of building the server graph, we build the individual service graphs. We realize the
+// dependencies in the server graph implicitly into the ServiceProviderParamsCommon object. Then, we convert them back
+// into fx providers here. Essentially, we want an `fx.In` object in the server graph, and an `fx.Out` object in the
+// service graphs. This is a workaround to achieve something similar.
+func (params ServiceProviderParamsCommon) GetCommonServiceOptions(serviceName primitives.ServiceName) fx.Option {
+	membershipModule := ringpop.MembershipModule
+	if len(params.StaticServiceHosts) > 0 {
+		membershipModule = static.MembershipModule(params.StaticServiceHosts)
+	}
+
+	return fx.Options(
+		fx.Supply(
+			serviceName,
+			params.EsConfig,
+			params.PersistenceConfig,
+			params.ClusterMetadata,
+			params.Cfg,
+			params.SpanExporters,
+		),
+		fx.Provide(
+			resource.DefaultSnTaggedLoggerProvider,
+			params.PersistenceFactoryProvider,
+			func() persistenceClient.AbstractDataStoreFactory {
+				return params.DataStoreFactory
+			},
+			func() visibility.VisibilityStoreFactory {
+				return params.VisibilityStoreFactory
+			},
+			func() client.FactoryProvider {
+				return params.ClientFactoryProvider
+			},
+			func() authorization.JWTAudienceMapper {
+				return params.AudienceGetter
+			},
+			func() resolver.ServiceResolver {
+				return params.PersistenceServiceResolver
+			},
+			func() searchattribute.Mapper {
+				return params.SearchAttributesMapper
+			},
+			func() authorization.Authorizer {
+				return params.Authorizer
+			},
+			func() authorization.ClaimMapper {
+				return params.ClaimMapper
+			},
+			func() encryption.TLSConfigProvider {
+				return params.TlsConfigProvider
+			},
+			func() dynamicconfig.Client {
+				return params.DynamicConfigClient
+			},
+			func() log.Logger {
+				return params.Logger
+			},
+			func() metrics.Handler {
+				return params.MetricsHandler.WithTags(metrics.ServiceNameTag(serviceName))
+			},
+			func() esclient.Client {
+				return params.EsClient
+			},
+			func() resource.NamespaceLogger {
+				return params.NamespaceLogger
+			},
+			func() tasks.TaskCategoryRegistry {
+				return params.TaskCategoryRegistry
+			},
+		),
+		ServiceTracingModule,
+		resource.DefaultOptions,
+		membershipModule,
+		FxLogAdapter,
+	)
+}
+
+// TaskCategoryRegistryProvider provides an immutable tasks.TaskCategoryRegistry to the server, which is intended to be
+// shared by each service. Why do we need to initialize this at the top-level? Because, even though the presence of the
+// archival task category is only needed by the history service, which must conditionally start a queue processor for
+// it, we also do validation on request task categories in the frontend service. As a result, we need to initialize the
+// registry in the server graph, and then propagate it to the service graphs. Otherwise, it would be isolated to the
+// history service's graph.
+func TaskCategoryRegistryProvider(archivalMetadata archiver.ArchivalMetadata) tasks.TaskCategoryRegistry {
+	registry := tasks.NewDefaultTaskCategoryRegistry()
+	if archivalMetadata.GetHistoryConfig().StaticClusterState() == archiver.ArchivalEnabled ||
+		archivalMetadata.GetVisibilityConfig().StaticClusterState() == archiver.ArchivalEnabled {
+		registry.AddCategory(tasks.CategoryArchival)
+	}
+	return registry
+}
+
+func NewService(app *fx.App, serviceName primitives.ServiceName, logger log.Logger) ServicesGroupOut {
+	return ServicesGroupOut{
+		Services: &ServicesMetadata{
+			app:         app,
+			serviceName: serviceName,
+			logger:      logger,
+		},
+	}
+}
 
 func HistoryServiceProvider(
 	params ServiceProviderParamsCommon,
@@ -336,61 +490,17 @@ func HistoryServiceProvider(
 
 	if _, ok := params.ServiceNames[serviceName]; !ok {
 		params.Logger.Info("Service is not requested, skipping initialization.", tag.Service(serviceName))
-		return ServicesGroupOut{
-			Services: &ServicesMetadata{
-				App:           fx.New(fx.NopLogger),
-				ServiceName:   serviceName,
-				ServiceStopFn: func() {},
-			},
-		}, nil
+		return ServicesGroupOut{}, nil
 	}
 
-	stopChan := make(chan struct{})
-
 	app := fx.New(
-		fx.Supply(
-			stopChan,
-			params.EsConfig,
-			params.PersistenceConfig,
-			params.ClusterMetadata,
-			params.Cfg,
-			serviceName,
-		),
-		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return params.DataStoreFactory }),
-		fx.Provide(func() client.FactoryProvider { return params.ClientFactoryProvider }),
-		fx.Provide(func() authorization.JWTAudienceMapper { return params.AudienceGetter }),
-		fx.Provide(func() resolver.ServiceResolver { return params.PersistenceServiceResolver }),
-		fx.Provide(func() searchattribute.Mapper { return params.SearchAttributesMapper }),
-		fx.Provide(func() []grpc.UnaryServerInterceptor { return params.CustomInterceptors }),
-		fx.Provide(func() authorization.Authorizer { return params.Authorizer }),
-		fx.Provide(func() authorization.ClaimMapper { return params.ClaimMapper }),
-		fx.Provide(func() encryption.TLSConfigProvider { return params.TlsConfigProvider }),
-		fx.Provide(func() dynamicconfig.Client { return params.DynamicConfigClient }),
-		fx.Provide(func() log.Logger { return params.Logger }),
-		fx.Provide(resource.DefaultSnTaggedLoggerProvider),
-		fx.Provide(func() metrics.Handler {
-			return params.MetricsHandler.WithTags(metrics.ServiceNameTag(serviceName))
-		}),
-		fx.Provide(func() esclient.Client { return params.EsClient }),
-		fx.Provide(params.PersistenceFactoryProvider),
-		fx.Provide(workflow.NewTaskGeneratorProvider),
-		fx.Supply(params.SpanExporters),
-		ServiceTracingModule,
-		resource.DefaultOptions,
+		params.GetCommonServiceOptions(serviceName),
 		history.QueueModule,
 		history.Module,
 		replication.Module,
-		FxLogAdapter,
 	)
 
-	stopFn := func() { StopService(params.Logger, app, serviceName, stopChan) }
-	return ServicesGroupOut{
-		Services: &ServicesMetadata{
-			App:           app,
-			ServiceName:   serviceName,
-			ServiceStopFn: stopFn,
-		},
-	}, app.Err()
+	return NewService(app, serviceName, params.Logger), app.Err()
 }
 
 func MatchingServiceProvider(
@@ -400,57 +510,15 @@ func MatchingServiceProvider(
 
 	if _, ok := params.ServiceNames[serviceName]; !ok {
 		params.Logger.Info("Service is not requested, skipping initialization.", tag.Service(serviceName))
-		return ServicesGroupOut{
-			Services: &ServicesMetadata{
-				App:           fx.New(fx.NopLogger),
-				ServiceName:   serviceName,
-				ServiceStopFn: func() {},
-			},
-		}, nil
+		return ServicesGroupOut{}, nil
 	}
 
-	stopChan := make(chan struct{})
 	app := fx.New(
-		fx.Supply(
-			stopChan,
-			params.EsConfig,
-			params.PersistenceConfig,
-			params.ClusterMetadata,
-			params.Cfg,
-			serviceName,
-		),
-		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return params.DataStoreFactory }),
-		fx.Provide(func() client.FactoryProvider { return params.ClientFactoryProvider }),
-		fx.Provide(func() authorization.JWTAudienceMapper { return params.AudienceGetter }),
-		fx.Provide(func() resolver.ServiceResolver { return params.PersistenceServiceResolver }),
-		fx.Provide(func() searchattribute.Mapper { return params.SearchAttributesMapper }),
-		fx.Provide(func() []grpc.UnaryServerInterceptor { return params.CustomInterceptors }),
-		fx.Provide(func() authorization.Authorizer { return params.Authorizer }),
-		fx.Provide(func() authorization.ClaimMapper { return params.ClaimMapper }),
-		fx.Provide(func() encryption.TLSConfigProvider { return params.TlsConfigProvider }),
-		fx.Provide(func() dynamicconfig.Client { return params.DynamicConfigClient }),
-		fx.Provide(func() log.Logger { return params.Logger }),
-		fx.Provide(resource.DefaultSnTaggedLoggerProvider),
-		fx.Provide(func() metrics.Handler {
-			return params.MetricsHandler.WithTags(metrics.ServiceNameTag(serviceName))
-		}),
-		fx.Provide(func() esclient.Client { return params.EsClient }),
-		fx.Provide(params.PersistenceFactoryProvider),
-		fx.Supply(params.SpanExporters),
-		ServiceTracingModule,
-		resource.DefaultOptions,
+		params.GetCommonServiceOptions(serviceName),
 		matching.Module,
-		FxLogAdapter,
 	)
 
-	stopFn := func() { StopService(params.Logger, app, serviceName, stopChan) }
-	return ServicesGroupOut{
-		Services: &ServicesMetadata{
-			App:           app,
-			ServiceName:   serviceName,
-			ServiceStopFn: stopFn,
-		},
-	}, app.Err()
+	return NewService(app, serviceName, params.Logger), app.Err()
 }
 
 func FrontendServiceProvider(
@@ -471,33 +539,13 @@ func genericFrontendServiceProvider(
 ) (ServicesGroupOut, error) {
 	if _, ok := params.ServiceNames[serviceName]; !ok {
 		params.Logger.Info("Service is not requested, skipping initialization.", tag.Service(serviceName))
-		return ServicesGroupOut{
-			Services: &ServicesMetadata{
-				App:           fx.New(fx.NopLogger),
-				ServiceName:   serviceName,
-				ServiceStopFn: func() {},
-			},
-		}, nil
+		return ServicesGroupOut{}, nil
 	}
 
-	stopChan := make(chan struct{})
 	app := fx.New(
-		fx.Supply(
-			stopChan,
-			params.EsConfig,
-			params.PersistenceConfig,
-			params.ClusterMetadata,
-			params.Cfg,
-			serviceName,
-		),
-		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return params.DataStoreFactory }),
-		fx.Provide(func() client.FactoryProvider { return params.ClientFactoryProvider }),
-		fx.Provide(func() authorization.JWTAudienceMapper { return params.AudienceGetter }),
-		fx.Provide(func() resolver.ServiceResolver { return params.PersistenceServiceResolver }),
-		fx.Provide(func() searchattribute.Mapper { return params.SearchAttributesMapper }),
-		fx.Provide(func() []grpc.UnaryServerInterceptor { return params.CustomInterceptors }),
-		fx.Provide(func() authorization.Authorizer { return params.Authorizer }),
-		fx.Provide(func() authorization.ClaimMapper {
+		params.GetCommonServiceOptions(serviceName),
+		fx.Supply(params.CustomFrontendInterceptors),
+		fx.Decorate(func() authorization.ClaimMapper {
 			switch serviceName {
 			case primitives.FrontendService:
 				return params.ClaimMapper
@@ -507,10 +555,7 @@ func genericFrontendServiceProvider(
 				panic("Unexpected frontend service name")
 			}
 		}),
-		fx.Provide(func() encryption.TLSConfigProvider { return params.TlsConfigProvider }),
-		fx.Provide(func() dynamicconfig.Client { return params.DynamicConfigClient }),
-		fx.Provide(func() log.Logger { return params.Logger }),
-		fx.Provide(func() log.SnTaggedLogger {
+		fx.Decorate(func() log.SnTaggedLogger {
 			// Use "frontend" for logs even if serviceName is "internal-frontend", but add an
 			// extra tag to differentiate.
 			tags := []tag.Tag{tag.Service(primitives.FrontendService)}
@@ -519,28 +564,10 @@ func genericFrontendServiceProvider(
 			}
 			return log.With(params.Logger, tags...)
 		}),
-		fx.Provide(func() metrics.Handler {
-			// Use either "frontend" or "internal-frontend" for metrics
-			return params.MetricsHandler.WithTags(metrics.ServiceNameTag(serviceName))
-		}),
-		fx.Provide(func() resource.NamespaceLogger { return params.NamespaceLogger }),
-		fx.Provide(func() esclient.Client { return params.EsClient }),
-		fx.Provide(params.PersistenceFactoryProvider),
-		fx.Supply(params.SpanExporters),
-		ServiceTracingModule,
-		resource.DefaultOptions,
 		frontend.Module,
-		FxLogAdapter,
 	)
 
-	stopFn := func() { StopService(params.Logger, app, serviceName, stopChan) }
-	return ServicesGroupOut{
-		Services: &ServicesMetadata{
-			App:           app,
-			ServiceName:   serviceName,
-			ServiceStopFn: stopFn,
-		},
-	}, app.Err()
+	return NewService(app, serviceName, params.Logger), app.Err()
 }
 
 func WorkerServiceProvider(
@@ -550,57 +577,15 @@ func WorkerServiceProvider(
 
 	if _, ok := params.ServiceNames[serviceName]; !ok {
 		params.Logger.Info("Service is not requested, skipping initialization.", tag.Service(serviceName))
-		return ServicesGroupOut{
-			Services: &ServicesMetadata{
-				App:           fx.New(fx.NopLogger),
-				ServiceName:   serviceName,
-				ServiceStopFn: func() {},
-			},
-		}, nil
+		return ServicesGroupOut{}, nil
 	}
 
-	stopChan := make(chan struct{})
 	app := fx.New(
-		fx.Supply(
-			stopChan,
-			params.EsConfig,
-			params.PersistenceConfig,
-			params.ClusterMetadata,
-			params.Cfg,
-			serviceName,
-		),
-		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return params.DataStoreFactory }),
-		fx.Provide(func() client.FactoryProvider { return params.ClientFactoryProvider }),
-		fx.Provide(func() authorization.JWTAudienceMapper { return params.AudienceGetter }),
-		fx.Provide(func() resolver.ServiceResolver { return params.PersistenceServiceResolver }),
-		fx.Provide(func() searchattribute.Mapper { return params.SearchAttributesMapper }),
-		fx.Provide(func() []grpc.UnaryServerInterceptor { return params.CustomInterceptors }),
-		fx.Provide(func() authorization.Authorizer { return params.Authorizer }),
-		fx.Provide(func() authorization.ClaimMapper { return params.ClaimMapper }),
-		fx.Provide(func() encryption.TLSConfigProvider { return params.TlsConfigProvider }),
-		fx.Provide(func() dynamicconfig.Client { return params.DynamicConfigClient }),
-		fx.Provide(func() log.Logger { return params.Logger }),
-		fx.Provide(resource.DefaultSnTaggedLoggerProvider),
-		fx.Provide(func() metrics.Handler {
-			return params.MetricsHandler.WithTags(metrics.ServiceNameTag(serviceName))
-		}),
-		fx.Provide(func() esclient.Client { return params.EsClient }),
-		fx.Provide(params.PersistenceFactoryProvider),
-		fx.Supply(params.SpanExporters),
-		ServiceTracingModule,
-		resource.DefaultOptions,
+		params.GetCommonServiceOptions(serviceName),
 		worker.Module,
-		FxLogAdapter,
 	)
 
-	stopFn := func() { StopService(params.Logger, app, serviceName, stopChan) }
-	return ServicesGroupOut{
-		Services: &ServicesMetadata{
-			App:           app,
-			ServiceName:   serviceName,
-			ServiceStopFn: stopFn,
-		},
-	}, app.Err()
+	return NewService(app, serviceName, params.Logger), app.Err()
 }
 
 // ApplyClusterMetadataConfigProvider performs a config check against the configured persistence store for cluster metadata.
@@ -609,256 +594,259 @@ func WorkerServiceProvider(
 // TODO: move this to cluster.fx
 func ApplyClusterMetadataConfigProvider(
 	logger log.Logger,
-	config *config.Config,
+	svc *config.Config,
 	persistenceServiceResolver resolver.ServiceResolver,
 	persistenceFactoryProvider persistenceClient.FactoryProviderFn,
 	customDataStoreFactory persistenceClient.AbstractDataStoreFactory,
+	metricsHandler metrics.Handler,
 ) (*cluster.Config, config.Persistence, error) {
 	ctx := context.TODO()
 	logger = log.With(logger, tag.ComponentMetadataInitializer)
-
-	clusterName := persistenceClient.ClusterName(config.ClusterMetadata.CurrentClusterName)
-	dataStoreFactory, _ := persistenceClient.DataStoreFactoryProvider(
+	metricsHandler = metricsHandler.WithTags(metrics.ServiceNameTag(primitives.ServerService))
+	clusterName := persistenceClient.ClusterName(svc.ClusterMetadata.CurrentClusterName)
+	dataStoreFactory := persistenceClient.DataStoreFactoryProvider(
 		clusterName,
 		persistenceServiceResolver,
-		&config.Persistence,
+		&svc.Persistence,
 		customDataStoreFactory,
 		logger,
-		nil,
+		metricsHandler,
+		telemetry.NoopTracerProvider,
 	)
 	factory := persistenceFactoryProvider(persistenceClient.NewFactoryParams{
 		DataStoreFactory:           dataStoreFactory,
-		Cfg:                        &config.Persistence,
+		Cfg:                        &svc.Persistence,
 		PersistenceMaxQPS:          nil,
 		PersistenceNamespaceMaxQPS: nil,
-		EnablePriorityRateLimiting: nil,
-		ClusterName:                persistenceClient.ClusterName(config.ClusterMetadata.CurrentClusterName),
-		MetricsHandler:             nil,
+		ClusterName:                persistenceClient.ClusterName(svc.ClusterMetadata.CurrentClusterName),
+		MetricsHandler:             metricsHandler,
 		Logger:                     logger,
 	})
 	defer factory.Close()
 
 	clusterMetadataManager, err := factory.NewClusterMetadataManager()
 	if err != nil {
-		return config.ClusterMetadata, config.Persistence, fmt.Errorf("error initializing cluster metadata manager: %w", err)
+		return svc.ClusterMetadata, svc.Persistence, fmt.Errorf("error initializing cluster metadata manager: %w", err)
 	}
 	defer clusterMetadataManager.Close()
 
-	var indexName string
-	var initialIndexSearchAttributes map[string]*persistencespb.IndexSearchAttributes
-	if config.Persistence.IsSQLVisibilityStore() {
-		indexName = config.Persistence.DataStores[config.Persistence.VisibilityStore].SQL.DatabaseName
-		initialIndexSearchAttributes = map[string]*persistencespb.IndexSearchAttributes{
-			indexName: searchattribute.GetSqlDbIndexSearchAttributes(),
-		}
+	initialIndexSearchAttributes := make(map[string]*persistencespb.IndexSearchAttributes)
+	if ds := svc.Persistence.GetVisibilityStoreConfig(); ds.SQL != nil {
+		initialIndexSearchAttributes[ds.GetIndexName()] = searchattribute.GetSqlDbIndexSearchAttributes()
+	}
+	if ds := svc.Persistence.GetSecondaryVisibilityStoreConfig(); ds.SQL != nil {
+		initialIndexSearchAttributes[ds.GetIndexName()] = searchattribute.GetSqlDbIndexSearchAttributes()
 	}
 
-	clusterData := config.ClusterMetadata
-	for clusterName, clusterInfo := range clusterData.ClusterInformation {
-		if clusterName != clusterData.CurrentClusterName {
-			logger.Warn(
-				"ClusterInformation in ClusterMetadata config is deprecated. "+
-					"Please use TCTL admin tool to configure remote cluster connections",
-				tag.Key("clusterInformation"),
-				tag.ClusterName(clusterName),
-				tag.IgnoredValue(clusterInfo))
-
-			// Only configure current cluster metadata from static config file
-			continue
-		}
-
-		var clusterId string
-		if uuid.Parse(clusterInfo.ClusterID) == nil {
-			if clusterInfo.ClusterID != "" {
-				logger.Warn("Cluster Id in Cluster Metadata config is not a valid uuid. Generating a new Cluster Id")
-			}
-			clusterId = uuid.New()
-		} else {
-			clusterId = clusterInfo.ClusterID
-		}
-
-		applied, err := clusterMetadataManager.SaveClusterMetadata(
+	clusterMetadata := svc.ClusterMetadata
+	if len(clusterMetadata.ClusterInformation) > 1 {
+		logger.Warn(
+			"All remote cluster settings under ClusterMetadata.ClusterInformation config will be ignored. "+
+				"Please use TCTL admin tool to configure remote cluster settings",
+			tag.Key("clusterInformation"))
+	}
+	if _, ok := clusterMetadata.ClusterInformation[clusterMetadata.CurrentClusterName]; !ok {
+		logger.Error("Current cluster setting is missing under clusterMetadata.ClusterInformation",
+			tag.ClusterName(clusterMetadata.CurrentClusterName))
+		return svc.ClusterMetadata, svc.Persistence, missingCurrentClusterMetadataErr
+	}
+	ctx = headers.SetCallerInfo(ctx, headers.SystemBackgroundCallerInfo)
+	resp, err := clusterMetadataManager.GetClusterMetadata(
+		ctx,
+		&persistence.GetClusterMetadataRequest{ClusterName: clusterMetadata.CurrentClusterName},
+	)
+	switch err.(type) {
+	case nil:
+		// Update current record
+		if updateErr := updateCurrentClusterMetadataRecord(
 			ctx,
-			&persistence.SaveClusterMetadataRequest{
-				ClusterMetadata: persistencespb.ClusterMetadata{
-					HistoryShardCount:        config.Persistence.NumHistoryShards,
-					ClusterName:              clusterName,
-					ClusterId:                clusterId,
-					ClusterAddress:           clusterInfo.RPCAddress,
-					FailoverVersionIncrement: clusterData.FailoverVersionIncrement,
-					InitialFailoverVersion:   clusterInfo.InitialFailoverVersion,
-					IsGlobalNamespaceEnabled: clusterData.EnableGlobalNamespace,
-					IsConnectionEnabled:      clusterInfo.Enabled,
-					UseClusterIdMembership:   true, // Enable this for new cluster after 1.19. This is to prevent two clusters join into one ring.
-					IndexSearchAttributes:    initialIndexSearchAttributes,
-				},
-			})
-		if err != nil {
-			logger.Warn("Failed to save cluster metadata.", tag.Error(err), tag.ClusterName(clusterName))
+			clusterMetadataManager,
+			svc,
+			initialIndexSearchAttributes,
+			resp,
+		); updateErr != nil {
+			return svc.ClusterMetadata, svc.Persistence, updateErr
 		}
-		if applied {
-			logger.Info("Successfully saved cluster metadata.", tag.ClusterName(clusterName))
-			continue
-		}
-
-		resp, err := clusterMetadataManager.GetClusterMetadata(
-			ctx,
-			&persistence.GetClusterMetadataRequest{ClusterName: clusterName},
+		// Ignore invalid cluster metadata
+		overwriteCurrentClusterMetadataWithDBRecord(
+			svc,
+			resp,
+			logger,
 		)
-		if err != nil {
-			return config.ClusterMetadata, config.Persistence, fmt.Errorf("error while fetching cluster metadata: %w", err)
+	case *serviceerror.NotFound:
+		// Initialize current cluster record
+		if initErr := initCurrentClusterMetadataRecord(
+			ctx,
+			clusterMetadataManager,
+			svc,
+			initialIndexSearchAttributes,
+			logger,
+		); initErr != nil {
+			return svc.ClusterMetadata, svc.Persistence, initErr
 		}
-
-		currentMetadata := resp.ClusterMetadata
-
-		// TODO (rodrigozhou): Remove this block for v1.21.
-		// Handle registering custom search attributes when upgrading to v1.20.
-		if config.Persistence.IsSQLVisibilityStore() {
-			needSave := false
-			if currentMetadata.IndexSearchAttributes == nil {
-				currentMetadata.IndexSearchAttributes = initialIndexSearchAttributes
-				needSave = true
-			} else if _, ok := currentMetadata.IndexSearchAttributes[indexName]; !ok {
-				currentMetadata.IndexSearchAttributes[indexName] = searchattribute.GetSqlDbIndexSearchAttributes()
-				needSave = true
-			}
-
-			if needSave {
-				_, err := clusterMetadataManager.SaveClusterMetadata(
-					ctx,
-					&persistence.SaveClusterMetadataRequest{ClusterMetadata: currentMetadata},
-				)
-				if err != nil {
-					logger.Warn(
-						"Failed to register search attributes.",
-						tag.Error(err),
-						tag.ClusterName(clusterName),
-					)
-				}
-				logger.Info("Successfully registered search attributes.", tag.ClusterName(clusterName))
-			}
-		}
-
-		// Allow updating cluster metadata if global namespace is disabled
-		if !resp.IsGlobalNamespaceEnabled && clusterData.EnableGlobalNamespace {
-			currentMetadata.IsGlobalNamespaceEnabled = clusterData.EnableGlobalNamespace
-			currentMetadata.InitialFailoverVersion = clusterInfo.InitialFailoverVersion
-			currentMetadata.FailoverVersionIncrement = clusterData.FailoverVersionIncrement
-
-			applied, err := clusterMetadataManager.SaveClusterMetadata(
-				ctx,
-				&persistence.SaveClusterMetadataRequest{
-					ClusterMetadata: currentMetadata,
-					Version:         resp.Version,
-				})
-			if !applied || err != nil {
-				return config.ClusterMetadata, config.Persistence, fmt.Errorf("error while updating cluster metadata: %w", err)
-			}
-		} else if resp.IsGlobalNamespaceEnabled != clusterData.EnableGlobalNamespace {
-			logger.Warn(
-				mismatchLogMessage,
-				tag.Key("clusterMetadata.EnableGlobalNamespace"),
-				tag.IgnoredValue(clusterData.EnableGlobalNamespace),
-				tag.Value(resp.IsGlobalNamespaceEnabled))
-			config.ClusterMetadata.EnableGlobalNamespace = resp.IsGlobalNamespaceEnabled
-		}
-
-		// Verify current cluster metadata
-		persistedShardCount := resp.HistoryShardCount
-		if config.Persistence.NumHistoryShards != persistedShardCount {
-			logger.Warn(
-				mismatchLogMessage,
-				tag.Key("persistence.numHistoryShards"),
-				tag.IgnoredValue(config.Persistence.NumHistoryShards),
-				tag.Value(persistedShardCount))
-			config.Persistence.NumHistoryShards = persistedShardCount
-		}
-		if resp.FailoverVersionIncrement != clusterData.FailoverVersionIncrement {
-			logger.Warn(
-				mismatchLogMessage,
-				tag.Key("clusterMetadata.FailoverVersionIncrement"),
-				tag.IgnoredValue(clusterData.FailoverVersionIncrement),
-				tag.Value(resp.FailoverVersionIncrement))
-			config.ClusterMetadata.FailoverVersionIncrement = resp.FailoverVersionIncrement
-		}
+	default:
+		return svc.ClusterMetadata, svc.Persistence, fmt.Errorf("error while fetching cluster metadata: %w", err)
 	}
-	err = loadClusterInformationFromStore(ctx, config, clusterMetadataManager, logger)
+
+	clusterLoader := NewClusterMetadataLoader(clusterMetadataManager, logger)
+	err = clusterLoader.LoadAndMergeWithStaticConfig(ctx, svc)
 	if err != nil {
-		return config.ClusterMetadata, config.Persistence, fmt.Errorf("error while loading metadata from cluster: %w", err)
+		return svc.ClusterMetadata, svc.Persistence, fmt.Errorf("error while loading metadata from cluster: %w", err)
 	}
-	return config.ClusterMetadata, config.Persistence, nil
+	return svc.ClusterMetadata, svc.Persistence, nil
+}
+
+func initCurrentClusterMetadataRecord(
+	ctx context.Context,
+	clusterMetadataManager persistence.ClusterMetadataManager,
+	svc *config.Config,
+	initialIndexSearchAttributes map[string]*persistencespb.IndexSearchAttributes,
+	logger log.Logger,
+) error {
+	var clusterId string
+	currentClusterName := svc.ClusterMetadata.CurrentClusterName
+	currentClusterInfo := svc.ClusterMetadata.ClusterInformation[currentClusterName]
+	if uuid.Parse(currentClusterInfo.ClusterID) == nil {
+		if currentClusterInfo.ClusterID != "" {
+			logger.Warn("Cluster Id in Cluster Metadata config is not a valid uuid. Generating a new Cluster Id")
+		}
+		clusterId = uuid.New()
+	} else {
+		clusterId = currentClusterInfo.ClusterID
+	}
+
+	applied, err := clusterMetadataManager.SaveClusterMetadata(
+		ctx,
+		&persistence.SaveClusterMetadataRequest{
+			ClusterMetadata: &persistencespb.ClusterMetadata{
+				HistoryShardCount:        svc.Persistence.NumHistoryShards,
+				ClusterName:              currentClusterName,
+				ClusterId:                clusterId,
+				ClusterAddress:           currentClusterInfo.RPCAddress,
+				HttpAddress:              currentClusterInfo.HTTPAddress,
+				FailoverVersionIncrement: svc.ClusterMetadata.FailoverVersionIncrement,
+				InitialFailoverVersion:   currentClusterInfo.InitialFailoverVersion,
+				IsGlobalNamespaceEnabled: svc.ClusterMetadata.EnableGlobalNamespace,
+				IsConnectionEnabled:      currentClusterInfo.Enabled,
+				UseClusterIdMembership:   true, // Enable this for new cluster after 1.19. This is to prevent two clusters join into one ring.
+				IndexSearchAttributes:    initialIndexSearchAttributes,
+				Tags:                     svc.ClusterMetadata.Tags,
+			},
+		})
+	if err != nil {
+		logger.Warn("Failed to save cluster metadata.", tag.Error(err), tag.ClusterName(currentClusterName))
+		return err
+	}
+	if !applied {
+		logger.Error("Failed to apply cluster metadata.", tag.ClusterName(currentClusterName))
+		return clusterMetadataInitErr
+	}
+	return nil
+}
+
+func updateCurrentClusterMetadataRecord(
+	ctx context.Context,
+	clusterMetadataManager persistence.ClusterMetadataManager,
+	svc *config.Config,
+	initialIndexSearchAttributes map[string]*persistencespb.IndexSearchAttributes,
+	currentClusterDBRecord *persistence.GetClusterMetadataResponse,
+) error {
+	updateDBRecord := false
+	currentClusterMetadata := svc.ClusterMetadata
+	currentClusterName := currentClusterMetadata.CurrentClusterName
+	currentCLusterInfo := currentClusterMetadata.ClusterInformation[currentClusterName]
+	// Allow updating cluster metadata if global namespace is disabled
+	if !currentClusterDBRecord.IsGlobalNamespaceEnabled && currentClusterMetadata.EnableGlobalNamespace {
+		currentClusterDBRecord.IsGlobalNamespaceEnabled = currentClusterMetadata.EnableGlobalNamespace
+		currentClusterDBRecord.InitialFailoverVersion = currentCLusterInfo.InitialFailoverVersion
+		currentClusterDBRecord.FailoverVersionIncrement = currentClusterMetadata.FailoverVersionIncrement
+		updateDBRecord = true
+	}
+	if currentClusterDBRecord.ClusterAddress != currentCLusterInfo.RPCAddress {
+		currentClusterDBRecord.ClusterAddress = currentCLusterInfo.RPCAddress
+		updateDBRecord = true
+	}
+	if currentClusterDBRecord.HttpAddress != currentCLusterInfo.HTTPAddress {
+		currentClusterDBRecord.HttpAddress = currentCLusterInfo.HTTPAddress
+		updateDBRecord = true
+	}
+	if !maps.Equal(currentClusterDBRecord.Tags, svc.ClusterMetadata.Tags) {
+		currentClusterDBRecord.Tags = svc.ClusterMetadata.Tags
+		updateDBRecord = true
+	}
+
+	if len(initialIndexSearchAttributes) > 0 {
+		if currentClusterDBRecord.IndexSearchAttributes == nil {
+			currentClusterDBRecord.IndexSearchAttributes = initialIndexSearchAttributes
+			updateDBRecord = true
+		} else {
+			for indexName, initialValue := range initialIndexSearchAttributes {
+				if _, ok := currentClusterDBRecord.IndexSearchAttributes[indexName]; !ok {
+					currentClusterDBRecord.IndexSearchAttributes[indexName] = initialValue
+					updateDBRecord = true
+				}
+			}
+		}
+	}
+
+	if !updateDBRecord {
+		return nil
+	}
+
+	applied, err := clusterMetadataManager.SaveClusterMetadata(
+		ctx,
+		&persistence.SaveClusterMetadataRequest{
+			ClusterMetadata: currentClusterDBRecord.ClusterMetadata,
+			Version:         currentClusterDBRecord.Version,
+		})
+	if !applied || err != nil {
+		return fmt.Errorf("error while updating cluster metadata: %w", err)
+	}
+	return nil
+}
+
+func overwriteCurrentClusterMetadataWithDBRecord(
+	svc *config.Config,
+	currentClusterDBRecord *persistence.GetClusterMetadataResponse,
+	logger log.Logger,
+) {
+	clusterMetadata := svc.ClusterMetadata
+	if currentClusterDBRecord.IsGlobalNamespaceEnabled && !clusterMetadata.EnableGlobalNamespace {
+		logger.Warn(
+			mismatchLogMessage,
+			tag.Key("clusterMetadata.EnableGlobalNamespace"),
+			tag.IgnoredValue(clusterMetadata.EnableGlobalNamespace),
+			tag.Value(currentClusterDBRecord.IsGlobalNamespaceEnabled))
+		svc.ClusterMetadata.EnableGlobalNamespace = currentClusterDBRecord.IsGlobalNamespaceEnabled
+	}
+	persistedShardCount := currentClusterDBRecord.HistoryShardCount
+	if svc.Persistence.NumHistoryShards != persistedShardCount {
+		logger.Warn(
+			mismatchLogMessage,
+			tag.Key("persistence.numHistoryShards"),
+			tag.IgnoredValue(svc.Persistence.NumHistoryShards),
+			tag.Value(persistedShardCount))
+		svc.Persistence.NumHistoryShards = persistedShardCount
+	}
+	if currentClusterDBRecord.FailoverVersionIncrement != clusterMetadata.FailoverVersionIncrement {
+		logger.Warn(
+			mismatchLogMessage,
+			tag.Key("clusterMetadata.FailoverVersionIncrement"),
+			tag.IgnoredValue(clusterMetadata.FailoverVersionIncrement),
+			tag.Value(currentClusterDBRecord.FailoverVersionIncrement))
+		svc.ClusterMetadata.FailoverVersionIncrement = currentClusterDBRecord.FailoverVersionIncrement
+	}
 }
 
 func PersistenceFactoryProvider() persistenceClient.FactoryProviderFn {
 	return persistenceClient.FactoryProvider
 }
 
-// TODO: move this to cluster.fx
-func loadClusterInformationFromStore(ctx context.Context, config *config.Config, clusterMsg persistence.ClusterMetadataManager, logger log.Logger) error {
-	iter := collection.NewPagingIterator(func(paginationToken []byte) ([]interface{}, []byte, error) {
-		request := &persistence.ListClusterMetadataRequest{
-			PageSize:      100,
-			NextPageToken: nil,
-		}
-		resp, err := clusterMsg.ListClusterMetadata(ctx, request)
-		if err != nil {
-			return nil, nil, err
-		}
-		var pageItem []interface{}
-		for _, metadata := range resp.ClusterMetadata {
-			pageItem = append(pageItem, metadata)
-		}
-		return pageItem, resp.NextPageToken, nil
-	})
-
-	for iter.HasNext() {
-		item, err := iter.Next()
-		if err != nil {
-			return err
-		}
-		metadata := item.(*persistence.GetClusterMetadataResponse)
-		shardCount := metadata.HistoryShardCount
-		if shardCount == 0 {
-			// This is to add backward compatibility to the config based cluster connection.
-			shardCount = config.Persistence.NumHistoryShards
-		}
-		newMetadata := cluster.ClusterInformation{
-			Enabled:                metadata.IsConnectionEnabled,
-			InitialFailoverVersion: metadata.InitialFailoverVersion,
-			RPCAddress:             metadata.ClusterAddress,
-			ShardCount:             shardCount,
-		}
-		if staticClusterMetadata, ok := config.ClusterMetadata.ClusterInformation[metadata.ClusterName]; ok {
-			if metadata.ClusterName != config.ClusterMetadata.CurrentClusterName {
-				logger.Warn(
-					"ClusterInformation in ClusterMetadata config is deprecated. Please use TCTL tool to configure remote cluster connections",
-					tag.Key("clusterInformation"),
-					tag.IgnoredValue(staticClusterMetadata),
-					tag.Value(newMetadata))
-			} else {
-				newMetadata.RPCAddress = staticClusterMetadata.RPCAddress
-				logger.Info(fmt.Sprintf("Use rpc address %v for cluster %v.", newMetadata.RPCAddress, metadata.ClusterName))
-			}
-		}
-		config.ClusterMetadata.ClusterInformation[metadata.ClusterName] = newMetadata
-	}
-	return nil
-}
-
 func ServerLifetimeHooks(
 	lc fx.Lifecycle,
-	svr Server,
+	svr *ServerImpl,
 ) {
-	lc.Append(
-		fx.Hook{
-			OnStart: func(context.Context) error {
-				return svr.Start()
-			},
-			OnStop: func(ctx context.Context) error {
-				return svr.Stop()
-			},
-		},
-	)
+	lc.Append(fx.StartStopHook(svr.Start, svr.Stop))
 }
 
 func verifyPersistenceCompatibleVersion(config config.Persistence, persistenceServiceResolver resolver.ServiceResolver) error {
@@ -873,28 +861,53 @@ func verifyPersistenceCompatibleVersion(config config.Persistence, persistenceSe
 	return nil
 }
 
+type SpanExporterInputs struct {
+	fx.In
+	Lifecycyle fx.Lifecycle
+	Logger     log.Logger
+	Config     *config.Config `optional:"true"`
+}
+
 // TraceExportModule holds process-global telemetry fx state defining the set of
 // OTEL trace/span exporters used by tracing instrumentation. The following
 // types can be overriden/augmented with fx.Replace/fx.Decorate:
 //
 // - []go.opentelemetry.io/otel/sdk/trace.SpanExporter
 var TraceExportModule = fx.Options(
-	fx.Invoke(func(log log.Logger) {
-		otel.SetErrorHandler(otel.ErrorHandlerFunc(
-			func(err error) {
-				log.Warn("OTEL error", tag.Error(err), tag.ErrorType(err))
-			}),
-		)
-	}),
+	fx.Provide(func(inputs SpanExporterInputs) ([]otelsdktrace.SpanExporter, error) {
+		var tracingReady atomic.Bool
+		otel.SetErrorHandler(otel.ErrorHandlerFunc(func(err error) {
+			if tracingReady.Load() { // ignore errors during startup
+				inputs.Logger.Warn("OTEL error", tag.Error(err), tag.ServiceErrorType(err))
+			}
+		}))
 
-	fx.Provide(func(lc fx.Lifecycle, c *config.Config) ([]otelsdktrace.SpanExporter, error) {
-		exporters, err := c.ExporterConfig.SpanExporters()
+		exportersByType := map[telemetry.SpanExporterType]otelsdktrace.SpanExporter{}
+		if inputs.Config != nil {
+			var err error
+			exportersByType, err = inputs.Config.ExporterConfig.SpanExporters()
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		exportersByTypeFromEnv, err := telemetry.SpanExportersFromEnv(os.LookupEnv)
 		if err != nil {
 			return nil, err
 		}
-		lc.Append(fx.Hook{
-			OnStart: startAll(exporters),
-			OnStop:  shutdownAll(exporters),
+
+		// config-defined exporters override env-defined exporters with the same type
+		maps.Copy(exportersByType, exportersByTypeFromEnv)
+
+		exporters := expmaps.Values(exportersByType)
+
+		inputs.Lifecycyle.Append(fx.Hook{
+			OnStart: func(ctx context.Context) error {
+				err = startAll(exporters)(ctx)
+				tracingReady.Store(true)
+				return err
+			},
+			OnStop: shutdownAll(exporters),
 		})
 		return exporters, nil
 	}),
@@ -909,14 +922,12 @@ var TraceExportModule = fx.Options(
 //     default: wrap each otelsdktrace.SpanExporter with otelsdktrace.NewBatchSpanProcessor
 //   - *go.opentelemetry.io/otel/sdk/resource.Resource
 //     default: resource.Default() augmented with the supplied serviceName
-//   - []go.opentelemetry.io/otel/sdk/trace.TracerProviderOption
-//     default: the provided resource.Resource and each of the otelsdktrace.SpanExporter
 //   - go.opentelemetry.io/otel/trace.TracerProvider
-//     default: otelsdktrace.NewTracerProvider with each of the otelsdktrace.TracerProviderOption
+//     default: otelnoop.NewTracerProvider()
 //   - go.opentelemetry.io/otel/ppropagation.TextMapPropagator
 //     default: propagation.TraceContext{}
-//   - telemetry.ServerTraceInterceptor
-//   - telemetry.ClientTraceInterceptor
+//   - telemetry.ServerStatsHandler
+//   - telemetry.ClientStatsHandler
 var ServiceTracingModule = fx.Options(
 	fx.Supply([]otelsdktrace.BatchSpanProcessorOption{}),
 	fx.Provide(
@@ -934,21 +945,14 @@ var ServiceTracingModule = fx.Options(
 	fx.Provide(
 		fx.Annotate(
 			func(rsn primitives.ServiceName, rsi resource.InstanceID) (*otelresource.Resource, error) {
-				// map "internal-frontend" to "frontend" for the purpose of tracing
-				if rsn == primitives.InternalFrontendService {
-					rsn = primitives.FrontendService
-				}
-				serviceName := string(rsn)
-				if !strings.HasPrefix(serviceName, "io.temporal.") {
-					serviceName = fmt.Sprintf("io.temporal.%s", serviceName)
-				}
 				attrs := []attribute.KeyValue{
-					semconv.ServiceNameKey.String(serviceName),
+					semconv.ServiceNameKey.String(telemetry.ResourceServiceName(rsn, os.LookupEnv)),
 					semconv.ServiceVersionKey.String(headers.ServerVersion),
 				}
 				if rsi != "" {
 					attrs = append(attrs, semconv.ServiceInstanceIDKey.String(string(rsi)))
 				}
+
 				return otelresource.New(context.Background(),
 					otelresource.WithProcess(),
 					otelresource.WithOS(),
@@ -960,27 +964,39 @@ var ServiceTracingModule = fx.Options(
 			fx.ParamTags(``, `optional:"true"`),
 		),
 	),
-	fx.Provide(
-		func(r *otelresource.Resource, sps []otelsdktrace.SpanProcessor) []otelsdktrace.TracerProviderOption {
-			opts := make([]otelsdktrace.TracerProviderOption, 0, len(sps)+1)
-			opts = append(opts, otelsdktrace.WithResource(r))
-			for _, sp := range sps {
-				opts = append(opts, otelsdktrace.WithSpanProcessor(sp))
-			}
-			return opts
-		},
-	),
-	fx.Provide(func(lc fx.Lifecycle, opts []otelsdktrace.TracerProviderOption) trace.TracerProvider {
+	fx.Provide(func(lc fx.Lifecycle, r *otelresource.Resource, sps []otelsdktrace.SpanProcessor) trace.TracerProvider {
+		if len(sps) == 0 {
+			return telemetry.NoopTracerProvider
+		}
+		opts := make([]otelsdktrace.TracerProviderOption, 0, len(sps)+1)
+		opts = append(opts, otelsdktrace.WithResource(r))
+		for _, sp := range sps {
+			opts = append(opts, otelsdktrace.WithSpanProcessor(sp))
+		}
 		tp := otelsdktrace.NewTracerProvider(opts...)
-		lc.Append(fx.Hook{OnStop: func(ctx context.Context) error {
-			return tp.Shutdown(ctx)
-		}})
+		lc.Append(fx.Hook{
+			OnStop: func(ctx context.Context) error {
+				otel.SetErrorHandler(otel.ErrorHandlerFunc(func(err error) {
+					// ignore errors during shutdown
+				}))
+
+				shutdownCtx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+				defer cancel()
+
+				err := tp.Shutdown(shutdownCtx)
+				if errors.Is(err, context.DeadlineExceeded) {
+					// Ignore timeouts since it's okay to drop OTEL traces on shutdown.
+					// Either there's no collector, or there are too many traces left to export.
+					return nil
+				}
+				return err
+			}})
 		return tp
 	}),
 	// Haven't had use for baggage propagation yet
 	fx.Provide(func() propagation.TextMapPropagator { return propagation.TraceContext{} }),
-	fx.Provide(telemetry.NewServerTraceInterceptor),
-	fx.Provide(telemetry.NewClientTraceInterceptor),
+	fx.Provide(telemetry.NewServerStatsHandler),
+	fx.Provide(telemetry.NewClientStatsHandler),
 )
 
 func startAll(exporters []otelsdktrace.SpanExporter) func(ctx context.Context) error {
@@ -1000,10 +1016,15 @@ func startAll(exporters []otelsdktrace.SpanExporter) func(ctx context.Context) e
 
 func shutdownAll(exporters []otelsdktrace.SpanExporter) func(ctx context.Context) error {
 	return func(ctx context.Context) error {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+		defer cancel()
+
 		for _, e := range exporters {
-			err := e.Shutdown(ctx)
-			if err != nil {
-				return err
+			err := e.Shutdown(shutdownCtx)
+			if errors.Is(err, context.DeadlineExceeded) {
+				// Ignore timeouts since it's okay to drop OTEL traces on shutdown.
+				// Either there's no collector, or there are too many traces left to export.
+				return nil
 			}
 		}
 		return nil
@@ -1092,6 +1113,16 @@ func (l *fxLogAdapter) LogEvent(e fxevent.Event) {
 				tag.ComponentFX,
 				tag.NewStringTag("module", e.ModuleName),
 				tag.Error(e.Err))
+		}
+	case *fxevent.Run:
+		if e.Err != nil {
+			l.logger.Error("error returned",
+				tag.ComponentFX,
+				tag.NewStringTag("name", e.Name),
+				tag.NewStringTag("kind", e.Kind),
+				tag.NewStringTag("module", e.ModuleName),
+				tag.Error(e.Err),
+			)
 		}
 	case *fxevent.Invoking:
 		// Do not log stack as it will make logs hard to read.

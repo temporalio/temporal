@@ -1,0 +1,61 @@
+# https://d2lang.com
+# Generate SVG by running `make` inside of `docs/`.
+
+Cluster: {
+    grid-rows: 2
+    vertical-gap: 10
+
+    label: "Temporal Cluster"
+    style.fill: transparent
+    style.stroke-dash: 3
+    style.double-border: false
+
+    Server: {
+        grid-columns: 3
+        horizontal-gap: 120
+
+        style.fill: transparent
+        style.stroke-dash: 3
+
+        History: {
+            style.multiple: true
+        }
+        Matching: {
+            style.multiple: true
+        }
+        Frontend: {
+            style.multiple: true
+        }
+    }
+    Database: {
+        label: ""
+        style.opacity: 0
+
+        grid-columns: 3
+        horizontal-gap: 120
+        vertical-gap: 10
+
+        placeho1.style.opacity: 0  # hack to align Database
+        Database: {
+            label: "Database"
+            style.border-radius: 100
+        }
+    }
+}
+
+Outside: {
+    grid-rows: 2
+    vertical-gap: 10
+    horizontal-gap: 20
+    style.opacity: 0
+
+    Worker: {
+        style.multiple: true
+    }
+    placeho.style.opacity: 0  # hack to align Worker
+}
+
+Outside.Worker -> Cluster.Server.Frontend: Poll Tasks
+Cluster.Server.Frontend -> Cluster.Server.Matching: Poll Tasks
+Cluster.Server.History -> Cluster.Server.Matching: Add Tasks
+Cluster.Server.Matching <-> Cluster.Database.Database

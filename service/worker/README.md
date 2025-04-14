@@ -43,9 +43,3 @@ can be applied to local Temporal cluster.
     ```bash
     tctl --ns sample namespace update --ac active
     ```
-
-## Archiver
-
-Archiver is used to handle archival of workflow execution histories. It does this by hosting a Temporal client worker
-and running an archival system workflow. The archival client gets used to initiate archival through signal sending. The archiver
-shards work across several workflows. 

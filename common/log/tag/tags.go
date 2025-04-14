@@ -26,14 +26,15 @@ package tag
 
 import (
 	"fmt"
-	"strings"
 	"time"
 
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/primitives"
-	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/util"
+	"go.uber.org/zap"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // All logging tags are defined in this file.
@@ -46,9 +47,8 @@ import (
 // LoggingCallAtKey is reserved tag
 const (
 	LoggingCallAtKey = "logging-call-at"
-
-	getType     = "%T"
-	errorPrefix = "*"
+	WorkflowIDKey    = "wf-id"
+	WorkflowRunIDKey = "wf-run-id"
 )
 
 // ==========  Common tags defined here ==========
@@ -60,12 +60,15 @@ func Operation(operation string) ZapTag {
 
 // Error returns tag for Error
 func Error(err error) ZapTag {
-	return NewErrorTag(err)
+	return ZapTag{
+		// NOTE: zap already chosen "error" as key
+		field: zap.Error(err),
+	}
 }
 
-// ErrorType returns tag for ErrorType
-func ErrorType(err error) ZapTag {
-	return NewStringTag("service-error-type", strings.TrimPrefix(fmt.Sprintf(getType, err), errorPrefix))
+// ServiceErrorType returns tag for ServiceErrorType
+func ServiceErrorType(err error) ZapTag {
+	return NewStringTag("service-error-type", util.ErrorType(err))
 }
 
 // IsRetryable returns tag for IsRetryable
@@ -83,9 +86,9 @@ func Timestamp(timestamp time.Time) ZapTag {
 	return NewTimeTag("timestamp", timestamp)
 }
 
-// TimestampPtr returns tag for TimestampPtr
-func TimestampPtr(t *time.Time) ZapTag {
-	return NewTimeTag("timestamp", timestamp.TimeValue(t))
+// RequestID returns tag for RequestID
+func RequestID(requestID string) ZapTag {
+	return NewStringTag("request-id", requestID)
 }
 
 // ==========  Workflow tags defined here: ( wf is short for workflow) ==========
@@ -119,7 +122,7 @@ func WorkflowHandlerName(handlerName string) ZapTag {
 
 // WorkflowID returns tag for WorkflowID
 func WorkflowID(workflowID string) ZapTag {
-	return NewStringTag("wf-id", workflowID)
+	return NewStringTag(WorkflowIDKey, workflowID)
 }
 
 // WorkflowType returns tag for WorkflowType
@@ -134,7 +137,12 @@ func WorkflowState(s enumsspb.WorkflowExecutionState) ZapTag {
 
 // WorkflowRunID returns tag for WorkflowRunID
 func WorkflowRunID(runID string) ZapTag {
-	return NewStringTag("wf-run-id", runID)
+	return NewStringTag(WorkflowRunIDKey, runID)
+}
+
+// WorkflowNewRunID returns tag for WorkflowNewRunID
+func WorkflowNewRunID(newRunID string) ZapTag {
+	return NewStringTag("wf-new-run-id", newRunID)
 }
 
 // WorkflowResetBaseRunID returns tag for WorkflowResetBaseRunID
@@ -177,9 +185,9 @@ func WorkflowTaskTimeoutSeconds(s int64) ZapTag {
 	return NewInt64("workflow-task-timeout", s)
 }
 
-// WorkflowTaskTimeoutSeconds returns tag for WorkflowTaskTimeoutSeconds
-func WorkflowTaskTimeout(s *time.Duration) ZapTag {
-	return NewDurationPtrTag("workflow-task-timeout", s)
+// WorkflowTaskTimeout returns tag for WorkflowTaskTimeoutSeconds
+func WorkflowTaskTimeout(s time.Duration) ZapTag {
+	return NewDurationTag("workflow-task-timeout", s)
 }
 
 // QueryID returns tag for QueryID
@@ -227,8 +235,8 @@ func WorkflowStartedEventID(startedEventID int64) ZapTag {
 }
 
 // WorkflowStartedTimestamp returns tag for WorkflowStartedTimestamp
-func WorkflowStartedTimestamp(t *time.Time) ZapTag {
-	return NewTimePtrTag("wf-started-timestamp", t)
+func WorkflowStartedTimestamp(t time.Time) ZapTag {
+	return NewTimeTag("wf-started-timestamp", t)
 }
 
 // WorkflowInitiatedID returns tag for WorkflowInitiatedID
@@ -305,7 +313,30 @@ func WorkflowTaskQueueName(taskQueueName string) ZapTag {
 	return NewStringTag("wf-task-queue-name", taskQueueName)
 }
 
+// WorkerBuildId returns tag for worker build ID
+func WorkerBuildId(buildId string) ZapTag {
+	if buildId == "" {
+		buildId = "_unversioned_"
+	}
+	return NewStringTag("worker-build-id", buildId)
+}
+
+// ReachabilityExitPointTag returns tag for reachabilityExitPoint
+func ReachabilityExitPointTag(reachabilityExitPoint string) ZapTag {
+	return NewStringTag("reachability-exit-point", reachabilityExitPoint)
+}
+
+// BuildIdTaskReachabilityTag returns tag for build id task reachability
+func BuildIdTaskReachabilityTag(buildIdReachability string) ZapTag {
+	return NewStringTag("build-id-reachability", buildIdReachability)
+}
+
 // size limit
+
+// BlobSize returns tag for BlobSize
+func BlobSize(blobSize int64) ZapTag {
+	return NewInt64("blob-size", blobSize)
+}
 
 // WorkflowSize returns tag for WorkflowSize
 func WorkflowSize(workflowSize int64) ZapTag {
@@ -327,9 +358,29 @@ func WorkflowHistorySizeBytes(historySizeBytes int) ZapTag {
 	return NewInt("wf-history-size-bytes", historySizeBytes)
 }
 
+// WorkflowMutableStateSize returns tag for MutableStateSize
+func WorkflowMutableStateSize(mutableStateSize int) ZapTag {
+	return NewInt("wf-mutable-state-size", mutableStateSize)
+}
+
 // WorkflowEventCount returns tag for EventCount
 func WorkflowEventCount(eventCount int) ZapTag {
 	return NewInt("wf-event-count", eventCount)
+}
+
+// WorkerVersioningAssignmentRuleCount returns tag for AssignmentRuleCount
+func WorkerVersioningAssignmentRuleCount(assignmentRuleCount int) ZapTag {
+	return NewInt("worker-versioning-assignment-rule-count", assignmentRuleCount)
+}
+
+// WorkerVersioningRedirectRuleCount returns tag for RedirectRuleCount
+func WorkerVersioningRedirectRuleCount(redirectRuleCount int) ZapTag {
+	return NewInt("worker-versioning-redirect-rule-count", redirectRuleCount)
+}
+
+// WorkerVersioningMaxUpstreamBuildIDs returns tag for RedirectRuleCount
+func WorkerVersioningMaxUpstreamBuildIDs(maxUpstreamBuildIDs int) ZapTag {
+	return NewInt("worker-versioning-max-upstream-build-ids", maxUpstreamBuildIDs)
 }
 
 // ScheduleID returns tag for ScheduleID
@@ -361,6 +412,11 @@ func operationResult(operationResult string) ZapTag {
 }
 
 // ErrorType returns tag for ErrorType
+func ErrorType(err error) ZapTag {
+	return errorType(util.ErrorType(err))
+}
+
+// errorType returns tag for ErrorType given a string
 func errorType(errorType string) ZapTag {
 	return NewStringTag("error-type", errorType)
 }
@@ -368,6 +424,12 @@ func errorType(errorType string) ZapTag {
 // Shardupdate returns tag for Shardupdate
 func shardupdate(shardupdate string) ZapTag {
 	return NewStringTag("shard-update", shardupdate)
+}
+
+// scope returns a tag for scope
+// Pre-defined scope tags are in values.go.
+func scope(scope string) ZapTag {
+	return NewStringTag("scope", scope)
 }
 
 // general
@@ -432,6 +494,11 @@ func IgnoredValue(v interface{}) ZapTag {
 	return NewAnyTag("ignored-value", v)
 }
 
+// Host returns tag for Host
+func Host(h string) ZapTag {
+	return NewStringTag("host", h)
+}
+
 // Port returns tag for Port
 func Port(p int) ZapTag {
 	return NewInt("port", p)
@@ -467,6 +534,11 @@ func RequestCount(c int) ZapTag {
 	return NewInt("request-count", c)
 }
 
+// RPS returns tag for requests per second
+func RPS(c int64) ZapTag {
+	return NewInt64("rps", c)
+}
+
 // Number returns tag for Number
 func Number(n int64) ZapTag {
 	return NewInt64("number", n)
@@ -495,6 +567,9 @@ func CertThumbprint(thumbprint string) ZapTag {
 func WorkerComponent(v interface{}) ZapTag {
 	return NewStringTag("worker-component", fmt.Sprintf("%T", v))
 }
+
+// FailedAssertion is a tag for marking a message as a failed assertion.
+var FailedAssertion = NewBoolTag("failed-assertion", true)
 
 // history engine shard
 
@@ -551,18 +626,13 @@ func ShardQueueAcks(categoryName string, ackLevel interface{}) ZapTag {
 // task queue processor
 
 // QueueReaderID returns tag for queue readerID
-func QueueReaderID(readerID int32) ZapTag {
-	return NewInt32("queue-reader-id", readerID)
+func QueueReaderID(readerID int64) ZapTag {
+	return NewInt64("queue-reader-id", readerID)
 }
 
-// QueueAlertType returns tag for queue alert type
-func QueueAlertType(alertType string) ZapTag {
-	return NewStringTag("queue-alert-type", alertType)
-}
-
-// QueueAlertAttributes returns tag for queue alert attributes
-func QueueAlertAttributes(attributes interface{}) ZapTag {
-	return NewAnyTag("queue-alert-attributes", attributes)
+// QueueAlert returns tag for queue alert
+func QueueAlert(alert interface{}) ZapTag {
+	return NewAnyTag("queue-alert", alert)
 }
 
 // Task returns tag for Task
@@ -575,6 +645,11 @@ func TaskID(taskID int64) ZapTag {
 	return NewInt64("queue-task-id", taskID)
 }
 
+// TaskKey returns tag for TaskKey
+func TaskKey(key interface{}) ZapTag {
+	return NewAnyTag("queue-task-key", key)
+}
+
 // TaskVersion returns tag for TaskVersion
 func TaskVersion(taskVersion int64) ZapTag {
 	return NewInt64("queue-task-version", taskVersion)
@@ -582,6 +657,10 @@ func TaskVersion(taskVersion int64) ZapTag {
 
 func TaskType(taskType enumsspb.TaskType) ZapTag {
 	return NewStringTag("queue-task-type", taskType.String())
+}
+
+func TaskCategoryID(taskCategoryID int) ZapTag {
+	return NewInt("queue-task-category-id", taskCategoryID)
 }
 
 // TaskVisibilityTimestamp returns tag for task visibilityTimestamp
@@ -599,9 +678,18 @@ func NumberDeleted(n int) ZapTag {
 	return NewInt("number-deleted", n)
 }
 
+// NumberChanged returns tag for NumberChanged
+func NumberChanged(n int) ZapTag {
+	return NewInt("number-changed", n)
+}
+
 // TimerTaskStatus returns tag for TimerTaskStatus
 func TimerTaskStatus(timerTaskStatus int32) ZapTag {
 	return NewInt32("timer-task-status", timerTaskStatus)
+}
+
+func DLQMessageID(dlqMessageID int64) ZapTag {
+	return NewInt64("dlq-message-id", dlqMessageID)
 }
 
 // retry
@@ -609,6 +697,11 @@ func TimerTaskStatus(timerTaskStatus int32) ZapTag {
 // Attempt returns tag for Attempt
 func Attempt(attempt int32) ZapTag {
 	return NewInt32("attempt", attempt)
+}
+
+// UnexpectedErrorAttempts returns tag for UnexpectedErrorAttempts
+func UnexpectedErrorAttempts(attempt int32) ZapTag {
+	return NewInt32("unexpected-error-attempts", attempt)
 }
 
 func WorkflowTaskType(wtType string) ZapTag {
@@ -707,6 +800,22 @@ func SourceCluster(sourceCluster string) ZapTag {
 	return NewStringTag("xdc-source-cluster", sourceCluster)
 }
 
+// TargetCluster returns tag for TargetCluster
+func TargetCluster(targetCluster string) ZapTag {
+	return NewStringTag("xdc-target-cluster", targetCluster)
+}
+
+func SourceShardID(shardID int32) ZapTag {
+	return NewInt32("xdc-source-shard-id", shardID)
+}
+
+func TargetShardID(shardID int32) ZapTag {
+	return NewInt32("xdc-target-shard-id", shardID)
+}
+func ReplicationTask(replicationTask interface{}) ZapTag {
+	return NewAnyTag("xdc-replication-task", replicationTask)
+}
+
 // PrevActiveCluster returns tag for PrevActiveCluster
 func PrevActiveCluster(prevActiveCluster string) ZapTag {
 	return NewStringTag("xdc-prev-active-cluster", prevActiveCluster)
@@ -755,11 +864,6 @@ func ArchivalCallerServiceName(callerServiceName string) ZapTag {
 	return NewStringTag("archival-caller-service-name", callerServiceName)
 }
 
-// ArchivalArchiveAttemptedInline returns tag for whether archival is attempted inline before signal is sent.
-func ArchivalArchiveAttemptedInline(archiveInline bool) ZapTag {
-	return NewBoolTag("archival-archive-attempted-inline", archiveInline)
-}
-
 // ArchivalRequestNamespaceID returns tag for RequestNamespaceID
 func ArchivalRequestNamespaceID(requestNamespaceID string) ZapTag {
 	return NewStringTag("archival-request-namespace-id", requestNamespaceID)
@@ -801,8 +905,8 @@ func ArchivalRequestCloseFailoverVersion(requestCloseFailoverVersion int64) ZapT
 }
 
 // ArchivalRequestCloseTimestamp returns tag for RequestCloseTimestamp
-func ArchivalRequestCloseTimestamp(requestCloseTimeStamp *time.Time) ZapTag {
-	return NewTimeTag("archival-request-close-timestamp", timestamp.TimeValue(requestCloseTimeStamp))
+func ArchivalRequestCloseTimestamp(requestCloseTimeStamp *timestamppb.Timestamp) ZapTag {
+	return NewTimeTag("archival-request-close-timestamp", requestCloseTimeStamp.AsTime())
 }
 
 // ArchivalRequestStatus returns tag for RequestStatus
@@ -818,44 +922,6 @@ func ArchivalURI(URI string) ZapTag {
 // ArchivalArchiveFailReason returns tag for ArchivalArchiveFailReason
 func ArchivalArchiveFailReason(archiveFailReason string) ZapTag {
 	return NewStringTag("archival-archive-fail-reason", archiveFailReason)
-}
-
-// ArchivalDeleteHistoryFailReason returns tag for ArchivalDeleteHistoryFailReason
-func ArchivalDeleteHistoryFailReason(deleteHistoryFailReason string) ZapTag {
-	return NewStringTag("archival-delete-history-fail-reason", deleteHistoryFailReason)
-}
-
-// ArchivalVisibilityQuery returns tag for the query for getting archived visibility record
-func ArchivalVisibilityQuery(query string) ZapTag {
-	return NewStringTag("archival-visibility-query", query)
-}
-
-// The following logger tags are only used by internal archiver implemention.
-// TODO: move them to internal repo once temporal plugin model is in place.
-
-// ArchivalBlobKey returns tag for BlobKey
-func ArchivalBlobKey(blobKey string) ZapTag {
-	return NewStringTag("archival-blob-key", blobKey)
-}
-
-// ArchivalDeterministicConstructionCheckFailReason returns tag for ArchivalDeterministicConstructionCheckFailReason
-func ArchivalDeterministicConstructionCheckFailReason(deterministicConstructionCheckFailReason string) ZapTag {
-	return NewStringTag("archival-deterministic-construction-check-fail-reason", deterministicConstructionCheckFailReason)
-}
-
-// ArchivalNonDeterministicBlobKey returns tag for randomly generated NonDeterministicBlobKey
-func ArchivalNonDeterministicBlobKey(nondeterministicBlobKey string) ZapTag {
-	return NewStringTag("archival-non-deterministic-blob-key", nondeterministicBlobKey)
-}
-
-// ArchivalBlobIntegrityCheckFailReason returns tag for ArchivalBlobIntegrityCheckFailReason
-func ArchivalBlobIntegrityCheckFailReason(blobIntegrityCheckFailReason string) ZapTag {
-	return NewStringTag("archival-blob-integrity-check-fail-reason", blobIntegrityCheckFailReason)
-}
-
-// ArchivalBlobstoreContextTimeout returns tag for ArchivalBlobstoreContextTimeout
-func ArchivalBlobstoreContextTimeout(blobstoreContextTimeout time.Duration) ZapTag {
-	return NewDurationTag("archival-blobstore-context-timeout", blobstoreContextTimeout)
 }
 
 // TransportType returns tag for transportType
@@ -923,4 +989,31 @@ func DeletedExecutionsErrorCount(count int) ZapTag {
 
 func Endpoint(endpoint string) ZapTag {
 	return NewStringTag("endpoint", endpoint)
+}
+
+func BuildId(buildId string) ZapTag {
+	return NewStringTag("build-id", buildId)
+}
+
+func VersioningBehavior(behavior enumspb.VersioningBehavior) ZapTag {
+	return NewStringTag("versioning-behavior", behavior.String())
+}
+
+func Deployment(d *deploymentpb.Deployment) ZapTag {
+	if d != nil {
+		return NewAnyTag("deployment", d.SeriesName+":"+d.BuildId)
+	}
+	return NewAnyTag("deployment", "unversioned")
+}
+
+func UserDataVersion(v int64) ZapTag {
+	return NewInt64("user-data-version", v)
+}
+
+func Cause(cause string) ZapTag {
+	return NewStringTag("cause", cause)
+}
+
+func NexusOperation(operation string) ZapTag {
+	return NewStringTag("nexus-operation", operation)
 }

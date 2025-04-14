@@ -31,31 +31,33 @@ import (
 
 	"github.com/pborman/uuid"
 	"go.temporal.io/api/serviceerror"
-
-	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/service/history/shard"
-	"go.temporal.io/server/service/history/workflow"
+	"go.temporal.io/server/common/util"
+	historyi "go.temporal.io/server/service/history/interfaces"
 )
 
 type (
 	ConflictResolver interface {
-		prepareMutableState(
+		GetOrRebuildCurrentMutableState(
 			ctx context.Context,
 			branchIndex int32,
 			incomingVersion int64,
-		) (workflow.MutableState, bool, error)
+		) (historyi.MutableState, bool, error)
+		GetOrRebuildMutableState(
+			ctx context.Context,
+			branchIndex int32,
+		) (historyi.MutableState, bool, error)
 	}
 
 	ConflictResolverImpl struct {
-		shard          shard.Context
+		shard          historyi.ShardContext
 		stateRebuilder StateRebuilder
 
-		context      workflow.Context
-		mutableState workflow.MutableState
+		context      historyi.WorkflowContext
+		mutableState historyi.MutableState
 		logger       log.Logger
 	}
 )
@@ -63,9 +65,9 @@ type (
 var _ ConflictResolver = (*ConflictResolverImpl)(nil)
 
 func NewConflictResolver(
-	shard shard.Context,
-	context workflow.Context,
-	mutableState workflow.MutableState,
+	shard historyi.ShardContext,
+	wfContext historyi.WorkflowContext,
+	mutableState historyi.MutableState,
 	logger log.Logger,
 ) *ConflictResolverImpl {
 
@@ -73,26 +75,19 @@ func NewConflictResolver(
 		shard:          shard,
 		stateRebuilder: NewStateRebuilder(shard, logger),
 
-		context:      context,
+		context:      wfContext,
 		mutableState: mutableState,
 		logger:       logger,
 	}
 }
 
-func (r *ConflictResolverImpl) prepareMutableState(
+func (r *ConflictResolverImpl) GetOrRebuildCurrentMutableState(
 	ctx context.Context,
 	branchIndex int32,
 	incomingVersion int64,
-) (workflow.MutableState, bool, error) {
-
+) (historyi.MutableState, bool, error) {
 	versionHistories := r.mutableState.GetExecutionInfo().GetVersionHistories()
 	currentVersionHistoryIndex := versionHistories.GetCurrentVersionHistoryIndex()
-
-	// replication task to be applied to current branch
-	if branchIndex == currentVersionHistoryIndex {
-		return r.mutableState, false, nil
-	}
-
 	currentVersionHistory, err := versionhistory.GetVersionHistory(versionHistories, currentVersionHistoryIndex)
 	if err != nil {
 		return nil, false, err
@@ -106,9 +101,31 @@ func (r *ConflictResolverImpl) prepareMutableState(
 	if incomingVersion < currentLastItem.GetVersion() {
 		return r.mutableState, false, nil
 	}
-
-	if incomingVersion == currentLastItem.GetVersion() {
+	if incomingVersion == currentLastItem.GetVersion() && branchIndex != currentVersionHistoryIndex {
 		return nil, false, serviceerror.NewInvalidArgument("ConflictResolver encountered replication task version == current branch last write version")
+	}
+	// incomingVersion > currentLastItem.GetVersion()
+	return r.getOrRebuildMutableStateByIndex(ctx, branchIndex)
+}
+
+func (r *ConflictResolverImpl) GetOrRebuildMutableState(
+	ctx context.Context,
+	branchIndex int32,
+) (historyi.MutableState, bool, error) {
+	return r.getOrRebuildMutableStateByIndex(ctx, branchIndex)
+}
+
+func (r *ConflictResolverImpl) getOrRebuildMutableStateByIndex(
+	ctx context.Context,
+	branchIndex int32,
+) (historyi.MutableState, bool, error) {
+
+	versionHistories := r.mutableState.GetExecutionInfo().GetVersionHistories()
+	currentVersionHistoryIndex := versionHistories.GetCurrentVersionHistoryIndex()
+
+	// replication task to be applied to current branch
+	if branchIndex == currentVersionHistoryIndex {
+		return r.mutableState, false, nil
 	}
 
 	// task.getVersion() > currentLastItem
@@ -125,7 +142,7 @@ func (r *ConflictResolverImpl) rebuild(
 	ctx context.Context,
 	branchIndex int32,
 	requestID string,
-) (workflow.MutableState, error) {
+) (historyi.MutableState, error) {
 
 	versionHistories := r.mutableState.GetExecutionInfo().GetVersionHistories()
 	replayVersionHistory, err := versionhistory.GetVersionHistory(versionHistories, branchIndex)
@@ -144,14 +161,15 @@ func (r *ConflictResolverImpl) rebuild(
 		executionInfo.WorkflowId,
 		executionState.RunId,
 	)
+	historySize := r.mutableState.GetHistorySize()
 
-	rebuildMutableState, rebuiltHistorySize, err := r.stateRebuilder.Rebuild(
+	rebuildMutableState, _, err := r.stateRebuilder.Rebuild(
 		ctx,
-		timestamp.TimeValue(executionInfo.StartTime),
+		timestamp.TimeValue(executionState.StartTime),
 		workflowKey,
 		replayVersionHistory.GetBranchToken(),
 		lastItem.GetEventId(),
-		convert.Int64Ptr(lastItem.GetVersion()),
+		util.Ptr(lastItem.GetVersion()),
 		workflowKey,
 		replayVersionHistory.GetBranchToken(),
 		requestID,
@@ -163,6 +181,8 @@ func (r *ConflictResolverImpl) rebuild(
 	// after rebuilt verification
 	rebuildVersionHistories := rebuildMutableState.GetExecutionInfo().GetVersionHistories()
 	rebuildVersionHistory, err := versionhistory.GetCurrentVersionHistory(rebuildVersionHistories)
+	rebuildMutableState.GetExecutionInfo().PreviousTransitionHistory = r.mutableState.GetExecutionInfo().PreviousTransitionHistory
+	rebuildMutableState.GetExecutionInfo().LastTransitionHistoryBreakPoint = r.mutableState.GetExecutionInfo().LastTransitionHistoryBreakPoint
 	if err != nil {
 		return nil, err
 	}
@@ -172,18 +192,14 @@ func (r *ConflictResolverImpl) rebuild(
 	}
 
 	// set the current branch index to target branch index
-	// set the version history back
-	//
-	// caller can use the IsVersionHistoriesRebuilt function in VersionHistories
-	// telling whether mutable state is rebuilt, before apply new history events
 	if err := versionhistory.SetCurrentVersionHistoryIndex(versionHistories, branchIndex); err != nil {
 		return nil, err
 	}
 	rebuildMutableState.GetExecutionInfo().VersionHistories = versionHistories
+	rebuildMutableState.AddHistorySize(historySize)
 	// set the update condition from original mutable state
 	rebuildMutableState.SetUpdateCondition(r.mutableState.GetUpdateCondition())
 
 	r.context.Clear()
-	r.context.SetHistorySize(rebuiltHistorySize)
 	return rebuildMutableState, nil
 }

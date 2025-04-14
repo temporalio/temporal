@@ -32,31 +32,26 @@ import (
 	"sync/atomic"
 	"time"
 
-	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/api/serviceerror"
-
-	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/archiver"
-	"go.temporal.io/server/common/clock"
-	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/future"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/serialization"
-	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/pingable"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
-	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/configs"
+	historyi "go.temporal.io/server/service/history/interfaces"
+	"golang.org/x/sync/semaphore"
+	"golang.org/x/time/rate"
 )
 
 const (
-	shardControllerMembershipUpdateListenerName = "ShardController"
+	shardLingerMaxTimeLimit = 1 * time.Minute
 )
 
 var (
@@ -66,38 +61,70 @@ var (
 
 type (
 	ControllerImpl struct {
-		membershipUpdateCh  chan *membership.ChangedEvent
-		engineFactory       EngineFactory
-		status              int32
-		shutdownWG          sync.WaitGroup
-		shutdownCh          chan struct{}
-		contextTaggedLogger log.Logger
-		throttledLogger     log.Logger
-		config              *configs.Config
-
 		sync.RWMutex
-		historyShards               map[int32]*ContextImpl
-		logger                      log.Logger
-		persistenceExecutionManager persistence.ExecutionManager
-		persistenceShardManager     persistence.ShardManager
-		clientBean                  client.Bean
-		historyClient               historyservice.HistoryServiceClient
-		historyServiceResolver      membership.ServiceResolver
-		taggedMetricsHandler        metrics.Handler
-		metricsHandler              metrics.Handler
-		payloadSerializer           serialization.Serializer
-		timeSource                  clock.TimeSource
-		namespaceRegistry           namespace.Registry
-		saProvider                  searchattribute.Provider
-		saMapperProvider            searchattribute.MapperProvider
-		clusterMetadata             cluster.Metadata
-		archivalMetadata            archiver.ArchivalMetadata
-		hostInfoProvider            membership.HostInfoProvider
-		tracer                      trace.Tracer
+		historyShards map[int32]historyi.ControllableContext
+
+		lingerState struct {
+			sync.Mutex
+			shards map[historyi.ControllableContext]struct{}
+		}
+
+		config               *configs.Config
+		contextFactory       ContextFactory
+		contextTaggedLogger  log.Logger
+		hostInfoProvider     membership.HostInfoProvider
+		ownership            *ownership
+		status               int32
+		taggedMetricsHandler metrics.Handler
+		// shardCountSubscriptions is a set of subscriptions that receive shard count updates whenever the set of
+		// shards that this controller owns changes.
+		shardCountSubscriptions map[*shardCountSubscription]struct{}
+		initialShardsAcquired   *future.FutureImpl[struct{}]
+		shardReadinessCancel    atomic.Value // context.CancelFunc
+	}
+	// shardCountSubscription is a subscription to shard count updates.
+	shardCountSubscription struct {
+		controller *ControllerImpl
+		ch         chan int
 	}
 )
 
 var _ Controller = (*ControllerImpl)(nil)
+
+func ControllerProvider(
+	config *configs.Config,
+	logger log.Logger,
+	historyServiceResolver membership.ServiceResolver,
+	metricsHandler metrics.Handler,
+	hostInfoProvider membership.HostInfoProvider,
+	contextFactory ContextFactory,
+) *ControllerImpl {
+	hostIdentity := hostInfoProvider.HostInfo().Identity()
+	contextTaggedLogger := log.With(logger, tag.ComponentShardController, tag.Address(hostIdentity))
+	taggedMetricsHandler := metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryShardControllerScope))
+
+	ownership := newOwnership(
+		config,
+		historyServiceResolver,
+		hostInfoProvider,
+		contextTaggedLogger,
+		taggedMetricsHandler,
+	)
+
+	c := &ControllerImpl{
+		config:                  config,
+		contextFactory:          contextFactory,
+		contextTaggedLogger:     contextTaggedLogger,
+		historyShards:           make(map[int32]historyi.ControllableContext),
+		hostInfoProvider:        hostInfoProvider,
+		ownership:               ownership,
+		taggedMetricsHandler:    taggedMetricsHandler,
+		shardCountSubscriptions: map[*shardCountSubscription]struct{}{},
+		initialShardsAcquired:   future.NewFuture[struct{}](),
+	}
+	c.lingerState.shards = make(map[historyi.ControllableContext]struct{})
+	return c
+}
 
 func (c *ControllerImpl) Start() {
 	if !atomic.CompareAndSwapInt32(
@@ -108,24 +135,7 @@ func (c *ControllerImpl) Start() {
 		return
 	}
 
-	if c.engineFactory == nil {
-		panic("engineFactory was not injected")
-	}
-
-	hostIdentity := c.hostInfoProvider.HostInfo().Identity()
-	c.contextTaggedLogger = log.With(c.logger, tag.ComponentShardController, tag.Address(hostIdentity))
-	c.throttledLogger = log.With(c.throttledLogger, tag.ComponentShardController, tag.Address(hostIdentity))
-
-	c.acquireShards()
-	c.shutdownWG.Add(1)
-	go c.shardManagementPump()
-
-	if err := c.historyServiceResolver.AddListener(
-		shardControllerMembershipUpdateListenerName,
-		c.membershipUpdateCh,
-	); err != nil {
-		c.contextTaggedLogger.Error("Error adding listener", tag.Error(err))
-	}
+	c.ownership.start(c)
 
 	c.contextTaggedLogger.Info("", tag.LifeCycleStarted)
 }
@@ -139,36 +149,30 @@ func (c *ControllerImpl) Stop() {
 		return
 	}
 
-	close(c.shutdownCh)
+	c.initialShardsAcquired.SetIfNotReady(struct{}{}, context.Canceled)
 
-	if err := c.historyServiceResolver.RemoveListener(
-		shardControllerMembershipUpdateListenerName,
-	); err != nil {
-		c.contextTaggedLogger.Error("Error removing membership update listener", tag.Error(err), tag.OperationFailed)
-	}
+	c.ownership.stop()
 
-	if success := common.AwaitWaitGroup(&c.shutdownWG, time.Minute); !success {
-		c.contextTaggedLogger.Warn("", tag.LifeCycleStopTimedout)
-	}
+	c.doShutdown()
 
 	c.contextTaggedLogger.Info("", tag.LifeCycleStopped)
 }
 
-func (c *ControllerImpl) GetPingChecks() []common.PingCheck {
-	return []common.PingCheck{{
+func (c *ControllerImpl) GetPingChecks() []pingable.Check {
+	return []pingable.Check{{
 		Name:    "shard controller",
 		Timeout: 10 * time.Second,
-		Ping: func() []common.Pingable {
+		Ping: func() []pingable.Pingable {
 			// we only need to read but get write lock to make sure we can
 			c.Lock()
 			defer c.Unlock()
-			out := make([]common.Pingable, 0, len(c.historyShards))
+			out := make([]pingable.Pingable, 0, len(c.historyShards))
 			for _, shard := range c.historyShards {
 				out = append(out, shard)
 			}
 			return out
 		},
-		MetricsName: metrics.ShardControllerLockLatency.GetMetricName(),
+		MetricsName: metrics.DDShardControllerLockLatency.Name(),
 	}}
 }
 
@@ -176,13 +180,18 @@ func (c *ControllerImpl) Status() int32 {
 	return atomic.LoadInt32(&c.status)
 }
 
-// GetShardByID returns a shard context for the given namespace and workflow.
+func (c *ControllerImpl) InitialShardsAcquired(ctx context.Context) error {
+	_, err := c.initialShardsAcquired.Get(ctx)
+	return err
+}
+
+// GetShardByNamespaceWorkflow returns a shard context for the given namespace and workflow.
 // The shard context may not have acquired a rangeid lease yet.
 // Callers can use GetEngine on the shard to block on rangeid lease acquisition.
 func (c *ControllerImpl) GetShardByNamespaceWorkflow(
 	namespaceID namespace.ID,
 	workflowID string,
-) (Context, error) {
+) (historyi.ShardContext, error) {
 	shardID := c.config.GetShardID(namespaceID, workflowID)
 	return c.GetShardByID(shardID)
 }
@@ -192,10 +201,10 @@ func (c *ControllerImpl) GetShardByNamespaceWorkflow(
 // Callers can use GetEngine on the shard to block on rangeid lease acquisition.
 func (c *ControllerImpl) GetShardByID(
 	shardID int32,
-) (Context, error) {
+) (historyi.ShardContext, error) {
 	startTime := time.Now().UTC()
 	defer func() {
-		c.taggedMetricsHandler.Timer(metrics.GetEngineForShardLatency.GetMetricName()).Record(time.Since(startTime))
+		metrics.GetEngineForShardLatency.With(c.taggedMetricsHandler).Record(time.Since(startTime))
 	}()
 
 	return c.getOrCreateShardContext(shardID)
@@ -204,16 +213,14 @@ func (c *ControllerImpl) GetShardByID(
 func (c *ControllerImpl) CloseShardByID(shardID int32) {
 	startTime := time.Now().UTC()
 	defer func() {
-		c.taggedMetricsHandler.Timer(metrics.RemoveEngineForShardLatency.GetMetricName()).Record(time.Since(startTime))
+		metrics.RemoveEngineForShardLatency.With(c.taggedMetricsHandler).Record(time.Since(startTime))
 	}()
 
-	shard, newNumShards := c.removeShard(shardID, nil)
+	shard := c.removeShard(shardID, nil)
+
 	// Stop the current shard, if it exists.
 	if shard != nil {
-		shard.contextTaggedLogger.Info("", tag.LifeCycleStopping, tag.ComponentShardContext, tag.ShardID(shardID))
-		shard.finishStop()
-		c.taggedMetricsHandler.Counter(metrics.ShardContextRemovedCounter.GetMetricName()).Record(1)
-		shard.contextTaggedLogger.Info("", tag.LifeCycleStopped, tag.ComponentShardContext, tag.Number(newNumShards))
+		shard.FinishStop()
 	}
 }
 
@@ -228,33 +235,29 @@ func (c *ControllerImpl) ShardIDs() []int32 {
 	return ids
 }
 
-func (c *ControllerImpl) shardClosedCallback(shard *ContextImpl) {
+func (c *ControllerImpl) shardRemoveAndStop(shard historyi.ControllableContext) {
 	startTime := time.Now().UTC()
 	defer func() {
-		c.taggedMetricsHandler.Timer(metrics.RemoveEngineForShardLatency.GetMetricName()).Record(time.Since(startTime))
+		metrics.RemoveEngineForShardLatency.With(c.taggedMetricsHandler).Record(time.Since(startTime))
 	}()
 
-	c.taggedMetricsHandler.Counter(metrics.ShardContextClosedCounter.GetMetricName()).Record(1)
-	_, newNumShards := c.removeShard(shard.shardID, shard)
+	metrics.ShardContextClosedCounter.With(c.taggedMetricsHandler).Record(1)
+	_ = c.removeShard(shard.GetShardID(), shard)
 
 	// Whether shard was in the shards map or not, in both cases we should stop it.
-	shard.contextTaggedLogger.Info("", tag.LifeCycleStopping, tag.ComponentShardContext, tag.ShardID(shard.shardID))
-	shard.finishStop()
-	c.taggedMetricsHandler.Counter(metrics.ShardContextRemovedCounter.GetMetricName()).Record(1)
-	shard.contextTaggedLogger.Info("", tag.LifeCycleStopped, tag.ComponentShardContext, tag.Number(newNumShards))
+	shard.FinishStop()
 }
 
 // getOrCreateShardContext returns a shard context for the given shard ID, creating a new one
 // if necessary. If a shard context is created, it will initialize in the background.
 // This function won't block on rangeid lease acquisition.
-func (c *ControllerImpl) getOrCreateShardContext(shardID int32) (*ContextImpl, error) {
-	err := c.validateShardId(shardID)
-	if err != nil {
+func (c *ControllerImpl) getOrCreateShardContext(shardID int32) (historyi.ControllableContext, error) {
+	if err := c.validateShardId(shardID); err != nil {
 		return nil, err
 	}
 	c.RLock()
 	if shard, ok := c.historyShards[shardID]; ok {
-		if shard.isValid() {
+		if shard.IsValid() {
 			c.RUnlock()
 			return shard, nil
 		}
@@ -262,196 +265,296 @@ func (c *ControllerImpl) getOrCreateShardContext(shardID int32) (*ContextImpl, e
 	}
 	c.RUnlock()
 
-	ownerInfo, err := c.historyServiceResolver.Lookup(convert.Int32ToString(shardID))
-	if err != nil {
-		return nil, err
-	}
-
-	hostInfo := c.hostInfoProvider.HostInfo()
-	if ownerInfo.Identity() != hostInfo.Identity() {
-		return nil, serviceerrors.NewShardOwnershipLost(ownerInfo.Identity(), hostInfo.GetAddress())
-	}
-
 	c.Lock()
 	defer c.Unlock()
 
 	// Check again with exclusive lock
 	if shard, ok := c.historyShards[shardID]; ok {
-		if shard.isValid() {
+		if shard.IsValid() {
 			return shard, nil
 		}
 
-		shard.Unload()
-		delete(c.historyShards, shardID)
+		// If the shard was invalid and still in the historyShards map, the
+		// shardClosedCallback call is in-flight, and will call finishStop.
+		_ = c.removeShardLocked(shardID, shard)
+	}
+
+	if err := c.ownership.verifyOwnership(shardID); err != nil {
+		return nil, err
 	}
 
 	if atomic.LoadInt32(&c.status) == common.DaemonStatusStopped {
+		hostInfo := c.hostInfoProvider.HostInfo()
 		return nil, fmt.Errorf("ControllerImpl for host '%v' shutting down", hostInfo.Identity())
 	}
 
-	shard, err := newContext(
-		shardID,
-		c.engineFactory,
-		c.config,
-		c.shardClosedCallback,
-		c.logger,
-		c.throttledLogger,
-		c.persistenceExecutionManager,
-		c.persistenceShardManager,
-		c.clientBean,
-		c.historyClient,
-		c.metricsHandler,
-		c.payloadSerializer,
-		c.timeSource,
-		c.namespaceRegistry,
-		c.saProvider,
-		c.saMapperProvider,
-		c.clusterMetadata,
-		c.archivalMetadata,
-		c.hostInfoProvider,
-	)
+	shard, err := c.contextFactory.CreateContext(shardID, c.shardRemoveAndStop)
 	if err != nil {
 		return nil, err
 	}
-	shard.start()
 	c.historyShards[shardID] = shard
-	c.taggedMetricsHandler.Counter(metrics.ShardContextCreatedCounter.GetMetricName()).Record(1)
+	metrics.ShardContextCreatedCounter.With(c.taggedMetricsHandler).Record(1)
+	c.contextTaggedLogger.Info("", numShardsTag(len(c.historyShards)))
 
-	shard.contextTaggedLogger.Info("", tag.LifeCycleStarted, tag.ComponentShardContext)
 	return shard, nil
 }
 
-func (c *ControllerImpl) removeShard(shardID int32, expected *ContextImpl) (*ContextImpl, int64) {
+func (c *ControllerImpl) removeShard(shardID int32, expected historyi.ControllableContext) historyi.ControllableContext {
 	c.Lock()
 	defer c.Unlock()
+	return c.removeShardLocked(shardID, expected)
+}
 
-	nShards := int64(len(c.historyShards))
+func (c *ControllerImpl) removeShardLocked(shardID int32, expected historyi.ControllableContext) historyi.ControllableContext {
 	current, ok := c.historyShards[shardID]
 	if !ok {
-		return nil, nShards
+		return nil
 	}
 	if expected != nil && current != expected {
 		// the shard comparison is a defensive check to make sure we are deleting
 		// what we intend to delete.
-		return nil, nShards
+		return nil
 	}
 
 	delete(c.historyShards, shardID)
+	c.contextTaggedLogger.Info("", numShardsTag(len(c.historyShards)))
+	metrics.ShardContextRemovedCounter.With(c.taggedMetricsHandler).Record(1)
 
-	return current, nShards - 1
+	return current
 }
 
-// shardManagementPump is the main event loop for
-// ControllerImpl. It is responsible for acquiring /
-// releasing shards in response to any event that can
-// change the shard ownership. These events are
-//
-//	a. Ring membership change
-//	b. Periodic ticker
-//	c. ShardOwnershipLostError and subsequent ShardClosedEvents from engine
-func (c *ControllerImpl) shardManagementPump() {
-	defer c.shutdownWG.Done()
+// shardLingerThenClose delays closing the shard for a small amount of time,
+// while watching for the shard to become invalid due to receiving a shard
+// ownership lost error.
+// The potential benefit over closing the shard immediately is that this
+// history instance can continue to process requests for the shard until the
+// new owner actually acquires the shard.
+func (c *ControllerImpl) shardLingerThenClose(ctx context.Context, shardID int32) {
+	c.RLock()
+	shard, ok := c.historyShards[shardID]
+	c.RUnlock()
+	if !ok {
+		return
+	}
 
-	acquireTicker := time.NewTicker(c.config.AcquireShardInterval())
-	defer acquireTicker.Stop()
+	// This uses a separate goroutine because acquireShards has a concurrency limit,
+	// and we don't want to block acquiring new shards while waiting for
+	// shard ownership lost on this one. Otherwise, another history instance
+	// could be lingering on a shard that this instance should own, but this
+	// instance's acquireShards concurrency slots are filled with lingering shards.
+	if !c.beginLinger(shard) {
+		return
+	}
+
+	go func() {
+		defer c.endLinger(shard)
+		c.doLinger(ctx, shard)
+	}()
+}
+
+func (c *ControllerImpl) beginLinger(shard historyi.ControllableContext) bool {
+	c.lingerState.Lock()
+	defer c.lingerState.Unlock()
+	if _, ok := c.lingerState.shards[shard]; ok {
+		return false
+	}
+	c.lingerState.shards[shard] = struct{}{}
+	return true
+}
+
+func (c *ControllerImpl) endLinger(shard historyi.ControllableContext) {
+	c.lingerState.Lock()
+	defer c.lingerState.Unlock()
+	delete(c.lingerState.shards, shard)
+}
+
+func (c *ControllerImpl) doLinger(ctx context.Context, shard historyi.ControllableContext) {
+	startTime := time.Now()
+	// Enforce a max limit to ensure we close the shard in a reasonable time,
+	// and to indirectly limit the number of lingering shards.
+	timeLimit := min(c.config.ShardLingerTimeLimit(), shardLingerMaxTimeLimit)
+	ctx, cancel := context.WithTimeout(ctx, timeLimit)
+	defer cancel()
+
+	qps := c.config.ShardLingerOwnershipCheckQPS()
+	// The limiter must be configured with burst>=1. With burst=1,
+	// the first call to Wait() won't be delayed.
+	limiter := rate.NewLimiter(rate.Limit(qps), 1)
 
 	for {
-		select {
-		case <-c.shutdownCh:
-			c.doShutdown()
-			return
-		case <-acquireTicker.C:
-			c.acquireShards()
-		case changedEvent := <-c.membershipUpdateCh:
-			c.taggedMetricsHandler.Counter(metrics.MembershipChangedCounter.GetMetricName()).Record(1)
-
-			c.contextTaggedLogger.Info("", tag.ValueRingMembershipChangedEvent,
-				tag.NumberProcessed(len(changedEvent.HostsAdded)),
-				tag.NumberDeleted(len(changedEvent.HostsRemoved)),
-			)
-			c.acquireShards()
+		if !shard.IsValid() {
+			metrics.ShardLingerSuccess.With(c.taggedMetricsHandler).Record(time.Since(startTime))
+			break
 		}
+
+		if err := limiter.Wait(ctx); err != nil {
+			c.contextTaggedLogger.Info("shardLinger: wait timed out",
+				tag.ShardID(shard.GetShardID()),
+				tag.NewDurationTag("duration", time.Now().Sub(startTime)),
+			)
+			metrics.ShardLingerTimeouts.With(c.taggedMetricsHandler).Record(1)
+			break
+		}
+
+		// If this AssertOwnership or any other request on the shard receives
+		// a shard ownership lost error, the shard will be marked as invalid.
+		_ = shard.AssertOwnership(ctx)
 	}
+
+	c.shardRemoveAndStop(shard)
 }
 
-func (c *ControllerImpl) acquireShards() {
-	c.taggedMetricsHandler.Counter(metrics.AcquireShardsCounter.GetMetricName()).Record(1)
+func (c *ControllerImpl) acquireShards(ctx context.Context) {
+	metrics.AcquireShardsCounter.With(c.taggedMetricsHandler).Record(1)
 	startTime := time.Now().UTC()
 	defer func() {
-		c.taggedMetricsHandler.Timer(metrics.AcquireShardsLatency.GetMetricName()).Record(time.Since(startTime))
+		metrics.AcquireShardsLatency.With(c.taggedMetricsHandler).Record(time.Since(startTime))
 	}()
 
+	ctx = headers.SetCallerInfo(ctx, headers.SystemBackgroundCallerInfo)
+
+	// Readiness check: if we haven't marked readiness yet, then we need to set up a context to
+	// run the readiness check on owned shards.
+	var readinessCtx context.Context
+	var readinessCancel context.CancelFunc
+	if !c.initialShardsAcquired.Ready() {
+		readinessCtx, readinessCancel = context.WithCancel(ctx)
+	} else {
+		readinessCancel = func() {} // we need a non-nil func for Swap
+	}
+	// Cancel previous readiness check to ensure that the readiness check is always running on
+	// the most recent set of owned shards (e.g. after a membership change).
+	if prevCancel := c.shardReadinessCancel.Swap(readinessCancel); prevCancel != nil {
+		prevCancel.(context.CancelFunc)()
+	}
+
+	var ownedShardsLock sync.Mutex
+	var ownedShards []int32 // only populated if we are doing a readiness check
+
 	tryAcquire := func(shardID int32) {
-		info, err := c.historyServiceResolver.Lookup(convert.Int32ToString(shardID))
-		if err != nil {
-			c.contextTaggedLogger.Error("Error looking up host for shardID", tag.Error(err), tag.OperationFailed, tag.ShardID(shardID))
+		if err := c.ownership.verifyOwnership(shardID); err != nil {
+			if IsShardOwnershipLostError(err) {
+				// current host is not owner of shard, unload it if it is already loaded.
+				if c.config.ShardLingerTimeLimit() > 0 {
+					c.shardLingerThenClose(ctx, shardID)
+				} else {
+					c.CloseShardByID(shardID)
+				}
+			}
 			return
 		}
-		if info.Identity() != c.hostInfoProvider.HostInfo().Identity() {
-			// current host is not owner of shard, unload it if it is already loaded.
-			c.CloseShardByID(shardID)
-			return
+
+		if readinessCtx != nil {
+			ownedShardsLock.Lock()
+			ownedShards = append(ownedShards, shardID)
+			ownedShardsLock.Unlock()
 		}
+
 		shard, err := c.GetShardByID(shardID)
 		if err != nil {
-			c.taggedMetricsHandler.Counter(metrics.GetEngineForShardErrorCounter.GetMetricName()).Record(1)
+			metrics.GetEngineForShardErrorCounter.With(c.taggedMetricsHandler).Record(1)
 			c.contextTaggedLogger.Error("Unable to create history shard context", tag.Error(err), tag.OperationFailed, tag.ShardID(shardID))
 			return
 		}
 
 		// Wait up to 1s for the shard to acquire the rangeid lock.
 		// After 1s we will move on but the shard will continue trying in the background.
-		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-		defer cancel()
-		_, _ = shard.GetEngine(ctx)
-
-		ctx, cancel = context.WithTimeout(context.Background(), shardIOTimeout)
-		defer cancel()
-		// trust the AssertOwnership will handle shard ownership lost
-		_ = shard.AssertOwnership(ctx)
+		engineCtx, engineCancel := context.WithTimeout(ctx, 1*time.Second)
+		defer engineCancel()
+		_, _ = shard.GetEngine(engineCtx)
 	}
 
-	concurrency := util.Max(c.config.AcquireShardConcurrency(), 1)
-	shardActionCh := make(chan int32, c.config.NumberOfShards)
-	var wg sync.WaitGroup
-	wg.Add(concurrency)
-	// Spawn workers that would lookup and add/remove shards concurrently.
-	for i := 0; i < concurrency; i++ {
-		go func() {
-			defer wg.Done()
-			for shardID := range shardActionCh {
-				select {
-				case <-c.shutdownCh:
-					return
-				default:
-					tryAcquire(shardID)
-				}
-			}
-		}()
-	}
-
-	// Submit tasks to the channel.
+	concurrency := int64(max(c.config.AcquireShardConcurrency(), 1))
+	sem := semaphore.NewWeighted(concurrency)
 	numShards := c.config.NumberOfShards
 	randomStartOffset := rand.Int31n(numShards)
-LoopSubmit:
-	for index := int32(0); index < numShards; index++ {
+	for index := range numShards {
 		shardID := (index+randomStartOffset)%numShards + 1
-		select {
-		case <-c.shutdownCh:
-			break LoopSubmit
-		case shardActionCh <- shardID:
-			// noop
+		if err := sem.Acquire(ctx, 1); err != nil {
+			break
 		}
+		go func() {
+			defer sem.Release(1)
+			tryAcquire(shardID)
+		}()
 	}
-	close(shardActionCh)
-	// Wait until all shards are processed.
-	wg.Wait()
+	_ = sem.Acquire(ctx, concurrency)
 
 	c.RLock()
+	// note that this count includes lingering shards
 	numOfOwnedShards := len(c.historyShards)
 	c.RUnlock()
+	metrics.NumShardsGauge.With(c.taggedMetricsHandler).Record(float64(numOfOwnedShards))
+	c.publishShardCountUpdate(numOfOwnedShards)
 
-	c.taggedMetricsHandler.Gauge(metrics.NumShardsGauge.GetMetricName()).Record(float64(numOfOwnedShards))
+	// Readiness check: We should set initialShardsAcquired when:
+	// 1. It's not already set.
+	// 2. We should own at least one shard (i.e. not before we join membership).
+	// 3. We have ownership of all the shards we're supposed to own.
+	if readinessCtx != nil {
+		if len(ownedShards) > 0 {
+			go func() {
+				defer readinessCancel()
+				if c.checkShardReadiness(readinessCtx, ownedShards) {
+					c.initialShardsAcquired.SetIfNotReady(struct{}{}, nil)
+				}
+			}()
+		} else {
+			readinessCancel()
+		}
+	}
+}
+
+func (c *ControllerImpl) checkShardReadiness(
+	ctx context.Context,
+	shards []int32,
+) bool {
+	concurrency := int64(max(c.config.AcquireShardConcurrency(), 1))
+	sem := semaphore.NewWeighted(concurrency)
+	var ready atomic.Int32
+	for _, shardID := range shards {
+		if sem.Acquire(ctx, 1) != nil {
+			return false
+		}
+		go func() {
+			defer sem.Release(1)
+			// Note that AssertOwnership uses a detached context for the actual persistence
+			// op so we can't cancel it. If context is canceled, the final Acquire will
+			// fail and we won't do anything.
+			if shard, err := c.GetShardByID(shardID); err != nil {
+				return
+			} else if _, err := shard.GetEngine(ctx); err != nil {
+				return
+			} else if shard.AssertOwnership(ctx) != nil {
+				return
+			}
+			ready.Add(1)
+		}()
+	}
+	if sem.Acquire(ctx, concurrency) != nil {
+		return false
+	}
+
+	if ready.Load() != int32(len(shards)) {
+		c.contextTaggedLogger.Info("initial shards not ready",
+			tag.NewInt32("ready", ready.Load()), tag.NewInt("total", len(shards)))
+		return false
+	}
+	c.contextTaggedLogger.Info("initial shards ready", tag.NewInt("total", len(shards)))
+	return true
+}
+
+// publishShardCountUpdate publishes the current number of shards that this controller owns to all shard count
+// subscribers in a non-blocking manner.
+func (c *ControllerImpl) publishShardCountUpdate(shardCount int) {
+	c.RLock()
+	defer c.RUnlock()
+	for sub := range c.shardCountSubscriptions {
+		select {
+		case sub.ch <- shardCount:
+		default:
+		}
+	}
 }
 
 func (c *ControllerImpl) doShutdown() {
@@ -459,7 +562,7 @@ func (c *ControllerImpl) doShutdown() {
 	c.Lock()
 	defer c.Unlock()
 	for _, shard := range c.historyShards {
-		shard.finishStop()
+		shard.FinishStop()
 	}
 	c.historyShards = nil
 }
@@ -474,6 +577,35 @@ func (c *ControllerImpl) validateShardId(shardID int32) error {
 	return nil
 }
 
+// SubscribeShardCount returns a subscription to shard count updates with a 1-buffered channel. This method is thread-safe.
+func (c *ControllerImpl) SubscribeShardCount() ShardCountSubscription {
+	c.Lock()
+	defer c.Unlock()
+	sub := &shardCountSubscription{
+		controller: c,
+		ch:         make(chan int, 1), // buffered because we do a non-blocking send
+	}
+	c.shardCountSubscriptions[sub] = struct{}{}
+	return sub
+}
+
+// ShardCount returns a channel that receives the current shard count. This channel will be closed when the subscription
+// is canceled.
+func (s *shardCountSubscription) ShardCount() <-chan int {
+	return s.ch
+}
+
+// Unsubscribe removes the subscription from the controller's list of subscriptions.
+func (s *shardCountSubscription) Unsubscribe() {
+	s.controller.Lock()
+	defer s.controller.Unlock()
+	if _, ok := s.controller.shardCountSubscriptions[s]; !ok {
+		return
+	}
+	delete(s.controller.shardCountSubscriptions, s)
+	close(s.ch)
+}
+
 func IsShardOwnershipLostError(err error) bool {
 	switch err.(type) {
 	case *persistence.ShardOwnershipLostError:
@@ -483,4 +615,8 @@ func IsShardOwnershipLostError(err error) bool {
 	}
 
 	return false
+}
+
+func numShardsTag(n int) tag.ZapTag {
+	return tag.NewInt("numShards", n)
 }

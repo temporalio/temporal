@@ -37,8 +37,8 @@ type (
 
 	LocalGateImpl struct {
 		// the channel which will be used to proxy the fired timer
-		fireChan  chan struct{}
-		closeChan chan struct{}
+		fireCh  chan struct{}
+		closeCh chan struct{}
 
 		timeSource clock.TimeSource
 
@@ -51,73 +51,73 @@ type (
 
 // NewLocalGate create a new timer gate instance
 func NewLocalGate(timeSource clock.TimeSource) LocalGate {
-	timer := &LocalGateImpl{
+	lg := &LocalGateImpl{
 		timer:          time.NewTimer(0),
 		nextWakeupTime: time.Time{},
-		fireChan:       make(chan struct{}, 1),
-		closeChan:      make(chan struct{}),
+		fireCh:         make(chan struct{}, 1),
+		closeCh:        make(chan struct{}),
 		timeSource:     timeSource,
 	}
 	// the timer should be stopped when initialized
-	if !timer.timer.Stop() {
+	if !lg.timer.Stop() {
 		// drain the existing signal if exist
-		<-timer.timer.C
+		<-lg.timer.C
 	}
 
 	go func() {
-		defer close(timer.fireChan)
-		defer timer.timer.Stop()
+		defer close(lg.fireCh)
+		defer lg.timer.Stop()
 	loop:
 		for {
 			select {
-			case <-timer.timer.C:
+			case <-lg.timer.C:
 				select {
 				// re-transmit on gateC
-				case timer.fireChan <- struct{}{}:
+				case lg.fireCh <- struct{}{}:
 				default:
 				}
 
-			case <-timer.closeChan:
+			case <-lg.closeCh:
 				// closed; cleanup and quit
 				break loop
 			}
 		}
 	}()
 
-	return timer
+	return lg
 }
 
-// FireChan return the channel which will be fired when time is up
-func (timerGate *LocalGateImpl) FireChan() <-chan struct{} {
-	return timerGate.fireChan
+// FireCh return the channel which will be fired when time is up
+func (lg *LocalGateImpl) FireCh() <-chan struct{} {
+	return lg.fireCh
 }
 
 // FireAfter check will the timer get fired after a certain time
-func (timerGate *LocalGateImpl) FireAfter(now time.Time) bool {
-	return timerGate.nextWakeupTime.After(now)
+func (lg *LocalGateImpl) FireAfter(now time.Time) bool {
+	return lg.nextWakeupTime.After(now)
 }
 
-// Update update the timer gate, return true if update is a success
-// success means timer is idle or timer is set with a sooner time to fire
-func (timerGate *LocalGateImpl) Update(nextTime time.Time) bool {
+// Update the timer gate, return true if update is a success.
+// Success means timer is idle or timer is set with a sooner time to fire
+func (lg *LocalGateImpl) Update(nextTime time.Time) bool {
 	// NOTE: negative duration will make the timer fire immediately
-	now := timerGate.timeSource.Now()
+	now := lg.timeSource.Now()
 
-	if timerGate.timer.Stop() && timerGate.nextWakeupTime.Before(nextTime) {
-		// this means the timer, before stopped, is active && next wake up time do not have to be updated
-		timerGate.timer.Reset(timerGate.nextWakeupTime.Sub(now))
+	if lg.timer.Stop() && lg.nextWakeupTime.Before(nextTime) {
+		// this means the timer, before stopped, is active && next wake-up time do not have to be updated
+		lg.timer.Reset(lg.nextWakeupTime.Sub(now))
 		return false
 	}
 
-	// this means the timer, before stopped, is active && next wake up time has to be updated
+	// this means the timer, before stopped, is active && next wake-up time has to be updated
 	// or this means the timer, before stopped, is already fired / never active
-	timerGate.nextWakeupTime = nextTime
-	timerGate.timer.Reset(nextTime.Sub(now))
+	lg.nextWakeupTime = nextTime
+	lg.timer.Reset(nextTime.Sub(now))
 	// Notifies caller that next notification is reset to fire at passed in 'next' visibility time
 	return true
 }
 
 // Close shutdown the timer
-func (timerGate *LocalGateImpl) Close() {
-	close(timerGate.closeChan)
+func (lg *LocalGateImpl) Close() {
+	close(lg.closeCh)
 }

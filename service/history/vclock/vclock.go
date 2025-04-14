@@ -28,7 +28,6 @@ import (
 	"fmt"
 
 	"go.temporal.io/api/serviceerror"
-
 	clockspb "go.temporal.io/server/api/clock/v1"
 )
 

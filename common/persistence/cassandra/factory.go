@@ -28,10 +28,10 @@ import (
 	"sync"
 
 	"github.com/gocql/gocql"
-
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	p "go.temporal.io/server/common/persistence"
 	commongocql "go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	"go.temporal.io/server/common/resolver"
@@ -55,12 +55,14 @@ func NewFactory(
 	r resolver.ServiceResolver,
 	clusterName string,
 	logger log.Logger,
+	metricsHandler metrics.Handler,
 ) *Factory {
 	session, err := commongocql.NewSession(
 		func() (*gocql.ClusterConfig, error) {
 			return commongocql.NewCassandraCluster(cfg, r)
 		},
 		logger,
+		metricsHandler,
 	)
 	if err != nil {
 		logger.Fatal("unable to initialize cassandra session", tag.Error(err))
@@ -105,12 +107,23 @@ func (f *Factory) NewClusterMetadataStore() (p.ClusterMetadataStore, error) {
 
 // NewExecutionStore returns a new ExecutionStore.
 func (f *Factory) NewExecutionStore() (p.ExecutionStore, error) {
-	return NewExecutionStore(f.session, f.logger), nil
+	return NewExecutionStore(f.session), nil
 }
 
 // NewQueue returns a new queue backed by cassandra
 func (f *Factory) NewQueue(queueType p.QueueType) (p.Queue, error) {
 	return NewQueueStore(queueType, f.session, f.logger)
+}
+
+// NewQueueV2 returns a new data-access object for queues and messages stored in Cassandra. It will never return an
+// error.
+func (f *Factory) NewQueueV2() (p.QueueV2, error) {
+	return NewQueueV2Store(f.session, f.logger), nil
+}
+
+// NewNexusEndpointStore returns a new NexusEndpointStore
+func (f *Factory) NewNexusEndpointStore() (p.NexusEndpointStore, error) {
+	return NewNexusEndpointStore(f.session, f.logger), nil
 }
 
 // Close closes the factory

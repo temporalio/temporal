@@ -25,6 +25,7 @@
 package searchattribute
 
 import (
+	"fmt"
 	"strings"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -49,6 +50,10 @@ const (
 	BatcherNamespace      = "BatcherNamespace"
 	BatcherUser           = "BatcherUser"
 	HistorySizeBytes      = "HistorySizeBytes"
+	ParentWorkflowID      = "ParentWorkflowId"
+	ParentRunID           = "ParentRunId"
+	RootWorkflowID        = "RootWorkflowId"
+	RootRunID             = "RootRunId"
 
 	TemporalNamespaceDivision = "TemporalNamespaceDivision"
 
@@ -65,6 +70,52 @@ const (
 	TemporalSchedulePaused = "TemporalSchedulePaused"
 
 	ReservedPrefix = "Temporal"
+
+	// Query clause that mentions TemporalNamespaceDivision to disable special handling of that
+	// search attribute in visibility.
+	matchAnyNamespaceDivision = TemporalNamespaceDivision + ` IS NULL OR ` + TemporalNamespaceDivision + ` IS NOT NULL`
+
+	// A user may specify a ScheduleID in a query even if a ScheduleId search attribute isn't defined for the namespace.
+	// In such a case, ScheduleId is effectively a fake search attribute. Of course, a user may optionally choose to
+	// define a custom ScheduleId search attribute, in which case the query using the ScheduleId would operate just like
+	// any other custom search attribute.
+	ScheduleID = "ScheduleId"
+
+	// TemporalPauseInfo is a search attribute that stores the information about paused entities in the workflow.
+	// Format of a single paused entity: "<key>:<value>".
+	//  * <key> is something that can be used to identify the filtering condition
+	//  * <value> is the value of the corresponding filtering condition.
+	// examples:
+	//   - for paused activities, manual pause, we may have 2 <key>:<value> pairs:
+	//     * "Activity:MyCoolActivityType"
+	//     * "Reason:ManualActivityPause"
+	//     * or
+	//     * "Policy:<some policy id>"
+	//   - for paused workflows, we may have the following <key>:<value> pairs:
+	//     * "Workflow:WorkflowID"
+	//     * "Reason:ManualWorkflowPause"
+	TemporalPauseInfo = "TemporalPauseInfo"
+
+	// BuildIds is a KeywordList that holds information about current and past build ids
+	// used by the workflow. Used for Worker Versioning
+	BuildIds = "BuildIds"
+
+	// TemporalWorkerDeploymentVersion stores the current Worker Deployment Version
+	// associated with the execution. It is updated at workflow task completion when
+	// the SDK says what Version completed the workflow task. It can have a value for
+	// unversioned workflows, if they are processed by an unversioned deployment.
+	TemporalWorkerDeploymentVersion = "TemporalWorkerDeploymentVersion"
+
+	// TemporalWorkerDeployment stores the current Worker Deployment associated with
+	// the execution. It is updated at workflow task completion when the SDK says what
+	// Worker Deployment completed the workflow task. It can have a value for
+	// unversioned workflows, if they are processed by an unversioned deployment.
+	TemporalWorkerDeployment = "TemporalWorkerDeployment"
+
+	// TemporalWorkflowVersioningBehavior stores the current Versioning Behavior of the
+	// execution. It is updated at workflow task completion when the server gets the
+	// behavior (`auto_upgrade` or `pinned`) from the SDK. Empty for unversioned workflows.
+	TemporalWorkflowVersioningBehavior = "TemporalWorkflowVersioningBehavior"
 )
 
 var (
@@ -82,41 +133,58 @@ var (
 		ExecutionDuration:    enumspb.INDEXED_VALUE_TYPE_INT,
 		StateTransitionCount: enumspb.INDEXED_VALUE_TYPE_INT,
 		HistorySizeBytes:     enumspb.INDEXED_VALUE_TYPE_INT,
+		ParentWorkflowID:     enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		ParentRunID:          enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		RootWorkflowID:       enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		RootRunID:            enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	}
 
 	// predefined are internal search attributes which are passed and stored in SearchAttributes object together with custom search attributes.
 	predefined = map[string]enumspb.IndexedValueType{
-		TemporalChangeVersion:      enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
-		BinaryChecksums:            enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
-		BatcherNamespace:           enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		BatcherUser:                enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		TemporalScheduledStartTime: enumspb.INDEXED_VALUE_TYPE_DATETIME,
-		TemporalScheduledById:      enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		TemporalSchedulePaused:     enumspb.INDEXED_VALUE_TYPE_BOOL,
-		TemporalNamespaceDivision:  enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		TemporalChangeVersion:              enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		BinaryChecksums:                    enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		BuildIds:                           enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		BatcherNamespace:                   enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		BatcherUser:                        enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		TemporalScheduledStartTime:         enumspb.INDEXED_VALUE_TYPE_DATETIME,
+		TemporalScheduledById:              enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		TemporalSchedulePaused:             enumspb.INDEXED_VALUE_TYPE_BOOL,
+		TemporalNamespaceDivision:          enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		TemporalPauseInfo:                  enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		TemporalWorkerDeploymentVersion:    enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		TemporalWorkflowVersioningBehavior: enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		TemporalWorkerDeployment:           enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	}
 
 	// reserved are internal field names that can't be used as search attribute names.
 	reserved = map[string]struct{}{
-		NamespaceID:       {},
-		MemoEncoding:      {},
-		Memo:              {},
+		NamespaceID:  {},
+		MemoEncoding: {},
+		Memo:         {},
+		// Used in the Elasticsearch bulk processor, not needed in SQL databases.
 		VisibilityTaskKey: {},
 	}
 
 	sqlDbSystemNameToColName = map[string]string{
-		NamespaceID:     "namespace_id",
-		WorkflowID:      "workflow_id",
-		RunID:           "run_id",
-		WorkflowType:    "workflow_type_name",
-		StartTime:       "start_time",
-		ExecutionTime:   "execution_time",
-		CloseTime:       "close_time",
-		ExecutionStatus: "status",
-		TaskQueue:       "task_queue",
-		HistoryLength:   "history_length",
-		Memo:            "memo",
-		MemoEncoding:    "encoding",
+		NamespaceID:          "namespace_id",
+		WorkflowID:           "workflow_id",
+		RunID:                "run_id",
+		WorkflowType:         "workflow_type_name",
+		StartTime:            "start_time",
+		ExecutionTime:        "execution_time",
+		CloseTime:            "close_time",
+		ExecutionStatus:      "status",
+		TaskQueue:            "task_queue",
+		HistoryLength:        "history_length",
+		HistorySizeBytes:     "history_size_bytes",
+		ExecutionDuration:    "execution_duration",
+		StateTransitionCount: "state_transition_count",
+		Memo:                 "memo",
+		MemoEncoding:         "encoding",
+		ParentWorkflowID:     "parent_workflow_id",
+		ParentRunID:          "parent_run_id",
+		RootWorkflowID:       "root_workflow_id",
+		RootRunID:            "root_run_id",
 	}
 
 	sqlDbCustomSearchAttributes = map[string]enumspb.IndexedValueType{
@@ -150,6 +218,12 @@ var (
 		"KeywordList03": enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
 	}
 )
+
+// IsSystem returns true if name is system search attribute
+func IsSystem(name string) bool {
+	_, ok := system[name]
+	return ok
+}
 
 // IsReserved returns true if name is system reserved and can't be used as custom search attribute name.
 func IsReserved(name string) bool {
@@ -189,4 +263,15 @@ func GetSqlDbIndexSearchAttributes() *persistencespb.IndexSearchAttributes {
 	return &persistencespb.IndexSearchAttributes{
 		CustomSearchAttributes: sqlDbCustomSearchAttributes,
 	}
+}
+
+// QueryWithAnyNamespaceDivision returns a modified workflow visibility query that disables
+// special handling of namespace division and so matches workflows in all namespace divisions.
+// Normally a query that didn't explicitly mention TemporalNamespaceDivision would be limited
+// to the default (empty string) namespace division.
+func QueryWithAnyNamespaceDivision(query string) string {
+	if strings.TrimSpace(query) == "" {
+		return matchAnyNamespaceDivision
+	}
+	return fmt.Sprintf(`(%s) AND (%s)`, query, matchAnyNamespaceDivision)
 }

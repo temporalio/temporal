@@ -32,13 +32,13 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
-	"go.temporal.io/server/service/history/shard"
+	historyi "go.temporal.io/server/service/history/interfaces"
 )
 
 func Invoke(
 	ctx context.Context,
 	req *historyservice.SignalWorkflowExecutionRequest,
-	shard shard.Context,
+	shard historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (resp *historyservice.SignalWorkflowExecutionResponse, retError error) {
 	namespaceEntry, err := api.GetActiveNamespace(shard, namespace.ID(req.GetNamespaceId()))
@@ -48,20 +48,19 @@ func Invoke(
 	namespaceID := namespaceEntry.ID()
 
 	request := req.SignalRequest
-	parentExecution := req.ExternalWorkflowExecution
+	externalWorkflowExecution := req.ExternalWorkflowExecution
 	childWorkflowOnly := req.GetChildWorkflowOnly()
 
 	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
 		nil,
-		api.BypassMutableStateConsistencyPredicate,
 		definition.NewWorkflowKey(
 			namespaceID.String(),
 			request.WorkflowExecution.WorkflowId,
 			request.WorkflowExecution.RunId,
 		),
-		func(workflowContext api.WorkflowContext) (*api.UpdateWorkflowAction, error) {
-			mutableState := workflowContext.GetMutableState()
+		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
+			mutableState := workflowLease.GetMutableState()
 			if request.GetRequestId() != "" && mutableState.IsSignalRequested(request.GetRequestId()) {
 				return &api.UpdateWorkflowAction{
 					Noop:               true,
@@ -69,15 +68,12 @@ func Invoke(
 				}, nil
 			}
 
+			releaseFn := workflowLease.GetReleaseFn()
 			if !mutableState.IsWorkflowExecutionRunning() {
+				// in-memory mutable state is still clean, release the lock with nil error to prevent
+				// clearing and reloading mutable state
+				releaseFn(nil)
 				return nil, consts.ErrWorkflowCompleted
-			}
-
-			executionInfo := mutableState.GetExecutionInfo()
-			createWorkflowTask := true
-			if mutableState.IsWorkflowPendingOnWorkflowTaskBackoff() {
-				// Do not create workflow task when the workflow has first workflow task backoff and execution is not started yet
-				createWorkflowTask = false
 			}
 
 			if err := api.ValidateSignal(
@@ -87,14 +83,21 @@ func Invoke(
 				request.GetInput().Size(),
 				"SignalWorkflowExecution",
 			); err != nil {
+				releaseFn(nil)
 				return nil, err
 			}
+
+			executionInfo := mutableState.GetExecutionInfo()
+
+			// Do not create workflow task when the workflow has first workflow task backoff and execution is not started yet
+			createWorkflowTask := !mutableState.IsWorkflowPendingOnWorkflowTaskBackoff()
 
 			if childWorkflowOnly {
 				parentWorkflowID := executionInfo.ParentWorkflowId
 				parentRunID := executionInfo.ParentRunId
-				if parentExecution.GetWorkflowId() != parentWorkflowID ||
-					parentExecution.GetRunId() != parentRunID {
+				if externalWorkflowExecution.GetWorkflowId() != parentWorkflowID ||
+					externalWorkflowExecution.GetRunId() != parentRunID {
+					releaseFn(nil)
 					return nil, consts.ErrWorkflowParent
 				}
 			}
@@ -102,11 +105,15 @@ func Invoke(
 			if request.GetRequestId() != "" {
 				mutableState.AddSignalRequested(request.GetRequestId())
 			}
-			if _, err := mutableState.AddWorkflowExecutionSignaled(
+			_, err := mutableState.AddWorkflowExecutionSignaledEvent(
 				request.GetSignalName(),
 				request.GetInput(),
 				request.GetIdentity(),
-				request.GetHeader()); err != nil {
+				request.GetHeader(),
+				externalWorkflowExecution,
+				request.GetLinks(),
+			)
+			if err != nil {
 				return nil, err
 			}
 

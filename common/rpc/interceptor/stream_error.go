@@ -28,10 +28,11 @@ import (
 	"context"
 	"io"
 
-	"github.com/gogo/status"
 	"go.temporal.io/api/serviceerror"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 type (
@@ -77,6 +78,19 @@ func StreamErrorInterceptor(
 	return NewClientStreamErrorInterceptor(clientStream), nil
 }
 
+func CustomErrorStreamInterceptor(
+	srv interface{},
+	serverStream grpc.ServerStream,
+	info *grpc.StreamServerInfo,
+	handler grpc.StreamHandler,
+) error {
+	err := handler(srv, serverStream)
+	if err != nil {
+		err = serviceerror.ToStatus(err).Err()
+	}
+	return err
+}
+
 func errorConvert(err error) error {
 	switch err {
 	case nil:
@@ -88,7 +102,7 @@ func errorConvert(err error) error {
 	}
 }
 
-// FromStatus converts gogo gRPC Status to service error.
+// FromStatus converts gRPC Status to service error.
 func FromStatus(st *status.Status) error {
 	if st == nil {
 		return nil
@@ -97,21 +111,9 @@ func FromStatus(st *status.Status) error {
 	switch st.Code() {
 	case codes.OK:
 		return nil
-	case codes.DeadlineExceeded:
-		return serviceerror.NewDeadlineExceeded(st.Message())
-	case codes.Canceled:
-		return serviceerror.NewCanceled(st.Message())
-	case codes.InvalidArgument:
-		return serviceerror.NewInvalidArgument(st.Message())
-	case codes.FailedPrecondition:
-		return serviceerror.NewFailedPrecondition(st.Message())
-	case codes.Unavailable:
-		return serviceerror.NewUnavailable(st.Message())
-	case codes.Internal:
-		return serviceerror.NewInternal(st.Message())
 	case codes.Unknown:
 		return serviceerror.NewInternal(st.Message())
 	default:
-		return serviceerror.NewInternal(st.Message())
+		return serviceerrors.FromStatus(st)
 	}
 }

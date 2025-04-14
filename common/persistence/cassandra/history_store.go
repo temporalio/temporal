@@ -30,7 +30,6 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	"go.temporal.io/server/common/primitives"
@@ -70,18 +69,13 @@ const (
 type (
 	HistoryStore struct {
 		Session gocql.Session
-		Logger  log.Logger
 		p.HistoryBranchUtilImpl
 	}
 )
 
-func NewHistoryStore(
-	session gocql.Session,
-	logger log.Logger,
-) *HistoryStore {
+func NewHistoryStore(session gocql.Session) *HistoryStore {
 	return &HistoryStore{
 		Session: session,
-		Logger:  logger,
 	}
 }
 
@@ -168,7 +162,12 @@ func (h *HistoryStore) ReadHistoryBranch(
 	ctx context.Context,
 	request *p.InternalReadHistoryBranchRequest,
 ) (*p.InternalReadHistoryBranchResponse, error) {
-	treeID, err := primitives.ValidateUUID(request.TreeID)
+	branch, err := h.GetHistoryBranchUtil().ParseHistoryBranchInfo(request.BranchToken)
+	if err != nil {
+		return nil, err
+	}
+
+	treeID, err := primitives.ValidateUUID(branch.TreeId)
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("ReadHistoryBranch - Gocql TreeId UUID cast failed. Error: %v", err))
 	}
@@ -290,12 +289,13 @@ func (h *HistoryStore) DeleteHistoryBranch(
 	ctx context.Context,
 	request *p.InternalDeleteHistoryBranchRequest,
 ) error {
+
 	batch := h.Session.NewBatch(gocql.LoggedBatch).WithContext(ctx)
-	batch.Query(v2templateDeleteBranch, request.TreeId, request.BranchId)
+	batch.Query(v2templateDeleteBranch, request.BranchInfo.TreeId, request.BranchInfo.BranchId)
 
 	// delete each branch range
 	for _, br := range request.BranchRanges {
-		h.deleteBranchRangeNodes(batch, request.TreeId, br.BranchId, br.BeginNodeId)
+		h.deleteBranchRangeNodes(batch, request.BranchInfo.TreeId, br.BranchId, br.BeginNodeId)
 	}
 
 	err := h.Session.ExecuteBatch(batch)
@@ -306,7 +306,7 @@ func (h *HistoryStore) DeleteHistoryBranch(
 }
 
 func (h *HistoryStore) deleteBranchRangeNodes(
-	batch gocql.Batch,
+	batch *gocql.Batch,
 	treeID string,
 	branchID string,
 	beginNodeID int64,
@@ -365,13 +365,18 @@ func (h *HistoryStore) GetAllHistoryTreeBranches(
 	return response, nil
 }
 
-// GetHistoryTree returns all branch information of a tree
-func (h *HistoryStore) GetHistoryTree(
+// GetHistoryTreeContainingBranch returns all branch information of a tree
+func (h *HistoryStore) GetHistoryTreeContainingBranch(
 	ctx context.Context,
-	request *p.GetHistoryTreeRequest,
-) (*p.InternalGetHistoryTreeResponse, error) {
+	request *p.InternalGetHistoryTreeContainingBranchRequest,
+) (*p.InternalGetHistoryTreeContainingBranchResponse, error) {
 
-	treeID, err := primitives.ValidateUUID(request.TreeID)
+	branch, err := h.GetHistoryBranchUtil().ParseHistoryBranchInfo(request.BranchToken)
+	if err != nil {
+		return nil, err
+	}
+
+	treeID, err := primitives.ValidateUUID(branch.TreeId)
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("ReadHistoryBranch. Gocql TreeId UUID cast failed. Error: %v", err))
 	}
@@ -406,7 +411,7 @@ func (h *HistoryStore) GetHistoryTree(
 		}
 	}
 
-	return &p.InternalGetHistoryTreeResponse{
+	return &p.InternalGetHistoryTreeContainingBranchResponse{
 		TreeInfos: treeInfos,
 	}, nil
 }

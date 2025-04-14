@@ -33,10 +33,10 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/primitives/timestamp"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -77,14 +77,14 @@ type (
 	}
 
 	timerSequenceImpl struct {
-		mutableState MutableState
+		mutableState historyi.MutableState
 	}
 )
 
 var _ TimerSequence = (*timerSequenceImpl)(nil)
 
 func NewTimerSequence(
-	mutableState MutableState,
+	mutableState historyi.MutableState,
 ) *timerSequenceImpl {
 	return &timerSequenceImpl{
 		mutableState: mutableState,
@@ -113,12 +113,12 @@ func (t *timerSequenceImpl) CreateNextUserTimer() (bool, error) {
 
 	timerInfo, ok := t.mutableState.GetUserTimerInfoByEventID(firstTimerTask.EventID)
 	if !ok {
-		return false, serviceerror.NewInternal(fmt.Sprintf("unable to load activity info %v", firstTimerTask.EventID))
+		return false, serviceerror.NewInternal(fmt.Sprintf("unable to load timer info %v", firstTimerTask.EventID))
 	}
 	// mark timer task mask as indication that timer task is generated
 	// here TaskID is misleading attr, should be called timer created flag or something
 	timerInfo.TaskStatus = TimerTaskStatusCreated
-	if err := t.mutableState.UpdateUserTimer(timerInfo); err != nil {
+	if err := t.mutableState.UpdateUserTimerTaskStatus(timerInfo.TimerId, TimerTaskStatusCreated); err != nil {
 		return false, err
 	}
 	t.mutableState.AddTasks(&tasks.UserTimerTask{
@@ -126,7 +126,6 @@ func (t *timerSequenceImpl) CreateNextUserTimer() (bool, error) {
 		WorkflowKey:         t.mutableState.GetWorkflowKey(),
 		VisibilityTimestamp: firstTimerTask.Timestamp,
 		EventID:             firstTimerTask.EventID,
-		Version:             t.mutableState.GetCurrentVersion(),
 	})
 	return true, nil
 }
@@ -157,13 +156,12 @@ func (t *timerSequenceImpl) CreateNextActivityTimer() (bool, error) {
 	}
 	// mark timer task mask as indication that timer task is generated
 	activityInfo.TimerTaskStatus |= timerTypeToTimerMask(firstTimerTask.TimerType)
-
 	var err error
+	var timerTaskStamp *time.Time
 	if firstTimerTask.TimerType == enumspb.TIMEOUT_TYPE_HEARTBEAT {
-		err = t.mutableState.UpdateActivityWithTimerHeartbeat(activityInfo, firstTimerTask.Timestamp)
-	} else {
-		err = t.mutableState.UpdateActivity(activityInfo)
+		timerTaskStamp = &firstTimerTask.Timestamp
 	}
+	err = t.mutableState.UpdateActivityTaskStatusWithTimerHeartbeat(activityInfo.ScheduledEventId, activityInfo.TimerTaskStatus, timerTaskStamp)
 
 	if err != nil {
 		return false, err
@@ -175,7 +173,7 @@ func (t *timerSequenceImpl) CreateNextActivityTimer() (bool, error) {
 		TimeoutType:         firstTimerTask.TimerType,
 		EventID:             firstTimerTask.EventID,
 		Attempt:             firstTimerTask.Attempt,
-		Version:             t.mutableState.GetCurrentVersion(),
+		Stamp:               activityInfo.Stamp,
 	})
 	return true, nil
 }
@@ -205,7 +203,10 @@ func (t *timerSequenceImpl) LoadAndSortActivityTimers() []TimerSequenceID {
 	activityTimers := make(TimerSequenceIDs, 0, len(pendingActivities)*4)
 
 	for _, activityInfo := range pendingActivities {
-
+		// skip activities that are paused
+		if activityInfo.Paused {
+			continue
+		}
 		if sequenceID := t.getActivityScheduleToCloseTimeout(
 			activityInfo,
 		); sequenceID != nil {
@@ -294,7 +295,14 @@ func (t *timerSequenceImpl) getActivityScheduleToCloseTimeout(
 		return nil
 	}
 
-	timeoutTime := timestamp.TimeValue(activityInfo.ScheduledTime).Add(scheduleToCloseDuration)
+	var timeoutTime time.Time
+	// for backward compatibility. FirstScheduledTime can be null if mutable state was
+	// restored from the version before this field was introduce
+	if activityInfo.FirstScheduledTime != nil {
+		timeoutTime = timestamp.TimeValue(activityInfo.FirstScheduledTime).Add(scheduleToCloseDuration)
+	} else {
+		timeoutTime = timestamp.TimeValue(activityInfo.ScheduledTime).Add(scheduleToCloseDuration)
+	}
 
 	return &TimerSequenceID{
 		EventID:      activityInfo.ScheduledEventId,
@@ -361,7 +369,7 @@ func (t *timerSequenceImpl) getActivityHeartbeatTimeout(
 		lastHeartbeat = timestamp.TimeValue(activityInfo.StartedTime)
 	}
 
-	if !timestamp.TimeValue(activityInfo.LastHeartbeatUpdateTime).IsZero() && activityInfo.LastHeartbeatUpdateTime.After(lastHeartbeat) {
+	if !timestamp.TimeValue(activityInfo.LastHeartbeatUpdateTime).IsZero() && activityInfo.LastHeartbeatUpdateTime.AsTime().After(lastHeartbeat) {
 		lastHeartbeat = timestamp.TimeValue(activityInfo.LastHeartbeatUpdateTime)
 	}
 

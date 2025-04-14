@@ -29,17 +29,18 @@ import (
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/api"
-	"go.temporal.io/server/service/history/shard"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
 )
 
 func GenerateTask(
 	ctx context.Context,
 	request *historyservice.GenerateLastHistoryReplicationTasksRequest,
-	shard shard.Context,
+	shard historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (_ *historyservice.GenerateLastHistoryReplicationTasksResponse, retError error) {
 	namespaceEntry, err := api.GetActiveNamespace(shard, namespace.ID(request.GetNamespaceId()))
@@ -48,22 +49,23 @@ func GenerateTask(
 	}
 	namespaceID := namespaceEntry.ID()
 
-	wfContext, err := workflowConsistencyChecker.GetWorkflowContext(
+	workflowLease, err := workflowConsistencyChecker.GetWorkflowLease(
 		ctx,
 		nil,
-		api.BypassMutableStateConsistencyPredicate,
 		definition.NewWorkflowKey(
 			namespaceID.String(),
 			request.Execution.WorkflowId,
 			request.Execution.RunId,
 		),
+		locks.PriorityHigh,
 	)
 	if err != nil {
 		return nil, err
 	}
-	defer func() { wfContext.GetReleaseFn()(retError) }()
+	defer func() { workflowLease.GetReleaseFn()(retError) }()
 
-	task, err := wfContext.GetMutableState().GenerateMigrationTasks()
+	mutableState := workflowLease.GetMutableState()
+	replicationTasks, stateTransitionCount, err := mutableState.GenerateMigrationTasks()
 	if err != nil {
 		return nil, err
 	}
@@ -73,13 +75,17 @@ func GenerateTask(
 		// RangeID is set by shard
 		NamespaceID: string(namespaceID),
 		WorkflowID:  request.Execution.WorkflowId,
-		RunID:       request.Execution.RunId,
 		Tasks: map[tasks.Category][]tasks.Task{
-			tasks.CategoryReplication: {task},
+			tasks.CategoryReplication: replicationTasks,
 		},
 	})
 	if err != nil {
 		return nil, err
 	}
-	return &historyservice.GenerateLastHistoryReplicationTasksResponse{}, nil
+
+	historyLength := max(mutableState.GetNextEventID()-1, 0)
+	return &historyservice.GenerateLastHistoryReplicationTasksResponse{
+		StateTransitionCount: stateTransitionCount,
+		HistoryLength:        historyLength,
+	}, nil
 }

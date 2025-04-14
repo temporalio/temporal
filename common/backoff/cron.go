@@ -29,7 +29,6 @@ import (
 
 	"github.com/robfig/cron/v3"
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/common/convert"
 )
 
@@ -41,8 +40,14 @@ func ValidateSchedule(cronSchedule string) error {
 	if cronSchedule == "" {
 		return nil
 	}
-	if _, err := cron.ParseStandard(cronSchedule); err != nil {
-		return serviceerror.NewInvalidArgument("Invalid CronSchedule.")
+	schedule, err := cron.ParseStandard(cronSchedule)
+	if err != nil {
+		return serviceerror.NewInvalidArgument("invalid CronSchedule.")
+	}
+	nextTime := schedule.Next(time.Now().UTC())
+	if nextTime.IsZero() {
+		// no time can be found to satisfy the schedule
+		return serviceerror.NewInvalidArgument("invalid CronSchedule, no time can be found to satisfy the schedule")
 	}
 	return nil
 }
@@ -68,9 +73,13 @@ func GetBackoffForNextSchedule(cronSchedule string, scheduledTime time.Time, now
 	} else {
 		nextScheduleTime = schedule.Next(scheduledUTCTime)
 		// Calculate the next schedule start time which is nearest to now (right after now).
-		for nextScheduleTime.Before(nowUTC) {
+		for !nextScheduleTime.IsZero() && nextScheduleTime.Before(nowUTC) {
 			nextScheduleTime = schedule.Next(nextScheduleTime)
 		}
+	}
+	if nextScheduleTime.IsZero() {
+		// no time can be found to satisfy the schedule
+		return NoBackoff
 	}
 
 	backoffInterval := nextScheduleTime.Sub(nowUTC)
@@ -79,10 +88,10 @@ func GetBackoffForNextSchedule(cronSchedule string, scheduledTime time.Time, now
 }
 
 // GetBackoffForNextScheduleNonNegative calculates the backoff time and ensures a non-negative duration.
-func GetBackoffForNextScheduleNonNegative(cronSchedule string, scheduledTime time.Time, now time.Time) *time.Duration {
+func GetBackoffForNextScheduleNonNegative(cronSchedule string, scheduledTime time.Time, now time.Time) time.Duration {
 	backoffDuration := GetBackoffForNextSchedule(cronSchedule, scheduledTime, now)
 	if backoffDuration == NoBackoff || backoffDuration < 0 {
 		backoffDuration = 0
 	}
-	return &backoffDuration
+	return backoffDuration
 }

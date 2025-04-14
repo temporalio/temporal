@@ -1,0 +1,90 @@
+// Copyright (c) 2019 Temporal Technologies, Inc.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
+syntax = "proto3";
+
+package temporal.server.api.persistence.v1;
+option go_package = "go.temporal.io/server/api/persistence/v1;persistence";
+
+import "google/protobuf/timestamp.proto";
+import "temporal/api/common/v1/message.proto";
+import "temporal/server/api/clock/v1/message.proto";
+
+// Contains mutable fields for an Endpoint. Duplicated from the public API's temporal.api.nexus.v1.EndpointSpec where
+// the worker target has a namespace name.
+// We store an ID in persistence to prevent namespace renames from breaking references.
+message NexusEndpointSpec {
+    // Endpoint name, unique for this cluster. Must match `[a-zA-Z_][a-zA-Z0-9_]*`.
+    // Renaming an endpoint breaks all workflow callers that reference this endpoint, causing operations to fail.
+    string name = 1;
+    temporal.api.common.v1.Payload description = 2;
+
+    // Target to route requests to.
+    NexusEndpointTarget target = 3;
+}
+
+// Target to route requests to.
+// Duplicated from the public API's temporal.api.nexus.v1.EndpointTarget where the worker target has a namespace name.
+// We store an ID in persistence to prevent namespace renames from breaking references.
+message NexusEndpointTarget {
+    // Target a worker polling on a Nexus task queue in a specific namespace.
+    message Worker {
+        // Namespace ID to route requests to.
+        string namespace_id = 1;
+        // Nexus task queue to route requests to.
+        string task_queue = 2;
+    }
+  
+    // Target an external server by URL.
+    // At a later point, this will support providing credentials, in the meantime, an http.RoundTripper can be injected
+    // into the server to modify the request.
+    message External {
+        // URL to call.
+        // (-- api-linter: core::0140::uri=disabled
+        //     aip.dev/not-precedent: Not following linter rules. --)
+        string url = 1;
+    }
+
+    oneof variant {
+        Worker worker = 1;
+        External external = 2;
+    }
+}
+
+message NexusEndpoint {
+    // The last recorded cluster-local Hybrid Logical Clock timestamp for _this_ endpoint.
+    // Updated whenever the endpoint is directly updated due to a user action but not when applying replication events.
+    // The clock is referenced when new timestamps are generated to ensure it produces monotonically increasing
+    // timestamps.
+    temporal.server.api.clock.v1.HybridLogicalClock clock = 1;
+    // Endpoint specification. This is a mirror of the public API and is intended to be mutable.
+    NexusEndpointSpec spec = 2;
+    // The date and time when the endpoint was created.
+    // (-- api-linter: core::0142::time-field-names=disabled
+    //     aip.dev/not-precedent: Not following linter rules. --)
+    google.protobuf.Timestamp created_time = 3;
+}
+
+// Container for a version, a UUID, and a NexusEndpoint.
+message NexusEndpointEntry {
+    int64 version = 1;
+    string id = 2;
+    NexusEndpoint endpoint = 3;
+}

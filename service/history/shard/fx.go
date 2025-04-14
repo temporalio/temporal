@@ -25,80 +25,71 @@
 package shard
 
 import (
-	"go.opentelemetry.io/otel/trace"
-	"go.uber.org/fx"
+	"context"
+	"sync/atomic"
 
-	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/client"
-	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/archiver"
-	"go.temporal.io/server/common/clock"
-	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/membership"
-	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/serialization"
-	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/pingable"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/service/history/configs"
-	"go.temporal.io/server/service/history/consts"
+	"go.uber.org/fx"
 )
 
 var Module = fx.Options(
-	fx.Provide(ControllerProvider),
-	fx.Provide(fx.Annotate(
-		func(p Controller) common.Pingable { return p },
-		fx.ResultTags(`group:"deadlockDetectorRoots"`),
-	)),
+	fx.Provide(
+		ControllerProvider,
+		func(impl *ControllerImpl) Controller { return impl },
+		ContextFactoryProvider,
+		fx.Annotate(
+			func(p Controller) pingable.Pingable { return p },
+			fx.ResultTags(`group:"deadlockDetectorRoots"`),
+		),
+	),
+	ownershipBasedQuotaScalerModule,
 )
 
-func ControllerProvider(
-	config *configs.Config,
-	logger log.Logger,
-	throttledLogger log.ThrottledLogger,
-	persistenceExecutionManager persistence.ExecutionManager,
-	persistenceShardManager persistence.ShardManager,
-	clientBean client.Bean,
-	historyClient historyservice.HistoryServiceClient,
-	historyServiceResolver membership.ServiceResolver,
-	metricsHandler metrics.Handler,
-	payloadSerializer serialization.Serializer,
-	timeSource clock.TimeSource,
-	namespaceRegistry namespace.Registry,
-	saProvider searchattribute.Provider,
-	saMapperProvider searchattribute.MapperProvider,
-	clusterMetadata cluster.Metadata,
-	archivalMetadata archiver.ArchivalMetadata,
-	hostInfoProvider membership.HostInfoProvider,
-	engineFactory EngineFactory,
-	tracerProvider trace.TracerProvider,
-) Controller {
-	return &ControllerImpl{
-		status:                      common.DaemonStatusInitialized,
-		membershipUpdateCh:          make(chan *membership.ChangedEvent, 10),
-		historyShards:               make(map[int32]*ContextImpl),
-		shutdownCh:                  make(chan struct{}),
-		logger:                      logger,
-		contextTaggedLogger:         logger,          // will add tags in Start
-		throttledLogger:             throttledLogger, // will add tags in Start
-		config:                      config,
-		persistenceExecutionManager: persistenceExecutionManager,
-		persistenceShardManager:     persistenceShardManager,
-		clientBean:                  clientBean,
-		historyClient:               historyClient,
-		historyServiceResolver:      historyServiceResolver,
-		metricsHandler:              metricsHandler,
-		taggedMetricsHandler:        metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryShardControllerScope)),
-		payloadSerializer:           payloadSerializer,
-		timeSource:                  timeSource,
-		namespaceRegistry:           namespaceRegistry,
-		saProvider:                  saProvider,
-		saMapperProvider:            saMapperProvider,
-		clusterMetadata:             clusterMetadata,
-		archivalMetadata:            archivalMetadata,
-		hostInfoProvider:            hostInfoProvider,
-		engineFactory:               engineFactory,
-		tracer:                      tracerProvider.Tracer(consts.LibraryName),
-	}
+var ownershipBasedQuotaScalerModule = fx.Options(
+	fx.Provide(func(
+		impl *ControllerImpl,
+		cfg *configs.Config,
+	) (*OwnershipBasedQuotaScalerImpl, error) {
+		return NewOwnershipBasedQuotaScaler(
+			impl,
+			int(cfg.NumberOfShards),
+			nil,
+		)
+	}),
+	fx.Provide(func(
+		impl *OwnershipBasedQuotaScalerImpl,
+	) OwnershipBasedQuotaScaler {
+		return impl
+	}),
+	fx.Provide(func() LazyLoadedOwnershipBasedQuotaScaler {
+		return LazyLoadedOwnershipBasedQuotaScaler{
+			Value: &atomic.Value{},
+		}
+	}),
+	fx.Invoke(initLazyLoadedOwnershipBasedQuotaScaler),
+	fx.Invoke(func(
+		lc fx.Lifecycle,
+		impl *OwnershipBasedQuotaScalerImpl,
+	) {
+		lc.Append(fx.Hook{
+			OnStop: func(_ context.Context) error {
+				impl.Close()
+				return nil
+			},
+		})
+	}),
+)
+
+func initLazyLoadedOwnershipBasedQuotaScaler(
+	serviceName primitives.ServiceName,
+	logger log.SnTaggedLogger,
+	ownershipBasedQuotaScaler OwnershipBasedQuotaScaler,
+	lazyLoadedOwnershipBasedQuotaScaler LazyLoadedOwnershipBasedQuotaScaler,
+) {
+	lazyLoadedOwnershipBasedQuotaScaler.Store(ownershipBasedQuotaScaler)
+	logger.Info("Initialized lazy loaded OwnershipBasedQuotaScaler", tag.Service(serviceName))
 }

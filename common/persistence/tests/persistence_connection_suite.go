@@ -35,6 +35,7 @@ import (
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 )
 
 type (
@@ -95,6 +96,5 @@ func (s *connectionSuite) TestClosedConnectionError() {
 	})
 
 	s.Nil(resp)
-	s.Error(err)
-	s.ErrorContains(err, "closed")
+	s.ErrorContains(err, sqlplugin.DatabaseUnavailableError.Error())
 }

@@ -29,18 +29,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/sdk/activity"
-	"go.temporal.io/sdk/workflow"
-
 	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/worker"
-
-	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/sdk/workflow"
 	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resourcetest"
+	"go.uber.org/mock/gomock"
 )
 
 type scannerWorkflowTestSuite struct {
@@ -77,7 +75,7 @@ func (s *scannerWorkflowTestSuite) TestScavengerActivity() {
 	s.registerActivities(env)
 	controller := gomock.NewController(s.T())
 	defer controller.Finish()
-	mockResource := resourcetest.NewTest(controller, metrics.Worker)
+	mockResource := resourcetest.NewTest(controller, primitives.WorkerService)
 
 	mockResource.TaskMgr.EXPECT().ListTaskQueue(gomock.Any(), gomock.Any()).Return(&p.ListTaskQueueResponse{}, nil)
 
@@ -87,6 +85,7 @@ func (s *scannerWorkflowTestSuite) TestScavengerActivity() {
 		executionManager: mockResource.GetExecutionManager(),
 		taskManager:      mockResource.GetTaskManager(),
 		historyClient:    mockResource.GetHistoryClient(),
+		hostInfo:         mockResource.GetHostInfo(),
 	}
 	env.SetTestTimeout(time.Second * 5)
 	env.SetWorkerOptions(worker.Options{

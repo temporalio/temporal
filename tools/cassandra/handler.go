@@ -25,15 +25,15 @@
 package cassandra
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/urfave/cli"
-
 	"go.temporal.io/server/common/auth"
 	c "go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/environment"
+	"go.temporal.io/server/temporal/environment"
 	"go.temporal.io/server/tools/common/schema"
 )
 
@@ -68,7 +68,7 @@ func setupSchema(cli *cli.Context, logger log.Logger) error {
 }
 
 // updateSchema executes the updateSchemaTask
-// using the given command lien args as input
+// using the given command line args as input
 func updateSchema(cli *cli.Context, logger log.Logger) error {
 	config, err := newCQLClientConfig(cli)
 	if err != nil {
@@ -96,7 +96,8 @@ func createKeyspace(cli *cli.Context, logger log.Logger) error {
 	}
 	keyspace := cli.String(schema.CLIOptKeyspace)
 	if keyspace == "" {
-		logger.Error("Unable to read config.", tag.Error(schema.NewConfigError("missing "+flag(schema.CLIOptKeyspace)+" argument ")))
+		err := fmt.Errorf("missing %s argument", flag(schema.CLIOptKeyspace))
+		logger.Error("Unable to read config.", tag.Error(schema.NewConfigError(err.Error())))
 		return err
 	}
 	err = doCreateKeyspace(config, keyspace, logger)
@@ -115,7 +116,8 @@ func dropKeyspace(cli *cli.Context, logger log.Logger) error {
 	}
 	keyspace := cli.String(schema.CLIOptKeyspace)
 	if keyspace == "" {
-		logger.Error("Unable to read config.", tag.Error(schema.NewConfigError("missing "+flag(schema.CLIOptKeyspace)+" argument ")))
+		err := fmt.Errorf("missing %s argument", flag(schema.CLIOptKeyspace))
+		logger.Error("Unable to read config.", tag.Error(schema.NewConfigError(err.Error())))
 		return err
 	}
 	err = doDropKeyspace(config, keyspace, logger)
@@ -161,12 +163,8 @@ func doDropKeyspace(cfg *CQLClientConfig, name string, logger log.Logger) error 
 	if err != nil {
 		return err
 	}
-	err = client.dropKeyspace(name)
-	if err != nil {
-		return err
-	}
-	client.Close()
-	return nil
+	defer client.Close()
+	return client.dropKeyspace(name)
 }
 
 func newCQLClientConfig(cli *cli.Context) (*CQLClientConfig, error) {
@@ -175,6 +173,7 @@ func newCQLClientConfig(cli *cli.Context) (*CQLClientConfig, error) {
 		Port:                     cli.GlobalInt(schema.CLIOptPort),
 		User:                     cli.GlobalString(schema.CLIOptUser),
 		Password:                 cli.GlobalString(schema.CLIOptPassword),
+		AllowedAuthenticators:    cli.GlobalStringSlice(schema.CLIOptAllowedAuthenticators),
 		Timeout:                  cli.GlobalInt(schema.CLIOptTimeout),
 		Keyspace:                 cli.GlobalString(schema.CLIOptKeyspace),
 		numReplicas:              cli.Int(schema.CLIOptReplicationFactor),

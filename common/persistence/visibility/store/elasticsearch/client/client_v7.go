@@ -27,6 +27,7 @@ package client
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
@@ -37,7 +38,7 @@ import (
 	"github.com/olivere/elastic/v7"
 	"github.com/olivere/elastic/v7/uritemplates"
 	enumspb "go.temporal.io/api/enums/v1"
-
+	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/log"
 )
 
@@ -53,7 +54,7 @@ type (
 )
 
 const (
-	pointInTimeSupportedFlavor = "default" // the other flavor is "oss".
+	pointInTimeSupportedFlavor = "default" // the other flavor is "oss"
 )
 
 var (
@@ -64,8 +65,17 @@ var _ Client = (*clientImpl)(nil)
 
 // newClient create a ES client
 func newClient(cfg *Config, httpClient *http.Client, logger log.Logger) (*clientImpl, error) {
+	var urls []string
+	if len(cfg.URLs) > 0 {
+		urls = make([]string, len(cfg.URLs))
+		for i, u := range cfg.URLs {
+			urls[i] = u.String()
+		}
+	} else {
+		urls = []string{cfg.URL.String()}
+	}
 	options := []elastic.ClientOptionFunc{
-		elastic.SetURL(cfg.URL.String()),
+		elastic.SetURL(urls...),
 		elastic.SetBasicAuth(cfg.Username, cfg.Password),
 		// Disable healthcheck to prevent blocking client creation (and thus Temporal server startup) if the Elasticsearch is down.
 		elastic.SetHealthcheck(false),
@@ -73,12 +83,21 @@ func newClient(cfg *Config, httpClient *http.Client, logger log.Logger) (*client
 		elastic.SetRetrier(elastic.NewBackoffRetrier(elastic.NewExponentialBackoff(128*time.Millisecond, 513*time.Millisecond))),
 		// Critical to ensure decode of int64 won't lose precision.
 		elastic.SetDecoder(&elastic.NumberDecoder{}),
+		elastic.SetGzip(true),
 	}
 
 	options = append(options, getLoggerOptions(cfg.LogLevel, logger)...)
 
 	if httpClient == nil {
-		httpClient = http.DefaultClient
+		if cfg.TLS != nil && cfg.TLS.Enabled {
+			tlsHttpClient, err := buildTLSHTTPClient(cfg.TLS)
+			if err != nil {
+				return nil, fmt.Errorf("unable to create TLS HTTP client: %w", err)
+			}
+			httpClient = tlsHttpClient
+		} else {
+			httpClient = http.DefaultClient
+		}
 	}
 
 	// TODO (alex): Remove this when https://github.com/olivere/elastic/pull/1507 is merged.
@@ -120,6 +139,19 @@ func newClient(cfg *Config, httpClient *http.Client, logger log.Logger) (*client
 	}, nil
 }
 
+// Build Http Client with TLS
+func buildTLSHTTPClient(config *auth.TLS) (*http.Client, error) {
+	tlsConfig, err := auth.NewTLSConfig(config)
+	if err != nil {
+		return nil, err
+	}
+
+	transport := &http.Transport{TLSClientConfig: tlsConfig}
+	tlsClient := &http.Client{Transport: transport}
+
+	return tlsClient, nil
+}
+
 func (c *clientImpl) Get(ctx context.Context, index string, docID string) (*elastic.GetResult, error) {
 	return c.esClient.Get().Index(index).Id(docID).Do(ctx)
 }
@@ -127,7 +159,8 @@ func (c *clientImpl) Get(ctx context.Context, index string, docID string) (*elas
 func (c *clientImpl) Search(ctx context.Context, p *SearchParameters) (*elastic.SearchResult, error) {
 	searchSource := elastic.NewSearchSource().
 		Query(p.Query).
-		SortBy(p.Sorter...)
+		SortBy(p.Sorter...).
+		TrackTotalHits(false)
 
 	if p.PointInTime != nil {
 		searchSource.PointInTime(p.PointInTime)
@@ -142,7 +175,7 @@ func (c *clientImpl) Search(ctx context.Context, p *SearchParameters) (*elastic.
 	}
 
 	searchService := c.esClient.Search().SearchSource(searchSource)
-	// When pit.id is specified index must not be used.
+	// If pit is specified, index must not be used.
 	if p.PointInTime == nil {
 		searchService.Index(p.Index)
 	}
@@ -150,30 +183,32 @@ func (c *clientImpl) Search(ctx context.Context, p *SearchParameters) (*elastic.
 	return searchService.Do(ctx)
 }
 
-func (c *clientImpl) OpenScroll(ctx context.Context, p *SearchParameters, keepAliveInterval string) (*elastic.SearchResult, error) {
+func (c *clientImpl) OpenScroll(
+	ctx context.Context,
+	p *SearchParameters,
+	keepAliveInterval string,
+) (*elastic.SearchResult, error) {
 	scrollService := elastic.NewScrollService(c.esClient).
 		Index(p.Index).
 		Query(p.Query).
 		SortBy(p.Sorter...).
 		KeepAlive(keepAliveInterval)
-
 	if p.PageSize != 0 {
 		scrollService.Size(p.PageSize)
 	}
-
-	searchResult, err := scrollService.Do(ctx)
-	return searchResult, err
+	return scrollService.Do(ctx)
 }
 
-func (c *clientImpl) Scroll(ctx context.Context, scrollID string, keepAliveInterval string) (*elastic.SearchResult, error) {
-	scrollService := elastic.NewScrollService(c.esClient)
-	result, err := scrollService.ScrollId(scrollID).KeepAlive(keepAliveInterval).Do(ctx)
-	return result, err
+func (c *clientImpl) Scroll(
+	ctx context.Context,
+	id string,
+	keepAliveInterval string,
+) (*elastic.SearchResult, error) {
+	return elastic.NewScrollService(c.esClient).ScrollId(id).KeepAlive(keepAliveInterval).Do(ctx)
 }
 
 func (c *clientImpl) CloseScroll(ctx context.Context, id string) error {
-	err := elastic.NewScrollService(c.esClient).ScrollId(id).Clear(ctx)
-	return err
+	return elastic.NewScrollService(c.esClient).ScrollId(id).Clear(ctx)
 }
 
 func (c *clientImpl) IsPointInTimeSupported(ctx context.Context) bool {
@@ -216,6 +251,21 @@ func (c *clientImpl) ClosePointInTime(ctx context.Context, id string) (bool, err
 
 func (c *clientImpl) Count(ctx context.Context, index string, query elastic.Query) (int64, error) {
 	return c.esClient.Count(index).Query(query).Do(ctx)
+}
+
+func (c *clientImpl) CountGroupBy(
+	ctx context.Context,
+	index string,
+	query elastic.Query,
+	aggName string,
+	agg elastic.Aggregation,
+) (*elastic.SearchResult, error) {
+	searchSource := elastic.NewSearchSource().
+		Query(query).
+		Size(0).
+		TrackTotalHits(false).
+		Aggregation(aggName, agg)
+	return c.esClient.Search(index).SearchSource(searchSource).Do(ctx)
 }
 
 func (c *clientImpl) RunBulkProcessor(ctx context.Context, p *BulkProcessorParameters) (BulkProcessor, error) {
@@ -284,8 +334,11 @@ func (c *clientImpl) GetDateFieldType() string {
 	return "date_nanos"
 }
 
-func (c *clientImpl) CreateIndex(ctx context.Context, index string) (bool, error) {
-	resp, err := c.esClient.CreateIndex(index).Do(ctx)
+func (c *clientImpl) CreateIndex(ctx context.Context, index string, body map[string]any) (bool, error) {
+	if body == nil {
+		body = make(map[string]interface{})
+	}
+	resp, err := c.esClient.CreateIndex(index).BodyJson(body).Do(ctx)
 	if err != nil {
 		return false, err
 	}
@@ -296,8 +349,8 @@ func (c *clientImpl) IsNotFoundError(err error) bool {
 	return elastic.IsNotFound(err)
 }
 
-func (c *clientImpl) CatIndices(ctx context.Context) (elastic.CatIndicesResponse, error) {
-	return c.esClient.CatIndices().Do(ctx)
+func (c *clientImpl) CatIndices(ctx context.Context, target string) (elastic.CatIndicesResponse, error) {
+	return c.esClient.CatIndices().Index(target).Do(ctx)
 }
 
 func (c *clientImpl) Bulk() BulkService {
@@ -344,6 +397,12 @@ func (c *clientImpl) Delete(ctx context.Context, indexName string, docID string,
 		Version(version).
 		VersionType(versionTypeExternal).
 		Do(ctx)
+	return err
+}
+
+// Ping returns whether or not the elastic search cluster is available
+func (c *clientImpl) Ping(ctx context.Context) error {
+	_, _, err := c.esClient.Ping(c.url.String()).Do(ctx)
 	return err
 }
 

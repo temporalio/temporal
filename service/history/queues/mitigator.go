@@ -36,36 +36,50 @@ import (
 var _ Mitigator = (*mitigatorImpl)(nil)
 
 type (
-	// Mitigator generates an Action for resolving the given Alert
+	// Mitigator generates and runs an Action for resolving the given Alert
 	Mitigator interface {
-		Mitigate(Alert) Action
+		Mitigate(Alert)
 	}
+
+	actionRunner func(Action, *ReaderGroup, metrics.Handler, log.Logger)
 
 	mitigatorImpl struct {
 		sync.Mutex
 
+		readerGroup    *ReaderGroup
 		monitor        Monitor
 		logger         log.Logger
 		metricsHandler metrics.Handler
 		maxReaderCount dynamicconfig.IntPropertyFn
+
+		// this is for overriding the behavior in unit tests
+		// since we don't really want to run the action in Mitigator unit tests
+		actionRunner actionRunner
+		grouper      Grouper
 	}
 )
 
 func newMitigator(
+	readerGroup *ReaderGroup,
 	monitor Monitor,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 	maxReaderCount dynamicconfig.IntPropertyFn,
+	grouper Grouper,
 ) *mitigatorImpl {
 	return &mitigatorImpl{
+		readerGroup:    readerGroup,
 		monitor:        monitor,
 		logger:         logger,
 		metricsHandler: metricsHandler,
 		maxReaderCount: maxReaderCount,
+
+		actionRunner: runAction,
+		grouper:      grouper,
 	}
 }
 
-func (m *mitigatorImpl) Mitigate(alert Alert) Action {
+func (m *mitigatorImpl) Mitigate(alert Alert) {
 	m.Lock()
 	defer m.Unlock()
 
@@ -76,38 +90,41 @@ func (m *mitigatorImpl) Mitigate(alert Alert) Action {
 			alert.AlertAttributesQueuePendingTaskCount,
 			m.monitor,
 			m.maxReaderCount(),
-			m.newActionCompletionFn(alert.AlertType, alert.AlertAttributesQueuePendingTaskCount),
+			m.grouper,
 		)
 	case AlertTypeReaderStuck:
 		action = newReaderStuckAction(
 			alert.AlertAttributesReaderStuck,
-			m.newActionCompletionFn(alert.AlertType, alert.AlertAttributesReaderStuck),
 			m.logger,
 		)
 	case AlertTypeSliceCount:
 		action = newSliceCountAction(
 			alert.AlertAttributesSliceCount,
 			m.monitor,
-			m.newActionCompletionFn(alert.AlertType, alert.AlertAttributesSliceCount),
 		)
 	default:
-		m.logger.Error("Unknown queue alert type", tag.QueueAlertType(alert.AlertType.String()))
-		return nil
+		m.logger.Error("Unknown queue alert type", tag.QueueAlert(alert))
+		return
 	}
 
-	return action
+	m.actionRunner(
+		action,
+		m.readerGroup,
+		m.metricsHandler,
+		log.With(m.logger, tag.QueueAlert(alert)),
+	)
+
+	m.monitor.ResolveAlert(alert.AlertType)
 }
 
-func (m *mitigatorImpl) newActionCompletionFn(
-	alertType AlertType,
-	alertAttributes interface{},
-) func() {
-	return func() {
-		m.monitor.ResolveAlert(alertType)
-		m.logger.Info("Action completed for queue alert",
-			tag.QueueAlertType(alertType.String()),
-			tag.QueueAlertAttributes(alertAttributes),
-		)
-		m.metricsHandler.Counter(metrics.QueueActionCounter.GetMetricName()).Record(1, metrics.QueueAlertTypeTag(alertType.String()))
-	}
+func runAction(
+	action Action,
+	readerGroup *ReaderGroup,
+	metricsHandler metrics.Handler,
+	logger log.Logger,
+) {
+	metricsHandler = metricsHandler.WithTags(metrics.QueueActionTag(action.Name()))
+	metrics.QueueActionCounter.With(metricsHandler).Record(1)
+
+	action.Run(readerGroup)
 }

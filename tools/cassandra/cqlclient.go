@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	commongocql "go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/tools/common/schema"
@@ -54,6 +55,7 @@ type (
 		Port                     int
 		User                     string
 		Password                 string
+		AllowedAuthenticators    []string
 		Keyspace                 string
 		Timeout                  int
 		numReplicas              int
@@ -68,6 +70,7 @@ type (
 const (
 	defaultTimeout = 30 // Timeout in seconds
 	systemKeyspace = "system"
+	dbType         = "cassandra"
 )
 
 const (
@@ -106,7 +109,6 @@ func newCQLClient(cfg *CQLClientConfig, logger log.Logger) (*cqlClient, error) {
 	var err error
 
 	cassandraConfig := cfg.toCassandraConfig()
-	cassandraConfig.ConnectTimeout = time.Duration(cfg.Timeout) * time.Second
 
 	logger.Info("Validating connection to cassandra cluster.")
 	session, err := commongocql.NewSession(
@@ -114,6 +116,7 @@ func newCQLClient(cfg *CQLClientConfig, logger log.Logger) (*cqlClient, error) {
 			return commongocql.NewCassandraCluster(*cassandraConfig, resolver.NewNoopResolver())
 		},
 		logger,
+		metrics.NoopMetricsHandler,
 	)
 	if err != nil {
 		logger.Error("Connection validation failed.", tag.Error(err))
@@ -137,6 +140,7 @@ func (cfg *CQLClientConfig) toCassandraConfig() *config.Cassandra {
 		Port:                     cfg.Port,
 		User:                     cfg.User,
 		Password:                 cfg.Password,
+		AllowedAuthenticators:    cfg.AllowedAuthenticators,
 		Keyspace:                 cfg.Keyspace,
 		TLS:                      cfg.TLS,
 		Datacenter:               cfg.Datacenter,
@@ -147,6 +151,7 @@ func (cfg *CQLClientConfig) toCassandraConfig() *config.Cassandra {
 			},
 		},
 		AddressTranslator: cfg.AddressTranslator,
+		ConnectTimeout:    time.Duration(cfg.Timeout) * time.Second,
 	}
 
 	return &cassandraConfig
@@ -316,4 +321,9 @@ func (client *cqlClient) waitSchemaAgreement() error {
 	ctx, cancel := context.WithTimeout(context.Background(), client.timeout)
 	defer cancel()
 	return client.session.AwaitSchemaAgreement(ctx)
+}
+
+// Type gives the type of db
+func (client *cqlClient) Type() string {
+	return dbType
 }

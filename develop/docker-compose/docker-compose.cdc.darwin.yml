@@ -1,6 +1,4 @@
-# Overrides for CDD for Mac/Darwin users.
-version: "3.5"
-
+# Overrides for CDC for MacOS (Darwin) users.
 services:
   temporal-ui-standby:
     environment:

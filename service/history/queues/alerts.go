@@ -25,8 +25,6 @@
 package queues
 
 import (
-	"strconv"
-
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -47,7 +45,7 @@ type (
 	}
 
 	AlertAttributesReaderStuck struct {
-		ReaderID         int32
+		ReaderID         int64
 		CurrentWatermark tasks.Key
 	}
 
@@ -63,20 +61,3 @@ const (
 	AlertTypeReaderStuck
 	AlertTypeSliceCount
 )
-
-var (
-	alertTypeNames = map[AlertType]string{
-		0: "Unspecified",
-		1: "QueuePendingTaskCount",
-		2: "ReaderStuck",
-		3: "SliceCount",
-	}
-)
-
-func (a AlertType) String() string {
-	s, ok := alertTypeNames[a]
-	if ok {
-		return s
-	}
-	return strconv.Itoa(int(a))
-}

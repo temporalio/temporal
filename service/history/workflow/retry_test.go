@@ -25,19 +25,19 @@
 package workflow
 
 import (
+	"math"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
-
-	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
-	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/failure"
-	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/number"
+	"go.temporal.io/server/common/retrypolicy"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func Test_IsRetryable(t *testing.T) {
@@ -66,7 +66,7 @@ func Test_IsRetryable(t *testing.T) {
 		}},
 	}
 	a.True(isRetryable(f, nil))
-	a.False(isRetryable(f, []string{common.TimeoutFailureTypePrefix + enumspb.TIMEOUT_TYPE_START_TO_CLOSE.String()}))
+	a.False(isRetryable(f, []string{retrypolicy.TimeoutFailureTypePrefix + enumspb.TIMEOUT_TYPE_START_TO_CLOSE.String()}))
 
 	f = &failurepb.Failure{
 		FailureInfo: &failurepb.Failure_TimeoutFailureInfo{TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
@@ -74,7 +74,7 @@ func Test_IsRetryable(t *testing.T) {
 		}},
 	}
 	a.False(isRetryable(f, nil))
-	a.False(isRetryable(f, []string{common.TimeoutFailureTypePrefix + enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START.String()}))
+	a.False(isRetryable(f, []string{retrypolicy.TimeoutFailureTypePrefix + enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START.String()}))
 
 	f = &failurepb.Failure{
 		FailureInfo: &failurepb.Failure_TimeoutFailureInfo{TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
@@ -82,7 +82,7 @@ func Test_IsRetryable(t *testing.T) {
 		}},
 	}
 	a.False(isRetryable(f, nil))
-	a.False(isRetryable(f, []string{common.TimeoutFailureTypePrefix + enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE.String()}))
+	a.False(isRetryable(f, []string{retrypolicy.TimeoutFailureTypePrefix + enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE.String()}))
 
 	f = &failurepb.Failure{
 		FailureInfo: &failurepb.Failure_TimeoutFailureInfo{TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
@@ -90,9 +90,9 @@ func Test_IsRetryable(t *testing.T) {
 		}},
 	}
 	a.True(isRetryable(f, nil))
-	a.False(isRetryable(f, []string{common.TimeoutFailureTypePrefix + enumspb.TIMEOUT_TYPE_HEARTBEAT.String()}))
-	a.True(isRetryable(f, []string{common.TimeoutFailureTypePrefix + enumspb.TIMEOUT_TYPE_START_TO_CLOSE.String()}))
-	a.True(isRetryable(f, []string{common.TimeoutFailureTypePrefix + "unknown timeout type string"}))
+	a.False(isRetryable(f, []string{retrypolicy.TimeoutFailureTypePrefix + enumspb.TIMEOUT_TYPE_HEARTBEAT.String()}))
+	a.True(isRetryable(f, []string{retrypolicy.TimeoutFailureTypePrefix + enumspb.TIMEOUT_TYPE_START_TO_CLOSE.String()}))
+	a.True(isRetryable(f, []string{retrypolicy.TimeoutFailureTypePrefix + "unknown timeout type string"}))
 
 	f = &failurepb.Failure{
 		FailureInfo: &failurepb.Failure_ServerFailureInfo{ServerFailureInfo: &failurepb.ServerFailureInfo{
@@ -151,232 +151,200 @@ func Test_IsRetryable(t *testing.T) {
 	a.True(isRetryable(f, nil))
 }
 
-func Test_NextRetry(t *testing.T) {
-	a := assert.New(t)
+func Test_NonRetriableErrors(t *testing.T) {
+	attempt := int32(1)
 	now, _ := time.Parse(time.RFC3339, "2018-04-13T16:08:08+00:00")
-	serverFailure := failure.NewServerFailure("some retryable server failure", false)
-	identity := "some-worker-identity"
+	maxRetryAttempts := int32(2)
+	retryInterval := durationpb.New(time.Duration(time.Second))
+	maxRetryInterval := durationpb.New(time.Duration(0))
+	expirationTime := timestamppb.New(now.Add(100 * time.Second))
+	backoffCoefficient := float64(2)
+	nonRetryableErrorTypes := []string{}
 
-	// no retry without retry policy
-	ai := &persistencespb.ActivityInfo{
-		ScheduleToStartTimeout:      timestamp.DurationFromSeconds(5),
-		ScheduleToCloseTimeout:      timestamp.DurationFromSeconds(30),
-		StartToCloseTimeout:         timestamp.DurationFromSeconds(25),
-		HasRetryPolicy:              false,
-		RetryNonRetryableErrorTypes: []string{},
-		StartedIdentity:             identity,
-		Attempt:                     1,
-		RetryMaximumAttempts:        2,
-		RetryExpirationTime:         timestamp.TimePtr(now.Add(100 * time.Second)),
-		RetryInitialInterval:        timestamp.DurationPtr(time.Duration(0)),
-		RetryMaximumInterval:        timestamp.DurationPtr(time.Duration(0)),
-		RetryBackoffCoefficient:     2,
+	t.Run("when non-retriable error provided should fail with non retriable failure", func(t *testing.T) {
+		nonRetriableFailure := failure.NewServerFailure("some non-retryable server failure", true)
+		interval, retryState := getBackoffInterval(
+			doNotCare(now),
+			doNotCare(attempt),
+			doNotCare(maxRetryAttempts),
+			doNotCare(retryInterval),
+			doNotCare(maxRetryInterval),
+			doNotCare(expirationTime),
+			doNotCare(backoffCoefficient),
+			nonRetriableFailure,
+			doNotCare(nonRetryableErrorTypes),
+		)
+		assert.Equal(t, backoff.NoBackoff, interval)
+		assert.Equal(t, enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE, retryState)
+	})
+
+	t.Run("when retriable error provided should proceed to calculate backoff interval", func(t *testing.T) {
+		retriableFailure := failure.NewServerFailure("good-reason", false)
+
+		_, retryState := getBackoffInterval(
+			doNotCare(now),
+			doNotCare(attempt),
+			doNotCare(maxRetryAttempts),
+			doNotCare(retryInterval),
+			doNotCare(maxRetryInterval),
+			doNotCare(expirationTime),
+			doNotCare(backoffCoefficient),
+			retriableFailure,
+			doNotCare(nonRetryableErrorTypes),
+		)
+		assert.NotEqual(t, enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE, retryState)
+	})
+}
+
+func Test_nextBackoffInterval(t *testing.T) {
+	now, _ := time.Parse(time.RFC3339, "2018-04-13T16:08:08+00:00")
+	expirationIn := func(t time.Duration) *timestamppb.Timestamp { return timestamppb.New(now.Add(t)) }
+	initInterval := func(t time.Duration) *durationpb.Duration { return durationpb.New(t) }
+	maxInterval := initInterval
+
+	t.Run("first attempt should use initial backoff", func(t *testing.T) {
+		currentAttempt := int32(1)
+		initialDelay := 5 * time.Second
+		interval, retryState := nextBackoffInterval(
+			doNotCare(now),
+			currentAttempt,
+			5,
+			initInterval(initialDelay),
+			doNotCare(maxInterval(10*time.Second)),
+			doNotCare(expirationIn(30*time.Second)),
+			doNotCare[float64](2),
+			ExponentialBackoffAlgorithm,
+		)
+		assert.Equal(t, initialDelay, interval)
+		assert.Equal(t, enumspb.RETRY_STATE_IN_PROGRESS, retryState)
+	})
+
+	t.Run("negative or 0 attempt should be treated as first", func(t *testing.T) {
+		currentAttempt := int32(-1)
+		maxAttempts := int32(5)
+		initialDelay := 5 * time.Second
+		interval, retryState := nextBackoffInterval(
+			doNotCare(now),
+			currentAttempt,
+			maxAttempts,
+			doNotCare(initInterval(initialDelay)),
+			doNotCare(maxInterval(10*time.Second)),
+			doNotCare(expirationIn(30*time.Second)),
+			doNotCare[float64](2),
+			ExponentialBackoffAlgorithm,
+		)
+		assert.Equal(t, initialDelay, interval)
+		assert.Equal(t, enumspb.RETRY_STATE_IN_PROGRESS, retryState)
+	})
+
+	t.Run("n-th retry should be initial * backoff^(n - 1)", func(t *testing.T) {
+		initialDelay := 2 * time.Second
+		attempt := int32(4)
+		maxAttempts := int32(5)
+		interval, retryState := nextBackoffInterval(
+			doNotCare(now),
+			attempt,
+			maxAttempts,
+			initInterval(initialDelay),
+			doNotCare(maxInterval(200*time.Second)),
+			doNotCare(expirationIn(600*time.Second)),
+			3,
+			ExponentialBackoffAlgorithm,
+		)
+		assert.Equal(t, initialDelay*pow(3, int32(attempt)-1), interval)
+		assert.Equal(t, enumspb.RETRY_STATE_IN_PROGRESS, retryState)
+	})
+
+	t.Run("if retry exceeds max backoff interval should set it to max", func(t *testing.T) {
+		maxBackoff := 1 * time.Second
+		interval, retryState := nextBackoffInterval(
+			doNotCare(now),
+			5,
+			doNotCare[int32](20),
+			initInterval(3*time.Second),
+			maxInterval(maxBackoff),
+			doNotCare(expirationIn(600*time.Second)),
+			doNotCare[float64](2),
+			ExponentialBackoffAlgorithm,
+		)
+		assert.Equal(t, maxBackoff, interval)
+		assert.Equal(t, enumspb.RETRY_STATE_IN_PROGRESS, retryState)
+	})
+
+	t.Run("when max attempts is specified and current exceeds max should return no more retries", func(t *testing.T) {
+		interval, retryState := nextBackoffInterval(
+			doNotCare(now),
+			10,
+			10,
+			doNotCare(initInterval(3*time.Second)),
+			doNotCare(maxInterval(10*time.Second)),
+			doNotCare(expirationIn(600*time.Second)),
+			doNotCare[float64](2),
+			ExponentialBackoffAlgorithm,
+		)
+		assert.Equal(t, backoff.NoBackoff, interval)
+		assert.Equal(t, enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED, retryState)
+	})
+
+	t.Run("when max attempts is set to 0 should keep trying", func(t *testing.T) {
+		initialDelay := 2 * time.Second
+		interval, retryState := nextBackoffInterval(
+			doNotCare(now),
+			10,
+			0,
+			doNotCare(initInterval(initialDelay)),
+			doNotCare(maxInterval(30*time.Minute)),
+			doNotCare(expirationIn(60*time.Minute)),
+			2,
+			ExponentialBackoffAlgorithm,
+		)
+		assert.Equal(t, initialDelay*pow(2, 10-1), interval)
+		assert.Equal(t, enumspb.RETRY_STATE_IN_PROGRESS, retryState)
+	})
+
+	t.Run("if expiration is not 0 and expected delay beyond expiration should return no more retries", func(t *testing.T) {
+		initialDelay := 2 * time.Second
+		interval, retryState := nextBackoffInterval(
+			doNotCare(now),
+			10,
+			0,
+			initInterval(initialDelay),
+			maxInterval(30*time.Minute),
+			expirationIn(1*time.Minute),
+			2,
+			ExponentialBackoffAlgorithm,
+		)
+		assert.Equal(t, backoff.NoBackoff, interval)
+		assert.Equal(t, enumspb.RETRY_STATE_TIMEOUT, retryState)
+	})
+
+	t.Run("if expiration is 0 should retry", func(t *testing.T) {
+		initialDelay := 2 * time.Second
+		interval, retryState := nextBackoffInterval(
+			doNotCare(now),
+			10,
+			0,
+			initInterval(initialDelay),
+			maxInterval(30*time.Minute),
+			expirationIn(0),
+			2,
+			ExponentialBackoffAlgorithm,
+		)
+		assert.Equal(t, backoff.NoBackoff, interval)
+		assert.Equal(t, enumspb.RETRY_STATE_TIMEOUT, retryState)
+	})
+}
+
+func doNotCare[T any](x T) T { return x }
+
+func pow[T any](base, exponent T) time.Duration {
+	b := number.NewNumber(base).GetFloatOrDefault(math.NaN())
+	if math.IsNaN(b) || b < 0 {
+		panic("base is not a non-negative number")
 	}
-
-	// retry if both MaximumAttempts and WorkflowExpirationTime are not set
-	//  above means no limitation on attempts and expiration
-	ai.RetryMaximumAttempts = 0
-	ai.RetryExpirationTime = timestamp.TimePtr(time.Time{})
-	ai.RetryInitialInterval = timestamp.DurationFromSeconds(1)
-	ai.CancelRequested = false
-	interval, retryState := getBackoffInterval(
-		clock.NewRealTimeSource().Now(),
-		ai.Attempt,
-		ai.RetryMaximumAttempts,
-		ai.RetryInitialInterval,
-		ai.RetryMaximumInterval,
-		ai.RetryExpirationTime,
-		ai.RetryBackoffCoefficient,
-		serverFailure,
-		ai.RetryNonRetryableErrorTypes,
-	)
-	a.Equal(time.Second, interval)
-	a.Equal(enumspb.RETRY_STATE_IN_PROGRESS, retryState)
-
-	// no retry if MaximumAttempts is 1 (for initial Attempt)
-	ai.RetryMaximumAttempts = 1
-	ai.RetryExpirationTime = timestamp.TimePtr(time.Time{})
-	ai.RetryInitialInterval = timestamp.DurationFromSeconds(1)
-	interval, retryState = getBackoffInterval(
-		clock.NewRealTimeSource().Now(),
-		ai.Attempt,
-		ai.RetryMaximumAttempts,
-		ai.RetryInitialInterval,
-		ai.RetryMaximumInterval,
-		ai.RetryExpirationTime,
-		ai.RetryBackoffCoefficient,
-		serverFailure,
-		ai.RetryNonRetryableErrorTypes,
-	)
-	a.Equal(backoff.NoBackoff, interval)
-	a.Equal(enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED, retryState)
-
-	// backoff retry, intervals: 1ms, 2ms, 4ms, 8ms.
-	ai.RetryMaximumAttempts = 5
-	ai.RetryBackoffCoefficient = 2
-	ai.RetryExpirationTime = timestamp.TimePtr(time.Time{})
-	ai.RetryInitialInterval = timestamp.DurationPtr(1 * time.Millisecond)
-	interval, retryState = getBackoffInterval(
-		now,
-		ai.Attempt,
-		ai.RetryMaximumAttempts,
-		ai.RetryInitialInterval,
-		ai.RetryMaximumInterval,
-		ai.RetryExpirationTime,
-		ai.RetryBackoffCoefficient,
-		serverFailure,
-		ai.RetryNonRetryableErrorTypes,
-	)
-	a.Equal(time.Millisecond, interval)
-	a.Equal(enumspb.RETRY_STATE_IN_PROGRESS, retryState)
-	ai.Attempt++
-
-	interval, retryState = getBackoffInterval(
-		now,
-		ai.Attempt,
-		ai.RetryMaximumAttempts,
-		ai.RetryInitialInterval,
-		ai.RetryMaximumInterval,
-		ai.RetryExpirationTime,
-		ai.RetryBackoffCoefficient,
-		serverFailure,
-		ai.RetryNonRetryableErrorTypes,
-	)
-	a.Equal(time.Millisecond*2, interval)
-	a.Equal(enumspb.RETRY_STATE_IN_PROGRESS, retryState)
-	ai.Attempt++
-
-	interval, retryState = getBackoffInterval(
-		now,
-		ai.Attempt,
-		ai.RetryMaximumAttempts,
-		ai.RetryInitialInterval,
-		ai.RetryMaximumInterval,
-		ai.RetryExpirationTime,
-		ai.RetryBackoffCoefficient,
-		serverFailure,
-		ai.RetryNonRetryableErrorTypes,
-	)
-	a.Equal(time.Millisecond*4, interval)
-	a.Equal(enumspb.RETRY_STATE_IN_PROGRESS, retryState)
-	ai.Attempt++
-
-	// test non-retryable error
-	serverFailure = failure.NewServerFailure("some non-retryable server failure", true)
-	interval, retryState = getBackoffInterval(
-		now,
-		ai.Attempt,
-		ai.RetryMaximumAttempts,
-		ai.RetryInitialInterval,
-		ai.RetryMaximumInterval,
-		ai.RetryExpirationTime,
-		ai.RetryBackoffCoefficient,
-		serverFailure,
-		ai.RetryNonRetryableErrorTypes,
-	)
-	a.Equal(backoff.NoBackoff, interval)
-	a.Equal(enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE, retryState)
-
-	serverFailure = failure.NewServerFailure("good-reason", false)
-
-	interval, retryState = getBackoffInterval(
-		now,
-		ai.Attempt,
-		ai.RetryMaximumAttempts,
-		ai.RetryInitialInterval,
-		ai.RetryMaximumInterval,
-		ai.RetryExpirationTime,
-		ai.RetryBackoffCoefficient,
-		serverFailure,
-		ai.RetryNonRetryableErrorTypes,
-	)
-	a.Equal(time.Millisecond*8, interval)
-	a.Equal(enumspb.RETRY_STATE_IN_PROGRESS, retryState)
-	ai.Attempt++
-
-	// no retry as max attempt reached
-	a.EqualValues(ai.RetryMaximumAttempts, ai.Attempt)
-	interval, retryState = getBackoffInterval(
-		now,
-		ai.Attempt,
-		ai.RetryMaximumAttempts,
-		ai.RetryInitialInterval,
-		ai.RetryMaximumInterval,
-		ai.RetryExpirationTime,
-		ai.RetryBackoffCoefficient,
-		serverFailure,
-		ai.RetryNonRetryableErrorTypes,
-	)
-	a.Equal(backoff.NoBackoff, interval)
-	a.Equal(enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED, retryState)
-
-	// increase max attempts, with max interval cap at 10s
-	ai.RetryMaximumAttempts = 6
-	ai.RetryMaximumInterval = timestamp.DurationPtr(10 * time.Millisecond)
-	interval, retryState = getBackoffInterval(
-		now,
-		ai.Attempt,
-		ai.RetryMaximumAttempts,
-		ai.RetryInitialInterval,
-		ai.RetryMaximumInterval,
-		ai.RetryExpirationTime,
-		ai.RetryBackoffCoefficient,
-		serverFailure,
-		ai.RetryNonRetryableErrorTypes,
-	)
-	a.Equal(time.Millisecond*10, interval)
-	a.Equal(enumspb.RETRY_STATE_IN_PROGRESS, retryState)
-	ai.Attempt++
-
-	// no retry because expiration time before next interval
-	ai.RetryMaximumAttempts = 8
-	ai.RetryExpirationTime = timestamp.TimePtr(now.Add(time.Millisecond * 5))
-	interval, retryState = getBackoffInterval(
-		now,
-		ai.Attempt,
-		ai.RetryMaximumAttempts,
-		ai.RetryInitialInterval,
-		ai.RetryMaximumInterval,
-		ai.RetryExpirationTime,
-		ai.RetryBackoffCoefficient,
-		serverFailure,
-		ai.RetryNonRetryableErrorTypes,
-	)
-	a.Equal(backoff.NoBackoff, interval)
-	a.Equal(enumspb.RETRY_STATE_TIMEOUT, retryState)
-
-	// extend expiration, next interval should be 10s
-	ai.RetryExpirationTime = timestamp.TimePtr(now.Add(time.Minute))
-	interval, retryState = getBackoffInterval(
-		now,
-		ai.Attempt,
-		ai.RetryMaximumAttempts,
-		ai.RetryInitialInterval,
-		ai.RetryMaximumInterval,
-		ai.RetryExpirationTime,
-		ai.RetryBackoffCoefficient,
-		serverFailure,
-		ai.RetryNonRetryableErrorTypes,
-	)
-	a.Equal(time.Millisecond*10, interval)
-	a.Equal(enumspb.RETRY_STATE_IN_PROGRESS, retryState)
-	ai.Attempt++
-
-	// with big max retry, math.Pow() could overflow, verify that it uses the MaxInterval
-	ai.Attempt = 64
-	ai.RetryMaximumAttempts = 100
-	interval, retryState = getBackoffInterval(
-		now,
-		ai.Attempt,
-		ai.RetryMaximumAttempts,
-		ai.RetryInitialInterval,
-		ai.RetryMaximumInterval,
-		ai.RetryExpirationTime,
-		ai.RetryBackoffCoefficient,
-		serverFailure,
-		ai.RetryNonRetryableErrorTypes,
-	)
-	a.Equal(time.Millisecond*10, interval)
-	a.Equal(enumspb.RETRY_STATE_IN_PROGRESS, retryState)
-	ai.Attempt++
+	e := number.NewNumber(exponent).GetFloatOrDefault(math.NaN())
+	if math.IsNaN(e) || e < 0 {
+		panic("exponent is not a non-negative number")
+	}
+	return time.Duration(math.Pow(b, e))
 }

@@ -29,7 +29,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/primitives"
 )
@@ -65,7 +64,17 @@ func (s *historyBranchUtilSuite) TestHistoryBranchUtil() {
 	treeID0 := primitives.NewUUID().String()
 	branchID0 := primitives.NewUUID().String()
 	ancestors := []*persistencespb.HistoryBranchRange(nil)
-	branchToken0, err := NewHistoryBranch(treeID0, &branchID0, ancestors)
+	branchToken0, err := historyBranchUtil.NewHistoryBranch(
+		primitives.NewUUID().String(),
+		primitives.NewUUID().String(),
+		primitives.NewUUID().String(),
+		treeID0,
+		&branchID0,
+		ancestors,
+		0,
+		0,
+		0,
+	)
 	s.NoError(err)
 
 	branchInfo0, err := historyBranchUtil.ParseHistoryBranchInfo(branchToken0)
@@ -82,7 +91,9 @@ func (s *historyBranchUtilSuite) TestHistoryBranchUtil() {
 			TreeId:    treeID1,
 			BranchId:  branchID1,
 			Ancestors: ancestors,
-		})
+		},
+		primitives.NewUUID().String(),
+	)
 	s.NoError(err)
 
 	branchInfo1, err := historyBranchUtil.ParseHistoryBranchInfo(branchToken1)

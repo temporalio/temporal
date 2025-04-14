@@ -34,5 +34,7 @@ import (
 )
 
 func main() {
-	_ = sql.RunTool(os.Args)
+	if err := sql.RunTool(os.Args); err != nil {
+		os.Exit(1)
+	}
 }

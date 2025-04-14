@@ -41,7 +41,6 @@ var (
 	errEmptyWorkflowTypeName = errors.New("field WorkflowTypeName is empty")
 	errEmptyStartTime        = errors.New("field StartTime is empty")
 	errEmptyCloseTime        = errors.New("field CloseTime is empty")
-	errEmptyQuery            = errors.New("field Query is empty")
 )
 
 // TagLoggerWithArchiveHistoryRequestAndURI tags logger with fields in the archive history request and the URI
@@ -126,10 +125,10 @@ func ValidateVisibilityArchivalRequest(request *archiverspb.VisibilityRecord) er
 	if request.GetWorkflowTypeName() == "" {
 		return errEmptyWorkflowTypeName
 	}
-	if request.GetStartTime() == nil || request.GetStartTime().IsZero() {
+	if request.GetStartTime() == nil || request.GetStartTime().AsTime().IsZero() {
 		return errEmptyStartTime
 	}
-	if request.GetCloseTime() == nil || request.GetCloseTime().IsZero() {
+	if request.GetCloseTime() == nil || request.GetCloseTime().AsTime().IsZero() {
 		return errEmptyCloseTime
 	}
 	return nil
@@ -142,9 +141,6 @@ func ValidateQueryRequest(request *QueryVisibilityRequest) error {
 	}
 	if request.PageSize == 0 {
 		return errInvalidPageSize
-	}
-	if request.Query == "" {
-		return errEmptyQuery
 	}
 	return nil
 }

@@ -26,23 +26,22 @@ package log
 
 import (
 	"os"
-	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
 
+	"go.temporal.io/server/common/log/tag"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-
-	"go.temporal.io/server/common/log/tag"
 )
 
 const (
 	skipForZapLogger = 3
 	// we put a default message when it is empty so that the log can be searchable/filterable
-	defaultMsgForEmpty  = "none"
-	testLogFormatEnvVar = "TEMPORAL_TEST_LOG_FORMAT" // set to "json" for json logs in tests
-	testLogLevelEnvVar  = "TEMPORAL_TEST_LOG_LEVEL"  // set to "debug" for debug level logs in tests
+	defaultMsgForEmpty = "none"
+	// TODO: once `NewTestLogger` has been removed, move these vars into testlogger.TestLogger
+	TestLogFormatEnvVar = "TEMPORAL_TEST_LOG_FORMAT" // set to "json" for json logs in tests
+	TestLogLevelEnvVar  = "TEMPORAL_TEST_LOG_LEVEL"  // set to "debug" for debug level logs in tests
 )
 
 type (
@@ -56,16 +55,23 @@ type (
 var _ Logger = (*zapLogger)(nil)
 
 // NewTestLogger returns a logger for tests
+// Deprecated: Use testlogger.TestLogger instead.
 func NewTestLogger() *zapLogger {
-	format := os.Getenv(testLogFormatEnvVar)
+	format := os.Getenv(TestLogFormatEnvVar)
 	if format == "" {
 		format = "console"
 	}
-	return NewZapLogger(BuildZapLogger(Config{
-		Level:       os.Getenv(testLogLevelEnvVar),
+
+	logger := BuildZapLogger(Config{
+		Level:       os.Getenv(TestLogLevelEnvVar),
 		Format:      format,
 		Development: true,
-	}))
+	})
+
+	// Don't include stack traces for warnings during tests. Only include them for logs with level error and above.
+	logger = logger.WithOptions(zap.AddStacktrace(zap.ErrorLevel))
+
+	return NewZapLogger(logger)
 }
 
 // NewCLILogger returns a logger at debug level and log into STDERR for logging from within CLI tools
@@ -91,7 +97,7 @@ func caller(skip int) string {
 	if !ok {
 		return ""
 	}
-	return filepath.Base(path) + ":" + strconv.Itoa(line)
+	return path + ":" + strconv.Itoa(line)
 }
 
 func (l *zapLogger) buildFieldsWithCallAt(tags []tag.Tag) []zap.Field {

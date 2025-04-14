@@ -28,20 +28,18 @@ import (
 	"context"
 
 	enumspb "go.temporal.io/api/enums/v1"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/service/history/consts"
-	"go.temporal.io/server/service/history/shard"
-	"go.temporal.io/server/service/history/workflow"
+	historyi "go.temporal.io/server/service/history/interfaces"
 )
 
 func ValidateSignal(
 	ctx context.Context,
-	shard shard.Context,
-	mutableState workflow.MutableState,
+	shard historyi.ShardContext,
+	mutableState historyi.MutableState,
 	signalPayloadSize int,
 	operation string,
 ) error {
@@ -81,6 +79,15 @@ func ValidateSignal(
 			tag.WorkflowSignalCount(executionInfo.SignalCount),
 		)
 		return consts.ErrSignalsLimitExceeded
+	}
+
+	if mutableState.IsWorkflowCloseAttempted() && mutableState.HasStartedWorkflowTask() {
+		shard.GetThrottledLogger().Info("Signal rejected because workflow is closing",
+			tag.WorkflowNamespaceID(namespaceID),
+			tag.WorkflowID(workflowID),
+			tag.WorkflowRunID(runID),
+		)
+		return consts.ErrWorkflowClosing
 	}
 
 	return nil

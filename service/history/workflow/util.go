@@ -25,47 +25,53 @@
 package workflow
 
 import (
-	"context"
-
-	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/common"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock"
-	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/effect"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/worker_versioning"
+	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/service/history/consts"
+	"go.temporal.io/server/service/history/hsm"
+	historyi "go.temporal.io/server/service/history/interfaces"
+	"google.golang.org/protobuf/proto"
 )
 
 func failWorkflowTask(
-	mutableState MutableState,
-	workflowTask *WorkflowTaskInfo,
+	mutableState historyi.MutableState,
+	workflowTask *historyi.WorkflowTaskInfo,
 	workflowTaskFailureCause enumspb.WorkflowTaskFailedCause,
-) error {
+) (*historypb.HistoryEvent, error) {
 
-	if _, err := mutableState.AddWorkflowTaskFailedEvent(
+	// IMPORTANT: wtFailedEvent can be nil under some circumstances. Specifically, if WT is transient.
+	wtFailedEvent, err := mutableState.AddWorkflowTaskFailedEvent(
 		workflowTask,
 		workflowTaskFailureCause,
 		nil,
 		consts.IdentityHistoryService,
+		nil,
 		"",
 		"",
 		"",
 		0,
-	); err != nil {
-		return err
+	)
+	if err != nil {
+		return nil, err
 	}
 
 	mutableState.FlushBufferedEvents()
-	return nil
+	return wtFailedEvent, nil
 }
 
 func ScheduleWorkflowTask(
-	mutableState MutableState,
+	mutableState historyi.MutableState,
 ) error {
 
 	if mutableState.HasPendingWorkflowTask() {
@@ -79,51 +85,25 @@ func ScheduleWorkflowTask(
 	return nil
 }
 
-func RetryWorkflow(
-	ctx context.Context,
-	mutableState MutableState,
-	eventBatchFirstEventID int64,
-	parentNamespace namespace.Name,
-	continueAsNewAttributes *commandpb.ContinueAsNewWorkflowExecutionCommandAttributes,
-) (MutableState, error) {
-
-	if workflowTask := mutableState.GetStartedWorkflowTask(); workflowTask != nil {
-		if err := failWorkflowTask(
-			mutableState,
-			workflowTask,
-			enumspb.WORKFLOW_TASK_FAILED_CAUSE_FORCE_CLOSE_COMMAND,
-		); err != nil {
-			return nil, err
-		}
-	}
-
-	_, newMutableState, err := mutableState.AddContinueAsNewEvent(
-		ctx,
-		eventBatchFirstEventID,
-		common.EmptyEventID,
-		parentNamespace,
-		continueAsNewAttributes,
-	)
-	if err != nil {
-		return nil, err
-	}
-	return newMutableState, nil
-}
-
 func TimeoutWorkflow(
-	mutableState MutableState,
-	eventBatchFirstEventID int64,
+	mutableState historyi.MutableState,
 	retryState enumspb.RetryState,
 	continuedRunID string,
 ) error {
 
+	// Check TerminateWorkflow comment bellow.
+	eventBatchFirstEventID := mutableState.GetNextEventID()
 	if workflowTask := mutableState.GetStartedWorkflowTask(); workflowTask != nil {
-		if err := failWorkflowTask(
+		wtFailedEvent, err := failWorkflowTask(
 			mutableState,
 			workflowTask,
 			enumspb.WORKFLOW_TASK_FAILED_CAUSE_FORCE_CLOSE_COMMAND,
-		); err != nil {
+		)
+		if err != nil {
 			return err
+		}
+		if wtFailedEvent != nil {
+			eventBatchFirstEventID = wtFailedEvent.GetEventId()
 		}
 	}
 
@@ -135,22 +115,39 @@ func TimeoutWorkflow(
 	return err
 }
 
+// TerminateWorkflow will write a WorkflowExecutionTerminated event with a fresh
+// batch ID. Do not use for situations where the WorkflowExecutionTerminated
+// event must fall within an existing event batch (for example, if you've already
+// failed a workflow task via `failWorkflowTask` and have an event batch ID).
 func TerminateWorkflow(
-	mutableState MutableState,
-	eventBatchFirstEventID int64,
+	mutableState historyi.MutableState,
 	terminateReason string,
 	terminateDetails *commonpb.Payloads,
 	terminateIdentity string,
 	deleteAfterTerminate bool,
+	links []*commonpb.Link,
 ) error {
 
+	// Terminate workflow is written as a separate batch and might result in more than one event
+	// if there is started WT which needs to be failed before.
+	// Failing speculative WT creates 3 events: WTScheduled, WTStarted, and WTFailed.
+	// First 2 goes to separate batch and eventBatchFirstEventID has to point to WTFailed event.
+	// Failing transient WT doesn't create any events at all and wtFailedEvent is nil.
+	// WTFailed event wasn't created (because there were no WT or WT was transient),
+	// then eventBatchFirstEventID points to TerminateWorkflow event (which is next event).
+	eventBatchFirstEventID := mutableState.GetNextEventID()
+
 	if workflowTask := mutableState.GetStartedWorkflowTask(); workflowTask != nil {
-		if err := failWorkflowTask(
+		wtFailedEvent, err := failWorkflowTask(
 			mutableState,
 			workflowTask,
 			enumspb.WORKFLOW_TASK_FAILED_CAUSE_FORCE_CLOSE_COMMAND,
-		); err != nil {
+		)
+		if err != nil {
 			return err
+		}
+		if wtFailedEvent != nil {
+			eventBatchFirstEventID = wtFailedEvent.GetEventId()
 		}
 	}
 
@@ -160,7 +157,9 @@ func TerminateWorkflow(
 		terminateDetails,
 		terminateIdentity,
 		deleteAfterTerminate,
+		links,
 	)
+
 	return err
 }
 
@@ -185,4 +184,131 @@ func FindAutoResetPoint(
 		}
 	}
 	return "", nil
+}
+
+func WithEffects(effects effect.Controller, ms historyi.MutableState) MutableStateWithEffects {
+	return MutableStateWithEffects{
+		MutableState: ms,
+		Controller:   effects,
+	}
+}
+
+type MutableStateWithEffects struct {
+	historyi.MutableState
+	effect.Controller
+}
+
+func (mse MutableStateWithEffects) CanAddEvent() bool {
+	// Event can be added to the history if workflow is still running.
+	return mse.MutableState.IsWorkflowExecutionRunning()
+}
+
+// GetEffectiveDeployment returns the effective deployment in the following order:
+//  1. DeploymentVersionTransition.Deployment: this is returned when the wf is transitioning to a
+//     new deployment
+//  2. VersioningOverride.Deployment: this is returned when user has set a PINNED override
+//     at wf start time, or later via UpdateWorkflowExecutionOptions.
+//  3. Deployment: this is returned when there is no transition and no override (the most
+//     common case). Deployment is set based on the worker-sent deployment in the latest WFT
+//     completion. Exception: if Deployment is set but the workflow's effective behavior is
+//     UNSPECIFIED, it means the workflow is unversioned, so effective deployment will be nil.
+//
+// Note: Deployment objects are immutable, never change their fields.
+//
+//nolint:revive // cognitive complexity to reduce after old code clean up
+func GetEffectiveDeployment(versioningInfo *workflowpb.WorkflowExecutionVersioningInfo) *deploymentpb.Deployment {
+	if versioningInfo == nil {
+		return nil
+	} else if transition := versioningInfo.GetVersionTransition(); transition != nil {
+		v, _ := worker_versioning.WorkerDeploymentVersionFromString(transition.GetVersion())
+		return worker_versioning.DeploymentFromDeploymentVersion(v)
+	} else if transition := versioningInfo.GetDeploymentTransition(); transition != nil {
+		return transition.GetDeployment()
+	} else if override := versioningInfo.GetVersioningOverride(); override != nil &&
+		override.GetBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED {
+		if pinned := override.GetPinnedVersion(); pinned != "" {
+			v, _ := worker_versioning.WorkerDeploymentVersionFromString(pinned)
+			return worker_versioning.DeploymentFromDeploymentVersion(v)
+		}
+		return override.GetDeployment()
+	} else if GetEffectiveVersioningBehavior(versioningInfo) != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
+		//nolint:revive // nesting will be reduced after old code clean up
+		if v := versioningInfo.GetVersion(); v != "" {
+			dv, _ := worker_versioning.WorkerDeploymentVersionFromString(v)
+			return worker_versioning.DeploymentFromDeploymentVersion(dv)
+		}
+		return versioningInfo.GetDeployment()
+	}
+	return nil
+}
+
+// GetEffectiveVersioningBehavior returns the effective versioning behavior in the following
+// order:
+//  1. VersioningOverride.Behavior: this is returned when user has set a behavior override
+//     at wf start time, or later via UpdateWorkflowExecutionOptions.
+//  2. Behavior: this is returned when there is no override (most common case). Behavior is
+//     set based on the worker-sent deployment in the latest WFT completion.
+func GetEffectiveVersioningBehavior(versioningInfo *workflowpb.WorkflowExecutionVersioningInfo) enumspb.VersioningBehavior {
+	if versioningInfo == nil {
+		return enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED
+	} else if override := versioningInfo.GetVersioningOverride(); override != nil {
+		return override.GetBehavior()
+	}
+	return versioningInfo.GetBehavior()
+}
+
+// shouldReapplyEvent returns true if the event should be reapplied to the workflow execution.
+func shouldReapplyEvent(stateMachineRegistry *hsm.Registry, event *historypb.HistoryEvent) bool {
+	switch event.GetEventType() { // nolint:exhaustive
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCEL_REQUESTED,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED:
+		return true
+	}
+
+	// events registered in the hsm framework that are potentially cherry-pickable
+	if _, ok := stateMachineRegistry.EventDefinition(event.GetEventType()); ok {
+		return true
+	}
+
+	return false
+}
+
+func getCompletionCallbacksAsProtoSlice(ms historyi.MutableState) ([]*commonpb.Callback, error) {
+	coll := callbacks.MachineCollection(ms.HSM())
+	result := make([]*commonpb.Callback, 0, coll.Size())
+	for _, node := range coll.List() {
+		cb, err := coll.Data(node.Key.ID)
+		if err != nil {
+			return nil, err
+		}
+		if _, ok := cb.Trigger.Variant.(*persistencespb.CallbackInfo_Trigger_WorkflowClosed); !ok {
+			continue
+		}
+		cbSpec := &commonpb.Callback{}
+		switch variant := cb.Callback.Variant.(type) {
+		case *persistencespb.Callback_Nexus_:
+			cbSpec.Variant = &commonpb.Callback_Nexus_{
+				Nexus: &commonpb.Callback_Nexus{
+					Url:    variant.Nexus.GetUrl(),
+					Header: variant.Nexus.GetHeader(),
+				},
+			}
+		default:
+			data, err := proto.Marshal(cb.Callback)
+			if err != nil {
+				return nil, err
+			}
+			cbSpec.Variant = &commonpb.Callback_Internal_{
+				Internal: &commonpb.Callback_Internal{
+					Data: data,
+				},
+			}
+		}
+		result = append(result, cbSpec)
+	}
+	return result, nil
 }

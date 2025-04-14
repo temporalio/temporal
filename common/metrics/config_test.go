@@ -27,13 +27,13 @@ package metrics
 import (
 	"testing"
 
-	"github.com/golang/mock/gomock"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally/v4"
 	"github.com/uber-go/tally/v4/m3"
-
 	"go.temporal.io/server/common/log"
+	"go.uber.org/mock/gomock"
 )
 
 type MetricsSuite struct {
@@ -135,22 +135,28 @@ func (s *MetricsSuite) TestSetDefaultPerUnitHistogramBoundaries() {
 		expectResult map[string][]float64
 	}
 
-	customizedBoundaries := map[string][]float64{
-		Dimensionless: {1},
-		Milliseconds:  defaultPerUnitHistogramBoundaries[Milliseconds],
-		Bytes:         defaultPerUnitHistogramBoundaries[Bytes],
-	}
 	testCases := []histogramTest{
 		{
-			input:        nil,
-			expectResult: defaultPerUnitHistogramBoundaries,
+			input: nil,
+			expectResult: map[string][]float64{
+				Dimensionless: defaultPerUnitHistogramBoundaries[Dimensionless],
+				Milliseconds:  defaultPerUnitHistogramBoundaries[Milliseconds],
+				Seconds:       {0.001, 0.002, 0.005, 0.010, 0.020, 0.050, 0.100, 0.200, 0.500, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1_000},
+				Bytes:         defaultPerUnitHistogramBoundaries[Bytes],
+			},
 		},
 		{
 			input: map[string][]float64{
 				UnitNameDimensionless: {1},
+				UnitNameMilliseconds:  {10, 1000, 2000},
 				"notDefine":           {1},
 			},
-			expectResult: customizedBoundaries,
+			expectResult: map[string][]float64{
+				Dimensionless: {1},
+				Milliseconds:  {10, 1000, 2000},
+				Seconds:       {0.01, 1, 2},
+				Bytes:         defaultPerUnitHistogramBoundaries[Bytes],
+			},
 		},
 	}
 
@@ -158,5 +164,55 @@ func (s *MetricsSuite) TestSetDefaultPerUnitHistogramBoundaries() {
 		config := &ClientConfig{PerUnitHistogramBoundaries: test.input}
 		setDefaultPerUnitHistogramBoundaries(config)
 		s.Equal(test.expectResult, config.PerUnitHistogramBoundaries)
+	}
+}
+
+func TestMetricsHandlerFromConfig(t *testing.T) {
+	t.Parallel()
+
+	logger := log.NewTestLogger()
+
+	for _, c := range []struct {
+		name         string
+		cfg          *Config
+		expectedType interface{}
+	}{
+		{
+			name:         "nil config",
+			cfg:          nil,
+			expectedType: &noopMetricsHandler{},
+		},
+		{
+			name: "tally",
+			cfg: &Config{
+				Prometheus: &PrometheusConfig{
+					Framework:     FrameworkTally,
+					ListenAddress: "localhost:0",
+				},
+			},
+			expectedType: &tallyMetricsHandler{},
+		},
+		{
+			name: "opentelemetry",
+			cfg: &Config{
+				Prometheus: &PrometheusConfig{
+					Framework:     FrameworkOpentelemetry,
+					ListenAddress: "localhost:0",
+				},
+			},
+			expectedType: &otelMetricsHandler{},
+		},
+	} {
+		c := c
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+
+			handler, err := MetricsHandlerFromConfig(logger, c.cfg)
+			require.NoError(t, err)
+			t.Cleanup(func() {
+				handler.Stop(logger)
+			})
+			assert.IsType(t, c.expectedType, handler)
+		})
 	}
 }

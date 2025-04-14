@@ -25,14 +25,14 @@
 package configs
 
 import (
-	"reflect"
+	"slices"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"golang.org/x/exp/slices"
-
-	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/quotas"
 )
 
 type (
@@ -60,8 +60,8 @@ func (s *quotasSuite) SetupTest() {
 func (s *quotasSuite) TearDownTest() {
 }
 
-func (s *quotasSuite) TestAPIToPriorityMapping() {
-	for _, priority := range APIToPriority {
+func (s *quotasSuite) TestCallerTypeToPriorityMapping() {
+	for _, priority := range CallerTypeToPriority {
 		index := slices.Index(APIPrioritiesOrdered, priority)
 		s.NotEqual(-1, index)
 	}
@@ -73,13 +73,35 @@ func (s *quotasSuite) TestAPIPrioritiesOrdered() {
 	}
 }
 
-func (s *quotasSuite) TestAPIs() {
-	var service historyservice.HistoryServiceServer
-	t := reflect.TypeOf(&service).Elem()
-	apiToPriority := make(map[string]int, t.NumMethod())
-	for i := 0; i < t.NumMethod(); i++ {
-		apiName := t.Method(i).Name
-		apiToPriority[apiName] = APIToPriority[apiName]
+func (s *quotasSuite) TestOperatorPrioritized() {
+	rateFn := func() float64 { return 5 }
+	operatorRPSRatioFn := func() float64 { return 0.2 }
+	limiter := NewPriorityRateLimiter(rateFn, operatorRPSRatioFn)
+
+	operatorRequest := quotas.NewRequest(
+		"/temporal.server.api.historyservice.v1.HistoryService/StartWorkflowExecution",
+		1,
+		"",
+		headers.CallerTypeOperator,
+		-1,
+		"")
+
+	apiRequest := quotas.NewRequest(
+		"/temporal.server.api.historyservice.v1.HistoryService/StartWorkflowExecution",
+		1,
+		"",
+		headers.CallerTypeAPI,
+		-1,
+		"")
+
+	requestTime := time.Now()
+	limitCount := 0
+
+	for i := 0; i < 12; i++ {
+		if !limiter.Allow(requestTime, apiRequest) {
+			limitCount++
+			s.True(limiter.Allow(requestTime, operatorRequest))
+		}
 	}
-	s.Equal(apiToPriority, APIToPriority)
+	s.Equal(2, limitCount)
 }

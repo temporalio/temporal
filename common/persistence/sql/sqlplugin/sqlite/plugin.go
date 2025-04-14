@@ -29,16 +29,19 @@ package sqlite
 import (
 	"fmt"
 	"net/url"
+	"sort"
 	"strings"
 
 	"github.com/iancoleman/strcase"
 	"github.com/jmoiron/sqlx"
-
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/resolver"
 	sqliteschema "go.temporal.io/server/schema/sqlite"
+	expmaps "golang.org/x/exp/maps"
 )
 
 const (
@@ -75,32 +78,15 @@ func (p *plugin) CreateDB(
 	dbKind sqlplugin.DbKind,
 	cfg *config.SQL,
 	r resolver.ServiceResolver,
-) (sqlplugin.DB, error) {
+	_ log.Logger,
+	_ metrics.Handler,
+) (sqlplugin.GenericDB, error) {
 	conn, err := p.connPool.Allocate(cfg, r, p.createDBConnection)
 	if err != nil {
 		return nil, err
 	}
-
 	db := newDB(dbKind, cfg.DatabaseName, conn, nil)
 	db.OnClose(func() { p.connPool.Close(cfg) }) // remove reference
-
-	return db, nil
-}
-
-// CreateAdminDB initialize the db object
-func (p *plugin) CreateAdminDB(
-	dbKind sqlplugin.DbKind,
-	cfg *config.SQL,
-	r resolver.ServiceResolver,
-) (sqlplugin.AdminDB, error) {
-	conn, err := p.connPool.Allocate(cfg, r, p.createDBConnection)
-	if err != nil {
-		return nil, err
-	}
-
-	db := newDB(dbKind, cfg.DatabaseName, conn, nil)
-	db.OnClose(func() { p.connPool.Close(cfg) }) // remove reference
-
 	return db, nil
 }
 
@@ -148,7 +134,6 @@ func (p *plugin) createDBConnection(
 			_ = db.Close()
 			return nil, err
 		}
-
 	}
 
 	return db, nil
@@ -185,9 +170,14 @@ func buildDSN(cfg *config.SQL) (string, error) {
 
 func buildDSNAttr(cfg *config.SQL) (url.Values, error) {
 	parameters := url.Values{}
-	for k, v := range cfg.ConnectAttributes {
+
+	// sort ConnectAttributes to get a deterministic order
+	keys := expmaps.Keys(cfg.ConnectAttributes)
+	sort.Strings(keys)
+
+	for _, k := range keys {
 		key := strings.TrimSpace(k)
-		value := strings.TrimSpace(v)
+		value := strings.TrimSpace(cfg.ConnectAttributes[k])
 		if parameters.Get(key) != "" {
 			return nil, fmt.Errorf("duplicate connection attr: %v:%v, %v:%v",
 				key,

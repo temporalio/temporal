@@ -27,16 +27,15 @@ package cluster
 import (
 	"context"
 
+	"go.temporal.io/server/common/pingable"
 	"go.uber.org/fx"
-
-	"go.temporal.io/server/common"
 )
 
 var MetadataLifetimeHooksModule = fx.Options(
 	fx.Provide(NewMetadataFromConfig),
 	fx.Invoke(MetadataLifetimeHooks),
 	fx.Provide(fx.Annotate(
-		func(p Metadata) common.Pingable { return p },
+		func(p Metadata) pingable.Pingable { return p },
 		fx.ResultTags(`group:"deadlockDetectorRoots"`),
 	)),
 )

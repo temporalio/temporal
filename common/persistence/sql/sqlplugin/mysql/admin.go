@@ -58,7 +58,7 @@ const (
 		`PRIMARY KEY (version_partition, year, month, update_time));`
 
 	// NOTE: we have to use %v because somehow mysql doesn't work with ? here
-	createDatabaseQuery = "CREATE DATABASE IF NOT EXISTS %v CHARACTER SET UTF8"
+	createDatabaseQuery = "CREATE DATABASE IF NOT EXISTS %v CHARACTER SET utf8mb4"
 
 	dropDatabaseQuery = "DROP DATABASE IF EXISTS %v"
 
@@ -78,8 +78,12 @@ func (mdb *db) CreateSchemaVersionTables() error {
 // ReadSchemaVersion returns the current schema version for the keyspace
 func (mdb *db) ReadSchemaVersion(database string) (string, error) {
 	var version string
-	err := mdb.db.Get(&version, readSchemaVersionQuery, database)
-	return version, err
+	db, err := mdb.handle.DB()
+	if err != nil {
+		return "", err
+	}
+	err = db.Get(&version, readSchemaVersionQuery, database)
+	return version, mdb.handle.ConvertError(err)
 }
 
 // UpdateSchemaVersion updates the schema version for the keyspace
@@ -95,15 +99,23 @@ func (mdb *db) WriteSchemaUpdateLog(oldVersion string, newVersion string, manife
 
 // Exec executes a sql statement
 func (mdb *db) Exec(stmt string, args ...interface{}) error {
-	_, err := mdb.db.Exec(stmt, args...)
-	return err
+	db, err := mdb.handle.DB()
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec(stmt, args...)
+	return mdb.handle.ConvertError(err)
 }
 
 // ListTables returns a list of tables in this database
 func (mdb *db) ListTables(database string) ([]string, error) {
 	var tables []string
-	err := mdb.db.Select(&tables, fmt.Sprintf(listTablesQuery, database))
-	return tables, err
+	db, err := mdb.handle.DB()
+	if err != nil {
+		return nil, err
+	}
+	err = db.Select(&tables, fmt.Sprintf(listTablesQuery, database))
+	return tables, mdb.handle.ConvertError(err)
 }
 
 // DropTable drops a given table from the database

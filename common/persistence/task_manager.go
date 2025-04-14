@@ -30,11 +30,16 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
+
+// Subqueue zero corresponds to "the queue" before migrating metadata to subqueues.
+// For SQL: metadata operations apply to subqueue zero only, while tasks are stored in
+// multiple subqueues.
+// For Cassandra: subqueues are represented in the row type.
+const SubqueueZero = 0
 
 type taskManagerImpl struct {
 	taskStore  TaskStore
@@ -200,6 +205,9 @@ func (m *taskManagerImpl) CreateTasks(
 			ExpiryTime: task.Data.ExpiryTime,
 			Task:       taskBlob,
 		}
+		if i < len(request.Subqueues) {
+			tasks[i].Subqueue = request.Subqueues[i]
+		}
 	}
 	internalRequest := &InternalCreateTasksRequest{
 		NamespaceID:   request.TaskQueueInfo.Data.GetNamespaceId(),
@@ -235,16 +243,78 @@ func (m *taskManagerImpl) GetTasks(
 	return &GetTasksResponse{Tasks: tasks, NextPageToken: internalResp.NextPageToken}, nil
 }
 
-func (m *taskManagerImpl) CompleteTask(
-	ctx context.Context,
-	request *CompleteTaskRequest,
-) error {
-	return m.taskStore.CompleteTask(ctx, request)
-}
-
 func (m *taskManagerImpl) CompleteTasksLessThan(
 	ctx context.Context,
 	request *CompleteTasksLessThanRequest,
 ) (int, error) {
 	return m.taskStore.CompleteTasksLessThan(ctx, request)
+}
+
+// GetTaskQueueUserData implements TaskManager
+func (m *taskManagerImpl) GetTaskQueueUserData(ctx context.Context, request *GetTaskQueueUserDataRequest) (*GetTaskQueueUserDataResponse, error) {
+	response, err := m.taskStore.GetTaskQueueUserData(ctx, request)
+	if err != nil {
+		return nil, err
+	}
+	data, err := m.serializer.TaskQueueUserDataFromBlob(response.UserData)
+	if err != nil {
+		return nil, err
+	}
+	return &GetTaskQueueUserDataResponse{UserData: &persistencespb.VersionedTaskQueueUserData{Version: response.Version, Data: data}}, nil
+}
+
+// UpdateTaskQueueUserData implements TaskManager
+func (m *taskManagerImpl) UpdateTaskQueueUserData(ctx context.Context, request *UpdateTaskQueueUserDataRequest) error {
+	internalRequest := &InternalUpdateTaskQueueUserDataRequest{
+		NamespaceID: request.NamespaceID,
+		Updates:     make(map[string]*InternalSingleTaskQueueUserDataUpdate, len(request.Updates)),
+	}
+	for taskQueue, update := range request.Updates {
+		userData, err := m.serializer.TaskQueueUserDataToBlob(update.UserData.Data, enumspb.ENCODING_TYPE_PROTO3)
+		if err != nil {
+			return err
+		}
+		internalRequest.Updates[taskQueue] = &InternalSingleTaskQueueUserDataUpdate{
+			Version:         update.UserData.Version,
+			UserData:        userData,
+			BuildIdsAdded:   update.BuildIdsAdded,
+			BuildIdsRemoved: update.BuildIdsRemoved,
+			Applied:         update.Applied,
+			Conflicting:     update.Conflicting,
+		}
+	}
+	return m.taskStore.UpdateTaskQueueUserData(ctx, internalRequest)
+}
+
+func (m *taskManagerImpl) ListTaskQueueUserDataEntries(ctx context.Context, request *ListTaskQueueUserDataEntriesRequest) (*ListTaskQueueUserDataEntriesResponse, error) {
+	response, err := m.taskStore.ListTaskQueueUserDataEntries(ctx, request)
+	if err != nil {
+		return nil, err
+	}
+	entries := make([]*TaskQueueUserDataEntry, len(response.Entries))
+	for i, entry := range response.Entries {
+		data, err := m.serializer.TaskQueueUserDataFromBlob(entry.Data)
+		if err != nil {
+			return nil, err
+		}
+		entries[i] = &TaskQueueUserDataEntry{
+			TaskQueue: entry.TaskQueue,
+			UserData: &persistencespb.VersionedTaskQueueUserData{
+				Data:    data,
+				Version: entry.Version,
+			},
+		}
+	}
+	return &ListTaskQueueUserDataEntriesResponse{
+		NextPageToken: response.NextPageToken,
+		Entries:       entries,
+	}, nil
+}
+
+func (m *taskManagerImpl) GetTaskQueuesByBuildId(ctx context.Context, request *GetTaskQueuesByBuildIdRequest) ([]string, error) {
+	return m.taskStore.GetTaskQueuesByBuildId(ctx, request)
+}
+
+func (m *taskManagerImpl) CountTaskQueuesByBuildId(ctx context.Context, request *CountTaskQueuesByBuildIdRequest) (int, error) {
+	return m.taskStore.CountTaskQueuesByBuildId(ctx, request)
 }

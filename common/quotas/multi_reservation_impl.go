@@ -81,6 +81,7 @@ func (r *MultiReservationImpl) Delay() time.Duration {
 
 // DelayFrom returns the duration for which the reservation holder must wait
 // before taking the reserved action.  Zero duration means act immediately.
+// MultiReservation DelayFrom returns the maximum delay of all its sub-reservations.
 func (r *MultiReservationImpl) DelayFrom(now time.Time) time.Duration {
 	if !r.ok {
 		return InfDuration

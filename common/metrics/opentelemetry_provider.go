@@ -33,10 +33,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	exporters "go.opentelemetry.io/otel/exporters/prometheus"
 	"go.opentelemetry.io/otel/metric"
-	"go.opentelemetry.io/otel/metric/unit"
 	sdkmetrics "go.opentelemetry.io/otel/sdk/metric"
-	"go.opentelemetry.io/otel/sdk/metric/aggregation"
-
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 )
@@ -50,10 +47,9 @@ type (
 	}
 
 	openTelemetryProviderImpl struct {
-		exporter *exporters.Exporter
-		meter    metric.Meter
-		config   *PrometheusConfig
-		server   *http.Server
+		meter  metric.Meter
+		config *PrometheusConfig
+		server *http.Server
 	}
 )
 
@@ -61,23 +57,34 @@ func NewOpenTelemetryProvider(
 	logger log.Logger,
 	prometheusConfig *PrometheusConfig,
 	clientConfig *ClientConfig,
+	fatalOnListenerError bool,
 ) (*openTelemetryProviderImpl, error) {
 	reg := prometheus.NewRegistry()
-	exporter, err := exporters.New(exporters.WithRegisterer(reg))
+	exporterOpts := []exporters.Option{exporters.WithRegisterer(reg)}
+	if clientConfig.WithoutUnitSuffix {
+		exporterOpts = append(exporterOpts, exporters.WithoutUnits())
+	}
+	if clientConfig.WithoutCounterSuffix {
+		exporterOpts = append(exporterOpts, exporters.WithoutCounterSuffixes())
+	}
+	if clientConfig.Prefix != "" {
+		exporterOpts = append(exporterOpts, exporters.WithNamespace(clientConfig.Prefix))
+	}
+	exporter, err := exporters.New(exporterOpts...)
 	if err != nil {
 		logger.Error("Failed to initialize prometheus exporter.", tag.Error(err))
 		return nil, err
 	}
 
 	var views []sdkmetrics.View
-	for _, u := range []string{Dimensionless, Bytes, Milliseconds} {
+	for _, u := range []string{Dimensionless, Bytes, Milliseconds, Seconds} {
 		views = append(views, sdkmetrics.NewView(
 			sdkmetrics.Instrument{
 				Kind: sdkmetrics.InstrumentKindHistogram,
-				Unit: unit.Unit(u),
+				Unit: u,
 			},
 			sdkmetrics.Stream{
-				Aggregation: aggregation.ExplicitBucketHistogram{
+				Aggregation: sdkmetrics.AggregationExplicitBucketHistogram{
 					Boundaries: clientConfig.PerUnitHistogramBoundaries[u],
 				},
 			},
@@ -87,19 +94,23 @@ func NewOpenTelemetryProvider(
 		sdkmetrics.WithReader(exporter),
 		sdkmetrics.WithView(views...),
 	)
-	metricServer := initPrometheusListener(prometheusConfig, reg, logger)
+	metricServer := initPrometheusListener(prometheusConfig, reg, logger, fatalOnListenerError)
 	meter := provider.Meter("temporal")
 	reporter := &openTelemetryProviderImpl{
-		exporter: exporter,
-		meter:    meter,
-		config:   prometheusConfig,
-		server:   metricServer,
+		meter:  meter,
+		config: prometheusConfig,
+		server: metricServer,
 	}
 
 	return reporter, nil
 }
 
-func initPrometheusListener(config *PrometheusConfig, reg *prometheus.Registry, logger log.Logger) *http.Server {
+func initPrometheusListener(
+	config *PrometheusConfig,
+	reg *prometheus.Registry,
+	logger log.Logger,
+	fatalOnListenerError bool,
+) *http.Server {
 	handlerPath := config.HandlerPath
 	if handlerPath == "" {
 		handlerPath = "/metrics"
@@ -115,8 +126,17 @@ func initPrometheusListener(config *PrometheusConfig, reg *prometheus.Registry, 
 
 	go func() {
 		err := server.ListenAndServe()
-		if err != http.ErrServerClosed {
-			logger.Fatal("Failed to initialize prometheus listener.", tag.Address(config.ListenAddress))
+		if err == http.ErrServerClosed {
+			return
+		}
+		msg := "Failed to initialize prometheus listener."
+		logger := log.With(logger, tag.Error(err), tag.Address(config.ListenAddress))
+		if fatalOnListenerError {
+			logger.Fatal(msg)
+		} else {
+			// For backward compatibility, we log as Warn instead of Error/Fatal
+			// to match the behavior of tally framework.
+			logger.Warn(msg)
 		}
 	}()
 

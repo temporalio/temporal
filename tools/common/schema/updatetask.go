@@ -25,6 +25,7 @@
 package schema
 
 import (
+	"bytes"
 	// In this context md5 is just used for versioning the current schema. It is a weak cryptographic primitive and
 	// should not be used for anything more important (password hashes etc.). Marking it as #nosec because of how it's
 	// being used.
@@ -32,16 +33,19 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
+	"io/fs"
 	"os"
+	"path"
 	"regexp"
 	"sort"
 	"strings"
 
 	"github.com/blang/semver/v4"
-
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
+	dbschemas "go.temporal.io/server/schema"
 )
 
 type (
@@ -61,7 +65,9 @@ type (
 		MinCompatibleVersion string
 		Description          string
 		SchemaUpdateCqlFiles []string
-		md5                  string
+		// If set, the manifest is intentionally opting out of schema updates.
+		AllowNoCqlFiles bool
+		md5             string
 	}
 
 	// changeSet represents all the changes
@@ -83,7 +89,7 @@ var (
 )
 
 // NewUpdateSchemaTask returns a new instance of UpdateTask
-func newUpdateSchemaTask(db DB, config *UpdateConfig, logger log.Logger) *UpdateTask {
+func NewUpdateSchemaTask(db DB, config *UpdateConfig, logger log.Logger) *UpdateTask {
 	return &UpdateTask{
 		db:     db,
 		config: config,
@@ -95,7 +101,7 @@ func newUpdateSchemaTask(db DB, config *UpdateConfig, logger log.Logger) *Update
 func (task *UpdateTask) Run() error {
 	config := task.config
 
-	task.logger.Info("UpdateSchemeTask started", tag.NewAnyTag("config", config))
+	task.logger.Info("UpdateSchemaTask started", tag.NewAnyTag("config", config))
 
 	if config.IsDryRun {
 		if err := task.setupDryRunDatabase(); err != nil {
@@ -118,7 +124,7 @@ func (task *UpdateTask) Run() error {
 		return err
 	}
 
-	task.logger.Info("UpdateSchemeTask done")
+	task.logger.Info("UpdateSchemaTask done")
 
 	return nil
 }
@@ -129,8 +135,8 @@ func (task *UpdateTask) executeUpdates(currVer string, updates []changeSet) erro
 		return nil
 	}
 
+	task.logger.Debug(fmt.Sprintf("running %v updates for current version %v", len(updates), currVer))
 	for _, cs := range updates {
-
 		err := task.execStmts(cs.version, cs.cqlStmts)
 		if err != nil {
 			return err
@@ -151,9 +157,20 @@ func (task *UpdateTask) execStmts(ver string, stmts []string) error {
 	task.logger.Debug(fmt.Sprintf("---- Executing updates for version %v ----", ver))
 	for _, stmt := range stmts {
 		task.logger.Debug(rmspaceRegex.ReplaceAllString(stmt, " "))
-		e := task.db.Exec(stmt)
-		if e != nil {
-			return fmt.Errorf("error executing statement:%v", e)
+		err := task.db.Exec(stmt)
+		if err != nil {
+			// To make schema update idempotent, we need to handle error when retry on previous partially succeeded update attempt.
+			// There are 2 major cases that will be handled:
+			// 1) Add table or column that already exists (message contains 'already existing' for table or 'already exists' for column)
+			// 2) Drop column that is not found (message contains 'not found')
+			alreadyExists := strings.Contains(err.Error(), "already exist")
+			notFound := strings.Contains(err.Error(), "not found")
+			if alreadyExists || notFound {
+				task.logger.Warn("Duplicate update, most likely due to previous partially succeeded update attempt. Ignoring it and continue.", tag.Error(err))
+				continue
+			}
+
+			return fmt.Errorf("error executing statement: %w", err)
 		}
 	}
 	task.logger.Debug("---- Done ----")
@@ -161,12 +178,10 @@ func (task *UpdateTask) execStmts(ver string, stmts []string) error {
 }
 
 func (task *UpdateTask) updateSchemaVersion(oldVer string, cs *changeSet) error {
-
 	err := task.db.UpdateSchemaVersion(cs.version, cs.manifest.MinCompatibleVersion)
 	if err != nil {
 		return fmt.Errorf("failed to update schema_version table, err=%v", err.Error())
 	}
-
 	err = task.db.WriteSchemaUpdateLog(oldVer, cs.manifest.CurrVersion, cs.manifest.md5, cs.manifest.Description)
 	if err != nil {
 		return fmt.Errorf("failed to add entry to schema_update_history, err=%v", err.Error())
@@ -179,7 +194,17 @@ func (task *UpdateTask) buildChangeSet(currVer string) ([]changeSet, error) {
 
 	config := task.config
 
-	verDirs, err := readSchemaDir(config.SchemaDir, currVer, config.TargetVersion, task.logger)
+	var fsys fs.FS
+	var dir string
+	if len(config.SchemaName) > 0 {
+		fsys = dbschemas.Assets()
+		dir = path.Join(config.SchemaName, "versioned")
+	} else {
+		fsys = os.DirFS(config.SchemaDir)
+		dir = "."
+	}
+
+	verDirs, err := readSchemaDir(fsys, dir, currVer, config.TargetVersion, task.logger)
 	if err != nil {
 		return nil, fmt.Errorf("error listing schema dir:%v", err.Error())
 	}
@@ -189,10 +214,9 @@ func (task *UpdateTask) buildChangeSet(currVer string) ([]changeSet, error) {
 	var result []changeSet
 
 	for _, vd := range verDirs {
+		dirPath := path.Join(dir, vd)
 
-		dirPath := config.SchemaDir + "/" + vd
-
-		m, e := readManifest(dirPath)
+		m, e := readManifest(fsys, dirPath)
 		if e != nil {
 			return nil, fmt.Errorf("error processing manifest for version %v:%v", vd, e.Error())
 		}
@@ -204,7 +228,7 @@ func (task *UpdateTask) buildChangeSet(currVer string) ([]changeSet, error) {
 			)
 		}
 
-		stmts, e := task.parseSQLStmts(dirPath, m)
+		stmts, e := task.parseSQLStmts(fsys, dirPath, m)
 		if e != nil {
 			return nil, e
 		}
@@ -224,21 +248,24 @@ func (task *UpdateTask) buildChangeSet(currVer string) ([]changeSet, error) {
 	return result, nil
 }
 
-func (task *UpdateTask) parseSQLStmts(dir string, manifest *manifest) ([]string, error) {
-
+func (task *UpdateTask) parseSQLStmts(fsys fs.FS, dir string, manifest *manifest) ([]string, error) {
 	result := make([]string, 0, 4)
 
 	for _, file := range manifest.SchemaUpdateCqlFiles {
-		path := dir + "/" + file
-		task.logger.Info("Processing schema file: " + path)
-		stmts, err := persistence.LoadAndSplitQuery([]string{path})
+		schemaPath := path.Join(dir, file)
+		task.logger.Info("Processing schema file: " + schemaPath)
+		schemaBuf, err := fs.ReadFile(fsys, schemaPath)
 		if err != nil {
-			return nil, fmt.Errorf("error parsing file %v, err=%v", path, err)
+			return nil, fmt.Errorf("error reading file %s: %w", schemaPath, err)
+		}
+		stmts, err := persistence.LoadAndSplitQueryFromReaders([]io.Reader{bytes.NewBuffer(schemaBuf)})
+		if err != nil {
+			return nil, fmt.Errorf("error parsing file %v, err=%v", schemaPath, err)
 		}
 		result = append(result, stmts...)
 	}
 
-	if len(result) == 0 {
+	if len(result) == 0 && !manifest.AllowNoCqlFiles {
 		return nil, fmt.Errorf("found 0 updates in dir %v", dir)
 	}
 
@@ -261,10 +288,11 @@ func validateCQLStmts(stmts []string) error {
 	return nil
 }
 
-func readManifest(dirPath string) (*manifest, error) {
+// readManifest reads the json manifest at dirPath into a manifest struct.
+func readManifest(fsys fs.FS, dirPath string) (*manifest, error) {
+	manifestPath := path.Join(dirPath, manifestFileName)
 
-	filePath := dirPath + "/" + manifestFileName
-	jsonBlob, err := os.ReadFile(filePath)
+	jsonBlob, err := fs.ReadFile(fsys, manifestPath)
 	if err != nil {
 		return nil, err
 	}
@@ -290,7 +318,7 @@ func readManifest(dirPath string) (*manifest, error) {
 	}
 	manifest.MinCompatibleVersion = minVer
 
-	if len(manifest.SchemaUpdateCqlFiles) == 0 {
+	if len(manifest.SchemaUpdateCqlFiles) == 0 && !manifest.AllowNoCqlFiles {
 		return nil, fmt.Errorf("manifest missing SchemaUpdateCqlFiles")
 	}
 
@@ -383,9 +411,8 @@ func sortAndFilterVersions(versions []string, startVerExcl string, endVerIncl st
 // readSchemaDir returns a sorted list of subdir names that hold
 // the schema changes for versions in the range startVer < ver <= endVer
 // when endVer is empty this method returns all subdir names that are greater than startVer
-func readSchemaDir(dir string, startVer string, endVer string, logger log.Logger) ([]string, error) {
-
-	subDirs, err := os.ReadDir(dir)
+func readSchemaDir(fsys fs.FS, dir string, startVer string, endVer string, logger log.Logger) ([]string, error) {
+	subDirs, err := fs.ReadDir(fsys, dir)
 	if err != nil {
 		return nil, err
 	}
@@ -419,7 +446,7 @@ func (task *UpdateTask) setupDryRunDatabase() error {
 		Overwrite:      true,
 		InitialVersion: "0.0",
 	}
-	setupTask := newSetupSchemaTask(task.db, setupConfig, task.logger)
+	setupTask := NewSetupSchemaTask(task.db, setupConfig, task.logger)
 	return setupTask.Run()
 }
 

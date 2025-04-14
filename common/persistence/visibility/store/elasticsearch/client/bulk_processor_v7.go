@@ -59,10 +59,12 @@ func (p *bulkProcessorImpl) Stop() error {
 			errC <- errS
 		}
 	}()
+	timer := time.NewTimer(5 * time.Second)
+	defer timer.Stop()
 	select {
 	case err := <-errC:
 		return err
-	case <-time.After(5 * time.Second):
+	case <-timer.C:
 		return errors.New("esBulkProcessor Flush/Stop timed out")
 	}
 }

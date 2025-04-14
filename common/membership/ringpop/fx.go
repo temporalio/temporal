@@ -25,71 +25,32 @@
 package ringpop
 
 import (
-	"context"
-
-	"go.uber.org/fx"
-
-	"go.temporal.io/server/common/config"
-	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
-	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/primitives"
-	"go.temporal.io/server/common/rpc/encryption"
+	"go.uber.org/fx"
 )
 
-var Module = fx.Options(
-	fx.Provide(membershipMonitorProvider),
+// MembershipModule provides membership objects given the types in factoryParams.
+var MembershipModule = fx.Provide(
+	provideFactory,
+	provideMembership,
+	provideHostInfoProvider,
 )
 
-func membershipMonitorProvider(
-	lc fx.Lifecycle,
-	clusterMetadataManager persistence.ClusterMetadataManager,
-	logger log.SnTaggedLogger,
-	cfg *config.Config,
-	svcName primitives.ServiceName,
-	tlsConfigProvider encryption.TLSConfigProvider,
-	dc *dynamicconfig.Collection,
-) (membership.Monitor, error) {
-	servicePortMap := make(map[primitives.ServiceName]int)
-	for sn, sc := range cfg.Services {
-		servicePortMap[primitives.ServiceName(sn)] = sc.RPC.GRPCPort
-	}
-
-	rpcConfig := cfg.Services[string(svcName)].RPC
-
-	factory, err := newFactory(
-		&cfg.Global.Membership,
-		svcName,
-		servicePortMap,
-		logger,
-		clusterMetadataManager,
-		&rpcConfig,
-		tlsConfigProvider,
-		dc,
-	)
+func provideFactory(lc fx.Lifecycle, params factoryParams) (*factory, error) {
+	f, err := newFactory(params)
 	if err != nil {
 		return nil, err
 	}
+	lc.Append(fx.StopHook(f.closeTChannel))
+	return f, nil
+}
 
-	monitor, err := factory.getMembershipMonitor()
-	if err != nil {
-		return nil, err
-	}
+func provideMembership(lc fx.Lifecycle, f *factory) membership.Monitor {
+	m := f.getMonitor()
+	lc.Append(fx.StopHook(m.Stop))
+	return m
+}
 
-	lc.Append(
-		fx.Hook{
-			OnStart: func(context.Context) error {
-				monitor.Start()
-				return nil
-			},
-			OnStop: func(context.Context) error {
-				monitor.Stop()
-				factory.closeTChannel()
-				return nil
-			},
-		},
-	)
-
-	return monitor, nil
+func provideHostInfoProvider(lc fx.Lifecycle, f *factory) (membership.HostInfoProvider, error) {
+	return f.getHostInfoProvider()
 }

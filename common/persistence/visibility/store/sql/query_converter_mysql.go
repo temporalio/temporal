@@ -29,7 +29,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/xwb1989/sqlparser"
+	"github.com/temporalio/sqlparser"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
@@ -275,6 +275,7 @@ func (c *mysqlQueryConverter) buildSelectStmt(
 func (c *mysqlQueryConverter) buildCountStmt(
 	namespaceID namespace.ID,
 	queryString string,
+	groupBy []string,
 ) (string, []any) {
 	var whereClauses []string
 	var queryArgs []any
@@ -289,14 +290,22 @@ func (c *mysqlQueryConverter) buildCountStmt(
 		whereClauses = append(whereClauses, queryString)
 	}
 
+	groupByClause := ""
+	if len(groupBy) > 0 {
+		groupByClause = fmt.Sprintf("GROUP BY %s", strings.Join(groupBy, ", "))
+	}
+
 	return fmt.Sprintf(
-		`SELECT COUNT(1)
+		`SELECT %s
 		FROM executions_visibility ev
 		LEFT JOIN custom_search_attributes
 		USING (%s, %s)
-		WHERE %s`,
+		WHERE %s
+		%s`,
+		strings.Join(append(groupBy, "COUNT(*)"), ", "),
 		searchattribute.GetSqlDbColName(searchattribute.NamespaceID),
 		searchattribute.GetSqlDbColName(searchattribute.RunID),
 		strings.Join(whereClauses, " AND "),
+		groupByClause,
 	), queryArgs
 }

@@ -27,6 +27,7 @@ package workflow
 import (
 	"context"
 	"math"
+	"slices"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -37,15 +38,23 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"golang.org/x/exp/slices"
-
-	"go.temporal.io/server/api/clock/v1"
+	clockspb "go.temporal.io/server/api/clock/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/retrypolicy"
+	"go.temporal.io/server/common/worker_versioning"
+	historyi "go.temporal.io/server/service/history/interfaces"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
+
+type BackoffCalculatorAlgorithmFunc func(duration *durationpb.Duration, coefficient float64, currentAttempt int32) time.Duration
+
+func ExponentialBackoffAlgorithm(initInterval *durationpb.Duration, backoffCoefficient float64, currentAttempt int32) time.Duration {
+	return time.Duration(int64(float64(initInterval.AsDuration().Nanoseconds()) * math.Pow(backoffCoefficient, float64(currentAttempt-1))))
+}
 
 // TODO treat 0 as 0, not infinite
 
@@ -53,36 +62,59 @@ func getBackoffInterval(
 	now time.Time,
 	currentAttempt int32,
 	maxAttempts int32,
-	initInterval *time.Duration,
-	maxInterval *time.Duration,
-	expirationTime *time.Time,
+	initInterval *durationpb.Duration,
+	maxInterval *durationpb.Duration,
+	expirationTime *timestamppb.Timestamp,
 	backoffCoefficient float64,
 	failure *failurepb.Failure,
 	nonRetryableTypes []string,
 ) (time.Duration, enumspb.RetryState) {
 
+	if !isRetryable(failure, nonRetryableTypes) {
+		return backoff.NoBackoff, enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE
+	}
+
+	// Check if the remote worker sent an application failure indicating a custom backoff duration.
+	delayedRetryDuration := nextRetryDelayFrom(failure)
+	if delayedRetryDuration != nil {
+		return nextBackoffInterval(now, currentAttempt, maxAttempts, initInterval, maxInterval, expirationTime, backoffCoefficient, makeBackoffAlgorithm(delayedRetryDuration))
+	}
+	return nextBackoffInterval(now, currentAttempt, maxAttempts, initInterval, maxInterval, expirationTime, backoffCoefficient, ExponentialBackoffAlgorithm)
+}
+
+func nextRetryDelayFrom(failure *failurepb.Failure) *time.Duration {
+	var delay *time.Duration
+	afi, ok := failure.GetFailureInfo().(*failurepb.Failure_ApplicationFailureInfo)
+	if !ok {
+		return delay
+	}
+	p := afi.ApplicationFailureInfo.GetNextRetryDelay()
+	if p != nil {
+		d := p.AsDuration()
+		delay = &d
+	}
+	return delay
+}
+
+func nextBackoffInterval(
+	now time.Time,
+	currentAttempt int32,
+	maxAttempts int32,
+	initInterval *durationpb.Duration,
+	maxInterval *durationpb.Duration,
+	expirationTime *timestamppb.Timestamp,
+	backoffCoefficient float64,
+	intervalCalculator BackoffCalculatorAlgorithmFunc,
+) (time.Duration, enumspb.RetryState) {
 	// TODO remove below checks, most are already set with correct values
 	if currentAttempt < 1 {
 		currentAttempt = 1
 	}
 
-	if initInterval == nil {
-		initInterval = timestamp.DurationPtr(time.Duration(0))
-	}
-
-	if maxInterval != nil && *maxInterval == 0 {
-		maxInterval = nil
-	}
-
-	if expirationTime != nil && expirationTime.IsZero() {
+	if expirationTime != nil && expirationTime.AsTime().IsZero() {
 		expirationTime = nil
 	}
 	// TODO remove above checks, most are already set with correct values
-
-	if !isRetryable(failure, nonRetryableTypes) {
-		return backoff.NoBackoff, enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE
-	}
-
 	// currentAttempt starts from 1.
 	// maxAttempts is the total attempts, including initial (non-retry) attempt.
 	// At this point we are about to make next attempt and all calculations in this func are for this next attempt.
@@ -94,18 +126,16 @@ func getBackoffInterval(
 		return backoff.NoBackoff, enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED
 	}
 
-	interval := time.Duration(int64(float64(initInterval.Nanoseconds()) * math.Pow(backoffCoefficient, float64(currentAttempt-1))))
-	if maxInterval != nil && (interval <= 0 || interval > *maxInterval) {
-		interval = *maxInterval
-	} else if maxInterval == nil && interval <= 0 {
+	interval := intervalCalculator(initInterval, backoffCoefficient, currentAttempt)
+	if maxInterval.AsDuration() == 0 && interval <= 0 {
 		return backoff.NoBackoff, enumspb.RETRY_STATE_TIMEOUT
-		// } else {
-		// maxInterval != nil && (0 < interval && interval <= *maxInterval)
-		// or
-		// maxInterval == nil && interval > 0
 	}
 
-	if expirationTime != nil && now.Add(interval).After(*expirationTime) {
+	if maxInterval.AsDuration() != 0 && (interval <= 0 || interval > maxInterval.AsDuration()) {
+		interval = maxInterval.AsDuration()
+	}
+
+	if expirationTime != nil && now.Add(interval).After(expirationTime.AsTime()) {
 		return backoff.NoBackoff, enumspb.RETRY_STATE_TIMEOUT
 	}
 	return interval, enumspb.RETRY_STATE_IN_PROGRESS
@@ -126,7 +156,7 @@ func isRetryable(failure *failurepb.Failure, nonRetryableTypes []string) bool {
 			timeoutType == enumspb.TIMEOUT_TYPE_HEARTBEAT {
 			return !slices.Contains(
 				nonRetryableTypes,
-				common.TimeoutFailureTypePrefix+timeoutType.String(),
+				retrypolicy.TimeoutFailureTypePrefix+timeoutType.String(),
 			)
 		}
 
@@ -154,18 +184,20 @@ func isRetryable(failure *failurepb.Failure, nonRetryableTypes []string) bool {
 
 func SetupNewWorkflowForRetryOrCron(
 	ctx context.Context,
-	previousMutableState MutableState,
-	newMutableState MutableState,
+	previousMutableState historyi.MutableState,
+	newMutableState historyi.MutableState,
 	newRunID string,
 	startAttr *historypb.WorkflowExecutionStartedEventAttributes,
+	startLinks []*commonpb.Link,
 	lastCompletionResult *commonpb.Payloads,
 	failure *failurepb.Failure,
 	backoffInterval time.Duration,
 	initiator enumspb.ContinueAsNewInitiator,
 ) error {
 
-	// Extract ParentExecutionInfo from current run so it can be passed down to the next
+	// Extract ParentExecutionInfo and RootExecutionInfo from current run so it can be passed down to the next
 	var parentInfo *workflowspb.ParentExecutionInfo
+	var rootInfo *workflowspb.RootExecutionInfo
 	previousExecutionInfo := previousMutableState.GetExecutionInfo()
 	if previousMutableState.HasParentExecution() {
 		parentInfo = &workflowspb.ParentExecutionInfo{
@@ -179,6 +211,12 @@ func SetupNewWorkflowForRetryOrCron(
 			InitiatedVersion: previousExecutionInfo.ParentInitiatedVersion,
 			Clock:            previousExecutionInfo.ParentClock,
 		}
+		rootInfo = &workflowspb.RootExecutionInfo{
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: previousExecutionInfo.RootWorkflowId,
+				RunId:      previousExecutionInfo.RootRunId,
+			},
+		}
 	}
 
 	newExecution := commonpb.WorkflowExecution{
@@ -186,7 +224,7 @@ func SetupNewWorkflowForRetryOrCron(
 		RunId:      newRunID,
 	}
 
-	firstRunID, err := previousMutableState.GetFirstRunID()
+	firstRunID, err := previousMutableState.GetFirstRunID(ctx)
 	if err != nil {
 		return err
 	}
@@ -208,7 +246,7 @@ func SetupNewWorkflowForRetryOrCron(
 		Name: workflowType,
 	}
 
-	var taskTimeout *time.Duration
+	var taskTimeout *durationpb.Duration
 	if timestamp.DurationValue(startAttr.GetWorkflowTaskTimeout()) == 0 {
 		taskTimeout = previousExecutionInfo.DefaultWorkflowTaskTimeout
 	} else {
@@ -218,6 +256,14 @@ func SetupNewWorkflowForRetryOrCron(
 	// Workflow runTimeout is already set to the correct value in
 	// validateContinueAsNewWorkflowExecutionAttributes
 	runTimeout := startAttr.GetWorkflowRunTimeout()
+
+	var completionCallbacks []*commonpb.Callback
+	if initiator == enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY {
+		completionCallbacks, err = getCompletionCallbacksAsProtoSlice(previousMutableState)
+		if err != nil {
+			return err
+		}
+	}
 
 	createRequest := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                uuid.New(),
@@ -234,11 +280,25 @@ func SetupNewWorkflowForRetryOrCron(
 		CronSchedule:             startAttr.CronSchedule,
 		Memo:                     startAttr.Memo,
 		SearchAttributes:         startAttr.SearchAttributes,
+		CompletionCallbacks:      completionCallbacks,
+		Links:                    startLinks,
+		Priority:                 startAttr.Priority,
 	}
 
 	attempt := int32(1)
 	if initiator == enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY {
 		attempt = previousExecutionInfo.Attempt + 1
+	}
+
+	var sourceVersionStamp *commonpb.WorkerVersionStamp
+	if previousExecutionInfo.AssignedBuildId == "" {
+		// TODO: only keeping this part for old versioning. The desired logic seem to be the same for both cron and
+		// retry: keep originally-inherited build ID. [cleanup-old-wv]
+		// For retry: propagate build-id version info to new workflow.
+		// For cron: do not propagate (always start on latest version).
+		if initiator == enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY {
+			sourceVersionStamp = worker_versioning.StampIfUsingVersioning(previousMutableState.GetMostRecentWorkerVersionStamp())
+		}
 	}
 
 	req := &historyservice.StartWorkflowExecutionRequest{
@@ -249,16 +309,19 @@ func SetupNewWorkflowForRetryOrCron(
 		ContinuedFailure:       failure,
 		ContinueAsNewInitiator: initiator,
 		// enforce minimal interval between runs to prevent tight loop continue as new spin.
-		FirstWorkflowTaskBackoff: previousMutableState.ContinueAsNewMinBackoff(&backoffInterval),
+		FirstWorkflowTaskBackoff: previousMutableState.ContinueAsNewMinBackoff(durationpb.New(backoffInterval)),
 		Attempt:                  attempt,
+		SourceVersionStamp:       sourceVersionStamp,
+		RootExecutionInfo:        rootInfo,
+		InheritedBuildId:         startAttr.InheritedBuildId,
 	}
 	workflowTimeoutTime := timestamp.TimeValue(previousExecutionInfo.WorkflowExecutionExpirationTime)
 	if !workflowTimeoutTime.IsZero() {
-		req.WorkflowExecutionExpirationTime = &workflowTimeoutTime
+		req.WorkflowExecutionExpirationTime = timestamppb.New(workflowTimeoutTime)
 	}
 
 	event, err := newMutableState.AddWorkflowExecutionStartedEventWithOptions(
-		newExecution,
+		&newExecution,
 		req,
 		previousExecutionInfo.AutoResetPoints,
 		previousMutableState.GetExecutionState().GetRunId(),
@@ -267,7 +330,7 @@ func SetupNewWorkflowForRetryOrCron(
 	if err != nil {
 		return serviceerror.NewInternal("Failed to add workflow execution started event.")
 	}
-	var parentClock *clock.VectorClock
+	var parentClock *clockspb.VectorClock
 	if parentInfo != nil {
 		parentClock = parentInfo.Clock
 	}

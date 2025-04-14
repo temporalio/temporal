@@ -38,12 +38,15 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence"
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/timer"
+	"go.temporal.io/server/common/util"
 )
 
 const (
-	taskChanFullBackoff = 3 * time.Second
+	taskChanFullBackoff                  = 2 * time.Second
+	taskChanFullBackoffJitterCoefficient = 0.5
 
 	reschedulerPQCleanupDuration          = 3 * time.Minute
 	reschedulerPQCleanupJitterCoefficient = 0.15
@@ -53,8 +56,6 @@ type (
 	// Rescheduler buffers task executables that are failed to process and
 	// resubmit them to the task scheduler when the Reschedule method is called.
 	Rescheduler interface {
-		common.Daemon
-
 		// Add task executable to the rescheduler.
 		Add(task Executable, rescheduleTime time.Time)
 
@@ -65,6 +66,8 @@ type (
 
 		// Len returns the total number of task executables waiting to be rescheduled.
 		Len() int
+		Start()
+		Stop()
 	}
 
 	rescheduledExecuable struct {
@@ -176,7 +179,12 @@ func (r *reschedulerImpl) Reschedule(
 		items := make([]rescheduledExecuable, 0, pq.Len())
 		for !pq.IsEmpty() {
 			rescheduled := pq.Remove()
-			rescheduled.rescheduleTime = now
+			// scheduled queue pre-fetches tasks,
+			// so we need to make sure the reschedule time is not before the task scheduled time
+			rescheduled.rescheduleTime = util.MaxTime(
+				rescheduled.executable.GetKey().FireTime.Add(persistence.ScheduledTaskMinPrecision),
+				now,
+			)
 			items = append(items, rescheduled)
 		}
 		r.pqMap[key] = r.newPriorityQueue(items)
@@ -209,7 +217,7 @@ func (r *reschedulerImpl) rescheduleLoop() {
 		case <-r.shutdownCh:
 			r.drain()
 			return
-		case <-r.timerGate.FireChan():
+		case <-r.timerGate.FireCh():
 			r.reschedule()
 		case <-cleanupTimer.C:
 			r.cleanupPQ()
@@ -226,8 +234,7 @@ func (r *reschedulerImpl) reschedule() {
 	r.Lock()
 	defer r.Unlock()
 
-	r.metricsHandler.Histogram(metrics.TaskReschedulerPendingTasks.GetMetricName(), metrics.TaskReschedulerPendingTasks.GetMetricUnit()).Record(int64(r.numExecutables))
-
+	metrics.TaskReschedulerPendingTasks.With(r.metricsHandler).Record(int64(r.numExecutables))
 	now := r.timeSource.Now()
 	for _, pq := range r.pqMap {
 		for !pq.IsEmpty() {
@@ -248,7 +255,7 @@ func (r *reschedulerImpl) reschedule() {
 			executable.SetScheduledTime(now)
 			submitted := r.scheduler.TrySubmit(executable)
 			if !submitted {
-				r.timerGate.Update(now.Add(taskChanFullBackoff))
+				r.timerGate.Update(now.Add(backoff.Jitter(taskChanFullBackoff, taskChanFullBackoffJitterCoefficient)))
 				break
 			}
 

@@ -42,6 +42,8 @@ CREATE TABLE executions (
   signal_map                     map<bigint, blob>,
   signal_map_encoding            text,
   signal_requested               set<uuid>,
+  chasm_node_map                 map<text, blob>, -- Map from path to CHASM node blob
+  chasm_node_map_encoding        text,
   buffered_events_list           list<frozen<serialized_event_batch>>,
   workflow_last_write_version    bigint,
   workflow_state                 int,
@@ -90,6 +92,25 @@ CREATE TABLE tasks (
   task_queue          blob,
   task_queue_encoding text,
   PRIMARY KEY ((namespace_id, task_queue_name, task_queue_type), type, task_id)
+) WITH COMPACTION = {
+    'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
+  };
+
+-- Stores task queue information such as user provided versioning data
+-- OR
+-- Used as a mapping from build ID to task queue
+CREATE TABLE task_queue_user_data (
+  namespace_id     uuid,
+  task_queue_name  text,
+  build_id         text,   -- If this row is used as a mapping of build ID to task queue, this will not be empty
+  data             blob,   -- temporal.server.api.persistence.v1.TaskQueueUserData
+  data_encoding    text,   -- Encoding type used for serialization, in practice this should always be proto3
+  version          bigint, -- Version of this row, used for optimistic concurrency
+  -- task_queue_name is not a part of the parititioning key to allow cheaply iterating all task queues in a single
+  -- namespace. Access to this table should be infrequent enough that a single partition per namespace can be used.
+  -- Note that this imposes a limit on total task queue user data within one namespace (see the relevant single
+  -- partition Cassandra limits).
+  PRIMARY KEY ((namespace_id), build_id, task_queue_name)
 ) WITH COMPACTION = {
     'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
   };
@@ -165,3 +186,44 @@ CREATE TABLE cluster_membership
 
 CREATE INDEX cm_lastheartbeat_idx on cluster_membership (last_heartbeat);
 CREATE INDEX cm_sessionstart_idx on cluster_membership (session_start);
+
+CREATE TABLE queues
+(
+    queue_type        int,
+    queue_name        text,
+    metadata_payload  blob,
+    metadata_encoding text,
+    version           bigint,
+    PRIMARY KEY ((queue_type, queue_name))
+) WITH COMPACTION = {
+    'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
+    };
+
+CREATE TABLE queue_messages
+(
+    queue_type       int,
+    queue_name       text,
+    queue_partition  int,
+    message_id       bigint,
+    message_payload  blob,
+    message_encoding text,
+    PRIMARY KEY ((queue_type, queue_name, queue_partition), message_id)
+) WITH COMPACTION = {
+    'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
+    };
+
+CREATE TABLE nexus_endpoints
+(
+    partition       int, -- constant for all rows (using a single partition for efficient list queries)
+    type            int, -- enum RowType { PartitionStatus, NexusEndpoint }
+    id              uuid,
+    data            blob,
+    data_encoding   text,
+    -- When type=PartitionStatus contains the partition version.
+    --      Partition version is used to guarantee latest versions when listing all endpoints.
+    -- When type=NexusEndpoint contains the endpoint version used for optimistic concurrency.
+    version         bigint,
+    PRIMARY KEY ((partition), type, id)
+) WITH COMPACTION = {
+    'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
+    };

@@ -26,12 +26,13 @@ package gocql
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/gocql/gocql"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/common/persistence"
 )
 
@@ -39,30 +40,49 @@ func ConvertError(
 	operation string,
 	err error,
 ) error {
-
-	switch err {
-	case nil:
+	if err == nil {
 		return nil
-	case context.DeadlineExceeded, gocql.ErrTimeoutNoResponse, gocql.ErrConnectionClosed:
+	}
+
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, gocql.ErrTimeoutNoResponse) || errors.Is(err, gocql.ErrConnectionClosed) {
 		return &persistence.TimeoutError{Msg: fmt.Sprintf("operation %v encountered %v", operation, err.Error())}
-	case gocql.ErrNotFound:
+	}
+	if errors.Is(err, gocql.ErrNotFound) {
 		return serviceerror.NewNotFound(fmt.Sprintf("operation %v encountered %v", operation, err.Error()))
 	}
 
-	switch v := err.(type) {
-	case *gocql.RequestErrWriteTimeout:
-		return &persistence.TimeoutError{Msg: fmt.Sprintf("operation %v encountered %v", operation, err.Error())}
-	case gocql.RequestError:
-		if v.Code() == gocql.ErrCodeOverloaded {
-			return serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED,
-				fmt.Sprintf("operation %v encountered %v", operation, err.Error()))
-		}
-		return serviceerror.NewUnavailable(fmt.Sprintf("operation %v encountered %v", operation, err.Error()))
-	default:
-		return serviceerror.NewUnavailable(fmt.Sprintf("operation %v encountered %v", operation, err.Error()))
+	var cqlTimeoutErr gocql.RequestErrWriteTimeout
+	if errors.As(err, &cqlTimeoutErr) {
+		return &persistence.TimeoutError{Msg: fmt.Sprintf("operation %v encountered %v", operation, cqlTimeoutErr.Error())}
 	}
+
+	var cqlRequestErr gocql.RequestError
+	if errors.As(err, &cqlRequestErr) {
+		if cqlRequestErr.Code() == gocql.ErrCodeOverloaded {
+			return &serviceerror.ResourceExhausted{
+				Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED,
+				Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM,
+				Message: fmt.Sprintf("operation %v encountered %v", operation, cqlRequestErr.Error()),
+			}
+		}
+
+		if cqlRequestErr.Code() == gocql.ErrCodeInvalid {
+			// NB: See https://cassandra.apache.org/_/blog/Apache-Cassandra-4.1-Features-Guardrails-Framework.html
+			if strings.Contains(strings.ToLower(cqlRequestErr.Message()), "disk usage exceeds failure threshold") {
+				return &serviceerror.ResourceExhausted{
+					Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_STORAGE_LIMIT,
+					Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM,
+					Message: fmt.Sprintf("operation %v encountered %v", operation, cqlRequestErr.Error()),
+				}
+			}
+
+			return serviceerror.NewUnavailable(fmt.Sprintf("operation %v encountered %v", operation, cqlRequestErr.Error()))
+		}
+	}
+
+	return serviceerror.NewUnavailable(fmt.Sprintf("operation %v encountered %v", operation, err.Error()))
 }
 
 func IsNotFoundError(err error) bool {
-	return err == gocql.ErrNotFound
+	return errors.Is(err, gocql.ErrNotFound)
 }

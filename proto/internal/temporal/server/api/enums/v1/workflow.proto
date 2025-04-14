@@ -1,3 +1,5 @@
+// The MIT License
+//
 // Copyright (c) 2019 Temporal Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -38,4 +40,11 @@ enum WorkflowBackoffType {
     WORKFLOW_BACKOFF_TYPE_UNSPECIFIED = 0;
     WORKFLOW_BACKOFF_TYPE_RETRY = 1;
     WORKFLOW_BACKOFF_TYPE_CRON = 2;
+    WORKFLOW_BACKOFF_TYPE_DELAY_START = 3;
+}
+
+enum PausedWorkflowEntityType {
+    PAUSED_WORKFLOW_ENTITY_TYPE_UNSPECIFIED = 0;
+    PAUSED_WORKFLOW_ENTITY_TYPE_ACTIVITY = 1;
+    PAUSED_WORKFLOW_ENTITY_TYPE_WORKFLOW = 2;
 }

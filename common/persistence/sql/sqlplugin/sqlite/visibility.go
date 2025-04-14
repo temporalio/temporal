@@ -72,8 +72,9 @@ func buildOnDuplicateKeyUpdate(fields ...string) string {
 		items[i] = fmt.Sprintf("%s = excluded.%s", field, field)
 	}
 	return fmt.Sprintf(
-		"ON CONFLICT (namespace_id, run_id) DO UPDATE SET %s",
-		strings.Join(items, ", "),
+		// The WHERE clause ensures that no update occurs if the version is behind the saved version.
+		"ON CONFLICT (namespace_id, run_id) DO UPDATE SET %s WHERE executions_visibility.%s < EXCLUDED.%s",
+		strings.Join(items, ", "), sqlplugin.VersionColumnName, sqlplugin.VersionColumnName,
 	)
 }
 
@@ -162,6 +163,18 @@ func (mdb *db) CountFromVisibility(
 		return 0, err
 	}
 	return count, nil
+}
+
+func (mdb *db) CountGroupByFromVisibility(
+	ctx context.Context,
+	filter sqlplugin.VisibilitySelectFilter,
+) ([]sqlplugin.VisibilityCountRow, error) {
+	rows, err := mdb.db.QueryContext(ctx, filter.Query, filter.QueryArgs...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return sqlplugin.ParseCountGroupByRows(rows, filter.GroupBy)
 }
 
 func (mdb *db) prepareRowForDB(row *sqlplugin.VisibilityRow) *sqlplugin.VisibilityRow {

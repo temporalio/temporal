@@ -1,3 +1,5 @@
+// The MIT License
+//
 // Copyright (c) 2020 Temporal Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -25,7 +27,6 @@ package temporal.server.api.cluster.v1;
 option go_package = "go.temporal.io/server/api/cluster/v1;cluster";
 
 import "google/protobuf/timestamp.proto";
-import "dependencies/gogoproto/gogo.proto";
 
 import "temporal/server/api/enums/v1/cluster.proto";
 
@@ -50,7 +51,7 @@ message ClusterMember {
     string host_id = 2;
     string rpc_address = 3;
     int32 rpc_port = 4;
-    google.protobuf.Timestamp session_start_time = 5 [(gogoproto.stdtime) = true];
-    google.protobuf.Timestamp last_heartbit_time = 6 [(gogoproto.stdtime) = true];
-    google.protobuf.Timestamp record_expiry_time = 7 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp session_start_time = 5;
+    google.protobuf.Timestamp last_heartbit_time = 6;
+    google.protobuf.Timestamp record_expiry_time = 7;
 }

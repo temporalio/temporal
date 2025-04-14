@@ -28,7 +28,6 @@ import (
 	"context"
 	"time"
 
-	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 )
@@ -88,12 +87,6 @@ const (
 )
 
 const (
-	// Row types for table tasks
-	rowTypeTask = iota
-	rowTypeTaskQueue
-)
-
-const (
 	taskQueueTaskID = -12345
 
 	// ref: https://docs.datastax.com/en/dse-trblshoot/doc/troubleshooting/recoveringTtlYear2038Problem.html
@@ -115,14 +108,11 @@ type (
 
 var _ p.ExecutionStore = (*ExecutionStore)(nil)
 
-func NewExecutionStore(
-	session gocql.Session,
-	logger log.Logger,
-) *ExecutionStore {
+func NewExecutionStore(session gocql.Session) *ExecutionStore {
 	return &ExecutionStore{
-		HistoryStore:          NewHistoryStore(session, logger),
-		MutableStateStore:     NewMutableStateStore(session, logger),
-		MutableStateTaskStore: NewMutableStateTaskStore(session, logger),
+		HistoryStore:          NewHistoryStore(session),
+		MutableStateStore:     NewMutableStateStore(session),
+		MutableStateTaskStore: NewMutableStateTaskStore(session),
 	}
 }
 

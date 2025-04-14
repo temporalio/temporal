@@ -28,39 +28,17 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
-
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/service/history/tasks"
 )
-
-func (m *sqlExecutionStore) RegisterHistoryTaskReader(
-	_ context.Context,
-	_ *p.RegisterHistoryTaskReaderRequest,
-) error {
-	// no-op
-	return nil
-}
-
-func (m *sqlExecutionStore) UnregisterHistoryTaskReader(
-	_ context.Context,
-	_ *p.UnregisterHistoryTaskReaderRequest,
-) {
-	// no-op
-}
-
-func (m *sqlExecutionStore) UpdateHistoryTaskReaderProgress(
-	_ context.Context,
-	_ *p.UpdateHistoryTaskReaderProgressRequest,
-) {
-	// no-op
-}
 
 func (m *sqlExecutionStore) AddHistoryTasks(
 	ctx context.Context,
@@ -145,7 +123,7 @@ func (m *sqlExecutionStore) getHistoryImmediateTasks(
 
 	rows, err := m.Db.RangeSelectFromHistoryImmediateTasks(ctx, sqlplugin.HistoryImmediateTasksRangeFilter{
 		ShardID:            request.ShardID,
-		CategoryID:         categoryID,
+		CategoryID:         int32(categoryID),
 		InclusiveMinTaskID: inclusiveMinTaskID,
 		ExclusiveMaxTaskID: exclusiveMaxTaskID,
 		PageSize:           request.BatchSize,
@@ -167,7 +145,7 @@ func (m *sqlExecutionStore) getHistoryImmediateTasks(
 	for i, row := range rows {
 		resp.Tasks[i] = p.InternalHistoryTask{
 			Key:  tasks.NewImmediateKey(row.TaskID),
-			Blob: *p.NewDataBlob(row.Data, row.DataEncoding),
+			Blob: p.NewDataBlob(row.Data, row.DataEncoding),
 		}
 	}
 	if len(rows) == request.BatchSize {
@@ -199,7 +177,7 @@ func (m *sqlExecutionStore) completeHistoryImmediateTask(
 
 	if _, err := m.Db.DeleteFromHistoryImmediateTasks(ctx, sqlplugin.HistoryImmediateTasksFilter{
 		ShardID:    request.ShardID,
-		CategoryID: categoryID,
+		CategoryID: int32(categoryID),
 		TaskID:     request.TaskKey.TaskID,
 	}); err != nil {
 		return serviceerror.NewUnavailable(
@@ -228,7 +206,7 @@ func (m *sqlExecutionStore) rangeCompleteHistoryImmediateTasks(
 
 	if _, err := m.Db.RangeDeleteFromHistoryImmediateTasks(ctx, sqlplugin.HistoryImmediateTasksRangeFilter{
 		ShardID:            request.ShardID,
-		CategoryID:         categoryID,
+		CategoryID:         int32(categoryID),
 		InclusiveMinTaskID: request.InclusiveMinTaskKey.TaskID,
 		ExclusiveMaxTaskID: request.ExclusiveMaxTaskKey.TaskID,
 	}); err != nil {
@@ -262,7 +240,7 @@ func (m *sqlExecutionStore) getHistoryScheduledTasks(
 
 	rows, err := m.Db.RangeSelectFromHistoryScheduledTasks(ctx, sqlplugin.HistoryScheduledTasksRangeFilter{
 		ShardID:                         request.ShardID,
-		CategoryID:                      categoryID,
+		CategoryID:                      int32(categoryID),
 		InclusiveMinVisibilityTimestamp: pageToken.Timestamp,
 		InclusiveMinTaskID:              pageToken.TaskID,
 		ExclusiveMaxVisibilityTimestamp: request.ExclusiveMaxTaskKey.FireTime,
@@ -279,7 +257,7 @@ func (m *sqlExecutionStore) getHistoryScheduledTasks(
 	for _, row := range rows {
 		resp.Tasks = append(resp.Tasks, p.InternalHistoryTask{
 			Key:  tasks.NewKey(row.VisibilityTimestamp, row.TaskID),
-			Blob: *p.NewDataBlob(row.Data, row.DataEncoding),
+			Blob: p.NewDataBlob(row.Data, row.DataEncoding),
 		})
 	}
 
@@ -312,7 +290,7 @@ func (m *sqlExecutionStore) completeHistoryScheduledTask(
 
 	if _, err := m.Db.DeleteFromHistoryScheduledTasks(ctx, sqlplugin.HistoryScheduledTasksFilter{
 		ShardID:             request.ShardID,
-		CategoryID:          categoryID,
+		CategoryID:          int32(categoryID),
 		VisibilityTimestamp: request.TaskKey.FireTime,
 		TaskID:              request.TaskKey.TaskID,
 	}); err != nil {
@@ -337,7 +315,7 @@ func (m *sqlExecutionStore) rangeCompleteHistoryScheduledTasks(
 	end := request.ExclusiveMaxTaskKey.FireTime
 	if _, err := m.Db.RangeDeleteFromHistoryScheduledTasks(ctx, sqlplugin.HistoryScheduledTasksRangeFilter{
 		ShardID:                         request.ShardID,
-		CategoryID:                      categoryID,
+		CategoryID:                      int32(categoryID),
 		InclusiveMinVisibilityTimestamp: start,
 		ExclusiveMaxVisibilityTimestamp: end,
 	}); err != nil {
@@ -376,7 +354,7 @@ func (m *sqlExecutionStore) getTransferTasks(
 	for i, row := range rows {
 		resp.Tasks[i] = p.InternalHistoryTask{
 			Key:  tasks.NewImmediateKey(row.TaskID),
-			Blob: *p.NewDataBlob(row.Data, row.DataEncoding),
+			Blob: p.NewDataBlob(row.Data, row.DataEncoding),
 		}
 	}
 	if len(rows) == request.BatchSize {
@@ -443,7 +421,7 @@ func (m *sqlExecutionStore) getTimerTasks(
 	for _, row := range rows {
 		resp.Tasks = append(resp.Tasks, p.InternalHistoryTask{
 			Key:  tasks.NewKey(row.VisibilityTimestamp, row.TaskID),
-			Blob: *p.NewDataBlob(row.Data, row.DataEncoding),
+			Blob: p.NewDataBlob(row.Data, row.DataEncoding),
 		})
 	}
 
@@ -556,7 +534,7 @@ func (m *sqlExecutionStore) populateGetReplicationTasksResponse(
 	for i, row := range rows {
 		replicationTasks[i] = p.InternalHistoryTask{
 			Key:  tasks.NewImmediateKey(row.TaskID),
-			Blob: *p.NewDataBlob(row.Data, row.DataEncoding),
+			Blob: p.NewDataBlob(row.Data, row.DataEncoding),
 		}
 	}
 	var nextPageToken []byte
@@ -585,7 +563,7 @@ func (m *sqlExecutionStore) populateGetReplicationDLQTasksResponse(
 	for i, row := range rows {
 		dlqTasks[i] = p.InternalHistoryTask{
 			Key:  tasks.NewImmediateKey(row.TaskID),
-			Blob: *p.NewDataBlob(row.Data, row.DataEncoding),
+			Blob: p.NewDataBlob(row.Data, row.DataEncoding),
 		}
 	}
 	var nextPageToken []byte
@@ -712,6 +690,27 @@ func (m *sqlExecutionStore) RangeDeleteReplicationTaskFromDLQ(
 	return nil
 }
 
+func (m *sqlExecutionStore) IsReplicationDLQEmpty(
+	ctx context.Context,
+	request *p.GetReplicationTasksFromDLQRequest,
+) (bool, error) {
+	res, err := m.Db.RangeSelectFromReplicationDLQTasks(ctx, sqlplugin.ReplicationDLQTasksRangeFilter{
+		ShardID:            request.ShardID,
+		SourceClusterName:  request.SourceClusterName,
+		InclusiveMinTaskID: request.InclusiveMinTaskKey.TaskID,
+		ExclusiveMaxTaskID: math.MaxInt64,
+		PageSize:           1,
+	})
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			// The queue is empty
+			return true, nil
+		}
+		return false, err
+	}
+	return len(res) == 0, nil
+}
+
 func (m *sqlExecutionStore) getVisibilityTasks(
 	ctx context.Context,
 	request *p.GetHistoryTasksRequest,
@@ -742,7 +741,7 @@ func (m *sqlExecutionStore) getVisibilityTasks(
 	for i, row := range rows {
 		resp.Tasks[i] = p.InternalHistoryTask{
 			Key:  tasks.NewImmediateKey(row.TaskID),
-			Blob: *p.NewDataBlob(row.Data, row.DataEncoding),
+			Blob: p.NewDataBlob(row.Data, row.DataEncoding),
 		}
 	}
 	if len(rows) == request.BatchSize {

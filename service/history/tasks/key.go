@@ -127,7 +127,7 @@ func (k Key) Sub(subtrahend Key) Key {
 	}
 
 	return NewKey(
-		time.Unix(0, fireTime-subtrahendFireTime),
+		time.Unix(0, fireTime-subtrahendFireTime).UTC(),
 		int64(differenceTaskID),
 	)
 }

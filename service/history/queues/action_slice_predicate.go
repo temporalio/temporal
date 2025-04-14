@@ -33,6 +33,8 @@ const (
 	moveSliceDefaultReaderMinSliceCount       = 3
 )
 
+var _ Action = (*slicePredicateAction)(nil)
+
 type (
 	// slicePredicateAction will move all slices in default reader
 	// with non-universal predicate to the next reader so that upon restart
@@ -57,11 +59,15 @@ type (
 func newSlicePredicateAction(
 	monitor Monitor,
 	maxReaderCount int,
-) Action {
+) *slicePredicateAction {
 	return &slicePredicateAction{
 		monitor:        monitor,
 		maxReaderCount: maxReaderCount,
 	}
+}
+
+func (a *slicePredicateAction) Name() string {
+	return "slice-predicate"
 }
 
 func (a *slicePredicateAction) Run(readerGroup *ReaderGroup) {
@@ -70,7 +76,7 @@ func (a *slicePredicateAction) Run(readerGroup *ReaderGroup) {
 		return
 	}
 
-	if a.maxReaderCount <= DefaultReaderId+1 {
+	if int64(a.maxReaderCount) <= DefaultReaderId+1 {
 		return
 	}
 
@@ -107,10 +113,6 @@ func (a *slicePredicateAction) Run(readerGroup *ReaderGroup) {
 		return
 	}
 
-	nextReader, ok := readerGroup.ReaderByID(DefaultReaderId + 1)
-	if !ok {
-		readerGroup.NewReader(DefaultReaderId+1, moveSlices...)
-	} else {
-		nextReader.MergeSlices(moveSlices...)
-	}
+	nextReader := readerGroup.GetOrCreateReader(DefaultReaderId + 1)
+	nextReader.MergeSlices(moveSlices...)
 }

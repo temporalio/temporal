@@ -25,10 +25,9 @@
 package serviceerror
 
 import (
-	"github.com/gogo/status"
+	errordetailsspb "go.temporal.io/server/api/errordetails/v1"
 	"google.golang.org/grpc/codes"
-
-	"go.temporal.io/server/api/errordetails/v1"
+	"google.golang.org/grpc/status"
 )
 
 type (
@@ -81,7 +80,7 @@ func (e *RetryReplication) Status() *status.Status {
 
 	st := status.New(codes.Aborted, e.Message)
 	st, _ = st.WithDetails(
-		&errordetails.RetryReplicationFailure{
+		&errordetailsspb.RetryReplicationFailure{
 			NamespaceId:       e.NamespaceId,
 			WorkflowId:        e.WorkflowId,
 			RunId:             e.RunId,
@@ -94,9 +93,19 @@ func (e *RetryReplication) Status() *status.Status {
 	return st
 }
 
+func (e *RetryReplication) Equal(err *RetryReplication) bool {
+	return e.NamespaceId == err.NamespaceId &&
+		e.WorkflowId == err.WorkflowId &&
+		e.RunId == err.RunId &&
+		e.StartEventId == err.StartEventId &&
+		e.StartEventVersion == err.StartEventVersion &&
+		e.EndEventId == err.EndEventId &&
+		e.EndEventVersion == err.EndEventVersion
+}
+
 func newRetryReplication(
 	st *status.Status,
-	errDetails *errordetails.RetryReplicationFailure,
+	errDetails *errordetailsspb.RetryReplicationFailure,
 ) error {
 	return &RetryReplication{
 		Message:           st.Message(),

@@ -32,13 +32,12 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/api/taskqueue/v1"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/converter"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/headers"
@@ -46,7 +45,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives"
-	"go.temporal.io/server/common/primitives/timestamp"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 const (
@@ -70,7 +69,7 @@ type (
 
 	// Request defines the request for parent close policy
 	Request struct {
-		ParentExecution commonpb.WorkflowExecution
+		ParentExecution *commonpb.WorkflowExecution
 		Executions      []RequestDetail
 	}
 
@@ -141,7 +140,7 @@ func ProcessorActivity(ctx context.Context, request Request) error {
 					Identity:            processorWFTypeName,
 					FirstExecutionRunId: execution.RunID,
 				},
-				ExternalWorkflowExecution: &request.ParentExecution,
+				ExternalWorkflowExecution: request.ParentExecution,
 				ChildWorkflowOnly:         childWorkflowOnly,
 			})
 		case enumspb.PARENT_CLOSE_POLICY_REQUEST_CANCEL:
@@ -155,20 +154,20 @@ func ProcessorActivity(ctx context.Context, request Request) error {
 					Identity:            processorWFTypeName,
 					FirstExecutionRunId: execution.RunID,
 				},
-				ExternalWorkflowExecution: &request.ParentExecution,
+				ExternalWorkflowExecution: request.ParentExecution,
 				ChildWorkflowOnly:         childWorkflowOnly,
 			})
 		}
 
 		switch typedErr := err.(type) {
 		case nil:
-			processor.metricsHandler.Counter(metrics.ParentClosePolicyProcessorSuccess.GetMetricName()).Record(1)
+			metrics.ParentClosePolicyProcessorSuccess.With(processor.metricsHandler).Record(1)
 		case *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
 			// no-op
 		case *serviceerror.NamespaceNotActive:
 			remoteExecutions[typedErr.ActiveCluster] = append(remoteExecutions[typedErr.ActiveCluster], execution)
 		default:
-			processor.metricsHandler.Counter(metrics.ParentClosePolicyProcessorFailures.GetMetricName()).Record(1)
+			metrics.ParentClosePolicyProcessorFailures.With(processor.metricsHandler).Record(1)
 			getActivityLogger(ctx).Error("failed to process parent close policy", tag.Error(err))
 			return err
 		}
@@ -193,7 +192,7 @@ func signalRemoteCluster(
 	ctx context.Context,
 	currentCluster string,
 	clientBean client.Bean,
-	parentExecution commonpb.WorkflowExecution,
+	parentExecution *commonpb.WorkflowExecution,
 	remoteExecutions map[string][]RequestDetail,
 	numWorkflows int,
 ) error {
@@ -221,11 +220,11 @@ func signalRemoteCluster(
 				WorkflowType: &commonpb.WorkflowType{
 					Name: processorWFTypeName,
 				},
-				TaskQueue: &taskqueue.TaskQueue{
+				TaskQueue: &taskqueuepb.TaskQueue{
 					Name: processorTaskQueueName,
 				},
 				Input:                 nil,
-				WorkflowTaskTimeout:   timestamp.DurationPtr(workflowTaskTimeout),
+				WorkflowTaskTimeout:   durationpb.New(workflowTaskTimeout),
 				Identity:              currentCluster + "-" + string(primitives.WorkerService) + "-service",
 				WorkflowIdReusePolicy: workflowIDReusePolicy,
 				SignalName:            processorChannelName,

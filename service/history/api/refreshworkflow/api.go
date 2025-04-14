@@ -28,17 +28,16 @@ import (
 	"context"
 
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/api"
-	"go.temporal.io/server/service/history/shard"
-	"go.temporal.io/server/service/history/workflow"
+	historyi "go.temporal.io/server/service/history/interfaces"
 )
 
 func Invoke(
 	ctx context.Context,
 	workflowKey definition.WorkflowKey,
-	shard shard.Context,
+	shardContext historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (retError error) {
 	err := api.ValidateNamespaceUUID(namespace.ID(workflowKey.NamespaceID))
@@ -46,37 +45,16 @@ func Invoke(
 		return err
 	}
 
-	wfContext, err := workflowConsistencyChecker.GetWorkflowContext(
+	workflowLease, err := workflowConsistencyChecker.GetWorkflowLease(
 		ctx,
 		nil,
-		api.BypassMutableStateConsistencyPredicate,
 		workflowKey,
+		locks.PriorityLow,
 	)
 	if err != nil {
 		return err
 	}
-	defer func() { wfContext.GetReleaseFn()(retError) }()
+	defer func() { workflowLease.GetReleaseFn()(retError) }()
 
-	mutableState := wfContext.GetMutableState()
-	mutableStateTaskRefresher := workflow.NewTaskRefresher(
-		shard,
-		shard.GetConfig(),
-		shard.GetNamespaceRegistry(),
-		shard.GetEventsCache(),
-		shard.GetLogger(),
-	)
-
-	err = mutableStateTaskRefresher.RefreshTasks(ctx, mutableState)
-	if err != nil {
-		return err
-	}
-
-	return shard.AddTasks(ctx, &persistence.AddHistoryTasksRequest{
-		ShardID: shard.GetShardID(),
-		// RangeID is set by shard
-		NamespaceID: workflowKey.NamespaceID,
-		WorkflowID:  workflowKey.WorkflowID,
-		RunID:       workflowKey.RunID,
-		Tasks:       mutableState.PopTasks(),
-	})
+	return workflowLease.GetContext().RefreshTasks(ctx, shardContext)
 }

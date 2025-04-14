@@ -32,11 +32,10 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/activity"
-
 	"go.temporal.io/server/api/adminservice/v1"
-	"go.temporal.io/server/api/enums/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
-	persistencepb "go.temporal.io/server/api/persistence/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -45,6 +44,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 )
@@ -230,7 +230,7 @@ func (s *Scavenger) filterTask(
 ) *taskDetail {
 
 	if time.Now().UTC().Add(-s.historyDataMinAge()).Before(timestamp.TimeValue(branch.ForkTime)) {
-		s.metricsHandler.Counter(metrics.HistoryScavengerSkipCount.GetMetricName()).Record(1)
+		metrics.HistoryScavengerSkipCount.With(s.metricsHandler).Record(1)
 
 		s.Lock()
 		defer s.Unlock()
@@ -240,8 +240,8 @@ func (s *Scavenger) filterTask(
 
 	namespaceID, workflowID, runID, err := persistence.SplitHistoryGarbageCleanupInfo(branch.Info)
 	if err != nil {
-		s.logger.Error("unable to parse the history cleanup info", tag.DetailInfo(branch.Info))
-		s.metricsHandler.Counter(metrics.HistoryScavengerErrorCount.GetMetricName()).Record(1)
+		s.logger.Error("unable to parse the history cleanup info", tag.DetailInfo(branch.Info), tag.Error(err))
+		metrics.HistoryScavengerErrorCount.With(s.metricsHandler).Record(1)
 
 		s.Lock()
 		defer s.Unlock()
@@ -250,12 +250,23 @@ func (s *Scavenger) filterTask(
 	}
 	shardID := common.WorkflowIDToHistoryShard(namespaceID, workflowID, s.numShards)
 
+	branchToken, err := serialization.HistoryBranchToBlob(branch.BranchInfo)
+	if err != nil {
+		s.logger.Error("unable to serialize the history branch token", tag.DetailInfo(branch.Info), tag.Error(err))
+		metrics.HistoryScavengerErrorCount.With(s.metricsHandler).Record(1)
+
+		s.Lock()
+		defer s.Unlock()
+		s.hbd.ErrorCount++
+		return nil
+	}
+
 	return &taskDetail{
 		shardID:     shardID,
 		namespaceID: namespaceID,
 		workflowID:  workflowID,
 		runID:       runID,
-		branchToken: branch.BranchToken,
+		branchToken: branchToken.Data,
 	}
 }
 
@@ -278,7 +289,7 @@ func (s *Scavenger) handleTask(
 			return s.cleanUpWorkflowPastRetention(ctx, ms.GetDatabaseMutableState())
 		}
 		return nil
-	case *serviceerror.NotFound:
+	case *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
 		// case handled below
 	default:
 		s.logger.Error("encounter error when describing the mutable state", getTaskLoggingTags(err, task)...)
@@ -304,12 +315,12 @@ func (s *Scavenger) handleErr(
 	s.Lock()
 	defer s.Unlock()
 	if err != nil {
-		s.metricsHandler.Counter(metrics.HistoryScavengerErrorCount.GetMetricName()).Record(1)
+		metrics.HistoryScavengerErrorCount.With(s.metricsHandler).Record(1)
 		s.hbd.ErrorCount++
 		return
 	}
 
-	s.metricsHandler.Counter(metrics.HistoryScavengerSuccessCount.GetMetricName()).Record(1)
+	metrics.HistoryScavengerSuccessCount.With(s.metricsHandler).Record(1)
 	s.hbd.SuccessCount++
 }
 
@@ -338,9 +349,9 @@ func (s *Scavenger) getPaginationFn(
 
 func (s *Scavenger) cleanUpWorkflowPastRetention(
 	ctx context.Context,
-	mutableState *persistencepb.WorkflowMutableState,
+	mutableState *persistencespb.WorkflowMutableState,
 ) error {
-	if mutableState.GetExecutionState().GetState() != enums.WORKFLOW_EXECUTION_STATE_COMPLETED {
+	if mutableState.GetExecutionState().GetState() != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		// Skip running workflow
 		return nil
 	}

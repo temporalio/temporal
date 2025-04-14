@@ -33,9 +33,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
-
-	"go.temporal.io/server/common/persistence/serialization"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log/tag"
@@ -48,6 +45,10 @@ const (
 
 	// TrimHistoryBranch will only dump metadata, relatively cheap
 	trimHistoryBranchPageSize = 1000
+	dataLossMsg               = "Potential data loss"
+	errNonContiguousEventID   = "corrupted history event batch, eventID is not contiguous"
+	errWrongVersion           = "corrupted history event batch, wrong version and IDs"
+	errEmptyEvents            = "corrupted history event batch, empty events"
 )
 
 var _ ExecutionManager = (*executionManagerImpl)(nil)
@@ -104,7 +105,11 @@ func (m *executionManagerImpl) ForkHistoryBranch(
 	// The above newBranchInfo is a lossy construction of the forked branch token from the original opaque branch token.
 	// It only initializes with the fields it understands, which may inadvertently discard other misc fields. The
 	// following is the replacement logic to correctly apply the updated fields into the original opaque branch token.
-	newBranchToken, err := m.GetHistoryBranchUtil().UpdateHistoryBranchInfo(request.ForkBranchToken, newBranchInfo)
+	newBranchToken, err := m.GetHistoryBranchUtil().UpdateHistoryBranchInfo(
+		request.ForkBranchToken,
+		newBranchInfo,
+		request.NewRunID,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -122,7 +127,7 @@ func (m *executionManagerImpl) ForkHistoryBranch(
 	}
 
 	req := &InternalForkHistoryBranchRequest{
-		BranchToken:    request.ForkBranchToken,
+		NewBranchToken: newBranchToken,
 		ForkBranchInfo: forkBranch,
 		TreeInfo:       treeInfoBlob,
 		ForkNodeID:     request.ForkNodeID,
@@ -161,23 +166,24 @@ func (m *executionManagerImpl) DeleteHistoryBranch(
 		BeginNodeId: GetBeginNodeID(branch),
 	})
 
-	// Get the entire history tree, so we know if any part of the target branch is referenced by other branches.
-	historyTreeResp, err := m.GetHistoryTree(ctx, &GetHistoryTreeRequest{
-		TreeID:      branch.TreeId,
-		ShardID:     &request.ShardID,
+	// Get the history tree containing the branch to be delelted,
+	// so we know if any part of the target branch is referenced by other branches.
+	historyTreeResp, err := m.persistence.GetHistoryTreeContainingBranch(ctx, &InternalGetHistoryTreeContainingBranchRequest{
 		BranchToken: request.BranchToken,
+		ShardID:     request.ShardID,
 	})
+	if err != nil {
+		return err
+	}
+
+	branchInfos, err := m.deserializeBranchInfos(historyTreeResp)
 	if err != nil {
 		return err
 	}
 
 	// usedBranches record branches referenced by others
 	usedBranches := map[string]int64{}
-	for _, br := range historyTreeResp.BranchTokens {
-		branchInfo, err := m.GetHistoryBranchUtil().ParseHistoryBranchInfo(br)
-		if err != nil {
-			return err
-		}
+	for _, branchInfo := range branchInfos {
 		if branchInfo.BranchId == branch.BranchId {
 			// skip the target branch
 			continue
@@ -216,9 +222,8 @@ findDeleteRanges:
 
 	req := &InternalDeleteHistoryBranchRequest{
 		BranchToken:  request.BranchToken,
+		BranchInfo:   branch,
 		ShardID:      request.ShardID,
-		TreeId:       branch.TreeId,
-		BranchId:     branch.BranchId,
 		BranchRanges: deleteRanges,
 	}
 	return m.persistence.DeleteHistoryBranch(ctx, req)
@@ -237,7 +242,7 @@ func (m *executionManagerImpl) TrimHistoryBranch(
 
 	branch, err := m.GetHistoryBranchUtil().ParseHistoryBranchInfo(request.BranchToken)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unable to parse history branch info: %w", err)
 	}
 	treeID := branch.TreeId
 	branchID := branch.BranchId
@@ -259,14 +264,13 @@ func (m *executionManagerImpl) TrimHistoryBranch(
 	for doContinue := true; doContinue; doContinue = len(pageToken) > 0 {
 		token, err := m.deserializeToken(pageToken, minNodeID-1, defaultLastTransactionID)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("unable to deserialize token: %w", err)
 		}
 
 		nodes, token, err := m.readRawHistoryBranch(
 			ctx,
 			request.BranchToken,
 			shardID,
-			treeID,
 			branchAncestors,
 			minNodeID,
 			maxNodeID,
@@ -275,7 +279,7 @@ func (m *executionManagerImpl) TrimHistoryBranch(
 			true,
 		)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("unable to read raw history branch: %w", err)
 		}
 
 		branchID := branchAncestors[token.CurrentRangeIndex].BranchId
@@ -294,7 +298,7 @@ func (m *executionManagerImpl) TrimHistoryBranch(
 
 		pageToken, err = m.serializeToken(token, false)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("unable to serialize token: %w", err)
 		}
 	}
 
@@ -316,72 +320,28 @@ func (m *executionManagerImpl) TrimHistoryBranch(
 			NodeID:        node.nodeID,
 			TransactionID: node.transactionID,
 		}); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("unable to delete history nodes: %w", err)
 		}
 	}
 
 	return &TrimHistoryBranchResponse{}, nil
 }
 
-// GetHistoryTree returns all branch information of a tree
-func (m *executionManagerImpl) GetHistoryTree(
-	ctx context.Context,
-	request *GetHistoryTreeRequest,
-) (*GetHistoryTreeResponse, error) {
-
-	if len(request.TreeID) == 0 {
-		branch, err := m.GetHistoryBranchUtil().ParseHistoryBranchInfo(request.BranchToken)
+func (m *executionManagerImpl) deserializeBranchInfos(
+	historyTreeResp *InternalGetHistoryTreeContainingBranchResponse,
+) ([]*persistencespb.HistoryBranch, error) {
+	branchInfos := make([]*persistencespb.HistoryBranch, 0, len(historyTreeResp.TreeInfos))
+	for _, blob := range historyTreeResp.TreeInfos {
+		treeInfo, err := m.serializer.HistoryTreeInfoFromBlob(blob)
 		if err != nil {
 			return nil, err
 		}
-		request.TreeID = branch.GetTreeId()
+		branchInfos = append(branchInfos, treeInfo.BranchInfo)
 	}
-	resp, err := m.persistence.GetHistoryTree(ctx, request)
-	if err != nil {
-		return nil, err
-	}
-	branchTokens := make([][]byte, 0, len(resp.TreeInfos))
-	for _, blob := range resp.TreeInfos {
-		treeInfo, err := ToHistoryTreeInfo(m.serializer, NewDataBlob(blob.Data, blob.EncodingType.String()))
-		if err != nil {
-			return nil, err
-		}
-		branchTokens = append(branchTokens, treeInfo.BranchToken)
-	}
-	return &GetHistoryTreeResponse{BranchTokens: branchTokens}, nil
-}
-
-func ToHistoryTreeInfo(serializer serialization.Serializer, blob *commonpb.DataBlob) (*persistencespb.HistoryTreeInfo, error) {
-	treeInfo, err := serializer.HistoryTreeInfoFromBlob(blob)
-	if err != nil {
-		return nil, err
-	}
-	// For existing data that was previously persisted with only branch info but without the opaque branch token,
-	// compute the missing branch token on the fly. Similarly, if only opaque branch token exists but without the branch
-	// info, then compute the missing branch info on the fly.
-	// TODO: Consider removing in the future, but this will be a forward/backward incompatible change for old data.
-	if treeInfo.BranchToken == nil {
-		blob, err := serializer.HistoryBranchToBlob(treeInfo.BranchInfo, enumspb.ENCODING_TYPE_PROTO3)
-		if err != nil {
-			return nil, err
-		}
-		treeInfo.BranchToken = blob.Data
-	} else if treeInfo.BranchInfo == nil {
-		branch, err := serializer.HistoryBranchFromBlob(NewDataBlob(treeInfo.BranchToken, enumspb.ENCODING_TYPE_PROTO3.String()))
-		if err != nil {
-			return nil, err
-		}
-		treeInfo.BranchInfo = &persistencespb.HistoryBranch{
-			TreeId:    branch.TreeId,
-			BranchId:  branch.BranchId,
-			Ancestors: branch.Ancestors,
-		}
-	}
-	return treeInfo, nil
+	return branchInfos, nil
 }
 
 func (m *executionManagerImpl) serializeAppendHistoryNodesRequest(
-	ctx context.Context,
 	request *AppendHistoryNodesRequest,
 ) (*InternalAppendHistoryNodesRequest, error) {
 	branch, err := m.GetHistoryBranchUtil().ParseHistoryBranchInfo(request.BranchToken)
@@ -449,7 +409,7 @@ func (m *executionManagerImpl) serializeAppendHistoryNodesRequest(
 	if req.IsNewBranch {
 		// TreeInfo is only needed for new branch
 		treeInfoBlob, err := m.serializer.HistoryTreeInfoToBlob(&persistencespb.HistoryTreeInfo{
-			BranchToken: request.BranchToken,
+			BranchToken: request.BranchToken, // NOTE: this is redundant but double-writing until 1 minor release later
 			BranchInfo:  branch,
 			ForkTime:    timestamp.TimeNowPtrUtc(),
 			Info:        request.Info,
@@ -517,7 +477,7 @@ func (m *executionManagerImpl) serializeAppendRawHistoryNodesRequest(
 	if req.IsNewBranch {
 		// TreeInfo is only needed for new branch
 		treeInfoBlob, err := m.serializer.HistoryTreeInfoToBlob(&persistencespb.HistoryTreeInfo{
-			BranchToken: request.BranchToken,
+			BranchToken: request.BranchToken, // NOTE: this is redundant but double-writing until 1 minor release later
 			BranchInfo:  branch,
 			ForkTime:    timestamp.TimeNowPtrUtc(),
 			Info:        request.Info,
@@ -543,7 +503,7 @@ func (m *executionManagerImpl) AppendHistoryNodes(
 	request *AppendHistoryNodesRequest,
 ) (*AppendHistoryNodesResponse, error) {
 
-	req, err := m.serializeAppendHistoryNodesRequest(ctx, request)
+	req, err := m.serializeAppendHistoryNodesRequest(request)
 
 	if err != nil {
 		return nil, err
@@ -647,14 +607,14 @@ func (m *executionManagerImpl) GetAllHistoryTreeBranches(
 	}
 	branches := make([]HistoryBranchDetail, 0, len(resp.Branches))
 	for _, branch := range resp.Branches {
-		treeInfo, err := ToHistoryTreeInfo(m.serializer, NewDataBlob(branch.Data, branch.Encoding))
+		treeInfo, err := m.serializer.HistoryTreeInfoFromBlob(NewDataBlob(branch.Data, branch.Encoding))
 		if err != nil {
 			return nil, err
 		}
 		branchDetail := HistoryBranchDetail{
-			BranchToken: treeInfo.BranchToken,
-			ForkTime:    treeInfo.ForkTime,
-			Info:        treeInfo.Info,
+			BranchInfo: treeInfo.BranchInfo,
+			ForkTime:   treeInfo.ForkTime,
+			Info:       treeInfo.Info,
 		}
 		branches = append(branches, branchDetail)
 	}
@@ -669,7 +629,6 @@ func (m *executionManagerImpl) readRawHistoryBranch(
 	ctx context.Context,
 	branchToken []byte,
 	shardID int32,
-	treeID string,
 	branchAncestors []*persistencespb.HistoryBranchRange,
 	minNodeID int64,
 	maxNodeID int64,
@@ -710,7 +669,6 @@ func (m *executionManagerImpl) readRawHistoryBranch(
 	resp, err := m.persistence.ReadHistoryBranch(ctx, &InternalReadHistoryBranchRequest{
 		BranchToken:   branchToken,
 		ShardID:       shardID,
-		TreeID:        treeID,
 		BranchID:      branchID,
 		MinNodeID:     minNodeID,
 		MaxNodeID:     maxNodeID,
@@ -771,7 +729,6 @@ func (m *executionManagerImpl) readRawHistoryBranchReverse(
 	resp, err := m.persistence.ReadHistoryBranch(ctx, &InternalReadHistoryBranchRequest{
 		BranchToken:   branchToken,
 		ShardID:       shardID,
-		TreeID:        treeID,
 		BranchID:      branchID,
 		MinNodeID:     minNodeID,
 		MaxNodeID:     maxNodeID,
@@ -801,7 +758,6 @@ func (m *executionManagerImpl) readRawHistoryBranchAndFilter(
 	if err != nil {
 		return nil, nil, nil, nil, 0, err
 	}
-	treeID := branch.TreeId
 	branchID := branch.BranchId
 	branchAncestors := branch.Ancestors
 
@@ -829,7 +785,6 @@ func (m *executionManagerImpl) readRawHistoryBranchAndFilter(
 		ctx,
 		branchToken,
 		shardID,
-		treeID,
 		branchAncestors,
 		minNodeID,
 		maxNodeID,
@@ -869,7 +824,6 @@ func (m *executionManagerImpl) readRawHistoryBranchAndFilter(
 		token.LastNodeID = lastNode.NodeID
 		token.LastTransactionID = lastNode.TransactionID
 	}
-
 	return dataBlobs, transactionIDs, nodeIDs, token, dataSize, nil
 }
 
@@ -976,35 +930,44 @@ func (m *executionManagerImpl) readHistoryBranch(
 	historyEvents := make([]*historypb.HistoryEvent, 0, request.PageSize)
 	historyEventBatches := make([]*historypb.History, 0, request.PageSize)
 
+	var firstEvent, lastEvent *historypb.HistoryEvent
+	var eventCount int
+
+	dataLossTags := func(cause string) []tag.Tag {
+		return []tag.Tag{
+			tag.Cause(cause),
+			tag.WorkflowBranchToken(request.BranchToken),
+			tag.WorkflowFirstEventID(firstEvent.GetEventId()),
+			tag.FirstEventVersion(firstEvent.GetVersion()),
+			tag.WorkflowNextEventID(lastEvent.GetEventId()),
+			tag.LastEventVersion(lastEvent.GetVersion()),
+			tag.Counter(eventCount),
+			tag.TokenLastEventID(token.LastEventID),
+		}
+	}
+
 	for _, batch := range dataBlobs {
 		events, err := m.serializer.DeserializeEvents(batch)
 		if err != nil {
 			return nil, nil, nil, nil, dataSize, err
 		}
 		if len(events) == 0 {
-			m.logger.Error("Empty events in a batch")
-			return nil, nil, nil, nil, dataSize, serviceerror.NewDataLoss("corrupted history event batch, empty events")
+			m.logger.Error(dataLossMsg, dataLossTags(errEmptyEvents)...)
+			return nil, nil, nil, nil, dataSize, serviceerror.NewDataLoss(errEmptyEvents)
 		}
 
-		firstEvent := events[0]           // first
-		eventCount := len(events)         // length
-		lastEvent := events[eventCount-1] // last
+		firstEvent = events[0]
+		eventCount = len(events)
+		lastEvent = events[eventCount-1]
 
 		if firstEvent.GetVersion() != lastEvent.GetVersion() || firstEvent.GetEventId()+int64(eventCount-1) != lastEvent.GetEventId() {
 			// in a single batch, version should be the same, and ID should be contiguous
-			m.logger.Error("Corrupted event batch",
-				tag.FirstEventVersion(firstEvent.GetVersion()), tag.WorkflowFirstEventID(firstEvent.GetEventId()),
-				tag.LastEventVersion(lastEvent.GetVersion()), tag.WorkflowNextEventID(lastEvent.GetEventId()),
-				tag.Counter(eventCount))
-			return historyEvents, historyEventBatches, transactionIDs, nil, dataSize, serviceerror.NewDataLoss("corrupted history event batch, wrong version and IDs")
+			m.logger.Error(dataLossMsg, dataLossTags(errWrongVersion)...)
+			return historyEvents, historyEventBatches, transactionIDs, nil, dataSize, serviceerror.NewDataLoss(errWrongVersion)
 		}
 		if firstEvent.GetEventId() != token.LastEventID+1 {
-			m.logger.Error("Corrupted non-contiguous event batch",
-				tag.WorkflowFirstEventID(firstEvent.GetEventId()),
-				tag.WorkflowNextEventID(lastEvent.GetEventId()),
-				tag.TokenLastEventID(token.LastEventID),
-				tag.Counter(eventCount))
-			return historyEvents, historyEventBatches, transactionIDs, nil, dataSize, serviceerror.NewDataLoss("corrupted history event batch, eventID is not contiguous")
+			m.logger.Error(dataLossMsg, dataLossTags(errNonContiguousEventID)...)
+			return historyEvents, historyEventBatches, transactionIDs, nil, dataSize, serviceerror.NewDataLoss(errNonContiguousEventID)
 		}
 
 		if byBatch {
@@ -1034,35 +997,44 @@ func (m *executionManagerImpl) readHistoryBranchReverse(
 
 	historyEvents := make([]*historypb.HistoryEvent, 0, request.PageSize)
 
+	var firstEvent, lastEvent *historypb.HistoryEvent
+	var eventCount int
+
+	datalossTags := func(cause string) []tag.Tag {
+		return []tag.Tag{
+			tag.Cause(cause),
+			tag.WorkflowBranchToken(request.BranchToken),
+			tag.WorkflowFirstEventID(firstEvent.GetEventId()),
+			tag.FirstEventVersion(firstEvent.GetVersion()),
+			tag.WorkflowNextEventID(lastEvent.GetEventId()),
+			tag.LastEventVersion(lastEvent.GetVersion()),
+			tag.Counter(eventCount),
+			tag.TokenLastEventID(token.LastEventID),
+		}
+	}
+
 	for _, batch := range dataBlobs {
 		events, err := m.serializer.DeserializeEvents(batch)
 		if err != nil {
 			return nil, nil, nil, dataSize, err
 		}
 		if len(events) == 0 {
-			m.logger.Error("Empty events in a batch")
-			return nil, nil, nil, dataSize, serviceerror.NewDataLoss("corrupted history event batch, empty events")
+			m.logger.Error(dataLossMsg, datalossTags(errEmptyEvents)...)
+			return nil, nil, nil, dataSize, serviceerror.NewDataLoss(errEmptyEvents)
 		}
 
-		firstEvent := events[0]           // first
-		eventCount := len(events)         // length
-		lastEvent := events[eventCount-1] // last
+		firstEvent = events[0]
+		eventCount = len(events)
+		lastEvent = events[eventCount-1]
 
 		if firstEvent.GetVersion() != lastEvent.GetVersion() || firstEvent.GetEventId()+int64(eventCount-1) != lastEvent.GetEventId() {
 			// in a single batch, version should be the same, and ID should be contiguous
-			m.logger.Error("Corrupted event batch",
-				tag.FirstEventVersion(firstEvent.GetVersion()), tag.WorkflowFirstEventID(firstEvent.GetEventId()),
-				tag.LastEventVersion(lastEvent.GetVersion()), tag.WorkflowNextEventID(lastEvent.GetEventId()),
-				tag.Counter(eventCount))
-			return historyEvents, transactionIDs, nil, dataSize, serviceerror.NewDataLoss("corrupted history event batch, wrong version and IDs")
+			m.logger.Error(dataLossMsg, datalossTags(errWrongVersion)...)
+			return historyEvents, transactionIDs, nil, dataSize, serviceerror.NewDataLoss(errWrongVersion)
 		}
 		if (token.LastEventID != common.EmptyEventID) && (lastEvent.GetEventId() != token.LastEventID-1) {
-			m.logger.Error("Corrupted non-contiguous event batch",
-				tag.WorkflowFirstEventID(firstEvent.GetEventId()),
-				tag.WorkflowNextEventID(lastEvent.GetEventId()),
-				tag.TokenLastEventID(token.LastEventID),
-				tag.Counter(eventCount))
-			return historyEvents, transactionIDs, nil, dataSize, serviceerror.NewDataLoss("corrupted history event batch, eventID is not contiguous")
+			m.logger.Error(dataLossMsg, datalossTags(errNonContiguousEventID)...)
+			return historyEvents, transactionIDs, nil, dataSize, serviceerror.NewDataLoss(errNonContiguousEventID)
 		}
 
 		events = m.reverseSlice(events)

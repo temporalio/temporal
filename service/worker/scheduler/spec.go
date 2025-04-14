@@ -32,34 +32,59 @@ import (
 	"time"
 
 	"github.com/dgryski/go-farm"
-	schedpb "go.temporal.io/api/schedule/v1"
-
+	schedulepb "go.temporal.io/api/schedule/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/util"
 )
 
 type (
 	CompiledSpec struct {
-		spec     *schedpb.ScheduleSpec
+		spec     *schedulepb.ScheduleSpec
 		tz       *time.Location
 		calendar []*compiledCalendar
 		excludes []*compiledCalendar
 	}
 
-	getNextTimeResult struct {
+	GetNextTimeResult struct {
 		Nominal time.Time // scheduled time before adding jitter
 		Next    time.Time // scheduled time after adding jitter
 	}
+
+	SpecBuilder struct {
+		// locationCache is a cache for the results of time.LoadLocation. That function accesses
+		// the filesystem and is relatively slow. We assume that it returns a semantically
+		// equivalent value for the same location name. This isn't strictly true, for example if
+		// the time zone database is changed while the process is running. To handle that, we
+		// expire entries after a day. Note that we cache negative results also.
+		locationCache cache.Cache
+	}
+
+	locationAndError struct {
+		loc *time.Location
+		err error
+	}
 )
 
-func NewCompiledSpec(spec *schedpb.ScheduleSpec) (*CompiledSpec, error) {
+func NewSpecBuilder() *SpecBuilder {
+	return &SpecBuilder{
+		locationCache: cache.New(1000,
+			&cache.Options{
+				TTL: 24 * time.Hour,
+			},
+		),
+	}
+}
+
+func (b *SpecBuilder) NewCompiledSpec(spec *schedulepb.ScheduleSpec) (*CompiledSpec, error) {
 	spec, err := canonicalizeSpec(spec)
 	if err != nil {
 		return nil, err
 	}
 
 	// load timezone
-	tz, err := loadTimezone(spec)
+	tz, err := b.loadTimezone(spec)
 	if err != nil {
 		return nil, err
 	}
@@ -86,10 +111,39 @@ func NewCompiledSpec(spec *schedpb.ScheduleSpec) (*CompiledSpec, error) {
 	return cspec, nil
 }
 
-func canonicalizeSpec(spec *schedpb.ScheduleSpec) (*schedpb.ScheduleSpec, error) {
-	// make shallow copy so we can change some fields
-	specCopy := *spec
-	spec = &specCopy
+// CleanSpec sets default values in ranges.
+func CleanSpec(spec *schedulepb.ScheduleSpec) {
+	cleanRanges := func(ranges []*schedulepb.Range) {
+		for _, r := range ranges {
+			if r.End < r.Start {
+				r.End = r.Start
+			}
+			if r.Step == 0 {
+				r.Step = 1
+			}
+		}
+	}
+	cleanCal := func(structured *schedulepb.StructuredCalendarSpec) {
+		cleanRanges(structured.Second)
+		cleanRanges(structured.Minute)
+		cleanRanges(structured.Hour)
+		cleanRanges(structured.DayOfMonth)
+		cleanRanges(structured.Month)
+		cleanRanges(structured.Year)
+		cleanRanges(structured.DayOfWeek)
+	}
+	for _, structured := range spec.StructuredCalendar {
+		cleanCal(structured)
+	}
+	for _, structured := range spec.ExcludeStructuredCalendar {
+		cleanCal(structured)
+	}
+}
+
+//revive:disable-next-line:cognitive-complexity
+func canonicalizeSpec(spec *schedulepb.ScheduleSpec) (*schedulepb.ScheduleSpec, error) {
+	// make copy so we can change some fields
+	spec = common.CloneProto(spec)
 
 	// parse CalendarSpecs to StructuredCalendarSpecs
 	for _, cal := range spec.Calendar {
@@ -160,20 +214,20 @@ func canonicalizeSpec(spec *schedpb.ScheduleSpec) (*schedpb.ScheduleSpec, error)
 	return spec, nil
 }
 
-func validateStructuredCalendar(scs *schedpb.StructuredCalendarSpec) error {
+func validateStructuredCalendar(scs *schedulepb.StructuredCalendarSpec) error {
 	var errs []string
 
-	checkRanges := func(ranges []*schedpb.Range, field string, min, max int32) {
+	checkRanges := func(ranges []*schedulepb.Range, field string, minVal, maxVal int32) {
 		for _, r := range ranges {
 			if r == nil { // shouldn't happen
 				errs = append(errs, "range is nil")
 				continue
 			}
-			if r.Start < min || r.Start > max {
-				errs = append(errs, fmt.Sprintf("%s Start is not in range [%d-%d]", field, min, max))
+			if r.Start < minVal || r.Start > maxVal {
+				errs = append(errs, fmt.Sprintf("%s Start is not in range [%d-%d]", field, minVal, maxVal))
 			}
-			if r.End != 0 && (r.End < r.Start || r.End > max) {
-				errs = append(errs, fmt.Sprintf("%s End is before Start or not in range [%d-%d]", field, min, max))
+			if r.End != 0 && (r.End < r.Start || r.End > maxVal) {
+				errs = append(errs, fmt.Sprintf("%s End is before Start or not in range [%d-%d]", field, minVal, maxVal))
 			}
 			if r.Step < 0 {
 				errs = append(errs, fmt.Sprintf("%s has invalid Step", field))
@@ -199,10 +253,12 @@ func validateStructuredCalendar(scs *schedpb.StructuredCalendarSpec) error {
 	return nil
 }
 
-func validateInterval(i *schedpb.IntervalSpec) error {
+func validateInterval(i *schedulepb.IntervalSpec) error {
 	if i == nil {
 		return errors.New("interval is nil")
 	}
+	// TODO: use timestamp.ValidateAndCapProtoDuration after switching to state machine based implementation.
+	// 	Not adding it to workflow based implementation to avoid potential non-determinism errors.
 	iv, phase := timestamp.DurationValue(i.Interval), timestamp.DurationValue(i.Phase)
 	if iv < time.Second {
 		return errors.New("interval is too small")
@@ -214,51 +270,56 @@ func validateInterval(i *schedpb.IntervalSpec) error {
 	return nil
 }
 
-func loadTimezone(spec *schedpb.ScheduleSpec) (*time.Location, error) {
+func (b *SpecBuilder) loadTimezone(spec *schedulepb.ScheduleSpec) (*time.Location, error) {
 	if spec.TimezoneData != nil {
 		return time.LoadLocationFromTZData(spec.TimezoneName, spec.TimezoneData)
 	}
-	return time.LoadLocation(spec.TimezoneName)
+
+	if cached, ok := b.locationCache.Get(spec.TimezoneName).(*locationAndError); ok {
+		return cached.loc, cached.err
+	}
+	loc, err := time.LoadLocation(spec.TimezoneName)
+	b.locationCache.Put(spec.TimezoneName, &locationAndError{
+		loc: loc,
+		err: err,
+	})
+	return loc, err
 }
 
-func (cs *CompiledSpec) CanonicalForm() *schedpb.ScheduleSpec {
+func (cs *CompiledSpec) CanonicalForm() *schedulepb.ScheduleSpec {
 	return cs.spec
 }
 
 // Returns the earliest time that matches the schedule spec that is after the given time.
 // Returns: Nominal is the time that matches, pre-jitter. Next is the nominal time with
 // jitter applied. If there is no matching time, Nominal and Next will be the zero time.
-func (cs *CompiledSpec) getNextTime(after time.Time) getNextTimeResult {
+func (cs *CompiledSpec) GetNextTime(jitterSeed string, after time.Time) GetNextTimeResult {
 	// If we're starting before the schedule's allowed time range, jump up to right before
 	// it (so that we can still return the first second of the range if it happens to match).
-	if cs.spec.StartTime != nil && after.Before(timestamp.TimeValue(cs.spec.StartTime)) {
-		after = cs.spec.StartTime.Add(-time.Second)
+	// note: AsTime returns unix epoch on nil StartTime
+	after = util.MaxTime(after, cs.spec.StartTime.AsTime().Add(-time.Second))
+
+	pastEndTime := func(t time.Time) bool {
+		return cs.spec.EndTime != nil && t.After(cs.spec.EndTime.AsTime())
 	}
-
 	var nominal time.Time
-	for {
+	for nominal.IsZero() || cs.excluded(nominal) {
 		nominal = cs.rawNextTime(after)
-
-		if nominal.IsZero() || (cs.spec.EndTime != nil && nominal.After(*cs.spec.EndTime)) {
-			return getNextTimeResult{}
-		}
-
-		// check against excludes
-		if !cs.excluded(nominal) {
-			break
-		}
-
 		after = nominal
+
+		if nominal.IsZero() || pastEndTime(nominal) {
+			return GetNextTimeResult{}
+		}
 	}
 
 	maxJitter := timestamp.DurationValue(cs.spec.Jitter)
 	// Ensure that jitter doesn't push this time past the _next_ nominal start time
 	if following := cs.rawNextTime(nominal); !following.IsZero() {
-		maxJitter = util.Min(maxJitter, following.Sub(nominal))
+		maxJitter = min(maxJitter, following.Sub(nominal))
 	}
-	next := cs.addJitter(nominal, maxJitter)
+	next := cs.addJitter(jitterSeed, nominal, maxJitter)
 
-	return getNextTimeResult{Nominal: nominal, Next: next}
+	return GetNextTimeResult{Nominal: nominal, Next: next}
 }
 
 // Returns the next matching time (without jitter), or the zero value if no time matches.
@@ -289,7 +350,7 @@ func (cs *CompiledSpec) rawNextTime(after time.Time) (nominal time.Time) {
 }
 
 // Returns the next matching time for a single interval spec.
-func (cs *CompiledSpec) nextIntervalTime(iv *schedpb.IntervalSpec, ts int64) int64 {
+func (cs *CompiledSpec) nextIntervalTime(iv *schedulepb.IntervalSpec, ts int64) int64 {
 	interval := int64(timestamp.DurationValue(iv.Interval) / time.Second)
 	if interval < 1 {
 		interval = 1
@@ -311,8 +372,8 @@ func (cs *CompiledSpec) excluded(nominal time.Time) bool {
 	return false
 }
 
-// Adds jitter to a nominal time, deterministically (by hashing the given time).
-func (cs *CompiledSpec) addJitter(nominal time.Time, maxJitter time.Duration) time.Time {
+// Adds jitter to a nominal time, deterministically (by hashing the given time and a seed).
+func (cs *CompiledSpec) addJitter(seed string, nominal time.Time, maxJitter time.Duration) time.Time {
 	if maxJitter < 0 {
 		maxJitter = 0
 	}
@@ -321,6 +382,8 @@ func (cs *CompiledSpec) addJitter(nominal time.Time, maxJitter time.Duration) ti
 	if err != nil {
 		return nominal
 	}
+
+	bin = append(bin, []byte(seed)...)
 
 	// we want to fit the result of a multiply in 64 bits, and use 32 bits of hash, which
 	// leaves 32 bits for the range. if we use nanoseconds or microseconds, our range is

@@ -145,18 +145,18 @@ func (e *fixedPoolExecutor) worker() {
 		switch status {
 		case TaskStatusDone:
 			atomic.AddInt64(&e.outstanding, -1)
-			e.metricsHandler.Counter(metrics.ExecutorTasksDoneCount.GetMetricName()).Record(1)
+			metrics.ExecutorTasksDoneCount.With(e.metricsHandler).Record(1)
 		case TaskStatusDefer:
 			if e.runQ.deferredCount() < e.maxDeferred {
 				e.runQ.addAndDefer(task)
-				e.metricsHandler.Counter(metrics.ExecutorTasksDeferredCount.GetMetricName()).Record(1)
+				metrics.ExecutorTasksDeferredCount.With(e.metricsHandler).Record(1)
 			} else {
 				atomic.AddInt64(&e.outstanding, -1)
-				e.metricsHandler.Counter(metrics.ExecutorTasksDroppedCount.GetMetricName()).Record(1)
+				metrics.ExecutorTasksDroppedCount.With(e.metricsHandler).Record(1)
 			}
 		case TaskStatusErr:
 			atomic.AddInt64(&e.outstanding, -1)
-			e.metricsHandler.Counter(metrics.ExecutorTasksErrCount.GetMetricName()).Record(1)
+			metrics.ExecutorTasksErrCount.With(e.metricsHandler).Record(1)
 		default:
 			panic(fmt.Sprintf("unknown task status: %v", status))
 		}

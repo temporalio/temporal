@@ -32,13 +32,13 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
-	"go.temporal.io/server/service/history/shard"
+	historyi "go.temporal.io/server/service/history/interfaces"
 )
 
 func Invoke(
 	ctx context.Context,
 	resetRequest *historyservice.ResetStickyTaskQueueRequest,
-	shard shard.Context,
+	shardContext historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (*historyservice.ResetStickyTaskQueueResponse, error) {
 	namespaceID := namespace.ID(resetRequest.GetNamespaceId())
@@ -50,26 +50,25 @@ func Invoke(
 	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
 		nil,
-		api.BypassMutableStateConsistencyPredicate,
 		definition.NewWorkflowKey(
 			resetRequest.NamespaceId,
 			resetRequest.Execution.WorkflowId,
 			resetRequest.Execution.RunId,
 		),
-		func(workflowContext api.WorkflowContext) (*api.UpdateWorkflowAction, error) {
-			mutableState := workflowContext.GetMutableState()
+		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
+			mutableState := workflowLease.GetMutableState()
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return nil, consts.ErrWorkflowCompleted
 			}
 
-			mutableState.ClearStickyness()
+			mutableState.ClearStickyTaskQueue()
 			return &api.UpdateWorkflowAction{
 				Noop:               true,
 				CreateWorkflowTask: false,
 			}, nil
 		},
 		nil,
-		shard,
+		shardContext,
 		workflowConsistencyChecker,
 	)
 

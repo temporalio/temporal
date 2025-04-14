@@ -30,6 +30,8 @@ import (
 
 	"github.com/jmoiron/sqlx"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/resolver"
 )
 
@@ -43,11 +45,16 @@ const (
 	DbKindVisibility
 )
 
+type VersionedBlob struct {
+	Version      int64
+	Data         []byte
+	DataEncoding string
+}
+
 type (
 	// Plugin defines the interface for any SQL database that needs to implement
 	Plugin interface {
-		CreateDB(dbKind DbKind, cfg *config.SQL, r resolver.ServiceResolver) (DB, error)
-		CreateAdminDB(dbKind DbKind, cfg *config.SQL, r resolver.ServiceResolver) (AdminDB, error)
+		CreateDB(dbKind DbKind, cfg *config.SQL, r resolver.ServiceResolver, l log.Logger, mh metrics.Handler) (GenericDB, error)
 	}
 
 	// TableCRUD defines the API for interacting with the database tables
@@ -57,9 +64,13 @@ type (
 		Visibility
 		QueueMessage
 		QueueMetadata
+		QueueV2Message
+		QueueV2Metadata
 
 		MatchingTask
 		MatchingTaskQueue
+
+		NexusEndpoints
 
 		HistoryNode
 		HistoryTree
@@ -74,6 +85,7 @@ type (
 		HistoryExecutionRequestCancel
 		HistoryExecutionSignal
 		HistoryExecutionSignalRequest
+		HistoryExecutionChasm
 
 		HistoryImmediateTask
 		HistoryScheduledTask
@@ -108,20 +120,22 @@ type (
 	// DB defines the API for regular SQL operations of a Temporal server
 	DB interface {
 		TableCRUD
-
+		GenericDB
 		BeginTx(ctx context.Context) (Tx, error)
-		PluginName() string
-		DbName() string
 		IsDupEntryError(err error) bool
-		Close() error
 	}
 
 	// AdminDB defines the API for admin SQL operations for CLI and testing suites
 	AdminDB interface {
 		AdminCRUD
-		PluginName() string
+		GenericDB
 		ExpectedVersion() string
 		VerifyVersion() error
+	}
+
+	GenericDB interface {
+		DbName() string
+		PluginName() string
 		Close() error
 	}
 
@@ -135,3 +149,14 @@ type (
 		PrepareNamedContext(ctx context.Context, query string) (*sqlx.NamedStmt, error)
 	}
 )
+
+func (k DbKind) String() string {
+	switch k {
+	case DbKindMain:
+		return "main"
+	case DbKindVisibility:
+		return "visibility"
+	default:
+		return "unknown"
+	}
+}

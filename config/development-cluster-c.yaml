@@ -1,0 +1,123 @@
+log:
+  stdout: true
+  level: info
+
+persistence:
+  defaultStore: cass-default
+  visibilityStore: es-visibility
+  numHistoryShards: 32
+  datastores:
+    cass-default:
+      cassandra:
+        hosts: "127.0.0.1"
+        keyspace: "temporal_cluster_c"
+    es-visibility:
+      elasticsearch:
+        version: "v7"
+        logLevel: "error"
+        url:
+          scheme: "http"
+          host: "127.0.0.1:9200"
+        indices:
+          visibility: temporal_visibility_v1_dev_cluster_c
+          # secondary_visibility: temporal_visibility_v2_dev
+        closeIdleConnectionsInterval: 15s
+
+global:
+  membership:
+    maxJoinDuration: 30s
+  pprof:
+    port: 9936
+  metrics:
+    prometheus:
+      framework: "opentelemetry"
+      timerType: "histogram"
+      listenAddress: "127.0.0.1:8002"
+
+services:
+  frontend:
+    rpc:
+      grpcPort: 9233
+      membershipPort: 9933
+      bindOnLocalHost: true
+
+  matching:
+    rpc:
+      grpcPort: 9235
+      membershipPort: 9935
+      bindOnLocalHost: true
+
+  history:
+    rpc:
+      grpcPort: 9234
+      membershipPort: 9934
+      bindOnLocalHost: true
+
+  worker:
+    rpc:
+      grpcPort: 9240
+      membershipPort: 9940
+      bindOnLocalHost: true
+
+clusterMetadata:
+  enableGlobalNamespace: true
+  failoverVersionIncrement: 100
+  masterClusterName: "cluster-a"
+  currentClusterName: "cluster-c"
+  clusterInformation:
+    cluster-a:
+      enabled: true
+      initialFailoverVersion: 1
+      rpcName: "frontend"
+      rpcAddress: "localhost:7233"
+    cluster-c:
+      enabled: true
+      initialFailoverVersion: 3
+      rpcName: "frontend"
+      rpcAddress: "localhost:9233"
+# Use tctl --ad 127.0.0.1:9233 adm cl upsert-remote-cluster --frontend_address "127.0.0.1:7233"
+#    active:
+#      enabled: true
+#      initialFailoverVersion: 1
+#      rpcName: "frontend"
+#      rpcAddress: "localhost:7233"
+# Use tctl --ad 127.0.0.1:9233 adm cl upsert-remote-cluster --frontend_address "127.0.0.1:8233"
+#    standby:
+#      enabled: true
+#      initialFailoverVersion: 2
+#      rpcName: "frontend"
+#      rpcAddress: "localhost:8233"
+
+dcRedirectionPolicy:
+  policy: "all-apis-forwarding"
+
+archival:
+  history:
+    state: "enabled"
+    enableRead: true
+    provider:
+      filestore:
+        fileMode: "0666"
+        dirMode: "0766"
+      gstorage:
+        credentialsPath: "/tmp/gcloud/keyfile.json"
+  visibility:
+    state: "enabled"
+    enableRead: true
+    provider:
+      filestore:
+        fileMode: "0666"
+        dirMode: "0766"
+
+namespaceDefaults:
+  archival:
+    history:
+      state: "disabled"
+      URI: "file:///tmp/temporal_archival/development"
+    visibility:
+      state: "disabled"
+      URI: "file:///tmp/temporal_vis_archival/development"
+
+dynamicConfigClient:
+  filepath: "config/dynamicconfig/development-xdc.yaml"
+  pollInterval: "10s"

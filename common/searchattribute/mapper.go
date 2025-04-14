@@ -124,11 +124,10 @@ func (m *mapperProviderImpl) GetMapper(nsName namespace.Name) (Mapper, error) {
 	if !m.enableMapperFromNamespace {
 		return &noopMapper{}, nil
 	}
-	ns, err := m.namespaceRegistry.GetNamespace(nsName)
+	saMapper, err := m.namespaceRegistry.GetCustomSearchAttributesMapper(nsName)
 	if err != nil {
 		return nil, err
 	}
-	saMapper := ns.CustomSearchAttributesMapper()
 	// if there's an error, it returns an empty object, which is expected here
 	emptyStringNameTypeMap, _ := m.searchAttributesProvider.GetSearchAttributes("", false)
 	return &backCompMapper_v1_20{
@@ -150,7 +149,7 @@ func AliasFields(
 	}
 
 	if len(searchAttributes.GetIndexedFields()) == 0 || mapper == nil {
-		return nil, nil
+		return searchAttributes, nil
 	}
 
 	newIndexedFields := make(map[string]*commonpb.Payload, len(searchAttributes.GetIndexedFields()))
@@ -179,13 +178,12 @@ func AliasFields(
 
 	// If no field name was mapped, return nil to save on clone operation on caller side.
 	if !mapped {
-		return nil, nil
+		return searchAttributes, nil
 	}
 	return &commonpb.SearchAttributes{IndexedFields: newIndexedFields}, nil
 }
 
 // UnaliasFields returns SearchAttributes struct where each search attribute alias is replaced with field name.
-// If no replacement where made, it returns nil which means that original SearchAttributes struct should be used.
 func UnaliasFields(
 	mapperProvider MapperProvider,
 	searchAttributes *commonpb.SearchAttributes,
@@ -197,7 +195,7 @@ func UnaliasFields(
 	}
 
 	if len(searchAttributes.GetIndexedFields()) == 0 || mapper == nil {
-		return nil, nil
+		return searchAttributes, nil
 	}
 
 	newIndexedFields := make(map[string]*commonpb.Payload, len(searchAttributes.GetIndexedFields()))
@@ -218,9 +216,8 @@ func UnaliasFields(
 		newIndexedFields[fieldName] = saPayload
 	}
 
-	// If no alias was mapped, return nil to save on clone operation on caller side.
 	if !mapped {
-		return nil, nil
+		return searchAttributes, nil
 	}
 
 	return &commonpb.SearchAttributes{IndexedFields: newIndexedFields}, nil

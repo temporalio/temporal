@@ -25,11 +25,12 @@
 package worker
 
 import (
+	"cmp"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
+	"maps"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -38,11 +39,9 @@ import (
 	"go.temporal.io/api/serviceerror"
 	sdkclient "go.temporal.io/sdk/client"
 	sdkworker "go.temporal.io/sdk/worker"
-	"go.uber.org/fx"
-	"golang.org/x/exp/maps"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -50,15 +49,22 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives"
-	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/util"
 	workercommon "go.temporal.io/server/service/worker/common"
+	"go.uber.org/fx"
+	expmaps "golang.org/x/exp/maps"
 )
 
 const (
 	perNamespaceWorkerManagerListenerKey = "perNamespaceWorkerManager"
+
+	// Always refresh workers after this time even if there were no membership or namespace
+	// state changes. This is to pick up dynamic config changes in component enabled status,
+	// and heal anything that may have gotten into a bad state.
+	refreshInterval = 10 * time.Minute
 )
 
 type (
@@ -87,6 +93,7 @@ type (
 		components        []workercommon.PerNSWorkerComponent
 		initialRetry      time.Duration
 		thisClusterName   string
+		startLimiter      quotas.RateLimiter
 
 		membershipChangedCh chan *membership.ChangedEvent
 
@@ -97,32 +104,38 @@ type (
 	perNamespaceWorker struct {
 		wm     *perNamespaceWorkerManager
 		logger log.Logger
+		cancel func()
 
-		lock         sync.Mutex // protects below fields
-		ns           *namespace.Namespace
+		lock sync.Mutex // protects below fields
+		refreshArgs
 		retrier      backoff.Retrier
 		retryTimer   *time.Timer
+		reserved     bool // whether startLimiter.Reserve was already called
 		componentSet string
 		client       sdkclient.Client
 		worker       sdkworker.Worker
+		cleanup      []func()
 	}
 
-	sdkWorkerOptions struct {
-		// Copy of relevant fields from sdkworker.Options
-		MaxConcurrentActivityExecutionSize      int
-		WorkerActivitiesPerSecond               float64
-		MaxConcurrentLocalActivityExecutionSize int
-		WorkerLocalActivitiesPerSecond          float64
-		MaxConcurrentActivityTaskPollers        int
-		MaxConcurrentWorkflowTaskExecutionSize  int
-		MaxConcurrentWorkflowTaskPollers        int
-		StickyScheduleToStartTimeout            string // parse into time.Duration
-		StickyScheduleToStartTimeoutDuration    time.Duration
+	// mutable parts of perNamespaceWorker that we want to pass around as a copy to use without
+	// holding the lock.
+	refreshArgs struct {
+		ns    *namespace.Namespace // can change on namespace change notification
+		count int                  // pushed from dynamic config
+		opts  sdkworker.Options    // pushed from dynamic config
 	}
+
+	workerAllocation struct {
+		total, local int
+	}
+
+	errRetryAfter time.Duration
 )
 
 var (
 	errNoWorkerNeeded = errors.New("no worker needed") // sentinel value, not a real error
+	// errInvalidConfiguration indicates that the value provided by dynamic config is not legal
+	errInvalidConfiguration = errors.New("invalid dynamic configuration")
 )
 
 func NewPerNamespaceWorkerManager(params perNamespaceWorkerManagerInitParams) *perNamespaceWorkerManager {
@@ -135,6 +148,7 @@ func NewPerNamespaceWorkerManager(params perNamespaceWorkerManagerInitParams) *p
 		components:          params.Components,
 		initialRetry:        1 * time.Second,
 		thisClusterName:     params.ClusterMetadata.GetCurrentClusterName(),
+		startLimiter:        quotas.NewDefaultOutgoingRateLimiter(quotas.RateFn(params.Config.PerNamespaceWorkerStartRate)),
 		membershipChangedCh: make(chan *membership.ChangedEvent),
 		workers:             make(map[namespace.ID]*perNamespaceWorker),
 	}
@@ -169,6 +183,7 @@ func (wm *perNamespaceWorkerManager) Start(
 		wm.logger.Fatal("Unable to register membership listener", tag.Error(err))
 	}
 	go wm.membershipChangedListener()
+	go wm.periodicRefresh()
 
 	wm.logger.Info("", tag.LifeCycleStarted)
 }
@@ -192,31 +207,41 @@ func (wm *perNamespaceWorkerManager) Stop() {
 	close(wm.membershipChangedCh)
 
 	wm.lock.Lock()
-	workers := maps.Values(wm.workers)
-	maps.Clear(wm.workers)
+	workers := expmaps.Values(wm.workers)
+	maps.DeleteFunc(wm.workers, func(_ namespace.ID, _ *perNamespaceWorker) bool { return true })
 	wm.lock.Unlock()
 
 	for _, worker := range workers {
 		worker.stopWorkerAndResetTimer()
+		worker.cancel()
 	}
 
 	wm.logger.Info("", tag.LifeCycleStopped)
 }
 
-func (wm *perNamespaceWorkerManager) namespaceCallback(ns *namespace.Namespace, deleted bool) {
-	go wm.getWorkerByNamespace(ns).refreshWithNewNamespace(ns, deleted)
+func (wm *perNamespaceWorkerManager) namespaceCallback(ns *namespace.Namespace, nsDeleted bool) {
+	go wm.getWorkerByNamespace(ns).update(ns, nsDeleted, nil, nil)
 }
 
 func (wm *perNamespaceWorkerManager) refreshAll() {
 	wm.lock.Lock()
 	defer wm.lock.Unlock()
 	for _, worker := range wm.workers {
-		go worker.refreshWithExistingNamespace()
+		go worker.update(nil, false, nil, nil)
 	}
 }
 
 func (wm *perNamespaceWorkerManager) membershipChangedListener() {
 	for range wm.membershipChangedCh {
+		wm.refreshAll()
+	}
+}
+
+func (wm *perNamespaceWorkerManager) periodicRefresh() {
+	for range time.NewTicker(refreshInterval).C {
+		if atomic.LoadInt32(&wm.status) != common.DaemonStatusStarted {
+			return
+		}
 		wm.refreshAll()
 	}
 }
@@ -232,9 +257,14 @@ func (wm *perNamespaceWorkerManager) getWorkerByNamespace(ns *namespace.Namespac
 	worker := &perNamespaceWorker{
 		wm:      wm,
 		logger:  log.With(wm.logger, tag.WorkflowNamespace(ns.Name().String())),
-		retrier: backoff.NewRetrier(backoff.NewExponentialRetryPolicy(wm.initialRetry), backoff.SystemClock),
-		ns:      ns,
+		retrier: backoff.NewRetrier(backoff.NewExponentialRetryPolicy(wm.initialRetry), clock.NewRealTimeSource()),
 	}
+	count, c1 := wm.config.PerNamespaceWorkerCount(ns.Name().String(), worker.setWorkerCount)
+	opts, c2 := wm.config.PerNamespaceWorkerOptions(ns.Name().String(), worker.setWorkerOptions)
+	worker.ns = ns
+	worker.count = count
+	worker.opts = opts
+	worker.cancel = func() { c1(); c2() }
 
 	wm.workers[ns.ID()] = worker
 	return worker
@@ -243,55 +273,70 @@ func (wm *perNamespaceWorkerManager) getWorkerByNamespace(ns *namespace.Namespac
 func (wm *perNamespaceWorkerManager) removeWorker(ns *namespace.Namespace) {
 	wm.lock.Lock()
 	defer wm.lock.Unlock()
+	prev := wm.workers[ns.ID()]
 	delete(wm.workers, ns.ID())
-}
-
-func (wm *perNamespaceWorkerManager) getWorkerMultiplicity(ns *namespace.Namespace) (int, int, error) {
-	totalWorkers := wm.config.PerNamespaceWorkerCount(ns.Name().String())
-	// This can result in fewer than the intended number of workers if totalWorkers > 1, because
-	// multiple lookups might land on the same node. To compensate, we increase the number of
-	// pollers in that case, but it would be better to try to spread them across our nodes.
-	// TODO: implement this properly using LookupN in serviceResolver
-	multiplicity := 0
-	for i := 0; i < totalWorkers; i++ {
-		key := fmt.Sprintf("%s/%d", ns.ID().String(), i)
-		target, err := wm.serviceResolver.Lookup(key)
-		if err != nil {
-			return 0, 0, err
-		}
-		if target.Identity() == wm.self.Identity() {
-			multiplicity++
-		}
+	if prev != nil {
+		prev.cancel()
 	}
-	return multiplicity, totalWorkers, nil
 }
 
-func (wm *perNamespaceWorkerManager) getWorkerOptions(ns *namespace.Namespace) sdkWorkerOptions {
-	optionsMap := wm.config.PerNamespaceWorkerOptions(ns.Name().String())
-	var options sdkWorkerOptions
-	b, err := json.Marshal(optionsMap)
+func (w *perNamespaceWorker) getWorkerAllocation(args refreshArgs) (workerAllocation, error) {
+	if args.count < 0 {
+		return workerAllocation{}, errInvalidConfiguration
+	} else if args.count == 0 {
+		return workerAllocation{0, 0}, nil
+	}
+	localCount, err := w.getLocallyDesiredWorkers(args)
 	if err != nil {
-		return options
+		return workerAllocation{}, err
 	}
-	_ = json.Unmarshal(b, &options) // ignore errors, just use the zero value anyway
-	if len(options.StickyScheduleToStartTimeout) > 0 {
-		if options.StickyScheduleToStartTimeoutDuration, err = timestamp.ParseDuration(options.StickyScheduleToStartTimeout); err != nil {
-			wm.logger.Warn("invalid StickyScheduleToStartTimeout", tag.Error(err))
-		}
-	}
-	return options
+	return workerAllocation{total: args.count, local: localCount}, nil
 }
 
-// called on namespace state change callback
-func (w *perNamespaceWorker) refreshWithNewNamespace(ns *namespace.Namespace, deleted bool) {
+func (w *perNamespaceWorker) getLocallyDesiredWorkers(args refreshArgs) (int, error) {
+	key := args.ns.ID().String()
+	availableHosts := w.wm.serviceResolver.LookupN(key, args.count)
+	hostsCount := len(availableHosts)
+	if hostsCount == 0 {
+		return 0, membership.ErrInsufficientHosts
+	}
+	maxWorkersPerHost := args.count/hostsCount + 1
+	desiredDistribution := util.RepeatSlice(availableHosts, maxWorkersPerHost)[:args.count]
+
+	isLocal := func(info membership.HostInfo) bool { return info.Identity() == w.wm.self.Identity() }
+	result := len(util.FilterSlice(desiredDistribution, isLocal))
+	return result, nil
+}
+
+func (w *perNamespaceWorker) setWorkerCount(count int) {
+	w.update(nil, false, &count, nil)
+}
+
+func (w *perNamespaceWorker) setWorkerOptions(opts sdkworker.Options) {
+	w.update(nil, false, nil, &opts)
+}
+
+// called on namespace state change callback, membership change, and dynamic config change
+func (w *perNamespaceWorker) update(ns *namespace.Namespace, nsDeleted bool, newCount *int, newOpts *sdkworker.Options) {
 	w.lock.Lock()
-	w.ns = ns
-	// namespace name can change, but don't update w.logger, otherwise we'd have to hold w.lock
-	// just to log.
+
+	if ns != nil {
+		w.ns = ns
+		// The name inside of *ns, which was used to initialize the logger, can change, but
+		// don't update w.logger here, otherwise we'd have to hold w.lock just to log.
+	}
+	if newCount != nil {
+		w.count = *newCount
+	}
+	if newOpts != nil {
+		w.opts = *newOpts
+	}
+
+	refreshArgs := w.refreshArgs // copy before releasing lock
 	isRetrying := w.retryTimer != nil
 	w.lock.Unlock()
 
-	if deleted {
+	if nsDeleted {
 		w.stopWorkerAndResetTimer()
 		// if namespace is fully deleted from db, we can remove from our map also
 		w.wm.removeWorker(ns)
@@ -299,24 +344,8 @@ func (w *perNamespaceWorker) refreshWithNewNamespace(ns *namespace.Namespace, de
 	}
 
 	if !isRetrying {
-		w.refresh(ns)
+		w.refresh(refreshArgs)
 	}
-}
-
-// called on all namespaces on membership change in worker ring
-func (w *perNamespaceWorker) refreshWithExistingNamespace() {
-	w.lock.Lock()
-	ns := w.ns
-	isRetrying := w.retryTimer != nil
-	w.lock.Unlock()
-
-	if !isRetrying {
-		w.refresh(ns)
-	}
-}
-
-func (w *perNamespaceWorker) refresh(ns *namespace.Namespace) {
-	w.handleError(w.tryRefresh(ns))
 }
 
 // handleError should be called on errors from worker creation or run. it will attempt to
@@ -337,39 +366,53 @@ func (w *perNamespaceWorker) handleError(err error) {
 		w.logger.Error("bug: handleError found existing timer")
 		return
 	}
-	sleep := w.retrier.NextBackOff()
-	if sleep < 0 {
-		w.logger.Error("Failed to start sdk worker, out of retries", tag.Error(err))
-		return
+
+	var sleep time.Duration
+
+	if retryAfter, ok := err.(errRetryAfter); ok {
+		// asked for an explicit delay due to rate limit, use that
+		sleep = time.Duration(retryAfter)
+	} else {
+		sleep = w.retrier.NextBackOff(err)
+		if sleep < 0 {
+			w.logger.Error("Failed to start sdk worker, out of retries", tag.Error(err))
+			return
+		}
+		w.logger.Warn("Failed to start sdk worker", tag.Error(err), tag.NewDurationTag("sleep", sleep))
 	}
-	w.logger.Warn("Failed to start sdk worker", tag.Error(err), tag.NewDurationTag("sleep", sleep))
+
 	w.retryTimer = time.AfterFunc(sleep, func() {
 		w.lock.Lock()
 		w.retryTimer = nil
-		ns := w.ns
+		args := w.refreshArgs // copy before releasing lock
 		w.lock.Unlock()
-		w.refresh(ns)
+		w.refresh(args)
 	})
 }
 
-// Only call from refresh so that errors are handled properly. Returning an error from here
-// means that we should retry creating/starting the worker. Returning noWorkerNeeded means any
-// existing worker should be stopped.
-func (w *perNamespaceWorker) tryRefresh(ns *namespace.Namespace) error {
+// Returning an error from here means that we should retry creating/starting the worker.
+// Returning noWorkerNeeded means any existing worker should be stopped.
+func (w *perNamespaceWorker) refresh(args refreshArgs) (retErr error) {
+	defer func() {
+		w.handleError(retErr)
+	}()
+
+	// note w.lock is not locked until we're about to start/stop a worker
+
 	if !w.wm.Running() ||
-		ns.State() == enumspb.NAMESPACE_STATE_DELETED ||
-		!ns.ActiveInCluster(w.wm.thisClusterName) {
+		args.ns.State() == enumspb.NAMESPACE_STATE_DELETED ||
+		!args.ns.ActiveInCluster(w.wm.thisClusterName) {
 		return errNoWorkerNeeded
 	}
 
 	// figure out which components are enabled at all for this namespace
 	var enabledComponents []workercommon.PerNSWorkerComponent
-	var componentSet string
+	var componentSet strings.Builder
 	for _, cmp := range w.wm.components {
-		options := cmp.DedicatedWorkerOptions(ns)
+		options := cmp.DedicatedWorkerOptions(args.ns)
 		if options.Enabled {
 			enabledComponents = append(enabledComponents, cmp)
-			componentSet += fmt.Sprintf("%p,", cmp)
+			fmt.Fprintf(&componentSet, "%p,", cmp)
 		}
 	}
 
@@ -379,57 +422,68 @@ func (w *perNamespaceWorker) tryRefresh(ns *namespace.Namespace) error {
 	}
 
 	// check if we are responsible for this namespace at all
-	multiplicity, totalWorkers, err := w.wm.getWorkerMultiplicity(ns)
+	workerAllocation, err := w.getWorkerAllocation(args)
 	if err != nil {
 		w.logger.Error("Failed to look up hosts", tag.Error(err))
 		// TODO: add metric also
 		return err
 	}
-	if multiplicity == 0 {
+	if workerAllocation.local == 0 {
 		// not ours, don't need a worker
 		return errNoWorkerNeeded
 	}
 	// ensure this changes if multiplicity changes
-	componentSet += fmt.Sprintf(",%d", multiplicity)
+	fmt.Fprintf(&componentSet, "%d,", workerAllocation.local)
 
 	// get sdk worker options
-	dcOptions := w.wm.getWorkerOptions(ns)
-	componentSet += fmt.Sprintf(",%+v", dcOptions)
+	fmt.Fprintf(&componentSet, "%+v,", w.opts)
 
 	// we do need a worker, but maybe we have one already
 	w.lock.Lock()
 	defer w.lock.Unlock()
 
-	if componentSet == w.componentSet {
+	if args.ns != w.ns {
+		// stale refresh goroutine, do nothing
+		return nil
+	}
+
+	if componentSet.String() == w.componentSet {
 		// no change in set of components enabled, leave existing running
 		return nil
 	}
+
+	// ask rate limiter if we can start now
+	if !w.reserved {
+		w.reserved = true
+		if delay := w.wm.startLimiter.Reserve().Delay(); delay > 0 {
+			return errRetryAfter(delay)
+		}
+	}
+
 	// set of components changed, need to recreate worker. first stop old one
 	w.stopWorkerLocked()
 
 	// create new one. note that even before startWorker returns, the worker may have started
 	// and already called the fatal error handler. we need to set w.client+worker+componentSet
 	// before releasing the lock to keep our state consistent.
-	client, worker, err := w.startWorker(ns, enabledComponents, multiplicity, totalWorkers, dcOptions)
+	client, worker, err := w.startWorker(enabledComponents, workerAllocation)
 	if err != nil {
 		// TODO: add metric also
+		w.stopWorkerLocked() // for calling cleanup
 		return err
 	}
 
 	w.client = client
 	w.worker = worker
-	w.componentSet = componentSet
+	w.componentSet = componentSet.String()
 	return nil
 }
 
 func (w *perNamespaceWorker) startWorker(
-	ns *namespace.Namespace,
 	components []workercommon.PerNSWorkerComponent,
-	multiplicity int,
-	totalWorkers int,
-	dcOptions sdkWorkerOptions,
+	allocation workerAllocation,
 ) (sdkclient.Client, sdkworker.Worker, error) {
-	nsName := ns.Name().String()
+	nsName := w.ns.Name().String()
 	// this should not block because it uses an existing grpc connection
 	client := w.wm.sdkClientFactory.NewClient(sdkclient.Options{
 		Namespace:     nsName,
@@ -438,31 +492,38 @@ func (w *perNamespaceWorker) startWorker(
 
 	var sdkoptions sdkworker.Options
 
-	// copy from dynamic config
-	sdkoptions.MaxConcurrentActivityExecutionSize = dcOptions.MaxConcurrentActivityExecutionSize
-	sdkoptions.WorkerActivitiesPerSecond = dcOptions.WorkerActivitiesPerSecond
-	sdkoptions.MaxConcurrentLocalActivityExecutionSize = dcOptions.MaxConcurrentLocalActivityExecutionSize
-	sdkoptions.WorkerLocalActivitiesPerSecond = dcOptions.WorkerLocalActivitiesPerSecond
-	sdkoptions.MaxConcurrentActivityTaskPollers = util.Max(2, dcOptions.MaxConcurrentActivityTaskPollers)
-	sdkoptions.MaxConcurrentWorkflowTaskExecutionSize = dcOptions.MaxConcurrentWorkflowTaskExecutionSize
-	sdkoptions.MaxConcurrentWorkflowTaskPollers = util.Max(2, dcOptions.MaxConcurrentWorkflowTaskPollers)
-	sdkoptions.StickyScheduleToStartTimeout = dcOptions.StickyScheduleToStartTimeoutDuration
+	// copy from dynamic config. apply explicit defaults for some instead of using the sdk
+	// defaults so that we can multiply below.
+	sdkoptions.MaxConcurrentActivityExecutionSize = cmp.Or(w.opts.MaxConcurrentActivityExecutionSize, 1000)
+	sdkoptions.WorkerActivitiesPerSecond = w.opts.WorkerActivitiesPerSecond
+	sdkoptions.MaxConcurrentLocalActivityExecutionSize = cmp.Or(w.opts.MaxConcurrentLocalActivityExecutionSize, 1000)
+	sdkoptions.WorkerLocalActivitiesPerSecond = w.opts.WorkerLocalActivitiesPerSecond
+	sdkoptions.MaxConcurrentActivityTaskPollers = max(cmp.Or(w.opts.MaxConcurrentActivityTaskPollers, 2), 2)
+	sdkoptions.MaxConcurrentWorkflowTaskExecutionSize = cmp.Or(w.opts.MaxConcurrentWorkflowTaskExecutionSize, 1000)
+	sdkoptions.MaxConcurrentWorkflowTaskPollers = max(cmp.Or(w.opts.MaxConcurrentWorkflowTaskPollers, 2), 2)
+	sdkoptions.StickyScheduleToStartTimeout = w.opts.StickyScheduleToStartTimeout
 
-	sdkoptions.BackgroundActivityContext = headers.SetCallerInfo(context.Background(), headers.NewBackgroundCallerInfo(ns.Name().String()))
-	sdkoptions.Identity = fmt.Sprintf("server-worker@%d@%s@%s", os.Getpid(), w.wm.hostName, nsName)
-	// increase these if we're supposed to run with more multiplicity
-	sdkoptions.MaxConcurrentWorkflowTaskPollers *= multiplicity
-	sdkoptions.MaxConcurrentActivityTaskPollers *= multiplicity
+	sdkoptions.BackgroundActivityContext = headers.SetCallerInfo(context.Background(), headers.NewBackgroundCallerInfo(nsName))
+	sdkoptions.Identity = fmt.Sprintf("temporal-system@%s@%s", w.wm.hostName, nsName)
+	// increase these if we're supposed to run with more allocation
+	sdkoptions.MaxConcurrentWorkflowTaskPollers *= allocation.local
+	sdkoptions.MaxConcurrentActivityTaskPollers *= allocation.local
+	sdkoptions.MaxConcurrentLocalActivityExecutionSize *= allocation.local
+	sdkoptions.MaxConcurrentWorkflowTaskExecutionSize *= allocation.local
+	sdkoptions.MaxConcurrentActivityExecutionSize *= allocation.local
 	sdkoptions.OnFatalError = w.onFatalError
 
 	// this should not block because the client already has server capabilities
 	worker := w.wm.sdkClientFactory.NewWorker(client, primitives.PerNSWorkerTaskQueue, sdkoptions)
 	details := workercommon.RegistrationDetails{
-		TotalWorkers: totalWorkers,
-		Multiplicity: multiplicity,
+		TotalWorkers: allocation.total,
+		Multiplicity: allocation.local,
 	}
 	for _, cmp := range components {
-		cmp.Register(worker, ns, details)
+		cleanup := cmp.Register(worker, w.ns, details)
+		if cleanup != nil {
+			w.cleanup = append(w.cleanup, cleanup)
+		}
 	}
 
 	// this blocks by calling DescribeNamespace a few times (with a 10s timeout)
@@ -504,6 +565,11 @@ func (w *perNamespaceWorker) stopWorkerAndResetTimer() {
 
 	w.stopWorkerLocked()
 	w.retrier.Reset()
+	// Note that we only reset reserved here, not in stopWorkerLocked: if we did it there, we
+	// would take a rate limiter token on each retry after failure. Failure to start the worker
+	// means we probably didn't do any polls yet, which is the main reason for the rate limit,
+	// so this it's okay to use only the backoff timer in that case.
+	w.reserved = false
 	if w.retryTimer != nil {
 		w.retryTimer.Stop()
 		w.retryTimer = nil
@@ -511,6 +577,10 @@ func (w *perNamespaceWorker) stopWorkerAndResetTimer() {
 }
 
 func (w *perNamespaceWorker) stopWorkerLocked() {
+	for _, cleanup := range w.cleanup {
+		cleanup()
+	}
+	w.cleanup = nil
 	if w.worker != nil {
 		w.worker.Stop()
 		w.worker = nil
@@ -520,4 +590,8 @@ func (w *perNamespaceWorker) stopWorkerLocked() {
 		w.client = nil
 	}
 	w.componentSet = ""
+}
+
+func (e errRetryAfter) Error() string {
+	return fmt.Sprintf("<delay %v>", time.Duration(e))
 }

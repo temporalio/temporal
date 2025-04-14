@@ -34,7 +34,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
@@ -45,7 +44,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/events"
-	"go.temporal.io/server/service/history/shard"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow"
 )
 
@@ -61,11 +60,11 @@ type (
 			targetWorkflowIdentifier definition.WorkflowKey,
 			targetBranchToken []byte,
 			requestID string,
-		) (workflow.MutableState, int64, error)
+		) (historyi.MutableState, int64, error)
 	}
 
 	StateRebuilderImpl struct {
-		shard             shard.Context
+		shard             historyi.ShardContext
 		namespaceRegistry namespace.Registry
 		eventsCache       events.Cache
 		clusterMetadata   cluster.Metadata
@@ -85,23 +84,17 @@ type (
 var _ StateRebuilder = (*StateRebuilderImpl)(nil)
 
 func NewStateRebuilder(
-	shard shard.Context,
+	shard historyi.ShardContext,
 	logger log.Logger,
 ) *StateRebuilderImpl {
 
 	return &StateRebuilderImpl{
-		shard:             shard,
-		namespaceRegistry: shard.GetNamespaceRegistry(),
-		eventsCache:       shard.GetEventsCache(),
-		clusterMetadata:   shard.GetClusterMetadata(),
-		executionMgr:      shard.GetExecutionManager(),
-		taskRefresher: workflow.NewTaskRefresher(
-			shard,
-			shard.GetConfig(),
-			shard.GetNamespaceRegistry(),
-			shard.GetEventsCache(),
-			logger,
-		),
+		shard:              shard,
+		namespaceRegistry:  shard.GetNamespaceRegistry(),
+		eventsCache:        shard.GetEventsCache(),
+		clusterMetadata:    shard.GetClusterMetadata(),
+		executionMgr:       shard.GetExecutionManager(),
+		taskRefresher:      workflow.NewTaskRefresher(shard),
 		rebuiltHistorySize: 0,
 		logger:             logger,
 	}
@@ -117,7 +110,7 @@ func (r *StateRebuilderImpl) Rebuild(
 	targetWorkflowIdentifier definition.WorkflowKey,
 	targetBranchToken []byte,
 	requestID string,
-) (workflow.MutableState, int64, error) {
+) (historyi.MutableState, int64, error) {
 	iter := collection.NewPagingIterator(r.getPaginationFn(
 		ctx,
 		common.FirstEventID,
@@ -132,6 +125,7 @@ func (r *StateRebuilderImpl) Rebuild(
 
 	rebuiltMutableState, stateBuilder := r.initializeBuilders(
 		namespaceEntry,
+		targetWorkflowIdentifier,
 		now,
 	)
 
@@ -149,6 +143,7 @@ func (r *StateRebuilderImpl) Rebuild(
 		}
 
 		if err := r.applyEvents(
+			ctx,
 			targetWorkflowIdentifier,
 			stateBuilder,
 			history.History.Events,
@@ -180,13 +175,13 @@ func (r *StateRebuilderImpl) Rebuild(
 			return nil, 0, serviceerror.NewInvalidArgument(fmt.Sprintf(
 				"StateRebuilder unable to Rebuild mutable state to event ID: %v, version: %v, this event must be at the boundary",
 				baseLastEventID,
-				baseLastEventVersion,
+				*baseLastEventVersion,
 			))
 		}
 	}
 
 	// close rebuilt mutable state transaction clearing all generated tasks, etc.
-	_, _, err = rebuiltMutableState.CloseTransactionAsSnapshot(now, workflow.TransactionPolicyPassive)
+	_, _, err = rebuiltMutableState.CloseTransactionAsSnapshot(historyi.TransactionPolicyPassive)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -194,7 +189,10 @@ func (r *StateRebuilderImpl) Rebuild(
 	rebuiltMutableState.GetExecutionInfo().LastFirstEventTxnId = lastTxnId
 
 	// refresh tasks to be generated
-	if err := r.taskRefresher.RefreshTasks(ctx, rebuiltMutableState); err != nil {
+	// TODO: ideally the executionTimeoutTimerTaskStatus field should be carried over
+	// from the base run. However, RefreshTasks always resets that field and
+	// force regenerates the execution timeout timer task.
+	if err := r.taskRefresher.Refresh(ctx, rebuiltMutableState); err != nil {
 		return nil, 0, err
 	}
 
@@ -203,13 +201,16 @@ func (r *StateRebuilderImpl) Rebuild(
 
 func (r *StateRebuilderImpl) initializeBuilders(
 	namespaceEntry *namespace.Namespace,
+	workflowIdentifier definition.WorkflowKey,
 	now time.Time,
-) (workflow.MutableState, workflow.MutableStateRebuilder) {
+) (historyi.MutableState, workflow.MutableStateRebuilder) {
 	resetMutableState := workflow.NewMutableState(
 		r.shard,
 		r.shard.GetEventsCache(),
 		r.logger,
 		namespaceEntry,
+		workflowIdentifier.GetWorkflowID(),
+		workflowIdentifier.GetRunID(),
 		now,
 	)
 	stateBuilder := workflow.NewMutableStateRebuilder(
@@ -221,6 +222,7 @@ func (r *StateRebuilderImpl) initializeBuilders(
 }
 
 func (r *StateRebuilderImpl) applyEvents(
+	ctx context.Context,
 	workflowKey definition.WorkflowKey,
 	stateBuilder workflow.MutableStateRebuilder,
 	events []*historypb.HistoryEvent,
@@ -228,15 +230,16 @@ func (r *StateRebuilderImpl) applyEvents(
 ) error {
 
 	_, err := stateBuilder.ApplyEvents(
-		context.Background(),
+		ctx,
 		namespace.ID(workflowKey.NamespaceID),
 		requestID,
-		commonpb.WorkflowExecution{
+		&commonpb.WorkflowExecution{
 			WorkflowId: workflowKey.WorkflowID,
 			RunId:      workflowKey.RunID,
 		},
-		events,
+		[][]*historypb.HistoryEvent{events},
 		nil, // no new run history when rebuilding mutable state
+		"",
 	)
 	if err != nil {
 		r.logger.Error("StateRebuilder unable to Rebuild mutable state.", tag.Error(err))

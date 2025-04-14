@@ -25,10 +25,9 @@
 package serviceerror
 
 import (
-	"github.com/gogo/status"
+	errordetailsspb "go.temporal.io/server/api/errordetails/v1"
 	"google.golang.org/grpc/codes"
-
-	"go.temporal.io/server/api/errordetails/v1"
+	"google.golang.org/grpc/status"
 )
 
 type (
@@ -58,7 +57,7 @@ func (e *StickyWorkerUnavailable) Status() *status.Status {
 
 	st := status.New(codes.Unavailable, e.Message)
 	st, _ = st.WithDetails(
-		&errordetails.StickyWorkerUnavailableFailure{},
+		&errordetailsspb.StickyWorkerUnavailableFailure{},
 	)
 	return st
 }

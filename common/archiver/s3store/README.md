@@ -11,12 +11,14 @@ archival:
     provider:
       s3store:
         region: "us-east-1"
+        logLevel: 0
   visibility:
     state: "enabled"
     enableRead: true
     provider:
       s3store:
         region: "us-east-1"
+        logLevel: 0
 
 namespaceDefaults:
   archival:
@@ -69,6 +71,25 @@ s3://<bucket-name>/<namespace-id>/
                 startTimeout/2020-01-21T16:16:11Z/<run-id>
                 closeTimeout/2020-01-21T16:16:11Z/<run-id>
 ```
+
+Enable AWS SDK Logging with config parameter `logLevel`. For example enable debug logging with `logLevel: 4096`. Possbile Values:
+* LogOff = 0 = 0x0
+* LogDebug = 4096 = 0x1000
+* LogDebugWithSigning = 4097 = 0x1001
+* LogDebugWithHTTPBody = 4098 = 0x1002
+* LogDebugWithRequestRetries = 4100 = 0x1004
+* LogDebugWithRequestErrors = 4104 = 0x1008
+* LogDebugWithEventStreamBody = 4112 = 0x1010
+* LogDebugWithDeprecated = 4128 = 0x1020
+
+
+## Permissions
+
+Your s3 user must have at least the following permissions:
+
+* s3:ListBucket
+* s3:GetObject
+* s3:PutObject
 
 ## Using localstack for local development
 1. Install awscli from [here](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html)

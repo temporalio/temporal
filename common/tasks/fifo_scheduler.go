@@ -47,26 +47,27 @@ type (
 	// FIFOSchedulerOptions is the configs for FIFOScheduler
 	FIFOSchedulerOptions struct {
 		QueueSize   int
-		WorkerCount dynamicconfig.IntPropertyFn
+		WorkerCount dynamicconfig.TypedSubscribable[int]
 	}
 
 	FIFOScheduler[T Task] struct {
 		status  int32
 		options *FIFOSchedulerOptions
 
-		monitor Monitor[T]
-		logger  log.Logger
+		logger log.Logger
 
-		tasksChan        chan T
-		shutdownChan     chan struct{}
-		shutdownWG       sync.WaitGroup
+		tasksChan  chan T
+		shutdownWG sync.WaitGroup
+
+		workerLock       sync.Mutex
 		workerShutdownCh []chan struct{}
+
+		workerCountSubscriptionCancelFn func()
 	}
 )
 
 // NewFIFOScheduler creates a new FIFOScheduler
 func NewFIFOScheduler[T Task](
-	scheduleMoniter Monitor[T],
 	options *FIFOSchedulerOptions,
 	logger log.Logger,
 ) *FIFOScheduler[T] {
@@ -74,11 +75,9 @@ func NewFIFOScheduler[T Task](
 		status:  common.DaemonStatusInitialized,
 		options: options,
 
-		monitor: scheduleMoniter,
-		logger:  logger,
+		logger: logger,
 
-		tasksChan:    make(chan T, options.QueueSize),
-		shutdownChan: make(chan struct{}),
+		tasksChan: make(chan T, options.QueueSize),
 	}
 }
 
@@ -91,11 +90,9 @@ func (f *FIFOScheduler[T]) Start() {
 		return
 	}
 
-	f.monitor.Start()
-	f.startWorkers(f.options.WorkerCount())
-
-	f.shutdownWG.Add(1)
-	go f.workerMonitor()
+	initialWorkerCount, workerCountSubscriptionCancelFn := f.options.WorkerCount(f.updateWorkerCount)
+	f.workerCountSubscriptionCancelFn = workerCountSubscriptionCancelFn
+	f.updateWorkerCount(initialWorkerCount)
 
 	f.logger.Info("fifo scheduler started")
 }
@@ -109,11 +106,9 @@ func (f *FIFOScheduler[T]) Stop() {
 		return
 	}
 
-	close(f.shutdownChan)
-	// must be called after the close of the shutdownChan
+	f.workerCountSubscriptionCancelFn()
+	f.updateWorkerCount(0)
 	f.drainTasks()
-
-	f.monitor.Stop()
 
 	go func() {
 		if success := common.AwaitWaitGroup(&f.shutdownWG, time.Minute); !success {
@@ -142,35 +137,34 @@ func (f *FIFOScheduler[T]) TrySubmit(task T) bool {
 	}
 }
 
-func (f *FIFOScheduler[T]) workerMonitor() {
-	defer f.shutdownWG.Done()
+func (f *FIFOScheduler[T]) updateWorkerCount(targetWorkerNum int) {
+	f.workerLock.Lock()
+	defer f.workerLock.Unlock()
 
-	timer := time.NewTimer(backoff.Jitter(defaultMonitorTickerDuration, defaultMonitorTickerJitter))
-	defer timer.Stop()
-
-	for {
-		select {
-		case <-f.shutdownChan:
-			f.stopWorkers(len(f.workerShutdownCh))
-			return
-		case <-timer.C:
-			timer.Reset(backoff.Jitter(defaultMonitorTickerDuration, defaultMonitorTickerJitter))
-
-			targetWorkerNum := f.options.WorkerCount()
-			currentWorkerNum := len(f.workerShutdownCh)
-
-			if targetWorkerNum == currentWorkerNum {
-				continue
-			}
-
-			if targetWorkerNum > currentWorkerNum {
-				f.startWorkers(targetWorkerNum - currentWorkerNum)
-			} else {
-				f.stopWorkers(currentWorkerNum - targetWorkerNum)
-			}
-			f.logger.Info("Update worker pool size", tag.Key("worker-pool-size"), tag.Value(targetWorkerNum))
-		}
+	if f.isStopped() {
+		// Always set the value to 0 when scheduler is stopped,
+		// in case there's a race condition between subscription callback invocation
+		// and the invocation made from Stop()
+		targetWorkerNum = 0
 	}
+
+	if targetWorkerNum < 0 {
+		f.logger.Error("Target worker pool size is negative. Please fix the dynamic config.", tag.Key("worker-pool-size"), tag.Value(targetWorkerNum))
+		return
+	}
+
+	currentWorkerNum := len(f.workerShutdownCh)
+	if targetWorkerNum == currentWorkerNum {
+		return
+	}
+
+	if targetWorkerNum > currentWorkerNum {
+		f.startWorkers(targetWorkerNum - currentWorkerNum)
+	} else {
+		f.stopWorkers(currentWorkerNum - targetWorkerNum)
+	}
+
+	f.logger.Info("Update worker pool size", tag.Key("worker-pool-size"), tag.Value(targetWorkerNum))
 }
 
 func (f *FIFOScheduler[T]) startWorkers(
@@ -225,8 +219,6 @@ func (f *FIFOScheduler[T]) processTask(
 func (f *FIFOScheduler[T]) executeTask(
 	task T,
 ) {
-	f.monitor.RecordStart(task)
-
 	operation := func() error {
 		if err := task.Execute(); err != nil {
 			return task.HandleErr(err)
@@ -240,7 +232,7 @@ func (f *FIFOScheduler[T]) executeTask(
 
 	if err := backoff.ThrottleRetry(operation, task.RetryPolicy(), isRetryable); err != nil {
 		if f.isStopped() {
-			task.Reschedule()
+			task.Abort()
 			return
 		}
 
@@ -256,7 +248,7 @@ LoopDrain:
 	for {
 		select {
 		case task := <-f.tasksChan:
-			task.Reschedule()
+			task.Abort()
 		default:
 			break LoopDrain
 		}

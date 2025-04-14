@@ -30,7 +30,6 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -66,10 +65,11 @@ type (
 		logger           log.Logger
 		scavenger        *Scavenger
 
-		ctx                         context.Context
-		rateLimiter                 quotas.RateLimiter
-		executionDataDurationBuffer dynamicconfig.DurationPropertyFn
-		paginationToken             []byte
+		ctx                           context.Context
+		rateLimiter                   quotas.RateLimiter
+		executionDataDurationBuffer   dynamicconfig.DurationPropertyFn
+		enableHistoryEventIDValidator dynamicconfig.BoolPropertyFn
+		paginationToken               []byte
 	}
 )
 
@@ -86,6 +86,7 @@ func newTask(
 	scavenger *Scavenger,
 	rateLimiter quotas.RateLimiter,
 	executionDataDurationBuffer dynamicconfig.DurationPropertyFn,
+	enableHistoryEventIDValidator dynamicconfig.BoolPropertyFn,
 ) executor.Task {
 	return &task{
 		shardID:          shardID,
@@ -98,9 +99,10 @@ func newTask(
 		logger:         logger,
 		scavenger:      scavenger,
 
-		ctx:                         ctx,
-		rateLimiter:                 rateLimiter,
-		executionDataDurationBuffer: executionDataDurationBuffer,
+		ctx:                           ctx,
+		rateLimiter:                   rateLimiter,
+		executionDataDurationBuffer:   executionDataDurationBuffer,
+		enableHistoryEventIDValidator: enableHistoryEventIDValidator,
 	}
 }
 
@@ -117,7 +119,7 @@ func (t *task) Run() executor.TaskStatus {
 		_ = t.rateLimiter.Wait(t.ctx)
 		record, err := iter.Next()
 		if err != nil {
-			t.metricsHandler.Counter(metrics.ScavengerValidationSkipsCount.GetMetricName()).Record(1)
+			metrics.ScavengerValidationSkipsCount.With(t.metricsHandler).Record(1)
 			// continue validation process and retry after all workflow records has been iterated.
 			t.logger.Error("unable to paginate concrete execution", tag.ShardID(t.shardID), tag.Error(err))
 			retryTask = true
@@ -135,7 +137,7 @@ func (t *task) Run() executor.TaskStatus {
 		if err != nil {
 			// continue validation process and retry after all workflow records has been iterated.
 			executionInfo := mutableState.GetExecutionInfo()
-			t.metricsHandler.Counter(metrics.ScavengerValidationSkipsCount.GetMetricName()).Record(1)
+			metrics.ScavengerValidationSkipsCount.With(t.metricsHandler).Record(1)
 			t.logger.Error("unable to process failure result",
 				tag.ShardID(t.shardID),
 				tag.Error(err),
@@ -186,19 +188,21 @@ func (t *task) validate(
 		return results
 	}
 
-	if validationResults, err := NewHistoryEventIDValidator(
-		t.shardID,
-		t.executionManager,
-	).Validate(t.ctx, mutableState); err != nil {
-		t.logger.Error("unable to validate history event ID being contiguous",
-			tag.ShardID(t.shardID),
-			tag.WorkflowNamespaceID(mutableState.GetExecutionInfo().GetNamespaceId()),
-			tag.WorkflowID(mutableState.GetExecutionInfo().GetWorkflowId()),
-			tag.WorkflowRunID(mutableState.GetExecutionState().GetRunId()),
-			tag.Error(err),
-		)
-	} else {
-		results = append(results, validationResults...)
+	if t.enableHistoryEventIDValidator() {
+		if validationResults, err := NewHistoryEventIDValidator(
+			t.shardID,
+			t.executionManager,
+		).Validate(t.ctx, mutableState); err != nil {
+			t.logger.Error("unable to validate history event ID being contiguous",
+				tag.ShardID(t.shardID),
+				tag.WorkflowNamespaceID(mutableState.GetExecutionInfo().GetNamespaceId()),
+				tag.WorkflowID(mutableState.GetExecutionInfo().GetWorkflowId()),
+				tag.WorkflowRunID(mutableState.GetExecutionState().GetRunId()),
+				tag.Error(err),
+			)
+		} else {
+			results = append(results, validationResults...)
+		}
 	}
 
 	return results
@@ -273,14 +277,14 @@ func printValidationResult(
 	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) {
-	metricsHandler.Counter(metrics.ScavengerValidationRequestsCount.GetMetricName()).Record(1)
+	metrics.ScavengerValidationRequestsCount.With(metricsHandler).Record(1)
 	if len(results) == 0 {
 		return
 	}
 
-	metricsHandler.Counter(metrics.ScavengerValidationFailuresCount.GetMetricName()).Record(1)
+	metrics.ScavengerValidationFailuresCount.With(metricsHandler).Record(1)
 	for _, result := range results {
-		metricsHandler.Counter(metrics.ScavengerValidationFailuresCount.GetMetricName()).Record(1, metrics.FailureTag(result.failureType))
+		metrics.ScavengerValidationFailuresCount.With(metricsHandler).Record(1, metrics.FailureTag(result.failureType))
 		logger.Info(
 			"validation failed for execution.",
 			tag.WorkflowNamespaceID(mutableState.GetExecutionInfo().GetNamespaceId()),

@@ -32,7 +32,6 @@ import (
 	"sync"
 
 	"github.com/jmoiron/sqlx"
-
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	sqliteschema "go.temporal.io/server/schema/sqlite"
 )

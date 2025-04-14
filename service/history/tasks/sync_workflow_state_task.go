@@ -38,7 +38,9 @@ type (
 		definition.WorkflowKey
 		VisibilityTimestamp time.Time
 		TaskID              int64
-		Version             int64
+		// TODO: validate this version in source task converter
+		Version  int64
+		Priority enumsspb.TaskPriority
 	}
 )
 

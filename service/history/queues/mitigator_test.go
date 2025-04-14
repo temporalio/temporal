@@ -29,11 +29,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/service/history/tasks"
 )
 
 type (
@@ -41,8 +40,16 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		monitor   Monitor
+		mockTimeSource *clock.EventTimeSource
+
+		monitor   *testMonitor
 		mitigator *mitigatorImpl
+	}
+
+	testMonitor struct {
+		Monitor
+
+		resolvedAlertType AlertType
 	}
 )
 
@@ -54,16 +61,83 @@ func TestMitigatorSuite(t *testing.T) {
 func (s *mitigatorSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
-	s.monitor = newMonitor(tasks.CategoryTypeImmediate, nil)
+	s.mockTimeSource = clock.NewEventTimeSource()
+	s.monitor = &testMonitor{}
+
+	// we use a different actionRunner implementation,
+	// which doesn't require readerGroup
 	s.mitigator = newMitigator(
+		nil,
 		s.monitor,
 		log.NewTestLogger(),
 		metrics.NoopMetricsHandler,
 		dynamicconfig.GetIntPropertyFn(3),
+		GrouperNamespaceID{},
 	)
 }
 
-func (s *mitigatorSuite) TestQueuePendingTaskAlert() {
+func (s *mitigatorSuite) TestMitigate_ActionMatchAlert() {
+	testCases := []struct {
+		alert          Alert
+		expectedAction Action
+	}{
+		{
+			alert: Alert{
+				AlertType: AlertTypeQueuePendingTaskCount,
+				AlertAttributesQueuePendingTaskCount: &AlertAttributesQueuePendingTaskCount{
+					CurrentPendingTaskCount:   1000,
+					CiriticalPendingTaskCount: 500,
+				},
+			},
+			expectedAction: &actionQueuePendingTask{},
+		},
+		{
+			alert: Alert{
+				AlertType: AlertTypeReaderStuck,
+				AlertAttributesReaderStuck: &AlertAttributesReaderStuck{
+					ReaderID:         1,
+					CurrentWatermark: NewRandomKey(),
+				},
+			},
+			expectedAction: &actionReaderStuck{},
+		},
+		{
+			alert: Alert{
+				AlertType: AlertTypeSliceCount,
+				AlertAttributesSliceCount: &AlertAttributesSlicesCount{
+					CurrentSliceCount:  1000,
+					CriticalSliceCount: 500,
+				},
+			},
+			expectedAction: &actionSliceCount{},
+		},
+	}
+
+	var actualAction Action
+	s.mitigator.actionRunner = func(
+		action Action,
+		_ *ReaderGroup,
+		_ metrics.Handler,
+		_ log.Logger,
+	) {
+		actualAction = action
+	}
+
+	for _, tc := range testCases {
+		s.mitigator.Mitigate(tc.alert)
+		s.IsType(tc.expectedAction, actualAction)
+	}
+}
+
+func (s *mitigatorSuite) TestMitigate_ResolveAlert() {
+	s.mitigator.actionRunner = func(
+		_ Action,
+		_ *ReaderGroup,
+		_ metrics.Handler,
+		_ log.Logger,
+	) {
+	}
+
 	alert := Alert{
 		AlertType: AlertTypeQueuePendingTaskCount,
 		AlertAttributesQueuePendingTaskCount: &AlertAttributesQueuePendingTaskCount{
@@ -71,48 +145,11 @@ func (s *mitigatorSuite) TestQueuePendingTaskAlert() {
 			CiriticalPendingTaskCount: 500,
 		},
 	}
+	s.mitigator.Mitigate(alert)
 
-	action := s.mitigator.Mitigate(alert)
-	s.IsType(&actionQueuePendingTask{}, action)
+	s.Equal(alert.AlertType, s.monitor.resolvedAlertType)
 }
 
-func (s *mitigatorSuite) TestReaderWatermarkAlert() {
-	alert := Alert{
-		AlertType: AlertTypeReaderStuck,
-		AlertAttributesReaderStuck: &AlertAttributesReaderStuck{
-			ReaderID:         1,
-			CurrentWatermark: NewRandomKey(),
-		},
-	}
-
-	action := s.mitigator.Mitigate(alert)
-	s.IsType(&actionReaderStuck{}, action)
-}
-
-func (s *mitigatorSuite) TestSliceCountAlert() {
-	alert := Alert{
-		AlertType: AlertTypeSliceCount,
-		AlertAttributesSliceCount: &AlertAttributesSlicesCount{
-			CurrentSliceCount:  1000,
-			CriticalSliceCount: 500,
-		},
-	}
-
-	action := s.mitigator.Mitigate(alert)
-	s.IsType(&actionSliceCount{}, action)
-}
-
-func (s *mitigatorSuite) TestActionComplectionFn() {
-	// manually set pending alerts in monitor
-	monitor := s.monitor.(*monitorImpl)
-	monitor.pendingAlerts = map[AlertType]struct{}{
-		AlertTypeQueuePendingTaskCount: {},
-	}
-
-	s.mitigator.newActionCompletionFn(
-		AlertTypeQueuePendingTaskCount,
-		&AlertAttributesQueuePendingTaskCount{},
-	)()
-
-	s.Empty(monitor.pendingAlerts)
+func (m *testMonitor) ResolveAlert(alertType AlertType) {
+	m.resolvedAlertType = alertType
 }

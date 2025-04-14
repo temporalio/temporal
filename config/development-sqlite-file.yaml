@@ -62,8 +62,8 @@ global:
     port: 7936
   metrics:
     prometheus:
-#      # specify framework to use new approach for initializing metrics and/or use opentelemetry
-#      framework: "opentelemetry"
+      #      # specify framework to use new approach for initializing metrics and/or use opentelemetry
+      #      framework: "opentelemetry"
       framework: "tally"
       timerType: "histogram"
       listenAddress: "127.0.0.1:8000"
@@ -74,6 +74,7 @@ services:
       grpcPort: 7233
       membershipPort: 6933
       bindOnLocalHost: true
+      httpPort: 7243
 
   matching:
     rpc:
@@ -104,10 +105,10 @@ clusterMetadata:
       initialFailoverVersion: 1
       rpcName: "frontend"
       rpcAddress: "localhost:7233"
+      httpAddres: "localhost:7243"
 
 dcRedirectionPolicy:
   policy: "noop"
-  toDC: ""
 
 archival:
   history:

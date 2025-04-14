@@ -38,25 +38,13 @@ type (
 		definition.WorkflowKey
 		VisibilityTimestamp            time.Time
 		TaskID                         int64
-		Version                        int64
 		CloseExecutionVisibilityTaskID int64
-		// These two fields are needed for cassandra standard visibility.
-		// TODO (alex): Remove them when cassandra standard visibility is removed.
-		StartTime *time.Time
-		CloseTime *time.Time
+		CloseTime                      time.Time
 	}
 )
 
 func (t *DeleteExecutionVisibilityTask) GetKey() Key {
 	return NewImmediateKey(t.TaskID)
-}
-
-func (t *DeleteExecutionVisibilityTask) GetVersion() int64 {
-	return t.Version
-}
-
-func (t *DeleteExecutionVisibilityTask) SetVersion(version int64) {
-	t.Version = version
 }
 
 func (t *DeleteExecutionVisibilityTask) GetTaskID() int64 {

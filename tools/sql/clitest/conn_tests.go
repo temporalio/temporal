@@ -28,7 +28,6 @@ import (
 	"net"
 
 	"github.com/stretchr/testify/require"
-
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -117,5 +116,5 @@ func newTestConn(
 		Password:     testPassword,
 		PluginName:   pluginName,
 		DatabaseName: database,
-	})
+	}, log.NewTestLogger())
 }

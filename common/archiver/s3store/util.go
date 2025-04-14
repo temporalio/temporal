@@ -37,17 +37,16 @@ import (
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
-	"github.com/gogo/protobuf/proto"
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
-	"go.uber.org/multierr"
-
 	archiverspb "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/searchattribute"
+	"go.uber.org/multierr"
+	"google.golang.org/protobuf/proto"
 )
 
 // encoding & decoding util
@@ -166,15 +165,40 @@ func constructTimeBasedSearchKey(path, namespaceID, primaryIndexKey, primaryInde
 		timeFormat = "2006-01-02T" + timeFormat
 	}
 
-	return fmt.Sprintf("%s/%s", constructVisibilitySearchPrefix(path, namespaceID, primaryIndexKey, primaryIndexValue, secondaryIndexKey), t.Format(timeFormat))
+	return fmt.Sprintf(
+		"%s/%s",
+		constructIndexedVisibilitySearchPrefix(path, namespaceID, primaryIndexKey, primaryIndexValue, secondaryIndexKey),
+		t.Format(timeFormat),
+	)
 }
 
 func constructTimestampIndex(path, namespaceID, primaryIndexKey, primaryIndexValue, secondaryIndexKey string, secondaryIndexValue time.Time, runID string) string {
-	return fmt.Sprintf("%s/%s/%s", constructVisibilitySearchPrefix(path, namespaceID, primaryIndexKey, primaryIndexValue, secondaryIndexKey), secondaryIndexValue.Format(time.RFC3339), runID)
+	return fmt.Sprintf(
+		"%s/%s/%s",
+		constructIndexedVisibilitySearchPrefix(path, namespaceID, primaryIndexKey, primaryIndexValue, secondaryIndexKey),
+		secondaryIndexValue.Format(time.RFC3339),
+		runID,
+	)
 }
 
-func constructVisibilitySearchPrefix(path, namespaceID, primaryIndexKey, primaryIndexValue, secondaryIndexType string) string {
-	return strings.TrimLeft(strings.Join([]string{path, namespaceID, "visibility", primaryIndexKey, primaryIndexValue, secondaryIndexType}, "/"), "/")
+func constructIndexedVisibilitySearchPrefix(
+	path string,
+	namespaceID string,
+	primaryIndexKey string,
+	primaryIndexValue string,
+	secondaryIndexType string,
+) string {
+	return strings.TrimLeft(
+		strings.Join(
+			[]string{path, namespaceID, "visibility", primaryIndexKey, primaryIndexValue, secondaryIndexType},
+			"/",
+		),
+		"/",
+	)
+}
+
+func constructVisibilitySearchPrefix(path, namespaceID string) string {
+	return strings.TrimLeft(strings.Join([]string{path, namespaceID, "visibility"}, "/"), "/")
 }
 
 func ensureContextTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
@@ -266,12 +290,13 @@ func convertToExecutionInfo(record *archiverspb.VisibilityRecord, saTypeMap sear
 		Type: &commonpb.WorkflowType{
 			Name: record.WorkflowTypeName,
 		},
-		StartTime:        record.StartTime,
-		ExecutionTime:    record.ExecutionTime,
-		CloseTime:        record.CloseTime,
-		Status:           record.Status,
-		HistoryLength:    record.HistoryLength,
-		Memo:             record.Memo,
-		SearchAttributes: searchAttributes,
+		StartTime:         record.StartTime,
+		ExecutionTime:     record.ExecutionTime,
+		CloseTime:         record.CloseTime,
+		ExecutionDuration: record.ExecutionDuration,
+		Status:            record.Status,
+		HistoryLength:     record.HistoryLength,
+		Memo:              record.Memo,
+		SearchAttributes:  searchAttributes,
 	}, nil
 }

@@ -56,17 +56,17 @@ const (
 	readLockExecutionQuery  = lockExecutionQueryBase
 
 	createCurrentExecutionQuery = `INSERT INTO current_executions
-(shard_id, namespace_id, workflow_id, run_id, create_request_id, state, status, last_write_version) VALUES
-(:shard_id, :namespace_id, :workflow_id, :run_id, :create_request_id, :state, :status, :last_write_version)`
+(shard_id, namespace_id, workflow_id, run_id, create_request_id, state, status, start_time, last_write_version, data, data_encoding) VALUES
+(:shard_id, :namespace_id, :workflow_id, :run_id, :create_request_id, :state, :status, :start_time, :last_write_version, :data, :data_encoding)`
 
 	deleteCurrentExecutionQuery = "DELETE FROM current_executions WHERE shard_id=? AND namespace_id=? AND workflow_id=? AND run_id=?"
 
 	getCurrentExecutionQuery = `SELECT
-shard_id, namespace_id, workflow_id, run_id, create_request_id, state, status, last_write_version
+shard_id, namespace_id, workflow_id, run_id, create_request_id, state, status, start_time, last_write_version, data, data_encoding
 FROM current_executions WHERE shard_id = ? AND namespace_id = ? AND workflow_id = ?`
 
 	lockCurrentExecutionJoinExecutionsQuery = `SELECT
-ce.shard_id, ce.namespace_id, ce.workflow_id, ce.run_id, ce.create_request_id, ce.state, ce.status, e.last_write_version
+ce.shard_id, ce.namespace_id, ce.workflow_id, ce.run_id, ce.create_request_id, ce.state, ce.status, ce.start_time, e.last_write_version, ce.data, ce.data_encoding
 FROM current_executions ce
 INNER JOIN executions e ON e.shard_id = ce.shard_id AND e.namespace_id = ce.namespace_id AND e.workflow_id = ce.workflow_id AND e.run_id = ce.run_id
 WHERE ce.shard_id = ? AND ce.namespace_id = ? AND ce.workflow_id = ?`
@@ -78,7 +78,10 @@ run_id = :run_id,
 create_request_id = :create_request_id,
 state = :state,
 status = :status,
-last_write_version = :last_write_version
+start_time = :start_time,
+last_write_version = :last_write_version,
+data = :data,
+data_encoding = :data_encoding
 WHERE
 shard_id = :shard_id AND
 namespace_id = :namespace_id AND
@@ -721,7 +724,7 @@ func (mdb *db) RangeDeleteFromReplicationTasks(
 	)
 }
 
-// InsertIntoReplicationTasksDLQ inserts one or more rows into replication_tasks_dlq table
+// InsertIntoReplicationDLQTasks inserts one or more rows into replication_tasks_dlq table
 func (mdb *db) InsertIntoReplicationDLQTasks(
 	ctx context.Context,
 	rows []sqlplugin.ReplicationDLQTasksRow,
@@ -732,7 +735,7 @@ func (mdb *db) InsertIntoReplicationDLQTasks(
 	)
 }
 
-// RangeSelectFromReplicationTasksDLQ reads one or more rows from replication_tasks_dlq table
+// RangeSelectFromReplicationDLQTasks reads one or more rows from replication_tasks_dlq table
 func (mdb *db) RangeSelectFromReplicationDLQTasks(
 	ctx context.Context,
 	filter sqlplugin.ReplicationDLQTasksRangeFilter,
@@ -749,7 +752,7 @@ func (mdb *db) RangeSelectFromReplicationDLQTasks(
 	return rows, err
 }
 
-// DeleteMessageFromReplicationTasksDLQ deletes one row from replication_tasks_dlq table
+// DeleteFromReplicationDLQTasks deletes one row from replication_tasks_dlq table
 func (mdb *db) DeleteFromReplicationDLQTasks(
 	ctx context.Context,
 	filter sqlplugin.ReplicationDLQTasksFilter,
@@ -763,7 +766,7 @@ func (mdb *db) DeleteFromReplicationDLQTasks(
 	)
 }
 
-// DeleteMessageFromReplicationTasksDLQ deletes one or more rows from replication_tasks_dlq table
+// RangeDeleteFromReplicationDLQTasks deletes one or more rows from replication_tasks_dlq table
 func (mdb *db) RangeDeleteFromReplicationDLQTasks(
 	ctx context.Context,
 	filter sqlplugin.ReplicationDLQTasksRangeFilter,

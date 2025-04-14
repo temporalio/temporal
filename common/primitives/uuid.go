@@ -29,7 +29,6 @@ import (
 	"encoding/hex"
 
 	guuid "github.com/google/uuid"
-	"github.com/pborman/uuid"
 )
 
 // UUID represents a 16-byte universally unique identifier
@@ -93,7 +92,12 @@ func ValidateUUID(s string) (string, error) {
 
 // NewUUID generates a new random UUID
 func NewUUID() UUID {
-	return UUID(uuid.NewRandom())
+	u, err := guuid.NewV7()
+	if err != nil {
+		// Should never happen, but this matches the behavior of pborman/uuid.NewRandom
+		return nil
+	}
+	return u[:]
 }
 
 // Downcast returns the UUID as a byte slice. This is necessary when passing to type sensitive interfaces such as cql.

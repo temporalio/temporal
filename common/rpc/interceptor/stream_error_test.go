@@ -28,11 +28,11 @@ import (
 	"io"
 	"testing"
 
-	"github.com/gogo/status"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/serviceerror"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 type (

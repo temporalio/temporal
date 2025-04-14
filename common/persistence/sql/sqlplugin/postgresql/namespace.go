@@ -30,7 +30,6 @@ import (
 	"errors"
 
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 )
 
@@ -70,7 +69,7 @@ func (pdb *db) InsertIntoNamespace(
 	ctx context.Context,
 	row *sqlplugin.NamespaceRow,
 ) (sql.Result, error) {
-	return pdb.conn.ExecContext(ctx, createNamespaceQuery, partitionID, row.ID, row.Name, row.IsGlobal, row.Data, row.DataEncoding, row.NotificationVersion)
+	return pdb.ExecContext(ctx, createNamespaceQuery, partitionID, row.ID, row.Name, row.IsGlobal, row.Data, row.DataEncoding, row.NotificationVersion)
 }
 
 // UpdateNamespace updates a single row in namespaces table
@@ -78,7 +77,7 @@ func (pdb *db) UpdateNamespace(
 	ctx context.Context,
 	row *sqlplugin.NamespaceRow,
 ) (sql.Result, error) {
-	return pdb.conn.ExecContext(ctx, updateNamespaceQuery, row.Name, row.Data, row.DataEncoding, row.IsGlobal, row.NotificationVersion, row.ID)
+	return pdb.ExecContext(ctx, updateNamespaceQuery, row.Name, row.Data, row.DataEncoding, row.IsGlobal, row.NotificationVersion, row.ID)
 }
 
 // SelectFromNamespace reads one or more rows from namespaces table
@@ -86,17 +85,21 @@ func (pdb *db) SelectFromNamespace(
 	ctx context.Context,
 	filter sqlplugin.NamespaceFilter,
 ) ([]sqlplugin.NamespaceRow, error) {
+	var res []sqlplugin.NamespaceRow
+	var err error
 	switch {
 	case filter.ID != nil || filter.Name != nil:
 		if filter.ID != nil && filter.Name != nil {
 			return nil, serviceerror.NewInternal("only ID or name filter can be specified for selection")
 		}
-		return pdb.selectFromNamespace(ctx, filter)
+		res, err = pdb.selectFromNamespace(ctx, filter)
 	case filter.PageSize != nil && *filter.PageSize > 0:
-		return pdb.selectAllFromNamespace(ctx, filter)
+		res, err = pdb.selectAllFromNamespace(ctx, filter)
 	default:
 		return nil, errMissingArgs
 	}
+
+	return res, err
 }
 
 func (pdb *db) selectFromNamespace(
@@ -107,14 +110,14 @@ func (pdb *db) selectFromNamespace(
 	var row sqlplugin.NamespaceRow
 	switch {
 	case filter.ID != nil:
-		err = pdb.conn.GetContext(ctx,
+		err = pdb.GetContext(ctx,
 			&row,
 			getNamespaceByIDQuery,
 			partitionID,
 			*filter.ID,
 		)
 	case filter.Name != nil:
-		err = pdb.conn.GetContext(ctx,
+		err = pdb.GetContext(ctx,
 			&row,
 			getNamespaceByNameQuery,
 			partitionID,
@@ -135,7 +138,7 @@ func (pdb *db) selectAllFromNamespace(
 	var rows []sqlplugin.NamespaceRow
 	switch {
 	case filter.GreaterThanID != nil:
-		err = pdb.conn.SelectContext(ctx,
+		err = pdb.SelectContext(ctx,
 			&rows,
 			listNamespacesRangeQuery,
 			partitionID,
@@ -143,7 +146,7 @@ func (pdb *db) selectAllFromNamespace(
 			*filter.PageSize,
 		)
 	default:
-		err = pdb.conn.SelectContext(ctx,
+		err = pdb.SelectContext(ctx,
 			&rows,
 			listNamespacesQuery,
 			partitionID,
@@ -162,13 +165,13 @@ func (pdb *db) DeleteFromNamespace(
 	var result sql.Result
 	switch {
 	case filter.ID != nil:
-		result, err = pdb.conn.ExecContext(ctx,
+		result, err = pdb.ExecContext(ctx,
 			deleteNamespaceByIDQuery,
 			partitionID,
 			filter.ID,
 		)
 	default:
-		result, err = pdb.conn.ExecContext(ctx,
+		result, err = pdb.ExecContext(ctx,
 			deleteNamespaceByNameQuery,
 			partitionID,
 			filter.Name,
@@ -182,7 +185,8 @@ func (pdb *db) LockNamespaceMetadata(
 	ctx context.Context,
 ) (*sqlplugin.NamespaceMetadataRow, error) {
 	var row sqlplugin.NamespaceMetadataRow
-	err := pdb.conn.GetContext(ctx,
+
+	err := pdb.GetContext(ctx,
 		&row.NotificationVersion,
 		lockNamespaceMetadataQuery,
 		partitionID,
@@ -198,7 +202,7 @@ func (pdb *db) SelectFromNamespaceMetadata(
 	ctx context.Context,
 ) (*sqlplugin.NamespaceMetadataRow, error) {
 	var row sqlplugin.NamespaceMetadataRow
-	err := pdb.conn.GetContext(ctx,
+	err := pdb.GetContext(ctx,
 		&row.NotificationVersion,
 		getNamespaceMetadataQuery,
 		partitionID,
@@ -211,7 +215,7 @@ func (pdb *db) UpdateNamespaceMetadata(
 	ctx context.Context,
 	row *sqlplugin.NamespaceMetadataRow,
 ) (sql.Result, error) {
-	return pdb.conn.ExecContext(ctx,
+	return pdb.ExecContext(ctx,
 		updateNamespaceMetadataQuery,
 		row.NotificationVersion+1,
 		row.NotificationVersion,
