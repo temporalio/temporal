@@ -308,6 +308,7 @@ func (s *Versioning3Suite) testUnpinnedQuery(sticky bool) {
 		})
 
 	s.setCurrentDeployment(tv)
+	s.waitForDeploymentDataPropagation(tv, versionStatusCurrent, false, tqTypeWf)
 
 	runID := s.startWorkflow(tv, nil)
 
