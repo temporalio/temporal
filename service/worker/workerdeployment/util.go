@@ -95,8 +95,8 @@ const (
 	errConflictTokenMismatchType  = "errConflictTokenMismatch"
 	errFailedPrecondition         = "FailedPrecondition"
 
-	ErrRampingVersionDoesNotHaveAllTaskQueues = "New ramping version does not have all the task queues from the previous current version and some missing task queues are active and would become unversioned after setting the new version as the ramping version"
-	ErrCurrentVersionDoesNotHaveAllTaskQueues = "New current version does not have all the task queues from the previous current version and some missing task queues are active and would become unversioned after setting the new version as the current version"
+	ErrRampingVersionDoesNotHaveAllTaskQueues = "New ramping version is missing active task queues from the current version; these would become unversioned after setting the new version as the ramping version"
+	ErrCurrentVersionDoesNotHaveAllTaskQueues = "New current version is missing active task queues from the previous current version; these would become unversioned after setting the new version as the current version"
 
 	syncBatchSize = 25
 )
