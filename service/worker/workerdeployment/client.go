@@ -543,6 +543,8 @@ func (d *ClientImpl) SetCurrentVersion(
 		return &res, nil
 	} else if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errVersionNotFound {
 		return nil, serviceerror.NewNotFound(errVersionNotFound)
+	} else if failure.GetApplicationFailureInfo().GetType() == errFailedPrecondition {
+		return nil, serviceerror.NewFailedPrecondition(failure.Message)
 	} else if failure != nil {
 		// TODO: is there an easy way to recover the original type here?
 		return nil, serviceerror.NewInternal(failure.Message)
@@ -635,6 +637,8 @@ func (d *ClientImpl) SetRampingVersion(
 		return nil, serviceerror.NewNotFound(errVersionNotFound)
 	} else if failure.GetApplicationFailureInfo().GetType() == errVersionAlreadyCurrentType {
 		return nil, serviceerror.NewFailedPrecondition(fmt.Sprintf("Ramping version %v is already current", version))
+	} else if failure.GetApplicationFailureInfo().GetType() == errFailedPrecondition {
+		return nil, serviceerror.NewFailedPrecondition(failure.Message)
 	} else if failure != nil {
 		return nil, serviceerror.NewInternal(failure.Message)
 	}
