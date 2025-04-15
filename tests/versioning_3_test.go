@@ -67,6 +67,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+type versionStatus int
+
 const (
 	tqTypeWf        = enumspb.TASK_QUEUE_TYPE_WORKFLOW
 	tqTypeAct       = enumspb.TASK_QUEUE_TYPE_ACTIVITY
@@ -75,6 +77,13 @@ const (
 	vbPinned        = enumspb.VERSIONING_BEHAVIOR_PINNED
 	vbUnpinned      = enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
 	ver3MinPollTime = common.MinLongPollTimeout + time.Millisecond*200
+
+	versionStatusNil      = versionStatus(0)
+	versionStatusInactive = versionStatus(1)
+	versionStatusRamping  = versionStatus(2)
+	versionStatusCurrent  = versionStatus(3)
+	versionStatusDraining = versionStatus(4)
+	versionStatusDrained  = versionStatus(5)
 )
 
 type Versioning3Suite struct {
@@ -2036,15 +2045,6 @@ func (s *Versioning3Suite) warmUpSticky(
 		taskpoller.WithTimeout(ver3MinPollTime),
 	)
 }
-
-type versionStatus int
-
-const versionStatusNil = versionStatus(-1)
-const versionStatusInactive = versionStatus(0)
-const versionStatusRamping = versionStatus(1)
-const versionStatusCurrent = versionStatus(2)
-const versionStatusDraining = versionStatus(3)
-const versionStatusDrained = versionStatus(4)
 
 func (s *Versioning3Suite) waitForDeploymentDataPropagation(
 	tv *testvars.TestVars,
