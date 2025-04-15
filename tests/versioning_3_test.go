@@ -2101,7 +2101,7 @@ func (s *Versioning3Suite) waitForDeploymentDataPropagation(
 				for _, d := range versions {
 					if d.GetVersion().Equal(tv.DeploymentVersion()) {
 						switch status {
-						case versionStatusInactive, versionStatusDraining, versionStatusDrained:
+						case versionStatusInactive, versionStatusDraining, versionStatusDrained, versionStatusNil:
 							if d.GetCurrentSinceTime() == nil && d.GetRampingSinceTime() == nil {
 								delete(remaining, pt)
 							}
