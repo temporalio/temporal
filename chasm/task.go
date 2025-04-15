@@ -42,3 +42,5 @@ type (
 		Execute(context.Context, ComponentRef, T) error
 	}
 )
+
+var TaskScheduledTimeImmediate = time.Time{}

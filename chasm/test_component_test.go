@@ -108,8 +108,9 @@ func testComponentSerializedNodes() map[string]*persistencespb.ChasmNode {
 				},
 				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
 					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
-						Type:  "TestLibrary.test_component",
-						Tasks: []*persistencespb.ChasmComponentAttributes_Task(nil),
+						Type:            "TestLibrary.test_component",
+						SideEffectTasks: []*persistencespb.ChasmComponentAttributes_Task(nil),
+						PureTasks:       []*persistencespb.ChasmComponentAttributes_Task(nil),
 					},
 				},
 			},
@@ -130,8 +131,9 @@ func testComponentSerializedNodes() map[string]*persistencespb.ChasmNode {
 				},
 				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
 					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
-						Type:  "TestLibrary.test_sub_component_1",
-						Tasks: []*persistencespb.ChasmComponentAttributes_Task(nil),
+						Type:            "TestLibrary.test_sub_component_1",
+						SideEffectTasks: []*persistencespb.ChasmComponentAttributes_Task(nil),
+						PureTasks:       []*persistencespb.ChasmComponentAttributes_Task(nil),
 					},
 				},
 			},
@@ -152,8 +154,9 @@ func testComponentSerializedNodes() map[string]*persistencespb.ChasmNode {
 				},
 				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
 					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
-						Type:  "TestLibrary.test_sub_component_11",
-						Tasks: []*persistencespb.ChasmComponentAttributes_Task(nil),
+						Type:            "TestLibrary.test_sub_component_11",
+						SideEffectTasks: []*persistencespb.ChasmComponentAttributes_Task(nil),
+						PureTasks:       []*persistencespb.ChasmComponentAttributes_Task(nil),
 					},
 				},
 			},
