@@ -972,6 +972,9 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_ConcurrentDeleteVersion() {
 
 // VersionMissingTaskQueues
 func (s *DeploymentVersionSuite) TestVersionMissingTaskQueues_InvalidSetCurrentVersion() {
+	// Override the dynamic config to verify we don't get any unexpected masked errors.
+	s.OverrideDynamicConfig(dynamicconfig.FrontendMaskInternalErrorDetails, true)
+
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	tv := testvars.New(s)
@@ -1013,8 +1016,7 @@ func (s *DeploymentVersionSuite) TestVersionMissingTaskQueues_InvalidSetCurrentV
 
 	// SetCurrent should fail since task_queue_1 does not have a current version than the deployment's existing current version
 	// and it either has a backlog of tasks being present or an add rate > 0.
-	s.Error(err)
-
+	s.EqualErrorf(err, workerdeployment.ErrCurrentVersionDoesNotHaveAllTaskQueues, err.Error())
 }
 
 func (s *DeploymentVersionSuite) TestVersionMissingTaskQueues_ValidSetCurrentVersion() {
@@ -1054,6 +1056,9 @@ func (s *DeploymentVersionSuite) TestVersionMissingTaskQueues_ValidSetCurrentVer
 }
 
 func (s *DeploymentVersionSuite) TestVersionMissingTaskQueues_InvalidSetRampingVersion() {
+	// Override the dynamic config to verify we don't get any unexpected masked errors.
+	s.OverrideDynamicConfig(dynamicconfig.FrontendMaskInternalErrorDetails, true)
+
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	tv := testvars.New(s)
@@ -1095,7 +1100,7 @@ func (s *DeploymentVersionSuite) TestVersionMissingTaskQueues_InvalidSetRampingV
 
 	// SetRampingVersion should fail since task_queue_1 does not have a current version than the deployment's existing current version
 	// and it either has a backlog of tasks being present or an add rate > 0.
-	s.Error(err)
+	s.EqualErrorf(err, workerdeployment.ErrRampingVersionDoesNotHaveAllTaskQueues, err.Error())
 }
 
 func (s *DeploymentVersionSuite) TestVersionMissingTaskQueues_ValidSetRampingVersion() {

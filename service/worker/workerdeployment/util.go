@@ -93,6 +93,10 @@ const (
 	errVersionHasPollers          = "Version cannot be deleted since it has active pollers."
 	errVersionIsCurrentOrRamping  = "Version cannot be deleted since it is current or ramping."
 	errConflictTokenMismatchType  = "errConflictTokenMismatch"
+	errFailedPrecondition         = "FailedPrecondition"
+
+	ErrRampingVersionDoesNotHaveAllTaskQueues = "New ramping version does not have all the task queues from the previous current version and some missing task queues are active and would become unversioned after this operation"
+	ErrCurrentVersionDoesNotHaveAllTaskQueues = "New current version does not have all the task queues from the previous current version and some missing task queues are active and would become unversioned after this operation"
 
 	syncBatchSize = 25
 )
