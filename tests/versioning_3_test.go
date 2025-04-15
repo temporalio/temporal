@@ -377,7 +377,7 @@ func (s *Versioning3Suite) testPinnedWorkflowWithLateActivityPoller() {
 			s.NotNil(task)
 			return respondWftWithActivities(tv, tv, false, vbUnpinned, "5"), nil
 		})
-	s.waitForDeploymentDataPropagation(tv, false, tqTypeWf)
+	s.waitForDeploymentDataPropagation(tv, versionStatusInactive, false, tqTypeWf)
 
 	override := tv.VersioningOverridePinned()
 	s.startWorkflow(tv, override)
@@ -542,11 +542,14 @@ func (s *Versioning3Suite) testUnpinnedWorkflowWithRamp(toUnversioned bool) {
 
 	// v1 is current and v2 is ramping at 50%
 
-	// Make sure both TQs are registered in v1 which is the current version. This is to make sure
+	// Make sure both TQs are registered in v1 which will be the current version. This is to make sure
 	// we don't get to ramping while one of the TQs has not yet got v1 as it's current version.
 	// (note that s.setCurrentDeployment(tv1) can pass even with one TQ added to the version)
-	s.waitForDeploymentDataPropagation(tv1, false, tqTypeWf, tqTypeAct)
+	s.waitForDeploymentDataPropagation(tv1, versionStatusInactive, false, tqTypeWf, tqTypeAct)
 	s.setCurrentDeployment(tv1)
+
+	// wait until all task queue partitions know that tv1 is current
+	s.waitForDeploymentDataPropagation(tv1, versionStatusCurrent, false, tqTypeWf, tqTypeAct)
 
 	w2 := worker.New(sdkClient, tv2.TaskQueue().GetName(), worker.Options{
 		BuildID:                 tv2.BuildID(),
@@ -563,6 +566,8 @@ func (s *Versioning3Suite) testUnpinnedWorkflowWithRamp(toUnversioned bool) {
 	defer w2.Stop()
 
 	s.setRampingDeployment(tv2, 50, toUnversioned)
+	// wait until all task queue partitions know that tv2 is ramping
+	s.waitForDeploymentDataPropagation(tv2, versionStatusRamping, toUnversioned, tqTypeWf, tqTypeAct)
 
 	counter := make(map[string]int)
 	for i := 0; i < 50; i++ {
@@ -1343,7 +1348,7 @@ func (s *Versioning3Suite) TestDescribeTaskQueueVersioningInfo() {
 
 	// Now ramp to unversioned
 	s.syncTaskQueueDeploymentData(tv, false, 10, true, t2, tqTypeAct)
-	s.waitForDeploymentDataPropagation(tv, true, tqTypeAct)
+	s.waitForDeploymentDataPropagation(tv, versionStatusNil, true, tqTypeAct)
 
 	actInfo, err = s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
 		Namespace:     s.Namespace().String(),
@@ -1525,7 +1530,17 @@ func (s *Versioning3Suite) updateTaskQueueDeploymentData(
 	tqTypes ...enumspb.TaskQueueType,
 ) {
 	s.syncTaskQueueDeploymentData(tv, isCurrent, ramp, rampUnversioned, time.Now().Add(-timeSinceUpdate), tqTypes...)
-	s.waitForDeploymentDataPropagation(tv, rampUnversioned, tqTypes...)
+	var status versionStatus
+	if isCurrent {
+		status = versionStatusCurrent
+	} else {
+		status = versionStatusRamping
+	}
+	if rampUnversioned {
+		status = versionStatusNil
+	}
+
+	s.waitForDeploymentDataPropagation(tv, status, rampUnversioned, tqTypes...)
 }
 
 // getTaskQueueDeploymentData gets the deployment data for a given TQ type. The data is always
@@ -1567,9 +1582,6 @@ func (s *Versioning3Suite) syncTaskQueueDeploymentData(
 	var currentSinceTime, rampingSinceTime *timestamppb.Timestamp
 	if isCurrent {
 		currentSinceTime = routingUpdateTime
-	}
-	if ramp > 0 { // todo carly / shahab: this doesn't account for setting 0 ramp, or for changing the ramp while ramping_since_time stays the same.
-		rampingSinceTime = routingUpdateTime
 	}
 
 	_, err := s.GetTestCluster().MatchingClient().SyncDeploymentUserData(
@@ -2021,8 +2033,18 @@ func (s *Versioning3Suite) warmUpSticky(
 	)
 }
 
+type versionStatus int
+
+const versionStatusNil = versionStatus(-1)
+const versionStatusInactive = versionStatus(0)
+const versionStatusRamping = versionStatus(1)
+const versionStatusCurrent = versionStatus(2)
+const versionStatusDraining = versionStatus(3)
+const versionStatusDrained = versionStatus(4)
+
 func (s *Versioning3Suite) waitForDeploymentDataPropagation(
 	tv *testvars.TestVars,
+	status versionStatus,
 	unversionedRamp bool,
 	tqTypes ...enumspb.TaskQueueType,
 ) {
@@ -2077,7 +2099,20 @@ func (s *Versioning3Suite) waitForDeploymentDataPropagation(
 				versions := perTypes[int32(pt.tp)].GetDeploymentData().GetVersions()
 				for _, d := range versions {
 					if d.GetVersion().Equal(tv.DeploymentVersion()) {
-						delete(remaining, pt)
+						switch status {
+						case versionStatusInactive, versionStatusDraining, versionStatusDrained:
+							if d.GetCurrentSinceTime() == nil && d.GetRampingSinceTime() == nil {
+								delete(remaining, pt)
+							}
+						case versionStatusRamping:
+							if d.GetRampingSinceTime() != nil {
+								delete(remaining, pt)
+							}
+						case versionStatusCurrent:
+							if d.GetCurrentSinceTime() != nil {
+								delete(remaining, pt)
+							}
+						}
 					}
 				}
 			}
