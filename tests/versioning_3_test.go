@@ -1584,6 +1584,9 @@ func (s *Versioning3Suite) syncTaskQueueDeploymentData(
 	if isCurrent {
 		currentSinceTime = routingUpdateTime
 	}
+	if ramp > 0 { // todo carly / shahab: this doesn't account for setting 0 ramp, or for changing the ramp while ramping_since_time stays the same.
+		rampingSinceTime = routingUpdateTime
+	}
 
 	_, err := s.GetTestCluster().MatchingClient().SyncDeploymentUserData(
 		ctx, &matchingservice.SyncDeploymentUserDataRequest{
