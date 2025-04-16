@@ -68,7 +68,7 @@ func (s *callerInfoSuite) TearDownSuite() {
 }
 
 func (s *callerInfoSuite) TestIntercept_CallerName() {
-	testNamespaceName := namespace.Name("test-namespace")
+	testNamespaceName := namespace.Name("test-namespace").String()
 	s.mockRegistry.EXPECT().GetNamespace(gomock.Any()).Return(nil, nil).AnyTimes()
 
 	testCases := []struct {
@@ -82,9 +82,9 @@ func (s *callerInfoSuite) TestIntercept_CallerName() {
 				return context.Background()
 			},
 			request: &workflowservice.StartWorkflowExecutionRequest{
-				Namespace: testNamespaceName.String(),
+				Namespace: testNamespaceName,
 			},
-			expectedCallerName: testNamespaceName.String(),
+			expectedCallerName: testNamespaceName,
 		},
 		{
 			// test context with caller type but no caller name
@@ -92,19 +92,19 @@ func (s *callerInfoSuite) TestIntercept_CallerName() {
 				return headers.SetCallerType(context.Background(), headers.CallerTypeBackground)
 			},
 			request: &workflowservice.StartWorkflowExecutionRequest{
-				Namespace: testNamespaceName.String(),
+				Namespace: testNamespaceName,
 			},
-			expectedCallerName: testNamespaceName.String(),
+			expectedCallerName: testNamespaceName,
 		},
 		{
 			// test context with matching caller name
 			setupIncomingCtx: func() context.Context {
-				return headers.SetCallerName(context.Background(), testNamespaceName.String())
+				return headers.SetCallerName(context.Background(), testNamespaceName)
 			},
 			request: &workflowservice.StartWorkflowExecutionRequest{
-				Namespace: testNamespaceName.String(),
+				Namespace: testNamespaceName,
 			},
-			expectedCallerName: headers.CallerNameSystem,
+			expectedCallerName: testNamespaceName,
 		},
 		{
 			// test context with empty caller name
@@ -112,9 +112,9 @@ func (s *callerInfoSuite) TestIntercept_CallerName() {
 				return headers.SetCallerName(context.Background(), "")
 			},
 			request: &workflowservice.StartWorkflowExecutionRequest{
-				Namespace: testNamespaceName.String(),
+				Namespace: testNamespaceName,
 			},
-			expectedCallerName: testNamespaceName.String(),
+			expectedCallerName: testNamespaceName,
 		},
 		{
 			// test context with invalid caller name
@@ -122,9 +122,9 @@ func (s *callerInfoSuite) TestIntercept_CallerName() {
 				return headers.SetCallerName(context.Background(), "some-random-value")
 			},
 			request: &workflowservice.StartWorkflowExecutionRequest{
-				Namespace: testNamespaceName.String(),
+				Namespace: testNamespaceName,
 			},
-			expectedCallerName: testNamespaceName.String(),
+			expectedCallerName: testNamespaceName,
 		},
 	}
 
