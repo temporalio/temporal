@@ -335,7 +335,7 @@ func (s *activitySuite) TestResetPausedActivityAcceptance() {
 	ai := s.AddActivityInfo()
 
 	prevStamp := ai.Stamp
-	err := PauseActivity(s.mutableState, ai.ActivityId)
+	err := PauseActivity(s.mutableState, ai.ActivityId, nil)
 	s.NoError(err)
 	s.NotEqual(prevStamp, ai.Stamp, "ActivityInfo.Stamp should change")
 
@@ -351,7 +351,7 @@ func (s *activitySuite) TestResetAndUnPauseActivityAcceptance() {
 	ai := s.AddActivityInfo()
 
 	prevStamp := ai.Stamp
-	err := PauseActivity(s.mutableState, ai.ActivityId)
+	err := PauseActivity(s.mutableState, ai.ActivityId, nil)
 	s.NoError(err)
 	s.NotEqual(prevStamp, ai.Stamp, "ActivityInfo.Stamp should change")
 
@@ -367,7 +367,7 @@ func (s *activitySuite) TestUnpauseActivityWithResumeAcceptance() {
 	ai := s.AddActivityInfo()
 
 	prevStamp := ai.Stamp
-	err := PauseActivity(s.mutableState, ai.ActivityId)
+	err := PauseActivity(s.mutableState, ai.ActivityId, nil)
 	s.NoError(err)
 
 	s.Equal(int32(1), ai.Attempt, "ActivityInfo.Attempt is shouldn't change")
@@ -386,7 +386,7 @@ func (s *activitySuite) TestUnpauseActivityWithNewRun() {
 	ai := s.AddActivityInfo()
 
 	prevStamp := ai.Stamp
-	err := PauseActivity(s.mutableState, ai.ActivityId)
+	err := PauseActivity(s.mutableState, ai.ActivityId, nil)
 	s.NoError(err)
 
 	s.Equal(int32(1), ai.Attempt, "ActivityInfo.Attempt is shouldn't change")
@@ -409,7 +409,7 @@ func (s *activitySuite) TestUnpauseActivityWithResetAcceptance() {
 	ai := s.AddActivityInfo()
 
 	prevStamp := ai.Stamp
-	err := PauseActivity(s.mutableState, ai.ActivityId)
+	err := PauseActivity(s.mutableState, ai.ActivityId, nil)
 	s.NoError(err)
 
 	s.Equal(int32(1), ai.Attempt, "ActivityInfo.Attempt is shouldn't change")

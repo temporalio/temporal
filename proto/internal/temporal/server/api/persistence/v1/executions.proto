@@ -476,6 +476,7 @@ message NexusCancelationTaskInfo {
 
 // activity_map column
 message ActivityInfo {
+
     int64 version = 1;
     int64 scheduled_event_batch_id = 2;
     reserved 3;
@@ -576,6 +577,27 @@ message ActivityInfo {
     // Priority metadata. If this message is not present, or any fields are not
     // present, they inherit the values from the workflow.
     temporal.api.common.v1.Priority priority = 45;
+
+    message PauseInfo {
+        // The time when the activity was paused.
+        google.protobuf.Timestamp pause_time = 1;
+
+        message Manual {
+            // The identity of the actor that paused the activity.
+            string identity = 1;
+            // Reason for pausing the activity.
+            string reason = 2;
+        }
+        oneof paused_by {
+            // activity was paused by the manual intervention
+            Manual manual = 2;
+
+            // Id of the rule that paused the activity.
+            string rule_id = 3;
+        }
+    }
+
+    PauseInfo pause_info = 46;
 }
 
 // timer_map column

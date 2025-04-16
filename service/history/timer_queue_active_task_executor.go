@@ -903,7 +903,7 @@ func (t *timerQueueActiveTaskExecutor) processActivityWorkflowRules(
 		return nil
 	}
 
-	activityChanged := workflow.ActivityMatchWorkflowRules(ms, t.logger, ai)
+	activityChanged := workflow.ActivityMatchWorkflowRules(ms, t.shardContext.GetTimeSource(), t.logger, ai)
 	if !activityChanged {
 		return nil
 	}

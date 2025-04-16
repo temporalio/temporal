@@ -128,12 +128,16 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WhileRunning() {
 	}, 5*time.Second, 500*time.Millisecond)
 
 	// pause activity
+	testIdentity := "test-identity"
+	testReason := "test-reason"
 	pauseRequest := &workflowservice.PauseActivityRequest{
 		Namespace: s.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowRun.GetID(),
 		},
 		Activity: &workflowservice.PauseActivityRequest_Id{Id: "activity-id"},
+		Identity: testIdentity,
+		Reason:   testReason,
 	}
 	resp, err := s.FrontendClient().PauseActivity(ctx, pauseRequest)
 	s.NoError(err)
@@ -180,6 +184,10 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WhileRunning() {
 	s.Equal(int32(1), description.PendingActivities[0].Attempt)
 	s.NotNil(description.PendingActivities[0].LastFailure)
 	s.Equal(activityErr.Error(), description.PendingActivities[0].LastFailure.Message)
+	s.NotNil(description.PendingActivities[0].PauseInfo)
+	s.NotNil(description.PendingActivities[0].PauseInfo.GetManual())
+	s.Equal(testIdentity, description.PendingActivities[0].PauseInfo.GetManual().Identity)
+	s.Equal(testReason, description.PendingActivities[0].PauseInfo.GetManual().Reason)
 
 	// unpause the activity
 	unpauseRequest := &workflowservice.UnpauseActivityRequest{
@@ -247,12 +255,16 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WhileWaiting() {
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// pause activity
+	testIdentity := "test-identity"
+	testReason := "test-reason"
 	pauseRequest := &workflowservice.PauseActivityRequest{
 		Namespace: s.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowRun.GetID(),
 		},
 		Activity: &workflowservice.PauseActivityRequest_Id{Id: "activity-id"},
+		Identity: testIdentity,
+		Reason:   testReason,
 	}
 	resp, err := s.FrontendClient().PauseActivity(ctx, pauseRequest)
 	s.NoError(err)
@@ -267,6 +279,10 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WhileWaiting() {
 	s.Equal(1, len(description.PendingActivities))
 	s.True(description.PendingActivities[0].Paused)
 	s.Equal(int32(2), description.PendingActivities[0].Attempt)
+	s.NotNil(description.PendingActivities[0].PauseInfo)
+	s.NotNil(description.PendingActivities[0].PauseInfo.GetManual())
+	s.Equal(testIdentity, description.PendingActivities[0].PauseInfo.GetManual().Identity)
+	s.Equal(testReason, description.PendingActivities[0].PauseInfo.GetManual().Reason)
 
 	// unpause the activity
 	unpauseRequest := &workflowservice.UnpauseActivityRequest{
@@ -351,7 +367,7 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WhileRetryNoWait(
 	s.NoError(err)
 	s.NotNil(resp)
 
-	// unpause the activity, and set noWait flag
+	// unpause the activity
 	unpauseRequest := &workflowservice.UnpauseActivityRequest{
 		Namespace: s.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{

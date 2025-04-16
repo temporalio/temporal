@@ -352,6 +352,14 @@ func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_RetryActivity() {
 		assert.Equal(t, int32(1), testWorkflow.startedActivityCount.Load())
 	}, 2*time.Second, 200*time.Millisecond)
 
+	// make sure activity pause info is set
+	description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+	s.NoError(err)
+	s.Equal(1, len(description.PendingActivities))
+	s.True(description.PendingActivities[0].Paused)
+	s.NotNil(description.PendingActivities[0].PauseInfo)
+	s.NotNil(ruleID, description.PendingActivities[0].PauseInfo.GetRuleId())
+
 	// let activity succeed
 	testWorkflow.letActivitySucceed.Store(true)
 
@@ -487,6 +495,14 @@ func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_RetryTask() {
 		assert.Equal(t, int32(1), testRetryTaskWorkflow.startedActivityCount.Load())
 	}, 5*time.Second, 200*time.Millisecond)
 
+	// make sure activity pause info is set
+	description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+	s.NoError(err)
+	s.Equal(1, len(description.PendingActivities))
+	s.True(description.PendingActivities[0].Paused)
+	s.NotNil(description.PendingActivities[0].PauseInfo)
+	s.NotNil(ruleID, description.PendingActivities[0].PauseInfo.GetRuleId())
+
 	// let activity succeed
 	testRetryTaskWorkflow.letActivitySucceed.Store(true)
 
@@ -604,10 +620,20 @@ func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_PrePause() {
 			assert.Len(t, description.PendingActivities, 1)
 			assert.True(t, description.PendingActivities[0].GetActivityType().GetName() == activityType)
 			assert.True(t, description.PendingActivities[0].GetPaused())
+			assert.NotNil(t, description.PendingActivities[0].GetPauseInfo())
+			assert.Equal(t, ruleID, description.PendingActivities[0].GetPauseInfo().GetRuleId())
 		}
 		// to be sure activity doesn't actually start
 		assert.Equal(t, int32(0), testRetryTaskWorkflow.startedActivityCount.Load())
 	}, 5*time.Second, 200*time.Millisecond)
+
+	// make sure activity pause info is set
+	description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+	s.NoError(err)
+	s.Equal(1, len(description.PendingActivities))
+	s.True(description.PendingActivities[0].Paused)
+	s.NotNil(description.PendingActivities[0].PauseInfo)
+	s.NotNil(ruleID, description.PendingActivities[0].PauseInfo.GetRuleId())
 
 	// 6. Remove the rule so it didn't interfere with the activity
 	deleteRuleResponse, err := s.FrontendClient().DeleteWorkflowRule(ctx, &workflowservice.DeleteWorkflowRuleRequest{
