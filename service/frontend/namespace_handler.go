@@ -207,8 +207,17 @@ func (d *namespaceHandler) RegisterNamespace(
 		}
 	}
 
+	const forceNamespaceUuid = "__temporal-force-namespace-uuid"
+	id := registerRequest.Data[forceNamespaceUuid]
+	if id == "" {
+		id = uuid.New()
+	} else {
+		d.logger.Warn(fmt.Sprintf("registerRequest with %s %s", forceNamespaceUuid, id))
+		delete(registerRequest.Data, forceNamespaceUuid)
+	}
+
 	info := &persistencespb.NamespaceInfo{
-		Id:          uuid.New(),
+		Id:          id,
 		Name:        registerRequest.GetNamespace(),
 		State:       enumspb.NAMESPACE_STATE_REGISTERED,
 		Owner:       registerRequest.GetOwnerEmail(),
