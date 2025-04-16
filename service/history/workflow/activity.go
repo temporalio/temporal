@@ -164,19 +164,21 @@ func GetPendingActivityInfo(
 		} // if state is CANCEL_REQUESTEd - it is not modified
 
 		// fill activity pause info
-		p.PauseInfo = &workflowpb.PendingActivityInfo_PauseInfo{
-			PauseTime: ai.PauseInfo.PauseTime,
-		}
-		if ai.PauseInfo.GetManual() != nil {
-			p.PauseInfo.PausedBy = &workflowpb.PendingActivityInfo_PauseInfo_Manual_{
-				Manual: &workflowpb.PendingActivityInfo_PauseInfo_Manual{
-					Identity: ai.PauseInfo.GetManual().Identity,
-					Reason:   ai.PauseInfo.GetManual().Reason,
-				},
+		if p.PauseInfo != nil {
+			p.PauseInfo = &workflowpb.PendingActivityInfo_PauseInfo{
+				PauseTime: ai.PauseInfo.PauseTime,
 			}
-		} else {
-			p.PauseInfo.PausedBy = &workflowpb.PendingActivityInfo_PauseInfo_RuleId{
-				RuleId: ai.PauseInfo.GetRuleId(),
+			if ai.PauseInfo.GetManual() != nil {
+				p.PauseInfo.PausedBy = &workflowpb.PendingActivityInfo_PauseInfo_Manual_{
+					Manual: &workflowpb.PendingActivityInfo_PauseInfo_Manual{
+						Identity: ai.PauseInfo.GetManual().Identity,
+						Reason:   ai.PauseInfo.GetManual().Reason,
+					},
+				}
+			} else {
+				p.PauseInfo.PausedBy = &workflowpb.PendingActivityInfo_PauseInfo_RuleId{
+					RuleId: ai.PauseInfo.GetRuleId(),
+				}
 			}
 		}
 	}
