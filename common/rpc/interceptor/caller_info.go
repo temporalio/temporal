@@ -73,22 +73,30 @@ func PopulateCallerInfo(
 ) context.Context {
 	callerInfo := headers.GetCallerInfo(ctx)
 
-	updateInfo := false
-	if callerInfo.CallerName == "" {
-		callerInfo.CallerName = nsNameGetter()
-		updateInfo = callerInfo.CallerName != ""
-	}
-	if callerInfo.CallerType == "" {
-		callerInfo.CallerType = headers.CallerTypeAPI
-		updateInfo = true
-	}
-	if (callerInfo.CallerType == headers.CallerTypeAPI || callerInfo.CallerType == headers.CallerTypeOperator) &&
-		callerInfo.CallOrigin == "" {
-		callerInfo.CallOrigin = methodGetter()
-		updateInfo = true
+	infoUpdated := false
+
+	nsName := nsNameGetter()
+	if callerInfo.CallerName != nsName {
+		callerInfo.CallerName = nsName
+		infoUpdated = true
 	}
 
-	if updateInfo {
+	_, isValidCallerType := headers.ValidCallerTypes[callerInfo.CallerType]
+	if !isValidCallerType {
+		callerInfo.CallerType = headers.CallerTypeAPI
+		infoUpdated = true
+	}
+
+	if callerInfo.CallerType == headers.CallerTypeAPI ||
+		callerInfo.CallerType == headers.CallerTypeOperator {
+		methodName := methodGetter()
+		if callerInfo.CallOrigin != methodName {
+			callerInfo.CallOrigin = methodName
+			infoUpdated = true
+		}
+	}
+
+	if infoUpdated {
 		ctx = headers.SetCallerInfo(ctx, callerInfo)
 	}
 
