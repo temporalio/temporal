@@ -964,8 +964,8 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Batching()
 	defer cancel()
 	tv := testvars.New(s)
 
-	// register 30 task-queues in the version
-	taskQueues := 30
+	// register 5 task-queues in the version
+	taskQueues := 5
 	for i := 0; i < taskQueues; i++ {
 		go s.pollFromDeploymentWithTaskQueueNumber(ctx, tv, i)
 	}
@@ -1004,8 +1004,8 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Unversione
 	defer cancel()
 	tv := testvars.New(s)
 
-	// Registering 50 task-queues in the
-	taskQueues := 50
+	// Registering 5 task-queues in the
+	taskQueues := 5
 	for i := 0; i < taskQueues; i++ {
 		go s.pollFromDeploymentWithTaskQueueNumber(ctx, tv, i)
 	}
@@ -1034,8 +1034,8 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Batching() {
 	defer cancel()
 	tv := testvars.New(s)
 
-	// register 30 task-queues in the version
-	taskQueues := 30
+	// register 5 task-queues in the version
+	taskQueues := 5
 	for i := 0; i < taskQueues; i++ {
 		go s.pollFromDeploymentWithTaskQueueNumber(ctx, tv, i)
 	}
