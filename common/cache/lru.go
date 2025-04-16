@@ -93,8 +93,7 @@ func (it *iteratorImpl) HasNext() bool {
 // Next return the next item
 func (it *iteratorImpl) Next() Entry {
 	if it.nextItem == nil {
-		panic("this is my newly introduced panic")
-		// panic("LRU cache iterator Next called when there is no next item")
+		panic("LRU cache iterator Next called when there is no next item")
 	}
 
 	entry := it.nextItem.Value.(*entryImpl)
