@@ -850,7 +850,7 @@ jobs:
     steps:
       - name: Check results
         run: |
-          if [[ ${{ inputs.run_single_functional_test }} == "" ]]; then
+          if [[ ${{ inputs.run_single_functional_test }} != "true" ]]; then
             # if in all-tests mode, all statuses must be success
             if [[ -n $(echo "$RESULTS" | jq '.[] | select (. != "success")') ]]; then
               exit 1
