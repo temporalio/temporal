@@ -33,10 +33,13 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/testing/protoassert"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testlogger"
@@ -71,7 +74,7 @@ func (s *nodeSuite) SetupTest() {
 	s.nodeBackend = NewMockNodeBackend(s.controller)
 
 	s.registry = NewRegistry()
-	err := s.registry.Register(newTestLibrary())
+	err := s.registry.Register(newTestLibrary(s.controller))
 	s.NoError(err)
 
 	s.timeSource = clock.NewEventTimeSource()
@@ -929,6 +932,127 @@ func (s *nodeSuite) TestGetComponent() {
 			}
 		})
 	}
+}
+
+func (s *nodeSuite) TestSeralizeTask() {
+	payload := &common.Payload{
+		Data: []byte("some-random-data"),
+	}
+	expectedBlob, err := serialization.ProtoEncodeBlob(payload, enumspb.ENCODING_TYPE_PROTO3)
+	s.NoError(err)
+
+	testCases := []struct {
+		name         string
+		task         any
+		expectedData []byte
+	}{
+		{
+			name: "ProtoTask",
+			task: &TestSideEffectTask{
+				Data: []byte("some-random-data"),
+			},
+			expectedData: expectedBlob.GetData(),
+		},
+		{
+			name:         "EmptyTask",
+			task:         TestOutboundSideEffectTask{},
+			expectedData: nil,
+		},
+		{
+			name: "StructWithProtoField",
+			task: &TestPureTask{
+				Payload: payload,
+			},
+			expectedData: expectedBlob.GetData(),
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			rt, ok := s.registry.taskFor(tc.task)
+			s.True(ok)
+
+			blob, err := serializeTask(rt, tc.task)
+			s.NoError(err)
+
+			// TODO: test the serialized blob by deserializing it back
+			s.NotNil(blob)
+			s.Equal(enumspb.ENCODING_TYPE_PROTO3, blob.GetEncodingType())
+			s.Equal(tc.expectedData, blob.GetData())
+		})
+	}
+}
+
+func (s *nodeSuite) TestCloseTransaction_NewComponentTasks() {
+	persistenceNodes := map[string]*persistencespb.ChasmNode{
+		"": {
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+						Type: "TestLibrary.test_component",
+					},
+				},
+			},
+		},
+	}
+	root, err := NewTree(persistenceNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+	s.NoError(err)
+
+	mutableContext := NewMutableContext(context.Background(), root)
+
+	c, err := root.Component(mutableContext, ComponentRef{})
+	s.NoError(err)
+
+	testComponent := c.(*TestComponent)
+	err = mutableContext.AddTask(testComponent, TaskAttributes{}, &TestSideEffectTask{
+		Data: []byte("some-random-data"),
+	})
+	s.NoError(err)
+	err = mutableContext.AddTask(
+		testComponent,
+		TaskAttributes{ScheduledTime: s.timeSource.Now()},
+		&TestPureTask{
+			Payload: &common.Payload{
+				Data: []byte("some-random-data"),
+			},
+		},
+	)
+	s.NoError(err)
+
+	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(0)).AnyTimes()
+	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(2)).AnyTimes()
+
+	// TODO: Call CloseTransaction() instead.
+	// It's not fully implemented right now, and we have to manually
+	// set the lastUpdateVersionedTransition for the updated nodes.
+	componentAttr := root.serializedNode.Metadata.GetComponentAttributes()
+	root.serializedNode.Metadata.LastUpdateVersionedTransition = &persistencespb.VersionedTransition{
+		TransitionCount: 2,
+	}
+	err = root.closeTransactionUpdateComponentTasks()
+	s.NoError(err)
+
+	newSideEffectTask := componentAttr.SideEffectTasks[0]
+	newSideEffectTask.Data = nil // This is tested by TestSerializeTask()
+	s.Equal(&persistencespb.ChasmComponentAttributes_Task{
+		Type:                      "TestLibrary.test_side_effect_task",
+		ScheduledTime:             timestamppb.New(time.Time{}),
+		VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 2},
+		VersionedTransitionOffset: 1,
+		PhysicalTaskStatus:        physicalTaskStatusNone,
+	}, newSideEffectTask)
+
+	newPureTask := componentAttr.PureTasks[0]
+	newPureTask.Data = nil // This is tested by TestSerializeTask()
+	s.Equal(&persistencespb.ChasmComponentAttributes_Task{
+		Type:                      "TestLibrary.test_pure_task",
+		ScheduledTime:             timestamppb.New(s.timeSource.Now()),
+		VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 2},
+		VersionedTransitionOffset: 2,
+		PhysicalTaskStatus:        physicalTaskStatusNone,
+	}, newPureTask)
 }
 
 func (s *nodeSuite) TestCloseTransaction_GeneratePhysicalSideEffectTasks() {

@@ -28,6 +28,7 @@ import (
 	"cmp"
 	"fmt"
 	"reflect"
+	"slices"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -42,6 +43,7 @@ import (
 	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/service/history/tasks"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 var (
@@ -104,8 +106,18 @@ type (
 		backend     NodeBackend
 		pathEncoder NodePathEncoder
 		logger      log.Logger
+
+		// Following fields are per transaction states, will get cleaned up
+		// during CloseTransaction().
+
 		// Mutations accumulated so far in this transaction.
 		mutation NodesMutation
+		newTasks map[any][]taskWithAttributes // component value -> task & attributes
+	}
+
+	taskWithAttributes struct {
+		task       any
+		attributes TaskAttributes
 	}
 
 	// NodesMutation is a set of mutations for all nodes rooted at a given node n,
@@ -169,6 +181,7 @@ func NewTree(
 			UpdatedNodes: make(map[string]*persistencespb.ChasmNode),
 			DeletedNodes: make(map[string]struct{}),
 		},
+		newTasks: make(map[any][]taskWithAttributes),
 	}
 
 	root := newNode(base, nil, "")
@@ -206,6 +219,11 @@ func NewEmptyTree(
 		timeSource:  timeSource,
 		backend:     backend,
 		pathEncoder: pathEncoder,
+		mutation: NodesMutation{
+			UpdatedNodes: make(map[string]*persistencespb.ChasmNode),
+			DeletedNodes: make(map[string]struct{}),
+		},
+		newTasks: make(map[any][]taskWithAttributes),
 	}
 	root := newNode(base, nil, "")
 	return root
@@ -745,15 +763,25 @@ func (n *Node) Now(
 func (n *Node) AddTask(
 	component Component,
 	taskAttributes TaskAttributes,
-	task interface{},
+	task any,
 ) error {
-	panic("not implemented")
+	n.nodeBase.newTasks[component] = append(n.nodeBase.newTasks[component], taskWithAttributes{
+		task:       task,
+		attributes: taskAttributes,
+	})
+	return nil
 }
 
 // CloseTransaction is used by MutableState to close the transaction and
 // track changes made in the current transaction.
 func (n *Node) CloseTransaction() (NodesMutation, error) {
 	defer n.cleanupTransaction()
+
+	// TODO: serialize updated nodes and update tree structure here.
+
+	if err := n.closeTransactionUpdateComponentTasks(); err != nil {
+		return NodesMutation{}, err
+	}
 
 	if err := n.closeTransactionGeneratePhysicalSideEffectTasks(); err != nil {
 		return NodesMutation{}, err
@@ -765,6 +793,80 @@ func (n *Node) CloseTransaction() (NodesMutation, error) {
 
 	panic("not implemented")
 	// return n.mutation, nil
+}
+
+func (n *Node) closeTransactionUpdateComponentTasks() error {
+	taskOffset := int64(1)
+	nextVersionedTransition := &persistencespb.VersionedTransition{
+		NamespaceFailoverVersion: n.backend.GetCurrentVersion(),
+		TransitionCount:          n.backend.NextTransitionCount(),
+	}
+
+	return n.walk(func(node *Node) error {
+		// no-op if node is not a component
+		componentAttr := node.serializedNode.Metadata.GetComponentAttributes()
+		if componentAttr == nil {
+			return nil
+		}
+
+		// no-op if node is not updated in this transition
+		lastUpdateVT := node.serializedNode.GetMetadata().LastUpdateVersionedTransition
+		if transitionhistory.Compare(lastUpdateVT, nextVersionedTransition) != 0 {
+			return nil
+		}
+
+		// no-op if node is not even deserialized
+		// NOTE: do not check if node.valueState == valueStateNeedSerialize here, because this method needs to be called
+		// after the tree structure is updated and value is serialized, and that flag will
+		// get set to valueStateSynced.
+		if node.valueState == valueStateNeedDeserialize {
+			return nil
+		}
+
+		// TODO: Validate existing tasks and remove them if no longer valid.
+
+		// no-op if no new tasks for this component
+		newTasks, ok := node.nodeBase.newTasks[node.value]
+		if !ok {
+			return nil
+		}
+
+		for _, newTask := range newTasks {
+			taskValue := newTask.task
+			registrableTask, ok := n.registry.taskFor(taskValue)
+			if !ok {
+				return serviceerror.NewInternal(fmt.Sprintf("task type %s is not registered", reflect.TypeOf(taskValue).String()))
+			}
+
+			taskBlob, err := serializeTask(registrableTask, taskValue)
+			if err != nil {
+				return err
+			}
+
+			componentTask := &persistencespb.ChasmComponentAttributes_Task{
+				Type:                      registrableTask.fqType(),
+				Destination:               newTask.attributes.Destination,
+				ScheduledTime:             timestamppb.New(newTask.attributes.ScheduledTime),
+				Data:                      taskBlob,
+				VersionedTransition:       nextVersionedTransition,
+				VersionedTransitionOffset: taskOffset,
+				PhysicalTaskStatus:        physicalTaskStatusNone,
+			}
+
+			if registrableTask.isPureTask {
+				componentAttr.PureTasks = append(componentAttr.PureTasks, componentTask)
+			} else {
+				componentAttr.SideEffectTasks = append(componentAttr.SideEffectTasks, componentTask)
+			}
+
+			taskOffset++
+		}
+
+		// pure tasks are sorted by scheduled time.
+		slices.SortFunc(componentAttr.PureTasks, comparePureTasks)
+
+		return nil
+	})
 }
 
 func (n *Node) closeTransactionGeneratePhysicalSideEffectTasks() error {
@@ -880,6 +982,7 @@ func (n *Node) cleanupTransaction() {
 		UpdatedNodes: make(map[string]*persistencespb.ChasmNode),
 		DeletedNodes: make(map[string]struct{}),
 	}
+	n.newTasks = make(map[any][]taskWithAttributes)
 }
 
 // Snapshot returns all nodes in the tree that have been modified after the given min versioned transition.
@@ -1224,4 +1327,59 @@ func taskCategory(
 		return tasks.CategoryTransfer, nil
 	}
 	return tasks.CategoryTimer, nil
+}
+
+func serializeTask(
+	registrableTask *RegistrableTask,
+	task any,
+) (*commonpb.DataBlob, error) {
+	protoValue, ok := task.(proto.Message)
+	if ok {
+		return serialization.ProtoEncodeBlob(protoValue, enumspb.ENCODING_TYPE_PROTO3)
+	}
+
+	taskGoType := registrableTask.goType
+	taskValue := reflect.ValueOf(task)
+
+	// Handle pointer to struct.
+	if taskGoType.Kind() == reflect.Ptr {
+		taskGoType = taskGoType.Elem()
+		taskValue = taskValue.Elem()
+	}
+
+	// Handle empty task struct.
+	if taskGoType.NumField() == 0 {
+		return &commonpb.DataBlob{
+			Data:         nil,
+			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
+		}, nil
+	}
+
+	// TODO: consider pre-calculating the proto field num when registring the task type.
+
+	var blob *commonpb.DataBlob
+	protoMessageFound := false
+	for i := 0; i < taskGoType.NumField(); i++ {
+		fieldV := taskValue.Field(i)
+		if !fieldV.Type().AssignableTo(protoMessageT) {
+			continue
+		}
+
+		if protoMessageFound {
+			return nil, serviceerror.NewInternal("only one proto field allowed in task struct")
+		}
+		protoMessageFound = true
+
+		var err error
+		blob, err = serialization.ProtoEncodeBlob(fieldV.Interface().(proto.Message), enumspb.ENCODING_TYPE_PROTO3)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if !protoMessageFound {
+		return nil, serviceerror.NewInternal("no proto field found in task struct")
+	}
+
+	return blob, nil
 }
