@@ -101,7 +101,7 @@ func (v *Validator) Validate(searchAttributes *commonpb.SearchAttributes, namesp
 		false,
 	)
 	if err != nil {
-		return serviceerror.NewInvalidArgument(
+		return serviceerror.NewUnavailable(
 			fmt.Sprintf("unable to get search attributes from cluster metadata: %v", err),
 		)
 	}
