@@ -164,7 +164,7 @@ func GetPendingActivityInfo(
 		} // if state is CANCEL_REQUESTEd - it is not modified
 
 		// fill activity pause info
-		if p.PauseInfo != nil {
+		if ai.PauseInfo != nil {
 			p.PauseInfo = &workflowpb.PendingActivityInfo_PauseInfo{
 				PauseTime: ai.PauseInfo.PauseTime,
 			}
