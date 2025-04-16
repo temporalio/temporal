@@ -389,7 +389,7 @@ shell-check:
 
 workflowcheck: $(WORKFLOWCHECK)
 	@printf $(COLOR) "Run workflowcheck for system workflows..."
-	for dir in ./service/worker/*/ ; do \
+	for dir in $(SYSTEM_WORKFLOWS_ROOT)/*/ ; do \
 		echo "Running workflowcheck on $$dir" ; \
 		$(WORKFLOWCHECK) "$$dir" ; \
 	done
