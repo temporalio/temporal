@@ -43,7 +43,7 @@ import (
 	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/tasktoken"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 )
@@ -80,7 +80,7 @@ func (s *namespaceValidatorSuite) TearDownTest() {
 }
 
 func (s *namespaceValidatorSuite) Test_StateValidationIntercept_NamespaceNotSet() {
-	taskToken, _ := common.NewProtoTaskTokenSerializer().Serialize(&tokenspb.Task{
+	taskToken, _ := tasktoken.NewSerializer().Serialize(&tokenspb.Task{
 		NamespaceId: "",
 		WorkflowId:  "wid",
 	})
@@ -156,7 +156,7 @@ func (s *namespaceValidatorSuite) Test_StateValidationIntercept_NamespaceNotFoun
 	s.False(handlerCalled)
 
 	s.mockRegistry.EXPECT().GetNamespaceByID(namespace.ID("not-found-namespace-id")).Return(nil, serviceerror.NewNamespaceNotFound("missing-namespace"))
-	taskToken, _ := common.NewProtoTaskTokenSerializer().Serialize(&tokenspb.Task{
+	taskToken, _ := tasktoken.NewSerializer().Serialize(&tokenspb.Task{
 		NamespaceId: "not-found-namespace-id",
 	})
 	tokenReq := &workflowservice.RespondWorkflowTaskCompletedRequest{
@@ -397,15 +397,13 @@ func (s *namespaceValidatorSuite) Test_StateValidationIntercept_StatusFromNamesp
 			_, isRegisterNamespace := testCase.req.(*workflowservice.RegisterNamespaceRequest)
 			if !isDescribeNamespace && !isRegisterNamespace {
 				s.mockRegistry.EXPECT().GetNamespace(namespace.Name("test-namespace")).Return(namespace.FromPersistentState(
-					&persistence.GetNamespaceResponse{
-						Namespace: &persistencespb.NamespaceDetail{
-							Config: &persistencespb.NamespaceConfig{},
-							ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
-								State: testCase.replicationState,
-							},
-							Info: &persistencespb.NamespaceInfo{
-								State: testCase.state,
-							},
+					&persistencespb.NamespaceDetail{
+						Config: &persistencespb.NamespaceConfig{},
+						ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+							State: testCase.replicationState,
+						},
+						Info: &persistencespb.NamespaceInfo{
+							State: testCase.state,
 						},
 					}), nil)
 			}
@@ -436,7 +434,7 @@ func (s *namespaceValidatorSuite) Test_StateValidationIntercept_StatusFromNamesp
 }
 
 func (s *namespaceValidatorSuite) Test_StateValidationIntercept_StatusFromToken() {
-	taskToken, _ := common.NewProtoTaskTokenSerializer().Serialize(&tokenspb.Task{
+	taskToken, _ := tasktoken.NewSerializer().Serialize(&tokenspb.Task{
 		NamespaceId: "test-namespace-id",
 	})
 
@@ -475,15 +473,14 @@ func (s *namespaceValidatorSuite) Test_StateValidationIntercept_StatusFromToken(
 
 	for _, testCase := range testCases {
 		s.mockRegistry.EXPECT().GetNamespaceByID(namespace.ID("test-namespace-id")).Return(namespace.FromPersistentState(
-			&persistence.GetNamespaceResponse{
-				Namespace: &persistencespb.NamespaceDetail{
-					Config:            &persistencespb.NamespaceConfig{},
-					ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
-					Info: &persistencespb.NamespaceInfo{
-						State: testCase.state,
-					},
+			&persistencespb.NamespaceDetail{
+				Config:            &persistencespb.NamespaceConfig{},
+				ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
+				Info: &persistencespb.NamespaceInfo{
+					State: testCase.state,
 				},
-			}), nil)
+			},
+		), nil)
 
 		nvi := NewNamespaceValidatorInterceptor(
 			s.mockRegistry,
@@ -634,19 +631,17 @@ func (s *namespaceValidatorSuite) Test_StateValidationIntercept_TokenNamespaceEn
 	}
 
 	for _, testCase := range testCases {
-		taskToken, _ := common.NewProtoTaskTokenSerializer().Serialize(&tokenspb.Task{
+		taskToken, _ := tasktoken.NewSerializer().Serialize(&tokenspb.Task{
 			NamespaceId: testCase.tokenNamespaceID.String(),
 		})
 		tokenNamespace := namespace.FromPersistentState(
-			&persistence.GetNamespaceResponse{
-				Namespace: &persistencespb.NamespaceDetail{
-					Config:            &persistencespb.NamespaceConfig{},
-					ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
-					Info: &persistencespb.NamespaceInfo{
-						Id:    testCase.tokenNamespaceID.String(),
-						Name:  testCase.tokenNamespaceName.String(),
-						State: enumspb.NAMESPACE_STATE_REGISTERED,
-					},
+			&persistencespb.NamespaceDetail{
+				Config:            &persistencespb.NamespaceConfig{},
+				ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
+				Info: &persistencespb.NamespaceInfo{
+					Id:    testCase.tokenNamespaceID.String(),
+					Name:  testCase.tokenNamespaceName.String(),
+					State: enumspb.NAMESPACE_STATE_REGISTERED,
 				},
 			})
 
@@ -659,15 +654,13 @@ func (s *namespaceValidatorSuite) Test_StateValidationIntercept_TokenNamespaceEn
 			TaskToken: taskToken,
 		}
 		requestNamespace := namespace.FromPersistentState(
-			&persistence.GetNamespaceResponse{
-				Namespace: &persistencespb.NamespaceDetail{
-					Config:            &persistencespb.NamespaceConfig{},
-					ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
-					Info: &persistencespb.NamespaceInfo{
-						Id:    testCase.requestNamespaceID.String(),
-						Name:  testCase.requestNamespaceName.String(),
-						State: enumspb.NAMESPACE_STATE_REGISTERED,
-					},
+			&persistencespb.NamespaceDetail{
+				Config:            &persistencespb.NamespaceConfig{},
+				ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
+				Info: &persistencespb.NamespaceInfo{
+					Id:    testCase.requestNamespaceID.String(),
+					Name:  testCase.requestNamespaceName.String(),
+					State: enumspb.NAMESPACE_STATE_REGISTERED,
 				},
 			})
 
@@ -836,28 +829,23 @@ func (s *namespaceValidatorSuite) Test_NamespaceValidateIntercept() {
 	serverInfo := &grpc.UnaryServerInfo{
 		FullMethod: api.WorkflowServicePrefix + "random",
 	}
-	requestNamespace := namespace.FromPersistentState(
-		&persistence.GetNamespaceResponse{
-			Namespace: &persistencespb.NamespaceDetail{
-				Config:            &persistencespb.NamespaceConfig{},
-				ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
-				Info: &persistencespb.NamespaceInfo{
-					Id:    uuid.New().String(),
-					Name:  "namespace",
-					State: enumspb.NAMESPACE_STATE_REGISTERED,
-				},
-			},
-		})
+	requestNamespace := namespace.FromPersistentState(&persistencespb.NamespaceDetail{
+		Config:            &persistencespb.NamespaceConfig{},
+		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
+		Info: &persistencespb.NamespaceInfo{
+			Id:    uuid.New().String(),
+			Name:  "namespace",
+			State: enumspb.NAMESPACE_STATE_REGISTERED,
+		},
+	})
 	requestNamespaceTooLong := namespace.FromPersistentState(
-		&persistence.GetNamespaceResponse{
-			Namespace: &persistencespb.NamespaceDetail{
-				Config:            &persistencespb.NamespaceConfig{},
-				ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
-				Info: &persistencespb.NamespaceInfo{
-					Id:    uuid.New().String(),
-					Name:  "namespaceTooLong",
-					State: enumspb.NAMESPACE_STATE_REGISTERED,
-				},
+		&persistencespb.NamespaceDetail{
+			Config:            &persistencespb.NamespaceConfig{},
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
+			Info: &persistencespb.NamespaceInfo{
+				Id:    uuid.New().String(),
+				Name:  "namespaceTooLong",
+				State: enumspb.NAMESPACE_STATE_REGISTERED,
 			},
 		})
 	s.mockRegistry.EXPECT().GetNamespace(namespace.Name("namespace")).Return(requestNamespace, nil).AnyTimes()
@@ -886,15 +874,13 @@ func (s *namespaceValidatorSuite) TestSetNamespace() {
 	namespaceRequestName := uuid.New().String()
 	namespaceEntryName := uuid.New().String()
 	namespaceEntry := namespace.FromPersistentState(
-		&persistence.GetNamespaceResponse{
-			Namespace: &persistencespb.NamespaceDetail{
-				Config:            &persistencespb.NamespaceConfig{},
-				ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
-				Info: &persistencespb.NamespaceInfo{
-					Id:    uuid.New().String(),
-					Name:  namespaceEntryName,
-					State: enumspb.NAMESPACE_STATE_REGISTERED,
-				},
+		&persistencespb.NamespaceDetail{
+			Config:            &persistencespb.NamespaceConfig{},
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
+			Info: &persistencespb.NamespaceInfo{
+				Id:    uuid.New().String(),
+				Name:  namespaceEntryName,
+				State: enumspb.NAMESPACE_STATE_REGISTERED,
 			},
 		})
 

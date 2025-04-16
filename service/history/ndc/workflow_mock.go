@@ -36,8 +36,7 @@ package ndc
 import (
 	reflect "reflect"
 
-	workflow "go.temporal.io/server/service/history/workflow"
-	cache "go.temporal.io/server/service/history/workflow/cache"
+	interfaces "go.temporal.io/server/service/history/interfaces"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -45,6 +44,7 @@ import (
 type MockWorkflow struct {
 	ctrl     *gomock.Controller
 	recorder *MockWorkflowMockRecorder
+	isgomock struct{}
 }
 
 // MockWorkflowMockRecorder is the mock recorder for MockWorkflow.
@@ -79,10 +79,10 @@ func (mr *MockWorkflowMockRecorder) FlushBufferedEvents() *gomock.Call {
 }
 
 // GetContext mocks base method.
-func (m *MockWorkflow) GetContext() workflow.Context {
+func (m *MockWorkflow) GetContext() interfaces.WorkflowContext {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetContext")
-	ret0, _ := ret[0].(workflow.Context)
+	ret0, _ := ret[0].(interfaces.WorkflowContext)
 	return ret0
 }
 
@@ -93,10 +93,10 @@ func (mr *MockWorkflowMockRecorder) GetContext() *gomock.Call {
 }
 
 // GetMutableState mocks base method.
-func (m *MockWorkflow) GetMutableState() workflow.MutableState {
+func (m *MockWorkflow) GetMutableState() interfaces.MutableState {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetMutableState")
-	ret0, _ := ret[0].(workflow.MutableState)
+	ret0, _ := ret[0].(interfaces.MutableState)
 	return ret0
 }
 
@@ -107,10 +107,10 @@ func (mr *MockWorkflowMockRecorder) GetMutableState() *gomock.Call {
 }
 
 // GetReleaseFn mocks base method.
-func (m *MockWorkflow) GetReleaseFn() cache.ReleaseCacheFunc {
+func (m *MockWorkflow) GetReleaseFn() interfaces.ReleaseWorkflowContextFunc {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetReleaseFn")
-	ret0, _ := ret[0].(cache.ReleaseCacheFunc)
+	ret0, _ := ret[0].(interfaces.ReleaseWorkflowContextFunc)
 	return ret0
 }
 
@@ -166,10 +166,10 @@ func (mr *MockWorkflowMockRecorder) Revive() *gomock.Call {
 }
 
 // SuppressBy mocks base method.
-func (m *MockWorkflow) SuppressBy(incomingWorkflow Workflow) (workflow.TransactionPolicy, error) {
+func (m *MockWorkflow) SuppressBy(incomingWorkflow Workflow) (interfaces.TransactionPolicy, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SuppressBy", incomingWorkflow)
-	ret0, _ := ret[0].(workflow.TransactionPolicy)
+	ret0, _ := ret[0].(interfaces.TransactionPolicy)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

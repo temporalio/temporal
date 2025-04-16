@@ -31,10 +31,13 @@ package taskqueue
 import (
 	reflect "reflect"
 	sync "sync"
+	unsafe "unsafe"
 
-	v11 "go.temporal.io/api/enums/v1"
-	v1 "go.temporal.io/api/taskqueue/v1"
-	v12 "go.temporal.io/server/api/enums/v1"
+	v11 "go.temporal.io/api/deployment/v1"
+	v1 "go.temporal.io/api/enums/v1"
+	v13 "go.temporal.io/api/taskqueue/v1"
+	v12 "go.temporal.io/server/api/deployment/v1"
+	v14 "go.temporal.io/server/api/enums/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	emptypb "google.golang.org/protobuf/types/known/emptypb"
@@ -49,28 +52,33 @@ const (
 
 // TaskVersionDirective controls how matching should direct a task.
 type TaskVersionDirective struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
+	state protoimpl.MessageState `protogen:"open.v1"`
 	// Default (if build_id is not present) is "unversioned":
 	// Use the unversioned task queue, even if the task queue has versioning data.
 	// Absent value means the task is the non-starting task of an unversioned execution so it should remain unversioned.
+	// Deprecated. Use deployment_version.
 	//
-	// Types that are assignable to BuildId:
+	// Types that are valid to be assigned to BuildId:
 	//
 	//	*TaskVersionDirective_UseAssignmentRules
 	//	*TaskVersionDirective_AssignedBuildId
 	BuildId isTaskVersionDirective_BuildId `protobuf_oneof:"build_id"`
+	// Workflow's effective behavior when the task is scheduled.
+	Behavior v1.VersioningBehavior `protobuf:"varint,3,opt,name=behavior,proto3,enum=temporal.api.enums.v1.VersioningBehavior" json:"behavior,omitempty"`
+	// Workflow's effective deployment when the task is scheduled.
+	// Deprecated. Use deployment_version.
+	Deployment *v11.Deployment `protobuf:"bytes,4,opt,name=deployment,proto3" json:"deployment,omitempty"`
+	// Workflow's effective deployment version when the task is scheduled.
+	DeploymentVersion *v12.WorkerDeploymentVersion `protobuf:"bytes,5,opt,name=deployment_version,json=deploymentVersion,proto3" json:"deployment_version,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *TaskVersionDirective) Reset() {
 	*x = TaskVersionDirective{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_taskqueue_v1_message_proto_msgTypes[0]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_taskqueue_v1_message_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *TaskVersionDirective) String() string {
@@ -81,7 +89,7 @@ func (*TaskVersionDirective) ProtoMessage() {}
 
 func (x *TaskVersionDirective) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_taskqueue_v1_message_proto_msgTypes[0]
-	if protoimpl.UnsafeEnabled && x != nil {
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -96,25 +104,50 @@ func (*TaskVersionDirective) Descriptor() ([]byte, []int) {
 	return file_temporal_server_api_taskqueue_v1_message_proto_rawDescGZIP(), []int{0}
 }
 
-func (m *TaskVersionDirective) GetBuildId() isTaskVersionDirective_BuildId {
-	if m != nil {
-		return m.BuildId
+func (x *TaskVersionDirective) GetBuildId() isTaskVersionDirective_BuildId {
+	if x != nil {
+		return x.BuildId
 	}
 	return nil
 }
 
 func (x *TaskVersionDirective) GetUseAssignmentRules() *emptypb.Empty {
-	if x, ok := x.GetBuildId().(*TaskVersionDirective_UseAssignmentRules); ok {
-		return x.UseAssignmentRules
+	if x != nil {
+		if x, ok := x.BuildId.(*TaskVersionDirective_UseAssignmentRules); ok {
+			return x.UseAssignmentRules
+		}
 	}
 	return nil
 }
 
 func (x *TaskVersionDirective) GetAssignedBuildId() string {
-	if x, ok := x.GetBuildId().(*TaskVersionDirective_AssignedBuildId); ok {
-		return x.AssignedBuildId
+	if x != nil {
+		if x, ok := x.BuildId.(*TaskVersionDirective_AssignedBuildId); ok {
+			return x.AssignedBuildId
+		}
 	}
 	return ""
+}
+
+func (x *TaskVersionDirective) GetBehavior() v1.VersioningBehavior {
+	if x != nil {
+		return x.Behavior
+	}
+	return v1.VersioningBehavior(0)
+}
+
+func (x *TaskVersionDirective) GetDeployment() *v11.Deployment {
+	if x != nil {
+		return x.Deployment
+	}
+	return nil
+}
+
+func (x *TaskVersionDirective) GetDeploymentVersion() *v12.WorkerDeploymentVersion {
+	if x != nil {
+		return x.DeploymentVersion
+	}
+	return nil
 }
 
 type isTaskVersionDirective_BuildId interface {
@@ -140,23 +173,22 @@ func (*TaskVersionDirective_UseAssignmentRules) isTaskVersionDirective_BuildId()
 func (*TaskVersionDirective_AssignedBuildId) isTaskVersionDirective_BuildId() {}
 
 type InternalTaskQueueStatus struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	ReadLevel        int64           `protobuf:"varint,1,opt,name=read_level,json=readLevel,proto3" json:"read_level,omitempty"`
-	AckLevel         int64           `protobuf:"varint,2,opt,name=ack_level,json=ackLevel,proto3" json:"ack_level,omitempty"`
-	TaskIdBlock      *v1.TaskIdBlock `protobuf:"bytes,3,opt,name=task_id_block,json=taskIdBlock,proto3" json:"task_id_block,omitempty"`
-	ReadBufferLength int64           `protobuf:"varint,4,opt,name=read_buffer_length,json=readBufferLength,proto3" json:"read_buffer_length,omitempty"`
+	state                   protoimpl.MessageState `protogen:"open.v1"`
+	ReadLevel               int64                  `protobuf:"varint,1,opt,name=read_level,json=readLevel,proto3" json:"read_level,omitempty"`
+	AckLevel                int64                  `protobuf:"varint,2,opt,name=ack_level,json=ackLevel,proto3" json:"ack_level,omitempty"`
+	TaskIdBlock             *v13.TaskIdBlock       `protobuf:"bytes,3,opt,name=task_id_block,json=taskIdBlock,proto3" json:"task_id_block,omitempty"`
+	LoadedTasks             int64                  `protobuf:"varint,4,opt,name=loaded_tasks,json=loadedTasks,proto3" json:"loaded_tasks,omitempty"`
+	ApproximateBacklogCount int64                  `protobuf:"varint,5,opt,name=approximate_backlog_count,json=approximateBacklogCount,proto3" json:"approximate_backlog_count,omitempty"`
+	MaxReadLevel            int64                  `protobuf:"varint,6,opt,name=max_read_level,json=maxReadLevel,proto3" json:"max_read_level,omitempty"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
 }
 
 func (x *InternalTaskQueueStatus) Reset() {
 	*x = InternalTaskQueueStatus{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_taskqueue_v1_message_proto_msgTypes[1]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_taskqueue_v1_message_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *InternalTaskQueueStatus) String() string {
@@ -167,7 +199,7 @@ func (*InternalTaskQueueStatus) ProtoMessage() {}
 
 func (x *InternalTaskQueueStatus) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_taskqueue_v1_message_proto_msgTypes[1]
-	if protoimpl.UnsafeEnabled && x != nil {
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -196,35 +228,46 @@ func (x *InternalTaskQueueStatus) GetAckLevel() int64 {
 	return 0
 }
 
-func (x *InternalTaskQueueStatus) GetTaskIdBlock() *v1.TaskIdBlock {
+func (x *InternalTaskQueueStatus) GetTaskIdBlock() *v13.TaskIdBlock {
 	if x != nil {
 		return x.TaskIdBlock
 	}
 	return nil
 }
 
-func (x *InternalTaskQueueStatus) GetReadBufferLength() int64 {
+func (x *InternalTaskQueueStatus) GetLoadedTasks() int64 {
 	if x != nil {
-		return x.ReadBufferLength
+		return x.LoadedTasks
+	}
+	return 0
+}
+
+func (x *InternalTaskQueueStatus) GetApproximateBacklogCount() int64 {
+	if x != nil {
+		return x.ApproximateBacklogCount
+	}
+	return 0
+}
+
+func (x *InternalTaskQueueStatus) GetMaxReadLevel() int64 {
+	if x != nil {
+		return x.MaxReadLevel
 	}
 	return 0
 }
 
 type TaskQueueVersionInfoInternal struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
+	state                 protoimpl.MessageState `protogen:"open.v1"`
 	PhysicalTaskQueueInfo *PhysicalTaskQueueInfo `protobuf:"bytes,2,opt,name=physical_task_queue_info,json=physicalTaskQueueInfo,proto3" json:"physical_task_queue_info,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
 }
 
 func (x *TaskQueueVersionInfoInternal) Reset() {
 	*x = TaskQueueVersionInfoInternal{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_taskqueue_v1_message_proto_msgTypes[2]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_taskqueue_v1_message_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *TaskQueueVersionInfoInternal) String() string {
@@ -235,7 +278,7 @@ func (*TaskQueueVersionInfoInternal) ProtoMessage() {}
 
 func (x *TaskQueueVersionInfoInternal) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_taskqueue_v1_message_proto_msgTypes[2]
-	if protoimpl.UnsafeEnabled && x != nil {
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -258,23 +301,20 @@ func (x *TaskQueueVersionInfoInternal) GetPhysicalTaskQueueInfo() *PhysicalTaskQ
 }
 
 type PhysicalTaskQueueInfo struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
+	state protoimpl.MessageState `protogen:"open.v1"`
 	// Unversioned workers (with `useVersioning=false`) are reported in unversioned result even if they set a Build ID.
-	Pollers                 []*v1.PollerInfo         `protobuf:"bytes,1,rep,name=pollers,proto3" json:"pollers,omitempty"`
-	TaskQueueStats          *v1.TaskQueueStats       `protobuf:"bytes,2,opt,name=task_queue_stats,json=taskQueueStats,proto3" json:"task_queue_stats,omitempty"`
-	InternalTaskQueueStatus *InternalTaskQueueStatus `protobuf:"bytes,3,opt,name=internal_task_queue_status,json=internalTaskQueueStatus,proto3" json:"internal_task_queue_status,omitempty"`
+	Pollers                 []*v13.PollerInfo          `protobuf:"bytes,1,rep,name=pollers,proto3" json:"pollers,omitempty"`
+	TaskQueueStats          *v13.TaskQueueStats        `protobuf:"bytes,2,opt,name=task_queue_stats,json=taskQueueStats,proto3" json:"task_queue_stats,omitempty"`
+	InternalTaskQueueStatus []*InternalTaskQueueStatus `protobuf:"bytes,3,rep,name=internal_task_queue_status,json=internalTaskQueueStatus,proto3" json:"internal_task_queue_status,omitempty"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
 }
 
 func (x *PhysicalTaskQueueInfo) Reset() {
 	*x = PhysicalTaskQueueInfo{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_taskqueue_v1_message_proto_msgTypes[3]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_taskqueue_v1_message_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *PhysicalTaskQueueInfo) String() string {
@@ -285,7 +325,7 @@ func (*PhysicalTaskQueueInfo) ProtoMessage() {}
 
 func (x *PhysicalTaskQueueInfo) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_taskqueue_v1_message_proto_msgTypes[3]
-	if protoimpl.UnsafeEnabled && x != nil {
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -300,21 +340,21 @@ func (*PhysicalTaskQueueInfo) Descriptor() ([]byte, []int) {
 	return file_temporal_server_api_taskqueue_v1_message_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *PhysicalTaskQueueInfo) GetPollers() []*v1.PollerInfo {
+func (x *PhysicalTaskQueueInfo) GetPollers() []*v13.PollerInfo {
 	if x != nil {
 		return x.Pollers
 	}
 	return nil
 }
 
-func (x *PhysicalTaskQueueInfo) GetTaskQueueStats() *v1.TaskQueueStats {
+func (x *PhysicalTaskQueueInfo) GetTaskQueueStats() *v13.TaskQueueStats {
 	if x != nil {
 		return x.TaskQueueStats
 	}
 	return nil
 }
 
-func (x *PhysicalTaskQueueInfo) GetInternalTaskQueueStatus() *InternalTaskQueueStatus {
+func (x *PhysicalTaskQueueInfo) GetInternalTaskQueueStatus() []*InternalTaskQueueStatus {
 	if x != nil {
 		return x.InternalTaskQueueStatus
 	}
@@ -323,29 +363,26 @@ func (x *PhysicalTaskQueueInfo) GetInternalTaskQueueStatus() *InternalTaskQueueS
 
 // Represents a normal or sticky partition of a task queue.
 type TaskQueuePartition struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
+	state protoimpl.MessageState `protogen:"open.v1"`
 	// This is the user-facing name for this task queue
-	TaskQueue     string            `protobuf:"bytes,1,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
-	TaskQueueType v11.TaskQueueType `protobuf:"varint,2,opt,name=task_queue_type,json=taskQueueType,proto3,enum=temporal.api.enums.v1.TaskQueueType" json:"task_queue_type,omitempty"`
+	TaskQueue     string           `protobuf:"bytes,1,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
+	TaskQueueType v1.TaskQueueType `protobuf:"varint,2,opt,name=task_queue_type,json=taskQueueType,proto3,enum=temporal.api.enums.v1.TaskQueueType" json:"task_queue_type,omitempty"`
 	// Absent means normal root partition (normal_partition_id=0)
 	//
-	// Types that are assignable to PartitionId:
+	// Types that are valid to be assigned to PartitionId:
 	//
 	//	*TaskQueuePartition_NormalPartitionId
 	//	*TaskQueuePartition_StickyName
-	PartitionId isTaskQueuePartition_PartitionId `protobuf_oneof:"partition_id"`
+	PartitionId   isTaskQueuePartition_PartitionId `protobuf_oneof:"partition_id"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *TaskQueuePartition) Reset() {
 	*x = TaskQueuePartition{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_taskqueue_v1_message_proto_msgTypes[4]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_taskqueue_v1_message_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *TaskQueuePartition) String() string {
@@ -356,7 +393,7 @@ func (*TaskQueuePartition) ProtoMessage() {}
 
 func (x *TaskQueuePartition) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_taskqueue_v1_message_proto_msgTypes[4]
-	if protoimpl.UnsafeEnabled && x != nil {
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -378,30 +415,34 @@ func (x *TaskQueuePartition) GetTaskQueue() string {
 	return ""
 }
 
-func (x *TaskQueuePartition) GetTaskQueueType() v11.TaskQueueType {
+func (x *TaskQueuePartition) GetTaskQueueType() v1.TaskQueueType {
 	if x != nil {
 		return x.TaskQueueType
 	}
-	return v11.TaskQueueType(0)
+	return v1.TaskQueueType(0)
 }
 
-func (m *TaskQueuePartition) GetPartitionId() isTaskQueuePartition_PartitionId {
-	if m != nil {
-		return m.PartitionId
+func (x *TaskQueuePartition) GetPartitionId() isTaskQueuePartition_PartitionId {
+	if x != nil {
+		return x.PartitionId
 	}
 	return nil
 }
 
 func (x *TaskQueuePartition) GetNormalPartitionId() int32 {
-	if x, ok := x.GetPartitionId().(*TaskQueuePartition_NormalPartitionId); ok {
-		return x.NormalPartitionId
+	if x != nil {
+		if x, ok := x.PartitionId.(*TaskQueuePartition_NormalPartitionId); ok {
+			return x.NormalPartitionId
+		}
 	}
 	return 0
 }
 
 func (x *TaskQueuePartition) GetStickyName() string {
-	if x, ok := x.GetPartitionId().(*TaskQueuePartition_StickyName); ok {
-		return x.StickyName
+	if x != nil {
+		if x, ok := x.PartitionId.(*TaskQueuePartition_StickyName); ok {
+			return x.StickyName
+		}
 	}
 	return ""
 }
@@ -422,25 +463,23 @@ func (*TaskQueuePartition_NormalPartitionId) isTaskQueuePartition_PartitionId() 
 
 func (*TaskQueuePartition_StickyName) isTaskQueuePartition_PartitionId() {}
 
-// Information about redirect intention sent by Matching to History in Record*TaskStarted calls
+// Information about redirect intention sent by Matching to History in Record*TaskStarted calls.
+// Deprecated.
 type BuildIdRedirectInfo struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
+	state protoimpl.MessageState `protogen:"open.v1"`
 	// build ID asked by History in the directive or the one calculated based on the assignment rules.
 	// this is the source of the redirect rule chain applied. (the target of the redirect rule chain is
 	// the poller's build ID reported in WorkerVersionCapabilities)
 	AssignedBuildId string `protobuf:"bytes,1,opt,name=assigned_build_id,json=assignedBuildId,proto3" json:"assigned_build_id,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *BuildIdRedirectInfo) Reset() {
 	*x = BuildIdRedirectInfo{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_taskqueue_v1_message_proto_msgTypes[5]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_taskqueue_v1_message_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *BuildIdRedirectInfo) String() string {
@@ -451,7 +490,7 @@ func (*BuildIdRedirectInfo) ProtoMessage() {}
 
 func (x *BuildIdRedirectInfo) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_taskqueue_v1_message_proto_msgTypes[5]
-	if protoimpl.UnsafeEnabled && x != nil {
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -473,34 +512,34 @@ func (x *BuildIdRedirectInfo) GetAssignedBuildId() string {
 	return ""
 }
 
-// Information about task forwarding from one partition to its parent. Versioning decisions for activity/workflow
-// tasks are made at the source partition and sent to the parent partition in this message so that parent partition
-// does not have to make versioning decision again. For Query/Nexus tasks, this works differently as the child's
-// versioning decision is ignored and the parent partition makes a fresh decision.
+// Information about task forwarding from one partition to its parent.
 type TaskForwardInfo struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
+	state protoimpl.MessageState `protogen:"open.v1"`
 	// RPC name of the partition forwarded the task.
 	// In case of multiple hops, this is the source partition of the last hop.
 	SourcePartition string         `protobuf:"bytes,1,opt,name=source_partition,json=sourcePartition,proto3" json:"source_partition,omitempty"`
-	TaskSource      v12.TaskSource `protobuf:"varint,2,opt,name=task_source,json=taskSource,proto3,enum=temporal.server.api.enums.v1.TaskSource" json:"task_source,omitempty"`
-	// Redirect info is not present for Query and Nexus tasks.
+	TaskSource      v14.TaskSource `protobuf:"varint,2,opt,name=task_source,json=taskSource,proto3,enum=temporal.server.api.enums.v1.TaskSource" json:"task_source,omitempty"`
+	// Redirect info is not present for Query and Nexus tasks. Versioning decisions for activity/workflow
+	// tasks are made at the source partition and sent to the parent partition in this message so that parent partition
+	// does not have to make versioning decision again. For Query/Nexus tasks, this works differently as the child's
+	// versioning decision is ignored and the parent partition makes a fresh decision.
+	// Deprecated. [cleanup-old-wv]
 	RedirectInfo *BuildIdRedirectInfo `protobuf:"bytes,3,opt,name=redirect_info,json=redirectInfo,proto3" json:"redirect_info,omitempty"`
 	// Build ID that should be used to dispatch the task to. Ignored in Query and Nexus tasks.
+	// Deprecated. [cleanup-old-wv]
 	DispatchBuildId string `protobuf:"bytes,4,opt,name=dispatch_build_id,json=dispatchBuildId,proto3" json:"dispatch_build_id,omitempty"`
 	// Only used for old versioning. [cleanup-old-wv]
+	// Deprecated. [cleanup-old-wv]
 	DispatchVersionSet string `protobuf:"bytes,5,opt,name=dispatch_version_set,json=dispatchVersionSet,proto3" json:"dispatch_version_set,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *TaskForwardInfo) Reset() {
 	*x = TaskForwardInfo{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_taskqueue_v1_message_proto_msgTypes[6]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_taskqueue_v1_message_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *TaskForwardInfo) String() string {
@@ -511,7 +550,7 @@ func (*TaskForwardInfo) ProtoMessage() {}
 
 func (x *TaskForwardInfo) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_taskqueue_v1_message_proto_msgTypes[6]
-	if protoimpl.UnsafeEnabled && x != nil {
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -533,11 +572,11 @@ func (x *TaskForwardInfo) GetSourcePartition() string {
 	return ""
 }
 
-func (x *TaskForwardInfo) GetTaskSource() v12.TaskSource {
+func (x *TaskForwardInfo) GetTaskSource() v14.TaskSource {
 	if x != nil {
 		return x.TaskSource
 	}
-	return v12.TaskSource(0)
+	return v14.TaskSource(0)
 }
 
 func (x *TaskForwardInfo) GetRedirectInfo() *BuildIdRedirectInfo {
@@ -563,132 +602,65 @@ func (x *TaskForwardInfo) GetDispatchVersionSet() string {
 
 var File_temporal_server_api_taskqueue_v1_message_proto protoreflect.FileDescriptor
 
-var file_temporal_server_api_taskqueue_v1_message_proto_rawDesc = []byte{
-	0x0a, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2f, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72,
-	0x2f, 0x61, 0x70, 0x69, 0x2f, 0x74, 0x61, 0x73, 0x6b, 0x71, 0x75, 0x65, 0x75, 0x65, 0x2f, 0x76, 0x31,
-	0x2f, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x12, 0x20, 0x74,
-	0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x61,
-	0x70, 0x69, 0x2e, 0x74, 0x61, 0x73, 0x6b, 0x71, 0x75, 0x65, 0x75, 0x65, 0x2e, 0x76, 0x31, 0x1a, 0x1b,
-	0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2f, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2f, 0x65,
-	0x6d, 0x70, 0x74, 0x79, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x1a, 0x27, 0x74, 0x65, 0x6d, 0x70, 0x6f,
-	0x72, 0x61, 0x6c, 0x2f, 0x61, 0x70, 0x69, 0x2f, 0x74, 0x61, 0x73, 0x6b, 0x71, 0x75, 0x65, 0x75,
-	0x65, 0x2f, 0x76, 0x31, 0x2f, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74,
-	0x6f, 0x1a, 0x26, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2f, 0x61, 0x70, 0x69, 0x2f, 0x65,
-	0x6e, 0x75, 0x6d, 0x73, 0x2f, 0x76, 0x31, 0x2f, 0x74, 0x61, 0x73, 0x6b, 0x5f, 0x71, 0x75, 0x65, 0x75,
-	0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x1a, 0x27, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61,
-	0x6c, 0x2f, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2f, 0x61, 0x70, 0x69, 0x2f, 0x65, 0x6e, 0x75, 0x6d,
-	0x73, 0x2f, 0x76, 0x31, 0x2f, 0x74, 0x61, 0x73, 0x6b, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x22, 0xa4,
-	0x01, 0x0a, 0x14, 0x54, 0x61, 0x73, 0x6b, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x44, 0x69, 0x72,
-	0x65, 0x63, 0x74, 0x69, 0x76, 0x65, 0x12, 0x4e, 0x0a, 0x14, 0x75, 0x73, 0x65, 0x5f, 0x61, 0x73,
-	0x73, 0x69, 0x67, 0x6e, 0x6d, 0x65, 0x6e, 0x74, 0x5f, 0x72, 0x75, 0x6c, 0x65, 0x73, 0x18, 0x01, 0x20,
-	0x01, 0x28, 0x0b, 0x32, 0x16, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74,
-	0x6f, 0x62, 0x75, 0x66, 0x2e, 0x45, 0x6d, 0x70, 0x74, 0x79, 0x48, 0x00, 0x52, 0x12, 0x75, 0x73, 0x65,
-	0x41, 0x73, 0x73, 0x69, 0x67, 0x6e, 0x6d, 0x65, 0x6e, 0x74, 0x52, 0x75, 0x6c, 0x65, 0x73, 0x42,
-	0x02, 0x68, 0x00, 0x12, 0x30, 0x0a, 0x11, 0x61, 0x73, 0x73, 0x69, 0x67, 0x6e, 0x65, 0x64, 0x5f, 0x62,
-	0x75, 0x69, 0x6c, 0x64, 0x5f, 0x69, 0x64, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x48, 0x00, 0x52, 0x0f,
-	0x61, 0x73, 0x73, 0x69, 0x67, 0x6e, 0x65, 0x64, 0x42, 0x75, 0x69, 0x6c, 0x64, 0x49, 0x64, 0x42, 0x02,
-	0x68, 0x00, 0x42, 0x0a, 0x0a, 0x08, 0x62, 0x75, 0x69, 0x6c, 0x64, 0x5f, 0x69, 0x64, 0x22, 0xdf,
-	0x01, 0x0a, 0x17, 0x49, 0x6e, 0x74, 0x65, 0x72, 0x6e, 0x61, 0x6c, 0x54, 0x61, 0x73, 0x6b, 0x51, 0x75,
-	0x65, 0x75, 0x65, 0x53, 0x74, 0x61, 0x74, 0x75, 0x73, 0x12, 0x21, 0x0a, 0x0a, 0x72, 0x65, 0x61, 0x64,
-	0x5f, 0x6c, 0x65, 0x76, 0x65, 0x6c, 0x18, 0x01, 0x20, 0x01, 0x28, 0x03, 0x52, 0x09, 0x72, 0x65,
-	0x61, 0x64, 0x4c, 0x65, 0x76, 0x65, 0x6c, 0x42, 0x02, 0x68, 0x00, 0x12, 0x1f, 0x0a, 0x09, 0x61, 0x63,
-	0x6b, 0x5f, 0x6c, 0x65, 0x76, 0x65, 0x6c, 0x18, 0x02, 0x20, 0x01, 0x28, 0x03, 0x52, 0x08, 0x61, 0x63,
-	0x6b, 0x4c, 0x65, 0x76, 0x65, 0x6c, 0x42, 0x02, 0x68, 0x00, 0x12, 0x4e, 0x0a, 0x0d, 0x74, 0x61, 0x73,
-	0x6b, 0x5f, 0x69, 0x64, 0x5f, 0x62, 0x6c, 0x6f, 0x63, 0x6b, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0b,
-	0x32, 0x26, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x74,
-	0x61, 0x73, 0x6b, 0x71, 0x75, 0x65, 0x75, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x54, 0x61, 0x73, 0x6b, 0x49,
-	0x64, 0x42, 0x6c, 0x6f, 0x63, 0x6b, 0x52, 0x0b, 0x74, 0x61, 0x73, 0x6b, 0x49, 0x64, 0x42, 0x6c, 0x6f,
-	0x63, 0x6b, 0x42, 0x02, 0x68, 0x00, 0x12, 0x30, 0x0a, 0x12, 0x72, 0x65, 0x61, 0x64, 0x5f, 0x62,
-	0x75, 0x66, 0x66, 0x65, 0x72, 0x5f, 0x6c, 0x65, 0x6e, 0x67, 0x74, 0x68, 0x18, 0x04, 0x20, 0x01, 0x28,
-	0x03, 0x52, 0x10, 0x72, 0x65, 0x61, 0x64, 0x42, 0x75, 0x66, 0x66, 0x65, 0x72, 0x4c, 0x65, 0x6e, 0x67,
-	0x74, 0x68, 0x42, 0x02, 0x68, 0x00, 0x22, 0x94, 0x01, 0x0a, 0x1c, 0x54, 0x61, 0x73, 0x6b, 0x51, 0x75,
-	0x65, 0x75, 0x65, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x49, 0x6e, 0x66, 0x6f, 0x49, 0x6e,
-	0x74, 0x65, 0x72, 0x6e, 0x61, 0x6c, 0x12, 0x74, 0x0a, 0x18, 0x70, 0x68, 0x79, 0x73, 0x69, 0x63, 0x61,
-	0x6c, 0x5f, 0x74, 0x61, 0x73, 0x6b, 0x5f, 0x71, 0x75, 0x65, 0x75, 0x65, 0x5f, 0x69, 0x6e, 0x66, 0x6f,
-	0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x37, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c,
-	0x2e, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x74, 0x61, 0x73, 0x6b,
-	0x71, 0x75, 0x65, 0x75, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x50, 0x68, 0x79, 0x73, 0x69, 0x63, 0x61, 0x6c,
-	0x54, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x49, 0x6e, 0x66, 0x6f, 0x52, 0x15, 0x70, 0x68,
-	0x79, 0x73, 0x69, 0x63, 0x61, 0x6c, 0x54, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x49, 0x6e,
-	0x66, 0x6f, 0x42, 0x02, 0x68, 0x00, 0x22, 0xb1, 0x02, 0x0a, 0x15, 0x50, 0x68, 0x79, 0x73, 0x69,
-	0x63, 0x61, 0x6c, 0x54, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x49, 0x6e, 0x66, 0x6f, 0x12,
-	0x43, 0x0a, 0x07, 0x70, 0x6f, 0x6c, 0x6c, 0x65, 0x72, 0x73, 0x18, 0x01, 0x20, 0x03, 0x28, 0x0b, 0x32,
-	0x25, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x74, 0x61,
-	0x73, 0x6b, 0x71, 0x75, 0x65, 0x75, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x50, 0x6f, 0x6c, 0x6c, 0x65,
-	0x72, 0x49, 0x6e, 0x66, 0x6f, 0x52, 0x07, 0x70, 0x6f, 0x6c, 0x6c, 0x65, 0x72, 0x73, 0x42, 0x02, 0x68,
-	0x00, 0x12, 0x57, 0x0a, 0x10, 0x74, 0x61, 0x73, 0x6b, 0x5f, 0x71, 0x75, 0x65, 0x75, 0x65, 0x5f, 0x73,
-	0x74, 0x61, 0x74, 0x73, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x29, 0x2e, 0x74, 0x65, 0x6d,
-	0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x74, 0x61, 0x73, 0x6b, 0x71, 0x75, 0x65,
-	0x75, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x54, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x53, 0x74,
-	0x61, 0x74, 0x73, 0x52, 0x0e, 0x74, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x53, 0x74, 0x61,
-	0x74, 0x73, 0x42, 0x02, 0x68, 0x00, 0x12, 0x7a, 0x0a, 0x1a, 0x69, 0x6e, 0x74, 0x65, 0x72, 0x6e,
-	0x61, 0x6c, 0x5f, 0x74, 0x61, 0x73, 0x6b, 0x5f, 0x71, 0x75, 0x65, 0x75, 0x65, 0x5f, 0x73, 0x74, 0x61,
-	0x74, 0x75, 0x73, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x39, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f,
-	0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x74, 0x61,
-	0x73, 0x6b, 0x71, 0x75, 0x65, 0x75, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x49, 0x6e, 0x74, 0x65, 0x72,
-	0x6e, 0x61, 0x6c, 0x54, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x53, 0x74, 0x61, 0x74, 0x75,
-	0x73, 0x52, 0x17, 0x69, 0x6e, 0x74, 0x65, 0x72, 0x6e, 0x61, 0x6c, 0x54, 0x61, 0x73, 0x6b, 0x51, 0x75,
-	0x65, 0x75, 0x65, 0x53, 0x74, 0x61, 0x74, 0x75, 0x73, 0x42, 0x02, 0x68, 0x00, 0x22, 0xf6, 0x01, 0x0a,
-	0x12, 0x54, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x50, 0x61, 0x72, 0x74, 0x69, 0x74,
-	0x69, 0x6f, 0x6e, 0x12, 0x21, 0x0a, 0x0a, 0x74, 0x61, 0x73, 0x6b, 0x5f, 0x71, 0x75, 0x65, 0x75, 0x65,
-	0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x09, 0x74, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65,
-	0x42, 0x02, 0x68, 0x00, 0x12, 0x50, 0x0a, 0x0f, 0x74, 0x61, 0x73, 0x6b, 0x5f, 0x71, 0x75, 0x65, 0x75,
-	0x65, 0x5f, 0x74, 0x79, 0x70, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0e, 0x32, 0x24, 0x2e, 0x74,
-	0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x65, 0x6e, 0x75, 0x6d, 0x73,
-	0x2e, 0x76, 0x31, 0x2e, 0x54, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x54, 0x79, 0x70, 0x65,
-	0x52, 0x0d, 0x74, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x54, 0x79, 0x70, 0x65, 0x42, 0x02,
-	0x68, 0x00, 0x12, 0x34, 0x0a, 0x13, 0x6e, 0x6f, 0x72, 0x6d, 0x61, 0x6c, 0x5f, 0x70, 0x61, 0x72,
-	0x74, 0x69, 0x74, 0x69, 0x6f, 0x6e, 0x5f, 0x69, 0x64, 0x18, 0x03, 0x20, 0x01, 0x28, 0x05, 0x48, 0x00,
-	0x52, 0x11, 0x6e, 0x6f, 0x72, 0x6d, 0x61, 0x6c, 0x50, 0x61, 0x72, 0x74, 0x69, 0x74, 0x69, 0x6f, 0x6e,
-	0x49, 0x64, 0x42, 0x02, 0x68, 0x00, 0x12, 0x25, 0x0a, 0x0b, 0x73, 0x74, 0x69, 0x63, 0x6b, 0x79, 0x5f,
-	0x6e, 0x61, 0x6d, 0x65, 0x18, 0x04, 0x20, 0x01, 0x28, 0x09, 0x48, 0x00, 0x52, 0x0a, 0x73, 0x74,
-	0x69, 0x63, 0x6b, 0x79, 0x4e, 0x61, 0x6d, 0x65, 0x42, 0x02, 0x68, 0x00, 0x42, 0x0e, 0x0a, 0x0c, 0x70,
-	0x61, 0x72, 0x74, 0x69, 0x74, 0x69, 0x6f, 0x6e, 0x5f, 0x69, 0x64, 0x22, 0x45, 0x0a, 0x13, 0x42, 0x75,
-	0x69, 0x6c, 0x64, 0x49, 0x64, 0x52, 0x65, 0x64, 0x69, 0x72, 0x65, 0x63, 0x74, 0x49, 0x6e, 0x66,
-	0x6f, 0x12, 0x2e, 0x0a, 0x11, 0x61, 0x73, 0x73, 0x69, 0x67, 0x6e, 0x65, 0x64, 0x5f, 0x62, 0x75, 0x69,
-	0x6c, 0x64, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0f, 0x61, 0x73, 0x73, 0x69,
-	0x67, 0x6e, 0x65, 0x64, 0x42, 0x75, 0x69, 0x6c, 0x64, 0x49, 0x64, 0x42, 0x02, 0x68, 0x00, 0x22, 0xd5,
-	0x02, 0x0a, 0x0f, 0x54, 0x61, 0x73, 0x6b, 0x46, 0x6f, 0x72, 0x77, 0x61, 0x72, 0x64, 0x49, 0x6e,
-	0x66, 0x6f, 0x12, 0x2d, 0x0a, 0x10, 0x73, 0x6f, 0x75, 0x72, 0x63, 0x65, 0x5f, 0x70, 0x61, 0x72, 0x74,
-	0x69, 0x74, 0x69, 0x6f, 0x6e, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0f, 0x73, 0x6f, 0x75, 0x72,
-	0x63, 0x65, 0x50, 0x61, 0x72, 0x74, 0x69, 0x74, 0x69, 0x6f, 0x6e, 0x42, 0x02, 0x68, 0x00, 0x12, 0x4d,
-	0x0a, 0x0b, 0x74, 0x61, 0x73, 0x6b, 0x5f, 0x73, 0x6f, 0x75, 0x72, 0x63, 0x65, 0x18, 0x02, 0x20,
-	0x01, 0x28, 0x0e, 0x32, 0x28, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65,
-	0x72, 0x76, 0x65, 0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x65, 0x6e, 0x75, 0x6d, 0x73, 0x2e, 0x76, 0x31,
-	0x2e, 0x54, 0x61, 0x73, 0x6b, 0x53, 0x6f, 0x75, 0x72, 0x63, 0x65, 0x52, 0x0a, 0x74, 0x61, 0x73, 0x6b,
-	0x53, 0x6f, 0x75, 0x72, 0x63, 0x65, 0x42, 0x02, 0x68, 0x00, 0x12, 0x5e, 0x0a, 0x0d, 0x72, 0x65,
-	0x64, 0x69, 0x72, 0x65, 0x63, 0x74, 0x5f, 0x69, 0x6e, 0x66, 0x6f, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0b,
-	0x32, 0x35, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65,
-	0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x74, 0x61, 0x73, 0x6b, 0x71, 0x75, 0x65, 0x75, 0x65, 0x2e, 0x76,
-	0x31, 0x2e, 0x42, 0x75, 0x69, 0x6c, 0x64, 0x49, 0x64, 0x52, 0x65, 0x64, 0x69, 0x72, 0x65, 0x63,
-	0x74, 0x49, 0x6e, 0x66, 0x6f, 0x52, 0x0c, 0x72, 0x65, 0x64, 0x69, 0x72, 0x65, 0x63, 0x74, 0x49, 0x6e,
-	0x66, 0x6f, 0x42, 0x02, 0x68, 0x00, 0x12, 0x2e, 0x0a, 0x11, 0x64, 0x69, 0x73, 0x70, 0x61, 0x74, 0x63,
-	0x68, 0x5f, 0x62, 0x75, 0x69, 0x6c, 0x64, 0x5f, 0x69, 0x64, 0x18, 0x04, 0x20, 0x01, 0x28, 0x09, 0x52,
-	0x0f, 0x64, 0x69, 0x73, 0x70, 0x61, 0x74, 0x63, 0x68, 0x42, 0x75, 0x69, 0x6c, 0x64, 0x49, 0x64,
-	0x42, 0x02, 0x68, 0x00, 0x12, 0x34, 0x0a, 0x14, 0x64, 0x69, 0x73, 0x70, 0x61, 0x74, 0x63, 0x68, 0x5f,
-	0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x5f, 0x73, 0x65, 0x74, 0x18, 0x05, 0x20, 0x01, 0x28, 0x09,
-	0x52, 0x12, 0x64, 0x69, 0x73, 0x70, 0x61, 0x74, 0x63, 0x68, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e,
-	0x53, 0x65, 0x74, 0x42, 0x02, 0x68, 0x00, 0x42, 0x32, 0x5a, 0x30, 0x67, 0x6f, 0x2e, 0x74, 0x65,
-	0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x69, 0x6f, 0x2f, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2f,
-	0x61, 0x70, 0x69, 0x2f, 0x74, 0x61, 0x73, 0x6b, 0x71, 0x75, 0x65, 0x75, 0x65, 0x2f, 0x76, 0x31, 0x3b,
-	0x74, 0x61, 0x73, 0x6b, 0x71, 0x75, 0x65, 0x75, 0x65, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f,
-	0x33,
-}
+const file_temporal_server_api_taskqueue_v1_message_proto_rawDesc = "" +
+	"\n" +
+	".temporal/server/api/taskqueue/v1/message.proto\x12 temporal.server.api.taskqueue.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a(temporal/api/deployment/v1/message.proto\x1a&temporal/api/enums/v1/task_queue.proto\x1a$temporal/api/enums/v1/workflow.proto\x1a'temporal/api/taskqueue/v1/message.proto\x1a'temporal/server/api/enums/v1/task.proto\x1a/temporal/server/api/deployment/v1/message.proto\"\x96\x03\n" +
+	"\x14TaskVersionDirective\x12J\n" +
+	"\x14use_assignment_rules\x18\x01 \x01(\v2\x16.google.protobuf.EmptyH\x00R\x12useAssignmentRules\x12,\n" +
+	"\x11assigned_build_id\x18\x02 \x01(\tH\x00R\x0fassignedBuildId\x12E\n" +
+	"\bbehavior\x18\x03 \x01(\x0e2).temporal.api.enums.v1.VersioningBehaviorR\bbehavior\x12F\n" +
+	"\n" +
+	"deployment\x18\x04 \x01(\v2&.temporal.api.deployment.v1.DeploymentR\n" +
+	"deployment\x12i\n" +
+	"\x12deployment_version\x18\x05 \x01(\v2:.temporal.server.api.deployment.v1.WorkerDeploymentVersionR\x11deploymentVersionB\n" +
+	"\n" +
+	"\bbuild_id\"\xa6\x02\n" +
+	"\x17InternalTaskQueueStatus\x12\x1d\n" +
+	"\n" +
+	"read_level\x18\x01 \x01(\x03R\treadLevel\x12\x1b\n" +
+	"\tack_level\x18\x02 \x01(\x03R\backLevel\x12J\n" +
+	"\rtask_id_block\x18\x03 \x01(\v2&.temporal.api.taskqueue.v1.TaskIdBlockR\vtaskIdBlock\x12!\n" +
+	"\floaded_tasks\x18\x04 \x01(\x03R\vloadedTasks\x12:\n" +
+	"\x19approximate_backlog_count\x18\x05 \x01(\x03R\x17approximateBacklogCount\x12$\n" +
+	"\x0emax_read_level\x18\x06 \x01(\x03R\fmaxReadLevel\"\x90\x01\n" +
+	"\x1cTaskQueueVersionInfoInternal\x12p\n" +
+	"\x18physical_task_queue_info\x18\x02 \x01(\v27.temporal.server.api.taskqueue.v1.PhysicalTaskQueueInfoR\x15physicalTaskQueueInfo\"\xa5\x02\n" +
+	"\x15PhysicalTaskQueueInfo\x12?\n" +
+	"\apollers\x18\x01 \x03(\v2%.temporal.api.taskqueue.v1.PollerInfoR\apollers\x12S\n" +
+	"\x10task_queue_stats\x18\x02 \x01(\v2).temporal.api.taskqueue.v1.TaskQueueStatsR\x0etaskQueueStats\x12v\n" +
+	"\x1ainternal_task_queue_status\x18\x03 \x03(\v29.temporal.server.api.taskqueue.v1.InternalTaskQueueStatusR\x17internalTaskQueueStatus\"\xe6\x01\n" +
+	"\x12TaskQueuePartition\x12\x1d\n" +
+	"\n" +
+	"task_queue\x18\x01 \x01(\tR\ttaskQueue\x12L\n" +
+	"\x0ftask_queue_type\x18\x02 \x01(\x0e2$.temporal.api.enums.v1.TaskQueueTypeR\rtaskQueueType\x120\n" +
+	"\x13normal_partition_id\x18\x03 \x01(\x05H\x00R\x11normalPartitionId\x12!\n" +
+	"\vsticky_name\x18\x04 \x01(\tH\x00R\n" +
+	"stickyNameB\x0e\n" +
+	"\fpartition_id\"A\n" +
+	"\x13BuildIdRedirectInfo\x12*\n" +
+	"\x11assigned_build_id\x18\x01 \x01(\tR\x0fassignedBuildId\"\xc1\x02\n" +
+	"\x0fTaskForwardInfo\x12)\n" +
+	"\x10source_partition\x18\x01 \x01(\tR\x0fsourcePartition\x12I\n" +
+	"\vtask_source\x18\x02 \x01(\x0e2(.temporal.server.api.enums.v1.TaskSourceR\n" +
+	"taskSource\x12Z\n" +
+	"\rredirect_info\x18\x03 \x01(\v25.temporal.server.api.taskqueue.v1.BuildIdRedirectInfoR\fredirectInfo\x12*\n" +
+	"\x11dispatch_build_id\x18\x04 \x01(\tR\x0fdispatchBuildId\x120\n" +
+	"\x14dispatch_version_set\x18\x05 \x01(\tR\x12dispatchVersionSetB2Z0go.temporal.io/server/api/taskqueue/v1;taskqueueb\x06proto3"
 
 var (
 	file_temporal_server_api_taskqueue_v1_message_proto_rawDescOnce sync.Once
-	file_temporal_server_api_taskqueue_v1_message_proto_rawDescData = file_temporal_server_api_taskqueue_v1_message_proto_rawDesc
+	file_temporal_server_api_taskqueue_v1_message_proto_rawDescData []byte
 )
 
 func file_temporal_server_api_taskqueue_v1_message_proto_rawDescGZIP() []byte {
 	file_temporal_server_api_taskqueue_v1_message_proto_rawDescOnce.Do(func() {
-		file_temporal_server_api_taskqueue_v1_message_proto_rawDescData = protoimpl.X.CompressGZIP(file_temporal_server_api_taskqueue_v1_message_proto_rawDescData)
+		file_temporal_server_api_taskqueue_v1_message_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_api_taskqueue_v1_message_proto_rawDesc), len(file_temporal_server_api_taskqueue_v1_message_proto_rawDesc)))
 	})
 	return file_temporal_server_api_taskqueue_v1_message_proto_rawDescData
 }
 
 var file_temporal_server_api_taskqueue_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
-var file_temporal_server_api_taskqueue_v1_message_proto_goTypes = []interface{}{
+var file_temporal_server_api_taskqueue_v1_message_proto_goTypes = []any{
 	(*TaskVersionDirective)(nil),         // 0: temporal.server.api.taskqueue.v1.TaskVersionDirective
 	(*InternalTaskQueueStatus)(nil),      // 1: temporal.server.api.taskqueue.v1.InternalTaskQueueStatus
 	(*TaskQueueVersionInfoInternal)(nil), // 2: temporal.server.api.taskqueue.v1.TaskQueueVersionInfoInternal
@@ -697,27 +669,33 @@ var file_temporal_server_api_taskqueue_v1_message_proto_goTypes = []interface{}{
 	(*BuildIdRedirectInfo)(nil),          // 5: temporal.server.api.taskqueue.v1.BuildIdRedirectInfo
 	(*TaskForwardInfo)(nil),              // 6: temporal.server.api.taskqueue.v1.TaskForwardInfo
 	(*emptypb.Empty)(nil),                // 7: google.protobuf.Empty
-	(*v1.TaskIdBlock)(nil),               // 8: temporal.api.taskqueue.v1.TaskIdBlock
-	(*v1.PollerInfo)(nil),                // 9: temporal.api.taskqueue.v1.PollerInfo
-	(*v1.TaskQueueStats)(nil),            // 10: temporal.api.taskqueue.v1.TaskQueueStats
-	(v11.TaskQueueType)(0),               // 11: temporal.api.enums.v1.TaskQueueType
-	(v12.TaskSource)(0),                  // 12: temporal.server.api.enums.v1.TaskSource
+	(v1.VersioningBehavior)(0),           // 8: temporal.api.enums.v1.VersioningBehavior
+	(*v11.Deployment)(nil),               // 9: temporal.api.deployment.v1.Deployment
+	(*v12.WorkerDeploymentVersion)(nil),  // 10: temporal.server.api.deployment.v1.WorkerDeploymentVersion
+	(*v13.TaskIdBlock)(nil),              // 11: temporal.api.taskqueue.v1.TaskIdBlock
+	(*v13.PollerInfo)(nil),               // 12: temporal.api.taskqueue.v1.PollerInfo
+	(*v13.TaskQueueStats)(nil),           // 13: temporal.api.taskqueue.v1.TaskQueueStats
+	(v1.TaskQueueType)(0),                // 14: temporal.api.enums.v1.TaskQueueType
+	(v14.TaskSource)(0),                  // 15: temporal.server.api.enums.v1.TaskSource
 }
 var file_temporal_server_api_taskqueue_v1_message_proto_depIdxs = []int32{
 	7,  // 0: temporal.server.api.taskqueue.v1.TaskVersionDirective.use_assignment_rules:type_name -> google.protobuf.Empty
-	8,  // 1: temporal.server.api.taskqueue.v1.InternalTaskQueueStatus.task_id_block:type_name -> temporal.api.taskqueue.v1.TaskIdBlock
-	3,  // 2: temporal.server.api.taskqueue.v1.TaskQueueVersionInfoInternal.physical_task_queue_info:type_name -> temporal.server.api.taskqueue.v1.PhysicalTaskQueueInfo
-	9,  // 3: temporal.server.api.taskqueue.v1.PhysicalTaskQueueInfo.pollers:type_name -> temporal.api.taskqueue.v1.PollerInfo
-	10, // 4: temporal.server.api.taskqueue.v1.PhysicalTaskQueueInfo.task_queue_stats:type_name -> temporal.api.taskqueue.v1.TaskQueueStats
-	1,  // 5: temporal.server.api.taskqueue.v1.PhysicalTaskQueueInfo.internal_task_queue_status:type_name -> temporal.server.api.taskqueue.v1.InternalTaskQueueStatus
-	11, // 6: temporal.server.api.taskqueue.v1.TaskQueuePartition.task_queue_type:type_name -> temporal.api.enums.v1.TaskQueueType
-	12, // 7: temporal.server.api.taskqueue.v1.TaskForwardInfo.task_source:type_name -> temporal.server.api.enums.v1.TaskSource
-	5,  // 8: temporal.server.api.taskqueue.v1.TaskForwardInfo.redirect_info:type_name -> temporal.server.api.taskqueue.v1.BuildIdRedirectInfo
-	9,  // [9:9] is the sub-list for method output_type
-	9,  // [9:9] is the sub-list for method input_type
-	9,  // [9:9] is the sub-list for extension type_name
-	9,  // [9:9] is the sub-list for extension extendee
-	0,  // [0:9] is the sub-list for field type_name
+	8,  // 1: temporal.server.api.taskqueue.v1.TaskVersionDirective.behavior:type_name -> temporal.api.enums.v1.VersioningBehavior
+	9,  // 2: temporal.server.api.taskqueue.v1.TaskVersionDirective.deployment:type_name -> temporal.api.deployment.v1.Deployment
+	10, // 3: temporal.server.api.taskqueue.v1.TaskVersionDirective.deployment_version:type_name -> temporal.server.api.deployment.v1.WorkerDeploymentVersion
+	11, // 4: temporal.server.api.taskqueue.v1.InternalTaskQueueStatus.task_id_block:type_name -> temporal.api.taskqueue.v1.TaskIdBlock
+	3,  // 5: temporal.server.api.taskqueue.v1.TaskQueueVersionInfoInternal.physical_task_queue_info:type_name -> temporal.server.api.taskqueue.v1.PhysicalTaskQueueInfo
+	12, // 6: temporal.server.api.taskqueue.v1.PhysicalTaskQueueInfo.pollers:type_name -> temporal.api.taskqueue.v1.PollerInfo
+	13, // 7: temporal.server.api.taskqueue.v1.PhysicalTaskQueueInfo.task_queue_stats:type_name -> temporal.api.taskqueue.v1.TaskQueueStats
+	1,  // 8: temporal.server.api.taskqueue.v1.PhysicalTaskQueueInfo.internal_task_queue_status:type_name -> temporal.server.api.taskqueue.v1.InternalTaskQueueStatus
+	14, // 9: temporal.server.api.taskqueue.v1.TaskQueuePartition.task_queue_type:type_name -> temporal.api.enums.v1.TaskQueueType
+	15, // 10: temporal.server.api.taskqueue.v1.TaskForwardInfo.task_source:type_name -> temporal.server.api.enums.v1.TaskSource
+	5,  // 11: temporal.server.api.taskqueue.v1.TaskForwardInfo.redirect_info:type_name -> temporal.server.api.taskqueue.v1.BuildIdRedirectInfo
+	12, // [12:12] is the sub-list for method output_type
+	12, // [12:12] is the sub-list for method input_type
+	12, // [12:12] is the sub-list for extension type_name
+	12, // [12:12] is the sub-list for extension extendee
+	0,  // [0:12] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_api_taskqueue_v1_message_proto_init() }
@@ -725,97 +703,11 @@ func file_temporal_server_api_taskqueue_v1_message_proto_init() {
 	if File_temporal_server_api_taskqueue_v1_message_proto != nil {
 		return
 	}
-	if !protoimpl.UnsafeEnabled {
-		file_temporal_server_api_taskqueue_v1_message_proto_msgTypes[0].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*TaskVersionDirective); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_taskqueue_v1_message_proto_msgTypes[1].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*InternalTaskQueueStatus); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_taskqueue_v1_message_proto_msgTypes[2].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*TaskQueueVersionInfoInternal); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_taskqueue_v1_message_proto_msgTypes[3].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*PhysicalTaskQueueInfo); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_taskqueue_v1_message_proto_msgTypes[4].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*TaskQueuePartition); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_taskqueue_v1_message_proto_msgTypes[5].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*BuildIdRedirectInfo); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_taskqueue_v1_message_proto_msgTypes[6].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*TaskForwardInfo); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-	}
-	file_temporal_server_api_taskqueue_v1_message_proto_msgTypes[0].OneofWrappers = []interface{}{
+	file_temporal_server_api_taskqueue_v1_message_proto_msgTypes[0].OneofWrappers = []any{
 		(*TaskVersionDirective_UseAssignmentRules)(nil),
 		(*TaskVersionDirective_AssignedBuildId)(nil),
 	}
-	file_temporal_server_api_taskqueue_v1_message_proto_msgTypes[4].OneofWrappers = []interface{}{
+	file_temporal_server_api_taskqueue_v1_message_proto_msgTypes[4].OneofWrappers = []any{
 		(*TaskQueuePartition_NormalPartitionId)(nil),
 		(*TaskQueuePartition_StickyName)(nil),
 	}
@@ -823,7 +715,7 @@ func file_temporal_server_api_taskqueue_v1_message_proto_init() {
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: file_temporal_server_api_taskqueue_v1_message_proto_rawDesc,
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_api_taskqueue_v1_message_proto_rawDesc), len(file_temporal_server_api_taskqueue_v1_message_proto_rawDesc)),
 			NumEnums:      0,
 			NumMessages:   7,
 			NumExtensions: 0,
@@ -834,7 +726,6 @@ func file_temporal_server_api_taskqueue_v1_message_proto_init() {
 		MessageInfos:      file_temporal_server_api_taskqueue_v1_message_proto_msgTypes,
 	}.Build()
 	File_temporal_server_api_taskqueue_v1_message_proto = out.File
-	file_temporal_server_api_taskqueue_v1_message_proto_rawDesc = nil
 	file_temporal_server_api_taskqueue_v1_message_proto_goTypes = nil
 	file_temporal_server_api_taskqueue_v1_message_proto_depIdxs = nil
 }

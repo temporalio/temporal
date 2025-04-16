@@ -29,9 +29,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/adminservice/v1"
 	commonspb "go.temporal.io/server/api/common/v1"
@@ -47,8 +45,8 @@ import (
 
 type (
 	PurgeDLQTasksSuite struct {
-		*require.Assertions
-		testcore.FunctionalTestBase
+		testcore.FunctionalTestSuite
+
 		dlq              *faultyDLQ
 		sdkClientFactory sdk.ClientFactory
 	}
@@ -88,9 +86,7 @@ func (q *faultyDLQ) DeleteTasks(
 }
 
 func (s *PurgeDLQTasksSuite) SetupSuite() {
-	s.Assertions = require.New(s.T())
-	s.FunctionalTestBase.SetupSuite(
-		"testdata/es_cluster.yaml",
+	s.FunctionalTestBase.SetupSuiteWithDefaultCluster(
 		testcore.WithFxOptionsForService(primitives.HistoryService,
 			fx.Decorate(func(manager persistence.HistoryTaskQueueManager) persistence.HistoryTaskQueueManager {
 				s.dlq = &faultyDLQ{HistoryTaskQueueManager: manager}
@@ -101,16 +97,6 @@ func (s *PurgeDLQTasksSuite) SetupSuite() {
 			fx.Populate(&s.sdkClientFactory),
 		),
 	)
-}
-
-func (s *PurgeDLQTasksSuite) TearDownSuite() {
-	s.FunctionalTestBase.TearDownSuite()
-}
-
-func (s *PurgeDLQTasksSuite) SetupTest() {
-	s.FunctionalTestBase.SetupTest()
-
-	s.Assertions = require.New(s.T())
 }
 
 func (s *PurgeDLQTasksSuite) TestPurgeDLQTasks() {

@@ -149,6 +149,19 @@ func TestMySQLTaskQueueTaskSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
+func TestMySQLTaskQueueUserDataSuite(t *testing.T) {
+	testData, tearDown := setUpMySQLTest(t)
+	defer tearDown()
+
+	taskQueueStore, err := testData.Factory.NewTaskStore()
+	if err != nil {
+		t.Fatalf("unable to create MySQL DB: %v", err)
+	}
+
+	s := NewTaskQueueUserDataSuite(t, taskQueueStore, testData.Logger)
+	suite.Run(t, s)
+}
+
 func TestMySQLVisibilityPersistenceSuite(t *testing.T) {
 	s := &VisibilityPersistenceSuite{
 		TestBase: persistencetests.NewTestBaseWithSQL(persistencetests.GetMySQLTestClusterOption()),
@@ -508,6 +521,23 @@ func TestMySQLHistoryExecutionTimerSuite(t *testing.T) {
 	}()
 
 	s := sqltests.NewHistoryExecutionTimerSuite(t, store)
+	suite.Run(t, s)
+}
+
+func TestMySQLHistoryExecutionChasmSuite(t *testing.T) {
+	cfg := NewMySQLConfig()
+	SetupMySQLDatabase(t, cfg)
+	SetupMySQLSchema(t, cfg)
+	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
+	if err != nil {
+		t.Fatalf("unable to create MySQL DB: %v", err)
+	}
+	defer func() {
+		_ = store.Close()
+		TearDownMySQLDatabase(t, cfg)
+	}()
+
+	s := sqltests.NewHistoryExecutionChasmSuite(t, store)
 	suite.Run(t, s)
 }
 

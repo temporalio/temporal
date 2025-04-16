@@ -26,32 +26,33 @@ package matching
 
 import (
 	"sync"
+	"sync/atomic"
 
 	"github.com/emirpasic/gods/maps/treemap"
 	godsutils "github.com/emirpasic/gods/utils"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.uber.org/atomic"
 )
 
 // Used to convert out of order acks into ackLevel movement.
 type ackManager struct {
 	sync.RWMutex
-	backlogMgr       *backlogManagerImpl // accessing approximateBacklogCounter
-	outstandingTasks *treemap.Map        // TaskID->acked
-	readLevel        int64               // Maximum TaskID inserted into outstandingTasks
-	ackLevel         int64               // Maximum TaskID below which all tasks are acked
-	backlogCountHint atomic.Int64
+	db               *taskQueueDB // to update approximateBacklogCount
+	outstandingTasks *treemap.Map // TaskID->acked
+	readLevel        int64        // Maximum TaskID inserted into outstandingTasks
+	ackLevel         int64        // Maximum TaskID below which all tasks are acked
+	backlogCountHint atomic.Int64 // TODO(pri): old matcher cleanup, task reader tracks this now
 	logger           log.Logger
 }
 
-func newAckManager(backlogMgr *backlogManagerImpl) ackManager {
-	return ackManager{
-		backlogMgr:       backlogMgr,
-		logger:           backlogMgr.logger,
+func newAckManager(db *taskQueueDB, logger log.Logger) *ackManager {
+	return &ackManager{
+		db:               db,
+		logger:           logger,
 		outstandingTasks: treemap.NewWith(godsutils.Int64Comparator),
 		readLevel:        -1,
-		ackLevel:         -1}
+		ackLevel:         -1,
+	}
 }
 
 // Registers task as in-flight and moves read level to it. Tasks can be added in increasing order of taskID only.
@@ -68,7 +69,7 @@ func (m *ackManager) addTask(taskID int64) {
 		m.logger.Fatal("Already present in outstanding tasks", tag.TaskID(taskID))
 	}
 	m.outstandingTasks.Put(taskID, false)
-	m.backlogCountHint.Inc()
+	m.backlogCountHint.Add(1)
 }
 
 func (m *ackManager) getReadLevel() int64 {
@@ -117,28 +118,27 @@ func (m *ackManager) setAckLevel(ackLevel int64) {
 	}
 }
 
-func (m *ackManager) completeTask(taskID int64) int64 {
+func (m *ackManager) completeTask(taskID int64) (newAckLevel, numberOfAckedTasks int64) {
 	m.Lock()
 	defer m.Unlock()
 
 	macked, found := m.outstandingTasks.Get(taskID)
 	if !found {
-		return m.ackLevel
+		return m.ackLevel, 0
 	}
 
 	acked := macked.(bool)
 	if acked {
 		// don't adjust ack level if nothing has changed
-		return m.ackLevel
+		return m.ackLevel, 0
 	}
 
 	// TODO the ack level management should be done by a dedicated coroutine
 	//  this is only a temporarily solution
 	m.outstandingTasks.Put(taskID, true)
-	m.backlogCountHint.Dec()
+	m.backlogCountHint.Add(-1)
 
 	// Adjust the ack level as far as we can
-	var numberOfAckedTasks int64
 	for {
 		min, acked := m.outstandingTasks.Min()
 		if min == nil || !acked.(bool) {
@@ -148,10 +148,7 @@ func (m *ackManager) completeTask(taskID int64) int64 {
 		m.outstandingTasks.Remove(min)
 		numberOfAckedTasks += 1
 	}
-	if numberOfAckedTasks > 0 {
-		m.backlogMgr.db.updateApproximateBacklogCount(-numberOfAckedTasks)
-	}
-	return m.ackLevel
+	return m.ackLevel, numberOfAckedTasks
 }
 
 func (m *ackManager) getBacklogCountHint() int64 {

@@ -24,20 +24,21 @@ package tests
 
 import (
 	"context"
+	"errors"
 
 	"github.com/google/uuid"
-	enumspb "go.temporal.io/api/enums/v1"
-	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
+	"go.temporal.io/api/serviceerror"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/converter"
 	"go.temporal.io/server/tests/testcore"
 )
 
 type NexusTestBaseSuite struct {
-	testcore.ClientFunctionalSuite
+	testcore.FunctionalTestSdkSuite
 }
 
 func (s *NexusTestBaseSuite) mustToPayload(v any) *commonpb.Payload {
@@ -61,7 +62,7 @@ func (s *NexusTestBaseSuite) versionedNexusTaskPoller(ctx context.Context, taskQ
 		}
 	}
 	res, err := s.GetTestCluster().FrontendClient().PollNexusTaskQueue(ctx, &workflowservice.PollNexusTaskQueueRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		Identity:  uuid.NewString(),
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: taskQueue,
@@ -83,24 +84,26 @@ func (s *NexusTestBaseSuite) versionedNexusTaskPoller(ctx context.Context, taskQ
 	response, handlerError := handler(res)
 	if handlerError != nil {
 		_, err = s.GetTestCluster().FrontendClient().RespondNexusTaskFailed(ctx, &workflowservice.RespondNexusTaskFailedRequest{
-			Namespace: s.Namespace(),
+			Namespace: s.Namespace().String(),
 			Identity:  uuid.NewString(),
 			TaskToken: res.TaskToken,
 			Error:     handlerError,
 		})
-		// There's no clean way to propagate this error back to the test that's worthwhile. Panic is good enough.
-		if err != nil && ctx.Err() == nil {
+		// Ignore if context is already cancelled or if the task is not found.
+		if err != nil && ctx.Err() == nil && !errors.As(err, new(*serviceerror.NotFound)) {
+			// There's no clean way to propagate this error back to the test that's worthwhile. Panic is good enough.
 			panic(err)
 		}
 	} else if response != nil {
 		_, err = s.GetTestCluster().FrontendClient().RespondNexusTaskCompleted(ctx, &workflowservice.RespondNexusTaskCompletedRequest{
-			Namespace: s.Namespace(),
+			Namespace: s.Namespace().String(),
 			Identity:  uuid.NewString(),
 			TaskToken: res.TaskToken,
 			Response:  response,
 		})
-		// There's no clean way to propagate this error back to the test that's worthwhile. Panic is good enough.
-		if err != nil && ctx.Err() == nil {
+		// Ignore if context is already cancelled or if the task is not found.
+		if err != nil && ctx.Err() == nil && !errors.As(err, new(*serviceerror.NotFound)) {
+			// There's no clean way to propagate this error back to the test that's worthwhile. Panic is good enough.
 			panic(err)
 		}
 	}

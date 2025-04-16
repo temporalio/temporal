@@ -33,7 +33,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
-	"go.temporal.io/api/enums/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/sql"
 )
@@ -70,7 +70,7 @@ func testNexusEndpointsStoreSteadyState(t *testing.T, store persistence.NexusEnd
 
 		data := &commonpb.DataBlob{
 			Data:         []byte("dummy endpoint data"),
-			EncodingType: enums.ENCODING_TYPE_PROTO3,
+			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 		}
 
 		// Get endpoint by ID when table is empty
@@ -207,7 +207,7 @@ func testCreateOrUpdateNexusEndpointExpectedErrors(t *testing.T, store persisten
 
 		data := &commonpb.DataBlob{
 			Data:         []byte("dummy endpoint data"),
-			EncodingType: enums.ENCODING_TYPE_PROTO3,
+			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 		}
 
 		// Valid create
@@ -264,7 +264,7 @@ func testListNexusEndpointsExpectedErrors(t *testing.T, store persistence.NexusE
 
 		data := &commonpb.DataBlob{
 			Data:         []byte("dummy endpoint data"),
-			EncodingType: enums.ENCODING_TYPE_PROTO3,
+			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 		}
 
 		// Create two endpoints
@@ -306,7 +306,7 @@ func testDeleteNexusEndpointExpectedErrors(t *testing.T, store persistence.Nexus
 
 		data := &commonpb.DataBlob{
 			Data:         []byte("dummy endpoint data"),
-			EncodingType: enums.ENCODING_TYPE_PROTO3,
+			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 		}
 
 		// Create an endpoint

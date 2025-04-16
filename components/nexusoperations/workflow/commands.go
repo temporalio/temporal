@@ -36,8 +36,10 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	commonnexus "go.temporal.io/server/common/nexus"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/hsm"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -49,7 +51,7 @@ type commandHandler struct {
 
 func (ch *commandHandler) HandleScheduleCommand(
 	ctx context.Context,
-	ms workflow.MutableState,
+	ms historyi.MutableState,
 	validator workflow.CommandValidator,
 	workflowTaskCompletedEventID int64,
 	command *commandpb.Command,
@@ -110,6 +112,14 @@ func (ch *commandHandler) HandleScheduleCommand(
 		}
 	}
 
+	if err := timestamp.ValidateAndCapProtoDuration(attrs.ScheduleToCloseTimeout); err != nil {
+		return workflow.FailWorkflowTaskError{
+			Cause: enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
+			Message: fmt.Sprintf(
+				"ScheduleNexusOperationCommandAttributes.ScheduleToCloseTimeout is invalid: %v", err),
+		}
+	}
+
 	if !validator.IsValidPayloadSize(attrs.Input.Size()) {
 		return workflow.FailWorkflowTaskError{
 			Cause:             enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
@@ -121,7 +131,7 @@ func (ch *commandHandler) HandleScheduleCommand(
 	headerLength := 0
 	for k, v := range attrs.NexusHeader {
 		headerLength += len(k) + len(v)
-		if slices.Contains(ch.config.DisallowedOperationHeaders(nsName), strings.ToLower(k)) {
+		if slices.Contains(ch.config.DisallowedOperationHeaders(), strings.ToLower(k)) {
 			return workflow.FailWorkflowTaskError{
 				Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
 				Message: fmt.Sprintf("ScheduleNexusOperationCommandAttributes.NexusHeader contains a disallowed header key: %q", k),
@@ -181,7 +191,7 @@ func (ch *commandHandler) HandleScheduleCommand(
 
 func (ch *commandHandler) HandleCancelCommand(
 	ctx context.Context,
-	ms workflow.MutableState,
+	ms historyi.MutableState,
 	validator workflow.CommandValidator,
 	workflowTaskCompletedEventID int64,
 	command *commandpb.Command,
@@ -200,33 +210,48 @@ func (ch *commandHandler) HandleCancelCommand(
 			Message: "empty CancelNexusOperationCommandAttributes",
 		}
 	}
+
 	coll := nexusoperations.MachineCollection(ms.HSM())
 	nodeID := strconv.FormatInt(attrs.ScheduledEventId, 10)
 	node, err := coll.Node(nodeID)
+	hasBufferedEvent := ms.HasAnyBufferedEvent(makeNexusOperationTerminalEventFilter(attrs.ScheduledEventId))
 	if err != nil {
 		if errors.Is(err, hsm.ErrStateMachineNotFound) {
-			return workflow.FailWorkflowTaskError{
-				Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_NEXUS_OPERATION_ATTRIBUTES,
-				Message: fmt.Sprintf("requested cancelation for a non-existing operation with scheduled event ID of %d", attrs.ScheduledEventId),
-				// TODO(bergundy): Message: fmt.Sprintf("requested cancelation for a non-existing or already completed operation with scheduled event ID of %d", attrs.ScheduledEventId),
+			if !hasBufferedEvent {
+				return workflow.FailWorkflowTaskError{
+					Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_NEXUS_OPERATION_ATTRIBUTES,
+					Message: fmt.Sprintf("requested cancelation for a non-existing or already completed operation with scheduled event ID of %d", attrs.ScheduledEventId),
+				}
 			}
-		}
-		return err
-	}
-	// TODO(bergundy): Remove this when operation auto-deletes itself on terminal state.
-	// Operation may already be in a terminal state because it doesn't yet delete itself. We don't want to accept
-	// cancelation in this case.
-	op, err := hsm.MachineData[nexusoperations.Operation](node)
-	if err != nil {
-		return err
-	}
-	if !nexusoperations.TransitionCanceled.Possible(op) {
-		return workflow.FailWorkflowTaskError{
-			Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_NEXUS_OPERATION_ATTRIBUTES,
-			Message: fmt.Sprintf("requested cancelation for an already complete operation with scheduled event ID of %d", attrs.ScheduledEventId),
+			// Fallthrough and apply the event, there's special logic that will handle state machine not found below.
+		} else {
+			return err
 		}
 	}
 
+	if node != nil {
+		// TODO(bergundy): Remove this when operation auto-deletes itself on terminal state.
+		// Operation may already be in a terminal state because it doesn't yet delete itself. We don't want to accept
+		// cancelation in this case.
+		op, err := hsm.MachineData[nexusoperations.Operation](node)
+		if err != nil {
+			return err
+		}
+		// The operation is already in a terminal state and the terminal NexusOperation event has not just been buffered.
+		// We allow the workflow to request canceling an operation that has just completed while a workflow task is in
+		// flight since it cannot know about the state of the operation.
+		if !nexusoperations.TransitionCanceled.Possible(op) && !hasBufferedEvent {
+			return workflow.FailWorkflowTaskError{
+				Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_NEXUS_OPERATION_ATTRIBUTES,
+				Message: fmt.Sprintf("requested cancelation for an already complete operation with scheduled event ID of %d", attrs.ScheduledEventId),
+			}
+		}
+		// END TODO
+	}
+
+	// Always create the event even if there's a buffered completion to avoid breaking replay in the SDK.
+	// The event will be applied before the completion since buffered events are reordered and put at the end of the
+	// batch, after command events from the workflow task.
 	event := ms.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUESTED, func(he *historypb.HistoryEvent) {
 		he.Attributes = &historypb.HistoryEvent_NexusOperationCancelRequestedEventAttributes{
 			NexusOperationCancelRequestedEventAttributes: &historypb.NexusOperationCancelRequestedEventAttributes{
@@ -243,13 +268,13 @@ func (ch *commandHandler) HandleCancelCommand(
 	if errors.Is(err, hsm.ErrStateMachineAlreadyExists) {
 		return workflow.FailWorkflowTaskError{
 			Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_NEXUS_OPERATION_ATTRIBUTES,
-			Message: fmt.Sprintf("cancelation was already requested for an operation with scheduled event ID of %d", attrs.ScheduledEventId),
+			Message: fmt.Sprintf("cancelation was already requested for an operation with scheduled event ID %d", attrs.ScheduledEventId),
 		}
+	} else if errors.Is(err, hsm.ErrStateMachineNotFound) {
+		// This may happen if there's a buffered completion. Ignore.
+		return nil
 	}
 
-	// TODO(bergundy): When we support machine deletion, this err may be an hsm.ErrStateMachineNotFound.
-	// We'll need to check buffered events and verify that there aren't any terminal events in there.
-	// Ideally the framework can abstract that for us though.
 	return err
 }
 
@@ -259,4 +284,21 @@ func RegisterCommandHandlers(reg *workflow.CommandHandlerRegistry, endpointRegis
 		return err
 	}
 	return reg.Register(enumspb.COMMAND_TYPE_REQUEST_CANCEL_NEXUS_OPERATION, h.HandleCancelCommand)
+}
+
+func makeNexusOperationTerminalEventFilter(scheduledEventID int64) func(event *historypb.HistoryEvent) bool {
+	return func(event *historypb.HistoryEvent) bool {
+		switch event.EventType {
+		case enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED:
+			return event.GetNexusOperationCompletedEventAttributes().GetScheduledEventId() == scheduledEventID
+		case enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED:
+			return event.GetNexusOperationFailedEventAttributes().GetScheduledEventId() == scheduledEventID
+		case enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCELED:
+			return event.GetNexusOperationCanceledEventAttributes().GetScheduledEventId() == scheduledEventID
+		case enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT:
+			return event.GetNexusOperationTimedOutEventAttributes().GetScheduledEventId() == scheduledEventID
+		default:
+			return false
+		}
+	}
 }

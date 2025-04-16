@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
@@ -77,7 +78,7 @@ func (s *contextSuite) SetupTest() {
 		&persistencespb.ShardInfo{ShardId: 1},
 		configs,
 	)
-	mockEngine := shard.NewMockEngine(controller)
+	mockEngine := historyi.NewMockEngine(controller)
 	mockEngine.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
 	mockEngine.EXPECT().NotifyNewHistoryEvent(gomock.Any()).AnyTimes()
 	s.mockShard.SetEngineForTesting(mockEngine)
@@ -200,6 +201,73 @@ func (s *contextSuite) TestMergeReplicationTasks_SingleReplicationTask() {
 	mergedReplicationTasks := currentWorkflowMutation.Tasks[tasks.CategoryReplication]
 	s.Empty(mergedReplicationTasks[0].(*tasks.HistoryReplicationTask).NewRunID)
 	s.Equal(newRunID, mergedReplicationTasks[1].(*tasks.HistoryReplicationTask).NewRunID)
+}
+
+func (s *contextSuite) TestMergeReplicationTasks_SyncVersionedTransitionTask_ShouldMergeTaskAndEquivalent() {
+	currentWorkflowMutation := &persistence.WorkflowMutation{
+		ExecutionState: &persistencespb.WorkflowExecutionState{
+			Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			State:  enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		},
+		Tasks: map[tasks.Category][]tasks.Task{
+			tasks.CategoryReplication: {
+				&tasks.SyncVersionedTransitionTask{
+					WorkflowKey:  tests.WorkflowKey,
+					FirstEventID: 5,
+					NextEventID:  10,
+					VersionedTransition: &persistencespb.VersionedTransition{
+						NamespaceFailoverVersion: 1,
+						TransitionCount:          1,
+					},
+					TaskEquivalents: []tasks.Task{
+						&tasks.HistoryReplicationTask{
+							WorkflowKey:         tests.WorkflowKey,
+							VisibilityTimestamp: time.Now(),
+							FirstEventID:        5,
+							NextEventID:         10,
+							Version:             tests.Version,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	newRunID := uuid.New()
+	newWorkflowSnapshot := &persistence.WorkflowSnapshot{
+		ExecutionState: &persistencespb.WorkflowExecutionState{
+			Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		},
+		Tasks: map[tasks.Category][]tasks.Task{
+			tasks.CategoryReplication: {
+				&tasks.HistoryReplicationTask{
+					WorkflowKey: definition.NewWorkflowKey(
+						string(tests.NamespaceID),
+						tests.WorkflowID,
+						newRunID,
+					),
+					VisibilityTimestamp: time.Now(),
+					FirstEventID:        1,
+					NextEventID:         3,
+					Version:             tests.Version,
+				},
+			},
+		},
+	}
+
+	err := s.workflowContext.mergeUpdateWithNewReplicationTasks(
+		currentWorkflowMutation,
+		newWorkflowSnapshot,
+	)
+	s.NoError(err)
+	s.Len(currentWorkflowMutation.Tasks[tasks.CategoryReplication], 1)
+	s.Empty(newWorkflowSnapshot.Tasks[tasks.CategoryReplication]) // verify no change to tasks
+
+	mergedReplicationTasks := currentWorkflowMutation.Tasks[tasks.CategoryReplication]
+	s.Equal(newRunID, mergedReplicationTasks[0].(*tasks.SyncVersionedTransitionTask).NewRunID)
+	s.Equal(newRunID, mergedReplicationTasks[0].(*tasks.SyncVersionedTransitionTask).TaskEquivalents[0].(*tasks.HistoryReplicationTask).NewRunID)
+
 }
 
 func (s *contextSuite) TestMergeReplicationTasks_MultipleReplicationTasks() {

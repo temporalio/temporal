@@ -28,6 +28,7 @@ import (
 	"fmt"
 	"time"
 
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/primitives"
@@ -46,6 +47,8 @@ import (
 // LoggingCallAtKey is reserved tag
 const (
 	LoggingCallAtKey = "logging-call-at"
+	WorkflowIDKey    = "wf-id"
+	WorkflowRunIDKey = "wf-run-id"
 )
 
 // ==========  Common tags defined here ==========
@@ -83,6 +86,11 @@ func Timestamp(timestamp time.Time) ZapTag {
 	return NewTimeTag("timestamp", timestamp)
 }
 
+// RequestID returns tag for RequestID
+func RequestID(requestID string) ZapTag {
+	return NewStringTag("request-id", requestID)
+}
+
 // ==========  Workflow tags defined here: ( wf is short for workflow) ==========
 
 // WorkflowAction returns tag for WorkflowAction
@@ -114,7 +122,7 @@ func WorkflowHandlerName(handlerName string) ZapTag {
 
 // WorkflowID returns tag for WorkflowID
 func WorkflowID(workflowID string) ZapTag {
-	return NewStringTag("wf-id", workflowID)
+	return NewStringTag(WorkflowIDKey, workflowID)
 }
 
 // WorkflowType returns tag for WorkflowType
@@ -129,7 +137,7 @@ func WorkflowState(s enumsspb.WorkflowExecutionState) ZapTag {
 
 // WorkflowRunID returns tag for WorkflowRunID
 func WorkflowRunID(runID string) ZapTag {
-	return NewStringTag("wf-run-id", runID)
+	return NewStringTag(WorkflowRunIDKey, runID)
 }
 
 // WorkflowNewRunID returns tag for WorkflowNewRunID
@@ -560,6 +568,9 @@ func WorkerComponent(v interface{}) ZapTag {
 	return NewStringTag("worker-component", fmt.Sprintf("%T", v))
 }
 
+// FailedAssertion is a tag for marking a message as a failed assertion.
+var FailedAssertion = NewBoolTag("failed-assertion", true)
+
 // history engine shard
 
 // ShardID returns tag for ShardID
@@ -984,10 +995,25 @@ func BuildId(buildId string) ZapTag {
 	return NewStringTag("build-id", buildId)
 }
 
+func VersioningBehavior(behavior enumspb.VersioningBehavior) ZapTag {
+	return NewStringTag("versioning-behavior", behavior.String())
+}
+
+func Deployment(d *deploymentpb.Deployment) ZapTag {
+	if d != nil {
+		return NewAnyTag("deployment", d.SeriesName+":"+d.BuildId)
+	}
+	return NewAnyTag("deployment", "unversioned")
+}
+
 func UserDataVersion(v int64) ZapTag {
 	return NewInt64("user-data-version", v)
 }
 
 func Cause(cause string) ZapTag {
 	return NewStringTag("cause", cause)
+}
+
+func NexusOperation(operation string) ZapTag {
+	return NewStringTag("nexus-operation", operation)
 }

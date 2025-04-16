@@ -45,8 +45,10 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	ctasks "go.temporal.io/server/common/tasks"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/queues/queuestest"
@@ -75,6 +77,7 @@ type (
 		dlqEnabled                 dynamicconfig.BoolPropertyFn
 		priorityAssigner           queues.PriorityAssigner
 		maxUnexpectedErrorAttempts dynamicconfig.IntPropertyFn
+		dlqInternalErrors          dynamicconfig.BoolPropertyFn
 		dlqErrorPattern            dynamicconfig.StringPropertyFn
 	}
 	option func(*params)
@@ -172,8 +175,33 @@ func (s *executableSuite) TestExecute_InMemoryNoUserLatency_SingleAttempt() {
 			expectBackoff:                false,
 		},
 		{
-			name:                         "ResourceExhaustedError",
+			name:                         "BusyWorkflowError",
 			taskErr:                      consts.ErrResourceExhaustedBusyWorkflow,
+			expectError:                  true,
+			expectedAttemptNoUserLatency: 0,
+			expectBackoff:                false,
+		},
+		{
+			name:                         "APSLimitError",
+			taskErr:                      consts.ErrResourceExhaustedBusyWorkflow,
+			expectError:                  true,
+			expectedAttemptNoUserLatency: 0,
+			expectBackoff:                false,
+		},
+		{
+			name: "OPSLimitError",
+			taskErr: &serviceerror.ResourceExhausted{
+				Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_OPS_LIMIT,
+				Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+				Message: "Namespace Max OPS Limit Reached.",
+			},
+			expectError:                  true,
+			expectedAttemptNoUserLatency: 0,
+			expectBackoff:                false,
+		},
+		{
+			name:                         "PersistenceNamespaceLimitExceeded",
+			taskErr:                      persistence.ErrPersistenceNamespaceLimitExceeded,
 			expectError:                  true,
 			expectedAttemptNoUserLatency: 0,
 			expectBackoff:                false,
@@ -539,11 +567,14 @@ func (s *executableSuite) TestExecute_SendToDLQAfterMaxAttemptsThenDisable() {
 	s.Empty(queueWriter.EnqueueTaskRequests)
 }
 
-func (s *executableSuite) TestExecute_SendsInternalErrorsToDLQ() {
+func (s *executableSuite) TestExecute_SendsInternalErrorsToDLQ_WhenEnabled() {
 	queueWriter := &queuestest.FakeQueueWriter{}
 	executable := s.newTestExecutable(func(p *params) {
 		p.dlqWriter = queues.NewDLQWriter(queueWriter, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry)
 		p.dlqEnabled = func() bool {
+			return true
+		}
+		p.dlqInternalErrors = func() bool {
 			return true
 		}
 	})
@@ -560,6 +591,35 @@ func (s *executableSuite) TestExecute_SendsInternalErrorsToDLQ() {
 	s.Len(queueWriter.EnqueueTaskRequests, 1)
 }
 
+func (s *executableSuite) TestExecute_DoesntSendInternalErrorsToDLQ_WhenDisabled() {
+	queueWriter := &queuestest.FakeQueueWriter{}
+	executable := s.newTestExecutable(func(p *params) {
+		p.dlqWriter = queues.NewDLQWriter(queueWriter, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry)
+		p.dlqEnabled = func() bool {
+			return true
+		}
+		p.dlqInternalErrors = func() bool {
+			return false
+		}
+	})
+
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(queues.ExecuteResponse{
+		ExecutionMetricTags: nil,
+		ExecutedAsActive:    false,
+		ExecutionErr:        serviceerror.NewInternal("injected error"),
+	}).Times(2)
+
+	// Attempt 1
+	err := executable.Execute()
+	s.Error(executable.HandleErr(err))
+
+	// Attempt 2
+	err = executable.Execute()
+	s.Error(err)
+	s.Error(executable.HandleErr(err))
+	s.Empty(queueWriter.EnqueueTaskRequests)
+}
+
 func (s *executableSuite) TestExecute_SendInternalErrorsToDLQ_ThenDisable() {
 	queueWriter := &queuestest.FakeQueueWriter{}
 	dlqEnabled := true
@@ -567,6 +627,9 @@ func (s *executableSuite) TestExecute_SendInternalErrorsToDLQ_ThenDisable() {
 		p.dlqWriter = queues.NewDLQWriter(queueWriter, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry)
 		p.dlqEnabled = func() bool {
 			return dlqEnabled
+		}
+		p.dlqInternalErrors = func() bool {
+			return true
 		}
 	})
 
@@ -758,6 +821,10 @@ func (s *executableSuite) TestTaskNack_Reschedule() {
 		{
 			name:    "ErrDeleteOpenExecErr",
 			taskErr: consts.ErrDependencyTaskNotCompleted, // this error won't trigger re-submit
+		},
+		{
+			name:    "ErrNamespaceHandover",
+			taskErr: consts.ErrNamespaceHandover, // this error won't trigger re-submit
 		},
 	}
 
@@ -1005,6 +1072,9 @@ func (s *executableSuite) newTestExecutable(opts ...option) queues.Executable {
 		dlqEnabled: func() bool {
 			return false
 		},
+		dlqInternalErrors: func() bool {
+			return false
+		},
 		priorityAssigner: queues.NewNoopPriorityAssigner(),
 		maxUnexpectedErrorAttempts: func() int {
 			return math.MaxInt
@@ -1036,10 +1106,12 @@ func (s *executableSuite) newTestExecutable(opts ...option) queues.Executable {
 		s.mockClusterMetadata,
 		log.NewTestLogger(),
 		s.metricsHandler,
+		telemetry.NoopTracer,
 		func(params *queues.ExecutableParams) {
 			params.DLQEnabled = p.dlqEnabled
 			params.DLQWriter = p.dlqWriter
 			params.MaxUnexpectedErrorAttempts = p.maxUnexpectedErrorAttempts
+			params.DLQInternalErrors = p.dlqInternalErrors
 			params.DLQErrorPattern = p.dlqErrorPattern
 		},
 	)

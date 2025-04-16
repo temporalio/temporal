@@ -31,10 +31,11 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
+	historyi "go.temporal.io/server/service/history/interfaces"
 )
 
 const (
-	QueryCompletionTypeSucceeded QueryCompletionType = iota
+	QueryCompletionTypeSucceeded historyi.QueryCompletionType = iota
 	QueryCompletionTypeUnblocked
 	QueryCompletionTypeFailed
 )
@@ -46,14 +47,12 @@ var (
 )
 
 type (
-	QueryCompletionType int
-
 	query interface {
 		getID() string
 		getCompletionCh() <-chan struct{}
 		getQueryInput() *querypb.WorkflowQuery
-		GetCompletionState() (*QueryCompletionState, error)
-		setCompletionState(*QueryCompletionState) error
+		GetCompletionState() (*historyi.QueryCompletionState, error)
+		setCompletionState(*historyi.QueryCompletionState) error
 	}
 
 	queryImpl struct {
@@ -62,12 +61,6 @@ type (
 		completionCh chan struct{}
 
 		completionState atomic.Value
-	}
-
-	QueryCompletionState struct {
-		Type   QueryCompletionType
-		Result *querypb.WorkflowQueryResult
-		Err    error
 	}
 )
 
@@ -91,15 +84,19 @@ func (q *queryImpl) getQueryInput() *querypb.WorkflowQuery {
 	return q.queryInput
 }
 
-func (q *queryImpl) GetCompletionState() (*QueryCompletionState, error) {
+func (q *queryImpl) GetCompletionState() (*historyi.QueryCompletionState, error) {
 	ts := q.completionState.Load()
 	if ts == nil {
 		return nil, errQueryNotInCompletionState
 	}
-	return ts.(*QueryCompletionState), nil
+	queryState, ok := ts.(*historyi.QueryCompletionState)
+	if !ok {
+		return nil, errCompletionStateInvalid
+	}
+	return queryState, nil
 }
 
-func (q *queryImpl) setCompletionState(completionState *QueryCompletionState) error {
+func (q *queryImpl) setCompletionState(completionState *historyi.QueryCompletionState) error {
 	if err := q.validateCompletionState(completionState); err != nil {
 		return err
 	}
@@ -113,7 +110,7 @@ func (q *queryImpl) setCompletionState(completionState *QueryCompletionState) er
 }
 
 func (q *queryImpl) validateCompletionState(
-	completionState *QueryCompletionState,
+	completionState *historyi.QueryCompletionState,
 ) error {
 	if completionState == nil {
 		return errCompletionStateInvalid

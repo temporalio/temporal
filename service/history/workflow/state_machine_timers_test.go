@@ -29,6 +29,8 @@ import (
 	"github.com/stretchr/testify/require"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/testing/protorequire"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 	"go.uber.org/mock/gomock"
@@ -36,7 +38,7 @@ import (
 
 func TestTrackStateMachineTimer_MaintainsSortedSlice(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	ms := workflow.NewMockMutableState(ctrl)
+	ms := historyi.NewMockMutableState(ctrl)
 
 	now := time.Now()
 	execInfo := &persistencespb.WorkflowExecutionInfo{}
@@ -44,21 +46,40 @@ func TestTrackStateMachineTimer_MaintainsSortedSlice(t *testing.T) {
 	ms.EXPECT().GetCurrentVersion().Return(int64(1)).AnyTimes()
 	ms.EXPECT().NextTransitionCount().Return(int64(3)).AnyTimes()
 
-	workflow.TrackStateMachineTimer(ms, now, &persistencespb.StateMachineTaskInfo{Type: "0"})
+	workflow.TrackStateMachineTimer(ms, now, &persistencespb.StateMachineTaskInfo{Type: "0", Ref: &persistencespb.StateMachineRef{
+		Path: []*persistencespb.StateMachineKey{{Type: "t", Id: "a"}},
+	}})
+	// This should be deduped.
+	workflow.TrackStateMachineTimer(ms, now, &persistencespb.StateMachineTaskInfo{Type: "0", Ref: &persistencespb.StateMachineRef{
+		Path: []*persistencespb.StateMachineKey{{Type: "t", Id: "a"}},
+	}})
+	// This should be deduped.
+	workflow.TrackStateMachineTimer(ms, now, &persistencespb.StateMachineTaskInfo{Type: "0", Ref: &persistencespb.StateMachineRef{
+		Path: []*persistencespb.StateMachineKey{{Type: "t", Id: "b"}},
+	}})
 	workflow.TrackStateMachineTimer(ms, now.Add(time.Hour), &persistencespb.StateMachineTaskInfo{Type: "1"})
 	workflow.TrackStateMachineTimer(ms, now.Add(time.Hour), &persistencespb.StateMachineTaskInfo{Type: "2"})
 	workflow.TrackStateMachineTimer(ms, now.Add(-time.Hour), &persistencespb.StateMachineTaskInfo{Type: "3"})
 
 	require.Equal(t, 3, len(execInfo.StateMachineTimers))
+
+	require.Equal(t, 1, len(execInfo.StateMachineTimers[0].Infos))
 	require.Equal(t, "3", execInfo.StateMachineTimers[0].Infos[0].Type)
+
+	require.Equal(t, 2, len(execInfo.StateMachineTimers[1].Infos))
 	require.Equal(t, "0", execInfo.StateMachineTimers[1].Infos[0].Type)
+	protorequire.ProtoSliceEqual(t, []*persistencespb.StateMachineKey{{Type: "t", Id: "a"}}, execInfo.StateMachineTimers[1].Infos[0].Ref.Path)
+	require.Equal(t, "0", execInfo.StateMachineTimers[1].Infos[1].Type)
+	protorequire.ProtoSliceEqual(t, []*persistencespb.StateMachineKey{{Type: "t", Id: "b"}}, execInfo.StateMachineTimers[1].Infos[1].Ref.Path)
+
+	require.Equal(t, 2, len(execInfo.StateMachineTimers[2].Infos))
 	require.Equal(t, "1", execInfo.StateMachineTimers[2].Infos[0].Type)
 	require.Equal(t, "2", execInfo.StateMachineTimers[2].Infos[1].Type)
 }
 
 func TestAddNextStateMachineTimerTask(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	ms := workflow.NewMockMutableState(ctrl)
+	ms := historyi.NewMockMutableState(ctrl)
 
 	now := time.Now().UTC()
 	var scheduledTasks []tasks.Task

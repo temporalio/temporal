@@ -117,7 +117,7 @@ func ClientProviderFactory(
 			Transport: ResponseSizeLimiter{transport},
 		}, nil
 	})
-	return func(ctx context.Context, namespaceID string, entry *persistencespb.NexusEndpointEntry, service string) (*nexus.Client, error) {
+	return func(ctx context.Context, namespaceID string, entry *persistencespb.NexusEndpointEntry, service string) (*nexus.HTTPClient, error) {
 		var url string
 		var httpClient *http.Client
 		switch variant := entry.Endpoint.Spec.Target.Variant.(type) {
@@ -138,14 +138,18 @@ func ClientProviderFactory(
 		if clusterInfo, ok := clusterMetadata.GetAllClusterInfo()[clusterMetadata.GetCurrentClusterName()]; ok {
 			httpCaller = func(r *http.Request) (*http.Response, error) {
 				r.Header.Set(NexusCallbackSourceHeader, clusterInfo.ClusterID)
-				return httpClient.Do(r)
+				resp, callErr := httpClient.Do(r)
+				commonnexus.SetFailureSourceOnContext(ctx, resp)
+				return resp, callErr
 			}
 		}
-		return nexus.NewClient(nexus.ClientOptions{
+		return nexus.NewHTTPClient(nexus.HTTPClientOptions{
 			BaseURL:    url,
 			Service:    service,
 			HTTPCaller: httpCaller,
 			Serializer: commonnexus.PayloadSerializer,
+			// TODO(bergundy): Remove this after the 1.27 release. It's here for compatibility with old server implementations.
+			UseOperationID: true,
 		})
 	}, nil
 }

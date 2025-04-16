@@ -153,6 +153,8 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 				Clock:                  task.event.Data.GetClock(),
 				ScheduleToStartTimeout: expirationDuration,
 				ForwardInfo:            fwdr.getForwardInfo(task),
+				VersionDirective:       task.event.Data.GetVersionDirective(),
+				Priority:               task.event.Data.GetPriority(),
 			},
 		)
 	case enumspb.TASK_QUEUE_TYPE_ACTIVITY:
@@ -168,6 +170,9 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 				Clock:                  task.event.Data.GetClock(),
 				ScheduleToStartTimeout: expirationDuration,
 				ForwardInfo:            fwdr.getForwardInfo(task),
+				Stamp:                  task.event.Data.GetStamp(),
+				VersionDirective:       task.event.Data.GetVersionDirective(),
+				Priority:               task.event.Data.GetPriority(),
 			},
 		)
 	default:
@@ -188,8 +193,8 @@ func (fwdr *Forwarder) getForwardInfo(task *internalTask) *taskqueuespb.TaskForw
 	forwardInfo := &taskqueuespb.TaskForwardInfo{
 		TaskSource:         task.source,
 		SourcePartition:    fwdr.partition.RpcName(),
-		DispatchBuildId:    fwdr.queue.BuildId(),
-		DispatchVersionSet: fwdr.queue.VersionSet(),
+		DispatchBuildId:    fwdr.queue.Version().BuildId(),
+		DispatchVersionSet: fwdr.queue.Version().VersionSet(),
 		RedirectInfo:       task.redirectInfo,
 	}
 	return forwardInfo
@@ -264,6 +269,7 @@ func (fwdr *Forwarder) ForwardPoll(ctx context.Context, pollMetadata *pollMetada
 				},
 				Identity:                  identity,
 				WorkerVersionCapabilities: pollMetadata.workerVersionCapabilities,
+				DeploymentOptions:         pollMetadata.deploymentOptions,
 			},
 			ForwardedSource: fwdr.partition.RpcName(),
 		})
@@ -281,7 +287,9 @@ func (fwdr *Forwarder) ForwardPoll(ctx context.Context, pollMetadata *pollMetada
 					Kind: fwdr.partition.Kind(),
 				},
 				Identity:                  identity,
+				TaskQueueMetadata:         pollMetadata.taskQueueMetadata,
 				WorkerVersionCapabilities: pollMetadata.workerVersionCapabilities,
+				DeploymentOptions:         pollMetadata.deploymentOptions,
 			},
 			ForwardedSource: fwdr.partition.RpcName(),
 		})
@@ -300,6 +308,7 @@ func (fwdr *Forwarder) ForwardPoll(ctx context.Context, pollMetadata *pollMetada
 				},
 				Identity:                  identity,
 				WorkerVersionCapabilities: pollMetadata.workerVersionCapabilities,
+				DeploymentOptions:         pollMetadata.deploymentOptions,
 				// Namespace is ignored here.
 			},
 			ForwardedSource: fwdr.partition.RpcName(),

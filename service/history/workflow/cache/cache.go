@@ -47,53 +47,39 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
-	"go.temporal.io/server/service/history/shard"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow"
 )
 
 type (
-	// ReleaseCacheFunc must be called to release the workflow context from the cache.
-	// Make sure not to access the mutable state or workflow context after releasing back to the cache.
-	// If there is any error when using the mutable state (e.g. mutable state is mutated and dirty), call release with
-	// the error so the in-memory copy will be thrown away.
-	ReleaseCacheFunc func(err error)
-
 	Cache interface {
-		Put(
-			shardContext shard.Context,
-			namespaceID namespace.ID,
-			execution *commonpb.WorkflowExecution,
-			workflowCtx workflow.Context,
-			handler metrics.Handler,
-		) (workflow.Context, error)
-
 		GetOrCreateCurrentWorkflowExecution(
 			ctx context.Context,
-			shardContext shard.Context,
+			shardContext historyi.ShardContext,
 			namespaceID namespace.ID,
 			workflowID string,
 			lockPriority locks.Priority,
-		) (ReleaseCacheFunc, error)
+		) (historyi.ReleaseWorkflowContextFunc, error)
 
 		GetOrCreateWorkflowExecution(
 			ctx context.Context,
-			shardContext shard.Context,
+			shardContext historyi.ShardContext,
 			namespaceID namespace.ID,
 			execution *commonpb.WorkflowExecution,
 			lockPriority locks.Priority,
-		) (workflow.Context, ReleaseCacheFunc, error)
+		) (historyi.WorkflowContext, historyi.ReleaseWorkflowContextFunc, error)
 	}
 
 	cacheImpl struct {
 		cache.Cache
 
-		onPut                     func(wfContext *workflow.Context)
-		onEvict                   func(wfContext *workflow.Context)
+		onPut                     func(wfContext *historyi.WorkflowContext)
+		onEvict                   func(wfContext *historyi.WorkflowContext)
 		nonUserContextLockTimeout time.Duration
 	}
 	cacheItem struct {
 		shardId   int32
-		wfContext workflow.Context
+		wfContext historyi.WorkflowContext
 		finalizer *finalizer.Finalizer
 	}
 
@@ -107,7 +93,7 @@ type (
 	}
 )
 
-var NoopReleaseFn ReleaseCacheFunc = func(err error) {}
+var NoopReleaseFn historyi.ReleaseWorkflowContextFunc = func(err error) {}
 
 const (
 	cacheNotReleased int32 = 0
@@ -211,11 +197,11 @@ func newCache(
 
 func (c *cacheImpl) GetOrCreateCurrentWorkflowExecution(
 	ctx context.Context,
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	namespaceID namespace.ID,
 	workflowID string,
 	lockPriority locks.Priority,
-) (ReleaseCacheFunc, error) {
+) (historyi.ReleaseWorkflowContextFunc, error) {
 
 	if err := c.validateWorkflowID(workflowID); err != nil {
 		return nil, err
@@ -254,11 +240,11 @@ func (c *cacheImpl) GetOrCreateCurrentWorkflowExecution(
 
 func (c *cacheImpl) GetOrCreateWorkflowExecution(
 	ctx context.Context,
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	namespaceID namespace.ID,
 	execution *commonpb.WorkflowExecution,
 	lockPriority locks.Priority,
-) (workflow.Context, ReleaseCacheFunc, error) {
+) (historyi.WorkflowContext, historyi.ReleaseWorkflowContextFunc, error) {
 
 	if err := c.validateWorkflowExecutionInfo(ctx, shardContext, namespaceID, execution, lockPriority); err != nil {
 		return nil, nil, err
@@ -289,36 +275,21 @@ func (c *cacheImpl) GetOrCreateWorkflowExecution(
 	return weCtx, weReleaseFunc, err
 }
 
-func (c *cacheImpl) Put(
-	shardContext shard.Context,
-	namespaceID namespace.ID,
-	execution *commonpb.WorkflowExecution,
-	workflowCtx workflow.Context,
-	handler metrics.Handler,
-) (workflow.Context, error) {
-	cacheKey := makeCacheKey(shardContext, namespaceID, execution)
-	item := &cacheItem{shardId: shardContext.GetShardID(), wfContext: workflowCtx, finalizer: shardContext.GetFinalizer()}
-	existing, err := c.PutIfNotExist(cacheKey, item)
-	if err != nil {
-		metrics.CacheFailures.With(handler).Record(1)
-		return nil, err
-	}
-	//nolint:revive
-	return existing.(*cacheItem).wfContext, nil
-}
-
 func (c *cacheImpl) getOrCreateWorkflowExecutionInternal(
 	ctx context.Context,
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	namespaceID namespace.ID,
 	execution *commonpb.WorkflowExecution,
 	handler metrics.Handler,
 	forceClearContext bool,
 	lockPriority locks.Priority,
-) (workflow.Context, ReleaseCacheFunc, error) {
-	cacheKey := makeCacheKey(shardContext, namespaceID, execution)
+) (historyi.WorkflowContext, historyi.ReleaseWorkflowContextFunc, error) {
+	cacheKey := Key{
+		WorkflowKey: definition.NewWorkflowKey(namespaceID.String(), execution.GetWorkflowId(), execution.GetRunId()),
+		ShardUUID:   shardContext.GetOwner(),
+	}
 	item, cacheHit := c.Get(cacheKey).(*cacheItem)
-	var workflowCtx workflow.Context
+	var workflowCtx historyi.WorkflowContext
 	if cacheHit {
 		workflowCtx = item.wfContext
 	} else {
@@ -332,10 +303,14 @@ func (c *cacheImpl) getOrCreateWorkflowExecutionInternal(
 		)
 
 		var err error
-		workflowCtx, err = c.Put(shardContext, namespaceID, execution, workflowCtx, handler)
+		value := &cacheItem{shardId: shardContext.GetShardID(), wfContext: workflowCtx, finalizer: shardContext.GetFinalizer()}
+		existing, err := c.PutIfNotExist(cacheKey, value)
 		if err != nil {
+			metrics.CacheFailures.With(handler).Record(1)
 			return nil, nil, err
 		}
+		//nolint:revive
+		workflowCtx = existing.(*cacheItem).wfContext
 	}
 
 	if err := c.lockWorkflowExecution(ctx, workflowCtx, cacheKey, lockPriority); err != nil {
@@ -353,7 +328,7 @@ func (c *cacheImpl) getOrCreateWorkflowExecutionInternal(
 
 func (c *cacheImpl) lockWorkflowExecution(
 	ctx context.Context,
-	workflowCtx workflow.Context,
+	workflowCtx historyi.WorkflowContext,
 	cacheKey Key,
 	lockPriority locks.Priority,
 ) error {
@@ -385,8 +360,8 @@ func (c *cacheImpl) lockWorkflowExecution(
 
 func (c *cacheImpl) makeReleaseFunc(
 	cacheKey Key,
-	shardContext shard.Context,
-	context workflow.Context,
+	shardContext historyi.ShardContext,
+	wfContext historyi.WorkflowContext,
 	forceClearContext bool,
 	handler metrics.Handler,
 	acquireTime time.Time,
@@ -399,28 +374,28 @@ func (c *cacheImpl) makeReleaseFunc(
 				metrics.HistoryWorkflowExecutionCacheLockHoldDuration.With(handler).Record(time.Since(acquireTime))
 			}()
 			if rec := recover(); rec != nil {
-				context.Clear()
-				context.Unlock()
+				wfContext.Clear()
+				wfContext.Unlock()
 				c.Release(cacheKey)
 				panic(rec)
 			} else {
 				if err != nil || forceClearContext {
 					// TODO see issue #668, there are certain type or errors which can bypass the clear
-					context.Clear()
-					context.Unlock()
+					wfContext.Clear()
+					wfContext.Unlock()
 					c.Release(cacheKey)
 				} else {
-					isDirty := context.IsDirty()
+					isDirty := wfContext.IsDirty()
 					if isDirty {
-						context.Clear()
+						wfContext.Clear()
 						logger := log.With(shardContext.GetLogger(), tag.ComponentHistoryCache)
 						logger.Error("Cache encountered dirty mutable state transaction",
-							tag.WorkflowNamespaceID(context.GetWorkflowKey().NamespaceID),
-							tag.WorkflowID(context.GetWorkflowKey().WorkflowID),
-							tag.WorkflowRunID(context.GetWorkflowKey().RunID),
+							tag.WorkflowNamespaceID(wfContext.GetWorkflowKey().NamespaceID),
+							tag.WorkflowID(wfContext.GetWorkflowKey().WorkflowID),
+							tag.WorkflowRunID(wfContext.GetWorkflowKey().RunID),
 						)
 					}
-					context.Unlock()
+					wfContext.Unlock()
 					c.Release(cacheKey)
 					if isDirty {
 						panic("Cache encountered dirty mutable state transaction")
@@ -433,7 +408,7 @@ func (c *cacheImpl) makeReleaseFunc(
 
 func (c *cacheImpl) validateWorkflowExecutionInfo(
 	ctx context.Context,
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	namespaceID namespace.ID,
 	execution *commonpb.WorkflowExecution,
 	lockPriority locks.Priority,
@@ -481,7 +456,7 @@ func (c *cacheImpl) validateWorkflowID(
 
 func GetCurrentRunID(
 	ctx context.Context,
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	workflowCache Cache,
 	namespaceID string,
 	workflowID string,
@@ -511,17 +486,6 @@ func GetCurrentRunID(
 		return "", err
 	}
 	return resp.RunID, nil
-}
-
-func makeCacheKey(
-	shardContext shard.Context,
-	namespaceID namespace.ID,
-	execution *commonpb.WorkflowExecution,
-) Key {
-	return Key{
-		WorkflowKey: definition.NewWorkflowKey(namespaceID.String(), execution.GetWorkflowId(), execution.GetRunId()),
-		ShardUUID:   shardContext.GetOwner(),
-	}
 }
 
 func (c *cacheItem) CacheSize() int {

@@ -38,13 +38,14 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/server/api/clock/v1"
+	clockspb "go.temporal.io/server/api/clock/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/retrypolicy"
 	"go.temporal.io/server/common/worker_versioning"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -79,6 +80,20 @@ func getBackoffInterval(
 		return nextBackoffInterval(now, currentAttempt, maxAttempts, initInterval, maxInterval, expirationTime, backoffCoefficient, makeBackoffAlgorithm(delayedRetryDuration))
 	}
 	return nextBackoffInterval(now, currentAttempt, maxAttempts, initInterval, maxInterval, expirationTime, backoffCoefficient, ExponentialBackoffAlgorithm)
+}
+
+func nextRetryDelayFrom(failure *failurepb.Failure) *time.Duration {
+	var delay *time.Duration
+	afi, ok := failure.GetFailureInfo().(*failurepb.Failure_ApplicationFailureInfo)
+	if !ok {
+		return delay
+	}
+	p := afi.ApplicationFailureInfo.GetNextRetryDelay()
+	if p != nil {
+		d := p.AsDuration()
+		delay = &d
+	}
+	return delay
 }
 
 func nextBackoffInterval(
@@ -169,10 +184,11 @@ func isRetryable(failure *failurepb.Failure, nonRetryableTypes []string) bool {
 
 func SetupNewWorkflowForRetryOrCron(
 	ctx context.Context,
-	previousMutableState MutableState,
-	newMutableState MutableState,
+	previousMutableState historyi.MutableState,
+	newMutableState historyi.MutableState,
 	newRunID string,
 	startAttr *historypb.WorkflowExecutionStartedEventAttributes,
+	startLinks []*commonpb.Link,
 	lastCompletionResult *commonpb.Payloads,
 	failure *failurepb.Failure,
 	backoffInterval time.Duration,
@@ -241,6 +257,14 @@ func SetupNewWorkflowForRetryOrCron(
 	// validateContinueAsNewWorkflowExecutionAttributes
 	runTimeout := startAttr.GetWorkflowRunTimeout()
 
+	var completionCallbacks []*commonpb.Callback
+	if initiator == enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY {
+		completionCallbacks, err = getCompletionCallbacksAsProtoSlice(previousMutableState)
+		if err != nil {
+			return err
+		}
+	}
+
 	createRequest := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                uuid.New(),
 		Namespace:                newMutableState.GetNamespaceEntry().Name().String(),
@@ -256,6 +280,9 @@ func SetupNewWorkflowForRetryOrCron(
 		CronSchedule:             startAttr.CronSchedule,
 		Memo:                     startAttr.Memo,
 		SearchAttributes:         startAttr.SearchAttributes,
+		CompletionCallbacks:      completionCallbacks,
+		Links:                    startLinks,
+		Priority:                 startAttr.Priority,
 	}
 
 	attempt := int32(1)
@@ -303,7 +330,7 @@ func SetupNewWorkflowForRetryOrCron(
 	if err != nil {
 		return serviceerror.NewInternal("Failed to add workflow execution started event.")
 	}
-	var parentClock *clock.VectorClock
+	var parentClock *clockspb.VectorClock
 	if parentInfo != nil {
 		parentClock = parentInfo.Clock
 	}

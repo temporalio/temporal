@@ -31,7 +31,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/api/common/v1"
+	commonpb "go.temporal.io/api/common/v1"
 	carchiver "go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/log"
@@ -55,7 +55,7 @@ func TestArchiver(t *testing.T) {
 		ArchiveVisibilityErr error
 		RateLimiterWaitErr   error
 		Targets              []Target
-		SearchAttributes     *common.SearchAttributes
+		SearchAttributes     *commonpb.SearchAttributes
 		SearchAttributesErr  error
 		NameTypeMap          searchattribute.NameTypeMap
 		NameTypeMapErr       error
@@ -142,7 +142,7 @@ func TestArchiver(t *testing.T) {
 		{
 			Name:    "Search attribute with no embedded type information",
 			Targets: []Target{TargetVisibility},
-			SearchAttributes: &common.SearchAttributes{IndexedFields: map[string]*common.Payload{
+			SearchAttributes: &commonpb.SearchAttributes{IndexedFields: map[string]*commonpb.Payload{
 				"Text01": payload.EncodeString("value"),
 			}},
 			NameTypeMap: searchattribute.TestNameTypeMap,
@@ -152,7 +152,7 @@ func TestArchiver(t *testing.T) {
 		{
 			Name:    "Search attribute missing in type map",
 			Targets: []Target{TargetVisibility},
-			SearchAttributes: &common.SearchAttributes{IndexedFields: map[string]*common.Payload{
+			SearchAttributes: &commonpb.SearchAttributes{IndexedFields: map[string]*commonpb.Payload{
 				"Text01": payload.EncodeString("value"),
 			}},
 			NameTypeMap: searchattribute.NameTypeMap{},
@@ -164,7 +164,7 @@ func TestArchiver(t *testing.T) {
 		{
 			Name:    "Error getting name type map from search attribute provider",
 			Targets: []Target{TargetVisibility},
-			SearchAttributes: &common.SearchAttributes{IndexedFields: map[string]*common.Payload{
+			SearchAttributes: &commonpb.SearchAttributes{IndexedFields: map[string]*commonpb.Payload{
 				"Text01": payload.EncodeString("value"),
 			}},
 			NameTypeMapErr: errors.New("name-type-map-err"),

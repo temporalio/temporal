@@ -25,6 +25,7 @@
 package queues
 
 import (
+	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -52,6 +53,7 @@ type (
 		clusterMetadata            cluster.Metadata
 		logger                     log.Logger
 		metricsHandler             metrics.Handler
+		tracer                     trace.Tracer
 		dlqWriter                  *DLQWriter
 		dlqEnabled                 dynamicconfig.BoolPropertyFn
 		attemptsBeforeSendingToDlq dynamicconfig.IntPropertyFn
@@ -74,9 +76,11 @@ func NewExecutableFactory(
 	clusterMetadata cluster.Metadata,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
+	tracer trace.Tracer,
 	dlqWriter *DLQWriter,
 	dlqEnabled dynamicconfig.BoolPropertyFn,
 	attemptsBeforeSendingToDlq dynamicconfig.IntPropertyFn,
+	dlqInternalErrors dynamicconfig.BoolPropertyFn,
 	dlqErrorPattern dynamicconfig.StringPropertyFn,
 ) *executableFactoryImpl {
 	return &executableFactoryImpl{
@@ -88,10 +92,12 @@ func NewExecutableFactory(
 		namespaceRegistry:          namespaceRegistry,
 		clusterMetadata:            clusterMetadata,
 		logger:                     logger,
-		metricsHandler:             metricsHandler,
+		metricsHandler:             metricsHandler.WithTags(defaultExecutableMetricsTags...),
+		tracer:                     tracer,
 		dlqWriter:                  dlqWriter,
 		dlqEnabled:                 dlqEnabled,
 		attemptsBeforeSendingToDlq: attemptsBeforeSendingToDlq,
+		dlqInternalErrors:          dlqInternalErrors,
 		dlqErrorPattern:            dlqErrorPattern,
 	}
 }
@@ -109,10 +115,12 @@ func (f *executableFactoryImpl) NewExecutable(task tasks.Task, readerID int64) E
 		f.clusterMetadata,
 		f.logger,
 		f.metricsHandler,
+		f.tracer,
 		func(params *ExecutableParams) {
 			params.DLQEnabled = f.dlqEnabled
 			params.DLQWriter = f.dlqWriter
 			params.MaxUnexpectedErrorAttempts = f.attemptsBeforeSendingToDlq
+			params.DLQInternalErrors = f.dlqInternalErrors
 			params.DLQErrorPattern = f.dlqErrorPattern
 		},
 	)

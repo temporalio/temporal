@@ -36,13 +36,12 @@ import (
 	"io"
 	"io/fs"
 	"os"
-	"path/filepath"
+	"path"
 	"regexp"
 	"sort"
 	"strings"
 
 	"github.com/blang/semver/v4"
-
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
@@ -199,7 +198,7 @@ func (task *UpdateTask) buildChangeSet(currVer string) ([]changeSet, error) {
 	var dir string
 	if len(config.SchemaName) > 0 {
 		fsys = dbschemas.Assets()
-		dir = filepath.Join(config.SchemaName, "versioned")
+		dir = path.Join(config.SchemaName, "versioned")
 	} else {
 		fsys = os.DirFS(config.SchemaDir)
 		dir = "."
@@ -215,7 +214,7 @@ func (task *UpdateTask) buildChangeSet(currVer string) ([]changeSet, error) {
 	var result []changeSet
 
 	for _, vd := range verDirs {
-		dirPath := filepath.Join(dir, vd)
+		dirPath := path.Join(dir, vd)
 
 		m, e := readManifest(fsys, dirPath)
 		if e != nil {
@@ -253,15 +252,15 @@ func (task *UpdateTask) parseSQLStmts(fsys fs.FS, dir string, manifest *manifest
 	result := make([]string, 0, 4)
 
 	for _, file := range manifest.SchemaUpdateCqlFiles {
-		path := filepath.Join(dir, file)
-		task.logger.Info("Processing schema file: " + path)
-		schemaBuf, err := fs.ReadFile(fsys, path)
+		schemaPath := path.Join(dir, file)
+		task.logger.Info("Processing schema file: " + schemaPath)
+		schemaBuf, err := fs.ReadFile(fsys, schemaPath)
 		if err != nil {
-			return nil, fmt.Errorf("error reading file %s: %w", path, err)
+			return nil, fmt.Errorf("error reading file %s: %w", schemaPath, err)
 		}
 		stmts, err := persistence.LoadAndSplitQueryFromReaders([]io.Reader{bytes.NewBuffer(schemaBuf)})
 		if err != nil {
-			return nil, fmt.Errorf("error parsing file %v, err=%v", path, err)
+			return nil, fmt.Errorf("error parsing file %v, err=%v", schemaPath, err)
 		}
 		result = append(result, stmts...)
 	}
@@ -291,7 +290,9 @@ func validateCQLStmts(stmts []string) error {
 
 // readManifest reads the json manifest at dirPath into a manifest struct.
 func readManifest(fsys fs.FS, dirPath string) (*manifest, error) {
-	jsonBlob, err := fs.ReadFile(fsys, filepath.Join(dirPath, manifestFileName))
+	manifestPath := path.Join(dirPath, manifestFileName)
+
+	jsonBlob, err := fs.ReadFile(fsys, manifestPath)
 	if err != nil {
 		return nil, err
 	}

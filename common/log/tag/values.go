@@ -35,12 +35,13 @@ var (
 	WorkflowActionWorkflowTerminated    = workflowAction("add-workflow-terminated-event")
 	WorkflowActionWorkflowContinueAsNew = workflowAction("add-workflow-continue-as-new-event")
 
-	// workflow cancellation / sign
+	// workflow cancellation / sign / update-options
 	WorkflowActionWorkflowCancelRequested        = workflowAction("add-workflow-cancel-requested-event")
 	WorkflowActionWorkflowSignaled               = workflowAction("add-workflow-signaled-event")
 	WorkflowActionWorkflowRecordMarker           = workflowAction("add-workflow-marker-record-event")
 	WorkflowActionUpsertWorkflowSearchAttributes = workflowAction("add-workflow-upsert-search-attributes-event")
 	WorkflowActionWorkflowPropertiesModified     = workflowAction("add-workflow-properties-modified-event")
+	WorkflowActionWorkflowOptionsUpdated         = workflowAction("add-workflow-options-updated-event")
 
 	// workflow update
 	WorkflowActionUpdateAccepted  = workflowAction("add-workflow-update-accepted-event")

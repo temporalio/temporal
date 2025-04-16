@@ -185,10 +185,13 @@ func (pool *DynamicWorkerPoolScheduler) exportMetricsWorker() {
 			timer.Stop()
 			return
 		case <-timer.C:
+			pool.mu.Lock()
+			bufferSize, runningGoroutines := pool.bufferSize, pool.runningGoroutines
+			pool.mu.Unlock()
 			metrics.DynamicWorkerPoolSchedulerBufferSize.With(pool.metricsHandler).
-				Record(float64(pool.bufferSize))
+				Record(float64(bufferSize))
 			metrics.DynamicWorkerPoolSchedulerActiveWorkers.With(pool.metricsHandler).
-				Record(float64(pool.runningGoroutines))
+				Record(float64(runningGoroutines))
 		}
 	}
 }

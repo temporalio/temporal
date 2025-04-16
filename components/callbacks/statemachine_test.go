@@ -54,7 +54,7 @@ func TestValidTransitions(t *testing.T) {
 	// AttemptFailed
 	out, err := callbacks.TransitionAttemptFailed.Apply(callback, callbacks.EventAttemptFailed{
 		Time:        currentTime,
-		Err:         fmt.Errorf("test"), // nolint:goerr113
+		Err:         fmt.Errorf("test"),
 		RetryPolicy: backoff.NewExponentialRetryPolicy(time.Second),
 	})
 	require.NoError(t, err)

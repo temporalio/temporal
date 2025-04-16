@@ -25,16 +25,15 @@
 package matching
 
 import (
-	"bytes"
 	"context"
 	"errors"
-	"fmt"
 	"sync/atomic"
 	"time"
 
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/future"
@@ -59,25 +58,34 @@ type (
 		Stop()
 		WaitUntilInitialized(context.Context) error
 		SpoolTask(taskInfo *persistencespb.TaskInfo) error
+		// BacklogCountHint returns the number of backlog tasks loaded in memory now.
+		// It's returned as a hint to the SDK to influence polling behavior (sticky vs normal).
 		BacklogCountHint() int64
 		BacklogStatus() *taskqueuepb.TaskQueueStatus
-		String() string
+		// TotalApproximateBacklogCount returns an estimate of the total size of the backlog in
+		// persistence. It may be off in either direction.
+		TotalApproximateBacklogCount() int64
+		BacklogHeadAge() time.Duration
+		InternalStatus() []*taskqueuespb.InternalTaskQueueStatus
+
+		// TODO(pri): remove
+		getDB() *taskQueueDB
 	}
 
 	backlogManagerImpl struct {
-		pqMgr               physicalTaskQueueManager
-		db                  *taskQueueDB
-		taskWriter          *taskWriter
-		taskReader          *taskReader // reads tasks from db and async matches it with poller
-		taskGC              *taskGC
-		taskAckManager      ackManager // tracks ackLevel for delivered messages
-		config              *taskQueueConfig
-		logger              log.Logger
-		throttledLogger     log.ThrottledLogger
-		matchingClient      matchingservice.MatchingServiceClient
-		metricsHandler      metrics.Handler
-		contextInfoProvider func(ctx context.Context) context.Context
-		initializedError    *future.FutureImpl[struct{}]
+		pqMgr            physicalTaskQueueManager
+		tqCtx            context.Context
+		db               *taskQueueDB
+		taskWriter       *taskWriter
+		taskReader       *taskReader // reads tasks from db and async matches it with poller
+		taskGC           *taskGC
+		taskAckManager   *ackManager // tracks ackLevel for delivered messages
+		config           *taskQueueConfig
+		logger           log.Logger
+		throttledLogger  log.ThrottledLogger
+		matchingClient   matchingservice.MatchingServiceClient
+		metricsHandler   metrics.Handler
+		initializedError *future.FutureImpl[struct{}]
 		// skipFinalUpdate controls behavior on Stop: if it's false, we try to write one final
 		// update before unloading
 		skipFinalUpdate atomic.Bool
@@ -87,6 +95,7 @@ type (
 var _ backlogManager = (*backlogManagerImpl)(nil)
 
 func newBacklogManager(
+	tqCtx context.Context,
 	pqMgr physicalTaskQueueManager,
 	config *taskQueueConfig,
 	taskManager persistence.TaskManager,
@@ -94,23 +103,22 @@ func newBacklogManager(
 	throttledLogger log.ThrottledLogger,
 	matchingClient matchingservice.MatchingServiceClient,
 	metricsHandler metrics.Handler,
-	contextInfoProvider func(ctx context.Context) context.Context,
 ) *backlogManagerImpl {
 	bmg := &backlogManagerImpl{
-		pqMgr:               pqMgr,
-		matchingClient:      matchingClient,
-		metricsHandler:      metricsHandler,
-		logger:              logger,
-		throttledLogger:     throttledLogger,
-		config:              config,
-		contextInfoProvider: contextInfoProvider,
-		initializedError:    future.NewFuture[struct{}](),
+		pqMgr:            pqMgr,
+		tqCtx:            tqCtx,
+		matchingClient:   matchingClient,
+		metricsHandler:   metricsHandler,
+		logger:           logger,
+		throttledLogger:  throttledLogger,
+		config:           config,
+		initializedError: future.NewFuture[struct{}](),
 	}
-	bmg.db = newTaskQueueDB(bmg, taskManager, pqMgr.QueueKey(), logger)
+	bmg.db = newTaskQueueDB(config, taskManager, pqMgr.QueueKey(), logger, metricsHandler)
 	bmg.taskWriter = newTaskWriter(bmg)
 	bmg.taskReader = newTaskReader(bmg)
-	bmg.taskAckManager = newAckManager(bmg)
-	bmg.taskGC = newTaskGC(bmg.db, config)
+	bmg.taskAckManager = newAckManager(bmg.db, logger)
+	bmg.taskGC = newTaskGC(tqCtx, bmg.db, config)
 
 	return bmg
 }
@@ -147,14 +155,12 @@ func (c *backlogManagerImpl) Stop() {
 	// tasks, the next owner will just read over an empty range.
 	ackLevel := c.taskAckManager.getAckLevel()
 	if ackLevel >= 0 && !c.skipFinalUpdate.Load() {
-		ctx, cancel := c.newIOContext()
+		ctx, cancel := context.WithTimeout(c.tqCtx, ioTimeout)
 		defer cancel()
 
-		_ = c.db.UpdateState(ctx, ackLevel)
-		c.taskGC.RunNow(ctx, ackLevel)
+		_ = c.db.OldUpdateState(ctx, ackLevel)
+		c.taskGC.RunNow(ackLevel)
 	}
-	c.taskWriter.Stop()
-	c.taskReader.Stop()
 }
 
 func (c *backlogManagerImpl) SetInitializedError(err error) {
@@ -173,7 +179,7 @@ func (c *backlogManagerImpl) WaitUntilInitialized(ctx context.Context) error {
 }
 
 func (c *backlogManagerImpl) SpoolTask(taskInfo *persistencespb.TaskInfo) error {
-	_, err := c.taskWriter.appendTask(taskInfo)
+	err := c.taskWriter.appendTask(taskInfo)
 	c.signalIfFatal(err)
 	if err == nil {
 		c.taskReader.Signal()
@@ -181,6 +187,7 @@ func (c *backlogManagerImpl) SpoolTask(taskInfo *persistencespb.TaskInfo) error 
 	return err
 }
 
+// TODO(pri): old matcher cleanup
 func (c *backlogManagerImpl) processSpooledTask(
 	ctx context.Context,
 	task *internalTask,
@@ -188,16 +195,25 @@ func (c *backlogManagerImpl) processSpooledTask(
 	return c.pqMgr.ProcessSpooledTask(ctx, task)
 }
 
+func (c *backlogManagerImpl) addSpooledTask(task *internalTask) error {
+	return c.pqMgr.AddSpooledTask(task)
+}
+
 func (c *backlogManagerImpl) BacklogCountHint() int64 {
 	return c.taskAckManager.getBacklogCountHint()
+}
+
+func (c *backlogManagerImpl) BacklogHeadAge() time.Duration {
+	return c.taskReader.getBacklogHeadAge()
 }
 
 func (c *backlogManagerImpl) BacklogStatus() *taskqueuepb.TaskQueueStatus {
 	taskIDBlock := rangeIDToTaskIDBlock(c.db.RangeID(), c.config.RangeSize)
 	return &taskqueuepb.TaskQueueStatus{
-		ReadLevel:        c.taskAckManager.getReadLevel(),
-		AckLevel:         c.taskAckManager.getAckLevel(),
-		BacklogCountHint: c.db.getApproximateBacklogCount(), // use getApproximateBacklogCount instead of BacklogCountHint since it's more accurate
+		ReadLevel: c.taskAckManager.getReadLevel(),
+		AckLevel:  c.taskAckManager.getAckLevel(),
+		// use getApproximateBacklogCount instead of BacklogCountHint since it's more accurate
+		BacklogCountHint: c.db.getApproximateBacklogCount(subqueueZero),
 		TaskIdBlock: &taskqueuepb.TaskIdBlock{
 			StartId: taskIDBlock.start,
 			EndId:   taskIDBlock.end,
@@ -205,39 +221,50 @@ func (c *backlogManagerImpl) BacklogStatus() *taskqueuepb.TaskQueueStatus {
 	}
 }
 
-func (c *backlogManagerImpl) String() string {
-	buf := new(bytes.Buffer)
-	rangeID := c.db.RangeID()
-	_, _ = fmt.Fprintf(buf, "RangeID=%v\n", rangeID)
-	_, _ = fmt.Fprintf(buf, "TaskIDBlock=%+v\n", rangeIDToTaskIDBlock(rangeID, c.config.RangeSize))
-	_, _ = fmt.Fprintf(buf, "AckLevel=%v\n", c.taskAckManager.ackLevel)
-	_, _ = fmt.Fprintf(buf, "MaxTaskID=%v\n", c.taskAckManager.getReadLevel())
+func (c *backlogManagerImpl) TotalApproximateBacklogCount() int64 {
+	return c.db.getTotalApproximateBacklogCount()
+}
 
-	return buf.String()
+func (c *backlogManagerImpl) InternalStatus() []*taskqueuespb.InternalTaskQueueStatus {
+	currentTaskIDBlock := c.taskWriter.getCurrentTaskIDBlock()
+	return []*taskqueuespb.InternalTaskQueueStatus{
+		&taskqueuespb.InternalTaskQueueStatus{
+			ReadLevel: c.taskAckManager.getReadLevel(),
+			AckLevel:  c.taskAckManager.getAckLevel(),
+			TaskIdBlock: &taskqueuepb.TaskIdBlock{
+				StartId: currentTaskIDBlock.start,
+				EndId:   currentTaskIDBlock.end,
+			},
+			LoadedTasks:             c.taskAckManager.getBacklogCountHint(),
+			MaxReadLevel:            c.db.GetMaxReadLevel(subqueueZero),
+			ApproximateBacklogCount: c.db.getApproximateBacklogCount(subqueueZero),
+		},
+	}
 }
 
 // completeTask marks a task as processed. Only tasks created by taskReader (i.e. backlog from db) reach
 // here. As part of completion:
 //   - task is deleted from the database when err is nil
 //   - new task is created and current task is deleted when err is not nil
-func (c *backlogManagerImpl) completeTask(task *persistencespb.AllocatedTaskInfo, err error) {
+func (c *backlogManagerImpl) completeTask(itask *internalTask, err error) {
+	task := itask.event.AllocatedTaskInfo
 	if err != nil {
 		// failed to start the task.
 		// We cannot just remove it from persistence because then it will be lost.
 		// We handle this by writing the task back to persistence with a higher taskID.
 		// This will allow subsequent tasks to make progress, and hopefully by the time this task is picked-up
 		// again the underlying reason for failing to start will be resolved.
-		// Note that RecordTaskStarted only fails after retrying for a long time, so a single task will not be
-		// re-written to persistence frequently.
+		metrics.TaskRewrites.With(c.metricsHandler).Record(1)
 		err = executeWithRetry(context.Background(), func(_ context.Context) error {
-			_, err := c.taskWriter.appendTask(task.Data)
-			return err
+			return c.taskWriter.appendTask(task.Data)
 		})
 
 		if err != nil {
 			// OK, we also failed to write to persistence.
 			// This should only happen in very extreme cases where persistence is completely down.
-			// We still can't lose the old task, so we just unload the entire task queue
+			// We still can't lose the old task, so we just unload the entire task queue.
+			// We haven't advanced the ack level past this task, so when the task queue reloads,
+			// it will see this task again.
 			c.logger.Error("Persistent store operation failure",
 				tag.StoreOperationStopTaskQueue,
 				tag.Error(err),
@@ -251,12 +278,15 @@ func (c *backlogManagerImpl) completeTask(task *persistencespb.AllocatedTaskInfo
 		c.taskReader.Signal()
 	}
 
-	ackLevel := c.taskAckManager.completeTask(task.GetTaskId())
-
-	// TODO: completeTaskFunc and task.finish() should take in a context
-	ctx, cancel := c.newIOContext()
-	defer cancel()
-	c.taskGC.Run(ctx, ackLevel)
+	ackLevel, numAcked := c.taskAckManager.completeTask(task.GetTaskId())
+	if numAcked > 0 {
+		var backlogHead time.Time
+		if nanos := c.taskReader.backlogHeadCreateTime.Load(); nanos > 0 {
+			backlogHead = time.Unix(0, nanos)
+		}
+		c.db.updateBacklogStats(-numAcked, backlogHead)
+	}
+	c.taskGC.Run(ackLevel)
 }
 
 func rangeIDToTaskIDBlock(rangeID int64, rangeSize int64) taskIDBlock {
@@ -282,11 +312,10 @@ func executeWithRetry(
 	})
 }
 
-func (c *backlogManagerImpl) newIOContext() (context.Context, context.CancelFunc) {
-	ctx, cancel := context.WithTimeout(context.Background(), ioTimeout)
-	return c.contextInfoProvider(ctx), cancel
-}
-
 func (c *backlogManagerImpl) queueKey() *PhysicalTaskQueueKey {
 	return c.pqMgr.QueueKey()
+}
+
+func (c *backlogManagerImpl) getDB() *taskQueueDB {
+	return c.db
 }

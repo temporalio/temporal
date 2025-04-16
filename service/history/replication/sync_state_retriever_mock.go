@@ -40,8 +40,7 @@ import (
 	common "go.temporal.io/api/common/v1"
 	history "go.temporal.io/server/api/history/v1"
 	persistence "go.temporal.io/server/api/persistence/v1"
-	workflow "go.temporal.io/server/service/history/workflow"
-	cache "go.temporal.io/server/service/history/workflow/cache"
+	interfaces "go.temporal.io/server/service/history/interfaces"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -49,6 +48,7 @@ import (
 type MockSyncStateRetriever struct {
 	ctrl     *gomock.Controller
 	recorder *MockSyncStateRetrieverMockRecorder
+	isgomock struct{}
 }
 
 // MockSyncStateRetrieverMockRecorder is the mock recorder for MockSyncStateRetriever.
@@ -84,7 +84,7 @@ func (mr *MockSyncStateRetrieverMockRecorder) GetSyncWorkflowStateArtifact(ctx, 
 }
 
 // GetSyncWorkflowStateArtifactFromMutableState mocks base method.
-func (m *MockSyncStateRetriever) GetSyncWorkflowStateArtifactFromMutableState(ctx context.Context, namespaceID string, execution *common.WorkflowExecution, mutableState workflow.MutableState, targetVersionedTransition *persistence.VersionedTransition, targetVersionHistories [][]*history.VersionHistoryItem, releaseFunc cache.ReleaseCacheFunc) (*SyncStateResult, error) {
+func (m *MockSyncStateRetriever) GetSyncWorkflowStateArtifactFromMutableState(ctx context.Context, namespaceID string, execution *common.WorkflowExecution, mutableState interfaces.MutableState, targetVersionedTransition *persistence.VersionedTransition, targetVersionHistories [][]*history.VersionHistoryItem, releaseFunc interfaces.ReleaseWorkflowContextFunc) (*SyncStateResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetSyncWorkflowStateArtifactFromMutableState", ctx, namespaceID, execution, mutableState, targetVersionedTransition, targetVersionHistories, releaseFunc)
 	ret0, _ := ret[0].(*SyncStateResult)
@@ -98,10 +98,26 @@ func (mr *MockSyncStateRetrieverMockRecorder) GetSyncWorkflowStateArtifactFromMu
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSyncWorkflowStateArtifactFromMutableState", reflect.TypeOf((*MockSyncStateRetriever)(nil).GetSyncWorkflowStateArtifactFromMutableState), ctx, namespaceID, execution, mutableState, targetVersionedTransition, targetVersionHistories, releaseFunc)
 }
 
+// GetSyncWorkflowStateArtifactFromMutableStateForNewWorkflow mocks base method.
+func (m *MockSyncStateRetriever) GetSyncWorkflowStateArtifactFromMutableStateForNewWorkflow(ctx context.Context, namespaceID string, execution *common.WorkflowExecution, mutableState interfaces.MutableState, releaseFunc interfaces.ReleaseWorkflowContextFunc, taskVersionedTransition *persistence.VersionedTransition) (*SyncStateResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetSyncWorkflowStateArtifactFromMutableStateForNewWorkflow", ctx, namespaceID, execution, mutableState, releaseFunc, taskVersionedTransition)
+	ret0, _ := ret[0].(*SyncStateResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetSyncWorkflowStateArtifactFromMutableStateForNewWorkflow indicates an expected call of GetSyncWorkflowStateArtifactFromMutableStateForNewWorkflow.
+func (mr *MockSyncStateRetrieverMockRecorder) GetSyncWorkflowStateArtifactFromMutableStateForNewWorkflow(ctx, namespaceID, execution, mutableState, releaseFunc, taskVersionedTransition any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSyncWorkflowStateArtifactFromMutableStateForNewWorkflow", reflect.TypeOf((*MockSyncStateRetriever)(nil).GetSyncWorkflowStateArtifactFromMutableStateForNewWorkflow), ctx, namespaceID, execution, mutableState, releaseFunc, taskVersionedTransition)
+}
+
 // MocklastUpdatedStateTransitionGetter is a mock of lastUpdatedStateTransitionGetter interface.
 type MocklastUpdatedStateTransitionGetter struct {
 	ctrl     *gomock.Controller
 	recorder *MocklastUpdatedStateTransitionGetterMockRecorder
+	isgomock struct{}
 }
 
 // MocklastUpdatedStateTransitionGetterMockRecorder is the mock recorder for MocklastUpdatedStateTransitionGetter.

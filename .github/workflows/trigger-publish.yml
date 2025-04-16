@@ -30,6 +30,7 @@ jobs:
           private_key: ${{ secrets.TEMPORAL_CICD_PRIVATE_KEY }}
 
       - name: Dispatch docker builds Github Action
+        if: ${{ vars.SHOULD_TRIGGER_DOCKER_BUILD == 'true' }}
         env:
           PAT: ${{ steps.generate_token.outputs.token }}
           PARENT_REPO: temporalio/docker-builds

@@ -322,7 +322,6 @@ func (b *EventStore) bufferEvent(
 		return false
 
 	case // events generated directly from messages should not be buffered
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_REJECTED,
 		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED,
 		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_COMPLETED:
 		return false

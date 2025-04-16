@@ -1,12 +1,7 @@
-enablearchival: false
-enablemetricscapture: true
 clusterno: 0
 historyconfig:
   numhistoryshards: 4
   numhistoryhosts: 1
-workerconfig:
-  enablearchiver: false
-  enablereplicator: false
 generatemtls: true
 esconfig:
   version: "${ES_VERSION}"

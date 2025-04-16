@@ -60,9 +60,9 @@ var (
 
 	templateUpsertCustomSearchAttributes = `
 		INSERT INTO custom_search_attributes (
-			namespace_id, run_id, search_attributes
-		) VALUES (:namespace_id, :run_id, :search_attributes)
-		ON DUPLICATE KEY UPDATE search_attributes = VALUES(search_attributes)`
+			namespace_id, run_id, search_attributes, _version
+		) VALUES (:namespace_id, :run_id, :search_attributes, :_version)` +
+		buildOnDuplicateKeyUpdate("search_attributes", sqlplugin.VersionColumnName)
 
 	templateDeleteWorkflowExecution_v8 = `
 		DELETE FROM executions_visibility
@@ -82,7 +82,9 @@ var (
 func buildOnDuplicateKeyUpdate(fields ...string) string {
 	items := make([]string, len(fields))
 	for i, field := range fields {
-		items[i] = fmt.Sprintf("%s = VALUES(%s)", field, field)
+		// This line is to ensure that no update occurs (for any column) if the version is behind the saved version.
+		items[i] = fmt.Sprintf("%v = IF(%v < VALUES(%v), VALUES(%v), %v)",
+			field, sqlplugin.VersionColumnName, sqlplugin.VersionColumnName, field, field)
 	}
 	return fmt.Sprintf("ON DUPLICATE KEY UPDATE %s", strings.Join(items, ", "))
 }

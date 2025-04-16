@@ -29,14 +29,13 @@ package ndc
 import (
 	"context"
 
-	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/service/history/hsm"
-	"go.temporal.io/server/service/history/workflow"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow/update"
 )
 
@@ -44,7 +43,7 @@ type (
 	EventsReapplier interface {
 		ReapplyEvents(
 			ctx context.Context,
-			ms workflow.MutableState,
+			ms historyi.MutableState,
 			updateRegistry update.Registry,
 			historyEvents []*historypb.HistoryEvent,
 			runID string,
@@ -73,7 +72,7 @@ func NewEventsReapplier(
 
 func (r *EventsReapplierImpl) ReapplyEvents(
 	ctx context.Context,
-	ms workflow.MutableState,
+	ms historyi.MutableState,
 	updateRegistry update.Registry,
 	historyEvents []*historypb.HistoryEvent,
 	runID string,
@@ -82,7 +81,7 @@ func (r *EventsReapplierImpl) ReapplyEvents(
 	if !ms.IsWorkflowExecutionRunning() {
 		return nil, serviceerror.NewInternal("unable to reapply events to closed workflow.")
 	}
-	reappliedEvents, err := reapplyEvents(ctx, ms, updateRegistry, r.stateMachineRegistry, historyEvents, nil, runID)
+	reappliedEvents, err := reapplyEvents(ctx, ms, updateRegistry, r.stateMachineRegistry, historyEvents, nil, runID, false)
 	if err != nil {
 		return nil, err
 	}
@@ -90,24 +89,14 @@ func (r *EventsReapplierImpl) ReapplyEvents(
 		return nil, nil
 	}
 
-	shouldScheduleWorkflowTask := false
-	for _, event := range reappliedEvents {
-		switch event.GetEventType() { //nolint:exhaustive
-		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
-			signal := event.GetWorkflowExecutionSignaledEventAttributes()
-			shouldScheduleWorkflowTask = shouldScheduleWorkflowTask || !signal.GetSkipGenerateWorkflowTask()
-		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED:
-			shouldScheduleWorkflowTask = true
-		}
+	if !ms.IsWorkflowExecutionRunning() {
+		// workflow is closed after reapplying events, no need to schedule workflow task
+		return reappliedEvents, nil
 	}
 
 	// After reapply event, checking if we should schedule a workflow task
 	if ms.IsWorkflowPendingOnWorkflowTaskBackoff() {
 		// Do not create workflow task when the workflow has first workflow task backoff and execution is not started yet
-		return reappliedEvents, nil
-	}
-	if !shouldScheduleWorkflowTask {
-		// Do not create workflow task when all reapplied signals had SkipGenerateWorkflowTask=true flag set
 		return reappliedEvents, nil
 	}
 

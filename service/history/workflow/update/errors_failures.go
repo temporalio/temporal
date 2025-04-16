@@ -28,10 +28,12 @@ import (
 	"errors"
 
 	failurepb "go.temporal.io/api/failure/v1"
+	"go.temporal.io/api/serviceerror"
 )
 
 var (
-	registryClearedErr = errors.New("update registry was cleared")
+	registryClearedErr  = errors.New("update registry was cleared")
+	workflowTaskFailErr = serviceerror.NewWorkflowNotReady("Unable to perform workflow execution update due to unexpected workflow task failure.")
 )
 
 var (
@@ -40,6 +42,15 @@ var (
 		Source:  "Server",
 		FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
 			Type:         "UnprocessedUpdate",
+			NonRetryable: true,
+		}},
+	}
+
+	acceptedUpdateCompletedWorkflowFailure = &failurepb.Failure{
+		Message: "Workflow Update failed because the Workflow completed before the Update completed.",
+		Source:  "Server",
+		FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+			Type:         "AcceptedUpdateCompletedWorkflow",
 			NonRetryable: true,
 		}},
 	}

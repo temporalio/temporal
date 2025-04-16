@@ -31,6 +31,7 @@ package schedule
 import (
 	reflect "reflect"
 	sync "sync"
+	unsafe "unsafe"
 
 	v12 "go.temporal.io/api/common/v1"
 	v1 "go.temporal.io/api/enums/v1"
@@ -51,10 +52,7 @@ const (
 )
 
 type BufferedStart struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
+	state protoimpl.MessageState `protogen:"open.v1"`
 	// Nominal (pre-jitter) and Actual (post-jitter) time of action
 	NominalTime *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=nominal_time,json=nominalTime,proto3" json:"nominal_time,omitempty"`
 	ActualTime  *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=actual_time,json=actualTime,proto3" json:"actual_time,omitempty"`
@@ -66,15 +64,19 @@ type BufferedStart struct {
 	OverlapPolicy v1.ScheduleOverlapPolicy `protobuf:"varint,3,opt,name=overlap_policy,json=overlapPolicy,proto3,enum=temporal.api.enums.v1.ScheduleOverlapPolicy" json:"overlap_policy,omitempty"`
 	// Trigger-immediately or backfill
 	Manual bool `protobuf:"varint,4,opt,name=manual,proto3" json:"manual,omitempty"`
+	// An ID generated when the action is buffered for deduplication during
+	// execution. Only used by the state machine scheduler (otherwise left
+	// empty).
+	RequestId     string `protobuf:"bytes,6,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *BufferedStart) Reset() {
 	*x = BufferedStart{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[0]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *BufferedStart) String() string {
@@ -85,7 +87,7 @@ func (*BufferedStart) ProtoMessage() {}
 
 func (x *BufferedStart) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[0]
-	if protoimpl.UnsafeEnabled && x != nil {
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -135,11 +137,15 @@ func (x *BufferedStart) GetManual() bool {
 	return false
 }
 
-type InternalState struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
+func (x *BufferedStart) GetRequestId() string {
+	if x != nil {
+		return x.RequestId
+	}
+	return ""
+}
 
+type InternalState struct {
+	state             protoimpl.MessageState `protogen:"open.v1"`
 	Namespace         string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	NamespaceId       string                 `protobuf:"bytes,2,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
 	ScheduleId        string                 `protobuf:"bytes,8,opt,name=schedule_id,json=scheduleId,proto3" json:"schedule_id,omitempty"`
@@ -152,15 +158,15 @@ type InternalState struct {
 	// conflict token is implemented as simple sequence number
 	ConflictToken int64 `protobuf:"varint,7,opt,name=conflict_token,json=conflictToken,proto3" json:"conflict_token,omitempty"`
 	NeedRefresh   bool  `protobuf:"varint,9,opt,name=need_refresh,json=needRefresh,proto3" json:"need_refresh,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *InternalState) Reset() {
 	*x = InternalState{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[1]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *InternalState) String() string {
@@ -171,7 +177,7 @@ func (*InternalState) ProtoMessage() {}
 
 func (x *InternalState) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[1]
-	if protoimpl.UnsafeEnabled && x != nil {
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -257,23 +263,20 @@ func (x *InternalState) GetNeedRefresh() bool {
 }
 
 type StartScheduleArgs struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Schedule      *v11.Schedule          `protobuf:"bytes,1,opt,name=schedule,proto3" json:"schedule,omitempty"`
+	Info          *v11.ScheduleInfo      `protobuf:"bytes,2,opt,name=info,proto3" json:"info,omitempty"`
+	InitialPatch  *v11.SchedulePatch     `protobuf:"bytes,3,opt,name=initial_patch,json=initialPatch,proto3" json:"initial_patch,omitempty"`
+	State         *InternalState         `protobuf:"bytes,4,opt,name=state,proto3" json:"state,omitempty"`
 	unknownFields protoimpl.UnknownFields
-
-	Schedule     *v11.Schedule      `protobuf:"bytes,1,opt,name=schedule,proto3" json:"schedule,omitempty"`
-	Info         *v11.ScheduleInfo  `protobuf:"bytes,2,opt,name=info,proto3" json:"info,omitempty"`
-	InitialPatch *v11.SchedulePatch `protobuf:"bytes,3,opt,name=initial_patch,json=initialPatch,proto3" json:"initial_patch,omitempty"`
-	State        *InternalState     `protobuf:"bytes,4,opt,name=state,proto3" json:"state,omitempty"`
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *StartScheduleArgs) Reset() {
 	*x = StartScheduleArgs{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[2]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *StartScheduleArgs) String() string {
@@ -284,7 +287,7 @@ func (*StartScheduleArgs) ProtoMessage() {}
 
 func (x *StartScheduleArgs) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[2]
-	if protoimpl.UnsafeEnabled && x != nil {
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -328,22 +331,19 @@ func (x *StartScheduleArgs) GetState() *InternalState {
 }
 
 type FullUpdateRequest struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	Schedule         *v11.Schedule         `protobuf:"bytes,1,opt,name=schedule,proto3" json:"schedule,omitempty"`
-	ConflictToken    int64                 `protobuf:"varint,2,opt,name=conflict_token,json=conflictToken,proto3" json:"conflict_token,omitempty"`
-	SearchAttributes *v12.SearchAttributes `protobuf:"bytes,3,opt,name=search_attributes,json=searchAttributes,proto3" json:"search_attributes,omitempty"`
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Schedule         *v11.Schedule          `protobuf:"bytes,1,opt,name=schedule,proto3" json:"schedule,omitempty"`
+	ConflictToken    int64                  `protobuf:"varint,2,opt,name=conflict_token,json=conflictToken,proto3" json:"conflict_token,omitempty"`
+	SearchAttributes *v12.SearchAttributes  `protobuf:"bytes,3,opt,name=search_attributes,json=searchAttributes,proto3" json:"search_attributes,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *FullUpdateRequest) Reset() {
 	*x = FullUpdateRequest{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[3]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *FullUpdateRequest) String() string {
@@ -354,7 +354,7 @@ func (*FullUpdateRequest) ProtoMessage() {}
 
 func (x *FullUpdateRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[3]
-	if protoimpl.UnsafeEnabled && x != nil {
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -391,22 +391,19 @@ func (x *FullUpdateRequest) GetSearchAttributes() *v12.SearchAttributes {
 }
 
 type DescribeResponse struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Schedule      *v11.Schedule          `protobuf:"bytes,1,opt,name=schedule,proto3" json:"schedule,omitempty"`
+	Info          *v11.ScheduleInfo      `protobuf:"bytes,2,opt,name=info,proto3" json:"info,omitempty"`
+	ConflictToken int64                  `protobuf:"varint,3,opt,name=conflict_token,json=conflictToken,proto3" json:"conflict_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
-
-	Schedule      *v11.Schedule     `protobuf:"bytes,1,opt,name=schedule,proto3" json:"schedule,omitempty"`
-	Info          *v11.ScheduleInfo `protobuf:"bytes,2,opt,name=info,proto3" json:"info,omitempty"`
-	ConflictToken int64             `protobuf:"varint,3,opt,name=conflict_token,json=conflictToken,proto3" json:"conflict_token,omitempty"`
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *DescribeResponse) Reset() {
 	*x = DescribeResponse{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[4]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *DescribeResponse) String() string {
@@ -417,7 +414,7 @@ func (*DescribeResponse) ProtoMessage() {}
 
 func (x *DescribeResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[4]
-	if protoimpl.UnsafeEnabled && x != nil {
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -454,24 +451,21 @@ func (x *DescribeResponse) GetConflictToken() int64 {
 }
 
 type WatchWorkflowRequest struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
+	state protoimpl.MessageState `protogen:"open.v1"`
 	// Note: this will be sent to the activity with empty execution.run_id, and
 	// the run id that we started in first_execution_run_id.
 	Execution           *v12.WorkflowExecution `protobuf:"bytes,3,opt,name=execution,proto3" json:"execution,omitempty"`
 	FirstExecutionRunId string                 `protobuf:"bytes,4,opt,name=first_execution_run_id,json=firstExecutionRunId,proto3" json:"first_execution_run_id,omitempty"`
 	LongPoll            bool                   `protobuf:"varint,5,opt,name=long_poll,json=longPoll,proto3" json:"long_poll,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *WatchWorkflowRequest) Reset() {
 	*x = WatchWorkflowRequest{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[5]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *WatchWorkflowRequest) String() string {
@@ -482,7 +476,7 @@ func (*WatchWorkflowRequest) ProtoMessage() {}
 
 func (x *WatchWorkflowRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[5]
-	if protoimpl.UnsafeEnabled && x != nil {
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -519,27 +513,24 @@ func (x *WatchWorkflowRequest) GetLongPoll() bool {
 }
 
 type WatchWorkflowResponse struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
+	state  protoimpl.MessageState     `protogen:"open.v1"`
 	Status v1.WorkflowExecutionStatus `protobuf:"varint,1,opt,name=status,proto3,enum=temporal.api.enums.v1.WorkflowExecutionStatus" json:"status,omitempty"`
-	// Types that are assignable to ResultFailure:
+	// Types that are valid to be assigned to ResultFailure:
 	//
 	//	*WatchWorkflowResponse_Result
 	//	*WatchWorkflowResponse_Failure
 	ResultFailure isWatchWorkflowResponse_ResultFailure `protobuf_oneof:"result_failure"`
 	// Timestamp of close event
-	CloseTime *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=close_time,json=closeTime,proto3" json:"close_time,omitempty"`
+	CloseTime     *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=close_time,json=closeTime,proto3" json:"close_time,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *WatchWorkflowResponse) Reset() {
 	*x = WatchWorkflowResponse{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[6]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *WatchWorkflowResponse) String() string {
@@ -550,7 +541,7 @@ func (*WatchWorkflowResponse) ProtoMessage() {}
 
 func (x *WatchWorkflowResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[6]
-	if protoimpl.UnsafeEnabled && x != nil {
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -572,23 +563,27 @@ func (x *WatchWorkflowResponse) GetStatus() v1.WorkflowExecutionStatus {
 	return v1.WorkflowExecutionStatus(0)
 }
 
-func (m *WatchWorkflowResponse) GetResultFailure() isWatchWorkflowResponse_ResultFailure {
-	if m != nil {
-		return m.ResultFailure
+func (x *WatchWorkflowResponse) GetResultFailure() isWatchWorkflowResponse_ResultFailure {
+	if x != nil {
+		return x.ResultFailure
 	}
 	return nil
 }
 
 func (x *WatchWorkflowResponse) GetResult() *v12.Payloads {
-	if x, ok := x.GetResultFailure().(*WatchWorkflowResponse_Result); ok {
-		return x.Result
+	if x != nil {
+		if x, ok := x.ResultFailure.(*WatchWorkflowResponse_Result); ok {
+			return x.Result
+		}
 	}
 	return nil
 }
 
 func (x *WatchWorkflowResponse) GetFailure() *v13.Failure {
-	if x, ok := x.GetResultFailure().(*WatchWorkflowResponse_Failure); ok {
-		return x.Failure
+	if x != nil {
+		if x, ok := x.ResultFailure.(*WatchWorkflowResponse_Failure); ok {
+			return x.Failure
+		}
 	}
 	return nil
 }
@@ -617,21 +612,18 @@ func (*WatchWorkflowResponse_Result) isWatchWorkflowResponse_ResultFailure() {}
 func (*WatchWorkflowResponse_Failure) isWatchWorkflowResponse_ResultFailure() {}
 
 type StartWorkflowRequest struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
+	state                   protoimpl.MessageState             `protogen:"open.v1"`
 	Request                 *v14.StartWorkflowExecutionRequest `protobuf:"bytes,2,opt,name=request,proto3" json:"request,omitempty"`
 	CompletedRateLimitSleep bool                               `protobuf:"varint,6,opt,name=completed_rate_limit_sleep,json=completedRateLimitSleep,proto3" json:"completed_rate_limit_sleep,omitempty"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
 }
 
 func (x *StartWorkflowRequest) Reset() {
 	*x = StartWorkflowRequest{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[7]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *StartWorkflowRequest) String() string {
@@ -642,7 +634,7 @@ func (*StartWorkflowRequest) ProtoMessage() {}
 
 func (x *StartWorkflowRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[7]
-	if protoimpl.UnsafeEnabled && x != nil {
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -672,21 +664,18 @@ func (x *StartWorkflowRequest) GetCompletedRateLimitSleep() bool {
 }
 
 type StartWorkflowResponse struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
+	state         protoimpl.MessageState `protogen:"open.v1"`
 	RunId         string                 `protobuf:"bytes,1,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
 	RealStartTime *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=real_start_time,json=realStartTime,proto3" json:"real_start_time,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *StartWorkflowResponse) Reset() {
 	*x = StartWorkflowResponse{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[8]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *StartWorkflowResponse) String() string {
@@ -697,7 +686,7 @@ func (*StartWorkflowResponse) ProtoMessage() {}
 
 func (x *StartWorkflowResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[8]
-	if protoimpl.UnsafeEnabled && x != nil {
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -727,24 +716,21 @@ func (x *StartWorkflowResponse) GetRealStartTime() *timestamppb.Timestamp {
 }
 
 type CancelWorkflowRequest struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	RequestId string `protobuf:"bytes,3,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
-	Identity  string `protobuf:"bytes,4,opt,name=identity,proto3" json:"identity,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	RequestId string                 `protobuf:"bytes,3,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	Identity  string                 `protobuf:"bytes,4,opt,name=identity,proto3" json:"identity,omitempty"`
 	// Note: run id in execution is first execution run id
-	Execution *v12.WorkflowExecution `protobuf:"bytes,5,opt,name=execution,proto3" json:"execution,omitempty"`
-	Reason    string                 `protobuf:"bytes,6,opt,name=reason,proto3" json:"reason,omitempty"`
+	Execution     *v12.WorkflowExecution `protobuf:"bytes,5,opt,name=execution,proto3" json:"execution,omitempty"`
+	Reason        string                 `protobuf:"bytes,6,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CancelWorkflowRequest) Reset() {
 	*x = CancelWorkflowRequest{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[9]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *CancelWorkflowRequest) String() string {
@@ -755,7 +741,7 @@ func (*CancelWorkflowRequest) ProtoMessage() {}
 
 func (x *CancelWorkflowRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[9]
-	if protoimpl.UnsafeEnabled && x != nil {
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -799,24 +785,21 @@ func (x *CancelWorkflowRequest) GetReason() string {
 }
 
 type TerminateWorkflowRequest struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	RequestId string `protobuf:"bytes,3,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
-	Identity  string `protobuf:"bytes,4,opt,name=identity,proto3" json:"identity,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	RequestId string                 `protobuf:"bytes,3,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	Identity  string                 `protobuf:"bytes,4,opt,name=identity,proto3" json:"identity,omitempty"`
 	// Note: run id in execution is first execution run id
-	Execution *v12.WorkflowExecution `protobuf:"bytes,5,opt,name=execution,proto3" json:"execution,omitempty"`
-	Reason    string                 `protobuf:"bytes,6,opt,name=reason,proto3" json:"reason,omitempty"`
+	Execution     *v12.WorkflowExecution `protobuf:"bytes,5,opt,name=execution,proto3" json:"execution,omitempty"`
+	Reason        string                 `protobuf:"bytes,6,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *TerminateWorkflowRequest) Reset() {
 	*x = TerminateWorkflowRequest{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[10]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *TerminateWorkflowRequest) String() string {
@@ -827,7 +810,7 @@ func (*TerminateWorkflowRequest) ProtoMessage() {}
 
 func (x *TerminateWorkflowRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[10]
-	if protoimpl.UnsafeEnabled && x != nil {
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -871,10 +854,7 @@ func (x *TerminateWorkflowRequest) GetReason() string {
 }
 
 type NextTimeCache struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
+	state protoimpl.MessageState `protogen:"open.v1"`
 	// workflow logic version (invalidate when changed)
 	Version int64 `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
 	// start time that the results were calculated from
@@ -883,18 +863,18 @@ type NextTimeCache struct {
 	// offset from start_time. next_times has one value for each time in the cache.
 	// nominal_times may have up to the same number of values, but it may also be shorter (or
 	// empty), if the corresponding nominal time is equal to the next time.
-	NextTimes    []int64 `protobuf:"varint,3,rep,packed,name=next_times,json=nextTimes,proto3" json:"next_times,omitempty"`
-	NominalTimes []int64 `protobuf:"varint,4,rep,packed,name=nominal_times,json=nominalTimes,proto3" json:"nominal_times,omitempty"`
-	Completed    bool    `protobuf:"varint,5,opt,name=completed,proto3" json:"completed,omitempty"`
+	NextTimes     []int64 `protobuf:"varint,3,rep,packed,name=next_times,json=nextTimes,proto3" json:"next_times,omitempty"`
+	NominalTimes  []int64 `protobuf:"varint,4,rep,packed,name=nominal_times,json=nominalTimes,proto3" json:"nominal_times,omitempty"`
+	Completed     bool    `protobuf:"varint,5,opt,name=completed,proto3" json:"completed,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *NextTimeCache) Reset() {
 	*x = NextTimeCache{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[11]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *NextTimeCache) String() string {
@@ -905,7 +885,7 @@ func (*NextTimeCache) ProtoMessage() {}
 
 func (x *NextTimeCache) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[11]
-	if protoimpl.UnsafeEnabled && x != nil {
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -955,35 +935,40 @@ func (x *NextTimeCache) GetCompleted() bool {
 	return false
 }
 
-// State of a scheduler using hierarchical state machines.
-type HsmSchedulerState struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
+// State machine scheduler internal state.
+type SchedulerInternal struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Scheduler request parameters and metadata.
+	Schedule     *v11.Schedule      `protobuf:"bytes,2,opt,name=schedule,proto3" json:"schedule,omitempty"`
+	Info         *v11.ScheduleInfo  `protobuf:"bytes,3,opt,name=info,proto3" json:"info,omitempty"`
+	InitialPatch *v11.SchedulePatch `protobuf:"bytes,4,opt,name=initial_patch,json=initialPatch,proto3" json:"initial_patch,omitempty"`
+	// State common to all generators is stored in the top-level machine.
+	Namespace   string `protobuf:"bytes,5,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	NamespaceId string `protobuf:"bytes,6,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
+	ScheduleId  string `protobuf:"bytes,7,opt,name=schedule_id,json=scheduleId,proto3" json:"schedule_id,omitempty"`
+	// Implemented as a sequence number. Used for optimistic locking against
+	// update requests.
+	ConflictToken int64 `protobuf:"varint,8,opt,name=conflict_token,json=conflictToken,proto3" json:"conflict_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
-
-	Args               *StartScheduleArgs     `protobuf:"bytes,1,opt,name=args,proto3" json:"args,omitempty"`
-	HsmState           v15.SchedulerState     `protobuf:"varint,2,opt,name=hsm_state,json=hsmState,proto3,enum=temporal.server.api.enums.v1.SchedulerState" json:"hsm_state,omitempty"`
-	NextInvocationTime *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=next_invocation_time,json=nextInvocationTime,proto3" json:"next_invocation_time,omitempty"`
+	sizeCache     protoimpl.SizeCache
 }
 
-func (x *HsmSchedulerState) Reset() {
-	*x = HsmSchedulerState{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[12]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+func (x *SchedulerInternal) Reset() {
+	*x = SchedulerInternal{}
+	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
-func (x *HsmSchedulerState) String() string {
+func (x *SchedulerInternal) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*HsmSchedulerState) ProtoMessage() {}
+func (*SchedulerInternal) ProtoMessage() {}
 
-func (x *HsmSchedulerState) ProtoReflect() protoreflect.Message {
+func (x *SchedulerInternal) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[12]
-	if protoimpl.UnsafeEnabled && x != nil {
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -993,26 +978,228 @@ func (x *HsmSchedulerState) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use HsmSchedulerState.ProtoReflect.Descriptor instead.
-func (*HsmSchedulerState) Descriptor() ([]byte, []int) {
+// Deprecated: Use SchedulerInternal.ProtoReflect.Descriptor instead.
+func (*SchedulerInternal) Descriptor() ([]byte, []int) {
 	return file_temporal_server_api_schedule_v1_message_proto_rawDescGZIP(), []int{12}
 }
 
-func (x *HsmSchedulerState) GetArgs() *StartScheduleArgs {
+func (x *SchedulerInternal) GetSchedule() *v11.Schedule {
 	if x != nil {
-		return x.Args
+		return x.Schedule
 	}
 	return nil
 }
 
-func (x *HsmSchedulerState) GetHsmState() v15.SchedulerState {
+func (x *SchedulerInternal) GetInfo() *v11.ScheduleInfo {
 	if x != nil {
-		return x.HsmState
+		return x.Info
 	}
-	return v15.SchedulerState(0)
+	return nil
 }
 
-func (x *HsmSchedulerState) GetNextInvocationTime() *timestamppb.Timestamp {
+func (x *SchedulerInternal) GetInitialPatch() *v11.SchedulePatch {
+	if x != nil {
+		return x.InitialPatch
+	}
+	return nil
+}
+
+func (x *SchedulerInternal) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
+	}
+	return ""
+}
+
+func (x *SchedulerInternal) GetNamespaceId() string {
+	if x != nil {
+		return x.NamespaceId
+	}
+	return ""
+}
+
+func (x *SchedulerInternal) GetScheduleId() string {
+	if x != nil {
+		return x.ScheduleId
+	}
+	return ""
+}
+
+func (x *SchedulerInternal) GetConflictToken() int64 {
+	if x != nil {
+		return x.ConflictToken
+	}
+	return 0
+}
+
+// State machine scheduler's Generator internal state.
+type GeneratorInternal struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Generator waits for the next_invocation_time before buffering more actions.
+	NextInvocationTime *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=next_invocation_time,json=nextInvocationTime,proto3" json:"next_invocation_time,omitempty"`
+	// High water mark.
+	LastProcessedTime *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=last_processed_time,json=lastProcessedTime,proto3" json:"last_processed_time,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *GeneratorInternal) Reset() {
+	*x = GeneratorInternal{}
+	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GeneratorInternal) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GeneratorInternal) ProtoMessage() {}
+
+func (x *GeneratorInternal) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GeneratorInternal.ProtoReflect.Descriptor instead.
+func (*GeneratorInternal) Descriptor() ([]byte, []int) {
+	return file_temporal_server_api_schedule_v1_message_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *GeneratorInternal) GetNextInvocationTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.NextInvocationTime
+	}
+	return nil
+}
+
+func (x *GeneratorInternal) GetLastProcessedTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.LastProcessedTime
+	}
+	return nil
+}
+
+// State machine scheduler's Executor internal state.
+type ExecutorInternal struct {
+	state protoimpl.MessageState     `protogen:"open.v1"`
+	State v15.SchedulerExecutorState `protobuf:"varint,1,opt,name=state,proto3,enum=temporal.server.api.enums.v1.SchedulerExecutorState" json:"state,omitempty"`
+	// Wakes immediately after actions are buffered, or when the deadline from
+	// the BACKING_OFF state has expired.
+	NextInvocationTime *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=next_invocation_time,json=nextInvocationTime,proto3" json:"next_invocation_time,omitempty"`
+	// Buffered starts that will be started by the Executor.
+	BufferedStarts []*BufferedStart `protobuf:"bytes,3,rep,name=buffered_starts,json=bufferedStarts,proto3" json:"buffered_starts,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *ExecutorInternal) Reset() {
+	*x = ExecutorInternal{}
+	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExecutorInternal) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExecutorInternal) ProtoMessage() {}
+
+func (x *ExecutorInternal) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExecutorInternal.ProtoReflect.Descriptor instead.
+func (*ExecutorInternal) Descriptor() ([]byte, []int) {
+	return file_temporal_server_api_schedule_v1_message_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *ExecutorInternal) GetState() v15.SchedulerExecutorState {
+	if x != nil {
+		return x.State
+	}
+	return v15.SchedulerExecutorState(0)
+}
+
+func (x *ExecutorInternal) GetNextInvocationTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.NextInvocationTime
+	}
+	return nil
+}
+
+func (x *ExecutorInternal) GetBufferedStarts() []*BufferedStart {
+	if x != nil {
+		return x.BufferedStarts
+	}
+	return nil
+}
+
+// State machine scheduler's Backfiller internal state. Backfill requests are 1:1
+// with Backfiller nodes.
+type BackfillerInternal struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Request *v11.BackfillRequest   `protobuf:"bytes,1,opt,name=request,proto3" json:"request,omitempty"`
+	// Backfiller waits for the next_invocation_time before buffering more actions.
+	NextInvocationTime *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=next_invocation_time,json=nextInvocationTime,proto3" json:"next_invocation_time,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *BackfillerInternal) Reset() {
+	*x = BackfillerInternal{}
+	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BackfillerInternal) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BackfillerInternal) ProtoMessage() {}
+
+func (x *BackfillerInternal) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BackfillerInternal.ProtoReflect.Descriptor instead.
+func (*BackfillerInternal) Descriptor() ([]byte, []int) {
+	return file_temporal_server_api_schedule_v1_message_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *BackfillerInternal) GetRequest() *v11.BackfillRequest {
+	if x != nil {
+		return x.Request
+	}
+	return nil
+}
+
+func (x *BackfillerInternal) GetNextInvocationTime() *timestamppb.Timestamp {
 	if x != nil {
 		return x.NextInvocationTime
 	}
@@ -1021,253 +1208,115 @@ func (x *HsmSchedulerState) GetNextInvocationTime() *timestamppb.Timestamp {
 
 var File_temporal_server_api_schedule_v1_message_proto protoreflect.FileDescriptor
 
-var file_temporal_server_api_schedule_v1_message_proto_rawDesc = []byte{
-	0x0a, 0x2d, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2f, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72,
-	0x2f, 0x61, 0x70, 0x69, 0x2f, 0x73, 0x63, 0x68, 0x65, 0x64, 0x75, 0x6c, 0x65, 0x2f, 0x76, 0x31, 0x2f,
-	0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x12, 0x1f, 0x74, 0x65,
-	0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x61, 0x70, 0x69,
-	0x2e, 0x73, 0x63, 0x68, 0x65, 0x64, 0x75, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x1a, 0x24, 0x74, 0x65, 0x6d,
-	0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2f, 0x61, 0x70, 0x69, 0x2f, 0x63, 0x6f, 0x6d, 0x6d, 0x6f, 0x6e, 0x2f,
-	0x76, 0x31, 0x2f, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x1a,
-	0x25, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2f, 0x61, 0x70, 0x69, 0x2f, 0x66, 0x61, 0x69,
-	0x6c, 0x75, 0x72, 0x65, 0x2f, 0x76, 0x31, 0x2f, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x2e, 0x70,
-	0x72, 0x6f, 0x74, 0x6f, 0x1a, 0x24, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2f, 0x61, 0x70,
-	0x69, 0x2f, 0x65, 0x6e, 0x75, 0x6d, 0x73, 0x2f, 0x76, 0x31, 0x2f, 0x73, 0x63, 0x68, 0x65, 0x64,
-	0x75, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x1a, 0x24, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72,
-	0x61, 0x6c, 0x2f, 0x61, 0x70, 0x69, 0x2f, 0x65, 0x6e, 0x75, 0x6d, 0x73, 0x2f, 0x76, 0x31, 0x2f, 0x77,
-	0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x1a, 0x26, 0x74, 0x65,
-	0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2f, 0x61, 0x70, 0x69, 0x2f, 0x73, 0x63, 0x68, 0x65, 0x64, 0x75,
-	0x6c, 0x65, 0x2f, 0x76, 0x31, 0x2f, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x2e, 0x70, 0x72, 0x6f,
-	0x74, 0x6f, 0x1a, 0x36, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2f, 0x61, 0x70, 0x69, 0x2f,
-	0x77, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x2f, 0x76,
-	0x31, 0x2f, 0x72, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x5f, 0x72, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73,
-	0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x1a, 0x29, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c,
-	0x2f, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2f, 0x61, 0x70, 0x69, 0x2f, 0x65, 0x6e, 0x75, 0x6d, 0x73,
-	0x2f, 0x76, 0x31, 0x2f, 0x63, 0x6f, 0x6d, 0x6d, 0x6f, 0x6e, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f,
-	0x1a, 0x1f, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2f, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66,
-	0x2f, 0x74, 0x69, 0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x22,
-	0xcb, 0x02, 0x0a, 0x0d, 0x42, 0x75, 0x66, 0x66, 0x65, 0x72, 0x65, 0x64, 0x53, 0x74, 0x61, 0x72, 0x74,
-	0x12, 0x41, 0x0a, 0x0c, 0x6e, 0x6f, 0x6d, 0x69, 0x6e, 0x61, 0x6c, 0x5f, 0x74, 0x69, 0x6d, 0x65, 0x18,
-	0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1a, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72,
-	0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x54, 0x69, 0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x52,
-	0x0b, 0x6e, 0x6f, 0x6d, 0x69, 0x6e, 0x61, 0x6c, 0x54, 0x69, 0x6d, 0x65, 0x42, 0x02, 0x68, 0x00, 0x12,
-	0x3f, 0x0a, 0x0b, 0x61, 0x63, 0x74, 0x75, 0x61, 0x6c, 0x5f, 0x74, 0x69, 0x6d, 0x65, 0x18, 0x02, 0x20,
-	0x01, 0x28, 0x0b, 0x32, 0x1a, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74,
-	0x6f, 0x62, 0x75, 0x66, 0x2e, 0x54, 0x69, 0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x52, 0x0a,
-	0x61, 0x63, 0x74, 0x75, 0x61, 0x6c, 0x54, 0x69, 0x6d, 0x65, 0x42, 0x02, 0x68, 0x00, 0x12, 0x41, 0x0a,
-	0x0c, 0x64, 0x65, 0x73, 0x69, 0x72, 0x65, 0x64, 0x5f, 0x74, 0x69, 0x6d, 0x65, 0x18, 0x05, 0x20, 0x01,
-	0x28, 0x0b, 0x32, 0x1a, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f,
-	0x62, 0x75, 0x66, 0x2e, 0x54, 0x69, 0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x52, 0x0b, 0x64, 0x65,
-	0x73, 0x69, 0x72, 0x65, 0x64, 0x54, 0x69, 0x6d, 0x65, 0x42, 0x02, 0x68, 0x00, 0x12, 0x57, 0x0a, 0x0e,
-	0x6f, 0x76, 0x65, 0x72, 0x6c, 0x61, 0x70, 0x5f, 0x70, 0x6f, 0x6c, 0x69, 0x63, 0x79, 0x18, 0x03, 0x20,
-	0x01, 0x28, 0x0e, 0x32, 0x2c, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x61, 0x70,
-	0x69, 0x2e, 0x65, 0x6e, 0x75, 0x6d, 0x73, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x63, 0x68, 0x65, 0x64, 0x75,
-	0x6c, 0x65, 0x4f, 0x76, 0x65, 0x72, 0x6c, 0x61, 0x70, 0x50, 0x6f, 0x6c, 0x69, 0x63, 0x79, 0x52, 0x0d,
-	0x6f, 0x76, 0x65, 0x72, 0x6c, 0x61, 0x70, 0x50, 0x6f, 0x6c, 0x69, 0x63, 0x79, 0x42, 0x02, 0x68, 0x00,
-	0x12, 0x1a, 0x0a, 0x06, 0x6d, 0x61, 0x6e, 0x75, 0x61, 0x6c, 0x18, 0x04, 0x20, 0x01, 0x28, 0x08,
-	0x52, 0x06, 0x6d, 0x61, 0x6e, 0x75, 0x61, 0x6c, 0x42, 0x02, 0x68, 0x00, 0x22, 0x87, 0x05, 0x0a, 0x0d,
-	0x49, 0x6e, 0x74, 0x65, 0x72, 0x6e, 0x61, 0x6c, 0x53, 0x74, 0x61, 0x74, 0x65, 0x12, 0x20, 0x0a, 0x09,
-	0x6e, 0x61, 0x6d, 0x65, 0x73, 0x70, 0x61, 0x63, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x09,
-	0x6e, 0x61, 0x6d, 0x65, 0x73, 0x70, 0x61, 0x63, 0x65, 0x42, 0x02, 0x68, 0x00, 0x12, 0x25, 0x0a, 0x0c,
-	0x6e, 0x61, 0x6d, 0x65, 0x73, 0x70, 0x61, 0x63, 0x65, 0x5f, 0x69, 0x64, 0x18, 0x02, 0x20, 0x01, 0x28,
-	0x09, 0x52, 0x0b, 0x6e, 0x61, 0x6d, 0x65, 0x73, 0x70, 0x61, 0x63, 0x65, 0x49, 0x64, 0x42, 0x02, 0x68,
-	0x00, 0x12, 0x23, 0x0a, 0x0b, 0x73, 0x63, 0x68, 0x65, 0x64, 0x75, 0x6c, 0x65, 0x5f, 0x69, 0x64, 0x18,
-	0x08, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0a, 0x73, 0x63, 0x68, 0x65, 0x64, 0x75, 0x6c, 0x65, 0x49, 0x64,
-	0x42, 0x02, 0x68, 0x00, 0x12, 0x4e, 0x0a, 0x13, 0x6c, 0x61, 0x73, 0x74, 0x5f, 0x70, 0x72, 0x6f, 0x63,
-	0x65, 0x73, 0x73, 0x65, 0x64, 0x5f, 0x74, 0x69, 0x6d, 0x65, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0b,
-	0x32, 0x1a, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75,
-	0x66, 0x2e, 0x54, 0x69, 0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x52, 0x11, 0x6c, 0x61, 0x73, 0x74,
-	0x50, 0x72, 0x6f, 0x63, 0x65, 0x73, 0x73, 0x65, 0x64, 0x54, 0x69, 0x6d, 0x65, 0x42, 0x02, 0x68, 0x00,
-	0x12, 0x5b, 0x0a, 0x0f, 0x62, 0x75, 0x66, 0x66, 0x65, 0x72, 0x65, 0x64, 0x5f, 0x73, 0x74, 0x61, 0x72,
-	0x74, 0x73, 0x18, 0x04, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x2e, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72,
-	0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x73, 0x63, 0x68,
-	0x65, 0x64, 0x75, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x42, 0x75, 0x66, 0x66, 0x65, 0x72, 0x65, 0x64,
-	0x53, 0x74, 0x61, 0x72, 0x74, 0x52, 0x0e, 0x62, 0x75, 0x66, 0x66, 0x65, 0x72, 0x65, 0x64, 0x53, 0x74,
-	0x61, 0x72, 0x74, 0x73, 0x42, 0x02, 0x68, 0x00, 0x12, 0x5a, 0x0a, 0x11, 0x6f, 0x6e, 0x67, 0x6f, 0x69,
-	0x6e, 0x67, 0x5f, 0x62, 0x61, 0x63, 0x6b, 0x66, 0x69, 0x6c, 0x6c, 0x73, 0x18, 0x0a, 0x20, 0x03, 0x28,
-	0x0b, 0x32, 0x29, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x61, 0x70, 0x69,
-	0x2e, 0x73, 0x63, 0x68, 0x65, 0x64, 0x75, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x42, 0x61, 0x63, 0x6b,
-	0x66, 0x69, 0x6c, 0x6c, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x52, 0x10, 0x6f, 0x6e, 0x67, 0x6f,
-	0x69, 0x6e, 0x67, 0x42, 0x61, 0x63, 0x6b, 0x66, 0x69, 0x6c, 0x6c, 0x73, 0x42, 0x02, 0x68, 0x00, 0x12,
-	0x5a, 0x0a, 0x16, 0x6c, 0x61, 0x73, 0x74, 0x5f, 0x63, 0x6f, 0x6d, 0x70, 0x6c, 0x65, 0x74, 0x69, 0x6f,
-	0x6e, 0x5f, 0x72, 0x65, 0x73, 0x75, 0x6c, 0x74, 0x18, 0x05, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x20, 0x2e,
-	0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x63, 0x6f, 0x6d, 0x6d,
-	0x6f, 0x6e, 0x2e, 0x76, 0x31, 0x2e, 0x50, 0x61, 0x79, 0x6c, 0x6f, 0x61, 0x64, 0x73, 0x52, 0x14, 0x6c,
-	0x61, 0x73, 0x74, 0x43, 0x6f, 0x6d, 0x70, 0x6c, 0x65, 0x74, 0x69, 0x6f, 0x6e, 0x52, 0x65, 0x73, 0x75,
-	0x6c, 0x74, 0x42, 0x02, 0x68, 0x00, 0x12, 0x51, 0x0a, 0x11, 0x63, 0x6f, 0x6e, 0x74, 0x69, 0x6e, 0x75,
-	0x65, 0x64, 0x5f, 0x66, 0x61, 0x69, 0x6c, 0x75, 0x72, 0x65, 0x18, 0x06, 0x20, 0x01, 0x28, 0x0b,
-	0x32, 0x20, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x66,
-	0x61, 0x69, 0x6c, 0x75, 0x72, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x46, 0x61, 0x69, 0x6c, 0x75, 0x72, 0x65,
-	0x52, 0x10, 0x63, 0x6f, 0x6e, 0x74, 0x69, 0x6e, 0x75, 0x65, 0x64, 0x46, 0x61, 0x69, 0x6c, 0x75, 0x72,
-	0x65, 0x42, 0x02, 0x68, 0x00, 0x12, 0x29, 0x0a, 0x0e, 0x63, 0x6f, 0x6e, 0x66, 0x6c, 0x69, 0x63, 0x74,
-	0x5f, 0x74, 0x6f, 0x6b, 0x65, 0x6e, 0x18, 0x07, 0x20, 0x01, 0x28, 0x03, 0x52, 0x0d, 0x63, 0x6f, 0x6e,
-	0x66, 0x6c, 0x69, 0x63, 0x74, 0x54, 0x6f, 0x6b, 0x65, 0x6e, 0x42, 0x02, 0x68, 0x00, 0x12, 0x25, 0x0a,
-	0x0c, 0x6e, 0x65, 0x65, 0x64, 0x5f, 0x72, 0x65, 0x66, 0x72, 0x65, 0x73, 0x68, 0x18, 0x09, 0x20, 0x01,
-	0x28, 0x08, 0x52, 0x0b, 0x6e, 0x65, 0x65, 0x64, 0x52, 0x65, 0x66, 0x72, 0x65, 0x73, 0x68, 0x42, 0x02,
-	0x68, 0x00, 0x22, 0xb3, 0x02, 0x0a, 0x11, 0x53, 0x74, 0x61, 0x72, 0x74, 0x53, 0x63, 0x68, 0x65, 0x64,
-	0x75, 0x6c, 0x65, 0x41, 0x72, 0x67, 0x73, 0x12, 0x42, 0x0a, 0x08, 0x73, 0x63, 0x68, 0x65, 0x64, 0x75,
-	0x6c, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x22, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f,
-	0x72, 0x61, 0x6c, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x73, 0x63, 0x68, 0x65, 0x64, 0x75, 0x6c, 0x65, 0x2e,
-	0x76, 0x31, 0x2e, 0x53, 0x63, 0x68, 0x65, 0x64, 0x75, 0x6c, 0x65, 0x52, 0x08, 0x73, 0x63, 0x68, 0x65,
-	0x64, 0x75, 0x6c, 0x65, 0x42, 0x02, 0x68, 0x00, 0x12, 0x3e, 0x0a, 0x04, 0x69, 0x6e, 0x66, 0x6f, 0x18,
-	0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x26, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e,
-	0x61, 0x70, 0x69, 0x2e, 0x73, 0x63, 0x68, 0x65, 0x64, 0x75, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x53,
-	0x63, 0x68, 0x65, 0x64, 0x75, 0x6c, 0x65, 0x49, 0x6e, 0x66, 0x6f, 0x52, 0x04, 0x69, 0x6e, 0x66, 0x6f,
-	0x42, 0x02, 0x68, 0x00, 0x12, 0x50, 0x0a, 0x0d, 0x69, 0x6e, 0x69, 0x74, 0x69, 0x61, 0x6c, 0x5f, 0x70,
-	0x61, 0x74, 0x63, 0x68, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x27, 0x2e, 0x74, 0x65, 0x6d, 0x70,
-	0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x73, 0x63, 0x68, 0x65, 0x64, 0x75, 0x6c, 0x65,
-	0x2e, 0x76, 0x31, 0x2e, 0x53, 0x63, 0x68, 0x65, 0x64, 0x75, 0x6c, 0x65, 0x50, 0x61, 0x74, 0x63,
-	0x68, 0x52, 0x0c, 0x69, 0x6e, 0x69, 0x74, 0x69, 0x61, 0x6c, 0x50, 0x61, 0x74, 0x63, 0x68, 0x42, 0x02,
-	0x68, 0x00, 0x12, 0x48, 0x0a, 0x05, 0x73, 0x74, 0x61, 0x74, 0x65, 0x18, 0x04, 0x20, 0x01, 0x28, 0x0b,
-	0x32, 0x2e, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65,
-	0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x73, 0x63, 0x68, 0x65, 0x64, 0x75, 0x6c, 0x65, 0x2e, 0x76, 0x31,
-	0x2e, 0x49, 0x6e, 0x74, 0x65, 0x72, 0x6e, 0x61, 0x6c, 0x53, 0x74, 0x61, 0x74, 0x65, 0x52, 0x05, 0x73,
-	0x74, 0x61, 0x74, 0x65, 0x42, 0x02, 0x68, 0x00, 0x22, 0xdd, 0x01, 0x0a, 0x11, 0x46, 0x75, 0x6c, 0x6c,
-	0x55, 0x70, 0x64, 0x61, 0x74, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x42, 0x0a, 0x08,
-	0x73, 0x63, 0x68, 0x65, 0x64, 0x75, 0x6c, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x22, 0x2e,
-	0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x73, 0x63, 0x68, 0x65,
-	0x64, 0x75, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x63, 0x68, 0x65, 0x64, 0x75, 0x6c, 0x65, 0x52,
-	0x08, 0x73, 0x63, 0x68, 0x65, 0x64, 0x75, 0x6c, 0x65, 0x42, 0x02, 0x68, 0x00, 0x12, 0x29, 0x0a,
-	0x0e, 0x63, 0x6f, 0x6e, 0x66, 0x6c, 0x69, 0x63, 0x74, 0x5f, 0x74, 0x6f, 0x6b, 0x65, 0x6e, 0x18, 0x02,
-	0x20, 0x01, 0x28, 0x03, 0x52, 0x0d, 0x63, 0x6f, 0x6e, 0x66, 0x6c, 0x69, 0x63, 0x74, 0x54, 0x6f, 0x6b,
-	0x65, 0x6e, 0x42, 0x02, 0x68, 0x00, 0x12, 0x59, 0x0a, 0x11, 0x73, 0x65, 0x61, 0x72, 0x63, 0x68, 0x5f,
-	0x61, 0x74, 0x74, 0x72, 0x69, 0x62, 0x75, 0x74, 0x65, 0x73, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0b, 0x32,
-	0x28, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x63, 0x6f,
-	0x6d, 0x6d, 0x6f, 0x6e, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x65, 0x61, 0x72, 0x63, 0x68, 0x41, 0x74, 0x74,
-	0x72, 0x69, 0x62, 0x75, 0x74, 0x65, 0x73, 0x52, 0x10, 0x73, 0x65, 0x61, 0x72, 0x63, 0x68, 0x41, 0x74,
-	0x74, 0x72, 0x69, 0x62, 0x75, 0x74, 0x65, 0x73, 0x42, 0x02, 0x68, 0x00, 0x22, 0xc1, 0x01, 0x0a, 0x10,
-	0x44, 0x65, 0x73, 0x63, 0x72, 0x69, 0x62, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12,
-	0x42, 0x0a, 0x08, 0x73, 0x63, 0x68, 0x65, 0x64, 0x75, 0x6c, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28,
-	0x0b, 0x32, 0x22, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x61, 0x70, 0x69, 0x2e,
-	0x73, 0x63, 0x68, 0x65, 0x64, 0x75, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x63, 0x68, 0x65, 0x64,
-	0x75, 0x6c, 0x65, 0x52, 0x08, 0x73, 0x63, 0x68, 0x65, 0x64, 0x75, 0x6c, 0x65, 0x42, 0x02, 0x68, 0x00,
-	0x12, 0x3e, 0x0a, 0x04, 0x69, 0x6e, 0x66, 0x6f, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x26, 0x2e,
-	0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x73, 0x63, 0x68, 0x65,
-	0x64, 0x75, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x63, 0x68, 0x65, 0x64, 0x75, 0x6c, 0x65, 0x49,
-	0x6e, 0x66, 0x6f, 0x52, 0x04, 0x69, 0x6e, 0x66, 0x6f, 0x42, 0x02, 0x68, 0x00, 0x12, 0x29, 0x0a, 0x0e,
-	0x63, 0x6f, 0x6e, 0x66, 0x6c, 0x69, 0x63, 0x74, 0x5f, 0x74, 0x6f, 0x6b, 0x65, 0x6e, 0x18, 0x03, 0x20,
-	0x01, 0x28, 0x03, 0x52, 0x0d, 0x63, 0x6f, 0x6e, 0x66, 0x6c, 0x69, 0x63, 0x74, 0x54, 0x6f, 0x6b, 0x65,
-	0x6e, 0x42, 0x02, 0x68, 0x00, 0x22, 0xbd, 0x01, 0x0a, 0x14, 0x57, 0x61, 0x74, 0x63, 0x68, 0x57, 0x6f,
-	0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x4b, 0x0a,
-	0x09, 0x65, 0x78, 0x65, 0x63, 0x75, 0x74, 0x69, 0x6f, 0x6e, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0b, 0x32,
-	0x29, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x63, 0x6f,
-	0x6d, 0x6d, 0x6f, 0x6e, 0x2e, 0x76, 0x31, 0x2e, 0x57, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x45,
-	0x78, 0x65, 0x63, 0x75, 0x74, 0x69, 0x6f, 0x6e, 0x52, 0x09, 0x65, 0x78, 0x65, 0x63, 0x75, 0x74, 0x69,
-	0x6f, 0x6e, 0x42, 0x02, 0x68, 0x00, 0x12, 0x37, 0x0a, 0x16, 0x66, 0x69, 0x72, 0x73, 0x74, 0x5f, 0x65,
-	0x78, 0x65, 0x63, 0x75, 0x74, 0x69, 0x6f, 0x6e, 0x5f, 0x72, 0x75, 0x6e, 0x5f, 0x69, 0x64, 0x18, 0x04,
-	0x20, 0x01, 0x28, 0x09, 0x52, 0x13, 0x66, 0x69, 0x72, 0x73, 0x74, 0x45, 0x78, 0x65, 0x63, 0x75, 0x74,
-	0x69, 0x6f, 0x6e, 0x52, 0x75, 0x6e, 0x49, 0x64, 0x42, 0x02, 0x68, 0x00, 0x12, 0x1f, 0x0a, 0x09, 0x6c,
-	0x6f, 0x6e, 0x67, 0x5f, 0x70, 0x6f, 0x6c, 0x6c, 0x18, 0x05, 0x20, 0x01, 0x28, 0x08, 0x52, 0x08, 0x6c,
-	0x6f, 0x6e, 0x67, 0x50, 0x6f, 0x6c, 0x6c, 0x42, 0x02, 0x68, 0x00, 0x22, 0xb6, 0x02, 0x0a, 0x15,
-	0x57, 0x61, 0x74, 0x63, 0x68, 0x57, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x52, 0x65, 0x73, 0x70,
-	0x6f, 0x6e, 0x73, 0x65, 0x12, 0x4a, 0x0a, 0x06, 0x73, 0x74, 0x61, 0x74, 0x75, 0x73, 0x18, 0x01, 0x20,
-	0x01, 0x28, 0x0e, 0x32, 0x2e, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x61, 0x70,
-	0x69, 0x2e, 0x65, 0x6e, 0x75, 0x6d, 0x73, 0x2e, 0x76, 0x31, 0x2e, 0x57, 0x6f, 0x72, 0x6b, 0x66, 0x6c,
-	0x6f, 0x77, 0x45, 0x78, 0x65, 0x63, 0x75, 0x74, 0x69, 0x6f, 0x6e, 0x53, 0x74, 0x61, 0x74, 0x75, 0x73,
-	0x52, 0x06, 0x73, 0x74, 0x61, 0x74, 0x75, 0x73, 0x42, 0x02, 0x68, 0x00, 0x12, 0x3e, 0x0a, 0x06, 0x72,
-	0x65, 0x73, 0x75, 0x6c, 0x74, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x20, 0x2e, 0x74, 0x65, 0x6d,
-	0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x63, 0x6f, 0x6d, 0x6d, 0x6f, 0x6e, 0x2e,
-	0x76, 0x31, 0x2e, 0x50, 0x61, 0x79, 0x6c, 0x6f, 0x61, 0x64, 0x73, 0x48, 0x00, 0x52, 0x06, 0x72, 0x65,
-	0x73, 0x75, 0x6c, 0x74, 0x42, 0x02, 0x68, 0x00, 0x12, 0x40, 0x0a, 0x07, 0x66, 0x61, 0x69, 0x6c, 0x75,
-	0x72, 0x65, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x20, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f,
-	0x72, 0x61, 0x6c, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x66, 0x61, 0x69, 0x6c, 0x75, 0x72, 0x65, 0x2e, 0x76,
-	0x31, 0x2e, 0x46, 0x61, 0x69, 0x6c, 0x75, 0x72, 0x65, 0x48, 0x00, 0x52, 0x07, 0x66, 0x61, 0x69, 0x6c,
-	0x75, 0x72, 0x65, 0x42, 0x02, 0x68, 0x00, 0x12, 0x3d, 0x0a, 0x0a, 0x63, 0x6c, 0x6f, 0x73, 0x65, 0x5f,
-	0x74, 0x69, 0x6d, 0x65, 0x18, 0x04, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1a, 0x2e, 0x67, 0x6f, 0x6f, 0x67,
-	0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x54, 0x69, 0x6d, 0x65, 0x73,
-	0x74, 0x61, 0x6d, 0x70, 0x52, 0x09, 0x63, 0x6c, 0x6f, 0x73, 0x65, 0x54, 0x69, 0x6d, 0x65, 0x42, 0x02,
-	0x68, 0x00, 0x42, 0x10, 0x0a, 0x0e, 0x72, 0x65, 0x73, 0x75, 0x6c, 0x74, 0x5f, 0x66, 0x61, 0x69, 0x6c,
-	0x75, 0x72, 0x65, 0x22, 0xc7, 0x01, 0x0a, 0x14, 0x53, 0x74, 0x61, 0x72, 0x74, 0x57, 0x6f, 0x72, 0x6b,
-	0x66, 0x6c, 0x6f, 0x77, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x5c, 0x0a, 0x07, 0x72, 0x65,
-	0x71, 0x75, 0x65, 0x73, 0x74, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x3e, 0x2e, 0x74, 0x65,
-	0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x77, 0x6f, 0x72, 0x6b, 0x66, 0x6c,
-	0x6f, 0x77, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x74, 0x61, 0x72,
-	0x74, 0x57, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x45, 0x78, 0x65, 0x63, 0x75, 0x74, 0x69, 0x6f,
-	0x6e, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x52, 0x07, 0x72, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74,
-	0x42, 0x02, 0x68, 0x00, 0x12, 0x3f, 0x0a, 0x1a, 0x63, 0x6f, 0x6d, 0x70, 0x6c, 0x65, 0x74, 0x65, 0x64,
-	0x5f, 0x72, 0x61, 0x74, 0x65, 0x5f, 0x6c, 0x69, 0x6d, 0x69, 0x74, 0x5f, 0x73, 0x6c, 0x65, 0x65, 0x70,
-	0x18, 0x06, 0x20, 0x01, 0x28, 0x08, 0x52, 0x17, 0x63, 0x6f, 0x6d, 0x70, 0x6c, 0x65, 0x74, 0x65, 0x64,
-	0x52, 0x61, 0x74, 0x65, 0x4c, 0x69, 0x6d, 0x69, 0x74, 0x53, 0x6c, 0x65, 0x65, 0x70, 0x42, 0x02, 0x68,
-	0x00, 0x4a, 0x04, 0x08, 0x03, 0x10, 0x04, 0x4a, 0x04, 0x08, 0x04, 0x10, 0x05, 0x4a, 0x04, 0x08, 0x05,
-	0x10, 0x06, 0x22, 0x7a, 0x0a, 0x15, 0x53, 0x74, 0x61, 0x72, 0x74, 0x57, 0x6f, 0x72, 0x6b, 0x66, 0x6c,
-	0x6f, 0x77, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x19, 0x0a, 0x06, 0x72, 0x75,
-	0x6e, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x05, 0x72, 0x75, 0x6e, 0x49, 0x64,
-	0x42, 0x02, 0x68, 0x00, 0x12, 0x46, 0x0a, 0x0f, 0x72, 0x65, 0x61, 0x6c, 0x5f, 0x73, 0x74, 0x61, 0x72,
-	0x74, 0x5f, 0x74, 0x69, 0x6d, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1a, 0x2e, 0x67, 0x6f,
-	0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x54, 0x69, 0x6d,
-	0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x52, 0x0d, 0x72, 0x65, 0x61, 0x6c, 0x53, 0x74, 0x61, 0x72, 0x74,
-	0x54, 0x69, 0x6d, 0x65, 0x42, 0x02, 0x68, 0x00, 0x22, 0xc3, 0x01, 0x0a, 0x15, 0x43, 0x61, 0x6e, 0x63,
-	0x65, 0x6c, 0x57, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74,
-	0x12, 0x21, 0x0a, 0x0a, 0x72, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x5f, 0x69, 0x64, 0x18, 0x03, 0x20,
-	0x01, 0x28, 0x09, 0x52, 0x09, 0x72, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x49, 0x64, 0x42, 0x02, 0x68,
-	0x00, 0x12, 0x1e, 0x0a, 0x08, 0x69, 0x64, 0x65, 0x6e, 0x74, 0x69, 0x74, 0x79, 0x18, 0x04, 0x20,
-	0x01, 0x28, 0x09, 0x52, 0x08, 0x69, 0x64, 0x65, 0x6e, 0x74, 0x69, 0x74, 0x79, 0x42, 0x02, 0x68, 0x00,
-	0x12, 0x4b, 0x0a, 0x09, 0x65, 0x78, 0x65, 0x63, 0x75, 0x74, 0x69, 0x6f, 0x6e, 0x18, 0x05, 0x20, 0x01,
-	0x28, 0x0b, 0x32, 0x29, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x61, 0x70, 0x69,
-	0x2e, 0x63, 0x6f, 0x6d, 0x6d, 0x6f, 0x6e, 0x2e, 0x76, 0x31, 0x2e, 0x57, 0x6f, 0x72, 0x6b, 0x66, 0x6c,
-	0x6f, 0x77, 0x45, 0x78, 0x65, 0x63, 0x75, 0x74, 0x69, 0x6f, 0x6e, 0x52, 0x09, 0x65, 0x78, 0x65, 0x63,
-	0x75, 0x74, 0x69, 0x6f, 0x6e, 0x42, 0x02, 0x68, 0x00, 0x12, 0x1a, 0x0a, 0x06, 0x72, 0x65, 0x61, 0x73,
-	0x6f, 0x6e, 0x18, 0x06, 0x20, 0x01, 0x28, 0x09, 0x52, 0x06, 0x72, 0x65, 0x61, 0x73, 0x6f, 0x6e, 0x42,
-	0x02, 0x68, 0x00, 0x22, 0xc6, 0x01, 0x0a, 0x18, 0x54, 0x65, 0x72, 0x6d, 0x69, 0x6e, 0x61, 0x74, 0x65,
-	0x57, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x21,
-	0x0a, 0x0a, 0x72, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x5f, 0x69, 0x64, 0x18, 0x03, 0x20, 0x01, 0x28,
-	0x09, 0x52, 0x09, 0x72, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x49, 0x64, 0x42, 0x02, 0x68, 0x00,
-	0x12, 0x1e, 0x0a, 0x08, 0x69, 0x64, 0x65, 0x6e, 0x74, 0x69, 0x74, 0x79, 0x18, 0x04, 0x20, 0x01, 0x28,
-	0x09, 0x52, 0x08, 0x69, 0x64, 0x65, 0x6e, 0x74, 0x69, 0x74, 0x79, 0x42, 0x02, 0x68, 0x00, 0x12, 0x4b,
-	0x0a, 0x09, 0x65, 0x78, 0x65, 0x63, 0x75, 0x74, 0x69, 0x6f, 0x6e, 0x18, 0x05, 0x20, 0x01, 0x28, 0x0b,
-	0x32, 0x29, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x63,
-	0x6f, 0x6d, 0x6d, 0x6f, 0x6e, 0x2e, 0x76, 0x31, 0x2e, 0x57, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77,
-	0x45, 0x78, 0x65, 0x63, 0x75, 0x74, 0x69, 0x6f, 0x6e, 0x52, 0x09, 0x65, 0x78, 0x65, 0x63, 0x75, 0x74,
-	0x69, 0x6f, 0x6e, 0x42, 0x02, 0x68, 0x00, 0x12, 0x1a, 0x0a, 0x06, 0x72, 0x65, 0x61, 0x73, 0x6f, 0x6e,
-	0x18, 0x06, 0x20, 0x01, 0x28, 0x09, 0x52, 0x06, 0x72, 0x65, 0x61, 0x73, 0x6f, 0x6e, 0x42, 0x02, 0x68,
-	0x00, 0x22, 0xda, 0x01, 0x0a, 0x0d, 0x4e, 0x65, 0x78, 0x74, 0x54, 0x69, 0x6d, 0x65, 0x43, 0x61, 0x63,
-	0x68, 0x65, 0x12, 0x1c, 0x0a, 0x07, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x18, 0x01, 0x20,
-	0x01, 0x28, 0x03, 0x52, 0x07, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x42, 0x02, 0x68, 0x00, 0x12,
-	0x3d, 0x0a, 0x0a, 0x73, 0x74, 0x61, 0x72, 0x74, 0x5f, 0x74, 0x69, 0x6d, 0x65, 0x18, 0x02, 0x20, 0x01,
-	0x28, 0x0b, 0x32, 0x1a, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f,
-	0x62, 0x75, 0x66, 0x2e, 0x54, 0x69, 0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x52, 0x09, 0x73, 0x74,
-	0x61, 0x72, 0x74, 0x54, 0x69, 0x6d, 0x65, 0x42, 0x02, 0x68, 0x00, 0x12, 0x21, 0x0a, 0x0a, 0x6e, 0x65,
-	0x78, 0x74, 0x5f, 0x74, 0x69, 0x6d, 0x65, 0x73, 0x18, 0x03, 0x20, 0x03, 0x28, 0x03, 0x52, 0x09, 0x6e,
-	0x65, 0x78, 0x74, 0x54, 0x69, 0x6d, 0x65, 0x73, 0x42, 0x02, 0x68, 0x00, 0x12, 0x27, 0x0a, 0x0d, 0x6e,
-	0x6f, 0x6d, 0x69, 0x6e, 0x61, 0x6c, 0x5f, 0x74, 0x69, 0x6d, 0x65, 0x73, 0x18, 0x04, 0x20, 0x03, 0x28,
-	0x03, 0x52, 0x0c, 0x6e, 0x6f, 0x6d, 0x69, 0x6e, 0x61, 0x6c, 0x54, 0x69, 0x6d, 0x65, 0x73, 0x42, 0x02,
-	0x68, 0x00, 0x12, 0x20, 0x0a, 0x09, 0x63, 0x6f, 0x6d, 0x70, 0x6c, 0x65, 0x74, 0x65, 0x64, 0x18, 0x05,
-	0x20, 0x01, 0x28, 0x08, 0x52, 0x09, 0x63, 0x6f, 0x6d, 0x70, 0x6c, 0x65, 0x74, 0x65, 0x64, 0x42,
-	0x02, 0x68, 0x00, 0x22, 0x80, 0x02, 0x0a, 0x11, 0x48, 0x73, 0x6d, 0x53, 0x63, 0x68, 0x65, 0x64, 0x75,
-	0x6c, 0x65, 0x72, 0x53, 0x74, 0x61, 0x74, 0x65, 0x12, 0x4a, 0x0a, 0x04, 0x61, 0x72, 0x67, 0x73, 0x18,
-	0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x32, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e,
-	0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x73, 0x63, 0x68, 0x65, 0x64, 0x75,
-	0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x74, 0x61, 0x72, 0x74, 0x53, 0x63, 0x68, 0x65, 0x64, 0x75,
-	0x6c, 0x65, 0x41, 0x72, 0x67, 0x73, 0x52, 0x04, 0x61, 0x72, 0x67, 0x73, 0x42, 0x02, 0x68, 0x00, 0x12,
-	0x4d, 0x0a, 0x09, 0x68, 0x73, 0x6d, 0x5f, 0x73, 0x74, 0x61, 0x74, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28,
-	0x0e, 0x32, 0x2c, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76,
-	0x65, 0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x65, 0x6e, 0x75, 0x6d, 0x73, 0x2e, 0x76, 0x31, 0x2e, 0x53,
-	0x63, 0x68, 0x65, 0x64, 0x75, 0x6c, 0x65, 0x72, 0x53, 0x74, 0x61, 0x74, 0x65, 0x52, 0x08, 0x68,
-	0x73, 0x6d, 0x53, 0x74, 0x61, 0x74, 0x65, 0x42, 0x02, 0x68, 0x00, 0x12, 0x50, 0x0a, 0x14, 0x6e, 0x65,
-	0x78, 0x74, 0x5f, 0x69, 0x6e, 0x76, 0x6f, 0x63, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x5f, 0x74, 0x69, 0x6d,
-	0x65, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1a, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e,
-	0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x54, 0x69, 0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d,
-	0x70, 0x52, 0x12, 0x6e, 0x65, 0x78, 0x74, 0x49, 0x6e, 0x76, 0x6f, 0x63, 0x61, 0x74, 0x69, 0x6f, 0x6e,
-	0x54, 0x69, 0x6d, 0x65, 0x42, 0x02, 0x68, 0x00, 0x42, 0x30, 0x5a, 0x2e, 0x67, 0x6f, 0x2e, 0x74, 0x65,
-	0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x69, 0x6f, 0x2f, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2f,
-	0x61, 0x70, 0x69, 0x2f, 0x73, 0x63, 0x68, 0x65, 0x64, 0x75, 0x6c, 0x65, 0x2f, 0x76, 0x31, 0x3b, 0x73,
-	0x63, 0x68, 0x65, 0x64, 0x75, 0x6c, 0x65, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
-}
+const file_temporal_server_api_schedule_v1_message_proto_rawDesc = "" +
+	"\n" +
+	"-temporal/server/api/schedule/v1/message.proto\x12\x1ftemporal.server.api.schedule.v1\x1a$temporal/api/common/v1/message.proto\x1a$temporal/api/enums/v1/schedule.proto\x1a$temporal/api/enums/v1/workflow.proto\x1a%temporal/api/failure/v1/message.proto\x1a&temporal/api/schedule/v1/message.proto\x1a6temporal/api/workflowservice/v1/request_response.proto\x1a)temporal/server/api/enums/v1/common.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xd6\x02\n" +
+	"\rBufferedStart\x12=\n" +
+	"\fnominal_time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\vnominalTime\x12;\n" +
+	"\vactual_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"actualTime\x12=\n" +
+	"\fdesired_time\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\vdesiredTime\x12S\n" +
+	"\x0eoverlap_policy\x18\x03 \x01(\x0e2,.temporal.api.enums.v1.ScheduleOverlapPolicyR\roverlapPolicy\x12\x16\n" +
+	"\x06manual\x18\x04 \x01(\bR\x06manual\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\x06 \x01(\tR\trequestId\"\xdf\x04\n" +
+	"\rInternalState\x12\x1c\n" +
+	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12!\n" +
+	"\fnamespace_id\x18\x02 \x01(\tR\vnamespaceId\x12\x1f\n" +
+	"\vschedule_id\x18\b \x01(\tR\n" +
+	"scheduleId\x12J\n" +
+	"\x13last_processed_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x11lastProcessedTime\x12W\n" +
+	"\x0fbuffered_starts\x18\x04 \x03(\v2..temporal.server.api.schedule.v1.BufferedStartR\x0ebufferedStarts\x12V\n" +
+	"\x11ongoing_backfills\x18\n" +
+	" \x03(\v2).temporal.api.schedule.v1.BackfillRequestR\x10ongoingBackfills\x12V\n" +
+	"\x16last_completion_result\x18\x05 \x01(\v2 .temporal.api.common.v1.PayloadsR\x14lastCompletionResult\x12M\n" +
+	"\x11continued_failure\x18\x06 \x01(\v2 .temporal.api.failure.v1.FailureR\x10continuedFailure\x12%\n" +
+	"\x0econflict_token\x18\a \x01(\x03R\rconflictToken\x12!\n" +
+	"\fneed_refresh\x18\t \x01(\bR\vneedRefresh\"\xa3\x02\n" +
+	"\x11StartScheduleArgs\x12>\n" +
+	"\bschedule\x18\x01 \x01(\v2\".temporal.api.schedule.v1.ScheduleR\bschedule\x12:\n" +
+	"\x04info\x18\x02 \x01(\v2&.temporal.api.schedule.v1.ScheduleInfoR\x04info\x12L\n" +
+	"\rinitial_patch\x18\x03 \x01(\v2'.temporal.api.schedule.v1.SchedulePatchR\finitialPatch\x12D\n" +
+	"\x05state\x18\x04 \x01(\v2..temporal.server.api.schedule.v1.InternalStateR\x05state\"\xd1\x01\n" +
+	"\x11FullUpdateRequest\x12>\n" +
+	"\bschedule\x18\x01 \x01(\v2\".temporal.api.schedule.v1.ScheduleR\bschedule\x12%\n" +
+	"\x0econflict_token\x18\x02 \x01(\x03R\rconflictToken\x12U\n" +
+	"\x11search_attributes\x18\x03 \x01(\v2(.temporal.api.common.v1.SearchAttributesR\x10searchAttributes\"\xb5\x01\n" +
+	"\x10DescribeResponse\x12>\n" +
+	"\bschedule\x18\x01 \x01(\v2\".temporal.api.schedule.v1.ScheduleR\bschedule\x12:\n" +
+	"\x04info\x18\x02 \x01(\v2&.temporal.api.schedule.v1.ScheduleInfoR\x04info\x12%\n" +
+	"\x0econflict_token\x18\x03 \x01(\x03R\rconflictToken\"\xb1\x01\n" +
+	"\x14WatchWorkflowRequest\x12G\n" +
+	"\texecution\x18\x03 \x01(\v2).temporal.api.common.v1.WorkflowExecutionR\texecution\x123\n" +
+	"\x16first_execution_run_id\x18\x04 \x01(\tR\x13firstExecutionRunId\x12\x1b\n" +
+	"\tlong_poll\x18\x05 \x01(\bR\blongPoll\"\xa6\x02\n" +
+	"\x15WatchWorkflowResponse\x12F\n" +
+	"\x06status\x18\x01 \x01(\x0e2..temporal.api.enums.v1.WorkflowExecutionStatusR\x06status\x12:\n" +
+	"\x06result\x18\x02 \x01(\v2 .temporal.api.common.v1.PayloadsH\x00R\x06result\x12<\n" +
+	"\afailure\x18\x03 \x01(\v2 .temporal.api.failure.v1.FailureH\x00R\afailure\x129\n" +
+	"\n" +
+	"close_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tcloseTimeB\x10\n" +
+	"\x0eresult_failure\"\xbf\x01\n" +
+	"\x14StartWorkflowRequest\x12X\n" +
+	"\arequest\x18\x02 \x01(\v2>.temporal.api.workflowservice.v1.StartWorkflowExecutionRequestR\arequest\x12;\n" +
+	"\x1acompleted_rate_limit_sleep\x18\x06 \x01(\bR\x17completedRateLimitSleepJ\x04\b\x03\x10\x04J\x04\b\x04\x10\x05J\x04\b\x05\x10\x06\"r\n" +
+	"\x15StartWorkflowResponse\x12\x15\n" +
+	"\x06run_id\x18\x01 \x01(\tR\x05runId\x12B\n" +
+	"\x0freal_start_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\rrealStartTime\"\xb3\x01\n" +
+	"\x15CancelWorkflowRequest\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\x03 \x01(\tR\trequestId\x12\x1a\n" +
+	"\bidentity\x18\x04 \x01(\tR\bidentity\x12G\n" +
+	"\texecution\x18\x05 \x01(\v2).temporal.api.common.v1.WorkflowExecutionR\texecution\x12\x16\n" +
+	"\x06reason\x18\x06 \x01(\tR\x06reason\"\xb6\x01\n" +
+	"\x18TerminateWorkflowRequest\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\x03 \x01(\tR\trequestId\x12\x1a\n" +
+	"\bidentity\x18\x04 \x01(\tR\bidentity\x12G\n" +
+	"\texecution\x18\x05 \x01(\v2).temporal.api.common.v1.WorkflowExecutionR\texecution\x12\x16\n" +
+	"\x06reason\x18\x06 \x01(\tR\x06reason\"\xc6\x01\n" +
+	"\rNextTimeCache\x12\x18\n" +
+	"\aversion\x18\x01 \x01(\x03R\aversion\x129\n" +
+	"\n" +
+	"start_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\tstartTime\x12\x1d\n" +
+	"\n" +
+	"next_times\x18\x03 \x03(\x03R\tnextTimes\x12#\n" +
+	"\rnominal_times\x18\x04 \x03(\x03R\fnominalTimes\x12\x1c\n" +
+	"\tcompleted\x18\x05 \x01(\bR\tcompleted\"\xe6\x02\n" +
+	"\x11SchedulerInternal\x12>\n" +
+	"\bschedule\x18\x02 \x01(\v2\".temporal.api.schedule.v1.ScheduleR\bschedule\x12:\n" +
+	"\x04info\x18\x03 \x01(\v2&.temporal.api.schedule.v1.ScheduleInfoR\x04info\x12L\n" +
+	"\rinitial_patch\x18\x04 \x01(\v2'.temporal.api.schedule.v1.SchedulePatchR\finitialPatch\x12\x1c\n" +
+	"\tnamespace\x18\x05 \x01(\tR\tnamespace\x12!\n" +
+	"\fnamespace_id\x18\x06 \x01(\tR\vnamespaceId\x12\x1f\n" +
+	"\vschedule_id\x18\a \x01(\tR\n" +
+	"scheduleId\x12%\n" +
+	"\x0econflict_token\x18\b \x01(\x03R\rconflictToken\"\xad\x01\n" +
+	"\x11GeneratorInternal\x12L\n" +
+	"\x14next_invocation_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x12nextInvocationTime\x12J\n" +
+	"\x13last_processed_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x11lastProcessedTime\"\x85\x02\n" +
+	"\x10ExecutorInternal\x12J\n" +
+	"\x05state\x18\x01 \x01(\x0e24.temporal.server.api.enums.v1.SchedulerExecutorStateR\x05state\x12L\n" +
+	"\x14next_invocation_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x12nextInvocationTime\x12W\n" +
+	"\x0fbuffered_starts\x18\x03 \x03(\v2..temporal.server.api.schedule.v1.BufferedStartR\x0ebufferedStarts\"\xa7\x01\n" +
+	"\x12BackfillerInternal\x12C\n" +
+	"\arequest\x18\x01 \x01(\v2).temporal.api.schedule.v1.BackfillRequestR\arequest\x12L\n" +
+	"\x14next_invocation_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x12nextInvocationTimeB0Z.go.temporal.io/server/api/schedule/v1;scheduleb\x06proto3"
 
 var (
 	file_temporal_server_api_schedule_v1_message_proto_rawDescOnce sync.Once
-	file_temporal_server_api_schedule_v1_message_proto_rawDescData = file_temporal_server_api_schedule_v1_message_proto_rawDesc
+	file_temporal_server_api_schedule_v1_message_proto_rawDescData []byte
 )
 
 func file_temporal_server_api_schedule_v1_message_proto_rawDescGZIP() []byte {
 	file_temporal_server_api_schedule_v1_message_proto_rawDescOnce.Do(func() {
-		file_temporal_server_api_schedule_v1_message_proto_rawDescData = protoimpl.X.CompressGZIP(file_temporal_server_api_schedule_v1_message_proto_rawDescData)
+		file_temporal_server_api_schedule_v1_message_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_api_schedule_v1_message_proto_rawDesc), len(file_temporal_server_api_schedule_v1_message_proto_rawDesc)))
 	})
 	return file_temporal_server_api_schedule_v1_message_proto_rawDescData
 }
 
-var file_temporal_server_api_schedule_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
-var file_temporal_server_api_schedule_v1_message_proto_goTypes = []interface{}{
+var file_temporal_server_api_schedule_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
+var file_temporal_server_api_schedule_v1_message_proto_goTypes = []any{
 	(*BufferedStart)(nil),                     // 0: temporal.server.api.schedule.v1.BufferedStart
 	(*InternalState)(nil),                     // 1: temporal.server.api.schedule.v1.InternalState
 	(*StartScheduleArgs)(nil),                 // 2: temporal.server.api.schedule.v1.StartScheduleArgs
@@ -1280,57 +1329,67 @@ var file_temporal_server_api_schedule_v1_message_proto_goTypes = []interface{}{
 	(*CancelWorkflowRequest)(nil),             // 9: temporal.server.api.schedule.v1.CancelWorkflowRequest
 	(*TerminateWorkflowRequest)(nil),          // 10: temporal.server.api.schedule.v1.TerminateWorkflowRequest
 	(*NextTimeCache)(nil),                     // 11: temporal.server.api.schedule.v1.NextTimeCache
-	(*HsmSchedulerState)(nil),                 // 12: temporal.server.api.schedule.v1.HsmSchedulerState
-	(*timestamppb.Timestamp)(nil),             // 13: google.protobuf.Timestamp
-	(v1.ScheduleOverlapPolicy)(0),             // 14: temporal.api.enums.v1.ScheduleOverlapPolicy
-	(*v11.BackfillRequest)(nil),               // 15: temporal.api.schedule.v1.BackfillRequest
-	(*v12.Payloads)(nil),                      // 16: temporal.api.common.v1.Payloads
-	(*v13.Failure)(nil),                       // 17: temporal.api.failure.v1.Failure
-	(*v11.Schedule)(nil),                      // 18: temporal.api.schedule.v1.Schedule
-	(*v11.ScheduleInfo)(nil),                  // 19: temporal.api.schedule.v1.ScheduleInfo
-	(*v11.SchedulePatch)(nil),                 // 20: temporal.api.schedule.v1.SchedulePatch
-	(*v12.SearchAttributes)(nil),              // 21: temporal.api.common.v1.SearchAttributes
-	(*v12.WorkflowExecution)(nil),             // 22: temporal.api.common.v1.WorkflowExecution
-	(v1.WorkflowExecutionStatus)(0),           // 23: temporal.api.enums.v1.WorkflowExecutionStatus
-	(*v14.StartWorkflowExecutionRequest)(nil), // 24: temporal.api.workflowservice.v1.StartWorkflowExecutionRequest
-	(v15.SchedulerState)(0),                   // 25: temporal.server.api.enums.v1.SchedulerState
+	(*SchedulerInternal)(nil),                 // 12: temporal.server.api.schedule.v1.SchedulerInternal
+	(*GeneratorInternal)(nil),                 // 13: temporal.server.api.schedule.v1.GeneratorInternal
+	(*ExecutorInternal)(nil),                  // 14: temporal.server.api.schedule.v1.ExecutorInternal
+	(*BackfillerInternal)(nil),                // 15: temporal.server.api.schedule.v1.BackfillerInternal
+	(*timestamppb.Timestamp)(nil),             // 16: google.protobuf.Timestamp
+	(v1.ScheduleOverlapPolicy)(0),             // 17: temporal.api.enums.v1.ScheduleOverlapPolicy
+	(*v11.BackfillRequest)(nil),               // 18: temporal.api.schedule.v1.BackfillRequest
+	(*v12.Payloads)(nil),                      // 19: temporal.api.common.v1.Payloads
+	(*v13.Failure)(nil),                       // 20: temporal.api.failure.v1.Failure
+	(*v11.Schedule)(nil),                      // 21: temporal.api.schedule.v1.Schedule
+	(*v11.ScheduleInfo)(nil),                  // 22: temporal.api.schedule.v1.ScheduleInfo
+	(*v11.SchedulePatch)(nil),                 // 23: temporal.api.schedule.v1.SchedulePatch
+	(*v12.SearchAttributes)(nil),              // 24: temporal.api.common.v1.SearchAttributes
+	(*v12.WorkflowExecution)(nil),             // 25: temporal.api.common.v1.WorkflowExecution
+	(v1.WorkflowExecutionStatus)(0),           // 26: temporal.api.enums.v1.WorkflowExecutionStatus
+	(*v14.StartWorkflowExecutionRequest)(nil), // 27: temporal.api.workflowservice.v1.StartWorkflowExecutionRequest
+	(v15.SchedulerExecutorState)(0),           // 28: temporal.server.api.enums.v1.SchedulerExecutorState
 }
 var file_temporal_server_api_schedule_v1_message_proto_depIdxs = []int32{
-	13, // 0: temporal.server.api.schedule.v1.BufferedStart.nominal_time:type_name -> google.protobuf.Timestamp
-	13, // 1: temporal.server.api.schedule.v1.BufferedStart.actual_time:type_name -> google.protobuf.Timestamp
-	13, // 2: temporal.server.api.schedule.v1.BufferedStart.desired_time:type_name -> google.protobuf.Timestamp
-	14, // 3: temporal.server.api.schedule.v1.BufferedStart.overlap_policy:type_name -> temporal.api.enums.v1.ScheduleOverlapPolicy
-	13, // 4: temporal.server.api.schedule.v1.InternalState.last_processed_time:type_name -> google.protobuf.Timestamp
+	16, // 0: temporal.server.api.schedule.v1.BufferedStart.nominal_time:type_name -> google.protobuf.Timestamp
+	16, // 1: temporal.server.api.schedule.v1.BufferedStart.actual_time:type_name -> google.protobuf.Timestamp
+	16, // 2: temporal.server.api.schedule.v1.BufferedStart.desired_time:type_name -> google.protobuf.Timestamp
+	17, // 3: temporal.server.api.schedule.v1.BufferedStart.overlap_policy:type_name -> temporal.api.enums.v1.ScheduleOverlapPolicy
+	16, // 4: temporal.server.api.schedule.v1.InternalState.last_processed_time:type_name -> google.protobuf.Timestamp
 	0,  // 5: temporal.server.api.schedule.v1.InternalState.buffered_starts:type_name -> temporal.server.api.schedule.v1.BufferedStart
-	15, // 6: temporal.server.api.schedule.v1.InternalState.ongoing_backfills:type_name -> temporal.api.schedule.v1.BackfillRequest
-	16, // 7: temporal.server.api.schedule.v1.InternalState.last_completion_result:type_name -> temporal.api.common.v1.Payloads
-	17, // 8: temporal.server.api.schedule.v1.InternalState.continued_failure:type_name -> temporal.api.failure.v1.Failure
-	18, // 9: temporal.server.api.schedule.v1.StartScheduleArgs.schedule:type_name -> temporal.api.schedule.v1.Schedule
-	19, // 10: temporal.server.api.schedule.v1.StartScheduleArgs.info:type_name -> temporal.api.schedule.v1.ScheduleInfo
-	20, // 11: temporal.server.api.schedule.v1.StartScheduleArgs.initial_patch:type_name -> temporal.api.schedule.v1.SchedulePatch
+	18, // 6: temporal.server.api.schedule.v1.InternalState.ongoing_backfills:type_name -> temporal.api.schedule.v1.BackfillRequest
+	19, // 7: temporal.server.api.schedule.v1.InternalState.last_completion_result:type_name -> temporal.api.common.v1.Payloads
+	20, // 8: temporal.server.api.schedule.v1.InternalState.continued_failure:type_name -> temporal.api.failure.v1.Failure
+	21, // 9: temporal.server.api.schedule.v1.StartScheduleArgs.schedule:type_name -> temporal.api.schedule.v1.Schedule
+	22, // 10: temporal.server.api.schedule.v1.StartScheduleArgs.info:type_name -> temporal.api.schedule.v1.ScheduleInfo
+	23, // 11: temporal.server.api.schedule.v1.StartScheduleArgs.initial_patch:type_name -> temporal.api.schedule.v1.SchedulePatch
 	1,  // 12: temporal.server.api.schedule.v1.StartScheduleArgs.state:type_name -> temporal.server.api.schedule.v1.InternalState
-	18, // 13: temporal.server.api.schedule.v1.FullUpdateRequest.schedule:type_name -> temporal.api.schedule.v1.Schedule
-	21, // 14: temporal.server.api.schedule.v1.FullUpdateRequest.search_attributes:type_name -> temporal.api.common.v1.SearchAttributes
-	18, // 15: temporal.server.api.schedule.v1.DescribeResponse.schedule:type_name -> temporal.api.schedule.v1.Schedule
-	19, // 16: temporal.server.api.schedule.v1.DescribeResponse.info:type_name -> temporal.api.schedule.v1.ScheduleInfo
-	22, // 17: temporal.server.api.schedule.v1.WatchWorkflowRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
-	23, // 18: temporal.server.api.schedule.v1.WatchWorkflowResponse.status:type_name -> temporal.api.enums.v1.WorkflowExecutionStatus
-	16, // 19: temporal.server.api.schedule.v1.WatchWorkflowResponse.result:type_name -> temporal.api.common.v1.Payloads
-	17, // 20: temporal.server.api.schedule.v1.WatchWorkflowResponse.failure:type_name -> temporal.api.failure.v1.Failure
-	13, // 21: temporal.server.api.schedule.v1.WatchWorkflowResponse.close_time:type_name -> google.protobuf.Timestamp
-	24, // 22: temporal.server.api.schedule.v1.StartWorkflowRequest.request:type_name -> temporal.api.workflowservice.v1.StartWorkflowExecutionRequest
-	13, // 23: temporal.server.api.schedule.v1.StartWorkflowResponse.real_start_time:type_name -> google.protobuf.Timestamp
-	22, // 24: temporal.server.api.schedule.v1.CancelWorkflowRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
-	22, // 25: temporal.server.api.schedule.v1.TerminateWorkflowRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
-	13, // 26: temporal.server.api.schedule.v1.NextTimeCache.start_time:type_name -> google.protobuf.Timestamp
-	2,  // 27: temporal.server.api.schedule.v1.HsmSchedulerState.args:type_name -> temporal.server.api.schedule.v1.StartScheduleArgs
-	25, // 28: temporal.server.api.schedule.v1.HsmSchedulerState.hsm_state:type_name -> temporal.server.api.enums.v1.SchedulerState
-	13, // 29: temporal.server.api.schedule.v1.HsmSchedulerState.next_invocation_time:type_name -> google.protobuf.Timestamp
-	30, // [30:30] is the sub-list for method output_type
-	30, // [30:30] is the sub-list for method input_type
-	30, // [30:30] is the sub-list for extension type_name
-	30, // [30:30] is the sub-list for extension extendee
-	0,  // [0:30] is the sub-list for field type_name
+	21, // 13: temporal.server.api.schedule.v1.FullUpdateRequest.schedule:type_name -> temporal.api.schedule.v1.Schedule
+	24, // 14: temporal.server.api.schedule.v1.FullUpdateRequest.search_attributes:type_name -> temporal.api.common.v1.SearchAttributes
+	21, // 15: temporal.server.api.schedule.v1.DescribeResponse.schedule:type_name -> temporal.api.schedule.v1.Schedule
+	22, // 16: temporal.server.api.schedule.v1.DescribeResponse.info:type_name -> temporal.api.schedule.v1.ScheduleInfo
+	25, // 17: temporal.server.api.schedule.v1.WatchWorkflowRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	26, // 18: temporal.server.api.schedule.v1.WatchWorkflowResponse.status:type_name -> temporal.api.enums.v1.WorkflowExecutionStatus
+	19, // 19: temporal.server.api.schedule.v1.WatchWorkflowResponse.result:type_name -> temporal.api.common.v1.Payloads
+	20, // 20: temporal.server.api.schedule.v1.WatchWorkflowResponse.failure:type_name -> temporal.api.failure.v1.Failure
+	16, // 21: temporal.server.api.schedule.v1.WatchWorkflowResponse.close_time:type_name -> google.protobuf.Timestamp
+	27, // 22: temporal.server.api.schedule.v1.StartWorkflowRequest.request:type_name -> temporal.api.workflowservice.v1.StartWorkflowExecutionRequest
+	16, // 23: temporal.server.api.schedule.v1.StartWorkflowResponse.real_start_time:type_name -> google.protobuf.Timestamp
+	25, // 24: temporal.server.api.schedule.v1.CancelWorkflowRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	25, // 25: temporal.server.api.schedule.v1.TerminateWorkflowRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	16, // 26: temporal.server.api.schedule.v1.NextTimeCache.start_time:type_name -> google.protobuf.Timestamp
+	21, // 27: temporal.server.api.schedule.v1.SchedulerInternal.schedule:type_name -> temporal.api.schedule.v1.Schedule
+	22, // 28: temporal.server.api.schedule.v1.SchedulerInternal.info:type_name -> temporal.api.schedule.v1.ScheduleInfo
+	23, // 29: temporal.server.api.schedule.v1.SchedulerInternal.initial_patch:type_name -> temporal.api.schedule.v1.SchedulePatch
+	16, // 30: temporal.server.api.schedule.v1.GeneratorInternal.next_invocation_time:type_name -> google.protobuf.Timestamp
+	16, // 31: temporal.server.api.schedule.v1.GeneratorInternal.last_processed_time:type_name -> google.protobuf.Timestamp
+	28, // 32: temporal.server.api.schedule.v1.ExecutorInternal.state:type_name -> temporal.server.api.enums.v1.SchedulerExecutorState
+	16, // 33: temporal.server.api.schedule.v1.ExecutorInternal.next_invocation_time:type_name -> google.protobuf.Timestamp
+	0,  // 34: temporal.server.api.schedule.v1.ExecutorInternal.buffered_starts:type_name -> temporal.server.api.schedule.v1.BufferedStart
+	18, // 35: temporal.server.api.schedule.v1.BackfillerInternal.request:type_name -> temporal.api.schedule.v1.BackfillRequest
+	16, // 36: temporal.server.api.schedule.v1.BackfillerInternal.next_invocation_time:type_name -> google.protobuf.Timestamp
+	37, // [37:37] is the sub-list for method output_type
+	37, // [37:37] is the sub-list for method input_type
+	37, // [37:37] is the sub-list for extension type_name
+	37, // [37:37] is the sub-list for extension extendee
+	0,  // [0:37] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_api_schedule_v1_message_proto_init() }
@@ -1338,165 +1397,7 @@ func file_temporal_server_api_schedule_v1_message_proto_init() {
 	if File_temporal_server_api_schedule_v1_message_proto != nil {
 		return
 	}
-	if !protoimpl.UnsafeEnabled {
-		file_temporal_server_api_schedule_v1_message_proto_msgTypes[0].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*BufferedStart); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_schedule_v1_message_proto_msgTypes[1].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*InternalState); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_schedule_v1_message_proto_msgTypes[2].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*StartScheduleArgs); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_schedule_v1_message_proto_msgTypes[3].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*FullUpdateRequest); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_schedule_v1_message_proto_msgTypes[4].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*DescribeResponse); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_schedule_v1_message_proto_msgTypes[5].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*WatchWorkflowRequest); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_schedule_v1_message_proto_msgTypes[6].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*WatchWorkflowResponse); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_schedule_v1_message_proto_msgTypes[7].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*StartWorkflowRequest); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_schedule_v1_message_proto_msgTypes[8].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*StartWorkflowResponse); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_schedule_v1_message_proto_msgTypes[9].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*CancelWorkflowRequest); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_schedule_v1_message_proto_msgTypes[10].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*TerminateWorkflowRequest); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_schedule_v1_message_proto_msgTypes[11].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*NextTimeCache); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_schedule_v1_message_proto_msgTypes[12].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*HsmSchedulerState); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-	}
-	file_temporal_server_api_schedule_v1_message_proto_msgTypes[6].OneofWrappers = []interface{}{
+	file_temporal_server_api_schedule_v1_message_proto_msgTypes[6].OneofWrappers = []any{
 		(*WatchWorkflowResponse_Result)(nil),
 		(*WatchWorkflowResponse_Failure)(nil),
 	}
@@ -1504,9 +1405,9 @@ func file_temporal_server_api_schedule_v1_message_proto_init() {
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: file_temporal_server_api_schedule_v1_message_proto_rawDesc,
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_api_schedule_v1_message_proto_rawDesc), len(file_temporal_server_api_schedule_v1_message_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   13,
+			NumMessages:   16,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
@@ -1515,7 +1416,6 @@ func file_temporal_server_api_schedule_v1_message_proto_init() {
 		MessageInfos:      file_temporal_server_api_schedule_v1_message_proto_msgTypes,
 	}.Build()
 	File_temporal_server_api_schedule_v1_message_proto = out.File
-	file_temporal_server_api_schedule_v1_message_proto_rawDesc = nil
 	file_temporal_server_api_schedule_v1_message_proto_goTypes = nil
 	file_temporal_server_api_schedule_v1_message_proto_depIdxs = nil
 }

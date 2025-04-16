@@ -38,7 +38,6 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
@@ -51,11 +50,14 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/testing/protomock"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -161,7 +163,7 @@ func (s *visibilityQueueTaskExecutorSuite) SetupTest() {
 		clusterMetadata:    mockClusterMetadata,
 		executionManager:   s.mockExecutionMgr,
 		logger:             s.logger,
-		tokenSerializer:    common.NewProtoTaskTokenSerializer(),
+		tokenSerializer:    tasktoken.NewSerializer(),
 		metricsHandler:     s.mockShard.GetMetricsHandler(),
 		eventNotifier:      events.NewNotifier(clock.NewRealTimeSource(), metrics.NoopMetricsHandler, func(namespace.ID, string) int32 { return 1 }),
 	}
@@ -176,6 +178,7 @@ func (s *visibilityQueueTaskExecutorSuite) SetupTest() {
 		metrics.NoopMetricsHandler,
 		config.VisibilityProcessorEnsureCloseBeforeDelete,
 		func(_ string) bool { return s.enableCloseWorkflowCleanup },
+		config.VisibilityProcessorRelocateAttributesMinBlobSize,
 	)
 }
 
@@ -580,7 +583,7 @@ func (s *visibilityQueueTaskExecutorSuite) execute(task tasks.Task) error {
 func (s *visibilityQueueTaskExecutorSuite) createVisibilityRequestBase(
 	namespaceName namespace.Name,
 	task tasks.Task,
-	mutableState workflow.MutableState,
+	mutableState historyi.MutableState,
 	taskQueueName string,
 	parentExecution *commonpb.WorkflowExecution,
 	rootExecution *commonpb.WorkflowExecution,
@@ -629,7 +632,7 @@ func (s *visibilityQueueTaskExecutorSuite) createVisibilityRequestBase(
 func (s *visibilityQueueTaskExecutorSuite) createRecordWorkflowExecutionStartedRequest(
 	namespaceName namespace.Name,
 	task *tasks.StartExecutionVisibilityTask,
-	mutableState workflow.MutableState,
+	mutableState historyi.MutableState,
 	taskQueueName string,
 ) gomock.Matcher {
 	return protomock.Eq(&manager.RecordWorkflowExecutionStartedRequest{
@@ -648,7 +651,7 @@ func (s *visibilityQueueTaskExecutorSuite) createRecordWorkflowExecutionStartedR
 func (s *visibilityQueueTaskExecutorSuite) createUpsertWorkflowRequest(
 	namespaceName namespace.Name,
 	task *tasks.UpsertExecutionVisibilityTask,
-	mutableState workflow.MutableState,
+	mutableState historyi.MutableState,
 	taskQueueName string,
 ) gomock.Matcher {
 	return protomock.Eq(&manager.UpsertWorkflowExecutionRequest{
@@ -667,7 +670,7 @@ func (s *visibilityQueueTaskExecutorSuite) createUpsertWorkflowRequest(
 func (s *visibilityQueueTaskExecutorSuite) createRecordWorkflowExecutionClosedRequest(
 	namespaceName namespace.Name,
 	task *tasks.CloseExecutionVisibilityTask,
-	mutableState workflow.MutableState,
+	mutableState historyi.MutableState,
 	taskQueueName string,
 	parentExecution *commonpb.WorkflowExecution,
 	rootExecution *commonpb.WorkflowExecution,
@@ -692,7 +695,7 @@ func (s *visibilityQueueTaskExecutorSuite) createRecordWorkflowExecutionClosedRe
 }
 
 func (s *visibilityQueueTaskExecutorSuite) createPersistenceMutableState(
-	ms workflow.MutableState,
+	ms historyi.MutableState,
 	lastEventID int64,
 	lastEventVersion int64,
 ) *persistencespb.WorkflowMutableState {
@@ -720,6 +723,7 @@ func (s *visibilityQueueTaskExecutorSuite) newTaskExecutable(
 		s.mockShard.GetClusterMetadata(),
 		nil,
 		metrics.NoopMetricsHandler,
+		telemetry.NoopTracer,
 	)
 }
 

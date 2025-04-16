@@ -35,6 +35,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/backoff"
@@ -48,6 +49,8 @@ import (
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/hsm"
+	"go.temporal.io/server/service/history/hsm/hsmtest"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
@@ -231,7 +234,7 @@ func TestTaskGeneratorImpl_GenerateWorkflowCloseTasks(t *testing.T) {
 			namespaceRegistry.EXPECT().GetNamespaceID(gomock.Any()).Return(namespaceEntry.ID(), nil).AnyTimes()
 			namespaceRegistry.EXPECT().GetNamespaceByID(namespaceEntry.ID()).Return(namespaceEntry, nil).AnyTimes()
 
-			mutableState := NewMockMutableState(ctrl)
+			mutableState := historyi.NewMockMutableState(ctrl)
 			execState := &persistencespb.WorkflowExecutionState{
 				State:  enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 				Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
@@ -334,7 +337,7 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	namespaceRegistry := namespace.NewMockRegistry(ctrl)
 
-	mutableState := NewMockMutableState(ctrl)
+	mutableState := historyi.NewMockMutableState(ctrl)
 	mutableState.EXPECT().GetCurrentVersion().Return(int64(3)).AnyTimes()
 	mutableState.EXPECT().NextTransitionCount().Return(int64(3)).AnyTimes()
 
@@ -376,7 +379,7 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 	err = coll.Transition("backoff", func(cb callbacks.Callback) (hsm.TransitionOutput, error) {
 		return callbacks.TransitionAttemptFailed.Apply(cb, callbacks.EventAttemptFailed{
 			Time:        time.Now(),
-			Err:         fmt.Errorf("test"), // nolint:goerr113
+			Err:         fmt.Errorf("test"),
 			RetryPolicy: backoff.NewExponentialRetryPolicy(time.Second),
 		})
 	})
@@ -387,6 +390,9 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 		TransitionHistory: []*persistencespb.VersionedTransition{
 			{NamespaceFailoverVersion: 3, TransitionCount: 3},
 		},
+	}).AnyTimes()
+	mutableState.EXPECT().CurrentVersionedTransition().Return(&persistencespb.VersionedTransition{
+		NamespaceFailoverVersion: 3, TransitionCount: 3,
 	}).AnyTimes()
 	mutableState.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey).AnyTimes()
 
@@ -490,7 +496,7 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 				ScheduleToCloseTimeout: durationpb.New(time.Hour),
 			},
 		},
-	}, []byte("token"), false)
+	}, []byte("token"))
 	require.NoError(t, err)
 	err = taskGenerator.GenerateDirtySubStateMachineTasks(reg)
 	require.NoError(t, err)
@@ -664,7 +670,7 @@ func TestTaskGenerator_GenerateWorkflowStartTasks(t *testing.T) {
 				config,
 			)
 
-			mockMutableState := NewMockMutableState(controller)
+			mockMutableState := historyi.NewMockMutableState(controller)
 			mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 
 			firstRunID := uuid.New()
@@ -718,4 +724,200 @@ func TestTaskGenerator_GenerateWorkflowStartTasks(t *testing.T) {
 			require.ElementsMatch(t, tc.expectedTaskTypes, generatedTaskTypes)
 		})
 	}
+}
+
+func TestTaskGeneratorImpl_GenerateMigrationTasks(t *testing.T) {
+	testCases := []struct {
+		name                        string
+		workflowState               enumsspb.WorkflowExecutionState
+		transitionHistoryEnabled    bool
+		pendingActivityInfo         map[int64]*persistencespb.ActivityInfo
+		expectedTaskTypes           []enumsspb.TaskType
+		expectedTaskEquivalentTypes []enumsspb.TaskType
+	}{
+		{
+			name:                     "transition history disabled, execution completed",
+			transitionHistoryEnabled: false,
+			workflowState:            enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+			pendingActivityInfo:      map[int64]*persistencespb.ActivityInfo{},
+			expectedTaskTypes:        []enumsspb.TaskType{enumsspb.TASK_TYPE_REPLICATION_SYNC_WORKFLOW_STATE},
+		},
+		{
+			name:                        "transition history enabled, execution completed",
+			transitionHistoryEnabled:    true,
+			workflowState:               enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+			pendingActivityInfo:         map[int64]*persistencespb.ActivityInfo{},
+			expectedTaskTypes:           []enumsspb.TaskType{enumsspb.TASK_TYPE_REPLICATION_SYNC_VERSIONED_TRANSITION},
+			expectedTaskEquivalentTypes: []enumsspb.TaskType{enumsspb.TASK_TYPE_REPLICATION_SYNC_WORKFLOW_STATE},
+		},
+		{
+			name:                     "transition history enabled, execution running",
+			transitionHistoryEnabled: true,
+			workflowState:            enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			pendingActivityInfo: map[int64]*persistencespb.ActivityInfo{
+				1: {
+					Version:          1,
+					ScheduledEventId: 1,
+				},
+				2: {
+					Version:          1,
+					ScheduledEventId: 2,
+				},
+			},
+			expectedTaskTypes:           []enumsspb.TaskType{enumsspb.TASK_TYPE_REPLICATION_SYNC_VERSIONED_TRANSITION},
+			expectedTaskEquivalentTypes: []enumsspb.TaskType{enumsspb.TASK_TYPE_REPLICATION_HISTORY, enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY, enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY, enumsspb.TASK_TYPE_REPLICATION_SYNC_HSM},
+		},
+		{
+			name:                     "transition history disabled, execution running",
+			transitionHistoryEnabled: false,
+			workflowState:            enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			pendingActivityInfo: map[int64]*persistencespb.ActivityInfo{
+				1: {
+					Version:          1,
+					ScheduledEventId: 1,
+				},
+				2: {
+					Version:          1,
+					ScheduledEventId: 2,
+				},
+			},
+			expectedTaskTypes: []enumsspb.TaskType{enumsspb.TASK_TYPE_REPLICATION_HISTORY, enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY, enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY, enumsspb.TASK_TYPE_REPLICATION_SYNC_HSM},
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			controller := gomock.NewController(t)
+			mockMutableState := historyi.NewMockMutableState(controller)
+			executionInfo := &persistencespb.WorkflowExecutionInfo{
+				VersionHistories: &historyspb.VersionHistories{
+					CurrentVersionHistoryIndex: 0,
+					Histories: []*historyspb.VersionHistory{
+						{
+							BranchToken: []byte{1},
+							Items: []*historyspb.VersionHistoryItem{
+								{
+									EventId: 10,
+									Version: 1,
+								},
+							},
+						},
+					},
+				},
+				TransitionHistory: []*persistencespb.VersionedTransition{
+					{
+						NamespaceFailoverVersion: 1,
+						TransitionCount:          5,
+					},
+				},
+			}
+			mockMutableState.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
+			mockMutableState.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey).AnyTimes()
+			mockMutableState.EXPECT().GetPendingActivityInfos().Return(tc.pendingActivityInfo).AnyTimes()
+			mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+				State: tc.workflowState,
+			}).AnyTimes()
+			mockMutableState.EXPECT().IsTransitionHistoryEnabled().Return(tc.transitionHistoryEnabled).AnyTimes()
+			mockShard := shard.NewTestContext(
+				controller,
+				&persistencespb.ShardInfo{
+					ShardId: 1,
+					RangeId: 1,
+				},
+				tests.NewDynamicConfig(),
+			)
+			taskGenerator := NewTaskGenerator(
+				mockShard.GetNamespaceRegistry(),
+				mockMutableState,
+				mockShard.GetConfig(),
+				mockShard.GetArchivalMetadata(),
+			)
+			resultTasks, _, err := taskGenerator.GenerateMigrationTasks()
+			require.NoError(t, err)
+			require.Equal(t, len(tc.expectedTaskTypes), len(resultTasks))
+			if tc.transitionHistoryEnabled {
+				require.Equal(t, 1, len(resultTasks))
+				require.Equal(t, tc.expectedTaskTypes[0].String(), resultTasks[0].GetType().String())
+				syncVersionTask, ok := resultTasks[0].(*tasks.SyncVersionedTransitionTask)
+				require.True(t, ok)
+				taskEquivalent := syncVersionTask.TaskEquivalents
+				require.Equal(t, len(tc.expectedTaskEquivalentTypes), len(taskEquivalent))
+				for i, equivalent := range taskEquivalent {
+					require.Equal(t, tc.expectedTaskEquivalentTypes[i], equivalent.GetType())
+				}
+			} else {
+				for i, task := range resultTasks {
+					require.Equal(t, tc.expectedTaskTypes[i], task.GetType())
+				}
+			}
+		})
+	}
+}
+
+func TestTaskGeneratorImpl_GenerateDirtySubStateMachineTasks_TrimsTimersForDeletedNodes(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	ms := historyi.NewMockMutableState(ctrl)
+	var genTasks []tasks.Task
+	ms.EXPECT().AddTasks(gomock.Any()).DoAndReturn(func(tasks ...tasks.Task) {
+		genTasks = append(genTasks, tasks...)
+	}).AnyTimes()
+
+	ms.EXPECT().IsTransitionHistoryEnabled().Return(true).AnyTimes()
+	ms.EXPECT().GetCurrentVersion().Return(int64(3)).AnyTimes()
+
+	currentTransition := &persistencespb.VersionedTransition{
+		NamespaceFailoverVersion: 3,
+		TransitionCount:          3,
+	}
+	executionInfo := &persistencespb.WorkflowExecutionInfo{
+		TransitionHistory: []*persistencespb.VersionedTransition{currentTransition},
+		StateMachineTimers: []*persistencespb.StateMachineTimerGroup{
+			{
+				Deadline: timestamppb.New(time.Now().Add(time.Hour)),
+				Infos: []*persistencespb.StateMachineTaskInfo{
+					{
+						Ref: &persistencespb.StateMachineRef{
+							Path: []*persistencespb.StateMachineKey{
+								{Type: callbacks.StateMachineType, Id: "test-callback"},
+							},
+						},
+						Type: callbacks.TaskTypeBackoff,
+					},
+				},
+			},
+		},
+	}
+	ms.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
+
+	reg := hsm.NewRegistry()
+	require.NoError(t, RegisterStateMachine(reg))
+	require.NoError(t, callbacks.RegisterStateMachine(reg))
+
+	cb := callbacks.NewCallback(timestamppb.Now(), callbacks.NewWorkflowClosedTrigger(), &persistencespb.Callback{})
+	root, err := hsm.NewRoot(reg, StateMachineType, ms, make(map[string]*persistencespb.StateMachineMap), &hsmtest.NodeBackend{})
+	require.NoError(t, err)
+	child, err := callbacks.MachineCollection(root).Add("test-callback", cb)
+	require.NoError(t, err)
+	err = root.DeleteChild(child.Key)
+	require.NoError(t, err)
+
+	ms.EXPECT().HSM().Return(root).AnyTimes()
+	ms.EXPECT().GetWorkflowKey().Return(definition.NewWorkflowKey(
+		tests.NamespaceID.String(),
+		tests.WorkflowID,
+		tests.RunID,
+	)).AnyTimes()
+
+	taskGenerator := NewTaskGenerator(
+		namespace.NewMockRegistry(ctrl),
+		ms,
+		&configs.Config{},
+		archiver.NewMockArchivalMetadata(ctrl),
+	)
+
+	err = taskGenerator.GenerateDirtySubStateMachineTasks(reg)
+	require.NoError(t, err)
+
+	require.Empty(t, genTasks)
+	require.Empty(t, ms.GetExecutionInfo().StateMachineTimers) // Timer should be trimmed
 }

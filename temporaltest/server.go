@@ -38,8 +38,8 @@ import (
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/internal/temporalite"
 	"go.temporal.io/server/temporal"
+	temporalite "go.temporal.io/server/temporaltest/internal"
 )
 
 // A TestServer is a Temporal server listening on a system-chosen port on the
@@ -101,6 +101,14 @@ func (ts *TestServer) GetDefaultClient() client.Client {
 // GetDefaultNamespace returns the randomly generated namespace which has been pre-registered with the test server.
 func (ts *TestServer) GetDefaultNamespace() string {
 	return ts.defaultTestNamespace
+}
+
+// GetFrontendHostPort returns the host:port for this server.
+//
+// When constructing a Temporal client from within the same process,
+// GetDefaultClient or NewClientWithOptions should be used instead.
+func (ts *TestServer) GetFrontendHostPort() string {
+	return ts.server.FrontendHostPort()
 }
 
 // NewClientWithOptions returns a new Temporal client configured for making requests to the server.

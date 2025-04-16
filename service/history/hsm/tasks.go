@@ -78,7 +78,26 @@ type TaskSerializer interface {
 // generated.
 func ValidateNotTransitioned(ref *persistencespb.StateMachineRef, node *Node) error {
 	if ref.MachineTransitionCount != node.InternalRepr().TransitionCount {
-		return fmt.Errorf("%w: state machine transitions != ref transitions", consts.ErrStaleReference)
+		return fmt.Errorf("%w: state machine transitions (%d) != ref transitions (%d)", consts.ErrStaleReference, node.InternalRepr().TransitionCount, ref.MachineTransitionCount)
+	}
+	return nil
+}
+
+// ValidateState returns a [consts.ErrStaleReference] if the machine is not in the expected state.
+func ValidateState[S comparable, T StateMachine[S]](node *Node, expected S) error {
+	cb, err := MachineData[T](node)
+	if err != nil {
+		return err
+	}
+	if cb.State() != expected {
+		return fmt.Errorf(
+			"%w: %w: expected a %s machine in %v state, got %v",
+			consts.ErrStaleReference,
+			ErrInvalidTransition,
+			node.Key.ID,
+			expected,
+			cb.State(),
+		)
 	}
 	return nil
 }

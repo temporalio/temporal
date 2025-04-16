@@ -117,10 +117,12 @@ func (s *quotasSuite) TestVisibilityAPIs() {
 		"/temporal.api.workflowservice.v1.WorkflowService/ListWorkflowExecutions":         {},
 		"/temporal.api.workflowservice.v1.WorkflowService/ListArchivedWorkflowExecutions": {},
 
-		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkerTaskReachability": {},
-		"/temporal.api.workflowservice.v1.WorkflowService/ListSchedules":             {},
-		"/temporal.api.workflowservice.v1.WorkflowService/ListBatchOperations":       {},
-		"/temporal.api.workflowservice.v1.WorkflowService/DescribeTaskQueue":         {},
+		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkerTaskReachability":         {},
+		"/temporal.api.workflowservice.v1.WorkflowService/ListSchedules":                     {},
+		"/temporal.api.workflowservice.v1.WorkflowService/ListBatchOperations":               {},
+		"/temporal.api.workflowservice.v1.WorkflowService/DescribeTaskQueueWithReachability": {},
+		"/temporal.api.workflowservice.v1.WorkflowService/ListDeployments":                   {},
+		"/temporal.api.workflowservice.v1.WorkflowService/GetDeploymentReachability":         {},
 	}
 
 	var service workflowservice.WorkflowServiceServer
@@ -128,6 +130,9 @@ func (s *quotasSuite) TestVisibilityAPIs() {
 	apiToPriority := make(map[string]int, t.NumMethod())
 	for i := 0; i < t.NumMethod(); i++ {
 		apiName := "/temporal.api.workflowservice.v1.WorkflowService/" + t.Method(i).Name
+		if t.Method(i).Name == "DescribeTaskQueue" {
+			apiName += "WithReachability"
+		}
 		if _, ok := apis[apiName]; ok {
 			apiToPriority[apiName] = VisibilityAPIToPriority[apiName]
 		}

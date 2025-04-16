@@ -30,10 +30,11 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	ctasks "go.temporal.io/server/common/tasks"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/service/history/archival"
 	"go.temporal.io/server/service/history/configs"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
-	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
@@ -92,9 +93,10 @@ func newHostScheduler(params ArchivalQueueFactoryParams) queues.Scheduler {
 	return queues.NewScheduler(
 		params.ClusterMetadata.GetCurrentClusterName(),
 		queues.SchedulerOptions{
-			WorkerCount:             params.Config.ArchivalProcessorSchedulerWorkerCount,
-			ActiveNamespaceWeights:  dynamicconfig.GetMapPropertyFnFilteredByNamespace(ArchivalTaskPriorities),
-			StandbyNamespaceWeights: dynamicconfig.GetMapPropertyFnFilteredByNamespace(ArchivalTaskPriorities),
+			WorkerCount:                    params.Config.ArchivalProcessorSchedulerWorkerCount,
+			ActiveNamespaceWeights:         dynamicconfig.GetMapPropertyFnFilteredByNamespace(ArchivalTaskPriorities),
+			StandbyNamespaceWeights:        dynamicconfig.GetMapPropertyFnFilteredByNamespace(ArchivalTaskPriorities),
+			InactiveNamespaceDeletionDelay: params.Config.TaskSchedulerInactiveChannelDeletionDelay,
 		},
 		params.NamespaceRegistry,
 		params.Logger,
@@ -115,12 +117,13 @@ func newQueueFactoryBase(params ArchivalQueueFactoryParams) QueueFactoryBase {
 			),
 			int64(params.Config.ArchivalQueueMaxReaderCount()),
 		),
+		Tracer: params.TracerProvider.Tracer(telemetry.ComponentQueueArchival),
 	}
 }
 
 // CreateQueue creates a new archival queue for the given shard.
 func (f *archivalQueueFactory) CreateQueue(
-	shard shard.Context,
+	shard historyi.ShardContext,
 	workflowCache wcache.Cache,
 ) queues.Queue {
 	executor := f.newArchivalTaskExecutor(shard, workflowCache)
@@ -131,7 +134,7 @@ func (f *archivalQueueFactory) CreateQueue(
 }
 
 // newArchivalTaskExecutor creates a new archival task executor for the given shard.
-func (f *archivalQueueFactory) newArchivalTaskExecutor(shard shard.Context, workflowCache wcache.Cache) queues.Executor {
+func (f *archivalQueueFactory) newArchivalTaskExecutor(shard historyi.ShardContext, workflowCache wcache.Cache) queues.Executor {
 	return NewArchivalQueueTaskExecutor(
 		f.Archiver,
 		shard,
@@ -143,7 +146,7 @@ func (f *archivalQueueFactory) newArchivalTaskExecutor(shard shard.Context, work
 }
 
 // newScheduledQueue creates a new scheduled queue for the given shard with archival-specific configurations.
-func (f *archivalQueueFactory) newScheduledQueue(shard shard.Context, executor queues.Executor) queues.Queue {
+func (f *archivalQueueFactory) newScheduledQueue(shard historyi.ShardContext, executor queues.Executor) queues.Queue {
 	logger := log.With(shard.GetLogger(), tag.ComponentArchivalQueue)
 	metricsHandler := f.MetricsHandler.WithTags(metrics.OperationTag(metrics.OperationArchivalQueueProcessorScope))
 
@@ -181,9 +184,11 @@ func (f *archivalQueueFactory) newScheduledQueue(shard shard.Context, executor q
 		shard.GetClusterMetadata(),
 		logger,
 		metricsHandler,
+		f.Tracer,
 		f.DLQWriter,
 		f.Config.TaskDLQEnabled,
 		f.Config.TaskDLQUnexpectedErrorAttempts,
+		f.Config.TaskDLQInternalErrors,
 		f.Config.TaskDLQErrorPattern,
 	)
 	return queues.NewScheduledQueue(

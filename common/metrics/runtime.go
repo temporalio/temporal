@@ -93,9 +93,15 @@ func (r *RuntimeMetricsReporter) report() {
 	GoMaxProcsGauge.With(r.handler).Record(float64(runtime.GOMAXPROCS(0)))
 	MemoryAllocatedGauge.With(r.handler).Record(float64(memStats.Alloc))
 	MemoryHeapGauge.With(r.handler).Record(float64(memStats.HeapAlloc))
+	MemoryHeapObjectsGauge.With(r.handler).Record(float64(memStats.HeapObjects))
 	MemoryHeapIdleGauge.With(r.handler).Record(float64(memStats.HeapIdle))
 	MemoryHeapInuseGauge.With(r.handler).Record(float64(memStats.HeapInuse))
 	MemoryStackGauge.With(r.handler).Record(float64(memStats.StackInuse))
+	MemoryMallocsGauge.With(r.handler).Record(float64(memStats.Mallocs))
+	MemoryFreesGauge.With(r.handler).Record(float64(memStats.Frees))
+
+	NumGCGauge.With(r.handler).Record(float64(memStats.NumGC))
+	GcPauseNsTotal.With(r.handler).Record(float64(memStats.PauseTotalNs))
 
 	// memStats.NumGC is a perpetually incrementing counter (unless it wraps at 2^32)
 	num := memStats.NumGC

@@ -34,9 +34,10 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/hsm"
-	"go.temporal.io/server/service/history/shard"
+	historyi "go.temporal.io/server/service/history/interfaces"
 )
 
 type (
@@ -45,7 +46,7 @@ type (
 		// those have side effects.
 		Refresh(
 			ctx context.Context,
-			mutableState MutableState,
+			mutableState historyi.MutableState,
 		) error
 		// PartialRefresh refresh tasks for all sub state machines that have been updated
 		// since the given minVersionedTransition (inclusive).
@@ -55,13 +56,13 @@ type (
 		// the behavior is equivalent to Refresh().
 		PartialRefresh(
 			ctx context.Context,
-			mutableState MutableState,
+			mutableState historyi.MutableState,
 			minVersionedTransition *persistencespb.VersionedTransition,
 		) error
 	}
 
 	TaskRefresherImpl struct {
-		shard shard.Context
+		shard historyi.ShardContext
 
 		// this defaults to the global taskGeneratorProvider
 		// for testing purposes, it can be overridden to use a mock task generator
@@ -70,7 +71,7 @@ type (
 )
 
 func NewTaskRefresher(
-	shard shard.Context,
+	shard historyi.ShardContext,
 ) *TaskRefresherImpl {
 
 	return &TaskRefresherImpl{
@@ -82,7 +83,7 @@ func NewTaskRefresher(
 
 func (r *TaskRefresherImpl) Refresh(
 	ctx context.Context,
-	mutableState MutableState,
+	mutableState historyi.MutableState,
 ) error {
 	if r.shard.GetConfig().EnableNexus() {
 		// Invalidate all tasks generated for this mutable state before the refresh.
@@ -94,20 +95,9 @@ func (r *TaskRefresherImpl) Refresh(
 
 func (r *TaskRefresherImpl) PartialRefresh(
 	ctx context.Context,
-	mutableState MutableState,
+	mutableState historyi.MutableState,
 	minVersionedTransition *persistencespb.VersionedTransition,
 ) error {
-	if CompareVersionedTransition(minVersionedTransition, EmptyVersionedTransition) != 0 {
-		// Perform a sanity check to make sure that the minVersionedTransition, if provided,
-		// is on the current branch of transition history.
-		if err := TransitionHistoryStalenessCheck(
-			mutableState.GetExecutionInfo().TransitionHistory,
-			minVersionedTransition,
-		); err != nil {
-			return err
-		}
-	}
-
 	taskGenerator := r.taskGeneratorProvider.NewTaskGenerator(
 		r.shard,
 		mutableState,
@@ -207,7 +197,7 @@ func (r *TaskRefresherImpl) PartialRefresh(
 
 func RefreshTasksForWorkflowStart(
 	ctx context.Context,
-	mutableState MutableState,
+	mutableState historyi.MutableState,
 	taskGenerator TaskGenerator,
 	minVersionedTransition *persistencespb.VersionedTransition,
 ) error {
@@ -218,7 +208,7 @@ func RefreshTasksForWorkflowStart(
 	}
 
 	// Skip task generation if workflow state has not been updated since minVersionedTransition.
-	if CompareVersionedTransition(
+	if transitionhistory.Compare(
 		executionState.LastUpdateVersionedTransition,
 		minVersionedTransition,
 	) < 0 {
@@ -255,7 +245,7 @@ func RefreshTasksForWorkflowStart(
 
 func (r *TaskRefresherImpl) refreshTasksForWorkflowClose(
 	ctx context.Context,
-	mutableState MutableState,
+	mutableState historyi.MutableState,
 	taskGenerator TaskGenerator,
 	minVersionedTransition *persistencespb.VersionedTransition,
 ) error {
@@ -266,7 +256,7 @@ func (r *TaskRefresherImpl) refreshTasksForWorkflowClose(
 	}
 
 	// Skip task generation if workflow state has not been updated since minVersionedTransition.
-	if CompareVersionedTransition(
+	if transitionhistory.Compare(
 		executionState.LastUpdateVersionedTransition,
 		minVersionedTransition,
 	) < 0 {
@@ -286,7 +276,7 @@ func (r *TaskRefresherImpl) refreshTasksForWorkflowClose(
 
 func (r *TaskRefresherImpl) refreshTasksForRecordWorkflowStarted(
 	ctx context.Context,
-	mutableState MutableState,
+	mutableState historyi.MutableState,
 	taskGenerator TaskGenerator,
 	minVersionedTransition *persistencespb.VersionedTransition,
 ) error {
@@ -298,7 +288,7 @@ func (r *TaskRefresherImpl) refreshTasksForRecordWorkflowStarted(
 
 	// Skip task generation if no transition since minVersionedTransition requires
 	// an update in the visibility record.
-	if CompareVersionedTransition(
+	if transitionhistory.Compare(
 		mutableState.GetExecutionInfo().VisibilityLastUpdateVersionedTransition,
 		minVersionedTransition,
 	) < 0 {
@@ -316,7 +306,7 @@ func (r *TaskRefresherImpl) refreshTasksForRecordWorkflowStarted(
 }
 
 func (r *TaskRefresherImpl) refreshWorkflowTaskTasks(
-	mutableState MutableState,
+	mutableState historyi.MutableState,
 	taskGenerator TaskGenerator,
 	minVersionedTransition *persistencespb.VersionedTransition,
 ) error {
@@ -332,7 +322,7 @@ func (r *TaskRefresherImpl) refreshWorkflowTaskTasks(
 	}
 
 	// Skip task generation if workflow task has not been updated since minVersionedTransition.
-	if CompareVersionedTransition(
+	if transitionhistory.Compare(
 		mutableState.GetExecutionInfo().WorkflowTaskLastUpdateVersionedTransition,
 		minVersionedTransition,
 	) < 0 {
@@ -364,7 +354,7 @@ func (r *TaskRefresherImpl) refreshWorkflowTaskTasks(
 
 func (r *TaskRefresherImpl) refreshTasksForActivity(
 	ctx context.Context,
-	mutableState MutableState,
+	mutableState historyi.MutableState,
 	taskGenerator TaskGenerator,
 	minVersionedTransition *persistencespb.VersionedTransition,
 ) error {
@@ -381,35 +371,36 @@ func (r *TaskRefresherImpl) refreshTasksForActivity(
 	for _, activityInfo := range pendingActivityInfos {
 
 		// Skip task generation if this activity has not been updated since minVersionedTransition.
-		if CompareVersionedTransition(
+		if transitionhistory.Compare(
 			activityInfo.LastUpdateVersionedTransition,
 			minVersionedTransition,
 		) < 0 {
 			continue
 		}
 
-		// clear activity timer task mask for later activity timer task re-generation
-		activityInfo.TimerTaskStatus = TimerTaskStatusNone
-		refreshActivityTimerTask = true
-
-		// need to update activity timer task mask for which task is generated
-		if err := mutableState.UpdateActivity(
-			activityInfo,
-		); err != nil {
-			return err
+		if transitionhistory.Compare(minVersionedTransition, EmptyVersionedTransition) == 0 { // Full refresh
+			activityInfo.TimerTaskStatus = TimerTaskStatusNone // clear activity timer task mask for later activity timer task re-generation
+			if err := mutableState.UpdateActivityTaskStatusWithTimerHeartbeat(
+				activityInfo.ScheduledEventId,
+				activityInfo.TimerTaskStatus,
+				nil,
+			); err != nil {
+				return err
+			}
 		}
+
+		refreshActivityTimerTask = true
 
 		if activityInfo.StartedEventId != common.EmptyEventID {
 			continue
 		}
 
-		scheduleEvent, err := mutableState.GetActivityScheduledEvent(ctx, activityInfo.ScheduledEventId)
-		if err != nil {
-			return err
+		if activityInfo.Paused {
+			continue
 		}
 
 		if err := taskGenerator.GenerateActivityTasks(
-			scheduleEvent.GetEventId(),
+			activityInfo.ScheduledEventId,
 		); err != nil {
 			return err
 		}
@@ -424,7 +415,7 @@ func (r *TaskRefresherImpl) refreshTasksForActivity(
 }
 
 func (r *TaskRefresherImpl) refreshTasksForTimer(
-	mutableState MutableState,
+	mutableState historyi.MutableState,
 	minVersionedTransition *persistencespb.VersionedTransition,
 ) error {
 
@@ -439,20 +430,19 @@ func (r *TaskRefresherImpl) refreshTasksForTimer(
 	for _, timerInfo := range pendingTimerInfos {
 
 		// Skip task generation if this user timer has not been updated since minVersionedTransition.
-		if CompareVersionedTransition(
+		if transitionhistory.Compare(
 			timerInfo.LastUpdateVersionedTransition,
 			minVersionedTransition,
 		) < 0 {
 			continue
 		}
 
-		// clear timer task mask for later timer task re-generation
-		timerInfo.TaskStatus = TimerTaskStatusNone
 		refreshUserTimerTask = true
 
 		// need to update user timer task mask for which task is generated
-		if err := mutableState.UpdateUserTimer(
-			timerInfo,
+		if err := mutableState.UpdateUserTimerTaskStatus(
+			timerInfo.TimerId,
+			TimerTaskStatusNone, // clear timer task mask for later timer task re-generation
 		); err != nil {
 			return err
 		}
@@ -468,7 +458,7 @@ func (r *TaskRefresherImpl) refreshTasksForTimer(
 
 func (r *TaskRefresherImpl) refreshTasksForChildWorkflow(
 	ctx context.Context,
-	mutableState MutableState,
+	mutableState historyi.MutableState,
 	taskGenerator TaskGenerator,
 	minVersionedTransition *persistencespb.VersionedTransition,
 ) error {
@@ -481,7 +471,7 @@ func (r *TaskRefresherImpl) refreshTasksForChildWorkflow(
 		}
 
 		// Skip task generation if this child workflow has not been updated since minVersionedTransition.
-		if CompareVersionedTransition(
+		if transitionhistory.Compare(
 			childWorkflowInfo.LastUpdateVersionedTransition,
 			minVersionedTransition,
 		) < 0 {
@@ -505,7 +495,7 @@ func (r *TaskRefresherImpl) refreshTasksForChildWorkflow(
 
 func (r *TaskRefresherImpl) refreshTasksForRequestCancelExternalWorkflow(
 	ctx context.Context,
-	mutableState MutableState,
+	mutableState historyi.MutableState,
 	taskGenerator TaskGenerator,
 	minVersionedTransition *persistencespb.VersionedTransition,
 ) error {
@@ -520,7 +510,7 @@ func (r *TaskRefresherImpl) refreshTasksForRequestCancelExternalWorkflow(
 	for _, requestCancelInfo := range pendingRequestCancelInfos {
 
 		// Skip task generation if this cancel external request has not been updated since minVersionedTransition.
-		if CompareVersionedTransition(
+		if transitionhistory.Compare(
 			requestCancelInfo.LastUpdateVersionedTransition,
 			minVersionedTransition,
 		) < 0 {
@@ -544,7 +534,7 @@ func (r *TaskRefresherImpl) refreshTasksForRequestCancelExternalWorkflow(
 
 func (r *TaskRefresherImpl) refreshTasksForSignalExternalWorkflow(
 	ctx context.Context,
-	mutableState MutableState,
+	mutableState historyi.MutableState,
 	taskGenerator TaskGenerator,
 	minVersionedTransition *persistencespb.VersionedTransition,
 ) error {
@@ -559,7 +549,7 @@ func (r *TaskRefresherImpl) refreshTasksForSignalExternalWorkflow(
 	for _, signalInfo := range pendingSignalInfos {
 
 		// Skip task generation if this signal external request has not been updated since minVersionedTransition.
-		if CompareVersionedTransition(
+		if transitionhistory.Compare(
 			signalInfo.LastUpdateVersionedTransition,
 			minVersionedTransition,
 		) < 0 {
@@ -582,7 +572,7 @@ func (r *TaskRefresherImpl) refreshTasksForSignalExternalWorkflow(
 }
 
 func (r *TaskRefresherImpl) refreshTasksForWorkflowSearchAttr(
-	mutableState MutableState,
+	mutableState historyi.MutableState,
 	taskGenerator TaskGenerator,
 	minVersionedTransition *persistencespb.VersionedTransition,
 ) error {
@@ -593,18 +583,17 @@ func (r *TaskRefresherImpl) refreshTasksForWorkflowSearchAttr(
 
 	// Skip task generation if no transition since minVersionedTransition requires
 	// an update in the visibility record.
-	if CompareVersionedTransition(
+	if transitionhistory.Compare(
 		mutableState.GetExecutionInfo().VisibilityLastUpdateVersionedTransition,
 		minVersionedTransition,
 	) < 0 {
 		return nil
 	}
-
 	return taskGenerator.GenerateUpsertVisibilityTask()
 }
 
 func (r *TaskRefresherImpl) refreshTasksForSubStateMachines(
-	mutableState MutableState,
+	mutableState historyi.MutableState,
 	minVersionedTransition *persistencespb.VersionedTransition,
 ) error {
 
@@ -637,7 +626,7 @@ func (r *TaskRefresherImpl) refreshTasksForSubStateMachines(
 		}
 
 		// Skip task generation if this state machine node has not been updated since minVersionedTransition.
-		if CompareVersionedTransition(
+		if transitionhistory.Compare(
 			node.InternalRepr().LastUpdateVersionedTransition,
 			minVersionedTransition,
 		) < 0 {
@@ -650,9 +639,7 @@ func (r *TaskRefresherImpl) refreshTasksForSubStateMachines(
 		return err
 	}
 
-	if len(nodesToRefresh) != 0 {
-		// TODO: after hsm node tombstone is tracked in mutable state,
-		// also trigger trim when there are new tombstones after minVersionedTransition
+	if len(nodesToRefresh) != 0 || mutableState.IsSubStateMachineDeleted() {
 		if err := TrimStateMachineTimers(mutableState, minVersionedTransition); err != nil {
 			return err
 		}

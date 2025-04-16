@@ -71,6 +71,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resourcetest"
 	"go.temporal.io/server/common/searchattribute"
+	serviceerror2 "go.temporal.io/server/common/serviceerror"
 	test "go.temporal.io/server/common/testing"
 	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/mocksdk"
@@ -1056,7 +1057,7 @@ func (s *adminHandlerSuite) TestStreamWorkflowReplicationMessages_ClientToServer
 
 		defer waitGroupEnd.Done()
 		<-channel
-		return nil, serviceerror.NewUnavailable("random error")
+		return nil, serviceerror.NewInternal("random error")
 	})
 	_ = s.handler.StreamWorkflowReplicationMessages(clientCluster)
 	close(channel)
@@ -1097,12 +1098,14 @@ func (s *adminHandlerSuite) TestStreamWorkflowReplicationMessages_ServerToClient
 		<-channel
 		return nil, serviceerror.NewUnavailable("random error")
 	})
+
+	s.mockHistoryClient.EXPECT().DescribeHistoryHost(gomock.Any(), &historyservice.DescribeHistoryHostRequest{ShardId: serverClusterShardID.ShardID}).Return(&historyservice.DescribeHistoryHostResponse{}, nil)
 	serverCluster.EXPECT().Recv().DoAndReturn(func() (*historyservice.StreamWorkflowReplicationMessagesResponse, error) {
 		waitGroupStart.Done()
 		waitGroupStart.Wait()
 
 		defer waitGroupEnd.Done()
-		return nil, serviceerror.NewUnavailable("random error")
+		return nil, serviceerror2.NewShardOwnershipLost("host1", "host2")
 	})
 	_ = s.handler.StreamWorkflowReplicationMessages(clientCluster)
 	close(channel)
@@ -1805,15 +1808,15 @@ func (s *adminHandlerSuite) TestDescribeTaskQueuePartition() {
 			TasksAddRate:            0,
 			TasksDispatchRate:       0,
 		},
-		InternalTaskQueueStatus: &taskqueuespb.InternalTaskQueueStatus{
+		InternalTaskQueueStatus: []*taskqueuespb.InternalTaskQueueStatus{&taskqueuespb.InternalTaskQueueStatus{
 			ReadLevel: 0,
 			AckLevel:  0,
 			TaskIdBlock: &taskqueuepb.TaskIdBlock{
 				StartId: 0,
 				EndId:   0,
 			},
-			ReadBufferLength: 0,
-		},
+			LoadedTasks: 0,
+		}},
 	}
 	versionedPhysicalTaskQueueInfo := &taskqueuespb.PhysicalTaskQueueInfo{
 		Pollers: []*taskqueuepb.PollerInfo(nil),
@@ -1823,15 +1826,15 @@ func (s *adminHandlerSuite) TestDescribeTaskQueuePartition() {
 			TasksAddRate:            10.21,
 			TasksDispatchRate:       10.50,
 		},
-		InternalTaskQueueStatus: &taskqueuespb.InternalTaskQueueStatus{
+		InternalTaskQueueStatus: []*taskqueuespb.InternalTaskQueueStatus{&taskqueuespb.InternalTaskQueueStatus{
 			ReadLevel: 1,
 			AckLevel:  1,
 			TaskIdBlock: &taskqueuepb.TaskIdBlock{
 				StartId: 1,
 				EndId:   1000,
 			},
-			ReadBufferLength: 10,
-		},
+			LoadedTasks: 10,
+		}},
 	}
 
 	matchingMockResponse := &matchingservice.DescribeTaskQueuePartitionResponse{

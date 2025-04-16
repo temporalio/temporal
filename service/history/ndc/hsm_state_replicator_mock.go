@@ -37,7 +37,7 @@ import (
 	context "context"
 	reflect "reflect"
 
-	shard "go.temporal.io/server/service/history/shard"
+	interfaces "go.temporal.io/server/service/history/interfaces"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -45,6 +45,7 @@ import (
 type MockHSMStateReplicator struct {
 	ctrl     *gomock.Controller
 	recorder *MockHSMStateReplicatorMockRecorder
+	isgomock struct{}
 }
 
 // MockHSMStateReplicatorMockRecorder is the mock recorder for MockHSMStateReplicator.
@@ -65,7 +66,7 @@ func (m *MockHSMStateReplicator) EXPECT() *MockHSMStateReplicatorMockRecorder {
 }
 
 // SyncHSMState mocks base method.
-func (m *MockHSMStateReplicator) SyncHSMState(ctx context.Context, request *shard.SyncHSMRequest) error {
+func (m *MockHSMStateReplicator) SyncHSMState(ctx context.Context, request *interfaces.SyncHSMRequest) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SyncHSMState", ctx, request)
 	ret0, _ := ret[0].(error)

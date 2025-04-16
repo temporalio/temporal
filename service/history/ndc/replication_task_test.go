@@ -30,7 +30,7 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"go.temporal.io/api/enums/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
@@ -180,6 +180,7 @@ func (s *replicationTaskSuite) TestSkipDuplicatedEvents_ValidInput_SkipEvents() 
 		nil,
 		"",
 		nil,
+		false,
 	)
 	err := task.skipDuplicatedEvents(1)
 	s.NoError(err)
@@ -221,6 +222,7 @@ func (s *replicationTaskSuite) TestSkipDuplicatedEvents_InvalidInput_ErrorOut() 
 		nil,
 		"",
 		nil,
+		false,
 	)
 	err := task.skipDuplicatedEvents(2)
 	s.Error(err)
@@ -258,6 +260,7 @@ func (s *replicationTaskSuite) TestSkipDuplicatedEvents_ZeroInput_DoNothing() {
 		nil,
 		"",
 		nil,
+		false,
 	)
 	err := task.skipDuplicatedEvents(0)
 	s.NoError(err)
@@ -274,7 +277,7 @@ func (s *replicationTaskSuite) TestResetInfo() {
 	slice1 := []*historypb.HistoryEvent{
 		{
 			EventId:   13,
-			EventType: enums.EVENT_TYPE_WORKFLOW_TASK_FAILED,
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED,
 		},
 		{
 			EventId: 14,
@@ -291,6 +294,7 @@ func (s *replicationTaskSuite) TestResetInfo() {
 		nil,
 		"",
 		nil,
+		false,
 	)
 	info := task.getBaseWorkflowInfo()
 	s.Nil(info)

@@ -32,4 +32,5 @@ const (
 	Dimensionless = "1"
 	Milliseconds  = "ms"
 	Bytes         = "By"
+	Seconds       = "s"
 )

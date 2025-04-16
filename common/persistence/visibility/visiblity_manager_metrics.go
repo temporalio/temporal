@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -44,6 +45,7 @@ type visibilityManagerMetrics struct {
 	logger        log.Logger
 	delegate      manager.VisibilityManager
 
+	slowQueryThreshold             dynamicconfig.DurationPropertyFn
 	visibilityPluginNameMetricsTag metrics.Tag
 	visibilityIndexNameMetricsTag  metrics.Tag
 }
@@ -52,6 +54,7 @@ func NewVisibilityManagerMetrics(
 	delegate manager.VisibilityManager,
 	metricHandler metrics.Handler,
 	logger log.Logger,
+	slowQueryThreshold dynamicconfig.DurationPropertyFn,
 	visibilityPluginNameMetricsTag metrics.Tag,
 	visibilityIndexNameMetricsTag metrics.Tag,
 ) *visibilityManagerMetrics {
@@ -60,6 +63,7 @@ func NewVisibilityManagerMetrics(
 		logger:        logger,
 		delegate:      delegate,
 
+		slowQueryThreshold:             slowQueryThreshold,
 		visibilityPluginNameMetricsTag: visibilityPluginNameMetricsTag,
 		visibilityIndexNameMetricsTag:  visibilityIndexNameMetricsTag,
 	}
@@ -137,7 +141,15 @@ func (m *visibilityManagerMetrics) ListWorkflowExecutions(
 ) (*manager.ListWorkflowExecutionsResponse, error) {
 	handler, startTime := m.tagScope(metrics.VisibilityPersistenceListWorkflowExecutionsScope)
 	response, err := m.delegate.ListWorkflowExecutions(ctx, request)
-	metrics.VisibilityPersistenceLatency.With(handler).Record(time.Since(startTime))
+	elapsed := time.Since(startTime)
+	if elapsed > m.slowQueryThreshold() {
+		m.logger.Warn("List query exceeded threshold",
+			tag.NewDurationTag("duration", elapsed),
+			tag.NewStringTag("visibility-query", request.Query),
+			tag.NewStringTag("namepsace", request.Namespace.String()),
+		)
+	}
+	metrics.VisibilityPersistenceLatency.With(handler).Record(elapsed)
 	return response, m.updateErrorMetric(handler, err)
 }
 
@@ -147,7 +159,15 @@ func (m *visibilityManagerMetrics) ScanWorkflowExecutions(
 ) (*manager.ListWorkflowExecutionsResponse, error) {
 	handler, startTime := m.tagScope(metrics.VisibilityPersistenceScanWorkflowExecutionsScope)
 	response, err := m.delegate.ScanWorkflowExecutions(ctx, request)
-	metrics.VisibilityPersistenceLatency.With(handler).Record(time.Since(startTime))
+	elapsed := time.Since(startTime)
+	if elapsed > m.slowQueryThreshold() {
+		m.logger.Warn("Count query exceeded threshold",
+			tag.NewDurationTag("duration", elapsed),
+			tag.NewStringTag("visibility-query", request.Query),
+			tag.NewStringTag("namepsace", request.Namespace.String()),
+		)
+	}
+	metrics.VisibilityPersistenceLatency.With(handler).Record(elapsed)
 	return response, m.updateErrorMetric(handler, err)
 }
 

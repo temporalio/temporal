@@ -71,7 +71,7 @@ func (n *NodeBackend) LoadHistoryEvent(ctx context.Context, tokenBytes []byte) (
 	})
 
 	if idx < 0 {
-		return nil, fmt.Errorf("event not found") // nolint:goerr113
+		return nil, fmt.Errorf("event not found")
 	}
 
 	return n.Events[idx], nil

@@ -26,6 +26,7 @@ package replication
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
@@ -40,6 +41,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	ctasks "go.temporal.io/server/common/tasks"
+	"go.temporal.io/server/service/history/consts"
 )
 
 type (
@@ -103,6 +105,14 @@ func NewExecutableActivityStateTask(
 			LastStartedRedirectCounter: task.LastStartedRedirectCounter,
 			BaseExecutionInfo:          task.BaseExecutionInfo,
 			VersionHistory:             task.VersionHistory,
+			FirstScheduledTime:         task.FirstScheduledTime,
+			LastAttemptCompleteTime:    task.LastAttemptCompleteTime,
+			Stamp:                      task.Stamp,
+			Paused:                     task.Paused,
+			RetryInitialInterval:       task.RetryInitialInterval,
+			RetryMaximumInterval:       task.RetryMaximumInterval,
+			RetryMaximumAttempts:       task.RetryMaximumAttempts,
+			RetryBackoffCoefficient:    task.RetryBackoffCoefficient,
 		},
 
 		batchable: true,
@@ -120,6 +130,14 @@ func NewExecutableActivityStateTask(
 			VersionHistory:             task.VersionHistory,
 			LastStartedBuildId:         task.LastStartedBuildId,
 			LastStartedRedirectCounter: task.LastStartedRedirectCounter,
+			FirstScheduledTime:         task.FirstScheduledTime,
+			LastAttemptCompleteTime:    task.LastAttemptCompleteTime,
+			Stamp:                      task.Stamp,
+			Paused:                     task.Paused,
+			RetryInitialInterval:       task.RetryInitialInterval,
+			RetryMaximumInterval:       task.RetryMaximumInterval,
+			RetryMaximumAttempts:       task.RetryMaximumAttempts,
+			RetryBackoffCoefficient:    task.RetryBackoffCoefficient,
 		}),
 	}
 }
@@ -180,6 +198,10 @@ func (e *ExecutableActivityStateTask) Execute() error {
 }
 
 func (e *ExecutableActivityStateTask) HandleErr(err error) error {
+	if errors.Is(err, consts.ErrDuplicate) {
+		e.MarkTaskDuplicated()
+		return nil
+	}
 	switch retryErr := err.(type) {
 	case nil, *serviceerror.NotFound:
 		return nil
@@ -270,4 +292,9 @@ func (e *ExecutableActivityStateTask) CanBatch() bool {
 
 func (e *ExecutableActivityStateTask) MarkUnbatchable() {
 	e.batchable = false
+}
+
+func (e *ExecutableActivityStateTask) Cancel() {
+	e.MarkUnbatchable()
+	e.ExecutableTask.Cancel()
 }

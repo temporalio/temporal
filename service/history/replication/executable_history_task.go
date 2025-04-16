@@ -26,17 +26,18 @@ package replication
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"time"
 
-	"go.temporal.io/api/common/v1"
+	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
-	workflowpb "go.temporal.io/server/api/workflow/v1"
+	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log/tag"
@@ -45,6 +46,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	ctasks "go.temporal.io/server/common/tasks"
+	"go.temporal.io/server/service/history/consts"
 )
 
 type (
@@ -53,10 +55,10 @@ type (
 
 		definition.WorkflowKey
 		ExecutableTask
-		baseExecutionInfo   *workflowpb.BaseExecutionInfo
+		baseExecutionInfo   *workflowspb.BaseExecutionInfo
 		versionHistoryItems []*historyspb.VersionHistoryItem
-		eventsBlobs         []*common.DataBlob
-		newRunEventsBlob    *common.DataBlob
+		eventsBlobs         []*commonpb.DataBlob
+		newRunEventsBlob    *commonpb.DataBlob
 		newRunID            string
 
 		deserializeLock   sync.Mutex
@@ -87,7 +89,7 @@ func NewExecutableHistoryTask(
 ) *ExecutableHistoryTask {
 	eventBatches := task.GetEventsBatches()
 	if eventBatches == nil {
-		eventBatches = []*common.DataBlob{task.GetEvents()}
+		eventBatches = []*commonpb.DataBlob{task.GetEvents()}
 	}
 	return &ExecutableHistoryTask{
 		ProcessToolBox: processToolBox,
@@ -186,6 +188,10 @@ func (e *ExecutableHistoryTask) Execute() error {
 }
 
 func (e *ExecutableHistoryTask) HandleErr(err error) error {
+	if errors.Is(err, consts.ErrDuplicate) {
+		e.MarkTaskDuplicated()
+		return nil
+	}
 	switch retryErr := err.(type) {
 	case nil, *serviceerror.NotFound:
 		return nil
@@ -435,7 +441,7 @@ func (e *ExecutableHistoryTask) checkWorkflowKey(incomingWorkflowKey definition.
 	return nil
 }
 
-func (e *ExecutableHistoryTask) checkBaseExecutionInfo(incomingTaskExecutionInfo *workflowpb.BaseExecutionInfo) error {
+func (e *ExecutableHistoryTask) checkBaseExecutionInfo(incomingTaskExecutionInfo *workflowspb.BaseExecutionInfo) error {
 	if e.baseExecutionInfo == nil && incomingTaskExecutionInfo == nil {
 		return nil
 	}
@@ -485,4 +491,9 @@ func (e *ExecutableHistoryTask) CanBatch() bool {
 
 func (e *ExecutableHistoryTask) MarkUnbatchable() {
 	e.batchable = false
+}
+
+func (e *ExecutableHistoryTask) Cancel() {
+	e.MarkUnbatchable()
+	e.ExecutableTask.Cancel()
 }

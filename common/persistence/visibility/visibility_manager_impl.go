@@ -39,7 +39,6 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store"
 	"go.temporal.io/server/common/searchattribute"
-	"go.temporal.io/server/common/utf8validator"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -349,9 +348,6 @@ func deserializeMemo(data *commonpb.DataBlob) (*commonpb.Memo, error) {
 	case enumspb.ENCODING_TYPE_PROTO3:
 		memo := &commonpb.Memo{}
 		err := proto.Unmarshal(data.Data, memo)
-		if err == nil {
-			err = utf8validator.Validate(memo, utf8validator.SourcePersistence)
-		}
 		if err != nil {
 			return nil, serialization.NewDeserializationError(
 				enumspb.ENCODING_TYPE_PROTO3, fmt.Errorf("unable to deserialize memo from data blob: %w", err))

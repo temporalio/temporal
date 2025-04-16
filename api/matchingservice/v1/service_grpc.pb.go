@@ -61,6 +61,7 @@ const (
 	MatchingService_GetTaskQueueUserData_FullMethodName                   = "/temporal.server.api.matchingservice.v1.MatchingService/GetTaskQueueUserData"
 	MatchingService_UpdateWorkerVersioningRules_FullMethodName            = "/temporal.server.api.matchingservice.v1.MatchingService/UpdateWorkerVersioningRules"
 	MatchingService_GetWorkerVersioningRules_FullMethodName               = "/temporal.server.api.matchingservice.v1.MatchingService/GetWorkerVersioningRules"
+	MatchingService_SyncDeploymentUserData_FullMethodName                 = "/temporal.server.api.matchingservice.v1.MatchingService/SyncDeploymentUserData"
 	MatchingService_ApplyTaskQueueUserDataReplicationEvent_FullMethodName = "/temporal.server.api.matchingservice.v1.MatchingService/ApplyTaskQueueUserDataReplicationEvent"
 	MatchingService_GetBuildIdTaskQueueMapping_FullMethodName             = "/temporal.server.api.matchingservice.v1.MatchingService/GetBuildIdTaskQueueMapping"
 	MatchingService_ForceLoadTaskQueuePartition_FullMethodName            = "/temporal.server.api.matchingservice.v1.MatchingService/ForceLoadTaskQueuePartition"
@@ -68,6 +69,7 @@ const (
 	MatchingService_ForceUnloadTaskQueuePartition_FullMethodName          = "/temporal.server.api.matchingservice.v1.MatchingService/ForceUnloadTaskQueuePartition"
 	MatchingService_UpdateTaskQueueUserData_FullMethodName                = "/temporal.server.api.matchingservice.v1.MatchingService/UpdateTaskQueueUserData"
 	MatchingService_ReplicateTaskQueueUserData_FullMethodName             = "/temporal.server.api.matchingservice.v1.MatchingService/ReplicateTaskQueueUserData"
+	MatchingService_CheckTaskQueueUserDataPropagation_FullMethodName      = "/temporal.server.api.matchingservice.v1.MatchingService/CheckTaskQueueUserDataPropagation"
 	MatchingService_CreateNexusEndpoint_FullMethodName                    = "/temporal.server.api.matchingservice.v1.MatchingService/CreateNexusEndpoint"
 	MatchingService_UpdateNexusEndpoint_FullMethodName                    = "/temporal.server.api.matchingservice.v1.MatchingService/UpdateNexusEndpoint"
 	MatchingService_DeleteNexusEndpoint_FullMethodName                    = "/temporal.server.api.matchingservice.v1.MatchingService/DeleteNexusEndpoint"
@@ -146,6 +148,8 @@ type MatchingServiceClient interface {
 	//
 	//	aip.dev/not-precedent: GetWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
 	GetWorkerVersioningRules(ctx context.Context, in *GetWorkerVersioningRulesRequest, opts ...grpc.CallOption) (*GetWorkerVersioningRulesResponse, error)
+	// This request should always be routed to the node holding the root partition of the workflow task queue.
+	SyncDeploymentUserData(ctx context.Context, in *SyncDeploymentUserDataRequest, opts ...grpc.CallOption) (*SyncDeploymentUserDataResponse, error)
 	// Apply a user data replication event.
 	ApplyTaskQueueUserDataReplicationEvent(ctx context.Context, in *ApplyTaskQueueUserDataReplicationEventRequest, opts ...grpc.CallOption) (*ApplyTaskQueueUserDataReplicationEventResponse, error)
 	// Gets all task queue names mapped to a given build ID
@@ -173,6 +177,10 @@ type MatchingServiceClient interface {
 	UpdateTaskQueueUserData(ctx context.Context, in *UpdateTaskQueueUserDataRequest, opts ...grpc.CallOption) (*UpdateTaskQueueUserDataResponse, error)
 	// Replicate task queue user data across clusters, must be done via the owning node for updates in namespace.
 	ReplicateTaskQueueUserData(ctx context.Context, in *ReplicateTaskQueueUserDataRequest, opts ...grpc.CallOption) (*ReplicateTaskQueueUserDataResponse, error)
+	// Blocks on user data propagation to all loaded partitions. If successful, all loaded
+	// workflow + activity partitions have the requested version or higher.
+	// Routed to user data owner (root partition of workflow task queue).
+	CheckTaskQueueUserDataPropagation(ctx context.Context, in *CheckTaskQueueUserDataPropagationRequest, opts ...grpc.CallOption) (*CheckTaskQueueUserDataPropagationResponse, error)
 	// Create a Nexus endpoint.
 	// (-- api-linter: core::0133::method-signature=disabled
 	//
@@ -386,6 +394,15 @@ func (c *matchingServiceClient) GetWorkerVersioningRules(ctx context.Context, in
 	return out, nil
 }
 
+func (c *matchingServiceClient) SyncDeploymentUserData(ctx context.Context, in *SyncDeploymentUserDataRequest, opts ...grpc.CallOption) (*SyncDeploymentUserDataResponse, error) {
+	out := new(SyncDeploymentUserDataResponse)
+	err := c.cc.Invoke(ctx, MatchingService_SyncDeploymentUserData_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *matchingServiceClient) ApplyTaskQueueUserDataReplicationEvent(ctx context.Context, in *ApplyTaskQueueUserDataReplicationEventRequest, opts ...grpc.CallOption) (*ApplyTaskQueueUserDataReplicationEventResponse, error) {
 	out := new(ApplyTaskQueueUserDataReplicationEventResponse)
 	err := c.cc.Invoke(ctx, MatchingService_ApplyTaskQueueUserDataReplicationEvent_FullMethodName, in, out, opts...)
@@ -443,6 +460,15 @@ func (c *matchingServiceClient) UpdateTaskQueueUserData(ctx context.Context, in 
 func (c *matchingServiceClient) ReplicateTaskQueueUserData(ctx context.Context, in *ReplicateTaskQueueUserDataRequest, opts ...grpc.CallOption) (*ReplicateTaskQueueUserDataResponse, error) {
 	out := new(ReplicateTaskQueueUserDataResponse)
 	err := c.cc.Invoke(ctx, MatchingService_ReplicateTaskQueueUserData_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *matchingServiceClient) CheckTaskQueueUserDataPropagation(ctx context.Context, in *CheckTaskQueueUserDataPropagationRequest, opts ...grpc.CallOption) (*CheckTaskQueueUserDataPropagationResponse, error) {
+	out := new(CheckTaskQueueUserDataPropagationResponse)
+	err := c.cc.Invoke(ctx, MatchingService_CheckTaskQueueUserDataPropagation_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -557,6 +583,8 @@ type MatchingServiceServer interface {
 	//
 	//	aip.dev/not-precedent: GetWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
 	GetWorkerVersioningRules(context.Context, *GetWorkerVersioningRulesRequest) (*GetWorkerVersioningRulesResponse, error)
+	// This request should always be routed to the node holding the root partition of the workflow task queue.
+	SyncDeploymentUserData(context.Context, *SyncDeploymentUserDataRequest) (*SyncDeploymentUserDataResponse, error)
 	// Apply a user data replication event.
 	ApplyTaskQueueUserDataReplicationEvent(context.Context, *ApplyTaskQueueUserDataReplicationEventRequest) (*ApplyTaskQueueUserDataReplicationEventResponse, error)
 	// Gets all task queue names mapped to a given build ID
@@ -584,6 +612,10 @@ type MatchingServiceServer interface {
 	UpdateTaskQueueUserData(context.Context, *UpdateTaskQueueUserDataRequest) (*UpdateTaskQueueUserDataResponse, error)
 	// Replicate task queue user data across clusters, must be done via the owning node for updates in namespace.
 	ReplicateTaskQueueUserData(context.Context, *ReplicateTaskQueueUserDataRequest) (*ReplicateTaskQueueUserDataResponse, error)
+	// Blocks on user data propagation to all loaded partitions. If successful, all loaded
+	// workflow + activity partitions have the requested version or higher.
+	// Routed to user data owner (root partition of workflow task queue).
+	CheckTaskQueueUserDataPropagation(context.Context, *CheckTaskQueueUserDataPropagationRequest) (*CheckTaskQueueUserDataPropagationResponse, error)
 	// Create a Nexus endpoint.
 	// (-- api-linter: core::0133::method-signature=disabled
 	//
@@ -680,6 +712,9 @@ func (UnimplementedMatchingServiceServer) UpdateWorkerVersioningRules(context.Co
 func (UnimplementedMatchingServiceServer) GetWorkerVersioningRules(context.Context, *GetWorkerVersioningRulesRequest) (*GetWorkerVersioningRulesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetWorkerVersioningRules not implemented")
 }
+func (UnimplementedMatchingServiceServer) SyncDeploymentUserData(context.Context, *SyncDeploymentUserDataRequest) (*SyncDeploymentUserDataResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SyncDeploymentUserData not implemented")
+}
 func (UnimplementedMatchingServiceServer) ApplyTaskQueueUserDataReplicationEvent(context.Context, *ApplyTaskQueueUserDataReplicationEventRequest) (*ApplyTaskQueueUserDataReplicationEventResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ApplyTaskQueueUserDataReplicationEvent not implemented")
 }
@@ -700,6 +735,9 @@ func (UnimplementedMatchingServiceServer) UpdateTaskQueueUserData(context.Contex
 }
 func (UnimplementedMatchingServiceServer) ReplicateTaskQueueUserData(context.Context, *ReplicateTaskQueueUserDataRequest) (*ReplicateTaskQueueUserDataResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ReplicateTaskQueueUserData not implemented")
+}
+func (UnimplementedMatchingServiceServer) CheckTaskQueueUserDataPropagation(context.Context, *CheckTaskQueueUserDataPropagationRequest) (*CheckTaskQueueUserDataPropagationResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CheckTaskQueueUserDataPropagation not implemented")
 }
 func (UnimplementedMatchingServiceServer) CreateNexusEndpoint(context.Context, *CreateNexusEndpointRequest) (*CreateNexusEndpointResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CreateNexusEndpoint not implemented")
@@ -1068,6 +1106,24 @@ func _MatchingService_GetWorkerVersioningRules_Handler(srv interface{}, ctx cont
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MatchingService_SyncDeploymentUserData_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SyncDeploymentUserDataRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MatchingServiceServer).SyncDeploymentUserData(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MatchingService_SyncDeploymentUserData_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MatchingServiceServer).SyncDeploymentUserData(ctx, req.(*SyncDeploymentUserDataRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _MatchingService_ApplyTaskQueueUserDataReplicationEvent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ApplyTaskQueueUserDataReplicationEventRequest)
 	if err := dec(in); err != nil {
@@ -1190,6 +1246,24 @@ func _MatchingService_ReplicateTaskQueueUserData_Handler(srv interface{}, ctx co
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(MatchingServiceServer).ReplicateTaskQueueUserData(ctx, req.(*ReplicateTaskQueueUserDataRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MatchingService_CheckTaskQueueUserDataPropagation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CheckTaskQueueUserDataPropagationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MatchingServiceServer).CheckTaskQueueUserDataPropagation(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MatchingService_CheckTaskQueueUserDataPropagation_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MatchingServiceServer).CheckTaskQueueUserDataPropagation(ctx, req.(*CheckTaskQueueUserDataPropagationRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1350,6 +1424,10 @@ var MatchingService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _MatchingService_GetWorkerVersioningRules_Handler,
 		},
 		{
+			MethodName: "SyncDeploymentUserData",
+			Handler:    _MatchingService_SyncDeploymentUserData_Handler,
+		},
+		{
 			MethodName: "ApplyTaskQueueUserDataReplicationEvent",
 			Handler:    _MatchingService_ApplyTaskQueueUserDataReplicationEvent_Handler,
 		},
@@ -1376,6 +1454,10 @@ var MatchingService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ReplicateTaskQueueUserData",
 			Handler:    _MatchingService_ReplicateTaskQueueUserData_Handler,
+		},
+		{
+			MethodName: "CheckTaskQueueUserDataPropagation",
+			Handler:    _MatchingService_CheckTaskQueueUserDataPropagation_Handler,
 		},
 		{
 			MethodName: "CreateNexusEndpoint",

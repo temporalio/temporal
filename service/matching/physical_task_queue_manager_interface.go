@@ -30,11 +30,10 @@ import (
 	"context"
 	"time"
 
-	"go.temporal.io/server/api/taskqueue/v1"
-
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 )
 
 type (
@@ -52,10 +51,15 @@ type (
 		TrySyncMatch(ctx context.Context, task *internalTask) (bool, error)
 		// SpoolTask spools a task to persistence to be matched asynchronously when a poller is available.
 		SpoolTask(taskInfo *persistencespb.TaskInfo) error
+		// TODO(pri): old matcher cleanup
 		ProcessSpooledTask(ctx context.Context, task *internalTask) error
 		// DispatchSpooledTask dispatches a task to a poller. When there are no pollers to pick
 		// up the task, this method will return error. Task will not be persisted to db
+		// TODO(pri): old matcher cleanup
 		DispatchSpooledTask(ctx context.Context, task *internalTask, userDataChanged <-chan struct{}) error
+		AddSpooledTask(task *internalTask) error
+		AddSpooledTaskToMatcher(task *internalTask)
+		UserDataChanged()
 		// DispatchQueryTask will dispatch query to local or remote poller. If forwarded then result or error is returned,
 		// if dispatched to local poller then nil and nil is returned.
 		DispatchQueryTask(ctx context.Context, taskId string, request *matchingservice.QueryWorkflowRequest) (*matchingservice.QueryWorkflowResponse, error)
@@ -68,12 +72,11 @@ type (
 		// LegacyDescribeTaskQueue returns pollers info and legacy TaskQueueStatus for this physical queue
 		LegacyDescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse
 		GetStats() *taskqueuepb.TaskQueueStats
-		GetInternalTaskQueueStatus() *taskqueue.InternalTaskQueueStatus
+		GetInternalTaskQueueStatus() []*taskqueuespb.InternalTaskQueueStatus
 		UnloadFromPartitionManager(unloadCause)
-		String() string
 		QueueKey() *PhysicalTaskQueueKey
-		// ShouldEmitGauges determines whether the gauge metrics should be emitted or not for this particular physical
-		// queue based on dynamic configs.
-		ShouldEmitGauges() bool
+		// MakePollerScalingDecision makes a decision on whether to scale pollers up or down based on the current state
+		// of the task queue and the task about to be returned.
+		MakePollerScalingDecision(pollStartTime time.Time) *taskqueuepb.PollerScalingDecision
 	}
 )

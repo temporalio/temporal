@@ -34,13 +34,12 @@ import (
 	namespacepb "go.temporal.io/api/namespace/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 func base(t *testing.T) *namespace.Namespace {
-	return namespace.FromPersistentState(&persistence.GetNamespaceResponse{
-		Namespace: &persistencespb.NamespaceDetail{
+	return namespace.FromPersistentState(
+		&persistencespb.NamespaceDetail{
 			Info: &persistencespb.NamespaceInfo{
 				Id:   namespace.NewID().String(),
 				Name: t.Name(),
@@ -55,8 +54,7 @@ func base(t *testing.T) *namespace.Namespace {
 				ActiveClusterName: "foo",
 				Clusters:          []string{"foo", "bar"},
 			},
-		},
-	})
+		})
 }
 
 func TestActiveInCluster(t *testing.T) {
@@ -71,28 +69,32 @@ func TestActiveInCluster(t *testing.T) {
 		{
 			name:        "global and cluster match",
 			testCluster: "foo",
-			entry: base.Clone(namespace.WithActiveCluster("foo"),
+			entry: base.Clone(
+				namespace.WithActiveCluster("foo"),
 				namespace.WithGlobalFlag(true)),
 			want: true,
 		},
 		{
 			name:        "global and cluster mismatch",
 			testCluster: "bar",
-			entry: base.Clone(namespace.WithActiveCluster("foo"),
+			entry: base.Clone(
+				namespace.WithActiveCluster("foo"),
 				namespace.WithGlobalFlag(true)),
 			want: false,
 		},
 		{
 			name:        "non-global and cluster mismatch",
 			testCluster: "bar",
-			entry: base.Clone(namespace.WithActiveCluster("foo"),
+			entry: base.Clone(
+				namespace.WithActiveCluster("foo"),
 				namespace.WithGlobalFlag(false)),
 			want: true,
 		},
 		{
 			name:        "non-global and cluster match",
 			testCluster: "foo",
-			entry: base.Clone(namespace.WithActiveCluster("foo"),
+			entry: base.Clone(
+				namespace.WithActiveCluster("foo"),
 				namespace.WithGlobalFlag(false)),
 			want: true,
 		},

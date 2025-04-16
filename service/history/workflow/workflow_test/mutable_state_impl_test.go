@@ -56,6 +56,7 @@ import (
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
@@ -69,7 +70,7 @@ func TestMutableStateImpl_ForceFlushBufferedEvents(t *testing.T) {
 	for _, tc := range []mutationTestCase{
 		{
 			name:              "Number of events ok",
-			transactionPolicy: workflow.TransactionPolicyActive,
+			transactionPolicy: historyi.TransactionPolicyActive,
 			signals:           2,
 			maxEvents:         2,
 			maxSizeInBytes:    math.MaxInt,
@@ -77,7 +78,7 @@ func TestMutableStateImpl_ForceFlushBufferedEvents(t *testing.T) {
 		},
 		{
 			name:              "Max number of events exceeded",
-			transactionPolicy: workflow.TransactionPolicyActive,
+			transactionPolicy: historyi.TransactionPolicyActive,
 			signals:           3,
 			maxEvents:         2,
 			maxSizeInBytes:    math.MaxInt,
@@ -85,7 +86,7 @@ func TestMutableStateImpl_ForceFlushBufferedEvents(t *testing.T) {
 		},
 		{
 			name:              "Number of events ok but byte size limit exceeded",
-			transactionPolicy: workflow.TransactionPolicyActive,
+			transactionPolicy: historyi.TransactionPolicyActive,
 			signals:           2,
 			maxEvents:         2,
 			maxSizeInBytes:    25,
@@ -93,7 +94,7 @@ func TestMutableStateImpl_ForceFlushBufferedEvents(t *testing.T) {
 		},
 		{
 			name:              "Max number of events and size of events both exceeded",
-			transactionPolicy: workflow.TransactionPolicyActive,
+			transactionPolicy: historyi.TransactionPolicyActive,
 			signals:           3,
 			maxEvents:         2,
 			maxSizeInBytes:    25,
@@ -106,7 +107,7 @@ func TestMutableStateImpl_ForceFlushBufferedEvents(t *testing.T) {
 
 type mutationTestCase struct {
 	name              string
-	transactionPolicy workflow.TransactionPolicy
+	transactionPolicy historyi.TransactionPolicy
 	signals           int
 	maxEvents         int
 	expectFlush       bool
@@ -142,7 +143,7 @@ func (c *mutationTestCase) Run(t *testing.T) {
 func (c *mutationTestCase) startWFT(
 	t *testing.T,
 	ms *workflow.MutableStateImpl,
-) *workflow.WorkflowTaskInfo {
+) *historyi.WorkflowTaskInfo {
 	t.Helper()
 
 	wft, err := ms.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
@@ -155,6 +156,7 @@ func (c *mutationTestCase) startWFT(
 		wft.RequestID,
 		wft.TaskQueue,
 		"",
+		nil,
 		nil,
 		nil,
 		false,
@@ -205,7 +207,6 @@ func addWorkflowExecutionSignaled(t *testing.T, i int, ms *workflow.MutableState
 		payload,
 		identity,
 		header,
-		false,
 		nil,
 	)
 	if err != nil {
@@ -276,7 +277,7 @@ func (c *mutationTestCase) getMaxSizeInBytes() int {
 
 func (c *mutationTestCase) testWFTFailedEvent(
 	t *testing.T,
-	wft *workflow.WorkflowTaskInfo,
+	wft *historyi.WorkflowTaskInfo,
 	event *historypb.HistoryEvent,
 ) {
 	t.Helper()
@@ -316,7 +317,7 @@ func (c *mutationTestCase) findWFTEvent(eventType enumspb.EventType, workflowEve
 func (c *mutationTestCase) testFailure(
 	t *testing.T,
 	ms *workflow.MutableStateImpl,
-	wft *workflow.WorkflowTaskInfo,
+	wft *historyi.WorkflowTaskInfo,
 	workflowEvents []*persistence.WorkflowEvents,
 ) {
 	t.Helper()
@@ -370,7 +371,7 @@ func (c *mutationTestCase) testSuccess(
 	}
 }
 
-func sealMutableState(t *testing.T, mutableState workflow.MutableState, lastEvent *historypb.HistoryEvent) {
+func sealMutableState(t *testing.T, mutableState historyi.MutableState, lastEvent *historypb.HistoryEvent) {
 	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(mutableState.GetExecutionInfo().GetVersionHistories())
 	require.NoError(t, err)
 	err = versionhistory.AddOrUpdateVersionHistoryItem(currentVersionHistory, versionhistory.NewVersionHistoryItem(
@@ -382,12 +383,12 @@ func sealMutableState(t *testing.T, mutableState workflow.MutableState, lastEven
 func TestGetNexusCompletion(t *testing.T) {
 	cases := []struct {
 		name             string
-		mutateState      func(workflow.MutableState) (*historypb.HistoryEvent, error)
+		mutateState      func(historyi.MutableState) (*historypb.HistoryEvent, error)
 		verifyCompletion func(*testing.T, nexus.OperationCompletion)
 	}{
 		{
 			name: "success",
-			mutateState: func(mutableState workflow.MutableState) (*historypb.HistoryEvent, error) {
+			mutateState: func(mutableState historyi.MutableState) (*historypb.HistoryEvent, error) {
 				return mutableState.AddCompletedWorkflowEvent(mutableState.GetNextEventID(), &commandpb.CompleteWorkflowExecutionCommandAttributes{
 					Result: &commonpb.Payloads{
 						Payloads: []*commonpb.Payload{
@@ -402,16 +403,16 @@ func TestGetNexusCompletion(t *testing.T) {
 			verifyCompletion: func(t *testing.T, completion nexus.OperationCompletion) {
 				success, ok := completion.(*nexus.OperationCompletionSuccessful)
 				require.True(t, ok)
-				require.Equal(t, "application/json", success.Header.Get("content-type"))
-				require.Equal(t, "1", success.Header.Get("content-length"))
-				buf, err := io.ReadAll(success.Body)
+				require.Equal(t, "application/json", success.Reader.Header.Get("type"))
+				require.Equal(t, "1", success.Reader.Header.Get("length"))
+				buf, err := io.ReadAll(success.Reader)
 				require.NoError(t, err)
 				require.Equal(t, []byte("3"), buf)
 			},
 		},
 		{
 			name: "failure",
-			mutateState: func(mutableState workflow.MutableState) (*historypb.HistoryEvent, error) {
+			mutateState: func(mutableState historyi.MutableState) (*historypb.HistoryEvent, error) {
 				return mutableState.AddFailWorkflowEvent(mutableState.GetNextEventID(), enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE, &commandpb.FailWorkflowExecutionCommandAttributes{
 					Failure: &failurepb.Failure{
 						Message: "workflow failed",
@@ -427,7 +428,7 @@ func TestGetNexusCompletion(t *testing.T) {
 		},
 		{
 			name: "termination",
-			mutateState: func(mutableState workflow.MutableState) (*historypb.HistoryEvent, error) {
+			mutateState: func(mutableState historyi.MutableState) (*historypb.HistoryEvent, error) {
 				return mutableState.AddWorkflowExecutionTerminatedEvent(mutableState.GetNextEventID(), "dont care", nil, "identity", false, nil)
 			},
 			verifyCompletion: func(t *testing.T, completion nexus.OperationCompletion) {
@@ -439,7 +440,7 @@ func TestGetNexusCompletion(t *testing.T) {
 		},
 		{
 			name: "cancelation",
-			mutateState: func(mutableState workflow.MutableState) (*historypb.HistoryEvent, error) {
+			mutateState: func(mutableState historyi.MutableState) (*historypb.HistoryEvent, error) {
 				return mutableState.AddWorkflowExecutionCanceledEvent(mutableState.GetNextEventID(), &commandpb.CancelWorkflowExecutionCommandAttributes{})
 			},
 			verifyCompletion: func(t *testing.T, completion nexus.OperationCompletion) {
@@ -465,12 +466,13 @@ func TestGetNexusCompletion(t *testing.T) {
 				"---",
 				nil,
 				nil,
+				nil,
 				false,
 			)
 			require.NoError(t, err)
 			_, err = ms.AddWorkflowTaskCompletedEvent(workflowTask, &workflowservice.RespondWorkflowTaskCompletedRequest{
 				Identity: "some random identity",
-			}, workflow.WorkflowTaskCompletionLimits{MaxResetPoints: 10, MaxSearchAttributeValueSize: 10})
+			}, historyi.WorkflowTaskCompletionLimits{MaxResetPoints: 10, MaxSearchAttributeValueSize: 10})
 			require.NoError(t, err)
 
 			event, err := tc.mutateState(ms)

@@ -31,8 +31,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
-	"go.temporal.io/server/service/history/shard"
-	"go.temporal.io/server/service/history/workflow"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow/update"
 )
 
@@ -41,8 +40,8 @@ func GetAndUpdateWorkflowWithNew(
 	reqClock *clockspb.VectorClock,
 	workflowKey definition.WorkflowKey,
 	action UpdateWorkflowActionFunc,
-	newWorkflowFn func() (workflow.Context, workflow.MutableState, error),
-	shard shard.Context,
+	newWorkflowFn func() (historyi.WorkflowContext, historyi.MutableState, error),
+	shard historyi.ShardContext,
 	workflowConsistencyChecker WorkflowConsistencyChecker,
 ) (retError error) {
 	workflowLease, err := workflowConsistencyChecker.GetWorkflowLease(
@@ -65,8 +64,8 @@ func GetAndUpdateWorkflowWithConsistencyCheck(
 	consistencyCheckFn MutableStateConsistencyPredicate,
 	workflowKey definition.WorkflowKey,
 	action UpdateWorkflowActionFunc,
-	newWorkflowFn func() (workflow.Context, workflow.MutableState, error),
-	shardContext shard.Context,
+	newWorkflowFn func() (historyi.WorkflowContext, historyi.MutableState, error),
+	shardContext historyi.ShardContext,
 	workflowConsistencyChecker WorkflowConsistencyChecker,
 ) (retError error) {
 	workflowLease, err := workflowConsistencyChecker.GetWorkflowLeaseWithConsistencyCheck(
@@ -85,11 +84,11 @@ func GetAndUpdateWorkflowWithConsistencyCheck(
 }
 
 func UpdateWorkflowWithNew(
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	ctx context.Context,
 	workflowLease WorkflowLease,
 	action UpdateWorkflowActionFunc,
-	newWorkflowFn func() (workflow.Context, workflow.MutableState, error),
+	newWorkflowFn func() (historyi.WorkflowContext, historyi.MutableState, error),
 ) (retError error) {
 
 	// conduct caller action
@@ -143,7 +142,7 @@ func UpdateWorkflowWithNew(
 	}
 
 	if postActions.AbortUpdates {
-		workflowLease.GetContext().UpdateRegistry(ctx, nil).Abort(update.AbortReasonWorkflowCompleted)
+		workflowLease.GetContext().UpdateRegistry(ctx).Abort(update.AbortReasonWorkflowCompleted)
 	}
 
 	return nil

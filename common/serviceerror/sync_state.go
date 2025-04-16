@@ -25,7 +25,7 @@
 package serviceerror
 
 import (
-	"go.temporal.io/server/api/errordetails/v1"
+	errordetailsspb "go.temporal.io/server/api/errordetails/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"google.golang.org/grpc/codes"
@@ -77,7 +77,7 @@ func (e *SyncState) Status() *status.Status {
 
 	st := status.New(codes.Aborted, e.Message)
 	st, _ = st.WithDetails(
-		&errordetails.SyncStateFailure{
+		&errordetailsspb.SyncStateFailure{
 			NamespaceId:         e.NamespaceId,
 			WorkflowId:          e.WorkflowId,
 			RunId:               e.RunId,
@@ -98,7 +98,7 @@ func (e *SyncState) Equal(err *SyncState) bool {
 
 func newSyncState(
 	st *status.Status,
-	errDetails *errordetails.SyncStateFailure,
+	errDetails *errordetailsspb.SyncStateFailure,
 ) error {
 	return &SyncState{
 		Message:             st.Message(),

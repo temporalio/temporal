@@ -46,6 +46,7 @@ import (
 type MockDataStoreFactory struct {
 	ctrl     *gomock.Controller
 	recorder *MockDataStoreFactoryMockRecorder
+	isgomock struct{}
 }
 
 // MockDataStoreFactoryMockRecorder is the mock recorder for MockDataStoreFactory.
@@ -201,6 +202,7 @@ func (mr *MockDataStoreFactoryMockRecorder) NewTaskStore() *gomock.Call {
 type MockShardStore struct {
 	ctrl     *gomock.Controller
 	recorder *MockShardStoreMockRecorder
+	isgomock struct{}
 }
 
 // MockShardStoreMockRecorder is the mock recorder for MockShardStore.
@@ -307,6 +309,7 @@ func (mr *MockShardStoreMockRecorder) UpdateShard(ctx, request any) *gomock.Call
 type MockTaskStore struct {
 	ctrl     *gomock.Controller
 	recorder *MockTaskStoreMockRecorder
+	isgomock struct{}
 }
 
 // MockTaskStoreMockRecorder is the mock recorder for MockTaskStore.
@@ -548,6 +551,7 @@ func (mr *MockTaskStoreMockRecorder) UpdateTaskQueueUserData(ctx, request any) *
 type MockMetadataStore struct {
 	ctrl     *gomock.Controller
 	recorder *MockMetadataStoreMockRecorder
+	isgomock struct{}
 }
 
 // MockMetadataStoreMockRecorder is the mock recorder for MockMetadataStore.
@@ -713,6 +717,7 @@ func (mr *MockMetadataStoreMockRecorder) UpdateNamespace(ctx, request any) *gomo
 type MockClusterMetadataStore struct {
 	ctrl     *gomock.Controller
 	recorder *MockClusterMetadataStoreMockRecorder
+	isgomock struct{}
 }
 
 // MockClusterMetadataStoreMockRecorder is the mock recorder for MockClusterMetadataStore.
@@ -864,6 +869,7 @@ func (mr *MockClusterMetadataStoreMockRecorder) UpsertClusterMembership(ctx, req
 type MockExecutionStore struct {
 	ctrl     *gomock.Controller
 	recorder *MockExecutionStoreMockRecorder
+	isgomock struct{}
 }
 
 // MockExecutionStoreMockRecorder is the mock recorder for MockExecutionStore.
@@ -1287,6 +1293,7 @@ func (mr *MockExecutionStoreMockRecorder) UpdateWorkflowExecution(ctx, request a
 type MockQueue struct {
 	ctrl     *gomock.Controller
 	recorder *MockQueueMockRecorder
+	isgomock struct{}
 }
 
 // MockQueueMockRecorder is the mock recorder for MockQueue.
@@ -1496,6 +1503,7 @@ func (mr *MockQueueMockRecorder) UpdateDLQAckLevel(ctx, metadata any) *gomock.Ca
 type MockNexusEndpointStore struct {
 	ctrl     *gomock.Controller
 	recorder *MockNexusEndpointStoreMockRecorder
+	isgomock struct{}
 }
 
 // MockNexusEndpointStoreMockRecorder is the mock recorder for MockNexusEndpointStore.
@@ -1603,6 +1611,7 @@ func (mr *MockNexusEndpointStoreMockRecorder) ListNexusEndpoints(ctx, request an
 type MockQueueV2 struct {
 	ctrl     *gomock.Controller
 	recorder *MockQueueV2MockRecorder
+	isgomock struct{}
 }
 
 // MockQueueV2MockRecorder is the mock recorder for MockQueueV2.

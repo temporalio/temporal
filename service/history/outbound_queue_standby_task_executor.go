@@ -33,8 +33,8 @@ import (
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
-	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
@@ -49,7 +49,7 @@ type outboundQueueStandbyTaskExecutor struct {
 var _ queues.Executor = &outboundQueueStandbyTaskExecutor{}
 
 func newOutboundQueueStandbyTaskExecutor(
-	shardCtx shard.Context,
+	shardCtx historyi.ShardContext,
 	workflowCache wcache.Cache,
 	clusterName string,
 	logger log.Logger,
@@ -114,7 +114,7 @@ func (e *outboundQueueStandbyTaskExecutor) processTask(
 		return err
 	}
 
-	ref, _, err := stateMachineTask(e.shardContext, task)
+	ref, _, err := StateMachineTask(e.shardContext.StateMachineRegistry(), task)
 	if err != nil {
 		return err
 	}

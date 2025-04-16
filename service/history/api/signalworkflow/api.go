@@ -32,13 +32,13 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
-	"go.temporal.io/server/service/history/shard"
+	historyi "go.temporal.io/server/service/history/interfaces"
 )
 
 func Invoke(
 	ctx context.Context,
 	req *historyservice.SignalWorkflowExecutionRequest,
-	shard shard.Context,
+	shard historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (resp *historyservice.SignalWorkflowExecutionResponse, retError error) {
 	namespaceEntry, err := api.GetActiveNamespace(shard, namespace.ID(req.GetNamespaceId()))
@@ -90,7 +90,7 @@ func Invoke(
 			executionInfo := mutableState.GetExecutionInfo()
 
 			// Do not create workflow task when the workflow has first workflow task backoff and execution is not started yet
-			createWorkflowTask := !mutableState.IsWorkflowPendingOnWorkflowTaskBackoff() && !request.GetSkipGenerateWorkflowTask()
+			createWorkflowTask := !mutableState.IsWorkflowPendingOnWorkflowTaskBackoff()
 
 			if childWorkflowOnly {
 				parentWorkflowID := executionInfo.ParentWorkflowId
@@ -110,7 +110,6 @@ func Invoke(
 				request.GetInput(),
 				request.GetIdentity(),
 				request.GetHeader(),
-				request.GetSkipGenerateWorkflowTask(),
 				externalWorkflowExecution,
 				request.GetLinks(),
 			)

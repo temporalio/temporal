@@ -32,15 +32,16 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
-	"go.temporal.io/server/service/history/shard"
+	historyi "go.temporal.io/server/service/history/interfaces"
 )
 
 func Invoke(
 	ctx context.Context,
 	req *historyservice.RecordActivityTaskHeartbeatRequest,
-	shard shard.Context,
+	shard historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (resp *historyservice.RecordActivityTaskHeartbeatResponse, retError error) {
 	_, err := api.GetActiveNamespace(shard, namespace.ID(req.GetNamespaceId()))
@@ -49,7 +50,7 @@ func Invoke(
 	}
 
 	request := req.HeartbeatRequest
-	tokenSerializer := common.NewProtoTaskTokenSerializer()
+	tokenSerializer := tasktoken.NewSerializer()
 	token, err0 := tokenSerializer.Deserialize(request.TaskToken)
 	if err0 != nil {
 		return nil, consts.ErrDeserializingToken
@@ -59,6 +60,7 @@ func Invoke(
 	}
 
 	var cancelRequested bool
+	var activityPaused bool
 	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
 		token.Clock,
@@ -104,6 +106,7 @@ func Invoke(
 			}
 
 			cancelRequested = ai.CancelRequested
+			activityPaused = ai.Paused
 
 			// Save progress and last HB reported time.
 			mutableState.UpdateActivityProgress(ai, request)
@@ -123,5 +126,6 @@ func Invoke(
 
 	return &historyservice.RecordActivityTaskHeartbeatResponse{
 		CancelRequested: cancelRequested,
+		ActivityPaused:  activityPaused,
 	}, nil
 }

@@ -62,7 +62,7 @@ type NexusHTTPHandler struct {
 	preprocessErrorCounter               metrics.CounterFunc
 	auth                                 *authorization.Interceptor
 	namespaceValidationInterceptor       *interceptor.NamespaceValidatorInterceptor
-	namespaceRateLimitInterceptor        *interceptor.NamespaceRateLimitInterceptor
+	namespaceRateLimitInterceptor        interceptor.NamespaceRateLimitInterceptor
 	namespaceConcurrencyLimitInterceptor *interceptor.ConcurrentRequestLimitInterceptor
 	rateLimitInterceptor                 *interceptor.RateLimitInterceptor
 	enabled                              dynamicconfig.BoolPropertyFn
@@ -80,10 +80,11 @@ func NewNexusHTTPHandler(
 	telemetryInterceptor *interceptor.TelemetryInterceptor,
 	redirectionInterceptor *interceptor.Redirection,
 	namespaceValidationInterceptor *interceptor.NamespaceValidatorInterceptor,
-	namespaceRateLimitInterceptor *interceptor.NamespaceRateLimitInterceptor,
+	namespaceRateLimitInterceptor interceptor.NamespaceRateLimitInterceptor,
 	namespaceConcurrencyLimitIntercptor *interceptor.ConcurrentRequestLimitInterceptor,
 	rateLimitInterceptor *interceptor.RateLimitInterceptor,
 	logger log.Logger,
+	httpTraceProvider commonnexus.HTTPClientTraceProvider,
 ) *NexusHTTPHandler {
 	return &NexusHTTPHandler{
 		logger:                               logger,
@@ -109,6 +110,9 @@ func NewNexusHTTPHandler(
 				forwardingEnabledForNamespace: serviceConfig.EnableNamespaceNotActiveAutoForwarding,
 				forwardingClients:             clientCache,
 				payloadSizeLimit:              serviceConfig.BlobSizeLimitError,
+				headersBlacklist:              serviceConfig.NexusRequestHeadersBlacklist,
+				metricTagConfig:               serviceConfig.NexusOperationsMetricTagConfig,
+				httpTraceProvider:             httpTraceProvider,
 			},
 			GetResultTimeout: serviceConfig.KeepAliveMaxConnectionIdle(),
 			Logger:           log.NewSlogLogger(logger),

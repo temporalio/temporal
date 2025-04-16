@@ -77,11 +77,11 @@ func (s hsmInvocation) WrapError(invocationResult, error) error {
 	return nil
 }
 
-func (s hsmInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e taskExecutor, task InvocationTask) (invocationResult, error) {
+func (s hsmInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e taskExecutor, task InvocationTask) invocationResult {
 	// TODO(Tianyu): Will this ever be too big for an RPC call?
 	callbackArgSerialized, err := s.callbackArg.Marshal()
 	if err != nil {
-		return failed, fmt.Errorf("failed to serialize completion event: %v", err) //nolint:goerr113
+		return invocationResultFail{fmt.Errorf("failed to serialize completion event: %w", err)}
 	}
 
 	request := historyservice.InvokeStateMachineMethodRequest{
@@ -107,9 +107,9 @@ func (s hsmInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e ta
 	if err != nil {
 		e.Logger.Error("Callback request failed", tag.Error(err))
 		if isRetryableRpcResponse(err) {
-			return retry, err
+			return invocationResultRetry{err}
 		}
-		return failed, err
+		return invocationResultFail{err}
 	}
-	return ok, nil
+	return invocationResultOK{}
 }

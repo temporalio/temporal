@@ -35,10 +35,9 @@ import (
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/effect"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/utf8validator"
-	"go.temporal.io/server/internal/effect"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 )
@@ -68,6 +67,7 @@ type (
 		request         *anypb.Any // of type *updatepb.Request
 		acceptedEventID int64
 		onComplete      func()
+		checkLimits     func(*updatepb.Request) error
 		instrumentation *instrumentation
 		admittedTime    time.Time
 
@@ -85,6 +85,7 @@ func New(id string, opts ...updateOpt) *Update {
 		id:              id,
 		state:           stateCreated,
 		onComplete:      func() {},
+		checkLimits:     func(request *updatepb.Request) error { return nil },
 		instrumentation: &noopInstrumentation,
 		accepted:        future.NewFuture[*failurepb.Failure](),
 		outcome:         future.NewFuture[*updatepb.Outcome](),
@@ -154,6 +155,12 @@ func withCompletionCallback(cb func()) updateOpt {
 	}
 }
 
+func withLimitChecker(cb func(req *updatepb.Request) error) updateOpt {
+	return func(u *Update) {
+		u.checkLimits = cb
+	}
+}
+
 func withInstrumentation(i *instrumentation) updateOpt {
 	return func(u *Update) {
 		u.instrumentation = i
@@ -175,30 +182,28 @@ func (u *Update) WaitLifecycleStage(
 	stCtx, stCancel := context.WithTimeout(ctx, softTimeout)
 	defer stCancel()
 
+	var err error
+
 	if u.outcome.Ready() || waitStage == enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED {
-		outcome, err := u.outcome.Get(stCtx)
+		var outcome *updatepb.Outcome
+		outcome, err = u.outcome.Get(stCtx)
 		if err == nil {
 			return statusCompleted(outcome), nil
 		}
 
-		// If err is not nil (checked above), and is not coming from context,
-		// then it means that the error is from the future itself.
-		if ctx.Err() == nil && stCtx.Err() == nil {
-			// Update uses registryClearedErr when Registry is cleared. This error has special handling here:
-			//   abort waiting for COMPLETED stage and check if Update has reached ACCEPTED stage.
-			// All other errors are returned to the caller.
-			if !errors.Is(err, registryClearedErr) {
-				return nil, err
-			}
-		}
-
-		if ctx.Err() != nil {
-			// Handle root context deadline expiry as normal error which is returned to the caller.
+		// If err is coming from the user provided context (context.DeadlineExceeded or context.Canceled), then return it to the caller.
+		if errors.Is(err, ctx.Err()) {
 			metrics.WorkflowExecutionUpdateClientTimeout.With(u.instrumentation.metrics).Record(1)
-			return nil, ctx.Err()
+			return nil, err
 		}
 
-		// Only get here if there is an error, and this error is stCtx.Err() (softTimeout has expired) or registryClearedErr.
+		// If err is not coming from stCtx, then it means that the error is coming from the future itself.
+		// If this err is not registryClearedErr, then it needs to be returned to the caller.
+		if !errors.Is(err, stCtx.Err()) && !errors.Is(err, registryClearedErr) {
+			return nil, err
+		}
+
+		// Only get here if there is an error, and this error is coming from stCtx or is registryClearedErr.
 		// In both cases, check if the Update has reached ACCEPTED stage.
 	}
 
@@ -206,7 +211,8 @@ func (u *Update) WaitLifecycleStage(
 	if u.accepted.Ready() || waitStage == enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED {
 		// Using the same context which might be already expired, but if accepted future is ready,
 		// then it will return immediately without checking context deadline.
-		rejection, err := u.accepted.Get(stCtx)
+		var rejection *failurepb.Failure
+		rejection, err = u.accepted.Get(stCtx)
 		if err == nil {
 			if rejection != nil {
 				return statusRejected(rejection), nil
@@ -226,26 +232,28 @@ func (u *Update) WaitLifecycleStage(
 			return statusAccepted(), nil
 		}
 
-		// If err is not nil (checked above), and is not coming from context,
-		// then it means that the error is from the future itself.
-		if ctx.Err() == nil && stCtx.Err() == nil {
-			// Update uses registryClearedErr when Registry is cleared. This error has special handling here:
-			//   abort waiting for ACCEPTED stage and return Unavailable (retryable) error to the caller.
-			// This error will be retried (by history service handler, or history service client in frontend,
-			// or SDK, or user client). This will recreate Update in the Registry.
-			// All other errors are returned to the caller.
-			if !errors.Is(err, registryClearedErr) {
-				return nil, err
-			}
-			return nil, WorkflowUpdateAbortedErr
-		}
-
-		if ctx.Err() != nil {
-			// Handle root context deadline expiry as normal error which is returned to the caller.
+		// If err is coming from the user provided context (context.DeadlineExceeded or context.Canceled), then return it to the caller.
+		if errors.Is(err, ctx.Err()) {
 			metrics.WorkflowExecutionUpdateClientTimeout.With(u.instrumentation.metrics).Record(1)
 			return nil, ctx.Err()
 		}
+
+		// If err is not coming from stCtx, then it means that the error is coming from the future itself.
+		// If this err is not registryClearedErr, then it needs to be returned to the caller.
+		if !errors.Is(err, stCtx.Err()) && !errors.Is(err, registryClearedErr) {
+			return nil, err
+		}
 	}
+
+	// Because of the checks above err (if is not nil) can be only registryClearedErr here.
+	// It is converted to Unavailable (retryable) error and returned to the caller.
+	// This error will be retried (by history service handler, or history service client in frontend,
+	// or SDK, or user client). This will recreate Update in the Registry.
+	if errors.Is(err, registryClearedErr) {
+		return nil, WorkflowUpdateAbortedErr
+	}
+
+	// TODO: assert(err == nil)
 
 	// If waitStage=COMPLETED or ACCEPTED and neither has been reached before the softTimeout has expired.
 	if stCtx.Err() != nil {
@@ -258,29 +266,59 @@ func (u *Update) WaitLifecycleStage(
 	return statusAdmitted(), nil
 }
 
-// abort fails Update futures with reason.Error() error (which will notify all waiters with error)
+// abort set Update futures with error or failure (which is passed to all waiters)
 // and set state to stateAborted. It is a terminal state. Update can't be changed after it is aborted.
-func (u *Update) abort(reason AbortReason) {
+// abort uses effects and intermediate stateProvisionallyAborted to delay actual aborting until effects are applied.
+func (u *Update) abort(
+	reason AbortReason,
+	effects effect.Controller,
+) {
+	abortFailure, abortErr := reason.FailureError(u.state)
+	if abortFailure == nil && abortErr == nil {
+		// If both failure and err are nil, then it means that Update in this state can't be aborted.
+		return
+	}
+
 	u.instrumentation.countAborted()
+	prevState := u.setState(stateProvisionallyAborted)
 
-	const preAcceptedStates = stateSet(stateCreated | stateProvisionallyAdmitted | stateAdmitted | stateSent | stateProvisionallyAccepted)
-	if u.state.Matches(preAcceptedStates | stateSet(stateProvisionallyCompletedAfterAccepted)) {
-		u.accepted.(*future.FutureImpl[*failurepb.Failure]).Set(nil, reason.Error())
-		u.outcome.(*future.FutureImpl[*updatepb.Outcome]).Set(nil, reason.Error())
-	}
-
-	const preCompletedStates = stateSet(stateAccepted | stateProvisionallyCompleted)
-	if u.state.Matches(preCompletedStates) {
-		abortErr := reason.Error()
-		if reason == AbortReasonWorkflowContinuing {
-			// Accepted Update can't be applied to the new run, and must be aborted
-			// same way as if Workflow is completed.
-			abortErr = AbortReasonWorkflowCompleted.Error()
+	effects.OnAfterCommit(func(context.Context) {
+		if !u.state.Matches(stateSet(stateProvisionallyAborted | stateProvisionallyCompletedAfterAccepted)) {
+			return
 		}
-		u.outcome.(*future.FutureImpl[*updatepb.Outcome]).Set(nil, abortErr)
-	}
+		var abortOutcome *updatepb.Outcome
+		if abortFailure != nil {
+			abortOutcome = &updatepb.Outcome{Value: &updatepb.Outcome_Failure{Failure: abortFailure}}
+		}
 
-	u.setState(stateAborted)
+		beforeCommitState := u.setState(stateAborted)
+		u.outcome.(*future.FutureImpl[*updatepb.Outcome]).Set(abortOutcome, abortErr)
+		if beforeCommitState == stateProvisionallyCompletedAfterAccepted {
+			// If the Update is accepted *and* aborted in the same WFT (because WF was completed in the same WFT),
+			// then its state is ProvisionallyCompletedAfterAccepted here, set by onAcceptance.OnAfterCommit.
+			//
+			// To prevent a race condition in WaitLifecycleStage, the accepted future
+			// has not been set by OnAcceptance earlier, as it must be set *after* the outcome future.
+			// Now is the time to set it.
+			//
+			// Note that the Accepted state is skipped, and it transitions straight to Aborted.
+			u.accepted.(*future.FutureImpl[*failurepb.Failure]).Set(nil, nil)
+			return
+		}
+
+		// If Update was aborted without being accepted,
+		// then accepted future must be also set with failure/error.
+		const preAcceptedStates = stateSet(stateCreated | stateProvisionallyAdmitted | stateAdmitted | stateSent | stateProvisionallyAccepted)
+		if prevState.Matches(preAcceptedStates) {
+			u.accepted.(*future.FutureImpl[*failurepb.Failure]).Set(abortFailure, abortErr)
+		}
+	})
+	effects.OnAfterRollback(func(context.Context) {
+		if u.state != stateProvisionallyAborted {
+			return
+		}
+		u.setState(prevState)
+	})
 }
 
 // Admit works if the Update is in any state, but if the state is anything
@@ -295,22 +333,26 @@ func (u *Update) Admit(
 	if u.state != stateCreated {
 		return nil
 	}
+	if err := u.checkLimits(req); err != nil {
+		// Remove the update from the registry immediately.
+		u.onComplete()
+		return err
+	}
 	if err := validateRequestMsg(u.id, req); err != nil {
 		return err
 	}
 	if !eventStore.CanAddEvent() {
 		// There shouldn't be any waiters before Update is admitted (this func returns).
 		// Call abort to seal the Update.
-		u.abort(AbortReasonWorkflowCompleted)
-		return AbortReasonWorkflowCompleted.Error()
+		u.abort(AbortReasonWorkflowCompleted, eventStore)
+		// This error must be not nil.
+		_, abortErr := AbortReasonWorkflowCompleted.FailureError(stateCreated)
+		return abortErr
 	}
 
 	u.instrumentation.countRequestMsg()
 
 	// Marshal Update request here to return InvalidArgument to the API caller if it can't be marshaled.
-	if err := utf8validator.Validate(req, utf8validator.SourceRPCRequest); err != nil {
-		return invalidArgf("unable to validate utf-8 request: %v", err)
-	}
 	reqAny, err := anypb.New(req)
 	if err != nil {
 		return invalidArgf("unable to unmarshal request: %v", err)
@@ -362,10 +404,6 @@ func (u *Update) OnProtocolMessage(
 	if err != nil {
 		return invalidArgf("unable to unmarshal request: %v", err)
 	}
-	err = utf8validator.Validate(body, utf8validator.SourceRPCRequest)
-	if err != nil {
-		return invalidArgf("unable to validate utf-8 request: %v", err)
-	}
 
 	// If no new events can be added to the event store (e.g., workflow is completed),
 	// then only Rejection messages can be processed, because they don't create new events in the history.
@@ -373,7 +411,7 @@ func (u *Update) OnProtocolMessage(
 	_, isRejection := body.(*updatepb.Rejection)
 	shouldAbort := !(eventStore.CanAddEvent() || isRejection)
 	if shouldAbort {
-		u.abort(AbortReasonWorkflowCompleted)
+		u.abort(AbortReasonWorkflowCompleted, eventStore)
 		return nil
 	}
 
@@ -482,7 +520,6 @@ func (u *Update) onAcceptanceMsg(
 			return internalErrorf("unable to unmarshal original request: %v", err)
 		}
 	}
-	// utf8validator: we just marshaled u.request ourself earlier, so we don't need to validate it for utf8 strings here
 
 	event, err := eventStore.AddWorkflowExecutionUpdateAcceptedEvent(
 		u.id,
@@ -496,7 +533,7 @@ func (u *Update) onAcceptanceMsg(
 
 	prevState := u.setState(stateProvisionallyAccepted)
 	eventStore.OnAfterCommit(func(context.Context) {
-		if !u.state.Matches(stateSet(stateProvisionallyAccepted | stateProvisionallyCompleted)) {
+		if !u.state.Matches(stateSet(stateProvisionallyAccepted | stateProvisionallyCompleted | stateProvisionallyAborted)) {
 			return
 		}
 		u.request = nil
@@ -509,8 +546,22 @@ func (u *Update) onAcceptanceMsg(
 		// cannot be set here right now, as it must be set *after* the outcome future.
 		//
 		// So instead, the state is set to ProvisionallyCompletedAfterAccepted here,
-		// and onResponseMsg's OnAfterCommit callback will set the futures in the correct order.
+		// and onResponseMsg.OnAfterCommit callback will set the futures in the correct order.
 		if u.state == stateProvisionallyCompleted {
+			u.state = stateProvisionallyCompletedAfterAccepted
+			return
+		}
+		// If the Update is accepted *and* WF is completed in the same WFT, then its state has transitioned
+		// from ProvisionallyAccepted to ProvisionallyAborted in abort function by the
+		// time we get here.
+		//
+		// Now, to prevent a race condition in WaitLifecycleStage, the accepted future
+		// cannot be set here right now, as it must be set *after* the outcome future.
+		//
+		// Same ProvisionallyCompletedAfterAccepted is reused here (although it is
+		// technically ProvisionallyAbortedAfterAccepted), and abort.OnAfterCommit callback
+		// will set the futures in the correct order.
+		if u.state == stateProvisionallyAborted {
 			u.state = stateProvisionallyCompletedAfterAccepted
 			return
 		}
@@ -601,7 +652,8 @@ func (u *Update) onResponseMsg(
 		beforeCommitState := u.setState(stateCompleted)
 		u.outcome.(*future.FutureImpl[*updatepb.Outcome]).Set(res.GetOutcome(), nil)
 		if beforeCommitState == stateProvisionallyCompletedAfterAccepted {
-			// If the Update is accepted *and* completed in the same WFT, then its state is ProvisionallyCompletedAfterAccepted here, set by onAcceptance's OnAfterCommit.
+			// If the Update is accepted *and* completed in the same WFT,
+			// then its state is ProvisionallyCompletedAfterAccepted here, set by onAcceptance.OnAfterCommit.
 			//
 			// To prevent a race condition in WaitLifecycleStage, the accepted future
 			// has not been set by OnAcceptance earlier, as it must be set *after* the outcome future.

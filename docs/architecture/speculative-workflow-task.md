@@ -39,7 +39,7 @@ event.
 - its `WorkflowTaskInfo.Type` is `WORKFLOW_TASK_TYPE_SPECULATIVE`
 
 Similar to a CPU's *speculative execution* (which gives this Workflow Task its name) where a branch
-execution can be thrown away, a speculative Workflow Task can be dropped as if it never existed.
+execution can be thrown away, a speculative Workflow Task can be discarded as if it never existed.
 The overall strategy is to optimistically assume the speculative Workflow Task will go through, but
 if anything goes wrong, give up quickly and convert the speculative Workflow Task to a normal one.
 
@@ -98,23 +98,35 @@ a new speculative Workflow Task can be created after the first one is lost, but 
 try to complete the first one. To prevent this, `StartedTime` was added to the Workflow Task token
 and if it doesn't match the start time in mutable state, the Workflow Task can't be completed.
 
-### Persist or Drop
+### Persist or Discard
 While completing a speculative Workflow Task, the server makes a decision to either write the 
-speculative events followed by a `WorkflowTaskCompleted` event - or drop the speculative events and
-make the speculative Workflow Task disappear. The latter can only happen, if the server knows that
+speculative events followed by a `WorkflowTaskCompleted` event - or discard the speculative events and
+make the speculative Workflow Task disappear. The latter can only happen if the server knows that
 this Workflow Task didn't change the Workflow state. Currently, the conditions are
 (check `skipWorkflowTaskCompletedEvent()` func):
  - response doesn't have any commands,
  - response has only Update rejection messages.
 
-> #### TODO
-> There is one more special case: when the speculative Workflow Task contained other events
-> (e.g. activity scheduled), then it can't be dropped because they would need to be sent *again* in the
-> next Workflow Task - but older SDK versions don't support receiving the same events twice. A
-> compatibility flag is needed to safely allow SDKs to opt-in to this optimization.
+The speculative Workflow Task can also ship other events (e.g. `ActivityTaskScheduled` or `TimerStarted`)
+that were generated from previous Workflow Task commands (also known as command-events).
+Unfortunately, older SDKs don't support receiving same events more
+than once. If SDK supports this, it will set `DiscardSpeculativeWorkflowTaskWithEvents` flag to `true`
+and the server will discard speculative Workflow Task even if it had events. These events can be shipped
+multiply times if Updates keep being rejected. To prevent shipping a large set of events to the worker over
+and over again, the server persists speculative Workflow Task if a number of events exceed
+`DiscardSpeculativeWorkflowTaskMaximumEventsCount` threshold.
 
-When the server decides to drop a speculative Workflow Task, it needs to communicate this decision to 
-the worker - because the SDK needs to roll back to a previous history event and drop all events after
+> #### NOTE
+> This is possible because of an important server invariant: the Workflow history can only end with:
+> - Workflow Task event (Scheduled, Started, Completed, Failed, Timeout),
+> 
+> or
+> - command-event, generated from previous Workflow Task command.
+> All these events don't change the Workflow state on the worker side. This invariant must not be 
+> broken by other features.
+
+When the server decides to discard a speculative Workflow Task, it needs to communicate this decision to 
+the worker - because the SDK needs to roll back to a previous history event and discard all events after
 that one. To do that, the server will set the `ResetHistoryEventId` field on the
 `RespondWorkflowTaskCompletedResponse` to the mutable state's `LastCompletedWorkflowTaskStartedEventId`
 (since the SDK uses `WorkflowTaskStartedEventID` as its history checkpoint).
@@ -128,7 +140,7 @@ rejection or acceptance message. If it does happen, the server will persist all 
 events and create a new Workflow Task as normal.
 
 > #### NOTE
-> This is a design decision, which could be changed later: instead, the server could drop the
+> This is a design decision, which could be changed later: instead, the server could discard the
 > speculative Workflow Task when it heartbeats and create a new speculative Workflow Task. No
 > new events would be added to the history - but heartbeats would not be visible anymore.
 

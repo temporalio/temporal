@@ -39,7 +39,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/service/history/api/addtasks"
-	"go.temporal.io/server/service/history/shard"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
@@ -48,7 +48,7 @@ import (
 type (
 	// testParams contains the arguments for invoking addtasks.Invoke.
 	testParams struct {
-		shardContext shard.Context
+		shardContext historyi.ShardContext
 		deserializer addtasks.TaskDeserializer
 		numShards    int
 		req          *historyservice.AddTasksRequest
@@ -79,7 +79,7 @@ func TestInvoke(t *testing.T) {
 		{
 			name: "happy path",
 			configure: func(t *testing.T, params *testParams) {
-				params.shardContext.(*shard.MockContext).EXPECT().AddTasks(
+				params.shardContext.(*historyi.MockShardContext).EXPECT().AddTasks(
 					gomock.Any(),
 					gomock.Any(),
 				).Return(nil)
@@ -97,7 +97,7 @@ func TestInvoke(t *testing.T) {
 			configure: func(t *testing.T, params *testParams) {
 				numWorkflows := 2
 				requests := make([]*persistence.AddHistoryTasksRequest, 0, numWorkflows)
-				params.shardContext.(*shard.MockContext).EXPECT().AddTasks(
+				params.shardContext.(*historyi.MockShardContext).EXPECT().AddTasks(
 					gomock.Any(),
 					gomock.Any(),
 				).DoAndReturn(func(_ context.Context, req *persistence.AddHistoryTasksRequest) error {
@@ -230,7 +230,7 @@ func TestInvoke(t *testing.T) {
 		{
 			name: "add tasks error",
 			configure: func(t *testing.T, params *testParams) {
-				params.shardContext.(*shard.MockContext).EXPECT().AddTasks(
+				params.shardContext.(*historyi.MockShardContext).EXPECT().AddTasks(
 					gomock.Any(),
 					gomock.Any(),
 				).Return(assert.AnError)
@@ -265,7 +265,7 @@ func getDefaultTestParams(t *testing.T) *testParams {
 	blob, err := serializer.SerializeTask(task)
 	require.NoError(t, err)
 	ctrl := gomock.NewController(t)
-	shardContext := shard.NewMockContext(ctrl)
+	shardContext := historyi.NewMockShardContext(ctrl)
 	shardContext.EXPECT().GetShardID().Return(int32(1)).AnyTimes()
 	shardContext.EXPECT().GetRangeID().Return(int64(1)).AnyTimes()
 	params := &testParams{

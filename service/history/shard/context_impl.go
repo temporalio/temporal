@@ -36,13 +36,14 @@ import (
 
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
-	"go.temporal.io/api/enums/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/adminservice/v1"
 	clockspb "go.temporal.io/server/api/clock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
@@ -74,6 +75,7 @@ import (
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/vclock"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -116,7 +118,7 @@ type (
 		contextTaggedLogger log.Logger
 		throttledLogger     log.Logger
 		engineFactory       EngineFactory
-		engineFuture        *future.FutureImpl[Engine]
+		engineFuture        *future.FutureImpl[historyi.Engine]
 		queueMetricEmitter  sync.Once
 		finalizer           *finalizer.Finalizer
 
@@ -169,6 +171,8 @@ type (
 		acquireShardRetryPolicy backoff.RetryPolicy
 
 		stateMachineRegistry *hsm.Registry
+
+		chasmRegistry *chasm.Registry
 	}
 
 	remoteClusterInfo struct {
@@ -186,7 +190,7 @@ type (
 	contextRequest interface{}
 
 	contextRequestAcquire    struct{}
-	contextRequestAcquired   struct{ engine Engine }
+	contextRequestAcquired   struct{ engine historyi.Engine }
 	contextRequestLost       struct{}
 	contextRequestStop       struct{ reason stopReason }
 	contextRequestFinishStop struct{}
@@ -199,7 +203,7 @@ const (
 	stopReasonOwnershipLost
 )
 
-var _ Context = (*ContextImpl)(nil)
+var _ historyi.ShardContext = (*ContextImpl)(nil)
 
 var (
 	// ErrShardStatusUnknown means we're not sure if we have the shard lock or not. This may be returned
@@ -277,7 +281,7 @@ func (s *ContextImpl) GetPingChecks() []pingable.Check {
 
 func (s *ContextImpl) GetEngine(
 	ctx context.Context,
-) (Engine, error) {
+) (historyi.Engine, error) {
 	return s.engineFuture.Get(ctx)
 }
 
@@ -496,7 +500,7 @@ func (s *ContextImpl) UpdateHandoverNamespace(ns *namespace.Namespace, deletedFr
 	// it here to be more safe in case above assumption no longer holds in the future.
 	isHandoverNamespace := ns.IsGlobalNamespace() &&
 		ns.ActiveInCluster(s.GetClusterMetadata().GetCurrentClusterName()) &&
-		ns.ReplicationState() == enums.REPLICATION_STATE_HANDOVER
+		ns.ReplicationState() == enumspb.REPLICATION_STATE_HANDOVER
 
 	s.wLock()
 	if deletedFromDb || !isHandoverNamespace {
@@ -550,7 +554,7 @@ func (s *ContextImpl) AddTasks(
 	defer s.ioSemaphoreRelease()
 
 	err = s.addTasksSemaphoreAcquired(ctx, request)
-	if OperationPossiblySucceeded(err) {
+	if persistence.OperationPossiblySucceeded(err) {
 		engine.NotifyNewTasks(request.Tasks)
 	}
 	return err
@@ -572,6 +576,18 @@ func (s *ContextImpl) AddSpeculativeWorkflowTaskTimeoutTask(
 	engine.NotifyNewTasks(map[tasks.Category][]tasks.Task{task.GetCategory(): []tasks.Task{task}})
 
 	return nil
+}
+
+func (s *ContextImpl) GetHistoryTasks(
+	ctx context.Context,
+	request *persistence.GetHistoryTasksRequest,
+) (*persistence.GetHistoryTasksResponse, error) {
+	if err := s.errorByState(); err != nil {
+		return nil, err
+	}
+
+	resp, err := s.executionManager.GetHistoryTasks(ctx, request)
+	return resp, s.handleReadError(err)
 }
 
 func (s *ContextImpl) CreateWorkflowExecution(
@@ -923,10 +939,12 @@ func (s *ContextImpl) AppendHistoryEvents(
 		// N.B. - Dual emit here makes sense so that we can see aggregate timer stats across all
 		// namespaces along with the individual namespaces stats
 		handler := s.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.SessionStatsScope))
-		metrics.HistorySize.With(handler).Record(int64(size))
 		if entry, err := s.GetNamespaceRegistry().GetNamespaceByID(namespaceID); err == nil && entry != nil {
 			metrics.HistorySize.With(handler).
 				Record(int64(size), metrics.NamespaceTag(entry.Name().String()))
+		} else {
+			metrics.HistorySize.With(handler).
+				Record(int64(size), metrics.NamespaceUnknownTag())
 		}
 		if size >= historySizeLogThreshold {
 			s.throttledLogger.Warn("history size threshold breached",
@@ -1037,7 +1055,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 					Tasks: newTasks,
 				}
 				err := s.addTasksSemaphoreAcquired(ctx, addTasksRequest)
-				if OperationPossiblySucceeded(err) {
+				if persistence.OperationPossiblySucceeded(err) {
 					engine.NotifyNewTasks(newTasks)
 				}
 				if err != nil {
@@ -1458,7 +1476,7 @@ func (s *ContextImpl) maybeRecordShardAcquisitionLatency(ownershipChanged bool) 
 	}
 }
 
-func (s *ContextImpl) createEngine() Engine {
+func (s *ContextImpl) createEngine() historyi.Engine {
 	s.contextTaggedLogger.Info("", tag.LifeCycleStarting, tag.ComponentShardEngine)
 	engine := s.engineFactory.CreateEngine(s)
 	engine.Start()
@@ -1687,7 +1705,7 @@ func (s *ContextImpl) transition(request contextRequest) error {
 	case contextStateAcquired:
 		switch request := request.(type) {
 		case contextRequestAcquire:
-			return nil // nothing to to do, already acquired
+			return nil // nothing to do, already acquired
 		case contextRequestLost:
 			setStateAcquiring()
 			return nil
@@ -1984,7 +2002,7 @@ func (s *ContextImpl) acquireShard() {
 		s.contextTaggedLogger.Info("Acquired shard")
 
 		// The first time we get the shard, we have to create the engine
-		var engine Engine
+		var engine historyi.Engine
 		if !s.engineFuture.Ready() {
 			s.maybeRecordShardAcquisitionLatency(ownershipChanged)
 			engine = s.createEngine()
@@ -2074,6 +2092,7 @@ func newContext(
 	taskCategoryRegistry tasks.TaskCategoryRegistry,
 	eventsCache events.Cache,
 	stateMachineRegistry *hsm.Registry,
+	chasmRegistry *chasm.Registry,
 ) (*ContextImpl, error) {
 	hostIdentity := hostInfoProvider.HostInfo().Identity()
 	sequenceID := atomic.AddInt64(&shardContextSequenceID, 1)
@@ -2118,10 +2137,11 @@ func newContext(
 		handoverNamespaces:      make(map[namespace.Name]*namespaceHandOverInfo),
 		lifecycleCtx:            lifecycleCtx,
 		lifecycleCancel:         lifecycleCancel,
-		engineFuture:            future.NewFuture[Engine](),
+		engineFuture:            future.NewFuture[historyi.Engine](),
 		queueMetricEmitter:      sync.Once{},
 		ioSemaphore:             locks.NewPrioritySemaphore(ioConcurrency),
 		stateMachineRegistry:    stateMachineRegistry,
+		chasmRegistry:           chasmRegistry,
 	}
 	shardContext.taskKeyManager = newTaskKeyManager(
 		shardContext.taskCategoryRegistry,
@@ -2224,6 +2244,26 @@ func (s *ContextImpl) StateMachineRegistry() *hsm.Registry {
 	return s.stateMachineRegistry
 }
 
+func (s *ContextImpl) ChasmRegistry() *chasm.Registry {
+	return s.chasmRegistry
+}
+
+func (s *ContextImpl) GetCachedWorkflowContext(
+	ctx context.Context,
+	namespaceID namespace.ID,
+	execution *commonpb.WorkflowExecution,
+	lockPriority locks.Priority,
+) (historyi.WorkflowContext, historyi.ReleaseWorkflowContextFunc, error) {
+	return nil, nil, nil
+}
+func (s *ContextImpl) GetCurrentCachedWorkflowContext(
+	ctx context.Context,
+	namespaceID namespace.ID,
+	workflowID string, lockPriority locks.Priority,
+) (historyi.ReleaseWorkflowContextFunc, error) {
+	return nil, nil
+}
+
 // newDetachedContext creates a detached context with the same deadline
 // and values from the given context. Detached context won't be affected
 // if the context it bases on is cancelled.
@@ -2266,25 +2306,6 @@ func (s *ContextImpl) newShardClosedErrorWithShardID() *persistence.ShardOwnersh
 	return &persistence.ShardOwnershipLostError{
 		ShardID: s.shardID, // immutable
 		Msg:     "shard closed",
-	}
-}
-
-func OperationPossiblySucceeded(err error) bool {
-	switch err.(type) {
-	case *persistence.CurrentWorkflowConditionFailedError,
-		*persistence.WorkflowConditionFailedError,
-		*persistence.ConditionFailedError,
-		*persistence.ShardOwnershipLostError,
-		*persistence.InvalidPersistenceRequestError,
-		*persistence.TransactionSizeLimitError,
-		*persistence.AppendHistoryTimeoutError, // this means task operations is not started
-		*serviceerror.ResourceExhausted,
-		*serviceerror.NotFound,
-		*serviceerror.NamespaceNotFound:
-		// Persistence failure that means that write was definitely not committed.
-		return false
-	default:
-		return true
 	}
 }
 

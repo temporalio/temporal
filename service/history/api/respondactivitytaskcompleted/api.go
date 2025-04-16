@@ -33,16 +33,17 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
-	"go.temporal.io/server/service/history/shard"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow"
 )
 
 func Invoke(
 	ctx context.Context,
 	req *historyservice.RespondActivityTaskCompletedRequest,
-	shard shard.Context,
+	shard historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (resp *historyservice.RespondActivityTaskCompletedResponse, retError error) {
 	namespaceEntry, err := api.GetActiveNamespace(shard, namespace.ID(req.GetNamespaceId()))
@@ -51,7 +52,7 @@ func Invoke(
 	}
 	namespace := namespaceEntry.Name()
 
-	tokenSerializer := common.NewProtoTaskTokenSerializer()
+	tokenSerializer := tasktoken.NewSerializer()
 	request := req.CompleteRequest
 	token, err0 := tokenSerializer.Deserialize(request.TaskToken)
 	if err0 != nil {
@@ -111,10 +112,15 @@ func Invoke(
 			// we need to force complete an activity
 			fabricateStartedEvent = ai.StartedEventId == common.EmptyEventID
 			if fabricateStartedEvent {
-				_, err := mutableState.AddActivityTaskStartedEvent(ai, scheduledEventID,
+				_, err := mutableState.AddActivityTaskStartedEvent(
+					ai,
+					scheduledEventID,
 					"",
 					req.GetCompleteRequest().GetIdentity(),
 					nil,
+					nil,
+					// TODO (shahab): do we need to do anything with wf redirect in this case or any
+					// other case where an activity starts?
 					nil,
 				)
 				if err != nil {

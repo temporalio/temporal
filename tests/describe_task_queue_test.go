@@ -27,19 +27,17 @@ import (
 	"testing"
 	"time"
 
-	"go.temporal.io/server/api/matchingservice/v1"
-	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
-
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -47,8 +45,7 @@ import (
 
 type (
 	DescribeTaskQueueSuite struct {
-		*require.Assertions
-		testcore.FunctionalTestBase
+		testcore.FunctionalTestSuite
 	}
 )
 
@@ -57,19 +54,14 @@ func TestDescribeTaskQueueSuite(t *testing.T) {
 	suite.Run(t, new(DescribeTaskQueueSuite))
 }
 
-func (s *DescribeTaskQueueSuite) SetupSuite() {
-	s.FunctionalTestBase.SetupSuite("testdata/es_cluster.yaml")
-}
-
-func (s *DescribeTaskQueueSuite) TearDownSuite() {
-	s.FunctionalTestBase.TearDownSuite()
-}
-
-func (s *DescribeTaskQueueSuite) SetupTest() {
-	s.FunctionalTestBase.SetupTest()
-
-	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
-	s.Assertions = require.New(s.T())
+func (s *DescribeTaskQueueSuite) TestNonRootLegacy() {
+	resp, err := s.FrontendClient().DescribeTaskQueue(context.Background(), &workflowservice.DescribeTaskQueueRequest{
+		Namespace: s.Namespace().String(),
+		TaskQueue: &taskqueuepb.TaskQueue{Name: "/_sys/foo/1", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		ApiMode:   enumspb.DESCRIBE_TASK_QUEUE_MODE_UNSPECIFIED,
+	})
+	s.NoError(err)
+	s.NotNil(resp)
 }
 
 func (s *DescribeTaskQueueSuite) TestAddNoTasks_ValidateStats() {
@@ -83,7 +75,6 @@ func (s *DescribeTaskQueueSuite) TestAddNoTasks_ValidateStats() {
 }
 
 func (s *DescribeTaskQueueSuite) TestAddSingleTask_ValidateStats() {
-	s.T().Skip("flaky test")
 	s.OverrideDynamicConfig(dynamicconfig.MatchingUpdateAckInterval, 5*time.Second)
 	s.RunTestWithMatchingBehavior(func() { s.publishConsumeWorkflowTasksValidateStats(1, true) })
 }
@@ -143,7 +134,7 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateStats(workfl
 
 		request := &workflowservice.StartWorkflowExecutionRequest{
 			RequestId:           uuid.New(),
-			Namespace:           s.Namespace(),
+			Namespace:           s.Namespace().String(),
 			WorkflowId:          id,
 			WorkflowType:        workflowType,
 			TaskQueue:           tq,
@@ -167,7 +158,7 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateStats(workfl
 	// Poll the tasks
 	for i := 0; i < workflows; {
 		resp1, err1 := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
-			Namespace: s.Namespace(),
+			Namespace: s.Namespace().String(),
 			TaskQueue: tq,
 			Identity:  identity,
 		})
@@ -177,7 +168,7 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateStats(workfl
 		}
 		i++
 		_, err := s.FrontendClient().RespondWorkflowTaskCompleted(testcore.NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
-			Namespace: s.Namespace(),
+			Namespace: s.Namespace().String(),
 			Identity:  identity,
 			TaskToken: resp1.TaskToken,
 			Commands: []*commandpb.Command{
@@ -214,7 +205,7 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateStats(workfl
 	for i := 0; i < workflows; {
 		resp1, err1 := s.FrontendClient().PollActivityTaskQueue(
 			testcore.NewContext(), &workflowservice.PollActivityTaskQueueRequest{
-				Namespace: s.Namespace(),
+				Namespace: s.Namespace().String(),
 				TaskQueue: tq,
 				Identity:  identity,
 			},
@@ -252,7 +243,7 @@ func (s *DescribeTaskQueueSuite) validateDescribeTaskQueue(
 	if isEnhancedMode {
 		if isCached {
 			resp, err = s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
-				Namespace:              s.Namespace(),
+				Namespace:              s.Namespace().String(),
 				TaskQueue:              &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 				ApiMode:                enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED,
 				Versions:               nil, // default version, in this case unversioned queue
@@ -285,9 +276,11 @@ func (s *DescribeTaskQueueSuite) validateDescribeTaskQueue(
 			s.Equal(expectedDispatchRate[enumspb.TASK_QUEUE_TYPE_WORKFLOW], wfStats.TasksDispatchRate > 0)
 			s.Equal(expectedDispatchRate[enumspb.TASK_QUEUE_TYPE_ACTIVITY], actStats.TasksDispatchRate > 0)
 		} else {
-			s.EventuallyWithT(func(t *assert.CollectT) {
+			s.EventuallyWithT(func(c *assert.CollectT) {
+				a := require.New(c)
+
 				resp, err = s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
-					Namespace:              s.Namespace(),
+					Namespace:              s.Namespace().String(),
 					TaskQueue:              &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					ApiMode:                enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED,
 					Versions:               nil, // default version, in this case unversioned queue
@@ -296,18 +289,16 @@ func (s *DescribeTaskQueueSuite) validateDescribeTaskQueue(
 					ReportTaskReachability: false,
 					ReportStats:            true,
 				})
-				s.NoError(err)
-				s.NotNil(resp)
-				s.Equal(1, len(resp.GetVersionsInfo()), "should be 1 because only default/unversioned queue")
+				a.NoError(err)
+				a.NotNil(resp)
+				a.Equal(1, len(resp.GetVersionsInfo()), "should be 1 because only default/unversioned queue")
 				versionInfo := resp.GetVersionsInfo()[""]
-				s.Equal(enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, versionInfo.GetTaskReachability())
+				a.Equal(enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, versionInfo.GetTaskReachability())
 				types := versionInfo.GetTypesInfo()
-				s.Equal(len(types), len(expectedBacklogCount))
+				a.Equal(len(types), len(expectedBacklogCount))
 
 				wfStats := types[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].Stats
 				actStats := types[int32(enumspb.TASK_QUEUE_TYPE_ACTIVITY)].Stats
-
-				a := assert.New(t)
 
 				// Actual counter can be greater than the expected due to history retries. We make sure the counter is in
 				// range [expected, expected+maxBacklogExtraTasks]
@@ -325,16 +316,17 @@ func (s *DescribeTaskQueueSuite) validateDescribeTaskQueue(
 		}
 	} else {
 		// Querying the Legacy API
-		s.Eventually(func() bool {
+		s.EventuallyWithT(func(c *assert.CollectT) {
+			a := require.New(c)
 			resp, err = s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
-				Namespace:              s.Namespace(),
+				Namespace:              s.Namespace().String(),
 				TaskQueue:              &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 				ApiMode:                enumspb.DESCRIBE_TASK_QUEUE_MODE_UNSPECIFIED,
 				IncludeTaskQueueStatus: true,
 			})
-			s.NoError(err)
-			s.NotNil(resp)
-			return resp.TaskQueueStatus.GetBacklogCountHint() == expectedBacklogCount[enumspb.TASK_QUEUE_TYPE_WORKFLOW]
+			a.NoError(err)
+			a.NotNil(resp)
+			a.Equal(resp.TaskQueueStatus.GetBacklogCountHint(), expectedBacklogCount[enumspb.TASK_QUEUE_TYPE_WORKFLOW])
 		}, 6*time.Second, 100*time.Millisecond)
 	}
 }
@@ -347,7 +339,7 @@ func (s *DescribeTaskQueueSuite) validateDescribeTaskQueuePartition(tqName strin
 		resp, err := s.GetTestCluster().MatchingClient().DescribeTaskQueuePartition(
 			context.Background(),
 			&matchingservice.DescribeTaskQueuePartitionRequest{
-				NamespaceId: s.GetNamespaceID(s.Namespace()),
+				NamespaceId: s.NamespaceID().String(),
 				TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
 					TaskQueue:     tqName,
 					TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW, // since we have only workflow tasks
@@ -359,7 +351,7 @@ func (s *DescribeTaskQueueSuite) validateDescribeTaskQueuePartition(tqName strin
 				ReportPollers:                 false,
 				ReportInternalTaskQueueStatus: false,
 			})
-		a := assert.New(t)
+		a := require.New(t)
 		a.NoError(err)
 
 		// parsing out the response
@@ -406,7 +398,7 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateStatsCached(
 
 		request := &workflowservice.StartWorkflowExecutionRequest{
 			RequestId:           uuid.New(),
-			Namespace:           s.Namespace(),
+			Namespace:           s.Namespace().String(),
 			WorkflowId:          id,
 			WorkflowType:        workflowType,
 			TaskQueue:           tq,
@@ -435,7 +427,7 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateStatsCached(
 	// Poll the tasks
 	for i := 0; i < workflows; {
 		resp1, err1 := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
-			Namespace: s.Namespace(),
+			Namespace: s.Namespace().String(),
 			TaskQueue: tq,
 			Identity:  identity,
 		})

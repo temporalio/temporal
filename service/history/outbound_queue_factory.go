@@ -25,7 +25,6 @@ package history
 import (
 	"fmt"
 
-	"go.temporal.io/server/common/circuitbreaker"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -34,9 +33,11 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/quotas"
 	ctasks "go.temporal.io/server/common/tasks"
+	"go.temporal.io/server/common/telemetry"
+	"go.temporal.io/server/service/history/circuitbreakerpool"
 	"go.temporal.io/server/service/history/hsm"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
-	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.uber.org/fx"
@@ -51,6 +52,7 @@ type outboundQueueFactoryParams struct {
 	fx.In
 
 	QueueFactoryBaseParams
+	CircuitBreakerPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool
 }
 
 type groupLimiter struct {
@@ -120,33 +122,6 @@ func NewOutboundQueueFactory(params outboundQueueFactoryParams) QueueFactory {
 		},
 	)
 
-	circuitBreakerPool := collection.NewOnceMap(
-		func(key tasks.TaskGroupNamespaceIDAndDestination) circuitbreaker.TwoStepCircuitBreaker {
-			// This is intentionally not failing the function in case of error. The circuit breaker is
-			// agnostic to Task implementation, and thus the settings function is not expected to return
-			// an error. Also, in this case, if the namespace registry fails to get the name, then the
-			// task itself will fail when it is processed and tries to get the namespace name.
-			nsName := getNamespaceNameOrDefault(
-				params.NamespaceRegistry,
-				key.NamespaceID,
-				"",
-				metricsHandler,
-			)
-			cb := circuitbreaker.NewTwoStepCircuitBreakerWithDynamicSettings(circuitbreaker.Settings{
-				Name: fmt.Sprintf(
-					"circuit_breaker:%s:%s:%s",
-					key.TaskGroup,
-					key.NamespaceID,
-					key.Destination,
-				),
-			})
-			initial, cancel := params.Config.OutboundQueueCircuitBreakerSettings(nsName, key.Destination, cb.UpdateSettings)
-			cb.UpdateSettings(initial)
-			_ = cancel // OnceMap never deletes anything. use this if we support deletion
-			return cb
-		},
-	)
-
 	grouper := queues.GrouperStateMachineNamespaceIDAndDestination{}
 	f := &outboundQueueFactory{
 		outboundQueueFactoryParams: params,
@@ -184,7 +159,7 @@ func NewOutboundQueueFactory(params outboundQueueFactoryParams) QueueFactory {
 							ctasks.RunnableTask{
 								Task: queues.NewCircuitBreakerExecutable(
 									e,
-									circuitBreakerPool.Get(key),
+									params.CircuitBreakerPool.Get(key),
 									taggedMetricsHandler,
 								),
 							},
@@ -238,7 +213,7 @@ func (f *outboundQueueFactory) Stop() {
 }
 
 func (f *outboundQueueFactory) CreateQueue(
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	workflowCache wcache.Cache,
 ) queues.Queue {
 	logger := log.With(shardContext.GetLogger(), tag.ComponentOutboundQueue)
@@ -291,9 +266,11 @@ func (f *outboundQueueFactory) CreateQueue(
 		shardContext.GetClusterMetadata(),
 		logger,
 		metricsHandler,
+		f.TracerProvider.Tracer(telemetry.ComponentQueueOutbound),
 		f.DLQWriter,
 		f.Config.TaskDLQEnabled,
 		f.Config.TaskDLQUnexpectedErrorAttempts,
+		f.Config.TaskDLQInternalErrors,
 		f.Config.TaskDLQErrorPattern,
 	)
 	return queues.NewImmediateQueue(
@@ -333,12 +310,12 @@ func getOutbountQueueProcessorMetricsHandler(handler metrics.Handler) metrics.Ha
 	return handler.WithTags(metrics.OperationTag(metrics.OperationOutboundQueueProcessorScope))
 }
 
-func stateMachineTask(shardContext shard.Context, task tasks.Task) (hsm.Ref, hsm.Task, error) {
+func StateMachineTask(smRegistry *hsm.Registry, task tasks.Task) (hsm.Ref, hsm.Task, error) {
 	cbt, ok := task.(*tasks.StateMachineOutboundTask)
 	if !ok {
 		return hsm.Ref{}, nil, queues.NewUnprocessableTaskError("unknown task type")
 	}
-	def, ok := shardContext.StateMachineRegistry().TaskSerializer(cbt.Info.Type)
+	def, ok := smRegistry.TaskSerializer(cbt.Info.Type)
 	if !ok {
 		return hsm.Ref{},
 			nil,

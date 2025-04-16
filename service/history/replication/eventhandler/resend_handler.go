@@ -28,6 +28,7 @@ package eventhandler
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	historypb "go.temporal.io/api/history/v1"
@@ -44,11 +45,12 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/configs"
-	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/consts"
+	historyi "go.temporal.io/server/service/history/interfaces"
 )
 
 type (
-	historyEngineProvider func(ctx context.Context, namespaceId namespace.ID, workflowId string) (shard.Engine, error)
+	historyEngineProvider func(ctx context.Context, namespaceId namespace.ID, workflowId string) (historyi.Engine, error)
 	ResendHandler         interface {
 		ResendHistoryEvents(
 			ctx context.Context,
@@ -80,7 +82,7 @@ func NewResendHandler(
 	clientBean client.Bean,
 	serializer serialization.Serializer,
 	clusterMetadata cluster.Metadata,
-	historyEngineProvider func(ctx context.Context, namespaceId namespace.ID, workflowId string) (shard.Engine, error),
+	historyEngineProvider func(ctx context.Context, namespaceId namespace.ID, workflowId string) (historyi.Engine, error),
 	remoteHistoryFetcher HistoryPaginatedFetcher,
 	importer EventImporter,
 	logger log.Logger,
@@ -274,7 +276,7 @@ func (r *resendHandlerImpl) replicateRemoteGeneratedEvents(
 			nil,
 			"",
 		)
-		if err != nil {
+		if err != nil && !errors.Is(err, consts.ErrDuplicate) {
 			r.logger.Error("failed to replicate events",
 				tag.WorkflowNamespaceID(namespaceID.String()),
 				tag.WorkflowID(workflowID),

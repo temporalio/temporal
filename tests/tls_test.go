@@ -26,18 +26,15 @@ package tests
 
 import (
 	"context"
-	"testing"
-
 	"net/http"
 	"sync"
+	"testing"
 	"time"
 
 	"github.com/stretchr/testify/suite"
-
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/server/common/authorization"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/tests/testcore"
 )
@@ -53,11 +50,11 @@ func TestTLSFunctionalSuite(t *testing.T) {
 }
 
 func (s *TLSFunctionalSuite) SetupSuite() {
-	s.FunctionalTestBase.SetupSuite("testdata/tls_cluster.yaml")
+	s.FunctionalTestBase.SetupSuiteWithCluster("testdata/tls_cluster.yaml")
 }
 
 func (s *TLSFunctionalSuite) TearDownSuite() {
-	s.FunctionalTestBase.TearDownSuite()
+	s.FunctionalTestBase.TearDownCluster()
 }
 
 func (s *TLSFunctionalSuite) SetupTest() {
@@ -66,20 +63,19 @@ func (s *TLSFunctionalSuite) SetupTest() {
 	var err error
 	s.sdkClient, err = sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.FrontendGRPCAddress(),
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		ConnectionOptions: sdkclient.ConnectionOptions{
 			TLS: s.GetTestCluster().Host().TlsConfigProvider().FrontendClientConfig,
 		},
 	})
-	if err != nil {
-		s.Logger.Fatal("Error when creating SDK client", tag.Error(err))
-	}
+	s.NoError(err)
 }
 
 func (s *TLSFunctionalSuite) TearDownTest() {
 	if s.sdkClient != nil {
 		s.sdkClient.Close()
 	}
+	s.FunctionalTestBase.TearDownTest()
 }
 
 func (s *TLSFunctionalSuite) TestGRPCMTLS() {
@@ -106,7 +102,7 @@ func (s *TLSFunctionalSuite) TestHTTPMTLS() {
 	calls := s.trackAuthInfoByCall()
 
 	// Confirm non-HTTPS call is rejected with 400
-	resp, err := http.Get("http://" + s.HttpAPIAddress() + "/namespaces/" + s.Namespace() + "/workflows")
+	resp, err := http.Get("http://" + s.HttpAPIAddress() + "/namespaces/" + s.Namespace().String() + "/workflows")
 	s.Require().NoError(err)
 	s.Require().Equal(http.StatusBadRequest, resp.StatusCode)
 
@@ -118,7 +114,7 @@ func (s *TLSFunctionalSuite) TestHTTPMTLS() {
 	}
 
 	// Make a list call
-	req, err := http.NewRequest("GET", "https://"+s.HttpAPIAddress()+"/namespaces/"+s.Namespace()+"/workflows", nil)
+	req, err := http.NewRequest("GET", "https://"+s.HttpAPIAddress()+"/namespaces/"+s.Namespace().String()+"/workflows", nil)
 	s.Require().NoError(err)
 	resp, err = httpClient.Do(req)
 	s.Require().NoError(err)

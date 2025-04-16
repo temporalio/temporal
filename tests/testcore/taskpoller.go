@@ -55,6 +55,7 @@ type (
 	QueryHandler        func(task *workflowservice.PollWorkflowTaskQueueResponse) (*commonpb.Payloads, error)
 	MessageHandler      func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error)
 
+	// Deprecated: TaskPoller is deprecated. Use taskpoller.TaskPoller instead.
 	// TaskPoller is used in functional tests to poll workflow or activity task queues.
 	TaskPoller struct {
 		Client                       workflowservice.WorkflowServiceClient

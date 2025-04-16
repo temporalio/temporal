@@ -1,6 +1,7 @@
 CREATE TABLE executions_visibility (
   namespace_id            CHAR(64)      NOT NULL,
   run_id                  CHAR(64)      NOT NULL,
+  _version                BIGINT        NOT NULL DEFAULT 0,
   start_time              TIMESTAMP     NOT NULL,
   execution_time          TIMESTAMP     NOT NULL,
   workflow_id             VARCHAR(255)  NOT NULL,
@@ -29,6 +30,10 @@ CREATE TABLE executions_visibility (
   TemporalSchedulePaused        BOOLEAN       GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.TemporalSchedulePaused")),
   TemporalNamespaceDivision     VARCHAR(255)  GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.TemporalNamespaceDivision")),
   BuildIds                      TEXT          GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.BuildIds"))              STORED,
+  TemporalPauseInfo             TEXT          GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.TemporalPauseInfo"))     STORED,
+  TemporalWorkerDeploymentVersion VARCHAR(255)        GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.TemporalWorkerDeploymentVersion")),
+  TemporalWorkflowVersioningBehavior VARCHAR(255)     GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.TemporalWorkflowVersioningBehavior")),
+  TemporalWorkerDeployment        VARCHAR(255)        GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.TemporalWorkerDeployment")),
 
   -- Pre-allocated custom search attributes
   Bool01          BOOLEAN         GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.Bool01")),
@@ -84,7 +89,10 @@ CREATE INDEX by_temporal_scheduled_start_time ON executions_visibility (namespac
 CREATE INDEX by_temporal_scheduled_by_id      ON executions_visibility (namespace_id, TemporalScheduledById,      (COALESCE(close_time, '9999-12-31 23:59:59+00:00')) DESC, start_time DESC, run_id);
 CREATE INDEX by_temporal_schedule_paused      ON executions_visibility (namespace_id, TemporalSchedulePaused,     (COALESCE(close_time, '9999-12-31 23:59:59+00:00')) DESC, start_time DESC, run_id);
 CREATE INDEX by_temporal_namespace_division   ON executions_visibility (namespace_id, TemporalNamespaceDivision,  (COALESCE(close_time, '9999-12-31 23:59:59+00:00')) DESC, start_time DESC, run_id);
-
+CREATE INDEX by_temporal_pause_info           ON executions_visibility (namespace_id, TemporalPauseInfo,          (COALESCE(close_time, '9999-12-31 23:59:59+00:00')) DESC, start_time DESC, run_id);
+CREATE INDEX by_temporal_worker_deployment_version ON executions_visibility (namespace_id, TemporalWorkerDeploymentVersion,  (COALESCE(close_time, '9999-12-31 23:59:59+00:00')) DESC, start_time DESC, run_id);
+CREATE INDEX by_temporal_workflow_versioning_behavior ON executions_visibility (namespace_id, TemporalWorkflowVersioningBehavior,  (COALESCE(close_time, '9999-12-31 23:59:59+00:00')) DESC, start_time DESC, run_id);
+CREATE INDEX by_temporal_worker_deployment    ON executions_visibility (namespace_id, TemporalWorkerDeployment,  (COALESCE(close_time, '9999-12-31 23:59:59+00:00')) DESC, start_time DESC, run_id);
 
 -- Indexes for the pre-allocated custom search attributes
 CREATE INDEX by_bool_01     ON executions_visibility (namespace_id, Bool01,     (COALESCE(close_time, '9999-12-31 23:59:59+00:00')) DESC, start_time DESC, run_id);
@@ -128,6 +136,7 @@ CREATE VIRTUAL TABLE executions_visibility_fts_keyword_list USING fts5 (
   TemporalChangeVersion,
   BinaryChecksums,
   BuildIds,
+  TemporalPauseInfo,
   KeywordList01,
   KeywordList02,
   KeywordList03,
@@ -155,6 +164,7 @@ BEGIN
     TemporalChangeVersion,
     BinaryChecksums,
     BuildIds,
+    TemporalPauseInfo,
     KeywordList01,
     KeywordList02,
     KeywordList03
@@ -163,6 +173,7 @@ BEGIN
     NEW.TemporalChangeVersion,
     NEW.BinaryChecksums,
     NEW.BuildIds,
+    NEW.TemporalPauseInfo,
     NEW.KeywordList01,
     NEW.KeywordList02,
     NEW.KeywordList03
@@ -192,6 +203,7 @@ BEGIN
     TemporalChangeVersion,
     BinaryChecksums,
     BuildIds,
+    TemporalPauseInfo,
     KeywordList01,
     KeywordList02,
     KeywordList03
@@ -201,6 +213,7 @@ BEGIN
     OLD.TemporalChangeVersion,
     OLD.BinaryChecksums,
     OLD.BuildIds,
+    OLD.TemporalPauseInfo,
     OLD.KeywordList01,
     OLD.KeywordList02,
     OLD.KeywordList03
@@ -241,6 +254,7 @@ BEGIN
     TemporalChangeVersion,
     BinaryChecksums,
     BuildIds,
+    TemporalPauseInfo,
     KeywordList01,
     KeywordList02,
     KeywordList03
@@ -250,6 +264,7 @@ BEGIN
     OLD.TemporalChangeVersion,
     OLD.BinaryChecksums,
     OLD.BuildIds,
+    OLD.TemporalPauseInfo,
     OLD.KeywordList01,
     OLD.KeywordList02,
     OLD.KeywordList03
@@ -259,6 +274,7 @@ BEGIN
     TemporalChangeVersion,
     BinaryChecksums,
     BuildIds,
+    TemporalPauseInfo,
     KeywordList01,
     KeywordList02,
     KeywordList03
@@ -267,6 +283,7 @@ BEGIN
     NEW.TemporalChangeVersion,
     NEW.BinaryChecksums,
     NEW.BuildIds,
+    NEW.TemporalPauseInfo,
     NEW.KeywordList01,
     NEW.KeywordList02,
     NEW.KeywordList03

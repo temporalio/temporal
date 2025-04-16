@@ -43,7 +43,7 @@ import (
 )
 
 type WorkflowVisibilityTestSuite struct {
-	testcore.FunctionalSuite
+	testcore.FunctionalTestSuite
 }
 
 func TestWorkflowVisibilityTestSuite(t *testing.T) {
@@ -63,7 +63,7 @@ func (s *WorkflowVisibilityTestSuite) TestVisibility() {
 
 	startRequest := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
-		Namespace:           s.Namespace(),
+		Namespace:           s.Namespace().String(),
 		WorkflowId:          id1,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -88,7 +88,7 @@ func (s *WorkflowVisibilityTestSuite) TestVisibility() {
 
 	poller := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
-		Namespace:           s.Namespace(),
+		Namespace:           s.Namespace().String(),
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
@@ -124,7 +124,7 @@ func (s *WorkflowVisibilityTestSuite) TestVisibility() {
 
 	startRequest = &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
-		Namespace:           s.Namespace(),
+		Namespace:           s.Namespace().String(),
 		WorkflowId:          id2,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -148,7 +148,7 @@ func (s *WorkflowVisibilityTestSuite) TestVisibility() {
 	s.Eventually(
 		func() bool {
 			resp, err3 := s.FrontendClient().ListClosedWorkflowExecutions(testcore.NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
-				Namespace:       s.Namespace(),
+				Namespace:       s.Namespace().String(),
 				MaximumPageSize: 100,
 				StartTimeFilter: startFilter,
 				Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_TypeFilter{
@@ -176,7 +176,7 @@ func (s *WorkflowVisibilityTestSuite) TestVisibility() {
 	s.Eventually(
 		func() bool {
 			resp, err4 := s.FrontendClient().ListOpenWorkflowExecutions(testcore.NewContext(), &workflowservice.ListOpenWorkflowExecutionsRequest{
-				Namespace:       s.Namespace(),
+				Namespace:       s.Namespace().String(),
 				MaximumPageSize: 100,
 				StartTimeFilter: startFilter,
 				Filters: &workflowservice.ListOpenWorkflowExecutionsRequest_TypeFilter{

@@ -25,9 +25,11 @@
 package matching
 
 import (
+	"context"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -39,7 +41,7 @@ type (
 	// genericTaskInfo contains the info for an activity or workflow task
 	genericTaskInfo struct {
 		*persistencespb.AllocatedTaskInfo
-		completionFunc func(*persistencespb.AllocatedTaskInfo, error)
+		completionFunc func(*internalTask, taskResponse)
 	}
 	// queryTaskInfo contains the info for a query task
 	queryTaskInfo struct {
@@ -48,9 +50,10 @@ type (
 	}
 	// nexusTaskInfo contains the info for a nexus task
 	nexusTaskInfo struct {
-		taskID   string
-		deadline time.Time
-		request  *matchingservice.DispatchNexusTaskRequest
+		taskID            string
+		deadline          time.Time
+		operationDeadline time.Time
+		request           *matchingservice.DispatchNexusTaskRequest
 	}
 	// startedTaskInfo contains info for any task received from
 	// another matching host. This type of task is already marked as started
@@ -69,7 +72,7 @@ type (
 		started          *startedTaskInfo // non-nil for a task received from a parent partition which is already started
 		namespace        namespace.Name
 		source           enumsspb.TaskSource
-		responseC        chan error // non-nil only where there is a caller waiting for response (sync-match)
+		responseC        chan taskResponse // non-nil only where there is a caller waiting for response (sync match)
 		backlogCountHint func() int64
 		// forwardInfo contains information about forward source partition and versioning decisions made by it
 		// a parent partition receiving forwarded tasks makes no versioning decisions and only follows what the source
@@ -78,7 +81,26 @@ type (
 		// redirectInfo is only set when redirect rule is applied on the task. for forwarded tasks, this is populated
 		// based on forwardInfo.
 		redirectInfo *taskqueuespb.BuildIdRedirectInfo
-		recycleToken func()
+		// pollerScalingDecision is assigned when the queue has advice to give to the poller about whether
+		// it should adjust its poller count
+		pollerScalingDecision *taskqueuepb.PollerScalingDecision
+		recycleToken          func(*internalTask)
+
+		// These fields are for use by matcherData:
+		waitableMatchResult
+		forwardCtx      context.Context // non-nil for sync match task only
+		isPollForwarder bool
+	}
+
+	// taskResponse is used to report the result of either a match with a local poller,
+	// or forwarding a task, query, or nexus task.
+	taskResponse struct {
+		// If forwarded is true, then forwardRes and forwardErr have the result of forwarding.
+		// If it's false, then startErr has the result of RecordTaskStarted.
+		forwarded  bool
+		forwardRes any // note this may be a non-nil "any" containing a nil pointer
+		forwardErr error
+		startErr   error
 	}
 )
 
@@ -94,7 +116,7 @@ func newInternalTaskForSyncMatch(
 		source = forwardInfo.TaskSource
 		redirectInfo = forwardInfo.GetRedirectInfo()
 	}
-	task := &internalTask{
+	return &internalTask{
 		event: &genericTaskInfo{
 			AllocatedTaskInfo: &persistencespb.AllocatedTaskInfo{
 				Data:   info,
@@ -104,23 +126,21 @@ func newInternalTaskForSyncMatch(
 		forwardInfo:  forwardInfo,
 		source:       source,
 		redirectInfo: redirectInfo,
-		responseC:    make(chan error, 1),
+		responseC:    make(chan taskResponse, 1),
 	}
-	return task
 }
 
 func newInternalTaskFromBacklog(
 	info *persistencespb.AllocatedTaskInfo,
-	completionFunc func(*persistencespb.AllocatedTaskInfo, error),
+	completionFunc func(*internalTask, taskResponse),
 ) *internalTask {
-	task := &internalTask{
+	return &internalTask{
 		event: &genericTaskInfo{
 			AllocatedTaskInfo: info,
 			completionFunc:    completionFunc,
 		},
 		source: enumsspb.TASK_SOURCE_DB_BACKLOG,
 	}
-	return task
 }
 
 func newInternalQueryTask(
@@ -133,7 +153,7 @@ func newInternalQueryTask(
 			request: request,
 		},
 		forwardInfo: request.GetForwardInfo(),
-		responseC:   make(chan error, 1),
+		responseC:   make(chan taskResponse, 1),
 		source:      enumsspb.TASK_SOURCE_HISTORY,
 	}
 }
@@ -141,16 +161,18 @@ func newInternalQueryTask(
 func newInternalNexusTask(
 	taskID string,
 	deadline time.Time,
+	operationDeadline time.Time,
 	request *matchingservice.DispatchNexusTaskRequest,
 ) *internalTask {
 	return &internalTask{
 		nexus: &nexusTaskInfo{
-			taskID:   taskID,
-			deadline: deadline,
-			request:  request,
+			taskID:            taskID,
+			deadline:          deadline,
+			operationDeadline: operationDeadline,
+			request:           request,
 		},
 		forwardInfo: request.GetForwardInfo(),
-		responseC:   make(chan error, 1),
+		responseC:   make(chan taskResponse, 1),
 		source:      enumsspb.TASK_SOURCE_HISTORY,
 	}
 }
@@ -174,6 +196,11 @@ func (info *startedTaskInfo) hasEmptyResponse() bool {
 // isQuery returns true if the underlying task is a query task
 func (task *internalTask) isQuery() bool {
 	return task.query != nil
+}
+
+// isNexus returns true if the underlying task is a nexus task
+func (task *internalTask) isNexus() bool {
+	return task.nexus != nil
 }
 
 // isStarted is true when this task is already marked as started
@@ -227,8 +254,29 @@ func (task *internalTask) pollActivityTaskQueueResponse() *matchingservice.PollA
 // should only be called when isStarted() is true
 func (task *internalTask) pollNexusTaskQueueResponse() *matchingservice.PollNexusTaskQueueResponse {
 	if task.isStarted() {
+		if task.started.nexusTaskInfo.Response != nil {
+			task.started.nexusTaskInfo.Response.PollerScalingDecision = task.pollerScalingDecision
+		}
 		return task.started.nexusTaskInfo
 	}
+	return nil
+}
+
+// getResponse waits for a response on the task's response channel.
+func (task *internalTask) getResponse() (taskResponse, bool) {
+	if task.responseC == nil {
+		return taskResponse{}, false
+	}
+	return <-task.responseC, true
+}
+
+func (task *internalTask) getPriority() *commonpb.Priority {
+	if task.event != nil {
+		return task.event.AllocatedTaskInfo.GetData().GetPriority()
+	} else if task.query != nil {
+		return task.query.request.GetPriority()
+	}
+	// nexus tasks don't have priorities for now
 	return nil
 }
 
@@ -241,15 +289,26 @@ func (task *internalTask) pollNexusTaskQueueResponse() *matchingservice.PollNexu
 // so finish will call the rate limiter's RecycleToken to give the unused token back to any process
 // that is waiting on the token, if one exists.
 func (task *internalTask) finish(err error, wasValid bool) {
+	res := taskResponse{startErr: err}
+	task.finishInternal(res, wasValid)
+}
+
+// finishForward should be called after forwarding a task.
+func (task *internalTask) finishForward(forwardRes any, forwardErr error, wasValid bool) {
+	res := taskResponse{forwarded: true, forwardRes: forwardRes, forwardErr: forwardErr}
+	task.finishInternal(res, wasValid)
+}
+
+func (task *internalTask) finishInternal(res taskResponse, wasValid bool) {
 	if !wasValid && task.recycleToken != nil {
-		task.recycleToken()
+		task.recycleToken(task)
 	}
 
 	switch {
 	case task.responseC != nil:
-		task.responseC <- err
+		task.responseC <- res
 	case task.event.completionFunc != nil:
 		// TODO: this probably should not be done synchronously in PollWorkflow/ActivityTaskQueue
-		task.event.completionFunc(task.event.AllocatedTaskInfo, err)
+		task.event.completionFunc(task, res)
 	}
 }

@@ -38,10 +38,10 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/consts"
-	"go.temporal.io/server/service/history/shard"
+	historyi "go.temporal.io/server/service/history/interfaces"
+	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/vclock"
-	"go.temporal.io/server/service/history/workflow"
 )
 
 type (
@@ -51,7 +51,7 @@ type (
 
 // CheckTaskVersion will return an error if task version check fails
 func CheckTaskVersion(
-	shard shard.Context,
+	shard historyi.ShardContext,
 	logger log.Logger,
 	namespace *namespace.Namespace,
 	version int64,
@@ -79,12 +79,12 @@ func CheckTaskVersion(
 // if still mutable state's next event ID <= task ID, will return nil, nil
 func loadMutableStateForTransferTask(
 	ctx context.Context,
-	shardContext shard.Context,
-	wfContext workflow.Context,
+	shardContext historyi.ShardContext,
+	wfContext historyi.WorkflowContext,
 	transferTask tasks.Task,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
-) (workflow.MutableState, error) {
+) (historyi.MutableState, error) {
 	logger = tasks.InitializeLogger(transferTask, logger)
 	mutableState, err := loadMutableStateForTask(
 		ctx,
@@ -94,6 +94,7 @@ func loadMutableStateForTransferTask(
 		tasks.GetTransferTaskEventID,
 		transferTaskMutableStateStaleChecker,
 		metricsHandler.WithTags(metrics.OperationTag(metrics.OperationTransferQueueProcessorScope)),
+		queues.GetActiveTransferTaskTypeTagValue(transferTask),
 		logger,
 	)
 	if err != nil {
@@ -126,12 +127,12 @@ func loadMutableStateForTransferTask(
 // if still mutable state's next event ID <= task ID, will return nil, nil
 func loadMutableStateForTimerTask(
 	ctx context.Context,
-	shardContext shard.Context,
-	wfContext workflow.Context,
+	shardContext historyi.ShardContext,
+	wfContext historyi.WorkflowContext,
 	timerTask tasks.Task,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
-) (workflow.MutableState, error) {
+) (historyi.MutableState, error) {
 	logger = tasks.InitializeLogger(timerTask, logger)
 	return loadMutableStateForTask(
 		ctx,
@@ -141,20 +142,22 @@ func loadMutableStateForTimerTask(
 		tasks.GetTimerTaskEventID,
 		timerTaskMutableStateStaleChecker,
 		metricsHandler.WithTags(metrics.OperationTag(metrics.OperationTimerQueueProcessorScope)),
+		queues.GetActiveTimerTaskTypeTagValue(timerTask),
 		logger,
 	)
 }
 
 func loadMutableStateForTask(
 	ctx context.Context,
-	shardContext shard.Context,
-	wfContext workflow.Context,
+	shardContext historyi.ShardContext,
+	wfContext historyi.WorkflowContext,
 	task tasks.Task,
 	getEventID taskEventIDGetter,
 	canMutableStateBeStale mutableStateStaleChecker,
 	metricsHandler metrics.Handler,
+	taskTypeTag string,
 	logger log.Logger,
-) (workflow.MutableState, error) {
+) (historyi.MutableState, error) {
 
 	if err := validateTaskByClock(shardContext, task); err != nil {
 		return nil, err
@@ -209,7 +212,8 @@ func loadMutableStateForTask(
 	}
 	// After reloading mutable state from a database, task's event ID is still not valid,
 	// means that task is obsolete and can be safely skipped.
-	metrics.TaskSkipped.With(metricsHandler).Record(1)
+	getNamespaceTagByID(shardContext.GetNamespaceRegistry(), task.GetNamespaceID())
+	metrics.TaskSkipped.With(metricsHandler).Record(1, getNamespaceTagByID(shardContext.GetNamespaceRegistry(), task.GetNamespaceID()), metrics.TaskTypeTag(taskTypeTag))
 	logger.Info("Task processor skipping task: task event ID >= MS NextEventID.",
 		tag.WorkflowNextEventID(mutableState.GetNextEventID()),
 	)
@@ -217,7 +221,7 @@ func loadMutableStateForTask(
 }
 
 func validateTaskByClock(
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	task tasks.Task,
 ) error {
 	shardID := shardContext.GetShardID()
@@ -244,9 +248,9 @@ func validateTaskByClock(
 
 func validateTaskGeneration(
 	ctx context.Context,
-	shardContext shard.Context,
-	workflowContext workflow.Context,
-	mutableState workflow.MutableState,
+	shardContext historyi.ShardContext,
+	workflowContext historyi.WorkflowContext,
+	mutableState historyi.MutableState,
 	taskID int64,
 ) error {
 	tgClock := mutableState.GetExecutionInfo().TaskGenerationShardClockTimestamp
@@ -331,10 +335,10 @@ func getNamespaceTagAndReplicationStateByID(
 	registry namespace.Registry,
 	namespaceID string,
 ) (metrics.Tag, enumspb.ReplicationState) {
-	namespace, err := registry.GetNamespaceByID(namespace.ID(namespaceID))
+	namespaceName, err := registry.GetNamespaceByID(namespace.ID(namespaceID))
 	if err != nil {
 		return metrics.NamespaceUnknownTag(), enumspb.REPLICATION_STATE_UNSPECIFIED
 	}
 
-	return metrics.NamespaceTag(namespace.Name().String()), namespace.ReplicationState()
+	return metrics.NamespaceTag(namespaceName.Name().String()), namespaceName.ReplicationState()
 }

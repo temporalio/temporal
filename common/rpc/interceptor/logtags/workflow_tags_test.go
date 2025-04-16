@@ -32,16 +32,16 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
-	"go.temporal.io/server/api/token/v1"
-	"go.temporal.io/server/common"
+	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/rpc/interceptor/logtags"
+	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/testing/testvars"
 )
 
 func TestExtract(t *testing.T) {
-	serializer := common.NewProtoTaskTokenSerializer()
+	serializer := tasktoken.NewSerializer()
 
 	wt := logtags.NewWorkflowTags(
 		serializer,
@@ -50,7 +50,7 @@ func TestExtract(t *testing.T) {
 
 	tv := testvars.New(t)
 	tv = tv.WithRunID(tv.Any().RunID())
-	taskToken := token.Task{
+	taskToken := tokenspb.Task{
 		WorkflowId: tv.WorkflowID(),
 		RunId:      tv.RunID(),
 	}

@@ -73,6 +73,8 @@ func SpanExportersFromEnv(
 
 			// other OTEL configuration env variables are picked up automatically by the exporter itself
 			exporters[OtelTracesOtlpExporterType] = otlptracegrpc.NewUnstarted()
+		case "none":
+			// ignored
 		default:
 			return nil, fmt.Errorf("%w: %v=%v", unsupportedTraceExporter, OtelTracesExporterTypesEnvKey, exporterType)
 		}

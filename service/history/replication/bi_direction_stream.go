@@ -186,24 +186,29 @@ func (s *BiDirectionStreamImpl[Req, Resp]) recvLoop() {
 		resp, err := s.streamingClient.Recv()
 		switch err {
 		case nil:
-			s.channel <- StreamResp[Resp]{
-				Resp: resp,
-				Err:  nil,
-			}
+			s.notifyRecvChannel(resp, nil)
 		case io.EOF:
 			return
 		default:
-			s.logger.Error(fmt.Sprintf(
-				"BiDirectionStream encountered unexpected error, closing: %T %s",
-				err, err,
-			))
 			var errResp Resp
-			s.channel <- StreamResp[Resp]{
-				Resp: errResp,
-				Err:  NewStreamError("BiDirectionStream recv error", err),
-			}
+			s.notifyRecvChannel(errResp, NewStreamError("BiDirectionStream recv error", err))
 			return
 		}
+	}
+}
+
+func (s *BiDirectionStreamImpl[Req, Resp]) notifyRecvChannel(response Resp, err error) {
+	resp := StreamResp[Resp]{
+		Resp: response,
+		Err:  err,
+	}
+
+	select {
+	case s.channel <- resp:
+		return
+	default:
+		s.logger.Warn("no enough worker on bi-direction receiving stream")
+		s.channel <- resp
 	}
 }
 

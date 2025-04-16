@@ -40,6 +40,7 @@ import (
 	history "go.temporal.io/api/history/v1"
 	persistence "go.temporal.io/server/api/persistence/v1"
 	hsm "go.temporal.io/server/service/history/hsm"
+	interfaces "go.temporal.io/server/service/history/interfaces"
 	tasks "go.temporal.io/server/service/history/tasks"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -48,6 +49,7 @@ import (
 type MockTaskGenerator struct {
 	ctrl     *gomock.Controller
 	recorder *MockTaskGeneratorMockRecorder
+	isgomock struct{}
 }
 
 // MockTaskGeneratorMockRecorder is the mock recorder for MockTaskGenerator.
@@ -181,11 +183,12 @@ func (mr *MockTaskGeneratorMockRecorder) GenerateDirtySubStateMachineTasks(state
 }
 
 // GenerateHistoryReplicationTasks mocks base method.
-func (m *MockTaskGenerator) GenerateHistoryReplicationTasks(eventBatches [][]*history.HistoryEvent) error {
+func (m *MockTaskGenerator) GenerateHistoryReplicationTasks(eventBatches [][]*history.HistoryEvent) ([]tasks.Task, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GenerateHistoryReplicationTasks", eventBatches)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].([]tasks.Task)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // GenerateHistoryReplicationTasks indicates an expected call of GenerateHistoryReplicationTasks.
@@ -239,7 +242,7 @@ func (mr *MockTaskGeneratorMockRecorder) GenerateRequestCancelExternalTasks(even
 }
 
 // GenerateScheduleSpeculativeWorkflowTaskTasks mocks base method.
-func (m *MockTaskGenerator) GenerateScheduleSpeculativeWorkflowTaskTasks(workflowTask *WorkflowTaskInfo) error {
+func (m *MockTaskGenerator) GenerateScheduleSpeculativeWorkflowTaskTasks(workflowTask *interfaces.WorkflowTaskInfo) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GenerateScheduleSpeculativeWorkflowTaskTasks", workflowTask)
 	ret0, _ := ret[0].(error)

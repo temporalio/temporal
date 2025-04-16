@@ -39,8 +39,8 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/util"
-	"go.temporal.io/server/internal/goro"
 )
 
 const (
@@ -50,11 +50,9 @@ const (
 
 type (
 	taskReader struct {
-		status     int32
 		taskBuffer chan *persistencespb.AllocatedTaskInfo // tasks loaded from persistence
 		notifyC    chan struct{}                          // Used as signal to notify pump of new tasks
 		backlogMgr *backlogManagerImpl
-		gorogrp    goro.Group
 
 		backoffTimerLock      sync.Mutex
 		backoffTimer          *time.Timer
@@ -65,7 +63,6 @@ type (
 
 func newTaskReader(backlogMgr *backlogManagerImpl) *taskReader {
 	tr := &taskReader{
-		status:     common.DaemonStatusInitialized,
 		backlogMgr: backlogMgr,
 		notifyC:    make(chan struct{}, 1),
 		// we always dequeue the head of the buffer and try to dispatch it to a poller
@@ -82,30 +79,8 @@ func newTaskReader(backlogMgr *backlogManagerImpl) *taskReader {
 
 // Start taskReader background goroutines.
 func (tr *taskReader) Start() {
-	if !atomic.CompareAndSwapInt32(
-		&tr.status,
-		common.DaemonStatusInitialized,
-		common.DaemonStatusStarted,
-	) {
-		return
-	}
-
-	tr.gorogrp.Go(tr.dispatchBufferedTasks)
-	tr.gorogrp.Go(tr.getTasksPump)
-}
-
-// Stop taskReader goroutines.
-// Note that this does not wait until
-func (tr *taskReader) Stop() {
-	if !atomic.CompareAndSwapInt32(
-		&tr.status,
-		common.DaemonStatusStarted,
-		common.DaemonStatusStopped,
-	) {
-		return
-	}
-
-	tr.gorogrp.Cancel()
+	go tr.dispatchBufferedTasks()
+	go tr.getTasksPump()
 }
 
 func (tr *taskReader) Signal() {
@@ -131,8 +106,8 @@ func (tr *taskReader) getBacklogHeadAge() time.Duration {
 	return time.Since(time.Unix(0, tr.backlogHeadCreateTime.Load()))
 }
 
-func (tr *taskReader) dispatchBufferedTasks(ctx context.Context) error {
-	ctx = tr.backlogMgr.contextInfoProvider(ctx)
+func (tr *taskReader) dispatchBufferedTasks() {
+	ctx := tr.backlogMgr.tqCtx
 
 dispatchLoop:
 	for ctx.Err() == nil {
@@ -145,7 +120,7 @@ dispatchLoop:
 			if !ok { // Task queue getTasks pump is shutdown
 				break dispatchLoop
 			}
-			task := newInternalTaskFromBacklog(taskInfo, tr.backlogMgr.completeTask)
+			task := newInternalTaskFromBacklog(taskInfo, tr.completeTask)
 			for ctx.Err() == nil {
 				tr.updateBacklogAge(task)
 				taskCtx, cancel := context.WithTimeout(ctx, taskReaderOfferTimeout)
@@ -155,27 +130,33 @@ dispatchLoop:
 					continue dispatchLoop
 				}
 
+				var stickyUnavailable *serviceerrors.StickyWorkerUnavailable
 				// if task is still valid (truly valid or unable to verify if task is valid)
 				metrics.BufferThrottlePerTaskQueueCounter.With(tr.taggedMetricsHandler()).Record(1)
-				if !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, context.Canceled) {
-					// Don't log here if encounters missing user data error when dispatch a versioned task.
+				if !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, context.Canceled) &&
+					// StickyWorkerUnavailable is expected for versioned sticky queues
+					!errors.As(err, &stickyUnavailable) {
 					tr.throttledLogger().Error("taskReader: unexpected error dispatching task", tag.Error(err))
 				}
 				util.InterruptibleSleep(ctx, taskReaderOfferThrottleWait)
 			}
-			return ctx.Err()
+			return
 		case <-ctx.Done():
-			return ctx.Err()
+			return
 		}
 	}
-	return ctx.Err()
 }
 
-func (tr *taskReader) getTasksPump(ctx context.Context) error {
-	ctx = tr.backlogMgr.contextInfoProvider(ctx)
+func (tr *taskReader) completeTask(task *internalTask, res taskResponse) {
+	tr.backlogMgr.completeTask(task, res.startErr)
+}
+
+// nolint:revive // can improve this later
+func (tr *taskReader) getTasksPump() {
+	ctx := tr.backlogMgr.tqCtx
 
 	if err := tr.backlogMgr.WaitUntilInitialized(ctx); err != nil {
-		return err
+		return
 	}
 
 	updateAckTimer := time.NewTimer(tr.backlogMgr.config.UpdateAckInterval())
@@ -187,13 +168,13 @@ Loop:
 		// Prioritize exiting over other processing
 		select {
 		case <-ctx.Done():
-			return nil
+			return
 		default:
 		}
 
 		select {
 		case <-ctx.Done():
-			return nil
+			return
 
 		case <-tr.notifyC:
 			batch, err := tr.getTaskBatch(ctx)
@@ -243,7 +224,7 @@ func (tr *taskReader) getTaskBatchWithRange(
 	readLevel int64,
 	maxReadLevel int64,
 ) ([]*persistencespb.AllocatedTaskInfo, error) {
-	response, err := tr.backlogMgr.db.GetTasks(ctx, readLevel+1, maxReadLevel+1, tr.backlogMgr.config.GetTasksBatchSize())
+	response, err := tr.backlogMgr.db.GetTasks(ctx, subqueueZero, readLevel+1, maxReadLevel+1, tr.backlogMgr.config.GetTasksBatchSize())
 	if err != nil {
 		return nil, err
 	}
@@ -262,7 +243,7 @@ type getTasksBatchResponse struct {
 func (tr *taskReader) getTaskBatch(ctx context.Context) (*getTasksBatchResponse, error) {
 	var tasks []*persistencespb.AllocatedTaskInfo
 	readLevel := tr.backlogMgr.taskAckManager.getReadLevel()
-	maxReadLevel := tr.backlogMgr.db.GetMaxReadLevel()
+	maxReadLevel := tr.backlogMgr.db.GetMaxReadLevel(subqueueZero)
 
 	// counter i is used to break and let caller check whether taskqueue is still alive and needs to resume read.
 	for i := 0; i < 10 && readLevel < maxReadLevel; i++ {
@@ -325,7 +306,7 @@ func (tr *taskReader) addSingleTaskToBuffer(
 
 func (tr *taskReader) persistAckBacklogCountLevel(ctx context.Context) error {
 	ackLevel := tr.backlogMgr.taskAckManager.getAckLevel()
-	return tr.backlogMgr.db.UpdateState(ctx, ackLevel)
+	return tr.backlogMgr.db.OldUpdateState(ctx, ackLevel)
 }
 
 func (tr *taskReader) logger() log.Logger {
