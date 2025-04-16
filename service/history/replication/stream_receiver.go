@@ -359,11 +359,7 @@ func (r *StreamReceiverImpl) processMessages(
 			Watermark: exclusiveHighWatermark,
 			Timestamp: exclusiveHighWatermarkTime,
 		}, convertedTasks...) {
-			if submitted := taskScheduler.TrySubmit(task); !submitted {
-				r.logger.Warn("no enough worker to process replication tasks")
-				taskScheduler.Submit(task)
-			}
-
+			taskScheduler.Submit(task)
 		}
 	}
 	return nil
