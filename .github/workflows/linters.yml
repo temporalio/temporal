@@ -75,9 +75,7 @@ jobs:
       - uses: arduino/setup-protoc@v3
 
       - name: lint system workflows with workflowcheck
-        run: |
-          make workflowcheck      
-          - run: make workflowcheck
+        run: make workflowcheck
 
   fmt-imports:
     runs-on: ubuntu-latest
