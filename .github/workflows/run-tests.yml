@@ -1,5 +1,5 @@
 name: All Tests
-run-name: ${{ inputs.test_name }}${{ inputs.test_dbs }}${{ inputs.run_single_test_job }}
+run-name: ${{ inputs.test_name }}${{ inputs.test_dbs }}
 
 on:
   pull_request:
