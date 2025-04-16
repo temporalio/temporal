@@ -68,9 +68,7 @@ func (s *callerInfoSuite) TearDownSuite() {
 }
 
 func (s *callerInfoSuite) TestIntercept_CallerName() {
-	// testNamespaceID := namespace.NewID()
 	testNamespaceName := namespace.Name("test-namespace")
-	// s.mockRegistry.EXPECT().GetNamespaceName(testNamespaceID).Return(testNamespaceName, nil).AnyTimes()
 	s.mockRegistry.EXPECT().GetNamespace(gomock.Any()).Return(nil, nil).AnyTimes()
 
 	testCases := []struct {
@@ -99,9 +97,9 @@ func (s *callerInfoSuite) TestIntercept_CallerName() {
 			expectedCallerName: testNamespaceName.String(),
 		},
 		{
-			// test context with caller name
+			// test context with matching caller name
 			setupIncomingCtx: func() context.Context {
-				return headers.SetCallerName(context.Background(), headers.CallerNameSystem)
+				return headers.SetCallerName(context.Background(), testNamespaceName.String())
 			},
 			request: &workflowservice.StartWorkflowExecutionRequest{
 				Namespace: testNamespaceName.String(),
@@ -112,6 +110,16 @@ func (s *callerInfoSuite) TestIntercept_CallerName() {
 			// test context with empty caller name
 			setupIncomingCtx: func() context.Context {
 				return headers.SetCallerName(context.Background(), "")
+			},
+			request: &workflowservice.StartWorkflowExecutionRequest{
+				Namespace: testNamespaceName.String(),
+			},
+			expectedCallerName: testNamespaceName.String(),
+		},
+		{
+			// test context with invalid caller name
+			setupIncomingCtx: func() context.Context {
+				return headers.SetCallerName(context.Background(), "some-random-value")
 			},
 			request: &workflowservice.StartWorkflowExecutionRequest{
 				Namespace: testNamespaceName.String(),
@@ -180,6 +188,14 @@ func (s *callerInfoSuite) TestIntercept_CallerType() {
 			request:            &workflowservice.StartWorkflowExecutionRequest{},
 			expectedCallerType: headers.CallerTypeAPI,
 		},
+		{
+			// test context with invalid caller type
+			setupIncomingCtx: func() context.Context {
+				return headers.SetCallerType(context.Background(), "some-random-value")
+			},
+			request:            &workflowservice.StartWorkflowExecutionRequest{},
+			expectedCallerType: headers.CallerTypeAPI,
+		},
 	}
 
 	for _, testCase := range testCases {
@@ -223,7 +239,7 @@ func (s *callerInfoSuite) TestIntercept_CallOrigin() {
 			expectedCallOrigin: method,
 		},
 		{
-			// test context with api caller type but no call initiation
+			// test context with api caller name but no call origin
 			setupIncomingCtx: func() context.Context {
 				return headers.SetCallerName(context.Background(), "test-namespace")
 			},
@@ -231,7 +247,7 @@ func (s *callerInfoSuite) TestIntercept_CallOrigin() {
 			expectedCallOrigin: method,
 		},
 		{
-			// test context with background caller type but no call initiation
+			// test context with background caller type but no call origin
 			setupIncomingCtx: func() context.Context {
 				return headers.SetCallerInfo(context.Background(), headers.SystemBackgroundCallerInfo)
 			},
@@ -239,17 +255,25 @@ func (s *callerInfoSuite) TestIntercept_CallOrigin() {
 			expectedCallOrigin: "",
 		},
 		{
-			// test context with call initiation
+			// test context with matchcing call origin
 			setupIncomingCtx: func() context.Context {
-				return headers.SetOrigin(context.Background(), "test-method")
+				return headers.SetOrigin(context.Background(), method)
 			},
 			request:            &workflowservice.StartWorkflowExecutionRequest{},
-			expectedCallOrigin: "test-method",
+			expectedCallOrigin: method,
 		},
 		{
-			// test context with empty call initiation
+			// test context with empty call origin
 			setupIncomingCtx: func() context.Context {
 				return headers.SetOrigin(context.Background(), "")
+			},
+			request:            &workflowservice.StartWorkflowExecutionRequest{},
+			expectedCallOrigin: method,
+		},
+		{
+			// test context with invalid call origin
+			setupIncomingCtx: func() context.Context {
+				return headers.SetOrigin(context.Background(), "some-random-value")
 			},
 			request:            &workflowservice.StartWorkflowExecutionRequest{},
 			expectedCallOrigin: method,
