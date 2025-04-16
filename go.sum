@@ -339,8 +339,8 @@ github.com/uber-common/bark v1.0.0/go.mod h1:g0ZuPcD7XiExKHynr93Q742G/sbrdVQkghr
 github.com/uber-common/bark v1.3.0 h1:DkuZCBaQS9LWuNAPrCO6yQVANckIX3QI0QwLemUnzCo=
 github.com/uber-common/bark v1.3.0/go.mod h1:5fDe/YcIVP55XhFF9hUihX2lDsDcpFrTZEAwAVwtPDw=
 github.com/uber-go/tally v3.3.15+incompatible/go.mod h1:YDTIBxdXyOU/sCWilKB4bgyufu1cEi0jdVnRdxvjnmU=
-github.com/uber-go/tally/v4 v4.1.17-0.20240412215630-22fe011f5ff0 h1:z5IgRoL16N7tdzn5oikX2G4oVXopW+CWo3XRxx61OQo=
-github.com/uber-go/tally/v4 v4.1.17-0.20240412215630-22fe011f5ff0/go.mod h1:ZdpiHRGSa3z4NIAc1VlEH4SiknR885fOIF08xmS0gaU=
+github.com/uber-go/tally/v4 v4.1.17 h1:C+U4BKtVDXTszuzU+WH8JVQvRVnaVKxzZrROFyDrvS8=
+github.com/uber-go/tally/v4 v4.1.17/go.mod h1:ZdpiHRGSa3z4NIAc1VlEH4SiknR885fOIF08xmS0gaU=
 github.com/uber/jaeger-client-go v2.22.1+incompatible h1:NHcubEkVbahf9t3p75TOCR83gdUHXjRJvjoBh1yACsM=
 github.com/uber/jaeger-client-go v2.22.1+incompatible/go.mod h1:WVhlPFC8FDjOFMMWRy2pZqQJSXxYSwNYOkTr/Z6d3Kk=
 github.com/uber/jaeger-lib v2.4.1+incompatible h1:td4jdvLcExb4cBISKIpHuGoVXh+dVKhn2Um6rjCsSsg=
