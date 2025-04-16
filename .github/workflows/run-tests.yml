@@ -224,6 +224,9 @@ jobs:
       - run: make clean-bins ci-build-misc
         if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
 
+      - run: make workflowcheck
+        if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
+
   unit-test:
     if: ${{ inputs.run_single_functional_test != true }}
     name: Unit test
