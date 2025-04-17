@@ -49,6 +49,15 @@ var (
 	errComponentNotFound = serviceerror.NewNotFound("component not found")
 )
 
+type valueState uint8
+
+const (
+	valueStateUndefined valueState = iota
+	valueStateSynced
+	valueStateNeedDeserialize
+	valueStateNeedSerialize
+)
+
 type (
 	// Node is the in-memory representation of a persisted CHASM node.
 	//
@@ -65,16 +74,13 @@ type (
 		serializedNode *persistencespb.ChasmNode // serialized component | data | collection with metadata
 		value          any                       // deserialized component | data | collection
 
-		// If valueSynced is false, the value field is not in sync with the persistence field.
-		// The field is only meaningful when value field is not nil.
-		//
+		// valueState indicates if the value field and the persistence field serializedNode are in sync.
+		// If new value might be changed since it was deserialized and serialize method wasn't called yet, then valueState is valueStateNeedSerialize.
+		// If a node is constructed from the database, then valueState is valueStateNeedDeserialize.
+		// If serialize or deserialize method were called, then valueState is valueStateSynced, and next calls to them would be no-op.
 		// NOTE: This is a different concept from the IsDirty() method needed by MutableState which means
 		// if the state in memory matches the state in DB.
-		//
-		// TODO: synced flag should be cleared
-		//   when values serializedNode and value got in-sync.
-		//   And deserialization/serialization can be skipped if synced flag is true.
-		valueSynced bool
+		valueState valueState
 	}
 
 	// nodeBase is a set of dependencies and states shared by all nodes in a CHASM tree.
@@ -152,9 +158,9 @@ func NewTree(
 		// Initialize empty serializedNode.
 		root.initSerializedNode(fieldTypeComponent)
 		// Although both value and serializedNode.Data are nil, they are considered NOT synced
-		// because value has no type but serializedNode does.
+		// because value has no type and serializedNode does.
 		// deserialize method should set value when called.
-		root.valueSynced = false
+		root.valueState = valueStateNeedDeserialize
 		return root, nil
 	}
 
@@ -247,7 +253,7 @@ func (n *Node) prepareComponentValue(
 		)
 	}
 
-	if !n.valueSynced {
+	if n.valueState == valueStateNeedDeserialize {
 		registrableComponent, ok := n.registry.component(componentAttr.GetType())
 		if !ok {
 			return nil, serviceerror.NewInternal(fmt.Sprintf("component type name not registered: %v", componentAttr.GetType()))
@@ -261,7 +267,9 @@ func (n *Node) prepareComponentValue(
 	// For now, we assume if a node is accessed with a MutableContext,
 	// its value will be mutated and no longer in sync with the serializedNode.
 	_, componentCanBeMutated := chasmContext.(MutableContext)
-	n.valueSynced = !componentCanBeMutated
+	if componentCanBeMutated {
+		n.valueState = valueStateNeedSerialize
+	}
 
 	return n.value, nil
 }
@@ -331,7 +339,7 @@ func (n *Node) setSerializedNode(
 ) {
 	if len(nodePath) == 0 {
 		n.serializedNode = serializedNode
-		n.valueSynced = false
+		n.valueState = valueStateNeedDeserialize
 		return
 	}
 
@@ -346,7 +354,7 @@ func (n *Node) setSerializedNode(
 
 // serialize sets or updates serializedValue field of the node n with serialized value.
 func (n *Node) serialize() error {
-	if n.valueSynced {
+	if n.valueState != valueStateNeedSerialize {
 		return nil
 	}
 
@@ -397,7 +405,9 @@ func (n *Node) serializeComponentNode() error {
 		n.serializedNode.Data = blob
 		n.serializedNode.GetMetadata().GetComponentAttributes().Type = rc.fqType()
 		n.updateLastUpdateVersionedTransition()
-		n.valueSynced = true
+		n.valueState = valueStateSynced
+
+		// continue to iterate over fields to validate that there is only one proto field in the component.
 	}
 	return nil
 }
@@ -457,7 +467,7 @@ func (n *Node) syncSubComponentsInternal(
 				}
 				childNode.value = internal.value
 				childNode.initSerializedNode(deduceFieldType(internal.value))
-				childNode.valueSynced = false
+				childNode.valueState = valueStateNeedSerialize
 
 				n.children[fieldN] = childNode
 				internal.node = childNode
@@ -514,7 +524,7 @@ func (n *Node) serializeDataNode() error {
 	}
 	n.serializedNode.Data = blob
 	n.updateLastUpdateVersionedTransition()
-	n.valueSynced = true
+	n.valueState = valueStateSynced
 
 	return nil
 }
@@ -537,7 +547,7 @@ func (n *Node) deserialize(
 		return err
 	}
 
-	if n.valueSynced {
+	if n.valueState != valueStateNeedDeserialize {
 		return nil
 	}
 
@@ -563,7 +573,7 @@ func (n *Node) deserializeComponentNode(
 		// serializedNode is empty (has only metadata) => use constructed value of valueT type as value and return.
 		// deserialize method acts as component constructor.
 		n.value = valueV.Interface()
-		n.valueSynced = true
+		n.valueState = valueStateSynced
 		return nil
 	}
 
@@ -625,7 +635,7 @@ func (n *Node) deserializeComponentNode(
 	}
 
 	n.value = valueV.Interface()
-	n.valueSynced = true
+	n.valueState = valueStateSynced
 	return nil
 }
 
@@ -638,7 +648,7 @@ func (n *Node) deserializeDataNode(
 	}
 
 	n.value = value.Interface()
-	n.valueSynced = true
+	n.valueState = valueStateSynced
 	return nil
 }
 
@@ -855,7 +865,7 @@ func (n *Node) applyUpdates(
 			n.mutation.UpdatedNodes[encodedPath] = updatedNode
 			node.serializedNode = updatedNode
 			node.value = nil
-			n.valueSynced = false
+			n.valueState = valueStateNeedDeserialize
 
 			// Clearing decoded value for ancestor nodes is not necessary because the value field is not referenced directly.
 			// Parent node is pointing to the Node struct.
@@ -918,21 +928,21 @@ func (n *Node) IsDirty() bool {
 		return true
 	}
 
-	return !n.isValueSynced()
+	return n.isValueNeedSerialize()
 }
 
-func (n *Node) isValueSynced() bool {
-	if !n.valueSynced {
-		return false
+func (n *Node) isValueNeedSerialize() bool {
+	if n.valueState == valueStateNeedSerialize {
+		return true
 	}
 
 	for _, childNode := range n.children {
-		if !childNode.isValueSynced() {
-			return false
+		if childNode.isValueNeedSerialize() {
+			return true
 		}
 	}
 
-	return true
+	return false
 }
 
 func newNode(
