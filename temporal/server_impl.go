@@ -34,6 +34,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -60,6 +61,7 @@ type (
 		persistenceFactoryProvider persistenceClient.FactoryProviderFn
 		metricsHandler             metrics.Handler
 		tracerProvider             trace.TracerProvider
+		dc                         *dynamicconfig.Collection
 	}
 )
 
@@ -95,6 +97,7 @@ func NewServerFxImpl(
 		clusterMetadata:            clusterMetadata,
 		persistenceFactoryProvider: persistenceFactoryProvider,
 		metricsHandler:             metricsHandler,
+		dc:                         dynamicconfig.NewNoopCollection(),
 	}
 	for _, svcMeta := range servicesGroup.Services {
 		if svcMeta != nil {
