@@ -335,7 +335,7 @@ func processActivityWorkflowRules(
 		return rejectCodeUndefined, nil
 	}
 
-	ruleMatched := workflow.ActivityMatchWorkflowRules(ms, shardContext.GetLogger(), ai)
+	ruleMatched := workflow.ActivityMatchWorkflowRules(ms, shardContext.GetTimeSource(), shardContext.GetLogger(), ai)
 	if !ruleMatched || !ai.Paused {
 		return rejectCodeUndefined, nil
 	}
