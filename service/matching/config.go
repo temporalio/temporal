@@ -38,6 +38,7 @@ type (
 
 		RangeSize                                int64
 		NewMatcher                               dynamicconfig.TypedSubscribableWithTaskQueueFilter[bool]
+		EnableFairness                           dynamicconfig.TypedSubscribableWithTaskQueueFilter[bool]
 		GetTasksBatchSize                        dynamicconfig.IntPropertyFnWithTaskQueueFilter
 		GetTasksReloadAt                         dynamicconfig.IntPropertyFnWithTaskQueueFilter
 		UpdateAckInterval                        dynamicconfig.DurationPropertyFnWithTaskQueueFilter
@@ -127,6 +128,7 @@ type (
 		BacklogTaskForwardTimeout  func() time.Duration
 		RangeSize                  int64
 		NewMatcher                 func(func(bool)) (bool, func())
+		EnableFairness             func(func(bool)) (bool, func())
 		GetTasksBatchSize          func() int
 		GetTasksReloadAt           func() int
 		UpdateAckInterval          func() time.Duration
@@ -228,6 +230,7 @@ func NewConfig(
 		OperatorRPSRatio:                         dynamicconfig.OperatorRPSRatio.Get(dc),
 		RangeSize:                                100000,
 		NewMatcher:                               dynamicconfig.MatchingUseNewMatcher.Subscribe(dc),
+		EnableFairness:                           dynamicconfig.MatchingEnableFairness.Subscribe(dc),
 		GetTasksBatchSize:                        dynamicconfig.MatchingGetTasksBatchSize.Get(dc),
 		GetTasksReloadAt:                         dynamicconfig.MatchingGetTasksReloadAt.Get(dc),
 		UpdateAckInterval:                        dynamicconfig.MatchingUpdateAckInterval.Get(dc),
@@ -307,6 +310,9 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		RangeSize: config.RangeSize,
 		NewMatcher: func(cb func(bool)) (bool, func()) {
 			return config.NewMatcher(ns.String(), taskQueueName, taskType, cb)
+		},
+		EnableFairness: func(cb func(bool)) (bool, func()) {
+			return config.EnableFairness(ns.String(), taskQueueName, taskType, cb)
 		},
 		GetTasksBatchSize: func() int {
 			return config.GetTasksBatchSize(ns.String(), taskQueueName, taskType)

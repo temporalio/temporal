@@ -1307,6 +1307,11 @@ second per poller by one physical queue manager`,
 		false,
 		`Use priority-enabled TaskMatcher`,
 	)
+	MatchingEnableFairness = NewTaskQueueBoolSetting(
+		"matching.enableFairness",
+		false,
+		`Enable fairness for task dispatching`,
+	)
 	MatchingPriorityLevels = NewTaskQueueIntSetting(
 		"matching.priorityLevels",
 		5,

@@ -159,6 +159,21 @@ func (mr *MockDataStoreFactoryMockRecorder) NewShardStore() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewShardStore", reflect.TypeOf((*MockDataStoreFactory)(nil).NewShardStore))
 }
 
+// NewTaskFairnessStore mocks base method.
+func (m *MockDataStoreFactory) NewTaskFairnessStore() (persistence.TaskStore, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NewTaskFairnessStore")
+	ret0, _ := ret[0].(persistence.TaskStore)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// NewTaskFairnessStore indicates an expected call of NewTaskFairnessStore.
+func (mr *MockDataStoreFactoryMockRecorder) NewTaskFairnessStore() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewTaskFairnessStore", reflect.TypeOf((*MockDataStoreFactory)(nil).NewTaskFairnessStore))
+}
+
 // NewTaskStore mocks base method.
 func (m *MockDataStoreFactory) NewTaskStore() (persistence.TaskStore, error) {
 	m.ctrl.T.Helper()
