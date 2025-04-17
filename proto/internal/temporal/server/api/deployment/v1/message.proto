@@ -169,7 +169,7 @@ message RegisterWorkerInVersionArgs {
     int32 max_task_queues = 3;
     string version = 4;
 
-    // add testHook values as appropriate
+    // populate testHook values as needed
     int32 testhook_task_queues_sync_batch_size = 5;
 }
 
@@ -180,7 +180,7 @@ message RegisterWorkerInWorkerDeploymentArgs {
     int32 max_task_queues = 3;
     WorkerDeploymentVersion version = 4;
     
-    // add testHook values as appropriate
+    // populate testHook values as needed
     int32 testhook_task_queues_sync_batch_size = 5;
 
 }

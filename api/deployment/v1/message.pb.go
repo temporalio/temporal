@@ -724,7 +724,7 @@ type RegisterWorkerInVersionArgs struct {
 	TaskQueueType v11.TaskQueueType      `protobuf:"varint,2,opt,name=task_queue_type,json=taskQueueType,proto3,enum=temporal.api.enums.v1.TaskQueueType" json:"task_queue_type,omitempty"`
 	MaxTaskQueues int32                  `protobuf:"varint,3,opt,name=max_task_queues,json=maxTaskQueues,proto3" json:"max_task_queues,omitempty"`
 	Version       string                 `protobuf:"bytes,4,opt,name=version,proto3" json:"version,omitempty"`
-	// add testHook values as appropriate
+	// populate testHook values as needed
 	TesthookTaskQueuesSyncBatchSize int32 `protobuf:"varint,5,opt,name=testhook_task_queues_sync_batch_size,json=testhookTaskQueuesSyncBatchSize,proto3" json:"testhook_task_queues_sync_batch_size,omitempty"`
 	unknownFields                   protoimpl.UnknownFields
 	sizeCache                       protoimpl.SizeCache
@@ -802,7 +802,7 @@ type RegisterWorkerInWorkerDeploymentArgs struct {
 	TaskQueueType v11.TaskQueueType        `protobuf:"varint,2,opt,name=task_queue_type,json=taskQueueType,proto3,enum=temporal.api.enums.v1.TaskQueueType" json:"task_queue_type,omitempty"`
 	MaxTaskQueues int32                    `protobuf:"varint,3,opt,name=max_task_queues,json=maxTaskQueues,proto3" json:"max_task_queues,omitempty"`
 	Version       *WorkerDeploymentVersion `protobuf:"bytes,4,opt,name=version,proto3" json:"version,omitempty"`
-	// add testHook values as appropriate
+	// populate testHook values as needed
 	TesthookTaskQueuesSyncBatchSize int32 `protobuf:"varint,5,opt,name=testhook_task_queues_sync_batch_size,json=testhookTaskQueuesSyncBatchSize,proto3" json:"testhook_task_queues_sync_batch_size,omitempty"`
 	unknownFields                   protoimpl.UnknownFields
 	sizeCache                       protoimpl.SizeCache
