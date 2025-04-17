@@ -40,6 +40,15 @@ const (
 )
 
 var (
+	ValidCallerTypes = map[string]struct{}{
+		CallerTypeOperator:    {},
+		CallerTypeAPI:         {},
+		CallerTypeBackground:  {},
+		CallerTypePreemptable: {},
+	}
+)
+
+var (
 	SystemBackgroundCallerInfo = CallerInfo{
 		CallerName: CallerNameSystem,
 		CallerType: CallerTypeBackground,
@@ -62,7 +71,7 @@ type (
 		CallerType string
 
 		// CallOrigin is the first API method name in the call chain.
-		// Currently, it is only specified when CallerType is CallerTypeAPI
+		// Currently, its value is valid only when CallerType is CallerTypeAPI or CallerTypeOperator.
 		CallOrigin string
 	}
 )
