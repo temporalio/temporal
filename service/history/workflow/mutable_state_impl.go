@@ -5437,7 +5437,7 @@ func (ms *MutableStateImpl) RetryActivity(
 
 	// check workflow rules
 	if !ai.Paused {
-		ActivityMatchWorkflowRules(ms, ms.logger, ai)
+		ActivityMatchWorkflowRules(ms, ms.timeSource, ms.logger, ai)
 	}
 
 	// if activity is paused
@@ -7875,6 +7875,7 @@ func (ms *MutableStateImpl) IsSubStateMachineDeleted() bool {
 // If activity was not changed it will return false.
 func ActivityMatchWorkflowRules(
 	ms historyi.MutableState,
+	timeSource clock.TimeSource,
 	logger log.Logger,
 	ai *persistencespb.ActivityInfo) bool {
 
@@ -7898,7 +7899,13 @@ func ActivityMatchWorkflowRules(
 			case *rulespb.WorkflowRuleAction_ActivityPause:
 				// pause the activity
 				if !ai.Paused {
-					if err = PauseActivity(ms, ai.ActivityId); err != nil {
+					pauseInfo := &persistencespb.ActivityInfo_PauseInfo{
+						PauseTime: timestamppb.New(timeSource.Now()),
+						PausedBy: &persistencespb.ActivityInfo_PauseInfo_RuleId{
+							RuleId: rule.GetSpec().GetId(),
+						},
+					}
+					if err = PauseActivity(ms, ai.ActivityId, pauseInfo); err != nil {
 						logError(logger, "error pausing activity", ms.GetExecutionInfo(), ms.GetExecutionState(), tag.Error(err))
 					}
 					activityChanged = true

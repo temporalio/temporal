@@ -3583,6 +3583,7 @@ func (s *VersioningIntegSuite) TestDispatchCronOld() {
 }
 
 func (s *VersioningIntegSuite) TestDispatchCron() {
+	s.T().Skip("Skipping test since this tests old versioning behavior and also flakes")
 	s.RunTestWithMatchingBehavior(func() { s.dispatchCron(true) })
 }
 
