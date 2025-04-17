@@ -191,7 +191,6 @@ func (a *Activities) RegisterWorkerInVersion(ctx context.Context, args *deployme
 	if err != nil {
 		return err
 	}
-
 	return nil
 }
 

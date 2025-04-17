@@ -664,7 +664,6 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 		testhook_sync_batch_size = n
 	}
 
-	fmt.Println("value of testhook_sync_batch_size", testhook_sync_batch_size)
 	err = c.partitionMgr.engine.workerDeploymentClient.RegisterTaskQueueWorker(
 		ctx, namespaceEntry, workerDeployment.SeriesName, workerDeployment.BuildId, c.queue.TaskQueueFamily().Name(), c.queue.TaskType(),
 		"matching service", uuid.New(), int32(testhook_sync_batch_size))
