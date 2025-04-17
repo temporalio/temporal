@@ -269,10 +269,11 @@ func (d *WorkflowRunner) handleRegisterWorker(ctx workflow.Context, args *deploy
 	// Register task-queue worker in version workflow.
 	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
 	err = workflow.ExecuteActivity(activityCtx, d.a.RegisterWorkerInVersion, &deploymentspb.RegisterWorkerInVersionArgs{
-		TaskQueueName: args.TaskQueueName,
-		TaskQueueType: args.TaskQueueType,
-		MaxTaskQueues: args.MaxTaskQueues,
-		Version:       worker_versioning.WorkerDeploymentVersionToString(args.Version),
+		TaskQueueName:                   args.TaskQueueName,
+		TaskQueueType:                   args.TaskQueueType,
+		MaxTaskQueues:                   args.MaxTaskQueues,
+		Version:                         worker_versioning.WorkerDeploymentVersionToString(args.Version),
+		TesthookTaskQueuesSyncBatchSize: args.TesthookTaskQueuesSyncBatchSize,
 	}).Get(ctx, nil)
 	if err != nil {
 		var appError *temporal.ApplicationError

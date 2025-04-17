@@ -31,7 +31,6 @@ package persistence
 import (
 	reflect "reflect"
 	sync "sync"
-	unsafe "unsafe"
 
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -50,20 +49,23 @@ const (
 // created when an accepted update (on one branch of workflow history) is converted into an admitted update (on another
 // branch).
 type UpdateAdmissionInfo struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Types that are valid to be assigned to Location:
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// Types that are assignable to Location:
 	//
 	//	*UpdateAdmissionInfo_HistoryPointer_
-	Location      isUpdateAdmissionInfo_Location `protobuf_oneof:"location"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Location isUpdateAdmissionInfo_Location `protobuf_oneof:"location"`
 }
 
 func (x *UpdateAdmissionInfo) Reset() {
 	*x = UpdateAdmissionInfo{}
-	mi := &file_temporal_server_api_persistence_v1_update_proto_msgTypes[0]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
+	if protoimpl.UnsafeEnabled {
+		mi := &file_temporal_server_api_persistence_v1_update_proto_msgTypes[0]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
 }
 
 func (x *UpdateAdmissionInfo) String() string {
@@ -74,7 +76,7 @@ func (*UpdateAdmissionInfo) ProtoMessage() {}
 
 func (x *UpdateAdmissionInfo) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_persistence_v1_update_proto_msgTypes[0]
-	if x != nil {
+	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -89,18 +91,16 @@ func (*UpdateAdmissionInfo) Descriptor() ([]byte, []int) {
 	return file_temporal_server_api_persistence_v1_update_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *UpdateAdmissionInfo) GetLocation() isUpdateAdmissionInfo_Location {
-	if x != nil {
-		return x.Location
+func (m *UpdateAdmissionInfo) GetLocation() isUpdateAdmissionInfo_Location {
+	if m != nil {
+		return m.Location
 	}
 	return nil
 }
 
 func (x *UpdateAdmissionInfo) GetHistoryPointer() *UpdateAdmissionInfo_HistoryPointer {
-	if x != nil {
-		if x, ok := x.Location.(*UpdateAdmissionInfo_HistoryPointer_); ok {
-			return x.HistoryPointer
-		}
+	if x, ok := x.GetLocation().(*UpdateAdmissionInfo_HistoryPointer_); ok {
+		return x.HistoryPointer
 	}
 	return nil
 }
@@ -117,18 +117,21 @@ func (*UpdateAdmissionInfo_HistoryPointer_) isUpdateAdmissionInfo_Location() {}
 
 // UpdateAcceptanceInfo contains information about an accepted update
 type UpdateAcceptanceInfo struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// the event ID of the WorkflowExecutionUpdateAcceptedEvent
-	EventId       int64 `protobuf:"varint,1,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
+	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// the event ID of the WorkflowExecutionUpdateAcceptedEvent
+	EventId int64 `protobuf:"varint,1,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
 }
 
 func (x *UpdateAcceptanceInfo) Reset() {
 	*x = UpdateAcceptanceInfo{}
-	mi := &file_temporal_server_api_persistence_v1_update_proto_msgTypes[1]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
+	if protoimpl.UnsafeEnabled {
+		mi := &file_temporal_server_api_persistence_v1_update_proto_msgTypes[1]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
 }
 
 func (x *UpdateAcceptanceInfo) String() string {
@@ -139,7 +142,7 @@ func (*UpdateAcceptanceInfo) ProtoMessage() {}
 
 func (x *UpdateAcceptanceInfo) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_persistence_v1_update_proto_msgTypes[1]
-	if x != nil {
+	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -163,20 +166,23 @@ func (x *UpdateAcceptanceInfo) GetEventId() int64 {
 
 // UpdateCompletionInfo contains information about a completed update
 type UpdateCompletionInfo struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
 	// the event ID of the WorkflowExecutionUpdateCompletedEvent
 	EventId int64 `protobuf:"varint,1,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
 	// the ID of the event batch containing the event_id above
-	EventBatchId  int64 `protobuf:"varint,2,opt,name=event_batch_id,json=eventBatchId,proto3" json:"event_batch_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	EventBatchId int64 `protobuf:"varint,2,opt,name=event_batch_id,json=eventBatchId,proto3" json:"event_batch_id,omitempty"`
 }
 
 func (x *UpdateCompletionInfo) Reset() {
 	*x = UpdateCompletionInfo{}
-	mi := &file_temporal_server_api_persistence_v1_update_proto_msgTypes[2]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
+	if protoimpl.UnsafeEnabled {
+		mi := &file_temporal_server_api_persistence_v1_update_proto_msgTypes[2]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
 }
 
 func (x *UpdateCompletionInfo) String() string {
@@ -187,7 +193,7 @@ func (*UpdateCompletionInfo) ProtoMessage() {}
 
 func (x *UpdateCompletionInfo) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_persistence_v1_update_proto_msgTypes[2]
-	if x != nil {
+	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -218,23 +224,26 @@ func (x *UpdateCompletionInfo) GetEventBatchId() int64 {
 
 // UpdateInfo is the persistent state of a single update
 type UpdateInfo struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Types that are valid to be assigned to Value:
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// Types that are assignable to Value:
 	//
 	//	*UpdateInfo_Acceptance
 	//	*UpdateInfo_Completion
 	//	*UpdateInfo_Admission
 	Value                         isUpdateInfo_Value   `protobuf_oneof:"value"`
 	LastUpdateVersionedTransition *VersionedTransition `protobuf:"bytes,4,opt,name=last_update_versioned_transition,json=lastUpdateVersionedTransition,proto3" json:"last_update_versioned_transition,omitempty"`
-	unknownFields                 protoimpl.UnknownFields
-	sizeCache                     protoimpl.SizeCache
 }
 
 func (x *UpdateInfo) Reset() {
 	*x = UpdateInfo{}
-	mi := &file_temporal_server_api_persistence_v1_update_proto_msgTypes[3]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
+	if protoimpl.UnsafeEnabled {
+		mi := &file_temporal_server_api_persistence_v1_update_proto_msgTypes[3]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
 }
 
 func (x *UpdateInfo) String() string {
@@ -245,7 +254,7 @@ func (*UpdateInfo) ProtoMessage() {}
 
 func (x *UpdateInfo) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_persistence_v1_update_proto_msgTypes[3]
-	if x != nil {
+	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -260,36 +269,30 @@ func (*UpdateInfo) Descriptor() ([]byte, []int) {
 	return file_temporal_server_api_persistence_v1_update_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *UpdateInfo) GetValue() isUpdateInfo_Value {
-	if x != nil {
-		return x.Value
+func (m *UpdateInfo) GetValue() isUpdateInfo_Value {
+	if m != nil {
+		return m.Value
 	}
 	return nil
 }
 
 func (x *UpdateInfo) GetAcceptance() *UpdateAcceptanceInfo {
-	if x != nil {
-		if x, ok := x.Value.(*UpdateInfo_Acceptance); ok {
-			return x.Acceptance
-		}
+	if x, ok := x.GetValue().(*UpdateInfo_Acceptance); ok {
+		return x.Acceptance
 	}
 	return nil
 }
 
 func (x *UpdateInfo) GetCompletion() *UpdateCompletionInfo {
-	if x != nil {
-		if x, ok := x.Value.(*UpdateInfo_Completion); ok {
-			return x.Completion
-		}
+	if x, ok := x.GetValue().(*UpdateInfo_Completion); ok {
+		return x.Completion
 	}
 	return nil
 }
 
 func (x *UpdateInfo) GetAdmission() *UpdateAdmissionInfo {
-	if x != nil {
-		if x, ok := x.Value.(*UpdateInfo_Admission); ok {
-			return x.Admission
-		}
+	if x, ok := x.GetValue().(*UpdateInfo_Admission); ok {
+		return x.Admission
 	}
 	return nil
 }
@@ -327,20 +330,23 @@ func (*UpdateInfo_Completion) isUpdateInfo_Value() {}
 func (*UpdateInfo_Admission) isUpdateInfo_Value() {}
 
 type UpdateAdmissionInfo_HistoryPointer struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
 	// the event ID of the WorkflowExecutionUpdateAdmittedEvent
 	EventId int64 `protobuf:"varint,1,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
 	// the ID of the event batch containing the event_id
-	EventBatchId  int64 `protobuf:"varint,2,opt,name=event_batch_id,json=eventBatchId,proto3" json:"event_batch_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	EventBatchId int64 `protobuf:"varint,2,opt,name=event_batch_id,json=eventBatchId,proto3" json:"event_batch_id,omitempty"`
 }
 
 func (x *UpdateAdmissionInfo_HistoryPointer) Reset() {
 	*x = UpdateAdmissionInfo_HistoryPointer{}
-	mi := &file_temporal_server_api_persistence_v1_update_proto_msgTypes[4]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
+	if protoimpl.UnsafeEnabled {
+		mi := &file_temporal_server_api_persistence_v1_update_proto_msgTypes[4]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
 }
 
 func (x *UpdateAdmissionInfo_HistoryPointer) String() string {
@@ -351,7 +357,7 @@ func (*UpdateAdmissionInfo_HistoryPointer) ProtoMessage() {}
 
 func (x *UpdateAdmissionInfo_HistoryPointer) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_persistence_v1_update_proto_msgTypes[4]
-	if x != nil {
+	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -382,47 +388,86 @@ func (x *UpdateAdmissionInfo_HistoryPointer) GetEventBatchId() int64 {
 
 var File_temporal_server_api_persistence_v1_update_proto protoreflect.FileDescriptor
 
-const file_temporal_server_api_persistence_v1_update_proto_rawDesc = "" +
-	"\n" +
-	"/temporal/server/api/persistence/v1/update.proto\x12\"temporal.server.api.persistence.v1\x1a,temporal/server/api/persistence/v1/hsm.proto\"\xe7\x01\n" +
-	"\x13UpdateAdmissionInfo\x12q\n" +
-	"\x0fhistory_pointer\x18\x01 \x01(\v2F.temporal.server.api.persistence.v1.UpdateAdmissionInfo.HistoryPointerH\x00R\x0ehistoryPointer\x1aQ\n" +
-	"\x0eHistoryPointer\x12\x19\n" +
-	"\bevent_id\x18\x01 \x01(\x03R\aeventId\x12$\n" +
-	"\x0eevent_batch_id\x18\x02 \x01(\x03R\feventBatchIdB\n" +
-	"\n" +
-	"\blocation\"1\n" +
-	"\x14UpdateAcceptanceInfo\x12\x19\n" +
-	"\bevent_id\x18\x01 \x01(\x03R\aeventId\"W\n" +
-	"\x14UpdateCompletionInfo\x12\x19\n" +
-	"\bevent_id\x18\x01 \x01(\x03R\aeventId\x12$\n" +
-	"\x0eevent_batch_id\x18\x02 \x01(\x03R\feventBatchId\"\xa9\x03\n" +
-	"\n" +
-	"UpdateInfo\x12Z\n" +
-	"\n" +
-	"acceptance\x18\x01 \x01(\v28.temporal.server.api.persistence.v1.UpdateAcceptanceInfoH\x00R\n" +
-	"acceptance\x12Z\n" +
-	"\n" +
-	"completion\x18\x02 \x01(\v28.temporal.server.api.persistence.v1.UpdateCompletionInfoH\x00R\n" +
-	"completion\x12W\n" +
-	"\tadmission\x18\x03 \x01(\v27.temporal.server.api.persistence.v1.UpdateAdmissionInfoH\x00R\tadmission\x12\x80\x01\n" +
-	" last_update_versioned_transition\x18\x04 \x01(\v27.temporal.server.api.persistence.v1.VersionedTransitionR\x1dlastUpdateVersionedTransitionB\a\n" +
-	"\x05valueB6Z4go.temporal.io/server/api/persistence/v1;persistenceb\x06proto3"
+var file_temporal_server_api_persistence_v1_update_proto_rawDesc = []byte{
+	0x0a, 0x2f, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2f, 0x73, 0x65, 0x72, 0x76, 0x65,
+	0x72, 0x2f, 0x61, 0x70, 0x69, 0x2f, 0x70, 0x65, 0x72, 0x73, 0x69, 0x73, 0x74, 0x65, 0x6e, 0x63,
+	0x65, 0x2f, 0x76, 0x31, 0x2f, 0x75, 0x70, 0x64, 0x61, 0x74, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74,
+	0x6f, 0x12, 0x22, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76,
+	0x65, 0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x70, 0x65, 0x72, 0x73, 0x69, 0x73, 0x74, 0x65, 0x6e,
+	0x63, 0x65, 0x2e, 0x76, 0x31, 0x1a, 0x2c, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2f,
+	0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2f, 0x61, 0x70, 0x69, 0x2f, 0x70, 0x65, 0x72, 0x73, 0x69,
+	0x73, 0x74, 0x65, 0x6e, 0x63, 0x65, 0x2f, 0x76, 0x31, 0x2f, 0x68, 0x73, 0x6d, 0x2e, 0x70, 0x72,
+	0x6f, 0x74, 0x6f, 0x22, 0xe7, 0x01, 0x0a, 0x13, 0x55, 0x70, 0x64, 0x61, 0x74, 0x65, 0x41, 0x64,
+	0x6d, 0x69, 0x73, 0x73, 0x69, 0x6f, 0x6e, 0x49, 0x6e, 0x66, 0x6f, 0x12, 0x71, 0x0a, 0x0f, 0x68,
+	0x69, 0x73, 0x74, 0x6f, 0x72, 0x79, 0x5f, 0x70, 0x6f, 0x69, 0x6e, 0x74, 0x65, 0x72, 0x18, 0x01,
+	0x20, 0x01, 0x28, 0x0b, 0x32, 0x46, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e,
+	0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x70, 0x65, 0x72, 0x73, 0x69,
+	0x73, 0x74, 0x65, 0x6e, 0x63, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x55, 0x70, 0x64, 0x61, 0x74, 0x65,
+	0x41, 0x64, 0x6d, 0x69, 0x73, 0x73, 0x69, 0x6f, 0x6e, 0x49, 0x6e, 0x66, 0x6f, 0x2e, 0x48, 0x69,
+	0x73, 0x74, 0x6f, 0x72, 0x79, 0x50, 0x6f, 0x69, 0x6e, 0x74, 0x65, 0x72, 0x48, 0x00, 0x52, 0x0e,
+	0x68, 0x69, 0x73, 0x74, 0x6f, 0x72, 0x79, 0x50, 0x6f, 0x69, 0x6e, 0x74, 0x65, 0x72, 0x1a, 0x51,
+	0x0a, 0x0e, 0x48, 0x69, 0x73, 0x74, 0x6f, 0x72, 0x79, 0x50, 0x6f, 0x69, 0x6e, 0x74, 0x65, 0x72,
+	0x12, 0x19, 0x0a, 0x08, 0x65, 0x76, 0x65, 0x6e, 0x74, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01,
+	0x28, 0x03, 0x52, 0x07, 0x65, 0x76, 0x65, 0x6e, 0x74, 0x49, 0x64, 0x12, 0x24, 0x0a, 0x0e, 0x65,
+	0x76, 0x65, 0x6e, 0x74, 0x5f, 0x62, 0x61, 0x74, 0x63, 0x68, 0x5f, 0x69, 0x64, 0x18, 0x02, 0x20,
+	0x01, 0x28, 0x03, 0x52, 0x0c, 0x65, 0x76, 0x65, 0x6e, 0x74, 0x42, 0x61, 0x74, 0x63, 0x68, 0x49,
+	0x64, 0x42, 0x0a, 0x0a, 0x08, 0x6c, 0x6f, 0x63, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x22, 0x31, 0x0a,
+	0x14, 0x55, 0x70, 0x64, 0x61, 0x74, 0x65, 0x41, 0x63, 0x63, 0x65, 0x70, 0x74, 0x61, 0x6e, 0x63,
+	0x65, 0x49, 0x6e, 0x66, 0x6f, 0x12, 0x19, 0x0a, 0x08, 0x65, 0x76, 0x65, 0x6e, 0x74, 0x5f, 0x69,
+	0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x03, 0x52, 0x07, 0x65, 0x76, 0x65, 0x6e, 0x74, 0x49, 0x64,
+	0x22, 0x57, 0x0a, 0x14, 0x55, 0x70, 0x64, 0x61, 0x74, 0x65, 0x43, 0x6f, 0x6d, 0x70, 0x6c, 0x65,
+	0x74, 0x69, 0x6f, 0x6e, 0x49, 0x6e, 0x66, 0x6f, 0x12, 0x19, 0x0a, 0x08, 0x65, 0x76, 0x65, 0x6e,
+	0x74, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x03, 0x52, 0x07, 0x65, 0x76, 0x65, 0x6e,
+	0x74, 0x49, 0x64, 0x12, 0x24, 0x0a, 0x0e, 0x65, 0x76, 0x65, 0x6e, 0x74, 0x5f, 0x62, 0x61, 0x74,
+	0x63, 0x68, 0x5f, 0x69, 0x64, 0x18, 0x02, 0x20, 0x01, 0x28, 0x03, 0x52, 0x0c, 0x65, 0x76, 0x65,
+	0x6e, 0x74, 0x42, 0x61, 0x74, 0x63, 0x68, 0x49, 0x64, 0x22, 0xa9, 0x03, 0x0a, 0x0a, 0x55, 0x70,
+	0x64, 0x61, 0x74, 0x65, 0x49, 0x6e, 0x66, 0x6f, 0x12, 0x5a, 0x0a, 0x0a, 0x61, 0x63, 0x63, 0x65,
+	0x70, 0x74, 0x61, 0x6e, 0x63, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x38, 0x2e, 0x74,
+	0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x61,
+	0x70, 0x69, 0x2e, 0x70, 0x65, 0x72, 0x73, 0x69, 0x73, 0x74, 0x65, 0x6e, 0x63, 0x65, 0x2e, 0x76,
+	0x31, 0x2e, 0x55, 0x70, 0x64, 0x61, 0x74, 0x65, 0x41, 0x63, 0x63, 0x65, 0x70, 0x74, 0x61, 0x6e,
+	0x63, 0x65, 0x49, 0x6e, 0x66, 0x6f, 0x48, 0x00, 0x52, 0x0a, 0x61, 0x63, 0x63, 0x65, 0x70, 0x74,
+	0x61, 0x6e, 0x63, 0x65, 0x12, 0x5a, 0x0a, 0x0a, 0x63, 0x6f, 0x6d, 0x70, 0x6c, 0x65, 0x74, 0x69,
+	0x6f, 0x6e, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x38, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f,
+	0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x70,
+	0x65, 0x72, 0x73, 0x69, 0x73, 0x74, 0x65, 0x6e, 0x63, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x55, 0x70,
+	0x64, 0x61, 0x74, 0x65, 0x43, 0x6f, 0x6d, 0x70, 0x6c, 0x65, 0x74, 0x69, 0x6f, 0x6e, 0x49, 0x6e,
+	0x66, 0x6f, 0x48, 0x00, 0x52, 0x0a, 0x63, 0x6f, 0x6d, 0x70, 0x6c, 0x65, 0x74, 0x69, 0x6f, 0x6e,
+	0x12, 0x57, 0x0a, 0x09, 0x61, 0x64, 0x6d, 0x69, 0x73, 0x73, 0x69, 0x6f, 0x6e, 0x18, 0x03, 0x20,
+	0x01, 0x28, 0x0b, 0x32, 0x37, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73,
+	0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x70, 0x65, 0x72, 0x73, 0x69, 0x73,
+	0x74, 0x65, 0x6e, 0x63, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x55, 0x70, 0x64, 0x61, 0x74, 0x65, 0x41,
+	0x64, 0x6d, 0x69, 0x73, 0x73, 0x69, 0x6f, 0x6e, 0x49, 0x6e, 0x66, 0x6f, 0x48, 0x00, 0x52, 0x09,
+	0x61, 0x64, 0x6d, 0x69, 0x73, 0x73, 0x69, 0x6f, 0x6e, 0x12, 0x80, 0x01, 0x0a, 0x20, 0x6c, 0x61,
+	0x73, 0x74, 0x5f, 0x75, 0x70, 0x64, 0x61, 0x74, 0x65, 0x5f, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f,
+	0x6e, 0x65, 0x64, 0x5f, 0x74, 0x72, 0x61, 0x6e, 0x73, 0x69, 0x74, 0x69, 0x6f, 0x6e, 0x18, 0x04,
+	0x20, 0x01, 0x28, 0x0b, 0x32, 0x37, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e,
+	0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x70, 0x65, 0x72, 0x73, 0x69,
+	0x73, 0x74, 0x65, 0x6e, 0x63, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f,
+	0x6e, 0x65, 0x64, 0x54, 0x72, 0x61, 0x6e, 0x73, 0x69, 0x74, 0x69, 0x6f, 0x6e, 0x52, 0x1d, 0x6c,
+	0x61, 0x73, 0x74, 0x55, 0x70, 0x64, 0x61, 0x74, 0x65, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e,
+	0x65, 0x64, 0x54, 0x72, 0x61, 0x6e, 0x73, 0x69, 0x74, 0x69, 0x6f, 0x6e, 0x42, 0x07, 0x0a, 0x05,
+	0x76, 0x61, 0x6c, 0x75, 0x65, 0x42, 0x36, 0x5a, 0x34, 0x67, 0x6f, 0x2e, 0x74, 0x65, 0x6d, 0x70,
+	0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x69, 0x6f, 0x2f, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2f, 0x61,
+	0x70, 0x69, 0x2f, 0x70, 0x65, 0x72, 0x73, 0x69, 0x73, 0x74, 0x65, 0x6e, 0x63, 0x65, 0x2f, 0x76,
+	0x31, 0x3b, 0x70, 0x65, 0x72, 0x73, 0x69, 0x73, 0x74, 0x65, 0x6e, 0x63, 0x65, 0x62, 0x06, 0x70,
+	0x72, 0x6f, 0x74, 0x6f, 0x33,
+}
 
 var (
 	file_temporal_server_api_persistence_v1_update_proto_rawDescOnce sync.Once
-	file_temporal_server_api_persistence_v1_update_proto_rawDescData []byte
+	file_temporal_server_api_persistence_v1_update_proto_rawDescData = file_temporal_server_api_persistence_v1_update_proto_rawDesc
 )
 
 func file_temporal_server_api_persistence_v1_update_proto_rawDescGZIP() []byte {
 	file_temporal_server_api_persistence_v1_update_proto_rawDescOnce.Do(func() {
-		file_temporal_server_api_persistence_v1_update_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_api_persistence_v1_update_proto_rawDesc), len(file_temporal_server_api_persistence_v1_update_proto_rawDesc)))
+		file_temporal_server_api_persistence_v1_update_proto_rawDescData = protoimpl.X.CompressGZIP(file_temporal_server_api_persistence_v1_update_proto_rawDescData)
 	})
 	return file_temporal_server_api_persistence_v1_update_proto_rawDescData
 }
 
 var file_temporal_server_api_persistence_v1_update_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
-var file_temporal_server_api_persistence_v1_update_proto_goTypes = []any{
+var file_temporal_server_api_persistence_v1_update_proto_goTypes = []interface{}{
 	(*UpdateAdmissionInfo)(nil),                // 0: temporal.server.api.persistence.v1.UpdateAdmissionInfo
 	(*UpdateAcceptanceInfo)(nil),               // 1: temporal.server.api.persistence.v1.UpdateAcceptanceInfo
 	(*UpdateCompletionInfo)(nil),               // 2: temporal.server.api.persistence.v1.UpdateCompletionInfo
@@ -449,10 +494,72 @@ func file_temporal_server_api_persistence_v1_update_proto_init() {
 		return
 	}
 	file_temporal_server_api_persistence_v1_hsm_proto_init()
-	file_temporal_server_api_persistence_v1_update_proto_msgTypes[0].OneofWrappers = []any{
+	if !protoimpl.UnsafeEnabled {
+		file_temporal_server_api_persistence_v1_update_proto_msgTypes[0].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*UpdateAdmissionInfo); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_temporal_server_api_persistence_v1_update_proto_msgTypes[1].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*UpdateAcceptanceInfo); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_temporal_server_api_persistence_v1_update_proto_msgTypes[2].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*UpdateCompletionInfo); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_temporal_server_api_persistence_v1_update_proto_msgTypes[3].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*UpdateInfo); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_temporal_server_api_persistence_v1_update_proto_msgTypes[4].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*UpdateAdmissionInfo_HistoryPointer); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+	}
+	file_temporal_server_api_persistence_v1_update_proto_msgTypes[0].OneofWrappers = []interface{}{
 		(*UpdateAdmissionInfo_HistoryPointer_)(nil),
 	}
-	file_temporal_server_api_persistence_v1_update_proto_msgTypes[3].OneofWrappers = []any{
+	file_temporal_server_api_persistence_v1_update_proto_msgTypes[3].OneofWrappers = []interface{}{
 		(*UpdateInfo_Acceptance)(nil),
 		(*UpdateInfo_Completion)(nil),
 		(*UpdateInfo_Admission)(nil),
@@ -461,7 +568,7 @@ func file_temporal_server_api_persistence_v1_update_proto_init() {
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_api_persistence_v1_update_proto_rawDesc), len(file_temporal_server_api_persistence_v1_update_proto_rawDesc)),
+			RawDescriptor: file_temporal_server_api_persistence_v1_update_proto_rawDesc,
 			NumEnums:      0,
 			NumMessages:   5,
 			NumExtensions: 0,
@@ -472,6 +579,7 @@ func file_temporal_server_api_persistence_v1_update_proto_init() {
 		MessageInfos:      file_temporal_server_api_persistence_v1_update_proto_msgTypes,
 	}.Build()
 	File_temporal_server_api_persistence_v1_update_proto = out.File
+	file_temporal_server_api_persistence_v1_update_proto_rawDesc = nil
 	file_temporal_server_api_persistence_v1_update_proto_goTypes = nil
 	file_temporal_server_api_persistence_v1_update_proto_depIdxs = nil
 }

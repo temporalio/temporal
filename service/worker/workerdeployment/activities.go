@@ -27,6 +27,7 @@ package workerdeployment
 import (
 	"cmp"
 	"context"
+	"fmt"
 	"sync"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -186,10 +187,13 @@ func (a *Activities) RegisterWorkerInVersion(ctx context.Context, args *deployme
 		a.namespace,
 		args,
 		identity,
+		int32(args.TesthookTaskQueuesSyncBatchSize),
 	)
 	if err != nil {
 		return err
 	}
+
+	fmt.Println("testhook_task_queues_sync_batch_size", args.TesthookTaskQueuesSyncBatchSize)
 	return nil
 }
 

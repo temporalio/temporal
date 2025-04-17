@@ -47,7 +47,6 @@ import (
 type MockAdminServiceClient struct {
 	ctrl     *gomock.Controller
 	recorder *MockAdminServiceClientMockRecorder
-	isgomock struct{}
 }
 
 // MockAdminServiceClientMockRecorder is the mock recorder for MockAdminServiceClient.
@@ -931,7 +930,6 @@ func (mr *MockAdminServiceClientMockRecorder) SyncWorkflowState(ctx, in any, opt
 type MockAdminService_StreamWorkflowReplicationMessagesClient struct {
 	ctrl     *gomock.Controller
 	recorder *MockAdminService_StreamWorkflowReplicationMessagesClientMockRecorder
-	isgomock struct{}
 }
 
 // MockAdminService_StreamWorkflowReplicationMessagesClientMockRecorder is the mock recorder for MockAdminService_StreamWorkflowReplicationMessagesClient.
@@ -1069,7 +1067,6 @@ func (mr *MockAdminService_StreamWorkflowReplicationMessagesClientMockRecorder) 
 type MockAdminServiceServer struct {
 	ctrl     *gomock.Controller
 	recorder *MockAdminServiceServerMockRecorder
-	isgomock struct{}
 }
 
 // MockAdminServiceServerMockRecorder is the mock recorder for MockAdminServiceServer.
@@ -1749,7 +1746,6 @@ func (mr *MockAdminServiceServerMockRecorder) mustEmbedUnimplementedAdminService
 type MockUnsafeAdminServiceServer struct {
 	ctrl     *gomock.Controller
 	recorder *MockUnsafeAdminServiceServerMockRecorder
-	isgomock struct{}
 }
 
 // MockUnsafeAdminServiceServerMockRecorder is the mock recorder for MockUnsafeAdminServiceServer.
@@ -1785,7 +1781,6 @@ func (mr *MockUnsafeAdminServiceServerMockRecorder) mustEmbedUnimplementedAdminS
 type MockAdminService_StreamWorkflowReplicationMessagesServer struct {
 	ctrl     *gomock.Controller
 	recorder *MockAdminService_StreamWorkflowReplicationMessagesServerMockRecorder
-	isgomock struct{}
 }
 
 // MockAdminService_StreamWorkflowReplicationMessagesServerMockRecorder is the mock recorder for MockAdminService_StreamWorkflowReplicationMessagesServer.

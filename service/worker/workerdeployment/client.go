@@ -68,6 +68,7 @@ type Client interface {
 		taskQueueType enumspb.TaskQueueType,
 		identity string,
 		requestID string,
+		testhook_task_queues_sync_batch_size int32,
 	) error
 
 	DescribeVersion(
@@ -196,6 +197,7 @@ type Client interface {
 		namespaceEntry *namespace.Namespace,
 		args *deploymentspb.RegisterWorkerInVersionArgs,
 		identity string,
+		testhook_task_queues_sync_batch_size int32,
 	) error
 }
 
@@ -226,6 +228,7 @@ func (d *ClientImpl) RegisterTaskQueueWorker(
 	taskQueueType enumspb.TaskQueueType,
 	identity string,
 	requestID string,
+	testhook_task_queues_sync_batch_size int32,
 ) (retErr error) {
 	//revive:disable-next-line:defer
 	defer d.record("RegisterTaskQueueWorker", &retErr, taskQueueName, taskQueueType, identity)()
@@ -238,6 +241,7 @@ func (d *ClientImpl) RegisterTaskQueueWorker(
 			DeploymentName: deploymentName,
 			BuildId:        buildId,
 		},
+		TesthookTaskQueuesSyncBatchSize: testhook_task_queues_sync_batch_size,
 	})
 	if err != nil {
 		return err
@@ -1057,6 +1061,7 @@ func (d *ClientImpl) updateWithStartWorkerDeploymentVersion(
 	updateRequest *updatepb.Request,
 	identity string,
 	requestID string,
+	testhook_task_queues_sync_batch_size int32,
 ) (*updatepb.Outcome, error) {
 	err := validateVersionWfParams(WorkerDeploymentNameFieldName, deploymentName, d.maxIDLengthLimit())
 	if err != nil {
@@ -1086,6 +1091,7 @@ func (d *ClientImpl) updateWithStartWorkerDeploymentVersion(
 			DrainageInfo:      &deploymentpb.VersionDrainageInfo{}, // not draining or drained
 			Metadata:          nil,                                 // todo
 		},
+		TesthookTaskQueuesSyncBatchSize: testhook_task_queues_sync_batch_size,
 	})
 	if err != nil {
 		return nil, err
@@ -1509,6 +1515,7 @@ func (d *ClientImpl) RegisterWorkerInVersion(
 	namespaceEntry *namespace.Namespace,
 	args *deploymentspb.RegisterWorkerInVersionArgs,
 	identity string,
+	testhook_task_queues_sync_batch_size int32,
 ) error {
 	versionObj, err := worker_versioning.WorkerDeploymentVersionFromString(args.Version)
 	if err != nil {
@@ -1528,7 +1535,7 @@ func (d *ClientImpl) RegisterWorkerInVersion(
 	outcome, err := d.updateWithStartWorkerDeploymentVersion(ctx, namespaceEntry, versionObj.DeploymentName, versionObj.BuildId, &updatepb.Request{
 		Input: &updatepb.Input{Name: RegisterWorkerInDeploymentVersion, Args: updatePayload},
 		Meta:  &updatepb.Meta{UpdateId: requestID, Identity: identity},
-	}, identity, requestID)
+	}, identity, requestID, testhook_task_queues_sync_batch_size)
 	if err != nil {
 		return err
 	}

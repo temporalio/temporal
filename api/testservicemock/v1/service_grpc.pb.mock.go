@@ -46,7 +46,6 @@ import (
 type MockTestServiceClient struct {
 	ctrl     *gomock.Controller
 	recorder *MockTestServiceClientMockRecorder
-	isgomock struct{}
 }
 
 // MockTestServiceClientMockRecorder is the mock recorder for MockTestServiceClient.
@@ -90,7 +89,6 @@ func (mr *MockTestServiceClientMockRecorder) SendHello(ctx, in any, opts ...any)
 type MockTestServiceServer struct {
 	ctrl     *gomock.Controller
 	recorder *MockTestServiceServerMockRecorder
-	isgomock struct{}
 }
 
 // MockTestServiceServerMockRecorder is the mock recorder for MockTestServiceServer.
@@ -141,7 +139,6 @@ func (mr *MockTestServiceServerMockRecorder) mustEmbedUnimplementedTestServiceSe
 type MockUnsafeTestServiceServer struct {
 	ctrl     *gomock.Controller
 	recorder *MockUnsafeTestServiceServerMockRecorder
-	isgomock struct{}
 }
 
 // MockUnsafeTestServiceServerMockRecorder is the mock recorder for MockUnsafeTestServiceServer.

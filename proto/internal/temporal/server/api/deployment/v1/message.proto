@@ -126,6 +126,9 @@ message WorkerDeploymentVersionWorkflowArgs {
     string namespace_name = 1;
     string namespace_id = 2;
     VersionLocalState version_state = 3;
+
+    // add testHook values as appropriate
+    int32 testhook_task_queues_sync_batch_size = 4;
 }
 
 // used as Worker Deployment workflow input:
@@ -165,6 +168,9 @@ message RegisterWorkerInVersionArgs {
     temporal.api.enums.v1.TaskQueueType task_queue_type = 2;
     int32 max_task_queues = 3;
     string version = 4;
+
+    // add testHook values as appropriate
+    uint32 testhook_task_queues_sync_batch_size = 5;
 }
 
 // used as Worker Deployment workflow update input:
@@ -173,6 +179,10 @@ message RegisterWorkerInWorkerDeploymentArgs {
     temporal.api.enums.v1.TaskQueueType task_queue_type = 2;
     int32 max_task_queues = 3;
     WorkerDeploymentVersion version = 4;
+    
+    // add testHook values as appropriate
+    int32 testhook_task_queues_sync_batch_size = 5;
+
 }
 
 // used as Worker Deployment workflow activity input:
