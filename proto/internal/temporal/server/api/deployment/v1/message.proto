@@ -170,7 +170,7 @@ message RegisterWorkerInVersionArgs {
     string version = 4;
 
     // add testHook values as appropriate
-    uint32 testhook_task_queues_sync_batch_size = 5;
+    int32 testhook_task_queues_sync_batch_size = 5;
 }
 
 // used as Worker Deployment workflow update input:
