@@ -714,5 +714,7 @@ func (d *VersionWorkflowRunner) syncSummary(ctx workflow.Context) {
 			DrainageStatus: d.VersionState.DrainageInfo.GetStatus(),
 		},
 	).Get(ctx, nil)
-	d.logger.Error("could not sync version summary to deployment workflow", "error", err)
+	if err != nil {
+		d.logger.Error("could not sync version summary to deployment workflow", "error", err)
+	}
 }
