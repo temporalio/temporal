@@ -72,7 +72,7 @@ func ClientProvider(
 	matchingClient resource.MatchingClient,
 	visibilityManager manager.VisibilityManager,
 	dc *dynamicconfig.Collection,
-	testhooks testhooks.TestHooks,
+	testHooks testhooks.TestHooks,
 ) Client {
 	return &ClientImpl{
 		logger:                           logger,
@@ -83,7 +83,7 @@ func ClientProvider(
 		visibilityMaxPageSize:            dynamicconfig.FrontendVisibilityMaxPageSize.Get(dc),
 		maxTaskQueuesInDeploymentVersion: dynamicconfig.MatchingMaxTaskQueuesInDeploymentVersion.Get(dc),
 		maxDeployments:                   dynamicconfig.MatchingMaxDeployments.Get(dc),
-		testhooks:                        testhooks,
+		testHooks:                        testHooks,
 	}
 }
 

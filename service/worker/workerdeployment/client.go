@@ -213,7 +213,7 @@ type ClientImpl struct {
 	visibilityMaxPageSize            dynamicconfig.IntPropertyFnWithNamespaceFilter
 	maxTaskQueuesInDeploymentVersion dynamicconfig.IntPropertyFnWithNamespaceFilter
 	maxDeployments                   dynamicconfig.IntPropertyFnWithNamespaceFilter
-	testhooks                        testhooks.TestHooks
+	testHooks                        testhooks.TestHooks
 }
 
 var _ Client = (*ClientImpl)(nil)
@@ -1554,7 +1554,7 @@ func (d *ClientImpl) RegisterWorkerInVersion(
 
 func (d *ClientImpl) getSyncBatchSize() int32 {
 	defaultSyncBatchSize := int32(25)
-	if n, ok := testhooks.Get[int](d.testhooks, testhooks.TaskQueuesInDeploymentSyncBatchSize); ok && n > 0 {
+	if n, ok := testhooks.Get[int](d.testHooks, testhooks.TaskQueuesInDeploymentSyncBatchSize); ok && n > 0 {
 		// In production, the testhook would be set to 0 and never reach here!
 		defaultSyncBatchSize = int32(n)
 	}
