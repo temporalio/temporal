@@ -802,7 +802,6 @@ type RegisterWorkerInWorkerDeploymentArgs struct {
 	TaskQueueType v11.TaskQueueType        `protobuf:"varint,2,opt,name=task_queue_type,json=taskQueueType,proto3,enum=temporal.api.enums.v1.TaskQueueType" json:"task_queue_type,omitempty"`
 	MaxTaskQueues int32                    `protobuf:"varint,3,opt,name=max_task_queues,json=maxTaskQueues,proto3" json:"max_task_queues,omitempty"`
 	Version       *WorkerDeploymentVersion `protobuf:"bytes,4,opt,name=version,proto3" json:"version,omitempty"`
-	SyncBatchSize int32                    `protobuf:"varint,5,opt,name=sync_batch_size,json=syncBatchSize,proto3" json:"sync_batch_size,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -863,13 +862,6 @@ func (x *RegisterWorkerInWorkerDeploymentArgs) GetVersion() *WorkerDeploymentVer
 		return x.Version
 	}
 	return nil
-}
-
-func (x *RegisterWorkerInWorkerDeploymentArgs) GetSyncBatchSize() int32 {
-	if x != nil {
-		return x.SyncBatchSize
-	}
-	return 0
 }
 
 // used as Worker Deployment workflow activity input:
@@ -4134,13 +4126,12 @@ const file_temporal_server_api_deployment_v1_message_proto_rawDesc = "" +
 	"\x0ftask_queue_name\x18\x01 \x01(\tR\rtaskQueueName\x12L\n" +
 	"\x0ftask_queue_type\x18\x02 \x01(\x0e2$.temporal.api.enums.v1.TaskQueueTypeR\rtaskQueueType\x12&\n" +
 	"\x0fmax_task_queues\x18\x03 \x01(\x05R\rmaxTaskQueues\x12\x18\n" +
-	"\aversion\x18\x04 \x01(\tR\aversion\"\xc2\x02\n" +
+	"\aversion\x18\x04 \x01(\tR\aversion\"\x9a\x02\n" +
 	"$RegisterWorkerInWorkerDeploymentArgs\x12&\n" +
 	"\x0ftask_queue_name\x18\x01 \x01(\tR\rtaskQueueName\x12L\n" +
 	"\x0ftask_queue_type\x18\x02 \x01(\x0e2$.temporal.api.enums.v1.TaskQueueTypeR\rtaskQueueType\x12&\n" +
 	"\x0fmax_task_queues\x18\x03 \x01(\x05R\rmaxTaskQueues\x12T\n" +
-	"\aversion\x18\x04 \x01(\v2:.temporal.server.api.deployment.v1.WorkerDeploymentVersionR\aversion\x12&\n" +
-	"\x0fsync_batch_size\x18\x05 \x01(\x05R\rsyncBatchSize\"K\n" +
+	"\aversion\x18\x04 \x01(\v2:.temporal.server.api.deployment.v1.WorkerDeploymentVersionR\aversion\"K\n" +
 	"/DescribeVersionFromWorkerDeploymentActivityArgs\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\"\xab\x01\n" +
 	"1DescribeVersionFromWorkerDeploymentActivityResult\x12v\n" +
