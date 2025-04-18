@@ -376,7 +376,7 @@ func createWorkflowExecution(
 			// workflow ID reuse policy
 			return nil, err
 		default:
-			shardContext.GetLogger().Error(
+			shardContext.GetThrottledLogger().Error(
 				"Persistent store operation Failure",
 				tag.WorkflowNamespaceID(request.NewWorkflowSnapshot.ExecutionInfo.NamespaceId),
 				tag.WorkflowID(request.NewWorkflowSnapshot.ExecutionInfo.WorkflowId),
