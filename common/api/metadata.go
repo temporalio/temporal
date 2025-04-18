@@ -179,7 +179,10 @@ var (
 		"ListNexusEndpoints":       {Scope: ScopeCluster, Access: AccessAdmin},
 	}
 	nexusServiceMetadata = map[string]MethodMetadata{
-		"DispatchNexusTask": {Scope: ScopeNamespace, Access: AccessWrite},
+		"DispatchNexusTask":               {Scope: ScopeNamespace, Access: AccessWrite},
+		"DispatchByNamespaceAndTaskQueue": {Scope: ScopeNamespace, Access: AccessWrite},
+		"DispatchByEndpoint":              {Scope: ScopeNamespace, Access: AccessWrite},
+		"CompleteNexusOperation":          {Scope: ScopeNamespace, Access: AccessWrite},
 	}
 )
 
