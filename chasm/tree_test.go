@@ -152,6 +152,7 @@ func (s *nodeSuite) TestSerializeNode_ComponentAttributes() {
 	s.NotNil(node.serializedNode)
 	s.NotNil(node.serializedNode.GetData(), "node serialized value must have data after serialize is called")
 	s.Equal("TestLibrary.test_component", node.serializedNode.GetMetadata().GetComponentAttributes().GetType(), "node serialized value must have type set")
+	s.Equal(valueStateSynced, node.valueState)
 
 	// Serialize subcomponents (there are 2 subcomponents).
 	sc1Node := node.children["SubComponent1"]
@@ -162,6 +163,7 @@ func (s *nodeSuite) TestSerializeNode_ComponentAttributes() {
 	for _, childNode := range node.children {
 		err = childNode.serialize()
 		s.NoError(err)
+		s.Equal(valueStateSynced, childNode.valueState)
 	}
 	s.NotNil(sc1Node.serializedNode.GetData(), "child node serialized value must have data after serialize is called")
 	s.Equal("TestLibrary.test_sub_component_1", sc1Node.serializedNode.GetMetadata().GetComponentAttributes().GetType(), "node serialized value must have type set")
@@ -185,6 +187,7 @@ func (s *nodeSuite) TestSerializeNode_ClearComponentData() {
 	s.NotNil(node.serializedNode.GetMetadata().GetComponentAttributes(), "metadata must have component attributes")
 	s.Nil(node.serializedNode.GetData(), "data field must cleared to nil")
 	s.Equal("TestLibrary.test_component", node.serializedNode.GetMetadata().GetComponentAttributes().GetType(), "type must present")
+	s.Equal(valueStateSynced, node.valueState)
 }
 
 func (s *nodeSuite) TestSerializeNode_ClearSubDataField() {
@@ -223,6 +226,7 @@ func (s *nodeSuite) TestSerializeNode_DataAttributes() {
 	node := newNode(s.nodeBase(), nil, "")
 	node.initSerializedNode(fieldTypeData)
 	node.value = component
+	node.valueState = valueStateNeedSerialize
 
 	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(1)).Times(1)
 	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(1)).Times(1)
@@ -230,6 +234,7 @@ func (s *nodeSuite) TestSerializeNode_DataAttributes() {
 	s.NoError(err)
 	s.NotNil(node.serializedNode.GetData(), "child node serialized value must have data after serialize is called")
 	s.Equal([]byte{0x42, 0x2, 0x32, 0x32}, node.serializedNode.GetData().GetData())
+	s.Equal(valueStateSynced, node.valueState)
 }
 
 func (s *nodeSuite) TestSyncSubComponents_DeleteLeafNode() {
@@ -285,6 +290,7 @@ func (s *nodeSuite) TestDeserializeNode_EmptyPersistence() {
 	s.NotNil(node.value)
 	s.IsType(&TestComponent{}, node.value)
 	tc := node.value.(*TestComponent)
+	s.Equal(valueStateSynced, node.valueState)
 	s.Nil(tc.SubComponent1.Internal.node)
 	s.Nil(tc.SubComponent1.Internal.value)
 	s.Nil(tc.ComponentData)
@@ -297,6 +303,7 @@ func (s *nodeSuite) TestDeserializeNode_ComponentAttributes() {
 	s.NoError(err)
 	s.Nil(node.value)
 	s.NotNil(node.serializedNode)
+	s.Equal(valueStateNeedDeserialize, node.valueState)
 
 	err = node.deserialize(reflect.TypeOf(&TestComponent{}))
 	s.NoError(err)
@@ -305,13 +312,16 @@ func (s *nodeSuite) TestDeserializeNode_ComponentAttributes() {
 	tc := node.value.(*TestComponent)
 	s.Equal(tc.SubComponent1.Internal.node, node.children["SubComponent1"])
 	s.Equal(tc.ComponentData.ActivityId, "component-data")
+	s.Equal(valueStateSynced, node.valueState)
 
 	s.Nil(tc.SubComponent1.Internal.value)
+	s.Equal(valueStateNeedDeserialize, tc.SubComponent1.Internal.node.valueState)
 	err = tc.SubComponent1.Internal.node.deserialize(reflect.TypeOf(&TestSubComponent1{}))
 	s.NoError(err)
 	s.NotNil(tc.SubComponent1.Internal.node.value)
 	s.IsType(&TestSubComponent1{}, tc.SubComponent1.Internal.node.value)
 	s.Equal("sub-component1-data", tc.SubComponent1.Internal.node.value.(*TestSubComponent1).SubComponent1Data.ActivityId)
+	s.Equal(valueStateSynced, tc.SubComponent1.Internal.node.valueState)
 }
 
 func (s *nodeSuite) TestDeserializeNode_DataAttributes() {
@@ -325,6 +335,8 @@ func (s *nodeSuite) TestDeserializeNode_DataAttributes() {
 	err = node.deserialize(reflect.TypeOf(&TestComponent{}))
 	s.NoError(err)
 	s.NotNil(node.value)
+	s.Equal(valueStateSynced, node.valueState)
+
 	s.IsType(&TestComponent{}, node.value)
 	tc := node.value.(*TestComponent)
 
@@ -334,6 +346,7 @@ func (s *nodeSuite) TestDeserializeNode_DataAttributes() {
 	err = tc.SubData1.Internal.node.deserialize(reflect.TypeOf(&protoMessageType{}))
 	s.NoError(err)
 	s.NotNil(tc.SubData1.Internal.node.value)
+	s.Equal(valueStateSynced, tc.SubData1.Internal.node.valueState)
 	s.IsType(&protoMessageType{}, tc.SubData1.Internal.node.value)
 	s.Equal("sub-data1", tc.SubData1.Internal.node.value.(*protoMessageType).ActivityId)
 }
@@ -619,7 +632,7 @@ func (s *nodeSuite) TestComponent() {
 		chasmContext    Context
 		ref             ComponentRef
 		expectedErr     error
-		valueSynced     bool
+		valueState      valueState
 		assertComponent func(Component)
 	}{
 		{
@@ -672,7 +685,7 @@ func (s *nodeSuite) TestComponent() {
 				},
 			},
 			expectedErr:     nil,
-			valueSynced:     true,
+			valueState:      valueStateSynced,
 			assertComponent: assertTestComponent,
 		},
 		{
@@ -682,7 +695,7 @@ func (s *nodeSuite) TestComponent() {
 				componentPath: []string{}, // root
 			},
 			expectedErr:     nil,
-			valueSynced:     false,
+			valueState:      valueStateNeedSerialize,
 			assertComponent: assertTestComponent,
 		},
 	}
@@ -697,7 +710,7 @@ func (s *nodeSuite) TestComponent() {
 				node, ok := root.getNodeByPath(tc.ref.componentPath)
 				s.True(ok)
 				s.Equal(component, node.value)
-				s.Equal(tc.valueSynced, node.valueSynced)
+				s.Equal(tc.valueState, node.valueState)
 			}
 		})
 	}
@@ -769,9 +782,12 @@ func (s *nodeSuite) testComponentTree() *Node {
 	err = node.deserialize(reflect.TypeOf(&TestComponent{}))
 	s.NoError(err)
 	s.NotNil(node.value)
+	s.Equal(valueStateSynced, node.valueState)
 
-	// Create subcommponents by assigning fileds to TestComponent instance.
+	// Create subcomponents by assigning fields to TestComponent instance.
 	setTestComponentFields(node.value.(*TestComponent))
+	// TODO: remove this when Field.Get is implemented.
+	node.valueState = valueStateNeedSerialize
 
 	// Sync tree with subcomponents of TestComponent.
 	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(1)).Times(4) // for InitialVersionedTransition of children.
