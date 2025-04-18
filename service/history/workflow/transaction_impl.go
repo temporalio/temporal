@@ -371,9 +371,10 @@ func createWorkflowExecution(
 		switch err.(type) {
 		case *persistence.CurrentWorkflowConditionFailedError,
 			*persistence.WorkflowConditionFailedError,
-			*persistence.ConditionFailedError:
+			*persistence.ConditionFailedError,
+			*serviceerror.ResourceExhausted:
 			// it is possible that workflow already exists and caller need to apply
-			// workflow ID reuse policy
+			// workflow ID reuse policy, or the error is resource exhausted.
 			return nil, err
 		default:
 			shardContext.GetLogger().Error(
