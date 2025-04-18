@@ -186,7 +186,6 @@ func (a *Activities) RegisterWorkerInVersion(ctx context.Context, args *deployme
 		a.namespace,
 		args,
 		identity,
-		int32(args.TesthookTaskQueuesSyncBatchSize),
 	)
 	if err != nil {
 		return err

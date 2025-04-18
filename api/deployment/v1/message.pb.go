@@ -238,8 +238,10 @@ type VersionLocalState struct {
 	StartedDeploymentWorkflow bool                `protobuf:"varint,9,opt,name=started_deployment_workflow,json=startedDeploymentWorkflow,proto3" json:"started_deployment_workflow,omitempty"`
 	// Key: Task Queue Name
 	TaskQueueFamilies map[string]*VersionLocalState_TaskQueueFamilyData `protobuf:"bytes,10,rep,name=task_queue_families,json=taskQueueFamilies,proto3" json:"task_queue_families,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// Number of task queues which will be synced in a single batch.
+	SyncBatchSize int32 `protobuf:"varint,11,opt,name=sync_batch_size,json=syncBatchSize,proto3" json:"sync_batch_size,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *VersionLocalState) Reset() {
@@ -342,6 +344,13 @@ func (x *VersionLocalState) GetTaskQueueFamilies() map[string]*VersionLocalState
 	return nil
 }
 
+func (x *VersionLocalState) GetSyncBatchSize() int32 {
+	if x != nil {
+		return x.SyncBatchSize
+	}
+	return 0
+}
+
 // Data specific to a task queue, from the perspective of a worker deployment version.
 type TaskQueueVersionData struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -385,10 +394,8 @@ type WorkerDeploymentVersionWorkflowArgs struct {
 	NamespaceName string                 `protobuf:"bytes,1,opt,name=namespace_name,json=namespaceName,proto3" json:"namespace_name,omitempty"`
 	NamespaceId   string                 `protobuf:"bytes,2,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
 	VersionState  *VersionLocalState     `protobuf:"bytes,3,opt,name=version_state,json=versionState,proto3" json:"version_state,omitempty"`
-	// add testHook values as appropriate
-	TesthookTaskQueuesSyncBatchSize int32 `protobuf:"varint,4,opt,name=testhook_task_queues_sync_batch_size,json=testhookTaskQueuesSyncBatchSize,proto3" json:"testhook_task_queues_sync_batch_size,omitempty"`
-	unknownFields                   protoimpl.UnknownFields
-	sizeCache                       protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *WorkerDeploymentVersionWorkflowArgs) Reset() {
@@ -440,13 +447,6 @@ func (x *WorkerDeploymentVersionWorkflowArgs) GetVersionState() *VersionLocalSta
 		return x.VersionState
 	}
 	return nil
-}
-
-func (x *WorkerDeploymentVersionWorkflowArgs) GetTesthookTaskQueuesSyncBatchSize() int32 {
-	if x != nil {
-		return x.TesthookTaskQueuesSyncBatchSize
-	}
-	return 0
 }
 
 // used as Worker Deployment workflow input:
@@ -588,8 +588,10 @@ type WorkerDeploymentLocalState struct {
 	Versions             map[string]*WorkerDeploymentVersionSummary `protobuf:"bytes,3,rep,name=versions,proto3" json:"versions,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	ConflictToken        []byte                                     `protobuf:"bytes,4,opt,name=conflict_token,json=conflictToken,proto3" json:"conflict_token,omitempty"`
 	LastModifierIdentity string                                     `protobuf:"bytes,5,opt,name=last_modifier_identity,json=lastModifierIdentity,proto3" json:"last_modifier_identity,omitempty"`
-	unknownFields        protoimpl.UnknownFields
-	sizeCache            protoimpl.SizeCache
+	// Number of task queues which will be synced in a single batch.
+	SyncBatchSize int32 `protobuf:"varint,6,opt,name=sync_batch_size,json=syncBatchSize,proto3" json:"sync_batch_size,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *WorkerDeploymentLocalState) Reset() {
@@ -655,6 +657,13 @@ func (x *WorkerDeploymentLocalState) GetLastModifierIdentity() string {
 		return x.LastModifierIdentity
 	}
 	return ""
+}
+
+func (x *WorkerDeploymentLocalState) GetSyncBatchSize() int32 {
+	if x != nil {
+		return x.SyncBatchSize
+	}
+	return 0
 }
 
 type WorkerDeploymentVersionSummary struct {
@@ -724,10 +733,8 @@ type RegisterWorkerInVersionArgs struct {
 	TaskQueueType v11.TaskQueueType      `protobuf:"varint,2,opt,name=task_queue_type,json=taskQueueType,proto3,enum=temporal.api.enums.v1.TaskQueueType" json:"task_queue_type,omitempty"`
 	MaxTaskQueues int32                  `protobuf:"varint,3,opt,name=max_task_queues,json=maxTaskQueues,proto3" json:"max_task_queues,omitempty"`
 	Version       string                 `protobuf:"bytes,4,opt,name=version,proto3" json:"version,omitempty"`
-	// populate testHook values as needed
-	TesthookTaskQueuesSyncBatchSize int32 `protobuf:"varint,5,opt,name=testhook_task_queues_sync_batch_size,json=testhookTaskQueuesSyncBatchSize,proto3" json:"testhook_task_queues_sync_batch_size,omitempty"`
-	unknownFields                   protoimpl.UnknownFields
-	sizeCache                       protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *RegisterWorkerInVersionArgs) Reset() {
@@ -788,13 +795,6 @@ func (x *RegisterWorkerInVersionArgs) GetVersion() string {
 	return ""
 }
 
-func (x *RegisterWorkerInVersionArgs) GetTesthookTaskQueuesSyncBatchSize() int32 {
-	if x != nil {
-		return x.TesthookTaskQueuesSyncBatchSize
-	}
-	return 0
-}
-
 // used as Worker Deployment workflow update input:
 type RegisterWorkerInWorkerDeploymentArgs struct {
 	state         protoimpl.MessageState   `protogen:"open.v1"`
@@ -802,10 +802,9 @@ type RegisterWorkerInWorkerDeploymentArgs struct {
 	TaskQueueType v11.TaskQueueType        `protobuf:"varint,2,opt,name=task_queue_type,json=taskQueueType,proto3,enum=temporal.api.enums.v1.TaskQueueType" json:"task_queue_type,omitempty"`
 	MaxTaskQueues int32                    `protobuf:"varint,3,opt,name=max_task_queues,json=maxTaskQueues,proto3" json:"max_task_queues,omitempty"`
 	Version       *WorkerDeploymentVersion `protobuf:"bytes,4,opt,name=version,proto3" json:"version,omitempty"`
-	// populate testHook values as needed
-	TesthookTaskQueuesSyncBatchSize int32 `protobuf:"varint,5,opt,name=testhook_task_queues_sync_batch_size,json=testhookTaskQueuesSyncBatchSize,proto3" json:"testhook_task_queues_sync_batch_size,omitempty"`
-	unknownFields                   protoimpl.UnknownFields
-	sizeCache                       protoimpl.SizeCache
+	SyncBatchSize int32                    `protobuf:"varint,5,opt,name=sync_batch_size,json=syncBatchSize,proto3" json:"sync_batch_size,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *RegisterWorkerInWorkerDeploymentArgs) Reset() {
@@ -866,9 +865,9 @@ func (x *RegisterWorkerInWorkerDeploymentArgs) GetVersion() *WorkerDeploymentVer
 	return nil
 }
 
-func (x *RegisterWorkerInWorkerDeploymentArgs) GetTesthookTaskQueuesSyncBatchSize() int32 {
+func (x *RegisterWorkerInWorkerDeploymentArgs) GetSyncBatchSize() int32 {
 	if x != nil {
-		return x.TesthookTaskQueuesSyncBatchSize
+		return x.SyncBatchSize
 	}
 	return 0
 }
@@ -4077,7 +4076,7 @@ const file_temporal_server_api_deployment_v1_message_proto_rawDesc = "" +
 	"\x13routing_update_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x11routingUpdateTime\x12H\n" +
 	"\x12current_since_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x10currentSinceTime\x12H\n" +
 	"\x12ramping_since_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x10rampingSinceTime\x12'\n" +
-	"\x0framp_percentage\x18\x05 \x01(\x02R\x0erampPercentage\"\xa7\t\n" +
+	"\x0framp_percentage\x18\x05 \x01(\x02R\x0erampPercentage\"\xcf\t\n" +
 	"\x11VersionLocalState\x12T\n" +
 	"\aversion\x18\x01 \x01(\v2:.temporal.server.api.deployment.v1.WorkerDeploymentVersionR\aversion\x12;\n" +
 	"\vcreate_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
@@ -4090,7 +4089,8 @@ const file_temporal_server_api_deployment_v1_message_proto_rawDesc = "" +
 	"\bmetadata\x18\b \x01(\v2+.temporal.api.deployment.v1.VersionMetadataR\bmetadata\x12>\n" +
 	"\x1bstarted_deployment_workflow\x18\t \x01(\bR\x19startedDeploymentWorkflow\x12{\n" +
 	"\x13task_queue_families\x18\n" +
-	" \x03(\v2K.temporal.server.api.deployment.v1.VersionLocalState.TaskQueueFamiliesEntryR\x11taskQueueFamilies\x1a\x8e\x01\n" +
+	" \x03(\v2K.temporal.server.api.deployment.v1.VersionLocalState.TaskQueueFamiliesEntryR\x11taskQueueFamilies\x12&\n" +
+	"\x0fsync_batch_size\x18\v \x01(\x05R\rsyncBatchSize\x1a\x8e\x01\n" +
 	"\x16TaskQueueFamiliesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12^\n" +
 	"\x05value\x18\x02 \x01(\v2H.temporal.server.api.deployment.v1.VersionLocalState.TaskQueueFamilyDataR\x05value:\x028\x01\x1a\x88\x02\n" +
@@ -4100,12 +4100,11 @@ const file_temporal_server_api_deployment_v1_message_proto_rawDesc = "" +
 	"\x0fTaskQueuesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\x05R\x03key\x12M\n" +
 	"\x05value\x18\x02 \x01(\v27.temporal.server.api.deployment.v1.TaskQueueVersionDataR\x05value:\x028\x01\"\x16\n" +
-	"\x14TaskQueueVersionData\"\x99\x02\n" +
+	"\x14TaskQueueVersionData\"\xca\x01\n" +
 	"#WorkerDeploymentVersionWorkflowArgs\x12%\n" +
 	"\x0enamespace_name\x18\x01 \x01(\tR\rnamespaceName\x12!\n" +
 	"\fnamespace_id\x18\x02 \x01(\tR\vnamespaceId\x12Y\n" +
-	"\rversion_state\x18\x03 \x01(\v24.temporal.server.api.deployment.v1.VersionLocalStateR\fversionState\x12M\n" +
-	"$testhook_task_queues_sync_batch_size\x18\x04 \x01(\x05R\x1ftesthookTaskQueuesSyncBatchSize\"\xe6\x01\n" +
+	"\rversion_state\x18\x03 \x01(\v24.temporal.server.api.deployment.v1.VersionLocalStateR\fversionState\"\xe6\x01\n" +
 	"\x1cWorkerDeploymentWorkflowArgs\x12%\n" +
 	"\x0enamespace_name\x18\x01 \x01(\tR\rnamespaceName\x12!\n" +
 	"\fnamespace_id\x18\x02 \x01(\tR\vnamespaceId\x12'\n" +
@@ -4114,14 +4113,15 @@ const file_temporal_server_api_deployment_v1_message_proto_rawDesc = "" +
 	"\x14DrainageWorkflowArgs\x12%\n" +
 	"\x0enamespace_name\x18\x01 \x01(\tR\rnamespaceName\x12T\n" +
 	"\aversion\x18\x02 \x01(\v2:.temporal.server.api.deployment.v1.WorkerDeploymentVersionR\aversion\x12\x15\n" +
-	"\x06is_can\x18\x03 \x01(\bR\x05isCan\"\xf1\x03\n" +
+	"\x06is_can\x18\x03 \x01(\bR\x05isCan\"\x99\x04\n" +
 	"\x1aWorkerDeploymentLocalState\x12;\n" +
 	"\vcreate_time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"createTime\x12P\n" +
 	"\x0erouting_config\x18\x02 \x01(\v2).temporal.api.deployment.v1.RoutingConfigR\rroutingConfig\x12g\n" +
 	"\bversions\x18\x03 \x03(\v2K.temporal.server.api.deployment.v1.WorkerDeploymentLocalState.VersionsEntryR\bversions\x12%\n" +
 	"\x0econflict_token\x18\x04 \x01(\fR\rconflictToken\x124\n" +
-	"\x16last_modifier_identity\x18\x05 \x01(\tR\x14lastModifierIdentity\x1a~\n" +
+	"\x16last_modifier_identity\x18\x05 \x01(\tR\x14lastModifierIdentity\x12&\n" +
+	"\x0fsync_batch_size\x18\x06 \x01(\x05R\rsyncBatchSize\x1a~\n" +
 	"\rVersionsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12W\n" +
 	"\x05value\x18\x02 \x01(\v2A.temporal.server.api.deployment.v1.WorkerDeploymentVersionSummaryR\x05value:\x028\x01\"\xce\x01\n" +
@@ -4129,19 +4129,18 @@ const file_temporal_server_api_deployment_v1_message_proto_rawDesc = "" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12;\n" +
 	"\vcreate_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"createTime\x12U\n" +
-	"\x0fdrainage_status\x18\x03 \x01(\x0e2,.temporal.api.enums.v1.VersionDrainageStatusR\x0edrainageStatus\"\xa4\x02\n" +
+	"\x0fdrainage_status\x18\x03 \x01(\x0e2,.temporal.api.enums.v1.VersionDrainageStatusR\x0edrainageStatus\"\xd5\x01\n" +
 	"\x1bRegisterWorkerInVersionArgs\x12&\n" +
 	"\x0ftask_queue_name\x18\x01 \x01(\tR\rtaskQueueName\x12L\n" +
 	"\x0ftask_queue_type\x18\x02 \x01(\x0e2$.temporal.api.enums.v1.TaskQueueTypeR\rtaskQueueType\x12&\n" +
 	"\x0fmax_task_queues\x18\x03 \x01(\x05R\rmaxTaskQueues\x12\x18\n" +
-	"\aversion\x18\x04 \x01(\tR\aversion\x12M\n" +
-	"$testhook_task_queues_sync_batch_size\x18\x05 \x01(\x05R\x1ftesthookTaskQueuesSyncBatchSize\"\xe9\x02\n" +
+	"\aversion\x18\x04 \x01(\tR\aversion\"\xc2\x02\n" +
 	"$RegisterWorkerInWorkerDeploymentArgs\x12&\n" +
 	"\x0ftask_queue_name\x18\x01 \x01(\tR\rtaskQueueName\x12L\n" +
 	"\x0ftask_queue_type\x18\x02 \x01(\x0e2$.temporal.api.enums.v1.TaskQueueTypeR\rtaskQueueType\x12&\n" +
 	"\x0fmax_task_queues\x18\x03 \x01(\x05R\rmaxTaskQueues\x12T\n" +
-	"\aversion\x18\x04 \x01(\v2:.temporal.server.api.deployment.v1.WorkerDeploymentVersionR\aversion\x12M\n" +
-	"$testhook_task_queues_sync_batch_size\x18\x05 \x01(\x05R\x1ftesthookTaskQueuesSyncBatchSize\"K\n" +
+	"\aversion\x18\x04 \x01(\v2:.temporal.server.api.deployment.v1.WorkerDeploymentVersionR\aversion\x12&\n" +
+	"\x0fsync_batch_size\x18\x05 \x01(\x05R\rsyncBatchSize\"K\n" +
 	"/DescribeVersionFromWorkerDeploymentActivityArgs\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\"\xab\x01\n" +
 	"1DescribeVersionFromWorkerDeploymentActivityResult\x12v\n" +

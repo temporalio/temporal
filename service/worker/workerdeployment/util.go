@@ -119,8 +119,6 @@ var (
 			MaximumAttempts: 5,
 		},
 	}
-
-	syncBatchSize = 25
 )
 
 // validateVersionWfParams is a helper that verifies if the fields used for generating

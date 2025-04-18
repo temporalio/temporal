@@ -106,8 +106,7 @@ func (d *WorkflowRunner) listenToSignals(ctx workflow.Context) {
 }
 
 func (d *WorkflowRunner) run(ctx workflow.Context) error {
-	if d.State == nil {
-		d.State = &deploymentspb.WorkerDeploymentLocalState{}
+	if d.GetState().GetCreateTime() == nil {
 		d.State.CreateTime = timestamppb.New(workflow.Now(ctx))
 		d.State.RoutingConfig = &deploymentpb.RoutingConfig{CurrentVersion: worker_versioning.UnversionedVersionId}
 		d.State.ConflictToken, _ = workflow.Now(ctx).MarshalBinary()
@@ -269,11 +268,10 @@ func (d *WorkflowRunner) handleRegisterWorker(ctx workflow.Context, args *deploy
 	// Register task-queue worker in version workflow.
 	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
 	err = workflow.ExecuteActivity(activityCtx, d.a.RegisterWorkerInVersion, &deploymentspb.RegisterWorkerInVersionArgs{
-		TaskQueueName:                   args.TaskQueueName,
-		TaskQueueType:                   args.TaskQueueType,
-		MaxTaskQueues:                   args.MaxTaskQueues,
-		Version:                         worker_versioning.WorkerDeploymentVersionToString(args.Version),
-		TesthookTaskQueuesSyncBatchSize: args.TesthookTaskQueuesSyncBatchSize,
+		TaskQueueName: args.TaskQueueName,
+		TaskQueueType: args.TaskQueueType,
+		MaxTaskQueues: args.MaxTaskQueues,
+		Version:       worker_versioning.WorkerDeploymentVersionToString(args.Version),
 	}).Get(ctx, nil)
 	if err != nil {
 		var appError *temporal.ApplicationError
@@ -830,7 +828,7 @@ func (d *WorkflowRunner) syncUnversionedRamp(ctx workflow.Context, versionUpdate
 			}
 			syncReqs = append(syncReqs, sync)
 
-			if len(syncReqs) == syncBatchSize {
+			if len(syncReqs) == int(d.State.SyncBatchSize) {
 				batches = append(batches, syncReqs)
 				syncReqs = make([]*deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData, 0) // reset the syncReq.Sync slice for the next batch
 			}

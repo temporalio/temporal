@@ -659,14 +659,9 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 	// we need to update the deployment workflow to tell it about this task queue
 	// TODO: add some backoff here if we got an error last time
 
-	testhook_sync_batch_size := 0
-	if n, ok := testhooks.Get[int](c.partitionMgr.engine.testHooks, testhooks.TaskQueuesInDeploymentSyncBatchSize); ok {
-		testhook_sync_batch_size = n
-	}
-
 	err = c.partitionMgr.engine.workerDeploymentClient.RegisterTaskQueueWorker(
 		ctx, namespaceEntry, workerDeployment.SeriesName, workerDeployment.BuildId, c.queue.TaskQueueFamily().Name(), c.queue.TaskType(),
-		"matching service", uuid.New(), int32(testhook_sync_batch_size))
+		"matching service", uuid.New())
 	if err != nil {
 		var errTooMany workerdeployment.ErrMaxTaskQueuesInDeployment
 		if errors.As(err, &errTooMany) {

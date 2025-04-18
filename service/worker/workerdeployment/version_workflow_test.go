@@ -43,8 +43,9 @@ import (
 type VersionWorkflowSuite struct {
 	suite.Suite
 	testsuite.WorkflowTestSuite
-	controller *gomock.Controller
-	env        *testsuite.TestWorkflowEnvironment
+	controller             *gomock.Controller
+	env                    *testsuite.TestWorkflowEnvironment
+	workerDeploymentClient *ClientImpl
 }
 
 func TestVersionWorkflowSuite(t *testing.T) {
@@ -55,6 +56,9 @@ func (s *VersionWorkflowSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.env = s.WorkflowTestSuite.NewTestWorkflowEnvironment()
 	s.env.RegisterWorkflow(VersionWorkflow)
+
+	// Initialize an empty ClientImpl to use its helper methods
+	s.workerDeploymentClient = &ClientImpl{}
 }
 
 func (s *VersionWorkflowSuite) TearDownTest() {
@@ -168,7 +172,7 @@ func (s *VersionWorkflowSuite) syncStateInBatches(totalWorkers int) {
 			},
 		})
 
-		if len(syncReq.Sync) == syncBatchSize {
+		if len(syncReq.Sync) == int(s.workerDeploymentClient.getSyncBatchSize()) {
 			batches = append(batches, syncReq.Sync)
 			syncReq.Sync = make([]*deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData, 0)
 		}
@@ -203,6 +207,7 @@ func (s *VersionWorkflowSuite) syncStateInBatches(totalWorkers int) {
 			RampPercentage:    0,                                   // not ramping
 			DrainageInfo:      &deploymentpb.VersionDrainageInfo{}, // not draining or drained
 			Metadata:          nil,
+			SyncBatchSize:     int32(s.workerDeploymentClient.getSyncBatchSize()), // initialize the sync batch size
 		},
 	})
 }

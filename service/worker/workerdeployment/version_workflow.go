@@ -620,11 +620,9 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 				Data:  data,
 			})
 
-			if d.TesthookTaskQueuesSyncBatchSize > 0 {
-				syncBatchSize = int(d.TesthookTaskQueuesSyncBatchSize)
-			}
+			fmt.Println("Using a SyncBatchSize of ", d.VersionState.SyncBatchSize)
 
-			if len(syncReq.Sync) == syncBatchSize {
+			if len(syncReq.Sync) == int(d.VersionState.SyncBatchSize) {
 				batches = append(batches, syncReq.Sync)
 				syncReq.Sync = make([]*deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData, 0) // reset the syncReq.Sync slice for the next batch
 			}
