@@ -1553,10 +1553,10 @@ func (d *ClientImpl) RegisterWorkerInVersion(
 }
 
 func (d *ClientImpl) getSyncBatchSize() int32 {
-	defaultSyncBatchSize := int32(25)
+	syncBatchSize := int32(25)
 	if n, ok := testhooks.Get[int](d.testHooks, testhooks.TaskQueuesInDeploymentSyncBatchSize); ok && n > 0 {
 		// In production, the testhook would be set to 0 and never reach here!
-		defaultSyncBatchSize = int32(n)
+		syncBatchSize = int32(n)
 	}
-	return defaultSyncBatchSize
+	return syncBatchSize
 }

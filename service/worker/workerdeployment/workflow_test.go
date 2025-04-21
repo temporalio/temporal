@@ -348,10 +348,11 @@ func (s *WorkerDeploymentSuite) syncUnversionedRampInBatches(totalWorkers int) {
 
 	// Mock the SyncDeploymentVersionUserData activity and expect it to be called totalWorkers times
 	var totalBatches int
-	if totalWorkers%int(s.workerDeploymentClient.getSyncBatchSize()) == 0 {
-		totalBatches = totalWorkers / int(s.workerDeploymentClient.getSyncBatchSize())
+	batchSize := s.workerDeploymentClient.getSyncBatchSize()
+	if totalWorkers%int(batchSize) == 0 {
+		totalBatches = totalWorkers / int(batchSize)
 	} else {
-		totalBatches = totalWorkers/int(s.workerDeploymentClient.getSyncBatchSize()) + 1
+		totalBatches = totalWorkers/int(batchSize) + 1
 	}
 
 	s.env.OnActivity(a.SyncDeploymentVersionUserDataFromWorkerDeployment, mock.Anything, mock.Anything).Times(totalBatches).Return(nil, nil)
