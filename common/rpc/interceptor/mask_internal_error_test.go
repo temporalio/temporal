@@ -148,10 +148,9 @@ func TestMaskInternalErrorDetailsInterceptor(t *testing.T) {
 
 			// Verify the error is masked or not based on expectations
 			if tc.expectMaskedError {
-				// If error should be masked, it should contain the "something went wrong" message
 				assert.Contains(t, err.Error(), errorFrontendMasked)
 			} else {
-				// If error should not be masked, it should be the original error
+				// If an error should not be masked, it should be the original error
 				assert.Equal(t, testError, err)
 			}
 		})
