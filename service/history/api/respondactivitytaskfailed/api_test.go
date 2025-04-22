@@ -131,7 +131,7 @@ func (s *workflowSuite) Test_NormalFlowShouldRescheduleActivity_UpdatesWorkflowE
 	request := s.newRespondActivityTaskFailedRequest(uc)
 	s.setupStubs(uc)
 
-	s.expectTimerMetricsRecorded(uc, s.shardContext)
+	s.expectMetricsRecorded(uc, s.shardContext)
 	s.workflowContext.EXPECT().UpdateWorkflowExecutionAsActive(ctx, s.shardContext).Return(nil)
 
 	_, err := Invoke(ctx, request, s.shardContext, s.workflowConsistencyChecker)
@@ -269,7 +269,7 @@ func (s *workflowSuite) Test_LastHeartBeatDetailsExist_UpdatesMutableState() {
 		Namespace: request.FailedRequest.GetNamespace(),
 	})
 
-	s.expectTimerMetricsRecorded(uc, s.shardContext)
+	s.expectMetricsRecorded(uc, s.shardContext)
 
 	_, err := Invoke(
 		ctx,
@@ -317,7 +317,7 @@ func (s *workflowSuite) Test_NoMoreRetriesAndMutableStateHasNoPendingTasks_WillR
 	})
 	s.setupStubs(uc)
 	request := s.newRespondActivityTaskFailedRequest(uc)
-	s.expectTimerMetricsRecorded(uc, s.shardContext)
+	s.expectMetricsRecorded(uc, s.shardContext)
 	s.currentMutableState.EXPECT().AddActivityTaskFailedEvent(
 		uc.scheduledEventId,
 		uc.startedEventId,
@@ -459,9 +459,9 @@ func (s *workflowSuite) setupShardContext(registry namespace.Registry) *historyi
 	return shardContext
 }
 
-func (s *workflowSuite) expectTimerMetricsRecorded(uc UsecaseConfig, shardContext *historyi.MockShardContext) {
+func (s *workflowSuite) expectMetricsRecorded(uc UsecaseConfig, shardContext *historyi.MockShardContext) {
 	timer := metrics.NewMockTimerIface(s.controller)
-	tags := []metrics.Tag{
+	timerTags := []metrics.Tag{
 		metrics.OperationTag(metrics.HistoryRespondActivityTaskFailedScope),
 		metrics.WorkflowTypeTag(uc.wfType.Name),
 		metrics.ActivityTypeTag(uc.activityType),
@@ -472,10 +472,23 @@ func (s *workflowSuite) expectTimerMetricsRecorded(uc UsecaseConfig, shardContex
 	timer.EXPECT().Record(
 		gomock.Any(),
 	)
-	metricsHandler := metrics.NewMockHandler(s.controller)
-	metricsHandler.EXPECT().WithTags(tags).Return(metricsHandler)
-	metricsHandler.EXPECT().Timer(metrics.ActivityE2ELatency.Name()).Return(timer)
 
+	counter := metrics.NewMockCounterIface(s.controller)
+	counterTags := []metrics.Tag{
+		metrics.WorkflowTypeTag(uc.wfType.Name),
+		metrics.ActivityTypeTag(uc.activityType),
+		metrics.FailureTag("failed"),
+		metrics.NamespaceTag(uc.namespaceName.String()),
+		metrics.UnsafeTaskQueueTag(uc.taskQueueId),
+	}
+
+	counter.EXPECT().Record(int64(1))
+
+	metricsHandler := metrics.NewMockHandler(s.controller)
+	metricsHandler.EXPECT().WithTags(timerTags).Return(metricsHandler)
+	metricsHandler.EXPECT().WithTags(counterTags).Return(metricsHandler)
+	metricsHandler.EXPECT().Timer(metrics.ActivityE2ELatency.Name()).Return(timer)
+	metricsHandler.EXPECT().Counter(metrics.ActivityFailed.Name()).Return(counter)
 	shardContext.EXPECT().GetMetricsHandler().Return(metricsHandler).AnyTimes()
 }
 

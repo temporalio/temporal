@@ -141,6 +141,16 @@ func Invoke(
 				metrics.ActivityTypeTag(token.ActivityType),
 			),
 		).Record(time.Since(activityStartedTime))
+
+		metrics.ActivityFailed.With(
+			workflow.GetPerTaskQueueFamilyScope(
+				shard.GetMetricsHandler(), namespace, taskQueue, shard.GetConfig(),
+				metrics.OperationTag(metrics.HistoryRespondActivityTaskCanceledScope),
+				metrics.WorkflowTypeTag(workflowTypeName),
+				metrics.ActivityTypeTag(token.ActivityType),
+				metrics.FailureTag("canceled"),
+			),
+		).Record(1)
 	}
 	return &historyservice.RespondActivityTaskCanceledResponse{}, err
 }

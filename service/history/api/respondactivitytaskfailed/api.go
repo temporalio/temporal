@@ -152,6 +152,15 @@ func Invoke(
 				metrics.ActivityTypeTag(token.ActivityType),
 			),
 		).Record(time.Since(activityStartedTime))
+
+		metrics.ActivityFailed.With(
+			workflow.GetPerTaskQueueFamilyScope(
+				shard.GetMetricsHandler(), namespace, taskQueue, shard.GetConfig(),
+				metrics.WorkflowTypeTag(workflowTypeName),
+				metrics.ActivityTypeTag(token.ActivityType),
+				metrics.FailureTag("failed"),
+			),
+		).Record(1)
 	}
 	return &historyservice.RespondActivityTaskFailedResponse{}, err
 }

@@ -1257,4 +1257,7 @@ var (
 	GcPauseNsTotal = NewGaugeDef("memory_pause_total_ns_last",
 		WithDescription("Last runtime.MemStats.PauseTotalNs"),
 	)
+
+	// Activity metrics
+	ActivityFailed = NewCounterDef("activity_failed")
 )
