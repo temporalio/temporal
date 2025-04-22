@@ -258,6 +258,8 @@ func GrpcServerOptionsProvider(
 		logger.Fatal("creating gRPC server options failed", tag.Error(err))
 	}
 	unaryInterceptors := []grpc.UnaryServerInterceptor{
+		// CallerInfoInterceptor needs to be before any interceptors that get namespace from requests
+		callerInfoInterceptor.Intercept,
 		// Order or interceptors is important
 		// Mask error interceptor should be the most outer interceptor since it handle the errors format
 		// Service Error Interceptor should be the next most outer interceptor on error handling
@@ -268,8 +270,6 @@ func GrpcServerOptionsProvider(
 		namespaceLogInterceptor.Intercept, // TODO: Deprecate this with a outer custom interceptor
 		metrics.NewServerMetricsContextInjectorInterceptor(),
 		authInterceptor.Intercept,
-		// CallerInfoInterceptor needs to be before any interceptors that get namespace from requests
-		callerInfoInterceptor.Intercept,
 		// Handover interceptor has to above redirection because the request will route to the correct cluster after handover completed.
 		// And retry cannot be performed before customInterceptors.
 		namespaceHandoverInterceptor.Intercept,
