@@ -37,18 +37,10 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
-
-// shouldMaskErrors is a helper method for testing
-func (mi *MaskInternalErrorDetailsInterceptor) shouldMaskErrors(ctx context.Context) bool {
-	nsName := headers.GetCallerInfo(ctx).CallerName
-	if nsName == "" {
-		return false
-	}
-	return mi.maskInternalError(nsName)
-}
 
 func TestMaskUnknownOrInternalErrors(t *testing.T) {
 
@@ -93,25 +85,75 @@ func TestMaskInternalErrorDetailsInterceptor(t *testing.T) {
 
 	controller := gomock.NewController(t)
 	mockRegistry := namespace.NewMockRegistry(controller)
-	dc := dynamicconfig.NewNoopCollection()
 	mockLogger := log.NewMockLogger(controller)
 
-	errorMask := NewMaskInternalErrorDetailsInterceptor(
-		dynamicconfig.FrontendMaskInternalErrorDetails.Get(dc), mockRegistry, mockLogger)
+	// Create a mock error for testing
+	testError := status.Error(codes.Internal, "test error")
 
-	test_namespace := "test-namespace"
-	ctx := headers.SetCallerInfo(context.Background(), headers.NewCallerInfo(test_namespace, "", ""))
-	assert.True(t, errorMask.shouldMaskErrors(ctx))
+	// Create a mock handler that always returns the test error
+	mockHandler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return nil, testError
+	}
 
-	namespace_not_found := "namespace-not-found"
-	ctx = headers.SetCallerInfo(context.Background(), headers.NewCallerInfo(namespace_not_found, "", ""))
-	assert.True(t, errorMask.shouldMaskErrors(ctx))
+	// Test cases for different namespace scenarios
+	testCases := []struct {
+		name              string
+		ctx               context.Context
+		maskInternalError bool
+		expectMaskedError bool
+	}{
+		{
+			name:              "Non-empty namespace with maskInternalError=false",
+			ctx:               headers.SetCallerInfo(context.Background(), headers.NewCallerInfo("test-namespace", "", "")),
+			maskInternalError: false,
+			expectMaskedError: false, // Should NOT mask errors when maskInternalError=false
+		},
+		{
+			name:              "Non-empty namespace with maskInternalError=true",
+			ctx:               headers.SetCallerInfo(context.Background(), headers.NewCallerInfo("test-namespace-2", "", "")),
+			maskInternalError: true,
+			expectMaskedError: true, // Should mask errors when maskInternalError=true
+		},
+		{
+			name:              "Empty namespace",
+			ctx:               headers.SetCallerInfo(context.Background(), headers.NewCallerInfo("", "", "")),
+			maskInternalError: false,
+			expectMaskedError: false, // Should NOT mask errors for empty namespace
+		},
+		{
+			name:              "No caller info",
+			ctx:               context.Background(), // Empty context without caller info
+			maskInternalError: false,
+			expectMaskedError: false, // Should NOT mask errors when no caller info
+		},
+	}
 
-	empty_namespace := ""
-	ctx = headers.SetCallerInfo(context.Background(), headers.NewCallerInfo(empty_namespace, "", ""))
-	assert.False(t, errorMask.shouldMaskErrors(ctx))
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Create a custom maskInternalError function based on the test case
+			maskInternalErrorFn := func(namespace string) bool {
+				return tc.maskInternalError
+			}
 
-	// Test with empty context (no caller info)
-	emptyCtx := context.Background()
-	assert.False(t, errorMask.shouldMaskErrors(emptyCtx))
+			// Create the interceptor with the custom maskInternalError function
+			errorMask := NewMaskInternalErrorDetailsInterceptor(
+				maskInternalErrorFn, mockRegistry, mockLogger)
+
+			if tc.expectMaskedError {
+				mockLogger.EXPECT().Error(gomock.Any(), gomock.Any()).Times(1)
+			}
+
+			// Call Intercept directly
+			_, err := errorMask.Intercept(tc.ctx, nil, &grpc.UnaryServerInfo{FullMethod: "test-method"}, mockHandler)
+
+			// Verify the error is masked or not based on expectations
+			if tc.expectMaskedError {
+				// If error should be masked, it should contain the "something went wrong" message
+				assert.Contains(t, err.Error(), errorFrontendMasked)
+			} else {
+				// If error should not be masked, it should be the original error
+				assert.Equal(t, testError, err)
+			}
+		})
+	}
 }

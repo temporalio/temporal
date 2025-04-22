@@ -77,10 +77,9 @@ func (mi *MaskInternalErrorDetailsInterceptor) Intercept(
 
 	if err != nil {
 		nsName := namespace.Name(headers.GetCallerInfo(ctx).CallerName)
-		if nsName.IsEmpty() || mi.maskInternalError(nsName.String()) {
-			return resp, err
+		if !nsName.IsEmpty() && mi.maskInternalError(nsName.String()) {
+			err = mi.maskUnknownOrInternalErrors(req, info.FullMethod, nsName, err)
 		}
-		err = mi.maskUnknownOrInternalErrors(req, info.FullMethod, nsName, err)
 	}
 	return resp, err
 }
