@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
@@ -74,22 +75,18 @@ func (mi *MaskInternalErrorDetailsInterceptor) Intercept(
 
 	resp, err := handler(ctx, req)
 
-	if err != nil && mi.shouldMaskErrors(req) {
-		err = mi.maskUnknownOrInternalErrors(req, info.FullMethod, err)
+	if err != nil {
+		nsName := namespace.Name(headers.GetCallerInfo(ctx).CallerName)
+		if nsName.IsEmpty() || mi.maskInternalError(nsName.String()) {
+			return resp, err
+		}
+		err = mi.maskUnknownOrInternalErrors(req, info.FullMethod, nsName, err)
 	}
 	return resp, err
 }
 
-func (mi *MaskInternalErrorDetailsInterceptor) shouldMaskErrors(req any) bool {
-	ns := MustGetNamespaceName(mi.namespaceRegistry, req)
-	if ns.IsEmpty() {
-		return false
-	}
-	return mi.maskInternalError(ns.String())
-}
-
 func (mi *MaskInternalErrorDetailsInterceptor) maskUnknownOrInternalErrors(
-	req interface{}, fullMethodName string, err error,
+	req interface{}, fullMethodName string, nsName namespace.Name, err error,
 ) error {
 	statusCode := serviceerror.ToStatus(err).Code()
 
@@ -103,7 +100,7 @@ func (mi *MaskInternalErrorDetailsInterceptor) maskUnknownOrInternalErrors(
 	// convert internal and unknown errors into neutral error with hash code of the original error
 	errorHash := common.ErrorHash(err)
 	// logging the error with hash code
-	mi.logError(req, fullMethodName, err, errorHash, statusCode)
+	mi.logError(req, fullMethodName, nsName, err, errorHash, statusCode)
 
 	// returning masked error
 	maskedErrorMessage := fmt.Sprintf("%s (%s)", errorFrontendMasked, errorHash)
@@ -113,19 +110,14 @@ func (mi *MaskInternalErrorDetailsInterceptor) maskUnknownOrInternalErrors(
 func (mi *MaskInternalErrorDetailsInterceptor) logError(
 	req any,
 	fullMethod string,
+	nsName namespace.Name,
 	err error,
 	errorHash string,
 	statusCode codes.Code,
 ) {
 	methodName := api.MethodName(fullMethod)
 	overridedMethodName := telemetryOverrideOperationTag(fullMethod, methodName)
-	nsName := MustGetNamespaceName(mi.namespaceRegistry, req)
-	var logTags []tag.Tag
-	if nsName == "" {
-		logTags = []tag.Tag{tag.Operation(overridedMethodName)}
-	} else {
-		logTags = []tag.Tag{tag.Operation(overridedMethodName), tag.WorkflowNamespace(nsName.String())}
-	}
+	logTags := []tag.Tag{tag.Operation(overridedMethodName), tag.WorkflowNamespace(nsName.String())}
 
 	logTags = append(logTags, tag.NewStringTag("hash", errorHash))
 

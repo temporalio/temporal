@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -91,7 +92,7 @@ func (i *NamespaceHandoverInterceptor) Intercept(
 
 	// review which method is allowed
 	methodName := api.MethodName(info.FullMethod)
-	namespaceName := MustGetNamespaceName(i.namespaceRegistry, req)
+	namespaceName := namespace.Name(headers.GetCallerInfo(ctx).CallerName)
 
 	if namespaceName != namespace.EmptyName && i.enabledForNS(namespaceName.String()) {
 		var waitTime *time.Duration

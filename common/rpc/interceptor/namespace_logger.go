@@ -31,6 +31,7 @@ import (
 
 	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/authorization"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
@@ -63,7 +64,7 @@ func (nli *NamespaceLogInterceptor) Intercept(
 
 	if nli.logger != nil {
 		methodName := api.MethodName(info.FullMethod)
-		namespace := MustGetNamespaceName(nli.namespaceRegistry, req)
+		nsName := headers.GetCallerInfo(ctx).CallerName
 		tlsInfo := authorization.TLSInfoFromContext(ctx)
 		var serverName string
 		var certThumbprint string
@@ -76,7 +77,7 @@ func (nli *NamespaceLogInterceptor) Intercept(
 		}
 		nli.logger.Debug(
 			"Frontend method invoked.",
-			tag.WorkflowNamespace(namespace.String()),
+			tag.WorkflowNamespace(nsName),
 			tag.Operation(methodName),
 			tag.ServerName(serverName),
 			tag.CertThumbprint(certThumbprint))

@@ -32,6 +32,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -96,7 +97,7 @@ func (ni *ConcurrentRequestLimitInterceptor) Intercept(
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
 ) (interface{}, error) {
-	nsName := MustGetNamespaceName(ni.namespaceRegistry, req)
+	nsName := namespace.Name(headers.GetCallerInfo(ctx).CallerName)
 	mh := GetMetricsHandlerFromContext(ctx, ni.logger)
 	cleanup, err := ni.Allow(nsName, info.FullMethod, mh, req)
 	defer cleanup()

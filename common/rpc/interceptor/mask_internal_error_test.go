@@ -25,20 +25,30 @@
 package interceptor
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
+
+// shouldMaskErrors is a helper method for testing
+func (mi *MaskInternalErrorDetailsInterceptor) shouldMaskErrors(ctx context.Context) bool {
+	nsName := headers.GetCallerInfo(ctx).CallerName
+	if nsName == "" {
+		return false
+	}
+	return mi.maskInternalError(nsName)
+}
 
 func TestMaskUnknownOrInternalErrors(t *testing.T) {
 
@@ -64,7 +74,7 @@ func testMaskUnknownOrInternalErrors(t *testing.T, st *status.Status, expectRelp
 	if expectRelpace {
 		mockLogger.EXPECT().Error(gomock.Any(), gomock.Any()).Times(1)
 	}
-	errorMessage := errorMaskInterceptor.maskUnknownOrInternalErrors(nil, "test", err)
+	errorMessage := errorMaskInterceptor.maskUnknownOrInternalErrors(nil, "test", "", err)
 	if expectRelpace {
 		errorHash := common.ErrorHash(err)
 		expectedMessage := fmt.Sprintf("rpc error: code = %s desc = %s (%s)", st.Message(), errorFrontendMasked, errorHash)
@@ -90,20 +100,18 @@ func TestMaskInternalErrorDetailsInterceptor(t *testing.T) {
 		dynamicconfig.FrontendMaskInternalErrorDetails.Get(dc), mockRegistry, mockLogger)
 
 	test_namespace := "test-namespace"
-	req := &workflowservice.StartWorkflowExecutionRequest{Namespace: test_namespace}
-	mockRegistry.EXPECT().GetNamespace(namespace.Name(test_namespace)).Return(&namespace.Namespace{}, nil).AnyTimes()
-	assert.True(t, errorMask.shouldMaskErrors(req))
+	ctx := headers.SetCallerInfo(context.Background(), headers.NewCallerInfo(test_namespace, "", ""))
+	assert.True(t, errorMask.shouldMaskErrors(ctx))
 
 	namespace_not_found := "namespace-not-found"
-	req = &workflowservice.StartWorkflowExecutionRequest{Namespace: namespace_not_found}
-	mockRegistry.EXPECT().GetNamespace(namespace.Name(namespace_not_found)).Return(nil, serviceerror.NewNamespaceNotFound("missing-namespace"))
-	assert.False(t, errorMask.shouldMaskErrors(req))
+	ctx = headers.SetCallerInfo(context.Background(), headers.NewCallerInfo(namespace_not_found, "", ""))
+	assert.True(t, errorMask.shouldMaskErrors(ctx))
 
 	empty_namespace := ""
-	req = &workflowservice.StartWorkflowExecutionRequest{Namespace: empty_namespace}
-	mockRegistry.EXPECT().GetNamespace(namespace.Name(empty_namespace)).Return(nil, serviceerror.NewNamespaceNotFound("missing-namespace"))
-	assert.False(t, errorMask.shouldMaskErrors(req))
+	ctx = headers.SetCallerInfo(context.Background(), headers.NewCallerInfo(empty_namespace, "", ""))
+	assert.False(t, errorMask.shouldMaskErrors(ctx))
 
-	var ei interface{}
-	assert.False(t, errorMask.shouldMaskErrors(ei))
+	// Test with empty context (no caller info)
+	emptyCtx := context.Background()
+	assert.False(t, errorMask.shouldMaskErrors(emptyCtx))
 }

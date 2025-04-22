@@ -268,6 +268,8 @@ func GrpcServerOptionsProvider(
 		namespaceLogInterceptor.Intercept, // TODO: Deprecate this with a outer custom interceptor
 		metrics.NewServerMetricsContextInjectorInterceptor(),
 		authInterceptor.Intercept,
+		// CallerInfoInterceptor needs to be before any interceptors that get namespace from requests
+		callerInfoInterceptor.Intercept,
 		// Handover interceptor has to above redirection because the request will route to the correct cluster after handover completed.
 		// And retry cannot be performed before customInterceptors.
 		namespaceHandoverInterceptor.Intercept,
@@ -279,7 +281,6 @@ func GrpcServerOptionsProvider(
 		namespaceRateLimiterInterceptor.Intercept,
 		rateLimitInterceptor.Intercept,
 		sdkVersionInterceptor.Intercept,
-		callerInfoInterceptor.Intercept,
 	}
 	if len(customInterceptors) > 0 {
 		// TODO: Deprecate WithChainedFrontendGrpcInterceptors and provide a inner custom interceptor
