@@ -106,8 +106,10 @@ func (d *WorkflowRunner) listenToSignals(ctx workflow.Context) {
 }
 
 func (d *WorkflowRunner) run(ctx workflow.Context) error {
-	if d.State == nil {
-		d.State = &deploymentspb.WorkerDeploymentLocalState{}
+	if d.GetState().GetCreateTime() == nil {
+		if d.State == nil {
+			d.State = &deploymentspb.WorkerDeploymentLocalState{}
+		}
 		d.State.CreateTime = timestamppb.New(workflow.Now(ctx))
 		d.State.RoutingConfig = &deploymentpb.RoutingConfig{CurrentVersion: worker_versioning.UnversionedVersionId}
 		d.State.ConflictToken, _ = workflow.Now(ctx).MarshalBinary()
@@ -830,7 +832,7 @@ func (d *WorkflowRunner) syncUnversionedRamp(ctx workflow.Context, versionUpdate
 			}
 			syncReqs = append(syncReqs, sync)
 
-			if len(syncReqs) == syncBatchSize {
+			if len(syncReqs) == int(d.State.SyncBatchSize) {
 				batches = append(batches, syncReqs)
 				syncReqs = make([]*deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData, 0) // reset the syncReq.Sync slice for the next batch
 			}

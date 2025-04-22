@@ -45,8 +45,9 @@ import (
 type WorkerDeploymentSuite struct {
 	suite.Suite
 	testsuite.WorkflowTestSuite
-	controller *gomock.Controller
-	env        *testsuite.TestWorkflowEnvironment
+	controller             *gomock.Controller
+	env                    *testsuite.TestWorkflowEnvironment
+	workerDeploymentClient *ClientImpl
 }
 
 func TestWorkerDeploymentSuite(t *testing.T) {
@@ -57,6 +58,9 @@ func (s *WorkerDeploymentSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.env = s.WorkflowTestSuite.NewTestWorkflowEnvironment()
 	s.env.RegisterWorkflow(Workflow)
+
+	// Initialize an empty ClientImpl to use its helper methods
+	s.workerDeploymentClient = &ClientImpl{}
 }
 
 func (s *WorkerDeploymentSuite) TearDownTest() {
@@ -344,10 +348,11 @@ func (s *WorkerDeploymentSuite) syncUnversionedRampInBatches(totalWorkers int) {
 
 	// Mock the SyncDeploymentVersionUserData activity and expect it to be called totalWorkers times
 	var totalBatches int
-	if totalWorkers%syncBatchSize == 0 {
-		totalBatches = totalWorkers / syncBatchSize
+	batchSize := int(s.workerDeploymentClient.getSyncBatchSize())
+	if totalWorkers%batchSize == 0 {
+		totalBatches = totalWorkers / batchSize
 	} else {
-		totalBatches = totalWorkers/syncBatchSize + 1
+		totalBatches = totalWorkers/batchSize + 1
 	}
 
 	s.env.OnActivity(a.SyncDeploymentVersionUserDataFromWorkerDeployment, mock.Anything, mock.Anything).Times(totalBatches).Return(nil, nil)
@@ -377,6 +382,9 @@ func (s *WorkerDeploymentSuite) syncUnversionedRampInBatches(totalWorkers int) {
 		NamespaceName:  tv.NamespaceName().String(),
 		NamespaceId:    tv.NamespaceID().String(),
 		DeploymentName: tv.DeploymentSeries(),
+		State: &deploymentspb.WorkerDeploymentLocalState{
+			SyncBatchSize: int32(s.workerDeploymentClient.getSyncBatchSize()), // initialize the sync batch size
+		},
 	})
 
 	s.True(s.env.IsWorkflowCompleted())

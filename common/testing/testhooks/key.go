@@ -29,4 +29,5 @@ const (
 	MatchingLBForceReadPartition
 	MatchingLBForceWritePartition
 	UpdateWithStartInBetweenLockAndStart
+	TaskQueuesInDeploymentSyncBatchSize
 )
