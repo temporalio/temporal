@@ -606,6 +606,7 @@ func TestNamespaceRateLimitInterceptorProvider(t *testing.T) {
 			// Create a gRPC server for the fake workflow service.
 			svc := &testSvc{}
 			server := grpc.NewServer(grpc.ChainUnaryInterceptor(
+				interceptor.NewCallerInfoInterceptor(mockRegistry).Intercept,
 				interceptor.ServiceErrorInterceptor,
 				rpc.NewFrontendServiceErrorInterceptor(log.NewTestLogger()),
 				rateLimitInterceptor.Intercept,
