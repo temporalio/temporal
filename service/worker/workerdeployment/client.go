@@ -55,6 +55,7 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/worker_versioning"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -212,6 +213,7 @@ type ClientImpl struct {
 	visibilityMaxPageSize            dynamicconfig.IntPropertyFnWithNamespaceFilter
 	maxTaskQueuesInDeploymentVersion dynamicconfig.IntPropertyFnWithNamespaceFilter
 	maxDeployments                   dynamicconfig.IntPropertyFnWithNamespaceFilter
+	testHooks                        testhooks.TestHooks
 }
 
 var _ Client = (*ClientImpl)(nil)
@@ -247,7 +249,7 @@ func (d *ClientImpl) RegisterTaskQueueWorker(
 	outcome, err := d.updateWithStartWorkerDeployment(ctx, namespaceEntry, deploymentName, buildId, &updatepb.Request{
 		Input: &updatepb.Input{Name: RegisterWorkerInWorkerDeployment, Args: updatePayload},
 		Meta:  &updatepb.Meta{UpdateId: requestID, Identity: identity},
-	}, identity, requestID)
+	}, identity, requestID, d.getSyncBatchSize())
 	if err != nil {
 		return err
 	}
@@ -1007,6 +1009,7 @@ func (d *ClientImpl) updateWithStartWorkerDeployment(
 	updateRequest *updatepb.Request,
 	identity string,
 	requestID string,
+	syncBatchSize int32,
 ) (*updatepb.Outcome, error) {
 	err := validateVersionWfParams(WorkerDeploymentNameFieldName, deploymentName, d.maxIDLengthLimit())
 	if err != nil {
@@ -1032,6 +1035,9 @@ func (d *ClientImpl) updateWithStartWorkerDeployment(
 		NamespaceName:  namespaceEntry.Name().String(),
 		NamespaceId:    namespaceEntry.ID().String(),
 		DeploymentName: deploymentName,
+		State: &deploymentspb.WorkerDeploymentLocalState{
+			SyncBatchSize: syncBatchSize,
+		},
 	})
 	if err != nil {
 		return nil, err
@@ -1085,6 +1091,7 @@ func (d *ClientImpl) updateWithStartWorkerDeploymentVersion(
 			RampPercentage:    0,                                   // not ramping
 			DrainageInfo:      &deploymentpb.VersionDrainageInfo{}, // not draining or drained
 			Metadata:          nil,                                 // todo
+			SyncBatchSize:     d.getSyncBatchSize(),
 		},
 	})
 	if err != nil {
@@ -1543,4 +1550,13 @@ func (d *ClientImpl) RegisterWorkerInVersion(
 	}
 
 	return nil
+}
+
+func (d *ClientImpl) getSyncBatchSize() int32 {
+	syncBatchSize := int32(25)
+	if n, ok := testhooks.Get[int](d.testHooks, testhooks.TaskQueuesInDeploymentSyncBatchSize); ok && n > 0 {
+		// In production, the testhook would be set to 0 and never reach here!
+		syncBatchSize = int32(n)
+	}
+	return syncBatchSize
 }

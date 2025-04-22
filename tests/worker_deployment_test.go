@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/worker/workerdeployment"
@@ -964,8 +965,10 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Batching()
 	defer cancel()
 	tv := testvars.New(s)
 
-	// register 30 task-queues in the version
-	taskQueues := 30
+	s.InjectHook(testhooks.TaskQueuesInDeploymentSyncBatchSize, 1)
+
+	// registering 5 task-queues in the version which would result in the creation of 5 batches, each with 1 task-queue, during the SyncState call.
+	taskQueues := 5
 	for i := 0; i < taskQueues; i++ {
 		go s.pollFromDeploymentWithTaskQueueNumber(ctx, tv, i)
 	}
@@ -1004,8 +1007,10 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Unversione
 	defer cancel()
 	tv := testvars.New(s)
 
-	// Registering 50 task-queues in the
-	taskQueues := 50
+	s.InjectHook(testhooks.TaskQueuesInDeploymentSyncBatchSize, 1)
+
+	// registering 5 task-queues in the version which would result in the creation of 5 batches, each with 1 task-queue, during the SyncState call.
+	taskQueues := 5
 	for i := 0; i < taskQueues; i++ {
 		go s.pollFromDeploymentWithTaskQueueNumber(ctx, tv, i)
 	}
@@ -1034,8 +1039,10 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Batching() {
 	defer cancel()
 	tv := testvars.New(s)
 
-	// register 30 task-queues in the version
-	taskQueues := 30
+	s.InjectHook(testhooks.TaskQueuesInDeploymentSyncBatchSize, 1)
+
+	// registering 5 task-queues in the version which would result in the creation of 5 batches, each with 1 task-queue, during the SyncState call.
+	taskQueues := 5
 	for i := 0; i < taskQueues; i++ {
 		go s.pollFromDeploymentWithTaskQueueNumber(ctx, tv, i)
 	}

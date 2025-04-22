@@ -111,6 +111,9 @@ message VersionLocalState {
     // Key: Task Queue Name
     map<string, TaskQueueFamilyData> task_queue_families = 10;
 
+    // Number of task queues which will be synced in a single batch.
+    int32 sync_batch_size = 11;
+
     message TaskQueueFamilyData {
         // Key: Task Queue Type
         map<int32, TaskQueueVersionData> task_queues = 1;
@@ -151,6 +154,8 @@ message WorkerDeploymentLocalState {
     map<string, WorkerDeploymentVersionSummary> versions = 3;
     bytes conflict_token = 4;
     string last_modifier_identity = 5;
+    // Number of task queues which will be synced in a single batch.
+    int32 sync_batch_size = 6;
 }
 
 message WorkerDeploymentVersionSummary {
