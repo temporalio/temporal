@@ -303,8 +303,11 @@ func (d *DeploymentWorkflowRunner) handleSyncState(ctx workflow.Context, args *d
 		syncReq := &deploymentspb.SyncUserDataRequest{
 			Deployment: d.State.Deployment,
 		}
-		for tqName, byType := range d.State.TaskQueueFamilies {
-			for tqType, data := range byType.TaskQueues {
+
+		for _, tqName := range workflow.DeterministicKeys(d.State.TaskQueueFamilies) {
+			byType := d.State.TaskQueueFamilies[tqName]
+			for _, tqType := range workflow.DeterministicKeys(byType.TaskQueues) {
+				data := byType.TaskQueues[tqType]
 				syncReq.Sync = append(syncReq.Sync, &deploymentspb.SyncUserDataRequest_SyncUserData{
 					Name: tqName,
 					Type: enumspb.TaskQueueType(tqType),
@@ -334,7 +337,8 @@ func (d *DeploymentWorkflowRunner) handleSyncState(ctx workflow.Context, args *d
 	if d.State.Metadata == nil && args.UpdateMetadata != nil {
 		d.State.Metadata = make(map[string]*commonpb.Payload)
 	}
-	for key, payload := range args.UpdateMetadata.GetUpsertEntries() {
+	for _, key := range workflow.DeterministicKeys(args.UpdateMetadata.GetUpsertEntries()) {
+		payload := args.UpdateMetadata.GetUpsertEntries()[key]
 		d.State.Metadata[key] = payload
 	}
 	for _, key := range args.UpdateMetadata.GetRemoveEntries() {

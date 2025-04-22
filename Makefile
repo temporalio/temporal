@@ -122,6 +122,7 @@ INTEGRATION_TEST_DIRS := $(DB_INTEGRATION_TEST_ROOT) $(DB_TOOL_INTEGRATION_TEST_
 ifeq ($(UNIT_TEST_DIRS),)
 UNIT_TEST_DIRS := $(filter-out $(FUNCTIONAL_TEST_ROOT)% $(FUNCTIONAL_TEST_XDC_ROOT)% $(FUNCTIONAL_TEST_NDC_ROOT)% $(DB_INTEGRATION_TEST_ROOT)% $(DB_TOOL_INTEGRATION_TEST_ROOT)% ./temporaltest%,$(TEST_DIRS))
 endif
+SYSTEM_WORKFLOWS_ROOT := ./service/worker
 
 # Pinning modernc.org/sqlite to this version until https://gitlab.com/cznic/sqlite/-/issues/196 is resolved.
 PINNED_DEPENDENCIES := \
@@ -203,6 +204,11 @@ ACTIONLINT_VER := v1.7.7
 ACTIONLINT := $(LOCALBIN)/actionlint-$(ACTIONLINT_VER)
 $(ACTIONLINT): | $(LOCALBIN)
 	$(call go-install-tool,$(ACTIONLINT),github.com/rhysd/actionlint/cmd/actionlint,$(ACTIONLINT_VER))
+
+WORKFLOWCHECK_VER := v0.3.0
+WORKFLOWCHECK := $(LOCALBIN)/workflowcheck-$(WORKFLOWCHECK_VER)
+$(WORKFLOWCHECK): | $(LOCALBIN)
+	$(call go-install-tool,$(WORKFLOWCHECK),go.temporal.io/sdk/contrib/tools/workflowcheck,$(WORKFLOWCHECK_VER))
 
 # The following tools need to have a consistent name, so we use a versioned stamp file to ensure the version we want is installed
 # while installing to an unversioned binary name.
@@ -380,6 +386,13 @@ buf-breaking: $(BUF) $(API_BINPB) $(INTERNAL_BINPB)
 shell-check:
 	@printf $(COLOR) "Run shellcheck for script files..."
 	@shellcheck $(ALL_SCRIPTS)
+
+workflowcheck: $(WORKFLOWCHECK)
+	@printf $(COLOR) "Run workflowcheck for system workflows..."
+	for dir in $(SYSTEM_WORKFLOWS_ROOT)/*/ ; do \
+		echo "Running workflowcheck on $$dir" ; \
+		$(WORKFLOWCHECK) "$$dir" ; \
+	done
 
 check: copyright-check lint shell-check
 
@@ -584,12 +597,9 @@ start-xdc-cluster-c: temporal-server
 	./temporal-server --env development-cluster-c --allow-no-auth start
 
 ##### Grafana #####
-DASHBOARD_DIR := develop/docker-compose/grafana/provisioning/temporalio-dashboards
 update-dashboards:
-	@printf $(COLOR) "Update dashboards ..."
-	@rm -rf $(DASHBOARD_DIR) && \
-		mkdir $(DASHBOARD_DIR) && \
-		curl -L https://api.github.com/repos/temporalio/dashboards/tarball | tar -x --strip 1 -C $(DASHBOARD_DIR)
+	@printf $(COLOR) "Update dashboards submodule from remote..."
+	git submodule update --force --init --remote develop/docker-compose/grafana/provisioning/temporalio-dashboards
 
 ##### Auxiliary #####
 gomodtidy:

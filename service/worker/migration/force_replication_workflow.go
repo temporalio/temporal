@@ -158,7 +158,7 @@ func ForceReplicationWorkflow(ctx workflow.Context, params ForceReplicationParam
 		}, nil
 	})
 
-	if err := validateAndSetForceReplicationParams(&params); err != nil {
+	if err := validateAndSetForceReplicationParams(ctx, &params); err != nil {
 		return err
 	}
 
@@ -283,7 +283,7 @@ func ForceTaskQueueUserDataReplicationWorkflow(ctx workflow.Context, params Task
 	return err
 }
 
-func validateAndSetForceReplicationParams(params *ForceReplicationParams) error {
+func validateAndSetForceReplicationParams(ctx workflow.Context, params *ForceReplicationParams) error {
 	if len(params.Namespace) == 0 {
 		return temporal.NewNonRetryableApplicationError("InvalidArgument: Namespace is required", "InvalidArgument", nil)
 	}
@@ -329,7 +329,7 @@ func validateAndSetForceReplicationParams(params *ForceReplicationParams) error 
 
 	if params.QPSQueue.Data == nil {
 		params.QPSQueue = NewQPSQueue(params.ConcurrentActivityCount, params.EstimationMultiplier)
-		params.QPSQueue.Enqueue(params.ReplicatedWorkflowCount)
+		params.QPSQueue.Enqueue(ctx, params.ReplicatedWorkflowCount)
 	}
 
 	return nil
@@ -471,7 +471,7 @@ func enqueueReplicationTasks(ctx workflow.Context, workflowExecutionsCh workflow
 				} else {
 					// Update replication status
 					params.ReplicatedWorkflowCount += int64(len(workflowExecutions))
-					params.QPSQueue.Enqueue(params.ReplicatedWorkflowCount)
+					params.QPSQueue.Enqueue(ctx, params.ReplicatedWorkflowCount)
 					params.ReplicatedWorkflowCountPerSecond = params.QPSQueue.CalculateQPS()
 
 					// Report new QPS to metrics
@@ -513,8 +513,8 @@ func NewQPSQueue(concurrentActivityCount int, estimationMultiplier int) QPSQueue
 	}
 }
 
-func (q *QPSQueue) Enqueue(count int64) {
-	data := QPSData{Count: count, Timestamp: time.Now()}
+func (q *QPSQueue) Enqueue(ctx workflow.Context, count int64) {
+	data := QPSData{Count: count, Timestamp: workflow.Now(ctx)}
 
 	// If queue length reaches max capacity, remove the oldest item
 	if len(q.Data) >= q.MaxSize {

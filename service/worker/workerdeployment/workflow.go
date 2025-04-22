@@ -222,7 +222,8 @@ func (d *WorkflowRunner) addVersionToWorkerDeployment(ctx workflow.Context, args
 		return nil
 	}
 
-	for _, v := range d.State.Versions {
+	for _, k := range workflow.DeterministicKeys(d.State.Versions) {
+		v := d.State.Versions[k]
 		if v.Version == args.Version {
 			return nil
 		}

@@ -1,4 +1,5 @@
 name: All Tests
+run-name: ${{ inputs.test_name }}${{ inputs.test_dbs }}
 
 on:
   pull_request:
@@ -26,7 +27,7 @@ on:
         type: string
         default: "./temporal"
       n_runs:
-        description: "Number of times to repeat the single test per database type"
+        description: "Number of times to repeat the test per database type (except for unit tests, start with n=25 or lower to avoid OOMKill)"
         type: number
         default: 1
       test_name:
@@ -849,6 +850,14 @@ jobs:
     steps:
       - name: Check results
         run: |
-          if [[ -n $(echo "$RESULTS" | jq '.[] | select (. != "success")') ]]; then
-            exit 1
+          if [[ "${{ inputs.run_single_functional_test }}" != "true" ]]; then
+            # if in all-tests mode, all statuses must be success
+            if [[ -n $(echo "$RESULTS" | jq '.[] | select (. != "success")') ]]; then
+              exit 1
+            fi
+          else
+            # if in single-test mode, skipped status is ok, failure is failure
+            if [[ -n $(echo "$RESULTS" | jq '.[] | select (. == "failure")') ]]; then
+              exit 1
+            fi
           fi
