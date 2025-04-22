@@ -449,7 +449,7 @@ func (h *nexusHandler) StartOperation(
 	// Convert to standard Nexus SDK response.
 	switch t := response.GetOutcome().(type) {
 	case *matchingservice.DispatchNexusTaskResponse_HandlerError:
-		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error"))
+		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error:" + t.HandlerError.GetErrorType()))
 
 		oc.nexusContext.setFailureSource(commonnexus.FailureSourceWorker)
 
@@ -492,7 +492,7 @@ func (h *nexusHandler) StartOperation(
 		}
 	}
 	// This is the worker's fault.
-	oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error"))
+	oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error:EMPTY_OUTCOME"))
 
 	oc.nexusContext.setFailureSource(commonnexus.FailureSourceWorker)
 
@@ -608,7 +608,7 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 	// Convert to standard Nexus SDK response.
 	switch t := response.GetOutcome().(type) {
 	case *matchingservice.DispatchNexusTaskResponse_HandlerError:
-		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error"))
+		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error:" + t.HandlerError.GetErrorType()))
 
 		oc.nexusContext.setFailureSource(commonnexus.FailureSourceWorker)
 
@@ -619,7 +619,7 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 		return nil
 	}
 	// This is the worker's fault.
-	oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error"))
+	oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error:EMPTY_OUTCOME"))
 
 	oc.nexusContext.setFailureSource(commonnexus.FailureSourceWorker)
 
