@@ -30,7 +30,6 @@ import (
 	"strings"
 	"time"
 
-	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/api"
@@ -38,7 +37,6 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -223,9 +221,9 @@ func (i *Redirection) Intercept(
 		return i.handleLocalAPIInvocation(ctx, req, handler, methodName)
 	}
 	if raFn, ok := globalAPIResponses[methodName]; ok {
-		namespaceName := namespace.Name(headers.GetCallerInfo(ctx).CallerName)
-		if namespaceName.IsEmpty() {
-			return nil, serviceerror.NewInvalidArgument("namespace is not set in the request")
+		namespaceName, err := GetNamespaceName(i.namespaceCache, req)
+		if err != nil {
+			return nil, err
 		}
 		return i.handleRedirectAPIInvocation(ctx, req, info, handler, methodName, raFn, namespaceName)
 	}
