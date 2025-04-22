@@ -170,8 +170,7 @@ func recordChildWorkflowCompleted(
 				attributes := completionEvent.GetWorkflowExecutionCanceledEventAttributes()
 				_, err = mutableState.AddChildWorkflowExecutionCanceledEvent(parentInitiatedID, childExecution, attributes)
 			case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED:
-				attributes := completionEvent.GetWorkflowExecutionTerminatedEventAttributes()
-				_, err = mutableState.AddChildWorkflowExecutionTerminatedEvent(parentInitiatedID, childExecution, attributes)
+				_, err = mutableState.AddChildWorkflowExecutionTerminatedEvent(parentInitiatedID, childExecution)
 			case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT:
 				attributes := completionEvent.GetWorkflowExecutionTimedOutEventAttributes()
 				_, err = mutableState.AddChildWorkflowExecutionTimedOutEvent(parentInitiatedID, childExecution, attributes)

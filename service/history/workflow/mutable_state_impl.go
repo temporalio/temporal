@@ -5324,7 +5324,6 @@ func (ms *MutableStateImpl) ApplyChildWorkflowExecutionCanceledEvent(
 func (ms *MutableStateImpl) AddChildWorkflowExecutionTerminatedEvent(
 	initiatedID int64,
 	childExecution *commonpb.WorkflowExecution,
-	_ *historypb.WorkflowExecutionTerminatedEventAttributes, // TODO this field is not used at all
 ) (*historypb.HistoryEvent, error) {
 	opTag := tag.WorkflowActionChildWorkflowTerminated
 	if err := ms.checkMutability(opTag); err != nil {

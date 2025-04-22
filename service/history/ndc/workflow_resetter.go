@@ -1107,7 +1107,7 @@ func reapplyChildEvents(mutableState historyi.MutableState, event *historypb.His
 		if !childExists {
 			return nil
 		}
-		if _, err := mutableState.AddChildWorkflowExecutionTerminatedEvent(childEventAttributes.GetInitiatedEventId(), childEventAttributes.WorkflowExecution, nil); err != nil {
+		if _, err := mutableState.AddChildWorkflowExecutionTerminatedEvent(childEventAttributes.GetInitiatedEventId(), childEventAttributes.WorkflowExecution); err != nil {
 			return err
 		}
 	default:
