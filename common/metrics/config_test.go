@@ -31,7 +31,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally/v4"
-	"github.com/uber-go/tally/v4/m3"
 	"go.temporal.io/server/common/log"
 	"go.uber.org/mock/gomock"
 )
@@ -59,18 +58,6 @@ func (s *MetricsSuite) TestStatsd() {
 
 	config := new(Config)
 	config.Statsd = statsd
-	scope := NewScope(log.NewNoopLogger(), config)
-	s.NotNil(scope)
-}
-
-func (s *MetricsSuite) TestM3() {
-	m3 := &m3.Configuration{
-		HostPort: "127.0.0.1:8125",
-		Service:  "testM3",
-		Env:      "devel",
-	}
-	config := new(Config)
-	config.M3 = m3
 	scope := NewScope(log.NewNoopLogger(), config)
 	s.NotNil(scope)
 }
