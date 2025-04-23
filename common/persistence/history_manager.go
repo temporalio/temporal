@@ -816,6 +816,9 @@ func (m *executionManagerImpl) readRawHistoryBranchAndFilter(
 		dataBlobs = make([]*commonpb.DataBlob, len(nodes))
 		for index, node := range nodes {
 			dataBlobs[index] = node.Events
+			if node.Events == nil {
+				return nil, nil, nil, nil, 0, serviceerror.NewDataLoss("no events in history node")
+			}
 			dataSize += len(node.Events.Data)
 			transactionIDs = append(transactionIDs, node.TransactionID)
 			nodeIDs = append(nodeIDs, node.NodeID)
