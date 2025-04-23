@@ -545,7 +545,7 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 			handlerError := nexus.HandlerErrorf(nexus.HandlerErrorTypeNotFound, "endpoint not registered")
 
 			// The endpoint is not registered, immediately fail the invocation.
-			return e.saveCancelationResult(ctx, env, ref, handlerError, args.scheduledEventID)
+			return e.saveCancelationResult(ctx, env, ref, handlerError)
 		}
 		return err
 	}
@@ -612,7 +612,7 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 		e.Logger.Error("Nexus CancelOperation request failed", tag.Error(callErr))
 	}
 
-	err = e.saveCancelationResult(ctx, env, ref, callErr, args.scheduledEventID)
+	err = e.saveCancelationResult(ctx, env, ref, callErr)
 
 	if callErr != nil && isDestinationDown(callErr) {
 		err = queues.NewDestinationDownError(callErr.Error(), err)
@@ -625,7 +625,6 @@ type cancelArgs struct {
 	service, operation, token, endpointID, endpointName, requestID string
 	scheduledTime                                                  time.Time
 	scheduleToCloseTimeout                                         time.Duration
-	scheduledEventID                                               int64
 }
 
 // loadArgsForCancelation loads state from the operation state machine that's the parent of the cancelation machine the
@@ -649,16 +648,12 @@ func (e taskExecutor) loadArgsForCancelation(ctx context.Context, env hsm.Enviro
 		args.requestID = op.RequestId
 		args.scheduledTime = op.ScheduledTime.AsTime()
 		args.scheduleToCloseTimeout = op.ScheduleToCloseTimeout.AsDuration()
-		args.scheduledEventID, err = hsm.EventIDFromToken(op.ScheduledEventToken)
-		if err != nil {
-			return err
-		}
 		return nil
 	})
 	return
 }
 
-func (e taskExecutor) saveCancelationResult(ctx context.Context, env hsm.Environment, ref hsm.Ref, callErr error, scheduledEventID int64) error {
+func (e taskExecutor) saveCancelationResult(ctx context.Context, env hsm.Environment, ref hsm.Ref, callErr error) error {
 	return env.Access(ctx, ref, hsm.AccessWrite, func(n *hsm.Node) error {
 		return hsm.MachineTransition(n, func(c Cancelation) (hsm.TransitionOutput, error) {
 			if callErr != nil {
@@ -672,7 +667,6 @@ func (e taskExecutor) saveCancelationResult(ctx context.Context, env hsm.Environ
 					// nolint:revive // We must mutate here even if the linter doesn't like it.
 					e.Attributes = &historypb.HistoryEvent_NexusOperationCancelRequestFailedEventAttributes{
 						NexusOperationCancelRequestFailedEventAttributes: &historypb.NexusOperationCancelRequestFailedEventAttributes{
-							ScheduledEventId: scheduledEventID,
 							RequestedEventId: c.RequestedEventId,
 							Failure:          failure,
 						},
@@ -701,7 +695,6 @@ func (e taskExecutor) saveCancelationResult(ctx context.Context, env hsm.Environ
 				// nolint:revive // We must mutate here even if the linter doesn't like it.
 				e.Attributes = &historypb.HistoryEvent_NexusOperationCancelRequestCompletedEventAttributes{
 					NexusOperationCancelRequestCompletedEventAttributes: &historypb.NexusOperationCancelRequestCompletedEventAttributes{
-						ScheduledEventId: scheduledEventID,
 						RequestedEventId: c.RequestedEventId,
 					},
 				}
