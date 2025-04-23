@@ -35,6 +35,7 @@ import (
 	protocolpb "go.temporal.io/api/protocol/v1"
 	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/api"
@@ -82,6 +83,17 @@ func TestEmitActionMetric(t *testing.T) {
 			expectEmitMetrics: true,
 		},
 		{
+			methodName: startWorkflow,
+			fullName:   api.WorkflowServicePrefix + startWorkflow,
+			req: &workflowservice.StartWorkflowExecutionRequest{
+				Namespace:                "test-namespace",
+				OnConflictOptions:        &workflowpb.OnConflictOptions{},
+				WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
+			},
+			resp:              &workflowservice.StartWorkflowExecutionResponse{Started: false},
+			expectEmitMetrics: true,
+		},
+		{
 			methodName: executeMultiOps,
 			fullName:   api.WorkflowServicePrefix + executeMultiOps,
 			resp: &workflowservice.ExecuteMultiOperationResponse{
@@ -116,6 +128,36 @@ func TestEmitActionMetric(t *testing.T) {
 					{
 						Response: &workflowservice.ExecuteMultiOperationResponse_Response_UpdateWorkflow{
 							UpdateWorkflow: &workflowservice.UpdateWorkflowExecutionResponse{},
+						},
+					},
+				},
+			},
+			expectEmitMetrics: true,
+		},
+		{
+			methodName: executeMultiOps,
+			fullName:   api.WorkflowServicePrefix + executeMultiOps,
+			resp: &workflowservice.ExecuteMultiOperationResponse{
+				Responses: []*workflowservice.ExecuteMultiOperationResponse_Response{
+					{
+						Response: &workflowservice.ExecuteMultiOperationResponse_Response_StartWorkflow{
+							StartWorkflow: &workflowservice.StartWorkflowExecutionResponse{
+								Started: false,
+							},
+						},
+					},
+				},
+			},
+			req: &workflowservice.ExecuteMultiOperationRequest{
+				Namespace: "test-namespace",
+				Operations: []*workflowservice.ExecuteMultiOperationRequest_Operation{
+					{
+						Operation: &workflowservice.ExecuteMultiOperationRequest_Operation_StartWorkflow{
+							StartWorkflow: &workflowservice.StartWorkflowExecutionRequest{
+								Namespace:                "test-namespace",
+								OnConflictOptions:        &workflowpb.OnConflictOptions{},
+								WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
+							},
 						},
 					},
 				},
@@ -212,6 +254,24 @@ func TestEmitActionMetric(t *testing.T) {
 			req: &workflowservice.QueryWorkflowRequest{
 				Query: &querypb.WorkflowQuery{
 					QueryType: "some_type",
+				},
+			},
+			expectEmitMetrics: true,
+		},
+		{
+			methodName: updateWorkflowExecutionOptions,
+			fullName:   api.WorkflowServicePrefix + updateWorkflowExecutionOptions,
+			req: &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+				Namespace: "test-namespace",
+				WorkflowExecution: &commonpb.WorkflowExecution{
+					WorkflowId: "test-workflow-id",
+					RunId:      "test-run-id",
+				},
+				WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{
+					VersioningOverride: &workflowpb.VersioningOverride{
+						Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED,
+						PinnedVersion: "fake-version",
+					},
 				},
 			},
 			expectEmitMetrics: true,

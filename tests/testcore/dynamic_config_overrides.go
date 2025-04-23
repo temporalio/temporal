@@ -61,7 +61,6 @@ var (
 		dynamicconfig.ClusterMetadataRefreshInterval.Key():                      100 * time.Millisecond,
 		dynamicconfig.NamespaceCacheRefreshInterval.Key():                       NamespaceCacheRefreshInterval,
 		dynamicconfig.ReplicationEnableUpdateWithNewTaskMerge.Key():             true,
-		dynamicconfig.EnableWorkflowExecutionTimeoutTimer.Key():                 true,
 		dynamicconfig.FrontendMaskInternalErrorDetails.Key():                    false,
 		dynamicconfig.HistoryScannerEnabled.Key():                               false,
 		dynamicconfig.TaskQueueScannerEnabled.Key():                             false,

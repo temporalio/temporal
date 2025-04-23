@@ -29,7 +29,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"go.temporal.io/server/common/clock"
-	"go.temporal.io/server/internal/goro"
+	"go.temporal.io/server/common/goro"
 )
 
 func block()   { <-make(chan struct{}) }

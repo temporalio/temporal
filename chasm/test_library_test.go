@@ -22,22 +22,25 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package effect_test
+package chasm
 
-import (
-	"context"
-	"testing"
+type TestLibrary struct {
+	UnimplementedLibrary
+}
 
-	"github.com/stretchr/testify/require"
-	"go.temporal.io/server/internal/effect"
-)
+func newTestLibrary() *TestLibrary {
+	return &TestLibrary{}
+}
 
-func TestImmediate(t *testing.T) {
-	var i int
-	immediate := effect.Immediate(context.TODO())
-	immediate.OnAfterCommit(func(context.Context) { i = 1 })
-	require.Equal(t, i, 1, "commit func should have run")
+func (l *TestLibrary) Name() string {
+	return "TestLibrary"
+}
 
-	immediate.OnAfterRollback(func(context.Context) { i = 2 })
-	require.Equal(t, i, 1, "rollback func should not run")
+func (l *TestLibrary) Components() []*RegistrableComponent {
+	return []*RegistrableComponent{
+		NewRegistrableComponent[*TestComponent]("test_component"),
+		NewRegistrableComponent[*TestSubComponent1]("test_sub_component_1"),
+		NewRegistrableComponent[*TestSubComponent11]("test_sub_component_11"),
+		NewRegistrableComponent[*TestSubComponent2]("test_sub_component_2"),
+	}
 }

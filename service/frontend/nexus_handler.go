@@ -72,7 +72,7 @@ type nexusContext struct {
 	endpointName                         string
 	claims                               *authorization.Claims
 	namespaceValidationInterceptor       *interceptor.NamespaceValidatorInterceptor
-	namespaceRateLimitInterceptor        *interceptor.NamespaceRateLimitInterceptor
+	namespaceRateLimitInterceptor        interceptor.NamespaceRateLimitInterceptor
 	namespaceConcurrencyLimitInterceptor *interceptor.ConcurrentRequestLimitInterceptor
 	rateLimitInterceptor                 *interceptor.RateLimitInterceptor
 	responseHeaders                      map[string]string
@@ -148,13 +148,16 @@ func (c *operationContext) augmentContext(ctx context.Context, header nexus.Head
 	if userAgent, ok := header[headerUserAgent]; ok {
 		parts := strings.Split(userAgent, clientNameVersionDelim)
 		if len(parts) == 2 {
-			return metadata.NewIncomingContext(ctx, metadata.New(map[string]string{
-				headers.ClientNameHeaderName:    parts[0],
-				headers.ClientVersionHeaderName: parts[1],
-			}))
+			mdIncoming, ok := metadata.FromIncomingContext(ctx)
+			if !ok {
+				mdIncoming = metadata.MD{}
+			}
+			mdIncoming.Set(headers.ClientNameHeaderName, parts[0])
+			mdIncoming.Set(headers.ClientVersionHeaderName, parts[1])
+			ctx = metadata.NewIncomingContext(ctx, mdIncoming)
 		}
 	}
-	return ctx
+	return headers.Propagate(ctx)
 }
 
 func (c *operationContext) interceptRequest(

@@ -976,20 +976,22 @@ func resetSignalInfos(
 
 func resetChasmNodes(
 	batch *gocql.Batch,
-	nodes map[string]*commonpb.DataBlob,
+	nodes map[string]p.InternalChasmNode,
 	shardID int32,
 	namespaceID string,
 	workflowID string,
 	runID string,
 ) error {
-	sMap, sMapEncoding, err := convertBlobMapToByteMap(nodes)
-	if err != nil {
-		return err
+	blobMap := make(map[string][]byte, len(nodes))
+	var encoding enumspb.EncodingType
+	for path, node := range nodes {
+		blobMap[path] = node.CassandraBlob.Data
+		encoding = node.CassandraBlob.EncodingType // TODO - we only support a single encoding
 	}
 
 	batch.Query(templateResetChasmNodeQuery,
-		sMap,
-		sMapEncoding.String(),
+		blobMap,
+		encoding.String(),
 		shardID,
 		rowTypeExecution,
 		namespaceID,
@@ -1003,7 +1005,7 @@ func resetChasmNodes(
 
 func updateChasmNodes(
 	batch *gocql.Batch,
-	upsertNodes map[string]*commonpb.DataBlob,
+	upsertNodes map[string]p.InternalChasmNode,
 	deleteNodes map[string]struct{},
 	shardID int32,
 	namespaceID string,
@@ -1022,11 +1024,11 @@ func updateChasmNodes(
 			rowTypeExecutionTaskID)
 	}
 
-	for upsertPath, blob := range upsertNodes {
+	for upsertPath, node := range upsertNodes {
 		batch.Query(templateUpdateChasmNodeQuery,
 			upsertPath,
-			blob.Data,
-			blob.EncodingType.String(),
+			node.CassandraBlob.Data,
+			node.CassandraBlob.EncodingType.String(),
 			shardID,
 			rowTypeExecution,
 			namespaceID,

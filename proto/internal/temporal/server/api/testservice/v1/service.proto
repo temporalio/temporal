@@ -1,8 +1,6 @@
 // The MIT License
 //
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
+// Copyright (c) 2019 Temporal Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -22,47 +20,15 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package goro_test
+syntax = "proto3";
 
-import (
-	"context"
-	"testing"
+package temporal.server.api.testservice.v1;
+option go_package = "go.temporal.io/server/api/testservice/v1;testservice";
 
-	"github.com/stretchr/testify/require"
-	"go.temporal.io/server/internal/goro"
-)
+import "temporal/server/api/testservice/v1/request_response.proto";
 
-func TestMultiCancelAndWait(t *testing.T) {
-	var g goro.Group
-	g.Go(blockOnCtxReturnNil)
-	g.Go(blockOnCtxReturnNil)
-	g.Go(blockOnCtxReturnNil)
-	g.Cancel()
-	g.Wait()
-}
-
-func TestCancelBeforeGo(t *testing.T) {
-	var g goro.Group
-	g.Cancel()
-	g.Go(func(ctx context.Context) error {
-		require.ErrorIs(t, context.Canceled, ctx.Err())
-		return nil
-	})
-	g.Wait()
-}
-
-func TestWaitOnNothing(t *testing.T) {
-	var g goro.Group
-	g.Wait() // nothing running, should return immediately
-}
-
-func TestWaitOnDifferentThread(t *testing.T) {
-	var g goro.Group
-	g.Go(blockOnCtxReturnNil)
-	h := goro.NewHandle(context.TODO()).Go(func(context.Context) error {
-		g.Wait()
-		return nil
-	})
-	g.Cancel()
-	<-h.Done()
+// The greeting service definition.
+service TestService {
+  // Sends a greeting
+  rpc SendHello (SendHelloRequest) returns (SendHelloResponse) {}
 }

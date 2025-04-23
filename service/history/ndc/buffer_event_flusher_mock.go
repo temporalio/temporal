@@ -45,6 +45,7 @@ import (
 type MockBufferEventFlusher struct {
 	ctrl     *gomock.Controller
 	recorder *MockBufferEventFlusherMockRecorder
+	isgomock struct{}
 }
 
 // MockBufferEventFlusherMockRecorder is the mock recorder for MockBufferEventFlusher.

@@ -60,12 +60,12 @@ func (r *Registry) Register(lib Library) error {
 		return err
 	}
 	for _, c := range lib.Components() {
-		if err := r.registerComponent(lib.Name(), c); err != nil {
+		if err := r.registerComponent(lib, c); err != nil {
 			return err
 		}
 	}
 	for _, t := range lib.Tasks() {
-		if err := r.registerTask(lib.Name(), t); err != nil {
+		if err := r.registerTask(lib, t); err != nil {
 			return err
 		}
 	}
@@ -92,20 +92,19 @@ func (r *Registry) taskFor(taskInstance any) (*RegistrableTask, bool) {
 	return rt, ok
 }
 
-func (r *Registry) fqn(libName, name string) string {
-	return libName + "." + name
-}
-
 func (r *Registry) registerComponent(
-	libName string,
+	lib namer,
 	rc *RegistrableComponent,
 ) error {
 	if err := r.validateName(rc.componentType); err != nil {
 		return err
 	}
-	fqn := r.fqn(libName, rc.componentType)
+	fqn := fullyQualifiedName(lib.Name(), rc.componentType)
 	if _, ok := r.componentByType[fqn]; ok {
 		return fmt.Errorf("component %s is already registered", fqn)
+	}
+	if rc.library != nil {
+		return fmt.Errorf("component %s is already registered in library %s", fqn, rc.library.Name())
 	}
 	// rc.goType implements Component interface; therefore, it must be a struct.
 	// This check to protect against the interface itself being registered.
@@ -116,20 +115,25 @@ func (r *Registry) registerComponent(
 	if _, ok := r.componentByGoType[rc.goType]; ok {
 		return fmt.Errorf("component type %s is already registered", rc.goType.String())
 	}
+
+	rc.library = lib
 	r.componentByType[fqn] = rc
 	r.componentByGoType[rc.goType] = rc
 	return nil
 }
 func (r *Registry) registerTask(
-	libName string,
+	lib namer,
 	rt *RegistrableTask,
 ) error {
 	if err := r.validateName(rt.taskType); err != nil {
 		return err
 	}
-	fqn := r.fqn(libName, rt.taskType)
+	fqn := fullyQualifiedName(lib.Name(), rt.taskType)
 	if _, ok := r.taskByType[fqn]; ok {
 		return fmt.Errorf("task %s is already registered", fqn)
+	}
+	if rt.library != nil {
+		return fmt.Errorf("task %s is already registered in library %s", fqn, rt.library.Name())
 	}
 	if !(rt.goType.Kind() == reflect.Struct ||
 		(rt.goType.Kind() == reflect.Ptr && rt.goType.Elem().Kind() == reflect.Struct)) {
@@ -145,6 +149,7 @@ func (r *Registry) registerTask(
 		return fmt.Errorf("component type %s must be and interface or struct that implements Component interface", rt.componentGoType.String())
 	}
 
+	rt.library = lib
 	r.taskByType[fqn] = rt
 	r.taskByGoType[rt.goType] = rt
 	return nil

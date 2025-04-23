@@ -201,10 +201,10 @@ func (s *SyncStateRetrieverImpl) getSyncStateResult(
 		}
 		if mutableState.GetExecutionInfo().LastTransitionHistoryBreakPoint != nil &&
 			// the target transition falls into the previous break point, need to send snapshot
-			workflow.CompareVersionedTransition(mutableState.GetExecutionInfo().LastTransitionHistoryBreakPoint, targetCurrentVersionedTransition) >= 0 {
+			transitionhistory.Compare(mutableState.GetExecutionInfo().LastTransitionHistoryBreakPoint, targetCurrentVersionedTransition) >= 0 {
 			return false
 		}
-		if workflow.CompareVersionedTransition(tombstoneBatch[0].VersionedTransition, targetCurrentVersionedTransition) <= 0 {
+		if transitionhistory.Compare(tombstoneBatch[0].VersionedTransition, targetCurrentVersionedTransition) <= 0 {
 			return true
 		}
 
@@ -352,10 +352,10 @@ func (s *SyncStateRetrieverImpl) getNewRunInfo(ctx context.Context, namespaceId 
 
 func (s *SyncStateRetrieverImpl) getMutation(
 	mutableState historyi.MutableState,
-	versionedTransition *persistencespb.VersionedTransition,
+	exclusiveMinVT *persistencespb.VersionedTransition,
 ) (*persistencespb.WorkflowMutableStateMutation, error) {
 	rootNode := mutableState.HSM()
-	updatedStateMachine, err := s.getUpdatedSubStateMachine(rootNode, versionedTransition)
+	updatedStateMachine, err := s.getUpdatedSubStateMachine(rootNode, exclusiveMinVT)
 	if err != nil {
 		return nil, err
 	}
@@ -364,25 +364,25 @@ func (s *SyncStateRetrieverImpl) getMutation(
 	tombstoneBatch := executionInfo.SubStateMachineTombstoneBatches
 	var tombstones []*persistencespb.StateMachineTombstoneBatch
 	for i, tombstone := range tombstoneBatch {
-		if workflow.CompareVersionedTransition(tombstone.VersionedTransition, versionedTransition) > 0 {
+		if transitionhistory.Compare(tombstone.VersionedTransition, exclusiveMinVT) > 0 {
 			tombstones = tombstoneBatch[i:]
 			break
 		}
 	}
 
 	var signalRequestedIds []string
-	if workflow.CompareVersionedTransition(executionInfo.SignalRequestIdsLastUpdateVersionedTransition, versionedTransition) > 0 {
+	if transitionhistory.Compare(executionInfo.SignalRequestIdsLastUpdateVersionedTransition, exclusiveMinVT) > 0 {
 		signalRequestedIds = mutableState.GetPendingSignalRequestedIds()
 	}
 
 	mutation := &persistencespb.WorkflowMutableStateMutation{
-		UpdatedActivityInfos:            getUpdatedInfo(mutableState.GetPendingActivityInfos(), versionedTransition),
-		UpdatedTimerInfos:               getUpdatedInfo(mutableState.GetPendingTimerInfos(), versionedTransition),
-		UpdatedChildExecutionInfos:      getUpdatedInfo(mutableState.GetPendingChildExecutionInfos(), versionedTransition),
-		UpdatedRequestCancelInfos:       getUpdatedInfo(mutableState.GetPendingRequestCancelExternalInfos(), versionedTransition),
-		UpdatedSignalInfos:              getUpdatedInfo(mutableState.GetPendingSignalExternalInfos(), versionedTransition),
-		UpdatedUpdateInfos:              getUpdatedInfo(executionInfo.UpdateInfos, versionedTransition),
-		UpdatedChasmNodes:               mutableState.ChasmTree().Snapshot(versionedTransition).Nodes,
+		UpdatedActivityInfos:            getUpdatedInfo(mutableState.GetPendingActivityInfos(), exclusiveMinVT),
+		UpdatedTimerInfos:               getUpdatedInfo(mutableState.GetPendingTimerInfos(), exclusiveMinVT),
+		UpdatedChildExecutionInfos:      getUpdatedInfo(mutableState.GetPendingChildExecutionInfos(), exclusiveMinVT),
+		UpdatedRequestCancelInfos:       getUpdatedInfo(mutableState.GetPendingRequestCancelExternalInfos(), exclusiveMinVT),
+		UpdatedSignalInfos:              getUpdatedInfo(mutableState.GetPendingSignalExternalInfos(), exclusiveMinVT),
+		UpdatedUpdateInfos:              getUpdatedInfo(executionInfo.UpdateInfos, exclusiveMinVT),
+		UpdatedChasmNodes:               mutableState.ChasmTree().Snapshot(exclusiveMinVT).Nodes,
 		UpdatedSubStateMachines:         updatedStateMachine,
 		SubStateMachineTombstoneBatches: tombstones,
 		SignalRequestedIds:              signalRequestedIds,
@@ -497,7 +497,7 @@ func isInfoUpdated(subStateMachine lastUpdatedStateTransitionGetter, versionedTr
 		return false
 	}
 	lastUpdate := subStateMachine.GetLastUpdateVersionedTransition()
-	return workflow.CompareVersionedTransition(lastUpdate, versionedTransition) > 0
+	return transitionhistory.Compare(lastUpdate, versionedTransition) > 0
 }
 
 func getUpdatedInfo[K comparable, V lastUpdatedStateTransitionGetter](subStateMachine map[K]V, versionedTransition *persistencespb.VersionedTransition) map[K]V {

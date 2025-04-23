@@ -43,6 +43,7 @@ import (
 type MockNodeBackend struct {
 	ctrl     *gomock.Controller
 	recorder *MockNodeBackendMockRecorder
+	isgomock struct{}
 }
 
 // MockNodeBackendMockRecorder is the mock recorder for MockNodeBackend.
@@ -62,10 +63,39 @@ func (m *MockNodeBackend) EXPECT() *MockNodeBackendMockRecorder {
 	return m.recorder
 }
 
+// GetCurrentVersion mocks base method.
+func (m *MockNodeBackend) GetCurrentVersion() int64 {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetCurrentVersion")
+	ret0, _ := ret[0].(int64)
+	return ret0
+}
+
+// GetCurrentVersion indicates an expected call of GetCurrentVersion.
+func (mr *MockNodeBackendMockRecorder) GetCurrentVersion() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCurrentVersion", reflect.TypeOf((*MockNodeBackend)(nil).GetCurrentVersion))
+}
+
+// NextTransitionCount mocks base method.
+func (m *MockNodeBackend) NextTransitionCount() int64 {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NextTransitionCount")
+	ret0, _ := ret[0].(int64)
+	return ret0
+}
+
+// NextTransitionCount indicates an expected call of NextTransitionCount.
+func (mr *MockNodeBackendMockRecorder) NextTransitionCount() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NextTransitionCount", reflect.TypeOf((*MockNodeBackend)(nil).NextTransitionCount))
+}
+
 // MockNodePathEncoder is a mock of NodePathEncoder interface.
 type MockNodePathEncoder struct {
 	ctrl     *gomock.Controller
 	recorder *MockNodePathEncoderMockRecorder
+	isgomock struct{}
 }
 
 // MockNodePathEncoderMockRecorder is the mock recorder for MockNodePathEncoder.

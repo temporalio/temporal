@@ -61,3 +61,54 @@ type MutableContext interface {
 	// return a Ref
 	// NewRef(Component) (ComponentRef, bool)
 }
+
+type ContextImpl struct {
+	ctx context.Context
+
+	// Not embedding the Node here to avoid exposing AddTask() method on Node,
+	// so that ContextImpl won't implement MutableContext interface.
+	root *Node
+}
+
+type MutableContextImpl struct {
+	*ContextImpl
+}
+
+func NewContext(
+	ctx context.Context,
+	root *Node,
+) *ContextImpl {
+	return &ContextImpl{
+		ctx:  ctx,
+		root: root,
+	}
+}
+
+func (c *ContextImpl) Ref(component Component) (ComponentRef, bool) {
+	return c.root.Ref(component)
+}
+
+func (c *ContextImpl) Now(component Component) time.Time {
+	return c.root.Now(component)
+}
+
+func (c *ContextImpl) getContext() context.Context {
+	return c.ctx
+}
+
+func NewMutableContext(
+	ctx context.Context,
+	root *Node,
+) *MutableContextImpl {
+	return &MutableContextImpl{
+		ContextImpl: NewContext(ctx, root),
+	}
+}
+
+func (c *MutableContextImpl) AddTask(
+	component Component,
+	attributes TaskAttributes,
+	payload any,
+) error {
+	return c.root.AddTask(component, attributes, payload)
+}

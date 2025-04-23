@@ -44,6 +44,7 @@ import (
 type MockReservation struct {
 	ctrl     *gomock.Controller
 	recorder *MockReservationMockRecorder
+	isgomock struct{}
 }
 
 // MockReservationMockRecorder is the mock recorder for MockReservation.

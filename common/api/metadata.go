@@ -158,6 +158,11 @@ var (
 		"DeleteWorkerDeploymentVersion":         {Scope: ScopeNamespace, Access: AccessWrite},
 		"UpdateWorkerDeploymentVersionMetadata": {Scope: ScopeNamespace, Access: AccessWrite},
 		"ListWorkerDeployments":                 {Scope: ScopeNamespace, Access: AccessReadOnly},
+		"CreateWorkflowRule":                    {Scope: ScopeNamespace, Access: AccessWrite},
+		"DescribeWorkflowRule":                  {Scope: ScopeNamespace, Access: AccessReadOnly},
+		"DeleteWorkflowRule":                    {Scope: ScopeNamespace, Access: AccessWrite},
+		"ListWorkflowRules":                     {Scope: ScopeNamespace, Access: AccessReadOnly},
+		"TriggerWorkflowRule":                   {Scope: ScopeNamespace, Access: AccessWrite},
 	}
 	operatorServiceMetadata = map[string]MethodMetadata{
 		"AddSearchAttributes":      {Scope: ScopeNamespace, Access: AccessAdmin},

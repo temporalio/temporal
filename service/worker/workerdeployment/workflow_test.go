@@ -26,15 +26,19 @@ package workerdeployment
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
+	deploymentpb "go.temporal.io/api/deployment/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/workflow"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/common/testing/testvars"
+	"go.temporal.io/server/common/worker_versioning"
 	"go.uber.org/mock/gomock"
 )
 
@@ -268,4 +272,113 @@ func (s *WorkerDeploymentSuite) Test_SetRampingVersion_RejectStaleConcurrentUpda
 	})
 
 	s.True(s.env.IsWorkflowCompleted())
+}
+
+func (s *WorkerDeploymentSuite) Test_SyncUnversionedRamp_SingleTaskQueue() {
+	workers := 1
+	s.syncUnversionedRampInBatches(workers)
+}
+
+func (s *WorkerDeploymentSuite) Test_SyncUnversionedRamp_MultipleTaskQueues() {
+	workers := 100
+	s.syncUnversionedRampInBatches(workers)
+}
+
+func (s *WorkerDeploymentSuite) syncUnversionedRampInBatches(totalWorkers int) {
+	tv := testvars.New(s.T())
+	s.env.OnUpsertMemo(mock.Anything).Return(nil)
+
+	// To call the UnversionedRamp activity, we first set the current version to be tv.DeploymentVersionString() and then ramp "unversioned".
+
+	// Step 1: Register the new version in the worker deployment.
+	var a *Activities
+	s.env.OnActivity(a.RegisterWorkerInVersion, mock.Anything, mock.Anything).Once().Return(nil)
+	s.env.RegisterDelayedCallback(func() {
+		s.env.UpdateWorkflow(RegisterWorkerInWorkerDeployment, "", &testsuite.TestUpdateCallback{
+			OnReject: func(err error) {
+				s.Fail("update failed with error %v", err)
+			},
+			OnAccept: func() {
+			},
+			OnComplete: func(a interface{}, err error) {
+			},
+		}, &deploymentspb.RegisterWorkerInWorkerDeploymentArgs{
+			TaskQueueName: tv.TaskQueue().Name,
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			MaxTaskQueues: 100,
+			Version:       tv.DeploymentVersion(),
+		})
+	}, 0*time.Millisecond)
+
+	// Step 2: Set current version to be tv.DeploymentVersionString()
+	s.env.OnActivity(a.SyncWorkerDeploymentVersion, mock.Anything, mock.Anything).Once().Return(nil, nil)
+	s.env.RegisterDelayedCallback(func() {
+		s.env.UpdateWorkflow(SetCurrentVersion, "", &testsuite.TestUpdateCallback{
+			OnReject: func(err error) {
+				s.Fail("update failed with error %v", err)
+			},
+			OnAccept: func() {
+			},
+			OnComplete: func(a interface{}, err error) {
+			},
+		}, &deploymentspb.SetCurrentVersionArgs{
+			Version:                 tv.DeploymentVersionString(),
+			IgnoreMissingTaskQueues: true,
+		})
+	}, 1*time.Millisecond)
+
+	// Step 3: Ramp "__unversioned__"
+
+	taskQueueInfos := make([]*deploymentpb.WorkerDeploymentVersionInfo_VersionTaskQueueInfo, totalWorkers)
+	for i := 0; i < totalWorkers; i++ {
+		taskQueueInfos[i] = &deploymentpb.WorkerDeploymentVersionInfo_VersionTaskQueueInfo{
+			Name: tv.TaskQueue().Name + fmt.Sprintf("%03d", i),
+			Type: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		}
+	}
+	// Mock the DescribeVersionFromWorkerDeployment activity to return numWorker taskQueues
+	s.env.OnActivity(a.DescribeVersionFromWorkerDeployment, mock.Anything, mock.Anything).Return(
+		&deploymentspb.DescribeVersionFromWorkerDeploymentActivityResult{
+			TaskQueueInfos: taskQueueInfos,
+		}, nil)
+
+	// Mock the SyncDeploymentVersionUserData activity and expect it to be called totalWorkers times
+	var totalBatches int
+	if totalWorkers%syncBatchSize == 0 {
+		totalBatches = totalWorkers / syncBatchSize
+	} else {
+		totalBatches = totalWorkers/syncBatchSize + 1
+	}
+
+	s.env.OnActivity(a.SyncDeploymentVersionUserDataFromWorkerDeployment, mock.Anything, mock.Anything).Times(totalBatches).Return(nil, nil)
+
+	s.env.RegisterDelayedCallback(func() {
+		s.env.UpdateWorkflow(SetRampingVersion, "", &testsuite.TestUpdateCallback{
+			OnReject: func(err error) {
+				s.Fail("update failed with error %v", err)
+			},
+			OnAccept: func() {
+			},
+			OnComplete: func(a interface{}, err error) {
+			},
+		}, &deploymentspb.SetRampingVersionArgs{
+			Version: worker_versioning.UnversionedVersionId,
+		})
+	}, 2*time.Millisecond)
+
+	deploymentWorkflow := func(ctx workflow.Context, args *deploymentspb.WorkerDeploymentWorkflowArgs) error {
+		maxVersionsGetter := func() int {
+			return 1000
+		}
+		return Workflow(ctx, maxVersionsGetter, args)
+	}
+
+	s.env.ExecuteWorkflow(deploymentWorkflow, &deploymentspb.WorkerDeploymentWorkflowArgs{
+		NamespaceName:  tv.NamespaceName().String(),
+		NamespaceId:    tv.NamespaceID().String(),
+		DeploymentName: tv.DeploymentSeries(),
+	})
+
+	s.True(s.env.IsWorkflowCompleted())
+
 }

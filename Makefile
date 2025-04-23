@@ -9,13 +9,20 @@ bins: temporal-server temporal-cassandra-tool temporal-sql-tool tdbg
 all: clean proto bins check test
 
 # Used in CI
-ci-build-misc: print-go-version proto go-generate buf-breaking shell-check copyright-check goimports gomodtidy ensure-no-changes
+ci-build-misc: \
+	print-go-version \
+	clean-tools \
+	proto \
+	go-generate \
+	buf-breaking \
+	shell-check \
+	copyright-check \
+	goimports \
+	gomodtidy \
+	ensure-no-changes
 
 # Delete all build artifacts
-clean: clean-bins clean-test-results
-	rm -rf $(STAMPDIR)
-	rm -rf $(TEST_OUTPUT_ROOT)
-	rm -rf $(LOCALBIN)
+clean: clean-bins clean-tools clean-test-output
 
 # Recompile proto files.
 proto: lint-protos lint-api protoc proto-codegen
@@ -74,7 +81,7 @@ GOINSTALL := GOBIN=$(ROOT)/$(LOCALBIN) go install
 
 OTEL ?= false
 ifeq ($(OTEL),true)
-	export OTEL_BSP_SCHEDULE_DELAY=0
+	export OTEL_BSP_SCHEDULE_DELAY=100 # in ms
 	export OTEL_EXPORTER_OTLP_TRACES_INSECURE=true
 	export OTEL_TRACES_EXPORTER=otlp
 	export TEMPORAL_OTEL_DEBUG=true
@@ -111,15 +118,15 @@ FUNCTIONAL_TEST_XDC_ROOT      := ./tests/xdc
 FUNCTIONAL_TEST_NDC_ROOT      := ./tests/ndc
 DB_INTEGRATION_TEST_ROOT      := ./common/persistence/tests
 DB_TOOL_INTEGRATION_TEST_ROOT := ./tools/tests
-INTEGRATION_TEST_DIRS := $(DB_INTEGRATION_TEST_ROOT) $(DB_TOOL_INTEGRATION_TEST_ROOT) ./temporaltest ./internal/temporalite
+INTEGRATION_TEST_DIRS := $(DB_INTEGRATION_TEST_ROOT) $(DB_TOOL_INTEGRATION_TEST_ROOT) ./temporaltest
 ifeq ($(UNIT_TEST_DIRS),)
-UNIT_TEST_DIRS := $(filter-out $(FUNCTIONAL_TEST_ROOT)% $(FUNCTIONAL_TEST_XDC_ROOT)% $(FUNCTIONAL_TEST_NDC_ROOT)% $(DB_INTEGRATION_TEST_ROOT)% $(DB_TOOL_INTEGRATION_TEST_ROOT)% ./temporaltest% ./internal/temporalite%,$(TEST_DIRS))
+UNIT_TEST_DIRS := $(filter-out $(FUNCTIONAL_TEST_ROOT)% $(FUNCTIONAL_TEST_XDC_ROOT)% $(FUNCTIONAL_TEST_NDC_ROOT)% $(DB_INTEGRATION_TEST_ROOT)% $(DB_TOOL_INTEGRATION_TEST_ROOT)% ./temporaltest%,$(TEST_DIRS))
 endif
 
 # Pinning modernc.org/sqlite to this version until https://gitlab.com/cznic/sqlite/-/issues/196 is resolved.
 PINNED_DEPENDENCIES := \
 	modernc.org/sqlite@v1.34.1 \
-	modernc.org/libc@v1.55.3
+	modernc.org/libc@v1.55.3 \
 
 # Code coverage & test report output files.
 TEST_OUTPUT_ROOT        := ./.testoutput
@@ -145,6 +152,11 @@ endef
 print-go-version:
 	@go version
 
+clean-tools:
+	@printf $(COLOR) "Delete tools..."
+	@rm -rf $(STAMPDIR)
+	@rm -rf $(LOCALBIN)
+
 $(STAMPDIR):
 	@mkdir -p $(STAMPDIR)
 
@@ -155,19 +167,18 @@ $(LOCALBIN):
 .PHONY: golangci-lint
 GOLANGCI_LINT_BASE_REV ?= $(MAIN_BRANCH)
 GOLANGCI_LINT_FIX ?= true
-# TODO: change to release once newer version than 1.62.2 exists: https://github.com/golangci/golangci-lint/releases
-GOLANGCI_LINT_VERSION := dafd65537336fdce063c492a7ab2a68cc89f8d52
+GOLANGCI_LINT_VERSION := v1.64.8
 GOLANGCI_LINT := $(LOCALBIN)/golangci-lint-$(GOLANGCI_LINT_VERSION)
 $(GOLANGCI_LINT): $(LOCALBIN)
 	$(call go-install-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/cmd/golangci-lint,$(GOLANGCI_LINT_VERSION))
 
 # Don't get confused, there is a single linter called gci, which is a part of the mega linter we use is called golangci-lint.
-GCI_VERSION := v0.13.5
+GCI_VERSION := v0.13.6
 GCI := $(LOCALBIN)/gci-$(GCI_VERSION)
 $(GCI): $(LOCALBIN)
 	$(call go-install-tool,$(GCI),github.com/daixiang0/gci,$(GCI_VERSION))
 
-GOTESTSUM_VER := v1.11
+GOTESTSUM_VER := v1.12.1
 GOTESTSUM := $(LOCALBIN)/gotestsum-$(GOTESTSUM_VER)
 $(GOTESTSUM): | $(LOCALBIN)
 	$(call go-install-tool,$(GOTESTSUM),gotest.tools/gotestsum,$(GOTESTSUM_VER))
@@ -182,48 +193,56 @@ BUF := $(LOCALBIN)/buf-$(BUF_VER)
 $(BUF): | $(LOCALBIN)
 	$(call go-install-tool,$(BUF),github.com/bufbuild/buf/cmd/buf,$(BUF_VER))
 
-GO_API_VER := v1.33.0
+GO_API_VER = $(shell go list -m -f '{{.Version}}' go.temporal.io/api \
+	|| (echo "failed to fetch version for go.temporal.io/api" >&2))
 PROTOGEN := $(LOCALBIN)/protogen-$(GO_API_VER)
 $(PROTOGEN): | $(LOCALBIN)
 	$(call go-install-tool,$(PROTOGEN),go.temporal.io/api/cmd/protogen,$(GO_API_VER))
 
-ACTIONLINT_VER := v1.6.27
+ACTIONLINT_VER := v1.7.7
 ACTIONLINT := $(LOCALBIN)/actionlint-$(ACTIONLINT_VER)
 $(ACTIONLINT): | $(LOCALBIN)
 	$(call go-install-tool,$(ACTIONLINT),github.com/rhysd/actionlint/cmd/actionlint,$(ACTIONLINT_VER))
 
 # The following tools need to have a consistent name, so we use a versioned stamp file to ensure the version we want is installed
 # while installing to an unversioned binary name.
-GOIMPORTS_VER := v0.20.0
+GOIMPORTS_VER := v0.31.0
 GOIMPORTS := $(LOCALBIN)/goimports
 $(STAMPDIR)/goimports-$(GOIMPORTS_VER): | $(STAMPDIR) $(LOCALBIN)
 	$(call go-install-tool,$(GOIMPORTS),golang.org/x/tools/cmd/goimports,$(GOIMPORTS_VER))
 	@touch $@
 $(GOIMPORTS): $(STAMPDIR)/goimports-$(GOIMPORTS_VER)
 
-GOWRAP_VER := v1.4.1
+GOWRAP_VER := v1.4.2
 GOWRAP := $(LOCALBIN)/gowrap
 $(STAMPDIR)/gowrap-$(GOWRAP_VER): | $(STAMPDIR) $(LOCALBIN)
 	$(call go-install-tool,$(GOWRAP),github.com/hexdigest/gowrap/cmd/gowrap,$(GOWRAP_VER))
 	@touch $@
 $(GOWRAP): $(STAMPDIR)/gowrap-$(GOWRAP_VER)
 
+GOMAJOR_VER := v0.14.0
+GOMAJOR := $(LOCALBIN)/gomajor
+$(STAMPDIR)/gomajor-$(GOMAJOR_VER): | $(STAMPDIR) $(LOCALBIN)
+	$(call go-install-tool,$(GOMAJOR),github.com/icholy/gomajor,$(GOMAJOR_VER))
+	@touch $@
+$(GOMAJOR): $(STAMPDIR)/gomajor-$(GOMAJOR_VER)
+
 # Mockgen is called by name throughout the codebase, so we need to keep the binary name consistent
-MOCKGEN_VER := v0.4.0
+MOCKGEN_VER := v0.5.0
 MOCKGEN := $(LOCALBIN)/mockgen
 $(STAMPDIR)/mockgen-$(MOCKGEN_VER): | $(STAMPDIR) $(LOCALBIN)
 	$(call go-install-tool,$(MOCKGEN),go.uber.org/mock/mockgen,$(MOCKGEN_VER))
 	@touch $@
 $(MOCKGEN): $(STAMPDIR)/mockgen-$(MOCKGEN_VER)
 
-STRINGER_VER := v0.30.0
+STRINGER_VER := v0.31.0
 STRINGER := $(LOCALBIN)/stringer
 $(STAMPDIR)/stringer-$(STRINGER_VER): | $(STAMPDIR) $(LOCALBIN)
 	$(call go-install-tool,$(STRINGER),golang.org/x/tools/cmd/stringer,$(STRINGER_VER))
 	@touch $@
 $(STRINGER): $(STAMPDIR)/stringer-$(STRINGER_VER)
 
-PROTOC_GEN_GO_VER := v1.33.0
+PROTOC_GEN_GO_VER := v1.36.6
 PROTOC_GEN_GO := $(LOCALBIN)/protoc-gen-go
 $(STAMPDIR)/protoc-gen-go-$(PROTOC_GEN_GO_VER): | $(STAMPDIR) $(LOCALBIN)
 	$(call go-install-tool,$(PROTOC_GEN_GO),google.golang.org/protobuf/cmd/protoc-gen-go,$(PROTOC_GEN_GO_VER))
@@ -325,7 +344,6 @@ copyright:
 	@printf $(COLOR) "Fix license header..."
 	@go run ./cmd/tools/copyright/licensegen.go
 
-
 goimports: fmt-imports
 	@printf $(COLOR) "Run goimports for all files..."
 	@UNGENERATED_FILES=$$(find . -type f -name '*.go' -print0 | xargs -0 grep -L -e "Code generated by .* DO NOT EDIT." || true) && \
@@ -366,32 +384,33 @@ shell-check:
 check: copyright-check lint shell-check
 
 ##### Tests #####
-clean-test-results:
-	@rm -f test.log $(TEST_OUTPUT_ROOT)/*
+clean-test-output:
+	@printf $(COLOR) "Delete test output..."
+	@rm -rf $(TEST_OUTPUT_ROOT)
 	@go clean -testcache
 
 build-tests:
 	@printf $(COLOR) "Build tests..."
 	@go test $(TEST_TAG_FLAG) -exec="true" -count=0 $(TEST_DIRS)
 
-unit-test: clean-test-results
+unit-test: clean-test-output
 	@printf $(COLOR) "Run unit tests..."
 	@go test $(UNIT_TEST_DIRS) $(COMPILED_TEST_ARGS) 2>&1 | tee -a test.log
 	@! grep -q "^--- FAIL" test.log
 
-integration-test: clean-test-results
+integration-test: clean-test-output
 	@printf $(COLOR) "Run integration tests..."
 	@go test $(INTEGRATION_TEST_DIRS) $(COMPILED_TEST_ARGS) 2>&1 | tee -a test.log
 	@! grep -q "^--- FAIL" test.log
 
-functional-test: clean-test-results
+functional-test: clean-test-output
 	@printf $(COLOR) "Run functional tests..."
 	@go test $(FUNCTIONAL_TEST_ROOT) $(COMPILED_TEST_ARGS) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
 	@go test $(FUNCTIONAL_TEST_NDC_ROOT) $(COMPILED_TEST_ARGS) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
 	@go test $(FUNCTIONAL_TEST_XDC_ROOT) $(COMPILED_TEST_ARGS) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
 	@! grep -q "^--- FAIL" test.log
 
-functional-with-fault-injection-test: clean-test-results
+functional-with-fault-injection-test: clean-test-output
 	@printf $(COLOR) "Run integration tests with fault injection..."
 	@go test $(FUNCTIONAL_TEST_ROOT) $(COMPILED_TEST_ARGS) -FaultInjectionConfigFile=testdata/fault_injection.yaml -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
 	@go test $(FUNCTIONAL_TEST_NDC_ROOT) $(COMPILED_TEST_ARGS) -FaultInjectionConfigFile=testdata/fault_injection.yaml -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
@@ -575,8 +594,16 @@ gomodtidy:
 	@go mod tidy
 
 update-dependencies:
-	@printf $(COLOR) "Update dependencies..."
+	@printf $(COLOR) "Update dependencies (minor versions only) ..."
 	@go get -u -t $(PINNED_DEPENDENCIES) ./...
+	@go mod tidy
+
+update-dependencies-major: $(GOMAJOR)
+	@printf $(COLOR) "Major version upgrades available:"
+	@$(GOMAJOR) list -major
+	@echo ""
+	@printf $(COLOR) "Update dependencies (major versions only) ..."
+	@$(GOMAJOR) get -major all
 	@go mod tidy
 
 go-generate: $(MOCKGEN) $(GOIMPORTS) $(STRINGER) $(GOWRAP)

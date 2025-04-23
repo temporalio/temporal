@@ -650,6 +650,12 @@ existing deployments even though it is a bit of a misnomer. This does not limit 
 per-_namespace_ limit on the _count_ of long-running requests. Requests are only throttled when the limit is
 exceeded, not when it is only reached.`,
 	)
+	ReducePollWorkflowHistoryRequestPriority = NewGlobalBoolSetting(
+		"frontend.reducePollWorkflowRequestPriority",
+		true,
+		`ReducePollWorkflowRequestPriority decides whether to reduce the priority of GetWorkflowExecutionHistory
+requests if WaitNewEvent is true.`,
+	)
 	FrontendGlobalMaxConcurrentLongRunningRequests = NewNamespaceIntSetting(
 		"frontend.globalNamespaceCount",
 		0,
@@ -1420,11 +1426,9 @@ HistoryCacheSizeBasedLimit is set to true.`,
 	)
 	EnableWorkflowExecutionTimeoutTimer = NewGlobalBoolSetting(
 		"history.enableWorkflowExecutionTimeoutTimer",
-		false,
+		true,
 		`EnableWorkflowExecutionTimeoutTimer controls whether to enable the new logic for generating a workflow execution
-timeout timer when execution timeout is specified when starting a workflow.
-For backward compatibility, this feature is disabled by default and should only be enabled after server version
-containing this flag is deployed to all history service nodes in the cluster.`,
+timeout timer when execution timeout is specified when starting a workflow.`,
 	)
 	EnableTransitionHistory = NewGlobalBoolSetting(
 		"history.enableTransitionHistory",
@@ -1511,6 +1515,12 @@ to cleanup any of its associated data, such as workflow contexts. If set to zero
 shard ownership information, instead of checking membership for each request.
 Only inspected when an instance first creates a history client, so changes
 to this require a restart to take effect.`,
+	)
+	HistoryClientOwnershipCachingStaleTTL = NewGlobalDurationSetting(
+		"history.clientOwnershipCachingUnusedTTL",
+		30*time.Second,
+		`HistoryClientOwnershipCachingStaleTTL, if non-zero, configures the TTL
+for cached shard ownership entries after a membership update.`,
 	)
 	ShardIOConcurrency = NewGlobalIntSetting(
 		"history.shardIOConcurrency",
@@ -2685,5 +2695,11 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		"frontend.activityAPIsEnabled",
 		false,
 		`ActivityAPIsEnabled is a "feature enable" flag. `,
+	)
+
+	WorkflowRulesAPIsEnabled = NewNamespaceBoolSetting(
+		"frontend.workflowRulesAPIsEnabled",
+		false,
+		`WorkflowRulesAPIsEnabled is a "feature enable" flag. `,
 	)
 )

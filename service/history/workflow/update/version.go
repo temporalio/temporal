@@ -24,6 +24,6 @@
 
 package update
 
-import "go.temporal.io/server/internal/protocol"
+import "go.temporal.io/server/common/protocol"
 
 const ProtocolV1 = protocol.Type("temporal.api.update.v1")

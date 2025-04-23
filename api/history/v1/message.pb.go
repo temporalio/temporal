@@ -31,6 +31,7 @@ package history
 import (
 	reflect "reflect"
 	sync "sync"
+	unsafe "unsafe"
 
 	v1 "go.temporal.io/api/history/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -46,21 +47,18 @@ const (
 )
 
 type TransientWorkflowTaskInfo struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
+	state protoimpl.MessageState `protogen:"open.v1"`
 	// A list of history events that are to be appended to the "real" workflow history.
 	HistorySuffix []*v1.HistoryEvent `protobuf:"bytes,3,rep,name=history_suffix,json=historySuffix,proto3" json:"history_suffix,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *TransientWorkflowTaskInfo) Reset() {
 	*x = TransientWorkflowTaskInfo{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_history_v1_message_proto_msgTypes[0]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_history_v1_message_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *TransientWorkflowTaskInfo) String() string {
@@ -71,7 +69,7 @@ func (*TransientWorkflowTaskInfo) ProtoMessage() {}
 
 func (x *TransientWorkflowTaskInfo) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_history_v1_message_proto_msgTypes[0]
-	if protoimpl.UnsafeEnabled && x != nil {
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -95,21 +93,18 @@ func (x *TransientWorkflowTaskInfo) GetHistorySuffix() []*v1.HistoryEvent {
 
 // VersionHistoryItem contains signal eventId and the corresponding version.
 type VersionHistoryItem struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	EventId       int64                  `protobuf:"varint,1,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
+	Version       int64                  `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
 	unknownFields protoimpl.UnknownFields
-
-	EventId int64 `protobuf:"varint,1,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
-	Version int64 `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *VersionHistoryItem) Reset() {
 	*x = VersionHistoryItem{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_history_v1_message_proto_msgTypes[1]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_history_v1_message_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *VersionHistoryItem) String() string {
@@ -120,7 +115,7 @@ func (*VersionHistoryItem) ProtoMessage() {}
 
 func (x *VersionHistoryItem) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_history_v1_message_proto_msgTypes[1]
-	if protoimpl.UnsafeEnabled && x != nil {
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -151,21 +146,18 @@ func (x *VersionHistoryItem) GetVersion() int64 {
 
 // VersionHistory contains the version history of a branch.
 type VersionHistory struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	BranchToken   []byte                 `protobuf:"bytes,1,opt,name=branch_token,json=branchToken,proto3" json:"branch_token,omitempty"`
+	Items         []*VersionHistoryItem  `protobuf:"bytes,2,rep,name=items,proto3" json:"items,omitempty"`
 	unknownFields protoimpl.UnknownFields
-
-	BranchToken []byte                `protobuf:"bytes,1,opt,name=branch_token,json=branchToken,proto3" json:"branch_token,omitempty"`
-	Items       []*VersionHistoryItem `protobuf:"bytes,2,rep,name=items,proto3" json:"items,omitempty"`
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *VersionHistory) Reset() {
 	*x = VersionHistory{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_history_v1_message_proto_msgTypes[2]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_history_v1_message_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *VersionHistory) String() string {
@@ -176,7 +168,7 @@ func (*VersionHistory) ProtoMessage() {}
 
 func (x *VersionHistory) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_history_v1_message_proto_msgTypes[2]
-	if protoimpl.UnsafeEnabled && x != nil {
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -207,21 +199,18 @@ func (x *VersionHistory) GetItems() []*VersionHistoryItem {
 
 // VersionHistories contains all version histories from all branches.
 type VersionHistories struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	CurrentVersionHistoryIndex int32             `protobuf:"varint,1,opt,name=current_version_history_index,json=currentVersionHistoryIndex,proto3" json:"current_version_history_index,omitempty"`
-	Histories                  []*VersionHistory `protobuf:"bytes,2,rep,name=histories,proto3" json:"histories,omitempty"`
+	state                      protoimpl.MessageState `protogen:"open.v1"`
+	CurrentVersionHistoryIndex int32                  `protobuf:"varint,1,opt,name=current_version_history_index,json=currentVersionHistoryIndex,proto3" json:"current_version_history_index,omitempty"`
+	Histories                  []*VersionHistory      `protobuf:"bytes,2,rep,name=histories,proto3" json:"histories,omitempty"`
+	unknownFields              protoimpl.UnknownFields
+	sizeCache                  protoimpl.SizeCache
 }
 
 func (x *VersionHistories) Reset() {
 	*x = VersionHistories{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_history_v1_message_proto_msgTypes[3]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_history_v1_message_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *VersionHistories) String() string {
@@ -232,7 +221,7 @@ func (*VersionHistories) ProtoMessage() {}
 
 func (x *VersionHistories) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_history_v1_message_proto_msgTypes[3]
-	if protoimpl.UnsafeEnabled && x != nil {
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -262,21 +251,18 @@ func (x *VersionHistories) GetHistories() []*VersionHistory {
 }
 
 type TaskKey struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TaskId        int64                  `protobuf:"varint,1,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
+	FireTime      *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=fire_time,json=fireTime,proto3" json:"fire_time,omitempty"`
 	unknownFields protoimpl.UnknownFields
-
-	TaskId   int64                  `protobuf:"varint,1,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
-	FireTime *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=fire_time,json=fireTime,proto3" json:"fire_time,omitempty"`
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *TaskKey) Reset() {
 	*x = TaskKey{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_history_v1_message_proto_msgTypes[4]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_history_v1_message_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *TaskKey) String() string {
@@ -287,7 +273,7 @@ func (*TaskKey) ProtoMessage() {}
 
 func (x *TaskKey) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_history_v1_message_proto_msgTypes[4]
-	if protoimpl.UnsafeEnabled && x != nil {
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -317,21 +303,18 @@ func (x *TaskKey) GetFireTime() *timestamppb.Timestamp {
 }
 
 type TaskRange struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	InclusiveMinTaskKey *TaskKey `protobuf:"bytes,1,opt,name=inclusive_min_task_key,json=inclusiveMinTaskKey,proto3" json:"inclusive_min_task_key,omitempty"`
-	ExclusiveMaxTaskKey *TaskKey `protobuf:"bytes,2,opt,name=exclusive_max_task_key,json=exclusiveMaxTaskKey,proto3" json:"exclusive_max_task_key,omitempty"`
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	InclusiveMinTaskKey *TaskKey               `protobuf:"bytes,1,opt,name=inclusive_min_task_key,json=inclusiveMinTaskKey,proto3" json:"inclusive_min_task_key,omitempty"`
+	ExclusiveMaxTaskKey *TaskKey               `protobuf:"bytes,2,opt,name=exclusive_max_task_key,json=exclusiveMaxTaskKey,proto3" json:"exclusive_max_task_key,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *TaskRange) Reset() {
 	*x = TaskRange{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_history_v1_message_proto_msgTypes[5]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_history_v1_message_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *TaskRange) String() string {
@@ -342,7 +325,7 @@ func (*TaskRange) ProtoMessage() {}
 
 func (x *TaskRange) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_history_v1_message_proto_msgTypes[5]
-	if protoimpl.UnsafeEnabled && x != nil {
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -373,21 +356,18 @@ func (x *TaskRange) GetExclusiveMaxTaskKey() *TaskKey {
 
 // StrippedHistoryEvent is a stripped down version of HistoryEvent that only contains the event_id and version.
 type StrippedHistoryEvent struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	EventId       int64                  `protobuf:"varint,1,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
+	Version       int64                  `protobuf:"varint,4,opt,name=version,proto3" json:"version,omitempty"`
 	unknownFields protoimpl.UnknownFields
-
-	EventId int64 `protobuf:"varint,1,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
-	Version int64 `protobuf:"varint,4,opt,name=version,proto3" json:"version,omitempty"`
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *StrippedHistoryEvent) Reset() {
 	*x = StrippedHistoryEvent{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_history_v1_message_proto_msgTypes[6]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_history_v1_message_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *StrippedHistoryEvent) String() string {
@@ -398,7 +378,7 @@ func (*StrippedHistoryEvent) ProtoMessage() {}
 
 func (x *StrippedHistoryEvent) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_history_v1_message_proto_msgTypes[6]
-	if protoimpl.UnsafeEnabled && x != nil {
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -428,20 +408,17 @@ func (x *StrippedHistoryEvent) GetVersion() int64 {
 }
 
 type StrippedHistoryEvents struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
+	state         protoimpl.MessageState  `protogen:"open.v1"`
+	Events        []*StrippedHistoryEvent `protobuf:"bytes,1,rep,name=events,proto3" json:"events,omitempty"`
 	unknownFields protoimpl.UnknownFields
-
-	Events []*StrippedHistoryEvent `protobuf:"bytes,1,rep,name=events,proto3" json:"events,omitempty"`
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *StrippedHistoryEvents) Reset() {
 	*x = StrippedHistoryEvents{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_history_v1_message_proto_msgTypes[7]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_history_v1_message_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *StrippedHistoryEvents) String() string {
@@ -452,7 +429,7 @@ func (*StrippedHistoryEvents) ProtoMessage() {}
 
 func (x *StrippedHistoryEvents) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_history_v1_message_proto_msgTypes[7]
-	if protoimpl.UnsafeEnabled && x != nil {
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -476,96 +453,46 @@ func (x *StrippedHistoryEvents) GetEvents() []*StrippedHistoryEvent {
 
 var File_temporal_server_api_history_v1_message_proto protoreflect.FileDescriptor
 
-var file_temporal_server_api_history_v1_message_proto_rawDesc = []byte{
-	0x0a, 0x2c, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2f, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72,
-	0x2f, 0x61, 0x70, 0x69, 0x2f, 0x68, 0x69, 0x73, 0x74, 0x6f, 0x72, 0x79, 0x2f, 0x76, 0x31, 0x2f, 0x6d,
-	0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x12, 0x1e, 0x74, 0x65, 0x6d,
-	0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e,
-	0x68, 0x69, 0x73, 0x74, 0x6f, 0x72, 0x79, 0x2e, 0x76, 0x31, 0x1a, 0x1f, 0x67, 0x6f, 0x6f, 0x67,
-	0x6c, 0x65, 0x2f, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2f, 0x74, 0x69, 0x6d, 0x65, 0x73,
-	0x74, 0x61, 0x6d, 0x70, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x1a, 0x25, 0x74, 0x65, 0x6d, 0x70, 0x6f,
-	0x72, 0x61, 0x6c, 0x2f, 0x61, 0x70, 0x69, 0x2f, 0x68, 0x69, 0x73, 0x74, 0x6f, 0x72, 0x79, 0x2f, 0x76,
-	0x31, 0x2f, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x22, 0x79,
-	0x0a, 0x19, 0x54, 0x72, 0x61, 0x6e, 0x73, 0x69, 0x65, 0x6e, 0x74, 0x57, 0x6f, 0x72, 0x6b, 0x66,
-	0x6c, 0x6f, 0x77, 0x54, 0x61, 0x73, 0x6b, 0x49, 0x6e, 0x66, 0x6f, 0x12, 0x50, 0x0a, 0x0e, 0x68, 0x69,
-	0x73, 0x74, 0x6f, 0x72, 0x79, 0x5f, 0x73, 0x75, 0x66, 0x66, 0x69, 0x78, 0x18, 0x03, 0x20, 0x03, 0x28,
-	0x0b, 0x32, 0x25, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x61, 0x70, 0x69, 0x2e,
-	0x68, 0x69, 0x73, 0x74, 0x6f, 0x72, 0x79, 0x2e, 0x76, 0x31, 0x2e, 0x48, 0x69, 0x73, 0x74, 0x6f,
-	0x72, 0x79, 0x45, 0x76, 0x65, 0x6e, 0x74, 0x52, 0x0d, 0x68, 0x69, 0x73, 0x74, 0x6f, 0x72, 0x79, 0x53,
-	0x75, 0x66, 0x66, 0x69, 0x78, 0x42, 0x02, 0x68, 0x00, 0x4a, 0x04, 0x08, 0x01, 0x10, 0x02, 0x4a, 0x04,
-	0x08, 0x02, 0x10, 0x03, 0x22, 0x51, 0x0a, 0x12, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x48, 0x69,
-	0x73, 0x74, 0x6f, 0x72, 0x79, 0x49, 0x74, 0x65, 0x6d, 0x12, 0x1d, 0x0a, 0x08, 0x65, 0x76, 0x65, 0x6e,
-	0x74, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x03, 0x52, 0x07, 0x65, 0x76, 0x65, 0x6e,
-	0x74, 0x49, 0x64, 0x42, 0x02, 0x68, 0x00, 0x12, 0x1c, 0x0a, 0x07, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f,
-	0x6e, 0x18, 0x02, 0x20, 0x01, 0x28, 0x03, 0x52, 0x07, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x42,
-	0x02, 0x68, 0x00, 0x22, 0x85, 0x01, 0x0a, 0x0e, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x48, 0x69,
-	0x73, 0x74, 0x6f, 0x72, 0x79, 0x12, 0x25, 0x0a, 0x0c, 0x62, 0x72, 0x61, 0x6e, 0x63, 0x68, 0x5f,
-	0x74, 0x6f, 0x6b, 0x65, 0x6e, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x0b, 0x62, 0x72, 0x61, 0x6e,
-	0x63, 0x68, 0x54, 0x6f, 0x6b, 0x65, 0x6e, 0x42, 0x02, 0x68, 0x00, 0x12, 0x4c, 0x0a, 0x05, 0x69, 0x74,
-	0x65, 0x6d, 0x73, 0x18, 0x02, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x32, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f,
-	0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x68, 0x69,
-	0x73, 0x74, 0x6f, 0x72, 0x79, 0x2e, 0x76, 0x31, 0x2e, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e,
-	0x48, 0x69, 0x73, 0x74, 0x6f, 0x72, 0x79, 0x49, 0x74, 0x65, 0x6d, 0x52, 0x05, 0x69, 0x74, 0x65, 0x6d,
-	0x73, 0x42, 0x02, 0x68, 0x00, 0x22, 0xab, 0x01, 0x0a, 0x10, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e,
-	0x48, 0x69, 0x73, 0x74, 0x6f, 0x72, 0x69, 0x65, 0x73, 0x12, 0x45, 0x0a, 0x1d, 0x63, 0x75, 0x72, 0x72,
-	0x65, 0x6e, 0x74, 0x5f, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x5f, 0x68, 0x69, 0x73, 0x74, 0x6f,
-	0x72, 0x79, 0x5f, 0x69, 0x6e, 0x64, 0x65, 0x78, 0x18, 0x01, 0x20, 0x01, 0x28, 0x05, 0x52, 0x1a,
-	0x63, 0x75, 0x72, 0x72, 0x65, 0x6e, 0x74, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x48, 0x69, 0x73,
-	0x74, 0x6f, 0x72, 0x79, 0x49, 0x6e, 0x64, 0x65, 0x78, 0x42, 0x02, 0x68, 0x00, 0x12, 0x50, 0x0a, 0x09,
-	0x68, 0x69, 0x73, 0x74, 0x6f, 0x72, 0x69, 0x65, 0x73, 0x18, 0x02, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x2e,
-	0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72,
-	0x2e, 0x61, 0x70, 0x69, 0x2e, 0x68, 0x69, 0x73, 0x74, 0x6f, 0x72, 0x79, 0x2e, 0x76, 0x31, 0x2e, 0x56,
-	0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x48, 0x69, 0x73, 0x74, 0x6f, 0x72, 0x79, 0x52, 0x09, 0x68, 0x69,
-	0x73, 0x74, 0x6f, 0x72, 0x69, 0x65, 0x73, 0x42, 0x02, 0x68, 0x00, 0x22, 0x63, 0x0a, 0x07, 0x54, 0x61,
-	0x73, 0x6b, 0x4b, 0x65, 0x79, 0x12, 0x1b, 0x0a, 0x07, 0x74, 0x61, 0x73, 0x6b, 0x5f, 0x69, 0x64, 0x18,
-	0x01, 0x20, 0x01, 0x28, 0x03, 0x52, 0x06, 0x74, 0x61, 0x73, 0x6b, 0x49, 0x64, 0x42, 0x02, 0x68,
-	0x00, 0x12, 0x3b, 0x0a, 0x09, 0x66, 0x69, 0x72, 0x65, 0x5f, 0x74, 0x69, 0x6d, 0x65, 0x18, 0x02, 0x20,
-	0x01, 0x28, 0x0b, 0x32, 0x1a, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74,
-	0x6f, 0x62, 0x75, 0x66, 0x2e, 0x54, 0x69, 0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x52, 0x08, 0x66,
-	0x69, 0x72, 0x65, 0x54, 0x69, 0x6d, 0x65, 0x42, 0x02, 0x68, 0x00, 0x22, 0xcf, 0x01, 0x0a, 0x09,
-	0x54, 0x61, 0x73, 0x6b, 0x52, 0x61, 0x6e, 0x67, 0x65, 0x12, 0x60, 0x0a, 0x16, 0x69, 0x6e, 0x63, 0x6c,
-	0x75, 0x73, 0x69, 0x76, 0x65, 0x5f, 0x6d, 0x69, 0x6e, 0x5f, 0x74, 0x61, 0x73, 0x6b, 0x5f, 0x6b, 0x65,
-	0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x27, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61,
-	0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x68, 0x69, 0x73, 0x74,
-	0x6f, 0x72, 0x79, 0x2e, 0x76, 0x31, 0x2e, 0x54, 0x61, 0x73, 0x6b, 0x4b, 0x65, 0x79, 0x52, 0x13,
-	0x69, 0x6e, 0x63, 0x6c, 0x75, 0x73, 0x69, 0x76, 0x65, 0x4d, 0x69, 0x6e, 0x54, 0x61, 0x73, 0x6b, 0x4b,
-	0x65, 0x79, 0x42, 0x02, 0x68, 0x00, 0x12, 0x60, 0x0a, 0x16, 0x65, 0x78, 0x63, 0x6c, 0x75, 0x73, 0x69,
-	0x76, 0x65, 0x5f, 0x6d, 0x61, 0x78, 0x5f, 0x74, 0x61, 0x73, 0x6b, 0x5f, 0x6b, 0x65, 0x79, 0x18, 0x02,
-	0x20, 0x01, 0x28, 0x0b, 0x32, 0x27, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e,
-	0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x68, 0x69, 0x73, 0x74, 0x6f, 0x72,
-	0x79, 0x2e, 0x76, 0x31, 0x2e, 0x54, 0x61, 0x73, 0x6b, 0x4b, 0x65, 0x79, 0x52, 0x13, 0x65, 0x78, 0x63,
-	0x6c, 0x75, 0x73, 0x69, 0x76, 0x65, 0x4d, 0x61, 0x78, 0x54, 0x61, 0x73, 0x6b, 0x4b, 0x65, 0x79, 0x42,
-	0x02, 0x68, 0x00, 0x22, 0x53, 0x0a, 0x14, 0x53, 0x74, 0x72, 0x69, 0x70, 0x70, 0x65, 0x64, 0x48, 0x69,
-	0x73, 0x74, 0x6f, 0x72, 0x79, 0x45, 0x76, 0x65, 0x6e, 0x74, 0x12, 0x1d, 0x0a, 0x08, 0x65, 0x76,
-	0x65, 0x6e, 0x74, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x03, 0x52, 0x07, 0x65, 0x76, 0x65,
-	0x6e, 0x74, 0x49, 0x64, 0x42, 0x02, 0x68, 0x00, 0x12, 0x1c, 0x0a, 0x07, 0x76, 0x65, 0x72, 0x73, 0x69,
-	0x6f, 0x6e, 0x18, 0x04, 0x20, 0x01, 0x28, 0x03, 0x52, 0x07, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e,
-	0x42, 0x02, 0x68, 0x00, 0x22, 0x69, 0x0a, 0x15, 0x53, 0x74, 0x72, 0x69, 0x70, 0x70, 0x65, 0x64, 0x48,
-	0x69, 0x73, 0x74, 0x6f, 0x72, 0x79, 0x45, 0x76, 0x65, 0x6e, 0x74, 0x73, 0x12, 0x50, 0x0a, 0x06,
-	0x65, 0x76, 0x65, 0x6e, 0x74, 0x73, 0x18, 0x01, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x34, 0x2e, 0x74, 0x65,
-	0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x61, 0x70, 0x69,
-	0x2e, 0x68, 0x69, 0x73, 0x74, 0x6f, 0x72, 0x79, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x74, 0x72, 0x69, 0x70,
-	0x70, 0x65, 0x64, 0x48, 0x69, 0x73, 0x74, 0x6f, 0x72, 0x79, 0x45, 0x76, 0x65, 0x6e, 0x74, 0x52,
-	0x06, 0x65, 0x76, 0x65, 0x6e, 0x74, 0x73, 0x42, 0x02, 0x68, 0x00, 0x42, 0x2e, 0x5a, 0x2c, 0x67, 0x6f,
-	0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x69, 0x6f, 0x2f, 0x73, 0x65, 0x72, 0x76,
-	0x65, 0x72, 0x2f, 0x61, 0x70, 0x69, 0x2f, 0x68, 0x69, 0x73, 0x74, 0x6f, 0x72, 0x79, 0x2f, 0x76, 0x31,
-	0x3b, 0x68, 0x69, 0x73, 0x74, 0x6f, 0x72, 0x79, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
-}
+const file_temporal_server_api_history_v1_message_proto_rawDesc = "" +
+	"\n" +
+	",temporal/server/api/history/v1/message.proto\x12\x1etemporal.server.api.history.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a%temporal/api/history/v1/message.proto\"u\n" +
+	"\x19TransientWorkflowTaskInfo\x12L\n" +
+	"\x0ehistory_suffix\x18\x03 \x03(\v2%.temporal.api.history.v1.HistoryEventR\rhistorySuffixJ\x04\b\x01\x10\x02J\x04\b\x02\x10\x03\"I\n" +
+	"\x12VersionHistoryItem\x12\x19\n" +
+	"\bevent_id\x18\x01 \x01(\x03R\aeventId\x12\x18\n" +
+	"\aversion\x18\x02 \x01(\x03R\aversion\"}\n" +
+	"\x0eVersionHistory\x12!\n" +
+	"\fbranch_token\x18\x01 \x01(\fR\vbranchToken\x12H\n" +
+	"\x05items\x18\x02 \x03(\v22.temporal.server.api.history.v1.VersionHistoryItemR\x05items\"\xa3\x01\n" +
+	"\x10VersionHistories\x12A\n" +
+	"\x1dcurrent_version_history_index\x18\x01 \x01(\x05R\x1acurrentVersionHistoryIndex\x12L\n" +
+	"\thistories\x18\x02 \x03(\v2..temporal.server.api.history.v1.VersionHistoryR\thistories\"[\n" +
+	"\aTaskKey\x12\x17\n" +
+	"\atask_id\x18\x01 \x01(\x03R\x06taskId\x127\n" +
+	"\tfire_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\bfireTime\"\xc7\x01\n" +
+	"\tTaskRange\x12\\\n" +
+	"\x16inclusive_min_task_key\x18\x01 \x01(\v2'.temporal.server.api.history.v1.TaskKeyR\x13inclusiveMinTaskKey\x12\\\n" +
+	"\x16exclusive_max_task_key\x18\x02 \x01(\v2'.temporal.server.api.history.v1.TaskKeyR\x13exclusiveMaxTaskKey\"K\n" +
+	"\x14StrippedHistoryEvent\x12\x19\n" +
+	"\bevent_id\x18\x01 \x01(\x03R\aeventId\x12\x18\n" +
+	"\aversion\x18\x04 \x01(\x03R\aversion\"e\n" +
+	"\x15StrippedHistoryEvents\x12L\n" +
+	"\x06events\x18\x01 \x03(\v24.temporal.server.api.history.v1.StrippedHistoryEventR\x06eventsB.Z,go.temporal.io/server/api/history/v1;historyb\x06proto3"
 
 var (
 	file_temporal_server_api_history_v1_message_proto_rawDescOnce sync.Once
-	file_temporal_server_api_history_v1_message_proto_rawDescData = file_temporal_server_api_history_v1_message_proto_rawDesc
+	file_temporal_server_api_history_v1_message_proto_rawDescData []byte
 )
 
 func file_temporal_server_api_history_v1_message_proto_rawDescGZIP() []byte {
 	file_temporal_server_api_history_v1_message_proto_rawDescOnce.Do(func() {
-		file_temporal_server_api_history_v1_message_proto_rawDescData = protoimpl.X.CompressGZIP(file_temporal_server_api_history_v1_message_proto_rawDescData)
+		file_temporal_server_api_history_v1_message_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_api_history_v1_message_proto_rawDesc), len(file_temporal_server_api_history_v1_message_proto_rawDesc)))
 	})
 	return file_temporal_server_api_history_v1_message_proto_rawDescData
 }
 
 var file_temporal_server_api_history_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
-var file_temporal_server_api_history_v1_message_proto_goTypes = []interface{}{
+var file_temporal_server_api_history_v1_message_proto_goTypes = []any{
 	(*TransientWorkflowTaskInfo)(nil), // 0: temporal.server.api.history.v1.TransientWorkflowTaskInfo
 	(*VersionHistoryItem)(nil),        // 1: temporal.server.api.history.v1.VersionHistoryItem
 	(*VersionHistory)(nil),            // 2: temporal.server.api.history.v1.VersionHistory
@@ -597,109 +524,11 @@ func file_temporal_server_api_history_v1_message_proto_init() {
 	if File_temporal_server_api_history_v1_message_proto != nil {
 		return
 	}
-	if !protoimpl.UnsafeEnabled {
-		file_temporal_server_api_history_v1_message_proto_msgTypes[0].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*TransientWorkflowTaskInfo); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_history_v1_message_proto_msgTypes[1].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*VersionHistoryItem); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_history_v1_message_proto_msgTypes[2].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*VersionHistory); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_history_v1_message_proto_msgTypes[3].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*VersionHistories); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_history_v1_message_proto_msgTypes[4].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*TaskKey); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_history_v1_message_proto_msgTypes[5].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*TaskRange); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_history_v1_message_proto_msgTypes[6].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*StrippedHistoryEvent); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_history_v1_message_proto_msgTypes[7].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*StrippedHistoryEvents); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: file_temporal_server_api_history_v1_message_proto_rawDesc,
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_api_history_v1_message_proto_rawDesc), len(file_temporal_server_api_history_v1_message_proto_rawDesc)),
 			NumEnums:      0,
 			NumMessages:   8,
 			NumExtensions: 0,
@@ -710,7 +539,6 @@ func file_temporal_server_api_history_v1_message_proto_init() {
 		MessageInfos:      file_temporal_server_api_history_v1_message_proto_msgTypes,
 	}.Build()
 	File_temporal_server_api_history_v1_message_proto = out.File
-	file_temporal_server_api_history_v1_message_proto_rawDesc = nil
 	file_temporal_server_api_history_v1_message_proto_goTypes = nil
 	file_temporal_server_api_history_v1_message_proto_depIdxs = nil
 }

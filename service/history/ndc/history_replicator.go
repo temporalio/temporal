@@ -312,7 +312,7 @@ func (r *HistoryReplicatorImpl) applyBackfillEvents(
 
 	transitionHistory := mutableState.GetExecutionInfo().GetTransitionHistory()
 	if len(transitionHistory) != 0 {
-		if workflow.CompareVersionedTransition(versionedTransition, transitionhistory.LastVersionedTransition(transitionHistory)) > 0 {
+		if transitionhistory.Compare(versionedTransition, transitionhistory.LastVersionedTransition(transitionHistory)) > 0 {
 			return serviceerrors.NewSyncState(
 				mutableStateMissingMessage,
 				task.getNamespaceID().String(),

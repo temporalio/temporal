@@ -90,7 +90,7 @@ type HandlerOptions struct {
 	HistoryClient                        resource.HistoryClient
 	TelemetryInterceptor                 *interceptor.TelemetryInterceptor
 	NamespaceValidationInterceptor       *interceptor.NamespaceValidatorInterceptor
-	NamespaceRateLimitInterceptor        *interceptor.NamespaceRateLimitInterceptor
+	NamespaceRateLimitInterceptor        interceptor.NamespaceRateLimitInterceptor
 	NamespaceConcurrencyLimitInterceptor *interceptor.ConcurrentRequestLimitInterceptor
 	RateLimitInterceptor                 *interceptor.RateLimitInterceptor
 	AuthInterceptor                      *authorization.Interceptor
@@ -382,13 +382,16 @@ func (c *requestContext) augmentContext(ctx context.Context, header http.Header)
 	if userAgent := header.Get(http.CanonicalHeaderKey(headerUserAgent)); userAgent != "" {
 		parts := strings.Split(userAgent, clientNameVersionDelim)
 		if len(parts) == 2 {
-			return metadata.NewIncomingContext(ctx, metadata.New(map[string]string{
-				headers.ClientNameHeaderName:    parts[0],
-				headers.ClientVersionHeaderName: parts[1],
-			}))
+			mdIncoming, ok := metadata.FromIncomingContext(ctx)
+			if !ok {
+				mdIncoming = metadata.MD{}
+			}
+			mdIncoming.Set(headers.ClientNameHeaderName, parts[0])
+			mdIncoming.Set(headers.ClientVersionHeaderName, parts[1])
+			ctx = metadata.NewIncomingContext(ctx, mdIncoming)
 		}
 	}
-	return ctx
+	return headers.Propagate(ctx)
 }
 
 func (c *requestContext) capturePanicAndRecordMetrics(ctxPtr *context.Context, errPtr *error) {

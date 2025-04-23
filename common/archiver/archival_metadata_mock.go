@@ -44,6 +44,7 @@ import (
 type MockArchivalMetadata struct {
 	ctrl     *gomock.Controller
 	recorder *MockArchivalMetadataMockRecorder
+	isgomock struct{}
 }
 
 // MockArchivalMetadataMockRecorder is the mock recorder for MockArchivalMetadata.
@@ -95,6 +96,7 @@ func (mr *MockArchivalMetadataMockRecorder) GetVisibilityConfig() *gomock.Call {
 type MockArchivalConfig struct {
 	ctrl     *gomock.Controller
 	recorder *MockArchivalConfigMockRecorder
+	isgomock struct{}
 }
 
 // MockArchivalConfigMockRecorder is the mock recorder for MockArchivalConfig.

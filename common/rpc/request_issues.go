@@ -50,5 +50,5 @@ func (ri *RequestIssues) GetError() error {
 	if len(ri.issues) == 0 {
 		return nil
 	}
-	return status.Errorf(codes.InvalidArgument, strings.Join(ri.issues, ", "))
+	return status.Error(codes.InvalidArgument, strings.Join(ri.issues, ", "))
 }

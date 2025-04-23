@@ -364,7 +364,7 @@ func (e *ExecutableTaskImpl) Resend(
 	if item != nil {
 		namespaceName = item.(namespace.Name).String()
 	}
-	metrics.ClientRequests.With(e.MetricsHandler).Record(
+	metrics.ReplicationTasksBackFill.With(e.MetricsHandler).Record(
 		1,
 		metrics.OperationTag(e.metricsTag+"Resend"),
 		metrics.NamespaceTag(namespaceName),
@@ -372,7 +372,7 @@ func (e *ExecutableTaskImpl) Resend(
 	)
 	startTime := time.Now().UTC()
 	defer func() {
-		metrics.ClientLatency.With(e.MetricsHandler).Record(
+		metrics.ReplicationTasksBackFillLatency.With(e.MetricsHandler).Record(
 			time.Since(startTime),
 			metrics.OperationTag(e.metricsTag+"Resend"),
 			metrics.NamespaceTag(namespaceName),
@@ -492,7 +492,7 @@ func (e *ExecutableTaskImpl) BackFillEvents(
 	if item != nil {
 		namespaceName = item.(namespace.Name).String()
 	}
-	metrics.ClientRequests.With(e.MetricsHandler).Record(
+	metrics.ReplicationTasksBackFill.With(e.MetricsHandler).Record(
 		1,
 		metrics.OperationTag(e.metricsTag+"BackFill"),
 		metrics.NamespaceTag(namespaceName),
@@ -500,7 +500,7 @@ func (e *ExecutableTaskImpl) BackFillEvents(
 	)
 	startTime := time.Now().UTC()
 	defer func() {
-		metrics.ClientLatency.With(e.MetricsHandler).Record(
+		metrics.ReplicationTasksBackFillLatency.With(e.MetricsHandler).Record(
 			time.Since(startTime),
 			metrics.OperationTag(e.metricsTag+"BackFill"),
 			metrics.NamespaceTag(namespaceName),
