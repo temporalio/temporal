@@ -412,9 +412,7 @@ var TransitionTimedOut = hsm.NewTransition(
 // Operation machine transition to the STARTED state.
 func (o Operation) Cancel(node *hsm.Node, t time.Time, requestedEventID int64) (hsm.TransitionOutput, error) {
 	child, err := node.AddChild(CancelationMachineKey, Cancelation{
-		NexusOperationCancellationInfo: &persistencespb.NexusOperationCancellationInfo{
-			RequestedEventId: requestedEventID,
-		},
+		NexusOperationCancellationInfo: &persistencespb.NexusOperationCancellationInfo{},
 	})
 	if err != nil {
 		// This function should be called as part of command/event handling and it should not be called
