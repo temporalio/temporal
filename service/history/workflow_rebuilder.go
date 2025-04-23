@@ -32,11 +32,13 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+	persistence2 "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/api"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -47,10 +49,13 @@ import (
 
 type (
 	rebuildSpec struct {
-		branchToken          []byte
-		stateTransitionCount int64
-		dbRecordVersion      int64
-		requestID            string
+		branchToken                     []byte
+		stateTransitionCount            int64
+		dbRecordVersion                 int64
+		requestID                       string
+		transitionHistory               []*persistence2.VersionedTransition
+		previousTransitionHistory       []*persistence2.VersionedTransition
+		lastTransitionHistoryBreakPoint *persistence2.VersionedTransition
 	}
 	workflowRebuilder interface {
 		// rebuild rebuilds a workflow, in case of any kind of corruption
@@ -122,7 +127,25 @@ func (r *workflowRebuilderImpl) rebuild(
 	if err != nil {
 		return err
 	}
+	r.handleTransitionHistory(rebuildSpec, rebuildMutableState)
 	return r.overwriteToDB(ctx, rebuildMutableState)
+}
+
+func (r *workflowRebuilderImpl) handleTransitionHistory(
+	rebuildSpec *rebuildSpec,
+	newMutableState historyi.MutableState,
+) {
+	newMutableState.GetExecutionInfo().PreviousTransitionHistory = rebuildSpec.previousTransitionHistory
+	newMutableState.GetExecutionInfo().LastTransitionHistoryBreakPoint = rebuildSpec.lastTransitionHistoryBreakPoint
+	if rebuildSpec.transitionHistory != nil {
+		transitionHistory := rebuildSpec.transitionHistory
+		breakPoint := transitionhistory.CopyVersionedTransition(transitionHistory[len(transitionHistory)-1])
+		// This update is a naive update. It failed to consider the case where the current cluster is not the cluster
+		// that did the last transition. But this should not break the replication protocol.
+		transitionHistory[len(transitionHistory)-1].TransitionCount += 1
+		newMutableState.GetExecutionInfo().TransitionHistory = transitionHistory
+		newMutableState.GetExecutionInfo().LastTransitionHistoryBreakPoint = breakPoint
+	}
 }
 
 func (r *workflowRebuilderImpl) getRebuildSpecFromMutableState(
@@ -167,6 +190,7 @@ func (r *workflowRebuilderImpl) getRebuildSpecFromMutableState(
 		stateTransitionCount: mutableState.ExecutionInfo.StateTransitionCount,
 		dbRecordVersion:      resp.DBRecordVersion,
 		requestID:            mutableState.ExecutionState.CreateRequestId,
+		transitionHistory:    mutableState.ExecutionInfo.TransitionHistory,
 	}, nil
 }
 
