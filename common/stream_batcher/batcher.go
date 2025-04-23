@@ -80,7 +80,7 @@ func NewBatcher[T, R any](fn func([]T) R, opts BatcherOptions, timeSource clock.
 // for the whole batch that the item ended up in, and a context error. Even if Add returns a
 // context error, the item may still be processed in the future!
 func (b *Batcher[T, R]) Add(ctx context.Context, t T) (R, error) {
-	resp := make(chan R)
+	resp := make(chan R, 1)
 	pair := batchPair[T, R]{resp: resp, item: t}
 
 	for {
