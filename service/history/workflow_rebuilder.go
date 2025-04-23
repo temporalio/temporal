@@ -186,11 +186,13 @@ func (r *workflowRebuilderImpl) getRebuildSpecFromMutableState(
 		return nil, err
 	}
 	return &rebuildSpec{
-		branchToken:          currentVersionHistory.BranchToken,
-		stateTransitionCount: mutableState.ExecutionInfo.StateTransitionCount,
-		dbRecordVersion:      resp.DBRecordVersion,
-		requestID:            mutableState.ExecutionState.CreateRequestId,
-		transitionHistory:    mutableState.ExecutionInfo.TransitionHistory,
+		branchToken:                     currentVersionHistory.BranchToken,
+		stateTransitionCount:            mutableState.ExecutionInfo.StateTransitionCount,
+		dbRecordVersion:                 resp.DBRecordVersion,
+		requestID:                       mutableState.ExecutionState.CreateRequestId,
+		transitionHistory:               mutableState.ExecutionInfo.TransitionHistory,
+		previousTransitionHistory:       mutableState.ExecutionInfo.PreviousTransitionHistory,
+		lastTransitionHistoryBreakPoint: mutableState.ExecutionInfo.LastTransitionHistoryBreakPoint,
 	}, nil
 }
 
