@@ -158,7 +158,7 @@ requirements and query complexity. Consider the cardinality impact when enabling
 var RecordCancelRequestCompletionEvents = dynamicconfig.NewGlobalBoolSetting(
 	"component.nexusoperations.recordCancelRequestCompletionEvents",
 	false,
-	`Boolean flag to control whether to record NexusOperationCancelRequestComplete and 
+	`Boolean flag to control whether to record NexusOperationCancelRequestCompleted and 
 NexusOperationCancelRequestFailed events. Default false.`,
 )
 
