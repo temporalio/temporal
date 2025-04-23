@@ -218,9 +218,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelation() {
 		WorkflowId: run.GetID(),
 		RunId:      run.GetRunID(),
 	})
-	s.ContainsHistoryEvents(`
-NexusOperationCancelRequestFailed
-NexusOperationCancelRequestCompleted`, hist)
+	s.ContainsHistoryEvents(`NexusOperationCancelRequestCompleted`, hist)
 }
 
 func (s *NexusWorkflowTestSuite) TestNexusOperationSyncCompletion() {
