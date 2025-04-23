@@ -177,6 +177,9 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 	smRef := common.CloneProto(ref.StateMachineRef)
 	smRef.MachineTransitionCount = 0
 
+	// Set ms VT to initial version because workflow may switch to a different branch.
+	smRef.MutableStateVersionedTransition = smRef.MachineInitialVersionedTransition
+
 	token, err := e.CallbackTokenGenerator.Tokenize(&tokenspb.NexusOperationCompletion{
 		NamespaceId: ref.WorkflowKey.NamespaceID,
 		WorkflowId:  ref.WorkflowKey.WorkflowID,
