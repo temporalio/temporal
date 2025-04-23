@@ -25,6 +25,7 @@
 package frontend
 
 import (
+	"strings"
 	"context"
 	"runtime"
 	"sync"
@@ -189,6 +190,11 @@ func (vc *VersionChecker) saveVersionInfo(ctx context.Context, resp *check.Versi
 
 func toVersionInfo(resp *check.VersionCheckResponse) (*versionpb.VersionInfo, error) {
 	for _, product := range resp.Products {
+
+		if strings.TrimSpace(product.Current.Version) == strings.TrimSpace(product.Recommended.Version) {
+			product.Alerts = nil
+		}
+
 		if product.Product == headers.ClientNameServer {
 			return &versionpb.VersionInfo{
 				Current:        convertReleaseInfo(product.Current),
