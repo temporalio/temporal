@@ -575,6 +575,10 @@ func NewMutableStateInChain(
 }
 
 func (ms *MutableStateImpl) mustInitHSM() {
+	if ms.executionInfo.SubStateMachinesByType == nil {
+		ms.executionInfo.SubStateMachinesByType = make(map[string]*persistencespb.StateMachineMap)
+	}
+
 	// Error only occurs if some initialization path forgets to register the workflow state machine.
 	stateMachineNode, err := hsm.NewRoot(ms.shard.StateMachineRegistry(), StateMachineType, ms, ms.executionInfo.SubStateMachinesByType, ms)
 	if err != nil {
