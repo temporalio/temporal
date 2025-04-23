@@ -27,7 +27,8 @@ package chasm
 type fieldType int
 
 const (
-	fieldTypeComponent fieldType = iota + 1
+	fieldTypeUnspecified fieldType = iota
+	fieldTypeComponent
 	fieldTypeComponentPointer
 	fieldTypeData
 )

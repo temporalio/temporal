@@ -25,9 +25,11 @@
 package chasm
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 
+	"go.temporal.io/api/serviceerror"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -58,10 +60,37 @@ func (fi fieldInternal) IsEmpty() bool {
 	return fi.value == nil
 }
 
-func (f Field[T]) Get(Context) (T, error) {
-	// remember to handle d == nil case
+func (f Field[T]) Get(chasmContext Context) (T, error) {
+	// If value is not nil, use it.
+	if f.Internal.value != nil {
+		return f.Internal.value.(T), nil
+	}
 
-	panic("not implemented")
+	// If node is nil, then there is nothing to deserialize from, return nil.
+	if f.Internal.node == nil {
+		var v T
+		return v, nil
+	}
+
+	var err error
+	switch f.Internal.fieldType {
+	case fieldTypeComponent:
+		err = f.Internal.node.prepareComponentValue(chasmContext)
+	case fieldTypeData:
+		// For data fields, T is always a concrete type.
+		err = f.Internal.node.prepareDataValue(chasmContext, reflect.TypeFor[T]())
+	case fieldTypeComponentPointer:
+		panic("not implemented")
+	default:
+		err = serviceerror.NewInternal(fmt.Sprintf("unsupported field type: %v", f.Internal.fieldType))
+	}
+
+	if err != nil {
+		var nilT T
+		return nilT, err
+	}
+	f.Internal.value = f.Internal.node.value
+	return f.Internal.value.(T), nil
 }
 
 func NewEmptyField[T any]() Field[T] {
