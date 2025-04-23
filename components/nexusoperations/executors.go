@@ -663,17 +663,6 @@ func (e taskExecutor) saveCancelationResult(ctx context.Context, env hsm.Environ
 				if err != nil {
 					return hsm.TransitionOutput{}, err
 				}
-				n.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUEST_FAILED, func(e *historypb.HistoryEvent) {
-					// nolint:revive // We must mutate here even if the linter doesn't like it.
-					e.Attributes = &historypb.HistoryEvent_NexusOperationCancelRequestFailedEventAttributes{
-						NexusOperationCancelRequestFailedEventAttributes: &historypb.NexusOperationCancelRequestFailedEventAttributes{
-							RequestedEventId: c.RequestedEventId,
-							Failure:          failure,
-						},
-					}
-					// nolint:revive // We must mutate here even if the linter doesn't like it.
-					e.WorkerMayIgnore = true // For compatibility with older SDKs.
-				})
 				if !isRetryable {
 					return TransitionCancelationFailed.Apply(c, EventCancelationFailed{
 						Time:    env.Now(),
@@ -691,16 +680,6 @@ func (e taskExecutor) saveCancelationResult(ctx context.Context, env hsm.Environ
 			// Cancelation request transmitted successfully.
 			// The operation is not yet canceled and may ignore our request, the outcome will be known via the
 			// completion callback.
-			n.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUEST_COMPLETED, func(e *historypb.HistoryEvent) {
-				// nolint:revive // We must mutate here even if the linter doesn't like it.
-				e.Attributes = &historypb.HistoryEvent_NexusOperationCancelRequestCompletedEventAttributes{
-					NexusOperationCancelRequestCompletedEventAttributes: &historypb.NexusOperationCancelRequestCompletedEventAttributes{
-						RequestedEventId: c.RequestedEventId,
-					},
-				}
-				// nolint:revive // We must mutate here even if the linter doesn't like it.
-				e.WorkerMayIgnore = true // For compatibility with older SDKs.
-			})
 			return TransitionCancelationSucceeded.Apply(c, EventCancelationSucceeded{
 				Time: env.Now(),
 				Node: n,

@@ -410,7 +410,7 @@ var TransitionTimedOut = hsm.NewTransition(
 // machine will stay in UNSPECIFIED state. If the Operation is in STARTED state, then transition the
 // Cancelation machine to the SCHEDULED state. Otherwise, the Cancelation machine will wait the
 // Operation machine transition to the STARTED state.
-func (o Operation) Cancel(node *hsm.Node, t time.Time, requestedEventID int64) (hsm.TransitionOutput, error) {
+func (o Operation) Cancel(node *hsm.Node, t time.Time) (hsm.TransitionOutput, error) {
 	child, err := node.AddChild(CancelationMachineKey, Cancelation{
 		NexusOperationCancellationInfo: &persistencespb.NexusOperationCancellationInfo{},
 	})
