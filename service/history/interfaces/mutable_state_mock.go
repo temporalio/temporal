@@ -270,7 +270,7 @@ func (m *MockMutableState) AddChildWorkflowExecutionTerminatedEvent(arg0 int64, 
 // AddChildWorkflowExecutionTerminatedEvent indicates an expected call of AddChildWorkflowExecutionTerminatedEvent.
 func (mr *MockMutableStateMockRecorder) AddChildWorkflowExecutionTerminatedEvent(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddChildWorkflowExecutionTerminatedEvent", reflect.TypeOf((*MockMutableState)(nil).AddChildWorkflowExecutionTerminatedEvent), arg0, arg1 )
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddChildWorkflowExecutionTerminatedEvent", reflect.TypeOf((*MockMutableState)(nil).AddChildWorkflowExecutionTerminatedEvent), arg0, arg1)
 }
 
 // AddChildWorkflowExecutionTimedOutEvent mocks base method.
