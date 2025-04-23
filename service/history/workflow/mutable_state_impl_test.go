@@ -3829,7 +3829,6 @@ func (s *mutableStateSuite) TestCloseTransactionTrackTombstones() {
 				_, err = mutableState.AddChildWorkflowExecutionTerminatedEvent(
 					initiatedEventId,
 					childExecution,
-					nil,
 				)
 				return &persistencespb.StateMachineTombstone{
 					StateMachineKey: &persistencespb.StateMachineTombstone_ChildExecutionInitiatedEventId{
