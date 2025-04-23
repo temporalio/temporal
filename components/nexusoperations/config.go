@@ -155,21 +155,29 @@ Adding high-cardinality tags (like unique operation names) can significantly inc
 requirements and query complexity. Consider the cardinality impact when enabling these tags.`,
 )
 
+var RecordCancelRequestCompletionEvents = dynamicconfig.NewGlobalBoolSetting(
+	"component.nexusoperations.recordCancelRequestCompletionEvents",
+	false,
+	`Boolean flag to control whether to record NexusOperationCancelRequestComplete and 
+NexusOperationCancelRequestFailed events. Default false.`,
+)
+
 type Config struct {
-	Enabled                            dynamicconfig.BoolPropertyFn
-	RequestTimeout                     dynamicconfig.DurationPropertyFnWithDestinationFilter
-	MinOperationTimeout                dynamicconfig.DurationPropertyFnWithNamespaceFilter
-	MaxConcurrentOperations            dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MaxServiceNameLength               dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MaxOperationNameLength             dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MaxOperationTokenLength            dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MaxOperationHeaderSize             dynamicconfig.IntPropertyFnWithNamespaceFilter
-	DisallowedOperationHeaders         dynamicconfig.TypedPropertyFn[[]string]
-	MaxOperationScheduleToCloseTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
-	PayloadSizeLimit                   dynamicconfig.IntPropertyFnWithNamespaceFilter
-	CallbackURLTemplate                dynamicconfig.StringPropertyFn
-	EndpointNotFoundAlwaysNonRetryable dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	RetryPolicy                        func() backoff.RetryPolicy
+	Enabled                             dynamicconfig.BoolPropertyFn
+	RequestTimeout                      dynamicconfig.DurationPropertyFnWithDestinationFilter
+	MinOperationTimeout                 dynamicconfig.DurationPropertyFnWithNamespaceFilter
+	MaxConcurrentOperations             dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxServiceNameLength                dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxOperationNameLength              dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxOperationTokenLength             dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxOperationHeaderSize              dynamicconfig.IntPropertyFnWithNamespaceFilter
+	DisallowedOperationHeaders          dynamicconfig.TypedPropertyFn[[]string]
+	MaxOperationScheduleToCloseTimeout  dynamicconfig.DurationPropertyFnWithNamespaceFilter
+	PayloadSizeLimit                    dynamicconfig.IntPropertyFnWithNamespaceFilter
+	CallbackURLTemplate                 dynamicconfig.StringPropertyFn
+	EndpointNotFoundAlwaysNonRetryable  dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	RecordCancelRequestCompletionEvents dynamicconfig.BoolPropertyFn
+	RetryPolicy                         func() backoff.RetryPolicy
 }
 
 func ConfigProvider(dc *dynamicconfig.Collection) *Config {
@@ -193,10 +201,11 @@ func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 			}
 			return keys, nil
 		}).Get,
-		MaxOperationScheduleToCloseTimeout: MaxOperationScheduleToCloseTimeout.Get(dc),
-		PayloadSizeLimit:                   dynamicconfig.BlobSizeLimitError.Get(dc),
-		CallbackURLTemplate:                CallbackURLTemplate.Get(dc),
-		EndpointNotFoundAlwaysNonRetryable: EndpointNotFoundAlwaysNonRetryable.Get(dc),
+		MaxOperationScheduleToCloseTimeout:  MaxOperationScheduleToCloseTimeout.Get(dc),
+		PayloadSizeLimit:                    dynamicconfig.BlobSizeLimitError.Get(dc),
+		CallbackURLTemplate:                 CallbackURLTemplate.Get(dc),
+		EndpointNotFoundAlwaysNonRetryable:  EndpointNotFoundAlwaysNonRetryable.Get(dc),
+		RecordCancelRequestCompletionEvents: RecordCancelRequestCompletionEvents.Get(dc),
 		RetryPolicy: func() backoff.RetryPolicy {
 			return backoff.NewExponentialRetryPolicy(
 				RetryPolicyInitialInterval.Get(dc)(),
