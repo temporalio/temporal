@@ -808,9 +808,10 @@ func TestProcessCancelationTask(t *testing.T) {
 
 			require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{
 				Config: &nexusoperations.Config{
-					Enabled:             dynamicconfig.GetBoolPropertyFn(true),
-					RequestTimeout:      dynamicconfig.GetDurationPropertyFnFilteredByDestination(tc.requestTimeout),
-					MinOperationTimeout: dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Millisecond),
+					Enabled:                             dynamicconfig.GetBoolPropertyFn(true),
+					RequestTimeout:                      dynamicconfig.GetDurationPropertyFnFilteredByDestination(tc.requestTimeout),
+					MinOperationTimeout:                 dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Millisecond),
+					RecordCancelRequestCompletionEvents: dynamicconfig.GetBoolPropertyFn(true),
 					RetryPolicy: func() backoff.RetryPolicy {
 						return backoff.NewExponentialRetryPolicy(time.Second)
 					},
