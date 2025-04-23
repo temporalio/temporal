@@ -4459,8 +4459,10 @@ func (s *mutableStateSuite) TestApplySnapshot() {
 	targetMS.closeTransactionTrackLastUpdateVersionedTransition(historyi.TransactionPolicyActive)
 
 	snapshot := s.buildSnapshot(targetMS)
+	s.Nil(snapshot.ExecutionInfo.SubStateMachinesByType)
 	err = currentMS.ApplySnapshot(snapshot)
 	s.NoError(err)
+	s.NotNil(currentMS.GetExecutionInfo().SubStateMachinesByType)
 
 	s.verifyMutableState(currentMS, targetMS, originMS)
 }
