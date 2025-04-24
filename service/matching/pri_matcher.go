@@ -582,10 +582,11 @@ func (tm *priTaskMatcher) poll(
 	pollWasForwarded = task.isStarted()
 
 	if !task.isQuery() {
+		priorityTag := metrics.CustomPriority(task.isCustomPriority())
 		if task.isSyncMatchTask() {
-			metrics.PollSuccessWithSyncPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
+			metrics.PollSuccessWithSyncPerTaskQueueCounter.With(tm.metricsHandler).Record(1, priorityTag)
 		}
-		metrics.PollSuccessPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
+		metrics.PollSuccessPerTaskQueueCounter.With(tm.metricsHandler).Record(1, priorityTag)
 	} else {
 		metrics.PollSuccessWithSyncPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
 		metrics.PollSuccessPerTaskQueueCounter.With(tm.metricsHandler).Record(1)

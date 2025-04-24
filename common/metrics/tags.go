@@ -55,6 +55,7 @@ const (
 	workflowType   = "workflowType"
 	activityType   = "activityType"
 	commandType    = "commandType"
+	customPriority = "custom_priority"
 	serviceName    = "service_name"
 	actionType     = "action_type"
 	workerBuildId  = "worker-build-id"
@@ -358,6 +359,10 @@ func ResourceExhaustedScopeTag(scope enumspb.ResourceExhaustedScope) Tag {
 
 func ServiceNameTag(value primitives.ServiceName) Tag {
 	return &tagImpl{key: serviceName, value: string(value)}
+}
+
+func CustomPriority(value bool) Tag {
+	return &tagImpl{key: customPriority, value: fmt.Sprintf("%t", value)}
 }
 
 func ActionType(value string) Tag {

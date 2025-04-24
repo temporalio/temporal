@@ -218,6 +218,13 @@ func (task *internalTask) isSyncMatchTask() bool {
 	return task.responseC != nil
 }
 
+func (task *internalTask) isCustomPriority() bool {
+	return task.event != nil &&
+		task.event.Data != nil &&
+		task.event.Data.Priority != nil &&
+		task.event.Data.Priority.PriorityKey != 0
+}
+
 func (task *internalTask) workflowExecution() *commonpb.WorkflowExecution {
 	switch {
 	case task.event != nil:
