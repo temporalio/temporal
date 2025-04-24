@@ -301,16 +301,6 @@ func (n *Node) prepareDataValue(
 	return nil
 }
 
-// deduceFieldType returns fieldTypeData if v's type implements proto.Message and fieldTypeComponent otherwise.
-func deduceFieldType(v any) fieldType {
-	fieldT := reflect.TypeOf(v)
-	if fieldT.AssignableTo(protoMessageT) {
-		return fieldTypeData
-	}
-	// TODO: what's about ComponentPointer?
-	return fieldTypeComponent
-}
-
 func (n *Node) fieldType() fieldType {
 	if n.serializedNode.GetMetadata().GetComponentAttributes() != nil {
 		return fieldTypeComponent
@@ -318,6 +308,14 @@ func (n *Node) fieldType() fieldType {
 
 	if n.serializedNode.GetMetadata().GetDataAttributes() != nil {
 		return fieldTypeData
+	}
+
+	if n.serializedNode.GetMetadata().GetCollectionAttributes() != nil {
+		panic("not implemented")
+	}
+
+	if n.serializedNode.GetMetadata().GetPointerAttributes() != nil {
+		panic("not implemented")
 	}
 
 	return fieldTypeUnspecified
@@ -369,6 +367,8 @@ func (n *Node) initSerializedNode(ft fieldType) {
 		}
 	case fieldTypeComponentPointer:
 		panic("not implemented")
+	case fieldTypeUnspecified:
+		// Do nothing. Panic?
 	}
 }
 
@@ -494,18 +494,18 @@ func (n *Node) syncSubComponentsInternal(
 			internalV := fieldV.FieldByName(internalFieldName)
 			//nolint:revive // Internal field is guaranteed to be of type fieldInternal.
 			internal := internalV.Interface().(fieldInternal)
-			if internal.IsEmpty() {
+			if internal.isEmpty() {
 				continue
 			}
-			if internal.node == nil && internal.value != nil {
+			if internal.node == nil && internal.value() != nil {
 				// Field is not empty but tree node is not set. It means this is a new field, and a node must be created.
 				childNode := newNode(n.nodeBase, n, fieldN)
 
-				if err := validateType(reflect.TypeOf(internal.value)); err != nil {
+				if err := validateType(reflect.TypeOf(internal.value())); err != nil {
 					return err
 				}
-				childNode.value = internal.value
-				childNode.initSerializedNode(deduceFieldType(internal.value))
+				childNode.value = internal.value()
+				childNode.initSerializedNode(internal.fieldType())
 				childNode.valueState = valueStateNeedSerialize
 
 				n.children[fieldN] = childNode
@@ -653,8 +653,7 @@ func (n *Node) deserializeComponentNode(
 				//  using childNode.serializedNode.GetComponentAttributes().GetType()
 				chasmFieldV := reflect.New(fieldT).Elem()
 				internalValue := reflect.ValueOf(fieldInternal{
-					node:      childNode,
-					fieldType: childNode.fieldType(),
+					node: childNode,
 				})
 				chasmFieldV.FieldByName(internalFieldName).Set(internalValue)
 				fieldV.Set(chasmFieldV)

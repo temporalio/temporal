@@ -49,31 +49,47 @@ type Field[T any] struct {
 }
 
 type fieldInternal struct {
-	fieldType fieldType
-	value     any // Component | Data | Pointer
+	// These 2 fields are used when node is not created yet.
+	// Don't access them directly outside of this file. Use corresponding getters instead.
+	ft fieldType
+	v  any // Component | Data | Pointer
 
-	// Pointer to the corresponding tree node. Can be nil for the just assigned fields.
+	// Pointer to the corresponding tree node. Can be nil for the just created fields.
 	node *Node
 }
 
-func (fi fieldInternal) IsEmpty() bool {
-	return fi.value == nil
+func (fi fieldInternal) isEmpty() bool {
+	return fi.value() == nil
+}
+
+func (fi fieldInternal) value() any {
+	if fi.node == nil {
+		return fi.v
+	}
+	return fi.node.value
+}
+
+func (fi fieldInternal) fieldType() fieldType {
+	if fi.node == nil {
+		return fi.ft
+	}
+	return fi.node.fieldType()
 }
 
 func (f Field[T]) Get(chasmContext Context) (T, error) {
 	// If value is not nil, use it.
-	if f.Internal.value != nil {
-		return f.Internal.value.(T), nil
+	if f.Internal.v != nil {
+		return f.Internal.v.(T), nil
 	}
 
 	// If node is nil, then there is nothing to deserialize from, return nil.
 	if f.Internal.node == nil {
-		var v T
-		return v, nil
+		var nilT T
+		return nilT, nil
 	}
 
 	var err error
-	switch f.Internal.fieldType {
+	switch f.Internal.fieldType() {
 	case fieldTypeComponent:
 		err = f.Internal.node.prepareComponentValue(chasmContext)
 	case fieldTypeData:
@@ -82,15 +98,15 @@ func (f Field[T]) Get(chasmContext Context) (T, error) {
 	case fieldTypeComponentPointer:
 		panic("not implemented")
 	default:
-		err = serviceerror.NewInternal(fmt.Sprintf("unsupported field type: %v", f.Internal.fieldType))
+		err = serviceerror.NewInternal(fmt.Sprintf("unsupported field type: %v", f.Internal.fieldType()))
 	}
 
 	if err != nil {
 		var nilT T
 		return nilT, err
 	}
-	f.Internal.value = f.Internal.node.value
-	return f.Internal.value.(T), nil
+	// TODO: check if f.Internal.node.value is T or implements T?
+	return f.Internal.node.value.(T), nil
 }
 
 func NewEmptyField[T any]() Field[T] {
@@ -111,8 +127,8 @@ func NewDataField[D proto.Message](
 ) Field[D] {
 	return Field[D]{
 		Internal: fieldInternal{
-			fieldType: fieldTypeData,
-			value:     d,
+			ft: fieldTypeData,
+			v:  d,
 		},
 	}
 }
@@ -136,8 +152,8 @@ func NewComponentField[C Component](
 ) Field[C] {
 	return Field[C]{
 		Internal: fieldInternal{
-			fieldType: fieldTypeComponent,
-			value:     c,
+			ft: fieldTypeComponent,
+			v:  c,
 		},
 	}
 }

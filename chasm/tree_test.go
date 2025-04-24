@@ -206,7 +206,7 @@ func (s *nodeSuite) TestSerializeNode_ClearComponentData() {
 func (s *nodeSuite) TestSerializeNode_ClearSubDataField() {
 	node := s.testComponentTree()
 
-	node.value.(*TestComponent).SubData1.Internal.value = nil
+	node.value.(*TestComponent).SubData1 = NewEmptyField[*protoMessageType]()
 
 	sd1Node := node.children["SubData1"]
 	s.NotNil(sd1Node)
@@ -256,7 +256,7 @@ func (s *nodeSuite) TestSyncSubComponents_DeleteLeafNode() {
 	component := node.value.(*TestComponent)
 
 	// Set very leaf node to empty.
-	component.SubComponent1.Internal.value.(*TestSubComponent1).SubComponent11 = NewEmptyField[*TestSubComponent11]()
+	component.SubComponent1.Internal.v.(*TestSubComponent1).SubComponent11 = NewEmptyField[*TestSubComponent11]()
 	s.NotNil(node.children["SubComponent1"].children["SubComponent11"])
 
 	err := node.syncSubComponents()
@@ -305,7 +305,7 @@ func (s *nodeSuite) TestDeserializeNode_EmptyPersistence() {
 	tc := node.value.(*TestComponent)
 	s.Equal(valueStateSynced, node.valueState)
 	s.Nil(tc.SubComponent1.Internal.node)
-	s.Nil(tc.SubComponent1.Internal.value)
+	s.Nil(tc.SubComponent1.Internal.value())
 	s.Nil(tc.ComponentData)
 }
 
@@ -327,7 +327,7 @@ func (s *nodeSuite) TestDeserializeNode_ComponentAttributes() {
 	s.Equal(tc.ComponentData.ActivityId, "component-data")
 	s.Equal(valueStateSynced, node.valueState)
 
-	s.Nil(tc.SubComponent1.Internal.value)
+	s.Nil(tc.SubComponent1.Internal.value())
 	s.Equal(valueStateNeedDeserialize, tc.SubComponent1.Internal.node.valueState)
 	err = tc.SubComponent1.Internal.node.deserialize(reflect.TypeOf(&TestSubComponent1{}))
 	s.NoError(err)
@@ -355,7 +355,7 @@ func (s *nodeSuite) TestDeserializeNode_DataAttributes() {
 
 	s.Equal(tc.SubData1.Internal.node, node.children["SubData1"])
 
-	s.Nil(tc.SubData1.Internal.value)
+	s.Nil(tc.SubData1.Internal.value())
 	err = tc.SubData1.Internal.node.deserialize(reflect.TypeOf(&protoMessageType{}))
 	s.NoError(err)
 	s.NotNil(tc.SubData1.Internal.node.value)
