@@ -5299,7 +5299,6 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 		})
 
 		s.Run("dedupes retry", func() {
-
 			for _, p := range []enumspb.WorkflowIdConflictPolicy{
 				enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING,
 				enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
@@ -5433,6 +5432,59 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 			var alreadyStartedErr *serviceerror.WorkflowExecutionAlreadyStarted
 			s.ErrorAs(errs[0], &alreadyStartedErr)
 			s.Equal("Operation was aborted.", errs[1].Error())
+		})
+
+		s.Run("receive update result from closed workflow", func() {
+			for _, p := range []enumspb.WorkflowIdConflictPolicy{
+				enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING,
+				enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
+				enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
+			} {
+				s.Run(fmt.Sprintf("for workflow id conflict policy %v", p), func() {
+					tv := testvars.New(s.T())
+
+					// 1st update-with-start
+					startReq := startWorkflowReq(tv)
+					startReq.WorkflowIdConflictPolicy = p
+					updateReq := s.updateWorkflowRequest(tv,
+						&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
+					uwsCh := sendUpdateWithStart(testcore.NewContext(), startReq, updateReq)
+
+					_, err := s.TaskPoller.PollAndHandleWorkflowTask(tv,
+						func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+							return &workflowservice.RespondWorkflowTaskCompletedRequest{
+								Messages: s.UpdateAcceptCompleteMessages(tv, task.Messages[0]),
+								Commands: s.UpdateAcceptCompleteCommands(tv),
+							}, nil
+						})
+					s.NoError(err)
+
+					uwsRes := <-uwsCh
+					s.NoError(uwsRes.err)
+					startResp1 := uwsRes.response.Responses[0].GetStartWorkflow()
+					_ = uwsRes.response.Responses[1].GetUpdateWorkflow()
+					s.True(startResp1.Started)
+
+					// terminate workflow
+					_, err = s.FrontendClient().TerminateWorkflowExecution(testcore.NewContext(),
+						&workflowservice.TerminateWorkflowExecutionRequest{
+							Namespace:         s.Namespace().String(),
+							WorkflowExecution: tv.WorkflowExecution(),
+							Reason:            tv.Any().String(),
+						})
+					s.NoError(err)
+
+					// 2nd update-with-start (using the same Update ID but different Request ID)
+					uwsRes = <-sendUpdateWithStart(testcore.NewContext(), startReq, updateReq)
+
+					s.NoError(uwsRes.err)
+					startResp := uwsRes.response.Responses[0].GetStartWorkflow()
+					updateRep := uwsRes.response.Responses[1].GetUpdateWorkflow()
+					s.False(startResp.Started)
+					// TODO: check startResp.Running
+					s.EqualValues("success-result-of-"+tv.UpdateID(), testcore.DecodeString(s.T(), updateRep.GetOutcome().GetSuccess()))
+				})
+			}
 		})
 	})
 
