@@ -316,14 +316,14 @@ func (d *VersionWorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *
 	// 1. Check if the version is not current or ramping.
 	if state.GetCurrentSinceTime() != nil || state.GetRampingSinceTime() != nil {
 		// activity won't retry on this error since version not eligible for deletion
-		return serviceerror.NewFailedPrecondition(errVersionIsCurrentOrRamping)
+		return serviceerror.NewFailedPrecondition(ErrVersionIsCurrentOrRamping)
 	}
 
 	// 2. Check if the version is draining.
 	if !args.SkipDrainage {
 		if state.GetDrainageInfo().GetStatus() == enumspb.VERSION_DRAINAGE_STATUS_DRAINING {
 			// activity won't retry on this error since version not eligible for deletion
-			return serviceerror.NewFailedPrecondition(errVersionIsDraining)
+			return serviceerror.NewFailedPrecondition(ErrVersionIsDraining)
 		}
 	}
 
@@ -331,7 +331,7 @@ func (d *VersionWorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *
 	hasPollers, err := d.doesVersionHaveActivePollers(ctx)
 	if hasPollers {
 		// activity won't retry on this error since version not eligible for deletion
-		return serviceerror.NewFailedPrecondition(errVersionHasPollers)
+		return serviceerror.NewFailedPrecondition(ErrVersionHasPollers)
 	}
 	if err != nil {
 		// some other error allowing activity retries
