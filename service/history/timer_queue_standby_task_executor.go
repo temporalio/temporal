@@ -364,6 +364,16 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowTaskTimeoutTask(
 			return nil, err
 		}
 
+		if workflowTask.Attempt != timerTask.ScheduleAttempt {
+			return nil, nil
+		}
+
+		// We could check if workflow task is started state (since the timeout type here is START_TO_CLOSE)
+		// but that's unnecessary.
+		//
+		// Ifthe  workflow task is in scheduled state, it must have a higher attempt
+		// count and will be captured by the attempt check above.
+
 		return &struct{}{}, nil
 	}
 
