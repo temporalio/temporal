@@ -48,13 +48,11 @@ import (
 
 type (
 	rebuildSpec struct {
-		branchToken                     []byte
-		stateTransitionCount            int64
-		dbRecordVersion                 int64
-		requestID                       string
-		transitionHistory               []*persistence2.VersionedTransition
-		previousTransitionHistory       []*persistence2.VersionedTransition
-		lastTransitionHistoryBreakPoint *persistence2.VersionedTransition
+		branchToken          []byte
+		stateTransitionCount int64
+		dbRecordVersion      int64
+		requestID            string
+		mutableState         *persistence2.WorkflowMutableState
 	}
 	workflowRebuilder interface {
 		// rebuild rebuilds a workflow, in case of any kind of corruption
@@ -93,7 +91,7 @@ func (r *workflowRebuilderImpl) rebuild(
 ) (retError error) {
 
 	wfCache := r.workflowConsistencyChecker.GetWorkflowCache()
-	rebuildSpec, state, err := r.getRebuildSpecFromMutableState(ctx, &workflowKey)
+	rebuildSpec, err := r.getRebuildSpecFromMutableState(ctx, &workflowKey)
 	if err != nil {
 		return err
 	}
@@ -121,7 +119,7 @@ func (r *workflowRebuilderImpl) rebuild(
 		rebuildSpec.stateTransitionCount,
 		rebuildSpec.dbRecordVersion,
 		rebuildSpec.requestID,
-		state,
+		rebuildSpec.mutableState,
 	)
 	if err != nil {
 		return err
@@ -132,7 +130,7 @@ func (r *workflowRebuilderImpl) rebuild(
 func (r *workflowRebuilderImpl) getRebuildSpecFromMutableState(
 	ctx context.Context,
 	workflowKey *definition.WorkflowKey,
-) (*rebuildSpec, *persistence2.WorkflowMutableState, error) {
+) (*rebuildSpec, error) {
 	if workflowKey.RunID == "" {
 		resp, err := r.shard.GetCurrentExecution(
 			ctx,
@@ -143,7 +141,7 @@ func (r *workflowRebuilderImpl) getRebuildSpecFromMutableState(
 			},
 		)
 		if err != nil && resp == nil {
-			return nil, nil, err
+			return nil, err
 		}
 		workflowKey.RunID = resp.RunID
 	}
@@ -157,24 +155,22 @@ func (r *workflowRebuilderImpl) getRebuildSpecFromMutableState(
 		},
 	)
 	if err != nil && resp == nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	mutableState := resp.State
 	versionHistories := mutableState.ExecutionInfo.VersionHistories
 	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(versionHistories)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	return &rebuildSpec{
-		branchToken:                     currentVersionHistory.BranchToken,
-		stateTransitionCount:            mutableState.ExecutionInfo.StateTransitionCount,
-		dbRecordVersion:                 resp.DBRecordVersion,
-		requestID:                       mutableState.ExecutionState.CreateRequestId,
-		transitionHistory:               mutableState.ExecutionInfo.TransitionHistory,
-		previousTransitionHistory:       mutableState.ExecutionInfo.PreviousTransitionHistory,
-		lastTransitionHistoryBreakPoint: mutableState.ExecutionInfo.LastTransitionHistoryBreakPoint,
-	}, mutableState, nil
+		branchToken:          currentVersionHistory.BranchToken,
+		stateTransitionCount: mutableState.ExecutionInfo.StateTransitionCount,
+		dbRecordVersion:      resp.DBRecordVersion,
+		requestID:            mutableState.ExecutionState.CreateRequestId,
+		mutableState:         resp.State,
+	}, nil
 }
 
 func (r *workflowRebuilderImpl) replayResetWorkflow(

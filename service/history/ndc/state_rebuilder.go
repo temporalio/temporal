@@ -186,11 +186,20 @@ func (r *StateRebuilderImpl) RebuildWithCurrentMutableState(
 		return nil, 0, err
 	}
 	copyToRebuildMutableState(rebuiltMutableState, currentMutableState)
+	versionHistories := rebuiltMutableState.GetExecutionInfo().GetVersionHistories()
+	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(versionHistories)
+	if err != nil {
+		return nil, 0, err
+	}
+	items := versionhistory.CopyVersionHistoryItems(currentVersionHistory.Items)
+	currentVersionHistory.Items = nil
+
 	// close rebuilt mutable state transaction clearing all generated tasks, etc.
 	_, _, err = rebuiltMutableState.CloseTransactionAsSnapshot(historyi.TransactionPolicyActive)
 	if err != nil {
 		return nil, 0, err
 	}
+	currentVersionHistory.Items = items
 
 	rebuiltMutableState.GetExecutionInfo().LastFirstEventTxnId = lastTxnId
 
