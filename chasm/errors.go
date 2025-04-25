@@ -24,11 +24,10 @@
 
 package chasm
 
-type fieldType int
+import (
+	"go.temporal.io/api/serviceerror"
+)
 
-const (
-	fieldTypeUnspecified fieldType = iota
-	fieldTypeComponent
-	fieldTypeComponentPointer
-	fieldTypeData
+var (
+	notImplemented = serviceerror.NewInternal("not implemented")
 )
