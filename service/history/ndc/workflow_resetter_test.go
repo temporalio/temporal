@@ -954,7 +954,6 @@ func (s *workflowResetterSuite) TestReapplyEvents_WithPendingChildren() {
 	mutableState.EXPECT().AddChildWorkflowExecutionTerminatedEvent(
 		testInitiatedEventID,
 		testChildWFExecution,
-		nil,
 	).Return(nil, nil).Times(1)
 
 	for _, tc := range testcases {

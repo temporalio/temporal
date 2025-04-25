@@ -32,6 +32,7 @@ import (
 
 var (
 	defaultShardingFn = func(key EntityKey) string { return key.NamespaceID + "_" + key.BusinessID }
+	RootPath          []string
 )
 
 type EntityKey struct {

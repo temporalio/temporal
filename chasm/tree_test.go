@@ -62,9 +62,7 @@ func TestNodeSuite(t *testing.T) {
 }
 
 func (s *nodeSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
-	s.ProtoAssertions = protorequire.New(s.T())
-
+	s.initAssertions()
 	s.controller = gomock.NewController(s.T())
 	s.nodeBackend = NewMockNodeBackend(s.controller)
 
@@ -75,6 +73,21 @@ func (s *nodeSuite) SetupTest() {
 	s.timeSource = clock.NewEventTimeSource()
 	s.nodePathEncoder = &testNodePathEncoder{}
 	s.logger = testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
+}
+
+func (s *nodeSuite) SetupSubTest() {
+	s.initAssertions()
+}
+
+func (s *nodeSuite) initAssertions() {
+	// `s.Assertions` (as well as other test helpers which depends on `s.T()`) must be initialized on
+	// both test and subtest levels (but not suite level, where `s.T()` is `nil`).
+	//
+	// If these helpers are not reinitialized on subtest level, any failed `assert` in
+	// subtest will fail the entire test (not subtest) immediately without running other subtests.
+
+	s.Assertions = require.New(s.T())
+	s.ProtoAssertions = protorequire.New(s.T())
 }
 
 func (s *nodeSuite) TestNewTree() {
@@ -193,7 +206,7 @@ func (s *nodeSuite) TestSerializeNode_ClearComponentData() {
 func (s *nodeSuite) TestSerializeNode_ClearSubDataField() {
 	node := s.testComponentTree()
 
-	node.value.(*TestComponent).SubData1.Internal.value = nil
+	node.value.(*TestComponent).SubData1 = NewEmptyField[*protoMessageType]()
 
 	sd1Node := node.children["SubData1"]
 	s.NotNil(sd1Node)
@@ -243,7 +256,7 @@ func (s *nodeSuite) TestSyncSubComponents_DeleteLeafNode() {
 	component := node.value.(*TestComponent)
 
 	// Set very leaf node to empty.
-	component.SubComponent1.Internal.value.(*TestSubComponent1).SubComponent11 = NewEmptyField[*TestSubComponent11]()
+	component.SubComponent1.Internal.v.(*TestSubComponent1).SubComponent11 = NewEmptyField[*TestSubComponent11]()
 	s.NotNil(node.children["SubComponent1"].children["SubComponent11"])
 
 	err := node.syncSubComponents()
@@ -292,7 +305,7 @@ func (s *nodeSuite) TestDeserializeNode_EmptyPersistence() {
 	tc := node.value.(*TestComponent)
 	s.Equal(valueStateSynced, node.valueState)
 	s.Nil(tc.SubComponent1.Internal.node)
-	s.Nil(tc.SubComponent1.Internal.value)
+	s.Nil(tc.SubComponent1.Internal.value())
 	s.Nil(tc.ComponentData)
 }
 
@@ -314,7 +327,7 @@ func (s *nodeSuite) TestDeserializeNode_ComponentAttributes() {
 	s.Equal(tc.ComponentData.ActivityId, "component-data")
 	s.Equal(valueStateSynced, node.valueState)
 
-	s.Nil(tc.SubComponent1.Internal.value)
+	s.Nil(tc.SubComponent1.Internal.value())
 	s.Equal(valueStateNeedDeserialize, tc.SubComponent1.Internal.node.valueState)
 	err = tc.SubComponent1.Internal.node.deserialize(reflect.TypeOf(&TestSubComponent1{}))
 	s.NoError(err)
@@ -342,7 +355,7 @@ func (s *nodeSuite) TestDeserializeNode_DataAttributes() {
 
 	s.Equal(tc.SubData1.Internal.node, node.children["SubData1"])
 
-	s.Nil(tc.SubData1.Internal.value)
+	s.Nil(tc.SubData1.Internal.value())
 	err = tc.SubData1.Internal.node.deserialize(reflect.TypeOf(&protoMessageType{}))
 	s.NoError(err)
 	s.NotNil(tc.SubData1.Internal.node.value)
@@ -604,7 +617,7 @@ func (s *nodeSuite) TestApplySnapshot() {
 	s.Equal(expectedMutation, root.mutation)
 }
 
-func (s *nodeSuite) TestComponent() {
+func (s *nodeSuite) TestGetComponent() {
 	root, err := NewTree(
 		testComponentSerializedNodes(),
 		s.registry,
@@ -778,16 +791,20 @@ func (s *nodeSuite) testComponentTree() *Node {
 	s.NoError(err)
 	s.Nil(node.value)
 
-	// Get an empty top level component from the empty tree.
+	// Get an empty top-level component from the empty tree.
 	err = node.deserialize(reflect.TypeOf(&TestComponent{}))
 	s.NoError(err)
 	s.NotNil(node.value)
+	s.IsType(&TestComponent{}, node.value)
 	s.Equal(valueStateSynced, node.valueState)
 
+	tc, err := node.Component(NewMutableContext(context.Background(), node), ComponentRef{
+		componentPath: []string{},
+	})
+	s.NoError(err)
+	s.Equal(valueStateNeedSerialize, node.valueState)
 	// Create subcomponents by assigning fields to TestComponent instance.
-	setTestComponentFields(node.value.(*TestComponent))
-	// TODO: remove this when Field.Get is implemented.
-	node.valueState = valueStateNeedSerialize
+	setTestComponentFields(tc.(*TestComponent))
 
 	// Sync tree with subcomponents of TestComponent.
 	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(1)).Times(4) // for InitialVersionedTransition of children.
@@ -796,5 +813,5 @@ func (s *nodeSuite) testComponentTree() *Node {
 	s.NoError(err)
 	s.Empty(node.mutation.DeletedNodes)
 
-	return node
+	return node // maybe tc too
 }

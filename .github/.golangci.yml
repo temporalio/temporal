@@ -43,6 +43,8 @@ linters-settings:
     forbid:
       - p: time.Sleep
         msg: "Please use require.Eventually or assert.Eventually instead unless you've no other option"
+      - p: panic
+        msg: "Please avoid using panic in application code"
   importas:
     # Enforce the aliases below.
     no-unaliased: true

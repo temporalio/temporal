@@ -575,6 +575,10 @@ func NewMutableStateInChain(
 }
 
 func (ms *MutableStateImpl) mustInitHSM() {
+	if ms.executionInfo.SubStateMachinesByType == nil {
+		ms.executionInfo.SubStateMachinesByType = make(map[string]*persistencespb.StateMachineMap)
+	}
+
 	// Error only occurs if some initialization path forgets to register the workflow state machine.
 	stateMachineNode, err := hsm.NewRoot(ms.shard.StateMachineRegistry(), StateMachineType, ms, ms.executionInfo.SubStateMachinesByType, ms)
 	if err != nil {
@@ -5324,7 +5328,6 @@ func (ms *MutableStateImpl) ApplyChildWorkflowExecutionCanceledEvent(
 func (ms *MutableStateImpl) AddChildWorkflowExecutionTerminatedEvent(
 	initiatedID int64,
 	childExecution *commonpb.WorkflowExecution,
-	_ *historypb.WorkflowExecutionTerminatedEventAttributes, // TODO this field is not used at all
 ) (*historypb.HistoryEvent, error) {
 	opTag := tag.WorkflowActionChildWorkflowTerminated
 	if err := ms.checkMutability(opTag); err != nil {

@@ -213,12 +213,11 @@ func (n *Node) Component(
 		return nil, errComponentNotFound
 	}
 
-	value, err := node.prepareComponentValue(chasmContext)
-	if err != nil {
+	if err := node.prepareComponentValue(chasmContext); err != nil {
 		return nil, err
 	}
 
-	componentValue, ok := value.(Component)
+	componentValue, ok := node.value.(Component)
 	if !ok {
 		return nil, serviceerror.NewInternal(
 			fmt.Sprintf("component value is not of type Component: %v", reflect.TypeOf(node.value)),
@@ -244,11 +243,11 @@ func (n *Node) Component(
 
 func (n *Node) prepareComponentValue(
 	chasmContext Context,
-) (any, error) {
+) error {
 	metadata := n.serializedNode.Metadata
 	componentAttr := metadata.GetComponentAttributes()
 	if componentAttr == nil {
-		return nil, serviceerror.NewInternal(
+		return serviceerror.NewInternal(
 			fmt.Sprintf("expect chasm node to have ComponentAttributes, actual attributes: %v", metadata.Attributes),
 		)
 	}
@@ -256,11 +255,11 @@ func (n *Node) prepareComponentValue(
 	if n.valueState == valueStateNeedDeserialize {
 		registrableComponent, ok := n.registry.component(componentAttr.GetType())
 		if !ok {
-			return nil, serviceerror.NewInternal(fmt.Sprintf("component type name not registered: %v", componentAttr.GetType()))
+			return serviceerror.NewInternal(fmt.Sprintf("component type name not registered: %v", componentAttr.GetType()))
 		}
 
 		if err := n.deserialize(registrableComponent.goType); err != nil {
-			return nil, fmt.Errorf("failed to deserialize component: %w", err)
+			return fmt.Errorf("failed to deserialize component: %w", err)
 		}
 	}
 
@@ -271,17 +270,56 @@ func (n *Node) prepareComponentValue(
 		n.valueState = valueStateNeedSerialize
 	}
 
-	return n.value, nil
+	return nil
 }
 
-// deduceFieldType returns fieldTypeData if v's type implements proto.Message and fieldTypeComponent otherwise.
-func deduceFieldType(v any) fieldType {
-	fieldT := reflect.TypeOf(v)
-	if fieldT.AssignableTo(protoMessageT) {
+func (n *Node) prepareDataValue(
+	chasmContext Context,
+	valueT reflect.Type,
+) error {
+	metadata := n.serializedNode.Metadata
+	dataAttr := metadata.GetDataAttributes()
+	if dataAttr == nil {
+		return serviceerror.NewInternal(
+			fmt.Sprintf("expect chasm node to have DataAttributes, actual attributes: %v", metadata.Attributes),
+		)
+	}
+
+	if n.valueState == valueStateNeedDeserialize {
+		if err := n.deserialize(valueT); err != nil {
+			return fmt.Errorf("failed to deserialize data: %w", err)
+		}
+	}
+
+	// For now, we assume if a node is accessed with a MutableContext,
+	// its value will be mutated and no longer in sync with the serializedNode.
+	_, componentCanBeMutated := chasmContext.(MutableContext)
+	if componentCanBeMutated {
+		n.valueState = valueStateNeedSerialize
+	}
+
+	return nil
+}
+
+func (n *Node) fieldType() fieldType {
+	if n.serializedNode.GetMetadata().GetComponentAttributes() != nil {
+		return fieldTypeComponent
+	}
+
+	if n.serializedNode.GetMetadata().GetDataAttributes() != nil {
 		return fieldTypeData
 	}
-	// TODO: what's about ComponentPointer?
-	return fieldTypeComponent
+
+	if n.serializedNode.GetMetadata().GetCollectionAttributes() != nil {
+		// Collection is not a Field.
+		return fieldTypeUnspecified
+	}
+
+	if n.serializedNode.GetMetadata().GetPointerAttributes() != nil {
+		return fieldTypeComponentPointer
+	}
+
+	return fieldTypeUnspecified
 }
 
 func validateType(t reflect.Type) error {
@@ -330,6 +368,8 @@ func (n *Node) initSerializedNode(ft fieldType) {
 		}
 	case fieldTypeComponentPointer:
 		panic("not implemented")
+	case fieldTypeUnspecified:
+		// Do nothing. Panic?
 	}
 }
 
@@ -455,18 +495,18 @@ func (n *Node) syncSubComponentsInternal(
 			internalV := fieldV.FieldByName(internalFieldName)
 			//nolint:revive // Internal field is guaranteed to be of type fieldInternal.
 			internal := internalV.Interface().(fieldInternal)
-			if internal.IsEmpty() {
+			if internal.isEmpty() {
 				continue
 			}
-			if internal.node == nil && internal.value != nil {
+			if internal.node == nil && internal.value() != nil {
 				// Field is not empty but tree node is not set. It means this is a new field, and a node must be created.
 				childNode := newNode(n.nodeBase, n, fieldN)
 
-				if err := validateType(reflect.TypeOf(internal.value)); err != nil {
+				if err := validateType(reflect.TypeOf(internal.value())); err != nil {
 					return err
 				}
-				childNode.value = internal.value
-				childNode.initSerializedNode(deduceFieldType(internal.value))
+				childNode.value = internal.value()
+				childNode.initSerializedNode(internal.fieldType())
 				childNode.valueState = valueStateNeedSerialize
 
 				n.children[fieldN] = childNode
