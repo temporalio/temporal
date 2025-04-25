@@ -5990,7 +5990,6 @@ func (ms *MutableStateImpl) closeTransaction(
 	); err != nil {
 		return closeTransactionResult{}, err
 	}
-
 	if ms.isStateDirty() {
 		if err := ms.closeTransactionUpdateTransitionHistory(
 			transactionPolicy,
@@ -6760,11 +6759,20 @@ func (ms *MutableStateImpl) updateWithLastWriteEvent(
 		// already handled in mutable state.
 		return nil
 	}
-
 	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(ms.executionInfo.VersionHistories)
 	if err != nil {
 		return err
 	}
+	if len(currentVersionHistory.Items) != 0 {
+		lastVersionHistoryItem, err := versionhistory.GetLastVersionHistoryItem(currentVersionHistory)
+		if err != nil {
+			return err
+		}
+		if lastVersionHistoryItem.GetEventId() == lastEvent.GetEventId() && lastVersionHistoryItem.GetVersion() == lastEvent.GetVersion() {
+			return nil
+		}
+	}
+
 	if err := versionhistory.AddOrUpdateVersionHistoryItem(currentVersionHistory, versionhistory.NewVersionHistoryItem(
 		lastEvent.GetEventId(), lastEvent.GetVersion(),
 	)); err != nil {

@@ -38,6 +38,7 @@ import (
 	reflect "reflect"
 	time "time"
 
+	persistence "go.temporal.io/server/api/persistence/v1"
 	definition "go.temporal.io/server/common/definition"
 	interfaces "go.temporal.io/server/service/history/interfaces"
 	gomock "go.uber.org/mock/gomock"
@@ -47,7 +48,6 @@ import (
 type MockStateRebuilder struct {
 	ctrl     *gomock.Controller
 	recorder *MockStateRebuilderMockRecorder
-	isgomock struct{}
 }
 
 // MockStateRebuilderMockRecorder is the mock recorder for MockStateRebuilder.
@@ -81,4 +81,20 @@ func (m *MockStateRebuilder) Rebuild(ctx context.Context, now time.Time, baseWor
 func (mr *MockStateRebuilderMockRecorder) Rebuild(ctx, now, baseWorkflowIdentifier, baseBranchToken, baseLastEventID, baseLastEventVersion, targetWorkflowIdentifier, targetBranchToken, requestID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Rebuild", reflect.TypeOf((*MockStateRebuilder)(nil).Rebuild), ctx, now, baseWorkflowIdentifier, baseBranchToken, baseLastEventID, baseLastEventVersion, targetWorkflowIdentifier, targetBranchToken, requestID)
+}
+
+// RebuildWithCurrentMutableState mocks base method.
+func (m *MockStateRebuilder) RebuildWithCurrentMutableState(ctx context.Context, now time.Time, baseWorkflowIdentifier definition.WorkflowKey, baseBranchToken []byte, baseLastEventID int64, baseLastEventVersion *int64, targetWorkflowIdentifier definition.WorkflowKey, targetBranchToken []byte, requestID string, currentMutableState *persistence.WorkflowMutableState) (interfaces.MutableState, int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RebuildWithCurrentMutableState", ctx, now, baseWorkflowIdentifier, baseBranchToken, baseLastEventID, baseLastEventVersion, targetWorkflowIdentifier, targetBranchToken, requestID, currentMutableState)
+	ret0, _ := ret[0].(interfaces.MutableState)
+	ret1, _ := ret[1].(int64)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// RebuildWithCurrentMutableState indicates an expected call of RebuildWithCurrentMutableState.
+func (mr *MockStateRebuilderMockRecorder) RebuildWithCurrentMutableState(ctx, now, baseWorkflowIdentifier, baseBranchToken, baseLastEventID, baseLastEventVersion, targetWorkflowIdentifier, targetBranchToken, requestID, currentMutableState any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RebuildWithCurrentMutableState", reflect.TypeOf((*MockStateRebuilder)(nil).RebuildWithCurrentMutableState), ctx, now, baseWorkflowIdentifier, baseBranchToken, baseLastEventID, baseLastEventVersion, targetWorkflowIdentifier, targetBranchToken, requestID, currentMutableState)
 }

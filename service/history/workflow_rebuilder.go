@@ -38,7 +38,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/api"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -94,7 +93,7 @@ func (r *workflowRebuilderImpl) rebuild(
 ) (retError error) {
 
 	wfCache := r.workflowConsistencyChecker.GetWorkflowCache()
-	rebuildSpec, err := r.getRebuildSpecFromMutableState(ctx, &workflowKey)
+	rebuildSpec, state, err := r.getRebuildSpecFromMutableState(ctx, &workflowKey)
 	if err != nil {
 		return err
 	}
@@ -115,7 +114,6 @@ func (r *workflowRebuilderImpl) rebuild(
 		releaseFn(retError)
 		wfContext.Clear()
 	}()
-
 	rebuildMutableState, err := r.replayResetWorkflow(
 		ctx,
 		workflowKey,
@@ -123,35 +121,18 @@ func (r *workflowRebuilderImpl) rebuild(
 		rebuildSpec.stateTransitionCount,
 		rebuildSpec.dbRecordVersion,
 		rebuildSpec.requestID,
+		state,
 	)
 	if err != nil {
 		return err
 	}
-	r.handleTransitionHistory(rebuildSpec, rebuildMutableState)
 	return r.overwriteToDB(ctx, rebuildMutableState)
-}
-
-func (r *workflowRebuilderImpl) handleTransitionHistory(
-	rebuildSpec *rebuildSpec,
-	newMutableState historyi.MutableState,
-) {
-	newMutableState.GetExecutionInfo().PreviousTransitionHistory = rebuildSpec.previousTransitionHistory
-	newMutableState.GetExecutionInfo().LastTransitionHistoryBreakPoint = rebuildSpec.lastTransitionHistoryBreakPoint
-	if rebuildSpec.transitionHistory != nil {
-		transitionHistory := rebuildSpec.transitionHistory
-		breakPoint := transitionhistory.CopyVersionedTransition(transitionHistory[len(transitionHistory)-1])
-		// This update is a naive update. It failed to consider the case where the current cluster is not the cluster
-		// that did the last transition. But this should not break the replication protocol.
-		transitionHistory[len(transitionHistory)-1].TransitionCount += 1
-		newMutableState.GetExecutionInfo().TransitionHistory = transitionHistory
-		newMutableState.GetExecutionInfo().LastTransitionHistoryBreakPoint = breakPoint
-	}
 }
 
 func (r *workflowRebuilderImpl) getRebuildSpecFromMutableState(
 	ctx context.Context,
 	workflowKey *definition.WorkflowKey,
-) (*rebuildSpec, error) {
+) (*rebuildSpec, *persistence2.WorkflowMutableState, error) {
 	if workflowKey.RunID == "" {
 		resp, err := r.shard.GetCurrentExecution(
 			ctx,
@@ -162,7 +143,7 @@ func (r *workflowRebuilderImpl) getRebuildSpecFromMutableState(
 			},
 		)
 		if err != nil && resp == nil {
-			return nil, err
+			return nil, nil, err
 		}
 		workflowKey.RunID = resp.RunID
 	}
@@ -176,14 +157,14 @@ func (r *workflowRebuilderImpl) getRebuildSpecFromMutableState(
 		},
 	)
 	if err != nil && resp == nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	mutableState := resp.State
 	versionHistories := mutableState.ExecutionInfo.VersionHistories
 	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(versionHistories)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	return &rebuildSpec{
 		branchToken:                     currentVersionHistory.BranchToken,
@@ -193,7 +174,7 @@ func (r *workflowRebuilderImpl) getRebuildSpecFromMutableState(
 		transitionHistory:               mutableState.ExecutionInfo.TransitionHistory,
 		previousTransitionHistory:       mutableState.ExecutionInfo.PreviousTransitionHistory,
 		lastTransitionHistoryBreakPoint: mutableState.ExecutionInfo.LastTransitionHistoryBreakPoint,
-	}, nil
+	}, mutableState, nil
 }
 
 func (r *workflowRebuilderImpl) replayResetWorkflow(
@@ -203,9 +184,9 @@ func (r *workflowRebuilderImpl) replayResetWorkflow(
 	stateTransitionCount int64,
 	dbRecordVersion int64,
 	requestID string,
+	mutableState *persistence2.WorkflowMutableState,
 ) (historyi.MutableState, error) {
-
-	rebuildMutableState, rebuildHistorySize, err := ndc.NewStateRebuilder(r.shard, r.logger).Rebuild(
+	rebuildMutableState, rebuildHistorySize, err := ndc.NewStateRebuilder(r.shard, r.logger).RebuildWithCurrentMutableState(
 		ctx,
 		r.shard.GetTimeSource().Now(),
 		workflowKey,
@@ -215,6 +196,7 @@ func (r *workflowRebuilderImpl) replayResetWorkflow(
 		workflowKey,
 		branchToken,
 		requestID,
+		mutableState,
 	)
 	if err != nil {
 		return nil, err
