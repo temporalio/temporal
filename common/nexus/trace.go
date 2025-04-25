@@ -44,8 +44,6 @@ type HTTPClientTraceProvider interface {
 }
 
 // HTTPTraceConfig is the dynamic config for controlling Nexus HTTP request tracing behavior.
-// The default is nil and the conversion function does not do any actual conversion because this should be wrapped by
-// a dynamicconfig.NewGlobalCachedTypedValue with the actual conversion function so that it is cached.
 var HTTPTraceConfig = dynamicconfig.NewGlobalTypedSettingWithConverter(
 	"system.nexusHTTPTraceConfig",
 	convertHTTPClientTraceConfig,
