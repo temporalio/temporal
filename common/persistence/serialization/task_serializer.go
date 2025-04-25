@@ -113,11 +113,27 @@ func (s *TaskSerializer) serializeTransferTask(
 		transferTask = s.transferResetTaskToProto(task)
 	case *tasks.DeleteExecutionTask:
 		transferTask = s.transferDeleteExecutionTaskToProto(task)
+	case *tasks.ChasmTask:
+		transferTask = s.transferChasmTaskToProto(task)
 	default:
 		return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown transfer task type: %v", task))
 	}
 
 	return TransferTaskInfoToBlob(transferTask)
+}
+
+func (s *TaskSerializer) transferChasmTaskToProto(task *tasks.ChasmTask) *persistencespb.TransferTaskInfo {
+	return &persistencespb.TransferTaskInfo{
+		NamespaceId:    task.WorkflowKey.NamespaceID,
+		WorkflowId:     task.WorkflowKey.WorkflowID,
+		RunId:          task.WorkflowKey.RunID,
+		TaskId:         task.TaskID,
+		TaskType:       task.GetType(),
+		VisibilityTime: timestamppb.New(task.VisibilityTimestamp),
+		TaskDetails: &persistencespb.TransferTaskInfo_ChasmTaskInfo{
+			ChasmTaskInfo: task.Info,
+		},
+	}
 }
 
 func (s *TaskSerializer) deserializeTransferTasks(
@@ -146,10 +162,26 @@ func (s *TaskSerializer) deserializeTransferTasks(
 		task = s.transferResetTaskFromProto(transferTask)
 	case enumsspb.TASK_TYPE_TRANSFER_DELETE_EXECUTION:
 		task = s.transferDeleteExecutionTaskFromProto(transferTask)
+	case enumsspb.TASK_TYPE_CHASM:
+		task = s.transferChasmTaskFromProto(transferTask)
 	default:
 		return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown transfer task type: %v", transferTask.TaskType))
 	}
 	return task, nil
+}
+
+func (s *TaskSerializer) transferChasmTaskFromProto(task *persistencespb.TransferTaskInfo) tasks.Task {
+	return &tasks.ChasmTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			task.NamespaceId,
+			task.WorkflowId,
+			task.RunId,
+		),
+		VisibilityTimestamp: task.VisibilityTime.AsTime(),
+		TaskID:              task.TaskId,
+		Category:            tasks.CategoryTransfer,
+		Info:                task.GetChasmTaskInfo(),
+	}
 }
 
 func (s *TaskSerializer) serializeTimerTask(
@@ -175,10 +207,39 @@ func (s *TaskSerializer) serializeTimerTask(
 		timerTask = s.timerWorkflowCleanupTaskToProto(task)
 	case *tasks.StateMachineTimerTask:
 		timerTask = s.stateMachineTimerTaskToProto(task)
+	case *tasks.ChasmTask:
+		timerTask = s.timerChasmTaskToProto(task)
+	case *tasks.ChasmTaskPure:
+		timerTask = s.timerChasmPureTaskToProto(task)
 	default:
 		return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown timer task type: %v", task))
 	}
 	return TimerTaskInfoToBlob(timerTask)
+}
+
+func (s *TaskSerializer) timerChasmPureTaskToProto(task *tasks.ChasmTaskPure) *persistencespb.TimerTaskInfo {
+	return &persistencespb.TimerTaskInfo{
+		NamespaceId:    task.NamespaceID,
+		WorkflowId:     task.WorkflowID,
+		RunId:          task.RunID,
+		TaskId:         task.TaskID,
+		VisibilityTime: timestamppb.New(task.VisibilityTimestamp),
+		TaskType:       task.GetType(),
+	}
+}
+
+func (s *TaskSerializer) timerChasmTaskToProto(task *tasks.ChasmTask) *persistencespb.TimerTaskInfo {
+	return &persistencespb.TimerTaskInfo{
+		NamespaceId:    task.NamespaceID,
+		WorkflowId:     task.WorkflowID,
+		RunId:          task.RunID,
+		TaskId:         task.TaskID,
+		VisibilityTime: timestamppb.New(task.VisibilityTimestamp),
+		TaskType:       task.GetType(),
+		TaskDetails: &persistencespb.TimerTaskInfo_ChasmTaskInfo{
+			ChasmTaskInfo: task.Info,
+		},
+	}
 }
 
 func (s *TaskSerializer) deserializeTimerTasks(
@@ -209,10 +270,41 @@ func (s *TaskSerializer) deserializeTimerTasks(
 		timer = s.timerWorkflowCleanupTaskFromProto(timerTask)
 	case enumsspb.TASK_TYPE_STATE_MACHINE_TIMER:
 		timer = s.stateMachineTimerTaskFromProto(timerTask)
+	case enumsspb.TASK_TYPE_CHASM:
+		timer = s.timerChasmTaskFromProto(timerTask)
+	case enumsspb.TASK_TYPE_CHASM_PURE:
+		timer = s.timerChasmPureTaskFromProto(timerTask)
 	default:
 		return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown timer task type: %v", timerTask.TaskType))
 	}
 	return timer, nil
+}
+
+func (s *TaskSerializer) timerChasmTaskFromProto(info *persistencespb.TimerTaskInfo) tasks.Task {
+	return &tasks.ChasmTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			info.NamespaceId,
+			info.WorkflowId,
+			info.RunId,
+		),
+		VisibilityTimestamp: info.VisibilityTime.AsTime(),
+		TaskID:              info.TaskId,
+		Category:            tasks.CategoryTimer,
+		Info:                info.GetChasmTaskInfo(),
+	}
+}
+
+func (s *TaskSerializer) timerChasmPureTaskFromProto(info *persistencespb.TimerTaskInfo) tasks.Task {
+	return &tasks.ChasmTaskPure{
+		WorkflowKey: definition.NewWorkflowKey(
+			info.NamespaceId,
+			info.WorkflowId,
+			info.RunId,
+		),
+		VisibilityTimestamp: info.VisibilityTime.AsTime(),
+		TaskID:              info.TaskId,
+		Category:            tasks.CategoryTimer,
+	}
 }
 
 func (s *TaskSerializer) serializeVisibilityTask(
@@ -1333,6 +1425,18 @@ func (s *TaskSerializer) serializeOutboundTask(task tasks.Task) (*commonpb.DataB
 				StateMachineInfo: task.Info,
 			},
 		})
+	case *tasks.ChasmTask:
+		return proto3Encode(&persistencespb.OutboundTaskInfo{
+			NamespaceId:    task.NamespaceID,
+			WorkflowId:     task.WorkflowID,
+			RunId:          task.RunID,
+			TaskId:         task.TaskID,
+			TaskType:       task.GetType(),
+			Destination:    task.Destination,
+			VisibilityTime: timestamppb.New(task.VisibilityTimestamp),
+			TaskDetails: &persistencespb.OutboundTaskInfo_ChasmTaskInfo{
+				ChasmTaskInfo: task.Info,
+			}})
 	default:
 		return nil, serviceerror.NewInternal(fmt.Sprintf("unknown outbound task type while serializing: %v", task))
 	}
@@ -1344,11 +1448,23 @@ func (s *TaskSerializer) deserializeOutboundTask(blob *commonpb.DataBlob) (tasks
 		return nil, err
 	}
 
-	if info.TaskType != enumsspb.TASK_TYPE_STATE_MACHINE_OUTBOUND {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("unknown outbound task type while deserializing: %v", info))
-	}
-	return &tasks.StateMachineOutboundTask{
-		StateMachineTask: tasks.StateMachineTask{
+	switch info.TaskType {
+	case enumsspb.TASK_TYPE_STATE_MACHINE_OUTBOUND:
+		return &tasks.StateMachineOutboundTask{
+			StateMachineTask: tasks.StateMachineTask{
+				WorkflowKey: definition.NewWorkflowKey(
+					info.NamespaceId,
+					info.WorkflowId,
+					info.RunId,
+				),
+				VisibilityTimestamp: info.VisibilityTime.AsTime(),
+				TaskID:              info.TaskId,
+				Info:                info.GetStateMachineInfo(),
+			},
+			Destination: info.Destination,
+		}, nil
+	case enumsspb.TASK_TYPE_CHASM:
+		return &tasks.ChasmTask{
 			WorkflowKey: definition.NewWorkflowKey(
 				info.NamespaceId,
 				info.WorkflowId,
@@ -1356,8 +1472,11 @@ func (s *TaskSerializer) deserializeOutboundTask(blob *commonpb.DataBlob) (tasks
 			),
 			VisibilityTimestamp: info.VisibilityTime.AsTime(),
 			TaskID:              info.TaskId,
-			Info:                info.GetStateMachineInfo(),
-		},
-		Destination: info.Destination,
-	}, nil
+			Category:            tasks.CategoryOutbound,
+			Info:                info.GetChasmTaskInfo(),
+			Destination:         info.Destination,
+		}, nil
+	default:
+		return nil, serviceerror.NewInternal(fmt.Sprintf("unknown outbound task type while deserializing: %v", info))
+	}
 }
