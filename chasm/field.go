@@ -42,38 +42,50 @@ const (
 	fieldNameTag = "name"
 )
 
-// This struct needs to be create via reflection
-// but reflection can't set prviate fields...
 type Field[T any] struct {
+	// This struct needs to be created via reflection, but reflection can't set private fields.
 	Internal fieldInternal
 }
 
-type fieldInternal struct {
-	// These 2 fields are used when node is not set yet (i.e., node==nil).
-	// Don't access them directly outside of this file. Use corresponding getters instead.
-	ft fieldType
-	v  any // Component | Data | Pointer
-
-	// Pointer to the corresponding tree node. Can be nil for the just created fields.
-	node *Node
-}
-
-func (fi fieldInternal) isEmpty() bool {
-	return fi.v == nil && fi.node == nil
-}
-
-func (fi fieldInternal) value() any {
-	if fi.node == nil {
-		return fi.v
+// re. Data v.s. Component.
+// Components have behavior and has a lifecycle.
+// while Data doesn't and must be attached to a component.
+//
+// You can define a component just for storing the data,
+// that may contain other information like ref count etc.
+// most importantly, the framework needs to know when it's safe to delete the data.
+// i.e. the lifecycle of that data component reaches completed.
+func NewDataField[D proto.Message](
+	ctx MutableContext,
+	d D,
+) Field[D] {
+	return Field[D]{
+		Internal: newFieldInternalWithValue(fieldTypeData, d),
 	}
-	return fi.node.value
 }
 
-func (fi fieldInternal) fieldType() fieldType {
-	if fi.node == nil {
-		return fi.ft
+func NewComponentField[C Component](
+	ctx MutableContext,
+	c C,
+	options ...ComponentFieldOption,
+) Field[C] {
+	return Field[C]{
+		Internal: newFieldInternalWithValue(fieldTypeComponent, c),
 	}
-	return fi.node.fieldType()
+}
+
+func NewComponentPointerField[C Component](
+	ctx MutableContext,
+	c C,
+) Field[C] {
+	panic("not implemented")
+}
+
+func NewDataPointerField[D proto.Message](
+	ctx MutableContext,
+	d D,
+) Field[D] {
+	panic("not implemented")
 }
 
 func (f Field[T]) Get(chasmContext Context) (T, error) {
@@ -120,67 +132,6 @@ func (f Field[T]) Get(chasmContext Context) (T, error) {
 func NewEmptyField[T any]() Field[T] {
 	return Field[T]{}
 }
-
-// re. Data v.s. Component.
-// Components have behavior and has a lifecycle.
-// while Data doesn't and must be attached to a component.
-//
-// You can define a component just for storing the data,
-// that may contain other information like ref count etc.
-// most importantly, the framework needs to know when it's safe to delete the data.
-// i.e. the lifecycle of that data component reaches completed.
-func NewDataField[D proto.Message](
-	ctx MutableContext,
-	d D,
-) Field[D] {
-	return Field[D]{
-		Internal: fieldInternal{
-			ft: fieldTypeData,
-			v:  d,
-		},
-	}
-}
-
-type componentFieldOptions struct {
-	detached bool
-}
-
-type ComponentFieldOption func(*componentFieldOptions)
-
-func ComponentFieldDetached() ComponentFieldOption {
-	return func(o *componentFieldOptions) {
-		o.detached = true
-	}
-}
-
-func NewComponentField[C Component](
-	ctx MutableContext,
-	c C,
-	options ...ComponentFieldOption,
-) Field[C] {
-	return Field[C]{
-		Internal: fieldInternal{
-			ft: fieldTypeComponent,
-			v:  c,
-		},
-	}
-}
-
-func NewComponentPointerField[C Component](
-	ctx MutableContext,
-	c C,
-) Field[C] {
-	panic("not implemented")
-}
-
-func NewDataPointerField[D proto.Message](
-	ctx MutableContext,
-	d D,
-) Field[D] {
-	panic("not implemented")
-}
-
-type Collection[T any] map[string]Field[T]
 
 func genericTypePrefix(t reflect.Type) string {
 	tn := t.String()
