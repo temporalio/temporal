@@ -24,10 +24,4 @@
 
 package chasm
 
-import (
-	"go.temporal.io/api/serviceerror"
-)
-
-var (
-	notImplemented = serviceerror.NewInternal("not implemented")
-)
+type Collection[T any] map[string]Field[T]

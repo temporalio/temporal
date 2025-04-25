@@ -653,9 +653,7 @@ func (n *Node) deserializeComponentNode(
 				// TODO: support chasm.Field[interface], type should go from registry
 				//  using childNode.serializedNode.GetComponentAttributes().GetType()
 				chasmFieldV := reflect.New(fieldT).Elem()
-				internalValue := reflect.ValueOf(fieldInternal{
-					node: childNode,
-				})
+				internalValue := reflect.ValueOf(newFieldInternalWithNode(childNode))
 				chasmFieldV.FieldByName(internalFieldName).Set(internalValue)
 				fieldV.Set(chasmFieldV)
 			}
