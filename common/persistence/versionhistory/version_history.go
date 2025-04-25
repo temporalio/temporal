@@ -26,7 +26,6 @@ package versionhistory
 
 import (
 	"fmt"
-	"runtime/debug"
 
 	"go.temporal.io/api/serviceerror"
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -100,8 +99,8 @@ func AddOrUpdateVersionHistoryItem(v *historyspb.VersionHistory, item *historysp
 	if item.Version < lastItem.Version {
 		return serviceerror.NewInternal(fmt.Sprintf("cannot update version history with a lower version %v. Last version: %v", item.Version, lastItem.Version))
 	}
+
 	if item.GetEventId() <= lastItem.GetEventId() {
-		debug.PrintStack()
 		return serviceerror.NewInternal(fmt.Sprintf("cannot add version history with a lower event id %v. Last event id: %v", item.GetEventId(), lastItem.GetEventId()))
 	}
 
