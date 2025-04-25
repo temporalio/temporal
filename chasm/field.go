@@ -78,6 +78,7 @@ func NewComponentPointerField[C Component](
 	ctx MutableContext,
 	c C,
 ) Field[C] {
+	//nolint:forbidigo
 	panic("not implemented")
 }
 
@@ -85,6 +86,7 @@ func NewDataPointerField[D proto.Message](
 	ctx MutableContext,
 	d D,
 ) Field[D] {
+	//nolint:forbidigo
 	panic("not implemented")
 }
 
@@ -114,7 +116,8 @@ func (f Field[T]) Get(chasmContext Context) (T, error) {
 			return nilT, err
 		}
 	case fieldTypeComponentPointer:
-		return nilT, notImplemented
+		//nolint:forbidigo
+		panic("not implemented")
 	default:
 		return nilT, serviceerror.NewInternal(fmt.Sprintf("unsupported field type: %v", f.Internal.fieldType()))
 	}
