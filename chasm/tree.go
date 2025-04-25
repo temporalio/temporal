@@ -311,11 +311,12 @@ func (n *Node) fieldType() fieldType {
 	}
 
 	if n.serializedNode.GetMetadata().GetCollectionAttributes() != nil {
-		panic("not implemented")
+		// Collection is not a Field.
+		return fieldTypeUnspecified
 	}
 
 	if n.serializedNode.GetMetadata().GetPointerAttributes() != nil {
-		panic("not implemented")
+		return fieldTypeComponentPointer
 	}
 
 	return fieldTypeUnspecified

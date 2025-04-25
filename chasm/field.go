@@ -49,7 +49,7 @@ type Field[T any] struct {
 }
 
 type fieldInternal struct {
-	// These 2 fields are used when node is not created yet.
+	// These 2 fields are used when node is not set yet (i.e., node==nil).
 	// Don't access them directly outside of this file. Use corresponding getters instead.
 	ft fieldType
 	v  any // Component | Data | Pointer
@@ -59,7 +59,7 @@ type fieldInternal struct {
 }
 
 func (fi fieldInternal) isEmpty() bool {
-	return fi.value() == nil
+	return fi.v == nil && fi.node == nil
 }
 
 func (fi fieldInternal) value() any {
@@ -77,36 +77,44 @@ func (fi fieldInternal) fieldType() fieldType {
 }
 
 func (f Field[T]) Get(chasmContext Context) (T, error) {
-	// If value is not nil, use it.
-	if f.Internal.v != nil {
-		return f.Internal.v.(T), nil
-	}
+	var nilT T
 
-	// If node is nil, then there is nothing to deserialize from, return nil.
+	// If node is nil, then there is nothing to deserialize from, return value (even if it is also nil).
 	if f.Internal.node == nil {
-		var nilT T
-		return nilT, nil
+		if f.Internal.v == nil {
+			return nilT, nil
+		}
+		vT, isT := f.Internal.v.(T)
+		if !isT {
+			return nilT, serviceerror.NewInternal(fmt.Sprintf("internal value doesn't implement %s", reflect.TypeFor[T]().Name()))
+		}
+		return vT, nil
 	}
 
-	var err error
 	switch f.Internal.fieldType() {
 	case fieldTypeComponent:
-		err = f.Internal.node.prepareComponentValue(chasmContext)
+		if err := f.Internal.node.prepareComponentValue(chasmContext); err != nil {
+			return nilT, err
+		}
 	case fieldTypeData:
 		// For data fields, T is always a concrete type.
-		err = f.Internal.node.prepareDataValue(chasmContext, reflect.TypeFor[T]())
+		if err := f.Internal.node.prepareDataValue(chasmContext, reflect.TypeFor[T]()); err != nil {
+			return nilT, err
+		}
 	case fieldTypeComponentPointer:
-		panic("not implemented")
+		return nilT, notImplemented
 	default:
-		err = serviceerror.NewInternal(fmt.Sprintf("unsupported field type: %v", f.Internal.fieldType()))
+		return nilT, serviceerror.NewInternal(fmt.Sprintf("unsupported field type: %v", f.Internal.fieldType()))
 	}
 
-	if err != nil {
-		var nilT T
-		return nilT, err
+	if f.Internal.node.value == nil {
+		return nilT, nil
 	}
-	// TODO: check if f.Internal.node.value is T or implements T?
-	return f.Internal.node.value.(T), nil
+	vT, isT := f.Internal.node.value.(T)
+	if !isT {
+		return nilT, serviceerror.NewInternal(fmt.Sprintf("node value doesn't implement %s", reflect.TypeFor[T]().Name()))
+	}
+	return vT, nil
 }
 
 func NewEmptyField[T any]() Field[T] {
