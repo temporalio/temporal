@@ -6184,7 +6184,7 @@ func (ms *MutableStateImpl) closeTransactionTrackLastUpdateVersionedTransition(
 		ms.executionInfo.UpdateInfos[updateID].LastUpdateVersionedTransition = currentVersionedTransition
 	}
 
-	if ms.workflowTaskUpdated && ms.HasPendingWorkflowTask() {
+	if ms.workflowTaskUpdated {
 		ms.executionInfo.WorkflowTaskLastUpdateVersionedTransition = currentVersionedTransition
 	}
 
@@ -7548,6 +7548,27 @@ func (ms *MutableStateImpl) applyUpdatesToUpdateInfos(
 }
 
 func (ms *MutableStateImpl) syncExecutionInfo(current *persistencespb.WorkflowExecutionInfo, incoming *persistencespb.WorkflowExecutionInfo, isSnapshot bool) error {
+	if transitionhistory.Compare(current.WorkflowTaskLastUpdateVersionedTransition, incoming.WorkflowTaskLastUpdateVersionedTransition) < 0 {
+		ms.workflowTaskManager.UpdateWorkflowTask(&historyi.WorkflowTaskInfo{
+			Version:             incoming.WorkflowTaskVersion,
+			ScheduledEventID:    incoming.WorkflowTaskScheduledEventId,
+			StartedEventID:      incoming.WorkflowTaskStartedEventId,
+			RequestID:           incoming.WorkflowTaskRequestId,
+			WorkflowTaskTimeout: incoming.WorkflowTaskTimeout.AsDuration(),
+			Attempt:             incoming.WorkflowTaskAttempt,
+			StartedTime:         incoming.WorkflowTaskStartedTime.AsTime(),
+			ScheduledTime:       incoming.WorkflowTaskScheduledTime.AsTime(),
+
+			OriginalScheduledTime: incoming.WorkflowTaskOriginalScheduledTime.AsTime(),
+			Type:                  incoming.WorkflowTaskType,
+
+			SuggestContinueAsNew:   incoming.WorkflowTaskSuggestContinueAsNew,
+			HistorySizeBytes:       incoming.WorkflowTaskHistorySizeBytes,
+			BuildId:                incoming.WorkflowTaskBuildId,
+			BuildIdRedirectCounter: incoming.WorkflowTaskBuildIdRedirectCounter,
+		})
+	}
+
 	doNotSync := func(v any) []interface{} {
 		info, ok := v.(*persistencespb.WorkflowExecutionInfo)
 		if !ok || info == nil {
@@ -7592,25 +7613,6 @@ func (ms *MutableStateImpl) syncExecutionInfo(current *persistencespb.WorkflowEx
 	}
 
 	ms.ClearStickyTaskQueue()
-
-	ms.workflowTaskManager.UpdateWorkflowTask(&historyi.WorkflowTaskInfo{
-		Version:             incoming.WorkflowTaskVersion,
-		ScheduledEventID:    incoming.WorkflowTaskScheduledEventId,
-		StartedEventID:      incoming.WorkflowTaskStartedEventId,
-		RequestID:           incoming.WorkflowTaskRequestId,
-		WorkflowTaskTimeout: incoming.WorkflowTaskTimeout.AsDuration(),
-		Attempt:             incoming.WorkflowTaskAttempt,
-		StartedTime:         incoming.WorkflowTaskStartedTime.AsTime(),
-		ScheduledTime:       incoming.WorkflowTaskScheduledTime.AsTime(),
-
-		OriginalScheduledTime: incoming.WorkflowTaskOriginalScheduledTime.AsTime(),
-		Type:                  incoming.WorkflowTaskType,
-
-		SuggestContinueAsNew:   incoming.WorkflowTaskSuggestContinueAsNew,
-		HistorySizeBytes:       incoming.WorkflowTaskHistorySizeBytes,
-		BuildId:                incoming.WorkflowTaskBuildId,
-		BuildIdRedirectCounter: incoming.WorkflowTaskBuildIdRedirectCounter,
-	})
 
 	return nil
 }

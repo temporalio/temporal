@@ -2800,7 +2800,8 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 				_, _, err := ms.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
 				s.NoError(err)
 
-				s.Nil(ms.GetExecutionInfo().WorkflowTaskLastUpdateVersionedTransition)
+				currentVersionedTransition := ms.CurrentVersionedTransition()
+				protorequire.ProtoEqual(s.T(), currentVersionedTransition, ms.GetExecutionInfo().WorkflowTaskLastUpdateVersionedTransition)
 			},
 		},
 		{
@@ -4489,149 +4490,176 @@ func (s *mutableStateSuite) buildMutation(
 }
 
 func (s *mutableStateSuite) TestApplyMutation() {
-	state := s.buildWorkflowMutableState()
-	s.addChangesForStateReplication(state)
-
-	originMS, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, state, 123)
-	s.NoError(err)
-	tombstones := []*persistencespb.StateMachineTombstoneBatch{
+	testCases := []struct {
+		name               string
+		updateWorkflowTask bool
+	}{
 		{
-			VersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 1},
-			StateMachineTombstones: []*persistencespb.StateMachineTombstone{
-				{
-					StateMachineKey: &persistencespb.StateMachineTombstone_ActivityScheduledEventId{
-						ActivityScheduledEventId: 10,
-					},
-				},
-			},
+			name:               "update workflow task",
+			updateWorkflowTask: true,
 		},
-	}
-	originMS.GetExecutionInfo().SubStateMachineTombstoneBatches = tombstones
-
-	currentMS, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, state, 123)
-	s.NoError(err)
-	currentMockChasmTree := historyi.NewMockChasmTree(s.controller)
-	currentMS.chasmTree = currentMockChasmTree
-
-	currentMS.GetExecutionInfo().SubStateMachineTombstoneBatches = tombstones
-
-	state = s.buildWorkflowMutableState()
-
-	targetMS, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, state, 123)
-	s.NoError(err)
-
-	targetMockChasmTree := historyi.NewMockChasmTree(s.controller)
-	updateChasmNodes := map[string]*persistencespb.ChasmNode{
-		"node-path": {
-			Metadata: &persistencespb.ChasmNodeMetadata{
-				InitialVersionedTransition:    &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 1},
-				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 1},
-				Attributes:                    &persistencespb.ChasmNodeMetadata_DataAttributes{},
-			},
-			Data: &commonpb.DataBlob{Data: []byte("test-data")},
-		},
-	}
-	targetMockChasmTree.EXPECT().Snapshot(nil).Return(chasm.NodesSnapshot{
-		Nodes: updateChasmNodes,
-	})
-	targetMS.chasmTree = targetMockChasmTree
-
-	transitionHistory := targetMS.executionInfo.TransitionHistory
-	failoverVersion := transitionhistory.LastVersionedTransition(transitionHistory).NamespaceFailoverVersion
-	targetMS.executionInfo.TransitionHistory = UpdatedTransitionHistory(transitionHistory, failoverVersion)
-
-	// set updateXXX so LastUpdateVersionedTransition will be updated
-	targetMS.updateActivityInfos = targetMS.pendingActivityInfoIDs
-	for key := range targetMS.updateActivityInfos {
-		targetMS.activityInfosUserDataUpdated[key] = struct{}{}
-	}
-	targetMS.updateTimerInfos = targetMS.pendingTimerInfoIDs
-	for key := range targetMS.updateTimerInfos {
-		targetMS.timerInfosUserDataUpdated[key] = struct{}{}
-	}
-	targetMS.updateChildExecutionInfos = targetMS.pendingChildExecutionInfoIDs
-	targetMS.updateRequestCancelInfos = targetMS.pendingRequestCancelInfoIDs
-	targetMS.updateSignalInfos = targetMS.pendingSignalInfoIDs
-	targetMS.updateSignalRequestedIDs = targetMS.pendingSignalRequestedIDs
-	targetMS.closeTransactionTrackLastUpdateVersionedTransition(historyi.TransactionPolicyActive)
-
-	tombstonesToAdd := []*persistencespb.StateMachineTombstoneBatch{
 		{
-			VersionedTransition: targetMS.CurrentVersionedTransition(),
-			StateMachineTombstones: []*persistencespb.StateMachineTombstone{
-				{
-					StateMachineKey: &persistencespb.StateMachineTombstone_ActivityScheduledEventId{
-						ActivityScheduledEventId: 89,
-					},
-				},
-				{
-					StateMachineKey: &persistencespb.StateMachineTombstone_ActivityScheduledEventId{
-						ActivityScheduledEventId: 9999, // not exist
-					},
-				},
-				{
-					StateMachineKey: &persistencespb.StateMachineTombstone_TimerId{
-						TimerId: "to-be-deleted",
-					},
-				},
-				{
-
-					StateMachineKey: &persistencespb.StateMachineTombstone_TimerId{
-						TimerId: "not-exist",
-					},
-				},
-				{
-					StateMachineKey: &persistencespb.StateMachineTombstone_ChildExecutionInitiatedEventId{
-						ChildExecutionInitiatedEventId: 79,
-					},
-				},
-				{
-					StateMachineKey: &persistencespb.StateMachineTombstone_ChildExecutionInitiatedEventId{
-						ChildExecutionInitiatedEventId: 9998, // not exist
-					},
-				},
-				{
-					StateMachineKey: &persistencespb.StateMachineTombstone_RequestCancelInitiatedEventId{
-						RequestCancelInitiatedEventId: 69,
-					},
-				},
-				{
-					StateMachineKey: &persistencespb.StateMachineTombstone_RequestCancelInitiatedEventId{
-						RequestCancelInitiatedEventId: 9997, // not exist
-					},
-				},
-				{
-					StateMachineKey: &persistencespb.StateMachineTombstone_SignalExternalInitiatedEventId{
-						SignalExternalInitiatedEventId: 74,
-					},
-				},
-				{
-					StateMachineKey: &persistencespb.StateMachineTombstone_SignalExternalInitiatedEventId{
-						SignalExternalInitiatedEventId: 9996, // not exist
-					},
-				},
-				{
-					StateMachineKey: &persistencespb.StateMachineTombstone_ChasmNodePath{
-						ChasmNodePath: "deleted-node-path",
-					},
-				},
-			},
+			name:               "not update workflow task",
+			updateWorkflowTask: false,
 		},
 	}
-	targetMS.GetExecutionInfo().SubStateMachineTombstoneBatches = append(tombstones, tombstonesToAdd...)
-	targetMS.totalTombstones = len(tombstones[0].StateMachineTombstones) + len(tombstonesToAdd[0].StateMachineTombstones)
-	mutation := s.buildMutation(targetMS, tombstonesToAdd)
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			state := s.buildWorkflowMutableState()
+			s.addChangesForStateReplication(state)
 
-	currentMockChasmTree.EXPECT().ApplyMutation(chasm.NodesMutation{
-		DeletedNodes: map[string]struct{}{"deleted-node-path": {}},
-	}).Return(nil).Times(1)
-	currentMockChasmTree.EXPECT().ApplyMutation(chasm.NodesMutation{
-		UpdatedNodes: updateChasmNodes,
-	}).Return(nil).Times(1)
+			originMS, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, state, 123)
+			s.NoError(err)
+			tombstones := []*persistencespb.StateMachineTombstoneBatch{
+				{
+					VersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 1},
+					StateMachineTombstones: []*persistencespb.StateMachineTombstone{
+						{
+							StateMachineKey: &persistencespb.StateMachineTombstone_ActivityScheduledEventId{
+								ActivityScheduledEventId: 10,
+							},
+						},
+					},
+				},
+			}
+			originMS.GetExecutionInfo().SubStateMachineTombstoneBatches = tombstones
 
-	err = currentMS.ApplyMutation(mutation)
-	s.NoError(err)
-	s.verifyMutableState(currentMS, targetMS, originMS)
+			currentMS, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, state, 123)
+			s.NoError(err)
+			currentMockChasmTree := historyi.NewMockChasmTree(s.controller)
+			currentMS.chasmTree = currentMockChasmTree
+
+			currentMS.GetExecutionInfo().SubStateMachineTombstoneBatches = tombstones
+
+			state = s.buildWorkflowMutableState()
+
+			targetMS, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, state, 123)
+			s.NoError(err)
+
+			targetMockChasmTree := historyi.NewMockChasmTree(s.controller)
+			updateChasmNodes := map[string]*persistencespb.ChasmNode{
+				"node-path": {
+					Metadata: &persistencespb.ChasmNodeMetadata{
+						InitialVersionedTransition:    &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 1},
+						LastUpdateVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 1},
+						Attributes:                    &persistencespb.ChasmNodeMetadata_DataAttributes{},
+					},
+					Data: &commonpb.DataBlob{Data: []byte("test-data")},
+				},
+			}
+			targetMockChasmTree.EXPECT().Snapshot(nil).Return(chasm.NodesSnapshot{
+				Nodes: updateChasmNodes,
+			})
+			targetMS.chasmTree = targetMockChasmTree
+
+			transitionHistory := targetMS.executionInfo.TransitionHistory
+			failoverVersion := transitionhistory.LastVersionedTransition(transitionHistory).NamespaceFailoverVersion
+			targetMS.executionInfo.TransitionHistory = UpdatedTransitionHistory(transitionHistory, failoverVersion)
+
+			// set updateXXX so LastUpdateVersionedTransition will be updated
+			targetMS.updateActivityInfos = targetMS.pendingActivityInfoIDs
+			for key := range targetMS.updateActivityInfos {
+				targetMS.activityInfosUserDataUpdated[key] = struct{}{}
+			}
+			targetMS.updateTimerInfos = targetMS.pendingTimerInfoIDs
+			for key := range targetMS.updateTimerInfos {
+				targetMS.timerInfosUserDataUpdated[key] = struct{}{}
+			}
+			targetMS.updateChildExecutionInfos = targetMS.pendingChildExecutionInfoIDs
+			targetMS.updateRequestCancelInfos = targetMS.pendingRequestCancelInfoIDs
+			targetMS.updateSignalInfos = targetMS.pendingSignalInfoIDs
+			targetMS.updateSignalRequestedIDs = targetMS.pendingSignalRequestedIDs
+
+			if tc.updateWorkflowTask {
+				// test mutation with workflow task update
+				workflowTask := &historyi.WorkflowTaskInfo{
+					ScheduledEventID: 1234,
+				}
+				targetMS.workflowTaskManager.UpdateWorkflowTask(workflowTask)
+			}
+
+			targetMS.closeTransactionTrackLastUpdateVersionedTransition(historyi.TransactionPolicyActive)
+
+			tombstonesToAdd := []*persistencespb.StateMachineTombstoneBatch{
+				{
+					VersionedTransition: targetMS.CurrentVersionedTransition(),
+					StateMachineTombstones: []*persistencespb.StateMachineTombstone{
+						{
+							StateMachineKey: &persistencespb.StateMachineTombstone_ActivityScheduledEventId{
+								ActivityScheduledEventId: 89,
+							},
+						},
+						{
+							StateMachineKey: &persistencespb.StateMachineTombstone_ActivityScheduledEventId{
+								ActivityScheduledEventId: 9999, // not exist
+							},
+						},
+						{
+							StateMachineKey: &persistencespb.StateMachineTombstone_TimerId{
+								TimerId: "to-be-deleted",
+							},
+						},
+						{
+
+							StateMachineKey: &persistencespb.StateMachineTombstone_TimerId{
+								TimerId: "not-exist",
+							},
+						},
+						{
+							StateMachineKey: &persistencespb.StateMachineTombstone_ChildExecutionInitiatedEventId{
+								ChildExecutionInitiatedEventId: 79,
+							},
+						},
+						{
+							StateMachineKey: &persistencespb.StateMachineTombstone_ChildExecutionInitiatedEventId{
+								ChildExecutionInitiatedEventId: 9998, // not exist
+							},
+						},
+						{
+							StateMachineKey: &persistencespb.StateMachineTombstone_RequestCancelInitiatedEventId{
+								RequestCancelInitiatedEventId: 69,
+							},
+						},
+						{
+							StateMachineKey: &persistencespb.StateMachineTombstone_RequestCancelInitiatedEventId{
+								RequestCancelInitiatedEventId: 9997, // not exist
+							},
+						},
+						{
+							StateMachineKey: &persistencespb.StateMachineTombstone_SignalExternalInitiatedEventId{
+								SignalExternalInitiatedEventId: 74,
+							},
+						},
+						{
+							StateMachineKey: &persistencespb.StateMachineTombstone_SignalExternalInitiatedEventId{
+								SignalExternalInitiatedEventId: 9996, // not exist
+							},
+						},
+						{
+							StateMachineKey: &persistencespb.StateMachineTombstone_ChasmNodePath{
+								ChasmNodePath: "deleted-node-path",
+							},
+						},
+					},
+				},
+			}
+			targetMS.GetExecutionInfo().SubStateMachineTombstoneBatches = append(tombstones, tombstonesToAdd...)
+			targetMS.totalTombstones = len(tombstones[0].StateMachineTombstones) + len(tombstonesToAdd[0].StateMachineTombstones)
+			mutation := s.buildMutation(targetMS, tombstonesToAdd)
+
+			currentMockChasmTree.EXPECT().ApplyMutation(chasm.NodesMutation{
+				DeletedNodes: map[string]struct{}{"deleted-node-path": {}},
+			}).Return(nil).Times(1)
+			currentMockChasmTree.EXPECT().ApplyMutation(chasm.NodesMutation{
+				UpdatedNodes: updateChasmNodes,
+			}).Return(nil).Times(1)
+
+			err = currentMS.ApplyMutation(mutation)
+			s.NoError(err)
+			s.verifyMutableState(currentMS, targetMS, originMS)
+			s.Equal(tc.updateWorkflowTask, currentMS.workflowTaskUpdated)
+		})
+	}
 }
 
 func (s *mutableStateSuite) TestRefreshTask_DiffCluster() {
