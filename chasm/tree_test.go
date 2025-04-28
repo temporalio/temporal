@@ -33,7 +33,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"go.temporal.io/api/common/v1"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock"
@@ -935,7 +935,7 @@ func (s *nodeSuite) TestGetComponent() {
 }
 
 func (s *nodeSuite) TestSeralizeTask() {
-	payload := &common.Payload{
+	payload := &commonpb.Payload{
 		Data: []byte("some-random-data"),
 	}
 	expectedBlob, err := serialization.ProtoEncodeBlob(payload, enumspb.ENCODING_TYPE_PROTO3)
@@ -1014,7 +1014,7 @@ func (s *nodeSuite) TestCloseTransaction_NewComponentTasks() {
 		testComponent,
 		TaskAttributes{ScheduledTime: s.timeSource.Now()},
 		&TestPureTask{
-			Payload: &common.Payload{
+			Payload: &commonpb.Payload{
 				Data: []byte("some-random-data"),
 			},
 		},
