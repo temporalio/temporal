@@ -331,13 +331,15 @@ func (c *ContextImpl) ConflictResolveWorkflowExecution(
 
 	eventsToReapply := resetWorkflowEventsSeq
 	if len(resetWorkflowEventsSeq) == 0 {
-		eventsToReapply = []*persistence.WorkflowEvents{
-			{
-				NamespaceID: c.workflowKey.NamespaceID,
-				WorkflowID:  c.workflowKey.WorkflowID,
-				RunID:       c.workflowKey.RunID,
-				Events:      resetMutableState.GetReapplyCandidateEvents(),
-			},
+		if reapplyCandidateEvents := resetMutableState.GetReapplyCandidateEvents(); len(reapplyCandidateEvents) != 0 {
+			eventsToReapply = []*persistence.WorkflowEvents{
+				{
+					NamespaceID: c.workflowKey.NamespaceID,
+					WorkflowID:  c.workflowKey.WorkflowID,
+					RunID:       c.workflowKey.RunID,
+					Events:      reapplyCandidateEvents,
+				},
+			}
 		}
 	}
 
@@ -402,10 +404,15 @@ func (c *ContextImpl) UpdateWorkflowExecutionAsActive(
 		}
 	}
 
+	updateMode, err := c.updateWorkflowMode()
+	if err != nil {
+		return err
+	}
+
 	err = c.UpdateWorkflowExecutionWithNew(
 		ctx,
 		shardContext,
-		persistence.UpdateWorkflowModeUpdateCurrent,
+		updateMode,
 		nil,
 		nil,
 		historyi.TransactionPolicyActive,
@@ -454,10 +461,15 @@ func (c *ContextImpl) UpdateWorkflowExecutionAsPassive(
 	shardContext historyi.ShardContext,
 ) error {
 
+	updateMode, err := c.updateWorkflowMode()
+	if err != nil {
+		return err
+	}
+
 	return c.UpdateWorkflowExecutionWithNew(
 		ctx,
 		shardContext,
-		persistence.UpdateWorkflowModeUpdateCurrent,
+		updateMode,
 		nil,
 		nil,
 		historyi.TransactionPolicyPassive,
@@ -532,13 +544,15 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 
 	eventsToReapply := updateWorkflowEventsSeq
 	if len(updateWorkflowEventsSeq) == 0 {
-		eventsToReapply = []*persistence.WorkflowEvents{
-			{
-				NamespaceID: c.workflowKey.NamespaceID,
-				WorkflowID:  c.workflowKey.WorkflowID,
-				RunID:       c.workflowKey.RunID,
-				Events:      c.MutableState.GetReapplyCandidateEvents(),
-			},
+		if reapplyCandidateEvents := c.MutableState.GetReapplyCandidateEvents(); len(reapplyCandidateEvents) != 0 {
+			eventsToReapply = []*persistence.WorkflowEvents{
+				{
+					NamespaceID: c.workflowKey.NamespaceID,
+					WorkflowID:  c.workflowKey.WorkflowID,
+					RunID:       c.workflowKey.RunID,
+					Events:      reapplyCandidateEvents,
+				},
+			}
 		}
 	}
 
@@ -739,6 +753,12 @@ func (c *ContextImpl) updateWorkflowExecutionEventReapply(
 	eventBatch1 []*persistence.WorkflowEvents,
 	eventBatch2 []*persistence.WorkflowEvents,
 ) error {
+	if updateMode == persistence.UpdateWorkflowModeIgnoreCurrent {
+		if len(eventBatch1) != 0 || len(eventBatch2) != 0 {
+			return serviceerror.NewInternal("encountered events reapplication without knowing if workflow is current. Events generated for a close workflow?")
+		}
+		return nil
+	}
 
 	if updateMode != persistence.UpdateWorkflowModeBypassCurrent {
 		return nil
@@ -766,6 +786,27 @@ func (c *ContextImpl) conflictResolveEventReapply(
 	eventBatches = append(eventBatches, eventBatch1...)
 	eventBatches = append(eventBatches, eventBatch2...)
 	return c.ReapplyEvents(ctx, shardContext, eventBatches)
+}
+
+func (c *ContextImpl) updateWorkflowMode() (persistence.UpdateWorkflowMode, error) {
+	updateMode := persistence.UpdateWorkflowModeUpdateCurrent
+	if !c.config.EnableUpdateWorkflowModeIgnoreCurrent() {
+		return persistence.UpdateWorkflowModeUpdateCurrent, nil
+	}
+
+	updateMode = persistence.UpdateWorkflowModeIgnoreCurrent
+	if c.MutableState.IsCurrentWorkflowGuaranteed() {
+		updateMode = persistence.UpdateWorkflowModeUpdateCurrent
+	}
+
+	guaranteed, err := c.MutableState.IsNonCurrentWorkflowGuaranteed()
+	if err != nil {
+		return updateMode, err
+	}
+	if guaranteed {
+		updateMode = persistence.UpdateWorkflowModeBypassCurrent
+	}
+	return updateMode, nil
 }
 
 func (c *ContextImpl) ReapplyEvents(
@@ -873,6 +914,11 @@ func (c *ContextImpl) RefreshTasks(
 		return err
 	}
 
+	if c.config.EnableUpdateWorkflowModeIgnoreCurrent() {
+		return c.UpdateWorkflowExecutionAsPassive(ctx, shardContext)
+	}
+
+	// TODO: remove following code once EnableUpdateWorkflowModeIgnoreCurrent config is deprecated.
 	if !mutableState.IsWorkflowExecutionRunning() {
 		// Can't use UpdateWorkflowExecutionAsPassive since it updates the current run,
 		// and we are operating on a closed workflow.

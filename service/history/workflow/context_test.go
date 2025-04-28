@@ -525,11 +525,7 @@ func (s *contextSuite) TestRefreshTask() {
 						s.Equal(persistence.UpdateWorkflowModeUpdateCurrent, request.Mode)
 						s.NotEmpty(request.UpdateWorkflowMutation.Tasks)
 						s.Empty(request.UpdateWorkflowEvents)
-						return &persistence.UpdateWorkflowExecutionResponse{
-							UpdateMutableStateStats: persistence.MutableStateStatistics{
-								HistoryStatistics: &persistence.HistoryStatistics{},
-							},
-						}, nil
+						return tests.UpdateWorkflowExecutionResponse, nil
 					}).Times(1)
 			},
 		},
@@ -546,10 +542,11 @@ func (s *contextSuite) TestRefreshTask() {
 				return base
 			},
 			setupMock: func(mockShard *shard.ContextTest) {
-				mockShard.Resource.ExecutionMgr.EXPECT().SetWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(_ context.Context, request *persistence.SetWorkflowExecutionRequest) (*persistence.SetWorkflowExecutionResponse, error) {
-						s.NotEmpty(request.SetWorkflowSnapshot.Tasks)
-						return &persistence.SetWorkflowExecutionResponse{}, nil
+				mockShard.Resource.ExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(_ context.Context, request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
+						s.NotEmpty(request.UpdateWorkflowMutation.Tasks)
+						s.Equal(persistence.UpdateWorkflowModeIgnoreCurrent, request.Mode)
+						return tests.UpdateWorkflowExecutionResponse, nil
 					}).Times(1)
 			},
 		},
@@ -574,10 +571,11 @@ func (s *contextSuite) TestRefreshTask() {
 					Version:    common.EmptyVersion,
 					Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{},
 				}, nil).Times(2)
-				mockShard.Resource.ExecutionMgr.EXPECT().SetWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(_ context.Context, request *persistence.SetWorkflowExecutionRequest) (*persistence.SetWorkflowExecutionResponse, error) {
-						s.NotEmpty(request.SetWorkflowSnapshot.Tasks)
-						return &persistence.SetWorkflowExecutionResponse{}, nil
+				mockShard.Resource.ExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(_ context.Context, request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
+						s.NotEmpty(request.UpdateWorkflowMutation.Tasks)
+						s.Equal(persistence.UpdateWorkflowModeBypassCurrent, request.Mode)
+						return tests.UpdateWorkflowExecutionResponse, nil
 					}).Times(1)
 			},
 		},

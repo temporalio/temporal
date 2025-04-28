@@ -222,6 +222,7 @@ type (
 		IsCancelRequested() bool
 		IsWorkflowCloseAttempted() bool
 		IsCurrentWorkflowGuaranteed() bool
+		IsNonCurrentWorkflowGuaranteed() (bool, error)
 		IsSignalRequested(requestID string) bool
 		GetApproximatePersistedSize() int
 
