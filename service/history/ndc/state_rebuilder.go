@@ -192,6 +192,10 @@ func (r *StateRebuilderImpl) RebuildWithCurrentMutableState(
 		return nil, 0, err
 	}
 	items := versionhistory.CopyVersionHistoryItems(currentVersionHistory.Items)
+
+	// This is a workaround to bypass the version history update check:
+	// We need to use Active policy to close the transaction. We need to clear the version history items here to
+	// let it pass the version history update logic and then re-assign the version history items after transaction.
 	currentVersionHistory.Items = nil
 
 	// close rebuilt mutable state transaction clearing all generated tasks, etc.
