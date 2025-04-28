@@ -1019,7 +1019,7 @@ func (s *nodeSuite) TestCloseTransaction_GeneratePhysicalSideEffectTasks() {
 		})
 	}
 
-	err = root.closeTransactionGenratePhysicalSideEffectTasks()
+	err = root.closeTransactionGeneratePhysicalSideEffectTasks()
 	s.NoError(err)
 }
 

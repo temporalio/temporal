@@ -237,10 +237,10 @@ type ChasmComponentAttributes struct {
 	// Fully qualified type name of a registered component.
 	Type string `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
 	// Tasks are in their insertion order,
-	// i.e. by versioned transtion and index_in_transition.
+	// i.e. by versioned transtion and versioned_transition_offset.
 	SideEffectTasks []*ChasmComponentAttributes_Task `protobuf:"bytes,2,rep,name=side_effect_tasks,json=sideEffectTasks,proto3" json:"side_effect_tasks,omitempty"`
 	// Tasks are ordered by their scheduled time, breaking ties by
-	// versioned transition and index_in_transition.
+	// versioned transition and versioned_transition_offset.
 	PureTasks     []*ChasmComponentAttributes_Task `protobuf:"bytes,3,rep,name=pure_tasks,json=pureTasks,proto3" json:"pure_tasks,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

@@ -755,7 +755,7 @@ func (n *Node) AddTask(
 func (n *Node) CloseTransaction() (NodesMutation, error) {
 	defer n.cleanupTransaction()
 
-	if err := n.closeTransactionGenratePhysicalSideEffectTasks(); err != nil {
+	if err := n.closeTransactionGeneratePhysicalSideEffectTasks(); err != nil {
 		return NodesMutation{}, err
 	}
 
@@ -767,7 +767,7 @@ func (n *Node) CloseTransaction() (NodesMutation, error) {
 	// return n.mutation, nil
 }
 
-func (n *Node) closeTransactionGenratePhysicalSideEffectTasks() error {
+func (n *Node) closeTransactionGeneratePhysicalSideEffectTasks() error {
 	entityKey := n.backend.GetWorkflowKey()
 
 	for encodedPath, updatedNode := range n.mutation.UpdatedNodes {
@@ -1184,19 +1184,23 @@ func carryOverTaskStatus(
 
 		switch compareFn(sourceTask, targetTask) {
 		case 0:
+			// Task match, carry over status.
 			targetTask.PhysicalTaskStatus = sourceTask.PhysicalTaskStatus
 			sourceIdx++
 			targetIdx++
 		case -1:
+			// Source task has a smaller key, meaning the task has been deleted.
+			// Move on to the next source task.
 			sourceIdx++
 		case 1:
-			// sanitize incoming task status
+			// Source task has a larger key, meaning there's a new task inserted.
+			// Sanitize incoming task status.
 			targetTask.PhysicalTaskStatus = physicalTaskStatusNone
 			targetIdx++
 		}
 	}
 
-	// sanitize incoming task status for remaining tasks
+	// Sanitize incoming task status for remaining tasks.
 	for ; targetIdx < len(targetTasks); targetIdx++ {
 		targetTasks[targetIdx].PhysicalTaskStatus = physicalTaskStatusNone
 	}
@@ -1205,10 +1209,10 @@ func carryOverTaskStatus(
 func taskCategory(
 	task *persistencespb.ChasmComponentAttributes_Task,
 ) (tasks.Category, error) {
-	isImmeidate := task.ScheduledTime == nil || task.ScheduledTime.AsTime().Equal(TaskScheduledTimeImmediate)
+	isImmediate := task.ScheduledTime == nil || task.ScheduledTime.AsTime().Equal(TaskScheduledTimeImmediate)
 
 	if task.Destination != "" {
-		if !isImmeidate {
+		if !isImmediate {
 			return tasks.Category{}, serviceerror.NewInternal(
 				fmt.Sprintf("Task cannot have both destination and scheduled time set, destination: %v, scheduled time: %v", task.Destination, task.ScheduledTime.AsTime()),
 			)
@@ -1216,7 +1220,7 @@ func taskCategory(
 		return tasks.CategoryOutbound, nil
 	}
 
-	if isImmeidate {
+	if isImmediate {
 		return tasks.CategoryTransfer, nil
 	}
 	return tasks.CategoryTimer, nil
