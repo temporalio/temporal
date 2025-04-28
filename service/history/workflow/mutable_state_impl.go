@@ -6129,10 +6129,12 @@ func (ms *MutableStateImpl) closeTransactionUpdateTransitionHistory(
 		ms.executionInfo.TransitionHistory = ms.executionInfo.PreviousTransitionHistory
 		ms.executionInfo.PreviousTransitionHistory = nil
 	}
+
 	ms.executionInfo.TransitionHistory = UpdatedTransitionHistory(
 		ms.executionInfo.TransitionHistory,
 		ms.GetCurrentVersion(),
 	)
+
 	return nil
 }
 
@@ -6758,11 +6760,11 @@ func (ms *MutableStateImpl) updateWithLastWriteEvent(
 		// already handled in mutable state.
 		return nil
 	}
+
 	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(ms.executionInfo.VersionHistories)
 	if err != nil {
 		return err
 	}
-
 	if err := versionhistory.AddOrUpdateVersionHistoryItem(currentVersionHistory, versionhistory.NewVersionHistoryItem(
 		lastEvent.GetEventId(), lastEvent.GetVersion(),
 	)); err != nil {
