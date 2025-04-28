@@ -2030,10 +2030,9 @@ func (ms *MutableStateImpl) HasBufferedEvents() bool {
 	return ms.hBuilder.HasBufferEvents()
 }
 
+// HasAnyBufferedEvent returns true if there is at least one buffered event that matches the provided filter.
 func (ms *MutableStateImpl) HasAnyBufferedEvent(filter historybuilder.BufferedEventFilter) bool {
 	return ms.hBuilder.HasAnyBufferedEvent(filter)
-	// HasAnyBufferedEvent returns true if there is at least one buffered event that matches the provided filter.
-
 }
 
 // GetLastFirstEventIDTxnID returns last first event ID and corresponding transaction ID

@@ -686,7 +686,8 @@ func (d *namespaceHandler) DeprecateNamespace(
 }
 
 func (d *namespaceHandler) CreateWorkflowRule(
-	ctx context.Context, ruleSpec *rulespb.WorkflowRuleSpec,
+	ctx context.Context,
+	ruleSpec *rulespb.WorkflowRuleSpec,
 	createdByIdentity string,
 	description string,
 	nsName string,
