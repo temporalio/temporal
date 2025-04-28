@@ -5902,7 +5902,11 @@ func (wh *WorkflowHandler) CreateWorkflowRule(
 		return nil, errWorkflowRuleIDTooLong
 	}
 
-	rule, err := wh.namespaceHandler.CreateWorkflowRule(ctx, request.GetSpec(), request.GetNamespace())
+	rule, err := wh.namespaceHandler.CreateWorkflowRule(ctx,
+		request.GetSpec(),
+		request.GetIdentity(),
+		request.GetDescription(),
+		request.GetNamespace())
 	if err != nil {
 		return nil, err
 	}

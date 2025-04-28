@@ -686,7 +686,10 @@ func (d *namespaceHandler) DeprecateNamespace(
 }
 
 func (d *namespaceHandler) CreateWorkflowRule(
-	ctx context.Context, ruleSpec *rulespb.WorkflowRuleSpec, nsName string,
+	ctx context.Context, ruleSpec *rulespb.WorkflowRuleSpec,
+	createdByIdentity string,
+	description string,
+	nsName string,
 ) (*rulespb.WorkflowRule, error) {
 
 	if ruleSpec.GetId() == "" {
@@ -715,8 +718,10 @@ func (d *namespaceHandler) CreateWorkflowRule(
 	}
 
 	workflowRule := &rulespb.WorkflowRule{
-		Spec:       ruleSpec,
-		CreateTime: timestamppb.New(d.timeSource.Now()),
+		Spec:              ruleSpec,
+		CreateTime:        timestamppb.New(d.timeSource.Now()),
+		CreatedByIdentity: createdByIdentity,
+		Description:       description,
 	}
 	config.WorkflowRules[ruleSpec.GetId()] = workflowRule
 
