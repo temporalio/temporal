@@ -29,16 +29,20 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/testing/protoassert"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testlogger"
+	"go.temporal.io/server/service/history/tasks"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -617,6 +621,204 @@ func (s *nodeSuite) TestApplySnapshot() {
 	s.Equal(expectedMutation, root.mutation)
 }
 
+func (s *nodeSuite) TestCarryOverTaskStatus() {
+	now := s.timeSource.Now()
+	persistenceNodes := map[string]*persistencespb.ChasmNode{
+		"": {
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 2},
+				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+						Type: "TestLibrary.test_component",
+						SideEffectTasks: []*persistencespb.ChasmComponentAttributes_Task{
+							{
+								Type:                      "TestLibrary.test_side_effect_task",
+								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
+								VersionedTransitionOffset: 1,
+								PhysicalTaskStatus:        physicalTaskStatusCreated,
+							},
+							{
+								Type:                      "TestLibrary.test_side_effect_task",
+								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
+								VersionedTransitionOffset: 2,
+								PhysicalTaskStatus:        physicalTaskStatusCreated,
+							},
+							{
+								Type:                      "TestLibrary.test_side_effect_task",
+								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 2},
+								VersionedTransitionOffset: 1,
+								PhysicalTaskStatus:        physicalTaskStatusCreated,
+							},
+						},
+						PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
+							{
+								Type:                      "TestLibrary.test_pure_task",
+								ScheduledTime:             timestamppb.New(now.Add(time.Minute)),
+								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 2},
+								VersionedTransitionOffset: 2,
+								PhysicalTaskStatus:        physicalTaskStatusCreated,
+							},
+							{
+								Type:                      "TestLibrary.test_pure_task",
+								ScheduledTime:             timestamppb.New(now.Add(2 * time.Minute)),
+								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
+								VersionedTransitionOffset: 3,
+								PhysicalTaskStatus:        physicalTaskStatusCreated,
+							},
+							{
+								Type:                      "TestLibrary.test_pure_task",
+								ScheduledTime:             timestamppb.New(now.Add(3 * time.Minute)),
+								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 2},
+								VersionedTransitionOffset: 3,
+								PhysicalTaskStatus:        physicalTaskStatusNone,
+							},
+						},
+					},
+				},
+			},
+		},
+		"data": {
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 2},
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 2},
+				Attributes: &persistencespb.ChasmNodeMetadata_DataAttributes{
+					DataAttributes: &persistencespb.ChasmDataAttributes{},
+				},
+			},
+		},
+	}
+	root, err := NewTree(persistenceNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+	s.NoError(err)
+
+	mutations := NodesMutation{
+		UpdatedNodes: map[string]*persistencespb.ChasmNode{
+			"": {
+				Metadata: &persistencespb.ChasmNodeMetadata{
+					InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
+					LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 3},
+					Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+						ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+							Type: "TestLibrary.test_component",
+							SideEffectTasks: []*persistencespb.ChasmComponentAttributes_Task{
+								{
+									Type:                      "TestLibrary.test_side_effect_task",
+									VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
+									VersionedTransitionOffset: 2,
+									PhysicalTaskStatus:        physicalTaskStatusCreated,
+								},
+								{
+									Type:                      "TestLibrary.test_side_effect_task",
+									VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 3},
+									VersionedTransitionOffset: 1,
+									PhysicalTaskStatus:        physicalTaskStatusCreated,
+								},
+							},
+							PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
+								{
+									Type:                      "TestLibrary.test_pure_task",
+									ScheduledTime:             timestamppb.New(now.Add(time.Second)),
+									VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 3},
+									VersionedTransitionOffset: 2,
+									PhysicalTaskStatus:        physicalTaskStatusCreated,
+								},
+								{
+									Type:                      "TestLibrary.test_pure_task",
+									ScheduledTime:             timestamppb.New(now.Add(2 * time.Minute)),
+									VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
+									VersionedTransitionOffset: 3,
+									PhysicalTaskStatus:        physicalTaskStatusCreated,
+								},
+								{
+									Type:                      "TestLibrary.test_pure_task",
+									ScheduledTime:             timestamppb.New(now.Add(3 * time.Minute)),
+									VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 2},
+									VersionedTransitionOffset: 3,
+									PhysicalTaskStatus:        physicalTaskStatusNone,
+								},
+							},
+						},
+					},
+				},
+			},
+			"data": {
+				Metadata: &persistencespb.ChasmNodeMetadata{
+					InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 2},
+					LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 3},
+					Attributes: &persistencespb.ChasmNodeMetadata_DataAttributes{
+						DataAttributes: &persistencespb.ChasmDataAttributes{},
+					},
+				},
+			},
+		},
+	}
+
+	expectedNodes := map[string]*persistencespb.ChasmNode{
+		"": {
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 3},
+				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+						Type: "TestLibrary.test_component",
+						SideEffectTasks: []*persistencespb.ChasmComponentAttributes_Task{
+							{
+								Type:                      "TestLibrary.test_side_effect_task",
+								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
+								VersionedTransitionOffset: 2,
+								PhysicalTaskStatus:        physicalTaskStatusCreated,
+							},
+							{
+								Type:                      "TestLibrary.test_side_effect_task",
+								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 3},
+								VersionedTransitionOffset: 1,
+								PhysicalTaskStatus:        physicalTaskStatusNone,
+							},
+						},
+						PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
+							{
+								Type:                      "TestLibrary.test_pure_task",
+								ScheduledTime:             timestamppb.New(now.Add(time.Second)),
+								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 3},
+								VersionedTransitionOffset: 2,
+								PhysicalTaskStatus:        physicalTaskStatusNone,
+							},
+							{
+								Type:                      "TestLibrary.test_pure_task",
+								ScheduledTime:             timestamppb.New(now.Add(2 * time.Minute)),
+								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
+								VersionedTransitionOffset: 3,
+								PhysicalTaskStatus:        physicalTaskStatusCreated,
+							},
+							{
+								Type:                      "TestLibrary.test_pure_task",
+								ScheduledTime:             timestamppb.New(now.Add(3 * time.Minute)),
+								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 2},
+								VersionedTransitionOffset: 3,
+								PhysicalTaskStatus:        physicalTaskStatusNone,
+							},
+						},
+					},
+				},
+			},
+		},
+		"data": {
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 2},
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 3},
+				Attributes: &persistencespb.ChasmNodeMetadata_DataAttributes{
+					DataAttributes: &persistencespb.ChasmDataAttributes{},
+				},
+			},
+		},
+	}
+
+	err = root.ApplyMutation(mutations)
+	s.NoError(err)
+
+	s.Equal(expectedNodes, root.Snapshot(nil).Nodes)
+}
+
 func (s *nodeSuite) TestGetComponent() {
 	root, err := NewTree(
 		testComponentSerializedNodes(),
@@ -727,6 +929,194 @@ func (s *nodeSuite) TestGetComponent() {
 			}
 		})
 	}
+}
+
+func (s *nodeSuite) TestCloseTransaction_GeneratePhysicalSideEffectTasks() {
+	persistenceNodes := map[string]*persistencespb.ChasmNode{
+		"": {
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+						Type: "TestLibrary.test_component",
+						SideEffectTasks: []*persistencespb.ChasmComponentAttributes_Task{
+							{
+								Type:                      "TestLibrary.test_side_effect_task",
+								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
+								VersionedTransitionOffset: 1,
+								PhysicalTaskStatus:        physicalTaskStatusCreated,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	mutation := NodesMutation{
+		UpdatedNodes: map[string]*persistencespb.ChasmNode{
+			"": {
+				Metadata: &persistencespb.ChasmNodeMetadata{
+					InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
+					LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 2},
+					Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+						ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+							Type: "TestLibrary.test_component",
+							SideEffectTasks: []*persistencespb.ChasmComponentAttributes_Task{
+								{
+									Type:                      "TestLibrary.test_side_effect_task",
+									VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
+									VersionedTransitionOffset: 1,
+									PhysicalTaskStatus:        physicalTaskStatusCreated,
+								},
+								{
+									Type:                      "TestLibrary.test_side_effect_task",
+									VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 2},
+									VersionedTransitionOffset: 1,
+									PhysicalTaskStatus:        physicalTaskStatusNone,
+								},
+								{
+									Type:                      "TestLibrary.test_side_effect_task",
+									Destination:               "destination",
+									ScheduledTime:             timestamppb.New(TaskScheduledTimeImmediate),
+									VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 2},
+									VersionedTransitionOffset: 2,
+									PhysicalTaskStatus:        physicalTaskStatusNone,
+								},
+								{
+									Type:                      "TestLibrary.test_side_effect_task",
+									ScheduledTime:             timestamppb.New(s.timeSource.Now().Add(time.Minute)),
+									VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 2},
+									VersionedTransitionOffset: 3,
+									PhysicalTaskStatus:        physicalTaskStatusNone,
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	root, err := NewTree(persistenceNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+	s.NoError(err)
+
+	err = root.ApplyMutation(mutation)
+	s.NoError(err)
+
+	s.nodeBackend.EXPECT().GetWorkflowKey().Return(definition.WorkflowKey{
+		NamespaceID: "ns-id",
+		WorkflowID:  "wf-id",
+		RunID:       "run-id",
+	}).AnyTimes()
+
+	expectedCategories := []tasks.Category{tasks.CategoryTimer, tasks.CategoryOutbound, tasks.CategoryTransfer}
+	for _, category := range expectedCategories {
+		s.nodeBackend.EXPECT().AddTasks(gomock.Any()).Do(func(addedTask tasks.Task) {
+			s.IsType(&tasks.ChasmTask{}, addedTask)
+			s.Equal(category, addedTask.GetCategory())
+		})
+	}
+
+	err = root.closeTransactionGeneratePhysicalSideEffectTasks()
+	s.NoError(err)
+}
+
+func (s *nodeSuite) TestCloseTransaction_GeneratePhysicalPureTask() {
+	now := s.timeSource.Now()
+	persistenceNodes := map[string]*persistencespb.ChasmNode{
+		"": {
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+						Type: "TestLibrary.test_component",
+						PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
+							{
+								Type:                      "TestLibrary.test_pure_task",
+								ScheduledTime:             timestamppb.New(now.Add(time.Second)),
+								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
+								VersionedTransitionOffset: 1,
+								PhysicalTaskStatus:        physicalTaskStatusCreated,
+							},
+						},
+					},
+				},
+			},
+		},
+		"child": {
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+						Type: "TestLibrary.test_child_component",
+						PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
+							{
+								Type:                      "TestLibrary.test_pure_task",
+								ScheduledTime:             timestamppb.New(now.Add(time.Minute)),
+								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
+								VersionedTransitionOffset: 2,
+								PhysicalTaskStatus:        physicalTaskStatusNone,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	mutation := NodesMutation{
+		UpdatedNodes: map[string]*persistencespb.ChasmNode{
+			"": {
+				Metadata: &persistencespb.ChasmNodeMetadata{
+					InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
+					LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 2},
+					Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+						ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+							Type: "TestLibrary.test_component",
+							PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
+								{
+									Type:                      "TestLibrary.test_pure_task",
+									ScheduledTime:             timestamppb.New(now.Add(2 * time.Minute)),
+									VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 2},
+									VersionedTransitionOffset: 1,
+									PhysicalTaskStatus:        physicalTaskStatusNone,
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	root, err := NewTree(persistenceNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+	s.NoError(err)
+
+	err = root.ApplyMutation(mutation)
+	s.NoError(err)
+
+	s.nodeBackend.EXPECT().GetWorkflowKey().Return(definition.WorkflowKey{
+		NamespaceID: "ns-id",
+		WorkflowID:  "wf-id",
+		RunID:       "run-id",
+	}).AnyTimes()
+
+	s.nodeBackend.EXPECT().AddTasks(gomock.Any()).Do(func(addedTask tasks.Task) {
+		s.IsType(&tasks.ChasmTaskPure{}, addedTask)
+		s.Equal(tasks.CategoryTimer, addedTask.GetCategory())
+		s.True(now.Add(time.Minute).Equal(addedTask.GetKey().FireTime))
+	}).Times(1)
+
+	err = root.closeTransactionGeneratePhysicalPureTask()
+	s.NoError(err)
+
+	// Although only root is mutated in ApplyMutation, we generated a pure task for the child node,
+	// and need to persist that as well.
+	s.Len(root.mutation.UpdatedNodes, 2)
 }
 
 func (s *nodeSuite) preorderAndAssertParent(
