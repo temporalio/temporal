@@ -135,7 +135,16 @@ func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
 
 	// Set up Query Handlers here:
 	if err := workflow.SetQueryHandler(ctx, QueryDescribeVersion, d.handleDescribeQuery); err != nil {
-		d.logger.Error("Failed while setting up query handler")
+		d.logger.Error("Failed while setting up QueryDescribeVersion handler")
+		return err
+	}
+
+	if err := workflow.SetUpdateHandlerWithOptions(
+		ctx,
+		GetStats,
+		d.handleGetStats,
+		workflow.UpdateHandlerOptions{},
+	); err != nil {
 		return err
 	}
 
@@ -515,6 +524,27 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 	}
 
 	return nil
+}
+
+func (d *VersionWorkflowRunner) handleGetStats(ctx workflow.Context) (*deploymentspb.WorkerDeploymentStatsResponse, error) {
+	var res *deploymentspb.WorkerDeploymentStatsResponse
+	// TODO: put cache here
+
+	activityArg := deploymentspb.GetTaskQueueStatsArg{
+		DeploymentVersion: worker_versioning.WorkerDeploymentVersionToString(d.VersionState.Version),
+	}
+	for _, tqName := range workflow.DeterministicKeys(d.VersionState.TaskQueueFamilies) {
+		byType := d.VersionState.TaskQueueFamilies[tqName]
+		for _, tqType := range workflow.DeterministicKeys(byType.TaskQueues) {
+			activityArg.TaskQueues = append(activityArg.TaskQueues, &deploymentspb.TaskQueue{
+				TaskQueueName: tqName,
+				TaskQueueType: enumspb.TaskQueueType(tqType),
+			})
+		}
+	}
+	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+	err := workflow.ExecuteActivity(activityCtx, d.a.GetTaskQueueStats, activityArg).Get(ctx, &res)
+	return res, err
 }
 
 // If routing update time has changed then we want to let the update through.

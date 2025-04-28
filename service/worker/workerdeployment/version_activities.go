@@ -196,3 +196,29 @@ func (a *VersionActivities) AddVersionToWorkerDeployment(ctx context.Context, in
 	}
 	return resp, err
 }
+
+func (a *VersionActivities) GetTaskQueueStats(
+	ctx context.Context,
+	arg *deploymentspb.GetTaskQueueStatsArg,
+) (*deploymentspb.WorkerDeploymentStatsResponse, error) {
+	var res deploymentspb.WorkerDeploymentStatsResponse
+	for _, tq := range arg.TaskQueues {
+		tqStats, err := a.matchingClient.GetTaskQueueStats(ctx,
+			&matchingservice.GetTaskQueueStatsRequest{
+				NamespaceId:       a.namespace.ID().String(),
+				TaskQueue:         tq.TaskQueueName,
+				TaskQueueType:     tq.TaskQueueType,
+				DeploymentVersion: arg.DeploymentVersion,
+			})
+		if err != nil {
+			return nil, err
+		}
+		res.TaskQueueStats = append(res.TaskQueueStats,
+			&taskqueuepb.TaskQueueStatsInfo{
+				TaskQueue:      &taskqueuepb.TaskQueue{Name: tq.TaskQueueName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				TaskQueueType:  tq.TaskQueueType,
+				TaskQueueStats: tqStats.TaskQueueStats,
+			})
+	}
+	return &res, nil
+}

@@ -30,6 +30,7 @@ import "temporal/api/enums/v1/task_queue.proto";
 import "temporal/api/enums/v1/deployment.proto";
 import "google/protobuf/timestamp.proto";
 import "temporal/api/deployment/v1/message.proto";
+import "temporal/api/taskqueue/v1/message.proto";
 import "temporal/api/common/v1/message.proto";
 
 // Identifies a Worker Deployment Version. The combination of `deployment_name` and `build_id`
@@ -242,6 +243,25 @@ message QueryDescribeVersionResponse {
 // used as Worker Deployment Version workflow query response:
 message QueryDescribeWorkerDeploymentResponse {
     WorkerDeploymentLocalState state = 1;
+}
+
+message WorkerDeploymentStatsRequest {
+    WorkerDeploymentVersion version = 1;
+}
+
+message WorkerDeploymentStatsResponse {
+    repeated temporal.api.taskqueue.v1.TaskQueueStatsInfo task_queue_stats = 1;
+}
+
+message GetTaskQueueStatsArg {
+    string deployment_version = 1;
+    repeated TaskQueue task_queues = 2;
+}
+
+// TODO: is this needed? if so, rename it?
+message TaskQueue {
+    string task_queue_name = 1;
+    temporal.api.enums.v1.TaskQueueType task_queue_type = 2;
 }
 
 // used as Worker Deployment Version workflow activity input:

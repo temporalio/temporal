@@ -83,6 +83,13 @@ type Client interface {
 		deploymentName string,
 	) (*deploymentpb.WorkerDeploymentInfo, []byte, error)
 
+	GetWorkerDeploymentStats(
+		ctx context.Context,
+		namespaceEntry *namespace.Namespace,
+		deploymentName string,
+		buildId string,
+	) (*workflowservice.GetWorkerDeploymentStatsResponse, error)
+
 	SetCurrentVersion(
 		ctx context.Context,
 		namespaceEntry *namespace.Namespace,
@@ -437,6 +444,68 @@ func (d *ClientImpl) DescribeWorkerDeployment(
 		return nil, nil, err
 	}
 	return dInfo, queryResponse.GetState().GetConflictToken(), nil
+}
+
+func (d *ClientImpl) GetWorkerDeploymentStats(
+	ctx context.Context,
+	namespaceEntry *namespace.Namespace,
+	deploymentName, buildID string,
+) (_ *workflowservice.GetWorkerDeploymentStatsResponse, retErr error) {
+	//revive:disable-next-line:defer
+	defer d.record("GetWorkerDeploymentStats", &retErr, deploymentName, buildID)()
+
+	err := validateVersionWfParams(WorkerDeploymentNameFieldName, deploymentName, d.maxIDLengthLimit())
+	if err != nil {
+		return nil, err
+	}
+
+	if buildID != "" {
+		if buildID == "__unversioned__" {
+			return nil, serviceerror.NewInvalidArgument("BuildID cannot be unversioned")
+		}
+		err = validateVersionWfParams(WorkerDeploymentBuildIDFieldName, buildID, d.maxIDLengthLimit())
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		// TODO: query and use current buildID here
+		if buildID == "__unversioned__" {
+			return nil, serviceerror.NewInvalidArgument("Worker Deployment is unversioned and can not be queried")
+		}
+	}
+
+	outcome, err := d.update(
+		ctx,
+		namespaceEntry,
+		worker_versioning.GenerateVersionWorkflowID(deploymentName, buildID),
+		&updatepb.Request{
+			Input: &updatepb.Input{Name: GetStats},
+			Meta:  &updatepb.Meta{UpdateId: uuid.New(), Identity: ""}, // TODO?
+		},
+	)
+	if err != nil {
+		var notFound *serviceerror.NotFound
+		if errors.As(err, &notFound) {
+			return nil, serviceerror.NewNotFound("Worker Deployment not found")
+		}
+		return nil, err
+	}
+
+	var statsResp *deploymentspb.WorkerDeploymentStatsResponse
+	err = sdk.PreferProtoDataConverter.FromPayloads(outcome.GetSuccess(), &statsResp)
+	if err != nil {
+		return nil, err
+	}
+
+	var approximateTotalBacklogCount int64
+	for _, tqStats := range statsResp.TaskQueueStats {
+		approximateTotalBacklogCount += tqStats.GetTaskQueueStats().GetApproximateBacklogCount()
+	}
+
+	return &workflowservice.GetWorkerDeploymentStatsResponse{
+		PerQueueMetrics:              statsResp.TaskQueueStats,
+		ApproximateTotalBacklogCount: approximateTotalBacklogCount,
+	}, nil
 }
 
 func (d *ClientImpl) ListWorkerDeployments(

@@ -89,6 +89,7 @@ service MatchingService {
 
     // DescribeTaskQueue returns information about the target task queue, right now this API returns the
     // pollers which polled this task queue in last few minutes.
+    // @deprecate TODO
     rpc DescribeTaskQueue (DescribeTaskQueueRequest) returns (DescribeTaskQueueResponse) {
     }
 
@@ -127,6 +128,9 @@ service MatchingService {
 
     // This request should always be routed to the node holding the root partition of the workflow task queue.
     rpc SyncDeploymentUserData (SyncDeploymentUserDataRequest) returns (SyncDeploymentUserDataResponse) {}
+
+    // TODO
+    rpc GetTaskQueueStats (GetTaskQueueStatsRequest) returns (GetTaskQueueStatsResponse) {}
 
     // Apply a user data replication event.
     rpc ApplyTaskQueueUserDataReplicationEvent (ApplyTaskQueueUserDataReplicationEventRequest) returns (ApplyTaskQueueUserDataReplicationEventResponse) {}

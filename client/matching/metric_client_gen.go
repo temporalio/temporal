@@ -201,6 +201,20 @@ func (c *metricClient) GetBuildIdTaskQueueMapping(
 	return c.client.GetBuildIdTaskQueueMapping(ctx, request, opts...)
 }
 
+func (c *metricClient) GetTaskQueueStats(
+	ctx context.Context,
+	request *matchingservice.GetTaskQueueStatsRequest,
+	opts ...grpc.CallOption,
+) (_ *matchingservice.GetTaskQueueStatsResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "MatchingClientGetTaskQueueStats")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.GetTaskQueueStats(ctx, request, opts...)
+}
+
 func (c *metricClient) GetTaskQueueUserData(
 	ctx context.Context,
 	request *matchingservice.GetTaskQueueUserDataRequest,

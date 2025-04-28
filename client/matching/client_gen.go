@@ -268,6 +268,26 @@ func (c *clientImpl) GetBuildIdTaskQueueMapping(
 	return client.GetBuildIdTaskQueueMapping(ctx, request, opts...)
 }
 
+func (c *clientImpl) GetTaskQueueStats(
+	ctx context.Context,
+	request *matchingservice.GetTaskQueueStatsRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.GetTaskQueueStatsResponse, error) {
+
+	p, err := tqid.NormalPartitionFromRpcName(request.GetTaskQueue(), request.GetNamespaceId(), request.GetTaskQueueType())
+	if err != nil {
+		return nil, err
+	}
+
+	client, err := c.getClientForTaskQueuePartition(p)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.GetTaskQueueStats(ctx, request, opts...)
+}
+
 func (c *clientImpl) GetTaskQueueUserData(
 	ctx context.Context,
 	request *matchingservice.GetTaskQueueUserDataRequest,

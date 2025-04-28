@@ -135,9 +135,17 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 		return nil
 	case *workflowservice.GetSystemInfoResponse:
 		return nil
+	case *workflowservice.GetTaskQueueStatsRequest:
+		return nil
+	case *workflowservice.GetTaskQueueStatsResponse:
+		return nil
 	case *workflowservice.GetWorkerBuildIdCompatibilityRequest:
 		return nil
 	case *workflowservice.GetWorkerBuildIdCompatibilityResponse:
+		return nil
+	case *workflowservice.GetWorkerDeploymentStatsRequest:
+		return nil
+	case *workflowservice.GetWorkerDeploymentStatsResponse:
 		return nil
 	case *workflowservice.GetWorkerTaskReachabilityRequest:
 		return nil

@@ -1128,6 +1128,56 @@ func (e *matchingEngineImpl) CancelOutstandingPoll(
 	return nil
 }
 
+func (e *matchingEngineImpl) GetTaskQueueStats(
+	ctx context.Context,
+	request *matchingservice.GetTaskQueueStatsRequest,
+) (*matchingservice.GetTaskQueueStatsResponse, error) {
+	ns, err := e.namespaceRegistry.GetNamespaceName(namespace.ID(request.NamespaceId))
+	if err != nil {
+		return nil, err
+	}
+
+	tq := &taskqueuepb.TaskQueue{Name: request.TaskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	taskQueueType := request.GetTaskQueueType()
+	rootPartition, err := tqid.PartitionFromProto(tq, request.GetNamespaceId(), taskQueueType)
+	if err != nil {
+		return nil, err
+	}
+
+	tqConfig := newTaskQueueConfig(rootPartition.TaskQueue(), e.config, ns)
+	numPartitions := max(tqConfig.NumWritePartitions(), tqConfig.NumReadPartitions())
+
+	queueStats := &taskqueuepb.TaskQueueStats{}
+	for i := 0; i < numPartitions; i++ {
+		descrPartition, err := e.matchingRawClient.DescribeTaskQueuePartition(ctx,
+			&matchingservice.DescribeTaskQueuePartitionRequest{
+				NamespaceId: request.GetNamespaceId(),
+				TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
+					TaskQueue:     request.TaskQueue,
+					TaskQueueType: request.TaskQueueType,
+					PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: int32(i)},
+				},
+				Versions: &taskqueuepb.TaskQueueVersionSelection{
+					BuildIds: []string{request.DeploymentVersion}, // NOTE: empty means "unversioned"
+				},
+				ReportStats: true,
+			})
+		if err != nil {
+			return nil, err
+		}
+		for _, vii := range descrPartition.VersionsInfoInternal {
+			partitionStats := vii.PhysicalTaskQueueInfo.TaskQueueStats
+			queueStats.ApproximateBacklogCount += partitionStats.ApproximateBacklogCount
+			queueStats.ApproximateBacklogAge = largerBacklogAge(queueStats.ApproximateBacklogAge, partitionStats.ApproximateBacklogAge)
+			queueStats.TasksAddRate += partitionStats.TasksAddRate
+			queueStats.TasksDispatchRate += partitionStats.TasksDispatchRate
+		}
+	}
+	return &matchingservice.GetTaskQueueStatsResponse{
+		TaskQueueStats: queueStats,
+	}, nil
+}
+
 func (e *matchingEngineImpl) DescribeTaskQueue(
 	ctx context.Context,
 	request *matchingservice.DescribeTaskQueueRequest,
