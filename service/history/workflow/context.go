@@ -404,10 +404,15 @@ func (c *ContextImpl) UpdateWorkflowExecutionAsActive(
 		}
 	}
 
+	updateMode, err := c.updateWorkflowMode()
+	if err != nil {
+		return err
+	}
+
 	err = c.UpdateWorkflowExecutionWithNew(
 		ctx,
 		shardContext,
-		c.updateWorkflowMode(),
+		updateMode,
 		nil,
 		nil,
 		historyi.TransactionPolicyActive,
@@ -456,10 +461,15 @@ func (c *ContextImpl) UpdateWorkflowExecutionAsPassive(
 	shardContext historyi.ShardContext,
 ) error {
 
+	updateMode, err := c.updateWorkflowMode()
+	if err != nil {
+		return err
+	}
+
 	return c.UpdateWorkflowExecutionWithNew(
 		ctx,
 		shardContext,
-		c.updateWorkflowMode(),
+		updateMode,
 		nil,
 		nil,
 		historyi.TransactionPolicyPassive,
@@ -778,20 +788,25 @@ func (c *ContextImpl) conflictResolveEventReapply(
 	return c.ReapplyEvents(ctx, shardContext, eventBatches)
 }
 
-func (c *ContextImpl) updateWorkflowMode() persistence.UpdateWorkflowMode {
+func (c *ContextImpl) updateWorkflowMode() (persistence.UpdateWorkflowMode, error) {
 	updateMode := persistence.UpdateWorkflowModeUpdateCurrent
 	if !c.config.EnableUpdateWorkflowModeIgnoreCurrent() {
-		return persistence.UpdateWorkflowModeUpdateCurrent
+		return persistence.UpdateWorkflowModeUpdateCurrent, nil
 	}
 
 	updateMode = persistence.UpdateWorkflowModeIgnoreCurrent
 	if c.MutableState.IsCurrentWorkflowGuaranteed() {
 		updateMode = persistence.UpdateWorkflowModeUpdateCurrent
 	}
-	if c.MutableState.IsNonCurrentWorkflowGuaranteed() {
+
+	guaranteed, err := c.MutableState.IsNonCurrentWorkflowGuaranteed()
+	if err != nil {
+		return updateMode, err
+	}
+	if guaranteed {
 		updateMode = persistence.UpdateWorkflowModeBypassCurrent
 	}
-	return updateMode
+	return updateMode, nil
 }
 
 func (c *ContextImpl) ReapplyEvents(

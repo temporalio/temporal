@@ -1020,22 +1020,22 @@ func (ms *MutableStateImpl) IsCurrentWorkflowGuaranteed() bool {
 	}
 }
 
-func (ms *MutableStateImpl) IsNonCurrentWorkflowGuaranteed() bool {
+func (ms *MutableStateImpl) IsNonCurrentWorkflowGuaranteed() (bool, error) {
 	switch ms.stateInDB {
 	case enumsspb.WORKFLOW_EXECUTION_STATE_VOID:
-		return true
+		return true, nil
 	case enumsspb.WORKFLOW_EXECUTION_STATE_CREATED:
-		return false
+		return false, nil
 	case enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:
-		return false
+		return false, nil
 	case enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED:
-		return false
+		return false, nil
 	case enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE:
-		return true
+		return true, nil
 	case enumsspb.WORKFLOW_EXECUTION_STATE_CORRUPTED:
-		return false
+		return false, nil
 	default:
-		panic(fmt.Sprintf("unknown workflow state: %v", ms.executionState.State))
+		return false, serviceerror.NewInternal(fmt.Sprintf("unknown workflow state: %v", ms.executionState.State.String()))
 	}
 }
 

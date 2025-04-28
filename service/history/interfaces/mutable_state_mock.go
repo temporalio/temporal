@@ -2823,11 +2823,12 @@ func (mr *MockMutableStateMockRecorder) IsDirty() *gomock.Call {
 }
 
 // IsNonCurrentWorkflowGuaranteed mocks base method.
-func (m *MockMutableState) IsNonCurrentWorkflowGuaranteed() bool {
+func (m *MockMutableState) IsNonCurrentWorkflowGuaranteed() (bool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "IsNonCurrentWorkflowGuaranteed")
 	ret0, _ := ret[0].(bool)
-	return ret0
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // IsNonCurrentWorkflowGuaranteed indicates an expected call of IsNonCurrentWorkflowGuaranteed.
