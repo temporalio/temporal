@@ -713,6 +713,12 @@ func (d *ClientImpl) DeleteWorkerDeploymentVersion(
 	if failure := outcome.GetFailure(); failure != nil {
 		if failure.GetApplicationFailureInfo().GetType() == errVersionNotFound {
 			return nil
+		} else if failure.GetCause().GetApplicationFailureInfo().GetType() == ErrVersionIsCurrentOrRamping {
+			return serviceerror.NewFailedPrecondition(ErrVersionIsCurrentOrRamping)
+		} else if failure.GetCause().GetApplicationFailureInfo().GetType() == ErrVersionIsDraining {
+			return serviceerror.NewFailedPrecondition(ErrVersionIsDraining)
+		} else if failure.GetCause().GetApplicationFailureInfo().GetType() == ErrVersionHasPollers {
+			return serviceerror.NewFailedPrecondition(ErrVersionHasPollers)
 		}
 		return serviceerror.NewInternal(failure.Message)
 	}
@@ -934,12 +940,12 @@ func (d *ClientImpl) DeleteVersionFromWorkerDeployment(
 	}
 
 	if failure := outcome.GetFailure(); failure != nil {
-		if failure.Message == errVersionIsDraining {
-			return temporal.NewNonRetryableApplicationError(errVersionIsDraining, "Delete on version failed", nil) // non-retryable error to stop multiple activity attempts
-		} else if failure.Message == errVersionHasPollers {
-			return temporal.NewNonRetryableApplicationError(errVersionHasPollers, "Delete on version failed", nil) // non-retryable error to stop multiple activity attempts
-		} else if failure.Message == errVersionIsCurrentOrRamping {
-			return temporal.NewNonRetryableApplicationError(errVersionIsCurrentOrRamping, "Delete on version failed", nil) // non-retryable error to stop multiple activity attempts
+		if failure.Message == ErrVersionIsDraining {
+			return temporal.NewNonRetryableApplicationError(ErrVersionIsDraining, ErrVersionIsDraining, nil) // non-retryable error to stop multiple activity attempts
+		} else if failure.Message == ErrVersionHasPollers {
+			return temporal.NewNonRetryableApplicationError(ErrVersionHasPollers, ErrVersionHasPollers, nil) // non-retryable error to stop multiple activity attempts
+		} else if failure.Message == ErrVersionIsCurrentOrRamping {
+			return temporal.NewNonRetryableApplicationError(ErrVersionIsCurrentOrRamping, ErrVersionIsCurrentOrRamping, nil) // non-retryable error to stop multiple activity attempts
 		}
 		return serviceerror.NewInternal(failure.Message)
 	}

@@ -150,13 +150,12 @@ func (s *fieldSuite) TestFieldGetSimple() {
 		{
 			name: "Get with non-nil value",
 			field: Field[*TestSubComponent1]{
-				Internal: fieldInternal{
-					v: &TestSubComponent1{SubComponent1Data: &protoMessageType{
+				Internal: newFieldInternalWithValue(
+					fieldTypeComponent,
+					&TestSubComponent1{SubComponent1Data: &protoMessageType{
 						ActivityId: "component-data",
 					}},
-					ft: fieldTypeComponent,
-				},
-			},
+				)},
 			expected: &TestSubComponent1{SubComponent1Data: &protoMessageType{
 				ActivityId: "component-data",
 			}},
@@ -164,10 +163,7 @@ func (s *fieldSuite) TestFieldGetSimple() {
 		{
 			name: "Get with nil value and nil node",
 			field: Field[*TestSubComponent1]{
-				Internal: fieldInternal{
-					v:    nil,
-					node: nil,
-				},
+				Internal: newFieldInternalWithNode(nil),
 			},
 			expected: nil,
 		},
