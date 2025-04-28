@@ -1366,7 +1366,7 @@ func serializeTask(
 		}
 
 		if protoMessageFound {
-			return nil, serviceerror.NewInternal("only one proto field allowed in task struct")
+			return nil, serviceerror.NewInternal(fmt.Sprintf("only one proto field allowed in task struct of type: %v", taskGoType.String()))
 		}
 		protoMessageFound = true
 
