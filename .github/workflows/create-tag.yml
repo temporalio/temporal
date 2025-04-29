@@ -9,6 +9,10 @@ on:
       tag:
         description: "Tag for new version (1.23.4)"
         required: true
+      skip_deps_check:
+        type: boolean
+        description: "Skip dependencies version check"
+        default: false
       release_notes:
         type: boolean
         description: "Create draft release notes"
@@ -72,6 +76,19 @@ jobs:
               echo "tag_with_v=v${TAG}" >> "$GITHUB_OUTPUT"
               echo "tag_no_v=${TAG}" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Validate API and SDK dependencies
+        if: ${{ github.event.inputs.skip_deps_check == 'false' }}
+        run: |
+          SEMVER_RE='^v[0-9]+\.[0-9]+\.[0-9]+$'
+          MODULES=( "go.temporal.io/api" "go.temporal.io/sdk" )
+          for module in "${MODULES[@]}"; do
+            read -r _ version <<< "$(go list -m "$module")"
+            if [[ ! "$version" =~ $SEMVER_RE ]]; then
+              echo "::error::Using non-tagged version of module $module with version $version"
+              exit 1
+            fi
+          done
 
       - name: Update Server version
         if: ${{ steps.get_current_version.outputs.CURRENT_VERSION != github.event.inputs.tag }}
