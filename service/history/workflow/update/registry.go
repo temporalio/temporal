@@ -38,11 +38,11 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/effect"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/telemetry"
-	"go.temporal.io/server/internal/effect"
 	"google.golang.org/protobuf/types/known/anypb"
 )
 

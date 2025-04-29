@@ -37,8 +37,17 @@ type (
 		Destination   string
 	}
 
-	TaskHandler[C any, T any] interface {
-		Validate(Context, C, T) error
+	SideEffectTaskExecutor[C any, T any] interface {
 		Execute(context.Context, ComponentRef, T) error
 	}
+
+	PureTaskExecutor[C any, T any] interface {
+		Execute(Context, C, T) error
+	}
+
+	TaskValidator[C any, T any] interface {
+		Validate(Context, C, T) (bool, error)
+	}
 )
+
+var TaskScheduledTimeImmediate = time.Time{}

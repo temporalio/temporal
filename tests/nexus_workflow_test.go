@@ -81,6 +81,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelation() {
 	taskQueue := testcore.RandomizeStr(s.T().Name())
 	endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
 
+	errSent := false
 	h := nexustest.Handler{
 		OnStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
 			if service != "service" {
@@ -89,6 +90,11 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelation() {
 			return &nexus.HandlerStartOperationResultAsync{OperationToken: "test"}, nil
 		},
 		OnCancelOperation: func(ctx context.Context, service, operation, token string, options nexus.CancelOperationOptions) error {
+			if !errSent {
+				// Fail cancel request once to test NexusOperationCancelRequestFailed event is recorded and request is retried.
+				errSent = true
+				return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "intentional cancel error for test")
+			}
 			return nil
 		},
 	}
@@ -203,11 +209,16 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelation() {
 		assert.Equal(t, "operation", op.Operation)
 		assert.Equal(t, enumspb.PENDING_NEXUS_OPERATION_STATE_STARTED, op.State)
 		assert.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SUCCEEDED, op.CancellationInfo.State)
-
 	}, time.Second*10, time.Millisecond*30)
 
 	err = s.SdkClient().TerminateWorkflow(ctx, run.GetID(), run.GetRunID(), "test")
 	s.NoError(err)
+
+	hist := s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{
+		WorkflowId: run.GetID(),
+		RunId:      run.GetRunID(),
+	})
+	s.ContainsHistoryEvents(`NexusOperationCancelRequestCompleted`, hist)
 }
 
 func (s *NexusWorkflowTestSuite) TestNexusOperationSyncCompletion() {
@@ -1514,6 +1525,15 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelBeforeStarted_Cancelati
 	// Terminate the workflow for good measure.
 	err = s.SdkClient().TerminateWorkflow(ctx, run.GetID(), run.GetRunID(), "test")
 	s.NoError(err)
+
+	// Assert that we did not send a cancel request until after the operation was started.
+	hist := s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{
+		WorkflowId: run.GetID(),
+		RunId:      run.GetRunID(),
+	})
+	s.ContainsHistoryEvents(`
+NexusOperationCancelRequested
+NexusOperationStarted`, hist)
 }
 
 func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionAfterReset() {
@@ -2117,6 +2137,81 @@ func (s *NexusWorkflowTestSuite) TestNexusAsyncOperationErrorRehydration() {
 	}
 }
 
+func (s *NexusWorkflowTestSuite) TestNexusCallbackAfterCallerComplete() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*20)
+	defer cancel()
+	taskQueue := testcore.RandomizeStr("caller_" + s.T().Name())
+	endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
+	handlerWorkflowID := testcore.RandomizeStr(s.T().Name())
+
+	_, err := s.SdkClient().OperatorService().CreateNexusEndpoint(ctx, &operatorservice.CreateNexusEndpointRequest{
+		Spec: &nexuspb.EndpointSpec{
+			Name: endpointName,
+			Target: &nexuspb.EndpointTarget{
+				Variant: &nexuspb.EndpointTarget_Worker_{
+					Worker: &nexuspb.EndpointTarget_Worker{
+						Namespace: s.Namespace().String(),
+						TaskQueue: taskQueue,
+					},
+				},
+			},
+		},
+	})
+	s.NoError(err)
+
+	w := worker.New(
+		s.SdkClient(),
+		taskQueue,
+		worker.Options{},
+	)
+
+	svc := nexus.NewService("test")
+
+	handlerWF := func(ctx workflow.Context, _ nexus.NoValue) (nexus.NoValue, error) {
+		return nil, workflow.Sleep(ctx, 1*time.Second)
+	}
+
+	op := temporalnexus.NewWorkflowRunOperation("op", handlerWF, func(ctx context.Context, _ nexus.NoValue, soo nexus.StartOperationOptions) (client.StartWorkflowOptions, error) {
+		return client.StartWorkflowOptions{ID: handlerWorkflowID}, nil
+	})
+	s.NoError(svc.Register(op))
+
+	callerWF := func(ctx workflow.Context) error {
+		c := workflow.NewNexusClient(endpointName, svc.Name)
+		fut := c.ExecuteOperation(ctx, op, nil, workflow.NexusOperationOptions{})
+		return fut.Get(ctx, nil)
+	}
+
+	w.RegisterNexusService(svc)
+	w.RegisterWorkflow(callerWF)
+	w.RegisterWorkflow(handlerWF)
+	s.NoError(w.Start())
+	s.T().Cleanup(w.Stop)
+
+	run, err := s.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		TaskQueue:          taskQueue,
+		WorkflowRunTimeout: 200 * time.Millisecond,
+	}, callerWF)
+	s.NoError(err)
+
+	wfErr := run.Get(ctx, nil)
+	s.Error(wfErr)
+
+	s.EventuallyWithT(func(ct *assert.CollectT) {
+		resp, err := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: s.Namespace().String(),
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: handlerWorkflowID,
+			},
+		})
+		require.NoError(ct, err)
+		require.Len(ct, resp.Callbacks, 1)
+		require.Equal(ct, resp.Callbacks[0].State, enumspb.CALLBACK_STATE_FAILED)
+		require.NotNil(ct, resp.Callbacks[0].LastAttemptFailure)
+		require.Equal(ct, resp.Callbacks[0].LastAttemptFailure.Message, "handler error (NOT_FOUND): workflow execution already completed")
+	}, 3*time.Second, 200*time.Millisecond)
+}
+
 func (s *NexusWorkflowTestSuite) TestNexusOperationSyncNexusFailure() {
 	ctx := testcore.NewContext()
 	taskQueue := testcore.RandomizeStr(s.T().Name())
@@ -2324,12 +2419,9 @@ func (s *NexusWorkflowTestSuite) TestNexusAsyncOperationWithMultipleCallers() {
 		{
 			input: "conflict-policy-use-existing",
 			checkOutput: func(t *testing.T, res CallerWfOutput, err error) {
-				// TODO(rodrigozhou): The SDK is temporarily blocking this. Remove this check and uncomment
-				// the checks below after SDK unblocks this.
-				require.ErrorContains(t, err, "workflow ID conflict policy UseExisting is not supported for Nexus WorkflowRunOperation")
-				// require.NoError(t, err)
-				// require.EqualValues(t, numCalls, res.CntOk)
-				// require.EqualValues(t, 0, res.CntErr)
+				require.NoError(t, err)
+				require.EqualValues(t, numCalls, res.CntOk)
+				require.EqualValues(t, 0, res.CntErr)
 			},
 		},
 	}

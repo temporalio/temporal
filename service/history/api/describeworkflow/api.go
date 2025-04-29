@@ -154,12 +154,14 @@ func Invoke(
 			InheritedBuildId:             executionInfo.InheritedBuildId,
 			FirstRunId:                   executionInfo.FirstExecutionRunId,
 			VersioningInfo:               executionInfo.VersioningInfo,
+			Priority:                     executionInfo.Priority,
 		},
 		WorkflowExtendedInfo: &workflowpb.WorkflowExecutionExtendedInfo{
 			ExecutionExpirationTime: executionInfo.WorkflowExecutionExpirationTime,
 			RunExpirationTime:       executionInfo.WorkflowRunExpirationTime,
 			OriginalStartTime:       startEvent.EventTime,
 			CancelRequested:         executionInfo.CancelRequested,
+			ResetRunId:              executionInfo.ResetRunId,
 		},
 	}
 

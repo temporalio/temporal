@@ -158,6 +158,11 @@ var (
 		"DeleteWorkerDeploymentVersion":         {Scope: ScopeNamespace, Access: AccessWrite},
 		"UpdateWorkerDeploymentVersionMetadata": {Scope: ScopeNamespace, Access: AccessWrite},
 		"ListWorkerDeployments":                 {Scope: ScopeNamespace, Access: AccessReadOnly},
+		"CreateWorkflowRule":                    {Scope: ScopeNamespace, Access: AccessWrite},
+		"DescribeWorkflowRule":                  {Scope: ScopeNamespace, Access: AccessReadOnly},
+		"DeleteWorkflowRule":                    {Scope: ScopeNamespace, Access: AccessWrite},
+		"ListWorkflowRules":                     {Scope: ScopeNamespace, Access: AccessReadOnly},
+		"TriggerWorkflowRule":                   {Scope: ScopeNamespace, Access: AccessWrite},
 	}
 	operatorServiceMetadata = map[string]MethodMetadata{
 		"AddSearchAttributes":      {Scope: ScopeNamespace, Access: AccessAdmin},
@@ -174,7 +179,10 @@ var (
 		"ListNexusEndpoints":       {Scope: ScopeCluster, Access: AccessAdmin},
 	}
 	nexusServiceMetadata = map[string]MethodMetadata{
-		"DispatchNexusTask": {Scope: ScopeNamespace, Access: AccessWrite},
+		"DispatchNexusTask":               {Scope: ScopeNamespace, Access: AccessWrite},
+		"DispatchByNamespaceAndTaskQueue": {Scope: ScopeNamespace, Access: AccessWrite},
+		"DispatchByEndpoint":              {Scope: ScopeNamespace, Access: AccessWrite},
+		"CompleteNexusOperation":          {Scope: ScopeNamespace, Access: AccessWrite},
 	}
 )
 

@@ -79,11 +79,12 @@ var (
 )
 
 var (
-	respondWorkflowTaskCompleted = "RespondWorkflowTaskCompleted"
-	pollActivityTaskQueue        = "PollActivityTaskQueue"
-	startWorkflowExecution       = "StartWorkflowExecution"
-	executeMultiOperation        = "ExecuteMultiOperation"
-	queryWorkflow                = "QueryWorkflow"
+	respondWorkflowTaskCompleted   = "RespondWorkflowTaskCompleted"
+	pollActivityTaskQueue          = "PollActivityTaskQueue"
+	startWorkflowExecution         = "StartWorkflowExecution"
+	executeMultiOperation          = "ExecuteMultiOperation"
+	queryWorkflow                  = "QueryWorkflow"
+	updateWorkflowExecutionOptions = "UpdateWorkflowExecutionOptions"
 
 	grpcActions = map[string]struct{}{
 		startWorkflowExecution:             {},
@@ -91,6 +92,7 @@ var (
 		respondWorkflowTaskCompleted:       {},
 		pollActivityTaskQueue:              {},
 		queryWorkflow:                      {},
+		updateWorkflowExecutionOptions:     {},
 		"RecordActivityTaskHeartbeat":      {},
 		"RecordActivityTaskHeartbeatById":  {},
 		"ResetWorkflowExecution":           {},
@@ -132,9 +134,9 @@ func NewTelemetryInterceptor(
 	}
 }
 
-// Use this method to override scope used for reporting a metric.
+// telemetryUnaryOverrideOperationTag is used to override scope used for reporting a metric.
 // Ideally this method should never be used.
-func (ti *TelemetryInterceptor) unaryOverrideOperationTag(fullName, operation string, req any) string {
+func telemetryUnaryOverrideOperationTag(fullName, operation string, req any) string {
 	if strings.HasPrefix(fullName, api.WorkflowServicePrefix) {
 		// GetWorkflowExecutionHistory method handles both long poll and regular calls.
 		// Current plan is to eventually split GetWorkflowExecutionHistory into two APIs,
@@ -159,12 +161,12 @@ func (ti *TelemetryInterceptor) unaryOverrideOperationTag(fullName, operation st
 			}
 		}
 	}
-	return ti.overrideOperationTag(fullName, operation)
+	return telemetryOverrideOperationTag(fullName, operation)
 }
 
-// Use this method to override scope used for reporting a metric.
+// telemetryOverrideOperationTag is used to override scope used for reporting a metric.
 // Ideally this method should never be used.
-func (ti *TelemetryInterceptor) overrideOperationTag(fullName, operation string) string {
+func telemetryOverrideOperationTag(fullName, operation string) string {
 	// prepend Operator prefix to Operator APIs
 	if strings.HasPrefix(fullName, api.OperatorServicePrefix) {
 		return "Operator" + operation
@@ -262,6 +264,11 @@ func (ti *TelemetryInterceptor) emitActionMetric(
 		}
 		if resp.Started {
 			metrics.ActionCounter.With(metricsHandler).Record(1, metrics.ActionType("grpc_"+methodName))
+		} else {
+			typedReq, ok := req.(*workflowservice.StartWorkflowExecutionRequest)
+			if ok && typedReq.GetWorkflowIdConflictPolicy() == enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING && typedReq.GetOnConflictOptions() != nil {
+				metrics.ActionCounter.With(metricsHandler).Record(1, metrics.ActionType("grpc_"+methodName+"_UpdateWorkflowExecutionOptions"))
+			}
 		}
 	case executeMultiOperation:
 		resp, ok := result.(*workflowservice.ExecuteMultiOperationResponse)
@@ -272,6 +279,16 @@ func (ti *TelemetryInterceptor) emitActionMetric(
 			if startResp := resp.GetResponses()[0].GetStartWorkflow(); startResp != nil {
 				if startResp.Started {
 					metrics.ActionCounter.With(metricsHandler).Record(1, metrics.ActionType("grpc_"+methodName))
+				} else {
+					typedReq, ok := req.(*workflowservice.ExecuteMultiOperationRequest)
+					if !ok || typedReq == nil || len(typedReq.Operations) == 0 {
+						return
+					}
+
+					if typedReq.GetOperations()[0].GetStartWorkflow().GetWorkflowIdConflictPolicy() == enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING &&
+						typedReq.GetOperations()[0].GetStartWorkflow().GetOnConflictOptions() != nil {
+						metrics.ActionCounter.With(metricsHandler).Record(1, metrics.ActionType("grpc_"+methodName+"_UpdateWorkflowExecutionOptions"))
+					}
 				}
 			}
 		}
@@ -359,7 +376,7 @@ func (ti *TelemetryInterceptor) unaryMetricsHandlerLogTags(req any,
 	fullMethod string,
 	methodName string,
 	nsName namespace.Name) (metrics.Handler, []tag.Tag) {
-	overridedMethodName := ti.unaryOverrideOperationTag(fullMethod, methodName, req)
+	overridedMethodName := telemetryUnaryOverrideOperationTag(fullMethod, methodName, req)
 
 	if nsName == "" {
 		return ti.metricsHandler.WithTags(metrics.OperationTag(overridedMethodName), metrics.NamespaceUnknownTag()),
@@ -373,7 +390,7 @@ func (ti *TelemetryInterceptor) streamMetricsHandlerLogTags(
 	fullMethod string,
 	methodName string,
 ) (metrics.Handler, []tag.Tag) {
-	overridedMethodName := ti.overrideOperationTag(fullMethod, methodName)
+	overridedMethodName := telemetryOverrideOperationTag(fullMethod, methodName)
 	return ti.metricsHandler.WithTags(
 		metrics.OperationTag(overridedMethodName),
 		metrics.NamespaceUnknownTag(),
@@ -415,13 +432,6 @@ func (ti *TelemetryInterceptor) logError(
 		common.IsContextCanceledErr(err) ||
 		common.IsResourceExhausted(err)) {
 		return
-	}
-
-	// We mask these two error types in MaskInternalErrorDetailsInterceptor, so we need the hash to find the actual
-	// error message.
-	if statusCode == codes.Internal || statusCode == codes.Unknown {
-		errorHash := common.ErrorHash(err)
-		logTags = append(logTags, tag.NewStringTag("hash", errorHash))
 	}
 
 	logTags = append(logTags, tag.NewStringTag("grpc_code", statusCode.String()))

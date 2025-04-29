@@ -400,7 +400,7 @@ func TestAccess(t *testing.T) {
 			persistenceMutableState := workflow.TestCloneToProto(mutableState)
 			em := s.mockShard.GetExecutionManager().(*persistence.MockExecutionManager)
 			em.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
-			em.EXPECT().SetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.SetWorkflowExecutionResponse{}, nil).Times(tc.expectedSetRequests)
+			em.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil).Times(tc.expectedSetRequests)
 
 			exec := stateMachineEnvironment{
 				shardContext:   s.mockShard,

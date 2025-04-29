@@ -25,6 +25,7 @@
 package replication
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
@@ -51,7 +52,7 @@ func TestWrapEventLoopFn_ReturnStreamError_ShouldStopLoop(t *testing.T) {
 		stopFunc := func() {
 			stopFuncCallCount++
 		}
-		WrapEventLoop(originalEventLoop, stopFunc, log.NewNoopLogger(), metrics.NoopMetricsHandler, NewClusterShardKey(1, 1), NewClusterShardKey(2, 1), backoff.DisabledRetryPolicy)
+		WrapEventLoop(context.Background(), originalEventLoop, stopFunc, log.NewNoopLogger(), metrics.NoopMetricsHandler, NewClusterShardKey(1, 1), NewClusterShardKey(2, 1), backoff.DisabledRetryPolicy)
 		assertion.Equal(1, originalEventLoopCallCount)
 		assertion.Equal(1, stopFuncCallCount)
 
@@ -83,7 +84,7 @@ func TestWrapEventLoopFn_ReturnShardOwnershipLostError_ShouldStopLoop(t *testing
 		stopFunc := func() {
 			stopFuncCallCount++
 		}
-		WrapEventLoop(originalEventLoop, stopFunc, log.NewNoopLogger(), metrics.NoopMetricsHandler, NewClusterShardKey(1, 1), NewClusterShardKey(2, 1), backoff.DisabledRetryPolicy)
+		WrapEventLoop(context.Background(), originalEventLoop, stopFunc, log.NewNoopLogger(), metrics.NoopMetricsHandler, NewClusterShardKey(1, 1), NewClusterShardKey(2, 1), backoff.DisabledRetryPolicy)
 		assertion.Equal(1, originalEventLoopCallCount)
 		assertion.Equal(1, stopFuncCallCount)
 
@@ -117,7 +118,7 @@ func TestWrapEventLoopFn_ReturnServiceError_ShouldRetryUntilStreamError(t *testi
 		stopFunc := func() {
 			stopFuncCallCount++
 		}
-		WrapEventLoop(originalEventLoop, stopFunc, log.NewNoopLogger(), metrics.NoopMetricsHandler, NewClusterShardKey(1, 1), NewClusterShardKey(2, 1), streamRetryPolicy)
+		WrapEventLoop(context.Background(), originalEventLoop, stopFunc, log.NewNoopLogger(), metrics.NoopMetricsHandler, NewClusterShardKey(1, 1), NewClusterShardKey(2, 1), streamRetryPolicy)
 		assertion.Equal(3, originalEventLoopCallCount)
 		assertion.Equal(1, stopFuncCallCount)
 

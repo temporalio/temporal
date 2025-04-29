@@ -188,6 +188,7 @@ func SetupNewWorkflowForRetryOrCron(
 	newMutableState historyi.MutableState,
 	newRunID string,
 	startAttr *historypb.WorkflowExecutionStartedEventAttributes,
+	startLinks []*commonpb.Link,
 	lastCompletionResult *commonpb.Payloads,
 	failure *failurepb.Failure,
 	backoffInterval time.Duration,
@@ -256,6 +257,14 @@ func SetupNewWorkflowForRetryOrCron(
 	// validateContinueAsNewWorkflowExecutionAttributes
 	runTimeout := startAttr.GetWorkflowRunTimeout()
 
+	var completionCallbacks []*commonpb.Callback
+	if initiator == enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY {
+		completionCallbacks, err = getCompletionCallbacksAsProtoSlice(previousMutableState)
+		if err != nil {
+			return err
+		}
+	}
+
 	createRequest := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                uuid.New(),
 		Namespace:                newMutableState.GetNamespaceEntry().Name().String(),
@@ -271,7 +280,9 @@ func SetupNewWorkflowForRetryOrCron(
 		CronSchedule:             startAttr.CronSchedule,
 		Memo:                     startAttr.Memo,
 		SearchAttributes:         startAttr.SearchAttributes,
-		CompletionCallbacks:      startAttr.CompletionCallbacks,
+		CompletionCallbacks:      completionCallbacks,
+		Links:                    startLinks,
+		Priority:                 startAttr.Priority,
 	}
 
 	attempt := int32(1)

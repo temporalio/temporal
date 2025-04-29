@@ -463,7 +463,7 @@ func TestProcessInvocationTask(t *testing.T) {
 			if tc.cancelBeforeStart {
 				op, err := hsm.MachineData[nexusoperations.Operation](node)
 				require.NoError(t, err)
-				_, err = op.Cancel(node, time.Now())
+				_, err = op.Cancel(node, time.Now(), 0)
 				require.NoError(t, err)
 				c, err := op.Cancelation(node)
 				require.NoError(t, err)
@@ -759,7 +759,7 @@ func TestProcessCancelationTask(t *testing.T) {
 				Node: node,
 			})
 			require.NoError(t, err)
-			_, err = op.Cancel(node, time.Now())
+			_, err = op.Cancel(node, time.Now(), 0)
 			require.NoError(t, err)
 			node, err = node.Child([]hsm.Key{nexusoperations.CancelationMachineKey})
 			require.NoError(t, err)
@@ -808,9 +808,10 @@ func TestProcessCancelationTask(t *testing.T) {
 
 			require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{
 				Config: &nexusoperations.Config{
-					Enabled:             dynamicconfig.GetBoolPropertyFn(true),
-					RequestTimeout:      dynamicconfig.GetDurationPropertyFnFilteredByDestination(tc.requestTimeout),
-					MinOperationTimeout: dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Millisecond),
+					Enabled:                             dynamicconfig.GetBoolPropertyFn(true),
+					RequestTimeout:                      dynamicconfig.GetDurationPropertyFnFilteredByDestination(tc.requestTimeout),
+					MinOperationTimeout:                 dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Millisecond),
+					RecordCancelRequestCompletionEvents: dynamicconfig.GetBoolPropertyFn(true),
 					RetryPolicy: func() backoff.RetryPolicy {
 						return backoff.NewExponentialRetryPolicy(time.Second)
 					},
@@ -866,7 +867,7 @@ func TestProcessCancelationTask_OperationCompleted(t *testing.T) {
 		Node: node,
 	})
 	require.NoError(t, err)
-	_, err = op.Cancel(node, time.Now())
+	_, err = op.Cancel(node, time.Now(), 0)
 	require.NoError(t, err)
 	_, err = nexusoperations.TransitionSucceeded.Apply(op, nexusoperations.EventSucceeded{
 		Node: node,
@@ -925,7 +926,7 @@ func TestProcessCancelationBackoffTask(t *testing.T) {
 		Node: node,
 	})
 	require.NoError(t, err)
-	_, err = op.Cancel(node, time.Now())
+	_, err = op.Cancel(node, time.Now(), 0)
 	require.NoError(t, err)
 
 	node, err = node.Child([]hsm.Key{nexusoperations.CancelationMachineKey})

@@ -68,6 +68,7 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
@@ -96,8 +97,9 @@ const (
 )
 
 type (
-	pollerIDCtxKey string
-	identityCtxKey string
+	TaskDispatchRateLimiter quotas.RequestRateLimiter
+	pollerIDCtxKey          string
+	identityCtxKey          string
 
 	taskQueueCounterKey struct {
 		namespaceID   string
@@ -180,6 +182,8 @@ type (
 		userDataUpdateBatchers collection.SyncMap[namespace.ID, *stream_batcher.Batcher[*userDataUpdate, error]]
 		// Stores results of reachability queries to visibility
 		reachabilityCache reachabilityCache
+		// Rate limiter to limit the task dispatch
+		rateLimiter TaskDispatchRateLimiter
 	}
 )
 
@@ -229,6 +233,7 @@ func NewEngine(
 	testHooks testhooks.TestHooks,
 	saProvider searchattribute.Provider,
 	saMapperProvider searchattribute.MapperProvider,
+	rateLimiter TaskDispatchRateLimiter,
 ) Engine {
 	scopedMetricsHandler := metricsHandler.WithTags(metrics.OperationTag(metrics.MatchingEngineScope))
 	e := &matchingEngineImpl{
@@ -269,6 +274,7 @@ func NewEngine(
 		outstandingPollers:        collection.NewSyncMap[string, context.CancelFunc](),
 		namespaceReplicationQueue: namespaceReplicationQueue,
 		userDataUpdateBatchers:    collection.NewSyncMap[namespace.ID, *stream_batcher.Batcher[*userDataUpdate, error]](),
+		rateLimiter:               rateLimiter,
 	}
 	e.reachabilityCache = newReachabilityCache(
 		metrics.NoopMetricsHandler,
@@ -431,8 +437,27 @@ func (e *matchingEngineImpl) getTaskQueuePartitionManager(
 	logger, throttledLogger, metricsHandler := e.loggerAndMetricsForPartition(nsName, partition, tqConfig)
 	var newPM *taskQueuePartitionManagerImpl
 	onFatalErr := func(cause unloadCause) { newPM.unloadFromEngine(cause) }
-	userDataManager := newUserDataManager(e.taskManager, e.matchingRawClient, onFatalErr, partition, tqConfig, logger, e.namespaceRegistry)
-	newPM, err = newTaskQueuePartitionManager(e, namespaceEntry, partition, tqConfig, logger, throttledLogger, metricsHandler, userDataManager)
+	onUserDataChanged := func() { newPM.userDataChanged() }
+	userDataManager := newUserDataManager(
+		e.taskManager,
+		e.matchingRawClient,
+		onFatalErr,
+		onUserDataChanged,
+		partition,
+		tqConfig,
+		logger,
+		e.namespaceRegistry,
+	)
+	newPM, err = newTaskQueuePartitionManager(
+		e,
+		namespaceEntry,
+		partition,
+		tqConfig,
+		logger,
+		throttledLogger,
+		metricsHandler,
+		userDataManager,
+	)
 	if err != nil {
 		return nil, false, err
 	}
@@ -527,6 +552,7 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 		ExpiryTime:       expirationTime,
 		CreateTime:       timestamppb.New(now),
 		VersionDirective: addRequest.VersionDirective,
+		Priority:         addRequest.Priority,
 	}
 
 	return pm.AddTask(ctx, addTaskParams{
@@ -565,6 +591,7 @@ func (e *matchingEngineImpl) AddActivityTask(
 		ExpiryTime:       expirationTime,
 		VersionDirective: addRequest.VersionDirective,
 		Stamp:            addRequest.Stamp,
+		Priority:         addRequest.Priority,
 	}
 
 	return pm.AddTask(ctx, addTaskParams{
@@ -583,6 +610,16 @@ func (e *matchingEngineImpl) PollWorkflowTaskQueue(
 	pollerID := req.GetPollerId()
 	request := req.PollRequest
 	taskQueueName := request.TaskQueue.GetName()
+
+	// Namespace field is not populated for forwarded requests.
+	if len(request.Namespace) == 0 {
+		ns, err := e.namespaceRegistry.GetNamespaceName(namespace.ID(req.GetNamespaceId()))
+		if err != nil {
+			return nil, err
+		}
+		request.Namespace = ns.String()
+	}
+
 pollLoop:
 	for {
 		err := common.IsValidContext(ctx)
@@ -620,7 +657,7 @@ pollLoop:
 			// for query task, we don't need to update history to record workflow task started. but we need to know
 			// the NextEventID and the currently set sticky task queue.
 			// TODO: in theory we only need this lookup for non-sticky queries (to get NextEventID for populating
-			//		partial history in the response), but we need a new history API to to determine whether the query
+			//		partial history in the response), but we need a new history API to determine whether the query
 			//		is sticky or not without this call
 			mutableStateResp, err := e.historyClient.GetMutableState(ctx, &historyservice.GetMutableStateRequest{
 				NamespaceId: req.GetNamespaceId(),
@@ -837,6 +874,16 @@ func (e *matchingEngineImpl) PollActivityTaskQueue(
 	pollerID := req.GetPollerId()
 	request := req.PollRequest
 	taskQueueName := request.TaskQueue.GetName()
+
+	// Namespace field is not populated for forwarded requests.
+	if len(request.Namespace) == 0 {
+		ns, err := e.namespaceRegistry.GetNamespaceName(namespace.ID(req.GetNamespaceId()))
+		if err != nil {
+			return nil, err
+		}
+		request.Namespace = ns.String()
+	}
+
 pollLoop:
 	for {
 		err := common.IsValidContext(ctx)
@@ -2582,6 +2629,7 @@ func (e *matchingEngineImpl) createPollActivityTaskQueueResponse(
 		WorkflowType:                historyResponse.WorkflowType,
 		WorkflowNamespace:           historyResponse.WorkflowNamespace,
 		PollerScalingDecision:       task.pollerScalingDecision,
+		Priority:                    historyResponse.Priority,
 	}
 }
 
@@ -2590,6 +2638,18 @@ func (e *matchingEngineImpl) recordWorkflowTaskStarted(
 	pollReq *workflowservice.PollWorkflowTaskQueueRequest,
 	task *internalTask,
 ) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
+	if e.rateLimiter != nil {
+		err := e.rateLimiter.Wait(ctx, quotas.Request{
+			API:        "RecordWorkflowTaskStarted",
+			Token:      1,
+			Caller:     pollReq.Namespace,
+			CallerType: headers.CallerTypeAPI,
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	ctx, cancel := newRecordTaskStartedContext(ctx, task)
 	defer cancel()
 
@@ -2628,6 +2688,18 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 	pollReq *workflowservice.PollActivityTaskQueueRequest,
 	task *internalTask,
 ) (*historyservice.RecordActivityTaskStartedResponse, error) {
+	if e.rateLimiter != nil {
+		err := e.rateLimiter.Wait(ctx, quotas.Request{
+			API:        "RecordActivityTaskStarted",
+			Token:      1,
+			Caller:     pollReq.Namespace,
+			CallerType: headers.CallerTypeAPI,
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	ctx, cancel := newRecordTaskStartedContext(ctx, task)
 	defer cancel()
 

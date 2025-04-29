@@ -81,6 +81,14 @@ type (
 			targetVersionHistories [][]*historyspb.VersionHistoryItem,
 			releaseFunc historyi.ReleaseWorkflowContextFunc,
 		) (*SyncStateResult, error)
+		GetSyncWorkflowStateArtifactFromMutableStateForNewWorkflow(
+			ctx context.Context,
+			namespaceID string,
+			execution *commonpb.WorkflowExecution,
+			mutableState historyi.MutableState,
+			releaseFunc historyi.ReleaseWorkflowContextFunc,
+			taskVersionedTransition *persistencespb.VersionedTransition,
+		) (*SyncStateResult, error)
 	}
 
 	SyncStateRetrieverImpl struct {
@@ -178,6 +186,68 @@ func (s *SyncStateRetrieverImpl) GetSyncWorkflowStateArtifactFromMutableState(
 	return s.getSyncStateResult(ctx, namespaceID, execution, mu, targetCurrentVersionedTransition, targetVersionHistories, releaseFunc)
 }
 
+func (s *SyncStateRetrieverImpl) GetSyncWorkflowStateArtifactFromMutableStateForNewWorkflow(
+	ctx context.Context,
+	namespaceID string,
+	execution *commonpb.WorkflowExecution,
+	mu historyi.MutableState,
+	releaseFunc historyi.ReleaseWorkflowContextFunc,
+	taskVersionedTransition *persistencespb.VersionedTransition,
+) (_ *SyncStateResult, retError error) {
+	versionedTransitionArtifact := &replicationspb.VersionedTransitionArtifact{}
+	mutation, err := s.getMutation(mu, workflow.EmptyVersionedTransition)
+	if err != nil {
+		return nil, err
+	}
+	versionedTransitionArtifact.StateAttributes = &replicationspb.VersionedTransitionArtifact_SyncWorkflowStateMutationAttributes{
+		SyncWorkflowStateMutationAttributes: &replicationspb.SyncWorkflowStateMutationAttributes{
+			StateMutation: mutation,
+			ExclusiveStartVersionedTransition: &persistencespb.VersionedTransition{
+				NamespaceFailoverVersion: taskVersionedTransition.NamespaceFailoverVersion,
+				TransitionCount:          0,
+			},
+		},
+	}
+
+	newRunId := mu.GetExecutionInfo().NewExecutionRunId
+	sourceVersionHistories := versionhistory.CopyVersionHistories(mu.GetExecutionInfo().VersionHistories)
+	sourceTransitionHistory := transitionhistory.CopyVersionedTransitions(mu.GetExecutionInfo().TransitionHistory)
+	if releaseFunc != nil {
+		releaseFunc(nil)
+	}
+	if len(newRunId) > 0 {
+		newRunInfo, err := s.getNewRunInfo(ctx, namespace.ID(namespaceID), execution, newRunId)
+		if err != nil {
+			return nil, err
+		}
+		versionedTransitionArtifact.NewRunInfo = newRunInfo
+	}
+	wfKey := definition.WorkflowKey{
+		NamespaceID: namespaceID,
+		WorkflowID:  execution.WorkflowId,
+		RunID:       execution.RunId,
+	}
+	sourceHistory, err := versionhistory.GetCurrentVersionHistory(sourceVersionHistories)
+	if err != nil {
+		return nil, err
+	}
+	sourceLastItem, err := versionhistory.GetLastVersionHistoryItem(sourceHistory)
+	if err != nil {
+		return nil, err
+	}
+	events, err := s.getEventsBlob(ctx, wfKey, sourceHistory, 1, sourceLastItem.GetEventId()+1, false)
+	if err != nil {
+		return nil, err
+	}
+	versionedTransitionArtifact.EventBatches = events
+	result := &SyncStateResult{
+		VersionedTransitionArtifact: versionedTransitionArtifact,
+		VersionedTransitionHistory:  sourceTransitionHistory,
+		SyncedVersionHistory:        sourceHistory,
+	}
+	return result, nil
+}
+
 func (s *SyncStateRetrieverImpl) getSyncStateResult(
 	ctx context.Context,
 	namespaceID string,
@@ -201,10 +271,10 @@ func (s *SyncStateRetrieverImpl) getSyncStateResult(
 		}
 		if mutableState.GetExecutionInfo().LastTransitionHistoryBreakPoint != nil &&
 			// the target transition falls into the previous break point, need to send snapshot
-			workflow.CompareVersionedTransition(mutableState.GetExecutionInfo().LastTransitionHistoryBreakPoint, targetCurrentVersionedTransition) >= 0 {
+			transitionhistory.Compare(mutableState.GetExecutionInfo().LastTransitionHistoryBreakPoint, targetCurrentVersionedTransition) >= 0 {
 			return false
 		}
-		if workflow.CompareVersionedTransition(tombstoneBatch[0].VersionedTransition, targetCurrentVersionedTransition) <= 0 {
+		if transitionhistory.Compare(tombstoneBatch[0].VersionedTransition, targetCurrentVersionedTransition) <= 0 {
 			return true
 		}
 
@@ -352,10 +422,10 @@ func (s *SyncStateRetrieverImpl) getNewRunInfo(ctx context.Context, namespaceId 
 
 func (s *SyncStateRetrieverImpl) getMutation(
 	mutableState historyi.MutableState,
-	versionedTransition *persistencespb.VersionedTransition,
+	exclusiveMinVT *persistencespb.VersionedTransition,
 ) (*persistencespb.WorkflowMutableStateMutation, error) {
 	rootNode := mutableState.HSM()
-	updatedStateMachine, err := s.getUpdatedSubStateMachine(rootNode, versionedTransition)
+	updatedStateMachine, err := s.getUpdatedSubStateMachine(rootNode, exclusiveMinVT)
 	if err != nil {
 		return nil, err
 	}
@@ -364,25 +434,25 @@ func (s *SyncStateRetrieverImpl) getMutation(
 	tombstoneBatch := executionInfo.SubStateMachineTombstoneBatches
 	var tombstones []*persistencespb.StateMachineTombstoneBatch
 	for i, tombstone := range tombstoneBatch {
-		if workflow.CompareVersionedTransition(tombstone.VersionedTransition, versionedTransition) > 0 {
+		if transitionhistory.Compare(tombstone.VersionedTransition, exclusiveMinVT) > 0 {
 			tombstones = tombstoneBatch[i:]
 			break
 		}
 	}
 
 	var signalRequestedIds []string
-	if workflow.CompareVersionedTransition(executionInfo.SignalRequestIdsLastUpdateVersionedTransition, versionedTransition) > 0 {
+	if transitionhistory.Compare(executionInfo.SignalRequestIdsLastUpdateVersionedTransition, exclusiveMinVT) > 0 {
 		signalRequestedIds = mutableState.GetPendingSignalRequestedIds()
 	}
 
 	mutation := &persistencespb.WorkflowMutableStateMutation{
-		UpdatedActivityInfos:            getUpdatedInfo(mutableState.GetPendingActivityInfos(), versionedTransition),
-		UpdatedTimerInfos:               getUpdatedInfo(mutableState.GetPendingTimerInfos(), versionedTransition),
-		UpdatedChildExecutionInfos:      getUpdatedInfo(mutableState.GetPendingChildExecutionInfos(), versionedTransition),
-		UpdatedRequestCancelInfos:       getUpdatedInfo(mutableState.GetPendingRequestCancelExternalInfos(), versionedTransition),
-		UpdatedSignalInfos:              getUpdatedInfo(mutableState.GetPendingSignalExternalInfos(), versionedTransition),
-		UpdatedUpdateInfos:              getUpdatedInfo(executionInfo.UpdateInfos, versionedTransition),
-		UpdatedChasmNodes:               mutableState.ChasmTree().Snapshot(versionedTransition).Nodes,
+		UpdatedActivityInfos:            getUpdatedInfo(mutableState.GetPendingActivityInfos(), exclusiveMinVT),
+		UpdatedTimerInfos:               getUpdatedInfo(mutableState.GetPendingTimerInfos(), exclusiveMinVT),
+		UpdatedChildExecutionInfos:      getUpdatedInfo(mutableState.GetPendingChildExecutionInfos(), exclusiveMinVT),
+		UpdatedRequestCancelInfos:       getUpdatedInfo(mutableState.GetPendingRequestCancelExternalInfos(), exclusiveMinVT),
+		UpdatedSignalInfos:              getUpdatedInfo(mutableState.GetPendingSignalExternalInfos(), exclusiveMinVT),
+		UpdatedUpdateInfos:              getUpdatedInfo(executionInfo.UpdateInfos, exclusiveMinVT),
+		UpdatedChasmNodes:               mutableState.ChasmTree().Snapshot(exclusiveMinVT).Nodes,
 		UpdatedSubStateMachines:         updatedStateMachine,
 		SubStateMachineTombstoneBatches: tombstones,
 		SignalRequestedIds:              signalRequestedIds,
@@ -468,7 +538,7 @@ func (s *SyncStateRetrieverImpl) getEventsBlob(
 }
 
 func (s *SyncStateRetrieverImpl) getSyncStateEvents(ctx context.Context, workflowKey definition.WorkflowKey, targetVersionHistories [][]*historyspb.VersionHistoryItem, sourceVersionHistories *historyspb.VersionHistories) ([]*commonpb.DataBlob, error) {
-	if targetVersionHistories == nil {
+	if targetVersionHistories == nil || sourceVersionHistories == nil {
 		// return nil, so target will retrieve the missing events from source
 		return nil, nil
 	}
@@ -497,7 +567,7 @@ func isInfoUpdated(subStateMachine lastUpdatedStateTransitionGetter, versionedTr
 		return false
 	}
 	lastUpdate := subStateMachine.GetLastUpdateVersionedTransition()
-	return workflow.CompareVersionedTransition(lastUpdate, versionedTransition) > 0
+	return transitionhistory.Compare(lastUpdate, versionedTransition) > 0
 }
 
 func getUpdatedInfo[K comparable, V lastUpdatedStateTransitionGetter](subStateMachine map[K]V, versionedTransition *persistencespb.VersionedTransition) map[K]V {

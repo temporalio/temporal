@@ -40,11 +40,11 @@ import (
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/effect"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/worker_versioning"
-	"go.temporal.io/server/internal/effect"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -73,6 +73,7 @@ type Updater struct {
 	// WARNING: any references to mutable state data *have to* be copied
 	// to avoid data races when used outside the workflow lease.
 	taskQueue              *taskqueuepb.TaskQueue
+	priority               *commonpb.Priority
 	normalTaskQueueName    string
 	scheduledEventID       int64
 	scheduleToStartTimeout time.Duration
@@ -210,6 +211,7 @@ func (u *Updater) ApplyRequest(
 	}
 
 	u.taskQueue = common.CloneProto(newWorkflowTask.TaskQueue)
+	u.priority = common.CloneProto(ms.GetExecutionInfo().Priority)
 	u.normalTaskQueueName = ms.GetExecutionInfo().TaskQueue
 	u.directive = worker_versioning.MakeDirectiveForWorkflowTask(
 		ms.GetInheritedBuildId(),
@@ -297,6 +299,7 @@ func (u *Updater) addWorkflowTaskToMatching(ctx context.Context) error {
 		ScheduleToStartTimeout: durationpb.New(u.scheduleToStartTimeout),
 		Clock:                  clock,
 		VersionDirective:       u.directive,
+		Priority:               u.priority,
 	})
 	if err != nil {
 		return err

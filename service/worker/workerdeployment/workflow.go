@@ -106,8 +106,10 @@ func (d *WorkflowRunner) listenToSignals(ctx workflow.Context) {
 }
 
 func (d *WorkflowRunner) run(ctx workflow.Context) error {
-	if d.State == nil {
-		d.State = &deploymentspb.WorkerDeploymentLocalState{}
+	if d.GetState().GetCreateTime() == nil {
+		if d.State == nil {
+			d.State = &deploymentspb.WorkerDeploymentLocalState{}
+		}
 		d.State.CreateTime = timestamppb.New(workflow.Now(ctx))
 		d.State.RoutingConfig = &deploymentpb.RoutingConfig{CurrentVersion: worker_versioning.UnversionedVersionId}
 		d.State.ConflictToken, _ = workflow.Now(ctx).MarshalBinary()
@@ -222,7 +224,8 @@ func (d *WorkflowRunner) addVersionToWorkerDeployment(ctx workflow.Context, args
 		return nil
 	}
 
-	for _, v := range d.State.Versions {
+	for _, k := range workflow.DeterministicKeys(d.State.Versions) {
+		v := d.State.Versions[k]
 		if v.Version == args.Version {
 			return nil
 		}
@@ -405,7 +408,7 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 					return nil, err
 				}
 				if isMissingTaskQueues {
-					return nil, serviceerror.NewFailedPrecondition("New ramping version does not have all the task queues from the previous current version and some missing task queues are active and would become unversioned after this operation")
+					return nil, serviceerror.NewFailedPrecondition(ErrRampingVersionDoesNotHaveAllTaskQueues)
 				}
 			}
 			rampingSinceTime = routingUpdateTime
@@ -590,7 +593,7 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 			return nil, err
 		}
 		if isMissingTaskQueues {
-			return nil, serviceerror.NewFailedPrecondition("New current version does not have all the task queues from the previous current version and some missing task queues are active and would become unversioned after this operation")
+			return nil, serviceerror.NewFailedPrecondition(ErrCurrentVersionDoesNotHaveAllTaskQueues)
 		}
 	}
 
@@ -765,25 +768,109 @@ func (d *WorkflowRunner) syncVersion(ctx workflow.Context, targetVersion string,
 }
 
 func (d *WorkflowRunner) syncUnversionedRamp(ctx workflow.Context, versionUpdateArgs *deploymentspb.SyncVersionStateUpdateArgs) error {
+	var err error
+	v := workflow.GetVersion(ctx, "syncUnversionedRamp", workflow.DefaultVersion, 1)
 	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
-	var res deploymentspb.SyncUnversionedRampActivityResponse
-	err := workflow.ExecuteActivity(
-		activityCtx,
-		d.a.SyncUnversionedRamp,
-		&deploymentspb.SyncUnversionedRampActivityArgs{
-			CurrentVersion: d.State.RoutingConfig.CurrentVersion,
-			UpdateArgs:     versionUpdateArgs,
-		}).Get(ctx, &res)
-	if err != nil {
-		return err
+
+	if v == workflow.DefaultVersion {
+		var res deploymentspb.SyncUnversionedRampActivityResponse
+		err := workflow.ExecuteActivity(
+			activityCtx,
+			d.a.SyncUnversionedRamp,
+			&deploymentspb.SyncUnversionedRampActivityArgs{
+				CurrentVersion: d.State.RoutingConfig.CurrentVersion,
+				UpdateArgs:     versionUpdateArgs,
+			}).Get(ctx, &res)
+		if err != nil {
+			return err
+		}
+		// check propagation
+		err = workflow.ExecuteActivity(
+			activityCtx,
+			d.a.CheckUnversionedRampUserDataPropagation,
+			&deploymentspb.CheckWorkerDeploymentUserDataPropagationRequest{
+				TaskQueueMaxVersions: res.TaskQueueMaxVersions,
+			}).Get(ctx, nil)
+		if err != nil {
+			return err
+		}
+	} else {
+
+		// DescribeVersion activity to get all the task queues in the current version
+		var res deploymentspb.DescribeVersionFromWorkerDeploymentActivityResult
+		err := workflow.ExecuteActivity(
+			activityCtx,
+			d.a.DescribeVersionFromWorkerDeployment,
+			&deploymentspb.DescribeVersionFromWorkerDeploymentActivityArgs{
+				Version: d.State.RoutingConfig.CurrentVersion,
+			}).Get(ctx, &res)
+		if err != nil {
+			return err
+		}
+
+		// send in the task-queue families in batches of syncBatchSize
+		batches := make([][]*deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData, 0)
+		syncReqs := make([]*deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData, 0)
+
+		// Grouping by task-queue name
+		taskQueuesByName := make(map[string][]enumspb.TaskQueueType)
+		for _, tq := range res.GetTaskQueueInfos() {
+			taskQueuesByName[tq.GetName()] = append(taskQueuesByName[tq.GetName()], tq.GetType())
+		}
+
+		for _, tqName := range workflow.DeterministicKeys(taskQueuesByName) {
+			tqTypes := taskQueuesByName[tqName]
+			sync := &deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData{
+				Name:  tqName,
+				Types: tqTypes,
+				Data: &deploymentspb.DeploymentVersionData{
+					Version:           nil,
+					RoutingUpdateTime: versionUpdateArgs.RoutingUpdateTime,
+					RampingSinceTime:  versionUpdateArgs.RampingSinceTime,
+					RampPercentage:    versionUpdateArgs.RampPercentage,
+				},
+			}
+			syncReqs = append(syncReqs, sync)
+
+			if len(syncReqs) == int(d.State.SyncBatchSize) {
+				batches = append(batches, syncReqs)
+				syncReqs = make([]*deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData, 0) // reset the syncReq.Sync slice for the next batch
+			}
+		}
+		if len(syncReqs) > 0 {
+			batches = append(batches, syncReqs)
+		}
+
+		// calling SyncDeploymentVersionUserData for each batch
+		for _, batch := range batches {
+			var syncRes deploymentspb.SyncDeploymentVersionUserDataResponse
+
+			err = workflow.ExecuteActivity(activityCtx, d.a.SyncDeploymentVersionUserDataFromWorkerDeployment, &deploymentspb.SyncDeploymentVersionUserDataRequest{
+				Version:       nil,
+				ForgetVersion: false,
+				Sync:          batch,
+			}).Get(ctx, &syncRes)
+			if err != nil {
+				// TODO (Shivam): Compensation functions required to roll back the local state + activity changes.
+				return err
+			}
+
+			if len(syncRes.TaskQueueMaxVersions) > 0 {
+				// wait for propagation
+				err = workflow.ExecuteActivity(
+					activityCtx,
+					d.a.CheckUnversionedRampUserDataPropagation,
+					&deploymentspb.CheckWorkerDeploymentUserDataPropagationRequest{
+						TaskQueueMaxVersions: syncRes.TaskQueueMaxVersions,
+					}).Get(ctx, nil)
+				if err != nil {
+					// TODO (Shivam): Compensation functions required to roll back the local state + activity changes.
+					return err
+				}
+			}
+		}
 	}
-	// check propagation
-	err = workflow.ExecuteActivity(
-		activityCtx,
-		d.a.CheckUnversionedRampUserDataPropagation,
-		&deploymentspb.CheckWorkerDeploymentUserDataPropagationRequest{
-			TaskQueueMaxVersions: res.TaskQueueMaxVersions,
-		}).Get(ctx, nil)
+
 	return err
 }
 

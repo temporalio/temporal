@@ -71,7 +71,7 @@ func RandomSnapshot(
 ) (*p.WorkflowSnapshot, []*p.WorkflowEvents) {
 	// TODO - remove this branching when other persistence implementations land for CHASM
 	var chasmNodes map[string]*persistencespb.ChasmNode
-	if strings.HasPrefix(t.Name(), "TestCassandra") {
+	if !strings.HasPrefix(t.Name(), "TestCDS") {
 		chasmNodes = RandomChasmNodeMap()
 	}
 
@@ -124,7 +124,7 @@ func RandomMutation(
 ) (*p.WorkflowMutation, []*p.WorkflowEvents) {
 	// TODO - remove this branching when other persistence implementations land for CHASM
 	var chasmNodes map[string]*persistencespb.ChasmNode
-	if strings.HasPrefix(t.Name(), "TestCassandra") {
+	if !strings.HasPrefix(t.Name(), "TestCDS") {
 		chasmNodes = RandomChasmNodeMap()
 	}
 
@@ -204,13 +204,12 @@ func RandomChasmNode() *persistencespb.ChasmNode {
 	_ = fakedata.FakeStruct(&versionedTransition)
 
 	return &persistencespb.ChasmNode{
-		InitialVersionedTransition:    &versionedTransition,
-		LastUpdateVersionedTransition: &versionedTransition,
-		Attributes: &persistencespb.ChasmNode_DataAttributes{
-			DataAttributes: &persistencespb.ChasmDataAttributes{
-				Data: blob,
-			},
+		Metadata: &persistencespb.ChasmNodeMetadata{
+			InitialVersionedTransition:    &versionedTransition,
+			LastUpdateVersionedTransition: &versionedTransition,
+			Attributes:                    &persistencespb.ChasmNodeMetadata_DataAttributes{},
 		},
+		Data: blob,
 	}
 }
 

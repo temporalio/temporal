@@ -50,6 +50,7 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -170,6 +171,13 @@ func convertActivityStateReplicationTask(
 			if lastStartedBuildId == "" {
 				lastStartedBuildId = activityInfo.GetUseWorkflowBuildIdInfo().GetLastUsedBuildId()
 			}
+			// We will use field to distinguish between nil and zero value for backward compatibility
+			retryInitialInterval := activityInfo.RetryInitialInterval
+			if retryInitialInterval == nil {
+				retryInitialInterval = &durationpb.Duration{
+					Nanos: 0,
+				}
+			}
 
 			return &replicationspb.ReplicationTask{
 				TaskType:     enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK,
@@ -197,7 +205,7 @@ func convertActivityStateReplicationTask(
 						LastAttemptCompleteTime:    activityInfo.LastAttemptCompleteTime,
 						Stamp:                      activityInfo.Stamp,
 						Paused:                     activityInfo.Paused,
-						RetryInitialInterval:       activityInfo.RetryInitialInterval,
+						RetryInitialInterval:       retryInitialInterval,
 						RetryMaximumInterval:       activityInfo.RetryMaximumInterval,
 						RetryMaximumAttempts:       activityInfo.RetryMaximumAttempts,
 						RetryBackoffCoefficient:    activityInfo.RetryBackoffCoefficient,
@@ -679,25 +687,40 @@ func (c *syncVersionedTransitionTaskConverter) convert(
 		return nil, err
 	}
 	currentHistoryCopy := versionhistory.CopyVersionHistory(currentHistory)
+	var syncStateResult *SyncStateResult
+	if taskInfo.IsFirstTask {
+		syncStateResult, err = c.syncStateRetriever.GetSyncWorkflowStateArtifactFromMutableStateForNewWorkflow(
+			ctx,
+			taskInfo.NamespaceID,
+			&commonpb.WorkflowExecution{
+				WorkflowId: taskInfo.WorkflowID,
+				RunId:      taskInfo.RunID,
+			},
+			mutableState,
+			releaseFunc,
+			taskInfo.VersionedTransition,
+		)
+	} else {
+		syncStateResult, err = c.syncStateRetriever.GetSyncWorkflowStateArtifactFromMutableState(
+			ctx,
+			taskInfo.NamespaceID,
+			&commonpb.WorkflowExecution{
+				WorkflowId: taskInfo.WorkflowID,
+				RunId:      taskInfo.RunID,
+			},
+			mutableState,
+			progress.LastSyncedTransition(),
+			targetHistoryItems,
+			releaseFunc,
+		)
+	}
 
-	result, err := c.syncStateRetriever.GetSyncWorkflowStateArtifactFromMutableState(
-		ctx,
-		taskInfo.NamespaceID,
-		&commonpb.WorkflowExecution{
-			WorkflowId: taskInfo.WorkflowID,
-			RunId:      taskInfo.RunID,
-		},
-		mutableState,
-		progress.LastSyncedTransition(),
-		targetHistoryItems,
-		releaseFunc,
-	)
 	if err != nil {
 		return nil, err
 	}
 	// do not access mutable state after this point
 
-	err = c.replicationCache.Update(taskInfo.RunID, targetClusterID, result.VersionedTransitionHistory, currentHistoryCopy.Items)
+	err = c.replicationCache.Update(taskInfo.RunID, targetClusterID, syncStateResult.VersionedTransitionHistory, currentHistoryCopy.Items)
 	if err != nil {
 		return nil, err
 	}
@@ -706,7 +729,7 @@ func (c *syncVersionedTransitionTaskConverter) convert(
 		SourceTaskId: taskInfo.TaskID,
 		Attributes: &replicationspb.ReplicationTask_SyncVersionedTransitionTaskAttributes{
 			SyncVersionedTransitionTaskAttributes: &replicationspb.SyncVersionedTransitionTaskAttributes{
-				VersionedTransitionArtifact: result.VersionedTransitionArtifact,
+				VersionedTransitionArtifact: syncStateResult.VersionedTransitionArtifact,
 				NamespaceId:                 taskInfo.NamespaceID,
 				WorkflowId:                  taskInfo.WorkflowID,
 				RunId:                       taskInfo.RunID,

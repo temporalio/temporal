@@ -111,6 +111,9 @@ message VersionLocalState {
     // Key: Task Queue Name
     map<string, TaskQueueFamilyData> task_queue_families = 10;
 
+    // Number of task queues which will be synced in a single batch.
+    int32 sync_batch_size = 11;
+
     message TaskQueueFamilyData {
         // Key: Task Queue Type
         map<int32, TaskQueueVersionData> task_queues = 1;
@@ -151,6 +154,8 @@ message WorkerDeploymentLocalState {
     map<string, WorkerDeploymentVersionSummary> versions = 3;
     bytes conflict_token = 4;
     string last_modifier_identity = 5;
+    // Number of task queues which will be synced in a single batch.
+    int32 sync_batch_size = 6;
 }
 
 message WorkerDeploymentVersionSummary {
@@ -174,6 +179,17 @@ message RegisterWorkerInWorkerDeploymentArgs {
     int32 max_task_queues = 3;
     WorkerDeploymentVersion version = 4;
 }
+
+// used as Worker Deployment workflow activity input:
+message DescribeVersionFromWorkerDeploymentActivityArgs {
+    string version = 1;
+}
+
+message DescribeVersionFromWorkerDeploymentActivityResult {
+    // All the Task Queues that have ever polled from this Deployment version.
+    repeated temporal.api.deployment.v1.WorkerDeploymentVersionInfo.VersionTaskQueueInfo task_queue_infos = 1;
+}
+
 
 // used as Worker Deployment workflow update input (sent from Worker Deployment workflow):
 message SyncVersionStateUpdateArgs {

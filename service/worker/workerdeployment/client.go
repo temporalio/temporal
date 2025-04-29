@@ -55,6 +55,7 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/worker_versioning"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -212,6 +213,7 @@ type ClientImpl struct {
 	visibilityMaxPageSize            dynamicconfig.IntPropertyFnWithNamespaceFilter
 	maxTaskQueuesInDeploymentVersion dynamicconfig.IntPropertyFnWithNamespaceFilter
 	maxDeployments                   dynamicconfig.IntPropertyFnWithNamespaceFilter
+	testHooks                        testhooks.TestHooks
 }
 
 var _ Client = (*ClientImpl)(nil)
@@ -243,13 +245,11 @@ func (d *ClientImpl) RegisterTaskQueueWorker(
 		return err
 	}
 
-	fmt.Println("GOING TO START WORKER DEPLOYMENT WORKFLOW!")
-
 	// starting and updating the deployment version workflow, which in turn starts a deployment workflow.
 	outcome, err := d.updateWithStartWorkerDeployment(ctx, namespaceEntry, deploymentName, buildId, &updatepb.Request{
 		Input: &updatepb.Input{Name: RegisterWorkerInWorkerDeployment, Args: updatePayload},
 		Meta:  &updatepb.Meta{UpdateId: requestID, Identity: identity},
-	}, identity, requestID)
+	}, identity, requestID, d.getSyncBatchSize())
 	if err != nil {
 		return err
 	}
@@ -545,6 +545,8 @@ func (d *ClientImpl) SetCurrentVersion(
 		return &res, nil
 	} else if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errVersionNotFound {
 		return nil, serviceerror.NewNotFound(errVersionNotFound)
+	} else if failure.GetApplicationFailureInfo().GetType() == errFailedPrecondition {
+		return nil, serviceerror.NewFailedPrecondition(failure.Message)
 	} else if failure != nil {
 		// TODO: is there an easy way to recover the original type here?
 		return nil, serviceerror.NewInternal(failure.Message)
@@ -558,6 +560,7 @@ func (d *ClientImpl) SetCurrentVersion(
 	if err := sdk.PreferProtoDataConverter.FromPayloads(success, &res); err != nil {
 		return nil, err
 	}
+
 	return &res, nil
 }
 
@@ -636,6 +639,8 @@ func (d *ClientImpl) SetRampingVersion(
 		return nil, serviceerror.NewNotFound(errVersionNotFound)
 	} else if failure.GetApplicationFailureInfo().GetType() == errVersionAlreadyCurrentType {
 		return nil, serviceerror.NewFailedPrecondition(fmt.Sprintf("Ramping version %v is already current", version))
+	} else if failure.GetApplicationFailureInfo().GetType() == errFailedPrecondition {
+		return nil, serviceerror.NewFailedPrecondition(failure.Message)
 	} else if failure != nil {
 		return nil, serviceerror.NewInternal(failure.Message)
 	}
@@ -708,6 +713,12 @@ func (d *ClientImpl) DeleteWorkerDeploymentVersion(
 	if failure := outcome.GetFailure(); failure != nil {
 		if failure.GetApplicationFailureInfo().GetType() == errVersionNotFound {
 			return nil
+		} else if failure.GetCause().GetApplicationFailureInfo().GetType() == ErrVersionIsCurrentOrRamping {
+			return serviceerror.NewFailedPrecondition(ErrVersionIsCurrentOrRamping)
+		} else if failure.GetCause().GetApplicationFailureInfo().GetType() == ErrVersionIsDraining {
+			return serviceerror.NewFailedPrecondition(ErrVersionIsDraining)
+		} else if failure.GetCause().GetApplicationFailureInfo().GetType() == ErrVersionHasPollers {
+			return serviceerror.NewFailedPrecondition(ErrVersionHasPollers)
 		}
 		return serviceerror.NewInternal(failure.Message)
 	}
@@ -929,12 +940,12 @@ func (d *ClientImpl) DeleteVersionFromWorkerDeployment(
 	}
 
 	if failure := outcome.GetFailure(); failure != nil {
-		if failure.Message == errVersionIsDraining {
-			return temporal.NewNonRetryableApplicationError(errVersionIsDraining, "Delete on version failed", nil) // non-retryable error to stop multiple activity attempts
-		} else if failure.Message == errVersionHasPollers {
-			return temporal.NewNonRetryableApplicationError(errVersionHasPollers, "Delete on version failed", nil) // non-retryable error to stop multiple activity attempts
-		} else if failure.Message == errVersionIsCurrentOrRamping {
-			return temporal.NewNonRetryableApplicationError(errVersionIsCurrentOrRamping, "Delete on version failed", nil) // non-retryable error to stop multiple activity attempts
+		if failure.Message == ErrVersionIsDraining {
+			return temporal.NewNonRetryableApplicationError(ErrVersionIsDraining, ErrVersionIsDraining, nil) // non-retryable error to stop multiple activity attempts
+		} else if failure.Message == ErrVersionHasPollers {
+			return temporal.NewNonRetryableApplicationError(ErrVersionHasPollers, ErrVersionHasPollers, nil) // non-retryable error to stop multiple activity attempts
+		} else if failure.Message == ErrVersionIsCurrentOrRamping {
+			return temporal.NewNonRetryableApplicationError(ErrVersionIsCurrentOrRamping, ErrVersionIsCurrentOrRamping, nil) // non-retryable error to stop multiple activity attempts
 		}
 		return serviceerror.NewInternal(failure.Message)
 	}
@@ -1004,6 +1015,7 @@ func (d *ClientImpl) updateWithStartWorkerDeployment(
 	updateRequest *updatepb.Request,
 	identity string,
 	requestID string,
+	syncBatchSize int32,
 ) (*updatepb.Outcome, error) {
 	err := validateVersionWfParams(WorkerDeploymentNameFieldName, deploymentName, d.maxIDLengthLimit())
 	if err != nil {
@@ -1029,6 +1041,9 @@ func (d *ClientImpl) updateWithStartWorkerDeployment(
 		NamespaceName:  namespaceEntry.Name().String(),
 		NamespaceId:    namespaceEntry.ID().String(),
 		DeploymentName: deploymentName,
+		State: &deploymentspb.WorkerDeploymentLocalState{
+			SyncBatchSize: syncBatchSize,
+		},
 	})
 	if err != nil {
 		return nil, err
@@ -1082,6 +1097,7 @@ func (d *ClientImpl) updateWithStartWorkerDeploymentVersion(
 			RampPercentage:    0,                                   // not ramping
 			DrainageInfo:      &deploymentpb.VersionDrainageInfo{}, // not draining or drained
 			Metadata:          nil,                                 // todo
+			SyncBatchSize:     d.getSyncBatchSize(),
 		},
 	})
 	if err != nil {
@@ -1540,4 +1556,13 @@ func (d *ClientImpl) RegisterWorkerInVersion(
 	}
 
 	return nil
+}
+
+func (d *ClientImpl) getSyncBatchSize() int32 {
+	syncBatchSize := int32(25)
+	if n, ok := testhooks.Get[int](d.testHooks, testhooks.TaskQueuesInDeploymentSyncBatchSize); ok && n > 0 {
+		// In production, the testhook would be set to 0 and never reach here!
+		syncBatchSize = int32(n)
+	}
+	return syncBatchSize
 }

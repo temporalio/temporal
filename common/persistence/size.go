@@ -71,7 +71,7 @@ func statusOfInternalWorkflow(
 	totalUpdateCount := state.ExecutionInfo.UpdateCount
 	updateInfoCount := len(state.ExecutionInfo.UpdateInfos)
 
-	chasmTotalSize := sizeOfStringBlobMap(internalState.ChasmNodes)
+	chasmTotalSize := sizeOfChasmNodeMap(internalState.ChasmNodes)
 
 	totalSize := executionInfoSize
 	totalSize += executionStateSize
@@ -184,7 +184,7 @@ func statusOfInternalWorkflowMutation(
 
 	taskCountByCategory := taskCountsByCategory(&mutation.Tasks)
 
-	chasmTotalSize := sizeOfStringBlobMap(mutation.UpsertChasmNodes)
+	chasmTotalSize := sizeOfChasmNodeMap(mutation.UpsertChasmNodes)
 	chasmTotalSize += sizeOfStringSet(mutation.DeleteChasmNodes)
 
 	// TODO what about checksum?
@@ -292,7 +292,7 @@ func statusOfInternalWorkflowSnapshot(
 	bufferedEventsCount := 0
 	bufferedEventsSize := 0
 
-	chasmTotalSize := sizeOfStringBlobMap(snapshot.ChasmNodes)
+	chasmTotalSize := sizeOfChasmNodeMap(snapshot.ChasmNodes)
 
 	totalSize := executionInfoSize
 	totalSize += executionStateSize

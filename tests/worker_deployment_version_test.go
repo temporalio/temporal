@@ -529,6 +529,9 @@ func (s *DeploymentVersionSuite) TestVersionIgnoresDrainageSignalWhenCurrentOrRa
 }
 
 func (s *DeploymentVersionSuite) TestDeleteVersion_DeleteCurrentVersion() {
+	// Override the dynamic config so that we can verify we don't get any unexpected masked errors.
+	s.OverrideDynamicConfig(dynamicconfig.FrontendMaskInternalErrorDetails, true)
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	tv1 := testvars.New(s).WithBuildIDNumber(1)
@@ -547,7 +550,7 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_DeleteCurrentVersion() {
 	s.Nil(err)
 
 	// Deleting this version should fail since the version is current
-	s.tryDeleteVersion(ctx, tv1, false, false)
+	s.tryDeleteVersion(ctx, tv1, workerdeployment.ErrVersionIsCurrentOrRamping, false)
 
 	// Verifying workflow is not in a locked state after an invalid delete request such as the one above. If the workflow were in a locked
 	// state, the passed context would have timed out making the following operation fail.
@@ -582,7 +585,7 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_DeleteRampedVersion() {
 	s.Nil(err)
 
 	// Deleting this version should fail since the version is ramping
-	s.tryDeleteVersion(ctx, tv1, false, false)
+	s.tryDeleteVersion(ctx, tv1, workerdeployment.ErrVersionIsCurrentOrRamping, false)
 
 	// Verifying workflow is not in a locked state after an invalid delete request such as the one above. If the workflow were in a locked
 	// state, the passed context would have timed out making the following operation fail.
@@ -611,7 +614,7 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_NoWfs() {
 	time.Sleep(2 * time.Second) // todo (Shivam): remove this after the above skip is removed
 
 	// delete should succeed
-	s.tryDeleteVersion(ctx, tv1, true, false)
+	s.tryDeleteVersion(ctx, tv1, "", false)
 
 	// deployment version does not exist in the deployment list
 	s.EventuallyWithT(func(t *assert.CollectT) {
@@ -668,7 +671,7 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_DrainingVersion() {
 	}, false, false)
 
 	// delete should fail
-	s.tryDeleteVersion(ctx, tv1, false, false)
+	s.tryDeleteVersion(ctx, tv1, workerdeployment.ErrVersionIsDraining, false)
 
 }
 
@@ -730,7 +733,7 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_Drained_But_Pollers_Exist() {
 	s.Nil(err)
 
 	// Version will bypass "drained" check but delete should still fail since we have active pollers.
-	s.tryDeleteVersion(ctx, tv1, false, false)
+	s.tryDeleteVersion(ctx, tv1, workerdeployment.ErrVersionHasPollers, false)
 }
 
 func (s *DeploymentVersionSuite) signalAndWaitForDrained(ctx context.Context, tv *testvars.TestVars) {
@@ -843,7 +846,7 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_ValidDelete() {
 	s.waitForNoPollers(ctx, tv1)
 
 	// delete succeeds
-	s.tryDeleteVersion(ctx, tv1, true, false)
+	s.tryDeleteVersion(ctx, tv1, "", false)
 
 	// deployment version does not exist in the deployment list
 	s.EventuallyWithT(func(t *assert.CollectT) {
@@ -861,7 +864,7 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_ValidDelete() {
 	}, time.Second*5, time.Millisecond*200)
 
 	// idempotency check: deleting the same version again should succeed
-	s.tryDeleteVersion(ctx, tv1, true, false)
+	s.tryDeleteVersion(ctx, tv1, "", false)
 }
 
 func (s *DeploymentVersionSuite) TestDeleteVersion_ValidDelete_SkipDrainage() {
@@ -886,7 +889,7 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_ValidDelete_SkipDrainage() {
 	}, 5*time.Second, time.Second)
 
 	// skipDrainage=true will make delete succeed
-	s.tryDeleteVersion(ctx, tv1, true, true)
+	s.tryDeleteVersion(ctx, tv1, "", false)
 
 	// deployment version does not exist in the deployment list
 	s.EventuallyWithT(func(t *assert.CollectT) {
@@ -904,7 +907,7 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_ValidDelete_SkipDrainage() {
 	}, time.Second*5, time.Millisecond*200)
 
 	// idempotency check: deleting the same version again should succeed
-	s.tryDeleteVersion(ctx, tv1, true, true)
+	s.tryDeleteVersion(ctx, tv1, "", false)
 
 	// Describe Worker Deployment should give not found
 	// describe deployment version gives not found error
@@ -946,11 +949,11 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_ConcurrentDeleteVersion() {
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		s.tryDeleteVersion(ctx, tv1, true, true)
+		s.tryDeleteVersion(ctx, tv1, "", false)
 	}()
 	go func() {
 		defer wg.Done()
-		s.tryDeleteVersion(ctx, tv1, true, true)
+		s.tryDeleteVersion(ctx, tv1, "", false)
 	}()
 	wg.Wait()
 
@@ -972,6 +975,9 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_ConcurrentDeleteVersion() {
 
 // VersionMissingTaskQueues
 func (s *DeploymentVersionSuite) TestVersionMissingTaskQueues_InvalidSetCurrentVersion() {
+	// Override the dynamic config to verify we don't get any unexpected masked errors.
+	s.OverrideDynamicConfig(dynamicconfig.FrontendMaskInternalErrorDetails, true)
+
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	tv := testvars.New(s)
@@ -1013,8 +1019,7 @@ func (s *DeploymentVersionSuite) TestVersionMissingTaskQueues_InvalidSetCurrentV
 
 	// SetCurrent should fail since task_queue_1 does not have a current version than the deployment's existing current version
 	// and it either has a backlog of tasks being present or an add rate > 0.
-	s.Error(err)
-
+	s.EqualErrorf(err, workerdeployment.ErrCurrentVersionDoesNotHaveAllTaskQueues, err.Error())
 }
 
 func (s *DeploymentVersionSuite) TestVersionMissingTaskQueues_ValidSetCurrentVersion() {
@@ -1054,6 +1059,9 @@ func (s *DeploymentVersionSuite) TestVersionMissingTaskQueues_ValidSetCurrentVer
 }
 
 func (s *DeploymentVersionSuite) TestVersionMissingTaskQueues_InvalidSetRampingVersion() {
+	// Override the dynamic config to verify we don't get any unexpected masked errors.
+	s.OverrideDynamicConfig(dynamicconfig.FrontendMaskInternalErrorDetails, true)
+
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	tv := testvars.New(s)
@@ -1095,7 +1103,7 @@ func (s *DeploymentVersionSuite) TestVersionMissingTaskQueues_InvalidSetRampingV
 
 	// SetRampingVersion should fail since task_queue_1 does not have a current version than the deployment's existing current version
 	// and it either has a backlog of tasks being present or an add rate > 0.
-	s.Error(err)
+	s.EqualErrorf(err, workerdeployment.ErrRampingVersionDoesNotHaveAllTaskQueues, err.Error())
 }
 
 func (s *DeploymentVersionSuite) TestVersionMissingTaskQueues_ValidSetRampingVersion() {
@@ -1157,7 +1165,7 @@ func (s *DeploymentVersionSuite) startWorkflow(
 func (s *DeploymentVersionSuite) tryDeleteVersion(
 	ctx context.Context,
 	tv *testvars.TestVars,
-	expectSuccess bool,
+	expectedError string,
 	skipDrainage bool,
 ) {
 	_, err := s.FrontendClient().DeleteWorkerDeploymentVersion(ctx, &workflowservice.DeleteWorkerDeploymentVersionRequest{
@@ -1165,10 +1173,10 @@ func (s *DeploymentVersionSuite) tryDeleteVersion(
 		Version:      tv.DeploymentVersionString(),
 		SkipDrainage: skipDrainage,
 	})
-	if expectSuccess {
+	if expectedError == "" {
 		s.Nil(err)
 	} else {
-		s.Error(err)
+		s.EqualErrorf(err, expectedError, err.Error())
 	}
 }
 

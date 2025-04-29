@@ -851,6 +851,7 @@ var (
 	// Timeouts and failures are not counted in this metric.
 	// This metric has a "reason" tag attached to it to understand why eager start was denied.
 	WorkflowEagerExecutionDeniedCounter           = NewCounterDef("workflow_eager_execution_denied")
+	StartWorkflowRequestDeduped                   = NewCounterDef("start_workflow_request_deduped")
 	EmptyCompletionCommandsCounter                = NewCounterDef("empty_completion_commands")
 	MultipleCompletionCommandsCounter             = NewCounterDef("multiple_completion_commands")
 	FailedWorkflowTasksCounter                    = NewCounterDef("failed_workflow_tasks")
@@ -936,11 +937,14 @@ var (
 	ReplicationTaskLoadLatency            = NewTimerDef("replication_task_load_latency")
 	ReplicationTaskLoadSize               = NewDimensionlessHistogramDef("replication_task_load_size")
 	ReplicationTaskSendLatency            = NewTimerDef("replication_task_send_latency")
+	ReplicationTaskSendBacklog            = NewDimensionlessHistogramDef("replication_task_send_backlog")
 	ReplicationTasksRecv                  = NewCounterDef("replication_tasks_recv")
 	ReplicationTasksRecvBacklog           = NewDimensionlessHistogramDef("replication_tasks_recv_backlog")
 	ReplicationTasksSkipped               = NewCounterDef("replication_tasks_skipped")
 	ReplicationTasksApplied               = NewCounterDef("replication_tasks_applied")
 	ReplicationTasksFailed                = NewCounterDef("replication_tasks_failed")
+	ReplicationTasksBackFill              = NewCounterDef("replication_tasks_back_fill")
+	ReplicationTasksBackFillLatency       = NewTimerDef("replication_tasks_back_fill_latency")
 	// ReplicationTasksLag is a heuristic for how far behind the remote DC is for a given cluster. It measures the
 	// difference between task IDs so its unit should be "tasks".
 	ReplicationTasksLag = NewDimensionlessHistogramDef("replication_tasks_lag")
@@ -996,6 +1000,7 @@ var (
 	DynamicWorkerPoolSchedulerEnqueuedTasks = NewCounterDef("dynamic_worker_pool_scheduler_enqueued_tasks")
 	DynamicWorkerPoolSchedulerDequeuedTasks = NewCounterDef("dynamic_worker_pool_scheduler_dequeued_tasks")
 	DynamicWorkerPoolSchedulerRejectedTasks = NewCounterDef("dynamic_worker_pool_scheduler_rejected_tasks")
+	PausedActivitiesCounter                 = NewCounterDef("paused_activities")
 
 	// Deadlock detector latency metrics
 	DDClusterMetadataLockLatency         = NewTimerDef("dd_cluster_metadata_lock_latency")
@@ -1039,14 +1044,18 @@ var (
 	TaskQueueStoppedCounter                           = NewCounterDef("task_queue_stopped")
 	TaskWriteThrottlePerTaskQueueCounter              = NewCounterDef("task_write_throttle_count")
 	TaskWriteLatencyPerTaskQueue                      = NewTimerDef("task_write_latency")
-	TaskLagPerTaskQueueGauge                          = NewGaugeDef("task_lag_per_tl")
-	NoRecentPollerTasksPerTaskQueueCounter            = NewCounterDef("no_poller_tasks")
-	UnknownBuildPollsCounter                          = NewCounterDef("unknown_build_polls")
-	UnknownBuildTasksCounter                          = NewCounterDef("unknown_build_tasks")
-	TaskDispatchLatencyPerTaskQueue                   = NewTimerDef("task_dispatch_latency")
-	ApproximateBacklogCount                           = NewGaugeDef("approximate_backlog_count")
-	ApproximateBacklogAgeSeconds                      = NewGaugeDef("approximate_backlog_age_seconds")
-	NonRetryableTasks                                 = NewCounterDef(
+	TaskRewrites                                      = NewCounterDef(
+		"task_rewrites",
+		WithDescription("Number of times tasks are rewritten to persistence after failing to process"),
+	)
+	TaskLagPerTaskQueueGauge               = NewGaugeDef("task_lag_per_tl")
+	NoRecentPollerTasksPerTaskQueueCounter = NewCounterDef("no_poller_tasks")
+	UnknownBuildPollsCounter               = NewCounterDef("unknown_build_polls")
+	UnknownBuildTasksCounter               = NewCounterDef("unknown_build_tasks")
+	TaskDispatchLatencyPerTaskQueue        = NewTimerDef("task_dispatch_latency")
+	ApproximateBacklogCount                = NewGaugeDef("approximate_backlog_count")
+	ApproximateBacklogAgeSeconds           = NewGaugeDef("approximate_backlog_age_seconds")
+	NonRetryableTasks                      = NewCounterDef(
 		"non_retryable_tasks",
 		WithDescription("The number of non-retryable matching tasks which are dropped due to specific errors"))
 
@@ -1233,17 +1242,20 @@ var (
 	PersistenceSessionRefreshAttempts      = NewCounterDef("persistence_session_refresh_attempts")
 
 	// Common service base metrics
-	RestartCount         = NewCounterDef("restarts")
-	NumGoRoutinesGauge   = NewGaugeDef("num_goroutines")
-	GoMaxProcsGauge      = NewGaugeDef("gomaxprocs")
-	MemoryAllocatedGauge = NewGaugeDef("memory_allocated")
-	MemoryHeapGauge      = NewGaugeDef("memory_heap")
-	MemoryHeapIdleGauge  = NewGaugeDef("memory_heapidle")
-	MemoryHeapInuseGauge = NewGaugeDef("memory_heapinuse")
-	MemoryStackGauge     = NewGaugeDef("memory_stack")
-	NumGCCounter         = NewBytesHistogramDef("memory_num_gc")
-	GcPauseMsTimer       = NewTimerDef("memory_gc_pause_ms")
-	NumGCGauge           = NewGaugeDef("memory_num_gc_last",
+	RestartCount           = NewCounterDef("restarts")
+	NumGoRoutinesGauge     = NewGaugeDef("num_goroutines")
+	GoMaxProcsGauge        = NewGaugeDef("gomaxprocs")
+	MemoryAllocatedGauge   = NewGaugeDef("memory_allocated")
+	MemoryHeapGauge        = NewGaugeDef("memory_heap")
+	MemoryHeapObjectsGauge = NewGaugeDef("memory_heap_objects")
+	MemoryHeapIdleGauge    = NewGaugeDef("memory_heapidle")
+	MemoryHeapInuseGauge   = NewGaugeDef("memory_heapinuse")
+	MemoryStackGauge       = NewGaugeDef("memory_stack")
+	MemoryMallocsGauge     = NewGaugeDef("memory_mallocs")
+	MemoryFreesGauge       = NewGaugeDef("memory_frees")
+	NumGCCounter           = NewBytesHistogramDef("memory_num_gc")
+	GcPauseMsTimer         = NewTimerDef("memory_gc_pause_ms")
+	NumGCGauge             = NewGaugeDef("memory_num_gc_last",
 		WithDescription("Last runtime.MemStats.NumGC"),
 	)
 	GcPauseNsTotal = NewGaugeDef("memory_pause_total_ns_last",

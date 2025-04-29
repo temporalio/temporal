@@ -137,7 +137,8 @@ func (m *sqlShardStore) AssertShardOwnership(
 	ctx context.Context,
 	request *persistence.AssertShardOwnershipRequest,
 ) error {
-	return serviceerror.NewUnimplemented("AssertShardOwnership is not implemented for sql shard store")
+	// AssertShardOwnership is not implemented for sql shard store
+	return nil
 }
 
 // initiated by the owning shard

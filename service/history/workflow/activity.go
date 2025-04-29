@@ -31,12 +31,14 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
+	rulespb "go.temporal.io/api/rules/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
+	"go.temporal.io/server/service/history/workflow/matcher"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -92,6 +94,7 @@ func GetPendingActivityInfo(
 	p := &workflowpb.PendingActivityInfo{
 		ActivityId:                  ai.ActivityId,
 		LastWorkerDeploymentVersion: ai.LastWorkerDeploymentVersion,
+		Priority:                    ai.Priority,
 	}
 	if ai.GetUseWorkflowBuildIdInfo() != nil {
 		p.AssignedBuildId = &workflowpb.PendingActivityInfo_UseWorkflowBuildId{UseWorkflowBuildId: &emptypb.Empty{}}
@@ -148,6 +151,46 @@ func GetPendingActivityInfo(
 		}
 	}
 
+	if ai.Paused {
+		// adjust activity state for paused activities
+		if p.State == enumspb.PENDING_ACTIVITY_STATE_SCHEDULED {
+			// this state means activity is not running on the worker
+			// if activity is paused on server and not running on worker - mark it as PAUSED
+			p.State = enumspb.PENDING_ACTIVITY_STATE_PAUSED
+		} else if p.State == enumspb.PENDING_ACTIVITY_STATE_STARTED {
+			// this state means activity is running on the worker
+			// if activity is paused on server, but still running on worker - mark it as PAUSE_REQUESTED
+			p.State = enumspb.PENDING_ACTIVITY_STATE_PAUSE_REQUESTED
+		} // if state is CANCEL_REQUESTEd - it is not modified
+
+		// fill activity pause info
+		if ai.PauseInfo != nil {
+			p.PauseInfo = &workflowpb.PendingActivityInfo_PauseInfo{
+				PauseTime: ai.PauseInfo.PauseTime,
+			}
+			if ai.PauseInfo.GetManual() != nil {
+				p.PauseInfo.PausedBy = &workflowpb.PendingActivityInfo_PauseInfo_Manual_{
+					Manual: &workflowpb.PendingActivityInfo_PauseInfo_Manual{
+						Identity: ai.PauseInfo.GetManual().Identity,
+						Reason:   ai.PauseInfo.GetManual().Reason,
+					},
+				}
+			} else {
+				ruleId := ai.PauseInfo.GetRuleId()
+				p.PauseInfo.PausedBy = &workflowpb.PendingActivityInfo_PauseInfo_Rule_{
+					Rule: &workflowpb.PendingActivityInfo_PauseInfo_Rule{
+						RuleId: ruleId,
+					},
+				}
+				rule, ok := mutableState.GetNamespaceEntry().GetWorkflowRule(ruleId)
+				if ok {
+					p.PauseInfo.PausedBy.(*workflowpb.PendingActivityInfo_PauseInfo_Rule_).Rule.Identity = rule.CreatedByIdentity
+					p.PauseInfo.PausedBy.(*workflowpb.PendingActivityInfo_PauseInfo_Rule_).Rule.Reason = rule.Description
+				}
+			}
+		}
+	}
+
 	return p, nil
 }
 
@@ -174,7 +217,11 @@ func GetNextScheduledTime(ai *persistencespb.ActivityInfo) time.Time {
 	return nextScheduledTime
 }
 
-func PauseActivity(mutableState historyi.MutableState, activityId string) error {
+func PauseActivity(
+	mutableState historyi.MutableState,
+	activityId string,
+	pauseInfo *persistencespb.ActivityInfo_PauseInfo,
+) error {
 	if !mutableState.IsWorkflowExecutionRunning() {
 		return consts.ErrWorkflowCompleted
 	}
@@ -197,6 +244,7 @@ func PauseActivity(mutableState historyi.MutableState, activityId string) error 
 			activityInfo.Stamp++
 		}
 		activityInfo.Paused = true
+		activityInfo.PauseInfo = pauseInfo
 		return nil
 	})
 }
@@ -253,6 +301,13 @@ func ResetActivity(
 	})
 }
 
+func unpauseActivityInfo(ai *persistencespb.ActivityInfo) {
+	ai.Paused = false
+	ai.PauseInfo = nil
+	ai.Stamp++
+
+}
+
 func UnpauseActivity(
 	shardContext historyi.ShardContext,
 	mutableState historyi.MutableState,
@@ -262,8 +317,7 @@ func UnpauseActivity(
 	jitter time.Duration,
 ) error {
 	if err := mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, ms historyi.MutableState) error {
-		activityInfo.Paused = false
-		activityInfo.Stamp++
+		unpauseActivityInfo(activityInfo)
 
 		if resetAttempts {
 			activityInfo.Attempt = 1
@@ -302,8 +356,7 @@ func UnpauseActivityWithResume(
 ) (*historyservice.UnpauseActivityResponse, error) {
 
 	if err := mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, ms historyi.MutableState) error {
-		activityInfo.Stamp++
-		activityInfo.Paused = false
+		unpauseActivityInfo(activityInfo)
 
 		// regenerate the retry task if needed
 		if GetActivityState(ai) == enumspb.PENDING_ACTIVITY_STATE_SCHEDULED {
@@ -328,8 +381,7 @@ func UnpauseActivityWithReset(
 	jitter time.Duration,
 ) (*historyservice.UnpauseActivityResponse, error) {
 	if err := mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, ms historyi.MutableState) error {
-		activityInfo.Paused = false
-		activityInfo.Stamp++
+		unpauseActivityInfo(activityInfo)
 
 		// reset the number of attempts
 		activityInfo.Attempt = 1
@@ -395,4 +447,27 @@ func needRegenerateRetryTask(ai *persistencespb.ActivityInfo, scheduleNewRun boo
 	// activity is running, scheduleNewRun flag is NOT provided
 	// in this case we don't need to do anything
 	return false
+}
+
+func MatchWorkflowRule(
+	executionInfo *persistencespb.WorkflowExecutionInfo,
+	executionState *persistencespb.WorkflowExecutionState,
+	ai *persistencespb.ActivityInfo,
+	rule *rulespb.WorkflowRuleSpec,
+) (bool, error) {
+	// match visibility query
+	visibilityQuery := rule.GetVisibilityQuery()
+	if visibilityQuery != "" {
+		match, err := matcher.MatchMutableState(executionInfo, executionState, rule.GetVisibilityQuery())
+		if err != nil || !match {
+			return false, err
+		}
+	}
+
+	// match activity query
+	activityTrigger := rule.GetActivityStart()
+	if activityTrigger == nil {
+		return false, nil
+	}
+	return matcher.MatchActivity(ai, activityTrigger.GetPredicate())
 }

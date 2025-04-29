@@ -25,11 +25,14 @@
 package chasm
 
 import (
+	"reflect"
+
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 )
 
 var (
 	defaultShardingFn = func(key EntityKey) string { return key.NamespaceID + "_" + key.BusinessID }
+	RootPath          []string
 )
 
 type EntityKey struct {
@@ -41,40 +44,46 @@ type EntityKey struct {
 type ComponentRef struct {
 	EntityKey
 
-	// Fully qualified component type name for routing.
-	rootComponentType string
-	// We could also make the routing infomation clear with
-	// routingKey string
-
-	// We can also simply put shardID here.
-	// TODO: Remove one of shardID and rootComponentType.
 	shardID int32
+	// entityGoType for calculating the entity shardID.
+	// CHASM component author has no idea about the shardID, so they will
+	// only specify the entityGoType and left the conversion to the CHASM engine.
+	//
+	// TODO: Can we remove this field and perform the shardID conversion while
+	// creating the ComponentRef?
+	entityGoType reflect.Type
 
-	// Fully qualified component type name.
-	// From the component type, we can find the component struct definition,
+	// entityLastUpdateVT is the consistency token for the entire entity.
+	entityLastUpdateVT *persistencespb.VersionedTransition
+
+	// componentType is the fully qualified component type name.
+	// It is for performing partial loading more efficiently in future versions of CHASM.
+	//
+	// From the componentType, we can find the registered component struct definition,
 	// then use reflection to find sub-components and understand if those sub-components
 	// need to be loaded or not.
 	// We only need to do this for sub-components, path for parent/ancenstor components
-	// can be inferred from the current component path.
-	componentType      string
+	// can be inferred from the current component path and they always needs to be loaded.
+	//
+	// componentType string
+
+	// componentPath and componentInitialVT are used to identify a component.
 	componentPath      []string
-	componentInitialVT *persistencespb.VersionedTransition // this identifies a component
-	entityLastUpdateVT *persistencespb.VersionedTransition // this is consistency token
+	componentInitialVT *persistencespb.VersionedTransition
 
 	validationFn func(Context, Component) error
 }
 
+// NewComponentRef creates a new ComponentRef with a registered root component go type.
+//
 // In V1, if you don't have a ref,
-// then you can only interact with the top level entity.
-func NewComponentRef(
+// then you can only interact with the (top level) entity.
+func NewComponentRef[C Component](
 	entityKey EntityKey,
-	rootComponentType string,
 ) ComponentRef {
 	return ComponentRef{
-		EntityKey: entityKey,
-		// we probably don't even need this,
-		// can make the function generic and find the type from registry
-		rootComponentType: rootComponentType,
+		EntityKey:    entityKey,
+		entityGoType: reflect.TypeFor[C](),
 	}
 }
 

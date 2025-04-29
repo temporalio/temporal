@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -261,7 +262,7 @@ func (e *stateMachineEnvironment) validateStateMachineRef(
 		return e.validateStateMachineRefWithoutTransitionHistory(ms, ref, potentialStaleState)
 	}
 
-	if workflow.CompareVersionedTransition(
+	if transitionhistory.Compare(
 		ref.StateMachineRef.MachineInitialVersionedTransition,
 		node.InternalRepr().GetInitialVersionedTransition(),
 	) != 0 {
@@ -395,6 +396,11 @@ func (e *stateMachineEnvironment) Access(ctx context.Context, ref hsm.Ref, acces
 		return nil
 	}
 
+	if e.shardContext.GetConfig().EnableUpdateWorkflowModeIgnoreCurrent() {
+		return wfCtx.UpdateWorkflowExecutionAsActive(ctx, e.shardContext)
+	}
+
+	// TODO: remove following code once EnableUpdateWorkflowModeIgnoreCurrent config is deprecated.
 	if ms.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		// Can't use UpdateWorkflowExecutionAsActive since it updates the current run, and we are operating on closed
 		// workflows.

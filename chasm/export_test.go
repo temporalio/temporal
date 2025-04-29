@@ -39,3 +39,11 @@ func (r *Registry) ComponentFor(componentInstance any) (*RegistrableComponent, b
 func (r *Registry) TaskFor(taskInstance any) (*RegistrableTask, bool) {
 	return r.taskFor(taskInstance)
 }
+
+func (rc RegistrableComponent) FqType() string {
+	return rc.fqType()
+}
+
+func (rt RegistrableTask) FqType() string {
+	return rt.fqType()
+}

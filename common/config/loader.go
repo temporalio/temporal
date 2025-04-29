@@ -25,10 +25,17 @@
 package config
 
 import (
+	"bufio"
+	"bytes"
 	"fmt"
+	"io"
 	stdlog "log"
 	"os"
+	"path/filepath"
+	"strings"
+	"text/template"
 
+	"github.com/Masterminds/sprig/v3"
 	"gopkg.in/validator.v2"
 	"gopkg.in/yaml.v3"
 )
@@ -51,9 +58,11 @@ const (
 )
 
 const (
-	baseFile         = "base.yaml"
-	envDevelopment   = "development"
-	defaultConfigDir = "config"
+	baseFile           = "base.yaml"
+	envDevelopment     = "development"
+	defaultConfigDir   = "config"
+	enableTemplate     = "enable-template"
+	commentSearchLimit = 1024
 )
 
 // Load loads the configuration from a set of
@@ -90,6 +99,8 @@ func Load(env string, configDir string, zone string, config interface{}) error {
 	// TODO: remove log dependency.
 	stdlog.Printf("Loading config files=%v\n", files)
 
+	templateFuncs := sprig.FuncMap()
+
 	for _, f := range files {
 		// This is tagged nosec because the file names being read are for config files that are not user supplied
 		// #nosec
@@ -97,6 +108,28 @@ func Load(env string, configDir string, zone string, config interface{}) error {
 		if err != nil {
 			return err
 		}
+
+		// If the config file contains "enable-template" in a comment within the first 1KB, then
+		// we will treat the file as a template and render it.
+		templating, err := checkTemplatingEnabled(data)
+		if err != nil {
+			return err
+		}
+
+		if templating {
+			tpl, err := template.New(filepath.Base(f)).Funcs(templateFuncs).Parse(string(data))
+			if err != nil {
+				return err
+			}
+
+			var rendered bytes.Buffer
+			err = tpl.Execute(&rendered, nil)
+			if err != nil {
+				return err
+			}
+			data = rendered.Bytes()
+		}
+
 		err = yaml.Unmarshal(data, config)
 		if err != nil {
 			return err
@@ -114,6 +147,19 @@ func LoadConfig(env string, configDir string, zone string) (*Config, error) {
 		return nil, fmt.Errorf("config file corrupted: %w", err)
 	}
 	return &config, nil
+}
+
+func checkTemplatingEnabled(content []byte) (bool, error) {
+	scanner := bufio.NewScanner(io.LimitReader(bytes.NewReader(content), commentSearchLimit))
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+
+		if strings.HasPrefix(line, "#") && strings.Contains(line, enableTemplate) {
+			return true, nil
+		}
+	}
+
+	return false, scanner.Err()
 }
 
 // getConfigFiles returns the list of config files to

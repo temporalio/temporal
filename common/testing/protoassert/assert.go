@@ -26,6 +26,8 @@
 package protoassert
 
 import (
+	"fmt"
+
 	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/assert"
 	"go.temporal.io/api/temporalproto"
@@ -51,7 +53,7 @@ func ProtoEqual(t assert.TestingT, a proto.Message, b proto.Message) bool {
 		th.Helper()
 	}
 	if diff := cmp.Diff(a, b, protocmp.Transform()); diff != "" {
-		return assert.Fail(t, "Proto mismatch (-want +got):\n", diff)
+		return assert.Fail(t, fmt.Sprintf("Proto mismatch (-want +got):\n%v", diff))
 	}
 	return true
 }
@@ -79,7 +81,7 @@ func ProtoSliceEqual[T proto.Message](t assert.TestingT, a []T, b []T) bool {
 	}
 	for i := 0; i < len(a); i++ {
 		if diff := cmp.Diff(a[i], b[i], protocmp.Transform()); diff != "" {
-			return assert.Fail(t, "Proto mismatch at index %d (-want +got):\n%v", i, diff)
+			return assert.Fail(t, fmt.Sprintf("Proto mismatch at index %d (-want +got):\n%v", i, diff))
 		}
 	}
 

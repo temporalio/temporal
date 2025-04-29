@@ -1277,6 +1277,7 @@ func (s *TaskSerializer) replicationSyncVersionedTransitionTaskToProto(
 		NextEventId:            syncVersionedTransitionTask.NextEventID,
 		NewRunId:               syncVersionedTransitionTask.NewRunID,
 		LastVersionHistoryItem: syncVersionedTransitionTask.LastVersionHistoryItem,
+		IsFirstTask:            syncVersionedTransitionTask.IsFirstTask,
 		TaskEquivalents:        taskInfoEquivalents,
 	}, nil
 }
@@ -1313,6 +1314,7 @@ func (s *TaskSerializer) replicationSyncVersionedTransitionTaskFromProto(
 		VersionedTransition:    syncVersionedTransitionTask.VersionedTransition,
 		LastVersionHistoryItem: syncVersionedTransitionTask.LastVersionHistoryItem,
 		TaskEquivalents:        taskEquivalents,
+		IsFirstTask:            syncVersionedTransitionTask.IsFirstTask,
 	}, nil
 }
 
@@ -1320,14 +1322,16 @@ func (s *TaskSerializer) serializeOutboundTask(task tasks.Task) (*commonpb.DataB
 	switch task := task.(type) {
 	case *tasks.StateMachineOutboundTask:
 		return proto3Encode(&persistencespb.OutboundTaskInfo{
-			NamespaceId:      task.NamespaceID,
-			WorkflowId:       task.WorkflowID,
-			RunId:            task.RunID,
-			TaskId:           task.TaskID,
-			StateMachineInfo: task.Info,
-			TaskType:         task.GetType(),
-			Destination:      task.Destination,
-			VisibilityTime:   timestamppb.New(task.VisibilityTimestamp),
+			NamespaceId:    task.NamespaceID,
+			WorkflowId:     task.WorkflowID,
+			RunId:          task.RunID,
+			TaskId:         task.TaskID,
+			TaskType:       task.GetType(),
+			Destination:    task.Destination,
+			VisibilityTime: timestamppb.New(task.VisibilityTimestamp),
+			TaskDetails: &persistencespb.OutboundTaskInfo_StateMachineInfo{
+				StateMachineInfo: task.Info,
+			},
 		})
 	default:
 		return nil, serviceerror.NewInternal(fmt.Sprintf("unknown outbound task type while serializing: %v", task))
@@ -1352,7 +1356,7 @@ func (s *TaskSerializer) deserializeOutboundTask(blob *commonpb.DataBlob) (tasks
 			),
 			VisibilityTimestamp: info.VisibilityTime.AsTime(),
 			TaskID:              info.TaskId,
-			Info:                info.StateMachineInfo,
+			Info:                info.GetStateMachineInfo(),
 		},
 		Destination: info.Destination,
 	}, nil

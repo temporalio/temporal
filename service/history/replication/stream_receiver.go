@@ -143,8 +143,8 @@ func (r *StreamReceiverImpl) Start() {
 		return
 	}
 
-	go WrapEventLoop(r.sendEventLoop, r.Stop, r.logger, r.MetricsHandler, r.clientShardKey, r.serverShardKey, streamRetryPolicy)
-	go WrapEventLoop(r.recvEventLoop, r.Stop, r.logger, r.MetricsHandler, r.clientShardKey, r.serverShardKey, streamRetryPolicy)
+	go WrapEventLoop(context.Background(), r.sendEventLoop, r.Stop, r.logger, r.MetricsHandler, r.clientShardKey, r.serverShardKey, streamRetryPolicy)
+	go WrapEventLoop(context.Background(), r.recvEventLoop, r.Stop, r.logger, r.MetricsHandler, r.clientShardKey, r.serverShardKey, streamRetryPolicy)
 
 	r.logger.Info("StreamReceiver started.")
 }
@@ -359,11 +359,7 @@ func (r *StreamReceiverImpl) processMessages(
 			Watermark: exclusiveHighWatermark,
 			Timestamp: exclusiveHighWatermarkTime,
 		}, convertedTasks...) {
-			if submitted := taskScheduler.TrySubmit(task); !submitted {
-				r.logger.Warn("no enough worker to process replication tasks")
-				taskScheduler.Submit(task)
-			}
-
+			taskScheduler.Submit(task)
 		}
 	}
 	return nil

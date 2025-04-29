@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/priorities"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
@@ -548,6 +549,18 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 		return consts.ErrWorkflowCompleted
 	}
 
+	err = t.processActivityWorkflowRules(ctx, weContext, mutableState, activityInfo)
+	if err != nil {
+		return err
+	}
+
+	// task can be paused as the result of processing activity workflow rules, so we need to check again
+	if task.Stamp != activityInfo.Stamp || activityInfo.Paused {
+		// if retry task event is from an old stamp of if activity is paused we should ignore the event.
+		release(nil) // release(nil) so mutable state is not unloaded from cache
+		return consts.ErrActivityTaskNotFound
+	}
+
 	taskQueue := &taskqueuepb.TaskQueue{
 		Name: activityInfo.TaskQueue,
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
@@ -555,6 +568,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 	scheduleToStartTimeout := timestamp.DurationValue(activityInfo.ScheduleToStartTimeout)
 	directive := MakeDirectiveForActivityTask(mutableState, activityInfo)
 	useWfBuildId := activityInfo.GetUseWorkflowBuildIdInfo() != nil
+	priority := priorities.Merge(mutableState.GetExecutionInfo().Priority, activityInfo.Priority)
 
 	// NOTE: do not access anything related mutable state after this lock release
 	release(nil) // release earlier as we don't need the lock anymore
@@ -571,6 +585,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 		Clock:                  vclock.NewVectorClock(t.shardContext.GetClusterMetadata().GetClusterID(), t.shardContext.GetShardID(), task.TaskID),
 		VersionDirective:       directive,
 		Stamp:                  task.Stamp,
+		Priority:               priority,
 	})
 	if err != nil {
 		return err
@@ -696,6 +711,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowRunTimeoutTask(
 		newMutableState,
 		newRunID,
 		startAttr,
+		startEvent.Links,
 		startAttr.LastCompletionResult,
 		timeoutFailure,
 		backoffInterval,
@@ -821,6 +837,11 @@ func (t *timerQueueActiveTaskExecutor) executeStateMachineTimerTask(
 		return nil
 	}
 
+	if t.config.EnableUpdateWorkflowModeIgnoreCurrent() {
+		return wfCtx.UpdateWorkflowExecutionAsActive(ctx, t.shardContext)
+	}
+
+	// TODO: remove following code once EnableUpdateWorkflowModeIgnoreCurrent config is deprecated.
 	if ms.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		// Can't use UpdateWorkflowExecutionAsActive since it updates the current run, and we are operating on a
 		// closed workflow.
@@ -875,4 +896,42 @@ func (t *timerQueueActiveTaskExecutor) emitTimeoutMetricScopeWithNamespaceTag(
 	case enumspb.TIMEOUT_TYPE_HEARTBEAT:
 		metrics.HeartbeatTimeoutCounter.With(metricsScope).Record(1)
 	}
+}
+
+func (t *timerQueueActiveTaskExecutor) processActivityWorkflowRules(
+	ctx context.Context,
+	weContext historyi.WorkflowContext,
+	ms historyi.MutableState,
+	ai *persistencespb.ActivityInfo,
+) error {
+	if ai.Paused {
+		return nil
+	}
+
+	activityChanged := workflow.ActivityMatchWorkflowRules(ms, t.shardContext.GetTimeSource(), t.logger, ai)
+	if !activityChanged {
+		return nil
+	}
+	if ai.Paused {
+		// need to update activity
+		if err := ms.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ historyi.MutableState) error {
+			activityInfo.StartedEventId = common.EmptyEventID
+			activityInfo.StartedTime = nil
+			activityInfo.RequestId = ""
+			return nil
+		}); err != nil {
+			return err
+		}
+
+		// need to update mutable state
+		err := weContext.UpdateWorkflowExecutionAsActive(
+			ctx,
+			t.shardContext,
+		)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

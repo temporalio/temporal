@@ -34,6 +34,7 @@ import (
 
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -78,6 +79,8 @@ type (
 		// shardCountSubscriptions is a set of subscriptions that receive shard count updates whenever the set of
 		// shards that this controller owns changes.
 		shardCountSubscriptions map[*shardCountSubscription]struct{}
+		initialShardsAcquired   *future.FutureImpl[struct{}]
+		shardReadinessCancel    atomic.Value // context.CancelFunc
 	}
 	// shardCountSubscription is a subscription to shard count updates.
 	shardCountSubscription struct {
@@ -117,6 +120,7 @@ func ControllerProvider(
 		ownership:               ownership,
 		taggedMetricsHandler:    taggedMetricsHandler,
 		shardCountSubscriptions: map[*shardCountSubscription]struct{}{},
+		initialShardsAcquired:   future.NewFuture[struct{}](),
 	}
 	c.lingerState.shards = make(map[historyi.ControllableContext]struct{})
 	return c
@@ -144,6 +148,8 @@ func (c *ControllerImpl) Stop() {
 	) {
 		return
 	}
+
+	c.initialShardsAcquired.SetIfNotReady(struct{}{}, context.Canceled)
 
 	c.ownership.stop()
 
@@ -174,7 +180,12 @@ func (c *ControllerImpl) Status() int32 {
 	return atomic.LoadInt32(&c.status)
 }
 
-// GetShardByID returns a shard context for the given namespace and workflow.
+func (c *ControllerImpl) InitialShardsAcquired(ctx context.Context) error {
+	_, err := c.initialShardsAcquired.Get(ctx)
+	return err
+}
+
+// GetShardByNamespaceWorkflow returns a shard context for the given namespace and workflow.
 // The shard context may not have acquired a rangeid lease yet.
 // Callers can use GetEngine on the shard to block on rangeid lease acquisition.
 func (c *ControllerImpl) GetShardByNamespaceWorkflow(
@@ -272,8 +283,8 @@ func (c *ControllerImpl) getOrCreateShardContext(shardID int32) (historyi.Contro
 		return nil, err
 	}
 
-	hostInfo := c.hostInfoProvider.HostInfo()
 	if atomic.LoadInt32(&c.status) == common.DaemonStatusStopped {
+		hostInfo := c.hostInfoProvider.HostInfo()
 		return nil, fmt.Errorf("ControllerImpl for host '%v' shutting down", hostInfo.Identity())
 	}
 
@@ -402,6 +413,24 @@ func (c *ControllerImpl) acquireShards(ctx context.Context) {
 
 	ctx = headers.SetCallerInfo(ctx, headers.SystemBackgroundCallerInfo)
 
+	// Readiness check: if we haven't marked readiness yet, then we need to set up a context to
+	// run the readiness check on owned shards.
+	var readinessCtx context.Context
+	var readinessCancel context.CancelFunc
+	if !c.initialShardsAcquired.Ready() {
+		readinessCtx, readinessCancel = context.WithCancel(ctx)
+	} else {
+		readinessCancel = func() {} // we need a non-nil func for Swap
+	}
+	// Cancel previous readiness check to ensure that the readiness check is always running on
+	// the most recent set of owned shards (e.g. after a membership change).
+	if prevCancel := c.shardReadinessCancel.Swap(readinessCancel); prevCancel != nil {
+		prevCancel.(context.CancelFunc)()
+	}
+
+	var ownedShardsLock sync.Mutex
+	var ownedShards []int32 // only populated if we are doing a readiness check
+
 	tryAcquire := func(shardID int32) {
 		if err := c.ownership.verifyOwnership(shardID); err != nil {
 			if IsShardOwnershipLostError(err) {
@@ -413,6 +442,12 @@ func (c *ControllerImpl) acquireShards(ctx context.Context) {
 				}
 			}
 			return
+		}
+
+		if readinessCtx != nil {
+			ownedShardsLock.Lock()
+			ownedShards = append(ownedShards, shardID)
+			ownedShardsLock.Unlock()
 		}
 
 		shard, err := c.GetShardByID(shardID)
@@ -433,7 +468,7 @@ func (c *ControllerImpl) acquireShards(ctx context.Context) {
 	sem := semaphore.NewWeighted(concurrency)
 	numShards := c.config.NumberOfShards
 	randomStartOffset := rand.Int31n(numShards)
-	for index := int32(0); index < numShards; index++ {
+	for index := range numShards {
 		shardID := (index+randomStartOffset)%numShards + 1
 		if err := sem.Acquire(ctx, 1); err != nil {
 			break
@@ -446,10 +481,67 @@ func (c *ControllerImpl) acquireShards(ctx context.Context) {
 	_ = sem.Acquire(ctx, concurrency)
 
 	c.RLock()
+	// note that this count includes lingering shards
 	numOfOwnedShards := len(c.historyShards)
 	c.RUnlock()
 	metrics.NumShardsGauge.With(c.taggedMetricsHandler).Record(float64(numOfOwnedShards))
 	c.publishShardCountUpdate(numOfOwnedShards)
+
+	// Readiness check: We should set initialShardsAcquired when:
+	// 1. It's not already set.
+	// 2. We should own at least one shard (i.e. not before we join membership).
+	// 3. We have ownership of all the shards we're supposed to own.
+	if readinessCtx != nil {
+		if len(ownedShards) > 0 {
+			go func() {
+				defer readinessCancel()
+				if c.checkShardReadiness(readinessCtx, ownedShards) {
+					c.initialShardsAcquired.SetIfNotReady(struct{}{}, nil)
+				}
+			}()
+		} else {
+			readinessCancel()
+		}
+	}
+}
+
+func (c *ControllerImpl) checkShardReadiness(
+	ctx context.Context,
+	shards []int32,
+) bool {
+	concurrency := int64(max(c.config.AcquireShardConcurrency(), 1))
+	sem := semaphore.NewWeighted(concurrency)
+	var ready atomic.Int32
+	for _, shardID := range shards {
+		if sem.Acquire(ctx, 1) != nil {
+			return false
+		}
+		go func() {
+			defer sem.Release(1)
+			// Note that AssertOwnership uses a detached context for the actual persistence
+			// op so we can't cancel it. If context is canceled, the final Acquire will
+			// fail and we won't do anything.
+			if shard, err := c.GetShardByID(shardID); err != nil {
+				return
+			} else if _, err := shard.GetEngine(ctx); err != nil {
+				return
+			} else if shard.AssertOwnership(ctx) != nil {
+				return
+			}
+			ready.Add(1)
+		}()
+	}
+	if sem.Acquire(ctx, concurrency) != nil {
+		return false
+	}
+
+	if ready.Load() != int32(len(shards)) {
+		c.contextTaggedLogger.Info("initial shards not ready",
+			tag.NewInt32("ready", ready.Load()), tag.NewInt("total", len(shards)))
+		return false
+	}
+	c.contextTaggedLogger.Info("initial shards ready", tag.NewInt("total", len(shards)))
+	return true
 }
 
 // publishShardCountUpdate publishes the current number of shards that this controller owns to all shard count

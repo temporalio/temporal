@@ -45,7 +45,7 @@ import (
 	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
 	sqltests "go.temporal.io/server/common/persistence/sql/sqlplugin/tests"
 	"go.temporal.io/server/common/resolver"
-	"go.temporal.io/server/environment"
+	"go.temporal.io/server/temporal/environment"
 )
 
 // TODO merge the initialization with existing persistence setup
@@ -67,7 +67,7 @@ func NewSQLiteMemoryConfig() *config.SQL {
 	}
 }
 
-// NewSQLiteMemoryConfig returns a new SQLite config for test
+// NewSQLiteFileConfig returns a new SQLite config for test
 func NewSQLiteFileConfig() *config.SQL {
 	return &config.SQL{
 		User:              "",
@@ -771,6 +771,20 @@ func TestSQLiteHistoryExecutionTimerSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
+func TestSQLiteHistoryExecutionChasmSuite(t *testing.T) {
+	cfg := NewSQLiteMemoryConfig()
+	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
+	if err != nil {
+		t.Fatalf("unable to create SQLite DB: %v", err)
+	}
+	defer func() {
+		_ = store.Close()
+	}()
+
+	s := sqltests.NewHistoryExecutionChasmSuite(t, store)
+	suite.Run(t, s)
+}
+
 func TestSQLiteHistoryExecutionRequestCancelSuite(t *testing.T) {
 	cfg := NewSQLiteMemoryConfig()
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
@@ -1071,6 +1085,19 @@ func TestSQLiteFileHistoryExecutionTimerSuite(t *testing.T) {
 	defer os.Remove(cfg.DatabaseName)
 
 	s := sqltests.NewHistoryExecutionTimerSuite(t, store)
+	suite.Run(t, s)
+}
+
+func TestSQLiteFileHistoryExecutionChasmSuite(t *testing.T) {
+	cfg := NewSQLiteFileConfig()
+	SetupSQLiteDatabase(t, cfg)
+	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
+	if err != nil {
+		t.Fatalf("unable to create SQLite DB: %v", err)
+	}
+	defer os.Remove(cfg.DatabaseName)
+
+	s := sqltests.NewHistoryExecutionChasmSuite(t, store)
 	suite.Run(t, s)
 }
 

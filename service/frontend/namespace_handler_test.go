@@ -36,6 +36,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
+	rulespb "go.temporal.io/api/rules/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -1707,6 +1708,203 @@ func (s *namespaceHandlerCommonSuite) TestFailoverGlobalNamespace_NotMaster() {
 	}
 	_, err := s.handler.UpdateNamespace(context.Background(), updateRequest)
 	s.NoError(err)
+}
+
+func (s *namespaceHandlerCommonSuite) TestCreateWorkflowRule_Acceptance() {
+	namespaceName := "test-namespace"
+	identity := "identity"
+	description := "description"
+	spec := &rulespb.WorkflowRuleSpec{
+		Id: "",
+	}
+	version := int64(100)
+
+	// first call returns error, because ID is not set
+	_, err := s.handler.CreateWorkflowRule(context.Background(), spec, identity, description, namespaceName)
+	s.Error(err)
+
+	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{
+		NotificationVersion: version,
+	}, nil)
+	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(&persistence.GetNamespaceResponse{
+		Namespace: &persistencespb.NamespaceDetail{
+			Info: &persistencespb.NamespaceInfo{
+				Id:   "1",
+				Name: namespaceName,
+			},
+			Config:            &persistencespb.NamespaceConfig{},
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
+		},
+	}, nil)
+	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).Return(nil)
+
+	spec.Id = "test-id"
+	rule, err := s.handler.CreateWorkflowRule(context.Background(), spec, identity, description, namespaceName)
+	s.NoError(err)
+	s.NotNil(rule)
+	s.NotNil(rule.Spec)
+	s.NotNil(rule.CreateTime)
+	s.Equal(identity, rule.CreatedByIdentity)
+	s.Equal(description, rule.Description)
+}
+
+func (s *namespaceHandlerCommonSuite) TestCreateWorkflowRule_Duplicate() {
+	namespaceName := "test-namespace"
+	identity := "identity"
+	description := "description"
+	ruleId := "test-id"
+	spec := &rulespb.WorkflowRuleSpec{
+		Id: ruleId,
+	}
+	version := int64(100)
+
+	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{
+		NotificationVersion: version,
+	}, nil)
+	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(&persistence.GetNamespaceResponse{
+		Namespace: &persistencespb.NamespaceDetail{
+			Info: &persistencespb.NamespaceInfo{
+				Id:   "1",
+				Name: namespaceName,
+			},
+			Config: &persistencespb.NamespaceConfig{
+				WorkflowRules: map[string]*rulespb.WorkflowRule{
+					ruleId: {
+						Spec: &rulespb.WorkflowRuleSpec{Id: ruleId},
+					},
+				},
+			},
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
+		},
+	}, nil)
+
+	_, err := s.handler.CreateWorkflowRule(context.Background(), spec, identity, description, namespaceName)
+	s.Error(err)
+	var invalidArgument *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArgument)
+}
+
+func (s *namespaceHandlerCommonSuite) TestDeleteWorkflowRule() {
+	namespaceName := "test-namespace"
+	ruleId := "test-id"
+	nsConfig := &persistencespb.NamespaceConfig{
+		WorkflowRules: map[string]*rulespb.WorkflowRule{
+			ruleId: &rulespb.WorkflowRule{
+				Spec: &rulespb.WorkflowRuleSpec{Id: ruleId},
+			},
+		},
+	}
+
+	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{
+		NotificationVersion: int64(1),
+	}, nil).AnyTimes()
+
+	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(&persistence.GetNamespaceResponse{
+		Namespace: &persistencespb.NamespaceDetail{
+			Info: &persistencespb.NamespaceInfo{
+				Id:   "1",
+				Name: namespaceName,
+			},
+			Config:            nsConfig,
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
+		},
+	}, nil).AnyTimes()
+	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+
+	// happy path
+	err := s.handler.DeleteWorkflowRule(context.Background(), ruleId, namespaceName)
+	s.NoError(err)
+
+	var invalidArgument *serviceerror.InvalidArgument
+
+	// rule with such id doesn't exist
+	err = s.handler.DeleteWorkflowRule(context.Background(), "not existing rule id", namespaceName)
+	s.Error(err)
+	s.ErrorAs(err, &invalidArgument)
+
+	// config is nil
+	nsConfig.WorkflowRules = nil
+	err = s.handler.DeleteWorkflowRule(context.Background(), "not existing rule id", namespaceName)
+	s.Error(err)
+	s.ErrorAs(err, &invalidArgument)
+}
+
+func (s *namespaceHandlerCommonSuite) TestDescribeWorkflowRule() {
+	namespaceName := "test-namespace"
+	ruleId := "test-id"
+	nsConfig := &persistencespb.NamespaceConfig{
+		WorkflowRules: map[string]*rulespb.WorkflowRule{
+			ruleId: &rulespb.WorkflowRule{
+				Spec: &rulespb.WorkflowRuleSpec{Id: ruleId},
+			},
+		},
+	}
+
+	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(&persistence.GetNamespaceResponse{
+		Namespace: &persistencespb.NamespaceDetail{
+			Info: &persistencespb.NamespaceInfo{
+				Id:   "1",
+				Name: namespaceName,
+			},
+			Config:            nsConfig,
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
+		},
+	}, nil).AnyTimes()
+
+	// happy path
+	rule, err := s.handler.DescribeWorkflowRule(context.Background(), ruleId, namespaceName)
+	s.NoError(err)
+	s.NotNil(rule)
+
+	var invalidArgument *serviceerror.InvalidArgument
+
+	// rule with such id doesn't exist
+	rule, err = s.handler.DescribeWorkflowRule(context.Background(), "not existing rule id", namespaceName)
+	s.Error(err)
+	s.ErrorAs(err, &invalidArgument)
+	s.Nil(rule)
+
+	// config is nil
+	nsConfig.WorkflowRules = nil
+	rule, err = s.handler.DescribeWorkflowRule(context.Background(), "not existing rule id", namespaceName)
+	s.Error(err)
+	s.ErrorAs(err, &invalidArgument)
+	s.Nil(rule)
+}
+
+func (s *namespaceHandlerCommonSuite) TestListWorkflowRules() {
+	namespaceName := "test-namespace"
+	nsConfig := &persistencespb.NamespaceConfig{
+		WorkflowRules: map[string]*rulespb.WorkflowRule{
+			"rule 1": {Spec: &rulespb.WorkflowRuleSpec{Id: "rule 1"}},
+			"rule 2": {Spec: &rulespb.WorkflowRuleSpec{Id: "rule 2"}},
+		},
+	}
+
+	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(&persistence.GetNamespaceResponse{
+		Namespace: &persistencespb.NamespaceDetail{
+			Info: &persistencespb.NamespaceInfo{
+				Id:   "1",
+				Name: namespaceName,
+			},
+			Config:            nsConfig,
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
+		},
+	}, nil).AnyTimes()
+
+	// happy path
+	rules, err := s.handler.ListWorkflowRules(context.Background(), namespaceName)
+	s.NoError(err)
+	s.NotNil(rules)
+	s.Equal(2, len(rules))
+
+	// config is nil
+	nsConfig.WorkflowRules = nil
+	rules, err = s.handler.ListWorkflowRules(context.Background(), namespaceName)
+	s.NoError(err)
+	s.NotNil(rules)
+	s.Equal(0, len(rules))
+
 }
 
 func (s *namespaceHandlerCommonSuite) getRandomNamespace() string {

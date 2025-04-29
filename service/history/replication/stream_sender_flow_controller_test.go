@@ -25,6 +25,7 @@
 package replication
 
 import (
+	"context"
 	"sync"
 	"testing"
 	"time"
@@ -80,7 +81,26 @@ func (s *senderFlowControllerSuite) TestWait_HighPriority() {
 
 	go func() {
 		defer wg.Done()
-		s.senderFlowCtrlImpl.Wait(enumsspb.TASK_PRIORITY_HIGH)
+		err := s.senderFlowCtrlImpl.Wait(context.Background(), enumsspb.TASK_PRIORITY_HIGH)
+		s.NoError(err)
+	}()
+
+	wg.Wait()
+}
+
+func (s *senderFlowControllerSuite) TestWait_Error() {
+	state := s.senderFlowCtrlImpl.flowControlStates[enumsspb.TASK_PRIORITY_HIGH]
+	state.rateLimiter = s.mockRateLimiter
+
+	s.mockRateLimiter.EXPECT().Wait(gomock.Any()).Return(context.Canceled)
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	go func() {
+		defer wg.Done()
+		err := s.senderFlowCtrlImpl.Wait(context.Background(), enumsspb.TASK_PRIORITY_HIGH)
+		s.Error(err)
 	}()
 
 	wg.Wait()
@@ -97,7 +117,8 @@ func (s *senderFlowControllerSuite) TestWait_LowPriority() {
 
 	go func() {
 		defer wg.Done()
-		s.senderFlowCtrlImpl.Wait(enumsspb.TASK_PRIORITY_LOW)
+		err := s.senderFlowCtrlImpl.Wait(context.Background(), enumsspb.TASK_PRIORITY_LOW)
+		s.NoError(err)
 	}()
 
 	wg.Wait()
@@ -113,7 +134,8 @@ func (s *senderFlowControllerSuite) TestWait_DefaultPriority() {
 
 	go func() {
 		defer wg.Done()
-		s.senderFlowCtrlImpl.Wait(enumsspb.TASK_PRIORITY_UNSPECIFIED)
+		err := s.senderFlowCtrlImpl.Wait(context.Background(), enumsspb.TASK_PRIORITY_UNSPECIFIED)
+		s.NoError(err)
 	}()
 
 	wg.Wait()
@@ -151,7 +173,8 @@ func (s *senderFlowControllerSuite) TestPauseToResume() {
 
 	go func() {
 		defer wg.Done()
-		s.senderFlowCtrlImpl.Wait(enumsspb.TASK_PRIORITY_HIGH)
+		err := s.senderFlowCtrlImpl.Wait(context.Background(), enumsspb.TASK_PRIORITY_HIGH)
+		s.NoError(err)
 	}()
 
 	// Ensure the goroutine has time to start and block

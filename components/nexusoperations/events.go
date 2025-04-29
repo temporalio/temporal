@@ -68,13 +68,82 @@ func (d CancelRequestedEventDefinition) Type() enumspb.EventType {
 
 func (d CancelRequestedEventDefinition) Apply(root *hsm.Node, event *historypb.HistoryEvent) error {
 	_, err := transitionOperation(root, event, func(node *hsm.Node, o Operation) (hsm.TransitionOutput, error) {
-		return o.Cancel(node, event.EventTime.AsTime())
+		return o.Cancel(node, event.EventTime.AsTime(), event.EventId)
 	})
 
 	return err
 }
 
 func (d CancelRequestedEventDefinition) CherryPick(root *hsm.Node, event *historypb.HistoryEvent, _ map[enumspb.ResetReapplyExcludeType]struct{}) error {
+	// We never cherry pick command events, and instead allow user logic to reschedule those commands.
+	return hsm.ErrNotCherryPickable
+}
+
+type CancelRequestCompletedEventDefinition struct{}
+
+func (d CancelRequestCompletedEventDefinition) IsWorkflowTaskTrigger() bool {
+	return false
+}
+
+func (d CancelRequestCompletedEventDefinition) Type() enumspb.EventType {
+	return enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUEST_COMPLETED
+}
+
+func (d CancelRequestCompletedEventDefinition) Apply(root *hsm.Node, event *historypb.HistoryEvent) error {
+	_, err := transitionOperation(root, event, func(node *hsm.Node, o Operation) (hsm.TransitionOutput, error) {
+		child, err := o.CancelationNode(node)
+		if err != nil {
+			return hsm.TransitionOutput{}, err
+		}
+		if child != nil {
+			return hsm.TransitionOutput{}, hsm.MachineTransition(child, func(c Cancelation) (hsm.TransitionOutput, error) {
+				return TransitionCancelationSucceeded.Apply(c, EventCancelationSucceeded{
+					Time: event.EventTime.AsTime(),
+					Node: child,
+				})
+			})
+		}
+		return hsm.TransitionOutput{}, nil
+	})
+	return err
+}
+
+func (d CancelRequestCompletedEventDefinition) CherryPick(root *hsm.Node, event *historypb.HistoryEvent, _ map[enumspb.ResetReapplyExcludeType]struct{}) error {
+	// We never cherry pick command events, and instead allow user logic to reschedule those commands.
+	return hsm.ErrNotCherryPickable
+}
+
+type CancelRequestFailedEventDefinition struct{}
+
+func (d CancelRequestFailedEventDefinition) IsWorkflowTaskTrigger() bool {
+	return false
+}
+
+func (d CancelRequestFailedEventDefinition) Type() enumspb.EventType {
+	return enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUEST_FAILED
+}
+
+func (d CancelRequestFailedEventDefinition) Apply(root *hsm.Node, event *historypb.HistoryEvent) error {
+	_, err := transitionOperation(root, event, func(node *hsm.Node, o Operation) (hsm.TransitionOutput, error) {
+		child, err := o.CancelationNode(node)
+		if err != nil {
+			return hsm.TransitionOutput{}, err
+		}
+		if child != nil {
+			return hsm.TransitionOutput{}, hsm.MachineTransition(child, func(c Cancelation) (hsm.TransitionOutput, error) {
+				return TransitionCancelationFailed.Apply(c, EventCancelationFailed{
+					Time:    event.EventTime.AsTime(),
+					Failure: event.GetNexusOperationCancelRequestFailedEventAttributes().GetFailure(),
+					Node:    child,
+				})
+			})
+		}
+		return hsm.TransitionOutput{}, nil
+	})
+	return err
+}
+
+func (d CancelRequestFailedEventDefinition) CherryPick(root *hsm.Node, event *historypb.HistoryEvent, _ map[enumspb.ResetReapplyExcludeType]struct{}) error {
 	// We never cherry pick command events, and instead allow user logic to reschedule those commands.
 	return hsm.ErrNotCherryPickable
 }
@@ -237,6 +306,12 @@ func RegisterEventDefinitions(reg *hsm.Registry) error {
 		return err
 	}
 	if err := reg.RegisterEventDefinition(CancelRequestedEventDefinition{}); err != nil {
+		return err
+	}
+	if err := reg.RegisterEventDefinition(CancelRequestCompletedEventDefinition{}); err != nil {
+		return err
+	}
+	if err := reg.RegisterEventDefinition(CancelRequestFailedEventDefinition{}); err != nil {
 		return err
 	}
 	if err := reg.RegisterEventDefinition(StartedEventDefinition{}); err != nil {

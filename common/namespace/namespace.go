@@ -32,10 +32,12 @@ import (
 	"github.com/google/uuid"
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
+	rulespb "go.temporal.io/api/rules/v1"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/util"
+	expmaps "golang.org/x/exp/maps"
 )
 
 type (
@@ -297,6 +299,21 @@ func (ns *Namespace) Retention() time.Duration {
 // CustomSearchAttributesMapper is a part of temporary solution. Do not use this method.
 func (ns *Namespace) CustomSearchAttributesMapper() CustomSearchAttributesMapper {
 	return ns.customSearchAttributesMapper
+}
+
+func (ns *Namespace) GetWorkflowRules() []*rulespb.WorkflowRule {
+	if ns.config.WorkflowRules == nil {
+		return nil
+	}
+	return expmaps.Values(ns.config.WorkflowRules)
+}
+
+func (ns *Namespace) GetWorkflowRule(ruleID string) (*rulespb.WorkflowRule, bool) {
+	if ns.config.WorkflowRules == nil {
+		return nil, false
+	}
+	result, ok := ns.config.WorkflowRules[ruleID]
+	return result, ok
 }
 
 // Error returns the reason associated with this bad binary.

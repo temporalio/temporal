@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
+	"go.temporal.io/server/common/testing/testhooks"
 	workercommon "go.temporal.io/server/service/worker/common"
 	"go.uber.org/fx"
 )
@@ -71,6 +72,7 @@ func ClientProvider(
 	matchingClient resource.MatchingClient,
 	visibilityManager manager.VisibilityManager,
 	dc *dynamicconfig.Collection,
+	testHooks testhooks.TestHooks,
 ) Client {
 	return &ClientImpl{
 		logger:                           logger,
@@ -81,6 +83,7 @@ func ClientProvider(
 		visibilityMaxPageSize:            dynamicconfig.FrontendVisibilityMaxPageSize.Get(dc),
 		maxTaskQueuesInDeploymentVersion: dynamicconfig.MatchingMaxTaskQueuesInDeploymentVersion.Get(dc),
 		maxDeployments:                   dynamicconfig.MatchingMaxDeployments.Get(dc),
+		testHooks:                        testHooks,
 	}
 }
 

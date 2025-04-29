@@ -29,7 +29,7 @@ import (
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
-	"go.temporal.io/server/environment"
+	"go.temporal.io/server/temporal/environment"
 )
 
 const (
@@ -87,7 +87,7 @@ func GetPostgreSQLPGXTestClusterOption() *TestBaseOptions {
 	}
 }
 
-// GetSQLiteTestClusterOption return test options
+// GetSQLiteFileTestClusterOption return test options
 func GetSQLiteFileTestClusterOption() *TestBaseOptions {
 	return &TestBaseOptions{
 		SQLDBPluginName:   sqlite.PluginName,
@@ -101,7 +101,7 @@ func GetSQLiteFileTestClusterOption() *TestBaseOptions {
 	}
 }
 
-// GetSQLiteTestClusterOption return test options
+// GetSQLiteMemoryTestClusterOption return test options
 func GetSQLiteMemoryTestClusterOption() *TestBaseOptions {
 	return &TestBaseOptions{
 		SQLDBPluginName:   sqlite.PluginName,

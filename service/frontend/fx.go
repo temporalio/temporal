@@ -216,7 +216,7 @@ func GrpcServerOptionsProvider(
 	serviceName primitives.ServiceName,
 	rpcFactory common.RPCFactory,
 	namespaceLogInterceptor *interceptor.NamespaceLogInterceptor,
-	namespaceRateLimiterInterceptor *interceptor.NamespaceRateLimitInterceptor,
+	namespaceRateLimiterInterceptor interceptor.NamespaceRateLimitInterceptor,
 	namespaceCountLimiterInterceptor *interceptor.ConcurrentRequestLimitInterceptor,
 	namespaceValidatorInterceptor *interceptor.NamespaceValidatorInterceptor,
 	namespaceHandoverInterceptor *interceptor.NamespaceHandoverInterceptor,
@@ -262,7 +262,7 @@ func GrpcServerOptionsProvider(
 		// Mask error interceptor should be the most outer interceptor since it handle the errors format
 		// Service Error Interceptor should be the next most outer interceptor on error handling
 		maskInternalErrorDetailsInterceptor.Intercept,
-		rpc.ServiceErrorInterceptor,
+		interceptor.ServiceErrorInterceptor,
 		rpc.NewFrontendServiceErrorInterceptor(logger),
 		namespaceValidatorInterceptor.NamespaceValidateIntercept,
 		namespaceLogInterceptor.Intercept, // TODO: Deprecate this with a outer custom interceptor
@@ -430,11 +430,12 @@ func RateLimitInterceptorProvider(
 }
 
 func MaskInternalErrorDetailsInterceptorProvider(
+	logger log.Logger,
 	serviceConfig *Config,
 	namespaceRegistry namespace.Registry,
 ) *interceptor.MaskInternalErrorDetailsInterceptor {
 	return interceptor.NewMaskInternalErrorDetailsInterceptor(
-		serviceConfig.MaskInternalErrorDetails, namespaceRegistry,
+		serviceConfig.MaskInternalErrorDetails, namespaceRegistry, logger,
 	)
 }
 
@@ -444,7 +445,7 @@ func NamespaceRateLimitInterceptorProvider(
 	namespaceRegistry namespace.Registry,
 	frontendServiceResolver membership.ServiceResolver,
 	logger log.SnTaggedLogger,
-) *interceptor.NamespaceRateLimitInterceptor {
+) interceptor.NamespaceRateLimitInterceptor {
 	var globalNamespaceRPS, globalNamespaceVisibilityRPS, globalNamespaceNamespaceReplicationInducingAPIsRPS dynamicconfig.IntPropertyFnWithNamespaceFilter
 
 	switch serviceName {
@@ -495,7 +496,7 @@ func NamespaceRateLimitInterceptorProvider(
 			)
 		},
 	)
-	return interceptor.NewNamespaceRateLimitInterceptor(namespaceRegistry, namespaceRateLimiter, map[string]int{})
+	return interceptor.NewNamespaceRateLimitInterceptor(namespaceRegistry, namespaceRateLimiter, map[string]int{}, serviceConfig.ReducePollWorkflowHistoryRequestPriority)
 }
 
 func NamespaceCountLimitInterceptorProvider(
@@ -777,7 +778,7 @@ func RegisterNexusHTTPHandler(
 	authInterceptor *authorization.Interceptor,
 	telemetryInterceptor *interceptor.TelemetryInterceptor,
 	redirectionInterceptor *interceptor.Redirection,
-	namespaceRateLimiterInterceptor *interceptor.NamespaceRateLimitInterceptor,
+	namespaceRateLimiterInterceptor interceptor.NamespaceRateLimitInterceptor,
 	namespaceCountLimiterInterceptor *interceptor.ConcurrentRequestLimitInterceptor,
 	namespaceValidatorInterceptor *interceptor.NamespaceValidatorInterceptor,
 	rateLimitInterceptor *interceptor.RateLimitInterceptor,

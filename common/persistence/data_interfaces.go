@@ -82,6 +82,12 @@ const (
 	// UpdateWorkflowModeBypassCurrent update workflow, without current record
 	// NOTE: current record CANNOT point to the workflow to be updated
 	UpdateWorkflowModeBypassCurrent
+	// UpdateWorkflowModeIgnoreCurrent update workflow, without checking or update current record.
+	// This mode should only be used when we don't know if the workflow being updated is the current workflow or not in DB.
+	// For example, when updating a closed workflow, it may or may not be the current workflow.
+	// This is similar to SetWorkflowExecution, but UpdateWorkflowExecution with this mode persists the workflow as a mutation,
+	// instead of a snapshot.
+	UpdateWorkflowModeIgnoreCurrent
 )
 
 // ConflictResolveWorkflowMode conflict resolve mode
@@ -599,10 +605,14 @@ type (
 	CreateTasksRequest struct {
 		TaskQueueInfo *PersistedTaskQueueInfo
 		Tasks         []*persistencespb.AllocatedTaskInfo
+		// If Subqueues is present, it should be the same size as Tasks and hold the subqueue
+		// indexes that each task should be added to.
+		Subqueues []int
 	}
 
 	// CreateTasksResponse is the response to CreateTasksRequest
 	CreateTasksResponse struct {
+		UpdatedMetadata bool
 	}
 
 	PersistedTaskQueueInfo struct {
@@ -617,6 +627,7 @@ type (
 		TaskType           enumspb.TaskQueueType
 		InclusiveMinTaskID int64
 		ExclusiveMaxTaskID int64
+		Subqueue           int
 		PageSize           int
 		NextPageToken      []byte
 	}
@@ -639,7 +650,8 @@ type (
 		TaskQueueName      string
 		TaskType           enumspb.TaskQueueType
 		ExclusiveMaxTaskID int64 // Tasks less than this ID will be completed
-		Limit              int   // Limit on the max number of tasks that can be completed. Required param
+		Subqueue           int
+		Limit              int // Limit on the max number of tasks that can be completed. Required param
 	}
 
 	// CreateNamespaceRequest is used to create the namespace

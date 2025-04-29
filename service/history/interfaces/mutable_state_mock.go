@@ -71,6 +71,7 @@ import (
 type MockMutableState struct {
 	ctrl     *gomock.Controller
 	recorder *MockMutableStateMockRecorder
+	isgomock struct{}
 }
 
 // MockMutableStateMockRecorder is the mock recorder for MockMutableState.
@@ -258,18 +259,18 @@ func (mr *MockMutableStateMockRecorder) AddChildWorkflowExecutionStartedEvent(ar
 }
 
 // AddChildWorkflowExecutionTerminatedEvent mocks base method.
-func (m *MockMutableState) AddChildWorkflowExecutionTerminatedEvent(arg0 int64, arg1 *common.WorkflowExecution, arg2 *history.WorkflowExecutionTerminatedEventAttributes) (*history.HistoryEvent, error) {
+func (m *MockMutableState) AddChildWorkflowExecutionTerminatedEvent(arg0 int64, arg1 *common.WorkflowExecution) (*history.HistoryEvent, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddChildWorkflowExecutionTerminatedEvent", arg0, arg1, arg2)
+	ret := m.ctrl.Call(m, "AddChildWorkflowExecutionTerminatedEvent", arg0, arg1)
 	ret0, _ := ret[0].(*history.HistoryEvent)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // AddChildWorkflowExecutionTerminatedEvent indicates an expected call of AddChildWorkflowExecutionTerminatedEvent.
-func (mr *MockMutableStateMockRecorder) AddChildWorkflowExecutionTerminatedEvent(arg0, arg1, arg2 any) *gomock.Call {
+func (mr *MockMutableStateMockRecorder) AddChildWorkflowExecutionTerminatedEvent(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddChildWorkflowExecutionTerminatedEvent", reflect.TypeOf((*MockMutableState)(nil).AddChildWorkflowExecutionTerminatedEvent), arg0, arg1, arg2)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddChildWorkflowExecutionTerminatedEvent", reflect.TypeOf((*MockMutableState)(nil).AddChildWorkflowExecutionTerminatedEvent), arg0, arg1)
 }
 
 // AddChildWorkflowExecutionTimedOutEvent mocks base method.
@@ -2819,6 +2820,21 @@ func (m *MockMutableState) IsDirty() bool {
 func (mr *MockMutableStateMockRecorder) IsDirty() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsDirty", reflect.TypeOf((*MockMutableState)(nil).IsDirty))
+}
+
+// IsNonCurrentWorkflowGuaranteed mocks base method.
+func (m *MockMutableState) IsNonCurrentWorkflowGuaranteed() (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsNonCurrentWorkflowGuaranteed")
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// IsNonCurrentWorkflowGuaranteed indicates an expected call of IsNonCurrentWorkflowGuaranteed.
+func (mr *MockMutableStateMockRecorder) IsNonCurrentWorkflowGuaranteed() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsNonCurrentWorkflowGuaranteed", reflect.TypeOf((*MockMutableState)(nil).IsNonCurrentWorkflowGuaranteed))
 }
 
 // IsResetRun mocks base method.

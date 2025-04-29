@@ -36,6 +36,8 @@ package chasm
 import (
 	reflect "reflect"
 
+	definition "go.temporal.io/server/common/definition"
+	tasks "go.temporal.io/server/service/history/tasks"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -43,6 +45,7 @@ import (
 type MockNodeBackend struct {
 	ctrl     *gomock.Controller
 	recorder *MockNodeBackendMockRecorder
+	isgomock struct{}
 }
 
 // MockNodeBackendMockRecorder is the mock recorder for MockNodeBackend.
@@ -62,10 +65,69 @@ func (m *MockNodeBackend) EXPECT() *MockNodeBackendMockRecorder {
 	return m.recorder
 }
 
+// AddTasks mocks base method.
+func (m *MockNodeBackend) AddTasks(arg0 ...tasks.Task) {
+	m.ctrl.T.Helper()
+	varargs := []any{}
+	for _, a := range arg0 {
+		varargs = append(varargs, a)
+	}
+	m.ctrl.Call(m, "AddTasks", varargs...)
+}
+
+// AddTasks indicates an expected call of AddTasks.
+func (mr *MockNodeBackendMockRecorder) AddTasks(arg0 ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddTasks", reflect.TypeOf((*MockNodeBackend)(nil).AddTasks), arg0...)
+}
+
+// GetCurrentVersion mocks base method.
+func (m *MockNodeBackend) GetCurrentVersion() int64 {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetCurrentVersion")
+	ret0, _ := ret[0].(int64)
+	return ret0
+}
+
+// GetCurrentVersion indicates an expected call of GetCurrentVersion.
+func (mr *MockNodeBackendMockRecorder) GetCurrentVersion() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCurrentVersion", reflect.TypeOf((*MockNodeBackend)(nil).GetCurrentVersion))
+}
+
+// GetWorkflowKey mocks base method.
+func (m *MockNodeBackend) GetWorkflowKey() definition.WorkflowKey {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetWorkflowKey")
+	ret0, _ := ret[0].(definition.WorkflowKey)
+	return ret0
+}
+
+// GetWorkflowKey indicates an expected call of GetWorkflowKey.
+func (mr *MockNodeBackendMockRecorder) GetWorkflowKey() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowKey", reflect.TypeOf((*MockNodeBackend)(nil).GetWorkflowKey))
+}
+
+// NextTransitionCount mocks base method.
+func (m *MockNodeBackend) NextTransitionCount() int64 {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NextTransitionCount")
+	ret0, _ := ret[0].(int64)
+	return ret0
+}
+
+// NextTransitionCount indicates an expected call of NextTransitionCount.
+func (mr *MockNodeBackendMockRecorder) NextTransitionCount() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NextTransitionCount", reflect.TypeOf((*MockNodeBackend)(nil).NextTransitionCount))
+}
+
 // MockNodePathEncoder is a mock of NodePathEncoder interface.
 type MockNodePathEncoder struct {
 	ctrl     *gomock.Controller
 	recorder *MockNodePathEncoderMockRecorder
+	isgomock struct{}
 }
 
 // MockNodePathEncoderMockRecorder is the mock recorder for MockNodePathEncoder.

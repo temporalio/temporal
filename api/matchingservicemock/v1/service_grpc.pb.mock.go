@@ -46,6 +46,7 @@ import (
 type MockMatchingServiceClient struct {
 	ctrl     *gomock.Controller
 	recorder *MockMatchingServiceClientMockRecorder
+	isgomock struct{}
 }
 
 // MockMatchingServiceClientMockRecorder is the mock recorder for MockMatchingServiceClient.
@@ -709,6 +710,7 @@ func (mr *MockMatchingServiceClientMockRecorder) UpdateWorkerVersioningRules(ctx
 type MockMatchingServiceServer struct {
 	ctrl     *gomock.Controller
 	recorder *MockMatchingServiceServerMockRecorder
+	isgomock struct{}
 }
 
 // MockMatchingServiceServerMockRecorder is the mock recorder for MockMatchingServiceServer.
@@ -1224,6 +1226,7 @@ func (mr *MockMatchingServiceServerMockRecorder) mustEmbedUnimplementedMatchingS
 type MockUnsafeMatchingServiceServer struct {
 	ctrl     *gomock.Controller
 	recorder *MockUnsafeMatchingServiceServerMockRecorder
+	isgomock struct{}
 }
 
 // MockUnsafeMatchingServiceServerMockRecorder is the mock recorder for MockUnsafeMatchingServiceServer.

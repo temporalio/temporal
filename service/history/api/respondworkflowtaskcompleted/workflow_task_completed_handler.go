@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/effect"
 	"go.temporal.io/server/common/enums"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -51,10 +52,9 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/protocol"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/tasktoken"
-	"go.temporal.io/server/internal/effect"
-	"go.temporal.io/server/internal/protocol"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/configs"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -332,6 +332,7 @@ func (handler *workflowTaskCompletedHandler) handleCommand(
 		return nil, handler.handleCommandProtocolMessage(ctx, command.GetProtocolMessageCommandAttributes(), msgs)
 
 	default:
+		// Nexus command handlers are registered in /components/nexusoperations/workflow/commands.go
 		ch, ok := handler.commandHandlerRegistry.Handler(command.GetCommandType())
 		if !ok {
 			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Unknown command type: %v", command.GetCommandType()))
@@ -1329,6 +1330,7 @@ func (handler *workflowTaskCompletedHandler) handleRetry(
 		newMutableState,
 		newRunID,
 		startAttr,
+		startEvent.Links,
 		nil,
 		failure,
 		backoffInterval,
@@ -1388,6 +1390,7 @@ func (handler *workflowTaskCompletedHandler) handleCron(
 		newMutableState,
 		newRunID,
 		startAttr,
+		startEvent.Links,
 		lastCompletionResult,
 		failure,
 		backoffInterval,

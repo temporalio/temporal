@@ -25,6 +25,7 @@
 package replication
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"time"
@@ -36,7 +37,8 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/common/persistence"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
 
 var (
@@ -70,6 +72,7 @@ func ClusterIDToClusterNameShardCount(
 }
 
 func WrapEventLoop(
+	ctx context.Context,
 	originalEventLoop func() error,
 	streamStopper func(),
 	logger log.Logger,
@@ -81,6 +84,9 @@ func WrapEventLoop(
 	defer streamStopper()
 
 	ops := func() error {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		err := originalEventLoop()
 
 		if err != nil {
@@ -111,11 +117,17 @@ func WrapEventLoop(
 }
 
 func isRetryableError(err error) bool {
-	if shard.IsShardOwnershipLostError(err) {
+	var streamError *StreamError
+	var shardOwnershipLostError *persistence.ShardOwnershipLostError
+	var shardOwnershipLost *serviceerrors.ShardOwnershipLost
+	switch {
+	case errors.As(err, &shardOwnershipLostError):
 		return false
-	}
-	switch err.(type) {
-	case *StreamError:
+	case errors.As(err, &shardOwnershipLost):
+		return false
+	case errors.As(err, &streamError):
+		return false
+	case errors.Is(err, context.Canceled):
 		return false
 	default:
 		return true

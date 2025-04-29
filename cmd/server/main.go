@@ -126,6 +126,23 @@ func buildCLI() *cli.App {
 			},
 		},
 		{
+			Name:      "render-config",
+			Usage:     "Render server config template",
+			ArgsUsage: " ",
+			Action: func(c *cli.Context) error {
+				cfg, err := config.LoadConfig(
+					c.String("env"),
+					c.String("config"),
+					c.String("zone"),
+				)
+				if err != nil {
+					return cli.Exit(fmt.Errorf("Unable to load configuration: %w", err), 1)
+				}
+				fmt.Println(cfg.String())
+				return nil
+			},
+		},
+		{
 			Name:      "start",
 			Usage:     "Start Temporal server",
 			ArgsUsage: " ",
