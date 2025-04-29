@@ -1070,15 +1070,15 @@ func (s *nodeSuite) TestCloseTransaction_InvalidateComponentTasks() {
 	rt, ok := s.registry.Task("TestLibrary.test_side_effect_task")
 	s.True(ok)
 	rt.validator.(*MockTaskValidator[any, *TestSideEffectTask]).EXPECT().
-		Validate(gomock.Any(), gomock.Any(), gomock.Any()).Return(errors.New("task is invalid")).Times(1)
+		Validate(gomock.Any(), gomock.Any(), gomock.Any()).Return(false, nil).Times(1)
 	rt, ok = s.registry.Task("TestLibrary.test_outbound_side_effect_task")
 	s.True(ok)
 	rt.validator.(*MockTaskValidator[any, TestOutboundSideEffectTask]).EXPECT().
-		Validate(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).Times(1)
+		Validate(gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).Times(1)
 	rt, ok = s.registry.Task("TestLibrary.test_pure_task")
 	s.True(ok)
 	rt.validator.(*MockTaskValidator[any, *TestPureTask]).EXPECT().
-		Validate(gomock.Any(), gomock.Any(), gomock.Any()).Return(errors.New("task is invalid")).Times(1)
+		Validate(gomock.Any(), gomock.Any(), gomock.Any()).Return(false, nil).Times(1)
 
 	err = root.closeTransactionUpdateComponentTasks()
 	s.NoError(err)

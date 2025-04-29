@@ -913,7 +913,12 @@ func (n *Node) validateComponentTask(
 		reflect.ValueOf(n.value),
 		deserizedTaskValue,
 	})
-	return retValues[0].IsNil(), nil
+	if !retValues[1].IsNil() {
+		//revive:disable-next-line:unchecked-type-assertion
+		return false, retValues[1].Interface().(error)
+	}
+	//revive:disable-next-line:unchecked-type-assertion
+	return retValues[0].Interface().(bool), nil
 }
 
 func (n *Node) closeTransactionGeneratePhysicalSideEffectTasks() error {

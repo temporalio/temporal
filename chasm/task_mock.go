@@ -141,11 +141,12 @@ func (m *MockTaskValidator[C, T]) EXPECT() *MockTaskValidatorMockRecorder[C, T] 
 }
 
 // Validate mocks base method.
-func (m *MockTaskValidator[C, T]) Validate(arg0 Context, arg1 C, arg2 T) error {
+func (m *MockTaskValidator[C, T]) Validate(arg0 Context, arg1 C, arg2 T) (bool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Validate", arg0, arg1, arg2)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // Validate indicates an expected call of Validate.
