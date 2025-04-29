@@ -84,6 +84,11 @@ func (c *clientImpl) AddActivityTask(
 	ctx context.Context,
 	request *matchingservice.AddActivityTaskRequest,
 	opts ...grpc.CallOption) (*matchingservice.AddActivityTaskResponse, error) {
+	if tqProto := request.GetTaskQueue(); tqProto != nil {
+		// pickClientForWrite mutates the Name field. Restore it after the call returns.
+		origName := tqProto.Name
+		defer func() { tqProto.Name = origName }()
+	}
 	client, err := c.pickClientForWrite(
 		request.GetTaskQueue(),
 		request.GetNamespaceId(),
@@ -101,6 +106,11 @@ func (c *clientImpl) AddWorkflowTask(
 	ctx context.Context,
 	request *matchingservice.AddWorkflowTaskRequest,
 	opts ...grpc.CallOption) (*matchingservice.AddWorkflowTaskResponse, error) {
+	if tqProto := request.GetTaskQueue(); tqProto != nil {
+		// pickClientForWrite mutates the Name field. Restore it after the call returns.
+		origName := tqProto.Name
+		defer func() { tqProto.Name = origName }()
+	}
 	client, err := c.pickClientForWrite(
 		request.GetTaskQueue(),
 		request.GetNamespaceId(),
@@ -165,6 +175,11 @@ func (c *clientImpl) PollWorkflowTaskQueue(
 }
 
 func (c *clientImpl) QueryWorkflow(ctx context.Context, request *matchingservice.QueryWorkflowRequest, opts ...grpc.CallOption) (*matchingservice.QueryWorkflowResponse, error) {
+	if tqProto := request.GetTaskQueue(); tqProto != nil {
+		// pickClientForWrite mutates the Name field. Restore it after the call returns.
+		origName := tqProto.Name
+		defer func() { tqProto.Name = origName }()
+	}
 	client, err := c.pickClientForWrite(request.GetTaskQueue(), request.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_WORKFLOW, request.GetForwardInfo().GetSourcePartition())
 	if err != nil {
 		return nil, err
