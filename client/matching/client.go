@@ -118,6 +118,11 @@ func (c *clientImpl) PollActivityTaskQueue(
 	ctx context.Context,
 	request *matchingservice.PollActivityTaskQueueRequest,
 	opts ...grpc.CallOption) (*matchingservice.PollActivityTaskQueueResponse, error) {
+	if tqProto := request.GetPollRequest().GetTaskQueue(); tqProto != nil {
+		// pickClientForRead mutates the Name field. Restore it after the call returns.
+		origName := tqProto.Name
+		defer func() { tqProto.Name = origName }()
+	}
 	client, release, err := c.pickClientForRead(
 		request.GetPollRequest().GetTaskQueue(),
 		request.GetNamespaceId(),
@@ -138,6 +143,11 @@ func (c *clientImpl) PollWorkflowTaskQueue(
 	ctx context.Context,
 	request *matchingservice.PollWorkflowTaskQueueRequest,
 	opts ...grpc.CallOption) (*matchingservice.PollWorkflowTaskQueueResponse, error) {
+	if tqProto := request.GetPollRequest().GetTaskQueue(); tqProto != nil {
+		// pickClientForRead mutates the Name field. Restore it after the call returns.
+		origName := tqProto.Name
+		defer func() { tqProto.Name = origName }()
+	}
 	client, release, err := c.pickClientForRead(
 		request.GetPollRequest().GetTaskQueue(),
 		request.GetNamespaceId(),
