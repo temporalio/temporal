@@ -322,7 +322,7 @@ func (n *Node) fieldType() fieldType {
 	return fieldTypeUnspecified
 }
 
-func validateType(t reflect.Type) error {
+func assertStructPointer(t reflect.Type) error {
 	if t == nil {
 		return nil
 	}
@@ -502,7 +502,7 @@ func (n *Node) syncSubComponentsInternal(
 				// Field is not empty but tree node is not set. It means this is a new field, and a node must be created.
 				childNode := newNode(n.nodeBase, n, fieldN)
 
-				if err := validateType(reflect.TypeOf(internal.value())); err != nil {
+				if err := assertStructPointer(reflect.TypeOf(internal.value())); err != nil {
 					return err
 				}
 				childNode.value = internal.value()
@@ -541,8 +541,8 @@ func (n *Node) deleteChildren(childrenToKeep map[string]struct{}, currentPath []
 				return err
 			}
 			n.mutation.DeletedNodes[path] = struct{}{}
-			// If parent is about to be removed, it must not have any children.
-			// TODO: softassert: len(childNode.children)==0
+			// If a parent is about to be removed, it must not have any children.
+			softassert.That(n.logger, len(childNode.children) == 0, "childNode.children must be empty when childNode is removed")
 			delete(n.children, childName)
 		}
 	}
@@ -578,12 +578,14 @@ func (n *Node) updateLastUpdateVersionedTransition() {
 }
 
 // deserialize initializes the node's value from its serializedNode.
-// If value is of component type, it initializes every chasm.Field of it and sets node field but not value field
-// i.e. it doesn't deserialize recursively and must be called on every node separately.
+// If a value is of the component type, it initializes every chasm.Field of it and sets serializedNode field but not value field,
+// i.e., it doesn't deserialize recursively and must be called on every node separately.
+// valueT must be a pointer to a concrete type (not interface). To support deserialization of a component to interface,
+// a registry lookup must be done outside the deserialize method.
 func (n *Node) deserialize(
 	valueT reflect.Type,
 ) error {
-	if err := validateType(valueT); err != nil {
+	if err := assertStructPointer(valueT); err != nil {
 		return err
 	}
 
@@ -607,11 +609,11 @@ func (n *Node) deserialize(
 func (n *Node) deserializeComponentNode(
 	valueT reflect.Type,
 ) error {
-	// TODO: use n.serializedNode.GetComponentAttributes().GetType() instead to support deserialization to interface.
+	// valueT is guaranteed to be a pointer to the struct because it was already validated by the assertStructPointer method.
 	valueV := reflect.New(valueT.Elem())
 	if n.serializedNode.GetData() == nil {
 		// serializedNode is empty (has only metadata) => use constructed value of valueT type as value and return.
-		// deserialize method acts as component constructor.
+		// deserialize method acts as a component constructor.
 		n.value = valueV.Interface()
 		n.valueState = valueStateSynced
 		return nil
@@ -650,8 +652,6 @@ func (n *Node) deserializeComponentNode(
 		switch genericTypePrefix(fieldT) {
 		case chasmFieldTypePrefix:
 			if childNode, found := n.children[fieldN]; found {
-				// TODO: support chasm.Field[interface], type should go from registry
-				//  using childNode.serializedNode.GetComponentAttributes().GetType()
 				chasmFieldV := reflect.New(fieldT).Elem()
 				internalValue := reflect.ValueOf(newFieldInternalWithNode(childNode))
 				chasmFieldV.FieldByName(internalFieldName).Set(internalValue)
