@@ -46,7 +46,7 @@ type (
 	}
 
 	TaskValidator[C any, T any] interface {
-		Validate(Context, C, T) error
+		Validate(Context, C, T) (bool, error)
 	}
 )
 

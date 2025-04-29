@@ -934,7 +934,7 @@ func (s *nodeSuite) TestGetComponent() {
 	}
 }
 
-func (s *nodeSuite) TestSeralizeTask() {
+func (s *nodeSuite) TestSeralizeDeserializeTask() {
 	payload := &commonpb.Payload{
 		Data: []byte("some-random-data"),
 	}
@@ -945,6 +945,7 @@ func (s *nodeSuite) TestSeralizeTask() {
 		name         string
 		task         any
 		expectedData []byte
+		equalFn      func(t1, t2 any)
 	}{
 		{
 			name: "ProtoTask",
@@ -952,11 +953,19 @@ func (s *nodeSuite) TestSeralizeTask() {
 				Data: []byte("some-random-data"),
 			},
 			expectedData: expectedBlob.GetData(),
+			equalFn: func(t1, t2 any) {
+				protorequire.ProtoEqual(s.T(), t1.(*TestSideEffectTask), t2.(*TestSideEffectTask))
+			},
 		},
 		{
 			name:         "EmptyTask",
 			task:         TestOutboundSideEffectTask{},
 			expectedData: nil,
+			equalFn: func(t1, t2 any) {
+				s.IsType(TestOutboundSideEffectTask{}, t1)
+				s.IsType(TestOutboundSideEffectTask{}, t2)
+				s.Equal(t1, t2)
+			},
 		},
 		{
 			name: "StructWithProtoField",
@@ -964,6 +973,9 @@ func (s *nodeSuite) TestSeralizeTask() {
 				Payload: payload,
 			},
 			expectedData: expectedBlob.GetData(),
+			equalFn: func(t1, t2 any) {
+				protorequire.ProtoEqual(s.T(), t1.(*TestPureTask).Payload, t2.(*TestPureTask).Payload)
+			},
 		},
 	}
 
@@ -975,12 +987,106 @@ func (s *nodeSuite) TestSeralizeTask() {
 			blob, err := serializeTask(rt, tc.task)
 			s.NoError(err)
 
-			// TODO: test the serialized blob by deserializing it back
 			s.NotNil(blob)
 			s.Equal(enumspb.ENCODING_TYPE_PROTO3, blob.GetEncodingType())
 			s.Equal(tc.expectedData, blob.GetData())
+
+			deserializedTaskValue, err := deserializeTask(rt, blob)
+			s.NoError(err)
+			tc.equalFn(tc.task, deserializedTaskValue.Interface())
 		})
 	}
+}
+
+func (s *nodeSuite) TestCloseTransaction_InvalidateComponentTasks() {
+	payload := &commonpb.Payload{
+		Data: []byte("some-random-data"),
+	}
+	taskBlob, err := serialization.ProtoEncodeBlob(payload, enumspb.ENCODING_TYPE_PROTO3)
+	s.NoError(err)
+
+	persistenceNodes := map[string]*persistencespb.ChasmNode{
+		"": {
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+						Type: "TestLibrary.test_component",
+						SideEffectTasks: []*persistencespb.ChasmComponentAttributes_Task{
+							{
+								Type:                      "TestLibrary.test_side_effect_task",
+								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
+								VersionedTransitionOffset: 1,
+								Data:                      taskBlob,
+								PhysicalTaskStatus:        physicalTaskStatusCreated,
+							},
+							{
+								Type:                      "TestLibrary.test_outbound_side_effect_task",
+								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
+								VersionedTransitionOffset: 2,
+								Data: &commonpb.DataBlob{
+									Data:         nil,
+									EncodingType: enumspb.ENCODING_TYPE_PROTO3,
+								},
+								PhysicalTaskStatus: physicalTaskStatusCreated,
+							},
+						},
+						PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
+							{
+								Type:                      "TestLibrary.test_pure_task",
+								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
+								VersionedTransitionOffset: 3,
+								Data:                      taskBlob,
+								PhysicalTaskStatus:        physicalTaskStatusCreated,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	root, err := NewTree(persistenceNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+	s.NoError(err)
+
+	// The idea is to mark the node as dirty by accessing it with a mutable context.
+	// Otherwise, CloseTransaction logic will skip validating tasks for this node.
+	// This is a no-op change right now, since we are manually setting the LastUpdateVersionedTransition
+	// for the node below.
+	// Once CloseTransaction is fully implemented, this will be mark the node as dirty,
+	// and CloseTransaction logic will take care of updating LastUpdateVersionedTransition.
+	mutableContext := NewMutableContext(context.Background(), root)
+	_, err = root.Component(mutableContext, ComponentRef{})
+	s.NoError(err)
+
+	// TODO: remove this when CloseTransaction is fully implemented.
+	root.serializedNode.Metadata.LastUpdateVersionedTransition = &persistencespb.VersionedTransition{
+		TransitionCount: 2,
+	}
+
+	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(0)).AnyTimes()
+	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(2)).AnyTimes()
+
+	rt, ok := s.registry.Task("TestLibrary.test_side_effect_task")
+	s.True(ok)
+	rt.validator.(*MockTaskValidator[any, *TestSideEffectTask]).EXPECT().
+		Validate(gomock.Any(), gomock.Any(), gomock.Any()).Return(false, nil).Times(1)
+	rt, ok = s.registry.Task("TestLibrary.test_outbound_side_effect_task")
+	s.True(ok)
+	rt.validator.(*MockTaskValidator[any, TestOutboundSideEffectTask]).EXPECT().
+		Validate(gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).Times(1)
+	rt, ok = s.registry.Task("TestLibrary.test_pure_task")
+	s.True(ok)
+	rt.validator.(*MockTaskValidator[any, *TestPureTask]).EXPECT().
+		Validate(gomock.Any(), gomock.Any(), gomock.Any()).Return(false, nil).Times(1)
+
+	err = root.closeTransactionUpdateComponentTasks()
+	s.NoError(err)
+
+	componentAttr := root.serializedNode.Metadata.GetComponentAttributes()
+	s.Empty(componentAttr.PureTasks)
+	s.Len(componentAttr.SideEffectTasks, 1)
+	s.Equal("TestLibrary.test_outbound_side_effect_task", componentAttr.SideEffectTasks[0].GetType())
 }
 
 func (s *nodeSuite) TestCloseTransaction_NewComponentTasks() {
@@ -1001,7 +1107,6 @@ func (s *nodeSuite) TestCloseTransaction_NewComponentTasks() {
 	s.NoError(err)
 
 	mutableContext := NewMutableContext(context.Background(), root)
-
 	c, err := root.Component(mutableContext, ComponentRef{})
 	s.NoError(err)
 

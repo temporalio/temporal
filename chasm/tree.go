@@ -26,6 +26,7 @@ package chasm
 
 import (
 	"cmp"
+	"context"
 	"fmt"
 	"reflect"
 	"slices"
@@ -669,7 +670,7 @@ func (n *Node) deserializeComponentNode(
 			}
 			protoMessageFound = true
 
-			value, err := n.unmarshalProto(n.serializedNode.GetData(), fieldT)
+			value, err := unmarshalProto(n.serializedNode.GetData(), fieldT)
 			if err != nil {
 				return err
 			}
@@ -717,7 +718,7 @@ func (n *Node) deserializeComponentNode(
 func (n *Node) deserializeDataNode(
 	valueT reflect.Type,
 ) error {
-	value, err := n.unmarshalProto(n.serializedNode.GetData(), valueT)
+	value, err := unmarshalProto(n.serializedNode.GetData(), valueT)
 	if err != nil {
 		return err
 	}
@@ -727,7 +728,7 @@ func (n *Node) deserializeDataNode(
 	return nil
 }
 
-func (n *Node) unmarshalProto(
+func unmarshalProto(
 	dataBlob *commonpb.DataBlob,
 	valueT reflect.Type,
 ) (reflect.Value, error) {
@@ -823,7 +824,25 @@ func (n *Node) closeTransactionUpdateComponentTasks() error {
 			return nil
 		}
 
-		// TODO: Validate existing tasks and remove them if no longer valid.
+		// Validate existing tasks and remove invalid ones.
+		validateContext := NewContext(context.Background(), n)
+		var validationErr error
+		deleteFunc := func(existingTask *persistencespb.ChasmComponentAttributes_Task) bool {
+			valid, err := node.validateComponentTask(validateContext, existingTask)
+			if err != nil {
+				validationErr = err
+				return false
+			}
+			return !valid
+		}
+		componentAttr.SideEffectTasks = slices.DeleteFunc(componentAttr.SideEffectTasks, deleteFunc)
+		if validationErr != nil {
+			return validationErr
+		}
+		componentAttr.PureTasks = slices.DeleteFunc(componentAttr.PureTasks, deleteFunc)
+		if validationErr != nil {
+			return validationErr
+		}
 
 		// no-op if no new tasks for this component
 		newTasks, ok := node.nodeBase.newTasks[node.value]
@@ -867,6 +886,39 @@ func (n *Node) closeTransactionUpdateComponentTasks() error {
 
 		return nil
 	})
+}
+
+func (n *Node) validateComponentTask(
+	validateContext Context,
+	componentTask *persistencespb.ChasmComponentAttributes_Task,
+) (bool, error) {
+	registableTask, ok := n.registry.task(componentTask.Type)
+	if !ok {
+		return false, serviceerror.NewInternal(fmt.Sprintf("task type %s is not registered", componentTask.Type))
+	}
+
+	// TODO: cache validateMethod (reflect.Value) in the registry
+	validator := registableTask.validator
+	validateMethod := reflect.ValueOf(validator).MethodByName("Validate")
+
+	// TODO: cache deserialized task value (reflect.Value) in the node,
+	// use task VT and offset as the key
+	deserizedTaskValue, err := deserializeTask(registableTask, componentTask.Data)
+	if err != nil {
+		return false, err
+	}
+
+	retValues := validateMethod.Call([]reflect.Value{
+		reflect.ValueOf(validateContext),
+		reflect.ValueOf(n.value),
+		deserizedTaskValue,
+	})
+	if !retValues[1].IsNil() {
+		//revive:disable-next-line:unchecked-type-assertion
+		return false, retValues[1].Interface().(error)
+	}
+	//revive:disable-next-line:unchecked-type-assertion
+	return retValues[0].Interface().(bool), nil
 }
 
 func (n *Node) closeTransactionGeneratePhysicalSideEffectTasks() error {
@@ -1327,6 +1379,63 @@ func taskCategory(
 		return tasks.CategoryTransfer, nil
 	}
 	return tasks.CategoryTimer, nil
+}
+
+func deserializeTask(
+	registrableTask *RegistrableTask,
+	taskBlob *commonpb.DataBlob,
+) (taskValue reflect.Value, retErr error) {
+	if registrableTask.goType.AssignableTo(protoMessageT) {
+		taskValue, err := unmarshalProto(taskBlob, registrableTask.goType)
+		if err != nil {
+			return reflect.Value{}, err
+		}
+		return taskValue, nil
+	}
+
+	taskGoType := registrableTask.goType
+	if taskGoType.Kind() == reflect.Ptr {
+		taskGoType = taskGoType.Elem()
+	}
+	taskValue = reflect.New(taskGoType)
+
+	// At this point taskGoType is guaranteed to be a struct and
+	// taskValue is a pointer to struct.
+
+	defer func() {
+		if retErr == nil && registrableTask.goType.Kind() == reflect.Struct {
+			taskValue = taskValue.Elem()
+		}
+	}()
+
+	if taskGoType.NumField() == 0 {
+		return taskValue, nil
+	}
+
+	// TODO: consider pre-calculating the proto field num when registring the task type.
+
+	protoMessageFound := false
+	for i := 0; i < taskGoType.NumField(); i++ {
+		fieldV := taskValue.Elem().Field(i)
+		fieldT := taskGoType.Field(i).Type
+		if !fieldT.AssignableTo(protoMessageT) {
+			continue
+		}
+
+		if protoMessageFound {
+			return reflect.Value{}, serviceerror.NewInternal("only one proto field allowed in task struct")
+		}
+		protoMessageFound = true
+
+		value, err := unmarshalProto(taskBlob, fieldT)
+		if err != nil {
+			return reflect.Value{}, err
+		}
+
+		fieldV.Set(value)
+	}
+
+	return taskValue, nil
 }
 
 func serializeTask(
