@@ -61,7 +61,7 @@ func (s *fieldSuite) SetupTest() {
 	s.nodeBackend = NewMockNodeBackend(s.controller)
 
 	s.registry = NewRegistry()
-	err := s.registry.Register(newTestLibrary())
+	err := s.registry.Register(newTestLibrary(s.controller))
 	s.NoError(err)
 
 	s.timeSource = clock.NewEventTimeSource()
