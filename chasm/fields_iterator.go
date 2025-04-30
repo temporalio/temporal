@@ -57,6 +57,7 @@ type fieldInfo struct {
 	err  error
 }
 
+//nolint:revive // cognitive complexity 26 (> max enabled 25)
 func fieldsOf(valueV reflect.Value) iter.Seq[fieldInfo] {
 	valueT := valueV.Type()
 	dataFieldFound := false

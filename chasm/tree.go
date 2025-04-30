@@ -486,6 +486,8 @@ func (n *Node) syncSubComponentsInternal(
 		}
 
 		switch field.kind {
+		case fieldKindUnspecified:
+			softassert.Fail(n.logger, "field.kind can be unspecified only if err is not nil, and there is a check for it above")
 		case fieldKindData:
 			// Nothing to sync.
 		case fieldKindSubField:
@@ -624,6 +626,8 @@ func (n *Node) deserializeComponentNode(
 		}
 
 		switch field.kind {
+		case fieldKindUnspecified:
+			softassert.Fail(n.logger, "field.kind can be unspecified only if err is not nil, and there is a check for it above")
 		case fieldKindData:
 			value, err := unmarshalProto(n.serializedNode.GetData(), field.typ)
 			if err != nil {
@@ -637,12 +641,10 @@ func (n *Node) deserializeComponentNode(
 				chasmFieldV.FieldByName(internalFieldName).Set(internalValue)
 				field.val.Set(chasmFieldV)
 			}
-			continue
 		case fieldKindSubCollection:
 			// TODO: support collection
 			// init the map and populate
 			panic("not implemented")
-			// continue
 		}
 	}
 
