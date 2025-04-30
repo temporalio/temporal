@@ -567,6 +567,9 @@ func (r *WorkflowStateReplicatorImpl) applyMutation(
 	if err != nil {
 		return err
 	}
+
+	prevPendingChildIds := localMutableState.GetPendingChildIds()
+
 	err = localMutableState.ApplyMutation(mutation.StateMutation)
 	if err != nil {
 		return err
@@ -581,7 +584,7 @@ func (r *WorkflowStateReplicatorImpl) applyMutation(
 	}
 	nextVersionedTransition := transitionhistory.CopyVersionedTransition(localVersionedTransition)
 	nextVersionedTransition.TransitionCount++
-	err = r.taskRefresher.PartialRefresh(ctx, localMutableState, nextVersionedTransition)
+	err = r.taskRefresher.PartialRefresh(ctx, localMutableState, nextVersionedTransition, prevPendingChildIds)
 	if err != nil {
 		return err
 	}
@@ -701,6 +704,11 @@ func (r *WorkflowStateReplicatorImpl) applySnapshotWhenWorkflowExist(
 		return err
 	}
 
+	pendingChildren := make(map[int64]struct{})
+	for _, child := range localMutableState.GetPendingChildExecutionInfos() {
+		pendingChildren[child.InitiatedEventId] = struct{}{}
+	}
+
 	err = localMutableState.ApplySnapshot(sourceMutableState)
 	if err != nil {
 		return err
@@ -728,7 +736,7 @@ func (r *WorkflowStateReplicatorImpl) applySnapshotWhenWorkflowExist(
 	} else {
 		nextVersionedTransition := transitionhistory.CopyVersionedTransition(localVersionedTransition)
 		nextVersionedTransition.TransitionCount++
-		err = r.taskRefresher.PartialRefresh(ctx, localMutableState, nextVersionedTransition)
+		err = r.taskRefresher.PartialRefresh(ctx, localMutableState, nextVersionedTransition, nil)
 		if err != nil {
 			return err
 		}

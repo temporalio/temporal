@@ -784,7 +784,7 @@ func (s *taskRefresherSuite) TestRefreshChildWorkflowTasks() {
 	err = s.taskRefresher.refreshTasksForChildWorkflow(context.Background(), mutableState, s.mockTaskGenerator, &persistencespb.VersionedTransition{
 		TransitionCount:          4,
 		NamespaceFailoverVersion: common.EmptyVersion,
-	})
+	}, nil)
 	s.NoError(err)
 }
 

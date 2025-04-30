@@ -58,6 +58,7 @@ type (
 			ctx context.Context,
 			mutableState historyi.MutableState,
 			minVersionedTransition *persistencespb.VersionedTransition,
+			previousPendingChildIds map[int64]struct{},
 		) error
 	}
 
@@ -90,13 +91,14 @@ func (r *TaskRefresherImpl) Refresh(
 		mutableState.GetExecutionInfo().TaskGenerationShardClockTimestamp = r.shard.CurrentVectorClock().GetClock()
 	}
 
-	return r.PartialRefresh(ctx, mutableState, EmptyVersionedTransition)
+	return r.PartialRefresh(ctx, mutableState, EmptyVersionedTransition, nil)
 }
 
 func (r *TaskRefresherImpl) PartialRefresh(
 	ctx context.Context,
 	mutableState historyi.MutableState,
 	minVersionedTransition *persistencespb.VersionedTransition,
+	previousPendingChildIds map[int64]struct{},
 ) error {
 	taskGenerator := r.taskGeneratorProvider.NewTaskGenerator(
 		r.shard,
@@ -159,6 +161,7 @@ func (r *TaskRefresherImpl) PartialRefresh(
 		mutableState,
 		taskGenerator,
 		minVersionedTransition,
+		previousPendingChildIds,
 	); err != nil {
 		return err
 	}
@@ -461,13 +464,16 @@ func (r *TaskRefresherImpl) refreshTasksForChildWorkflow(
 	mutableState historyi.MutableState,
 	taskGenerator TaskGenerator,
 	minVersionedTransition *persistencespb.VersionedTransition,
+	previousPendingChildIds map[int64]struct{},
 ) error {
 
 	pendingChildWorkflowInfos := mutableState.GetPendingChildExecutionInfos()
 
 	for _, childWorkflowInfo := range pendingChildWorkflowInfos {
-		if childWorkflowInfo.StartedEventId != common.EmptyEventID {
-			continue
+		if _, ok := previousPendingChildIds[childWorkflowInfo.InitiatedEventId]; ok {
+			if childWorkflowInfo.StartedEventId != common.EmptyEventID {
+				continue
+			}
 		}
 
 		// Skip task generation if this child workflow has not been updated since minVersionedTransition.

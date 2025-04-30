@@ -1964,6 +1964,14 @@ func (ms *MutableStateImpl) GetPendingChildExecutionInfos() map[int64]*persisten
 	return ms.pendingChildExecutionInfoIDs
 }
 
+func (ms *MutableStateImpl) GetPendingChildIds() map[int64]struct{} {
+	ids := make(map[int64]struct{})
+	for _, child := range ms.GetPendingChildExecutionInfos() {
+		ids[child.InitiatedEventId] = struct{}{}
+	}
+	return ids
+}
+
 func (ms *MutableStateImpl) GetPendingRequestCancelExternalInfos() map[int64]*persistencespb.RequestCancelInfo {
 	return ms.pendingRequestCancelInfoIDs
 }

@@ -2278,6 +2278,20 @@ func (mr *MockMutableStateMockRecorder) GetPendingChildExecutionInfos() *gomock.
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPendingChildExecutionInfos", reflect.TypeOf((*MockMutableState)(nil).GetPendingChildExecutionInfos))
 }
 
+// GetPendingChildIds mocks base method.
+func (m *MockMutableState) GetPendingChildIds() map[int64]struct{} {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetPendingChildIds")
+	ret0, _ := ret[0].(map[int64]struct{})
+	return ret0
+}
+
+// GetPendingChildIds indicates an expected call of GetPendingChildIds.
+func (mr *MockMutableStateMockRecorder) GetPendingChildIds() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPendingChildIds", reflect.TypeOf((*MockMutableState)(nil).GetPendingChildIds))
+}
+
 // GetPendingRequestCancelExternalInfos mocks base method.
 func (m *MockMutableState) GetPendingRequestCancelExternalInfos() map[int64]*persistence.RequestCancelInfo {
 	m.ctrl.T.Helper()
