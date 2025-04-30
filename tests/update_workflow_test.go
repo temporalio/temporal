@@ -120,7 +120,7 @@ func (s *UpdateWorkflowSuite) speculativeWorkflowTaskOutcomes(
 	return
 }
 
-func (s *UpdateWorkflowSuite) TestUpdateWorkflow_EmptySpeculativeWorkflowTask_AcceptComplete() {
+func (s *UpdateWorkflowSuite) TestEmptySpeculativeWorkflowTask_AcceptComplete() {
 	testCases := []struct {
 		name     string
 		useRunID bool
@@ -246,7 +246,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_EmptySpeculativeWorkflowTask_Ac
 	}
 }
 
-func (s *UpdateWorkflowSuite) TestUpdateWorkflow_NotEmptySpeculativeWorkflowTask_AcceptComplete() {
+func (s *UpdateWorkflowSuite) TestNotEmptySpeculativeWorkflowTask_AcceptComplete() {
 	testCases := []struct {
 		name     string
 		useRunID bool
@@ -366,7 +366,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_NotEmptySpeculativeWorkflowTask
 	}
 }
 
-func (s *UpdateWorkflowSuite) TestUpdateWorkflow_FirstNormalScheduledWorkflowTask_AcceptComplete() {
+func (s *UpdateWorkflowSuite) TestFirstNormalScheduledWorkflowTask_AcceptComplete() {
 
 	testCases := []struct {
 		name     string
@@ -463,7 +463,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_FirstNormalScheduledWorkflowTas
 	}
 }
 
-func (s *UpdateWorkflowSuite) TestUpdateWorkflow_NormalScheduledWorkflowTask_AcceptComplete() {
+func (s *UpdateWorkflowSuite) TestNormalScheduledWorkflowTask_AcceptComplete() {
 
 	testCases := []struct {
 		name     string
@@ -581,7 +581,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_NormalScheduledWorkflowTask_Acc
 	}
 }
 
-func (s *UpdateWorkflowSuite) TestUpdateWorkflow_RunningWorkflowTask_NewEmptySpeculativeWorkflowTask_Rejected() {
+func (s *UpdateWorkflowSuite) TestRunningWorkflowTask_NewEmptySpeculativeWorkflowTask_Rejected() {
 	tv := testvars.New(s.T())
 
 	s.startWorkflow(tv)
@@ -700,7 +700,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_RunningWorkflowTask_NewEmptySpe
   9 WorkflowExecutionCompleted`, events)
 }
 
-func (s *UpdateWorkflowSuite) TestUpdateWorkflow_RunningWorkflowTask_NewNotEmptySpeculativeWorkflowTask_Rejected() {
+func (s *UpdateWorkflowSuite) TestRunningWorkflowTask_NewNotEmptySpeculativeWorkflowTask_Rejected() {
 
 	tv := testvars.New(s.T())
 
@@ -840,7 +840,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_RunningWorkflowTask_NewNotEmpty
  14 WorkflowExecutionCompleted`, events)
 }
 
-func (s *UpdateWorkflowSuite) TestUpdateWorkflow_CompletedWorkflow() {
+func (s *UpdateWorkflowSuite) TestCompletedWorkflow() {
 	s.Run("receive outcome from completed Update", func() {
 		tv := testvars.New(s.T())
 		s.startWorkflow(tv)
@@ -984,7 +984,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_CompletedWorkflow() {
 	})
 }
 
-func (s *UpdateWorkflowSuite) TestUpdateWorkflow_ValidateWorkerMessages() {
+func (s *UpdateWorkflowSuite) TestValidateWorkerMessages() {
 	testCases := []struct {
 		Name                     string
 		RespondWorkflowTaskError string
@@ -1340,7 +1340,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_ValidateWorkerMessages() {
 	}
 }
 
-func (s *UpdateWorkflowSuite) TestUpdateWorkflow_StickySpeculativeWorkflowTask_AcceptComplete() {
+func (s *UpdateWorkflowSuite) TestStickySpeculativeWorkflowTask_AcceptComplete() {
 	testCases := []struct {
 		name     string
 		useRunID bool
@@ -1420,7 +1420,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_StickySpeculativeWorkflowTask_A
 	}
 }
 
-func (s *UpdateWorkflowSuite) TestUpdateWorkflow_StickySpeculativeWorkflowTask_AcceptComplete_StickyWorkerUnavailable() {
+func (s *UpdateWorkflowSuite) TestStickySpeculativeWorkflowTask_AcceptComplete_StickyWorkerUnavailable() {
 	tv := testvars.New(s.T())
 
 	s.startWorkflow(tv)
@@ -1522,7 +1522,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_StickySpeculativeWorkflowTask_A
 `, events)
 }
 
-func (s *UpdateWorkflowSuite) TestUpdateWorkflow_FirstNormalScheduledWorkflowTask_Reject() {
+func (s *UpdateWorkflowSuite) TestFirstNormalScheduledWorkflowTask_Reject() {
 	tv := testvars.New(s.T())
 
 	s.startWorkflow(tv)
@@ -1596,7 +1596,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_FirstNormalScheduledWorkflowTas
 `, events)
 }
 
-func (s *UpdateWorkflowSuite) TestUpdateWorkflow_EmptySpeculativeWorkflowTask_Reject() {
+func (s *UpdateWorkflowSuite) TestEmptySpeculativeWorkflowTask_Reject() {
 	tv := testvars.New(s.T())
 
 	s.startWorkflow(tv)
@@ -1678,7 +1678,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_EmptySpeculativeWorkflowTask_Re
 	`, events)
 }
 
-func (s *UpdateWorkflowSuite) TestUpdateWorkflow_NotEmptySpeculativeWorkflowTask_Reject() {
+func (s *UpdateWorkflowSuite) TestNotEmptySpeculativeWorkflowTask_Reject() {
 	tv := testvars.New(s.T())
 
 	s.startWorkflow(tv)
@@ -1815,7 +1815,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_NotEmptySpeculativeWorkflowTask
  14 WorkflowExecutionCompleted`, events)
 }
 
-func (s *UpdateWorkflowSuite) TestUpdateWorkflow_1stAccept_2ndAccept_2ndComplete_1stComplete() {
+func (s *UpdateWorkflowSuite) Test1stAccept_2ndAccept_2ndComplete_1stComplete() {
 	tv := testvars.New(s.T())
 
 	s.startWorkflow(tv)
@@ -2025,7 +2025,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_1stAccept_2ndAccept_2ndComplete
 `, events)
 }
 
-func (s *UpdateWorkflowSuite) TestUpdateWorkflow_1stAccept_2ndReject_1stComplete() {
+func (s *UpdateWorkflowSuite) Test1stAccept_2ndReject_1stComplete() {
 	tv := testvars.New(s.T())
 
 	s.startWorkflow(tv)
@@ -2182,7 +2182,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_1stAccept_2ndReject_1stComplete
 `, events)
 }
 
-func (s *UpdateWorkflowSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_Fail() {
+func (s *UpdateWorkflowSuite) TestSpeculativeWorkflowTask_Fail() {
 	tv := testvars.New(s.T())
 
 	s.startWorkflow(tv)
@@ -2351,7 +2351,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_Fail() 
  13 WorkflowExecutionCompleted`, events)
 }
 
-func (s *UpdateWorkflowSuite) TestUpdateWorkflow_StartedSpeculativeWorkflowTask_ConvertToNormalBecauseOfBufferedSignal() {
+func (s *UpdateWorkflowSuite) TestStartedSpeculativeWorkflowTask_ConvertToNormalBecauseOfBufferedSignal() {
 	tv := testvars.New(s.T())
 
 	s.startWorkflow(tv)
@@ -2465,7 +2465,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_StartedSpeculativeWorkflowTask_
  12 WorkflowExecutionCompleted`, events)
 }
 
-func (s *UpdateWorkflowSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTask_ConvertToNormalBecauseOfSignal() {
+func (s *UpdateWorkflowSuite) TestScheduledSpeculativeWorkflowTask_ConvertToNormalBecauseOfSignal() {
 	tv := testvars.New(s.T())
 
 	s.startWorkflow(tv)
@@ -2560,7 +2560,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTas
 `, events)
 }
 
-func (s *UpdateWorkflowSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_StartToCloseTimeout() {
+func (s *UpdateWorkflowSuite) TestSpeculativeWorkflowTask_StartToCloseTimeout() {
 	tv := testvars.New(s.T())
 
 	capture := s.GetTestCluster().Host().CaptureMetricsHandler().StartCapture()
@@ -2717,7 +2717,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_StartTo
  13 WorkflowExecutionCompleted`, events)
 }
 
-func (s *UpdateWorkflowSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_ScheduleToStartTimeout() {
+func (s *UpdateWorkflowSuite) TestSpeculativeWorkflowTask_ScheduleToStartTimeout() {
 	tv := testvars.New(s.T())
 
 	s.startWorkflow(tv)
@@ -2774,7 +2774,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_Schedul
 	`, events)
 }
 
-func (s *UpdateWorkflowSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_ScheduleToStartTimeoutOnNormalTaskQueue() {
+func (s *UpdateWorkflowSuite) TestSpeculativeWorkflowTask_ScheduleToStartTimeoutOnNormalTaskQueue() {
 	tv := testvars.New(s.T())
 
 	s.startWorkflow(tv)
@@ -2876,7 +2876,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_Schedul
 `, events)
 }
 
-func (s *UpdateWorkflowSuite) TestUpdateWorkflow_StartedSpeculativeWorkflowTask_TerminateWorkflow() {
+func (s *UpdateWorkflowSuite) TestStartedSpeculativeWorkflowTask_TerminateWorkflow() {
 	tv := testvars.New(s.T())
 
 	s.startWorkflow(tv)
@@ -2981,7 +2981,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_StartedSpeculativeWorkflowTask_
 	s.EqualValues(7, msResp.GetDatabaseMutableState().GetExecutionInfo().GetCompletionEventBatchId(), "completion_event_batch_id should point to WTFailed event")
 }
 
-func (s *UpdateWorkflowSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTask_TerminateWorkflow() {
+func (s *UpdateWorkflowSuite) TestScheduledSpeculativeWorkflowTask_TerminateWorkflow() {
 	tv := testvars.New(s.T())
 
 	s.startWorkflow(tv)
@@ -3066,7 +3066,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTas
 	s.EqualValues(5, msResp.GetDatabaseMutableState().GetExecutionInfo().GetCompletionEventBatchId(), "completion_event_batch_id should point to WFTerminated event")
 }
 
-func (s *UpdateWorkflowSuite) TestUpdateWorkflow_CompleteWorkflow_AbortUpdates() {
+func (s *UpdateWorkflowSuite) TestCompleteWorkflow_AbortUpdates() {
 	type testCase struct {
 		name          string
 		description   string
@@ -3278,7 +3278,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_CompleteWorkflow_AbortUpdates()
 	}
 }
 
-func (s *UpdateWorkflowSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_Heartbeat() {
+func (s *UpdateWorkflowSuite) TestSpeculativeWorkflowTask_Heartbeat() {
 	tv := testvars.New(s.T())
 
 	s.startWorkflow(tv)
@@ -3352,7 +3352,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_Heartbe
 	`, events)
 }
 
-func (s *UpdateWorkflowSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTask_LostUpdate() {
+func (s *UpdateWorkflowSuite) TestScheduledSpeculativeWorkflowTask_LostUpdate() {
 	tv := testvars.New(s.T())
 
 	s.startWorkflow(tv)
@@ -3460,7 +3460,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTas
   9 WorkflowExecutionCompleted`, events)
 }
 
-func (s *UpdateWorkflowSuite) TestUpdateWorkflow_StartedSpeculativeWorkflowTask_LostUpdate() {
+func (s *UpdateWorkflowSuite) TestStartedSpeculativeWorkflowTask_LostUpdate() {
 	tv := testvars.New(s.T())
 
 	s.startWorkflow(tv)
@@ -3582,7 +3582,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_StartedSpeculativeWorkflowTask_
   9 WorkflowExecutionCompleted`, events)
 }
 
-func (s *UpdateWorkflowSuite) TestUpdateWorkflow_FirstNormalWorkflowTask_UpdateResurrectedAfterRegistryCleared() {
+func (s *UpdateWorkflowSuite) TestFirstNormalWorkflowTask_UpdateResurrectedAfterRegistryCleared() {
 	tv := testvars.New(s.T())
 
 	s.startWorkflow(tv)
@@ -3691,7 +3691,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_FirstNormalWorkflowTask_UpdateR
  11 WorkflowExecutionCompleted`, events)
 }
 
-func (s *UpdateWorkflowSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTask_DeduplicateID() {
+func (s *UpdateWorkflowSuite) TestScheduledSpeculativeWorkflowTask_DeduplicateID() {
 	tv := testvars.New(s.T())
 
 	s.startWorkflow(tv)
@@ -3784,7 +3784,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTas
 `, events)
 }
 
-func (s *UpdateWorkflowSuite) TestUpdateWorkflow_StartedSpeculativeWorkflowTask_DeduplicateID() {
+func (s *UpdateWorkflowSuite) TestStartedSpeculativeWorkflowTask_DeduplicateID() {
 	tv := testvars.New(s.T())
 
 	s.startWorkflow(tv)
@@ -3878,7 +3878,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_StartedSpeculativeWorkflowTask_
 `, events)
 }
 
-func (s *UpdateWorkflowSuite) TestUpdateWorkflow_CompletedSpeculativeWorkflowTask_DeduplicateID() {
+func (s *UpdateWorkflowSuite) TestCompletedSpeculativeWorkflowTask_DeduplicateID() {
 	testCases := []struct {
 		Name       string
 		CloseShard bool
@@ -4026,7 +4026,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_CompletedSpeculativeWorkflowTas
 	}
 }
 
-func (s *UpdateWorkflowSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_Fail_BecauseOfDifferentStartedId() {
+func (s *UpdateWorkflowSuite) TestStaleSpeculativeWorkflowTask_Fail_BecauseOfDifferentStartedId() {
 	/*
 		Test scenario:
 		An update created a speculative WT and WT is dispatched to the worker (started).
@@ -4172,7 +4172,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_Fa
 	`, events)
 }
 
-func (s *UpdateWorkflowSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_Fail_BecauseOfDifferentStartTime() {
+func (s *UpdateWorkflowSuite) TestStaleSpeculativeWorkflowTask_Fail_BecauseOfDifferentStartTime() {
 	/*
 		Test scenario:
 		An update created a speculative WT and WT is dispatched to the worker (started).
@@ -4291,7 +4291,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_Fa
 	`, events)
 }
 
-func (s *UpdateWorkflowSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_Fail_NewWorkflowTaskWith2Updates() {
+func (s *UpdateWorkflowSuite) TestStaleSpeculativeWorkflowTask_Fail_NewWorkflowTaskWith2Updates() {
 	/*
 		Test scenario:
 		An update created a speculative WT and WT is dispatched to the worker (started).
@@ -4417,7 +4417,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_Fa
 	`, events)
 }
 
-func (s *UpdateWorkflowSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_WorkerSkippedProcessing_RejectByServer() {
+func (s *UpdateWorkflowSuite) TestSpeculativeWorkflowTask_WorkerSkippedProcessing_RejectByServer() {
 	tv := testvars.New(s.T())
 
 	s.startWorkflow(tv)
@@ -4539,7 +4539,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_WorkerS
  10 WorkflowExecutionCompleted`, events)
 }
 
-func (s *UpdateWorkflowSuite) TestUpdateWorkflow_LastWorkflowTask_HasUpdateMessage() {
+func (s *UpdateWorkflowSuite) TestLastWorkflowTask_HasUpdateMessage() {
 	tv := testvars.New(s.T())
 	s.startWorkflow(tv)
 
@@ -4583,7 +4583,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_LastWorkflowTask_HasUpdateMessa
 	`, s.GetHistory(s.Namespace().String(), tv.WorkflowExecution()))
 }
 
-func (s *UpdateWorkflowSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_QueryFailureClearsWFContext() {
+func (s *UpdateWorkflowSuite) TestSpeculativeWorkflowTask_QueryFailureClearsWFContext() {
 	tv := testvars.New(s.T())
 
 	s.startWorkflow(tv)
@@ -4727,7 +4727,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_QueryFa
 `, events)
 }
 
-func (s *UpdateWorkflowSuite) TestUpdateWorkflow_UpdatesAreSentToWorkerInOrderOfAdmission() {
+func (s *UpdateWorkflowSuite) TestUpdatesAreSentToWorkerInOrderOfAdmission() {
 	// If our implementation is not in fact ordering updates correctly, then it may be ordering them
 	// non-deterministically. This number should be high enough that the false-negative rate of the test is low, but
 	// must not exceed our limit on number of in-flight updates. If we were picking a random ordering then the
@@ -4794,7 +4794,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_UpdatesAreSentToWorkerInOrderOf
 	s.EqualHistoryEvents(expectedHistory, history)
 }
 
-func (s *UpdateWorkflowSuite) TestUpdateWorkflow_WaitAccepted_GotCompleted() {
+func (s *UpdateWorkflowSuite) TestWaitAccepted_GotCompleted() {
 	tv := testvars.New(s.T())
 	s.startWorkflow(tv)
 
@@ -4832,7 +4832,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_WaitAccepted_GotCompleted() {
 	`, s.GetHistory(s.Namespace().String(), tv.WorkflowExecution()))
 }
 
-func (s *UpdateWorkflowSuite) TestUpdateWorkflow_ContinueAsNew_UpdateIsNotCarriedOver() {
+func (s *UpdateWorkflowSuite) TestContinueAsNew_UpdateIsNotCarriedOver() {
 	tv := testvars.New(s.T())
 	firstRunID := s.startWorkflow(tv)
 	tv1 := tv.WithUpdateIDNumber(1).WithMessageIDNumber(1)
@@ -4922,7 +4922,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_ContinueAsNew_UpdateIsNotCarrie
   4 WorkflowTaskCompleted`, s.GetHistory(s.Namespace().String(), tv.WorkflowExecution()))
 }
 
-func (s *UpdateWorkflowSuite) TestUpdateWorkflow_ContinueAsNew_Suggestion() {
+func (s *UpdateWorkflowSuite) TestContinueAsNew_Suggestion() {
 	// setup CAN suggestion to be at 2nd Update
 	cleanup1 := s.OverrideDynamicConfig(dynamicconfig.WorkflowExecutionMaxTotalUpdates, 3)
 	defer cleanup1()
