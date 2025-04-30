@@ -14,9 +14,9 @@ import (
 // validateTaskTransition ensures that the given transition is possible with the current
 // state machine state.
 func validateTaskTransition[
-S comparable,
-SM hsm.StateMachine[S],
-E any](node *hsm.Node, transition hsm.Transition[S, SM, E]) error {
+	S comparable,
+	SM hsm.StateMachine[S],
+	E any](node *hsm.Node, transition hsm.Transition[S, SM, E]) error {
 	if err := node.CheckRunning(); err != nil {
 		return err
 	}

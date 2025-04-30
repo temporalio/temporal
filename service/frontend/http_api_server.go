@@ -468,7 +468,7 @@ func (*inlineClientConn) NewStream(
 	context.Context,
 	*grpc.StreamDesc,
 	string,
-...grpc.CallOption,
+	...grpc.CallOption,
 ) (grpc.ClientStream, error) {
 	return nil, errHTTPGRPCStreamNotSupported
 }
