@@ -84,6 +84,7 @@ func (c *clientImpl) AddActivityTask(
 	ctx context.Context,
 	request *matchingservice.AddActivityTaskRequest,
 	opts ...grpc.CallOption) (*matchingservice.AddActivityTaskResponse, error) {
+	request = common.CloneProto(request)
 	client, err := c.pickClientForWrite(
 		request.GetTaskQueue(),
 		request.GetNamespaceId(),
@@ -101,6 +102,7 @@ func (c *clientImpl) AddWorkflowTask(
 	ctx context.Context,
 	request *matchingservice.AddWorkflowTaskRequest,
 	opts ...grpc.CallOption) (*matchingservice.AddWorkflowTaskResponse, error) {
+	request = common.CloneProto(request)
 	client, err := c.pickClientForWrite(
 		request.GetTaskQueue(),
 		request.GetNamespaceId(),
@@ -118,6 +120,7 @@ func (c *clientImpl) PollActivityTaskQueue(
 	ctx context.Context,
 	request *matchingservice.PollActivityTaskQueueRequest,
 	opts ...grpc.CallOption) (*matchingservice.PollActivityTaskQueueResponse, error) {
+	request = common.CloneProto(request)
 	client, release, err := c.pickClientForRead(
 		request.GetPollRequest().GetTaskQueue(),
 		request.GetNamespaceId(),
@@ -138,6 +141,7 @@ func (c *clientImpl) PollWorkflowTaskQueue(
 	ctx context.Context,
 	request *matchingservice.PollWorkflowTaskQueueRequest,
 	opts ...grpc.CallOption) (*matchingservice.PollWorkflowTaskQueueResponse, error) {
+	request = common.CloneProto(request)
 	client, release, err := c.pickClientForRead(
 		request.GetPollRequest().GetTaskQueue(),
 		request.GetNamespaceId(),
@@ -155,6 +159,15 @@ func (c *clientImpl) PollWorkflowTaskQueue(
 }
 
 func (c *clientImpl) QueryWorkflow(ctx context.Context, request *matchingservice.QueryWorkflowRequest, opts ...grpc.CallOption) (*matchingservice.QueryWorkflowResponse, error) {
+	// use shallow copy since QueryRequest may contain a large payload
+	request = &matchingservice.QueryWorkflowRequest{
+		NamespaceId:      request.NamespaceId,
+		TaskQueue:        common.CloneProto(request.TaskQueue),
+		QueryRequest:     request.QueryRequest,
+		VersionDirective: request.VersionDirective,
+		ForwardInfo:      request.ForwardInfo,
+		Priority:         request.Priority,
+	}
 	client, err := c.pickClientForWrite(request.GetTaskQueue(), request.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_WORKFLOW, request.GetForwardInfo().GetSourcePartition())
 	if err != nil {
 		return nil, err
@@ -188,6 +201,7 @@ func (c *clientImpl) processInputPartition(proto *taskqueuepb.TaskQueue, nsid st
 	}
 }
 
+// pickClientForWrite mutates the given proto. Callers should copy the proto before if necessary.
 func (c *clientImpl) pickClientForWrite(proto *taskqueuepb.TaskQueue, nsid string, taskType enumspb.TaskQueueType, forwardedFrom string) (matchingservice.MatchingServiceClient, error) {
 	p, tq := c.processInputPartition(proto, nsid, taskType, forwardedFrom)
 	if tq != nil {
@@ -197,6 +211,7 @@ func (c *clientImpl) pickClientForWrite(proto *taskqueuepb.TaskQueue, nsid strin
 	return c.getClientForTaskQueuePartition(p)
 }
 
+// pickClientForRead mutates the given proto. Callers should copy the proto before if necessary.
 func (c *clientImpl) pickClientForRead(proto *taskqueuepb.TaskQueue, nsid string, taskType enumspb.TaskQueueType, forwardedFrom string) (client matchingservice.MatchingServiceClient, release func(), err error) {
 	p, tq := c.processInputPartition(proto, nsid, taskType, forwardedFrom)
 	if tq != nil {
