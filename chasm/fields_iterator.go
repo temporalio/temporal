@@ -26,6 +26,7 @@ package chasm
 
 import (
 	"fmt"
+	"iter"
 	"reflect"
 	"strings"
 
@@ -56,7 +57,7 @@ type fieldInfo struct {
 	err  error
 }
 
-func fieldsOf(valueV reflect.Value) func(func(fieldInfo) bool) {
+func fieldsOf(valueV reflect.Value) iter.Seq[fieldInfo] {
 	valueT := valueV.Type()
 	dataFieldFound := false
 	return func(yield func(fi fieldInfo) bool) {

@@ -339,7 +339,7 @@ func (n *Node) fieldType() fieldType {
 	return fieldTypeUnspecified
 }
 
-func (n *Node) valueFields() func(func(fieldInfo) bool) {
+func (n *Node) valueFields() iter.Seq[fieldInfo] {
 	return fieldsOf(reflect.ValueOf(n.value))
 }
 
