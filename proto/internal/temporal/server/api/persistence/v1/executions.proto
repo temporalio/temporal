@@ -314,6 +314,7 @@ message WorkflowExecutionState {
 
 message RequestIDInfo {
     temporal.api.enums.v1.EventType event_type = 1;
+    int64 event_id = 2;
 }
 
 // transfer column

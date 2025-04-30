@@ -2143,16 +2143,20 @@ func (ms *MutableStateImpl) DeleteSignalRequested(
 	ms.approximateSize -= len(requestID)
 }
 
-func (ms *MutableStateImpl) attachRequestID(requestID string, eventType enumspb.EventType) {
+func (ms *MutableStateImpl) attachRequestID(
+	requestID string,
+	eventType enumspb.EventType,
+	eventID int64,
+) {
 	ms.approximateSize -= ms.executionState.Size()
 	if ms.executionState.RequestIds == nil {
 		ms.executionState.RequestIds = make(map[string]*persistencespb.RequestIDInfo, 1)
 	}
 	ms.executionState.RequestIds[requestID] = &persistencespb.RequestIDInfo{
 		EventType: eventType,
+		EventId:   eventID,
 	}
 	ms.approximateSize += ms.executionState.Size()
-	ms.executionStateUpdated = true
 }
 
 func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
@@ -2397,6 +2401,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	ms.executionState.CreateRequestId = requestID
 	ms.executionState.RequestIds[requestID] = &persistencespb.RequestIDInfo{
 		EventType: startEvent.EventType,
+		EventId:   startEvent.EventId,
 	}
 
 	ms.executionInfo.FirstExecutionRunId = event.GetFirstExecutionRunId()
@@ -4717,7 +4722,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 		return err
 	}
 	if attributes.GetAttachedRequestId() != "" {
-		ms.attachRequestID(attributes.GetAttachedRequestId(), event.EventType)
+		ms.attachRequestID(attributes.GetAttachedRequestId(), event.EventType, event.EventId)
 	}
 	if len(attributes.GetAttachedCompletionCallbacks()) > 0 {
 		if err := ms.addCompletionCallbacks(
@@ -6010,7 +6015,20 @@ func (ms *MutableStateImpl) closeTransaction(
 		return closeTransactionResult{}, err
 	}
 
-	if ms.isStateDirty() {
+	// Save if the state is dirty before closeTransactionPrepareEvents since it flushes the buffer
+	// events, and therefore change the dirty state.
+	isStateDirty := ms.isStateDirty()
+
+	// closeTransactionPrepareEvents must be called after closeTransactionHandleWorkflowTask because
+	// the latter might fail the workflow task and buffered events must be flushed afterwards.
+	// We need to save the value of ms.isStateDirty() before calling closeTransactionPrepareEvents
+	// because flushing the buffered events might change the dirty state.
+	workflowEventsSeq, eventBatches, bufferEvents, clearBuffer, err := ms.closeTransactionPrepareEvents(transactionPolicy)
+	if err != nil {
+		return closeTransactionResult{}, err
+	}
+
+	if isStateDirty {
 		if err := ms.closeTransactionUpdateTransitionHistory(
 			transactionPolicy,
 		); err != nil {
@@ -6028,11 +6046,6 @@ func (ms *MutableStateImpl) closeTransaction(
 	ms.closeTransactionTrackLastUpdateVersionedTransition(
 		transactionPolicy,
 	)
-
-	workflowEventsSeq, eventBatches, bufferEvents, clearBuffer, err := ms.closeTransactionPrepareEvents(transactionPolicy)
-	if err != nil {
-		return closeTransactionResult{}, err
-	}
 
 	ms.closeTransactionTrackTombstones(transactionPolicy, chasmNodesMutation)
 
@@ -6617,7 +6630,7 @@ func (ms *MutableStateImpl) closeTransactionPrepareEvents(
 	newBufferBatch := historyMutation.DBBufferBatch
 	clearBuffer := historyMutation.DBClearBuffer
 	newEventsBatches := historyMutation.DBEventsBatches
-	ms.updatePendingEventIDs(historyMutation.ScheduledIDToStartedID)
+	ms.updatePendingEventIDs(historyMutation.ScheduledIDToStartedID, historyMutation.RequestIDToEventID)
 
 	workflowEventsSeq := make([]*persistence.WorkflowEvents, len(newEventsBatches))
 	historyNodeTxnIDs, err := ms.shard.GenerateTaskIDs(len(newEventsBatches))
@@ -6755,6 +6768,7 @@ func (ms *MutableStateImpl) dirtyHSMToReplicationTask(
 
 func (ms *MutableStateImpl) updatePendingEventIDs(
 	scheduledIDToStartedID map[int64]int64,
+	requestIDToEventID map[string]int64,
 ) {
 	for scheduledEventID, startedEventID := range scheduledIDToStartedID {
 		if activityInfo, ok := ms.GetActivityInfo(scheduledEventID); ok {
@@ -6767,6 +6781,13 @@ func (ms *MutableStateImpl) updatePendingEventIDs(
 			childInfo.StartedEventId = startedEventID
 			ms.updateChildExecutionInfos[childInfo.InitiatedEventId] = childInfo
 			continue
+		}
+	}
+	if len(requestIDToEventID) > 0 {
+		for requestID, eventID := range requestIDToEventID {
+			if requestIDInfo, ok := ms.executionState.RequestIds[requestID]; ok {
+				requestIDInfo.EventId = eventID
+			}
 		}
 	}
 }

@@ -2414,6 +2414,18 @@ func (s *NexusWorkflowTestSuite) TestNexusAsyncOperationWithMultipleCallers() {
 				require.NoError(t, err)
 				require.EqualValues(t, 1, res.CntOk)
 				require.EqualValues(t, numCalls-1, res.CntErr)
+
+				// check the handler workflow has the request ID infos map correct
+				descResp, err := s.SdkClient().DescribeWorkflowExecution(context.Background(), handlerWorkflowID, "")
+				require.NoError(t, err)
+				requestIDInfos := descResp.GetWorkflowExtendedInfo().GetRequestIdInfos()
+				require.NotNil(t, requestIDInfos)
+				require.Len(t, requestIDInfos, 1)
+				for _, info := range requestIDInfos {
+					require.False(t, info.Buffered)
+					require.GreaterOrEqual(t, info.EventId, common.FirstEventID)
+					require.Equal(t, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, info.EventType)
+				}
 			},
 		},
 		{
@@ -2422,6 +2434,28 @@ func (s *NexusWorkflowTestSuite) TestNexusAsyncOperationWithMultipleCallers() {
 				require.NoError(t, err)
 				require.EqualValues(t, numCalls, res.CntOk)
 				require.EqualValues(t, 0, res.CntErr)
+
+				// check the handler workflow has the request ID infos map correct
+				descResp, err := s.SdkClient().DescribeWorkflowExecution(context.Background(), handlerWorkflowID, "")
+				require.NoError(t, err)
+				requestIDInfos := descResp.GetWorkflowExtendedInfo().GetRequestIdInfos()
+				require.NotNil(t, requestIDInfos)
+				cntStarted := 0
+				cntAttached := 0
+				for _, info := range requestIDInfos {
+					require.False(t, info.Buffered)
+					require.GreaterOrEqual(t, info.EventId, common.FirstEventID)
+					switch info.EventType {
+					case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED:
+						cntStarted++
+					case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED:
+						cntAttached++
+					default:
+						require.Fail(t, "Unexpected event type in request ID info")
+					}
+				}
+				require.Equal(t, 1, cntStarted)
+				require.Equal(t, numCalls-1, cntAttached)
 			},
 		},
 	}
