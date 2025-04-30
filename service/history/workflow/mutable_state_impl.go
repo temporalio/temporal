@@ -7548,7 +7548,7 @@ func (ms *MutableStateImpl) applyUpdatesToUpdateInfos(
 }
 
 func (ms *MutableStateImpl) syncExecutionInfo(current *persistencespb.WorkflowExecutionInfo, incoming *persistencespb.WorkflowExecutionInfo, isSnapshot bool) error {
-	if transitionhistory.Compare(current.WorkflowTaskLastUpdateVersionedTransition, incoming.WorkflowTaskLastUpdateVersionedTransition) < 0 {
+	if transitionhistory.Compare(current.WorkflowTaskLastUpdateVersionedTransition, incoming.WorkflowTaskLastUpdateVersionedTransition) != 0 {
 		ms.workflowTaskManager.UpdateWorkflowTask(&historyi.WorkflowTaskInfo{
 			Version:             incoming.WorkflowTaskVersion,
 			ScheduledEventID:    incoming.WorkflowTaskScheduledEventId,
