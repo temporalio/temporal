@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package tdbg_test
 
 import (
@@ -333,7 +309,7 @@ func (f *fakeAdminClient) ListQueues(_ context.Context, req *adminservice.ListQu
 func (f *fakeAdminClient) DescribeCluster(
 	context.Context,
 	*adminservice.DescribeClusterRequest,
-	...grpc.CallOption,
+...grpc.CallOption,
 ) (*adminservice.DescribeClusterResponse, error) {
 	if f.err != nil {
 		return nil, f.err
@@ -345,7 +321,7 @@ func (f *fakeAdminClient) DescribeCluster(
 func (f *fakeAdminClient) GetDLQTasks(
 	context.Context,
 	*adminservice.GetDLQTasksRequest,
-	...grpc.CallOption,
+...grpc.CallOption,
 ) (*adminservice.GetDLQTasksResponse, error) {
 	if f.err != nil {
 		return nil, f.err
@@ -356,7 +332,7 @@ func (f *fakeAdminClient) GetDLQTasks(
 func (f *fakeAdminClient) PurgeDLQTasks(
 	context.Context,
 	*adminservice.PurgeDLQTasksRequest,
-	...grpc.CallOption,
+...grpc.CallOption,
 ) (*adminservice.PurgeDLQTasksResponse, error) {
 	if f.err != nil {
 		return nil, f.err
@@ -367,7 +343,7 @@ func (f *fakeAdminClient) PurgeDLQTasks(
 func (f *fakeAdminClient) MergeDLQTasks(
 	context.Context,
 	*adminservice.MergeDLQTasksRequest,
-	...grpc.CallOption,
+...grpc.CallOption,
 ) (*adminservice.MergeDLQTasksResponse, error) {
 	if f.err != nil {
 		return nil, f.err

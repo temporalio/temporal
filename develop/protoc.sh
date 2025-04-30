@@ -34,9 +34,6 @@ find "$new" -name service.pb.go -o -name service_grpc.pb.go | while read -r src;
   rm -f "$dst.replaced"
 done
 
-color "Update license headers for proto files..."
-go run ./cmd/tools/copyright/licensegen.go --scanDir "$new"
-
 color "Modify history service server interface..."
 sed -i.bak \
     -e 's/GetWorkflowExecutionHistory(context\.Context, \*GetWorkflowExecutionHistoryRequest) (\*GetWorkflowExecutionHistoryResponse, error)/GetWorkflowExecutionHistory(context.Context, *GetWorkflowExecutionHistoryRequest) (*GetWorkflowExecutionHistoryResponseWithRaw, error)/g' \

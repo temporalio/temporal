@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 // Copyright (c) 2019 Temporal Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -53,7 +29,6 @@ package persistence
 import (
 	reflect "reflect"
 	sync "sync"
-	unsafe "unsafe"
 
 	v1 "go.temporal.io/api/common/v1"
 	v11 "go.temporal.io/server/api/clock/v1"
@@ -73,22 +48,25 @@ const (
 // the worker target has a namespace name.
 // We store an ID in persistence to prevent namespace renames from breaking references.
 type NexusEndpointSpec struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
 	// Endpoint name, unique for this cluster. Must match `[a-zA-Z_][a-zA-Z0-9_]*`.
 	// Renaming an endpoint breaks all workflow callers that reference this endpoint, causing operations to fail.
 	Name        string      `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	Description *v1.Payload `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
 	// Target to route requests to.
-	Target        *NexusEndpointTarget `protobuf:"bytes,3,opt,name=target,proto3" json:"target,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Target *NexusEndpointTarget `protobuf:"bytes,3,opt,name=target,proto3" json:"target,omitempty"`
 }
 
 func (x *NexusEndpointSpec) Reset() {
 	*x = NexusEndpointSpec{}
-	mi := &file_temporal_server_api_persistence_v1_nexus_proto_msgTypes[0]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
+	if protoimpl.UnsafeEnabled {
+		mi := &file_temporal_server_api_persistence_v1_nexus_proto_msgTypes[0]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
 }
 
 func (x *NexusEndpointSpec) String() string {
@@ -99,7 +77,7 @@ func (*NexusEndpointSpec) ProtoMessage() {}
 
 func (x *NexusEndpointSpec) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_persistence_v1_nexus_proto_msgTypes[0]
-	if x != nil {
+	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -139,21 +117,24 @@ func (x *NexusEndpointSpec) GetTarget() *NexusEndpointTarget {
 // Duplicated from the public API's temporal.api.nexus.v1.EndpointTarget where the worker target has a namespace name.
 // We store an ID in persistence to prevent namespace renames from breaking references.
 type NexusEndpointTarget struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Types that are valid to be assigned to Variant:
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// Types that are assignable to Variant:
 	//
 	//	*NexusEndpointTarget_Worker_
 	//	*NexusEndpointTarget_External_
-	Variant       isNexusEndpointTarget_Variant `protobuf_oneof:"variant"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Variant isNexusEndpointTarget_Variant `protobuf_oneof:"variant"`
 }
 
 func (x *NexusEndpointTarget) Reset() {
 	*x = NexusEndpointTarget{}
-	mi := &file_temporal_server_api_persistence_v1_nexus_proto_msgTypes[1]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
+	if protoimpl.UnsafeEnabled {
+		mi := &file_temporal_server_api_persistence_v1_nexus_proto_msgTypes[1]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
 }
 
 func (x *NexusEndpointTarget) String() string {
@@ -164,7 +145,7 @@ func (*NexusEndpointTarget) ProtoMessage() {}
 
 func (x *NexusEndpointTarget) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_persistence_v1_nexus_proto_msgTypes[1]
-	if x != nil {
+	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -179,27 +160,23 @@ func (*NexusEndpointTarget) Descriptor() ([]byte, []int) {
 	return file_temporal_server_api_persistence_v1_nexus_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *NexusEndpointTarget) GetVariant() isNexusEndpointTarget_Variant {
-	if x != nil {
-		return x.Variant
+func (m *NexusEndpointTarget) GetVariant() isNexusEndpointTarget_Variant {
+	if m != nil {
+		return m.Variant
 	}
 	return nil
 }
 
 func (x *NexusEndpointTarget) GetWorker() *NexusEndpointTarget_Worker {
-	if x != nil {
-		if x, ok := x.Variant.(*NexusEndpointTarget_Worker_); ok {
-			return x.Worker
-		}
+	if x, ok := x.GetVariant().(*NexusEndpointTarget_Worker_); ok {
+		return x.Worker
 	}
 	return nil
 }
 
 func (x *NexusEndpointTarget) GetExternal() *NexusEndpointTarget_External {
-	if x != nil {
-		if x, ok := x.Variant.(*NexusEndpointTarget_External_); ok {
-			return x.External
-		}
+	if x, ok := x.GetVariant().(*NexusEndpointTarget_External_); ok {
+		return x.External
 	}
 	return nil
 }
@@ -221,7 +198,10 @@ func (*NexusEndpointTarget_Worker_) isNexusEndpointTarget_Variant() {}
 func (*NexusEndpointTarget_External_) isNexusEndpointTarget_Variant() {}
 
 type NexusEndpoint struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
 	// The last recorded cluster-local Hybrid Logical Clock timestamp for _this_ endpoint.
 	// Updated whenever the endpoint is directly updated due to a user action but not when applying replication events.
 	// The clock is referenced when new timestamps are generated to ensure it produces monotonically increasing
@@ -233,16 +213,16 @@ type NexusEndpoint struct {
 	// (-- api-linter: core::0142::time-field-names=disabled
 	//
 	//	aip.dev/not-precedent: Not following linter rules. --)
-	CreatedTime   *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=created_time,json=createdTime,proto3" json:"created_time,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	CreatedTime *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=created_time,json=createdTime,proto3" json:"created_time,omitempty"`
 }
 
 func (x *NexusEndpoint) Reset() {
 	*x = NexusEndpoint{}
-	mi := &file_temporal_server_api_persistence_v1_nexus_proto_msgTypes[2]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
+	if protoimpl.UnsafeEnabled {
+		mi := &file_temporal_server_api_persistence_v1_nexus_proto_msgTypes[2]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
 }
 
 func (x *NexusEndpoint) String() string {
@@ -253,7 +233,7 @@ func (*NexusEndpoint) ProtoMessage() {}
 
 func (x *NexusEndpoint) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_persistence_v1_nexus_proto_msgTypes[2]
-	if x != nil {
+	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -291,19 +271,22 @@ func (x *NexusEndpoint) GetCreatedTime() *timestamppb.Timestamp {
 
 // Container for a version, a UUID, and a NexusEndpoint.
 type NexusEndpointEntry struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Version       int64                  `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
-	Id            string                 `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
-	Endpoint      *NexusEndpoint         `protobuf:"bytes,3,opt,name=endpoint,proto3" json:"endpoint,omitempty"`
-	unknownFields protoimpl.UnknownFields
+	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Version  int64          `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
+	Id       string         `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
+	Endpoint *NexusEndpoint `protobuf:"bytes,3,opt,name=endpoint,proto3" json:"endpoint,omitempty"`
 }
 
 func (x *NexusEndpointEntry) Reset() {
 	*x = NexusEndpointEntry{}
-	mi := &file_temporal_server_api_persistence_v1_nexus_proto_msgTypes[3]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
+	if protoimpl.UnsafeEnabled {
+		mi := &file_temporal_server_api_persistence_v1_nexus_proto_msgTypes[3]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
 }
 
 func (x *NexusEndpointEntry) String() string {
@@ -314,7 +297,7 @@ func (*NexusEndpointEntry) ProtoMessage() {}
 
 func (x *NexusEndpointEntry) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_persistence_v1_nexus_proto_msgTypes[3]
-	if x != nil {
+	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -352,20 +335,23 @@ func (x *NexusEndpointEntry) GetEndpoint() *NexusEndpoint {
 
 // Target a worker polling on a Nexus task queue in a specific namespace.
 type NexusEndpointTarget_Worker struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
 	// Namespace ID to route requests to.
 	NamespaceId string `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
 	// Nexus task queue to route requests to.
-	TaskQueue     string `protobuf:"bytes,2,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	TaskQueue string `protobuf:"bytes,2,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
 }
 
 func (x *NexusEndpointTarget_Worker) Reset() {
 	*x = NexusEndpointTarget_Worker{}
-	mi := &file_temporal_server_api_persistence_v1_nexus_proto_msgTypes[4]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
+	if protoimpl.UnsafeEnabled {
+		mi := &file_temporal_server_api_persistence_v1_nexus_proto_msgTypes[4]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
 }
 
 func (x *NexusEndpointTarget_Worker) String() string {
@@ -376,7 +362,7 @@ func (*NexusEndpointTarget_Worker) ProtoMessage() {}
 
 func (x *NexusEndpointTarget_Worker) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_persistence_v1_nexus_proto_msgTypes[4]
-	if x != nil {
+	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -409,21 +395,24 @@ func (x *NexusEndpointTarget_Worker) GetTaskQueue() string {
 // At a later point, this will support providing credentials, in the meantime, an http.RoundTripper can be injected
 // into the server to modify the request.
 type NexusEndpointTarget_External struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
 	// URL to call.
 	// (-- api-linter: core::0140::uri=disabled
 	//
 	//	aip.dev/not-precedent: Not following linter rules. --)
-	Url           string `protobuf:"bytes,1,opt,name=url,proto3" json:"url,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Url string `protobuf:"bytes,1,opt,name=url,proto3" json:"url,omitempty"`
 }
 
 func (x *NexusEndpointTarget_External) Reset() {
 	*x = NexusEndpointTarget_External{}
-	mi := &file_temporal_server_api_persistence_v1_nexus_proto_msgTypes[5]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
+	if protoimpl.UnsafeEnabled {
+		mi := &file_temporal_server_api_persistence_v1_nexus_proto_msgTypes[5]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
 }
 
 func (x *NexusEndpointTarget_External) String() string {
@@ -434,7 +423,7 @@ func (*NexusEndpointTarget_External) ProtoMessage() {}
 
 func (x *NexusEndpointTarget_External) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_persistence_v1_nexus_proto_msgTypes[5]
-	if x != nil {
+	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -458,46 +447,95 @@ func (x *NexusEndpointTarget_External) GetUrl() string {
 
 var File_temporal_server_api_persistence_v1_nexus_proto protoreflect.FileDescriptor
 
-const file_temporal_server_api_persistence_v1_nexus_proto_rawDesc = "" +
-	"\n" +
-	".temporal/server/api/persistence/v1/nexus.proto\x12\"temporal.server.api.persistence.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\x1a*temporal/server/api/clock/v1/message.proto\"\xbb\x01\n" +
-	"\x11NexusEndpointSpec\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12A\n" +
-	"\vdescription\x18\x02 \x01(\v2\x1f.temporal.api.common.v1.PayloadR\vdescription\x12O\n" +
-	"\x06target\x18\x03 \x01(\v27.temporal.server.api.persistence.v1.NexusEndpointTargetR\x06target\"\xc4\x02\n" +
-	"\x13NexusEndpointTarget\x12X\n" +
-	"\x06worker\x18\x01 \x01(\v2>.temporal.server.api.persistence.v1.NexusEndpointTarget.WorkerH\x00R\x06worker\x12^\n" +
-	"\bexternal\x18\x02 \x01(\v2@.temporal.server.api.persistence.v1.NexusEndpointTarget.ExternalH\x00R\bexternal\x1aJ\n" +
-	"\x06Worker\x12!\n" +
-	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1d\n" +
-	"\n" +
-	"task_queue\x18\x02 \x01(\tR\ttaskQueue\x1a\x1c\n" +
-	"\bExternal\x12\x10\n" +
-	"\x03url\x18\x01 \x01(\tR\x03urlB\t\n" +
-	"\avariant\"\xe1\x01\n" +
-	"\rNexusEndpoint\x12F\n" +
-	"\x05clock\x18\x01 \x01(\v20.temporal.server.api.clock.v1.HybridLogicalClockR\x05clock\x12I\n" +
-	"\x04spec\x18\x02 \x01(\v25.temporal.server.api.persistence.v1.NexusEndpointSpecR\x04spec\x12=\n" +
-	"\fcreated_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\vcreatedTime\"\x8d\x01\n" +
-	"\x12NexusEndpointEntry\x12\x18\n" +
-	"\aversion\x18\x01 \x01(\x03R\aversion\x12\x0e\n" +
-	"\x02id\x18\x02 \x01(\tR\x02id\x12M\n" +
-	"\bendpoint\x18\x03 \x01(\v21.temporal.server.api.persistence.v1.NexusEndpointR\bendpointB6Z4go.temporal.io/server/api/persistence/v1;persistenceb\x06proto3"
+var file_temporal_server_api_persistence_v1_nexus_proto_rawDesc = []byte{
+	0x0a, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2f, 0x73, 0x65, 0x72, 0x76, 0x65,
+	0x72, 0x2f, 0x61, 0x70, 0x69, 0x2f, 0x70, 0x65, 0x72, 0x73, 0x69, 0x73, 0x74, 0x65, 0x6e, 0x63,
+	0x65, 0x2f, 0x76, 0x31, 0x2f, 0x6e, 0x65, 0x78, 0x75, 0x73, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f,
+	0x12, 0x22, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65,
+	0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x70, 0x65, 0x72, 0x73, 0x69, 0x73, 0x74, 0x65, 0x6e, 0x63,
+	0x65, 0x2e, 0x76, 0x31, 0x1a, 0x1f, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2f, 0x70, 0x72, 0x6f,
+	0x74, 0x6f, 0x62, 0x75, 0x66, 0x2f, 0x74, 0x69, 0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x2e,
+	0x70, 0x72, 0x6f, 0x74, 0x6f, 0x1a, 0x24, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2f,
+	0x61, 0x70, 0x69, 0x2f, 0x63, 0x6f, 0x6d, 0x6d, 0x6f, 0x6e, 0x2f, 0x76, 0x31, 0x2f, 0x6d, 0x65,
+	0x73, 0x73, 0x61, 0x67, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x1a, 0x2a, 0x74, 0x65, 0x6d,
+	0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2f, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2f, 0x61, 0x70, 0x69,
+	0x2f, 0x63, 0x6c, 0x6f, 0x63, 0x6b, 0x2f, 0x76, 0x31, 0x2f, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67,
+	0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x22, 0xbb, 0x01, 0x0a, 0x11, 0x4e, 0x65, 0x78, 0x75,
+	0x73, 0x45, 0x6e, 0x64, 0x70, 0x6f, 0x69, 0x6e, 0x74, 0x53, 0x70, 0x65, 0x63, 0x12, 0x12, 0x0a,
+	0x04, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x6e, 0x61, 0x6d,
+	0x65, 0x12, 0x41, 0x0a, 0x0b, 0x64, 0x65, 0x73, 0x63, 0x72, 0x69, 0x70, 0x74, 0x69, 0x6f, 0x6e,
+	0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1f, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61,
+	0x6c, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x63, 0x6f, 0x6d, 0x6d, 0x6f, 0x6e, 0x2e, 0x76, 0x31, 0x2e,
+	0x50, 0x61, 0x79, 0x6c, 0x6f, 0x61, 0x64, 0x52, 0x0b, 0x64, 0x65, 0x73, 0x63, 0x72, 0x69, 0x70,
+	0x74, 0x69, 0x6f, 0x6e, 0x12, 0x4f, 0x0a, 0x06, 0x74, 0x61, 0x72, 0x67, 0x65, 0x74, 0x18, 0x03,
+	0x20, 0x01, 0x28, 0x0b, 0x32, 0x37, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e,
+	0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x70, 0x65, 0x72, 0x73, 0x69,
+	0x73, 0x74, 0x65, 0x6e, 0x63, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x4e, 0x65, 0x78, 0x75, 0x73, 0x45,
+	0x6e, 0x64, 0x70, 0x6f, 0x69, 0x6e, 0x74, 0x54, 0x61, 0x72, 0x67, 0x65, 0x74, 0x52, 0x06, 0x74,
+	0x61, 0x72, 0x67, 0x65, 0x74, 0x22, 0xc4, 0x02, 0x0a, 0x13, 0x4e, 0x65, 0x78, 0x75, 0x73, 0x45,
+	0x6e, 0x64, 0x70, 0x6f, 0x69, 0x6e, 0x74, 0x54, 0x61, 0x72, 0x67, 0x65, 0x74, 0x12, 0x58, 0x0a,
+	0x06, 0x77, 0x6f, 0x72, 0x6b, 0x65, 0x72, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x3e, 0x2e,
+	0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e,
+	0x61, 0x70, 0x69, 0x2e, 0x70, 0x65, 0x72, 0x73, 0x69, 0x73, 0x74, 0x65, 0x6e, 0x63, 0x65, 0x2e,
+	0x76, 0x31, 0x2e, 0x4e, 0x65, 0x78, 0x75, 0x73, 0x45, 0x6e, 0x64, 0x70, 0x6f, 0x69, 0x6e, 0x74,
+	0x54, 0x61, 0x72, 0x67, 0x65, 0x74, 0x2e, 0x57, 0x6f, 0x72, 0x6b, 0x65, 0x72, 0x48, 0x00, 0x52,
+	0x06, 0x77, 0x6f, 0x72, 0x6b, 0x65, 0x72, 0x12, 0x5e, 0x0a, 0x08, 0x65, 0x78, 0x74, 0x65, 0x72,
+	0x6e, 0x61, 0x6c, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x40, 0x2e, 0x74, 0x65, 0x6d, 0x70,
+	0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e,
+	0x70, 0x65, 0x72, 0x73, 0x69, 0x73, 0x74, 0x65, 0x6e, 0x63, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x4e,
+	0x65, 0x78, 0x75, 0x73, 0x45, 0x6e, 0x64, 0x70, 0x6f, 0x69, 0x6e, 0x74, 0x54, 0x61, 0x72, 0x67,
+	0x65, 0x74, 0x2e, 0x45, 0x78, 0x74, 0x65, 0x72, 0x6e, 0x61, 0x6c, 0x48, 0x00, 0x52, 0x08, 0x65,
+	0x78, 0x74, 0x65, 0x72, 0x6e, 0x61, 0x6c, 0x1a, 0x4a, 0x0a, 0x06, 0x57, 0x6f, 0x72, 0x6b, 0x65,
+	0x72, 0x12, 0x21, 0x0a, 0x0c, 0x6e, 0x61, 0x6d, 0x65, 0x73, 0x70, 0x61, 0x63, 0x65, 0x5f, 0x69,
+	0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0b, 0x6e, 0x61, 0x6d, 0x65, 0x73, 0x70, 0x61,
+	0x63, 0x65, 0x49, 0x64, 0x12, 0x1d, 0x0a, 0x0a, 0x74, 0x61, 0x73, 0x6b, 0x5f, 0x71, 0x75, 0x65,
+	0x75, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x09, 0x74, 0x61, 0x73, 0x6b, 0x51, 0x75,
+	0x65, 0x75, 0x65, 0x1a, 0x1c, 0x0a, 0x08, 0x45, 0x78, 0x74, 0x65, 0x72, 0x6e, 0x61, 0x6c, 0x12,
+	0x10, 0x0a, 0x03, 0x75, 0x72, 0x6c, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x03, 0x75, 0x72,
+	0x6c, 0x42, 0x09, 0x0a, 0x07, 0x76, 0x61, 0x72, 0x69, 0x61, 0x6e, 0x74, 0x22, 0xe1, 0x01, 0x0a,
+	0x0d, 0x4e, 0x65, 0x78, 0x75, 0x73, 0x45, 0x6e, 0x64, 0x70, 0x6f, 0x69, 0x6e, 0x74, 0x12, 0x46,
+	0x0a, 0x05, 0x63, 0x6c, 0x6f, 0x63, 0x6b, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x30, 0x2e,
+	0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e,
+	0x61, 0x70, 0x69, 0x2e, 0x63, 0x6c, 0x6f, 0x63, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x48, 0x79, 0x62,
+	0x72, 0x69, 0x64, 0x4c, 0x6f, 0x67, 0x69, 0x63, 0x61, 0x6c, 0x43, 0x6c, 0x6f, 0x63, 0x6b, 0x52,
+	0x05, 0x63, 0x6c, 0x6f, 0x63, 0x6b, 0x12, 0x49, 0x0a, 0x04, 0x73, 0x70, 0x65, 0x63, 0x18, 0x02,
+	0x20, 0x01, 0x28, 0x0b, 0x32, 0x35, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e,
+	0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x70, 0x65, 0x72, 0x73, 0x69,
+	0x73, 0x74, 0x65, 0x6e, 0x63, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x4e, 0x65, 0x78, 0x75, 0x73, 0x45,
+	0x6e, 0x64, 0x70, 0x6f, 0x69, 0x6e, 0x74, 0x53, 0x70, 0x65, 0x63, 0x52, 0x04, 0x73, 0x70, 0x65,
+	0x63, 0x12, 0x3d, 0x0a, 0x0c, 0x63, 0x72, 0x65, 0x61, 0x74, 0x65, 0x64, 0x5f, 0x74, 0x69, 0x6d,
+	0x65, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1a, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65,
+	0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x54, 0x69, 0x6d, 0x65, 0x73, 0x74,
+	0x61, 0x6d, 0x70, 0x52, 0x0b, 0x63, 0x72, 0x65, 0x61, 0x74, 0x65, 0x64, 0x54, 0x69, 0x6d, 0x65,
+	0x22, 0x8d, 0x01, 0x0a, 0x12, 0x4e, 0x65, 0x78, 0x75, 0x73, 0x45, 0x6e, 0x64, 0x70, 0x6f, 0x69,
+	0x6e, 0x74, 0x45, 0x6e, 0x74, 0x72, 0x79, 0x12, 0x18, 0x0a, 0x07, 0x76, 0x65, 0x72, 0x73, 0x69,
+	0x6f, 0x6e, 0x18, 0x01, 0x20, 0x01, 0x28, 0x03, 0x52, 0x07, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f,
+	0x6e, 0x12, 0x0e, 0x0a, 0x02, 0x69, 0x64, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x02, 0x69,
+	0x64, 0x12, 0x4d, 0x0a, 0x08, 0x65, 0x6e, 0x64, 0x70, 0x6f, 0x69, 0x6e, 0x74, 0x18, 0x03, 0x20,
+	0x01, 0x28, 0x0b, 0x32, 0x31, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73,
+	0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x70, 0x65, 0x72, 0x73, 0x69, 0x73,
+	0x74, 0x65, 0x6e, 0x63, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x4e, 0x65, 0x78, 0x75, 0x73, 0x45, 0x6e,
+	0x64, 0x70, 0x6f, 0x69, 0x6e, 0x74, 0x52, 0x08, 0x65, 0x6e, 0x64, 0x70, 0x6f, 0x69, 0x6e, 0x74,
+	0x42, 0x36, 0x5a, 0x34, 0x67, 0x6f, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e,
+	0x69, 0x6f, 0x2f, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2f, 0x61, 0x70, 0x69, 0x2f, 0x70, 0x65,
+	0x72, 0x73, 0x69, 0x73, 0x74, 0x65, 0x6e, 0x63, 0x65, 0x2f, 0x76, 0x31, 0x3b, 0x70, 0x65, 0x72,
+	0x73, 0x69, 0x73, 0x74, 0x65, 0x6e, 0x63, 0x65, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+}
 
 var (
 	file_temporal_server_api_persistence_v1_nexus_proto_rawDescOnce sync.Once
-	file_temporal_server_api_persistence_v1_nexus_proto_rawDescData []byte
+	file_temporal_server_api_persistence_v1_nexus_proto_rawDescData = file_temporal_server_api_persistence_v1_nexus_proto_rawDesc
 )
 
 func file_temporal_server_api_persistence_v1_nexus_proto_rawDescGZIP() []byte {
 	file_temporal_server_api_persistence_v1_nexus_proto_rawDescOnce.Do(func() {
-		file_temporal_server_api_persistence_v1_nexus_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_api_persistence_v1_nexus_proto_rawDesc), len(file_temporal_server_api_persistence_v1_nexus_proto_rawDesc)))
+		file_temporal_server_api_persistence_v1_nexus_proto_rawDescData = protoimpl.X.CompressGZIP(file_temporal_server_api_persistence_v1_nexus_proto_rawDescData)
 	})
 	return file_temporal_server_api_persistence_v1_nexus_proto_rawDescData
 }
 
 var file_temporal_server_api_persistence_v1_nexus_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
-var file_temporal_server_api_persistence_v1_nexus_proto_goTypes = []any{
+var file_temporal_server_api_persistence_v1_nexus_proto_goTypes = []interface{}{
 	(*NexusEndpointSpec)(nil),            // 0: temporal.server.api.persistence.v1.NexusEndpointSpec
 	(*NexusEndpointTarget)(nil),          // 1: temporal.server.api.persistence.v1.NexusEndpointTarget
 	(*NexusEndpoint)(nil),                // 2: temporal.server.api.persistence.v1.NexusEndpoint
@@ -529,7 +567,81 @@ func file_temporal_server_api_persistence_v1_nexus_proto_init() {
 	if File_temporal_server_api_persistence_v1_nexus_proto != nil {
 		return
 	}
-	file_temporal_server_api_persistence_v1_nexus_proto_msgTypes[1].OneofWrappers = []any{
+	if !protoimpl.UnsafeEnabled {
+		file_temporal_server_api_persistence_v1_nexus_proto_msgTypes[0].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*NexusEndpointSpec); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_temporal_server_api_persistence_v1_nexus_proto_msgTypes[1].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*NexusEndpointTarget); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_temporal_server_api_persistence_v1_nexus_proto_msgTypes[2].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*NexusEndpoint); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_temporal_server_api_persistence_v1_nexus_proto_msgTypes[3].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*NexusEndpointEntry); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_temporal_server_api_persistence_v1_nexus_proto_msgTypes[4].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*NexusEndpointTarget_Worker); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_temporal_server_api_persistence_v1_nexus_proto_msgTypes[5].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*NexusEndpointTarget_External); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+	}
+	file_temporal_server_api_persistence_v1_nexus_proto_msgTypes[1].OneofWrappers = []interface{}{
 		(*NexusEndpointTarget_Worker_)(nil),
 		(*NexusEndpointTarget_External_)(nil),
 	}
@@ -537,7 +649,7 @@ func file_temporal_server_api_persistence_v1_nexus_proto_init() {
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_api_persistence_v1_nexus_proto_rawDesc), len(file_temporal_server_api_persistence_v1_nexus_proto_rawDesc)),
+			RawDescriptor: file_temporal_server_api_persistence_v1_nexus_proto_rawDesc,
 			NumEnums:      0,
 			NumMessages:   6,
 			NumExtensions: 0,
@@ -548,6 +660,7 @@ func file_temporal_server_api_persistence_v1_nexus_proto_init() {
 		MessageInfos:      file_temporal_server_api_persistence_v1_nexus_proto_msgTypes,
 	}.Build()
 	File_temporal_server_api_persistence_v1_nexus_proto = out.File
+	file_temporal_server_api_persistence_v1_nexus_proto_rawDesc = nil
 	file_temporal_server_api_persistence_v1_nexus_proto_goTypes = nil
 	file_temporal_server_api_persistence_v1_nexus_proto_depIdxs = nil
 }
