@@ -690,7 +690,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_SameBranch_S
 	mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: s.runID,
 	}).AnyTimes()
-	mockMutableState.EXPECT().GetPendingChildExecutionInfos().Return(nil).Times(1)
+	mockMutableState.EXPECT().GetPendingChildIds().Return(nil).Times(1)
 	mockMutableState.EXPECT().ApplySnapshot(versionedTransitionArtifact.GetSyncWorkflowStateSnapshotAttributes().State)
 	mockTransactionManager.EXPECT().UpdateWorkflow(gomock.Any(), false, gomock.Any(), nil).Return(nil).Times(1)
 	mockTaskRefresher.EXPECT().
@@ -776,7 +776,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_DifferentBra
 			{NamespaceFailoverVersion: 1, TransitionCount: 13}, // local transition is stale
 		},
 	}).AnyTimes()
-	mockMutableState.EXPECT().GetPendingChildExecutionInfos().Return(nil).Times(1)
+	mockMutableState.EXPECT().GetPendingChildIds().Return(nil).Times(1)
 	mockMutableState.EXPECT().ApplySnapshot(versionedTransitionArtifact.GetSyncWorkflowStateSnapshotAttributes().State)
 	mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: s.runID,
