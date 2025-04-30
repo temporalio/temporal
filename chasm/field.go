@@ -11,8 +11,6 @@ import (
 const (
 	// Used by reflection.
 	internalFieldName = "Internal"
-
-	fieldNameTag = "name"
 )
 
 type Field[T any] struct {

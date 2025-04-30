@@ -339,7 +339,7 @@ func (n *Node) fieldType() fieldType {
 	return fieldTypeUnspecified
 }
 
-func (n *Node) fields() func(func(fieldInfo) bool) {
+func (n *Node) valueFields() func(func(fieldInfo) bool) {
 	return fieldsOf(reflect.ValueOf(n.value))
 }
 
@@ -427,7 +427,7 @@ func (n *Node) serialize() error {
 }
 
 func (n *Node) serializeComponentNode() error {
-	for field := range n.fields() {
+	for field := range n.valueFields() {
 		if field.err != nil {
 			return field.err
 		}
@@ -480,7 +480,7 @@ func (n *Node) syncSubComponentsInternal(
 	nodePath []string,
 ) error {
 	childrenToKeep := make(map[string]struct{})
-	for field := range n.fields() {
+	for field := range n.valueFields() {
 		if field.err != nil {
 			return field.err
 		}

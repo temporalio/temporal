@@ -35,6 +35,8 @@ import (
 const (
 	chasmFieldTypePrefix      = "chasm.Field["
 	chasmCollectionTypePrefix = "chasm.Collection["
+
+	fieldNameTag = "name"
 )
 
 type fieldKind uint8
