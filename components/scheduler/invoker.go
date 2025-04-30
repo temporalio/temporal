@@ -25,6 +25,7 @@
 package scheduler
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -101,7 +102,7 @@ func (invokerMachineDefinition) Deserialize(body []byte) (any, error) {
 }
 
 func (invokerMachineDefinition) CompareState(a any, b any) (int, error) {
-	return 0, fmt.Errorf("unimplemented")
+	return 0, errors.New("unimplemented")
 }
 
 // TransitionEnqueue adds buffered starts to the Invoker's queue.
