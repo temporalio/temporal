@@ -1010,6 +1010,8 @@ func (n *Node) closeTransactionGeneratePhysicalPureTask() error {
 	return nil
 }
 
+// andAllChildren returns a sequence of all nodes in the tree starting from n, including n itself.
+// The sequence is depth-first, pre-order traversal.
 func (n *Node) andAllChildren() iter.Seq2[[]string, *Node] {
 	return func(yield func([]string, *Node) bool) {
 		var walk func([]string, *Node) bool
