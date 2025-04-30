@@ -473,7 +473,7 @@ func (n *Node) syncSubComponents() error {
 		return serviceerror.NewInternal("syncSubComponents must be called on root node")
 	}
 	n.mutation.DeletedNodes = make(map[string]struct{})
-	return n.syncSubComponentsInternal(nil)
+	return n.syncSubComponentsInternal(RootPath)
 }
 
 func (n *Node) syncSubComponentsInternal(
@@ -716,7 +716,24 @@ func (n *Node) AddTask(
 func (n *Node) CloseTransaction() (NodesMutation, error) {
 	defer n.cleanupTransaction()
 
-	// TODO: serialize updated nodes and update tree structure here.
+	if err := n.syncSubComponents(); err != nil {
+		return NodesMutation{}, err
+	}
+
+	for nodePath, node := range n.andAllChildren() {
+		if node.valueState != valueStateNeedSerialize {
+			continue
+		}
+		if err := node.serialize(); err != nil {
+			return NodesMutation{}, err
+		}
+
+		encodedPath, err := n.pathEncoder.Encode(node, nodePath)
+		if err != nil {
+			return NodesMutation{}, err
+		}
+		n.mutation.UpdatedNodes[encodedPath] = node.serializedNode
+	}
 
 	if err := n.closeTransactionUpdateComponentTasks(); err != nil {
 		return NodesMutation{}, err
@@ -730,8 +747,7 @@ func (n *Node) CloseTransaction() (NodesMutation, error) {
 		return NodesMutation{}, err
 	}
 
-	panic("not implemented")
-	// return n.mutation, nil
+	return n.mutation, nil
 }
 
 func (n *Node) closeTransactionUpdateComponentTasks() error {
