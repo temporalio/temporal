@@ -744,6 +744,17 @@ func (s *taskRefresherSuite) TestRefreshChildWorkflowTasks() {
 					NamespaceFailoverVersion: common.EmptyVersion,
 				},
 			},
+			7: {
+				InitiatedEventBatchId: 4,
+				InitiatedEventId:      7,
+				StartedEventId:        8,
+				CreateRequestId:       uuid.New(),
+				StartedWorkflowId:     "child-workflow-id-7",
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{
+					TransitionCount:          5,
+					NamespaceFailoverVersion: common.EmptyVersion,
+				},
+			},
 		},
 	}
 	mutableState, err := NewMutableStateFromDB(
@@ -756,36 +767,62 @@ func (s *taskRefresherSuite) TestRefreshChildWorkflowTasks() {
 	)
 	s.NoError(err)
 
-	// only the second child workflow will refresh the child workflow task
-	initEvent := &historypb.HistoryEvent{
-		EventId:   6,
-		Version:   common.EmptyVersion,
-		EventType: enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED,
-		Attributes: &historypb.HistoryEvent_StartChildWorkflowExecutionInitiatedEventAttributes{
-			StartChildWorkflowExecutionInitiatedEventAttributes: &historypb.StartChildWorkflowExecutionInitiatedEventAttributes{},
+	testcases := []struct {
+		name                   string
+		hasPendingChildIds     bool
+		expectedRefreshedTasks []int64
+	}{
+		{
+			name:                   "has pending child ids",
+			hasPendingChildIds:     true,
+			expectedRefreshedTasks: []int64{6},
+		},
+		{
+			name:                   "no pending child ids",
+			hasPendingChildIds:     false,
+			expectedRefreshedTasks: []int64{6, 7},
 		},
 	}
-	s.mockShard.MockEventsCache.EXPECT().GetEvent(
-		gomock.Any(),
-		s.mockShard.GetShardID(),
-		events.EventKey{
-			NamespaceID: tests.NamespaceID,
-			WorkflowID:  tests.WorkflowID,
-			RunID:       tests.RunID,
-			EventID:     int64(6),
-			Version:     common.EmptyVersion,
-		},
-		int64(4),
-		branchToken,
-	).Return(initEvent, nil).Times(1)
+	for _, tc := range testcases {
+		s.T().Run(tc.name, func(t *testing.T) {
+			for _, eventID := range tc.expectedRefreshedTasks {
+				// only the second child workflow will refresh the child workflow task
+				initEvent := &historypb.HistoryEvent{
+					EventId:   eventID,
+					Version:   common.EmptyVersion,
+					EventType: enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED,
+					Attributes: &historypb.HistoryEvent_StartChildWorkflowExecutionInitiatedEventAttributes{
+						StartChildWorkflowExecutionInitiatedEventAttributes: &historypb.StartChildWorkflowExecutionInitiatedEventAttributes{},
+					},
+				}
+				s.mockShard.MockEventsCache.EXPECT().GetEvent(
+					gomock.Any(),
+					s.mockShard.GetShardID(),
+					events.EventKey{
+						NamespaceID: tests.NamespaceID,
+						WorkflowID:  tests.WorkflowID,
+						RunID:       tests.RunID,
+						EventID:     int64(eventID),
+						Version:     common.EmptyVersion,
+					},
+					int64(4),
+					branchToken,
+				).Return(initEvent, nil).Times(1)
 
-	s.mockTaskGenerator.EXPECT().GenerateChildWorkflowTasks(initEvent).Return(nil).Times(1)
+				s.mockTaskGenerator.EXPECT().GenerateChildWorkflowTasks(initEvent).Return(nil).Times(1)
+			}
 
-	err = s.taskRefresher.refreshTasksForChildWorkflow(context.Background(), mutableState, s.mockTaskGenerator, &persistencespb.VersionedTransition{
-		TransitionCount:          4,
-		NamespaceFailoverVersion: common.EmptyVersion,
-	}, nil)
-	s.NoError(err)
+			var previousPendingChildIds map[int64]struct{}
+			if tc.hasPendingChildIds {
+				previousPendingChildIds = mutableState.GetPendingChildIds()
+			}
+			err = s.taskRefresher.refreshTasksForChildWorkflow(context.Background(), mutableState, s.mockTaskGenerator, &persistencespb.VersionedTransition{
+				TransitionCount:          4,
+				NamespaceFailoverVersion: common.EmptyVersion,
+			}, previousPendingChildIds)
+			s.NoError(err)
+		})
+	}
 }
 
 func (s *taskRefresherSuite) TestRefreshRequestCancelExternalTasks() {
