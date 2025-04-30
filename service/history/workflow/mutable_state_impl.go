@@ -7237,9 +7237,6 @@ func (ms *MutableStateImpl) ApplyMutation(
 	if err != nil {
 		return err
 	}
-	if mutation.ExecutionInfo.WorkflowTaskType == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
-		ms.workflowTaskManager.deleteWorkflowTask()
-	}
 
 	ms.applyUpdatesToUpdateInfos(mutation.UpdatedUpdateInfos, false)
 
@@ -7280,9 +7277,6 @@ func (ms *MutableStateImpl) ApplySnapshot(
 	err := ms.syncExecutionInfo(ms.executionInfo, snapshot.ExecutionInfo, true)
 	if err != nil {
 		return err
-	}
-	if snapshot.ExecutionInfo.WorkflowTaskType == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
-		ms.workflowTaskManager.deleteWorkflowTask()
 	}
 
 	ms.applyUpdatesToUpdateInfos(snapshot.ExecutionInfo.UpdateInfos, true)
@@ -7548,6 +7542,7 @@ func (ms *MutableStateImpl) applyUpdatesToUpdateInfos(
 }
 
 func (ms *MutableStateImpl) syncExecutionInfo(current *persistencespb.WorkflowExecutionInfo, incoming *persistencespb.WorkflowExecutionInfo, isSnapshot bool) error {
+	var workflowTaskVersionUpdated bool
 	if transitionhistory.Compare(current.WorkflowTaskLastUpdateVersionedTransition, incoming.WorkflowTaskLastUpdateVersionedTransition) != 0 {
 		ms.workflowTaskManager.UpdateWorkflowTask(&historyi.WorkflowTaskInfo{
 			Version:             incoming.WorkflowTaskVersion,
@@ -7567,6 +7562,18 @@ func (ms *MutableStateImpl) syncExecutionInfo(current *persistencespb.WorkflowEx
 			BuildId:                incoming.WorkflowTaskBuildId,
 			BuildIdRedirectCounter: incoming.WorkflowTaskBuildIdRedirectCounter,
 		})
+		workflowTaskVersionUpdated = true
+	}
+
+	if incoming.WorkflowTaskType == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
+		ms.workflowTaskManager.deleteWorkflowTask()
+		ms.RemoveSpeculativeWorkflowTaskTimeoutTask()
+		if !workflowTaskVersionUpdated {
+			// Source has speculative workflow task. We need to reset workflowTaskUpdated
+			// because speculative workflow task is not a real workflow task and it is not
+			// updated in mutation or snapshot.
+			ms.workflowTaskUpdated = false
+		}
 	}
 
 	doNotSync := func(v any) []interface{} {

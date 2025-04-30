@@ -4389,6 +4389,7 @@ func (s *mutableStateSuite) buildSnapshot(state *MutableStateImpl) *persistences
 				{TransitionCount: 1025},
 			},
 			SignalRequestIdsLastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1025},
+			WorkflowTaskLastUpdateVersionedTransition:     state.executionInfo.WorkflowTaskLastUpdateVersionedTransition,
 		},
 		ExecutionState: &persistencespb.WorkflowExecutionState{
 			RunId:     state.executionState.RunId,
@@ -4402,70 +4403,119 @@ func (s *mutableStateSuite) buildSnapshot(state *MutableStateImpl) *persistences
 }
 
 func (s *mutableStateSuite) TestApplySnapshot() {
-	state := s.buildWorkflowMutableState()
-	s.addChangesForStateReplication(state)
-
-	chasmNodesSnapshot := chasm.NodesSnapshot{
-		Nodes: state.ChasmNodes,
+	testCases := []struct {
+		name                        string
+		updateWorkflowTask          bool
+		speculativeTask             bool
+		expectedWorkflowTaskUpdated bool
+	}{
+		{
+			name:                        "update workflow task",
+			updateWorkflowTask:          true,
+			speculativeTask:             false,
+			expectedWorkflowTaskUpdated: true,
+		},
+		{
+			name:                        "not update workflow task",
+			updateWorkflowTask:          false,
+			speculativeTask:             false,
+			expectedWorkflowTaskUpdated: false,
+		},
+		{
+			name:                        "update speculative workflow task",
+			updateWorkflowTask:          true,
+			speculativeTask:             true,
+			expectedWorkflowTaskUpdated: true,
+		},
+		{
+			name:                        "not update speculative workflow task",
+			updateWorkflowTask:          false,
+			speculativeTask:             true,
+			expectedWorkflowTaskUpdated: false,
+		},
 	}
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			state := s.buildWorkflowMutableState()
+			s.addChangesForStateReplication(state)
 
-	originMS, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, state, 123)
-	s.NoError(err)
+			chasmNodesSnapshot := chasm.NodesSnapshot{
+				Nodes: state.ChasmNodes,
+			}
 
-	currentMS, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, state, 123)
-	s.NoError(err)
-	currentMockChasmTree := historyi.NewMockChasmTree(s.controller)
-	currentMockChasmTree.EXPECT().ApplySnapshot(chasmNodesSnapshot).Return(nil).Times(1)
-	currentMS.chasmTree = currentMockChasmTree
+			originMS, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, state, 123)
+			s.NoError(err)
 
-	state = s.buildWorkflowMutableState()
-	state.ActivityInfos[91] = &persistencespb.ActivityInfo{
-		ActivityId: "activity_id_91",
+			currentMS, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, state, 123)
+			s.NoError(err)
+			currentMockChasmTree := historyi.NewMockChasmTree(s.controller)
+			currentMockChasmTree.EXPECT().ApplySnapshot(chasmNodesSnapshot).Return(nil).Times(1)
+			currentMS.chasmTree = currentMockChasmTree
+
+			state = s.buildWorkflowMutableState()
+			state.ActivityInfos[91] = &persistencespb.ActivityInfo{
+				ActivityId: "activity_id_91",
+			}
+			state.TimerInfos["26"] = &persistencespb.TimerInfo{
+				TimerId: "26",
+			}
+			state.ChildExecutionInfos[81] = &persistencespb.ChildExecutionInfo{
+				InitiatedEventBatchId: 81,
+			}
+			state.RequestCancelInfos[71] = &persistencespb.RequestCancelInfo{
+				InitiatedEventBatchId: 71,
+			}
+			state.SignalInfos[76] = &persistencespb.SignalInfo{
+				InitiatedEventBatchId: 76,
+			}
+			state.SignalRequestedIds = append(state.SignalRequestedIds, "signal_requested_id_2")
+
+			targetMS, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, state, 123)
+			s.NoError(err)
+			targetMockChasmTree := historyi.NewMockChasmTree(s.controller)
+			targetMockChasmTree.EXPECT().Snapshot(nil).Return(chasmNodesSnapshot).Times(1)
+			targetMS.chasmTree = targetMockChasmTree
+
+			targetMS.GetExecutionInfo().TransitionHistory = UpdatedTransitionHistory(targetMS.GetExecutionInfo().TransitionHistory, targetMS.GetCurrentVersion())
+
+			// set updateXXX so LastUpdateVersionedTransition will be updated
+			targetMS.updateActivityInfos = targetMS.pendingActivityInfoIDs
+			for key := range targetMS.updateActivityInfos {
+				targetMS.activityInfosUserDataUpdated[key] = struct{}{}
+			}
+			targetMS.updateTimerInfos = targetMS.pendingTimerInfoIDs
+			for key := range targetMS.updateTimerInfos {
+				targetMS.timerInfosUserDataUpdated[key] = struct{}{}
+			}
+			targetMS.updateChildExecutionInfos = targetMS.pendingChildExecutionInfoIDs
+			targetMS.updateRequestCancelInfos = targetMS.pendingRequestCancelInfoIDs
+			targetMS.updateSignalInfos = targetMS.pendingSignalInfoIDs
+			targetMS.updateSignalRequestedIDs = targetMS.pendingSignalRequestedIDs
+
+			if tc.updateWorkflowTask {
+				// test mutation with workflow task update
+				workflowTask := &historyi.WorkflowTaskInfo{
+					ScheduledEventID: 1234,
+				}
+				targetMS.workflowTaskManager.UpdateWorkflowTask(workflowTask)
+			}
+
+			if tc.speculativeTask {
+				targetMS.executionInfo.WorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE
+			}
+
+			targetMS.closeTransactionTrackLastUpdateVersionedTransition(historyi.TransactionPolicyActive)
+
+			snapshot := s.buildSnapshot(targetMS)
+			s.Nil(snapshot.ExecutionInfo.SubStateMachinesByType)
+			err = currentMS.ApplySnapshot(snapshot)
+			s.NoError(err)
+			s.NotNil(currentMS.GetExecutionInfo().SubStateMachinesByType)
+
+			s.verifyMutableState(currentMS, targetMS, originMS)
+			s.Equal(tc.expectedWorkflowTaskUpdated, currentMS.workflowTaskUpdated)
+		})
 	}
-	state.TimerInfos["26"] = &persistencespb.TimerInfo{
-		TimerId: "26",
-	}
-	state.ChildExecutionInfos[81] = &persistencespb.ChildExecutionInfo{
-		InitiatedEventBatchId: 81,
-	}
-	state.RequestCancelInfos[71] = &persistencespb.RequestCancelInfo{
-		InitiatedEventBatchId: 71,
-	}
-	state.SignalInfos[76] = &persistencespb.SignalInfo{
-		InitiatedEventBatchId: 76,
-	}
-	state.SignalRequestedIds = append(state.SignalRequestedIds, "signal_requested_id_2")
-
-	targetMS, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, state, 123)
-	s.NoError(err)
-	targetMockChasmTree := historyi.NewMockChasmTree(s.controller)
-	targetMockChasmTree.EXPECT().Snapshot(nil).Return(chasmNodesSnapshot).Times(1)
-	targetMS.chasmTree = targetMockChasmTree
-
-	targetMS.GetExecutionInfo().TransitionHistory = UpdatedTransitionHistory(targetMS.GetExecutionInfo().TransitionHistory, targetMS.GetCurrentVersion())
-
-	// set updateXXX so LastUpdateVersionedTransition will be updated
-	targetMS.updateActivityInfos = targetMS.pendingActivityInfoIDs
-	for key := range targetMS.updateActivityInfos {
-		targetMS.activityInfosUserDataUpdated[key] = struct{}{}
-	}
-	targetMS.updateTimerInfos = targetMS.pendingTimerInfoIDs
-	for key := range targetMS.updateTimerInfos {
-		targetMS.timerInfosUserDataUpdated[key] = struct{}{}
-	}
-	targetMS.updateChildExecutionInfos = targetMS.pendingChildExecutionInfoIDs
-	targetMS.updateRequestCancelInfos = targetMS.pendingRequestCancelInfoIDs
-	targetMS.updateSignalInfos = targetMS.pendingSignalInfoIDs
-	targetMS.updateSignalRequestedIDs = targetMS.pendingSignalRequestedIDs
-	targetMS.closeTransactionTrackLastUpdateVersionedTransition(historyi.TransactionPolicyActive)
-
-	snapshot := s.buildSnapshot(targetMS)
-	s.Nil(snapshot.ExecutionInfo.SubStateMachinesByType)
-	err = currentMS.ApplySnapshot(snapshot)
-	s.NoError(err)
-	s.NotNil(currentMS.GetExecutionInfo().SubStateMachinesByType)
-
-	s.verifyMutableState(currentMS, targetMS, originMS)
 }
 
 func (s *mutableStateSuite) buildMutation(
@@ -4491,16 +4541,34 @@ func (s *mutableStateSuite) buildMutation(
 
 func (s *mutableStateSuite) TestApplyMutation() {
 	testCases := []struct {
-		name               string
-		updateWorkflowTask bool
+		name                        string
+		updateWorkflowTask          bool
+		speculativeTask             bool
+		expectedWorkflowTaskUpdated bool
 	}{
 		{
-			name:               "update workflow task",
-			updateWorkflowTask: true,
+			name:                        "update workflow task",
+			updateWorkflowTask:          true,
+			speculativeTask:             false,
+			expectedWorkflowTaskUpdated: true,
 		},
 		{
-			name:               "not update workflow task",
-			updateWorkflowTask: false,
+			name:                        "not update workflow task",
+			updateWorkflowTask:          false,
+			speculativeTask:             false,
+			expectedWorkflowTaskUpdated: false,
+		},
+		{
+			name:                        "update speculative workflow task",
+			updateWorkflowTask:          true,
+			speculativeTask:             true,
+			expectedWorkflowTaskUpdated: true,
+		},
+		{
+			name:                        "not update speculative workflow task",
+			updateWorkflowTask:          false,
+			speculativeTask:             true,
+			expectedWorkflowTaskUpdated: false,
 		},
 	}
 	for _, tc := range testCases {
@@ -4576,6 +4644,10 @@ func (s *mutableStateSuite) TestApplyMutation() {
 					ScheduledEventID: 1234,
 				}
 				targetMS.workflowTaskManager.UpdateWorkflowTask(workflowTask)
+			}
+
+			if tc.speculativeTask {
+				targetMS.executionInfo.WorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE
 			}
 
 			targetMS.closeTransactionTrackLastUpdateVersionedTransition(historyi.TransactionPolicyActive)
@@ -4657,7 +4729,7 @@ func (s *mutableStateSuite) TestApplyMutation() {
 			err = currentMS.ApplyMutation(mutation)
 			s.NoError(err)
 			s.verifyMutableState(currentMS, targetMS, originMS)
-			s.Equal(tc.updateWorkflowTask, currentMS.workflowTaskUpdated)
+			s.Equal(tc.expectedWorkflowTaskUpdated, currentMS.workflowTaskUpdated)
 		})
 	}
 }
