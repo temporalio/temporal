@@ -470,6 +470,11 @@ func (r *TaskRefresherImpl) refreshTasksForChildWorkflow(
 	pendingChildWorkflowInfos := mutableState.GetPendingChildExecutionInfos()
 
 	for _, childWorkflowInfo := range pendingChildWorkflowInfos {
+		// Skip task generation if this child workflow has already been started.
+		// This is an optimization to avoid generating duplicate tasks.
+		// However, if this child workflow was not in the previous pending child IDs,
+		// we still need to generate tasks even if it's started, because this means
+		// the child workflow was just added to the mutable state.
 		if _, ok := previousPendingChildIds[childWorkflowInfo.InitiatedEventId]; ok {
 			if childWorkflowInfo.StartedEventId != common.EmptyEventID {
 				continue
