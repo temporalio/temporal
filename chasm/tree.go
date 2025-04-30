@@ -804,7 +804,7 @@ func (n *Node) closeTransactionUpdateComponentTasks() error {
 		TransitionCount:          n.backend.NextTransitionCount(),
 	}
 
-	for node := range n.andAllChildren() {
+	for _, node := range n.andAllChildren() {
 		// no-op if node is not a component
 		componentAttr := node.serializedNode.Metadata.GetComponentAttributes()
 		if componentAttr == nil {
@@ -969,7 +969,7 @@ func (n *Node) closeTransactionGeneratePhysicalSideEffectTasks() error {
 func (n *Node) closeTransactionGeneratePhysicalPureTask() error {
 	var firstPureTask *persistencespb.ChasmComponentAttributes_Task
 	var firstTaskNode *Node
-	for node := range n.andAllChildren() {
+	for _, node := range n.andAllChildren() {
 		componentAttr := node.serializedNode.GetMetadata().GetComponentAttributes()
 		if componentAttr == nil {
 			return nil
@@ -1010,24 +1010,24 @@ func (n *Node) closeTransactionGeneratePhysicalPureTask() error {
 	return nil
 }
 
-func (n *Node) andAllChildren() iter.Seq[*Node] {
-	return func(yield func(*Node) bool) {
-		var walk func(*Node) bool
-		walk = func(node *Node) bool {
+func (n *Node) andAllChildren() iter.Seq2[[]string, *Node] {
+	return func(yield func([]string, *Node) bool) {
+		var walk func([]string, *Node) bool
+		walk = func(path []string, node *Node) bool {
 			if node == nil {
 				return true
 			}
-			if !yield(node) {
+			if !yield(path, node) {
 				return false
 			}
 			for _, child := range node.children {
-				if !walk(child) {
+				if !walk(append(path, child.nodeName), child) {
 					return false
 				}
 			}
 			return true
 		}
-		walk(n)
+		walk(nil, n)
 	}
 }
 
