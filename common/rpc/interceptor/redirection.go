@@ -237,6 +237,8 @@ func (i *Redirection) handleRedirectAPIInvocation(
 	var err error
 
 	scope, startTime := i.BeforeCall(dcRedirectionMetricsPrefix + methodName)
+	scope = scope.WithTags(metrics.NamespaceTag(string(namespaceName)))
+
 	defer func() {
 		i.AfterCall(scope, startTime, clusterName, retError)
 	}()
