@@ -339,6 +339,10 @@ func (n *Node) fieldType() fieldType {
 	return fieldTypeUnspecified
 }
 
+func (n *Node) fields() func(func(fieldInfo) bool) {
+	return fieldsOf(reflect.ValueOf(n.value))
+}
+
 func assertStructPointer(t reflect.Type) error {
 	if t == nil {
 		return nil
@@ -348,13 +352,6 @@ func assertStructPointer(t reflect.Type) error {
 		return serviceerror.NewInternal("only pointer to struct is supported for tree node value")
 	}
 	return nil
-}
-
-func fieldName(f reflect.StructField) string {
-	if tagName := f.Tag.Get(fieldNameTag); tagName != "" {
-		return tagName
-	}
-	return f.Name
 }
 
 func (n *Node) initSerializedNode(ft fieldType) {
@@ -430,33 +427,26 @@ func (n *Node) serialize() error {
 }
 
 func (n *Node) serializeComponentNode() error {
-	nodeValueT := reflect.TypeOf(n.value)
-	nodeValueV := reflect.ValueOf(n.value)
+	for field := range n.fields() {
+		if field.err != nil {
+			return field.err
+		}
 
-	protoMessageFound := false
-	// TODO: consider using walker pattern to unify walking over reflected fields.
-	for i := 0; i < nodeValueT.Elem().NumField(); i++ {
-		fieldV := nodeValueV.Elem().Field(i)
-		if !fieldV.Type().AssignableTo(protoMessageT) {
+		if field.kind != fieldKindData {
 			continue
 		}
 
-		if protoMessageFound {
-			return serviceerror.NewInternal("only one proto field allowed in component")
-		}
-		protoMessageFound = true
-
 		var blob *commonpb.DataBlob
-		if !fieldV.IsNil() {
+		if !field.val.IsNil() {
 			var err error
-			if blob, err = serialization.ProtoEncodeBlob(fieldV.Interface().(proto.Message), enumspb.ENCODING_TYPE_PROTO3); err != nil {
+			if blob, err = serialization.ProtoEncodeBlob(field.val.Interface().(proto.Message), enumspb.ENCODING_TYPE_PROTO3); err != nil {
 				return err
 			}
 		}
 
 		rc, ok := n.registry.componentFor(n.value)
 		if !ok {
-			return serviceerror.NewInternal(fmt.Sprintf("component type %s is not registered", nodeValueT.String()))
+			return serviceerror.NewInternal(fmt.Sprintf("component type %s is not registered", reflect.TypeOf(n.value).String()))
 		}
 
 		n.serializedNode.Data = blob
@@ -489,27 +479,17 @@ func (n *Node) syncSubComponents() error {
 func (n *Node) syncSubComponentsInternal(
 	nodePath []string,
 ) error {
-	nodeValueT := reflect.TypeOf(n.value)
-	nodeValueV := reflect.ValueOf(n.value)
-
 	childrenToKeep := make(map[string]struct{})
-	for i := 0; i < nodeValueT.Elem().NumField(); i++ {
-		fieldV := nodeValueV.Elem().Field(i)
-		fieldT := fieldV.Type()
-
-		if fieldT == UnimplementedComponentT {
-			continue
+	for field := range n.fields() {
+		if field.err != nil {
+			return field.err
 		}
 
-		if fieldT.Kind() == reflect.Ptr {
-			continue
-		}
-
-		fieldN := fieldName(nodeValueT.Elem().Field(i))
-
-		switch genericTypePrefix(fieldT) {
-		case chasmFieldTypePrefix:
-			internalV := fieldV.FieldByName(internalFieldName)
+		switch field.kind {
+		case fieldKindData:
+			// Nothing to sync.
+		case fieldKindSubField:
+			internalV := field.val.FieldByName(internalFieldName)
 			//nolint:revive // Internal field is guaranteed to be of type fieldInternal.
 			internal := internalV.Interface().(fieldInternal)
 			if internal.isEmpty() {
@@ -517,7 +497,7 @@ func (n *Node) syncSubComponentsInternal(
 			}
 			if internal.node == nil && internal.value() != nil {
 				// Field is not empty but tree node is not set. It means this is a new field, and a node must be created.
-				childNode := newNode(n.nodeBase, n, fieldN)
+				childNode := newNode(n.nodeBase, n, field.name)
 
 				if err := assertStructPointer(reflect.TypeOf(internal.value())); err != nil {
 					return err
@@ -526,18 +506,20 @@ func (n *Node) syncSubComponentsInternal(
 				childNode.initSerializedNode(internal.fieldType())
 				childNode.valueState = valueStateNeedSerialize
 
-				n.children[fieldN] = childNode
+				n.children[field.name] = childNode
 				internal.node = childNode
 				// TODO: this line can be remove if Internal becomes a *fieldInternal.
 				internalV.Set(reflect.ValueOf(internal))
 			}
-			if err := internal.node.syncSubComponentsInternal(append(nodePath, fieldN)); err != nil {
-				return err
+			if internal.fieldType() == fieldTypeComponent {
+				if err := internal.node.syncSubComponentsInternal(append(nodePath, field.name)); err != nil {
+					return err
+				}
 			}
 
-			childrenToKeep[fieldN] = struct{}{}
-		case chasmCollectionTypePrefix:
-			childrenToKeep[fieldN] = struct{}{}
+			childrenToKeep[field.name] = struct{}{}
+		case fieldKindSubCollection:
+			childrenToKeep[field.name] = struct{}{}
 			// TODO: need to go over every item in collection and update children for it.
 			panic("not implemented")
 		}
@@ -636,57 +618,32 @@ func (n *Node) deserializeComponentNode(
 		return nil
 	}
 
-	protoMessageFound := false
-	for i := 0; i < valueT.Elem().NumField(); i++ {
-		fieldV := valueV.Elem().Field(i)
-		fieldT := fieldV.Type()
-
-		if fieldT == UnimplementedComponentT {
-			continue
+	for field := range fieldsOf(valueV) {
+		if field.err != nil {
+			return field.err
 		}
 
-		if fieldT.AssignableTo(protoMessageT) {
-			if protoMessageFound {
-				return serviceerror.NewInternal("only one proto field allowed in component")
-			}
-			protoMessageFound = true
-
-			value, err := unmarshalProto(n.serializedNode.GetData(), fieldT)
+		switch field.kind {
+		case fieldKindData:
+			value, err := unmarshalProto(n.serializedNode.GetData(), field.typ)
 			if err != nil {
 				return err
 			}
-			fieldV.Set(value)
-			continue
-		}
-
-		// chasm.Field field must NOT be a pointer, i.e. chasm.Field[T] not *chasm.Field[T].
-		if fieldT.Kind() == reflect.Ptr {
-			continue
-		}
-
-		fieldN := fieldName(valueT.Elem().Field(i))
-
-		switch genericTypePrefix(fieldT) {
-		case chasmFieldTypePrefix:
-			if childNode, found := n.children[fieldN]; found {
-				chasmFieldV := reflect.New(fieldT).Elem()
+			field.val.Set(value)
+		case fieldKindSubField:
+			if childNode, found := n.children[field.name]; found {
+				chasmFieldV := reflect.New(field.typ).Elem()
 				internalValue := reflect.ValueOf(newFieldInternalWithNode(childNode))
 				chasmFieldV.FieldByName(internalFieldName).Set(internalValue)
-				fieldV.Set(chasmFieldV)
+				field.val.Set(chasmFieldV)
 			}
 			continue
-		case chasmCollectionTypePrefix:
+		case fieldKindSubCollection:
 			// TODO: support collection
 			// init the map and populate
 			panic("not implemented")
 			// continue
 		}
-
-		return serviceerror.NewInternal(fmt.Sprintf("unsupported field type %s in component %s", fieldT.String(), valueT.String()))
-	}
-
-	if !protoMessageFound {
-		return serviceerror.NewInternal("no proto field found in component")
 	}
 
 	n.value = valueV.Interface()

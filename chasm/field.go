@@ -3,7 +3,6 @@ package chasm
 import (
 	"fmt"
 	"reflect"
-	"strings"
 
 	"go.temporal.io/api/serviceerror"
 	"google.golang.org/protobuf/proto"
@@ -11,9 +10,7 @@ import (
 
 const (
 	// Used by reflection.
-	chasmFieldTypePrefix      = "chasm.Field["
-	chasmCollectionTypePrefix = "chasm.Collection["
-	internalFieldName         = "Internal"
+	internalFieldName = "Internal"
 
 	fieldNameTag = "name"
 )
@@ -110,13 +107,4 @@ func (f Field[T]) Get(chasmContext Context) (T, error) {
 
 func NewEmptyField[T any]() Field[T] {
 	return Field[T]{}
-}
-
-func genericTypePrefix(t reflect.Type) string {
-	tn := t.String()
-	bracketPos := strings.Index(tn, "[")
-	if bracketPos == -1 {
-		return ""
-	}
-	return tn[:bracketPos+1]
 }
