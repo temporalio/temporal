@@ -119,6 +119,7 @@ message StartWorkflowExecutionResponse {
     temporal.api.workflowservice.v1.PollWorkflowTaskQueueResponse eager_workflow_task = 3;
     bool started = 4;
     temporal.api.enums.v1.WorkflowExecutionStatus status = 5;
+    temporal.api.common.v1.Link link = 6;
 }
 
 message GetMutableStateRequest {
