@@ -327,12 +327,14 @@ func (s *Starter) handleConflict(
 
 		if requestIDInfo.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
 			resp, err := s.respondToRetriedRequest(ctx, currentWorkflowConditionFailed.RunID)
+			resp.Status = currentWorkflowConditionFailed.Status
 			return resp, StartDeduped, err
 		}
 
 		resp := &historyservice.StartWorkflowExecutionResponse{
 			RunId:   currentWorkflowConditionFailed.RunID,
 			Started: false,
+			Status:  currentWorkflowConditionFailed.Status,
 		}
 		return resp, StartDeduped, nil
 	}
@@ -531,6 +533,7 @@ func (s *Starter) respondToRetriedRequest(
 		return &historyservice.StartWorkflowExecutionResponse{
 			RunId:   runID,
 			Started: true,
+			// Status is set by caller
 		}, nil
 	}
 
@@ -549,6 +552,7 @@ func (s *Starter) respondToRetriedRequest(
 		return &historyservice.StartWorkflowExecutionResponse{
 			RunId:   runID,
 			Started: true,
+			// Status is set by caller
 		}, nil
 	}
 
@@ -683,6 +687,7 @@ func (s *Starter) handleUseExistingWorkflowOnConflictOptions(
 		resp := &historyservice.StartWorkflowExecutionResponse{
 			RunId:   workflowKey.RunID,
 			Started: false, // set explicitly for emphasis
+			Status:  enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		}
 		return resp, StartReused, nil
 	case consts.ErrWorkflowCompleted:
@@ -735,6 +740,7 @@ func (s *Starter) generateResponse(
 		return &historyservice.StartWorkflowExecutionResponse{
 			RunId:   runID,
 			Started: true,
+			Status:  enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		}, nil
 	}
 
@@ -771,6 +777,7 @@ func (s *Starter) generateResponse(
 		RunId:   runID,
 		Clock:   clock,
 		Started: true,
+		Status:  enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		EagerWorkflowTask: &workflowservice.PollWorkflowTaskQueueResponse{
 			TaskToken:         serializedToken,
 			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
