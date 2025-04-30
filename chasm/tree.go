@@ -28,6 +28,7 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"iter"
 	"reflect"
 	"slices"
 	"time"
@@ -803,15 +804,15 @@ func (n *Node) closeTransactionUpdateComponentTasks() error {
 		TransitionCount:          n.backend.NextTransitionCount(),
 	}
 
-	return n.walk(func(node *Node) error {
+	for child := range n.allChildren() {
 		// no-op if node is not a component
-		componentAttr := node.serializedNode.Metadata.GetComponentAttributes()
+		componentAttr := child.serializedNode.Metadata.GetComponentAttributes()
 		if componentAttr == nil {
 			return nil
 		}
 
 		// no-op if node is not updated in this transition
-		lastUpdateVT := node.serializedNode.GetMetadata().LastUpdateVersionedTransition
+		lastUpdateVT := child.serializedNode.GetMetadata().LastUpdateVersionedTransition
 		if transitionhistory.Compare(lastUpdateVT, nextVersionedTransition) != 0 {
 			return nil
 		}
@@ -820,7 +821,7 @@ func (n *Node) closeTransactionUpdateComponentTasks() error {
 		// NOTE: do not check if node.valueState == valueStateNeedSerialize here, because this method needs to be called
 		// after the tree structure is updated and value is serialized, and that flag will
 		// get set to valueStateSynced.
-		if node.valueState == valueStateNeedDeserialize {
+		if child.valueState == valueStateNeedDeserialize {
 			return nil
 		}
 
@@ -828,7 +829,7 @@ func (n *Node) closeTransactionUpdateComponentTasks() error {
 		validateContext := NewContext(context.Background(), n)
 		var validationErr error
 		deleteFunc := func(existingTask *persistencespb.ChasmComponentAttributes_Task) bool {
-			valid, err := node.validateComponentTask(validateContext, existingTask)
+			valid, err := child.validateComponentTask(validateContext, existingTask)
 			if err != nil {
 				validationErr = err
 				return false
@@ -845,7 +846,7 @@ func (n *Node) closeTransactionUpdateComponentTasks() error {
 		}
 
 		// no-op if no new tasks for this component
-		newTasks, ok := node.nodeBase.newTasks[node.value]
+		newTasks, ok := child.nodeBase.newTasks[child.value]
 		if !ok {
 			return nil
 		}
@@ -883,9 +884,9 @@ func (n *Node) closeTransactionUpdateComponentTasks() error {
 
 		// pure tasks are sorted by scheduled time.
 		slices.SortFunc(componentAttr.PureTasks, comparePureTasks)
+	}
 
-		return nil
-	})
+	return nil
 }
 
 func (n *Node) validateComponentTask(
@@ -968,8 +969,8 @@ func (n *Node) closeTransactionGeneratePhysicalSideEffectTasks() error {
 func (n *Node) closeTransactionGeneratePhysicalPureTask() error {
 	var firstPureTask *persistencespb.ChasmComponentAttributes_Task
 	var firstTaskNode *Node
-	if err := n.walk(func(node *Node) error {
-		componentAttr := node.serializedNode.GetMetadata().GetComponentAttributes()
+	for child := range n.allChildren() {
+		componentAttr := child.serializedNode.GetMetadata().GetComponentAttributes()
 		if componentAttr == nil {
 			return nil
 		}
@@ -982,12 +983,8 @@ func (n *Node) closeTransactionGeneratePhysicalPureTask() error {
 		if firstPureTask == nil ||
 			comparePureTasks(pureTasks[0], firstPureTask) < 0 {
 			firstPureTask = pureTasks[0]
-			firstTaskNode = node
+			firstTaskNode = child
 		}
-
-		return nil
-	}); err != nil {
-		return err
 	}
 
 	if firstPureTask == nil || firstPureTask.PhysicalTaskStatus == physicalTaskStatusCreated {
@@ -1013,20 +1010,25 @@ func (n *Node) closeTransactionGeneratePhysicalPureTask() error {
 	return nil
 }
 
-func (n *Node) walk(
-	visitor func(node *Node) error,
-) error {
-	if err := visitor(n); err != nil {
-		return err
-	}
-
-	for _, childNode := range n.children {
-		if err := childNode.walk(visitor); err != nil {
-			return err
+func (n *Node) allChildren() iter.Seq[*Node] {
+	return func(yield func(*Node) bool) {
+		var walk func(*Node) bool
+		walk = func(node *Node) bool {
+			if node == nil {
+				return true
+			}
+			if !yield(node) {
+				return false
+			}
+			for _, child := range node.children {
+				if !walk(child) {
+					return false
+				}
+			}
+			return true
 		}
+		walk(n)
 	}
-
-	return nil
 }
 
 func (n *Node) cleanupTransaction() {
