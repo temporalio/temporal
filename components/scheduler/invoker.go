@@ -101,7 +101,7 @@ func (invokerMachineDefinition) Deserialize(body []byte) (any, error) {
 }
 
 func (invokerMachineDefinition) CompareState(a any, b any) (int, error) {
-	panic("TODO: CompareState not yet implemented for Invoker")
+	return 0, fmt.Errorf("unimplemented")
 }
 
 // TransitionEnqueue adds buffered starts to the Invoker's queue.
