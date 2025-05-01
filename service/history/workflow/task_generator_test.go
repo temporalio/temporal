@@ -831,7 +831,7 @@ func TestTaskGeneratorImpl_GenerateMigrationTasks(t *testing.T) {
 				mockShard.GetConfig(),
 				mockShard.GetArchivalMetadata(),
 			)
-			resultTasks, _, err := taskGenerator.GenerateMigrationTasks()
+			resultTasks, _, err := taskGenerator.GenerateMigrationTasks("")
 			require.NoError(t, err)
 			require.Equal(t, len(tc.expectedTaskTypes), len(resultTasks))
 			if tc.transitionHistoryEnabled {

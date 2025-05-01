@@ -6210,11 +6210,12 @@ func (*RefreshWorkflowTasksResponse) Descriptor() ([]byte, []int) {
 }
 
 type GenerateLastHistoryReplicationTasksRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	NamespaceId   string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	Execution     *v14.WorkflowExecution `protobuf:"bytes,2,opt,name=execution,proto3" json:"execution,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	NamespaceId     string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
+	Execution       *v14.WorkflowExecution `protobuf:"bytes,2,opt,name=execution,proto3" json:"execution,omitempty"`
+	TargetClusterId string                 `protobuf:"bytes,3,opt,name=target_cluster_id,json=targetClusterId,proto3" json:"target_cluster_id,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *GenerateLastHistoryReplicationTasksRequest) Reset() {
@@ -6259,6 +6260,13 @@ func (x *GenerateLastHistoryReplicationTasksRequest) GetExecution() *v14.Workflo
 		return x.Execution
 	}
 	return nil
+}
+
+func (x *GenerateLastHistoryReplicationTasksRequest) GetTargetClusterId() string {
+	if x != nil {
+		return x.TargetClusterId
+	}
+	return ""
 }
 
 type GenerateLastHistoryReplicationTasksResponse struct {
@@ -10057,10 +10065,11 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\x1bRefreshWorkflowTasksRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12Z\n" +
 	"\arequest\x18\x02 \x01(\v2@.temporal.server.api.adminservice.v1.RefreshWorkflowTasksRequestR\arequest:#\x92\xc4\x03\x1f*\x1drequest.execution.workflow_id\"\x1e\n" +
-	"\x1cRefreshWorkflowTasksResponse\"\xb5\x01\n" +
+	"\x1cRefreshWorkflowTasksResponse\"\xe1\x01\n" +
 	"*GenerateLastHistoryReplicationTasksRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12G\n" +
-	"\texecution\x18\x02 \x01(\v2).temporal.api.common.v1.WorkflowExecutionR\texecution:\x1b\x92\xc4\x03\x17*\x15execution.workflow_id\"\x8a\x01\n" +
+	"\texecution\x18\x02 \x01(\v2).temporal.api.common.v1.WorkflowExecutionR\texecution\x12*\n" +
+	"\x11target_cluster_id\x18\x03 \x01(\tR\x0ftargetClusterId:\x1b\x92\xc4\x03\x17*\x15execution.workflow_id\"\x8a\x01\n" +
 	"+GenerateLastHistoryReplicationTasksResponse\x124\n" +
 	"\x16state_transition_count\x18\x01 \x01(\x03R\x14stateTransitionCount\x12%\n" +
 	"\x0ehistory_length\x18\x02 \x01(\x03R\rhistoryLength\"N\n" +

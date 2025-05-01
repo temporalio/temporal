@@ -380,6 +380,7 @@ message ReplicationTaskInfo {
     repeated ReplicationTaskInfo task_equivalents = 20;
     history.v1.VersionHistoryItem last_version_history_item = 21;
     bool is_first_task = 22;
+    string target_cluster_id= 23;
 }
 
 // visibility_task_data column

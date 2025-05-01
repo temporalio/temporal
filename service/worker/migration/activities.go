@@ -92,6 +92,7 @@ type (
 		Executions       []*commonpb.WorkflowExecution
 		RPS              float64
 		GetParentInfoRPS float64
+		TargetClusterId  string
 	}
 
 	verifyReplicationTasksRequest struct {
@@ -359,7 +360,7 @@ func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHand
 	return readyShardCount == len(resp.Shards), nil
 }
 
-func (a *activities) generateWorkflowReplicationTask(ctx context.Context, rateLimiter quotas.RateLimiter, wKey definition.WorkflowKey) error {
+func (a *activities) generateWorkflowReplicationTask(ctx context.Context, rateLimiter quotas.RateLimiter, wKey definition.WorkflowKey, targetClusterId string) error {
 	if err := rateLimiter.WaitN(ctx, 1); err != nil {
 		return err
 	}
@@ -374,6 +375,7 @@ func (a *activities) generateWorkflowReplicationTask(ctx context.Context, rateLi
 			WorkflowId: wKey.WorkflowID,
 			RunId:      wKey.RunID,
 		},
+		TargetClusterId: targetClusterId,
 	})
 
 	if err != nil {
@@ -501,7 +503,7 @@ func (a *activities) GenerateReplicationTasks(ctx context.Context, request *gene
 		executionCandidates = []definition.WorkflowKey{definition.NewWorkflowKey(request.NamespaceID, request.Executions[i].GetWorkflowId(), request.Executions[i].GetRunId())}
 
 		for _, we := range executionCandidates {
-			if err := a.generateWorkflowReplicationTask(ctx, rateLimiter, we); err != nil {
+			if err := a.generateWorkflowReplicationTask(ctx, rateLimiter, we, request.TargetClusterId); err != nil {
 				if !isNotFoundServiceError(err) {
 					a.logger.Error("force-replication failed to generate replication task",
 						tag.WorkflowNamespaceID(we.GetNamespaceID()),
