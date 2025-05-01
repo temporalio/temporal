@@ -1822,7 +1822,7 @@ func (s *NexusWorkflowTestSuite) TestNexusSyncOperationErrorRehydration() {
 	)
 
 	svc := nexus.NewService("test")
-	op := temporalnexus.NewSyncOperation("op", func(ctx context.Context, c client.Client, outcome string, soo nexus.StartOperationOptions) (nexus.NoValue, error) {
+	op := nexus.NewSyncOperation("op", func(ctx context.Context, outcome string, soo nexus.StartOperationOptions) (nexus.NoValue, error) {
 		switch outcome {
 		case "fail-handler-internal":
 			return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "intentional internal error")
