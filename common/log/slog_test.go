@@ -47,5 +47,5 @@ func TestSlogFromLayeredLogger(t *testing.T) {
 	require.Equal(t, "wp", record["hey.go.gg"])
 	require.Equal(t, "wow", record["msg"])
 	require.Equal(t, "corn", record["cluster-name"])
-	require.True(t, strings.HasSuffix(record["logging-call-at"].(string), "slog_test.go:62"))
+	require.True(t, strings.HasSuffix(record["logging-call-at"].(string), "slog_test.go:40"), "%q doesn't end with %q", record["logging-call-at"], "slog_test.go:40")
 }
