@@ -9,27 +9,27 @@ type engine interface {
 		context.Context,
 		EntityKey,
 		func(MutableContext) (Component, error),
-	...TransitionOption,
+		...TransitionOption,
 	) (ComponentRef, error)
 	updateWithNewInstance(
 		context.Context,
 		EntityKey,
 		func(MutableContext) (Component, error),
 		func(MutableContext, Component) error,
-	...TransitionOption,
+		...TransitionOption,
 	) (ComponentRef, error)
 
 	updateComponent(
 		context.Context,
 		ComponentRef,
 		func(MutableContext, Component) error,
-	...TransitionOption,
+		...TransitionOption,
 	) (ComponentRef, error)
 	readComponent(
 		context.Context,
 		ComponentRef,
 		func(Context, Component) error,
-	...TransitionOption,
+		...TransitionOption,
 	) error
 
 	pollComponent(
@@ -37,7 +37,7 @@ type engine interface {
 		ComponentRef,
 		func(Context, Component) (any, bool, error),
 		func(MutableContext, Component, any) error,
-	...TransitionOption,
+		...TransitionOption,
 	) (ComponentRef, error)
 }
 
