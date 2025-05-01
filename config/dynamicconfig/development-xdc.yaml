@@ -37,9 +37,8 @@ frontend.workerVersioningDataAPIs:
 frontend.workerVersioningWorkflowAPIs:
   - value: true
 system.enableNexus:
-  - value: true
-history.enableTransitionHistory:
-  - value: true
+  # enableNexus also controls transition history which can't be enabled now
+  - value: false
 component.nexusoperations.callback.endpoint.template:
   - value: http://localhost:7243/api/v1/namespaces/{{.NamespaceName}}/nexus/callback
 component.callbacks.allowedAddresses:
