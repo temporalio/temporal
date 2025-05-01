@@ -56,7 +56,7 @@ func TestUpdateWorkflowSdkSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-func (s *UpdateWorkflowSdkSuite) TestUpdateWorkflow_TerminateWorkflowAfterUpdateAdmitted() {
+func (s *UpdateWorkflowSdkSuite) TestTerminateWorkflowAfterUpdateAdmitted() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 	tv := testvars.New(s.T()).
@@ -96,7 +96,7 @@ WorkflowExecutionTerminated // This can be EventID=3 if WF is terminated before 
 // TestUpdateWorkflow_TimeoutWorkflowAfterUpdateAccepted executes an update, and while WF awaits
 // server times out the WF after the update has been accepted but before it has been completed. It checks
 // that the client gets a NotFound error when attempting to fetch the update result (rather than a timeout).
-func (s *UpdateWorkflowSdkSuite) TestUpdateWorkflow_TimeoutWorkflowAfterUpdateAccepted() {
+func (s *UpdateWorkflowSdkSuite) TestTimeoutWorkflowAfterUpdateAccepted() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 	tv := testvars.New(s.T()).
@@ -160,7 +160,7 @@ func (s *UpdateWorkflowSdkSuite) TestUpdateWorkflow_TimeoutWorkflowAfterUpdateAc
 // TestUpdateWorkflow_TerminateWorkflowAfterUpdateAccepted executes an update, and while WF awaits
 // server terminates the WF after the update has been accepted but before it has been completed. It checks
 // that the client gets a NotFound error when attempting to fetch the update result (rather than a timeout).
-func (s *UpdateWorkflowSdkSuite) TestUpdateWorkflow_TerminateWorkflowAfterUpdateAccepted() {
+func (s *UpdateWorkflowSdkSuite) TestTerminateWorkflowAfterUpdateAccepted() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 	tv := testvars.New(s.T()).
@@ -217,7 +217,7 @@ func (s *UpdateWorkflowSdkSuite) TestUpdateWorkflow_TerminateWorkflowAfterUpdate
 	9 WorkflowExecutionTerminated`, s.GetHistory(s.Namespace().String(), tv.WorkflowExecution()))
 }
 
-func (s *UpdateWorkflowSdkSuite) TestUpdateWorkflow_ContinueAsNewAfterUpdateAdmitted() {
+func (s *UpdateWorkflowSdkSuite) TestContinueAsNewAfterUpdateAdmitted() {
 	/*
 		Start Workflow and send Update to itself from LA to make sure it is admitted
 		by server while WFT is running. This WFT does CAN. For test simplicity,
@@ -303,7 +303,7 @@ WorkflowExecutionUpdateAccepted
 WorkflowExecutionUpdateCompleted`, hist2)
 }
 
-func (s *UpdateWorkflowSdkSuite) TestUpdateWorkflow_TimeoutWithRetryAfterUpdateAdmitted() {
+func (s *UpdateWorkflowSdkSuite) TestTimeoutWithRetryAfterUpdateAdmitted() {
 	/*
 		Test ensures that admitted Updates are aborted with retriable error
 		when WF times out with retries and carried over to the new run.

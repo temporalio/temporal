@@ -305,7 +305,7 @@ func (s *nodeSuite) TestDeserializeNode_EmptyPersistence() {
 	s.Nil(node.value)
 	s.NotNil(node.serializedNode)
 
-	err = node.deserialize(reflect.TypeOf(&TestComponent{}))
+	err = node.deserialize(reflect.TypeFor[*TestComponent]())
 	s.NoError(err)
 	s.NotNil(node.value)
 	s.IsType(&TestComponent{}, node.value)
@@ -325,7 +325,7 @@ func (s *nodeSuite) TestDeserializeNode_ComponentAttributes() {
 	s.NotNil(node.serializedNode)
 	s.Equal(valueStateNeedDeserialize, node.valueState)
 
-	err = node.deserialize(reflect.TypeOf(&TestComponent{}))
+	err = node.deserialize(reflect.TypeFor[*TestComponent]())
 	s.NoError(err)
 	s.NotNil(node.value)
 	s.IsType(&TestComponent{}, node.value)
@@ -336,7 +336,7 @@ func (s *nodeSuite) TestDeserializeNode_ComponentAttributes() {
 
 	s.Nil(tc.SubComponent1.Internal.value())
 	s.Equal(valueStateNeedDeserialize, tc.SubComponent1.Internal.node.valueState)
-	err = tc.SubComponent1.Internal.node.deserialize(reflect.TypeOf(&TestSubComponent1{}))
+	err = tc.SubComponent1.Internal.node.deserialize(reflect.TypeFor[*TestSubComponent1]())
 	s.NoError(err)
 	s.NotNil(tc.SubComponent1.Internal.node.value)
 	s.IsType(&TestSubComponent1{}, tc.SubComponent1.Internal.node.value)
@@ -352,7 +352,7 @@ func (s *nodeSuite) TestDeserializeNode_DataAttributes() {
 	s.Nil(node.value)
 	s.NotNil(node.serializedNode)
 
-	err = node.deserialize(reflect.TypeOf(&TestComponent{}))
+	err = node.deserialize(reflect.TypeFor[*TestComponent]())
 	s.NoError(err)
 	s.NotNil(node.value)
 	s.Equal(valueStateSynced, node.valueState)
@@ -363,12 +363,38 @@ func (s *nodeSuite) TestDeserializeNode_DataAttributes() {
 	s.Equal(tc.SubData1.Internal.node, node.children["SubData1"])
 
 	s.Nil(tc.SubData1.Internal.value())
-	err = tc.SubData1.Internal.node.deserialize(reflect.TypeOf(&protoMessageType{}))
+	err = tc.SubData1.Internal.node.deserialize(reflect.TypeFor[*protoMessageType]())
 	s.NoError(err)
 	s.NotNil(tc.SubData1.Internal.node.value)
 	s.Equal(valueStateSynced, tc.SubData1.Internal.node.valueState)
 	s.IsType(&protoMessageType{}, tc.SubData1.Internal.node.value)
 	s.Equal("sub-data1", tc.SubData1.Internal.node.value.(*protoMessageType).ActivityId)
+}
+
+func (s *nodeSuite) TestFieldInterface() {
+	type testComponent struct {
+		UnimplementedComponent
+		Data          *protoMessageType
+		SubComponent1 Field[TestSubComponent]
+	}
+
+	serializedNodes := testComponentSerializedNodes()
+	node, err := NewTree(serializedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+	s.NoError(err)
+	s.Nil(node.value)
+	s.NotNil(node.serializedNode)
+
+	err = node.deserialize(reflect.TypeFor[*testComponent]())
+	s.NoError(err)
+	s.NotNil(node.value)
+	s.IsType(&testComponent{}, node.value)
+	tc := node.value.(*testComponent)
+
+	chasmContext := NewMutableContext(context.Background(), node)
+	sc1, err := tc.SubComponent1.Get(chasmContext)
+	s.NoError(err)
+	s.NotNil(sc1)
+	s.Equal("sub-component1-data", sc1.GetData())
 }
 
 func (s *nodeSuite) TestGenerateSerializedNodes() {
@@ -1411,7 +1437,7 @@ func (s *nodeSuite) testComponentTree() *Node {
 	s.Nil(node.value)
 
 	// Get an empty top-level component from the empty tree.
-	err = node.deserialize(reflect.TypeOf(&TestComponent{}))
+	err = node.deserialize(reflect.TypeFor[*TestComponent]())
 	s.NoError(err)
 	s.NotNil(node.value)
 	s.IsType(&TestComponent{}, node.value)

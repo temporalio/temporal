@@ -67,7 +67,15 @@ type (
 		UnimplementedComponent
 		SubComponent2Data protoMessageType
 	}
+
+	TestSubComponent interface {
+		GetData() string
+	}
 )
+
+func (tsc1 *TestSubComponent1) GetData() string {
+	return tsc1.SubComponent1Data.GetActivityId()
+}
 
 func setTestComponentFields(c *TestComponent) {
 	c.ComponentData = &protoMessageType{
