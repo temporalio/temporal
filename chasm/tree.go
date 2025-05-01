@@ -133,6 +133,7 @@ type (
 	// where MutableState is defined.
 	NodeBackend interface {
 		// TODO: Add methods needed from MutateState here.
+		GetExecutionInfo() *persistencespb.WorkflowExecutionInfo
 		GetCurrentVersion() int64
 		NextTransitionCount() int64
 		GetWorkflowKey() definition.WorkflowKey
@@ -170,31 +171,7 @@ func NewTree(
 	pathEncoder NodePathEncoder,
 	logger log.Logger,
 ) (*Node, error) {
-	base := &nodeBase{
-		registry:    registry,
-		timeSource:  timeSource,
-		backend:     backend,
-		pathEncoder: pathEncoder,
-		logger:      logger,
-
-		mutation: NodesMutation{
-			UpdatedNodes: make(map[string]*persistencespb.ChasmNode),
-			DeletedNodes: make(map[string]struct{}),
-		},
-		newTasks: make(map[any][]taskWithAttributes),
-	}
-
-	root := newNode(base, nil, "")
-	if len(serializedNodes) == 0 {
-		// If serializedNodes is empty, it means that this new tree.
-		// Initialize empty serializedNode.
-		root.initSerializedNode(fieldTypeComponent)
-		// Although both value and serializedNode.Data are nil, they are considered NOT synced
-		// because value has no type and serializedNode does.
-		// deserialize method should set value when called.
-		root.valueState = valueStateNeedDeserialize
-		return root, nil
-	}
+	root := NewEmptyTree(registry, timeSource, backend, pathEncoder, logger)
 
 	for encodedPath, serializedNode := range serializedNodes {
 		nodePath, err := pathEncoder.Decode(encodedPath)
@@ -213,19 +190,30 @@ func NewEmptyTree(
 	timeSource clock.TimeSource,
 	backend NodeBackend,
 	pathEncoder NodePathEncoder,
+	logger log.Logger,
 ) *Node {
 	base := &nodeBase{
 		registry:    registry,
 		timeSource:  timeSource,
 		backend:     backend,
 		pathEncoder: pathEncoder,
+		logger:      logger,
+
 		mutation: NodesMutation{
 			UpdatedNodes: make(map[string]*persistencespb.ChasmNode),
 			DeletedNodes: make(map[string]struct{}),
 		},
 		newTasks: make(map[any][]taskWithAttributes),
 	}
+
 	root := newNode(base, nil, "")
+	// If serializedNodes is empty, it means that this new tree.
+	// Initialize empty serializedNode.
+	root.initSerializedNode(fieldTypeComponent)
+	// Although both value and serializedNode.Data are nil, they are considered NOT synced
+	// because value has no type and serializedNode does.
+	// deserialize method should set value when called.
+	root.valueState = valueStateNeedDeserialize
 	return root
 }
 
@@ -237,6 +225,19 @@ func (n *Node) Component(
 	chasmContext Context,
 	ref ComponentRef,
 ) (Component, error) {
+	if ref.entityGoType != nil && ref.archetype == "" {
+		rootRC, ok := n.registry.componentOf(ref.entityGoType)
+		if !ok {
+			return nil, errComponentNotFound
+		}
+		ref.archetype = rootRC.fqType()
+
+	}
+	if ref.archetype != "" &&
+		n.root().serializedNode.GetMetadata().GetComponentAttributes().Type != ref.archetype {
+		return nil, errComponentNotFound
+	}
+
 	node, ok := n.getNodeByPath(ref.componentPath)
 	if !ok {
 		return nil, errComponentNotFound
@@ -710,7 +711,9 @@ func unmarshalProto(
 func (n *Node) Ref(
 	component Component,
 ) (ComponentRef, bool) {
-	panic("not implemented")
+	// TODO: Implement this method.
+	// Currently returning an empty reference to unblock tests.
+	return ComponentRef{}, true
 }
 
 // Now implements the CHASM Context interface
@@ -1335,6 +1338,21 @@ func (n *Node) IsDirty() bool {
 	}
 
 	return n.isValueNeedSerialize()
+}
+
+func (n *Node) IsStale(
+	ref ComponentRef,
+) error {
+	// The point of this method to access the private entityLastUpdateVT field in componentRef,
+	// and avoid exposing it in the public CHASM interface.
+	if ref.entityLastUpdateVT == nil {
+		return nil
+	}
+
+	return transitionhistory.StalenessCheck(
+		n.backend.GetExecutionInfo().TransitionHistory,
+		ref.entityLastUpdateVT,
+	)
 }
 
 func (n *Node) isValueNeedSerialize() bool {

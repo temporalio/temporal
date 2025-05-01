@@ -1,6 +1,7 @@
 package chasm_test
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -43,6 +44,10 @@ func TestRegistry_RegisterComponents_Success(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, "TestLibrary.Component1", rc2.FqType())
 
+	rc2, ok = r.ComponentOf(reflect.TypeOf(cInstance1))
+	require.True(t, ok)
+	require.Equal(t, "TestLibrary.Component1", rc2.FqType())
+
 	cInstance2 := "invalid component instance"
 	rc3, ok := r.ComponentFor(cInstance2)
 	require.False(t, ok)
@@ -82,6 +87,10 @@ func TestRegistry_RegisterTasks_Success(t *testing.T) {
 
 	tInstance1 := testTask2{}
 	rt2, ok := r.TaskFor(tInstance1)
+	require.True(t, ok)
+	require.Equal(t, "TestLibrary.Task2", rt2.FqType())
+
+	rt2, ok = r.TaskOf(reflect.TypeOf(tInstance1))
 	require.True(t, ok)
 	require.Equal(t, "TestLibrary.Task2", rt2.FqType())
 

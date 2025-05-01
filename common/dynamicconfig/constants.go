@@ -2441,6 +2441,12 @@ that task will be sent to DLQ.`,
 		"Enable generating request ID reference links",
 	)
 
+	EnableChasm = NewGlobalBoolSetting(
+		"history.enableChasm",
+		false,
+		"Use real chasm tree implementation instead of the noop one",
+	)
+
 	// keys for worker
 
 	WorkerPersistenceMaxQPS = NewGlobalIntSetting(
