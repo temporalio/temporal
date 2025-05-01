@@ -487,7 +487,6 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 }
 
 func (d *WorkflowRunner) setDrainageStatus(ctx workflow.Context, version string, status enumspb.VersionDrainageStatus) {
-	fmt.Println("drainage status has been set to ", status)
 	if summary := d.State.GetVersions()[version]; summary != nil {
 		summary.DrainageStatus = status
 		summary.DrainageInfo = &deploymentpb.VersionDrainageInfo{

@@ -702,7 +702,6 @@ func (d *VersionWorkflowRunner) newUUID(ctx workflow.Context) string {
 	return val
 }
 
-// TODO (Shivam): Add more fields here to keep version-summary and the version local state in sync.
 // Sync version summary with the WorkerDeployment workflow.
 func (d *VersionWorkflowRunner) syncSummary(ctx workflow.Context) {
 	err := workflow.SignalExternalWorkflow(ctx,
