@@ -258,7 +258,10 @@ func GrpcServerOptionsProvider(
 		logger.Fatal("creating gRPC server options failed", tag.Error(err))
 	}
 	unaryInterceptors := []grpc.UnaryServerInterceptor{
-		// CallerInfoInterceptor needs to be before any interceptors that get namespace from requests
+		// CallerInfoInterceptor and namespaceValidatorInterceptor needs to be before any interceptors that get namespace from requests.
+		// namespaceValidatorInterceptor will extract namespace name from task token if it is not present in request.
+		// callerInfoInterceptor will populate this value in CallerInfo in request context.
+		namespaceValidatorInterceptor.NamespaceValidateIntercept,
 		callerInfoInterceptor.Intercept,
 		// Order or interceptors is important
 		// Mask error interceptor should be the most outer interceptor since it handle the errors format
@@ -266,7 +269,6 @@ func GrpcServerOptionsProvider(
 		maskInternalErrorDetailsInterceptor.Intercept,
 		interceptor.ServiceErrorInterceptor,
 		rpc.NewFrontendServiceErrorInterceptor(logger),
-		namespaceValidatorInterceptor.NamespaceValidateIntercept,
 		namespaceLogInterceptor.Intercept, // TODO: Deprecate this with a outer custom interceptor
 		metrics.NewServerMetricsContextInjectorInterceptor(),
 		authInterceptor.Intercept,
