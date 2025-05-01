@@ -218,7 +218,7 @@ func (i *Redirection) handleLocalAPIInvocation(
 ) (_ any, retError error) {
 	scope, startTime := i.BeforeCall(dcRedirectionMetricsPrefix + methodName)
 	defer func() {
-		i.AfterCall(scope, startTime, i.currentClusterName, retError)
+		i.AfterCall(scope, startTime, i.currentClusterName, "", retError)
 	}()
 	return handler(ctx, req)
 }
@@ -237,10 +237,8 @@ func (i *Redirection) handleRedirectAPIInvocation(
 	var err error
 
 	scope, startTime := i.BeforeCall(dcRedirectionMetricsPrefix + methodName)
-	scope = scope.WithTags(metrics.NamespaceTag(string(namespaceName)))
-
 	defer func() {
-		i.AfterCall(scope, startTime, clusterName, retError)
+		i.AfterCall(scope, startTime, clusterName, namespaceName.String(), retError)
 	}()
 
 	err = i.redirectionPolicy.WithNamespaceRedirect(ctx, namespaceName, methodName, func(targetDC string) error {
@@ -274,11 +272,14 @@ func (i *Redirection) AfterCall(
 	metricsHandler metrics.Handler,
 	startTime time.Time,
 	clusterName string,
+	namespaceName string,
 	retError error,
 ) {
 	metricsHandler = metricsHandler.WithTags(metrics.TargetClusterTag(clusterName))
-	metrics.ClientRedirectionRequests.With(metricsHandler).Record(1)
 	metrics.ClientRedirectionLatency.With(metricsHandler).Record(i.timeSource.Now().Sub(startTime))
+
+	metricsHandler = metricsHandler.WithTags(metrics.NamespaceTag(namespaceName))
+	metrics.ClientRedirectionRequests.With(metricsHandler).Record(1)
 	if retError != nil {
 		metrics.ClientRedirectionFailures.With(metricsHandler).Record(1)
 	}
