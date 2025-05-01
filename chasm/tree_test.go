@@ -375,6 +375,47 @@ func (s *nodeSuite) TestFieldInterface() {
 	s.Equal("sub-component1-data", sc1.GetData())
 }
 
+func (s *nodeSuite) TestCloseTransaction() {
+	node := s.testComponentTree()
+
+	s.Len(node.children, 2)
+	s.NotNil(node.children["SubComponent1"].value)
+	s.Len(node.children["SubComponent1"].children, 2)
+	s.NotNil(node.children["SubComponent1"].children["SubComponent11"].value)
+	s.Empty(node.children["SubComponent1"].children["SubComponent11"].children)
+
+	// Serialize root component.
+	s.NotNil(node.serializedNode.GetMetadata().GetComponentAttributes())
+	s.Nil(node.serializedNode.GetData())
+	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(2)).Times(1) // for LastUpdatesVersionedTransition for TestComponent
+	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(2)).Times(1)
+	err := node.serialize()
+	s.NoError(err)
+	s.NotNil(node.serializedNode)
+	s.NotNil(node.serializedNode.GetData(), "node serialized value must have data after serialize is called")
+	s.Equal("TestLibrary.test_component", node.serializedNode.GetMetadata().GetComponentAttributes().GetType(), "node serialized value must have type set")
+	s.Equal(valueStateSynced, node.valueState)
+
+	// Serialize subcomponents (there are 2 subcomponents).
+	sc1Node := node.children["SubComponent1"]
+	s.NotNil(sc1Node.serializedNode.GetMetadata().GetComponentAttributes())
+	s.Nil(sc1Node.serializedNode.GetData())
+	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(2)).Times(2) // for LastUpdatesVersionedTransition of TestSubComponent1
+	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(2)).Times(2)
+	for _, childNode := range node.children {
+		err = childNode.serialize()
+		s.NoError(err)
+		s.Equal(valueStateSynced, childNode.valueState)
+	}
+	s.NotNil(sc1Node.serializedNode.GetData(), "child node serialized value must have data after serialize is called")
+	s.Equal("TestLibrary.test_sub_component_1", sc1Node.serializedNode.GetMetadata().GetComponentAttributes().GetType(), "node serialized value must have type set")
+
+	// Check SubData too.
+	sd1Node := node.children["SubData1"]
+	s.NoError(err)
+	s.NotNil(sd1Node.serializedNode.GetData(), "child node serialized value must have data after serialize is called")
+}
+
 func (s *nodeSuite) TestGenerateSerializedNodes() {
 	s.T().Skip("This test is used to generate serialized nodes for other tests.")
 
