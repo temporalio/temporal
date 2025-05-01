@@ -504,7 +504,11 @@ func WorkerDeploymentVersionToString(v *deploymentspb.WorkerDeploymentVersion) s
 	if v == nil {
 		return "__unversioned__"
 	}
-	return v.GetDeploymentName() + WorkerDeploymentVersionIdDelimiter + v.GetBuildId()
+	return WorkerDeploymentNameAndVersionToString(v.GetDeploymentName(), v.GetBuildId())
+}
+
+func WorkerDeploymentNameAndVersionToString(deploymentName string, versionName string) string {
+	return deploymentName + WorkerDeploymentVersionIdDelimiter + versionName
 }
 
 func WorkerDeploymentVersionFromString(s string) (*deploymentspb.WorkerDeploymentVersion, error) {

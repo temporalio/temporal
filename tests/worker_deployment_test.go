@@ -34,7 +34,10 @@ import (
 	"time"
 
 	"github.com/dgryski/go-farm"
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
@@ -49,6 +52,7 @@ import (
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/worker/workerdeployment"
 	"go.temporal.io/server/tests/testcore"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -1603,6 +1607,251 @@ func (s *WorkerDeploymentSuite) TestDeleteWorkerDeployment_InvalidDelete() {
 		Identity:       tv1.ClientIdentity(),
 	})
 	s.Error(err)
+}
+
+func (s *WorkerDeploymentSuite) TestGetDeploymentStats() {
+	tv := testvars.New(s)
+
+	ctx, cancel := context.WithTimeout(testcore.NewContext(), time.Second*10)
+	defer cancel()
+
+	tv1 := tv.WithTaskQueueNumber(1)
+	tv2 := tv.WithTaskQueueNumber(2)
+
+	// poll from the task queue to register it as part of the deployment
+	s.startVersionWorkflow(ctx, tv1)
+	s.startVersionWorkflow(ctx, tv2)
+
+	s.Run("Query by deployment version", func() {
+		sortStats := func(resp *workflowservice.GetWorkerDeploymentStatsResponse) {
+			slices.SortFunc(resp.PerQueueMetrics, func(l, r *taskqueuepb.TaskQueueStatsInfo) int {
+				if cmp := strings.Compare(l.TaskQueue.GetName(), r.TaskQueue.GetName()); cmp != 0 {
+					return cmp
+				}
+				return strings.Compare(l.TaskQueueType.String(), r.TaskQueueType.String())
+			})
+		}
+
+		verifyStats := func(expected *workflowservice.GetWorkerDeploymentStatsResponse) {
+			s.T().Helper()
+			sortStats(expected)
+			s.EventuallyWithT(func(t *assert.CollectT) {
+				actual, err := s.FrontendClient().GetWorkerDeploymentStats(
+					ctx,
+					&workflowservice.GetWorkerDeploymentStatsRequest{
+						Namespace:         s.Namespace().String(),
+						DeploymentName:    tv.DeploymentSeries(),
+						DeploymentVersion: tv.BuildID(),
+					})
+				s.NoError(err)
+				sortStats(actual)
+				require.Empty(t, cmp.Diff(actual.PerQueueMetrics, expected.PerQueueMetrics))
+				require.Empty(t, cmp.Diff(actual.PerQueueMetrics, expected.PerQueueMetrics))
+			}, time.Second*5, time.Millisecond*200)
+		}
+
+		generateBacklog := func(tv *testvars.TestVars, count int) {
+			s.T().Helper()
+			for i := 0; i < count; i++ {
+				_, err := s.FrontendClient().StartWorkflowExecution(
+					ctx,
+					&workflowservice.StartWorkflowExecutionRequest{
+						Namespace:           s.Namespace().String(),
+						RequestId:           uuid.NewString(),
+						WorkflowId:          uuid.NewString(),
+						WorkflowType:        tv.WorkflowType(),
+						TaskQueue:           tv.TaskQueue(),
+						WorkflowRunTimeout:  durationpb.New(10 * time.Minute),
+						WorkflowTaskTimeout: durationpb.New(10 * time.Minute),
+						Identity:            tv.ClientIdentity(),
+					})
+				s.NoError(err)
+			}
+		}
+
+		drainBacklog := func(tv *testvars.TestVars, count int) {
+			s.T().Helper()
+			for i := 0; i < count; {
+				resp, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+					Namespace: s.Namespace().String(),
+					TaskQueue: tv.TaskQueue(),
+					Identity:  tv.ClientIdentity(),
+				})
+				s.NoError(err)
+				if resp == nil || resp.GetAttempt() < 1 {
+					continue // poll again on empty responses
+				}
+				i++
+				_, err = s.FrontendClient().RespondWorkflowTaskCompleted(ctx,
+					&workflowservice.RespondWorkflowTaskCompletedRequest{
+						TaskToken: resp.GetTaskToken(),
+					})
+				s.NoError(err)
+			}
+		}
+
+		// no backlog when we start
+		verifyStats(&workflowservice.GetWorkerDeploymentStatsResponse{
+			PerQueueMetrics: []*taskqueuepb.TaskQueueStatsInfo{ // is sorted by task queue name
+				{
+					TaskQueue:     tv1.TaskQueue(),
+					TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+					TaskQueueStats: &taskqueuepb.TaskQueueStats{
+						ApproximateBacklogAge: durationpb.New(0),
+					},
+				},
+				{
+					TaskQueue:     tv2.TaskQueue(),
+					TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+					TaskQueueStats: &taskqueuepb.TaskQueueStats{
+						ApproximateBacklogAge: durationpb.New(0),
+					},
+				},
+			},
+			ApproximateTotalBacklogCount: 0,
+		})
+
+		// generate backlog
+		desiredQueueBacklogSize := 5
+		generateBacklog(tv1, desiredQueueBacklogSize)
+		generateBacklog(tv2, desiredQueueBacklogSize)
+
+		// there is a backlog now
+		verifyStats(&workflowservice.GetWorkerDeploymentStatsResponse{
+			PerQueueMetrics: []*taskqueuepb.TaskQueueStatsInfo{ // is sorted by task queue name
+				{
+					TaskQueue:     tv1.TaskQueue(),
+					TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+					TaskQueueStats: &taskqueuepb.TaskQueueStats{
+						ApproximateBacklogCount: int64(desiredQueueBacklogSize),
+					},
+				},
+				{
+					TaskQueue:     tv2.TaskQueue(),
+					TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+					TaskQueueStats: &taskqueuepb.TaskQueueStats{
+						ApproximateBacklogCount: int64(desiredQueueBacklogSize),
+					},
+				},
+			},
+			ApproximateTotalBacklogCount: int64(2 * desiredQueueBacklogSize),
+		})
+
+		// drain backlog
+		drainBacklog(tv1, desiredQueueBacklogSize)
+		drainBacklog(tv2, desiredQueueBacklogSize)
+
+		// backlog is gone again
+		verifyStats(&workflowservice.GetWorkerDeploymentStatsResponse{
+			PerQueueMetrics: []*taskqueuepb.TaskQueueStatsInfo{ // is sorted by task queue name
+				{
+					TaskQueue:     tv1.TaskQueue(),
+					TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+					TaskQueueStats: &taskqueuepb.TaskQueueStats{
+						ApproximateBacklogAge: durationpb.New(0),
+					},
+				},
+				{
+					TaskQueue:     tv2.TaskQueue(),
+					TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+					TaskQueueStats: &taskqueuepb.TaskQueueStats{
+						ApproximateBacklogAge: durationpb.New(0),
+					},
+				},
+			},
+			ApproximateTotalBacklogCount: 0,
+		})
+	})
+
+	s.Run("Query by deployment name", func() {
+		_, err := s.FrontendClient().GetWorkerDeploymentStats(
+			ctx,
+			&workflowservice.GetWorkerDeploymentStatsRequest{
+				Namespace:      s.Namespace().String(),
+				DeploymentName: tv.DeploymentSeries(),
+				// empty DeploymentVersion means current version, which is unversioned right now
+			})
+		s.ErrorContains(err, "Worker Deployment is unversioned and can not be queried")
+
+		s.setCurrentVersion(ctx, tv, worker_versioning.UnversionedVersionId, true, "")
+
+		_, err = s.FrontendClient().GetWorkerDeploymentStats(
+			ctx,
+			&workflowservice.GetWorkerDeploymentStatsRequest{
+				Namespace:      s.Namespace().String(),
+				DeploymentName: tv.DeploymentSeries(),
+				// empty DeploymentVersion means current version, which is not unversioned anymore now
+			})
+		s.NoError(err) // TODO: fix test
+	})
+
+	s.Run("Error when namespace missing", func() {
+		_, err := s.FrontendClient().GetWorkerDeploymentStats(
+			ctx,
+			&workflowservice.GetWorkerDeploymentStatsRequest{
+				Namespace: "", // empty!
+			})
+		s.ErrorContains(err, "Namespace not set on request")
+	})
+
+	s.Run("Error when deployment name is invalid", func() {
+		_, err := s.FrontendClient().GetWorkerDeploymentStats(
+			ctx,
+			&workflowservice.GetWorkerDeploymentStatsRequest{
+				Namespace: s.Namespace().String(),
+			})
+		s.ErrorContains(err, "WorkerDeploymentName cannot be empty")
+
+		_, err = s.FrontendClient().GetWorkerDeploymentStats(
+			ctx,
+			&workflowservice.GetWorkerDeploymentStatsRequest{
+				Namespace:      s.Namespace().String(),
+				DeploymentName: "in.va.lid",
+			})
+		s.ErrorContains(err, "WorkerDeploymentName cannot contain '.'")
+	})
+
+	s.Run("Error when build id is invalid", func() {
+		_, err := s.FrontendClient().GetWorkerDeploymentStats(
+			ctx,
+			&workflowservice.GetWorkerDeploymentStatsRequest{
+				Namespace:         s.Namespace().String(),
+				DeploymentName:    tv.DeploymentSeries(),
+				DeploymentVersion: "__invalid",
+			})
+		s.ErrorContains(err, "BuildID cannot start with '__'")
+
+		_, err = s.FrontendClient().GetWorkerDeploymentStats(
+			ctx,
+			&workflowservice.GetWorkerDeploymentStatsRequest{
+				Namespace:         s.Namespace().String(),
+				DeploymentName:    tv.DeploymentSeries(),
+				DeploymentVersion: "__unversioned__",
+			})
+		s.ErrorContains(err, "BuildID cannot be unversioned")
+	})
+
+	s.Run("Error when deployment name does not exist", func() {
+		_, err := s.FrontendClient().GetWorkerDeploymentStats(
+			ctx,
+			&workflowservice.GetWorkerDeploymentStatsRequest{
+				Namespace:         s.Namespace().String(),
+				DeploymentName:    "not-found",
+				DeploymentVersion: "not-found",
+			})
+		s.ErrorContains(err, "Worker Deployment not found")
+	})
+
+	s.Run("Error when deployment version does not exist", func() {
+		_, err := s.FrontendClient().GetWorkerDeploymentStats(
+			ctx,
+			&workflowservice.GetWorkerDeploymentStatsRequest{
+				Namespace:         s.Namespace().String(),
+				DeploymentName:    tv.DeploymentSeries(),
+				DeploymentVersion: "not-found",
+			})
+		s.ErrorContains(err, "Worker Deployment not found")
+	})
 }
 
 func (s *WorkerDeploymentSuite) tryDeleteVersion(

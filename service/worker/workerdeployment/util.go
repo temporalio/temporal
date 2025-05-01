@@ -60,6 +60,7 @@ const (
 	AddVersionToWorkerDeployment      = "add-version-to-worker-deployment" // for Worker Deployment wfs
 	DeleteVersion                     = "delete-version"                   // for WorkerDeployment wfs
 	DeleteDeployment                  = "delete-deployment"                // for WorkerDeployment wfs
+	GetStats                          = "describe-stats"                   // for Worker Deployment stats
 
 	// Signals
 	ForceCANSignalName       = "force-continue-as-new" // for Worker Deployment Version _and_ Worker Deployment wfs
@@ -125,29 +126,29 @@ var (
 
 // validateVersionWfParams is a helper that verifies if the fields used for generating
 // Worker Deployment Version related workflowID's are valid
-func validateVersionWfParams(fieldName string, field string, maxIDLengthLimit int) error {
+func validateVersionWfParams(fieldName, fieldValue string, maxIDLengthLimit int) error {
 	// Length checks
-	if field == "" {
+	if fieldValue == "" {
 		return serviceerror.NewInvalidArgument(fmt.Sprintf("%v cannot be empty", fieldName))
 	}
 
 	// Length of each field should be: (MaxIDLengthLimit - (prefix + delimeter length)) / 2
-	if len(field) > (maxIDLengthLimit-WorkerDeploymentVersionWorkflowIDInitialSize)/2 {
+	if len(fieldValue) > (maxIDLengthLimit-WorkerDeploymentVersionWorkflowIDInitialSize)/2 {
 		return serviceerror.NewInvalidArgument(fmt.Sprintf("size of %v larger than the maximum allowed", fieldName))
 	}
 
 	// deploymentName cannot have "."
-	if fieldName == WorkerDeploymentNameFieldName && strings.Contains(field, worker_versioning.WorkerDeploymentVersionIdDelimiter) {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("worker deployment name cannot contain '%s'", worker_versioning.WorkerDeploymentVersionIdDelimiter))
+	if fieldName == WorkerDeploymentNameFieldName && strings.Contains(fieldValue, worker_versioning.WorkerDeploymentVersionIdDelimiter) {
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("%v cannot contain '%s'", fieldName, worker_versioning.WorkerDeploymentVersionIdDelimiter))
 	}
 
 	// buildID or deployment name cannot start with "__"
-	if strings.HasPrefix(field, "__") {
+	if strings.HasPrefix(fieldValue, "__") {
 		return serviceerror.NewInvalidArgument(fmt.Sprintf("%v cannot start with '__'", fieldName))
 	}
 
 	// UTF-8 check
-	return common.ValidateUTF8String(fieldName, field)
+	return common.ValidateUTF8String(fieldName, fieldValue)
 }
 
 func DecodeWorkerDeploymentMemo(memo *commonpb.Memo) *deploymentspb.WorkerDeploymentWorkflowMemo {

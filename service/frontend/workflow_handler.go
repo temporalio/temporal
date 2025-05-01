@@ -3228,6 +3228,37 @@ func (wh *WorkflowHandler) GetCurrentDeployment(ctx context.Context, request *wo
 	}, nil
 }
 
+func (wh *WorkflowHandler) GetWorkerDeploymentStats(
+	ctx context.Context,
+	request *workflowservice.GetWorkerDeploymentStatsRequest,
+) (_ *workflowservice.GetWorkerDeploymentStatsResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if len(request.Namespace) == 0 {
+		return nil, errNamespaceNotSet
+	}
+
+	if !wh.config.EnableDeploymentVersions(request.Namespace) {
+		return nil, errDeploymentsNotAllowed
+	}
+
+	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+	
+	return wh.workerDeploymentClient.GetWorkerDeploymentStats(
+		ctx,
+		namespaceEntry,
+		request.DeploymentName,
+		request.DeploymentVersion,
+	)
+}
+
 // [cleanup-wv-pre-release]
 func (wh *WorkflowHandler) ListDeployments(
 	ctx context.Context,

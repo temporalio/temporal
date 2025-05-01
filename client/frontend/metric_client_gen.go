@@ -369,6 +369,20 @@ func (c *metricClient) GetSystemInfo(
 	return c.client.GetSystemInfo(ctx, request, opts...)
 }
 
+func (c *metricClient) GetTaskQueueStats(
+	ctx context.Context,
+	request *workflowservice.GetTaskQueueStatsRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.GetTaskQueueStatsResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientGetTaskQueueStats")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.GetTaskQueueStats(ctx, request, opts...)
+}
+
 func (c *metricClient) GetWorkerBuildIdCompatibility(
 	ctx context.Context,
 	request *workflowservice.GetWorkerBuildIdCompatibilityRequest,
@@ -381,6 +395,20 @@ func (c *metricClient) GetWorkerBuildIdCompatibility(
 	}()
 
 	return c.client.GetWorkerBuildIdCompatibility(ctx, request, opts...)
+}
+
+func (c *metricClient) GetWorkerDeploymentStats(
+	ctx context.Context,
+	request *workflowservice.GetWorkerDeploymentStatsRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.GetWorkerDeploymentStatsResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientGetWorkerDeploymentStats")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.GetWorkerDeploymentStats(ctx, request, opts...)
 }
 
 func (c *metricClient) GetWorkerTaskReachability(

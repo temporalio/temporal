@@ -346,6 +346,26 @@ func (mr *MockMatchingServiceClientMockRecorder) GetBuildIdTaskQueueMapping(ctx,
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBuildIdTaskQueueMapping", reflect.TypeOf((*MockMatchingServiceClient)(nil).GetBuildIdTaskQueueMapping), varargs...)
 }
 
+// GetTaskQueueStats mocks base method.
+func (m *MockMatchingServiceClient) GetTaskQueueStats(ctx context.Context, in *matchingservice.GetTaskQueueStatsRequest, opts ...grpc.CallOption) (*matchingservice.GetTaskQueueStatsResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "GetTaskQueueStats", varargs...)
+	ret0, _ := ret[0].(*matchingservice.GetTaskQueueStatsResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetTaskQueueStats indicates an expected call of GetTaskQueueStats.
+func (mr *MockMatchingServiceClientMockRecorder) GetTaskQueueStats(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTaskQueueStats", reflect.TypeOf((*MockMatchingServiceClient)(nil).GetTaskQueueStats), varargs...)
+}
+
 // GetTaskQueueUserData mocks base method.
 func (m *MockMatchingServiceClient) GetTaskQueueUserData(ctx context.Context, in *matchingservice.GetTaskQueueUserDataRequest, opts ...grpc.CallOption) (*matchingservice.GetTaskQueueUserDataResponse, error) {
 	m.ctrl.T.Helper()
@@ -938,6 +958,21 @@ func (m *MockMatchingServiceServer) GetBuildIdTaskQueueMapping(arg0 context.Cont
 func (mr *MockMatchingServiceServerMockRecorder) GetBuildIdTaskQueueMapping(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBuildIdTaskQueueMapping", reflect.TypeOf((*MockMatchingServiceServer)(nil).GetBuildIdTaskQueueMapping), arg0, arg1)
+}
+
+// GetTaskQueueStats mocks base method.
+func (m *MockMatchingServiceServer) GetTaskQueueStats(arg0 context.Context, arg1 *matchingservice.GetTaskQueueStatsRequest) (*matchingservice.GetTaskQueueStatsResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetTaskQueueStats", arg0, arg1)
+	ret0, _ := ret[0].(*matchingservice.GetTaskQueueStatsResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetTaskQueueStats indicates an expected call of GetTaskQueueStats.
+func (mr *MockMatchingServiceServerMockRecorder) GetTaskQueueStats(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTaskQueueStats", reflect.TypeOf((*MockMatchingServiceServer)(nil).GetTaskQueueStats), arg0, arg1)
 }
 
 // GetTaskQueueUserData mocks base method.

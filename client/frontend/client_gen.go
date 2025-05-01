@@ -273,6 +273,16 @@ func (c *clientImpl) GetSystemInfo(
 	return c.client.GetSystemInfo(ctx, request, opts...)
 }
 
+func (c *clientImpl) GetTaskQueueStats(
+	ctx context.Context,
+	request *workflowservice.GetTaskQueueStatsRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.GetTaskQueueStatsResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.GetTaskQueueStats(ctx, request, opts...)
+}
+
 func (c *clientImpl) GetWorkerBuildIdCompatibility(
 	ctx context.Context,
 	request *workflowservice.GetWorkerBuildIdCompatibilityRequest,
@@ -281,6 +291,16 @@ func (c *clientImpl) GetWorkerBuildIdCompatibility(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.GetWorkerBuildIdCompatibility(ctx, request, opts...)
+}
+
+func (c *clientImpl) GetWorkerDeploymentStats(
+	ctx context.Context,
+	request *workflowservice.GetWorkerDeploymentStatsRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.GetWorkerDeploymentStatsResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.GetWorkerDeploymentStats(ctx, request, opts...)
 }
 
 func (c *clientImpl) GetWorkerTaskReachability(

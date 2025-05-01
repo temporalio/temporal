@@ -546,6 +546,26 @@ func (mr *MockWorkflowServiceClientMockRecorder) GetSystemInfo(ctx, in any, opts
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSystemInfo", reflect.TypeOf((*MockWorkflowServiceClient)(nil).GetSystemInfo), varargs...)
 }
 
+// GetTaskQueueStats mocks base method.
+func (m *MockWorkflowServiceClient) GetTaskQueueStats(ctx context.Context, in *workflowservice.GetTaskQueueStatsRequest, opts ...grpc.CallOption) (*workflowservice.GetTaskQueueStatsResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "GetTaskQueueStats", varargs...)
+	ret0, _ := ret[0].(*workflowservice.GetTaskQueueStatsResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetTaskQueueStats indicates an expected call of GetTaskQueueStats.
+func (mr *MockWorkflowServiceClientMockRecorder) GetTaskQueueStats(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTaskQueueStats", reflect.TypeOf((*MockWorkflowServiceClient)(nil).GetTaskQueueStats), varargs...)
+}
+
 // GetWorkerBuildIdCompatibility mocks base method.
 func (m *MockWorkflowServiceClient) GetWorkerBuildIdCompatibility(ctx context.Context, in *workflowservice.GetWorkerBuildIdCompatibilityRequest, opts ...grpc.CallOption) (*workflowservice.GetWorkerBuildIdCompatibilityResponse, error) {
 	m.ctrl.T.Helper()
@@ -564,6 +584,26 @@ func (mr *MockWorkflowServiceClientMockRecorder) GetWorkerBuildIdCompatibility(c
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkerBuildIdCompatibility", reflect.TypeOf((*MockWorkflowServiceClient)(nil).GetWorkerBuildIdCompatibility), varargs...)
+}
+
+// GetWorkerDeploymentStats mocks base method.
+func (m *MockWorkflowServiceClient) GetWorkerDeploymentStats(ctx context.Context, in *workflowservice.GetWorkerDeploymentStatsRequest, opts ...grpc.CallOption) (*workflowservice.GetWorkerDeploymentStatsResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "GetWorkerDeploymentStats", varargs...)
+	ret0, _ := ret[0].(*workflowservice.GetWorkerDeploymentStatsResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetWorkerDeploymentStats indicates an expected call of GetWorkerDeploymentStats.
+func (mr *MockWorkflowServiceClientMockRecorder) GetWorkerDeploymentStats(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkerDeploymentStats", reflect.TypeOf((*MockWorkflowServiceClient)(nil).GetWorkerDeploymentStats), varargs...)
 }
 
 // GetWorkerTaskReachability mocks base method.
