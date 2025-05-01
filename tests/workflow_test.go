@@ -1047,6 +1047,8 @@ func (s *WorkflowTestSuite) TestSequentialWorkflow() {
 		s.Equal(tv.ActivityType().Name, task.ActivityType.Name)
 		s.Equal(tv.WithActivityIDNumber(int(expectedActivity)).ActivityID(), task.ActivityId)
 		s.Equal(expectedActivity, s.DecodePayloadsByteSliceInt32(task.Input))
+		s.NotNil(task.RetryPolicy)
+		s.Equal(int64(1), task.RetryPolicy.InitialInterval.Seconds) // server default
 		expectedActivity++
 
 		return payloads.EncodeString("Activity Result"), false, nil
