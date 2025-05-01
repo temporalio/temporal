@@ -66,13 +66,19 @@ func NewWorkflowClosedTrigger() *persistencespb.CallbackInfo_Trigger {
 }
 
 // NewCallback creates a new callback in the STANDBY state from given params.
-func NewCallback(registrationTime *timestamppb.Timestamp, trigger *persistencespb.CallbackInfo_Trigger, cb *persistencespb.Callback) Callback {
+func NewCallback(
+	requestId string,
+	registrationTime *timestamppb.Timestamp,
+	trigger *persistencespb.CallbackInfo_Trigger,
+	cb *persistencespb.Callback,
+) Callback {
 	return Callback{
 		&persistencespb.CallbackInfo{
 			Trigger:          trigger,
 			Callback:         cb,
 			State:            enumsspb.CALLBACK_STATE_STANDBY,
 			RegistrationTime: registrationTime,
+			RequestId:        requestId,
 		},
 	}
 }

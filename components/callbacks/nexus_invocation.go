@@ -50,7 +50,7 @@ var retryable4xxErrorTypes = []int{
 }
 
 type CanGetNexusCompletion interface {
-	GetNexusCompletion(ctx context.Context) (nexus.OperationCompletion, error)
+	GetNexusCompletion(ctx context.Context, requestID string) (nexus.OperationCompletion, error)
 }
 
 type nexusInvocation struct {

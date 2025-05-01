@@ -480,7 +480,7 @@ func TestGetNexusCompletion(t *testing.T) {
 			sealMutableState(t, ms, event)
 
 			events.EXPECT().GetEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(event, nil).Times(1)
-			completion, err := ms.GetNexusCompletion(context.Background())
+			completion, err := ms.GetNexusCompletion(context.Background(), "")
 			require.NoError(t, err)
 			tc.verifyCompletion(t, completion)
 		})

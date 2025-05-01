@@ -598,23 +598,40 @@ func (ms *MutableStateImpl) ChasmTree() historyi.ChasmTree {
 // GetNexusCompletion converts a workflow completion event into a [nexus.OperationCompletion].
 // Completions may be sent to arbitrary third parties, we intentionally do not include any termination reasons, and
 // expose only failure messages.
-func (ms *MutableStateImpl) GetNexusCompletion(ctx context.Context) (nexus.OperationCompletion, error) {
+func (ms *MutableStateImpl) GetNexusCompletion(
+	ctx context.Context,
+	requestID string,
+) (nexus.OperationCompletion, error) {
 	ce, err := ms.GetCompletionEvent(ctx)
 	if err != nil {
 		return nil, err
 	}
+
 	// Create the link information about the workflow to be attached to fabricated started event if completion is
 	// received before start response.
-	startLink := temporalnexus.ConvertLinkWorkflowEventToNexusLink(&commonpb.Link_WorkflowEvent{
+	link := &commonpb.Link_WorkflowEvent{
 		Namespace:  ms.namespaceEntry.Name().String(),
 		WorkflowId: ms.executionInfo.WorkflowId,
 		RunId:      ms.executionState.RunId,
+		// Backwards compatibility: this is the default link type.
 		Reference: &commonpb.Link_WorkflowEvent_EventRef{
 			EventRef: &commonpb.Link_WorkflowEvent_EventReference{
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 			},
 		},
-	})
+	}
+	requestIDInfo := ms.executionState.RequestIds[requestID]
+	if requestIDInfo.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED {
+		// If the callback was attached, then replace with RequestIdReference.
+		link.Reference = &commonpb.Link_WorkflowEvent_RequestIdRef{
+			RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
+				RequestId: requestID,
+				EventType: requestIDInfo.GetEventType(),
+			},
+		}
+	}
+	startLink := temporalnexus.ConvertLinkWorkflowEventToNexusLink(link)
+
 	switch ce.GetEventType() {
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:
 		payloads := ce.GetWorkflowExecutionCompletedEventAttributes().GetResult().GetPayloads()
@@ -2601,7 +2618,7 @@ func (ms *MutableStateImpl) addCompletionCallbacks(
 				return err
 			}
 		}
-		machine := callbacks.NewCallback(event.EventTime, callbacks.NewWorkflowClosedTrigger(), persistenceCB)
+		machine := callbacks.NewCallback(requestID, event.EventTime, callbacks.NewWorkflowClosedTrigger(), persistenceCB)
 		id := ""
 		// This is for backwards compatibility: callbacks were initially only attached when the workflow
 		// execution started, but now they can be attached while the workflow is running.
