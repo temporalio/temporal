@@ -327,7 +327,9 @@ func (s *Starter) handleConflict(
 
 		if requestIDInfo.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
 			resp, err := s.respondToRetriedRequest(ctx, currentWorkflowConditionFailed.RunID)
-			resp.Status = currentWorkflowConditionFailed.Status
+			if resp != nil {
+				resp.Status = currentWorkflowConditionFailed.Status
+			}
 			return resp, StartDeduped, err
 		}
 
