@@ -288,27 +288,37 @@ func getCompletionCallbacksAsProtoSlice(ms historyi.MutableState) ([]*commonpb.C
 		if _, ok := cb.Trigger.Variant.(*persistencespb.CallbackInfo_Trigger_WorkflowClosed); !ok {
 			continue
 		}
-		cbSpec := &commonpb.Callback{}
-		switch variant := cb.Callback.Variant.(type) {
-		case *persistencespb.Callback_Nexus_:
-			cbSpec.Variant = &commonpb.Callback_Nexus_{
-				Nexus: &commonpb.Callback_Nexus{
-					Url:    variant.Nexus.GetUrl(),
-					Header: variant.Nexus.GetHeader(),
-				},
-			}
-		default:
-			data, err := proto.Marshal(cb.Callback)
-			if err != nil {
-				return nil, err
-			}
-			cbSpec.Variant = &commonpb.Callback_Internal_{
-				Internal: &commonpb.Callback_Internal{
-					Data: data,
-				},
-			}
+		cbSpec, err := PersistenceCallbackToAPICallback(cb.Callback)
+		if err != nil {
+			return nil, err
 		}
 		result = append(result, cbSpec)
 	}
 	return result, nil
+}
+
+func PersistenceCallbackToAPICallback(cb *persistencespb.Callback) (*commonpb.Callback, error) {
+	res := &commonpb.Callback{
+		Links: cb.GetLinks(),
+	}
+	switch variant := cb.Variant.(type) {
+	case *persistencespb.Callback_Nexus_:
+		res.Variant = &commonpb.Callback_Nexus_{
+			Nexus: &commonpb.Callback_Nexus{
+				Url:    variant.Nexus.GetUrl(),
+				Header: variant.Nexus.GetHeader(),
+			},
+		}
+	default:
+		data, err := proto.Marshal(cb)
+		if err != nil {
+			return nil, err
+		}
+		res.Variant = &commonpb.Callback_Internal_{
+			Internal: &commonpb.Callback_Internal{
+				Data: data,
+			},
+		}
+	}
+	return res, nil
 }

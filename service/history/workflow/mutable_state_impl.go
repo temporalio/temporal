@@ -2603,7 +2603,9 @@ func (ms *MutableStateImpl) addCompletionCallbacks(
 		))
 	}
 	for idx, cb := range completionCallbaks {
-		persistenceCB := &persistencespb.Callback{}
+		persistenceCB := &persistencespb.Callback{
+			Links: cb.GetLinks(),
+		}
 		switch variant := cb.Variant.(type) {
 		case *commonpb.Callback_Nexus_:
 			persistenceCB.Variant = &persistencespb.Callback_Nexus_{
