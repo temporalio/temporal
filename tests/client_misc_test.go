@@ -37,6 +37,7 @@ import (
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
@@ -128,11 +129,13 @@ func (s *ClientMiscTestSuite) TestTooManyChildWorkflows() {
 	future, err := s.SdkClient().ExecuteWorkflow(ctx, options, parentWorkflow)
 	s.NoError(err)
 
-	s.HistoryContainsFailureCausedBy(
-		ctx,
-		parentWorkflowId,
-		enumspb.WORKFLOW_TASK_FAILED_CAUSE_PENDING_CHILD_WORKFLOWS_LIMIT_EXCEEDED,
-	)
+	s.WaitForHistoryEventsSuffix(`
+ WorkflowTaskScheduled
+ WorkflowTaskStarted // 26 below is enumspb.WORKFLOW_TASK_FAILED_CAUSE_PENDING_CHILD_WORKFLOWS_LIMIT_EXCEEDED
+ WorkflowTaskFailed {"Cause":26,"Failure":{"Message":"PendingChildWorkflowsLimitExceeded: the number of pending child workflow executions, 10, has reached the per-workflow limit of 10"}}
+`, func() []*historypb.HistoryEvent {
+		return s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: parentWorkflowId})
+	}, 10*time.Second, 500*time.Millisecond)
 
 	// unblock the last child, allowing it to complete, which lowers the number of pending child workflows
 	s.NoError(s.SdkClient().SignalWorkflow(
@@ -144,9 +147,9 @@ func (s *ClientMiscTestSuite) TestTooManyChildWorkflows() {
 	))
 
 	// verify that the parent workflow completes soon after the number of pending child workflows drops
-	s.EventuallySucceeds(ctx, func(ctx context.Context) error {
-		return future.Get(ctx, nil)
-	})
+	s.Eventually(func() bool {
+		return future.Get(ctx, nil) == nil
+	}, 20*time.Second, 500*time.Millisecond)
 }
 
 // TestTooManyPendingActivities verifies that we don't allow users to schedule new activities when they've already
@@ -209,17 +212,19 @@ func (s *ClientMiscTestSuite) TestTooManyPendingActivities() {
 
 	// verify that the workflow's history contains a task that failed because it would otherwise exceed the pending
 	// child workflow limit
-	s.HistoryContainsFailureCausedBy(
-		ctx,
-		workflowId,
-		enumspb.WORKFLOW_TASK_FAILED_CAUSE_PENDING_ACTIVITIES_LIMIT_EXCEEDED,
-	)
+	s.WaitForHistoryEventsSuffix(`
+ 19 WorkflowTaskScheduled
+ 20 WorkflowTaskStarted // 27 below is enumspb.WORKFLOW_TASK_FAILED_CAUSE_PENDING_ACTIVITIES_LIMIT_EXCEEDED
+ 21 WorkflowTaskFailed {"Cause":27,"Failure":{"Message":"PendingActivitiesLimitExceeded: the number of pending activities, 10, has reached the per-workflow limit of 10"}}
+`, func() []*historypb.HistoryEvent {
+		return s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: workflowRun.GetID(), RunId: workflowRun.GetRunID()})
+	}, 3*time.Second, 500*time.Millisecond)
 
 	// mark one of the pending activities as complete and verify that the workflow can now complete
 	s.NoError(s.SdkClient().CompleteActivity(ctx, activityInfo.TaskToken, nil, nil))
-	s.EventuallySucceeds(ctx, func(ctx context.Context) error {
-		return workflowRun.Get(ctx, nil)
-	})
+	s.Eventually(func() bool {
+		return workflowRun.Get(ctx, nil) == nil
+	}, 10*time.Second, 500*time.Millisecond)
 }
 
 func (s *ClientMiscTestSuite) TestTooManyCancelRequests() {
@@ -267,7 +272,16 @@ func (s *ClientMiscTestSuite) TestTooManyCancelRequests() {
 			ID:        cancelerWorkflowId,
 		}, cancelWorkflowsInRange, 0, numTargetWorkflows)
 		s.NoError(err)
-		s.HistoryContainsFailureCausedBy(ctx, cancelerWorkflowId, enumspb.WORKFLOW_TASK_FAILED_CAUSE_PENDING_REQUEST_CANCEL_LIMIT_EXCEEDED)
+
+		s.WaitForHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted // 29 below is enumspb.WORKFLOW_TASK_FAILED_CAUSE_PENDING_REQUEST_CANCEL_LIMIT_EXCEEDED
+  4 WorkflowTaskFailed {"Cause":29,"Failure":{"Message":"PendingRequestCancelLimitExceeded: the number of pending requests to cancel external workflows, 10, has reached the per-workflow limit of 10"}}
+`, func() []*historypb.HistoryEvent {
+			return s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()})
+		}, 3*time.Second, 500*time.Millisecond)
+
 		{
 			ctx, cancel := context.WithTimeout(ctx, time.Second*3)
 			defer cancel()
@@ -356,11 +370,16 @@ func (s *ClientMiscTestSuite) TestTooManyPendingSignals() {
 			err := senderRun.Get(ctx, nil)
 			s.Error(err)
 		}
-		s.HistoryContainsFailureCausedBy(
-			ctx,
-			senderId,
-			enumspb.WORKFLOW_TASK_FAILED_CAUSE_PENDING_SIGNALS_LIMIT_EXCEEDED,
-		)
+
+		s.WaitForHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted // 28 below is enumspb.WORKFLOW_TASK_FAILED_CAUSE_PENDING_SIGNALS_LIMIT_EXCEEDED
+  4 WorkflowTaskFailed {"Cause":28,"Failure":{"Message":"PendingSignalsLimitExceeded: the number of pending signals to external workflows, 10, has reached the per-workflow limit of 10"}}
+`, func() []*historypb.HistoryEvent {
+			return s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: senderRun.GetID(), RunId: senderRun.GetRunID()})
+		}, 3*time.Second, 500*time.Millisecond)
+
 		s.NoError(s.SdkClient().CancelWorkflow(ctx, senderId, ""))
 	})
 

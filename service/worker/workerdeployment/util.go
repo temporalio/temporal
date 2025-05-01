@@ -88,17 +88,17 @@ const (
 	errVersionAlreadyExistsType   = "errVersionAlreadyExists"
 	errMaxTaskQueuesInVersionType = "errMaxTaskQueuesInVersion"
 	errVersionAlreadyCurrentType  = "errVersionAlreadyCurrent"
-	errVersionIsDraining          = "Version cannot be deleted since it is draining."
 	errVersionNotFound            = "Version not found in deployment"
-	errVersionHasPollers          = "Version cannot be deleted since it has active pollers."
-	errVersionIsCurrentOrRamping  = "Version cannot be deleted since it is current or ramping."
-	errConflictTokenMismatchType  = "errConflictTokenMismatch"
-	errFailedPrecondition         = "FailedPrecondition"
+
+	errConflictTokenMismatchType = "errConflictTokenMismatch"
+	errFailedPrecondition        = "FailedPrecondition"
+
+	ErrVersionIsDraining         = "Version cannot be deleted since it is draining."
+	ErrVersionHasPollers         = "Version cannot be deleted since it has active pollers."
+	ErrVersionIsCurrentOrRamping = "Version cannot be deleted since it is current or ramping."
 
 	ErrRampingVersionDoesNotHaveAllTaskQueues = "proposed ramping version is missing active task queues from the current version; these would become unversioned if it is set as the ramping version"
 	ErrCurrentVersionDoesNotHaveAllTaskQueues = "proposed current version is missing active task queues from the current version; these would become unversioned if it is set as the current version"
-
-	syncBatchSize = 25
 )
 
 var (

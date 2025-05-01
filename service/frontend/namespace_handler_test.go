@@ -1712,13 +1712,15 @@ func (s *namespaceHandlerCommonSuite) TestFailoverGlobalNamespace_NotMaster() {
 
 func (s *namespaceHandlerCommonSuite) TestCreateWorkflowRule_Acceptance() {
 	namespaceName := "test-namespace"
+	identity := "identity"
+	description := "description"
 	spec := &rulespb.WorkflowRuleSpec{
 		Id: "",
 	}
 	version := int64(100)
 
 	// first call returns error, because ID is not set
-	_, err := s.handler.CreateWorkflowRule(context.Background(), spec, namespaceName)
+	_, err := s.handler.CreateWorkflowRule(context.Background(), spec, identity, description, namespaceName)
 	s.Error(err)
 
 	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{
@@ -1737,15 +1739,19 @@ func (s *namespaceHandlerCommonSuite) TestCreateWorkflowRule_Acceptance() {
 	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).Return(nil)
 
 	spec.Id = "test-id"
-	rule, err := s.handler.CreateWorkflowRule(context.Background(), spec, namespaceName)
+	rule, err := s.handler.CreateWorkflowRule(context.Background(), spec, identity, description, namespaceName)
 	s.NoError(err)
 	s.NotNil(rule)
 	s.NotNil(rule.Spec)
 	s.NotNil(rule.CreateTime)
+	s.Equal(identity, rule.CreatedByIdentity)
+	s.Equal(description, rule.Description)
 }
 
 func (s *namespaceHandlerCommonSuite) TestCreateWorkflowRule_Duplicate() {
 	namespaceName := "test-namespace"
+	identity := "identity"
+	description := "description"
 	ruleId := "test-id"
 	spec := &rulespb.WorkflowRuleSpec{
 		Id: ruleId,
@@ -1763,7 +1769,7 @@ func (s *namespaceHandlerCommonSuite) TestCreateWorkflowRule_Duplicate() {
 			},
 			Config: &persistencespb.NamespaceConfig{
 				WorkflowRules: map[string]*rulespb.WorkflowRule{
-					ruleId: &rulespb.WorkflowRule{
+					ruleId: {
 						Spec: &rulespb.WorkflowRuleSpec{Id: ruleId},
 					},
 				},
@@ -1772,7 +1778,7 @@ func (s *namespaceHandlerCommonSuite) TestCreateWorkflowRule_Duplicate() {
 		},
 	}, nil)
 
-	_, err := s.handler.CreateWorkflowRule(context.Background(), spec, namespaceName)
+	_, err := s.handler.CreateWorkflowRule(context.Background(), spec, identity, description, namespaceName)
 	s.Error(err)
 	var invalidArgument *serviceerror.InvalidArgument
 	s.ErrorAs(err, &invalidArgument)

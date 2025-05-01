@@ -65,7 +65,10 @@ func (ctx *ctxWithDeadline) deadlineExceeded() {
 
 func (ctx *ctxWithDeadline) cancel() {
 	ctx.once.Do(func() {
-		ctx.timer.Stop()
+		// We'd like to call ctx.timer.Stop() here, but we can't: the time source may call
+		// deadlineExceeded while holding its lock, which acquires the once mutex. Here we have
+		// the once mutex and want to cancel a timer, which would create a potential lock
+		// cycle. So just leave the timer as a no-op.
 		ctx.err = context.Canceled
 		close(ctx.done)
 	})

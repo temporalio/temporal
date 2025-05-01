@@ -1,8 +1,6 @@
 // The MIT License
 //
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
+// Copyright (c) 2025 Temporal Technologies Inc.  All rights reserved.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -22,13 +20,19 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+// TODO: move this to chasm_test package
 package chasm
 
-type fieldType int
+import (
+	commonpb "go.temporal.io/api/common/v1"
+)
 
-const (
-	fieldTypeUnspecified fieldType = iota
-	fieldTypeComponent
-	fieldTypeComponentPointer
-	fieldTypeData
+type (
+	TestSideEffectTask = commonpb.Payload
+
+	TestOutboundSideEffectTask struct{}
+
+	TestPureTask struct {
+		Payload *commonpb.Payload
+	}
 )

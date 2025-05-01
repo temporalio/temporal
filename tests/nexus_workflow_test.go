@@ -218,9 +218,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelation() {
 		WorkflowId: run.GetID(),
 		RunId:      run.GetRunID(),
 	})
-	s.ContainsHistoryEvents(`
-NexusOperationCancelRequestFailed
-NexusOperationCancelRequestCompleted`, hist)
+	s.ContainsHistoryEvents(`NexusOperationCancelRequestCompleted`, hist)
 }
 
 func (s *NexusWorkflowTestSuite) TestNexusOperationSyncCompletion() {
@@ -2421,12 +2419,9 @@ func (s *NexusWorkflowTestSuite) TestNexusAsyncOperationWithMultipleCallers() {
 		{
 			input: "conflict-policy-use-existing",
 			checkOutput: func(t *testing.T, res CallerWfOutput, err error) {
-				// TODO(rodrigozhou): The SDK is temporarily blocking this. Remove this check and uncomment
-				// the checks below after SDK unblocks this.
-				require.ErrorContains(t, err, "workflow ID conflict policy UseExisting is not supported for Nexus WorkflowRunOperation")
-				// require.NoError(t, err)
-				// require.EqualValues(t, numCalls, res.CntOk)
-				// require.EqualValues(t, 0, res.CntErr)
+				require.NoError(t, err)
+				require.EqualValues(t, numCalls, res.CntOk)
+				require.EqualValues(t, 0, res.CntErr)
 			},
 		},
 	}

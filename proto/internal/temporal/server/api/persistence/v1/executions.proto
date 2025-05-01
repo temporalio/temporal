@@ -588,6 +588,7 @@ message ActivityInfo {
             // Reason for pausing the activity.
             string reason = 2;
         }
+
         oneof paused_by {
             // activity was paused by the manual intervention
             Manual manual = 2;

@@ -25,16 +25,11 @@
 package testcore
 
 import (
-	"context"
 	"errors"
-	"fmt"
 	"time"
 
-	enumspb "go.temporal.io/api/enums/v1"
-	historypb "go.temporal.io/api/history/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
-	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/components/callbacks"
@@ -87,6 +82,7 @@ func (s *FunctionalTestSdkSuite) SetupSuite() {
 		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs.Key():      true,
 		dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace.Key(): ClientSuiteLimit,
 		dynamicconfig.RefreshNexusEndpointsMinWait.Key():                    1 * time.Millisecond,
+		nexusoperations.RecordCancelRequestCompletionEvents.Key():           true,
 		callbacks.AllowedAddresses.Key():                                    []any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
 	}
 
@@ -125,45 +121,4 @@ func (s *FunctionalTestSdkSuite) TearDownTest() {
 		s.sdkClient.Close()
 	}
 	s.FunctionalTestBase.TearDownTest()
-}
-
-func (s *FunctionalTestSdkSuite) EventuallySucceeds(ctx context.Context, operationCtx backoff.OperationCtx) {
-	s.T().Helper()
-	s.NoError(backoff.ThrottleRetryContext(
-		ctx,
-		operationCtx,
-		backoff.NewExponentialRetryPolicy(time.Second),
-		func(err error) bool {
-			// all errors are retryable
-			return true
-		},
-	))
-}
-
-func (s *FunctionalTestSdkSuite) HistoryContainsFailureCausedBy(
-	ctx context.Context,
-	workflowId string,
-	cause enumspb.WorkflowTaskFailedCause,
-) {
-	s.T().Helper()
-	s.EventuallySucceeds(ctx, func(ctx context.Context) error {
-		history := s.sdkClient.GetWorkflowHistory(
-			ctx,
-			workflowId,
-			"",
-			true,
-			enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT,
-		)
-		for history.HasNext() {
-			event, err := history.Next()
-			s.NoError(err)
-			switch a := event.Attributes.(type) {
-			case *historypb.HistoryEvent_WorkflowTaskFailedEventAttributes:
-				if a.WorkflowTaskFailedEventAttributes.Cause == cause {
-					return nil
-				}
-			}
-		}
-		return fmt.Errorf("did not find a failed task whose cause was %q", cause)
-	})
 }

@@ -118,6 +118,7 @@ message StartWorkflowExecutionResponse {
     // Set if request_eager_execution is set on the start request
     temporal.api.workflowservice.v1.PollWorkflowTaskQueueResponse eager_workflow_task = 3;
     bool started = 4;
+    temporal.api.enums.v1.WorkflowExecutionStatus status = 5;
 }
 
 message GetMutableStateRequest {

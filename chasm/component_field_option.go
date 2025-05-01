@@ -24,11 +24,16 @@
 
 package chasm
 
-type fieldType int
+type (
+	componentFieldOptions struct {
+		detached bool
+	}
 
-const (
-	fieldTypeUnspecified fieldType = iota
-	fieldTypeComponent
-	fieldTypeComponentPointer
-	fieldTypeData
+	ComponentFieldOption func(*componentFieldOptions)
 )
+
+func ComponentFieldDetached() ComponentFieldOption {
+	return func(o *componentFieldOptions) {
+		o.detached = true
+	}
+}

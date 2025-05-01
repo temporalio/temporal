@@ -205,7 +205,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes() {
 		},
 		{
 			name:     "handler_error",
-			outcome:  "handler_error",
+			outcome:  "handler_error:INTERNAL",
 			endpoint: s.createNexusEndpoint(testcore.RandomizeStr("test-endpoint"), testcore.RandomizeStr("task-queue")),
 			handler: func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
 				return nil, &nexuspb.HandlerError{
@@ -224,7 +224,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes() {
 		},
 		{
 			name:     "handler_error_non_retryable",
-			outcome:  "handler_error",
+			outcome:  "handler_error:INTERNAL",
 			endpoint: s.createNexusEndpoint(testcore.RandomizeStr("test-endpoint"), testcore.RandomizeStr("task-queue")),
 			handler: func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
 				return nil, &nexuspb.HandlerError{
@@ -674,7 +674,7 @@ func (s *NexusApiTestSuite) TestNexusCancelOperation_Outcomes() {
 			},
 		},
 		{
-			outcome:  "handler_error",
+			outcome:  "handler_error:INTERNAL",
 			endpoint: s.createNexusEndpoint(testcore.RandomizeStr("test-endpoint"), testcore.RandomizeStr("task-queue")),
 			handler: func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
 				return nil, &nexuspb.HandlerError{

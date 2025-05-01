@@ -24,11 +24,4 @@
 
 package chasm
 
-type fieldType int
-
-const (
-	fieldTypeUnspecified fieldType = iota
-	fieldTypeComponent
-	fieldTypeComponentPointer
-	fieldTypeData
-)
+type Collection[T any] map[string]Field[T]

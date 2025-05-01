@@ -1069,7 +1069,8 @@ func (s *scheduler) updateCustomSearchAttributes(searchAttributes *commonpb.Sear
 	}
 
 	upsertMap := map[string]any{}
-	for key, valuePayload := range searchAttributes.GetIndexedFields() {
+	for _, key := range workflow.DeterministicKeys(searchAttributes.GetIndexedFields()) {
+		valuePayload := searchAttributes.GetIndexedFields()[key]
 		var value any
 		if err := payload.Decode(valuePayload, &value); err != nil {
 			s.logger.Error("error updating search attributes of the scheule", "error", err)
@@ -1080,7 +1081,8 @@ func (s *scheduler) updateCustomSearchAttributes(searchAttributes *commonpb.Sear
 
 	//nolint:staticcheck // SA1019 Use untyped version for backwards compatibility.
 	currentSearchAttributes := workflow.GetInfo(s.ctx).SearchAttributes
-	for key, currentValuePayload := range currentSearchAttributes.GetIndexedFields() {
+	for _, key := range workflow.DeterministicKeys(currentSearchAttributes.GetIndexedFields()) {
+		currentValuePayload := currentSearchAttributes.GetIndexedFields()[key]
 		// This might violate determinism when a new system search attribute is added
 		// and the user already had a custom search attribute with same name. This is
 		// a general issue in the system, and it will be fixed when we introduce
@@ -1117,7 +1119,7 @@ func (s *scheduler) updateMemoAndSearchAttributes() {
 	if currentInfoPayload == nil ||
 		payload.Decode(currentInfoPayload, &currentInfoBytes) != nil ||
 		currentInfo.Unmarshal(currentInfoBytes) != nil ||
-		!proto.Equal(&currentInfo, newInfo) {
+		!s.deterministicProtoEqual(&currentInfo, newInfo) { // TODO(carlydf): proto.Equal is non-deterministic
 		// marshal manually to get proto encoding (default dataconverter will use json)
 		newInfoBytes, err := newInfo.Marshal()
 		if err == nil {
@@ -1142,6 +1144,12 @@ func (s *scheduler) updateMemoAndSearchAttributes() {
 			s.logger.Error("error updating search attributes", "error", err)
 		}
 	}
+}
+
+func (s *scheduler) deterministicProtoEqual(a, b *schedulepb.ScheduleListInfo) bool {
+	ab, _ := proto.Marshal(a)
+	bb, _ := proto.Marshal(b)
+	return string(ab) == string(bb)
 }
 
 func (s *scheduler) checkConflict(token int64) error {
