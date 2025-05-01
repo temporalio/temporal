@@ -285,7 +285,6 @@ type (
 		TaskQueue     string
 		TaskType      enumspb.TaskQueueType
 		RangeID       int64
-		AckLevel      int64
 		TaskQueueInfo *commonpb.DataBlob
 
 		TaskQueueKind enumspb.TaskQueueKind
