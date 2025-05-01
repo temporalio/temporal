@@ -980,7 +980,6 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 	eventsConsecutiveCheck := func(currentEventId, currentEventVersion int64) error {
 		if expectedEventID != currentEventId {
 			return fmt.Errorf("%w Expected %v, but got %v", ErrEventSlicesNotConsecutive, expectedEventID, currentEventId)
-			return serviceerror.NewInternal(fmt.Sprintf("Event Id is not consecutive. Expected %v, but got %v", expectedEventID, currentEventId))
 		}
 		version, err := versionhistory.GetVersionHistoryEventVersion(sourceVersionHistory, currentEventId)
 		if err != nil {
