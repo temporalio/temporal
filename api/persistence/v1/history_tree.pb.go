@@ -9,6 +9,7 @@ package persistence
 import (
 	reflect "reflect"
 	sync "sync"
+	unsafe "unsafe"
 
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -24,11 +25,8 @@ const (
 
 // branch column
 type HistoryTreeInfo struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	BranchInfo *HistoryBranch `protobuf:"bytes,1,opt,name=branch_info,json=branchInfo,proto3" json:"branch_info,omitempty"`
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	BranchInfo *HistoryBranch         `protobuf:"bytes,1,opt,name=branch_info,json=branchInfo,proto3" json:"branch_info,omitempty"`
 	// For fork operation to prevent race condition of leaking event data when forking branches fail. Also can be used for clean up leaked data.
 	ForkTime *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=fork_time,json=forkTime,proto3" json:"fork_time,omitempty"`
 	// For lookup back to workflow during debugging, also background cleanup when fork operation cannot finish self cleanup due to crash.
@@ -36,16 +34,16 @@ type HistoryTreeInfo struct {
 	// Deprecating branch token in favor of branch info.
 	//
 	// Deprecated: Marked as deprecated in temporal/server/api/persistence/v1/history_tree.proto.
-	BranchToken []byte `protobuf:"bytes,4,opt,name=branch_token,json=branchToken,proto3" json:"branch_token,omitempty"`
+	BranchToken   []byte `protobuf:"bytes,4,opt,name=branch_token,json=branchToken,proto3" json:"branch_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *HistoryTreeInfo) Reset() {
 	*x = HistoryTreeInfo{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_persistence_v1_history_tree_proto_msgTypes[0]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_persistence_v1_history_tree_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *HistoryTreeInfo) String() string {
@@ -56,7 +54,7 @@ func (*HistoryTreeInfo) ProtoMessage() {}
 
 func (x *HistoryTreeInfo) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_persistence_v1_history_tree_proto_msgTypes[0]
-	if protoimpl.UnsafeEnabled && x != nil {
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -102,22 +100,19 @@ func (x *HistoryTreeInfo) GetBranchToken() []byte {
 
 // For history persistence to serialize/deserialize branch details.
 type HistoryBranch struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TreeId        string                 `protobuf:"bytes,1,opt,name=tree_id,json=treeId,proto3" json:"tree_id,omitempty"`
+	BranchId      string                 `protobuf:"bytes,2,opt,name=branch_id,json=branchId,proto3" json:"branch_id,omitempty"`
+	Ancestors     []*HistoryBranchRange  `protobuf:"bytes,3,rep,name=ancestors,proto3" json:"ancestors,omitempty"`
 	unknownFields protoimpl.UnknownFields
-
-	TreeId    string                `protobuf:"bytes,1,opt,name=tree_id,json=treeId,proto3" json:"tree_id,omitempty"`
-	BranchId  string                `protobuf:"bytes,2,opt,name=branch_id,json=branchId,proto3" json:"branch_id,omitempty"`
-	Ancestors []*HistoryBranchRange `protobuf:"bytes,3,rep,name=ancestors,proto3" json:"ancestors,omitempty"`
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *HistoryBranch) Reset() {
 	*x = HistoryBranch{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_persistence_v1_history_tree_proto_msgTypes[1]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_persistence_v1_history_tree_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *HistoryBranch) String() string {
@@ -128,7 +123,7 @@ func (*HistoryBranch) ProtoMessage() {}
 
 func (x *HistoryBranch) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_persistence_v1_history_tree_proto_msgTypes[1]
-	if protoimpl.UnsafeEnabled && x != nil {
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -166,25 +161,22 @@ func (x *HistoryBranch) GetAncestors() []*HistoryBranchRange {
 
 // HistoryBranchRange represents a piece of range for a branch.
 type HistoryBranchRange struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
+	state protoimpl.MessageState `protogen:"open.v1"`
 	// BranchId of original branch forked from.
 	BranchId string `protobuf:"bytes,1,opt,name=branch_id,json=branchId,proto3" json:"branch_id,omitempty"`
 	// Beginning node for the range, inclusive.
 	BeginNodeId int64 `protobuf:"varint,2,opt,name=begin_node_id,json=beginNodeId,proto3" json:"begin_node_id,omitempty"`
 	// Ending node for the range, exclusive.
-	EndNodeId int64 `protobuf:"varint,3,opt,name=end_node_id,json=endNodeId,proto3" json:"end_node_id,omitempty"`
+	EndNodeId     int64 `protobuf:"varint,3,opt,name=end_node_id,json=endNodeId,proto3" json:"end_node_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *HistoryBranchRange) Reset() {
 	*x = HistoryBranchRange{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_persistence_v1_history_tree_proto_msgTypes[2]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_temporal_server_api_persistence_v1_history_tree_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *HistoryBranchRange) String() string {
@@ -195,7 +187,7 @@ func (*HistoryBranchRange) ProtoMessage() {}
 
 func (x *HistoryBranchRange) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_persistence_v1_history_tree_proto_msgTypes[2]
-	if protoimpl.UnsafeEnabled && x != nil {
+	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -233,66 +225,38 @@ func (x *HistoryBranchRange) GetEndNodeId() int64 {
 
 var File_temporal_server_api_persistence_v1_history_tree_proto protoreflect.FileDescriptor
 
-var file_temporal_server_api_persistence_v1_history_tree_proto_rawDesc = []byte{
-	0x0a, 0x35, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2f, 0x73, 0x65, 0x72, 0x76, 0x65,
-	0x72, 0x2f, 0x61, 0x70, 0x69, 0x2f, 0x70, 0x65, 0x72, 0x73, 0x69, 0x73, 0x74, 0x65, 0x6e, 0x63,
-	0x65, 0x2f, 0x76, 0x31, 0x2f, 0x68, 0x69, 0x73, 0x74, 0x6f, 0x72, 0x79, 0x5f, 0x74, 0x72, 0x65,
-	0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x12, 0x22, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61,
-	0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x70, 0x65, 0x72,
-	0x73, 0x69, 0x73, 0x74, 0x65, 0x6e, 0x63, 0x65, 0x2e, 0x76, 0x31, 0x1a, 0x1f, 0x67, 0x6f, 0x6f,
-	0x67, 0x6c, 0x65, 0x2f, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2f, 0x74, 0x69, 0x6d,
-	0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x22, 0xd9, 0x01, 0x0a,
-	0x0f, 0x48, 0x69, 0x73, 0x74, 0x6f, 0x72, 0x79, 0x54, 0x72, 0x65, 0x65, 0x49, 0x6e, 0x66, 0x6f,
-	0x12, 0x52, 0x0a, 0x0b, 0x62, 0x72, 0x61, 0x6e, 0x63, 0x68, 0x5f, 0x69, 0x6e, 0x66, 0x6f, 0x18,
-	0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x31, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c,
-	0x2e, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x70, 0x65, 0x72, 0x73,
-	0x69, 0x73, 0x74, 0x65, 0x6e, 0x63, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x48, 0x69, 0x73, 0x74, 0x6f,
-	0x72, 0x79, 0x42, 0x72, 0x61, 0x6e, 0x63, 0x68, 0x52, 0x0a, 0x62, 0x72, 0x61, 0x6e, 0x63, 0x68,
-	0x49, 0x6e, 0x66, 0x6f, 0x12, 0x37, 0x0a, 0x09, 0x66, 0x6f, 0x72, 0x6b, 0x5f, 0x74, 0x69, 0x6d,
-	0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1a, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65,
-	0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x54, 0x69, 0x6d, 0x65, 0x73, 0x74,
-	0x61, 0x6d, 0x70, 0x52, 0x08, 0x66, 0x6f, 0x72, 0x6b, 0x54, 0x69, 0x6d, 0x65, 0x12, 0x12, 0x0a,
-	0x04, 0x69, 0x6e, 0x66, 0x6f, 0x18, 0x03, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x69, 0x6e, 0x66,
-	0x6f, 0x12, 0x25, 0x0a, 0x0c, 0x62, 0x72, 0x61, 0x6e, 0x63, 0x68, 0x5f, 0x74, 0x6f, 0x6b, 0x65,
-	0x6e, 0x18, 0x04, 0x20, 0x01, 0x28, 0x0c, 0x42, 0x02, 0x18, 0x01, 0x52, 0x0b, 0x62, 0x72, 0x61,
-	0x6e, 0x63, 0x68, 0x54, 0x6f, 0x6b, 0x65, 0x6e, 0x22, 0x9b, 0x01, 0x0a, 0x0d, 0x48, 0x69, 0x73,
-	0x74, 0x6f, 0x72, 0x79, 0x42, 0x72, 0x61, 0x6e, 0x63, 0x68, 0x12, 0x17, 0x0a, 0x07, 0x74, 0x72,
-	0x65, 0x65, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x06, 0x74, 0x72, 0x65,
-	0x65, 0x49, 0x64, 0x12, 0x1b, 0x0a, 0x09, 0x62, 0x72, 0x61, 0x6e, 0x63, 0x68, 0x5f, 0x69, 0x64,
-	0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x08, 0x62, 0x72, 0x61, 0x6e, 0x63, 0x68, 0x49, 0x64,
-	0x12, 0x54, 0x0a, 0x09, 0x61, 0x6e, 0x63, 0x65, 0x73, 0x74, 0x6f, 0x72, 0x73, 0x18, 0x03, 0x20,
-	0x03, 0x28, 0x0b, 0x32, 0x36, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73,
-	0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x70, 0x65, 0x72, 0x73, 0x69, 0x73,
-	0x74, 0x65, 0x6e, 0x63, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x48, 0x69, 0x73, 0x74, 0x6f, 0x72, 0x79,
-	0x42, 0x72, 0x61, 0x6e, 0x63, 0x68, 0x52, 0x61, 0x6e, 0x67, 0x65, 0x52, 0x09, 0x61, 0x6e, 0x63,
-	0x65, 0x73, 0x74, 0x6f, 0x72, 0x73, 0x22, 0x75, 0x0a, 0x12, 0x48, 0x69, 0x73, 0x74, 0x6f, 0x72,
-	0x79, 0x42, 0x72, 0x61, 0x6e, 0x63, 0x68, 0x52, 0x61, 0x6e, 0x67, 0x65, 0x12, 0x1b, 0x0a, 0x09,
-	0x62, 0x72, 0x61, 0x6e, 0x63, 0x68, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52,
-	0x08, 0x62, 0x72, 0x61, 0x6e, 0x63, 0x68, 0x49, 0x64, 0x12, 0x22, 0x0a, 0x0d, 0x62, 0x65, 0x67,
-	0x69, 0x6e, 0x5f, 0x6e, 0x6f, 0x64, 0x65, 0x5f, 0x69, 0x64, 0x18, 0x02, 0x20, 0x01, 0x28, 0x03,
-	0x52, 0x0b, 0x62, 0x65, 0x67, 0x69, 0x6e, 0x4e, 0x6f, 0x64, 0x65, 0x49, 0x64, 0x12, 0x1e, 0x0a,
-	0x0b, 0x65, 0x6e, 0x64, 0x5f, 0x6e, 0x6f, 0x64, 0x65, 0x5f, 0x69, 0x64, 0x18, 0x03, 0x20, 0x01,
-	0x28, 0x03, 0x52, 0x09, 0x65, 0x6e, 0x64, 0x4e, 0x6f, 0x64, 0x65, 0x49, 0x64, 0x42, 0x36, 0x5a,
-	0x34, 0x67, 0x6f, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x69, 0x6f, 0x2f,
-	0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2f, 0x61, 0x70, 0x69, 0x2f, 0x70, 0x65, 0x72, 0x73, 0x69,
-	0x73, 0x74, 0x65, 0x6e, 0x63, 0x65, 0x2f, 0x76, 0x31, 0x3b, 0x70, 0x65, 0x72, 0x73, 0x69, 0x73,
-	0x74, 0x65, 0x6e, 0x63, 0x65, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
-}
+const file_temporal_server_api_persistence_v1_history_tree_proto_rawDesc = "" +
+	"\n" +
+	"5temporal/server/api/persistence/v1/history_tree.proto\x12\"temporal.server.api.persistence.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xd9\x01\n" +
+	"\x0fHistoryTreeInfo\x12R\n" +
+	"\vbranch_info\x18\x01 \x01(\v21.temporal.server.api.persistence.v1.HistoryBranchR\n" +
+	"branchInfo\x127\n" +
+	"\tfork_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\bforkTime\x12\x12\n" +
+	"\x04info\x18\x03 \x01(\tR\x04info\x12%\n" +
+	"\fbranch_token\x18\x04 \x01(\fB\x02\x18\x01R\vbranchToken\"\x9b\x01\n" +
+	"\rHistoryBranch\x12\x17\n" +
+	"\atree_id\x18\x01 \x01(\tR\x06treeId\x12\x1b\n" +
+	"\tbranch_id\x18\x02 \x01(\tR\bbranchId\x12T\n" +
+	"\tancestors\x18\x03 \x03(\v26.temporal.server.api.persistence.v1.HistoryBranchRangeR\tancestors\"u\n" +
+	"\x12HistoryBranchRange\x12\x1b\n" +
+	"\tbranch_id\x18\x01 \x01(\tR\bbranchId\x12\"\n" +
+	"\rbegin_node_id\x18\x02 \x01(\x03R\vbeginNodeId\x12\x1e\n" +
+	"\vend_node_id\x18\x03 \x01(\x03R\tendNodeIdB6Z4go.temporal.io/server/api/persistence/v1;persistenceb\x06proto3"
 
 var (
 	file_temporal_server_api_persistence_v1_history_tree_proto_rawDescOnce sync.Once
-	file_temporal_server_api_persistence_v1_history_tree_proto_rawDescData = file_temporal_server_api_persistence_v1_history_tree_proto_rawDesc
+	file_temporal_server_api_persistence_v1_history_tree_proto_rawDescData []byte
 )
 
 func file_temporal_server_api_persistence_v1_history_tree_proto_rawDescGZIP() []byte {
 	file_temporal_server_api_persistence_v1_history_tree_proto_rawDescOnce.Do(func() {
-		file_temporal_server_api_persistence_v1_history_tree_proto_rawDescData = protoimpl.X.CompressGZIP(file_temporal_server_api_persistence_v1_history_tree_proto_rawDescData)
+		file_temporal_server_api_persistence_v1_history_tree_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_api_persistence_v1_history_tree_proto_rawDesc), len(file_temporal_server_api_persistence_v1_history_tree_proto_rawDesc)))
 	})
 	return file_temporal_server_api_persistence_v1_history_tree_proto_rawDescData
 }
 
 var file_temporal_server_api_persistence_v1_history_tree_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
-var file_temporal_server_api_persistence_v1_history_tree_proto_goTypes = []interface{}{
+var file_temporal_server_api_persistence_v1_history_tree_proto_goTypes = []any{
 	(*HistoryTreeInfo)(nil),       // 0: temporal.server.api.persistence.v1.HistoryTreeInfo
 	(*HistoryBranch)(nil),         // 1: temporal.server.api.persistence.v1.HistoryBranch
 	(*HistoryBranchRange)(nil),    // 2: temporal.server.api.persistence.v1.HistoryBranchRange
@@ -314,49 +278,11 @@ func file_temporal_server_api_persistence_v1_history_tree_proto_init() {
 	if File_temporal_server_api_persistence_v1_history_tree_proto != nil {
 		return
 	}
-	if !protoimpl.UnsafeEnabled {
-		file_temporal_server_api_persistence_v1_history_tree_proto_msgTypes[0].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*HistoryTreeInfo); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_persistence_v1_history_tree_proto_msgTypes[1].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*HistoryBranch); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_temporal_server_api_persistence_v1_history_tree_proto_msgTypes[2].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*HistoryBranchRange); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: file_temporal_server_api_persistence_v1_history_tree_proto_rawDesc,
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_api_persistence_v1_history_tree_proto_rawDesc), len(file_temporal_server_api_persistence_v1_history_tree_proto_rawDesc)),
 			NumEnums:      0,
 			NumMessages:   3,
 			NumExtensions: 0,
@@ -367,7 +293,6 @@ func file_temporal_server_api_persistence_v1_history_tree_proto_init() {
 		MessageInfos:      file_temporal_server_api_persistence_v1_history_tree_proto_msgTypes,
 	}.Build()
 	File_temporal_server_api_persistence_v1_history_tree_proto = out.File
-	file_temporal_server_api_persistence_v1_history_tree_proto_rawDesc = nil
 	file_temporal_server_api_persistence_v1_history_tree_proto_goTypes = nil
 	file_temporal_server_api_persistence_v1_history_tree_proto_depIdxs = nil
 }
