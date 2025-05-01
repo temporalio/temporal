@@ -55,6 +55,8 @@ type EventStore struct {
 
 	// scheduled to started event ID mapping
 	scheduledIDToStartedID map[int64]int64
+	// request id to event ID mapping
+	requestIDToEventID map[string]int64
 
 	metricsHandler metrics.Handler
 }
@@ -150,9 +152,9 @@ func (b *EventStore) SizeInBytesOfBufferedEvents() int {
 	return size
 }
 
-func (b *EventStore) FlushBufferToCurrentBatch() map[int64]int64 {
+func (b *EventStore) FlushBufferToCurrentBatch() (map[int64]int64, map[string]int64) {
 	if len(b.dbBufferBatch) == 0 && len(b.memBufferBatch) == 0 {
-		return b.scheduledIDToStartedID
+		return b.scheduledIDToStartedID, b.requestIDToEventID
 	}
 
 	b.assertMutable()
@@ -164,7 +166,7 @@ func (b *EventStore) FlushBufferToCurrentBatch() map[int64]int64 {
 		// above will generate 2 then 1
 		b.dbBufferBatch = nil
 		b.memBufferBatch = nil
-		return b.scheduledIDToStartedID
+		return b.scheduledIDToStartedID, b.requestIDToEventID
 	}
 
 	b.dbClearBuffer = b.dbClearBuffer || len(b.dbBufferBatch) > 0
@@ -186,7 +188,7 @@ func (b *EventStore) FlushBufferToCurrentBatch() map[int64]int64 {
 
 	b.memLatestBatch = append(b.memLatestBatch, bufferBatch...)
 
-	return b.scheduledIDToStartedID
+	return b.scheduledIDToStartedID, b.requestIDToEventID
 }
 
 func (b *EventStore) FlushAndCreateNewBatch() {
@@ -207,7 +209,7 @@ func (b *EventStore) Finish(
 	}()
 
 	if flushBufferEvent {
-		_ = b.FlushBufferToCurrentBatch()
+		_, _ = b.FlushBufferToCurrentBatch()
 	}
 	b.FlushAndCreateNewBatch()
 
@@ -217,6 +219,7 @@ func (b *EventStore) Finish(
 	memBufferBatch := b.dbBufferBatch
 	memBufferBatch = append(memBufferBatch, dbBufferBatch...)
 	scheduledIDToStartedID := b.scheduledIDToStartedID
+	requestIDToEventID := b.requestIDToEventID
 
 	b.memEventsBatches = nil
 	b.memBufferBatch = nil
@@ -235,6 +238,7 @@ func (b *EventStore) Finish(
 		DBBufferBatch:          dbBufferBatch,
 		MemBufferBatch:         memBufferBatch,
 		ScheduledIDToStartedID: scheduledIDToStartedID,
+		RequestIDToEventID:     requestIDToEventID,
 	}, nil
 }
 
@@ -408,6 +412,12 @@ func (b *EventStore) wireEventIDs(
 			attributes := event.GetChildWorkflowExecutionTerminatedEventAttributes()
 			if startedEventID, ok := b.scheduledIDToStartedID[attributes.GetInitiatedEventId()]; ok {
 				attributes.StartedEventId = startedEventID
+			}
+
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED:
+			attributes := event.GetWorkflowExecutionOptionsUpdatedEventAttributes()
+			if attributes.GetAttachedRequestId() != "" {
+				b.requestIDToEventID[attributes.AttachedRequestId] = event.GetEventId()
 			}
 		}
 	}

@@ -1186,6 +1186,7 @@ func (x *WorkflowExecutionState) GetRequestIds() map[string]*RequestIDInfo {
 type RequestIDInfo struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	EventType     v16.EventType          `protobuf:"varint,1,opt,name=event_type,json=eventType,proto3,enum=temporal.api.enums.v1.EventType" json:"event_type,omitempty"`
+	EventId       int64                  `protobuf:"varint,2,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1225,6 +1226,13 @@ func (x *RequestIDInfo) GetEventType() v16.EventType {
 		return x.EventType
 	}
 	return v16.EventType(0)
+}
+
+func (x *RequestIDInfo) GetEventId() int64 {
+	if x != nil {
+		return x.EventId
+	}
+	return 0
 }
 
 // transfer column
@@ -4381,10 +4389,11 @@ const file_temporal_server_api_persistence_v1_executions_proto_rawDesc = "" +
 	"requestIds\x1ap\n" +
 	"\x0fRequestIdsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12G\n" +
-	"\x05value\x18\x02 \x01(\v21.temporal.server.api.persistence.v1.RequestIDInfoR\x05value:\x028\x01\"P\n" +
+	"\x05value\x18\x02 \x01(\v21.temporal.server.api.persistence.v1.RequestIDInfoR\x05value:\x028\x01\"k\n" +
 	"\rRequestIDInfo\x12?\n" +
 	"\n" +
-	"event_type\x18\x01 \x01(\x0e2 .temporal.api.enums.v1.EventTypeR\teventType\"\xdf\a\n" +
+	"event_type\x18\x01 \x01(\x0e2 .temporal.api.enums.v1.EventTypeR\teventType\x12\x19\n" +
+	"\bevent_id\x18\x02 \x01(\x03R\aeventId\"\xdf\a\n" +
 	"\x10TransferTaskInfo\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
