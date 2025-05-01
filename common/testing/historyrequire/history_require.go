@@ -135,9 +135,9 @@ func (h HistoryRequire) WaitForHistoryEvents(expectedHistory string, actualHisto
 	expectedHistoryEvents, expectedEventsAttributes := h.parseHistory(expectedHistory)
 
 	var actualHistoryEvents []*historypb.HistoryEvent
-	require.EventuallyWithT(h.t, func(collect *assert.CollectT) {
+	require.EventuallyWithT(h.t, func(t *assert.CollectT) {
 		actualHistoryEvents = actualHistoryEventsReader()
-		assert.Equalf(collect, len(expectedHistoryEvents), len(actualHistoryEvents),
+		assert.Equalf(t, len(expectedHistoryEvents), len(actualHistoryEvents),
 			"Length of expected(%d) and actual(%d) histories is not equal - actual history: \n%v",
 			len(expectedHistoryEvents), len(actualHistoryEvents), h.formatHistoryEvents(actualHistoryEvents, true))
 	}, waitFor, tick)
@@ -155,10 +155,10 @@ func (h HistoryRequire) WaitForHistoryEventsSuffix(expectedHistorySuffix string,
 	expectedCompactHistory := h.formatHistoryEvents(expectedHistoryEvents, true)
 
 	var actualHistoryEvents []*historypb.HistoryEvent
-	require.EventuallyWithT(h.t, func(collect *assert.CollectT) {
+	require.EventuallyWithT(h.t, func(t *assert.CollectT) {
 		actualHistoryEvents = actualHistoryEventsReader()
 
-		assert.GreaterOrEqualf(collect, len(actualHistoryEvents), len(expectedHistoryEvents),
+		assert.GreaterOrEqualf(t, len(actualHistoryEvents), len(expectedHistoryEvents),
 			"Length of actual history(%d) must be greater or equal to the length of expected history suffix(%d) - actual history: \n%v",
 			len(actualHistoryEvents), len(expectedHistoryEvents), h.formatHistoryEvents(actualHistoryEvents, true))
 		if len(actualHistoryEvents) < len(expectedHistoryEvents) {
@@ -169,15 +169,15 @@ func (h HistoryRequire) WaitForHistoryEventsSuffix(expectedHistorySuffix string,
 		actualHistoryEvents = h.sanitizeActualHistoryEventsForEquals(expectedHistoryEvents, actualHistoryEvents)
 		actualCompactHistory := h.formatHistoryEvents(actualHistoryEvents, true)
 
-		assert.Equalf(collect, actualCompactHistory, expectedCompactHistory,
+		assert.Equalf(t, expectedCompactHistory, actualCompactHistory,
 			"Expected history suffix is not found in actual history. Expected suffix:\n%s\nLast actual:\n%s",
 			expectedCompactHistory, actualCompactHistory)
 	}, waitFor, tick)
 
-	// TODO: Now if expected sequence of events is found, all attributes must match.
-	//  If attributes also need to be checked (but not asserted) then this call
-	//  needs to be moved to Eventually block. This will require passing `collect`
-	//  all way down and replace require with assert.
+	// TODO: Now if expected sequence of events is reached, all attributes must match.
+	//  If attributes values also need to be reached (but not just asserted) then this call
+	//  needs to be moved to Eventually block. This will require passing `t`
+	//  all way down and replace `require` with `assert`.
 	h.equalHistoryEventsAttributes(expectedEventsAttributes, actualHistoryEvents)
 }
 
