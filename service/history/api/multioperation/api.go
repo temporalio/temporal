@@ -156,7 +156,7 @@ func (mo *multiOp) Invoke(ctx context.Context) (*historyservice.ExecuteMultiOper
 				&historyservice.StartWorkflowExecutionResponse{
 					RunId:   workflowKey.RunID,
 					Started: false, // set explicitly for emphasis
-					// TODO: Running: false,
+					Status:  workflowLease.GetMutableState().GetExecutionState().Status,
 				},
 				mo.updater.CreateResponse(workflowKey, outcome, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED),
 			), nil
@@ -327,6 +327,7 @@ func (mo *multiOp) updateWorkflow(
 	startResp := &historyservice.StartWorkflowExecutionResponse{
 		RunId:   currentWorkflowLease.GetContext().GetWorkflowKey().RunID,
 		Started: false, // set explicitly for emphasis
+		Status:  enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	}
 
 	return makeResponse(startResp, updateResp), nil
