@@ -52,8 +52,8 @@ type (
 		Close()
 		// NewTaskManager returns a new task manager
 		NewTaskManager() (persistence.TaskManager, error)
-		// NewTaskFairnessManager returns a new task (fairness) manager
-		NewTaskFairnessManager() (persistence.TaskFairnessManager, error)
+		// NewFairTaskManager returns a new task (fairness) manager
+		NewFairTaskManager() (persistence.FairTaskManager, error)
 		// NewShardManager returns a new shard manager
 		NewShardManager() (persistence.ShardManager, error)
 		// NewMetadataManager returns a new metadata manager
@@ -139,9 +139,9 @@ func (f *factoryImpl) NewTaskManager() (persistence.TaskManager, error) {
 	return result, nil
 }
 
-// NewTaskFairnessManager returns a new task fairness manager
+// NewFairTaskManager returns a new task fairness manager
 // TODO(fairness): cleanup; rename to NewTaskManager
-func (f *factoryImpl) NewTaskFairnessManager() (persistence.TaskFairnessManager, error) {
+func (f *factoryImpl) NewFairTaskManager() (persistence.FairTaskManager, error) {
 	taskStore, err := f.dataStoreFactory.NewTaskFairnessStore()
 	if err != nil {
 		return nil, err

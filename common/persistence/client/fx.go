@@ -85,7 +85,7 @@ var Module = fx.Options(
 	fx.Provide(managerProvider(Factory.NewClusterMetadataManager)),
 	fx.Provide(managerProvider(Factory.NewMetadataManager)),
 	fx.Provide(managerProvider(Factory.NewTaskManager)),
-	fx.Provide(managerProvider(Factory.NewTaskFairnessManager)),
+	fx.Provide(managerProvider(Factory.NewFairTaskManager)),
 	fx.Provide(managerProvider(Factory.NewNamespaceReplicationQueue)),
 	fx.Provide(managerProvider(Factory.NewShardManager)),
 	fx.Provide(managerProvider(Factory.NewExecutionManager)),

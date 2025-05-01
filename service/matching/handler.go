@@ -73,7 +73,7 @@ type (
 		Logger                        log.Logger
 		ThrottledLogger               log.Logger
 		TaskManager                   persistence.TaskManager
-		TaskFairnessManager           persistence.TaskFairnessManager
+		FairTaskManager               persistence.FairTaskManager
 		HistoryClient                 resource.HistoryClient
 		MatchingRawClient             resource.MatchingRawClient
 		DeploymentStoreClient         deployment.DeploymentStoreClient
@@ -112,7 +112,7 @@ func NewHandler(
 		throttledLogger: params.ThrottledLogger,
 		engine: NewEngine(
 			params.TaskManager,
-			params.TaskFairnessManager,
+			params.FairTaskManager,
 			params.HistoryClient,
 			params.MatchingRawClient, // Use non retry client inside matching
 			params.DeploymentStoreClient,
