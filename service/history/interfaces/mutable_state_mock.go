@@ -2278,6 +2278,20 @@ func (mr *MockMutableStateMockRecorder) GetPendingChildExecutionInfos() *gomock.
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPendingChildExecutionInfos", reflect.TypeOf((*MockMutableState)(nil).GetPendingChildExecutionInfos))
 }
 
+// GetPendingChildIds mocks base method.
+func (m *MockMutableState) GetPendingChildIds() map[int64]struct{} {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetPendingChildIds")
+	ret0, _ := ret[0].(map[int64]struct{})
+	return ret0
+}
+
+// GetPendingChildIds indicates an expected call of GetPendingChildIds.
+func (mr *MockMutableStateMockRecorder) GetPendingChildIds() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPendingChildIds", reflect.TypeOf((*MockMutableState)(nil).GetPendingChildIds))
+}
+
 // GetPendingRequestCancelExternalInfos mocks base method.
 func (m *MockMutableState) GetPendingRequestCancelExternalInfos() map[int64]*persistence.RequestCancelInfo {
 	m.ctrl.T.Helper()
@@ -2820,6 +2834,21 @@ func (m *MockMutableState) IsDirty() bool {
 func (mr *MockMutableStateMockRecorder) IsDirty() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsDirty", reflect.TypeOf((*MockMutableState)(nil).IsDirty))
+}
+
+// IsNonCurrentWorkflowGuaranteed mocks base method.
+func (m *MockMutableState) IsNonCurrentWorkflowGuaranteed() (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsNonCurrentWorkflowGuaranteed")
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// IsNonCurrentWorkflowGuaranteed indicates an expected call of IsNonCurrentWorkflowGuaranteed.
+func (mr *MockMutableStateMockRecorder) IsNonCurrentWorkflowGuaranteed() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsNonCurrentWorkflowGuaranteed", reflect.TypeOf((*MockMutableState)(nil).IsNonCurrentWorkflowGuaranteed))
 }
 
 // IsResetRun mocks base method.

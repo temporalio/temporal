@@ -29,6 +29,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"time"
 
 	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/server/common/cluster"
@@ -199,7 +200,12 @@ func initSystemNamespaces(
 		return fmt.Errorf("unable to initialize metadata manager: %w", err)
 	}
 	defer metadataManager.Close()
-	ctx = headers.SetCallerInfo(ctx, headers.SystemBackgroundCallerInfo)
+	ctx, cancel := context.WithTimeout(
+		headers.SetCallerInfo(ctx, headers.SystemBackgroundCallerInfo),
+		30*time.Second,
+	)
+	defer cancel()
+
 	if err = metadataManager.InitializeSystemNamespaces(ctx, currentClusterName); err != nil {
 		return fmt.Errorf("unable to register system namespace: %w", err)
 	}

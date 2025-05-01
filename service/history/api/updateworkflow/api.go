@@ -277,7 +277,7 @@ func (u *Updater) OnSuccess(
 	if err != nil {
 		return nil, err
 	}
-	resp := u.createResponse(u.wfKey, status.Outcome, status.Stage)
+	resp := u.CreateResponse(u.wfKey, status.Outcome, status.Stage)
 	return resp, nil
 }
 
@@ -308,7 +308,7 @@ func (u *Updater) addWorkflowTaskToMatching(ctx context.Context) error {
 	return nil
 }
 
-func (u *Updater) createResponse(
+func (u *Updater) CreateResponse(
 	wfKey definition.WorkflowKey,
 	outcome *updatepb.Outcome,
 	stage enumspb.UpdateWorkflowExecutionLifecycleStage,

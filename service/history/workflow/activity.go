@@ -176,8 +176,16 @@ func GetPendingActivityInfo(
 					},
 				}
 			} else {
-				p.PauseInfo.PausedBy = &workflowpb.PendingActivityInfo_PauseInfo_RuleId{
-					RuleId: ai.PauseInfo.GetRuleId(),
+				ruleId := ai.PauseInfo.GetRuleId()
+				p.PauseInfo.PausedBy = &workflowpb.PendingActivityInfo_PauseInfo_Rule_{
+					Rule: &workflowpb.PendingActivityInfo_PauseInfo_Rule{
+						RuleId: ruleId,
+					},
+				}
+				rule, ok := mutableState.GetNamespaceEntry().GetWorkflowRule(ruleId)
+				if ok {
+					p.PauseInfo.PausedBy.(*workflowpb.PendingActivityInfo_PauseInfo_Rule_).Rule.Identity = rule.CreatedByIdentity
+					p.PauseInfo.PausedBy.(*workflowpb.PendingActivityInfo_PauseInfo_Rule_).Rule.Reason = rule.Description
 				}
 			}
 		}

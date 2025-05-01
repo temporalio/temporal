@@ -42,6 +42,7 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
@@ -96,14 +97,15 @@ func (s *stateRebuilderSuite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
 	s.mockTaskRefresher = workflow.NewMockTaskRefresher(s.controller)
-
+	config := tests.NewDynamicConfig()
+	config.EnableTransitionHistory = dynamicconfig.GetBoolPropertyFn(true)
 	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&persistencespb.ShardInfo{
 			ShardId: 10,
 			RangeId: 1,
 		},
-		tests.NewDynamicConfig(),
+		config,
 	)
 
 	reg := hsm.NewRegistry()
@@ -377,4 +379,132 @@ func (s *stateRebuilderSuite) TestRebuild() {
 	), rebuildMutableState.GetExecutionInfo().GetVersionHistories())
 	s.Equal(timestamp.TimeValue(rebuildMutableState.GetExecutionState().StartTime), s.now)
 	s.Equal(expectedLastFirstTransactionID, rebuildExecutionInfo.LastFirstEventTxnId)
+}
+
+func (s *stateRebuilderSuite) TestRebuildWithCurrentMutableState() {
+	requestID := uuid.New()
+	version := int64(12)
+	lastEventID := int64(2)
+	branchToken := []byte("other random branch token")
+	targetBranchToken := []byte("some other random branch token")
+
+	targetNamespaceID := namespace.ID(uuid.New())
+	targetNamespace := namespace.Name("other random namespace name")
+	targetWorkflowID := "other random workflow ID"
+	targetRunID := uuid.New()
+
+	firstEventID := common.FirstEventID
+	nextEventID := lastEventID + 1
+	events1 := []*historypb.HistoryEvent{{
+		EventId:   1,
+		Version:   version,
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+		Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
+			WorkflowType:             &commonpb.WorkflowType{Name: "some random workflow type"},
+			TaskQueue:                &taskqueuepb.TaskQueue{Name: "some random workflow type"},
+			Input:                    payloads.EncodeString("some random input"),
+			WorkflowExecutionTimeout: durationpb.New(123 * time.Second),
+			WorkflowRunTimeout:       durationpb.New(233 * time.Second),
+			WorkflowTaskTimeout:      durationpb.New(45 * time.Second),
+			Identity:                 "some random identity",
+		}},
+	}}
+	events2 := []*historypb.HistoryEvent{{
+		EventId:   2,
+		Version:   version,
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
+		Attributes: &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &historypb.WorkflowExecutionSignaledEventAttributes{
+			SignalName: "some random signal name",
+			Input:      payloads.EncodeString("some random signal input"),
+			Identity:   "some random identity",
+		}},
+	}}
+	history1 := []*historypb.History{{Events: events1}}
+	history2 := []*historypb.History{{Events: events2}}
+	pageToken := []byte("some random pagination token")
+
+	historySize1 := 12345
+	historySize2 := 67890
+	shardID := s.mockShard.GetShardID()
+	s.mockExecutionManager.EXPECT().ReadHistoryBranchByBatch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
+		BranchToken:   branchToken,
+		MinEventID:    firstEventID,
+		MaxEventID:    nextEventID,
+		PageSize:      defaultPageSize,
+		NextPageToken: nil,
+		ShardID:       shardID,
+	}).Return(&persistence.ReadHistoryBranchByBatchResponse{
+		History:        history1,
+		TransactionIDs: []int64{10},
+		NextPageToken:  pageToken,
+		Size:           historySize1,
+	}, nil)
+	expectedLastFirstTransactionID := int64(20)
+	s.mockExecutionManager.EXPECT().ReadHistoryBranchByBatch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
+		BranchToken:   branchToken,
+		MinEventID:    firstEventID,
+		MaxEventID:    nextEventID,
+		PageSize:      defaultPageSize,
+		NextPageToken: pageToken,
+		ShardID:       shardID,
+	}).Return(&persistence.ReadHistoryBranchByBatchResponse{
+		History:        history2,
+		TransactionIDs: []int64{expectedLastFirstTransactionID},
+		NextPageToken:  nil,
+		Size:           historySize2,
+	}, nil)
+
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(targetNamespaceID).Return(namespace.NewGlobalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Id: targetNamespaceID.String(), Name: targetNamespace.String()},
+		&persistencespb.NamespaceConfig{},
+		&persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: cluster.TestCurrentClusterName,
+			Clusters: []string{
+				cluster.TestCurrentClusterName,
+				cluster.TestAlternativeClusterName,
+			},
+		},
+		1234,
+	), nil).AnyTimes()
+
+	s.mockTaskRefresher.EXPECT().Refresh(gomock.Any(), gomock.Any()).Return(nil)
+	currentMutableState := &persistencespb.WorkflowMutableState{
+		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+			TransitionHistory: []*persistencespb.VersionedTransition{
+				{
+					TransitionCount:          10,
+					NamespaceFailoverVersion: 12,
+				},
+			},
+		},
+	}
+	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, int64(12)).Return(cluster.TestCurrentClusterName).AnyTimes()
+	rebuildMutableState, rebuiltHistorySize, err := s.nDCStateRebuilder.RebuildWithCurrentMutableState(
+		context.Background(),
+		s.now,
+		definition.NewWorkflowKey(s.namespaceID.String(), s.workflowID, s.runID),
+		branchToken,
+		lastEventID,
+		util.Ptr(version),
+		definition.NewWorkflowKey(targetNamespaceID.String(), targetWorkflowID, targetRunID),
+		targetBranchToken,
+		requestID,
+		currentMutableState,
+	)
+	s.NoError(err)
+	s.NotNil(rebuildMutableState)
+	rebuildExecutionInfo := rebuildMutableState.GetExecutionInfo()
+	s.Equal(targetNamespaceID, namespace.ID(rebuildExecutionInfo.NamespaceId))
+	s.Equal(targetWorkflowID, rebuildExecutionInfo.WorkflowId)
+	s.Equal(targetRunID, rebuildMutableState.GetExecutionState().RunId)
+	s.Equal(int64(historySize1+historySize2), rebuiltHistorySize)
+	s.ProtoEqual(versionhistory.NewVersionHistories(
+		versionhistory.NewVersionHistory(
+			targetBranchToken,
+			[]*historyspb.VersionHistoryItem{versionhistory.NewVersionHistoryItem(lastEventID, version)},
+		),
+	), rebuildMutableState.GetExecutionInfo().GetVersionHistories())
+	s.Equal(timestamp.TimeValue(rebuildMutableState.GetExecutionState().StartTime), s.now)
+	s.Equal(expectedLastFirstTransactionID, rebuildExecutionInfo.LastFirstEventTxnId)
+	s.Equal(int64(11), rebuildExecutionInfo.TransitionHistory[0].TransitionCount)
 }

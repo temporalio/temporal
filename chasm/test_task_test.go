@@ -1,8 +1,6 @@
 // The MIT License
 //
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
+// Copyright (c) 2025 Temporal Technologies Inc.  All rights reserved.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -22,32 +20,19 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../LICENSE -package $GOPACKAGE -source $GOFILE -destination task_mock.go
-
+// TODO: move this to chasm_test package
 package chasm
 
 import (
-	"context"
-	"time"
+	commonpb "go.temporal.io/api/common/v1"
 )
 
 type (
-	TaskAttributes struct {
-		ScheduledTime time.Time
-		Destination   string
-	}
+	TestSideEffectTask = commonpb.Payload
 
-	SideEffectTaskExecutor[C any, T any] interface {
-		Execute(context.Context, ComponentRef, T) error
-	}
+	TestOutboundSideEffectTask struct{}
 
-	PureTaskExecutor[C any, T any] interface {
-		Execute(Context, C, T) error
-	}
-
-	TaskValidator[C any, T any] interface {
-		Validate(Context, C, T) (bool, error)
+	TestPureTask struct {
+		Payload *commonpb.Payload
 	}
 )
-
-var TaskScheduledTimeImmediate = time.Time{}

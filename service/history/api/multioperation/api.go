@@ -128,40 +128,47 @@ func Invoke(
 }
 
 func (mo *multiOp) Invoke(ctx context.Context) (*historyservice.ExecuteMultiOperationResponse, error) {
-	// For workflow id conflict policy terminate-existing, always attempt a start
-	// since that works when the workflow is already running *and* when it's not running.
 	conflictPolicy := mo.startReq.StartRequest.WorkflowIdConflictPolicy
-	if conflictPolicy == enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING {
-		resp, err := mo.startAndUpdateWorkflow(ctx)
-		var noStartErr *noStartError
-		switch {
-		case errors.As(err, &noStartErr):
-			// The start request was deduped, no termination is needed.
-			// Continue below by only sending the update.
-		case err != nil:
-			return nil, err
-		default:
-			return resp, nil
-		}
-	}
 
-	runningWorkflowLease, err := mo.getRunningWorkflowLease(ctx)
+	workflowLease, err := mo.getWorkflowLease(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	// Workflow was already started ...
-	if runningWorkflowLease != nil {
-		if err = mo.allowUpdateWorkflow(ctx, runningWorkflowLease, conflictPolicy); err != nil {
-			runningWorkflowLease.GetReleaseFn()(nil) // nil since nothing was modified
-			return nil, err
+	// Workflow was started already.
+	if workflowLease != nil {
+		// Workflow is still running and not requested to be terminated - send the update.
+		if workflowLease.GetMutableState().IsWorkflowExecutionRunning() && conflictPolicy != enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING {
+			if err = mo.allowUpdateRunningWorkflow(workflowLease, conflictPolicy); err != nil {
+				workflowLease.GetReleaseFn()(nil) // nil since nothing was modified
+				return nil, err
+			}
+			return mo.updateWorkflow(ctx, workflowLease) // lease released inside
 		}
-		return mo.updateWorkflow(ctx, runningWorkflowLease)
+
+		// Workflow is not running anymore and the update already completed - return the outcome.
+		updateId := mo.updateReq.Request.Request.Meta.GetUpdateId()
+		if outcome, err := workflowLease.GetMutableState().GetUpdateOutcome(ctx, updateId); err == nil {
+			workflowKey := workflowLease.GetContext().GetWorkflowKey()
+			workflowLease.GetReleaseFn()(nil)
+
+			return makeResponse(
+				&historyservice.StartWorkflowExecutionResponse{
+					RunId:   workflowKey.RunID,
+					Started: false, // set explicitly for emphasis
+					Status:  workflowLease.GetMutableState().GetExecutionState().Status,
+				},
+				mo.updater.CreateResponse(workflowKey, outcome, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED),
+			), nil
+		}
+
+		// Workflow is closed and Update not complete. Will try to start it below.
+		workflowLease.GetReleaseFn()(nil)
 	}
 
 	testhooks.Call(mo.testHooks, testhooks.UpdateWithStartInBetweenLockAndStart)
 
-	// Workflow hasn't been started yet ...
+	// Workflow is not running - start and update it!
 	resp, err := mo.startAndUpdateWorkflow(ctx)
 	var noStartErr *noStartError
 	if errors.As(err, &noStartErr) {
@@ -230,7 +237,7 @@ func (mo *multiOp) workflowLeaseCallback(
 	}
 }
 
-func (mo *multiOp) getRunningWorkflowLease(ctx context.Context) (api.WorkflowLease, error) {
+func (mo *multiOp) getWorkflowLease(ctx context.Context) (api.WorkflowLease, error) {
 	runningWorkflowLease, err := mo.consistencyChecker.GetWorkflowLease(
 		ctx,
 		nil,
@@ -244,21 +251,10 @@ func (mo *multiOp) getRunningWorkflowLease(ctx context.Context) (api.WorkflowLea
 	if err != nil {
 		return nil, newMultiOpError(err, multiOpAbortedErr)
 	}
-
-	if runningWorkflowLease == nil {
-		return nil, nil
-	}
-
-	if !runningWorkflowLease.GetMutableState().IsWorkflowExecutionRunning() {
-		runningWorkflowLease.GetReleaseFn()(nil)
-		return nil, nil
-	}
-
 	return runningWorkflowLease, nil
 }
 
-func (mo *multiOp) allowUpdateWorkflow(
-	ctx context.Context,
+func (mo *multiOp) allowUpdateRunningWorkflow(
 	currentWorkflowLease api.WorkflowLease,
 	conflictPolicy enumspb.WorkflowIdConflictPolicy,
 ) error {
@@ -331,6 +327,7 @@ func (mo *multiOp) updateWorkflow(
 	startResp := &historyservice.StartWorkflowExecutionResponse{
 		RunId:   currentWorkflowLease.GetContext().GetWorkflowKey().RunID,
 		Started: false, // set explicitly for emphasis
+		Status:  enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	}
 
 	return makeResponse(startResp, updateResp), nil

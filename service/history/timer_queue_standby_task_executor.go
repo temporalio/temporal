@@ -364,6 +364,16 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowTaskTimeoutTask(
 			return nil, err
 		}
 
+		if workflowTask.Attempt != timerTask.ScheduleAttempt {
+			return nil, nil
+		}
+
+		// We could check if workflow task is started state (since the timeout type here is START_TO_CLOSE)
+		// but that's unnecessary.
+		//
+		// Ifthe  workflow task is in scheduled state, it must have a higher attempt
+		// count and will be captured by the attempt check above.
+
 		return &struct{}{}, nil
 	}
 
@@ -526,6 +536,11 @@ func (t *timerQueueStandbyTaskExecutor) executeStateMachineTimerTask(
 			return nil, nil
 		}
 
+		if t.config.EnableUpdateWorkflowModeIgnoreCurrent() {
+			return nil, wfContext.UpdateWorkflowExecutionAsPassive(ctx, t.shardContext)
+		}
+
+		// TODO: remove following code once EnableUpdateWorkflowModeIgnoreCurrent config is deprecated.
 		if mutableState.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 			// Can't use UpdateWorkflowExecutionAsPassive since it updates the current run,
 			// and we are operating on a closed workflow.

@@ -176,6 +176,11 @@ func (r *ActivityStateReplicatorImpl) SyncActivityState(
 		return err
 	}
 
+	if r.shardContext.GetConfig().EnableUpdateWorkflowModeIgnoreCurrent() {
+		return executionContext.UpdateWorkflowExecutionAsPassive(ctx, r.shardContext)
+	}
+
+	// TODO: remove following code once EnableUpdateWorkflowModeIgnoreCurrent config is deprecated.
 	updateMode := persistence.UpdateWorkflowModeUpdateCurrent
 	if state, _ := mutableState.GetWorkflowStateStatus(); state == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
 		updateMode = persistence.UpdateWorkflowModeBypassCurrent
@@ -262,6 +267,11 @@ func (r *ActivityStateReplicatorImpl) SyncActivitiesState(
 		return err
 	}
 
+	if r.shardContext.GetConfig().EnableUpdateWorkflowModeIgnoreCurrent() {
+		return executionContext.UpdateWorkflowExecutionAsPassive(ctx, r.shardContext)
+	}
+
+	// TODO: remove following code once EnableUpdateWorkflowModeIgnoreCurrent config is deprecated.
 	updateMode := persistence.UpdateWorkflowModeUpdateCurrent
 	if state, _ := mutableState.GetWorkflowStateStatus(); state == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
 		updateMode = persistence.UpdateWorkflowModeBypassCurrent

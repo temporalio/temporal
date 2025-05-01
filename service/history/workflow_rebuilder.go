@@ -32,6 +32,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
@@ -51,6 +52,7 @@ type (
 		stateTransitionCount int64
 		dbRecordVersion      int64
 		requestID            string
+		mutableState         *persistencespb.WorkflowMutableState
 	}
 	workflowRebuilder interface {
 		// rebuild rebuilds a workflow, in case of any kind of corruption
@@ -110,7 +112,6 @@ func (r *workflowRebuilderImpl) rebuild(
 		releaseFn(retError)
 		wfContext.Clear()
 	}()
-
 	rebuildMutableState, err := r.replayResetWorkflow(
 		ctx,
 		workflowKey,
@@ -118,6 +119,7 @@ func (r *workflowRebuilderImpl) rebuild(
 		rebuildSpec.stateTransitionCount,
 		rebuildSpec.dbRecordVersion,
 		rebuildSpec.requestID,
+		rebuildSpec.mutableState,
 	)
 	if err != nil {
 		return err
@@ -167,6 +169,7 @@ func (r *workflowRebuilderImpl) getRebuildSpecFromMutableState(
 		stateTransitionCount: mutableState.ExecutionInfo.StateTransitionCount,
 		dbRecordVersion:      resp.DBRecordVersion,
 		requestID:            mutableState.ExecutionState.CreateRequestId,
+		mutableState:         resp.State,
 	}, nil
 }
 
@@ -177,9 +180,9 @@ func (r *workflowRebuilderImpl) replayResetWorkflow(
 	stateTransitionCount int64,
 	dbRecordVersion int64,
 	requestID string,
+	mutableState *persistencespb.WorkflowMutableState,
 ) (historyi.MutableState, error) {
-
-	rebuildMutableState, rebuildHistorySize, err := ndc.NewStateRebuilder(r.shard, r.logger).Rebuild(
+	rebuildMutableState, rebuildHistorySize, err := ndc.NewStateRebuilder(r.shard, r.logger).RebuildWithCurrentMutableState(
 		ctx,
 		r.shard.GetTimeSource().Now(),
 		workflowKey,
@@ -189,6 +192,7 @@ func (r *workflowRebuilderImpl) replayResetWorkflow(
 		workflowKey,
 		branchToken,
 		requestID,
+		mutableState,
 	)
 	if err != nil {
 		return nil, err

@@ -308,6 +308,14 @@ func (ns *Namespace) GetWorkflowRules() []*rulespb.WorkflowRule {
 	return expmaps.Values(ns.config.WorkflowRules)
 }
 
+func (ns *Namespace) GetWorkflowRule(ruleID string) (*rulespb.WorkflowRule, bool) {
+	if ns.config.WorkflowRules == nil {
+		return nil, false
+	}
+	result, ok := ns.config.WorkflowRules[ruleID]
+	return result, ok
+}
+
 // Error returns the reason associated with this bad binary.
 func (e BadBinaryError) Error() string {
 	return e.info.Reason

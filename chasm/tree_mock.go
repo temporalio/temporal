@@ -36,6 +36,8 @@ package chasm
 import (
 	reflect "reflect"
 
+	definition "go.temporal.io/server/common/definition"
+	tasks "go.temporal.io/server/service/history/tasks"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -63,6 +65,22 @@ func (m *MockNodeBackend) EXPECT() *MockNodeBackendMockRecorder {
 	return m.recorder
 }
 
+// AddTasks mocks base method.
+func (m *MockNodeBackend) AddTasks(arg0 ...tasks.Task) {
+	m.ctrl.T.Helper()
+	varargs := []any{}
+	for _, a := range arg0 {
+		varargs = append(varargs, a)
+	}
+	m.ctrl.Call(m, "AddTasks", varargs...)
+}
+
+// AddTasks indicates an expected call of AddTasks.
+func (mr *MockNodeBackendMockRecorder) AddTasks(arg0 ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddTasks", reflect.TypeOf((*MockNodeBackend)(nil).AddTasks), arg0...)
+}
+
 // GetCurrentVersion mocks base method.
 func (m *MockNodeBackend) GetCurrentVersion() int64 {
 	m.ctrl.T.Helper()
@@ -75,6 +93,20 @@ func (m *MockNodeBackend) GetCurrentVersion() int64 {
 func (mr *MockNodeBackendMockRecorder) GetCurrentVersion() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCurrentVersion", reflect.TypeOf((*MockNodeBackend)(nil).GetCurrentVersion))
+}
+
+// GetWorkflowKey mocks base method.
+func (m *MockNodeBackend) GetWorkflowKey() definition.WorkflowKey {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetWorkflowKey")
+	ret0, _ := ret[0].(definition.WorkflowKey)
+	return ret0
+}
+
+// GetWorkflowKey indicates an expected call of GetWorkflowKey.
+func (mr *MockNodeBackendMockRecorder) GetWorkflowKey() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowKey", reflect.TypeOf((*MockNodeBackend)(nil).GetWorkflowKey))
 }
 
 // NextTransitionCount mocks base method.
