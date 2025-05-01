@@ -1351,9 +1351,13 @@ func (d *ClientImpl) deploymentStateToDeploymentInfo(deploymentName string, stat
 
 	for _, v := range state.Versions {
 		workerDeploymentInfo.VersionSummaries = append(workerDeploymentInfo.VersionSummaries, &deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary{
-			Version:        v.GetVersion(),
-			CreateTime:     v.GetCreateTime(),
-			DrainageStatus: v.GetDrainageStatus(),
+			Version:           v.GetVersion(),
+			CreateTime:        v.GetCreateTime(),
+			DrainageStatus:    v.GetDrainageInfo().GetStatus(), // deprecated.
+			DrainageInfo:      v.GetDrainageInfo(),
+			RoutingUpdateTime: v.GetRoutingUpdateTime(),
+			CurrentSinceTime:  v.GetCurrentSinceTime(),
+			RampingSinceTime:  v.GetRampingSinceTime(),
 		})
 	}
 

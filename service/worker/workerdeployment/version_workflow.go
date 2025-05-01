@@ -683,9 +683,6 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 		d.VersionState.DrainageInfo = nil
 	}
 
-	// TODO (Shivam): Sync versionState to the deployment workflow on sync updates here?
-	// d.syncSummary(ctx)
-
 	return &deploymentspb.SyncVersionStateResponse{
 		VersionState: state,
 	}, nil
@@ -713,9 +710,13 @@ func (d *VersionWorkflowRunner) syncSummary(ctx workflow.Context) {
 		"",
 		SyncVersionSummarySignal,
 		&deploymentspb.WorkerDeploymentVersionSummary{
-			Version:        worker_versioning.WorkerDeploymentVersionToString(d.VersionState.Version),
-			CreateTime:     d.VersionState.CreateTime,
-			DrainageStatus: d.VersionState.DrainageInfo.GetStatus(),
+			Version:           worker_versioning.WorkerDeploymentVersionToString(d.VersionState.Version),
+			CreateTime:        d.VersionState.CreateTime,
+			DrainageStatus:    d.VersionState.DrainageInfo.GetStatus(), // deprecated.
+			DrainageInfo:      d.VersionState.DrainageInfo,
+			RoutingUpdateTime: d.VersionState.RoutingUpdateTime,
+			CurrentSinceTime:  d.VersionState.CurrentSinceTime,
+			RampingSinceTime:  d.VersionState.RampingSinceTime,
 		},
 	).Get(ctx, nil)
 	if err != nil {
