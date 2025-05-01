@@ -401,6 +401,31 @@ func (r *WorkflowStateReplicatorImpl) handleFirstReplicationTask(
 			historyEventBatchs = append(historyEventBatchs, sourceEvents)
 		}
 	}
+	checkEventBatchs := func() error {
+		if len(historyEventBatchs) == 0 && lastVersionHistoryItem != nil {
+			return serviceerror.NewInvalidArgument("no history event batch found")
+		}
+		expectedEventId := common.FirstEventID
+		for _, historyEventBatch := range historyEventBatchs {
+			for _, historyEvent := range historyEventBatch {
+				expectedEventVersion, err := versionhistory.GetVersionHistoryEventVersion(currentVersionHistory, historyEvent.EventId)
+				if err != nil {
+					return fmt.Errorf("failed to get event version %w, eventId: %v, versionHistory: %v", err, historyEvent.EventId, currentVersionHistory)
+				}
+				if historyEvent.EventId != expectedEventId || historyEvent.Version != expectedEventVersion {
+					return serviceerror.NewInvalidArgument(fmt.Sprintf("eventId %v, version %v is not expected, expected eventId %v, version %v", historyEvent.EventId, historyEvent.Version, expectedEventId, expectedEventVersion))
+				}
+				expectedEventId++
+			}
+		}
+		if expectedEventId != lastVersionHistoryItem.EventId+1 {
+			return serviceerror.NewInvalidArgument(fmt.Sprintf("event not match. Expected eventId %v, but got %v", expectedEventId, lastVersionHistoryItem.EventId+1))
+		}
+		return nil
+	}
+	if err := checkEventBatchs(); err != nil {
+		return err
+	}
 
 	wfCtx, releaseFn, err := r.workflowCache.GetOrCreateWorkflowExecution(
 		ctx,
@@ -1124,7 +1149,7 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 		}
 	}
 	if expectedEventID != endEventID+1 {
-		return serviceerror.NewInternal(fmt.Sprintf("Missing events. Expected %v, but got %v", expectedEventID, endEventID+1))
+		return serviceerror.NewInternal(fmt.Sprintf("Event not match. Expected %v, but got %v", expectedEventID, endEventID+1))
 	}
 	versionHistoryToAppend.Items = versionhistory.CopyVersionHistoryItems(sourceVersionHistory.Items)
 	localMutableState.SetHistoryBuilder(historybuilder.NewImmutableForUpdateNextEventID(sourceLastItem))
