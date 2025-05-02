@@ -472,7 +472,10 @@ func (n *Node) syncSubComponents() error {
 	if n.parent != nil {
 		return serviceerror.NewInternal("syncSubComponents must be called on root node")
 	}
-	n.mutation.DeletedNodes = make(map[string]struct{})
+	// If node value is nil, then it means there are no subcomponents to sync.
+	if n.value == nil {
+		return nil
+	}
 	return n.syncSubComponentsInternal(RootPath)
 }
 

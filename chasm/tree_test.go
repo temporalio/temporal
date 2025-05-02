@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/server/common/testing/protoassert"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testlogger"
+	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/service/history/tasks"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -373,47 +374,6 @@ func (s *nodeSuite) TestFieldInterface() {
 	s.NoError(err)
 	s.NotNil(sc1)
 	s.Equal("sub-component1-data", sc1.GetData())
-}
-
-func (s *nodeSuite) TestCloseTransaction() {
-	node := s.testComponentTree()
-
-	s.Len(node.children, 2)
-	s.NotNil(node.children["SubComponent1"].value)
-	s.Len(node.children["SubComponent1"].children, 2)
-	s.NotNil(node.children["SubComponent1"].children["SubComponent11"].value)
-	s.Empty(node.children["SubComponent1"].children["SubComponent11"].children)
-
-	// Serialize root component.
-	s.NotNil(node.serializedNode.GetMetadata().GetComponentAttributes())
-	s.Nil(node.serializedNode.GetData())
-	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(2)).Times(1) // for LastUpdatesVersionedTransition for TestComponent
-	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(2)).Times(1)
-	err := node.serialize()
-	s.NoError(err)
-	s.NotNil(node.serializedNode)
-	s.NotNil(node.serializedNode.GetData(), "node serialized value must have data after serialize is called")
-	s.Equal("TestLibrary.test_component", node.serializedNode.GetMetadata().GetComponentAttributes().GetType(), "node serialized value must have type set")
-	s.Equal(valueStateSynced, node.valueState)
-
-	// Serialize subcomponents (there are 2 subcomponents).
-	sc1Node := node.children["SubComponent1"]
-	s.NotNil(sc1Node.serializedNode.GetMetadata().GetComponentAttributes())
-	s.Nil(sc1Node.serializedNode.GetData())
-	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(2)).Times(2) // for LastUpdatesVersionedTransition of TestSubComponent1
-	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(2)).Times(2)
-	for _, childNode := range node.children {
-		err = childNode.serialize()
-		s.NoError(err)
-		s.Equal(valueStateSynced, childNode.valueState)
-	}
-	s.NotNil(sc1Node.serializedNode.GetData(), "child node serialized value must have data after serialize is called")
-	s.Equal("TestLibrary.test_sub_component_1", sc1Node.serializedNode.GetMetadata().GetComponentAttributes().GetType(), "node serialized value must have type set")
-
-	// Check SubData too.
-	sd1Node := node.children["SubData1"]
-	s.NoError(err)
-	s.NotNil(sd1Node.serializedNode.GetData(), "child node serialized value must have data after serialize is called")
 }
 
 func (s *nodeSuite) TestGenerateSerializedNodes() {
@@ -979,7 +939,7 @@ func (s *nodeSuite) TestGetComponent() {
 	}
 }
 
-func (s *nodeSuite) TestSeralizeDeserializeTask() {
+func (s *nodeSuite) TestSerializeDeserializeTask() {
 	payload := &commonpb.Payload{
 		Data: []byte("some-random-data"),
 	}
@@ -1041,6 +1001,63 @@ func (s *nodeSuite) TestSeralizeDeserializeTask() {
 			tc.equalFn(tc.task, deserializedTaskValue.Interface())
 		})
 	}
+}
+
+func (s *nodeSuite) TestCloseTransaction_Success() {
+	node := s.testComponentTree()
+	tv := testvars.New(s.T())
+
+	chasmCtx := NewMutableContext(context.Background(), node)
+	tc, err := node.Component(chasmCtx, ComponentRef{componentPath: RootPath})
+	s.NoError(err)
+	tc.(*TestComponent).SubData1 = NewEmptyField[*protoMessageType]()
+	tc.(*TestComponent).ComponentData = &protoMessageType{ActivityId: tv.Any().String()}
+
+	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(1)).AnyTimes()
+	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(1)).AnyTimes()
+	s.nodeBackend.EXPECT().GetWorkflowKey().Return(tv.Any().WorkflowKey()).AnyTimes()
+
+	mutations, err := node.CloseTransaction()
+	s.NoError(err)
+	s.Len(mutations.UpdatedNodes, 4)
+	s.Contains(mutations.UpdatedNodes, "", "root component must be in UpdatedNodes")
+	s.Contains(mutations.UpdatedNodes, "SubComponent1", "SubComponent1 component must be in UpdatedNodes")
+	s.Contains(mutations.UpdatedNodes, "SubComponent1/SubComponent11", "SubComponent1/SubComponent11 component must be in UpdatedNodes")
+	s.Contains(mutations.UpdatedNodes, "SubComponent1/SubData11", "SubComponent1/SubData11 component must be in UpdatedNodes")
+	s.Len(mutations.DeletedNodes, 1)
+	s.Contains(mutations.DeletedNodes, "SubData1", "SubData1 was removed and must be in DeletedNodes")
+
+	sc1, err := tc.(*TestComponent).SubComponent1.Get(chasmCtx)
+	s.NoError(err)
+	s.NotNil(sc1)
+
+	mutations, err = node.CloseTransaction()
+	s.NoError(err)
+	s.Len(mutations.UpdatedNodes, 1)
+	s.Contains(mutations.UpdatedNodes, "SubComponent1", "SubComponent1 component must be in UpdatedNodes")
+	s.Empty(mutations.DeletedNodes)
+}
+
+func (s *nodeSuite) TestCloseTransaction_EmptyNode() {
+	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(1)).Times(1) // for InitialVersionedTransition of the root component.
+	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(1)).Times(1)
+
+	var nilSerializedNodes map[string]*persistencespb.ChasmNode
+	// Create an empty tree.
+	node, err := NewTree(nilSerializedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+	s.NoError(err)
+	s.Nil(node.value)
+
+	tv := testvars.New(s.T())
+
+	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(1)).Times(1)
+	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(1)).Times(1)
+	s.nodeBackend.EXPECT().GetWorkflowKey().Return(tv.Any().WorkflowKey())
+
+	mutations, err := node.CloseTransaction()
+	s.NoError(err)
+	s.Empty(mutations.UpdatedNodes, "there should be no updated nodes because tree was initialized with empty serialized nodes")
+	s.Empty(mutations.DeletedNodes, "there should be no deleted nodes because tree was initialized with empty serialized nodes")
 }
 
 func (s *nodeSuite) TestCloseTransaction_InvalidateComponentTasks() {
@@ -1462,9 +1479,7 @@ func (s *nodeSuite) testComponentTree() *Node {
 	s.IsType(&TestComponent{}, node.value)
 	s.Equal(valueStateSynced, node.valueState)
 
-	tc, err := node.Component(NewMutableContext(context.Background(), node), ComponentRef{
-		componentPath: []string{},
-	})
+	tc, err := node.Component(NewMutableContext(context.Background(), node), ComponentRef{componentPath: RootPath})
 	s.NoError(err)
 	s.Equal(valueStateNeedSerialize, node.valueState)
 	// Create subcomponents by assigning fields to TestComponent instance.
