@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/enums"
@@ -327,7 +328,9 @@ func (s *Starter) handleConflict(
 
 		if requestIDInfo.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
 			resp, err := s.respondToRetriedRequest(ctx, currentWorkflowConditionFailed.RunID)
-			resp.Status = currentWorkflowConditionFailed.Status
+			if resp != nil {
+				resp.Status = currentWorkflowConditionFailed.Status
+			}
 			return resp, StartDeduped, err
 		}
 
@@ -335,6 +338,7 @@ func (s *Starter) handleConflict(
 			RunId:   currentWorkflowConditionFailed.RunID,
 			Started: false,
 			Status:  currentWorkflowConditionFailed.Status,
+			Link:    s.generateRequestIdRefLink(currentWorkflowConditionFailed.RunID),
 		}
 		return resp, StartDeduped, nil
 	}
@@ -499,6 +503,8 @@ func (s *Starter) resolveDuplicateWorkflowID(
 			return &historyservice.StartWorkflowExecutionResponse{
 				RunId:   newRunID,
 				Started: true,
+				Status:  enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+				Link:    s.generateStartedEventRefLink(newRunID),
 			}, StartNew, nil
 		}
 		events, err := s.getWorkflowHistory(ctx, mutableStateInfo)
@@ -534,6 +540,7 @@ func (s *Starter) respondToRetriedRequest(
 			RunId:   runID,
 			Started: true,
 			// Status is set by caller
+			Link: s.generateStartedEventRefLink(runID),
 		}, nil
 	}
 
@@ -553,6 +560,7 @@ func (s *Starter) respondToRetriedRequest(
 			RunId:   runID,
 			Started: true,
 			// Status is set by caller
+			Link: s.generateStartedEventRefLink(runID),
 		}, nil
 	}
 
@@ -642,12 +650,17 @@ func (s *Starter) handleUseExistingWorkflowOnConflictOptions(
 	workflowKey definition.WorkflowKey,
 	currentWorkflowConditionFailed *persistence.CurrentWorkflowConditionFailedError,
 ) (*historyservice.StartWorkflowExecutionResponse, StartOutcome, error) {
+	// Default response link is for the started event. If there is OnConflictOptions set, and it's
+	// attaching the request ID, then the response link will be a request ID reference.
+	responseLink := s.generateStartedEventRefLink(currentWorkflowConditionFailed.RunID)
+
 	var err error
 	onConflictOptions := s.request.StartRequest.GetOnConflictOptions()
 	if onConflictOptions != nil {
 		requestID := ""
 		if onConflictOptions.AttachRequestId {
 			requestID = s.request.StartRequest.GetRequestId()
+			responseLink = s.generateRequestIdRefLink(currentWorkflowConditionFailed.RunID)
 		}
 		var completionCallbacks []*commonpb.Callback
 		if onConflictOptions.AttachCompletionCallbacks {
@@ -688,6 +701,7 @@ func (s *Starter) handleUseExistingWorkflowOnConflictOptions(
 			RunId:   workflowKey.RunID,
 			Started: false, // set explicitly for emphasis
 			Status:  enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			Link:    responseLink,
 		}
 		return resp, StartReused, nil
 	case consts.ErrWorkflowCompleted:
@@ -741,6 +755,7 @@ func (s *Starter) generateResponse(
 			RunId:   runID,
 			Started: true,
 			Status:  enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			Link:    s.generateStartedEventRefLink(runID),
 		}, nil
 	}
 
@@ -778,6 +793,7 @@ func (s *Starter) generateResponse(
 		Clock:   clock,
 		Started: true,
 		Status:  enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		Link:    s.generateStartedEventRefLink(runID),
 		EagerWorkflowTask: &workflowservice.PollWorkflowTaskQueueResponse{
 			TaskToken:         serializedToken,
 			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
@@ -794,6 +810,42 @@ func (s *Starter) generateResponse(
 			StartedTime:                timestamppb.New(workflowTaskInfo.StartedTime),
 		},
 	}, nil
+}
+
+func (s *Starter) generateStartedEventRefLink(runID string) *commonpb.Link {
+	return &commonpb.Link{
+		Variant: &commonpb.Link_WorkflowEvent_{
+			WorkflowEvent: &commonpb.Link_WorkflowEvent{
+				Namespace:  s.namespace.Name().String(),
+				WorkflowId: s.request.StartRequest.WorkflowId,
+				RunId:      runID,
+				Reference: &commonpb.Link_WorkflowEvent_EventRef{
+					EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+						EventId:   common.FirstEventID,
+						EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+					},
+				},
+			},
+		},
+	}
+}
+
+func (s *Starter) generateRequestIdRefLink(runID string) *commonpb.Link {
+	return &commonpb.Link{
+		Variant: &commonpb.Link_WorkflowEvent_{
+			WorkflowEvent: &commonpb.Link_WorkflowEvent{
+				Namespace:  s.namespace.Name().String(),
+				WorkflowId: s.request.StartRequest.WorkflowId,
+				RunId:      runID,
+				Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
+					RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
+						RequestId: s.request.StartRequest.RequestId,
+						EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+					},
+				},
+			},
+		},
+	}
 }
 
 func (s StartOutcome) String() string {

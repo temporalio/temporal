@@ -35,6 +35,7 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -83,7 +84,21 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution() {
 		request := makeRequest()
 		we, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 		s.NoError(err)
-		s.True(we.Started)
+		requireStartedAndRunning(s.T(), we)
+		s.ProtoEqual(
+			&commonpb.Link_WorkflowEvent{
+				Namespace:  s.Namespace().String(),
+				WorkflowId: request.WorkflowId,
+				RunId:      we.RunId,
+				Reference: &commonpb.Link_WorkflowEvent_EventRef{
+					EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+						EventId:   1,
+						EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+					},
+				},
+			},
+			we.Link.GetWorkflowEvent(),
+		)
 
 		// Validate the default value for WorkflowTaskTimeoutSeconds
 		historyEvents := s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{
@@ -100,11 +115,39 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution() {
 
 		we0, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 		s.NoError(err0)
-		s.True(we0.Started)
+		requireStartedAndRunning(s.T(), we0)
+		s.ProtoEqual(
+			&commonpb.Link_WorkflowEvent{
+				Namespace:  s.Namespace().String(),
+				WorkflowId: request.WorkflowId,
+				RunId:      we0.RunId,
+				Reference: &commonpb.Link_WorkflowEvent_EventRef{
+					EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+						EventId:   1,
+						EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+					},
+				},
+			},
+			we0.Link.GetWorkflowEvent(),
+		)
 
 		we1, err1 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 		s.NoError(err1)
-		s.True(we1.Started)
+		requireStartedAndRunning(s.T(), we1)
+		s.ProtoEqual(
+			&commonpb.Link_WorkflowEvent{
+				Namespace:  s.Namespace().String(),
+				WorkflowId: request.WorkflowId,
+				RunId:      we1.RunId,
+				Reference: &commonpb.Link_WorkflowEvent_EventRef{
+					EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+						EventId:   1,
+						EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+					},
+				},
+			},
+			we1.Link.GetWorkflowEvent(),
+		)
 
 		s.Equal(we0.RunId, we1.RunId)
 	})
@@ -113,7 +156,7 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution() {
 		request := makeRequest()
 		we, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 		s.NoError(err)
-		s.True(we.Started)
+		requireStartedAndRunning(s.T(), we)
 
 		request.RequestId = uuid.New()
 
@@ -140,14 +183,42 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting() {
 
 	we0, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err0)
-	s.True(we0.Started)
+	requireStartedAndRunning(s.T(), we0)
+	s.ProtoEqual(
+		&commonpb.Link_WorkflowEvent{
+			Namespace:  s.Namespace().String(),
+			WorkflowId: request.WorkflowId,
+			RunId:      we0.RunId,
+			Reference: &commonpb.Link_WorkflowEvent_EventRef{
+				EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+					EventId:   1,
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+				},
+			},
+		},
+		we0.Link.GetWorkflowEvent(),
+	)
 
 	request.RequestId = uuid.New()
 	request.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING
 	we1, err1 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err1)
 	s.Equal(we0.RunId, we1.RunId)
-	s.False(we1.Started)
+	requireNotStartedButRunning(s.T(), we1)
+	s.ProtoEqual(
+		&commonpb.Link_WorkflowEvent{
+			Namespace:  s.Namespace().String(),
+			WorkflowId: request.WorkflowId,
+			RunId:      we1.RunId,
+			Reference: &commonpb.Link_WorkflowEvent_EventRef{
+				EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+					EventId:   1,
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+				},
+			},
+		},
+		we1.Link.GetWorkflowEvent(),
+	)
 }
 
 func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting_OnConflictOptions() {
@@ -233,7 +304,21 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting_OnConflictOpt
 
 			we0, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 			s.NoError(err0)
-			s.True(we0.Started)
+			requireStartedAndRunning(s.T(), we0)
+			s.ProtoEqual(
+				&commonpb.Link_WorkflowEvent{
+					Namespace:  s.Namespace().String(),
+					WorkflowId: request.WorkflowId,
+					RunId:      we0.RunId,
+					Reference: &commonpb.Link_WorkflowEvent_EventRef{
+						EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+							EventId:   1,
+							EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+						},
+					},
+				},
+				we0.Link.GetWorkflowEvent(),
+			)
 
 			historyEvents := s.GetHistory(
 				s.Namespace().String(),
@@ -293,7 +378,21 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting_OnConflictOpt
 			}
 			s.NoError(err1)
 			s.Equal(we0.RunId, we1.RunId)
-			s.False(we1.Started)
+			requireNotStartedButRunning(s.T(), we1)
+			s.ProtoEqual(
+				&commonpb.Link_WorkflowEvent{
+					Namespace:  s.Namespace().String(),
+					WorkflowId: request.WorkflowId,
+					RunId:      we1.RunId,
+					Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
+						RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
+							RequestId: request.RequestId,
+							EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+						},
+					},
+				},
+				we1.Link.GetWorkflowEvent(),
+			)
 
 			historyEvents = s.GetHistory(
 				s.Namespace().String(),
@@ -379,7 +478,21 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting_OnConflictOpt
 
 	we0, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err0)
-	s.True(we0.Started)
+	requireStartedAndRunning(s.T(), we0)
+	s.ProtoEqual(
+		&commonpb.Link_WorkflowEvent{
+			Namespace:  s.Namespace().String(),
+			WorkflowId: request.WorkflowId,
+			RunId:      we0.RunId,
+			Reference: &commonpb.Link_WorkflowEvent_EventRef{
+				EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+					EventId:   1,
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+				},
+			},
+		},
+		we0.Link.GetWorkflowEvent(),
+	)
 
 	request.RequestId = uuid.New()
 	request.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING
@@ -389,7 +502,21 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting_OnConflictOpt
 	we1, err1 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err1)
 	s.Equal(we0.RunId, we1.RunId)
-	s.False(we1.Started)
+	requireNotStartedButRunning(s.T(), we1)
+	s.ProtoEqual(
+		&commonpb.Link_WorkflowEvent{
+			Namespace:  s.Namespace().String(),
+			WorkflowId: request.WorkflowId,
+			RunId:      we1.RunId,
+			Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
+				RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
+					RequestId: request.RequestId,
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+				},
+			},
+		},
+		we1.Link.GetWorkflowEvent(),
+	)
 
 	historyEvents := s.GetHistory(
 		s.Namespace().String(),
@@ -410,7 +537,21 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting_OnConflictOpt
 	we2, err2 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err2)
 	s.Equal(we0.RunId, we2.RunId)
-	s.False(we2.Started)
+	requireNotStartedButRunning(s.T(), we2)
+	s.ProtoEqual(
+		&commonpb.Link_WorkflowEvent{
+			Namespace:  s.Namespace().String(),
+			WorkflowId: request.WorkflowId,
+			RunId:      we2.RunId,
+			Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
+				RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
+					RequestId: request.RequestId,
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+				},
+			},
+		},
+		we2.Link.GetWorkflowEvent(),
+	)
 
 	// History events must be the same as before.
 	historyEvents = s.GetHistory(
@@ -435,8 +576,21 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting_OnConflictOpt
 	we3, err3 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err3)
 	s.Equal(we0.RunId, we3.RunId)
-	s.True(we3.Started) // Original request was the start request.
-
+	requireStartedAndRunning(s.T(), we3) // Original request was the start request.
+	s.ProtoEqual(
+		&commonpb.Link_WorkflowEvent{
+			Namespace:  s.Namespace().String(),
+			WorkflowId: request.WorkflowId,
+			RunId:      we3.RunId,
+			Reference: &commonpb.Link_WorkflowEvent_EventRef{
+				EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+					EventId:   1,
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+				},
+			},
+		},
+		we3.Link.GetWorkflowEvent(),
+	)
 }
 
 func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting_OnConflictOptions_NoDedup() {
@@ -454,7 +608,21 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting_OnConflictOpt
 
 	we0, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err0)
-	s.True(we0.Started)
+	requireStartedAndRunning(s.T(), we0)
+	s.ProtoEqual(
+		&commonpb.Link_WorkflowEvent{
+			Namespace:  s.Namespace().String(),
+			WorkflowId: request.WorkflowId,
+			RunId:      we0.RunId,
+			Reference: &commonpb.Link_WorkflowEvent_EventRef{
+				EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+					EventId:   1,
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+				},
+			},
+		},
+		we0.Link.GetWorkflowEvent(),
+	)
 
 	// New RequestId, but not attaching it.
 	request.RequestId = uuid.New()
@@ -462,7 +630,21 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting_OnConflictOpt
 	we1, err1 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err1)
 	s.Equal(we0.RunId, we1.RunId)
-	s.False(we1.Started)
+	requireNotStartedButRunning(s.T(), we1)
+	s.ProtoEqual(
+		&commonpb.Link_WorkflowEvent{
+			Namespace:  s.Namespace().String(),
+			WorkflowId: request.WorkflowId,
+			RunId:      we1.RunId,
+			Reference: &commonpb.Link_WorkflowEvent_EventRef{
+				EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+					EventId:   1,
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+				},
+			},
+		},
+		we1.Link.GetWorkflowEvent(),
+	)
 
 	// Since OnConflictOptions is nil, no history event is added.
 	historyEvents := s.GetHistory(
@@ -485,7 +667,21 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting_OnConflictOpt
 	we2, err2 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err2)
 	s.Equal(we0.RunId, we2.RunId)
-	s.False(we2.Started)
+	requireNotStartedButRunning(s.T(), we2)
+	s.ProtoEqual(
+		&commonpb.Link_WorkflowEvent{
+			Namespace:  s.Namespace().String(),
+			WorkflowId: request.WorkflowId,
+			RunId:      we2.RunId,
+			Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
+				RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
+					RequestId: request.RequestId,
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+				},
+			},
+		},
+		we2.Link.GetWorkflowEvent(),
+	)
 
 	historyEvents = s.GetHistory(
 		s.Namespace().String(),
@@ -546,6 +742,20 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_Terminate() {
 
 			we0, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 			s.NoError(err0)
+			s.ProtoEqual(
+				&commonpb.Link_WorkflowEvent{
+					Namespace:  s.Namespace().String(),
+					WorkflowId: request.WorkflowId,
+					RunId:      we0.RunId,
+					Reference: &commonpb.Link_WorkflowEvent_EventRef{
+						EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+							EventId:   1,
+							EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+						},
+					},
+				},
+				we0.Link.GetWorkflowEvent(),
+			)
 
 			request.RequestId = uuid.New()
 			request.WorkflowIdReusePolicy = tc.WorkflowIdReusePolicy
@@ -553,6 +763,20 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_Terminate() {
 			we1, err1 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 			s.NoError(err1)
 			s.NotEqual(we0.RunId, we1.RunId)
+			s.ProtoEqual(
+				&commonpb.Link_WorkflowEvent{
+					Namespace:  s.Namespace().String(),
+					WorkflowId: request.WorkflowId,
+					RunId:      we1.RunId,
+					Reference: &commonpb.Link_WorkflowEvent_EventRef{
+						EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+							EventId:   1,
+							EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+						},
+					},
+				},
+				we1.Link.GetWorkflowEvent(),
+			)
 
 			descResp, err := s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
 				Namespace: s.Namespace().String(),
@@ -595,6 +819,20 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecutionWithDelay() {
 	reqStartTime := time.Now()
 	we0, startErr := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(startErr)
+	s.ProtoEqual(
+		&commonpb.Link_WorkflowEvent{
+			Namespace:  s.Namespace().String(),
+			WorkflowId: request.WorkflowId,
+			RunId:      we0.RunId,
+			Reference: &commonpb.Link_WorkflowEvent_EventRef{
+				EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+					EventId:   1,
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+				},
+			},
+		},
+		we0.Link.GetWorkflowEvent(),
+	)
 
 	delayEndTime := time.Now()
 	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
@@ -1336,4 +1574,18 @@ func (s *WorkflowTestSuite) TestWorkflowRetryFailures() {
   3 WorkflowTaskStarted
   4 WorkflowTaskCompleted
   5 WorkflowExecutionFailed`, events)
+}
+
+func requireNotStartedButRunning(t *testing.T, resp *workflowservice.StartWorkflowExecutionResponse) {
+	t.Helper()
+	require.False(t, resp.Started)
+	require.Equalf(t, resp.Status, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		"Expected workflow to be running, but got %s", resp.Status)
+}
+
+func requireStartedAndRunning(t *testing.T, resp *workflowservice.StartWorkflowExecutionResponse) {
+	t.Helper()
+	require.True(t, resp.Started)
+	require.Equalf(t, resp.Status, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		"Expected workflow to be running, but got %s", resp.Status)
 }

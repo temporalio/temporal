@@ -352,13 +352,17 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 	require.NoError(t, err)
 	coll := callbacks.MachineCollection(node)
 
-	callbackToSchedule := callbacks.NewCallback(timestamppb.Now(), callbacks.NewWorkflowClosedTrigger(), &persistencespb.Callback{
-		Variant: &persistencespb.Callback_Nexus_{
-			Nexus: &persistencespb.Callback_Nexus{
-				Url: "http://localhost?foo=bar",
+	callbackToSchedule := callbacks.NewCallback(
+		"request-id-1",
+		timestamppb.Now(),
+		callbacks.NewWorkflowClosedTrigger(), &persistencespb.Callback{
+			Variant: &persistencespb.Callback_Nexus_{
+				Nexus: &persistencespb.Callback_Nexus{
+					Url: "http://localhost?foo=bar",
+				},
 			},
 		},
-	})
+	)
 	_, err = coll.Add("sched", callbackToSchedule)
 	require.NoError(t, err)
 	err = coll.Transition("sched", func(cb callbacks.Callback) (hsm.TransitionOutput, error) {
@@ -366,13 +370,17 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	callbackToBackoff := callbacks.NewCallback(timestamppb.Now(), callbacks.NewWorkflowClosedTrigger(), &persistencespb.Callback{
-		Variant: &persistencespb.Callback_Nexus_{
-			Nexus: &persistencespb.Callback_Nexus{
-				Url: "http://localhost?foo=bar",
+	callbackToBackoff := callbacks.NewCallback(
+		"request-id-2",
+		timestamppb.Now(),
+		callbacks.NewWorkflowClosedTrigger(), &persistencespb.Callback{
+			Variant: &persistencespb.Callback_Nexus_{
+				Nexus: &persistencespb.Callback_Nexus{
+					Url: "http://localhost?foo=bar",
+				},
 			},
 		},
-	})
+	)
 	callbackToBackoff.CallbackInfo.State = enumsspb.CALLBACK_STATE_SCHEDULED
 	_, err = coll.Add("backoff", callbackToBackoff)
 	require.NoError(t, err)
@@ -893,7 +901,12 @@ func TestTaskGeneratorImpl_GenerateDirtySubStateMachineTasks_TrimsTimersForDelet
 	require.NoError(t, RegisterStateMachine(reg))
 	require.NoError(t, callbacks.RegisterStateMachine(reg))
 
-	cb := callbacks.NewCallback(timestamppb.Now(), callbacks.NewWorkflowClosedTrigger(), &persistencespb.Callback{})
+	cb := callbacks.NewCallback(
+		"request-id",
+		timestamppb.Now(),
+		callbacks.NewWorkflowClosedTrigger(),
+		&persistencespb.Callback{},
+	)
 	root, err := hsm.NewRoot(reg, StateMachineType, ms, make(map[string]*persistencespb.StateMachineMap), &hsmtest.NodeBackend{})
 	require.NoError(t, err)
 	child, err := callbacks.MachineCollection(root).Add("test-callback", cb)

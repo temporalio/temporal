@@ -587,7 +587,7 @@ func (t *resetTest) run() {
 		},
 	)
 	t.Equal(runID, resp.RunId)
-	t.False(resp.Started)
+	requireNotStartedButRunning(t.T(), resp)
 
 	for i := 1; i <= t.totalSignals; i++ {
 		t.sendSignalAndProcessWFT(poller)
@@ -718,7 +718,7 @@ func (t *resetTest) run() {
 		},
 	)
 	t.Equal(newRunId, resp.RunId)
-	t.False(resp.Started)
+	requireNotStartedButRunning(t.T(), resp)
 
 	// History events must be the same.
 	events = t.GetHistory(t.Namespace().String(), t.tv.WorkflowExecution())

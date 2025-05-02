@@ -294,6 +294,7 @@ func (s *temporalSerializerSuite) TestSerializeWorkflowExecutionState() {
 	// Deserialization adds the CreateRequestId to the Details.RequestIds map.
 	state.RequestIds[state.CreateRequestId] = &persistencespb.RequestIDInfo{
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+		EventId:   common.FirstEventID,
 	}
 	s.ProtoEqual(state, deserializedState)
 

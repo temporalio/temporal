@@ -162,11 +162,23 @@ func Invoke(
 			OriginalStartTime:       startEvent.EventTime,
 			CancelRequested:         executionInfo.CancelRequested,
 			ResetRunId:              executionInfo.ResetRunId,
+			RequestIdInfos:          make(map[string]*workflowpb.RequestIdInfo),
 		},
 	}
 
 	if mutableState.IsResetRun() {
 		result.WorkflowExtendedInfo.LastResetTime = executionState.StartTime
+	}
+
+	for requestID, requestIDInfo := range mutableState.GetExecutionState().GetRequestIds() {
+		info := &workflowpb.RequestIdInfo{
+			EventType: requestIDInfo.EventType,
+			Buffered:  requestIDInfo.EventId == common.BufferedEventID,
+		}
+		if !info.Buffered {
+			info.EventId = requestIDInfo.EventId
+		}
+		result.WorkflowExtendedInfo.RequestIdInfos[requestID] = info
 	}
 
 	if executionInfo.ParentRunId != "" {

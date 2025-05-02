@@ -314,6 +314,7 @@ message WorkflowExecutionState {
 
 message RequestIDInfo {
     temporal.api.enums.v1.EventType event_type = 1;
+    int64 event_id = 2;
 }
 
 // transfer column
@@ -732,6 +733,9 @@ message CallbackInfo {
     temporal.api.failure.v1.Failure last_attempt_failure = 7;
     // The time when the next attempt is scheduled.
     google.protobuf.Timestamp next_attempt_schedule_time = 8;
+
+    // Request ID that added the callback.
+    string request_id = 9;
 }
 
 // NexusOperationInfo contains the state of a nexus operation.

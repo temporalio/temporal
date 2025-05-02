@@ -36,7 +36,9 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
@@ -61,8 +63,9 @@ func (s *DescribeTestSuite) TestDescribeWorkflowExecution() {
 	identity := "worker1"
 
 	// Start workflow execution
+	requestID := uuid.New()
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           requestID,
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
@@ -107,6 +110,17 @@ func (s *DescribeTestSuite) TestDescribeWorkflowExecution() {
 	s.Nil(dweResponse.WorkflowExtendedInfo.ExecutionExpirationTime)
 	s.NotNil(dweResponse.WorkflowExtendedInfo.RunExpirationTime)
 	s.NotNil(dweResponse.WorkflowExtendedInfo.OriginalStartTime)
+	s.NotNil(dweResponse.WorkflowExtendedInfo.RequestIdInfos)
+	s.Contains(dweResponse.WorkflowExtendedInfo.RequestIdInfos, requestID)
+	s.NotNil(dweResponse.WorkflowExtendedInfo.RequestIdInfos[requestID])
+	s.ProtoEqual(
+		&workflowpb.RequestIdInfo{
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+			EventId:   common.FirstEventID,
+			Buffered:  false,
+		},
+		dweResponse.WorkflowExtendedInfo.RequestIdInfos[requestID],
+	)
 
 	// workflow logic
 	workflowComplete := false

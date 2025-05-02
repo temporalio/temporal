@@ -1186,6 +1186,7 @@ func (x *WorkflowExecutionState) GetRequestIds() map[string]*RequestIDInfo {
 type RequestIDInfo struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	EventType     v16.EventType          `protobuf:"varint,1,opt,name=event_type,json=eventType,proto3,enum=temporal.api.enums.v1.EventType" json:"event_type,omitempty"`
+	EventId       int64                  `protobuf:"varint,2,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1225,6 +1226,13 @@ func (x *RequestIDInfo) GetEventType() v16.EventType {
 		return x.EventType
 	}
 	return v16.EventType(0)
+}
+
+func (x *RequestIDInfo) GetEventId() int64 {
+	if x != nil {
+		return x.EventId
+	}
+	return 0
 }
 
 // transfer column
@@ -3332,8 +3340,10 @@ type CallbackInfo struct {
 	LastAttemptFailure *v17.Failure `protobuf:"bytes,7,opt,name=last_attempt_failure,json=lastAttemptFailure,proto3" json:"last_attempt_failure,omitempty"`
 	// The time when the next attempt is scheduled.
 	NextAttemptScheduleTime *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=next_attempt_schedule_time,json=nextAttemptScheduleTime,proto3" json:"next_attempt_schedule_time,omitempty"`
-	unknownFields           protoimpl.UnknownFields
-	sizeCache               protoimpl.SizeCache
+	// Request ID that added the callback.
+	RequestId     string `protobuf:"bytes,9,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CallbackInfo) Reset() {
@@ -3420,6 +3430,13 @@ func (x *CallbackInfo) GetNextAttemptScheduleTime() *timestamppb.Timestamp {
 		return x.NextAttemptScheduleTime
 	}
 	return nil
+}
+
+func (x *CallbackInfo) GetRequestId() string {
+	if x != nil {
+		return x.RequestId
+	}
+	return ""
 }
 
 // NexusOperationInfo contains the state of a nexus operation.
@@ -4381,10 +4398,11 @@ const file_temporal_server_api_persistence_v1_executions_proto_rawDesc = "" +
 	"requestIds\x1ap\n" +
 	"\x0fRequestIdsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12G\n" +
-	"\x05value\x18\x02 \x01(\v21.temporal.server.api.persistence.v1.RequestIDInfoR\x05value:\x028\x01\"P\n" +
+	"\x05value\x18\x02 \x01(\v21.temporal.server.api.persistence.v1.RequestIDInfoR\x05value:\x028\x01\"k\n" +
 	"\rRequestIDInfo\x12?\n" +
 	"\n" +
-	"event_type\x18\x01 \x01(\x0e2 .temporal.api.enums.v1.EventTypeR\teventType\"\xdf\a\n" +
+	"event_type\x18\x01 \x01(\x0e2 .temporal.api.enums.v1.EventTypeR\teventType\x12\x19\n" +
+	"\bevent_id\x18\x02 \x01(\x03R\aeventId\"\xdf\a\n" +
 	"\x10TransferTaskInfo\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
@@ -4621,7 +4639,7 @@ const file_temporal_server_api_persistence_v1_executions_proto_rawDesc = "" +
 	"workflowId\x12\x15\n" +
 	"\x06run_id\x18\x03 \x01(\tR\x05runId\x12D\n" +
 	"\n" +
-	"last_event\x18\x04 \x01(\v2%.temporal.api.history.v1.HistoryEventR\tlastEvent\"\xed\x05\n" +
+	"last_event\x18\x04 \x01(\v2%.temporal.api.history.v1.HistoryEventR\tlastEvent\"\x8c\x06\n" +
 	"\fCallbackInfo\x12H\n" +
 	"\bcallback\x18\x01 \x01(\v2,.temporal.server.api.persistence.v1.CallbackR\bcallback\x12R\n" +
 	"\atrigger\x18\x02 \x01(\v28.temporal.server.api.persistence.v1.CallbackInfo.TriggerR\atrigger\x12G\n" +
@@ -4630,7 +4648,9 @@ const file_temporal_server_api_persistence_v1_executions_proto_rawDesc = "" +
 	"\aattempt\x18\x05 \x01(\x05R\aattempt\x12W\n" +
 	"\x1alast_attempt_complete_time\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\x17lastAttemptCompleteTime\x12R\n" +
 	"\x14last_attempt_failure\x18\a \x01(\v2 .temporal.api.failure.v1.FailureR\x12lastAttemptFailure\x12W\n" +
-	"\x1anext_attempt_schedule_time\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\x17nextAttemptScheduleTime\x1a\x10\n" +
+	"\x1anext_attempt_schedule_time\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\x17nextAttemptScheduleTime\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\t \x01(\tR\trequestId\x1a\x10\n" +
 	"\x0eWorkflowClosed\x1a\x80\x01\n" +
 	"\aTrigger\x12j\n" +
 	"\x0fworkflow_closed\x18\x01 \x01(\v2?.temporal.server.api.persistence.v1.CallbackInfo.WorkflowClosedH\x00R\x0eworkflowClosedB\t\n" +
