@@ -1216,6 +1216,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeat(ctx context.Context, requ
 	return &workflowservice.RecordActivityTaskHeartbeatResponse{
 		CancelRequested: resp.GetCancelRequested(),
 		ActivityPaused:  resp.GetActivityPaused(),
+		ActivityReset:   resp.GetActivityReset(),
 	}, nil
 }
 
@@ -1314,6 +1315,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatById(ctx context.Context, 
 	return &workflowservice.RecordActivityTaskHeartbeatByIdResponse{
 		CancelRequested: resp.GetCancelRequested(),
 		ActivityPaused:  resp.GetActivityPaused(),
+		ActivityReset:   resp.GetActivityReset(),
 	}, nil
 }
 
