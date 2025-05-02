@@ -919,6 +919,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionBeforeStart() 
 			RunId:      completionWfRunIDs[0],
 			Reference: &commonpb.Link_WorkflowEvent_EventRef{
 				EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+					EventId:   common.FirstEventID,
 					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 				},
 			},
@@ -927,12 +928,19 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionBeforeStart() 
 			Namespace:  s.Namespace().String(),
 			WorkflowId: completionWFID,
 			RunId:      completionWfRunIDs[1],
-			Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
-				RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
-					RequestId: completionWFStartRequestIDs[1],
-					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+			// TODO(rodrigozhou): RequestIdReference depends on a new release of sdk-go.
+			Reference: &commonpb.Link_WorkflowEvent_EventRef{
+				EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+					EventId:   common.FirstEventID,
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 				},
 			},
+			// Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
+			// 	RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
+			// 		RequestId: completionWFStartRequestIDs[1],
+			// 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+			// 	},
+			// },
 		},
 	}
 
