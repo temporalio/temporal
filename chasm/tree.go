@@ -1241,6 +1241,83 @@ func (n *Node) isValueNeedSerialize() bool {
 	return false
 }
 
+// GetPureTasks returns all valid, expired/runnable pure tasks within the CHASM
+// tree. The CHASM tree is left untouched, even if invalid tasks are
+// detected (these are cleaned up as part of transaction close).
+func (n *Node) GetPureTasks(deadline time.Time) ([]any, error) {
+	var componentTasks []*persistencespb.ChasmComponentAttributes_Task
+
+	// Walk the tree to find runnable, valid tasks.
+	err := n.walk(func(node *Node) error {
+		// Skip nodes that aren't serialized yet.
+		if node.serializedNode == nil || node.serializedNode.Metadata == nil {
+			return nil
+		}
+
+		componentAttr := node.serializedNode.Metadata.GetComponentAttributes()
+		// Skip nodes that aren't components.
+		if componentAttr == nil {
+			return nil
+		}
+
+		validateContext := NewContext(context.Background(), n)
+		for _, task := range componentAttr.GetPureTasks() {
+			if task.ScheduledTime.AsTime().After(deadline) {
+				// Pure tasks are stored in-order, so we can skip scanning the rest once we hit
+				// an unexpired task deadline.
+				break
+			}
+
+			if task.PhysicalTaskStatus != physicalTaskStatusCreated {
+				continue
+			}
+
+			// Component value must be prepared for validation to work.
+			if err := node.prepareComponentValue(validateContext); err != nil {
+				return err
+			}
+
+			// Validate the task. If the task is invalid, skip it for processing (it'll be
+			// removed when the transaction closes).
+			ok, err := node.validateComponentTask(validateContext, task)
+			if !ok {
+				continue
+			}
+			if err != nil {
+				return err
+			}
+
+			componentTasks = append(componentTasks, task)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// Map serialized component tasks to their deserialized values using the Registry.
+	taskValues := make([]any, len(componentTasks))
+	for idx, componentTask := range componentTasks {
+		registrableTask, ok := n.registry.task(componentTask.GetType())
+		if !ok {
+			return nil, serviceerror.NewInternal(fmt.Sprintf(
+				"unregistered CHASM task type '%s'",
+				componentTask.GetType(),
+			))
+		}
+
+		// TODO - validateComponentTask also calls deserializeTask, should share a cached value
+		taskValue, err := deserializeTask(registrableTask, componentTask.Data)
+		if err != nil {
+			return nil, err
+		}
+		taskValues[idx] = taskValue.Interface()
+	}
+
+	return taskValues, nil
+}
+
 func newNode(
 	base *nodeBase,
 	parent *Node,
@@ -1432,4 +1509,43 @@ func serializeTask(
 	}
 
 	return blob, nil
+}
+
+// ExecutePureTask executes the given taskInstance against the node's component.
+func (n *Node) ExecutePureTask(taskInstance any) error {
+	registrableTask, ok := n.registry.taskFor(taskInstance)
+	if !ok {
+		return fmt.Errorf("unknown task type for task instance goType '%s'", reflect.TypeOf(taskInstance).Name())
+	}
+
+	if !registrableTask.isPureTask {
+		return fmt.Errorf("ExecutePureTask called on a SideEffect task '%s'", registrableTask.fqType())
+	}
+
+	// Ensure this node's component value is hydrated before execution.
+	ctx := NewContext(context.Background(), n)
+	if err := n.prepareComponentValue(ctx); err != nil {
+		return err
+	}
+
+	// TODO - access rule check here?
+	// TODO - instantiate CHASM engine and attach to context
+
+	executor := registrableTask.handler
+	if executor == nil {
+		return fmt.Errorf("no handler registered for task type '%s'", registrableTask.taskType)
+	}
+
+	fn := reflect.ValueOf(executor).MethodByName("Execute")
+	result := fn.Call([]reflect.Value{
+		reflect.ValueOf(ctx),
+		reflect.ValueOf(n.value),
+		reflect.ValueOf(taskInstance),
+	})
+	if !result[0].IsNil() {
+		//nolint:revive // type cast result is unchecked
+		return result[0].Interface().(error)
+	}
+
+	return nil
 }
