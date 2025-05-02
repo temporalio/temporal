@@ -1439,7 +1439,7 @@ func (s *nodeSuite) testComponentTree() *Node {
 	return node // maybe tc too
 }
 
-func (s *nodeSuite) TestGetPureTasks() {
+func (s *nodeSuite) TestEachPureTask() {
 	now := s.timeSource.Now()
 
 	payload := &commonpb.Payload{
@@ -1501,7 +1501,7 @@ func (s *nodeSuite) TestGetPureTasks() {
 						PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
 							{
 								Type: "TestLibrary.test_pure_task",
-								// Expired, but physical task not created
+								// Expired, and physical task not created
 								ScheduledTime:             timestamppb.New(now),
 								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
 								VersionedTransitionOffset: 2,
@@ -1517,15 +1517,6 @@ func (s *nodeSuite) TestGetPureTasks() {
 								PhysicalTaskStatus:        physicalTaskStatusCreated,
 								Data:                      taskBlob,
 							},
-							{
-								Type: "TestLibrary.test_pure_task",
-								// Expired, but will fail to validate
-								ScheduledTime:             timestamppb.New(now),
-								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
-								VersionedTransitionOffset: 1,
-								PhysicalTaskStatus:        physicalTaskStatusCreated,
-								Data:                      taskBlob,
-							},
 						},
 					},
 				},
@@ -1533,26 +1524,22 @@ func (s *nodeSuite) TestGetPureTasks() {
 		},
 	}
 
-	rt, ok := s.registry.Task("TestLibrary.test_pure_task")
-	s.True(ok)
-
-	// Succeed first two task validations, and then fail the third.
-	rt.validator.(*MockTaskValidator[any, *TestPureTask]).EXPECT().
-		Validate(gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).Times(2)
-	rt.validator.(*MockTaskValidator[any, *TestPureTask]).EXPECT().
-		Validate(gomock.Any(), gomock.Any(), gomock.Any()).Return(false, nil).Times(1)
-
 	root, err := NewTree(persistenceNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
 	s.NoError(err)
 	s.NotNil(root)
 
-	tasks, err := root.GetPureTasks(now.Add(time.Minute))
-	s.NoError(err)
-	s.NotNil(tasks)
-	s.Equal(2, len(tasks))
+	actualTaskCount := 0
+	err = root.EachPureTask(now.Add(time.Minute), func(node *Node, task any) error {
+		s.NotNil(node)
 
-	_, ok = tasks[0].(*TestPureTask)
-	s.True(ok)
+		_, ok := task.(*TestPureTask)
+		s.True(ok)
+
+		actualTaskCount += 1
+		return nil
+	})
+	s.NoError(err)
+	s.Equal(3, actualTaskCount)
 }
 
 func (s *nodeSuite) TestExecutePureTask() {
@@ -1578,17 +1565,46 @@ func (s *nodeSuite) TestExecutePureTask() {
 	rt, ok := s.registry.Task("TestLibrary.test_pure_task")
 	s.True(ok)
 
-	rt.handler.(*MockPureTaskExecutor[any, *TestPureTask]).EXPECT().
-		Execute(
-			gomock.Any(),
-			gomock.AssignableToTypeOf(&TestComponent{}),
-			gomock.Eq(pureTask),
-		).Return(nil).Times(1)
-
 	root, err := NewTree(persistenceNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
 	s.NoError(err)
 	s.NotNil(root)
+	ctx := context.Background()
 
-	err = root.ExecutePureTask(pureTask)
+	expectExecute := func(result error) {
+		rt.handler.(*MockPureTaskExecutor[any, *TestPureTask]).EXPECT().
+			Execute(
+				gomock.Any(),
+				gomock.AssignableToTypeOf(&TestComponent{}),
+				gomock.Eq(pureTask),
+			).Return(result).Times(1)
+	}
+
+	expectValidate := func(retValue bool, errValue error) {
+		rt.validator.(*MockTaskValidator[any, *TestPureTask]).EXPECT().
+			Validate(gomock.Any(), gomock.Any(), gomock.Any()).Return(retValue, errValue).Times(1)
+	}
+
+	// Succeed task execution and validation (happy case).
+	expectExecute(nil)
+	expectValidate(true, nil)
+	err = root.ExecutePureTask(ctx, pureTask)
 	s.NoError(err)
+
+	expectedErr := errors.New("dummy")
+
+	// Succeed validation, fail execution.
+	expectExecute(expectedErr)
+	expectValidate(true, nil)
+	err = root.ExecutePureTask(ctx, pureTask)
+	s.ErrorIs(expectedErr, err)
+
+	// Fail task validation (no execution occurs).
+	expectValidate(false, nil)
+	err = root.ExecutePureTask(ctx, pureTask)
+	s.NoError(err)
+
+	// Error during task validation (no execution occurs).
+	expectValidate(false, expectedErr)
+	err = root.ExecutePureTask(ctx, pureTask)
+	s.ErrorIs(expectedErr, err)
 }

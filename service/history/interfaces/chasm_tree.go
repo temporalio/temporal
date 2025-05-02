@@ -18,6 +18,8 @@ type ChasmTree interface {
 	ApplySnapshot(chasm.NodesSnapshot) error
 	IsDirty() bool
 
-	GetPureTasks(deadline time.Time) ([]any, error)
-	ExecutePureTask(taskInstance any) error
+	EachPureTask(
+		deadline time.Time,
+		callback func(node *chasm.Node, task any) error,
+	) error
 }
