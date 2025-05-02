@@ -918,7 +918,7 @@ func (t *timerQueueActiveTaskExecutor) processActivityWorkflowRules(
 func (t *timerQueueActiveTaskExecutor) executeChasmPureTimerTask(
 	ctx context.Context,
 	task *tasks.ChasmTaskPure,
-) (err error) {
+) error {
 	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
 
@@ -937,13 +937,21 @@ func (t *timerQueueActiveTaskExecutor) executeChasmPureTimerTask(
 	}
 
 	// Execute all fired pure tasks for a component while holding the workflow lock.
-	processedTimers, err := t.executeChasmPureTimers(
+	processedTimers := 0
+	err = t.executeChasmPureTimers(
 		ctx,
 		wfCtx,
 		ms,
 		task,
 		func(node *chasm.Node, task any) error {
-			return node.ExecutePureTask(task)
+			// ExecutePureTask also calls the task's validator. Invalid tasks will no-op
+			// succeed.
+			if err := node.ExecutePureTask(ctx, task); err != nil {
+				return err
+			}
+
+			processedTimers += 1
+			return nil
 		},
 	)
 

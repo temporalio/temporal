@@ -1,3 +1,27 @@
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
 package history
 
 import (
@@ -123,46 +147,24 @@ func (t *timerQueueStandbyTaskExecutor) executeChasmPureTimerTask(
 		wfContext historyi.WorkflowContext,
 		mutableState historyi.MutableState,
 	) (any, error) {
-		processedTimers, err := t.executeChasmPureTimers(
+		err := t.executeChasmPureTimers(
 			ctx,
 			wfContext,
 			mutableState,
 			task,
 			func(node *chasm.Node, task any) error {
-				// If this line of code is reached, the task's Validate() function returned no error, which indicates
-				// that it is still expected to run. Return ErrTaskRetry to wait the machine to transition on the active
-				// cluster.
+				// If this line of code is reached, the task's Validate() function succeeded, which
+				// indicates that it is still expected to run. Return ErrTaskRetry to wait for the
+				// task to complete on the active cluster, after which Validate will begun returning
+				// false.
 				return consts.ErrTaskRetry
 			},
 		)
-		if err != nil {
-			if errors.Is(err, consts.ErrTaskRetry) {
-				// This handles the ErrTaskRetry error returned by executeChasmPureTimers.
-				return &struct{}{}, nil
-			}
-			return nil, err
+		if err != nil && errors.Is(err, consts.ErrTaskRetry) {
+			return &struct{}{}, nil
 		}
 
-		// We haven't done any work, return without committing.
-		if processedTimers == 0 {
-			return nil, nil
-		}
-
-		if t.config.EnableUpdateWorkflowModeIgnoreCurrent() {
-			return nil, wfContext.UpdateWorkflowExecutionAsPassive(ctx, t.shardContext)
-		}
-
-		// TODO: remove following code once EnableUpdateWorkflowModeIgnoreCurrent config is deprecated.
-		if mutableState.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
-			// Can't use UpdateWorkflowExecutionAsPassive since it updates the current run,
-			// and we are operating on a closed workflow.
-			return nil, wfContext.SubmitClosedWorkflowSnapshot(
-				ctx,
-				t.shardContext,
-				historyi.TransactionPolicyPassive,
-			)
-		}
-		return nil, wfContext.UpdateWorkflowExecutionAsPassive(ctx, t.shardContext)
+		return nil, nil
 	}
 
 	return t.processTimer(

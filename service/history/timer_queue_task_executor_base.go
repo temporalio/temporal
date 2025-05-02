@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/deletemanager"
@@ -249,39 +250,27 @@ func (t *timerQueueTaskExecutorBase) executeChasmPureTimers(
 	ms historyi.MutableState,
 	task *tasks.ChasmTaskPure,
 	execute func(node *chasm.Node, task any) error,
-) (processedCount int, err error) {
+) error {
 	// Because CHASM timers can target closed workflows, we need to specifically
 	// exclude zombie workflows, instead of merely checking that the workflow is
 	// running.
 	if ms.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
-		return 0, consts.ErrWorkflowZombie
+		return consts.ErrWorkflowZombie
 	}
 
 	tree := ms.ChasmTree()
 	if tree == nil {
-		return 0, consts.ErrStaleReference
+		return serviceerror.NewInternal("mutable state associated with CHASM task has no CHASM tree")
 	}
 
-	rootNode, ok := tree.(*chasm.Node)
-	if !ok {
-		return 0, fmt.Errorf("failed type assertion for ChasmTree")
-	}
+	// Because the persistence layer can lose precision on the task compared to the
+	// physical task stored in the queue, we take the max of both here. Time is also
+	// truncated to a common (millisecond) precision later on.
+	//
+	// See also queues.IsTimeExpired.
+	referenceTime := util.MaxTime(t.Now(), task.GetKey().FireTime)
 
-	pureTasks, err := tree.GetPureTasks(t.Now())
-	if err != nil {
-		return
-	}
-
-	for _, pureTask := range pureTasks {
-		err = execute(rootNode, pureTask)
-		if err != nil {
-			return
-		}
-
-		processedCount += 1
-	}
-
-	return
+	return tree.EachPureTask(referenceTime, execute)
 }
 
 // executeStateMachineTimers gets the state machine timers, processes the expired timers,
