@@ -35,6 +35,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -161,7 +162,9 @@ func (s *taskSerializerSuite) TestTransferChasmTask() {
 		TaskID:              rand.Int63(),
 		Category:            tasks.CategoryTransfer,
 		Info: &persistencespb.ChasmTaskInfo{
-			Data: []byte("some-data"),
+			Data: &commonpb.DataBlob{
+				Data: []byte("some-data"),
+			},
 		},
 	}
 
@@ -452,7 +455,9 @@ func (s *taskSerializerSuite) TestOutboundChasmTask() {
 		TaskID:              rand.Int63(),
 		Category:            tasks.CategoryOutbound,
 		Info: &persistencespb.ChasmTaskInfo{
-			Data: []byte("some-data"),
+			Data: &commonpb.DataBlob{
+				Data: []byte("some-data"),
+			},
 		},
 		Destination: "somewhere",
 	}
@@ -517,7 +522,9 @@ func (s *taskSerializerSuite) TestTimerChasmTask() {
 		TaskID:              rand.Int63(),
 		Category:            tasks.CategoryTimer,
 		Info: &persistencespb.ChasmTaskInfo{
-			Data: []byte("some-data"),
+			Data: &commonpb.DataBlob{
+				Data: []byte("some-data"),
+			},
 		},
 	}
 
