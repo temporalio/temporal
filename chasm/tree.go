@@ -1260,16 +1260,32 @@ func (n *Node) isValueNeedSerialize() bool {
 	return false
 }
 
+// isComponentTaskExpired returns true when the task's scheduled time is equal
+// or before the reference time. The caller should also make sure to account
+// for skew between the physical task queue and the database by adjusting
+// referenceTime in advance.
+func isComponentTaskExpired(
+	referenceTime time.Time,
+	task *persistencespb.ChasmComponentAttributes_Task,
+) bool {
+	if task.ScheduledTime == nil {
+		return false
+	}
+
+	scheduledTime := task.ScheduledTime.AsTime().Truncate(persistence.ScheduledTaskMinPrecision)
+	referenceTime = referenceTime.Truncate(persistence.ScheduledTaskMinPrecision)
+
+	return !scheduledTime.After(referenceTime)
+}
+
 // EachPureTask runs the callback for all expired/runnable pure tasks within the
 // CHASM tree (including invalid tasks). The CHASM tree is left untouched, even
 // if invalid tasks are detected (these are cleaned up as part of transaction
 // close).
 func (n *Node) EachPureTask(
-	deadline time.Time,
+	referenceTime time.Time,
 	callback func(node *Node, task any) error,
 ) error {
-	deadline = deadline.Truncate(persistence.ScheduledTaskMinPrecision)
-
 	// Walk the tree to find all runnable tasks.
 	for _, node := range n.andAllChildren() {
 		// Skip nodes that aren't serialized yet.
@@ -1284,8 +1300,7 @@ func (n *Node) EachPureTask(
 		}
 
 		for _, task := range componentAttr.GetPureTasks() {
-			scheduledTime := task.ScheduledTime.AsTime().Truncate(persistence.ScheduledTaskMinPrecision)
-			if scheduledTime.After(deadline) {
+			if !isComponentTaskExpired(referenceTime, task) {
 				// Pure tasks are stored in-order, so we can skip scanning the rest once we hit
 				// an unexpired task deadline.
 				break
