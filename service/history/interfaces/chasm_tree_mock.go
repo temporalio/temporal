@@ -69,6 +69,20 @@ func (mr *MockChasmTreeMockRecorder) ApplySnapshot(arg0 any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplySnapshot", reflect.TypeOf((*MockChasmTree)(nil).ApplySnapshot), arg0)
 }
 
+// Archetype mocks base method.
+func (m *MockChasmTree) Archetype() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Archetype")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// Archetype indicates an expected call of Archetype.
+func (mr *MockChasmTreeMockRecorder) Archetype() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Archetype", reflect.TypeOf((*MockChasmTree)(nil).Archetype))
+}
+
 // CloseTransaction mocks base method.
 func (m *MockChasmTree) CloseTransaction() (chasm.NodesMutation, error) {
 	m.ctrl.T.Helper()
@@ -110,4 +124,18 @@ func (m *MockChasmTree) Snapshot(arg0 *persistence.VersionedTransition) chasm.No
 func (mr *MockChasmTreeMockRecorder) Snapshot(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Snapshot", reflect.TypeOf((*MockChasmTree)(nil).Snapshot), arg0)
+}
+
+// Terminate mocks base method.
+func (m *MockChasmTree) Terminate(arg0 chasm.TerminateComponentRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Terminate", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Terminate indicates an expected call of Terminate.
+func (mr *MockChasmTreeMockRecorder) Terminate(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Terminate", reflect.TypeOf((*MockChasmTree)(nil).Terminate), arg0)
 }

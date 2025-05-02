@@ -134,6 +134,7 @@ func (s *bufferEventFlusherSuite) TestFlushBufferedEvents() {
 	)
 	s.NoError(err)
 
+	s.mockMutableState.EXPECT().IsWorkflow().Return(true).AnyTimes()
 	s.mockMutableState.EXPECT().GetLastWriteVersion().Return(lastWriteVersion, nil).AnyTimes()
 	s.mockMutableState.EXPECT().HasBufferedEvents().Return(true).AnyTimes()
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
