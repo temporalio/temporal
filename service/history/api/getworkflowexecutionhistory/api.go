@@ -240,7 +240,7 @@ func Invoke(
 				if err != nil {
 					return nil, err
 				}
-				// GetHistory func will not return empty history. Log workflow details if that is not the cse
+				// GetHistory func will not return empty history. Log workflow details if that is not the case
 				if len(history.Events) == 0 {
 					shardContext.GetLogger().Error(
 						"GetHistory returned empty history",
