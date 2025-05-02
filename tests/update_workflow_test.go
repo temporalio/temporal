@@ -5066,7 +5066,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 					s.NoError(err)
 					startResp := uwsRes.response.Responses[0].GetStartWorkflow()
 					updateRep := uwsRes.response.Responses[1].GetUpdateWorkflow()
-					s.True(startResp.Started)
+					requireStartedAndRunning(s.T(), startResp)
 					s.EqualValues("success-result-of-"+tv.UpdateID(), testcore.DecodeString(s.T(), updateRep.GetOutcome().GetSuccess()))
 
 					// poll update to ensure same outcome is returned
@@ -5104,7 +5104,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 					s.NoError(uwsRes.err)
 					startResp := uwsRes.response.Responses[0].GetStartWorkflow()
 					updateRep := uwsRes.response.Responses[1].GetUpdateWorkflow()
-					s.True(startResp.Started)
+					requireStartedAndRunning(s.T(), startResp)
 					s.Equal("rejection-of-"+tv.UpdateID(), updateRep.GetOutcome().GetFailure().GetMessage())
 
 					// poll update to ensure same outcome is returned
@@ -5156,7 +5156,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 				s.NoError(uwsRes.err)
 				startResp := uwsRes.response.Responses[0].GetStartWorkflow()
 				updateRep := uwsRes.response.Responses[1].GetUpdateWorkflow()
-				s.False(startResp.Started)
+				requireNotStartedButRunning(s.T(), startResp)
 				s.EqualValues("success-result-of-"+tv.UpdateID(), testcore.DecodeString(s.T(), updateRep.GetOutcome().GetSuccess()))
 
 				// poll update to ensure same outcome is returned
@@ -5206,7 +5206,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 				s.NoError(uwsRes.err)
 				startResp := uwsRes.response.Responses[0].GetStartWorkflow()
 				updateRep := uwsRes.response.Responses[1].GetUpdateWorkflow()
-				s.False(startResp.Started)
+				requireNotStartedButRunning(s.T(), startResp)
 				s.Equal("rejection-of-"+tv.UpdateID(), updateRep.GetOutcome().GetFailure().GetMessage())
 
 				// poll update to ensure same outcome is returned
@@ -5255,7 +5255,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 				s.NoError(uwsRes.err)
 				startResp := uwsRes.response.Responses[0].GetStartWorkflow()
 				updateRep := uwsRes.response.Responses[1].GetUpdateWorkflow()
-				s.True(startResp.Started)
+				requireStartedAndRunning(s.T(), startResp)
 				s.Equal(startResp.RunId, updateRep.UpdateRef.GetWorkflowExecution().RunId)
 				s.EqualValues("success-result-of-"+tv.UpdateID(), testcore.DecodeString(s.T(), updateRep.GetOutcome().GetSuccess()))
 
@@ -5424,7 +5424,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 			s.NoError(uwsRes.err)
 			startResp := uwsRes.response.Responses[0].GetStartWorkflow()
 			updateRep := uwsRes.response.Responses[1].GetUpdateWorkflow()
-			s.True(startResp.Started)
+			requireStartedAndRunning(s.T(), startResp)
 			s.EqualValues("success-result-of-"+tv.UpdateID(), testcore.DecodeString(s.T(), updateRep.GetOutcome().GetSuccess()))
 
 			// ensure terminated workflow is not locked by update-with-start
@@ -5506,7 +5506,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 					s.NoError(uwsRes.err)
 					startResp1 := uwsRes.response.Responses[0].GetStartWorkflow()
 					_ = uwsRes.response.Responses[1].GetUpdateWorkflow()
-					s.True(startResp1.Started)
+					requireStartedAndRunning(s.T(), startResp1)
 
 					// terminate workflow
 					_, err = s.FrontendClient().TerminateWorkflowExecution(testcore.NewContext(),
@@ -5524,6 +5524,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 					startResp := uwsRes.response.Responses[0].GetStartWorkflow()
 					updateRep := uwsRes.response.Responses[1].GetUpdateWorkflow()
 					s.False(startResp.Started)
+					s.Equal(startResp.Status, enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED)
 					// TODO: check startResp.Running
 					s.EqualValues("success-result-of-"+tv.UpdateID(), testcore.DecodeString(s.T(), updateRep.GetOutcome().GetSuccess()))
 				})
