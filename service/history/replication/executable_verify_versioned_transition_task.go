@@ -149,6 +149,11 @@ func (e *ExecutableVerifyVersionedTransitionTask) Execute() error {
 		return e.verifyNewRunExist(ctx)
 	}
 
+	if len(e.taskAttr.EventVersionHistory) == 0 {
+		// no events to verify
+		return nil
+	}
+
 	targetHistory := &historyspb.VersionHistory{
 		Items: e.taskAttr.EventVersionHistory,
 	}

@@ -84,8 +84,8 @@ func setStateStatus(
 		case enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED:
 			if status != e.GetStatus() {
 				return invalidStateTransitionErr(e.GetState(), state, status)
-
 			}
+
 		case enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE:
 			return invalidStateTransitionErr(e.GetState(), state, status)
 
