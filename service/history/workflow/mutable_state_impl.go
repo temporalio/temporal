@@ -498,7 +498,6 @@ func NewSanitizedMutableState(
 	logger log.Logger,
 	namespaceEntry *namespace.Namespace,
 	mutableStateRecord *persistencespb.WorkflowMutableState,
-	lastFirstEventTxnID int64,
 	lastWriteVersion int64,
 ) (*MutableStateImpl, error) {
 	// Although new versions of temporal server will perform state sanitization,
@@ -514,9 +513,7 @@ func NewSanitizedMutableState(
 		return nil, err
 	}
 
-	mutableState.executionInfo.LastFirstEventTxnId = lastFirstEventTxnID
 	mutableState.currentVersion = lastWriteVersion
-
 	return mutableState, nil
 }
 

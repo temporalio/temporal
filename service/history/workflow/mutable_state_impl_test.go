@@ -1356,7 +1356,7 @@ func (s *mutableStateSuite) TestSanitizedMutableState() {
 	s.NoError(err)
 
 	mutableStateProto := mutableState.CloneToProto()
-	sanitizedMutableState, err := NewSanitizedMutableState(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, mutableStateProto, 0, 0)
+	sanitizedMutableState, err := NewSanitizedMutableState(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, mutableStateProto, 0)
 	s.NoError(err)
 	s.Equal(int64(0), sanitizedMutableState.executionInfo.LastFirstEventTxnId)
 	s.Nil(sanitizedMutableState.executionInfo.ParentClock)
