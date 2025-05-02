@@ -422,6 +422,7 @@ func (wh *WorkflowHandler) StartWorkflowExecution(
 		RunId:             resp.GetRunId(),
 		Started:           resp.Started,
 		EagerWorkflowTask: resp.GetEagerWorkflowTask(),
+		Link:              resp.GetLink(),
 	}, nil
 }
 
@@ -694,6 +695,7 @@ func convertToMultiOperationResponse(
 					StartWorkflow: &workflowservice.StartWorkflowExecutionResponse{
 						RunId:   startResp.RunId,
 						Started: startResp.Started,
+						Link:    startResp.Link,
 					},
 				},
 			}

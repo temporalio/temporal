@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/namespace"
@@ -275,10 +276,25 @@ func (mo *multiOp) updateWorkflow(
 		return nil, newMultiOpError(multiOpAbortedErr, err)
 	}
 
+	wfKey := currentWorkflowLease.GetContext().GetWorkflowKey()
 	startResp := &historyservice.StartWorkflowExecutionResponse{
 		RunId:   currentWorkflowLease.GetContext().GetWorkflowKey().RunID,
 		Started: false, // set explicitly for emphasis
 		Status:  enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		Link: &commonpb.Link{
+			Variant: &commonpb.Link_WorkflowEvent_{
+				WorkflowEvent: &commonpb.Link_WorkflowEvent{
+					WorkflowId: wfKey.WorkflowID,
+					RunId:      wfKey.RunID,
+					Reference: &commonpb.Link_WorkflowEvent_EventRef{
+						EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+							EventId:   common.FirstEventID,
+							EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+						},
+					},
+				},
+			},
+		},
 	}
 
 	return makeResponse(startResp, updateResp), nil
