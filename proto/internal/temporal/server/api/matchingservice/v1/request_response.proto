@@ -88,6 +88,7 @@ message PollActivityTaskQueueResponse {
     temporal.api.common.v1.Header header = 16;
     temporal.api.taskqueue.v1.PollerScalingDecision poller_scaling_decision = 17;
     temporal.api.common.v1.Priority priority = 18;
+    temporal.api.common.v1.RetryPolicy retry_policy = 19;
 }
 
 message AddWorkflowTaskRequest {
