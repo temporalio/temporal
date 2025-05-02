@@ -280,7 +280,8 @@ func (i *Redirection) AfterCall(
 	metricsHandler = metricsHandler.WithTags(metrics.NamespaceTag(namespaceName))
 	metrics.ClientRedirectionRequests.With(metricsHandler).Record(1)
 	if retError != nil {
-		metrics.ClientRedirectionFailures.With(metricsHandler).Record(1)
+		metrics.ClientRedirectionFailures.With(metricsHandler).Record(1,
+			metrics.ServiceErrorTypeTag(retError))
 	}
 }
 
