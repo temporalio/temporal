@@ -387,6 +387,8 @@ go.opentelemetry.io/proto/otlp v1.5.0 h1:xJvq7gMzB31/d406fB8U5CBdyQGw4P399D1aQWU
 go.opentelemetry.io/proto/otlp v1.5.0/go.mod h1:keN8WnHxOy8PG0rQZjJJ5A2ebUoafqWp0eVQ4yIXvJ4=
 go.temporal.io/api v1.49.0 h1:aL+zfrdZC6iRU0Lqc1Qds83oMEj1DwhmPUdfiIenGE4=
 go.temporal.io/api v1.49.0/go.mod h1:iaxoP/9OXMJcQkETTECfwYq4cw/bj4nwov8b3ZLVnXM=
+go.temporal.io/sdk v1.34.0 h1:VLg/h6ny7GvLFVoQPqz2NcC93V9yXboQwblkRvZ1cZE=
+go.temporal.io/sdk v1.34.0/go.mod h1:iE4U5vFrH3asOhqpBBphpj9zNtw8btp8+MSaf5A0D3w=
 go.temporal.io/sdk v1.34.1-0.20250501224827-5de51a1d0a6f h1:LVXfyrcs7GWhF8RxGDqYQEaMR/94f0z+CbTXYL4y3mQ=
 go.temporal.io/sdk v1.34.1-0.20250501224827-5de51a1d0a6f/go.mod h1:V4mc7x+G/snAGyW9nwJYT8kPZZG8c4f+Dd2u4DK6UBs=
 go.temporal.io/version v0.3.0 h1:dMrei9l9NyHt8nG6EB8vAwDLLTwx2SvRyucCSumAiig=
