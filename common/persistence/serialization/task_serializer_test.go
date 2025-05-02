@@ -2,6 +2,7 @@ package serialization
 
 import (
 	"math/rand"
+	"reflect"
 	"testing"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -127,6 +129,22 @@ func (s *taskSerializerSuite) TestTransferChildWorkflowTask() {
 	}
 
 	s.assertEqualTasks(childWorkflowTask)
+}
+
+func (s *taskSerializerSuite) TestTransferChasmTask() {
+	transferChasmTask := &tasks.ChasmTask{
+		WorkflowKey:         s.workflowKey,
+		VisibilityTimestamp: time.Unix(0, rand.Int63()).UTC(),
+		TaskID:              rand.Int63(),
+		Category:            tasks.CategoryTransfer,
+		Info: &persistencespb.ChasmTaskInfo{
+			Data: &commonpb.DataBlob{
+				Data: []byte("some-data"),
+			},
+		},
+	}
+
+	s.assertEqualTasks(transferChasmTask)
 }
 
 func (s *taskSerializerSuite) TestTransferCloseTask() {
@@ -406,6 +424,23 @@ func (s *taskSerializerSuite) TestArchiveExecutionTask() {
 	s.assertEqualTasks(task)
 }
 
+func (s *taskSerializerSuite) TestOutboundChasmTask() {
+	task := &tasks.ChasmTask{
+		WorkflowKey:         s.workflowKey,
+		VisibilityTimestamp: time.Unix(0, rand.Int63()).UTC(),
+		TaskID:              rand.Int63(),
+		Category:            tasks.CategoryOutbound,
+		Info: &persistencespb.ChasmTaskInfo{
+			Data: &commonpb.DataBlob{
+				Data: []byte("some-data"),
+			},
+		},
+		Destination: "somewhere",
+	}
+
+	s.assertEqualTasks(task)
+}
+
 func (s *taskSerializerSuite) TestStateMachineOutboundTask() {
 	task := &tasks.StateMachineOutboundTask{
 		StateMachineTask: tasks.StateMachineTask{
@@ -456,6 +491,33 @@ func (s *taskSerializerSuite) TestStateMachineOutboundTask() {
 	s.Equal(task, deserializedTask)
 }
 
+func (s *taskSerializerSuite) TestTimerChasmTask() {
+	task := &tasks.ChasmTask{
+		WorkflowKey:         s.workflowKey,
+		VisibilityTimestamp: time.Unix(0, rand.Int63()).UTC(),
+		TaskID:              rand.Int63(),
+		Category:            tasks.CategoryTimer,
+		Info: &persistencespb.ChasmTaskInfo{
+			Data: &commonpb.DataBlob{
+				Data: []byte("some-data"),
+			},
+		},
+	}
+
+	s.assertEqualTasks(task)
+}
+
+func (s *taskSerializerSuite) TestTimerChasmPureTask() {
+	task := &tasks.ChasmTaskPure{
+		WorkflowKey:         s.workflowKey,
+		VisibilityTimestamp: time.Unix(0, rand.Int63()).UTC(),
+		TaskID:              rand.Int63(),
+		Category:            tasks.CategoryTimer,
+	}
+
+	s.assertEqualTasks(task)
+}
+
 func (s *taskSerializerSuite) TestStateMachineTimerTask() {
 	task := &tasks.StateMachineTimerTask{
 		WorkflowKey:         s.workflowKey,
@@ -498,5 +560,27 @@ func (s *taskSerializerSuite) assertEqualTasks(
 	s.NoError(err)
 	deserializedTask, err := s.taskSerializer.DeserializeTask(task.GetCategory(), blob)
 	s.NoError(err)
+
+	// Find all top-level protobuf fields and compare them, then unset them, as their
+	// internal state parameters can cause direct struct comparison to fail.
+	taskValue := reflect.ValueOf(task).Elem()
+	deserializedTaskValue := reflect.ValueOf(deserializedTask).Elem()
+	s.Equal(taskValue.Type(), deserializedTaskValue.Type())
+
+	for i := range deserializedTaskValue.NumField() {
+		deField := deserializedTaskValue.Field(i)
+		if !deField.CanInterface() {
+			continue
+		}
+
+		if innerProto, ok := deField.Interface().(proto.Message); ok {
+			originalProto, _ := taskValue.Field(i).Interface().(proto.Message)
+			protorequire.ProtoEqual(s.T(), originalProto, innerProto)
+
+			taskValue.Field(i).SetZero()
+			deserializedTaskValue.Field(i).SetZero()
+		}
+	}
+
 	s.Equal(task, deserializedTask)
 }
