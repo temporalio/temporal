@@ -333,11 +333,14 @@ func buildCallbackInfo(
 	callback callbacks.Callback,
 	outboundQueueCBPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool,
 ) (*workflowpb.CallbackInfo, error) {
-	cbSpec, err := workflow.PersistenceCallbackToAPICallback(callback.Callback)
-	if err != nil || cbSpec.GetNexus() == nil {
-		// Errors only happen for non-nexus callbacks.
+	if callback.Callback.GetNexus() == nil {
 		// Ignore non-nexus callbacks for now (there aren't any just yet).
 		return nil, nil
+	}
+
+	cbSpec, err := workflow.PersistenceCallbackToAPICallback(callback.Callback)
+	if err != nil {
+		return nil, err
 	}
 
 	var state enumspb.CallbackState

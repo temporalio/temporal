@@ -34,7 +34,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -480,9 +479,9 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback() {
 	}
 	callbackAddress := fmt.Sprintf("localhost:%d", freeport.MustGetFreePort())
 	shutdownServer := s.runNexusCompletionHTTPServer(ch, callbackAddress)
-	s.T().Cleanup(func() {
-		require.NoError(s.T(), shutdownServer())
-	})
+	defer func() {
+		s.NoError(shutdownServer())
+	}()
 
 	w := worker.New(sdkClient, taskQueue.GetName(), worker.Options{})
 
