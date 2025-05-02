@@ -3,7 +3,6 @@ package chasm
 import (
 	"context"
 	"reflect"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -62,61 +61,12 @@ func (s *fieldSuite) initAssertions() {
 	s.ProtoAssertions = protorequire.New(s.T())
 }
 
-func (s *fieldSuite) TestChasmFieldTypePrefix() {
-	f := Field[any]{}
-	fT := reflect.TypeOf(f)
-	s.True(strings.HasPrefix(fT.String(), chasmFieldTypePrefix))
-}
-
-func (s *fieldSuite) TestChasmCollectionTypePrefix() {
-	c := Collection[any]{}
-	cT := reflect.TypeOf(c)
-	s.True(strings.HasPrefix(cT.String(), chasmCollectionTypePrefix))
-}
-
 func (s *fieldSuite) TestInternalFieldName() {
 	f := Field[any]{}
 	fT := reflect.TypeOf(f)
 
 	_, ok := fT.FieldByName(internalFieldName)
 	s.True(ok, "expected field %s not found", internalFieldName)
-}
-
-func (s *fieldSuite) TestGenericTypePrefix() {
-	tests := []struct {
-		name     string
-		input    any
-		expected string
-	}{
-		{
-			name:     "Field type",
-			input:    Field[string]{},
-			expected: chasmFieldTypePrefix,
-		},
-		{
-			name:     "Collection type",
-			input:    Collection[int]{},
-			expected: chasmCollectionTypePrefix,
-		},
-		{
-			name:     "Non-generic type",
-			input:    0,
-			expected: "",
-		},
-		{
-			name:     "Map type",
-			input:    map[string]int{},
-			expected: "map[",
-		},
-	}
-
-	for _, tt := range tests {
-		s.Run(tt.name, func() {
-			typ := reflect.TypeOf(tt.input)
-			result := genericTypePrefix(typ)
-			s.Equal(tt.expected, result)
-		})
-	}
 }
 
 func (s *fieldSuite) TestFieldGetSimple() {
