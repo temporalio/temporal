@@ -119,9 +119,18 @@ func (s *fieldsIteratorSuite) TestFieldsOf() {
 		InvalidField *Field[string]
 	}
 
-	type noData struct {
+	type noDataField struct {
 		SubField      Field[string]
 		SubCollection Collection[int]
+	}
+
+	type twoDataFields struct {
+		DataField        *protoMessageType
+		AnotherDataField *protoMessageType
+	}
+
+	type unimplementedComponentOnly struct {
+		UnimplementedComponent
 	}
 
 	tests := []struct {
@@ -147,11 +156,11 @@ func (s *fieldsIteratorSuite) TestFieldsOf() {
 		},
 		{
 			name:           "Component with no data field",
-			input:          &noData{},
+			input:          &noDataField{},
 			expectedKinds:  []fieldKind{fieldKindSubField, fieldKindSubCollection, fieldKindUnspecified},
 			expectedNames:  []string{"SubField", "SubCollection", ""},
 			expectedTypes:  []string{"chasm.Field[string]", "chasm.Collection[int]", ""},
-			expectedErrors: []string{"", "", "no data field (implements proto.Message) found in component *chasm.noData"},
+			expectedErrors: []string{"", "", "*chasm.noDataField: no data field (implements proto.Message) found"},
 		},
 		{
 			name:           "Component with *Field",
@@ -159,28 +168,23 @@ func (s *fieldsIteratorSuite) TestFieldsOf() {
 			expectedKinds:  []fieldKind{fieldKindData, fieldKindUnspecified},
 			expectedNames:  []string{"DataField", "InvalidField"},
 			expectedTypes:  []string{"*persistence.ActivityInfo", "*chasm.Field[string]"},
-			expectedErrors: []string{"", "chasm field must be of type chasm.Field[T] not *chasm.Field[T] in component *chasm.fieldPointer"},
+			expectedErrors: []string{"", "*chasm.fieldPointer.InvalidField: chasm field type *chasm.Field[string] must not be a pointer"},
 		},
 		{
-			name: "Component with multiple data fields",
-			input: &struct {
-				DataField        *protoMessageType
-				AnotherDataField *protoMessageType
-			}{},
+			name:           "Component with multiple data fields",
+			input:          &twoDataFields{},
 			expectedKinds:  []fieldKind{fieldKindData, fieldKindData},
 			expectedNames:  []string{"DataField", "AnotherDataField"},
 			expectedTypes:  []string{"*persistence.ActivityInfo", "*persistence.ActivityInfo"},
-			expectedErrors: []string{"", "only one data field (implements proto.Message) allowed in component"},
+			expectedErrors: []string{"", "*chasm.twoDataFields.AnotherDataField: only one data field DataField (implements proto.Message) allowed in component"},
 		},
 		{
-			name: "Component with UnimplementedComponent only",
-			input: &struct {
-				UnimplementedComponent
-			}{},
+			name:           "Component with UnimplementedComponent only",
+			input:          &unimplementedComponentOnly{},
 			expectedKinds:  []fieldKind{fieldKindUnspecified},
 			expectedNames:  []string{""},
 			expectedTypes:  []string{""},
-			expectedErrors: []string{"no data field (implements proto.Message) found in component *struct { chasm.UnimplementedComponent }"},
+			expectedErrors: []string{"*chasm.unimplementedComponentOnly: no data field (implements proto.Message) found"},
 		},
 	}
 

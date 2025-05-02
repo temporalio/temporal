@@ -60,7 +60,7 @@ type fieldInfo struct {
 //nolint:revive // cognitive complexity 26 (> max enabled 25)
 func fieldsOf(valueV reflect.Value) iter.Seq[fieldInfo] {
 	valueT := valueV.Type()
-	dataFieldFound := false
+	dataFieldName := ""
 	return func(yield func(fi fieldInfo) bool) {
 		for i := 0; i < valueT.Elem().NumField(); i++ {
 			fieldV := valueV.Elem().Field(i)
@@ -70,34 +70,29 @@ func fieldsOf(valueV reflect.Value) iter.Seq[fieldInfo] {
 			}
 			fieldN := fieldName(valueT.Elem().Field(i))
 
-			var (
-				fieldK   = fieldKindUnspecified
-				fieldErr error
-			)
+			var fieldErr error
+			fieldK := fieldKindUnspecified
 			if fieldT.AssignableTo(protoMessageT) {
-				if dataFieldFound {
-					fieldErr = serviceerror.NewInternal("only one data field (implements proto.Message) allowed in component")
+				if dataFieldName != "" {
+					fieldErr = serviceerror.NewInternal(fmt.Sprintf("%s.%s: only one data field %s (implements proto.Message) allowed in component", valueT, fieldN, dataFieldName))
 				}
-				dataFieldFound = true
+				dataFieldName = fieldN
 				fieldK = fieldKindData
 			} else {
 				prefix := genericTypePrefix(fieldT)
-				switch prefix {
-				case chasmFieldTypePrefix:
-					fieldK = fieldKindSubField
-				case chasmCollectionTypePrefix:
-					fieldK = fieldKindSubCollection
-				default:
-					prefix = strings.TrimPrefix(prefix, "*")
+				if strings.HasPrefix(prefix, "*") {
+					fieldErr = serviceerror.NewInternal(fmt.Sprintf("%s.%s: chasm field type %s must not be a pointer", valueT, fieldN, fieldT))
+				} else {
 					switch prefix {
 					case chasmFieldTypePrefix:
-						fieldErr = serviceerror.NewInternal(fmt.Sprintf("chasm field must be of type chasm.Field[T] not *chasm.Field[T] in component %s", valueT.String()))
+						fieldK = fieldKindSubField
 					case chasmCollectionTypePrefix:
-						fieldErr = serviceerror.NewInternal(fmt.Sprintf("chasm collection must be of type chasm.Collection[T] not *chasm.Collection[T] in component %s", valueT.String()))
+						fieldK = fieldKindSubCollection
 					default:
-						fieldErr = serviceerror.NewInternal(fmt.Sprintf("unsupported field type %s in component %s: must implement proto.Message, or be chasm.Field[T] or chasm.Collection[T]", fieldT.String(), valueT.String()))
+						fieldErr = serviceerror.NewInternal(fmt.Sprintf("%s.%s: unsupported field type %s: must implement proto.Message, or be chasm.Field[T] or chasm.Collection[T]", valueT, fieldN, fieldT))
 					}
 				}
+
 			}
 
 			if !yield(fieldInfo{val: fieldV, typ: fieldT, name: fieldN, kind: fieldK, err: fieldErr}) {
@@ -105,8 +100,8 @@ func fieldsOf(valueV reflect.Value) iter.Seq[fieldInfo] {
 			}
 		}
 		// If the data field is not found, generate one more fake field with only an error set.
-		if !dataFieldFound {
-			yield(fieldInfo{err: serviceerror.NewInternal(fmt.Sprintf("no data field (implements proto.Message) found in component %s", valueT.String()))})
+		if dataFieldName == "" {
+			yield(fieldInfo{err: serviceerror.NewInternal(fmt.Sprintf("%s: no data field (implements proto.Message) found", valueT))})
 		}
 	}
 }
