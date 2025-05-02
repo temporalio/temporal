@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -240,8 +241,51 @@ func (t *timerQueueTaskExecutorBase) executeSingleStateMachineTimer(
 	return nil
 }
 
-// executeStateMachineTimers gets the state machine timers, processed the expired timers,
-// and return a slice of unprocessed timers.
+// executeChasmPureTimers walks a CHASM tree for expired pure task timers,
+// executes them, and returns a count of timers processed.
+func (t *timerQueueTaskExecutorBase) executeChasmPureTimers(
+	ctx context.Context,
+	workflowContext historyi.WorkflowContext,
+	ms historyi.MutableState,
+	task *tasks.ChasmTaskPure,
+	execute func(node *chasm.Node, task any) error,
+) (processedCount int, err error) {
+	// Because CHASM timers can target closed workflows, we need to specifically
+	// exclude zombie workflows, instead of merely checking that the workflow is
+	// running.
+	if ms.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
+		return 0, consts.ErrWorkflowZombie
+	}
+
+	tree := ms.ChasmTree()
+	if tree == nil {
+		return 0, consts.ErrStaleReference
+	}
+
+	rootNode, ok := tree.(*chasm.Node)
+	if !ok {
+		return 0, fmt.Errorf("failed type assertion for ChasmTree")
+	}
+
+	pureTasks, err := tree.GetPureTasks(t.Now())
+	if err != nil {
+		return
+	}
+
+	for _, pureTask := range pureTasks {
+		err = execute(rootNode, pureTask)
+		if err != nil {
+			return
+		}
+
+		processedCount += 1
+	}
+
+	return
+}
+
+// executeStateMachineTimers gets the state machine timers, processes the expired timers,
+// and returns a count of timers processed.
 func (t *timerQueueTaskExecutorBase) executeStateMachineTimers(
 	ctx context.Context,
 	workflowContext historyi.WorkflowContext,
