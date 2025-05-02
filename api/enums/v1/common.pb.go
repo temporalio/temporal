@@ -158,66 +158,66 @@ func (ChecksumFlavor) EnumDescriptor() ([]byte, []int) {
 	return file_temporal_server_api_enums_v1_common_proto_rawDescGZIP(), []int{1}
 }
 
-// State for the state machine scheduler's Executor.
-type SchedulerExecutorState int32
+// State for the state machine scheduler's Invoker.
+type SchedulerInvokerState int32
 
 const (
 	// Default value, unspecified state.
-	SCHEDULER_EXECUTOR_STATE_UNSPECIFIED SchedulerExecutorState = 0
-	// Executor is awaiting actions to be buffered and eligible for execution.
-	SCHEDULER_EXECUTOR_STATE_WAITING SchedulerExecutorState = 1
-	// Executor is starting actions.
-	SCHEDULER_EXECUTOR_STATE_EXECUTING SchedulerExecutorState = 2
+	SCHEDULER_INVOKER_STATE_UNSPECIFIED SchedulerInvokerState = 0
+	// Invoker is awaiting backoff, or for actions to be buffered and eligible for execution.
+	SCHEDULER_INVOKER_STATE_WAITING SchedulerInvokerState = 1
+	// Invoker is starting actions.
+	SCHEDULER_INVOKER_STATE_PROCESSING SchedulerInvokerState = 2
 )
 
-// Enum value maps for SchedulerExecutorState.
+// Enum value maps for SchedulerInvokerState.
 var (
-	SchedulerExecutorState_name = map[int32]string{
-		0: "SCHEDULER_EXECUTOR_STATE_UNSPECIFIED",
-		1: "SCHEDULER_EXECUTOR_STATE_WAITING",
-		2: "SCHEDULER_EXECUTOR_STATE_EXECUTING",
+	SchedulerInvokerState_name = map[int32]string{
+		0: "SCHEDULER_INVOKER_STATE_UNSPECIFIED",
+		1: "SCHEDULER_INVOKER_STATE_WAITING",
+		2: "SCHEDULER_INVOKER_STATE_PROCESSING",
 	}
-	SchedulerExecutorState_value = map[string]int32{
-		"SCHEDULER_EXECUTOR_STATE_UNSPECIFIED": 0,
-		"SCHEDULER_EXECUTOR_STATE_WAITING":     1,
-		"SCHEDULER_EXECUTOR_STATE_EXECUTING":   2,
+	SchedulerInvokerState_value = map[string]int32{
+		"SCHEDULER_INVOKER_STATE_UNSPECIFIED": 0,
+		"SCHEDULER_INVOKER_STATE_WAITING":     1,
+		"SCHEDULER_INVOKER_STATE_PROCESSING":  2,
 	}
 )
 
-func (x SchedulerExecutorState) Enum() *SchedulerExecutorState {
-	p := new(SchedulerExecutorState)
+func (x SchedulerInvokerState) Enum() *SchedulerInvokerState {
+	p := new(SchedulerInvokerState)
 	*p = x
 	return p
 }
 
-func (x SchedulerExecutorState) String() string {
+func (x SchedulerInvokerState) String() string {
 	switch x {
-	case SCHEDULER_EXECUTOR_STATE_UNSPECIFIED:
+	case SCHEDULER_INVOKER_STATE_UNSPECIFIED:
 		return "Unspecified"
-	case SCHEDULER_EXECUTOR_STATE_WAITING:
+	case SCHEDULER_INVOKER_STATE_WAITING:
 		return "Waiting"
-	case SCHEDULER_EXECUTOR_STATE_EXECUTING:
-		return "Executing"
+	case SCHEDULER_INVOKER_STATE_PROCESSING:
+		return "Processing"
 	default:
 		return strconv.Itoa(int(x))
 	}
 
 }
 
-func (SchedulerExecutorState) Descriptor() protoreflect.EnumDescriptor {
+func (SchedulerInvokerState) Descriptor() protoreflect.EnumDescriptor {
 	return file_temporal_server_api_enums_v1_common_proto_enumTypes[2].Descriptor()
 }
 
-func (SchedulerExecutorState) Type() protoreflect.EnumType {
+func (SchedulerInvokerState) Type() protoreflect.EnumType {
 	return &file_temporal_server_api_enums_v1_common_proto_enumTypes[2]
 }
 
-func (x SchedulerExecutorState) Number() protoreflect.EnumNumber {
+func (x SchedulerInvokerState) Number() protoreflect.EnumNumber {
 	return protoreflect.EnumNumber(x)
 }
 
-// Deprecated: Use SchedulerExecutorState.Descriptor instead.
-func (SchedulerExecutorState) EnumDescriptor() ([]byte, []int) {
+// Deprecated: Use SchedulerInvokerState.Descriptor instead.
+func (SchedulerInvokerState) EnumDescriptor() ([]byte, []int) {
 	return file_temporal_server_api_enums_v1_common_proto_rawDescGZIP(), []int{2}
 }
 
@@ -313,11 +313,11 @@ const file_temporal_server_api_enums_v1_common_proto_rawDesc = "" +
 	" DEAD_LETTER_QUEUE_TYPE_NAMESPACE\x10\x02*d\n" +
 	"\x0eChecksumFlavor\x12\x1f\n" +
 	"\x1bCHECKSUM_FLAVOR_UNSPECIFIED\x10\x00\x121\n" +
-	"-CHECKSUM_FLAVOR_IEEE_CRC32_OVER_PROTO3_BINARY\x10\x01*\x90\x01\n" +
-	"\x16SchedulerExecutorState\x12(\n" +
-	"$SCHEDULER_EXECUTOR_STATE_UNSPECIFIED\x10\x00\x12$\n" +
-	" SCHEDULER_EXECUTOR_STATE_WAITING\x10\x01\x12&\n" +
-	"\"SCHEDULER_EXECUTOR_STATE_EXECUTING\x10\x02*\xc2\x01\n" +
+	"-CHECKSUM_FLAVOR_IEEE_CRC32_OVER_PROTO3_BINARY\x10\x01*\x8d\x01\n" +
+	"\x15SchedulerInvokerState\x12'\n" +
+	"#SCHEDULER_INVOKER_STATE_UNSPECIFIED\x10\x00\x12#\n" +
+	"\x1fSCHEDULER_INVOKER_STATE_WAITING\x10\x01\x12&\n" +
+	"\"SCHEDULER_INVOKER_STATE_PROCESSING\x10\x02*\xc2\x01\n" +
 	"\rCallbackState\x12\x1e\n" +
 	"\x1aCALLBACK_STATE_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16CALLBACK_STATE_STANDBY\x10\x01\x12\x1c\n" +
@@ -340,10 +340,10 @@ func file_temporal_server_api_enums_v1_common_proto_rawDescGZIP() []byte {
 
 var file_temporal_server_api_enums_v1_common_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
 var file_temporal_server_api_enums_v1_common_proto_goTypes = []any{
-	(DeadLetterQueueType)(0),    // 0: temporal.server.api.enums.v1.DeadLetterQueueType
-	(ChecksumFlavor)(0),         // 1: temporal.server.api.enums.v1.ChecksumFlavor
-	(SchedulerExecutorState)(0), // 2: temporal.server.api.enums.v1.SchedulerExecutorState
-	(CallbackState)(0),          // 3: temporal.server.api.enums.v1.CallbackState
+	(DeadLetterQueueType)(0),   // 0: temporal.server.api.enums.v1.DeadLetterQueueType
+	(ChecksumFlavor)(0),        // 1: temporal.server.api.enums.v1.ChecksumFlavor
+	(SchedulerInvokerState)(0), // 2: temporal.server.api.enums.v1.SchedulerInvokerState
+	(CallbackState)(0),         // 3: temporal.server.api.enums.v1.CallbackState
 }
 var file_temporal_server_api_enums_v1_common_proto_depIdxs = []int32{
 	0, // [0:0] is the sub-list for method output_type

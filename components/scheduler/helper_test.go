@@ -127,9 +127,9 @@ func newSchedulerTree(
 	_, err = schedulerNode.AddChild(scheduler.GeneratorMachineKey, *generator)
 	require.NoError(t, err)
 
-	// Add Executor sub state machine node
-	executor := scheduler.NewExecutor()
-	_, err = schedulerNode.AddChild(scheduler.ExecutorMachineKey, *executor)
+	// Add Invoker sub state machine node
+	invoker := scheduler.NewInvoker()
+	_, err = schedulerNode.AddChild(scheduler.InvokerMachineKey, *invoker)
 	require.NoError(t, err)
 
 	// TODO - add others

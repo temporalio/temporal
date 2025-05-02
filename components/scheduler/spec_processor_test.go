@@ -30,11 +30,13 @@ import (
 
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
+	schedulepb "go.temporal.io/api/schedule/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/components/scheduler"
 	scheduler1 "go.temporal.io/server/service/worker/scheduler"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -116,6 +118,41 @@ func TestProcessTimeRange_UpdateAfterHighWatermark(t *testing.T) {
 	res, err := processor.ProcessTimeRange(s, start, end, false, nil)
 	require.NoError(t, err)
 	require.Equal(t, 3, len(res.BufferedStarts))
+}
+
+// Tests that an update between a nominal time and jittered time for a start, that doesn't
+// modify that start, will still start it.
+func TestProcessTimeRange_UpdateBetweenNominalAndJitter(t *testing.T) {
+	processor := setupSpecProcessor(t)
+	schedule := defaultSchedule()
+	schedule.Policies.CatchupWindow = durationpb.New(2 * time.Hour)
+	schedule.Spec = &schedulepb.ScheduleSpec{
+		Interval: []*schedulepb.IntervalSpec{{
+			Interval: durationpb.New(1 * time.Hour),
+		}},
+		Jitter: durationpb.New(1 * time.Hour),
+	}
+	s := *scheduler.NewScheduler(namespace, namespaceID, scheduleID, schedule, nil)
+
+	// Generate a start with a long jitter period.
+	base := time.Date(2025, 03, 31, 1, 0, 0, 0, time.UTC)
+	start := base.Add(-1 * time.Minute)
+	end := start.Add(1 * time.Hour)
+
+	// Set our update time between the start's nominal and jittered time.
+	updateTime := start.Add(10 * time.Minute)
+	s.Info.UpdateTime = timestamppb.New(updateTime)
+
+	// A single start should have been buffered.
+	res, err := processor.ProcessTimeRange(s, start, end, false, nil)
+	require.NoError(t, err)
+	require.Equal(t, 1, len(res.BufferedStarts))
+
+	// Validates the test case.
+	actualTime := res.BufferedStarts[0].GetActualTime().AsTime()
+	nominalTime := res.BufferedStarts[0].GetNominalTime().AsTime()
+	require.True(t, nominalTime.Before(updateTime))
+	require.True(t, actualTime.After(updateTime))
 }
 
 func TestProcessTimeRange_CatchupWindow(t *testing.T) {

@@ -31,21 +31,9 @@ import (
 	"go.temporal.io/server/service/history/hsm"
 )
 
-type (
-	BufferTask struct {
-		deadline time.Time
-	}
-
-	// Fired when the Generator should buffer actions. After buffering, another buffer
-	// task is usually created with a later deadline. The Generator will
-	// alternate between sleeping and buffering without an explicit state
-	// transition.
-	EventBuffer struct {
-		Node *hsm.Node
-
-		Deadline time.Time
-	}
-)
+type BufferTask struct {
+	deadline time.Time
+}
 
 const (
 	TaskTypeBuffer = "scheduler.generator.Buffer"
