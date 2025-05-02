@@ -867,7 +867,7 @@ message GenerateLastHistoryReplicationTasksRequest {
 
     string namespace_id = 1;
     temporal.api.common.v1.WorkflowExecution execution = 2;
-    string target_cluster_id = 3;
+    repeated string target_clusters = 3;
 }
 
 message GenerateLastHistoryReplicationTasksResponse {

@@ -15,9 +15,9 @@ type (
 		VisibilityTimestamp time.Time
 		TaskID              int64
 		// TODO: validate this version in source task converter
-		Version         int64
-		Priority        enumsspb.TaskPriority
-		TargetClusterId string
+		Version        int64
+		Priority       enumsspb.TaskPriority
+		TargetClusters []string
 	}
 )
 

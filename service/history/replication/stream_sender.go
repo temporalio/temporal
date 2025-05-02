@@ -29,6 +29,7 @@ import (
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
+	"golang.org/x/exp/slices"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -611,8 +612,8 @@ func (s *StreamSenderImpl) shouldProcessTask(item tasks.Task) bool {
 		return false
 	}
 
-	targetCluster := s.getTaskTargetCluster(item)
-	if targetCluster != "" && targetCluster != s.clientClusterName {
+	targetClusters := s.getTaskTargetCluster(item)
+	if len(targetClusters) != 0 && !slices.Contains(targetClusters, s.clientClusterName) {
 		return false
 	}
 
@@ -650,11 +651,11 @@ func (s *StreamSenderImpl) getTaskPriority(task tasks.Task) enumsspb.TaskPriorit
 	}
 }
 
-func (s *StreamSenderImpl) getTaskTargetCluster(task tasks.Task) string {
+func (s *StreamSenderImpl) getTaskTargetCluster(task tasks.Task) []string {
 	switch t := task.(type) {
 	case *tasks.SyncWorkflowStateTask:
-		return t.TargetClusterId
+		return t.TargetClusters
 	default:
-		return ""
+		return nil
 	}
 }

@@ -1757,9 +1757,9 @@ func (mr *MockMutableStateMockRecorder) FlushBufferedEvents() *gomock.Call {
 }
 
 // GenerateMigrationTasks mocks base method.
-func (m *MockMutableState) GenerateMigrationTasks(targetClusterId string) ([]tasks.Task, int64, error) {
+func (m *MockMutableState) GenerateMigrationTasks(targetClusters []string) ([]tasks.Task, int64, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GenerateMigrationTasks", targetClusterId)
+	ret := m.ctrl.Call(m, "GenerateMigrationTasks", targetClusters)
 	ret0, _ := ret[0].([]tasks.Task)
 	ret1, _ := ret[1].(int64)
 	ret2, _ := ret[2].(error)
@@ -1767,9 +1767,9 @@ func (m *MockMutableState) GenerateMigrationTasks(targetClusterId string) ([]tas
 }
 
 // GenerateMigrationTasks indicates an expected call of GenerateMigrationTasks.
-func (mr *MockMutableStateMockRecorder) GenerateMigrationTasks(targetClusterId interface{}) *gomock.Call {
+func (mr *MockMutableStateMockRecorder) GenerateMigrationTasks(targetClusters interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateMigrationTasks", reflect.TypeOf((*MockMutableState)(nil).GenerateMigrationTasks), targetClusterId)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateMigrationTasks", reflect.TypeOf((*MockMutableState)(nil).GenerateMigrationTasks), targetClusters)
 }
 
 // GetActivityByActivityID mocks base method.
