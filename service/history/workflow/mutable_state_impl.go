@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package workflow
 
 import (
@@ -598,23 +574,40 @@ func (ms *MutableStateImpl) ChasmTree() historyi.ChasmTree {
 // GetNexusCompletion converts a workflow completion event into a [nexus.OperationCompletion].
 // Completions may be sent to arbitrary third parties, we intentionally do not include any termination reasons, and
 // expose only failure messages.
-func (ms *MutableStateImpl) GetNexusCompletion(ctx context.Context) (nexus.OperationCompletion, error) {
+func (ms *MutableStateImpl) GetNexusCompletion(
+	ctx context.Context,
+	requestID string,
+) (nexus.OperationCompletion, error) {
 	ce, err := ms.GetCompletionEvent(ctx)
 	if err != nil {
 		return nil, err
 	}
+
 	// Create the link information about the workflow to be attached to fabricated started event if completion is
 	// received before start response.
-	startLink := temporalnexus.ConvertLinkWorkflowEventToNexusLink(&commonpb.Link_WorkflowEvent{
+	link := &commonpb.Link_WorkflowEvent{
 		Namespace:  ms.namespaceEntry.Name().String(),
 		WorkflowId: ms.executionInfo.WorkflowId,
 		RunId:      ms.executionState.RunId,
+		// Backwards compatibility: this is the default link type.
 		Reference: &commonpb.Link_WorkflowEvent_EventRef{
 			EventRef: &commonpb.Link_WorkflowEvent_EventReference{
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 			},
 		},
-	})
+	}
+	requestIDInfo := ms.executionState.RequestIds[requestID]
+	if requestIDInfo.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED {
+		// If the callback was attached, then replace with RequestIdReference.
+		link.Reference = &commonpb.Link_WorkflowEvent_RequestIdRef{
+			RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
+				RequestId: requestID,
+				EventType: requestIDInfo.GetEventType(),
+			},
+		}
+	}
+	startLink := temporalnexus.ConvertLinkWorkflowEventToNexusLink(link)
+
 	switch ce.GetEventType() {
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:
 		payloads := ce.GetWorkflowExecutionCompletedEventAttributes().GetResult().GetPayloads()
@@ -2151,16 +2144,20 @@ func (ms *MutableStateImpl) DeleteSignalRequested(
 	ms.approximateSize -= len(requestID)
 }
 
-func (ms *MutableStateImpl) attachRequestID(requestID string, eventType enumspb.EventType) {
+func (ms *MutableStateImpl) attachRequestID(
+	requestID string,
+	eventType enumspb.EventType,
+	eventID int64,
+) {
 	ms.approximateSize -= ms.executionState.Size()
 	if ms.executionState.RequestIds == nil {
 		ms.executionState.RequestIds = make(map[string]*persistencespb.RequestIDInfo, 1)
 	}
 	ms.executionState.RequestIds[requestID] = &persistencespb.RequestIDInfo{
 		EventType: eventType,
+		EventId:   eventID,
 	}
 	ms.approximateSize += ms.executionState.Size()
-	ms.executionStateUpdated = true
 }
 
 func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
@@ -2405,6 +2402,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	ms.executionState.CreateRequestId = requestID
 	ms.executionState.RequestIds[requestID] = &persistencespb.RequestIDInfo{
 		EventType: startEvent.EventType,
+		EventId:   startEvent.EventId,
 	}
 
 	ms.executionInfo.FirstExecutionRunId = event.GetFirstExecutionRunId()
@@ -2569,19 +2567,21 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 func (ms *MutableStateImpl) addCompletionCallbacks(
 	event *historypb.HistoryEvent,
 	requestID string,
-	completionCallbaks []*commonpb.Callback,
+	completionCallbacks []*commonpb.Callback,
 ) error {
 	coll := callbacks.MachineCollection(ms.HSM())
 	maxCallbacksPerWorkflow := ms.config.MaxCallbacksPerWorkflow(ms.GetNamespaceEntry().Name().String())
-	if len(completionCallbaks)+coll.Size() > maxCallbacksPerWorkflow {
+	if len(completionCallbacks)+coll.Size() > maxCallbacksPerWorkflow {
 		return serviceerror.NewInvalidArgument(fmt.Sprintf(
 			"cannot attach more than %d callbacks to a workflow (%d callbacks already attached)",
 			maxCallbacksPerWorkflow,
 			coll.Size(),
 		))
 	}
-	for idx, cb := range completionCallbaks {
-		persistenceCB := &persistencespb.Callback{}
+	for idx, cb := range completionCallbacks {
+		persistenceCB := &persistencespb.Callback{
+			Links: cb.GetLinks(),
+		}
 		switch variant := cb.Variant.(type) {
 		case *commonpb.Callback_Nexus_:
 			persistenceCB.Variant = &persistencespb.Callback_Nexus_{
@@ -2596,7 +2596,7 @@ func (ms *MutableStateImpl) addCompletionCallbacks(
 				return err
 			}
 		}
-		machine := callbacks.NewCallback(event.EventTime, callbacks.NewWorkflowClosedTrigger(), persistenceCB)
+		machine := callbacks.NewCallback(requestID, event.EventTime, callbacks.NewWorkflowClosedTrigger(), persistenceCB)
 		id := ""
 		// This is for backwards compatibility: callbacks were initially only attached when the workflow
 		// execution started, but now they can be attached while the workflow is running.
@@ -4725,7 +4725,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 		return err
 	}
 	if attributes.GetAttachedRequestId() != "" {
-		ms.attachRequestID(attributes.GetAttachedRequestId(), event.EventType)
+		ms.attachRequestID(attributes.GetAttachedRequestId(), event.EventType, event.EventId)
 	}
 	if len(attributes.GetAttachedCompletionCallbacks()) > 0 {
 		if err := ms.addCompletionCallbacks(
@@ -6018,7 +6018,20 @@ func (ms *MutableStateImpl) closeTransaction(
 		return closeTransactionResult{}, err
 	}
 
-	if ms.isStateDirty() {
+	// Save if the state is dirty before closeTransactionPrepareEvents since it flushes the buffer
+	// events, and therefore change the dirty state.
+	isStateDirty := ms.isStateDirty()
+
+	// closeTransactionPrepareEvents must be called after closeTransactionHandleWorkflowTask because
+	// the latter might fail the workflow task and buffered events must be flushed afterwards.
+	// We need to save the value of ms.isStateDirty() before calling closeTransactionPrepareEvents
+	// because flushing the buffered events might change the dirty state.
+	workflowEventsSeq, eventBatches, bufferEvents, clearBuffer, err := ms.closeTransactionPrepareEvents(transactionPolicy)
+	if err != nil {
+		return closeTransactionResult{}, err
+	}
+
+	if isStateDirty {
 		if err := ms.closeTransactionUpdateTransitionHistory(
 			transactionPolicy,
 		); err != nil {
@@ -6036,11 +6049,6 @@ func (ms *MutableStateImpl) closeTransaction(
 	ms.closeTransactionTrackLastUpdateVersionedTransition(
 		transactionPolicy,
 	)
-
-	workflowEventsSeq, eventBatches, bufferEvents, clearBuffer, err := ms.closeTransactionPrepareEvents(transactionPolicy)
-	if err != nil {
-		return closeTransactionResult{}, err
-	}
 
 	ms.closeTransactionTrackTombstones(transactionPolicy, chasmNodesMutation)
 
@@ -6625,7 +6633,7 @@ func (ms *MutableStateImpl) closeTransactionPrepareEvents(
 	newBufferBatch := historyMutation.DBBufferBatch
 	clearBuffer := historyMutation.DBClearBuffer
 	newEventsBatches := historyMutation.DBEventsBatches
-	ms.updatePendingEventIDs(historyMutation.ScheduledIDToStartedID)
+	ms.updatePendingEventIDs(historyMutation.ScheduledIDToStartedID, historyMutation.RequestIDToEventID)
 
 	workflowEventsSeq := make([]*persistence.WorkflowEvents, len(newEventsBatches))
 	historyNodeTxnIDs, err := ms.shard.GenerateTaskIDs(len(newEventsBatches))
@@ -6763,6 +6771,7 @@ func (ms *MutableStateImpl) dirtyHSMToReplicationTask(
 
 func (ms *MutableStateImpl) updatePendingEventIDs(
 	scheduledIDToStartedID map[int64]int64,
+	requestIDToEventID map[string]int64,
 ) {
 	for scheduledEventID, startedEventID := range scheduledIDToStartedID {
 		if activityInfo, ok := ms.GetActivityInfo(scheduledEventID); ok {
@@ -6775,6 +6784,13 @@ func (ms *MutableStateImpl) updatePendingEventIDs(
 			childInfo.StartedEventId = startedEventID
 			ms.updateChildExecutionInfos[childInfo.InitiatedEventId] = childInfo
 			continue
+		}
+	}
+	if len(requestIDToEventID) > 0 {
+		for requestID, eventID := range requestIDToEventID {
+			if requestIDInfo, ok := ms.executionState.RequestIds[requestID]; ok {
+				requestIDInfo.EventId = eventID
+			}
 		}
 	}
 }

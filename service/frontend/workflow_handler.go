@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package frontend
 
 import (
@@ -422,6 +398,8 @@ func (wh *WorkflowHandler) StartWorkflowExecution(
 		RunId:             resp.GetRunId(),
 		Started:           resp.Started,
 		EagerWorkflowTask: resp.GetEagerWorkflowTask(),
+		Link:              resp.GetLink(),
+		Status:            resp.GetStatus(),
 	}, nil
 }
 
@@ -493,7 +471,8 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 		return nil, err
 	}
 	if sa != request.SearchAttributes {
-		// cloning here so in case of retry the field is set to the current search attributes
+		// Since unaliasedSearchAttributesFrom is not idempotent, we need to clone the request so that
+		// in case of retries, the field is set to the original value.
 		request = common.CloneProto(request)
 		request.SearchAttributes = sa
 	}
@@ -505,6 +484,8 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 	if err := wh.validateLinks(namespaceName, request.GetLinks()); err != nil {
 		return nil, err
 	}
+
+	request.Links = dedupLinksFromCallbacks(request.GetLinks(), request.GetCompletionCallbacks())
 
 	return request, nil
 }
@@ -694,6 +675,8 @@ func convertToMultiOperationResponse(
 					StartWorkflow: &workflowservice.StartWorkflowExecutionResponse{
 						RunId:   startResp.RunId,
 						Started: startResp.Started,
+						Link:    startResp.Link,
+						Status:  startResp.Status,
 					},
 				},
 			}
@@ -1165,6 +1148,7 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 		Header:                      matchingResponse.Header,
 		PollerScalingDecision:       matchingResponse.PollerScalingDecision,
 		Priority:                    matchingResponse.Priority,
+		RetryPolicy:                 matchingResponse.RetryPolicy,
 	}, nil
 }
 
@@ -5138,6 +5122,36 @@ func (wh *WorkflowHandler) validateOnConflictOptions(opts *workflowpb.OnConflict
 		return serviceerror.NewInvalidArgument("attaching request ID is required for attaching completion callbacks")
 	}
 	return nil
+}
+
+func dedupLinksFromCallbacks(
+	links []*commonpb.Link,
+	callbacks []*commonpb.Callback,
+) []*commonpb.Link {
+	if len(links) == 0 {
+		return nil
+	}
+	var res []*commonpb.Link
+	callbacksLinks := make([]*commonpb.Link, 0, len(callbacks))
+	for _, cb := range callbacks {
+		if cb.GetNexus() != nil {
+			// Only dedup links from Nexus callbacks.
+			callbacksLinks = append(callbacksLinks, cb.GetLinks()...)
+		}
+	}
+	for _, link := range links {
+		isDup := false
+		for _, cbLink := range callbacksLinks {
+			if proto.Equal(link, cbLink) {
+				isDup = true
+				break
+			}
+		}
+		if !isDup {
+			res = append(res, link)
+		}
+	}
+	return res
 }
 
 func (wh *WorkflowHandler) validateLinks(

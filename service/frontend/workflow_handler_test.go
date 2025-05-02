@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package frontend
 
 import (
@@ -75,6 +51,7 @@ import (
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/testing/protoassert"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/worker/batcher"
@@ -3016,6 +2993,139 @@ func TestValidateRequestId(t *testing.T) {
 	err = validateRequestId(&req.RequestId, 100)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "not a valid UTF-8 string")
+}
+
+func TestDedupLinksFromCallbacks(t *testing.T) {
+	links := []*commonpb.Link{
+		{
+			Variant: &commonpb.Link_WorkflowEvent_{
+				WorkflowEvent: &commonpb.Link_WorkflowEvent{
+					Namespace:  "test-ns",
+					WorkflowId: "test-workflow-id",
+					RunId:      "test-run-id",
+					Reference: &commonpb.Link_WorkflowEvent_EventRef{
+						EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+							EventId:   3,
+							EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
+						},
+					},
+				},
+			},
+		},
+		{
+			Variant: &commonpb.Link_WorkflowEvent_{
+				WorkflowEvent: &commonpb.Link_WorkflowEvent{
+					Namespace:  "test-ns",
+					WorkflowId: "test-workflow-id",
+					RunId:      "test-run-id",
+					Reference: &commonpb.Link_WorkflowEvent_EventRef{
+						EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+							EventId:   5,
+							EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
+						},
+					},
+				},
+			},
+		},
+		{
+			Variant: &commonpb.Link_WorkflowEvent_{
+				WorkflowEvent: &commonpb.Link_WorkflowEvent{
+					Namespace:  "test-ns",
+					WorkflowId: "test-workflow-id",
+					RunId:      "test-run-id",
+					Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
+						RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
+							RequestId: "test-request-id",
+							EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+						},
+					},
+				},
+			},
+		},
+	}
+	callbacks := []*commonpb.Callback{
+		{
+			Variant: &commonpb.Callback_Nexus_{
+				Nexus: &commonpb.Callback_Nexus{},
+			},
+			Links: []*commonpb.Link{
+				{
+					Variant: &commonpb.Link_WorkflowEvent_{
+						WorkflowEvent: &commonpb.Link_WorkflowEvent{
+							Namespace:  "test-ns",
+							WorkflowId: "test-workflow-id",
+							RunId:      "test-run-id",
+							Reference: &commonpb.Link_WorkflowEvent_EventRef{
+								EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+									EventId:   3,
+									EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
+								},
+							},
+						},
+					},
+				},
+				{
+					Variant: &commonpb.Link_WorkflowEvent_{
+						WorkflowEvent: &commonpb.Link_WorkflowEvent{
+							Namespace:  "test-ns",
+							WorkflowId: "test-workflow-id",
+							RunId:      "test-run-id",
+							Reference: &commonpb.Link_WorkflowEvent_EventRef{
+								EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+									EventId:   5,
+									EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			Variant: &commonpb.Callback_Internal_{
+				Internal: &commonpb.Callback_Internal{},
+			},
+			Links: []*commonpb.Link{
+				{
+					Variant: &commonpb.Link_WorkflowEvent_{
+						WorkflowEvent: &commonpb.Link_WorkflowEvent{
+							Namespace:  "test-ns",
+							WorkflowId: "test-workflow-id",
+							RunId:      "test-run-id",
+							Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
+								RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
+									RequestId: "test-request-id",
+									EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	dedupedLinks := dedupLinksFromCallbacks(links, callbacks)
+	assert.Len(t, dedupedLinks, 1)
+	protoassert.ProtoEqual(
+		t,
+		&commonpb.Link{
+			Variant: &commonpb.Link_WorkflowEvent_{
+				WorkflowEvent: &commonpb.Link_WorkflowEvent{
+					Namespace:  "test-ns",
+					WorkflowId: "test-workflow-id",
+					RunId:      "test-run-id",
+					Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
+						RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
+							RequestId: "test-request-id",
+							EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+						},
+					},
+				},
+			},
+		},
+		dedupedLinks[0],
+	)
 }
 
 func (s *WorkflowHandlerSuite) Test_DeleteWorkflowExecution() {

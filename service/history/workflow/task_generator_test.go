@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package workflow
 
 import (
@@ -352,13 +328,17 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 	require.NoError(t, err)
 	coll := callbacks.MachineCollection(node)
 
-	callbackToSchedule := callbacks.NewCallback(timestamppb.Now(), callbacks.NewWorkflowClosedTrigger(), &persistencespb.Callback{
-		Variant: &persistencespb.Callback_Nexus_{
-			Nexus: &persistencespb.Callback_Nexus{
-				Url: "http://localhost?foo=bar",
+	callbackToSchedule := callbacks.NewCallback(
+		"request-id-1",
+		timestamppb.Now(),
+		callbacks.NewWorkflowClosedTrigger(), &persistencespb.Callback{
+			Variant: &persistencespb.Callback_Nexus_{
+				Nexus: &persistencespb.Callback_Nexus{
+					Url: "http://localhost?foo=bar",
+				},
 			},
 		},
-	})
+	)
 	_, err = coll.Add("sched", callbackToSchedule)
 	require.NoError(t, err)
 	err = coll.Transition("sched", func(cb callbacks.Callback) (hsm.TransitionOutput, error) {
@@ -366,13 +346,17 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	callbackToBackoff := callbacks.NewCallback(timestamppb.Now(), callbacks.NewWorkflowClosedTrigger(), &persistencespb.Callback{
-		Variant: &persistencespb.Callback_Nexus_{
-			Nexus: &persistencespb.Callback_Nexus{
-				Url: "http://localhost?foo=bar",
+	callbackToBackoff := callbacks.NewCallback(
+		"request-id-2",
+		timestamppb.Now(),
+		callbacks.NewWorkflowClosedTrigger(), &persistencespb.Callback{
+			Variant: &persistencespb.Callback_Nexus_{
+				Nexus: &persistencespb.Callback_Nexus{
+					Url: "http://localhost?foo=bar",
+				},
 			},
 		},
-	})
+	)
 	callbackToBackoff.CallbackInfo.State = enumsspb.CALLBACK_STATE_SCHEDULED
 	_, err = coll.Add("backoff", callbackToBackoff)
 	require.NoError(t, err)
@@ -893,7 +877,12 @@ func TestTaskGeneratorImpl_GenerateDirtySubStateMachineTasks_TrimsTimersForDelet
 	require.NoError(t, RegisterStateMachine(reg))
 	require.NoError(t, callbacks.RegisterStateMachine(reg))
 
-	cb := callbacks.NewCallback(timestamppb.Now(), callbacks.NewWorkflowClosedTrigger(), &persistencespb.Callback{})
+	cb := callbacks.NewCallback(
+		"request-id",
+		timestamppb.Now(),
+		callbacks.NewWorkflowClosedTrigger(),
+		&persistencespb.Callback{},
+	)
 	root, err := hsm.NewRoot(reg, StateMachineType, ms, make(map[string]*persistencespb.StateMachineMap), &hsmtest.NodeBackend{})
 	require.NoError(t, err)
 	child, err := callbacks.MachineCollection(root).Add("test-callback", cb)
