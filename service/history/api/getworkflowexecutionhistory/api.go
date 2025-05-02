@@ -240,7 +240,16 @@ func Invoke(
 				if err != nil {
 					return nil, err
 				}
-				// since getHistory func will not return empty history, so the below is safe
+				// GetHistory func will not return empty history. Log workflow details if that is not the case
+				if len(history.Events) == 0 {
+					shardContext.GetLogger().Error(
+						"GetHistory returned empty history",
+						tag.WorkflowNamespaceID(namespaceID.String()),
+						tag.WorkflowID(execution.GetWorkflowId()),
+						tag.WorkflowRunID(execution.GetRunId()),
+					)
+					return nil, serviceerror.NewDataLoss("no events in workflow history")
+				}
 				history.Events = history.Events[len(history.Events)-1 : len(history.Events)]
 			}
 			continuationToken = nil
