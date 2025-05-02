@@ -32,10 +32,9 @@ func (*noopChasmTree) IsDirty() bool {
 	return false
 }
 
-func (*noopChasmTree) GetPureTasks(deadline time.Time) ([]any, error) {
-	return nil, nil
-}
-
-func (*noopChasmTree) ExecutePureTask(taskInstance any) error {
+func (*noopChasmTree) EachPureTask(
+	deadline time.Time,
+	callback func(node *chasm.Node, task any) error,
+) error {
 	return nil
 }

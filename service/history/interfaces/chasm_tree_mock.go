@@ -11,6 +11,7 @@ package interfaces
 
 import (
 	reflect "reflect"
+	time "time"
 
 	persistence "go.temporal.io/server/api/persistence/v1"
 	chasm "go.temporal.io/server/chasm"
@@ -82,6 +83,20 @@ func (m *MockChasmTree) CloseTransaction() (chasm.NodesMutation, error) {
 func (mr *MockChasmTreeMockRecorder) CloseTransaction() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseTransaction", reflect.TypeOf((*MockChasmTree)(nil).CloseTransaction))
+}
+
+// EachPureTask mocks base method.
+func (m *MockChasmTree) EachPureTask(deadline time.Time, callback func(*chasm.Node, any) error) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "EachPureTask", deadline, callback)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// EachPureTask indicates an expected call of EachPureTask.
+func (mr *MockChasmTreeMockRecorder) EachPureTask(deadline, callback any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EachPureTask", reflect.TypeOf((*MockChasmTree)(nil).EachPureTask), deadline, callback)
 }
 
 // IsDirty mocks base method.
