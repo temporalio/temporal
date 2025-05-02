@@ -34,6 +34,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
@@ -42,6 +43,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/events"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -60,6 +62,18 @@ type (
 			targetWorkflowIdentifier definition.WorkflowKey,
 			targetBranchToken []byte,
 			requestID string,
+		) (historyi.MutableState, int64, error)
+		RebuildWithCurrentMutableState(
+			ctx context.Context,
+			now time.Time,
+			baseWorkflowIdentifier definition.WorkflowKey,
+			baseBranchToken []byte,
+			baseLastEventID int64,
+			baseLastEventVersion *int64,
+			targetWorkflowIdentifier definition.WorkflowKey,
+			targetBranchToken []byte,
+			requestID string,
+			currentMutableState *persistencespb.WorkflowMutableState,
 		) (historyi.MutableState, int64, error)
 	}
 
@@ -101,6 +115,119 @@ func NewStateRebuilder(
 }
 
 func (r *StateRebuilderImpl) Rebuild(
+	ctx context.Context,
+	now time.Time,
+	baseWorkflowIdentifier definition.WorkflowKey,
+	baseBranchToken []byte,
+	baseLastEventID int64,
+	baseLastEventVersion *int64,
+	targetWorkflowIdentifier definition.WorkflowKey,
+	targetBranchToken []byte,
+	requestID string,
+) (historyi.MutableState, int64, error) {
+	rebuiltMutableState, lastTxnId, err := r.buildMutableStateFromEvent(
+		ctx,
+		now,
+		baseWorkflowIdentifier,
+		baseBranchToken,
+		baseLastEventID,
+		baseLastEventVersion,
+		targetWorkflowIdentifier,
+		targetBranchToken,
+		requestID,
+	)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	// close rebuilt mutable state transaction clearing all generated tasks, etc.
+	_, _, err = rebuiltMutableState.CloseTransactionAsSnapshot(historyi.TransactionPolicyPassive)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	rebuiltMutableState.GetExecutionInfo().LastFirstEventTxnId = lastTxnId
+
+	// refresh tasks to be generated
+	// TODO: ideally the executionTimeoutTimerTaskStatus field should be carried over
+	// from the base run. However, RefreshTasks always resets that field and
+	// force regenerates the execution timeout timer task.
+	if err := r.taskRefresher.Refresh(ctx, rebuiltMutableState); err != nil {
+		return nil, 0, err
+	}
+
+	return rebuiltMutableState, r.rebuiltHistorySize, nil
+}
+
+func (r *StateRebuilderImpl) RebuildWithCurrentMutableState(
+	ctx context.Context,
+	now time.Time,
+	baseWorkflowIdentifier definition.WorkflowKey,
+	baseBranchToken []byte,
+	baseLastEventID int64,
+	baseLastEventVersion *int64,
+	targetWorkflowIdentifier definition.WorkflowKey,
+	targetBranchToken []byte,
+	requestID string,
+	currentMutableState *persistencespb.WorkflowMutableState,
+) (historyi.MutableState, int64, error) {
+	rebuiltMutableState, lastTxnId, err := r.buildMutableStateFromEvent(
+		ctx,
+		now,
+		baseWorkflowIdentifier,
+		baseBranchToken,
+		baseLastEventID,
+		baseLastEventVersion,
+		targetWorkflowIdentifier,
+		targetBranchToken,
+		requestID,
+	)
+	if err != nil {
+		return nil, 0, err
+	}
+	copyToRebuildMutableState(rebuiltMutableState, currentMutableState)
+	versionHistories := rebuiltMutableState.GetExecutionInfo().GetVersionHistories()
+	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(versionHistories)
+	if err != nil {
+		return nil, 0, err
+	}
+	items := versionhistory.CopyVersionHistoryItems(currentVersionHistory.Items)
+
+	// This is a workaround to bypass the version history update check:
+	// We need to use Active policy to close the transaction. We need to clear the version history items here to
+	// let it pass the version history update logic and then re-assign the version history items after transaction.
+	currentVersionHistory.Items = nil
+
+	// close rebuilt mutable state transaction clearing all generated tasks, etc.
+	_, _, err = rebuiltMutableState.CloseTransactionAsSnapshot(historyi.TransactionPolicyActive)
+	if err != nil {
+		return nil, 0, err
+	}
+	currentVersionHistory.Items = items
+
+	rebuiltMutableState.GetExecutionInfo().LastFirstEventTxnId = lastTxnId
+
+	// refresh tasks to be generated
+	// TODO: ideally the executionTimeoutTimerTaskStatus field should be carried over
+	// from the base run. However, RefreshTasks always resets that field and
+	// force regenerates the execution timeout timer task.
+	if err := r.taskRefresher.Refresh(ctx, rebuiltMutableState); err != nil {
+		return nil, 0, err
+	}
+
+	return rebuiltMutableState, r.rebuiltHistorySize, nil
+}
+
+func copyToRebuildMutableState(
+	rebuiltMutableState historyi.MutableState,
+	currentMutableState *persistencespb.WorkflowMutableState,
+) {
+	rebuiltMutableState.GetExecutionInfo().TransitionHistory = transitionhistory.CopyVersionedTransitions(currentMutableState.GetExecutionInfo().TransitionHistory)
+	rebuiltMutableState.GetExecutionInfo().PreviousTransitionHistory = transitionhistory.CopyVersionedTransitions(currentMutableState.GetExecutionInfo().PreviousTransitionHistory)
+	rebuiltMutableState.GetExecutionInfo().LastTransitionHistoryBreakPoint = transitionhistory.CopyVersionedTransition(currentMutableState.GetExecutionInfo().LastTransitionHistoryBreakPoint)
+}
+
+func (r *StateRebuilderImpl) buildMutableStateFromEvent(
 	ctx context.Context,
 	now time.Time,
 	baseWorkflowIdentifier definition.WorkflowKey,
@@ -179,24 +306,7 @@ func (r *StateRebuilderImpl) Rebuild(
 			))
 		}
 	}
-
-	// close rebuilt mutable state transaction clearing all generated tasks, etc.
-	_, _, err = rebuiltMutableState.CloseTransactionAsSnapshot(historyi.TransactionPolicyPassive)
-	if err != nil {
-		return nil, 0, err
-	}
-
-	rebuiltMutableState.GetExecutionInfo().LastFirstEventTxnId = lastTxnId
-
-	// refresh tasks to be generated
-	// TODO: ideally the executionTimeoutTimerTaskStatus field should be carried over
-	// from the base run. However, RefreshTasks always resets that field and
-	// force regenerates the execution timeout timer task.
-	if err := r.taskRefresher.Refresh(ctx, rebuiltMutableState); err != nil {
-		return nil, 0, err
-	}
-
-	return rebuiltMutableState, r.rebuiltHistorySize, nil
+	return rebuiltMutableState, lastTxnId, nil
 }
 
 func (r *StateRebuilderImpl) initializeBuilders(

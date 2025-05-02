@@ -401,6 +401,31 @@ func (r *WorkflowStateReplicatorImpl) handleFirstReplicationTask(
 			historyEventBatchs = append(historyEventBatchs, sourceEvents)
 		}
 	}
+	checkEventBatchs := func() error {
+		if len(historyEventBatchs) == 0 && lastVersionHistoryItem != nil {
+			return serviceerror.NewInvalidArgument("no history event batch found")
+		}
+		expectedEventId := common.FirstEventID
+		for _, historyEventBatch := range historyEventBatchs {
+			for _, historyEvent := range historyEventBatch {
+				expectedEventVersion, err := versionhistory.GetVersionHistoryEventVersion(currentVersionHistory, historyEvent.EventId)
+				if err != nil {
+					return fmt.Errorf("failed to get event version %w, eventId: %v, versionHistory: %v", err, historyEvent.EventId, currentVersionHistory)
+				}
+				if historyEvent.EventId != expectedEventId || historyEvent.Version != expectedEventVersion {
+					return serviceerror.NewInvalidArgument(fmt.Sprintf("eventId %v, version %v is not expected, expected eventId %v, version %v", historyEvent.EventId, historyEvent.Version, expectedEventId, expectedEventVersion))
+				}
+				expectedEventId++
+			}
+		}
+		if expectedEventId != lastVersionHistoryItem.EventId+1 {
+			return serviceerror.NewInvalidArgument(fmt.Sprintf("event not match. Expected eventId %v, but got %v", expectedEventId, lastVersionHistoryItem.EventId+1))
+		}
+		return nil
+	}
+	if err := checkEventBatchs(); err != nil {
+		return err
+	}
 
 	wfCtx, releaseFn, err := r.workflowCache.GetOrCreateWorkflowExecution(
 		ctx,
@@ -567,6 +592,9 @@ func (r *WorkflowStateReplicatorImpl) applyMutation(
 	if err != nil {
 		return err
 	}
+
+	prevPendingChildIds := localMutableState.GetPendingChildIds()
+
 	err = localMutableState.ApplyMutation(mutation.StateMutation)
 	if err != nil {
 		return err
@@ -581,7 +609,7 @@ func (r *WorkflowStateReplicatorImpl) applyMutation(
 	}
 	nextVersionedTransition := transitionhistory.CopyVersionedTransition(localVersionedTransition)
 	nextVersionedTransition.TransitionCount++
-	err = r.taskRefresher.PartialRefresh(ctx, localMutableState, nextVersionedTransition)
+	err = r.taskRefresher.PartialRefresh(ctx, localMutableState, nextVersionedTransition, prevPendingChildIds)
 	if err != nil {
 		return err
 	}
@@ -701,6 +729,8 @@ func (r *WorkflowStateReplicatorImpl) applySnapshotWhenWorkflowExist(
 		return err
 	}
 
+	prevPendingChildIds := localMutableState.GetPendingChildIds()
+
 	err = localMutableState.ApplySnapshot(sourceMutableState)
 	if err != nil {
 		return err
@@ -728,7 +758,7 @@ func (r *WorkflowStateReplicatorImpl) applySnapshotWhenWorkflowExist(
 	} else {
 		nextVersionedTransition := transitionhistory.CopyVersionedTransition(localVersionedTransition)
 		nextVersionedTransition.TransitionCount++
-		err = r.taskRefresher.PartialRefresh(ctx, localMutableState, nextVersionedTransition)
+		err = r.taskRefresher.PartialRefresh(ctx, localMutableState, nextVersionedTransition, prevPendingChildIds)
 		if err != nil {
 			return err
 		}
@@ -975,6 +1005,22 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 	startEventVersion := localLastItem.GetVersion()
 	endEventID := sourceLastItem.GetEventId() // inclusive
 	endEventVersion := sourceLastItem.GetVersion()
+	expectedEventID := startEventID + 1
+
+	eventsConsecutiveCheck := func(currentEventId, currentEventVersion int64) error {
+		if expectedEventID != currentEventId {
+			return fmt.Errorf("%w Expected %v, but got %v", ErrEventSlicesNotConsecutive, expectedEventID, currentEventId)
+		}
+		version, err := versionhistory.GetVersionHistoryEventVersion(sourceVersionHistory, currentEventId)
+		if err != nil {
+			return serviceerror.NewInternal(fmt.Sprintf("Failed to get version for event id %v from history %v", currentEventId, sourceVersionHistory))
+		}
+		if version != currentEventVersion {
+			return serviceerror.NewInternal(fmt.Sprintf("Event Version does not match. Expected %v, but got %v", version, currentEventVersion))
+		}
+		expectedEventID = currentEventId + 1
+		return nil
+	}
 	var historyEvents [][]*historypb.HistoryEvent
 	for _, blob := range eventBlobs {
 		events, err := r.historySerializer.DeserializeEvents(blob)
@@ -1016,6 +1062,10 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 				return err
 			}
 			for _, event := range events {
+				err := eventsConsecutiveCheck(event.EventId, event.Version)
+				if err != nil {
+					return err
+				}
 				localMutableState.AddReapplyCandidateEvent(event)
 				r.addEventToCache(localMutableState.GetWorkflowKey(), event)
 			}
@@ -1066,6 +1116,10 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 			return err
 		}
 		for _, event := range events {
+			err := eventsConsecutiveCheck(event.EventId, event.Version)
+			if err != nil {
+				return err
+			}
 			localMutableState.AddReapplyCandidateEvent(event)
 			r.addEventToCache(localMutableState.GetWorkflowKey(), event)
 		}
@@ -1098,6 +1152,9 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 		if err != nil {
 			return err
 		}
+	}
+	if expectedEventID != endEventID+1 {
+		return serviceerror.NewInternal(fmt.Sprintf("Event not match. Expected %v, but got %v", expectedEventID, endEventID+1))
 	}
 	versionHistoryToAppend.Items = versionhistory.CopyVersionHistoryItems(sourceVersionHistory.Items)
 	localMutableState.SetHistoryBuilder(historybuilder.NewImmutableForUpdateNextEventID(sourceLastItem))
