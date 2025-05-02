@@ -495,7 +495,8 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 		return nil, err
 	}
 	if sa != request.SearchAttributes {
-		// cloning here so in case of retry the field is set to the current search attributes
+		// Since unaliasedSearchAttributesFrom is not idempotent, we need to clone the request so that
+		// in case of retries, the field is set to the original value.
 		request = common.CloneProto(request)
 		request.SearchAttributes = sa
 	}
@@ -507,6 +508,8 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 	if err := wh.validateLinks(namespaceName, request.GetLinks()); err != nil {
 		return nil, err
 	}
+
+	request.Links = dedupLinksFromCallbacks(request.GetLinks(), request.GetCompletionCallbacks())
 
 	return request, nil
 }
@@ -5142,6 +5145,36 @@ func (wh *WorkflowHandler) validateOnConflictOptions(opts *workflowpb.OnConflict
 		return serviceerror.NewInvalidArgument("attaching request ID is required for attaching completion callbacks")
 	}
 	return nil
+}
+
+func dedupLinksFromCallbacks(
+	links []*commonpb.Link,
+	callbacks []*commonpb.Callback,
+) []*commonpb.Link {
+	if len(links) == 0 {
+		return nil
+	}
+	var res []*commonpb.Link
+	callbacksLinks := make([]*commonpb.Link, 0, len(callbacks))
+	for _, cb := range callbacks {
+		if cb.GetNexus() != nil {
+			// Only dedup links from Nexus callbacks.
+			callbacksLinks = append(callbacksLinks, cb.GetLinks()...)
+		}
+	}
+	for _, link := range links {
+		isDup := false
+		for _, cbLink := range callbacksLinks {
+			if proto.Equal(link, cbLink) {
+				isDup = true
+				break
+			}
+		}
+		if !isDup {
+			res = append(res, link)
+		}
+	}
+	return res
 }
 
 func (wh *WorkflowHandler) validateLinks(

@@ -75,6 +75,7 @@ import (
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/testing/protoassert"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/worker/batcher"
@@ -3016,6 +3017,139 @@ func TestValidateRequestId(t *testing.T) {
 	err = validateRequestId(&req.RequestId, 100)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "not a valid UTF-8 string")
+}
+
+func TestDedupLinksFromCallbacks(t *testing.T) {
+	links := []*commonpb.Link{
+		{
+			Variant: &commonpb.Link_WorkflowEvent_{
+				WorkflowEvent: &commonpb.Link_WorkflowEvent{
+					Namespace:  "test-ns",
+					WorkflowId: "test-workflow-id",
+					RunId:      "test-run-id",
+					Reference: &commonpb.Link_WorkflowEvent_EventRef{
+						EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+							EventId:   3,
+							EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
+						},
+					},
+				},
+			},
+		},
+		{
+			Variant: &commonpb.Link_WorkflowEvent_{
+				WorkflowEvent: &commonpb.Link_WorkflowEvent{
+					Namespace:  "test-ns",
+					WorkflowId: "test-workflow-id",
+					RunId:      "test-run-id",
+					Reference: &commonpb.Link_WorkflowEvent_EventRef{
+						EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+							EventId:   5,
+							EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
+						},
+					},
+				},
+			},
+		},
+		{
+			Variant: &commonpb.Link_WorkflowEvent_{
+				WorkflowEvent: &commonpb.Link_WorkflowEvent{
+					Namespace:  "test-ns",
+					WorkflowId: "test-workflow-id",
+					RunId:      "test-run-id",
+					Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
+						RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
+							RequestId: "test-request-id",
+							EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+						},
+					},
+				},
+			},
+		},
+	}
+	callbacks := []*commonpb.Callback{
+		{
+			Variant: &commonpb.Callback_Nexus_{
+				Nexus: &commonpb.Callback_Nexus{},
+			},
+			Links: []*commonpb.Link{
+				{
+					Variant: &commonpb.Link_WorkflowEvent_{
+						WorkflowEvent: &commonpb.Link_WorkflowEvent{
+							Namespace:  "test-ns",
+							WorkflowId: "test-workflow-id",
+							RunId:      "test-run-id",
+							Reference: &commonpb.Link_WorkflowEvent_EventRef{
+								EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+									EventId:   3,
+									EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
+								},
+							},
+						},
+					},
+				},
+				{
+					Variant: &commonpb.Link_WorkflowEvent_{
+						WorkflowEvent: &commonpb.Link_WorkflowEvent{
+							Namespace:  "test-ns",
+							WorkflowId: "test-workflow-id",
+							RunId:      "test-run-id",
+							Reference: &commonpb.Link_WorkflowEvent_EventRef{
+								EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+									EventId:   5,
+									EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			Variant: &commonpb.Callback_Internal_{
+				Internal: &commonpb.Callback_Internal{},
+			},
+			Links: []*commonpb.Link{
+				{
+					Variant: &commonpb.Link_WorkflowEvent_{
+						WorkflowEvent: &commonpb.Link_WorkflowEvent{
+							Namespace:  "test-ns",
+							WorkflowId: "test-workflow-id",
+							RunId:      "test-run-id",
+							Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
+								RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
+									RequestId: "test-request-id",
+									EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	dedupedLinks := dedupLinksFromCallbacks(links, callbacks)
+	assert.Len(t, dedupedLinks, 1)
+	protoassert.ProtoEqual(
+		t,
+		&commonpb.Link{
+			Variant: &commonpb.Link_WorkflowEvent_{
+				WorkflowEvent: &commonpb.Link_WorkflowEvent{
+					Namespace:  "test-ns",
+					WorkflowId: "test-workflow-id",
+					RunId:      "test-run-id",
+					Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
+						RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
+							RequestId: "test-request-id",
+							EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+						},
+					},
+				},
+			},
+		},
+		dedupedLinks[0],
+	)
 }
 
 func (s *WorkflowHandlerSuite) Test_DeleteWorkflowExecution() {

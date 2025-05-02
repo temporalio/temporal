@@ -2591,19 +2591,21 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 func (ms *MutableStateImpl) addCompletionCallbacks(
 	event *historypb.HistoryEvent,
 	requestID string,
-	completionCallbaks []*commonpb.Callback,
+	completionCallbacks []*commonpb.Callback,
 ) error {
 	coll := callbacks.MachineCollection(ms.HSM())
 	maxCallbacksPerWorkflow := ms.config.MaxCallbacksPerWorkflow(ms.GetNamespaceEntry().Name().String())
-	if len(completionCallbaks)+coll.Size() > maxCallbacksPerWorkflow {
+	if len(completionCallbacks)+coll.Size() > maxCallbacksPerWorkflow {
 		return serviceerror.NewInvalidArgument(fmt.Sprintf(
 			"cannot attach more than %d callbacks to a workflow (%d callbacks already attached)",
 			maxCallbacksPerWorkflow,
 			coll.Size(),
 		))
 	}
-	for idx, cb := range completionCallbaks {
-		persistenceCB := &persistencespb.Callback{}
+	for idx, cb := range completionCallbacks {
+		persistenceCB := &persistencespb.Callback{
+			Links: cb.GetLinks(),
+		}
 		switch variant := cb.Variant.(type) {
 		case *commonpb.Callback_Nexus_:
 			persistenceCB.Variant = &persistencespb.Callback_Nexus_{

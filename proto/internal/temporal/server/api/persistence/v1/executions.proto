@@ -692,6 +692,8 @@ message Callback {
         Nexus nexus = 2;
         HSM hsm = 3;
     }
+
+    repeated temporal.api.common.v1.Link links = 100;
 }
 
 message HSMCompletionCallbackArg {

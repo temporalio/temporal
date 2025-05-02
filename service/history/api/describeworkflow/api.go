@@ -333,20 +333,14 @@ func buildCallbackInfo(
 	callback callbacks.Callback,
 	outboundQueueCBPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool,
 ) (*workflowpb.CallbackInfo, error) {
-	destination := ""
-	cbSpec := &commonpb.Callback{}
-	switch variant := callback.Callback.Variant.(type) {
-	case *persistencespb.Callback_Nexus_:
-		cbSpec.Variant = &commonpb.Callback_Nexus_{
-			Nexus: &commonpb.Callback_Nexus{
-				Url:    variant.Nexus.GetUrl(),
-				Header: variant.Nexus.GetHeader(),
-			},
-		}
-		destination = variant.Nexus.GetUrl()
-	default:
+	if callback.Callback.GetNexus() == nil {
 		// Ignore non-nexus callbacks for now (there aren't any just yet).
 		return nil, nil
+	}
+
+	cbSpec, err := workflow.PersistenceCallbackToAPICallback(callback.Callback)
+	if err != nil {
+		return nil, err
 	}
 
 	var state enumspb.CallbackState
@@ -370,7 +364,7 @@ func buildCallbackInfo(
 		cb := outboundQueueCBPool.Get(tasks.TaskGroupNamespaceIDAndDestination{
 			TaskGroup:   callbacks.TaskTypeInvocation,
 			NamespaceID: namespaceID.String(),
-			Destination: destination,
+			Destination: cbSpec.GetNexus().GetUrl(),
 		})
 		if cb.State() != gobreaker.StateClosed {
 			state = enumspb.CALLBACK_STATE_BLOCKED
