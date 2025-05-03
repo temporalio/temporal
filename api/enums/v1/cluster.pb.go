@@ -120,6 +120,7 @@ const (
 	HEALTH_STATE_UNSPECIFIED HealthState = 0
 	HEALTH_STATE_SERVING     HealthState = 1
 	HEALTH_STATE_NOT_SERVING HealthState = 2
+	HEALTH_STATE_STARTING    HealthState = 3
 )
 
 // Enum value maps for HealthState.
@@ -128,11 +129,13 @@ var (
 		0: "HEALTH_STATE_UNSPECIFIED",
 		1: "HEALTH_STATE_SERVING",
 		2: "HEALTH_STATE_NOT_SERVING",
+		3: "HEALTH_STATE_STARTING",
 	}
 	HealthState_value = map[string]int32{
 		"HEALTH_STATE_UNSPECIFIED": 0,
 		"HEALTH_STATE_SERVING":     1,
 		"HEALTH_STATE_NOT_SERVING": 2,
+		"HEALTH_STATE_STARTING":    3,
 	}
 )
 
@@ -150,6 +153,8 @@ func (x HealthState) String() string {
 		return "Serving"
 	case HEALTH_STATE_NOT_SERVING:
 		return "NotServing"
+	case HEALTH_STATE_STARTING:
+		return "Starting"
 	default:
 		return strconv.Itoa(int(x))
 	}
@@ -183,11 +188,12 @@ const file_temporal_server_api_enums_v1_cluster_proto_rawDesc = "" +
 	"\x1cCLUSTER_MEMBER_ROLE_FRONTEND\x10\x01\x12\x1f\n" +
 	"\x1bCLUSTER_MEMBER_ROLE_HISTORY\x10\x02\x12 \n" +
 	"\x1cCLUSTER_MEMBER_ROLE_MATCHING\x10\x03\x12\x1e\n" +
-	"\x1aCLUSTER_MEMBER_ROLE_WORKER\x10\x04*c\n" +
+	"\x1aCLUSTER_MEMBER_ROLE_WORKER\x10\x04*~\n" +
 	"\vHealthState\x12\x1c\n" +
 	"\x18HEALTH_STATE_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14HEALTH_STATE_SERVING\x10\x01\x12\x1c\n" +
-	"\x18HEALTH_STATE_NOT_SERVING\x10\x02B*Z(go.temporal.io/server/api/enums/v1;enumsb\x06proto3"
+	"\x18HEALTH_STATE_NOT_SERVING\x10\x02\x12\x19\n" +
+	"\x15HEALTH_STATE_STARTING\x10\x03B*Z(go.temporal.io/server/api/enums/v1;enumsb\x06proto3"
 
 var (
 	file_temporal_server_api_enums_v1_cluster_proto_rawDescOnce sync.Once

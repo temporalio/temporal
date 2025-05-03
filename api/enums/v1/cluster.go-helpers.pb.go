@@ -55,6 +55,7 @@ var (
 		"Unspecified": 0,
 		"Serving":     1,
 		"NotServing":  2,
+		"Starting":    3,
 	}
 )
 
