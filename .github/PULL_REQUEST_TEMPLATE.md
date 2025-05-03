@@ -7,11 +7,15 @@
 
 
 ## How did you test it?
-<!-- Tested locally? Added a unit test? Added a functional test? Checked in CI? -->
-
+- [ ] built
+- [ ] run locally and tested manually
+- [ ] covered by existing tests
+- [ ] added new unit test(s)
+- [ ] added new functional test(s)
+- [ ] validated in CI
 
 ## Potential risks
-<!-- Any change is risky. Identify any potential risks involved in deploying this change to production. -->
+<!-- Any change is risky. Identify all risks you are aware of. If none, remove this section. -->
 
 
 <!-- If this PR a hotfix candidate label it with corresponding patch release label. -->

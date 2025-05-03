@@ -1,0 +1,41 @@
+name: Clean PR Description on First Approval
+
+on:
+  pull_request_review:
+    types: [submitted]
+
+jobs:
+  strip-comments:
+    if: github.event.review.state == 'approved'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+
+    steps:
+      - name: Strip HTML Comments from PR Description
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = context.payload.pull_request.number;
+            const { owner, repo } = context.repo;
+
+            const pr = await github.rest.pulls.get({
+              owner,
+              repo,
+              pull_number: prNumber
+            });
+
+            const originalBody = pr.data.body || '';
+            const cleanedBody = originalBody.replace(/<!--[\s\S]*?-->/g, '').trim();
+
+            if (cleanedBody !== originalBody.trim()) {
+              await github.rest.pulls.update({
+                owner,
+                repo,
+                pull_number: prNumber,
+                body: cleanedBody
+              });
+              console.log("PR description updated with comments removed.");
+            } else {
+              console.log("No comments found to remove.");
+            }
