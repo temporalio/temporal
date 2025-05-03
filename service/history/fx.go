@@ -123,6 +123,7 @@ func HandlerProvider(args NewHandlerArgs) *Handler {
 		persistenceShardManager:      args.PersistenceShardManager,
 		persistenceVisibilityManager: args.PersistenceVisibilityManager,
 		persistenceHealthSignal:      args.PersistenceHealthSignal,
+		healthServer:                 args.HealthServer,
 		historyServiceResolver:       args.HistoryServiceResolver,
 		metricsHandler:               args.MetricsHandler,
 		payloadSerializer:            args.PayloadSerializer,
