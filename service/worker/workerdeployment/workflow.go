@@ -55,15 +55,9 @@ func Workflow(ctx workflow.Context, unsafeMaxVersion func() int, args *deploymen
 }
 
 func (d *WorkflowRunner) listenToSignals(ctx workflow.Context) {
-	forceCANSignalChannel := workflow.GetSignalChannel(ctx, ForceCANSignalName)
 	syncVersionSummaryChannel := workflow.GetSignalChannel(ctx, SyncVersionSummarySignal)
-	forceCAN := false
 
 	selector := workflow.NewSelector(ctx)
-	selector.AddReceive(forceCANSignalChannel, func(c workflow.ReceiveChannel, more bool) {
-		c.Receive(ctx, nil)
-		forceCAN = true
-	})
 	selector.AddReceive(syncVersionSummaryChannel, func(c workflow.ReceiveChannel, more bool) {
 		var summary *deploymentspb.WorkerDeploymentVersionSummary
 		c.Receive(ctx, &summary)
@@ -73,7 +67,7 @@ func (d *WorkflowRunner) listenToSignals(ctx workflow.Context) {
 		d.State.Versions[summary.GetVersion()] = summary
 	})
 
-	for (!workflow.GetInfo(ctx).GetContinueAsNewSuggested() && !forceCAN) || selector.HasPending() {
+	for selector.HasPending() {
 		selector.Select(ctx)
 	}
 
@@ -178,7 +172,7 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 
 	// Wait until we can continue as new or are cancelled.
 	err = workflow.Await(ctx, func() bool {
-		return (d.signalsCompleted && d.pendingUpdates == 0) || d.done
+		return (d.signalsCompleted && d.pendingUpdates == 0) && d.done
 	})
 	if err != nil {
 		return err
@@ -188,10 +182,11 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 		return nil
 	}
 
-	// Continue as new when there are no pending updates and history size is greater than requestsBeforeContinueAsNew.
-	// Note, if update requests come in faster than they
-	// are handled, there will not be a moment where the workflow has
-	// nothing pending which means this will run forever.
+	// We perform a continue-as-new after each update and signal is handled to ensure compatibility
+	// even if the server rolls back to a previous minor version. By continuing-as-new,
+	// we pass the current state as input to the next workflow execution, resulting in a new
+	// workflow history with just two initial events. This minimizes the risk of NDE (Non-Deterministic Execution)
+	// errors during server rollbacks.
 	return workflow.NewContinueAsNewError(ctx, WorkerDeploymentWorkflowType, d.WorkerDeploymentWorkflowArgs)
 }
 
@@ -697,6 +692,7 @@ func (d *WorkflowRunner) handleAddVersionToWorkerDeployment(ctx workflow.Context
 		Version:    args.Version,
 		CreateTime: args.CreateTime,
 	}
+
 	return nil
 }
 
