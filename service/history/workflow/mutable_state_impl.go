@@ -6567,9 +6567,9 @@ func (ms *MutableStateImpl) closeTransactionPrepareReplicationTasks(
 			replicationTasks = append(replicationTasks, task...)
 		}
 	}
-
 	replicationTasks = append(replicationTasks, ms.syncActivityToReplicationTask(transactionPolicy)...)
 	replicationTasks = append(replicationTasks, ms.dirtyHSMToReplicationTask(transactionPolicy, eventBatches, clearBufferEvents)...)
+
 	if ms.transitionHistoryEnabled {
 		switch transactionPolicy {
 		case historyi.TransactionPolicyActive:
@@ -6596,6 +6596,7 @@ func (ms *MutableStateImpl) closeTransactionPrepareReplicationTasks(
 					}
 					if !versionhistory.IsEmptyVersionHistory(currentHistory) {
 						item, err := versionhistory.GetLastVersionHistoryItem(currentHistory)
+						//nolint:revive // max-control-nesting: control flow nesting exceeds 5
 						if err != nil {
 							return err
 						}
