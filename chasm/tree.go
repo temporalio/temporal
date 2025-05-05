@@ -1525,7 +1525,6 @@ func (n *Node) ExecutePureTask(baseCtx context.Context, taskInstance any) error 
 		return fmt.Errorf("ExecutePureTask called on a SideEffect task '%s'", registrableTask.fqType())
 	}
 
-	// TODO - instantiate CHASM engine and attach to context
 	ctx := NewContext(baseCtx, n)
 
 	// Ensure this node's component value is hydrated before execution. Component
