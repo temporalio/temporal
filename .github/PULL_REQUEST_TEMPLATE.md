@@ -1,10 +1,8 @@
 ## What changed?
-<!-- Describe what has changed in this PR. -->
-
+_Describe what has changed in this PR._
 
 ## Why?
-<!-- Tell your future self why have you made these changes. -->
-
+_Tell your future self why have you made these changes._
 
 ## How did you test it?
 - [ ] built
@@ -14,7 +12,4 @@
 - [ ] added new functional test(s)
 
 ## Potential risks
-<!-- Any change is risky. Identify all risks you are aware of. If none, remove this section. -->
-
-
-<!-- If this PR a hotfix candidate label it with corresponding patch release label. -->
+_Any change is risky. Identify all risks you are aware of. If none, remove this section._
