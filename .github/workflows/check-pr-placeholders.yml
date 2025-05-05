@@ -11,8 +11,8 @@ jobs:
       pull-requests: read
 
     steps:
-      - name: Fetch PR body
-        id: pr
+      - name: Get PR description
+        id: get-pr-body
         uses: actions/github-script@v7
         with:
           result-encoding: string
@@ -20,30 +20,31 @@ jobs:
             const pr = await github.rest.pulls.get({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              pull_number: context.payload.pull_request.number,
+              pull_number: context.payload.pull_request.number
             });
-
             return pr.data.body || '';
 
-      - name: Check for underscore placeholders
+      - name: Check for placeholder lines
         id: check
         run: |
+          echo "Writing PR body to file..."
           printf "%s\n" "$BODY" > body.txt
-          count=$(grep -cE '^_.*_$' body.txt || true)
-          
+
+          echo "Checking for placeholder lines (starting and ending with underscore)..."
+          grep -En '^_.*_$' body.txt || true
+          count=$(grep -cEn '^_.*_$' body.txt || true)
+
           if [ "$count" -gt 0 ]; then
-            echo "❌ Found $count placeholder line(s) in PR description:"
-            grep -E '^_.*_$' body.txt
-            echo "Please replace or remove them before merging."
+            echo "Found $count placeholder line(s)."
             echo "warning_detected=true" >> $GITHUB_OUTPUT
             exit 1
           else
-            echo "✅ No placeholder lines detected."
+            echo "No placeholder lines found."
             echo "warning_detected=false" >> $GITHUB_OUTPUT
           fi
         env:
-          BODY: ${{ steps.pr.outputs.result }}
+          BODY: ${{ steps.get-pr-body.outputs.result }}
 
-      - name: Mark job as passed even if warning
+      - name: Mark job passed (if only warning)
         if: failure() && steps.check.outputs.warning_detected == 'true'
-        run: echo "Placeholder warning recorded, but allowing merge."
+        run: echo "Warning noted, but not failing the check."
