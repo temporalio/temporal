@@ -1,50 +1,41 @@
-name: PR Placeholder Check
+name: Block PRs with Placeholder Lines
 
 on:
   pull_request:
     types: [opened, edited, synchronize, reopened]
 
+permissions:
+  pull-requests: read
+
 jobs:
-  placeholder-check:
+  enforce-clean-description:
     runs-on: ubuntu-latest
-    permissions:
-      pull-requests: read
 
     steps:
-      - name: Get PR description
-        id: get-pr-body
+      - name: Validate PR description for placeholders
         uses: actions/github-script@v7
         with:
-          result-encoding: string
           script: |
             const pr = await github.rest.pulls.get({
               owner: context.repo.owner,
               repo: context.repo.repo,
               pull_number: context.payload.pull_request.number
             });
-            return pr.data.body || '';
 
-      - name: Check for placeholder lines
-        id: check
-        run: |
-          echo "Writing PR body to file..."
-          printf "%s\n" "$BODY" > body.txt
+            const body = pr.data.body || '';
+            const lines = body.split(/\r?\n/);
 
-          echo "Checking for placeholder lines (starting and ending with underscore)..."
-          grep -En '^_.*_$' body.txt || true
-          count=$(grep -cEn '^_.*_$' body.txt || true)
+            const placeholderLines = lines
+              .map((line, index) => ({ line, number: index + 1 }))
+              .filter(({ line }) => /^_.*_$/.test(line.trim()));
 
-          if [ "$count" -gt 0 ]; then
-            echo "Found $count placeholder line(s)."
-            echo "warning_detected=true" >> $GITHUB_OUTPUT
-            exit 1
-          else
-            echo "No placeholder lines found."
-            echo "warning_detected=false" >> $GITHUB_OUTPUT
-          fi
-        env:
-          BODY: ${{ steps.get-pr-body.outputs.result }}
+            if (placeholderLines.length > 0) {
+              console.log(`❌ Found ${placeholderLines.length} placeholder line(s):`);
+              placeholderLines.forEach(({ number, line }) => {
+                console.log(`Line ${number}: ${line}`);
+              });
 
-      - name: Mark job passed (if only warning)
-        if: failure() && steps.check.outputs.warning_detected == 'true'
-        run: echo "Warning noted, but not failing the check."
+              core.setFailed(`PR contains ${placeholderLines.length} placeholder line(s) that must be removed.`);
+            } else {
+              console.log("✅ PR description is clean.");
+            }
