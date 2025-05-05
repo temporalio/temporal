@@ -140,7 +140,7 @@ func (t *timerQueueStandbyTaskExecutor) executeChasmPureTimerTask(
 			return &struct{}{}, nil
 		}
 
-		return nil, nil
+		return nil, err
 	}
 
 	return t.processTimer(
