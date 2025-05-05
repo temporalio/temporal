@@ -30,6 +30,24 @@ func GetActiveNamespace(
 	return namespaceEntry, nil
 }
 
+func GetNamespace(
+	shard historyi.ShardContext,
+	namespaceUUID namespace.ID,
+) (*namespace.Namespace, error) {
+
+	err := ValidateNamespaceUUID(namespaceUUID)
+	if err != nil {
+		return nil, err
+	}
+
+	namespaceEntry, err := shard.GetNamespaceRegistry().GetNamespaceByID(namespaceUUID)
+	if err != nil {
+		return nil, err
+	}
+
+	return namespaceEntry, nil
+}
+
 func ValidateNamespaceUUID(
 	namespaceUUID namespace.ID,
 ) error {
