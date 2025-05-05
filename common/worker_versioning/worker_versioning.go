@@ -476,11 +476,38 @@ func DirectiveDeployment(directive *taskqueuespb.TaskVersionDirective) *deployme
 	return directive.GetDeployment()
 }
 
+func V32RoutingConfigFromV31(r *deploymentpb.RoutingConfig) *deploymentpb.RoutingConfig {
+	return &deploymentpb.RoutingConfig{
+		CurrentDeploymentVersion:            ExternalWorkerDeploymentVersionFromString(r.CurrentVersion),
+		CurrentVersion:                      r.CurrentVersion,
+		RampingDeploymentVersion:            ExternalWorkerDeploymentVersionFromString(r.RampingVersion),
+		RampingVersion:                      r.RampingVersion,
+		RampingVersionPercentage:            r.RampingVersionPercentage,
+		CurrentVersionChangedTime:           r.CurrentVersionChangedTime,
+		RampingVersionChangedTime:           r.RampingVersionChangedTime,
+		RampingVersionPercentageChangedTime: r.RampingVersionPercentageChangedTime,
+	}
+}
+
 func WorkerDeploymentVersionToString(v *deploymentspb.WorkerDeploymentVersion) string {
 	if v == nil {
 		return "__unversioned__"
 	}
 	return v.GetDeploymentName() + WorkerDeploymentVersionIdDelimiter + v.GetBuildId()
+}
+
+func ExternalWorkerDeploymentVersionFromString(s string) *deploymentpb.WorkerDeploymentVersion {
+	if s == "" { // unset ramp is no longer supported in v32, so all empty version strings will be treated as unversioned.
+		s = UnversionedVersionId
+	}
+	v, _ := WorkerDeploymentVersionFromString(s)
+	if v == nil {
+		return nil
+	}
+	return &deploymentpb.WorkerDeploymentVersion{
+		BuildId:        v.BuildId,
+		DeploymentName: v.DeploymentName,
+	}
 }
 
 func WorkerDeploymentVersionFromString(s string) (*deploymentspb.WorkerDeploymentVersion, error) {
