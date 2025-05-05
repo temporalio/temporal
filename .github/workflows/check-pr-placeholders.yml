@@ -28,18 +28,21 @@ jobs:
       - name: Check for underscore placeholders
         id: check
         run: |
-          echo "$BODY" > body.txt
+          cat <<'EOF' > body.txt
+          $BODY
+          EOF
+          
           count=$(grep -cE '^_.*_$' body.txt || true)
-
+          
           if [ "$count" -gt 0 ]; then
-            echo "❌ Found $count placeholder line(s) in PR description:"
-            grep -E '^_.*_$' body.txt
-            echo "Please replace or remove them before merging."
-            echo "warning_detected=true" >> $GITHUB_OUTPUT
-            exit 1  # Mark this step as failed
+          echo "❌ Found $count placeholder line(s) in PR description:"
+          grep -E '^_.*_$' body.txt
+          echo "Please replace or remove them before merging."
+          echo "warning_detected=true" >> $GITHUB_OUTPUT
+          exit 1
           else
-            echo "✅ No placeholder lines detected."
-            echo "warning_detected=false" >> $GITHUB_OUTPUT
+          echo "✅ No placeholder lines detected."
+          echo "warning_detected=false" >> $GITHUB_OUTPUT
           fi
         env:
           BODY: ${{ steps.pr.outputs.result }}
