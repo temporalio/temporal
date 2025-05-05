@@ -522,6 +522,14 @@ func (s *SyncStateRetrieverImpl) getSyncStateEvents(ctx context.Context, workflo
 	if err != nil {
 		return nil, err
 	}
+
+	if versionhistory.IsEmptyVersionHistory(sourceHistory) {
+		return nil, nil
+	}
+
+	// TODO: we may need to handle the case where mutable state only starts to generate events during middle of its execution.
+	// In that case targetVersionHistories maybe empty and sourceVersionHistories is not empty.
+	// The LCA logic doesn't work in that case today.
 	lcaItem, _, err := versionhistory.FindLCAVersionHistoryItemFromItems(targetVersionHistories, sourceHistory.Items)
 	if err != nil {
 		return nil, err

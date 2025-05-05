@@ -729,20 +729,27 @@ func (c *syncVersionedTransitionTaskConverter) generateVerifyVersionedTransition
 		return nil, err
 	}
 	var nextEventId = taskInfo.NextEventID
-	if nextEventId == common.EmptyEventID {
+	if nextEventId == common.EmptyEventID && taskInfo.LastVersionHistoryItem != nil {
 		nextEventId = taskInfo.LastVersionHistoryItem.GetEventId() + 1
 	}
-	lastEventVersion, err := versionhistory.GetVersionHistoryEventVersion(currentHistory, nextEventId-1)
-	if err != nil {
-		return nil, err
+
+	var eventVersionHistory []*historyspb.VersionHistoryItem
+	if nextEventId != common.EmptyEventID {
+		lastEventVersion, err := versionhistory.GetVersionHistoryEventVersion(currentHistory, nextEventId-1)
+		if err != nil {
+			return nil, err
+		}
+		capItems, err := versionhistory.CopyVersionHistoryUntilLCAVersionHistoryItem(currentHistory, &historyspb.VersionHistoryItem{
+			EventId: nextEventId - 1,
+			Version: lastEventVersion,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		eventVersionHistory = capItems.Items
 	}
-	capItems, err := versionhistory.CopyVersionHistoryUntilLCAVersionHistoryItem(currentHistory, &historyspb.VersionHistoryItem{
-		EventId: nextEventId - 1,
-		Version: lastEventVersion,
-	})
-	if err != nil {
-		return nil, err
-	}
+
 	return &replicationspb.ReplicationTask{
 		TaskType:     enumsspb.REPLICATION_TASK_TYPE_VERIFY_VERSIONED_TRANSITION_TASK,
 		SourceTaskId: taskInfo.TaskID,
@@ -752,7 +759,7 @@ func (c *syncVersionedTransitionTaskConverter) generateVerifyVersionedTransition
 				WorkflowId:          taskInfo.WorkflowID,
 				RunId:               taskInfo.RunID,
 				NewRunId:            taskInfo.NewRunID,
-				EventVersionHistory: capItems.Items,
+				EventVersionHistory: eventVersionHistory,
 				NextEventId:         nextEventId,
 			},
 		},
@@ -766,6 +773,12 @@ func (c *syncVersionedTransitionTaskConverter) generateBackfillHistoryTask(
 	taskInfo *tasks.SyncVersionedTransitionTask,
 	targetClusterID int32,
 ) (*replicationspb.ReplicationTask, error) {
+	if taskInfo.FirstEventID == common.EmptyEventID &&
+		taskInfo.NextEventID == common.EmptyEventID &&
+		len(taskInfo.NewRunID) == 0 {
+		return nil, nil
+	}
+
 	historyItems, taskEvents, taskNewEvents, _, err := getVersionHistoryAndEventsWithNewRun(
 		ctx,
 		c.shardContext,

@@ -145,7 +145,7 @@ type WorkflowExecutionInfo struct {
 	WorkflowExecutionTimeout                *durationpb.Duration   `protobuf:"bytes,11,opt,name=workflow_execution_timeout,json=workflowExecutionTimeout,proto3" json:"workflow_execution_timeout,omitempty"`
 	WorkflowRunTimeout                      *durationpb.Duration   `protobuf:"bytes,12,opt,name=workflow_run_timeout,json=workflowRunTimeout,proto3" json:"workflow_run_timeout,omitempty"`
 	DefaultWorkflowTaskTimeout              *durationpb.Duration   `protobuf:"bytes,13,opt,name=default_workflow_task_timeout,json=defaultWorkflowTaskTimeout,proto3" json:"default_workflow_task_timeout,omitempty"`
-	LastEventTaskId                         int64                  `protobuf:"varint,17,opt,name=last_event_task_id,json=lastEventTaskId,proto3" json:"last_event_task_id,omitempty"`
+	LastRunningClock                        int64                  `protobuf:"varint,17,opt,name=last_running_clock,json=lastRunningClock,proto3" json:"last_running_clock,omitempty"`
 	LastFirstEventId                        int64                  `protobuf:"varint,18,opt,name=last_first_event_id,json=lastFirstEventId,proto3" json:"last_first_event_id,omitempty"`
 	LastCompletedWorkflowTaskStartedEventId int64                  `protobuf:"varint,19,opt,name=last_completed_workflow_task_started_event_id,json=lastCompletedWorkflowTaskStartedEventId,proto3" json:"last_completed_workflow_task_started_event_id,omitempty"`
 	// Deprecated. use `WorkflowExecutionState.start_time`
@@ -447,9 +447,9 @@ func (x *WorkflowExecutionInfo) GetDefaultWorkflowTaskTimeout() *durationpb.Dura
 	return nil
 }
 
-func (x *WorkflowExecutionInfo) GetLastEventTaskId() int64 {
+func (x *WorkflowExecutionInfo) GetLastRunningClock() int64 {
 	if x != nil {
-		return x.LastEventTaskId
+		return x.LastRunningClock
 	}
 	return 0
 }
@@ -4253,7 +4253,7 @@ const file_temporal_server_api_persistence_v1_executions_proto_rawDesc = "" +
 	"\x03key\x18\x01 \x01(\x05R\x03key\x12D\n" +
 	"\x05value\x18\x02 \x01(\v2..temporal.server.api.persistence.v1.QueueStateR\x05value:\x028\x01J\x04\b\x04\x10\x05J\x04\b\x05\x10\x06J\x04\b\b\x10\tJ\x04\b\t\x10\n" +
 	"J\x04\b\n" +
-	"\x10\vJ\x04\b\v\x10\fJ\x04\b\f\x10\rJ\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11\"\xc6:\n" +
+	"\x10\vJ\x04\b\v\x10\fJ\x04\b\f\x10\rJ\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11\"\xc7:\n" +
 	"\x15WorkflowExecutionInfo\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
@@ -4269,8 +4269,8 @@ const file_temporal_server_api_persistence_v1_executions_proto_rawDesc = "" +
 	" \x01(\tR\x10workflowTypeName\x12W\n" +
 	"\x1aworkflow_execution_timeout\x18\v \x01(\v2\x19.google.protobuf.DurationR\x18workflowExecutionTimeout\x12K\n" +
 	"\x14workflow_run_timeout\x18\f \x01(\v2\x19.google.protobuf.DurationR\x12workflowRunTimeout\x12\\\n" +
-	"\x1ddefault_workflow_task_timeout\x18\r \x01(\v2\x19.google.protobuf.DurationR\x1adefaultWorkflowTaskTimeout\x12+\n" +
-	"\x12last_event_task_id\x18\x11 \x01(\x03R\x0flastEventTaskId\x12-\n" +
+	"\x1ddefault_workflow_task_timeout\x18\r \x01(\v2\x19.google.protobuf.DurationR\x1adefaultWorkflowTaskTimeout\x12,\n" +
+	"\x12last_running_clock\x18\x11 \x01(\x03R\x10lastRunningClock\x12-\n" +
 	"\x13last_first_event_id\x18\x12 \x01(\x03R\x10lastFirstEventId\x12^\n" +
 	"-last_completed_workflow_task_started_event_id\x18\x13 \x01(\x03R'lastCompletedWorkflowTaskStartedEventId\x129\n" +
 	"\n" +
