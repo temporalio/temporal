@@ -12,7 +12,6 @@
 - [ ] covered by existing tests
 - [ ] added new unit test(s)
 - [ ] added new functional test(s)
-- [ ] validated in CI
 
 ## Potential risks
 <!-- Any change is risky. Identify all risks you are aware of. If none, remove this section. -->
