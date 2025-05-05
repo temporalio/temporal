@@ -41,11 +41,12 @@ type (
 	}
 
 	healthCheckerImpl struct {
-		serviceName           primitives.ServiceName
-		membershipMonitor     membership.Monitor
-		hostFailurePercentage dynamicconfig.FloatPropertyFn
-		healthCheckFn         func(ctx context.Context, hostAddress string) (enumsspb.HealthState, error)
-		logger                log.Logger
+		serviceName            primitives.ServiceName
+		membershipMonitor      membership.Monitor
+		hostFailurePercentage  dynamicconfig.FloatPropertyFn
+		hostStartingPercentage dynamicconfig.FloatPropertyFn
+		healthCheckFn          func(ctx context.Context, hostAddress string) (enumsspb.HealthState, error)
+		logger                 log.Logger
 	}
 )
 
@@ -53,15 +54,17 @@ func NewHealthChecker(
 	serviceName primitives.ServiceName,
 	membershipMonitor membership.Monitor,
 	hostFailurePercentage dynamicconfig.FloatPropertyFn,
+	hostStartingPercentage dynamicconfig.FloatPropertyFn,
 	healthCheckFn func(ctx context.Context, hostAddress string) (enumsspb.HealthState, error),
 	logger log.Logger,
 ) HealthChecker {
 	return &healthCheckerImpl{
-		serviceName:           serviceName,
-		membershipMonitor:     membershipMonitor,
-		hostFailurePercentage: hostFailurePercentage,
-		healthCheckFn:         healthCheckFn,
-		logger:                logger,
+		serviceName:            serviceName,
+		membershipMonitor:      membershipMonitor,
+		hostFailurePercentage:  hostFailurePercentage,
+		hostStartingPercentage: hostStartingPercentage,
+		healthCheckFn:          healthCheckFn,
+		logger:                 logger,
 	}
 }
 
@@ -91,15 +94,27 @@ func (h *healthCheckerImpl) Check(ctx context.Context) (enumsspb.HealthState, er
 	}
 
 	var failedHostCount float64
+	var startingHostCount float64
 	for i := 0; i < len(hosts); i++ {
 		healthState := <-receiveCh
-		if healthState == enumsspb.HEALTH_STATE_NOT_SERVING {
+		switch healthState {
+		case enumsspb.HEALTH_STATE_NOT_SERVING:
 			failedHostCount++
+		case enumsspb.HEALTH_STATE_STARTING:
+			startingHostCount++
 		}
 	}
 	close(receiveCh)
 
-	if (failedHostCount / float64(len(hosts))) > h.hostFailurePercentage() {
+	startingHostCountPercentage := startingHostCount / float64(len(hosts))
+	if startingHostCountPercentage > h.hostStartingPercentage() {
+		h.logger.Warn("health check exceeded host starting percentage threshold", tag.NewFloat64("host starting percentage threshold", h.hostStartingPercentage()))
+		return enumsspb.HEALTH_STATE_STARTING, nil
+	}
+
+	failedHostCountPercentage := failedHostCount / float64(len(hosts))
+	if failedHostCountPercentage+startingHostCountPercentage > h.hostFailurePercentage() {
+		h.logger.Warn("health check exceeded host failure percentage threshold", tag.NewFloat64("host failure percentage threshold", h.hostFailurePercentage()), tag.NewFloat64("host failure percentage", failedHostCountPercentage), tag.NewFloat64("host starting percentage", startingHostCountPercentage))
 		return enumsspb.HEALTH_STATE_NOT_SERVING, nil
 	}
 

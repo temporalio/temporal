@@ -761,6 +761,11 @@ This config is EXPERIMENTAL and may be changed or removed in a later release.`,
 		0.5,
 		`HistoryHostErrorPercentage is the percentage of hosts that are unhealthy`,
 	)
+	HistoryHostStartingPercentage = NewGlobalFloatSetting(
+		"frontend.historyHostStartingPercentage",
+		0.05,
+		`HistoryHostStartingPercentage is the percentage of hosts that are not yet ready to serve traffic`,
+	)
 	SendRawWorkflowHistory = NewNamespaceBoolSetting(
 		"frontend.sendRawWorkflowHistory",
 		false,

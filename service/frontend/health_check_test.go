@@ -66,6 +66,9 @@ func (s *healthCheckerSuite) SetupTest() {
 		func() float64 {
 			return 0.25
 		},
+		func() float64 {
+			return 0.15
+		},
 		func(ctx context.Context, hostAddress string) (enumsspb.HealthState, error) {
 			switch hostAddress {
 			case "1", "3":
@@ -114,4 +117,20 @@ func (s *healthCheckerSuite) Test_Check_Not_Serving() {
 	state, err := s.checker.Check(context.Background())
 	s.NoError(err)
 	s.Equal(enumsspb.HEALTH_STATE_NOT_SERVING, state)
+}
+
+func (s *healthCheckerSuite) Test_Check_Starting() {
+	s.resolver.EXPECT().AvailableMembers().Return([]membership.HostInfo{
+		membership.NewHostInfoFromAddress("1"),
+		membership.NewHostInfoFromAddress("2"),
+		membership.NewHostInfoFromAddress("3"),
+		membership.NewHostInfoFromAddress("4"),
+		membership.NewHostInfoFromAddress("5"),
+		membership.NewHostInfoFromAddress("6"),
+		membership.NewHostInfoFromAddress("7"),
+	})
+
+	state, err := s.checker.Check(context.Background())
+	s.NoError(err)
+	s.Equal(enumsspb.HEALTH_STATE_STARTING, state)
 }

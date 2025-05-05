@@ -227,7 +227,8 @@ type Config struct {
 	MaskInternalErrorDetails dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	// Health check
-	HistoryHostErrorPercentage dynamicconfig.FloatPropertyFn
+	HistoryHostErrorPercentage    dynamicconfig.FloatPropertyFn
+	HistoryHostStartingPercentage dynamicconfig.FloatPropertyFn
 
 	LogAllReqErrors dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
