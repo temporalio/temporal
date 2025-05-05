@@ -1,0 +1,49 @@
+name: PR Placeholder Check
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+jobs:
+  placeholder-check:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+
+    steps:
+      - name: Fetch PR body
+        id: pr
+        uses: actions/github-script@v7
+        with:
+          result-encoding: string
+          script: |
+            const pr = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.payload.pull_request.number,
+            });
+
+            return pr.data.body || '';
+
+      - name: Check for underscore placeholders
+        id: check
+        run: |
+          echo "$BODY" > body.txt
+          count=$(grep -cE '^_.*_$' body.txt || true)
+
+          if [ "$count" -gt 0 ]; then
+            echo "❌ Found $count placeholder line(s) in PR description:"
+            grep -E '^_.*_$' body.txt
+            echo "Please replace or remove them before merging."
+            echo "warning_detected=true" >> $GITHUB_OUTPUT
+            exit 1  # Mark this step as failed
+          else
+            echo "✅ No placeholder lines detected."
+            echo "warning_detected=false" >> $GITHUB_OUTPUT
+          fi
+        env:
+          BODY: ${{ steps.pr.outputs.result }}
+
+      - name: Mark job as passed even if warning
+        if: failure() && steps.check.outputs.warning_detected == 'true'
+        run: echo "Placeholder warning recorded, but allowing merge."
