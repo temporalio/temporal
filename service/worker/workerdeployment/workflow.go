@@ -172,7 +172,7 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 
 	// Wait until we can continue as new or are cancelled.
 	err = workflow.Await(ctx, func() bool {
-		return (d.signalsCompleted && d.pendingUpdates == 0) && d.done
+		return (d.signalsCompleted && d.pendingUpdates == 0) || d.done
 	})
 	if err != nil {
 		return err

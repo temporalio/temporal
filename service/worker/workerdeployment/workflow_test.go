@@ -71,45 +71,31 @@ func (s *WorkerDeploymentSuite) Test_SetCurrentVersion_RejectStaleConcurrentUpda
 		IgnoreMissingTaskQueues: true,
 	}
 
-	// Chaining multiple updates in a single callback to ensure that the updates are processed sequentially
-	// during a single workflow run.
 	s.env.RegisterDelayedCallback(func() {
-		s.env.UpdateWorkflow(AddVersionToWorkerDeployment, "", &testsuite.TestUpdateCallback{
+		// Firing update #1
+		s.env.UpdateWorkflow(SetCurrentVersion, "", &testsuite.TestUpdateCallback{
 			OnReject: func(err error) {
-				s.Fail("update failed with error %v", err)
+				s.Fail("update #1 should not have failed with error %v", err)
 			},
 			OnAccept: func() {
-			},
-			OnComplete: func(interface{}, error) {
-				// After registering the version, fire Update #1.
+				// Firing Update #2 which shall gets processed after Update #1 gets completed.
 				s.env.UpdateWorkflow(SetCurrentVersion, "", &testsuite.TestUpdateCallback{
 					OnReject: func(err error) {
-						s.Fail("update #1 should not have failed with error %v", err)
+						s.Fail("update #2 should have been accepted by the validator")
 					},
 					OnAccept: func() {
-
-						// Fire Update #2 which shall get processed after Update #1 gets unblocked during the activity call.
-						s.env.UpdateWorkflow(SetCurrentVersion, "", &testsuite.TestUpdateCallback{
-							OnReject: func(err error) {
-								s.Fail("update #2 should have been accepted by the validator")
-							},
-							OnAccept: func() {
-							},
-							OnComplete: func(a interface{}, err error) {
-								// Update #2 clears the validator and waits for the first update to complete. Once it starts
-								// being processed, it should be rejected since completion of the first update changed the state.
-								s.ErrorContains(err, errNoChangeType)
-							},
-						}, updateArgs)
-
+						fmt.Println("update #2 accepted")
 					},
 					OnComplete: func(a interface{}, err error) {
+						// Update #2 clears the validator and waits for the first update to complete. Once it starts
+						// being processed, it should be rejected since completion of the first update changed the state.
+						s.ErrorContains(err, errNoChangeType)
 					},
 				}, updateArgs)
 			},
-		}, &deploymentspb.AddVersionUpdateArgs{
-			Version: tv.DeploymentVersionString(),
-		})
+			OnComplete: func(a interface{}, err error) {
+			},
+		}, updateArgs)
 
 	}, 0*time.Millisecond)
 
@@ -124,6 +110,14 @@ func (s *WorkerDeploymentSuite) Test_SetCurrentVersion_RejectStaleConcurrentUpda
 		NamespaceName:  tv.NamespaceName().String(),
 		NamespaceId:    tv.NamespaceID().String(),
 		DeploymentName: tv.DeploymentSeries(),
+		// Add version to deployment's local state since it's a prerequisite for SetCurrentVersion.
+		State: &deploymentspb.WorkerDeploymentLocalState{
+			Versions: map[string]*deploymentspb.WorkerDeploymentVersionSummary{
+				tv.DeploymentVersionString(): {
+					Version: tv.DeploymentVersionString(),
+				},
+			},
+		},
 	})
 
 	s.True(s.env.IsWorkflowCompleted())
@@ -145,8 +139,6 @@ func (s *WorkerDeploymentSuite) Test_SetRampingVersion_RejectStaleConcurrentUpda
 	s.env.RegisterActivity(a.SyncWorkerDeploymentVersion)
 	s.env.OnActivity(a.SyncWorkerDeploymentVersion, mock.Anything, mock.Anything).Once().Return(
 		func(ctx context.Context, args *deploymentspb.SyncVersionStateActivityArgs) (*deploymentspb.SyncVersionStateActivityResult, error) {
-			if args.Version == tv.DeploymentVersionString() {
-			}
 			return &deploymentspb.SyncVersionStateActivityResult{}, nil
 		},
 	)
@@ -157,45 +149,32 @@ func (s *WorkerDeploymentSuite) Test_SetRampingVersion_RejectStaleConcurrentUpda
 		Percentage:              50,
 		IgnoreMissingTaskQueues: true,
 	}
-	// Chaining multiple updates in a single callback to ensure that the updates are processed sequentially
-	// during a single workflow run.
+
 	s.env.RegisterDelayedCallback(func() {
-		s.env.UpdateWorkflow(AddVersionToWorkerDeployment, "", &testsuite.TestUpdateCallback{
+		// Firing Update #1.
+		s.env.UpdateWorkflow(SetRampingVersion, "", &testsuite.TestUpdateCallback{
 			OnReject: func(err error) {
-				s.Fail("update failed with error %v", err)
+				s.Fail("update #1 should not have failed with error %v", err)
 			},
 			OnAccept: func() {
-			},
-			OnComplete: func(interface{}, error) {
-				// After registering the version, fire Update #1.
+				// Firing Update #2 which shall get processed after Update #1 gets completed.
 				s.env.UpdateWorkflow(SetRampingVersion, "", &testsuite.TestUpdateCallback{
 					OnReject: func(err error) {
-						s.Fail("update #1 should not have failed with error %v", err)
+						s.Fail("update #2 should have been accepted by the validator")
 					},
 					OnAccept: func() {
-
-						// Fire Update #2 which shall get processed after Update #1 gets unblocked during the activity call.
-						s.env.UpdateWorkflow(SetRampingVersion, "", &testsuite.TestUpdateCallback{
-							OnReject: func(err error) {
-								s.Fail("update #2 should have been accepted by the validator")
-							},
-							OnAccept: func() {
-							},
-							OnComplete: func(a interface{}, err error) {
-								// Update #2 clears the validator and waits for the first update to complete. Once it starts
-								// being processed, it should be rejected since completion of the first update changed the state.
-								s.ErrorContains(err, errNoChangeType)
-							},
-						}, updateArgs)
-
 					},
 					OnComplete: func(a interface{}, err error) {
+						// Update #2 clears the validator and waits for the first update to complete. Once it starts
+						// being processed, it should be rejected since completion of the first update changed the state.
+						s.ErrorContains(err, errNoChangeType)
 					},
 				}, updateArgs)
+
 			},
-		}, &deploymentspb.AddVersionUpdateArgs{
-			Version: tv.DeploymentVersionString(),
-		})
+			OnComplete: func(a interface{}, err error) {
+			},
+		}, updateArgs)
 
 	}, 0*time.Millisecond)
 
@@ -210,8 +189,14 @@ func (s *WorkerDeploymentSuite) Test_SetRampingVersion_RejectStaleConcurrentUpda
 		NamespaceName:  tv.NamespaceName().String(),
 		NamespaceId:    tv.NamespaceID().String(),
 		DeploymentName: tv.DeploymentSeries(),
+		State: &deploymentspb.WorkerDeploymentLocalState{
+			Versions: map[string]*deploymentspb.WorkerDeploymentVersionSummary{
+				tv.DeploymentVersionString(): {
+					Version: tv.DeploymentVersionString(),
+				},
+			},
+		},
 	})
-
 	s.True(s.env.IsWorkflowCompleted())
 }
 
