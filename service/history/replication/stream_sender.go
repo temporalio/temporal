@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -29,7 +30,6 @@ import (
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
-	"golang.org/x/exp/slices"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
