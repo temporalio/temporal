@@ -954,6 +954,9 @@ func (t *timerQueueActiveTaskExecutor) executeChasmPureTimerTask(
 			return nil
 		},
 	)
+	if err != nil {
+		return err
+	}
 
 	// Commit changes only if we processed any timers.
 	if processedTimers == 0 {
