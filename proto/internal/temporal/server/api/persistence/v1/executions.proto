@@ -69,7 +69,7 @@ message WorkflowExecutionInfo {
     reserved 14;
     reserved 15;
     reserved 16;
-    int64 last_event_task_id = 17;
+    int64 last_running_clock = 17;
     int64 last_first_event_id = 18;
     int64 last_completed_workflow_task_started_event_id = 19;
     // Deprecated. use `WorkflowExecutionState.start_time`

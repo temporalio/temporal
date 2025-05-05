@@ -139,7 +139,7 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 	)); err != nil {
 		return nil, err
 	}
-	executionInfo.LastEventTaskId = lastEvent.GetTaskId()
+	executionInfo.LastRunningClock = lastEvent.GetTaskId()
 
 	for _, event := range history {
 		switch event.GetEventType() {
