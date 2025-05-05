@@ -592,20 +592,22 @@ func (ms *MutableStateImpl) GetNexusCompletion(
 		// Backwards compatibility: this is the default link type.
 		Reference: &commonpb.Link_WorkflowEvent_EventRef{
 			EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+				EventId:   common.FirstEventID,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 			},
 		},
 	}
-	requestIDInfo := ms.executionState.RequestIds[requestID]
-	if requestIDInfo.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED {
-		// If the callback was attached, then replace with RequestIdReference.
-		link.Reference = &commonpb.Link_WorkflowEvent_RequestIdRef{
-			RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
-				RequestId: requestID,
-				EventType: requestIDInfo.GetEventType(),
-			},
-		}
-	}
+	// TODO(rodrigozhou): RequestIdReference depends on a new release of sdk-go.
+	// requestIDInfo := ms.executionState.RequestIds[requestID]
+	// if requestIDInfo.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED {
+	// 	// If the callback was attached, then replace with RequestIdReference.
+	// 	link.Reference = &commonpb.Link_WorkflowEvent_RequestIdRef{
+	// 		RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
+	// 			RequestId: requestID,
+	// 			EventType: requestIDInfo.GetEventType(),
+	// 		},
+	// 	}
+	// }
 	startLink := temporalnexus.ConvertLinkWorkflowEventToNexusLink(link)
 
 	switch ce.GetEventType() {

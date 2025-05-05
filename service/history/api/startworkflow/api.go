@@ -807,21 +807,24 @@ func (s *Starter) generateStartedEventRefLink(runID string) *commonpb.Link {
 }
 
 func (s *Starter) generateRequestIdRefLink(runID string) *commonpb.Link {
-	return &commonpb.Link{
-		Variant: &commonpb.Link_WorkflowEvent_{
-			WorkflowEvent: &commonpb.Link_WorkflowEvent{
-				Namespace:  s.namespace.Name().String(),
-				WorkflowId: s.request.StartRequest.WorkflowId,
-				RunId:      runID,
-				Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
-					RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
-						RequestId: s.request.StartRequest.RequestId,
-						EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
-					},
-				},
-			},
-		},
-	}
+	// TODO(rodrigozhou): RequestIdReference depends on a new release of sdk-go.
+	// Generate an EventReference for now.
+	return s.generateStartedEventRefLink(runID)
+	// return &commonpb.Link{
+	// 	Variant: &commonpb.Link_WorkflowEvent_{
+	// 		WorkflowEvent: &commonpb.Link_WorkflowEvent{
+	// 			Namespace:  s.namespace.Name().String(),
+	// 			WorkflowId: s.request.StartRequest.WorkflowId,
+	// 			RunId:      runID,
+	// 			Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
+	// 				RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
+	// 					RequestId: s.request.StartRequest.RequestId,
+	// 					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+	// 				},
+	// 			},
+	// 		},
+	// 	},
+	// }
 }
 
 func (s StartOutcome) String() string {

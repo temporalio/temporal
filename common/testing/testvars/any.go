@@ -6,6 +6,7 @@ import (
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	failurepb "go.temporal.io/api/failure/v1"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -65,4 +66,8 @@ func (a Any) InfiniteTimeout() *durationpb.Duration {
 
 func (a Any) RunID() string {
 	return uuid.New()
+}
+
+func (a Any) WorkflowKey() definition.WorkflowKey {
+	return definition.NewWorkflowKey(a.String(), a.String(), a.RunID())
 }
