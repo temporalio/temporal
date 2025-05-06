@@ -53,8 +53,8 @@ func Invoke(
 			}
 
 			// Merge the requested options mentioned in the field mask with the current options in the mutable state
-			mergedOpts, err := applyWorkflowExecutionOptions(
-				getOptionsFromMutableState(mutableState),
+			mergedOpts, err := MergeWorkflowExecutionOptions(
+				GetOptionsFromMutableState(mutableState),
 				opts,
 				req.GetUpdateMask(),
 			)
@@ -66,7 +66,7 @@ func Invoke(
 			ret.WorkflowExecutionOptions = mergedOpts
 
 			// If there is no mutable state change at all, return with no new history event and Noop=true
-			if proto.Equal(mergedOpts, getOptionsFromMutableState(mutableState)) {
+			if proto.Equal(mergedOpts, GetOptionsFromMutableState(mutableState)) {
 				return &api.UpdateWorkflowAction{
 					Noop:               true,
 					CreateWorkflowTask: false,
@@ -98,7 +98,7 @@ func Invoke(
 	return ret, nil
 }
 
-func getOptionsFromMutableState(ms historyi.MutableState) *workflowpb.WorkflowExecutionOptions {
+func GetOptionsFromMutableState(ms historyi.MutableState) *workflowpb.WorkflowExecutionOptions {
 	opts := &workflowpb.WorkflowExecutionOptions{}
 	if versioningInfo := ms.GetExecutionInfo().GetVersioningInfo(); versioningInfo != nil {
 		override, ok := proto.Clone(versioningInfo.GetVersioningOverride()).(*workflowpb.VersioningOverride)
@@ -110,8 +110,8 @@ func getOptionsFromMutableState(ms historyi.MutableState) *workflowpb.WorkflowEx
 	return opts
 }
 
-// applyWorkflowExecutionOptions copies the given paths in `src` struct to `dst` struct
-func applyWorkflowExecutionOptions(
+// MergeWorkflowExecutionOptions copies the given paths in `src` struct to `dst` struct
+func MergeWorkflowExecutionOptions(
 	mergeInto, mergeFrom *workflowpb.WorkflowExecutionOptions,
 	updateMask *fieldmaskpb.FieldMask,
 ) (*workflowpb.WorkflowExecutionOptions, error) {
