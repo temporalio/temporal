@@ -597,14 +597,16 @@ func (ms *MutableStateImpl) GetNexusCompletion(
 			},
 		},
 	}
-	requestIDInfo := ms.executionState.RequestIds[requestID]
-	if requestIDInfo.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED {
-		// If the callback was attached, then replace with RequestIdReference.
-		link.Reference = &commonpb.Link_WorkflowEvent_RequestIdRef{
-			RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
-				RequestId: requestID,
-				EventType: requestIDInfo.GetEventType(),
-			},
+	if ms.config.EnableRequestIdRefLinks() {
+		requestIDInfo := ms.executionState.RequestIds[requestID]
+		if requestIDInfo.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED {
+			// If the callback was attached, then replace with RequestIdReference.
+			link.Reference = &commonpb.Link_WorkflowEvent_RequestIdRef{
+				RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
+					RequestId: requestID,
+					EventType: requestIDInfo.GetEventType(),
+				},
+			}
 		}
 	}
 	startLink := nexusoperations.ConvertLinkWorkflowEventToNexusLink(link)
