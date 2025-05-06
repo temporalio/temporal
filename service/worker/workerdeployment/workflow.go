@@ -60,7 +60,7 @@ func Workflow(ctx workflow.Context, unsafeMaxVersion func() int, args *deploymen
 		lock:             workflow.NewMutex(ctx),
 		unsafeMaxVersion: unsafeMaxVersion,
 		stateChanged: &StateChanged{
-			ch:    workflow.NewBufferedChannel(ctx, 100), // might have to make this a buffered channel since after a continue-as-new, we could send a value on the channel before we start a loop to process it?
+			ch:    workflow.NewChannel(ctx),
 			value: false,
 		},
 	}
@@ -90,7 +90,6 @@ func (d *WorkflowRunner) listenToSignals(ctx workflow.Context) {
 	})
 	selector.AddReceive(d.stateChanged.ch, func(c workflow.ReceiveChannel, more bool) {
 		c.Receive(ctx, nil)
-		fmt.Println("Received state changed signals")
 		stateChanged = true
 	})
 
@@ -102,8 +101,6 @@ func (d *WorkflowRunner) listenToSignals(ctx workflow.Context) {
 	for selector.HasPending() || (stateChanged == false && forceCAN == false) {
 		selector.Select(ctx)
 	}
-
-	fmt.Println("Exiting signals loop")
 
 	// Done processing signals before CAN
 	d.signalsCompleted = true
@@ -217,15 +214,11 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 		return nil
 	}
 
-	// TODO (Shivam) - update this please.
-
 	// We perform a continue-as-new after each update and signal is handled to ensure compatibility
 	// even if the server rolls back to a previous minor version. By continuing-as-new,
 	// we pass the current state as input to the next workflow execution, resulting in a new
 	// workflow history with just two initial events. This minimizes the risk of NDE (Non-Deterministic Execution)
 	// errors during server rollbacks.
-	d.logger.Info("Continuing as new")
-
 	return workflow.NewContinueAsNewError(ctx, WorkerDeploymentWorkflowType, d.WorkerDeploymentWorkflowArgs)
 }
 
@@ -924,7 +917,10 @@ func (d *WorkflowRunner) updateMemo(ctx workflow.Context) error {
 
 func (d *WorkflowRunner) setStateChanged(ctx workflow.Context) {
 	if !d.stateChanged.value {
-		d.stateChanged.value = true
-		d.stateChanged.ch.Send(ctx, nil)
+		// Send the value on the channel without blocking.
+		workflow.Go(ctx, func(ctx workflow.Context) {
+			d.stateChanged.value = true
+			d.stateChanged.ch.Send(ctx, nil)
+		})
 	}
 }
