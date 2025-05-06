@@ -25,7 +25,6 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/sdk/temporalnexus"
 	clockspb "go.temporal.io/server/api/clock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -58,6 +57,7 @@ import (
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/components/callbacks"
+	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
@@ -594,18 +594,17 @@ func (ms *MutableStateImpl) GetNexusCompletion(
 			},
 		},
 	}
-	// TODO(rodrigozhou): RequestIdReference depends on a new release of sdk-go.
-	// requestIDInfo := ms.executionState.RequestIds[requestID]
-	// if requestIDInfo.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED {
-	// 	// If the callback was attached, then replace with RequestIdReference.
-	// 	link.Reference = &commonpb.Link_WorkflowEvent_RequestIdRef{
-	// 		RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
-	// 			RequestId: requestID,
-	// 			EventType: requestIDInfo.GetEventType(),
-	// 		},
-	// 	}
-	// }
-	startLink := temporalnexus.ConvertLinkWorkflowEventToNexusLink(link)
+	requestIDInfo := ms.executionState.RequestIds[requestID]
+	if requestIDInfo.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED {
+		// If the callback was attached, then replace with RequestIdReference.
+		link.Reference = &commonpb.Link_WorkflowEvent_RequestIdRef{
+			RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
+				RequestId: requestID,
+				EventType: requestIDInfo.GetEventType(),
+			},
+		}
+	}
+	startLink := nexusoperations.ConvertLinkWorkflowEventToNexusLink(link)
 
 	switch ce.GetEventType() {
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:

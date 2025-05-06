@@ -215,7 +215,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSyncCompletion() {
 			},
 		},
 	}
-	handlerNexusLink := temporalnexus.ConvertLinkWorkflowEventToNexusLink(handlerLink)
+	handlerNexusLink := nexusoperations.ConvertLinkWorkflowEventToNexusLink(handlerLink)
 
 	h := nexustest.Handler{
 		OnStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
@@ -460,7 +460,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion() {
 			},
 		},
 	}
-	handlerNexusLink := temporalnexus.ConvertLinkWorkflowEventToNexusLink(handlerLink)
+	handlerNexusLink := nexusoperations.ConvertLinkWorkflowEventToNexusLink(handlerLink)
 
 	h := nexustest.Handler{
 		OnStartOperation: func(
@@ -474,7 +474,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion() {
 			s.Len(options.Links, 1)
 			var links []*commonpb.Link
 			for _, nexusLink := range options.Links {
-				link, err := temporalnexus.ConvertNexusLinkToLinkWorkflowEvent(nexusLink)
+				link, err := nexusoperations.ConvertNexusLinkToLinkWorkflowEvent(nexusLink)
 				s.NoError(err)
 				links = append(links, &commonpb.Link{
 					Variant: &commonpb.Link_WorkflowEvent_{
@@ -928,19 +928,12 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionBeforeStart() 
 			Namespace:  s.Namespace().String(),
 			WorkflowId: completionWFID,
 			RunId:      completionWfRunIDs[1],
-			// TODO(rodrigozhou): RequestIdReference depends on a new release of sdk-go.
-			Reference: &commonpb.Link_WorkflowEvent_EventRef{
-				EventRef: &commonpb.Link_WorkflowEvent_EventReference{
-					EventId:   common.FirstEventID,
-					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+			Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
+				RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
+					RequestId: completionWFStartRequestIDs[1],
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
 				},
 			},
-			// Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
-			// 	RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
-			// 		RequestId: completionWFStartRequestIDs[1],
-			// 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
-			// 	},
-			// },
 		},
 	}
 
