@@ -472,7 +472,6 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 		return nil, err
 	}
 
-	fmt.Println("Setting state changed inside ramping version with value", d.stateChanged.value)
 	d.setStateChanged(ctx)
 
 	return &deploymentspb.SetRampingVersionResponse{
@@ -734,6 +733,7 @@ func (d *WorkflowRunner) handleAddVersionToWorkerDeployment(ctx workflow.Context
 		CreateTime: args.CreateTime,
 	}
 
+	d.setStateChanged(ctx)
 	return nil
 }
 
