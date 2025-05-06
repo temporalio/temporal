@@ -58,7 +58,8 @@ type Starter struct {
 	request                                       *historyservice.StartWorkflowExecutionRequest
 	namespace                                     *namespace.Namespace
 	createOrUpdateLeaseFn                         api.CreateOrUpdateLeaseFunc
-	followReusePolicyAfterConflictPolicyTerminate dynamicconfig.TypedPropertyFnWithNamespaceFilter[bool]
+	followReusePolicyAfterConflictPolicyTerminate dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	enableRequestIdRefLinks                       dynamicconfig.BoolPropertyFn
 }
 
 // creationParams is a container for all information obtained from creating the uncommitted execution.
@@ -105,6 +106,7 @@ func NewStarter(
 		namespace:                  namespaceEntry,
 		createOrUpdateLeaseFn:      createLeaseFn,
 		followReusePolicyAfterConflictPolicyTerminate: shardContext.GetConfig().FollowReusePolicyAfterConflictPolicyTerminate,
+		enableRequestIdRefLinks:                       shardContext.GetConfig().EnableRequestIdRefLinks,
 	}, nil
 }
 
@@ -807,6 +809,9 @@ func (s *Starter) generateStartedEventRefLink(runID string) *commonpb.Link {
 }
 
 func (s *Starter) generateRequestIdRefLink(runID string) *commonpb.Link {
+	if !s.enableRequestIdRefLinks() {
+		return s.generateStartedEventRefLink(runID)
+	}
 	return &commonpb.Link{
 		Variant: &commonpb.Link_WorkflowEvent_{
 			WorkflowEvent: &commonpb.Link_WorkflowEvent{

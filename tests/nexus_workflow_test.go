@@ -758,6 +758,8 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion() {
 }
 
 func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionBeforeStart() {
+	s.OverrideDynamicConfig(dynamicconfig.EnableRequestIdRefLinks, true)
+
 	ctx := testcore.NewContext()
 	taskQueues := []string{testcore.RandomizeStr(s.T().Name()), testcore.RandomizeStr(s.T().Name())}
 	wfRuns := []client.WorkflowRun{}
@@ -2231,7 +2233,7 @@ func (s *NexusWorkflowTestSuite) TestNexusCallbackAfterCallerComplete() {
 		})
 		require.NoError(ct, err)
 		require.Len(ct, resp.Callbacks, 1)
-		require.Equal(ct, resp.Callbacks[0].State, enumspb.CALLBACK_STATE_FAILED)
+		require.Equal(ct, enumspb.CALLBACK_STATE_FAILED, resp.Callbacks[0].State)
 		require.NotNil(ct, resp.Callbacks[0].LastAttemptFailure)
 		require.Equal(ct, resp.Callbacks[0].LastAttemptFailure.Message, "handler error (NOT_FOUND): workflow execution already completed")
 	}, 3*time.Second, 200*time.Millisecond)
