@@ -96,8 +96,8 @@ func (d *WorkflowRunner) listenToSignals(ctx workflow.Context) {
 	// Requirement of this condition:
 	// 1. If there are pending signals, we should process them.
 	// 2. If there are no pending signals:
-	// 	a. If forceCAN is true, we should exit out.
-	//  b. If state has changed, we should exit out.
+	// 		a. If forceCAN is true, we should exit out.
+	//  	b. If state has changed, we should exit out.
 	for selector.HasPending() || (stateChanged == false && forceCAN == false) {
 		selector.Select(ctx)
 	}
