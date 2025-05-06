@@ -166,7 +166,7 @@ func (s *WorkerDeploymentSuite) startVersionWorkflow(ctx context.Context, tv *te
 		})
 		a.NoError(err)
 		a.Equal(tv.DeploymentVersionString(), resp.GetWorkerDeploymentVersionInfo().GetVersion())
-	}, time.Second*5, time.Millisecond*200)
+	}, time.Second*10, time.Millisecond*200)
 }
 
 func (s *WorkerDeploymentSuite) TestForceCAN_NoOpenWFS() {

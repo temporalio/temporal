@@ -25,10 +25,15 @@ const (
 )
 
 type (
-	// StateChanged encapsulates the state change channel and its current state
+	// StateChanged encapsulates the state change logic
 	StateChanged struct {
-		ch    workflow.Channel
 		value bool
+	}
+
+	// SignalHandler encapsulates the signal handling logic
+	SignalHandler struct {
+		signalSelector    workflow.Selector
+		processingSignals int
 	}
 
 	// WorkflowRunner holds the local state while running a deployment-series workflow
@@ -40,15 +45,13 @@ type (
 		lock             workflow.Mutex
 		pendingUpdates   int
 		conflictToken    []byte
-		done             bool
-		signalsCompleted bool
+		deleteDeployment bool
 		unsafeMaxVersion func() int
 		// stateChanged is used to track if the state of the workflow has undergone a local state change since the last signal/update.
 		// This prevents a workflow from continuing-as-new if the state has not changed.
-		stateChanged      *StateChanged
-		forceCAN          bool
-		signalSelector    workflow.Selector
-		processingSignals int
+		stateChanged  *StateChanged
+		signalHandler *SignalHandler
+		forceCAN      bool
 	}
 )
 
@@ -62,8 +65,10 @@ func Workflow(ctx workflow.Context, unsafeMaxVersion func() int, args *deploymen
 		lock:             workflow.NewMutex(ctx),
 		unsafeMaxVersion: unsafeMaxVersion,
 		stateChanged: &StateChanged{
-			ch:    workflow.NewChannel(ctx),
 			value: false,
+		},
+		signalHandler: &SignalHandler{
+			signalSelector: workflow.NewSelector(ctx),
 		},
 	}
 
@@ -74,28 +79,27 @@ func (d *WorkflowRunner) listenToSignals(ctx workflow.Context) {
 	forceCANSignalChannel := workflow.GetSignalChannel(ctx, ForceCANSignalName)
 	syncVersionSummaryChannel := workflow.GetSignalChannel(ctx, SyncVersionSummarySignal)
 
-	d.signalSelector = workflow.NewSelector(ctx)
-	d.signalSelector.AddReceive(forceCANSignalChannel, func(c workflow.ReceiveChannel, more bool) {
-		d.processingSignals++
+	d.signalHandler.signalSelector.AddReceive(forceCANSignalChannel, func(c workflow.ReceiveChannel, more bool) {
+		d.signalHandler.processingSignals++
 		c.Receive(ctx, nil)
 		d.forceCAN = true
-		d.processingSignals--
+		d.signalHandler.processingSignals--
 	})
-	d.signalSelector.AddReceive(syncVersionSummaryChannel, func(c workflow.ReceiveChannel, more bool) {
+	d.signalHandler.signalSelector.AddReceive(syncVersionSummaryChannel, func(c workflow.ReceiveChannel, more bool) {
 		var summary *deploymentspb.WorkerDeploymentVersionSummary
-		d.processingSignals++
+		d.signalHandler.processingSignals++
 		c.Receive(ctx, &summary)
 		if _, ok := d.State.Versions[summary.GetVersion()]; !ok {
 			d.logger.Error("received summary for a non-existing version, ignoring it", "version", summary.GetVersion())
 		}
 		d.State.Versions[summary.GetVersion()] = summary
 		d.stateChanged.value = true
-		d.processingSignals--
+		d.signalHandler.processingSignals--
 	})
 
 	// Keep waiting for signals, when it's time to CaN the main goroutine will exit.
 	for {
-		d.signalSelector.Select(ctx)
+		d.signalHandler.signalSelector.Select(ctx)
 	}
 }
 
@@ -197,16 +201,16 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 	// Wait until we can continue as new or are cancelled. The workflow will continue-as-new iff
 	// there are no pending updates/signals and the state has changed.
 	err = workflow.Await(ctx, func() bool {
-		return d.done || // deployment is deleted -> it's ok to drop all signals and updates.
+		return d.deleteDeployment || // deployment is deleted -> it's ok to drop all signals and updates.
 			// There is no pending signal or update, but the state is dirty or forceCaN is requested:
-			(d.signalSelector != nil && !d.signalSelector.HasPending() && d.processingSignals == 0 && d.pendingUpdates == 0 &&
+			(!d.signalHandler.signalSelector.HasPending() && d.signalHandler.processingSignals == 0 && d.pendingUpdates == 0 &&
 				(d.forceCAN || d.stateChanged.value))
 	})
 	if err != nil {
 		return err
 	}
 
-	if d.done {
+	if d.deleteDeployment {
 		return nil
 	}
 
@@ -302,7 +306,7 @@ func (d *WorkflowRunner) validateDeleteDeployment() error {
 
 func (d *WorkflowRunner) handleDeleteDeployment(ctx workflow.Context) error {
 	if len(d.State.Versions) == 0 {
-		d.done = true
+		d.deleteDeployment = true
 	}
 	d.setStateChanged(ctx)
 	return nil
@@ -916,7 +920,6 @@ func (d *WorkflowRunner) setStateChanged(ctx workflow.Context) {
 		// Send the value on the channel without blocking.
 		workflow.Go(ctx, func(ctx workflow.Context) {
 			d.stateChanged.value = true
-			//d.stateChanged.ch.Send(ctx, nil)
 		})
 	}
 }
