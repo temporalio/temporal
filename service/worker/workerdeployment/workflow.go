@@ -25,6 +25,12 @@ const (
 )
 
 type (
+	// StateChanged encapsulates the state change channel and its current state
+	StateChanged struct {
+		ch    workflow.Channel
+		value bool
+	}
+
 	// WorkflowRunner holds the local state while running a deployment-series workflow
 	WorkflowRunner struct {
 		*deploymentspb.WorkerDeploymentWorkflowArgs
@@ -39,7 +45,7 @@ type (
 		unsafeMaxVersion func() int
 		// stateChanged is used to track if the state of the workflow has undergone a local state change since the last signal/update.
 		// This prevents a workflow from continuing-as-new if the state has not changed.
-		stateChanged bool
+		stateChanged *StateChanged
 		forceCAN     bool
 	}
 )
@@ -53,6 +59,10 @@ func Workflow(ctx workflow.Context, unsafeMaxVersion func() int, args *deploymen
 		metrics:          workflow.GetMetricsHandler(ctx).WithTags(map[string]string{"namespace": args.NamespaceName}),
 		lock:             workflow.NewMutex(ctx),
 		unsafeMaxVersion: unsafeMaxVersion,
+		stateChanged: &StateChanged{
+			ch:    workflow.NewBufferedChannel(ctx, 100), // might have to make this a buffered channel since after a continue-as-new, we could send a value on the channel before we start a loop to process it?
+			value: false,
+		},
 	}
 
 	return workflowRunner.run(ctx)
@@ -61,11 +71,13 @@ func Workflow(ctx workflow.Context, unsafeMaxVersion func() int, args *deploymen
 func (d *WorkflowRunner) listenToSignals(ctx workflow.Context) {
 	forceCANSignalChannel := workflow.GetSignalChannel(ctx, ForceCANSignalName)
 	syncVersionSummaryChannel := workflow.GetSignalChannel(ctx, SyncVersionSummarySignal)
+	forceCAN := false
+	stateChanged := false
 
 	selector := workflow.NewSelector(ctx)
 	selector.AddReceive(forceCANSignalChannel, func(c workflow.ReceiveChannel, more bool) {
 		c.Receive(ctx, nil)
-		d.forceCAN = true
+		forceCAN = true
 	})
 	selector.AddReceive(syncVersionSummaryChannel, func(c workflow.ReceiveChannel, more bool) {
 		var summary *deploymentspb.WorkerDeploymentVersionSummary
@@ -74,7 +86,12 @@ func (d *WorkflowRunner) listenToSignals(ctx workflow.Context) {
 			d.logger.Error("received summary for a non-existing version, ignoring it", "version", summary.GetVersion())
 		}
 		d.State.Versions[summary.GetVersion()] = summary
-		d.setStateChanged()
+		stateChanged = true
+	})
+	selector.AddReceive(d.stateChanged.ch, func(c workflow.ReceiveChannel, more bool) {
+		c.Receive(ctx, nil)
+		fmt.Println("Received state changed signals")
+		stateChanged = true
 	})
 
 	// Requirement of this condition:
@@ -82,9 +99,11 @@ func (d *WorkflowRunner) listenToSignals(ctx workflow.Context) {
 	// 2. If there are no pending signals:
 	// 	a. If forceCAN is true, we should exit out.
 	//  b. If state has changed, we should exit out.
-	for (!d.stateChanged && !d.forceCAN) || selector.HasPending() {
+	for selector.HasPending() || (stateChanged == false && forceCAN == false) {
 		selector.Select(ctx)
 	}
+
+	fmt.Println("Exiting signals loop")
 
 	// Done processing signals before CAN
 	d.signalsCompleted = true
@@ -188,7 +207,7 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 	// Wait until we can continue as new or are cancelled. The workflow will continue-as-new iff
 	// there are no pending updates/signals and the state has changed.
 	err = workflow.Await(ctx, func() bool {
-		return (d.signalsCompleted && d.pendingUpdates == 0 && d.stateChanged) || d.done || d.forceCAN
+		return (d.signalsCompleted && d.pendingUpdates == 0) || d.done
 	})
 	if err != nil {
 		return err
@@ -205,6 +224,8 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 	// we pass the current state as input to the next workflow execution, resulting in a new
 	// workflow history with just two initial events. This minimizes the risk of NDE (Non-Deterministic Execution)
 	// errors during server rollbacks.
+	d.logger.Info("Continuing as new")
+
 	return workflow.NewContinueAsNewError(ctx, WorkerDeploymentWorkflowType, d.WorkerDeploymentWorkflowArgs)
 }
 
@@ -279,8 +300,7 @@ func (d *WorkflowRunner) handleRegisterWorker(ctx workflow.Context, args *deploy
 		return err
 	}
 
-	fmt.Println("State set to true")
-	d.setStateChanged()
+	d.setStateChanged(ctx)
 	return nil
 }
 
@@ -295,7 +315,7 @@ func (d *WorkflowRunner) handleDeleteDeployment(ctx workflow.Context) error {
 	if len(d.State.Versions) == 0 {
 		d.done = true
 	}
-	d.setStateChanged()
+	d.setStateChanged(ctx)
 	return nil
 }
 
@@ -459,7 +479,8 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 		return nil, err
 	}
 
-	d.setStateChanged()
+	fmt.Println("Setting state changed inside ramping version with value", d.stateChanged.value)
+	d.setStateChanged(ctx)
 
 	return &deploymentspb.SetRampingVersionResponse{
 		PreviousVersion:    prevRampingVersion,
@@ -530,7 +551,7 @@ func (d *WorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *deploym
 		return err
 	}
 
-	d.setStateChanged()
+	d.setStateChanged(ctx)
 
 	return d.deleteVersion(ctx, args)
 }
@@ -661,9 +682,8 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 		return nil, err
 	}
 
-	d.setStateChanged()
+	d.setStateChanged(ctx)
 
-	fmt.Println("Set current version to", args.Version)
 	return &deploymentspb.SetCurrentVersionResponse{
 		PreviousVersion: prevCurrentVersion,
 		ConflictToken:   d.State.ConflictToken,
@@ -902,7 +922,9 @@ func (d *WorkflowRunner) updateMemo(ctx workflow.Context) error {
 	})
 }
 
-func (d *WorkflowRunner) setStateChanged() {
-	fmt.Println("Setting state changed to true")
-	d.stateChanged = true
+func (d *WorkflowRunner) setStateChanged(ctx workflow.Context) {
+	if !d.stateChanged.value {
+		d.stateChanged.value = true
+		d.stateChanged.ch.Send(ctx, nil)
+	}
 }
