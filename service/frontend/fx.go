@@ -86,6 +86,7 @@ var Module = fx.Options(
 	fx.Provide(NamespaceRateLimitInterceptorProvider),
 	fx.Provide(SDKVersionInterceptorProvider),
 	fx.Provide(CallerInfoInterceptorProvider),
+	fx.Provide(SlowRequestLoggerInterceptorProvider),
 	fx.Provide(MaskInternalErrorDetailsInterceptorProvider),
 	fx.Provide(GrpcServerOptionsProvider),
 	fx.Provide(VisibilityManagerProvider),
@@ -206,6 +207,7 @@ func GrpcServerOptionsProvider(
 	callerInfoInterceptor *interceptor.CallerInfoInterceptor,
 	authInterceptor *authorization.Interceptor,
 	maskInternalErrorDetailsInterceptor *interceptor.MaskInternalErrorDetailsInterceptor,
+	slowRequestLoggerInterceptor *interceptor.SlowRequestLoggerInterceptor,
 	customInterceptors []grpc.UnaryServerInterceptor,
 	metricsHandler metrics.Handler,
 ) GrpcServerOptions {
@@ -256,6 +258,7 @@ func GrpcServerOptionsProvider(
 		rateLimitInterceptor.Intercept,
 		sdkVersionInterceptor.Intercept,
 		callerInfoInterceptor.Intercept,
+		slowRequestLoggerInterceptor.Intercept,
 	}
 	if len(customInterceptors) > 0 {
 		// TODO: Deprecate WithChainedFrontendGrpcInterceptors and provide a inner custom interceptor
@@ -510,6 +513,12 @@ func CallerInfoInterceptorProvider(
 	namespaceRegistry namespace.Registry,
 ) *interceptor.CallerInfoInterceptor {
 	return interceptor.NewCallerInfoInterceptor(namespaceRegistry)
+}
+
+func SlowRequestLoggerInterceptorProvider(
+	logger log.Logger,
+) *interceptor.SlowRequestLoggerInterceptor {
+	return interceptor.NewSlowRequestLoggerInterceptor(logger)
 }
 
 func PersistenceRateLimitingParamsProvider(
