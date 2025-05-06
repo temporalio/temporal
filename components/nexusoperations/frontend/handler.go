@@ -20,7 +20,6 @@ import (
 	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/sdk/temporalnexus"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/cluster"
@@ -33,6 +32,7 @@ import (
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc/interceptor"
+	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/frontend/configs"
 	"go.uber.org/fx"
 	"google.golang.org/grpc/credentials"
@@ -165,7 +165,7 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexus.Comp
 	for _, nexusLink := range r.Links {
 		switch nexusLink.Type {
 		case string((&commonpb.Link_WorkflowEvent{}).ProtoReflect().Descriptor().FullName()):
-			link, err := temporalnexus.ConvertNexusLinkToLinkWorkflowEvent(nexusLink)
+			link, err := nexusoperations.ConvertNexusLinkToLinkWorkflowEvent(nexusLink)
 			if err != nil {
 				// TODO(rodrigozhou): links are non-essential for the execution of the workflow,
 				// so ignoring the error for now; we will revisit how to handle these errors later.
