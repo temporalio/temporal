@@ -178,7 +178,7 @@ var (
 	identityKey identityCtxKey = "identity"
 
 	// The routing key for the single partition used to route Nexus endpoints CRUD RPCs to.
-	nexusEndpointsTablePartitionRoutingKey = tqid.MustNormalPartitionFromRpcName("not-applicable", "not-applicable", enumspb.TASK_QUEUE_TYPE_UNSPECIFIED).RoutingKey()
+	nexusEndpointsTablePartitionRoutingKey, _ = tqid.MustNormalPartitionFromRpcName("not-applicable", "not-applicable", enumspb.TASK_QUEUE_TYPE_UNSPECIFIED).RoutingKey(0)
 
 	// Options for batching user data updates.
 	userDataBatcherOptions = stream_batcher.BatcherOptions{
@@ -309,6 +309,19 @@ func (e *matchingEngineImpl) watchMembership() {
 			continue
 		}
 
+		spreadRoutingBatchSize := e.config.SpreadRoutingBatchSize()
+		ownedByOther := func(p tqid.Partition) bool {
+			name, n := p.RoutingKey(spreadRoutingBatchSize)
+			hosts := e.serviceResolver.LookupN(name, n+1)
+			if len(hosts) == 0 {
+				return false
+			}
+			if n >= len(hosts) {
+				n %= len(hosts)
+			}
+			return hosts[n].Identity() != self
+		}
+
 		e.notifyNexusEndpointsOwnershipChange()
 
 		// Check all our loaded partitions to see if we lost ownership of any of them.
@@ -319,10 +332,7 @@ func (e *matchingEngineImpl) watchMembership() {
 		}
 		e.partitionsLock.RUnlock()
 
-		partitions = util.FilterSlice(partitions, func(p tqid.Partition) bool {
-			owner, err := e.serviceResolver.Lookup(p.RoutingKey())
-			return err == nil && owner.Identity() != self
-		})
+		partitions = util.FilterSlice(partitions, ownedByOther)
 
 		const batchSize = 100
 		for i := 0; i < len(partitions); i += batchSize {
@@ -339,8 +349,7 @@ func (e *matchingEngineImpl) watchMembership() {
 				}
 				for _, p := range batch {
 					// maybe ownership changed again
-					owner, err := e.serviceResolver.Lookup(p.RoutingKey())
-					if err != nil || owner.Identity() == self {
+					if !ownedByOther(p) {
 						return
 					}
 					// now we can unload
