@@ -45,8 +45,10 @@ type (
 		unsafeMaxVersion func() int
 		// stateChanged is used to track if the state of the workflow has undergone a local state change since the last signal/update.
 		// This prevents a workflow from continuing-as-new if the state has not changed.
-		stateChanged *StateChanged
-		forceCAN     bool
+		stateChanged      *StateChanged
+		forceCAN          bool
+		signalSelector    workflow.Selector
+		processingSignals int
 	}
 )
 
@@ -71,39 +73,30 @@ func Workflow(ctx workflow.Context, unsafeMaxVersion func() int, args *deploymen
 func (d *WorkflowRunner) listenToSignals(ctx workflow.Context) {
 	forceCANSignalChannel := workflow.GetSignalChannel(ctx, ForceCANSignalName)
 	syncVersionSummaryChannel := workflow.GetSignalChannel(ctx, SyncVersionSummarySignal)
-	forceCAN := false
-	stateChanged := false
 
-	selector := workflow.NewSelector(ctx)
-	selector.AddReceive(forceCANSignalChannel, func(c workflow.ReceiveChannel, more bool) {
+	d.signalSelector = workflow.NewSelector(ctx)
+	d.signalSelector.AddReceive(forceCANSignalChannel, func(c workflow.ReceiveChannel, more bool) {
+		d.processingSignals++
 		c.Receive(ctx, nil)
-		forceCAN = true
+		d.forceCAN = true
+		d.processingSignals--
 	})
-	selector.AddReceive(syncVersionSummaryChannel, func(c workflow.ReceiveChannel, more bool) {
+	d.signalSelector.AddReceive(syncVersionSummaryChannel, func(c workflow.ReceiveChannel, more bool) {
 		var summary *deploymentspb.WorkerDeploymentVersionSummary
+		d.processingSignals++
 		c.Receive(ctx, &summary)
 		if _, ok := d.State.Versions[summary.GetVersion()]; !ok {
 			d.logger.Error("received summary for a non-existing version, ignoring it", "version", summary.GetVersion())
 		}
 		d.State.Versions[summary.GetVersion()] = summary
-		stateChanged = true
-	})
-	selector.AddReceive(d.stateChanged.ch, func(c workflow.ReceiveChannel, more bool) {
-		c.Receive(ctx, nil)
-		stateChanged = true
+		d.stateChanged.value = true
+		d.processingSignals--
 	})
 
-	// Requirement of this condition:
-	// 1. If there are pending signals, we should process them.
-	// 2. If there are no pending signals:
-	//    a. If forceCAN is true, we should exit out.
-	//    b. If state has changed, we should exit out.
-	for selector.HasPending() || (stateChanged == false && forceCAN == false) {
-		selector.Select(ctx)
+	// Keep waiting for signals, when it's time to CaN the main goroutine will exit.
+	for {
+		d.signalSelector.Select(ctx)
 	}
-
-	// Done processing signals before CAN
-	d.signalsCompleted = true
 }
 
 func (d *WorkflowRunner) run(ctx workflow.Context) error {
@@ -204,7 +197,10 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 	// Wait until we can continue as new or are cancelled. The workflow will continue-as-new iff
 	// there are no pending updates/signals and the state has changed.
 	err = workflow.Await(ctx, func() bool {
-		return (d.signalsCompleted && d.pendingUpdates == 0) || d.done
+		return d.done || // deployment is deleted -> it's ok to drop all signals and updates.
+			// There is no pending signal or update, but the state is dirty or forceCaN is requested:
+			(d.signalSelector != nil && !d.signalSelector.HasPending() && d.processingSignals == 0 && d.pendingUpdates == 0 &&
+				(d.forceCAN || d.stateChanged.value))
 	})
 	if err != nil {
 		return err
@@ -920,7 +916,7 @@ func (d *WorkflowRunner) setStateChanged(ctx workflow.Context) {
 		// Send the value on the channel without blocking.
 		workflow.Go(ctx, func(ctx workflow.Context) {
 			d.stateChanged.value = true
-			d.stateChanged.ch.Send(ctx, nil)
+			//d.stateChanged.ch.Send(ctx, nil)
 		})
 	}
 }
