@@ -86,7 +86,7 @@ func (mr *MockChasmTreeMockRecorder) CloseTransaction() *gomock.Call {
 }
 
 // EachPureTask mocks base method.
-func (m *MockChasmTree) EachPureTask(deadline time.Time, callback func(*chasm.Node, any) error) error {
+func (m *MockChasmTree) EachPureTask(deadline time.Time, callback func(chasm.LogicalTaskExecutor, any) error) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "EachPureTask", deadline, callback)
 	ret0, _ := ret[0].(error)

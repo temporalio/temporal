@@ -128,7 +128,7 @@ func (t *timerQueueStandbyTaskExecutor) executeChasmPureTimerTask(
 			wfContext,
 			mutableState,
 			task,
-			func(node *chasm.Node, task any) error {
+			func(_ chasm.LogicalTaskExecutor, task any) error {
 				// If this line of code is reached, the task's Validate() function succeeded, which
 				// indicates that it is still expected to run. Return ErrTaskRetry to wait for the
 				// task to complete on the active cluster, after which Validate will begun returning

@@ -34,7 +34,7 @@ func (*noopChasmTree) IsDirty() bool {
 
 func (*noopChasmTree) EachPureTask(
 	deadline time.Time,
-	callback func(node *chasm.Node, task any) error,
+	callback func(executor chasm.LogicalTaskExecutor, task any) error,
 ) error {
 	return nil
 }
