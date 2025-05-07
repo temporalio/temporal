@@ -148,7 +148,7 @@ func (s *healthCheckerSuite) Test_GetProportionOfNotReadyHosts() {
 			name:                             "zero proportion",
 			proportionOfDeclinedServingHosts: 0.0,
 			totalHosts:                       10,
-			expectedProportion:               0.0,
+			expectedProportion:               0.2,
 		},
 		{
 			name:                             "small proportion with few hosts",

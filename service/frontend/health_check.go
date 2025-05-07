@@ -128,16 +128,6 @@ func (h *healthCheckerImpl) Check(ctx context.Context) (enumsspb.HealthState, er
 }
 
 func getProportionOfDeclinedServiceHosts(proportionOfDeclinedServingHosts float64, totalHosts int) float64 {
-	var numHostsToFail float64
-	if proportionOfDeclinedServingHosts > 0.0 { // sanity guard against panic.
-		numHostsToFail = float64(totalHosts) * proportionOfDeclinedServingHosts
-	}
-	var proportionOfDeclinedServiceHosts float64
-	if numHostsToFail < 2 {
-		correctedProportion := 2.0 / float64(totalHosts)
-		proportionOfDeclinedServiceHosts = math.Max(proportionOfDeclinedServingHosts, correctedProportion)
-	} else {
-		proportionOfDeclinedServiceHosts = proportionOfDeclinedServingHosts
-	}
-	return proportionOfDeclinedServiceHosts
+	minimumProportion := 2.0 / float64(totalHosts)
+	return math.Max(proportionOfDeclinedServingHosts, minimumProportion)
 }
