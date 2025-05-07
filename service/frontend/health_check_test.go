@@ -136,3 +136,44 @@ func (s *healthCheckerSuite) Test_Check_Declined_Serving() {
 	s.NoError(err)
 	s.Equal(enumsspb.HEALTH_STATE_DECLINED_SERVING, state)
 }
+
+func (s *healthCheckerSuite) Test_GetProportionOfNotReadyHosts() {
+	testCases := []struct {
+		name                             string
+		proportionOfDeclinedServingHosts float64
+		totalHosts                       int
+		expectedProportion               float64
+	}{
+		{
+			name:                             "zero proportion",
+			proportionOfDeclinedServingHosts: 0.0,
+			totalHosts:                       10,
+			expectedProportion:               0.0,
+		},
+		{
+			name:                             "small proportion with few hosts",
+			proportionOfDeclinedServingHosts: 0.1,
+			totalHosts:                       10,
+			expectedProportion:               0.2, // 2/10 = 0.2 since numHostsToFail < 2
+		},
+		{
+			name:                             "small proportion with many hosts",
+			proportionOfDeclinedServingHosts: 0.1,
+			totalHosts:                       100,
+			expectedProportion:               0.1, // 10 hosts > 2, so use original proportion
+		},
+		{
+			name:                             "large proportion",
+			proportionOfDeclinedServingHosts: 0.8,
+			totalHosts:                       10,
+			expectedProportion:               0.8, // 8 hosts > 2, so use original proportion
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			proportion := getProportionOfDeclinedServiceHosts(tc.proportionOfDeclinedServingHosts, tc.totalHosts)
+			s.Equal(tc.expectedProportion, proportion)
+		})
+	}
+}

@@ -26,6 +26,7 @@ package frontend
 
 import (
 	"context"
+	"math"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -108,17 +109,35 @@ func (h *healthCheckerImpl) Check(ctx context.Context) (enumsspb.HealthState, er
 	}
 	close(receiveCh)
 
+	// Make sure that at lease 2 hosts must be not ready to trigger this check.
+	proportionOfDeclinedServiceHosts := getProportionOfDeclinedServiceHosts(hostDeclinedServingCount/float64(len(hosts)), len(hosts))
+
 	hostDeclinedServingProportion := hostDeclinedServingCount / float64(len(hosts))
-	if hostDeclinedServingProportion > h.hostDeclinedServingProportion() {
-		h.logger.Warn("health check exceeded host declined serving proportion threshold", tag.NewFloat64("host declined serving proportion threshold", h.hostDeclinedServingProportion()))
+	if hostDeclinedServingProportion > proportionOfDeclinedServiceHosts {
+		h.logger.Warn("health check exceeded host declined serving proportion threshold", tag.NewFloat64("host declined serving proportion threshold", proportionOfDeclinedServiceHosts))
 		return enumsspb.HEALTH_STATE_DECLINED_SERVING, nil
 	}
 
 	failedHostCountProportion := failedHostCount / float64(len(hosts))
 	if failedHostCountProportion+hostDeclinedServingProportion > h.hostFailurePercentage() {
-		h.logger.Warn("health check exceeded host failure percentage threshold", tag.NewFloat64("host failure percentage threshold", h.hostFailurePercentage()), tag.NewFloat64("host failure percentage", failedHostCountPercentage), tag.NewFloat64("host starting percentage", hostDeclinedServingCountPercentage))
+		h.logger.Warn("health check exceeded host failure percentage threshold", tag.NewFloat64("host failure percentage threshold", h.hostFailurePercentage()), tag.NewFloat64("host failure percentage", failedHostCountProportion), tag.NewFloat64("host declined serving percentage", hostDeclinedServingProportion))
 		return enumsspb.HEALTH_STATE_NOT_SERVING, nil
 	}
 
 	return enumsspb.HEALTH_STATE_SERVING, nil
+}
+
+func getProportionOfDeclinedServiceHosts(proportionOfDeclinedServingHosts float64, totalHosts int) float64 {
+	var numHostsToFail float64
+	if proportionOfDeclinedServingHosts > 0.0 { // sanity guard against panic.
+		numHostsToFail = float64(totalHosts) * proportionOfDeclinedServingHosts
+	}
+	var proportionOfDeclinedServiceHosts float64
+	if numHostsToFail < 2 {
+		correctedProportion := 2.0 / float64(totalHosts)
+		proportionOfDeclinedServiceHosts = math.Max(proportionOfDeclinedServingHosts, correctedProportion)
+	} else {
+		proportionOfDeclinedServiceHosts = proportionOfDeclinedServingHosts
+	}
+	return proportionOfDeclinedServiceHosts
 }
