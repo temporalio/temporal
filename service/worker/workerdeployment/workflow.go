@@ -25,11 +25,6 @@ const (
 )
 
 type (
-	// StateChanged encapsulates the state change logic
-	StateChanged struct {
-		value bool
-	}
-
 	// SignalHandler encapsulates the signal handling logic
 	SignalHandler struct {
 		signalSelector    workflow.Selector
@@ -48,7 +43,7 @@ type (
 		unsafeMaxVersion func() int
 		// stateChanged is used to track if the state of the workflow has undergone a local state change since the last signal/update.
 		// This prevents a workflow from continuing-as-new if the state has not changed.
-		stateChanged  *StateChanged
+		stateChanged  bool
 		signalHandler *SignalHandler
 		forceCAN      bool
 	}
@@ -63,9 +58,6 @@ func Workflow(ctx workflow.Context, unsafeMaxVersion func() int, args *deploymen
 		metrics:          workflow.GetMetricsHandler(ctx).WithTags(map[string]string{"namespace": args.NamespaceName}),
 		lock:             workflow.NewMutex(ctx),
 		unsafeMaxVersion: unsafeMaxVersion,
-		stateChanged: &StateChanged{
-			value: false,
-		},
 		signalHandler: &SignalHandler{
 			signalSelector: workflow.NewSelector(ctx),
 		},
@@ -92,7 +84,7 @@ func (d *WorkflowRunner) listenToSignals(ctx workflow.Context) {
 			d.logger.Error("received summary for a non-existing version, ignoring it", "version", summary.GetVersion())
 		}
 		d.State.Versions[summary.GetVersion()] = summary
-		d.stateChanged.value = true
+		d.stateChanged = true
 		d.signalHandler.processingSignals--
 	})
 
@@ -203,7 +195,7 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 		return d.deleteDeployment || // deployment is deleted -> it's ok to drop all signals and updates.
 			// There is no pending signal or update, but the state is dirty or forceCaN is requested:
 			(!d.signalHandler.signalSelector.HasPending() && d.signalHandler.processingSignals == 0 && workflow.AllHandlersFinished(ctx) &&
-				(d.forceCAN || d.stateChanged.value))
+				(d.forceCAN || d.stateChanged))
 	})
 	if err != nil {
 		return err
@@ -903,10 +895,7 @@ func (d *WorkflowRunner) updateMemo(ctx workflow.Context) error {
 }
 
 func (d *WorkflowRunner) setStateChanged(ctx workflow.Context) {
-	if !d.stateChanged.value {
-		// Send the value on the channel without blocking.
-		workflow.Go(ctx, func(ctx workflow.Context) {
-			d.stateChanged.value = true
-		})
+	if !d.stateChanged {
+		d.stateChanged = true
 	}
 }

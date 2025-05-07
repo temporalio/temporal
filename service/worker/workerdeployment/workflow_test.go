@@ -84,7 +84,6 @@ func (s *WorkerDeploymentSuite) Test_SetCurrentVersion_RejectStaleConcurrentUpda
 						s.Fail("update #2 should have been accepted by the validator")
 					},
 					OnAccept: func() {
-						fmt.Println("update #2 accepted")
 					},
 					OnComplete: func(a interface{}, err error) {
 						// Update #2 clears the validator and waits for the first update to complete. Once it starts
