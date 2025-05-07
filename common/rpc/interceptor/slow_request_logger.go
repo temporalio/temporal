@@ -45,7 +45,7 @@ func (i *SlowRequestLoggerInterceptor) Intercept(
 	startTime := time.Now()
 
 	defer func() {
-		elapsed := time.Now().Sub(startTime)
+		elapsed := time.Since(startTime)
 		if elapsed > SlowRequestThreshold {
 			i.logSlowRequest(request, info, elapsed)
 		}
