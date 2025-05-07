@@ -98,6 +98,10 @@ func GetTimerTaskEventID(
 		eventID = common.FirstEventID
 	case *StateMachineTimerTask:
 		eventID = common.FirstEventID
+	case *ChasmTaskPure:
+		eventID = common.FirstEventID
+	case *ChasmTask:
+		eventID = common.FirstEventID
 	case *FakeTask:
 		// no-op
 	default:

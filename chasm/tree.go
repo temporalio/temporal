@@ -152,6 +152,13 @@ type (
 		// allocation for the decoded path.
 		Decode(encodedPath string) ([]string, error)
 	}
+
+	// LogicalTaskExecutor must be implemented on backends capable of running logical
+	// task instances to completion. This interface is intended to be implemented and
+	// used within the CHASM framework only.
+	LogicalTaskExecutor interface {
+		ExecutePureTask(baseCtx context.Context, taskInstance any) error
+	}
 )
 
 // NewTree creates a new in-memory CHASM tree from a collection of flattened persistence CHASM nodes.
@@ -1405,7 +1412,7 @@ func isComponentTaskExpired(
 // close).
 func (n *Node) EachPureTask(
 	referenceTime time.Time,
-	callback func(node *Node, task any) error,
+	callback func(executor LogicalTaskExecutor, task any) error,
 ) error {
 	// Walk the tree to find all runnable tasks.
 	for _, node := range n.andAllChildren() {

@@ -12,6 +12,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/definition"
@@ -114,6 +115,8 @@ func (t *timerQueueActiveTaskExecutor) Execute(
 		err = t.executeDeleteHistoryEventTask(ctx, task)
 	case *tasks.StateMachineTimerTask:
 		err = t.executeStateMachineTimerTask(ctx, task)
+	case *tasks.ChasmTaskPure:
+		err = t.executeChasmPureTimerTask(ctx, task)
 	default:
 		err = queues.NewUnprocessableTaskError("unknown task type")
 	}
@@ -910,4 +913,65 @@ func (t *timerQueueActiveTaskExecutor) processActivityWorkflowRules(
 	}
 
 	return nil
+}
+
+func (t *timerQueueActiveTaskExecutor) executeChasmPureTimerTask(
+	ctx context.Context,
+	task *tasks.ChasmTaskPure,
+) error {
+	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
+	defer cancel()
+
+	wfCtx, release, err := getWorkflowExecutionContextForTask(ctx, t.shardContext, t.cache, task)
+	if err != nil {
+		return err
+	}
+	defer func() { release(err) }()
+
+	ms, err := loadMutableStateForTimerTask(ctx, t.shardContext, wfCtx, task, t.metricsHandler, t.logger)
+	if err != nil {
+		return err
+	}
+	if ms == nil {
+		return nil
+	}
+
+	// Execute all fired pure tasks for a component while holding the workflow lock.
+	processedTimers := 0
+	err = t.executeChasmPureTimers(
+		ctx,
+		wfCtx,
+		ms,
+		task,
+		func(executor chasm.LogicalTaskExecutor, task any) error {
+			// ExecutePureTask also calls the task's validator. Invalid tasks will no-op
+			// succeed.
+			if err := executor.ExecutePureTask(ctx, task); err != nil {
+				return err
+			}
+
+			processedTimers += 1
+			return nil
+		},
+	)
+	if err != nil {
+		return err
+	}
+
+	// Commit changes only if we processed any timers.
+	if processedTimers == 0 {
+		return nil
+	}
+
+	if t.config.EnableUpdateWorkflowModeIgnoreCurrent() {
+		return wfCtx.UpdateWorkflowExecutionAsActive(ctx, t.shardContext)
+	}
+
+	// TODO: remove following code once EnableUpdateWorkflowModeIgnoreCurrent config is deprecated.
+	if ms.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+		// Can't use UpdateWorkflowExecutionAsActive since it updates the current run, and we are operating on a
+		// closed workflow.
+		return wfCtx.SubmitClosedWorkflowSnapshot(ctx, t.shardContext, historyi.TransactionPolicyActive)
+	}
+	return wfCtx.UpdateWorkflowExecutionAsActive(ctx, t.shardContext)
 }
