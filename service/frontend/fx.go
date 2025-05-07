@@ -517,8 +517,9 @@ func CallerInfoInterceptorProvider(
 
 func SlowRequestLoggerInterceptorProvider(
 	logger log.Logger,
+	dc *dynamicconfig.Collection,
 ) *interceptor.SlowRequestLoggerInterceptor {
-	return interceptor.NewSlowRequestLoggerInterceptor(logger)
+	return interceptor.NewSlowRequestLoggerInterceptor(logger, dc)
 }
 
 func PersistenceRateLimitingParamsProvider(

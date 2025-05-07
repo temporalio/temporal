@@ -2,37 +2,34 @@ package interceptor
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/rpc/interceptor/logtags"
 	"go.temporal.io/server/common/tasktoken"
 	"google.golang.org/grpc"
 )
 
-var (
-	// Requests over this threshold will be logged.
-	SlowRequestThreshold = 5 * time.Second
+// Certain types of methods are ignored as a rule.
+var ignoredMethodSubstrings = []string{"Poll", "GetWorkflowExecutionHistory"}
 
-	// Certain types of methods are ignored as a rule.
-	ignoredMethodSubstrings = []string{"Poll"}
-)
-
-type (
-	SlowRequestLoggerInterceptor struct {
-		logger       log.Logger
-		workflowTags *logtags.WorkflowTags
-	}
-)
+type SlowRequestLoggerInterceptor struct {
+	logger       log.Logger
+	workflowTags *logtags.WorkflowTags
+	dc           *dynamicconfig.Collection
+}
 
 func NewSlowRequestLoggerInterceptor(
 	logger log.Logger,
+	dc *dynamicconfig.Collection,
 ) *SlowRequestLoggerInterceptor {
 	return &SlowRequestLoggerInterceptor{
 		logger:       logger,
 		workflowTags: logtags.NewWorkflowTags(tasktoken.NewSerializer(), logger),
+		dc:           dc,
 	}
 }
 
@@ -42,11 +39,12 @@ func (i *SlowRequestLoggerInterceptor) Intercept(
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
 ) (interface{}, error) {
+	threshold := dynamicconfig.SlowRequestLoggingThreshold.Get(i.dc)()
 	startTime := time.Now()
 
 	defer func() {
 		elapsed := time.Since(startTime)
-		if elapsed > SlowRequestThreshold {
+		if elapsed > threshold {
 			i.logSlowRequest(request, info, elapsed)
 		}
 	}()
@@ -68,13 +66,9 @@ func (i *SlowRequestLoggerInterceptor) logSlowRequest(
 		}
 	}
 
-	wfTags := i.workflowTags.Extract(request, method)
-	i.logger.Warn(
-		fmt.Sprintf(
-			"Slow gRPC call for '%s', took %s",
-			method,
-			elapsed.String(),
-		),
-		wfTags...,
-	)
+	tags := i.workflowTags.Extract(request, method)
+	tags = append(tags, tag.NewDurationTag("duration", elapsed))
+	tags = append(tags, tag.NewStringTag("method", method))
+
+	i.logger.Warn("Slow gRPC call", tags...)
 }

@@ -9,6 +9,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.uber.org/mock/gomock"
@@ -25,6 +26,7 @@ type slowRequestLoggerSuite struct {
 
 	logger      *log.MockLogger
 	interceptor *interceptor.SlowRequestLoggerInterceptor
+	dc          *dynamicconfig.Collection
 }
 
 func TestSlowRequestLoggerInterceptor(t *testing.T) {
@@ -34,9 +36,12 @@ func TestSlowRequestLoggerInterceptor(t *testing.T) {
 func (s *slowRequestLoggerSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.logger = log.NewMockLogger(s.controller)
-	s.interceptor = interceptor.NewSlowRequestLoggerInterceptor(s.logger)
 
-	interceptor.SlowRequestThreshold = testThreshold
+	dcClient := dynamicconfig.NewMemoryClient()
+	dcClient.OverrideValue(dynamicconfig.SlowRequestLoggingThreshold.Key(), testThreshold)
+	s.dc = dynamicconfig.NewCollection(dcClient, log.NewNoopLogger())
+
+	s.interceptor = interceptor.NewSlowRequestLoggerInterceptor(s.logger, s.dc)
 }
 
 func (s *slowRequestLoggerSuite) TestIntercept() {
@@ -73,13 +78,13 @@ func (s *slowRequestLoggerSuite) TestIntercept() {
 	s.NoError(err)
 
 	// Ensure slow requests are logged.
-	expectedMsg := "Slow gRPC call for '.*', took \\d+"
-	s.logger.EXPECT().Warn(gomock.Regex(expectedMsg), gomock.Any(), gomock.Any()).Times(1)
+	expectedMsg := "Slow gRPC call"
+	s.logger.EXPECT().Warn(gomock.Eq(expectedMsg), gomock.Any()).Times(1)
 	_, err = s.interceptor.Intercept(ctx, request, info, slowHandler)
 	s.NoError(err)
 
 	// Slow request without parameters set.
-	s.logger.EXPECT().Warn(gomock.Regex(expectedMsg), gomock.Any(), gomock.Any()).Times(1)
+	s.logger.EXPECT().Warn(gomock.Eq(expectedMsg), gomock.Any()).Times(1)
 	_, err = s.interceptor.Intercept(ctx, &historyservice.DescribeWorkflowExecutionRequest{}, info, slowHandler)
 	s.NoError(err)
 
@@ -90,13 +95,13 @@ func (s *slowRequestLoggerSuite) TestIntercept() {
 
 	// Nil requests.
 	info.FullMethod = ""
-	s.logger.EXPECT().Warn(gomock.Regex(expectedMsg)).Times(1)
+	s.logger.EXPECT().Warn(gomock.Eq(expectedMsg), gomock.Any()).Times(1)
 	_, err = s.interceptor.Intercept(ctx, nil, info, slowHandler)
 	s.NoError(err)
 
 	// Unknown requests.
 	info.FullMethod = ""
-	s.logger.EXPECT().Warn(gomock.Regex(expectedMsg)).Times(1)
+	s.logger.EXPECT().Warn(gomock.Eq(expectedMsg), gomock.Any()).Times(1)
 	_, err = s.interceptor.Intercept(ctx, &struct{}{}, info, slowHandler)
 	s.NoError(err)
 }

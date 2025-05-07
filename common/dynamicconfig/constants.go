@@ -2691,4 +2691,10 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		false,
 		`WorkflowRulesAPIsEnabled is a "feature enable" flag. `,
 	)
+
+	SlowRequestLoggingThreshold = NewGlobalDurationSetting(
+		"rpc.slowRequestLoggingThreshold",
+		5*time.Second,
+		`SlowRequestLoggingThreshold is the threshold above which a gRPC request is considered slow and logged.`,
+	)
 )
