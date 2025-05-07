@@ -805,6 +805,44 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidLinks() 
 	s.ErrorContains(err, "batch job link must not have an empty job ID")
 }
 
+func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidCallbackLinks() {
+	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).AnyTimes().Return(nil, nil)
+	config := s.newConfig()
+	config.RPS = dc.GetIntPropertyFn(10)
+	wh := s.getWorkflowHandler(config)
+
+	req := &workflowservice.StartWorkflowExecutionRequest{
+		Namespace:  "test-namespace",
+		WorkflowId: "workflow-id",
+		WorkflowType: &commonpb.WorkflowType{
+			Name: "workflow-type",
+		},
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: "task-queue",
+		},
+		RequestId: uuid.NewString(),
+		CompletionCallbacks: []*commonpb.Callback{
+			{
+				Variant: &commonpb.Callback_Internal_{
+					Internal: &commonpb.Callback_Internal{},
+				},
+				Links: []*commonpb.Link{
+					{
+						Variant: &commonpb.Link_WorkflowEvent_{
+							WorkflowEvent: &commonpb.Link_WorkflowEvent{},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	var invalidArgument *serviceerror.InvalidArgument
+	_, err := wh.StartWorkflowExecution(context.Background(), req)
+	s.ErrorAs(err, &invalidArgument)
+	s.ErrorContains(err, "workflow event link must not have an empty namespace field")
+}
+
 func (s *WorkflowHandlerSuite) TestSignalWithStartWorkflowExecution_InvalidWorkflowIdConflictPolicy() {
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
