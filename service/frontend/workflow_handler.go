@@ -5217,6 +5217,9 @@ func (wh *WorkflowHandler) validateWorkflowCompletionCallbacks(
 	}
 
 	for _, callback := range callbacks {
+		if err := wh.validateLinks(ns, callback.GetLinks()); err != nil {
+			return err
+		}
 		switch cb := callback.GetVariant().(type) {
 		case *commonpb.Callback_Nexus_:
 			if err := wh.validateCallbackURL(ns, cb.Nexus.GetUrl()); err != nil {
