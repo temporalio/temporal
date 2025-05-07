@@ -110,7 +110,7 @@ func (h *healthCheckerImpl) Check(ctx context.Context) (enumsspb.HealthState, er
 	close(receiveCh)
 
 	// Make sure that at lease 2 hosts must be not ready to trigger this check.
-	proportionOfDeclinedServiceHosts := getProportionOfDeclinedServiceHosts(hostDeclinedServingCount/float64(len(hosts)), len(hosts))
+	proportionOfDeclinedServiceHosts := ensureMinimumProportionOfHosts(h.hostDeclinedServingProportion(), len(hosts))
 
 	hostDeclinedServingProportion := hostDeclinedServingCount / float64(len(hosts))
 	if hostDeclinedServingProportion > proportionOfDeclinedServiceHosts {
@@ -127,7 +127,8 @@ func (h *healthCheckerImpl) Check(ctx context.Context) (enumsspb.HealthState, er
 	return enumsspb.HEALTH_STATE_SERVING, nil
 }
 
-func getProportionOfDeclinedServiceHosts(proportionOfDeclinedServingHosts float64, totalHosts int) float64 {
-	minimumProportion := 2.0 / float64(totalHosts)
+func ensureMinimumProportionOfHosts(proportionOfDeclinedServingHosts float64, totalHosts int) float64 {
+	minimumHostsFailed := 2.0 // We want to ensure that at least 2 fail before we notify the upstream.
+	minimumProportion := minimumHostsFailed / float64(totalHosts)
 	return math.Max(proportionOfDeclinedServingHosts, minimumProportion)
 }
