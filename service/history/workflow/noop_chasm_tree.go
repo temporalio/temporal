@@ -46,5 +46,3 @@ func (*noopChasmTree) EachPureTask(
 ) error {
 	return nil
 }
-
-
