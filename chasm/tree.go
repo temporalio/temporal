@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/softassert"
@@ -150,6 +151,13 @@ type (
 		// so that we can get a node by encoded path without additional
 		// allocation for the decoded path.
 		Decode(encodedPath string) ([]string, error)
+	}
+
+	// LogicalTaskExecutor must be implemented on backends capable of running logical
+	// task instances to completion. This interface is intended to be implemented and
+	// used within the CHASM framework only.
+	LogicalTaskExecutor interface {
+		ExecutePureTask(baseCtx context.Context, taskInstance any) error
 	}
 )
 
@@ -851,7 +859,13 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 		validateContext := NewContext(context.Background(), n)
 		var validationErr error
 		deleteFunc := func(existingTask *persistencespb.ChasmComponentAttributes_Task) bool {
-			valid, err := node.validateComponentTask(validateContext, existingTask)
+			existingTaskInstance, err := node.deserializeComponentTask(existingTask)
+			if err != nil {
+				validationErr = err
+				return false
+			}
+
+			valid, err := node.validateTask(validateContext, existingTaskInstance)
 			if err != nil {
 				validationErr = err
 				return false
@@ -911,30 +925,42 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 	return nil
 }
 
-func (n *Node) validateComponentTask(
-	validateContext Context,
+func (n *Node) deserializeComponentTask(
 	componentTask *persistencespb.ChasmComponentAttributes_Task,
-) (bool, error) {
+) (any, error) {
 	registableTask, ok := n.registry.task(componentTask.Type)
 	if !ok {
-		return false, serviceerror.NewInternal(fmt.Sprintf("task type %s is not registered", componentTask.Type))
+		return nil, serviceerror.NewInternal(fmt.Sprintf("task type %s is not registered", componentTask.Type))
+	}
+
+	// TODO: cache deserialized task value (reflect.Value) in the node,
+	// use task VT and offset as the key
+	taskValue, err := deserializeTask(registableTask, componentTask.Data)
+	if err != nil {
+		return nil, err
+	}
+
+	return taskValue.Interface(), nil
+}
+
+func (n *Node) validateTask(
+	validateContext Context,
+	taskInstance any,
+) (bool, error) {
+	registableTask, ok := n.registry.taskFor(taskInstance)
+	if !ok {
+		return false, serviceerror.NewInternal(
+			fmt.Sprintf("task type for goType %s is not registered", reflect.TypeOf(taskInstance).Name()))
 	}
 
 	// TODO: cache validateMethod (reflect.Value) in the registry
 	validator := registableTask.validator
 	validateMethod := reflect.ValueOf(validator).MethodByName("Validate")
 
-	// TODO: cache deserialized task value (reflect.Value) in the node,
-	// use task VT and offset as the key
-	deserizedTaskValue, err := deserializeTask(registableTask, componentTask.Data)
-	if err != nil {
-		return false, err
-	}
-
 	retValues := validateMethod.Call([]reflect.Value{
 		reflect.ValueOf(validateContext),
 		reflect.ValueOf(n.value),
-		deserizedTaskValue,
+		reflect.ValueOf(taskInstance),
 	})
 	if !retValues[1].IsNil() {
 		//revive:disable-next-line:unchecked-type-assertion
@@ -1362,6 +1388,66 @@ func (n *Node) root() *Node {
 	return n.parent.root()
 }
 
+// isComponentTaskExpired returns true when the task's scheduled time is equal
+// or before the reference time. The caller should also make sure to account
+// for skew between the physical task queue and the database by adjusting
+// referenceTime in advance.
+func isComponentTaskExpired(
+	referenceTime time.Time,
+	task *persistencespb.ChasmComponentAttributes_Task,
+) bool {
+	if task.ScheduledTime == nil {
+		return false
+	}
+
+	scheduledTime := task.ScheduledTime.AsTime().Truncate(persistence.ScheduledTaskMinPrecision)
+	referenceTime = referenceTime.Truncate(persistence.ScheduledTaskMinPrecision)
+
+	return !scheduledTime.After(referenceTime)
+}
+
+// EachPureTask runs the callback for all expired/runnable pure tasks within the
+// CHASM tree (including invalid tasks). The CHASM tree is left untouched, even
+// if invalid tasks are detected (these are cleaned up as part of transaction
+// close).
+func (n *Node) EachPureTask(
+	referenceTime time.Time,
+	callback func(executor LogicalTaskExecutor, task any) error,
+) error {
+	// Walk the tree to find all runnable tasks.
+	for _, node := range n.andAllChildren() {
+		// Skip nodes that aren't serialized yet.
+		if node.serializedNode == nil || node.serializedNode.Metadata == nil {
+			continue
+		}
+
+		componentAttr := node.serializedNode.Metadata.GetComponentAttributes()
+		// Skip nodes that aren't components.
+		if componentAttr == nil {
+			continue
+		}
+
+		for _, task := range componentAttr.GetPureTasks() {
+			if !isComponentTaskExpired(referenceTime, task) {
+				// Pure tasks are stored in-order, so we can skip scanning the rest once we hit
+				// an unexpired task deadline.
+				break
+			}
+
+			taskValue, err := node.deserializeComponentTask(task)
+			if err != nil {
+				return err
+			}
+
+			if err = callback(node, taskValue); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
 func newNode(
 	base *nodeBase,
 	parent *Node,
@@ -1553,4 +1639,60 @@ func serializeTask(
 	}
 
 	return blob, nil
+}
+
+// ExecutePureTask validates and then executes the given taskInstance against the
+// node's component. Executing an invalid task is a no-op (no error returned).
+func (n *Node) ExecutePureTask(baseCtx context.Context, taskInstance any) error {
+	registrableTask, ok := n.registry.taskFor(taskInstance)
+	if !ok {
+		return fmt.Errorf("unknown task type for task instance goType '%s'", reflect.TypeOf(taskInstance).Name())
+	}
+
+	if !registrableTask.isPureTask {
+		return fmt.Errorf("ExecutePureTask called on a SideEffect task '%s'", registrableTask.fqType())
+	}
+
+	ctx := NewContext(baseCtx, n)
+
+	// Ensure this node's component value is hydrated before execution. Component
+	// will also check access rules.
+	component, err := n.Component(ctx, ComponentRef{})
+	if err != nil {
+		return err
+	}
+
+	// Run the task's registered value before execution.
+	valid, err := n.validateTask(ctx, taskInstance)
+	if err != nil {
+		return err
+	}
+	if !valid {
+		return nil
+	}
+
+	executor := registrableTask.handler
+	if executor == nil {
+		return fmt.Errorf("no handler registered for task type '%s'", registrableTask.taskType)
+	}
+
+	fn := reflect.ValueOf(executor).MethodByName("Execute")
+	result := fn.Call([]reflect.Value{
+		reflect.ValueOf(ctx),
+		reflect.ValueOf(component),
+		reflect.ValueOf(taskInstance),
+	})
+	if !result[0].IsNil() {
+		//nolint:revive // type cast result is unchecked
+		return result[0].Interface().(error)
+	}
+
+	// TODO - a task validator must succeed validation after a task executes
+	// successfully (without error), otherwise it will generate an infinite loop.
+	// Check for this case by marking the in-memory task as having executed, which the
+	// CloseTransaction method will check against.
+	//
+	// See: https://github.com/temporalio/temporal/pull/7701#discussion_r2072026993
+
+	return nil
 }

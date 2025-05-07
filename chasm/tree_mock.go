@@ -10,6 +10,7 @@
 package chasm
 
 import (
+	context "context"
 	reflect "reflect"
 
 	enums "go.temporal.io/api/enums/v1"
@@ -167,4 +168,42 @@ func (m *MockNodePathEncoder) Encode(node *Node, path []string) (string, error) 
 func (mr *MockNodePathEncoderMockRecorder) Encode(node, path any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Encode", reflect.TypeOf((*MockNodePathEncoder)(nil).Encode), node, path)
+}
+
+// MockLogicalTaskExecutor is a mock of LogicalTaskExecutor interface.
+type MockLogicalTaskExecutor struct {
+	ctrl     *gomock.Controller
+	recorder *MockLogicalTaskExecutorMockRecorder
+	isgomock struct{}
+}
+
+// MockLogicalTaskExecutorMockRecorder is the mock recorder for MockLogicalTaskExecutor.
+type MockLogicalTaskExecutorMockRecorder struct {
+	mock *MockLogicalTaskExecutor
+}
+
+// NewMockLogicalTaskExecutor creates a new mock instance.
+func NewMockLogicalTaskExecutor(ctrl *gomock.Controller) *MockLogicalTaskExecutor {
+	mock := &MockLogicalTaskExecutor{ctrl: ctrl}
+	mock.recorder = &MockLogicalTaskExecutorMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockLogicalTaskExecutor) EXPECT() *MockLogicalTaskExecutorMockRecorder {
+	return m.recorder
+}
+
+// ExecutePureTask mocks base method.
+func (m *MockLogicalTaskExecutor) ExecutePureTask(baseCtx context.Context, taskInstance any) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ExecutePureTask", baseCtx, taskInstance)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ExecutePureTask indicates an expected call of ExecutePureTask.
+func (mr *MockLogicalTaskExecutorMockRecorder) ExecutePureTask(baseCtx, taskInstance any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecutePureTask", reflect.TypeOf((*MockLogicalTaskExecutor)(nil).ExecutePureTask), baseCtx, taskInstance)
 }

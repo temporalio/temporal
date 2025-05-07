@@ -1578,3 +1578,173 @@ func (s *nodeSuite) testComponentTree() *Node {
 
 	return node // maybe tc too
 }
+
+func (s *nodeSuite) TestEachPureTask() {
+	now := s.timeSource.Now()
+
+	payload := &commonpb.Payload{
+		Data: []byte("some-random-data"),
+	}
+	taskBlob, err := serialization.ProtoEncodeBlob(payload, enumspb.ENCODING_TYPE_PROTO3)
+	s.NoError(err)
+
+	// Set up a tree with expired and unexpired pure tasks.
+	persistenceNodes := map[string]*persistencespb.ChasmNode{
+		"": {
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+						Type: "TestLibrary.test_component",
+						PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
+							{
+								// Expired
+								Type:                      "TestLibrary.test_pure_task",
+								ScheduledTime:             timestamppb.New(now),
+								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
+								VersionedTransitionOffset: 1,
+								PhysicalTaskStatus:        physicalTaskStatusCreated,
+								Data:                      taskBlob,
+							},
+						},
+					},
+				},
+			},
+		},
+		"child": {
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+						Type: "TestLibrary.test_component",
+						PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
+							{
+								Type: "TestLibrary.test_pure_task",
+								// Unexpired
+								ScheduledTime:             timestamppb.New(now.Add(time.Hour)),
+								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
+								VersionedTransitionOffset: 1,
+								PhysicalTaskStatus:        physicalTaskStatusCreated,
+								Data:                      taskBlob,
+							},
+						},
+					},
+				},
+			},
+		},
+		"child/grandchild1": {
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+						Type: "TestLibrary.test_component",
+						PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
+							{
+								Type: "TestLibrary.test_pure_task",
+								// Expired, and physical task not created
+								ScheduledTime:             timestamppb.New(now),
+								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
+								VersionedTransitionOffset: 2,
+								PhysicalTaskStatus:        physicalTaskStatusNone,
+								Data:                      taskBlob,
+							},
+							{
+								Type: "TestLibrary.test_pure_task",
+								// Expired
+								ScheduledTime:             timestamppb.New(now),
+								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
+								VersionedTransitionOffset: 1,
+								PhysicalTaskStatus:        physicalTaskStatusCreated,
+								Data:                      taskBlob,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	root, err := NewTree(persistenceNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+	s.NoError(err)
+	s.NotNil(root)
+
+	actualTaskCount := 0
+	err = root.EachPureTask(now.Add(time.Minute), func(executor LogicalTaskExecutor, task any) error {
+		s.NotNil(executor)
+
+		_, ok := task.(*TestPureTask)
+		s.True(ok)
+
+		actualTaskCount += 1
+		return nil
+	})
+	s.NoError(err)
+	s.Equal(3, actualTaskCount)
+}
+
+func (s *nodeSuite) TestExecutePureTask() {
+	persistenceNodes := map[string]*persistencespb.ChasmNode{
+		"": {
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+						Type: "TestLibrary.test_component",
+					},
+				},
+			},
+		},
+	}
+
+	pureTask := &TestPureTask{
+		Payload: &commonpb.Payload{
+			Data: []byte("some-random-data"),
+		},
+	}
+
+	rt, ok := s.registry.Task("TestLibrary.test_pure_task")
+	s.True(ok)
+
+	root, err := NewTree(persistenceNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+	s.NoError(err)
+	s.NotNil(root)
+	ctx := context.Background()
+
+	expectExecute := func(result error) {
+		rt.handler.(*MockPureTaskExecutor[any, *TestPureTask]).EXPECT().
+			Execute(
+				gomock.Any(),
+				gomock.AssignableToTypeOf(&TestComponent{}),
+				gomock.Eq(pureTask),
+			).Return(result).Times(1)
+	}
+
+	expectValidate := func(retValue bool, errValue error) {
+		rt.validator.(*MockTaskValidator[any, *TestPureTask]).EXPECT().
+			Validate(gomock.Any(), gomock.Any(), gomock.Any()).Return(retValue, errValue).Times(1)
+	}
+
+	// Succeed task execution and validation (happy case).
+	expectExecute(nil)
+	expectValidate(true, nil)
+	err = root.ExecutePureTask(ctx, pureTask)
+	s.NoError(err)
+
+	expectedErr := errors.New("dummy")
+
+	// Succeed validation, fail execution.
+	expectExecute(expectedErr)
+	expectValidate(true, nil)
+	err = root.ExecutePureTask(ctx, pureTask)
+	s.ErrorIs(expectedErr, err)
+
+	// Fail task validation (no execution occurs).
+	expectValidate(false, nil)
+	err = root.ExecutePureTask(ctx, pureTask)
+	s.NoError(err)
+
+	// Error during task validation (no execution occurs).
+	expectValidate(false, expectedErr)
+	err = root.ExecutePureTask(ctx, pureTask)
+	s.ErrorIs(expectedErr, err)
+}

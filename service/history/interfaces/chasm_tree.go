@@ -3,6 +3,8 @@
 package interfaces
 
 import (
+	"time"
+
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 )
@@ -19,4 +21,9 @@ type ChasmTree interface {
 	IsDirty() bool
 	Terminate(chasm.TerminateComponentRequest) error
 	Archetype() string
+
+	EachPureTask(
+		deadline time.Time,
+		callback func(executor chasm.LogicalTaskExecutor, task any) error,
+	) error
 }
