@@ -8,7 +8,6 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/rpc/interceptor"
@@ -26,7 +25,6 @@ type slowRequestLoggerSuite struct {
 
 	logger      *log.MockLogger
 	interceptor *interceptor.SlowRequestLoggerInterceptor
-	dc          *dynamicconfig.Collection
 }
 
 func TestSlowRequestLoggerInterceptor(t *testing.T) {
@@ -36,12 +34,10 @@ func TestSlowRequestLoggerInterceptor(t *testing.T) {
 func (s *slowRequestLoggerSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.logger = log.NewMockLogger(s.controller)
-
-	dcClient := dynamicconfig.NewMemoryClient()
-	dcClient.OverrideValue(dynamicconfig.SlowRequestLoggingThreshold.Key(), testThreshold)
-	s.dc = dynamicconfig.NewCollection(dcClient, log.NewNoopLogger())
-
-	s.interceptor = interceptor.NewSlowRequestLoggerInterceptor(s.logger, s.dc)
+	s.interceptor = interceptor.NewSlowRequestLoggerInterceptor(
+		s.logger,
+		dynamicconfig.GetDurationPropertyFn(testThreshold),
+	)
 }
 
 func (s *slowRequestLoggerSuite) TestIntercept() {
@@ -59,18 +55,15 @@ func (s *slowRequestLoggerSuite) TestIntercept() {
 	slowHandler := makeHandler(testThreshold + 1)
 
 	// Dummy request to test extraction.
-	request := &historyservice.DescribeWorkflowExecutionRequest{
-		NamespaceId: "namespace-id",
-		Request: &workflowservice.DescribeWorkflowExecutionRequest{
-			Namespace: "namespace-name",
-			Execution: &commonpb.WorkflowExecution{
-				WorkflowId: "wf-id",
-				RunId:      "run-id",
-			},
+	request := &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: "namespace-name",
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: "wf-id",
+			RunId:      "run-id",
 		},
 	}
 	info := &grpc.UnaryServerInfo{
-		FullMethod: historyservice.HistoryService_DescribeWorkflowExecution_FullMethodName,
+		FullMethod: workflowservice.WorkflowService_DescribeWorkflowExecution_FullMethodName,
 	}
 
 	// Ensure fast requests aren't logged.
@@ -85,23 +78,21 @@ func (s *slowRequestLoggerSuite) TestIntercept() {
 
 	// Slow request without parameters set.
 	s.logger.EXPECT().Warn(gomock.Eq(expectedMsg), gomock.Any()).Times(1)
-	_, err = s.interceptor.Intercept(ctx, &historyservice.DescribeWorkflowExecutionRequest{}, info, slowHandler)
+	_, err = s.interceptor.Intercept(ctx, &workflowservice.DescribeWorkflowExecutionRequest{}, info, slowHandler)
+	s.NoError(err)
+
+	// Nil request bodies.
+	s.logger.EXPECT().Warn(gomock.Eq(expectedMsg), gomock.Any()).Times(1)
+	_, err = s.interceptor.Intercept(ctx, nil, info, slowHandler)
+	s.NoError(err)
+
+	// Unknown request bodies.
+	s.logger.EXPECT().Warn(gomock.Eq(expectedMsg), gomock.Any()).Times(1)
+	_, err = s.interceptor.Intercept(ctx, &struct{}{}, info, slowHandler)
 	s.NoError(err)
 
 	// Ensure poll requests, or other expected-slow requests, aren't logged.
-	info.FullMethod = historyservice.HistoryService_PollWorkflowExecutionUpdate_FullMethodName
+	info.FullMethod = workflowservice.WorkflowService_PollWorkflowExecutionUpdate_FullMethodName
 	_, err = s.interceptor.Intercept(ctx, nil, info, slowHandler)
-	s.NoError(err)
-
-	// Nil requests.
-	info.FullMethod = ""
-	s.logger.EXPECT().Warn(gomock.Eq(expectedMsg), gomock.Any()).Times(1)
-	_, err = s.interceptor.Intercept(ctx, nil, info, slowHandler)
-	s.NoError(err)
-
-	// Unknown requests.
-	info.FullMethod = ""
-	s.logger.EXPECT().Warn(gomock.Eq(expectedMsg), gomock.Any()).Times(1)
-	_, err = s.interceptor.Intercept(ctx, &struct{}{}, info, slowHandler)
 	s.NoError(err)
 }

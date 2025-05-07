@@ -2,9 +2,9 @@ package interceptor
 
 import (
 	"context"
-	"strings"
 	"time"
 
+	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -17,19 +17,19 @@ import (
 var ignoredMethodSubstrings = []string{"Poll", "GetWorkflowExecutionHistory"}
 
 type SlowRequestLoggerInterceptor struct {
-	logger       log.Logger
-	workflowTags *logtags.WorkflowTags
-	dc           *dynamicconfig.Collection
+	logger               log.Logger
+	workflowTags         *logtags.WorkflowTags
+	slowRequestThreshold dynamicconfig.DurationPropertyFn
 }
 
 func NewSlowRequestLoggerInterceptor(
 	logger log.Logger,
-	dc *dynamicconfig.Collection,
+	slowRequestThreshold dynamicconfig.DurationPropertyFn,
 ) *SlowRequestLoggerInterceptor {
 	return &SlowRequestLoggerInterceptor{
-		logger:       logger,
-		workflowTags: logtags.NewWorkflowTags(tasktoken.NewSerializer(), logger),
-		dc:           dc,
+		logger:               logger,
+		workflowTags:         logtags.NewWorkflowTags(tasktoken.NewSerializer(), logger),
+		slowRequestThreshold: slowRequestThreshold,
 	}
 }
 
@@ -39,15 +39,17 @@ func (i *SlowRequestLoggerInterceptor) Intercept(
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
 ) (interface{}, error) {
-	threshold := dynamicconfig.SlowRequestLoggingThreshold.Get(i.dc)()
-	startTime := time.Now()
+	// Long-polled methods aren't useful logged.
+	if api.GetMethodMetadata(info.FullMethod).Polling == api.PollingNone {
+		startTime := time.Now()
 
-	defer func() {
-		elapsed := time.Since(startTime)
-		if elapsed > threshold {
-			i.logSlowRequest(request, info, elapsed)
-		}
-	}()
+		defer func() {
+			elapsed := time.Since(startTime)
+			if elapsed > i.slowRequestThreshold() {
+				i.logSlowRequest(request, info, elapsed)
+			}
+		}()
+	}
 
 	return handler(ctx, request)
 }
@@ -58,13 +60,6 @@ func (i *SlowRequestLoggerInterceptor) logSlowRequest(
 	elapsed time.Duration,
 ) {
 	method := info.FullMethod
-
-	// Certain methods aren't useful logged.
-	for _, substr := range ignoredMethodSubstrings {
-		if strings.Contains(method, substr) {
-			return
-		}
-	}
 
 	tags := i.workflowTags.Extract(request, method)
 	tags = append(tags, tag.NewDurationTag("duration", elapsed))

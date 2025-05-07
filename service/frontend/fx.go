@@ -519,7 +519,10 @@ func SlowRequestLoggerInterceptorProvider(
 	logger log.Logger,
 	dc *dynamicconfig.Collection,
 ) *interceptor.SlowRequestLoggerInterceptor {
-	return interceptor.NewSlowRequestLoggerInterceptor(logger, dc)
+	return interceptor.NewSlowRequestLoggerInterceptor(
+		logger,
+		dynamicconfig.SlowRequestLoggingThreshold.Get(dc),
+	)
 }
 
 func PersistenceRateLimitingParamsProvider(
