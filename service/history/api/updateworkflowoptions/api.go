@@ -52,34 +52,19 @@ func Invoke(
 				return nil, consts.ErrWorkflowCompleted
 			}
 
-			// Merge the requested options mentioned in the field mask with the current options in the mutable state
-			mergedOpts, err := MergeWorkflowExecutionOptions(
-				GetOptionsFromMutableState(mutableState),
-				opts,
-				req.GetUpdateMask(),
-			)
+			mergedOpts, hasChanges, err := MergeAndApply(mutableState, opts, req.GetUpdateMask())
 			if err != nil {
-				return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("error applying update_options: %v", err))
+				return nil, err
 			}
-
 			// Set options for gRPC response
 			ret.WorkflowExecutionOptions = mergedOpts
 
 			// If there is no mutable state change at all, return with no new history event and Noop=true
-			if proto.Equal(mergedOpts, GetOptionsFromMutableState(mutableState)) {
+			if !hasChanges {
 				return &api.UpdateWorkflowAction{
 					Noop:               true,
 					CreateWorkflowTask: false,
 				}, nil
-			}
-
-			unsetOverride := false
-			if mergedOpts.GetVersioningOverride() == nil {
-				unsetOverride = true
-			}
-			_, err = mutableState.AddWorkflowExecutionOptionsUpdatedEvent(mergedOpts.GetVersioningOverride(), unsetOverride, "", nil, nil)
-			if err != nil {
-				return nil, err
 			}
 
 			// TODO (carly) part 2: handle safe deployment change --> CreateWorkflowTask=true
@@ -98,7 +83,41 @@ func Invoke(
 	return ret, nil
 }
 
-func GetOptionsFromMutableState(ms historyi.MutableState) *workflowpb.WorkflowExecutionOptions {
+// MergeAndApply merges the requested options mentioned in the field mask with the current options in the mutable state
+// and applies the changes to the mutable state. Returns the merged options and a boolean indicating if there were any changes.
+func MergeAndApply(
+	ms historyi.MutableState,
+	opts *workflowpb.WorkflowExecutionOptions,
+	updateMask *fieldmaskpb.FieldMask,
+) (*workflowpb.WorkflowExecutionOptions, bool, error) {
+	// Merge the requested options mentioned in the field mask with the current options in the mutable state
+	mergedOpts, err := mergeWorkflowExecutionOptions(
+		getOptionsFromMutableState(ms),
+		opts,
+		updateMask,
+	)
+	if err != nil {
+		return nil, false, serviceerror.NewInvalidArgument(fmt.Sprintf("error applying update_options: %v", err))
+	}
+
+	// If there is no mutable state change at all, return with no new history event and Noop=true
+	hasChanges := !proto.Equal(mergedOpts, getOptionsFromMutableState(ms))
+	if !hasChanges {
+		return mergedOpts, false, nil
+	}
+
+	unsetOverride := false
+	if mergedOpts.GetVersioningOverride() == nil {
+		unsetOverride = true
+	}
+	_, err = ms.AddWorkflowExecutionOptionsUpdatedEvent(mergedOpts.GetVersioningOverride(), unsetOverride, "", nil, nil)
+	if err != nil {
+		return nil, hasChanges, err
+	}
+	return mergedOpts, hasChanges, nil
+}
+
+func getOptionsFromMutableState(ms historyi.MutableState) *workflowpb.WorkflowExecutionOptions {
 	opts := &workflowpb.WorkflowExecutionOptions{}
 	if versioningInfo := ms.GetExecutionInfo().GetVersioningInfo(); versioningInfo != nil {
 		override, ok := proto.Clone(versioningInfo.GetVersioningOverride()).(*workflowpb.VersioningOverride)
@@ -110,8 +129,8 @@ func GetOptionsFromMutableState(ms historyi.MutableState) *workflowpb.WorkflowEx
 	return opts
 }
 
-// MergeWorkflowExecutionOptions copies the given paths in `src` struct to `dst` struct
-func MergeWorkflowExecutionOptions(
+// mergeWorkflowExecutionOptions copies the given paths in `src` struct to `dst` struct
+func mergeWorkflowExecutionOptions(
 	mergeInto, mergeFrom *workflowpb.WorkflowExecutionOptions,
 	updateMask *fieldmaskpb.FieldMask,
 ) (*workflowpb.WorkflowExecutionOptions, error) {
