@@ -60,14 +60,14 @@ func (s *workflowSuite) TearDownTest() {
 }
 
 func (s *workflowSuite) TestGetMethods() {
-	lastEventTaskID := int64(144)
+	lastRunningClock := int64(144)
 	lastEventVersion := int64(12)
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	s.mockMutableState.EXPECT().GetLastWriteVersion().Return(lastEventVersion, nil).AnyTimes()
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
-		NamespaceId:     s.namespaceID,
-		WorkflowId:      s.workflowID,
-		LastEventTaskId: lastEventTaskID,
+		NamespaceId:      s.namespaceID,
+		WorkflowId:       s.workflowID,
+		LastRunningClock: lastRunningClock,
 	}).AnyTimes()
 	s.mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: s.runID,
@@ -88,65 +88,65 @@ func (s *workflowSuite) TestGetMethods() {
 	expectedReleaseFn := runtime.FuncForPC(reflect.ValueOf(wcache.NoopReleaseFn).Pointer()).Name()
 	actualReleaseFn := runtime.FuncForPC(reflect.ValueOf(nDCWorkflow.GetReleaseFn()).Pointer()).Name()
 	s.Equal(expectedReleaseFn, actualReleaseFn)
-	version, taskID, err := nDCWorkflow.GetVectorClock()
+	version, clock, err := nDCWorkflow.GetVectorClock()
 	s.NoError(err)
 	s.Equal(lastEventVersion, version)
-	s.Equal(lastEventTaskID, taskID)
+	s.Equal(lastRunningClock, clock)
 }
 
 func (s *workflowSuite) TestHappensAfter_LargerVersion() {
 	thisLastWriteVersion := int64(0)
-	thisLastEventTaskID := int64(100)
+	thisLastRunningClock := int64(100)
 	thatLastWriteVersion := thisLastWriteVersion - 1
-	thatLastEventTaskID := int64(123)
+	thatLastRunningClock := int64(123)
 
 	s.True(WorkflowHappensAfter(
 		thisLastWriteVersion,
-		thisLastEventTaskID,
+		thisLastRunningClock,
 		thatLastWriteVersion,
-		thatLastEventTaskID,
+		thatLastRunningClock,
 	))
 }
 
 func (s *workflowSuite) TestHappensAfter_SmallerVersion() {
 	thisLastWriteVersion := int64(0)
-	thisLastEventTaskID := int64(100)
+	thisLastRunningClock := int64(100)
 	thatLastWriteVersion := thisLastWriteVersion + 1
-	thatLastEventTaskID := int64(23)
+	thatLastRunningClock := int64(23)
 
 	s.False(WorkflowHappensAfter(
 		thisLastWriteVersion,
-		thisLastEventTaskID,
+		thisLastRunningClock,
 		thatLastWriteVersion,
-		thatLastEventTaskID,
+		thatLastRunningClock,
 	))
 }
 
 func (s *workflowSuite) TestHappensAfter_SameVersion_SmallerTaskID() {
 	thisLastWriteVersion := int64(0)
-	thisLastEventTaskID := int64(100)
+	thisLastRunningClock := int64(100)
 	thatLastWriteVersion := thisLastWriteVersion
-	thatLastEventTaskID := thisLastEventTaskID + 1
+	thatLastRunningClock := thisLastRunningClock + 1
 
 	s.False(WorkflowHappensAfter(
 		thisLastWriteVersion,
-		thisLastEventTaskID,
+		thisLastRunningClock,
 		thatLastWriteVersion,
-		thatLastEventTaskID,
+		thatLastRunningClock,
 	))
 }
 
 func (s *workflowSuite) TestHappensAfter_SameVersion_LatrgerTaskID() {
 	thisLastWriteVersion := int64(0)
-	thisLastEventTaskID := int64(100)
+	thisLastRunningClock := int64(100)
 	thatLastWriteVersion := thisLastWriteVersion
-	thatLastEventTaskID := thisLastEventTaskID - 1
+	thatLastRunningClock := thisLastRunningClock - 1
 
 	s.True(WorkflowHappensAfter(
 		thisLastWriteVersion,
-		thisLastEventTaskID,
+		thisLastRunningClock,
 		thatLastWriteVersion,
-		thatLastEventTaskID,
+		thatLastRunningClock,
 	))
 }
 
@@ -168,28 +168,28 @@ func (s *workflowSuite) TestSuppressWorkflowBy_Error() {
 	)
 
 	// cannot suppress by older workflow
-	lastEventTaskID := int64(144)
+	lastRunningClock := int64(144)
 	lastEventVersion := int64(12)
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	s.mockMutableState.EXPECT().GetLastWriteVersion().Return(lastEventVersion, nil).AnyTimes()
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
-		NamespaceId:     s.namespaceID,
-		WorkflowId:      s.workflowID,
-		LastEventTaskId: lastEventTaskID,
+		NamespaceId:      s.namespaceID,
+		WorkflowId:       s.workflowID,
+		LastRunningClock: lastRunningClock,
 	}).AnyTimes()
 	s.mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: s.runID,
 	}).AnyTimes()
 
 	incomingRunID := uuid.New()
-	incomingLastEventTaskID := int64(144)
+	incomingLastRunningClock := int64(144)
 	incomingLastEventVersion := lastEventVersion - 1
 	incomingMockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	incomingMockMutableState.EXPECT().GetLastWriteVersion().Return(incomingLastEventVersion, nil).AnyTimes()
 	incomingMockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
-		NamespaceId:     s.namespaceID,
-		WorkflowId:      s.workflowID,
-		LastEventTaskId: incomingLastEventTaskID,
+		NamespaceId:      s.namespaceID,
+		WorkflowId:       s.workflowID,
+		LastRunningClock: incomingLastRunningClock,
 	}).AnyTimes()
 	incomingMockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: incomingRunID,
@@ -202,13 +202,13 @@ func (s *workflowSuite) TestSuppressWorkflowBy_Error() {
 func (s *workflowSuite) TestSuppressWorkflowBy_Terminate() {
 	randomEventID := int64(2208)
 	wtFailedEventID := int64(2)
-	lastEventTaskID := int64(144)
+	lastRunningClock := int64(144)
 	lastEventVersion := int64(12)
 	s.mockMutableState.EXPECT().GetNextEventID().Return(randomEventID).AnyTimes() // This doesn't matter, GetNextEventID is not used if there is started WT.
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
-		NamespaceId:     s.namespaceID,
-		WorkflowId:      s.workflowID,
-		LastEventTaskId: lastEventTaskID,
+		NamespaceId:      s.namespaceID,
+		WorkflowId:       s.workflowID,
+		LastRunningClock: lastRunningClock,
 	}).AnyTimes()
 	s.mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: s.runID,
@@ -221,7 +221,7 @@ func (s *workflowSuite) TestSuppressWorkflowBy_Terminate() {
 	)
 
 	incomingRunID := uuid.New()
-	incomingLastEventTaskID := int64(144)
+	incomingLastRunningClock := int64(144)
 	incomingLastEventVersion := lastEventVersion + 1
 	incomingMockContext := historyi.NewMockWorkflowContext(s.controller)
 	incomingMockMutableState := historyi.NewMockMutableState(s.controller)
@@ -234,9 +234,9 @@ func (s *workflowSuite) TestSuppressWorkflowBy_Terminate() {
 	incomingMockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	incomingMockMutableState.EXPECT().GetLastWriteVersion().Return(incomingLastEventVersion, nil).AnyTimes()
 	incomingMockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
-		NamespaceId:     s.namespaceID,
-		WorkflowId:      s.workflowID,
-		LastEventTaskId: incomingLastEventTaskID,
+		NamespaceId:      s.namespaceID,
+		WorkflowId:       s.workflowID,
+		LastRunningClock: incomingLastRunningClock,
 	}).AnyTimes()
 	incomingMockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: incomingRunID,
@@ -244,6 +244,7 @@ func (s *workflowSuite) TestSuppressWorkflowBy_Terminate() {
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, lastEventVersion).Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
+	s.mockMutableState.EXPECT().IsWorkflow().Return(true).AnyTimes()
 	s.mockMutableState.EXPECT().UpdateCurrentVersion(lastEventVersion, true).Return(nil).AnyTimes()
 	startedWorkflowTask := &historyi.WorkflowTaskInfo{
 		Version:          1234,
@@ -283,12 +284,12 @@ func (s *workflowSuite) TestSuppressWorkflowBy_Terminate() {
 }
 
 func (s *workflowSuite) TestSuppressWorkflowBy_Zombiefy() {
-	lastEventTaskID := int64(144)
+	lastRunningClock := int64(144)
 	lastEventVersion := int64(12)
 	executionInfo := &persistencespb.WorkflowExecutionInfo{
-		NamespaceId:     s.namespaceID,
-		WorkflowId:      s.workflowID,
-		LastEventTaskId: lastEventTaskID,
+		NamespaceId:      s.namespaceID,
+		WorkflowId:       s.workflowID,
+		LastRunningClock: lastRunningClock,
 	}
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 	executionState := &persistencespb.WorkflowExecutionState{
@@ -308,7 +309,7 @@ func (s *workflowSuite) TestSuppressWorkflowBy_Zombiefy() {
 	)
 
 	incomingRunID := uuid.New()
-	incomingLastEventTaskID := int64(144)
+	incomingLastRunningClock := int64(144)
 	incomingLastEventVersion := lastEventVersion + 1
 	incomingMockContext := historyi.NewMockWorkflowContext(s.controller)
 	incomingMockMutableState := historyi.NewMockMutableState(s.controller)
@@ -321,9 +322,9 @@ func (s *workflowSuite) TestSuppressWorkflowBy_Zombiefy() {
 	incomingMockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	incomingMockMutableState.EXPECT().GetLastWriteVersion().Return(incomingLastEventVersion, nil).AnyTimes()
 	incomingMockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
-		NamespaceId:     s.namespaceID,
-		WorkflowId:      s.workflowID,
-		LastEventTaskId: incomingLastEventTaskID,
+		NamespaceId:      s.namespaceID,
+		WorkflowId:       s.workflowID,
+		LastRunningClock: incomingLastRunningClock,
 	}).AnyTimes()
 	incomingMockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: incomingRunID,

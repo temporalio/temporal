@@ -41,6 +41,21 @@ func GetVersionHistory(h *historyspb.VersionHistories, index int32) (*historyspb
 	return h.Histories[index], nil
 }
 
+// AddEmptyVersionHistory adds an empty VersionHistory to VersionHistories.
+// It reuses an existing empty VersionHistory if one already exists.
+// Returns:
+//   - the index of the newly added or reused empty VersionHistory.
+func AddEmptyVersionHistory(h *historyspb.VersionHistories) int32 {
+	for idx, versionHistory := range h.Histories {
+		if IsEmptyVersionHistory(versionHistory) {
+			// already have an empty version history, return its index
+			return int32(idx)
+		}
+	}
+	h.Histories = append(h.Histories, &historyspb.VersionHistory{})
+	return int32(len(h.Histories)) - 1
+}
+
 // AddVersionHistory adds a VersionHistory to VersionHistories.
 // Returns:
 //   - the index of the newly added VersionHistory
@@ -167,4 +182,13 @@ func SetCurrentVersionHistoryIndex(h *historyspb.VersionHistories, currentVersio
 // GetCurrentVersionHistory gets the current VersionHistory.
 func GetCurrentVersionHistory(h *historyspb.VersionHistories) (*historyspb.VersionHistory, error) {
 	return GetVersionHistory(h, h.GetCurrentVersionHistoryIndex())
+}
+
+// IsCurrentVersionHistoryEmpty checks if the current VersionHistory is empty.
+func IsCurrentVersionHistoryEmpty(h *historyspb.VersionHistories) (bool, error) {
+	currentVersionHistory, err := GetCurrentVersionHistory(h)
+	if err != nil {
+		return false, err
+	}
+	return IsEmptyVersionHistory(currentVersionHistory), nil
 }

@@ -1645,6 +1645,7 @@ func (adh *AdminHandler) GetTaskQueueTasks(
 		TaskType:           request.GetTaskQueueType(),
 		InclusiveMinTaskID: request.GetMinTaskId(),
 		ExclusiveMaxTaskID: request.GetMaxTaskId(),
+		Subqueue:           int(request.GetSubqueue()),
 		PageSize:           int(request.GetBatchSize()),
 		NextPageToken:      request.NextPageToken,
 	})
