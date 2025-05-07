@@ -311,8 +311,8 @@ func (e *matchingEngineImpl) watchMembership() {
 
 		spreadRoutingBatchSize := e.config.SpreadRoutingBatchSize()
 		ownedByOther := func(p tqid.Partition) bool {
-			name, n := p.RoutingKey(spreadRoutingBatchSize)
-			hosts := e.serviceResolver.LookupN(name, n+1)
+			key, n := p.RoutingKey(spreadRoutingBatchSize)
+			hosts := e.serviceResolver.LookupN(key, n+1)
 			if len(hosts) == 0 {
 				return false // don't unload on lookup error
 			}
