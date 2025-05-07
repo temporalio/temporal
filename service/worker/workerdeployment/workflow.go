@@ -84,7 +84,7 @@ func (d *WorkflowRunner) listenToSignals(ctx workflow.Context) {
 			d.logger.Error("received summary for a non-existing version, ignoring it", "version", summary.GetVersion())
 		}
 		d.State.Versions[summary.GetVersion()] = summary
-		d.stateChanged = true
+		d.setStateChanged()
 		d.signalHandler.processingSignals--
 	})
 
@@ -282,7 +282,7 @@ func (d *WorkflowRunner) handleRegisterWorker(ctx workflow.Context, args *deploy
 		return err
 	}
 
-	d.setStateChanged(ctx)
+	d.setStateChanged()
 	return nil
 }
 
@@ -297,7 +297,7 @@ func (d *WorkflowRunner) handleDeleteDeployment(ctx workflow.Context) error {
 	if len(d.State.Versions) == 0 {
 		d.deleteDeployment = true
 	}
-	d.setStateChanged(ctx)
+	d.setStateChanged()
 	return nil
 }
 
@@ -459,7 +459,7 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 		return nil, err
 	}
 
-	d.setStateChanged(ctx)
+	d.setStateChanged()
 
 	return &deploymentspb.SetRampingVersionResponse{
 		PreviousVersion:    prevRampingVersion,
@@ -528,7 +528,7 @@ func (d *WorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *deploym
 		return err
 	}
 
-	d.setStateChanged(ctx)
+	d.setStateChanged()
 
 	return d.deleteVersion(ctx, args)
 }
@@ -657,7 +657,7 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 		return nil, err
 	}
 
-	d.setStateChanged(ctx)
+	d.setStateChanged()
 
 	return &deploymentspb.SetCurrentVersionResponse{
 		PreviousVersion: prevCurrentVersion,
@@ -712,7 +712,7 @@ func (d *WorkflowRunner) handleAddVersionToWorkerDeployment(ctx workflow.Context
 		CreateTime: args.CreateTime,
 	}
 
-	d.setStateChanged(ctx)
+	d.setStateChanged()
 	return nil
 }
 
@@ -894,8 +894,6 @@ func (d *WorkflowRunner) updateMemo(ctx workflow.Context) error {
 	})
 }
 
-func (d *WorkflowRunner) setStateChanged(ctx workflow.Context) {
-	if !d.stateChanged {
-		d.stateChanged = true
-	}
+func (d *WorkflowRunner) setStateChanged() {
+	d.stateChanged = true
 }
