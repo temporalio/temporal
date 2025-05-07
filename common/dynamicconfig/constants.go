@@ -18,7 +18,7 @@ var (
 		"dynamicconfig.subscriptionCallback",
 		subscriptionCallbackSettings{
 			MinWorkers:   10,
-			MaxWorkers:   100,
+			MaxWorkers:   1e9, // effectively unlimited
 			TargetDelay:  10 * time.Millisecond,
 			ShrinkFactor: 1000, // 10 seconds
 		},
