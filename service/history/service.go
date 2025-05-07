@@ -55,7 +55,7 @@ type (
 		grpcListener      net.Listener
 		membershipMonitor membership.Monitor
 		metricsHandler    metrics.Handler
-		healthServer      *health.Server
+		healthServer      *health.Server //
 		readinessCancel   context.CancelFunc
 	}
 )
@@ -102,8 +102,14 @@ func (s *Service) Start() {
 	go func() {
 		if s.handler.controller.InitialShardsAcquired(readinessCtx) == nil {
 			// add a few seconds for stabilization
-			if util.InterruptibleSleep(readinessCtx, 5*time.Second) == nil {
-				s.healthServer.SetServingStatus(serviceName, healthpb.HealthCheckResponse_SERVING)
+			if util.InterruptibleSleep(readinessCtx, 5*time.Second) == nil { // defensive.
+				// history has gRPC health server
+				// previously wasn't used
+				// now means history has aquired all shards it should have.
+				// has joined ringpop, aquired shards.
+				// speeds up deployment, because no longer waits arbitrary time. Instead, waits to aquire shards.
+				// Shallow health check.
+				s.healthServer.SetServingStatus(serviceName, healthpb.HealthCheckResponse_SERVING) // here
 			}
 		}
 	}()

@@ -52,10 +52,10 @@ func ClusterMemberRoleFromString(s string) (ClusterMemberRole, error) {
 
 var (
 	HealthState_shorthandValue = map[string]int32{
-		"Unspecified": 0,
-		"Serving":     1,
-		"NotServing":  2,
-		"Starting":    3,
+		"Unspecified":     0,
+		"Serving":         1,
+		"NotServing":      2,
+		"DeclinedServing": 3,
 	}
 )
 

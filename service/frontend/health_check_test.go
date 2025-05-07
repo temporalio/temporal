@@ -76,7 +76,7 @@ func (s *healthCheckerSuite) SetupTest() {
 			case "2":
 				return enumsspb.HEALTH_STATE_UNSPECIFIED, fmt.Errorf("test")
 			case "4":
-				return enumsspb.HEALTH_STATE_STARTING, nil
+				return enumsspb.HEALTH_STATE_DECLINED_SERVING, nil
 			default:
 				return enumsspb.HEALTH_STATE_NOT_SERVING, nil
 			}
@@ -121,7 +121,7 @@ func (s *healthCheckerSuite) Test_Check_Not_Serving() {
 	s.Equal(enumsspb.HEALTH_STATE_NOT_SERVING, state)
 }
 
-func (s *healthCheckerSuite) Test_Check_Starting() {
+func (s *healthCheckerSuite) Test_Check_Declined_Serving() {
 	s.resolver.EXPECT().AvailableMembers().Return([]membership.HostInfo{
 		membership.NewHostInfoFromAddress("1"),
 		membership.NewHostInfoFromAddress("2"),
@@ -134,5 +134,5 @@ func (s *healthCheckerSuite) Test_Check_Starting() {
 
 	state, err := s.checker.Check(context.Background())
 	s.NoError(err)
-	s.Equal(enumsspb.HEALTH_STATE_STARTING, state)
+	s.Equal(enumsspb.HEALTH_STATE_DECLINED_SERVING, state)
 }

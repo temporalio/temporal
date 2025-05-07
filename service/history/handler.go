@@ -226,7 +226,7 @@ func (h *Handler) DeepHealthCheck(
 		return nil, err
 	}
 	if status.Status != healthpb.HealthCheckResponse_SERVING {
-		return &historyservice.DeepHealthCheckResponse{State: enumsspb.HEALTH_STATE_STARTING}, nil
+		return &historyservice.DeepHealthCheckResponse{State: enumsspb.HEALTH_STATE_DECLINED_SERVING}, nil
 	}
 
 	latency := h.persistenceHealthSignal.AverageLatency()
