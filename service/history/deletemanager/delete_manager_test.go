@@ -114,7 +114,6 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution() {
 		&we,
 		mockWeCtx,
 		mockMutableState,
-		false,
 		&stage,
 	)
 	s.NoError(err)
@@ -154,7 +153,6 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution_Error() 
 		&we,
 		mockWeCtx,
 		mockMutableState,
-		false,
 		&stage,
 	)
 	s.Error(err)
@@ -195,7 +193,6 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecution_OpenWorkflow() 
 		&we,
 		mockWeCtx,
 		mockMutableState,
-		true,
 		&stage,
 	)
 	s.NoError(err)

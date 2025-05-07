@@ -29,3 +29,11 @@ func (*noopChasmTree) ApplySnapshot(chasm.NodesSnapshot) error {
 func (*noopChasmTree) IsDirty() bool {
 	return false
 }
+
+func (*noopChasmTree) Terminate(chasm.TerminateComponentRequest) error {
+	return nil
+}
+
+func (*noopChasmTree) Archetype() string {
+	return ""
+}

@@ -12,6 +12,8 @@ package chasm
 import (
 	reflect "reflect"
 
+	enums "go.temporal.io/api/enums/v1"
+	enums0 "go.temporal.io/server/api/enums/v1"
 	definition "go.temporal.io/server/common/definition"
 	tasks "go.temporal.io/server/service/history/tasks"
 	gomock "go.uber.org/mock/gomock"
@@ -97,6 +99,20 @@ func (m *MockNodeBackend) NextTransitionCount() int64 {
 func (mr *MockNodeBackendMockRecorder) NextTransitionCount() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NextTransitionCount", reflect.TypeOf((*MockNodeBackend)(nil).NextTransitionCount))
+}
+
+// UpdateWorkflowStateStatus mocks base method.
+func (m *MockNodeBackend) UpdateWorkflowStateStatus(state enums0.WorkflowExecutionState, status enums.WorkflowExecutionStatus) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateWorkflowStateStatus", state, status)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateWorkflowStateStatus indicates an expected call of UpdateWorkflowStateStatus.
+func (mr *MockNodeBackendMockRecorder) UpdateWorkflowStateStatus(state, status any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkflowStateStatus", reflect.TypeOf((*MockNodeBackend)(nil).UpdateWorkflowStateStatus), state, status)
 }
 
 // MockNodePathEncoder is a mock of NodePathEncoder interface.
