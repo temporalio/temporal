@@ -2948,15 +2948,17 @@ func (s *matchingEngineSuite) TestUnloadOnMembershipChange() {
 	s.mockServiceResolver.EXPECT().Lookup(nexusEndpointsTablePartitionRoutingKey).Return(self, nil).AnyTimes()
 
 	// signal membership changed and give time for loop to wake up
-	s.mockServiceResolver.EXPECT().Lookup(p1.RoutingKey()).Return(self, nil)
-	s.mockServiceResolver.EXPECT().Lookup(p2.RoutingKey()).Return(self, nil)
+	p1key, p1n := p1.RoutingKey(0)
+	p2key, p2n := p2.RoutingKey(0)
+	s.mockServiceResolver.EXPECT().LookupN(p1key, p1n+1).Return([]membership.HostInfo{self})
+	s.mockServiceResolver.EXPECT().LookupN(p2key, p2n+1).Return([]membership.HostInfo{self})
 	e.membershipChangedCh <- nil
 	time.Sleep(50 * time.Millisecond)
 	s.Equal(2, len(e.getTaskQueuePartitions(1000)), "nothing should be unloaded yet")
 
 	// signal again but p2 doesn't belong to us anymore
-	s.mockServiceResolver.EXPECT().Lookup(p1.RoutingKey()).Return(self, nil)
-	s.mockServiceResolver.EXPECT().Lookup(p2.RoutingKey()).Return(other, nil).Times(2)
+	s.mockServiceResolver.EXPECT().LookupN(p1key, p1n+1).Return([]membership.HostInfo{self})
+	s.mockServiceResolver.EXPECT().LookupN(p2key, p2n+1).Return([]membership.HostInfo{other}).Times(2)
 	e.membershipChangedCh <- nil
 	s.Eventually(func() bool {
 		return len(e.getTaskQueuePartitions(1000)) == 1

@@ -314,7 +314,7 @@ func (e *matchingEngineImpl) watchMembership() {
 			name, n := p.RoutingKey(spreadRoutingBatchSize)
 			hosts := e.serviceResolver.LookupN(name, n+1)
 			if len(hosts) == 0 {
-				return false
+				return false // don't unload on lookup error
 			}
 			if n >= len(hosts) {
 				n %= len(hosts)
