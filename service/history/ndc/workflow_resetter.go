@@ -34,7 +34,6 @@ import (
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.temporal.io/server/service/history/workflow/update"
-	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -258,37 +257,11 @@ func (r *workflowResetterImpl) performPostResetOperations(ctx context.Context, r
 	for _, operation := range postResetOperations {
 		switch op := operation.GetVariant().(type) {
 		case *workflowpb.PostResetOperation_UpdateWorkflowOptions_:
-			if err := r.performPostResetWorkflowOptionsUpdate(ctx, resetMS, op.UpdateWorkflowOptions); err != nil {
+			_, _, err := updateworkflowoptions.MergeAndApply(resetMS, op.UpdateWorkflowOptions.GetWorkflowExecutionOptions(), op.UpdateWorkflowOptions.GetUpdateMask())
+			if err != nil {
 				return err
 			}
 		}
-	}
-	return nil
-}
-
-func (r *workflowResetterImpl) performPostResetWorkflowOptionsUpdate(ctx context.Context, resetMS historyi.MutableState, opts *workflowpb.PostResetOperation_UpdateWorkflowOptions) error {
-	// Merge the requested options mentioned in the field mask with the current options in the mutable state
-	mergedOpts, err := updateworkflowoptions.MergeWorkflowExecutionOptions(
-		updateworkflowoptions.GetOptionsFromMutableState(resetMS),
-		opts.GetWorkflowExecutionOptions(),
-		opts.GetUpdateMask(),
-	)
-	if err != nil {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("error applying update_options: %v", err))
-	}
-
-	// return if there is no change in the options
-	if proto.Equal(mergedOpts, updateworkflowoptions.GetOptionsFromMutableState(resetMS)) {
-		return nil
-	}
-
-	// add the event to the history
-	unsetOverride := false
-	if mergedOpts.GetVersioningOverride() == nil {
-		unsetOverride = true
-	}
-	if _, err := resetMS.AddWorkflowExecutionOptionsUpdatedEvent(mergedOpts.GetVersioningOverride(), unsetOverride, "", nil, nil); err != nil {
-		return err
 	}
 	return nil
 }
