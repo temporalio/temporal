@@ -43,7 +43,6 @@ type (
 		logger           sdklog.Logger
 		metrics          sdkclient.MetricsHandler
 		lock             workflow.Mutex
-		pendingUpdates   int
 		conflictToken    []byte
 		deleteDeployment bool
 		unsafeMaxVersion func() int
@@ -203,7 +202,7 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 	err = workflow.Await(ctx, func() bool {
 		return d.deleteDeployment || // deployment is deleted -> it's ok to drop all signals and updates.
 			// There is no pending signal or update, but the state is dirty or forceCaN is requested:
-			(!d.signalHandler.signalSelector.HasPending() && d.signalHandler.processingSignals == 0 && d.pendingUpdates == 0 &&
+			(!d.signalHandler.signalSelector.HasPending() && d.signalHandler.processingSignals == 0 && workflow.AllHandlersFinished(ctx) &&
 				(d.forceCAN || d.stateChanged.value))
 	})
 	if err != nil {
@@ -257,9 +256,7 @@ func (d *WorkflowRunner) handleRegisterWorker(ctx workflow.Context, args *deploy
 		d.logger.Error("Could not acquire workflow lock")
 		return serviceerror.NewDeadlineExceeded("Could not acquire workflow lock")
 	}
-	d.pendingUpdates++
 	defer func() {
-		d.pendingUpdates--
 		d.lock.Unlock()
 	}()
 
@@ -345,9 +342,7 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 		d.logger.Error("Could not acquire workflow lock")
 		return nil, serviceerror.NewDeadlineExceeded("Could not acquire workflow lock")
 	}
-	d.pendingUpdates++
 	defer func() {
-		d.pendingUpdates--
 		d.lock.Unlock()
 	}()
 
@@ -527,9 +522,7 @@ func (d *WorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *deploym
 		d.logger.Error("Could not acquire workflow lock")
 		return serviceerror.NewDeadlineExceeded("Could not acquire workflow lock")
 	}
-	d.pendingUpdates++
 	defer func() {
-		d.pendingUpdates--
 		d.lock.Unlock()
 	}()
 
@@ -573,9 +566,7 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 		d.logger.Error("Could not acquire workflow lock")
 		return nil, serviceerror.NewDeadlineExceeded("Could not acquire workflow lock")
 	}
-	d.pendingUpdates++
 	defer func() {
-		d.pendingUpdates--
 		d.lock.Unlock()
 	}()
 
@@ -714,10 +705,6 @@ func (d *WorkflowRunner) getMaxVersions(ctx workflow.Context) int {
 
 // to-be-deprecated
 func (d *WorkflowRunner) handleAddVersionToWorkerDeployment(ctx workflow.Context, args *deploymentspb.AddVersionUpdateArgs) error {
-	d.pendingUpdates++
-	defer func() {
-		d.pendingUpdates--
-	}()
 
 	maxVersions := d.getMaxVersions(ctx)
 
