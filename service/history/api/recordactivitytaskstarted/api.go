@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
@@ -251,6 +252,13 @@ func recordActivityTaskStarted(
 
 	response.WorkflowType = mutableState.GetWorkflowType()
 	response.WorkflowNamespace = namespaceName
+	response.RetryPolicy = &commonpb.RetryPolicy{
+		InitialInterval:        ai.RetryInitialInterval,
+		BackoffCoefficient:     ai.RetryBackoffCoefficient,
+		MaximumInterval:        ai.RetryMaximumInterval,
+		MaximumAttempts:        ai.RetryMaximumAttempts,
+		NonRetryableErrorTypes: ai.RetryNonRetryableErrorTypes,
+	}
 
 	return response, rejectCodeAccepted, nil
 }

@@ -14,6 +14,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/definition"
@@ -78,6 +79,14 @@ type (
 		// Encoded path for different runs of the same Component type are the same.
 		//
 		// encodedPath string
+
+		// When terminated is true, regardless of the Lifecycle state of the component,
+		// the component will be considered as closed.
+		//
+		// This right now only applies to the root node and used to update MutableState
+		// executionState and executionStatus and trigger retention timers.
+		// We could consider extending the force terminate concept to sub-components as well.
+		terminated bool
 	}
 
 	// nodeBase is a set of dependencies and states shared by all nodes in a CHASM tree.
@@ -128,6 +137,10 @@ type (
 		NextTransitionCount() int64
 		GetWorkflowKey() definition.WorkflowKey
 		AddTasks(...tasks.Task)
+		UpdateWorkflowStateStatus(
+			state enumsspb.WorkflowExecutionState,
+			status enumspb.WorkflowExecutionStatus,
+		) error
 	}
 
 	// NodePathEncoder is an interface for encoding and decoding node paths.
@@ -480,8 +493,11 @@ func (n *Node) syncSubComponents() error {
 	if n.parent != nil {
 		return serviceerror.NewInternal("syncSubComponents must be called on root node")
 	}
-	n.mutation.DeletedNodes = make(map[string]struct{})
-	return n.syncSubComponentsInternal(nil)
+	// If node value is nil, then it means there are no subcomponents to sync.
+	if n.value == nil {
+		return nil
+	}
+	return n.syncSubComponentsInternal(RootPath)
 }
 
 func (n *Node) syncSubComponentsInternal(
@@ -724,9 +740,35 @@ func (n *Node) AddTask(
 func (n *Node) CloseTransaction() (NodesMutation, error) {
 	defer n.cleanupTransaction()
 
-	// TODO: serialize updated nodes and update tree structure here.
+	if err := n.syncSubComponents(); err != nil {
+		return NodesMutation{}, err
+	}
 
-	if err := n.closeTransactionUpdateComponentTasks(); err != nil {
+	for nodePath, node := range n.andAllChildren() {
+		if node.valueState != valueStateNeedSerialize {
+			continue
+		}
+		if err := node.serialize(); err != nil {
+			return NodesMutation{}, err
+		}
+
+		encodedPath, err := n.pathEncoder.Encode(node, nodePath)
+		if err != nil {
+			return NodesMutation{}, err
+		}
+		n.mutation.UpdatedNodes[encodedPath] = node.serializedNode
+	}
+
+	nextVersionedTransition := &persistencespb.VersionedTransition{
+		NamespaceFailoverVersion: n.backend.GetCurrentVersion(),
+		TransitionCount:          n.backend.NextTransitionCount(),
+	}
+
+	if err := n.closeTransactionHandleRootLifecycleChange(nextVersionedTransition); err != nil {
+		return NodesMutation{}, err
+	}
+
+	if err := n.closeTransactionUpdateComponentTasks(nextVersionedTransition); err != nil {
 		return NodesMutation{}, err
 	}
 
@@ -738,17 +780,57 @@ func (n *Node) CloseTransaction() (NodesMutation, error) {
 		return NodesMutation{}, err
 	}
 
-	//nolint:forbidigo
-	panic("not implemented")
-	// return n.mutation, nil
+	return n.mutation, nil
 }
 
-func (n *Node) closeTransactionUpdateComponentTasks() error {
-	taskOffset := int64(1)
-	nextVersionedTransition := &persistencespb.VersionedTransition{
-		NamespaceFailoverVersion: n.backend.GetCurrentVersion(),
-		TransitionCount:          n.backend.NextTransitionCount(),
+func (n *Node) closeTransactionHandleRootLifecycleChange(
+	nextVersionedTransition *persistencespb.VersionedTransition,
+) error {
+	lastUpdateVT := n.serializedNode.GetMetadata().LastUpdateVersionedTransition
+	if transitionhistory.Compare(lastUpdateVT, nextVersionedTransition) != 0 {
+		// root not updated in this transition
+		// and this covers all standby logic as well
+		return nil
 	}
+
+	if n.terminated {
+		return n.backend.UpdateWorkflowStateStatus(
+			enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+			enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+		)
+	}
+
+	chasmContext := NewContext(context.Background(), n)
+	component, err := n.Component(chasmContext, ComponentRef{})
+	if err != nil {
+		return err
+	}
+	lifecycleState := component.LifecycleState(chasmContext)
+
+	var newState enumsspb.WorkflowExecutionState
+	var newStatus enumspb.WorkflowExecutionStatus
+	switch lifecycleState {
+	case LifecycleStateRunning:
+		newState = enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING
+		newStatus = enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
+	case LifecycleStateCompleted:
+		newState = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
+		newStatus = enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+	case LifecycleStateFailed:
+		newState = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
+		newStatus = enumspb.WORKFLOW_EXECUTION_STATUS_FAILED
+	default:
+		return serviceerror.NewInternal(fmt.Sprintf("unknown component lifecycle state: %v", lifecycleState))
+	}
+
+	return n.backend.UpdateWorkflowStateStatus(newState, newStatus)
+}
+
+//nolint:revive // cognitive complexity 28 (> max enabled 25)
+func (n *Node) closeTransactionUpdateComponentTasks(
+	nextVersionedTransition *persistencespb.VersionedTransition,
+) error {
+	taskOffset := int64(1)
 
 	for _, node := range n.andAllChildren() {
 		// no-op if node is not a component
@@ -758,6 +840,8 @@ func (n *Node) closeTransactionUpdateComponentTasks() error {
 		}
 
 		// no-op if node is not updated in this transition
+		// This also prevents standby logic from updating component tasks, since the condition
+		// will never be true.
 		lastUpdateVT := node.serializedNode.GetMetadata().LastUpdateVersionedTransition
 		if transitionhistory.Compare(lastUpdateVT, nextVersionedTransition) != 0 {
 			return nil
@@ -1266,6 +1350,42 @@ func (n *Node) isValueNeedSerialize() bool {
 	}
 
 	return false
+}
+
+func (n *Node) Terminate(
+	request TerminateComponentRequest,
+) error {
+	mutableContext := NewMutableContext(context.Background(), n.root())
+	component, err := n.Component(mutableContext, ComponentRef{})
+	if err != nil {
+		return err
+	}
+
+	_, err = component.Terminate(mutableContext, request)
+	if err != nil {
+		return err
+	}
+
+	n.terminated = true
+	return nil
+}
+
+func (n *Node) Archetype() string {
+	root := n.root()
+	if root.serializedNode == nil {
+		// Empty tree
+		return ""
+	}
+
+	// Root must have be a component.
+	return root.serializedNode.Metadata.GetComponentAttributes().Type
+}
+
+func (n *Node) root() *Node {
+	if n.parent == nil {
+		return n
+	}
+	return n.parent.root()
 }
 
 // isComponentTaskExpired returns true when the task's scheduled time is equal

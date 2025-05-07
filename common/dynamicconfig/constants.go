@@ -2118,7 +2118,7 @@ the user has not specified an explicit RetryPolicy`,
 		`DefaultWorkflowRetryPolicy represents the out-of-box retry policy for unset fields
 where the user has set an explicit RetryPolicy, but not specified all the fields`,
 	)
-	FollowReusePolicyAfterConflictPolicyTerminate = NewNamespaceTypedSetting(
+	FollowReusePolicyAfterConflictPolicyTerminate = NewNamespaceBoolSetting(
 		"history.followReusePolicyAfterConflictPolicyTerminate",
 		true,
 		`Follows WorkflowIdReusePolicy RejectDuplicate and AllowDuplicateFailedOnly after WorkflowIdReusePolicy TerminateExisting was applied.
@@ -2427,6 +2427,13 @@ that task will be sent to DLQ.`,
 		"history.sendRawHistoryBetweenInternalServices",
 		false,
 		`SendRawHistoryBetweenInternalServices is whether to send raw history events between internal temporal services`,
+	)
+
+	// TODO(rodrigozhou): This is temporary dynamic config to be removed before the next release.
+	EnableRequestIdRefLinks = NewGlobalBoolSetting(
+		"history.enableRequestIdRefLinks",
+		false,
+		"Enable generating request ID reference links",
 	)
 
 	// keys for worker

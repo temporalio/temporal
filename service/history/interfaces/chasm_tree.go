@@ -11,12 +11,16 @@ import (
 
 var _ ChasmTree = (*chasm.Node)(nil)
 
+// TODO: Remove this interface and use *chasm.Node directly
+// when chasm/tree.go implementation completes.
 type ChasmTree interface {
 	CloseTransaction() (chasm.NodesMutation, error)
 	Snapshot(*persistencespb.VersionedTransition) chasm.NodesSnapshot
 	ApplyMutation(chasm.NodesMutation) error
 	ApplySnapshot(chasm.NodesSnapshot) error
 	IsDirty() bool
+	Terminate(chasm.TerminateComponentRequest) error
+	Archetype() string
 
 	EachPureTask(
 		deadline time.Time,

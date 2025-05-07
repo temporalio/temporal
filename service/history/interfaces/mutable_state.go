@@ -311,6 +311,8 @@ type (
 		HasCompletedAnyWorkflowTask() bool
 
 		HSM() *hsm.Node
+
+		IsWorkflow() bool
 		ChasmTree() ChasmTree
 
 		// NextTransitionCount returns the next state transition count from the state transition history.
