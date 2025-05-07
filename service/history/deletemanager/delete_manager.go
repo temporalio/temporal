@@ -33,7 +33,6 @@ type (
 			we *commonpb.WorkflowExecution,
 			weCtx historyi.WorkflowContext,
 			ms historyi.MutableState,
-			forceDeleteFromOpenVisibility bool,
 			stage *tasks.DeleteWorkflowExecutionStage,
 		) error
 		DeleteWorkflowExecutionByRetention(
@@ -110,11 +109,10 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecution(
 	we *commonpb.WorkflowExecution,
 	weCtx historyi.WorkflowContext,
 	ms historyi.MutableState,
-	forceDeleteFromOpenVisibility bool,
 	stage *tasks.DeleteWorkflowExecutionStage,
 ) error {
 
-	return m.deleteWorkflowExecutionInternal(ctx, nsID, we, weCtx, ms, forceDeleteFromOpenVisibility, stage, m.metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryDeleteWorkflowExecutionScope)))
+	return m.deleteWorkflowExecutionInternal(ctx, nsID, we, weCtx, ms, stage, m.metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryDeleteWorkflowExecutionScope)))
 }
 
 func (m *DeleteManagerImpl) DeleteWorkflowExecutionByRetention(
@@ -126,7 +124,7 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecutionByRetention(
 	stage *tasks.DeleteWorkflowExecutionStage,
 ) error {
 
-	return m.deleteWorkflowExecutionInternal(ctx, nsID, we, weCtx, ms, false, stage, m.metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryProcessDeleteHistoryEventScope)))
+	return m.deleteWorkflowExecutionInternal(ctx, nsID, we, weCtx, ms, stage, m.metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryProcessDeleteHistoryEventScope)))
 }
 
 func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
@@ -135,7 +133,6 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 	we *commonpb.WorkflowExecution,
 	weCtx historyi.WorkflowContext,
 	ms historyi.MutableState,
-	forceDeleteFromOpenVisibility bool, //revive:disable-line:flag-parameter
 	stage *tasks.DeleteWorkflowExecutionStage,
 	metricsHandler metrics.Handler,
 ) error {
