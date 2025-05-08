@@ -1696,43 +1696,63 @@ func (n *Node) ExecutePureTask(baseCtx context.Context, taskInstance any) error 
 	return nil
 }
 
-// ExecuteSideEffectTask executes the given taskInstance against the node without
-// hydrating the component value.
-func (n *Node) ExecuteSideEffectTask(
-	baseCtx context.Context,
-	ref ComponentRef,
-	taskInstance any,
+// ExecuteSideEffectTask executes the given ChasmTask without hydrating the CHASM
+// tree from mutable state.
+func ExecuteSideEffectTask(
+	registry *Registry,
+	pathEncoder NodePathEncoder,
+	ctx context.Context,
+	entityKey EntityKey,
+	taskInfo *persistencespb.ChasmTaskInfo,
 ) error {
-	registrableTask, ok := n.registry.taskFor(taskInstance)
+	taskType := taskInfo.Type
+	registrableTask, ok := registry.task(taskType)
 	if !ok {
-		return fmt.Errorf("unknown task type for task instance goType '%s'", reflect.TypeOf(taskInstance).Name())
+		return fmt.Errorf("unknown task type '%s'", taskType)
 	}
 
 	if registrableTask.isPureTask {
-		return fmt.Errorf("ExecuteSideEffectTask called on a Pure task '%s'", registrableTask.fqType())
+		return fmt.Errorf("ExecuteSideEffectTask called on a Pure task '%s'", taskType)
 	}
 
-	// TODO - Side Effect tasks should include the CHASM engine on the context
-	ctx := NewContext(baseCtx, n)
+	path, err := pathEncoder.Decode(taskInfo.Ref.Path)
+	if err != nil {
+		return err
+	}
+
+	ref := ComponentRef{
+		EntityKey:          entityKey,
+		entityGoType:       registrableTask.goType,
+		entityLastUpdateVT: taskInfo.Ref.ComponentLastUpdateVersionedTransition,
+		componentPath:      path,
+		componentInitialVT: taskInfo.Ref.ComponentInitialVersionedTransition,
+	}
 
 	// We can't run the validator up-front because we haven't hydrated the component.
 	// Instead, attach it to the Ref instead, and the component will be validated
 	// upon access.
 	ref.validationFn, ok = registrableTask.validator.(func(Context, Component) error)
 	if !ok {
-		return fmt.Errorf("type assertion failed on validator for task type '%s'", registrableTask.taskType)
+		return fmt.Errorf("type assertion failed on validator for task type '%s'", taskType)
 	}
 
 	executor := registrableTask.handler
 	if executor == nil {
-		return fmt.Errorf("no handler registered for task type '%s'", registrableTask.taskType)
+		return fmt.Errorf("no handler registered for task type '%s'", taskType)
 	}
+
+	taskValue, err := deserializeTask(registrableTask, taskInfo.Data)
+	if err != nil {
+		return err
+	}
+
+	// TODO - Side Effect tasks should include the CHASM engine on the context
 
 	fn := reflect.ValueOf(executor).MethodByName("Execute")
 	result := fn.Call([]reflect.Value{
-		reflect.ValueOf(ctx.getContext()),
+		reflect.ValueOf(ctx),
 		reflect.ValueOf(ref),
-		reflect.ValueOf(taskInstance),
+		reflect.ValueOf(taskValue.Interface()),
 	})
 	if !result[0].IsNil() {
 		//nolint:revive // type cast result is unchecked

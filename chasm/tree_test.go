@@ -1751,7 +1751,7 @@ func (s *nodeSuite) TestExecutePureTask() {
 
 func (s *nodeSuite) TestExecuteSideEffectTask() {
 	persistenceNodes := map[string]*persistencespb.ChasmNode{
-		"somenode/path/1": {
+		"": {
 			Metadata: &persistencespb.ChasmNodeMetadata{
 				InitialVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
 				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
@@ -1763,10 +1763,23 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 		},
 	}
 
-	task := &TestSideEffectTask{
-		Data: []byte("some-stuff"),
+	taskInfo := &persistencespb.ChasmTaskInfo{
+		Ref: &persistencespb.ChasmComponentRef{
+			ComponentInitialVersionedTransition: &persistencespb.VersionedTransition{
+				TransitionCount: 1,
+			},
+			ComponentLastUpdateVersionedTransition: &persistencespb.VersionedTransition{
+				TransitionCount: 1,
+			},
+			Path: "",
+		},
+		Type: "TestLibrary.test_side_effect_task",
+		Data: &commonpb.DataBlob{
+			Data:         nil,
+			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
+		},
 	}
-	ref := ComponentRef{}
+	entityKey := EntityKey{}
 
 	rt, ok := s.registry.Task("TestLibrary.test_side_effect_task")
 	s.True(ok)
@@ -1776,12 +1789,15 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 	s.NotNil(root)
 	ctx := context.Background()
 
+	pathEncoder := NewMockNodePathEncoder(s.controller)
+	pathEncoder.EXPECT().Decode(gomock.Any()).Return([]string{""}, nil).AnyTimes()
+
 	expectExecute := func(result error) {
 		rt.handler.(*MockSideEffectTaskExecutor[any, *TestSideEffectTask]).EXPECT().
 			Execute(
 				gomock.Any(),
 				gomock.Any(),
-				gomock.Eq(task),
+				gomock.Any(),
 			).Return(result).Times(1)
 	}
 
@@ -1791,12 +1807,12 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 
 	// Succeed task execution.
 	expectExecute(nil)
-	err = root.ExecuteSideEffectTask(ctx, ref, task)
+	err = ExecuteSideEffectTask(s.registry, pathEncoder, ctx, entityKey, taskInfo)
 	s.NoError(err)
 
 	// Fail task execution.
 	expectedErr := errors.New("dummy error")
 	expectExecute(expectedErr)
-	err = root.ExecuteSideEffectTask(ctx, ref, task)
+	err = ExecuteSideEffectTask(s.registry, pathEncoder, ctx, entityKey, taskInfo)
 	s.ErrorIs(expectedErr, err)
 }
