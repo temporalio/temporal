@@ -177,6 +177,12 @@ func CompletionHandler(
 	if errors.As(err, new(*serviceerror.NotFound)) && isRetryableNotFoundErr && ref.WorkflowKey.RunID != "" {
 		// Try again without a run ID in case the original run was reset.
 		ref.WorkflowKey.RunID = ""
+		// VersionedTransition is for a specific run. After reset, the TransitionCount will
+		// start from 1 again. Reset the TransitionCount to 0 here to fallback to old ref
+		// validation logic.
+		ref.StateMachineRef.MutableStateVersionedTransition.TransitionCount = 0
+		ref.StateMachineRef.MachineInitialVersionedTransition.TransitionCount = 0
+		ref.StateMachineRef.MachineLastUpdateVersionedTransition.TransitionCount = 0
 		return CompletionHandler(ctx, env, ref, requestID, operationToken, startTime, links, result, opFailedError)
 	}
 	return err
