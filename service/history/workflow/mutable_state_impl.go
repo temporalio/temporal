@@ -25,7 +25,6 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/sdk/temporalnexus"
 	clockspb "go.temporal.io/server/api/clock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -58,6 +57,7 @@ import (
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/components/callbacks"
+	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
@@ -498,7 +498,6 @@ func NewSanitizedMutableState(
 	logger log.Logger,
 	namespaceEntry *namespace.Namespace,
 	mutableStateRecord *persistencespb.WorkflowMutableState,
-	lastFirstEventTxnID int64,
 	lastWriteVersion int64,
 ) (*MutableStateImpl, error) {
 	// Although new versions of temporal server will perform state sanitization,
@@ -514,9 +513,7 @@ func NewSanitizedMutableState(
 		return nil, err
 	}
 
-	mutableState.executionInfo.LastFirstEventTxnId = lastFirstEventTxnID
 	mutableState.currentVersion = lastWriteVersion
-
 	return mutableState, nil
 }
 
@@ -563,6 +560,11 @@ func (ms *MutableStateImpl) mustInitHSM() {
 	ms.stateMachineNode = stateMachineNode
 }
 
+func (ms *MutableStateImpl) IsWorkflow() bool {
+	// TODO: Check if Archetype is workflow archetype when we move part of workflow to CHASM framework as well.
+	return ms.chasmTree.Archetype() == "" // || ms.chasmTree.Archetype() == "Workflow archetype name"
+}
+
 func (ms *MutableStateImpl) HSM() *hsm.Node {
 	return ms.stateMachineNode
 }
@@ -597,18 +599,19 @@ func (ms *MutableStateImpl) GetNexusCompletion(
 			},
 		},
 	}
-	// TODO(rodrigozhou): RequestIdReference depends on a new release of sdk-go.
-	// requestIDInfo := ms.executionState.RequestIds[requestID]
-	// if requestIDInfo.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED {
-	// 	// If the callback was attached, then replace with RequestIdReference.
-	// 	link.Reference = &commonpb.Link_WorkflowEvent_RequestIdRef{
-	// 		RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
-	// 			RequestId: requestID,
-	// 			EventType: requestIDInfo.GetEventType(),
-	// 		},
-	// 	}
-	// }
-	startLink := temporalnexus.ConvertLinkWorkflowEventToNexusLink(link)
+	if ms.config.EnableRequestIdRefLinks() {
+		requestIDInfo := ms.executionState.RequestIds[requestID]
+		if requestIDInfo.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED {
+			// If the callback was attached, then replace with RequestIdReference.
+			link.Reference = &commonpb.Link_WorkflowEvent_RequestIdRef{
+				RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
+					RequestId: requestID,
+					EventType: requestIDInfo.GetEventType(),
+				},
+			}
+		}
+	}
+	startLink := nexusoperations.ConvertLinkWorkflowEventToNexusLink(link)
 
 	switch ce.GetEventType() {
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:
@@ -909,7 +912,12 @@ func (ms *MutableStateImpl) UpdateCurrentVersion(
 }
 
 func (ms *MutableStateImpl) GetCurrentVersion() int64 {
+	// TODO: can we always return ms.currentVersion here?
 	if ms.executionInfo.VersionHistories != nil {
+		return ms.currentVersion
+	}
+
+	if ms.transitionHistoryEnabled && len(ms.executionInfo.TransitionHistory) != 0 {
 		return ms.currentVersion
 	}
 
@@ -937,22 +945,46 @@ func (ms *MutableStateImpl) GetStartVersion() (int64, error) {
 		if err != nil {
 			return 0, err
 		}
-		firstItem, err := versionhistory.GetFirstVersionHistoryItem(versionHistory)
-		if err != nil {
-			return 0, err
+
+		if !versionhistory.IsEmptyVersionHistory(versionHistory) {
+			firstItem, err := versionhistory.GetFirstVersionHistoryItem(versionHistory)
+			if err != nil {
+				return 0, err
+			}
+			return firstItem.GetVersion(), nil
 		}
-		return firstItem.GetVersion(), nil
+	}
+
+	// We can't check TransitionHistory before VersionHistories because old workflows (mutable state) may
+	// not have transition history enabled while they are running, so the first item in the transition history
+	// is not the actual start version.
+	//
+	// However, this assumes that if mutable state has event, it must also generate an event in it's first transition.
+	// That assumption is true today, but no necessarily true in the future. We should fix this if we ever
+	// have such a case.
+	if ms.transitionHistoryEnabled && len(ms.executionInfo.TransitionHistory) != 0 {
+		return ms.executionInfo.TransitionHistory[0].GetNamespaceFailoverVersion(), nil
 	}
 
 	return common.EmptyVersion, nil
 }
 
 func (ms *MutableStateImpl) GetCloseVersion() (int64, error) {
-	if ms.IsWorkflowExecutionRunning() {
-		return common.EmptyVersion, serviceerror.NewInternal("GetCloseVersion: workflow is still running")
+	// TODO: Remove this special handling for zombie workflow.
+	// This method should not be called for zombie workflow as it's not considered closed (though it's not running either).
+	//
+	// However, most callers in this codebase simply check if workflowIsRunning before calling this method, so we cloud reach here
+	// even if the workflow is zombie.
+	// Most callers are in task executor logic, and we should just prevent any task executor from running when workflow is in zombie state.
+	if ms.executionState.State == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
+		return ms.GetLastWriteVersion()
 	}
 
-	// here we assume that closing a workflow must generate an event
+	// Do NOT use ms.IsWorkflowExecutionRunning() for the check.
+	// Zombie workflow is not considered running but also not closed.
+	if ms.executionState.State != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+		return common.EmptyVersion, serviceerror.NewInternal(fmt.Sprintf("workflow still running, current state: %v", ms.executionState.State.String()))
+	}
 
 	// if workflow is closing in the current transation,
 	// then the last event is closed event and the event version is the close version
@@ -960,7 +992,34 @@ func (ms *MutableStateImpl) GetCloseVersion() (int64, error) {
 		return lastEventVersion, nil
 	}
 
-	return ms.GetLastEventVersion()
+	// We check version history first to prevserve the existing behaior of workflow to minimize risk.
+	// However, this assumes that if mutable state has event, it must also generate an event upon closing.
+	// That assumption is true today, but no necessarily true in the future. We should fix this if we ever
+	// have such a case.
+	if ms.executionInfo.VersionHistories != nil {
+		isEmpty, err := versionhistory.IsCurrentVersionHistoryEmpty(ms.executionInfo.VersionHistories)
+		if err != nil {
+			return common.EmptyVersion, err
+		}
+		if !isEmpty {
+			return ms.GetLastEventVersion()
+		}
+	}
+
+	if ms.transitionHistoryEnabled {
+		if ms.executionStateUpdated {
+			// closing in the current transaction
+			return ms.GetCurrentVersion(), nil
+		}
+
+		// once the mutable state is closed, the execution state will no longer be updated.
+		// so the last update version is the close version.
+		if ms.executionState.LastUpdateVersionedTransition != nil {
+			return ms.executionState.LastUpdateVersionedTransition.NamespaceFailoverVersion, nil
+		}
+	}
+
+	return common.EmptyVersion, nil
 }
 
 func (ms *MutableStateImpl) GetLastWriteVersion() (int64, error) {
@@ -5813,7 +5872,9 @@ func (ms *MutableStateImpl) UpdateWorkflowStateStatus(
 	if state == ms.executionState.State && status == ms.executionState.Status {
 		return nil
 	}
-	if state != enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
+	if state != enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE &&
+		ms.executionState.State != enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
+		// Suppress and Revive workflows are cluster local operations.
 		ms.executionStateUpdated = true
 		ms.visibilityUpdated = true // workflow status & state change triggers visibility change as well
 	}
@@ -6054,6 +6115,15 @@ func (ms *MutableStateImpl) closeTransaction(
 		return closeTransactionResult{}, err
 	}
 
+	// CloseTransaction() on chasmTree may update execution state & status,
+	// so must be called before closeTransactionUpdateTransitionHistory().
+	//
+	// TODO: update approximateSize once chasm.NodesMutation returns size change as well.
+	chasmNodesMutation, err := ms.chasmTree.CloseTransaction()
+	if err != nil {
+		return closeTransactionResult{}, err
+	}
+
 	if isStateDirty {
 		if err := ms.closeTransactionUpdateTransitionHistory(
 			transactionPolicy,
@@ -6061,12 +6131,7 @@ func (ms *MutableStateImpl) closeTransaction(
 			return closeTransactionResult{}, err
 		}
 		ms.closeTransactionHandleUnknownVersionedTransition()
-	}
-
-	// TODO: update approximateSize once chasm.NodesMutation returns size change as well.
-	chasmNodesMutation, err := ms.chasmTree.CloseTransaction()
-	if err != nil {
-		return closeTransactionResult{}, err
+		ms.closeTransactionUpdateLastRunningClock(transactionPolicy, workflowEventsSeq)
 	}
 
 	ms.closeTransactionTrackLastUpdateVersionedTransition(
@@ -6079,6 +6144,7 @@ func (ms *MutableStateImpl) closeTransaction(
 		transactionPolicy,
 		eventBatches,
 		clearBuffer,
+		isStateDirty,
 	); err != nil {
 		return closeTransactionResult{}, err
 	}
@@ -6322,6 +6388,33 @@ func (ms *MutableStateImpl) closeTransactionHandleUnknownVersionedTransition() {
 	}
 }
 
+func (ms *MutableStateImpl) closeTransactionUpdateLastRunningClock(
+	transactionPolicy historyi.TransactionPolicy,
+	workflowEventsSeq []*persistence.WorkflowEvents,
+) {
+	if transactionPolicy != historyi.TransactionPolicyActive {
+		return
+	}
+
+	// Events can only be generated while mutable state is running,
+	// so we can update LastRunningClock blindly.
+	if len(workflowEventsSeq) > 0 {
+		lastEvents := workflowEventsSeq[len(workflowEventsSeq)-1].Events
+		lastEvent := lastEvents[len(lastEvents)-1]
+		ms.executionInfo.LastRunningClock = lastEvent.GetTaskId()
+		return
+	}
+
+	if !ms.IsWorkflowExecutionRunning() && !ms.IsCurrentWorkflowGuaranteed() {
+		// If workflow currently is not running and also not running at the beginning of the transaction,
+		// then don't update the lastRunningClock
+		// NOTE: running at the beginning of the transaction == it's a current workflow in DB.
+		return
+	}
+
+	ms.executionInfo.LastRunningClock = ms.shard.CurrentVectorClock().GetClock()
+}
+
 func (ms *MutableStateImpl) closeTransactionTrackTombstones(
 	transactionPolicy historyi.TransactionPolicy,
 	chasmNodesMutation chasm.NodesMutation,
@@ -6453,6 +6546,7 @@ func (ms *MutableStateImpl) closeTransactionPrepareTasks(
 	transactionPolicy historyi.TransactionPolicy,
 	eventBatches [][]*historypb.HistoryEvent,
 	clearBufferEvents bool,
+	isStateDirty bool,
 ) error {
 	if err := ms.closeTransactionHandleWorkflowResetTask(
 		transactionPolicy,
@@ -6466,6 +6560,10 @@ func (ms *MutableStateImpl) closeTransactionPrepareTasks(
 
 	ms.closeTransactionCollapseVisibilityTasks()
 
+	if err := ms.closeTransactionGenerateChasmRetentionTask(isStateDirty); err != nil {
+		return err
+	}
+
 	// TODO merge active & passive task generation
 	// NOTE: this function must be the last call
 	//  since we only generate at most one activity & user timer,
@@ -6476,6 +6574,25 @@ func (ms *MutableStateImpl) closeTransactionPrepareTasks(
 	}
 
 	return ms.closeTransactionPrepareReplicationTasks(transactionPolicy, eventBatches, clearBufferEvents)
+}
+
+func (ms *MutableStateImpl) closeTransactionGenerateChasmRetentionTask(
+	isStateDirty bool,
+) error {
+
+	if !isStateDirty ||
+		ms.IsWorkflow() ||
+		ms.executionState.State != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED ||
+		transitionhistory.Compare(
+			ms.executionState.LastUpdateVersionedTransition,
+			ms.CurrentVersionedTransition(),
+		) != 0 {
+		return nil
+	}
+
+	closeTime := ms.timeSource.Now()
+	ms.executionInfo.CloseTime = timestamppb.New(closeTime)
+	return ms.taskGenerator.GenerateDeleteHistoryEventTask(closeTime)
 }
 
 func (ms *MutableStateImpl) closeTransactionPrepareReplicationTasks(
@@ -6499,9 +6616,9 @@ func (ms *MutableStateImpl) closeTransactionPrepareReplicationTasks(
 			replicationTasks = append(replicationTasks, task...)
 		}
 	}
-
 	replicationTasks = append(replicationTasks, ms.syncActivityToReplicationTask(transactionPolicy)...)
 	replicationTasks = append(replicationTasks, ms.dirtyHSMToReplicationTask(transactionPolicy, eventBatches, clearBufferEvents)...)
+
 	if ms.transitionHistoryEnabled {
 		switch transactionPolicy {
 		case historyi.TransactionPolicyActive:
@@ -6512,7 +6629,9 @@ func (ms *MutableStateImpl) closeTransactionPrepareReplicationTasks(
 					ms.executionInfo.WorkflowId,
 					ms.executionState.RunId,
 				)
-				var firstEventID, firstEventVersion, nextEventID int64
+				firstEventID := common.EmptyEventID
+				firstEventVersion := common.EmptyVersion
+				nextEventID := common.EmptyEventID
 				var lastVersionHistoryItem *historyspb.VersionHistoryItem
 				if len(eventBatches) > 0 {
 					firstEventID = eventBatches[0][0].EventId
@@ -6524,15 +6643,16 @@ func (ms *MutableStateImpl) closeTransactionPrepareReplicationTasks(
 					if err != nil {
 						return err
 					}
-					item, err := versionhistory.GetLastVersionHistoryItem(currentHistory)
-					if err != nil {
-						return err
+					if !versionhistory.IsEmptyVersionHistory(currentHistory) {
+						item, err := versionhistory.GetLastVersionHistoryItem(currentHistory)
+						//nolint:revive // max-control-nesting: control flow nesting exceeds 5
+						if err != nil {
+							return err
+						}
+						lastVersionHistoryItem = versionhistory.CopyVersionHistoryItem(item)
 					}
-					firstEventID = common.EmptyEventID
-					firstEventVersion = common.EmptyVersion
-					nextEventID = common.EmptyEventID
-					lastVersionHistoryItem = versionhistory.CopyVersionHistoryItem(item)
 				}
+
 				currentVersionedTransition := ms.CurrentVersionedTransition()
 				if currentVersionedTransition != nil && transitionhistory.Compare(
 					ms.versionedTransitionInDB,
@@ -6836,7 +6956,6 @@ func (ms *MutableStateImpl) updateWithLastWriteEvent(
 	)); err != nil {
 		return err
 	}
-	ms.executionInfo.LastEventTaskId = lastEvent.GetTaskId()
 
 	return nil
 }

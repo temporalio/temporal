@@ -1020,6 +1020,17 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_FirstTask_Sy
 		nil,
 		int64(100),
 	), nil).AnyTimes()
+	mockWeCtx := historyi.NewMockWorkflowContext(s.controller)
+	s.mockWorkflowCache.EXPECT().GetOrCreateWorkflowExecution(
+		gomock.Any(),
+		s.mockShard,
+		namespace.ID(namespaceID),
+		&commonpb.WorkflowExecution{
+			WorkflowId: s.workflowID,
+			RunId:      s.runID,
+		},
+		locks.PriorityLow,
+	).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
 
 	err = workflowStateReplicator.ReplicateVersionedTransition(context.Background(), versionedTransitionArtifact, "test")
 	s.Error(err)

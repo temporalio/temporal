@@ -40,17 +40,32 @@ func (m *MockComponent) EXPECT() *MockComponentMockRecorder {
 }
 
 // LifecycleState mocks base method.
-func (m *MockComponent) LifecycleState() LifecycleState {
+func (m *MockComponent) LifecycleState(arg0 Context) LifecycleState {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "LifecycleState")
+	ret := m.ctrl.Call(m, "LifecycleState", arg0)
 	ret0, _ := ret[0].(LifecycleState)
 	return ret0
 }
 
 // LifecycleState indicates an expected call of LifecycleState.
-func (mr *MockComponentMockRecorder) LifecycleState() *gomock.Call {
+func (mr *MockComponentMockRecorder) LifecycleState(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LifecycleState", reflect.TypeOf((*MockComponent)(nil).LifecycleState))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LifecycleState", reflect.TypeOf((*MockComponent)(nil).LifecycleState), arg0)
+}
+
+// Terminate mocks base method.
+func (m *MockComponent) Terminate(arg0 MutableContext, arg1 TerminateComponentRequest) (TerminateComponentResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Terminate", arg0, arg1)
+	ret0, _ := ret[0].(TerminateComponentResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Terminate indicates an expected call of Terminate.
+func (mr *MockComponentMockRecorder) Terminate(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Terminate", reflect.TypeOf((*MockComponent)(nil).Terminate), arg0, arg1)
 }
 
 // mustEmbedUnimplementedComponent mocks base method.

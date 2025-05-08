@@ -16,7 +16,6 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/sdk/temporalnexus"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
@@ -312,7 +311,7 @@ func (e taskExecutor) loadOperationArgs(
 		args.scheduleToCloseTimeout = event.GetNexusOperationScheduledEventAttributes().GetScheduleToCloseTimeout().AsDuration()
 		args.payload = event.GetNexusOperationScheduledEventAttributes().GetInput()
 		args.header = event.GetNexusOperationScheduledEventAttributes().GetNexusHeader()
-		args.nexusLink = temporalnexus.ConvertLinkWorkflowEventToNexusLink(&commonpb.Link_WorkflowEvent{
+		args.nexusLink = ConvertLinkWorkflowEventToNexusLink(&commonpb.Link_WorkflowEvent{
 			Namespace:  ns.Name().String(),
 			WorkflowId: ref.WorkflowKey.WorkflowID,
 			RunId:      ref.WorkflowKey.RunID,
@@ -348,7 +347,7 @@ func (e taskExecutor) saveResult(ctx context.Context, env hsm.Environment, ref h
 			for _, nexusLink := range result.Links {
 				switch nexusLink.Type {
 				case string((&commonpb.Link_WorkflowEvent{}).ProtoReflect().Descriptor().FullName()):
-					link, err := temporalnexus.ConvertNexusLinkToLinkWorkflowEvent(nexusLink)
+					link, err := ConvertNexusLinkToLinkWorkflowEvent(nexusLink)
 					if err != nil {
 						// TODO(rodrigozhou): links are non-essential for the execution of the workflow,
 						// so ignoring the error for now; we will revisit how to handle these errors later.

@@ -145,7 +145,7 @@ type WorkflowExecutionInfo struct {
 	WorkflowExecutionTimeout                *durationpb.Duration   `protobuf:"bytes,11,opt,name=workflow_execution_timeout,json=workflowExecutionTimeout,proto3" json:"workflow_execution_timeout,omitempty"`
 	WorkflowRunTimeout                      *durationpb.Duration   `protobuf:"bytes,12,opt,name=workflow_run_timeout,json=workflowRunTimeout,proto3" json:"workflow_run_timeout,omitempty"`
 	DefaultWorkflowTaskTimeout              *durationpb.Duration   `protobuf:"bytes,13,opt,name=default_workflow_task_timeout,json=defaultWorkflowTaskTimeout,proto3" json:"default_workflow_task_timeout,omitempty"`
-	LastEventTaskId                         int64                  `protobuf:"varint,17,opt,name=last_event_task_id,json=lastEventTaskId,proto3" json:"last_event_task_id,omitempty"`
+	LastRunningClock                        int64                  `protobuf:"varint,17,opt,name=last_running_clock,json=lastRunningClock,proto3" json:"last_running_clock,omitempty"`
 	LastFirstEventId                        int64                  `protobuf:"varint,18,opt,name=last_first_event_id,json=lastFirstEventId,proto3" json:"last_first_event_id,omitempty"`
 	LastCompletedWorkflowTaskStartedEventId int64                  `protobuf:"varint,19,opt,name=last_completed_workflow_task_started_event_id,json=lastCompletedWorkflowTaskStartedEventId,proto3" json:"last_completed_workflow_task_started_event_id,omitempty"`
 	// Deprecated. use `WorkflowExecutionState.start_time`
@@ -447,9 +447,9 @@ func (x *WorkflowExecutionInfo) GetDefaultWorkflowTaskTimeout() *durationpb.Dura
 	return nil
 }
 
-func (x *WorkflowExecutionInfo) GetLastEventTaskId() int64 {
+func (x *WorkflowExecutionInfo) GetLastRunningClock() int64 {
 	if x != nil {
-		return x.LastEventTaskId
+		return x.LastRunningClock
 	}
 	return 0
 }
@@ -2326,13 +2326,17 @@ type ActivityInfo struct {
 	LastWorkerDeploymentVersion string `protobuf:"bytes,44,opt,name=last_worker_deployment_version,json=lastWorkerDeploymentVersion,proto3" json:"last_worker_deployment_version,omitempty"`
 	// The deployment version this activity was dispatched to most recently. Present only if the activity
 	// was dispatched to a versioned worker.
-	LastDeploymentVersion *v18.WorkerDeploymentVersion `protobuf:"bytes,47,opt,name=last_deployment_version,json=lastDeploymentVersion,proto3" json:"last_deployment_version,omitempty"`
+	LastDeploymentVersion *v18.WorkerDeploymentVersion `protobuf:"bytes,49,opt,name=last_deployment_version,json=lastDeploymentVersion,proto3" json:"last_deployment_version,omitempty"`
 	// Priority metadata. If this message is not present, or any fields are not
 	// present, they inherit the values from the workflow.
-	Priority      *v12.Priority           `protobuf:"bytes,45,opt,name=priority,proto3" json:"priority,omitempty"`
-	PauseInfo     *ActivityInfo_PauseInfo `protobuf:"bytes,46,opt,name=pause_info,json=pauseInfo,proto3" json:"pause_info,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Priority  *v12.Priority           `protobuf:"bytes,45,opt,name=priority,proto3" json:"priority,omitempty"`
+	PauseInfo *ActivityInfo_PauseInfo `protobuf:"bytes,46,opt,name=pause_info,json=pauseInfo,proto3" json:"pause_info,omitempty"`
+	// set to true if there was an activity reset while activity is still running on the worker
+	ActivityReset bool `protobuf:"varint,47,opt,name=activity_reset,json=activityReset,proto3" json:"activity_reset,omitempty"`
+	// set to true if reset heartbeat flag was set with an activity reset
+	ResetHeartbeats bool `protobuf:"varint,48,opt,name=reset_heartbeats,json=resetHeartbeats,proto3" json:"reset_heartbeats,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *ActivityInfo) Reset() {
@@ -2682,6 +2686,20 @@ func (x *ActivityInfo) GetPauseInfo() *ActivityInfo_PauseInfo {
 		return x.PauseInfo
 	}
 	return nil
+}
+
+func (x *ActivityInfo) GetActivityReset() bool {
+	if x != nil {
+		return x.ActivityReset
+	}
+	return false
+}
+
+func (x *ActivityInfo) GetResetHeartbeats() bool {
+	if x != nil {
+		return x.ResetHeartbeats
+	}
+	return false
 }
 
 type isActivityInfo_BuildIdInfo interface {
@@ -4264,7 +4282,7 @@ const file_temporal_server_api_persistence_v1_executions_proto_rawDesc = "" +
 	"\x03key\x18\x01 \x01(\x05R\x03key\x12D\n" +
 	"\x05value\x18\x02 \x01(\v2..temporal.server.api.persistence.v1.QueueStateR\x05value:\x028\x01J\x04\b\x04\x10\x05J\x04\b\x05\x10\x06J\x04\b\b\x10\tJ\x04\b\t\x10\n" +
 	"J\x04\b\n" +
-	"\x10\vJ\x04\b\v\x10\fJ\x04\b\f\x10\rJ\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11\"\xc6:\n" +
+	"\x10\vJ\x04\b\v\x10\fJ\x04\b\f\x10\rJ\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11\"\xc7:\n" +
 	"\x15WorkflowExecutionInfo\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
@@ -4280,8 +4298,8 @@ const file_temporal_server_api_persistence_v1_executions_proto_rawDesc = "" +
 	" \x01(\tR\x10workflowTypeName\x12W\n" +
 	"\x1aworkflow_execution_timeout\x18\v \x01(\v2\x19.google.protobuf.DurationR\x18workflowExecutionTimeout\x12K\n" +
 	"\x14workflow_run_timeout\x18\f \x01(\v2\x19.google.protobuf.DurationR\x12workflowRunTimeout\x12\\\n" +
-	"\x1ddefault_workflow_task_timeout\x18\r \x01(\v2\x19.google.protobuf.DurationR\x1adefaultWorkflowTaskTimeout\x12+\n" +
-	"\x12last_event_task_id\x18\x11 \x01(\x03R\x0flastEventTaskId\x12-\n" +
+	"\x1ddefault_workflow_task_timeout\x18\r \x01(\v2\x19.google.protobuf.DurationR\x1adefaultWorkflowTaskTimeout\x12,\n" +
+	"\x12last_running_clock\x18\x11 \x01(\x03R\x10lastRunningClock\x12-\n" +
 	"\x13last_first_event_id\x18\x12 \x01(\x03R\x10lastFirstEventId\x12^\n" +
 	"-last_completed_workflow_task_started_event_id\x18\x13 \x01(\x03R'lastCompletedWorkflowTaskStartedEventId\x129\n" +
 	"\n" +
@@ -4507,7 +4525,7 @@ const file_temporal_server_api_persistence_v1_executions_proto_rawDesc = "" +
 	"\x17NexusInvocationTaskInfo\x12\x18\n" +
 	"\aattempt\x18\x01 \x01(\x05R\aattempt\"4\n" +
 	"\x18NexusCancelationTaskInfo\x12\x18\n" +
-	"\aattempt\x18\x01 \x01(\x05R\aattempt\"\xa7\x1a\n" +
+	"\aattempt\x18\x01 \x01(\x05R\aattempt\"\xf9\x1a\n" +
 	"\fActivityInfo\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\x03R\aversion\x127\n" +
 	"\x18scheduled_event_batch_id\x18\x02 \x01(\x03R\x15scheduledEventBatchId\x12A\n" +
@@ -4554,10 +4572,12 @@ const file_temporal_server_api_persistence_v1_executions_proto_rawDesc = "" +
 	"\x06paused\x18* \x01(\bR\x06paused\x12^\n" +
 	"\x17last_started_deployment\x18+ \x01(\v2&.temporal.api.deployment.v1.DeploymentR\x15lastStartedDeployment\x12C\n" +
 	"\x1elast_worker_deployment_version\x18, \x01(\tR\x1blastWorkerDeploymentVersion\x12k\n" +
-	"\x17last_deployment_version\x18/ \x01(\v23.temporal.api.deployment.v1.WorkerDeploymentVersionR\x15lastDeploymentVersion\x12<\n" +
+	"\x17last_deployment_version\x181 \x01(\v23.temporal.api.deployment.v1.WorkerDeploymentVersionR\x15lastDeploymentVersion\x12<\n" +
 	"\bpriority\x18- \x01(\v2 .temporal.api.common.v1.PriorityR\bpriority\x12Y\n" +
 	"\n" +
-	"pause_info\x18. \x01(\v2:.temporal.server.api.persistence.v1.ActivityInfo.PauseInfoR\tpauseInfo\x1ay\n" +
+	"pause_info\x18. \x01(\v2:.temporal.server.api.persistence.v1.ActivityInfo.PauseInfoR\tpauseInfo\x12%\n" +
+	"\x0eactivity_reset\x18/ \x01(\bR\ractivityReset\x12)\n" +
+	"\x10reset_heartbeats\x180 \x01(\bR\x0fresetHeartbeats\x1ay\n" +
 	"\x16UseWorkflowBuildIdInfo\x12+\n" +
 	"\x12last_used_build_id\x18\x01 \x01(\tR\x0flastUsedBuildId\x122\n" +
 	"\x15last_redirect_counter\x18\x02 \x01(\x03R\x13lastRedirectCounter\x1a\x89\x02\n" +

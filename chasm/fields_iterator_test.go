@@ -127,7 +127,7 @@ func (s *fieldsIteratorSuite) TestFieldsOf() {
 			}{},
 			expectedKinds:  []fieldKind{fieldKindData, fieldKindSubField, fieldKindSubCollection},
 			expectedNames:  []string{"DataField", "SubField", "SubCollection"},
-			expectedTypes:  []string{"*persistence.ActivityInfo", "chasm.Field[string]", "chasm.Collection[int]"},
+			expectedTypes:  []string{"*persistence.WorkflowExecutionState", "chasm.Field[string]", "chasm.Collection[int]"},
 			expectedErrors: []string{"", "", ""},
 		},
 		{
@@ -143,7 +143,7 @@ func (s *fieldsIteratorSuite) TestFieldsOf() {
 			input:          &fieldPointer{},
 			expectedKinds:  []fieldKind{fieldKindData, fieldKindUnspecified},
 			expectedNames:  []string{"DataField", "InvalidField"},
-			expectedTypes:  []string{"*persistence.ActivityInfo", "*chasm.Field[string]"},
+			expectedTypes:  []string{"*persistence.WorkflowExecutionState", "*chasm.Field[string]"},
 			expectedErrors: []string{"", "*chasm.fieldPointer.InvalidField: chasm field type *chasm.Field[string] must not be a pointer"},
 		},
 		{
@@ -151,7 +151,7 @@ func (s *fieldsIteratorSuite) TestFieldsOf() {
 			input:          &twoDataFields{},
 			expectedKinds:  []fieldKind{fieldKindData, fieldKindData},
 			expectedNames:  []string{"DataField", "AnotherDataField"},
-			expectedTypes:  []string{"*persistence.ActivityInfo", "*persistence.ActivityInfo"},
+			expectedTypes:  []string{"*persistence.WorkflowExecutionState", "*persistence.WorkflowExecutionState"},
 			expectedErrors: []string{"", "*chasm.twoDataFields.AnotherDataField: only one data field DataField (implements proto.Message) allowed in component"},
 		},
 		{

@@ -793,6 +793,25 @@ func (s *versionHistoriesSuite) TestFindLCAVersionHistoryItemFromItems() {
 	)
 }
 
+func (s *versionHistoriesSuite) TestAddEmptyVersionHistory() {
+	versionHistories := NewVersionHistories(&historyspb.VersionHistory{
+		BranchToken: []byte("random branch token"),
+		Items: []*historyspb.VersionHistoryItem{
+			{EventId: 1, Version: 1},
+			{EventId: 2, Version: 2},
+		},
+	})
+
+	idx := AddEmptyVersionHistory(versionHistories)
+	actualVersionHistory, err := GetVersionHistory(versionHistories, idx)
+	s.NoError(err)
+	s.True(IsEmptyVersionHistory(actualVersionHistory))
+
+	// Add another empty version history and check if the previous empty one is reused.
+	idx2 := AddEmptyVersionHistory(versionHistories)
+	s.Equal(idx, idx2)
+}
+
 func (s *versionHistoriesSuite) findLCAVersionHistoryItemFromItemsTestBase(
 	versionHistoryItemsA [][]*historyspb.VersionHistoryItem,
 	versionHistoryItemsB []*historyspb.VersionHistoryItem,

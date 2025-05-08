@@ -9,6 +9,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/payloads"
@@ -76,34 +77,38 @@ func (r *WorkflowImpl) GetVectorClock() (int64, int64, error) {
 			return 0, 0, err
 		}
 	} else {
+		// TODO: If workflow is in zombie state, it should call GetLastWriteVersion() instead of
+		// GetCloseVersion().
+		// Zombie state is handled specially in GetCloseVersion() implementation today, but we should
+		// eventually remove that special handling.
 		version, err = r.mutableState.GetCloseVersion()
 		if err != nil {
 			return 0, 0, err
 		}
 	}
 
-	lastEventTaskID := r.mutableState.GetExecutionInfo().LastEventTaskId
-	return version, lastEventTaskID, nil
+	lastRunningClock := r.mutableState.GetExecutionInfo().LastRunningClock
+	return version, lastRunningClock, nil
 }
 
 func (r *WorkflowImpl) HappensAfter(
 	that Workflow,
 ) (bool, error) {
 
-	thisLastWriteVersion, thisLastEventTaskID, err := r.GetVectorClock()
+	thisLastWriteVersion, thisLastRunningClock, err := r.GetVectorClock()
 	if err != nil {
 		return false, err
 	}
-	thatLastWriteVersion, thatLastEventTaskID, err := that.GetVectorClock()
+	thatLastWriteVersion, thatLastRunningClock, err := that.GetVectorClock()
 	if err != nil {
 		return false, err
 	}
 
 	return WorkflowHappensAfter(
 		thisLastWriteVersion,
-		thisLastEventTaskID,
+		thisLastRunningClock,
 		thatLastWriteVersion,
-		thatLastEventTaskID,
+		thatLastRunningClock,
 	), nil
 }
 
@@ -117,10 +122,10 @@ func (r *WorkflowImpl) Revive() error {
 		return nil
 	}
 
-	// workflow is in zombie state, need to set the state correctly accordingly
-	state = enumsspb.WORKFLOW_EXECUTION_STATE_CREATED
-	if r.mutableState.HadOrHasWorkflowTask() {
-		state = enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING
+	// mutable state is in zombie state, need to set the state correctly accordingly
+	state = enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING
+	if r.mutableState.IsWorkflow() && !r.mutableState.HadOrHasWorkflowTask() {
+		state = enumsspb.WORKFLOW_EXECUTION_STATE_CREATED
 	}
 	return r.mutableState.UpdateWorkflowStateStatus(
 		state,
@@ -139,20 +144,20 @@ func (r *WorkflowImpl) SuppressBy(
 	// if the workflow to be suppressed has last write version being remote active
 	//  then turn this workflow into a zombie
 
-	lastWriteVersion, lastEventTaskID, err := r.GetVectorClock()
+	lastWriteVersion, lastRunningClock, err := r.GetVectorClock()
 	if err != nil {
 		return historyi.TransactionPolicyActive, err
 	}
-	incomingLastWriteVersion, incomingLastEventTaskID, err := incomingWorkflow.GetVectorClock()
+	incomingLastWriteVersion, incomingLastRunningClock, err := incomingWorkflow.GetVectorClock()
 	if err != nil {
 		return historyi.TransactionPolicyActive, err
 	}
 
 	if WorkflowHappensAfter(
 		lastWriteVersion,
-		lastEventTaskID,
+		lastRunningClock,
 		incomingLastWriteVersion,
-		incomingLastEventTaskID,
+		incomingLastRunningClock,
 	) {
 		return historyi.TransactionPolicyActive, serviceerror.NewInternal("Workflow cannot suppress workflow by older workflow")
 	}
@@ -166,7 +171,7 @@ func (r *WorkflowImpl) SuppressBy(
 	currentCluster := r.clusterMetadata.GetCurrentClusterName()
 
 	if currentCluster == lastWriteCluster {
-		return historyi.TransactionPolicyActive, r.terminateWorkflow(lastWriteVersion, incomingLastWriteVersion)
+		return historyi.TransactionPolicyActive, r.terminateMutableState(lastWriteVersion, incomingLastWriteVersion)
 	}
 	return historyi.TransactionPolicyPassive, r.mutableState.UpdateWorkflowStateStatus(
 		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
@@ -175,6 +180,10 @@ func (r *WorkflowImpl) SuppressBy(
 }
 
 func (r *WorkflowImpl) FlushBufferedEvents() error {
+
+	if !r.mutableState.IsWorkflow() {
+		return nil
+	}
 
 	if !r.mutableState.IsWorkflowExecutionRunning() {
 		return nil
@@ -200,7 +209,11 @@ func (r *WorkflowImpl) FlushBufferedEvents() error {
 		return serviceerror.NewInternal("Workflow encountered workflow with buffered events but last write not from current cluster")
 	}
 
-	if _, err = r.failWorkflowTask(lastWriteVersion); err != nil {
+	if err := r.mutableState.UpdateCurrentVersion(lastWriteVersion, true); err != nil {
+		return err
+	}
+
+	if _, err = r.failWorkflowTask(); err != nil {
 		return err
 	}
 	if _, err := r.mutableState.AddWorkflowTaskScheduledEvent(
@@ -212,15 +225,9 @@ func (r *WorkflowImpl) FlushBufferedEvents() error {
 	return nil
 }
 
-func (r *WorkflowImpl) failWorkflowTask(
-	lastWriteVersion int64,
-) (*historypb.HistoryEvent, error) {
+func (r *WorkflowImpl) failWorkflowTask() (*historypb.HistoryEvent, error) {
 
 	// do not persist the change right now, Workflow requires transaction
-	if err := r.mutableState.UpdateCurrentVersion(lastWriteVersion, true); err != nil {
-		return nil, err
-	}
-
 	workflowTask := r.mutableState.GetStartedWorkflowTask()
 	if workflowTask == nil {
 		return nil, nil
@@ -245,13 +252,25 @@ func (r *WorkflowImpl) failWorkflowTask(
 	return wtFailedEvent, nil
 }
 
-func (r *WorkflowImpl) terminateWorkflow(
+func (r *WorkflowImpl) terminateMutableState(
 	lastWriteVersion int64,
 	incomingLastWriteVersion int64,
 ) error {
 
+	if err := r.mutableState.UpdateCurrentVersion(lastWriteVersion, true); err != nil {
+		return err
+	}
+
+	if !r.mutableState.IsWorkflow() {
+		return r.mutableState.ChasmTree().Terminate(chasm.TerminateComponentRequest{
+			Identity: consts.IdentityHistoryService,
+			Reason:   common.FailureReasonWorkflowTerminationDueToVersionConflict,
+			Details:  payloads.EncodeString(fmt.Sprintf("terminated by version: %v", incomingLastWriteVersion)),
+		})
+	}
+
 	eventBatchFirstEventID := r.GetMutableState().GetNextEventID()
-	wtFailedEvent, err := r.failWorkflowTask(lastWriteVersion)
+	wtFailedEvent, err := r.failWorkflowTask()
 	if err != nil {
 		return err
 	}
@@ -261,10 +280,6 @@ func (r *WorkflowImpl) terminateWorkflow(
 	}
 
 	// do not persist the change right now, Workflow requires transaction
-	if err = r.mutableState.UpdateCurrentVersion(lastWriteVersion, true); err != nil {
-		return err
-	}
-
 	_, err = r.mutableState.AddWorkflowExecutionTerminatedEvent(
 		eventBatchFirstEventID,
 		common.FailureReasonWorkflowTerminationDueToVersionConflict,
@@ -285,9 +300,9 @@ func (r *WorkflowImpl) terminateWorkflow(
 
 func WorkflowHappensAfter(
 	thisLastWriteVersion int64,
-	thisLastEventTaskID int64,
+	thisLastRunningClock int64,
 	thatLastWriteVersion int64,
-	thatLastEventTaskID int64,
+	thatLastRunningClock int64,
 ) bool {
 
 	if thisLastWriteVersion != thatLastWriteVersion {
@@ -295,5 +310,5 @@ func WorkflowHappensAfter(
 	}
 
 	// thisLastWriteVersion == thatLastWriteVersion
-	return thisLastEventTaskID > thatLastEventTaskID
+	return thisLastRunningClock > thatLastRunningClock
 }

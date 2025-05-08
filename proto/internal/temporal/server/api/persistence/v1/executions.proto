@@ -69,7 +69,7 @@ message WorkflowExecutionInfo {
     reserved 14;
     reserved 15;
     reserved 16;
-    int64 last_event_task_id = 17;
+    int64 last_running_clock = 17;
     int64 last_first_event_id = 18;
     int64 last_completed_workflow_task_started_event_id = 19;
     // Deprecated. use `WorkflowExecutionState.start_time`
@@ -556,7 +556,7 @@ message ActivityInfo {
 
     // The deployment version this activity was dispatched to most recently. Present only if the activity
     // was dispatched to a versioned worker.
-    temporal.api.deployment.v1.WorkerDeploymentVersion last_deployment_version = 47;
+    temporal.api.deployment.v1.WorkerDeploymentVersion last_deployment_version = 49;
 
 
     // Priority metadata. If this message is not present, or any fields are not
@@ -584,6 +584,12 @@ message ActivityInfo {
     }
 
     PauseInfo pause_info = 46;
+
+    // set to true if there was an activity reset while activity is still running on the worker
+    bool activity_reset = 47;
+
+    // set to true if reset heartbeat flag was set with an activity reset
+    bool reset_heartbeats = 48;
 }
 
 // timer_map column

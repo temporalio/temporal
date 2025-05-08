@@ -381,6 +381,7 @@ message GetTaskQueueTasksRequest {
   int64 max_task_id = 5;
   int32 batch_size = 6;
   bytes next_page_token = 7;
+  int32 subqueue = 8;
 }
 
 message GetTaskQueueTasksResponse {
