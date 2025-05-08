@@ -560,6 +560,11 @@ func (ms *MutableStateImpl) mustInitHSM() {
 	ms.stateMachineNode = stateMachineNode
 }
 
+func (ms *MutableStateImpl) IsWorkflow() bool {
+	// TODO: Check if Archetype is workflow archetype when we move part of workflow to CHASM framework as well.
+	return ms.chasmTree.Archetype() == "" // || ms.chasmTree.Archetype() == "Workflow archetype name"
+}
+
 func (ms *MutableStateImpl) HSM() *hsm.Node {
 	return ms.stateMachineNode
 }
@@ -6118,6 +6123,7 @@ func (ms *MutableStateImpl) closeTransaction(
 		transactionPolicy,
 		eventBatches,
 		clearBuffer,
+		isStateDirty,
 	); err != nil {
 		return closeTransactionResult{}, err
 	}
@@ -6519,6 +6525,7 @@ func (ms *MutableStateImpl) closeTransactionPrepareTasks(
 	transactionPolicy historyi.TransactionPolicy,
 	eventBatches [][]*historypb.HistoryEvent,
 	clearBufferEvents bool,
+	isStateDirty bool,
 ) error {
 	if err := ms.closeTransactionHandleWorkflowResetTask(
 		transactionPolicy,
@@ -6532,6 +6539,10 @@ func (ms *MutableStateImpl) closeTransactionPrepareTasks(
 
 	ms.closeTransactionCollapseVisibilityTasks()
 
+	if err := ms.closeTransactionGenerateChasmRetentionTask(isStateDirty); err != nil {
+		return err
+	}
+
 	// TODO merge active & passive task generation
 	// NOTE: this function must be the last call
 	//  since we only generate at most one activity & user timer,
@@ -6542,6 +6553,25 @@ func (ms *MutableStateImpl) closeTransactionPrepareTasks(
 	}
 
 	return ms.closeTransactionPrepareReplicationTasks(transactionPolicy, eventBatches, clearBufferEvents)
+}
+
+func (ms *MutableStateImpl) closeTransactionGenerateChasmRetentionTask(
+	isStateDirty bool,
+) error {
+
+	if !isStateDirty ||
+		ms.IsWorkflow() ||
+		ms.executionState.State != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED ||
+		transitionhistory.Compare(
+			ms.executionState.LastUpdateVersionedTransition,
+			ms.CurrentVersionedTransition(),
+		) != 0 {
+		return nil
+	}
+
+	closeTime := ms.timeSource.Now()
+	ms.executionInfo.CloseTime = timestamppb.New(closeTime)
+	return ms.taskGenerator.GenerateDeleteHistoryEventTask(closeTime)
 }
 
 func (ms *MutableStateImpl) closeTransactionPrepareReplicationTasks(
