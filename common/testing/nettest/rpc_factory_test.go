@@ -55,7 +55,7 @@ func TestRPCFactory_CreateLocalFrontendGRPCConnection(t *testing.T) {
 	})
 }
 
-func TestRPCFactory_CreateRemoteFrontendGRPCConnection(t *testing.T) {
+func TestRPCFactory_CreateRemoteFrontendGRPCConnectionSimple(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -77,12 +77,114 @@ func TestRPCFactory_CreateRemoteFrontendGRPCConnection(t *testing.T) {
 			wantTarget: "127.0.0.1:8080",
 			wantErr:    false,
 		},
+	}
+
+	for _, tt := range tests {
+		tt := tt // capture range variable
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			// Create a context with timeout
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			rpcFactory := newRPCFactory()
+			errs := make(chan error, 1)
+
+			go func() {
+				_, err := rpcFactory.GetGRPCListener().Accept()
+				errs <- err
+			}()
+
+			conn := rpcFactory.CreateRemoteFrontendGRPCConnection(tt.rpcAddress)
+
+			if tt.wantErr {
+				assert.Nil(t, conn, "Expected nil connection for error case")
+			} else {
+				assert.NotNil(t, conn, "Expected non-nil connection for success case")
+				if conn != nil {
+					conn.Connect()
+					select {
+					case err := <-errs:
+						require.NoError(t, err)
+					case <-ctx.Done():
+						t.Fatal("Test timed out waiting for connection")
+					}
+					assert.Equal(t, tt.wantTarget, conn.Target())
+					assert.NoError(t, conn.Close())
+				}
+			}
+		})
+	}
+}
+
+func TestRPCFactory_CreateRemoteFrontendGRPCConnectionPassthrough(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		rpcAddress  string
+		wantTarget  string
+		wantErr     bool
+		errContains string
+	}{
 		{
 			name:       "passthrough URL",
 			rpcAddress: "passthrough:///host:8080",
 			wantTarget: "passthrough:///host:8080",
 			wantErr:    false,
 		},
+	}
+
+	for _, tt := range tests {
+		tt := tt // capture range variable
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			// Create a context with timeout
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			rpcFactory := newRPCFactory()
+			errs := make(chan error, 1)
+
+			go func() {
+				_, err := rpcFactory.GetGRPCListener().Accept()
+				errs <- err
+			}()
+
+			conn := rpcFactory.CreateRemoteFrontendGRPCConnection(tt.rpcAddress)
+
+			if tt.wantErr {
+				assert.Nil(t, conn, "Expected nil connection for error case")
+			} else {
+				assert.NotNil(t, conn, "Expected non-nil connection for success case")
+				if conn != nil {
+					conn.Connect()
+					select {
+					case err := <-errs:
+						require.NoError(t, err)
+					case <-ctx.Done():
+						t.Fatal("Test timed out waiting for connection")
+					}
+					assert.Equal(t, tt.wantTarget, conn.Target())
+					assert.NoError(t, conn.Close())
+				}
+			}
+		})
+	}
+}
+
+func TestRPCFactory_CreateRemoteFrontendGRPCConnectionDNS(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		rpcAddress  string
+		wantTarget  string
+		wantErr     bool
+		errContains string
+	}{
 		{
 			name:       "dns URL",
 			rpcAddress: "dns:///host:8080",
