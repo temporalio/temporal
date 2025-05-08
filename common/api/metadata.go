@@ -20,7 +20,7 @@ type (
 		Scope Scope
 		// Describes what level of access is needed for a method (advisory).
 		Access Access
-		// Describes if long polling is supportede by the method.
+		// Describes if long polling is supported by the method.
 		Polling Polling
 	}
 )
