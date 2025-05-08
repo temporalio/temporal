@@ -54,6 +54,8 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.uber.org/fx"
+	"google.golang.org/grpc/health"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 )
 
 type (
@@ -74,6 +76,7 @@ type (
 		persistenceShardManager      persistence.ShardManager
 		persistenceVisibilityManager manager.VisibilityManager
 		persistenceHealthSignal      persistence.HealthSignalAggregator
+		healthServer                 *health.Server
 		historyServiceResolver       membership.ServiceResolver
 		metricsHandler               metrics.Handler
 		payloadSerializer            serialization.Serializer
@@ -103,6 +106,7 @@ type (
 		PersistenceExecutionManager  persistence.ExecutionManager
 		PersistenceShardManager      persistence.ShardManager
 		PersistenceHealthSignal      persistence.HealthSignalAggregator
+		HealthServer                 *health.Server
 		PersistenceVisibilityManager manager.VisibilityManager
 		HistoryServiceResolver       membership.ServiceResolver
 		MetricsHandler               metrics.Handler
@@ -187,11 +191,19 @@ func (h *Handler) isStopped() bool {
 }
 
 func (h *Handler) DeepHealthCheck(
-	_ context.Context,
+	ctx context.Context,
 	_ *historyservice.DeepHealthCheckRequest,
 ) (_ *historyservice.DeepHealthCheckResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
 	h.startWG.Wait()
+
+	status, err := h.healthServer.Check(ctx, &healthpb.HealthCheckRequest{Service: serviceName})
+	if err != nil {
+		return nil, err
+	}
+	if status.Status != healthpb.HealthCheckResponse_SERVING {
+		return &historyservice.DeepHealthCheckResponse{State: enumsspb.HEALTH_STATE_DECLINED_SERVING}, nil
+	}
 
 	latency := h.persistenceHealthSignal.AverageLatency()
 	errRatio := h.persistenceHealthSignal.ErrorRatio()
