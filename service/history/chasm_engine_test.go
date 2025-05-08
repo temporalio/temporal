@@ -184,6 +184,7 @@ func (s *chasmEngineSuite) TestUpdateComponent_Success() {
 
 func (s *chasmEngineSuite) TestReadComponent_Success() {
 	tv := testvars.New(s.T())
+	tv = tv.WithRunID(primitives.NewUUID().String())
 
 	ref := chasm.NewComponentRef[*testComponent](
 		chasm.EntityKey{
