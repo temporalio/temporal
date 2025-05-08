@@ -1789,9 +1789,6 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 	s.NotNil(root)
 	ctx := context.Background()
 
-	pathEncoder := NewMockNodePathEncoder(s.controller)
-	pathEncoder.EXPECT().Decode(gomock.Any()).Return([]string{""}, nil).AnyTimes()
-
 	expectExecute := func(result error) {
 		rt.handler.(*MockSideEffectTaskExecutor[any, *TestSideEffectTask]).EXPECT().
 			Execute(
@@ -1807,12 +1804,12 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 
 	// Succeed task execution.
 	expectExecute(nil)
-	err = ExecuteSideEffectTask(s.registry, pathEncoder, ctx, entityKey, taskInfo)
+	err = ExecuteSideEffectTask(ctx, s.registry, entityKey, taskInfo)
 	s.NoError(err)
 
 	// Fail task execution.
 	expectedErr := errors.New("dummy error")
 	expectExecute(expectedErr)
-	err = ExecuteSideEffectTask(s.registry, pathEncoder, ctx, entityKey, taskInfo)
+	err = ExecuteSideEffectTask(ctx, s.registry, entityKey, taskInfo)
 	s.ErrorIs(expectedErr, err)
 }

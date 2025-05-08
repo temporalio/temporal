@@ -1904,6 +1904,61 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteStateMachineTimerTask_Zom
 	s.ErrorIs(resp.ExecutionErr, consts.ErrWorkflowZombie)
 }
 
+func (s *timerQueueActiveTaskExecutorSuite) TestExecuteChasmSideEffectTimerTask_ExecutesHandler() {
+	execution := &commonpb.WorkflowExecution{
+		WorkflowId: tests.WorkflowKey.WorkflowID,
+		RunId:      tests.WorkflowKey.RunID,
+	}
+
+	// Register a handler to receive the Execute callback.
+	type testSideEffectTask struct{}
+	taskType := "TestSideEffectTask"
+	mockHandler := chasm.NewMockSideEffectTaskExecutor[*chasm.MockComponent, testSideEffectTask](s.controller)
+	mockHandler.EXPECT().Execute(gomock.Any(), gomock.Any(), gomock.Any()).Times(1)
+	mockValidator := chasm.NewMockTaskValidator[*chasm.MockComponent, testSideEffectTask](s.controller)
+
+	library := chasm.NewMockLibrary(s.controller)
+	library.EXPECT().Name().Return("Testlib").AnyTimes()
+	library.EXPECT().Tasks().Return([]*chasm.RegistrableTask{
+		chasm.NewRegistrableSideEffectTask(
+			taskType,
+			mockValidator,
+			mockHandler,
+		)}).AnyTimes()
+	library.EXPECT().Components().Return(nil).AnyTimes()
+	registry := chasm.NewRegistry()
+	err := registry.Register(library)
+	s.NoError(err)
+	s.mockShard.SetChasmRegistry(registry)
+
+	// Add a valid timer task.
+	timerTask := &tasks.ChasmTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			s.namespaceID.String(),
+			execution.GetWorkflowId(),
+			execution.GetRunId(),
+		),
+		VisibilityTimestamp: s.now,
+		TaskID:              s.mustGenerateTaskID(),
+		Info: &persistencespb.ChasmTaskInfo{
+			Ref: &persistencespb.ChasmComponentRef{
+				ComponentInitialVersionedTransition:    &persistencespb.VersionedTransition{},
+				ComponentLastUpdateVersionedTransition: &persistencespb.VersionedTransition{},
+				Path:                                   "",
+			},
+			Type: "Testlib.TestSideEffectTask",
+			Data: &commonpb.DataBlob{
+				EncodingType: enumspb.ENCODING_TYPE_PROTO3,
+			},
+		},
+	}
+
+	// Execution should succeed.
+	resp := s.timerQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
+	s.NotNil(resp)
+	s.Nil(resp.ExecutionErr)
+}
+
 func (s *timerQueueActiveTaskExecutorSuite) TestExecuteChasmPureTimerTask_ExecutesAllPureTimers() {
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: tests.WorkflowKey.WorkflowID,

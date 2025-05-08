@@ -5,6 +5,7 @@ package chasm
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"iter"
 	"reflect"
@@ -33,7 +34,8 @@ var (
 )
 
 var (
-	errComponentNotFound = serviceerror.NewNotFound("component not found")
+	errComponentNotFound    = serviceerror.NewNotFound("component not found")
+	errTaskValidationFailed = errors.New("task validation failed")
 )
 
 type valueState uint8
@@ -1699,9 +1701,8 @@ func (n *Node) ExecutePureTask(baseCtx context.Context, taskInstance any) error 
 // ExecuteSideEffectTask executes the given ChasmTask without hydrating the CHASM
 // tree from mutable state.
 func ExecuteSideEffectTask(
-	registry *Registry,
-	pathEncoder NodePathEncoder,
 	ctx context.Context,
+	registry *Registry,
 	entityKey EntityKey,
 	taskInfo *persistencespb.ChasmTaskInfo,
 ) error {
@@ -1715,26 +1716,20 @@ func ExecuteSideEffectTask(
 		return fmt.Errorf("ExecuteSideEffectTask called on a Pure task '%s'", taskType)
 	}
 
-	path, err := pathEncoder.Decode(taskInfo.Ref.Path)
-	if err != nil {
-		return err
-	}
-
+	// TODO - update ComponentRef to use the encoded path, and then leave decoding
+	// until access/dereference time.
+	// TODO - use DefaultPathEncoder directly, when it lands
 	ref := ComponentRef{
 		EntityKey:          entityKey,
-		entityGoType:       registrableTask.goType,
 		entityLastUpdateVT: taskInfo.Ref.ComponentLastUpdateVersionedTransition,
-		componentPath:      path,
+		componentPath:      []string{""}, // TODO
 		componentInitialVT: taskInfo.Ref.ComponentInitialVersionedTransition,
 	}
 
 	// We can't run the validator up-front because we haven't hydrated the component.
 	// Instead, attach it to the Ref instead, and the component will be validated
 	// upon access.
-	ref.validationFn, ok = registrableTask.validator.(func(Context, Component) error)
-	if !ok {
-		return fmt.Errorf("type assertion failed on validator for task type '%s'", taskType)
-	}
+	ref.validationFn = makeValidationFn(registrableTask)
 
 	executor := registrableTask.handler
 	if executor == nil {
@@ -1747,7 +1742,6 @@ func ExecuteSideEffectTask(
 	}
 
 	// TODO - Side Effect tasks should include the CHASM engine on the context
-
 	fn := reflect.ValueOf(executor).MethodByName("Execute")
 	result := fn.Call([]reflect.Value{
 		reflect.ValueOf(ctx),
@@ -1760,4 +1754,30 @@ func ExecuteSideEffectTask(
 	}
 
 	return nil
+}
+
+// makeValidationFn adapts the TaskValidator interface to the ComponentRef's
+// validation callback format.
+func makeValidationFn(registrableTask *RegistrableTask) func(Context, Component) error {
+	return func(ctx Context, component Component) error {
+		// Call the TaskValidator interface.
+		fn := reflect.ValueOf(registrableTask.validator).MethodByName("Validate")
+		result := fn.Call([]reflect.Value{
+			reflect.ValueOf(ctx),
+			reflect.ValueOf(component),
+		})
+
+		// Handle err.
+		if !result[1].IsNil() {
+			//nolint:revive // type cast result is unchecked
+			return result[1].Interface().(error)
+		}
+
+		// Handle bool result.
+		if !result[0].Bool() {
+			return errTaskValidationFailed
+		}
+
+		return nil
+	}
 }
