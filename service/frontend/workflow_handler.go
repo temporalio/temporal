@@ -436,10 +436,6 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 		return nil, errWorkflowTypeTooLong
 	}
 
-	if err := common.ValidateUTF8String("WorkflowType", request.WorkflowType.GetName()); err != nil {
-		return nil, err
-	}
-
 	if err := tqid.NormalizeAndValidate(request.TaskQueue, "", wh.config.MaxIDLengthLimit()); err != nil {
 		return nil, err
 	}
@@ -1974,9 +1970,6 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		return nil, errWorkflowTypeTooLong
 	}
 
-	if err := common.ValidateUTF8String("WorkflowType", request.WorkflowType.GetName()); err != nil {
-		return nil, err
-	}
 	namespaceName := namespace.Name(request.GetNamespace())
 	if err := tqid.NormalizeAndValidate(request.TaskQueue, "", wh.config.MaxIDLengthLimit()); err != nil {
 		return nil, err
@@ -5074,8 +5067,7 @@ func (wh *WorkflowHandler) validateVersionRuleBuildId(request *workflowservice.U
 		if len(bid) > 255 {
 			return serviceerror.NewInvalidArgument(fmt.Sprintf("BuildId must be <= 255 characters, was %d", len(bid)))
 		}
-
-		return common.ValidateUTF8String("BuildId", bid)
+		return nil
 	}
 	switch request.GetOperation().(type) {
 	case *workflowservice.UpdateWorkerVersioningRulesRequest_InsertAssignmentRule:
@@ -5301,9 +5293,6 @@ func (wh *WorkflowHandler) validateBuildIdCompatibilityUpdate(
 			errDeets = append(errDeets, fmt.Sprintf(" Worker build IDs to be no larger than %v characters",
 				wh.config.WorkerBuildIdSizeLimit()))
 		}
-		if err := common.ValidateUTF8String("BuildId", id); err != nil {
-			errDeets = append(errDeets, err.Error())
-		}
 	}
 
 	if req.GetNamespace() == "" {
@@ -5516,7 +5505,7 @@ func validateRequestId(requestID *string, lenLimit int) error {
 		return errRequestIDTooLong
 	}
 
-	return common.ValidateUTF8String("RequestId", *requestID)
+	return nil
 }
 
 func (wh *WorkflowHandler) validateStartWorkflowTimeouts(
@@ -5577,9 +5566,6 @@ func (wh *WorkflowHandler) metricsScope(ctx context.Context) metrics.Handler {
 func (wh *WorkflowHandler) validateNamespace(
 	namespace string,
 ) error {
-	if err := common.ValidateUTF8String("Namespace", namespace); err != nil {
-		return err
-	}
 	if len(namespace) > wh.config.MaxIDLengthLimit() {
 		return errNamespaceTooLong
 	}
@@ -5591,9 +5577,6 @@ func (wh *WorkflowHandler) validateWorkflowID(
 ) error {
 	if workflowID == "" {
 		return errWorkflowIDNotSet
-	}
-	if err := common.ValidateUTF8String("WorkflowId", workflowID); err != nil {
-		return err
 	}
 	if len(workflowID) > wh.config.MaxIDLengthLimit() {
 		return errWorkflowIDTooLong

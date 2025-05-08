@@ -2988,11 +2988,6 @@ func TestValidateRequestId(t *testing.T) {
 	err := validateRequestId(&req.RequestId, 100)
 	assert.Nil(t, err)
 	assert.Len(t, req.RequestId, 36) // new UUID length
-
-	req.RequestId = "\x87\x01"
-	err = validateRequestId(&req.RequestId, 100)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "not a valid UTF-8 string")
 }
 
 func TestDedupLinksFromCallbacks(t *testing.T) {
