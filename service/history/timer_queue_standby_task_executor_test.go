@@ -2004,13 +2004,13 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteChasmPureTimerTask_Execu
 		RunId:      tests.WorkflowKey.RunID,
 	}
 
-	// Mock the CHASM tree and executor.
-	mockExecutor := chasm.NewMockLogicalTaskExecutor(s.controller)
+	// Mock the CHASM tree and execute interface.
+	mockEach := chasm.NewMockNodeExecutePureTask(s.controller)
 	chasmTree := historyi.NewMockChasmTree(s.controller)
 	chasmTree.EXPECT().EachPureTask(gomock.Any(), gomock.Any()).
 		Times(1).Do(
 		func(_ time.Time, callback func(executor chasm.NodeExecutePureTask, task any) error) error {
-			return callback(mockExecutor, nil)
+			return callback(mockEach, nil)
 		})
 
 	// Mock mutable state.
