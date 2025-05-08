@@ -88,6 +88,11 @@ message VersionLocalState {
     // Can be in the range [0, 100] if the version is ramping.
     float ramp_percentage = 6;
 
+    // Timestamp when this version first started receiving traffic, either as current or ramping.
+    google.protobuf.Timestamp traffic_first_received_time = 12;
+    // Timestamp when this version last received any traffic, either as current or ramping.
+    google.protobuf.Timestamp traffic_last_received_time = 13;
+
     // Helps user determine when it is safe to decommission the workers of this
     // Version. Not present when version is current or ramping.
     // Current limitations:
@@ -177,6 +182,11 @@ message WorkerDeploymentVersionSummary {
     //     aip.dev/not-precedent: 'Since' captures the field semantics despite being a preposition. --)
     // Nil if not ramping. Updated when the version first starts ramping, not on each ramp change.
     google.protobuf.Timestamp ramping_since_time = 7;
+
+    // Timestamp when this version first started receiving traffic, either as current or ramping.
+    google.protobuf.Timestamp traffic_first_received_time = 8;
+    // Timestamp when this version last received any traffic, either as current or ramping.
+    google.protobuf.Timestamp traffic_last_received_time = 9;
 }
 
 // used as Worker Deployment Version workflow update input:
