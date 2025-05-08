@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 )
 
@@ -15,7 +16,7 @@ type (
 	// TestComponent is a sample CHASM component used in tests.
 	// It would be nice to move it another package, but this creates a circular dependency.
 
-	protoMessageType = persistencespb.ActivityInfo // Random proto message.
+	protoMessageType = persistencespb.WorkflowExecutionState // Random proto message.
 	TestComponent    struct {
 		UnimplementedComponent
 
@@ -49,30 +50,57 @@ type (
 	}
 )
 
+func (tc *TestComponent) LifecycleState(_ Context) LifecycleState {
+	switch tc.ComponentData.Status {
+	case enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING:
+		return LifecycleStateRunning
+	case enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW:
+		return LifecycleStateCompleted
+	default:
+		return LifecycleStateFailed
+	}
+}
+
+func (tc *TestComponent) Terminate(
+	mutableContext MutableContext,
+	_ TerminateComponentRequest,
+) (TerminateComponentResponse, error) {
+	tc.Fail(mutableContext)
+	return TerminateComponentResponse{}, nil
+}
+
+func (tc *TestComponent) Complete(_ MutableContext) {
+	tc.ComponentData.Status = enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+}
+
+func (tc *TestComponent) Fail(_ MutableContext) {
+	tc.ComponentData.Status = enumspb.WORKFLOW_EXECUTION_STATUS_FAILED
+}
+
 func (tsc1 *TestSubComponent1) GetData() string {
-	return tsc1.SubComponent1Data.GetActivityId()
+	return tsc1.SubComponent1Data.GetCreateRequestId()
 }
 
 func setTestComponentFields(c *TestComponent) {
 	c.ComponentData = &protoMessageType{
-		ActivityId: "component-data",
+		CreateRequestId: "component-data",
 	}
 	c.SubComponent1 = NewComponentField[*TestSubComponent1](nil, &TestSubComponent1{
 		SubComponent1Data: &protoMessageType{
-			ActivityId: "sub-component1-data",
+			CreateRequestId: "sub-component1-data",
 		},
 		SubComponent11: NewComponentField[*TestSubComponent11](nil, &TestSubComponent11{
 			SubComponent11Data: &protoMessageType{
-				ActivityId: "sub-component1-sub-component11-data",
+				CreateRequestId: "sub-component1-sub-component11-data",
 			},
 		}),
 		SubData11: NewDataField[*protoMessageType](nil, &protoMessageType{
-			ActivityId: "sub-component1-sub-data11",
+			CreateRequestId: "sub-component1-sub-data11",
 		}),
 	})
 	c.SubComponent2 = NewEmptyField[*TestSubComponent2]()
 	c.SubData1 = NewDataField[*protoMessageType](nil, &protoMessageType{
-		ActivityId: "sub-data1",
+		CreateRequestId: "sub-data1",
 	})
 }
 
@@ -100,7 +128,7 @@ func testComponentSerializedNodes() map[string]*persistencespb.ChasmNode {
 			},
 			Data: &commonpb.DataBlob{
 				EncodingType: 1,
-				Data:         []byte{0x42, 0xe, 0x63, 0x6f, 0x6d, 0x70, 0x6f, 0x6e, 0x65, 0x6e, 0x74, 0x2d, 0x64, 0x61, 0x74, 0x61},
+				Data:         []byte{0xa, 0xe, 0x63, 0x6f, 0x6d, 0x70, 0x6f, 0x6e, 0x65, 0x6e, 0x74, 0x2d, 0x64, 0x61, 0x74, 0x61},
 			},
 		},
 		"SubComponent1": &persistencespb.ChasmNode{
@@ -123,7 +151,7 @@ func testComponentSerializedNodes() map[string]*persistencespb.ChasmNode {
 			},
 			Data: &commonpb.DataBlob{
 				EncodingType: 1,
-				Data:         []byte{0x42, 0x13, 0x73, 0x75, 0x62, 0x2d, 0x63, 0x6f, 0x6d, 0x70, 0x6f, 0x6e, 0x65, 0x6e, 0x74, 0x31, 0x2d, 0x64, 0x61, 0x74, 0x61},
+				Data:         []byte{0xa, 0x13, 0x73, 0x75, 0x62, 0x2d, 0x63, 0x6f, 0x6d, 0x70, 0x6f, 0x6e, 0x65, 0x6e, 0x74, 0x31, 0x2d, 0x64, 0x61, 0x74, 0x61},
 			},
 		},
 		"SubComponent1/SubComponent11": &persistencespb.ChasmNode{
@@ -146,7 +174,7 @@ func testComponentSerializedNodes() map[string]*persistencespb.ChasmNode {
 			},
 			Data: &commonpb.DataBlob{
 				EncodingType: 1,
-				Data:         []byte{0x42, 0x23, 0x73, 0x75, 0x62, 0x2d, 0x63, 0x6f, 0x6d, 0x70, 0x6f, 0x6e, 0x65, 0x6e, 0x74, 0x31, 0x2d, 0x73, 0x75, 0x62, 0x2d, 0x63, 0x6f, 0x6d, 0x70, 0x6f, 0x6e, 0x65, 0x6e, 0x74, 0x31, 0x31, 0x2d, 0x64, 0x61, 0x74, 0x61},
+				Data:         []byte{0xa, 0x23, 0x73, 0x75, 0x62, 0x2d, 0x63, 0x6f, 0x6d, 0x70, 0x6f, 0x6e, 0x65, 0x6e, 0x74, 0x31, 0x2d, 0x73, 0x75, 0x62, 0x2d, 0x63, 0x6f, 0x6d, 0x70, 0x6f, 0x6e, 0x65, 0x6e, 0x74, 0x31, 0x31, 0x2d, 0x64, 0x61, 0x74, 0x61},
 			},
 		},
 		"SubComponent1/SubData11": &persistencespb.ChasmNode{
@@ -165,7 +193,7 @@ func testComponentSerializedNodes() map[string]*persistencespb.ChasmNode {
 			},
 			Data: &commonpb.DataBlob{
 				EncodingType: 1,
-				Data:         []byte{0x42, 0x19, 0x73, 0x75, 0x62, 0x2d, 0x63, 0x6f, 0x6d, 0x70, 0x6f, 0x6e, 0x65, 0x6e, 0x74, 0x31, 0x2d, 0x73, 0x75, 0x62, 0x2d, 0x64, 0x61, 0x74, 0x61, 0x31, 0x31},
+				Data:         []byte{0xa, 0x19, 0x73, 0x75, 0x62, 0x2d, 0x63, 0x6f, 0x6d, 0x70, 0x6f, 0x6e, 0x65, 0x6e, 0x74, 0x31, 0x2d, 0x73, 0x75, 0x62, 0x2d, 0x64, 0x61, 0x74, 0x61, 0x31, 0x31},
 			},
 		},
 		"SubData1": &persistencespb.ChasmNode{
@@ -184,7 +212,7 @@ func testComponentSerializedNodes() map[string]*persistencespb.ChasmNode {
 			},
 			Data: &commonpb.DataBlob{
 				EncodingType: 1,
-				Data:         []byte{0x42, 0x9, 0x73, 0x75, 0x62, 0x2d, 0x64, 0x61, 0x74, 0x61, 0x31},
+				Data:         []byte{0xa, 0x9, 0x73, 0x75, 0x62, 0x2d, 0x64, 0x61, 0x74, 0x61, 0x31},
 			},
 		},
 	}

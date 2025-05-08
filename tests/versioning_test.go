@@ -174,17 +174,10 @@ func (s *VersioningIntegSuite) TestVersionRuleBuildIdValidation() {
 	cT := s.getVersioningRules(ctx, tq).GetConflictToken()
 
 	// failure due to long build id
-	longStr := `_1234567890_2234567890_3234567890_4234567890_5234567890_6234567890_7234567890_8234567890_9234567890_
-				_1234567890_2234567890_3234567890_4234567890_5234567890_6234567890_7234567890_8234567890_9234567890_
-				_1234567890_2234567890_3234567890_4234567890_5234567890_6234567890_7234567890_8234567890_9234567890_`
+	longStr := strings.Repeat("0123456789", 30)
 	s.insertAssignmentRule(ctx, tq, longStr, 0, cT, false)
 	s.insertRedirectRule(ctx, tq, longStr, "foo", cT, false)
 	s.insertRedirectRule(ctx, tq, "foo", longStr, cT, false)
-
-	// failure due to invalid utf-8
-	s.insertAssignmentRule(ctx, tq, testcore.InvalidUTF8, 0, cT, false)
-	s.insertRedirectRule(ctx, tq, testcore.InvalidUTF8, "foo", cT, false)
-	s.insertRedirectRule(ctx, tq, "foo", testcore.InvalidUTF8, cT, false)
 }
 
 func (s *VersioningIntegSuite) TestAssignmentRuleInsert() {

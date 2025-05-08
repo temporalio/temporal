@@ -367,8 +367,8 @@ message RecordActivityTaskHeartbeatRequest {
 
 message RecordActivityTaskHeartbeatResponse {
     bool cancel_requested = 1;
-
     bool activity_paused = 2;
+    bool activity_reset = 3;
 }
 
 message RespondActivityTaskCompletedRequest {
