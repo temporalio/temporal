@@ -84,3 +84,22 @@ func TestDeepCopy_Pointers(t *testing.T) {
 	(*a.L.L.L.V)++
 	assert.NotEqual(t, *a.L.L.L.V, *b.L.L.L.V)
 }
+
+func TestDeepCopy_Map(t *testing.T) {
+	a := map[int]int{3: 5}
+	b := deepCopyForMapstructure(a)
+	a[3] = 7
+	a[8] = 9
+	assert.Equal(t, b[3], 5)
+	assert.Zero(t, b[8])
+}
+
+func TestDeepCopy_MapMap(t *testing.T) {
+	a := map[int]map[string]int{
+		3: map[string]int{"three": 3},
+		5: map[string]int{"five": 5},
+	}
+	b := deepCopyForMapstructure(a)
+	a[5]["five"] = 3
+	assert.Equal(t, b[5]["five"], 5)
+}
