@@ -128,7 +128,7 @@ func (h *healthCheckerImpl) Check(ctx context.Context) (enumsspb.HealthState, er
 }
 
 func ensureMinimumProportionOfHosts(proportionOfDeclinedServingHosts float64, totalHosts int) float64 {
-	minimumHostsFailed := 2.0 // We want to ensure that at least 2 fail before we notify the upstream.
+	const minimumHostsFailed = 2.0 // We want to ensure that at least 2 fail before we notify the upstream.
 	minimumProportion := minimumHostsFailed / float64(totalHosts)
 	return math.Max(proportionOfDeclinedServingHosts, minimumProportion)
 }
