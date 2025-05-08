@@ -1652,7 +1652,7 @@ func (n *Node) ExecutePureTask(baseCtx context.Context, taskInstance any) error 
 		return fmt.Errorf("ExecutePureTask called on a SideEffect task '%s'", registrableTask.fqType())
 	}
 
-	ctx := NewContext(baseCtx, n)
+	ctx := NewMutableContext(baseCtx, n)
 
 	// Ensure this node's component value is hydrated before execution. Component
 	// will also check access rules.
@@ -1692,6 +1692,52 @@ func (n *Node) ExecutePureTask(baseCtx context.Context, taskInstance any) error 
 	// CloseTransaction method will check against.
 	//
 	// See: https://github.com/temporalio/temporal/pull/7701#discussion_r2072026993
+
+	return nil
+}
+
+// ExecuteSideEffectTask executes the given taskInstance against the node without
+// hydrating the component value.
+func (n *Node) ExecuteSideEffectTask(
+	baseCtx context.Context,
+	ref ComponentRef,
+	taskInstance any,
+) error {
+	registrableTask, ok := n.registry.taskFor(taskInstance)
+	if !ok {
+		return fmt.Errorf("unknown task type for task instance goType '%s'", reflect.TypeOf(taskInstance).Name())
+	}
+
+	if registrableTask.isPureTask {
+		return fmt.Errorf("ExecuteSideEffectTask called on a Pure task '%s'", registrableTask.fqType())
+	}
+
+	// TODO - Side Effect tasks should include the CHASM engine on the context
+	ctx := NewContext(baseCtx, n)
+
+	// We can't run the validator up-front because we haven't hydrated the component.
+	// Instead, attach it to the Ref instead, and the component will be validated
+	// upon access.
+	ref.validationFn, ok = registrableTask.validator.(func(Context, Component) error)
+	if !ok {
+		return fmt.Errorf("type assertion failed on validator for task type '%s'", registrableTask.taskType)
+	}
+
+	executor := registrableTask.handler
+	if executor == nil {
+		return fmt.Errorf("no handler registered for task type '%s'", registrableTask.taskType)
+	}
+
+	fn := reflect.ValueOf(executor).MethodByName("Execute")
+	result := fn.Call([]reflect.Value{
+		reflect.ValueOf(ctx.getContext()),
+		reflect.ValueOf(ref),
+		reflect.ValueOf(taskInstance),
+	})
+	if !result[0].IsNil() {
+		//nolint:revive // type cast result is unchecked
+		return result[0].Interface().(error)
+	}
 
 	return nil
 }

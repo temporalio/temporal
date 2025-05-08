@@ -1748,3 +1748,55 @@ func (s *nodeSuite) TestExecutePureTask() {
 	err = root.ExecutePureTask(ctx, pureTask)
 	s.ErrorIs(expectedErr, err)
 }
+
+func (s *nodeSuite) TestExecuteSideEffectTask() {
+	persistenceNodes := map[string]*persistencespb.ChasmNode{
+		"somenode/path/1": {
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+						Type: "TestLibrary.test_component",
+					},
+				},
+			},
+		},
+	}
+
+	task := &TestSideEffectTask{
+		Data: []byte("some-stuff"),
+	}
+	ref := ComponentRef{}
+
+	rt, ok := s.registry.Task("TestLibrary.test_side_effect_task")
+	s.True(ok)
+
+	root, err := NewTree(persistenceNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+	s.NoError(err)
+	s.NotNil(root)
+	ctx := context.Background()
+
+	expectExecute := func(result error) {
+		rt.handler.(*MockSideEffectTaskExecutor[any, *TestSideEffectTask]).EXPECT().
+			Execute(
+				gomock.Any(),
+				gomock.Any(),
+				gomock.Eq(task),
+			).Return(result).Times(1)
+	}
+
+	rt.validator = func(Context, Component) error {
+		return nil
+	}
+
+	// Succeed task execution.
+	expectExecute(nil)
+	err = root.ExecuteSideEffectTask(ctx, ref, task)
+	s.NoError(err)
+
+	// Fail task execution.
+	expectedErr := errors.New("dummy error")
+	expectExecute(expectedErr)
+	err = root.ExecuteSideEffectTask(ctx, ref, task)
+	s.ErrorIs(expectedErr, err)
+}
