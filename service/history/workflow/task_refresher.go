@@ -76,6 +76,11 @@ func (r *TaskRefresherImpl) PartialRefresh(
 	minVersionedTransition *persistencespb.VersionedTransition,
 	previousPendingChildIds map[int64]struct{},
 ) error {
+	// TODO: handle task refresh for non workflow mutable states.
+	if !mutableState.IsWorkflow() {
+		return nil
+	}
+
 	taskGenerator := r.taskGeneratorProvider.NewTaskGenerator(
 		r.shard,
 		mutableState,

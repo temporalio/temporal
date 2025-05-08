@@ -1,6 +1,8 @@
 package workflow
 
 import (
+	"time"
+
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -28,4 +30,19 @@ func (*noopChasmTree) ApplySnapshot(chasm.NodesSnapshot) error {
 
 func (*noopChasmTree) IsDirty() bool {
 	return false
+}
+
+func (*noopChasmTree) Terminate(chasm.TerminateComponentRequest) error {
+	return nil
+}
+
+func (*noopChasmTree) Archetype() string {
+	return ""
+}
+
+func (*noopChasmTree) EachPureTask(
+	deadline time.Time,
+	callback func(executor chasm.LogicalTaskExecutor, task any) error,
+) error {
+	return nil
 }

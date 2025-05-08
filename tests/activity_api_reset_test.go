@@ -1,3 +1,27 @@
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
 package tests
 
 import (
@@ -12,9 +36,11 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/sdk/activity"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/tests/testcore"
@@ -427,4 +453,144 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_KeepPaused() {
 	var out string
 	err = workflowRun.Get(ctx, &out)
 	s.NoError(err)
+}
+
+func assertPayload(t assert.TestingT, expected string, pls *commonpb.Payloads) {
+	assert.NotNil(t, pls)
+	if pls == nil {
+		assert.NotNil(t, pls.Payloads)
+		assert.Len(t, pls.Payloads, 1)
+		var actual string
+		err := payloads.Decode(pls, &actual)
+		assert.NoError(t, err)
+		assert.Equal(t, expected, actual)
+	}
+}
+
+func (s *ActivityApiResetClientTestSuite) TestActivityReset_HeartbeatDetails() {
+	// Latest reported heartbeat on activity should be available throughout workflow execution or until activity succeeds.
+	// If activity was reset with "reset-heartbeat" flag, when returned heartbeat details should be nil.
+	// 1. Start workflow with single activity
+	// 2. First invocation of activity sets heartbeat details and fails upon request.
+	// 3. Second invocation triggers waits to be triggered, and then send new heartbeat until requested to finish.
+	// 6. Once workflow completes -- we're done.
+
+	activityCompleteCh := make(chan struct{})
+	var activityIteration atomic.Int32
+	var activityShouldBreak atomic.Bool
+	var activityShouldFinish atomic.Bool
+
+	activityFn := func(ctx context.Context) (string, error) {
+		if activityIteration.Load() == 0 {
+			for activityShouldBreak.Load() == false {
+				activity.RecordHeartbeat(ctx, "first")
+				time.Sleep(time.Second) //nolint:forbidigo
+			}
+			return "", errors.New("bad-luck-please-retry")
+		}
+		// not the first iteration
+		s.WaitForChannel(ctx, activityCompleteCh)
+		for activityShouldFinish.Load() == false {
+			activity.RecordHeartbeat(ctx, "second")
+			time.Sleep(time.Second) //nolint:forbidigo
+		}
+		return "Done", nil
+	}
+
+	activityId := "heartbeat_retry"
+	workflowFn := func(ctx workflow.Context) (string, error) {
+		var ret string
+		err := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+			ActivityID:             activityId,
+			DisableEagerExecution:  true,
+			StartToCloseTimeout:    s.startToCloseTimeout,
+			ScheduleToCloseTimeout: s.scheduleToCloseTimeout,
+			RetryPolicy:            s.activityRetryPolicy,
+		}), activityFn).Get(ctx, &ret)
+		return ret, err
+	}
+
+	s.Worker().RegisterActivity(activityFn)
+	s.Worker().RegisterWorkflow(workflowFn)
+
+	wfId := "functional-test-heartbeat-details-after-reset"
+	workflowOptions := sdkclient.StartWorkflowOptions{
+		ID:                 wfId,
+		TaskQueue:          s.TaskQueue(),
+		WorkflowRunTimeout: 20 * time.Second,
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
+	s.NoError(err)
+
+	s.NotNil(workflowRun)
+	runId := workflowRun.GetRunID()
+	s.NotEmpty(runId)
+
+	// make sure activity is running and sending heartbeats
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+		assert.NoError(t, err)
+		if description.GetPendingActivities() != nil {
+			assert.Len(t, description.PendingActivities, 1)
+			assertPayload(t, "first", description.PendingActivities[0].GetHeartbeatDetails())
+		}
+		assert.Equal(t, int32(0), activityIteration.Load())
+	}, 5*time.Second, 500*time.Millisecond)
+
+	// reset the activity, with heartbeats
+	resetRequest := &workflowservice.ResetActivityRequest{
+		Namespace: s.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: workflowRun.GetID(),
+		},
+		Activity:       &workflowservice.ResetActivityRequest_Id{Id: activityId},
+		ResetHeartbeat: true,
+	}
+
+	resp, err := s.FrontendClient().ResetActivity(ctx, resetRequest)
+	s.NoError(err)
+	s.NotNil(resp)
+
+	activityIteration.Store(1)
+	activityShouldBreak.Store(true)
+
+	// wait for activity to fail and retried
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+		assert.NoError(t, err)
+		if description.GetPendingActivities() != nil {
+			assert.Len(t, description.PendingActivities, 1)
+			ap := description.PendingActivities[0]
+
+			assert.Equal(t, int32(2), ap.Attempt)
+			// make sure heartbeat was reset
+			assert.Nil(t, ap.HeartbeatDetails)
+		}
+		assert.Equal(t, int32(1), activityIteration.Load())
+	}, 5*time.Second, 500*time.Millisecond)
+
+	// let activity start producing heartbeats
+	activityCompleteCh <- struct{}{}
+
+	// make sure activity is running and sending heartbeats
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+		assert.NoError(t, err)
+		assert.Equal(t, int32(1), activityIteration.Load())
+		if description.GetPendingActivities() != nil {
+			assert.Len(t, description.PendingActivities, 1)
+			assertPayload(t, "second", description.PendingActivities[0].GetHeartbeatDetails())
+		}
+	}, 5*time.Second, 500*time.Millisecond)
+
+	// let activity finish
+	activityShouldFinish.Store(true)
+
+	// wait for workflow to finish
+	var out string
+	err = workflowRun.Get(ctx, &out)
+	s.NoError(err)
+	s.NotEmpty(out)
 }

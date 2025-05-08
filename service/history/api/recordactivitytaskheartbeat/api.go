@@ -37,6 +37,7 @@ func Invoke(
 
 	var cancelRequested bool
 	var activityPaused bool
+	var activityReset bool
 	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
 		token.Clock,
@@ -83,6 +84,7 @@ func Invoke(
 
 			cancelRequested = ai.CancelRequested
 			activityPaused = ai.Paused
+			activityReset = ai.ActivityReset
 
 			// Save progress and last HB reported time.
 			mutableState.UpdateActivityProgress(ai, request)
@@ -103,5 +105,6 @@ func Invoke(
 	return &historyservice.RecordActivityTaskHeartbeatResponse{
 		CancelRequested: cancelRequested,
 		ActivityPaused:  activityPaused,
+		ActivityReset:   activityReset,
 	}, nil
 }
