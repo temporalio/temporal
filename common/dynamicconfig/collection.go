@@ -244,6 +244,10 @@ func findMatch(cvs []ConstrainedValue, precedence []Constraints) (*ConstrainedVa
 	for _, m := range precedence {
 		for idx, cv := range cvs {
 			if m == cv.Constraints {
+				// Note: cvs here is the slice returned by Client.GetValue. We want to return a
+				// pointer into that slice so that the converted value is cached as long as the
+				// Client keeps the []ConstrainedValue alive. See the comment on
+				// Client.GetValue.
 				return &cvs[idx], nil
 			}
 		}
@@ -309,6 +313,9 @@ func findMatchWithConstrainedDefaults[T any](cvs []ConstrainedValue, defaultCVs 
 			if m == cv.Constraints {
 				if valueOrder == 0 {
 					valueOrder = order
+					// Note: cvs here is the slice returned by Client.GetValue. We want to
+					// return a pointer into that slice instead of copying the ConstrainedValue.
+					// See findMatch.
 					matchedValue = &cvs[idx]
 				}
 			}
