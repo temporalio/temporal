@@ -50,8 +50,8 @@ type Client interface {
 	DescribeVersion(
 		ctx context.Context,
 		namespaceEntry *namespace.Namespace,
-		request *workflowservice.DescribeWorkerDeploymentVersionRequest,
-	) (*workflowservice.DescribeWorkerDeploymentVersionResponse, error)
+		version string,
+	) (*deploymentpb.WorkerDeploymentVersionInfo, error)
 
 	DescribeWorkerDeployment(
 		ctx context.Context,
@@ -245,27 +245,20 @@ func (d *ClientImpl) RegisterTaskQueueWorker(
 func (d *ClientImpl) DescribeVersion(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
-	request *workflowservice.DescribeWorkerDeploymentVersionRequest,
-) (_ *workflowservice.DescribeWorkerDeploymentVersionResponse, retErr error) {
-	deploymentName := request.GetDeploymentVersion().GetDeploymentName()
-	buildID := request.GetDeploymentVersion().GetBuildId()
-	if request.GetDeploymentVersion() == nil {
-		if request.GetVersion() == "" {
-			return nil, serviceerror.NewInvalidArgument("deployment version cannot be empty")
-		}
-		v, err := worker_versioning.WorkerDeploymentVersionFromString(request.GetVersion())
-		if err != nil {
-			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("invalid version string '%q', expected format is \"<deployment_name>.<build_id>\"", request.GetVersion()))
-		}
-		deploymentName = v.GetDeploymentName()
-		buildID = v.GetBuildId()
+	version string,
+) (_ *deploymentpb.WorkerDeploymentVersionInfo, retErr error) {
+	v, err := worker_versioning.WorkerDeploymentVersionFromString(version)
+	if err != nil {
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("invalid version string %q, expected format is \"<deployment_name>.<build_id>\"", version))
 	}
+	deploymentName := v.GetDeploymentName()
+	buildID := v.GetBuildId()
 
 	//revive:disable-next-line:defer
 	defer d.record("DescribeVersion", &retErr, deploymentName, buildID)()
 
 	// validate deployment name
-	err := validateVersionWfParams(WorkerDeploymentNameFieldName, deploymentName, d.maxIDLengthLimit())
+	err = validateVersionWfParams(WorkerDeploymentNameFieldName, deploymentName, d.maxIDLengthLimit())
 	if err != nil {
 		return nil, err
 	}
@@ -310,9 +303,7 @@ func (d *ClientImpl) DescribeVersion(
 		return nil, err
 	}
 
-	return &workflowservice.DescribeWorkerDeploymentVersionResponse{
-		WorkerDeploymentVersionInfo: versionStateToVersionInfo(queryResponse.VersionState),
-	}, nil
+	return versionStateToVersionInfo(queryResponse.VersionState), nil
 }
 
 func (d *ClientImpl) UpdateVersionMetadata(
@@ -1309,10 +1300,6 @@ func versionStateToVersionInfo(state *deploymentspb.VersionLocalState) *deployme
 		drainageInfo = nil
 	}
 	return &deploymentpb.WorkerDeploymentVersionInfo{
-		DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
-			BuildId:        state.GetVersion().GetBuildId(),
-			DeploymentName: state.GetVersion().GetBuildId(),
-		},
 		Version:            worker_versioning.WorkerDeploymentVersionToString(state.Version),
 		CreateTime:         state.CreateTime,
 		RoutingChangedTime: state.RoutingUpdateTime,
@@ -1381,21 +1368,17 @@ func makeDeploymentQuery(version string) string {
 
 func (d *ClientImpl) IsVersionMissingTaskQueues(ctx context.Context, namespaceEntry *namespace.Namespace, prevCurrentVersion, newVersion string) (bool, error) {
 	// Check if all the task-queues in the prevCurrentVersion are present in the newCurrentVersion (newVersion is either the new ramping version or the new current version)
-	prevCurrentVersionResp, err := d.DescribeVersion(ctx, namespaceEntry, &workflowservice.DescribeWorkerDeploymentVersionRequest{
-		Version: prevCurrentVersion,
-	})
+	prevCurrentVersionInfo, err := d.DescribeVersion(ctx, namespaceEntry, prevCurrentVersion)
 	if err != nil {
 		return false, serviceerror.NewFailedPrecondition(fmt.Sprintf("Version %s not found in deployment with error: %v", prevCurrentVersion, err))
 	}
 
-	newVersionResp, err := d.DescribeVersion(ctx, namespaceEntry, &workflowservice.DescribeWorkerDeploymentVersionRequest{
-		Version: newVersion,
-	})
+	newVersionInfo, err := d.DescribeVersion(ctx, namespaceEntry, newVersion)
 	if err != nil {
 		return false, serviceerror.NewFailedPrecondition(fmt.Sprintf("Version %s not found in deployment with error: %v", newVersion, err))
 	}
 
-	missingTaskQueues, err := d.checkForMissingTaskQueues(prevCurrentVersionResp.GetWorkerDeploymentVersionInfo(), newVersionResp.GetWorkerDeploymentVersionInfo())
+	missingTaskQueues, err := d.checkForMissingTaskQueues(prevCurrentVersionInfo, newVersionInfo)
 	if err != nil {
 		return false, err
 	}
@@ -1406,7 +1389,7 @@ func (d *ClientImpl) IsVersionMissingTaskQueues(ctx context.Context, namespaceEn
 
 	// Verify that all the missing task-queues have been added to another deployment or do not have backlogged tasks/add-rate > 0
 	for _, missingTaskQueue := range missingTaskQueues {
-		isExpectedInNewVersion, err := d.isTaskQueueExpectedInNewVersion(ctx, namespaceEntry, missingTaskQueue, prevCurrentVersionResp.GetWorkerDeploymentVersionInfo())
+		isExpectedInNewVersion, err := d.isTaskQueueExpectedInNewVersion(ctx, namespaceEntry, missingTaskQueue, prevCurrentVersionInfo)
 		if err != nil {
 			return false, err
 		}

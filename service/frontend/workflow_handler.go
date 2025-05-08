@@ -3356,7 +3356,21 @@ func (wh *WorkflowHandler) DescribeWorkerDeploymentVersion(ctx context.Context, 
 		return nil, err
 	}
 
-	return wh.workerDeploymentClient.DescribeVersion(ctx, namespaceEntry, request)
+	versionStr := request.GetVersion()
+	if versionStr == "" {
+		if request.GetDeploymentVersion() == nil {
+			return nil, serviceerror.NewInvalidArgument("deployment version cannot be empty")
+		}
+		versionStr = worker_versioning.ExternalWorkerDeploymentVersionToString(request.GetDeploymentVersion())
+	}
+
+	info, err := wh.workerDeploymentClient.DescribeVersion(ctx, namespaceEntry, versionStr)
+	if err != nil {
+		return nil, err
+	}
+
+	info.DeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromString(info.Version)
+	return &workflowservice.DescribeWorkerDeploymentVersionResponse{WorkerDeploymentVersionInfo: info}, nil
 }
 
 func (wh *WorkflowHandler) SetWorkerDeploymentCurrentVersion(ctx context.Context, request *workflowservice.SetWorkerDeploymentCurrentVersionRequest) (_ *workflowservice.SetWorkerDeploymentCurrentVersionResponse, retError error) {
