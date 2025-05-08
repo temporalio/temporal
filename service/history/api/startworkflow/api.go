@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package startworkflow
 
 import (
@@ -36,6 +12,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/enums"
@@ -81,7 +58,8 @@ type Starter struct {
 	request                                       *historyservice.StartWorkflowExecutionRequest
 	namespace                                     *namespace.Namespace
 	createOrUpdateLeaseFn                         api.CreateOrUpdateLeaseFunc
-	followReusePolicyAfterConflictPolicyTerminate dynamicconfig.TypedPropertyFnWithNamespaceFilter[bool]
+	followReusePolicyAfterConflictPolicyTerminate dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	enableRequestIdRefLinks                       dynamicconfig.BoolPropertyFn
 }
 
 // creationParams is a container for all information obtained from creating the uncommitted execution.
@@ -128,6 +106,7 @@ func NewStarter(
 		namespace:                  namespaceEntry,
 		createOrUpdateLeaseFn:      createLeaseFn,
 		followReusePolicyAfterConflictPolicyTerminate: shardContext.GetConfig().FollowReusePolicyAfterConflictPolicyTerminate,
+		enableRequestIdRefLinks:                       shardContext.GetConfig().EnableRequestIdRefLinks,
 	}, nil
 }
 
@@ -327,12 +306,17 @@ func (s *Starter) handleConflict(
 
 		if requestIDInfo.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
 			resp, err := s.respondToRetriedRequest(ctx, currentWorkflowConditionFailed.RunID)
+			if resp != nil {
+				resp.Status = currentWorkflowConditionFailed.Status
+			}
 			return resp, StartDeduped, err
 		}
 
 		resp := &historyservice.StartWorkflowExecutionResponse{
 			RunId:   currentWorkflowConditionFailed.RunID,
 			Started: false,
+			Status:  currentWorkflowConditionFailed.Status,
+			Link:    s.generateRequestIdRefLink(currentWorkflowConditionFailed.RunID),
 		}
 		return resp, StartDeduped, nil
 	}
@@ -497,6 +481,8 @@ func (s *Starter) resolveDuplicateWorkflowID(
 			return &historyservice.StartWorkflowExecutionResponse{
 				RunId:   newRunID,
 				Started: true,
+				Status:  enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+				Link:    s.generateStartedEventRefLink(newRunID),
 			}, StartNew, nil
 		}
 		events, err := s.getWorkflowHistory(ctx, mutableStateInfo)
@@ -531,6 +517,8 @@ func (s *Starter) respondToRetriedRequest(
 		return &historyservice.StartWorkflowExecutionResponse{
 			RunId:   runID,
 			Started: true,
+			// Status is set by caller
+			Link: s.generateStartedEventRefLink(runID),
 		}, nil
 	}
 
@@ -549,6 +537,8 @@ func (s *Starter) respondToRetriedRequest(
 		return &historyservice.StartWorkflowExecutionResponse{
 			RunId:   runID,
 			Started: true,
+			// Status is set by caller
+			Link: s.generateStartedEventRefLink(runID),
 		}, nil
 	}
 
@@ -638,12 +628,17 @@ func (s *Starter) handleUseExistingWorkflowOnConflictOptions(
 	workflowKey definition.WorkflowKey,
 	currentWorkflowConditionFailed *persistence.CurrentWorkflowConditionFailedError,
 ) (*historyservice.StartWorkflowExecutionResponse, StartOutcome, error) {
+	// Default response link is for the started event. If there is OnConflictOptions set, and it's
+	// attaching the request ID, then the response link will be a request ID reference.
+	responseLink := s.generateStartedEventRefLink(currentWorkflowConditionFailed.RunID)
+
 	var err error
 	onConflictOptions := s.request.StartRequest.GetOnConflictOptions()
 	if onConflictOptions != nil {
 		requestID := ""
 		if onConflictOptions.AttachRequestId {
 			requestID = s.request.StartRequest.GetRequestId()
+			responseLink = s.generateRequestIdRefLink(currentWorkflowConditionFailed.RunID)
 		}
 		var completionCallbacks []*commonpb.Callback
 		if onConflictOptions.AttachCompletionCallbacks {
@@ -683,6 +678,8 @@ func (s *Starter) handleUseExistingWorkflowOnConflictOptions(
 		resp := &historyservice.StartWorkflowExecutionResponse{
 			RunId:   workflowKey.RunID,
 			Started: false, // set explicitly for emphasis
+			Status:  enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			Link:    responseLink,
 		}
 		return resp, StartReused, nil
 	case consts.ErrWorkflowCompleted:
@@ -735,6 +732,8 @@ func (s *Starter) generateResponse(
 		return &historyservice.StartWorkflowExecutionResponse{
 			RunId:   runID,
 			Started: true,
+			Status:  enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			Link:    s.generateStartedEventRefLink(runID),
 		}, nil
 	}
 
@@ -771,6 +770,8 @@ func (s *Starter) generateResponse(
 		RunId:   runID,
 		Clock:   clock,
 		Started: true,
+		Status:  enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		Link:    s.generateStartedEventRefLink(runID),
 		EagerWorkflowTask: &workflowservice.PollWorkflowTaskQueueResponse{
 			TaskToken:         serializedToken,
 			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
@@ -787,6 +788,45 @@ func (s *Starter) generateResponse(
 			StartedTime:                timestamppb.New(workflowTaskInfo.StartedTime),
 		},
 	}, nil
+}
+
+func (s *Starter) generateStartedEventRefLink(runID string) *commonpb.Link {
+	return &commonpb.Link{
+		Variant: &commonpb.Link_WorkflowEvent_{
+			WorkflowEvent: &commonpb.Link_WorkflowEvent{
+				Namespace:  s.namespace.Name().String(),
+				WorkflowId: s.request.StartRequest.WorkflowId,
+				RunId:      runID,
+				Reference: &commonpb.Link_WorkflowEvent_EventRef{
+					EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+						EventId:   common.FirstEventID,
+						EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+					},
+				},
+			},
+		},
+	}
+}
+
+func (s *Starter) generateRequestIdRefLink(runID string) *commonpb.Link {
+	if !s.enableRequestIdRefLinks() {
+		return s.generateStartedEventRefLink(runID)
+	}
+	return &commonpb.Link{
+		Variant: &commonpb.Link_WorkflowEvent_{
+			WorkflowEvent: &commonpb.Link_WorkflowEvent{
+				Namespace:  s.namespace.Name().String(),
+				WorkflowId: s.request.StartRequest.WorkflowId,
+				RunId:      runID,
+				Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
+					RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
+						RequestId: s.request.StartRequest.RequestId,
+						EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+					},
+				},
+			},
+		},
+	}
 }
 
 func (s StartOutcome) String() string {

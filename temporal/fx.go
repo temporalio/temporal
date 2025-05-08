@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package temporal
 
 import (
@@ -1060,7 +1036,7 @@ func (l *fxLogAdapter) LogEvent(e fxevent.Event) {
 				tag.ComponentFX,
 				tag.NewStringTag("callee", e.FunctionName),
 				tag.NewStringTag("caller", e.CallerName),
-				tag.NewStringTag("runtime", e.Runtime.String()),
+				tag.NewStringerTag("runtime", e.Runtime),
 			)
 		}
 	case *fxevent.OnStopExecuting:
@@ -1082,7 +1058,7 @@ func (l *fxLogAdapter) LogEvent(e fxevent.Event) {
 				tag.ComponentFX,
 				tag.NewStringTag("callee", e.FunctionName),
 				tag.NewStringTag("caller", e.CallerName),
-				tag.NewStringTag("runtime", e.Runtime.String()),
+				tag.NewStringerTag("runtime", e.Runtime),
 			)
 		}
 	case *fxevent.Supplied:
@@ -1144,7 +1120,7 @@ func (l *fxLogAdapter) LogEvent(e fxevent.Event) {
 	case *fxevent.Stopping:
 		l.logger.Info("received signal",
 			tag.ComponentFX,
-			tag.NewStringTag("signal", e.Signal.String()))
+			tag.NewStringerTag("signal", e.Signal))
 	case *fxevent.Stopped:
 		if e.Err != nil {
 			l.logger.Error("stop failed", tag.ComponentFX, tag.Error(e.Err))

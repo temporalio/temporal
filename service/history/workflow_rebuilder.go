@@ -1,28 +1,4 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination workflow_rebuilder_mock.go
+//go:generate mockgen -package $GOPACKAGE -source $GOFILE -destination workflow_rebuilder_mock.go
 
 package history
 
@@ -32,6 +8,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
@@ -51,6 +28,7 @@ type (
 		stateTransitionCount int64
 		dbRecordVersion      int64
 		requestID            string
+		mutableState         *persistencespb.WorkflowMutableState
 	}
 	workflowRebuilder interface {
 		// rebuild rebuilds a workflow, in case of any kind of corruption
@@ -110,7 +88,6 @@ func (r *workflowRebuilderImpl) rebuild(
 		releaseFn(retError)
 		wfContext.Clear()
 	}()
-
 	rebuildMutableState, err := r.replayResetWorkflow(
 		ctx,
 		workflowKey,
@@ -118,6 +95,7 @@ func (r *workflowRebuilderImpl) rebuild(
 		rebuildSpec.stateTransitionCount,
 		rebuildSpec.dbRecordVersion,
 		rebuildSpec.requestID,
+		rebuildSpec.mutableState,
 	)
 	if err != nil {
 		return err
@@ -167,6 +145,7 @@ func (r *workflowRebuilderImpl) getRebuildSpecFromMutableState(
 		stateTransitionCount: mutableState.ExecutionInfo.StateTransitionCount,
 		dbRecordVersion:      resp.DBRecordVersion,
 		requestID:            mutableState.ExecutionState.CreateRequestId,
+		mutableState:         resp.State,
 	}, nil
 }
 
@@ -177,9 +156,9 @@ func (r *workflowRebuilderImpl) replayResetWorkflow(
 	stateTransitionCount int64,
 	dbRecordVersion int64,
 	requestID string,
+	mutableState *persistencespb.WorkflowMutableState,
 ) (historyi.MutableState, error) {
-
-	rebuildMutableState, rebuildHistorySize, err := ndc.NewStateRebuilder(r.shard, r.logger).Rebuild(
+	rebuildMutableState, rebuildHistorySize, err := ndc.NewStateRebuilder(r.shard, r.logger).RebuildWithCurrentMutableState(
 		ctx,
 		r.shard.GetTimeSource().Now(),
 		workflowKey,
@@ -189,6 +168,7 @@ func (r *workflowRebuilderImpl) replayResetWorkflow(
 		workflowKey,
 		branchToken,
 		requestID,
+		mutableState,
 	)
 	if err != nil {
 		return nil, err

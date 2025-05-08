@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package frontend
 
 import (
@@ -422,6 +398,8 @@ func (wh *WorkflowHandler) StartWorkflowExecution(
 		RunId:             resp.GetRunId(),
 		Started:           resp.Started,
 		EagerWorkflowTask: resp.GetEagerWorkflowTask(),
+		Link:              resp.GetLink(),
+		Status:            resp.GetStatus(),
 	}, nil
 }
 
@@ -458,10 +436,6 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 		return nil, errWorkflowTypeTooLong
 	}
 
-	if err := common.ValidateUTF8String("WorkflowType", request.WorkflowType.GetName()); err != nil {
-		return nil, err
-	}
-
 	if err := tqid.NormalizeAndValidate(request.TaskQueue, "", wh.config.MaxIDLengthLimit()); err != nil {
 		return nil, err
 	}
@@ -493,7 +467,8 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 		return nil, err
 	}
 	if sa != request.SearchAttributes {
-		// cloning here so in case of retry the field is set to the current search attributes
+		// Since unaliasedSearchAttributesFrom is not idempotent, we need to clone the request so that
+		// in case of retries, the field is set to the original value.
 		request = common.CloneProto(request)
 		request.SearchAttributes = sa
 	}
@@ -505,6 +480,8 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 	if err := wh.validateLinks(namespaceName, request.GetLinks()); err != nil {
 		return nil, err
 	}
+
+	request.Links = dedupLinksFromCallbacks(request.GetLinks(), request.GetCompletionCallbacks())
 
 	return request, nil
 }
@@ -694,6 +671,8 @@ func convertToMultiOperationResponse(
 					StartWorkflow: &workflowservice.StartWorkflowExecutionResponse{
 						RunId:   startResp.RunId,
 						Started: startResp.Started,
+						Link:    startResp.Link,
+						Status:  startResp.Status,
 					},
 				},
 			}
@@ -1165,6 +1144,7 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 		Header:                      matchingResponse.Header,
 		PollerScalingDecision:       matchingResponse.PollerScalingDecision,
 		Priority:                    matchingResponse.Priority,
+		RetryPolicy:                 matchingResponse.RetryPolicy,
 	}, nil
 }
 
@@ -1232,6 +1212,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeat(ctx context.Context, requ
 	return &workflowservice.RecordActivityTaskHeartbeatResponse{
 		CancelRequested: resp.GetCancelRequested(),
 		ActivityPaused:  resp.GetActivityPaused(),
+		ActivityReset:   resp.GetActivityReset(),
 	}, nil
 }
 
@@ -1330,6 +1311,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatById(ctx context.Context, 
 	return &workflowservice.RecordActivityTaskHeartbeatByIdResponse{
 		CancelRequested: resp.GetCancelRequested(),
 		ActivityPaused:  resp.GetActivityPaused(),
+		ActivityReset:   resp.GetActivityReset(),
 	}, nil
 }
 
@@ -1988,9 +1970,6 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		return nil, errWorkflowTypeTooLong
 	}
 
-	if err := common.ValidateUTF8String("WorkflowType", request.WorkflowType.GetName()); err != nil {
-		return nil, err
-	}
 	namespaceName := namespace.Name(request.GetNamespace())
 	if err := tqid.NormalizeAndValidate(request.TaskQueue, "", wh.config.MaxIDLengthLimit()); err != nil {
 		return nil, err
@@ -5088,8 +5067,7 @@ func (wh *WorkflowHandler) validateVersionRuleBuildId(request *workflowservice.U
 		if len(bid) > 255 {
 			return serviceerror.NewInvalidArgument(fmt.Sprintf("BuildId must be <= 255 characters, was %d", len(bid)))
 		}
-
-		return common.ValidateUTF8String("BuildId", bid)
+		return nil
 	}
 	switch request.GetOperation().(type) {
 	case *workflowservice.UpdateWorkerVersioningRulesRequest_InsertAssignmentRule:
@@ -5138,6 +5116,36 @@ func (wh *WorkflowHandler) validateOnConflictOptions(opts *workflowpb.OnConflict
 		return serviceerror.NewInvalidArgument("attaching request ID is required for attaching completion callbacks")
 	}
 	return nil
+}
+
+func dedupLinksFromCallbacks(
+	links []*commonpb.Link,
+	callbacks []*commonpb.Callback,
+) []*commonpb.Link {
+	if len(links) == 0 {
+		return nil
+	}
+	var res []*commonpb.Link
+	callbacksLinks := make([]*commonpb.Link, 0, len(callbacks))
+	for _, cb := range callbacks {
+		if cb.GetNexus() != nil {
+			// Only dedup links from Nexus callbacks.
+			callbacksLinks = append(callbacksLinks, cb.GetLinks()...)
+		}
+	}
+	for _, link := range links {
+		isDup := false
+		for _, cbLink := range callbacksLinks {
+			if proto.Equal(link, cbLink) {
+				isDup = true
+				break
+			}
+		}
+		if !isDup {
+			res = append(res, link)
+		}
+	}
+	return res
 }
 
 func (wh *WorkflowHandler) validateLinks(
@@ -5284,9 +5292,6 @@ func (wh *WorkflowHandler) validateBuildIdCompatibilityUpdate(
 		if len(id) > wh.config.WorkerBuildIdSizeLimit() {
 			errDeets = append(errDeets, fmt.Sprintf(" Worker build IDs to be no larger than %v characters",
 				wh.config.WorkerBuildIdSizeLimit()))
-		}
-		if err := common.ValidateUTF8String("BuildId", id); err != nil {
-			errDeets = append(errDeets, err.Error())
 		}
 	}
 
@@ -5500,7 +5505,7 @@ func validateRequestId(requestID *string, lenLimit int) error {
 		return errRequestIDTooLong
 	}
 
-	return common.ValidateUTF8String("RequestId", *requestID)
+	return nil
 }
 
 func (wh *WorkflowHandler) validateStartWorkflowTimeouts(
@@ -5561,9 +5566,6 @@ func (wh *WorkflowHandler) metricsScope(ctx context.Context) metrics.Handler {
 func (wh *WorkflowHandler) validateNamespace(
 	namespace string,
 ) error {
-	if err := common.ValidateUTF8String("Namespace", namespace); err != nil {
-		return err
-	}
 	if len(namespace) > wh.config.MaxIDLengthLimit() {
 		return errNamespaceTooLong
 	}
@@ -5575,9 +5577,6 @@ func (wh *WorkflowHandler) validateWorkflowID(
 ) error {
 	if workflowID == "" {
 		return errWorkflowIDNotSet
-	}
-	if err := common.ValidateUTF8String("WorkflowId", workflowID); err != nil {
-		return err
 	}
 	if len(workflowID) > wh.config.MaxIDLengthLimit() {
 		return errWorkflowIDTooLong
@@ -5902,7 +5901,11 @@ func (wh *WorkflowHandler) CreateWorkflowRule(
 		return nil, errWorkflowRuleIDTooLong
 	}
 
-	rule, err := wh.namespaceHandler.CreateWorkflowRule(ctx, request.GetSpec(), request.GetNamespace())
+	rule, err := wh.namespaceHandler.CreateWorkflowRule(ctx,
+		request.GetSpec(),
+		request.GetIdentity(),
+		request.GetDescription(),
+		request.GetNamespace())
 	if err != nil {
 		return nil, err
 	}
