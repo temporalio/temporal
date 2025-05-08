@@ -24,6 +24,6 @@ type ChasmTree interface {
 
 	EachPureTask(
 		deadline time.Time,
-		callback func(executor chasm.LogicalTaskExecutor, task any) error,
+		callback func(executor chasm.NodeExecutePureTask, task any) error,
 	) error
 }
