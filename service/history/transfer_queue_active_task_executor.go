@@ -3,6 +3,7 @@ package history
 import (
 	"context"
 	"fmt"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
@@ -891,14 +892,16 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 	}
 
 	parentPinnedVersion := ""
+	var parentPinnedDeploymentVersion *deploymentpb.WorkerDeploymentVersion
 	var parentPinnedOverride *workflowpb.VersioningOverride
 	if attributes.TaskQueue.GetName() == mutableState.GetExecutionInfo().GetTaskQueue() {
 		// TODO (shahab): also inherit when the child TQ is different, but in the same Version
 		if mutableState.GetEffectiveVersioningBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED {
 			parentPinnedVersion = worker_versioning.WorkerDeploymentVersionToString(
 				worker_versioning.DeploymentVersionFromDeployment(mutableState.GetEffectiveDeployment()))
+			parentPinnedDeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(mutableState.GetEffectiveDeployment())
 		}
-		if mutableState.GetExecutionInfo().GetVersioningInfo().GetVersioningOverride().GetBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED {
+		if worker_versioning.OverrideIsPinned(mutableState.GetExecutionInfo().GetVersioningInfo().GetVersioningOverride()) {
 			parentPinnedOverride = mutableState.GetExecutionInfo().GetVersioningInfo().GetVersioningOverride()
 		}
 	}
@@ -916,6 +919,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		initiatedEvent.GetUserMetadata(),
 		shouldTerminateAndStartChild,
 		parentPinnedVersion,
+		parentPinnedDeploymentVersion,
 		parentPinnedOverride,
 		priorities.Merge(mutableState.GetExecutionInfo().Priority, attributes.Priority),
 	)
@@ -1489,6 +1493,7 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 	userMetadata *sdkpb.UserMetadata,
 	shouldTerminateAndStartChild bool,
 	parentPinnedVersion string,
+	parentPinnedDeploymentVersion *deploymentpb.WorkerDeploymentVersion,
 	parentPinnedOverride *workflowpb.VersioningOverride,
 	priority *commonpb.Priority,
 ) (string, *clockspb.VectorClock, error) {
@@ -1529,6 +1534,7 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 			InitiatedVersion:              task.Version,
 			Clock:                         vclock.NewVectorClock(t.shardContext.GetClusterMetadata().GetClusterID(), t.shardContext.GetShardID(), task.TaskID),
 			PinnedWorkerDeploymentVersion: parentPinnedVersion,
+			PinnedDeploymentVersion:       parentPinnedDeploymentVersion,
 		},
 		rootExecutionInfo,
 		t.shardContext.GetTimeSource().Now(),

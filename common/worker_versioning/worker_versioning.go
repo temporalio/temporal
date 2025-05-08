@@ -252,6 +252,30 @@ func DeploymentVersionFromDeployment(deployment *deploymentpb.Deployment) *deplo
 	}
 }
 
+// ExternalWorkerDeploymentVersionFromDeployment Temporary helper function to convert Deployment to
+// WorkerDeploymentVersion proto until we update code to use the new proto in all places.
+func ExternalWorkerDeploymentVersionFromDeployment(deployment *deploymentpb.Deployment) *deploymentpb.WorkerDeploymentVersion {
+	if deployment == nil {
+		return nil
+	}
+	return &deploymentpb.WorkerDeploymentVersion{
+		BuildId:        deployment.GetBuildId(),
+		DeploymentName: deployment.GetSeriesName(),
+	}
+}
+
+// ExternalWorkerDeploymentVersionFromVersion Temporary helper function to convert internal Worker Deployment to
+// WorkerDeploymentVersion proto until we update code to use the new proto in all places.
+func ExternalWorkerDeploymentVersionFromVersion(version *deploymentspb.WorkerDeploymentVersion) *deploymentpb.WorkerDeploymentVersion {
+	if version == nil {
+		return nil
+	}
+	return &deploymentpb.WorkerDeploymentVersion{
+		BuildId:        version.GetBuildId(),
+		DeploymentName: version.GetDeploymentName(),
+	}
+}
+
 // DeploymentFromExternalDeploymentVersion Temporary helper function to convert WorkerDeploymentVersion to
 // Deployment proto until we update code to use the new proto in all places.
 func DeploymentFromExternalDeploymentVersion(dv *deploymentpb.WorkerDeploymentVersion) *deploymentpb.Deployment {
@@ -343,6 +367,16 @@ func ValidateDeploymentVersionString(version string) (*deploymentspb.WorkerDeplo
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("invalid version string %q, expected format is \"<deployment_name>.<build_id>\"", version))
 	}
 	return v, nil
+}
+
+func OverrideIsPinned(override *workflowpb.VersioningOverride) bool {
+	return override.GetBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED ||
+		override.GetPinned().GetBehavior() == workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED
+}
+
+func OverrideGetPinnedVersion(override *workflowpb.VersioningOverride) bool {
+	return override.GetBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED ||
+		override.GetPinned().GetBehavior() == workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED
 }
 
 // todo carly

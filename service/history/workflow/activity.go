@@ -70,6 +70,7 @@ func GetPendingActivityInfo(
 	p := &workflowpb.PendingActivityInfo{
 		ActivityId:                  ai.ActivityId,
 		LastWorkerDeploymentVersion: ai.LastWorkerDeploymentVersion,
+		LastDeploymentVersion:       ai.LastDeploymentVersion,
 		Priority:                    ai.Priority,
 	}
 	if ai.GetUseWorkflowBuildIdInfo() != nil {

@@ -1098,10 +1098,13 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 	m.ms.executionInfo.WorkerDeploymentName = attrs.GetWorkerDeploymentName()
 
 	//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
-	wftDeployment := attrs.GetDeployment()
-	if v := attrs.GetWorkerDeploymentVersion(); v != "" {
+	wftDeployment := attrs.GetDeployment()                // v0.30
+	if v := attrs.GetWorkerDeploymentVersion(); v != "" { // v0.31
 		dv, _ := worker_versioning.WorkerDeploymentVersionFromString(v)
 		wftDeployment = worker_versioning.DeploymentFromDeploymentVersion(dv)
+	}
+	if v := attrs.GetDeploymentVersion(); v != nil { // v0.32
+		wftDeployment = worker_versioning.DeploymentFromExternalDeploymentVersion(v)
 	}
 	wftBehavior := attrs.GetVersioningBehavior()
 	versioningInfo := m.ms.GetExecutionInfo().GetVersioningInfo()
@@ -1139,6 +1142,8 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 		if versioningInfo != nil {
 			versioningInfo.Behavior = wftBehavior
 			// Deployment Version is not set for unversioned workers.
+			versioningInfo.DeploymentVersion = nil
+			//nolint:staticcheck // SA1019 deprecated Version will clean up later
 			versioningInfo.Version = ""
 			//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
 			versioningInfo.Deployment = nil
@@ -1152,7 +1157,9 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 		// Only populating the new field.
 		//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
 		versioningInfo.Deployment = nil
-		versioningInfo.Version = worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(wftDeployment))
+		//nolint:staticcheck // SA1019 deprecated Version will clean up later
+		versioningInfo.Version = ""
+		versioningInfo.DeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(wftDeployment)
 	}
 
 	// Deployment and behavior after applying the data came from the completed wft.
@@ -1176,7 +1183,7 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 		}
 	}
 
-	// TODO: create reset point based on attrs.Deployment instead of the build ID.
+	// TODO(carlydf): create reset point based on attrs.Deployment instead of the build ID.
 	addedResetPoint := m.ms.addResetPointFromCompletion(
 		attrs.GetBinaryChecksum(),
 		attrs.GetWorkerVersion().GetBuildId(),
