@@ -91,7 +91,7 @@ func (d *WorkflowRunner) listenToSignals(ctx workflow.Context) {
 	selector.AddReceive(syncVersionSummaryChannel, func(c workflow.ReceiveChannel, more bool) {
 		var summary *deploymentspb.WorkerDeploymentVersionSummary
 		c.Receive(ctx, &summary)
-		d.updateVersionSummary(summary)
+		d.syncVersionSummaryFromVersionWorkflow(summary)
 	})
 
 	for (!workflow.GetInfo(ctx).GetContinueAsNewSuggested() && !forceCAN) || selector.HasPending() {
@@ -102,6 +102,17 @@ func (d *WorkflowRunner) listenToSignals(ctx workflow.Context) {
 	d.signalsCompleted = true
 }
 
+// syncVersionSummary ensures the version summary in the deployment workflow stays consistent
+// with the version workflow. This helps prevent discrepancies if they ever fall out of sync.
+func (d *WorkflowRunner) syncVersionSummaryFromVersionWorkflow(summary *deploymentspb.WorkerDeploymentVersionSummary) {
+	if _, ok := d.State.Versions[summary.GetVersion()]; !ok {
+		d.logger.Error("received summary for a non-existing version, ignoring it", "version", summary.GetVersion())
+		return
+	}
+
+	d.State.Versions[summary.GetVersion()] = summary
+}
+
 func (d *WorkflowRunner) updateVersionSummary(summary *deploymentspb.WorkerDeploymentVersionSummary) {
 	if _, ok := d.State.Versions[summary.GetVersion()]; !ok {
 		d.logger.Error("received summary for a non-existing version, ignoring it", "version", summary.GetVersion())
@@ -109,7 +120,7 @@ func (d *WorkflowRunner) updateVersionSummary(summary *deploymentspb.WorkerDeplo
 	}
 
 	// Preserve create_time and first_activation_time if they exist in current summary. This is to ensure that if the version
-	// had already been activated before, we don't override the first activation time
+	// had already been activated before, we don't override the first activation time by setting it to a wrong value.
 	if existingSummary := d.State.Versions[summary.GetVersion()]; existingSummary != nil && existingSummary.GetCreateTime() != nil {
 		summary.CreateTime = existingSummary.GetCreateTime()
 
