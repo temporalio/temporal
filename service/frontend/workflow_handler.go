@@ -3355,17 +3355,8 @@ func (wh *WorkflowHandler) DescribeWorkerDeploymentVersion(ctx context.Context, 
 	if err != nil {
 		return nil, err
 	}
-	workerDeploymentVersionInfo, err := wh.workerDeploymentClient.DescribeVersion(ctx, namespaceEntry, request.Version)
-	if err != nil {
-		return nil, err
-	}
 
-	workerDeploymentVersionInfo.DeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromString(
-		workerDeploymentVersionInfo.Version,
-	)
-	return &workflowservice.DescribeWorkerDeploymentVersionResponse{
-		WorkerDeploymentVersionInfo: workerDeploymentVersionInfo,
-	}, nil
+	return wh.workerDeploymentClient.DescribeVersion(ctx, namespaceEntry, request)
 }
 
 func (wh *WorkflowHandler) SetWorkerDeploymentCurrentVersion(ctx context.Context, request *workflowservice.SetWorkerDeploymentCurrentVersionRequest) (_ *workflowservice.SetWorkerDeploymentCurrentVersionResponse, retError error) {
@@ -3395,7 +3386,7 @@ func (wh *WorkflowHandler) SetWorkerDeploymentCurrentVersion(ctx context.Context
 	versionStr := request.GetVersion()
 	if versionStr == "" {
 		var v *deploymentspb.WorkerDeploymentVersion
-		if request.GetBuildId() != "" {
+		if request.GetBuildId() != "" { // versioned
 			v = &deploymentspb.WorkerDeploymentVersion{
 				DeploymentName: request.GetDeploymentName(),
 				BuildId:        request.GetBuildId(),
@@ -3440,11 +3431,11 @@ func (wh *WorkflowHandler) SetWorkerDeploymentRampingVersion(ctx context.Context
 	if versionStr == "" {
 		// Either a v0.31 user is trying to unset the ramp, or a v0.32 user did not populate the deprecated field.
 		//
-		// In the first case, the user will have also passed percentage=0, so we will set the ramping version to
-		// (__unversioned__, 0), which is the desired substitute for legacy "unset ramp" in the v0.32 framework where
-		// the only way to "unset ramp" is to have percentage=0.
+		// In the first case, the user will have also passed build_id="" and percentage=0, so we will set the ramping
+		// version to (__unversioned__, 0), which is the desired substitute for legacy "unset ramp" in the v0.32
+		// framework where the only way to "unset ramp" is to have percentage=0.
 		//
-		// In the second case, we want to convert to struct.
+		// In the second case, we will have build_id!="" and create a target ramping version.
 		var v *deploymentspb.WorkerDeploymentVersion
 		if request.GetBuildId() != "" {
 			v = &deploymentspb.WorkerDeploymentVersion{
@@ -3582,11 +3573,7 @@ func (wh *WorkflowHandler) DeleteWorkerDeploymentVersion(ctx context.Context, re
 
 	versionStr := request.GetVersion()
 	if request.GetDeploymentVersion() != nil {
-		versionStr = worker_versioning.WorkerDeploymentVersionToString(&deploymentspb.WorkerDeploymentVersion{
-			DeploymentName: request.GetDeploymentVersion().GetDeploymentName(),
-			BuildId:        request.GetDeploymentVersion().GetBuildId(),
-		})
-
+		versionStr = worker_versioning.ExternalWorkerDeploymentVersionToString(request.GetDeploymentVersion())
 	}
 
 	err = wh.workerDeploymentClient.DeleteWorkerDeploymentVersion(ctx, namespaceEntry, versionStr, request.SkipDrainage, request.Identity)
@@ -3615,11 +3602,7 @@ func (wh *WorkflowHandler) UpdateWorkerDeploymentVersionMetadata(ctx context.Con
 
 	versionStr := request.GetVersion()
 	if request.GetDeploymentVersion() != nil {
-		versionStr = worker_versioning.WorkerDeploymentVersionToString(&deploymentspb.WorkerDeploymentVersion{
-			DeploymentName: request.GetDeploymentVersion().GetDeploymentName(),
-			BuildId:        request.GetDeploymentVersion().GetBuildId(),
-		})
-
+		versionStr = worker_versioning.ExternalWorkerDeploymentVersionToString(request.GetDeploymentVersion())
 	}
 
 	// todo (Shivam): Should we get identity from the request?

@@ -252,6 +252,18 @@ func DeploymentVersionFromDeployment(deployment *deploymentpb.Deployment) *deplo
 	}
 }
 
+// DeploymentFromExternalDeploymentVersion Temporary helper function to convert WorkerDeploymentVersion to
+// Deployment proto until we update code to use the new proto in all places.
+func DeploymentFromExternalDeploymentVersion(dv *deploymentpb.WorkerDeploymentVersion) *deploymentpb.Deployment {
+	if dv == nil {
+		return nil
+	}
+	return &deploymentpb.Deployment{
+		BuildId:    dv.GetBuildId(),
+		SeriesName: dv.GetDeploymentName(),
+	}
+}
+
 // DeploymentFromDeploymentVersion Temporary helper function to convert WorkerDeploymentVersion to
 // Deployment proto until we update code to use the new proto in all places.
 func DeploymentFromDeploymentVersion(dv *deploymentspb.WorkerDeploymentVersion) *deploymentpb.Deployment {
@@ -333,6 +345,7 @@ func ValidateDeploymentVersionString(version string) (*deploymentspb.WorkerDeplo
 	return v, nil
 }
 
+// todo carly
 func ValidateVersioningOverride(override *workflowpb.VersioningOverride) error {
 	if override == nil {
 		return nil
@@ -490,6 +503,13 @@ func V32RoutingConfigFromV31(r *deploymentpb.RoutingConfig) *deploymentpb.Routin
 }
 
 func WorkerDeploymentVersionToString(v *deploymentspb.WorkerDeploymentVersion) string {
+	if v == nil {
+		return "__unversioned__"
+	}
+	return v.GetDeploymentName() + WorkerDeploymentVersionIdDelimiter + v.GetBuildId()
+}
+
+func ExternalWorkerDeploymentVersionToString(v *deploymentpb.WorkerDeploymentVersion) string {
 	if v == nil {
 		return "__unversioned__"
 	}
