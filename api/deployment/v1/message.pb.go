@@ -219,10 +219,10 @@ type VersionLocalState struct {
 	// Range: [0, 100]. Must be zero if the version is not ramping (i.e. `ramping_since_time` is nil).
 	// Can be in the range [0, 100] if the version is ramping.
 	RampPercentage float32 `protobuf:"fixed32,6,opt,name=ramp_percentage,json=rampPercentage,proto3" json:"ramp_percentage,omitempty"`
-	// Timestamp when this version first started receiving traffic, either as current or ramping.
-	TrafficFirstReceivedTime *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=traffic_first_received_time,json=trafficFirstReceivedTime,proto3" json:"traffic_first_received_time,omitempty"`
-	// Timestamp when this version last received any traffic, either as current or ramping.
-	TrafficLastReceivedTime *timestamppb.Timestamp `protobuf:"bytes,13,opt,name=traffic_last_received_time,json=trafficLastReceivedTime,proto3" json:"traffic_last_received_time,omitempty"`
+	// Timestamp when this version first became current or ramping.
+	FirstActivationTime *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=first_activation_time,json=firstActivationTime,proto3" json:"first_activation_time,omitempty"`
+	// Timestamp when this version last stopped being current or ramping.
+	LastDeactivationTime *timestamppb.Timestamp `protobuf:"bytes,13,opt,name=last_deactivation_time,json=lastDeactivationTime,proto3" json:"last_deactivation_time,omitempty"`
 	// Helps user determine when it is safe to decommission the workers of this
 	// Version. Not present when version is current or ramping.
 	// Current limitations:
@@ -320,16 +320,16 @@ func (x *VersionLocalState) GetRampPercentage() float32 {
 	return 0
 }
 
-func (x *VersionLocalState) GetTrafficFirstReceivedTime() *timestamppb.Timestamp {
+func (x *VersionLocalState) GetFirstActivationTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.TrafficFirstReceivedTime
+		return x.FirstActivationTime
 	}
 	return nil
 }
 
-func (x *VersionLocalState) GetTrafficLastReceivedTime() *timestamppb.Timestamp {
+func (x *VersionLocalState) GetLastDeactivationTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.TrafficLastReceivedTime
+		return x.LastDeactivationTime
 	}
 	return nil
 }
@@ -707,12 +707,12 @@ type WorkerDeploymentVersionSummary struct {
 	//
 	// Nil if not ramping. Updated when the version first starts ramping, not on each ramp change.
 	RampingSinceTime *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=ramping_since_time,json=rampingSinceTime,proto3" json:"ramping_since_time,omitempty"`
-	// Timestamp when this version first started receiving traffic, either as current or ramping.
-	TrafficFirstReceivedTime *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=traffic_first_received_time,json=trafficFirstReceivedTime,proto3" json:"traffic_first_received_time,omitempty"`
-	// Timestamp when this version last received any traffic, either as current or ramping.
-	TrafficLastReceivedTime *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=traffic_last_received_time,json=trafficLastReceivedTime,proto3" json:"traffic_last_received_time,omitempty"`
-	unknownFields           protoimpl.UnknownFields
-	sizeCache               protoimpl.SizeCache
+	// Timestamp when this version first became current or ramping.
+	FirstActivationTime *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=first_activation_time,json=firstActivationTime,proto3" json:"first_activation_time,omitempty"`
+	// Timestamp when this version last stopped being current or ramping.
+	LastDeactivationTime *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=last_deactivation_time,json=lastDeactivationTime,proto3" json:"last_deactivation_time,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *WorkerDeploymentVersionSummary) Reset() {
@@ -795,16 +795,16 @@ func (x *WorkerDeploymentVersionSummary) GetRampingSinceTime() *timestamppb.Time
 	return nil
 }
 
-func (x *WorkerDeploymentVersionSummary) GetTrafficFirstReceivedTime() *timestamppb.Timestamp {
+func (x *WorkerDeploymentVersionSummary) GetFirstActivationTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.TrafficFirstReceivedTime
+		return x.FirstActivationTime
 	}
 	return nil
 }
 
-func (x *WorkerDeploymentVersionSummary) GetTrafficLastReceivedTime() *timestamppb.Timestamp {
+func (x *WorkerDeploymentVersionSummary) GetLastDeactivationTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.TrafficLastReceivedTime
+		return x.LastDeactivationTime
 	}
 	return nil
 }
@@ -4151,7 +4151,8 @@ const file_temporal_server_api_deployment_v1_message_proto_rawDesc = "" +
 	"\x13routing_update_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x11routingUpdateTime\x12H\n" +
 	"\x12current_since_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x10currentSinceTime\x12H\n" +
 	"\x12ramping_since_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x10rampingSinceTime\x12'\n" +
-	"\x0framp_percentage\x18\x05 \x01(\x02R\x0erampPercentage\"\x83\v\n" +
+	"\x0framp_percentage\x18\x05 \x01(\x02R\x0erampPercentage\"\xf1\n" +
+	"\n" +
 	"\x11VersionLocalState\x12T\n" +
 	"\aversion\x18\x01 \x01(\v2:.temporal.server.api.deployment.v1.WorkerDeploymentVersionR\aversion\x12;\n" +
 	"\vcreate_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
@@ -4159,9 +4160,9 @@ const file_temporal_server_api_deployment_v1_message_proto_rawDesc = "" +
 	"\x13routing_update_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x11routingUpdateTime\x12H\n" +
 	"\x12current_since_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x10currentSinceTime\x12H\n" +
 	"\x12ramping_since_time\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\x10rampingSinceTime\x12'\n" +
-	"\x0framp_percentage\x18\x06 \x01(\x02R\x0erampPercentage\x12Y\n" +
-	"\x1btraffic_first_received_time\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\x18trafficFirstReceivedTime\x12W\n" +
-	"\x1atraffic_last_received_time\x18\r \x01(\v2\x1a.google.protobuf.TimestampR\x17trafficLastReceivedTime\x12T\n" +
+	"\x0framp_percentage\x18\x06 \x01(\x02R\x0erampPercentage\x12N\n" +
+	"\x15first_activation_time\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\x13firstActivationTime\x12P\n" +
+	"\x16last_deactivation_time\x18\r \x01(\v2\x1a.google.protobuf.TimestampR\x14lastDeactivationTime\x12T\n" +
 	"\rdrainage_info\x18\a \x01(\v2/.temporal.api.deployment.v1.VersionDrainageInfoR\fdrainageInfo\x12G\n" +
 	"\bmetadata\x18\b \x01(\v2+.temporal.api.deployment.v1.VersionMetadataR\bmetadata\x12>\n" +
 	"\x1bstarted_deployment_workflow\x18\t \x01(\bR\x19startedDeploymentWorkflow\x12{\n" +
@@ -4201,7 +4202,7 @@ const file_temporal_server_api_deployment_v1_message_proto_rawDesc = "" +
 	"\x0fsync_batch_size\x18\x06 \x01(\x05R\rsyncBatchSize\x1a~\n" +
 	"\rVersionsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12W\n" +
-	"\x05value\x18\x02 \x01(\v2A.temporal.server.api.deployment.v1.WorkerDeploymentVersionSummaryR\x05value:\x028\x01\"\xbc\x05\n" +
+	"\x05value\x18\x02 \x01(\v2A.temporal.server.api.deployment.v1.WorkerDeploymentVersionSummaryR\x05value:\x028\x01\"\xaa\x05\n" +
 	"\x1eWorkerDeploymentVersionSummary\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12;\n" +
 	"\vcreate_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
@@ -4210,9 +4211,9 @@ const file_temporal_server_api_deployment_v1_message_proto_rawDesc = "" +
 	"\rdrainage_info\x18\x04 \x01(\v2/.temporal.api.deployment.v1.VersionDrainageInfoR\fdrainageInfo\x12J\n" +
 	"\x13routing_update_time\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\x11routingUpdateTime\x12H\n" +
 	"\x12current_since_time\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\x10currentSinceTime\x12H\n" +
-	"\x12ramping_since_time\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\x10rampingSinceTime\x12Y\n" +
-	"\x1btraffic_first_received_time\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\x18trafficFirstReceivedTime\x12W\n" +
-	"\x1atraffic_last_received_time\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\x17trafficLastReceivedTime\"\xd5\x01\n" +
+	"\x12ramping_since_time\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\x10rampingSinceTime\x12N\n" +
+	"\x15first_activation_time\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\x13firstActivationTime\x12P\n" +
+	"\x16last_deactivation_time\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\x14lastDeactivationTime\"\xd5\x01\n" +
 	"\x1bRegisterWorkerInVersionArgs\x12&\n" +
 	"\x0ftask_queue_name\x18\x01 \x01(\tR\rtaskQueueName\x12L\n" +
 	"\x0ftask_queue_type\x18\x02 \x01(\x0e2$.temporal.api.enums.v1.TaskQueueTypeR\rtaskQueueType\x12&\n" +
@@ -4587,8 +4588,8 @@ var file_temporal_server_api_deployment_v1_message_proto_depIdxs = []int32{
 	82,  // 6: temporal.server.api.deployment.v1.VersionLocalState.routing_update_time:type_name -> google.protobuf.Timestamp
 	82,  // 7: temporal.server.api.deployment.v1.VersionLocalState.current_since_time:type_name -> google.protobuf.Timestamp
 	82,  // 8: temporal.server.api.deployment.v1.VersionLocalState.ramping_since_time:type_name -> google.protobuf.Timestamp
-	82,  // 9: temporal.server.api.deployment.v1.VersionLocalState.traffic_first_received_time:type_name -> google.protobuf.Timestamp
-	82,  // 10: temporal.server.api.deployment.v1.VersionLocalState.traffic_last_received_time:type_name -> google.protobuf.Timestamp
+	82,  // 9: temporal.server.api.deployment.v1.VersionLocalState.first_activation_time:type_name -> google.protobuf.Timestamp
+	82,  // 10: temporal.server.api.deployment.v1.VersionLocalState.last_deactivation_time:type_name -> google.protobuf.Timestamp
 	83,  // 11: temporal.server.api.deployment.v1.VersionLocalState.drainage_info:type_name -> temporal.api.deployment.v1.VersionDrainageInfo
 	84,  // 12: temporal.server.api.deployment.v1.VersionLocalState.metadata:type_name -> temporal.api.deployment.v1.VersionMetadata
 	63,  // 13: temporal.server.api.deployment.v1.VersionLocalState.task_queue_families:type_name -> temporal.server.api.deployment.v1.VersionLocalState.TaskQueueFamiliesEntry
@@ -4604,8 +4605,8 @@ var file_temporal_server_api_deployment_v1_message_proto_depIdxs = []int32{
 	82,  // 23: temporal.server.api.deployment.v1.WorkerDeploymentVersionSummary.routing_update_time:type_name -> google.protobuf.Timestamp
 	82,  // 24: temporal.server.api.deployment.v1.WorkerDeploymentVersionSummary.current_since_time:type_name -> google.protobuf.Timestamp
 	82,  // 25: temporal.server.api.deployment.v1.WorkerDeploymentVersionSummary.ramping_since_time:type_name -> google.protobuf.Timestamp
-	82,  // 26: temporal.server.api.deployment.v1.WorkerDeploymentVersionSummary.traffic_first_received_time:type_name -> google.protobuf.Timestamp
-	82,  // 27: temporal.server.api.deployment.v1.WorkerDeploymentVersionSummary.traffic_last_received_time:type_name -> google.protobuf.Timestamp
+	82,  // 26: temporal.server.api.deployment.v1.WorkerDeploymentVersionSummary.first_activation_time:type_name -> google.protobuf.Timestamp
+	82,  // 27: temporal.server.api.deployment.v1.WorkerDeploymentVersionSummary.last_deactivation_time:type_name -> google.protobuf.Timestamp
 	87,  // 28: temporal.server.api.deployment.v1.RegisterWorkerInVersionArgs.task_queue_type:type_name -> temporal.api.enums.v1.TaskQueueType
 	87,  // 29: temporal.server.api.deployment.v1.RegisterWorkerInWorkerDeploymentArgs.task_queue_type:type_name -> temporal.api.enums.v1.TaskQueueType
 	0,   // 30: temporal.server.api.deployment.v1.RegisterWorkerInWorkerDeploymentArgs.version:type_name -> temporal.server.api.deployment.v1.WorkerDeploymentVersion
