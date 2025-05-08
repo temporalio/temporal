@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package history
 
 import (
@@ -44,6 +20,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
@@ -738,10 +715,10 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Multiple
 			s.Equal(1, len(input.UpdateWorkflowMutation.UpsertActivityInfos))
 			mutableState.GetExecutionInfo().LastUpdateTime = input.UpdateWorkflowMutation.ExecutionInfo.LastUpdateTime
 			input.RangeID = 0
-			input.UpdateWorkflowMutation.ExecutionInfo.LastEventTaskId = 0
+			input.UpdateWorkflowMutation.ExecutionInfo.LastRunningClock = 0
 			input.UpdateWorkflowMutation.ExecutionInfo.LastFirstEventTxnId = 0
 			input.UpdateWorkflowMutation.ExecutionInfo.StateTransitionCount = 0
-			mutableState.GetExecutionInfo().LastEventTaskId = 0
+			mutableState.GetExecutionInfo().LastRunningClock = 0
 			mutableState.GetExecutionInfo().LastFirstEventTxnId = 0
 			mutableState.GetExecutionInfo().StateTransitionCount = 0
 			mutableState.GetExecutionInfo().WorkflowTaskOriginalScheduledTime = input.UpdateWorkflowMutation.ExecutionInfo.WorkflowTaskOriginalScheduledTime
@@ -2019,6 +1996,72 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_Zo
 
 	resp := s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
 	s.ErrorIs(resp.ExecutionErr, consts.ErrWorkflowZombie)
+}
+
+func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteChasmPureTimerTask_ExecutesAllPureTimers() {
+	execution := &commonpb.WorkflowExecution{
+		WorkflowId: tests.WorkflowKey.WorkflowID,
+		RunId:      tests.WorkflowKey.RunID,
+	}
+
+	// Mock the CHASM tree and execute interface.
+	mockEach := chasm.NewMockNodeExecutePureTask(s.controller)
+	chasmTree := historyi.NewMockChasmTree(s.controller)
+	chasmTree.EXPECT().EachPureTask(gomock.Any(), gomock.Any()).
+		Times(1).Do(
+		func(_ time.Time, callback func(executor chasm.NodeExecutePureTask, task any) error) error {
+			return callback(mockEach, nil)
+		})
+
+	// Mock mutable state.
+	ms := historyi.NewMockMutableState(s.controller)
+	info := &persistencespb.WorkflowExecutionInfo{}
+	ms.EXPECT().GetCurrentVersion().Return(int64(2)).AnyTimes()
+	ms.EXPECT().NextTransitionCount().Return(int64(0)).AnyTimes() // emulate transition history disabled.
+	ms.EXPECT().GetNextEventID().Return(int64(2)).AnyTimes()
+	ms.EXPECT().GetExecutionInfo().Return(info).AnyTimes()
+	ms.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey).AnyTimes()
+	ms.EXPECT().GetExecutionState().Return(
+		&persistencespb.WorkflowExecutionState{Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING},
+	).AnyTimes()
+	ms.EXPECT().ChasmTree().Return(chasmTree).AnyTimes()
+
+	// Add a valid timer task.
+	timerTask := &tasks.ChasmTaskPure{
+		WorkflowKey: definition.NewWorkflowKey(
+			s.namespaceID.String(),
+			execution.GetWorkflowId(),
+			execution.GetRunId(),
+		),
+		VisibilityTimestamp: s.now,
+		TaskID:              s.mustGenerateTaskID(),
+	}
+
+	wfCtx := historyi.NewMockWorkflowContext(s.controller)
+	wfCtx.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(ms, nil)
+	// wfCtx.EXPECT().UpdateWorkflowExecutionAsActive(gomock.Any(), gomock.Any())
+
+	mockCache := wcache.NewMockCache(s.controller)
+	mockCache.EXPECT().GetOrCreateWorkflowExecution(
+		gomock.Any(), s.mockShard, gomock.Any(), execution, locks.PriorityLow,
+	).Return(wfCtx, wcache.NoopReleaseFn, nil)
+
+	//nolint:revive // unchecked-type-assertion
+	timerQueueStandbyTaskExecutor := newTimerQueueStandbyTaskExecutor(
+		s.mockShard,
+		mockCache,
+		s.mockDeleteManager,
+		s.mockMatchingClient,
+		s.logger,
+		metrics.NoopMetricsHandler,
+		s.clusterName,
+		s.config,
+		s.clientBean,
+	).(*timerQueueStandbyTaskExecutor)
+
+	resp := timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
+	s.NotNil(resp)
+	s.NoError(resp.ExecutionErr)
 }
 
 func (s *timerQueueStandbyTaskExecutorSuite) createPersistenceMutableState(

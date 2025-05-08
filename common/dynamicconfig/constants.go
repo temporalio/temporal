@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package dynamicconfig
 
 import (
@@ -42,7 +18,7 @@ var (
 		"dynamicconfig.subscriptionCallback",
 		subscriptionCallbackSettings{
 			MinWorkers:   10,
-			MaxWorkers:   100,
+			MaxWorkers:   1e9, // effectively unlimited
 			TargetDelay:  10 * time.Millisecond,
 			ShrinkFactor: 1000, // 10 seconds
 		},
@@ -761,7 +737,12 @@ This config is EXPERIMENTAL and may be changed or removed in a later release.`,
 	HistoryHostErrorPercentage = NewGlobalFloatSetting(
 		"frontend.historyHostErrorPercentage",
 		0.5,
-		`HistoryHostErrorPercentage is the percentage of hosts that are unhealthy`,
+		`HistoryHostErrorPercentage is the proportion of hosts that are unhealthy through observation external to the host and internal host health checks`,
+	)
+	HistoryHostSelfErrorProportion = NewGlobalFloatSetting(
+		"frontend.historyHostSelfErrorProportion",
+		0.05,
+		`HistoryHostStartingProportion is the proportion of hosts that have marked themselves as not ready -- this could due to waiting to acquire all shards on startup, or an internal health check failure`,
 	)
 	SendRawWorkflowHistory = NewNamespaceBoolSetting(
 		"frontend.sendRawWorkflowHistory",
@@ -1433,6 +1414,12 @@ HistoryCacheSizeBasedLimit is set to true.`,
 		true,
 		`EnableWorkflowExecutionTimeoutTimer controls whether to enable the new logic for generating a workflow execution
 timeout timer when execution timeout is specified when starting a workflow.`,
+	)
+	EnableUpdateWorkflowModeIgnoreCurrent = NewGlobalBoolSetting(
+		"history.enableUpdateWorkflowModeIgnoreCurrent",
+		true,
+		`EnableUpdateWorkflowModeIgnoreCurrent controls whether to enable the new logic for updating closed workflow execution
+by mutation using UpdateWorkflowModeIgnoreCurrent`,
 	)
 	EnableTransitionHistory = NewGlobalBoolSetting(
 		"history.enableTransitionHistory",
@@ -2140,7 +2127,7 @@ the user has not specified an explicit RetryPolicy`,
 		`DefaultWorkflowRetryPolicy represents the out-of-box retry policy for unset fields
 where the user has set an explicit RetryPolicy, but not specified all the fields`,
 	)
-	FollowReusePolicyAfterConflictPolicyTerminate = NewNamespaceTypedSetting(
+	FollowReusePolicyAfterConflictPolicyTerminate = NewNamespaceBoolSetting(
 		"history.followReusePolicyAfterConflictPolicyTerminate",
 		true,
 		`Follows WorkflowIdReusePolicy RejectDuplicate and AllowDuplicateFailedOnly after WorkflowIdReusePolicy TerminateExisting was applied.
@@ -2451,6 +2438,13 @@ that task will be sent to DLQ.`,
 		`SendRawHistoryBetweenInternalServices is whether to send raw history events between internal temporal services`,
 	)
 
+	// TODO(rodrigozhou): This is temporary dynamic config to be removed before the next release.
+	EnableRequestIdRefLinks = NewGlobalBoolSetting(
+		"history.enableRequestIdRefLinks",
+		false,
+		"Enable generating request ID reference links",
+	)
+
 	// keys for worker
 
 	WorkerPersistenceMaxQPS = NewGlobalIntSetting(
@@ -2705,5 +2699,11 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		"frontend.workflowRulesAPIsEnabled",
 		false,
 		`WorkflowRulesAPIsEnabled is a "feature enable" flag. `,
+	)
+
+	SlowRequestLoggingThreshold = NewGlobalDurationSetting(
+		"rpc.slowRequestLoggingThreshold",
+		5*time.Second,
+		`SlowRequestLoggingThreshold is the threshold above which a gRPC request is considered slow and logged.`,
 	)
 )

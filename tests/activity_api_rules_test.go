@@ -1,25 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package tests
 
 import (
@@ -358,7 +336,9 @@ func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_RetryActivity() {
 	s.Equal(1, len(description.PendingActivities))
 	s.True(description.PendingActivities[0].Paused)
 	s.NotNil(description.PendingActivities[0].PauseInfo)
-	s.NotNil(ruleID, description.PendingActivities[0].PauseInfo.GetRuleId())
+	rule := description.PendingActivities[0].PauseInfo.GetRule()
+	s.NotNil(rule)
+	s.Equal(ruleID, rule.RuleId)
 
 	// let activity succeed
 	testWorkflow.letActivitySucceed.Store(true)
@@ -501,7 +481,9 @@ func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_RetryTask() {
 	s.Equal(1, len(description.PendingActivities))
 	s.True(description.PendingActivities[0].Paused)
 	s.NotNil(description.PendingActivities[0].PauseInfo)
-	s.NotNil(ruleID, description.PendingActivities[0].PauseInfo.GetRuleId())
+	rule := description.PendingActivities[0].PauseInfo.GetRule()
+	s.NotNil(rule)
+	s.Equal(ruleID, rule.RuleId)
 
 	// let activity succeed
 	testRetryTaskWorkflow.letActivitySucceed.Store(true)
@@ -621,7 +603,7 @@ func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_PrePause() {
 			assert.True(t, description.PendingActivities[0].GetActivityType().GetName() == activityType)
 			assert.True(t, description.PendingActivities[0].GetPaused())
 			assert.NotNil(t, description.PendingActivities[0].GetPauseInfo())
-			assert.Equal(t, ruleID, description.PendingActivities[0].GetPauseInfo().GetRuleId())
+			assert.Equal(t, ruleID, description.PendingActivities[0].GetPauseInfo().GetRule().GetRuleId())
 		}
 		// to be sure activity doesn't actually start
 		assert.Equal(t, int32(0), testRetryTaskWorkflow.startedActivityCount.Load())
@@ -633,7 +615,7 @@ func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_PrePause() {
 	s.Equal(1, len(description.PendingActivities))
 	s.True(description.PendingActivities[0].Paused)
 	s.NotNil(description.PendingActivities[0].PauseInfo)
-	s.NotNil(ruleID, description.PendingActivities[0].PauseInfo.GetRuleId())
+	s.Equal(ruleID, description.PendingActivities[0].PauseInfo.GetRule().GetRuleId())
 
 	// 6. Remove the rule so it didn't interfere with the activity
 	deleteRuleResponse, err := s.FrontendClient().DeleteWorkflowRule(ctx, &workflowservice.DeleteWorkflowRuleRequest{

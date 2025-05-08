@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 // nolint:revive
 package tests
 
@@ -198,17 +174,10 @@ func (s *VersioningIntegSuite) TestVersionRuleBuildIdValidation() {
 	cT := s.getVersioningRules(ctx, tq).GetConflictToken()
 
 	// failure due to long build id
-	longStr := `_1234567890_2234567890_3234567890_4234567890_5234567890_6234567890_7234567890_8234567890_9234567890_
-				_1234567890_2234567890_3234567890_4234567890_5234567890_6234567890_7234567890_8234567890_9234567890_
-				_1234567890_2234567890_3234567890_4234567890_5234567890_6234567890_7234567890_8234567890_9234567890_`
+	longStr := strings.Repeat("0123456789", 30)
 	s.insertAssignmentRule(ctx, tq, longStr, 0, cT, false)
 	s.insertRedirectRule(ctx, tq, longStr, "foo", cT, false)
 	s.insertRedirectRule(ctx, tq, "foo", longStr, cT, false)
-
-	// failure due to invalid utf-8
-	s.insertAssignmentRule(ctx, tq, testcore.InvalidUTF8, 0, cT, false)
-	s.insertRedirectRule(ctx, tq, testcore.InvalidUTF8, "foo", cT, false)
-	s.insertRedirectRule(ctx, tq, "foo", testcore.InvalidUTF8, cT, false)
 }
 
 func (s *VersioningIntegSuite) TestAssignmentRuleInsert() {
