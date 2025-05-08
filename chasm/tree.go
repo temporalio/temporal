@@ -171,8 +171,11 @@ func NewTree(
 	pathEncoder NodePathEncoder,
 	logger log.Logger,
 ) (*Node, error) {
-	root := NewEmptyTree(registry, timeSource, backend, pathEncoder, logger)
+	if len(serializedNodes) == 0 {
+		return NewEmptyTree(registry, timeSource, backend, pathEncoder, logger), nil
+	}
 
+	root := newTreeHelper(registry, timeSource, backend, pathEncoder, logger)
 	for encodedPath, serializedNode := range serializedNodes {
 		nodePath, err := pathEncoder.Decode(encodedPath)
 		if err != nil {
@@ -186,6 +189,25 @@ func NewTree(
 
 // NewEmptyTree creates a new empty in-memory CHASM tree.
 func NewEmptyTree(
+	registry *Registry,
+	timeSource clock.TimeSource,
+	backend NodeBackend,
+	pathEncoder NodePathEncoder,
+	logger log.Logger,
+) *Node {
+	root := newTreeHelper(registry, timeSource, backend, pathEncoder, logger)
+
+	// If serializedNodes is empty, it means that this new tree.
+	// Initialize empty serializedNode.
+	root.initSerializedNode(fieldTypeComponent)
+	// Although both value and serializedNode.Data are nil, they are considered NOT synced
+	// because value has no type and serializedNode does.
+	// deserialize method should set value when called.
+	root.valueState = valueStateNeedDeserialize
+	return root
+}
+
+func newTreeHelper(
 	registry *Registry,
 	timeSource clock.TimeSource,
 	backend NodeBackend,
@@ -206,15 +228,7 @@ func NewEmptyTree(
 		newTasks: make(map[any][]taskWithAttributes),
 	}
 
-	root := newNode(base, nil, "")
-	// If serializedNodes is empty, it means that this new tree.
-	// Initialize empty serializedNode.
-	root.initSerializedNode(fieldTypeComponent)
-	// Although both value and serializedNode.Data are nil, they are considered NOT synced
-	// because value has no type and serializedNode does.
-	// deserialize method should set value when called.
-	root.valueState = valueStateNeedDeserialize
-	return root
+	return newNode(base, nil, "")
 }
 
 // Component retrieves a component from the tree rooted at node n
