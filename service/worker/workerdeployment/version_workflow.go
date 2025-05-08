@@ -670,7 +670,7 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 
 	// stopped accepting new workflows --> start drainage child wf
 	if wasAcceptingNewWorkflows && !isAcceptingNewWorkflows {
-		// Version stopped receiving traffic
+		// Version deactivated from current/ramping
 		d.VersionState.LastDeactivationTime = args.RoutingUpdateTime
 		d.startDrainage(ctx, false)
 	}
@@ -678,7 +678,7 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 	// started accepting new workflows --> stop drainage child wf if it exists
 	if !wasAcceptingNewWorkflows && isAcceptingNewWorkflows {
 		if d.VersionState.FirstActivationTime == nil {
-			// First time this version started receiving traffic
+			// First time this version is activated to current/ramping
 			d.VersionState.FirstActivationTime = args.RoutingUpdateTime
 		}
 		if d.drainageWorkflowFuture != nil {
