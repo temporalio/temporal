@@ -13,9 +13,6 @@ import (
 	"google.golang.org/grpc"
 )
 
-// Certain types of methods are ignored as a rule.
-var ignoredMethodSubstrings = []string{"Poll", "GetWorkflowExecutionHistory"}
-
 type SlowRequestLoggerInterceptor struct {
 	logger               log.Logger
 	workflowTags         *logtags.WorkflowTags
