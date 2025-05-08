@@ -180,7 +180,7 @@ func CompletionHandler(
 		// VersionedTransition is for a specific run. After reset, the TransitionCount will
 		// start from 1 again. Reset the TransitionCount to 0 here to fallback to old ref
 		// validation logic.
-		ref.StateMachineRef.MutableStateVersionedTransition.TransitionCount = 0
+		ref.StateMachineRef.MutableStateVersionedTransition = nil
 		ref.StateMachineRef.MachineInitialVersionedTransition.TransitionCount = 0
 		ref.StateMachineRef.MachineLastUpdateVersionedTransition.TransitionCount = 0
 		return CompletionHandler(ctx, env, ref, requestID, operationToken, startTime, links, result, opFailedError)
