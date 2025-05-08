@@ -585,7 +585,7 @@ func MachineTransition[T any](n *Node, transitionFn func(T) (TransitionOutput, e
 		NamespaceFailoverVersion: n.backend.GetCurrentVersion(),
 		// The transition count for the backend is only incremented when closing the current transaction,
 		// but any change to state machine node is a state transtion,
-		// so we can safely using next transition count here is safe.
+		// so we can safely using next transition count here.
 		TransitionCount: n.backend.NextTransitionCount(),
 	}
 	// Rollback on error
