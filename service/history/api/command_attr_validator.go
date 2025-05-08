@@ -1,25 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package api
 
 import (
@@ -33,7 +11,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
@@ -219,9 +196,6 @@ func (v *CommandAttrValidator) ValidateTimerScheduleAttributes(
 	if len(timerID) > v.maxIDLengthLimit {
 		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("TimerId on StartTimerCommand exceeds length limit. TimerId=%s Length=%d Limit=%d", timerID, len(timerID), v.maxIDLengthLimit))
 	}
-	if err := common.ValidateUTF8String("TimerId", timerID); err != nil {
-		return failedCause, err
-	}
 	if err := timestamp.ValidateAndCapProtoDuration(attributes.GetStartToFireTimeout()); err != nil {
 		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("An invalid StartToFireTimeout is set on StartTimerCommand: %v. TimerId=%s", err, timerID))
 	}
@@ -350,9 +324,6 @@ func (v *CommandAttrValidator) ValidateCancelExternalWorkflowExecutionAttributes
 	if len(workflowID) > v.maxIDLengthLimit {
 		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("WorkflowId on RequestCancelExternalWorkflowExecutionCommand exceeds length limit. WorkflowId=%s Length=%d Limit=%d RunId=%s Namespace=%s", workflowID, len(workflowID), v.maxIDLengthLimit, runID, ns))
 	}
-	if err := common.ValidateUTF8String("WorkflowId", workflowID); err != nil {
-		return failedCause, err
-	}
 	if runID != "" && uuid.Parse(runID) == nil {
 		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid RunId set on RequestCancelExternalWorkflowExecutionCommand. WorkflowId=%s RunId=%s Namespace=%s", workflowID, runID, ns))
 	}
@@ -397,9 +368,6 @@ func (v *CommandAttrValidator) ValidateSignalExternalWorkflowExecutionAttributes
 	}
 	if len(workflowID) > v.maxIDLengthLimit {
 		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("WorkflowId on SignalExternalWorkflowExecutionCommand exceeds length limit. WorkflowId=%s Length=%d Limit=%d Namespace=%s RunId=%s SignalName=%s", workflowID, len(workflowID), v.maxIDLengthLimit, ns, targetRunID, signalName))
-	}
-	if err := common.ValidateUTF8String("WorkflowId", workflowID); err != nil {
-		return failedCause, err
 	}
 	if targetRunID != "" && uuid.Parse(targetRunID) == nil {
 		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid RunId set on SignalExternalWorkflowExecutionCommand. WorkflowId=%s Namespace=%s RunId=%s SignalName=%s", workflowID, ns, targetRunID, signalName))
@@ -564,14 +532,6 @@ func (v *CommandAttrValidator) ValidateStartChildExecutionAttributes(
 
 	if len(wfType) > v.maxIDLengthLimit {
 		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("WorkflowType on StartChildWorkflowExecutionCommand exceeds length limit. WorkflowId=%s WorkflowType=%s Length=%d Limit=%d Namespace=%s", wfID, wfType, len(wfType), v.maxIDLengthLimit, ns))
-	}
-
-	if err := common.ValidateUTF8String("WorkflowId", wfID); err != nil {
-		return failedCause, err
-	}
-
-	if err := common.ValidateUTF8String("WorkflowType", wfType); err != nil {
-		return failedCause, err
 	}
 
 	if err := timestamp.ValidateAndCapProtoDuration(attributes.GetWorkflowExecutionTimeout()); err != nil {

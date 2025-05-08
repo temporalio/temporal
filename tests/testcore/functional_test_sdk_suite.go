@@ -1,40 +1,11 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package testcore
 
 import (
-	"context"
 	"errors"
-	"fmt"
 	"time"
 
-	enumspb "go.temporal.io/api/enums/v1"
-	historypb "go.temporal.io/api/history/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
-	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/components/callbacks"
@@ -126,45 +97,4 @@ func (s *FunctionalTestSdkSuite) TearDownTest() {
 		s.sdkClient.Close()
 	}
 	s.FunctionalTestBase.TearDownTest()
-}
-
-func (s *FunctionalTestSdkSuite) EventuallySucceeds(ctx context.Context, operationCtx backoff.OperationCtx) {
-	s.T().Helper()
-	s.NoError(backoff.ThrottleRetryContext(
-		ctx,
-		operationCtx,
-		backoff.NewExponentialRetryPolicy(time.Second),
-		func(err error) bool {
-			// all errors are retryable
-			return true
-		},
-	))
-}
-
-func (s *FunctionalTestSdkSuite) HistoryContainsFailureCausedBy(
-	ctx context.Context,
-	workflowId string,
-	cause enumspb.WorkflowTaskFailedCause,
-) {
-	s.T().Helper()
-	s.EventuallySucceeds(ctx, func(ctx context.Context) error {
-		history := s.sdkClient.GetWorkflowHistory(
-			ctx,
-			workflowId,
-			"",
-			true,
-			enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT,
-		)
-		for history.HasNext() {
-			event, err := history.Next()
-			s.NoError(err)
-			switch a := event.Attributes.(type) {
-			case *historypb.HistoryEvent_WorkflowTaskFailedEventAttributes:
-				if a.WorkflowTaskFailedEventAttributes.Cause == cause {
-					return nil
-				}
-			}
-		}
-		return fmt.Errorf("did not find a failed task whose cause was %q", cause)
-	})
 }

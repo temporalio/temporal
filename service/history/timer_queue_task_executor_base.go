@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package history
 
 import (
@@ -34,6 +10,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -41,6 +18,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/deletemanager"
@@ -264,8 +242,39 @@ func (t *timerQueueTaskExecutorBase) executeSingleStateMachineTimer(
 	return nil
 }
 
-// executeStateMachineTimers gets the state machine timers, processed the expired timers,
-// and return a slice of unprocessed timers.
+// executeChasmPureTimers walks a CHASM tree for expired pure task timers,
+// executes them, and returns a count of timers processed.
+func (t *timerQueueTaskExecutorBase) executeChasmPureTimers(
+	ctx context.Context,
+	workflowContext historyi.WorkflowContext,
+	ms historyi.MutableState,
+	task *tasks.ChasmTaskPure,
+	execute func(executor chasm.LogicalTaskExecutor, task any) error,
+) error {
+	// Because CHASM timers can target closed workflows, we need to specifically
+	// exclude zombie workflows, instead of merely checking that the workflow is
+	// running.
+	if ms.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
+		return consts.ErrWorkflowZombie
+	}
+
+	tree := ms.ChasmTree()
+	if tree == nil {
+		return serviceerror.NewInternal("mutable state associated with CHASM task has no CHASM tree")
+	}
+
+	// Because the persistence layer can lose precision on the task compared to the
+	// physical task stored in the queue, we take the max of both here. Time is also
+	// truncated to a common (millisecond) precision later on.
+	//
+	// See also queues.IsTimeExpired.
+	referenceTime := util.MaxTime(t.Now(), task.GetKey().FireTime)
+
+	return tree.EachPureTask(referenceTime, execute)
+}
+
+// executeStateMachineTimers gets the state machine timers, processes the expired timers,
+// and returns a count of timers processed.
 func (t *timerQueueTaskExecutorBase) executeStateMachineTimers(
 	ctx context.Context,
 	workflowContext historyi.WorkflowContext,

@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package tests
 
 import (
@@ -36,7 +12,9 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
@@ -61,8 +39,9 @@ func (s *DescribeTestSuite) TestDescribeWorkflowExecution() {
 	identity := "worker1"
 
 	// Start workflow execution
+	requestID := uuid.New()
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           requestID,
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
@@ -107,6 +86,17 @@ func (s *DescribeTestSuite) TestDescribeWorkflowExecution() {
 	s.Nil(dweResponse.WorkflowExtendedInfo.ExecutionExpirationTime)
 	s.NotNil(dweResponse.WorkflowExtendedInfo.RunExpirationTime)
 	s.NotNil(dweResponse.WorkflowExtendedInfo.OriginalStartTime)
+	s.NotNil(dweResponse.WorkflowExtendedInfo.RequestIdInfos)
+	s.Contains(dweResponse.WorkflowExtendedInfo.RequestIdInfos, requestID)
+	s.NotNil(dweResponse.WorkflowExtendedInfo.RequestIdInfos[requestID])
+	s.ProtoEqual(
+		&workflowpb.RequestIdInfo{
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+			EventId:   common.FirstEventID,
+			Buffered:  false,
+		},
+		dweResponse.WorkflowExtendedInfo.RequestIdInfos[requestID],
+	)
 
 	// workflow logic
 	workflowComplete := false

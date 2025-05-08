@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package workflow
 
 import (
@@ -525,11 +501,7 @@ func (s *contextSuite) TestRefreshTask() {
 						s.Equal(persistence.UpdateWorkflowModeUpdateCurrent, request.Mode)
 						s.NotEmpty(request.UpdateWorkflowMutation.Tasks)
 						s.Empty(request.UpdateWorkflowEvents)
-						return &persistence.UpdateWorkflowExecutionResponse{
-							UpdateMutableStateStats: persistence.MutableStateStatistics{
-								HistoryStatistics: &persistence.HistoryStatistics{},
-							},
-						}, nil
+						return tests.UpdateWorkflowExecutionResponse, nil
 					}).Times(1)
 			},
 		},
@@ -546,10 +518,11 @@ func (s *contextSuite) TestRefreshTask() {
 				return base
 			},
 			setupMock: func(mockShard *shard.ContextTest) {
-				mockShard.Resource.ExecutionMgr.EXPECT().SetWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(_ context.Context, request *persistence.SetWorkflowExecutionRequest) (*persistence.SetWorkflowExecutionResponse, error) {
-						s.NotEmpty(request.SetWorkflowSnapshot.Tasks)
-						return &persistence.SetWorkflowExecutionResponse{}, nil
+				mockShard.Resource.ExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(_ context.Context, request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
+						s.NotEmpty(request.UpdateWorkflowMutation.Tasks)
+						s.Equal(persistence.UpdateWorkflowModeIgnoreCurrent, request.Mode)
+						return tests.UpdateWorkflowExecutionResponse, nil
 					}).Times(1)
 			},
 		},
@@ -574,10 +547,11 @@ func (s *contextSuite) TestRefreshTask() {
 					Version:    common.EmptyVersion,
 					Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{},
 				}, nil).Times(2)
-				mockShard.Resource.ExecutionMgr.EXPECT().SetWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(_ context.Context, request *persistence.SetWorkflowExecutionRequest) (*persistence.SetWorkflowExecutionResponse, error) {
-						s.NotEmpty(request.SetWorkflowSnapshot.Tasks)
-						return &persistence.SetWorkflowExecutionResponse{}, nil
+				mockShard.Resource.ExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(_ context.Context, request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
+						s.NotEmpty(request.UpdateWorkflowMutation.Tasks)
+						s.Equal(persistence.UpdateWorkflowModeBypassCurrent, request.Mode)
+						return tests.UpdateWorkflowExecutionResponse, nil
 					}).Times(1)
 			},
 		},

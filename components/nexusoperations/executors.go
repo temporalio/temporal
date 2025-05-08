@@ -1,25 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package nexusoperations
 
 import (
@@ -38,7 +16,6 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/sdk/temporalnexus"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
@@ -334,7 +311,7 @@ func (e taskExecutor) loadOperationArgs(
 		args.scheduleToCloseTimeout = event.GetNexusOperationScheduledEventAttributes().GetScheduleToCloseTimeout().AsDuration()
 		args.payload = event.GetNexusOperationScheduledEventAttributes().GetInput()
 		args.header = event.GetNexusOperationScheduledEventAttributes().GetNexusHeader()
-		args.nexusLink = temporalnexus.ConvertLinkWorkflowEventToNexusLink(&commonpb.Link_WorkflowEvent{
+		args.nexusLink = ConvertLinkWorkflowEventToNexusLink(&commonpb.Link_WorkflowEvent{
 			Namespace:  ns.Name().String(),
 			WorkflowId: ref.WorkflowKey.WorkflowID,
 			RunId:      ref.WorkflowKey.RunID,
@@ -370,7 +347,7 @@ func (e taskExecutor) saveResult(ctx context.Context, env hsm.Environment, ref h
 			for _, nexusLink := range result.Links {
 				switch nexusLink.Type {
 				case string((&commonpb.Link_WorkflowEvent{}).ProtoReflect().Descriptor().FullName()):
-					link, err := temporalnexus.ConvertNexusLinkToLinkWorkflowEvent(nexusLink)
+					link, err := ConvertNexusLinkToLinkWorkflowEvent(nexusLink)
 					if err != nil {
 						// TODO(rodrigozhou): links are non-essential for the execution of the workflow,
 						// so ignoring the error for now; we will revisit how to handle these errors later.

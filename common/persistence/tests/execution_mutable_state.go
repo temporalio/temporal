@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package tests
 
 import (
@@ -849,6 +825,114 @@ func (s *ExecutionMutableStateSuite) TestUpdate_Zombie_WithNew() {
 	s.AssertMSEqualWithDB(newZombieSnapshot)
 	s.AssertHEEqualWithDB(zombieBranchToken, zombieEvents1, zombieEvents2)
 	s.AssertHEEqualWithDB(newBranchToken, newEvents3)
+}
+
+func (s *ExecutionMutableStateSuite) TestUpdate_ClosedWorkflow_IsCurrent() {
+	branchToken, newSnapshot, newEvents := s.CreateWorkflow(
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		rand.Int63(),
+	)
+
+	// NOTE: no new events for closed workflows
+	currentMutation, _ := RandomMutation(
+		s.T(),
+		s.NamespaceID,
+		s.WorkflowID,
+		s.RunID,
+		newSnapshot.NextEventID,
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		newSnapshot.DBRecordVersion+1,
+		branchToken,
+	)
+	_, err := s.ExecutionManager.UpdateWorkflowExecution(s.Ctx, &p.UpdateWorkflowExecutionRequest{
+		ShardID: s.ShardID,
+		RangeID: s.RangeID,
+		Mode:    p.UpdateWorkflowModeIgnoreCurrent,
+
+		UpdateWorkflowMutation: *currentMutation,
+		UpdateWorkflowEvents:   nil,
+
+		NewWorkflowSnapshot: nil,
+		NewWorkflowEvents:   nil,
+	})
+	s.NoError(err)
+
+	s.AssertMSEqualWithDB(newSnapshot, currentMutation)
+	s.AssertHEEqualWithDB(branchToken, newEvents)
+}
+
+func (s *ExecutionMutableStateSuite) TestUpdate_ClosedWorkflow_IsNonCurrent() {
+	nonCurrentLastWriteVersion := rand.Int63()
+	nonCurrentBranchToken, nonCurrentSnapshot, nonCurrentEvents := s.CreateWorkflow(
+		nonCurrentLastWriteVersion,
+		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		rand.Int63(),
+	)
+
+	// make current workflow to a different run
+	currentRunID := uuid.New().String()
+	currentBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, currentRunID, s.historyBranchUtil)
+	currentSnapshot, currentEvents := RandomSnapshot(
+		s.T(),
+		s.NamespaceID,
+		s.WorkflowID,
+		currentRunID,
+		common.FirstEventID,
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		rand.Int63(),
+		currentBranchToken,
+	)
+	_, err := s.ExecutionManager.CreateWorkflowExecution(s.Ctx, &p.CreateWorkflowExecutionRequest{
+		ShardID: s.ShardID,
+		RangeID: s.RangeID,
+		Mode:    p.CreateWorkflowModeUpdateCurrent,
+
+		PreviousRunID:            nonCurrentSnapshot.ExecutionState.RunId,
+		PreviousLastWriteVersion: nonCurrentLastWriteVersion,
+
+		NewWorkflowSnapshot: *currentSnapshot,
+		NewWorkflowEvents:   currentEvents,
+	})
+	s.NoError(err)
+
+	// Update the original closed workflow
+	// NOTE: no new events for closed workflows
+	nonCurrentMutation, _ := RandomMutation(
+		s.T(),
+		s.NamespaceID,
+		s.WorkflowID,
+		s.RunID,
+		nonCurrentSnapshot.NextEventID,
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		nonCurrentSnapshot.DBRecordVersion+1,
+		nonCurrentBranchToken,
+	)
+	_, err = s.ExecutionManager.UpdateWorkflowExecution(s.Ctx, &p.UpdateWorkflowExecutionRequest{
+		ShardID: s.ShardID,
+		RangeID: s.RangeID,
+		Mode:    p.UpdateWorkflowModeIgnoreCurrent,
+
+		UpdateWorkflowMutation: *nonCurrentMutation,
+		UpdateWorkflowEvents:   nil,
+
+		NewWorkflowSnapshot: nil,
+		NewWorkflowEvents:   nil,
+	})
+	s.NoError(err)
+
+	s.AssertMSEqualWithDB(nonCurrentSnapshot, nonCurrentMutation)
+	s.AssertHEEqualWithDB(nonCurrentBranchToken, nonCurrentEvents)
+	s.AssertMSEqualWithDB(currentSnapshot)
+	s.AssertHEEqualWithDB(currentBranchToken, currentEvents)
 }
 
 func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent() {

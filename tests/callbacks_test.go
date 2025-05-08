@@ -1,25 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package tests
 
 import (
@@ -34,7 +12,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -165,7 +142,7 @@ func (s *CallbacksSuite) TestWorkflowCallbacks_InvalidArgument() {
 	)
 
 	for _, tc := range cases {
-		s.T().Run(tc.name, func(t *testing.T) {
+		s.Run(tc.name, func() {
 			s.OverrideDynamicConfig(dynamicconfig.EnableNexus, tc.allow)
 			cbs := make([]*commonpb.Callback, 0, len(tc.urls))
 			for _, url := range tc.urls {
@@ -249,8 +226,8 @@ func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 	}
 
 	for _, tc := range cases {
-		s.T().Run(tc.name, func(t *testing.T) {
-			tv := testvars.New(t)
+		s.Run(tc.name, func() {
+			tv := testvars.New(s.T())
 			ctx := testcore.NewContext()
 			sdkClient, err := client.Dial(client.Options{
 				HostPort:  s.FrontendGRPCAddress(),
@@ -268,14 +245,35 @@ func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 			}
 			callbackAddress := fmt.Sprintf("localhost:%d", freeport.MustGetFreePort())
 			shutdownServer := s.runNexusCompletionHTTPServer(ch, callbackAddress)
-			t.Cleanup(func() {
-				require.NoError(t, shutdownServer())
-			})
+			defer func() {
+				s.NoError(shutdownServer())
+			}()
 
 			w := worker.New(sdkClient, taskQueue, worker.Options{})
 			w.RegisterWorkflowWithOptions(tc.wf, workflow.RegisterOptions{Name: workflowType})
 			s.NoError(w.Start())
 			defer w.Stop()
+
+			links := []*commonpb.Link{
+				{
+					Variant: &commonpb.Link_WorkflowEvent_{
+						WorkflowEvent: &commonpb.Link_WorkflowEvent{
+							Namespace:  s.Namespace().String(),
+							WorkflowId: "some-caller-wfid-1",
+							RunId:      "some-caller-runid-1",
+						},
+					},
+				},
+				{
+					Variant: &commonpb.Link_WorkflowEvent_{
+						WorkflowEvent: &commonpb.Link_WorkflowEvent{
+							Namespace:  s.Namespace().String(),
+							WorkflowId: "some-caller-wfid-2",
+							RunId:      "some-caller-runid-2",
+						},
+					},
+				},
+			}
 
 			cbs := []*commonpb.Callback{
 				{
@@ -284,6 +282,7 @@ func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 							Url: "http://" + callbackAddress + "/cb1",
 						},
 					},
+					Links: []*commonpb.Link{links[0]},
 				},
 				{
 					Variant: &commonpb.Callback_Nexus_{
@@ -291,23 +290,10 @@ func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 							Url: "http://" + callbackAddress + "/cb2",
 						},
 					},
+					Links: []*commonpb.Link{links[1]},
 				},
 			}
 
-			startLink := &commonpb.Link{
-				Variant: &commonpb.Link_WorkflowEvent_{
-					WorkflowEvent: &commonpb.Link_WorkflowEvent{
-						Namespace:  s.Namespace().String(),
-						WorkflowId: "some-caller-wfid",
-						RunId:      "some-caller-runid",
-						Reference: &commonpb.Link_WorkflowEvent_EventRef{
-							EventRef: &commonpb.Link_WorkflowEvent_EventReference{
-								EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
-							},
-						},
-					},
-				},
-			}
 			request := &workflowservice.StartWorkflowExecutionRequest{
 				RequestId:          uuid.NewString(),
 				Namespace:          s.Namespace().String(),
@@ -323,7 +309,7 @@ func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 					BackoffCoefficient: 1,
 				},
 				CompletionCallbacks: []*commonpb.Callback{cbs[0]},
-				Links:               []*commonpb.Link{startLink},
+				Links:               []*commonpb.Link{links[0]},
 			}
 
 			response1, err := s.FrontendClient().StartWorkflowExecution(ctx, request)
@@ -343,6 +329,7 @@ func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 				AttachCompletionCallbacks: true,
 			}
 			request2.CompletionCallbacks = []*commonpb.Callback{cbs[1]}
+			request2.Links = []*commonpb.Link{links[1]}
 
 			response2, err := s.FrontendClient().StartWorkflowExecution(ctx, request2)
 			s.NoError(err)
@@ -395,8 +382,8 @@ func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 				s.NoError(err)
 				s.Len(getHistoryResponse.History.Events, 1)
 				startEvent := getHistoryResponse.History.Events[0]
-				// Also checks workflow execution started event links are copied over.
-				s.ProtoElementsMatch(request.Links, startEvent.Links)
+				// Start event links is empty since it's deduped.
+				s.Empty(startEvent.Links)
 				startEventAttr := startEvent.GetWorkflowExecutionStartedEventAttributes()
 				s.NotNil(startEventAttr)
 				// Start event contains all callbacks attached to the first workflow.
@@ -470,9 +457,9 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback() {
 	}
 	callbackAddress := fmt.Sprintf("localhost:%d", freeport.MustGetFreePort())
 	shutdownServer := s.runNexusCompletionHTTPServer(ch, callbackAddress)
-	s.T().Cleanup(func() {
-		require.NoError(s.T(), shutdownServer())
-	})
+	defer func() {
+		s.NoError(shutdownServer())
+	}()
 
 	w := worker.New(sdkClient, taskQueue.GetName(), worker.Options{})
 
