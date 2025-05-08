@@ -491,6 +491,11 @@ func newAdminTaskQueueCommands(clientFactory ClientFactory) []*cli.Command {
 					Name:  FlagMaxTaskID,
 					Usage: "Maximum task ID",
 				},
+				&cli.IntFlag{
+					Name:  FlagSubqueue,
+					Usage: "Subqueue to query",
+					Value: 0,
+				},
 				&cli.BoolFlag{
 					Name:  FlagPrintJSON,
 					Usage: "Print in raw json format",

@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
@@ -1077,6 +1078,14 @@ func (c *ContextImpl) forceTerminateWorkflow(
 	mutableState, err := c.LoadMutableState(ctx, shardContext)
 	if err != nil {
 		return err
+	}
+
+	if !mutableState.IsWorkflow() {
+		return mutableState.ChasmTree().Terminate(chasm.TerminateComponentRequest{
+			Identity: consts.IdentityHistoryService,
+			Reason:   failureReason,
+			Details:  nil,
+		})
 	}
 
 	return TerminateWorkflow(
