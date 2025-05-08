@@ -13,6 +13,9 @@ import (
 )
 
 var (
+	// TEST ONLY DO NOT LAND
+	HistoryShouldFailReplicationTask = "history.shouldFailReplicationTask"
+
 	// keys for dynamic config itself
 	DynamicConfigSubscriptionCallback = NewGlobalTypedSetting(
 		"dynamicconfig.subscriptionCallback",
