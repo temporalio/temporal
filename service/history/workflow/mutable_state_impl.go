@@ -8086,8 +8086,14 @@ func ActivityMatchWorkflowRules(
 	workflowRules := ms.GetNamespaceEntry().GetWorkflowRules()
 
 	activityChanged := false
+	now := timeSource.Now()
 
 	for _, rule := range workflowRules {
+		expirationTime := rule.GetSpec().GetExpirationTime()
+		if expirationTime != nil && expirationTime.AsTime().Before(now) {
+			// the rule is expired
+			continue
+		}
 		match, err := MatchWorkflowRule(ms.GetExecutionInfo(), ms.GetExecutionState(), ai, rule.GetSpec())
 		if err != nil {
 			logError(logger, "error matching workflow rule", ms.GetExecutionInfo(), ms.GetExecutionState(), tag.Error(err))
