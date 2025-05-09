@@ -2615,6 +2615,12 @@ func (e *matchingEngineImpl) recordWorkflowTaskStarted(
 	pollReq *workflowservice.PollWorkflowTaskQueueRequest,
 	task *internalTask,
 ) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
+
+	metrics.OperationCounter.With(e.metricsHandler).Record(
+		1,
+		metrics.OperationTag("RecordWorkflowTaskStarted"),
+		metrics.NamespaceTag(pollReq.Namespace),
+	)
 	if e.rateLimiter != nil {
 		err := e.rateLimiter.Wait(ctx, quotas.Request{
 			API:        "RecordWorkflowTaskStarted",
@@ -2665,6 +2671,12 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 	pollReq *workflowservice.PollActivityTaskQueueRequest,
 	task *internalTask,
 ) (*historyservice.RecordActivityTaskStartedResponse, error) {
+
+	metrics.OperationCounter.With(e.metricsHandler).Record(
+		1,
+		metrics.OperationTag("RecordActivityTaskStarted"),
+		metrics.NamespaceTag(pollReq.Namespace),
+	)
 	if e.rateLimiter != nil {
 		err := e.rateLimiter.Wait(ctx, quotas.Request{
 			API:        "RecordActivityTaskStarted",

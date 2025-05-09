@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/server/common/rpc/interceptor/logtags"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/service/frontend/configs"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -174,6 +175,10 @@ func (ti *TelemetryInterceptor) UnaryIntercept(
 	}()
 
 	resp, err := handler(ctx, req)
+
+	if configs.IsAPIOperation(info.FullMethod) {
+		metrics.OperationCounter.With(metricsHandler).Record(1)
+	}
 
 	if err != nil {
 		ti.HandleError(req, info.FullMethod, metricsHandler, logTags, err, nsName)

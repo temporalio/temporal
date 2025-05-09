@@ -133,17 +133,18 @@ type (
 		lowestPriority ctasks.Priority // priority for emitting metrics across multiple attempts
 		attempt        int
 
-		executor          Executor
-		scheduler         Scheduler
-		rescheduler       Rescheduler
-		priorityAssigner  PriorityAssigner
-		timeSource        clock.TimeSource
-		namespaceRegistry namespace.Registry
-		clusterMetadata   cluster.Metadata
-		logger            log.Logger
-		metricsHandler    metrics.Handler
-		tracer            trace.Tracer
-		dlqWriter         *DLQWriter
+		executor               Executor
+		scheduler              Scheduler
+		rescheduler            Rescheduler
+		priorityAssigner       PriorityAssigner
+		timeSource             clock.TimeSource
+		namespaceRegistry      namespace.Registry
+		clusterMetadata        cluster.Metadata
+		logger                 log.Logger
+		untaggedMetricsHandler metrics.Handler
+		metricsHandler         metrics.Handler
+		tracer                 trace.Tracer
+		dlqWriter              *DLQWriter
 
 		readerID                   int64
 		loadTime                   time.Time
@@ -222,7 +223,7 @@ func NewExecutable(
 				return tasks.Tags(task)
 			},
 		),
-		metricsHandler:             metricsHandler,
+		untaggedMetricsHandler:     metricsHandler,
 		tracer:                     tracer,
 		dlqWriter:                  params.DLQWriter,
 		dlqEnabled:                 params.DLQEnabled,
@@ -301,7 +302,7 @@ func (e *executableImpl) Execute() (retErr error) {
 
 			// we need to guess the metrics tags here as we don't know which execution logic
 			// is actually used which is upto the executor implementation
-			e.metricsHandler = e.metricsHandler.WithTags(
+			e.metricsHandler = e.untaggedMetricsHandler.WithTags(
 				estimateTaskMetricTag(
 					e.GetTask(),
 					e.namespaceRegistry,
@@ -322,6 +323,7 @@ func (e *executableImpl) Execute() (retErr error) {
 		priorityTaggedProvider := e.metricsHandler.WithTags(metrics.TaskPriorityTag(e.priority.String()))
 		metrics.TaskRequests.With(priorityTaggedProvider).Record(1)
 		metrics.TaskScheduleLatency.With(priorityTaggedProvider).Record(e.scheduleLatency)
+		metrics.OperationCounter.With(e.metricsHandler).Record(1)
 
 		if retErr == nil {
 			e.inMemoryNoUserLatency += e.scheduleLatency + e.attemptNoUserLatency
@@ -348,7 +350,7 @@ func (e *executableImpl) Execute() (retErr error) {
 	}
 
 	resp := e.executor.Execute(ctx, e)
-	e.metricsHandler = e.metricsHandler.WithTags(resp.ExecutionMetricTags...)
+	e.metricsHandler = e.untaggedMetricsHandler.WithTags(resp.ExecutionMetricTags...)
 
 	if resp.ExecutedAsActive != e.lastActiveness {
 		// namespace did a failover,
