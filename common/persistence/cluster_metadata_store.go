@@ -214,8 +214,7 @@ func immutableFieldsChanged(old *persistencespb.ClusterMetadata, cur *persistenc
 		return true
 	}
 	if old.IsGlobalNamespaceEnabled {
-		if (old.FailoverVersionIncrement != 0 && old.FailoverVersionIncrement != cur.FailoverVersionIncrement) ||
-			(old.InitialFailoverVersion != 0 && old.InitialFailoverVersion != cur.InitialFailoverVersion) {
+		if old.InitialFailoverVersion != 0 && old.InitialFailoverVersion != cur.InitialFailoverVersion {
 			return true
 		}
 	}
