@@ -379,12 +379,24 @@ func OverrideGetPinnedVersion(override *workflowpb.VersioningOverride) bool {
 		override.GetPinned().GetBehavior() == workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED
 }
 
-// todo carly
 func ValidateVersioningOverride(override *workflowpb.VersioningOverride) error {
 	if override == nil {
 		return nil
 	}
-	switch override.GetBehavior() {
+
+	if override.GetAutoUpgrade() { // v0.32
+		return nil
+	} else if p := override.GetPinned(); p != nil {
+		if p.GetVersion() == nil {
+			return serviceerror.NewInvalidArgument("must provide version if override is pinned.")
+		}
+		if p.GetBehavior() == workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_UNSPECIFIED {
+			return serviceerror.NewInvalidArgument("must specify pinned override behavior if override is pinned.")
+		}
+		return nil
+	}
+
+	switch override.GetBehavior() { // v0.30 and v0.31
 	case enumspb.VERSIONING_BEHAVIOR_PINNED:
 		if override.GetDeployment() != nil {
 			return ValidateDeployment(override.GetDeployment())

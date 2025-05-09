@@ -7974,13 +7974,14 @@ func (ms *MutableStateImpl) GetWorkflowVersioningBehaviorSA() enumspb.Versioning
 
 func (ms *MutableStateImpl) GetDeploymentTransition() *workflowpb.DeploymentTransition {
 	vi := ms.GetExecutionInfo().GetVersioningInfo()
-	if t := vi.GetVersionTransition(); t != nil {
+	if t := vi.GetVersionTransition(); t != nil { // v0.31 or v0.32
 		ret := &workflowpb.DeploymentTransition{}
 		if dv := t.GetDeploymentVersion(); dv != nil { // v0.32
 			ret.Deployment = worker_versioning.DeploymentFromExternalDeploymentVersion(dv)
+		} else {
+			v, _ := worker_versioning.WorkerDeploymentVersionFromString(t.GetVersion()) // v0.31
+			ret.Deployment = worker_versioning.DeploymentFromDeploymentVersion(v)
 		}
-		v, _ := worker_versioning.WorkerDeploymentVersionFromString(t.GetVersion()) // v0.31
-		ret.Deployment = worker_versioning.DeploymentFromDeploymentVersion(v)
 		return ret
 	}
 	return ms.GetExecutionInfo().GetVersioningInfo().GetDeploymentTransition() // v0.30
@@ -8018,11 +8019,11 @@ func (ms *MutableStateImpl) StartDeploymentTransition(deployment *deploymentpb.D
 	}
 
 	// Only store transition in VersionTransition but read from both VersionTransition and DeploymentVersionTransition.
+	// Within VersionTransition, only store in DeploymentVersion, but read from Version too.
 	//nolint:staticcheck // SA1019 deprecated DeploymentTransition will clean up later
 	versioningInfo.DeploymentTransition = nil
 	versioningInfo.VersionTransition = &workflowpb.DeploymentVersionTransition{
 		// [cleanup-wv-3.1]
-		Version:           worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(deployment)),
 		DeploymentVersion: worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(deployment),
 	}
 
