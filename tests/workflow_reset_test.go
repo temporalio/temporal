@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
 
 // Tests workflow reset feature
@@ -217,6 +218,12 @@ func (s *WorkflowResetSuite) TestResetWorkflowWithOptionsUpdate() {
 							VersioningOverride: &workflowpb.VersioningOverride{
 								Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED,
 								PinnedVersion: "testing.v.123",
+							},
+						},
+						UpdateMask: &fieldmaskpb.FieldMask{
+							Paths: []string{
+								"versioning_override.behavior",
+								"versioning_override.pinned_version",
 							},
 						},
 					},
