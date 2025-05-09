@@ -222,8 +222,7 @@ func (s *WorkflowResetSuite) TestResetWorkflowWithOptionsUpdate() {
 						},
 						UpdateMask: &fieldmaskpb.FieldMask{
 							Paths: []string{
-								"versioning_override.behavior",
-								"versioning_override.pinned_version",
+								"versioning_override",
 							},
 						},
 					},
