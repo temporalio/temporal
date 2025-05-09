@@ -99,7 +99,6 @@ type (
 	matcherInterface interface {
 		Start()
 		Stop()
-		UpdateRatelimit(rpsPtr float64)
 		Rate() float64
 		Poll(ctx context.Context, pollMetadata *pollMetadata) (*internalTask, error)
 		PollForQuery(ctx context.Context, pollMetadata *pollMetadata) (*internalTask, error)
@@ -225,7 +224,7 @@ func newPhysicalTaskQueueManager(
 				return nil, err
 			}
 		}
-		pqMgr.oldMatcher = newTaskMatcher(config, fwdr, taggedMetricsHandler)
+		pqMgr.oldMatcher = newTaskMatcher(config, fwdr, taggedMetricsHandler, pqMgr.partitionMgr.rateLimiter)
 		pqMgr.matcher = pqMgr.oldMatcher
 	}
 	return pqMgr, nil
@@ -315,7 +314,7 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 	// we update the ratelimiter rps if it has changed from the last
 	// value. Last poller wins if different pollers provide different values
 	if rps := pollMetadata.taskQueueMetadata.GetMaxTasksPerSecond(); rps != nil {
-		c.matcher.UpdateRatelimit(rps.Value)
+		c.partitionMgr.UpdateRatelimit(rps.Value)
 	}
 
 	if !namespaceEntry.ActiveInCluster(c.clusterMeta.GetCurrentClusterName()) {

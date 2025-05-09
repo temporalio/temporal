@@ -992,19 +992,9 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	s.taskManager.getQueueManagerByKey(dbq).rangeID = initialRangeID
 
 	mgr := s.newPartitionManager(dbq.partition, s.matchingEngine.config)
-	mgrImpl, ok := mgr.(*taskQueuePartitionManagerImpl).defaultQueue.(*physicalTaskQueueManagerImpl)
+	_, ok := mgr.(*taskQueuePartitionManagerImpl).defaultQueue.(*physicalTaskQueueManagerImpl)
 	s.True(ok)
-	mgrImpl.oldMatcher.rateLimiter = quotas.NewRateLimiter(
-		defaultTaskDispatchRPS,
-		defaultTaskDispatchRPS,
-	)
-	mgrImpl.oldMatcher.dynamicRateBurst = &dynamicRateBurstWrapper{
-		MutableRateBurst: quotas.NewMutableRateBurst(
-			defaultTaskDispatchRPS,
-			defaultTaskDispatchRPS,
-		),
-		RateLimiterImpl: mgrImpl.oldMatcher.rateLimiter.(*quotas.RateLimiterImpl),
-	}
+
 	s.matchingEngine.updateTaskQueue(dbq.partition, mgr)
 	mgr.Start()
 

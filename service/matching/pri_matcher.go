@@ -474,14 +474,6 @@ func (tm *priTaskMatcher) ReprocessAllTasks() {
 	}
 }
 
-// UpdateRatelimit updates the task dispatch rate
-func (tm *priTaskMatcher) UpdateRatelimit(rps float64) {
-	tm.limiterLock.Lock()
-	defer tm.limiterLock.Unlock()
-	tm.dynamicRate = rps
-	tm.setLimitLocked()
-}
-
 func (tm *priTaskMatcher) setAdminNsRate(rps float64) {
 	tm.limiterLock.Lock()
 	defer tm.limiterLock.Unlock()
