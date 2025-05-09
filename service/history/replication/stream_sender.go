@@ -611,6 +611,11 @@ func (s *StreamSenderImpl) shouldProcessTask(item tasks.Task) bool {
 		return false
 	}
 
+	targetCluster := s.getTaskTargetCluster(item)
+	if targetCluster != "" && targetCluster != s.clientClusterName {
+		return false
+	}
+
 	var shouldProcessTask bool
 	namespaceEntry, err := s.shardContext.GetNamespaceRegistry().GetNamespaceByID(
 		namespace.ID(item.GetNamespaceID()),
@@ -642,5 +647,14 @@ func (s *StreamSenderImpl) getTaskPriority(task tasks.Task) enumsspb.TaskPriorit
 		return t.Priority
 	default:
 		return enumsspb.TASK_PRIORITY_HIGH
+	}
+}
+
+func (s *StreamSenderImpl) getTaskTargetCluster(task tasks.Task) string {
+	switch t := task.(type) {
+	case *tasks.SyncWorkflowStateTask:
+		return t.TargetCluster
+	default:
+		return ""
 	}
 }
