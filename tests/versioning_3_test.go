@@ -299,7 +299,7 @@ func (s *Versioning3Suite) testUnpinnedQuery(sticky bool) {
 			return respondEmptyWft(tv, sticky, vbUnpinned), nil
 		})
 
-	s.setCurrentDeployment(tv, s.useV32)
+	s.setCurrentDeployment(tv)
 	s.waitForDeploymentDataPropagation(tv, versionStatusCurrent, false, tqTypeWf)
 
 	runID := s.startWorkflow(tv, nil)
@@ -439,7 +439,7 @@ func (s *Versioning3Suite) testUnpinnedWorkflow(sticky bool) {
 			return respondActivity(), nil
 		})
 
-	s.setCurrentDeployment(tv, s.useV32)
+	s.setCurrentDeployment(tv)
 
 	runID := s.startWorkflow(tv, nil)
 
@@ -539,7 +539,7 @@ func (s *Versioning3Suite) testUnpinnedWorkflowWithRamp(toUnversioned bool) {
 	// we don't get to ramping while one of the TQs has not yet got v1 as it's current version.
 	// (note that s.setCurrentDeployment(tv1) can pass even with one TQ added to the version)
 	s.waitForDeploymentDataPropagation(tv1, versionStatusInactive, false, tqTypeWf, tqTypeAct)
-	s.setCurrentDeployment(tv1, s.useV32)
+	s.setCurrentDeployment(tv1)
 
 	// wait until all task queue partitions know that tv1 is current
 	s.waitForDeploymentDataPropagation(tv1, versionStatusCurrent, false, tqTypeWf, tqTypeAct)
@@ -558,7 +558,7 @@ func (s *Versioning3Suite) testUnpinnedWorkflowWithRamp(toUnversioned bool) {
 	s.NoError(w2.Start())
 	defer w2.Stop()
 
-	s.setRampingDeployment(tv2, 50, toUnversioned, s.useV32)
+	s.setRampingDeployment(tv2, 50, toUnversioned)
 	// wait until all task queue partitions know that tv2 is ramping
 	s.waitForDeploymentDataPropagation(tv2, versionStatusRamping, toUnversioned, tqTypeWf, tqTypeAct)
 
@@ -1203,7 +1203,7 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectNoInherit(crossTq 
 
 	// wait for it to start on v1
 	s.WaitForChannel(ctx, wfStarted)
-	close(wfStarted) // force panic if replayed // TODO (carlydf): I'm getting a replay here, what does that mean?
+	close(wfStarted)
 
 	// make v2 current for both parent and child and unblock the wf to start the child
 	s.updateTaskQueueDeploymentData(tv2, true, 0, false, 0, tqTypeWf)
@@ -1327,7 +1327,14 @@ func (s *Versioning3Suite) TestDescribeTaskQueueVersioningInfo() {
 		TaskQueueType: tqTypeWf,
 	})
 	s.NoError(err)
-	s.ProtoEqual(&taskqueuepb.TaskQueueVersioningInfo{CurrentVersion: "__unversioned__", RampingVersion: tv.DeploymentVersionString(), RampingVersionPercentage: 20, UpdateTime: timestamp.TimePtr(t1)}, wfInfo.GetVersioningInfo())
+	s.ProtoEqual(&taskqueuepb.TaskQueueVersioningInfo{
+		CurrentDeploymentVersion: worker_versioning.ExternalWorkerDeploymentVersionFromString("__unversioned__"),
+		CurrentVersion:           "__unversioned__",
+		RampingDeploymentVersion: worker_versioning.ExternalWorkerDeploymentVersionFromString(tv.DeploymentVersionString()),
+		RampingVersion:           tv.DeploymentVersionString(),
+		RampingVersionPercentage: 20,
+		UpdateTime:               timestamp.TimePtr(t1),
+	}, wfInfo.GetVersioningInfo())
 
 	s.syncTaskQueueDeploymentData(tv, true, 0, false, t1, tqTypeAct)
 
@@ -1337,7 +1344,11 @@ func (s *Versioning3Suite) TestDescribeTaskQueueVersioningInfo() {
 		TaskQueueType: tqTypeAct,
 	})
 	s.NoError(err)
-	s.ProtoEqual(&taskqueuepb.TaskQueueVersioningInfo{CurrentVersion: tv.DeploymentVersionString(), UpdateTime: timestamp.TimePtr(t1)}, actInfo.GetVersioningInfo())
+	s.ProtoEqual(&taskqueuepb.TaskQueueVersioningInfo{
+		CurrentDeploymentVersion: worker_versioning.ExternalWorkerDeploymentVersionFromString(tv.DeploymentVersionString()),
+		CurrentVersion:           tv.DeploymentVersionString(),
+		UpdateTime:               timestamp.TimePtr(t1),
+	}, actInfo.GetVersioningInfo())
 
 	// Now ramp to unversioned
 	s.syncTaskQueueDeploymentData(tv, false, 10, true, t2, tqTypeAct)
@@ -1349,7 +1360,14 @@ func (s *Versioning3Suite) TestDescribeTaskQueueVersioningInfo() {
 		TaskQueueType: tqTypeAct,
 	})
 	s.NoError(err)
-	s.ProtoEqual(&taskqueuepb.TaskQueueVersioningInfo{CurrentVersion: tv.DeploymentVersionString(), RampingVersion: "__unversioned__", RampingVersionPercentage: 10, UpdateTime: timestamp.TimePtr(t2)}, actInfo.GetVersioningInfo())
+	s.ProtoEqual(&taskqueuepb.TaskQueueVersioningInfo{
+		CurrentDeploymentVersion: worker_versioning.ExternalWorkerDeploymentVersionFromString(tv.DeploymentVersionString()),
+		CurrentVersion:           tv.DeploymentVersionString(),
+		RampingDeploymentVersion: worker_versioning.ExternalWorkerDeploymentVersionFromString("__unversioned__"),
+		RampingVersion:           "__unversioned__",
+		RampingVersionPercentage: 10,
+		UpdateTime:               timestamp.TimePtr(t2),
+	}, actInfo.GetVersioningInfo())
 }
 
 func (s *Versioning3Suite) TestSyncDeploymentUserData_Update() {
@@ -1464,10 +1482,7 @@ func (s *Versioning3Suite) waitForDeploymentVersionCreation(
 	}, 5*time.Second, 100*time.Millisecond)
 }
 
-func (s *Versioning3Suite) setCurrentDeployment(
-	tv *testvars.TestVars,
-	v32 bool,
-) {
+func (s *Versioning3Suite) setCurrentDeployment(tv *testvars.TestVars) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	s.Eventually(func() bool {
@@ -1475,7 +1490,7 @@ func (s *Versioning3Suite) setCurrentDeployment(
 			Namespace:      s.Namespace().String(),
 			DeploymentName: tv.DeploymentSeries(),
 		}
-		if v32 {
+		if s.useV32 {
 			req.BuildId = tv.BuildID()
 		} else {
 			req.Version = tv.DeploymentVersionString()
@@ -1494,7 +1509,6 @@ func (s *Versioning3Suite) setRampingDeployment(
 	tv *testvars.TestVars,
 	percentage float32,
 	rampUnversioned bool,
-	v32 bool,
 ) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
@@ -1511,7 +1525,7 @@ func (s *Versioning3Suite) setRampingDeployment(
 			DeploymentName: tv.DeploymentSeries(),
 			Percentage:     percentage,
 		}
-		if v32 {
+		if s.useV32 {
 			req.BuildId = bid
 		} else {
 			req.Version = v
@@ -1671,17 +1685,22 @@ func (s *Versioning3Suite) verifyWorkflowVersioning(
 		))
 	}
 
-	// v0.31 override
-	s.Equal(override.GetBehavior().String(), versioningInfo.GetVersioningOverride().GetBehavior().String())
-	if actualOverrideDeployment := versioningInfo.GetVersioningOverride().GetPinnedVersion(); override.GetPinnedVersion() != actualOverrideDeployment {
-		s.Fail(fmt.Sprintf("pinned override mismatch. expected: {%s}, actual: {%s}",
-			override.GetPinnedVersion(),
-			actualOverrideDeployment,
-		))
+	if s.useV32 {
+		// v0.32 override
+		s.Equal(override.GetAutoUpgrade(), versioningInfo.GetVersioningOverride().GetAutoUpgrade())
+		s.Equal(override.GetPinned().GetVersion().GetBuildId(), versioningInfo.GetVersioningOverride().GetPinned().GetVersion().GetBuildId())
+		s.Equal(override.GetPinned().GetVersion().GetDeploymentName(), versioningInfo.GetVersioningOverride().GetPinned().GetVersion().GetDeploymentName())
+		s.Equal(override.GetPinned().GetBehavior(), versioningInfo.GetVersioningOverride().GetPinned().GetBehavior())
+	} else {
+		// v0.31 override
+		s.Equal(override.GetBehavior().String(), versioningInfo.GetVersioningOverride().GetBehavior().String())
+		if actualOverrideDeployment := versioningInfo.GetVersioningOverride().GetPinnedVersion(); override.GetPinnedVersion() != actualOverrideDeployment {
+			s.Fail(fmt.Sprintf("pinned override mismatch. expected: {%s}, actual: {%s}",
+				override.GetPinnedVersion(),
+				actualOverrideDeployment,
+			))
+		}
 	}
-
-	// v0.32 override
-	s.Equal(override.GetOverride(), versioningInfo.GetVersioningOverride().GetOverride())
 
 	if !versioningInfo.GetVersionTransition().Equal(transition) {
 		s.Fail(fmt.Sprintf("version transition mismatch. expected: {%s}, actual: {%s}",

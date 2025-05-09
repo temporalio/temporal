@@ -2787,6 +2787,8 @@ func (wh *WorkflowHandler) DescribeWorkflowExecution(ctx context.Context, reques
 		}
 	}
 
+	response.GetWorkflowExecutionInfo().VersioningInfo = worker_versioning.PopulateDeprecatedVersioningInfoFields(response.GetWorkflowExecutionInfo().GetVersioningInfo())
+
 	return &workflowservice.DescribeWorkflowExecutionResponse{
 		ExecutionConfig:        response.GetExecutionConfig(),
 		WorkflowExecutionInfo:  response.GetWorkflowExecutionInfo(),

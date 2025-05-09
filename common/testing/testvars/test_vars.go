@@ -259,9 +259,12 @@ func (tv *TestVars) DeploymentVersionString() string {
 }
 
 func (tv *TestVars) DeploymentVersionTransition() *workflowpb.DeploymentVersionTransition {
-	return &workflowpb.DeploymentVersionTransition{
+	ret := &workflowpb.DeploymentVersionTransition{
 		DeploymentVersion: worker_versioning.ExternalWorkerDeploymentVersionFromVersion(tv.DeploymentVersion()),
 	}
+	// DescribeWorkflowExecution populates both fields on read, so we expect to see both fields
+	ret.Version = worker_versioning.ExternalWorkerDeploymentVersionToString(ret.GetDeploymentVersion())
+	return ret
 }
 
 func (tv *TestVars) VersioningOverridePinned(useV32 bool) *workflowpb.VersioningOverride {
