@@ -3440,21 +3440,14 @@ func (wh *WorkflowHandler) SetWorkerDeploymentRampingVersion(ctx context.Context
 
 	versionStr := request.GetVersion()
 	if versionStr == "" {
-		// Either a v0.31 user is trying to unset the ramp, or a v0.32 user did not populate the deprecated field.
-		//
-		// In the first case, the user will have also passed build_id="" and percentage=0, so we will set the ramping
-		// version to (__unversioned__, 0), which is the desired substitute for legacy "unset ramp" in the v0.32
-		// framework where the only way to "unset ramp" is to have percentage=0.
-		//
-		// In the second case, we will have build_id!="" and create a target ramping version.
-		var v *deploymentspb.WorkerDeploymentVersion
+		// If v0.31 user is trying to unset the ramp, let them do it until we update the deployment manager.
+		// We know it's unsetting the ramp if Build ID is "" and percentage is 0.
 		if request.GetBuildId() != "" {
-			v = &deploymentspb.WorkerDeploymentVersion{
+			versionStr = worker_versioning.WorkerDeploymentVersionToString(&deploymentspb.WorkerDeploymentVersion{
 				DeploymentName: request.GetDeploymentName(),
 				BuildId:        request.GetBuildId(),
-			}
+			})
 		}
-		versionStr = worker_versioning.WorkerDeploymentVersionToString(v)
 	}
 
 	if request.GetPercentage() < 0 || request.GetPercentage() > 100 {
