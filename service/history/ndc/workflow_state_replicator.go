@@ -303,7 +303,7 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 		}
 
 		sourceTransitionHistory := executionInfo.TransitionHistory
-		err = workflow.TransitionHistoryStalenessCheck(localTransitionHistory, transitionhistory.LastVersionedTransition(sourceTransitionHistory))
+		err = transitionhistory.StalenessCheck(localTransitionHistory, transitionhistory.LastVersionedTransition(sourceTransitionHistory))
 		switch {
 		case err == nil:
 			return consts.ErrDuplicate
@@ -561,8 +561,8 @@ func (r *WorkflowStateReplicatorImpl) applyMutation(
 	sourceTransitionHistory := mutation.StateMutation.ExecutionInfo.TransitionHistory
 
 	// make sure mutation range is extension of local range
-	if workflow.TransitionHistoryStalenessCheck(localTransitionHistory, mutation.ExclusiveStartVersionedTransition) != nil ||
-		workflow.TransitionHistoryStalenessCheck(sourceTransitionHistory, localVersionedTransition) != nil {
+	if transitionhistory.StalenessCheck(localTransitionHistory, mutation.ExclusiveStartVersionedTransition) != nil ||
+		transitionhistory.StalenessCheck(sourceTransitionHistory, localVersionedTransition) != nil {
 		return serviceerrors.NewSyncState(
 			fmt.Sprintf("Failed to apply mutation due to version check failed. local transition history: %v, source transition history: %v, exclusiveStartVersionedTransition: %v",
 				localTransitionHistory, sourceTransitionHistory, mutation.ExclusiveStartVersionedTransition),
@@ -677,7 +677,7 @@ func (r *WorkflowStateReplicatorImpl) applySnapshotWhenWorkflowExist(
 		localTransitionHistory = transitionhistory.CopyVersionedTransitions(localMutableState.GetExecutionInfo().TransitionHistory)
 		localVersionedTransition = transitionhistory.LastVersionedTransition(localTransitionHistory)
 		sourceTransitionHistory := sourceMutableState.ExecutionInfo.TransitionHistory
-		err := workflow.TransitionHistoryStalenessCheck(sourceTransitionHistory, localVersionedTransition)
+		err := transitionhistory.StalenessCheck(sourceTransitionHistory, localVersionedTransition)
 		switch {
 		case err == nil:
 			// no branch switch

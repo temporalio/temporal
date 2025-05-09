@@ -50,5 +50,6 @@ var (
 		dynamicconfig.EnableEagerWorkflowStart.Key():            true,
 		dynamicconfig.FrontendEnableExecuteMultiOperation.Key(): true,
 		dynamicconfig.ActivityAPIsEnabled.Key():                 true,
+		dynamicconfig.EnableTransitionHistory.Key():             true,
 	}
 )

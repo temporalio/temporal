@@ -122,7 +122,7 @@ func (m *visibilityManagerMetrics) ListWorkflowExecutions(
 		m.logger.Warn("List query exceeded threshold",
 			tag.NewDurationTag("duration", elapsed),
 			tag.NewStringTag("visibility-query", request.Query),
-			tag.NewStringTag("namepsace", request.Namespace.String()),
+			tag.NewStringerTag("namepsace", request.Namespace),
 		)
 	}
 	metrics.VisibilityPersistenceLatency.With(handler).Record(elapsed)
@@ -140,7 +140,7 @@ func (m *visibilityManagerMetrics) ScanWorkflowExecutions(
 		m.logger.Warn("Count query exceeded threshold",
 			tag.NewDurationTag("duration", elapsed),
 			tag.NewStringTag("visibility-query", request.Query),
-			tag.NewStringTag("namepsace", request.Namespace.String()),
+			tag.NewStringerTag("namepsace", request.Namespace),
 		)
 	}
 	metrics.VisibilityPersistenceLatency.With(handler).Record(elapsed)

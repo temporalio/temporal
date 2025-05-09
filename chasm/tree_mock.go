@@ -15,6 +15,7 @@ import (
 
 	enums "go.temporal.io/api/enums/v1"
 	enums0 "go.temporal.io/server/api/enums/v1"
+	persistence "go.temporal.io/server/api/persistence/v1"
 	definition "go.temporal.io/server/common/definition"
 	tasks "go.temporal.io/server/service/history/tasks"
 	gomock "go.uber.org/mock/gomock"
@@ -72,6 +73,20 @@ func (m *MockNodeBackend) GetCurrentVersion() int64 {
 func (mr *MockNodeBackendMockRecorder) GetCurrentVersion() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCurrentVersion", reflect.TypeOf((*MockNodeBackend)(nil).GetCurrentVersion))
+}
+
+// GetExecutionInfo mocks base method.
+func (m *MockNodeBackend) GetExecutionInfo() *persistence.WorkflowExecutionInfo {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetExecutionInfo")
+	ret0, _ := ret[0].(*persistence.WorkflowExecutionInfo)
+	return ret0
+}
+
+// GetExecutionInfo indicates an expected call of GetExecutionInfo.
+func (mr *MockNodeBackendMockRecorder) GetExecutionInfo() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetExecutionInfo", reflect.TypeOf((*MockNodeBackend)(nil).GetExecutionInfo))
 }
 
 // GetWorkflowKey mocks base method.
@@ -170,32 +185,32 @@ func (mr *MockNodePathEncoderMockRecorder) Encode(node, path any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Encode", reflect.TypeOf((*MockNodePathEncoder)(nil).Encode), node, path)
 }
 
-// MockLogicalTaskExecutor is a mock of LogicalTaskExecutor interface.
-type MockLogicalTaskExecutor struct {
+// MockNodeExecutePureTask is a mock of NodeExecutePureTask interface.
+type MockNodeExecutePureTask struct {
 	ctrl     *gomock.Controller
-	recorder *MockLogicalTaskExecutorMockRecorder
+	recorder *MockNodeExecutePureTaskMockRecorder
 	isgomock struct{}
 }
 
-// MockLogicalTaskExecutorMockRecorder is the mock recorder for MockLogicalTaskExecutor.
-type MockLogicalTaskExecutorMockRecorder struct {
-	mock *MockLogicalTaskExecutor
+// MockNodeExecutePureTaskMockRecorder is the mock recorder for MockNodeExecutePureTask.
+type MockNodeExecutePureTaskMockRecorder struct {
+	mock *MockNodeExecutePureTask
 }
 
-// NewMockLogicalTaskExecutor creates a new mock instance.
-func NewMockLogicalTaskExecutor(ctrl *gomock.Controller) *MockLogicalTaskExecutor {
-	mock := &MockLogicalTaskExecutor{ctrl: ctrl}
-	mock.recorder = &MockLogicalTaskExecutorMockRecorder{mock}
+// NewMockNodeExecutePureTask creates a new mock instance.
+func NewMockNodeExecutePureTask(ctrl *gomock.Controller) *MockNodeExecutePureTask {
+	mock := &MockNodeExecutePureTask{ctrl: ctrl}
+	mock.recorder = &MockNodeExecutePureTaskMockRecorder{mock}
 	return mock
 }
 
 // EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockLogicalTaskExecutor) EXPECT() *MockLogicalTaskExecutorMockRecorder {
+func (m *MockNodeExecutePureTask) EXPECT() *MockNodeExecutePureTaskMockRecorder {
 	return m.recorder
 }
 
 // ExecutePureTask mocks base method.
-func (m *MockLogicalTaskExecutor) ExecutePureTask(baseCtx context.Context, taskInstance any) error {
+func (m *MockNodeExecutePureTask) ExecutePureTask(baseCtx context.Context, taskInstance any) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ExecutePureTask", baseCtx, taskInstance)
 	ret0, _ := ret[0].(error)
@@ -203,7 +218,7 @@ func (m *MockLogicalTaskExecutor) ExecutePureTask(baseCtx context.Context, taskI
 }
 
 // ExecutePureTask indicates an expected call of ExecutePureTask.
-func (mr *MockLogicalTaskExecutorMockRecorder) ExecutePureTask(baseCtx, taskInstance any) *gomock.Call {
+func (mr *MockNodeExecutePureTaskMockRecorder) ExecutePureTask(baseCtx, taskInstance any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecutePureTask", reflect.TypeOf((*MockLogicalTaskExecutor)(nil).ExecutePureTask), baseCtx, taskInstance)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecutePureTask", reflect.TypeOf((*MockNodeExecutePureTask)(nil).ExecutePureTask), baseCtx, taskInstance)
 }

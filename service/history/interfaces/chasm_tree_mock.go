@@ -99,8 +99,23 @@ func (mr *MockChasmTreeMockRecorder) CloseTransaction() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseTransaction", reflect.TypeOf((*MockChasmTree)(nil).CloseTransaction))
 }
 
+// Component mocks base method.
+func (m *MockChasmTree) Component(arg0 chasm.Context, arg1 chasm.ComponentRef) (chasm.Component, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Component", arg0, arg1)
+	ret0, _ := ret[0].(chasm.Component)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Component indicates an expected call of Component.
+func (mr *MockChasmTreeMockRecorder) Component(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Component", reflect.TypeOf((*MockChasmTree)(nil).Component), arg0, arg1)
+}
+
 // EachPureTask mocks base method.
-func (m *MockChasmTree) EachPureTask(deadline time.Time, callback func(chasm.LogicalTaskExecutor, any) error) error {
+func (m *MockChasmTree) EachPureTask(deadline time.Time, callback func(chasm.NodeExecutePureTask, any) error) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "EachPureTask", deadline, callback)
 	ret0, _ := ret[0].(error)
@@ -125,6 +140,20 @@ func (m *MockChasmTree) IsDirty() bool {
 func (mr *MockChasmTreeMockRecorder) IsDirty() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsDirty", reflect.TypeOf((*MockChasmTree)(nil).IsDirty))
+}
+
+// IsStale mocks base method.
+func (m *MockChasmTree) IsStale(arg0 chasm.ComponentRef) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsStale", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// IsStale indicates an expected call of IsStale.
+func (mr *MockChasmTreeMockRecorder) IsStale(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsStale", reflect.TypeOf((*MockChasmTree)(nil).IsStale), arg0)
 }
 
 // Snapshot mocks base method.
