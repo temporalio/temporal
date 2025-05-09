@@ -21,6 +21,7 @@ import (
 type MockEagerNamespaceRefresher struct {
 	ctrl     *gomock.Controller
 	recorder *MockEagerNamespaceRefresherMockRecorder
+	isgomock struct{}
 }
 
 // MockEagerNamespaceRefresherMockRecorder is the mock recorder for MockEagerNamespaceRefresher.
