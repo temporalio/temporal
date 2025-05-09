@@ -22,12 +22,10 @@ type HTTPClientTraceProvider interface {
 }
 
 // HTTPTraceConfig is the dynamic config for controlling Nexus HTTP request tracing behavior.
-// The default is nil and the conversion function does not do any actual conversion because this should be wrapped by
-// a dynamicconfig.NewGlobalCachedTypedValue with the actual conversion function so that it is cached.
 var HTTPTraceConfig = dynamicconfig.NewGlobalTypedSettingWithConverter(
 	"system.nexusHTTPTraceConfig",
-	func(a any) (any, error) { return a, nil },
-	nil,
+	convertHTTPClientTraceConfig,
+	defaultHTTPClientTraceConfig,
 	`Configuration options for controlling additional tracing for Nexus HTTP requests. Fields: Enabled, ForwardingEnabled, MinAttempt, MaxAttempt, Hooks. See HTTPClientTraceConfig comments for more detail.`,
 )
 
@@ -50,8 +48,8 @@ var defaultHTTPClientTraceConfig = HTTPClientTraceConfig{
 	ForwardingEnabled: false,
 	MinAttempt:        2,
 	MaxAttempt:        2,
-	// Set to nil here because of dynamic config conversion limitations.
-	Hooks: []string(nil),
+	// use separate default for Hooks so that users can override with a smaller set of hooks
+	Hooks: nil,
 }
 
 var defaultHTTPClientTraceHooks = []string{"GetConn", "GotConn", "ConnectStart", "ConnectDone", "DNSStart", "DNSDone", "TLSHandshakeStart", "TLSHandshakeDone", "WroteRequest", "GotFirstResponseByte"}
@@ -68,17 +66,17 @@ func convertHTTPClientTraceConfig(in any) (HTTPClientTraceConfig, error) {
 }
 
 type LoggedHTTPClientTraceProvider struct {
-	Config *dynamicconfig.GlobalCachedTypedValue[HTTPClientTraceConfig]
+	Config dynamicconfig.TypedPropertyFn[HTTPClientTraceConfig]
 }
 
 func NewLoggedHTTPClientTraceProvider(dc *dynamicconfig.Collection) HTTPClientTraceProvider {
 	return &LoggedHTTPClientTraceProvider{
-		Config: dynamicconfig.NewGlobalCachedTypedValue(dc, HTTPTraceConfig, convertHTTPClientTraceConfig),
+		Config: HTTPTraceConfig.Get(dc),
 	}
 }
 
 func (p *LoggedHTTPClientTraceProvider) NewTrace(attempt int32, logger log.Logger) *httptrace.ClientTrace {
-	config := p.Config.Get()
+	config := p.Config()
 	if !config.Enabled {
 		return nil
 	}
@@ -93,7 +91,7 @@ func (p *LoggedHTTPClientTraceProvider) NewTrace(attempt int32, logger log.Logge
 }
 
 func (p *LoggedHTTPClientTraceProvider) NewForwardingTrace(logger log.Logger) *httptrace.ClientTrace {
-	config := p.Config.Get()
+	config := p.Config()
 	if !config.Enabled || !config.ForwardingEnabled {
 		return nil
 	}
