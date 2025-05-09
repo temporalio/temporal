@@ -1299,6 +1299,7 @@ func versionStateToVersionInfo(state *deploymentspb.VersionLocalState) *deployme
 	if drainageInfo.GetStatus() == enumspb.VERSION_DRAINAGE_STATUS_UNSPECIFIED {
 		drainageInfo = nil
 	}
+
 	return &deploymentpb.WorkerDeploymentVersionInfo{
 		Version:            worker_versioning.WorkerDeploymentVersionToString(state.Version),
 		CreateTime:         state.CreateTime,

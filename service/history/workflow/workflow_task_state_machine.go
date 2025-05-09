@@ -1157,8 +1157,8 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 		// Only populating the new field.
 		//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
 		versioningInfo.Deployment = nil
-		//nolint:staticcheck // SA1019 deprecated Version will clean up later
-		versioningInfo.Version = ""
+		//nolint:staticcheck // SA1019 deprecated Version will clean up later [cleanup-wv-3.1]
+		versioningInfo.Version = worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(wftDeployment))
 		versioningInfo.DeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(wftDeployment)
 	}
 

@@ -3485,6 +3485,7 @@ func (ms *MutableStateImpl) AddActivityTaskStartedEvent(
 	}
 
 	if deployment != nil {
+		ai.LastWorkerDeploymentVersion = worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(deployment))
 		ai.LastDeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(deployment)
 	}
 
@@ -8020,6 +8021,8 @@ func (ms *MutableStateImpl) StartDeploymentTransition(deployment *deploymentpb.D
 	//nolint:staticcheck // SA1019 deprecated DeploymentTransition will clean up later
 	versioningInfo.DeploymentTransition = nil
 	versioningInfo.VersionTransition = &workflowpb.DeploymentVersionTransition{
+		// [cleanup-wv-3.1]
+		Version:           worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(deployment)),
 		DeploymentVersion: worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(deployment),
 	}
 
