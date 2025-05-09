@@ -2194,6 +2194,7 @@ func (s *Versioning3Suite) verifyVersioningSAs(
 		})
 		a := assert.New(t)
 		a.Nil(err)
+		a.Greater(len(resp.GetExecutions()), 0)
 		if a.NotEmpty(resp.GetExecutions()) {
 			w := resp.GetExecutions()[0]
 			payload, ok := w.GetSearchAttributes().GetIndexedFields()["BuildIds"]
@@ -2205,10 +2206,10 @@ func (s *Versioning3Suite) verifyVersioningSAs(
 				searchAttr = searchAttrAny.([]string)
 			}
 			if behavior == enumspb.VERSIONING_BEHAVIOR_PINNED {
-				a.Contains(searchAttr, "pinned:"+tv.DeploymentVersionString())
+				a.Contains(searchAttr, worker_versioning.PinnedBuildIdSearchAttribute(tv.DeploymentVersionString()))
 			}
 			for _, b := range usedBuilds {
-				a.Contains(searchAttr, "versioned:"+b.BuildID())
+				a.Contains(searchAttr, worker_versioning.VersionedBuildIdSearchAttribute(b.BuildID()))
 			}
 			fmt.Println(resp.GetExecutions()[0])
 		}

@@ -572,6 +572,9 @@ func V32RoutingConfigFromV31(r *deploymentpb.RoutingConfig) *deploymentpb.Routin
 }
 
 func PopulateDeprecatedVersioningInfoFields(info *workflowpb.WorkflowExecutionVersioningInfo) *workflowpb.WorkflowExecutionVersioningInfo {
+	if info == nil {
+		return nil
+	}
 	if info.Version == "" && info.DeploymentVersion != nil {
 		info.Version = ExternalWorkerDeploymentVersionToString(info.DeploymentVersion)
 	}

@@ -495,6 +495,7 @@ func (s *DeploymentSuite) checkDescribeWorkflowAfterOverride(
 			Namespace: s.Namespace().String(),
 			Execution: wf,
 		})
+		fmt.Println("CDFERR: ", err)
 		a.NoError(err)
 		a.NotNil(resp)
 		a.NotNil(resp.GetWorkflowExecutionInfo())
