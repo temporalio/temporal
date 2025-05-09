@@ -992,8 +992,26 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	s.taskManager.getQueueManagerByKey(dbq).rangeID = initialRangeID
 
 	mgr := s.newPartitionManager(dbq.partition, s.matchingEngine.config)
-	_, ok := mgr.(*taskQueuePartitionManagerImpl).defaultQueue.(*physicalTaskQueueManagerImpl)
+	tqPTM, ok := mgr.(*taskQueuePartitionManagerImpl)
 	s.True(ok)
+	mgrImpl, ok := mgr.(*taskQueuePartitionManagerImpl).defaultQueue.(*physicalTaskQueueManagerImpl)
+	s.True(ok)
+
+	tqPTM.rateLimiter = quotas.NewRateLimiter(
+		defaultTaskDispatchRPS,
+		defaultTaskDispatchRPS,
+	)
+
+	// Overriding the rate-limiter in the matcher to have the above rate-limiter instead of the default multi-rate limiter.
+	mgrImpl.oldMatcher.rateLimiter = tqPTM.rateLimiter
+
+	tqPTM.dynamicRateBurst = &dynamicRateBurstWrapper{
+		MutableRateBurst: quotas.NewMutableRateBurst(
+			defaultTaskDispatchRPS,
+			defaultTaskDispatchRPS,
+		),
+		RateLimiterImpl: mgrImpl.oldMatcher.rateLimiter.(*quotas.RateLimiterImpl),
+	}
 
 	s.matchingEngine.updateTaskQueue(dbq.partition, mgr)
 	mgr.Start()
