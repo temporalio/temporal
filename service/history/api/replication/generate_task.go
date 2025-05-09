@@ -41,7 +41,7 @@ func GenerateTask(
 	defer func() { workflowLease.GetReleaseFn()(retError) }()
 
 	mutableState := workflowLease.GetMutableState()
-	replicationTasks, stateTransitionCount, err := mutableState.GenerateMigrationTasks()
+	replicationTasks, stateTransitionCount, err := mutableState.GenerateMigrationTasks(request.GetTargetClusters())
 	if err != nil {
 		return nil, err
 	}
