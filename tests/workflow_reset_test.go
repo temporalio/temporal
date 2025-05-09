@@ -10,13 +10,16 @@ import (
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
 
 // Tests workflow reset feature
@@ -191,6 +194,59 @@ func (s *WorkflowResetSuite) TestOriginalExecutionRunId() {
 		s.NoError(err)
 		s.Equal(baseRunID, baseMutableState.GetDatabaseMutableState().ExecutionInfo.OriginalExecutionRunId)
 	}
+}
+
+// Test that the workflow options are updated when the workflow is reset.
+func (s *WorkflowResetSuite) TestResetWorkflowWithOptionsUpdate() {
+	workflowID := "test-reset" + uuid.NewString()
+	ctx := testcore.NewContext()
+	runs := s.setupRuns(ctx, workflowID, 1, true)
+	currentRunID := runs[0]
+
+	// Reset the workflow by providing the explicit runID (base run) to reset.
+	resp, err := s.FrontendClient().ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
+		Namespace:                 s.Namespace().String(),
+		WorkflowExecution:         &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: currentRunID},
+		Reason:                    "testing-reset",
+		RequestId:                 uuid.NewString(),
+		WorkflowTaskFinishEventId: s.getFirstWFTaskCompleteEventID(ctx, workflowID, currentRunID),
+		PostResetOperations: []*workflowpb.PostResetOperation{
+			{
+				Variant: &workflowpb.PostResetOperation_UpdateWorkflowOptions_{
+					UpdateWorkflowOptions: &workflowpb.PostResetOperation_UpdateWorkflowOptions{
+						WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{
+							VersioningOverride: &workflowpb.VersioningOverride{
+								Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED,
+								PinnedVersion: "testing.v.123",
+							},
+						},
+						UpdateMask: &fieldmaskpb.FieldMask{
+							Paths: []string{
+								"versioning_override",
+							},
+						},
+					},
+				},
+			},
+		},
+	})
+	s.NoError(err)
+	newRunID := resp.RunId
+
+	// assert that the new run has the updated workflow options
+	var optionsUpdatedEvent *historypb.HistoryEvent
+	hist := s.SdkClient().GetWorkflowHistory(ctx, workflowID, newRunID, false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+	for hist.HasNext() {
+		event, err := hist.Next()
+		s.NoError(err)
+		if event.EventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED {
+			optionsUpdatedEvent = event
+			break
+		}
+	}
+	s.NotNil(optionsUpdatedEvent)
+	s.Equal(optionsUpdatedEvent.GetWorkflowExecutionOptionsUpdatedEventAttributes().GetVersioningOverride().GetBehavior(), enumspb.VERSIONING_BEHAVIOR_PINNED)
+	s.Equal(optionsUpdatedEvent.GetWorkflowExecutionOptionsUpdatedEventAttributes().GetVersioningOverride().GetPinnedVersion(), "testing.v.123")
 }
 
 // Helper methods
