@@ -253,19 +253,6 @@ func (r *workflowResetterImpl) ResetWorkflow(
 	return nil
 }
 
-func (r *workflowResetterImpl) performPostResetOperations(ctx context.Context, resetMS historyi.MutableState, postResetOperations []*workflowpb.PostResetOperation) error {
-	for _, operation := range postResetOperations {
-		switch op := operation.GetVariant().(type) {
-		case *workflowpb.PostResetOperation_UpdateWorkflowOptions_:
-			_, _, err := updateworkflowoptions.MergeAndApply(resetMS, op.UpdateWorkflowOptions.GetWorkflowExecutionOptions(), op.UpdateWorkflowOptions.GetUpdateMask())
-			if err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
 func (r *workflowResetterImpl) prepareResetWorkflow(
 	ctx context.Context,
 	namespaceID namespace.ID,
@@ -1156,4 +1143,18 @@ func (r *workflowResetterImpl) shouldExcludeAllReapplyEvents(excludeTypes map[en
 		}
 	}
 	return true
+}
+
+// performPostResetOperations performs the optional post reset operations on the reset workflow.
+func (r *workflowResetterImpl) performPostResetOperations(ctx context.Context, resetMS historyi.MutableState, postResetOperations []*workflowpb.PostResetOperation) error {
+	for _, operation := range postResetOperations {
+		switch op := operation.GetVariant().(type) {
+		case *workflowpb.PostResetOperation_UpdateWorkflowOptions_:
+			_, _, err := updateworkflowoptions.MergeAndApply(resetMS, op.UpdateWorkflowOptions.GetWorkflowExecutionOptions(), op.UpdateWorkflowOptions.GetUpdateMask())
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }

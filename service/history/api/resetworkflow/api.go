@@ -194,6 +194,7 @@ func GetResetReapplyExcludeTypes(
 	return exclude
 }
 
+// validatePostResetOperationInputs validates the optional post reset operation inputs.
 func validatePostResetOperationInputs(postResetOperations []*workflowpb.PostResetOperation) error {
 	for _, operation := range postResetOperations {
 		switch op := operation.GetVariant().(type) {
@@ -204,7 +205,6 @@ func validatePostResetOperationInputs(postResetOperations []*workflowpb.PostRese
 			}
 		}
 		// TODO: add signal workflow validation here.
-		// case *workflowpb.PostResetOperation_SignalWorkflow_:
 	}
 	return nil
 }
