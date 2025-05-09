@@ -245,7 +245,7 @@ func (s *WorkflowResetSuite) TestResetWorkflowWithOptionsUpdate() {
 		}
 	}
 	s.NotNil(optionsUpdatedEvent)
-	s.Equal(optionsUpdatedEvent.GetWorkflowExecutionOptionsUpdatedEventAttributes().GetVersioningOverride().GetBehavior(), enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE)
+	s.Equal(optionsUpdatedEvent.GetWorkflowExecutionOptionsUpdatedEventAttributes().GetVersioningOverride().GetBehavior(), enumspb.VERSIONING_BEHAVIOR_PINNED)
 	s.Equal(optionsUpdatedEvent.GetWorkflowExecutionOptionsUpdatedEventAttributes().GetVersioningOverride().GetPinnedVersion(), "testing.v.123")
 }
 
