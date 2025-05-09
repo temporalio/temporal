@@ -79,9 +79,10 @@ func (e *ExecutableSyncHSMTask) Execute() error {
 		return nil
 	}
 
+	callerInfo := getSystemCallerInfo(e.GetPriority())
 	namespaceName, apply, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
 		context.Background(),
-		headers.SystemPreemptableCallerInfo,
+		callerInfo,
 	), e.NamespaceID)
 	if nsError != nil {
 		return nsError
@@ -99,7 +100,7 @@ func (e *ExecutableSyncHSMTask) Execute() error {
 		)
 		return nil
 	}
-	ctx, cancel := newTaskContext(namespaceName, e.Config.ReplicationTaskApplyTimeout())
+	ctx, cancel := newTaskContext(namespaceName, e.Config.ReplicationTaskApplyTimeout(), callerInfo)
 	defer cancel()
 
 	shardContext, err := e.ShardController.GetShardByNamespaceWorkflow(
@@ -126,18 +127,19 @@ func (e *ExecutableSyncHSMTask) HandleErr(err error) error {
 		e.MarkTaskDuplicated()
 		return nil
 	}
+	callerInfo := getSystemCallerInfo(e.GetPriority())
 	switch retryErr := err.(type) {
 	case nil, *serviceerror.NotFound:
 		return nil
 	case *serviceerrors.RetryReplication:
 		namespaceName, _, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
 			context.Background(),
-			headers.SystemPreemptableCallerInfo,
+			callerInfo,
 		), e.NamespaceID)
 		if nsError != nil {
 			return err
 		}
-		ctx, cancel := newTaskContext(namespaceName, e.Config.ReplicationTaskApplyTimeout())
+		ctx, cancel := newTaskContext(namespaceName, e.Config.ReplicationTaskApplyTimeout(), callerInfo)
 		defer cancel()
 
 		if doContinue, resendErr := e.Resend(

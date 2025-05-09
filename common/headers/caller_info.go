@@ -11,6 +11,7 @@ const (
 	CallerTypeAPI         = "api"
 	CallerTypeBackground  = "background"
 	CallerTypePreemptable = "preemptable"
+	CallerTypeOptional    = "optional"
 
 	CallerNameSystem = "system"
 )
@@ -32,6 +33,10 @@ var (
 	SystemPreemptableCallerInfo = CallerInfo{
 		CallerName: CallerNameSystem,
 		CallerType: CallerTypePreemptable,
+	}
+	SystemOptionalCallerInfo = CallerInfo{
+		CallerName: CallerNameSystem,
+		CallerType: CallerTypeOptional,
 	}
 )
 

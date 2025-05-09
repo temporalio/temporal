@@ -103,6 +103,7 @@ type (
 			newRunId string,
 		) error
 		MarkTaskDuplicated()
+		GetPriority() enumsspb.TaskPriority
 	}
 	ExecutableTaskImpl struct {
 		ProcessToolBox
@@ -279,6 +280,10 @@ func (e *ExecutableTaskImpl) Attempt() int {
 
 func (e *ExecutableTaskImpl) MarkTaskDuplicated() {
 	e.isDuplicated = true
+}
+
+func (e *ExecutableTaskImpl) GetPriority() enumsspb.TaskPriority {
+	return e.taskPriority
 }
 
 func (e *ExecutableTaskImpl) emitFinishMetrics(
@@ -801,7 +806,11 @@ func (e *ExecutableTaskImpl) MarkPoisonPill() error {
 		tag.ReplicationTask(taskInfo),
 	)
 
-	ctx, cancel := newTaskContext(e.replicationTask.RawTaskInfo.NamespaceId, e.Config.ReplicationTaskApplyTimeout())
+	ctx, cancel := newTaskContext(
+		e.replicationTask.RawTaskInfo.NamespaceId,
+		e.Config.ReplicationTaskApplyTimeout(),
+		headers.SystemPreemptableCallerInfo,
+	)
 	defer cancel()
 
 	return writeTaskToDLQ(ctx, e.DLQWriter, e.sourceShardKey.ShardID, e.SourceClusterName(), shardContext.GetShardID(), taskInfo)
@@ -810,11 +819,21 @@ func (e *ExecutableTaskImpl) MarkPoisonPill() error {
 func newTaskContext(
 	namespaceName string,
 	timeout time.Duration,
+	callerInfo headers.CallerInfo,
 ) (context.Context, context.CancelFunc) {
 	ctx := headers.SetCallerInfo(
 		context.Background(),
-		headers.SystemPreemptableCallerInfo,
+		callerInfo,
 	)
 	ctx = headers.SetCallerName(ctx, namespaceName)
 	return context.WithTimeout(ctx, timeout)
+}
+
+func getSystemCallerInfo(priority enumsspb.TaskPriority) headers.CallerInfo {
+	switch priority {
+	case enumsspb.TASK_PRIORITY_LOW:
+		return headers.SystemOptionalCallerInfo
+	default:
+		return headers.SystemPreemptableCallerInfo
+	}
 }

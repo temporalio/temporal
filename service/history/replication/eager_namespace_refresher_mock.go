@@ -21,7 +21,6 @@ import (
 type MockEagerNamespaceRefresher struct {
 	ctrl     *gomock.Controller
 	recorder *MockEagerNamespaceRefresherMockRecorder
-	isgomock struct{}
 }
 
 // MockEagerNamespaceRefresherMockRecorder is the mock recorder for MockEagerNamespaceRefresher.
@@ -54,18 +53,4 @@ func (m *MockEagerNamespaceRefresher) SyncNamespaceFromSourceCluster(ctx context
 func (mr *MockEagerNamespaceRefresherMockRecorder) SyncNamespaceFromSourceCluster(ctx, namespaceId, sourceCluster any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncNamespaceFromSourceCluster", reflect.TypeOf((*MockEagerNamespaceRefresher)(nil).SyncNamespaceFromSourceCluster), ctx, namespaceId, sourceCluster)
-}
-
-// UpdateNamespaceFailoverVersion mocks base method.
-func (m *MockEagerNamespaceRefresher) UpdateNamespaceFailoverVersion(namespaceId namespace.ID, targetFailoverVersion int64) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateNamespaceFailoverVersion", namespaceId, targetFailoverVersion)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// UpdateNamespaceFailoverVersion indicates an expected call of UpdateNamespaceFailoverVersion.
-func (mr *MockEagerNamespaceRefresherMockRecorder) UpdateNamespaceFailoverVersion(namespaceId, targetFailoverVersion any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateNamespaceFailoverVersion", reflect.TypeOf((*MockEagerNamespaceRefresher)(nil).UpdateNamespaceFailoverVersion), namespaceId, targetFailoverVersion)
 }

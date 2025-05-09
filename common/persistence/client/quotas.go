@@ -22,6 +22,7 @@ var (
 		headers.CallerTypeAPI:         2,
 		headers.CallerTypeBackground:  4,
 		headers.CallerTypePreemptable: 5,
+		headers.CallerTypeOptional:    6,
 	}
 
 	APITypeCallOriginPriorityOverride = map[string]int{
@@ -56,7 +57,7 @@ var (
 		p.ConstructHistoryTaskAPI("GetHistoryTasks", tasks.CategoryVisibility): 3,
 	}
 
-	RequestPrioritiesOrdered = []int{0, 1, 2, 3, 4, 5}
+	RequestPrioritiesOrdered = []int{0, 1, 2, 3, 4, 5, 6}
 )
 
 func NewPriorityRateLimiter(
@@ -277,6 +278,8 @@ func RequestPriorityFn(req quotas.Request) int {
 		}
 		return CallerTypeDefaultPriority[req.CallerType]
 	case headers.CallerTypePreemptable:
+		return CallerTypeDefaultPriority[req.CallerType]
+	case headers.CallerTypeOptional:
 		return CallerTypeDefaultPriority[req.CallerType]
 	default:
 		// default requests to API priority to be consistent with existing behavior
