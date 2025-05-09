@@ -21,12 +21,12 @@ func GetActiveNamespace(
 	if err != nil {
 		return nil, err
 	}
-	//if !namespaceEntry.ActiveInCluster(shard.GetClusterMetadata().GetCurrentClusterName()) {
-	//	return nil, serviceerror.NewNamespaceNotActive(
-	//		namespaceEntry.Name().String(),
-	//		shard.GetClusterMetadata().GetCurrentClusterName(),
-	//		namespaceEntry.ActiveClusterName())
-	//}
+	if !namespaceEntry.ActiveInCluster(shard.GetClusterMetadata().GetCurrentClusterName()) {
+		return nil, serviceerror.NewNamespaceNotActive(
+			namespaceEntry.Name().String(),
+			shard.GetClusterMetadata().GetCurrentClusterName(),
+			namespaceEntry.ActiveClusterName())
+	}
 	return namespaceEntry, nil
 }
 
