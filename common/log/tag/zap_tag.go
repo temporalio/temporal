@@ -55,12 +55,20 @@ func NewStringsTag(key string, value []string) ZapTag {
 	}
 }
 
+// NewStringerTag returns a tag that will lazily generate the string representation
+// of the provided fmt.Stringer value. Note that it does **not** cache the result, so
+// you should use `NewStringTag` instead if the tag is applied to the logger itself using
+// `log.With`.
 func NewStringerTag(key string, value fmt.Stringer) ZapTag {
 	return ZapTag{
 		field: zap.Stringer(key, value),
 	}
 }
 
+// NewStringersTag returns a tag that will lazily generate the string representation
+// of the provided fmt.Stringer values. Note that it does **not** cache the results, so
+// you should use `NewStringsTag` instead if the tag is applied to the logger itself using
+// `log.With`.
 func NewStringersTag(key string, value []fmt.Stringer) ZapTag {
 	return ZapTag{
 		field: zap.Stringers(key, value),
