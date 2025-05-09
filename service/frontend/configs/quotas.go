@@ -350,11 +350,12 @@ func NewNamespaceReplicationInducingAPIPriorityRateLimiter(
 }
 
 func IsAPIOperation(apiFullName string) bool {
-	if _, ok := APIToPriority[apiFullName]; ok {
-		if _, ok := operationExcludedAPIs[apiFullName]; ok {
-			return false
-		}
-		return true
+	if _, ok := operationExcludedAPIs[apiFullName]; ok {
+		return false
 	}
-	return false
+
+	_, inAPI := APIToPriority[apiFullName]
+	_, inNamespaceReplicationInducingAPI := NamespaceReplicationInducingAPIToPriority[apiFullName]
+
+	return inAPI || inNamespaceReplicationInducingAPI
 }
