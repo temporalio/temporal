@@ -981,7 +981,7 @@ func (s *DeploymentVersionSuite) TestVersionMissingTaskQueues_InvalidSetCurrentV
 	pollerCancel1()
 
 	// Start a workflow on task_queue_1 to increase the add rate
-	s.startWorkflow(tv1, tv1.VersioningOverridePinned())
+	s.startWorkflow(tv1, tv1.VersioningOverridePinned(false)) //  todo carly
 
 	// SetCurrent tv2
 	_, err = s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
@@ -1065,7 +1065,7 @@ func (s *DeploymentVersionSuite) TestVersionMissingTaskQueues_InvalidSetRampingV
 	pollerCancel1()
 
 	// Start a workflow on task_queue_1 to increase the add rate
-	s.startWorkflow(tv1, tv1.VersioningOverridePinned())
+	s.startWorkflow(tv1, tv1.VersioningOverridePinned(false)) // todo carly
 
 	// SetRampingVersion to tv2
 	_, err = s.FrontendClient().SetWorkerDeploymentRampingVersion(ctx, &workflowservice.SetWorkerDeploymentRampingVersionRequest{

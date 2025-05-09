@@ -252,6 +252,42 @@ func DeploymentVersionFromDeployment(deployment *deploymentpb.Deployment) *deplo
 	}
 }
 
+// ExternalWorkerDeploymentVersionFromDeployment Temporary helper function to convert Deployment to
+// WorkerDeploymentVersion proto until we update code to use the new proto in all places.
+func ExternalWorkerDeploymentVersionFromDeployment(deployment *deploymentpb.Deployment) *deploymentpb.WorkerDeploymentVersion {
+	if deployment == nil {
+		return nil
+	}
+	return &deploymentpb.WorkerDeploymentVersion{
+		BuildId:        deployment.GetBuildId(),
+		DeploymentName: deployment.GetSeriesName(),
+	}
+}
+
+// ExternalWorkerDeploymentVersionFromVersion Temporary helper function to convert internal Worker Deployment to
+// WorkerDeploymentVersion proto until we update code to use the new proto in all places.
+func ExternalWorkerDeploymentVersionFromVersion(version *deploymentspb.WorkerDeploymentVersion) *deploymentpb.WorkerDeploymentVersion {
+	if version == nil {
+		return nil
+	}
+	return &deploymentpb.WorkerDeploymentVersion{
+		BuildId:        version.GetBuildId(),
+		DeploymentName: version.GetDeploymentName(),
+	}
+}
+
+// DeploymentFromExternalDeploymentVersion Temporary helper function to convert WorkerDeploymentVersion to
+// Deployment proto until we update code to use the new proto in all places.
+func DeploymentFromExternalDeploymentVersion(dv *deploymentpb.WorkerDeploymentVersion) *deploymentpb.Deployment {
+	if dv == nil {
+		return nil
+	}
+	return &deploymentpb.Deployment{
+		BuildId:    dv.GetBuildId(),
+		SeriesName: dv.GetDeploymentName(),
+	}
+}
+
 // DeploymentFromDeploymentVersion Temporary helper function to convert WorkerDeploymentVersion to
 // Deployment proto until we update code to use the new proto in all places.
 func DeploymentFromDeploymentVersion(dv *deploymentspb.WorkerDeploymentVersion) *deploymentpb.Deployment {
@@ -320,6 +356,34 @@ func ValidateDeploymentVersion(version *deploymentspb.WorkerDeploymentVersion) e
 	return nil
 }
 
+// MakeOverrideNotDeprecated reads from deprecated fields and writes to equivalent non-deprecated fields
+func MakeOverrideNotDeprecated(override *workflowpb.VersioningOverride) *workflowpb.VersioningOverride {
+	if override == nil {
+		return nil
+	}
+	ret := &workflowpb.VersioningOverride{
+		Override: override.GetOverride(),
+	}
+	if ret.Override == nil {
+		switch override.GetBehavior() { // v0.31 or v0.30
+		case enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE:
+			ret.Override = &workflowpb.VersioningOverride_AutoUpgrade{AutoUpgrade: true}
+		case enumspb.VERSIONING_BEHAVIOR_PINNED:
+			ret.Override = &workflowpb.VersioningOverride_Pinned{
+				Pinned: &workflowpb.VersioningOverride_PinnedOverride{
+					Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
+				},
+			}
+			if override.GetPinnedVersion() != "" {
+				ret.GetPinned().Version = ExternalWorkerDeploymentVersionFromString(override.GetPinnedVersion()) // v0.31
+			} else {
+				ret.GetPinned().Version = ExternalWorkerDeploymentVersionFromDeployment(override.GetDeployment()) // v0.30
+			}
+		}
+	}
+	return ret
+}
+
 // ValidateDeploymentVersionString returns error if the deployment version is nil or it has empty version
 // or deployment name.
 func ValidateDeploymentVersionString(version string) (*deploymentspb.WorkerDeploymentVersion, error) {
@@ -333,11 +397,29 @@ func ValidateDeploymentVersionString(version string) (*deploymentspb.WorkerDeplo
 	return v, nil
 }
 
+func OverrideIsPinned(override *workflowpb.VersioningOverride) bool {
+	return override.GetBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED ||
+		override.GetPinned().GetBehavior() == workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED
+}
+
 func ValidateVersioningOverride(override *workflowpb.VersioningOverride) error {
 	if override == nil {
 		return nil
 	}
-	switch override.GetBehavior() {
+
+	if override.GetAutoUpgrade() { // v0.32
+		return nil
+	} else if p := override.GetPinned(); p != nil {
+		if p.GetVersion() == nil {
+			return serviceerror.NewInvalidArgument("must provide version if override is pinned.")
+		}
+		if p.GetBehavior() == workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_UNSPECIFIED {
+			return serviceerror.NewInvalidArgument("must specify pinned override behavior if override is pinned.")
+		}
+		return nil
+	}
+
+	switch override.GetBehavior() { // v0.30 and v0.31
 	case enumspb.VERSIONING_BEHAVIOR_PINNED:
 		if override.GetDeployment() != nil {
 			return ValidateDeployment(override.GetDeployment())
@@ -476,11 +558,70 @@ func DirectiveDeployment(directive *taskqueuespb.TaskVersionDirective) *deployme
 	return directive.GetDeployment()
 }
 
+func V32RoutingConfigFromV31(r *deploymentpb.RoutingConfig) *deploymentpb.RoutingConfig {
+	return &deploymentpb.RoutingConfig{
+		CurrentDeploymentVersion:            ExternalWorkerDeploymentVersionFromString(r.CurrentVersion),
+		CurrentVersion:                      r.CurrentVersion,
+		RampingDeploymentVersion:            ExternalWorkerDeploymentVersionFromString(r.RampingVersion),
+		RampingVersion:                      r.RampingVersion,
+		RampingVersionPercentage:            r.RampingVersionPercentage,
+		CurrentVersionChangedTime:           r.CurrentVersionChangedTime,
+		RampingVersionChangedTime:           r.RampingVersionChangedTime,
+		RampingVersionPercentageChangedTime: r.RampingVersionPercentageChangedTime,
+	}
+}
+
+func PopulateDeprecatedVersioningInfoFields(info *workflowpb.WorkflowExecutionVersioningInfo) *workflowpb.WorkflowExecutionVersioningInfo {
+	if info == nil {
+		return nil
+	}
+	if info.Version == "" && info.DeploymentVersion != nil {
+		info.Version = ExternalWorkerDeploymentVersionToString(info.DeploymentVersion)
+	}
+	if t := info.VersionTransition; t != nil {
+		if t.Version == "" {
+			t.Version = ExternalWorkerDeploymentVersionToString(t.DeploymentVersion)
+		}
+	}
+	if o := info.VersioningOverride; o != nil {
+		if o.GetBehavior() == enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
+			if o.GetAutoUpgrade() {
+				o.Behavior = enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
+			} else if o.GetPinned() != nil {
+				o.Behavior = enumspb.VERSIONING_BEHAVIOR_PINNED
+				o.PinnedVersion = ExternalWorkerDeploymentVersionToString(o.GetPinned().GetVersion())
+			}
+		}
+	}
+	return info
+}
+
 func WorkerDeploymentVersionToString(v *deploymentspb.WorkerDeploymentVersion) string {
 	if v == nil {
 		return "__unversioned__"
 	}
 	return v.GetDeploymentName() + WorkerDeploymentVersionIdDelimiter + v.GetBuildId()
+}
+
+func ExternalWorkerDeploymentVersionToString(v *deploymentpb.WorkerDeploymentVersion) string {
+	if v == nil {
+		return "__unversioned__"
+	}
+	return v.GetDeploymentName() + WorkerDeploymentVersionIdDelimiter + v.GetBuildId()
+}
+
+func ExternalWorkerDeploymentVersionFromString(s string) *deploymentpb.WorkerDeploymentVersion {
+	if s == "" { // unset ramp is no longer supported in v32, so all empty version strings will be treated as unversioned.
+		s = UnversionedVersionId
+	}
+	v, _ := WorkerDeploymentVersionFromString(s)
+	if v == nil {
+		return nil
+	}
+	return &deploymentpb.WorkerDeploymentVersion{
+		BuildId:        v.BuildId,
+		DeploymentName: v.DeploymentName,
+	}
 }
 
 func WorkerDeploymentVersionFromString(s string) (*deploymentspb.WorkerDeploymentVersion, error) {

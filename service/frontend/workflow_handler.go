@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"net/url"
 	"strings"
 	"sync/atomic"
@@ -2791,6 +2792,8 @@ func (wh *WorkflowHandler) DescribeWorkflowExecution(ctx context.Context, reques
 		}
 	}
 
+	response.GetWorkflowExecutionInfo().VersioningInfo = worker_versioning.PopulateDeprecatedVersioningInfoFields(response.GetWorkflowExecutionInfo().GetVersioningInfo())
+
 	return &workflowservice.DescribeWorkflowExecutionResponse{
 		ExecutionConfig:        response.GetExecutionConfig(),
 		WorkflowExecutionInfo:  response.GetWorkflowExecutionInfo(),
@@ -3354,14 +3357,22 @@ func (wh *WorkflowHandler) DescribeWorkerDeploymentVersion(ctx context.Context, 
 	if err != nil {
 		return nil, err
 	}
-	workerDeploymentVersionInfo, err := wh.workerDeploymentClient.DescribeVersion(ctx, namespaceEntry, request.Version)
+
+	versionStr := request.GetVersion()
+	if versionStr == "" {
+		if request.GetDeploymentVersion() == nil {
+			return nil, serviceerror.NewInvalidArgument("deployment version cannot be empty")
+		}
+		versionStr = worker_versioning.ExternalWorkerDeploymentVersionToString(request.GetDeploymentVersion())
+	}
+
+	info, err := wh.workerDeploymentClient.DescribeVersion(ctx, namespaceEntry, versionStr)
 	if err != nil {
 		return nil, err
 	}
 
-	return &workflowservice.DescribeWorkerDeploymentVersionResponse{
-		WorkerDeploymentVersionInfo: workerDeploymentVersionInfo,
-	}, nil
+	info.DeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromString(info.Version)
+	return &workflowservice.DescribeWorkerDeploymentVersionResponse{WorkerDeploymentVersionInfo: info}, nil
 }
 
 func (wh *WorkflowHandler) SetWorkerDeploymentCurrentVersion(ctx context.Context, request *workflowservice.SetWorkerDeploymentCurrentVersionRequest) (_ *workflowservice.SetWorkerDeploymentCurrentVersionResponse, retError error) {
@@ -3384,17 +3395,31 @@ func (wh *WorkflowHandler) SetWorkerDeploymentCurrentVersion(ctx context.Context
 		return nil, err
 	}
 
-	if request.GetVersion() == "" {
-		return nil, serviceerror.NewInvalidArgument("version cannot be empty")
+	if request.GetDeploymentName() == "" {
+		return nil, serviceerror.NewInvalidArgument("deployment name cannot be empty")
 	}
 
-	resp, err := wh.workerDeploymentClient.SetCurrentVersion(ctx, namespaceEntry, request.DeploymentName, request.Version, request.Identity, request.IgnoreMissingTaskQueues, request.GetConflictToken())
+	versionStr := request.GetVersion()
+	if versionStr == "" {
+		var v *deploymentspb.WorkerDeploymentVersion
+		if request.GetBuildId() != "" { // versioned
+			v = &deploymentspb.WorkerDeploymentVersion{
+				DeploymentName: request.GetDeploymentName(),
+				BuildId:        request.GetBuildId(),
+			}
+		}
+		versionStr = worker_versioning.WorkerDeploymentVersionToString(v)
+	}
+
+	resp, err := wh.workerDeploymentClient.SetCurrentVersion(ctx, namespaceEntry, request.DeploymentName, versionStr, request.Identity, request.IgnoreMissingTaskQueues, request.GetConflictToken())
 	if err != nil {
 		return nil, err
 	}
 
 	return &workflowservice.SetWorkerDeploymentCurrentVersionResponse{
-		PreviousVersion: resp.PreviousVersion,
+		ConflictToken:             resp.ConflictToken,
+		PreviousVersion:           resp.PreviousVersion,
+		PreviousDeploymentVersion: worker_versioning.ExternalWorkerDeploymentVersionFromString(resp.PreviousVersion),
 	}, nil
 }
 
@@ -3418,9 +3443,22 @@ func (wh *WorkflowHandler) SetWorkerDeploymentRampingVersion(ctx context.Context
 		return nil, err
 	}
 
-	if request.GetVersion() == "" {
-		if request.GetPercentage() != 0 {
-			return nil, serviceerror.NewInvalidArgument("Empty value for version must be paired with percentage=0")
+	versionStr := request.GetVersion()
+	if versionStr == "" {
+		// If v0.31 user is trying to unset the ramp, let them do it until we update the deployment manager.
+		// We know it's unsetting the ramp if Build ID is "" and percentage is 0.
+
+		// This is a v0.32 user trying to ramp to unversioned.
+		if request.GetBuildId() == "" && request.GetPercentage() > 0 {
+			versionStr = worker_versioning.UnversionedVersionId
+		}
+
+		// This is a v0.32 user trying to ramp up a version. We don't care what percentage it is.
+		if request.GetBuildId() != "" {
+			versionStr = worker_versioning.WorkerDeploymentVersionToString(&deploymentspb.WorkerDeploymentVersion{
+				DeploymentName: request.GetDeploymentName(),
+				BuildId:        request.GetBuildId(),
+			})
 		}
 	}
 
@@ -3428,14 +3466,16 @@ func (wh *WorkflowHandler) SetWorkerDeploymentRampingVersion(ctx context.Context
 		return nil, serviceerror.NewInvalidArgument("Percentage must be between 0 and 100 (inclusive)")
 	}
 
-	resp, err := wh.workerDeploymentClient.SetRampingVersion(ctx, namespaceEntry, request.DeploymentName, request.Version, request.GetPercentage(), request.GetIdentity(), request.IgnoreMissingTaskQueues, request.GetConflictToken())
+	resp, err := wh.workerDeploymentClient.SetRampingVersion(ctx, namespaceEntry, request.DeploymentName, versionStr, request.GetPercentage(), request.GetIdentity(), request.IgnoreMissingTaskQueues, request.GetConflictToken())
 	if err != nil {
 		return nil, err
 	}
 
 	return &workflowservice.SetWorkerDeploymentRampingVersionResponse{
-		PreviousVersion:    resp.PreviousVersion,
-		PreviousPercentage: resp.PreviousPercentage,
+		ConflictToken:             resp.ConflictToken,
+		PreviousVersion:           resp.PreviousVersion,
+		PreviousPercentage:        resp.PreviousPercentage,
+		PreviousDeploymentVersion: worker_versioning.ExternalWorkerDeploymentVersionFromString(resp.PreviousVersion),
 	}, nil
 }
 
@@ -3478,7 +3518,7 @@ func (wh *WorkflowHandler) ListWorkerDeployments(ctx context.Context, request *w
 		workerDeployments[i] = &workflowservice.ListWorkerDeploymentsResponse_WorkerDeploymentSummary{
 			Name:          d.Name,
 			CreateTime:    d.CreateTime,
-			RoutingConfig: d.RoutingConfig,
+			RoutingConfig: worker_versioning.V32RoutingConfigFromV31(d.RoutingConfig),
 		}
 	}
 
@@ -3505,6 +3545,10 @@ func (wh *WorkflowHandler) DescribeWorkerDeployment(ctx context.Context, request
 		return nil, err
 	}
 
+	for _, vs := range workerDeploymentInfo.VersionSummaries {
+		vs.DeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromString(vs.Version)
+	}
+	workerDeploymentInfo.RoutingConfig = worker_versioning.V32RoutingConfigFromV31(workerDeploymentInfo.RoutingConfig)
 	return &workflowservice.DescribeWorkerDeploymentResponse{
 		WorkerDeploymentInfo: workerDeploymentInfo,
 		ConflictToken:        cT,
@@ -3543,7 +3587,12 @@ func (wh *WorkflowHandler) DeleteWorkerDeploymentVersion(ctx context.Context, re
 		return nil, err
 	}
 
-	err = wh.workerDeploymentClient.DeleteWorkerDeploymentVersion(ctx, namespaceEntry, request.Version, request.SkipDrainage, request.Identity)
+	versionStr := request.GetVersion()
+	if request.GetDeploymentVersion() != nil {
+		versionStr = worker_versioning.ExternalWorkerDeploymentVersionToString(request.GetDeploymentVersion())
+	}
+
+	err = wh.workerDeploymentClient.DeleteWorkerDeploymentVersion(ctx, namespaceEntry, versionStr, request.SkipDrainage, request.Identity)
 	if err != nil {
 		return nil, err
 	}
@@ -3567,9 +3616,14 @@ func (wh *WorkflowHandler) UpdateWorkerDeploymentVersionMetadata(ctx context.Con
 		return nil, err
 	}
 
+	versionStr := request.GetVersion()
+	if request.GetDeploymentVersion() != nil {
+		versionStr = worker_versioning.ExternalWorkerDeploymentVersionToString(request.GetDeploymentVersion())
+	}
+
 	// todo (Shivam): Should we get identity from the request?
 	identity := uuid.New()
-	updatedMetadata, err := wh.workerDeploymentClient.UpdateVersionMetadata(ctx, namespaceEntry, request.Version, request.UpsertEntries, request.RemoveEntries, identity)
+	updatedMetadata, err := wh.workerDeploymentClient.UpdateVersionMetadata(ctx, namespaceEntry, versionStr, request.UpsertEntries, request.RemoveEntries, identity)
 	if err != nil {
 		return nil, err
 	}
