@@ -20,7 +20,6 @@ import (
 	"go.temporal.io/server/service/history/hsm"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
-	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
@@ -219,7 +218,7 @@ func (e *stateMachineEnvironment) validateStateMachineRef(
 		return e.validateStateMachineRefWithoutTransitionHistory(ms, ref, potentialStaleState)
 	}
 
-	err := workflow.TransitionHistoryStalenessCheck(
+	err := transitionhistory.StalenessCheck(
 		ms.GetExecutionInfo().GetTransitionHistory(),
 		ref.StateMachineRef.MutableStateVersionedTransition,
 	)
