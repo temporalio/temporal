@@ -284,7 +284,7 @@ func (s *activitySuite) TestGetPendingActivityInfoHasRetryPolicy() {
 	s.Equal(ai.LastAttemptCompleteTime, pi.LastAttemptCompleteTime)
 	s.NotNil(pi.ActivityOptions)
 	s.NotNil(pi.ActivityOptions.RetryPolicy)
-	s.Equal(ai.TaskQueue, pi.ActivityOptions.TaskQueue)
+	s.Equal(ai.TaskQueue, pi.ActivityOptions.TaskQueue.Name)
 	s.Equal(ai.ScheduleToCloseTimeout, pi.ActivityOptions.ScheduleToCloseTimeout)
 	s.Equal(ai.ScheduleToStartTimeout, pi.ActivityOptions.ScheduleToStartTimeout)
 	s.Equal(ai.StartToCloseTimeout, pi.ActivityOptions.StartToCloseTimeout)
