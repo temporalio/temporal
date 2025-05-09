@@ -281,7 +281,7 @@ func WorkflowTaskFailedCause(workflowTaskFailCause enumspb.WorkflowTaskFailedCau
 
 // WorkflowTaskQueueType returns tag for WorkflowTaskQueueType
 func WorkflowTaskQueueType(taskQueueType enumspb.TaskQueueType) ZapTag {
-	return NewStringerTag("wf-task-queue-type", taskQueueType)
+	return NewStringTag("wf-task-queue-type", taskQueueType.String())
 }
 
 // WorkflowTaskQueueName returns tag for WorkflowTaskQueueName
@@ -632,7 +632,7 @@ func TaskVersion(taskVersion int64) ZapTag {
 }
 
 func TaskType(taskType enumsspb.TaskType) ZapTag {
-	return NewStringerTag("queue-task-type", taskType)
+	return NewStringTag("queue-task-type", taskType.String())
 }
 
 func TaskCategoryID(taskCategoryID int) ZapTag {
