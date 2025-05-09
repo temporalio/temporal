@@ -71,9 +71,10 @@ func (e *ExecutableSyncVersionedTransitionTask) Execute() error {
 		return nil
 	}
 
+	callerInfo := getSystemCallerInfo(e.GetPriority())
 	namespaceName, apply, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
 		context.Background(),
-		headers.SystemPreemptableCallerInfo,
+		callerInfo,
 	), e.NamespaceID)
 	if nsError != nil {
 		return nsError
@@ -92,7 +93,7 @@ func (e *ExecutableSyncVersionedTransitionTask) Execute() error {
 		return nil
 	}
 
-	ctx, cancel := newTaskContext(namespaceName, e.Config.ReplicationTaskApplyTimeout())
+	ctx, cancel := newTaskContext(namespaceName, e.Config.ReplicationTaskApplyTimeout(), callerInfo)
 	defer cancel()
 	shardContext, err := e.ShardController.GetShardByNamespaceWorkflow(
 		namespace.ID(e.NamespaceID),
@@ -120,16 +121,17 @@ func (e *ExecutableSyncVersionedTransitionTask) HandleErr(err error) error {
 		tag.TaskID(e.ExecutableTask.TaskID()),
 		tag.Error(err),
 	)
+	callerInfo := getSystemCallerInfo(e.GetPriority())
 	switch taskErr := err.(type) {
 	case *serviceerrors.SyncState:
 		namespaceName, _, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
 			context.Background(),
-			headers.SystemPreemptableCallerInfo,
+			callerInfo,
 		), e.NamespaceID)
 		if nsError != nil {
 			return err
 		}
-		ctx, cancel := newTaskContext(namespaceName, e.Config.ReplicationTaskApplyTimeout())
+		ctx, cancel := newTaskContext(namespaceName, e.Config.ReplicationTaskApplyTimeout(), callerInfo)
 		defer cancel()
 
 		if doContinue, syncStateErr := e.SyncState(
@@ -153,12 +155,12 @@ func (e *ExecutableSyncVersionedTransitionTask) HandleErr(err error) error {
 	case *serviceerrors.RetryReplication:
 		namespaceName, _, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
 			context.Background(),
-			headers.SystemPreemptableCallerInfo,
+			callerInfo,
 		), e.NamespaceID)
 		if nsError != nil {
 			return err
 		}
-		ctx, cancel := newTaskContext(namespaceName, e.Config.ReplicationTaskApplyTimeout())
+		ctx, cancel := newTaskContext(namespaceName, e.Config.ReplicationTaskApplyTimeout(), callerInfo)
 		defer cancel()
 		var mutation *replicationspb.SyncWorkflowStateMutationAttributes
 		var snapshot *replicationspb.SyncWorkflowStateSnapshotAttributes

@@ -80,9 +80,10 @@ func (e *ExecutableWorkflowStateTask) Execute() error {
 		return nil
 	}
 
+	callerInfo := getSystemCallerInfo(e.GetPriority())
 	namespaceName, apply, err := e.GetNamespaceInfo(headers.SetCallerInfo(
 		context.Background(),
-		headers.SystemPreemptableCallerInfo,
+		callerInfo,
 	), e.NamespaceID)
 	if err != nil {
 		return err
@@ -100,7 +101,7 @@ func (e *ExecutableWorkflowStateTask) Execute() error {
 		)
 		return nil
 	}
-	ctx, cancel := newTaskContext(namespaceName, e.Config.ReplicationTaskApplyTimeout())
+	ctx, cancel := newTaskContext(namespaceName, e.Config.ReplicationTaskApplyTimeout(), callerInfo)
 	defer cancel()
 
 	shardContext, err := e.ShardController.GetShardByNamespaceWorkflow(
@@ -122,16 +123,17 @@ func (e *ExecutableWorkflowStateTask) HandleErr(err error) error {
 		e.MarkTaskDuplicated()
 		return nil
 	}
+	callerInfo := getSystemCallerInfo(e.GetPriority())
 	switch retryErr := err.(type) {
 	case *serviceerrors.SyncState:
 		namespaceName, _, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
 			context.Background(),
-			headers.SystemPreemptableCallerInfo,
+			callerInfo,
 		), e.NamespaceID)
 		if nsError != nil {
 			return err
 		}
-		ctx, cancel := newTaskContext(namespaceName, e.Config.ReplicationTaskApplyTimeout())
+		ctx, cancel := newTaskContext(namespaceName, e.Config.ReplicationTaskApplyTimeout(), callerInfo)
 		defer cancel()
 
 		if doContinue, syncStateErr := e.SyncState(
@@ -157,12 +159,12 @@ func (e *ExecutableWorkflowStateTask) HandleErr(err error) error {
 	case *serviceerrors.RetryReplication:
 		namespaceName, _, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
 			context.Background(),
-			headers.SystemPreemptableCallerInfo,
+			callerInfo,
 		), e.NamespaceID)
 		if nsError != nil {
 			return err
 		}
-		ctx, cancel := newTaskContext(namespaceName, e.Config.ReplicationTaskApplyTimeout())
+		ctx, cancel := newTaskContext(namespaceName, e.Config.ReplicationTaskApplyTimeout(), callerInfo)
 		defer cancel()
 
 		if doContinue, resendErr := e.Resend(

@@ -133,6 +133,7 @@ func (s *executableActivityStateTaskSuite) SetupTest() {
 	s.task.ExecutableTask = s.executableTask
 	s.executableTask.EXPECT().TaskID().Return(s.taskID).AnyTimes()
 	s.executableTask.EXPECT().SourceClusterName().Return(s.sourceClusterName).AnyTimes()
+	s.executableTask.EXPECT().GetPriority().Return(enumsspb.TASK_PRIORITY_HIGH).AnyTimes()
 }
 
 func (s *executableActivityStateTaskSuite) TearDownTest() {
