@@ -1296,6 +1296,11 @@ second per poller by one physical queue manager`,
 		60*time.Second,
 		`Timeout for forwarded backlog task (requires new matcher)`,
 	)
+	MatchingSpreadRoutingBatchSize = NewGlobalIntSetting(
+		"matching.spreadRoutingBatchSize",
+		0,
+		`If non-zero, try to spread task queue partitions across matching nodes better, using the given batch size.`,
+	)
 
 	// keys for history
 

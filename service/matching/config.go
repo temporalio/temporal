@@ -33,6 +33,7 @@ type (
 		EnableDeploymentVersions             dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		MaxTaskQueuesInDeployment            dynamicconfig.IntPropertyFnWithNamespaceFilter
 		MaxIDLengthLimit                     dynamicconfig.IntPropertyFn
+		SpreadRoutingBatchSize               dynamicconfig.IntPropertyFn
 
 		// task queue configuration
 
@@ -269,6 +270,7 @@ func NewConfig(
 		PriorityLevels:                           dynamicconfig.MatchingPriorityLevels.Get(dc),
 		MatchingDropNonRetryableTasks:            dynamicconfig.MatchingDropNonRetryableTasks.Get(dc),
 		MaxIDLengthLimit:                         dynamicconfig.MaxIDLengthLimit.Get(dc),
+		SpreadRoutingBatchSize:                   dynamicconfig.MatchingSpreadRoutingBatchSize.Get(dc),
 
 		AdminNamespaceToPartitionDispatchRate:          dynamicconfig.AdminMatchingNamespaceToPartitionDispatchRate.Get(dc),
 		AdminNamespaceToPartitionRateSub:               dynamicconfig.AdminMatchingNamespaceToPartitionDispatchRate.Subscribe(dc),
