@@ -410,6 +410,7 @@ func (tm *TaskMatcher) emitDispatchLatency(task *internalTask, forwarded bool) {
 		time.Since(timestamp.TimeValue(task.event.Data.CreateTime)),
 		metrics.StringTag("source", task.source.String()),
 		metrics.StringTag("forwarded", strconv.FormatBool(forwarded)),
+		metrics.StringTag(metrics.TaskPriorityTagName, ""),
 	)
 }
 
@@ -476,7 +477,10 @@ func (tm *TaskMatcher) poll(
 		if pollMetadata.forwardedFrom == "" {
 			// Only recording for original polls
 			metrics.PollLatencyPerTaskQueue.With(tm.metricsHandler).Record(
-				time.Since(start), metrics.StringTag("forwarded", strconv.FormatBool(forwardedPoll)))
+				time.Since(start),
+				metrics.StringTag("forwarded", strconv.FormatBool(forwardedPoll)),
+				metrics.StringTag(metrics.TaskPriorityTagName, ""),
+			)
 		}
 
 		if err == nil {
