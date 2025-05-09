@@ -6,7 +6,7 @@ import (
 	"io"
 	"log"
 	"os"
-	"path"
+	"path/filepath"
 	"strings"
 	"text/template"
 
@@ -20,7 +20,7 @@ func GenerateToFile[T any](
 	outPath string,
 	outFileName string,
 ) {
-	filename := path.Join(outPath, outFileName+"_gen.go")
+	filename := filepath.Join(outPath, outFileName+"_gen.go")
 	w, err := os.Create(filename)
 	FatalIfErr(err)
 	defer func() {
@@ -53,9 +53,14 @@ func GenerateTemplateToFile(
 
 func FatalIfErr(err error) {
 	if err != nil {
-		//nolint:revive // calls to log.Fatal only in main() or init() functions (revive)
+		//nolint:revive // okay to call Fatal here since this is part of the build process, not the server.
 		log.Fatal(err)
 	}
+}
+
+func Fatalf(format string, v ...any) {
+	//nolint:revive // okay to call Fatal here since this is part of the build process, not the server.
+	log.Fatalf(format, v...)
 }
 
 func CamelCaseToSnakeCase(s string) string {

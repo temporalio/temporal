@@ -19,7 +19,7 @@ const (
 )
 {{$Precedences := .Precedences }}
 {{- range $T :=.Types}}
-	{{- range $P := $Precedences}}
+{{- range $P := $Precedences}}
 {{ if $T.IsGeneric -}}
 type {{$P.Name}}TypedSetting[T any] setting[T, func({{$P.GoArgs}})]
 
@@ -162,6 +162,6 @@ func Get{{$T.Name}}PropertyFnFilteredBy{{$P.Name}}(value {{$T.GoType}}) {{$T.Nam
 	return GetTypedPropertyFnFilteredBy{{$P.Name}}(value)
 }
 {{- end}}
-{{end }}
-	{{- end}}
-{{- end}}
+{{end }}{{/* if $T.IsGeneric */}}
+{{- end}}{{/* range $T :=.Types */}}
+{{- end}}{{/* range $P := $Precedences */}}

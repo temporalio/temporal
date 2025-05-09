@@ -133,19 +133,19 @@ func verifyFieldExists(t reflect.Type, path string) {
 	parts := strings.Split(path, ".")
 	for i, part := range parts {
 		if t.Kind() != reflect.Struct {
-			codegen.FatalIfErr(fmt.Errorf("%s is not a struct", pathPrefix))
+			codegen.Fatalf("%s is not a struct", pathPrefix)
 		}
 		fieldName := codegen.SnakeCaseToPascalCase(part)
 		f, ok := t.FieldByName(fieldName)
 		if !ok {
-			codegen.FatalIfErr(fmt.Errorf("%s has no field named %s", pathPrefix, fieldName))
+			codegen.Fatalf("%s has no field named %s", pathPrefix, fieldName)
 		}
 		if i == len(parts)-1 {
 			return
 		}
 		ft := f.Type
 		if ft.Kind() != reflect.Pointer {
-			codegen.FatalIfErr(fmt.Errorf("%s.%s is not a struct pointer", pathPrefix, fieldName))
+			codegen.Fatalf("%s.%s is not a struct pointer", pathPrefix, fieldName)
 		}
 		t = ft.Elem()
 		pathPrefix += "." + fieldName
@@ -176,9 +176,9 @@ func findNestedField(t reflect.Type, name string, path string, maxDepth int) []f
 func findOneNestedField(t reflect.Type, name string, path string, maxDepth int) fieldWithPath {
 	fields := findNestedField(t, name, path, maxDepth)
 	if len(fields) == 0 {
-		codegen.FatalIfErr(fmt.Errorf("couldn't find %s in %s", name, t))
+		codegen.Fatalf("couldn't find %s in %s", name, t)
 	} else if len(fields) > 1 {
-		codegen.FatalIfErr(fmt.Errorf("found more than one %s in %s (%v)", name, t, fields))
+		codegen.Fatalf("found more than one %s in %s (%v)", name, t, fields)
 	}
 	return fields[0]
 }
@@ -188,7 +188,7 @@ func tryFindOneNestedField(t reflect.Type, name string, path string, maxDepth in
 	if len(fields) == 0 {
 		return fieldWithPath{}
 	} else if len(fields) > 1 {
-		codegen.FatalIfErr(fmt.Errorf("found more than one %s in %s (%v)", name, t, fields))
+		codegen.Fatalf("found more than one %s in %s (%v)", name, t, fields)
 	}
 	return fields[0]
 }
@@ -329,7 +329,7 @@ func makeGetMatchingClient(reqType reflect.Type) string {
 	}
 
 	if !nsID.found() {
-		codegen.FatalIfErr(fmt.Errorf("I don't know how to get a client from a %s", t))
+		codegen.Fatalf("I don't know how to get a client from a %s", t)
 	}
 
 	if tqp.found() {
@@ -591,7 +591,7 @@ func main() {
 
 	i := slices.IndexFunc(services, func(s service) bool { return s.name == *serviceFlag })
 	if i < 0 {
-		codegen.FatalIfErr(fmt.Errorf("unknown service: %s", *serviceFlag))
+		codegen.Fatalf("unknown service: %s", *serviceFlag)
 	}
 	svc := services[i]
 
