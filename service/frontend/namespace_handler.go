@@ -953,9 +953,13 @@ func (d *namespaceHandler) validateHistoryArchivalURI(URIString string) error {
 		return err
 	}
 
-	archiver, err := d.archiverProvider.GetHistoryArchiver(URI.Scheme(), string(primitives.FrontendService))
+	var archiver archiver.HistoryArchiver
+	archiver, err = d.archiverProvider.GetHistoryArchiver(URI.Scheme(), string(primitives.FrontendService))
 	if err != nil {
-		return err
+		archiver, err = d.archiverProvider.GetHistoryArchiver(URI.Scheme(), string(primitives.InternalFrontendService))
+		if err != nil {
+			return err
+		}
 	}
 
 	return archiver.ValidateURI(URI)
@@ -967,9 +971,13 @@ func (d *namespaceHandler) validateVisibilityArchivalURI(URIString string) error
 		return err
 	}
 
-	archiver, err := d.archiverProvider.GetVisibilityArchiver(URI.Scheme(), string(primitives.FrontendService))
+	var archiver archiver.VisibilityArchiver
+	archiver, err = d.archiverProvider.GetVisibilityArchiver(URI.Scheme(), string(primitives.FrontendService))
 	if err != nil {
-		return err
+		archiver, err = d.archiverProvider.GetVisibilityArchiver(URI.Scheme(), string(primitives.InternalFrontendService))
+		if err != nil {
+			return err
+		}
 	}
 
 	return archiver.ValidateURI(URI)
