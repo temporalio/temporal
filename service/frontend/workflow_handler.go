@@ -3442,6 +3442,13 @@ func (wh *WorkflowHandler) SetWorkerDeploymentRampingVersion(ctx context.Context
 	if versionStr == "" {
 		// If v0.31 user is trying to unset the ramp, let them do it until we update the deployment manager.
 		// We know it's unsetting the ramp if Build ID is "" and percentage is 0.
+
+		// This is a v0.32 user trying to ramp to unversioned.
+		if request.GetBuildId() == "" && request.GetPercentage() > 0 {
+			versionStr = worker_versioning.UnversionedVersionId
+		}
+
+		// This is a v0.32 user trying to ramp up a version. We don't care what percentage it is.
 		if request.GetBuildId() != "" {
 			versionStr = worker_versioning.WorkerDeploymentVersionToString(&deploymentspb.WorkerDeploymentVersion{
 				DeploymentName: request.GetDeploymentName(),
