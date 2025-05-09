@@ -490,7 +490,7 @@ Loop:
 			}
 		}
 		if priority != enumsspb.TASK_PRIORITY_UNSPECIFIED && // case: skip priority check. When priority is unspecified, send all tasks
-			priority != s.getTaskPriority(item) { // case: skip task with different priority than this loop
+			priority != getTaskPriority(item) { // case: skip task with different priority than this loop
 			continue Loop
 		}
 		metrics.ReplicationTaskLoadLatency.With(s.metrics).Record(
@@ -634,7 +634,7 @@ func (s *StreamSenderImpl) shouldProcessTask(item tasks.Task) bool {
 	return shouldProcessTask
 }
 
-func (s *StreamSenderImpl) getTaskPriority(task tasks.Task) enumsspb.TaskPriority {
+func getTaskPriority(task tasks.Task) enumsspb.TaskPriority {
 	switch t := task.(type) {
 	case *tasks.SyncWorkflowStateTask:
 		if t.Priority == enumsspb.TASK_PRIORITY_UNSPECIFIED {
