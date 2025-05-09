@@ -186,16 +186,16 @@ var (
 	// APIs that are not considered as a namespace operation. Namespace operations are used to track the usage of a namespace.
 	// This includes some APIs, history tasks, etc.
 	operationExcludedAPIs = map[string]struct{}{
-		// Poll requests are not considered as namespace operations. We will count these operations when we try to match a task
+		// Poll requests are not considered as namespace operations. We will count these operations when we try to return a task
 		// from matching service to this request.
-		"PollWorkflowTaskQueue": {},
-		"PollActivityTaskQueue": {},
+		"/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowTaskQueue": {},
+		"/temporal.api.workflowservice.v1.WorkflowService/PollActivityTaskQueue": {},
 
 		// Replication-related APIs are not counted as operations.
-		"GetWorkflowExecutionRawHistory":   {},
-		"GetWorkflowExecutionRawHistoryV2": {},
-		"ReapplyEvents":                    {},
-		"SyncWorkflowState":                {},
+		"/temporal.server.api.adminservice.v1.AdminService/GetWorkflowExecutionRawHistory":   {},
+		"/temporal.server.api.adminservice.v1.AdminService/GetWorkflowExecutionRawHistoryV2": {},
+		"/temporal.server.api.adminservice.v1.AdminService/ReapplyEvents":                    {},
+		"/temporal.server.api.adminservice.v1.AdminService/SyncWorkflowState":                {},
 	}
 )
 
