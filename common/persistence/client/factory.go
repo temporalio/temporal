@@ -28,6 +28,8 @@ type (
 		Close()
 		// NewTaskManager returns a new task manager
 		NewTaskManager() (persistence.TaskManager, error)
+		// NewFairTaskManager returns a new task (fairness) manager
+		NewFairTaskManager() (persistence.FairTaskManager, error)
 		// NewShardManager returns a new shard manager
 		NewShardManager() (persistence.ShardManager, error)
 		// NewMetadataManager returns a new metadata manager
@@ -102,7 +104,24 @@ func (f *factoryImpl) NewTaskManager() (persistence.TaskManager, error) {
 	if err != nil {
 		return nil, err
 	}
+	result := persistence.NewTaskManager(taskStore, f.serializer)
+	if f.systemRateLimiter != nil && f.namespaceRateLimiter != nil {
+		result = persistence.NewTaskPersistenceRateLimitedClient(result, f.systemRateLimiter, f.namespaceRateLimiter, f.shardRateLimiter, f.logger)
+	}
+	if f.metricsHandler != nil && f.healthSignals != nil {
+		result = persistence.NewTaskPersistenceMetricsClient(result, f.metricsHandler, f.healthSignals, f.logger)
+	}
+	result = persistence.NewTaskPersistenceRetryableClient(result, retryPolicy, IsPersistenceTransientError)
+	return result, nil
+}
 
+// NewFairTaskManager returns a new task fairness manager
+// TODO(fairness): cleanup; rename to NewTaskManager
+func (f *factoryImpl) NewFairTaskManager() (persistence.FairTaskManager, error) {
+	taskStore, err := f.dataStoreFactory.NewTaskFairnessStore()
+	if err != nil {
+		return nil, err
+	}
 	result := persistence.NewTaskManager(taskStore, f.serializer)
 	if f.systemRateLimiter != nil && f.namespaceRateLimiter != nil {
 		result = persistence.NewTaskPersistenceRateLimitedClient(result, f.systemRateLimiter, f.namespaceRateLimiter, f.shardRateLimiter, f.logger)

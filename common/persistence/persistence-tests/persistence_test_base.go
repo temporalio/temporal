@@ -71,6 +71,7 @@ type (
 		Factory                   client.Factory
 		ExecutionManager          persistence.ExecutionManager
 		TaskMgr                   persistence.TaskManager
+		TaskFairnessMgr           persistence.FairTaskManager // TODO(fairness): cleanup; rename to TaskMgr
 		ClusterMetadataManager    persistence.ClusterMetadataManager
 		MetadataManager           persistence.MetadataManager
 		NamespaceReplicationQueue persistence.NamespaceReplicationQueue
@@ -215,6 +216,10 @@ func (s *TestBase) Setup(clusterMetadataConfig *cluster.Config) {
 
 	s.TaskMgr, err = factory.NewTaskManager()
 	s.fatalOnError("NewTaskManager", err)
+
+	// TODO(fairness): cleanup; rename to TaskMgr
+	s.TaskFairnessMgr, err = factory.NewFairTaskManager()
+	s.fatalOnError("NewFairTaskManager", err)
 
 	s.ClusterMetadataManager, err = factory.NewClusterMetadataManager()
 	s.fatalOnError("NewClusterMetadataManager", err)
