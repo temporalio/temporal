@@ -79,19 +79,10 @@ func (s *PhysicalTaskQueueManagerTestSuite) SetupTest() {
 	onFatalErr := func(unloadCause) { s.T().Fatal("user data manager called onFatalErr") }
 	udMgr := newUserDataManager(engine.taskManager, engine.matchingRawClient, onFatalErr, nil, prtn, tqConfig, engine.logger, engine.namespaceRegistry)
 
-	prtnMgr := &taskQueuePartitionManagerImpl{
-		engine:          engine,
-		partition:       prtn,
-		config:          tqConfig,
-		ns:              ns,
-		logger:          engine.logger,
-		matchingClient:  engine.matchingRawClient,
-		metricsHandler:  metrics.NoopMetricsHandler,
-		userDataManager: udMgr,
-	}
+	prtnMgr, err := newTaskQueuePartitionManager(engine, ns, prtn, tqConfig, engine.logger, nil, metrics.NoopMetricsHandler, udMgr)
+	s.NoError(err)
 	engine.partitions[prtn.Key()] = prtnMgr
 
-	var err error
 	s.tqMgr, err = newPhysicalTaskQueueManager(prtnMgr, s.physicalTaskQueueKey)
 	s.NoError(err)
 	prtnMgr.defaultQueue = s.tqMgr
