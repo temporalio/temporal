@@ -215,7 +215,7 @@ func (s *WorkflowResetSuite) TestResetWorkflowWithOptionsUpdate() {
 					UpdateWorkflowOptions: &workflowpb.PostResetOperation_UpdateWorkflowOptions{
 						WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{
 							VersioningOverride: &workflowpb.VersioningOverride{
-								Behavior:      enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE,
+								Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED,
 								PinnedVersion: "testing.v.123",
 							},
 						},
