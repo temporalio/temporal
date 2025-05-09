@@ -25,6 +25,7 @@ func (l *TestLibrary) Name() string {
 
 func (l *TestLibrary) Components() []*RegistrableComponent {
 	return []*RegistrableComponent{
+		NewRegistrableComponent[*CollectionComponent]("collection_component"),
 		NewRegistrableComponent[*TestComponent]("test_component"),
 		NewRegistrableComponent[*TestSubComponent1]("test_sub_component_1"),
 		NewRegistrableComponent[*TestSubComponent11]("test_sub_component_11"),
