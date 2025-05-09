@@ -182,6 +182,21 @@ var (
 	}
 
 	NamespaceReplicationInducingAPIPrioritiesOrdered = []int{0, 1, 2}
+
+	// APIs that are not considered as a namespace operation. Namespace operations are used to track the usage of a namespace.
+	// This includes some APIs, history tasks, etc.
+	operationExcludedAPIs = map[string]struct{}{
+		// Poll requests are not considered as namespace operations. We will count these operations when we try to match a task
+		// from matching service to this request.
+		"PollWorkflowTaskQueue": {},
+		"PollActivityTaskQueue": {},
+
+		// Replication-related APIs are not counted as operations.
+		"GetWorkflowExecutionRawHistory":   {},
+		"GetWorkflowExecutionRawHistoryV2": {},
+		"ReapplyEvents":                    {},
+		"SyncWorkflowState":                {},
+	}
 )
 
 type (
@@ -332,4 +347,14 @@ func NewNamespaceReplicationInducingAPIPriorityRateLimiter(
 		}
 		return NamespaceReplicationInducingAPIPrioritiesOrdered[len(NamespaceReplicationInducingAPIPrioritiesOrdered)-1]
 	}, rateLimiters)
+}
+
+func IsAPIOperation(apiFullName string) bool {
+	if _, ok := APIToPriority[apiFullName]; ok {
+		if _, ok := operationExcludedAPIs[apiFullName]; ok {
+			return false
+		}
+		return true
+	}
+	return false
 }
