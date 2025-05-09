@@ -62,8 +62,8 @@ func (e generatorTaskExecutor) executeBufferTask(env hsm.Environment, node *hsm.
 	t2 := env.Now().UTC()
 	if t2.Before(t1) {
 		logger.Warn("Time went backwards",
-			tag.NewStringTag("time", t1.String()),
-			tag.NewStringTag("time", t2.String()))
+			tag.NewStringerTag("time", t1),
+			tag.NewStringerTag("time", t2))
 		t2 = t1
 	}
 

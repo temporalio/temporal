@@ -869,6 +869,22 @@ func (s *nodeSuite) TestGetComponent() {
 			expectedErr: errComponentNotFound,
 		},
 		{
+			name:         "archetype mismatch",
+			chasmContext: NewContext(context.Background(), root),
+			ref: ComponentRef{
+				archetype: "TestLibrary.test_sub_component_1",
+			},
+			expectedErr: errComponentNotFound,
+		},
+		{
+			name:         "entityGoType mismatch",
+			chasmContext: NewContext(context.Background(), root),
+			ref: ComponentRef{
+				entityGoType: reflect.TypeFor[*TestSubComponent2](),
+			},
+			expectedErr: errComponentNotFound,
+		},
+		{
 			name:         "initialVT mismatch",
 			chasmContext: NewContext(context.Background(), root),
 			ref: ComponentRef{
@@ -1669,7 +1685,7 @@ func (s *nodeSuite) TestEachPureTask() {
 	s.NotNil(root)
 
 	actualTaskCount := 0
-	err = root.EachPureTask(now.Add(time.Minute), func(executor LogicalTaskExecutor, task any) error {
+	err = root.EachPureTask(now.Add(time.Minute), func(executor NodeExecutePureTask, task any) error {
 		s.NotNil(executor)
 
 		_, ok := task.(*TestPureTask)

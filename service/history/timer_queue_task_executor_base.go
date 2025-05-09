@@ -249,7 +249,7 @@ func (t *timerQueueTaskExecutorBase) executeChasmPureTimers(
 	workflowContext historyi.WorkflowContext,
 	ms historyi.MutableState,
 	task *tasks.ChasmTaskPure,
-	execute func(executor chasm.LogicalTaskExecutor, task any) error,
+	execute func(executor chasm.NodeExecutePureTask, task any) error,
 ) error {
 	// Because CHASM timers can target closed workflows, we need to specifically
 	// exclude zombie workflows, instead of merely checking that the workflow is
