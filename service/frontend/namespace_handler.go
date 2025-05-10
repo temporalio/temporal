@@ -47,6 +47,7 @@ type (
 		archiverProvider       provider.ArchiverProvider
 		timeSource             clock.TimeSource
 		config                 *Config
+		serviceName            primitives.ServiceName
 	}
 )
 
@@ -74,6 +75,7 @@ func newNamespaceHandler(
 	archiverProvider provider.ArchiverProvider,
 	timeSource clock.TimeSource,
 	config *Config,
+	serviceName primitives.ServiceName,
 ) *namespaceHandler {
 	return &namespaceHandler{
 		logger:                 logger,
@@ -85,6 +87,7 @@ func newNamespaceHandler(
 		archiverProvider:       archiverProvider,
 		timeSource:             timeSource,
 		config:                 config,
+		serviceName:            serviceName,
 	}
 }
 
@@ -953,7 +956,8 @@ func (d *namespaceHandler) validateHistoryArchivalURI(URIString string) error {
 		return err
 	}
 
-	archiver, err := d.archiverProvider.GetHistoryArchiver(URI.Scheme(), string(primitives.FrontendService))
+	d.logger.Info("validateHistoryArchivalURI for " + string(d.serviceName))
+	archiver, err := d.archiverProvider.GetHistoryArchiver(URI.Scheme(), string(d.serviceName))
 	if err != nil {
 		return err
 	}
@@ -967,7 +971,7 @@ func (d *namespaceHandler) validateVisibilityArchivalURI(URIString string) error
 		return err
 	}
 
-	archiver, err := d.archiverProvider.GetVisibilityArchiver(URI.Scheme(), string(primitives.FrontendService))
+	archiver, err := d.archiverProvider.GetVisibilityArchiver(URI.Scheme(), string(d.serviceName))
 	if err != nil {
 		return err
 	}
