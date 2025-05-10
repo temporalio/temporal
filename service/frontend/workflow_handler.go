@@ -127,6 +127,7 @@ type (
 		scheduleSpecBuilder                           *scheduler.SpecBuilder
 		outstandingPollers                            collection.SyncMap[string, collection.SyncMap[string, context.CancelFunc]]
 		httpEnabled                                   bool
+		serviceName                                   primitives.ServiceName
 	}
 )
 
@@ -157,6 +158,7 @@ func NewWorkflowHandler(
 	healthInterceptor *interceptor.HealthInterceptor,
 	scheduleSpecBuilder *scheduler.SpecBuilder,
 	httpEnabled bool,
+	serviceName primitives.ServiceName,
 ) *WorkflowHandler {
 	handler := &WorkflowHandler{
 		status:          common.DaemonStatusInitialized,
@@ -172,6 +174,7 @@ func NewWorkflowHandler(
 			archiverProvider,
 			timeSource,
 			config,
+			serviceName,
 		),
 		getDefaultWorkflowRetrySettings:               config.DefaultWorkflowRetryPolicy,
 		followReusePolicyAfterConflictPolicyTerminate: config.FollowReusePolicyAfterConflictPolicyTerminate,
@@ -211,6 +214,7 @@ func NewWorkflowHandler(
 		scheduleSpecBuilder: scheduleSpecBuilder,
 		outstandingPollers:  collection.NewSyncMap[string, collection.SyncMap[string, context.CancelFunc]](),
 		httpEnabled:         httpEnabled,
+		serviceName:         serviceName,
 	}
 
 	return handler
@@ -2444,13 +2448,9 @@ func (wh *WorkflowHandler) ListArchivedWorkflowExecutions(ctx context.Context, r
 		return nil, err
 	}
 
-	var visibilityArchiver archiver.VisibilityArchiver
-	visibilityArchiver, err = wh.archiverProvider.GetVisibilityArchiver(URI.Scheme(), string(primitives.FrontendService))
+	visibilityArchiver, err := wh.archiverProvider.GetVisibilityArchiver(URI.Scheme(), string(wh.serviceName))
 	if err != nil {
-		visibilityArchiver, err = wh.archiverProvider.GetVisibilityArchiver(URI.Scheme(), string(primitives.InternalFrontendService))
-		if err != nil {
-			return nil, err
-		}
+		return nil, err
 	}
 
 	archiverRequest := &archiver.QueryVisibilityRequest{
@@ -5391,13 +5391,9 @@ func (wh *WorkflowHandler) getArchivedHistory(
 		return nil, err
 	}
 
-	var historyArchiver archiver.HistoryArchiver
-	historyArchiver, err = wh.archiverProvider.GetHistoryArchiver(URI.Scheme(), string(primitives.FrontendService))
+	historyArchiver, err := wh.archiverProvider.GetHistoryArchiver(URI.Scheme(), string(wh.serviceName))
 	if err != nil {
-		historyArchiver, err = wh.archiverProvider.GetHistoryArchiver(URI.Scheme(), string(primitives.InternalFrontendService))
-		if err != nil {
-			return nil, err
-		}
+		return nil, err
 	}
 
 	resp, err := historyArchiver.Get(ctx, URI, &archiver.GetHistoryRequest{

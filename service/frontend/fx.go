@@ -751,6 +751,7 @@ func HandlerProvider(
 		healthInterceptor,
 		scheduleSpecBuilder,
 		httpEnabled(cfg, serviceName),
+		serviceName,
 	)
 	return wfHandler
 }

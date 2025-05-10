@@ -183,6 +183,7 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 		healthInterceptor,
 		scheduler.NewSpecBuilder(),
 		true,
+		primitives.FrontendService,
 	)
 }
 
