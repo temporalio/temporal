@@ -2702,6 +2702,12 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		`WorkflowRulesAPIsEnabled is a "feature enable" flag. `,
 	)
 
+	MaxWorkflowRulesPerNamespace = NewNamespaceIntSetting(
+		"frontend.maxWorkflowRulesPerNamespace",
+		10,
+		`Maximum number of workflow rules in a given namespace`,
+	)
+
 	SlowRequestLoggingThreshold = NewGlobalDurationSetting(
 		"rpc.slowRequestLoggingThreshold",
 		5*time.Second,
