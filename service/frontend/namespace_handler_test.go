@@ -1880,7 +1880,50 @@ func (s *namespaceHandlerCommonSuite) TestListWorkflowRules() {
 	s.NoError(err)
 	s.NotNil(rules)
 	s.Equal(0, len(rules))
+}
 
+func (s *namespaceHandlerCommonSuite) TestWorkflowRuleEviction() {
+	s.fakeClock.Update(time.Now())
+	expiredTime1 := s.fakeClock.Now().Add(-1 * time.Hour)
+	expiredTime2 := s.fakeClock.Now().Add(-2 * time.Hour)
+
+	tests := []struct {
+		name        string
+		deletedRule string
+		rules       map[string]*rulespb.WorkflowRule
+	}{
+		{
+			name: "empty map", deletedRule: "", rules: map[string]*rulespb.WorkflowRule{},
+		},
+		{
+			name: "no rule to delete", deletedRule: "", rules: map[string]*rulespb.WorkflowRule{
+				"rule 1": {Spec: &rulespb.WorkflowRuleSpec{Id: "rule 1"}},
+			},
+		},
+		{
+			name: "single rule to delete", deletedRule: "rule 1", rules: map[string]*rulespb.WorkflowRule{
+				"rule 1": {Spec: &rulespb.WorkflowRuleSpec{Id: "rule 1", ExpirationTime: timestamppb.New(expiredTime1)}},
+			},
+		},
+		{
+			name: "two candidates to delete", deletedRule: "rule 2", rules: map[string]*rulespb.WorkflowRule{
+				"rule 1": {Spec: &rulespb.WorkflowRuleSpec{Id: "rule 1", ExpirationTime: timestamppb.New(expiredTime1)}},
+				"rule 2": {Spec: &rulespb.WorkflowRuleSpec{Id: "rule 2", ExpirationTime: timestamppb.New(expiredTime2)}},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		oldLens := len(tt.rules)
+		s.handler.removeExpiredWorkflowRules(tt.rules)
+		if len(tt.deletedRule) == 0 {
+			s.Equal(oldLens, len(tt.rules))
+		} else {
+			if _, exists := tt.rules[tt.deletedRule]; exists {
+				s.True(false, "Rule was not deleted")
+			}
+		}
+	}
 }
 
 func (s *namespaceHandlerCommonSuite) getRandomNamespace() string {
