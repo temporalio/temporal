@@ -2,6 +2,7 @@ package frontend
 
 import (
 	"context"
+	"go.temporal.io/server/common/primitives"
 	"slices"
 	"testing"
 	"time"
@@ -93,6 +94,7 @@ func (s *namespaceHandlerCommonSuite) SetupTest() {
 		s.mockArchiverProvider,
 		s.fakeClock,
 		s.config,
+		primitives.FrontendService,
 	)
 }
 
