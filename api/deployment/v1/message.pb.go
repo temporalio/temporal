@@ -669,7 +669,7 @@ type WorkerDeploymentVersionSummary struct {
 	// Deprecated: Marked as deprecated in temporal/server/api/deployment/v1/message.proto.
 	DrainageStatus v11.VersionDrainageStatus `protobuf:"varint,3,opt,name=drainage_status,json=drainageStatus,proto3,enum=temporal.api.enums.v1.VersionDrainageStatus" json:"drainage_status,omitempty"`
 	// Information about workflow drainage to help the user determine when it is safe
-	// to decommission a Version. Not present while version is current or ramping
+	// to decommission a Version. Not present while version is current or ramping.
 	DrainageInfo *v1.VersionDrainageInfo `protobuf:"bytes,4,opt,name=drainage_info,json=drainageInfo,proto3" json:"drainage_info,omitempty"`
 	// Last time `current_since_time`, `ramping_since_time, or `ramp_percentage` of this version changed.
 	RoutingUpdateTime *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=routing_update_time,json=routingUpdateTime,proto3" json:"routing_update_time,omitempty"`
