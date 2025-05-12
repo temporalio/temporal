@@ -722,8 +722,8 @@ func emitCompletionMetrics(
 			namespaceName,
 			completionMetric.namespaceState,
 			completionMetric.taskQueue,
-			completionMetric.status,
 			completionMetric.workflowTypeName,
+			completionMetric.status,
 			shardContext.GetConfig(),
 		)
 	}

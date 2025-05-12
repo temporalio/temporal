@@ -79,8 +79,8 @@ func emitWorkflowCompletionStats(
 	namespace namespace.Name,
 	namespaceState string,
 	taskQueue string,
-	status enumspb.WorkflowExecutionStatus,
 	workflowTypeName string,
+	status enumspb.WorkflowExecutionStatus,
 	config *configs.Config,
 ) {
 	handler := GetPerTaskQueueFamilyScope(metricsHandler, namespace, taskQueue, config,
