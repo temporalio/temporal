@@ -1036,7 +1036,7 @@ func (l *fxLogAdapter) LogEvent(e fxevent.Event) {
 				tag.ComponentFX,
 				tag.NewStringTag("callee", e.FunctionName),
 				tag.NewStringTag("caller", e.CallerName),
-				tag.NewStringTag("runtime", e.Runtime.String()),
+				tag.NewStringerTag("runtime", e.Runtime),
 			)
 		}
 	case *fxevent.OnStopExecuting:
@@ -1058,7 +1058,7 @@ func (l *fxLogAdapter) LogEvent(e fxevent.Event) {
 				tag.ComponentFX,
 				tag.NewStringTag("callee", e.FunctionName),
 				tag.NewStringTag("caller", e.CallerName),
-				tag.NewStringTag("runtime", e.Runtime.String()),
+				tag.NewStringerTag("runtime", e.Runtime),
 			)
 		}
 	case *fxevent.Supplied:
@@ -1120,7 +1120,7 @@ func (l *fxLogAdapter) LogEvent(e fxevent.Event) {
 	case *fxevent.Stopping:
 		l.logger.Info("received signal",
 			tag.ComponentFX,
-			tag.NewStringTag("signal", e.Signal.String()))
+			tag.NewStringerTag("signal", e.Signal))
 	case *fxevent.Stopped:
 		if e.Err != nil {
 			l.logger.Error("stop failed", tag.ComponentFX, tag.Error(e.Err))

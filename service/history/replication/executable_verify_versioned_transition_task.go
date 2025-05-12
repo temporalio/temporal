@@ -23,7 +23,6 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/service/history/consts"
-	"go.temporal.io/server/service/history/workflow"
 )
 
 type (
@@ -122,7 +121,7 @@ func (e *ExecutableVerifyVersionedTransitionTask) Execute() error {
 	if len(transitionHistory) == 0 {
 		return nil
 	}
-	err = workflow.TransitionHistoryStalenessCheck(transitionHistory, e.ReplicationTask().VersionedTransition)
+	err = transitionhistory.StalenessCheck(transitionHistory, e.ReplicationTask().VersionedTransition)
 
 	// case 1: VersionedTransition is up-to-date on current mutable state
 	if err == nil {

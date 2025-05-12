@@ -735,7 +735,12 @@ This config is EXPERIMENTAL and may be changed or removed in a later release.`,
 	HistoryHostErrorPercentage = NewGlobalFloatSetting(
 		"frontend.historyHostErrorPercentage",
 		0.5,
-		`HistoryHostErrorPercentage is the percentage of hosts that are unhealthy`,
+		`HistoryHostErrorPercentage is the proportion of hosts that are unhealthy through observation external to the host and internal host health checks`,
+	)
+	HistoryHostSelfErrorProportion = NewGlobalFloatSetting(
+		"frontend.historyHostSelfErrorProportion",
+		0.05,
+		`HistoryHostStartingProportion is the proportion of hosts that have marked themselves as not ready -- this could due to waiting to acquire all shards on startup, or an internal health check failure`,
 	)
 	SendRawWorkflowHistory = NewNamespaceBoolSetting(
 		"frontend.sendRawWorkflowHistory",
@@ -1301,10 +1306,9 @@ second per poller by one physical queue manager`,
 	)
 	EnableHistoryReplicationDLQV2 = NewGlobalBoolSetting(
 		"history.enableHistoryReplicationDLQV2",
-		false,
+		true,
 		`EnableHistoryReplicationDLQV2 switches to the DLQ v2 implementation for history replication. See details in
-[go.temporal.io/server/common/persistence.QueueV2]. This feature is currently in development. Do NOT use it in
-production.`,
+[go.temporal.io/server/common/persistence.QueueV2]`,
 	)
 
 	HistoryRPS = NewGlobalIntSetting(
@@ -2434,6 +2438,12 @@ that task will be sent to DLQ.`,
 		"history.enableRequestIdRefLinks",
 		false,
 		"Enable generating request ID reference links",
+	)
+
+	EnableChasm = NewGlobalBoolSetting(
+		"history.enableChasm",
+		false,
+		"Use real chasm tree implementation instead of the noop one",
 	)
 
 	// keys for worker

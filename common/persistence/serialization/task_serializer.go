@@ -1266,6 +1266,7 @@ func (s *TaskSerializer) replicationSyncWorkflowStateTaskToProto(
 		Version:        syncWorkflowStateTask.Version,
 		VisibilityTime: timestamppb.New(syncWorkflowStateTask.VisibilityTimestamp),
 		Priority:       syncWorkflowStateTask.Priority,
+		TargetClusters: syncWorkflowStateTask.TargetClusters,
 	}
 }
 
@@ -1286,6 +1287,7 @@ func (s *TaskSerializer) replicationSyncWorkflowStateTaskFromProto(
 		Version:             syncWorkflowStateTask.Version,
 		TaskID:              syncWorkflowStateTask.TaskId,
 		Priority:            syncWorkflowStateTask.Priority,
+		TargetClusters:      syncWorkflowStateTask.TargetClusters,
 	}
 }
 

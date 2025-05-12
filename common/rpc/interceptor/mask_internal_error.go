@@ -105,7 +105,7 @@ func (mi *MaskInternalErrorDetailsInterceptor) logError(
 
 	logTags = append(logTags, tag.NewStringTag("hash", errorHash))
 
-	logTags = append(logTags, tag.NewStringTag("grpc_code", statusCode.String()))
+	logTags = append(logTags, tag.NewStringerTag("grpc_code", statusCode))
 	logTags = append(logTags, mi.workflowTags.Extract(req, fullMethod)...)
 
 	mi.logger.Error("masked service failures", append(logTags, tag.Error(err))...)

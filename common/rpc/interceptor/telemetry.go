@@ -410,7 +410,7 @@ func (ti *TelemetryInterceptor) logError(
 		return
 	}
 
-	logTags = append(logTags, tag.NewStringTag("grpc_code", statusCode.String()))
+	logTags = append(logTags, tag.NewStringerTag("grpc_code", statusCode))
 	logTags = append(logTags, ti.workflowTags.Extract(req, fullMethod)...)
 
 	ti.logger.Error("service failures", append(logTags, tag.Error(err))...)

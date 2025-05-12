@@ -75,7 +75,7 @@ type (
 		GenerateHistoryReplicationTasks(
 			eventBatches [][]*historypb.HistoryEvent,
 		) ([]tasks.Task, error)
-		GenerateMigrationTasks() ([]tasks.Task, int64, error)
+		GenerateMigrationTasks(targetClusters []string) ([]tasks.Task, int64, error)
 
 		// Generate tasks for any updated state machines on mutable state.
 		// Looks up machine definition in the provided registry.
@@ -715,7 +715,7 @@ func (r *TaskGeneratorImpl) GenerateHistoryReplicationTasks(
 	}, nil
 }
 
-func (r *TaskGeneratorImpl) GenerateMigrationTasks() ([]tasks.Task, int64, error) {
+func (r *TaskGeneratorImpl) GenerateMigrationTasks(targetClusters []string) ([]tasks.Task, int64, error) {
 	executionInfo := r.mutableState.GetExecutionInfo()
 	versionHistory, err := versionhistory.GetCurrentVersionHistory(executionInfo.GetVersionHistories())
 	if err != nil {
@@ -731,9 +731,10 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks() ([]tasks.Task, int64, error
 	if r.mutableState.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		syncWorkflowStateTask := []tasks.Task{&tasks.SyncWorkflowStateTask{
 			// TaskID, VisibilityTimestamp is set by shard
-			WorkflowKey: workflowKey,
-			Version:     lastItem.GetVersion(),
-			Priority:    enumsspb.TASK_PRIORITY_LOW,
+			WorkflowKey:    workflowKey,
+			Version:        lastItem.GetVersion(),
+			Priority:       enumsspb.TASK_PRIORITY_LOW,
+			TargetClusters: targetClusters,
 		}}
 		if r.mutableState.IsTransitionHistoryEnabled() &&
 			// even though current cluster may enabled state transition, but transition history can be cleared
