@@ -80,11 +80,13 @@ func emitWorkflowCompletionStats(
 	namespaceState string,
 	taskQueue string,
 	status enumspb.WorkflowExecutionStatus,
+	workflowTypeName string,
 	config *configs.Config,
 ) {
 	handler := GetPerTaskQueueFamilyScope(metricsHandler, namespace, taskQueue, config,
 		metrics.OperationTag(metrics.WorkflowCompletionStatsScope),
 		metrics.NamespaceStateTag(namespaceState),
+		metrics.WorkflowTypeTag(workflowTypeName),
 	)
 
 	switch status {
