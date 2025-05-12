@@ -315,6 +315,7 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 	// value. Last poller wins if different pollers provide different values
 	if rps := pollMetadata.taskQueueMetadata.GetMaxTasksPerSecond(); rps != nil {
 		c.partitionMgr.UpdateRatelimit(rps.Value)
+
 	}
 
 	if !namespaceEntry.ActiveInCluster(c.clusterMeta.GetCurrentClusterName()) {

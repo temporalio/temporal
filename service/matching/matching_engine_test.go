@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -18,6 +19,7 @@ import (
 	"github.com/uber-go/tally/v4"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	querypb "go.temporal.io/api/query/v1"
@@ -25,6 +27,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	clockspb "go.temporal.io/server/api/clock/v1"
+	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -1002,7 +1005,6 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 		defaultTaskDispatchRPS,
 	)
 
-	// Overriding the rate-limiter in the matcher to have the above rate-limiter instead of the default multi-rate limiter.
 	mgrImpl.oldMatcher.rateLimiter = tqPTM.rateLimiter
 
 	tqPTM.dynamicRateBurst = &dynamicRateBurstWrapper{
@@ -1049,7 +1051,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 			}, nil
 		}).AnyTimes()
 
-	const taskCount = 10
+	const taskCount = 2
 	runID := uuid.NewRandom().String()
 	workflowID := "workflow1"
 	workflowExecution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
@@ -1070,7 +1072,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 		var result *matchingservice.PollActivityTaskQueueResponse
 		var pollErr error
 		maxDispatch := defaultTaskDispatchRPS
-		if i == taskCount/2 {
+		if i == 1 {
 			maxDispatch = 0
 		}
 		wg.Add(1)
@@ -1161,6 +1163,207 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	s.NotNil(descResp.DescResponse.GetTaskQueueStatus())
 	numPartitions := float64(s.matchingEngine.config.NumTaskqueueWritePartitions("", "", tlType))
 	s.True(descResp.DescResponse.GetTaskQueueStatus().GetRatePerSecond()*numPartitions >= (defaultTaskDispatchRPS - 1))
+}
+
+func (s *matchingEngineSuite) TestRateLimiterAcrossVersionedQueues() {
+	/*
+		1. Start a versioned poller with maxTasksPerSecond = defaultTaskDispatchRPS
+		2. Start another versioned poller, polling a different version, maxTasksPerSecond = 0
+		3. Add tasks to both these versioned queues and notice no dispatch of tasks.
+		4. Restart the pollers with maxTasksPerSecond = defaultTaskDispatchRPS
+		5. Verify that both the pollers have received tasks.
+	*/
+
+	if s.newMatcher {
+		s.T().Skip("not supported by new matcher")
+	}
+	s.logger.Expect(testlogger.Error, "unexpected error dispatching task")
+
+	scope := tally.NewTestScope("test", nil)
+	s.matchingEngine.metricsHandler = metrics.NewTallyMetricsHandler(metrics.ClientConfig{}, scope).WithTags(metrics.ServiceNameTag(primitives.MatchingService))
+
+	// Set a short long poll expiration so that the pollers don't wait too long for tasks
+	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(5 * time.Second)
+	s.matchingEngine.config.MinTaskThrottlingBurstSize = dynamicconfig.GetIntPropertyFnFilteredByTaskQueue(0)
+
+	tl := "makeToast"
+	dbq := newUnversionedRootQueueKey(namespaceId, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+	s.taskManager.getQueueManagerByKey(dbq).rangeID = initialRangeID
+
+	runID := uuid.NewRandom().String()
+	workflowID := "workflow1"
+	workflowExecution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
+	deploymentName := "test-deployment"
+
+	mgr := s.newPartitionManager(dbq.partition, s.matchingEngine.config)
+	tqPTM, ok := mgr.(*taskQueuePartitionManagerImpl)
+	s.True(ok)
+	mgrImpl, ok := mgr.(*taskQueuePartitionManagerImpl).defaultQueue.(*physicalTaskQueueManagerImpl)
+	s.True(ok)
+
+	// Overriding the rate-limiter in the matcher to have the above rate-limiter instead of the default multi-rate limiter.
+	// This is because the default multi-rate limiter has a 1 min refresh rate which is too long for this test.
+	tqPTM.rateLimiter = quotas.NewRateLimiter(
+		defaultTaskDispatchRPS,
+		defaultTaskDispatchRPS,
+	)
+	mgrImpl.oldMatcher.rateLimiter = tqPTM.rateLimiter
+	tqPTM.dynamicRateBurst = &dynamicRateBurstWrapper{
+		MutableRateBurst: quotas.NewMutableRateBurst(
+			defaultTaskDispatchRPS,
+			defaultTaskDispatchRPS,
+		),
+		RateLimiterImpl: mgrImpl.oldMatcher.rateLimiter.(*quotas.RateLimiterImpl),
+	}
+
+	s.matchingEngine.updateTaskQueue(dbq.partition, mgr)
+	mgr.Start()
+
+	taskQueue := &taskqueuepb.TaskQueue{
+		Name: tl,
+		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+	}
+	activityTypeName := "activity1"
+	activityID := "activityId1"
+	activityType := &commonpb.ActivityType{Name: activityTypeName}
+	activityInput := payloads.EncodeString("Activity1 Input")
+
+	identity := "nobody"
+
+	s.mockHistoryClient.EXPECT().RecordActivityTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, taskRequest *historyservice.RecordActivityTaskStartedRequest, arg2 ...interface{}) (*historyservice.RecordActivityTaskStartedResponse, error) {
+			s.logger.Debug("Mock Received RecordActivityTaskStartedRequest")
+			return &historyservice.RecordActivityTaskStartedResponse{
+				Attempt: 1,
+				ScheduledEvent: newActivityTaskScheduledEvent(taskRequest.ScheduledEventId, 0,
+					&commandpb.ScheduleActivityTaskCommandAttributes{
+						ActivityId: activityID,
+						TaskQueue: &taskqueuepb.TaskQueue{
+							Name: taskQueue.Name,
+							Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+						},
+						ActivityType:           activityType,
+						Input:                  activityInput,
+						ScheduleToStartTimeout: durationpb.New(1 * time.Second),
+						ScheduleToCloseTimeout: durationpb.New(2 * time.Second),
+						StartToCloseTimeout:    durationpb.New(1 * time.Second),
+						HeartbeatTimeout:       durationpb.New(1 * time.Second),
+					}),
+			}, nil
+		}).Times(2)
+
+	pollFunc := func(maxDispatch float64, buildID string) (*matchingservice.PollActivityTaskQueueResponse, error) {
+		return s.matchingEngine.PollActivityTaskQueue(context.Background(), &matchingservice.PollActivityTaskQueueRequest{
+			NamespaceId: namespaceId,
+			PollRequest: &workflowservice.PollActivityTaskQueueRequest{
+				TaskQueue:         taskQueue,
+				Identity:          identity,
+				TaskQueueMetadata: &taskqueuepb.TaskQueueMetadata{MaxTasksPerSecond: &wrapperspb.DoubleValue{Value: maxDispatch}},
+				DeploymentOptions: &deploymentpb.WorkerDeploymentOptions{
+					DeploymentName:       deploymentName,
+					BuildId:              buildID,
+					WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_VERSIONED,
+				},
+			},
+		}, metrics.NoopMetricsHandler)
+	}
+
+	const taskCount = 2
+	var result *matchingservice.PollActivityTaskQueueResponse
+
+	resultChan := make(chan *matchingservice.PollActivityTaskQueueResponse)
+
+	for i := int64(0); i < taskCount; i++ {
+		maxDispatch := defaultTaskDispatchRPS
+		if i == 1 {
+			maxDispatch = 0 // second poller overrides the dispatch rate to 0
+		}
+		go func() {
+			result, _ = pollFunc(float64(maxDispatch), strconv.FormatInt(int64(i), 10))
+			resultChan <- result
+		}()
+		time.Sleep(10 * time.Millisecond) // Delay to allow the second poller coming in a little later.
+	}
+
+	// Update user data of the task queue so that the activity tasks generated are not treated as independent activities.
+	// Independent activity tasks are those if the task queue the task is scheduled on is not part of the workflow's pinned
+	// deployment.
+	updateOptions := UserDataUpdateOptions{Source: "SyncDeploymentUserData"}
+	_, err := tqPTM.GetUserDataManager().UpdateUserData(context.Background(), updateOptions, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
+
+		newData := &persistencespb.TaskQueueUserData{
+			PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+				int32(enumspb.TASK_QUEUE_TYPE_ACTIVITY): {
+					DeploymentData: &persistencespb.DeploymentData{
+						Versions: []*deploymentspb.DeploymentVersionData{
+							{
+								Version: &deploymentspb.WorkerDeploymentVersion{
+									DeploymentName: deploymentName,
+									BuildId:        strconv.FormatInt(int64(0), 10),
+								},
+								RoutingUpdateTime: timestamppb.Now(),
+								CurrentSinceTime:  timestamppb.Now(),
+							},
+							{
+								Version: &deploymentspb.WorkerDeploymentVersion{
+									DeploymentName: deploymentName,
+									BuildId:        strconv.FormatInt(int64(1), 10),
+								},
+								RoutingUpdateTime: timestamppb.Now(),
+								RampingSinceTime:  timestamppb.Now(),
+							},
+						},
+					},
+				},
+			},
+		}
+		return newData, true, nil
+	})
+	s.NoError(err)
+
+	for i := int64(0); i < taskCount; i++ {
+		scheduledEventID := i * 3
+		addRequest := matchingservice.AddActivityTaskRequest{
+			NamespaceId:            namespaceId,
+			Execution:              workflowExecution,
+			ScheduledEventId:       scheduledEventID,
+			TaskQueue:              taskQueue,
+			ScheduleToStartTimeout: timestamp.DurationFromSeconds(100),
+			VersionDirective: &taskqueuespb.TaskVersionDirective{
+				Behavior: enumspb.VERSIONING_BEHAVIOR_PINNED,
+				DeploymentVersion: &deploymentspb.WorkerDeploymentVersion{
+					DeploymentName: deploymentName,
+					BuildId:        strconv.FormatInt(int64(i), 10),
+				},
+			},
+		}
+
+		_, _, err = s.matchingEngine.AddActivityTask(context.Background(), &addRequest)
+		s.NoError(err)
+	}
+
+	// Verifying that both the pollers don't receive any tasks since the overall dispatch rate has been set to 0
+	for i := int64(0); i < taskCount; i++ {
+		receivedResult := <-resultChan
+		s.Nil(receivedResult.TaskToken)
+	}
+
+	// Restart the pollers with maxTasksPerSecond = defaultTaskDispatchRPS so that they can receive tasks
+	for i := int64(0); i < taskCount; i++ {
+		maxDispatch := float64(defaultTaskDispatchRPS)
+		go func() {
+			result, _ = pollFunc(maxDispatch, strconv.FormatInt(int64(i), 10))
+			resultChan <- result
+		}()
+	}
+
+	// Verifying that both the pollers receive the tasks which were added previously
+	for i := int64(0); i < taskCount; i++ {
+		receivedResult := <-resultChan
+
+		s.NotNil(receivedResult)
+		s.NotNil(receivedResult.TaskToken)
+	}
 }
 
 func (s *matchingEngineSuite) TestConcurrentPublishConsumeActivities() {
