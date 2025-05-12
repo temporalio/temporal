@@ -1333,7 +1333,7 @@ Loop:
 			metrics.ShardInfoScheduledQueueLagTimer.With(metricsHandler).
 				Record(lag, metrics.TaskCategoryTag(category.Name()))
 		default:
-			s.contextTaggedLogger.Error("Unknown task category type", tag.NewStringTag("task-category", category.Type().String()))
+			s.contextTaggedLogger.Error("Unknown task category type", tag.NewStringerTag("task-category", category.Type()))
 		}
 	}
 }

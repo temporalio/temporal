@@ -106,7 +106,11 @@ func NewEntity[C Component, I any, O any](
 		},
 		opts...,
 	)
-	return output, ref.Serialize(), err
+	if err != nil {
+		return output, nil, err
+	}
+	serializedRef, err := ref.serialize()
+	return output, serializedRef, err
 }
 
 func UpdateWithNewEntity[C Component, I any, O1 any, O2 any](
@@ -135,7 +139,11 @@ func UpdateWithNewEntity[C Component, I any, O1 any, O2 any](
 		},
 		opts...,
 	)
-	return output1, output2, ref.Serialize(), err
+	if err != nil {
+		return output1, output2, nil, err
+	}
+	serializedRef, err := ref.serialize()
+	return output1, output2, serializedRef, err
 }
 
 // TODO:
@@ -168,7 +176,11 @@ func UpdateComponent[C Component, R []byte | ComponentRef, I any, O any](
 		opts...,
 	)
 
-	return output, newRef.Serialize(), err
+	if err != nil {
+		return output, nil, err
+	}
+	serializedRef, err := newRef.serialize()
+	return output, serializedRef, err
 }
 
 func ReadComponent[C Component, R []byte | ComponentRef, I any, O any](
@@ -233,14 +245,18 @@ func PollComponent[C Component, R []byte | ComponentRef, I any, O any, T any](
 		},
 		opts...,
 	)
-	return output, newRef.Serialize(), err
+	if err != nil {
+		return output, nil, err
+	}
+	serializedRef, err := newRef.serialize()
+	return output, serializedRef, err
 }
 
 func convertComponentRef[R []byte | ComponentRef](
 	r R,
 ) (ComponentRef, error) {
 	if refToken, ok := any(r).([]byte); ok {
-		return DeserializeComponentRef(refToken)
+		return deserializeComponentRef(refToken)
 	}
 
 	//revive:disable-next-line:unchecked-type-assertion

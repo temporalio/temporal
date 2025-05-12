@@ -50,6 +50,7 @@ var (
 	FlagMaxEventVersion            = "max-event-version"
 	FlagMinTaskID                  = "min-task-id"
 	FlagMaxTaskID                  = "max-task-id"
+	FlagSubqueue                   = "subqueue"
 	FlagDLQType                    = "dlq-type"
 	FlagQueueType                  = "queue-type"
 	FlagDLQVersion                 = "dlq-version"

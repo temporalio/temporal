@@ -19,7 +19,7 @@ func GenerateTask(
 	shard historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (_ *historyservice.GenerateLastHistoryReplicationTasksResponse, retError error) {
-	namespaceEntry, err := api.GetActiveNamespace(shard, namespace.ID(request.GetNamespaceId()))
+	namespaceEntry, err := api.GetNamespace(shard, namespace.ID(request.GetNamespaceId()))
 	if err != nil {
 		return nil, err
 	}

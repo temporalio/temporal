@@ -1,6 +1,9 @@
 package workflow
 
 import (
+	"time"
+
+	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -28,4 +31,27 @@ func (*noopChasmTree) ApplySnapshot(chasm.NodesSnapshot) error {
 
 func (*noopChasmTree) IsDirty() bool {
 	return false
+}
+
+func (*noopChasmTree) Terminate(chasm.TerminateComponentRequest) error {
+	return nil
+}
+
+func (*noopChasmTree) Archetype() string {
+	return ""
+}
+
+func (*noopChasmTree) EachPureTask(
+	deadline time.Time,
+	callback func(executor chasm.NodeExecutePureTask, task any) error,
+) error {
+	return nil
+}
+
+func (*noopChasmTree) IsStale(chasm.ComponentRef) error {
+	return nil
+}
+
+func (*noopChasmTree) Component(chasm.Context, chasm.ComponentRef) (chasm.Component, error) {
+	return nil, serviceerror.NewInternal("Component() method invoked on noop CHASM tree")
 }

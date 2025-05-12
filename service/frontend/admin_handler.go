@@ -169,6 +169,7 @@ func NewAdminHandler(
 		primitives.HistoryService,
 		args.MembershipMonitor,
 		args.Config.HistoryHostErrorPercentage,
+		args.Config.HistoryHostSelfErrorProportion,
 		func(ctx context.Context, hostAddress string) (enumsspb.HealthState, error) {
 			resp, err := args.HistoryClient.DeepHealthCheck(ctx, &historyservice.DeepHealthCheckRequest{HostAddress: hostAddress})
 			if err != nil {
@@ -1645,6 +1646,7 @@ func (adh *AdminHandler) GetTaskQueueTasks(
 		TaskType:           request.GetTaskQueueType(),
 		InclusiveMinTaskID: request.GetMinTaskId(),
 		ExclusiveMaxTaskID: request.GetMaxTaskId(),
+		Subqueue:           int(request.GetSubqueue()),
 		PageSize:           int(request.GetBatchSize()),
 		NextPageToken:      request.NextPageToken,
 	})

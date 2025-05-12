@@ -9,7 +9,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 )
@@ -77,8 +76,7 @@ func ValidateDeploymentWfParams(fieldName string, field string, maxIDLengthLimit
 		return serviceerror.NewInvalidArgument(fmt.Sprintf("size of %v larger than the maximum allowed", fieldName))
 	}
 
-	// UTF-8 check
-	return common.ValidateUTF8String(fieldName, field)
+	return nil
 }
 
 // EscapeChar is a helper which escapes the DeploymentWorkflowIDDelimeter character

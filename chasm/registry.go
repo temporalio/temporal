@@ -68,6 +68,16 @@ func (r *Registry) taskFor(taskInstance any) (*RegistrableTask, bool) {
 	return rt, ok
 }
 
+func (r *Registry) componentOf(componentGoType reflect.Type) (*RegistrableComponent, bool) {
+	rc, ok := r.componentByGoType[componentGoType]
+	return rc, ok
+}
+
+func (r *Registry) taskOf(taskGoType reflect.Type) (*RegistrableTask, bool) {
+	rt, ok := r.taskByGoType[taskGoType]
+	return rt, ok
+}
+
 func (r *Registry) registerComponent(
 	lib namer,
 	rc *RegistrableComponent,

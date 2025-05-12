@@ -90,7 +90,7 @@ func (i *instrumentation) invalidStateTransition(updateID string, msg proto.Mess
 	i.log.Error("invalid state transition attempted",
 		tag.NewStringTag("update-id", updateID),
 		tag.NewStringTag("message", fmt.Sprintf("%T", msg)),
-		tag.NewStringTag("state", state.String()))
+		tag.NewStringerTag("state", state))
 }
 
 func (i *instrumentation) updateRegistrySize(size int) {
@@ -104,7 +104,7 @@ func (i *instrumentation) oneOf(counterName string) {
 func (i *instrumentation) stateChange(updateID string, from, to state) {
 	i.log.Debug("update state change",
 		tag.NewStringTag("update-id", updateID),
-		tag.NewStringTag("from-state", from.String()),
-		tag.NewStringTag("to-state", to.String()),
+		tag.NewStringerTag("from-state", from),
+		tag.NewStringerTag("to-state", to),
 	)
 }
