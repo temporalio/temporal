@@ -893,7 +893,7 @@ func (a *activities) WaitCatchup(ctx context.Context, params CatchUpParams) erro
 		return err
 	}
 
-	targetCluster := params.CatchUpCluster
+	targetCluster := params.TargetCluster
 	if targetCluster == "" {
 		targetCluster = descResp.ReplicationConfig.GetActiveClusterName()
 	}

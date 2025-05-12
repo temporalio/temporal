@@ -13,9 +13,9 @@ const (
 
 type (
 	CatchUpParams struct {
-		Namespace      string
-		RemoteCluster  string
-		CatchUpCluster string
+		Namespace     string
+		RemoteCluster string
+		TargetCluster string
 	}
 
 	CatchUpOutput struct{}
