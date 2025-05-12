@@ -6,6 +6,8 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/searchattribute"
 	"math"
 	"testing"
 	"time"
@@ -1555,6 +1557,54 @@ func (s *WorkflowTestSuite) TestWorkflowRetryFailures() {
   3 WorkflowTaskStarted
   4 WorkflowTaskCompleted
   5 WorkflowExecutionFailed`, events)
+}
+
+// TestStartWorkflowExecution_Invalid_DeploymentSearchAttributes verifies that Worker Deployment related
+// search attributes cannot be used on StartWorkflowExecution.
+func (s *WorkflowTestSuite) TestStartWorkflowExecution_Invalid_DeploymentSearchAttributes() {
+	tv := testvars.New(s.T())
+	makeRequest := func(saFieldName string) *workflowservice.StartWorkflowExecutionRequest {
+		return &workflowservice.StartWorkflowExecutionRequest{
+			RequestId:          uuid.New(),
+			Namespace:          s.Namespace().String(),
+			WorkflowId:         testcore.RandomizeStr(s.T().Name()),
+			WorkflowType:       tv.WorkflowType(),
+			TaskQueue:          tv.TaskQueue(),
+			Input:              nil,
+			WorkflowRunTimeout: durationpb.New(100 * time.Second),
+			Identity:           tv.WorkerIdentity(),
+			SearchAttributes: &commonpb.SearchAttributes{
+				IndexedFields: map[string]*commonpb.Payload{
+					saFieldName: payload.EncodeString("1.0.0"),
+				},
+			},
+		}
+	}
+
+	s.Run(searchattribute.TemporalWorkerDeploymentVersion, func() {
+		request := makeRequest(searchattribute.TemporalWorkerDeploymentVersion)
+		_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+		s.Error(err)
+		var invalidArgument *serviceerror.InvalidArgument
+		s.ErrorAs(err, &invalidArgument)
+	})
+
+	s.Run(searchattribute.TemporalWorkerDeployment, func() {
+		request := makeRequest(searchattribute.TemporalWorkerDeployment)
+		_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+		s.Error(err)
+		var invalidArgument *serviceerror.InvalidArgument
+		s.ErrorAs(err, &invalidArgument)
+	})
+
+	s.Run(searchattribute.TemporalWorkflowVersioningBehavior, func() {
+		request := makeRequest(searchattribute.TemporalWorkflowVersioningBehavior)
+		_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+		s.Error(err)
+		var invalidArgument *serviceerror.InvalidArgument
+		s.ErrorAs(err, &invalidArgument)
+	})
+
 }
 
 func requireNotStartedButRunning(t *testing.T, resp *workflowservice.StartWorkflowExecutionResponse) {

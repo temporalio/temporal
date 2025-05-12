@@ -1,6 +1,7 @@
 package searchattribute
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
@@ -110,6 +111,31 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate() {
 	err = saValidator.Validate(attr, namespace)
 	s.Error(err)
 	s.Equal("StartTime attribute can't be set in SearchAttributes", err.Error())
+
+	// Validate Deployment related search attributes
+	fields = map[string]*commonpb.Payload{
+		TemporalWorkerDeploymentVersion: payload.EncodeString("1.0.0"),
+	}
+	attr.IndexedFields = fields
+	err = saValidator.Validate(attr, namespace)
+	s.Error(err)
+	s.Equal(fmt.Sprintf("%s attribute can't be set in SearchAttributes", TemporalWorkerDeploymentVersion), err.Error())
+
+	fields = map[string]*commonpb.Payload{
+		TemporalWorkerDeployment: payload.EncodeString("1.0.0"),
+	}
+	attr.IndexedFields = fields
+	err = saValidator.Validate(attr, namespace)
+	s.Error(err)
+	s.Equal(fmt.Sprintf("%s attribute can't be set in SearchAttributes", TemporalWorkerDeployment), err.Error())
+
+	fields = map[string]*commonpb.Payload{
+		TemporalWorkflowVersioningBehavior: payload.EncodeString("1.0.0"),
+	}
+	attr.IndexedFields = fields
+	err = saValidator.Validate(attr, namespace)
+	s.Error(err)
+	s.Equal(fmt.Sprintf("%s attribute can't be set in SearchAttributes", TemporalWorkflowVersioningBehavior), err.Error())
 }
 
 func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate_SuppressError() {

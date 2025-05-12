@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"math/rand"
 	"testing"
 	"time"
@@ -199,6 +200,29 @@ func (s *commandAttrValidatorSuite) TestValidateUpsertWorkflowSearchAttributes()
 	fc, err = s.validator.ValidateUpsertWorkflowSearchAttributes(namespaceName, attributes)
 	s.NoError(err)
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, fc)
+
+	// Predefined Worker-Deployment related SA's should be rejected when they are attempted to be upserted
+
+	attributes.SearchAttributes.IndexedFields = map[string]*commonpb.Payload{
+		searchattribute.TemporalWorkerDeploymentVersion: saPayload,
+	}
+	fc, err = s.validator.ValidateUpsertWorkflowSearchAttributes(namespaceName, attributes)
+	s.EqualError(err, fmt.Sprintf("%s attribute can't be set in SearchAttributes", searchattribute.TemporalWorkerDeploymentVersion))
+	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, fc)
+
+	attributes.SearchAttributes.IndexedFields = map[string]*commonpb.Payload{
+		searchattribute.TemporalWorkerDeployment: saPayload,
+	}
+	fc, err = s.validator.ValidateUpsertWorkflowSearchAttributes(namespaceName, attributes)
+	s.EqualError(err, fmt.Sprintf("%s attribute can't be set in SearchAttributes", searchattribute.TemporalWorkerDeployment))
+	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, fc)
+
+	attributes.SearchAttributes.IndexedFields = map[string]*commonpb.Payload{
+		searchattribute.TemporalWorkflowVersioningBehavior: saPayload,
+	}
+	fc, err = s.validator.ValidateUpsertWorkflowSearchAttributes(namespaceName, attributes)
+	s.EqualError(err, fmt.Sprintf("%s attribute can't be set in SearchAttributes", searchattribute.TemporalWorkflowVersioningBehavior))
+	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, fc)
 }
 
 func (s *commandAttrValidatorSuite) TestValidateContinueAsNewWorkflowExecutionAttributes() {
@@ -233,6 +257,49 @@ func (s *commandAttrValidatorSuite) TestValidateContinueAsNewWorkflowExecutionAt
 	s.Equal(taskQueue, attributes.GetTaskQueue().GetName())
 	s.Equal(executionTimeout, attributes.GetWorkflowRunTimeout().AsDuration())
 	s.Equal(maxWorkflowTaskStartToCloseTimeout, attributes.GetWorkflowTaskTimeout().AsDuration())
+
+	// Predefined Worker-Deployment related SA's should be rejected when they are attempted to be set during CAN
+	saPayload, err := searchattribute.EncodeValue([]string{"a"}, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
+	attributes.SearchAttributes = &commonpb.SearchAttributes{}
+
+	// Reject TemporalWorkerDeploymentVersion
+	attributes.SearchAttributes.IndexedFields = map[string]*commonpb.Payload{
+		searchattribute.TemporalWorkerDeploymentVersion: saPayload,
+	}
+	fc, err = s.validator.ValidateContinueAsNewWorkflowExecutionAttributes(
+		tests.Namespace,
+		attributes,
+		executionInfo,
+	)
+	s.EqualError(err, fmt.Sprintf("invalid SearchAttributes on ContinueAsNewWorkflowExecutionCommand: %s attribute "+
+		"can't be set in SearchAttributes. WorkflowType=%s TaskQueue=%s",
+		searchattribute.TemporalWorkerDeploymentVersion, workflowTypeName, attributes.TaskQueue))
+
+	// Reject TemporalWorkerDeployment
+	attributes.SearchAttributes.IndexedFields = map[string]*commonpb.Payload{
+		searchattribute.TemporalWorkerDeployment: saPayload,
+	}
+	fc, err = s.validator.ValidateContinueAsNewWorkflowExecutionAttributes(
+		tests.Namespace,
+		attributes,
+		executionInfo,
+	)
+	s.EqualError(err, fmt.Sprintf("invalid SearchAttributes on ContinueAsNewWorkflowExecutionCommand: %s attribute "+
+		"can't be set in SearchAttributes. WorkflowType=%s TaskQueue=%s",
+		searchattribute.TemporalWorkerDeployment, workflowTypeName, attributes.TaskQueue))
+
+	// Reject TemporalWorkflowVersioningBehavior
+	attributes.SearchAttributes.IndexedFields = map[string]*commonpb.Payload{
+		searchattribute.TemporalWorkflowVersioningBehavior: saPayload,
+	}
+	fc, err = s.validator.ValidateContinueAsNewWorkflowExecutionAttributes(
+		tests.Namespace,
+		attributes,
+		executionInfo,
+	)
+	s.EqualError(err, fmt.Sprintf("invalid SearchAttributes on ContinueAsNewWorkflowExecutionCommand: %s attribute "+
+		"can't be set in SearchAttributes. WorkflowType=%s TaskQueue=%s",
+		searchattribute.TemporalWorkflowVersioningBehavior, workflowTypeName, attributes.TaskQueue))
 }
 
 func (s *commandAttrValidatorSuite) TestValidateModifyWorkflowProperties() {

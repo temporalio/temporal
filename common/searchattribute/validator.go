@@ -111,12 +111,10 @@ func (v *Validator) Validate(searchAttributes *commonpb.SearchAttributes, namesp
 			)
 		}
 
-		// Blocking Deployment related SA's that are present in the predefined category
+		// Don't allow predefined Deployment SA's to be set by the user
 		if saFieldName == TemporalWorkerDeploymentVersion || saFieldName == TemporalWorkerDeployment || saFieldName == TemporalWorkflowVersioningBehavior {
-			return v.validationError(
-				fmt.Sprintf("search attribute %s is not allowed", saFieldName),
-				saFieldName,
-				namespace,
+			return serviceerror.NewInvalidArgument(
+				fmt.Sprintf("%s attribute can't be set in SearchAttributes", saFieldName),
 			)
 		}
 		saValue, err := DecodeValue(saPayload, saType, v.allowList(namespace))
