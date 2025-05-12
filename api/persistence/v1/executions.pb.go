@@ -2333,10 +2333,14 @@ type ActivityInfo struct {
 	LastWorkerDeploymentVersion string `protobuf:"bytes,44,opt,name=last_worker_deployment_version,json=lastWorkerDeploymentVersion,proto3" json:"last_worker_deployment_version,omitempty"`
 	// Priority metadata. If this message is not present, or any fields are not
 	// present, they inherit the values from the workflow.
-	Priority      *v12.Priority           `protobuf:"bytes,45,opt,name=priority,proto3" json:"priority,omitempty"`
-	PauseInfo     *ActivityInfo_PauseInfo `protobuf:"bytes,46,opt,name=pause_info,json=pauseInfo,proto3" json:"pause_info,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Priority  *v12.Priority           `protobuf:"bytes,45,opt,name=priority,proto3" json:"priority,omitempty"`
+	PauseInfo *ActivityInfo_PauseInfo `protobuf:"bytes,46,opt,name=pause_info,json=pauseInfo,proto3" json:"pause_info,omitempty"`
+	// set to true if there was an activity reset while activity is still running on the worker
+	ActivityReset bool `protobuf:"varint,47,opt,name=activity_reset,json=activityReset,proto3" json:"activity_reset,omitempty"`
+	// set to true if reset heartbeat flag was set with an activity reset
+	ResetHeartbeats bool `protobuf:"varint,48,opt,name=reset_heartbeats,json=resetHeartbeats,proto3" json:"reset_heartbeats,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *ActivityInfo) Reset() {
@@ -2679,6 +2683,20 @@ func (x *ActivityInfo) GetPauseInfo() *ActivityInfo_PauseInfo {
 		return x.PauseInfo
 	}
 	return nil
+}
+
+func (x *ActivityInfo) GetActivityReset() bool {
+	if x != nil {
+		return x.ActivityReset
+	}
+	return false
+}
+
+func (x *ActivityInfo) GetResetHeartbeats() bool {
+	if x != nil {
+		return x.ResetHeartbeats
+	}
+	return false
 }
 
 type isActivityInfo_BuildIdInfo interface {
@@ -4505,7 +4523,7 @@ const file_temporal_server_api_persistence_v1_executions_proto_rawDesc = "" +
 	"\x17NexusInvocationTaskInfo\x12\x18\n" +
 	"\aattempt\x18\x01 \x01(\x05R\aattempt\"4\n" +
 	"\x18NexusCancelationTaskInfo\x12\x18\n" +
-	"\aattempt\x18\x01 \x01(\x05R\aattempt\"\xba\x19\n" +
+	"\aattempt\x18\x01 \x01(\x05R\aattempt\"\x8c\x1a\n" +
 	"\fActivityInfo\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\x03R\aversion\x127\n" +
 	"\x18scheduled_event_batch_id\x18\x02 \x01(\x03R\x15scheduledEventBatchId\x12A\n" +
@@ -4554,7 +4572,9 @@ const file_temporal_server_api_persistence_v1_executions_proto_rawDesc = "" +
 	"\x1elast_worker_deployment_version\x18, \x01(\tR\x1blastWorkerDeploymentVersion\x12<\n" +
 	"\bpriority\x18- \x01(\v2 .temporal.api.common.v1.PriorityR\bpriority\x12Y\n" +
 	"\n" +
-	"pause_info\x18. \x01(\v2:.temporal.server.api.persistence.v1.ActivityInfo.PauseInfoR\tpauseInfo\x1ay\n" +
+	"pause_info\x18. \x01(\v2:.temporal.server.api.persistence.v1.ActivityInfo.PauseInfoR\tpauseInfo\x12%\n" +
+	"\x0eactivity_reset\x18/ \x01(\bR\ractivityReset\x12)\n" +
+	"\x10reset_heartbeats\x180 \x01(\bR\x0fresetHeartbeats\x1ay\n" +
 	"\x16UseWorkflowBuildIdInfo\x12+\n" +
 	"\x12last_used_build_id\x18\x01 \x01(\tR\x0flastUsedBuildId\x122\n" +
 	"\x15last_redirect_counter\x18\x02 \x01(\x03R\x13lastRedirectCounter\x1a\x89\x02\n" +

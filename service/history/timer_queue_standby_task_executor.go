@@ -12,6 +12,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
@@ -100,6 +101,8 @@ func (t *timerQueueStandbyTaskExecutor) Execute(
 		err = t.executeDeleteHistoryEventTask(ctx, task)
 	case *tasks.StateMachineTimerTask:
 		err = t.executeStateMachineTimerTask(ctx, task)
+	case *tasks.ChasmTaskPure:
+		err = t.executeChasmPureTimerTask(ctx, task)
 	default:
 		err = queues.NewUnprocessableTaskError("unknown task type")
 	}
@@ -109,6 +112,48 @@ func (t *timerQueueStandbyTaskExecutor) Execute(
 		ExecutedAsActive:    false,
 		ExecutionErr:        err,
 	}
+}
+
+func (t *timerQueueStandbyTaskExecutor) executeChasmPureTimerTask(
+	ctx context.Context,
+	task *tasks.ChasmTaskPure,
+) error {
+	actionFn := func(
+		ctx context.Context,
+		wfContext historyi.WorkflowContext,
+		mutableState historyi.MutableState,
+	) (any, error) {
+		err := t.executeChasmPureTimers(
+			ctx,
+			wfContext,
+			mutableState,
+			task,
+			func(_ chasm.NodeExecutePureTask, task any) error {
+				// If this line of code is reached, the task's Validate() function succeeded, which
+				// indicates that it is still expected to run. Return ErrTaskRetry to wait for the
+				// task to complete on the active cluster, after which Validate will begun returning
+				// false.
+				return consts.ErrTaskRetry
+			},
+		)
+		if err != nil && errors.Is(err, consts.ErrTaskRetry) {
+			return &struct{}{}, nil
+		}
+
+		return nil, err
+	}
+
+	return t.processTimer(
+		ctx,
+		task,
+		actionFn,
+		getStandbyPostActionFn(
+			task,
+			t.getCurrentTime,
+			t.config.StandbyTaskMissingEventsDiscardDelay(task.GetType()),
+			t.checkWorkflowStillExistOnSourceBeforeDiscard,
+		),
+	)
 }
 
 func (t *timerQueueStandbyTaskExecutor) executeUserTimerTimeoutTask(

@@ -10,8 +10,12 @@
 package chasm
 
 import (
+	context "context"
 	reflect "reflect"
 
+	enums "go.temporal.io/api/enums/v1"
+	enums0 "go.temporal.io/server/api/enums/v1"
+	persistence "go.temporal.io/server/api/persistence/v1"
 	definition "go.temporal.io/server/common/definition"
 	tasks "go.temporal.io/server/service/history/tasks"
 	gomock "go.uber.org/mock/gomock"
@@ -71,6 +75,20 @@ func (mr *MockNodeBackendMockRecorder) GetCurrentVersion() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCurrentVersion", reflect.TypeOf((*MockNodeBackend)(nil).GetCurrentVersion))
 }
 
+// GetExecutionInfo mocks base method.
+func (m *MockNodeBackend) GetExecutionInfo() *persistence.WorkflowExecutionInfo {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetExecutionInfo")
+	ret0, _ := ret[0].(*persistence.WorkflowExecutionInfo)
+	return ret0
+}
+
+// GetExecutionInfo indicates an expected call of GetExecutionInfo.
+func (mr *MockNodeBackendMockRecorder) GetExecutionInfo() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetExecutionInfo", reflect.TypeOf((*MockNodeBackend)(nil).GetExecutionInfo))
+}
+
 // GetWorkflowKey mocks base method.
 func (m *MockNodeBackend) GetWorkflowKey() definition.WorkflowKey {
 	m.ctrl.T.Helper()
@@ -97,6 +115,20 @@ func (m *MockNodeBackend) NextTransitionCount() int64 {
 func (mr *MockNodeBackendMockRecorder) NextTransitionCount() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NextTransitionCount", reflect.TypeOf((*MockNodeBackend)(nil).NextTransitionCount))
+}
+
+// UpdateWorkflowStateStatus mocks base method.
+func (m *MockNodeBackend) UpdateWorkflowStateStatus(state enums0.WorkflowExecutionState, status enums.WorkflowExecutionStatus) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateWorkflowStateStatus", state, status)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateWorkflowStateStatus indicates an expected call of UpdateWorkflowStateStatus.
+func (mr *MockNodeBackendMockRecorder) UpdateWorkflowStateStatus(state, status any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkflowStateStatus", reflect.TypeOf((*MockNodeBackend)(nil).UpdateWorkflowStateStatus), state, status)
 }
 
 // MockNodePathEncoder is a mock of NodePathEncoder interface.
@@ -151,4 +183,42 @@ func (m *MockNodePathEncoder) Encode(node *Node, path []string) (string, error) 
 func (mr *MockNodePathEncoderMockRecorder) Encode(node, path any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Encode", reflect.TypeOf((*MockNodePathEncoder)(nil).Encode), node, path)
+}
+
+// MockNodeExecutePureTask is a mock of NodeExecutePureTask interface.
+type MockNodeExecutePureTask struct {
+	ctrl     *gomock.Controller
+	recorder *MockNodeExecutePureTaskMockRecorder
+	isgomock struct{}
+}
+
+// MockNodeExecutePureTaskMockRecorder is the mock recorder for MockNodeExecutePureTask.
+type MockNodeExecutePureTaskMockRecorder struct {
+	mock *MockNodeExecutePureTask
+}
+
+// NewMockNodeExecutePureTask creates a new mock instance.
+func NewMockNodeExecutePureTask(ctrl *gomock.Controller) *MockNodeExecutePureTask {
+	mock := &MockNodeExecutePureTask{ctrl: ctrl}
+	mock.recorder = &MockNodeExecutePureTaskMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockNodeExecutePureTask) EXPECT() *MockNodeExecutePureTaskMockRecorder {
+	return m.recorder
+}
+
+// ExecutePureTask mocks base method.
+func (m *MockNodeExecutePureTask) ExecutePureTask(baseCtx context.Context, taskInstance any) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ExecutePureTask", baseCtx, taskInstance)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ExecutePureTask indicates an expected call of ExecutePureTask.
+func (mr *MockNodeExecutePureTaskMockRecorder) ExecutePureTask(baseCtx, taskInstance any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecutePureTask", reflect.TypeOf((*MockNodeExecutePureTask)(nil).ExecutePureTask), baseCtx, taskInstance)
 }

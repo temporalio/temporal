@@ -579,6 +579,12 @@ message ActivityInfo {
     }
 
     PauseInfo pause_info = 46;
+
+    // set to true if there was an activity reset while activity is still running on the worker
+    bool activity_reset = 47;
+
+    // set to true if reset heartbeat flag was set with an activity reset
+    bool reset_heartbeats = 48;
 }
 
 // timer_map column

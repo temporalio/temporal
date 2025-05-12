@@ -20,7 +20,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/headers"
@@ -199,6 +198,7 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting() {
 }
 
 func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting_OnConflictOptions() {
+	s.OverrideDynamicConfig(dynamicconfig.EnableRequestIdRefLinks, true)
 	s.OverrideDynamicConfig(
 		callbacks.AllowedAddresses,
 		[]any{
@@ -361,19 +361,12 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting_OnConflictOpt
 					Namespace:  s.Namespace().String(),
 					WorkflowId: request.WorkflowId,
 					RunId:      we1.RunId,
-					// TODO(rodrigozhou): RequestIdReference depends on a new release of sdk-go.
-					Reference: &commonpb.Link_WorkflowEvent_EventRef{
-						EventRef: &commonpb.Link_WorkflowEvent_EventReference{
-							EventId:   common.FirstEventID,
-							EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+					Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
+						RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
+							RequestId: request.RequestId,
+							EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
 						},
 					},
-					// Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
-					// 	RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
-					// 		RequestId: request.RequestId,
-					// 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
-					// 	},
-					// },
 				},
 				we1.Link.GetWorkflowEvent(),
 			)
@@ -448,6 +441,7 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting_OnConflictOpt
 }
 
 func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting_OnConflictOptions_Dedup() {
+	s.OverrideDynamicConfig(dynamicconfig.EnableRequestIdRefLinks, true)
 	tv := testvars.New(s.T())
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:          tv.RequestID(),
@@ -492,19 +486,12 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting_OnConflictOpt
 			Namespace:  s.Namespace().String(),
 			WorkflowId: request.WorkflowId,
 			RunId:      we1.RunId,
-			// TODO(rodrigozhou): RequestIdReference depends on a new release of sdk-go.
-			Reference: &commonpb.Link_WorkflowEvent_EventRef{
-				EventRef: &commonpb.Link_WorkflowEvent_EventReference{
-					EventId:   common.FirstEventID,
-					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+			Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
+				RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
+					RequestId: request.RequestId,
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
 				},
 			},
-			// Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
-			// 	RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
-			// 		RequestId: request.RequestId,
-			// 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
-			// 	},
-			// },
 		},
 		we1.Link.GetWorkflowEvent(),
 	)
@@ -534,19 +521,12 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting_OnConflictOpt
 			Namespace:  s.Namespace().String(),
 			WorkflowId: request.WorkflowId,
 			RunId:      we2.RunId,
-			// TODO(rodrigozhou): RequestIdReference depends on a new release of sdk-go.
-			Reference: &commonpb.Link_WorkflowEvent_EventRef{
-				EventRef: &commonpb.Link_WorkflowEvent_EventReference{
-					EventId:   common.FirstEventID,
-					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+			Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
+				RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
+					RequestId: request.RequestId,
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
 				},
 			},
-			// Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
-			// 	RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
-			// 		RequestId: request.RequestId,
-			// 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
-			// 	},
-			// },
 		},
 		we2.Link.GetWorkflowEvent(),
 	)
@@ -592,6 +572,7 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting_OnConflictOpt
 }
 
 func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting_OnConflictOptions_NoDedup() {
+	s.OverrideDynamicConfig(dynamicconfig.EnableRequestIdRefLinks, true)
 	tv := testvars.New(s.T())
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:          uuid.New(),
@@ -671,19 +652,12 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting_OnConflictOpt
 			Namespace:  s.Namespace().String(),
 			WorkflowId: request.WorkflowId,
 			RunId:      we2.RunId,
-			// TODO(rodrigozhou): RequestIdReference depends on a new release of sdk-go.
-			Reference: &commonpb.Link_WorkflowEvent_EventRef{
-				EventRef: &commonpb.Link_WorkflowEvent_EventReference{
-					EventId:   common.FirstEventID,
-					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+			Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
+				RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
+					RequestId: request.RequestId,
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
 				},
 			},
-			// Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
-			// 	RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
-			// 		RequestId: request.RequestId,
-			// 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
-			// 	},
-			// },
 		},
 		we2.Link.GetWorkflowEvent(),
 	)

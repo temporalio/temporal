@@ -11,6 +11,7 @@ package interfaces
 
 import (
 	reflect "reflect"
+	time "time"
 
 	persistence "go.temporal.io/server/api/persistence/v1"
 	chasm "go.temporal.io/server/chasm"
@@ -69,6 +70,20 @@ func (mr *MockChasmTreeMockRecorder) ApplySnapshot(arg0 any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplySnapshot", reflect.TypeOf((*MockChasmTree)(nil).ApplySnapshot), arg0)
 }
 
+// Archetype mocks base method.
+func (m *MockChasmTree) Archetype() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Archetype")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// Archetype indicates an expected call of Archetype.
+func (mr *MockChasmTreeMockRecorder) Archetype() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Archetype", reflect.TypeOf((*MockChasmTree)(nil).Archetype))
+}
+
 // CloseTransaction mocks base method.
 func (m *MockChasmTree) CloseTransaction() (chasm.NodesMutation, error) {
 	m.ctrl.T.Helper()
@@ -82,6 +97,35 @@ func (m *MockChasmTree) CloseTransaction() (chasm.NodesMutation, error) {
 func (mr *MockChasmTreeMockRecorder) CloseTransaction() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseTransaction", reflect.TypeOf((*MockChasmTree)(nil).CloseTransaction))
+}
+
+// Component mocks base method.
+func (m *MockChasmTree) Component(arg0 chasm.Context, arg1 chasm.ComponentRef) (chasm.Component, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Component", arg0, arg1)
+	ret0, _ := ret[0].(chasm.Component)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Component indicates an expected call of Component.
+func (mr *MockChasmTreeMockRecorder) Component(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Component", reflect.TypeOf((*MockChasmTree)(nil).Component), arg0, arg1)
+}
+
+// EachPureTask mocks base method.
+func (m *MockChasmTree) EachPureTask(deadline time.Time, callback func(chasm.NodeExecutePureTask, any) error) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "EachPureTask", deadline, callback)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// EachPureTask indicates an expected call of EachPureTask.
+func (mr *MockChasmTreeMockRecorder) EachPureTask(deadline, callback any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EachPureTask", reflect.TypeOf((*MockChasmTree)(nil).EachPureTask), deadline, callback)
 }
 
 // IsDirty mocks base method.
@@ -98,6 +142,20 @@ func (mr *MockChasmTreeMockRecorder) IsDirty() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsDirty", reflect.TypeOf((*MockChasmTree)(nil).IsDirty))
 }
 
+// IsStale mocks base method.
+func (m *MockChasmTree) IsStale(arg0 chasm.ComponentRef) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsStale", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// IsStale indicates an expected call of IsStale.
+func (mr *MockChasmTreeMockRecorder) IsStale(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsStale", reflect.TypeOf((*MockChasmTree)(nil).IsStale), arg0)
+}
+
 // Snapshot mocks base method.
 func (m *MockChasmTree) Snapshot(arg0 *persistence.VersionedTransition) chasm.NodesSnapshot {
 	m.ctrl.T.Helper()
@@ -110,4 +168,18 @@ func (m *MockChasmTree) Snapshot(arg0 *persistence.VersionedTransition) chasm.No
 func (mr *MockChasmTreeMockRecorder) Snapshot(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Snapshot", reflect.TypeOf((*MockChasmTree)(nil).Snapshot), arg0)
+}
+
+// Terminate mocks base method.
+func (m *MockChasmTree) Terminate(arg0 chasm.TerminateComponentRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Terminate", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Terminate indicates an expected call of Terminate.
+func (mr *MockChasmTreeMockRecorder) Terminate(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Terminate", reflect.TypeOf((*MockChasmTree)(nil).Terminate), arg0)
 }

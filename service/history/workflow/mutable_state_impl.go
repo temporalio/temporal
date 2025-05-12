@@ -25,7 +25,6 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/sdk/temporalnexus"
 	clockspb "go.temporal.io/server/api/clock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -58,6 +57,7 @@ import (
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/components/callbacks"
+	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
@@ -364,6 +364,16 @@ func NewMutableState(
 
 	s.mustInitHSM()
 
+	if s.config.EnableChasm() {
+		s.chasmTree = chasm.NewEmptyTree(
+			shard.ChasmRegistry(),
+			shard.GetTimeSource(),
+			s,
+			chasm.DefaultPathEncoder,
+			shard.GetLogger(),
+		)
+	}
+
 	return s
 }
 
@@ -489,6 +499,24 @@ func NewMutableStateFromDB(
 
 	mutableState.mustInitHSM()
 
+	if shard.GetConfig().EnableChasm() {
+		var err error
+		mutableState.chasmTree, err = chasm.NewTree(
+			dbRecord.ChasmNodes,
+			shard.ChasmRegistry(),
+			shard.GetTimeSource(),
+			mutableState,
+			chasm.DefaultPathEncoder,
+			shard.GetLogger(),
+		)
+		if err != nil {
+			return nil, err
+		}
+		for key, node := range dbRecord.ChasmNodes {
+			mutableState.approximateSize += len(key) + node.Size()
+		}
+	}
+
 	return mutableState, nil
 }
 
@@ -498,7 +526,6 @@ func NewSanitizedMutableState(
 	logger log.Logger,
 	namespaceEntry *namespace.Namespace,
 	mutableStateRecord *persistencespb.WorkflowMutableState,
-	lastFirstEventTxnID int64,
 	lastWriteVersion int64,
 ) (*MutableStateImpl, error) {
 	// Although new versions of temporal server will perform state sanitization,
@@ -514,9 +541,7 @@ func NewSanitizedMutableState(
 		return nil, err
 	}
 
-	mutableState.executionInfo.LastFirstEventTxnId = lastFirstEventTxnID
 	mutableState.currentVersion = lastWriteVersion
-
 	return mutableState, nil
 }
 
@@ -563,6 +588,11 @@ func (ms *MutableStateImpl) mustInitHSM() {
 	ms.stateMachineNode = stateMachineNode
 }
 
+func (ms *MutableStateImpl) IsWorkflow() bool {
+	// TODO: Check if Archetype is workflow archetype when we move part of workflow to CHASM framework as well.
+	return ms.chasmTree.Archetype() == "" // || ms.chasmTree.Archetype() == "Workflow archetype name"
+}
+
 func (ms *MutableStateImpl) HSM() *hsm.Node {
 	return ms.stateMachineNode
 }
@@ -597,18 +627,19 @@ func (ms *MutableStateImpl) GetNexusCompletion(
 			},
 		},
 	}
-	// TODO(rodrigozhou): RequestIdReference depends on a new release of sdk-go.
-	// requestIDInfo := ms.executionState.RequestIds[requestID]
-	// if requestIDInfo.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED {
-	// 	// If the callback was attached, then replace with RequestIdReference.
-	// 	link.Reference = &commonpb.Link_WorkflowEvent_RequestIdRef{
-	// 		RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
-	// 			RequestId: requestID,
-	// 			EventType: requestIDInfo.GetEventType(),
-	// 		},
-	// 	}
-	// }
-	startLink := temporalnexus.ConvertLinkWorkflowEventToNexusLink(link)
+	if ms.config.EnableRequestIdRefLinks() {
+		requestIDInfo := ms.executionState.RequestIds[requestID]
+		if requestIDInfo.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED {
+			// If the callback was attached, then replace with RequestIdReference.
+			link.Reference = &commonpb.Link_WorkflowEvent_RequestIdRef{
+				RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
+					RequestId: requestID,
+					EventType: requestIDInfo.GetEventType(),
+				},
+			}
+		}
+	}
+	startLink := nexusoperations.ConvertLinkWorkflowEventToNexusLink(link)
 
 	switch ce.GetEventType() {
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:
@@ -6120,6 +6151,7 @@ func (ms *MutableStateImpl) closeTransaction(
 		transactionPolicy,
 		eventBatches,
 		clearBuffer,
+		isStateDirty,
 	); err != nil {
 		return closeTransactionResult{}, err
 	}
@@ -6521,6 +6553,7 @@ func (ms *MutableStateImpl) closeTransactionPrepareTasks(
 	transactionPolicy historyi.TransactionPolicy,
 	eventBatches [][]*historypb.HistoryEvent,
 	clearBufferEvents bool,
+	isStateDirty bool,
 ) error {
 	if err := ms.closeTransactionHandleWorkflowResetTask(
 		transactionPolicy,
@@ -6534,6 +6567,10 @@ func (ms *MutableStateImpl) closeTransactionPrepareTasks(
 
 	ms.closeTransactionCollapseVisibilityTasks()
 
+	if err := ms.closeTransactionGenerateChasmRetentionTask(isStateDirty); err != nil {
+		return err
+	}
+
 	// TODO merge active & passive task generation
 	// NOTE: this function must be the last call
 	//  since we only generate at most one activity & user timer,
@@ -6544,6 +6581,25 @@ func (ms *MutableStateImpl) closeTransactionPrepareTasks(
 	}
 
 	return ms.closeTransactionPrepareReplicationTasks(transactionPolicy, eventBatches, clearBufferEvents)
+}
+
+func (ms *MutableStateImpl) closeTransactionGenerateChasmRetentionTask(
+	isStateDirty bool,
+) error {
+
+	if !isStateDirty ||
+		ms.IsWorkflow() ||
+		ms.executionState.State != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED ||
+		transitionhistory.Compare(
+			ms.executionState.LastUpdateVersionedTransition,
+			ms.CurrentVersionedTransition(),
+		) != 0 {
+		return nil
+	}
+
+	closeTime := ms.timeSource.Now()
+	ms.executionInfo.CloseTime = timestamppb.New(closeTime)
+	return ms.taskGenerator.GenerateDeleteHistoryEventTask(closeTime)
 }
 
 func (ms *MutableStateImpl) closeTransactionPrepareReplicationTasks(
@@ -8030,8 +8086,14 @@ func ActivityMatchWorkflowRules(
 	workflowRules := ms.GetNamespaceEntry().GetWorkflowRules()
 
 	activityChanged := false
+	now := timeSource.Now()
 
 	for _, rule := range workflowRules {
+		expirationTime := rule.GetSpec().GetExpirationTime()
+		if expirationTime != nil && expirationTime.AsTime().Before(now) {
+			// the rule is expired
+			continue
+		}
 		match, err := MatchWorkflowRule(ms.GetExecutionInfo(), ms.GetExecutionState(), ai, rule.GetSpec())
 		if err != nil {
 			logError(logger, "error matching workflow rule", ms.GetExecutionInfo(), ms.GetExecutionState(), tag.Error(err))

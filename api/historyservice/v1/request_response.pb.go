@@ -2215,6 +2215,7 @@ type RecordActivityTaskHeartbeatResponse struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	CancelRequested bool                   `protobuf:"varint,1,opt,name=cancel_requested,json=cancelRequested,proto3" json:"cancel_requested,omitempty"`
 	ActivityPaused  bool                   `protobuf:"varint,2,opt,name=activity_paused,json=activityPaused,proto3" json:"activity_paused,omitempty"`
+	ActivityReset   bool                   `protobuf:"varint,3,opt,name=activity_reset,json=activityReset,proto3" json:"activity_reset,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -2259,6 +2260,13 @@ func (x *RecordActivityTaskHeartbeatResponse) GetCancelRequested() bool {
 func (x *RecordActivityTaskHeartbeatResponse) GetActivityPaused() bool {
 	if x != nil {
 		return x.ActivityPaused
+	}
+	return false
+}
+
+func (x *RecordActivityTaskHeartbeatResponse) GetActivityReset() bool {
+	if x != nil {
+		return x.ActivityReset
 	}
 	return false
 }
@@ -9794,10 +9802,11 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\bis_valid\x18\x01 \x01(\bR\aisValid\"\xdd\x01\n" +
 	"\"RecordActivityTaskHeartbeatRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12p\n" +
-	"\x11heartbeat_request\x18\x02 \x01(\v2C.temporal.api.workflowservice.v1.RecordActivityTaskHeartbeatRequestR\x10heartbeatRequest:\"\x92\xc4\x03\x1e2\x1cheartbeat_request.task_token\"y\n" +
+	"\x11heartbeat_request\x18\x02 \x01(\v2C.temporal.api.workflowservice.v1.RecordActivityTaskHeartbeatRequestR\x10heartbeatRequest:\"\x92\xc4\x03\x1e2\x1cheartbeat_request.task_token\"\xa0\x01\n" +
 	"#RecordActivityTaskHeartbeatResponse\x12)\n" +
 	"\x10cancel_requested\x18\x01 \x01(\bR\x0fcancelRequested\x12'\n" +
-	"\x0factivity_paused\x18\x02 \x01(\bR\x0eactivityPaused\"\xdc\x01\n" +
+	"\x0factivity_paused\x18\x02 \x01(\bR\x0eactivityPaused\x12%\n" +
+	"\x0eactivity_reset\x18\x03 \x01(\bR\ractivityReset\"\xdc\x01\n" +
 	"#RespondActivityTaskCompletedRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12o\n" +
 	"\x10complete_request\x18\x02 \x01(\v2D.temporal.api.workflowservice.v1.RespondActivityTaskCompletedRequestR\x0fcompleteRequest:!\x92\xc4\x03\x1d2\x1bcomplete_request.task_token\"&\n" +

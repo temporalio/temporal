@@ -9,7 +9,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"unicode/utf8"
 
 	"github.com/dgryski/go-farm"
 	commonpb "go.temporal.io/api/common/v1"
@@ -381,8 +380,15 @@ func WorkflowIDToHistoryShard(
 	workflowID string,
 	numberOfShards int32,
 ) int32 {
-	idBytes := []byte(namespaceID + "_" + workflowID)
-	hash := farm.Fingerprint32(idBytes)
+	return ShardingKeyToShard(namespaceID+"_"+workflowID, numberOfShards)
+}
+
+// ShardingKeyToShard is used to map a sharding key to a shardID.
+func ShardingKeyToShard(
+	shardingKey string,
+	numberOfShards int32,
+) int32 {
+	hash := farm.Fingerprint32([]byte(shardingKey))
 	return int32(hash%uint32(numberOfShards)) + 1 // ShardID starts with 1
 }
 
@@ -652,13 +658,6 @@ func GetPayloadsMapSize(data map[string]*commonpb.Payloads) int {
 // CloneProto is a generic typed version of proto.Clone from proto.
 func CloneProto[T proto.Message](v T) T {
 	return proto.Clone(v).(T)
-}
-
-func ValidateUTF8String(fieldName string, strValue string) error {
-	if !utf8.ValidString(strValue) {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("%s %v is not a valid UTF-8 string", fieldName, strValue))
-	}
-	return nil
 }
 
 // DiscardUnknownProto discards unknown fields in a proto message.
