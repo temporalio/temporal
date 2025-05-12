@@ -51,7 +51,8 @@ func TestMatcherSuite(t *testing.T) {
 	suite.Run(t, new(MatcherTestSuite))
 }
 
-// attachRateLimiter attaches a rate limiter to the matcher the same way as it is done in task queue partition manager.
+// attachRateLimiter attaches a rate limiter to the matcher. This behavior is only implemented in tests,
+// as the matcher relies on the rate limiter that is initialized by the task queue partition manager in production.
 func (t *MatcherTestSuite) attachRateLimiter(taskQueueConfig *taskQueueConfig) quotas.RateLimiter {
 	dynamicRateBurst := quotas.NewMutableRateBurst(
 		defaultTaskDispatchRPS,

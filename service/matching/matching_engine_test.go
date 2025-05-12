@@ -1000,13 +1000,13 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	mgrImpl, ok := mgr.(*taskQueuePartitionManagerImpl).defaultQueue.(*physicalTaskQueueManagerImpl)
 	s.True(ok)
 
+	// Overriding the rate-limiter in the matcher to have a RateLimiterImpl instead of the default multi-rate limiter.
+	// This is because the default multi-rate limiter has a 1 min refresh rate which is too long for this test.
 	tqPTM.rateLimiter = quotas.NewRateLimiter(
 		defaultTaskDispatchRPS,
 		defaultTaskDispatchRPS,
 	)
-
 	mgrImpl.oldMatcher.rateLimiter = tqPTM.rateLimiter
-
 	tqPTM.dynamicRateBurst = &dynamicRateBurstWrapper{
 		MutableRateBurst: quotas.NewMutableRateBurst(
 			defaultTaskDispatchRPS,
@@ -1051,7 +1051,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 			}, nil
 		}).AnyTimes()
 
-	const taskCount = 2
+	const taskCount = 10
 	runID := uuid.NewRandom().String()
 	workflowID := "workflow1"
 	workflowExecution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
@@ -1072,7 +1072,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 		var result *matchingservice.PollActivityTaskQueueResponse
 		var pollErr error
 		maxDispatch := defaultTaskDispatchRPS
-		if i == 1 {
+		if i == taskCount/2 {
 			maxDispatch = 0
 		}
 		wg.Add(1)
@@ -1201,7 +1201,7 @@ func (s *matchingEngineSuite) TestRateLimiterAcrossVersionedQueues() {
 	mgrImpl, ok := mgr.(*taskQueuePartitionManagerImpl).defaultQueue.(*physicalTaskQueueManagerImpl)
 	s.True(ok)
 
-	// Overriding the rate-limiter in the matcher to have the above rate-limiter instead of the default multi-rate limiter.
+	// Overriding the rate-limiter in the matcher to have a RateLimiterImpl instead of the default multi-rate limiter.
 	// This is because the default multi-rate limiter has a 1 min refresh rate which is too long for this test.
 	tqPTM.rateLimiter = quotas.NewRateLimiter(
 		defaultTaskDispatchRPS,
