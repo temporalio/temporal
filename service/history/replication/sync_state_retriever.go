@@ -275,11 +275,14 @@ func (s *SyncStateRetrieverImpl) getSyncStateResult(
 			return nil, err
 		}
 		events, err = s.getEventsBlob(ctx, wfKey, sourceHistory, 1, sourceLastItem.GetEventId()+1, false)
+		if err != nil {
+			return nil, err
+		}
 	} else {
 		events, err = s.getSyncStateEvents(ctx, wfKey, targetVersionHistories, sourceVersionHistories)
-	}
-	if err != nil {
-		return nil, err
+		if err != nil {
+			return nil, err
+		}
 	}
 	versionedTransitionArtifact.EventBatches = events
 	result := &SyncStateResult{
