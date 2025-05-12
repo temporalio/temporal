@@ -56,7 +56,7 @@ func NewDeploymentVersionSuite(useV32 bool) *DeploymentVersionSuite {
 
 func TestDeploymentVersionSuite(t *testing.T) {
 	t.Parallel()
-	//suite.Run(t, NewDeploymentVersionSuite(true))
+	suite.Run(t, NewDeploymentVersionSuite(true))
 	suite.Run(t, NewDeploymentVersionSuite(false))
 }
 

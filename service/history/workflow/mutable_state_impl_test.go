@@ -529,38 +529,38 @@ func (s *mutableStateSuite) TestEffectiveDeployment() {
 	ms.executionInfo.VersioningInfo = versioningInfo
 	s.verifyEffectiveDeployment(nil, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED)
 
-	v1 := worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(deployment1))
-	v2 := worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(deployment2))
-	v3 := worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(deployment3))
+	dv1 := worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(deployment1))
+	dv2 := worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(deployment2))
+	dv3 := worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(deployment3))
 
-	dv1 := worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(deployment1)
-	dv2 := worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(deployment2)
-	dv3 := worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(deployment3)
+	deploymentVersion1 := worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(deployment1)
+	deploymentVersion2 := worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(deployment2)
+	deploymentVersion3 := worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(deployment3)
 
 	for _, useV32 := range []bool{true, false} {
 		// ------- Without override, without transition
 
 		// deployment is set but behavior is not -> unversioned
 		if useV32 {
-			versioningInfo.DeploymentVersion = dv1
+			versioningInfo.DeploymentVersion = deploymentVersion1
 		} else {
-			versioningInfo.Version = v1
+			versioningInfo.Version = dv1
 		}
 		versioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED
 		s.verifyEffectiveDeployment(nil, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED)
 
 		if useV32 {
-			versioningInfo.DeploymentVersion = dv1
+			versioningInfo.DeploymentVersion = deploymentVersion1
 		} else {
-			versioningInfo.Version = v1
+			versioningInfo.Version = dv1
 		}
 		versioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_PINNED
 		s.verifyEffectiveDeployment(deployment1, enumspb.VERSIONING_BEHAVIOR_PINNED)
 
 		if useV32 {
-			versioningInfo.DeploymentVersion = dv1
+			versioningInfo.DeploymentVersion = deploymentVersion1
 		} else {
-			versioningInfo.Version = v1
+			versioningInfo.Version = dv1
 		}
 		versioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
 		s.verifyEffectiveDeployment(deployment1, enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE)
@@ -584,12 +584,12 @@ func (s *mutableStateSuite) TestEffectiveDeployment() {
 
 		// deployment is set, behavior is not, but override behavior is AUTO_UPGRADE -> AUTO_UPGRADE
 		if useV32 {
-			versioningInfo.DeploymentVersion = dv1
+			versioningInfo.DeploymentVersion = deploymentVersion1
 			versioningInfo.VersioningOverride = &workflowpb.VersioningOverride{
 				Override: &workflowpb.VersioningOverride_AutoUpgrade{AutoUpgrade: true},
 			}
 		} else {
-			versioningInfo.Version = v1
+			versioningInfo.Version = dv1
 			versioningInfo.VersioningOverride = &workflowpb.VersioningOverride{
 				Behavior: enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE,
 			}
@@ -599,20 +599,20 @@ func (s *mutableStateSuite) TestEffectiveDeployment() {
 
 		// worker says PINNED, but override behavior is AUTO_UPGRADE -> AUTO_UPGRADE
 		if useV32 {
-			versioningInfo.DeploymentVersion = dv1
+			versioningInfo.DeploymentVersion = deploymentVersion1
 			versioningInfo.VersioningOverride = &workflowpb.VersioningOverride{
 				Override: &workflowpb.VersioningOverride_Pinned{Pinned: &workflowpb.VersioningOverride_PinnedOverride{
 					Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
-					Version:  dv2,
+					Version:  deploymentVersion2,
 				}},
 			}
 		} else {
-			versioningInfo.Version = v1
+			versioningInfo.Version = dv1
 			versioningInfo.VersioningOverride = &workflowpb.VersioningOverride{
 				Behavior: enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE,
 				// Technically, API should not allow deployment to be set for AUTO_UPGRADE override, but we
 				// test it this way to make sure it is ignored.
-				PinnedVersion: v2,
+				PinnedVersion: dv2,
 			}
 		}
 		versioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_PINNED
@@ -624,14 +624,14 @@ func (s *mutableStateSuite) TestEffectiveDeployment() {
 			versioningInfo.VersioningOverride = &workflowpb.VersioningOverride{
 				Override: &workflowpb.VersioningOverride_Pinned{Pinned: &workflowpb.VersioningOverride_PinnedOverride{
 					Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
-					Version:  dv2,
+					Version:  deploymentVersion2,
 				}},
 			}
 		} else {
 			versioningInfo.Version = ""
 			versioningInfo.VersioningOverride = &workflowpb.VersioningOverride{
 				Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED,
-				PinnedVersion: v2,
+				PinnedVersion: dv2,
 			}
 		}
 		versioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED
@@ -639,18 +639,18 @@ func (s *mutableStateSuite) TestEffectiveDeployment() {
 
 		// deployment is set, behavior is not, but override behavior is PINNED --> PINNED
 		if useV32 {
-			versioningInfo.DeploymentVersion = dv1
+			versioningInfo.DeploymentVersion = deploymentVersion1
 			versioningInfo.VersioningOverride = &workflowpb.VersioningOverride{
 				Override: &workflowpb.VersioningOverride_Pinned{Pinned: &workflowpb.VersioningOverride_PinnedOverride{
 					Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
-					Version:  dv2,
+					Version:  deploymentVersion2,
 				}},
 			}
 		} else {
-			versioningInfo.Version = v1
+			versioningInfo.Version = dv1
 			versioningInfo.VersioningOverride = &workflowpb.VersioningOverride{
 				Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED,
-				PinnedVersion: v2,
+				PinnedVersion: dv2,
 			}
 		}
 		versioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED
@@ -658,18 +658,18 @@ func (s *mutableStateSuite) TestEffectiveDeployment() {
 
 		// worker says AUTO_UPGRADE, but override behavior is PINNED --> PINNED
 		if useV32 {
-			versioningInfo.DeploymentVersion = dv1
+			versioningInfo.DeploymentVersion = deploymentVersion1
 			versioningInfo.VersioningOverride = &workflowpb.VersioningOverride{
 				Override: &workflowpb.VersioningOverride_Pinned{Pinned: &workflowpb.VersioningOverride_PinnedOverride{
 					Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
-					Version:  dv2,
+					Version:  deploymentVersion2,
 				}},
 			}
 		} else {
-			versioningInfo.Version = v1
+			versioningInfo.Version = dv1
 			versioningInfo.VersioningOverride = &workflowpb.VersioningOverride{
 				Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED,
-				PinnedVersion: v2,
+				PinnedVersion: dv2,
 			}
 		}
 		versioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
@@ -678,46 +678,46 @@ func (s *mutableStateSuite) TestEffectiveDeployment() {
 		// ------- With transition
 
 		if useV32 {
-			versioningInfo.DeploymentVersion = dv1
+			versioningInfo.DeploymentVersion = deploymentVersion1
 			versioningInfo.VersioningOverride = &workflowpb.VersioningOverride{
 				Override: &workflowpb.VersioningOverride_Pinned{Pinned: &workflowpb.VersioningOverride_PinnedOverride{
 					Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
-					Version:  dv2,
+					Version:  deploymentVersion2,
 				}},
 			}
 			versioningInfo.VersionTransition = &workflowpb.DeploymentVersionTransition{
-				DeploymentVersion: dv3,
+				DeploymentVersion: deploymentVersion3,
 			}
 		} else {
-			versioningInfo.Version = v1
+			versioningInfo.Version = dv1
 			versioningInfo.VersioningOverride = &workflowpb.VersioningOverride{
 				Behavior:      enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE,
-				PinnedVersion: v2,
+				PinnedVersion: dv2,
 			}
 			versioningInfo.VersionTransition = &workflowpb.DeploymentVersionTransition{
-				Version: v3,
+				Version: dv3,
 			}
 		}
 		versioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_PINNED
 		s.verifyEffectiveDeployment(deployment3, enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE)
 
 		if useV32 {
-			versioningInfo.DeploymentVersion = dv1
+			versioningInfo.DeploymentVersion = deploymentVersion1
 			versioningInfo.VersioningOverride = &workflowpb.VersioningOverride{
 				Override: &workflowpb.VersioningOverride_Pinned{Pinned: &workflowpb.VersioningOverride_PinnedOverride{
 					Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
-					Version:  dv2,
+					Version:  deploymentVersion2,
 				}},
 			}
 			versioningInfo.VersionTransition = &workflowpb.DeploymentVersionTransition{
 				DeploymentVersion: nil,
 			}
 		} else {
-			versioningInfo.Version = v1
+			versioningInfo.Version = dv1
 			versioningInfo.VersioningOverride = &workflowpb.VersioningOverride{
 				// Transitioning to unversioned
 				Behavior:      enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE,
-				PinnedVersion: v2,
+				PinnedVersion: dv2,
 			}
 			versioningInfo.VersionTransition = &workflowpb.DeploymentVersionTransition{
 				Version: "",
