@@ -2792,7 +2792,7 @@ func (wh *WorkflowHandler) DescribeWorkflowExecution(ctx context.Context, reques
 		}
 	}
 
-	response.GetWorkflowExecutionInfo().VersioningInfo = worker_versioning.PopulateDeprecatedVersioningInfoFields(response.GetWorkflowExecutionInfo().GetVersioningInfo())
+	response.GetWorkflowExecutionInfo().VersioningInfo = worker_versioning.AddV31VersioningInfoToV32(response.GetWorkflowExecutionInfo().GetVersioningInfo())
 
 	return &workflowservice.DescribeWorkflowExecutionResponse{
 		ExecutionConfig:        response.GetExecutionConfig(),
@@ -3518,7 +3518,7 @@ func (wh *WorkflowHandler) ListWorkerDeployments(ctx context.Context, request *w
 		workerDeployments[i] = &workflowservice.ListWorkerDeploymentsResponse_WorkerDeploymentSummary{
 			Name:          d.Name,
 			CreateTime:    d.CreateTime,
-			RoutingConfig: worker_versioning.V32RoutingConfigFromV31(d.RoutingConfig),
+			RoutingConfig: worker_versioning.AddV32RoutingConfigToV31(d.RoutingConfig),
 		}
 	}
 
@@ -3548,7 +3548,7 @@ func (wh *WorkflowHandler) DescribeWorkerDeployment(ctx context.Context, request
 	for _, vs := range workerDeploymentInfo.VersionSummaries {
 		vs.DeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromString(vs.Version)
 	}
-	workerDeploymentInfo.RoutingConfig = worker_versioning.V32RoutingConfigFromV31(workerDeploymentInfo.RoutingConfig)
+	workerDeploymentInfo.RoutingConfig = worker_versioning.AddV32RoutingConfigToV31(workerDeploymentInfo.RoutingConfig)
 	return &workflowservice.DescribeWorkerDeploymentResponse{
 		WorkerDeploymentInfo: workerDeploymentInfo,
 		ConflictToken:        cT,

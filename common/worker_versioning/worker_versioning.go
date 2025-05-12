@@ -356,42 +356,6 @@ func ValidateDeploymentVersion(version *deploymentspb.WorkerDeploymentVersion) e
 	return nil
 }
 
-// MakeOverrideNotDeprecated reads from deprecated fields and writes to equivalent non-deprecated fields
-func MakeOverrideNotDeprecated(override *workflowpb.VersioningOverride) *workflowpb.VersioningOverride {
-	if override == nil {
-		return nil
-	}
-	ret := &workflowpb.VersioningOverride{
-		Override: override.GetOverride(),
-	}
-	// populate v0.32 field with deprecated fields
-	if ret.Override == nil {
-		//lint:ignore SA1019 worker versioning v0.31 or v0.30
-		switch override.GetBehavior() {
-		case enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE:
-			ret.Override = &workflowpb.VersioningOverride_AutoUpgrade{AutoUpgrade: true}
-		case enumspb.VERSIONING_BEHAVIOR_PINNED:
-			ret.Override = &workflowpb.VersioningOverride_Pinned{
-				Pinned: &workflowpb.VersioningOverride_PinnedOverride{
-					Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
-				},
-			}
-			//lint:ignore SA1019 worker versioning v0.31
-			if override.GetPinnedVersion() != "" {
-				//lint:ignore SA1019 worker versioning v0.31
-				ret.GetPinned().Version = ExternalWorkerDeploymentVersionFromString(override.GetPinnedVersion())
-			} else {
-				//lint:ignore SA1019 worker versioning v0.30
-				ret.GetPinned().Version = ExternalWorkerDeploymentVersionFromDeployment(override.GetDeployment())
-			}
-		case enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED:
-			// this won't happen, but if it did, it makes some sense for unspecified behavior to cause a nil override
-			return nil
-		}
-	}
-	return ret
-}
-
 // ValidateDeploymentVersionString returns error if the deployment version is nil or it has empty version
 // or deployment name.
 func ValidateDeploymentVersionString(version string) (*deploymentspb.WorkerDeploymentVersion, error) {
@@ -568,20 +532,19 @@ func DirectiveDeployment(directive *taskqueuespb.TaskVersionDirective) *deployme
 	return directive.GetDeployment()
 }
 
-func V32RoutingConfigFromV31(r *deploymentpb.RoutingConfig) *deploymentpb.RoutingConfig {
-	return &deploymentpb.RoutingConfig{
-		CurrentDeploymentVersion:            ExternalWorkerDeploymentVersionFromString(r.CurrentVersion),
-		CurrentVersion:                      r.CurrentVersion, //lint:ignore SA1019 worker versioning v0.31
-		RampingDeploymentVersion:            ExternalWorkerDeploymentVersionFromString(r.RampingVersion),
-		RampingVersion:                      r.RampingVersion, //lint:ignore SA1019 worker versioning v0.31
-		RampingVersionPercentage:            r.RampingVersionPercentage,
-		CurrentVersionChangedTime:           r.CurrentVersionChangedTime,
-		RampingVersionChangedTime:           r.RampingVersionChangedTime,
-		RampingVersionPercentageChangedTime: r.RampingVersionPercentageChangedTime,
-	}
+// The worker deployment manager workflows still use the v0.31 format, so call this before returning the object to readers
+// to mutatively populate the missing fields.
+func AddV32RoutingConfigToV31(r *deploymentpb.RoutingConfig) *deploymentpb.RoutingConfig {
+	//lint:ignore SA1019 worker versioning v0.31
+	r.CurrentDeploymentVersion = ExternalWorkerDeploymentVersionFromString(r.CurrentVersion)
+	//lint:ignore SA1019 worker versioning v0.31
+	r.RampingDeploymentVersion = ExternalWorkerDeploymentVersionFromString(r.RampingVersion)
+	return r
 }
 
-func PopulateDeprecatedVersioningInfoFields(info *workflowpb.WorkflowExecutionVersioningInfo) *workflowpb.WorkflowExecutionVersioningInfo {
+// We store versioning info in the modern v0.32 format, so call this before returning the object to readers
+// to mutatively populate the missing fields.
+func AddV31VersioningInfoToV32(info *workflowpb.WorkflowExecutionVersioningInfo) *workflowpb.WorkflowExecutionVersioningInfo {
 	if info == nil {
 		return nil
 	}
@@ -594,6 +557,7 @@ func PopulateDeprecatedVersioningInfoFields(info *workflowpb.WorkflowExecutionVe
 		}
 	}
 	if o := info.VersioningOverride; o != nil {
+		//lint:ignore SA1019 worker versioning v0.31
 		if o.GetBehavior() == enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
 			if o.GetAutoUpgrade() {
 				o.Behavior = enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
@@ -604,6 +568,43 @@ func PopulateDeprecatedVersioningInfoFields(info *workflowpb.WorkflowExecutionVe
 		}
 	}
 	return info
+}
+
+// ConvertOverrideToV32 reads from deprecated fields and returns a new object with ONLY the equivalent non-deprecated v0.32
+// fields. Should be used to replace any passed in override that is stored in persistence.
+func ConvertOverrideToV32(override *workflowpb.VersioningOverride) *workflowpb.VersioningOverride {
+	if override == nil {
+		return nil
+	}
+	ret := &workflowpb.VersioningOverride{
+		Override: override.GetOverride(),
+	}
+	// populate v0.32 field with deprecated fields
+	if ret.Override == nil {
+		//lint:ignore SA1019 worker versioning v0.31 or v0.30
+		switch override.GetBehavior() {
+		case enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE:
+			ret.Override = &workflowpb.VersioningOverride_AutoUpgrade{AutoUpgrade: true}
+		case enumspb.VERSIONING_BEHAVIOR_PINNED:
+			ret.Override = &workflowpb.VersioningOverride_Pinned{
+				Pinned: &workflowpb.VersioningOverride_PinnedOverride{
+					Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
+				},
+			}
+			//lint:ignore SA1019 worker versioning v0.31
+			if override.GetPinnedVersion() != "" {
+				//lint:ignore SA1019 worker versioning v0.31
+				ret.GetPinned().Version = ExternalWorkerDeploymentVersionFromString(override.GetPinnedVersion())
+			} else {
+				//lint:ignore SA1019 worker versioning v0.30
+				ret.GetPinned().Version = ExternalWorkerDeploymentVersionFromDeployment(override.GetDeployment())
+			}
+		case enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED:
+			// this won't happen, but if it did, it makes some sense for unspecified behavior to cause a nil override
+			return nil
+		}
+	}
+	return ret
 }
 
 func WorkerDeploymentVersionToString(v *deploymentspb.WorkerDeploymentVersion) string {
