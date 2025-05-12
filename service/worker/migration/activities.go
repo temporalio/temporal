@@ -897,13 +897,13 @@ func (a *activities) WaitCatchup(ctx context.Context, params CatchUpParams) erro
 		ActiveCluster: descResp.ReplicationConfig.GetActiveClusterName(),
 	}
 
-	activeAckIDOnShard, err := a.getActiveClusterReplicationStatus(ctx, waitCatchupRequest) // from B, A ack level
+	activeAckIDOnShard, err := a.getActiveClusterReplicationStatus(ctx, waitCatchupRequest)
 	if err != nil {
 		return err
 	}
 
 	for {
-		done, err := a.checkReplicationOnRemoteCluster(ctx, waitCatchupRequest, activeAckIDOnShard) // C ack level > A ack level
+		done, err := a.checkReplicationOnRemoteCluster(ctx, waitCatchupRequest, activeAckIDOnShard)
 		if err != nil {
 			return err
 		}

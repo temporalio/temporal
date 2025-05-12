@@ -55,7 +55,6 @@ func NewExecutableSyncVersionedTransitionTask(
 			time.Now().UTC(),
 			sourceClusterName,
 			sourceShardKey,
-			replicationTask.Priority,
 			replicationTask,
 		),
 		taskAttr: task,

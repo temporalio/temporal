@@ -61,7 +61,6 @@ func NewExecutableVerifyVersionedTransitionTask(
 			time.Now().UTC(),
 			sourceClusterName,
 			sourceShardKey,
-			replicationTask.Priority,
 			replicationTask,
 		),
 		taskAttr: task,

@@ -135,7 +135,6 @@ func NewExecutableTask(
 	taskReceivedTime time.Time,
 	sourceClusterName string,
 	sourceShardKey ClusterShardKey,
-	priority enumsspb.TaskPriority,
 	replicationTask *replicationspb.ReplicationTask,
 ) *ExecutableTaskImpl {
 	return &ExecutableTaskImpl{
@@ -146,7 +145,7 @@ func NewExecutableTask(
 		taskReceivedTime:       taskReceivedTime,
 		sourceClusterName:      sourceClusterName,
 		sourceShardKey:         sourceShardKey,
-		taskPriority:           priority,
+		taskPriority:           replicationTask.GetPriority(),
 		replicationTask:        replicationTask,
 		taskState:              taskStatePending,
 		attempt:                1,

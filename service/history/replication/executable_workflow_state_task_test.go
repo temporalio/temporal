@@ -117,8 +117,9 @@ func (s *executableWorkflowStateTaskSuite) SetupTest() {
 		s.replicationTask,
 		s.sourceClusterName,
 		s.sourceShardKey,
-		enumsspb.TASK_PRIORITY_HIGH,
-		nil,
+		&replicationspb.ReplicationTask{
+			Priority: enumsspb.TASK_PRIORITY_HIGH,
+		},
 	)
 	s.task.ExecutableTask = s.executableTask
 	s.executableTask.EXPECT().TaskID().Return(s.taskID).AnyTimes()

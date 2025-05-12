@@ -59,7 +59,6 @@ func NewExecutableBackfillHistoryEventsTask(
 			time.Now().UTC(),
 			sourceClusterName,
 			sourceShardKey,
-			replicationTask.Priority,
 			replicationTask,
 		),
 		taskAttr:               task,

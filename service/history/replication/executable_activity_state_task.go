@@ -45,7 +45,6 @@ func NewExecutableActivityStateTask(
 	task *replicationspb.SyncActivityTaskAttributes,
 	sourceClusterName string,
 	sourceShardKey ClusterShardKey,
-	priority enumsspb.TaskPriority,
 	replicationTask *replicationspb.ReplicationTask,
 ) *ExecutableActivityStateTask {
 	return &ExecutableActivityStateTask{
@@ -60,7 +59,6 @@ func NewExecutableActivityStateTask(
 			time.Now().UTC(),
 			sourceClusterName,
 			sourceShardKey,
-			priority,
 			replicationTask,
 		),
 		req: &historyservice.SyncActivityRequest{

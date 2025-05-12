@@ -48,7 +48,6 @@ func NewExecutableSyncHSMTask(
 	task *replicationspb.SyncHSMAttributes,
 	sourceClusterName string,
 	sourceShardKey ClusterShardKey,
-	priority enumsspb.TaskPriority,
 	replicationTask *replicationspb.ReplicationTask,
 ) *ExecutableSyncHSMTask {
 	return &ExecutableSyncHSMTask{
@@ -63,7 +62,6 @@ func NewExecutableSyncHSMTask(
 			time.Now().UTC(),
 			sourceClusterName,
 			sourceShardKey,
-			priority,
 			replicationTask,
 		),
 		taskAttr: task,
