@@ -252,7 +252,7 @@ func (s *commandAttrValidatorSuite) TestValidateContinueAsNewWorkflowExecutionAt
 	s.Equal(maxWorkflowTaskStartToCloseTimeout, attributes.GetWorkflowTaskTimeout().AsDuration())
 
 	// Predefined Worker-Deployment related SA's should be rejected when they are attempted to be set during CAN
-	saPayload, err := searchattribute.EncodeValue([]string{"a"}, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
+	saPayload, _ := searchattribute.EncodeValue([]string{"a"}, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
 	attributes.SearchAttributes = &commonpb.SearchAttributes{}
 
 	deploymentRestrictedAttributes := []string{
@@ -273,6 +273,7 @@ func (s *commandAttrValidatorSuite) TestValidateContinueAsNewWorkflowExecutionAt
 		s.EqualError(err, fmt.Sprintf("invalid SearchAttributes on ContinueAsNewWorkflowExecutionCommand: %s attribute "+
 			"can't be set in SearchAttributes. WorkflowType=%s TaskQueue=%s",
 			attr, workflowTypeName, attributes.TaskQueue))
+		s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, fc)
 	}
 }
 
