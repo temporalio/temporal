@@ -1,28 +1,4 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
-//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination sync_state_retriever_mock.go
+//go:generate mockgen -package $GOPACKAGE -source $GOFILE -destination sync_state_retriever_mock.go
 
 package replication
 
@@ -133,7 +109,7 @@ func (s *SyncStateRetrieverImpl) GetSyncWorkflowStateArtifact(
 			if targetCurrentVersionedTransition == nil {
 				return true
 			}
-			return !errors.Is(workflow.TransitionHistoryStalenessCheck(mutableState.GetExecutionInfo().TransitionHistory, targetCurrentVersionedTransition), consts.ErrStaleState)
+			return !errors.Is(transitionhistory.StalenessCheck(mutableState.GetExecutionInfo().TransitionHistory, targetCurrentVersionedTransition), consts.ErrStaleState)
 		},
 		definition.WorkflowKey{
 			NamespaceID: namespaceID,
@@ -262,7 +238,7 @@ func (s *SyncStateRetrieverImpl) getSyncStateResult(
 			return false
 		}
 		// not on the same branch
-		if workflow.TransitionHistoryStalenessCheck(mutableState.GetExecutionInfo().TransitionHistory, targetCurrentVersionedTransition) != nil {
+		if transitionhistory.StalenessCheck(mutableState.GetExecutionInfo().TransitionHistory, targetCurrentVersionedTransition) != nil {
 			return false
 		}
 		tombstoneBatch := mutableState.GetExecutionInfo().SubStateMachineTombstoneBatches
@@ -546,6 +522,14 @@ func (s *SyncStateRetrieverImpl) getSyncStateEvents(ctx context.Context, workflo
 	if err != nil {
 		return nil, err
 	}
+
+	if versionhistory.IsEmptyVersionHistory(sourceHistory) {
+		return nil, nil
+	}
+
+	// TODO: we may need to handle the case where mutable state only starts to generate events during middle of its execution.
+	// In that case targetVersionHistories maybe empty and sourceVersionHistories is not empty.
+	// The LCA logic doesn't work in that case today.
 	lcaItem, _, err := versionhistory.FindLCAVersionHistoryItemFromItems(targetVersionHistories, sourceHistory.Items)
 	if err != nil {
 		return nil, err

@@ -1,25 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2024 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package workflow
 
 import (
@@ -285,6 +263,7 @@ func (s *activitySuite) TestGetPendingActivityInfoHasRetryPolicy() {
 		RetryInitialInterval:    durationpb.New(time.Minute),
 		RetryBackoffCoefficient: 1.0,
 		RetryMaximumAttempts:    10,
+		TaskQueue:               "task-queue",
 	}
 
 	s.mockMutableState.EXPECT().GetActivityType(gomock.Any(), gomock.Any()).Return(&activityType, nil).Times(1)
@@ -303,6 +282,17 @@ func (s *activitySuite) TestGetPendingActivityInfoHasRetryPolicy() {
 	s.Equal(durationpb.New(2*time.Minute), pi.CurrentRetryInterval)
 	s.Equal(ai.ScheduledTime, pi.ScheduledTime)
 	s.Equal(ai.LastAttemptCompleteTime, pi.LastAttemptCompleteTime)
+	s.NotNil(pi.ActivityOptions)
+	s.NotNil(pi.ActivityOptions.RetryPolicy)
+	s.Equal(ai.TaskQueue, pi.ActivityOptions.TaskQueue.Name)
+	s.Equal(ai.ScheduleToCloseTimeout, pi.ActivityOptions.ScheduleToCloseTimeout)
+	s.Equal(ai.ScheduleToStartTimeout, pi.ActivityOptions.ScheduleToStartTimeout)
+	s.Equal(ai.StartToCloseTimeout, pi.ActivityOptions.StartToCloseTimeout)
+	s.Equal(ai.HeartbeatTimeout, pi.ActivityOptions.HeartbeatTimeout)
+	s.Equal(ai.RetryMaximumInterval, pi.ActivityOptions.RetryPolicy.MaximumInterval)
+	s.Equal(ai.RetryInitialInterval, pi.ActivityOptions.RetryPolicy.InitialInterval)
+	s.Equal(ai.RetryBackoffCoefficient, pi.ActivityOptions.RetryPolicy.BackoffCoefficient)
+	s.Equal(ai.RetryMaximumAttempts, pi.ActivityOptions.RetryPolicy.MaximumAttempts)
 }
 
 func (s *activitySuite) AddActivityInfo() *persistencespb.ActivityInfo {

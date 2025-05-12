@@ -1,32 +1,10 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package frontend
 
 import (
 	"context"
 	"errors"
+	"fmt"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -75,6 +53,8 @@ import (
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/testing/protoassert"
+	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/worker/batcher"
@@ -704,7 +684,7 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_DefaultWorkflowIdDupli
 func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidLinks() {
 	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).AnyTimes().Return(nil, nil)
 	config := s.newConfig()
-	config.RPS = dc.GetIntPropertyFn(10)
+	config.MaxLinksPerRequest = dc.GetIntPropertyFnFilteredByNamespace(10)
 	wh := s.getWorkflowHandler(config)
 
 	req := &workflowservice.StartWorkflowExecutionRequest{
@@ -828,6 +808,112 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidLinks() 
 	s.ErrorContains(err, "batch job link must not have an empty job ID")
 }
 
+func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidCallbackLinks() {
+	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).AnyTimes().Return(nil, nil)
+	config := s.newConfig()
+	wh := s.getWorkflowHandler(config)
+
+	req := &workflowservice.StartWorkflowExecutionRequest{
+		Namespace:  "test-namespace",
+		WorkflowId: "workflow-id",
+		WorkflowType: &commonpb.WorkflowType{
+			Name: "workflow-type",
+		},
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: "task-queue",
+		},
+		RequestId: uuid.NewString(),
+		CompletionCallbacks: []*commonpb.Callback{
+			{
+				Variant: &commonpb.Callback_Internal_{
+					Internal: &commonpb.Callback_Internal{},
+				},
+				Links: []*commonpb.Link{
+					{
+						Variant: &commonpb.Link_WorkflowEvent_{
+							WorkflowEvent: &commonpb.Link_WorkflowEvent{},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	var invalidArgument *serviceerror.InvalidArgument
+	_, err := wh.StartWorkflowExecution(context.Background(), req)
+	s.ErrorAs(err, &invalidArgument)
+	s.ErrorContains(err, "workflow event link must not have an empty namespace field")
+}
+
+func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidAggregatedLinks() {
+	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).AnyTimes().Return(nil, nil)
+	config := s.newConfig()
+	config.MaxLinksPerRequest = dc.GetIntPropertyFnFilteredByNamespace(10)
+	config.CallbackEndpointConfigs = dc.GetTypedPropertyFnFilteredByNamespace([]callbacks.AddressMatchRule{
+		{
+			Regexp:        regexp.MustCompile(`.*`),
+			AllowInsecure: true,
+		},
+	})
+	wh := s.getWorkflowHandler(config)
+
+	req := &workflowservice.StartWorkflowExecutionRequest{
+		Namespace:  "test-namespace",
+		WorkflowId: "workflow-id",
+		WorkflowType: &commonpb.WorkflowType{
+			Name: "workflow-type",
+		},
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: "task-queue",
+		},
+		RequestId: uuid.NewString(),
+		CompletionCallbacks: []*commonpb.Callback{
+			{
+				Variant: &commonpb.Callback_Nexus_{
+					Nexus: &commonpb.Callback_Nexus{
+						Url: "http://localhost/test",
+					},
+				},
+				Links: []*commonpb.Link{
+					{
+						Variant: &commonpb.Link_WorkflowEvent_{
+							WorkflowEvent: &commonpb.Link_WorkflowEvent{},
+						},
+					},
+					{
+						Variant: &commonpb.Link_WorkflowEvent_{
+							WorkflowEvent: &commonpb.Link_WorkflowEvent{
+								Namespace:  "dont-care",
+								WorkflowId: "dont-care",
+								RunId:      "run-id-0",
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	// add 10 links and one of them is duplicated in the callback
+	req.Links = []*commonpb.Link{}
+	for i := 0; i < 10; i++ {
+		req.Links = append(req.Links, &commonpb.Link{
+			Variant: &commonpb.Link_WorkflowEvent_{
+				WorkflowEvent: &commonpb.Link_WorkflowEvent{
+					Namespace:  "dont-care",
+					WorkflowId: "dont-care",
+					RunId:      fmt.Sprintf("run-id-%d", i),
+				},
+			},
+		})
+	}
+
+	var invalidArgument *serviceerror.InvalidArgument
+	_, err := wh.StartWorkflowExecution(context.Background(), req)
+	s.ErrorAs(err, &invalidArgument)
+	s.ErrorContains(err, "cannot attach more than 10 links per request, got 11")
+}
+
 func (s *WorkflowHandlerSuite) TestSignalWithStartWorkflowExecution_InvalidWorkflowIdConflictPolicy() {
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
@@ -892,7 +978,7 @@ func (s *WorkflowHandlerSuite) TestSignalWithStartWorkflowExecution_DefaultWorkf
 func (s *WorkflowHandlerSuite) TestSignalWithStartWorkflowExecution_Failed_InvalidLinks() {
 	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).AnyTimes().Return(nil, nil)
 	config := s.newConfig()
-	config.RPS = dc.GetIntPropertyFn(10)
+	config.MaxLinksPerRequest = dc.GetIntPropertyFnFilteredByNamespace(10)
 	wh := s.getWorkflowHandler(config)
 
 	req := &workflowservice.SignalWithStartWorkflowExecutionRequest{
@@ -928,7 +1014,7 @@ func (s *WorkflowHandlerSuite) TestSignalWithStartWorkflowExecution_Failed_Inval
 func (s *WorkflowHandlerSuite) TestSignalWorkflowExecution_Failed_InvalidLinks() {
 	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).AnyTimes().Return(nil, nil)
 	config := s.newConfig()
-	config.RPS = dc.GetIntPropertyFn(10)
+	config.MaxLinksPerRequest = dc.GetIntPropertyFnFilteredByNamespace(10)
 	wh := s.getWorkflowHandler(config)
 
 	req := &workflowservice.SignalWorkflowExecutionRequest{
@@ -960,7 +1046,7 @@ func (s *WorkflowHandlerSuite) TestSignalWorkflowExecution_Failed_InvalidLinks()
 func (s *WorkflowHandlerSuite) TestTerminateWorkflowExecution_Failed_InvalidLinks() {
 	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).AnyTimes().Return(nil, nil)
 	config := s.newConfig()
-	config.RPS = dc.GetIntPropertyFn(10)
+	config.MaxLinksPerRequest = dc.GetIntPropertyFnFilteredByNamespace(10)
 	wh := s.getWorkflowHandler(config)
 
 	req := &workflowservice.TerminateWorkflowExecutionRequest{
@@ -991,7 +1077,7 @@ func (s *WorkflowHandlerSuite) TestTerminateWorkflowExecution_Failed_InvalidLink
 func (s *WorkflowHandlerSuite) TestRequestCancelWorkflowExecution_Failed_InvalidLinks() {
 	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).AnyTimes().Return(nil, nil)
 	config := s.newConfig()
-	config.RPS = dc.GetIntPropertyFn(10)
+	config.MaxLinksPerRequest = dc.GetIntPropertyFnFilteredByNamespace(10)
 	wh := s.getWorkflowHandler(config)
 
 	req := &workflowservice.RequestCancelWorkflowExecutionRequest{
@@ -3011,11 +3097,139 @@ func TestValidateRequestId(t *testing.T) {
 	err := validateRequestId(&req.RequestId, 100)
 	assert.Nil(t, err)
 	assert.Len(t, req.RequestId, 36) // new UUID length
+}
 
-	req.RequestId = "\x87\x01"
-	err = validateRequestId(&req.RequestId, 100)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "not a valid UTF-8 string")
+func TestDedupLinksFromCallbacks(t *testing.T) {
+	links := []*commonpb.Link{
+		{
+			Variant: &commonpb.Link_WorkflowEvent_{
+				WorkflowEvent: &commonpb.Link_WorkflowEvent{
+					Namespace:  "test-ns",
+					WorkflowId: "test-workflow-id",
+					RunId:      "test-run-id",
+					Reference: &commonpb.Link_WorkflowEvent_EventRef{
+						EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+							EventId:   3,
+							EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
+						},
+					},
+				},
+			},
+		},
+		{
+			Variant: &commonpb.Link_WorkflowEvent_{
+				WorkflowEvent: &commonpb.Link_WorkflowEvent{
+					Namespace:  "test-ns",
+					WorkflowId: "test-workflow-id",
+					RunId:      "test-run-id",
+					Reference: &commonpb.Link_WorkflowEvent_EventRef{
+						EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+							EventId:   5,
+							EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
+						},
+					},
+				},
+			},
+		},
+		{
+			Variant: &commonpb.Link_WorkflowEvent_{
+				WorkflowEvent: &commonpb.Link_WorkflowEvent{
+					Namespace:  "test-ns",
+					WorkflowId: "test-workflow-id",
+					RunId:      "test-run-id",
+					Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
+						RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
+							RequestId: "test-request-id",
+							EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+						},
+					},
+				},
+			},
+		},
+	}
+	callbacks := []*commonpb.Callback{
+		{
+			Variant: &commonpb.Callback_Nexus_{
+				Nexus: &commonpb.Callback_Nexus{},
+			},
+			Links: []*commonpb.Link{
+				{
+					Variant: &commonpb.Link_WorkflowEvent_{
+						WorkflowEvent: &commonpb.Link_WorkflowEvent{
+							Namespace:  "test-ns",
+							WorkflowId: "test-workflow-id",
+							RunId:      "test-run-id",
+							Reference: &commonpb.Link_WorkflowEvent_EventRef{
+								EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+									EventId:   3,
+									EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
+								},
+							},
+						},
+					},
+				},
+				{
+					Variant: &commonpb.Link_WorkflowEvent_{
+						WorkflowEvent: &commonpb.Link_WorkflowEvent{
+							Namespace:  "test-ns",
+							WorkflowId: "test-workflow-id",
+							RunId:      "test-run-id",
+							Reference: &commonpb.Link_WorkflowEvent_EventRef{
+								EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+									EventId:   5,
+									EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			Variant: &commonpb.Callback_Internal_{
+				Internal: &commonpb.Callback_Internal{},
+			},
+			Links: []*commonpb.Link{
+				{
+					Variant: &commonpb.Link_WorkflowEvent_{
+						WorkflowEvent: &commonpb.Link_WorkflowEvent{
+							Namespace:  "test-ns",
+							WorkflowId: "test-workflow-id",
+							RunId:      "test-run-id",
+							Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
+								RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
+									RequestId: "test-request-id",
+									EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	dedupedLinks := dedupLinksFromCallbacks(links, callbacks)
+	assert.Len(t, dedupedLinks, 1)
+	protoassert.ProtoEqual(
+		t,
+		&commonpb.Link{
+			Variant: &commonpb.Link_WorkflowEvent_{
+				WorkflowEvent: &commonpb.Link_WorkflowEvent{
+					Namespace:  "test-ns",
+					WorkflowId: "test-workflow-id",
+					RunId:      "test-run-id",
+					Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
+						RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
+							RequestId: "test-request-id",
+							EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+						},
+					},
+				},
+			},
+		},
+		dedupedLinks[0],
+	)
 }
 
 func (s *WorkflowHandlerSuite) Test_DeleteWorkflowExecution() {

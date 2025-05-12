@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2024 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package workerdeployment
 
 import (
@@ -49,6 +25,12 @@ const (
 )
 
 type (
+	// SignalHandler encapsulates the signal handling logic
+	SignalHandler struct {
+		signalSelector    workflow.Selector
+		processingSignals int
+	}
+
 	// WorkflowRunner holds the local state while running a deployment-series workflow
 	WorkflowRunner struct {
 		*deploymentspb.WorkerDeploymentWorkflowArgs
@@ -56,11 +38,14 @@ type (
 		logger           sdklog.Logger
 		metrics          sdkclient.MetricsHandler
 		lock             workflow.Mutex
-		pendingUpdates   int
 		conflictToken    []byte
-		done             bool
-		signalsCompleted bool
+		deleteDeployment bool
 		unsafeMaxVersion func() int
+		// stateChanged is used to track if the state of the workflow has undergone a local state change since the last signal/update.
+		// This prevents a workflow from continuing-as-new if the state has not changed.
+		stateChanged  bool
+		signalHandler *SignalHandler
+		forceCAN      bool
 	}
 )
 
@@ -73,6 +58,9 @@ func Workflow(ctx workflow.Context, unsafeMaxVersion func() int, args *deploymen
 		metrics:          workflow.GetMetricsHandler(ctx).WithTags(map[string]string{"namespace": args.NamespaceName}),
 		lock:             workflow.NewMutex(ctx),
 		unsafeMaxVersion: unsafeMaxVersion,
+		signalHandler: &SignalHandler{
+			signalSelector: workflow.NewSelector(ctx),
+		},
 	}
 
 	return workflowRunner.run(ctx)
@@ -81,25 +69,26 @@ func Workflow(ctx workflow.Context, unsafeMaxVersion func() int, args *deploymen
 func (d *WorkflowRunner) listenToSignals(ctx workflow.Context) {
 	forceCANSignalChannel := workflow.GetSignalChannel(ctx, ForceCANSignalName)
 	syncVersionSummaryChannel := workflow.GetSignalChannel(ctx, SyncVersionSummarySignal)
-	forceCAN := false
 
-	selector := workflow.NewSelector(ctx)
-	selector.AddReceive(forceCANSignalChannel, func(c workflow.ReceiveChannel, more bool) {
+	d.signalHandler.signalSelector.AddReceive(forceCANSignalChannel, func(c workflow.ReceiveChannel, more bool) {
+		d.signalHandler.processingSignals++
 		c.Receive(ctx, nil)
-		forceCAN = true
+		d.forceCAN = true
+		d.signalHandler.processingSignals--
 	})
-	selector.AddReceive(syncVersionSummaryChannel, func(c workflow.ReceiveChannel, more bool) {
+	d.signalHandler.signalSelector.AddReceive(syncVersionSummaryChannel, func(c workflow.ReceiveChannel, more bool) {
 		var summary *deploymentspb.WorkerDeploymentVersionSummary
+		d.signalHandler.processingSignals++
 		c.Receive(ctx, &summary)
 		d.syncVersionSummaryFromVersionWorkflow(summary)
+		d.setStateChanged()
+		d.signalHandler.processingSignals--
 	})
 
-	for (!workflow.GetInfo(ctx).GetContinueAsNewSuggested() && !forceCAN) || selector.HasPending() {
-		selector.Select(ctx)
+	// Keep waiting for signals, when it's time to CaN the main goroutine will exit.
+	for {
+		d.signalHandler.signalSelector.Select(ctx)
 	}
-
-	// Done processing signals before CAN
-	d.signalsCompleted = true
 }
 
 // syncVersionSummary ensures the version summary in the deployment workflow stays consistent
@@ -227,22 +216,27 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 	// Listen to signals in a different goroutine to make business logic clearer
 	workflow.Go(ctx, d.listenToSignals)
 
-	// Wait until we can continue as new or are cancelled.
+	// Wait until we can continue as new or are cancelled. The workflow will continue-as-new iff
+	// there are no pending updates/signals and the state has changed.
 	err = workflow.Await(ctx, func() bool {
-		return (d.signalsCompleted && d.pendingUpdates == 0) || d.done
+		return d.deleteDeployment || // deployment is deleted -> it's ok to drop all signals and updates.
+			// There is no pending signal or update, but the state is dirty or forceCaN is requested:
+			(!d.signalHandler.signalSelector.HasPending() && d.signalHandler.processingSignals == 0 && workflow.AllHandlersFinished(ctx) &&
+				(d.forceCAN || d.stateChanged))
 	})
 	if err != nil {
 		return err
 	}
 
-	if d.done {
+	if d.deleteDeployment {
 		return nil
 	}
 
-	// Continue as new when there are no pending updates and history size is greater than requestsBeforeContinueAsNew.
-	// Note, if update requests come in faster than they
-	// are handled, there will not be a moment where the workflow has
-	// nothing pending which means this will run forever.
+	// We perform a continue-as-new after each update and signal is handled to ensure compatibility
+	// even if the server rolls back to a previous minor version. By continuing-as-new,
+	// we pass the current state as input to the next workflow execution, resulting in a new
+	// workflow history with just two initial events. This minimizes the risk of NDE (Non-Deterministic Execution)
+	// errors during server rollbacks.
 	return workflow.NewContinueAsNewError(ctx, WorkerDeploymentWorkflowType, d.WorkerDeploymentWorkflowArgs)
 }
 
@@ -281,9 +275,7 @@ func (d *WorkflowRunner) handleRegisterWorker(ctx workflow.Context, args *deploy
 		d.logger.Error("Could not acquire workflow lock")
 		return serviceerror.NewDeadlineExceeded("Could not acquire workflow lock")
 	}
-	d.pendingUpdates++
 	defer func() {
-		d.pendingUpdates--
 		d.lock.Unlock()
 	}()
 
@@ -317,6 +309,7 @@ func (d *WorkflowRunner) handleRegisterWorker(ctx workflow.Context, args *deploy
 		return err
 	}
 
+	d.setStateChanged()
 	return nil
 }
 
@@ -329,8 +322,9 @@ func (d *WorkflowRunner) validateDeleteDeployment() error {
 
 func (d *WorkflowRunner) handleDeleteDeployment(ctx workflow.Context) error {
 	if len(d.State.Versions) == 0 {
-		d.done = true
+		d.deleteDeployment = true
 	}
+	d.setStateChanged()
 	return nil
 }
 
@@ -367,9 +361,7 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 		d.logger.Error("Could not acquire workflow lock")
 		return nil, serviceerror.NewDeadlineExceeded("Could not acquire workflow lock")
 	}
-	d.pendingUpdates++
 	defer func() {
-		d.pendingUpdates--
 		d.lock.Unlock()
 	}()
 
@@ -494,6 +486,8 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 		return nil, err
 	}
 
+	d.setStateChanged()
+
 	return &deploymentspb.SetRampingVersionResponse{
 		PreviousVersion:    prevRampingVersion,
 		PreviousPercentage: prevRampingVersionPercentage,
@@ -551,9 +545,7 @@ func (d *WorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *deploym
 		d.logger.Error("Could not acquire workflow lock")
 		return serviceerror.NewDeadlineExceeded("Could not acquire workflow lock")
 	}
-	d.pendingUpdates++
 	defer func() {
-		d.pendingUpdates--
 		d.lock.Unlock()
 	}()
 
@@ -566,6 +558,8 @@ func (d *WorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *deploym
 	if err != nil {
 		return err
 	}
+
+	d.setStateChanged()
 
 	return d.deleteVersion(ctx, args)
 }
@@ -595,9 +589,7 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 		d.logger.Error("Could not acquire workflow lock")
 		return nil, serviceerror.NewDeadlineExceeded("Could not acquire workflow lock")
 	}
-	d.pendingUpdates++
 	defer func() {
-		d.pendingUpdates--
 		d.lock.Unlock()
 	}()
 
@@ -697,6 +689,8 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 		return nil, err
 	}
 
+	d.setStateChanged()
+
 	return &deploymentspb.SetCurrentVersionResponse{
 		PreviousVersion: prevCurrentVersion,
 		ConflictToken:   d.State.ConflictToken,
@@ -735,10 +729,6 @@ func (d *WorkflowRunner) getMaxVersions(ctx workflow.Context) int {
 
 // to-be-deprecated
 func (d *WorkflowRunner) handleAddVersionToWorkerDeployment(ctx workflow.Context, args *deploymentspb.AddVersionUpdateArgs) error {
-	d.pendingUpdates++
-	defer func() {
-		d.pendingUpdates--
-	}()
 
 	maxVersions := d.getMaxVersions(ctx)
 
@@ -753,6 +743,8 @@ func (d *WorkflowRunner) handleAddVersionToWorkerDeployment(ctx workflow.Context
 		Version:    args.Version,
 		CreateTime: args.CreateTime,
 	}
+
+	d.setStateChanged()
 	return nil
 }
 
@@ -948,4 +940,8 @@ func (d *WorkflowRunner) updateMemo(ctx workflow.Context) error {
 			RoutingConfig:  d.State.RoutingConfig,
 		},
 	})
+}
+
+func (d *WorkflowRunner) setStateChanged() {
+	d.stateChanged = true
 }

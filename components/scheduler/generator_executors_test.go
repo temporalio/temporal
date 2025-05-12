@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package scheduler_test
 
 import (
@@ -98,14 +74,14 @@ func TestExecuteBufferTask_Basic(t *testing.T) {
 	require.NoError(t, err)
 
 	// Buffering should have resulted in buffered starts being applied to the
-	// Executor.
-	executorNode, err := schedulerNode.Child([]hsm.Key{scheduler.ExecutorMachineKey})
+	// Invoker.
+	invokerNode, err := schedulerNode.Child([]hsm.Key{scheduler.InvokerMachineKey})
 	require.NoError(t, err)
-	executor, err := hsm.MachineData[scheduler.Executor](executorNode)
+	invoker, err := hsm.MachineData[scheduler.Invoker](invokerNode)
 	require.NoError(t, err)
 
 	// We expect 5 buffered starts.
-	require.Equal(t, 5, len(executor.BufferedStarts))
+	require.Equal(t, 5, len(invoker.BufferedStarts))
 
 	// Generator's high water mark should have advanced.
 	generator, err = hsm.MachineData[scheduler.Generator](generatorNode)
@@ -114,20 +90,21 @@ func TestExecuteBufferTask_Basic(t *testing.T) {
 	require.True(t, newHighWatermark.After(highWatermark))
 	require.True(t, generator.NextInvocationTime.AsTime().After(newHighWatermark))
 
-	// We should have enqueued an Execute task, and another Buffer task.
+	// We should have enqueued a ProcessBuffer task on Invoker, and another Buffer
+	// task on Generator.
 	opLog, err := root.OpLog()
 	require.NoError(t, err)
 	require.Equal(t, 2, len(opLog))
 
-	// The execute task should be scheduled immediately.
+	// The ProcessBuffer task should be scheduled immediately.
 	output, ok := opLog[0].(hsm.TransitionOperation)
 	require.True(t, ok)
 	require.Equal(t, 1, len(output.Output.Tasks))
 	task := output.Output.Tasks[0]
-	require.Equal(t, scheduler.TaskTypeExecute, task.Type())
+	require.Equal(t, scheduler.TaskTypeProcessBuffer, task.Type())
 	require.Equal(t, hsm.Immediate, task.Deadline())
 
-	// The buffer task should have a deadline on our next invocation time.
+	// The Buffer task should have a deadline on our next invocation time.
 	output, ok = opLog[1].(hsm.TransitionOperation)
 	require.True(t, ok)
 	require.Equal(t, 1, len(output.Output.Tasks))

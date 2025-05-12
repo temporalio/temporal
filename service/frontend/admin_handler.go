@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package frontend
 
 import (
@@ -193,6 +169,7 @@ func NewAdminHandler(
 		primitives.HistoryService,
 		args.MembershipMonitor,
 		args.Config.HistoryHostErrorPercentage,
+		args.Config.HistoryHostSelfErrorProportion,
 		func(ctx context.Context, hostAddress string) (enumsspb.HealthState, error) {
 			resp, err := args.HistoryClient.DeepHealthCheck(ctx, &historyservice.DeepHealthCheckRequest{HostAddress: hostAddress})
 			if err != nil {
@@ -1669,6 +1646,7 @@ func (adh *AdminHandler) GetTaskQueueTasks(
 		TaskType:           request.GetTaskQueueType(),
 		InclusiveMinTaskID: request.GetMinTaskId(),
 		ExclusiveMaxTaskID: request.GetMaxTaskId(),
+		Subqueue:           int(request.GetSubqueue()),
 		PageSize:           int(request.GetBatchSize()),
 		NextPageToken:      request.NextPageToken,
 	})

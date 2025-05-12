@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package history
 
 import (
@@ -78,6 +54,8 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.uber.org/fx"
+	"google.golang.org/grpc/health"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 )
 
 type (
@@ -98,6 +76,7 @@ type (
 		persistenceShardManager      persistence.ShardManager
 		persistenceVisibilityManager manager.VisibilityManager
 		persistenceHealthSignal      persistence.HealthSignalAggregator
+		healthServer                 *health.Server
 		historyServiceResolver       membership.ServiceResolver
 		metricsHandler               metrics.Handler
 		payloadSerializer            serialization.Serializer
@@ -127,6 +106,7 @@ type (
 		PersistenceExecutionManager  persistence.ExecutionManager
 		PersistenceShardManager      persistence.ShardManager
 		PersistenceHealthSignal      persistence.HealthSignalAggregator
+		HealthServer                 *health.Server
 		PersistenceVisibilityManager manager.VisibilityManager
 		HistoryServiceResolver       membership.ServiceResolver
 		MetricsHandler               metrics.Handler
@@ -211,11 +191,19 @@ func (h *Handler) isStopped() bool {
 }
 
 func (h *Handler) DeepHealthCheck(
-	_ context.Context,
+	ctx context.Context,
 	_ *historyservice.DeepHealthCheckRequest,
 ) (_ *historyservice.DeepHealthCheckResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
 	h.startWG.Wait()
+
+	status, err := h.healthServer.Check(ctx, &healthpb.HealthCheckRequest{Service: serviceName})
+	if err != nil {
+		return nil, err
+	}
+	if status.Status != healthpb.HealthCheckResponse_SERVING {
+		return &historyservice.DeepHealthCheckResponse{State: enumsspb.HEALTH_STATE_DECLINED_SERVING}, nil
+	}
 
 	latency := h.persistenceHealthSignal.AverageLatency()
 	errRatio := h.persistenceHealthSignal.ErrorRatio()

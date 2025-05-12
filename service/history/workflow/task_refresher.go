@@ -1,28 +1,4 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
-//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination task_refresher_mock.go
+//go:generate mockgen -package $GOPACKAGE -source $GOFILE -destination task_refresher_mock.go
 
 package workflow
 
@@ -58,6 +34,7 @@ type (
 			ctx context.Context,
 			mutableState historyi.MutableState,
 			minVersionedTransition *persistencespb.VersionedTransition,
+			previousPendingChildIds map[int64]struct{},
 		) error
 	}
 
@@ -90,14 +67,20 @@ func (r *TaskRefresherImpl) Refresh(
 		mutableState.GetExecutionInfo().TaskGenerationShardClockTimestamp = r.shard.CurrentVectorClock().GetClock()
 	}
 
-	return r.PartialRefresh(ctx, mutableState, EmptyVersionedTransition)
+	return r.PartialRefresh(ctx, mutableState, EmptyVersionedTransition, nil)
 }
 
 func (r *TaskRefresherImpl) PartialRefresh(
 	ctx context.Context,
 	mutableState historyi.MutableState,
 	minVersionedTransition *persistencespb.VersionedTransition,
+	previousPendingChildIds map[int64]struct{},
 ) error {
+	// TODO: handle task refresh for non workflow mutable states.
+	if !mutableState.IsWorkflow() {
+		return nil
+	}
+
 	taskGenerator := r.taskGeneratorProvider.NewTaskGenerator(
 		r.shard,
 		mutableState,
@@ -159,6 +142,7 @@ func (r *TaskRefresherImpl) PartialRefresh(
 		mutableState,
 		taskGenerator,
 		minVersionedTransition,
+		previousPendingChildIds,
 	); err != nil {
 		return err
 	}
@@ -461,13 +445,21 @@ func (r *TaskRefresherImpl) refreshTasksForChildWorkflow(
 	mutableState historyi.MutableState,
 	taskGenerator TaskGenerator,
 	minVersionedTransition *persistencespb.VersionedTransition,
+	previousPendingChildIds map[int64]struct{},
 ) error {
 
 	pendingChildWorkflowInfos := mutableState.GetPendingChildExecutionInfos()
 
 	for _, childWorkflowInfo := range pendingChildWorkflowInfos {
-		if childWorkflowInfo.StartedEventId != common.EmptyEventID {
-			continue
+		// Skip task generation if this child workflow has already been started.
+		// This is an optimization to avoid generating duplicate tasks.
+		// However, if this child workflow was not in the previous pending child IDs,
+		// we still need to generate tasks even if it's started, because this means
+		// the child workflow was just added to the mutable state.
+		if _, ok := previousPendingChildIds[childWorkflowInfo.InitiatedEventId]; ok {
+			if childWorkflowInfo.StartedEventId != common.EmptyEventID {
+				continue
+			}
 		}
 
 		// Skip task generation if this child workflow has not been updated since minVersionedTransition.

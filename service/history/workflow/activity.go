@@ -29,9 +29,12 @@ import (
 	"math/rand"
 	"time"
 
+	activitypb "go.temporal.io/api/activity/v1"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	rulespb "go.temporal.io/api/rules/v1"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -79,6 +82,16 @@ func UpdateActivityInfoForRetries(
 	ai.TimerTaskStatus = TimerTaskStatusNone
 	ai.RetryLastWorkerIdentity = ai.StartedIdentity
 	ai.RetryLastFailure = failure
+	// this flag means the user resets the activity with "--reset-heartbeat" flag
+	// server sends heartbeat details to the worker with the new activity attempt
+	// if the current attempt was still running - worker can still send new heartbeats, and even complete the activity
+	// so for the current activity attempt server continue to accept the heartbeats, but reset it for the new attempt
+	if ai.ResetHeartbeats {
+		ai.LastHeartbeatDetails = nil
+		ai.LastHeartbeatUpdateTime = nil
+	}
+	ai.ActivityReset = false
+	ai.ResetHeartbeats = false
 
 	return ai
 }
@@ -191,6 +204,25 @@ func GetPendingActivityInfo(
 		}
 	}
 
+	p.ActivityOptions = &activitypb.ActivityOptions{
+		TaskQueue: &taskqueuepb.TaskQueue{
+			// we may need to return sticky task queue name here
+			Name:       ai.TaskQueue,
+			NormalName: ai.TaskQueue,
+		},
+		ScheduleToCloseTimeout: ai.ScheduleToCloseTimeout,
+		ScheduleToStartTimeout: ai.ScheduleToStartTimeout,
+		StartToCloseTimeout:    ai.StartToCloseTimeout,
+		HeartbeatTimeout:       ai.HeartbeatTimeout,
+
+		RetryPolicy: &commonpb.RetryPolicy{
+			InitialInterval:    ai.RetryInitialInterval,
+			BackoffCoefficient: ai.RetryBackoffCoefficient,
+			MaximumInterval:    ai.RetryMaximumInterval,
+			MaximumAttempts:    ai.RetryMaximumAttempts,
+		},
+	}
+
 	return p, nil
 }
 
@@ -269,10 +301,9 @@ func ResetActivity(
 	return mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, ms historyi.MutableState) error {
 		// reset the number of attempts
 		ai.Attempt = 1
-
+		ai.ActivityReset = true
 		if resetHeartbeats {
-			activityInfo.LastHeartbeatDetails = nil
-			activityInfo.LastHeartbeatUpdateTime = nil
+			ai.ResetHeartbeats = true
 		}
 
 		// if activity is running, or it is paused and we don't want to unpause - we don't need to do anything
@@ -287,6 +318,12 @@ func ResetActivity(
 
 		// if activity is not running - we need to regenerate the retry task as schedule activity immediately
 		if GetActivityState(ai) == enumspb.PENDING_ACTIVITY_STATE_SCHEDULED {
+			// we reset heartbeat was requested we also should reset heartbeat details and timer
+			if resetHeartbeats {
+				ai.LastHeartbeatDetails = nil
+				ai.LastHeartbeatUpdateTime = nil
+			}
+
 			scheduleTime := shardContext.GetTimeSource().Now().UTC()
 			if jitter != 0 {
 				randomOffset := time.Duration(rand.Int63n(int64(jitter)))
