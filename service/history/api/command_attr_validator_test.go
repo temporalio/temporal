@@ -5,8 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"go.temporal.io/api/taskqueue/v1"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -14,6 +12,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -291,7 +290,7 @@ func (s *commandAttrValidatorSuite) TestValidateCommandStartChildWorkflowSearchA
 		Namespace:           s.testTargetNamespaceID.String(),
 		WorkflowId:          "child-123",
 		WorkflowType:        &commonpb.WorkflowType{Name: workflowTypeName},
-		TaskQueue:           &taskqueue.TaskQueue{Name: tq},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tq},
 		WorkflowTaskTimeout: durationpb.New(time.Since(time.Now())),
 	}
 
