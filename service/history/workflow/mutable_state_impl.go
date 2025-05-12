@@ -3012,14 +3012,12 @@ func (ms *MutableStateImpl) UpdateBuildIdAssignment(buildId string) error {
 // For all other workflows (ms.GetEffectiveVersioningBehavior() != PINNED), this will append a tag  to BuildIds
 // based on the workflow's versioning status.
 func (ms *MutableStateImpl) updateBuildIdsAndDeploymentSearchAttributes(stamp *commonpb.WorkerVersionStamp, maxSearchAttributeValueSize int) error {
-	println("CDF1 UPDATING SAS")
 	changed, err := ms.addBuildIdAndDeploymentInfoToSearchAttributesWithNoVisibilityTask(stamp, maxSearchAttributeValueSize)
 	if err != nil {
 		return err
 	}
 
 	if !changed {
-		println("CDF1 NOT CHANGED")
 		return nil
 	}
 	return ms.taskGenerator.GenerateUpsertVisibilityTask()
@@ -3250,7 +3248,6 @@ func (ms *MutableStateImpl) addBuildIdAndDeploymentInfoToSearchAttributesWithNoV
 		if err != nil {
 			return false, err // if err != nil, nothing will be written
 		}
-		fmt.Printf("CDF SAVED BUILD IDS %+v\n", modifiedBuildIds)
 	}
 
 	// save deployment search attributes if changed
@@ -8034,15 +8031,12 @@ func (ms *MutableStateImpl) GetWorkerDeploymentVersionSA() string {
 }
 
 func (ms *MutableStateImpl) GetWorkflowVersioningBehaviorSA() enumspb.VersioningBehavior {
-	println("getting behavior sa")
 	if override := ms.executionInfo.GetVersioningInfo().GetVersioningOverride(); override != nil {
-		fmt.Printf("override is `%+v`, auto: `%+v`, pinned: `%+v`, pinned behavior: `%v`\n", *override, override.GetAutoUpgrade(), override.GetPinned(), override.GetPinned().GetBehavior())
 		if override.GetAutoUpgrade() {
 			return enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
 		} else if worker_versioning.OverrideIsPinned(override) {
 			return enumspb.VERSIONING_BEHAVIOR_PINNED
 		}
-		fmt.Printf("returning override behavior '%v'\n", override.GetBehavior())
 		return override.GetBehavior()
 	}
 	return ms.executionInfo.GetVersioningInfo().GetBehavior()

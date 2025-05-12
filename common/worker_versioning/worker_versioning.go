@@ -364,8 +364,10 @@ func MakeOverrideNotDeprecated(override *workflowpb.VersioningOverride) *workflo
 	ret := &workflowpb.VersioningOverride{
 		Override: override.GetOverride(),
 	}
+	// populate v0.32 field with deprecated fields
 	if ret.Override == nil {
-		switch override.GetBehavior() { // v0.31 or v0.30
+		//lint:ignore SA1019 worker versioning v0.31 or v0.30
+		switch override.GetBehavior() {
 		case enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE:
 			ret.Override = &workflowpb.VersioningOverride_AutoUpgrade{AutoUpgrade: true}
 		case enumspb.VERSIONING_BEHAVIOR_PINNED:
@@ -374,11 +376,17 @@ func MakeOverrideNotDeprecated(override *workflowpb.VersioningOverride) *workflo
 					Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
 				},
 			}
+			//lint:ignore SA1019 worker versioning v0.31
 			if override.GetPinnedVersion() != "" {
-				ret.GetPinned().Version = ExternalWorkerDeploymentVersionFromString(override.GetPinnedVersion()) // v0.31
+				//lint:ignore SA1019 worker versioning v0.31
+				ret.GetPinned().Version = ExternalWorkerDeploymentVersionFromString(override.GetPinnedVersion())
 			} else {
-				ret.GetPinned().Version = ExternalWorkerDeploymentVersionFromDeployment(override.GetDeployment()) // v0.30
+				//lint:ignore SA1019 worker versioning v0.30
+				ret.GetPinned().Version = ExternalWorkerDeploymentVersionFromDeployment(override.GetDeployment())
 			}
+		case enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED:
+			// this won't happen, but if it did, it makes some sense for unspecified behavior to cause a nil override
+			return nil
 		}
 	}
 	return ret
@@ -398,6 +406,7 @@ func ValidateDeploymentVersionString(version string) (*deploymentspb.WorkerDeplo
 }
 
 func OverrideIsPinned(override *workflowpb.VersioningOverride) bool {
+	//lint:ignore SA1019 worker versioning v0.31 and v0.30
 	return override.GetBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED ||
 		override.GetPinned().GetBehavior() == workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED
 }
@@ -419,7 +428,8 @@ func ValidateVersioningOverride(override *workflowpb.VersioningOverride) error {
 		return nil
 	}
 
-	switch override.GetBehavior() { // v0.30 and v0.31
+	//lint:ignore SA1019 worker versioning v0.31
+	switch override.GetBehavior() {
 	case enumspb.VERSIONING_BEHAVIOR_PINNED:
 		if override.GetDeployment() != nil {
 			return ValidateDeployment(override.GetDeployment())
@@ -561,9 +571,9 @@ func DirectiveDeployment(directive *taskqueuespb.TaskVersionDirective) *deployme
 func V32RoutingConfigFromV31(r *deploymentpb.RoutingConfig) *deploymentpb.RoutingConfig {
 	return &deploymentpb.RoutingConfig{
 		CurrentDeploymentVersion:            ExternalWorkerDeploymentVersionFromString(r.CurrentVersion),
-		CurrentVersion:                      r.CurrentVersion,
+		CurrentVersion:                      r.CurrentVersion, //lint:ignore SA1019 worker versioning v0.31
 		RampingDeploymentVersion:            ExternalWorkerDeploymentVersionFromString(r.RampingVersion),
-		RampingVersion:                      r.RampingVersion,
+		RampingVersion:                      r.RampingVersion, //lint:ignore SA1019 worker versioning v0.31
 		RampingVersionPercentage:            r.RampingVersionPercentage,
 		CurrentVersionChangedTime:           r.CurrentVersionChangedTime,
 		RampingVersionChangedTime:           r.RampingVersionChangedTime,

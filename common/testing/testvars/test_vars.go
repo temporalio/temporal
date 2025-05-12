@@ -263,6 +263,7 @@ func (tv *TestVars) DeploymentVersionTransition() *workflowpb.DeploymentVersionT
 		DeploymentVersion: worker_versioning.ExternalWorkerDeploymentVersionFromVersion(tv.DeploymentVersion()),
 	}
 	// DescribeWorkflowExecution populates both fields on read, so we expect to see both fields
+	//lint:ignore SA1019 worker versioning v0.31
 	ret.Version = worker_versioning.ExternalWorkerDeploymentVersionToString(ret.GetDeploymentVersion())
 	return ret
 }
