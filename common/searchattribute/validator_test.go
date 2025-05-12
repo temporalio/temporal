@@ -113,29 +113,21 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate() {
 	s.Equal("StartTime attribute can't be set in SearchAttributes", err.Error())
 
 	// Validate Deployment related search attributes
-	fields = map[string]*commonpb.Payload{
-		TemporalWorkerDeploymentVersion: payload.EncodeString("1.0.0"),
+	deploymentRestrictedAttributes := []string{
+		TemporalWorkerDeploymentVersion,
+		TemporalWorkerDeployment,
+		TemporalWorkflowVersioningBehavior,
 	}
-	attr.IndexedFields = fields
-	err = saValidator.Validate(attr, namespace)
-	s.Error(err)
-	s.Equal(fmt.Sprintf("%s attribute can't be set in SearchAttributes", TemporalWorkerDeploymentVersion), err.Error())
 
-	fields = map[string]*commonpb.Payload{
-		TemporalWorkerDeployment: payload.EncodeString("1.0.0"),
+	for _, restrictedAttr := range deploymentRestrictedAttributes {
+		fields = map[string]*commonpb.Payload{
+			restrictedAttr: payload.EncodeString("1.0.0"),
+		}
+		attr.IndexedFields = fields
+		err = saValidator.Validate(attr, namespace)
+		s.Error(err)
+		s.Equal(fmt.Sprintf("%s attribute can't be set in SearchAttributes", restrictedAttr), err.Error())
 	}
-	attr.IndexedFields = fields
-	err = saValidator.Validate(attr, namespace)
-	s.Error(err)
-	s.Equal(fmt.Sprintf("%s attribute can't be set in SearchAttributes", TemporalWorkerDeployment), err.Error())
-
-	fields = map[string]*commonpb.Payload{
-		TemporalWorkflowVersioningBehavior: payload.EncodeString("1.0.0"),
-	}
-	attr.IndexedFields = fields
-	err = saValidator.Validate(attr, namespace)
-	s.Error(err)
-	s.Equal(fmt.Sprintf("%s attribute can't be set in SearchAttributes", TemporalWorkflowVersioningBehavior), err.Error())
 }
 
 func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate_SuppressError() {
