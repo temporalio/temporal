@@ -1,7 +1,6 @@
 package historybuilder
 
 import (
-	"go.temporal.io/server/common/worker_versioning"
 	"time"
 
 	commandpb "go.temporal.io/api/command/v1"
@@ -19,6 +18,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/worker_versioning"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 

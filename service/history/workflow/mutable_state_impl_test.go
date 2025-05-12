@@ -3,7 +3,6 @@ package workflow
 import (
 	"context"
 	"fmt"
-	"go.temporal.io/server/common/testing/testvars"
 	"reflect"
 	"sort"
 	"testing"
@@ -45,6 +44,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	serviceerror2 "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/components/callbacks"
