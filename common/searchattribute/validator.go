@@ -111,6 +111,14 @@ func (v *Validator) Validate(searchAttributes *commonpb.SearchAttributes, namesp
 			)
 		}
 
+		// Blocking Deployment related SA's that are present in the predefined category
+		if saFieldName == TemporalWorkerDeploymentVersion || saFieldName == TemporalWorkerDeployment || saFieldName == TemporalWorkflowVersioningBehavior {
+			return v.validationError(
+				fmt.Sprintf("search attribute %s is not allowed", saFieldName),
+				saFieldName,
+				namespace,
+			)
+		}
 		saValue, err := DecodeValue(saPayload, saType, v.allowList(namespace))
 		if err != nil {
 			var invalidValue interface{}
