@@ -109,7 +109,7 @@ func (s *SyncStateRetrieverImpl) GetSyncWorkflowStateArtifact(
 			if targetCurrentVersionedTransition == nil {
 				return true
 			}
-			return !errors.Is(workflow.TransitionHistoryStalenessCheck(mutableState.GetExecutionInfo().TransitionHistory, targetCurrentVersionedTransition), consts.ErrStaleState)
+			return !errors.Is(transitionhistory.StalenessCheck(mutableState.GetExecutionInfo().TransitionHistory, targetCurrentVersionedTransition), consts.ErrStaleState)
 		},
 		definition.WorkflowKey{
 			NamespaceID: namespaceID,
@@ -238,7 +238,7 @@ func (s *SyncStateRetrieverImpl) getSyncStateResult(
 			return false
 		}
 		// not on the same branch
-		if workflow.TransitionHistoryStalenessCheck(mutableState.GetExecutionInfo().TransitionHistory, targetCurrentVersionedTransition) != nil {
+		if transitionhistory.StalenessCheck(mutableState.GetExecutionInfo().TransitionHistory, targetCurrentVersionedTransition) != nil {
 			return false
 		}
 		tombstoneBatch := mutableState.GetExecutionInfo().SubStateMachineTombstoneBatches

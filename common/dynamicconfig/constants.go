@@ -1306,10 +1306,9 @@ second per poller by one physical queue manager`,
 	)
 	EnableHistoryReplicationDLQV2 = NewGlobalBoolSetting(
 		"history.enableHistoryReplicationDLQV2",
-		false,
+		true,
 		`EnableHistoryReplicationDLQV2 switches to the DLQ v2 implementation for history replication. See details in
-[go.temporal.io/server/common/persistence.QueueV2]. This feature is currently in development. Do NOT use it in
-production.`,
+[go.temporal.io/server/common/persistence.QueueV2]`,
 	)
 
 	HistoryRPS = NewGlobalIntSetting(
@@ -2439,6 +2438,12 @@ that task will be sent to DLQ.`,
 		"history.enableRequestIdRefLinks",
 		false,
 		"Enable generating request ID reference links",
+	)
+
+	EnableChasm = NewGlobalBoolSetting(
+		"history.enableChasm",
+		false,
+		"Use real chasm tree implementation instead of the noop one",
 	)
 
 	// keys for worker

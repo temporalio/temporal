@@ -364,6 +364,16 @@ func NewMutableState(
 
 	s.mustInitHSM()
 
+	if s.config.EnableChasm() {
+		s.chasmTree = chasm.NewEmptyTree(
+			shard.ChasmRegistry(),
+			shard.GetTimeSource(),
+			s,
+			chasm.DefaultPathEncoder,
+			shard.GetLogger(),
+		)
+	}
+
 	return s
 }
 
@@ -488,6 +498,24 @@ func NewMutableStateFromDB(
 	}
 
 	mutableState.mustInitHSM()
+
+	if shard.GetConfig().EnableChasm() {
+		var err error
+		mutableState.chasmTree, err = chasm.NewTree(
+			dbRecord.ChasmNodes,
+			shard.ChasmRegistry(),
+			shard.GetTimeSource(),
+			mutableState,
+			chasm.DefaultPathEncoder,
+			shard.GetLogger(),
+		)
+		if err != nil {
+			return nil, err
+		}
+		for key, node := range dbRecord.ChasmNodes {
+			mutableState.approximateSize += len(key) + node.Size()
+		}
+	}
 
 	return mutableState, nil
 }
@@ -8058,8 +8086,14 @@ func ActivityMatchWorkflowRules(
 	workflowRules := ms.GetNamespaceEntry().GetWorkflowRules()
 
 	activityChanged := false
+	now := timeSource.Now()
 
 	for _, rule := range workflowRules {
+		expirationTime := rule.GetSpec().GetExpirationTime()
+		if expirationTime != nil && expirationTime.AsTime().Before(now) {
+			// the rule is expired
+			continue
+		}
 		match, err := MatchWorkflowRule(ms.GetExecutionInfo(), ms.GetExecutionState(), ai, rule.GetSpec())
 		if err != nil {
 			logError(logger, "error matching workflow rule", ms.GetExecutionInfo(), ms.GetExecutionState(), tag.Error(err))

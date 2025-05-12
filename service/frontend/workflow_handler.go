@@ -477,11 +477,16 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 		return nil, err
 	}
 
-	if err := wh.validateLinks(namespaceName, request.GetLinks()); err != nil {
+	request.Links = dedupLinksFromCallbacks(request.GetLinks(), request.GetCompletionCallbacks())
+
+	allLinks := make([]*commonpb.Link, 0, len(request.GetLinks())+len(request.GetCompletionCallbacks()))
+	allLinks = append(allLinks, request.GetLinks()...)
+	for _, cb := range request.GetCompletionCallbacks() {
+		allLinks = append(allLinks, cb.GetLinks()...)
+	}
+	if err := wh.validateLinks(namespaceName, allLinks); err != nil {
 		return nil, err
 	}
-
-	request.Links = dedupLinksFromCallbacks(request.GetLinks(), request.GetCompletionCallbacks())
 
 	return request, nil
 }
