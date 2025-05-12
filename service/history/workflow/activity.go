@@ -29,9 +29,12 @@ import (
 	"math/rand"
 	"time"
 
+	activitypb "go.temporal.io/api/activity/v1"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	rulespb "go.temporal.io/api/rules/v1"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -199,6 +202,25 @@ func GetPendingActivityInfo(
 				}
 			}
 		}
+	}
+
+	p.ActivityOptions = &activitypb.ActivityOptions{
+		TaskQueue: &taskqueuepb.TaskQueue{
+			// we may need to return sticky task queue name here
+			Name:       ai.TaskQueue,
+			NormalName: ai.TaskQueue,
+		},
+		ScheduleToCloseTimeout: ai.ScheduleToCloseTimeout,
+		ScheduleToStartTimeout: ai.ScheduleToStartTimeout,
+		StartToCloseTimeout:    ai.StartToCloseTimeout,
+		HeartbeatTimeout:       ai.HeartbeatTimeout,
+
+		RetryPolicy: &commonpb.RetryPolicy{
+			InitialInterval:    ai.RetryInitialInterval,
+			BackoffCoefficient: ai.RetryBackoffCoefficient,
+			MaximumInterval:    ai.RetryMaximumInterval,
+			MaximumAttempts:    ai.RetryMaximumAttempts,
+		},
 	}
 
 	return p, nil
