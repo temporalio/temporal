@@ -3358,6 +3358,7 @@ func (wh *WorkflowHandler) DescribeWorkerDeploymentVersion(ctx context.Context, 
 		return nil, err
 	}
 
+	//nolint:staticcheck // SA1019: worker versioning v0.31
 	versionStr := request.GetVersion()
 	if versionStr == "" {
 		if request.GetDeploymentVersion() == nil {
@@ -3371,6 +3372,7 @@ func (wh *WorkflowHandler) DescribeWorkerDeploymentVersion(ctx context.Context, 
 		return nil, err
 	}
 
+	//nolint:staticcheck // SA1019: worker versioning v0.31
 	info.DeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromString(info.Version)
 	return &workflowservice.DescribeWorkerDeploymentVersionResponse{WorkerDeploymentVersionInfo: info}, nil
 }
@@ -3399,6 +3401,7 @@ func (wh *WorkflowHandler) SetWorkerDeploymentCurrentVersion(ctx context.Context
 		return nil, serviceerror.NewInvalidArgument("deployment name cannot be empty")
 	}
 
+	//nolint:staticcheck // SA1019: worker versioning v0.31
 	versionStr := request.GetVersion()
 	if versionStr == "" {
 		var v *deploymentspb.WorkerDeploymentVersion
@@ -3443,6 +3446,7 @@ func (wh *WorkflowHandler) SetWorkerDeploymentRampingVersion(ctx context.Context
 		return nil, err
 	}
 
+	//nolint:staticcheck // SA1019: worker versioning v0.31
 	versionStr := request.GetVersion()
 	if versionStr == "" {
 		// If v0.31 user is trying to unset the ramp, let them do it until we update the deployment manager.

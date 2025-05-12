@@ -139,10 +139,10 @@ func TestMutableStateSuite(t *testing.T) {
 		name                       string
 		replicationMultipleBatches bool
 	}{
-		//{
-		//	name:                       "ReplicationMultipleBatchesEnabled",
-		//	replicationMultipleBatches: true,
-		//},
+		{
+			name:                       "ReplicationMultipleBatchesEnabled",
+			replicationMultipleBatches: true,
+		},
 		{
 			name:                       "ReplicationMultipleBatchesDisabled",
 			replicationMultipleBatches: false,

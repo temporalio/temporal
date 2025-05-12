@@ -548,11 +548,15 @@ func AddV31VersioningInfoToV32(info *workflowpb.WorkflowExecutionVersioningInfo)
 	if info == nil {
 		return nil
 	}
+	//nolint:staticcheck // SA1019: worker versioning v0.31
 	if info.Version == "" && info.DeploymentVersion != nil {
+		//nolint:staticcheck // SA1019: worker versioning v0.31
 		info.Version = ExternalWorkerDeploymentVersionToString(info.DeploymentVersion)
 	}
 	if t := info.VersionTransition; t != nil {
+		//nolint:staticcheck // SA1019: worker versioning v0.31
 		if t.Version == "" {
+			//nolint:staticcheck // SA1019: worker versioning v0.31
 			t.Version = ExternalWorkerDeploymentVersionToString(t.DeploymentVersion)
 		}
 	}
@@ -560,9 +564,12 @@ func AddV31VersioningInfoToV32(info *workflowpb.WorkflowExecutionVersioningInfo)
 		//nolint:staticcheck // SA1019: worker versioning v0.31
 		if o.GetBehavior() == enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
 			if o.GetAutoUpgrade() {
+				//nolint:staticcheck // SA1019: worker versioning v0.31
 				o.Behavior = enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
 			} else if o.GetPinned() != nil {
+				//nolint:staticcheck // SA1019: worker versioning v0.31
 				o.Behavior = enumspb.VERSIONING_BEHAVIOR_PINNED
+				//nolint:staticcheck // SA1019: worker versioning v0.31
 				o.PinnedVersion = ExternalWorkerDeploymentVersionToString(o.GetPinned().GetVersion())
 			}
 		}
