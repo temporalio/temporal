@@ -1047,6 +1047,7 @@ func (s *taskRefresherSuite) TestRefreshSubStateMachineTasks() {
 		if node.Parent == nil {
 			return nil
 		}
+		// After the transition, the LastUpdateVersionedTransition should have transition count 4.
 		return hsm.MachineTransition(node, func(_ *hsmtest.Data) (hsm.TransitionOutput, error) {
 			return hsm.TransitionOutput{}, nil
 		})
@@ -1067,6 +1068,20 @@ func (s *taskRefresherSuite) TestRefreshSubStateMachineTasks() {
 		&persistencespb.VersionedTransition{
 			NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(),
 			TransitionCount:          4,
+		},
+	)
+	s.NoError(err)
+	refreshedTasks = s.mutableState.PopTasks()
+	s.Len(refreshedTasks[tasks.CategoryOutbound], 3)
+	s.Len(s.mutableState.GetExecutionInfo().StateMachineTimers, 3)
+	s.Len(refreshedTasks[tasks.CategoryTimer], 1)
+	s.False(hsmRoot.Dirty())
+
+	err = s.taskRefresher.refreshTasksForSubStateMachines(
+		s.mutableState,
+		&persistencespb.VersionedTransition{
+			NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(),
+			TransitionCount:          5,
 		},
 	)
 	s.NoError(err)

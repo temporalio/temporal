@@ -380,8 +380,15 @@ func WorkflowIDToHistoryShard(
 	workflowID string,
 	numberOfShards int32,
 ) int32 {
-	idBytes := []byte(namespaceID + "_" + workflowID)
-	hash := farm.Fingerprint32(idBytes)
+	return ShardingKeyToShard(namespaceID+"_"+workflowID, numberOfShards)
+}
+
+// ShardingKeyToShard is used to map a sharding key to a shardID.
+func ShardingKeyToShard(
+	shardingKey string,
+	numberOfShards int32,
+) int32 {
+	hash := farm.Fingerprint32([]byte(shardingKey))
 	return int32(hash%uint32(numberOfShards)) + 1 // ShardID starts with 1
 }
 
