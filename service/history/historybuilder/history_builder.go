@@ -1,6 +1,7 @@
 package historybuilder
 
 import (
+	"go.temporal.io/server/common/worker_versioning"
 	"time"
 
 	commandpb "go.temporal.io/api/command/v1"
@@ -402,7 +403,7 @@ func (b *HistoryBuilder) AddWorkflowExecutionOptionsUpdatedEvent(
 	links []*commonpb.Link,
 ) *historypb.HistoryEvent {
 	event := b.EventFactory.CreateWorkflowExecutionOptionsUpdatedEvent(
-		versioningOverride,
+		worker_versioning.ConvertOverrideToV32(versioningOverride),
 		unsetVersioningOverride,
 		attachRequestID,
 		attachCompletionCallbacks,
