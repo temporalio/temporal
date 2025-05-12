@@ -1,6 +1,7 @@
 package workflow
 
 import (
+	"fmt"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -239,6 +240,7 @@ func GetEffectiveVersioningBehavior(versioningInfo *workflowpb.WorkflowExecution
 	if versioningInfo == nil {
 		return enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED
 	} else if override := versioningInfo.GetVersioningOverride(); override != nil {
+		fmt.Printf("OVERRIDE NOT NIL: %+v\n\n", override)
 		if override.GetAutoUpgrade() || override.GetPinned() != nil { // v0.32 override behavior
 			if override.GetAutoUpgrade() {
 				return enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
@@ -247,6 +249,7 @@ func GetEffectiveVersioningBehavior(versioningInfo *workflowpb.WorkflowExecution
 		}
 		return override.GetBehavior() // v0.30 and v0.31 override behavior
 	}
+	fmt.Printf("OVERRIDE IS NIL, BEHAVIOR IS: %v\n\n", versioningInfo.GetBehavior())
 	return versioningInfo.GetBehavior()
 }
 

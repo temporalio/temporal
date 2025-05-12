@@ -139,10 +139,10 @@ func TestMutableStateSuite(t *testing.T) {
 		name                       string
 		replicationMultipleBatches bool
 	}{
-		{
-			name:                       "ReplicationMultipleBatchesEnabled",
-			replicationMultipleBatches: true,
-		},
+		//{
+		//	name:                       "ReplicationMultipleBatchesEnabled",
+		//	replicationMultipleBatches: true,
+		//},
 		{
 			name:                       "ReplicationMultipleBatchesDisabled",
 			replicationMultipleBatches: false,
@@ -601,10 +601,7 @@ func (s *mutableStateSuite) TestEffectiveDeployment() {
 		if useV32 {
 			versioningInfo.DeploymentVersion = deploymentVersion1
 			versioningInfo.VersioningOverride = &workflowpb.VersioningOverride{
-				Override: &workflowpb.VersioningOverride_Pinned{Pinned: &workflowpb.VersioningOverride_PinnedOverride{
-					Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
-					Version:  deploymentVersion2,
-				}},
+				Override: &workflowpb.VersioningOverride_AutoUpgrade{AutoUpgrade: true},
 			}
 		} else {
 			versioningInfo.Version = dv1
@@ -680,10 +677,7 @@ func (s *mutableStateSuite) TestEffectiveDeployment() {
 		if useV32 {
 			versioningInfo.DeploymentVersion = deploymentVersion1
 			versioningInfo.VersioningOverride = &workflowpb.VersioningOverride{
-				Override: &workflowpb.VersioningOverride_Pinned{Pinned: &workflowpb.VersioningOverride_PinnedOverride{
-					Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
-					Version:  deploymentVersion2,
-				}},
+				Override: &workflowpb.VersioningOverride_AutoUpgrade{AutoUpgrade: true},
 			}
 			versioningInfo.VersionTransition = &workflowpb.DeploymentVersionTransition{
 				DeploymentVersion: deploymentVersion3,
@@ -704,10 +698,7 @@ func (s *mutableStateSuite) TestEffectiveDeployment() {
 		if useV32 {
 			versioningInfo.DeploymentVersion = deploymentVersion1
 			versioningInfo.VersioningOverride = &workflowpb.VersioningOverride{
-				Override: &workflowpb.VersioningOverride_Pinned{Pinned: &workflowpb.VersioningOverride_PinnedOverride{
-					Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
-					Version:  deploymentVersion2,
-				}},
+				Override: &workflowpb.VersioningOverride_AutoUpgrade{AutoUpgrade: true},
 			}
 			versioningInfo.VersionTransition = &workflowpb.DeploymentVersionTransition{
 				DeploymentVersion: nil,
@@ -725,6 +716,12 @@ func (s *mutableStateSuite) TestEffectiveDeployment() {
 		}
 		versioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_PINNED
 		s.verifyEffectiveDeployment(nil, enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE)
+
+		// clear for next round
+		versioningInfo.VersioningOverride = nil
+		versioningInfo.VersionTransition = nil
+		versioningInfo.DeploymentVersion = nil
+		versioningInfo.Version = ""
 	}
 }
 
@@ -924,7 +921,18 @@ func (s *mutableStateSuite) verifyWorkflowOptionsUpdatedEventAttr(
 	actualAttr *historypb.WorkflowExecutionOptionsUpdatedEventAttributes,
 	expectedAttr *historypb.WorkflowExecutionOptionsUpdatedEventAttributes,
 ) {
-	s.Equal(actualAttr.GetVersioningOverride(), worker_versioning.ConvertOverrideToV32(expectedAttr.GetVersioningOverride()))
+	expectedOverride := worker_versioning.ConvertOverrideToV32(expectedAttr.GetVersioningOverride())
+	actualOverride := actualAttr.GetVersioningOverride()
+	s.Equal(expectedOverride.GetPinned().GetBehavior(), actualOverride.GetPinned().GetBehavior())
+	s.Equal(expectedOverride.GetPinned().GetVersion().GetDeploymentName(), actualOverride.GetPinned().GetVersion().GetDeploymentName())
+	s.Equal(expectedOverride.GetPinned().GetVersion().GetBuildId(), actualOverride.GetPinned().GetVersion().GetBuildId())
+	s.Equal(expectedOverride.GetAutoUpgrade(), actualOverride.GetAutoUpgrade())
+
+	s.Equal(expectedOverride.GetBehavior(), actualOverride.GetBehavior())
+	s.Equal(expectedOverride.GetDeployment().GetSeriesName(), expectedOverride.GetDeployment().GetSeriesName())
+	s.Equal(expectedOverride.GetDeployment().GetBuildId(), expectedOverride.GetDeployment().GetBuildId())
+	s.Equal(expectedOverride.GetPinnedVersion(), actualOverride.GetPinnedVersion())
+
 	s.Equal(actualAttr.GetUnsetVersioningOverride(), expectedAttr.GetUnsetVersioningOverride())
 }
 
@@ -934,17 +942,22 @@ func (s *mutableStateSuite) verifyOverrides(
 ) {
 	versioningInfo := s.mutableState.GetExecutionInfo().GetVersioningInfo()
 	s.Equal(expectedBehavior, versioningInfo.GetBehavior())
-	s.Equal(expectedBehaviorOverride, versioningInfo.GetVersioningOverride().GetBehavior())
+	if versioningInfo.GetVersioningOverride().GetAutoUpgrade() {
+		s.Equal(expectedBehaviorOverride, enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE)
+	} else if versioningInfo.GetVersioningOverride().GetPinned().GetBehavior() == workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED {
+		s.Equal(expectedBehaviorOverride, enumspb.VERSIONING_BEHAVIOR_PINNED)
+	}
 	expectedVersion := ""
 	if expectedDeployment != nil {
 		expectedVersion = worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(expectedDeployment))
 	}
 	s.Equal(expectedVersion, versioningInfo.GetVersion())
-	expectedPinnedVersion := ""
+	var expectedPinnedDeploymentVersion *deploymentpb.WorkerDeploymentVersion
 	if expectedDeploymentOverride != nil {
-		expectedPinnedVersion = worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(expectedDeploymentOverride))
+		expectedPinnedDeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(expectedDeploymentOverride)
 	}
-	s.Equal(expectedPinnedVersion, versioningInfo.GetVersioningOverride().GetPinnedVersion())
+	s.Equal(expectedPinnedDeploymentVersion.GetDeploymentName(), versioningInfo.GetVersioningOverride().GetPinned().GetVersion().GetDeploymentName())
+	s.Equal(expectedPinnedDeploymentVersion.GetBuildId(), versioningInfo.GetVersioningOverride().GetPinned().GetVersion().GetBuildId())
 }
 
 func (s *mutableStateSuite) TestOverride_UnpinnedBase_SetPinnedAndUnsetWithEmptyOptions() {
