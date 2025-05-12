@@ -314,8 +314,11 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 	// we update the ratelimiter rps if it has changed from the last
 	// value. Last poller wins if different pollers provide different values
 	if rps := pollMetadata.taskQueueMetadata.GetMaxTasksPerSecond(); rps != nil {
-		c.partitionMgr.UpdateRatelimit(rps.Value)
-
+		if c.priMatcher != nil {
+			c.priMatcher.UpdateRatelimit(rps.Value)
+		} else {
+			c.partitionMgr.UpdateRatelimit(rps.Value)
+		}
 	}
 
 	if !namespaceEntry.ActiveInCluster(c.clusterMeta.GetCurrentClusterName()) {
