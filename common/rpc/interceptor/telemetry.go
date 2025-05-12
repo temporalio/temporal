@@ -177,7 +177,10 @@ func (ti *TelemetryInterceptor) UnaryIntercept(
 	resp, err := handler(ctx, req)
 
 	if configs.IsAPIOperation(info.FullMethod) {
-		metrics.OperationCounter.With(metricsHandler).Record(1)
+		metrics.OperationCounter.With(metricsHandler).Record(
+			1,
+			metrics.TaskTypeTag(""), // Added to make tags consistent with history task executor.
+		)
 	}
 
 	if err != nil {
