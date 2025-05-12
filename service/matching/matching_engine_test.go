@@ -1269,8 +1269,6 @@ func (s *matchingEngineSuite) TestRateLimiterAcrossVersionedQueues() {
 	}
 
 	const taskCount = 2
-	var result *matchingservice.PollActivityTaskQueueResponse
-
 	resultChan := make(chan *matchingservice.PollActivityTaskQueueResponse)
 
 	for i := int64(0); i < taskCount; i++ {
@@ -1279,10 +1277,14 @@ func (s *matchingEngineSuite) TestRateLimiterAcrossVersionedQueues() {
 			maxDispatch = 0 // second poller overrides the dispatch rate to 0
 		}
 		go func() {
-			result, _ = pollFunc(float64(maxDispatch), strconv.FormatInt(int64(i), 10))
+			result, _ := pollFunc(float64(maxDispatch), strconv.FormatInt(int64(i), 10))
 			resultChan <- result
 		}()
-		time.Sleep(10 * time.Millisecond) // Delay to allow the second poller coming in a little later.
+
+		currentTime := time.Now()
+		s.Eventually(func() bool {
+			return time.Since(currentTime) > 10*time.Millisecond // Delay to allow the second poller coming in a little later.
+		}, 20*time.Millisecond, 1*time.Millisecond)
 	}
 
 	// Update user data of the task queue so that the activity tasks generated are not treated as independent activities.
@@ -1349,10 +1351,10 @@ func (s *matchingEngineSuite) TestRateLimiterAcrossVersionedQueues() {
 	}
 
 	// Restart the pollers with maxTasksPerSecond = defaultTaskDispatchRPS so that they can receive tasks
+	maxDispatch := float64(defaultTaskDispatchRPS)
 	for i := int64(0); i < taskCount; i++ {
-		maxDispatch := float64(defaultTaskDispatchRPS)
 		go func() {
-			result, _ = pollFunc(maxDispatch, strconv.FormatInt(int64(i), 10))
+			result, _ := pollFunc(maxDispatch, strconv.FormatInt(int64(i), 10))
 			resultChan <- result
 		}()
 	}
