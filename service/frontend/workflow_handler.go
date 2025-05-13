@@ -3550,6 +3550,7 @@ func (wh *WorkflowHandler) DescribeWorkerDeployment(ctx context.Context, request
 	}
 
 	for _, vs := range workerDeploymentInfo.VersionSummaries {
+		//nolint:staticcheck // SA1019: worker versioning v0.31
 		vs.DeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromString(vs.Version)
 	}
 	workerDeploymentInfo.RoutingConfig = worker_versioning.AddV32RoutingConfigToV31(workerDeploymentInfo.RoutingConfig)
@@ -3591,6 +3592,7 @@ func (wh *WorkflowHandler) DeleteWorkerDeploymentVersion(ctx context.Context, re
 		return nil, err
 	}
 
+	//nolint:staticcheck // SA1019: worker versioning v0.31
 	versionStr := request.GetVersion()
 	if request.GetDeploymentVersion() != nil {
 		versionStr = worker_versioning.ExternalWorkerDeploymentVersionToString(request.GetDeploymentVersion())
@@ -3620,6 +3622,7 @@ func (wh *WorkflowHandler) UpdateWorkerDeploymentVersionMetadata(ctx context.Con
 		return nil, err
 	}
 
+	//nolint:staticcheck // SA1019: worker versioning v0.31
 	versionStr := request.GetVersion()
 	if request.GetDeploymentVersion() != nil {
 		versionStr = worker_versioning.ExternalWorkerDeploymentVersionToString(request.GetDeploymentVersion())

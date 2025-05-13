@@ -2545,11 +2545,11 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 		ms.executionInfo.ParentInitiatedVersion = common.EmptyVersion
 	}
 
+	//nolint:staticcheck // SA1019: worker versioning v0.31
 	if event.ParentPinnedWorkerDeploymentVersion != "" || event.ParentPinnedDeploymentVersion != nil {
 		ms.executionInfo.VersioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{
 			Behavior:          enumspb.VERSIONING_BEHAVIOR_PINNED,
 			DeploymentVersion: event.ParentPinnedDeploymentVersion,
-			Version:           event.ParentPinnedWorkerDeploymentVersion,
 		}
 	}
 
@@ -2626,7 +2626,8 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 			ms.executionInfo.VersioningInfo.VersioningOverride.Deployment = nil
 			ms.executionInfo.VersioningInfo.VersioningOverride.Behavior = enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED
 		}
-		if vs := event.GetVersioningOverride().GetPinnedVersion(); vs != "" { // v0.31 pinned
+		//nolint:staticcheck // SA1019: worker versioning v0.31
+		if vs := event.GetVersioningOverride().GetPinnedVersion(); vs != "" {
 			// We read from both old and new fields but write in the new fields only.
 			ms.executionInfo.VersioningInfo.VersioningOverride.Override = &workflowpb.VersioningOverride_Pinned{
 				Pinned: &workflowpb.VersioningOverride_PinnedOverride{
@@ -2634,12 +2635,15 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 					Version:  worker_versioning.ExternalWorkerDeploymentVersionFromString(vs),
 				},
 			}
+			//nolint:staticcheck // SA1019: worker versioning v0.31
 			ms.executionInfo.VersioningInfo.VersioningOverride.PinnedVersion = ""
 			ms.executionInfo.VersioningInfo.VersioningOverride.Behavior = enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED
 		}
-		if b := event.GetVersioningOverride().GetBehavior(); b == enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE { // v0.30 and v0.31 auto-upgrade
+		//nolint:staticcheck // SA1019: worker versioning v0.31
+		if b := event.GetVersioningOverride().GetBehavior(); b == enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE {
 			// We read from both old and new fields but write in the new fields only.
 			ms.executionInfo.VersioningInfo.VersioningOverride.Override = &workflowpb.VersioningOverride_AutoUpgrade{AutoUpgrade: true}
+			//nolint:staticcheck // SA1019: worker versioning v0.31
 			ms.executionInfo.VersioningInfo.VersioningOverride.Behavior = enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED
 		}
 	}
@@ -3067,30 +3071,6 @@ func (ms *MutableStateImpl) loadSearchAttributeString(saName string) (string, er
 		return "", serviceerror.NewInternal(fmt.Sprintf("invalid search attribute value stored for %s", saName))
 	}
 	return val, nil
-}
-
-// getPinnedDeployment returns nil if the workflow is not pinned. If there is a pinned override,
-// it returns the override deployment. If there is no override, it returns execution_info.deployment,
-// which is the last deployment that this workflow completed a task on.
-func (ms *MutableStateImpl) getPinnedDeployment() *deploymentpb.Deployment {
-	if ms.GetEffectiveVersioningBehavior() != enumspb.VERSIONING_BEHAVIOR_PINNED {
-		return nil
-	}
-	return ms.GetEffectiveDeployment()
-}
-
-// getPinnedVersion returns nil if the workflow is not pinned. If there is a pinned override,
-// it returns the override deployment. If there is no override, it returns execution_info.deployment,
-// which is the last deployment that this workflow completed a task on.
-func (ms *MutableStateImpl) getPinnedVersion() string {
-	if ms.GetEffectiveVersioningBehavior() != enumspb.VERSIONING_BEHAVIOR_PINNED {
-		return ""
-	}
-	if override := ms.executionInfo.GetVersioningInfo().GetVersioningOverride(); override != nil {
-		// todo (carlydf)
-		return override.GetPinnedVersion()
-	}
-	return ms.executionInfo.GetVersioningInfo().GetVersion()
 }
 
 // Takes a list of loaded build IDs from a search attribute and adds a new build ID to it. Also makes sure that the
