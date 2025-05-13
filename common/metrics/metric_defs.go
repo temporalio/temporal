@@ -601,6 +601,7 @@ var (
 	ServiceErrUnauthorizedCounter            = NewCounterDef("service_errors_unauthorized")
 	ServiceErrAuthorizeFailedCounter         = NewCounterDef("service_errors_authorize_failed")
 	ActionCounter                            = NewCounterDef("action")
+	OperationCounter                         = NewCounterDef("operation")
 	TlsCertsExpired                          = NewGaugeDef("certificates_expired")
 	TlsCertsExpiring                         = NewGaugeDef("certificates_expiring")
 	ServiceAuthorizationLatency              = NewTimerDef("service_authorization_latency")
