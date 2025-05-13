@@ -1038,7 +1038,7 @@ func (s *DeploymentVersionSuite) setRamping(
 	if s.useV32 {
 		req.BuildId = bid
 	} else {
-		req.Version = v
+		req.Version = v //nolint:staticcheck // SA1019: worker versioning v0.31
 	}
 	_, err := s.FrontendClient().SetWorkerDeploymentRampingVersion(ctx, req)
 	return err
@@ -1056,7 +1056,7 @@ func (s *DeploymentVersionSuite) setCurrent(tv *testvars.TestVars, ignoreMissing
 	if s.useV32 {
 		req.BuildId = tv.BuildID()
 	} else {
-		req.Version = tv.DeploymentVersionString()
+		req.Version = tv.DeploymentVersionString() //nolint:staticcheck // SA1019: worker versioning v0.31
 	}
 	_, err := s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, req)
 	return err
