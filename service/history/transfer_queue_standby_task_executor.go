@@ -241,7 +241,7 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 			now := t.getCurrentTime()
 			taskTime := transferTask.GetVisibilityTime()
 			localVerificationTime := taskTime.Add(t.config.MaxLocalParentWorkflowVerificationDuration())
-			resendParent := now.After(localVerificationTime)
+			resendParent := now.After(localVerificationTime) && t.config.EnableTransitionHistory()
 
 			_, err := t.historyRawClient.VerifyChildExecutionCompletionRecorded(ctx, &historyservice.VerifyChildExecutionCompletionRecordedRequest{
 				NamespaceId: executionInfo.ParentNamespaceId,
