@@ -1493,7 +1493,7 @@ func (s *Versioning3Suite) setCurrentDeployment(tv *testvars.TestVars) {
 		if s.useV32 {
 			req.BuildId = tv.BuildID()
 		} else {
-			req.Version = tv.DeploymentVersionString()
+			req.Version = tv.DeploymentVersionString() //nolint:staticcheck // SA1019: worker versioning v0.31
 		}
 		_, err := s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, req)
 		var notFound *serviceerror.NotFound
@@ -1528,7 +1528,7 @@ func (s *Versioning3Suite) setRampingDeployment(
 		if s.useV32 {
 			req.BuildId = bid
 		} else {
-			req.Version = v
+			req.Version = v //nolint:staticcheck // SA1019: worker versioning v0.31
 		}
 		_, err := s.FrontendClient().SetWorkerDeploymentRampingVersion(ctx, req)
 		var notFound *serviceerror.NotFound
@@ -1669,7 +1669,7 @@ func (s *Versioning3Suite) verifyWorkflowVersioning(
 	versioningInfo := dwf.WorkflowExecutionInfo.GetVersioningInfo()
 	s.Equal(behavior.String(), versioningInfo.GetBehavior().String())
 	var v *deploymentspb.WorkerDeploymentVersion
-	if versioningInfo.GetVersion() != "" {
+	if versioningInfo.GetVersion() != "" { //nolint:staticcheck // SA1019: worker versioning v0.31
 		v, err = worker_versioning.WorkerDeploymentVersionFromString(versioningInfo.GetVersion())
 		s.NoError(err)
 		s.NotNil(versioningInfo.GetDeploymentVersion()) // make sure we are always populating this whenever Version string is populated
@@ -1693,10 +1693,10 @@ func (s *Versioning3Suite) verifyWorkflowVersioning(
 		s.Equal(override.GetPinned().GetBehavior(), versioningInfo.GetVersioningOverride().GetPinned().GetBehavior())
 	} else {
 		// v0.31 override
-		s.Equal(override.GetBehavior().String(), versioningInfo.GetVersioningOverride().GetBehavior().String())
-		if actualOverrideDeployment := versioningInfo.GetVersioningOverride().GetPinnedVersion(); override.GetPinnedVersion() != actualOverrideDeployment {
+		s.Equal(override.GetBehavior().String(), versioningInfo.GetVersioningOverride().GetBehavior().String())                                             //nolint:staticcheck // SA1019: worker versioning v0.31
+		if actualOverrideDeployment := versioningInfo.GetVersioningOverride().GetPinnedVersion(); override.GetPinnedVersion() != actualOverrideDeployment { //nolint:staticcheck // SA1019: worker versioning v0.31
 			s.Fail(fmt.Sprintf("pinned override mismatch. expected: {%s}, actual: {%s}",
-				override.GetPinnedVersion(),
+				override.GetPinnedVersion(), //nolint:staticcheck // SA1019: worker versioning v0.31
 				actualOverrideDeployment,
 			))
 		}
@@ -1738,7 +1738,7 @@ func respondWftWithActivities(
 					ActivityType: tvAct.ActivityType(),
 					TaskQueue:    tvAct.TaskQueue(),
 					Input:        tvAct.Any().Payloads(),
-					// TODO (shahab): tests with forced task forward take multiple seconds. Need to know why?
+					// TODO(carlydf): tests with forced task forward take multiple seconds. Need to know why?
 					ScheduleToCloseTimeout: durationpb.New(10 * time.Second),
 					ScheduleToStartTimeout: durationpb.New(10 * time.Second),
 					StartToCloseTimeout:    durationpb.New(3 * time.Second),
@@ -1758,8 +1758,8 @@ func respondWftWithActivities(
 			DeploymentName:       tvWf.DeploymentSeries(),
 			WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_VERSIONED,
 		},
-		// TODO (shahab): remove stamp once build ID is added to wftc event
-		WorkerVersionStamp: &commonpb.WorkerVersionStamp{
+		// TODO(carlydf): remove stamp once build ID is added to wftc event
+		WorkerVersionStamp: &commonpb.WorkerVersionStamp{ //nolint:staticcheck // SA1019: worker versioning v0.20
 			BuildId:       tvWf.BuildID(),
 			UseVersioning: true,
 		},

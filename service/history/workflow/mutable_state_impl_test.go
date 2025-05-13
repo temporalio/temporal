@@ -544,7 +544,7 @@ func (s *mutableStateSuite) TestEffectiveDeployment() {
 		if useV32 {
 			versioningInfo.DeploymentVersion = deploymentVersion1
 		} else {
-			versioningInfo.Version = dv1
+			versioningInfo.Version = dv1 //nolint:staticcheck // SA1019: worker versioning v0.31
 		}
 		versioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED
 		s.verifyEffectiveDeployment(nil, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED)
@@ -552,7 +552,7 @@ func (s *mutableStateSuite) TestEffectiveDeployment() {
 		if useV32 {
 			versioningInfo.DeploymentVersion = deploymentVersion1
 		} else {
-			versioningInfo.Version = dv1
+			versioningInfo.Version = dv1 //nolint:staticcheck // SA1019: worker versioning v0.31
 		}
 		versioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_PINNED
 		s.verifyEffectiveDeployment(deployment1, enumspb.VERSIONING_BEHAVIOR_PINNED)
@@ -560,7 +560,7 @@ func (s *mutableStateSuite) TestEffectiveDeployment() {
 		if useV32 {
 			versioningInfo.DeploymentVersion = deploymentVersion1
 		} else {
-			versioningInfo.Version = dv1
+			versioningInfo.Version = dv1 //nolint:staticcheck // SA1019: worker versioning v0.31
 		}
 		versioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
 		s.verifyEffectiveDeployment(deployment1, enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE)
@@ -574,9 +574,9 @@ func (s *mutableStateSuite) TestEffectiveDeployment() {
 				Override: &workflowpb.VersioningOverride_AutoUpgrade{AutoUpgrade: true},
 			}
 		} else {
-			versioningInfo.Version = ""
+			versioningInfo.Version = "" //nolint:staticcheck // SA1019: worker versioning v0.31
 			versioningInfo.VersioningOverride = &workflowpb.VersioningOverride{
-				Behavior: enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE,
+				Behavior: enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE, //nolint:staticcheck // SA1019: worker versioning v0.31
 			}
 		}
 		versioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED
@@ -589,9 +589,9 @@ func (s *mutableStateSuite) TestEffectiveDeployment() {
 				Override: &workflowpb.VersioningOverride_AutoUpgrade{AutoUpgrade: true},
 			}
 		} else {
-			versioningInfo.Version = dv1
+			versioningInfo.Version = dv1 //nolint:staticcheck // SA1019: worker versioning v0.31
 			versioningInfo.VersioningOverride = &workflowpb.VersioningOverride{
-				Behavior: enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE,
+				Behavior: enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE, //nolint:staticcheck // SA1019: worker versioning v0.31
 			}
 		}
 		versioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED
@@ -604,12 +604,12 @@ func (s *mutableStateSuite) TestEffectiveDeployment() {
 				Override: &workflowpb.VersioningOverride_AutoUpgrade{AutoUpgrade: true},
 			}
 		} else {
-			versioningInfo.Version = dv1
+			versioningInfo.Version = dv1 //nolint:staticcheck // SA1019: worker versioning v0.31
 			versioningInfo.VersioningOverride = &workflowpb.VersioningOverride{
-				Behavior: enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE,
+				Behavior: enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE, //nolint:staticcheck // SA1019: worker versioning v0.31
 				// Technically, API should not allow deployment to be set for AUTO_UPGRADE override, but we
 				// test it this way to make sure it is ignored.
-				PinnedVersion: dv2,
+				PinnedVersion: dv2, //nolint:staticcheck // SA1019: worker versioning v0.31
 			}
 		}
 		versioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_PINNED
@@ -625,10 +625,10 @@ func (s *mutableStateSuite) TestEffectiveDeployment() {
 				}},
 			}
 		} else {
-			versioningInfo.Version = ""
+			versioningInfo.Version = "" //nolint:staticcheck // SA1019: worker versioning v0.31
 			versioningInfo.VersioningOverride = &workflowpb.VersioningOverride{
-				Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED,
-				PinnedVersion: dv2,
+				Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED, //nolint:staticcheck // SA1019: worker versioning v0.31
+				PinnedVersion: dv2,                                //nolint:staticcheck // SA1019: worker versioning v0.31
 			}
 		}
 		versioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED
@@ -644,10 +644,10 @@ func (s *mutableStateSuite) TestEffectiveDeployment() {
 				}},
 			}
 		} else {
-			versioningInfo.Version = dv1
+			versioningInfo.Version = dv1 //nolint:staticcheck // SA1019: worker versioning v0.31
 			versioningInfo.VersioningOverride = &workflowpb.VersioningOverride{
-				Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED,
-				PinnedVersion: dv2,
+				Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED, //nolint:staticcheck // SA1019: worker versioning v0.31
+				PinnedVersion: dv2,                                //nolint:staticcheck // SA1019: worker versioning v0.31
 			}
 		}
 		versioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED
@@ -663,10 +663,10 @@ func (s *mutableStateSuite) TestEffectiveDeployment() {
 				}},
 			}
 		} else {
-			versioningInfo.Version = dv1
+			versioningInfo.Version = dv1 //nolint:staticcheck // SA1019: worker versioning v0.31
 			versioningInfo.VersioningOverride = &workflowpb.VersioningOverride{
-				Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED,
-				PinnedVersion: dv2,
+				Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED, //nolint:staticcheck // SA1019: worker versioning v0.31
+				PinnedVersion: dv2,                                //nolint:staticcheck // SA1019: worker versioning v0.31
 			}
 		}
 		versioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
@@ -683,13 +683,13 @@ func (s *mutableStateSuite) TestEffectiveDeployment() {
 				DeploymentVersion: deploymentVersion3,
 			}
 		} else {
-			versioningInfo.Version = dv1
+			versioningInfo.Version = dv1 //nolint:staticcheck // SA1019: worker versioning v0.31
 			versioningInfo.VersioningOverride = &workflowpb.VersioningOverride{
-				Behavior:      enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE,
-				PinnedVersion: dv2,
+				Behavior:      enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE, //nolint:staticcheck // SA1019: worker versioning v0.31
+				PinnedVersion: dv2,                                      //nolint:staticcheck // SA1019: worker versioning v0.31
 			}
 			versioningInfo.VersionTransition = &workflowpb.DeploymentVersionTransition{
-				Version: dv3,
+				Version: dv3, //nolint:staticcheck // SA1019: worker versioning v0.31
 			}
 		}
 		versioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_PINNED
@@ -704,14 +704,14 @@ func (s *mutableStateSuite) TestEffectiveDeployment() {
 				DeploymentVersion: nil,
 			}
 		} else {
-			versioningInfo.Version = dv1
+			versioningInfo.Version = dv1 //nolint:staticcheck // SA1019: worker versioning v0.31
 			versioningInfo.VersioningOverride = &workflowpb.VersioningOverride{
 				// Transitioning to unversioned
-				Behavior:      enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE,
-				PinnedVersion: dv2,
+				Behavior:      enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE, //nolint:staticcheck // SA1019: worker versioning v0.31
+				PinnedVersion: dv2,                                      //nolint:staticcheck // SA1019: worker versioning v0.31
 			}
 			versioningInfo.VersionTransition = &workflowpb.DeploymentVersionTransition{
-				Version: "",
+				Version: "", //nolint:staticcheck // SA1019: worker versioning v0.31
 			}
 		}
 		versioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_PINNED
@@ -721,7 +721,7 @@ func (s *mutableStateSuite) TestEffectiveDeployment() {
 		versioningInfo.VersioningOverride = nil
 		versioningInfo.VersionTransition = nil
 		versioningInfo.DeploymentVersion = nil
-		versioningInfo.Version = ""
+		versioningInfo.Version = "" //nolint:staticcheck // SA1019: worker versioning v0.31
 	}
 }
 
@@ -784,7 +784,7 @@ func (s *mutableStateSuite) createMutableStateWithVersioningBehavior(
 		wft,
 		&workflowservice.RespondWorkflowTaskCompletedRequest{
 			VersioningBehavior: behavior,
-			Deployment:         deployment,
+			Deployment:         deployment, //nolint:staticcheck // SA1019: worker versioning v0.30
 		},
 		workflowTaskCompletionLimits,
 	)
@@ -835,7 +835,7 @@ func (s *mutableStateSuite) TestUnpinnedTransition() {
 		&workflowservice.RespondWorkflowTaskCompletedRequest{
 			// wf is pinned in the new build
 			VersioningBehavior: enumspb.VERSIONING_BEHAVIOR_PINNED,
-			Deployment:         deployment2,
+			Deployment:         deployment2, //nolint:staticcheck // SA1019: worker versioning v0.30
 		},
 		workflowTaskCompletionLimits,
 	)
@@ -928,10 +928,10 @@ func (s *mutableStateSuite) verifyWorkflowOptionsUpdatedEventAttr(
 	s.Equal(expectedOverride.GetPinned().GetVersion().GetBuildId(), actualOverride.GetPinned().GetVersion().GetBuildId())
 	s.Equal(expectedOverride.GetAutoUpgrade(), actualOverride.GetAutoUpgrade())
 
-	s.Equal(expectedOverride.GetBehavior(), actualOverride.GetBehavior())
-	s.Equal(expectedOverride.GetDeployment().GetSeriesName(), expectedOverride.GetDeployment().GetSeriesName())
-	s.Equal(expectedOverride.GetDeployment().GetBuildId(), expectedOverride.GetDeployment().GetBuildId())
-	s.Equal(expectedOverride.GetPinnedVersion(), actualOverride.GetPinnedVersion())
+	s.Equal(expectedOverride.GetBehavior(), actualOverride.GetBehavior())                                       //nolint:staticcheck // SA1019: worker versioning v0.31
+	s.Equal(expectedOverride.GetDeployment().GetSeriesName(), expectedOverride.GetDeployment().GetSeriesName()) //nolint:staticcheck // SA1019: worker versioning v0.30
+	s.Equal(expectedOverride.GetDeployment().GetBuildId(), expectedOverride.GetDeployment().GetBuildId())       //nolint:staticcheck // SA1019: worker versioning v0.30
+	s.Equal(expectedOverride.GetPinnedVersion(), actualOverride.GetPinnedVersion())                             //nolint:staticcheck // SA1019: worker versioning v0.31
 
 	s.Equal(actualAttr.GetUnsetVersioningOverride(), expectedAttr.GetUnsetVersioningOverride())
 }
@@ -951,7 +951,7 @@ func (s *mutableStateSuite) verifyOverrides(
 	if expectedDeployment != nil {
 		expectedVersion = worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(expectedDeployment))
 	}
-	s.Equal(expectedVersion, versioningInfo.GetVersion())
+	s.Equal(expectedVersion, versioningInfo.GetVersion()) //nolint:staticcheck // SA1019: worker versioning v0.31
 	var expectedPinnedDeploymentVersion *deploymentpb.WorkerDeploymentVersion
 	if expectedDeploymentOverride != nil {
 		expectedPinnedDeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(expectedDeploymentOverride)
