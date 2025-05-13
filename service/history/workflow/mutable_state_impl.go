@@ -2547,9 +2547,13 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 
 	//nolint:staticcheck // SA1019: worker versioning v0.31
 	if event.ParentPinnedWorkerDeploymentVersion != "" || event.ParentPinnedDeploymentVersion != nil {
+		parentPinned := event.ParentPinnedDeploymentVersion
+		if parentPinned == nil {
+			parentPinned = worker_versioning.ExternalWorkerDeploymentVersionFromString(event.ParentPinnedWorkerDeploymentVersion) //nolint:staticcheck // SA1019: worker versioning v0.31
+		}
 		ms.executionInfo.VersioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{
 			Behavior:          enumspb.VERSIONING_BEHAVIOR_PINNED,
-			DeploymentVersion: event.ParentPinnedDeploymentVersion,
+			DeploymentVersion: parentPinned,
 		}
 	}
 

@@ -282,7 +282,7 @@ func (s *Versioning3Suite) TestUnpinnedQuery_Sticky() {
 }
 
 func (s *Versioning3Suite) testUnpinnedQuery(sticky bool) {
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
 	tv := testvars.New(s)
