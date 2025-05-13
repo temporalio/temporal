@@ -1605,6 +1605,20 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_Invalid_DeploymentSearchA
 		s.ErrorAs(err, &invalidArgument)
 	})
 
+	// These are currently allowed since they are in the predefinedWhiteList. Once it's confirmed that they are not being used,
+	// we can remove them from the predefinedWhiteList.
+	s.Run(searchattribute.BatcherUser, func() {
+		request := makeRequest(searchattribute.BatcherUser)
+		_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+		s.NoError(err)
+	})
+
+	s.Run(searchattribute.BatcherNamespace, func() {
+		request := makeRequest(searchattribute.BatcherNamespace)
+		_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+		s.NoError(err)
+	})
+
 }
 
 func requireNotStartedButRunning(t *testing.T, resp *workflowservice.StartWorkflowExecutionResponse) {
