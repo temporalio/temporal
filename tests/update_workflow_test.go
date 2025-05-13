@@ -136,6 +136,9 @@ func (s *UpdateWorkflowSuite) TestEmptySpeculativeWorkflowTask_AcceptComplete() 
   5 WorkflowTaskScheduled // Speculative WT events are not written to the history yet.
   6 WorkflowTaskStarted
 `, task.History)
+
+					// TODO (Shivam): Can one actually query the deployment transition information here!?
+
 					return s.UpdateAcceptCompleteCommands(tv), nil
 				default:
 					s.Failf("wtHandler called too many times", "wtHandler shouldn't be called %d times", wtHandlerCalls)
