@@ -111,6 +111,14 @@ func (v *Validator) Validate(searchAttributes *commonpb.SearchAttributes, namesp
 			)
 		}
 
+		// Don't allow those SA's that are in predefined but not in predefinedWhiteList to be set by a user
+		if _, ok := predefined[saFieldName]; ok {
+			if _, ok = predefinedWhiteList[saFieldName]; !ok {
+				return serviceerror.NewInvalidArgument(
+					fmt.Sprintf("%s attribute can't be set in SearchAttributes", saFieldName),
+				)
+			}
+		}
 		saValue, err := DecodeValue(saPayload, saType, v.allowList(namespace))
 		if err != nil {
 			var invalidValue interface{}
