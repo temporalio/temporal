@@ -689,10 +689,10 @@ func (d *namespaceHandler) CreateWorkflowRule(
 		config.WorkflowRules = make(map[string]*rulespb.WorkflowRule)
 	} else {
 		maxRules := d.config.MaxWorkflowRulesPerNamespace(nsName)
-		if len(config.WorkflowRules) > maxRules {
-			d.removeExpiredWorkflowRules(config.WorkflowRules)
+		if len(config.WorkflowRules) >= maxRules {
+			d.removeOldestExpiredWorkflowRule(config.WorkflowRules)
 		}
-		if len(config.WorkflowRules) > maxRules {
+		if len(config.WorkflowRules) >= maxRules {
 			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Workflow Rule limit exceeded. Max: %v", maxRules))
 		}
 	}
@@ -730,7 +730,7 @@ func (d *namespaceHandler) CreateWorkflowRule(
 	return workflowRule, nil
 }
 
-func (d *namespaceHandler) removeExpiredWorkflowRules(rules map[string]*rulespb.WorkflowRule) {
+func (d *namespaceHandler) removeOldestExpiredWorkflowRule(rules map[string]*rulespb.WorkflowRule) {
 	oldestTime := d.timeSource.Now()
 	var oldestKey string
 	found := false
