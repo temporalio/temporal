@@ -8025,6 +8025,7 @@ func (ms *MutableStateImpl) GetWorkflowVersioningBehaviorSA() enumspb.Versioning
 		} else if worker_versioning.OverrideIsPinned(override) {
 			return enumspb.VERSIONING_BEHAVIOR_PINNED
 		}
+		//nolint:staticcheck // SA1019: worker versioning v0.31 and v0.30
 		return override.GetBehavior()
 	}
 	return ms.executionInfo.GetVersioningInfo().GetBehavior()

@@ -1098,12 +1098,12 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 	m.ms.executionInfo.WorkerDeploymentName = attrs.GetWorkerDeploymentName()
 
 	//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
-	wftDeployment := attrs.GetDeployment()                // v0.30
-	if v := attrs.GetWorkerDeploymentVersion(); v != "" { // v0.31
+	wftDeployment := attrs.GetDeployment()
+	if v := attrs.GetWorkerDeploymentVersion(); v != "" { //nolint:staticcheck // SA1019: worker versioning v0.31
 		dv, _ := worker_versioning.WorkerDeploymentVersionFromString(v)
 		wftDeployment = worker_versioning.DeploymentFromDeploymentVersion(dv)
 	}
-	if v := attrs.GetDeploymentVersion(); v != nil { // v0.32
+	if v := attrs.GetDeploymentVersion(); v != nil {
 		wftDeployment = worker_versioning.DeploymentFromExternalDeploymentVersion(v)
 	}
 	wftBehavior := attrs.GetVersioningBehavior()
@@ -1116,7 +1116,7 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 		// the transition started, the current wft was already started. In this case, we allow the
 		// started wft to run and when completed, we create another wft immediately.
 		if transition.GetDeployment().Equal(wftDeployment) {
-			versioningInfo.DeploymentTransition = nil
+			versioningInfo.DeploymentTransition = nil //nolint:staticcheck // SA1019: worker versioning v0.30
 			versioningInfo.VersionTransition = nil
 			transition = nil
 			completedTransition = true
