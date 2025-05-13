@@ -3721,6 +3721,7 @@ type VerifyChildExecutionCompletionRecordedRequest struct {
 	ParentInitiatedId      int64                  `protobuf:"varint,4,opt,name=parent_initiated_id,json=parentInitiatedId,proto3" json:"parent_initiated_id,omitempty"`
 	ParentInitiatedVersion int64                  `protobuf:"varint,5,opt,name=parent_initiated_version,json=parentInitiatedVersion,proto3" json:"parent_initiated_version,omitempty"`
 	Clock                  *v16.VectorClock       `protobuf:"bytes,6,opt,name=clock,proto3" json:"clock,omitempty"`
+	ResendParent           bool                   `protobuf:"varint,7,opt,name=resend_parent,json=resendParent,proto3" json:"resend_parent,omitempty"`
 	unknownFields          protoimpl.UnknownFields
 	sizeCache              protoimpl.SizeCache
 }
@@ -3795,6 +3796,13 @@ func (x *VerifyChildExecutionCompletionRecordedRequest) GetClock() *v16.VectorCl
 		return x.Clock
 	}
 	return nil
+}
+
+func (x *VerifyChildExecutionCompletionRecordedRequest) GetResendParent() bool {
+	if x != nil {
+		return x.ResendParent
+	}
+	return false
 }
 
 type VerifyChildExecutionCompletionRecordedResponse struct {
@@ -9881,14 +9889,15 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\x05clock\x18\x06 \x01(\v2).temporal.server.api.clock.v1.VectorClockR\x05clock\x128\n" +
 	"\x18parent_initiated_version\x18\a \x01(\x03R\x16parentInitiatedVersion\x12>\n" +
 	"\x1cchild_first_execution_run_id\x18\b \x01(\tR\x18childFirstExecutionRunId:\"\x92\xc4\x03\x1e*\x1cparent_execution.workflow_id\"'\n" +
-	"%RecordChildExecutionCompletedResponse\"\xcb\x03\n" +
+	"%RecordChildExecutionCompletedResponse\"\xf0\x03\n" +
 	"-VerifyChildExecutionCompletionRecordedRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12T\n" +
 	"\x10parent_execution\x18\x02 \x01(\v2).temporal.api.common.v1.WorkflowExecutionR\x0fparentExecution\x12R\n" +
 	"\x0fchild_execution\x18\x03 \x01(\v2).temporal.api.common.v1.WorkflowExecutionR\x0echildExecution\x12.\n" +
 	"\x13parent_initiated_id\x18\x04 \x01(\x03R\x11parentInitiatedId\x128\n" +
 	"\x18parent_initiated_version\x18\x05 \x01(\x03R\x16parentInitiatedVersion\x12?\n" +
-	"\x05clock\x18\x06 \x01(\v2).temporal.server.api.clock.v1.VectorClockR\x05clock:\"\x92\xc4\x03\x1e*\x1cparent_execution.workflow_id\"0\n" +
+	"\x05clock\x18\x06 \x01(\v2).temporal.server.api.clock.v1.VectorClockR\x05clock\x12#\n" +
+	"\rresend_parent\x18\a \x01(\bR\fresendParent:\"\x92\xc4\x03\x1e*\x1cparent_execution.workflow_id\"0\n" +
 	".VerifyChildExecutionCompletionRecordedResponse\"\xc7\x01\n" +
 	" DescribeWorkflowExecutionRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12[\n" +
