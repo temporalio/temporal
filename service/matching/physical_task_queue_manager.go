@@ -308,16 +308,11 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 		}
 	}
 
-	// the desired global rate limit for the task queue comes from the
-	// poller, which lives inside the client side worker. There is
-	// one rateLimiter for this entire task queue and as we get polls,
-	// we update the ratelimiter rps if it has changed from the last
-	// value. Last poller wins if different pollers provide different values
+	// If the priority matcher is enabled, use the rate limiter defined in the priority matcher.
+	// TODO(pri): remove this once we have a way to set the partition-scoped rate limiter for the priority matcher.
 	if rps := pollMetadata.taskQueueMetadata.GetMaxTasksPerSecond(); rps != nil {
 		if c.priMatcher != nil {
 			c.priMatcher.UpdateRatelimit(rps.Value)
-		} else {
-			c.partitionMgr.UpdateRatelimit(rps.Value)
 		}
 	}
 

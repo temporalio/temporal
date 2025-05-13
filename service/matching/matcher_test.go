@@ -62,16 +62,7 @@ func (t *MatcherTestSuite) attachRateLimiter(taskQueueConfig *taskQueueConfig) q
 		dynamicRateBurst,
 		defaultTaskDispatchRPSTTL,
 	)
-	limiter := quotas.NewMultiRateLimiter([]quotas.RateLimiter{
-		dynamicRateLimiter,
-		quotas.NewDefaultOutgoingRateLimiter(
-			taskQueueConfig.AdminNamespaceTaskQueueToPartitionDispatchRate,
-		),
-		quotas.NewDefaultOutgoingRateLimiter(
-			taskQueueConfig.AdminNamespaceToPartitionDispatchRate,
-		),
-	})
-	return limiter
+	return dynamicRateLimiter
 }
 
 func (t *MatcherTestSuite) SetupTest() {

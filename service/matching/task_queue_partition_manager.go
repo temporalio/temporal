@@ -369,6 +369,15 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 		defer dbq.UpdatePollerInfo(pollerIdentity(identity), pollMetadata)
 	}
 
+	// The desired global rate limit for the task queue comes from the
+	// poller, which lives inside the client side worker. There is
+	// one rateLimiter for this entire task queue and as we get polls,
+	// we update the ratelimiter rps if it has changed from the last
+	// value. Last poller wins if different pollers provide different values
+	if rps := pollMetadata.taskQueueMetadata.GetMaxTasksPerSecond(); rps != nil {
+		pm.UpdateRatelimit(rps.Value)
+	}
+
 	task, err := dbq.PollTask(ctx, pollMetadata)
 
 	if task != nil {
