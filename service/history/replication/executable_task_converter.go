@@ -139,7 +139,6 @@ func (e *executableTaskConverterImpl) convertOne(
 			replicationTask,
 		)
 	case enumsspb.REPLICATION_TASK_TYPE_SYNC_VERSIONED_TRANSITION_TASK:
-		// TODO: ask why there is no priority
 		return NewExecutableSyncVersionedTransitionTask(
 			e.processToolBox,
 			replicationTask.SourceTaskId,

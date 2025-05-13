@@ -610,7 +610,7 @@ update-dependencies-major: $(GOMAJOR)
 	@$(GOMAJOR) get -major all
 	@go mod tidy
 
-go-generate: $(MOCKGEN) $(GOIMPORTS) $(STRINGER) $(GOWRAP)
+go-generate: $(STAMPDIR)/mockgen-$(MOCKGEN_VER) $(GOIMPORTS) $(STRINGER) $(GOWRAP)
 	@printf $(COLOR) "Process go:generate directives..."
 	@go generate ./...
 
