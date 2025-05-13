@@ -1897,25 +1897,25 @@ func (s *namespaceHandlerCommonSuite) TestWorkflowRuleEviction() {
 		},
 		{
 			name: "no rule to delete", deletedRule: "", rules: map[string]*rulespb.WorkflowRule{
-				"rule 1": {Spec: &rulespb.WorkflowRuleSpec{Id: "rule 1"}},
-			},
+			"rule 1": {Spec: &rulespb.WorkflowRuleSpec{Id: "rule 1"}},
+		},
 		},
 		{
 			name: "single rule to delete", deletedRule: "rule 1", rules: map[string]*rulespb.WorkflowRule{
-				"rule 1": {Spec: &rulespb.WorkflowRuleSpec{Id: "rule 1", ExpirationTime: timestamppb.New(expiredTime1)}},
-			},
+			"rule 1": {Spec: &rulespb.WorkflowRuleSpec{Id: "rule 1", ExpirationTime: timestamppb.New(expiredTime1)}},
+		},
 		},
 		{
 			name: "two candidates to delete", deletedRule: "rule 2", rules: map[string]*rulespb.WorkflowRule{
-				"rule 1": {Spec: &rulespb.WorkflowRuleSpec{Id: "rule 1", ExpirationTime: timestamppb.New(expiredTime1)}},
-				"rule 2": {Spec: &rulespb.WorkflowRuleSpec{Id: "rule 2", ExpirationTime: timestamppb.New(expiredTime2)}},
-			},
+			"rule 1": {Spec: &rulespb.WorkflowRuleSpec{Id: "rule 1", ExpirationTime: timestamppb.New(expiredTime1)}},
+			"rule 2": {Spec: &rulespb.WorkflowRuleSpec{Id: "rule 2", ExpirationTime: timestamppb.New(expiredTime2)}},
+		},
 		},
 	}
 
 	for _, tt := range tests {
 		oldLens := len(tt.rules)
-		s.handler.removeExpiredWorkflowRules(tt.rules)
+		s.handler.removeOldestExpiredWorkflowRule(tt.rules)
 		if len(tt.deletedRule) == 0 {
 			s.Equal(oldLens, len(tt.rules))
 		} else {
