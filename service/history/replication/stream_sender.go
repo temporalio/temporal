@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -611,6 +612,11 @@ func (s *StreamSenderImpl) shouldProcessTask(item tasks.Task) bool {
 		return false
 	}
 
+	targetClusters := s.getTaskTargetCluster(item)
+	if len(targetClusters) != 0 && !slices.Contains(targetClusters, s.clientClusterName) {
+		return false
+	}
+
 	var shouldProcessTask bool
 	namespaceEntry, err := s.shardContext.GetNamespaceRegistry().GetNamespaceByID(
 		namespace.ID(item.GetNamespaceID()),
@@ -642,5 +648,14 @@ func (s *StreamSenderImpl) getTaskPriority(task tasks.Task) enumsspb.TaskPriorit
 		return t.Priority
 	default:
 		return enumsspb.TASK_PRIORITY_HIGH
+	}
+}
+
+func (s *StreamSenderImpl) getTaskTargetCluster(task tasks.Task) []string {
+	switch t := task.(type) {
+	case *tasks.SyncWorkflowStateTask:
+		return t.TargetClusters
+	default:
+		return nil
 	}
 }

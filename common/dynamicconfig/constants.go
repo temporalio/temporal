@@ -1306,10 +1306,9 @@ second per poller by one physical queue manager`,
 	)
 	EnableHistoryReplicationDLQV2 = NewGlobalBoolSetting(
 		"history.enableHistoryReplicationDLQV2",
-		false,
+		true,
 		`EnableHistoryReplicationDLQV2 switches to the DLQ v2 implementation for history replication. See details in
-[go.temporal.io/server/common/persistence.QueueV2]. This feature is currently in development. Do NOT use it in
-production.`,
+[go.temporal.io/server/common/persistence.QueueV2]`,
 	)
 
 	HistoryRPS = NewGlobalIntSetting(
@@ -2701,6 +2700,12 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		"frontend.workflowRulesAPIsEnabled",
 		false,
 		`WorkflowRulesAPIsEnabled is a "feature enable" flag. `,
+	)
+
+	MaxWorkflowRulesPerNamespace = NewNamespaceIntSetting(
+		"frontend.maxWorkflowRulesPerNamespace",
+		10,
+		`Maximum number of workflow rules in a given namespace`,
 	)
 
 	SlowRequestLoggingThreshold = NewGlobalDurationSetting(

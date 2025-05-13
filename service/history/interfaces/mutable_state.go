@@ -301,7 +301,7 @@ type (
 		// CloseTransactionAsSnapshot closes the mutable state transaction (different from DB transaction) and prepares the current snapshot of the state to be persisted and bumps the DBRecordVersion.
 		// You should ideally not make any changes to the mutable state after this call.
 		CloseTransactionAsSnapshot(transactionPolicy TransactionPolicy) (*persistence.WorkflowSnapshot, []*persistence.WorkflowEvents, error)
-		GenerateMigrationTasks() ([]tasks.Task, int64, error)
+		GenerateMigrationTasks(targetClusters []string) ([]tasks.Task, int64, error)
 
 		// ContinueAsNewMinBackoff calculate minimal backoff for next ContinueAsNew run.
 		// Input backoffDuration is current backoff for next run.
