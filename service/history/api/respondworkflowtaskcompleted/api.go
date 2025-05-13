@@ -229,6 +229,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		}
 	}()
 
+	// TODO(carlydf): change condition when deprecating versionstamp
 	// It's an error if the workflow has used versioning in the past but this task has no versioning info.
 	if ms.GetMostRecentWorkerVersionStamp().GetUseVersioning() &&
 		//nolint:staticcheck // SA1019 deprecated stamp will clean up later
