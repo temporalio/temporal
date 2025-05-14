@@ -82,6 +82,7 @@ type (
 		ServiceOptions         map[primitives.ServiceName][]fx.Option
 		DynamicConfigOverrides map[dynamicconfig.Key]any
 		ArchivalEnabled        bool
+		EnableMTLS             bool
 	}
 	TestClusterOption func(params *TestClusterParams)
 )
@@ -123,6 +124,12 @@ func WithDynamicConfigOverrides(overrides map[dynamicconfig.Key]any) TestCluster
 func WithArchivalEnabled() TestClusterOption {
 	return func(params *TestClusterParams) {
 		params.ArchivalEnabled = true
+	}
+}
+
+func WithMTLS() TestClusterOption {
+	return func(params *TestClusterParams) {
+		params.EnableMTLS = true
 	}
 }
 
@@ -227,13 +234,12 @@ func (s *FunctionalTestBase) SetupSuiteWithCluster(clusterConfigFile string, opt
 	if s.testClusterConfig.ESConfig != nil {
 		s.testClusterConfig.DynamicConfigOverrides[dynamicconfig.SecondaryVisibilityWritingMode.Key()] = visibility.SecondaryVisibilityWritingModeDual
 	}
-	// Enable raw history for functional tests.
-	// TODO (prathyush): remove this after setting it to true by default.
-	s.testClusterConfig.DynamicConfigOverrides[dynamicconfig.SendRawHistoryBetweenInternalServices.Key()] = true
 
 	s.testClusterConfig.ServiceFxOptions = params.ServiceOptions
 	s.testClusterConfig.EnableMetricsCapture = true
 	s.testClusterConfig.EnableArchival = params.ArchivalEnabled
+
+	s.testClusterConfig.EnableMTLS = params.EnableMTLS
 
 	testClusterFactory := NewTestClusterFactory()
 	s.testCluster, err = testClusterFactory.NewCluster(s.T(), s.testClusterConfig, s.Logger)
@@ -369,6 +375,11 @@ func (s *FunctionalTestBase) setupSdk() {
 		HostPort:  s.FrontendGRPCAddress(),
 		Namespace: s.Namespace().String(),
 		Logger:    log.NewSdkLogger(s.Logger),
+	}
+	if s.GetTestCluster().Host().TlsConfigProvider() != nil {
+		clientOptions.ConnectionOptions = sdkclient.ConnectionOptions{
+			TLS: s.GetTestCluster().Host().TlsConfigProvider().FrontendClientConfig,
+		}
 	}
 
 	var err error
