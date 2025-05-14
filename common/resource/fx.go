@@ -296,7 +296,6 @@ func ArchiverProviderProvider(
 	persistenceExecutionManager persistence.ExecutionManager,
 	logger log.SnTaggedLogger,
 	metricsHandler metrics.Handler,
-	clusterMetadata cluster.Metadata,
 ) provider.ArchiverProvider {
 	return provider.NewArchiverProvider(
 		cfg.Archival.History.Provider,
@@ -304,7 +303,6 @@ func ArchiverProviderProvider(
 		persistenceExecutionManager,
 		logger,
 		metricsHandler,
-		clusterMetadata,
 	)
 }
 

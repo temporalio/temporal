@@ -10,7 +10,6 @@ import (
 	"go.temporal.io/server/common/archiver/filestore"
 	"go.temporal.io/server/common/archiver/gcloud"
 	"go.temporal.io/server/common/archiver/s3store"
-	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -20,10 +19,6 @@ import (
 var (
 	// ErrUnknownScheme is the error for unknown archiver scheme
 	ErrUnknownScheme = errors.New("unknown archiver scheme")
-	// ErrNotSupported is the error for not supported archiver implementation
-	ErrNotSupported = errors.New("archiver provider not supported")
-	// ErrBootstrapContainerNotFound is the error for unable to find the bootstrap container
-	ErrBootstrapContainerNotFound = errors.New("unable to find bootstrap container")
 	// ErrArchiverConfigNotFound is the error for unable to find the config for an archiver given scheme
 	ErrArchiverConfigNotFound = errors.New("unable to find archiver config for the given scheme")
 )
@@ -59,7 +54,6 @@ func NewArchiverProvider(
 	executionManager persistence.ExecutionManager,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
-	clusterMetadata cluster.Metadata,
 ) ArchiverProvider {
 	return &archiverProvider{
 		historyArchiverConfigs:    historyArchiverConfigs,
@@ -80,10 +74,6 @@ func (p *archiverProvider) GetHistoryArchiver(scheme string) (historyArchiver ar
 		return historyArchiver, nil
 	}
 	p.RUnlock()
-
-	if p.executionManager == nil && p.logger == nil && p.metricsHandler == nil {
-		return nil, ErrBootstrapContainerNotFound
-	}
 
 	switch scheme {
 	case filestore.URIScheme:
@@ -129,10 +119,6 @@ func (p *archiverProvider) GetVisibilityArchiver(scheme string) (archiver.Visibi
 		return visibilityArchiver, nil
 	}
 	p.RUnlock()
-
-	if p.logger == nil && p.metricsHandler == nil {
-		return nil, ErrBootstrapContainerNotFound
-	}
 
 	var visibilityArchiver archiver.VisibilityArchiver
 	var err error

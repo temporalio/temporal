@@ -473,7 +473,7 @@ func newArchiverBase(enabled bool, executionManager persistence.ExecutionManager
 	if !enabled {
 		return &ArchiverBase{
 			metadata: archiver.NewArchivalMetadata(dcCollection, "", false, "", false, &config.ArchivalNamespaceDefaults{}),
-			provider: provider.NewArchiverProvider(nil, nil, nil, logger, metrics.NoopMetricsHandler, nil),
+			provider: provider.NewArchiverProvider(nil, nil, nil, logger, metrics.NoopMetricsHandler),
 		}
 	}
 
@@ -499,7 +499,6 @@ func newArchiverBase(enabled bool, executionManager persistence.ExecutionManager
 		executionManager,
 		logger,
 		metrics.NoopMetricsHandler,
-		nil,
 	)
 	return &ArchiverBase{
 		metadata: archiver.NewArchivalMetadata(dcCollection, "enabled", true, "enabled", true, &config.ArchivalNamespaceDefaults{
