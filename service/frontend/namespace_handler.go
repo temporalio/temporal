@@ -27,7 +27,6 @@ import (
 	"go.temporal.io/server/common/namespace/nsmanager"
 	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/util"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -984,7 +983,7 @@ func (d *namespaceHandler) validateHistoryArchivalURI(URIString string) error {
 		return err
 	}
 
-	archiver, err := d.archiverProvider.GetHistoryArchiver(URI.Scheme(), string(primitives.FrontendService))
+	archiver, err := d.archiverProvider.GetHistoryArchiver(URI.Scheme())
 	if err != nil {
 		return err
 	}
@@ -998,7 +997,7 @@ func (d *namespaceHandler) validateVisibilityArchivalURI(URIString string) error
 		return err
 	}
 
-	archiver, err := d.archiverProvider.GetVisibilityArchiver(URI.Scheme(), string(primitives.FrontendService))
+	archiver, err := d.archiverProvider.GetVisibilityArchiver(URI.Scheme())
 	if err != nil {
 		return err
 	}

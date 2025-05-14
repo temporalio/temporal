@@ -28,6 +28,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership/static"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
@@ -472,7 +473,7 @@ func newArchiverBase(enabled bool, logger log.Logger) *ArchiverBase {
 	if !enabled {
 		return &ArchiverBase{
 			metadata: archiver.NewArchivalMetadata(dcCollection, "", false, "", false, &config.ArchivalNamespaceDefaults{}),
-			provider: provider.NewArchiverProvider(nil, nil),
+			provider: provider.NewArchiverProvider(nil, nil, nil, logger, metrics.NoopMetricsHandler, nil),
 		}
 	}
 
@@ -495,6 +496,10 @@ func newArchiverBase(enabled bool, logger log.Logger) *ArchiverBase {
 		&config.VisibilityArchiverProvider{
 			Filestore: cfg,
 		},
+		nil,
+		logger,
+		metrics.NoopMetricsHandler,
+		nil,
 	)
 	return &ArchiverBase{
 		metadata: archiver.NewArchivalMetadata(dcCollection, "enabled", true, "enabled", true, &config.ArchivalNamespaceDefaults{

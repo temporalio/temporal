@@ -10,7 +10,11 @@ import (
 	"go.temporal.io/server/common/archiver/filestore"
 	"go.temporal.io/server/common/archiver/gcloud"
 	"go.temporal.io/server/common/archiver/s3store"
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence"
 )
 
 var (
@@ -18,25 +22,18 @@ var (
 	ErrUnknownScheme = errors.New("unknown archiver scheme")
 	// ErrNotSupported is the error for not supported archiver implementation
 	ErrNotSupported = errors.New("archiver provider not supported")
-	// ErrBootstrapContainerNotFound is the error for unable to find the bootstrap container given serviceName
-	ErrBootstrapContainerNotFound = errors.New("unable to find bootstrap container for the given service name")
+	// ErrBootstrapContainerNotFound is the error for unable to find the bootstrap container
+	ErrBootstrapContainerNotFound = errors.New("unable to find bootstrap container")
 	// ErrArchiverConfigNotFound is the error for unable to find the config for an archiver given scheme
 	ErrArchiverConfigNotFound = errors.New("unable to find archiver config for the given scheme")
-	// ErrBootstrapContainerAlreadyRegistered is the error for registering multiple containers for the same serviceName
-	ErrBootstrapContainerAlreadyRegistered = errors.New("bootstrap container has already been registered")
 )
 
 type (
-	// ArchiverProvider returns history or visibility archiver based on the scheme and serviceName.
-	// The archiver for each combination of scheme and serviceName will be created only once and cached.
+	// ArchiverProvider returns history or visibility archiver based on the scheme.
+	// The archiver for each scheme will be created only once and cached.
 	ArchiverProvider interface {
-		RegisterBootstrapContainer(
-			serviceName string,
-			historyContainer *archiver.HistoryBootstrapContainer,
-			visibilityContainter *archiver.VisibilityBootstrapContainer,
-		) error
-		GetHistoryArchiver(scheme, serviceName string) (archiver.HistoryArchiver, error)
-		GetVisibilityArchiver(scheme, serviceName string) (archiver.VisibilityArchiver, error)
+		GetHistoryArchiver(scheme string) (archiver.HistoryArchiver, error)
+		GetVisibilityArchiver(scheme string) (archiver.VisibilityArchiver, error)
 	}
 
 	archiverProvider struct {
@@ -45,11 +42,10 @@ type (
 		historyArchiverConfigs    *config.HistoryArchiverProvider
 		visibilityArchiverConfigs *config.VisibilityArchiverProvider
 
-		// Key for the container is just serviceName
-		historyContainers    map[string]*archiver.HistoryBootstrapContainer
-		visibilityContainers map[string]*archiver.VisibilityBootstrapContainer
+		historyContainer    *archiver.HistoryBootstrapContainer
+		visibilityContainer *archiver.VisibilityBootstrapContainer
 
-		// Key for the archiver is scheme + serviceName
+		// Key for the archiver is scheme
 		historyArchivers    map[string]archiver.HistoryArchiver
 		visibilityArchivers map[string]archiver.VisibilityArchiver
 	}
@@ -59,48 +55,42 @@ type (
 func NewArchiverProvider(
 	historyArchiverConfigs *config.HistoryArchiverProvider,
 	visibilityArchiverConfigs *config.VisibilityArchiverProvider,
+	executionManager persistence.ExecutionManager,
+	logger log.Logger,
+	metricsHandler metrics.Handler,
+	clusterMetadata cluster.Metadata,
 ) ArchiverProvider {
+	var historyContainer *archiver.HistoryBootstrapContainer
+	if executionManager != nil || logger != nil || metricsHandler != nil || clusterMetadata != nil {
+		historyContainer = &archiver.HistoryBootstrapContainer{
+			ExecutionManager: executionManager,
+			Logger:           logger,
+			MetricsHandler:   metricsHandler,
+			ClusterMetadata:  clusterMetadata,
+		}
+	}
+
+	var visibilityContainer *archiver.VisibilityBootstrapContainer
+	if logger != nil || metricsHandler != nil || clusterMetadata != nil {
+		visibilityContainer = &archiver.VisibilityBootstrapContainer{
+			Logger:          logger,
+			MetricsHandler:  metricsHandler,
+			ClusterMetadata: clusterMetadata,
+		}
+	}
+
 	return &archiverProvider{
 		historyArchiverConfigs:    historyArchiverConfigs,
 		visibilityArchiverConfigs: visibilityArchiverConfigs,
-		historyContainers:         make(map[string]*archiver.HistoryBootstrapContainer),
-		visibilityContainers:      make(map[string]*archiver.VisibilityBootstrapContainer),
+		historyContainer:          historyContainer,
+		visibilityContainer:       visibilityContainer,
 		historyArchivers:          make(map[string]archiver.HistoryArchiver),
 		visibilityArchivers:       make(map[string]archiver.VisibilityArchiver),
 	}
 }
 
-// RegisterBootstrapContainer stores the given bootstrap container given the serviceName
-// The container should be registered when a service starts up and before GetArchiver() is ever called.
-// Later calls to GetArchiver() will used the registered container to initialize new archivers.
-// If the container for a service has already registered, and this method is invoked for that service again
-// with an non-nil container, an error will be returned.
-func (p *archiverProvider) RegisterBootstrapContainer(
-	serviceName string,
-	historyContainer *archiver.HistoryBootstrapContainer,
-	visibilityContainter *archiver.VisibilityBootstrapContainer,
-) error {
-	p.Lock()
-	defer p.Unlock()
-
-	if _, ok := p.historyContainers[serviceName]; ok && historyContainer != nil {
-		return ErrBootstrapContainerAlreadyRegistered
-	}
-	if _, ok := p.visibilityContainers[serviceName]; ok && visibilityContainter != nil {
-		return ErrBootstrapContainerAlreadyRegistered
-	}
-
-	if historyContainer != nil {
-		p.historyContainers[serviceName] = historyContainer
-	}
-	if visibilityContainter != nil {
-		p.visibilityContainers[serviceName] = visibilityContainter
-	}
-	return nil
-}
-
-func (p *archiverProvider) GetHistoryArchiver(scheme, serviceName string) (historyArchiver archiver.HistoryArchiver, err error) {
-	archiverKey := p.getArchiverKey(scheme, serviceName)
+func (p *archiverProvider) GetHistoryArchiver(scheme string) (historyArchiver archiver.HistoryArchiver, err error) {
+	archiverKey := p.getArchiverKey(scheme)
 	p.RLock()
 	if historyArchiver, ok := p.historyArchivers[archiverKey]; ok {
 		p.RUnlock()
@@ -108,8 +98,8 @@ func (p *archiverProvider) GetHistoryArchiver(scheme, serviceName string) (histo
 	}
 	p.RUnlock()
 
-	container, ok := p.historyContainers[serviceName]
-	if !ok {
+	container := p.historyContainer
+	if container == nil {
 		return nil, ErrBootstrapContainerNotFound
 	}
 
@@ -149,8 +139,8 @@ func (p *archiverProvider) GetHistoryArchiver(scheme, serviceName string) (histo
 	return historyArchiver, nil
 }
 
-func (p *archiverProvider) GetVisibilityArchiver(scheme, serviceName string) (archiver.VisibilityArchiver, error) {
-	archiverKey := p.getArchiverKey(scheme, serviceName)
+func (p *archiverProvider) GetVisibilityArchiver(scheme string) (archiver.VisibilityArchiver, error) {
+	archiverKey := p.getArchiverKey(scheme)
 	p.RLock()
 	if visibilityArchiver, ok := p.visibilityArchivers[archiverKey]; ok {
 		p.RUnlock()
@@ -158,8 +148,8 @@ func (p *archiverProvider) GetVisibilityArchiver(scheme, serviceName string) (ar
 	}
 	p.RUnlock()
 
-	container, ok := p.visibilityContainers[serviceName]
-	if !ok {
+	container := p.visibilityContainer
+	if container == nil {
 		return nil, ErrBootstrapContainerNotFound
 	}
 
@@ -200,6 +190,6 @@ func (p *archiverProvider) GetVisibilityArchiver(scheme, serviceName string) (ar
 
 }
 
-func (p *archiverProvider) getArchiverKey(scheme, serviceName string) string {
-	return scheme + ":" + serviceName
+func (p *archiverProvider) getArchiverKey(scheme string) string {
+	return scheme
 }
