@@ -38,7 +38,6 @@ type (
 
 		shardController *faultyShardController
 		worker          worker.Worker
-		sdkClient       sdkclient.Client
 		skippedTasks    chan tasks.Task
 
 		shouldSkip   atomic.Bool
@@ -134,13 +133,6 @@ func (s *AddTasksSuite) SetupSuite() {
 		),
 	),
 	)
-	// Get an SDK client so that we can call ExecuteWorkflow.
-	s.sdkClient = s.newSDKClient()
-}
-
-func (s *AddTasksSuite) TearDownSuite() {
-	s.sdkClient.Close()
-	s.FunctionalTestBase.TearDownSuite()
 }
 
 func (s *AddTasksSuite) TestAddTasks_Ok() {
@@ -159,8 +151,7 @@ func (s *AddTasksSuite) TestAddTasks_Ok() {
 	} {
 		s.Run(tc.name, func() {
 			// Register a workflow which does nothing.
-			taskQueue := testcore.RandomizeStr("add-tasks-test-queue")
-			w := worker.New(s.sdkClient, taskQueue, worker.Options{DeadlockDetectionTimeout: 0})
+			w := worker.New(s.SdkClient(), s.TaskQueue(), worker.Options{DeadlockDetectionTimeout: 0})
 			myWorkflow := func(ctx workflow.Context) error {
 				return nil
 			}
@@ -178,9 +169,9 @@ func (s *AddTasksSuite) TestAddTasks_Ok() {
 			timeout := 5 * debug.TimeoutMultiplier * time.Second
 			ctx, cancel := context.WithTimeout(ctx, timeout)
 			defer cancel()
-			run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+			run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 				ID:        workflowID,
-				TaskQueue: taskQueue,
+				TaskQueue: s.TaskQueue(),
 			}, myWorkflow)
 			s.NoError(err)
 
@@ -243,13 +234,4 @@ func (s *AddTasksSuite) TestAddTasks_GetEngineErr() {
 	})
 	s.Error(err)
 	s.ErrorContains(err, (*s.getEngineErr.Load()).Error())
-}
-
-func (s *AddTasksSuite) newSDKClient() sdkclient.Client {
-	client, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.FrontendGRPCAddress(),
-		Namespace: s.Namespace().String(),
-	})
-	s.Require().NoError(err)
-	return client
 }

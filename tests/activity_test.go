@@ -1391,15 +1391,9 @@ func (s *ActivityTestSuite) TestActivityHeartBeat_RecordIdentity() {
 }
 
 func (s *ActivityTestSuite) TestActivityTaskCompleteForceCompletion() {
-	sdkClient, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.FrontendGRPCAddress(),
-		Namespace: s.Namespace().String(),
-	})
-	s.NoError(err)
-
 	activityInfo := make(chan activity.Info, 1)
 	taskQueue := testcore.RandomizeStr(s.T().Name())
-	w, wf := s.mockWorkflowWithErrorActivity(activityInfo, sdkClient, taskQueue)
+	w, wf := s.mockWorkflowWithErrorActivity(activityInfo, s.SdkClient(), taskQueue)
 	s.NoError(w.Start())
 	defer w.Stop()
 
@@ -1408,11 +1402,11 @@ func (s *ActivityTestSuite) TestActivityTaskCompleteForceCompletion() {
 		ID:        uuid.New(),
 		TaskQueue: taskQueue,
 	}
-	run, err := sdkClient.ExecuteWorkflow(ctx, workflowOptions, wf)
+	run, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, wf)
 	s.NoError(err)
 	ai := <-activityInfo
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		description, err := sdkClient.DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
+		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
 		assert.NoError(t, err)
 		assert.Equal(t, 1, len(description.PendingActivities))
 		assert.Equal(t, "mock error of an activity", description.PendingActivities[0].LastFailure.Message)
@@ -1420,7 +1414,7 @@ func (s *ActivityTestSuite) TestActivityTaskCompleteForceCompletion() {
 		10*time.Second,
 		500*time.Millisecond)
 
-	err = sdkClient.CompleteActivityByID(ctx, s.Namespace().String(), run.GetID(), run.GetRunID(), ai.ActivityID, nil, nil)
+	err = s.SdkClient().CompleteActivityByID(ctx, s.Namespace().String(), run.GetID(), run.GetRunID(), ai.ActivityID, nil, nil)
 	s.NoError(err)
 
 	// Ensure the activity is completed and the workflow is unblcked.
@@ -1428,15 +1422,9 @@ func (s *ActivityTestSuite) TestActivityTaskCompleteForceCompletion() {
 }
 
 func (s *ActivityTestSuite) TestActivityTaskCompleteRejectCompletion() {
-	sdkClient, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.FrontendGRPCAddress(),
-		Namespace: s.Namespace().String(),
-	})
-	s.NoError(err)
-
 	activityInfo := make(chan activity.Info, 1)
 	taskQueue := testcore.RandomizeStr(s.T().Name())
-	w, wf := s.mockWorkflowWithErrorActivity(activityInfo, sdkClient, taskQueue)
+	w, wf := s.mockWorkflowWithErrorActivity(activityInfo, s.SdkClient(), taskQueue)
 	s.NoError(w.Start())
 	defer w.Stop()
 
@@ -1445,11 +1433,11 @@ func (s *ActivityTestSuite) TestActivityTaskCompleteRejectCompletion() {
 		ID:        uuid.New(),
 		TaskQueue: taskQueue,
 	}
-	run, err := sdkClient.ExecuteWorkflow(ctx, workflowOptions, wf)
+	run, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, wf)
 	s.NoError(err)
 	ai := <-activityInfo
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		description, err := sdkClient.DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
+		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
 		assert.NoError(t, err)
 		assert.Equal(t, 1, len(description.PendingActivities))
 		assert.Equal(t, "mock error of an activity", description.PendingActivities[0].LastFailure.Message)
@@ -1457,7 +1445,7 @@ func (s *ActivityTestSuite) TestActivityTaskCompleteRejectCompletion() {
 		10*time.Second,
 		500*time.Millisecond)
 
-	err = sdkClient.CompleteActivity(ctx, ai.TaskToken, nil, nil)
+	err = s.SdkClient().CompleteActivity(ctx, ai.TaskToken, nil, nil)
 	var svcErr *serviceerror.NotFound
 	s.ErrorAs(err, &svcErr, "invalid activityID or activity already timed out or invoking workflow is completed")
 }

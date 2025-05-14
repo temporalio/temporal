@@ -385,6 +385,7 @@ func (s *FunctionalTestBase) setupSdk() {
 	var err error
 	s.sdkClient, err = sdkclient.Dial(clientOptions)
 	s.NoError(err)
+	// TODO(alex): move initialization to suite level?
 	s.taskQueue = RandomizeStr("tq")
 
 	workerOptions := sdkworker.Options{}

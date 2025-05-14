@@ -21,6 +21,7 @@ type TestDataConverter struct {
 	NumOfCallFromPayloads int
 }
 
+// TODO (alex): use it by default SdkCleint everywhere?
 func NewTestDataConverter() converter.DataConverter {
 	return &TestDataConverter{}
 }
