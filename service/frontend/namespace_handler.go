@@ -983,12 +983,12 @@ func (d *namespaceHandler) validateHistoryArchivalURI(URIString string) error {
 		return err
 	}
 
-	archiver, err := d.archiverProvider.GetHistoryArchiver(URI.Scheme())
+	a, err := d.archiverProvider.GetHistoryArchiver(URI.Scheme())
 	if err != nil {
 		return err
 	}
 
-	return archiver.ValidateURI(URI)
+	return a.ValidateURI(URI)
 }
 
 func (d *namespaceHandler) validateVisibilityArchivalURI(URIString string) error {
@@ -997,12 +997,12 @@ func (d *namespaceHandler) validateVisibilityArchivalURI(URIString string) error
 		return err
 	}
 
-	archiver, err := d.archiverProvider.GetVisibilityArchiver(URI.Scheme())
+	a, err := d.archiverProvider.GetVisibilityArchiver(URI.Scheme())
 	if err != nil {
 		return err
 	}
 
-	return archiver.ValidateURI(URI)
+	return a.ValidateURI(URI)
 }
 
 // maybeUpdateFailoverHistory adds an entry if the Namespace is becoming active in a new cluster.

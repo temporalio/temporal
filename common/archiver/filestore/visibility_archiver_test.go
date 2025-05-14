@@ -559,9 +559,9 @@ func (s *visibilityArchiverSuite) newTestVisibilityArchiver() *visibilityArchive
 		FileMode: testFileModeStr,
 		DirMode:  testDirModeStr,
 	}
-	archiver, err := NewVisibilityArchiver(s.logger, s.metricsHandler, config)
+	a, err := NewVisibilityArchiver(s.logger, s.metricsHandler, config)
 	s.NoError(err)
-	return archiver.(*visibilityArchiver)
+	return a.(*visibilityArchiver)
 }
 
 func (s *visibilityArchiverSuite) setupVisibilityDirectory() {

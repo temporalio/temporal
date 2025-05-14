@@ -60,8 +60,8 @@ func newVisibilityArchiver(logger log.Logger, metricsHandler metrics.Handler, st
 }
 
 // NewVisibilityArchiver creates a new archiver.VisibilityArchiver based on filestore
-func NewVisibilityArchiver(logger log.Logger, metricsHandler metrics.Handler, config *config.GstorageArchiver) (archiver.VisibilityArchiver, error) {
-	storage, err := connector.NewClient(context.Background(), config)
+func NewVisibilityArchiver(logger log.Logger, metricsHandler metrics.Handler, cfg *config.GstorageArchiver) (archiver.VisibilityArchiver, error) {
+	storage, err := connector.NewClient(context.Background(), cfg)
 	return newVisibilityArchiver(logger, metricsHandler, storage), err
 }
 
