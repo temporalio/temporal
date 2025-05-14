@@ -1361,22 +1361,6 @@ See DynamicRateLimitingParams comments for more details.`,
 and HistoryCacheHostLevelMaxSizeBytes. Otherwise, entry count in the history cache will be limited by
 HistoryCacheMaxSize and HistoryCacheHostLevelMaxSize.`,
 	)
-	HistoryCacheInitialSize = NewGlobalIntSetting(
-		"history.cacheInitialSize",
-		128,
-		`HistoryCacheInitialSize is initial size of history cache`,
-	)
-	HistoryCacheMaxSize = NewGlobalIntSetting(
-		"history.cacheMaxSize",
-		512,
-		`HistoryCacheMaxSize is the maximum number of entries in the shard level history cache`,
-	)
-	HistoryCacheMaxSizeBytes = NewGlobalIntSetting(
-		"history.cacheMaxSizeBytes",
-		512*4*1024,
-		`HistoryCacheMaxSizeBytes is the maximum size of the shard level history cache in bytes. This is only used if
-HistoryCacheSizeBasedLimit is set to true.`,
-	)
 	HistoryCacheTTL = NewGlobalDurationSetting(
 		"history.cacheTTL",
 		time.Hour,
@@ -1387,11 +1371,6 @@ HistoryCacheSizeBasedLimit is set to true.`,
 		500*time.Millisecond,
 		`HistoryCacheNonUserContextLockTimeout controls how long non-user call (callerType != API or Operator)
 will wait on workflow lock acquisition. Requires service restart to take effect.`,
-	)
-	EnableHostHistoryCache = NewGlobalBoolSetting(
-		"history.enableHostHistoryCache",
-		true,
-		`EnableHostHistoryCache controls if the history cache is host level`,
 	)
 	HistoryCacheHostLevelMaxSize = NewGlobalIntSetting(
 		"history.hostLevelCacheMaxSize",
