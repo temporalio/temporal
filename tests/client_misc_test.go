@@ -37,23 +37,11 @@ import (
 
 type ClientMiscTestSuite struct {
 	testcore.FunctionalTestBase
-	maxPendingSignals         int
-	maxPendingCancelRequests  int
-	maxPendingActivities      int
-	maxPendingChildExecutions int
 }
 
 func TestClientMiscTestSuite(t *testing.T) {
 	t.Parallel()
 	suite.Run(t, new(ClientMiscTestSuite))
-}
-
-func (s *ClientMiscTestSuite) SetupSuite() {
-	s.FunctionalTestBase.SetupTest()
-	s.maxPendingSignals = testcore.ClientSuiteLimit
-	s.maxPendingCancelRequests = testcore.ClientSuiteLimit
-	s.maxPendingActivities = testcore.ClientSuiteLimit
-	s.maxPendingChildExecutions = testcore.ClientSuiteLimit
 }
 
 func (s *ClientMiscTestSuite) TestTooManyChildWorkflows() {
@@ -71,7 +59,7 @@ func (s *ClientMiscTestSuite) TestTooManyChildWorkflows() {
 
 	// define a workflow which creates N blocked children, and then tries to create another, which should fail because
 	// it's now past the limit
-	maxPendingChildWorkflows := s.maxPendingChildExecutions
+	maxPendingChildWorkflows := testcore.ClientSuiteLimit
 	parentWorkflow := func(ctx workflow.Context) error {
 		childStarted := workflow.GetSignalChannel(ctx, "blocking-child-started")
 		for i := 0; i < maxPendingChildWorkflows; i++ {
@@ -135,7 +123,7 @@ func (s *ClientMiscTestSuite) TestTooManyPendingActivities() {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	pendingActivities := make(chan activity.Info, s.maxPendingActivities)
+	pendingActivities := make(chan activity.Info, testcore.ClientSuiteLimit)
 	pendingActivity := func(ctx context.Context) error {
 		pendingActivities <- activity.GetInfo(ctx)
 		return activity.ErrResultPending
@@ -148,7 +136,7 @@ func (s *ClientMiscTestSuite) TestTooManyPendingActivities() {
 
 	readyToScheduleLastActivity := "ready-to-schedule-last-activity"
 	myWorkflow := func(ctx workflow.Context) error {
-		for i := 0; i < s.maxPendingActivities; i++ {
+		for i := 0; i < testcore.ClientSuiteLimit; i++ {
 			workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 				StartToCloseTimeout: time.Minute,
 				ActivityID:          fmt.Sprintf("pending-activity-%d", i),
@@ -173,7 +161,7 @@ func (s *ClientMiscTestSuite) TestTooManyPendingActivities() {
 
 	// wait until all of the activities are started (but not finished) before trying to schedule the last one
 	var activityInfo activity.Info
-	for i := 0; i < s.maxPendingActivities; i++ {
+	for i := 0; i < testcore.ClientSuiteLimit; i++ {
 		activityInfo = <-pendingActivities
 	}
 	s.NoError(s.SdkClient().SignalWorkflow(ctx, workflowId, "", readyToScheduleLastActivity, nil))
@@ -282,7 +270,7 @@ func (s *ClientMiscTestSuite) TestTooManyCancelRequests() {
 		var runs []sdkclient.WorkflowRun
 		var stop int
 		for start := 0; start < numTargetWorkflows; start = stop {
-			stop = start + s.maxPendingCancelRequests
+			stop = start + testcore.ClientSuiteLimit
 			if stop > numTargetWorkflows {
 				stop = numTargetWorkflows
 			}
@@ -338,7 +326,7 @@ func (s *ClientMiscTestSuite) TestTooManyPendingSignals() {
 		senderRun, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 			TaskQueue: s.TaskQueue(),
 			ID:        senderId,
-		}, sender, s.maxPendingSignals+1)
+		}, sender, testcore.ClientSuiteLimit+1)
 		s.NoError(err)
 		{
 			ctx, cancel := context.WithTimeout(ctx, successTimeout)
@@ -364,7 +352,7 @@ func (s *ClientMiscTestSuite) TestTooManyPendingSignals() {
 		senderRun, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 			TaskQueue: s.TaskQueue(),
 			ID:        senderID,
-		}, sender, s.maxPendingSignals)
+		}, sender, testcore.ClientSuiteLimit)
 		s.NoError(err)
 		ctx, cancel := context.WithTimeout(ctx, successTimeout)
 		defer cancel()

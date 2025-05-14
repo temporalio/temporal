@@ -2573,6 +2573,7 @@ func (s *AdvancedVisibilitySuite) TestBuildIdScavenger_DeletesUnusedBuildId() {
 	err = run.Get(ctx, nil)
 	s.Require().NoError(err)
 
+	//nolint:staticcheck This is legacy test
 	compatibility, err := s.SdkClient().GetWorkerBuildIdCompatibility(ctx, &sdkclient.GetWorkerBuildIdCompatibilityOptions{
 		TaskQueue: tq,
 	})
