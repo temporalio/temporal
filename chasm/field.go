@@ -48,14 +48,21 @@ func NewComponentPointerField[C Component](
 	ctx MutableContext,
 	c C,
 ) Field[C] {
-	//nolint:forbidigo
-	panic("not implemented")
+	path, exists := ctx.Ref(c)
+	if !exists {
+		// TODO (alex): error?
+		return NewEmptyField[C]()
+	}
+	return Field[C]{
+		Internal: newFieldInternalWithValue(fieldTypeComponentPointer, path.componentPath),
+	}
 }
 
 func NewDataPointerField[D proto.Message](
 	ctx MutableContext,
 	d D,
 ) Field[D] {
+	// TODO (alex): this needs to be implmeted somehow too
 	//nolint:forbidigo
 	panic("not implemented")
 }
@@ -75,27 +82,41 @@ func (f Field[T]) Get(chasmContext Context) (T, error) {
 		return vT, nil
 	}
 
+	var nodeValue any
 	switch f.Internal.fieldType() {
 	case fieldTypeComponent:
 		if err := f.Internal.node.prepareComponentValue(chasmContext); err != nil {
 			return nilT, err
 		}
+		nodeValue = f.Internal.node.value
 	case fieldTypeData:
 		// For data fields, T is always a concrete type.
 		if err := f.Internal.node.prepareDataValue(chasmContext, reflect.TypeFor[T]()); err != nil {
 			return nilT, err
 		}
+		nodeValue = f.Internal.node.value
 	case fieldTypeComponentPointer:
-		//nolint:forbidigo
-		panic("not implemented")
+		if err := f.Internal.node.preparePointerValue(chasmContext); err != nil {
+			return nilT, err
+		}
+		//nolint:revive // value is guaranteed to be of type []string.
+		path := f.Internal.value().([]string)
+		referencedNode := f.Internal.node.root().findNode(path)
+		if referencedNode != nil {
+			// TODO (alex): can it be data pointer too? then we need new field type and call prepareDataValue here
+			if err := referencedNode.prepareComponentValue(chasmContext); err != nil {
+				return nilT, err
+			}
+			nodeValue = referencedNode.value
+		}
 	default:
 		return nilT, serviceerror.NewInternalf("unsupported field type: %v", f.Internal.fieldType())
 	}
 
-	if f.Internal.node.value == nil {
+	if nodeValue == nil {
 		return nilT, nil
 	}
-	vT, isT := f.Internal.node.value.(T)
+	vT, isT := nodeValue.(T)
 	if !isT {
 		return nilT, serviceerror.NewInternalf("node value doesn't implement %s", reflect.TypeFor[T]().Name())
 	}
