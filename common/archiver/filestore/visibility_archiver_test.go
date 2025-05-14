@@ -36,7 +36,8 @@ type visibilityArchiverSuite struct {
 	*require.Assertions
 	suite.Suite
 
-	container          *archiver.VisibilityBootstrapContainer
+	logger             log.Logger
+	metricsHandler     metrics.Handler
 	testArchivalURI    archiver.URI
 	testQueryDirectory string
 	visibilityRecords  []*archiverspb.VisibilityRecord
@@ -65,9 +66,8 @@ func (s *visibilityArchiverSuite) TearDownSuite() {
 
 func (s *visibilityArchiverSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
-	s.container = &archiver.VisibilityBootstrapContainer{
-		Logger: log.NewNoopLogger(),
-	}
+	s.logger = log.NewNoopLogger()
+	s.metricsHandler = metrics.NoopMetricsHandler
 	s.controller = gomock.NewController(s.T())
 }
 
@@ -558,7 +558,7 @@ func (s *visibilityArchiverSuite) newTestVisibilityArchiver() *visibilityArchive
 		FileMode: testFileModeStr,
 		DirMode:  testDirModeStr,
 	}
-	archiver, err := NewVisibilityArchiver(s.container, config)
+	archiver, err := NewVisibilityArchiver(s.logger, s.metricsHandler, config)
 	s.NoError(err)
 	return archiver.(*visibilityArchiver)
 }

@@ -44,7 +44,9 @@ type historyArchiverSuite struct {
 	*require.Assertions
 	suite.Suite
 
-	container          *archiver.HistoryBootstrapContainer
+	logger             log.Logger
+	executionManager   persistence.ExecutionManager
+	metricsHandler     metrics.Handler
 	testArchivalURI    archiver.URI
 	testGetDirectory   string
 	historyBatchesV1   []*historypb.History
@@ -72,9 +74,8 @@ func (s *historyArchiverSuite) TearDownSuite() {
 
 func (s *historyArchiverSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
-	s.container = &archiver.HistoryBootstrapContainer{
-		Logger: log.NewNoopLogger(),
-	}
+	s.logger = log.NewNoopLogger()
+	s.metricsHandler = metrics.NoopMetricsHandler
 }
 
 func (s *historyArchiverSuite) TestValidateURI() {
@@ -556,7 +557,7 @@ func (s *historyArchiverSuite) newTestHistoryArchiver(historyIterator archiver.H
 		FileMode: testFileModeStr,
 		DirMode:  testDirModeStr,
 	}
-	archiver, err := newHistoryArchiver(s.container, config, historyIterator)
+	archiver, err := newHistoryArchiver(s.executionManager, s.logger, s.metricsHandler, config, historyIterator)
 	s.NoError(err)
 	return archiver
 }

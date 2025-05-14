@@ -22,9 +22,10 @@ import (
 
 type (
 	visibilityArchiver struct {
-		container   *archiver.VisibilityBootstrapContainer
-		s3cli       s3iface.S3API
-		queryParser QueryParser
+		logger         log.Logger
+		metricsHandler metrics.Handler
+		s3cli          s3iface.S3API
+		queryParser    QueryParser
 	}
 
 	queryVisibilityRequest struct {
@@ -52,14 +53,16 @@ const (
 
 // NewVisibilityArchiver creates a new archiver.VisibilityArchiver based on s3
 func NewVisibilityArchiver(
-	container *archiver.VisibilityBootstrapContainer,
+	logger log.Logger,
+	metricsHandler metrics.Handler,
 	config *config.S3Archiver,
 ) (archiver.VisibilityArchiver, error) {
-	return newVisibilityArchiver(container, config)
+	return newVisibilityArchiver(logger, metricsHandler, config)
 }
 
 func newVisibilityArchiver(
-	container *archiver.VisibilityBootstrapContainer,
+	logger log.Logger,
+	metricsHandler metrics.Handler,
 	config *config.S3Archiver) (*visibilityArchiver, error) {
 	s3Config := &aws.Config{
 		Endpoint:         config.Endpoint,
@@ -72,9 +75,10 @@ func newVisibilityArchiver(
 		return nil, err
 	}
 	return &visibilityArchiver{
-		container:   container,
-		s3cli:       s3.New(sess),
-		queryParser: NewQueryParser(),
+		logger:         logger,
+		metricsHandler: metricsHandler,
+		s3cli:          s3.New(sess),
+		queryParser:    NewQueryParser(),
 	}, nil
 }
 
@@ -84,10 +88,10 @@ func (v *visibilityArchiver) Archive(
 	request *archiverspb.VisibilityRecord,
 	opts ...archiver.ArchiveOption,
 ) (err error) {
-	handler := v.container.MetricsHandler.WithTags(metrics.OperationTag(metrics.VisibilityArchiverScope), metrics.NamespaceTag(request.Namespace))
+	handler := v.metricsHandler.WithTags(metrics.OperationTag(metrics.VisibilityArchiverScope), metrics.NamespaceTag(request.Namespace))
 	featureCatalog := archiver.GetFeatureCatalog(opts...)
 	startTime := time.Now().UTC()
-	logger := archiver.TagLoggerWithArchiveVisibilityRequestAndURI(v.container.Logger, request, URI.String())
+	logger := archiver.TagLoggerWithArchiveVisibilityRequestAndURI(v.logger, request, URI.String())
 	archiveFailReason := ""
 	defer func() {
 		metrics.ServiceLatency.With(handler).Record(time.Since(startTime))

@@ -51,7 +51,8 @@ type historyArchiverSuite struct {
 	*require.Assertions
 	suite.Suite
 	s3cli              *mocks.MockS3API
-	container          *archiver.HistoryBootstrapContainer
+	logger             log.Logger
+	metricsHandler     metrics.Handler
 	testArchivalURI    archiver.URI
 	historyBatchesV1   []*archiverspb.HistoryBlob
 	historyBatchesV100 []*archiverspb.HistoryBlob
@@ -73,10 +74,8 @@ func (s *historyArchiverSuite) TearDownSuite() {
 
 func (s *historyArchiverSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
-	s.container = &archiver.HistoryBootstrapContainer{
-		Logger:         log.NewNoopLogger(),
-		MetricsHandler: metrics.NoopMetricsHandler,
-	}
+	s.logger = log.NewNoopLogger()
+	s.metricsHandler = metrics.NoopMetricsHandler
 
 	s.controller = gomock.NewController(s.T())
 	s.s3cli = mocks.NewMockS3API(s.controller)
@@ -670,12 +669,12 @@ func (s *historyArchiverSuite) TestArchiveAndGet() {
 }
 
 func (s *historyArchiverSuite) newTestHistoryArchiver(historyIterator archiver.HistoryIterator) *historyArchiver {
-	// config := &config.S3Archiver{}
-	// archiver, err := newHistoryArchiver(s.container, config, historyIterator)
 	archiver := &historyArchiver{
-		container:       s.container,
-		s3cli:           s.s3cli,
-		historyIterator: historyIterator,
+		executionManager: s.executionManager,
+		logger:           s.logger,
+		metricsHandler:   s.metricsHandler,
+		s3cli:            s.s3cli,
+		historyIterator:  historyIterator,
 	}
 	return archiver
 }
