@@ -15,6 +15,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
@@ -238,18 +239,6 @@ func (s *nodeSuite) TestSerializeNode_DataAttributes() {
 	s.Equal(valueStateSynced, node.valueState)
 }
 
-type CollectionComponent struct {
-	UnimplementedComponent
-	Data *protoMessageType
-
-	SubComponent1 Field[*TestSubComponent1]
-	SubComponents Collection[*TestSubComponent1]
-}
-
-func (cc *CollectionComponent) LifecycleState(_ Context) LifecycleState {
-	return LifecycleStateRunning
-}
-
 func (s *nodeSuite) TestCollectionAttributes() {
 	tv := testvars.New(s.T())
 
@@ -257,10 +246,6 @@ func (s *nodeSuite) TestCollectionAttributes() {
 	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(1)).AnyTimes()
 	s.nodeBackend.EXPECT().UpdateWorkflowStateStatus(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 	s.nodeBackend.EXPECT().GetWorkflowKey().Return(tv.Any().WorkflowKey()).AnyTimes()
-
-	var nilSerializedNodes map[string]*persistencespb.ChasmNode
-	tree, err := NewTree(nilSerializedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
-	s.NoError(err)
 
 	sc1 := &TestSubComponent1{
 		SubComponent1Data: &protoMessageType{
@@ -272,77 +257,116 @@ func (s *nodeSuite) TestCollectionAttributes() {
 			RunId: tv.WithWorkflowIDNumber(2).WorkflowID(),
 		},
 	}
-	collectionComponent := &CollectionComponent{
-		SubComponents: Collection[*TestSubComponent1]{
-			"SubComponent1": NewComponentField[*TestSubComponent1](nil, sc1),
-			"SubComponent2": NewComponentField[*TestSubComponent1](nil, sc2),
-		},
-	}
-	tree.value = collectionComponent
-	tree.valueState = valueStateNeedSerialize
 
-	// Serialize collectionComponent.
-	mutations, err := tree.CloseTransaction()
-	s.NoError(err)
-	s.Len(mutations.UpdatedNodes, 4, "root, collection, and 2 collection items must be updated")
-	s.Empty(mutations.DeletedNodes)
+	var persistedNodes map[string]*persistencespb.ChasmNode
 
-	s.NotEmpty(tree.children["SubComponents"].children["SubComponent1"].serializedNode.GetData().GetData())
-	s.NotEmpty(tree.children["SubComponents"].children["SubComponent2"].serializedNode.GetData().GetData())
+	s.Run("Sync and serialize component with collection", func() {
+		var nilSerializedNodes map[string]*persistencespb.ChasmNode
+		rootNode, err := NewTree(nilSerializedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+		s.NoError(err)
 
-	// Now deserialized it back.
-	tree, err = NewTree(mutations.UpdatedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
-	s.NoError(err)
+		rootComponent := &TestComponent{
+			SubComponents: Collection[*TestSubComponent1]{
+				"SubComponent1": NewComponentField[*TestSubComponent1](nil, sc1),
+				"SubComponent2": NewComponentField[*TestSubComponent1](nil, sc2),
+			},
+		}
+		rootNode.value = rootComponent
+		rootNode.valueState = valueStateNeedSerialize
 
-	err = tree.deserialize(reflect.TypeFor[*CollectionComponent]())
-	s.NoError(err)
+		mutations, err := rootNode.CloseTransaction()
+		s.NoError(err)
+		s.Len(mutations.UpdatedNodes, 4, "root, collection, and 2 collection items must be updated")
+		s.Empty(mutations.DeletedNodes)
 
-	collectionComponent = tree.value.(*CollectionComponent)
-	chasmContext := NewMutableContext(context.Background(), tree)
-	sc1Des, err := collectionComponent.SubComponents["SubComponent1"].Get(chasmContext)
-	s.NoError(err)
-	s.Equal(sc1.SubComponent1Data.RunId, sc1Des.SubComponent1Data.RunId)
+		s.NotEmpty(rootNode.children["SubComponents"].children["SubComponent1"].serializedNode.GetData().GetData())
+		s.NotEmpty(rootNode.children["SubComponents"].children["SubComponent2"].serializedNode.GetData().GetData())
 
-	sc2Des, err := collectionComponent.SubComponents["SubComponent2"].Get(chasmContext)
-	s.NoError(err)
-	s.Equal(sc2.SubComponent1Data.RunId, sc2Des.SubComponent1Data.RunId)
+		// Save it use in other subtests.
+		persistedNodes = common.CloneProtoMap(mutations.UpdatedNodes)
+	})
 
-	// Clear collection.
-	tree.valueState = valueStateNeedSerialize
-	collectionComponent.SubComponents = nil
+	s.NotNil(persistedNodes)
 
-	setCollectionNilMutations, err := tree.CloseTransaction()
-	s.NoError(err)
-	s.Len(setCollectionNilMutations.UpdatedNodes, 1, "although root component is not updated, collection is tracked as part of component, therefore root must be updated")
-	s.Len(setCollectionNilMutations.DeletedNodes, 3, "collection and 2 collection items must be deleted")
+	s.Run("Deserialize component with collection", func() {
+		rootNode, err := NewTree(persistedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+		s.NoError(err)
 
-	// Now deserialized it back again.
-	tree, err = NewTree(mutations.UpdatedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
-	s.NoError(err)
+		err = rootNode.deserialize(reflect.TypeFor[*TestComponent]())
+		s.NoError(err)
 
-	err = tree.deserialize(reflect.TypeFor[*CollectionComponent]())
-	s.NoError(err)
+		rootComponent := rootNode.value.(*TestComponent)
 
-	collectionComponent = tree.value.(*CollectionComponent)
+		s.NotNil(rootComponent.SubComponents)
+		s.Len(rootComponent.SubComponents, 2)
 
-	// Delete collection item 1.
-	tree.valueState = valueStateNeedSerialize
-	delete(collectionComponent.SubComponents, "SubComponent1")
+		chasmContext := NewMutableContext(context.Background(), rootNode)
+		sc1Des, err := rootComponent.SubComponents["SubComponent1"].Get(chasmContext)
+		s.NoError(err)
+		s.Equal(sc1.SubComponent1Data.GetRunId(), sc1Des.SubComponent1Data.GetRunId())
 
-	deleteCollectionItemMutations, err := tree.CloseTransaction()
-	s.NoError(err)
-	s.Len(setCollectionNilMutations.UpdatedNodes, 1, "although root component is not updated, collection is tracked as part of component, therefore root must be updated")
-	s.Len(deleteCollectionItemMutations.DeletedNodes, 1, "collection item 1 must be deleted")
+		sc2Des, err := rootComponent.SubComponents["SubComponent2"].Get(chasmContext)
+		s.NoError(err)
+		s.Equal(sc2.SubComponent1Data.GetRunId(), sc2Des.SubComponent1Data.GetRunId())
+	})
 
-	// Delete collection item 2.
-	tree.valueState = valueStateNeedSerialize
-	delete(collectionComponent.SubComponents, "SubComponent2")
+	s.Run("Clear collection by setting it to nil", func() {
+		rootNode, err := NewTree(persistedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+		s.NoError(err)
 
-	// Now map is empty and must be deleted.
-	emptyCollectionMutations, err := tree.CloseTransaction()
-	s.NoError(err)
-	s.Len(emptyCollectionMutations.UpdatedNodes, 1, "although root component is not updated, collection is tracked as part of component, therefore root must be updated")
-	s.Len(emptyCollectionMutations.DeletedNodes, 2, "collection and item 2 must be deleted")
+		err = rootNode.deserialize(reflect.TypeFor[*TestComponent]())
+		s.NoError(err)
+
+		rootComponent := rootNode.value.(*TestComponent)
+
+		rootNode.valueState = valueStateNeedSerialize
+		rootComponent.SubComponents = nil
+
+		setCollectionNilMutations, err := rootNode.CloseTransaction()
+		s.NoError(err)
+		s.Len(setCollectionNilMutations.UpdatedNodes, 1, "although root component is not updated, collection is tracked as part of component, therefore root must be updated")
+		s.Len(setCollectionNilMutations.DeletedNodes, 3, "collection and 2 collection items must be deleted")
+	})
+
+	s.Run("Delete single collection item", func() {
+		rootNode, err := NewTree(persistedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+		s.NoError(err)
+
+		err = rootNode.deserialize(reflect.TypeFor[*TestComponent]())
+		s.NoError(err)
+
+		rootComponent := rootNode.value.(*TestComponent)
+
+		// Delete collection item 1.
+		rootNode.valueState = valueStateNeedSerialize
+		delete(rootComponent.SubComponents, "SubComponent1")
+
+		deleteCollectionItemMutations, err := rootNode.CloseTransaction()
+		s.NoError(err)
+		s.Len(deleteCollectionItemMutations.UpdatedNodes, 1, "although root component is not updated, collection is tracked as part of component, therefore root must be updated")
+		s.Len(deleteCollectionItemMutations.DeletedNodes, 1, "collection item 1 must be deleted")
+	})
+
+	s.Run("Clear collection by deleting all items", func() {
+		rootNode, err := NewTree(persistedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+		s.NoError(err)
+
+		err = rootNode.deserialize(reflect.TypeFor[*TestComponent]())
+		s.NoError(err)
+
+		rootComponent := rootNode.value.(*TestComponent)
+
+		// Delete both collection items.
+		rootNode.valueState = valueStateNeedSerialize
+		delete(rootComponent.SubComponents, "SubComponent1")
+		delete(rootComponent.SubComponents, "SubComponent2")
+
+		// Now map is empty and must be deleted.
+		emptyCollectionMutations, err := rootNode.CloseTransaction()
+		s.NoError(err)
+		s.Len(emptyCollectionMutations.UpdatedNodes, 1, "although root component is not updated, collection is tracked as part of component, therefore root must be updated")
+		s.Len(emptyCollectionMutations.DeletedNodes, 3, "collection and 2 items must be deleted")
+	})
 }
 
 func (s *nodeSuite) TestSyncSubComponents_DeleteLeafNode() {

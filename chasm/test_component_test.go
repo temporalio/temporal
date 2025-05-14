@@ -24,6 +24,7 @@ type (
 		SubComponent1 Field[*TestSubComponent1]
 		SubComponent2 Field[*TestSubComponent2]
 		SubData1      Field[*protoMessageType]
+		SubComponents Collection[*TestSubComponent1]
 	}
 
 	TestSubComponent1 struct {
@@ -51,7 +52,7 @@ type (
 )
 
 func (tc *TestComponent) LifecycleState(_ Context) LifecycleState {
-	switch tc.ComponentData.Status {
+	switch tc.ComponentData.GetStatus() {
 	case enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING:
 		return LifecycleStateRunning
 	case enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW:

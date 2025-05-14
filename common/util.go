@@ -659,6 +659,18 @@ func CloneProto[T proto.Message](v T) T {
 	return proto.Clone(v).(T)
 }
 
+func CloneProtoMap[K comparable, T proto.Message](src map[K]T) map[K]T {
+	if src == nil {
+		return nil
+	}
+
+	result := make(map[K]T, len(src))
+	for k, v := range src {
+		result[k] = CloneProto(v)
+	}
+	return result
+}
+
 // DiscardUnknownProto discards unknown fields in a proto message.
 func DiscardUnknownProto(m proto.Message) error {
 	return protorange.Range(m.ProtoReflect(), func(values protopath.Values) error {
