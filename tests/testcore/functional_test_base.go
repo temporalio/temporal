@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/testing/updateutils"
@@ -76,6 +77,9 @@ type (
 		sdkClient sdkclient.Client
 		worker    sdkworker.Worker
 		taskQueue string
+
+		// TODO (alex): replace with v2
+		taskPoller *taskpoller.TaskPoller
 	}
 	// TestClusterParams contains the variables which are used to configure test cluster via the TestClusterOption type.
 	TestClusterParams struct {
@@ -185,6 +189,10 @@ func (s *FunctionalTestBase) TaskQueue() string {
 	return s.taskQueue
 }
 
+func (s *FunctionalTestBase) TaskPoller() *taskpoller.TaskPoller {
+	return s.taskPoller
+}
+
 func (s *FunctionalTestBase) SetupSuite() {
 	s.SetupSuiteWithDefaultCluster()
 }
@@ -263,6 +271,7 @@ func (s *FunctionalTestBase) SetupTest() {
 	s.checkTestShard()
 	s.initAssertions()
 	s.setupSdk()
+	s.taskPoller = taskpoller.New(s.T(), s.FrontendClient(), s.Namespace().String())
 }
 
 func (s *FunctionalTestBase) SetupSubTest() {

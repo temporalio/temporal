@@ -34,7 +34,7 @@ import (
 type (
 	// AddTasksSuite is a separate suite because we need to override the history service's executable wrapper.
 	AddTasksSuite struct {
-		testcore.FunctionalTestSuite
+		testcore.FunctionalTestBase
 
 		shardController *faultyShardController
 		worker          worker.Worker

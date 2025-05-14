@@ -44,7 +44,7 @@ import (
 
 type (
 	DLQSuite struct {
-		testcore.FunctionalTestSuite
+		testcore.FunctionalTestBase
 
 		dlq              persistence.HistoryTaskQueueManager
 		dlqTasks         chan tasks.Task
@@ -140,7 +140,7 @@ func myWorkflow(workflow.Context) (string, error) {
 }
 
 func (s *DLQSuite) SetupTest() {
-	s.FunctionalTestSuite.SetupTest()
+	s.FunctionalTestBase.SetupTest()
 
 	s.Worker().RegisterWorkflow(myWorkflow)
 

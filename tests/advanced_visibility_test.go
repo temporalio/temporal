@@ -53,7 +53,7 @@ const (
 )
 
 type AdvancedVisibilitySuite struct {
-	testcore.FunctionalTestSuite
+	testcore.FunctionalTestBase
 
 	// client for the system namespace
 	sysSDKClient sdkclient.Client

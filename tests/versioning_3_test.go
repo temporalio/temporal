@@ -63,7 +63,7 @@ const (
 )
 
 type Versioning3Suite struct {
-	testcore.FunctionalTestSuite
+	testcore.FunctionalTestBase
 }
 
 func TestVersioning3FunctionalSuite(t *testing.T) {

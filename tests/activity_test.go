@@ -37,7 +37,7 @@ import (
 )
 
 type ActivityTestSuite struct {
-	testcore.FunctionalTestSuite
+	testcore.FunctionalTestBase
 }
 
 type ActivityClientTestSuite struct {
@@ -620,7 +620,7 @@ func (s *ActivityTestSuite) TestActivityRetry() {
 	_, err := poller.PollAndProcessWorkflowTask()
 	s.NoError(err)
 
-	_, err = s.TaskPoller.PollAndHandleActivityTask(tv,
+	_, err = s.TaskPoller().PollAndHandleActivityTask(tv,
 		func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
 			s.Equal(tv.WorkflowID(), task.WorkflowExecution.GetWorkflowId())
 			s.Equal(activityName, task.ActivityType.GetName())
@@ -640,7 +640,7 @@ func (s *ActivityTestSuite) TestActivityRetry() {
 		}
 	}
 
-	_, err = s.TaskPoller.PollAndHandleActivityTask(tv,
+	_, err = s.TaskPoller().PollAndHandleActivityTask(tv,
 		func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
 			s.Equal(tv.WorkflowID(), task.WorkflowExecution.GetWorkflowId())
 			s.Equal(activityName, task.ActivityType.GetName())

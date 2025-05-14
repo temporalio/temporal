@@ -38,7 +38,7 @@ import (
 )
 
 type VersioningIntegSuite struct {
-	testcore.FunctionalTestSuite
+	testcore.FunctionalTestBase
 }
 
 const (
