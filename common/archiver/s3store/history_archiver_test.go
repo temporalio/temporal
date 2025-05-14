@@ -28,6 +28,7 @@ import (
 	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/util"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -52,6 +53,7 @@ type historyArchiverSuite struct {
 	suite.Suite
 	s3cli              *mocks.MockS3API
 	logger             log.Logger
+	executionManager   persistence.ExecutionManager
 	metricsHandler     metrics.Handler
 	testArchivalURI    archiver.URI
 	historyBatchesV1   []*archiverspb.HistoryBlob
