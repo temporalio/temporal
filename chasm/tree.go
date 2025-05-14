@@ -589,6 +589,7 @@ func (n *Node) syncSubComponentsInternal(
 			collectionItemsToKeep := make(map[string]struct{})
 			for _, collectionKeyV := range field.val.MapKeys() {
 				collectionItemV := field.val.MapIndex(collectionKeyV)
+				//nolint:revive // Collection key is guaranteed to be of type string.
 				collectionKey := collectionKeyV.Interface().(string)
 				keepItem, updatedCollectionItemV, err := collectionNode.syncSubField(collectionItemV, collectionKey, append(nodePath, field.name))
 				if err != nil {
@@ -609,10 +610,8 @@ func (n *Node) syncSubComponentsInternal(
 		}
 	}
 
-	if err := n.deleteChildren(childrenToKeep, nodePath); err != nil {
-		return err
-	}
-	return nil
+	err := n.deleteChildren(childrenToKeep, nodePath)
+	return err
 }
 
 // syncSubField syncs node n with value from fieldV parameter.
