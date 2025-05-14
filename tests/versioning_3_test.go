@@ -38,7 +38,6 @@ import (
 	"go.temporal.io/server/common/testing/protoutils"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testvars"
-	"go.temporal.io/server/common/testing/updateutils"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/tests/testcore"
@@ -67,7 +66,6 @@ const (
 
 type Versioning3Suite struct {
 	WorkflowUpdateBaseSuite
-	updateutils.UpdateUtils
 }
 
 func TestVersioning3FunctionalSuite(t *testing.T) {
