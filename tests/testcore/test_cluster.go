@@ -226,7 +226,7 @@ func newClusterWithPersistenceTestBaseFactory(t *testing.T, clusterConfig *TestC
 	testBase := tbFactory.NewTestBase(&clusterConfig.Persistence)
 
 	testBase.Setup(clusterMetadataConfig)
-	archiverBase := newArchiverBase(clusterConfig.EnableArchival, logger)
+	archiverBase := newArchiverBase(clusterConfig.EnableArchival, testBase.ExecutionManager, logger)
 
 	pConfig := testBase.DefaultTestCluster.Config()
 	pConfig.NumHistoryShards = clusterConfig.HistoryConfig.NumHistoryShards
@@ -468,7 +468,7 @@ func newPProfInitializerImpl(logger log.Logger, port int) *pprof.PProfInitialize
 	}
 }
 
-func newArchiverBase(enabled bool, logger log.Logger) *ArchiverBase {
+func newArchiverBase(enabled bool, executionManager persistence.ExecutionManager, logger log.Logger) *ArchiverBase {
 	dcCollection := dynamicconfig.NewNoopCollection()
 	if !enabled {
 		return &ArchiverBase{
@@ -496,7 +496,7 @@ func newArchiverBase(enabled bool, logger log.Logger) *ArchiverBase {
 		&config.VisibilityArchiverProvider{
 			Filestore: cfg,
 		},
-		nil,
+		executionManager,
 		logger,
 		metrics.NoopMetricsHandler,
 		nil,
