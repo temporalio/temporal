@@ -445,7 +445,7 @@ func (s *StreamSenderImpl) sendTasks(
 		})
 	}
 
-	callerInfo := getSystemCallerInfo(priority)
+	callerInfo := getReplicaitonCallerInfo(priority)
 	ctx := headers.SetCallerInfo(s.server.Context(), callerInfo)
 	iter, err := s.historyEngine.GetReplicationTasksIter(
 		ctx,

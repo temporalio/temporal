@@ -10,8 +10,8 @@ const (
 	CallerTypeOperator    = "operator"
 	CallerTypeAPI         = "api"
 	CallerTypeBackground  = "background"
+	CallerTypeReplication = "replication"
 	CallerTypePreemptable = "preemptable"
-	CallerTypeOptional    = "optional"
 
 	CallerNameSystem = "system"
 )
@@ -34,9 +34,9 @@ var (
 		CallerName: CallerNameSystem,
 		CallerType: CallerTypePreemptable,
 	}
-	SystemOptionalCallerInfo = CallerInfo{
+	SystemReplicationCallerInfo = CallerInfo{
 		CallerName: CallerNameSystem,
-		CallerType: CallerTypeOptional,
+		CallerType: CallerTypeReplication,
 	}
 )
 

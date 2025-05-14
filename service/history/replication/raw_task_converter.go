@@ -92,7 +92,7 @@ func (c *SourceTaskConverterImpl) Convert(
 		nsName = namespaceEntry.Name().String()
 	}
 	priority := getTaskPriority(task)
-	callerInfo := getSystemCallerInfo(priority)
+	callerInfo := getReplicaitonCallerInfo(priority)
 	ctx, cancel = newTaskContext(nsName, c.config.ReplicationTaskApplyTimeout(), callerInfo)
 	defer cancel()
 	replicationTask, err := c.historyEngine.ConvertReplicationTask(ctx, task, targetClusterID)

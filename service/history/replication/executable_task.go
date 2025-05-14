@@ -828,11 +828,11 @@ func newTaskContext(
 	return context.WithTimeout(ctx, timeout)
 }
 
-func getSystemCallerInfo(priority enumsspb.TaskPriority) headers.CallerInfo {
+func getReplicaitonCallerInfo(priority enumsspb.TaskPriority) headers.CallerInfo {
 	switch priority {
 	case enumsspb.TASK_PRIORITY_LOW:
-		return headers.SystemOptionalCallerInfo
-	default:
 		return headers.SystemPreemptableCallerInfo
+	default:
+		return headers.SystemReplicationCallerInfo
 	}
 }
