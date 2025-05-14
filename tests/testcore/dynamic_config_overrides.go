@@ -5,6 +5,8 @@ import (
 
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/persistence/visibility"
+	"go.temporal.io/server/components/callbacks"
+	"go.temporal.io/server/components/nexusoperations"
 )
 
 var (
@@ -51,5 +53,16 @@ var (
 		dynamicconfig.FrontendEnableExecuteMultiOperation.Key(): true,
 		dynamicconfig.ActivityAPIsEnabled.Key():                 true,
 		dynamicconfig.EnableTransitionHistory.Key():             true,
+
+		dynamicconfig.NumPendingChildExecutionsLimitError.Key():             ClientSuiteLimit,
+		dynamicconfig.NumPendingActivitiesLimitError.Key():                  ClientSuiteLimit,
+		dynamicconfig.NumPendingCancelRequestsLimitError.Key():              ClientSuiteLimit,
+		dynamicconfig.NumPendingSignalsLimitError.Key():                     ClientSuiteLimit,
+		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs.Key():          true,
+		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs.Key():      true,
+		dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace.Key(): ClientSuiteLimit,
+		dynamicconfig.RefreshNexusEndpointsMinWait.Key():                    1 * time.Millisecond,
+		nexusoperations.RecordCancelRequestCompletionEvents.Key():           true,
+		callbacks.AllowedAddresses.Key():                                    []any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
 	}
 )

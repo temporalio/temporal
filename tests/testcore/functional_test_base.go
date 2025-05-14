@@ -20,7 +20,8 @@ import (
 	namespacepb "go.temporal.io/api/namespace/v1"
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/sdk/worker"
+	sdkclient "go.temporal.io/sdk/client"
+	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -39,6 +40,7 @@ import (
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/testing/updateutils"
+	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/temporal/environment"
 	"go.uber.org/fx"
 	"gopkg.in/yaml.v3"
@@ -69,6 +71,11 @@ type (
 		namespaceID namespace.ID
 		// TODO (alex): rename to externalNamespace
 		foreignNamespace namespace.Name
+
+		// Fields used by SDK based tests.
+		sdkClient sdkclient.Client
+		worker    sdkworker.Worker
+		taskQueue string
 	}
 	// TestClusterParams contains the variables which are used to configure test cluster via the TestClusterOption type.
 	TestClusterParams struct {
@@ -83,7 +90,7 @@ func init() {
 	// By default, the SDK worker will calculate a checksum of the binary and use that as an identifier.
 	// But given the size of the test binary, that has a significant performance impact (100 ms or more).
 	// By specifying a checksum here, we can avoid that overhead.
-	worker.SetBinaryChecksum("oss-server-test")
+	sdkworker.SetBinaryChecksum("oss-server-test")
 }
 
 // WithFxOptionsForService returns an Option which, when passed as an argument to setupSuite, will append the given list
@@ -157,6 +164,18 @@ func (s *FunctionalTestBase) ForeignNamespace() namespace.Name {
 
 func (s *FunctionalTestBase) FrontendGRPCAddress() string {
 	return s.GetTestCluster().Host().FrontendGRPCAddress()
+}
+
+func (s *FunctionalTestBase) Worker() sdkworker.Worker {
+	return s.worker
+}
+
+func (s *FunctionalTestBase) SdkClient() sdkclient.Client {
+	return s.sdkClient
+}
+
+func (s *FunctionalTestBase) TaskQueue() string {
+	return s.taskQueue
 }
 
 func (s *FunctionalTestBase) SetupSuite() {
@@ -237,6 +256,7 @@ func (s *FunctionalTestBase) SetupSuiteWithCluster(clusterConfigFile string, opt
 func (s *FunctionalTestBase) SetupTest() {
 	s.checkTestShard()
 	s.initAssertions()
+	s.setupSdk()
 }
 
 func (s *FunctionalTestBase) SetupSubTest() {
@@ -339,6 +359,29 @@ func readTestClusterConfig(configFile string) (*TestClusterConfig, error) {
 	return &clusterConfig, nil
 }
 
+func (s *FunctionalTestBase) setupSdk() {
+	// Set URL template after httpAPAddress is set, see commonnexus.RouteCompletionCallback
+	s.OverrideDynamicConfig(
+		nexusoperations.CallbackURLTemplate,
+		"http://"+s.HttpAPIAddress()+"/namespaces/{{.NamespaceName}}/nexus/callback")
+
+	clientOptions := sdkclient.Options{
+		HostPort:  s.FrontendGRPCAddress(),
+		Namespace: s.Namespace().String(),
+		Logger:    log.NewSdkLogger(s.Logger),
+	}
+
+	var err error
+	s.sdkClient, err = sdkclient.Dial(clientOptions)
+	s.NoError(err)
+	s.taskQueue = RandomizeStr("tq")
+
+	workerOptions := sdkworker.Options{}
+	s.worker = sdkworker.New(s.sdkClient, s.taskQueue, workerOptions)
+	err = s.worker.Start()
+	s.NoError(err)
+}
+
 func (s *FunctionalTestBase) TearDownCluster() {
 	s.Require().NoError(s.MarkNamespaceAsDeleted(s.Namespace()))
 	s.Require().NoError(s.MarkNamespaceAsDeleted(s.ForeignNamespace()))
@@ -351,6 +394,7 @@ func (s *FunctionalTestBase) TearDownCluster() {
 // **IMPORTANT**: When overridding this, make sure to invoke `s.FunctionalTestBase.TearDownTest()`.
 func (s *FunctionalTestBase) TearDownTest() {
 	s.checkNoUnexpectedErrorLogs()
+	s.tearDownSdk()
 }
 
 // **IMPORTANT**: When overridding this, make sure to invoke `s.FunctionalTestBase.TearDownSubTest()`.
@@ -364,6 +408,15 @@ func (s *FunctionalTestBase) checkNoUnexpectedErrorLogs() {
 			s.Fail(`Failing test as unexpected error logs were found.
 Look for 'Unexpected Error log encountered'.`)
 		}
+	}
+}
+
+func (s *FunctionalTestBase) tearDownSdk() {
+	if s.worker != nil {
+		s.worker.Stop()
+	}
+	if s.sdkClient != nil {
+		s.sdkClient.Close()
 	}
 }
 

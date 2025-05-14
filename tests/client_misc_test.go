@@ -36,7 +36,7 @@ import (
 )
 
 type ClientMiscTestSuite struct {
-	testcore.FunctionalTestSdkSuite
+	testcore.FunctionalTestBase
 	maxPendingSignals         int
 	maxPendingCancelRequests  int
 	maxPendingActivities      int
@@ -49,13 +49,13 @@ func TestClientMiscTestSuite(t *testing.T) {
 }
 
 func (s *ClientMiscTestSuite) SetupSuite() {
-	s.FunctionalTestSdkSuite.SetupSuite()
+	s.FunctionalTestBase.SetupTest()
 	s.maxPendingSignals = testcore.ClientSuiteLimit
 	s.maxPendingCancelRequests = testcore.ClientSuiteLimit
 	s.maxPendingActivities = testcore.ClientSuiteLimit
 	s.maxPendingChildExecutions = testcore.ClientSuiteLimit
-
 }
+
 func (s *ClientMiscTestSuite) TestTooManyChildWorkflows() {
 	// To ensure that there is one pending child workflow before we try to create the next one,
 	// we create a child workflow here that signals the parent when it has started and then blocks forever.

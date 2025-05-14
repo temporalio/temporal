@@ -34,7 +34,7 @@ type CronTestSuite struct {
 }
 
 type CronTestClientSuite struct {
-	testcore.FunctionalTestSdkSuite
+	testcore.FunctionalTestBase
 }
 
 func TestCronTestSuite(t *testing.T) {

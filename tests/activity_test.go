@@ -41,7 +41,7 @@ type ActivityTestSuite struct {
 }
 
 type ActivityClientTestSuite struct {
-	testcore.FunctionalTestSdkSuite
+	testcore.FunctionalTestBase
 }
 
 func TestActivityTestSuite(t *testing.T) {
