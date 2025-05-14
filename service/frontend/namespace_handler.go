@@ -748,7 +748,7 @@ func (d *namespaceHandler) removeOldestExpiredWorkflowRule(rules map[string]*rul
 	}
 
 	if found {
-		d.logger.Info(fmt.Sprintf("Removed expired workflow rule %s", oldestKey))
+		d.logger.Info("Removed expired workflow rule", tag.WorkflowRuleID(oldestKey))
 		delete(rules, oldestKey)
 	}
 }
