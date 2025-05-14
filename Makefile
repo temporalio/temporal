@@ -235,7 +235,7 @@ $(GOMAJOR): $(STAMPDIR)/gomajor-$(GOMAJOR_VER)
 # Mockgen is called by name throughout the codebase, so we need to keep the binary name consistent
 MOCKGEN_VER := v0.5.0
 MOCKGEN := $(LOCALBIN)/mockgen
-go-generate: $(MOCKGEN) $(GOIMPORTS) $(STRINGER) $(GOWRAP)
+$(STAMPDIR)/mockgen-$(MOCKGEN_VER): | $(STAMPDIR) $(LOCALBIN)
 	$(call go-install-tool,$(MOCKGEN),go.uber.org/mock/mockgen,$(MOCKGEN_VER))
 	@touch $@
 $(MOCKGEN): $(STAMPDIR)/mockgen-$(MOCKGEN_VER)
@@ -610,7 +610,7 @@ update-dependencies-major: $(GOMAJOR)
 	@$(GOMAJOR) get -major all
 	@go mod tidy
 
-go-generate: $(STAMPDIR)/mockgen-$(MOCKGEN_VER) $(GOIMPORTS) $(STRINGER) $(GOWRAP)
+go-generate: $(MOCKGEN) $(GOIMPORTS) $(STRINGER) $(GOWRAP)
 	@printf $(COLOR) "Process go:generate directives..."
 	@go generate ./...
 
