@@ -1456,6 +1456,10 @@ func (r *WorkflowStateReplicatorImpl) backfillHistory(
 	sortedAncestors := sortAncestors(historyBranch.GetAncestors())
 	sortedAncestorsIdx := 0
 	var ancestors []*persistencespb.HistoryBranchRange
+	var expectedEventID int64
+	if isStateBased {
+		expectedEventID = common.FirstEventID
+	}
 
 BackfillLoop:
 	for remoteHistoryIterator.HasNext() {
@@ -1463,15 +1467,18 @@ BackfillLoop:
 		if err != nil {
 			return err
 		}
-
 		if isStateBased {
-			// If backfill suceeds but later event reapply fails, during task's next retry,
-			// we still need to reapply events that have been stored in local DB.
 			events, err := r.historySerializer.DeserializeEvents(historyBlob.rawHistory)
 			if err != nil {
 				return err
 			}
 			for _, event := range events {
+				if expectedEventID != event.GetEventId() {
+					return serviceerror.NewInternal(fmt.Sprintf("Event not match. Expected %v, but got %v", expectedEventID, event.GetEventId()))
+				}
+				expectedEventID = event.GetEventId() + 1
+				// If backfill suceeds but later event reapply fails, during task's next retry,
+				// we still need to reapply events that have been stored in local DB.
 				mutableState.AddReapplyCandidateEvent(event)
 				r.addEventToCache(mutableState.GetWorkflowKey(), event)
 			}
@@ -1550,6 +1557,10 @@ BackfillLoop:
 		}
 		prevTxnID = txnID
 		prevBranchID = branchID
+	}
+
+	if isStateBased && expectedEventID != lastEventItem.EventId+1 {
+		return serviceerror.NewInternal(fmt.Sprintf("Event not match. Expected %v, but got %v", expectedEventID, lastEventItem.EventId+1))
 	}
 
 	mutableState.GetExecutionInfo().LastFirstEventTxnId = prevTxnID

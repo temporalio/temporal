@@ -1554,3 +1554,68 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_C
 	s.Equal(forkedBranchToken, localVersionHistoryies.Histories[2].BranchToken)
 	s.Equal(int32(2), localVersionHistoryies.CurrentVersionHistoryIndex)
 }
+
+func (s *workflowReplicatorSuite) Test_backfillHistory_EventIDMismatch() {
+	namespaceID := uuid.New()
+	branchInfo := &persistencespb.HistoryBranch{
+		TreeId:    s.runID,
+		BranchId:  uuid.New(),
+		Ancestors: nil,
+	}
+	historyBranch, err := serialization.HistoryBranchToBlob(branchInfo)
+	s.NoError(err)
+
+	nsEntry := namespace.NewNamespaceForTest(&persistencespb.NamespaceInfo{Name: "ns"}, nil, false, nil, 0)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(nsEntry, nil).AnyTimes()
+
+	mutableState := workflow.NewMutableState(
+		s.mockShard,
+		s.mockShard.GetEventsCache(),
+		s.logger,
+		nsEntry,
+		s.workflowID,
+		s.runID,
+		s.now,
+	)
+	mutableState.GetExecutionInfo().NamespaceId = namespaceID
+	mutableState.GetExecutionInfo().WorkflowId = s.workflowID
+	mutableState.GetExecutionInfo().VersionHistories = &historyspb.VersionHistories{
+		CurrentVersionHistoryIndex: 0,
+		Histories: []*historyspb.VersionHistory{
+			{
+				BranchToken: historyBranch.GetData(),
+				Items:       []*historyspb.VersionHistoryItem{{EventId: 4, Version: 1}},
+			},
+		},
+	}
+	serializer := serialization.NewSerializer()
+	blob1, err := serializer.SerializeEvents([]*historypb.HistoryEvent{{EventId: 1, Version: 1}}, enumspb.ENCODING_TYPE_PROTO3)
+	s.NoError(err)
+	blob2, err := serializer.SerializeEvents([]*historypb.HistoryEvent{{EventId: 3, Version: 1}}, enumspb.ENCODING_TYPE_PROTO3)
+	s.NoError(err)
+
+	s.mockExecutionManager.EXPECT().ReadHistoryBranchByBatch(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNotFound("not found")).AnyTimes()
+	mockShard := historyi.NewMockShardContext(s.controller)
+	mockShard.EXPECT().GenerateTaskID().Return(int64(1), nil).AnyTimes()
+	mockShard.EXPECT().GetRemoteAdminClient("test-cluster").Return(s.mockRemoteAdminClient, nil).AnyTimes()
+	mockShard.EXPECT().GetShardID().Return(int32(0)).AnyTimes()
+	mockShard.EXPECT().GetExecutionManager().Return(s.mockExecutionManager).AnyTimes()
+	s.workflowStateReplicator.shardContext = mockShard
+	s.mockRemoteAdminClient.EXPECT().GetWorkflowExecutionRawHistoryV2(gomock.Any(), gomock.Any()).Return(&adminservice.GetWorkflowExecutionRawHistoryV2Response{
+		HistoryBatches: []*commonpb.DataBlob{blob1, blob2},
+		HistoryNodeIds: []int64{1, 3},
+	}, nil)
+	s.mockExecutionManager.EXPECT().AppendRawHistoryNodes(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
+
+	err = s.workflowStateReplicator.backfillHistory(
+		context.Background(),
+		"test-cluster",
+		namespace.ID(namespaceID),
+		s.workflowID,
+		s.runID,
+		mutableState,
+		true,
+	)
+	var internalErr *serviceerror.Internal
+	s.ErrorAs(err, &internalErr)
+}
