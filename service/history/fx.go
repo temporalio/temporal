@@ -63,6 +63,7 @@ var Module = fx.Options(
 	fx.Provide(VisibilityManagerProvider),
 	fx.Provide(ThrottledLoggerRpsFnProvider),
 	fx.Provide(PersistenceRateLimitingParamsProvider),
+	fx.Provide(HealthSignalAggregatorProvider),
 	service.PersistenceLazyLoadedServiceResolverModule,
 	fx.Provide(ServiceResolverProvider),
 	fx.Provide(EventNotifierProvider),
@@ -115,6 +116,7 @@ func HandlerProvider(args NewHandlerArgs) *Handler {
 		taskQueueManager:             args.TaskQueueManager,
 		taskCategoryRegistry:         args.TaskCategoryRegistry,
 		dlqMetricsEmitter:            args.DLQMetricsEmitter,
+		healthSignalAggregator:       args.HealthSignalAggregator,
 
 		replicationTaskFetcherFactory:    args.ReplicationTaskFetcherFactory,
 		replicationTaskConverterProvider: args.ReplicationTaskConverterFactory,
@@ -289,4 +291,23 @@ func ReplicationProgressCacheProvider(
 	handler metrics.Handler,
 ) replication.ProgressCache {
 	return replication.NewProgressCache(serviceConfig, logger, handler)
+}
+
+func HealthSignalAggregatorProvider(
+	dynamicCollection *dynamicconfig.Collection,
+	metricsHandler metrics.Handler,
+	logger log.ThrottledLogger,
+) HealthSignalAggregator {
+	if dynamicconfig.HistoryHealthSignalMetricsEnabled.Get(dynamicCollection)() {
+		return NewHealthSignalAggregatorImpl(
+			dynamicconfig.PersistenceHealthSignalAggregationEnabled.Get(dynamicCollection)(),
+			dynamicconfig.PersistenceHealthSignalWindowSize.Get(dynamicCollection)(),
+			dynamicconfig.PersistenceHealthSignalBufferSize.Get(dynamicCollection)(),
+			metricsHandler,
+			dynamicconfig.ShardRPSWarnLimit.Get(dynamicCollection),
+			dynamicconfig.ShardPerNsRPSWarnPercent.Get(dynamicCollection),
+			logger,
+		)
+	}
+	return NoopHealthSignalAggregator
 }
