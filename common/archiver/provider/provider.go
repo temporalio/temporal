@@ -67,9 +67,8 @@ func NewArchiverProvider(
 }
 
 func (p *archiverProvider) GetHistoryArchiver(scheme string) (historyArchiver archiver.HistoryArchiver, err error) {
-	archiverKey := p.getArchiverKey(scheme)
 	p.RLock()
-	if historyArchiver, ok := p.historyArchivers[archiverKey]; ok {
+	if historyArchiver, ok := p.historyArchivers[scheme]; ok {
 		p.RUnlock()
 		return historyArchiver, nil
 	}
@@ -104,17 +103,16 @@ func (p *archiverProvider) GetHistoryArchiver(scheme string) (historyArchiver ar
 
 	p.Lock()
 	defer p.Unlock()
-	if existingHistoryArchiver, ok := p.historyArchivers[archiverKey]; ok {
+	if existingHistoryArchiver, ok := p.historyArchivers[scheme]; ok {
 		return existingHistoryArchiver, nil
 	}
-	p.historyArchivers[archiverKey] = historyArchiver
+	p.historyArchivers[scheme] = historyArchiver
 	return historyArchiver, nil
 }
 
 func (p *archiverProvider) GetVisibilityArchiver(scheme string) (archiver.VisibilityArchiver, error) {
-	archiverKey := p.getArchiverKey(scheme)
 	p.RLock()
-	if visibilityArchiver, ok := p.visibilityArchivers[archiverKey]; ok {
+	if visibilityArchiver, ok := p.visibilityArchivers[scheme]; ok {
 		p.RUnlock()
 		return visibilityArchiver, nil
 	}
@@ -149,14 +147,10 @@ func (p *archiverProvider) GetVisibilityArchiver(scheme string) (archiver.Visibi
 
 	p.Lock()
 	defer p.Unlock()
-	if existingVisibilityArchiver, ok := p.visibilityArchivers[archiverKey]; ok {
+	if existingVisibilityArchiver, ok := p.visibilityArchivers[scheme]; ok {
 		return existingVisibilityArchiver, nil
 	}
-	p.visibilityArchivers[archiverKey] = visibilityArchiver
+	p.visibilityArchivers[scheme] = visibilityArchiver
 	return visibilityArchiver, nil
 
-}
-
-func (p *archiverProvider) getArchiverKey(scheme string) string {
-	return scheme
 }
