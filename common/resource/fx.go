@@ -86,8 +86,6 @@ var Module = fx.Options(
 		fx.ResultTags(`group:"deadlockDetectorRoots"`),
 	)),
 	fx.Provide(serialization.NewSerializer),
-	fx.Provide(HistoryBootstrapContainerProvider),
-	fx.Provide(VisibilityBootstrapContainerProvider),
 	fx.Provide(ClientFactoryProvider),
 	fx.Provide(ClientBeanProvider),
 	fx.Provide(FrontendClientProvider),
@@ -100,7 +98,6 @@ var Module = fx.Options(
 	fx.Provide(MatchingClientProvider),
 	membership.GRPCResolverModule,
 	fx.Provide(FrontendHTTPClientCacheProvider),
-	fx.Invoke(RegisterBootstrapContainer),
 	fx.Provide(PersistenceConfigProvider),
 	fx.Provide(health.NewServer),
 	deadlock.Module,
@@ -251,45 +248,6 @@ func RuntimeMetricsReporterProvider(
 	)
 }
 
-func VisibilityBootstrapContainerProvider(
-	logger log.SnTaggedLogger,
-	metricsHandler metrics.Handler,
-	clusterMetadata cluster.Metadata,
-) *archiver.VisibilityBootstrapContainer {
-	return &archiver.VisibilityBootstrapContainer{
-		Logger:          logger,
-		MetricsHandler:  metricsHandler,
-		ClusterMetadata: clusterMetadata,
-	}
-}
-
-func HistoryBootstrapContainerProvider(
-	logger log.SnTaggedLogger,
-	metricsHandler metrics.Handler,
-	clusterMetadata cluster.Metadata,
-	executionManager persistence.ExecutionManager,
-) *archiver.HistoryBootstrapContainer {
-	return &archiver.HistoryBootstrapContainer{
-		ExecutionManager: executionManager,
-		Logger:           logger,
-		MetricsHandler:   metricsHandler,
-		ClusterMetadata:  clusterMetadata,
-	}
-}
-
-func RegisterBootstrapContainer(
-	archiverProvider provider.ArchiverProvider,
-	serviceName primitives.ServiceName,
-	visibilityArchiverBootstrapContainer *archiver.VisibilityBootstrapContainer,
-	historyArchiverBootstrapContainer *archiver.HistoryBootstrapContainer,
-) error {
-	return archiverProvider.RegisterBootstrapContainer(
-		string(serviceName),
-		historyArchiverBootstrapContainer,
-		visibilityArchiverBootstrapContainer,
-	)
-}
-
 func HistoryRawClientProvider(clientBean client.Bean) HistoryRawClient {
 	return clientBean.GetHistoryClient()
 }
@@ -333,8 +291,19 @@ func ArchivalMetadataProvider(dc *dynamicconfig.Collection, cfg *config.Config) 
 	)
 }
 
-func ArchiverProviderProvider(cfg *config.Config) provider.ArchiverProvider {
-	return provider.NewArchiverProvider(cfg.Archival.History.Provider, cfg.Archival.Visibility.Provider)
+func ArchiverProviderProvider(
+	cfg *config.Config,
+	persistenceExecutionManager persistence.ExecutionManager,
+	logger log.SnTaggedLogger,
+	metricsHandler metrics.Handler,
+) provider.ArchiverProvider {
+	return provider.NewArchiverProvider(
+		cfg.Archival.History.Provider,
+		cfg.Archival.Visibility.Provider,
+		persistenceExecutionManager,
+		logger,
+		metricsHandler,
+	)
 }
 
 func SdkClientFactoryProvider(
