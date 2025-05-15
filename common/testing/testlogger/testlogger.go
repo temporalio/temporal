@@ -299,7 +299,7 @@ func (tl *TestLogger) PanicOnError(v bool) bool {
 	return tl.state.panicOnError.Swap(v)
 }
 
-func (tl *TestLogger) mergeTags(tags []tag.Tag) []tag.Tag {
+func (tl *TestLogger) getMergedTags(tags []tag.Tag) []tag.Tag {
 	if tl.tags == nil {
 		return tags
 	}
@@ -324,7 +324,7 @@ func (tl *TestLogger) DPanic(msg string, tags ...tag.Tag) {
 	if tl.state.mu.closed {
 		return
 	}
-	tags = tl.mergeTags(tags)
+	tags = tl.getMergedTags(tags)
 	// note, actual panic'ing in wrapped is turned off so we can control.
 	tl.wrapped.DPanic(msg, tags...)
 	if tl.state.panicOnDPanic.Load() && tl.shouldFailTest(Error, msg, tags) {
@@ -340,7 +340,7 @@ func (tl *TestLogger) Debug(msg string, tags ...tag.Tag) {
 	if tl.state.mu.closed {
 		return
 	}
-	tl.wrapped.Debug(msg, tl.mergeTags(tags)...)
+	tl.wrapped.Debug(msg, tl.getMergedTags(tags)...)
 }
 
 // Error implements log.Logger.
@@ -350,7 +350,7 @@ func (tl *TestLogger) Error(msg string, tags ...tag.Tag) {
 		tl.state.mu.RUnlock()
 		return
 	}
-	tags = tl.mergeTags(tags)
+	tags = tl.getMergedTags(tags)
 	if !tl.shouldFailTest(Error, msg, tags) {
 		tl.wrapped.Error(msg, tags...)
 		tl.state.mu.RUnlock()
@@ -381,7 +381,7 @@ func (tl *TestLogger) Fatal(msg string, tags ...tag.Tag) {
 		return
 	}
 	tl.state.t.Helper()
-	tl.state.t.Fatal(failureMessage("Fatal", msg, tl.mergeTags(tags)))
+	tl.state.t.Fatal(failureMessage("Fatal", msg, tl.getMergedTags(tags)))
 }
 
 // Info implements log.Logger.
@@ -391,7 +391,7 @@ func (tl *TestLogger) Info(msg string, tags ...tag.Tag) {
 	if tl.state.mu.closed {
 		return
 	}
-	tl.wrapped.Info(msg, tl.mergeTags(tags)...)
+	tl.wrapped.Info(msg, tl.getMergedTags(tags)...)
 }
 
 // Panic implements log.Logger.
@@ -402,7 +402,7 @@ func (tl *TestLogger) Panic(msg string, tags ...tag.Tag) {
 		return
 	}
 	tl.state.t.Helper()
-	tl.state.t.Fatal(failureMessage("Panic", msg, tl.mergeTags(tags)))
+	tl.state.t.Fatal(failureMessage("Panic", msg, tl.getMergedTags(tags)))
 }
 
 // Warn implements log.Logger.
@@ -412,7 +412,7 @@ func (tl *TestLogger) Warn(msg string, tags ...tag.Tag) {
 	if tl.state.mu.closed {
 		return
 	}
-	tl.wrapped.Warn(msg, tl.mergeTags(tags)...)
+	tl.wrapped.Warn(msg, tl.getMergedTags(tags)...)
 }
 
 // WithTags gives you a new logger, copying the tags of the source, appending the provided new Tags
@@ -449,7 +449,7 @@ func (tl *TestLogger) With(tags ...tag.Tag) log.Logger {
 	return &TestLogger{
 		wrapped: tl.wrapped,
 		state:   tl.state,
-		tags:    tl.mergeTags(tags),
+		tags:    tl.getMergedTags(tags),
 	}
 }
 
