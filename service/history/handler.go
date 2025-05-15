@@ -1092,6 +1092,10 @@ func (h *Handler) SignalWorkflowExecution(ctx context.Context, request *historys
 	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
 	h.startWG.Wait()
 
+	if h.isStopped() {
+		return nil, errShuttingDown
+	}
+
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	if namespaceID == "" {
 		return nil, h.convertError(errNamespaceNotSet)
@@ -1129,6 +1133,10 @@ func (h *Handler) SignalWorkflowExecution(ctx context.Context, request *historys
 func (h *Handler) SignalWithStartWorkflowExecution(ctx context.Context, request *historyservice.SignalWithStartWorkflowExecutionRequest) (_ *historyservice.SignalWithStartWorkflowExecutionResponse, retError error) {
 	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
 	h.startWG.Wait()
+
+	if h.isStopped() {
+		return nil, errShuttingDown
+	}
 
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	if namespaceID == "" {
@@ -1227,6 +1235,10 @@ func (h *Handler) TerminateWorkflowExecution(ctx context.Context, request *histo
 	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
 	h.startWG.Wait()
 
+	if h.isStopped() {
+		return nil, errShuttingDown
+	}
+
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	if namespaceID == "" {
 		return nil, h.convertError(errNamespaceNotSet)
@@ -1254,6 +1266,10 @@ func (h *Handler) TerminateWorkflowExecution(ctx context.Context, request *histo
 func (h *Handler) DeleteWorkflowExecution(ctx context.Context, request *historyservice.DeleteWorkflowExecutionRequest) (_ *historyservice.DeleteWorkflowExecutionResponse, retError error) {
 	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
 	h.startWG.Wait()
+
+	if h.isStopped() {
+		return nil, errShuttingDown
+	}
 
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	if namespaceID == "" {
@@ -1294,6 +1310,10 @@ func (h *Handler) ResetWorkflowExecution(ctx context.Context, request *historyse
 	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
 	h.startWG.Wait()
 
+	if h.isStopped() {
+		return nil, errShuttingDown
+	}
+
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	if namespaceID == "" {
 		return nil, h.convertError(errNamespaceNotSet)
@@ -1328,6 +1348,10 @@ func (h *Handler) ResetWorkflowExecution(ctx context.Context, request *historyse
 func (h *Handler) UpdateWorkflowExecutionOptions(ctx context.Context, request *historyservice.UpdateWorkflowExecutionOptionsRequest) (_ *historyservice.UpdateWorkflowExecutionOptionsResponse, retError error) {
 	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
 	h.startWG.Wait()
+
+	if h.isStopped() {
+		return nil, errShuttingDown
+	}
 
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	if namespaceID == "" {
