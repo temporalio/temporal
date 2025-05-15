@@ -482,24 +482,6 @@ func (s *Versioning3Suite) drainWorkflowTaskAfterSetCurrent(
 	return execution, runID
 }
 
-// verifyWorkflowVersioningState verifies the state of the versioningInfo of a workflow execution.
-// It checks that the workflow has the expected version and version transition.
-func (s *Versioning3Suite) verifyWorkflowVersioningState(
-	execution *commonpb.WorkflowExecution,
-	expectedVersion string,
-	expectedTransition *workflowpb.DeploymentVersionTransition,
-) {
-	resp, err := s.FrontendClient().DescribeWorkflowExecution(context.Background(), &workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: s.Namespace().String(),
-		Execution: execution,
-	})
-	s.Nil(err)
-	s.NotNil(resp)
-
-	s.Equal(expectedVersion, resp.GetWorkflowExecutionInfo().GetVersioningInfo().GetVersion())
-	s.Equal(expectedTransition, resp.GetWorkflowExecutionInfo().GetVersioningInfo().GetVersionTransition())
-}
-
 func (s *Versioning3Suite) TestUnpinnedWorkflow_SuccessfulUpdate_TransitionstoNewDeployment() {
 	tv1 := testvars.New(s).WithBuildIDNumber(1)
 
@@ -518,6 +500,7 @@ func (s *Versioning3Suite) TestUnpinnedWorkflow_SuccessfulUpdate_TransitionstoNe
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 			s.NotNil(task)
 
+			// Verify that events from the speculative task are written to the task history
 			s.EqualHistory(`
 			1 WorkflowExecutionStarted
 			2 WorkflowTaskScheduled
@@ -527,9 +510,18 @@ func (s *Versioning3Suite) TestUnpinnedWorkflow_SuccessfulUpdate_TransitionstoNe
 			6 WorkflowTaskStarted
 		  `, task.History)
 
+			// Verify that events from the speculative task are *not* written to the workflow history before being processed by the poller
+			events := s.GetHistory(s.Namespace().String(), execution)
+			s.EqualHistoryEvents(`
+				1 WorkflowExecutionStarted
+				2 WorkflowTaskScheduled
+				3 WorkflowTaskStarted
+				4 WorkflowTaskCompleted
+			`, events)
+
 			// VersioningInfo should not have changed before the update has been processed by the poller.
 			// Deployment version transition should also be nil since this is a speculative task.
-			s.verifyWorkflowVersioningState(execution, tv1.DeploymentVersionString(), nil)
+			s.verifyWorkflowVersioning(tv1, vbUnpinned, tv1.Deployment(), nil, nil)
 
 			return &workflowservice.RespondWorkflowTaskCompletedRequest{
 				Commands:           s.UpdateAcceptCompleteCommands(tv2),
@@ -546,7 +538,7 @@ func (s *Versioning3Suite) TestUnpinnedWorkflow_SuccessfulUpdate_TransitionstoNe
 	updateResult := <-updateResultCh
 	s.EqualValues("success-result-of-"+tv2.UpdateID(), testcore.DecodeString(s.T(), updateResult.GetOutcome().GetSuccess()))
 
-	// Veriyfing that events from the speculative task are written to the history
+	// Verify that events from the speculative task are written to the history since the update was accepted
 	events := s.GetHistory(s.Namespace().String(), execution)
 	s.EqualHistoryEvents(`
 1 WorkflowExecutionStarted
@@ -560,7 +552,7 @@ func (s *Versioning3Suite) TestUnpinnedWorkflow_SuccessfulUpdate_TransitionstoNe
 9 WorkflowExecutionUpdateCompleted {"AcceptedEventId": 8}
 `, events)
 
-	// Veriyfing that the versioning info is updated correctly.
+	// Verify that the versioning info is updated correctly.
 	describeCall, err := s.FrontendClient().DescribeWorkflowExecution(context.Background(), &workflowservice.DescribeWorkflowExecutionRequest{
 		Namespace: s.Namespace().String(),
 		Execution: execution,
@@ -571,7 +563,7 @@ func (s *Versioning3Suite) TestUnpinnedWorkflow_SuccessfulUpdate_TransitionstoNe
 	// Since the poller accepted the update, the Worker Deployment Version that completed the last workflow task
 	// of this workflow execution should have changed to the new version. However, the version transition should
 	// still be nil.
-	s.verifyWorkflowVersioningState(execution, tv2.DeploymentVersionString(), nil)
+	s.verifyWorkflowVersioning(tv2, vbUnpinned, tv2.Deployment(), nil, nil)
 
 }
 
@@ -595,6 +587,7 @@ func (s *Versioning3Suite) TestUnpinnedWorkflow_FailedUpdate_DoesNotTransitionTo
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 			s.NotNil(task)
 
+			// Verify that events from the speculative task are written to the task history
 			s.EqualHistory(`
 			1 WorkflowExecutionStarted
 			2 WorkflowTaskScheduled
@@ -604,9 +597,18 @@ func (s *Versioning3Suite) TestUnpinnedWorkflow_FailedUpdate_DoesNotTransitionTo
 			6 WorkflowTaskStarted
 		  `, task.History)
 
+			// Verify that events from the speculative task are *not* written to the workflow history before being processed by the poller
+			events := s.GetHistory(s.Namespace().String(), execution)
+			s.EqualHistoryEvents(`
+				1 WorkflowExecutionStarted
+				2 WorkflowTaskScheduled
+				3 WorkflowTaskStarted
+				4 WorkflowTaskCompleted
+			`, events)
+
 			// VersioningInfo should not have changed before the update has been processed by the poller.
 			// Deployment version transition should also be nil since this is a speculative task.
-			s.verifyWorkflowVersioningState(execution, tv1.DeploymentVersionString(), nil)
+			s.verifyWorkflowVersioning(tv1, vbUnpinned, tv1.Deployment(), nil, nil)
 
 			updRequestMsg := task.Messages[0]
 			updRequest := protoutils.UnmarshalAny[*updatepb.Request](s.T(), updRequestMsg.GetBody())
@@ -629,7 +631,7 @@ func (s *Versioning3Suite) TestUnpinnedWorkflow_FailedUpdate_DoesNotTransitionTo
 	updateResult := <-updateResultCh
 	s.Equal("rejection-of-"+tv2.UpdateID(), updateResult.GetOutcome().GetFailure().GetMessage())
 
-	// Verify events from the speculative task are written to the history
+	// Verify events from the speculative task are *not* written to the workflow history since the update was rejected
 	events := s.GetHistory(s.Namespace().String(), execution)
 	s.EqualHistoryEvents(`
 	1 WorkflowExecutionStarted
@@ -640,7 +642,7 @@ func (s *Versioning3Suite) TestUnpinnedWorkflow_FailedUpdate_DoesNotTransitionTo
 
 	// Since the poller rejected the update, the Worker Deployment Version that completed the last workflow task
 	// of this workflow execution should not have changed.
-	s.verifyWorkflowVersioningState(execution, tv1.DeploymentVersionString(), nil)
+	s.verifyWorkflowVersioning(tv1, vbUnpinned, tv1.Deployment(), nil, nil)
 }
 
 func (s *Versioning3Suite) sendUpdateNoError(tv *testvars.TestVars) <-chan *workflowservice.UpdateWorkflowExecutionResponse {
