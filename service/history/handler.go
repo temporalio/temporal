@@ -200,7 +200,7 @@ func (h *Handler) DeepHealthCheck(
 	ctx context.Context,
 	_ *historyservice.DeepHealthCheckRequest,
 ) (_ *historyservice.DeepHealthCheckResponse, retError error) {
-	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
+	defer log.CapturePanic(h.logger, &retError)
 	h.startWG.Wait()
 
 	// Ensure that the hosts are marked internally as healthy.
@@ -237,7 +237,7 @@ func (h *Handler) DeepHealthCheck(
 
 // IsWorkflowTaskValid - whether workflow task is still valid
 func (h *Handler) IsWorkflowTaskValid(ctx context.Context, request *historyservice.IsWorkflowTaskValidRequest) (_ *historyservice.IsWorkflowTaskValidResponse, retError error) {
-	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
+	defer log.CapturePanic(h.logger, &retError)
 	h.startWG.Wait()
 
 	namespaceID := namespace.ID(request.GetNamespaceId())
