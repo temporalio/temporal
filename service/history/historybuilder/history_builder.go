@@ -158,6 +158,7 @@ func (b *HistoryBuilder) AddWorkflowExecutionStartedEvent(
 	prevRunID string,
 	firstInChainRunID string,
 	originalRunID string,
+	parentVersioningInfo, previousRunVersioningInfo *historypb.WorkflowExecutionStartedEventAttributes_SourceWorkflowVersioningInfo,
 ) *historypb.HistoryEvent {
 	event := b.EventFactory.CreateWorkflowExecutionStartedEvent(
 		startTime,
@@ -166,6 +167,8 @@ func (b *HistoryBuilder) AddWorkflowExecutionStartedEvent(
 		prevRunID,
 		firstInChainRunID,
 		originalRunID,
+		parentVersioningInfo,
+		previousRunVersioningInfo,
 	)
 	if request.StartRequest.GetUserMetadata() != nil {
 		event.UserMetadata = request.StartRequest.GetUserMetadata()
@@ -448,7 +451,6 @@ func (b *HistoryBuilder) AddContinuedAsNewEvent(
 	command *commandpb.ContinueAsNewWorkflowExecutionCommandAttributes,
 ) *historypb.HistoryEvent {
 	event := b.EventFactory.CreateContinuedAsNewEvent(workflowTaskCompletedEventID, newRunID, command)
-
 	event, _ = b.EventStore.add(event)
 	return event
 }
