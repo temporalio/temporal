@@ -508,12 +508,14 @@ func (n *Node) serializeComponentNode() error {
 	return nil
 }
 
-// Sync the entire tree recursively (starting from the root node n) from the underlining component value:
+// syncSubComponents syncs the entire tree recursively (starting from the root node n) from the underlining component value:
 //   - Create:
-//     -- if child node is nil but subcomponent is not empty, a new node with subcomponent value is created.
+//     -- if child node is nil but subcomponent is not empty or key present in the collection,
+//        a new node with subcomponent/collection_item value is created.
 //   - Delete:
 //     -- if subcomponent is empty, the corresponding child is removed from the tree,
 //     -- if subcomponent is no longer in a component, the corresponding child is removed from the tree,
+//     -- if collection item is not in the collection, the corresponding child is removed from the tree,
 //     -- when a child is removed, all its children are removed too.
 //
 // All removed paths are added to mutation.DeletedNodes (which is shared between all nodes in the tree).
@@ -569,7 +571,7 @@ func (n *Node) syncSubComponentsInternal(
 
 			// Validate collection type
 			if field.val.Kind() != reflect.Map {
-				return serviceerror.NewInternal(fmt.Sprintf("only support map[string]Field[T] as CHASM collection: value of %s is not of a map type", n.nodeName))
+				return serviceerror.NewInternal(fmt.Sprintf("CHASM collection must be of map[string]Field[T] type: value of %s is not of a map type", n.nodeName))
 			}
 
 			if len(field.val.MapKeys()) == 0 {
@@ -578,12 +580,12 @@ func (n *Node) syncSubComponentsInternal(
 			}
 
 			if field.typ.Key().Kind() != reflect.String {
-				return serviceerror.NewInternal(fmt.Sprintf("only support map[string]Field[T] as CHASM collection: %s map key type is not string but %s", n.nodeName, field.typ.Key()))
+				return serviceerror.NewInternal(fmt.Sprintf("CHASM collection must be of map[string]Field[T] type: %s map key type is not string but %s", n.nodeName, field.typ.Key()))
 			}
 
 			collectionValT := field.typ.Elem()
 			if collectionValT.Kind() != reflect.Struct || genericTypePrefix(collectionValT) != chasmFieldTypePrefix {
-				return serviceerror.NewInternal(fmt.Sprintf("only support map[string]Field[T] as CHASM collection: %s map value type is not Field[T] but %s", n.nodeName, collectionValT))
+				return serviceerror.NewInternal(fmt.Sprintf("CHASM collection must be of map[string]Field[T] type: %s map value type is not Field[T] but %s", n.nodeName, collectionValT))
 			}
 
 			collectionItemsToKeep := make(map[string]struct{})
@@ -627,6 +629,8 @@ func (n *Node) syncSubField(fieldV reflect.Value, fieldN string, nodePath []stri
 	//nolint:revive // Internal field is guaranteed to be of type fieldInternal.
 	internal := internalV.Interface().(fieldInternal)
 	if internal.isEmpty() {
+		// Internal is empty only when Field was explicitly set to NewEmptyField[T] which is a way to clear its value.
+		// In this case, return keepNode=false and this node (and all it children) will be added to DeletedNodes map.
 		return
 	}
 	if internal.node == nil && internal.value() != nil {
