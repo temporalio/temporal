@@ -363,6 +363,8 @@ type Config struct {
 	BreakdownMetricsByTaskQueue dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 
 	LogAllReqErrors dynamicconfig.BoolPropertyFnWithNamespaceFilter
+
+	MaxLocalParentWorkflowVerificationDuration dynamicconfig.DurationPropertyFn
 }
 
 // NewConfig returns new service config with default values
@@ -392,6 +394,8 @@ func NewConfig(
 		AllowResetWithPendingChildren:        dynamicconfig.AllowResetWithPendingChildren.Get(dc),
 		MaxAutoResetPoints:                   dynamicconfig.HistoryMaxAutoResetPoints.Get(dc),
 		DefaultWorkflowTaskTimeout:           dynamicconfig.DefaultWorkflowTaskTimeout.Get(dc),
+
+		MaxLocalParentWorkflowVerificationDuration: dynamicconfig.MaxLocalParentWorkflowVerificationDuration.Get(dc),
 
 		VisibilityPersistenceMaxReadQPS:         dynamicconfig.VisibilityPersistenceMaxReadQPS.Get(dc),
 		VisibilityPersistenceMaxWriteQPS:        dynamicconfig.VisibilityPersistenceMaxWriteQPS.Get(dc),

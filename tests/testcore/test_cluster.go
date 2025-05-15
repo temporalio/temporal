@@ -81,7 +81,7 @@ type (
 		MockAdminClient        map[string]adminservice.AdminServiceClient
 		FaultInjection         config.FaultInjection     `yaml:"faultInjection"`
 		DynamicConfigOverrides map[dynamicconfig.Key]any `yaml:"-"`
-		GenerateMTLS           bool
+		EnableMTLS             bool
 		EnableMetricsCapture   bool
 		// ServiceFxOptions can be populated using WithFxOptionsForService.
 		ServiceFxOptions map[primitives.ServiceName][]fx.Option
@@ -297,7 +297,7 @@ func newClusterWithPersistenceTestBaseFactory(t *testing.T, clusterConfig *TestC
 	}
 
 	var tlsConfigProvider *encryption.FixedTLSConfigProvider
-	if clusterConfig.GenerateMTLS {
+	if clusterConfig.EnableMTLS {
 		if tlsConfigProvider, err = createFixedTLSConfigProvider(); err != nil {
 			return nil, err
 		}
