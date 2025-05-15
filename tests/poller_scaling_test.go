@@ -27,7 +27,6 @@ import (
 
 type PollerScalingIntegSuite struct {
 	testcore.FunctionalTestSuite
-	sdkClient sdkclient.Client
 }
 
 func (s *PollerScalingIntegSuite) mustToPayload(v any) *commonpb.Payload {
@@ -50,23 +49,6 @@ func (s *PollerScalingIntegSuite) SetupSuite() {
 		dynamicconfig.MatchingPollerScalingBacklogAgeScaleUp.Key(): 50 * time.Millisecond,
 	}
 	s.FunctionalTestBase.SetupSuiteWithDefaultCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
-}
-
-func (s *PollerScalingIntegSuite) SetupTest() {
-	s.FunctionalTestSuite.SetupTest()
-
-	var err error
-	s.sdkClient, err = sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.FrontendGRPCAddress(),
-		Namespace: s.Namespace().String(),
-	})
-	s.NoError(err)
-}
-
-func (s *PollerScalingIntegSuite) TearDownTest() {
-	if s.sdkClient != nil {
-		s.sdkClient.Close()
-	}
 }
 
 func (s *PollerScalingIntegSuite) TestPollerScalingSimpleBacklog() {
@@ -96,7 +78,7 @@ func (s *PollerScalingIntegSuite) TestPollerScalingSimpleBacklog() {
 
 	// Queue up a couple workflows
 	for i := 0; i < 5; i++ {
-		_, err := s.sdkClient.ExecuteWorkflow(
+		_, err := s.SdkClient().ExecuteWorkflow(
 			ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
 		s.NoError(err)
 	}
@@ -194,7 +176,7 @@ func (s *PollerScalingIntegSuite) TestPollerScalingDecisionsAreSeenProbabilistic
 	// Fire off workflows until polling stops
 	go func() {
 		for {
-			_, _ = s.sdkClient.ExecuteWorkflow(
+			_, _ = s.SdkClient().ExecuteWorkflow(
 				longctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
 			select {
 			case <-ctx.Done():

@@ -506,13 +506,7 @@ func (s *Versioning3Suite) testUnpinnedWorkflowWithRamp(toUnversioned bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	sdkClient, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.FrontendGRPCAddress(),
-		Namespace: s.Namespace().String(),
-	})
-	s.NoError(err)
-
-	w1 := worker.New(sdkClient, tv1.TaskQueue().GetName(), worker.Options{
+	w1 := worker.New(s.SdkClient(), tv1.TaskQueue().GetName(), worker.Options{
 		BuildID:                 tv1.BuildID(),
 		UseBuildIDForVersioning: true,
 		DeploymentOptions: worker.DeploymentOptions{
@@ -537,7 +531,7 @@ func (s *Versioning3Suite) testUnpinnedWorkflowWithRamp(toUnversioned bool) {
 	// wait until all task queue partitions know that tv1 is current
 	s.waitForDeploymentDataPropagation(tv1, versionStatusCurrent, false, tqTypeWf, tqTypeAct)
 
-	w2 := worker.New(sdkClient, tv2.TaskQueue().GetName(), worker.Options{
+	w2 := worker.New(s.SdkClient(), tv2.TaskQueue().GetName(), worker.Options{
 		BuildID:                 tv2.BuildID(),
 		UseBuildIDForVersioning: !toUnversioned,
 		DeploymentOptions: worker.DeploymentOptions{
@@ -557,7 +551,7 @@ func (s *Versioning3Suite) testUnpinnedWorkflowWithRamp(toUnversioned bool) {
 
 	counter := make(map[string]int)
 	for i := 0; i < 50; i++ {
-		run, err := sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tv1.TaskQueue().GetName()}, "wf")
+		run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tv1.TaskQueue().GetName()}, "wf")
 		s.NoError(err)
 		var out string
 		s.NoError(run.Get(ctx, &out))
@@ -987,14 +981,8 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectInherit(crossTq bo
 		s.updateTaskQueueDeploymentData(tv1Child, true, 0, false, 0, tqTypeWf)
 	}
 
-	sdkClient, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.FrontendGRPCAddress(),
-		Namespace: s.Namespace().String(),
-	})
-	s.NoError(err)
-
 	if crossTq {
-		w1xtq := worker.New(sdkClient, tv1Child.TaskQueue().GetName(), worker.Options{
+		w1xtq := worker.New(s.SdkClient(), tv1Child.TaskQueue().GetName(), worker.Options{
 			BuildID:                 tv1Child.BuildID(),
 			UseBuildIDForVersioning: true,
 			DeploymentOptions: worker.DeploymentOptions{
@@ -1008,7 +996,7 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectInherit(crossTq bo
 		defer w1xtq.Stop()
 	}
 
-	w1 := worker.New(sdkClient, tv1.TaskQueue().GetName(), worker.Options{
+	w1 := worker.New(s.SdkClient(), tv1.TaskQueue().GetName(), worker.Options{
 		BuildID:                 tv1.BuildID(),
 		UseBuildIDForVersioning: true,
 		DeploymentOptions: worker.DeploymentOptions{
@@ -1024,7 +1012,7 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectInherit(crossTq bo
 	s.NoError(w1.Start())
 	defer w1.Stop()
 
-	run, err := sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+	run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 		ID:                 tv1.WorkflowID(),
 		TaskQueue:          tv1.TaskQueue().GetName(),
 		VersioningOverride: sdkOverride,

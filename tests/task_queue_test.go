@@ -21,7 +21,6 @@ import (
 
 type TaskQueueSuite struct {
 	testcore.FunctionalTestSuite
-	sdkClient sdkclient.Client
 }
 
 func TestTaskQueueSuite(t *testing.T) {
@@ -35,24 +34,6 @@ func (s *TaskQueueSuite) SetupSuite() {
 		dynamicconfig.MatchingNumTaskqueueReadPartitions.Key():  4,
 	}
 	s.FunctionalTestSuite.SetupSuiteWithDefaultCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
-}
-
-func (s *TaskQueueSuite) SetupTest() {
-	s.FunctionalTestSuite.SetupTest()
-
-	var err error
-	s.sdkClient, err = sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.FrontendGRPCAddress(),
-		Namespace: s.Namespace().String(),
-	})
-	s.NoError(err)
-}
-
-func (s *TaskQueueSuite) TearDownTest() {
-	if s.sdkClient != nil {
-		s.sdkClient.Close()
-	}
-	s.FunctionalTestBase.TearDownTest()
 }
 
 // Not using RunTestWithMatchingBehavior because I want to pass different expected drain times for different configurations
@@ -98,7 +79,7 @@ func (s *TaskQueueSuite) taskQueueRateLimitTest(nPartitions, nWorkers int, timeT
 
 	// start workflows to create a backlog
 	for wfidx := 0; wfidx < maxBacklog; wfidx++ {
-		_, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+		_, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 			TaskQueue: tv.TaskQueue().GetName(),
 			ID:        fmt.Sprintf("wf%d", wfidx),
 		}, helloRateLimitTest, "Donna")
@@ -145,7 +126,7 @@ func (s *TaskQueueSuite) taskQueueRateLimitTest(nPartitions, nWorkers int, timeT
 	// start some workers
 	workers := make([]worker.Worker, nWorkers)
 	for i := 0; i < nWorkers; i++ {
-		workers[i] = worker.New(s.sdkClient, tv.TaskQueue().GetName(), worker.Options{})
+		workers[i] = worker.New(s.SdkClient(), tv.TaskQueue().GetName(), worker.Options{})
 		workers[i].RegisterWorkflow(helloRateLimitTest)
 		err := workers[i].Start()
 		s.NoError(err)

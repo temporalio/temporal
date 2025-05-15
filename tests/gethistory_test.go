@@ -32,7 +32,7 @@ type RawHistorySuite struct {
 }
 
 type RawHistoryClientSuite struct {
-	testcore.FunctionalTestSdkSuite
+	testcore.FunctionalTestBase
 }
 
 type GetHistoryFunctionalSuite struct {

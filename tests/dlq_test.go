@@ -20,7 +20,6 @@ import (
 	"github.com/urfave/cli/v2"
 	enumspb "go.temporal.io/api/enums/v1"
 	sdkclient "go.temporal.io/sdk/client"
-	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -28,7 +27,6 @@ import (
 	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/definition"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives"
@@ -53,7 +51,6 @@ type (
 		writer           bytes.Buffer
 		sdkClientFactory sdk.ClientFactory
 		tdbgApp          *cli.App
-		worker           sdkworker.Worker
 		deleteBlockCh    chan interface{}
 
 		failingWorkflowIDPrefix atomic.Pointer[string]
@@ -87,8 +84,7 @@ type (
 )
 
 const (
-	testTimeout = 10 * time.Second * debug.TimeoutMultiplier
-	taskQueue   = "dlq-test-task-queue"
+	dlqTestTimeout = 10 * time.Second * debug.TimeoutMultiplier
 )
 
 func TestDLQSuite(t *testing.T) {
@@ -97,14 +93,10 @@ func TestDLQSuite(t *testing.T) {
 }
 
 func (s *DLQSuite) SetupSuite() {
-	dynamicConfigOverrides := map[dynamicconfig.Key]any{
-		dynamicconfig.HistoryTaskDLQEnabled.Key(): true,
-	}
 	s.dlqTasks = make(chan tasks.Task)
 	testPrefix := "dlq-test-terminal-wfts-"
 	s.failingWorkflowIDPrefix.Store(&testPrefix)
 	s.FunctionalTestBase.SetupSuiteWithDefaultCluster(
-		testcore.WithDynamicConfigOverrides(dynamicConfigOverrides),
 		testcore.WithFxOptionsForService(primitives.HistoryService,
 			fx.Populate(&s.dlq),
 			fx.Provide(
@@ -141,19 +133,6 @@ func (s *DLQSuite) SetupSuite() {
 			params.Writer = &s.writer
 		},
 	)
-	sdkClient, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.FrontendGRPCAddress(),
-		Namespace: s.Namespace().String(),
-	})
-	s.Require().NoError(err)
-	s.worker = sdkworker.New(sdkClient, taskQueue, sdkworker.Options{})
-	s.worker.RegisterWorkflow(myWorkflow)
-	s.Require().NoError(s.worker.Start())
-}
-
-func (s *DLQSuite) TearDownSuite() {
-	s.worker.Stop()
-	s.FunctionalTestBase.TearDownSuite()
 }
 
 func myWorkflow(workflow.Context) (string, error) {
@@ -162,6 +141,8 @@ func myWorkflow(workflow.Context) (string, error) {
 
 func (s *DLQSuite) SetupTest() {
 	s.FunctionalTestSuite.SetupTest()
+
+	s.Worker().RegisterWorkflow(myWorkflow)
 
 	s.deleteBlockCh = make(chan interface{})
 	close(s.deleteBlockCh)
@@ -285,7 +266,7 @@ func (s *DLQSuite) TestReadArtificialDLQTasks() {
 // This test will then call DescribeDLQJob and CancelDLQJob api to verify.
 func (s *DLQSuite) TestPurgeRealWorkflow() {
 	ctx := context.Background()
-	ctx, cancel := context.WithTimeout(ctx, testTimeout)
+	ctx, cancel := context.WithTimeout(ctx, dlqTestTimeout)
 	defer cancel()
 
 	_, dlqMessageID := s.executeDoomedWorkflow(ctx)
@@ -316,7 +297,7 @@ func (s *DLQSuite) TestPurgeRealWorkflow() {
 // This test will then call DescribeDLQJob and CancelDLQJob api to verify.
 func (s *DLQSuite) TestMergeRealWorkflow() {
 	ctx := context.Background()
-	ctx, cancel := context.WithTimeout(ctx, testTimeout)
+	ctx, cancel := context.WithTimeout(ctx, dlqTestTimeout)
 	defer cancel()
 
 	// Verify that we can execute a normal workflow.
@@ -362,7 +343,7 @@ func (s *DLQSuite) TestMergeRealWorkflow() {
 func (s *DLQSuite) TestCancelRunningMerge() {
 	s.deleteBlockCh = make(chan interface{})
 	ctx := context.Background()
-	ctx, cancel := context.WithTimeout(ctx, testTimeout)
+	ctx, cancel := context.WithTimeout(ctx, dlqTestTimeout)
 	defer cancel()
 
 	// Execute several doomed workflows.
@@ -381,7 +362,7 @@ func (s *DLQSuite) TestCancelRunningMerge() {
 
 func (s *DLQSuite) TestListQueues() {
 	ctx := context.Background()
-	ctx, cancel := context.WithTimeout(ctx, testTimeout)
+	ctx, cancel := context.WithTimeout(ctx, dlqTestTimeout)
 	defer cancel()
 	targetCluster := "active"
 	category := tasks.CategoryTransfer
@@ -482,15 +463,9 @@ func (s *DLQSuite) verifyRunIsInDLQ(
 
 // executeWorkflow just executes a simple no-op workflow that returns "hello" and returns the sdk workflow run.
 func (s *DLQSuite) executeWorkflow(ctx context.Context, workflowID string) sdkclient.WorkflowRun {
-	sdkClient, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.FrontendGRPCAddress(),
-		Namespace: s.Namespace().String(),
-	})
-	s.NoError(err)
-
-	run, err := sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+	run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 		ID:        workflowID,
-		TaskQueue: taskQueue,
+		TaskQueue: s.TaskQueue(),
 	}, myWorkflow)
 	s.NoError(err)
 	return run
