@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -49,8 +50,9 @@ func TestCurrentCounterAndGauge(t *testing.T) {
 	capture := mh.StartCapture()
 	go lc.check(context.Background(), check)
 
-	time.Sleep(20 * time.Millisecond)
-	require.Equal(t, int64(1), dd.CurrentSuspected())
+	require.EventuallyWithT(t, func(collect *assert.CollectT) {
+		require.Equal(collect, int64(1), dd.CurrentSuspected())
+	}, time.Second, time.Millisecond)
 
 	snapshot := capture.Snapshot()
 	current := snapshot[metrics.DDCurrentSuspectedDeadlocks.Name()]
@@ -61,8 +63,9 @@ func TestCurrentCounterAndGauge(t *testing.T) {
 	require.Equal(t, int64(1), counter[0].Value)
 
 	close(b.done)
-	time.Sleep(20 * time.Millisecond)
-	require.Equal(t, int64(0), dd.CurrentSuspected())
+	require.EventuallyWithT(t, func(collect *assert.CollectT) {
+		require.Equal(collect, int64(0), dd.CurrentSuspected())
+	}, time.Second, time.Millisecond)
 
 	snapshot = capture.Snapshot()
 	current = snapshot[metrics.DDCurrentSuspectedDeadlocks.Name()]
