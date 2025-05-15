@@ -1253,12 +1253,22 @@ func (d *ClientImpl) record(operation string, retErr *error, args ...any) func()
 		// TODO: add metrics recording here
 
 		if *retErr != nil {
-			d.logger.Error("deployment client error",
-				tag.Error(*retErr),
-				tag.Operation(operation),
-				tag.NewDurationTag("elapsed", elapsed),
-				tag.NewAnyTag("args", args),
-			)
+			var failedPreconditionError *serviceerror.FailedPrecondition
+			if errors.As(*retErr, &failedPreconditionError) {
+				d.logger.Debug("deployment client failure due to a failed precondition",
+					tag.Error(*retErr),
+					tag.Operation(operation),
+					tag.NewDurationTag("elapsed", elapsed),
+					tag.NewAnyTag("args", args),
+				)
+			} else {
+				d.logger.Error("deployment client error",
+					tag.Error(*retErr),
+					tag.Operation(operation),
+					tag.NewDurationTag("elapsed", elapsed),
+					tag.NewAnyTag("args", args),
+				)
+			}
 		} else {
 			d.logger.Debug("deployment client success",
 				tag.Operation(operation),
