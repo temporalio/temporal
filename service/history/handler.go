@@ -7,6 +7,7 @@ import (
 	"math"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/pborman/uuid"
@@ -39,6 +40,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/api"
@@ -91,6 +93,7 @@ type (
 		taskQueueManager             persistence.HistoryTaskQueueManager
 		taskCategoryRegistry         tasks.TaskCategoryRegistry
 		dlqMetricsEmitter            *persistence.DLQMetricsEmitter
+		healthSignalAggregator       HealthSignalAggregator
 
 		replicationTaskFetcherFactory    replication.TaskFetcherFactory
 		replicationTaskConverterProvider replication.SourceTaskConverterProvider
@@ -123,6 +126,7 @@ type (
 		TaskQueueManager             persistence.HistoryTaskQueueManager
 		TaskCategoryRegistry         tasks.TaskCategoryRegistry
 		DLQMetricsEmitter            *persistence.DLQMetricsEmitter
+		HealthSignalAggregator       HealthSignalAggregator
 
 		ReplicationTaskFetcherFactory   replication.TaskFetcherFactory
 		ReplicationTaskConverterFactory replication.SourceTaskConverterProvider
@@ -165,6 +169,7 @@ func (h *Handler) Start() {
 	h.eventNotifier.Start()
 	h.controller.Start()
 	h.dlqMetricsEmitter.Start()
+	h.healthSignalAggregator.Start()
 
 	h.startWG.Done()
 }
@@ -184,6 +189,7 @@ func (h *Handler) Stop() {
 	h.controller.Stop()
 	h.eventNotifier.Stop()
 	h.dlqMetricsEmitter.Stop()
+	h.healthSignalAggregator.Stop()
 }
 
 func (h *Handler) isStopped() bool {
@@ -194,9 +200,10 @@ func (h *Handler) DeepHealthCheck(
 	ctx context.Context,
 	_ *historyservice.DeepHealthCheckRequest,
 ) (_ *historyservice.DeepHealthCheckResponse, retError error) {
-	defer log.CapturePanic(h.logger, &retError)
+	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
 	h.startWG.Wait()
 
+	// Ensure that the hosts are marked internally as healthy.
 	status, err := h.healthServer.Check(ctx, &healthpb.HealthCheckRequest{Service: serviceName})
 	if err != nil {
 		return nil, err
@@ -205,7 +212,18 @@ func (h *Handler) DeepHealthCheck(
 		metrics.HistoryHostHealthGauge.With(h.metricsHandler).Record(float64(enumsspb.HEALTH_STATE_DECLINED_SERVING))
 		return &historyservice.DeepHealthCheckResponse{State: enumsspb.HEALTH_STATE_DECLINED_SERVING}, nil
 	}
+	// Check that the RPC latency doesn't exceed the threshold.
+	rpcLatency := h.healthSignalAggregator.AverageLatency()
 
+	if _, ok := h.healthSignalAggregator.(*noopSignalAggregator); ok {
+		h.logger.Warn("health signal aggregator is using noop implementation")
+	}
+	if rpcLatency > h.config.HealthRPCLatencyFailure() {
+		metrics.HistoryHostHealthGauge.With(h.metricsHandler).Record(float64(enumsspb.HEALTH_STATE_NOT_SERVING))
+		return &historyservice.DeepHealthCheckResponse{State: enumsspb.HEALTH_STATE_NOT_SERVING}, nil
+	}
+
+	// Check if the persistence layer is healthy.
 	latency := h.persistenceHealthSignal.AverageLatency()
 	errRatio := h.persistenceHealthSignal.ErrorRatio()
 
@@ -219,7 +237,7 @@ func (h *Handler) DeepHealthCheck(
 
 // IsWorkflowTaskValid - whether workflow task is still valid
 func (h *Handler) IsWorkflowTaskValid(ctx context.Context, request *historyservice.IsWorkflowTaskValidRequest) (_ *historyservice.IsWorkflowTaskValidResponse, retError error) {
-	defer log.CapturePanic(h.logger, &retError)
+	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
 	h.startWG.Wait()
 
 	namespaceID := namespace.ID(request.GetNamespaceId())
@@ -236,6 +254,11 @@ func (h *Handler) IsWorkflowTaskValid(ctx context.Context, request *historyservi
 	if err != nil {
 		return nil, h.convertError(err)
 	}
+
+	startTime := h.timeSource.Now()
+	defer func() {
+		h.healthSignalAggregator.Record("IsWorkflowTaskValid", time.Since(startTime), retError)
+	}()
 
 	response, err := engine.IsWorkflowTaskValid(ctx, request)
 	if err != nil {
@@ -246,7 +269,7 @@ func (h *Handler) IsWorkflowTaskValid(ctx context.Context, request *historyservi
 
 // IsActivityTaskValid - whether activity task is still valid
 func (h *Handler) IsActivityTaskValid(ctx context.Context, request *historyservice.IsActivityTaskValidRequest) (_ *historyservice.IsActivityTaskValidResponse, retError error) {
-	defer log.CapturePanic(h.logger, &retError)
+	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
 	h.startWG.Wait()
 
 	namespaceID := namespace.ID(request.GetNamespaceId())
@@ -263,6 +286,11 @@ func (h *Handler) IsActivityTaskValid(ctx context.Context, request *historyservi
 	if err != nil {
 		return nil, h.convertError(err)
 	}
+
+	startTime := h.timeSource.Now()
+	defer func() {
+		h.healthSignalAggregator.Record("IsActivityTaskValid", time.Since(startTime), retError)
+	}()
 
 	response, err := engine.IsActivityTaskValid(ctx, request)
 	if err != nil {
@@ -301,6 +329,11 @@ func (h *Handler) RecordActivityTaskHeartbeat(ctx context.Context, request *hist
 		return nil, h.convertError(err)
 	}
 
+	startTime := h.timeSource.Now()
+	defer func() {
+		h.healthSignalAggregator.Record("RecordActivityTaskHeartbeat", time.Since(startTime), retError)
+	}()
+
 	response, err2 := engine.RecordActivityTaskHeartbeat(ctx, request)
 	if err2 != nil {
 		return nil, h.convertError(err2)
@@ -329,6 +362,11 @@ func (h *Handler) RecordActivityTaskStarted(ctx context.Context, request *histor
 	if err != nil {
 		return nil, h.convertError(err)
 	}
+
+	startTime := h.timeSource.Now()
+	defer func() {
+		h.healthSignalAggregator.Record("RecordActivityTaskStarted", time.Since(startTime), retError)
+	}()
 
 	response, err := engine.RecordActivityTaskStarted(ctx, request)
 	if err != nil {
@@ -372,6 +410,11 @@ func (h *Handler) RecordWorkflowTaskStarted(ctx context.Context, request *histor
 		return nil, h.convertError(err)
 	}
 
+	startTime := h.timeSource.Now()
+	defer func() {
+		h.healthSignalAggregator.Record("RecordWorkflowTaskStarted", time.Since(startTime), retError)
+	}()
+
 	response, err := engine.RecordWorkflowTaskStarted(ctx, request)
 	if err != nil {
 		return nil, h.convertError(err)
@@ -414,6 +457,11 @@ func (h *Handler) RespondActivityTaskCompleted(ctx context.Context, request *his
 		return nil, h.convertError(err)
 	}
 
+	startTime := h.timeSource.Now()
+	defer func() {
+		h.healthSignalAggregator.Record("RespondActivityTaskCompleted", time.Since(startTime), retError)
+	}()
+
 	resp, err2 := engine.RespondActivityTaskCompleted(ctx, request)
 	if err2 != nil {
 		return nil, h.convertError(err2)
@@ -453,6 +501,11 @@ func (h *Handler) RespondActivityTaskFailed(ctx context.Context, request *histor
 		return nil, h.convertError(err)
 	}
 
+	startTime := h.timeSource.Now()
+	defer func() {
+		h.healthSignalAggregator.Record("RespondActivityTaskFailed", time.Since(startTime), retError)
+	}()
+
 	resp, err2 := engine.RespondActivityTaskFailed(ctx, request)
 	if err2 != nil {
 		return nil, h.convertError(err2)
@@ -491,6 +544,11 @@ func (h *Handler) RespondActivityTaskCanceled(ctx context.Context, request *hist
 	if err != nil {
 		return nil, h.convertError(err)
 	}
+
+	startTime := h.timeSource.Now()
+	defer func() {
+		h.healthSignalAggregator.Record("RespondActivityTaskCanceled", time.Since(startTime), retError)
+	}()
 
 	resp, err2 := engine.RespondActivityTaskCanceled(ctx, request)
 	if err2 != nil {
@@ -536,6 +594,11 @@ func (h *Handler) RespondWorkflowTaskCompleted(ctx context.Context, request *his
 	if err != nil {
 		return nil, h.convertError(err)
 	}
+
+	startTime := h.timeSource.Now()
+	defer func() {
+		h.healthSignalAggregator.Record("RespondWorkflowTaskCompleted", time.Since(startTime), retError)
+	}()
 
 	response, err2 := engine.RespondWorkflowTaskCompleted(ctx, request)
 	if err2 != nil {
@@ -625,10 +688,7 @@ func (h *Handler) StartWorkflowExecution(ctx context.Context, request *historyse
 	return response, nil
 }
 
-func (h *Handler) ExecuteMultiOperation(
-	ctx context.Context,
-	request *historyservice.ExecuteMultiOperationRequest,
-) (_ *historyservice.ExecuteMultiOperationResponse, retError error) {
+func (h *Handler) ExecuteMultiOperation(ctx context.Context, request *historyservice.ExecuteMultiOperationRequest) (_ *historyservice.ExecuteMultiOperationResponse, retError error) {
 	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
 	h.startWG.Wait()
 
@@ -646,6 +706,11 @@ func (h *Handler) ExecuteMultiOperation(
 	if err != nil {
 		return nil, h.convertError(err)
 	}
+
+	startTime := h.timeSource.Now()
+	defer func() {
+		h.healthSignalAggregator.Record("ExecuteMultiOperation", time.Since(startTime), retError)
+	}()
 
 	response, err := engine.ExecuteMultiOperation(ctx, request)
 	if err != nil {
@@ -767,6 +832,11 @@ func (h *Handler) RebuildMutableState(ctx context.Context, request *historyservi
 		return nil, h.convertError(err)
 	}
 
+	startTime := h.timeSource.Now()
+	defer func() {
+		h.healthSignalAggregator.Record("RebuildMutableState", time.Since(startTime), retError)
+	}()
+
 	if err := engine.RebuildMutableState(ctx, namespaceID, &commonpb.WorkflowExecution{
 		WorkflowId: workflowExecution.WorkflowId,
 		RunId:      workflowExecution.RunId,
@@ -811,6 +881,12 @@ func (h *Handler) ImportWorkflowExecution(ctx context.Context, request *historys
 	if !shardContext.GetClusterMetadata().IsGlobalNamespaceEnabled() {
 		return nil, serviceerror.NewUnimplemented("ImportWorkflowExecution must be used in global namespace mode")
 	}
+
+	startTime := h.timeSource.Now()
+	defer func() {
+		h.healthSignalAggregator.Record("ImportWorkflowExecution", time.Since(startTime), retError)
+	}()
+
 	resp, err := engine.ImportWorkflowExecution(ctx, request)
 	if err != nil {
 		return nil, h.convertError(err)
@@ -842,6 +918,11 @@ func (h *Handler) DescribeMutableState(ctx context.Context, request *historyserv
 	if err != nil {
 		return nil, h.convertError(err)
 	}
+
+	startTime := h.timeSource.Now()
+	defer func() {
+		h.healthSignalAggregator.Record("DescribeMutableState", time.Since(startTime), retError)
+	}()
 
 	resp, err2 := engine.DescribeMutableState(ctx, request)
 	if err2 != nil {
@@ -875,6 +956,11 @@ func (h *Handler) GetMutableState(ctx context.Context, request *historyservice.G
 		return nil, h.convertError(err)
 	}
 
+	startTime := h.timeSource.Now()
+	defer func() {
+		h.healthSignalAggregator.Record("GetMutableState", time.Since(startTime), retError)
+	}()
+
 	resp, err2 := engine.GetMutableState(ctx, request)
 	if err2 != nil {
 		return nil, h.convertError(err2)
@@ -906,6 +992,11 @@ func (h *Handler) PollMutableState(ctx context.Context, request *historyservice.
 	if err != nil {
 		return nil, h.convertError(err)
 	}
+
+	startTime := h.timeSource.Now()
+	defer func() {
+		h.healthSignalAggregator.Record("PollMutableState", time.Since(startTime), retError)
+	}()
 
 	resp, err2 := engine.PollMutableState(ctx, request)
 	if err2 != nil {
@@ -939,6 +1030,11 @@ func (h *Handler) DescribeWorkflowExecution(ctx context.Context, request *histor
 		return nil, h.convertError(err)
 	}
 
+	startTime := h.timeSource.Now()
+	defer func() {
+		h.healthSignalAggregator.Record("DescribeWorkflowExecution", time.Since(startTime), retError)
+	}()
+
 	resp, err2 := engine.DescribeWorkflowExecution(ctx, request)
 	if err2 != nil {
 		return nil, h.convertError(err2)
@@ -950,10 +1046,6 @@ func (h *Handler) DescribeWorkflowExecution(ctx context.Context, request *histor
 func (h *Handler) RequestCancelWorkflowExecution(ctx context.Context, request *historyservice.RequestCancelWorkflowExecutionRequest) (_ *historyservice.RequestCancelWorkflowExecutionResponse, retError error) {
 	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
 	h.startWG.Wait()
-
-	if h.isStopped() {
-		return nil, errShuttingDown
-	}
 
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	if namespaceID == "" || request.CancelRequest.GetNamespace() == "" {
@@ -977,6 +1069,11 @@ func (h *Handler) RequestCancelWorkflowExecution(ctx context.Context, request *h
 		return nil, h.convertError(err)
 	}
 
+	startTime := h.timeSource.Now()
+	defer func() {
+		h.healthSignalAggregator.Record("RequestCancelWorkflowExecution", time.Since(startTime), retError)
+	}()
+
 	resp, err2 := engine.RequestCancelWorkflowExecution(ctx, request)
 	if err2 != nil {
 		return nil, h.convertError(err2)
@@ -990,10 +1087,6 @@ func (h *Handler) RequestCancelWorkflowExecution(ctx context.Context, request *h
 func (h *Handler) SignalWorkflowExecution(ctx context.Context, request *historyservice.SignalWorkflowExecutionRequest) (_ *historyservice.SignalWorkflowExecutionResponse, retError error) {
 	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
 	h.startWG.Wait()
-
-	if h.isStopped() {
-		return nil, errShuttingDown
-	}
 
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	if namespaceID == "" {
@@ -1010,6 +1103,11 @@ func (h *Handler) SignalWorkflowExecution(ctx context.Context, request *historys
 	if err != nil {
 		return nil, h.convertError(err)
 	}
+
+	startTime := h.timeSource.Now()
+	defer func() {
+		h.healthSignalAggregator.Record("SignalWorkflowExecution", time.Since(startTime), retError)
+	}()
 
 	resp, err2 := engine.SignalWorkflowExecution(ctx, request)
 	if err2 != nil {
@@ -1028,10 +1126,6 @@ func (h *Handler) SignalWithStartWorkflowExecution(ctx context.Context, request 
 	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
 	h.startWG.Wait()
 
-	if h.isStopped() {
-		return nil, errShuttingDown
-	}
-
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	if namespaceID == "" {
 		return nil, h.convertError(errNamespaceNotSet)
@@ -1047,6 +1141,11 @@ func (h *Handler) SignalWithStartWorkflowExecution(ctx context.Context, request 
 	if err != nil {
 		return nil, h.convertError(err)
 	}
+
+	startTime := h.timeSource.Now()
+	defer func() {
+		h.healthSignalAggregator.Record("SignalWithStartWorkflowExecution", time.Since(startTime), retError)
+	}()
 
 	for {
 		resp, err2 := engine.SignalWithStartWorkflowExecution(ctx, request)
@@ -1105,6 +1204,11 @@ func (h *Handler) RemoveSignalMutableState(ctx context.Context, request *history
 		return nil, h.convertError(err)
 	}
 
+	startTime := h.timeSource.Now()
+	defer func() {
+		h.healthSignalAggregator.Record("RemoveSignalMutableState", time.Since(startTime), retError)
+	}()
+
 	resp, err2 := engine.RemoveSignalMutableState(ctx, request)
 	if err2 != nil {
 		return nil, h.convertError(err2)
@@ -1118,10 +1222,6 @@ func (h *Handler) RemoveSignalMutableState(ctx context.Context, request *history
 func (h *Handler) TerminateWorkflowExecution(ctx context.Context, request *historyservice.TerminateWorkflowExecutionRequest) (_ *historyservice.TerminateWorkflowExecutionResponse, retError error) {
 	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
 	h.startWG.Wait()
-
-	if h.isStopped() {
-		return nil, errShuttingDown
-	}
 
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	if namespaceID == "" {
@@ -1151,10 +1251,6 @@ func (h *Handler) DeleteWorkflowExecution(ctx context.Context, request *historys
 	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
 	h.startWG.Wait()
 
-	if h.isStopped() {
-		return nil, errShuttingDown
-	}
-
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	if namespaceID == "" {
 		return nil, h.convertError(errNamespaceNotSet)
@@ -1176,6 +1272,11 @@ func (h *Handler) DeleteWorkflowExecution(ctx context.Context, request *historys
 		tag.WorkflowID(workflowExecution.GetWorkflowId()),
 		tag.WorkflowRunID(workflowExecution.GetRunId()))
 
+	startTime := h.timeSource.Now()
+	defer func() {
+		h.healthSignalAggregator.Record("DeleteWorkflowExecution", time.Since(startTime), retError)
+	}()
+
 	resp, err := engine.DeleteWorkflowExecution(ctx, request)
 	if err != nil {
 		return nil, h.convertError(err)
@@ -1188,10 +1289,6 @@ func (h *Handler) DeleteWorkflowExecution(ctx context.Context, request *historys
 func (h *Handler) ResetWorkflowExecution(ctx context.Context, request *historyservice.ResetWorkflowExecutionRequest) (_ *historyservice.ResetWorkflowExecutionResponse, retError error) {
 	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
 	h.startWG.Wait()
-
-	if h.isStopped() {
-		return nil, errShuttingDown
-	}
 
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	if namespaceID == "" {
@@ -1209,6 +1306,11 @@ func (h *Handler) ResetWorkflowExecution(ctx context.Context, request *historyse
 		return nil, h.convertError(err)
 	}
 
+	startTime := h.timeSource.Now()
+	defer func() {
+		h.healthSignalAggregator.Record("ResetWorkflowExecution", time.Since(startTime), retError)
+	}()
+
 	resp, err2 := engine.ResetWorkflowExecution(ctx, request)
 	if err2 != nil {
 		return nil, h.convertError(err2)
@@ -1222,10 +1324,6 @@ func (h *Handler) ResetWorkflowExecution(ctx context.Context, request *historyse
 func (h *Handler) UpdateWorkflowExecutionOptions(ctx context.Context, request *historyservice.UpdateWorkflowExecutionOptionsRequest) (_ *historyservice.UpdateWorkflowExecutionOptionsResponse, retError error) {
 	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
 	h.startWG.Wait()
-
-	if h.isStopped() {
-		return nil, errShuttingDown
-	}
 
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	if namespaceID == "" {
@@ -1242,6 +1340,11 @@ func (h *Handler) UpdateWorkflowExecutionOptions(ctx context.Context, request *h
 	if err != nil {
 		return nil, h.convertError(err)
 	}
+
+	startTime := h.timeSource.Now()
+	defer func() {
+		h.healthSignalAggregator.Record("UpdateWorkflowExecutionOptions", time.Since(startTime), retError)
+	}()
 
 	resp, err2 := engine.UpdateWorkflowExecutionOptions(ctx, request)
 	if err2 != nil {
@@ -1274,6 +1377,11 @@ func (h *Handler) QueryWorkflow(ctx context.Context, request *historyservice.Que
 	if err != nil {
 		return nil, h.convertError(err)
 	}
+
+	startTime := h.timeSource.Now()
+	defer func() {
+		h.healthSignalAggregator.Record("QueryWorkflow", time.Since(startTime), retError)
+	}()
 
 	resp, err2 := engine.QueryWorkflow(ctx, request)
 	if err2 != nil {
@@ -1315,6 +1423,11 @@ func (h *Handler) ScheduleWorkflowTask(ctx context.Context, request *historyserv
 		return nil, h.convertError(err)
 	}
 
+	startTime := h.timeSource.Now()
+	defer func() {
+		h.healthSignalAggregator.Record("ScheduleWorkflowTask", time.Since(startTime), retError)
+	}()
+
 	err2 := engine.ScheduleWorkflowTask(ctx, request)
 	if err2 != nil {
 		return nil, h.convertError(err2)
@@ -1354,6 +1467,11 @@ func (h *Handler) VerifyFirstWorkflowTaskScheduled(
 		return nil, h.convertError(err)
 	}
 
+	startTime := h.timeSource.Now()
+	defer func() {
+		h.healthSignalAggregator.Record("VerifyFirstWorkflowTaskScheduled", time.Since(startTime), retError)
+	}()
+
 	err2 := engine.VerifyFirstWorkflowTaskScheduled(ctx, request)
 	if err2 != nil {
 		return nil, h.convertError(err2)
@@ -1389,6 +1507,11 @@ func (h *Handler) RecordChildExecutionCompleted(ctx context.Context, request *hi
 	if err != nil {
 		return nil, h.convertError(err)
 	}
+
+	startTime := h.timeSource.Now()
+	defer func() {
+		h.healthSignalAggregator.Record("RecordChildExecutionCompleted", time.Since(startTime), retError)
+	}()
 
 	resp, err2 := engine.RecordChildExecutionCompleted(ctx, request)
 	if err2 != nil {
