@@ -334,16 +334,16 @@ func (d *WorkflowRunner) validateStateBeforeAcceptingRampingUpdate(args *deploym
 	}
 
 	if args.ConflictToken != nil && !bytes.Equal(args.ConflictToken, d.State.ConflictToken) {
-		return temporal.NewApplicationError("conflict token mismatch", errConflictTokenMismatchType)
+		return temporal.NewApplicationError("conflict token mismatch", errFailedPrecondition)
 	}
 	if args.Version == d.State.RoutingConfig.CurrentVersion {
 		d.logger.Info("version can't be set to ramping since it is already current")
-		return temporal.NewApplicationError("version can't be set to ramping since it is already current", errVersionAlreadyCurrentType)
+		return temporal.NewApplicationError(fmt.Sprintf("Ramping version %s is already current", args.Version), errFailedPrecondition)
 	}
 
 	if _, ok := d.State.Versions[args.Version]; !ok && args.Version != "" && args.Version != worker_versioning.UnversionedVersionId {
 		d.logger.Info("version not found in deployment")
-		return temporal.NewApplicationError("version not found in deployment", errVersionNotFound)
+		return temporal.NewApplicationError("version not found in deployment", errFailedPrecondition)
 	}
 
 	return nil
@@ -569,11 +569,11 @@ func (d *WorkflowRunner) validateStateBeforeAcceptingSetCurrent(args *deployment
 		return temporal.NewApplicationError("no change", errNoChangeType, d.State.ConflictToken)
 	}
 	if args.ConflictToken != nil && !bytes.Equal(args.ConflictToken, d.State.ConflictToken) {
-		return temporal.NewApplicationError("conflict token mismatch", errConflictTokenMismatchType)
+		return temporal.NewApplicationError("conflict token mismatch", errFailedPrecondition)
 	}
 	if _, ok := d.State.Versions[args.Version]; !ok && args.Version != worker_versioning.UnversionedVersionId {
 		d.logger.Info("version not found in deployment")
-		return temporal.NewApplicationError("version not found in deployment", errVersionNotFound)
+		return temporal.NewApplicationError(fmt.Sprintf("Version %s not found in deployment", args.Version), errFailedPrecondition)
 	}
 	return nil
 }

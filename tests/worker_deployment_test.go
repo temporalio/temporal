@@ -422,9 +422,12 @@ func (s *WorkerDeploymentSuite) TestConflictToken_Describe_SetCurrent_SetRamping
 }
 
 func (s *WorkerDeploymentSuite) TestConflictToken_SetCurrent_SetRamping_Wrong() {
+	s.OverrideDynamicConfig(dynamicconfig.FrontendMaskInternalErrorDetails, true)
+
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
 	tv := testvars.New(s)
+	expectedError := "conflict token mismatch"
 
 	firstVersion := tv.WithBuildIDNumber(1)
 
@@ -450,7 +453,7 @@ func (s *WorkerDeploymentSuite) TestConflictToken_SetCurrent_SetRamping_Wrong() 
 		Version:        firstVersion.DeploymentVersionString(),
 		ConflictToken:  cTWrong,
 	})
-	s.NotNil(err)
+	s.Equal(err.Error(), expectedError)
 
 	// Set first version as ramping version with wrong token
 	_, err = s.FrontendClient().SetWorkerDeploymentRampingVersion(ctx, &workflowservice.SetWorkerDeploymentRampingVersionRequest{
@@ -460,7 +463,7 @@ func (s *WorkerDeploymentSuite) TestConflictToken_SetCurrent_SetRamping_Wrong() 
 		Percentage:     5,
 		ConflictToken:  cTWrong,
 	})
-	s.NotNil(err)
+	s.Equal(err.Error(), expectedError)
 }
 
 // Testing ListWorkerDeployments
