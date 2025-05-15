@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
-	"fmt"
 	"maps"
 	"os"
 	"strconv"
@@ -43,7 +42,6 @@ import (
 	"go.temporal.io/server/common/testing/updateutils"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.uber.org/fx"
-	"gopkg.in/yaml.v3"
 )
 
 type (
@@ -229,11 +227,8 @@ func (s *FunctionalTestBase) SetupSuiteWithCluster(options ...TestClusterOption)
 		s.Logger = tl
 	}
 
-	fiConfigFromFlags, err := readFaultInjectionConfig()
-	s.Require().NoError(err)
-
 	s.testClusterConfig = &TestClusterConfig{
-		FaultInjection: fiConfigFromFlags,
+		FaultInjection: params.FaultInjectionConfig,
 		HistoryConfig: HistoryConfig{
 			NumHistoryShards: 4,
 		},
@@ -245,11 +240,7 @@ func (s *FunctionalTestBase) SetupSuiteWithCluster(options ...TestClusterOption)
 		EnableMTLS: params.EnableMTLS,
 	}
 
-	// If FaultInjectionConfig is passed with options, it overrides the one from command line flags.
-	if params.FaultInjectionConfig != nil {
-		s.testClusterConfig.FaultInjection = *params.FaultInjectionConfig
-	}
-
+	var err error
 	testClusterFactory := NewTestClusterFactory()
 	s.testCluster, err = testClusterFactory.NewCluster(s.T(), s.testClusterConfig, s.Logger)
 	s.Require().NoError(err)
@@ -330,24 +321,6 @@ func ApplyTestClusterOptions(options []TestClusterOption) TestClusterParams {
 		opt(&params)
 	}
 	return params
-}
-
-func readFaultInjectionConfig() (config.FaultInjection, error) {
-	// If -FaultInjectionConfigFile is passed to the test runner,
-	// then fault injection config will be added to the test cluster config.
-	var fiConfig config.FaultInjection
-	if TestFlags.FaultInjectionConfigFile != "" {
-		fiConfigContent, err := os.ReadFile(TestFlags.FaultInjectionConfigFile)
-		if err != nil {
-			return fiConfig, fmt.Errorf("failed to read test cluster fault injection config file %s: %v", TestFlags.FaultInjectionConfigFile, err)
-		}
-
-		if err = yaml.Unmarshal(fiConfigContent, &fiConfig); err != nil {
-			return fiConfig, fmt.Errorf("failed to decode test cluster fault injection config %s: %w", TestFlags.FaultInjectionConfigFile, err)
-		}
-	}
-
-	return fiConfig, nil
 }
 
 func (s *FunctionalTestBase) setupSdk() {

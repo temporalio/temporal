@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/server/tests/testutils"
 	"go.uber.org/fx"
 	"go.uber.org/multierr"
+	"gopkg.in/yaml.v3"
 )
 
 type (
@@ -79,7 +80,7 @@ type (
 		WorkerConfig           WorkerConfig
 		ESConfig               *esclient.Config
 		MockAdminClient        map[string]adminservice.AdminServiceClient
-		FaultInjection         config.FaultInjection
+		FaultInjection         *config.FaultInjection
 		DynamicConfigOverrides map[dynamicconfig.Key]any `yaml:"-"`
 		EnableMTLS             bool
 		EnableMetricsCapture   bool
@@ -168,7 +169,32 @@ func (f *defaultPersistenceTestBaseFactory) NewTestBase(options *persistencetest
 		panic(fmt.Sprintf("unknown store type: %v", options.StoreType))
 	}
 
+	readFaultInjectionConfig(options.FaultInjection)
+
 	return persistencetests.NewTestBase(options)
+}
+
+func readFaultInjectionConfig(fiConfig *config.FaultInjection) {
+	if fiConfig != nil {
+		// If FaultInjectionConfig is already set by test, then it means that this test requires
+		// a specific fault injection configuration that takes precedence over a command line flag.
+		return
+	}
+
+	// If -faultInjectionConfigFile is passed to the test runner, then fault injection config will be added to the persistence options.
+	if TestFlags.FaultInjectionConfigFile == "" {
+		return
+	}
+
+	fiConfigContent, err := os.ReadFile(TestFlags.FaultInjectionConfigFile)
+	if err != nil {
+		panic(fmt.Sprintf("failed to read fault injection config file %s: %v", TestFlags.FaultInjectionConfigFile, err))
+	}
+
+	fiConfig = &config.FaultInjection{}
+	if err = yaml.Unmarshal(fiConfigContent, &fiConfig); err != nil {
+		panic(fmt.Sprintf("failed to decode test cluster fault injection config %s: %w", TestFlags.FaultInjectionConfigFile, err))
+	}
 }
 
 func newClusterWithPersistenceTestBaseFactory(t *testing.T, clusterConfig *TestClusterConfig, logger log.Logger, tbFactory PersistenceTestBaseFactory) (*TestCluster, error) {
@@ -217,7 +243,7 @@ func newClusterWithPersistenceTestBaseFactory(t *testing.T, clusterConfig *TestC
 		}
 	}
 	clusterConfig.Persistence.Logger = logger
-	clusterConfig.Persistence.FaultInjection = &clusterConfig.FaultInjection
+	clusterConfig.Persistence.FaultInjection = clusterConfig.FaultInjection
 
 	testBase := tbFactory.NewTestBase(&clusterConfig.Persistence)
 

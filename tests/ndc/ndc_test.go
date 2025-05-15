@@ -87,9 +87,6 @@ func (s *NDCFunctionalTestSuite) SetupSuite() {
 	s.testClusterFactory = testcore.NewTestClusterFactory()
 
 	fileName := "../testdata/ndc_clusters.yaml"
-	if testcore.TestFlags.TestClusterConfigFile != "" {
-		fileName = testcore.TestFlags.TestClusterConfigFile
-	}
 	environment.SetupEnv()
 
 	confContent, err := os.ReadFile(fileName)
