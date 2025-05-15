@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path"
 	"testing"
@@ -42,6 +43,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/testing/freeport"
 	"go.temporal.io/server/temporal"
+	"go.temporal.io/server/temporal/environment"
 	"go.temporal.io/server/tests/testutils"
 	"go.uber.org/fx"
 	"go.uber.org/multierr"
@@ -262,6 +264,11 @@ func newClusterWithPersistenceTestBaseFactory(t *testing.T, clusterConfig *TestC
 			Indices: map[string]string{
 				esclient.VisibilityAppName: RandomizeStr("temporal_visibility_v1_test"),
 			},
+			URL: url.URL{
+				Host:   fmt.Sprintf("%s:%d", environment.GetESAddress(), environment.GetESPort()),
+				Scheme: "http",
+			},
+			Version: environment.GetESVersion(),
 		}
 
 		err := setupIndex(clusterConfig.ESConfig, logger)

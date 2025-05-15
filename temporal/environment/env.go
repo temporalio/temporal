@@ -157,6 +157,34 @@ func GetCassandraPort() int {
 	return p
 }
 
+func GetESAddress() string {
+	addr := os.Getenv(ESSeeds)
+	if addr == "" {
+		addr = GetLocalhostIP()
+	}
+	return addr
+}
+
+func GetESPort() int {
+	port := os.Getenv(ESPort)
+	if port == "" {
+		return ESDefaultPort
+	}
+	p, err := strconv.Atoi(port)
+	if err != nil {
+		panic(fmt.Sprintf("error getting env %v", ESPort))
+	}
+	return p
+}
+
+func GetESVersion() string {
+	version := os.Getenv(ESVersion)
+	if version == "" {
+		version = ESDefaultVersion
+	}
+	return version
+}
+
 // GetMySQLAddress return the cassandra address
 func GetMySQLAddress() string {
 	addr := os.Getenv(MySQLSeeds)
