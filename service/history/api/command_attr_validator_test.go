@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"math/rand"
 	"testing"
 	"time"
@@ -199,6 +200,22 @@ func (s *commandAttrValidatorSuite) TestValidateUpsertWorkflowSearchAttributes()
 	fc, err = s.validator.ValidateUpsertWorkflowSearchAttributes(namespaceName, attributes)
 	s.NoError(err)
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, fc)
+
+	// Predefined Worker-Deployment related SA's should be rejected when they are attempted to be upserted
+	deploymentRestrictedAttributes := []string{
+		searchattribute.TemporalWorkerDeploymentVersion,
+		searchattribute.TemporalWorkerDeployment,
+		searchattribute.TemporalWorkflowVersioningBehavior,
+	}
+
+	for _, attr := range deploymentRestrictedAttributes {
+		attributes.SearchAttributes.IndexedFields = map[string]*commonpb.Payload{
+			attr: saPayload,
+		}
+		fc, err = s.validator.ValidateUpsertWorkflowSearchAttributes(namespaceName, attributes)
+		s.EqualError(err, fmt.Sprintf("%s attribute can't be set in SearchAttributes", attr))
+		s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, fc)
+	}
 }
 
 func (s *commandAttrValidatorSuite) TestValidateContinueAsNewWorkflowExecutionAttributes() {
@@ -233,6 +250,31 @@ func (s *commandAttrValidatorSuite) TestValidateContinueAsNewWorkflowExecutionAt
 	s.Equal(taskQueue, attributes.GetTaskQueue().GetName())
 	s.Equal(executionTimeout, attributes.GetWorkflowRunTimeout().AsDuration())
 	s.Equal(maxWorkflowTaskStartToCloseTimeout, attributes.GetWorkflowTaskTimeout().AsDuration())
+
+	// Predefined Worker-Deployment related SA's should be rejected when they are attempted to be set during CAN
+	saPayload, _ := searchattribute.EncodeValue([]string{"a"}, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
+	attributes.SearchAttributes = &commonpb.SearchAttributes{}
+
+	deploymentRestrictedAttributes := []string{
+		searchattribute.TemporalWorkerDeploymentVersion,
+		searchattribute.TemporalWorkerDeployment,
+		searchattribute.TemporalWorkflowVersioningBehavior,
+	}
+
+	for _, attr := range deploymentRestrictedAttributes {
+		attributes.SearchAttributes.IndexedFields = map[string]*commonpb.Payload{
+			attr: saPayload,
+		}
+		fc, err = s.validator.ValidateContinueAsNewWorkflowExecutionAttributes(
+			tests.Namespace,
+			attributes,
+			executionInfo,
+		)
+		s.EqualError(err, fmt.Sprintf("invalid SearchAttributes on ContinueAsNewWorkflowExecutionCommand: %s attribute "+
+			"can't be set in SearchAttributes. WorkflowType=%s TaskQueue=%s",
+			attr, workflowTypeName, attributes.TaskQueue))
+		s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, fc)
+	}
 }
 
 func (s *commandAttrValidatorSuite) TestValidateModifyWorkflowProperties() {

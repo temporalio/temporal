@@ -27,7 +27,6 @@ import (
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
-	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.uber.org/mock/gomock"
 )
@@ -278,6 +277,9 @@ func (s *syncWorkflowStateSuite) TestGetSyncStateRetrieverForNewWorkflow() {
 		},
 		SubStateMachineTombstoneBatches: []*persistencespb.StateMachineTombstoneBatch{
 			{
+				VersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 1},
+			},
+			{
 				VersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 12},
 			},
 		},
@@ -308,7 +310,10 @@ func (s *syncWorkflowStateSuite) TestGetSyncStateRetrieverForNewWorkflow() {
 	})
 	mu.EXPECT().HSM().Return(nil)
 	mockChasmTree := historyi.NewMockChasmTree(s.controller)
-	mockChasmTree.EXPECT().Snapshot(workflow.EmptyVersionedTransition).
+	mockChasmTree.EXPECT().Snapshot(&persistencespb.VersionedTransition{
+		NamespaceFailoverVersion: 1,
+		TransitionCount:          0,
+	}).
 		Return(chasm.NodesSnapshot{
 			Nodes: map[string]*persistencespb.ChasmNode{
 				"node-path": {

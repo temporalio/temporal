@@ -326,6 +326,7 @@ func (r *transactionMgrImpl) backfillWorkflowEventsReapply(
 			totalEvents,
 			nil,
 			false, // allowResetWithPendingChildren
+			nil,
 		)
 		switch err.(type) {
 		case *serviceerror.InvalidArgument:

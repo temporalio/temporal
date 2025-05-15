@@ -8,10 +8,6 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	archiverspb "go.temporal.io/server/api/archiver/v1"
-	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/searchattribute"
 )
 
@@ -44,14 +40,6 @@ type (
 		NextPageToken  []byte
 	}
 
-	// HistoryBootstrapContainer contains components needed by all history Archiver implementations
-	HistoryBootstrapContainer struct {
-		ExecutionManager persistence.ExecutionManager
-		Logger           log.Logger
-		MetricsHandler   metrics.Handler
-		ClusterMetadata  cluster.Metadata
-	}
-
 	// HistoryArchiver is used to archive history and read archived history
 	HistoryArchiver interface {
 		// Archive is used to archive a Workflow's history. When the context expires the method should stop trying to archive.
@@ -68,13 +56,6 @@ type (
 		Get(ctx context.Context, url URI, request *GetHistoryRequest) (*GetHistoryResponse, error)
 		// ValidateURI is used to define what a valid URI for an implementation is.
 		ValidateURI(uri URI) error
-	}
-
-	// VisibilityBootstrapContainer contains components needed by all visibility Archiver implementations
-	VisibilityBootstrapContainer struct {
-		Logger          log.Logger
-		MetricsHandler  metrics.Handler
-		ClusterMetadata cluster.Metadata
 	}
 
 	// QueryVisibilityRequest is the request to query archived visibility records

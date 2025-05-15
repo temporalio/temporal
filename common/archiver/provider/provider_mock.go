@@ -41,45 +41,31 @@ func (m *MockArchiverProvider) EXPECT() *MockArchiverProviderMockRecorder {
 }
 
 // GetHistoryArchiver mocks base method.
-func (m *MockArchiverProvider) GetHistoryArchiver(scheme, serviceName string) (archiver.HistoryArchiver, error) {
+func (m *MockArchiverProvider) GetHistoryArchiver(scheme string) (archiver.HistoryArchiver, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetHistoryArchiver", scheme, serviceName)
+	ret := m.ctrl.Call(m, "GetHistoryArchiver", scheme)
 	ret0, _ := ret[0].(archiver.HistoryArchiver)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetHistoryArchiver indicates an expected call of GetHistoryArchiver.
-func (mr *MockArchiverProviderMockRecorder) GetHistoryArchiver(scheme, serviceName any) *gomock.Call {
+func (mr *MockArchiverProviderMockRecorder) GetHistoryArchiver(scheme any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetHistoryArchiver", reflect.TypeOf((*MockArchiverProvider)(nil).GetHistoryArchiver), scheme, serviceName)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetHistoryArchiver", reflect.TypeOf((*MockArchiverProvider)(nil).GetHistoryArchiver), scheme)
 }
 
 // GetVisibilityArchiver mocks base method.
-func (m *MockArchiverProvider) GetVisibilityArchiver(scheme, serviceName string) (archiver.VisibilityArchiver, error) {
+func (m *MockArchiverProvider) GetVisibilityArchiver(scheme string) (archiver.VisibilityArchiver, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetVisibilityArchiver", scheme, serviceName)
+	ret := m.ctrl.Call(m, "GetVisibilityArchiver", scheme)
 	ret0, _ := ret[0].(archiver.VisibilityArchiver)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetVisibilityArchiver indicates an expected call of GetVisibilityArchiver.
-func (mr *MockArchiverProviderMockRecorder) GetVisibilityArchiver(scheme, serviceName any) *gomock.Call {
+func (mr *MockArchiverProviderMockRecorder) GetVisibilityArchiver(scheme any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVisibilityArchiver", reflect.TypeOf((*MockArchiverProvider)(nil).GetVisibilityArchiver), scheme, serviceName)
-}
-
-// RegisterBootstrapContainer mocks base method.
-func (m *MockArchiverProvider) RegisterBootstrapContainer(serviceName string, historyContainer *archiver.HistoryBootstrapContainer, visibilityContainter *archiver.VisibilityBootstrapContainer) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RegisterBootstrapContainer", serviceName, historyContainer, visibilityContainter)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// RegisterBootstrapContainer indicates an expected call of RegisterBootstrapContainer.
-func (mr *MockArchiverProviderMockRecorder) RegisterBootstrapContainer(serviceName, historyContainer, visibilityContainter any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterBootstrapContainer", reflect.TypeOf((*MockArchiverProvider)(nil).RegisterBootstrapContainer), serviceName, historyContainer, visibilityContainter)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVisibilityArchiver", reflect.TypeOf((*MockArchiverProvider)(nil).GetVisibilityArchiver), scheme)
 }

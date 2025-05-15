@@ -28,15 +28,15 @@ import (
 )
 
 type RawHistorySuite struct {
-	testcore.FunctionalTestSuite
+	testcore.FunctionalTestBase
 }
 
 type RawHistoryClientSuite struct {
-	testcore.FunctionalTestSdkSuite
+	testcore.FunctionalTestBase
 }
 
 type GetHistoryFunctionalSuite struct {
-	testcore.FunctionalTestSuite
+	testcore.FunctionalTestBase
 	EnableTransitionHistory bool
 }
 

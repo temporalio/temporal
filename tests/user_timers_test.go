@@ -21,7 +21,7 @@ import (
 )
 
 type UserTimersTestSuite struct {
-	testcore.FunctionalTestSuite
+	testcore.FunctionalTestBase
 }
 
 func TestUserTimersTestSuite(t *testing.T) {

@@ -45,8 +45,10 @@ var (
 
 type (
 	historyArchiver struct {
-		container *archiver.HistoryBootstrapContainer
-		s3cli     s3iface.S3API
+		executionManager persistence.ExecutionManager
+		logger           log.Logger
+		metricsHandler   metrics.Handler
+		s3cli            s3iface.S3API
 		// only set in test code
 		historyIterator archiver.HistoryIterator
 	}
@@ -66,14 +68,18 @@ type (
 
 // NewHistoryArchiver creates a new archiver.HistoryArchiver based on s3
 func NewHistoryArchiver(
-	container *archiver.HistoryBootstrapContainer,
+	executionManager persistence.ExecutionManager,
+	logger log.Logger,
+	metricsHandler metrics.Handler,
 	config *config.S3Archiver,
 ) (archiver.HistoryArchiver, error) {
-	return newHistoryArchiver(container, config, nil)
+	return newHistoryArchiver(executionManager, logger, metricsHandler, config, nil)
 }
 
 func newHistoryArchiver(
-	container *archiver.HistoryBootstrapContainer,
+	executionManager persistence.ExecutionManager,
+	logger log.Logger,
+	metricsHandler metrics.Handler,
 	config *config.S3Archiver,
 	historyIterator archiver.HistoryIterator,
 ) (*historyArchiver, error) {
@@ -92,9 +98,11 @@ func newHistoryArchiver(
 	}
 
 	return &historyArchiver{
-		container:       container,
-		s3cli:           s3.New(sess),
-		historyIterator: historyIterator,
+		executionManager: executionManager,
+		logger:           logger,
+		metricsHandler:   metricsHandler,
+		s3cli:            s3.New(sess),
+		historyIterator:  historyIterator,
 	}, nil
 }
 func (h *historyArchiver) Archive(
@@ -103,7 +111,7 @@ func (h *historyArchiver) Archive(
 	request *archiver.ArchiveHistoryRequest,
 	opts ...archiver.ArchiveOption,
 ) (err error) {
-	handler := h.container.MetricsHandler.WithTags(metrics.OperationTag(metrics.HistoryArchiverScope), metrics.NamespaceTag(request.Namespace))
+	handler := h.metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryArchiverScope), metrics.NamespaceTag(request.Namespace))
 	featureCatalog := archiver.GetFeatureCatalog(opts...)
 	startTime := time.Now().UTC()
 	defer func() {
@@ -120,7 +128,7 @@ func (h *historyArchiver) Archive(
 		}
 	}()
 
-	logger := archiver.TagLoggerWithArchiveHistoryRequestAndURI(h.container.Logger, request, URI.String())
+	logger := archiver.TagLoggerWithArchiveHistoryRequestAndURI(h.logger, request, URI.String())
 
 	if err := SoftValidateURI(URI); err != nil {
 		logger.Error(archiver.ArchiveNonRetryableErrorMsg, tag.ArchivalArchiveFailReason(archiver.ErrReasonInvalidURI), tag.Error(err))
@@ -135,7 +143,7 @@ func (h *historyArchiver) Archive(
 	var progress uploadProgress
 	historyIterator := h.historyIterator
 	if historyIterator == nil { // will only be set by testing code
-		historyIterator = loadHistoryIterator(ctx, request, h.container.ExecutionManager, featureCatalog, &progress)
+		historyIterator = loadHistoryIterator(ctx, request, h.executionManager, featureCatalog, &progress)
 	}
 	for historyIterator.HasNext() {
 		historyBlob, err := historyIterator.Next(ctx)

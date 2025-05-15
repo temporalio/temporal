@@ -245,4 +245,5 @@ message VersionedTransitionArtifact {
     }
     repeated temporal.api.common.v1.DataBlob event_batches = 3;
     NewRunInfo new_run_info = 4;
+    bool is_first_sync = 5;
 }

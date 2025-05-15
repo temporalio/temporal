@@ -19,10 +19,12 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common"
@@ -52,6 +54,7 @@ import (
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
 	historyi "go.temporal.io/server/service/history/interfaces"
+	"go.temporal.io/server/service/history/ndc"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -69,17 +72,18 @@ type (
 		*require.Assertions
 		protorequire.ProtoAssertions
 
-		controller               *gomock.Controller
-		mockShard                *shard.ContextTest
-		mockTxProcessor          *queues.MockQueue
-		mockTimerProcessor       *queues.MockQueue
-		mockVisibilityProcessor  *queues.MockQueue
-		mockArchivalProcessor    *queues.MockQueue
-		mockMemoryScheduledQueue *queues.MockQueue
-		mockEventsCache          *events.MockCache
-		mockNamespaceCache       *namespace.MockRegistry
-		mockClusterMetadata      *cluster.MockMetadata
-		mockVisibilityManager    *manager.MockVisibilityManager
+		controller                  *gomock.Controller
+		mockShard                   *shard.ContextTest
+		mockTxProcessor             *queues.MockQueue
+		mockTimerProcessor          *queues.MockQueue
+		mockVisibilityProcessor     *queues.MockQueue
+		mockArchivalProcessor       *queues.MockQueue
+		mockMemoryScheduledQueue    *queues.MockQueue
+		mockEventsCache             *events.MockCache
+		mockNamespaceCache          *namespace.MockRegistry
+		mockClusterMetadata         *cluster.MockMetadata
+		mockVisibilityManager       *manager.MockVisibilityManager
+		mockWorkflowStateReplicator *ndc.MockWorkflowStateReplicator
 
 		workflowCache    wcache.Cache
 		historyEngine    *historyEngineImpl
@@ -173,6 +177,8 @@ func (s *engine2Suite) SetupTest() {
 		s.errorMessages = append(s.errorMessages, msg)
 	})
 
+	s.mockWorkflowStateReplicator = ndc.NewMockWorkflowStateReplicator(s.controller)
+
 	h := &historyEngineImpl{
 		currentClusterName: s.mockShard.GetClusterMetadata().GetCurrentClusterName(),
 		shardContext:       s.mockShard,
@@ -204,6 +210,7 @@ func (s *engine2Suite) SetupTest() {
 		),
 		workflowConsistencyChecker: api.NewWorkflowConsistencyChecker(mockShard, s.workflowCache),
 		persistenceVisibilityMgr:   s.mockVisibilityManager,
+		nDCWorkflowStateReplicator: s.mockWorkflowStateReplicator,
 	}
 	s.mockShard.SetEngineForTesting(h)
 
@@ -2452,6 +2459,94 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_WorkflowNotExi
 
 	_, err := s.historyEngine.VerifyChildExecutionCompletionRecorded(metrics.AddMetricsContext(context.Background()), request)
 	s.IsType(&serviceerror.NotFound{}, err)
+}
+
+func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_ResendParent() {
+
+	request := &historyservice.VerifyChildExecutionCompletionRecordedRequest{
+		NamespaceId: tests.ParentNamespaceID.String(),
+		ParentExecution: &commonpb.WorkflowExecution{
+			WorkflowId: tests.WorkflowID,
+			RunId:      tests.RunID,
+		},
+		ChildExecution: &commonpb.WorkflowExecution{
+			WorkflowId: "child workflowId",
+			RunId:      "child runId",
+		},
+		ParentInitiatedId:      123,
+		ParentInitiatedVersion: 100,
+		ResendParent:           true,
+	}
+
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, &serviceerror.NotFound{})
+
+	mockClusterMetadata := cluster.NewMockMetadata(s.controller)
+	mockClusterMetadata.EXPECT().GetClusterID().Return(tests.Version).AnyTimes()
+	mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestAlternativeClusterName).AnyTimes()
+	mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo)
+	mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, tests.Version).Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockShard.SetClusterMetadata(mockClusterMetadata)
+
+	// Add expectation for SyncWorkflowState
+	req := &adminservice.SyncWorkflowStateRequest{
+		NamespaceId: request.NamespaceId,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: request.ParentExecution.WorkflowId,
+			RunId:      request.ParentExecution.RunId,
+		},
+		VersionedTransition: nil,
+		VersionHistories:    nil,
+		TargetClusterId:     int32(cluster.TestAlternativeClusterInitialFailoverVersion),
+	}
+	resp := &adminservice.SyncWorkflowStateResponse{
+		VersionedTransitionArtifact: &replicationspb.VersionedTransitionArtifact{
+			StateAttributes: &replicationspb.VersionedTransitionArtifact_SyncWorkflowStateSnapshotAttributes{
+				SyncWorkflowStateSnapshotAttributes: &replicationspb.SyncWorkflowStateSnapshotAttributes{
+					State: &persistencespb.WorkflowMutableState{
+						Checksum: &persistencespb.Checksum{
+							Value: []byte("test-checksum"),
+						},
+					},
+				},
+			},
+		},
+	}
+	s.mockShard.Resource.RemoteAdminClient.EXPECT().SyncWorkflowState(
+		gomock.Any(),
+		req,
+	).Return(resp, nil)
+	s.mockWorkflowStateReplicator.EXPECT().ReplicateVersionedTransition(gomock.Any(), resp.VersionedTransitionArtifact, cluster.TestCurrentClusterName).Return(nil)
+
+	// prepare closed workflow
+	ms := workflow.TestGlobalMutableState(s.historyEngine.shardContext, s.mockEventsCache, log.NewTestLogger(), tests.Version, tests.WorkflowID, tests.RunID)
+	addWorkflowExecutionStartedEvent(ms, &commonpb.WorkflowExecution{
+		WorkflowId: tests.WorkflowID,
+		RunId:      tests.RunID,
+	}, "wType", "testTaskQueue", payloads.EncodeString("input"), 25*time.Second, 20*time.Second, 200*time.Second, "identity")
+	_, err := ms.AddTimeoutWorkflowEvent(
+		ms.GetNextEventID(),
+		enumspb.RETRY_STATE_RETRY_POLICY_NOT_SET,
+		uuid.New(),
+	)
+	s.NoError(err)
+	ms.GetExecutionInfo().VersionHistories = &historyspb.VersionHistories{
+		CurrentVersionHistoryIndex: 0,
+		Histories: []*historyspb.VersionHistory{
+			{
+				BranchToken: []byte{4, 5, 6},
+				Items: []*historyspb.VersionHistoryItem{
+					{EventId: 456, Version: 100},
+				},
+			},
+		},
+	}
+
+	wfMs := workflow.TestCloneToProto(ms)
+	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
+
+	_, err = s.historyEngine.VerifyChildExecutionCompletionRecorded(metrics.AddMetricsContext(context.Background()), request)
+	s.NoError(err)
 }
 
 func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_WorkflowClosed() {

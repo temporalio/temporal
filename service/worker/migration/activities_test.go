@@ -687,8 +687,8 @@ func (s *activitiesSuite) TestWaitCatchUp() {
 	}
 
 	request := CatchUpParams{
-		Namespace:     mockedNamespace,
-		RemoteCluster: remoteCluster,
+		Namespace:      mockedNamespace,
+		CatchupCluster: remoteCluster,
 	}
 
 	s.mockFrontendClient.EXPECT().DescribeNamespace(gomock.Any(), protomock.Eq(describeNamespaceRequest)).Return(&workflowservice.DescribeNamespaceResponse{

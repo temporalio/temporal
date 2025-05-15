@@ -24,7 +24,7 @@ import (
 )
 
 type ActivityApiRulesClientTestSuite struct {
-	testcore.FunctionalTestSdkSuite
+	testcore.FunctionalTestBase
 
 	initialRetryInterval   time.Duration
 	scheduleToCloseTimeout time.Duration
@@ -127,7 +127,7 @@ func (w *internalRulesTestWorkflow) ActivityFuncForPrePause() (string, error) {
 }
 
 func (s *ActivityApiRulesClientTestSuite) SetupTest() {
-	s.FunctionalTestSdkSuite.SetupTest()
+	s.FunctionalTestBase.SetupTest()
 
 	s.OverrideDynamicConfig(dynamicconfig.WorkflowRulesAPIsEnabled, true)
 

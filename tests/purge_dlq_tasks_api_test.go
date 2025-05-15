@@ -21,7 +21,7 @@ import (
 
 type (
 	PurgeDLQTasksSuite struct {
-		testcore.FunctionalTestSuite
+		testcore.FunctionalTestBase
 
 		dlq              *faultyDLQ
 		sdkClientFactory sdk.ClientFactory

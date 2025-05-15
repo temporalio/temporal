@@ -15,7 +15,7 @@ import (
 )
 
 type WorkflowUpdateBaseSuite struct {
-	testcore.FunctionalTestSuite
+	testcore.FunctionalTestBase
 }
 
 type updateResponseErr struct {

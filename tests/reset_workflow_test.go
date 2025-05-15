@@ -22,7 +22,6 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
-	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
@@ -951,24 +950,11 @@ func CaNOnceWorkflow(ctx workflow.Context, input string) (string, error) {
 }
 
 func (s *ResetWorkflowTestSuite) TestResetWorkflow_ResetAfterContinueAsNew() {
-	id := "functional-reset-workflow-test"
-	tq := "functional-reset-workflow-test-taskqueue"
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	// get sdkClient
-	sdkClient, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.FrontendGRPCAddress(),
-		Namespace: s.Namespace().String(),
-	})
-	s.NoError(err)
-
-	// start workflow that does CaN once
-	w := worker.New(sdkClient, tq, worker.Options{Identity: id})
-	w.RegisterWorkflow(CaNOnceWorkflow)
-	s.NoError(w.Start())
-	defer w.Stop()
-	run, err := sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, CaNOnceWorkflow, "")
+	s.Worker().RegisterWorkflow(CaNOnceWorkflow)
+	run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: s.TaskQueue()}, CaNOnceWorkflow, "")
 	s.NoError(err)
 
 	// wait for your workflow and its CaN to complete

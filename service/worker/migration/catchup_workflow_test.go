@@ -16,8 +16,8 @@ func TestCatchupWorkflow(t *testing.T) {
 	env.OnActivity(a.WaitCatchup, mock.Anything, mock.Anything).Return(nil)
 
 	env.ExecuteWorkflow(CatchupWorkflow, CatchUpParams{
-		Namespace:     "test-ns",
-		RemoteCluster: "test-remote",
+		Namespace:      "test-ns",
+		CatchupCluster: "test-remote",
 	})
 
 	require.True(t, env.IsWorkflowCompleted())

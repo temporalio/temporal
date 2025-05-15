@@ -29,7 +29,7 @@ import (
 
 type (
 	namespaceTestSuite struct {
-		testcore.FunctionalTestSuite
+		testcore.FunctionalTestBase
 	}
 )
 

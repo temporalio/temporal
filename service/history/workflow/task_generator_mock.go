@@ -174,9 +174,9 @@ func (mr *MockTaskGeneratorMockRecorder) GenerateHistoryReplicationTasks(eventBa
 }
 
 // GenerateMigrationTasks mocks base method.
-func (m *MockTaskGenerator) GenerateMigrationTasks() ([]tasks.Task, int64, error) {
+func (m *MockTaskGenerator) GenerateMigrationTasks(targetClusters []string) ([]tasks.Task, int64, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GenerateMigrationTasks")
+	ret := m.ctrl.Call(m, "GenerateMigrationTasks", targetClusters)
 	ret0, _ := ret[0].([]tasks.Task)
 	ret1, _ := ret[1].(int64)
 	ret2, _ := ret[2].(error)
@@ -184,9 +184,9 @@ func (m *MockTaskGenerator) GenerateMigrationTasks() ([]tasks.Task, int64, error
 }
 
 // GenerateMigrationTasks indicates an expected call of GenerateMigrationTasks.
-func (mr *MockTaskGeneratorMockRecorder) GenerateMigrationTasks() *gomock.Call {
+func (mr *MockTaskGeneratorMockRecorder) GenerateMigrationTasks(targetClusters any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateMigrationTasks", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateMigrationTasks))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateMigrationTasks", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateMigrationTasks), targetClusters)
 }
 
 // GenerateRecordWorkflowStartedTasks mocks base method.

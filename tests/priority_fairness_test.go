@@ -22,7 +22,7 @@ import (
 )
 
 type PriorityFairnessSuite struct {
-	testcore.FunctionalTestSuite
+	testcore.FunctionalTestBase
 }
 
 func TestPriorityFairnessSuite(t *testing.T) {
@@ -35,7 +35,7 @@ func (s *PriorityFairnessSuite) SetupSuite() {
 		dynamicconfig.MatchingUseNewMatcher.Key():     true,
 		dynamicconfig.MatchingGetTasksBatchSize.Key(): 20,
 	}
-	s.FunctionalTestSuite.SetupSuiteWithDefaultCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
+	s.FunctionalTestBase.SetupSuiteWithDefaultCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 }
 
 func (s *PriorityFairnessSuite) TestPriority_Activity_Basic() {
@@ -59,7 +59,7 @@ func (s *PriorityFairnessSuite) TestPriority_Activity_Basic() {
 
 	// process workflow tasks
 	for range N {
-		_, err := s.TaskPoller.PollAndHandleWorkflowTask(
+		_, err := s.TaskPoller().PollAndHandleWorkflowTask(
 			tv,
 			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 				s.Equal(3, len(task.History.Events))
@@ -100,7 +100,7 @@ func (s *PriorityFairnessSuite) TestPriority_Activity_Basic() {
 	// process activity tasks
 	var runs []int
 	for range N * Levels {
-		_, err := s.TaskPoller.PollAndHandleActivityTask(
+		_, err := s.TaskPoller().PollAndHandleActivityTask(
 			tv,
 			func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
 				var wfidx, pri int
@@ -143,7 +143,7 @@ func (s *PriorityFairnessSuite) TestSubqueue_Migration() {
 
 	// process workflow tasks and create 300 activities
 	for range 100 {
-		_, err := s.TaskPoller.PollAndHandleWorkflowTask(
+		_, err := s.TaskPoller().PollAndHandleWorkflowTask(
 			tv,
 			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 				s.Equal(3, len(task.History.Events))
@@ -175,7 +175,7 @@ func (s *PriorityFairnessSuite) TestSubqueue_Migration() {
 	}
 
 	processActivity := func() {
-		_, err := s.TaskPoller.PollAndHandleActivityTask(
+		_, err := s.TaskPoller().PollAndHandleActivityTask(
 			tv,
 			func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
 				nothing, err := payloads.Encode()

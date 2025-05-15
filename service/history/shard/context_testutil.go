@@ -210,6 +210,10 @@ func (s *ContextTest) SetChasmRegistry(reg *chasm.Registry) {
 	s.chasmRegistry = reg
 }
 
+func (s *ContextTest) SetClusterMetadata(metadata cluster.Metadata) {
+	s.clusterMetadata = metadata
+}
+
 // StopForTest calls FinishStop(). In general only the controller
 // should call that, but integration tests need to do it also to clean up any
 // background acquireShard goroutines that may exist.

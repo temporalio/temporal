@@ -17,7 +17,7 @@ import (
 )
 
 type AdminTestSuite struct {
-	testcore.FunctionalTestSdkSuite
+	testcore.FunctionalTestBase
 }
 
 func TestAdminTestSuite(t *testing.T) {

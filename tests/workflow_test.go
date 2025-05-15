@@ -24,8 +24,10 @@ import (
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/tests/testcore"
@@ -33,7 +35,7 @@ import (
 )
 
 type WorkflowTestSuite struct {
-	testcore.FunctionalTestSuite
+	testcore.FunctionalTestBase
 }
 
 func TestWorkflowTestSuite(t *testing.T) {
@@ -1555,6 +1557,68 @@ func (s *WorkflowTestSuite) TestWorkflowRetryFailures() {
   3 WorkflowTaskStarted
   4 WorkflowTaskCompleted
   5 WorkflowExecutionFailed`, events)
+}
+
+// TestStartWorkflowExecution_Invalid_DeploymentSearchAttributes verifies that Worker Deployment related
+// search attributes cannot be used on StartWorkflowExecution.
+func (s *WorkflowTestSuite) TestStartWorkflowExecution_Invalid_DeploymentSearchAttributes() {
+	tv := testvars.New(s.T())
+	makeRequest := func(saFieldName string) *workflowservice.StartWorkflowExecutionRequest {
+		return &workflowservice.StartWorkflowExecutionRequest{
+			RequestId:          uuid.New(),
+			Namespace:          s.Namespace().String(),
+			WorkflowId:         testcore.RandomizeStr(s.T().Name()),
+			WorkflowType:       tv.WorkflowType(),
+			TaskQueue:          tv.TaskQueue(),
+			Input:              nil,
+			WorkflowRunTimeout: durationpb.New(100 * time.Second),
+			Identity:           tv.WorkerIdentity(),
+			SearchAttributes: &commonpb.SearchAttributes{
+				IndexedFields: map[string]*commonpb.Payload{
+					saFieldName: payload.EncodeString("1.0.0"),
+				},
+			},
+		}
+	}
+
+	s.Run(searchattribute.TemporalWorkerDeploymentVersion, func() {
+		request := makeRequest(searchattribute.TemporalWorkerDeploymentVersion)
+		_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+		s.Error(err)
+		var invalidArgument *serviceerror.InvalidArgument
+		s.ErrorAs(err, &invalidArgument)
+	})
+
+	s.Run(searchattribute.TemporalWorkerDeployment, func() {
+		request := makeRequest(searchattribute.TemporalWorkerDeployment)
+		_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+		s.Error(err)
+		var invalidArgument *serviceerror.InvalidArgument
+		s.ErrorAs(err, &invalidArgument)
+	})
+
+	s.Run(searchattribute.TemporalWorkflowVersioningBehavior, func() {
+		request := makeRequest(searchattribute.TemporalWorkflowVersioningBehavior)
+		_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+		s.Error(err)
+		var invalidArgument *serviceerror.InvalidArgument
+		s.ErrorAs(err, &invalidArgument)
+	})
+
+	// These are currently allowed since they are in the predefinedWhiteList. Once it's confirmed that they are not being used,
+	// we can remove them from the predefinedWhiteList.
+	s.Run(searchattribute.BatcherUser, func() {
+		request := makeRequest(searchattribute.BatcherUser)
+		_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+		s.NoError(err)
+	})
+
+	s.Run(searchattribute.BatcherNamespace, func() {
+		request := makeRequest(searchattribute.BatcherNamespace)
+		_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+		s.NoError(err)
+	})
+
 }
 
 func requireNotStartedButRunning(t *testing.T, resp *workflowservice.StartWorkflowExecutionResponse) {

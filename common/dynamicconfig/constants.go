@@ -2331,6 +2331,12 @@ the dlq (or will drop them if not enabled)`,
 that task will be sent to DLQ.`,
 	)
 
+	MaxLocalParentWorkflowVerificationDuration = NewGlobalDurationSetting(
+		"history.maxLocalParentWorkflowVerificationDuration",
+		5*time.Minute,
+		`MaxLocalParentWorkflowVerificationDuration controls the maximum duration to verify on the local cluster before requesting to resend parent workflow.`,
+	)
+
 	ReplicationStreamSyncStatusDuration = NewGlobalDurationSetting(
 		"history.ReplicationStreamSyncStatusDuration",
 		1*time.Second,
@@ -2700,6 +2706,12 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		"frontend.workflowRulesAPIsEnabled",
 		false,
 		`WorkflowRulesAPIsEnabled is a "feature enable" flag. `,
+	)
+
+	MaxWorkflowRulesPerNamespace = NewNamespaceIntSetting(
+		"frontend.maxWorkflowRulesPerNamespace",
+		10,
+		`Maximum number of workflow rules in a given namespace`,
 	)
 
 	SlowRequestLoggingThreshold = NewGlobalDurationSetting(

@@ -206,7 +206,7 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 		return serviceerror.NewInvalidArgument(fmt.Sprintf("unknown artifact type %T", artifactType))
 	}
 
-	if mutation != nil && mutation.ExclusiveStartVersionedTransition.TransitionCount == 0 {
+	if versionedTransition.IsFirstSync {
 		// this is the first replication task for this workflow
 		// TODO: Handle reset case to reduce the amount of history events write
 		err := r.handleFirstReplicationTask(ctx, versionedTransition, sourceClusterName)
@@ -326,12 +326,25 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 
 func (r *WorkflowStateReplicatorImpl) handleFirstReplicationTask(
 	ctx context.Context,
-	versionedTransitionArtifact *replicationspb.VersionedTransitionArtifact,
+	versionedTransition *replicationspb.VersionedTransitionArtifact,
 	sourceClusterName string,
 ) (retErr error) {
-	mutation := versionedTransitionArtifact.GetSyncWorkflowStateMutationAttributes()
-	executionInfo := mutation.StateMutation.ExecutionInfo
-	executionState := mutation.StateMutation.ExecutionState
+	var mutation *replicationspb.SyncWorkflowStateMutationAttributes
+	var snapshot *replicationspb.SyncWorkflowStateSnapshotAttributes
+	switch artifactType := versionedTransition.StateAttributes.(type) {
+	case *replicationspb.VersionedTransitionArtifact_SyncWorkflowStateSnapshotAttributes:
+		snapshot = versionedTransition.GetSyncWorkflowStateSnapshotAttributes()
+	case *replicationspb.VersionedTransitionArtifact_SyncWorkflowStateMutationAttributes:
+		mutation = versionedTransition.GetSyncWorkflowStateMutationAttributes()
+	default:
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("unknown artifact type %T", artifactType))
+	}
+	executionState, executionInfo := func() (*persistencespb.WorkflowExecutionState, *persistencespb.WorkflowExecutionInfo) {
+		if snapshot != nil {
+			return snapshot.State.ExecutionState, snapshot.State.ExecutionInfo
+		}
+		return mutation.StateMutation.ExecutionState, mutation.StateMutation.ExecutionInfo
+	}()
 
 	wfCtx, releaseFn, err := r.workflowCache.GetOrCreateWorkflowExecution(
 		ctx,
@@ -367,12 +380,16 @@ func (r *WorkflowStateReplicatorImpl) handleFirstReplicationTask(
 		executionState.RunId,
 		timestamp.TimeValue(executionState.StartTime),
 	)
-	err = localMutableState.ApplyMutation(mutation.StateMutation)
+	if mutation != nil {
+		err = localMutableState.ApplyMutation(mutation.StateMutation)
+	} else {
+		err = localMutableState.ApplySnapshot(snapshot.State)
+	}
 	if err != nil {
 		return err
 	}
 
-	localBranchToken, err := r.prepareFirstReplicationTaskEvents(ctx, versionedTransitionArtifact, sourceClusterName, localMutableState)
+	localBranchToken, err := r.prepareFirstReplicationTaskEvents(ctx, executionInfo, executionState, versionedTransition.EventBatches, sourceClusterName, localMutableState)
 	if err != nil {
 		return err
 	}
@@ -389,12 +406,12 @@ func (r *WorkflowStateReplicatorImpl) handleFirstReplicationTask(
 		}
 	}()
 
-	if versionedTransitionArtifact.NewRunInfo != nil {
+	if versionedTransition.NewRunInfo != nil {
 		err = r.createNewRunWorkflow(
 			ctx,
 			namespace.ID(executionInfo.NamespaceId),
 			executionInfo.WorkflowId,
-			versionedTransitionArtifact.NewRunInfo,
+			versionedTransition.NewRunInfo,
 			localMutableState,
 			true,
 		)
@@ -422,15 +439,13 @@ func (r *WorkflowStateReplicatorImpl) handleFirstReplicationTask(
 //nolint:revive // cognitive complexity 40 (> max enabled 25)
 func (r *WorkflowStateReplicatorImpl) prepareFirstReplicationTaskEvents(
 	ctx context.Context,
-	versionedTransitionArtifact *replicationspb.VersionedTransitionArtifact,
+	executionInfo *persistencespb.WorkflowExecutionInfo,
+	executionState *persistencespb.WorkflowExecutionState,
+	eventBatches []*commonpb.DataBlob,
 	sourceClusterName string,
 	localMutableState historyi.MutableState,
 ) ([]byte, error) {
-	mutation := versionedTransitionArtifact.GetSyncWorkflowStateMutationAttributes()
-	executionInfo := mutation.StateMutation.ExecutionInfo
-	executionState := mutation.StateMutation.ExecutionState
-
-	sourceVersionHistories := mutation.StateMutation.ExecutionInfo.VersionHistories
+	sourceVersionHistories := executionInfo.VersionHistories
 	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(sourceVersionHistories)
 	if err != nil {
 		return nil, err
@@ -445,7 +460,7 @@ func (r *WorkflowStateReplicatorImpl) prepareFirstReplicationTaskEvents(
 	}
 
 	var historyEventBatchs [][]*historypb.HistoryEvent
-	for _, blob := range versionedTransitionArtifact.EventBatches {
+	for _, blob := range eventBatches {
 		e, err := r.historySerializer.DeserializeEvents(blob)
 		if err != nil {
 			return nil, err
