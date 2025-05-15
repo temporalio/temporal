@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/gcloud/connector"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/searchattribute"
@@ -31,9 +32,10 @@ var (
 
 type (
 	visibilityArchiver struct {
-		container     *archiver.VisibilityBootstrapContainer
-		gcloudStorage connector.Client
-		queryParser   QueryParser
+		logger         log.Logger
+		metricsHandler metrics.Handler
+		gcloudStorage  connector.Client
+		queryParser    QueryParser
 	}
 
 	queryVisibilityToken struct {
@@ -48,18 +50,19 @@ type (
 	}
 )
 
-func newVisibilityArchiver(container *archiver.VisibilityBootstrapContainer, storage connector.Client) *visibilityArchiver {
+func newVisibilityArchiver(logger log.Logger, metricsHandler metrics.Handler, storage connector.Client) *visibilityArchiver {
 	return &visibilityArchiver{
-		container:     container,
-		gcloudStorage: storage,
-		queryParser:   NewQueryParser(),
+		logger:         logger,
+		metricsHandler: metricsHandler,
+		gcloudStorage:  storage,
+		queryParser:    NewQueryParser(),
 	}
 }
 
 // NewVisibilityArchiver creates a new archiver.VisibilityArchiver based on filestore
-func NewVisibilityArchiver(container *archiver.VisibilityBootstrapContainer, config *config.GstorageArchiver) (archiver.VisibilityArchiver, error) {
-	storage, err := connector.NewClient(context.Background(), config)
-	return newVisibilityArchiver(container, storage), err
+func NewVisibilityArchiver(logger log.Logger, metricsHandler metrics.Handler, cfg *config.GstorageArchiver) (archiver.VisibilityArchiver, error) {
+	storage, err := connector.NewClient(context.Background(), cfg)
+	return newVisibilityArchiver(logger, metricsHandler, storage), err
 }
 
 // Archive is used to archive one workflow visibility record.
@@ -68,7 +71,7 @@ func NewVisibilityArchiver(container *archiver.VisibilityBootstrapContainer, con
 // Please make sure your implementation is lossless. If any in-memory batching mechanism is used, then those batched records will be lost during server restarts.
 // This method will be invoked when workflow closes. Note that because of conflict resolution, it is possible for a workflow to through the closing process multiple times, which means that this method can be invoked more than once after a workflow closes.
 func (v *visibilityArchiver) Archive(ctx context.Context, URI archiver.URI, request *archiverspb.VisibilityRecord, opts ...archiver.ArchiveOption) (err error) {
-	handler := v.container.MetricsHandler.WithTags(metrics.OperationTag(metrics.HistoryArchiverScope), metrics.NamespaceTag(request.Namespace))
+	handler := v.metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryArchiverScope), metrics.NamespaceTag(request.Namespace))
 	featureCatalog := archiver.GetFeatureCatalog(opts...)
 	startTime := time.Now().UTC()
 	defer func() {
@@ -85,7 +88,7 @@ func (v *visibilityArchiver) Archive(ctx context.Context, URI archiver.URI, requ
 		}
 	}()
 
-	logger := archiver.TagLoggerWithArchiveVisibilityRequestAndURI(v.container.Logger, request, URI.String())
+	logger := archiver.TagLoggerWithArchiveVisibilityRequestAndURI(v.logger, request, URI.String())
 
 	if err := v.ValidateURI(URI); err != nil {
 		if isRetryableError(err) {

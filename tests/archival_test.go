@@ -26,7 +26,6 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
-	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/testing/protoassert"
 	"go.temporal.io/server/tests/testcore"
@@ -35,7 +34,7 @@ import (
 
 type (
 	ArchivalSuite struct {
-		testcore.FunctionalTestSuite
+		testcore.FunctionalTestBase
 
 		archivalNamespace   namespace.Name
 		archivalNamespaceID namespace.ID
@@ -177,12 +176,10 @@ func (s *ArchivalSuite) TestVisibilityArchival() {
 
 // workflowIsArchived asserts that both the workflow history and workflow visibility are archived.
 func (s *ArchivalSuite) workflowIsArchived(namespaceID namespace.ID, execution *commonpb.WorkflowExecution) {
-	serviceName := string(primitives.HistoryService)
 	historyURI, err := archiver.NewURI(s.GetTestCluster().ArchiverBase().HistoryURI())
 	s.NoError(err)
 	historyArchiver, err := s.GetTestCluster().ArchiverBase().Provider().GetHistoryArchiver(
 		historyURI.Scheme(),
-		serviceName,
 	)
 	s.NoError(err)
 
@@ -190,7 +187,6 @@ func (s *ArchivalSuite) workflowIsArchived(namespaceID namespace.ID, execution *
 	s.NoError(err)
 	visibilityArchiver, err := s.GetTestCluster().ArchiverBase().Provider().GetVisibilityArchiver(
 		visibilityURI.Scheme(),
-		serviceName,
 	)
 	s.NoError(err)
 

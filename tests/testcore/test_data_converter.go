@@ -3,10 +3,16 @@ package testcore
 import (
 	"bytes"
 	"encoding/gob"
+	"errors"
 	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/sdk/converter"
+)
+
+var (
+	ErrEncodingIsNotSet       = errors.New("payload encoding metadata is not set")
+	ErrEncodingIsNotSupported = errors.New("payload encoding is not supported")
 )
 
 // TestDataConverter implements encoded.DataConverter using gob
@@ -15,6 +21,7 @@ type TestDataConverter struct {
 	NumOfCallFromPayloads int
 }
 
+// TODO (alex): use it by default SdkCleint everywhere?
 func NewTestDataConverter() converter.DataConverter {
 	return &TestDataConverter{}
 }

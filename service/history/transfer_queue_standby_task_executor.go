@@ -238,6 +238,11 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 		}
 
 		if verifyCompletionRecorded {
+			now := t.getCurrentTime()
+			taskTime := transferTask.GetVisibilityTime()
+			localVerificationTime := taskTime.Add(t.config.MaxLocalParentWorkflowVerificationDuration())
+			resendParent := now.After(localVerificationTime) && t.config.EnableTransitionHistory()
+
 			_, err := t.historyRawClient.VerifyChildExecutionCompletionRecorded(ctx, &historyservice.VerifyChildExecutionCompletionRecordedRequest{
 				NamespaceId: executionInfo.ParentNamespaceId,
 				ParentExecution: &commonpb.WorkflowExecution{
@@ -251,6 +256,7 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 				ParentInitiatedId:      executionInfo.ParentInitiatedId,
 				ParentInitiatedVersion: executionInfo.ParentInitiatedVersion,
 				Clock:                  executionInfo.ParentClock,
+				ResendParent:           resendParent,
 			})
 			switch err.(type) {
 			case nil, *serviceerror.NamespaceNotFound, *serviceerror.Unimplemented:

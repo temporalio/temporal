@@ -28,7 +28,7 @@ import (
 )
 
 type SizeLimitFunctionalSuite struct {
-	testcore.FunctionalTestSuite
+	testcore.FunctionalTestBase
 }
 
 func TestSizeLimitFunctionalSuite(t *testing.T) {

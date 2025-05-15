@@ -1621,6 +1621,7 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 		nil,
 		nil,
 		allowResetWithPendingChildren,
+		nil,
 	)
 
 	switch err.(type) {

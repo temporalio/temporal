@@ -58,6 +58,8 @@ type (
 		onceClusterConnect sync.Once
 
 		enableTransitionHistory bool
+
+		// TODO: add sdkClient and worker here and remove its creation in many tests.
 	}
 )
 
