@@ -750,6 +750,7 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks(targetClusters []string) ([]t
 				FirstEventVersion:   lastItem.Version,
 				NextEventID:         lastItem.GetEventId() + 1,
 				TaskEquivalents:     syncWorkflowStateTask,
+				TargetClusters:      targetClusters,
 			}}, 1, nil
 		}
 		return syncWorkflowStateTask, 1, nil
@@ -758,10 +759,11 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks(targetClusters []string) ([]t
 	replicationTasks := make([]tasks.Task, 0, len(r.mutableState.GetPendingActivityInfos())+1)
 	replicationTasks = append(replicationTasks, &tasks.HistoryReplicationTask{
 		// TaskID, VisibilityTimestamp is set by shard
-		WorkflowKey:  workflowKey,
-		FirstEventID: executionInfo.LastFirstEventId,
-		NextEventID:  lastItem.GetEventId() + 1,
-		Version:      lastItem.GetVersion(),
+		WorkflowKey:    workflowKey,
+		FirstEventID:   executionInfo.LastFirstEventId,
+		NextEventID:    lastItem.GetEventId() + 1,
+		Version:        lastItem.GetVersion(),
+		TargetClusters: targetClusters,
 	})
 	activityIDs := make(map[int64]struct{}, len(r.mutableState.GetPendingActivityInfos()))
 	for activityID := range r.mutableState.GetPendingActivityInfos() {
@@ -772,11 +774,13 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks(targetClusters []string) ([]t
 		workflowKey,
 		r.mutableState.GetPendingActivityInfos(),
 		activityIDs,
+		targetClusters,
 	)...)
 	if r.config.EnableNexus() {
 		replicationTasks = append(replicationTasks, &tasks.SyncHSMTask{
 			WorkflowKey: workflowKey,
 			// TaskID and VisibilityTimestamp are set by shard
+			TargetClusters: targetClusters,
 		})
 	}
 
@@ -794,6 +798,7 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks(targetClusters []string) ([]t
 			FirstEventVersion:   lastItem.GetVersion(),
 			NextEventID:         lastItem.GetEventId() + 1,
 			TaskEquivalents:     replicationTasks,
+			TargetClusters:      targetClusters,
 		}}, 1, nil
 	}
 	return replicationTasks, executionInfo.StateTransitionCount, nil
