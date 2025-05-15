@@ -682,12 +682,8 @@ func (d *ClientImpl) DeleteWorkerDeploymentVersion(
 	if failure := outcome.GetFailure(); failure != nil {
 		if failure.GetApplicationFailureInfo().GetType() == errVersionNotFound {
 			return nil
-		} else if failure.GetCause().GetApplicationFailureInfo().GetType() == ErrVersionIsCurrentOrRamping {
-			return serviceerror.NewFailedPrecondition(ErrVersionIsCurrentOrRamping)
-		} else if failure.GetCause().GetApplicationFailureInfo().GetType() == ErrVersionIsDraining {
-			return serviceerror.NewFailedPrecondition(ErrVersionIsDraining)
-		} else if failure.GetCause().GetApplicationFailureInfo().GetType() == ErrVersionHasPollers {
-			return serviceerror.NewFailedPrecondition(ErrVersionHasPollers)
+		} else if failure.GetCause().GetApplicationFailureInfo().GetType() == errFailedPrecondition {
+			return serviceerror.NewFailedPrecondition(failure.GetCause().GetMessage())
 		}
 		return serviceerror.NewInternal(failure.Message)
 	}
@@ -910,11 +906,11 @@ func (d *ClientImpl) DeleteVersionFromWorkerDeployment(
 
 	if failure := outcome.GetFailure(); failure != nil {
 		if failure.Message == ErrVersionIsDraining {
-			return temporal.NewNonRetryableApplicationError(ErrVersionIsDraining, ErrVersionIsDraining, nil) // non-retryable error to stop multiple activity attempts
+			return temporal.NewNonRetryableApplicationError(ErrVersionIsDraining, errFailedPrecondition, nil) // non-retryable error to stop multiple activity attempts
 		} else if failure.Message == ErrVersionHasPollers {
-			return temporal.NewNonRetryableApplicationError(ErrVersionHasPollers, ErrVersionHasPollers, nil) // non-retryable error to stop multiple activity attempts
+			return temporal.NewNonRetryableApplicationError(ErrVersionHasPollers, errFailedPrecondition, nil) // non-retryable error to stop multiple activity attempts
 		} else if failure.Message == ErrVersionIsCurrentOrRamping {
-			return temporal.NewNonRetryableApplicationError(ErrVersionIsCurrentOrRamping, ErrVersionIsCurrentOrRamping, nil) // non-retryable error to stop multiple activity attempts
+			return temporal.NewNonRetryableApplicationError(ErrVersionIsCurrentOrRamping, errFailedPrecondition, nil) // non-retryable error to stop multiple activity attempts
 		}
 		return serviceerror.NewInternal(failure.Message)
 	}
@@ -1253,8 +1249,7 @@ func (d *ClientImpl) record(operation string, retErr *error, args ...any) func()
 		// TODO: add metrics recording here
 
 		if *retErr != nil {
-			var failedPreconditionError *serviceerror.FailedPrecondition
-			if errors.As(*retErr, &failedPreconditionError) {
+			if isFailedPrecondition(*retErr) {
 				d.logger.Debug("deployment client failure due to a failed precondition",
 					tag.Error(*retErr),
 					tag.Operation(operation),
@@ -1550,4 +1545,11 @@ func (d *ClientImpl) getSyncBatchSize() int32 {
 		syncBatchSize = int32(n)
 	}
 	return syncBatchSize
+}
+
+// isFailedPrecondition checks if the error is a FailedPrecondition error. It also checks if the FailedPrecondition error is wrapped in an ApplicationError.
+func isFailedPrecondition(err error) bool {
+	var failedPreconditionError *serviceerror.FailedPrecondition
+	var applicationError *temporal.ApplicationError
+	return errors.As(err, &failedPreconditionError) || (errors.As(err, &applicationError) && applicationError.Type() == errFailedPrecondition)
 }
