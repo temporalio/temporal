@@ -52,8 +52,8 @@ type historyArchiverSuite struct {
 	*require.Assertions
 	suite.Suite
 	s3cli              *mocks.MockS3API
-	logger             log.Logger
 	executionManager   persistence.ExecutionManager
+	logger             log.Logger
 	metricsHandler     metrics.Handler
 	testArchivalURI    archiver.URI
 	historyBatchesV1   []*archiverspb.HistoryBlob
