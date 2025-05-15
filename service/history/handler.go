@@ -1047,6 +1047,10 @@ func (h *Handler) RequestCancelWorkflowExecution(ctx context.Context, request *h
 	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
 	h.startWG.Wait()
 
+	if h.isStopped() {
+		return nil, errShuttingDown
+	}
+
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	if namespaceID == "" || request.CancelRequest.GetNamespace() == "" {
 		return nil, h.convertError(errNamespaceNotSet)
