@@ -130,6 +130,7 @@ func Invoke(
 			InheritedBuildId:             executionInfo.InheritedBuildId,
 			FirstRunId:                   executionInfo.FirstExecutionRunId,
 			VersioningInfo:               executionInfo.VersioningInfo,
+			WorkerDeploymentName:         executionInfo.WorkerDeploymentName,
 			Priority:                     executionInfo.Priority,
 		},
 		WorkflowExtendedInfo: &workflowpb.WorkflowExecutionExtendedInfo{
