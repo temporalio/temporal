@@ -30,7 +30,7 @@ const (
 )
 
 type WorkflowDeleteExecutionSuite struct {
-	testcore.FunctionalTestSuite
+	testcore.FunctionalTestBase
 }
 
 func TestWorkflowDeleteExecutionSuite(t *testing.T) {

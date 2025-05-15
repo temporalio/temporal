@@ -21,7 +21,7 @@ import (
 )
 
 type ActivityApiPauseClientTestSuite struct {
-	testcore.FunctionalTestSdkSuite
+	testcore.FunctionalTestBase
 	tv                     *testvars.TestVars
 	initialRetryInterval   time.Duration
 	scheduleToCloseTimeout time.Duration
@@ -36,7 +36,7 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 }
 
 func (s *ActivityApiPauseClientTestSuite) SetupTest() {
-	s.FunctionalTestSdkSuite.SetupTest()
+	s.FunctionalTestBase.SetupTest()
 
 	s.tv = testvars.New(s.T()).WithTaskQueue(s.TaskQueue()).WithNamespaceName(s.Namespace())
 

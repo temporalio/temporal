@@ -24,16 +24,12 @@ import (
 )
 
 type ActivityApiBatchUnpauseClientTestSuite struct {
-	testcore.FunctionalTestSdkSuite
+	testcore.FunctionalTestBase
 }
 
 func TestActivityApiBatchUnpauseClientTestSuite(t *testing.T) {
 	s := new(ActivityApiBatchUnpauseClientTestSuite)
 	suite.Run(t, s)
-}
-
-func (s *ActivityApiBatchUnpauseClientTestSuite) SetupTest() {
-	s.FunctionalTestSdkSuite.SetupTest()
 }
 
 type internalTestWorkflow struct {

@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
@@ -36,7 +37,8 @@ type visibilityArchiverSuite struct {
 	*require.Assertions
 	suite.Suite
 
-	container          *archiver.VisibilityBootstrapContainer
+	logger             log.Logger
+	metricsHandler     metrics.Handler
 	testArchivalURI    archiver.URI
 	testQueryDirectory string
 	visibilityRecords  []*archiverspb.VisibilityRecord
@@ -65,9 +67,8 @@ func (s *visibilityArchiverSuite) TearDownSuite() {
 
 func (s *visibilityArchiverSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
-	s.container = &archiver.VisibilityBootstrapContainer{
-		Logger: log.NewNoopLogger(),
-	}
+	s.logger = log.NewNoopLogger()
+	s.metricsHandler = metrics.NoopMetricsHandler
 	s.controller = gomock.NewController(s.T())
 }
 
@@ -558,9 +559,9 @@ func (s *visibilityArchiverSuite) newTestVisibilityArchiver() *visibilityArchive
 		FileMode: testFileModeStr,
 		DirMode:  testDirModeStr,
 	}
-	archiver, err := NewVisibilityArchiver(s.container, config)
+	a, err := NewVisibilityArchiver(s.logger, s.metricsHandler, config)
 	s.NoError(err)
-	return archiver.(*visibilityArchiver)
+	return a.(*visibilityArchiver)
 }
 
 func (s *visibilityArchiverSuite) setupVisibilityDirectory() {

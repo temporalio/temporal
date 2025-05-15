@@ -39,8 +39,7 @@ const (
 
 type (
 	DeploymentVersionSuite struct {
-		testcore.FunctionalTestSuite
-		sdkClient sdkclient.Client
+		testcore.FunctionalTestBase
 	}
 )
 
@@ -54,7 +53,7 @@ func TestDeploymentVersionSuite(t *testing.T) {
 }
 
 func (s *DeploymentVersionSuite) SetupSuite() {
-	s.FunctionalTestSuite.SetupSuiteWithDefaultCluster(testcore.WithDynamicConfigOverrides(map[dynamicconfig.Key]any{
+	s.FunctionalTestBase.SetupSuiteWithDefaultCluster(testcore.WithDynamicConfigOverrides(map[dynamicconfig.Key]any{
 		dynamicconfig.EnableDeploymentVersions.Key():                   true,
 		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs.Key():     true, // [wv-cleanup-pre-release]
 		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs.Key(): true, // [wv-cleanup-pre-release]
@@ -72,24 +71,6 @@ func (s *DeploymentVersionSuite) SetupSuite() {
 		dynamicconfig.VersionDrainageStatusRefreshInterval.Key():       testVersionDrainageRefreshInterval,
 		dynamicconfig.VersionDrainageStatusVisibilityGracePeriod.Key(): testVersionDrainageVisibilityGracePeriod,
 	}))
-}
-
-func (s *DeploymentVersionSuite) SetupTest() {
-	s.FunctionalTestSuite.SetupTest()
-
-	var err error
-	s.sdkClient, err = sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.FrontendGRPCAddress(),
-		Namespace: s.Namespace().String(),
-	})
-	s.NoError(err)
-}
-
-func (s *DeploymentVersionSuite) TearDownTest() {
-	if s.sdkClient != nil {
-		s.sdkClient.Close()
-	}
-	s.FunctionalTestBase.TearDownTest()
 }
 
 // pollFromDeployment calls PollWorkflowTaskQueue to start deployment related workflows
@@ -429,7 +410,7 @@ func (s *DeploymentVersionSuite) startPinnedWorkflow(ctx context.Context, tv *te
 		panic("oops")
 	}
 	wId := testcore.RandomizeStr("id")
-	w := worker.New(s.sdkClient, tv.TaskQueue().String(), worker.Options{
+	w := worker.New(s.SdkClient(), tv.TaskQueue().String(), worker.Options{
 		DeploymentOptions: worker.DeploymentOptions{
 			DeploymentSeriesName: tv.DeploymentSeries(),
 		},
@@ -440,7 +421,7 @@ func (s *DeploymentVersionSuite) startPinnedWorkflow(ctx context.Context, tv *te
 	w.RegisterWorkflowWithOptions(wf, workflow.RegisterOptions{VersioningBehavior: workflow.VersioningBehaviorPinned})
 	s.NoError(w.Start())
 	defer w.Stop()
-	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tv.TaskQueue().String()}, wf)
+	run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tv.TaskQueue().String()}, wf)
 	s.NoError(err)
 	s.WaitForChannel(ctx, started)
 	return run

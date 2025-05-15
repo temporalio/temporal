@@ -115,7 +115,30 @@ var (
 		RootRunID:            enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	}
 
+	// predefinedWhiteList contains a subset of predefined Search Attributes (SAs)
+	// that are currently allowed for use in production environments. These attributes
+	// are internal and were not originally intended for end-user usage, but may be
+	// in active use by users at the moment.
+	//
+	// The long-term plan is to deprecate and disallow the use of these attributes
+	// once it is confirmed that they are no longer being relied upon in any
+	// production workflows. Until then, this whitelist acts as a temporary allowance
+	// to ensure backward compatibility and avoid breaking existing use cases.
+	predefinedWhiteList = map[string]enumspb.IndexedValueType{
+		TemporalChangeVersion:      enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		BinaryChecksums:            enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		BuildIds:                   enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		BatcherNamespace:           enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		BatcherUser:                enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		TemporalScheduledStartTime: enumspb.INDEXED_VALUE_TYPE_DATETIME,
+		TemporalScheduledById:      enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		TemporalSchedulePaused:     enumspb.INDEXED_VALUE_TYPE_BOOL,
+		TemporalNamespaceDivision:  enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		TemporalPauseInfo:          enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+	}
+
 	// predefined are internal search attributes which are passed and stored in SearchAttributes object together with custom search attributes.
+	// Attributes listed here but not in predefinedWhiteList are considered internal-only and are banned from user-facing usage.
 	predefined = map[string]enumspb.IndexedValueType{
 		TemporalChangeVersion:              enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
 		BinaryChecksums:                    enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
