@@ -102,6 +102,8 @@ func (dd *deadlockDetector) Stop() error {
 func (dd *deadlockDetector) detected(name string) {
 	dd.logger.Error("potential deadlock detected", tag.Name(name))
 
+	metrics.DDSuspectedDeadlocks.With(dd.metricsHandler).Record(1)
+
 	if dd.config.DumpGoroutines() {
 		dd.dumpGoroutines()
 	}
