@@ -338,7 +338,7 @@ func (d *WorkflowRunner) validateStateBeforeAcceptingRampingUpdate(args *deploym
 	}
 	if args.Version == d.State.RoutingConfig.CurrentVersion {
 		d.logger.Info("version can't be set to ramping since it is already current")
-		return temporal.NewApplicationError(fmt.Sprintf("Ramping version %s is already current", args.Version), errFailedPrecondition)
+		return temporal.NewApplicationError(fmt.Sprintf("ramping version %s is already current", args.Version), errFailedPrecondition)
 	}
 
 	if _, ok := d.State.Versions[args.Version]; !ok && args.Version != "" && args.Version != worker_versioning.UnversionedVersionId {
@@ -573,7 +573,7 @@ func (d *WorkflowRunner) validateStateBeforeAcceptingSetCurrent(args *deployment
 	}
 	if _, ok := d.State.Versions[args.Version]; !ok && args.Version != worker_versioning.UnversionedVersionId {
 		d.logger.Info("version not found in deployment")
-		return temporal.NewApplicationError(fmt.Sprintf("Version %s not found in deployment", args.Version), errFailedPrecondition)
+		return temporal.NewApplicationError(fmt.Sprintf("version %s not found in deployment", args.Version), errFailedPrecondition)
 	}
 	return nil
 }
