@@ -79,15 +79,12 @@ type (
 		WorkerConfig           WorkerConfig
 		ESConfig               *esclient.Config
 		MockAdminClient        map[string]adminservice.AdminServiceClient
-		FaultInjection         config.FaultInjection     `yaml:"faultInjection"`
+		FaultInjection         config.FaultInjection
 		DynamicConfigOverrides map[dynamicconfig.Key]any `yaml:"-"`
 		EnableMTLS             bool
 		EnableMetricsCapture   bool
 		// ServiceFxOptions can be populated using WithFxOptionsForService.
 		ServiceFxOptions map[primitives.ServiceName][]fx.Option
-
-		DeprecatedFrontendAddress string `yaml:"frontendAddress"`
-		DeprecatedClusterNo       int    `yaml:"clusterno"`
 	}
 
 	TestClusterFactory interface {
@@ -234,10 +231,11 @@ func newClusterWithPersistenceTestBaseFactory(t *testing.T, clusterConfig *TestC
 		indexName string
 		esClient  esclient.Client
 	)
-	if !UseSQLVisibility() && clusterConfig.ESConfig != nil {
-		// Randomize index name to avoid cross tests interference.
-		for k, v := range clusterConfig.ESConfig.Indices {
-			clusterConfig.ESConfig.Indices[k] = fmt.Sprintf("%v-%v", v, uuid.New())
+	if !UseSQLVisibility() {
+		clusterConfig.ESConfig = &esclient.Config{
+			Indices: map[string]string{
+				esclient.VisibilityAppName: RandomizeStr("temporal_visibility_v1_test"),
+			},
 		}
 
 		err := setupIndex(clusterConfig.ESConfig, logger)

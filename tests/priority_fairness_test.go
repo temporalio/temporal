@@ -35,7 +35,7 @@ func (s *PriorityFairnessSuite) SetupSuite() {
 		dynamicconfig.MatchingUseNewMatcher.Key():     true,
 		dynamicconfig.MatchingGetTasksBatchSize.Key(): 20,
 	}
-	s.FunctionalTestBase.SetupSuiteWithDefaultCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
+	s.FunctionalTestBase.SetupSuiteWithCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 }
 
 func (s *PriorityFairnessSuite) TestPriority_Activity_Basic() {
