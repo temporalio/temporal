@@ -91,7 +91,7 @@ func (s *WorkerDeploymentSuite) pollFromDeploymentWithTaskQueueNumber(ctx contex
 	})
 }
 
-func (s *WorkerDeploymentSuite) pollFromDeploymentExpectFail(ctx context.Context, tv *testvars.TestVars) {
+func (s *WorkerDeploymentSuite) pollFromDeploymentExpectFail(ctx context.Context, tv *testvars.TestVars, expectedError string) {
 	_, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace:         s.Namespace().String(),
 		TaskQueue:         tv.TaskQueue(),
@@ -99,6 +99,7 @@ func (s *WorkerDeploymentSuite) pollFromDeploymentExpectFail(ctx context.Context
 		DeploymentOptions: tv.WorkerDeploymentOptions(true),
 	})
 	s.Error(err)
+	s.Equal(expectedError, err.Error())
 }
 
 func (s *WorkerDeploymentSuite) ensureCreateVersionWithExpectedTaskQueues(ctx context.Context, tv *testvars.TestVars, expectedTaskQueues int) {
@@ -207,13 +208,13 @@ func (s *WorkerDeploymentSuite) TestForceCAN_NoOpenWFS() {
 }
 
 func (s *WorkerDeploymentSuite) TestDeploymentVersionLimits() {
-	// TODO (carly): check the error messages that poller receives in each case and make sense they are informative and appropriate (e.g. do not expose internal stuff)
-
 	s.OverrideDynamicConfig(dynamicconfig.MatchingMaxVersionsInDeployment, 1)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingMaxTaskQueuesInDeploymentVersion, 1)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
+	expectedErrorMaxVersions := "cannot add version since maximum number of versions (1) have been registered in the deployment"
+	expectedErrorMaxTaskQueues := "cannot add task queue since maximum number of task queues (1) have been registered in deployment"
 
 	tv := testvars.New(s)
 
@@ -222,7 +223,7 @@ func (s *WorkerDeploymentSuite) TestDeploymentVersionLimits() {
 	s.ensureCreateVersionInDeployment(tv)
 
 	// pollers of second version in the same deployment should be rejected
-	s.pollFromDeploymentExpectFail(ctx, tv.WithBuildIDNumber(2))
+	s.pollFromDeploymentExpectFail(ctx, tv.WithBuildIDNumber(2), expectedErrorMaxVersions)
 
 	// But first version of another deployment fine
 	tv2 := tv.WithDeploymentSeriesNumber(2)
@@ -230,7 +231,7 @@ func (s *WorkerDeploymentSuite) TestDeploymentVersionLimits() {
 	s.ensureCreateVersionInDeployment(tv2)
 
 	// pollers of the second TQ in the same deployment version should be rejected
-	s.pollFromDeploymentExpectFail(ctx, tv.WithTaskQueueNumber(2))
+	s.pollFromDeploymentExpectFail(ctx, tv.WithTaskQueueNumber(2), expectedErrorMaxTaskQueues)
 }
 
 func (s *WorkerDeploymentSuite) TestNamespaceDeploymentsLimit() {
@@ -249,7 +250,7 @@ func (s *WorkerDeploymentSuite) TestNamespaceDeploymentsLimit() {
 	s.ensureCreateVersionInDeployment(tv)
 
 	// pollers of the second deployment version should be rejected
-	s.pollFromDeploymentExpectFail(ctx, tv.WithDeploymentSeriesNumber(2))
+	s.pollFromDeploymentExpectFail(ctx, tv.WithDeploymentSeriesNumber(2), "Namespace deployments limit reached")
 }
 
 func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment_TwoVersions_Sorted() {
