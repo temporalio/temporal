@@ -742,3 +742,48 @@ func (k *KeepAliveServerConfig) GetKeepAliveEnforcementPolicy() keepalive.Enforc
 
 	return defaultConfig
 }
+
+func (fi FaultInjection) WithError(storeName DataStoreName, methodName, errorName string, probability float64) FaultInjection {
+	if fi.Targets.DataStores == nil {
+		fi.Targets.DataStores = map[DataStoreName]FaultInjectionDataStoreConfig{}
+	}
+	store, ok := fi.Targets.DataStores[storeName]
+	if !ok {
+		store = FaultInjectionDataStoreConfig{}
+	}
+	if store.Methods == nil {
+		store.Methods = map[string]FaultInjectionMethodConfig{}
+	}
+	method, ok := store.Methods[methodName]
+	if !ok {
+		method = FaultInjectionMethodConfig{}
+	}
+	if method.Errors == nil {
+		method.Errors = map[string]float64{}
+	}
+	method.Errors[errorName] = probability
+	store.Methods[methodName] = method
+	fi.Targets.DataStores[storeName] = store
+	return fi
+}
+
+func (fi FaultInjection) WithMethodSeed(storeName DataStoreName, methodName string, seed int64) FaultInjection {
+	if fi.Targets.DataStores == nil {
+		fi.Targets.DataStores = map[DataStoreName]FaultInjectionDataStoreConfig{}
+	}
+	store, ok := fi.Targets.DataStores[storeName]
+	if !ok {
+		store = FaultInjectionDataStoreConfig{}
+	}
+	if store.Methods == nil {
+		store.Methods = map[string]FaultInjectionMethodConfig{}
+	}
+	method, ok := store.Methods[methodName]
+	if !ok {
+		method = FaultInjectionMethodConfig{}
+	}
+	method.Seed = seed
+	store.Methods[methodName] = method
+	fi.Targets.DataStores[storeName] = store
+	return fi
+}

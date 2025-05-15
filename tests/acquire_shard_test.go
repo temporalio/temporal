@@ -103,23 +103,11 @@ func TestAcquireShard_OwnershipLostErrorSuite(t *testing.T) {
 // SetupSuite reads the shard ownership lost error fault injection config from the testdata folder.
 func (s *OwnershipLostErrorSuite) SetupSuite() {
 	s.AcquireShardSuiteBase.SetupSuite()
-	s.FunctionalTestBase.SetupSuiteWithCluster(testcore.WithFaultInjectionConfig(
-		config.FaultInjection{
-			Targets: config.FaultInjectionTargets{
-				DataStores: map[config.DataStoreName]config.FaultInjectionDataStoreConfig{
-					config.ShardStoreName: {
-						Methods: map[string]config.FaultInjectionMethodConfig{
-							"UpdateShard": {
-								Errors: map[string]float64{
-									"ShardOwnershipLost": 1.0,
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-	))
+	s.FunctionalTestBase.SetupSuiteWithCluster(
+		testcore.WithNumHistoryShards(1),
+		testcore.WithFaultInjectionConfig(config.FaultInjection{}.
+			WithError(config.ShardStoreName, "UpdateShard", "ShardOwnershipLost", 1.0),
+		))
 }
 
 // TestDoesNotRetry verifies that we do not retry acquiring the shard when we get an ownership lost error.
@@ -168,23 +156,11 @@ func TestAcquireShard_DeadlineExceededErrorSuite(t *testing.T) {
 // SetupSuite reads the deadline exceeded error targeted fault injection config from the test data folder.
 func (s *DeadlineExceededErrorSuite) SetupSuite() {
 	s.AcquireShardSuiteBase.SetupSuite()
-	s.FunctionalTestBase.SetupSuiteWithCluster(testcore.WithFaultInjectionConfig(
-		config.FaultInjection{
-			Targets: config.FaultInjectionTargets{
-				DataStores: map[config.DataStoreName]config.FaultInjectionDataStoreConfig{
-					config.ShardStoreName: {
-						Methods: map[string]config.FaultInjectionMethodConfig{
-							"UpdateShard": {
-								Errors: map[string]float64{
-									"DeadlineExceeded": 1.0,
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-	))
+	s.FunctionalTestBase.SetupSuiteWithCluster(
+		testcore.WithNumHistoryShards(1),
+		testcore.WithFaultInjectionConfig(config.FaultInjection{}.
+			WithError(config.ShardStoreName, "UpdateShard", "DeadlineExceeded", 1.0),
+		))
 }
 
 // TestDoesRetry verifies that we do retry acquiring the shard when we get a deadline exceeded error because that should
@@ -235,24 +211,12 @@ func TestAcquireShard_EventualSuccess(t *testing.T) {
 // the next call to return a successful response.
 func (s *EventualSuccessSuite) SetupSuite() {
 	s.AcquireShardSuiteBase.SetupSuite()
-	s.FunctionalTestBase.SetupSuiteWithCluster(testcore.WithFaultInjectionConfig(
-		config.FaultInjection{
-			Targets: config.FaultInjectionTargets{
-				DataStores: map[config.DataStoreName]config.FaultInjectionDataStoreConfig{
-					config.ShardStoreName: {
-						Methods: map[string]config.FaultInjectionMethodConfig{
-							"UpdateShard": {
-								Seed: 43, // deterministically generate a deadline exceeded error followed by a success
-								Errors: map[string]float64{
-									"DeadlineExceeded": 0.5,
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-	))
+	s.FunctionalTestBase.SetupSuiteWithCluster(
+		testcore.WithNumHistoryShards(1),
+		testcore.WithFaultInjectionConfig(config.FaultInjection{}.
+			WithError(config.ShardStoreName, "UpdateShard", "DeadlineExceeded", 0.5).
+			WithMethodSeed(config.ShardStoreName, "UpdateShard", 43),
+		))
 }
 
 // TestEventuallySucceeds verifies that we eventually succeed in acquiring the shard when we get a deadline exceeded

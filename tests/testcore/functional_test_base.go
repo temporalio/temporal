@@ -2,6 +2,7 @@ package testcore
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/binary"
 	"maps"
@@ -85,6 +86,7 @@ type (
 		ArchivalEnabled        bool
 		EnableMTLS             bool
 		FaultInjectionConfig   *config.FaultInjection
+		NumHisotryShards       int32
 	}
 	TestClusterOption func(params *TestClusterParams)
 )
@@ -138,6 +140,12 @@ func WithMTLS() TestClusterOption {
 func WithFaultInjectionConfig(cfg config.FaultInjection) TestClusterOption {
 	return func(params *TestClusterParams) {
 		params.FaultInjectionConfig = &cfg
+	}
+}
+
+func WithNumHistoryShards(n int32) TestClusterOption {
+	return func(params *TestClusterParams) {
+		params.NumHisotryShards = n
 	}
 }
 
@@ -230,14 +238,13 @@ func (s *FunctionalTestBase) SetupSuiteWithCluster(options ...TestClusterOption)
 	s.testClusterConfig = &TestClusterConfig{
 		FaultInjection: params.FaultInjectionConfig,
 		HistoryConfig: HistoryConfig{
-			NumHistoryShards: 4,
+			NumHistoryShards: cmp.Or(params.NumHisotryShards, 4),
 		},
 		DynamicConfigOverrides: params.DynamicConfigOverrides,
 		ServiceFxOptions:       params.ServiceOptions,
 		EnableMetricsCapture:   true,
 		EnableArchival:         params.ArchivalEnabled,
-
-		EnableMTLS: params.EnableMTLS,
+		EnableMTLS:             params.EnableMTLS,
 	}
 
 	var err error
