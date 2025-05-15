@@ -101,7 +101,7 @@ func SetupEnv() {
 	for _, envVar := range envVars {
 		if os.Getenv(envVar.name) == "" {
 			if err := os.Setenv(envVar.name, envVar.getDefault()); err != nil {
-				//nolint:forbidigo used in test code only
+				//nolint:forbidigo // used in test code only
 				panic(fmt.Sprintf("error setting env var %s: %s", envVar.name, err))
 			}
 		}
@@ -155,7 +155,7 @@ func GetCassandraPort() int {
 	}
 	p, err := strconv.Atoi(port)
 	if err != nil {
-		//nolint:forbidigo used in test code only
+		//nolint:forbidigo // used in test code only
 		panic(fmt.Sprintf("error getting env %v", CassandraPort))
 	}
 	return p
@@ -176,7 +176,7 @@ func GetESPort() int {
 	}
 	p, err := strconv.Atoi(port)
 	if err != nil {
-		//nolint:forbidigo used in test code only
+		//nolint:forbidigo // used in test code only
 		panic(fmt.Sprintf("error getting env %v", ESPort))
 	}
 	return p
@@ -207,7 +207,7 @@ func GetMySQLPort() int {
 	}
 	p, err := strconv.Atoi(port)
 	if err != nil {
-		//nolint:forbidigo used in test code only
+		//nolint:forbidigo // used in test code only
 		panic(fmt.Sprintf("error getting env %v", MySQLPort))
 	}
 	return p
@@ -230,7 +230,7 @@ func GetPostgreSQLPort() int {
 	}
 	p, err := strconv.Atoi(port)
 	if err != nil {
-		//nolint:forbidigo used in test code only
+		//nolint:forbidigo // used in test code only
 		panic(fmt.Sprintf("error getting env %v", PostgresPort))
 	}
 	return p
