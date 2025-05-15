@@ -20,7 +20,7 @@ import (
 )
 
 type TaskQueueSuite struct {
-	testcore.FunctionalTestSuite
+	testcore.FunctionalTestBase
 }
 
 func TestTaskQueueSuite(t *testing.T) {
@@ -33,7 +33,7 @@ func (s *TaskQueueSuite) SetupSuite() {
 		dynamicconfig.MatchingNumTaskqueueWritePartitions.Key(): 4,
 		dynamicconfig.MatchingNumTaskqueueReadPartitions.Key():  4,
 	}
-	s.FunctionalTestSuite.SetupSuiteWithDefaultCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
+	s.FunctionalTestBase.SetupSuiteWithDefaultCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 }
 
 // Not using RunTestWithMatchingBehavior because I want to pass different expected drain times for different configurations

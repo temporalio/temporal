@@ -28,7 +28,7 @@ import (
 )
 
 type RawHistorySuite struct {
-	testcore.FunctionalTestSuite
+	testcore.FunctionalTestBase
 }
 
 type RawHistoryClientSuite struct {
@@ -36,7 +36,7 @@ type RawHistoryClientSuite struct {
 }
 
 type GetHistoryFunctionalSuite struct {
-	testcore.FunctionalTestSuite
+	testcore.FunctionalTestBase
 	EnableTransitionHistory bool
 }
 

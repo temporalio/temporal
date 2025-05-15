@@ -30,7 +30,7 @@ import (
 )
 
 type CronTestSuite struct {
-	testcore.FunctionalTestSuite
+	testcore.FunctionalTestBase
 }
 
 type CronTestClientSuite struct {

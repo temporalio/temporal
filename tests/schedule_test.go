@@ -48,7 +48,7 @@ worker restart/long-poll activity failure:
 
 type (
 	ScheduleFunctionalSuite struct {
-		testcore.FunctionalTestSuite
+		testcore.FunctionalTestBase
 
 		sdkClient     sdkclient.Client
 		worker        worker.Worker
@@ -63,7 +63,7 @@ func TestScheduleFunctionalSuite(t *testing.T) {
 }
 
 func (s *ScheduleFunctionalSuite) SetupTest() {
-	s.FunctionalTestSuite.SetupTest()
+	s.FunctionalTestBase.SetupTest()
 	s.dataConverter = testcore.NewTestDataConverter()
 
 	var err error

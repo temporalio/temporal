@@ -26,7 +26,7 @@ import (
 )
 
 type PollerScalingIntegSuite struct {
-	testcore.FunctionalTestSuite
+	testcore.FunctionalTestBase
 }
 
 func (s *PollerScalingIntegSuite) mustToPayload(v any) *commonpb.Payload {

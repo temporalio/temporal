@@ -29,7 +29,7 @@ import (
 
 type (
 	WorkerDeploymentSuite struct {
-		testcore.FunctionalTestSuite
+		testcore.FunctionalTestBase
 	}
 )
 
@@ -39,7 +39,7 @@ func TestWorkerDeploymentSuite(t *testing.T) {
 }
 
 func (s *WorkerDeploymentSuite) SetupSuite() {
-	s.FunctionalTestSuite.SetupSuiteWithDefaultCluster(testcore.WithDynamicConfigOverrides(map[dynamicconfig.Key]any{
+	s.FunctionalTestBase.SetupSuiteWithDefaultCluster(testcore.WithDynamicConfigOverrides(map[dynamicconfig.Key]any{
 		dynamicconfig.EnableDeploymentVersions.Key():                   true,
 		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs.Key():     true, // [wv-cleanup-pre-release]
 		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs.Key(): true, // [wv-cleanup-pre-release]
@@ -69,7 +69,7 @@ func (s *WorkerDeploymentSuite) SetupSuite() {
 }
 
 func (s *WorkerDeploymentSuite) SetupTest() {
-	s.FunctionalTestSuite.SetupTest()
+	s.FunctionalTestBase.SetupTest()
 }
 
 // pollFromDeployment calls PollWorkflowTaskQueue to start deployment related workflows

@@ -35,7 +35,7 @@ import (
 
 type (
 	ArchivalSuite struct {
-		testcore.FunctionalTestSuite
+		testcore.FunctionalTestBase
 
 		archivalNamespace   namespace.Name
 		archivalNamespaceID namespace.ID

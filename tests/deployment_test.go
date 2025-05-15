@@ -47,7 +47,7 @@ const (
 
 type (
 	DeploymentSuite struct {
-		testcore.FunctionalTestSuite
+		testcore.FunctionalTestBase
 	}
 )
 
