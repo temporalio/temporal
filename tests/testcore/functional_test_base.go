@@ -86,7 +86,7 @@ type (
 		ArchivalEnabled        bool
 		EnableMTLS             bool
 		FaultInjectionConfig   *config.FaultInjection
-		NumHisotryShards       int32
+		NumHistoryShards       int32
 	}
 	TestClusterOption func(params *TestClusterParams)
 )
@@ -137,15 +137,15 @@ func WithMTLS() TestClusterOption {
 	}
 }
 
-func WithFaultInjectionConfig(cfg config.FaultInjection) TestClusterOption {
+func WithFaultInjectionConfig(cfg *config.FaultInjection) TestClusterOption {
 	return func(params *TestClusterParams) {
-		params.FaultInjectionConfig = &cfg
+		params.FaultInjectionConfig = cfg
 	}
 }
 
 func WithNumHistoryShards(n int32) TestClusterOption {
 	return func(params *TestClusterParams) {
-		params.NumHisotryShards = n
+		params.NumHistoryShards = n
 	}
 }
 
@@ -238,7 +238,7 @@ func (s *FunctionalTestBase) SetupSuiteWithCluster(options ...TestClusterOption)
 	s.testClusterConfig = &TestClusterConfig{
 		FaultInjection: params.FaultInjectionConfig,
 		HistoryConfig: HistoryConfig{
-			NumHistoryShards: cmp.Or(params.NumHisotryShards, 4),
+			NumHistoryShards: cmp.Or(params.NumHistoryShards, 4),
 		},
 		DynamicConfigOverrides: params.DynamicConfigOverrides,
 		ServiceFxOptions:       params.ServiceOptions,

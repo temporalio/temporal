@@ -743,7 +743,27 @@ func (k *KeepAliveServerConfig) GetKeepAliveEnforcementPolicy() keepalive.Enforc
 	return defaultConfig
 }
 
-func (fi FaultInjection) WithError(storeName DataStoreName, methodName, errorName string, probability float64) FaultInjection {
+func (fi *FaultInjection) WithError(storeName DataStoreName, methodName, errorName string, probability float64) *FaultInjection {
+	if fi == nil {
+		return nil
+	}
+	m := fi.method(storeName, methodName)
+	m.Errors[errorName] = probability
+	fi.Targets.DataStores[storeName].Methods[methodName] = m
+	return fi
+}
+
+func (fi *FaultInjection) WithMethodSeed(storeName DataStoreName, methodName string, seed int64) *FaultInjection {
+	if fi == nil {
+		return nil
+	}
+	m := fi.method(storeName, methodName)
+	m.Seed = seed
+	fi.Targets.DataStores[storeName].Methods[methodName] = m
+	return fi
+}
+
+func (fi *FaultInjection) method(storeName DataStoreName, methodName string) FaultInjectionMethodConfig {
 	if fi.Targets.DataStores == nil {
 		fi.Targets.DataStores = map[DataStoreName]FaultInjectionDataStoreConfig{}
 	}
@@ -761,29 +781,27 @@ func (fi FaultInjection) WithError(storeName DataStoreName, methodName, errorNam
 	if method.Errors == nil {
 		method.Errors = map[string]float64{}
 	}
-	method.Errors[errorName] = probability
 	store.Methods[methodName] = method
 	fi.Targets.DataStores[storeName] = store
-	return fi
+	return method
 }
 
-func (fi FaultInjection) WithMethodSeed(storeName DataStoreName, methodName string, seed int64) FaultInjection {
-	if fi.Targets.DataStores == nil {
-		fi.Targets.DataStores = map[DataStoreName]FaultInjectionDataStoreConfig{}
-	}
-	store, ok := fi.Targets.DataStores[storeName]
-	if !ok {
-		store = FaultInjectionDataStoreConfig{}
-	}
-	if store.Methods == nil {
-		store.Methods = map[string]FaultInjectionMethodConfig{}
-	}
-	method, ok := store.Methods[methodName]
-	if !ok {
-		method = FaultInjectionMethodConfig{}
-	}
-	method.Seed = seed
-	store.Methods[methodName] = method
-	fi.Targets.DataStores[storeName] = store
-	return fi
+func DefaultFaultInjection() *FaultInjection {
+	fiCfg := &FaultInjection{}
+	return fiCfg.
+		WithError(ExecutionStoreName, "CreateWorkflowExecution", "ResourceExhausted", 0.01).
+		WithError(ExecutionStoreName, "CreateWorkflowExecution", "Timeout", 0.01).
+		WithError(ExecutionStoreName, "CreateWorkflowExecution", "ExecuteAndTimeout", 0.01).
+		WithError(ExecutionStoreName, "UpdateWorkflowExecution", "ResourceExhausted", 0.01).
+		WithError(ExecutionStoreName, "UpdateWorkflowExecution", "Timeout", 0.01).
+		WithError(ExecutionStoreName, "UpdateWorkflowExecution", "ExecuteAndTimeout", 0.01).
+		WithError(ExecutionStoreName, "GetWorkflowExecution", "ResourceExhausted", 0.01).
+		WithError(ExecutionStoreName, "GetWorkflowExecution", "Timeout", 0.01).
+		WithError(ExecutionStoreName, "GetCurrentExecution", "ResourceExhausted", 0.01).
+		WithError(ExecutionStoreName, "GetCurrentExecution", "Timeout", 0.01).
+		WithError(ExecutionStoreName, "AppendHistoryNodes", "ResourceExhausted", 0.01).
+		WithError(ExecutionStoreName, "AppendHistoryNodes", "Timeout", 0.01).
+		WithError(ExecutionStoreName, "AppendHistoryNodes", "ExecuteAndTimeout", 0.01).
+		WithError(ExecutionStoreName, "ReadHistoryBranch", "ResourceExhausted", 0.01).
+		WithError(ExecutionStoreName, "ReadHistoryBranch", "Timeout", 0.01)
 }

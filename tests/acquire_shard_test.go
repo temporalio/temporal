@@ -105,7 +105,7 @@ func (s *OwnershipLostErrorSuite) SetupSuite() {
 	s.AcquireShardSuiteBase.SetupSuite()
 	s.FunctionalTestBase.SetupSuiteWithCluster(
 		testcore.WithNumHistoryShards(1),
-		testcore.WithFaultInjectionConfig(config.FaultInjection{}.
+		testcore.WithFaultInjectionConfig((&config.FaultInjection{}).
 			WithError(config.ShardStoreName, "UpdateShard", "ShardOwnershipLost", 1.0),
 		))
 }
@@ -158,7 +158,7 @@ func (s *DeadlineExceededErrorSuite) SetupSuite() {
 	s.AcquireShardSuiteBase.SetupSuite()
 	s.FunctionalTestBase.SetupSuiteWithCluster(
 		testcore.WithNumHistoryShards(1),
-		testcore.WithFaultInjectionConfig(config.FaultInjection{}.
+		testcore.WithFaultInjectionConfig((&config.FaultInjection{}).
 			WithError(config.ShardStoreName, "UpdateShard", "DeadlineExceeded", 1.0),
 		))
 }
@@ -213,7 +213,7 @@ func (s *EventualSuccessSuite) SetupSuite() {
 	s.AcquireShardSuiteBase.SetupSuite()
 	s.FunctionalTestBase.SetupSuiteWithCluster(
 		testcore.WithNumHistoryShards(1),
-		testcore.WithFaultInjectionConfig(config.FaultInjection{}.
+		testcore.WithFaultInjectionConfig((&config.FaultInjection{}).
 			WithError(config.ShardStoreName, "UpdateShard", "DeadlineExceeded", 0.5).
 			WithMethodSeed(config.ShardStoreName, "UpdateShard", 43),
 		))

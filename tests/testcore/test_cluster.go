@@ -47,7 +47,6 @@ import (
 	"go.temporal.io/server/tests/testutils"
 	"go.uber.org/fx"
 	"go.uber.org/multierr"
-	"gopkg.in/yaml.v3"
 )
 
 type (
@@ -83,7 +82,7 @@ type (
 		ESConfig               *esclient.Config
 		MockAdminClient        map[string]adminservice.AdminServiceClient
 		FaultInjection         *config.FaultInjection
-		DynamicConfigOverrides map[dynamicconfig.Key]any `yaml:"-"`
+		DynamicConfigOverrides map[dynamicconfig.Key]any
 		EnableMTLS             bool
 		EnableMetricsCapture   bool
 		// ServiceFxOptions can be populated using WithFxOptionsForService.
@@ -142,11 +141,11 @@ type PersistenceTestBaseFactory interface {
 type defaultPersistenceTestBaseFactory struct{}
 
 func (f *defaultPersistenceTestBaseFactory) NewTestBase(options *persistencetests.TestBaseOptions) *persistencetests.TestBase {
-	options.StoreType = TestFlags.PersistenceType
-	switch TestFlags.PersistenceType {
+	options.StoreType = cliFlags.persistenceType
+	switch cliFlags.persistenceType {
 	case config.StoreTypeSQL:
 		var ops *persistencetests.TestBaseOptions
-		switch TestFlags.PersistenceDriver {
+		switch cliFlags.persistenceDriver {
 		case mysql.PluginName:
 			ops = persistencetests.GetMySQLTestClusterOption()
 		case postgresql.PluginName:
@@ -156,9 +155,9 @@ func (f *defaultPersistenceTestBaseFactory) NewTestBase(options *persistencetest
 		case sqlite.PluginName:
 			ops = persistencetests.GetSQLiteMemoryTestClusterOption()
 		default:
-			panic(fmt.Sprintf("unknown sql store driver: %v", TestFlags.PersistenceDriver))
+			panic(fmt.Sprintf("unknown sql store driver: %v", cliFlags.persistenceDriver))
 		}
-		options.SQLDBPluginName = TestFlags.PersistenceDriver
+		options.SQLDBPluginName = cliFlags.persistenceDriver
 		options.DBUsername = ops.DBUsername
 		options.DBPassword = ops.DBPassword
 		options.DBHost = ops.DBHost
@@ -171,32 +170,14 @@ func (f *defaultPersistenceTestBaseFactory) NewTestBase(options *persistencetest
 		panic(fmt.Sprintf("unknown store type: %v", options.StoreType))
 	}
 
-	readFaultInjectionConfig(options.FaultInjection)
+	if cliFlags.enableFaultInjection != "" && options.FaultInjection == nil {
+		// If -enableFaultInjection is passed to the test runner, then default fault injection config is added to the persistence options.
+		// If FaultInjectionConfig is already set by test, then it means that this test requires
+		// a specific fault injection configuration that takes precedence over a default one.
+		options.FaultInjection = config.DefaultFaultInjection()
+	}
 
 	return persistencetests.NewTestBase(options)
-}
-
-func readFaultInjectionConfig(fiConfig *config.FaultInjection) {
-	if fiConfig != nil {
-		// If FaultInjectionConfig is already set by test, then it means that this test requires
-		// a specific fault injection configuration that takes precedence over a command line flag.
-		return
-	}
-
-	// If -faultInjectionConfigFile is passed to the test runner, then fault injection config will be added to the persistence options.
-	if TestFlags.FaultInjectionConfigFile == "" {
-		return
-	}
-
-	fiConfigContent, err := os.ReadFile(TestFlags.FaultInjectionConfigFile)
-	if err != nil {
-		panic(fmt.Sprintf("failed to read fault injection config file %s: %v", TestFlags.FaultInjectionConfigFile, err))
-	}
-
-	fiConfig = &config.FaultInjection{}
-	if err = yaml.Unmarshal(fiConfigContent, &fiConfig); err != nil {
-		panic(fmt.Sprintf("failed to decode test cluster fault injection config %s: %w", TestFlags.FaultInjectionConfigFile, err))
-	}
 }
 
 func newClusterWithPersistenceTestBaseFactory(t *testing.T, clusterConfig *TestClusterConfig, logger log.Logger, tbFactory PersistenceTestBaseFactory) (*TestCluster, error) {
