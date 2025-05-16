@@ -957,7 +957,7 @@ func (d *ClientImpl) update(
 	policy := backoff.NewExponentialRetryPolicy(100 * time.Millisecond)
 	isRetryable := func(err error) bool {
 		// Updates admitted as the workflow is closing may result in a ResourceExhausted error, which is considered retryable.
-		return errors.Is(err, errRetry) || (errors.As(err, new(*serviceerror.ResourceExhausted)) && err.Error() == consts.ErrWorkflowClosing.Error())
+		return errors.Is(err, errRetry) || (errors.Is(err, consts.ErrWorkflowClosing))
 	}
 
 	var outcome *updatepb.Outcome
@@ -1208,8 +1208,8 @@ func (d *ClientImpl) updateWithStart(
 
 	policy := backoff.NewExponentialRetryPolicy(100 * time.Millisecond)
 	isRetryable := func(err error) bool {
-		// Updates admitted as the workflow is closing may result in a ResourceExhausted error, which is considered retryable.
-		return errors.Is(err, errRetry) || (errors.As(err, new(*serviceerror.ResourceExhausted)) && err.Error() == consts.ErrWorkflowClosing.Error())
+		// Updates admitted as the workflow is closing may result in an error which is considered retryable.
+		return errors.Is(err, errRetry) || errors.Is(err, consts.ErrWorkflowClosing)
 	}
 	var outcome *updatepb.Outcome
 
