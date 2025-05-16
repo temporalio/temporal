@@ -117,6 +117,8 @@ func (t *timerQueueActiveTaskExecutor) Execute(
 		err = t.executeStateMachineTimerTask(ctx, task)
 	case *tasks.ChasmTaskPure:
 		err = t.executeChasmPureTimerTask(ctx, task)
+	case *tasks.ChasmTask:
+		err = t.executeChasmSideEffectTimerTask(ctx, task)
 	default:
 		err = queues.NewUnprocessableTaskError("unknown task type")
 	}
@@ -913,6 +915,30 @@ func (t *timerQueueActiveTaskExecutor) processActivityWorkflowRules(
 	}
 
 	return nil
+}
+
+func (t *timerQueueActiveTaskExecutor) executeChasmSideEffectTimerTask(
+	ctx context.Context,
+	task *tasks.ChasmTask,
+) error {
+	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
+	defer cancel()
+
+	if !queues.IsTimeExpired(task, t.Now(), task.GetVisibilityTime()) {
+		return nil
+	}
+
+	entityKey := chasm.EntityKey{
+		NamespaceID: task.NamespaceID,
+		BusinessID:  task.WorkflowID,
+		EntityID:    task.RunID,
+	}
+	return chasm.ExecuteSideEffectTask(
+		ctx,
+		t.shardContext.ChasmRegistry(),
+		entityKey,
+		task.Info,
+	)
 }
 
 func (t *timerQueueActiveTaskExecutor) executeChasmPureTimerTask(
