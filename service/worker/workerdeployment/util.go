@@ -62,7 +62,6 @@ const (
 	errTooManyDeployments         = "errTooManyDeployments"
 	errVersionAlreadyExistsType   = "errVersionAlreadyExists"
 	errMaxTaskQueuesInVersionType = "errMaxTaskQueuesInVersion"
-	errVersionAlreadyCurrentType  = "errVersionAlreadyCurrent"
 	errVersionNotFound            = "Version not found in deployment"
 
 	errConflictTokenMismatchType = "errConflictTokenMismatch"
