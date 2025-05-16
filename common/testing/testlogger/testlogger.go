@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -299,11 +300,12 @@ func (tl *TestLogger) PanicOnError(v bool) bool {
 	return tl.state.panicOnError.Swap(v)
 }
 
-func (tl *TestLogger) getMergedTags(tags []tag.Tag) []tag.Tag {
-	if tl.tags == nil {
+func (tl *TestLogger) mergeWithLoggerTags(tags []tag.Tag) []tag.Tag {
+	if len(tl.tags) == 0 {
 		return tags
 	}
 	tagMap := make(map[string]tag.Tag, len(tl.tags)+len(tags))
+	// Iterate over the logger's tags first so that explicitly specified tags override them
 	for _, t := range tl.tags {
 		tagMap[t.Key()] = t
 	}
@@ -314,6 +316,9 @@ func (tl *TestLogger) getMergedTags(tags []tag.Tag) []tag.Tag {
 	for _, t := range tagMap {
 		newTags = append(newTags, t)
 	}
+	slices.SortStableFunc(newTags, func(a, b tag.Tag) int {
+		return cmp.Compare(a.Key(), b.Key())
+	})
 	return newTags
 }
 
@@ -324,7 +329,7 @@ func (tl *TestLogger) DPanic(msg string, tags ...tag.Tag) {
 	if tl.state.mu.closed {
 		return
 	}
-	tags = tl.getMergedTags(tags)
+	tags = tl.mergeWithLoggerTags(tags)
 	// note, actual panic'ing in wrapped is turned off so we can control.
 	tl.wrapped.DPanic(msg, tags...)
 	if tl.state.panicOnDPanic.Load() && tl.shouldFailTest(Error, msg, tags) {
@@ -340,7 +345,7 @@ func (tl *TestLogger) Debug(msg string, tags ...tag.Tag) {
 	if tl.state.mu.closed {
 		return
 	}
-	tl.wrapped.Debug(msg, tl.getMergedTags(tags)...)
+	tl.wrapped.Debug(msg, tl.mergeWithLoggerTags(tags)...)
 }
 
 // Error implements log.Logger.
@@ -350,7 +355,7 @@ func (tl *TestLogger) Error(msg string, tags ...tag.Tag) {
 		tl.state.mu.RUnlock()
 		return
 	}
-	tags = tl.getMergedTags(tags)
+	tags = tl.mergeWithLoggerTags(tags)
 	if !tl.shouldFailTest(Error, msg, tags) {
 		tl.wrapped.Error(msg, tags...)
 		tl.state.mu.RUnlock()
@@ -381,7 +386,7 @@ func (tl *TestLogger) Fatal(msg string, tags ...tag.Tag) {
 		return
 	}
 	tl.state.t.Helper()
-	tl.state.t.Fatal(failureMessage("Fatal", msg, tl.getMergedTags(tags)))
+	tl.state.t.Fatal(failureMessage("Fatal", msg, tl.mergeWithLoggerTags(tags)))
 }
 
 // Info implements log.Logger.
@@ -391,7 +396,7 @@ func (tl *TestLogger) Info(msg string, tags ...tag.Tag) {
 	if tl.state.mu.closed {
 		return
 	}
-	tl.wrapped.Info(msg, tl.getMergedTags(tags)...)
+	tl.wrapped.Info(msg, tl.mergeWithLoggerTags(tags)...)
 }
 
 // Panic implements log.Logger.
@@ -402,7 +407,7 @@ func (tl *TestLogger) Panic(msg string, tags ...tag.Tag) {
 		return
 	}
 	tl.state.t.Helper()
-	tl.state.t.Fatal(failureMessage("Panic", msg, tl.getMergedTags(tags)))
+	tl.state.t.Fatal(failureMessage("Panic", msg, tl.mergeWithLoggerTags(tags)))
 }
 
 // Warn implements log.Logger.
@@ -412,7 +417,7 @@ func (tl *TestLogger) Warn(msg string, tags ...tag.Tag) {
 	if tl.state.mu.closed {
 		return
 	}
-	tl.wrapped.Warn(msg, tl.getMergedTags(tags)...)
+	tl.wrapped.Warn(msg, tl.mergeWithLoggerTags(tags)...)
 }
 
 // WithTags gives you a new logger, copying the tags of the source, appending the provided new Tags
@@ -449,7 +454,7 @@ func (tl *TestLogger) With(tags ...tag.Tag) log.Logger {
 	return &TestLogger{
 		wrapped: tl.wrapped,
 		state:   tl.state,
-		tags:    tl.getMergedTags(tags),
+		tags:    tl.mergeWithLoggerTags(tags),
 	}
 }
 
