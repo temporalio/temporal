@@ -988,6 +988,9 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	s.matchingEngine.config.MinTaskThrottlingBurstSize = dynamicconfig.GetIntPropertyFnFilteredByTaskQueue(0)
 	s.matchingEngine.config.RangeSize = 30 // override to low number for the test
 
+	// Overriding the dynamic config so that the rate-limiter has a refresh rate of 0. By default, the rate-limiter has a refresh rate of 1 minute which is too long for this test.
+	// s.matchingEngine.config.RateLimiterRefreshInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(0)
+
 	const initialRangeID = 102
 	namespaceId := uuid.New()
 	tl := "makeToast"
@@ -995,25 +998,6 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	s.taskManager.getQueueManagerByKey(dbq).rangeID = initialRangeID
 
 	mgr := s.newPartitionManager(dbq.partition, s.matchingEngine.config)
-	tqPTM, ok := mgr.(*taskQueuePartitionManagerImpl)
-	s.True(ok)
-	mgrImpl, ok := mgr.(*taskQueuePartitionManagerImpl).defaultQueue.(*physicalTaskQueueManagerImpl)
-	s.True(ok)
-
-	// Overriding the rate-limiter in the matcher to have a RateLimiterImpl instead of the default multi-rate limiter.
-	// This is because the default multi-rate limiter has a 1 min refresh rate which is too long for this test.
-	tqPTM.rateLimiter = quotas.NewRateLimiter(
-		defaultTaskDispatchRPS,
-		defaultTaskDispatchRPS,
-	)
-	mgrImpl.oldMatcher.rateLimiter = tqPTM.rateLimiter
-	tqPTM.dynamicRateBurst = &dynamicRateBurstWrapper{
-		MutableRateBurst: quotas.NewMutableRateBurst(
-			defaultTaskDispatchRPS,
-			defaultTaskDispatchRPS,
-		),
-		RateLimiterImpl: mgrImpl.oldMatcher.rateLimiter.(*quotas.RateLimiterImpl),
-	}
 
 	s.matchingEngine.updateTaskQueue(dbq.partition, mgr)
 	mgr.Start()
@@ -1186,6 +1170,9 @@ func (s *matchingEngineSuite) TestRateLimiterAcrossVersionedQueues() {
 	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(5 * time.Second)
 	s.matchingEngine.config.MinTaskThrottlingBurstSize = dynamicconfig.GetIntPropertyFnFilteredByTaskQueue(0)
 
+	// Overriding the dynamic config so that the rate-limiter has a refresh rate of 0. By default, the rate-limiter has a refresh rate of 1 minute which is too long for this test.
+	s.matchingEngine.config.RateLimiterRefreshInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(0)
+
 	tl := "makeToast"
 	dbq := newUnversionedRootQueueKey(namespaceId, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 	s.taskManager.getQueueManagerByKey(dbq).rangeID = initialRangeID
@@ -1198,23 +1185,6 @@ func (s *matchingEngineSuite) TestRateLimiterAcrossVersionedQueues() {
 	mgr := s.newPartitionManager(dbq.partition, s.matchingEngine.config)
 	tqPTM, ok := mgr.(*taskQueuePartitionManagerImpl)
 	s.True(ok)
-	mgrImpl, ok := mgr.(*taskQueuePartitionManagerImpl).defaultQueue.(*physicalTaskQueueManagerImpl)
-	s.True(ok)
-
-	// Overriding the rate-limiter in the matcher to have a RateLimiterImpl instead of the default multi-rate limiter.
-	// This is because the default multi-rate limiter has a 1 min refresh rate which is too long for this test.
-	tqPTM.rateLimiter = quotas.NewRateLimiter(
-		defaultTaskDispatchRPS,
-		defaultTaskDispatchRPS,
-	)
-	mgrImpl.oldMatcher.rateLimiter = tqPTM.rateLimiter
-	tqPTM.dynamicRateBurst = &dynamicRateBurstWrapper{
-		MutableRateBurst: quotas.NewMutableRateBurst(
-			defaultTaskDispatchRPS,
-			defaultTaskDispatchRPS,
-		),
-		RateLimiterImpl: mgrImpl.oldMatcher.rateLimiter.(*quotas.RateLimiterImpl),
-	}
 
 	s.matchingEngine.updateTaskQueue(dbq.partition, mgr)
 	mgr.Start()

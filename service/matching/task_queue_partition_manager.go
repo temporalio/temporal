@@ -101,16 +101,16 @@ func newTaskQueuePartitionManager(
 		cachedPhysicalInfoByBuildId: nil,
 	}
 
-	dynamicRateBurst := quotas.NewMutableRateBurst(
+	pm.dynamicRateBurst = quotas.NewMutableRateBurst(
 		defaultTaskDispatchRPS,
 		int(defaultTaskDispatchRPS),
 	)
-	dynamicRateLimiter := quotas.NewDynamicRateLimiter(
-		dynamicRateBurst,
-		defaultTaskDispatchRPSTTL,
+	pm.dynamicRateLimiter = quotas.NewDynamicRateLimiter(
+		pm.dynamicRateBurst,
+		tqConfig.RateLimiterRefreshInterval(),
 	)
-	limiter := quotas.NewMultiRateLimiter([]quotas.RateLimiter{
-		dynamicRateLimiter,
+	pm.rateLimiter = quotas.NewMultiRateLimiter([]quotas.RateLimiter{
+		pm.dynamicRateLimiter,
 		quotas.NewDefaultOutgoingRateLimiter(
 			tqConfig.AdminNamespaceTaskQueueToPartitionDispatchRate,
 		),
@@ -118,10 +118,6 @@ func newTaskQueuePartitionManager(
 			tqConfig.AdminNamespaceToPartitionDispatchRate,
 		),
 	})
-
-	pm.dynamicRateBurst = dynamicRateBurst
-	pm.dynamicRateLimiter = dynamicRateLimiter
-	pm.rateLimiter = limiter
 
 	defaultQ, err := newPhysicalTaskQueueManager(pm, UnversionedQueueKey(partition))
 	if err != nil {

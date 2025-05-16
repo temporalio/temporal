@@ -51,18 +51,14 @@ func TestMatcherSuite(t *testing.T) {
 	suite.Run(t, new(MatcherTestSuite))
 }
 
-// attachRateLimiter attaches a rate limiter to the matcher. This behavior is only implemented in tests,
-// as the matcher relies on the rate limiter that is initialized by the task queue partition manager in production.
-func (t *MatcherTestSuite) attachRateLimiter(taskQueueConfig *taskQueueConfig) quotas.RateLimiter {
-	dynamicRateBurst := quotas.NewMutableRateBurst(
-		defaultTaskDispatchRPS,
-		int(defaultTaskDispatchRPS),
-	)
-	dynamicRateLimiter := quotas.NewDynamicRateLimiter(
-		dynamicRateBurst,
+func (t *MatcherTestSuite) newDefaultRateLimiter() quotas.RateLimiter {
+	return quotas.NewDynamicRateLimiter(
+		quotas.NewMutableRateBurst(
+			defaultTaskDispatchRPS,
+			int(defaultTaskDispatchRPS),
+		),
 		defaultTaskDispatchRPSTTL,
 	)
-	return dynamicRateLimiter
 }
 
 func (t *MatcherTestSuite) SetupTest() {
@@ -86,11 +82,11 @@ func (t *MatcherTestSuite) SetupTest() {
 	t.childConfig = tlCfg
 	t.fwdr, err = newForwarder(&t.childConfig.forwarderConfig, t.queue, t.client)
 	t.Assert().NoError(err)
-	t.childMatcher = newTaskMatcher(tlCfg, t.fwdr, metrics.NoopMetricsHandler, t.attachRateLimiter(tlCfg))
+	t.childMatcher = newTaskMatcher(tlCfg, t.fwdr, metrics.NoopMetricsHandler, t.newDefaultRateLimiter())
 	t.childMatcher.Start()
 
 	t.rootConfig = newTaskQueueConfig(prtn.TaskQueue(), cfg, "test-namespace")
-	t.rootMatcher = newTaskMatcher(t.rootConfig, nil, metrics.NoopMetricsHandler, t.attachRateLimiter(t.rootConfig))
+	t.rootMatcher = newTaskMatcher(t.rootConfig, nil, metrics.NoopMetricsHandler, t.newDefaultRateLimiter())
 	t.rootMatcher.Start()
 }
 
