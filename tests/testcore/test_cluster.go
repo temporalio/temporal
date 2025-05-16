@@ -155,6 +155,7 @@ func (f *defaultPersistenceTestBaseFactory) NewTestBase(options *persistencetest
 		case sqlite.PluginName:
 			ops = persistencetests.GetSQLiteMemoryTestClusterOption()
 		default:
+			//nolint:forbidigo // test code
 			panic(fmt.Sprintf("unknown sql store driver: %v", cliFlags.persistenceDriver))
 		}
 		options.SQLDBPluginName = cliFlags.persistenceDriver
@@ -167,6 +168,7 @@ func (f *defaultPersistenceTestBaseFactory) NewTestBase(options *persistencetest
 	case config.StoreTypeNoSQL:
 		// noop for now
 	default:
+		//nolint:forbidigo // test code
 		panic(fmt.Sprintf("unknown store type: %v", options.StoreType))
 	}
 

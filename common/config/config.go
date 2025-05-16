@@ -769,17 +769,11 @@ func (fi *FaultInjection) method(storeName DataStoreName, methodName string) Fau
 	}
 	store, ok := fi.Targets.DataStores[storeName]
 	if !ok {
-		store = FaultInjectionDataStoreConfig{}
-	}
-	if store.Methods == nil {
-		store.Methods = map[string]FaultInjectionMethodConfig{}
+		store = FaultInjectionDataStoreConfig{Methods: map[string]FaultInjectionMethodConfig{}}
 	}
 	method, ok := store.Methods[methodName]
 	if !ok {
-		method = FaultInjectionMethodConfig{}
-	}
-	if method.Errors == nil {
-		method.Errors = map[string]float64{}
+		method = FaultInjectionMethodConfig{Errors: map[string]float64{}}
 	}
 	store.Methods[methodName] = method
 	fi.Targets.DataStores[storeName] = store
