@@ -145,7 +145,7 @@ func (q *QueueStore) ReadMessages(
 	}
 
 	if err := iter.Close(); err != nil {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("ReadMessages operation failed. Error: %v", err))
+		return nil, serviceerror.NewUnavailablef("ReadMessages operation failed. Error: %v", err)
 	}
 
 	return result, nil
@@ -180,7 +180,7 @@ func (q *QueueStore) ReadMessagesFromDLQ(
 		nextPageToken = iter.PageState()
 	}
 	if err := iter.Close(); err != nil {
-		return nil, nil, serviceerror.NewUnavailable(fmt.Sprintf("ReadMessagesFromDLQ operation failed. Error: %v", err))
+		return nil, nil, serviceerror.NewUnavailablef("ReadMessagesFromDLQ operation failed. Error: %v", err)
 	}
 
 	return result, nextPageToken, nil
@@ -193,7 +193,7 @@ func (q *QueueStore) DeleteMessagesBefore(
 
 	query := q.session.Query(templateDeleteMessagesBeforeQuery, q.queueType, messageID).WithContext(ctx)
 	if err := query.Exec(); err != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf("DeleteMessagesBefore operation failed. Error %v", err))
+		return serviceerror.NewUnavailablef("DeleteMessagesBefore operation failed. Error %v", err)
 	}
 	return nil
 }
@@ -206,7 +206,7 @@ func (q *QueueStore) DeleteMessageFromDLQ(
 	// Use negative queue type as the dlq type
 	query := q.session.Query(templateDeleteMessageQuery, q.getDLQTypeFromQueueType(), messageID).WithContext(ctx)
 	if err := query.Exec(); err != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf("DeleteMessageFromDLQ operation failed. Error %v", err))
+		return serviceerror.NewUnavailablef("DeleteMessageFromDLQ operation failed. Error %v", err)
 	}
 
 	return nil
@@ -221,7 +221,7 @@ func (q *QueueStore) RangeDeleteMessagesFromDLQ(
 	// Use negative queue type as the dlq type
 	query := q.session.Query(templateDeleteMessagesQuery, q.getDLQTypeFromQueueType(), firstMessageID, lastMessageID).WithContext(ctx)
 	if err := query.Exec(); err != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf("RangeDeleteMessagesFromDLQ operation failed. Error %v", err))
+		return serviceerror.NewUnavailablef("RangeDeleteMessagesFromDLQ operation failed. Error %v", err)
 	}
 
 	return nil

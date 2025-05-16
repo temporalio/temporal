@@ -1,7 +1,6 @@
 package metrics
 
 import (
-	"fmt"
 	"runtime/debug"
 
 	"go.temporal.io/api/serviceerror"
@@ -18,7 +17,7 @@ func CapturePanic(logger log.Logger, metricHandler Handler, retError *error) {
 	if panicObj := recover(); panicObj != nil {
 		err, ok := panicObj.(error)
 		if !ok {
-			err = serviceerror.NewInternal(fmt.Sprintf("panic: %v", panicObj))
+			err = serviceerror.NewInternalf("panic: %v", panicObj)
 		}
 
 		st := string(debug.Stack())

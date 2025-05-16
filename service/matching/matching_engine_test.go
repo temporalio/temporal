@@ -3656,7 +3656,7 @@ func (m *testTaskManager) CreateTasks(
 	}
 
 	if m.dbServiceError {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("CreateTasks operation failed during serialization. Error : %v", errors.New("failure")))
+		return nil, serviceerror.NewUnavailablef("CreateTasks operation failed during serialization. Error : %v", errors.New("failure"))
 	}
 
 	tlm := m.getQueueManager(taskQueue, namespaceId, taskType)
@@ -3706,7 +3706,7 @@ func (m *testTaskManager) GetTasks(
 	m.logger.Debug("testTaskManager.GetTasks", tag.MinLevel(request.InclusiveMinTaskID), tag.MaxLevel(request.ExclusiveMaxTaskID))
 
 	if m.generateErrorRandomly() {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetTasks operation failed"))
+		return nil, serviceerror.NewUnavailablef("GetTasks operation failed")
 	}
 
 	tlm := m.getQueueManager(request.TaskQueue, request.NamespaceID, request.TaskType)

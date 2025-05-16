@@ -657,7 +657,7 @@ func (ms *MutableStateImpl) GetNexusCompletion(
 			Links:      []nexus.Link{startLink},
 		})
 		if err != nil {
-			return nil, serviceerror.NewInternal(fmt.Sprintf("failed to construct Nexus completion: %v", err))
+			return nil, serviceerror.NewInternalf("failed to construct Nexus completion: %v", err)
 		}
 		return completion, nil
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED:
@@ -731,7 +731,7 @@ func (ms *MutableStateImpl) GetNexusCompletion(
 				Links:     []nexus.Link{startLink},
 			})
 	}
-	return nil, serviceerror.NewInternal(fmt.Sprintf("invalid workflow execution status: %v", ce.GetEventType()))
+	return nil, serviceerror.NewInternalf("invalid workflow execution status: %v", ce.GetEventType())
 }
 
 // GetHSMCallbackArg converts a workflow completion event into a [persistencespb.HSMCallbackArg].
@@ -1011,7 +1011,7 @@ func (ms *MutableStateImpl) GetCloseVersion() (int64, error) {
 	// Do NOT use ms.IsWorkflowExecutionRunning() for the check.
 	// Zombie workflow is not considered running but also not closed.
 	if ms.executionState.State != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
-		return common.EmptyVersion, serviceerror.NewInternal(fmt.Sprintf("workflow still running, current state: %v", ms.executionState.State.String()))
+		return common.EmptyVersion, serviceerror.NewInternalf("workflow still running, current state: %v", ms.executionState.State.String())
 	}
 
 	// if workflow is closing in the current transation,
@@ -1117,7 +1117,7 @@ func (ms *MutableStateImpl) IsNonCurrentWorkflowGuaranteed() (bool, error) {
 	case enumsspb.WORKFLOW_EXECUTION_STATE_CORRUPTED:
 		return false, nil
 	default:
-		return false, serviceerror.NewInternal(fmt.Sprintf("unknown workflow state: %v", ms.executionState.State.String()))
+		return false, serviceerror.NewInternalf("unknown workflow state: %v", ms.executionState.State.String())
 	}
 }
 
@@ -2473,16 +2473,16 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	startEvent *historypb.HistoryEvent,
 ) error {
 	if ms.executionInfo.NamespaceId != ms.namespaceEntry.ID().String() {
-		return serviceerror.NewInternal(fmt.Sprintf("applying conflicting namespace ID: %v != %v",
-			ms.executionInfo.NamespaceId, ms.namespaceEntry.ID().String()))
+		return serviceerror.NewInternalf("applying conflicting namespace ID: %v != %v",
+			ms.executionInfo.NamespaceId, ms.namespaceEntry.ID().String())
 	}
 	if ms.executionInfo.WorkflowId != execution.GetWorkflowId() {
-		return serviceerror.NewInternal(fmt.Sprintf("applying conflicting workflow ID: %v != %v",
-			ms.executionInfo.WorkflowId, execution.GetWorkflowId()))
+		return serviceerror.NewInternalf("applying conflicting workflow ID: %v != %v",
+			ms.executionInfo.WorkflowId, execution.GetWorkflowId())
 	}
 	if ms.executionState.RunId != execution.GetRunId() {
-		return serviceerror.NewInternal(fmt.Sprintf("applying conflicting run ID: %v != %v",
-			ms.executionState.RunId, execution.GetRunId()))
+		return serviceerror.NewInternalf("applying conflicting run ID: %v != %v",
+			ms.executionState.RunId, execution.GetRunId())
 	}
 
 	ms.approximateSize -= ms.executionInfo.Size()
@@ -2661,11 +2661,11 @@ func (ms *MutableStateImpl) addCompletionCallbacks(
 	coll := callbacks.MachineCollection(ms.HSM())
 	maxCallbacksPerWorkflow := ms.config.MaxCallbacksPerWorkflow(ms.GetNamespaceEntry().Name().String())
 	if len(completionCallbacks)+coll.Size() > maxCallbacksPerWorkflow {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf(
+		return serviceerror.NewInvalidArgumentf(
 			"cannot attach more than %d callbacks to a workflow (%d callbacks already attached)",
 			maxCallbacksPerWorkflow,
 			coll.Size(),
-		))
+		)
 	}
 	for idx, cb := range completionCallbacks {
 		persistenceCB := &persistencespb.Callback{
@@ -3042,7 +3042,7 @@ func (ms *MutableStateImpl) loadSearchAttributeString(saName string) (string, er
 	}
 	val, ok := decoded.(string)
 	if !ok {
-		return "", serviceerror.NewInternal(fmt.Sprintf("invalid search attribute value stored for %s", saName))
+		return "", serviceerror.NewInternalf("invalid search attribute value stored for %s", saName)
 	}
 	return val, nil
 }
@@ -4662,7 +4662,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateAdmittedEvent(event *his
 		},
 	}
 	if _, ok := ms.executionInfo.UpdateInfos[updateID]; ok {
-		return serviceerror.NewInternal(fmt.Sprintf("Update ID %s is already present in mutable state", updateID))
+		return serviceerror.NewInternalf("Update ID %s is already present in mutable state", updateID)
 	}
 	ui := persistencespb.UpdateInfo{Value: admission}
 	ms.executionInfo.UpdateInfos[updateID] = &ui
@@ -6210,7 +6210,7 @@ func (ms *MutableStateImpl) closeTransactionHandleWorkflowTaskScheduling(
 	for _, t := range ms.currentTransactionAddedStateMachineEventTypes {
 		def, ok := ms.shard.StateMachineRegistry().EventDefinition(t)
 		if !ok {
-			return serviceerror.NewInternal(fmt.Sprintf("no event definition registered for %v", t))
+			return serviceerror.NewInternalf("no event definition registered for %v", t)
 		}
 		if def.IsWorkflowTaskTrigger() {
 			if !ms.HasPendingWorkflowTask() {
@@ -7057,7 +7057,7 @@ func (ms *MutableStateImpl) startTransactionHandleWorkflowTaskFailover() (bool, 
 		return false, err
 	}
 	if lastEventVersion != workflowTask.Version {
-		return false, serviceerror.NewInternal(fmt.Sprintf("MutableStateImpl encountered mismatch version, workflow task: %v, last event version %v", workflowTask.Version, lastEventVersion))
+		return false, serviceerror.NewInternalf("MutableStateImpl encountered mismatch version, workflow task: %v, last event version %v", workflowTask.Version, lastEventVersion)
 	}
 
 	// NOTE: if lastEventVersion is used here then the version transition history could decrecase

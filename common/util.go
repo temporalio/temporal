@@ -122,7 +122,7 @@ var (
 
 var (
 	// ErrNamespaceHandover is error indicating namespace is in handover state and cannot process request.
-	ErrNamespaceHandover = serviceerror.NewUnavailable(fmt.Sprintf("Namespace replication in %s state.", enumspb.REPLICATION_STATE_HANDOVER.String()))
+	ErrNamespaceHandover = serviceerror.NewUnavailablef("Namespace replication in %s state.", enumspb.REPLICATION_STATE_HANDOVER.String())
 )
 
 // AwaitWaitGroup calls Wait on the given wait
@@ -443,11 +443,10 @@ func VerifyShardIDMapping(
 	if thisShardID%shardCountMin == thatShardID%shardCountMin {
 		return nil
 	}
-	return serviceerror.NewInternal(
-		fmt.Sprintf("shard ID mapping verification failed; shard count: %v vs %v, shard ID: %v vs %v",
-			thisShardCount, thatShardCount,
-			thisShardID, thatShardID,
-		),
+	return serviceerror.NewInternalf(
+		"shard ID mapping verification failed; shard count: %v vs %v, shard ID: %v vs %v",
+		thisShardCount, thatShardCount,
+		thisShardID, thatShardID,
 	)
 }
 

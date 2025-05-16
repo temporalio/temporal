@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -300,7 +299,7 @@ func ProcessOutgoingSearchAttributes(
 ) error {
 	saTypeMap, err := saProvider.GetSearchAttributes(persistenceVisibilityMgr.GetIndexName(), false)
 	if err != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf(consts.ErrUnableToGetSearchAttributesMessage, err))
+		return serviceerror.NewUnavailablef(consts.ErrUnableToGetSearchAttributesMessage, err)
 	}
 	for _, event := range events {
 		var searchAttributes *commonpb.SearchAttributes
@@ -336,12 +335,12 @@ func validateTransientWorkflowTaskEvents(
 	for i, event := range transientWorkflowTaskInfo.HistorySuffix {
 		expectedEventID := eventIDOffset + int64(i)
 		if event.GetEventId() != expectedEventID {
-			return serviceerror.NewInternal(
-				fmt.Sprintf(
-					"invalid transient workflow task at position %v; expected event ID %v, found event ID %v",
-					i,
-					expectedEventID,
-					event.GetEventId()))
+			return serviceerror.NewInternalf(
+
+				"invalid transient workflow task at position %v; expected event ID %v, found event ID %v",
+				i,
+				expectedEventID,
+				event.GetEventId())
 		}
 	}
 
@@ -372,7 +371,7 @@ func VerifyHistoryIsComplete(
 	if !isFirstPage { // at least one page of history has been read previously
 		if firstEvent.GetEventId() <= expectedFirstEventID {
 			// not first page and no events have been read in the previous pages - not possible
-			return serviceerror.NewDataLoss(fmt.Sprintf("Invalid history: expected first eventID to be > %v but got %v", expectedFirstEventID, firstEvent.GetEventId()))
+			return serviceerror.NewDataLossf("Invalid history: expected first eventID to be > %v but got %v", expectedFirstEventID, firstEvent.GetEventId())
 		}
 		expectedFirstEventID = firstEvent.GetEventId()
 	}
@@ -391,7 +390,7 @@ func VerifyHistoryIsComplete(
 		return nil
 	}
 
-	return serviceerror.NewDataLoss(fmt.Sprintf("Incomplete history: expected events [%v-%v] but got events [%v-%v] of length %v: isFirstPage=%v,isLastPage=%v,pageSize=%v",
+	return serviceerror.NewDataLossf("Incomplete history: expected events [%v-%v] but got events [%v-%v] of length %v: isFirstPage=%v,isLastPage=%v,pageSize=%v",
 		expectedFirstEventID,
 		expectedLastEventID,
 		firstEvent.GetEventId(),
@@ -399,7 +398,7 @@ func VerifyHistoryIsComplete(
 		eventCount,
 		isFirstPage,
 		isLastPage,
-		pageSize))
+		pageSize)
 }
 
 // ProcessInternalRawHistory processes history in the field response.History.
