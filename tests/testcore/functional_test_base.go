@@ -2,9 +2,9 @@ package testcore
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/binary"
-	"fmt"
 	"maps"
 	"os"
 	"strconv"
@@ -25,13 +25,13 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc"
@@ -42,9 +42,7 @@ import (
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/testing/updateutils"
 	"go.temporal.io/server/components/nexusoperations"
-	"go.temporal.io/server/temporal/environment"
 	"go.uber.org/fx"
-	"gopkg.in/yaml.v3"
 )
 
 type (
@@ -87,6 +85,8 @@ type (
 		DynamicConfigOverrides map[dynamicconfig.Key]any
 		ArchivalEnabled        bool
 		EnableMTLS             bool
+		FaultInjectionConfig   *config.FaultInjection
+		NumHistoryShards       int32
 	}
 	TestClusterOption func(params *TestClusterParams)
 )
@@ -134,6 +134,18 @@ func WithArchivalEnabled() TestClusterOption {
 func WithMTLS() TestClusterOption {
 	return func(params *TestClusterParams) {
 		params.EnableMTLS = true
+	}
+}
+
+func WithFaultInjectionConfig(cfg *config.FaultInjection) TestClusterOption {
+	return func(params *TestClusterParams) {
+		params.FaultInjectionConfig = cfg
+	}
+}
+
+func WithNumHistoryShards(n int32) TestClusterOption {
+	return func(params *TestClusterParams) {
+		params.NumHistoryShards = n
 	}
 }
 
@@ -194,7 +206,7 @@ func (s *FunctionalTestBase) TaskPoller() *taskpoller.TaskPoller {
 }
 
 func (s *FunctionalTestBase) SetupSuite() {
-	s.SetupSuiteWithDefaultCluster()
+	s.SetupSuiteWithCluster()
 }
 
 func (s *FunctionalTestBase) TearDownSuite() {
@@ -208,13 +220,7 @@ func (s *FunctionalTestBase) TearDownSuite() {
 	s.TearDownCluster()
 }
 
-func (s *FunctionalTestBase) SetupSuiteWithDefaultCluster(options ...TestClusterOption) {
-	// TODO (alex): rename es_cluster.yaml to default_cluster.yaml
-	// TODO (alex): reduce the number of configs or may be get rid of it completely.
-	// TODO (alex): or replace clusterConfigFile param with WithClusterConfigFile option with default value.
-	s.SetupSuiteWithCluster("testdata/es_cluster.yaml", options...)
-}
-func (s *FunctionalTestBase) SetupSuiteWithCluster(clusterConfigFile string, options ...TestClusterOption) {
+func (s *FunctionalTestBase) SetupSuiteWithCluster(options ...TestClusterOption) {
 	params := ApplyTestClusterOptions(options)
 
 	// NOTE: A suite might set its own logger. Example: AcquireShardSuiteBase.
@@ -229,26 +235,19 @@ func (s *FunctionalTestBase) SetupSuiteWithCluster(clusterConfigFile string, opt
 		s.Logger = tl
 	}
 
-	// Setup test cluster.
-	var err error
-	s.testClusterConfig, err = readTestClusterConfig(clusterConfigFile)
-	s.Require().NoError(err)
-	s.Require().Empty(s.testClusterConfig.DeprecatedFrontendAddress, "Functional tests against external frontends are not supported")
-	s.Require().Empty(s.testClusterConfig.DeprecatedClusterNo, "ClusterNo should not be present in cluster config files")
-
-	s.testClusterConfig.DynamicConfigOverrides = make(map[dynamicconfig.Key]any)
-	maps.Copy(s.testClusterConfig.DynamicConfigOverrides, params.DynamicConfigOverrides)
-	// TODO (alex): is it needed?
-	if s.testClusterConfig.ESConfig != nil {
-		s.testClusterConfig.DynamicConfigOverrides[dynamicconfig.SecondaryVisibilityWritingMode.Key()] = visibility.SecondaryVisibilityWritingModeDual
+	s.testClusterConfig = &TestClusterConfig{
+		FaultInjection: params.FaultInjectionConfig,
+		HistoryConfig: HistoryConfig{
+			NumHistoryShards: cmp.Or(params.NumHistoryShards, 4),
+		},
+		DynamicConfigOverrides: params.DynamicConfigOverrides,
+		ServiceFxOptions:       params.ServiceOptions,
+		EnableMetricsCapture:   true,
+		EnableArchival:         params.ArchivalEnabled,
+		EnableMTLS:             params.EnableMTLS,
 	}
 
-	s.testClusterConfig.ServiceFxOptions = params.ServiceOptions
-	s.testClusterConfig.EnableMetricsCapture = true
-	s.testClusterConfig.EnableArchival = params.ArchivalEnabled
-
-	s.testClusterConfig.EnableMTLS = params.EnableMTLS
-
+	var err error
 	testClusterFactory := NewTestClusterFactory()
 	s.testCluster, err = testClusterFactory.NewCluster(s.T(), s.testClusterConfig, s.Logger)
 	s.Require().NoError(err)
@@ -329,49 +328,6 @@ func ApplyTestClusterOptions(options []TestClusterOption) TestClusterParams {
 		opt(&params)
 	}
 	return params
-}
-
-func readTestClusterConfig(configFile string) (*TestClusterConfig, error) {
-	environment.SetupEnv()
-
-	configLocation := configFile
-	if TestFlags.TestClusterConfigFile != "" {
-		configLocation = TestFlags.TestClusterConfigFile
-	}
-	if _, err := os.Stat(configLocation); err != nil {
-		if os.IsNotExist(err) {
-			configLocation = "../" + configLocation
-		}
-	}
-
-	// This is just reading a config, so it's less of a security concern
-	// #nosec
-	confContent, err := os.ReadFile(configLocation)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read test cluster config file %s: %w", configLocation, err)
-	}
-	confContent = []byte(os.ExpandEnv(string(confContent)))
-	var clusterConfig TestClusterConfig
-	if err = yaml.Unmarshal(confContent, &clusterConfig); err != nil {
-		return nil, fmt.Errorf("failed to decode test cluster config %s: %w", configLocation, err)
-	}
-
-	// If -FaultInjectionConfigFile is passed to the test runner,
-	// then fault injection config will be added to the test cluster config.
-	if TestFlags.FaultInjectionConfigFile != "" {
-		fiConfigContent, err := os.ReadFile(TestFlags.FaultInjectionConfigFile)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read test cluster fault injection config file %s: %v", TestFlags.FaultInjectionConfigFile, err)
-		}
-
-		var fiOptions TestClusterConfig
-		if err = yaml.Unmarshal(fiConfigContent, &fiOptions); err != nil {
-			return nil, fmt.Errorf("failed to decode test cluster fault injection config %s: %w", TestFlags.FaultInjectionConfigFile, err)
-		}
-		clusterConfig.FaultInjection = fiOptions.FaultInjection
-	}
-
-	return &clusterConfig, nil
 }
 
 func (s *FunctionalTestBase) setupSdk() {

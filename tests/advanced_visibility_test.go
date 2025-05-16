@@ -77,7 +77,7 @@ func (s *AdvancedVisibilitySuite) SetupSuite() {
 		// Allow the scavenger to remove any build ID regardless of when it was last default for a set.
 		dynamicconfig.RemovableBuildIdDurationSinceDefault.Key(): time.Microsecond,
 	}
-	s.FunctionalTestBase.SetupSuiteWithDefaultCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
+	s.FunctionalTestBase.SetupSuiteWithCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 
 	if !testcore.UseSQLVisibility() {
 		// To ensure that Elasticsearch won't return more than defaultPageSize documents,

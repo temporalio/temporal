@@ -73,9 +73,6 @@ func (s *NDCReplicationTaskBatchingTestSuite) SetupSuite() {
 	s.passiveClusterName = "cluster-b"
 
 	fileName := "../testdata/ndc_clusters.yaml"
-	if testcore.TestFlags.TestClusterConfigFile != "" {
-		fileName = testcore.TestFlags.TestClusterConfigFile
-	}
 	environment.SetupEnv()
 	s.standByTaskID = 0
 
