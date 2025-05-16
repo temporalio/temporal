@@ -353,6 +353,45 @@ func (n *Node) prepareDataValue(
 	return nil
 }
 
+func (n *Node) preparePointerValue(
+	chasmContext Context,
+) error {
+	metadata := n.serializedNode.Metadata
+	pointerAttr := metadata.GetPointerAttributes()
+	if pointerAttr == nil {
+		return serviceerror.NewInternal(
+			fmt.Sprintf("expect chasm node to have PointerAttributes, actual attributes: %v", metadata.Attributes),
+		)
+	}
+
+	if n.valueState == valueStateNeedDeserialize {
+		if err := n.deserialize(nil); err != nil {
+			return fmt.Errorf("failed to deserialize data: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func (n *Node) findNode(path []string) *Node {
+	if len(path) == 0 {
+		// shouldn't happen. softassert?
+		return nil
+	}
+
+	if len(path) == 1 {
+		if path[0] != n.nodeName {
+			return nil
+		}
+		return n
+	}
+	child := n.children[path[0]]
+	if child == nil {
+		return nil
+	}
+	return child.findNode(path[1:])
+}
+
 func (n *Node) fieldType() fieldType {
 	if n.serializedNode.GetMetadata().GetComponentAttributes() != nil {
 		return fieldTypeComponent
@@ -362,13 +401,12 @@ func (n *Node) fieldType() fieldType {
 		return fieldTypeData
 	}
 
-	if n.serializedNode.GetMetadata().GetCollectionAttributes() != nil {
-		// Collection is not a Field.
-		return fieldTypeUnspecified
-	}
-
 	if n.serializedNode.GetMetadata().GetPointerAttributes() != nil {
 		return fieldTypeComponentPointer
+	}
+
+	if n.serializedNode.GetMetadata().GetCollectionAttributes() != nil {
+		softassert.Fail(n.logger, "fieldType can't be called on Collection node because Collection is not a Field")
 	}
 
 	return fieldTypeUnspecified
@@ -416,9 +454,19 @@ func (n *Node) initSerializedNode(ft fieldType) {
 			},
 		}
 	case fieldTypeComponentPointer:
-		panic("not implemented")
+		n.serializedNode = &persistencespb.ChasmNode{
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition: &persistencespb.VersionedTransition{
+					TransitionCount:          n.backend.NextTransitionCount(),
+					NamespaceFailoverVersion: n.backend.GetCurrentVersion(),
+				},
+				Attributes: &persistencespb.ChasmNodeMetadata_PointerAttributes{
+					PointerAttributes: &persistencespb.ChasmPointerAttributes{},
+				},
+			},
+		}
 	case fieldTypeUnspecified:
-		// Do nothing. Panic?
+		softassert.Fail(n.logger, "initSerializedNode can't be called with fieldTypeUnspecified")
 	}
 }
 
@@ -455,7 +503,7 @@ func (n *Node) serialize() error {
 	case *persistencespb.ChasmNodeMetadata_CollectionAttributes:
 		panic("not implemented")
 	case *persistencespb.ChasmNodeMetadata_PointerAttributes:
-		panic("not implemented")
+		return n.serializePointerNode()
 	default:
 		return serviceerror.NewInternal("unknown node type")
 	}
@@ -608,6 +656,21 @@ func (n *Node) serializeDataNode() error {
 	return nil
 }
 
+func (n *Node) serializePointerNode() error {
+	path, isPathValid := n.value.([]string)
+	if !isPathValid {
+		// TODO (alex): may be not needed. it must be always be []string
+		return serviceerror.NewInternal(fmt.Sprintf("pointer path is not []string but %T", n.value))
+	}
+
+	// TODO: should it go to Data instead ???
+	n.serializedNode.GetMetadata().GetPointerAttributes().NodePath = path
+	n.updateLastUpdateVersionedTransition()
+	n.valueState = valueStateSynced
+
+	return nil
+}
+
 func (n *Node) updateLastUpdateVersionedTransition() {
 	if n.serializedNode.GetMetadata().GetLastUpdateVersionedTransition() == nil {
 		n.serializedNode.GetMetadata().LastUpdateVersionedTransition = &persistencespb.VersionedTransition{}
@@ -640,7 +703,7 @@ func (n *Node) deserialize(
 	case *persistencespb.ChasmNodeMetadata_CollectionAttributes:
 		panic("not implemented")
 	case *persistencespb.ChasmNodeMetadata_PointerAttributes:
-		// TODO: return serviceerror.NewInternal(...) instead.
+		return n.deserializePointerNode()
 	}
 	return nil
 }
@@ -700,6 +763,12 @@ func (n *Node) deserializeDataNode(
 	}
 
 	n.value = value.Interface()
+	n.valueState = valueStateSynced
+	return nil
+}
+
+func (n *Node) deserializePointerNode() error {
+	n.value = n.serializedNode.GetMetadata().GetPointerAttributes().GetNodePath()
 	n.valueState = valueStateSynced
 	return nil
 }
