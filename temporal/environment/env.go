@@ -48,66 +48,6 @@ const (
 	PostgresDefaultPort = 5432
 )
 
-type varSpec struct {
-	name       string
-	getDefault func() string
-}
-
-var envVars = []varSpec{
-	{
-		name:       LocalhostIP,
-		getDefault: func() string { return lookupLocalhostIP("localhost") },
-	},
-	{
-		name:       CassandraSeeds,
-		getDefault: GetLocalhostIP,
-	},
-	{
-		name:       CassandraPort,
-		getDefault: func() string { return strconv.Itoa(CassandraDefaultPort) },
-	},
-	{
-		name:       MySQLSeeds,
-		getDefault: GetLocalhostIP,
-	},
-	{
-		name:       MySQLPort,
-		getDefault: func() string { return strconv.Itoa(MySQLDefaultPort) },
-	},
-	{
-		name:       PostgresSeeds,
-		getDefault: GetLocalhostIP,
-	},
-	{
-		name:       PostgresPort,
-		getDefault: func() string { return strconv.Itoa(PostgresDefaultPort) },
-	},
-	{
-		name:       ESSeeds,
-		getDefault: GetLocalhostIP,
-	},
-	{
-		name:       ESPort,
-		getDefault: func() string { return strconv.Itoa(ESDefaultPort) },
-	},
-	{
-		name:       ESVersion,
-		getDefault: func() string { return ESDefaultVersion },
-	},
-}
-
-// SetupEnv setup the necessary env
-func SetupEnv() {
-	for _, envVar := range envVars {
-		if os.Getenv(envVar.name) == "" {
-			if err := os.Setenv(envVar.name, envVar.getDefault()); err != nil {
-				//nolint:forbidigo // used in test code only
-				panic(fmt.Sprintf("error setting env var %s: %s", envVar.name, err))
-			}
-		}
-	}
-}
-
 func lookupLocalhostIP(domain string) string {
 	// lookup localhost and favor the first ipv4 address
 	// unless there are only ipv6 addresses available

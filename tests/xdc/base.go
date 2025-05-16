@@ -1,8 +1,8 @@
 package xdc
 
 import (
+	"cmp"
 	"context"
-	"os"
 	"sync"
 	"time"
 
@@ -25,10 +25,8 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/protorequire"
-	"go.temporal.io/server/temporal/environment"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
-	"gopkg.in/yaml.v3"
 )
 
 const (
@@ -42,7 +40,7 @@ const (
 
 type (
 	xdcBaseSuite struct {
-		// TODO (alex): use FunctionalTestSuite
+		// TODO (alex): use FunctionalTestBase instead.
 		suite.Suite
 		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 		// not merely log an error
@@ -90,16 +88,27 @@ func (s *xdcBaseSuite) setupSuite(opts ...testcore.TestClusterOption) {
 	// TODO (prathyush): remove this after setting it to true by default.
 	s.dynamicConfigOverrides[dynamicconfig.SendRawHistoryBetweenInternalServices.Key()] = true
 
-	fileName := "../testdata/xdc_clusters.yaml"
-	environment.SetupEnv()
+	clusterConfigs := []*testcore.TestClusterConfig{
+		{
+			ClusterMetadata: cluster.Config{
+				EnableGlobalNamespace:    true,
+				FailoverVersionIncrement: 10,
+			},
+			HistoryConfig: testcore.HistoryConfig{
+				NumHistoryShards: cmp.Or(params.NumHistoryShards, 1),
+			},
+		},
+		{
+			ClusterMetadata: cluster.Config{
+				EnableGlobalNamespace:    true,
+				FailoverVersionIncrement: 10,
+			},
+			HistoryConfig: testcore.HistoryConfig{
+				NumHistoryShards: cmp.Or(params.NumHistoryShards, 1),
+			},
+		},
+	}
 
-	confContent, err := os.ReadFile(fileName)
-	s.Require().NoError(err)
-	confContent = []byte(os.ExpandEnv(string(confContent)))
-
-	var clusterConfigs []*testcore.TestClusterConfig
-	s.Require().NoError(yaml.Unmarshal(confContent, &clusterConfigs))
-	s.Require().Len(clusterConfigs, 2)
 	s.clusters = make([]*testcore.TestCluster, len(clusterConfigs))
 	suffix := common.GenerateRandomString(5)
 
@@ -120,6 +129,7 @@ func (s *xdcBaseSuite) setupSuite(opts ...testcore.TestClusterOption) {
 		clusterConfigs[clusterIndex].ServiceFxOptions = params.ServiceOptions
 		clusterConfigs[clusterIndex].EnableMetricsCapture = true
 
+		var err error
 		s.clusters[clusterIndex], err = testClusterFactory.NewCluster(s.T(), clusterConfigs[clusterIndex], log.With(s.logger, tag.ClusterName(clusterName)))
 		s.Require().NoError(err)
 	}
@@ -129,7 +139,7 @@ func (s *xdcBaseSuite) setupSuite(opts ...testcore.TestClusterOption) {
 	for ci, c := range s.clusters {
 		for remoteCi, remoteC := range s.clusters {
 			if ci != remoteCi {
-				_, err = c.AdminClient().AddOrUpdateRemoteCluster(
+				_, err := c.AdminClient().AddOrUpdateRemoteCluster(
 					testcore.NewContext(),
 					&adminservice.AddOrUpdateRemoteClusterRequest{
 						FrontendAddress:               remoteC.Host().RemoteFrontendGRPCAddress(),
