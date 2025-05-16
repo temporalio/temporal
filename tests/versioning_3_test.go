@@ -1654,8 +1654,7 @@ func (s *Versioning3Suite) setCurrentDeployment(
 				Version:        tv.DeploymentVersionString(),
 			})
 		var notFound *serviceerror.NotFound
-		var resourceExhausted *serviceerror.ResourceExhausted
-		if errors.As(err, &notFound) || errors.As(err, &resourceExhausted) {
+		if errors.As(err, &notFound) {
 			return false
 		}
 		s.NoError(err)
@@ -1684,8 +1683,7 @@ func (s *Versioning3Suite) setRampingDeployment(
 				Percentage:     percentage,
 			})
 		var notFound *serviceerror.NotFound
-		var resourceExhausted *serviceerror.ResourceExhausted
-		if errors.As(err, &notFound) || errors.As(err, &resourceExhausted) {
+		if errors.As(err, &notFound) {
 			return false
 		}
 		s.NoError(err)

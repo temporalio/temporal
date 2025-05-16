@@ -955,7 +955,7 @@ func (d *ClientImpl) update(
 
 	policy := backoff.NewExponentialRetryPolicy(100 * time.Millisecond)
 	isRetryable := func(err error) bool {
-		return errors.Is(err, errRetry)
+		return errors.Is(err, errRetry) || errors.As(err, new(*serviceerror.ResourceExhausted))
 	}
 
 	var outcome *updatepb.Outcome
@@ -1206,7 +1206,7 @@ func (d *ClientImpl) updateWithStart(
 
 	policy := backoff.NewExponentialRetryPolicy(100 * time.Millisecond)
 	isRetryable := func(err error) bool {
-		return errors.Is(err, errRetry)
+		return errors.Is(err, errRetry) || errors.As(err, new(*serviceerror.ResourceExhausted))
 	}
 	var outcome *updatepb.Outcome
 
