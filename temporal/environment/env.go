@@ -7,6 +7,8 @@ import (
 	"strconv"
 )
 
+// TODO (alex): this file is used by tests only. It should be moved to tests dir.
+
 const (
 	// LocalhostIP default localhost
 	LocalhostIP = "LOCALHOST_IP"
@@ -99,6 +101,7 @@ func SetupEnv() {
 	for _, envVar := range envVars {
 		if os.Getenv(envVar.name) == "" {
 			if err := os.Setenv(envVar.name, envVar.getDefault()); err != nil {
+				//nolint:forbidigo // used in test code only
 				panic(fmt.Sprintf("error setting env var %s: %s", envVar.name, err))
 			}
 		}
@@ -152,9 +155,39 @@ func GetCassandraPort() int {
 	}
 	p, err := strconv.Atoi(port)
 	if err != nil {
+		//nolint:forbidigo // used in test code only
 		panic(fmt.Sprintf("error getting env %v", CassandraPort))
 	}
 	return p
+}
+
+func GetESAddress() string {
+	addr := os.Getenv(ESSeeds)
+	if addr == "" {
+		addr = GetLocalhostIP()
+	}
+	return addr
+}
+
+func GetESPort() int {
+	port := os.Getenv(ESPort)
+	if port == "" {
+		return ESDefaultPort
+	}
+	p, err := strconv.Atoi(port)
+	if err != nil {
+		//nolint:forbidigo // used in test code only
+		panic(fmt.Sprintf("error getting env %v", ESPort))
+	}
+	return p
+}
+
+func GetESVersion() string {
+	version := os.Getenv(ESVersion)
+	if version == "" {
+		version = ESDefaultVersion
+	}
+	return version
 }
 
 // GetMySQLAddress return the cassandra address
@@ -174,6 +207,7 @@ func GetMySQLPort() int {
 	}
 	p, err := strconv.Atoi(port)
 	if err != nil {
+		//nolint:forbidigo // used in test code only
 		panic(fmt.Sprintf("error getting env %v", MySQLPort))
 	}
 	return p
@@ -196,6 +230,7 @@ func GetPostgreSQLPort() int {
 	}
 	p, err := strconv.Atoi(port)
 	if err != nil {
+		//nolint:forbidigo // used in test code only
 		panic(fmt.Sprintf("error getting env %v", PostgresPort))
 	}
 	return p

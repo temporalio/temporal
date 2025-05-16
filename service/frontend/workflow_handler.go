@@ -2444,7 +2444,7 @@ func (wh *WorkflowHandler) ListArchivedWorkflowExecutions(ctx context.Context, r
 		return nil, err
 	}
 
-	visibilityArchiver, err := wh.archiverProvider.GetVisibilityArchiver(URI.Scheme(), string(primitives.FrontendService))
+	visibilityArchiver, err := wh.archiverProvider.GetVisibilityArchiver(URI.Scheme())
 	if err != nil {
 		return nil, err
 	}
@@ -5387,7 +5387,7 @@ func (wh *WorkflowHandler) getArchivedHistory(
 		return nil, err
 	}
 
-	historyArchiver, err := wh.archiverProvider.GetHistoryArchiver(URI.Scheme(), string(primitives.FrontendService))
+	historyArchiver, err := wh.archiverProvider.GetHistoryArchiver(URI.Scheme())
 	if err != nil {
 		return nil, err
 	}
