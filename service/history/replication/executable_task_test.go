@@ -141,7 +141,6 @@ func (s *executableTaskSuite) SetupTest() {
 		receivedTime,
 		s.sourceCluster,
 		s.sourceShardKey,
-		enumsspb.TASK_PRIORITY_UNSPECIFIED,
 		&replicationspb.ReplicationTask{
 			RawTaskInfo: &persistencespb.ReplicationTaskInfo{
 				NamespaceId: s.namespaceId,
@@ -750,7 +749,6 @@ func (s *executableTaskSuite) TestBackFillEvents_Success() {
 		time.Now(),
 		s.sourceCluster,
 		s.sourceShardKey,
-		enumsspb.TASK_PRIORITY_UNSPECIFIED,
 		&replicationspb.ReplicationTask{
 			TaskType: enumsspb.REPLICATION_TASK_TYPE_VERIFY_VERSIONED_TRANSITION_TASK,
 			RawTaskInfo: &persistencespb.ReplicationTaskInfo{
@@ -916,7 +914,6 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_NamespaceFailoverNotSync_Sync
 		now,
 		s.sourceCluster,
 		s.sourceShardKey,
-		enumsspb.TASK_PRIORITY_UNSPECIFIED,
 		&replicationspb.ReplicationTask{
 			TaskType:            enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
 			VersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 80},
@@ -991,7 +988,6 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_NamespaceFailoverBehind_Still
 		now,
 		s.sourceCluster,
 		s.sourceShardKey,
-		enumsspb.TASK_PRIORITY_UNSPECIFIED,
 		&replicationspb.ReplicationTask{
 			TaskType:            enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
 			VersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 80},
