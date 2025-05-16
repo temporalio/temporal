@@ -98,7 +98,7 @@ func (s *Versioning3Suite) SetupSuite() {
 		// matching so they're a good condidate.
 		dynamicconfig.MatchingUseNewMatcher.Key(): true,
 	}
-	s.FunctionalTestBase.SetupSuiteWithDefaultCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
+	s.FunctionalTestBase.SetupSuiteWithCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 }
 
 func (s *Versioning3Suite) TestPinnedTask_NoProperPoller() {
