@@ -74,7 +74,6 @@ const (
 
 	ErrRampingVersionDoesNotHaveAllTaskQueues = "proposed ramping version is missing active task queues from the current version; these would become unversioned if it is set as the ramping version"
 	ErrCurrentVersionDoesNotHaveAllTaskQueues = "proposed current version is missing active task queues from the current version; these would become unversioned if it is set as the current version"
-	ErrWorkflowClosing                        = "workflow operation can not be applied because workflow is closing"
 )
 
 var (

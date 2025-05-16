@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/worker_versioning"
+	"go.temporal.io/server/service/history/consts"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -956,7 +957,7 @@ func (d *ClientImpl) update(
 	policy := backoff.NewExponentialRetryPolicy(100 * time.Millisecond)
 	isRetryable := func(err error) bool {
 		// Updates admitted as the workflow is closing may result in a ResourceExhausted error, which is considered retryable.
-		return errors.Is(err, errRetry) || (errors.As(err, new(*serviceerror.ResourceExhausted)) && err.Error() == ErrWorkflowClosing)
+		return errors.Is(err, errRetry) || (errors.As(err, new(*serviceerror.ResourceExhausted)) && err.Error() == consts.ErrWorkflowClosing.Error())
 	}
 
 	var outcome *updatepb.Outcome
@@ -1208,7 +1209,7 @@ func (d *ClientImpl) updateWithStart(
 	policy := backoff.NewExponentialRetryPolicy(100 * time.Millisecond)
 	isRetryable := func(err error) bool {
 		// Updates admitted as the workflow is closing may result in a ResourceExhausted error, which is considered retryable.
-		return errors.Is(err, errRetry) || (errors.As(err, new(*serviceerror.ResourceExhausted)) && err.Error() == ErrWorkflowClosing)
+		return errors.Is(err, errRetry) || (errors.As(err, new(*serviceerror.ResourceExhausted)) && err.Error() == consts.ErrWorkflowClosing.Error())
 	}
 	var outcome *updatepb.Outcome
 
