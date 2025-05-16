@@ -3140,7 +3140,7 @@ func (s *matchingEngineSuite) resetBacklogCounter(numWorkers int, taskCount int,
 
 	s.EqualValues(0, s.taskManager.getTaskCount(ptq))
 	s.EventuallyWithT(func(collect *assert.CollectT) {
-		assert.Equal(collect, int64(0), pqMgr.backlogMgr.TotalApproximateBacklogCount())
+		require.Equal(collect, int64(0), pqMgr.backlogMgr.TotalApproximateBacklogCount())
 	}, 4*time.Second, 10*time.Millisecond, "backlog counter should have been reset")
 }
 

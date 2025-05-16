@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -91,10 +92,9 @@ func (s *PollerScalingIntegSuite) TestPollerScalingSimpleBacklog() {
 			Namespace: s.Namespace().String(),
 			TaskQueue: &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		})
-		assert.NoError(t, err)
-		if assert.NotNil(t, resp.PollerScalingDecision) {
-			assert.GreaterOrEqual(t, int32(1), resp.PollerScalingDecision.PollRequestDeltaSuggestion)
-		}
+		require.NoError(t, err)
+		require.NotNil(t, resp.PollerScalingDecision)
+		require.GreaterOrEqual(t, int32(1), resp.PollerScalingDecision.PollRequestDeltaSuggestion)
 
 		// Start enough activities / nexus tasks to ensure we will see scale up decisions
 		commands := make([]*commandpb.Command, 0, 5)
@@ -127,7 +127,7 @@ func (s *PollerScalingIntegSuite) TestPollerScalingSimpleBacklog() {
 			TaskToken: resp.TaskToken,
 			Commands:  commands,
 		})
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	}, 20*time.Second, 200*time.Millisecond)
 
 	// Wait to ensure add rate exceeds dispatch rate & backlog age grows
@@ -140,9 +140,9 @@ func (s *PollerScalingIntegSuite) TestPollerScalingSimpleBacklog() {
 			TaskQueueTypes: []enumspb.TaskQueueType{tqtyp},
 			ReportStats:    true,
 		})
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		stats := res.GetVersionsInfo()[""].TypesInfo[int32(tqtyp)].Stats
-		assert.GreaterOrEqual(t, stats.ApproximateBacklogAge.AsDuration(), 200*time.Millisecond)
+		require.GreaterOrEqual(t, stats.ApproximateBacklogAge.AsDuration(), 200*time.Millisecond)
 	}, 20*time.Second, 200*time.Millisecond)
 
 	actResp, err := feClient.PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{

@@ -10,6 +10,7 @@ import (
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -425,12 +426,12 @@ func (s *ScheduleFunctionalSuite) TestBasics() {
 					ScheduleId: sid,
 				},
 			)
-			assert.NoError(c, err)
-			assert.Len(c, describeResp.SearchAttributes.GetIndexedFields(), 3)
-			assert.Equal(c, schSAValue.Data, describeResp.SearchAttributes.IndexedFields[csaKeyword].Data)
-			assert.Equal(c, schSAIntValue.Data, describeResp.SearchAttributes.IndexedFields[csaInt].Data)
-			assert.Equal(c, schSADoubleValue.Data, describeResp.SearchAttributes.IndexedFields[csaDouble].Data)
-			assert.NotContains(c, describeResp.SearchAttributes.IndexedFields, csaBool)
+			require.NoError(c, err)
+			require.Len(c, describeResp.SearchAttributes.GetIndexedFields(), 3)
+			require.Equal(c, schSAValue.Data, describeResp.SearchAttributes.IndexedFields[csaKeyword].Data)
+			require.Equal(c, schSAIntValue.Data, describeResp.SearchAttributes.IndexedFields[csaInt].Data)
+			require.Equal(c, schSADoubleValue.Data, describeResp.SearchAttributes.IndexedFields[csaDouble].Data)
+			require.NotContains(c, describeResp.SearchAttributes.IndexedFields, csaBool)
 		},
 		2*time.Second,
 		500*time.Millisecond,
@@ -461,8 +462,8 @@ func (s *ScheduleFunctionalSuite) TestBasics() {
 					ScheduleId: sid,
 				},
 			)
-			assert.NoError(c, err)
-			assert.Empty(c, describeResp.SearchAttributes.GetIndexedFields())
+			require.NoError(c, err)
+			require.Empty(c, describeResp.SearchAttributes.GetIndexedFields())
 		},
 		5*time.Second,
 		500*time.Millisecond,

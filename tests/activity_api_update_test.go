@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	activitypb "go.temporal.io/api/activity/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -102,11 +103,9 @@ func (s *ActivityApiUpdateClientTestSuite) TestActivityUpdateApi_ChangeRetryInte
 
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
-		assert.NoError(t, err)
-		if description.GetPendingActivities() != nil {
-			assert.Len(t, description.GetPendingActivities(), 1)
-			assert.Equal(t, int32(1), startedActivityCount.Load())
-		}
+		require.NoError(t, err)
+		require.Len(t, description.GetPendingActivities(), 1)
+		require.Equal(t, int32(1), startedActivityCount.Load())
 	}, 10*time.Second, 500*time.Millisecond)
 
 	updateRequest := &workflowservice.UpdateActivityOptionsRequest{
@@ -134,11 +133,9 @@ func (s *ActivityApiUpdateClientTestSuite) TestActivityUpdateApi_ChangeRetryInte
 
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err = s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
-		assert.NoError(t, err)
-		if description.GetPendingActivities() != nil {
-			assert.Len(t, description.GetPendingActivities(), 0)
-			assert.Equal(t, int32(2), startedActivityCount.Load())
-		}
+		require.NoError(t, err)
+		require.Len(t, description.GetPendingActivities(), 0)
+		require.Equal(t, int32(2), startedActivityCount.Load())
 	}, 3*time.Second, 100*time.Millisecond)
 
 	var out string
@@ -180,11 +177,9 @@ func (s *ActivityApiUpdateClientTestSuite) TestActivityUpdateApi_ChangeScheduleT
 	// wait for activity to start (and fail)
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
-		assert.NoError(t, err)
-		if description.GetPendingActivities() != nil {
-			assert.Len(t, description.GetPendingActivities(), 1)
-			assert.Equal(t, int32(1), startedActivityCount.Load())
-		}
+		require.NoError(t, err)
+		require.Len(t, description.GetPendingActivities(), 1)
+		require.Equal(t, int32(1), startedActivityCount.Load())
 
 	}, 2*time.Second, 200*time.Millisecond)
 
@@ -207,11 +202,9 @@ func (s *ActivityApiUpdateClientTestSuite) TestActivityUpdateApi_ChangeScheduleT
 	// activity should fail immediately
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
-		assert.NoError(t, err)
-		if description.GetPendingActivities() != nil {
-			assert.Len(t, description.GetPendingActivities(), 0)
-			assert.Equal(t, int32(1), startedActivityCount.Load())
-		}
+		require.NoError(t, err)
+		require.Len(t, description.GetPendingActivities(), 0)
+		require.Equal(t, int32(1), startedActivityCount.Load())
 	}, 2*time.Second, 200*time.Millisecond)
 
 	var out string
@@ -264,7 +257,7 @@ func (s *ActivityApiUpdateClientTestSuite) TestActivityUpdateApi_ChangeScheduleT
 
 	// wait for activity to start (and fail)
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		assert.True(t, startedActivityCount.Load() > 0)
+		require.True(t, startedActivityCount.Load() > 0)
 	}, 2*time.Second, 200*time.Millisecond)
 
 	// update schedule_to_close_timeout, make it longer
@@ -296,11 +289,9 @@ func (s *ActivityApiUpdateClientTestSuite) TestActivityUpdateApi_ChangeScheduleT
 	// now activity should succeed
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
-		assert.NoError(t, err)
-		if description.GetPendingActivities() != nil {
-			assert.Len(t, description.GetPendingActivities(), 0)
-		}
-		assert.Equal(t, int32(2), startedActivityCount.Load())
+		require.NoError(t, err)
+		require.Len(t, description.GetPendingActivities(), 0)
+		require.Equal(t, int32(2), startedActivityCount.Load())
 	}, 5*time.Second, 200*time.Millisecond)
 
 	var out string
