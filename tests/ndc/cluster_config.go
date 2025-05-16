@@ -1,67 +1,46 @@
 package ndc
 
 import (
+	"fmt"
+
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/tests/testcore"
 )
 
-func clustersConfig() []*testcore.TestClusterConfig {
+func clustersConfig(clusterNames ...string) []*testcore.TestClusterConfig {
 	// TODO (alex): I don't know how many of these settings are really needed.
 
-	clusterInformation := map[string]cluster.ClusterInformation{
-		"cluster-a": {
-			Enabled:                true,
-			InitialFailoverVersion: 1,
-			RPCAddress:             "nowhere1:7134",
-		},
-		"cluster-b": {
-			Enabled:                true,
-			InitialFailoverVersion: 2,
-			RPCAddress:             "nowhere2:7134",
-		},
-		"cluster-c": {
-			Enabled:                true,
-			InitialFailoverVersion: 3,
-			RPCAddress:             "nowhere3:7134",
-		},
+	if len(clusterNames) < 2 {
+		//nolint:forbidigo // test code
+		panic("at least 2 clusters are needed for ndc tests")
 	}
 
-	return []*testcore.TestClusterConfig{
-		{
-			ClusterMetadata: cluster.Config{
-				EnableGlobalNamespace:    true,
-				FailoverVersionIncrement: 10,
-				MasterClusterName:        "cluster-a",
-				CurrentClusterName:       "cluster-a",
-				ClusterInformation:       clusterInformation,
-			},
-			HistoryConfig: testcore.HistoryConfig{
-				NumHistoryShards: 1,
-			},
-		},
-		{
-			ClusterMetadata: cluster.Config{
-				EnableGlobalNamespace:    true,
-				FailoverVersionIncrement: 10,
-				MasterClusterName:        "cluster-a",
-				CurrentClusterName:       "cluster-b",
-				ClusterInformation:       clusterInformation,
-			},
-			HistoryConfig: testcore.HistoryConfig{
-				NumHistoryShards: 1,
-			},
-		},
-		{
-			ClusterMetadata: cluster.Config{
-				EnableGlobalNamespace:    true,
-				FailoverVersionIncrement: 10,
-				MasterClusterName:        "cluster-a",
-				CurrentClusterName:       "cluster-c",
-				ClusterInformation:       clusterInformation,
-			},
-			HistoryConfig: testcore.HistoryConfig{
-				NumHistoryShards: 1,
-			},
-		},
+	clusterInformation := make(map[string]cluster.ClusterInformation, len(clusterNames))
+	for i, cn := range clusterNames {
+		clusterInformation[cn] = cluster.ClusterInformation{
+			Enabled:                true,
+			InitialFailoverVersion: int64(i + 1),
+			RPCAddress:             fmt.Sprintf("nowhere%d:7134", i+1),
+		}
 	}
+
+	var clusterConfigs []*testcore.TestClusterConfig
+
+	for i, cn := range clusterNames {
+		clusterConfig := &testcore.TestClusterConfig{
+			ClusterMetadata: cluster.Config{
+				EnableGlobalNamespace:    true,
+				FailoverVersionIncrement: 10,
+				MasterClusterName:        clusterNames[0], // the first one is always master.
+				CurrentClusterName:       cn,
+				ClusterInformation:       clusterInformation,
+			},
+			HistoryConfig: testcore.HistoryConfig{
+				NumHistoryShards: 1,
+			},
+		}
+		clusterConfigs = append(clusterConfigs, clusterConfig)
+	}
+
+	return clusterConfigs
 }

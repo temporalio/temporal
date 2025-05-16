@@ -69,7 +69,7 @@ func (s *NDCReplicationTaskBatchingTestSuite) SetupSuite() {
 	s.testClusterFactory = testcore.NewTestClusterFactory()
 	s.passiveClusterName = "cluster-b"
 
-	clusterConfigs := clustersConfig()
+	clusterConfigs := clustersConfig("cluster-a", "cluster-b")
 	passiveClusterConfig := clusterConfigs[1]
 	passiveClusterConfig.WorkerConfig = testcore.WorkerConfig{DisableWorker: true}
 	passiveClusterConfig.DynamicConfigOverrides = map[dynamicconfig.Key]any{
@@ -97,7 +97,6 @@ func (s *NDCReplicationTaskBatchingTestSuite) SetupSuite() {
 	passiveClusterConfig.MockAdminClient = s.mockAdminClient
 
 	passiveClusterConfig.ClusterMetadata.MasterClusterName = s.passiveClusterName
-	delete(passiveClusterConfig.ClusterMetadata.ClusterInformation, "cluster-c") // ndc_clusters.yaml has 3 clusters, but we only need 2 for this test
 	cluster, err := s.testClusterFactory.NewCluster(s.T(), passiveClusterConfig, log.With(s.logger, tag.ClusterName(clusterName[0])))
 	s.Require().NoError(err)
 	s.passtiveCluster = cluster

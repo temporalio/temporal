@@ -83,7 +83,7 @@ func (s *NDCFunctionalTestSuite) SetupSuite() {
 	s.serializer = serialization.NewSerializer()
 	s.testClusterFactory = testcore.NewTestClusterFactory()
 
-	clusterConfigs := clustersConfig()
+	clusterConfigs := clustersConfig("cluster-a", "cluster-b", "cluster-c")
 	clusterConfigs[0].WorkerConfig = testcore.WorkerConfig{DisableWorker: true}
 	clusterConfigs[1].WorkerConfig = testcore.WorkerConfig{DisableWorker: true}
 
