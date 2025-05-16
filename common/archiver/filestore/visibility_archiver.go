@@ -16,7 +16,9 @@ import (
 	archiverspb "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
 )
@@ -27,10 +29,11 @@ const (
 
 type (
 	visibilityArchiver struct {
-		container   *archiver.VisibilityBootstrapContainer
-		fileMode    os.FileMode
-		dirMode     os.FileMode
-		queryParser QueryParser
+		logger         log.Logger
+		metricsHandler metrics.Handler
+		fileMode       os.FileMode
+		dirMode        os.FileMode
+		queryParser    QueryParser
 	}
 
 	queryVisibilityToken struct {
@@ -48,7 +51,8 @@ type (
 
 // NewVisibilityArchiver creates a new archiver.VisibilityArchiver based on filestore
 func NewVisibilityArchiver(
-	container *archiver.VisibilityBootstrapContainer,
+	logger log.Logger,
+	metricsHandler metrics.Handler,
 	config *config.FilestoreArchiver,
 ) (archiver.VisibilityArchiver, error) {
 	fileMode, err := strconv.ParseUint(config.FileMode, 0, 32)
@@ -60,10 +64,11 @@ func NewVisibilityArchiver(
 		return nil, errInvalidDirMode
 	}
 	return &visibilityArchiver{
-		container:   container,
-		fileMode:    os.FileMode(fileMode),
-		dirMode:     os.FileMode(dirMode),
-		queryParser: NewQueryParser(),
+		logger:         logger,
+		metricsHandler: metricsHandler,
+		fileMode:       os.FileMode(fileMode),
+		dirMode:        os.FileMode(dirMode),
+		queryParser:    NewQueryParser(),
 	}, nil
 }
 
@@ -80,7 +85,7 @@ func (v *visibilityArchiver) Archive(
 		}
 	}()
 
-	logger := archiver.TagLoggerWithArchiveVisibilityRequestAndURI(v.container.Logger, request, URI.String())
+	logger := archiver.TagLoggerWithArchiveVisibilityRequestAndURI(v.logger, request, URI.String())
 
 	if err := v.ValidateURI(URI); err != nil {
 		logger.Error(archiver.ArchiveNonRetryableErrorMsg, tag.ArchivalArchiveFailReason(archiver.ErrReasonInvalidURI), tag.Error(err))

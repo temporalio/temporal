@@ -48,7 +48,7 @@ func (s *PollerScalingIntegSuite) SetupSuite() {
 		dynamicconfig.MatchingNumTaskqueueWritePartitions.Key():    1,
 		dynamicconfig.MatchingPollerScalingBacklogAgeScaleUp.Key(): 50 * time.Millisecond,
 	}
-	s.FunctionalTestBase.SetupSuiteWithDefaultCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
+	s.FunctionalTestBase.SetupSuiteWithCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 }
 
 func (s *PollerScalingIntegSuite) TestPollerScalingSimpleBacklog() {

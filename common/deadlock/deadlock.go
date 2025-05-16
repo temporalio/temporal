@@ -4,6 +4,7 @@ import (
 	"context"
 	"runtime/pprof"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"go.temporal.io/server/common/clock"
@@ -45,6 +46,9 @@ type (
 		roots          []pingable.Pingable
 		pools          []*goro.AdaptivePool
 		loops          goro.Group
+
+		// number of suspected deadlocks that have not resolved yet
+		current atomic.Int64
 	}
 
 	loopContext struct {
@@ -53,6 +57,11 @@ type (
 		p    *goro.AdaptivePool
 	}
 )
+
+// CurrentSuspected returns the number of currently unresolved suspected deadlocks.
+func (dd *deadlockDetector) CurrentSuspected() int64 {
+	return dd.current.Load()
+}
 
 func NewDeadlockDetector(params params) *deadlockDetector {
 	return &deadlockDetector{
@@ -102,6 +111,8 @@ func (dd *deadlockDetector) Stop() error {
 func (dd *deadlockDetector) detected(name string) {
 	dd.logger.Error("potential deadlock detected", tag.Name(name))
 
+	metrics.DDSuspectedDeadlocks.With(dd.metricsHandler).Record(1)
+
 	if dd.config.DumpGoroutines() {
 		dd.dumpGoroutines()
 	}
@@ -134,6 +145,11 @@ func (dd *deadlockDetector) dumpGoroutines() {
 	dd.logger.Info(b.String())
 }
 
+func (dd *deadlockDetector) adjustCurrent(delta int64) {
+	dd.current.Add(delta)
+	metrics.DDCurrentSuspectedDeadlocks.With(dd.metricsHandler).Record(float64(dd.current.Load()))
+}
+
 func (lc *loopContext) run(ctx context.Context) error {
 	for {
 		// ping blocks until it has passed all checks to a worker goroutine (using an
@@ -161,6 +177,7 @@ func (lc *loopContext) ping(ctx context.Context, pingables []pingable.Pingable) 
 func (lc *loopContext) check(ctx context.Context, check pingable.Check) {
 	lc.dd.logger.Debug("starting ping check", tag.Name(check.Name))
 	startTime := time.Now().UTC()
+	resolved := make(chan struct{})
 
 	// Using AfterFunc is cheaper than creating another goroutine to be the waiter, since
 	// we expect to always cancel it. If the go runtime is so messed up that it can't
@@ -170,13 +187,21 @@ func (lc *loopContext) check(ctx context.Context, check pingable.Check) {
 			// deadlock detector was stopped
 			return
 		}
+		lc.dd.adjustCurrent(1)
+
 		lc.dd.detected(check.Name)
+
+		// Wait and see if Ping() returns past the timeout. If it's a true deadlock, it'll
+		// block here forever.
+		<-resolved
+		lc.dd.adjustCurrent(-1)
 	})
 	newPingables := check.Ping()
 	t.Stop()
 	if len(check.MetricsName) > 0 {
 		lc.dd.metricsHandler.Timer(check.MetricsName).Record(time.Since(startTime))
 	}
+	close(resolved)
 
 	lc.dd.logger.Debug("ping check succeeded", tag.Name(check.Name))
 

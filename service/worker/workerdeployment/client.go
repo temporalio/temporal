@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/worker_versioning"
+	"go.temporal.io/server/service/history/consts"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -944,7 +945,8 @@ func (d *ClientImpl) update(
 
 	policy := backoff.NewExponentialRetryPolicy(100 * time.Millisecond)
 	isRetryable := func(err error) bool {
-		return errors.Is(err, errRetry)
+		// All updates that are admitted as the workflow is closing are considered retryable.
+		return errors.Is(err, errRetry) || err.Error() == consts.ErrWorkflowClosing.Error()
 	}
 
 	var outcome *updatepb.Outcome
@@ -1195,7 +1197,8 @@ func (d *ClientImpl) updateWithStart(
 
 	policy := backoff.NewExponentialRetryPolicy(100 * time.Millisecond)
 	isRetryable := func(err error) bool {
-		return errors.Is(err, errRetry)
+		// All updates that are admitted as the workflow is closing are considered retryable.
+		return errors.Is(err, errRetry) || err.Error() == consts.ErrWorkflowClosing.Error()
 	}
 	var outcome *updatepb.Outcome
 

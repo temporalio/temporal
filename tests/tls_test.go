@@ -24,7 +24,7 @@ func TestTLSFunctionalSuite(t *testing.T) {
 }
 
 func (s *TLSFunctionalSuite) SetupSuite() {
-	s.FunctionalTestBase.SetupSuiteWithDefaultCluster(testcore.WithMTLS())
+	s.FunctionalTestBase.SetupSuiteWithCluster(testcore.WithMTLS())
 }
 
 func (s *TLSFunctionalSuite) TearDownSuite() {
