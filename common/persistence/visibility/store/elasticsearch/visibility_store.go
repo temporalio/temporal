@@ -1051,7 +1051,6 @@ func (s *VisibilityStore) ParseESDoc(
 		if err != nil {
 			metrics.ElasticsearchDocumentParseFailuresCount.With(s.metricsHandler).Record(1)
 			return nil, serviceerror.NewInternalf(
-
 				"Unable to encode custom search attributes of Elasticsearch document(%s): %v",
 				docID,
 				err,
@@ -1076,7 +1075,6 @@ func (s *VisibilityStore) ParseESDoc(
 	} else if memo != nil {
 		metrics.ElasticsearchDocumentParseFailuresCount.With(s.metricsHandler).Record(1)
 		return nil, serviceerror.NewInternalf(
-
 			"%q field is missing in Elasticsearch document(%s)",
 			searchattribute.MemoEncoding,
 			docID,
@@ -1434,7 +1432,6 @@ func validateDatetime(value time.Time) error {
 func validateString(value string) error {
 	if len(value) > maxStringLength {
 		return serviceerror.NewInvalidArgumentf(
-
 			"strings with more than %d bytes are not supported (got string of len %d)",
 			maxStringLength,
 			len(value),

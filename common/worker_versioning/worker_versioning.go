@@ -357,6 +357,7 @@ func ValidateVersioningOverride(override *workflowpb.VersioningOverride) error {
 	case enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED:
 		return serviceerror.NewInvalidArgument("override behavior is required")
 	default:
+		//nolint:staticcheck // SA1019 deprecated stamp will clean up later
 		return serviceerror.NewInvalidArgumentf("override behavior %s not recognized", override.GetBehavior())
 	}
 	return nil

@@ -336,7 +336,6 @@ func validateTransientWorkflowTaskEvents(
 		expectedEventID := eventIDOffset + int64(i)
 		if event.GetEventId() != expectedEventID {
 			return serviceerror.NewInternalf(
-
 				"invalid transient workflow task at position %v; expected event ID %v, found event ID %v",
 				i,
 				expectedEventID,

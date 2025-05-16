@@ -64,7 +64,6 @@ func (v *Validator) Validate(searchAttributes *commonpb.SearchAttributes, namesp
 	lengthOfFields := len(searchAttributes.GetIndexedFields())
 	if lengthOfFields > v.searchAttributesNumberOfKeysLimit(namespace) {
 		return serviceerror.NewInvalidArgumentf(
-
 			"number of search attributes %d exceeds limit %d",
 			lengthOfFields,
 			v.searchAttributesNumberOfKeysLimit(namespace),
@@ -165,7 +164,6 @@ func (v *Validator) ValidateSize(searchAttributes *commonpb.SearchAttributes, na
 
 	if searchAttributes.Size() > v.searchAttributesTotalSizeLimit(namespace) {
 		return serviceerror.NewInvalidArgumentf(
-
 			"total size of search attributes %d exceeds size limit %d",
 			searchAttributes.Size(),
 			v.searchAttributesTotalSizeLimit(namespace),

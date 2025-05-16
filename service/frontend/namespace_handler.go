@@ -1067,17 +1067,15 @@ func validateReplicationStateUpdate(existingNamespace *persistence.GetNamespaceR
 
 	if existingNamespace.Namespace.Info.State != enumspb.NAMESPACE_STATE_REGISTERED {
 		return serviceerror.NewInvalidArgumentf(
-
 			"update ReplicationState is only supported when namespace is in %s state, current state: %s",
-			enumspb.NAMESPACE_STATE_REGISTERED.String(),
-			existingNamespace.Namespace.Info.State.String(),
+			enumspb.NAMESPACE_STATE_REGISTERED,
+			existingNamespace.Namespace.Info.State,
 		)
 	}
 
 	if nsUpdateRequest.ReplicationConfig.State == enumspb.REPLICATION_STATE_HANDOVER {
 		if !existingNamespace.IsGlobalNamespace {
 			return serviceerror.NewInvalidArgumentf(
-
 				"%s can only be set for global namespace",
 				enumspb.REPLICATION_STATE_HANDOVER,
 			)

@@ -122,7 +122,7 @@ var (
 
 var (
 	// ErrNamespaceHandover is error indicating namespace is in handover state and cannot process request.
-	ErrNamespaceHandover = serviceerror.NewUnavailablef("Namespace replication in %s state.", enumspb.REPLICATION_STATE_HANDOVER.String())
+	ErrNamespaceHandover = serviceerror.NewUnavailablef("Namespace replication in %s state.", enumspb.REPLICATION_STATE_HANDOVER)
 )
 
 // AwaitWaitGroup calls Wait on the given wait

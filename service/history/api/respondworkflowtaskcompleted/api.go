@@ -332,8 +332,8 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		wtFailedCause = newWorkflowTaskFailedCause(
 			enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_BINARY,
 			serviceerror.NewInvalidArgumentf(
-
 				"binary %v is marked as bad deployment",
+				//nolint:staticcheck // SA1019 deprecated stamp will clean up later
 				request.GetBinaryChecksum()),
 			false)
 	} else {

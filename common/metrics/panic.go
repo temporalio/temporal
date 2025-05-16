@@ -14,10 +14,10 @@ import (
 // And we have to set the returned error otherwise our handler will return nil as error which is incorrect
 func CapturePanic(logger log.Logger, metricHandler Handler, retError *error) {
 	//revive:disable-next-line:defer
-	if panicObj := recover(); panicObj != nil {
-		err, ok := panicObj.(error)
+	if pObj := recover(); pObj != nil {
+		err, ok := pObj.(error)
 		if !ok {
-			err = serviceerror.NewInternalf("panic: %v", panicObj)
+			err = serviceerror.NewInternalf("panic: %v", pObj)
 		}
 
 		st := string(debug.Stack())

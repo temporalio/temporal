@@ -290,10 +290,10 @@ func (e *executableImpl) Execute() (retErr error) {
 	}
 
 	defer func() {
-		if panicObj := recover(); panicObj != nil {
-			err, ok := panicObj.(error)
+		if pObj := recover(); pObj != nil {
+			err, ok := pObj.(error)
 			if !ok {
-				err = serviceerror.NewInternalf("panic: %v", panicObj)
+				err = serviceerror.NewInternalf("panic: %v", pObj)
 			}
 
 			e.logger.Error("Panic is captured", tag.SysStackTrace(string(debug.Stack())), tag.Error(err))
