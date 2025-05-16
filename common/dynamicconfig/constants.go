@@ -2443,6 +2443,11 @@ that task will be sent to DLQ.`,
 		500,
 		"History service health check on RPC average latency (millisecond) threshold",
 	)
+	HealthRPCErrorRatio = NewGlobalFloatSetting(
+		"history.healthRPCErrorRatio",
+		0.90,
+		"History service health check on RPC error ratio",
+	)
 	SendRawHistoryBetweenInternalServices = NewGlobalBoolSetting(
 		"history.sendRawHistoryBetweenInternalServices",
 		false,
