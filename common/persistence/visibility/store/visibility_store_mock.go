@@ -41,6 +41,20 @@ func (m *MockVisibilityStore) EXPECT() *MockVisibilityStoreMockRecorder {
 	return m.recorder
 }
 
+// AddSearchAttributes mocks base method.
+func (m *MockVisibilityStore) AddSearchAttributes(ctx context.Context, request *manager.AddSearchAttributesRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AddSearchAttributes", ctx, request)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// AddSearchAttributes indicates an expected call of AddSearchAttributes.
+func (mr *MockVisibilityStoreMockRecorder) AddSearchAttributes(ctx, request any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddSearchAttributes", reflect.TypeOf((*MockVisibilityStore)(nil).AddSearchAttributes), ctx, request)
+}
+
 // Close mocks base method.
 func (m *MockVisibilityStore) Close() {
 	m.ctrl.T.Helper()

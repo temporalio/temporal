@@ -516,3 +516,11 @@ func (s *VisibilityStore) processRowSearchAttributes(
 	}
 	return aliasedSas, nil
 }
+
+func (s *VisibilityStore) AddSearchAttributes(
+	ctx context.Context,
+	request *manager.AddSearchAttributesRequest,
+) error {
+	// SQL Visibility does not support modifying schema to add search attributes at this moment.
+	return serviceerror.NewUnimplemented("AddSearchAttributes operation not supported in SQL visibility")
+}
