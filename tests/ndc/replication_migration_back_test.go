@@ -3,7 +3,6 @@ package ndc
 import (
 	"context"
 	"fmt"
-	"os"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -32,12 +31,10 @@ import (
 	test "go.temporal.io/server/common/testing"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/history/replication/eventhandler"
-	"go.temporal.io/server/temporal/environment"
 	"go.temporal.io/server/tests/testcore"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
-	"gopkg.in/yaml.v3"
 )
 
 type (
@@ -75,16 +72,7 @@ func (s *ReplicationMigrationBackTestSuite) SetupSuite() {
 	s.testClusterFactory = testcore.NewTestClusterFactory()
 	s.passiveClusterName = "cluster-b"
 
-	fileName := "../testdata/ndc_clusters.yaml"
-	environment.SetupEnv()
-	s.standByTaskID = 0
-
-	confContent, err := os.ReadFile(fileName)
-	s.Require().NoError(err)
-	confContent = []byte(os.ExpandEnv(string(confContent)))
-
-	var clusterConfigs []*testcore.TestClusterConfig
-	s.Require().NoError(yaml.Unmarshal(confContent, &clusterConfigs))
+	clusterConfigs := clustersConfig()
 	passiveClusterConfig := clusterConfigs[1]
 	passiveClusterConfig.WorkerConfig = testcore.WorkerConfig{DisableWorker: true}
 	passiveClusterConfig.DynamicConfigOverrides = map[dynamicconfig.Key]any{
@@ -232,7 +220,7 @@ func (s *ReplicationMigrationBackTestSuite) longRunningMigrationBackReplicationT
 	runID string,
 	supplyBatchIndex int,
 	expectedRetrievingBatchesStartIndex int, // inclusive
-	expectedRetrievingBatchesEndIndex int, // exclusive
+	expectedRetrievingBatchesEndIndex int,   // exclusive
 ) {
 	eventBatches, history, err := GetEventBatchesFromTestEvents("migration_back_forth.json", "workflow_1")
 	s.Require().NoError(err)
