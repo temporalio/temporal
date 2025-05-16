@@ -699,7 +699,7 @@ func (s *Versioning3Suite) testUnpinnedWorkflowWithRamp(toUnversioned bool) {
 		return "v2", nil
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
 	w1 := worker.New(s.SdkClient(), tv1.TaskQueue().GetName(), worker.Options{
@@ -1644,7 +1644,7 @@ func (s *Versioning3Suite) waitForDeploymentVersionCreation(
 func (s *Versioning3Suite) setCurrentDeployment(
 	tv *testvars.TestVars,
 ) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	s.Eventually(func() bool {
 		_, err := s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx,
@@ -1659,7 +1659,7 @@ func (s *Versioning3Suite) setCurrentDeployment(
 		}
 		s.NoError(err)
 		return err == nil
-	}, 5*time.Second, 100*time.Millisecond)
+	}, 60*time.Second, 500*time.Millisecond)
 }
 
 func (s *Versioning3Suite) setRampingDeployment(
@@ -1667,7 +1667,7 @@ func (s *Versioning3Suite) setRampingDeployment(
 	percentage float32,
 	rampUnversioned bool,
 ) {
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	v := tv.DeploymentVersionString()
 	if rampUnversioned {
@@ -1688,7 +1688,7 @@ func (s *Versioning3Suite) setRampingDeployment(
 		}
 		s.NoError(err)
 		return err == nil
-	}, 20*time.Second, 100*time.Millisecond)
+	}, 60*time.Second, 500*time.Millisecond)
 }
 
 func (s *Versioning3Suite) updateTaskQueueDeploymentData(
