@@ -5746,22 +5746,10 @@ func (ms *MutableStateImpl) truncateRetryableActivityFailure(
 		return activityFailure
 	}
 
-	throttledLogger := log.With(
-		ms.shard.GetThrottledLogger(),
-		tag.WorkflowNamespace(namespaceName),
-		tag.WorkflowID(ms.executionInfo.WorkflowId),
-		tag.WorkflowRunID(ms.executionState.RunId),
-		tag.BlobSize(int64(failureSize)),
-		tag.BlobSizeViolationOperation("RetryActivity"),
-	)
-
 	sizeLimitError := ms.config.MutableStateActivityFailureSizeLimitError(namespaceName)
 	if failureSize <= sizeLimitError {
-		throttledLogger.Warn("Activity failure size exceeds warning limit for mutable state.")
 		return activityFailure
 	}
-
-	throttledLogger.Warn("Activity failure size exceeds error limit for mutable state, truncated.")
 
 	// nonRetryable is set to false here as only retryable failures are recorded in mutable state.
 	// also when this method is called, the check for isRetryable is already done, so the value
