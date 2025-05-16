@@ -1172,6 +1172,7 @@ type (
 		GetTaskQueuesByBuildId(ctx context.Context, request *GetTaskQueuesByBuildIdRequest) ([]string, error)
 		CountTaskQueuesByBuildId(ctx context.Context, request *CountTaskQueuesByBuildIdRequest) (int, error)
 	}
+	FairTaskManager TaskManager
 
 	// MetadataManager is used to manage metadata CRUD for namespace entities
 	MetadataManager interface {
