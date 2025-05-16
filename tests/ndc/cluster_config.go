@@ -26,7 +26,7 @@ func clustersConfig(clusterNames ...string) []*testcore.TestClusterConfig {
 
 	var clusterConfigs []*testcore.TestClusterConfig
 
-	for i, cn := range clusterNames {
+	for _, cn := range clusterNames {
 		clusterConfig := &testcore.TestClusterConfig{
 			ClusterMetadata: cluster.Config{
 				EnableGlobalNamespace:    true,
