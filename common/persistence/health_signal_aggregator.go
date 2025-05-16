@@ -127,6 +127,10 @@ func (s *HealthSignalAggregatorImpl) incrementShardRequestCount(shardID int32, n
 	s.requestCounts[shardID][namespace]++
 }
 
+// Traverse through all shards and get the per-namespace persistence RPS for all shards.
+// If that is over the limit, print a log line. Per-shard-per-namespace RPC limit for namespaces
+// is configured in dynamic config. This will allow us to see if some namespaces had hit
+// this limit in any of the shards.
 func (s *HealthSignalAggregatorImpl) emitMetricsLoop() {
 	for {
 		select {
