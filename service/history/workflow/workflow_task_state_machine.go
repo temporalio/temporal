@@ -1099,9 +1099,12 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 
 	//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
 	wftDeployment := attrs.GetDeployment()
-	if v := attrs.GetWorkerDeploymentVersion(); v != "" {
+	if v := attrs.GetWorkerDeploymentVersion(); v != "" { //nolint:staticcheck // SA1019: worker versioning v0.31
 		dv, _ := worker_versioning.WorkerDeploymentVersionFromString(v)
 		wftDeployment = worker_versioning.DeploymentFromDeploymentVersion(dv)
+	}
+	if v := attrs.GetDeploymentVersion(); v != nil {
+		wftDeployment = worker_versioning.DeploymentFromExternalDeploymentVersion(v)
 	}
 	wftBehavior := attrs.GetVersioningBehavior()
 	versioningInfo := m.ms.GetExecutionInfo().GetVersioningInfo()
@@ -1113,7 +1116,7 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 		// the transition started, the current wft was already started. In this case, we allow the
 		// started wft to run and when completed, we create another wft immediately.
 		if transition.GetDeployment().Equal(wftDeployment) {
-			versioningInfo.DeploymentTransition = nil
+			versioningInfo.DeploymentTransition = nil //nolint:staticcheck // SA1019: worker versioning v0.30
 			versioningInfo.VersionTransition = nil
 			transition = nil
 			completedTransition = true
@@ -1139,6 +1142,8 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 		if versioningInfo != nil {
 			versioningInfo.Behavior = wftBehavior
 			// Deployment Version is not set for unversioned workers.
+			versioningInfo.DeploymentVersion = nil
+			//nolint:staticcheck // SA1019 deprecated Version will clean up later
 			versioningInfo.Version = ""
 			//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
 			versioningInfo.Deployment = nil
@@ -1152,7 +1157,9 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 		// Only populating the new field.
 		//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
 		versioningInfo.Deployment = nil
+		//nolint:staticcheck // SA1019 deprecated Version will clean up later [cleanup-wv-3.1]
 		versioningInfo.Version = worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(wftDeployment))
+		versioningInfo.DeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(wftDeployment)
 	}
 
 	// Deployment and behavior after applying the data came from the completed wft.
@@ -1176,7 +1183,7 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 		}
 	}
 
-	// TODO: create reset point based on attrs.Deployment instead of the build ID.
+	// TODO(carlydf): create reset point based on attrs.Deployment instead of the build ID.
 	addedResetPoint := m.ms.addResetPointFromCompletion(
 		attrs.GetBinaryChecksum(),
 		attrs.GetWorkerVersion().GetBuildId(),

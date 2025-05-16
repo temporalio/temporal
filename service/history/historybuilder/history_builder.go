@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/worker_versioning"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -157,6 +158,7 @@ func (b *HistoryBuilder) AddWorkflowExecutionStartedEvent(
 	prevRunID string,
 	firstInChainRunID string,
 	originalRunID string,
+	parentVersioningInfo, previousRunVersioningInfo *historypb.WorkflowExecutionStartedEventAttributes_SourceWorkflowVersioningInfo,
 ) *historypb.HistoryEvent {
 	event := b.EventFactory.CreateWorkflowExecutionStartedEvent(
 		startTime,
@@ -165,6 +167,8 @@ func (b *HistoryBuilder) AddWorkflowExecutionStartedEvent(
 		prevRunID,
 		firstInChainRunID,
 		originalRunID,
+		parentVersioningInfo,
+		previousRunVersioningInfo,
 	)
 	if request.StartRequest.GetUserMetadata() != nil {
 		event.UserMetadata = request.StartRequest.GetUserMetadata()
@@ -402,7 +406,7 @@ func (b *HistoryBuilder) AddWorkflowExecutionOptionsUpdatedEvent(
 	links []*commonpb.Link,
 ) *historypb.HistoryEvent {
 	event := b.EventFactory.CreateWorkflowExecutionOptionsUpdatedEvent(
-		versioningOverride,
+		worker_versioning.ConvertOverrideToV32(versioningOverride),
 		unsetVersioningOverride,
 		attachRequestID,
 		attachCompletionCallbacks,
@@ -447,7 +451,6 @@ func (b *HistoryBuilder) AddContinuedAsNewEvent(
 	command *commandpb.ContinueAsNewWorkflowExecutionCommandAttributes,
 ) *historypb.HistoryEvent {
 	event := b.EventFactory.CreateContinuedAsNewEvent(workflowTaskCompletedEventID, newRunID, command)
-
 	event, _ = b.EventStore.add(event)
 	return event
 }
