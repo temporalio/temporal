@@ -130,6 +130,7 @@ type (
 		IsResetRun() bool
 		SetChildrenInitializedPostResetPoint(children map[string]*persistencespb.ResetChildInfo)
 		GetChildrenInitializedPostResetPoint() map[string]*persistencespb.ResetChildInfo
+		AttachRequestID(requestID string, eventType enumspb.EventType, eventID int64)
 
 		CloneToProto() *persistencespb.WorkflowMutableState
 		RetryActivity(ai *persistencespb.ActivityInfo, failure *failurepb.Failure) (enumspb.RetryState, error)
