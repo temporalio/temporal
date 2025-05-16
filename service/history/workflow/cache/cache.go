@@ -58,8 +58,6 @@ type (
 		finalizer *finalizer.Finalizer
 	}
 
-	NewCacheFn func(config *configs.Config, logger log.Logger, handler metrics.Handler) Cache
-
 	Key struct {
 		// Those are exported because some unit tests uses the cache directly.
 		// TODO: Update the unit tests and make those fields private.
@@ -87,24 +85,6 @@ func NewHostLevelCache(
 	maxSize := config.HistoryHostLevelCacheMaxSize()
 	if config.HistoryCacheLimitSizeBased {
 		maxSize = config.HistoryHostLevelCacheMaxSizeBytes()
-	}
-	return newCache(
-		maxSize,
-		config.HistoryCacheTTL(),
-		config.HistoryCacheNonUserContextLockTimeout(),
-		logger,
-		handler,
-	)
-}
-
-func NewShardLevelCache(
-	config *configs.Config,
-	logger log.Logger,
-	handler metrics.Handler,
-) Cache {
-	maxSize := config.HistoryShardLevelCacheMaxSize()
-	if config.HistoryCacheLimitSizeBased {
-		maxSize = config.HistoryShardLevelCacheMaxSizeBytes()
 	}
 	return newCache(
 		maxSize,
