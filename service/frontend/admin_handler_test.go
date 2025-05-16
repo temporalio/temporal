@@ -150,7 +150,6 @@ func (s *adminHandlerSuite) SetupTest() {
 		cfg,
 		s.mockResource.GetNamespaceReplicationQueue(),
 		s.mockProducer,
-		s.mockResource.ESClient,
 		s.mockVisibilityMgr,
 		s.mockResource.GetLogger(),
 		s.mockResource.GetTaskManager(),
@@ -338,7 +337,6 @@ func (s *adminHandlerSuite) Test_GetSearchAttributes_EmptyIndexName() {
 	s.mockVisibilityMgr.EXPECT().GetIndexName().Return("").AnyTimes()
 	mockSdkClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), "temporal-sys-add-search-attributes-workflow", "").Return(
 		&workflowservice.DescribeWorkflowExecutionResponse{}, nil)
-	s.mockResource.ESClient.EXPECT().GetMapping(gomock.Any(), "").Return(map[string]string{"col": "type"}, nil)
 	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("", true).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
 
 	resp, err = handler.GetSearchAttributes(ctx, &adminservice.GetSearchAttributesRequest{Namespace: s.namespace.String()})
@@ -359,7 +357,6 @@ func (s *adminHandlerSuite) Test_GetSearchAttributes_NonEmptyIndexName() {
 
 	mockSdkClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), "temporal-sys-add-search-attributes-workflow", "").Return(
 		&workflowservice.DescribeWorkflowExecutionResponse{}, nil)
-	s.mockResource.ESClient.EXPECT().GetMapping(gomock.Any(), "random-index-name").Return(map[string]string{"col": "type"}, nil)
 	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("random-index-name", true).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
 	resp, err := handler.GetSearchAttributes(ctx, &adminservice.GetSearchAttributesRequest{})
 	s.NoError(err)
@@ -367,7 +364,6 @@ func (s *adminHandlerSuite) Test_GetSearchAttributes_NonEmptyIndexName() {
 
 	mockSdkClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), "temporal-sys-add-search-attributes-workflow", "").Return(
 		&workflowservice.DescribeWorkflowExecutionResponse{}, nil)
-	s.mockResource.ESClient.EXPECT().GetMapping(gomock.Any(), "another-index-name").Return(map[string]string{"col": "type"}, nil)
 	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("another-index-name", true).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
 	resp, err = handler.GetSearchAttributes(ctx, &adminservice.GetSearchAttributesRequest{IndexName: "another-index-name"})
 	s.NoError(err)
@@ -375,7 +371,6 @@ func (s *adminHandlerSuite) Test_GetSearchAttributes_NonEmptyIndexName() {
 
 	mockSdkClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), "temporal-sys-add-search-attributes-workflow", "").Return(
 		nil, errors.New("random error"))
-	s.mockResource.ESClient.EXPECT().GetMapping(gomock.Any(), "random-index-name").Return(map[string]string{"col": "type"}, nil)
 	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("random-index-name", true).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
 	resp, err = handler.GetSearchAttributes(ctx, &adminservice.GetSearchAttributesRequest{Namespace: s.namespace.String()})
 	s.Error(err)

@@ -232,3 +232,13 @@ func (v *VisibilityManagerDual) GetWorkflowExecution(
 	}
 	return v.managerSelector.readManager(request.Namespace).GetWorkflowExecution(ctx, request)
 }
+
+func (v *VisibilityManagerDual) AddSearchAttributes(
+	ctx context.Context,
+	request *manager.AddSearchAttributesRequest,
+) error {
+	if err := v.visibilityManager.AddSearchAttributes(ctx, request); err != nil {
+		return err
+	}
+	return v.secondaryVisibilityManager.AddSearchAttributes(ctx, request)
+}

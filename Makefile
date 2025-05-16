@@ -503,6 +503,13 @@ install-schema-es:
 	curl -X PUT "http://127.0.0.1:9200/temporal_visibility_v1_dev" --write-out "\n"
 # curl -X PUT "http://127.0.0.1:9200/temporal_visibility_v1_secondary" --write-out "\n"
 
+install-schema-es-secondary:
+	@printf $(COLOR) "Install Elasticsearch schema..."
+	curl --fail -X PUT "http://127.0.0.1:8200/_cluster/settings" -H "Content-Type: application/json" --data-binary @./schema/elasticsearch/visibility/cluster_settings_v7.json --write-out "\n"
+	curl --fail -X PUT "http://127.0.0.1:8200/_template/temporal_visibility_v1_template" -H "Content-Type: application/json" --data-binary @./schema/elasticsearch/visibility/index_template_v7.json --write-out "\n"
+# No --fail here because create index is not idempotent operation.
+	curl -X PUT "http://127.0.0.1:8200/temporal_visibility_v1_secondary" --write-out "\n"
+
 install-schema-xdc: temporal-cassandra-tool
 	@printf $(COLOR)  "Install Cassandra schema (active)..."
 	./temporal-cassandra-tool drop -k temporal_cluster_a -f
@@ -542,6 +549,12 @@ start-dependencies:
 stop-dependencies:
 	docker compose $(DOCKER_COMPOSE_FILES) down
 
+start-dependencies-dual:
+	docker compose $(DOCKER_COMPOSE_FILES) -f ./develop/docker-compose/docker-compose.secondary-es.yml up
+
+stop-dependencies-dual:
+	docker compose $(DOCKER_COMPOSE_FILES) -f ./develop/docker-compose/docker-compose.secondary-es.yml down
+
 start-dependencies-cdc:
 	docker compose $(DOCKER_COMPOSE_FILES) $(DOCKER_COMPOSE_CDC_FILES) up
 
@@ -552,6 +565,9 @@ start: start-sqlite
 
 start-cass-es: temporal-server
 	./temporal-server --env development-cass-es --allow-no-auth start
+
+start-cass-es-dual: temporal-server
+	./temporal-server --env development-cass-es-dual --allow-no-auth start
 
 start-cass-es-custom: temporal-server
 	./temporal-server --env development-cass-es-custom --allow-no-auth start

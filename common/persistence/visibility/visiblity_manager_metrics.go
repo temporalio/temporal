@@ -167,6 +167,16 @@ func (m *visibilityManagerMetrics) GetWorkflowExecution(
 	return response, m.updateErrorMetric(handler, err)
 }
 
+func (m *visibilityManagerMetrics) AddSearchAttributes(
+	ctx context.Context,
+	request *manager.AddSearchAttributesRequest,
+) error {
+	handler, startTime := m.tagScope(metrics.VisibilityPersistenceAddSearchAttributesScope)
+	err := m.delegate.AddSearchAttributes(ctx, request)
+	metrics.VisibilityPersistenceLatency.With(handler).Record(time.Since(startTime))
+	return m.updateErrorMetric(handler, err)
+}
+
 func (m *visibilityManagerMetrics) tagScope(operation string) (metrics.Handler, time.Time) {
 	taggedHandler := m.metricHandler.WithTags(metrics.OperationTag(operation), m.visibilityPluginNameMetricsTag, m.visibilityIndexNameMetricsTag)
 	metrics.VisibilityPersistenceRequests.With(taggedHandler).Record(1)
