@@ -68,8 +68,5 @@ var (
 		dynamicconfig.RefreshNexusEndpointsMinWait.Key():                    1 * time.Millisecond,
 		nexusoperations.RecordCancelRequestCompletionEvents.Key():           true,
 		callbacks.AllowedAddresses.Key():                                    []any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
-
-		// TODO (alex): is it needed?
-		dynamicconfig.SecondaryVisibilityWritingMode.Key(): visibility.SecondaryVisibilityWritingModeDual,
 	}
 )
