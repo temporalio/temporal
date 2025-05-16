@@ -47,8 +47,7 @@ const (
 
 type (
 	DeploymentSuite struct {
-		testcore.FunctionalTestSuite
-		sdkClient sdkclient.Client
+		testcore.FunctionalTestBase
 	}
 )
 
@@ -78,25 +77,7 @@ func (s *DeploymentSuite) SetupSuite() {
 		dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace.Key(): maxConcurrentBatchOps,
 	}
 
-	s.FunctionalTestBase.SetupSuiteWithDefaultCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
-}
-
-func (s *DeploymentSuite) SetupTest() {
-	s.FunctionalTestSuite.SetupTest()
-
-	var err error
-	s.sdkClient, err = sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.FrontendGRPCAddress(),
-		Namespace: s.Namespace().String(),
-	})
-	s.NoError(err)
-}
-
-func (s *DeploymentSuite) TearDownTest() {
-	if s.sdkClient != nil {
-		s.sdkClient.Close()
-	}
-	s.FunctionalTestBase.TearDownTest()
+	s.FunctionalTestBase.SetupSuiteWithCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 }
 
 // pollFromDeployment calls PollWorkflowTaskQueue to start deployment related workflows
@@ -429,7 +410,7 @@ func (s *DeploymentSuite) TestGetDeploymentReachability_OverrideUnversioned() {
 
 	// start an unversioned workflow, set pinned deployment override --> deployment should be reachable
 	unversionedTQ := "unversioned-test-tq"
-	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: unversionedTQ}, "wf")
+	run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: unversionedTQ}, "wf")
 	s.NoError(err)
 	unversionedWFExec := &commonpb.WorkflowExecution{
 		WorkflowId: run.GetID(),
@@ -546,7 +527,7 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetUnpinnedThenUnse
 
 	tv := testvars.New(s)
 	// start an unversioned workflow
-	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tv.TaskQueue().Name}, "wf")
+	run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tv.TaskQueue().Name}, "wf")
 	s.NoError(err)
 	unversionedWFExec := &commonpb.WorkflowExecution{
 		WorkflowId: run.GetID(),
@@ -597,7 +578,7 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetPinnedThenUnset(
 
 	// start an unversioned workflow
 	unversionedTQ := "unversioned-test-tq"
-	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: unversionedTQ}, "wf")
+	run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: unversionedTQ}, "wf")
 	s.NoError(err)
 	unversionedWFExec := &commonpb.WorkflowExecution{
 		WorkflowId: run.GetID(),
@@ -654,7 +635,7 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_EmptyFields() {
 
 	// start an unversioned workflow
 	unversionedTQ := "unversioned-test-tq"
-	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: unversionedTQ}, "wf")
+	run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: unversionedTQ}, "wf")
 	s.NoError(err)
 	unversionedWFExec := &commonpb.WorkflowExecution{
 		WorkflowId: run.GetID(),
@@ -688,7 +669,7 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetPinnedSetPinned(
 	series := tv.DeploymentSeries()
 
 	// start an unversioned workflow
-	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq.GetName()}, "wf")
+	run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq.GetName()}, "wf")
 	s.NoError(err)
 	unversionedWFExec := &commonpb.WorkflowExecution{
 		WorkflowId: run.GetID(),
@@ -754,7 +735,7 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetUnpinnedSetUnpin
 	tq := tv.TaskQueue()
 
 	// start an unversioned workflow
-	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq.GetName()}, "wf")
+	run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq.GetName()}, "wf")
 	s.NoError(err)
 	unversionedWFExec := &commonpb.WorkflowExecution{
 		WorkflowId: run.GetID(),
@@ -800,7 +781,7 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetUnpinnedSetPinne
 
 	// start an unversioned workflow
 	unversionedTQ := "unversioned-test-tq"
-	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq.GetName()}, "wf")
+	run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq.GetName()}, "wf")
 	s.NoError(err)
 	unversionedWFExec := &commonpb.WorkflowExecution{
 		WorkflowId: run.GetID(),
@@ -859,7 +840,7 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetPinnedSetUnpinne
 	series := tv.DeploymentSeries()
 
 	// start an unversioned workflow
-	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq.GetName()}, "wf")
+	run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq.GetName()}, "wf")
 	s.NoError(err)
 	unversionedWFExec := &commonpb.WorkflowExecution{
 		WorkflowId: run.GetID(),
@@ -938,7 +919,7 @@ func (s *DeploymentSuite) TestBatchUpdateWorkflowExecutionOptions_SetPinnedThenU
 	workflowType := "batch-test-type"
 	workflows := make([]*commonpb.WorkflowExecution, 0)
 	for i := 0; i < 5; i++ {
-		run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq.GetName()}, workflowType)
+		run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq.GetName()}, workflowType)
 		s.NoError(err)
 		workflows = append(workflows, &commonpb.WorkflowExecution{
 			WorkflowId: run.GetID(),

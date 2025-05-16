@@ -27,7 +27,6 @@ import (
 	"go.temporal.io/server/common/namespace/nsmanager"
 	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/util"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -687,6 +686,14 @@ func (d *namespaceHandler) CreateWorkflowRule(
 
 	if config.WorkflowRules == nil {
 		config.WorkflowRules = make(map[string]*rulespb.WorkflowRule)
+	} else {
+		maxRules := d.config.MaxWorkflowRulesPerNamespace(nsName)
+		if len(config.WorkflowRules) >= maxRules {
+			d.removeOldestExpiredWorkflowRule(config.WorkflowRules)
+		}
+		if len(config.WorkflowRules) >= maxRules {
+			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Workflow Rule limit exceeded. Max: %v", maxRules))
+		}
 	}
 
 	_, ok := config.WorkflowRules[ruleSpec.GetId()]
@@ -720,6 +727,29 @@ func (d *namespaceHandler) CreateWorkflowRule(
 	}
 
 	return workflowRule, nil
+}
+
+func (d *namespaceHandler) removeOldestExpiredWorkflowRule(rules map[string]*rulespb.WorkflowRule) {
+	oldestTime := d.timeSource.Now()
+	var oldestKey string
+	found := false
+
+	for key, rule := range rules {
+		expirationTime := rule.GetSpec().GetExpirationTime()
+		if expirationTime == nil {
+			continue
+		}
+		if !found || expirationTime.AsTime().Before(oldestTime) {
+			oldestTime = expirationTime.AsTime()
+			oldestKey = key
+			found = true
+		}
+	}
+
+	if found {
+		d.logger.Info(fmt.Sprintf("Removed expired workflow rule %s", oldestKey))
+		delete(rules, oldestKey)
+	}
 }
 
 func (d *namespaceHandler) DescribeWorkflowRule(
@@ -953,12 +983,12 @@ func (d *namespaceHandler) validateHistoryArchivalURI(URIString string) error {
 		return err
 	}
 
-	archiver, err := d.archiverProvider.GetHistoryArchiver(URI.Scheme(), string(primitives.FrontendService))
+	a, err := d.archiverProvider.GetHistoryArchiver(URI.Scheme())
 	if err != nil {
 		return err
 	}
 
-	return archiver.ValidateURI(URI)
+	return a.ValidateURI(URI)
 }
 
 func (d *namespaceHandler) validateVisibilityArchivalURI(URIString string) error {
@@ -967,12 +997,12 @@ func (d *namespaceHandler) validateVisibilityArchivalURI(URIString string) error
 		return err
 	}
 
-	archiver, err := d.archiverProvider.GetVisibilityArchiver(URI.Scheme(), string(primitives.FrontendService))
+	a, err := d.archiverProvider.GetVisibilityArchiver(URI.Scheme())
 	if err != nil {
 		return err
 	}
 
-	return archiver.ValidateURI(URI)
+	return a.ValidateURI(URI)
 }
 
 // maybeUpdateFailoverHistory adds an entry if the Namespace is becoming active in a new cluster.

@@ -94,9 +94,9 @@ type (
 	}
 
 	waitCatchupRequest struct {
-		ActiveCluster string
-		RemoteCluster string
-		Namespace     string
+		TargetCluster  string
+		CatchupCluster string
+		Namespace      string
 	}
 
 	activities struct {
@@ -883,6 +883,8 @@ func (a *activities) VerifyReplicationTasks(ctx context.Context, request *verify
 	}
 }
 
+// WaitCatchup waits for the CatchupCluster to catch necessary data from the current cluster,
+// ensuring it has caught up to the TargetCluster's ack level for the specified namespace.
 func (a *activities) WaitCatchup(ctx context.Context, params CatchUpParams) error {
 	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(params.Namespace, headers.CallerTypeAPI, ""))
 
@@ -893,19 +895,24 @@ func (a *activities) WaitCatchup(ctx context.Context, params CatchUpParams) erro
 		return err
 	}
 
-	waitCatchupRequest := waitCatchupRequest{
-		Namespace:     params.Namespace,
-		RemoteCluster: params.RemoteCluster,
-		ActiveCluster: descResp.ReplicationConfig.GetActiveClusterName(),
+	targetCluster := params.TargetCluster
+	if targetCluster == "" {
+		targetCluster = descResp.ReplicationConfig.GetActiveClusterName()
 	}
 
-	activeAckIDOnShard, err := a.getActiveClusterReplicationStatus(ctx, waitCatchupRequest)
+	waitCatchupRequest := waitCatchupRequest{
+		Namespace:      params.Namespace,
+		CatchupCluster: params.CatchupCluster,
+		TargetCluster:  targetCluster,
+	}
+
+	targetAckIDOnShard, err := a.getTargetClusterReplicationStatus(ctx, waitCatchupRequest)
 	if err != nil {
 		return err
 	}
 
 	for {
-		done, err := a.checkReplicationOnRemoteCluster(ctx, waitCatchupRequest, activeAckIDOnShard)
+		done, err := a.checkReplicationOnRemoteCluster(ctx, waitCatchupRequest, targetAckIDOnShard)
 		if err != nil {
 			return err
 		}
@@ -919,48 +926,48 @@ func (a *activities) WaitCatchup(ctx context.Context, params CatchUpParams) erro
 	}
 }
 
-// Check if remote cluster has caught up on all shards on replication tasks from passive replica.
-func (a *activities) getActiveClusterReplicationStatus(ctx context.Context, waitRequest waitCatchupRequest) (map[int32]int64, error) {
-	activeAckIDOnShard := make(map[int32]int64)
+// Check if remote cluster has caught up on all shards on replication tasks from target replica.
+func (a *activities) getTargetClusterReplicationStatus(ctx context.Context, waitRequest waitCatchupRequest) (map[int32]int64, error) {
+	targetAckIDOnShard := make(map[int32]int64)
 
 	resp, err := a.historyClient.GetReplicationStatus(ctx, &historyservice.GetReplicationStatusRequest{
-		RemoteClusters: []string{waitRequest.ActiveCluster},
+		RemoteClusters: []string{waitRequest.TargetCluster},
 	})
 	if err != nil {
-		return activeAckIDOnShard, err
+		return targetAckIDOnShard, err
 	}
 
 	// record the acked task id from active for each shard
 	for _, shard := range resp.Shards {
-		activeInfo, hasActiveInfo := shard.RemoteClusters[waitRequest.ActiveCluster]
+		activeInfo, hasActiveInfo := shard.RemoteClusters[waitRequest.TargetCluster]
 		if hasActiveInfo {
-			activeAckIDOnShard[shard.ShardId] = activeInfo.AckedTaskId
+			targetAckIDOnShard[shard.ShardId] = activeInfo.AckedTaskId
 		}
 	}
 
-	return activeAckIDOnShard, nil
+	return targetAckIDOnShard, nil
 }
 
-// Check if remote cluster has caught up on all shards on replication tasks from passive replica.
-func (a *activities) checkReplicationOnRemoteCluster(ctx context.Context, waitRequest waitCatchupRequest, activeAckIDOnShard map[int32]int64) (bool, error) {
+// Check if remote cluster has caught up on all shards on replication tasks from target replica.
+func (a *activities) checkReplicationOnRemoteCluster(ctx context.Context, waitRequest waitCatchupRequest, targetAckIDOnShard map[int32]int64) (bool, error) {
 
 	resp, err := a.historyClient.GetReplicationStatus(ctx, &historyservice.GetReplicationStatusRequest{
-		RemoteClusters: []string{waitRequest.RemoteCluster},
+		RemoteClusters: []string{waitRequest.CatchupCluster},
 	})
 	if err != nil {
 		return false, err
 	}
 
-	expectedShardCount := len(activeAckIDOnShard)
+	expectedShardCount := len(targetAckIDOnShard)
 
 	readyShardCount := 0
 	logged := false
 	// check that on every shard, all source clusters have caught up with target cluster
 	for _, shard := range resp.Shards {
-		clusterInfo, hasClusterInfo := shard.RemoteClusters[waitRequest.RemoteCluster]
+		clusterInfo, hasClusterInfo := shard.RemoteClusters[waitRequest.CatchupCluster]
 		if hasClusterInfo {
-			value, exists := activeAckIDOnShard[shard.ShardId]
-			// If the active acked task ID is not found, the shard is considered ready, as the remote ack level
+			value, exists := targetAckIDOnShard[shard.ShardId]
+			// If the target acked task ID is not found, the shard is considered ready, as the remote ack level
 			// is assumed to be more up-to-date than the active ack level.
 			if !exists {
 				readyShardCount++
@@ -976,17 +983,17 @@ func (a *activities) checkReplicationOnRemoteCluster(ctx context.Context, waitRe
 		if !logged {
 			logged = true
 			if !hasClusterInfo {
-				a.logger.Info("Wait handover missing remote cluster info", tag.ShardID(shard.ShardId), tag.ClusterName(waitRequest.RemoteCluster))
+				a.logger.Info("Wait handover missing remote cluster info", tag.ShardID(shard.ShardId), tag.ClusterName(waitRequest.CatchupCluster))
 				// this is not expected, so fail activity to surface the error, but retryPolicy will keep retrying.
-				return false, temporal.NewNonRetryableApplicationError(fmt.Sprintf("GetReplicationStatus response for shard %d does not contains remote cluster %s", shard.ShardId, waitRequest.RemoteCluster), "", nil)
+				return false, temporal.NewNonRetryableApplicationError(fmt.Sprintf("GetReplicationStatus response for shard %d does not contains remote cluster %s", shard.ShardId, waitRequest.CatchupCluster), "", nil)
 			}
 
 			a.logger.Info("Wait handover not ready",
 				tag.NewInt32("ShardId", shard.ShardId),
 				tag.NewInt64("AckedTaskId", clusterInfo.AckedTaskId),
 				tag.NewStringTag("Namespace", waitRequest.Namespace),
-				tag.NewStringTag("RemoteCluster", waitRequest.RemoteCluster),
-				tag.NewInt64("activeAckIDOnShard", activeAckIDOnShard[shard.ShardId]),
+				tag.NewStringTag("CatchupCluster", waitRequest.CatchupCluster),
+				tag.NewInt64("targetAckIDOnShard", targetAckIDOnShard[shard.ShardId]),
 			)
 
 		}

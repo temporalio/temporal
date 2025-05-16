@@ -12,6 +12,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -26,6 +27,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/util"
+	"go.temporal.io/server/service/history/api/updateworkflowoptions"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -64,6 +66,7 @@ type (
 			additionalReapplyEvents []*historypb.HistoryEvent,
 			resetReapplyExcludeTypes map[enumspb.ResetReapplyExcludeType]struct{},
 			allowResetWithPendingChildren bool,
+			postResetOperations []*workflowpb.PostResetOperation,
 		) error
 	}
 
@@ -119,6 +122,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 	additionalReapplyEvents []*historypb.HistoryEvent,
 	resetReapplyExcludeTypes map[enumspb.ResetReapplyExcludeType]struct{},
 	allowResetWithPendingChildren bool,
+	postResetOperations []*workflowpb.PostResetOperation,
 ) (retError error) {
 
 	namespaceEntry, err := r.namespaceRegistry.GetNamespaceByID(namespaceID)
@@ -222,6 +226,10 @@ func (r *workflowResetterImpl) ResetWorkflow(
 		return err
 	}
 	if _, err := r.reapplyEvents(ctx, resetMS, additionalReapplyEvents, nil); err != nil {
+		return err
+	}
+
+	if err := r.performPostResetOperations(ctx, resetMS, postResetOperations); err != nil {
 		return err
 	}
 
@@ -1135,4 +1143,18 @@ func (r *workflowResetterImpl) shouldExcludeAllReapplyEvents(excludeTypes map[en
 		}
 	}
 	return true
+}
+
+// performPostResetOperations performs the optional post reset operations on the reset workflow.
+func (r *workflowResetterImpl) performPostResetOperations(ctx context.Context, resetMS historyi.MutableState, postResetOperations []*workflowpb.PostResetOperation) error {
+	for _, operation := range postResetOperations {
+		switch op := operation.GetVariant().(type) {
+		case *workflowpb.PostResetOperation_UpdateWorkflowOptions_:
+			_, _, err := updateworkflowoptions.MergeAndApply(resetMS, op.UpdateWorkflowOptions.GetWorkflowExecutionOptions(), op.UpdateWorkflowOptions.GetUpdateMask())
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
