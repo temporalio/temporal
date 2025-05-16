@@ -1,3 +1,8 @@
+// This file is a copy of common/persistence/health_signal_aggregator.go
+// with the following changes:
+// - We don't emit metrics for history service, because this is already handled by metrics.ServiceLatency.
+// - We don't have per-method RPS warn limit.
+
 package history
 
 import (
@@ -10,7 +15,6 @@ import (
 	"go.temporal.io/server/common/aggregate"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 )
 
@@ -143,20 +147,7 @@ func (s *HealthSignalAggregatorImpl) emitMetricsLoop() {
 		case <-s.shutdownCh:
 			return
 		case <-s.emitMetricsTimer.C:
-			s.requestsLock.Lock()
-			requestCounts := s.requestCounts
-			s.requestCounts = make(map[string]int64, len(requestCounts))
-			s.requestsLock.Unlock()
-
-			for method, count := range requestCounts {
-				methodRPS := int64(float64(count) / emitMetricsInterval.Seconds())
-				s.metricsHandler.Histogram(HistoryServiceRPS.Name(), HistoryServiceRPS.Unit()).Record(methodRPS)
-				if methodRPS > int64(s.perMethodRPSWarnLimit()) {
-					s.logger.Warn("Per method RPS warn limit exceeded",
-						tag.NewStringTag("method", method),
-						tag.NewInt64("rps", methodRPS))
-				}
-			}
+			// noop. We already emit metrics via metrics.ServiceLatency. This service is used by DeepHealthCheck in-memory metrics.
 		}
 	}
 }
