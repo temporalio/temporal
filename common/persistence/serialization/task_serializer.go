@@ -1154,6 +1154,7 @@ func (s *TaskSerializer) replicationActivityTaskToProto(
 		BranchToken:       nil,
 		NewRunBranchToken: nil,
 		VisibilityTime:    timestamppb.New(activityTask.VisibilityTimestamp),
+		TargetClusters:    activityTask.TargetClusters,
 	}
 }
 
@@ -1174,6 +1175,7 @@ func (s *TaskSerializer) replicationActivityTaskFromProto(
 		Version:             activityTask.Version,
 		TaskID:              activityTask.TaskId,
 		ScheduledEventID:    activityTask.ScheduledEventId,
+		TargetClusters:      activityTask.TargetClusters,
 	}
 }
 
@@ -1194,6 +1196,7 @@ func (s *TaskSerializer) replicationHistoryTaskToProto(
 		NewRunBranchToken: historyTask.NewRunBranchToken,
 		NewRunId:          historyTask.NewRunID,
 		VisibilityTime:    timestamppb.New(historyTask.VisibilityTimestamp),
+		TargetClusters:    historyTask.TargetClusters,
 	}
 }
 
@@ -1218,6 +1221,7 @@ func (s *TaskSerializer) replicationHistoryTaskFromProto(
 		BranchToken:         historyTask.BranchToken,
 		NewRunBranchToken:   historyTask.NewRunBranchToken,
 		NewRunID:            historyTask.NewRunId,
+		TargetClusters:      historyTask.TargetClusters,
 	}
 }
 
@@ -1301,6 +1305,7 @@ func (s *TaskSerializer) replicationSyncHSMTaskToProto(
 		TaskType:       enumsspb.TASK_TYPE_REPLICATION_SYNC_HSM,
 		TaskId:         syncHSMTask.TaskID,
 		VisibilityTime: timestamppb.New(syncHSMTask.VisibilityTimestamp),
+		TargetClusters: syncHSMTask.TargetClusters,
 	}
 }
 
@@ -1319,6 +1324,7 @@ func (s *TaskSerializer) replicationSyncHSMTaskFromProto(
 		),
 		VisibilityTimestamp: visibilityTimestamp,
 		TaskID:              syncHSMTask.TaskId,
+		TargetClusters:      syncHSMTask.TargetClusters,
 	}
 }
 
@@ -1348,6 +1354,7 @@ func (s *TaskSerializer) replicationSyncVersionedTransitionTaskToProto(
 		NewRunId:               syncVersionedTransitionTask.NewRunID,
 		LastVersionHistoryItem: syncVersionedTransitionTask.LastVersionHistoryItem,
 		IsFirstTask:            syncVersionedTransitionTask.IsFirstTask,
+		TargetClusters:         syncVersionedTransitionTask.TargetClusters,
 		TaskEquivalents:        taskInfoEquivalents,
 	}, nil
 }
@@ -1385,6 +1392,7 @@ func (s *TaskSerializer) replicationSyncVersionedTransitionTaskFromProto(
 		LastVersionHistoryItem: syncVersionedTransitionTask.LastVersionHistoryItem,
 		TaskEquivalents:        taskEquivalents,
 		IsFirstTask:            syncVersionedTransitionTask.IsFirstTask,
+		TargetClusters:         syncVersionedTransitionTask.TargetClusters,
 	}, nil
 }
 
