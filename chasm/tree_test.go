@@ -239,7 +239,7 @@ func (s *nodeSuite) TestSerializeNode_DataAttributes() {
 	s.Equal(valueStateSynced, node.valueState)
 }
 
-func (s *nodeSuite) TestCollectionAttributes() {
+func (s *nodeSuite) TestCollectionAttributes_StringKey() {
 	tv := testvars.New(s.T())
 
 	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(1)).AnyTimes()
@@ -266,7 +266,7 @@ func (s *nodeSuite) TestCollectionAttributes() {
 		s.NoError(err)
 
 		rootComponent := &TestComponent{
-			SubComponents: Collection[*TestSubComponent1]{
+			SubComponents: Collection[string, *TestSubComponent1]{
 				"SubComponent1": NewComponentField[*TestSubComponent1](nil, sc1),
 				"SubComponent2": NewComponentField[*TestSubComponent1](nil, sc2),
 			},
@@ -360,6 +360,136 @@ func (s *nodeSuite) TestCollectionAttributes() {
 		rootNode.valueState = valueStateNeedSerialize
 		delete(rootComponent.SubComponents, "SubComponent1")
 		delete(rootComponent.SubComponents, "SubComponent2")
+
+		// Now map is empty and must be deleted.
+		emptyCollectionMutations, err := rootNode.CloseTransaction()
+		s.NoError(err)
+		s.Len(emptyCollectionMutations.UpdatedNodes, 1, "although root component is not updated, collection is tracked as part of component, therefore root must be updated")
+		s.Len(emptyCollectionMutations.DeletedNodes, 3, "collection and 2 items must be deleted")
+	})
+}
+
+func (s *nodeSuite) TestCollectionAttributes_IntKey() {
+	tv := testvars.New(s.T())
+
+	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(1)).AnyTimes()
+	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(1)).AnyTimes()
+	s.nodeBackend.EXPECT().UpdateWorkflowStateStatus(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+	s.nodeBackend.EXPECT().GetWorkflowKey().Return(tv.Any().WorkflowKey()).AnyTimes()
+
+	sc1 := &TestSubComponent1{
+		SubComponent1Data: &protoMessageType{
+			RunId: tv.WithWorkflowIDNumber(1).WorkflowID(),
+		},
+	}
+	sc2 := &TestSubComponent1{
+		SubComponent1Data: &protoMessageType{
+			RunId: tv.WithWorkflowIDNumber(2).WorkflowID(),
+		},
+	}
+
+	var persistedNodes map[string]*persistencespb.ChasmNode
+
+	s.Run("Sync and serialize component with collection", func() {
+		var nilSerializedNodes map[string]*persistencespb.ChasmNode
+		rootNode, err := NewTree(nilSerializedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+		s.NoError(err)
+
+		rootComponent := &TestComponent{
+			PendingActivities: Collection[int, *TestSubComponent1]{
+				1: NewComponentField[*TestSubComponent1](nil, sc1),
+				2: NewComponentField[*TestSubComponent1](nil, sc2),
+			},
+		}
+		rootNode.value = rootComponent
+		rootNode.valueState = valueStateNeedSerialize
+
+		mutations, err := rootNode.CloseTransaction()
+		s.NoError(err)
+		s.Len(mutations.UpdatedNodes, 4, "root, collection, and 2 collection items must be updated")
+		s.Empty(mutations.DeletedNodes)
+
+		s.NotEmpty(rootNode.children["PendingActivities"].children["1"].serializedNode.GetData().GetData())
+		s.NotEmpty(rootNode.children["PendingActivities"].children["2"].serializedNode.GetData().GetData())
+
+		// Save it use in other subtests.
+		persistedNodes = common.CloneProtoMap(mutations.UpdatedNodes)
+	})
+
+	s.NotNil(persistedNodes)
+
+	s.Run("Deserialize component with collection", func() {
+		rootNode, err := NewTree(persistedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+		s.NoError(err)
+
+		err = rootNode.deserialize(reflect.TypeFor[*TestComponent]())
+		s.NoError(err)
+
+		rootComponent := rootNode.value.(*TestComponent)
+
+		s.NotNil(rootComponent.PendingActivities)
+		s.Len(rootComponent.PendingActivities, 2)
+
+		chasmContext := NewMutableContext(context.Background(), rootNode)
+		sc1Des, err := rootComponent.PendingActivities[1].Get(chasmContext)
+		s.NoError(err)
+		s.Equal(sc1.SubComponent1Data.GetRunId(), sc1Des.SubComponent1Data.GetRunId())
+
+		sc2Des, err := rootComponent.PendingActivities[2].Get(chasmContext)
+		s.NoError(err)
+		s.Equal(sc2.SubComponent1Data.GetRunId(), sc2Des.SubComponent1Data.GetRunId())
+	})
+
+	s.Run("Clear collection by setting it to nil", func() {
+		rootNode, err := NewTree(persistedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+		s.NoError(err)
+
+		err = rootNode.deserialize(reflect.TypeFor[*TestComponent]())
+		s.NoError(err)
+
+		rootComponent := rootNode.value.(*TestComponent)
+
+		rootNode.valueState = valueStateNeedSerialize
+		rootComponent.PendingActivities = nil
+
+		setCollectionNilMutations, err := rootNode.CloseTransaction()
+		s.NoError(err)
+		s.Len(setCollectionNilMutations.UpdatedNodes, 1, "although root component is not updated, collection is tracked as part of component, therefore root must be updated")
+		s.Len(setCollectionNilMutations.DeletedNodes, 3, "collection and 2 collection items must be deleted")
+	})
+
+	s.Run("Delete single collection item", func() {
+		rootNode, err := NewTree(persistedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+		s.NoError(err)
+
+		err = rootNode.deserialize(reflect.TypeFor[*TestComponent]())
+		s.NoError(err)
+
+		rootComponent := rootNode.value.(*TestComponent)
+
+		// Delete collection item 1.
+		rootNode.valueState = valueStateNeedSerialize
+		delete(rootComponent.PendingActivities, 1)
+
+		deleteCollectionItemMutations, err := rootNode.CloseTransaction()
+		s.NoError(err)
+		s.Len(deleteCollectionItemMutations.UpdatedNodes, 1, "although root component is not updated, collection is tracked as part of component, therefore root must be updated")
+		s.Len(deleteCollectionItemMutations.DeletedNodes, 1, "collection item 1 must be deleted")
+	})
+
+	s.Run("Clear collection by deleting all items", func() {
+		rootNode, err := NewTree(persistedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+		s.NoError(err)
+
+		err = rootNode.deserialize(reflect.TypeFor[*TestComponent]())
+		s.NoError(err)
+
+		rootComponent := rootNode.value.(*TestComponent)
+
+		// Delete both collection items.
+		rootNode.valueState = valueStateNeedSerialize
+		delete(rootComponent.PendingActivities, 1)
+		delete(rootComponent.PendingActivities, 2)
 
 		// Now map is empty and must be deleted.
 		emptyCollectionMutations, err := rootNode.CloseTransaction()

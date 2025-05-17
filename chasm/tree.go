@@ -9,6 +9,7 @@ import (
 	"iter"
 	"reflect"
 	"slices"
+	"strconv"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -571,7 +572,7 @@ func (n *Node) syncSubComponentsInternal(
 
 			// Validate collection type
 			if field.val.Kind() != reflect.Map {
-				return serviceerror.NewInternal(fmt.Sprintf("CHASM collection must be of map[string]Field[T] type: value of %s is not of a map type", n.nodeName))
+				return serviceerror.NewInternalf("CHASM collection must be of map[comparable]Field[T] type: value of %s is not of a map type", n.nodeName)
 			}
 
 			if len(field.val.MapKeys()) == 0 {
@@ -579,21 +580,19 @@ func (n *Node) syncSubComponentsInternal(
 				continue
 			}
 
-			if field.typ.Key().Kind() != reflect.String {
-				return serviceerror.NewInternal(fmt.Sprintf("CHASM collection must be of map[string]Field[T] type: %s map key type is not string but %s", n.nodeName, field.typ.Key()))
-			}
-
 			collectionValT := field.typ.Elem()
 			if collectionValT.Kind() != reflect.Struct || genericTypePrefix(collectionValT) != chasmFieldTypePrefix {
-				return serviceerror.NewInternal(fmt.Sprintf("CHASM collection must be of map[string]Field[T] type: %s map value type is not Field[T] but %s", n.nodeName, collectionValT))
+				return serviceerror.NewInternalf("CHASM collection must be of map[comparable]Field[T] type: %s map value type is not Field[T] but %s", n.nodeName, collectionValT)
 			}
 
 			collectionItemsToKeep := make(map[string]struct{})
 			for _, collectionKeyV := range field.val.MapKeys() {
 				collectionItemV := field.val.MapIndex(collectionKeyV)
-				//nolint:revive // Collection key is guaranteed to be of type string.
-				collectionKey := collectionKeyV.Interface().(string)
-				keepItem, updatedCollectionItemV, err := collectionNode.syncSubField(collectionItemV, collectionKey, append(nodePath, field.name))
+				collectionKeyStr, err := comparableKeyToString(n.nodeName, collectionKeyV)
+				if err != nil {
+					return err
+				}
+				keepItem, updatedCollectionItemV, err := collectionNode.syncSubField(collectionItemV, collectionKeyStr, append(nodePath, field.name))
 				if err != nil {
 					return err
 				}
@@ -602,7 +601,7 @@ func (n *Node) syncSubComponentsInternal(
 					field.val.SetMapIndex(collectionKeyV, updatedCollectionItemV)
 				}
 				if keepItem {
-					collectionItemsToKeep[collectionKey] = struct{}{}
+					collectionItemsToKeep[collectionKeyStr] = struct{}{}
 				}
 			}
 			if err := collectionNode.deleteChildren(collectionItemsToKeep, append(nodePath, field.name)); err != nil {
@@ -614,6 +613,88 @@ func (n *Node) syncSubComponentsInternal(
 
 	err := n.deleteChildren(childrenToKeep, nodePath)
 	return err
+}
+
+func comparableKeyToString(nodeName string, keyV reflect.Value) (string, error) {
+	switch keyV.Kind() {
+	case reflect.String:
+		return keyV.String(), nil
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return strconv.FormatInt(keyV.Int(), 10), nil
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return strconv.FormatUint(keyV.Uint(), 10), nil
+	case reflect.Bool:
+		return strconv.FormatBool(keyV.Bool()), nil
+	default:
+		return "", serviceerror.NewInternalf("CHASM collection must be of map[comparable|string]Field[T] type: %s map key type not comparable but %s", nodeName, keyV.Type().String())
+	}
+}
+
+func stringToComparableKey(nodeName string, key string, keyT reflect.Type) (reflect.Value, error) {
+	var (
+		keyV reflect.Value
+		err  error
+	)
+	switch keyT.Kind() {
+	case reflect.String:
+		keyV = reflect.ValueOf(key)
+	case reflect.Int:
+		var x int64
+		x, err = strconv.ParseInt(key, 10, 0)
+		keyV = reflect.ValueOf(int(x))
+	case reflect.Int8:
+		var x int64
+		x, err = strconv.ParseInt(key, 10, 8)
+		keyV = reflect.ValueOf(int8(x))
+	case reflect.Int16:
+		var x int64
+		x, err = strconv.ParseInt(key, 10, 16)
+		keyV = reflect.ValueOf(int16(x))
+	case reflect.Int32:
+		var x int64
+		x, err = strconv.ParseInt(key, 10, 32)
+		keyV = reflect.ValueOf(int32(x))
+	case reflect.Int64:
+		var x int64
+		x, err = strconv.ParseInt(key, 10, 64)
+		keyV = reflect.ValueOf(x)
+	case reflect.Uint:
+		var x uint64
+		x, err = strconv.ParseUint(key, 10, 0)
+		keyV = reflect.ValueOf(uint(x))
+	case reflect.Uint8:
+		var x uint64
+		x, err = strconv.ParseUint(key, 10, 8)
+		keyV = reflect.ValueOf(uint8(x))
+	case reflect.Uint16:
+		var x uint64
+		x, err = strconv.ParseUint(key, 10, 16)
+		keyV = reflect.ValueOf(uint16(x))
+	case reflect.Uint32:
+		var x uint64
+		x, err = strconv.ParseUint(key, 10, 32)
+		keyV = reflect.ValueOf(uint32(x))
+	case reflect.Uint64:
+		var x uint64
+		x, err = strconv.ParseUint(key, 10, 64)
+		keyV = reflect.ValueOf(x)
+	case reflect.Bool:
+		var b bool
+		b, err = strconv.ParseBool(key)
+		keyV = reflect.ValueOf(b)
+	default:
+		err = fmt.Errorf("unsupported type %s of kind %s", keyT.String(), keyT.Kind().String())
+	}
+
+	if err == nil && !keyV.IsValid() {
+		err = fmt.Errorf("value %s is not valid of type %s of kind %s", key, keyT.String(), keyT.Kind().String())
+	}
+
+	if err != nil {
+		err = serviceerror.NewInternalf("serialized collection %s key value %s can't be parsed to CHASM collection key type %s: %s", nodeName, key, keyT.String(), err.Error())
+	}
+
+	return keyV, err
 }
 
 // syncSubField syncs node n with value from fieldV parameter.
@@ -779,12 +860,16 @@ func (n *Node) deserializeComponentNode(
 					field.val.Set(collectionFieldV)
 				}
 
-				for collectionKey, collectionItemNode := range collectionNode.children {
+				for collectionItemName, collectionItemNode := range collectionNode.children {
 					// field.typ.Elem() is a go type of map item: Field[T]
 					chasmFieldV := reflect.New(field.typ.Elem()).Elem()
 					internalValue := reflect.ValueOf(newFieldInternalWithNode(collectionItemNode))
 					chasmFieldV.FieldByName(internalFieldName).Set(internalValue)
-					collectionFieldV.SetMapIndex(reflect.ValueOf(collectionKey), chasmFieldV)
+					collectionKeyV, err := stringToComparableKey(field.name, collectionItemName, collectionFieldV.Type().Key())
+					if err != nil {
+						return err
+					}
+					collectionFieldV.SetMapIndex(collectionKeyV, chasmFieldV)
 				}
 			}
 		}
