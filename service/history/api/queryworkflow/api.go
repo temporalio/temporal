@@ -166,6 +166,12 @@ func Invoke(
 		}
 	}
 
+	if !IsWorkersPolling(ctx, request.GetNamespaceId(), mutableState.CurrentTaskQueue().Name, matchingClient) {
+		return nil, &serviceerror.FailedPrecondition{
+			Message: "no poller seen for task queue recently, worker may be down",
+		}
+	}
+
 	// If we get here it means query could not be dispatched through matching directly, so it must block
 	// until either a result has been obtained on a workflow task response or until it is safe to dispatch directly through matching.
 	startTime := time.Now().UTC()
