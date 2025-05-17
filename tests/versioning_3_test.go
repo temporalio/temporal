@@ -11,6 +11,7 @@ import (
 
 	"github.com/dgryski/go-farm"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -1623,7 +1624,7 @@ func (s *Versioning3Suite) waitForDeploymentVersionCreation(
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := assert.New(t)
+		a := require.New(t)
 		res, _ := s.FrontendClient().DescribeWorkerDeployment(ctx,
 			&workflowservice.DescribeWorkerDeploymentRequest{
 				Namespace:      s.Namespace().String(),
@@ -2310,7 +2311,7 @@ func (s *Versioning3Suite) validateBacklogCount(
 		versionInfo := resp.GetVersionsInfo()[""]
 		typeInfo, ok := versionInfo.GetTypesInfo()[int32(tqType)]
 		s.True(ok)
-		a := assert.New(t)
+		a := require.New(t)
 		a.Equal(expectedCount, typeInfo.Stats.GetApproximateBacklogCount())
 	}, 6*time.Second, 100*time.Millisecond)
 }
@@ -2330,25 +2331,24 @@ func (s *Versioning3Suite) verifyVersioningSAs(
 			Namespace: s.Namespace().String(),
 			Query:     query,
 		})
-		a := assert.New(t)
+		a := require.New(t)
 		a.Nil(err)
-		if a.NotEmpty(resp.GetExecutions()) {
-			w := resp.GetExecutions()[0]
-			payload, ok := w.GetSearchAttributes().GetIndexedFields()["BuildIds"]
-			a.True(ok)
-			searchAttrAny, err := searchattribute.DecodeValue(payload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, true)
-			a.NoError(err)
-			var searchAttr []string
-			if searchAttrAny != nil {
-				searchAttr = searchAttrAny.([]string)
-			}
-			if behavior == enumspb.VERSIONING_BEHAVIOR_PINNED {
-				a.Contains(searchAttr, "pinned:"+tv.DeploymentVersionString())
-			}
-			for _, b := range usedBuilds {
-				a.Contains(searchAttr, "versioned:"+b.BuildID())
-			}
-			fmt.Println(resp.GetExecutions()[0])
+		a.NotEmpty(resp.GetExecutions())
+		w := resp.GetExecutions()[0]
+		payload, ok := w.GetSearchAttributes().GetIndexedFields()["BuildIds"]
+		a.True(ok)
+		searchAttrAny, err := searchattribute.DecodeValue(payload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, true)
+		a.NoError(err)
+		var searchAttr []string
+		if searchAttrAny != nil {
+			searchAttr = searchAttrAny.([]string)
 		}
+		if behavior == enumspb.VERSIONING_BEHAVIOR_PINNED {
+			a.Contains(searchAttr, "pinned:"+tv.DeploymentVersionString())
+		}
+		for _, b := range usedBuilds {
+			a.Contains(searchAttr, "versioned:"+b.BuildID())
+		}
+		fmt.Println(resp.GetExecutions()[0])
 	}, 5*time.Second, 50*time.Millisecond)
 }
