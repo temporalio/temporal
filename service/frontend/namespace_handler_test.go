@@ -1915,7 +1915,7 @@ func (s *namespaceHandlerCommonSuite) TestWorkflowRuleEviction() {
 
 	for _, tt := range tests {
 		oldLens := len(tt.rules)
-		s.handler.removeExpiredWorkflowRules(tt.rules)
+		s.handler.removeOldestExpiredWorkflowRule(tt.rules)
 		if len(tt.deletedRule) == 0 {
 			s.Equal(oldLens, len(tt.rules))
 		} else {

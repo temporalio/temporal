@@ -1,8 +1,6 @@
 package vclock
 
 import (
-	"fmt"
-
 	"go.temporal.io/api/serviceerror"
 	clockspb "go.temporal.io/server/api/clock/v1"
 )
@@ -35,13 +33,13 @@ func Compare(
 	clock2 *clockspb.VectorClock,
 ) (int, error) {
 	if !Comparable(clock1, clock2) {
-		return 0, serviceerror.NewInternal(fmt.Sprintf(
+		return 0, serviceerror.NewInternalf(
 			"Encountered shard ID mismatch: %v:%v vs %v:%v",
 			clock1.GetClusterId(),
 			clock1.GetShardId(),
 			clock2.GetClusterId(),
 			clock2.GetShardId(),
-		))
+		)
 	}
 
 	vClock1 := clock1.GetClock()

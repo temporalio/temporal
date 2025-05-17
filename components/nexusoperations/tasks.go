@@ -115,7 +115,7 @@ func (InvocationTaskSerializer) Serialize(task hsm.Task) ([]byte, error) {
 	case InvocationTask:
 		return proto.Marshal(&persistencespb.NexusInvocationTaskInfo{Attempt: task.Attempt})
 	default:
-		return nil, serviceerror.NewInternal(fmt.Sprintf("unknown HSM task type while serializing: %v", task))
+		return nil, serviceerror.NewInternalf("unknown HSM task type while serializing: %v", task)
 	}
 }
 
@@ -196,7 +196,7 @@ func (CancelationTaskSerializer) Serialize(task hsm.Task) ([]byte, error) {
 	case CancelationTask:
 		return proto.Marshal(&persistencespb.NexusCancelationTaskInfo{Attempt: task.Attempt})
 	default:
-		return nil, serviceerror.NewInternal(fmt.Sprintf("unknown HSM task type while serializing: %v", task))
+		return nil, serviceerror.NewInternalf("unknown HSM task type while serializing: %v", task)
 	}
 }
 

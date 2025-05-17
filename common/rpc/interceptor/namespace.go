@@ -1,8 +1,6 @@
 package interceptor
 
 import (
-	"fmt"
-
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/namespace"
@@ -60,6 +58,6 @@ func GetNamespaceName(
 		return namespaceName, nil
 
 	default:
-		return namespace.EmptyName, serviceerror.NewInternal(fmt.Sprintf("unable to extract namespace info from request of type %T", req))
+		return namespace.EmptyName, serviceerror.NewInternalf("unable to extract namespace info from request of type %T", req)
 	}
 }
