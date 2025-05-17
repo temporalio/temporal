@@ -9,6 +9,7 @@ import (
 	"iter"
 	"reflect"
 	"slices"
+	"strconv"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -422,6 +423,20 @@ func (n *Node) initSerializedNode(ft fieldType) {
 	}
 }
 
+func (n *Node) initSerializedCollectionNode() {
+	n.serializedNode = &persistencespb.ChasmNode{
+		Metadata: &persistencespb.ChasmNodeMetadata{
+			InitialVersionedTransition: &persistencespb.VersionedTransition{
+				TransitionCount:          n.backend.NextTransitionCount(),
+				NamespaceFailoverVersion: n.backend.GetCurrentVersion(),
+			},
+			Attributes: &persistencespb.ChasmNodeMetadata_CollectionAttributes{
+				CollectionAttributes: &persistencespb.ChasmCollectionAttributes{},
+			},
+		},
+	}
+}
+
 func (n *Node) setSerializedNode(
 	nodePath []string,
 	serializedNode *persistencespb.ChasmNode,
@@ -453,7 +468,7 @@ func (n *Node) serialize() error {
 	case *persistencespb.ChasmNodeMetadata_DataAttributes:
 		return n.serializeDataNode()
 	case *persistencespb.ChasmNodeMetadata_CollectionAttributes:
-		panic("not implemented")
+		return n.serializeCollectionNode()
 	case *persistencespb.ChasmNodeMetadata_PointerAttributes:
 		panic("not implemented")
 	default:
@@ -494,12 +509,14 @@ func (n *Node) serializeComponentNode() error {
 	return nil
 }
 
-// Sync the entire tree recursively starting from node n from the underlining component value:
+// syncSubComponents syncs the entire tree recursively (starting from the root node n) from the underlining component value:
 //   - Create:
-//     -- if child node is nil but subcomponent is not empty, a new node with subcomponent value is created.
+//     -- if child node is nil but subcomponent is not empty or key present in the collection,
+//     a new node with subcomponent/collection_item value is created.
 //   - Delete:
 //     -- if subcomponent is empty, the corresponding child is removed from the tree,
 //     -- if subcomponent is no longer in a component, the corresponding child is removed from the tree,
+//     -- if collection item is not in the collection, the corresponding child is removed from the tree,
 //     -- when a child is removed, all its children are removed too.
 //
 // All removed paths are added to mutation.DeletedNodes (which is shared between all nodes in the tree).
@@ -529,44 +546,197 @@ func (n *Node) syncSubComponentsInternal(
 		case fieldKindData:
 			// Nothing to sync.
 		case fieldKindSubField:
-			internalV := field.val.FieldByName(internalFieldName)
-			//nolint:revive // Internal field is guaranteed to be of type fieldInternal.
-			internal := internalV.Interface().(fieldInternal)
-			if internal.isEmpty() {
+			keepChild, updatedFieldV, err := n.syncSubField(field.val, field.name, nodePath)
+			if err != nil {
+				return err
+			}
+			if updatedFieldV.IsValid() {
+				field.val.Set(updatedFieldV)
+			}
+			if keepChild {
+				childrenToKeep[field.name] = struct{}{}
+			}
+		case fieldKindSubCollection:
+			if field.val.IsNil() {
+				// If Collection field is nil then delete all collection items nodes and collection node itself.
 				continue
 			}
-			if internal.node == nil && internal.value() != nil {
-				// Field is not empty but tree node is not set. It means this is a new field, and a node must be created.
-				childNode := newNode(n.nodeBase, n, field.name)
 
-				if err := assertStructPointer(reflect.TypeOf(internal.value())); err != nil {
-					return err
-				}
-				childNode.value = internal.value()
-				childNode.initSerializedNode(internal.fieldType())
-				childNode.valueState = valueStateNeedSerialize
-
-				n.children[field.name] = childNode
-				internal.node = childNode
-				// TODO: this line can be remove if Internal becomes a *fieldInternal.
-				internalV.Set(reflect.ValueOf(internal))
-			}
-			if internal.fieldType() == fieldTypeComponent {
-				if err := internal.node.syncSubComponentsInternal(append(nodePath, field.name)); err != nil {
-					return err
-				}
+			collectionNode := n.children[field.name]
+			if collectionNode == nil {
+				collectionNode = newNode(n.nodeBase, n, field.name)
+				collectionNode.initSerializedCollectionNode()
+				collectionNode.valueState = valueStateNeedSerialize
+				n.children[field.name] = collectionNode
 			}
 
+			// Validate collection type
+			if field.val.Kind() != reflect.Map {
+				return serviceerror.NewInternalf("CHASM collection must be of map[comparable]Field[T] type: value of %s is not of a map type", n.nodeName)
+			}
+
+			if len(field.val.MapKeys()) == 0 {
+				// If Collection field is empty then delete all collection items nodes and collection node itself.
+				continue
+			}
+
+			collectionValT := field.typ.Elem()
+			if collectionValT.Kind() != reflect.Struct || genericTypePrefix(collectionValT) != chasmFieldTypePrefix {
+				return serviceerror.NewInternalf("CHASM collection must be of map[comparable]Field[T] type: %s map value type is not Field[T] but %s", n.nodeName, collectionValT)
+			}
+
+			collectionItemsToKeep := make(map[string]struct{})
+			for _, collectionKeyV := range field.val.MapKeys() {
+				collectionItemV := field.val.MapIndex(collectionKeyV)
+				collectionKeyStr, err := comparableKeyToString(n.nodeName, collectionKeyV)
+				if err != nil {
+					return err
+				}
+				keepItem, updatedCollectionItemV, err := collectionNode.syncSubField(collectionItemV, collectionKeyStr, append(nodePath, field.name))
+				if err != nil {
+					return err
+				}
+				if updatedCollectionItemV.IsValid() {
+					// The only way to update item in the map is to set it back.
+					field.val.SetMapIndex(collectionKeyV, updatedCollectionItemV)
+				}
+				if keepItem {
+					collectionItemsToKeep[collectionKeyStr] = struct{}{}
+				}
+			}
+			if err := collectionNode.deleteChildren(collectionItemsToKeep, append(nodePath, field.name)); err != nil {
+				return err
+			}
 			childrenToKeep[field.name] = struct{}{}
-		case fieldKindSubCollection:
-			childrenToKeep[field.name] = struct{}{}
-			// TODO: need to go over every item in collection and update children for it.
-			panic("not implemented")
 		}
 	}
 
 	err := n.deleteChildren(childrenToKeep, nodePath)
 	return err
+}
+
+func comparableKeyToString(nodeName string, keyV reflect.Value) (string, error) {
+	switch keyV.Kind() {
+	case reflect.String:
+		return keyV.String(), nil
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return strconv.FormatInt(keyV.Int(), 10), nil
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return strconv.FormatUint(keyV.Uint(), 10), nil
+	case reflect.Bool:
+		return strconv.FormatBool(keyV.Bool()), nil
+	default:
+		return "", serviceerror.NewInternalf("CHASM collection must be of map[comparable|string]Field[T] type: %s map key type not comparable but %s", nodeName, keyV.Type().String())
+	}
+}
+
+func stringToComparableKey(nodeName string, key string, keyT reflect.Type) (reflect.Value, error) {
+	var (
+		keyV reflect.Value
+		err  error
+	)
+	switch keyT.Kind() {
+	case reflect.String:
+		keyV = reflect.ValueOf(key)
+	case reflect.Int:
+		var x int64
+		x, err = strconv.ParseInt(key, 10, 0)
+		keyV = reflect.ValueOf(int(x))
+	case reflect.Int8:
+		var x int64
+		x, err = strconv.ParseInt(key, 10, 8)
+		keyV = reflect.ValueOf(int8(x))
+	case reflect.Int16:
+		var x int64
+		x, err = strconv.ParseInt(key, 10, 16)
+		keyV = reflect.ValueOf(int16(x))
+	case reflect.Int32:
+		var x int64
+		x, err = strconv.ParseInt(key, 10, 32)
+		keyV = reflect.ValueOf(int32(x))
+	case reflect.Int64:
+		var x int64
+		x, err = strconv.ParseInt(key, 10, 64)
+		keyV = reflect.ValueOf(x)
+	case reflect.Uint:
+		var x uint64
+		x, err = strconv.ParseUint(key, 10, 0)
+		keyV = reflect.ValueOf(uint(x))
+	case reflect.Uint8:
+		var x uint64
+		x, err = strconv.ParseUint(key, 10, 8)
+		keyV = reflect.ValueOf(uint8(x))
+	case reflect.Uint16:
+		var x uint64
+		x, err = strconv.ParseUint(key, 10, 16)
+		keyV = reflect.ValueOf(uint16(x))
+	case reflect.Uint32:
+		var x uint64
+		x, err = strconv.ParseUint(key, 10, 32)
+		keyV = reflect.ValueOf(uint32(x))
+	case reflect.Uint64:
+		var x uint64
+		x, err = strconv.ParseUint(key, 10, 64)
+		keyV = reflect.ValueOf(x)
+	case reflect.Bool:
+		var b bool
+		b, err = strconv.ParseBool(key)
+		keyV = reflect.ValueOf(b)
+	default:
+		err = fmt.Errorf("unsupported type %s of kind %s", keyT.String(), keyT.Kind().String())
+	}
+
+	if err == nil && !keyV.IsValid() {
+		err = fmt.Errorf("value %s is not valid of type %s of kind %s", key, keyT.String(), keyT.Kind().String())
+	}
+
+	if err != nil {
+		err = serviceerror.NewInternalf("serialized collection %s key value %s can't be parsed to CHASM collection key type %s: %s", nodeName, key, keyT.String(), err.Error())
+	}
+
+	return keyV, err
+}
+
+// syncSubField syncs node n with value from fieldV parameter.
+// If fieldV is a component, then it will sync all subcomponents recursively.
+// It returns:
+//   - bool keepNode indicates if node needs to be removed from parent's children map.
+//   - updatedFieldV if fieldV needs to be updated with new value.
+//     If updatedFieldV is invalid, then fieldV doesn't need to be updated.
+//     NOTE: this function doesn't update fieldV because it might come from the map which is not addressable.
+//   - error.
+func (n *Node) syncSubField(fieldV reflect.Value, fieldN string, nodePath []string) (keepNode bool, updatedFieldV reflect.Value, err error) {
+	internalV := fieldV.FieldByName(internalFieldName)
+	//nolint:revive // Internal field is guaranteed to be of type fieldInternal.
+	internal := internalV.Interface().(fieldInternal)
+	if internal.isEmpty() {
+		// Internal is empty only when Field was explicitly set to NewEmptyField[T] which is a way to clear its value.
+		// In this case, return keepNode=false and this node (and all it children) will be added to DeletedNodes map.
+		return
+	}
+	if internal.node == nil && internal.value() != nil {
+		// Field is not empty but tree node is not set. It means this is a new field, and a node must be created.
+		childNode := newNode(n.nodeBase, n, fieldN)
+
+		if err = assertStructPointer(reflect.TypeOf(internal.value())); err != nil {
+			return
+		}
+		childNode.value = internal.value()
+		childNode.initSerializedNode(internal.fieldType())
+		childNode.valueState = valueStateNeedSerialize
+
+		n.children[fieldN] = childNode
+		internal.node = childNode
+
+		updatedFieldV = reflect.New(fieldV.Type()).Elem()
+		updatedFieldV.FieldByName(internalFieldName).Set(reflect.ValueOf(internal))
+	}
+	if internal.fieldType() == fieldTypeComponent && internal.value() != nil {
+		if err = internal.node.syncSubComponentsInternal(append(nodePath, fieldN)); err != nil {
+			return
+		}
+	}
+	return true, updatedFieldV, nil
 }
 
 func (n *Node) deleteChildren(childrenToKeep map[string]struct{}, currentPath []string) error {
@@ -608,6 +778,13 @@ func (n *Node) serializeDataNode() error {
 	return nil
 }
 
+func (n *Node) serializeCollectionNode() error {
+	// The collection node has no data; therefore, only metadata needs to be updated.
+	n.updateLastUpdateVersionedTransition()
+	n.valueState = valueStateSynced
+	return nil
+}
+
 func (n *Node) updateLastUpdateVersionedTransition() {
 	if n.serializedNode.GetMetadata().GetLastUpdateVersionedTransition() == nil {
 		n.serializedNode.GetMetadata().LastUpdateVersionedTransition = &persistencespb.VersionedTransition{}
@@ -638,7 +815,7 @@ func (n *Node) deserialize(
 	case *persistencespb.ChasmNodeMetadata_DataAttributes:
 		return n.deserializeDataNode(valueT)
 	case *persistencespb.ChasmNodeMetadata_CollectionAttributes:
-		panic("not implemented")
+		softassert.Fail(n.logger, "deserialize shouldn't be called on the collection node because it is deserialized with the parent component.")
 	case *persistencespb.ChasmNodeMetadata_PointerAttributes:
 		// TODO: return serviceerror.NewInternal(...) instead.
 	}
@@ -650,13 +827,6 @@ func (n *Node) deserializeComponentNode(
 ) error {
 	// valueT is guaranteed to be a pointer to the struct because it was already validated by the assertStructPointer method.
 	valueV := reflect.New(valueT.Elem())
-	if n.serializedNode.GetData() == nil {
-		// serializedNode is empty (has only metadata) => use constructed value of valueT type as value and return.
-		// deserialize method acts as a component constructor.
-		n.value = valueV.Interface()
-		n.valueState = valueStateSynced
-		return nil
-	}
 
 	for field := range fieldsOf(valueV) {
 		if field.err != nil {
@@ -667,6 +837,9 @@ func (n *Node) deserializeComponentNode(
 		case fieldKindUnspecified:
 			softassert.Fail(n.logger, "field.kind can be unspecified only if err is not nil, and there is a check for it above")
 		case fieldKindData:
+			if n.serializedNode.GetData() == nil {
+				continue
+			}
 			value, err := unmarshalProto(n.serializedNode.GetData(), field.typ)
 			if err != nil {
 				return err
@@ -680,9 +853,25 @@ func (n *Node) deserializeComponentNode(
 				field.val.Set(chasmFieldV)
 			}
 		case fieldKindSubCollection:
-			// TODO: support collection
-			// init the map and populate
-			panic("not implemented")
+			if collectionNode, found := n.children[field.name]; found {
+				collectionFieldV := field.val
+				if collectionFieldV.IsNil() {
+					collectionFieldV = reflect.MakeMapWithSize(field.typ, field.val.Len())
+					field.val.Set(collectionFieldV)
+				}
+
+				for collectionItemName, collectionItemNode := range collectionNode.children {
+					// field.typ.Elem() is a go type of map item: Field[T]
+					chasmFieldV := reflect.New(field.typ.Elem()).Elem()
+					internalValue := reflect.ValueOf(newFieldInternalWithNode(collectionItemNode))
+					chasmFieldV.FieldByName(internalFieldName).Set(internalValue)
+					collectionKeyV, err := stringToComparableKey(field.name, collectionItemName, collectionFieldV.Type().Key())
+					if err != nil {
+						return err
+					}
+					collectionFieldV.SetMapIndex(collectionKeyV, chasmFieldV)
+				}
+			}
 		}
 	}
 
