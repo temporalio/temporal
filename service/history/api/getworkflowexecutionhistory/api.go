@@ -185,7 +185,7 @@ func Invoke(
 
 	// TODO: remove this after it start to support it
 	if clientName, _ := headers.GetClientNameAndVersion(ctx); clientName == headers.ClientNameCLI || clientName == headers.ClientNameUI {
-		// Pretend that there is transient or speculative WFT if client is CLI or UI because they don't support it.
+		// Pretend that there is NO transient or speculative WFT if a client is CLI or UI because they don't support it.
 		tranOrSpecWFT = nil
 	}
 
