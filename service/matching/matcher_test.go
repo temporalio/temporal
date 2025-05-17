@@ -23,6 +23,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/tqid"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
@@ -51,6 +52,20 @@ func TestMatcherSuite(t *testing.T) {
 	suite.Run(t, new(MatcherTestSuite))
 }
 
+// attachRateLimiter attaches a rate limiter to the matcher. This behavior is only implemented in tests,
+// as the matcher relies on the rate limiter that is initialized by the task queue partition manager in production.
+func (t *MatcherTestSuite) attachRateLimiter(taskQueueConfig *taskQueueConfig) quotas.RateLimiter {
+	dynamicRateBurst := quotas.NewMutableRateBurst(
+		defaultTaskDispatchRPS,
+		int(defaultTaskDispatchRPS),
+	)
+	dynamicRateLimiter := quotas.NewDynamicRateLimiter(
+		dynamicRateBurst,
+		defaultTaskDispatchRPSTTL,
+	)
+	return dynamicRateLimiter
+}
+
 func (t *MatcherTestSuite) SetupTest() {
 	t.controller = gomock.NewController(t.T())
 	t.client = matchingservicemock.NewMockMatchingServiceClient(t.controller)
@@ -72,11 +87,11 @@ func (t *MatcherTestSuite) SetupTest() {
 	t.childConfig = tlCfg
 	t.fwdr, err = newForwarder(&t.childConfig.forwarderConfig, t.queue, t.client)
 	t.Assert().NoError(err)
-	t.childMatcher = newTaskMatcher(tlCfg, t.fwdr, metrics.NoopMetricsHandler)
+	t.childMatcher = newTaskMatcher(tlCfg, t.fwdr, metrics.NoopMetricsHandler, t.attachRateLimiter(tlCfg))
 	t.childMatcher.Start()
 
 	t.rootConfig = newTaskQueueConfig(prtn.TaskQueue(), cfg, "test-namespace")
-	t.rootMatcher = newTaskMatcher(t.rootConfig, nil, metrics.NoopMetricsHandler)
+	t.rootMatcher = newTaskMatcher(t.rootConfig, nil, metrics.NoopMetricsHandler, t.attachRateLimiter(t.rootConfig))
 	t.rootMatcher.Start()
 }
 
