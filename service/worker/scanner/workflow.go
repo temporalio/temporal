@@ -9,6 +9,7 @@ import (
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
+
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/service/worker/scanner/executions"
 	"go.temporal.io/server/service/worker/scanner/history"
@@ -110,7 +111,6 @@ func HistoryScavengerActivity(
 ) (history.ScavengerHeartbeatDetails, error) {
 
 	ctx := activityCtx.Value(scannerContextKey).(scannerContext)
-	rps := ctx.cfg.PersistenceMaxQPS()
 	numShards := ctx.cfg.Persistence.NumHistoryShards
 
 	hbd := history.ScavengerHeartbeatDetails{}
@@ -123,7 +123,8 @@ func HistoryScavengerActivity(
 	scavenger := history.NewScavenger(
 		numShards,
 		ctx.executionManager,
-		rps,
+		ctx.cfg.HistoryScannerPerHostQPS,
+		ctx.rateLimiter,
 		ctx.historyClient,
 		ctx.adminClient,
 		ctx.namespaceRegistry,
@@ -142,7 +143,7 @@ func TaskQueueScavengerActivity(
 	activityCtx context.Context,
 ) error {
 	ctx := activityCtx.Value(scannerContextKey).(scannerContext)
-	scavenger := taskqueue.NewScavenger(ctx.taskManager, ctx.metricsHandler, ctx.logger)
+	scavenger := taskqueue.NewScavenger(ctx.taskManager, ctx.metricsHandler, ctx.logger, ctx.cfg.TaskQueueScannerPerHostQPS, ctx.rateLimiter)
 	ctx.logger.Info("Starting task queue scavenger")
 	scavenger.Start()
 	for scavenger.Alive() {
@@ -169,6 +170,7 @@ func ExecutionsScavengerActivity(
 		ctx.cfg.Persistence.NumHistoryShards,
 		ctx.cfg.ExecutionScannerPerHostQPS,
 		ctx.cfg.ExecutionScannerPerShardQPS,
+		ctx.rateLimiter,
 		ctx.cfg.ExecutionDataDurationBuffer,
 		ctx.cfg.ExecutionScannerWorkerCount,
 		ctx.cfg.ExecutionScannerHistoryEventIdValidator,

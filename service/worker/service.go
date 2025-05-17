@@ -5,6 +5,7 @@ import (
 
 	"go.temporal.io/api/serviceerror"
 	sdkworker "go.temporal.io/sdk/worker"
+
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/cluster"
@@ -20,6 +21,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/service/worker/parentclosepolicy"
@@ -180,6 +182,9 @@ func NewConfig(
 			HistoryScannerVerifyRetention:           dynamicconfig.HistoryScannerVerifyRetention.Get(dc),
 			ExecutionScannerPerHostQPS:              dynamicconfig.ExecutionScannerPerHostQPS.Get(dc),
 			ExecutionScannerPerShardQPS:             dynamicconfig.ExecutionScannerPerShardQPS.Get(dc),
+			HistoryScannerPerHostQPS:                dynamicconfig.HistoryScannerPerHostQPS.Get(dc),
+			TaskQueueScannerPerHostQPS:              dynamicconfig.TaskQueueScannerPerHostQPS.Get(dc),
+			BuildIdScavengerPerHostQPS:              dynamicconfig.BuildIdScavengerPerHostQPS.Get(dc),
 			ExecutionDataDurationBuffer:             dynamicconfig.ExecutionDataDurationBuffer.Get(dc),
 			ExecutionScannerWorkerCount:             dynamicconfig.ExecutionScannerWorkerCount.Get(dc),
 			ExecutionScannerHistoryEventIdValidator: dynamicconfig.ExecutionScannerHistoryEventIdValidator.Get(dc),
@@ -307,6 +312,9 @@ func (s *Service) initScanner() error {
 		s.namespaceRegistry,
 		currentCluster,
 		s.hostInfo,
+		quotas.NewDefaultOutgoingRateLimiter(func() float64 {
+			return float64(s.config.ScannerCfg.PersistenceMaxQPS())
+		}),
 	)
 	return nil
 }

@@ -6,6 +6,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/quotas"
+
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -18,8 +21,10 @@ import (
 type (
 	// Scavenger is the type that holds the state for task queue scavenger daemon
 	Scavenger struct {
+		activityCtx    context.Context
 		db             p.TaskManager
 		executor       executor.Executor
+		rateLimiter    quotas.RateLimiter
 		metricsHandler metrics.Handler
 		logger         log.Logger
 		stats          stats
@@ -77,7 +82,7 @@ var (
 // two conditions
 //   - either all task queues are processed successfully (or)
 //   - Stop() method is called to stop the scavenger
-func NewScavenger(db p.TaskManager, metricsHandler metrics.Handler, logger log.Logger) *Scavenger {
+func NewScavenger(db p.TaskManager, metricsHandler metrics.Handler, logger log.Logger, perHostQPS dynamicconfig.IntPropertyFn, defaultRateLimiter quotas.RateLimiter) *Scavenger {
 	stopC := make(chan struct{})
 	taskExecutor := executor.NewFixedSizePoolExecutor(
 		taskQueueBatchSize, executorMaxDeferredTasks, metricsHandler, metrics.TaskQueueScavengerScope)
@@ -95,6 +100,12 @@ func NewScavenger(db p.TaskManager, metricsHandler metrics.Handler, logger log.L
 		executor:        taskExecutor,
 		lifecycleCtx:    lifecycleCtx,
 		lifecycleCancel: lifecycleCancel,
+		rateLimiter: quotas.NewMultiRateLimiter([]quotas.RateLimiter{
+			quotas.NewDefaultOutgoingRateLimiter(
+				func() float64 { return float64(perHostQPS()) },
+			),
+			defaultRateLimiter,
+		}),
 	}
 }
 

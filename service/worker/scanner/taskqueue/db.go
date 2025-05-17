@@ -25,6 +25,10 @@ func (s *Scavenger) completeTasks(
 	var n int
 	var err error
 	err = s.retryForever(func() error {
+		if err = s.rateLimiter.Wait(s.lifecycleCtx); err != nil {
+			return err
+		}
+
 		n, err = s.db.CompleteTasksLessThan(ctx, &p.CompleteTasksLessThanRequest{
 			NamespaceID:        key.NamespaceID,
 			TaskQueueName:      key.TaskQueueName,
@@ -45,6 +49,10 @@ func (s *Scavenger) getTasks(
 	var err error
 	var resp *p.GetTasksResponse
 	err = s.retryForever(func() error {
+		if err = s.rateLimiter.Wait(s.lifecycleCtx); err != nil {
+			return err
+		}
+
 		resp, err = s.db.GetTasks(ctx, &p.GetTasksRequest{
 			NamespaceID:        key.NamespaceID,
 			TaskQueue:          key.TaskQueueName,
@@ -66,6 +74,10 @@ func (s *Scavenger) listTaskQueue(
 	var err error
 	var resp *p.ListTaskQueueResponse
 	err = s.retryForever(func() error {
+		if err = s.rateLimiter.Wait(ctx); err != nil {
+			return err
+		}
+
 		resp, err = s.db.ListTaskQueue(ctx, &p.ListTaskQueueRequest{
 			PageSize:  pageSize,
 			PageToken: pageToken,
@@ -82,6 +94,10 @@ func (s *Scavenger) deleteTaskQueue(
 ) error {
 	// retry only on service busy errors
 	return backoff.ThrottleRetry(func() error {
+		if err := s.rateLimiter.Wait(s.lifecycleCtx); err != nil {
+			return err
+		}
+
 		return s.db.DeleteTaskQueue(ctx, &p.DeleteTaskQueueRequest{
 			TaskQueue: &p.TaskQueueKey{
 				NamespaceID:   key.NamespaceID,

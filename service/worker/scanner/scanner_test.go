@@ -7,6 +7,8 @@ import (
 
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/sdk/client"
+	"go.uber.org/mock/gomock"
+
 	"go.temporal.io/server/api/adminservicemock/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	"go.temporal.io/server/common/config"
@@ -16,10 +18,10 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/testing/mocksdk"
 	"go.temporal.io/server/service/worker/scanner/build_ids"
-	"go.uber.org/mock/gomock"
 )
 
 type scannerTestSuite struct {
@@ -204,6 +206,9 @@ func (s *scannerTestSuite) TestScannerEnabled() {
 				mockNamespaceRegistry,
 				"active-cluster",
 				membership.NewHostInfoFromAddress("localhost"),
+				quotas.NewDefaultOutgoingRateLimiter(func() float64 {
+					return float64(100)
+				}),
 			)
 			var wg sync.WaitGroup
 			for _, sc := range c.ExpectedScanners {
@@ -280,6 +285,9 @@ func (s *scannerTestSuite) TestScannerShutdown() {
 		mockNamespaceRegistry,
 		"active-cluster",
 		membership.NewHostInfoFromAddress("localhost"),
+		quotas.NewDefaultOutgoingRateLimiter(func() float64 {
+			return float64(100)
+		}),
 	)
 	mockSdkClientFactory.EXPECT().GetSystemClient().Return(mockSdkClient).AnyTimes()
 	worker.EXPECT().RegisterActivityWithOptions(gomock.Any(), gomock.Any()).AnyTimes()
