@@ -15,6 +15,10 @@ import (
 	"go.temporal.io/sdk/interceptor"
 	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/worker"
+	"go.uber.org/mock/gomock"
+	"google.golang.org/grpc"
+	"google.golang.org/protobuf/types/known/durationpb"
+
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -26,9 +30,6 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/worker_versioning"
-	"go.uber.org/mock/gomock"
-	"google.golang.org/grpc"
-	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 func Test_findBuildIdsToRemove_AcceptsNilVersioningData(t *testing.T) {
@@ -251,6 +252,9 @@ func Test_ScavengeBuildIds_Heartbeats(t *testing.T) {
 		matchingClient:                       matchingClient,
 		removableBuildIdDurationSinceDefault: dynamicconfig.GetDurationPropertyFn(time.Hour),
 		buildIdScavengerVisibilityRPS:        dynamicconfig.GetFloatPropertyFn(1.0),
+		persistencePerHostQPS:                dynamicconfig.GetIntPropertyFn(100),
+		persistencePerShardQPS:               dynamicconfig.GetIntPropertyFn(100),
+		persistenceMaxQPS:                    dynamicconfig.GetIntPropertyFn(100),
 		currentClusterName:                   "test-cluster",
 	}
 

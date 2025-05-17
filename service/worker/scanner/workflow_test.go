@@ -5,16 +5,19 @@ import (
 	"testing"
 	"time"
 
+	"go.temporal.io/server/common/dynamicconfig"
+
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	"go.uber.org/mock/gomock"
+
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resourcetest"
-	"go.uber.org/mock/gomock"
 )
 
 type scannerWorkflowTestSuite struct {
@@ -62,6 +65,11 @@ func (s *scannerWorkflowTestSuite) TestScavengerActivity() {
 		taskManager:      mockResource.GetTaskManager(),
 		historyClient:    mockResource.GetHistoryClient(),
 		hostInfo:         mockResource.GetHostInfo(),
+		cfg: &Config{
+			TaskQueueScannerPerHostQPS:  dynamicconfig.GetIntPropertyFn(10),
+			TaskQueueScannerPerShardQPS: dynamicconfig.GetIntPropertyFn(10),
+			PersistenceMaxQPS:           dynamicconfig.GetIntPropertyFn(10),
+		},
 	}
 	env.SetTestTimeout(time.Second * 5)
 	env.SetWorkerOptions(worker.Options{

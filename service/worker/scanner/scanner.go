@@ -58,6 +58,18 @@ type (
 		ExecutionScannerPerHostQPS dynamicconfig.IntPropertyFn
 		// ExecutionScannerPerShardQPS the max rate of calls to scan execution data per shard
 		ExecutionScannerPerShardQPS dynamicconfig.IntPropertyFn
+		// HistoryScannerPerHostQPS the max rate of calls to scan history data per host
+		HistoryScannerPerHostQPS dynamicconfig.IntPropertyFn
+		// HistoryScannerPerShardQPS the max rate of calls to scan history data per shard
+		HistoryScannerPerShardQPS dynamicconfig.IntPropertyFn
+		// TaskQueueScannerPerHostQPS the max rate of calls to scan task queue data per host
+		TaskQueueScannerPerHostQPS dynamicconfig.IntPropertyFn
+		// TaskQueueScannerPerShardQPS the max rate of calls to scan task queue data per shard
+		TaskQueueScannerPerShardQPS dynamicconfig.IntPropertyFn
+		// BuildIdScavengerPerHostQPS the max rate of calls to scan build id data per host
+		BuildIdScavengerPerHostQPS dynamicconfig.IntPropertyFn
+		// BuildIdScavengerPerShardQPS the max rate of calls to scan build id data per shard
+		BuildIdScavengerPerShardQPS dynamicconfig.IntPropertyFn
 		// ExecutionDataDurationBuffer is the data TTL duration buffer of execution data
 		ExecutionDataDurationBuffer dynamicconfig.DurationPropertyFn
 		// ExecutionScannerWorkerCount is the execution scavenger task worker number
@@ -191,6 +203,9 @@ func (s *Scanner) Start() error {
 			s.context.currentClusterName,
 			s.context.cfg.RemovableBuildIdDurationSinceDefault,
 			s.context.cfg.BuildIdScavengerVisibilityRPS,
+			s.context.cfg.BuildIdScavengerPerHostQPS,
+			s.context.cfg.BuildIdScavengerPerShardQPS,
+			s.context.cfg.PersistenceMaxQPS,
 		)
 
 		work := s.context.sdkClientFactory.NewWorker(s.context.sdkClientFactory.GetSystemClient(), build_ids.BuildIdScavengerTaskQueueName, workerOpts)

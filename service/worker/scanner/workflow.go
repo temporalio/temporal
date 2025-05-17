@@ -110,7 +110,6 @@ func HistoryScavengerActivity(
 ) (history.ScavengerHeartbeatDetails, error) {
 
 	ctx := activityCtx.Value(scannerContextKey).(scannerContext)
-	rps := ctx.cfg.PersistenceMaxQPS()
 	numShards := ctx.cfg.Persistence.NumHistoryShards
 
 	hbd := history.ScavengerHeartbeatDetails{}
@@ -123,7 +122,9 @@ func HistoryScavengerActivity(
 	scavenger := history.NewScavenger(
 		numShards,
 		ctx.executionManager,
-		rps,
+		ctx.cfg.HistoryScannerPerHostQPS,
+		ctx.cfg.HistoryScannerPerShardQPS,
+		ctx.cfg.PersistenceMaxQPS,
 		ctx.historyClient,
 		ctx.adminClient,
 		ctx.namespaceRegistry,
@@ -142,7 +143,7 @@ func TaskQueueScavengerActivity(
 	activityCtx context.Context,
 ) error {
 	ctx := activityCtx.Value(scannerContextKey).(scannerContext)
-	scavenger := taskqueue.NewScavenger(ctx.taskManager, ctx.metricsHandler, ctx.logger)
+	scavenger := taskqueue.NewScavenger(ctx.taskManager, ctx.metricsHandler, ctx.logger, ctx.cfg.TaskQueueScannerPerHostQPS, ctx.cfg.TaskQueueScannerPerShardQPS, ctx.cfg.PersistenceMaxQPS)
 	ctx.logger.Info("Starting task queue scavenger")
 	scavenger.Start()
 	for scavenger.Alive() {
@@ -169,6 +170,7 @@ func ExecutionsScavengerActivity(
 		ctx.cfg.Persistence.NumHistoryShards,
 		ctx.cfg.ExecutionScannerPerHostQPS,
 		ctx.cfg.ExecutionScannerPerShardQPS,
+		ctx.cfg.PersistenceMaxQPS,
 		ctx.cfg.ExecutionDataDurationBuffer,
 		ctx.cfg.ExecutionScannerWorkerCount,
 		ctx.cfg.ExecutionScannerHistoryEventIdValidator,
