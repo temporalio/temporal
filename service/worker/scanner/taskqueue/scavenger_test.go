@@ -8,10 +8,12 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/suite"
+	"go.uber.org/mock/gomock"
+
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	p "go.temporal.io/server/common/persistence"
-	"go.uber.org/mock/gomock"
 )
 
 type (
@@ -39,7 +41,7 @@ func (s *ScavengerTestSuite) SetupTest() {
 	s.taskQueueTable = &mockTaskQueueTable{}
 	s.taskTables = make(map[string]*mockTaskTable)
 	logger := log.NewTestLogger()
-	s.scvgr = NewScavenger(s.taskMgr, metrics.NoopMetricsHandler, logger)
+	s.scvgr = NewScavenger(s.taskMgr, metrics.NoopMetricsHandler, logger, dynamicconfig.GetIntPropertyFn(10), dynamicconfig.GetIntPropertyFn(10), dynamicconfig.GetIntPropertyFn(10))
 	maxTasksPerJob = 4
 	executorPollInterval = time.Millisecond * 50
 }

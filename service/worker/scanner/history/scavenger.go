@@ -82,7 +82,9 @@ const (
 func NewScavenger(
 	numShards int32,
 	db persistence.ExecutionManager,
-	rps int,
+	perHostQPS dynamicconfig.IntPropertyFn,
+	perShardQPS dynamicconfig.IntPropertyFn,
+	persistenceMaxQPS dynamicconfig.IntPropertyFn,
 	client historyservice.HistoryServiceClient,
 	adminClient adminservice.AdminServiceClient,
 	registry namespace.Registry,
@@ -100,9 +102,17 @@ func NewScavenger(
 		client:      client,
 		adminClient: adminClient,
 		registry:    registry,
-		rateLimiter: quotas.NewDefaultOutgoingRateLimiter(
-			func() float64 { return float64(rps) },
-		),
+		rateLimiter: quotas.NewMultiRateLimiter([]quotas.RateLimiter{
+			quotas.NewDefaultOutgoingRateLimiter(
+				func() float64 { return float64(persistenceMaxQPS()) },
+			),
+			quotas.NewDefaultOutgoingRateLimiter(
+				func() float64 { return float64(perHostQPS()) },
+			),
+			quotas.NewDefaultOutgoingRateLimiter(func() float64 {
+				return float64(perShardQPS())
+			}),
+		}),
 		historyDataMinAge:           historyDataMinAge,
 		executionDataDurationBuffer: executionDataDurationBuffer,
 		enableRetentionVerification: enableRetentionVerification,

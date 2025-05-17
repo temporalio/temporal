@@ -71,16 +71,14 @@ func (s *ScavengerTestSuite) SetupTest() {
 	s.logger = log.NewTestLogger()
 	s.metricHandler = metrics.NoopMetricsHandler
 	s.numShards = 512
-	s.createTestScavenger(100)
+	s.createTestScavenger(100, 100, 100)
 }
 
 func (s *ScavengerTestSuite) TearDownTest() {
 	s.controller.Finish()
 }
 
-func (s *ScavengerTestSuite) createTestScavenger(
-	rps int,
-) {
+func (s *ScavengerTestSuite) createTestScavenger(perHostQPS, perShardQPS, maxQPS int) {
 	s.controller = gomock.NewController(s.T())
 	s.mockExecutionManager = persistence.NewMockExecutionManager(s.controller)
 	s.mockHistoryClient = historyservicemock.NewMockHistoryServiceClient(s.controller)
@@ -92,7 +90,9 @@ func (s *ScavengerTestSuite) createTestScavenger(
 	s.scavenger = NewScavenger(
 		s.numShards,
 		s.mockExecutionManager,
-		rps,
+		dynamicconfig.GetIntPropertyFn(perHostQPS),
+		dynamicconfig.GetIntPropertyFn(perShardQPS),
+		dynamicconfig.GetIntPropertyFn(maxQPS),
 		s.mockHistoryClient,
 		s.mockAdminClient,
 		s.mockRegistry,
