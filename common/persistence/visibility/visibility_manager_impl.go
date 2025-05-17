@@ -341,7 +341,7 @@ func serializeMemo(memo *commonpb.Memo) (*commonpb.DataBlob, error) {
 
 	data, err := proto.Marshal(memo)
 	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("Unable to serialize memo to data blob: %v", err))
+		return nil, serviceerror.NewInternalf("Unable to serialize memo to data blob: %v", err)
 	}
 
 	return &commonpb.DataBlob{

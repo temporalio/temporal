@@ -241,7 +241,7 @@ func (r *registry) TryResurrect(_ context.Context, acptOrRejMsg *protocolpb.Mess
 
 	body, err := acptOrRejMsg.Body.UnmarshalNew()
 	if err != nil {
-		return nil, invalidArgf("unable to unmarshal request: %v", err)
+		return nil, serviceerror.NewInvalidArgumentf("unable to unmarshal request: %v", err)
 	}
 
 	var reqMsg *updatepb.Request
@@ -258,7 +258,7 @@ func (r *registry) TryResurrect(_ context.Context, acptOrRejMsg *protocolpb.Mess
 	}
 	reqAny, err := anypb.New(reqMsg)
 	if err != nil {
-		return nil, invalidArgf("unable to marshal request: %v", err)
+		return nil, serviceerror.NewInvalidArgumentf("unable to marshal request: %v", err)
 	}
 
 	updateID := acptOrRejMsg.ProtocolInstanceId

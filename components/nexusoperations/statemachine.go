@@ -206,7 +206,7 @@ func (operationMachineDefinition) CompareState(state1, state2 any) (int, error) 
 		return stage1 - stage2, nil
 	}
 	if stage1 == terminalStage && o1.State() != o2.State() {
-		return 0, serviceerror.NewInvalidArgument(fmt.Sprintf("cannot compare two distinct terminal states: %v, %v", o1.State(), o2.State()))
+		return 0, serviceerror.NewInvalidArgumentf("cannot compare two distinct terminal states: %v, %v", o1.State(), o2.State())
 	}
 	return int(attempts1 - attempts2), nil
 }
@@ -479,7 +479,7 @@ func (cancelationMachineDefinition) CompareState(state1, state2 any) (int, error
 		return stage1 - stage2, nil
 	}
 	if stage1 == terminalStage && c1.State() != c2.State() {
-		return 0, serviceerror.NewInvalidArgument(fmt.Sprintf("cannot compare two distinct terminal states: %v, %v", c1.State(), c2.State()))
+		return 0, serviceerror.NewInvalidArgumentf("cannot compare two distinct terminal states: %v, %v", c1.State(), c2.State())
 	}
 	return int(attempts1 - attempts2), nil
 }

@@ -138,6 +138,7 @@ func Invoke(
 					toReapplyEvents,
 					nil,
 					false, // allowResetWithPendingChildren
+					nil,
 				)
 				switch err.(type) {
 				case *serviceerror.InvalidArgument:

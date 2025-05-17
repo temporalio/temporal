@@ -26,7 +26,7 @@ import (
 )
 
 type ChildWorkflowSuite struct {
-	testcore.FunctionalTestSuite
+	testcore.FunctionalTestBase
 }
 
 func TestChildWorkflowSuite(t *testing.T) {

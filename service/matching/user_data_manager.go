@@ -3,7 +3,6 @@ package matching
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -486,7 +485,7 @@ func (m *userDataManagerImpl) updateUserData(
 		preUpdateData = &persistencespb.TaskQueueUserData{}
 	}
 	if options.KnownVersion > 0 && preUpdateVersion != options.KnownVersion {
-		return nil, false, serviceerror.NewFailedPrecondition(fmt.Sprintf("user data version mismatch: requested: %d, current: %d", options.KnownVersion, preUpdateVersion))
+		return nil, false, serviceerror.NewFailedPreconditionf("user data version mismatch: requested: %d, current: %d", options.KnownVersion, preUpdateVersion)
 	}
 	updatedUserData, shouldReplicate, err := updateFn(preUpdateData)
 	if err == errUserDataUnmodified {
@@ -510,7 +509,7 @@ func (m *userDataManagerImpl) updateUserData(
 				return nil, false, err
 			}
 			if numTaskQueues >= options.TaskQueueLimitPerBuildId {
-				return nil, false, serviceerror.NewFailedPrecondition(fmt.Sprintf("Exceeded max task queues allowed to be mapped to a single build ID: %d", options.TaskQueueLimitPerBuildId))
+				return nil, false, serviceerror.NewFailedPreconditionf("Exceeded max task queues allowed to be mapped to a single build ID: %d", options.TaskQueueLimitPerBuildId)
 			}
 		}
 	}

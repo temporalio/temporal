@@ -24,7 +24,7 @@ import (
 )
 
 type ContinueAsNewTestSuite struct {
-	testcore.FunctionalTestSuite
+	testcore.FunctionalTestBase
 }
 
 func TestContinueAsNewTestSuite(t *testing.T) {

@@ -4,7 +4,6 @@ package replication
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"time"
 
@@ -239,7 +238,7 @@ func (p *ackMgrImpl) GetTask(
 			TaskID:              taskInfo.TaskId,
 		})
 	default:
-		return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown replication task type: %v", taskInfo.TaskType))
+		return nil, serviceerror.NewInternalf("Unknown replication task type: %v", taskInfo.TaskType)
 	}
 }
 

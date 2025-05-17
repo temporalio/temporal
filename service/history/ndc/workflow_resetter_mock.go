@@ -15,6 +15,7 @@ import (
 
 	enums "go.temporal.io/api/enums/v1"
 	history "go.temporal.io/api/history/v1"
+	workflow "go.temporal.io/api/workflow/v1"
 	namespace "go.temporal.io/server/common/namespace"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -44,15 +45,15 @@ func (m *MockWorkflowResetter) EXPECT() *MockWorkflowResetterMockRecorder {
 }
 
 // ResetWorkflow mocks base method.
-func (m *MockWorkflowResetter) ResetWorkflow(ctx context.Context, namespaceID namespace.ID, workflowID, baseRunID string, baseBranchToken []byte, baseRebuildLastEventID, baseRebuildLastEventVersion, baseNextEventID int64, resetRunID, resetRequestID string, baseWorkflow, currentWorkflow Workflow, resetReason string, additionalReapplyEvents []*history.HistoryEvent, resetReapplyExcludeTypes map[enums.ResetReapplyExcludeType]struct{}, allowResetWithPendingChildren bool) error {
+func (m *MockWorkflowResetter) ResetWorkflow(ctx context.Context, namespaceID namespace.ID, workflowID, baseRunID string, baseBranchToken []byte, baseRebuildLastEventID, baseRebuildLastEventVersion, baseNextEventID int64, resetRunID, resetRequestID string, baseWorkflow, currentWorkflow Workflow, resetReason string, additionalReapplyEvents []*history.HistoryEvent, resetReapplyExcludeTypes map[enums.ResetReapplyExcludeType]struct{}, allowResetWithPendingChildren bool, postResetOperations []*workflow.PostResetOperation) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ResetWorkflow", ctx, namespaceID, workflowID, baseRunID, baseBranchToken, baseRebuildLastEventID, baseRebuildLastEventVersion, baseNextEventID, resetRunID, resetRequestID, baseWorkflow, currentWorkflow, resetReason, additionalReapplyEvents, resetReapplyExcludeTypes, allowResetWithPendingChildren)
+	ret := m.ctrl.Call(m, "ResetWorkflow", ctx, namespaceID, workflowID, baseRunID, baseBranchToken, baseRebuildLastEventID, baseRebuildLastEventVersion, baseNextEventID, resetRunID, resetRequestID, baseWorkflow, currentWorkflow, resetReason, additionalReapplyEvents, resetReapplyExcludeTypes, allowResetWithPendingChildren, postResetOperations)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // ResetWorkflow indicates an expected call of ResetWorkflow.
-func (mr *MockWorkflowResetterMockRecorder) ResetWorkflow(ctx, namespaceID, workflowID, baseRunID, baseBranchToken, baseRebuildLastEventID, baseRebuildLastEventVersion, baseNextEventID, resetRunID, resetRequestID, baseWorkflow, currentWorkflow, resetReason, additionalReapplyEvents, resetReapplyExcludeTypes, allowResetWithPendingChildren any) *gomock.Call {
+func (mr *MockWorkflowResetterMockRecorder) ResetWorkflow(ctx, namespaceID, workflowID, baseRunID, baseBranchToken, baseRebuildLastEventID, baseRebuildLastEventVersion, baseNextEventID, resetRunID, resetRequestID, baseWorkflow, currentWorkflow, resetReason, additionalReapplyEvents, resetReapplyExcludeTypes, allowResetWithPendingChildren, postResetOperations any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResetWorkflow", reflect.TypeOf((*MockWorkflowResetter)(nil).ResetWorkflow), ctx, namespaceID, workflowID, baseRunID, baseBranchToken, baseRebuildLastEventID, baseRebuildLastEventVersion, baseNextEventID, resetRunID, resetRequestID, baseWorkflow, currentWorkflow, resetReason, additionalReapplyEvents, resetReapplyExcludeTypes, allowResetWithPendingChildren)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResetWorkflow", reflect.TypeOf((*MockWorkflowResetter)(nil).ResetWorkflow), ctx, namespaceID, workflowID, baseRunID, baseBranchToken, baseRebuildLastEventID, baseRebuildLastEventVersion, baseNextEventID, resetRunID, resetRequestID, baseWorkflow, currentWorkflow, resetReason, additionalReapplyEvents, resetReapplyExcludeTypes, allowResetWithPendingChildren, postResetOperations)
 }

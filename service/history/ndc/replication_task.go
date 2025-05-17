@@ -1,7 +1,6 @@
 package ndc
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -324,7 +323,7 @@ func (t *replicationTaskImpl) skipDuplicatedEvents(index int) error {
 		return nil
 	}
 	if index >= len(t.events) || index < 0 {
-		return serviceerror.NewInternal(fmt.Sprintf("Invalid skip index: Length=%v, skipIndex=%v", len(t.events), index))
+		return serviceerror.NewInternalf("Invalid skip index: Length=%v, skipIndex=%v", len(t.events), index)
 	}
 	t.events = t.events[index:]
 	t.firstEvent = t.events[0][0]

@@ -3,7 +3,6 @@ package nexus
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -161,7 +160,7 @@ func (r *EndpointRegistryImpl) GetByName(ctx context.Context, _ namespace.ID, en
 	r.dataLock.RUnlock()
 
 	if !ok {
-		return nil, serviceerror.NewNotFound(fmt.Sprintf("could not find Nexus endpoint by name: %v", endpointName))
+		return nil, serviceerror.NewNotFoundf("could not find Nexus endpoint by name: %v", endpointName)
 	}
 	return endpoint, nil
 }

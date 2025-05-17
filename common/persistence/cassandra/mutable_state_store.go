@@ -432,7 +432,7 @@ func (d *MutableStateStore) CreateWorkflowExecution(
 		requestCurrentRunID = ""
 
 	default:
-		return nil, serviceerror.NewInternal(fmt.Sprintf("CreateWorkflowExecution: unknown mode: %v", request.Mode))
+		return nil, serviceerror.NewInternalf("CreateWorkflowExecution: unknown mode: %v", request.Mode)
 	}
 
 	if err := applyWorkflowSnapshotBatchAsNew(batch,
@@ -504,7 +504,7 @@ func (d *MutableStateStore) GetWorkflowExecution(
 
 	state, err := mutableStateFromRow(result)
 	if err != nil {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetWorkflowExecution operation failed. Error: %v", err))
+		return nil, serviceerror.NewUnavailablef("GetWorkflowExecution operation failed. Error: %v", err)
 	}
 
 	activityInfos := make(map[int64]*commonpb.DataBlob)
@@ -671,7 +671,7 @@ func (d *MutableStateStore) UpdateWorkflowExecution(
 		}
 
 	default:
-		return serviceerror.NewInternal(fmt.Sprintf("UpdateWorkflowExecution: unknown mode: %v", request.Mode))
+		return serviceerror.NewInternalf("UpdateWorkflowExecution: unknown mode: %v", request.Mode)
 	}
 
 	if err := applyWorkflowMutationBatch(batch, shardID, &updateWorkflow); err != nil {
@@ -796,7 +796,7 @@ func (d *MutableStateStore) ConflictResolveWorkflowExecution(
 		)
 
 	default:
-		return serviceerror.NewInternal(fmt.Sprintf("ConflictResolveWorkflowExecution: unknown mode: %v", request.Mode))
+		return serviceerror.NewInternalf("ConflictResolveWorkflowExecution: unknown mode: %v", request.Mode)
 	}
 
 	if err := applyWorkflowSnapshotBatchAsReset(batch, shardID, &resetWorkflow); err != nil {
@@ -958,7 +958,7 @@ func (d *MutableStateStore) GetCurrentExecution(
 	currentRunID := gocql.UUIDToString(result["current_run_id"])
 	executionStateBlob, err := executionStateBlobFromRow(result)
 	if err != nil {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetCurrentExecution operation failed. Error: %v", err))
+		return nil, serviceerror.NewUnavailablef("GetCurrentExecution operation failed. Error: %v", err)
 	}
 
 	// TODO: fix blob ExecutionState in storage should not be a blob.

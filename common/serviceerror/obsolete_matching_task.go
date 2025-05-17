@@ -1,6 +1,8 @@
 package serviceerror
 
 import (
+	"fmt"
+
 	errordetailsspb "go.temporal.io/server/api/errordetails/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -24,6 +26,12 @@ type (
 func NewObsoleteMatchingTask(msg string) error {
 	return &ObsoleteMatchingTask{
 		Message: msg,
+	}
+}
+
+func NewObsoleteMatchingTaskf(format string, args ...any) error {
+	return &ObsoleteMatchingTask{
+		Message: fmt.Sprintf(format, args...),
 	}
 }
 

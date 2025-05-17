@@ -646,17 +646,25 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 
 	// stopped accepting new workflows --> start drainage child wf
 	if wasAcceptingNewWorkflows && !isAcceptingNewWorkflows {
+		// Version deactivated from current/ramping
+		d.VersionState.LastDeactivationTime = args.RoutingUpdateTime
 		d.startDrainage(ctx, false)
 	}
 
 	// started accepting new workflows --> stop drainage child wf if it exists
-	if !wasAcceptingNewWorkflows && isAcceptingNewWorkflows && d.drainageWorkflowFuture != nil {
-		err = d.stopDrainage(ctx)
-		if err != nil {
-			// TODO: compensate
-			return nil, err
+	if !wasAcceptingNewWorkflows && isAcceptingNewWorkflows {
+		if d.VersionState.FirstActivationTime == nil {
+			// First time this version is activated to current/ramping
+			d.VersionState.FirstActivationTime = args.RoutingUpdateTime
 		}
-		d.VersionState.DrainageInfo = nil
+		if d.drainageWorkflowFuture != nil {
+			err = d.stopDrainage(ctx)
+			if err != nil {
+				// TODO: compensate
+				return nil, err
+			}
+			d.VersionState.DrainageInfo = nil
+		}
 	}
 
 	return &deploymentspb.SyncVersionStateResponse{
@@ -685,9 +693,15 @@ func (d *VersionWorkflowRunner) syncSummary(ctx workflow.Context) {
 		"",
 		SyncVersionSummarySignal,
 		&deploymentspb.WorkerDeploymentVersionSummary{
-			Version:        worker_versioning.WorkerDeploymentVersionToString(d.VersionState.Version),
-			CreateTime:     d.VersionState.CreateTime,
-			DrainageStatus: d.VersionState.DrainageInfo.GetStatus(),
+			Version:              worker_versioning.WorkerDeploymentVersionToString(d.VersionState.Version),
+			CreateTime:           d.VersionState.CreateTime,
+			DrainageStatus:       d.VersionState.DrainageInfo.GetStatus(), // deprecated.
+			DrainageInfo:         d.VersionState.DrainageInfo,
+			RoutingUpdateTime:    d.VersionState.RoutingUpdateTime,
+			CurrentSinceTime:     d.VersionState.CurrentSinceTime,
+			RampingSinceTime:     d.VersionState.RampingSinceTime,
+			FirstActivationTime:  d.VersionState.FirstActivationTime,
+			LastDeactivationTime: d.VersionState.LastDeactivationTime,
 		},
 	).Get(ctx, nil)
 	if err != nil {

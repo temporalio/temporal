@@ -428,7 +428,7 @@ func (s *ContextImpl) UpdateRemoteReaderInfo(
 	clusterName, _, ok := clusterNameInfoFromClusterID(s.clusterMetadata.GetAllClusterInfo(), clusterID)
 	if !ok {
 		// cluster is not present in cluster metadata map
-		return serviceerror.NewInternal(fmt.Sprintf("unknown cluster ID: %v", clusterID))
+		return serviceerror.NewInternalf("unknown cluster ID: %v", clusterID)
 	}
 
 	s.wLock()

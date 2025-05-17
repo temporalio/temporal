@@ -158,7 +158,7 @@ func (s *NexusEndpointStore) GetNexusEndpoint(
 
 	err := query.Scan(&data, &dataEncoding, &version)
 	if gocql.IsNotFoundError(err) {
-		return nil, serviceerror.NewNotFound(fmt.Sprintf("Nexus endpoint with ID `%v` not found", request.ID))
+		return nil, serviceerror.NewNotFoundf("Nexus endpoint with ID `%v` not found", request.ID)
 	}
 	if err != nil {
 		return nil, gocql.ConvertError("GetNexusEndpoint", err)
@@ -195,7 +195,7 @@ func (s *NexusEndpointStore) ListNexusEndpoints(
 	}
 
 	if err := iter.Close(); err != nil {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("ListNexusEndpoints operation failed: %v", err))
+		return nil, serviceerror.NewUnavailablef("ListNexusEndpoints operation failed: %v", err)
 	}
 
 	currentTableVersion, err := s.getTableVersion(ctx)
@@ -259,7 +259,7 @@ func (s *NexusEndpointStore) DeleteNexusEndpoint(
 				currentTableVersion)
 		}
 
-		return serviceerror.NewNotFound(fmt.Sprintf("nexus endpoint not found for ID: %v", request.ID))
+		return serviceerror.NewNotFoundf("nexus endpoint not found for ID: %v", request.ID)
 	}
 
 	return nil

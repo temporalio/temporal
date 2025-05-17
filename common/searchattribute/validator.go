@@ -63,12 +63,10 @@ func (v *Validator) Validate(searchAttributes *commonpb.SearchAttributes, namesp
 
 	lengthOfFields := len(searchAttributes.GetIndexedFields())
 	if lengthOfFields > v.searchAttributesNumberOfKeysLimit(namespace) {
-		return serviceerror.NewInvalidArgument(
-			fmt.Sprintf(
-				"number of search attributes %d exceeds limit %d",
-				lengthOfFields,
-				v.searchAttributesNumberOfKeysLimit(namespace),
-			),
+		return serviceerror.NewInvalidArgumentf(
+			"number of search attributes %d exceeds limit %d",
+			lengthOfFields,
+			v.searchAttributesNumberOfKeysLimit(namespace),
 		)
 	}
 
@@ -77,8 +75,8 @@ func (v *Validator) Validate(searchAttributes *commonpb.SearchAttributes, namesp
 		false,
 	)
 	if err != nil {
-		return serviceerror.NewUnavailable(
-			fmt.Sprintf("unable to get search attributes from cluster metadata: %v", err),
+		return serviceerror.NewUnavailablef(
+			"unable to get search attributes from cluster metadata: %v", err,
 		)
 	}
 
@@ -90,8 +88,8 @@ func (v *Validator) Validate(searchAttributes *commonpb.SearchAttributes, namesp
 				// if suppressing the error, then just ignore the search attribute
 				continue
 			}
-			return serviceerror.NewInvalidArgument(
-				fmt.Sprintf("%s attribute can't be set in SearchAttributes", saFieldName),
+			return serviceerror.NewInvalidArgumentf(
+				"%s attribute can't be set in SearchAttributes", saFieldName,
 			)
 		}
 
@@ -114,8 +112,8 @@ func (v *Validator) Validate(searchAttributes *commonpb.SearchAttributes, namesp
 		// Don't allow those SA's that are in predefined but not in predefinedWhiteList to be set by a user
 		if _, ok := predefined[saFieldName]; ok {
 			if _, ok = predefinedWhiteList[saFieldName]; !ok {
-				return serviceerror.NewInvalidArgument(
-					fmt.Sprintf("%s attribute can't be set in SearchAttributes", saFieldName),
+				return serviceerror.NewInvalidArgumentf(
+					"%s attribute can't be set in SearchAttributes", saFieldName,
 				)
 			}
 		}
@@ -165,12 +163,10 @@ func (v *Validator) ValidateSize(searchAttributes *commonpb.SearchAttributes, na
 	}
 
 	if searchAttributes.Size() > v.searchAttributesTotalSizeLimit(namespace) {
-		return serviceerror.NewInvalidArgument(
-			fmt.Sprintf(
-				"total size of search attributes %d exceeds size limit %d",
-				searchAttributes.Size(),
-				v.searchAttributesTotalSizeLimit(namespace),
-			),
+		return serviceerror.NewInvalidArgumentf(
+			"total size of search attributes %d exceeds size limit %d",
+			searchAttributes.Size(),
+			v.searchAttributesTotalSizeLimit(namespace),
 		)
 	}
 
@@ -185,7 +181,7 @@ func (v *Validator) validationError(msg string, saFieldName string, namespace st
 	if err != nil {
 		return err
 	}
-	return serviceerror.NewInvalidArgument(fmt.Sprintf(msg, saAlias))
+	return serviceerror.NewInvalidArgumentf(msg, saAlias)
 }
 
 func (v *Validator) getAlias(saFieldName string, namespaceName string) (string, error) {

@@ -1,7 +1,6 @@
 package chasm
 
 import (
-	"fmt"
 	"iter"
 	"reflect"
 	"strings"
@@ -50,14 +49,14 @@ func fieldsOf(valueV reflect.Value) iter.Seq[fieldInfo] {
 			fieldK := fieldKindUnspecified
 			if fieldT.AssignableTo(protoMessageT) {
 				if dataFieldName != "" {
-					fieldErr = serviceerror.NewInternal(fmt.Sprintf("%s.%s: only one data field %s (implements proto.Message) allowed in component", valueT, fieldN, dataFieldName))
+					fieldErr = serviceerror.NewInternalf("%s.%s: only one data field %s (implements proto.Message) allowed in component", valueT, fieldN, dataFieldName)
 				}
 				dataFieldName = fieldN
 				fieldK = fieldKindData
 			} else {
 				prefix := genericTypePrefix(fieldT)
 				if strings.HasPrefix(prefix, "*") {
-					fieldErr = serviceerror.NewInternal(fmt.Sprintf("%s.%s: chasm field type %s must not be a pointer", valueT, fieldN, fieldT))
+					fieldErr = serviceerror.NewInternalf("%s.%s: chasm field type %s must not be a pointer", valueT, fieldN, fieldT)
 				} else {
 					switch prefix {
 					case chasmFieldTypePrefix:
@@ -65,7 +64,7 @@ func fieldsOf(valueV reflect.Value) iter.Seq[fieldInfo] {
 					case chasmCollectionTypePrefix:
 						fieldK = fieldKindSubCollection
 					default:
-						fieldErr = serviceerror.NewInternal(fmt.Sprintf("%s.%s: unsupported field type %s: must implement proto.Message, or be chasm.Field[T] or chasm.Collection[T]", valueT, fieldN, fieldT))
+						fieldErr = serviceerror.NewInternalf("%s.%s: unsupported field type %s: must implement proto.Message, or be chasm.Field[T] or chasm.Collection[T]", valueT, fieldN, fieldT)
 					}
 				}
 
@@ -77,7 +76,7 @@ func fieldsOf(valueV reflect.Value) iter.Seq[fieldInfo] {
 		}
 		// If the data field is not found, generate one more fake field with only an error set.
 		if dataFieldName == "" {
-			yield(fieldInfo{err: serviceerror.NewInternal(fmt.Sprintf("%s: no data field (implements proto.Message) found", valueT))})
+			yield(fieldInfo{err: serviceerror.NewInternalf("%s: no data field (implements proto.Message) found", valueT)})
 		}
 	}
 }

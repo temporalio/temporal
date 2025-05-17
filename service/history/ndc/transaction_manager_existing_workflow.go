@@ -4,7 +4,6 @@ package ndc
 
 import (
 	"context"
-	"fmt"
 
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/namespace"
@@ -497,7 +496,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) executeTransaction(
 		)
 
 	default:
-		return serviceerror.NewInternal(fmt.Sprintf("transactionMgr: encountered unknown transaction type: %v", transactionPolicy))
+		return serviceerror.NewInternalf("transactionMgr: encountered unknown transaction type: %v", transactionPolicy)
 	}
 }
 

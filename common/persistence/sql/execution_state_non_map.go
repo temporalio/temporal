@@ -3,7 +3,6 @@ package sql
 import (
 	"context"
 	"database/sql"
-	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
@@ -36,7 +35,7 @@ func updateSignalsRequested(
 			})
 		}
 		if _, err := tx.ReplaceIntoSignalsRequestedSets(ctx, rows); err != nil {
-			return serviceerror.NewUnavailable(fmt.Sprintf("Failed to update signals requested. Failed to execute update query. Error: %v", err))
+			return serviceerror.NewUnavailablef("Failed to update signals requested. Failed to execute update query. Error: %v", err)
 		}
 	}
 
@@ -48,7 +47,7 @@ func updateSignalsRequested(
 			RunID:       runID,
 			SignalIDs:   convert.StringSetToSlice(deleteIDs),
 		}); err != nil {
-			return serviceerror.NewUnavailable(fmt.Sprintf("Failed to update signals requested. Failed to execute delete query. Error: %v", err))
+			return serviceerror.NewUnavailablef("Failed to update signals requested. Failed to execute delete query. Error: %v", err)
 		}
 	}
 	return nil
@@ -70,7 +69,7 @@ func getSignalsRequested(
 		RunID:       runID,
 	})
 	if err != nil && err != sql.ErrNoRows {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("Failed to get signals requested. Error: %v", err))
+		return nil, serviceerror.NewUnavailablef("Failed to get signals requested. Error: %v", err)
 	}
 	var ret = make([]string, len(rows))
 	for i, s := range rows {
@@ -94,7 +93,7 @@ func deleteSignalsRequestedSet(
 		WorkflowID:  workflowID,
 		RunID:       runID,
 	}); err != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf("Failed to delete signals requested set. Error: %v", err))
+		return serviceerror.NewUnavailablef("Failed to delete signals requested set. Error: %v", err)
 	}
 	return nil
 }
@@ -122,7 +121,7 @@ func updateBufferedEvents(
 	}
 
 	if _, err := tx.InsertIntoBufferedEvents(ctx, []sqlplugin.BufferedEventsRow{row}); err != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf("updateBufferedEvents operation failed. Error: %v", err))
+		return serviceerror.NewUnavailablef("updateBufferedEvents operation failed. Error: %v", err)
 	}
 	return nil
 }
@@ -143,7 +142,7 @@ func getBufferedEvents(
 		RunID:       runID,
 	})
 	if err != nil && err != sql.ErrNoRows {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("getBufferedEvents operation failed. Select failed: %v", err))
+		return nil, serviceerror.NewUnavailablef("getBufferedEvents operation failed. Select failed: %v", err)
 	}
 	var result []*commonpb.DataBlob
 	for _, row := range rows {
@@ -167,7 +166,7 @@ func deleteBufferedEvents(
 		WorkflowID:  workflowID,
 		RunID:       runID,
 	}); err != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf("updateBufferedEvents delete operation failed. Error: %v", err))
+		return serviceerror.NewUnavailablef("updateBufferedEvents delete operation failed. Error: %v", err)
 	}
 	return nil
 }

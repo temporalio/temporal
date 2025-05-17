@@ -348,7 +348,7 @@ func (r *StreamReceiverImpl) getTrackerAndSchedulerByPriority(priority enumsspb.
 	case enumsspb.TASK_PRIORITY_LOW:
 		return r.lowPriorityTaskTracker, r.ProcessToolBox.LowPriorityTaskScheduler, nil
 	default:
-		return nil, nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Unknown task priority: %v", priority))
+		return nil, nil, serviceerror.NewInvalidArgumentf("Unknown task priority: %v", priority)
 	}
 }
 
@@ -391,7 +391,7 @@ func ValidateTasksHaveSamePriority(messageBatchPriority enumsspb.TaskPriority, t
 	}
 	for _, task := range tasks {
 		if task.Priority != messageBatchPriority {
-			return serviceerror.NewInvalidArgument(fmt.Sprintf("Task priority does not match batch priority: %v, %v", task.Priority, messageBatchPriority))
+			return serviceerror.NewInvalidArgumentf("Task priority does not match batch priority: %v, %v", task.Priority, messageBatchPriority)
 		}
 	}
 	return nil

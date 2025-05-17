@@ -68,12 +68,12 @@ var (
 func ValidateDeploymentWfParams(fieldName string, field string, maxIDLengthLimit int) error {
 	// Length checks
 	if field == "" {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("%v cannot be empty", fieldName))
+		return serviceerror.NewInvalidArgumentf("%v cannot be empty", fieldName)
 	}
 
 	// Length of each field should be: (MaxIDLengthLimit - prefix and delimeter length) / 2
 	if len(field) > (maxIDLengthLimit-DeploymentWorkflowIDInitialSize)/2 {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("size of %v larger than the maximum allowed", fieldName))
+		return serviceerror.NewInvalidArgumentf("size of %v larger than the maximum allowed", fieldName)
 	}
 
 	return nil

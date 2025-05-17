@@ -29,7 +29,7 @@ import (
 
 type (
 	namespaceTestSuite struct {
-		testcore.FunctionalTestSuite
+		testcore.FunctionalTestBase
 	}
 )
 
@@ -46,7 +46,7 @@ func (s *namespaceTestSuite) SetupSuite() {
 		dynamicconfig.TransferProcessorUpdateAckInterval.Key():   1 * time.Second,
 		dynamicconfig.VisibilityProcessorUpdateAckInterval.Key(): 1 * time.Second,
 	}
-	s.SetupSuiteWithDefaultCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
+	s.SetupSuiteWithCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 }
 
 func (s *namespaceTestSuite) Test_NamespaceDelete_Empty() {

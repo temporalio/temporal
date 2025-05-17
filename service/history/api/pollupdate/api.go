@@ -2,7 +2,6 @@ package pollupdate
 
 import (
 	"context"
-	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
@@ -51,7 +50,7 @@ func Invoke(
 		return nil, err
 	}
 	if upd == nil {
-		return nil, serviceerror.NewNotFound(fmt.Sprintf("update %q not found", updateRef.GetUpdateId()))
+		return nil, serviceerror.NewNotFoundf("update %q not found", updateRef.GetUpdateId())
 	}
 
 	namespaceID := namespace.ID(req.GetNamespaceId())

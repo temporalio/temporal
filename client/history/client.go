@@ -5,7 +5,6 @@ package history
 
 import (
 	"context"
-	"fmt"
 	"math/rand"
 	"sync"
 	"time"
@@ -262,7 +261,7 @@ func (c *clientImpl) shardIDFromWorkflowID(namespaceID, workflowID string) int32
 
 func checkShardID(shardID int32) error {
 	if shardID <= 0 {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid ShardID: %d", shardID))
+		return serviceerror.NewInvalidArgumentf("Invalid ShardID: %d", shardID)
 	}
 	return nil
 }

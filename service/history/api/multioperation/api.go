@@ -297,7 +297,7 @@ func (mo *multiOp) startAndUpdateWorkflow(ctx context.Context) (*historyservice.
 		// The best way forward is to exit and retry from the top.
 		// By returning an Unavailable service error, the entire MultiOperation will be retried.
 		return nil, newMultiOpError(
-			serviceerror.NewUnavailable(fmt.Sprintf("Workflow was not started: %v", startOutcome)),
+			serviceerror.NewUnavailablef("Workflow was not started: %v", startOutcome),
 			multiOpAbortedErr)
 	}
 

@@ -5,7 +5,6 @@ package eventhandler
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
@@ -142,7 +141,7 @@ func (r *resendHandlerImpl) ResendHistoryEvents(
 
 	if startEventID != common.EmptyEventID {
 		// make sure resend is requesting from the first event when requesting local generated portion
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid Resend Request: expecting to resend from first event for local generated portion, but startEventID is %v", startEventID))
+		return serviceerror.NewInvalidArgumentf("Invalid Resend Request: expecting to resend from first event for local generated portion, but startEventID is %v", startEventID)
 	}
 	lastLocalItem := localVersionHistory[len(localVersionHistory)-1]
 	err = r.resendLocalGeneratedHistoryEvents(ctx, remoteClusterName, namespaceID, workflowID, runID, lastLocalItem.EventId, lastLocalItem.Version)

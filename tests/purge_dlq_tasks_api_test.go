@@ -21,7 +21,7 @@ import (
 
 type (
 	PurgeDLQTasksSuite struct {
-		testcore.FunctionalTestSuite
+		testcore.FunctionalTestBase
 
 		dlq              *faultyDLQ
 		sdkClientFactory sdk.ClientFactory
@@ -62,7 +62,7 @@ func (q *faultyDLQ) DeleteTasks(
 }
 
 func (s *PurgeDLQTasksSuite) SetupSuite() {
-	s.FunctionalTestBase.SetupSuiteWithDefaultCluster(
+	s.FunctionalTestBase.SetupSuiteWithCluster(
 		testcore.WithFxOptionsForService(primitives.HistoryService,
 			fx.Decorate(func(manager persistence.HistoryTaskQueueManager) persistence.HistoryTaskQueueManager {
 				s.dlq = &faultyDLQ{HistoryTaskQueueManager: manager}

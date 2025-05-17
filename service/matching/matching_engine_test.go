@@ -3140,7 +3140,7 @@ func (s *matchingEngineSuite) resetBacklogCounter(numWorkers int, taskCount int,
 
 	s.EqualValues(0, s.taskManager.getTaskCount(ptq))
 	s.EventuallyWithT(func(collect *assert.CollectT) {
-		assert.Equal(collect, int64(0), pqMgr.backlogMgr.TotalApproximateBacklogCount())
+		require.Equal(collect, int64(0), pqMgr.backlogMgr.TotalApproximateBacklogCount())
 	}, 4*time.Second, 10*time.Millisecond, "backlog counter should have been reset")
 }
 
@@ -3656,7 +3656,7 @@ func (m *testTaskManager) CreateTasks(
 	}
 
 	if m.dbServiceError {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("CreateTasks operation failed during serialization. Error : %v", errors.New("failure")))
+		return nil, serviceerror.NewUnavailablef("CreateTasks operation failed during serialization. Error : %v", errors.New("failure"))
 	}
 
 	tlm := m.getQueueManager(taskQueue, namespaceId, taskType)
@@ -3706,7 +3706,7 @@ func (m *testTaskManager) GetTasks(
 	m.logger.Debug("testTaskManager.GetTasks", tag.MinLevel(request.InclusiveMinTaskID), tag.MaxLevel(request.ExclusiveMaxTaskID))
 
 	if m.generateErrorRandomly() {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetTasks operation failed"))
+		return nil, serviceerror.NewUnavailablef("GetTasks operation failed")
 	}
 
 	tlm := m.getQueueManager(request.TaskQueue, request.NamespaceID, request.TaskType)

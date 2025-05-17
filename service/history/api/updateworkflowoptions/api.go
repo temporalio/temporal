@@ -2,7 +2,6 @@ package updateworkflowoptions
 
 import (
 	"context"
-	"fmt"
 
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
@@ -97,7 +96,7 @@ func MergeAndApply(
 		updateMask,
 	)
 	if err != nil {
-		return nil, false, serviceerror.NewInvalidArgument(fmt.Sprintf("error applying update_options: %v", err))
+		return nil, false, serviceerror.NewInvalidArgumentf("error applying update_options: %v", err)
 	}
 
 	// If there is no mutable state change at all, return with no new history event and Noop=true

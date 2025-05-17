@@ -4,7 +4,6 @@ package getdlqtasks
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	"go.temporal.io/api/serviceerror"
 	commonspb "go.temporal.io/server/api/common/v1"
@@ -43,7 +42,7 @@ func Invoke(
 			return nil, consts.ErrInvalidPageSize
 		}
 
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetDLQTasks failed. Error: %v", err))
+		return nil, serviceerror.NewUnavailablef("GetDLQTasks failed. Error: %v", err)
 	}
 
 	dlqTasks := make([]*commonspb.HistoryDLQTask, len(response.Tasks))

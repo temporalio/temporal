@@ -14,7 +14,7 @@ import (
 )
 
 type UserMetadataSuite struct {
-	testcore.FunctionalTestSuite
+	testcore.FunctionalTestBase
 }
 
 func TestUserMetadataSuite(t *testing.T) {

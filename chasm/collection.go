@@ -1,3 +1,3 @@
 package chasm
 
-type Collection[T any] map[string]Field[T]
+type Collection[K comparable, T any] map[K]Field[T]

@@ -66,6 +66,11 @@ message VersionLocalState {
     // Can be in the range [0, 100] if the version is ramping.
     float ramp_percentage = 6;
 
+    // Timestamp when this version first became current or ramping.
+    google.protobuf.Timestamp first_activation_time = 12;
+    // Timestamp when this version last stopped being current or ramping.
+    google.protobuf.Timestamp last_deactivation_time = 13;
+
     // Helps user determine when it is safe to decommission the workers of this
     // Version. Not present when version is current or ramping.
     // Current limitations:
@@ -139,7 +144,27 @@ message WorkerDeploymentLocalState {
 message WorkerDeploymentVersionSummary {
     string version = 1;
     google.protobuf.Timestamp create_time = 2;
-    temporal.api.enums.v1.VersionDrainageStatus drainage_status = 3;
+    temporal.api.enums.v1.VersionDrainageStatus drainage_status = 3 [deprecated=true];
+    // Information about workflow drainage to help the user determine when it is safe
+    // to decommission a Version. Not present while version is current or ramping.
+    temporal.api.deployment.v1.VersionDrainageInfo drainage_info = 4;
+    // Last time `current_since_time`, `ramping_since_time, or `ramp_percentage` of this version changed.
+    google.protobuf.Timestamp routing_update_time = 5;
+
+    // (-- api-linter: core::0140::prepositions=disabled
+    //     aip.dev/not-precedent: 'Since' captures the field semantics despite being a preposition. --)
+    // Nil if not current.
+    google.protobuf.Timestamp current_since_time = 6;
+
+    // (-- api-linter: core::0140::prepositions=disabled
+    //     aip.dev/not-precedent: 'Since' captures the field semantics despite being a preposition. --)
+    // Nil if not ramping. Updated when the version first starts ramping, not on each ramp change.
+    google.protobuf.Timestamp ramping_since_time = 7;
+
+    // Timestamp when this version first became current or ramping.
+    google.protobuf.Timestamp first_activation_time = 8;
+    // Timestamp when this version last stopped being current or ramping.
+    google.protobuf.Timestamp last_deactivation_time = 9;
 }
 
 // used as Worker Deployment Version workflow update input:

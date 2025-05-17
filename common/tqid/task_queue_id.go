@@ -146,7 +146,7 @@ func PartitionFromProto(proto *taskqueuepb.TaskQueue, namespaceId string, taskTy
 	kind := proto.GetKind()
 	normalName := proto.GetNormalName()
 	if normalName != "" && kind != enumspb.TASK_QUEUE_KIND_STICKY {
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("only sticky queues can have normal name. tq: %s, normal name: %s", baseName, normalName))
+		return nil, serviceerror.NewInvalidArgumentf("only sticky queues can have normal name. tq: %s, normal name: %s", baseName, normalName)
 	}
 
 	switch kind {

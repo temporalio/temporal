@@ -32,7 +32,7 @@ import (
 )
 
 type SignalWorkflowTestSuite struct {
-	testcore.FunctionalTestSuite
+	testcore.FunctionalTestBase
 }
 
 func TestSignalWorkflowTestSuite(t *testing.T) {

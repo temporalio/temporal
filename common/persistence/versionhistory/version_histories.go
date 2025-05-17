@@ -1,8 +1,6 @@
 package versionhistory
 
 import (
-	"fmt"
-
 	"go.temporal.io/api/serviceerror"
 	historyspb "go.temporal.io/server/api/history/v1"
 )
@@ -166,7 +164,7 @@ func FindFirstVersionHistoryIndexByVersionHistoryItem(h *historyspb.VersionHisto
 			return int32(versionHistoryIndex), nil
 		}
 	}
-	return 0, serviceerror.NewInternal(fmt.Sprintf("version histories does not contains given item: %v, %v", item, h))
+	return 0, serviceerror.NewInternalf("version histories does not contains given item: %v, %v", item, h)
 }
 
 // SetCurrentVersionHistoryIndex set the current VersionHistory index.

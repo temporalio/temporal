@@ -258,9 +258,9 @@ func GetMutableState(
 ) (_ *historyservice.GetMutableStateResponse, retError error) {
 
 	if len(workflowKey.RunID) == 0 {
-		return nil, serviceerror.NewInternal(fmt.Sprintf(
+		return nil, serviceerror.NewInternalf(
 			"getMutableState encountered empty run ID: %v", workflowKey,
-		))
+		)
 	}
 
 	workflowLease, err := workflowConsistencyChecker.GetWorkflowLease(
@@ -292,9 +292,9 @@ func GetMutableStateWithConsistencyCheck(
 ) (_ *historyservice.GetMutableStateResponse, retError error) {
 
 	if len(workflowKey.RunID) == 0 {
-		return nil, serviceerror.NewInternal(fmt.Sprintf(
+		return nil, serviceerror.NewInternalf(
 			"getMutableState encountered empty run ID: %v", workflowKey,
-		))
+		)
 	}
 
 	workflowLease, err := workflowConsistencyChecker.GetWorkflowLeaseWithConsistencyCheck(

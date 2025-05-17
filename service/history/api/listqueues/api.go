@@ -3,7 +3,6 @@ package listqueues
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -28,7 +27,7 @@ func Invoke(
 		if errors.Is(err, persistence.ErrNegativeListQueuesOffset) || errors.Is(err, persistence.ErrInvalidListQueuesNextPageToken) {
 			return nil, consts.ErrInvalidPaginationToken
 		}
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("ListQueues failed. Error: %v", err))
+		return nil, serviceerror.NewUnavailablef("ListQueues failed. Error: %v", err)
 	}
 	var queues []*historyservice.ListQueuesResponse_QueueInfo
 	for _, queue := range resp.Queues {

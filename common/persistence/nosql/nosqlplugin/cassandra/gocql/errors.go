@@ -24,7 +24,7 @@ func ConvertError(
 		return &persistence.TimeoutError{Msg: fmt.Sprintf("operation %v encountered %v", operation, err.Error())}
 	}
 	if errors.Is(err, gocql.ErrNotFound) {
-		return serviceerror.NewNotFound(fmt.Sprintf("operation %v encountered %v", operation, err.Error()))
+		return serviceerror.NewNotFoundf("operation %v encountered %v", operation, err.Error())
 	}
 
 	var cqlTimeoutErr gocql.RequestErrWriteTimeout
@@ -52,11 +52,11 @@ func ConvertError(
 				}
 			}
 
-			return serviceerror.NewUnavailable(fmt.Sprintf("operation %v encountered %v", operation, cqlRequestErr.Error()))
+			return serviceerror.NewUnavailablef("operation %v encountered %v", operation, cqlRequestErr.Error())
 		}
 	}
 
-	return serviceerror.NewUnavailable(fmt.Sprintf("operation %v encountered %v", operation, err.Error()))
+	return serviceerror.NewUnavailablef("operation %v encountered %v", operation, err.Error())
 }
 
 func IsNotFoundError(err error) bool {

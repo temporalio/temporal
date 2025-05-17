@@ -2,9 +2,9 @@ package testcore
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/binary"
-	"fmt"
 	"maps"
 	"os"
 	"strconv"
@@ -20,28 +20,29 @@ import (
 	namespacepb "go.temporal.io/api/namespace/v1"
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/sdk/worker"
+	sdkclient "go.temporal.io/sdk/client"
+	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/testing/updateutils"
-	"go.temporal.io/server/temporal/environment"
+	"go.temporal.io/server/components/nexusoperations"
 	"go.uber.org/fx"
-	"gopkg.in/yaml.v3"
 )
 
 type (
@@ -69,12 +70,23 @@ type (
 		namespaceID namespace.ID
 		// TODO (alex): rename to externalNamespace
 		foreignNamespace namespace.Name
+
+		// Fields used by SDK based tests.
+		sdkClient sdkclient.Client
+		worker    sdkworker.Worker
+		taskQueue string
+
+		// TODO (alex): replace with v2
+		taskPoller *taskpoller.TaskPoller
 	}
 	// TestClusterParams contains the variables which are used to configure test cluster via the TestClusterOption type.
 	TestClusterParams struct {
 		ServiceOptions         map[primitives.ServiceName][]fx.Option
 		DynamicConfigOverrides map[dynamicconfig.Key]any
 		ArchivalEnabled        bool
+		EnableMTLS             bool
+		FaultInjectionConfig   *config.FaultInjection
+		NumHistoryShards       int32
 	}
 	TestClusterOption func(params *TestClusterParams)
 )
@@ -83,7 +95,7 @@ func init() {
 	// By default, the SDK worker will calculate a checksum of the binary and use that as an identifier.
 	// But given the size of the test binary, that has a significant performance impact (100 ms or more).
 	// By specifying a checksum here, we can avoid that overhead.
-	worker.SetBinaryChecksum("oss-server-test")
+	sdkworker.SetBinaryChecksum("oss-server-test")
 }
 
 // WithFxOptionsForService returns an Option which, when passed as an argument to setupSuite, will append the given list
@@ -116,6 +128,24 @@ func WithDynamicConfigOverrides(overrides map[dynamicconfig.Key]any) TestCluster
 func WithArchivalEnabled() TestClusterOption {
 	return func(params *TestClusterParams) {
 		params.ArchivalEnabled = true
+	}
+}
+
+func WithMTLS() TestClusterOption {
+	return func(params *TestClusterParams) {
+		params.EnableMTLS = true
+	}
+}
+
+func WithFaultInjectionConfig(cfg *config.FaultInjection) TestClusterOption {
+	return func(params *TestClusterParams) {
+		params.FaultInjectionConfig = cfg
+	}
+}
+
+func WithNumHistoryShards(n int32) TestClusterOption {
+	return func(params *TestClusterParams) {
+		params.NumHistoryShards = n
 	}
 }
 
@@ -159,8 +189,24 @@ func (s *FunctionalTestBase) FrontendGRPCAddress() string {
 	return s.GetTestCluster().Host().FrontendGRPCAddress()
 }
 
+func (s *FunctionalTestBase) Worker() sdkworker.Worker {
+	return s.worker
+}
+
+func (s *FunctionalTestBase) SdkClient() sdkclient.Client {
+	return s.sdkClient
+}
+
+func (s *FunctionalTestBase) TaskQueue() string {
+	return s.taskQueue
+}
+
+func (s *FunctionalTestBase) TaskPoller() *taskpoller.TaskPoller {
+	return s.taskPoller
+}
+
 func (s *FunctionalTestBase) SetupSuite() {
-	s.SetupSuiteWithDefaultCluster()
+	s.SetupSuiteWithCluster()
 }
 
 func (s *FunctionalTestBase) TearDownSuite() {
@@ -174,13 +220,7 @@ func (s *FunctionalTestBase) TearDownSuite() {
 	s.TearDownCluster()
 }
 
-func (s *FunctionalTestBase) SetupSuiteWithDefaultCluster(options ...TestClusterOption) {
-	// TODO (alex): rename es_cluster.yaml to default_cluster.yaml
-	// TODO (alex): reduce the number of configs or may be get rid of it completely.
-	// TODO (alex): or replace clusterConfigFile param with WithClusterConfigFile option with default value.
-	s.SetupSuiteWithCluster("testdata/es_cluster.yaml", options...)
-}
-func (s *FunctionalTestBase) SetupSuiteWithCluster(clusterConfigFile string, options ...TestClusterOption) {
+func (s *FunctionalTestBase) SetupSuiteWithCluster(options ...TestClusterOption) {
 	params := ApplyTestClusterOptions(options)
 
 	// NOTE: A suite might set its own logger. Example: AcquireShardSuiteBase.
@@ -195,27 +235,19 @@ func (s *FunctionalTestBase) SetupSuiteWithCluster(clusterConfigFile string, opt
 		s.Logger = tl
 	}
 
-	// Setup test cluster.
-	var err error
-	s.testClusterConfig, err = readTestClusterConfig(clusterConfigFile)
-	s.Require().NoError(err)
-	s.Require().Empty(s.testClusterConfig.DeprecatedFrontendAddress, "Functional tests against external frontends are not supported")
-	s.Require().Empty(s.testClusterConfig.DeprecatedClusterNo, "ClusterNo should not be present in cluster config files")
-
-	s.testClusterConfig.DynamicConfigOverrides = make(map[dynamicconfig.Key]any)
-	maps.Copy(s.testClusterConfig.DynamicConfigOverrides, params.DynamicConfigOverrides)
-	// TODO (alex): is it needed?
-	if s.testClusterConfig.ESConfig != nil {
-		s.testClusterConfig.DynamicConfigOverrides[dynamicconfig.SecondaryVisibilityWritingMode.Key()] = visibility.SecondaryVisibilityWritingModeDual
+	s.testClusterConfig = &TestClusterConfig{
+		FaultInjection: params.FaultInjectionConfig,
+		HistoryConfig: HistoryConfig{
+			NumHistoryShards: cmp.Or(params.NumHistoryShards, 4),
+		},
+		DynamicConfigOverrides: params.DynamicConfigOverrides,
+		ServiceFxOptions:       params.ServiceOptions,
+		EnableMetricsCapture:   true,
+		EnableArchival:         params.ArchivalEnabled,
+		EnableMTLS:             params.EnableMTLS,
 	}
-	// Enable raw history for functional tests.
-	// TODO (prathyush): remove this after setting it to true by default.
-	s.testClusterConfig.DynamicConfigOverrides[dynamicconfig.SendRawHistoryBetweenInternalServices.Key()] = true
 
-	s.testClusterConfig.ServiceFxOptions = params.ServiceOptions
-	s.testClusterConfig.EnableMetricsCapture = true
-	s.testClusterConfig.EnableArchival = params.ArchivalEnabled
-
+	var err error
 	testClusterFactory := NewTestClusterFactory()
 	s.testCluster, err = testClusterFactory.NewCluster(s.T(), s.testClusterConfig, s.Logger)
 	s.Require().NoError(err)
@@ -237,6 +269,8 @@ func (s *FunctionalTestBase) SetupSuiteWithCluster(clusterConfigFile string, opt
 func (s *FunctionalTestBase) SetupTest() {
 	s.checkTestShard()
 	s.initAssertions()
+	s.setupSdk()
+	s.taskPoller = taskpoller.New(s.T(), s.FrontendClient(), s.Namespace().String())
 }
 
 func (s *FunctionalTestBase) SetupSubTest() {
@@ -296,47 +330,33 @@ func ApplyTestClusterOptions(options []TestClusterOption) TestClusterParams {
 	return params
 }
 
-func readTestClusterConfig(configFile string) (*TestClusterConfig, error) {
-	environment.SetupEnv()
+func (s *FunctionalTestBase) setupSdk() {
+	// Set URL template after httpAPAddress is set, see commonnexus.RouteCompletionCallback
+	s.OverrideDynamicConfig(
+		nexusoperations.CallbackURLTemplate,
+		"http://"+s.HttpAPIAddress()+"/namespaces/{{.NamespaceName}}/nexus/callback")
 
-	configLocation := configFile
-	if TestFlags.TestClusterConfigFile != "" {
-		configLocation = TestFlags.TestClusterConfigFile
+	clientOptions := sdkclient.Options{
+		HostPort:  s.FrontendGRPCAddress(),
+		Namespace: s.Namespace().String(),
+		Logger:    log.NewSdkLogger(s.Logger),
 	}
-	if _, err := os.Stat(configLocation); err != nil {
-		if os.IsNotExist(err) {
-			configLocation = "../" + configLocation
+	if s.GetTestCluster().Host().TlsConfigProvider() != nil {
+		clientOptions.ConnectionOptions = sdkclient.ConnectionOptions{
+			TLS: s.GetTestCluster().Host().TlsConfigProvider().FrontendClientConfig,
 		}
 	}
 
-	// This is just reading a config, so it's less of a security concern
-	// #nosec
-	confContent, err := os.ReadFile(configLocation)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read test cluster config file %s: %w", configLocation, err)
-	}
-	confContent = []byte(os.ExpandEnv(string(confContent)))
-	var clusterConfig TestClusterConfig
-	if err = yaml.Unmarshal(confContent, &clusterConfig); err != nil {
-		return nil, fmt.Errorf("failed to decode test cluster config %s: %w", configLocation, err)
-	}
+	var err error
+	s.sdkClient, err = sdkclient.Dial(clientOptions)
+	s.NoError(err)
+	// TODO(alex): move initialization to suite level?
+	s.taskQueue = RandomizeStr("tq")
 
-	// If -FaultInjectionConfigFile is passed to the test runner,
-	// then fault injection config will be added to the test cluster config.
-	if TestFlags.FaultInjectionConfigFile != "" {
-		fiConfigContent, err := os.ReadFile(TestFlags.FaultInjectionConfigFile)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read test cluster fault injection config file %s: %v", TestFlags.FaultInjectionConfigFile, err)
-		}
-
-		var fiOptions TestClusterConfig
-		if err = yaml.Unmarshal(fiConfigContent, &fiOptions); err != nil {
-			return nil, fmt.Errorf("failed to decode test cluster fault injection config %s: %w", TestFlags.FaultInjectionConfigFile, err)
-		}
-		clusterConfig.FaultInjection = fiOptions.FaultInjection
-	}
-
-	return &clusterConfig, nil
+	workerOptions := sdkworker.Options{}
+	s.worker = sdkworker.New(s.sdkClient, s.taskQueue, workerOptions)
+	err = s.worker.Start()
+	s.NoError(err)
 }
 
 func (s *FunctionalTestBase) TearDownCluster() {
@@ -351,6 +371,7 @@ func (s *FunctionalTestBase) TearDownCluster() {
 // **IMPORTANT**: When overridding this, make sure to invoke `s.FunctionalTestBase.TearDownTest()`.
 func (s *FunctionalTestBase) TearDownTest() {
 	s.checkNoUnexpectedErrorLogs()
+	s.tearDownSdk()
 }
 
 // **IMPORTANT**: When overridding this, make sure to invoke `s.FunctionalTestBase.TearDownSubTest()`.
@@ -364,6 +385,15 @@ func (s *FunctionalTestBase) checkNoUnexpectedErrorLogs() {
 			s.Fail(`Failing test as unexpected error logs were found.
 Look for 'Unexpected Error log encountered'.`)
 		}
+	}
+}
+
+func (s *FunctionalTestBase) tearDownSdk() {
+	if s.worker != nil {
+		s.worker.Stop()
+	}
+	if s.sdkClient != nil {
+		s.sdkClient.Close()
 	}
 }
 

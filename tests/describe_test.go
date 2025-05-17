@@ -24,7 +24,7 @@ import (
 )
 
 type DescribeTestSuite struct {
-	testcore.FunctionalTestSuite
+	testcore.FunctionalTestBase
 }
 
 func TestDescribeTestSuite(t *testing.T) {

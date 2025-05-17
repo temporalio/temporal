@@ -4,7 +4,6 @@ package ndc
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -275,11 +274,11 @@ func (r *StateRebuilderImpl) buildMutableStateFromEvent(
 			baseLastEventID,
 			*baseLastEventVersion,
 		)) {
-			return nil, 0, serviceerror.NewInvalidArgument(fmt.Sprintf(
+			return nil, 0, serviceerror.NewInvalidArgumentf(
 				"StateRebuilder unable to Rebuild mutable state to event ID: %v, version: %v, this event must be at the boundary",
 				baseLastEventID,
 				*baseLastEventVersion,
-			))
+			)
 		}
 	}
 	return rebuiltMutableState, lastTxnId, nil

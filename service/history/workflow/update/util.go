@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"go.opentelemetry.io/otel/trace"
-	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -27,14 +26,6 @@ var (
 		tracer:  telemetry.NoopTracer,
 	}
 )
-
-func invalidArgf(tmpl string, args ...any) error {
-	return serviceerror.NewInvalidArgument(fmt.Sprintf(tmpl, args...))
-}
-
-func internalErrorf(tmpl string, args ...any) error {
-	return serviceerror.NewInternal(fmt.Sprintf(tmpl, args...))
-}
 
 func (i *instrumentation) countRequestMsg() {
 	i.oneOf(metrics.MessageTypeRequestWorkflowExecutionUpdateCounter.Name())

@@ -1,6 +1,7 @@
 package update
 
 import (
+	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
 	"google.golang.org/protobuf/proto"
 )
@@ -9,7 +10,7 @@ func notZero[T comparable](v T, label string, msg proto.Message) func() error {
 	return func() error {
 		var zero T
 		if v == zero {
-			return invalidArgf("invalid %T: %v is not set", msg, label)
+			return serviceerror.NewInvalidArgumentf("invalid %T: %v is not set", msg, label)
 		}
 		return nil
 	}
@@ -24,7 +25,7 @@ func eq[T comparable](
 ) func() error {
 	return func() error {
 		if left != right {
-			return invalidArgf("invalid %T: %v != %v", msg, leftLbl, rightLbl)
+			return serviceerror.NewInvalidArgumentf("invalid %T: %v != %v", msg, leftLbl, rightLbl)
 		}
 		return nil
 	}

@@ -3,7 +3,6 @@ package deployment
 import (
 	"context"
 	"errors"
-	"fmt"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -388,8 +387,8 @@ func (d *DeploymentClientImpl) SetCurrentDeployment(
 	}
 
 	if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errNoChangeType {
-		return nil, nil, serviceerror.NewAlreadyExist(fmt.Sprintf("Build ID %q is already current for %q",
-			deployment.BuildId, deployment.SeriesName))
+		return nil, nil, serviceerror.NewAlreadyExistsf("Build ID %q is already current for %q",
+			deployment.BuildId, deployment.SeriesName)
 	} else if failure != nil {
 		// TODO: is there an easy way to recover the original type here?
 		return nil, nil, serviceerror.NewInternal(failure.Message)

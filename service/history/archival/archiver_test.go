@@ -172,13 +172,13 @@ func TestArchiver(t *testing.T) {
 			require.NoError(t, err)
 
 			if c.ExpectArchiveHistory {
-				archiverProvider.EXPECT().GetHistoryArchiver(gomock.Any(), gomock.Any()).Return(historyArchiver, nil)
+				archiverProvider.EXPECT().GetHistoryArchiver(gomock.Any()).Return(historyArchiver, nil)
 				historyArchiver.EXPECT().Archive(gomock.Any(), historyURI, gomock.Any()).Return(c.ArchiveHistoryErr)
 			}
 
 			visibilityURI, err := carchiver.NewURI("test:///visibility/archival")
 			require.NoError(t, err)
-			archiverProvider.EXPECT().GetVisibilityArchiver(gomock.Any(), gomock.Any()).
+			archiverProvider.EXPECT().GetVisibilityArchiver(gomock.Any()).
 				Return(visibilityArchiver, nil).AnyTimes()
 
 			if c.ExpectArchiveVisibility {

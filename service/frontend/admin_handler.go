@@ -288,18 +288,18 @@ func (adh *AdminHandler) AddSearchAttributes(
 
 	currentSearchAttributes, err := adh.saProvider.GetSearchAttributes(indexName, true)
 	if err != nil {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
+		return nil, serviceerror.NewUnavailablef(errUnableToGetSearchAttributesMessage, err)
 	}
 
 	for saName, saType := range request.GetSearchAttributes() {
 		if searchattribute.IsReserved(saName) {
-			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(errSearchAttributeIsReservedMessage, saName))
+			return nil, serviceerror.NewInvalidArgumentf(errSearchAttributeIsReservedMessage, saName)
 		}
 		if currentSearchAttributes.IsDefined(saName) {
-			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(errSearchAttributeAlreadyExistsMessage, saName))
+			return nil, serviceerror.NewInvalidArgumentf(errSearchAttributeAlreadyExistsMessage, saName)
 		}
 		if _, ok := enumspb.IndexedValueType_name[int32(saType)]; !ok {
-			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(errUnknownSearchAttributeTypeMessage, saType))
+			return nil, serviceerror.NewInvalidArgumentf(errUnknownSearchAttributeTypeMessage, saType)
 		}
 	}
 
@@ -343,16 +343,16 @@ func (adh *AdminHandler) addSearchAttributesElasticsearch(
 		wfParams,
 	)
 	if err != nil {
-		return serviceerror.NewUnavailable(
-			fmt.Sprintf(errUnableToStartWorkflowMessage, addsearchattributes.WorkflowName, err),
+		return serviceerror.NewUnavailablef(
+			errUnableToStartWorkflowMessage, addsearchattributes.WorkflowName, err,
 		)
 	}
 
 	// Wait for workflow to complete.
 	err = run.Get(ctx, nil)
 	if err != nil {
-		return serviceerror.NewUnavailable(
-			fmt.Sprintf(errWorkflowReturnedErrorMessage, addsearchattributes.WorkflowName, err),
+		return serviceerror.NewUnavailablef(
+			errWorkflowReturnedErrorMessage, addsearchattributes.WorkflowName, err,
 		)
 	}
 	return nil
@@ -368,7 +368,7 @@ func (adh *AdminHandler) addSearchAttributesSQL(
 		frontend.DefaultLongPollTimeout,
 	)
 	if err != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToCreateFrontendClientMessage, err))
+		return serviceerror.NewUnavailablef(errUnableToCreateFrontendClientMessage, err)
 	}
 
 	nsName := request.GetNamespace()
@@ -380,7 +380,7 @@ func (adh *AdminHandler) addSearchAttributesSQL(
 		&workflowservice.DescribeNamespaceRequest{Namespace: nsName},
 	)
 	if err != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetNamespaceInfoMessage, nsName, err))
+		return serviceerror.NewUnavailablef(errUnableToGetNamespaceInfoMessage, nsName, err)
 	}
 
 	dbCustomSearchAttributes := searchattribute.GetSqlDbIndexSearchAttributes().CustomSearchAttributes
@@ -391,8 +391,8 @@ func (adh *AdminHandler) addSearchAttributesSQL(
 	for saName, saType := range request.GetSearchAttributes() {
 		// check if alias is already in use
 		if _, ok := aliasToFieldMap[saName]; ok {
-			return serviceerror.NewAlreadyExist(
-				fmt.Sprintf(errSearchAttributeAlreadyExistsMessage, saName),
+			return serviceerror.NewAlreadyExistsf(
+				errSearchAttributeAlreadyExistsMessage, saName,
 			)
 		}
 		// find the first available field for the given type
@@ -416,8 +416,8 @@ func (adh *AdminHandler) addSearchAttributesSQL(
 			}
 		}
 		if targetFieldName == "" {
-			return serviceerror.NewInvalidArgument(
-				fmt.Sprintf(errTooManySearchAttributesMessage, cntUsed, saType.String()),
+			return serviceerror.NewInvalidArgumentf(
+				errTooManySearchAttributesMessage, cntUsed, saType.String(),
 			)
 		}
 		upsertFieldToAliasMap[targetFieldName] = saName
@@ -458,7 +458,7 @@ func (adh *AdminHandler) RemoveSearchAttributes(
 
 	currentSearchAttributes, err := adh.saProvider.GetSearchAttributes(indexName, true)
 	if err != nil {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
+		return nil, serviceerror.NewUnavailablef(errUnableToGetSearchAttributesMessage, err)
 	}
 
 	// TODO (rodrigozhou): Remove condition `indexName == ""`.
@@ -487,17 +487,17 @@ func (adh *AdminHandler) removeSearchAttributesElasticsearch(
 	newCustomSearchAttributes := maps.Clone(currentSearchAttributes.Custom())
 	for _, saName := range request.GetSearchAttributes() {
 		if !currentSearchAttributes.IsDefined(saName) {
-			return serviceerror.NewInvalidArgument(fmt.Sprintf(errSearchAttributeDoesntExistMessage, saName))
+			return serviceerror.NewInvalidArgumentf(errSearchAttributeDoesntExistMessage, saName)
 		}
 		if _, ok := newCustomSearchAttributes[saName]; !ok {
-			return serviceerror.NewInvalidArgument(fmt.Sprintf(errUnableToRemoveNonCustomSearchAttributesMessage, saName))
+			return serviceerror.NewInvalidArgumentf(errUnableToRemoveNonCustomSearchAttributesMessage, saName)
 		}
 		delete(newCustomSearchAttributes, saName)
 	}
 
 	err := adh.saManager.SaveSearchAttributes(ctx, indexName, newCustomSearchAttributes)
 	if err != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToSaveSearchAttributesMessage, err))
+		return serviceerror.NewUnavailablef(errUnableToSaveSearchAttributesMessage, err)
 	}
 	return nil
 }
@@ -512,7 +512,7 @@ func (adh *AdminHandler) removeSearchAttributesSQL(
 		frontend.DefaultLongPollTimeout,
 	)
 	if err != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToCreateFrontendClientMessage, err))
+		return serviceerror.NewUnavailablef(errUnableToCreateFrontendClientMessage, err)
 	}
 
 	nsName := request.GetNamespace()
@@ -524,7 +524,7 @@ func (adh *AdminHandler) removeSearchAttributesSQL(
 		&workflowservice.DescribeNamespaceRequest{Namespace: nsName},
 	)
 	if err != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetNamespaceInfoMessage, nsName, err))
+		return serviceerror.NewUnavailablef(errUnableToGetNamespaceInfoMessage, nsName, err)
 	}
 
 	upsertFieldToAliasMap := make(map[string]string)
@@ -535,11 +535,11 @@ func (adh *AdminHandler) removeSearchAttributesSQL(
 			continue
 		}
 		if currentSearchAttributes.IsDefined(saName) {
-			return serviceerror.NewInvalidArgument(
-				fmt.Sprintf(errUnableToRemoveNonCustomSearchAttributesMessage, saName),
+			return serviceerror.NewInvalidArgumentf(
+				errUnableToRemoveNonCustomSearchAttributesMessage, saName,
 			)
 		}
-		return serviceerror.NewNotFound(fmt.Sprintf(errSearchAttributeDoesntExistMessage, saName))
+		return serviceerror.NewNotFoundf(errSearchAttributeDoesntExistMessage, saName)
 	}
 
 	_, err = client.UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
@@ -569,7 +569,7 @@ func (adh *AdminHandler) GetSearchAttributes(
 	searchAttributes, err := adh.saProvider.GetSearchAttributes(indexName, true)
 	if err != nil {
 		adh.logger.Error("getSearchAttributes error", tag.Error(err))
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
+		return nil, serviceerror.NewUnavailablef(errUnableToGetSearchAttributesMessage, err)
 	}
 
 	// TODO (rodrigozhou): Remove condition `indexName == ""`.
@@ -596,7 +596,7 @@ func (adh *AdminHandler) getSearchAttributesElasticsearch(
 	if err != nil {
 		// NotFound can happen when no search attributes were added and the workflow has never been executed.
 		if _, isNotFound := err.(*serviceerror.NotFound); !isNotFound {
-			lastErr = serviceerror.NewUnavailable(fmt.Sprintf("unable to get %s workflow state: %v", addsearchattributes.WorkflowName, err))
+			lastErr = serviceerror.NewUnavailablef("unable to get %s workflow state: %v", addsearchattributes.WorkflowName, err)
 			adh.logger.Error("getSearchAttributes error", tag.Error(lastErr))
 		}
 	} else {
@@ -607,7 +607,7 @@ func (adh *AdminHandler) getSearchAttributesElasticsearch(
 	if adh.ESClient != nil {
 		esMapping, err = adh.ESClient.GetMapping(ctx, indexName)
 		if err != nil {
-			lastErr = serviceerror.NewUnavailable(fmt.Sprintf("unable to get mapping from Elasticsearch: %v", err))
+			lastErr = serviceerror.NewUnavailablef("unable to get mapping from Elasticsearch: %v", err)
 			adh.logger.Error("getSearchAttributes error", tag.Error(lastErr))
 		}
 	}
@@ -633,7 +633,7 @@ func (adh *AdminHandler) getSearchAttributesSQL(
 		frontend.DefaultLongPollTimeout,
 	)
 	if err != nil {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf(errUnableToCreateFrontendClientMessage, err))
+		return nil, serviceerror.NewUnavailablef(errUnableToCreateFrontendClientMessage, err)
 	}
 
 	nsName := request.GetNamespace()
@@ -645,8 +645,8 @@ func (adh *AdminHandler) getSearchAttributesSQL(
 		&workflowservice.DescribeNamespaceRequest{Namespace: nsName},
 	)
 	if err != nil {
-		return nil, serviceerror.NewUnavailable(
-			fmt.Sprintf(errUnableToGetNamespaceInfoMessage, nsName, err),
+		return nil, serviceerror.NewUnavailablef(
+			errUnableToGetNamespaceInfoMessage, nsName, err,
 		)
 	}
 
@@ -1849,9 +1849,9 @@ func (adh *AdminHandler) StreamWorkflowReplicationMessages(
 					return
 				}
 			default:
-				logger.Info("AdminStreamReplicationMessages client -> server encountered error", tag.Error(serviceerror.NewInternal(fmt.Sprintf(
+				logger.Info("AdminStreamReplicationMessages client -> server encountered error", tag.Error(serviceerror.NewInternalf(
 					"StreamWorkflowReplicationMessages encountered unknown type: %T %v", attr, attr,
-				))))
+				)))
 				return
 			}
 		}
@@ -1890,9 +1890,9 @@ func (adh *AdminHandler) StreamWorkflowReplicationMessages(
 					return
 				}
 			default:
-				logger.Info("AdminStreamReplicationMessages server -> client encountered error", tag.Error(serviceerror.NewInternal(fmt.Sprintf(
+				logger.Info("AdminStreamReplicationMessages server -> client encountered error", tag.Error(serviceerror.NewInternalf(
 					"StreamWorkflowReplicationMessages encountered unknown type: %T %v", attr, attr,
-				))))
+				)))
 				return
 			}
 		}
@@ -2076,7 +2076,7 @@ func (adh *AdminHandler) DescribeDLQJob(ctx context.Context, request *adminservi
 	case dlq.WorkflowTypeMerge:
 		opType = enumsspb.DLQ_OPERATION_TYPE_MERGE
 	default:
-		return nil, serviceerror.NewInternal(fmt.Sprintf("Invalid DLQ workflow type: %v", opType))
+		return nil, serviceerror.NewInternalf("Invalid DLQ workflow type: %v", opType)
 	}
 	return &adminservice.DescribeDLQJobResponse{
 		DlqKey: &commonspb.HistoryDLQKey{

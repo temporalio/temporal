@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"fmt"
 
 	"go.temporal.io/api/serviceerror"
 	tokenspb "go.temporal.io/server/api/token/v1"
@@ -49,7 +48,7 @@ func GetActivityScheduledEventID(
 	}
 	activityInfo, ok := mutableState.GetActivityByActivityID(activityID)
 	if !ok {
-		return 0, serviceerror.NewNotFound(fmt.Sprintf("cannot find pending activity with ActivityID %s, check workflow execution history for more details", activityID))
+		return 0, serviceerror.NewNotFoundf("cannot find pending activity with ActivityID %s, check workflow execution history for more details", activityID)
 	}
 	return activityInfo.ScheduledEventId, nil
 }

@@ -159,10 +159,10 @@ func (h *OperatorHandlerImpl) AddSearchAttributes(
 
 	for saName, saType := range request.GetSearchAttributes() {
 		if searchattribute.IsReserved(saName) {
-			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(errSearchAttributeIsReservedMessage, saName))
+			return nil, serviceerror.NewInvalidArgumentf(errSearchAttributeIsReservedMessage, saName)
 		}
 		if _, ok := enumspb.IndexedValueType_name[int32(saType)]; !ok {
-			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(errUnknownSearchAttributeTypeMessage, saType))
+			return nil, serviceerror.NewInvalidArgumentf(errUnknownSearchAttributeTypeMessage, saType)
 		}
 	}
 
@@ -198,7 +198,7 @@ func (h *OperatorHandlerImpl) addSearchAttributesInternal(
 ) error {
 	currentSearchAttributes, err := h.saManager.GetSearchAttributes(indexName, true)
 	if err != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
+		return serviceerror.NewUnavailablef(errUnableToGetSearchAttributesMessage, err)
 	}
 
 	if indexName == "" {
@@ -267,8 +267,8 @@ func (h *OperatorHandlerImpl) addSearchAttributesElasticsearch(
 		wfParams,
 	)
 	if err != nil {
-		return serviceerror.NewUnavailable(
-			fmt.Sprintf(errUnableToStartWorkflowMessage, addsearchattributes.WorkflowName, err),
+		return serviceerror.NewUnavailablef(
+			errUnableToStartWorkflowMessage, addsearchattributes.WorkflowName, err,
 		)
 	}
 
@@ -294,7 +294,7 @@ func (h *OperatorHandlerImpl) addSearchAttributesSQL(
 		frontend.DefaultLongPollTimeout,
 	)
 	if err != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToCreateFrontendClientMessage, err))
+		return serviceerror.NewUnavailablef(errUnableToCreateFrontendClientMessage, err)
 	}
 
 	nsName := request.GetNamespace()
@@ -306,7 +306,7 @@ func (h *OperatorHandlerImpl) addSearchAttributesSQL(
 		&workflowservice.DescribeNamespaceRequest{Namespace: nsName},
 	)
 	if err != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetNamespaceInfoMessage, nsName, err))
+		return serviceerror.NewUnavailablef(errUnableToGetNamespaceInfoMessage, nsName, err)
 	}
 
 	dbCustomSearchAttributes := searchattribute.GetSqlDbIndexSearchAttributes().CustomSearchAttributes
@@ -345,8 +345,8 @@ func (h *OperatorHandlerImpl) addSearchAttributesSQL(
 			}
 		}
 		if targetFieldName == "" {
-			return serviceerror.NewInvalidArgument(
-				fmt.Sprintf(errTooManySearchAttributesMessage, cntUsed, saType),
+			return serviceerror.NewInvalidArgumentf(
+				errTooManySearchAttributesMessage, cntUsed, saType,
 			)
 		}
 		upsertFieldToAliasMap[targetFieldName] = saName
@@ -367,7 +367,7 @@ func (h *OperatorHandlerImpl) addSearchAttributesSQL(
 		if err.Error() == errCustomSearchAttributeFieldAlreadyAllocated.Error() {
 			return errRaceConditionAddingSearchAttributes
 		}
-		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToSaveSearchAttributesMessage, err))
+		return serviceerror.NewUnavailablef(errUnableToSaveSearchAttributesMessage, err)
 	}
 	return nil
 }
@@ -390,7 +390,7 @@ func (h *OperatorHandlerImpl) RemoveSearchAttributes(
 	indexName := h.visibilityMgr.GetIndexName()
 	currentSearchAttributes, err := h.saManager.GetSearchAttributes(indexName, true)
 	if err != nil {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
+		return nil, serviceerror.NewUnavailablef(errUnableToGetSearchAttributesMessage, err)
 	}
 
 	// TODO (rodrigozhou): Remove condition `indexName == ""`.
@@ -419,11 +419,11 @@ func (h *OperatorHandlerImpl) removeSearchAttributesElasticsearch(
 	newCustomSearchAttributes := maps.Clone(currentSearchAttributes.Custom())
 	for _, saName := range request.GetSearchAttributes() {
 		if !currentSearchAttributes.IsDefined(saName) {
-			return serviceerror.NewNotFound(fmt.Sprintf(errSearchAttributeDoesntExistMessage, saName))
+			return serviceerror.NewNotFoundf(errSearchAttributeDoesntExistMessage, saName)
 		}
 		if _, ok := newCustomSearchAttributes[saName]; !ok {
-			return serviceerror.NewInvalidArgument(
-				fmt.Sprintf(errUnableToRemoveNonCustomSearchAttributesMessage, saName),
+			return serviceerror.NewInvalidArgumentf(
+				errUnableToRemoveNonCustomSearchAttributesMessage, saName,
 			)
 		}
 		delete(newCustomSearchAttributes, saName)
@@ -431,7 +431,7 @@ func (h *OperatorHandlerImpl) removeSearchAttributesElasticsearch(
 
 	err := h.saManager.SaveSearchAttributes(ctx, indexName, newCustomSearchAttributes)
 	if err != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToSaveSearchAttributesMessage, err))
+		return serviceerror.NewUnavailablef(errUnableToSaveSearchAttributesMessage, err)
 	}
 	return nil
 }
@@ -446,7 +446,7 @@ func (h *OperatorHandlerImpl) removeSearchAttributesSQL(
 		frontend.DefaultLongPollTimeout,
 	)
 	if err != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToCreateFrontendClientMessage, err))
+		return serviceerror.NewUnavailablef(errUnableToCreateFrontendClientMessage, err)
 	}
 
 	nsName := request.GetNamespace()
@@ -458,7 +458,7 @@ func (h *OperatorHandlerImpl) removeSearchAttributesSQL(
 		&workflowservice.DescribeNamespaceRequest{Namespace: nsName},
 	)
 	if err != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetNamespaceInfoMessage, nsName, err))
+		return serviceerror.NewUnavailablef(errUnableToGetNamespaceInfoMessage, nsName, err)
 	}
 
 	upsertFieldToAliasMap := make(map[string]string)
@@ -469,11 +469,11 @@ func (h *OperatorHandlerImpl) removeSearchAttributesSQL(
 			continue
 		}
 		if currentSearchAttributes.IsDefined(saName) {
-			return serviceerror.NewInvalidArgument(
-				fmt.Sprintf(errUnableToRemoveNonCustomSearchAttributesMessage, saName),
+			return serviceerror.NewInvalidArgumentf(
+				errUnableToRemoveNonCustomSearchAttributesMessage, saName,
 			)
 		}
-		return serviceerror.NewNotFound(fmt.Sprintf(errSearchAttributeDoesntExistMessage, saName))
+		return serviceerror.NewNotFoundf(errSearchAttributeDoesntExistMessage, saName)
 	}
 
 	_, err = client.UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
@@ -498,8 +498,8 @@ func (h *OperatorHandlerImpl) ListSearchAttributes(
 	indexName := h.visibilityMgr.GetIndexName()
 	searchAttributes, err := h.saManager.GetSearchAttributes(indexName, true)
 	if err != nil {
-		return nil, serviceerror.NewUnavailable(
-			fmt.Sprintf("unable to read custom search attributes: %v", err),
+		return nil, serviceerror.NewUnavailablef(
+			"unable to read custom search attributes: %v", err,
 		)
 	}
 
@@ -524,8 +524,8 @@ func (h *OperatorHandlerImpl) listSearchAttributesElasticsearch(
 		var err error
 		storageSchema, err = h.esClient.GetMapping(ctx, indexName)
 		if err != nil {
-			return nil, serviceerror.NewUnavailable(
-				fmt.Sprintf("unable to get mapping from Elasticsearch: %v", err),
+			return nil, serviceerror.NewUnavailablef(
+				"unable to get mapping from Elasticsearch: %v", err,
 			)
 		}
 	}
@@ -546,7 +546,7 @@ func (h *OperatorHandlerImpl) listSearchAttributesSQL(
 		frontend.DefaultLongPollTimeout,
 	)
 	if err != nil {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf(errUnableToCreateFrontendClientMessage, err))
+		return nil, serviceerror.NewUnavailablef(errUnableToCreateFrontendClientMessage, err)
 	}
 
 	nsName := request.GetNamespace()
@@ -558,8 +558,8 @@ func (h *OperatorHandlerImpl) listSearchAttributesSQL(
 		&workflowservice.DescribeNamespaceRequest{Namespace: nsName},
 	)
 	if err != nil {
-		return nil, serviceerror.NewUnavailable(
-			fmt.Sprintf(errUnableToGetNamespaceInfoMessage, nsName, err),
+		return nil, serviceerror.NewUnavailablef(
+			errUnableToGetNamespaceInfoMessage, nsName, err,
 		)
 	}
 
@@ -619,7 +619,7 @@ func (h *OperatorHandlerImpl) DeleteNamespace(
 		wfParams,
 	)
 	if err != nil {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf(errUnableToStartWorkflowMessage, deletenamespace.WorkflowName, err))
+		return nil, serviceerror.NewUnavailablef(errUnableToStartWorkflowMessage, deletenamespace.WorkflowName, err)
 	}
 
 	// Wait for the workflow to complete.
@@ -650,16 +650,16 @@ func (h *OperatorHandlerImpl) AddOrUpdateRemoteCluster(
 	// Fetch cluster metadata from remote cluster
 	resp, err := adminClient.DescribeCluster(ctx, &adminservice.DescribeClusterRequest{})
 	if err != nil {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf(
+		return nil, serviceerror.NewUnavailablef(
 			errUnableConnectRemoteClusterMessage,
 			request.GetFrontendAddress(),
 			err,
-		))
+		)
 	}
 
 	err = h.validateRemoteClusterMetadata(resp)
 	if err != nil {
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(errInvalidRemoteClusterInfo, err))
+		return nil, serviceerror.NewInvalidArgumentf(errInvalidRemoteClusterInfo, err)
 	}
 
 	var updateRequestVersion int64 = 0
@@ -673,7 +673,7 @@ func (h *OperatorHandlerImpl) AddOrUpdateRemoteCluster(
 	case *serviceerror.NotFound:
 		updateRequestVersion = 0
 	default:
-		return nil, serviceerror.NewInternal(fmt.Sprintf(errUnableToStoreClusterInfo, err))
+		return nil, serviceerror.NewInternalf(errUnableToStoreClusterInfo, err)
 	}
 
 	applied, err := h.clusterMetadataManager.SaveClusterMetadata(ctx, &persistence.SaveClusterMetadataRequest{
@@ -692,10 +692,10 @@ func (h *OperatorHandlerImpl) AddOrUpdateRemoteCluster(
 		Version: updateRequestVersion,
 	})
 	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf(errUnableToStoreClusterInfo, err))
+		return nil, serviceerror.NewInternalf(errUnableToStoreClusterInfo, err)
 	}
 	if !applied {
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(errUnableToStoreClusterInfo, err))
+		return nil, serviceerror.NewInvalidArgumentf(errUnableToStoreClusterInfo, err)
 	}
 	return &operatorservice.AddOrUpdateRemoteClusterResponse{}, nil
 }
@@ -721,7 +721,7 @@ func (h *OperatorHandlerImpl) RemoveRemoteCluster(
 		ctx,
 		&persistence.DeleteClusterMetadataRequest{ClusterName: request.GetClusterName()},
 	); err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf(errUnableToDeleteClusterInfo, err))
+		return nil, serviceerror.NewInternalf(errUnableToDeleteClusterInfo, err)
 	}
 	return &operatorservice.RemoveRemoteClusterResponse{}, nil
 }

@@ -2,7 +2,6 @@ package workflow
 
 import (
 	"context"
-	"fmt"
 	"testing"
 	"time"
 
@@ -63,7 +62,7 @@ func NewMapEventCache(
 				if event, ok := m[key]; ok {
 					return event, nil
 				}
-				return nil, serviceerror.NewNotFound(fmt.Sprintf("event %#v not found", key))
+				return nil, serviceerror.NewNotFoundf("event %#v not found", key)
 			},
 		)
 	return cache

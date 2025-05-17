@@ -29,7 +29,7 @@ func (c *ConverterError) Error() string {
 }
 
 func (c *ConverterError) ToInvalidArgument() error {
-	return serviceerror.NewInvalidArgument(fmt.Sprintf("invalid query: %v", c))
+	return serviceerror.NewInvalidArgumentf("invalid query: %v", c)
 }
 
 func wrapConverterError(message string, err error) error {

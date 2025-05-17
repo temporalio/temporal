@@ -3,7 +3,6 @@ package persistence
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strings"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -377,8 +376,8 @@ func (m *executionManagerImpl) GetWorkflowExecution(
 	var notFound *serviceerror.NotFound
 	if errors.As(respErr, &notFound) {
 		// strip persistence-specific error message
-		respErr = serviceerror.NewNotFound(fmt.Sprintf(
-			"workflow execution not found for workflow ID %q and run ID %q", request.WorkflowID, request.RunID))
+		respErr = serviceerror.NewNotFoundf(
+			"workflow execution not found for workflow ID %q and run ID %q", request.WorkflowID, request.RunID)
 	}
 	if respErr != nil && response == nil {
 		// try to utilize resp as much as possible, for RebuildMutableState API
@@ -767,7 +766,7 @@ func (m *executionManagerImpl) GetCurrentExecution(
 	var notFound *serviceerror.NotFound
 	if errors.As(respErr, &notFound) {
 		// strip persistence-specific error message
-		respErr = serviceerror.NewNotFound(fmt.Sprintf("workflow not found for ID: %v", request.WorkflowID))
+		respErr = serviceerror.NewNotFoundf("workflow not found for ID: %v", request.WorkflowID)
 	}
 	if respErr != nil && response == nil {
 		// try to utilize resp as much as possible, for RebuildMutableState API
@@ -1164,7 +1163,7 @@ func validateTaskRange(
 			return serviceerror.NewInvalidArgument("invalid task range, taskID must be empty for scheduled task category")
 		}
 	default:
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("invalid task category type: %v", taskCategoryType))
+		return serviceerror.NewInvalidArgumentf("invalid task category type: %v", taskCategoryType)
 	}
 
 	return nil

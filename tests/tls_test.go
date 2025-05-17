@@ -9,7 +9,6 @@ import (
 
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/workflowservice/v1"
-	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/tests/testcore"
@@ -17,7 +16,6 @@ import (
 
 type TLSFunctionalSuite struct {
 	testcore.FunctionalTestBase
-	sdkClient sdkclient.Client
 }
 
 func TestTLSFunctionalSuite(t *testing.T) {
@@ -26,32 +24,11 @@ func TestTLSFunctionalSuite(t *testing.T) {
 }
 
 func (s *TLSFunctionalSuite) SetupSuite() {
-	s.FunctionalTestBase.SetupSuiteWithCluster("testdata/tls_cluster.yaml")
+	s.FunctionalTestBase.SetupSuiteWithCluster(testcore.WithMTLS())
 }
 
 func (s *TLSFunctionalSuite) TearDownSuite() {
 	s.FunctionalTestBase.TearDownCluster()
-}
-
-func (s *TLSFunctionalSuite) SetupTest() {
-	s.FunctionalTestBase.SetupTest()
-
-	var err error
-	s.sdkClient, err = sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.FrontendGRPCAddress(),
-		Namespace: s.Namespace().String(),
-		ConnectionOptions: sdkclient.ConnectionOptions{
-			TLS: s.GetTestCluster().Host().TlsConfigProvider().FrontendClientConfig,
-		},
-	})
-	s.NoError(err)
-}
-
-func (s *TLSFunctionalSuite) TearDownTest() {
-	if s.sdkClient != nil {
-		s.sdkClient.Close()
-	}
-	s.FunctionalTestBase.TearDownTest()
 }
 
 func (s *TLSFunctionalSuite) TestGRPCMTLS() {
@@ -62,7 +39,7 @@ func (s *TLSFunctionalSuite) TestGRPCMTLS() {
 	calls := s.trackAuthInfoByCall()
 
 	// Make a list-open call
-	_, _ = s.sdkClient.ListOpenWorkflow(ctx, &workflowservice.ListOpenWorkflowExecutionsRequest{})
+	_, _ = s.SdkClient().ListOpenWorkflow(ctx, &workflowservice.ListOpenWorkflowExecutionsRequest{})
 
 	// Confirm auth info as expected
 	authInfo, ok := calls.Load("/temporal.api.workflowservice.v1.WorkflowService/ListOpenWorkflowExecutions")

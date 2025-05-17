@@ -2,7 +2,6 @@ package persistence
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -362,7 +361,7 @@ func (p *executionPersistenceClient) GetHistoryTasks(
 	case tasks.CategoryIDOutbound:
 		operation = metrics.PersistenceGetOutboundTasksScope
 	default:
-		return nil, serviceerror.NewInternal(fmt.Sprintf("unknown task category type: %v", request.TaskCategory))
+		return nil, serviceerror.NewInternalf("unknown task category type: %v", request.TaskCategory)
 	}
 
 	caller := headers.GetCallerInfo(ctx).CallerName
@@ -393,7 +392,7 @@ func (p *executionPersistenceClient) CompleteHistoryTask(
 	case tasks.CategoryIDOutbound:
 		operation = metrics.PersistenceCompleteOutboundTasksScope
 	default:
-		return serviceerror.NewInternal(fmt.Sprintf("unknown task category type: %v", request.TaskCategory))
+		return serviceerror.NewInternalf("unknown task category type: %v", request.TaskCategory)
 	}
 
 	caller := headers.GetCallerInfo(ctx).CallerName
@@ -424,7 +423,7 @@ func (p *executionPersistenceClient) RangeCompleteHistoryTasks(
 	case tasks.CategoryIDOutbound:
 		operation = metrics.PersistenceRangeCompleteOutboundTasksScope
 	default:
-		return serviceerror.NewInternal(fmt.Sprintf("unknown task category type: %v", request.TaskCategory))
+		return serviceerror.NewInternalf("unknown task category type: %v", request.TaskCategory)
 	}
 
 	caller := headers.GetCallerInfo(ctx).CallerName

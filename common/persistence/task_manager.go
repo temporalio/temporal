@@ -2,7 +2,6 @@ package persistence
 
 import (
 	"context"
-	"fmt"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -174,7 +173,7 @@ func (m *taskManagerImpl) CreateTasks(
 	for i, task := range request.Tasks {
 		taskBlob, err := m.serializer.TaskInfoToBlob(task, enumspb.ENCODING_TYPE_PROTO3)
 		if err != nil {
-			return nil, serviceerror.NewUnavailable(fmt.Sprintf("CreateTasks operation failed during serialization. Error : %v", err))
+			return nil, serviceerror.NewUnavailablef("CreateTasks operation failed during serialization. Error : %v", err)
 		}
 		tasks[i] = &InternalCreateTask{
 			TaskId:     task.GetTaskId(),
@@ -212,7 +211,7 @@ func (m *taskManagerImpl) GetTasks(
 	for i, taskBlob := range internalResp.Tasks {
 		task, err := m.serializer.TaskInfoFromBlob(taskBlob)
 		if err != nil {
-			return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetTasks failed to deserialize task: %s", err.Error()))
+			return nil, serviceerror.NewUnavailablef("GetTasks failed to deserialize task: %s", err.Error())
 		}
 		tasks[i] = task
 	}

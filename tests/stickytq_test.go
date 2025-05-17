@@ -19,7 +19,7 @@ import (
 )
 
 type StickyTqTestSuite struct {
-	testcore.FunctionalTestSuite
+	testcore.FunctionalTestBase
 }
 
 func TestStickyTqTestSuite(t *testing.T) {

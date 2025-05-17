@@ -1615,6 +1615,7 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 		nil,
 		nil,
 		allowResetWithPendingChildren,
+		nil,
 	)
 
 	switch err.(type) {
@@ -1781,7 +1782,7 @@ func (t *transferQueueActiveTaskExecutor) applyParentClosePolicy(
 		return err
 
 	default:
-		return serviceerror.NewInternal(fmt.Sprintf("unknown parent close policy: %v", childInfo.ParentClosePolicy))
+		return serviceerror.NewInternalf("unknown parent close policy: %v", childInfo.ParentClosePolicy)
 	}
 }
 

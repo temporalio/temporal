@@ -35,8 +35,10 @@ const (
 )
 
 type historyArchiver struct {
-	container     *archiver.HistoryBootstrapContainer
-	gcloudStorage connector.Client
+	executionManager persistence.ExecutionManager
+	logger           log.Logger
+	metricsHandler   metrics.Handler
+	gcloudStorage    connector.Client
 
 	// only set in test code
 	historyIterator archiver.HistoryIterator
@@ -56,21 +58,25 @@ type getHistoryToken struct {
 
 // NewHistoryArchiver creates a new gcloud storage HistoryArchiver
 func NewHistoryArchiver(
-	container *archiver.HistoryBootstrapContainer,
+	executionManager persistence.ExecutionManager,
+	logger log.Logger,
+	metricsHandler metrics.Handler,
 	config *config.GstorageArchiver,
 ) (archiver.HistoryArchiver, error) {
 	storage, err := connector.NewClient(context.Background(), config)
 	if err == nil {
-		return newHistoryArchiver(container, nil, storage), nil
+		return newHistoryArchiver(executionManager, logger, metricsHandler, nil, storage), nil
 	}
 	return nil, err
 }
 
-func newHistoryArchiver(container *archiver.HistoryBootstrapContainer, historyIterator archiver.HistoryIterator, storage connector.Client) archiver.HistoryArchiver {
+func newHistoryArchiver(executionManager persistence.ExecutionManager, logger log.Logger, metricsHandler metrics.Handler, historyIterator archiver.HistoryIterator, storage connector.Client) archiver.HistoryArchiver {
 	return &historyArchiver{
-		container:       container,
-		gcloudStorage:   storage,
-		historyIterator: historyIterator,
+		executionManager: executionManager,
+		logger:           logger,
+		metricsHandler:   metricsHandler,
+		gcloudStorage:    storage,
+		historyIterator:  historyIterator,
 	}
 }
 
@@ -82,7 +88,7 @@ func newHistoryArchiver(container *archiver.HistoryBootstrapContainer, historyIt
 // between retry attempts.
 // This method will be invoked after a workflow passes its retention period.
 func (h *historyArchiver) Archive(ctx context.Context, URI archiver.URI, request *archiver.ArchiveHistoryRequest, opts ...archiver.ArchiveOption) (err error) {
-	handler := h.container.MetricsHandler.WithTags(metrics.OperationTag(metrics.HistoryArchiverScope), metrics.NamespaceTag(request.Namespace))
+	handler := h.metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryArchiverScope), metrics.NamespaceTag(request.Namespace))
 	featureCatalog := archiver.GetFeatureCatalog(opts...)
 	startTime := time.Now().UTC()
 	defer func() {
@@ -102,7 +108,7 @@ func (h *historyArchiver) Archive(ctx context.Context, URI archiver.URI, request
 		}
 	}()
 
-	logger := archiver.TagLoggerWithArchiveHistoryRequestAndURI(h.container.Logger, request, URI.String())
+	logger := archiver.TagLoggerWithArchiveHistoryRequestAndURI(h.logger, request, URI.String())
 
 	if err := h.ValidateURI(URI); err != nil {
 		logger.Error(archiver.ArchiveNonRetryableErrorMsg, tag.ArchivalArchiveFailReason(archiver.ErrReasonInvalidURI), tag.Error(err))
@@ -118,7 +124,7 @@ func (h *historyArchiver) Archive(ctx context.Context, URI archiver.URI, request
 	historyIterator := h.historyIterator
 	var progress progress
 	if historyIterator == nil { // will only be set by testing code
-		historyIterator, _ = loadHistoryIterator(ctx, request, h.container.ExecutionManager, featureCatalog, &progress)
+		historyIterator, _ = loadHistoryIterator(ctx, request, h.executionManager, featureCatalog, &progress)
 	}
 
 	encoder := codec.NewJSONPBEncoder()

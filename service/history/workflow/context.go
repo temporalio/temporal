@@ -2,7 +2,6 @@ package workflow
 
 import (
 	"context"
-	"fmt"
 
 	"go.opentelemetry.io/otel/trace"
 	commonpb "go.temporal.io/api/common/v1"
@@ -678,7 +677,7 @@ func (c *ContextImpl) mergeUpdateWithNewReplicationTasks(
 		newRunID = task.RunID
 	default:
 		// Handle unexpected types or log an error if this case is not expected
-		return serviceerror.NewInternal(fmt.Sprintf("unexpected replication task type for new run task %T", newRunTask))
+		return serviceerror.NewInternalf("unexpected replication task type for new run task %T", newRunTask)
 	}
 	taskUpdated := false
 
@@ -863,7 +862,7 @@ func (c *ContextImpl) ReapplyEvents(
 	}
 	if sourceAdminClient == nil {
 		// TODO: will this ever happen?
-		return serviceerror.NewInternal(fmt.Sprintf("cannot find cluster config %v to do reapply", activeCluster))
+		return serviceerror.NewInternalf("cannot find cluster config %v to do reapply", activeCluster)
 	}
 
 	_, err = sourceAdminClient.ReapplyEvents(
