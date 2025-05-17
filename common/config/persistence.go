@@ -77,20 +77,6 @@ func (c *Persistence) Validate() error {
 				ErrPersistenceConfig,
 				c.SecondaryVisibilityStore)
 		}
-		if isPrimaryEs && isSecondaryEs {
-			// ElasticSearch config for visibilityStore and secondaryVisibilityStore must be the same except for
-			// `indices.visibility` config key and private fields - this is a restriction due to global ES client
-			esConfig := *c.DataStores[c.VisibilityStore].Elasticsearch
-			secEsConfig := *c.DataStores[c.SecondaryVisibilityStore].Elasticsearch
-			esConfig.Indices = nil
-			secEsConfig.Indices = nil
-			if !reflect.DeepEqual(esConfig, secEsConfig) {
-				return fmt.Errorf(
-					"%w: config mismatch for visibilityStore and secondaryVisibilityStore",
-					ErrPersistenceConfig,
-				)
-			}
-		}
 	}
 
 	for _, st := range stores {
