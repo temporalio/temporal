@@ -176,7 +176,7 @@ func (s *StreamSenderImpl) recvEventLoop() (retErr error) {
 		switch attr := req.GetAttributes().(type) {
 		case *historyservice.StreamWorkflowReplicationMessagesRequest_SyncReplicationState:
 			if err := s.recvSyncReplicationState(attr.SyncReplicationState); err != nil {
-				return fmt.Errorf("ReplicationServiceError StreamSender unable to handle SyncReplicationState: %w", err)
+				return fmt.Errorf("streamSender unable to handle SyncReplicationState: %w", err)
 			}
 			metrics.ReplicationTasksRecv.With(s.metrics).Record(
 				int64(1),
@@ -185,7 +185,7 @@ func (s *StreamSenderImpl) recvEventLoop() (retErr error) {
 				metrics.OperationTag(metrics.SyncWatermarkScope),
 			)
 		default:
-			return fmt.Errorf("ReplicationServiceError StreamSender unable to handle request: %w, taskAttr: %v", err, attr)
+			return fmt.Errorf("streamSender unable to handle request: %w, taskAttr: %v", err, attr)
 		}
 	}
 	return nil
@@ -207,14 +207,14 @@ func (s *StreamSenderImpl) sendEventLoop(priority enumsspb.TaskPriority) (retErr
 
 	catchupEndExclusiveWatermark, err := s.sendCatchUp(priority)
 	if err != nil {
-		return fmt.Errorf("ReplicationServiceError StreamSender unable to catch up replication tasks: %w", err)
+		return fmt.Errorf("streamSender unable to catch up replication tasks: %w", err)
 	}
-	if err := s.sendLive(
+	if err = s.sendLive(
 		priority,
 		newTaskNotificationChan,
 		catchupEndExclusiveWatermark,
 	); err != nil {
-		return fmt.Errorf("ReplicationServiceError StreamSender unable to stream replication tasks: %w", err)
+		return fmt.Errorf("streamSender unable to stream replication tasks: %w", err)
 	}
 	return nil
 }
@@ -226,7 +226,7 @@ func (s *StreamSenderImpl) recvSyncReplicationState(
 	switch s.isTieredStackEnabled {
 	case true:
 		if attr.HighPriorityState == nil || attr.LowPriorityState == nil {
-			return NewStreamError("ReplicationServiceError StreamSender encountered unsupported SyncReplicationState", nil)
+			return NewStreamError("streamSender encountered unsupported SyncReplicationState", nil)
 		}
 		readerState = &persistencespb.QueueReaderState{
 			Scopes: []*persistencespb.QueueSliceScope{
@@ -279,7 +279,7 @@ func (s *StreamSenderImpl) recvSyncReplicationState(
 		}
 	case false:
 		if attr.HighPriorityState != nil || attr.LowPriorityState != nil {
-			return NewStreamError("ReplicationServiceError StreamSender encountered unsupported SyncReplicationState", nil)
+			return NewStreamError("streamSender encountered unsupported SyncReplicationState", nil)
 		}
 		readerState = &persistencespb.QueueReaderState{
 			Scopes: []*persistencespb.QueueSliceScope{
@@ -465,7 +465,7 @@ Loop:
 
 		item, err := iter.Next()
 		if err != nil {
-			return fmt.Errorf("ReplicationServiceError StreamSender unable to get next replication task: %w", err)
+			return fmt.Errorf("streamSender unable to get next replication task: %w", err)
 		}
 
 		if !s.shouldProcessTask(item) {

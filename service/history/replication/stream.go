@@ -18,7 +18,6 @@ import (
 
 var (
 	streamRetryPolicy = backoff.NewExponentialRetryPolicy(500 * time.Millisecond).
-		WithMaximumAttempts(100).
 		WithMaximumInterval(time.Second * 2)
 )
 
