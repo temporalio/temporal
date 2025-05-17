@@ -515,15 +515,15 @@ func (e *ExecutableTaskImpl) BackFillEvents(
 			endEventVersion,
 		)
 		if !iterator.HasNext() {
-			return serviceerror.NewInternal(fmt.Sprintf("failed to get new run history when backfill"))
+			return serviceerror.NewInternalf("failed to get new run history when backfill")
 		}
 		batch, err := iterator.Next()
 		if err != nil {
-			return serviceerror.NewInternal(fmt.Sprintf("failed to get new run history when backfill: %v", err))
+			return serviceerror.NewInternalf("failed to get new run history when backfill: %v", err)
 		}
 		events, err := e.EventSerializer.DeserializeEvents(batch.RawEventBatch)
 		if err != nil {
-			return serviceerror.NewInternal(fmt.Sprintf("failed to deserailize run history events when backfill: %v", err))
+			return serviceerror.NewInternalf("failed to deserailize run history events when backfill: %v", err)
 		}
 		newRunEvents = events
 	}
@@ -542,7 +542,7 @@ func (e *ExecutableTaskImpl) BackFillEvents(
 		}
 		err := engine.BackfillHistoryEvents(ctx, backFillRequest)
 		if err != nil {
-			return serviceerror.NewInternal(fmt.Sprintf("failed to backfill: %v", err))
+			return serviceerror.NewInternalf("failed to backfill: %v", err)
 		}
 		eventsBatch = nil
 		versionHistory = nil
@@ -727,7 +727,7 @@ func (e *ExecutableTaskImpl) GetNamespaceInfo(
 	case nil:
 		if e.replicationTask.VersionedTransition != nil && e.replicationTask.VersionedTransition.NamespaceFailoverVersion > namespaceEntry.FailoverVersion() {
 			if !e.ProcessToolBox.Config.EnableReplicationEagerRefreshNamespace() {
-				return "", false, serviceerror.NewInternal(fmt.Sprintf("cannot process task because namespace failover version is not up to date, task version: %v, namespace version: %v", e.replicationTask.VersionedTransition.NamespaceFailoverVersion, namespaceEntry.FailoverVersion()))
+				return "", false, serviceerror.NewInternalf("cannot process task because namespace failover version is not up to date, task version: %v, namespace version: %v", e.replicationTask.VersionedTransition.NamespaceFailoverVersion, namespaceEntry.FailoverVersion())
 			}
 			_, err = e.ProcessToolBox.EagerNamespaceRefresher.SyncNamespaceFromSourceCluster(ctx, namespace.ID(namespaceID), e.sourceClusterName)
 			if err != nil {
@@ -752,7 +752,7 @@ func (e *ExecutableTaskImpl) GetNamespaceInfo(
 	}
 	// need to make sure ns in cache is up-to-date
 	if e.replicationTask.VersionedTransition != nil && namespaceEntry.FailoverVersion() < e.replicationTask.VersionedTransition.NamespaceFailoverVersion {
-		return "", false, serviceerror.NewInternal(fmt.Sprintf("cannot process task because namespace failover version is not up to date after sync, task version: %v, namespace version: %v", e.replicationTask.VersionedTransition.NamespaceFailoverVersion, namespaceEntry.FailoverVersion()))
+		return "", false, serviceerror.NewInternalf("cannot process task because namespace failover version is not up to date after sync, task version: %v, namespace version: %v", e.replicationTask.VersionedTransition.NamespaceFailoverVersion, namespaceEntry.FailoverVersion())
 	}
 
 	e.namespace.Store(namespaceEntry.Name())

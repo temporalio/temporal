@@ -403,10 +403,10 @@ func (r *TaskGeneratorImpl) GenerateScheduleWorkflowTaskTasks(
 		workflowTaskScheduledEventID,
 	)
 	if workflowTask == nil {
-		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending workflow task: %v", workflowTaskScheduledEventID))
+		return serviceerror.NewInternalf("it could be a bug, cannot get pending workflow task: %v", workflowTaskScheduledEventID)
 	}
 	if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
-		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, GenerateScheduleSpeculativeWorkflowTaskTasks must be called for speculative workflow task: %v", workflowTaskScheduledEventID))
+		return serviceerror.NewInternalf("it could be a bug, GenerateScheduleSpeculativeWorkflowTaskTasks must be called for speculative workflow task: %v", workflowTaskScheduledEventID)
 	}
 
 	if r.mutableState.IsStickyTaskQueueSet() {
@@ -495,7 +495,7 @@ func (r *TaskGeneratorImpl) GenerateStartWorkflowTaskTasks(
 		workflowTaskScheduledEventID,
 	)
 	if workflowTask == nil {
-		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending workflow task: %v", workflowTaskScheduledEventID))
+		return serviceerror.NewInternalf("it could be a bug, cannot get pending workflow task: %v", workflowTaskScheduledEventID)
 	}
 
 	isSpeculative := workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE
@@ -524,7 +524,7 @@ func (r *TaskGeneratorImpl) GenerateActivityTasks(
 ) error {
 	activityInfo, ok := r.mutableState.GetActivityInfo(activityScheduledEventID)
 	if !ok {
-		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending activity: %v", activityScheduledEventID))
+		return serviceerror.NewInternalf("it could be a bug, cannot get pending activity: %v", activityScheduledEventID)
 	}
 
 	r.mutableState.AddTasks(&tasks.ActivityTask{
@@ -560,7 +560,7 @@ func (r *TaskGeneratorImpl) GenerateChildWorkflowTasks(
 
 	childWorkflowInfo, ok := r.mutableState.GetChildExecutionInfo(childWorkflowScheduledEventID)
 	if !ok {
-		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending child workflow: %v", childWorkflowScheduledEventID))
+		return serviceerror.NewInternalf("it could be a bug, cannot get pending child workflow: %v", childWorkflowScheduledEventID)
 	}
 
 	targetNamespaceID, err := r.getTargetNamespaceID(namespace.Name(attr.GetNamespace()), namespace.ID(attr.GetNamespaceId()))
@@ -593,7 +593,7 @@ func (r *TaskGeneratorImpl) GenerateRequestCancelExternalTasks(
 
 	_, ok := r.mutableState.GetRequestCancelInfo(scheduledEventID)
 	if !ok {
-		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending request cancel external workflow: %v", scheduledEventID))
+		return serviceerror.NewInternalf("it could be a bug, cannot get pending request cancel external workflow: %v", scheduledEventID)
 	}
 
 	targetNamespaceID, err := r.getTargetNamespaceID(namespace.Name(attr.GetNamespace()), namespace.ID(attr.GetNamespaceId()))
@@ -628,7 +628,7 @@ func (r *TaskGeneratorImpl) GenerateSignalExternalTasks(
 
 	_, ok := r.mutableState.GetSignalInfo(scheduledEventID)
 	if !ok {
-		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending signal external workflow: %v", scheduledEventID))
+		return serviceerror.NewInternalf("it could be a bug, cannot get pending signal external workflow: %v", scheduledEventID)
 	}
 
 	targetNamespaceID, err := r.getTargetNamespaceID(namespace.Name(attr.GetNamespace()), namespace.ID(attr.GetNamespaceId()))
@@ -843,7 +843,7 @@ func generateSubStateMachineTask(
 ) error {
 	ser, ok := stateMachineRegistry.TaskSerializer(task.Type())
 	if !ok {
-		return serviceerror.NewInternal(fmt.Sprintf("no task serializer for %v", task.Type()))
+		return serviceerror.NewInternalf("no task serializer for %v", task.Type())
 	}
 	data, err := ser.Serialize(task)
 	if err != nil {

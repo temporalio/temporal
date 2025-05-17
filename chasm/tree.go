@@ -271,8 +271,8 @@ func (n *Node) Component(
 
 	componentValue, ok := node.value.(Component)
 	if !ok {
-		return nil, serviceerror.NewInternal(
-			fmt.Sprintf("component value is not of type Component: %v", reflect.TypeOf(node.value)),
+		return nil, serviceerror.NewInternalf(
+			"component value is not of type Component: %v", reflect.TypeOf(node.value),
 		)
 	}
 
@@ -299,15 +299,15 @@ func (n *Node) prepareComponentValue(
 	metadata := n.serializedNode.Metadata
 	componentAttr := metadata.GetComponentAttributes()
 	if componentAttr == nil {
-		return serviceerror.NewInternal(
-			fmt.Sprintf("expect chasm node to have ComponentAttributes, actual attributes: %v", metadata.Attributes),
+		return serviceerror.NewInternalf(
+			"expect chasm node to have ComponentAttributes, actual attributes: %v", metadata.Attributes,
 		)
 	}
 
 	if n.valueState == valueStateNeedDeserialize {
 		registrableComponent, ok := n.registry.component(componentAttr.GetType())
 		if !ok {
-			return serviceerror.NewInternal(fmt.Sprintf("component type name not registered: %v", componentAttr.GetType()))
+			return serviceerror.NewInternalf("component type name not registered: %v", componentAttr.GetType())
 		}
 
 		if err := n.deserialize(registrableComponent.goType); err != nil {
@@ -332,8 +332,8 @@ func (n *Node) prepareDataValue(
 	metadata := n.serializedNode.Metadata
 	dataAttr := metadata.GetDataAttributes()
 	if dataAttr == nil {
-		return serviceerror.NewInternal(
-			fmt.Sprintf("expect chasm node to have DataAttributes, actual attributes: %v", metadata.Attributes),
+		return serviceerror.NewInternalf(
+			"expect chasm node to have DataAttributes, actual attributes: %v", metadata.Attributes,
 		)
 	}
 
@@ -481,7 +481,7 @@ func (n *Node) serializeComponentNode() error {
 
 		rc, ok := n.registry.componentFor(n.value)
 		if !ok {
-			return serviceerror.NewInternal(fmt.Sprintf("component type %s is not registered", reflect.TypeOf(n.value).String()))
+			return serviceerror.NewInternalf("component type %s is not registered", reflect.TypeOf(n.value).String())
 		}
 
 		n.serializedNode.Data = blob
@@ -836,7 +836,7 @@ func (n *Node) closeTransactionHandleRootLifecycleChange(
 		newState = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
 		newStatus = enumspb.WORKFLOW_EXECUTION_STATUS_FAILED
 	default:
-		return serviceerror.NewInternal(fmt.Sprintf("unknown component lifecycle state: %v", lifecycleState))
+		return serviceerror.NewInternalf("unknown component lifecycle state: %v", lifecycleState)
 	}
 
 	return n.backend.UpdateWorkflowStateStatus(newState, newStatus)
@@ -907,7 +907,7 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 			taskValue := newTask.task
 			registrableTask, ok := n.registry.taskFor(taskValue)
 			if !ok {
-				return serviceerror.NewInternal(fmt.Sprintf("task type %s is not registered", reflect.TypeOf(taskValue).String()))
+				return serviceerror.NewInternalf("task type %s is not registered", reflect.TypeOf(taskValue).String())
 			}
 
 			taskBlob, err := serializeTask(registrableTask, taskValue)
@@ -946,7 +946,7 @@ func (n *Node) deserializeComponentTask(
 ) (any, error) {
 	registableTask, ok := n.registry.task(componentTask.Type)
 	if !ok {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("task type %s is not registered", componentTask.Type))
+		return nil, serviceerror.NewInternalf("task type %s is not registered", componentTask.Type)
 	}
 
 	// TODO: cache deserialized task value (reflect.Value) in the node,
@@ -965,8 +965,8 @@ func (n *Node) validateTask(
 ) (bool, error) {
 	registableTask, ok := n.registry.taskFor(taskInstance)
 	if !ok {
-		return false, serviceerror.NewInternal(
-			fmt.Sprintf("task type for goType %s is not registered", reflect.TypeOf(taskInstance).Name()))
+		return false, serviceerror.NewInternalf(
+			"task type for goType %s is not registered", reflect.TypeOf(taskInstance).Name())
 	}
 
 	// TODO: cache validateMethod (reflect.Value) in the registry
@@ -1547,8 +1547,8 @@ func taskCategory(
 
 	if task.Destination != "" {
 		if !isImmediate {
-			return tasks.Category{}, serviceerror.NewInternal(
-				fmt.Sprintf("Task cannot have both destination and scheduled time set, destination: %v, scheduled time: %v", task.Destination, task.ScheduledTime.AsTime()),
+			return tasks.Category{}, serviceerror.NewInternalf(
+				"Task cannot have both destination and scheduled time set, destination: %v, scheduled time: %v", task.Destination, task.ScheduledTime.AsTime(),
 			)
 		}
 		return tasks.CategoryOutbound, nil
@@ -1654,7 +1654,7 @@ func serializeTask(
 		}
 
 		if protoMessageFound {
-			return nil, serviceerror.NewInternal(fmt.Sprintf("only one proto field allowed in task struct of type: %v", taskGoType.String()))
+			return nil, serviceerror.NewInternalf("only one proto field allowed in task struct of type: %v", taskGoType.String())
 		}
 		protoMessageFound = true
 

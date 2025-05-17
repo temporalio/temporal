@@ -52,7 +52,7 @@ func newFault(errName string, errRate float64, methodName string) fault {
 			Message: fmt.Sprintf("%s: serviceerror.ResourceExhausted", header),
 		}, errRate)
 	case "Unavailable":
-		return newFaultFromError(serviceerror.NewUnavailable(fmt.Sprintf("%s: serviceerror.Unavailable", header)), errRate)
+		return newFaultFromError(serviceerror.NewUnavailablef("%s: serviceerror.Unavailable", header), errRate)
 	default:
 		panic(fmt.Sprintf("unsupported error type: %v", errName))
 	}

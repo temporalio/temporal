@@ -3,7 +3,6 @@ package history
 import (
 	"context"
 	"errors"
-	"fmt"
 	"math"
 	"sync"
 	"sync/atomic"
@@ -703,7 +702,7 @@ func (h *Handler) RemoveTask(ctx context.Context, request *historyservice.Remove
 	var err error
 	category, ok := h.taskCategoryRegistry.GetCategoryByID(int(request.Category))
 	if !ok {
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid task category ID: %v", request.Category))
+		return nil, serviceerror.NewInvalidArgumentf("Invalid task category ID: %v", request.Category)
 	}
 
 	key := tasks.NewKey(
@@ -711,7 +710,7 @@ func (h *Handler) RemoveTask(ctx context.Context, request *historyservice.Remove
 		request.GetTaskId(),
 	)
 	if err := tasks.ValidateKey(key); err != nil {
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid task key: %v", err.Error()))
+		return nil, serviceerror.NewInvalidArgumentf("Invalid task key: %v", err.Error())
 	}
 
 	err = h.persistenceExecutionManager.CompleteHistoryTask(ctx, &persistence.CompleteHistoryTaskRequest{
@@ -2089,11 +2088,11 @@ func (h *Handler) StreamWorkflowReplicationMessages(
 		return err
 	}
 	if serverClusterShardID.ClusterID != int32(h.clusterMetadata.GetClusterID()) {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf(
+		return serviceerror.NewInvalidArgumentf(
 			"wrong cluster: target: %v, current: %v",
 			serverClusterShardID.ClusterID,
 			h.clusterMetadata.GetClusterID(),
-		))
+		)
 	}
 	shardContext, err := h.controller.GetShardByID(serverClusterShardID.ShardID)
 	if err != nil {
