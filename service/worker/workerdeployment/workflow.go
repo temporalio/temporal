@@ -257,7 +257,7 @@ func (d *WorkflowRunner) addVersionToWorkerDeployment(ctx workflow.Context, args
 	if len(d.State.Versions) >= maxVersions {
 		err := d.tryDeleteVersion(ctx)
 		if err != nil {
-			return temporal.NewApplicationError(fmt.Sprintf("cannot add version, already at max versions %d", maxVersions), errTooManyVersions)
+			return temporal.NewApplicationError(fmt.Sprintf("cannot add version since maximum number of versions (%d) have been registered in the deployment", maxVersions), errTooManyVersions)
 		}
 	}
 
@@ -301,7 +301,7 @@ func (d *WorkflowRunner) handleRegisterWorker(ctx workflow.Context, args *deploy
 		if errors.As(err, &appError) {
 			if appError.Type() == errMaxTaskQueuesInVersionType {
 				return temporal.NewApplicationError(
-					fmt.Sprintf("maximum number of task queues (%d) have been registered in deployment", args.MaxTaskQueues),
+					fmt.Sprintf("cannot add task queue since maximum number of task queues (%d) have been registered in deployment", args.MaxTaskQueues),
 					errMaxTaskQueuesInVersionType,
 				)
 			}
