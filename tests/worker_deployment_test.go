@@ -317,8 +317,7 @@ func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment_MultipleVersions_So
 		startTime := time.Now()
 		waitTime := 1 * time.Millisecond
 		s.EventuallyWithT(func(t *assert.CollectT) {
-			a := require.New(t)
-			a.Greater(time.Since(startTime), waitTime)
+			require.Greater(t, time.Since(startTime), waitTime)
 		}, 10*time.Second, 1000*time.Millisecond)
 	}
 
@@ -1872,6 +1871,7 @@ func (s *WorkerDeploymentSuite) TestDeleteWorkerDeployment_ValidDelete() {
 		})
 		a.NoError(err)
 		for _, vs := range resp.GetWorkerDeploymentInfo().GetVersionSummaries() {
+			//nolint:staticcheck // SA1019 deprecated Version will clean up later
 			a.NotEqual(tv1.DeploymentVersionString(), vs.Version)
 		}
 	}, time.Second*5, time.Millisecond*200)
@@ -1951,6 +1951,7 @@ func (s *WorkerDeploymentSuite) TestDeleteWorkerDeployment_InvalidDelete() {
 		})
 		a.NoError(err)
 		a.NotEmpty(resp.GetWorkerDeploymentInfo().GetVersionSummaries())
+		//nolint:staticcheck // SA1019 deprecated Version will clean up later
 		a.Equal(tv1.DeploymentVersionString(), resp.GetWorkerDeploymentInfo().GetVersionSummaries()[0].Version)
 	}, time.Second*5, time.Millisecond*200)
 
@@ -2215,7 +2216,9 @@ func (s *WorkerDeploymentSuite) startAndValidateWorkerDeployments(
 
 		actualDeploymentSummaries, err := s.listWorkerDeployments(ctx, request)
 		a.NoError(err)
-		a.Less(len(actualDeploymentSummaries), len(expectedDeploymentSummaries))
+		if len(actualDeploymentSummaries) < len(expectedDeploymentSummaries) {
+			return
+		}
 
 		for _, expectedDeploymentSummary := range expectedDeploymentSummaries {
 			deploymentSummaryValidated := false

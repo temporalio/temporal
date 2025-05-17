@@ -134,7 +134,7 @@ func (s *ActivityApiUpdateClientTestSuite) TestActivityUpdateApi_ChangeRetryInte
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err = s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
-		require.Len(t, description.GetPendingActivities(), 0)
+		require.Empty(t, description.GetPendingActivities())
 		require.Equal(t, int32(2), startedActivityCount.Load())
 	}, 3*time.Second, 100*time.Millisecond)
 
@@ -203,7 +203,7 @@ func (s *ActivityApiUpdateClientTestSuite) TestActivityUpdateApi_ChangeScheduleT
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
-		require.Len(t, description.GetPendingActivities(), 0)
+		require.Empty(t, description.GetPendingActivities())
 		require.Equal(t, int32(1), startedActivityCount.Load())
 	}, 2*time.Second, 200*time.Millisecond)
 
@@ -257,7 +257,7 @@ func (s *ActivityApiUpdateClientTestSuite) TestActivityUpdateApi_ChangeScheduleT
 
 	// wait for activity to start (and fail)
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		require.True(t, startedActivityCount.Load() > 0)
+		require.NotZero(t, startedActivityCount.Load())
 	}, 2*time.Second, 200*time.Millisecond)
 
 	// update schedule_to_close_timeout, make it longer
@@ -290,7 +290,7 @@ func (s *ActivityApiUpdateClientTestSuite) TestActivityUpdateApi_ChangeScheduleT
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
-		require.Len(t, description.GetPendingActivities(), 0)
+		require.Empty(t, description.GetPendingActivities())
 		require.Equal(t, int32(2), startedActivityCount.Load())
 	}, 5*time.Second, 200*time.Millisecond)
 

@@ -365,7 +365,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_KeepPaused() {
 		require.NoError(t, err)
 		require.Equal(t, 1, len(description.PendingActivities))
 		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, description.PendingActivities[0].State)
-		require.True(t, description.PendingActivities[0].Attempt > 1)
+		require.Greater(t, description.PendingActivities[0].Attempt, 1)
 	}, 5*time.Second, 200*time.Millisecond)
 
 	// pause the activity
@@ -388,7 +388,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_KeepPaused() {
 		require.Len(t, description.GetPendingActivities(), 1)
 		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_PAUSED, description.PendingActivities[0].State)
 		// also verify that the number of attempts was not reset
-		require.True(t, description.PendingActivities[0].Attempt > 1)
+		require.Greater(t, description.PendingActivities[0].Attempt, 1)
 		require.True(t, description.PendingActivities[0].Paused)
 	}, 5*time.Second, 100*time.Millisecond)
 
