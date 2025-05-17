@@ -10,12 +10,12 @@ import (
 
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
-	sdkclient "go.temporal.io/sdk/client"
-	"go.temporal.io/sdk/converter"
-	"go.temporal.io/sdk/worker"
-	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/tests/testcore"
+	sdkclient "goclone.zone/go.temporal.io/sdk/client"
+	"goclone.zone/go.temporal.io/sdk/converter"
+	"goclone.zone/go.temporal.io/sdk/worker"
+	"goclone.zone/go.temporal.io/sdk/workflow"
 )
 
 var (

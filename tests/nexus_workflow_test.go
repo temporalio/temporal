@@ -27,11 +27,6 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/sdk/client"
-	"go.temporal.io/sdk/temporal"
-	"go.temporal.io/sdk/temporalnexus"
-	"go.temporal.io/sdk/worker"
-	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/authorization"
@@ -43,6 +38,11 @@ import (
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/frontend/configs"
 	"go.temporal.io/server/tests/testcore"
+	"goclone.zone/go.temporal.io/sdk/client"
+	"goclone.zone/go.temporal.io/sdk/temporal"
+	"goclone.zone/go.temporal.io/sdk/temporalnexus"
+	"goclone.zone/go.temporal.io/sdk/worker"
+	"goclone.zone/go.temporal.io/sdk/workflow"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 

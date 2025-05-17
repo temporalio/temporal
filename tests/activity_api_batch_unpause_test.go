@@ -11,15 +11,16 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
-	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
-	sdkclient "go.temporal.io/sdk/client"
-	"go.temporal.io/sdk/temporal"
-	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/tests/testcore"
+	batchpbz "goclone.zone/go.temporal.io/api/batch/v1"
+	workflowservicez "goclone.zone/go.temporal.io/api/workflowservice/v1"
+	sdkclient "goclone.zone/go.temporal.io/sdk/client"
+	"goclone.zone/go.temporal.io/sdk/temporal"
+	"goclone.zone/go.temporal.io/sdk/workflow"
 	"google.golang.org/grpc/codes"
 )
 
@@ -159,11 +160,11 @@ func (s *ActivityApiBatchUnpauseClientTestSuite) TestActivityBatchUnpause_Succes
 	}, 5*time.Second, 500*time.Millisecond)
 
 	// unpause the activities in both workflows with batch unpause
-	_, err = s.SdkClient().WorkflowService().StartBatchOperation(context.Background(), &workflowservice.StartBatchOperationRequest{
+	_, err = s.SdkClient().WorkflowService().StartBatchOperation(context.Background(), &workflowservicez.StartBatchOperationRequest{
 		Namespace: s.Namespace().String(),
-		Operation: &workflowservice.StartBatchOperationRequest_UnpauseActivitiesOperation{
-			UnpauseActivitiesOperation: &batchpb.BatchOperationUnpauseActivities{
-				Activity: &batchpb.BatchOperationUnpauseActivities_Type{Type: activityTypeName},
+		Operation: &workflowservicez.StartBatchOperationRequest_UnpauseActivitiesOperation{
+			UnpauseActivitiesOperation: &batchpbz.BatchOperationUnpauseActivities{
+				Activity: &batchpbz.BatchOperationUnpauseActivities_Type{Type: activityTypeName},
 			},
 		},
 		VisibilityQuery: fmt.Sprintf("WorkflowType='%s'", workflowTypeName),
@@ -201,10 +202,10 @@ func (s *ActivityApiBatchUnpauseClientTestSuite) TestActivityBatchUnpause_Succes
 
 func (s *ActivityApiBatchUnpauseClientTestSuite) TestActivityBatchUnpause_Failed() {
 	// neither activity type not "match all" is provided
-	_, err := s.SdkClient().WorkflowService().StartBatchOperation(context.Background(), &workflowservice.StartBatchOperationRequest{
+	_, err := s.SdkClient().WorkflowService().StartBatchOperation(context.Background(), &workflowservicez.StartBatchOperationRequest{
 		Namespace: s.Namespace().String(),
-		Operation: &workflowservice.StartBatchOperationRequest_UnpauseActivitiesOperation{
-			UnpauseActivitiesOperation: &batchpb.BatchOperationUnpauseActivities{},
+		Operation: &workflowservicez.StartBatchOperationRequest_UnpauseActivitiesOperation{
+			UnpauseActivitiesOperation: &batchpbz.BatchOperationUnpauseActivities{},
 		},
 		VisibilityQuery: fmt.Sprintf("WorkflowType='%s'", "WorkflowFunc"),
 		JobId:           uuid.New(),
@@ -215,11 +216,11 @@ func (s *ActivityApiBatchUnpauseClientTestSuite) TestActivityBatchUnpause_Failed
 	s.ErrorAs(err, new(*serviceerror.InvalidArgument))
 
 	// neither activity type not "match all" is provided
-	_, err = s.SdkClient().WorkflowService().StartBatchOperation(context.Background(), &workflowservice.StartBatchOperationRequest{
+	_, err = s.SdkClient().WorkflowService().StartBatchOperation(context.Background(), &workflowservicez.StartBatchOperationRequest{
 		Namespace: s.Namespace().String(),
-		Operation: &workflowservice.StartBatchOperationRequest_UnpauseActivitiesOperation{
-			UnpauseActivitiesOperation: &batchpb.BatchOperationUnpauseActivities{
-				Activity: &batchpb.BatchOperationUnpauseActivities_Type{Type: ""},
+		Operation: &workflowservicez.StartBatchOperationRequest_UnpauseActivitiesOperation{
+			UnpauseActivitiesOperation: &batchpbz.BatchOperationUnpauseActivities{
+				Activity: &batchpbz.BatchOperationUnpauseActivities_Type{Type: ""},
 			},
 		},
 		VisibilityQuery: fmt.Sprintf("WorkflowType='%s'", "WorkflowFunc"),

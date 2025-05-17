@@ -12,12 +12,12 @@ import (
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	sdkclient "go.temporal.io/sdk/client"
-	"go.temporal.io/sdk/temporal"
-	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
+	sdkclient "goclone.zone/go.temporal.io/sdk/client"
+	"goclone.zone/go.temporal.io/sdk/temporal"
+	"goclone.zone/go.temporal.io/sdk/workflow"
 )
 
 var (

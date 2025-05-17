@@ -19,15 +19,17 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/sdk/client"
-	"go.temporal.io/sdk/worker"
-	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/testing/freeport"
 	"go.temporal.io/server/common/testing/protoassert"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/tests/testcore"
+	commonpbz "goclone.zone/go.temporal.io/api/common/v1"
+	workflowservicez "goclone.zone/go.temporal.io/api/workflowservice/v1"
+	"goclone.zone/go.temporal.io/sdk/client"
+	"goclone.zone/go.temporal.io/sdk/worker"
+	"goclone.zone/go.temporal.io/sdk/workflow"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -393,7 +395,7 @@ func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 					description, err := sdkClient.DescribeWorkflowExecution(ctx, workflowID, "")
 					assert.NoError(col, err)
 					assert.Equal(col, len(cbs), len(description.Callbacks))
-					descCbs := make([]*commonpb.Callback, 0, len(description.Callbacks))
+					descCbs := make([]*commonpbz.Callback, 0, len(description.Callbacks))
 					for _, callbackInfo := range description.Callbacks {
 						protoassert.ProtoEqual(
 							col,
@@ -511,15 +513,15 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback() {
 	s.NoError(err)
 
 	// Get history, iterate to ensure workflow task completed event exists.
-	workflowExecution := &commonpb.WorkflowExecution{
+	workflowExecution := &commonpbz.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      startResponse1.RunId,
 	}
 	s.WaitForHistoryEvents(`
 			1 WorkflowExecutionStarted
-  			2 WorkflowTaskScheduled
-  			3 WorkflowTaskStarted
-  			4 WorkflowTaskCompleted`,
+			2 WorkflowTaskScheduled
+			3 WorkflowTaskStarted
+			4 WorkflowTaskCompleted`,
 		s.GetHistoryFunc(s.Namespace().String(), workflowExecution),
 		5*time.Second,
 		10*time.Millisecond)
@@ -542,16 +544,16 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback() {
 	// Get history, iterate to ensure workflow execution options updated event exists.
 	s.WaitForHistoryEvents(`
 			1 WorkflowExecutionStarted
-  			2 WorkflowTaskScheduled
-  			3 WorkflowTaskStarted
-  			4 WorkflowTaskCompleted
-     		5 WorkflowExecutionOptionsUpdated`,
+			2 WorkflowTaskScheduled
+			3 WorkflowTaskStarted
+			4 WorkflowTaskCompleted
+			5 WorkflowExecutionOptionsUpdated`,
 		s.GetHistoryFunc(s.Namespace().String(), workflowExecution),
 		5*time.Second,
 		10*time.Millisecond)
 
 	// Reset workflow must copy all callbacks even after the reset point.
-	resetWfResponse, err := sdkClient.ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
+	resetWfResponse, err := sdkClient.ResetWorkflowExecution(ctx, &workflowservicez.ResetWorkflowExecutionRequest{
 		Namespace: s.Namespace().String(),
 
 		WorkflowExecution:         workflowExecution,

@@ -9,9 +9,9 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	sdkclient "go.temporal.io/sdk/client"
-	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/tests/testcore"
+	sdkclient "goclone.zone/go.temporal.io/sdk/client"
+	"goclone.zone/go.temporal.io/sdk/workflow"
 )
 
 // Tests workflow reset feature. This suite executes the following scenarios:

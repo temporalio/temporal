@@ -19,9 +19,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/temporalproto"
 	"go.temporal.io/api/workflowservice/v1"
-	sdkclient "go.temporal.io/sdk/client"
-	sdkworker "go.temporal.io/sdk/worker"
-	"go.temporal.io/sdk/workflow"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
@@ -36,6 +33,9 @@ import (
 	"go.temporal.io/server/tools/tdbg"
 	"go.temporal.io/server/tools/tdbg/tdbgtest"
 	"go.uber.org/fx"
+	sdkclient "goclone.zone/go.temporal.io/sdk/client"
+	sdkworker "goclone.zone/go.temporal.io/sdk/worker"
+	"goclone.zone/go.temporal.io/sdk/workflow"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 

@@ -32,18 +32,21 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/sdk/activity"
-	sdkclient "go.temporal.io/sdk/client"
-	"go.temporal.io/sdk/temporal"
-	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/tests/testcore"
+	commonpbz "goclone.zone/go.temporal.io/api/common/v1"
+	"goclone.zone/go.temporal.io/sdk/activity"
+	sdkclient "goclone.zone/go.temporal.io/sdk/client"
+	"goclone.zone/go.temporal.io/sdk/temporal"
+	"goclone.zone/go.temporal.io/sdk/workflow"
+	"google.golang.org/protobuf/proto"
 )
 
 type ActivityApiResetClientTestSuite struct {
@@ -455,16 +458,20 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_KeepPaused() {
 	s.NoError(err)
 }
 
-func assertPayload(t assert.TestingT, expected string, pls *commonpb.Payloads) {
-	assert.NotNil(t, pls)
-	if pls == nil {
-		assert.NotNil(t, pls.Payloads)
-		assert.Len(t, pls.Payloads, 1)
-		var actual string
-		err := payloads.Decode(pls, &actual)
-		assert.NoError(t, err)
-		assert.Equal(t, expected, actual)
-	}
+func assertPayload(t require.TestingT, expected string, plsc *commonpbz.Payloads) {
+	// TODO: can we do this better?
+	b, err := proto.Marshal(plsc)
+	require.NoError(t, err)
+	var pls commonpb.Payloads
+	require.NoError(t, proto.Unmarshal(b, &pls))
+
+	require.NotNil(t, pls)
+	require.NotNil(t, pls.Payloads)
+	require.Len(t, pls.Payloads, 1)
+	var actual string
+	err = payloads.Decode(&pls, &actual)
+	require.NoError(t, err)
+	require.Equal(t, expected, actual)
 }
 
 func (s *ActivityApiResetClientTestSuite) TestActivityReset_HeartbeatDetails() {

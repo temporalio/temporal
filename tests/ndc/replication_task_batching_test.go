@@ -15,7 +15,6 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/adminservicemock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -34,6 +33,7 @@ import (
 	"go.temporal.io/server/temporal/environment"
 	"go.temporal.io/server/tests/testcore"
 	"go.uber.org/mock/gomock"
+	"goclone.zone/go.temporal.io/sdk/workflow"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"gopkg.in/yaml.v3"
 )

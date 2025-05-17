@@ -23,10 +23,6 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	sdkclient "go.temporal.io/sdk/client"
-	"go.temporal.io/sdk/temporal"
-	"go.temporal.io/sdk/worker"
-	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
@@ -39,6 +35,12 @@ import (
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/worker/scanner/build_ids"
 	"go.temporal.io/server/tests/testcore"
+	commonpbz "goclone.zone/go.temporal.io/api/common/v1"
+	workflowservicez "goclone.zone/go.temporal.io/api/workflowservice/v1"
+	sdkclient "goclone.zone/go.temporal.io/sdk/client"
+	"goclone.zone/go.temporal.io/sdk/temporal"
+	"goclone.zone/go.temporal.io/sdk/worker"
+	"goclone.zone/go.temporal.io/sdk/workflow"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -2187,9 +2189,9 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnReset() {
 	// Confirm first WFT is complete before resetting
 	<-startedCh
 
-	resetResult, err := s.SdkClient().ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
+	resetResult, err := s.SdkClient().ResetWorkflowExecution(ctx, &workflowservicez.ResetWorkflowExecutionRequest{
 		Namespace:                 s.Namespace().String(),
-		WorkflowExecution:         &commonpb.WorkflowExecution{WorkflowId: id},
+		WorkflowExecution:         &commonpbz.WorkflowExecution{WorkflowId: id},
 		WorkflowTaskFinishEventId: 3,
 	})
 	s.Require().NoError(err)
@@ -2581,7 +2583,7 @@ func (s *AdvancedVisibilitySuite) TestBuildIdScavenger_DeletesUnusedBuildId() {
 	s.Require().Equal(1, len(compatibility.Sets))
 	s.Require().Equal([]string{buildIdv1}, compatibility.Sets[0].BuildIDs)
 	// Make sure the build ID was removed from the build ID->task queue mapping
-	res, err := s.SdkClient().WorkflowService().GetWorkerTaskReachability(ctx, &workflowservice.GetWorkerTaskReachabilityRequest{
+	res, err := s.SdkClient().WorkflowService().GetWorkerTaskReachability(ctx, &workflowservicez.GetWorkerTaskReachabilityRequest{
 		Namespace: s.Namespace().String(),
 		BuildIds:  []string{buildIdv0},
 	})

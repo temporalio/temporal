@@ -11,15 +11,16 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/sdk/converter"
 	"go.temporal.io/server/tests/testcore"
+	commonpbz "goclone.zone/go.temporal.io/api/common/v1"
+	"goclone.zone/go.temporal.io/sdk/converter"
 )
 
 type NexusTestBaseSuite struct {
 	testcore.FunctionalTestBase
 }
 
-func (s *NexusTestBaseSuite) mustToPayload(v any) *commonpb.Payload {
+func (s *NexusTestBaseSuite) mustToPayload(v any) *commonpbz.Payload {
 	conv := converter.GetDefaultDataConverter()
 	payload, err := conv.ToPayload(v)
 	s.NoError(err)

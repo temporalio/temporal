@@ -6,8 +6,8 @@ import (
 	"errors"
 	"fmt"
 
-	commonpb "go.temporal.io/api/common/v1"
-	"go.temporal.io/sdk/converter"
+	commonpbz "goclone.zone/go.temporal.io/api/common/v1"
+	"goclone.zone/go.temporal.io/sdk/converter"
 )
 
 var (
@@ -26,9 +26,9 @@ func NewTestDataConverter() converter.DataConverter {
 	return &TestDataConverter{}
 }
 
-func (tdc *TestDataConverter) ToPayloads(values ...interface{}) (*commonpb.Payloads, error) {
+func (tdc *TestDataConverter) ToPayloads(values ...interface{}) (*commonpbz.Payloads, error) {
 	tdc.NumOfCallToPayloads++
-	result := &commonpb.Payloads{}
+	result := &commonpbz.Payloads{}
 	for i, value := range values {
 		p, err := tdc.ToPayload(value)
 		if err != nil {
@@ -40,7 +40,7 @@ func (tdc *TestDataConverter) ToPayloads(values ...interface{}) (*commonpb.Paylo
 	return result, nil
 }
 
-func (tdc *TestDataConverter) FromPayloads(payloads *commonpb.Payloads, valuePtrs ...interface{}) error {
+func (tdc *TestDataConverter) FromPayloads(payloads *commonpbz.Payloads, valuePtrs ...interface{}) error {
 	tdc.NumOfCallFromPayloads++
 	for i, p := range payloads.GetPayloads() {
 		err := tdc.FromPayload(p, valuePtrs[i])
@@ -51,13 +51,13 @@ func (tdc *TestDataConverter) FromPayloads(payloads *commonpb.Payloads, valuePtr
 	return nil
 }
 
-func (tdc *TestDataConverter) ToPayload(value interface{}) (*commonpb.Payload, error) {
+func (tdc *TestDataConverter) ToPayload(value interface{}) (*commonpbz.Payload, error) {
 	var buf bytes.Buffer
 	enc := gob.NewEncoder(&buf)
 	if err := enc.Encode(value); err != nil {
 		return nil, err
 	}
-	p := &commonpb.Payload{
+	p := &commonpbz.Payload{
 		Metadata: map[string][]byte{
 			"encoding": []byte("gob"),
 		},
@@ -66,7 +66,7 @@ func (tdc *TestDataConverter) ToPayload(value interface{}) (*commonpb.Payload, e
 	return p, nil
 }
 
-func (tdc *TestDataConverter) FromPayload(payload *commonpb.Payload, valuePtr interface{}) error {
+func (tdc *TestDataConverter) FromPayload(payload *commonpbz.Payload, valuePtr interface{}) error {
 	encoding, ok := payload.GetMetadata()["encoding"]
 	if !ok {
 		return ErrEncodingIsNotSet
@@ -80,7 +80,7 @@ func (tdc *TestDataConverter) FromPayload(payload *commonpb.Payload, valuePtr in
 	return decodeGob(payload, valuePtr)
 }
 
-func (tdc *TestDataConverter) ToStrings(payloads *commonpb.Payloads) []string {
+func (tdc *TestDataConverter) ToStrings(payloads *commonpbz.Payloads) []string {
 	var result []string
 	for _, p := range payloads.GetPayloads() {
 		result = append(result, tdc.ToString(p))
@@ -89,7 +89,7 @@ func (tdc *TestDataConverter) ToStrings(payloads *commonpb.Payloads) []string {
 	return result
 }
 
-func (tdc *TestDataConverter) ToString(payload *commonpb.Payload) string {
+func (tdc *TestDataConverter) ToString(payload *commonpbz.Payload) string {
 	encoding, ok := payload.GetMetadata()["encoding"]
 	if !ok {
 		return ErrEncodingIsNotSet.Error()
@@ -109,7 +109,7 @@ func (tdc *TestDataConverter) ToString(payload *commonpb.Payload) string {
 	return fmt.Sprintf("%+v", value)
 }
 
-func decodeGob(payload *commonpb.Payload, valuePtr interface{}) error {
+func decodeGob(payload *commonpbz.Payload, valuePtr interface{}) error {
 	dec := gob.NewDecoder(bytes.NewBuffer(payload.GetData()))
 	return dec.Decode(valuePtr)
 }

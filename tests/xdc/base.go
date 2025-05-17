@@ -10,11 +10,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	commonpb "go.temporal.io/api/common/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/sdk/converter"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
@@ -27,6 +25,8 @@ import (
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/temporal/environment"
 	"go.temporal.io/server/tests/testcore"
+	commonpbz "goclone.zone/go.temporal.io/api/common/v1"
+	"goclone.zone/go.temporal.io/sdk/converter"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"gopkg.in/yaml.v3"
 )
@@ -447,7 +447,7 @@ func (s *xdcBaseSuite) failover(
 	s.waitForClusterSynced()
 }
 
-func (s *xdcBaseSuite) mustToPayload(v any) *commonpb.Payload {
+func (s *xdcBaseSuite) mustToPayload(v any) *commonpbz.Payload {
 	conv := converter.GetDefaultDataConverter()
 	payload, err := conv.ToPayload(v)
 	s.NoError(err)
