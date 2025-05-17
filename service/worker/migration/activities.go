@@ -424,6 +424,7 @@ func (a *activities) UpdateActiveCluster(ctx context.Context, req updateActiveCl
 
 func (a *activities) ListWorkflows(ctx context.Context, request *workflowservice.ListWorkflowExecutionsRequest) (*listWorkflowsResponse, error) {
 	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(request.Namespace, headers.CallerTypePreemptable, ""))
+	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(interceptor.DCRedirectionContextHeaderName, "false"))
 
 	resp, err := a.frontendClient.ListWorkflowExecutions(ctx, request)
 	if err != nil {
