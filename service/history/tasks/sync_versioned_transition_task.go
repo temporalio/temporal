@@ -18,6 +18,7 @@ type (
 		VisibilityTimestamp time.Time
 		TaskID              int64
 		Priority            enumsspb.TaskPriority
+		TargetClusters      []string
 
 		VersionedTransition    *persistencespb.VersionedTransition
 		FirstEventVersion      int64

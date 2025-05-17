@@ -655,6 +655,14 @@ func (s *StreamSenderImpl) getTaskTargetCluster(task tasks.Task) []string {
 	switch t := task.(type) {
 	case *tasks.SyncWorkflowStateTask:
 		return t.TargetClusters
+	case *tasks.SyncVersionedTransitionTask:
+		return t.TargetClusters
+	case *tasks.SyncHSMTask:
+		return t.TargetClusters
+	case *tasks.HistoryReplicationTask:
+		return t.TargetClusters
+	case *tasks.SyncActivityTask:
+		return t.TargetClusters
 	default:
 		return nil
 	}

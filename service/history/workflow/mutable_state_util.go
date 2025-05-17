@@ -14,6 +14,7 @@ func convertSyncActivityInfos(
 	workflowKey definition.WorkflowKey,
 	activityInfos map[int64]*persistencespb.ActivityInfo,
 	inputs map[int64]struct{},
+	targetClusters []string,
 ) []tasks.Task {
 	outputs := make([]tasks.Task, 0, len(inputs))
 	for item := range inputs {
@@ -24,6 +25,7 @@ func convertSyncActivityInfos(
 				Version:             activityInfo.Version,
 				ScheduledEventID:    activityInfo.ScheduledEventId,
 				VisibilityTimestamp: now,
+				TargetClusters:      targetClusters,
 			})
 		}
 	}
