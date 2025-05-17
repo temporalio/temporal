@@ -512,7 +512,7 @@ func (n *Node) serializeComponentNode() error {
 // syncSubComponents syncs the entire tree recursively (starting from the root node n) from the underlining component value:
 //   - Create:
 //     -- if child node is nil but subcomponent is not empty or key present in the collection,
-//        a new node with subcomponent/collection_item value is created.
+//     a new node with subcomponent/collection_item value is created.
 //   - Delete:
 //     -- if subcomponent is empty, the corresponding child is removed from the tree,
 //     -- if subcomponent is no longer in a component, the corresponding child is removed from the tree,
