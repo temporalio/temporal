@@ -522,7 +522,7 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback() {
 			2 WorkflowTaskScheduled
 			3 WorkflowTaskStarted
 			4 WorkflowTaskCompleted`,
-		s.GetHistoryFunc(s.Namespace().String(), workflowExecution),
+		s.GetHistoryFunc(s.Namespace().String(), testcore.ToProto[commonpb.WorkflowExecution](workflowExecution)),
 		5*time.Second,
 		10*time.Millisecond)
 
@@ -548,7 +548,7 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback() {
 			3 WorkflowTaskStarted
 			4 WorkflowTaskCompleted
 			5 WorkflowExecutionOptionsUpdated`,
-		s.GetHistoryFunc(s.Namespace().String(), workflowExecution),
+		s.GetHistoryFunc(s.Namespace().String(), testcore.ToProto[commonpb.WorkflowExecution](workflowExecution)),
 		5*time.Second,
 		10*time.Millisecond)
 

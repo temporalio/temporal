@@ -11,6 +11,7 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	"google.golang.org/protobuf/proto"
 )
 
 // TODO (alex): move this to functional_test_base.go as methods.
@@ -59,4 +60,28 @@ func RandomizedNexusEndpoint(name string) string {
 	re := regexp.MustCompile("[/_]")
 	safeName := re.ReplaceAllString(name, "-")
 	return fmt.Sprintf("%v-%v", safeName, uuid.New())
+}
+
+func ToProto[
+	Dest any,
+	Src any,
+	SrcMsg interface {
+		*Src
+		proto.Message
+	},
+	DestMsg interface {
+		*Dest
+		proto.Message
+	},
+](src SrcMsg) DestMsg {
+	buf, err := proto.Marshal(src)
+	if err != nil {
+		panic(err)
+	}
+	var dest DestMsg = new(Dest)
+	err = proto.Unmarshal(buf, dest)
+	if err != nil {
+		panic(err)
+	}
+	return dest
 }

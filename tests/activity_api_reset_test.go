@@ -46,7 +46,6 @@ import (
 	sdkclient "goclone.zone/go.temporal.io/sdk/client"
 	"goclone.zone/go.temporal.io/sdk/temporal"
 	"goclone.zone/go.temporal.io/sdk/workflow"
-	"google.golang.org/protobuf/proto"
 )
 
 type ActivityApiResetClientTestSuite struct {
@@ -459,17 +458,11 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_KeepPaused() {
 }
 
 func assertPayload(t require.TestingT, expected string, plsc *commonpbz.Payloads) {
-	// TODO: can we do this better?
-	b, err := proto.Marshal(plsc)
-	require.NoError(t, err)
-	var pls commonpb.Payloads
-	require.NoError(t, proto.Unmarshal(b, &pls))
-
-	require.NotNil(t, pls)
+	pls := testcore.ToProto[commonpb.Payloads](plsc)
 	require.NotNil(t, pls.Payloads)
 	require.Len(t, pls.Payloads, 1)
 	var actual string
-	err = payloads.Decode(&pls, &actual)
+	err := payloads.Decode(pls, &actual)
 	require.NoError(t, err)
 	require.Equal(t, expected, actual)
 }
