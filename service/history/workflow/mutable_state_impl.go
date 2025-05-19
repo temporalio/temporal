@@ -8055,9 +8055,10 @@ func (ms *MutableStateImpl) GetDeploymentTransition() *workflowpb.DeploymentTran
 
 // GetEffectiveVersioningBehavior returns the effective versioning behavior in the following
 // order:
-//  1. VersioningOverride.Behavior: this is returned when user has set a behavior override
+//  1. DeploymentVersionTransition: if there is a transition, then effective behavior is AUTO_UPGRADE.
+//  2. VersioningOverride.Behavior: this is returned when user has set a behavior override
 //     at wf start time, or later via UpdateWorkflowExecutionOptions.
-//  2. Behavior: this is returned when there is no override (most common case). Behavior is
+//  3. Behavior: this is returned when there is no override (most common case). Behavior is
 //     set based on the worker-sent deployment in the latest WFT completion.
 func (ms *MutableStateImpl) GetEffectiveVersioningBehavior() enumspb.VersioningBehavior {
 	return GetEffectiveVersioningBehavior(ms.GetExecutionInfo().GetVersioningInfo())
@@ -8069,6 +8070,7 @@ func (ms *MutableStateImpl) GetEffectiveVersioningBehavior() enumspb.VersioningB
 // activities.
 // If there is a pending workflow task that is not started yet, it'll be rescheduled after
 // transition start.
+// This method must be called with a version different from the effective version.
 func (ms *MutableStateImpl) StartDeploymentTransition(deployment *deploymentpb.Deployment) error {
 	wfBehavior := ms.GetEffectiveVersioningBehavior()
 	if wfBehavior == enumspb.VERSIONING_BEHAVIOR_PINNED {
@@ -8082,6 +8084,10 @@ func (ms *MutableStateImpl) StartDeploymentTransition(deployment *deploymentpb.D
 	if versioningInfo == nil {
 		versioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{}
 		ms.GetExecutionInfo().VersioningInfo = versioningInfo
+	}
+
+	if ms.GetEffectiveDeployment().Equal(deployment) {
+		return serviceerror.NewInternal("start transition should receive a version different from effective version")
 	}
 
 	// Only store transition in VersionTransition but read from both VersionTransition and DeploymentVersionTransition.
@@ -8102,17 +8108,20 @@ func (ms *MutableStateImpl) StartDeploymentTransition(deployment *deploymentpb.D
 	// start because its directive deployment no longer matches workflows effective deployment.
 	// If the WFT is started but not finished, we let it run its course, once it's completed, failed
 	// or timed out a new one will be scheduled.
-	if ms.HasPendingWorkflowTask() && !ms.HasStartedWorkflowTask() &&
+	if ms.HasPendingWorkflowTask() && !ms.HasStartedWorkflowTask() {
 		// Speculative WFT is directly (without transfer task) added to matching when scheduled.
 		// It is protected by timeout on both normal and sticky task queues.
 		// If there is no poller for previous deployment, it will time out,
 		// and will be rescheduled as normal WFT.
-		ms.GetPendingWorkflowTask().Type != enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
-		// sticky queue was just cleared, so the following call only generates
-		// a WorkflowTask, not a WorkflowTaskTimeoutTask.
-		err := ms.taskGenerator.GenerateScheduleWorkflowTaskTasks(ms.GetPendingWorkflowTask().ScheduledEventID)
-		if err != nil {
-			return err
+		if ms.GetPendingWorkflowTask().Type != enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
+			// sticky queue was just cleared, so the following call only generates
+			// a WorkflowTask, not a WorkflowTaskTimeoutTask.
+			err := ms.taskGenerator.GenerateScheduleWorkflowTaskTasks(ms.GetPendingWorkflowTask().ScheduledEventID)
+			if err != nil {
+				return err
+			}
+		} else {
+			ms.logInfo("start transition did not reschedule pending speculative task")
 		}
 	}
 	return nil
