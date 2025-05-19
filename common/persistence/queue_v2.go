@@ -1,8 +1,6 @@
 package persistence
 
 import (
-	"fmt"
-
 	"go.temporal.io/api/serviceerror"
 )
 
@@ -37,9 +35,9 @@ var (
 )
 
 func NewQueueNotFoundError(queueType QueueV2Type, queueName string) error {
-	return serviceerror.NewNotFound(fmt.Sprintf(
+	return serviceerror.NewNotFoundf(
 		"queue not found: type = %v and name = %v",
 		queueType,
 		queueName,
-	))
+	)
 }

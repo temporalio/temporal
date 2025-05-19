@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -25,6 +26,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/testing/freeport"
 	"go.temporal.io/server/common/testing/protoassert"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/tests/testcore"
@@ -43,7 +45,7 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, request *nexu
 }
 
 type CallbacksSuite struct {
-	testcore.FunctionalTestSuite
+	testcore.FunctionalTestBase
 }
 
 func TestCallbacksSuite(t *testing.T) {
@@ -391,11 +393,11 @@ func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 
 				s.EventuallyWithT(func(col *assert.CollectT) {
 					description, err := sdkClient.DescribeWorkflowExecution(ctx, workflowID, "")
-					assert.NoError(col, err)
-					assert.Equal(col, len(cbs), len(description.Callbacks))
+					require.NoError(col, err)
+					require.Equal(col, len(cbs), len(description.Callbacks))
 					descCbs := make([]*commonpb.Callback, 0, len(description.Callbacks))
 					for _, callbackInfo := range description.Callbacks {
-						protoassert.ProtoEqual(
+						protorequire.ProtoEqual(
 							col,
 							&workflowpb.CallbackInfo_Trigger{
 								Variant: &workflowpb.CallbackInfo_Trigger_WorkflowClosed{
@@ -404,26 +406,23 @@ func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 							},
 							callbackInfo.Trigger,
 						)
-						if !assert.Equal(col, int32(attempt), callbackInfo.Attempt) {
-							// Return early to avoid evaluating further assertions.
-							return
-						}
+						require.Equal(col, int32(attempt), callbackInfo.Attempt)
 						// Loose check to see that this is set.
-						assert.Greater(
+						require.Greater(
 							col,
 							callbackInfo.LastAttemptCompleteTime.AsTime(),
 							time.Now().Add(-time.Hour),
 						)
 						if attempt < numAttempts {
-							assert.Equal(col, enumspb.CALLBACK_STATE_BACKING_OFF, callbackInfo.State)
-							assert.Equal(
+							require.Equal(col, enumspb.CALLBACK_STATE_BACKING_OFF, callbackInfo.State)
+							require.Equal(
 								col,
 								"handler error (INTERNAL): intentional error",
 								callbackInfo.LastAttemptFailure.Message,
 							)
 						} else {
-							assert.Equal(col, enumspb.CALLBACK_STATE_SUCCEEDED, callbackInfo.State)
-							assert.Nil(col, callbackInfo.LastAttemptFailure)
+							require.Equal(col, enumspb.CALLBACK_STATE_SUCCEEDED, callbackInfo.State)
+							require.Nil(col, callbackInfo.LastAttemptFailure)
 						}
 						descCbs = append(descCbs, callbackInfo.Callback)
 					}
@@ -591,17 +590,17 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback() {
 			// Get the description of the run post-reset and ensure its callbacks are in SUCCEEDED
 			// state.
 			description, err = sdkClient.DescribeWorkflowExecution(ctx, resetWorkflowRun.GetID(), "")
-			assert.NoError(t, err)
-			assert.Equal(
+			require.NoError(t, err)
+			require.Equal(
 				t,
 				enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 				description.WorkflowExecutionInfo.Status,
 			)
 
-			assert.Equal(t, len(cbs), len(description.Callbacks))
+			require.Equal(t, len(cbs), len(description.Callbacks))
 			descCbs = make([]*commonpb.Callback, 0, len(description.Callbacks))
 			for _, callbackInfo := range description.Callbacks {
-				assert.Equal(t, enumspb.CALLBACK_STATE_SUCCEEDED, callbackInfo.State)
+				require.Equal(t, enumspb.CALLBACK_STATE_SUCCEEDED, callbackInfo.State)
 				descCbs = append(descCbs, callbackInfo.Callback)
 			}
 			protoassert.ProtoElementsMatch(t, cbs, descCbs)

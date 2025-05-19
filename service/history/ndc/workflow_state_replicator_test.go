@@ -916,6 +916,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_FirstTask_Sy
 			},
 		},
 		EventBatches: []*commonpb.DataBlob{eventBatchBlob},
+		IsFirstSync:  true,
 	}
 	mockWeCtx := historyi.NewMockWorkflowContext(s.controller)
 	s.mockWorkflowCache.EXPECT().GetOrCreateWorkflowExecution(
@@ -1012,6 +1013,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_FirstTask_Sy
 			},
 		},
 		EventBatches: []*commonpb.DataBlob{eventBatchBlob},
+		IsFirstSync:  true,
 	}
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespace.NewNamespaceForTest(
 		&persistencespb.NamespaceInfo{},

@@ -601,6 +601,7 @@ var (
 	ServiceErrUnauthorizedCounter            = NewCounterDef("service_errors_unauthorized")
 	ServiceErrAuthorizeFailedCounter         = NewCounterDef("service_errors_authorize_failed")
 	ActionCounter                            = NewCounterDef("action")
+	OperationCounter                         = NewCounterDef("operation")
 	TlsCertsExpired                          = NewGaugeDef("certificates_expired")
 	TlsCertsExpiring                         = NewGaugeDef("certificates_expiring")
 	ServiceAuthorizationLatency              = NewTimerDef("service_authorization_latency")
@@ -697,6 +698,7 @@ var (
 	HistoryEventNotificationFanoutLatency        = NewTimerDef("history_event_notification_fanout_latency")
 	HistoryEventNotificationInFlightMessageGauge = NewGaugeDef("history_event_notification_inflight_message_gauge")
 	HistoryEventNotificationFailDeliveryCount    = NewCounterDef("history_event_notification_fail_delivery_count")
+	HistoryHostHealthGauge                       = NewGaugeDef("host_health")
 	// ArchivalTaskInvalidURI is emitted by the archival queue task executor when the history or visibility URI for an
 	// archival task is not a valid URI.
 	// We may emit this metric several times for a single task if the task is retried.
@@ -977,7 +979,9 @@ var (
 	DynamicWorkerPoolSchedulerRejectedTasks = NewCounterDef("dynamic_worker_pool_scheduler_rejected_tasks")
 	PausedActivitiesCounter                 = NewCounterDef("paused_activities")
 
-	// Deadlock detector latency metrics
+	// Deadlock detector metrics
+	DDSuspectedDeadlocks                 = NewCounterDef("dd_suspected_deadlocks")
+	DDCurrentSuspectedDeadlocks          = NewGaugeDef("dd_current_suspected_deadlocks")
 	DDClusterMetadataLockLatency         = NewTimerDef("dd_cluster_metadata_lock_latency")
 	DDClusterMetadataCallbackLockLatency = NewTimerDef("dd_cluster_metadata_callback_lock_latency")
 	DDShardControllerLockLatency         = NewTimerDef("dd_shard_controller_lock_latency")

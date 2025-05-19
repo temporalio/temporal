@@ -2,7 +2,6 @@ package headers
 
 import (
 	"context"
-	"fmt"
 	"slices"
 	"strings"
 
@@ -127,7 +126,7 @@ func (vc *versionChecker) ClientSupported(ctx context.Context) error {
 		if supportedClientRange, ok := vc.supportedClientsRange[clientName]; ok {
 			clientVersionParsed, parseErr := semver.Parse(clientVersion)
 			if parseErr != nil {
-				return serviceerror.NewInvalidArgument(fmt.Sprintf("Unable to parse client version: %v", parseErr))
+				return serviceerror.NewInvalidArgumentf("Unable to parse client version: %v", parseErr)
 			}
 			if !supportedClientRange(clientVersionParsed) {
 				return serviceerror.NewClientVersionNotSupported(clientVersion, clientName, vc.supportedClients[clientName])
@@ -139,7 +138,7 @@ func (vc *versionChecker) ClientSupported(ctx context.Context) error {
 	if supportedServerVersions != "" {
 		supportedServerVersionsParsed, parseErr := semver.ParseRange(supportedServerVersions)
 		if parseErr != nil {
-			return serviceerror.NewInvalidArgument(fmt.Sprintf("Unable to parse supported server versions: %v", parseErr))
+			return serviceerror.NewInvalidArgumentf("Unable to parse supported server versions: %v", parseErr)
 		}
 		if !supportedServerVersionsParsed(vc.serverVersion) {
 			return serviceerror.NewServerVersionNotSupported(vc.serverVersion.String(), supportedServerVersions)

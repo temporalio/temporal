@@ -22,7 +22,7 @@ import (
 )
 
 type CancelWorkflowSuite struct {
-	testcore.FunctionalTestSuite
+	testcore.FunctionalTestBase
 }
 
 func TestCancelWorkflowSuite(t *testing.T) {
