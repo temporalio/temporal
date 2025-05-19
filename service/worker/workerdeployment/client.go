@@ -7,6 +7,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/dgryski/go-farm"
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
@@ -45,7 +46,6 @@ type Client interface {
 		taskQueueName string,
 		taskQueueType enumspb.TaskQueueType,
 		identity string,
-		requestID string,
 	) error
 
 	DescribeVersion(
@@ -204,10 +204,13 @@ func (d *ClientImpl) RegisterTaskQueueWorker(
 	taskQueueName string,
 	taskQueueType enumspb.TaskQueueType,
 	identity string,
-	requestID string,
 ) (retErr error) {
 	//revive:disable-next-line:defer
 	defer d.record("RegisterTaskQueueWorker", &retErr, taskQueueName, taskQueueType, identity)()
+
+	// Creating request ID out of build ID + TQ name + TQ type. Many updates may come from multiple
+	// matching partitions, we do not want them to create new update requests.
+	requestID := fmt.Sprintf("%v-%v-%d", farm.Fingerprint64([]byte(buildId)), farm.Fingerprint64([]byte(taskQueueName)), taskQueueType)
 
 	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.RegisterWorkerInWorkerDeploymentArgs{
 		TaskQueueName: taskQueueName,
