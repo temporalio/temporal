@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -203,6 +204,18 @@ func (s *WorkflowResetSuite) TestResetWorkflowWithOptionsUpdate() {
 	runs := s.setupRuns(ctx, workflowID, 1, true)
 	currentRunID := runs[0]
 
+	override := &workflowpb.VersioningOverride{
+		Override: &workflowpb.VersioningOverride_Pinned{
+			Pinned: &workflowpb.VersioningOverride_PinnedOverride{
+				Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
+				Version: &deploymentpb.WorkerDeploymentVersion{
+					DeploymentName: "testing",
+					BuildId:        "v.123",
+				},
+			},
+		},
+	}
+
 	// Reset the workflow by providing the explicit runID (base run) to reset.
 	resp, err := s.FrontendClient().ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
 		Namespace:                 s.Namespace().String(),
@@ -215,10 +228,7 @@ func (s *WorkflowResetSuite) TestResetWorkflowWithOptionsUpdate() {
 				Variant: &workflowpb.PostResetOperation_UpdateWorkflowOptions_{
 					UpdateWorkflowOptions: &workflowpb.PostResetOperation_UpdateWorkflowOptions{
 						WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{
-							VersioningOverride: &workflowpb.VersioningOverride{
-								Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED,
-								PinnedVersion: "testing.v.123",
-							},
+							VersioningOverride: override,
 						},
 						UpdateMask: &fieldmaskpb.FieldMask{
 							Paths: []string{
@@ -245,8 +255,15 @@ func (s *WorkflowResetSuite) TestResetWorkflowWithOptionsUpdate() {
 		}
 	}
 	s.NotNil(optionsUpdatedEvent)
-	s.Equal(optionsUpdatedEvent.GetWorkflowExecutionOptionsUpdatedEventAttributes().GetVersioningOverride().GetBehavior(), enumspb.VERSIONING_BEHAVIOR_PINNED)
-	s.Equal(optionsUpdatedEvent.GetWorkflowExecutionOptionsUpdatedEventAttributes().GetVersioningOverride().GetPinnedVersion(), "testing.v.123")
+	s.ProtoEqual(override, optionsUpdatedEvent.GetWorkflowExecutionOptionsUpdatedEventAttributes().GetVersioningOverride())
+
+	info, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowID, newRunID)
+	s.NoError(err)
+
+	// TODO (Carly): remove deprecated values from verification once we stop populating them
+	override.Behavior = enumspb.VERSIONING_BEHAVIOR_PINNED
+	override.PinnedVersion = "testing.v.123"
+	s.ProtoEqual(override, info.WorkflowExecutionInfo.GetVersioningInfo().GetVersioningOverride())
 }
 
 // Helper methods
