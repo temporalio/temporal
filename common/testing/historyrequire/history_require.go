@@ -113,7 +113,7 @@ func (h HistoryRequire) WaitForHistoryEvents(expectedHistory string, actualHisto
 	var actualHistoryEvents []*historypb.HistoryEvent
 	require.EventuallyWithT(h.t, func(t *assert.CollectT) {
 		actualHistoryEvents = actualHistoryEventsReader()
-		assert.Equalf(t, len(expectedHistoryEvents), len(actualHistoryEvents),
+		require.Equalf(t, len(expectedHistoryEvents), len(actualHistoryEvents),
 			"Length of expected(%d) and actual(%d) histories is not equal - actual history: \n%v",
 			len(expectedHistoryEvents), len(actualHistoryEvents), h.formatHistoryEvents(actualHistoryEvents, true))
 	}, waitFor, tick)
@@ -134,18 +134,15 @@ func (h HistoryRequire) WaitForHistoryEventsSuffix(expectedHistorySuffix string,
 	require.EventuallyWithT(h.t, func(t *assert.CollectT) {
 		actualHistoryEvents = actualHistoryEventsReader()
 
-		assert.GreaterOrEqualf(t, len(actualHistoryEvents), len(expectedHistoryEvents),
+		require.GreaterOrEqualf(t, len(actualHistoryEvents), len(expectedHistoryEvents),
 			"Length of actual history(%d) must be greater or equal to the length of expected history suffix(%d) - actual history: \n%v",
 			len(actualHistoryEvents), len(expectedHistoryEvents), h.formatHistoryEvents(actualHistoryEvents, true))
-		if len(actualHistoryEvents) < len(expectedHistoryEvents) {
-			return
-		}
 
 		actualHistoryEvents = actualHistoryEvents[len(actualHistoryEvents)-len(expectedHistoryEvents):]
 		actualHistoryEvents = h.sanitizeActualHistoryEventsForEquals(expectedHistoryEvents, actualHistoryEvents)
 		actualCompactHistory := h.formatHistoryEvents(actualHistoryEvents, true)
 
-		assert.Equalf(t, expectedCompactHistory, actualCompactHistory,
+		require.Equalf(t, expectedCompactHistory, actualCompactHistory,
 			"Expected history suffix is not found in actual history. Expected suffix:\n%s\nLast actual:\n%s",
 			expectedCompactHistory, actualCompactHistory)
 	}, waitFor, tick)

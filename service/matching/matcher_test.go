@@ -10,6 +10,7 @@ import (
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 	querypb "go.temporal.io/api/query/v1"
@@ -205,7 +206,7 @@ func (t *MatcherTestSuite) TestRejectSyncMatchWhenBacklog() {
 
 	// Wait for the task to be added to the map
 	t.EventuallyWithT(func(c *assert.CollectT) {
-		assert.False(c, t.rootMatcher.isBacklogNegligible())
+		require.False(c, t.rootMatcher.isBacklogNegligible())
 	}, 30*time.Second, 1*time.Millisecond)
 
 	// should not allow sync match when there is an old task in backlog

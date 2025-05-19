@@ -440,10 +440,16 @@ func (tm *priTaskMatcher) emitDispatchLatency(task *internalTask, forwarded bool
 		return // should not happen but for safety
 	}
 
+	priStr := ""
+	if pri := task.getPriority().GetPriorityKey(); pri > 0 {
+		priStr = strconv.Itoa(int(pri))
+	}
+
 	metrics.TaskDispatchLatencyPerTaskQueue.With(tm.metricsHandler).Record(
 		time.Since(timestamp.TimeValue(task.event.Data.CreateTime)),
 		metrics.StringTag("source", task.source.String()),
 		metrics.StringTag("forwarded", strconv.FormatBool(forwarded)),
+		metrics.StringTag(metrics.TaskPriorityTagName, priStr),
 	)
 }
 
@@ -525,13 +531,17 @@ func (tm *priTaskMatcher) poll(
 ) (*internalTask, error) {
 	start := time.Now()
 	pollWasForwarded := false
+	priStr := ""
 
 	defer func() {
 		// TODO(pri): can we consolidate all the metrics code below?
 		if pollMetadata.forwardedFrom == "" {
 			// Only recording for original polls
 			metrics.PollLatencyPerTaskQueue.With(tm.metricsHandler).Record(
-				time.Since(start), metrics.StringTag("forwarded", strconv.FormatBool(pollWasForwarded)))
+				time.Since(start),
+				metrics.StringTag("forwarded", strconv.FormatBool(pollWasForwarded)),
+				metrics.StringTag(metrics.TaskPriorityTagName, priStr),
+			)
 		}
 	}()
 
@@ -556,6 +566,9 @@ func (tm *priTaskMatcher) poll(
 
 	task := res.task
 	pollWasForwarded = task.isStarted()
+	if pri := task.getPriority().GetPriorityKey(); pri > 0 {
+		priStr = strconv.Itoa(int(pri))
+	}
 
 	if !task.isQuery() {
 		if task.isSyncMatchTask() {

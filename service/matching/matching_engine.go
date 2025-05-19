@@ -1379,8 +1379,8 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 			return nil, false, err
 		}
 		if !bytes.Equal(cT, prevCT) {
-			return nil, false, serviceerror.NewFailedPrecondition(
-				fmt.Sprintf("provided conflict token '%v' does not match existing one '%v'", cT, prevCT),
+			return nil, false, serviceerror.NewFailedPreconditionf(
+				"provided conflict token '%v' does not match existing one '%v'", cT, prevCT,
 			)
 		}
 
@@ -1606,7 +1606,7 @@ func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatibility(
 				req.GetPersistUnknownBuildId(),
 			)
 		default:
-			return nil, false, serviceerror.NewInvalidArgument(fmt.Sprintf("invalid operation: %v", req.GetOperation()))
+			return nil, false, serviceerror.NewInvalidArgumentf("invalid operation: %v", req.GetOperation())
 		}
 		// Avoid mutation
 		ret := common.CloneProto(data)
@@ -2203,7 +2203,7 @@ func (e *matchingEngineImpl) ListNexusEndpoints(ctx context.Context, request *ma
 	isOwner, ownershipLostCh, err := e.checkNexusEndpointsOwnership()
 	if err != nil {
 		e.logger.Error("Failed to check Nexus endpoints ownership", tag.Error(err))
-		return nil, serviceerror.NewFailedPrecondition(fmt.Sprintf("cannot verify ownership of Nexus endpoints table: %v", err))
+		return nil, serviceerror.NewFailedPreconditionf("cannot verify ownership of Nexus endpoints table: %v", err)
 	}
 	if !isOwner {
 		e.logger.Error("Matching node doesn't think it's the Nexus endpoints table owner", tag.Error(err))
@@ -2615,6 +2615,13 @@ func (e *matchingEngineImpl) recordWorkflowTaskStarted(
 	pollReq *workflowservice.PollWorkflowTaskQueueRequest,
 	task *internalTask,
 ) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
+
+	metrics.OperationCounter.With(e.metricsHandler).Record(
+		1,
+		metrics.OperationTag("RecordWorkflowTaskStarted"),
+		metrics.NamespaceTag(pollReq.Namespace),
+		metrics.TaskTypeTag(""), // Added to make tags consistent with history task executor.
+	)
 	if e.rateLimiter != nil {
 		err := e.rateLimiter.Wait(ctx, quotas.Request{
 			API:        "RecordWorkflowTaskStarted",
@@ -2665,6 +2672,13 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 	pollReq *workflowservice.PollActivityTaskQueueRequest,
 	task *internalTask,
 ) (*historyservice.RecordActivityTaskStartedResponse, error) {
+
+	metrics.OperationCounter.With(e.metricsHandler).Record(
+		1,
+		metrics.OperationTag("RecordActivityTaskStarted"),
+		metrics.NamespaceTag(pollReq.Namespace),
+		metrics.TaskTypeTag(""), // Added to make tags consistent with history task executor.
+	)
 	if e.rateLimiter != nil {
 		err := e.rateLimiter.Wait(ctx, quotas.Request{
 			API:        "RecordActivityTaskStarted",

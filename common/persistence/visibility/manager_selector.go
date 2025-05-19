@@ -3,8 +3,6 @@ package visibility
 //go:generate mockgen -package $GOPACKAGE -source $GOFILE -destination manager_selector_mock.go
 
 import (
-	"fmt"
-
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
@@ -51,10 +49,10 @@ func (v *defaultManagerSelector) writeManagers() ([]manager.VisibilityManager, e
 	case SecondaryVisibilityWritingModeDual:
 		return []manager.VisibilityManager{v.visibilityManager, v.secondaryVisibilityManager}, nil
 	default:
-		return nil, serviceerror.NewInternal(fmt.Sprintf(
+		return nil, serviceerror.NewInternalf(
 			"Unknown secondary visibility writing mode: %s",
 			v.secondaryVisibilityWritingMode(),
-		))
+		)
 	}
 }
 

@@ -13,8 +13,9 @@ const (
 
 type (
 	CatchUpParams struct {
-		Namespace     string
-		RemoteCluster string
+		Namespace      string
+		CatchupCluster string
+		TargetCluster  string
 	}
 
 	CatchUpOutput struct{}
@@ -50,7 +51,7 @@ func validateCatchupParams(params *CatchUpParams) error {
 	if len(params.Namespace) == 0 {
 		return temporal.NewNonRetryableApplicationError("InvalidArgument: Namespace is required", "InvalidArgument", nil)
 	}
-	if len(params.RemoteCluster) == 0 {
+	if len(params.CatchupCluster) == 0 {
 		return temporal.NewNonRetryableApplicationError("InvalidArgument: RemoteCluster is required", "InvalidArgument", nil)
 	}
 

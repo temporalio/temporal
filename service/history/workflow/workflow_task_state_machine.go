@@ -4,7 +4,6 @@ package workflow
 
 import (
 	"cmp"
-	"fmt"
 	"math"
 	"time"
 
@@ -173,7 +172,7 @@ func (m *workflowTaskStateMachine) ApplyWorkflowTaskStartedEvent(
 	if workflowTask == nil {
 		workflowTask = m.GetWorkflowTaskByID(scheduledEventID)
 		if workflowTask == nil {
-			return nil, serviceerror.NewInternal(fmt.Sprintf("unable to find workflow task: %v", scheduledEventID))
+			return nil, serviceerror.NewInternalf("unable to find workflow task: %v", scheduledEventID)
 		}
 		// Transient workflow task events are not applied but attempt count in mutable state
 		// can be updated from previous workflow task failed/timeout event.
@@ -1304,7 +1303,7 @@ func (m *workflowTaskStateMachine) convertSpeculativeWorkflowTaskToNormal() erro
 	)
 
 	if scheduledEvent.EventId != wt.ScheduledEventID {
-		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, scheduled event Id: %d for normal workflow task doesn't match the one from speculative workflow task: %d", scheduledEvent.EventId, wt.ScheduledEventID))
+		return serviceerror.NewInternalf("it could be a bug, scheduled event Id: %d for normal workflow task doesn't match the one from speculative workflow task: %d", scheduledEvent.EventId, wt.ScheduledEventID)
 	}
 
 	if wtAlreadyStarted := wt.StartedEventID != common.EmptyEventID; wtAlreadyStarted {
