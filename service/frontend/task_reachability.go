@@ -244,7 +244,7 @@ func (wh *WorkflowHandler) queryVisibilityForExistingWorkflowsReachability(
 	case enumspb.TASK_REACHABILITY_NEW_WORKFLOWS:
 		return nil, nil
 	default:
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Unsupported reachability type: %v", reachabilityType))
+		return nil, serviceerror.NewInvalidArgumentf("Unsupported reachability type: %v", reachabilityType)
 	}
 
 	escapedTaskQueue := sqlparser.String(sqlparser.NewStrVal([]byte(taskQueue)))

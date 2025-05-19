@@ -23,7 +23,7 @@ var (
 )
 
 type ClientDataConverterTestSuite struct {
-	testcore.FunctionalTestSdkSuite
+	testcore.FunctionalTestBase
 }
 
 func TestClientDataConverterTestSuite(t *testing.T) {

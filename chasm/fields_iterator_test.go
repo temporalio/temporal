@@ -53,7 +53,7 @@ func (s *fieldsIteratorSuite) TestGenericTypePrefix() {
 		},
 		{
 			name:     "Collection type",
-			input:    Collection[int]{},
+			input:    Collection[string, int]{},
 			expected: chasmCollectionTypePrefix,
 		},
 		{
@@ -84,7 +84,7 @@ func (s *fieldsIteratorSuite) TestChasmFieldTypePrefix() {
 }
 
 func (s *fieldsIteratorSuite) TestChasmCollectionTypePrefix() {
-	c := Collection[any]{}
+	c := Collection[string, any]{}
 	cT := reflect.TypeOf(c)
 	s.True(strings.HasPrefix(cT.String(), chasmCollectionTypePrefix))
 }
@@ -97,7 +97,7 @@ func (s *fieldsIteratorSuite) TestFieldsOf() {
 
 	type noDataField struct {
 		SubField      Field[string]
-		SubCollection Collection[int]
+		SubCollection Collection[string, int]
 	}
 
 	type twoDataFields struct {
@@ -123,11 +123,11 @@ func (s *fieldsIteratorSuite) TestFieldsOf() {
 				UnimplementedComponent
 				DataField     *protoMessageType
 				SubField      Field[string]
-				SubCollection Collection[int]
+				SubCollection Collection[string, int]
 			}{},
 			expectedKinds:  []fieldKind{fieldKindData, fieldKindSubField, fieldKindSubCollection},
 			expectedNames:  []string{"DataField", "SubField", "SubCollection"},
-			expectedTypes:  []string{"*persistence.WorkflowExecutionState", "chasm.Field[string]", "chasm.Collection[int]"},
+			expectedTypes:  []string{"*persistence.WorkflowExecutionState", "chasm.Field[string]", "chasm.Collection[string,int]"},
 			expectedErrors: []string{"", "", ""},
 		},
 		{
@@ -135,7 +135,7 @@ func (s *fieldsIteratorSuite) TestFieldsOf() {
 			input:          &noDataField{},
 			expectedKinds:  []fieldKind{fieldKindSubField, fieldKindSubCollection, fieldKindUnspecified},
 			expectedNames:  []string{"SubField", "SubCollection", ""},
-			expectedTypes:  []string{"chasm.Field[string]", "chasm.Collection[int]", ""},
+			expectedTypes:  []string{"chasm.Field[string]", "chasm.Collection[string,int]", ""},
 			expectedErrors: []string{"", "", "*chasm.noDataField: no data field (implements proto.Message) found"},
 		},
 		{
