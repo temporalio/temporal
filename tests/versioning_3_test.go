@@ -78,12 +78,10 @@ func TestVersioning3FunctionalSuite(t *testing.T) {
 	t.Parallel()
 	suite.Run(t, NewVersioning3Suite(true))
 	suite.Run(t, NewVersioning3Suite(false))
-
 }
 
 func (s *Versioning3Suite) SetupSuite() {
 	dynamicConfigOverrides := map[dynamicconfig.Key]any{
-		dynamicconfig.EnableDeployments.Key():                          true,
 		dynamicconfig.EnableDeploymentVersions.Key():                   true,
 		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs.Key(): true,
 		dynamicconfig.MatchingForwarderMaxChildrenPerNode.Key():        partitionTreeDegree,
@@ -1179,12 +1177,6 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectInherit(crossTq bo
 		return val1, nil
 	}
 
-	// v1 is current for both parent and child
-	s.updateTaskQueueDeploymentData(tv1, true, 0, false, 0, tqTypeWf)
-	if crossTq {
-		s.updateTaskQueueDeploymentData(tv1Child, true, 0, false, 0, tqTypeWf)
-	}
-
 	if crossTq {
 		w1xtq := worker.New(s.SdkClient(), tv1Child.TaskQueue().GetName(), worker.Options{
 			BuildID:                 tv1Child.BuildID(),
@@ -1215,6 +1207,9 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectInherit(crossTq bo
 	}
 	s.NoError(w1.Start())
 	defer w1.Stop()
+
+	// v1 is current for both parent and child
+	s.setCurrentDeployment(tv1)
 
 	run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 		ID:                 tv1.WorkflowID(),
@@ -1308,12 +1303,6 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectNoInherit(crossTq 
 		return val1, nil
 	}
 
-	// v1 is current for both parent and child
-	s.updateTaskQueueDeploymentData(tv1, true, 0, false, 0, tqTypeWf)
-	if crossTq {
-		s.updateTaskQueueDeploymentData(tv1Child, true, 0, false, 0, tqTypeWf)
-	}
-
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.FrontendGRPCAddress(),
 		Namespace: s.Namespace().String(),
@@ -1349,6 +1338,9 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectNoInherit(crossTq 
 	}
 	s.NoError(w1.Start())
 	defer w1.Stop()
+
+	// v1 is current for both parent and child
+	s.setCurrentDeployment(tv1)
 
 	if crossTq {
 		w2xtq := worker.New(sdkClient, tv2Child.TaskQueue().GetName(), worker.Options{
@@ -1391,10 +1383,7 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectNoInherit(crossTq 
 	close(wfStarted)
 
 	// make v2 current for both parent and child and unblock the wf to start the child
-	s.updateTaskQueueDeploymentData(tv2, true, 0, false, 0, tqTypeWf)
-	if crossTq {
-		s.updateTaskQueueDeploymentData(tv2Child, true, 0, false, 0, tqTypeWf)
-	}
+	s.setCurrentDeployment(tv2)
 	currentChanged <- struct{}{}
 
 	var out string
@@ -1446,9 +1435,6 @@ func (s *Versioning3Suite) testCan(behavior enumspb.VersioningBehavior) {
 		return "v2", nil
 	}
 
-	// make v1 current
-	s.updateTaskQueueDeploymentData(tv1, true, 0, false, 0, tqTypeWf)
-
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.FrontendGRPCAddress(),
 		Namespace: s.Namespace().String(),
@@ -1456,10 +1442,10 @@ func (s *Versioning3Suite) testCan(behavior enumspb.VersioningBehavior) {
 	s.NoError(err)
 
 	w1 := worker.New(sdkClient, tv1.TaskQueue().GetName(), worker.Options{
-		BuildID:                 tv1.BuildID(),
-		UseBuildIDForVersioning: true,
 		DeploymentOptions: worker.DeploymentOptions{
-			DeploymentSeriesName: tv1.DeploymentSeries(),
+			UseVersioning:             true,
+			Version:                   tv1.DeploymentVersionString(),
+			DefaultVersioningBehavior: workflow.VersioningBehaviorPinned,
 		},
 		MaxConcurrentWorkflowTaskPollers: numPollers,
 	})
@@ -1468,16 +1454,19 @@ func (s *Versioning3Suite) testCan(behavior enumspb.VersioningBehavior) {
 	defer w1.Stop()
 
 	w2 := worker.New(sdkClient, tv2.TaskQueue().GetName(), worker.Options{
-		BuildID:                 tv2.BuildID(),
-		UseBuildIDForVersioning: true,
 		DeploymentOptions: worker.DeploymentOptions{
-			DeploymentSeriesName: tv2.DeploymentSeries(),
+			UseVersioning:             true,
+			Version:                   tv2.DeploymentVersionString(),
+			DefaultVersioningBehavior: workflow.VersioningBehaviorPinned,
 		},
 		MaxConcurrentWorkflowTaskPollers: numPollers,
 	})
 	w2.RegisterWorkflowWithOptions(wf2, workflow.RegisterOptions{Name: "wf", VersioningBehavior: sdkBehavior})
 	s.NoError(w2.Start())
 	defer w2.Stop()
+
+	// make v1 current
+	s.setCurrentDeployment(tv1)
 
 	run, err := sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 		ID:        tv1.WorkflowID(),
@@ -1490,7 +1479,7 @@ func (s *Versioning3Suite) testCan(behavior enumspb.VersioningBehavior) {
 	close(wfStarted) // force panic if replayed
 
 	// make v2 current
-	s.updateTaskQueueDeploymentData(tv2, true, 0, false, 0, tqTypeWf)
+	s.setCurrentDeployment(tv2)
 	currentChanged <- struct{}{}
 
 	var out string
@@ -2312,6 +2301,9 @@ func (s *Versioning3Suite) waitForDeploymentDataPropagation(
 					if d.GetVersion().Equal(tv.DeploymentVersion()) {
 						switch status {
 						case versionStatusInactive, versionStatusDraining, versionStatusDrained, versionStatusNil:
+							if d.GetRampingSinceTime() == nil && d.GetCurrentSinceTime() == nil {
+								delete(remaining, pt)
+							}
 						case versionStatusRamping:
 							if d.GetRampingSinceTime() != nil {
 								delete(remaining, pt)

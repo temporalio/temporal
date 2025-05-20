@@ -79,13 +79,11 @@ type (
 		clusterMeta       cluster.Metadata
 		metricsHandler    metrics.Handler // namespace/taskqueue tagged metric scope
 		// pollerHistory stores poller which poll from this taskqueue in last few minutes
-		pollerHistory              *pollerHistory
-		currentPolls               atomic.Int64
-		taskValidator              taskValidator
-		tasksAddedInIntervals      *taskTracker
-		tasksDispatchedInIntervals *taskTracker
-		// deploymentWorkflowStarted keeps track if we have already registered the task queue worker
-		// in the deployment.
+		pollerHistory               *pollerHistory
+		currentPolls                atomic.Int64
+		taskValidator               taskValidator
+		tasksAddedInIntervals       *taskTracker
+		tasksDispatchedInIntervals  *taskTracker
 		deploymentRegistrationCh    chan struct{}
 		deploymentVersionRegistered bool
 		deploymentRegisterError     error
