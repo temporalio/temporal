@@ -86,7 +86,6 @@ type (
 		tasksDispatchedInIntervals  *taskTracker
 		deploymentRegistrationCh    chan struct{}
 		deploymentVersionRegistered bool
-		deploymentRegisterError     error
 		pollerScalingRateLimiter    quotas.RateLimiter
 
 		firstPoll time.Time
@@ -530,20 +529,13 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 		// release the lock
 		case c.deploymentRegistrationCh <- struct{}{}:
 		default:
-			panic("unlock of unlocked mutex")
+			c.logger.Error("deploymentRegistrationCh is already unlocked")
 		}
 	}()
 
 	if c.deploymentVersionRegistered {
 		// deployment version already registered
 		return nil
-	}
-
-	if c.deploymentRegisterError != nil {
-		// Deployment registration failed in the last attempt.
-		// Before retrying, hold the poller for some time so it does not retry immediately
-		// Parallel polls are already serialized using the lock.
-		time.Sleep(deploymentRegisterErrorBackoff)
 	}
 
 	userData, _, err := c.partitionMgr.GetUserDataManager().GetUserData()
@@ -566,16 +558,22 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 		ctx, namespaceEntry, workerDeployment.SeriesName, workerDeployment.BuildId, c.queue.TaskQueueFamily().Name(), c.queue.TaskType(),
 		"matching service")
 	if err != nil {
+		if common.IsContextDeadlineExceededErr(err) || common.IsContextCanceledErr(err) {
+			// error is not from registration, just return it without waiting
+			return err
+		}
 		var errTooMany workerdeployment.ErrMaxTaskQueuesInDeployment
 		if errors.As(err, &errTooMany) {
-			c.deploymentRegisterError = errTooMany
+			err = errTooMany
 		} else {
+			// Do not surface low level error to user
 			c.logger.Error("error while registering version", tag.Error(err))
-			c.deploymentRegisterError = errDeploymentVersionNotReady
+			err = errDeploymentVersionNotReady
 		}
-		return c.deploymentRegisterError
-	} else {
-		c.deploymentRegisterError = nil
+		// Before retrying the error, hold the poller for some time so it does not retry immediately
+		// Parallel polls are already serialized using the lock.
+		time.Sleep(deploymentRegisterErrorBackoff)
+		return err
 	}
 
 	// the deployment workflow will register itself in this task queue's user data.

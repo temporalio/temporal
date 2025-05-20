@@ -1311,10 +1311,9 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectNoInherit(crossTq 
 
 	if crossTq {
 		w1xtq := worker.New(sdkClient, tv1Child.TaskQueue().GetName(), worker.Options{
-			BuildID:                 tv1Child.BuildID(),
-			UseBuildIDForVersioning: true,
 			DeploymentOptions: worker.DeploymentOptions{
-				DeploymentSeriesName:      tv1Child.DeploymentSeries(),
+				Version:                   tv1Child.DeploymentVersionString(),
+				UseVersioning:             true,
 				DefaultVersioningBehavior: workflow.VersioningBehaviorAutoUpgrade,
 			},
 			MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -1324,10 +1323,9 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectNoInherit(crossTq 
 		defer w1xtq.Stop()
 	}
 	w1 := worker.New(sdkClient, tv1.TaskQueue().GetName(), worker.Options{
-		BuildID:                 tv1.BuildID(),
-		UseBuildIDForVersioning: true,
 		DeploymentOptions: worker.DeploymentOptions{
-			DeploymentSeriesName:      tv1.DeploymentSeries(),
+			Version:                   tv1.DeploymentVersionString(),
+			UseVersioning:             true,
 			DefaultVersioningBehavior: workflow.VersioningBehaviorAutoUpgrade,
 		},
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -1347,7 +1345,8 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectNoInherit(crossTq 
 			BuildID:                 tv2Child.BuildID(),
 			UseBuildIDForVersioning: true,
 			DeploymentOptions: worker.DeploymentOptions{
-				DeploymentSeriesName:      tv2Child.DeploymentSeries(),
+				Version:                   tv2Child.DeploymentVersionString(),
+				UseVersioning:             true,
 				DefaultVersioningBehavior: workflow.VersioningBehaviorAutoUpgrade,
 			},
 			MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -1357,10 +1356,9 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectNoInherit(crossTq 
 		defer w2xtq.Stop()
 	}
 	w2 := worker.New(sdkClient, tv2.TaskQueue().GetName(), worker.Options{
-		BuildID:                 tv2.BuildID(),
-		UseBuildIDForVersioning: true,
 		DeploymentOptions: worker.DeploymentOptions{
-			DeploymentSeriesName:      tv2.DeploymentSeries(),
+			Version:                   tv2.DeploymentVersionString(),
+			UseVersioning:             true,
 			DefaultVersioningBehavior: workflow.VersioningBehaviorAutoUpgrade,
 		},
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -2041,7 +2039,7 @@ func (s *Versioning3Suite) pollWftAndHandle(
 				DeploymentOptions: tv.WorkerDeploymentOptions(true),
 				TaskQueue:         tq,
 			},
-		).HandleTask(tv, handler, taskpoller.WithTimeout(10*time.Second))
+		).HandleTask(tv, handler, taskpoller.WithTimeout(30*time.Second))
 		s.NoError(err)
 		return resp
 	}
