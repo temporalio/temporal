@@ -261,8 +261,8 @@ func (s *WorkflowResetSuite) TestResetWorkflowWithOptionsUpdate() {
 	s.NoError(err)
 
 	// TODO (Carly): remove deprecated values from verification once we stop populating them
-	override.Behavior = enumspb.VERSIONING_BEHAVIOR_PINNED
-	override.PinnedVersion = "testing.v.123"
+	override.Behavior = enumspb.VERSIONING_BEHAVIOR_PINNED //nolint:staticcheck
+	override.PinnedVersion = "testing.v.123"               //nolint:staticcheck
 	s.ProtoEqual(override, info.WorkflowExecutionInfo.GetVersioningInfo().GetVersioningOverride())
 }
 

@@ -6912,6 +6912,7 @@ func (ms *MutableStateImpl) syncActivityToReplicationTask(
 				),
 				ms.pendingActivityInfoIDs,
 				activityIDs,
+				nil,
 			)
 		}
 		return nil
