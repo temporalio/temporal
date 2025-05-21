@@ -536,6 +536,9 @@ func DirectiveDeployment(directive *taskqueuespb.TaskVersionDirective) *deployme
 // The worker deployment manager workflows still use the v0.31 format, so call this before returning the object to readers
 // to mutatively populate the missing fields.
 func AddV32RoutingConfigToV31(r *deploymentpb.RoutingConfig) *deploymentpb.RoutingConfig {
+	if r == nil {
+		return nil
+	}
 	//nolint:staticcheck // SA1019: worker versioning v0.31
 	r.CurrentDeploymentVersion = ExternalWorkerDeploymentVersionFromString(r.CurrentVersion)
 	//nolint:staticcheck // SA1019: worker versioning v0.31
