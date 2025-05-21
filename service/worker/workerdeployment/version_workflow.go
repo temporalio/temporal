@@ -2,6 +2,7 @@ package workerdeployment
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
@@ -13,6 +14,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/worker_versioning"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -22,78 +24,92 @@ type (
 	// VersionWorkflowRunner holds the local state for a deployment workflow
 	VersionWorkflowRunner struct {
 		*deploymentspb.WorkerDeploymentVersionWorkflowArgs
-		a                      *VersionActivities
-		logger                 sdklog.Logger
-		metrics                sdkclient.MetricsHandler
-		lock                   workflow.Mutex
-		pendingUpdates         int
-		signalsCompleted       bool
-		drainageWorkflowFuture *workflow.ChildWorkflowFuture
-		done                   bool
+		a                                 *VersionActivities
+		logger                            sdklog.Logger
+		metrics                           sdkclient.MetricsHandler
+		lock                              workflow.Mutex
+		unsafeRefreshIntervalGetter       func() any
+		unsafeVisibilityGracePeriodGetter func() any
+		//drainageWorkflowFuture            *workflow.ChildWorkflowFuture
+		deleteVersion bool
+		// stateChanged is used to track if the state of the workflow has undergone a local state change since the last signal/update.
+		// This prevents a workflow from continuing-as-new if the state has not changed.
+		stateChanged  bool
+		signalHandler *SignalHandler
+		forceCAN      bool
 	}
 )
 
-func VersionWorkflow(ctx workflow.Context, versionWorkflowArgs *deploymentspb.WorkerDeploymentVersionWorkflowArgs) error {
+func VersionWorkflow(
+	ctx workflow.Context,
+	unsafeRefreshIntervalGetter func() any,
+	unsafeVisibilityGracePeriodGetter func() any,
+	versionWorkflowArgs *deploymentspb.WorkerDeploymentVersionWorkflowArgs,
+) error {
 	versionWorkflowRunner := &VersionWorkflowRunner{
 		WorkerDeploymentVersionWorkflowArgs: versionWorkflowArgs,
 
-		a:       nil,
-		logger:  sdklog.With(workflow.GetLogger(ctx), "wf-namespace", versionWorkflowArgs.NamespaceName),
-		metrics: workflow.GetMetricsHandler(ctx).WithTags(map[string]string{"namespace": versionWorkflowArgs.NamespaceName}),
-		lock:    workflow.NewMutex(ctx),
+		a:                                 nil,
+		logger:                            sdklog.With(workflow.GetLogger(ctx), "wf-namespace", versionWorkflowArgs.NamespaceName),
+		metrics:                           workflow.GetMetricsHandler(ctx).WithTags(map[string]string{"namespace": versionWorkflowArgs.NamespaceName}),
+		lock:                              workflow.NewMutex(ctx),
+		unsafeRefreshIntervalGetter:       unsafeRefreshIntervalGetter,
+		unsafeVisibilityGracePeriodGetter: unsafeVisibilityGracePeriodGetter,
+		signalHandler: &SignalHandler{
+			signalSelector: workflow.NewSelector(ctx),
+		},
 	}
-
 	return versionWorkflowRunner.run(ctx)
 }
 
 func (d *VersionWorkflowRunner) listenToSignals(ctx workflow.Context) {
 	// Fetch signal channels
 	forceCANSignalChannel := workflow.GetSignalChannel(ctx, ForceCANSignalName)
-	forceCAN := false
-	drainageStatusSignalChannel := workflow.GetSignalChannel(ctx, SyncDrainageSignalName)
+	//drainageStatusSignalChannel := workflow.GetSignalChannel(ctx, SyncDrainageSignalName)
 
-	selector := workflow.NewSelector(ctx)
-	selector.AddReceive(forceCANSignalChannel, func(c workflow.ReceiveChannel, more bool) {
+	d.signalHandler.signalSelector.AddReceive(forceCANSignalChannel, func(c workflow.ReceiveChannel, more bool) {
+		d.signalHandler.processingSignals++
+		defer func() { d.signalHandler.processingSignals-- }()
 		// Process Signal
 		c.Receive(ctx, nil)
-		forceCAN = true
+		d.forceCAN = true
 	})
-	selector.AddReceive(drainageStatusSignalChannel, func(c workflow.ReceiveChannel, more bool) {
-		var newInfo *deploymentpb.VersionDrainageInfo
+	//d.signalHandler.signalSelector.AddReceive(drainageStatusSignalChannel, func(c workflow.ReceiveChannel, more bool) {
+	//	d.signalHandler.processingSignals++
+	//	defer func() { d.signalHandler.processingSignals-- }()
+	//
+	//	var newInfo *deploymentpb.VersionDrainageInfo
+	//	c.Receive(ctx, &newInfo)
+	//
+	//	// if the version is current or ramping, ignore drainage signal since it could have come late
+	//	if d.VersionState.GetRampingSinceTime() != nil || d.VersionState.GetCurrentSinceTime() != nil {
+	//		return
+	//	}
+	//
+	//	mergedInfo := &deploymentpb.VersionDrainageInfo{}
+	//	mergedInfo.LastCheckedTime = newInfo.LastCheckedTime
+	//	if d.VersionState.GetDrainageInfo().GetStatus() != newInfo.Status {
+	//		mergedInfo.Status = newInfo.Status
+	//		mergedInfo.LastChangedTime = newInfo.LastCheckedTime
+	//		d.VersionState.DrainageInfo = mergedInfo
+	//		d.syncSummary(ctx)
+	//	} else {
+	//		mergedInfo.Status = d.VersionState.DrainageInfo.Status
+	//		mergedInfo.LastChangedTime = d.VersionState.DrainageInfo.LastChangedTime
+	//		d.VersionState.DrainageInfo = mergedInfo
+	//	}
+	//
+	//	// If the version is now drained, the drainage workflow has completed execution as well.
+	//	// Update the future to be nil to indicate that the drainage workflow is no longer running.
+	//	if d.VersionState.GetDrainageInfo().GetStatus() == enumspb.VERSION_DRAINAGE_STATUS_DRAINED {
+	//		d.drainageWorkflowFuture = nil
+	//	}
+	//})
 
-		c.Receive(ctx, &newInfo)
-
-		// if the version is current or ramping, ignore drainage signal since it could have come late
-		if d.VersionState.GetRampingSinceTime() != nil || d.VersionState.GetCurrentSinceTime() != nil {
-			return
-		}
-
-		mergedInfo := &deploymentpb.VersionDrainageInfo{}
-		mergedInfo.LastCheckedTime = newInfo.LastCheckedTime
-		if d.VersionState.GetDrainageInfo().GetStatus() != newInfo.Status {
-			mergedInfo.Status = newInfo.Status
-			mergedInfo.LastChangedTime = newInfo.LastCheckedTime
-			d.VersionState.DrainageInfo = mergedInfo
-			d.syncSummary(ctx)
-		} else {
-			mergedInfo.Status = d.VersionState.DrainageInfo.Status
-			mergedInfo.LastChangedTime = d.VersionState.DrainageInfo.LastChangedTime
-			d.VersionState.DrainageInfo = mergedInfo
-		}
-
-		// If the version is now drained, the drainage workflow has completed execution as well.
-		// Update the future to be nil to indicate that the drainage workflow is no longer running.
-		if d.VersionState.GetDrainageInfo().GetStatus() == enumspb.VERSION_DRAINAGE_STATUS_DRAINED {
-			d.drainageWorkflowFuture = nil
-		}
-	})
-
-	for (!workflow.GetInfo(ctx).GetContinueAsNewSuggested() && !forceCAN) || selector.HasPending() {
-		selector.Select(ctx)
+	// Keep waiting for signals, when it's time to CaN the main goroutine will exit.
+	for {
+		d.signalHandler.signalSelector.Select(ctx)
 	}
-
-	// Done processing signals before CAN
-	d.signalsCompleted = true
 }
 
 func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
@@ -104,9 +120,9 @@ func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
 		d.VersionState.CreateTime = timestamppb.New(workflow.Now(ctx))
 	}
 
-	// if we were draining and just continued-as-new, restart drainage child wf
+	// if we were draining and just continued-as-new, do another drainage check after waiting for appropriate time
 	if d.VersionState.GetDrainageInfo().GetStatus() == enumspb.VERSION_DRAINAGE_STATUS_DRAINING {
-		d.startDrainage(ctx, true)
+		workflow.Go(ctx, d.checkDrainage)
 	}
 
 	// Set up Query Handlers here:
@@ -172,19 +188,25 @@ func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
 	// Listen to signals in a different goroutine to make business logic clearer
 	workflow.Go(ctx, d.listenToSignals)
 
-	// Wait on any pending signals and updates.
-	err := workflow.Await(ctx, func() bool { return (d.signalsCompleted && d.pendingUpdates == 0) || d.done })
+	// Wait until we can continue as new or are cancelled. The workflow will continue-as-new iff
+	// there are no pending updates/signals and the state has changed.
+	err := workflow.Await(ctx, func() bool {
+		return d.deleteVersion || // version is deleted -> it's ok to drop all signals and updates.
+			// There is no pending signal or update, but the state is dirty or forceCaN is requested:
+			(!d.signalHandler.signalSelector.HasPending() && d.signalHandler.processingSignals == 0 && workflow.AllHandlersFinished(ctx) &&
+				(d.forceCAN || d.stateChanged))
+	})
 	if err != nil {
 		return err
 	}
 
 	// Before continue-as-new or done, stop drainage wf if it exists.
-	if d.drainageWorkflowFuture != nil {
-		d.logger.Debug("Version terminating drainage workflow before continue-as-new")
-		_ = d.stopDrainage(ctx) // child options say terminate-on-close, so if this fails the wf will terminate instead.
-	}
+	//if d.drainageWorkflowFuture != nil {
+	//	d.logger.Debug("Version terminating drainage workflow before continue-as-new")
+	//	_ = d.stopDrainage(ctx) // child options say terminate-on-close, so if this fails the wf will terminate instead.
+	//}
 
-	if d.done {
+	if d.deleteVersion {
 		return nil
 	}
 
@@ -209,33 +231,26 @@ func (d *VersionWorkflowRunner) handleUpdateVersionMetadata(ctx workflow.Context
 		delete(d.VersionState.Metadata.Entries, key)
 	}
 
+	// although the handler might have not changed the metadata at all, still
+	// it's better to CaN because some history events are built now.
+	d.setStateChanged()
+
 	return &deploymentspb.UpdateVersionMetadataResponse{
 		Metadata: d.VersionState.Metadata,
 	}, nil
 }
 
 func (d *VersionWorkflowRunner) startDrainage(ctx workflow.Context, isCan bool) {
-	v := workflow.GetVersion(ctx, "Step1", workflow.DefaultVersion, 1)
-	if v != workflow.DefaultVersion { // needs patching because we added a Signal call via d.syncSummary
-		if d.VersionState.GetDrainageInfo().GetStatus() == enumspb.VERSION_DRAINAGE_STATUS_UNSPECIFIED {
-			now := timestamppb.New(workflow.Now(ctx))
-			d.VersionState.DrainageInfo = &deploymentpb.VersionDrainageInfo{
-				Status:          enumspb.VERSION_DRAINAGE_STATUS_DRAINING,
-				LastChangedTime: now,
-				LastCheckedTime: now,
-			}
-			d.syncSummary(ctx)
+	if d.VersionState.GetDrainageInfo().GetStatus() == enumspb.VERSION_DRAINAGE_STATUS_UNSPECIFIED {
+		now := timestamppb.New(workflow.Now(ctx))
+		d.VersionState.DrainageInfo = &deploymentpb.VersionDrainageInfo{
+			Status:          enumspb.VERSION_DRAINAGE_STATUS_DRAINING,
+			LastChangedTime: now,
+			LastCheckedTime: now,
 		}
+		d.syncSummary(ctx)
+		d.setStateChanged()
 	}
-	childCtx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
-		ParentClosePolicy:     enumspb.PARENT_CLOSE_POLICY_TERMINATE,
-		TypedSearchAttributes: d.buildSearchAttributes(),
-	})
-	fut := workflow.ExecuteChildWorkflow(childCtx, WorkerDeploymentDrainageWorkflowType, &deploymentspb.DrainageWorkflowArgs{
-		Version: d.VersionState.Version,
-		IsCan:   isCan,
-	})
-	d.drainageWorkflowFuture = &fut
 }
 
 func (d *VersionWorkflowRunner) buildSearchAttributes() temporal.SearchAttributes {
@@ -244,16 +259,16 @@ func (d *VersionWorkflowRunner) buildSearchAttributes() temporal.SearchAttribute
 	)
 }
 
-func (d *VersionWorkflowRunner) stopDrainage(ctx workflow.Context) error {
-	if d.drainageWorkflowFuture == nil {
-		return nil
-	}
-	fut := *d.drainageWorkflowFuture
-	_ = fut.SignalChildWorkflow(ctx, TerminateDrainageSignal, nil)
-
-	d.drainageWorkflowFuture = nil
-	return nil
-}
+//func (d *VersionWorkflowRunner) stopDrainage(ctx workflow.Context) error {
+//	if d.drainageWorkflowFuture == nil {
+//		return nil
+//	}
+//	fut := *d.drainageWorkflowFuture
+//	_ = fut.SignalChildWorkflow(ctx, TerminateDrainageSignal, nil)
+//
+//	d.drainageWorkflowFuture = nil
+//	return nil
+//}
 
 func (d *VersionWorkflowRunner) validateDeleteVersion(args *deploymentspb.DeleteVersionArgs) error {
 	// We can't call DescribeTaskQueue here because that would be an Activity call / non-deterministic.
@@ -268,9 +283,10 @@ func (d *VersionWorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *
 		d.logger.Error("Could not acquire workflow lock")
 		return serviceerror.NewDeadlineExceeded("Could not acquire workflow lock")
 	}
-	d.pendingUpdates++
 	defer func() {
-		d.pendingUpdates--
+		// although the handler might have not changed the state and had returned an error, still
+		// it's better to CaN because some history events are built now.
+		d.setStateChanged()
 		d.lock.Unlock()
 	}()
 
@@ -353,7 +369,7 @@ func (d *VersionWorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *
 		}
 	}
 
-	d.done = true
+	d.deleteVersion = true
 	return nil
 }
 
@@ -404,9 +420,10 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 		d.logger.Error("Could not acquire workflow lock")
 		return err
 	}
-	d.pendingUpdates++
 	defer func() {
-		d.pendingUpdates--
+		// although the handler might have not changed the state and had returned an error, still
+		// it's better to CaN because some history events are built now.
+		d.setStateChanged()
 		d.lock.Unlock()
 	}()
 
@@ -509,9 +526,10 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 		d.logger.Error("Could not acquire workflow lock")
 		return nil, serviceerror.NewDeadlineExceeded("Could not acquire workflow lock")
 	}
-	d.pendingUpdates++
 	defer func() {
-		d.pendingUpdates--
+		// although the handler might have not changed the state and had returned an error, still
+		// it's better to CaN because some history events are built now.
+		d.setStateChanged()
 		d.lock.Unlock()
 	}()
 
@@ -657,14 +675,15 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 			// First time this version is activated to current/ramping
 			d.VersionState.FirstActivationTime = args.RoutingUpdateTime
 		}
-		if d.drainageWorkflowFuture != nil {
-			err = d.stopDrainage(ctx)
-			if err != nil {
-				// TODO: compensate
-				return nil, err
-			}
-			d.VersionState.DrainageInfo = nil
-		}
+		//
+		//if d.drainageWorkflowFuture != nil {
+		//	err = d.stopDrainage(ctx)
+		//	if err != nil {
+		//		// TODO: compensate
+		//		return nil, err
+		//	}
+		//	d.VersionState.DrainageInfo = nil
+		//}
 	}
 
 	return &deploymentspb.SyncVersionStateResponse{
@@ -707,4 +726,51 @@ func (d *VersionWorkflowRunner) syncSummary(ctx workflow.Context) {
 	if err != nil {
 		d.logger.Error("could not sync version summary to deployment workflow", "error", err)
 	}
+}
+
+func (d *VersionWorkflowRunner) checkDrainage(ctx workflow.Context) {
+	drainage := d.VersionState.GetDrainageInfo()
+	var interval time.Duration
+	var err error
+	if drainage.LastCheckedTime.AsTime() == drainage.LastCheckedTime.AsTime() {
+		// this is the first update, so we wait according to the grace period config
+		interval, err = getSafeDurationConfig(ctx, "getVisibilityGracePeriod", d.unsafeVisibilityGracePeriodGetter, defaultVisibilityGrace)
+	} else {
+		// this is a subsequent check, we wait according to the refresh interval
+		interval, err = getSafeDurationConfig(ctx, "getDrainageRefreshInterval", d.unsafeRefreshIntervalGetter, defaultVisibilityRefresh)
+	}
+	if err != nil {
+		d.logger.Error("could not calculate drainage refresh interval", tag.Error(err))
+		return
+	}
+	timeSinceLastRefresh := workflow.Now(ctx).Sub(drainage.LastCheckedTime.AsTime())
+	if err = workflow.Sleep(ctx, interval-timeSinceLastRefresh); err != nil {
+		d.logger.Error("error while trying to sleep", tag.Error(err))
+		return
+	}
+
+	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+	var a *DrainageActivities
+	var info *deploymentpb.VersionDrainageInfo
+	err = workflow.ExecuteActivity(
+		activityCtx,
+		a.GetVersionDrainageStatus,
+		d.VersionState.Version,
+	).Get(ctx, &info)
+	if err != nil {
+		d.logger.Error("could not get version drainage status", tag.Error(err))
+		return
+	}
+
+	if d.VersionState.GetDrainageInfo().GetStatus() == enumspb.VERSION_DRAINAGE_STATUS_DRAINING {
+		d.VersionState.DrainageInfo = info
+	}
+
+	// regardless of results mark state as dirty so we CaN in the first opportunity now that some
+	// history events are made.
+	d.setStateChanged()
+}
+
+func (d *VersionWorkflowRunner) setStateChanged() {
+	d.stateChanged = true
 }

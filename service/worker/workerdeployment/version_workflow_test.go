@@ -10,6 +10,7 @@ import (
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/testsuite"
+	"go.temporal.io/sdk/workflow"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.uber.org/mock/gomock"
@@ -31,7 +32,10 @@ func TestVersionWorkflowSuite(t *testing.T) {
 func (s *VersionWorkflowSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.env = s.WorkflowTestSuite.NewTestWorkflowEnvironment()
-	s.env.RegisterWorkflow(VersionWorkflow)
+	versionWorkflow := func(ctx workflow.Context, args *deploymentspb.WorkerDeploymentVersionWorkflowArgs) error {
+		return VersionWorkflow(ctx, nil, nil, args)
+	}
+	s.env.RegisterWorkflowWithOptions(versionWorkflow, workflow.RegisterOptions{Name: WorkerDeploymentVersionWorkflowType})
 
 	// Initialize an empty ClientImpl to use its helper methods
 	s.workerDeploymentClient = &ClientImpl{}
@@ -168,7 +172,7 @@ func (s *VersionWorkflowSuite) syncStateInBatches(totalWorkers int) {
 	}
 
 	// starting the version workflow
-	s.env.ExecuteWorkflow(VersionWorkflow, &deploymentspb.WorkerDeploymentVersionWorkflowArgs{
+	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, &deploymentspb.WorkerDeploymentVersionWorkflowArgs{
 		NamespaceName: tv.NamespaceName().String(),
 		NamespaceId:   tv.NamespaceID().String(),
 		VersionState: &deploymentspb.VersionLocalState{
