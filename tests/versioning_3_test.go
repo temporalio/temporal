@@ -709,8 +709,8 @@ func (s *Versioning3Suite) testUnpinnedWorkflowWithRamp(toUnversioned bool) {
 
 	w1 := worker.New(s.SdkClient(), tv1.TaskQueue().GetName(), worker.Options{
 		DeploymentOptions: worker.DeploymentOptions{
-			Version: tv1.DeploymentVersionString(),
-			UseVersioning: true,
+			Version:                   tv1.DeploymentVersionString(),
+			UseVersioning:             true,
 			DefaultVersioningBehavior: workflow.VersioningBehaviorAutoUpgrade,
 		},
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -733,8 +733,8 @@ func (s *Versioning3Suite) testUnpinnedWorkflowWithRamp(toUnversioned bool) {
 
 	w2 := worker.New(s.SdkClient(), tv2.TaskQueue().GetName(), worker.Options{
 		DeploymentOptions: worker.DeploymentOptions{
-			Version: tv2.DeploymentVersionString(),
-			UseVersioning: !toUnversioned,
+			Version:                   tv2.DeploymentVersionString(),
+			UseVersioning:             !toUnversioned,
 			DefaultVersioningBehavior: workflow.VersioningBehaviorAutoUpgrade,
 		},
 		MaxConcurrentWorkflowTaskPollers: numPollers,
