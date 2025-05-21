@@ -583,7 +583,6 @@ func (s *Versioning3Suite) TestUnpinnedWorkflow_FailedUpdate_DoesNotTransitionTo
 	s.idlePollWorkflow(tv2, true, ver3MinPollTime, "should not have gotten any tasks since there are none")
 
 	s.setCurrentDeployment(tv2)
-	s.waitForDeploymentDataPropagation(tv2, versionStatusInactive, false, tqTypeWf)
 
 	// Send update
 	updateResultCh := s.sendUpdateNoError(tv2)
