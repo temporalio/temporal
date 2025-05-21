@@ -708,10 +708,9 @@ func (s *Versioning3Suite) testUnpinnedWorkflowWithRamp(toUnversioned bool) {
 	defer cancel()
 
 	w1 := worker.New(s.SdkClient(), tv1.TaskQueue().GetName(), worker.Options{
-		BuildID:                 tv1.BuildID(),
-		UseBuildIDForVersioning: true,
 		DeploymentOptions: worker.DeploymentOptions{
-			DeploymentSeriesName:      tv1.DeploymentSeries(),
+			Version: tv1.DeploymentVersionString(),
+			UseVersioning: true,
 			DefaultVersioningBehavior: workflow.VersioningBehaviorAutoUpgrade,
 		},
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -733,10 +732,9 @@ func (s *Versioning3Suite) testUnpinnedWorkflowWithRamp(toUnversioned bool) {
 	s.waitForDeploymentDataPropagation(tv1, versionStatusCurrent, false, tqTypeWf, tqTypeAct)
 
 	w2 := worker.New(s.SdkClient(), tv2.TaskQueue().GetName(), worker.Options{
-		BuildID:                 tv2.BuildID(),
-		UseBuildIDForVersioning: !toUnversioned,
 		DeploymentOptions: worker.DeploymentOptions{
-			DeploymentSeriesName:      tv2.DeploymentSeries(),
+			Version: tv2.DeploymentVersionString(),
+			UseVersioning: !toUnversioned,
 			DefaultVersioningBehavior: workflow.VersioningBehaviorAutoUpgrade,
 		},
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -1178,10 +1176,9 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectInherit(crossTq bo
 
 	if crossTq {
 		w1xtq := worker.New(s.SdkClient(), tv1Child.TaskQueue().GetName(), worker.Options{
-			BuildID:                 tv1Child.BuildID(),
-			UseBuildIDForVersioning: true,
 			DeploymentOptions: worker.DeploymentOptions{
-				DeploymentSeriesName:      tv1Child.DeploymentSeries(),
+				Version:                   tv1Child.DeploymentVersionString(),
+				UseVersioning:             true,
 				DefaultVersioningBehavior: workflow.VersioningBehaviorAutoUpgrade,
 			},
 			MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -1192,10 +1189,9 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectInherit(crossTq bo
 	}
 
 	w1 := worker.New(s.SdkClient(), tv1.TaskQueue().GetName(), worker.Options{
-		BuildID:                 tv1.BuildID(),
-		UseBuildIDForVersioning: true,
 		DeploymentOptions: worker.DeploymentOptions{
-			DeploymentSeriesName:      tv1.DeploymentSeries(),
+			Version:                   tv1.DeploymentVersionString(),
+			UseVersioning:             true,
 			DefaultVersioningBehavior: workflow.VersioningBehaviorAutoUpgrade,
 		},
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -1211,9 +1207,10 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectInherit(crossTq bo
 	s.setCurrentDeployment(tv1)
 
 	run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
-		ID:                 tv1.WorkflowID(),
-		TaskQueue:          tv1.TaskQueue().GetName(),
-		VersioningOverride: sdkOverride,
+		ID:                  tv1.WorkflowID(),
+		TaskQueue:           tv1.TaskQueue().GetName(),
+		VersioningOverride:  sdkOverride,
+		WorkflowTaskTimeout: 10 * time.Second,
 	}, "wf")
 	s.NoError(err)
 	// wait for it to start on v1
@@ -1341,8 +1338,6 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectNoInherit(crossTq 
 
 	if crossTq {
 		w2xtq := worker.New(sdkClient, tv2Child.TaskQueue().GetName(), worker.Options{
-			BuildID:                 tv2Child.BuildID(),
-			UseBuildIDForVersioning: true,
 			DeploymentOptions: worker.DeploymentOptions{
 				Version:                   tv2Child.DeploymentVersionString(),
 				UseVersioning:             true,
@@ -1370,8 +1365,9 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectNoInherit(crossTq 
 	defer w2.Stop()
 
 	run, err := sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
-		ID:        tv1.WorkflowID(),
-		TaskQueue: tv1.TaskQueue().GetName(),
+		ID:                  tv1.WorkflowID(),
+		TaskQueue:           tv1.TaskQueue().GetName(),
+		WorkflowTaskTimeout: 10 * time.Second,
 	}, "wf")
 	s.NoError(err)
 
@@ -1466,8 +1462,9 @@ func (s *Versioning3Suite) testCan(behavior enumspb.VersioningBehavior) {
 	s.setCurrentDeployment(tv1)
 
 	run, err := sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
-		ID:        tv1.WorkflowID(),
-		TaskQueue: tv1.TaskQueue().GetName(),
+		ID:                  tv1.WorkflowID(),
+		TaskQueue:           tv1.TaskQueue().GetName(),
+		WorkflowTaskTimeout: 10 * time.Second,
 	}, "wf")
 	s.NoError(err)
 
