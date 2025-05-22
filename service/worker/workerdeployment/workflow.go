@@ -257,7 +257,7 @@ func (d *WorkflowRunner) addVersionToWorkerDeployment(ctx workflow.Context, args
 	if len(d.State.Versions) >= maxVersions {
 		err := d.tryDeleteVersion(ctx)
 		if err != nil {
-			return temporal.NewApplicationError(fmt.Sprintf("cannot add version since maximum number of versions (%d) have been registered in the deployment", maxVersions), errTooManyVersions)
+			return temporal.NewApplicationError(fmt.Sprintf("cannot add version %s since maximum number of versions (%d) have been registered in the deployment", args.Version, maxVersions), errTooManyVersions)
 		}
 	}
 
@@ -301,7 +301,7 @@ func (d *WorkflowRunner) handleRegisterWorker(ctx workflow.Context, args *deploy
 		if errors.As(err, &appError) {
 			if appError.Type() == errMaxTaskQueuesInVersionType {
 				return temporal.NewApplicationError(
-					fmt.Sprintf("cannot add task queue since maximum number of task queues (%d) have been registered in deployment", args.MaxTaskQueues),
+					fmt.Sprintf("cannot add task queue %v since maximum number of task queues (%d) have been registered in deployment", args.TaskQueueName, args.MaxTaskQueues),
 					errMaxTaskQueuesInVersionType,
 				)
 			}
@@ -338,12 +338,12 @@ func (d *WorkflowRunner) validateStateBeforeAcceptingRampingUpdate(args *deploym
 	}
 	if args.Version == d.State.RoutingConfig.CurrentVersion {
 		d.logger.Info("version can't be set to ramping since it is already current")
-		return temporal.NewApplicationError(fmt.Sprintf("ramping version %s is already current", args.Version), errFailedPrecondition)
+		return temporal.NewApplicationError(fmt.Sprintf("requested ramping version %s is already current", args.Version), errFailedPrecondition)
 	}
 
 	if _, ok := d.State.Versions[args.Version]; !ok && args.Version != "" && args.Version != worker_versioning.UnversionedVersionId {
 		d.logger.Info("version not found in deployment")
-		return temporal.NewApplicationError("version not found in deployment", errFailedPrecondition)
+		return temporal.NewApplicationError(fmt.Sprintf("requested ramping version %s not found in deployment", args.Version), errFailedPrecondition)
 	}
 
 	return nil

@@ -213,25 +213,31 @@ func (s *WorkerDeploymentSuite) TestDeploymentVersionLimits() {
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
-	expectedErrorMaxVersions := "cannot add version since maximum number of versions (1) have been registered in the deployment"
-	expectedErrorMaxTaskQueues := "cannot add task queue since maximum number of task queues (1) have been registered in deployment"
 
-	tv := testvars.New(s)
+	firstDeployment := testvars.New(s).WithDeploymentSeriesNumber(1)
+	secondDeployment := testvars.New(s).WithDeploymentSeriesNumber(2)
+
+	firstDeploymentVersionOne := firstDeployment.WithBuildIDNumber(1)
+	firstDeploymentVersionTwo := firstDeployment.WithBuildIDNumber(2)
+
+	secondDeploymentVersionOne := secondDeployment.WithBuildIDNumber(1)
+
+	expectedErrorMaxVersions := fmt.Sprintf("cannot add version %v since maximum number of versions (1) have been registered in the deployment", firstDeploymentVersionTwo.DeploymentVersionString())
+	expectedErrorMaxTaskQueues := fmt.Sprintf("cannot add task queue %v since maximum number of task queues (1) have been registered in deployment", secondDeploymentVersionOne.WithTaskQueueNumber(2).TaskQueue().GetName())
 
 	// First deployment version should be fine
-	go s.pollFromDeployment(ctx, tv)
-	s.ensureCreateVersionInDeployment(tv)
+	go s.pollFromDeployment(ctx, firstDeploymentVersionOne)
+	s.ensureCreateVersionInDeployment(firstDeploymentVersionOne)
 
 	// pollers of second version in the same deployment should be rejected
-	s.pollFromDeploymentExpectFail(ctx, tv.WithBuildIDNumber(2), expectedErrorMaxVersions)
+	s.pollFromDeploymentExpectFail(ctx, firstDeploymentVersionTwo, expectedErrorMaxVersions)
 
 	// But first version of another deployment fine
-	tv2 := tv.WithDeploymentSeriesNumber(2)
-	go s.pollFromDeployment(ctx, tv2)
-	s.ensureCreateVersionInDeployment(tv2)
+	go s.pollFromDeployment(ctx, secondDeploymentVersionOne)
+	s.ensureCreateVersionInDeployment(secondDeploymentVersionOne)
 
 	// pollers of the second TQ in the same deployment version should be rejected
-	s.pollFromDeploymentExpectFail(ctx, tv.WithTaskQueueNumber(2), expectedErrorMaxTaskQueues)
+	s.pollFromDeploymentExpectFail(ctx, secondDeploymentVersionOne.WithTaskQueueNumber(2), expectedErrorMaxTaskQueues)
 }
 
 func (s *WorkerDeploymentSuite) TestNamespaceDeploymentsLimit() {
