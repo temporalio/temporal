@@ -712,9 +712,11 @@ func (s *DeploymentVersionSuite) waitForNoPollers(ctx context.Context, tv *testv
 }
 
 func (s *DeploymentVersionSuite) TestVersionScavenger_DeleteOnAdd() {
-	s.OverrideDynamicConfig(dynamicconfig.PollerHistoryTTL, 5000*time.Millisecond)
+	testMaxVersionsInDeployment := 4
+	s.OverrideDynamicConfig(dynamicconfig.PollerHistoryTTL, 2*time.Second)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingMaxVersionsInDeployment, testMaxVersionsInDeployment)
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	s.OverrideDynamicConfig(dynamicconfig.VersionDrainageStatusVisibilityGracePeriod, 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	tvs := make([]*testvars.TestVars, testMaxVersionsInDeployment)
 
@@ -723,17 +725,28 @@ func (s *DeploymentVersionSuite) TestVersionScavenger_DeleteOnAdd() {
 		tvs[i] = testvars.New(s).WithBuildIDNumber(i).WithTaskQueue(fmt.Sprintf("%d", i))
 		s.startVersionWorkflow(ctx, tvs[i])
 	}
+	// startVersionWorkflow can take a long time, so sending some fresh polls so that deletion logic sees them.
+	for i := 0; i < testMaxVersionsInDeployment; i++ {
+		go s.pollFromDeployment(ctx, tvs[i])
+	}
+
+	// Make tvs[0] current
+	err := s.setCurrent(tvs[0], false)
+	s.Nil(err)
+	// Make tvs[1] current, hence tvs[0] should go to draining
+	err = s.setCurrent(tvs[1], false)
+	s.Nil(err)
+
 	tvMax := testvars.New(s).WithBuildIDNumber(9999)
 
-	// try to add a version and it fails
+	// try to add a version and it fails because none of the versions can be deleted
 	s.startVersionWorkflowExpectFailAddVersion(ctx, tvMax)
 
-	// signal the second and third wfs to be drained (testing that we don't delete the first version just due to create time oldest)
-	s.signalAndWaitForDrained(ctx, tvs[1])
-	s.signalAndWaitForDrained(ctx, tvs[2])
-	// Wait for pollers going away
+	// tvs[0] is draining so can't be deleted. tvs[1] is current, so tvs[2] should be deleted.
+	s.waitForNoPollers(ctx, tvs[0])
 	s.waitForNoPollers(ctx, tvs[1])
 	s.waitForNoPollers(ctx, tvs[2])
+	s.waitForNoPollers(ctx, tvs[3])
 
 	// try to add a version again, and it succeeds, after deleting the second version but not the third (both are eligible)
 	// TODO: This fails if I try to add tvMax again...
@@ -751,8 +764,10 @@ func (s *DeploymentVersionSuite) TestVersionScavenger_DeleteOnAdd() {
 		for _, vs := range resp.GetWorkerDeploymentInfo().GetVersionSummaries() {
 			versions = append(versions, vs.Version) //nolint:staticcheck // SA1019: worker versioning v0.31
 		}
-		a.NotContains(versions, tvs[1].DeploymentVersionString())
-		a.Contains(versions, tvs[2].DeploymentVersionString())
+		a.NotContains(versions, tvs[2].DeploymentVersionString())
+		a.Contains(versions, tvs[0].DeploymentVersionString())
+		a.Contains(versions, tvs[1].DeploymentVersionString())
+		a.Contains(versions, tvs[3].DeploymentVersionString())
 	}, time.Second*5, time.Millisecond*200)
 }
 
