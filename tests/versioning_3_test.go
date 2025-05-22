@@ -731,8 +731,12 @@ func (s *Versioning3Suite) testUnpinnedWorkflowWithRamp(toUnversioned bool) {
 
 	w2 := worker.New(s.SdkClient(), tv2.TaskQueue().GetName(), worker.Options{
 		DeploymentOptions: worker.DeploymentOptions{
-			Version:                   tv2.DeploymentVersionString(),
-			UseVersioning:             !toUnversioned,
+			Version:       tv2.DeploymentVersionString(),
+			UseVersioning: !toUnversioned,
+			// We are passing default behavior even for unversioned because SDK accepts it
+			// for now. Later SDK will stop accepting such config and this test should be fixed
+			// to not pass this value. The reason we pass it is to ensure server does not get
+			// confused by the conflicting wft completion response until the SDK fix comes.
 			DefaultVersioningBehavior: workflow.VersioningBehaviorAutoUpgrade,
 		},
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -746,19 +750,24 @@ func (s *Versioning3Suite) testUnpinnedWorkflowWithRamp(toUnversioned bool) {
 	// wait until all task queue partitions know that tv2 is ramping
 	s.waitForDeploymentDataPropagation(tv2, versionStatusRamping, toUnversioned, tqTypeWf, tqTypeAct)
 
+	numTests := 50
 	counter := make(map[string]int)
-	for i := 0; i < 50; i++ {
+	runs := make([]sdkclient.WorkflowRun, numTests)
+	for i := 0; i < numTests; i++ {
 		run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tv1.TaskQueue().GetName()}, "wf")
 		s.NoError(err)
+		runs[i] = run
+	}
+	for i := 0; i < numTests; i++ {
 		var out string
-		s.NoError(run.Get(ctx, &out))
+		s.NoError(runs[i].Get(ctx, &out))
 		counter[out]++
 	}
 
 	// both versions should've got executions
 	s.Greater(counter["v1"], 0)
 	s.Greater(counter["v2"], 0)
-	s.Equal(50, counter["v1"]+counter["v2"])
+	s.Equal(numTests, counter["v1"]+counter["v2"])
 }
 
 func (s *Versioning3Suite) TestTransitionFromWft_Sticky() {
