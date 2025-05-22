@@ -49,6 +49,11 @@ type (
 	}
 )
 
+// Workflow this workflow is implemented in a way that it always CaNs after some
+// history events are added and wf does not have pending work to do. This is to keep the
+// history clean so that we have less concern about backwards and forwards compatibility.
+// In steady state (i.e. absence of ongoing updates or signals) the wf should only have
+// a single wft in the history.
 func Workflow(ctx workflow.Context, unsafeMaxVersion func() int, args *deploymentspb.WorkerDeploymentWorkflowArgs) error {
 	workflowRunner := &WorkflowRunner{
 		WorkerDeploymentWorkflowArgs: args,
@@ -72,17 +77,17 @@ func (d *WorkflowRunner) listenToSignals(ctx workflow.Context) {
 
 	d.signalHandler.signalSelector.AddReceive(forceCANSignalChannel, func(c workflow.ReceiveChannel, more bool) {
 		d.signalHandler.processingSignals++
+		defer func() { d.signalHandler.processingSignals-- }()
 		c.Receive(ctx, nil)
 		d.forceCAN = true
-		d.signalHandler.processingSignals--
 	})
 	d.signalHandler.signalSelector.AddReceive(syncVersionSummaryChannel, func(c workflow.ReceiveChannel, more bool) {
-		var summary *deploymentspb.WorkerDeploymentVersionSummary
 		d.signalHandler.processingSignals++
+		defer func() { d.signalHandler.processingSignals-- }()
+		var summary *deploymentspb.WorkerDeploymentVersionSummary
 		c.Receive(ctx, &summary)
 		d.syncVersionSummaryFromVersionWorkflow(summary)
 		d.setStateChanged()
-		d.signalHandler.processingSignals--
 	})
 
 	// Keep waiting for signals, when it's time to CaN the main goroutine will exit.
@@ -269,6 +274,7 @@ func (d *WorkflowRunner) addVersionToWorkerDeployment(ctx workflow.Context, args
 }
 
 func (d *WorkflowRunner) handleRegisterWorker(ctx workflow.Context, args *deploymentspb.RegisterWorkerInWorkerDeploymentArgs) error {
+
 	// use lock to enforce only one update at a time
 	err := d.lock.Lock(ctx)
 	if err != nil {
@@ -276,6 +282,8 @@ func (d *WorkflowRunner) handleRegisterWorker(ctx workflow.Context, args *deploy
 		return serviceerror.NewDeadlineExceeded("Could not acquire workflow lock")
 	}
 	defer func() {
+		// Even if the update doesn't change the state we mark it as dirty because of created history events.
+		d.setStateChanged()
 		d.lock.Unlock()
 	}()
 
@@ -309,7 +317,6 @@ func (d *WorkflowRunner) handleRegisterWorker(ctx workflow.Context, args *deploy
 		return err
 	}
 
-	d.setStateChanged()
 	return nil
 }
 
@@ -321,10 +328,12 @@ func (d *WorkflowRunner) validateDeleteDeployment() error {
 }
 
 func (d *WorkflowRunner) handleDeleteDeployment(ctx workflow.Context) error {
+	// Even if the update doesn't change the state we mark it as dirty because of created history events.
+	defer d.setStateChanged()
+
 	if len(d.State.Versions) == 0 {
 		d.deleteDeployment = true
 	}
-	d.setStateChanged()
 	return nil
 }
 
@@ -362,6 +371,8 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 		return nil, serviceerror.NewDeadlineExceeded("Could not acquire workflow lock")
 	}
 	defer func() {
+		// Even if the update doesn't change the state we mark it as dirty because of created history events.
+		d.setStateChanged()
 		d.lock.Unlock()
 	}()
 
@@ -486,8 +497,6 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 		return nil, err
 	}
 
-	d.setStateChanged()
-
 	return &deploymentspb.SetRampingVersionResponse{
 		PreviousVersion:    prevRampingVersion,
 		PreviousPercentage: prevRampingVersionPercentage,
@@ -546,7 +555,7 @@ func (d *WorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *deploym
 		return serviceerror.NewDeadlineExceeded("Could not acquire workflow lock")
 	}
 	defer func() {
-		// although th
+		// Even if the update doesn't change the state we mark it as dirty because of created history events.
 		d.setStateChanged()
 		d.lock.Unlock()
 	}()
@@ -590,6 +599,8 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 		return nil, serviceerror.NewDeadlineExceeded("Could not acquire workflow lock")
 	}
 	defer func() {
+		// Even if the update doesn't change the state we mark it as dirty because of created history events.
+		d.setStateChanged()
 		d.lock.Unlock()
 	}()
 
@@ -689,8 +700,6 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 		return nil, err
 	}
 
-	d.setStateChanged()
-
 	return &deploymentspb.SetCurrentVersionResponse{
 		PreviousVersion: prevCurrentVersion,
 		ConflictToken:   d.State.ConflictToken,
@@ -729,6 +738,8 @@ func (d *WorkflowRunner) getMaxVersions(ctx workflow.Context) int {
 
 // to-be-deprecated
 func (d *WorkflowRunner) handleAddVersionToWorkerDeployment(ctx workflow.Context, args *deploymentspb.AddVersionUpdateArgs) error {
+	// Even if the update doesn't change the state we mark it as dirty because of created history events.
+	defer d.setStateChanged()
 
 	maxVersions := d.getMaxVersions(ctx)
 
@@ -744,7 +755,6 @@ func (d *WorkflowRunner) handleAddVersionToWorkerDeployment(ctx workflow.Context
 		CreateTime: args.CreateTime,
 	}
 
-	d.setStateChanged()
 	return nil
 }
 

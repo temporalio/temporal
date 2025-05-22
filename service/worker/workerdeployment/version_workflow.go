@@ -40,6 +40,13 @@ type (
 	}
 )
 
+// VersionWorkflow this workflow is implemented in a way that it always CaNs after some
+// history events are added and wf does not have pending work to do. This is to keep the
+// history clean so that we have less concern about backwards and forwards compatibility.
+// In steady state (i.e. absence of ongoing updates or signals) the wf should only have
+// a single wft in the history. For draining versions, the workflow history should only
+// have a single wft in the history followed by a scheduled timer for refreshing drainage
+// info.
 func VersionWorkflow(
 	ctx workflow.Context,
 	unsafeRefreshIntervalGetter func() any,
@@ -92,12 +99,12 @@ func (d *VersionWorkflowRunner) listenToSignals(ctx workflow.Context) {
 			mergedInfo.Status = newInfo.Status
 			mergedInfo.LastChangedTime = newInfo.LastCheckedTime
 			d.VersionState.DrainageInfo = mergedInfo
-			d.syncSummary(ctx)
 		} else {
 			mergedInfo.Status = d.VersionState.DrainageInfo.Status
 			mergedInfo.LastChangedTime = d.VersionState.DrainageInfo.LastChangedTime
 			d.VersionState.DrainageInfo = mergedInfo
 		}
+		d.syncSummary(ctx)
 	})
 
 	// Keep waiting for signals, when it's time to CaN the main goroutine will exit.
@@ -116,7 +123,7 @@ func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
 
 	// if we were draining and just continued-as-new, do another drainage check after waiting for appropriate time
 	if d.VersionState.GetDrainageInfo().GetStatus() == enumspb.VERSION_DRAINAGE_STATUS_DRAINING {
-		workflow.Go(ctx, d.checkDrainage)
+		workflow.Go(ctx, d.refreshDrainageInfo)
 	}
 
 	// Set up Query Handlers here:
@@ -722,7 +729,13 @@ func (d *VersionWorkflowRunner) syncSummary(ctx workflow.Context) {
 	}
 }
 
-func (d *VersionWorkflowRunner) checkDrainage(ctx workflow.Context) {
+func (d *VersionWorkflowRunner) refreshDrainageInfo(ctx workflow.Context) {
+	defer func() {
+		// regardless of results mark state as dirty so we CaN in the first opportunity now that some
+		// history events are made.
+		d.setStateChanged()
+	}()
+
 	drainage := d.VersionState.GetDrainageInfo()
 	var interval time.Duration
 	var err error
@@ -745,24 +758,27 @@ func (d *VersionWorkflowRunner) checkDrainage(ctx workflow.Context) {
 
 	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
 	var a *DrainageActivities
-	var info *deploymentpb.VersionDrainageInfo
+	var newInfo *deploymentpb.VersionDrainageInfo
 	err = workflow.ExecuteActivity(
 		activityCtx,
 		a.GetVersionDrainageStatus,
 		d.VersionState.Version,
-	).Get(ctx, &info)
+	).Get(ctx, &newInfo)
 	if err != nil {
 		d.logger.Error("could not get version drainage status", tag.Error(err))
 		return
 	}
 
-	if d.VersionState.GetDrainageInfo().GetStatus() == enumspb.VERSION_DRAINAGE_STATUS_DRAINING {
-		d.VersionState.DrainageInfo = info
+	if d.VersionState.DrainageInfo == nil {
+		d.VersionState.DrainageInfo = &deploymentpb.VersionDrainageInfo{}
 	}
 
-	// regardless of results mark state as dirty so we CaN in the first opportunity now that some
-	// history events are made.
-	d.setStateChanged()
+	d.VersionState.DrainageInfo.LastCheckedTime = newInfo.LastCheckedTime
+	if d.VersionState.GetDrainageInfo().GetStatus() != newInfo.Status {
+		d.VersionState.DrainageInfo.Status = newInfo.Status
+		d.VersionState.DrainageInfo.LastChangedTime = newInfo.LastCheckedTime
+	}
+	d.syncSummary(ctx)
 }
 
 func (d *VersionWorkflowRunner) setStateChanged() {
