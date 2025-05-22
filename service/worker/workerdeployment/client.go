@@ -447,7 +447,18 @@ func (d *ClientImpl) ListWorkerDeployments(
 
 	workerDeploymentSummaries := make([]*deploymentspb.WorkerDeploymentSummary, len(persistenceResp.Executions))
 	for i, ex := range persistenceResp.Executions {
-		workerDeploymentInfo := DecodeWorkerDeploymentMemo(ex.GetMemo())
+		var workerDeploymentInfo *deploymentspb.WorkerDeploymentWorkflowMemo
+		if ex.GetMemo() != nil {
+			workerDeploymentInfo = DecodeWorkerDeploymentMemo(ex.GetMemo())
+		} else {
+			// There is a race condition where the Deployment workflow exists, but has not yet
+			// upserted the memo. If that is the case, we handle it here.
+			workerDeploymentInfo = &deploymentspb.WorkerDeploymentWorkflowMemo{
+				DeploymentName: worker_versioning.GetDeploymentNameFromWorkflowID(ex.GetExecution().GetWorkflowId()),
+				CreateTime:     ex.GetStartTime(),
+				RoutingConfig:  &deploymentpb.RoutingConfig{CurrentVersion: worker_versioning.UnversionedVersionId},
+			}
+		}
 		workerDeploymentSummaries[i] = &deploymentspb.WorkerDeploymentSummary{
 			Name:          workerDeploymentInfo.DeploymentName,
 			CreateTime:    workerDeploymentInfo.CreateTime,
