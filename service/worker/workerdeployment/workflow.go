@@ -546,6 +546,8 @@ func (d *WorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *deploym
 		return serviceerror.NewDeadlineExceeded("Could not acquire workflow lock")
 	}
 	defer func() {
+		// although th
+		d.setStateChanged()
 		d.lock.Unlock()
 	}()
 
@@ -558,8 +560,6 @@ func (d *WorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *deploym
 	if err != nil {
 		return err
 	}
-
-	d.setStateChanged()
 
 	return d.deleteVersion(ctx, args)
 }

@@ -712,7 +712,7 @@ func (s *DeploymentVersionSuite) waitForNoPollers(ctx context.Context, tv *testv
 }
 
 func (s *DeploymentVersionSuite) TestVersionScavenger_DeleteOnAdd() {
-	s.OverrideDynamicConfig(dynamicconfig.PollerHistoryTTL, 500*time.Millisecond)
+	s.OverrideDynamicConfig(dynamicconfig.PollerHistoryTTL, 5000*time.Millisecond)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingMaxVersionsInDeployment, testMaxVersionsInDeployment)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
