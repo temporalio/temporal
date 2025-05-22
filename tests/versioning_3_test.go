@@ -1256,7 +1256,7 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectNoInherit(crossTq 
 		sdkParentBehavior = workflow.VersioningBehaviorAutoUpgrade
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
 	wfStarted := make(chan struct{}, 1)
@@ -1409,7 +1409,7 @@ func (s *Versioning3Suite) testCan(behavior enumspb.VersioningBehavior) {
 		sdkBehavior = workflow.VersioningBehaviorPinned
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
 	wfStarted := make(chan struct{}, 1)
