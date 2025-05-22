@@ -65,7 +65,7 @@ func VersionWorkflow(
 func (d *VersionWorkflowRunner) listenToSignals(ctx workflow.Context) {
 	// Fetch signal channels
 	forceCANSignalChannel := workflow.GetSignalChannel(ctx, ForceCANSignalName)
-	//drainageStatusSignalChannel := workflow.GetSignalChannel(ctx, SyncDrainageSignalName)
+	drainageStatusSignalChannel := workflow.GetSignalChannel(ctx, SyncDrainageSignalName)
 
 	d.signalHandler.signalSelector.AddReceive(forceCANSignalChannel, func(c workflow.ReceiveChannel, more bool) {
 		d.signalHandler.processingSignals++
@@ -74,37 +74,31 @@ func (d *VersionWorkflowRunner) listenToSignals(ctx workflow.Context) {
 		c.Receive(ctx, nil)
 		d.forceCAN = true
 	})
-	//d.signalHandler.signalSelector.AddReceive(drainageStatusSignalChannel, func(c workflow.ReceiveChannel, more bool) {
-	//	d.signalHandler.processingSignals++
-	//	defer func() { d.signalHandler.processingSignals-- }()
-	//
-	//	var newInfo *deploymentpb.VersionDrainageInfo
-	//	c.Receive(ctx, &newInfo)
-	//
-	//	// if the version is current or ramping, ignore drainage signal since it could have come late
-	//	if d.VersionState.GetRampingSinceTime() != nil || d.VersionState.GetCurrentSinceTime() != nil {
-	//		return
-	//	}
-	//
-	//	mergedInfo := &deploymentpb.VersionDrainageInfo{}
-	//	mergedInfo.LastCheckedTime = newInfo.LastCheckedTime
-	//	if d.VersionState.GetDrainageInfo().GetStatus() != newInfo.Status {
-	//		mergedInfo.Status = newInfo.Status
-	//		mergedInfo.LastChangedTime = newInfo.LastCheckedTime
-	//		d.VersionState.DrainageInfo = mergedInfo
-	//		d.syncSummary(ctx)
-	//	} else {
-	//		mergedInfo.Status = d.VersionState.DrainageInfo.Status
-	//		mergedInfo.LastChangedTime = d.VersionState.DrainageInfo.LastChangedTime
-	//		d.VersionState.DrainageInfo = mergedInfo
-	//	}
-	//
-	//	// If the version is now drained, the drainage workflow has completed execution as well.
-	//	// Update the future to be nil to indicate that the drainage workflow is no longer running.
-	//	if d.VersionState.GetDrainageInfo().GetStatus() == enumspb.VERSION_DRAINAGE_STATUS_DRAINED {
-	//		d.drainageWorkflowFuture = nil
-	//	}
-	//})
+	d.signalHandler.signalSelector.AddReceive(drainageStatusSignalChannel, func(c workflow.ReceiveChannel, more bool) {
+		d.signalHandler.processingSignals++
+		defer func() { d.signalHandler.processingSignals-- }()
+
+		var newInfo *deploymentpb.VersionDrainageInfo
+		c.Receive(ctx, &newInfo)
+
+		// if the version is current or ramping, ignore drainage signal since it could have come late
+		if d.VersionState.GetRampingSinceTime() != nil || d.VersionState.GetCurrentSinceTime() != nil {
+			return
+		}
+
+		mergedInfo := &deploymentpb.VersionDrainageInfo{}
+		mergedInfo.LastCheckedTime = newInfo.LastCheckedTime
+		if d.VersionState.GetDrainageInfo().GetStatus() != newInfo.Status {
+			mergedInfo.Status = newInfo.Status
+			mergedInfo.LastChangedTime = newInfo.LastCheckedTime
+			d.VersionState.DrainageInfo = mergedInfo
+			d.syncSummary(ctx)
+		} else {
+			mergedInfo.Status = d.VersionState.DrainageInfo.Status
+			mergedInfo.LastChangedTime = d.VersionState.DrainageInfo.LastChangedTime
+			d.VersionState.DrainageInfo = mergedInfo
+		}
+	})
 
 	// Keep waiting for signals, when it's time to CaN the main goroutine will exit.
 	for {
