@@ -247,17 +247,38 @@ func (tv *TestVars) DeploymentVersion() *deploymentspb.WorkerDeploymentVersion {
 	}
 }
 
+func (tv *TestVars) ExternalDeploymentVersion() *deploymentpb.WorkerDeploymentVersion {
+	return &deploymentpb.WorkerDeploymentVersion{
+		BuildId:        tv.BuildID(),
+		DeploymentName: tv.DeploymentSeries(),
+	}
+}
+
 func (tv *TestVars) DeploymentVersionString() string {
 	return worker_versioning.WorkerDeploymentVersionToString(tv.DeploymentVersion())
 }
 
 func (tv *TestVars) DeploymentVersionTransition() *workflowpb.DeploymentVersionTransition {
-	return &workflowpb.DeploymentVersionTransition{
-		Version: tv.DeploymentVersionString(),
+	ret := &workflowpb.DeploymentVersionTransition{
+		DeploymentVersion: worker_versioning.ExternalWorkerDeploymentVersionFromVersion(tv.DeploymentVersion()),
 	}
+	// DescribeWorkflowExecution populates both fields on read, so we expect to see both fields
+	//nolint:staticcheck // SA1019: worker versioning v0.31
+	ret.Version = worker_versioning.ExternalWorkerDeploymentVersionToString(ret.GetDeploymentVersion())
+	return ret
 }
 
-func (tv *TestVars) VersioningOverridePinned() *workflowpb.VersioningOverride {
+func (tv *TestVars) VersioningOverridePinned(useV32 bool) *workflowpb.VersioningOverride {
+	if useV32 {
+		return &workflowpb.VersioningOverride{
+			Override: &workflowpb.VersioningOverride_Pinned{
+				Pinned: &workflowpb.VersioningOverride_PinnedOverride{
+					Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
+					Version:  tv.ExternalDeploymentVersion(),
+				},
+			},
+		}
+	}
 	return &workflowpb.VersioningOverride{
 		Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED,
 		PinnedVersion: tv.DeploymentVersionString(),

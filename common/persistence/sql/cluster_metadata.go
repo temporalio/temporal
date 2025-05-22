@@ -3,7 +3,6 @@ package sql
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"net"
 	"time"
 
@@ -27,7 +26,7 @@ func (s *sqlClusterMetadataManager) ListClusterMetadata(
 	if request.NextPageToken != nil {
 		err := gobDeserialize(request.NextPageToken, &clusterName)
 		if err != nil {
-			return nil, serviceerror.NewInternal(fmt.Sprintf("error deserializing page token: %v", err))
+			return nil, serviceerror.NewInternalf("error deserializing page token: %v", err)
 		}
 	}
 
@@ -36,7 +35,7 @@ func (s *sqlClusterMetadataManager) ListClusterMetadata(
 		if err == sql.ErrNoRows {
 			return &p.InternalListClusterMetadataResponse{}, nil
 		}
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("ListClusterMetadata operation failed. Failed to get cluster metadata rows. Error: %v", err))
+		return nil, serviceerror.NewUnavailablef("ListClusterMetadata operation failed. Failed to get cluster metadata rows. Error: %v", err)
 	}
 
 	var clusterMetadata []*p.InternalGetClusterMetadataResponse
@@ -55,7 +54,7 @@ func (s *sqlClusterMetadataManager) ListClusterMetadata(
 	if len(rows) >= request.PageSize {
 		nextPageToken, err := gobSerialize(rows[len(rows)-1].ClusterName)
 		if err != nil {
-			return nil, serviceerror.NewInternal(fmt.Sprintf("error serializing page token: %v", err))
+			return nil, serviceerror.NewInternalf("error serializing page token: %v", err)
 		}
 		resp.NextPageToken = nextPageToken
 	}
@@ -89,14 +88,14 @@ func (s *sqlClusterMetadataManager) SaveClusterMetadata(
 		var lastVersion int64
 		if err != nil {
 			if err != sql.ErrNoRows {
-				return serviceerror.NewUnavailable(fmt.Sprintf("SaveClusterMetadata operation failed. Error %v", err))
+				return serviceerror.NewUnavailablef("SaveClusterMetadata operation failed. Error %v", err)
 			}
 		} else {
 			lastVersion = oldClusterMetadata.Version
 		}
 		if request.Version != lastVersion {
-			return serviceerror.NewUnavailable(fmt.Sprintf("SaveClusterMetadata encountered version mismatch, expected %v but got %v.",
-				request.Version, oldClusterMetadata.Version))
+			return serviceerror.NewUnavailablef("SaveClusterMetadata encountered version mismatch, expected %v but got %v.",
+				request.Version, oldClusterMetadata.Version)
 		}
 		_, err = tx.SaveClusterMetadata(ctx, &sqlplugin.ClusterMetadataRow{
 			ClusterName:  request.ClusterName,

@@ -250,7 +250,7 @@ func (d *ClientImpl) DescribeVersion(
 ) (_ *deploymentpb.WorkerDeploymentVersionInfo, retErr error) {
 	v, err := worker_versioning.WorkerDeploymentVersionFromString(version)
 	if err != nil {
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("invalid version string %q, expected format is \"<deployment_name>.<build_id>\"", version))
+		return nil, serviceerror.NewInvalidArgumentf("invalid version string %q, expected format is \"<deployment_name>.<build_id>\"", version)
 	}
 	deploymentName := v.GetDeploymentName()
 	buildID := v.GetBuildId()
@@ -447,7 +447,18 @@ func (d *ClientImpl) ListWorkerDeployments(
 
 	workerDeploymentSummaries := make([]*deploymentspb.WorkerDeploymentSummary, len(persistenceResp.Executions))
 	for i, ex := range persistenceResp.Executions {
-		workerDeploymentInfo := DecodeWorkerDeploymentMemo(ex.GetMemo())
+		var workerDeploymentInfo *deploymentspb.WorkerDeploymentWorkflowMemo
+		if ex.GetMemo() != nil {
+			workerDeploymentInfo = DecodeWorkerDeploymentMemo(ex.GetMemo())
+		} else {
+			// There is a race condition where the Deployment workflow exists, but has not yet
+			// upserted the memo. If that is the case, we handle it here.
+			workerDeploymentInfo = &deploymentspb.WorkerDeploymentWorkflowMemo{
+				DeploymentName: worker_versioning.GetDeploymentNameFromWorkflowID(ex.GetExecution().GetWorkflowId()),
+				CreateTime:     ex.GetStartTime(),
+				RoutingConfig:  &deploymentpb.RoutingConfig{CurrentVersion: worker_versioning.UnversionedVersionId},
+			}
+		}
 		workerDeploymentSummaries[i] = &deploymentspb.WorkerDeploymentSummary{
 			Name:          workerDeploymentInfo.DeploymentName,
 			CreateTime:    workerDeploymentInfo.CreateTime,
@@ -475,7 +486,7 @@ func (d *ClientImpl) SetCurrentVersion(
 		return nil, serviceerror.NewInvalidArgument("invalid version string: " + err.Error())
 	}
 	if versionObj.GetDeploymentName() != "" && versionObj.GetDeploymentName() != deploymentName {
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("invalid version string '%s' does not match deployment name '%s'", version, deploymentName))
+		return nil, serviceerror.NewInvalidArgumentf("invalid version string '%s' does not match deployment name '%s'", version, deploymentName)
 	}
 
 	err = validateVersionWfParams(WorkerDeploymentNameFieldName, deploymentName, d.maxIDLengthLimit())
@@ -559,7 +570,7 @@ func (d *ClientImpl) SetRampingVersion(
 			return nil, serviceerror.NewInvalidArgument("invalid version string: " + err.Error())
 		}
 		if versionObj.GetDeploymentName() != "" && versionObj.GetDeploymentName() != deploymentName {
-			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("invalid version string '%s' does not match deployment name '%s'", version, deploymentName))
+			return nil, serviceerror.NewInvalidArgumentf("invalid version string '%s' does not match deployment name '%s'", version, deploymentName)
 		}
 	}
 
@@ -635,7 +646,7 @@ func (d *ClientImpl) DeleteWorkerDeploymentVersion(
 ) (retErr error) {
 	v, err := worker_versioning.WorkerDeploymentVersionFromString(version)
 	if err != nil {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("invalid version string %q, expected format is \"<deployment_name>.<build_id>\"", version))
+		return serviceerror.NewInvalidArgumentf("invalid version string %q, expected format is \"<deployment_name>.<build_id>\"", version)
 	}
 	deploymentName := v.GetDeploymentName()
 	buildId := v.GetBuildId()
@@ -1125,12 +1136,12 @@ func (d *ClientImpl) AddVersionToWorkerDeployment(
 	} else if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errTooManyVersions {
 		return nil, serviceerror.NewFailedPrecondition(failure.Message)
 	} else if failure != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("failed to add version %v to worker deployment %v with error %v", args.Version, deploymentName, failure.Message))
+		return nil, serviceerror.NewInternalf("failed to add version %v to worker deployment %v with error %v", args.Version, deploymentName, failure.Message)
 	}
 
 	success := outcome.GetSuccess()
 	if success == nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("outcome missing success and failure while adding version %v to worker deployment %v", args.Version, deploymentName))
+		return nil, serviceerror.NewInternalf("outcome missing success and failure while adding version %v to worker deployment %v", args.Version, deploymentName)
 	}
 
 	return &deploymentspb.AddVersionToWorkerDeploymentResponse{}, nil
@@ -1378,12 +1389,12 @@ func (d *ClientImpl) IsVersionMissingTaskQueues(ctx context.Context, namespaceEn
 	// Check if all the task-queues in the prevCurrentVersion are present in the newCurrentVersion (newVersion is either the new ramping version or the new current version)
 	prevCurrentVersionInfo, err := d.DescribeVersion(ctx, namespaceEntry, prevCurrentVersion)
 	if err != nil {
-		return false, serviceerror.NewFailedPrecondition(fmt.Sprintf("Version %s not found in deployment with error: %v", prevCurrentVersion, err))
+		return false, serviceerror.NewFailedPreconditionf("Version %s not found in deployment with error: %v", prevCurrentVersion, err)
 	}
 
 	newVersionInfo, err := d.DescribeVersion(ctx, namespaceEntry, newVersion)
 	if err != nil {
-		return false, serviceerror.NewFailedPrecondition(fmt.Sprintf("Version %s not found in deployment with error: %v", newVersion, err))
+		return false, serviceerror.NewFailedPreconditionf("Version %s not found in deployment with error: %v", newVersion, err)
 	}
 
 	missingTaskQueues, err := d.checkForMissingTaskQueues(prevCurrentVersionInfo, newVersionInfo)
