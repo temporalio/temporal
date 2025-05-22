@@ -1259,8 +1259,8 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectNoInherit(crossTq 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	wfStarted := make(chan struct{}, 1)
-	currentChanged := make(chan struct{}, 1)
+	wfStarted := make(chan struct{}, 10)
+	currentChanged := make(chan struct{}, 10)
 
 	childv1 := func(ctx workflow.Context) (string, error) {
 		panic("child should not run on v1")
@@ -1273,7 +1273,6 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectNoInherit(crossTq 
 		// wait for current version to change
 		<-currentChanged
 
-		// run two child workflows
 		fut1 := workflow.ExecuteChildWorkflow(workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
 			TaskQueue:  tv2Child.TaskQueue().GetName(),
 			WorkflowID: tv2Child.WorkflowID(),
@@ -1288,7 +1287,6 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectNoInherit(crossTq 
 
 	// Same as v1 without channel blocking
 	wf2 := func(ctx workflow.Context) (string, error) {
-		// run two child workflows
 		fut1 := workflow.ExecuteChildWorkflow(workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
 			TaskQueue:  tv2Child.TaskQueue().GetName(),
 			WorkflowID: tv2Child.WorkflowID(),
@@ -1325,6 +1323,8 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectNoInherit(crossTq 
 			DefaultVersioningBehavior: workflow.VersioningBehaviorAutoUpgrade,
 		},
 		MaxConcurrentWorkflowTaskPollers: numPollers,
+		// Because the wf task can get stuck behind a channel, we make sure sdk does not panic too early
+		DeadlockDetectionTimeout:         10 * time.Second,
 	})
 	w1.RegisterWorkflowWithOptions(wf1, workflow.RegisterOptions{Name: "wf", VersioningBehavior: sdkParentBehavior})
 	if !crossTq {
@@ -1368,6 +1368,10 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectNoInherit(crossTq 
 		ID:                  tv1.WorkflowID(),
 		TaskQueue:           tv1.TaskQueue().GetName(),
 		WorkflowTaskTimeout: 10 * time.Second,
+		RetryPolicy: &temporal.RetryPolicy{
+			BackoffCoefficient: 1.,
+			InitialInterval:    time.Second,
+		},
 	}, "wf")
 	s.NoError(err)
 
@@ -1412,8 +1416,8 @@ func (s *Versioning3Suite) testCan(behavior enumspb.VersioningBehavior) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	wfStarted := make(chan struct{}, 1)
-	currentChanged := make(chan struct{}, 1)
+	wfStarted := make(chan struct{}, 10)
+	currentChanged := make(chan struct{}, 10)
 
 	wf1 := func(ctx workflow.Context) (string, error) {
 		s.verifyWorkflowVersioning(tv1, vbUnspecified, nil, nil, tv1.DeploymentVersionTransition())
@@ -1441,6 +1445,8 @@ func (s *Versioning3Suite) testCan(behavior enumspb.VersioningBehavior) {
 			DefaultVersioningBehavior: workflow.VersioningBehaviorPinned,
 		},
 		MaxConcurrentWorkflowTaskPollers: numPollers,
+		// Because the wf task can get stuck behind a channel, we make sure sdk does not panic too early
+		DeadlockDetectionTimeout:         10 * time.Second,
 	})
 	w1.RegisterWorkflowWithOptions(wf1, workflow.RegisterOptions{Name: "wf", VersioningBehavior: sdkBehavior})
 	s.NoError(w1.Start())
