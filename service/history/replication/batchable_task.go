@@ -4,6 +4,7 @@ import (
 	"sync"
 	"time"
 
+	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -126,6 +127,10 @@ func (w *batchedTask) Reschedule() {
 
 func (w *batchedTask) State() ctasks.State {
 	return w.batchedTask.State()
+}
+
+func (w *batchedTask) ReplicationTask() *replicationspb.ReplicationTask {
+	return w.batchedTask.ReplicationTask()
 }
 
 func (w *batchedTask) callIndividual(f func(task TrackableExecutableTask)) {
