@@ -114,12 +114,5 @@ func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Na
 		matchingClient:   s.activityDeps.MatchingClient,
 	}
 	registry.RegisterActivity(activities)
-
-	drainageActivities := &DrainageActivities{
-		namespace:        ns,
-		deploymentClient: s.activityDeps.WorkerDeploymentClient,
-	}
-	registry.RegisterActivity(drainageActivities)
-
 	return nil
 }

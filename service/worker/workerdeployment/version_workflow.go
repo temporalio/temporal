@@ -20,6 +20,11 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+const (
+	defaultVisibilityRefresh = 5 * time.Minute
+	defaultVisibilityGrace   = 3 * time.Minute
+)
+
 type (
 	// VersionWorkflowRunner holds the local state for a deployment workflow
 	VersionWorkflowRunner struct {
@@ -200,12 +205,6 @@ func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
 		return err
 	}
 
-	// Before continue-as-new or done, stop drainage wf if it exists.
-	//if d.drainageWorkflowFuture != nil {
-	//	d.logger.Debug("Version terminating drainage workflow before continue-as-new")
-	//	_ = d.stopDrainage(ctx) // child options say terminate-on-close, so if this fails the wf will terminate instead.
-	//}
-
 	if d.deleteVersion {
 		return nil
 	}
@@ -258,17 +257,6 @@ func (d *VersionWorkflowRunner) buildSearchAttributes() temporal.SearchAttribute
 		temporal.NewSearchAttributeKeyString(searchattribute.TemporalNamespaceDivision).ValueSet(WorkerDeploymentNamespaceDivision),
 	)
 }
-
-//func (d *VersionWorkflowRunner) stopDrainage(ctx workflow.Context) error {
-//	if d.drainageWorkflowFuture == nil {
-//		return nil
-//	}
-//	fut := *d.drainageWorkflowFuture
-//	_ = fut.SignalChildWorkflow(ctx, TerminateDrainageSignal, nil)
-//
-//	d.drainageWorkflowFuture = nil
-//	return nil
-//}
 
 func (d *VersionWorkflowRunner) validateDeleteVersion(args *deploymentspb.DeleteVersionArgs) error {
 	// We can't call DescribeTaskQueue here because that would be an Activity call / non-deterministic.
@@ -675,15 +663,6 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 			// First time this version is activated to current/ramping
 			d.VersionState.FirstActivationTime = args.RoutingUpdateTime
 		}
-		//
-		//if d.drainageWorkflowFuture != nil {
-		//	err = d.stopDrainage(ctx)
-		//	if err != nil {
-		//		// TODO: compensate
-		//		return nil, err
-		//	}
-		//	d.VersionState.DrainageInfo = nil
-		//}
 	}
 
 	return &deploymentspb.SyncVersionStateResponse{
@@ -756,7 +735,7 @@ func (d *VersionWorkflowRunner) refreshDrainageInfo(ctx workflow.Context) {
 	}
 
 	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
-	var a *DrainageActivities
+	var a *VersionActivities
 	var newInfo *deploymentpb.VersionDrainageInfo
 	err = workflow.ExecuteActivity(
 		activityCtx,

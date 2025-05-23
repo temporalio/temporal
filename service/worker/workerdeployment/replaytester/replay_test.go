@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/client"
@@ -20,15 +19,6 @@ import (
 // TestReplays tests workflow logic backwards compatibility from previous versions.
 func TestReplays(t *testing.T) {
 	replayer := worker.NewWorkflowReplayer()
-	drainageWorkflow := func(ctx workflow.Context, args *deploymentspb.DrainageWorkflowArgs) error {
-		refreshIntervalGetter := func() any {
-			return time.Minute
-		}
-		visibilityGracePeriodGetter := func() any {
-			return time.Minute
-		}
-		return workerdeployment.DrainageWorkflow(ctx, refreshIntervalGetter, visibilityGracePeriodGetter, args)
-	}
 	deploymentWorkflow := func(ctx workflow.Context, args *deploymentspb.WorkerDeploymentWorkflowArgs) error {
 		maxVersionsGetter := func() int {
 			return 100
@@ -37,7 +27,6 @@ func TestReplays(t *testing.T) {
 	}
 	replayer.RegisterWorkflowWithOptions(workerdeployment.VersionWorkflow, workflow.RegisterOptions{Name: workerdeployment.WorkerDeploymentVersionWorkflowType})
 	replayer.RegisterWorkflowWithOptions(deploymentWorkflow, workflow.RegisterOptions{Name: workerdeployment.WorkerDeploymentWorkflowType})
-	replayer.RegisterWorkflowWithOptions(drainageWorkflow, workflow.RegisterOptions{Name: workerdeployment.WorkerDeploymentDrainageWorkflowType})
 
 	files, err := filepath.Glob("testdata/replay_*.json.gz")
 	require.NoError(t, err)
