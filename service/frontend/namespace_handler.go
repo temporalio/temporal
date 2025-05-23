@@ -120,7 +120,7 @@ func (d *namespaceHandler) RegisterNamespace(
 	switch err.(type) {
 	case nil:
 		// namespace already exists, cannot proceed
-		return nil, serviceerror.NewNamespaceAlreadyExists(fmt.Sprintf("Namespace %q already exists", registerRequest.GetNamespace()))
+		return nil, serviceerror.NewNamespaceAlreadyExistsf("Namespace %q already exists", registerRequest.GetNamespace())
 	case *serviceerror.NamespaceNotFound:
 		// namespace does not exists, proceeds
 	default:
@@ -465,7 +465,7 @@ func (d *namespaceHandler) UpdateNamespace(
 			bb := d.mergeBadBinaries(config.BadBinaries.Binaries, updatedConfig.BadBinaries.Binaries, time.Now().UTC())
 			config.BadBinaries = &bb
 			if len(config.BadBinaries.Binaries) > maxLength {
-				return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Total resetBinaries cannot exceed the max limit: %v", maxLength))
+				return nil, serviceerror.NewInvalidArgumentf("Total resetBinaries cannot exceed the max limit: %v", maxLength)
 			}
 		}
 		if len(updatedConfig.CustomSearchAttributeAliases) > 0 {
@@ -485,7 +485,7 @@ func (d *namespaceHandler) UpdateNamespace(
 		binChecksum := updateRequest.GetDeleteBadBinary()
 		_, ok := config.BadBinaries.Binaries[binChecksum]
 		if !ok {
-			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Bad binary checksum %v doesn't exists.", binChecksum))
+			return nil, serviceerror.NewInvalidArgumentf("Bad binary checksum %v doesn't exists.", binChecksum)
 		}
 		configurationChanged = true
 		delete(config.BadBinaries.Binaries, binChecksum)
@@ -527,8 +527,8 @@ func (d *namespaceHandler) UpdateNamespace(
 			return nil, err
 		}
 		if !d.clusterMetadata.IsGlobalNamespaceEnabled() {
-			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("global namespace is not enabled on this "+
-				"cluster, cannot update global namespace or promote local namespace: %v", updateRequest.Namespace))
+			return nil, serviceerror.NewInvalidArgumentf("global namespace is not enabled on this "+
+				"cluster, cannot update global namespace or promote local namespace: %v", updateRequest.Namespace)
 		}
 	} else {
 		if err := d.namespaceAttrValidator.ValidateNamespaceReplicationConfigForLocalNamespace(
@@ -692,7 +692,7 @@ func (d *namespaceHandler) CreateWorkflowRule(
 			d.removeOldestExpiredWorkflowRule(config.WorkflowRules)
 		}
 		if len(config.WorkflowRules) >= maxRules {
-			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Workflow Rule limit exceeded. Max: %v", maxRules))
+			return nil, serviceerror.NewInvalidArgumentf("Workflow Rule limit exceeded. Max: %v", maxRules)
 		}
 	}
 
@@ -1066,22 +1066,18 @@ func validateReplicationStateUpdate(existingNamespace *persistence.GetNamespaceR
 	}
 
 	if existingNamespace.Namespace.Info.State != enumspb.NAMESPACE_STATE_REGISTERED {
-		return serviceerror.NewInvalidArgument(
-			fmt.Sprintf(
-				"update ReplicationState is only supported when namespace is in %s state, current state: %s",
-				enumspb.NAMESPACE_STATE_REGISTERED.String(),
-				existingNamespace.Namespace.Info.State.String(),
-			),
+		return serviceerror.NewInvalidArgumentf(
+			"update ReplicationState is only supported when namespace is in %s state, current state: %s",
+			enumspb.NAMESPACE_STATE_REGISTERED,
+			existingNamespace.Namespace.Info.State,
 		)
 	}
 
 	if nsUpdateRequest.ReplicationConfig.State == enumspb.REPLICATION_STATE_HANDOVER {
 		if !existingNamespace.IsGlobalNamespace {
-			return serviceerror.NewInvalidArgument(
-				fmt.Sprintf(
-					"%s can only be set for global namespace",
-					enumspb.REPLICATION_STATE_HANDOVER,
-				),
+			return serviceerror.NewInvalidArgumentf(
+				"%s can only be set for global namespace",
+				enumspb.REPLICATION_STATE_HANDOVER,
 			)
 		}
 		// verify namespace has more than 1 replication clusters
@@ -1090,7 +1086,7 @@ func validateReplicationStateUpdate(existingNamespace *persistence.GetNamespaceR
 			replicationClusterCount = len(nsUpdateRequest.ReplicationConfig.Clusters)
 		}
 		if replicationClusterCount < 2 {
-			return serviceerror.NewInvalidArgument(fmt.Sprintf("%s require more than one replication clusters", enumspb.REPLICATION_STATE_HANDOVER))
+			return serviceerror.NewInvalidArgumentf("%s require more than one replication clusters", enumspb.REPLICATION_STATE_HANDOVER)
 		}
 	}
 	return nil

@@ -61,7 +61,7 @@ func (m *sqlExecutionStore) AppendHistoryNodes(
 			if m.Db.IsDupEntryError(err) {
 				return &p.ConditionFailedError{Msg: fmt.Sprintf("AppendHistoryNodes: row already exist: %v", err)}
 			}
-			return serviceerror.NewUnavailable(fmt.Sprintf("AppendHistoryNodes: %v", err))
+			return serviceerror.NewUnavailablef("AppendHistoryNodes: %v", err)
 		}
 	}
 
@@ -103,7 +103,7 @@ func (m *sqlExecutionStore) AppendHistoryNodes(
 				Msg: err.Error(),
 			}
 		default:
-			return serviceerror.NewUnavailable(fmt.Sprintf("AppendHistoryNodes: %v", err))
+			return serviceerror.NewUnavailablef("AppendHistoryNodes: %v", err)
 		}
 	})
 }
@@ -142,7 +142,7 @@ func (m *sqlExecutionStore) DeleteHistoryNodes(
 
 	_, err = m.Db.DeleteFromHistoryNode(ctx, nodeRow)
 	if err != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf("DeleteHistoryNodes: %v", err))
+		return serviceerror.NewUnavailablef("DeleteHistoryNodes: %v", err)
 	}
 	return nil
 }

@@ -13,6 +13,7 @@ import (
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -1407,9 +1408,9 @@ func (s *ActivityTestSuite) TestActivityTaskCompleteForceCompletion() {
 	ai := <-activityInfo
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
-		assert.NoError(t, err)
-		assert.Equal(t, 1, len(description.PendingActivities))
-		assert.Equal(t, "mock error of an activity", description.PendingActivities[0].LastFailure.Message)
+		require.NoError(t, err)
+		require.Equal(t, 1, len(description.PendingActivities))
+		require.Equal(t, "mock error of an activity", description.PendingActivities[0].LastFailure.Message)
 	},
 		10*time.Second,
 		500*time.Millisecond)
@@ -1438,9 +1439,9 @@ func (s *ActivityTestSuite) TestActivityTaskCompleteRejectCompletion() {
 	ai := <-activityInfo
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
-		assert.NoError(t, err)
-		assert.Equal(t, 1, len(description.PendingActivities))
-		assert.Equal(t, "mock error of an activity", description.PendingActivities[0].LastFailure.Message)
+		require.NoError(t, err)
+		require.Equal(t, 1, len(description.PendingActivities))
+		require.Equal(t, "mock error of an activity", description.PendingActivities[0].LastFailure.Message)
 	},
 		10*time.Second,
 		500*time.Millisecond)

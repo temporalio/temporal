@@ -43,7 +43,7 @@ func (s *sqlNexusEndpointStore) CreateOrUpdateNexusEndpoint(
 ) error {
 	id, retErr := primitives.ParseUUID(request.Endpoint.ID)
 	if retErr != nil {
-		return serviceerror.NewInternal(fmt.Sprintf("unable to parse endpoint ID as UUID: %v", retErr))
+		return serviceerror.NewInternalf("unable to parse endpoint ID as UUID: %v", retErr)
 	}
 
 	retErr = s.txExecute(ctx, "CreateOrUpdateNexusEndpoint", func(tx sqlplugin.Tx) error {
@@ -93,13 +93,13 @@ func (s *sqlNexusEndpointStore) GetNexusEndpoint(
 ) (*p.InternalNexusEndpoint, error) {
 	id, err := primitives.ParseUUID(request.ID)
 	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("unable to parse endpoint ID as UUID: %v", err))
+		return nil, serviceerror.NewInternalf("unable to parse endpoint ID as UUID: %v", err)
 	}
 
 	row, err := s.Db.GetNexusEndpointByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, serviceerror.NewNotFound(fmt.Sprintf("Nexus endpoint with ID `%v` not found", request.ID))
+			return nil, serviceerror.NewNotFoundf("Nexus endpoint with ID `%v` not found", request.ID)
 		}
 		s.logger.Error(fmt.Sprintf("error getting Nexus endpoint with ID %v", request.ID), tag.Error(err))
 		return nil, serviceerror.NewUnavailable(err.Error())
@@ -181,7 +181,7 @@ func (s *sqlNexusEndpointStore) DeleteNexusEndpoint(
 ) error {
 	id, retErr := primitives.ParseUUID(request.ID)
 	if retErr != nil {
-		return serviceerror.NewInternal(fmt.Sprintf("unable to parse endpoint ID as UUID: %v", retErr))
+		return serviceerror.NewInternalf("unable to parse endpoint ID as UUID: %v", retErr)
 	}
 
 	retErr = s.txExecute(ctx, "DeleteNexusEndpoint", func(tx sqlplugin.Tx) error {
@@ -201,10 +201,10 @@ func (s *sqlNexusEndpointStore) DeleteNexusEndpoint(
 		nRows, err := result.RowsAffected()
 		if err != nil {
 			s.logger.Error("error getting RowsAffected during DeleteNexusEndpoint", tag.Error(err))
-			return serviceerror.NewUnavailable(fmt.Sprintf("rowsAffected returned error: %v", err))
+			return serviceerror.NewUnavailablef("rowsAffected returned error: %v", err)
 		}
 		if nRows != 1 {
-			return serviceerror.NewNotFound(fmt.Sprintf("nexus endpoint not found for ID: %v", request.ID))
+			return serviceerror.NewNotFoundf("nexus endpoint not found for ID: %v", request.ID)
 		}
 
 		return nil

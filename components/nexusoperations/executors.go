@@ -117,7 +117,7 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 	}
 
 	if e.Config.CallbackURLTemplate() == "unset" {
-		return serviceerror.NewInternal(fmt.Sprintf("dynamic config %q is unset", CallbackURLTemplate.Key().String()))
+		return serviceerror.NewInternalf("dynamic config %q is unset", CallbackURLTemplate.Key().String())
 	}
 	// TODO(bergundy): Consider caching this template.
 	callbackURLTemplate, err := template.New("NexusCallbackURL").Parse(e.Config.CallbackURLTemplate())

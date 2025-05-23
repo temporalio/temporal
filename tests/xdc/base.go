@@ -1,8 +1,8 @@
 package xdc
 
 import (
+	"cmp"
 	"context"
-	"os"
 	"sync"
 	"time"
 
@@ -25,10 +25,8 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/protorequire"
-	"go.temporal.io/server/temporal/environment"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
-	"gopkg.in/yaml.v3"
 )
 
 const (
@@ -42,7 +40,7 @@ const (
 
 type (
 	xdcBaseSuite struct {
-		// TODO (alex): use FunctionalTestSuite
+		// TODO (alex): use FunctionalTestBase instead.
 		suite.Suite
 		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 		// not merely log an error
@@ -90,16 +88,27 @@ func (s *xdcBaseSuite) setupSuite(opts ...testcore.TestClusterOption) {
 	// TODO (prathyush): remove this after setting it to true by default.
 	s.dynamicConfigOverrides[dynamicconfig.SendRawHistoryBetweenInternalServices.Key()] = true
 
-	fileName := "../testdata/xdc_clusters.yaml"
-	environment.SetupEnv()
+	clusterConfigs := []*testcore.TestClusterConfig{
+		{
+			ClusterMetadata: cluster.Config{
+				EnableGlobalNamespace:    true,
+				FailoverVersionIncrement: 10,
+			},
+			HistoryConfig: testcore.HistoryConfig{
+				NumHistoryShards: cmp.Or(params.NumHistoryShards, 1),
+			},
+		},
+		{
+			ClusterMetadata: cluster.Config{
+				EnableGlobalNamespace:    true,
+				FailoverVersionIncrement: 10,
+			},
+			HistoryConfig: testcore.HistoryConfig{
+				NumHistoryShards: cmp.Or(params.NumHistoryShards, 1),
+			},
+		},
+	}
 
-	confContent, err := os.ReadFile(fileName)
-	s.Require().NoError(err)
-	confContent = []byte(os.ExpandEnv(string(confContent)))
-
-	var clusterConfigs []*testcore.TestClusterConfig
-	s.Require().NoError(yaml.Unmarshal(confContent, &clusterConfigs))
-	s.Require().Len(clusterConfigs, 2)
 	s.clusters = make([]*testcore.TestCluster, len(clusterConfigs))
 	suffix := common.GenerateRandomString(5)
 
@@ -120,6 +129,7 @@ func (s *xdcBaseSuite) setupSuite(opts ...testcore.TestClusterOption) {
 		clusterConfigs[clusterIndex].ServiceFxOptions = params.ServiceOptions
 		clusterConfigs[clusterIndex].EnableMetricsCapture = true
 
+		var err error
 		s.clusters[clusterIndex], err = testClusterFactory.NewCluster(s.T(), clusterConfigs[clusterIndex], log.With(s.logger, tag.ClusterName(clusterName)))
 		s.Require().NoError(err)
 	}
@@ -129,7 +139,7 @@ func (s *xdcBaseSuite) setupSuite(opts ...testcore.TestClusterOption) {
 	for ci, c := range s.clusters {
 		for remoteCi, remoteC := range s.clusters {
 			if ci != remoteCi {
-				_, err = c.AdminClient().AddOrUpdateRemoteCluster(
+				_, err := c.AdminClient().AddOrUpdateRemoteCluster(
 					testcore.NewContext(),
 					&adminservice.AddOrUpdateRemoteClusterRequest{
 						FrontendAddress:               remoteC.Host().RemoteFrontendGRPCAddress(),
@@ -153,27 +163,22 @@ func (s *xdcBaseSuite) waitForClusterConnected(
 	s.EventuallyWithT(func(c *assert.CollectT) {
 		s.logger.Info("check if clusters are synced", tag.SourceCluster(sourceCluster.ClusterName()), tag.TargetCluster(targetClusterName))
 		resp, err := sourceCluster.HistoryClient().GetReplicationStatus(context.Background(), &historyservice.GetReplicationStatusRequest{})
-		if !assert.NoError(c, err) {
-			return
-		}
-		assert.Lenf(c, resp.Shards, 1, "test cluster has only one history shard")
+		require.NoError(c, err)
+		require.Lenf(c, resp.Shards, 1, "test cluster has only one history shard")
 
 		shard := resp.Shards[0]
-		if !assert.NotNil(c, shard) {
-			return
-		}
-		assert.Greater(c, shard.MaxReplicationTaskId, int64(0))
-		assert.NotNil(c, shard.ShardLocalTime)
-		assert.WithinRange(c, shard.ShardLocalTime.AsTime(), s.startTime, time.Now())
-		assert.NotNil(c, shard.RemoteClusters)
+		require.NotNil(c, shard)
+		require.Greater(c, shard.MaxReplicationTaskId, int64(0))
+		require.NotNil(c, shard.ShardLocalTime)
+		require.WithinRange(c, shard.ShardLocalTime.AsTime(), s.startTime, time.Now())
+		require.NotNil(c, shard.RemoteClusters)
 
 		standbyAckInfo, ok := shard.RemoteClusters[targetClusterName]
-		if !assert.True(c, ok) || !assert.NotNil(c, standbyAckInfo) {
-			return
-		}
-		assert.LessOrEqual(c, shard.MaxReplicationTaskId, standbyAckInfo.AckedTaskId)
-		assert.NotNil(c, standbyAckInfo.AckedTaskVisibilityTime)
-		assert.WithinRange(c, standbyAckInfo.AckedTaskVisibilityTime.AsTime(), s.startTime, time.Now())
+		require.True(c, ok)
+		require.NotNil(c, standbyAckInfo)
+		require.LessOrEqual(c, shard.MaxReplicationTaskId, standbyAckInfo.AckedTaskId)
+		require.NotNil(c, standbyAckInfo.AckedTaskVisibilityTime)
+		require.WithinRange(c, standbyAckInfo.AckedTaskVisibilityTime.AsTime(), s.startTime, time.Now())
 	}, 90*time.Second, 1*time.Second)
 	s.logger.Info("clusters synced", tag.SourceCluster(sourceCluster.ClusterName()), tag.TargetCluster(targetClusterName))
 }
@@ -245,10 +250,9 @@ func (s *xdcBaseSuite) createNamespace(
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		for _, r := range clusters[0].Host().NamespaceRegistries() {
 			resp, err := r.GetNamespace(namespace.Name(ns))
-			assert.NoError(t, err)
-			if assert.NotNil(t, resp) {
-				assert.Equal(t, isGlobal, resp.IsGlobalNamespace())
-			}
+			require.NoError(t, err)
+			require.NotNil(t, resp)
+			require.Equal(t, isGlobal, resp.IsGlobalNamespace())
 		}
 	}, namespaceCacheWaitTime, namespaceCacheCheckInterval)
 
@@ -259,11 +263,10 @@ func (s *xdcBaseSuite) createNamespace(
 			for _, c := range clusters[1:] {
 				for _, r := range c.Host().NamespaceRegistries() {
 					resp, err := r.GetNamespace(namespace.Name(ns))
-					assert.NoError(t, err)
-					if assert.NotNil(t, resp) {
-						assert.Equal(t, isGlobal, resp.IsGlobalNamespace())
-						assert.Equal(t, clusterNames, resp.ClusterNames())
-					}
+					require.NoError(t, err)
+					require.NotNil(t, resp)
+					require.Equal(t, isGlobal, resp.IsGlobalNamespace())
+					require.Equal(t, clusterNames, resp.ClusterNames())
 				}
 			}
 		}, replicationWaitTime, replicationCheckInterval)
@@ -286,13 +289,12 @@ func updateNamespaceConfig(
 			// TODO(alex): here and everywere else in this file: instead of waiting for registry to be updated
 			// r.RefreshNamespaceById() can be used. It will require to pass nsID everywhere.
 			resp, err := r.GetNamespace(namespace.Name(ns))
-			assert.NoError(t, err)
-			if assert.NotNil(t, resp) {
-				if configVersion == -1 {
-					configVersion = resp.ConfigVersion()
-				}
-				assert.Equal(t, configVersion, resp.ConfigVersion(), "config version must be the same for all namespace registries")
+			require.NoError(t, err)
+			require.NotNil(t, resp)
+			if configVersion == -1 {
+				configVersion = resp.ConfigVersion()
 			}
+			require.Equal(t, configVersion, resp.ConfigVersion(), "config version must be the same for all namespace registries")
 		}
 	}, namespaceCacheWaitTime, namespaceCacheCheckInterval)
 	s.NotEqual(int64(-1), configVersion)
@@ -311,10 +313,9 @@ func updateNamespaceConfig(
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		for _, r := range clusters[inClusterIndex].Host().NamespaceRegistries() {
 			resp, err := r.GetNamespace(namespace.Name(ns))
-			assert.NoError(t, err)
-			if assert.NotNil(t, resp) {
-				assert.Equal(t, configVersion, resp.ConfigVersion())
-			}
+			require.NoError(t, err)
+			require.NotNil(t, resp)
+			require.Equal(t, configVersion, resp.ConfigVersion())
 		}
 	}, namespaceCacheWaitTime, namespaceCacheCheckInterval)
 
@@ -327,10 +328,9 @@ func updateNamespaceConfig(
 				}
 				for _, r := range c.Host().NamespaceRegistries() {
 					resp, err := r.GetNamespace(namespace.Name(ns))
-					assert.NoError(t, err)
-					if assert.NotNil(t, resp) {
-						assert.Equal(t, configVersion, resp.ConfigVersion())
-					}
+					require.NoError(t, err)
+					require.NotNil(t, resp)
+					require.Equal(t, configVersion, resp.ConfigVersion())
 				}
 			}
 		}, replicationWaitTime, replicationCheckInterval)
@@ -361,11 +361,10 @@ func (s *xdcBaseSuite) updateNamespaceClusters(
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		for _, r := range clusters[inClusterIndex].Host().NamespaceRegistries() {
 			resp, err := r.GetNamespace(namespace.Name(ns))
-			assert.NoError(t, err)
-			if assert.NotNil(t, resp) {
-				assert.Equal(t, clusterNames, resp.ClusterNames())
-				isGlobalNamespace = resp.IsGlobalNamespace()
-			}
+			require.NoError(t, err)
+			require.NotNil(t, resp)
+			require.Equal(t, clusterNames, resp.ClusterNames())
+			isGlobalNamespace = resp.IsGlobalNamespace()
 		}
 	}, namespaceCacheWaitTime, namespaceCacheCheckInterval)
 
@@ -379,10 +378,9 @@ func (s *xdcBaseSuite) updateNamespaceClusters(
 				}
 				for _, r := range c.Host().NamespaceRegistries() {
 					resp, err := r.GetNamespace(namespace.Name(ns))
-					assert.NoError(t, err)
-					if assert.NotNil(t, resp) {
-						assert.Equal(t, clusterNames, resp.ClusterNames())
-					}
+					require.NoError(t, err)
+					require.NotNil(t, resp)
+					require.Equal(t, clusterNames, resp.ClusterNames())
 				}
 			}
 		}, replicationWaitTime, replicationCheckInterval)
@@ -403,10 +401,9 @@ func (s *xdcBaseSuite) promoteNamespace(
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		for _, r := range s.clusters[inClusterIndex].Host().NamespaceRegistries() {
 			resp, err := r.GetNamespace(namespace.Name(ns))
-			assert.NoError(t, err)
-			if assert.NotNil(t, resp) {
-				assert.True(t, resp.IsGlobalNamespace())
-			}
+			require.NoError(t, err)
+			require.NotNil(t, resp)
+			require.True(t, resp.IsGlobalNamespace())
 		}
 	}, namespaceCacheWaitTime, namespaceCacheCheckInterval)
 }
@@ -436,10 +433,9 @@ func (s *xdcBaseSuite) failover(
 		for _, c := range s.clusters {
 			for _, r := range c.Host().NamespaceRegistries() {
 				resp, err := r.GetNamespace(namespace.Name(ns))
-				assert.NoError(t, err)
-				if assert.NotNil(t, resp) {
-					assert.Equal(t, targetCluster, resp.ActiveClusterName())
-				}
+				require.NoError(t, err)
+				require.NotNil(t, resp)
+				require.Equal(t, targetCluster, resp.ActiveClusterName())
 			}
 		}
 	}, replicationWaitTime, replicationCheckInterval)
