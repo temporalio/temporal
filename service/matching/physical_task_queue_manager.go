@@ -642,8 +642,10 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 		var errTooMany workerdeployment.ErrMaxTaskQueuesInDeployment
 		if errors.As(err, &errTooMany) {
 			c.deploymentRegisterError = errTooMany
+			return errTooMany
 		}
-		return err
+		c.logger.Error("error while registering version", tag.Error(err))
+		return errDeploymentVersionNotReady
 	}
 
 	// the deployment workflow will register itself in this task queue's user data.

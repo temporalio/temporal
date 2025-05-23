@@ -765,7 +765,7 @@ func (s *mutableStateSuite) createMutableStateWithVersioningBehavior(
 
 	err = s.mutableState.StartDeploymentTransition(deployment)
 	s.NoError(err)
-	s.verifyEffectiveDeployment(deployment, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED)
+	s.verifyEffectiveDeployment(deployment, enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE)
 
 	_, wft, err = s.mutableState.AddWorkflowTaskStartedEvent(
 		wft.ScheduledEventID,
@@ -778,7 +778,7 @@ func (s *mutableStateSuite) createMutableStateWithVersioningBehavior(
 		false,
 	)
 	s.NoError(err)
-	s.verifyEffectiveDeployment(deployment, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED)
+	s.verifyEffectiveDeployment(deployment, enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE)
 
 	_, err = s.mutableState.AddWorkflowTaskCompletedEvent(
 		wft,
