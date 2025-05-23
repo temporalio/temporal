@@ -434,6 +434,7 @@ jobs:
             persistence_driver: cassandra
             containers: [cassandra, elasticsearch8]
             es_version: v8
+            runs-on: ubuntu-latest-16-cores
           - name: sqlite
             persistence_type: sql
             persistence_driver: sqlite
