@@ -644,19 +644,6 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 		}
 		// Erase summary drainage status immediately (in case it was previously drained/draining)
 		d.setDrainageStatus(newCurrentVersion, enumspb.VERSION_DRAINAGE_STATUS_UNSPECIFIED, updateTime)
-	} else if d.State.RoutingConfig.RampingVersion == worker_versioning.UnversionedVersionId {
-		// If the new current is unversioned, and it was previously ramping, we need to tell
-		// all the task queues with unversioned ramp that they no longer have unversioned ramp.
-		// The task queues with unversioned ramp are the task queues of the previous current version.
-		// TODO (Carly): Should we ban people from changing the task queues in the current version while they have an unversioned ramp?
-		unsetRampUpdateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
-			RoutingUpdateTime: updateTime,
-			RampingSinceTime:  nil, // remove ramp
-			RampPercentage:    0,   // remove ramp
-		}
-		if err := d.syncUnversionedRamp(ctx, unsetRampUpdateArgs); err != nil {
-			return nil, err
-		}
 	}
 	// If the new current version is unversioned and there was no unversioned ramp, all we need to
 	// do is tell the previous current version that it is not current. Then, the task queues in the
@@ -676,6 +663,22 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 		// Set summary drainage status immediately to draining.
 		// We know prevCurrentVersion cannot have been ramping, so it must now be draining
 		d.setDrainageStatus(prevCurrentVersion, enumspb.VERSION_DRAINAGE_STATUS_DRAINING, updateTime)
+	}
+
+	//nolint:staticcheck // deprecated stuff will be cleaned
+	if newCurrentVersion == worker_versioning.UnversionedVersionId && d.State.RoutingConfig.RampingVersion == worker_versioning.UnversionedVersionId {
+		// If the new current is unversioned, and it was previously ramping, we need to tell
+		// all the task queues with unversioned ramp that they no longer have unversioned ramp.
+		// The task queues with unversioned ramp are the task queues of the previous current version.
+		// TODO (Carly): Should we ban people from changing the task queues in the current version while they have an unversioned ramp?
+		unsetRampUpdateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
+			RoutingUpdateTime: updateTime,
+			RampingSinceTime:  nil, // remove ramp
+			RampPercentage:    0,   // remove ramp
+		}
+		if err := d.syncUnversionedRamp(ctx, unsetRampUpdateArgs); err != nil {
+			return nil, err
+		}
 	}
 
 	// If the previous current version was unversioned, there is nothing in the task queues

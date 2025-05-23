@@ -61,8 +61,6 @@ const (
 	versionStatusInactive = versionStatus(1)
 	versionStatusRamping  = versionStatus(2)
 	versionStatusCurrent  = versionStatus(3)
-	versionStatusDraining = versionStatus(4)
-	versionStatusDrained  = versionStatus(5)
 )
 
 type Versioning3Suite struct {
@@ -78,7 +76,6 @@ func TestVersioning3FunctionalSuite(t *testing.T) {
 	t.Parallel()
 	suite.Run(t, NewVersioning3Suite(true))
 	suite.Run(t, NewVersioning3Suite(false))
-
 }
 
 func (s *Versioning3Suite) SetupSuite() {
@@ -814,6 +811,124 @@ func (s *Versioning3Suite) testTransitionFromWft(sticky bool) {
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 			s.NotNil(task)
 			s.verifyWorkflowVersioning(tv1, vbUnpinned, tv1.Deployment(), nil, tv2.DeploymentVersionTransition())
+			return respondCompleteWorkflow(tv2, vbUnpinned), nil
+		})
+	s.verifyWorkflowVersioning(tv2, vbUnpinned, tv2.Deployment(), nil, nil)
+}
+
+func (s *Versioning3Suite) TestDoubleTransition() {
+	s.testDoubleTransition(false, false)
+}
+
+func (s *Versioning3Suite) TestDoubleTransition_WithSignal() {
+	s.testDoubleTransition(false, true)
+}
+
+func (s *Versioning3Suite) TestDoubleTransitionFromUnversioned() {
+	s.testDoubleTransition(true, false)
+}
+
+func (s *Versioning3Suite) TestDoubleTransitionFromUnversioned_WithSignal() {
+	s.testDoubleTransition(true, true)
+}
+
+func (s *Versioning3Suite) testDoubleTransition(unversionedSrc bool, signal bool) {
+	// Scenario: make sure a transition on top of another transition works properly. Steps:
+	// 1. Start a workflow, process first task with sourceV (which is v1 or unversioned depending on passed `unversionedSrc`).
+	//    The first wft schedules an activity.
+	// 2. (optional) Send a signal to wf so we generate a pending (not started) wft
+	// 3. Set current version to v2.
+	// 4. Poll activity from v2 worker. Activity is not dispatched but a transition starts from sourceV -> v2.
+	// 5. Change routing config back to sourceV.
+	// 6. Send a wf task poller from sourceV. This should get the pending wft and replace the transition to v2 with a transition
+	//    back to sourceV. Note that in this case versioning info has a transition target same as the existing version.
+	//    Therefore, a transition from x -> x is valid (although, can only happen indirectly by another hop).
+	// 7. Once the wft completes we make sure the wf is on sourceV without any transition.
+	// 8. Not that the transition is complete, the activity should be able to go to sourceV poller.
+	// 9. Set v2 as current again and ensure the wf can complete on it.
+
+	tv1 := testvars.New(s).WithBuildIDNumber(1)
+	tv2 := tv1.WithBuildIDNumber(2)
+	sourceV := tv1.Deployment()
+	sourceVB := vbUnpinned
+	sourceTransition := tv1.DeploymentVersionTransition()
+	if unversionedSrc {
+		sourceV = nil
+		sourceVB = vbUnspecified
+		sourceTransition = &workflowpb.DeploymentVersionTransition{Version: "__unversioned__"}
+	}
+
+	runId := s.startWorkflow(tv1, nil)
+
+	if !unversionedSrc {
+		// sourceV is v1, set current version to it
+		s.updateTaskQueueDeploymentData(tv1, true, 0, false, 0, tqTypeWf, tqTypeAct)
+	}
+
+	s.doPollWftAndHandle(tv1, !unversionedSrc, false, nil,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			return respondWftWithActivities(tv1, tv1, false, sourceVB, "5"), nil
+		})
+	s.verifyWorkflowVersioning(tv1, sourceVB, sourceV, nil, nil)
+
+	if signal {
+		// Send a signal so a wf task is scheduled before we poll the activity
+		err := s.SdkClient().SignalWorkflow(context.Background(), tv1.WorkflowID(), runId, "test-signal", nil)
+		s.NoError(err)
+	}
+
+	// set current version to v2
+	s.updateTaskQueueDeploymentData(tv2, true, 0, false, 0, tqTypeWf, tqTypeAct)
+	// poll activity from v2 worker, this should start a transition but should not immediately start the activity.
+	go s.idlePollActivity(tv2, true, time.Minute, "v2 worker should not receive the activity")
+
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		dwf, err := s.FrontendClient().DescribeWorkflowExecution(
+			context.Background(), &workflowservice.DescribeWorkflowExecutionRequest{
+				Namespace: s.Namespace().String(),
+				Execution: &commonpb.WorkflowExecution{
+					WorkflowId: tv1.WorkflowID(),
+				},
+			},
+		)
+		s.NoError(err)
+		a := assert.New(t)
+		a.Equal(tv2.DeploymentVersionTransition(), dwf.WorkflowExecutionInfo.GetVersioningInfo().GetVersionTransition())
+	}, 10*time.Second, 100*time.Millisecond)
+
+	// Back to sourceV
+	if unversionedSrc {
+		s.updateTaskQueueDeploymentData(tv2, false, 0, false, 0, tqTypeWf, tqTypeAct)
+	} else {
+		s.updateTaskQueueDeploymentData(tv1, true, 0, false, 0, tqTypeWf, tqTypeAct)
+	}
+
+	// Now poll for wf task from sourceV while there is a transition to v2
+	// this poller should clear the transition and complete the wft.
+	s.doPollWftAndHandle(tv1, !unversionedSrc, false, nil,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			s.verifyWorkflowVersioning(tv1, sourceVB, sourceV, nil, sourceTransition)
+			return respondEmptyWft(tv1, false, sourceVB), nil
+		})
+	s.verifyWorkflowVersioning(tv1, sourceVB, sourceV, nil, nil)
+
+	// Activity should be unblocked now to sourceV poller
+	s.doPollActivityAndHandle(tv1, !unversionedSrc, nil,
+		func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
+			s.NotNil(task)
+			s.verifyWorkflowVersioning(tv1, sourceVB, sourceV, nil, nil)
+			return respondActivity(), nil
+		})
+
+	// Set v2 as the current version again
+	s.updateTaskQueueDeploymentData(tv2, true, 0, false, 0, tqTypeWf, tqTypeAct)
+
+	s.pollWftAndHandle(tv2, false, nil,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			s.verifyWorkflowVersioning(tv2, sourceVB, sourceV, nil, tv2.DeploymentVersionTransition())
 			return respondCompleteWorkflow(tv2, vbUnpinned), nil
 		})
 	s.verifyWorkflowVersioning(tv2, vbUnpinned, tv2.Deployment(), nil, nil)
@@ -1690,6 +1805,24 @@ func (s *Versioning3Suite) setCurrentDeployment(tv *testvars.TestVars) {
 	}, 60*time.Second, 500*time.Millisecond)
 }
 
+func (s *Versioning3Suite) unsetCurrentDeployment(tv *testvars.TestVars) {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	s.Eventually(func() bool {
+		req := &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
+			Namespace:      s.Namespace().String(),
+			DeploymentName: tv.DeploymentSeries(),
+		}
+		_, err := s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, req)
+		var notFound *serviceerror.NotFound
+		if errors.As(err, &notFound) {
+			return false
+		}
+		s.NoError(err)
+		return err == nil
+	}, 60*time.Second, 500*time.Millisecond)
+}
+
 func (s *Versioning3Suite) setRampingDeployment(
 	tv *testvars.TestVars,
 	percentage float32,
@@ -1737,8 +1870,10 @@ func (s *Versioning3Suite) updateTaskQueueDeploymentData(
 	var status versionStatus
 	if isCurrent {
 		status = versionStatusCurrent
-	} else {
+	} else if ramp > 0 {
 		status = versionStatusRamping
+	} else {
+		status = versionStatusInactive
 	}
 	if rampUnversioned {
 		status = versionStatusNil
@@ -1933,6 +2068,10 @@ func respondWftWithActivities(
 			},
 		})
 	}
+	versioningMode := enumspb.WORKER_VERSIONING_MODE_VERSIONED
+	if behavior == vbUnspecified {
+		versioningMode = enumspb.WORKER_VERSIONING_MODE_UNVERSIONED
+	}
 	return &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Commands:                   commands,
 		StickyAttributes:           stickyAttr,
@@ -1941,12 +2080,12 @@ func respondWftWithActivities(
 		DeploymentOptions: &deploymentpb.WorkerDeploymentOptions{
 			BuildId:              tvWf.BuildID(),
 			DeploymentName:       tvWf.DeploymentSeries(),
-			WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_VERSIONED,
+			WorkerVersioningMode: versioningMode,
 		},
 		// TODO(carlydf): remove stamp once build ID is added to wftc event
 		WorkerVersionStamp: &commonpb.WorkerVersionStamp{ //nolint:staticcheck // SA1019: worker versioning v0.20
 			BuildId:       tvWf.BuildID(),
-			UseVersioning: true,
+			UseVersioning: versioningMode == enumspb.WORKER_VERSIONING_MODE_VERSIONED,
 		},
 	}
 }
@@ -2041,6 +2180,28 @@ func (s *Versioning3Suite) pollWftAndHandle(
 	async chan<- struct{},
 	handler func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error),
 ) (*taskpoller.TaskPoller, *workflowservice.RespondWorkflowTaskCompletedResponse) {
+	return s.doPollWftAndHandle(tv, true, sticky, async, handler)
+}
+
+func (s *Versioning3Suite) unversionedPollWftAndHandle(
+	tv *testvars.TestVars,
+	sticky bool,
+	async chan<- struct{},
+	handler func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error),
+) (*taskpoller.TaskPoller, *workflowservice.RespondWorkflowTaskCompletedResponse) {
+	return s.doPollWftAndHandle(tv, false, sticky, async, handler)
+}
+
+// doPollWftAndHandle can be used in sync and async mode. For async mode pass the async channel. It
+// will be closed when the task is handled.
+// Returns the poller and poll response only in sync mode (can be used to process new wft in the response)
+func (s *Versioning3Suite) doPollWftAndHandle(
+	tv *testvars.TestVars,
+	versioned bool,
+	sticky bool,
+	async chan<- struct{},
+	handler func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error),
+) (*taskpoller.TaskPoller, *workflowservice.RespondWorkflowTaskCompletedResponse) {
 	poller := taskpoller.New(s.T(), s.FrontendClient(), s.Namespace().String())
 	f := func() *workflowservice.RespondWorkflowTaskCompletedResponse {
 		tq := tv.TaskQueue()
@@ -2049,7 +2210,7 @@ func (s *Versioning3Suite) pollWftAndHandle(
 		}
 		resp, err := poller.PollWorkflowTask(
 			&workflowservice.PollWorkflowTaskQueueRequest{
-				DeploymentOptions: tv.WorkerDeploymentOptions(true),
+				DeploymentOptions: tv.WorkerDeploymentOptions(versioned),
 				TaskQueue:         tq,
 			},
 		).HandleTask(tv, handler, taskpoller.WithTimeout(10*time.Second))
@@ -2129,8 +2290,25 @@ func (s *Versioning3Suite) pollNexusTaskAndHandle(
 	return nil, nil
 }
 
+func (s *Versioning3Suite) unversionedPollActivityAndHandle(
+	tv *testvars.TestVars,
+	async chan<- struct{},
+	handler func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error),
+) {
+	s.doPollActivityAndHandle(tv, false, async, handler)
+}
+
 func (s *Versioning3Suite) pollActivityAndHandle(
 	tv *testvars.TestVars,
+	async chan<- struct{},
+	handler func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error),
+) {
+	s.doPollActivityAndHandle(tv, true, async, handler)
+}
+
+func (s *Versioning3Suite) doPollActivityAndHandle(
+	tv *testvars.TestVars,
+	versioned bool,
 	async chan<- struct{},
 	handler func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error),
 ) {
@@ -2138,7 +2316,7 @@ func (s *Versioning3Suite) pollActivityAndHandle(
 	f := func() {
 		_, err := poller.PollActivityTask(
 			&workflowservice.PollActivityTaskQueueRequest{
-				DeploymentOptions: tv.WorkerDeploymentOptions(true),
+				DeploymentOptions: tv.WorkerDeploymentOptions(versioned),
 			},
 		).HandleTask(tv, handler, taskpoller.WithTimeout(time.Minute))
 		s.NoError(err)
@@ -2311,7 +2489,10 @@ func (s *Versioning3Suite) waitForDeploymentDataPropagation(
 				for _, d := range versions {
 					if d.GetVersion().Equal(tv.DeploymentVersion()) {
 						switch status {
-						case versionStatusInactive, versionStatusDraining, versionStatusDrained, versionStatusNil:
+						case versionStatusInactive:
+							if d.GetRampingSinceTime() == nil && d.GetCurrentSinceTime() == nil {
+								delete(remaining, pt)
+							}
 						case versionStatusRamping:
 							if d.GetRampingSinceTime() != nil {
 								delete(remaining, pt)
