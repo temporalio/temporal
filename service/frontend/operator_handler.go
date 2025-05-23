@@ -361,7 +361,7 @@ func (h *OperatorHandlerImpl) RemoveSearchAttributes(
 	}
 
 	for _, visManager := range visManagers {
-		if err := h.RemoveSearchAttributesInternal(ctx, request, visManager); err != nil {
+		if err := h.removeSearchAttributesInternal(ctx, request, visManager); err != nil {
 			return nil, err
 		}
 	}
@@ -369,7 +369,7 @@ func (h *OperatorHandlerImpl) RemoveSearchAttributes(
 	return &operatorservice.RemoveSearchAttributesResponse{}, nil
 }
 
-func (h *OperatorHandlerImpl) RemoveSearchAttributesInternal(
+func (h *OperatorHandlerImpl) removeSearchAttributesInternal(
 	ctx context.Context,
 	request *operatorservice.RemoveSearchAttributesRequest,
 	visManager manager.VisibilityManager,
