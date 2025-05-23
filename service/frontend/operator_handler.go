@@ -7,7 +7,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	"go.temporal.io/api/operatorservice/v1"
@@ -29,13 +28,11 @@ import (
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
-	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/util"
-	"go.temporal.io/server/service/worker/addsearchattributes"
 	"go.temporal.io/server/service/worker/deletenamespace"
 	"go.temporal.io/server/service/worker/deletenamespace/deleteexecutions"
 	delnserrors "go.temporal.io/server/service/worker/deletenamespace/errors"
@@ -56,7 +53,6 @@ type (
 
 		logger                 log.Logger
 		config                 *Config
-		esClient               esclient.Client
 		sdkClientFactory       sdk.ClientFactory
 		metricsHandler         metrics.Handler
 		visibilityMgr          manager.VisibilityManager
@@ -72,7 +68,6 @@ type (
 
 	NewOperatorHandlerImplArgs struct {
 		config                 *Config
-		EsClient               esclient.Client
 		Logger                 log.Logger
 		sdkClientFactory       sdk.ClientFactory
 		MetricsHandler         metrics.Handler
@@ -103,7 +98,6 @@ func NewOperatorHandlerImpl(
 		logger:                 args.Logger,
 		status:                 common.DaemonStatusInitialized,
 		config:                 args.config,
-		esClient:               args.EsClient,
 		sdkClientFactory:       args.sdkClientFactory,
 		metricsHandler:         args.MetricsHandler,
 		visibilityMgr:          args.VisibilityMgr,
@@ -178,12 +172,8 @@ func (h *OperatorHandlerImpl) AddSearchAttributes(
 	}
 
 	for _, visManager := range visManagers {
-		var (
-			storeName = visManager.GetStoreNames()[0]
-			indexName = visManager.GetIndexName()
-		)
-		if err := h.addSearchAttributesInternal(ctx, request, storeName, indexName); err != nil {
-			return nil, fmt.Errorf("Failed to add search attributes to store %s: %w", storeName, err)
+		if err := h.addSearchAttributesInternal(ctx, request, visManager); err != nil {
+			return nil, err
 		}
 	}
 
@@ -193,41 +183,26 @@ func (h *OperatorHandlerImpl) AddSearchAttributes(
 func (h *OperatorHandlerImpl) addSearchAttributesInternal(
 	ctx context.Context,
 	request *operatorservice.AddSearchAttributesRequest,
-	storeName string,
-	indexName string,
+	visManager manager.VisibilityManager,
 ) error {
-	currentSearchAttributes, err := h.saManager.GetSearchAttributes(indexName, true)
-	if err != nil {
-		return serviceerror.NewUnavailablef(errUnableToGetSearchAttributesMessage, err)
+	storeName := visManager.GetStoreNames()[0]
+	if storeName == elasticsearch.PersistenceName {
+		return h.addSearchAttributesElasticsearch(ctx, request, visManager)
 	}
-
-	if indexName == "" {
-		h.logger.Error(
-			"Cannot add search attributes in standard visibility.",
-			tag.NewStringTag("pluginName", storeName),
-		)
-	} else if storeName == elasticsearch.PersistenceName {
-		scope := h.metricsHandler.WithTags(metrics.OperationTag(metrics.OperatorAddSearchAttributesScope))
-		err = h.addSearchAttributesElasticsearch(ctx, request, indexName, currentSearchAttributes)
-		if err != nil {
-			if _, isWorkflowErr := err.(*serviceerror.SystemWorkflow); isWorkflowErr {
-				metrics.AddSearchAttributesWorkflowFailuresCount.With(scope).Record(1)
-			}
-		} else {
-			metrics.AddSearchAttributesWorkflowSuccessCount.With(scope).Record(1)
-		}
-	} else {
-		err = h.addSearchAttributesSQL(ctx, request, currentSearchAttributes)
-	}
-	return err
+	return h.addSearchAttributesSQL(ctx, request, visManager)
 }
 
 func (h *OperatorHandlerImpl) addSearchAttributesElasticsearch(
 	ctx context.Context,
 	request *operatorservice.AddSearchAttributesRequest,
-	indexName string,
-	currentSearchAttributes searchattribute.NameTypeMap,
+	visManager manager.VisibilityManager,
 ) error {
+	indexName := visManager.GetIndexName()
+	currentSearchAttributes, err := h.saManager.GetSearchAttributes(indexName, true)
+	if err != nil {
+		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
+	}
+
 	// Check if custom search attribute already exists in cluster metadata.
 	// This check is not needed in SQL DB because all custom search attributes
 	// are pre-allocated, and only aliases are created.
@@ -249,37 +224,18 @@ func (h *OperatorHandlerImpl) addSearchAttributesElasticsearch(
 		return nil
 	}
 
-	// Execute workflow.
-	wfParams := addsearchattributes.WorkflowParams{
-		CustomAttributesToAdd: customAttributesToAdd,
-		IndexName:             indexName,
-		SkipSchemaUpdate:      false,
-	}
-
-	sdkClient := h.sdkClientFactory.GetSystemClient()
-	run, err := sdkClient.ExecuteWorkflow(
+	if err := visManager.AddSearchAttributes(
 		ctx,
-		sdkclient.StartWorkflowOptions{
-			TaskQueue: primitives.DefaultWorkerTaskQueue,
-			ID:        addsearchattributes.WorkflowName,
-		},
-		addsearchattributes.WorkflowName,
-		wfParams,
-	)
-	if err != nil {
-		return serviceerror.NewUnavailablef(
-			errUnableToStartWorkflowMessage, addsearchattributes.WorkflowName, err,
-		)
+		&manager.AddSearchAttributesRequest{SearchAttributes: customAttributesToAdd},
+	); err != nil {
+		return serviceerror.NewUnavailablef(errUnableToSaveSearchAttributesMessage, err)
 	}
 
-	// Wait for workflow to complete.
-	err = run.Get(ctx, nil)
+	newCustomSearchAttributes := util.CloneMapNonNil(currentSearchAttributes.Custom())
+	maps.Copy(newCustomSearchAttributes, customAttributesToAdd)
+	err = h.saManager.SaveSearchAttributes(ctx, indexName, newCustomSearchAttributes)
 	if err != nil {
-		execution := &commonpb.WorkflowExecution{
-			WorkflowId: addsearchattributes.WorkflowName,
-			RunId:      run.GetRunID(),
-		}
-		return serviceerror.NewSystemWorkflow(execution, err)
+		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToSaveSearchAttributesMessage, err))
 	}
 	return nil
 }
@@ -287,8 +243,14 @@ func (h *OperatorHandlerImpl) addSearchAttributesElasticsearch(
 func (h *OperatorHandlerImpl) addSearchAttributesSQL(
 	ctx context.Context,
 	request *operatorservice.AddSearchAttributesRequest,
-	currentSearchAttributes searchattribute.NameTypeMap,
+	visManager manager.VisibilityManager,
 ) error {
+	indexName := visManager.GetIndexName()
+	currentSearchAttributes, err := h.saManager.GetSearchAttributes(indexName, true)
+	if err != nil {
+		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
+	}
+
 	_, client, err := h.clientFactory.NewLocalFrontendClientWithTimeout(
 		frontend.DefaultTimeout,
 		frontend.DefaultLongPollTimeout,
@@ -387,39 +349,54 @@ func (h *OperatorHandlerImpl) RemoveSearchAttributes(
 		return nil, errSearchAttributesNotSet
 	}
 
-	indexName := h.visibilityMgr.GetIndexName()
-	currentSearchAttributes, err := h.saManager.GetSearchAttributes(indexName, true)
-	if err != nil {
-		return nil, serviceerror.NewUnavailablef(errUnableToGetSearchAttributesMessage, err)
-	}
-
-	// TODO (rodrigozhou): Remove condition `indexName == ""`.
-	// If indexName == "", then calling addSearchAttributesElasticsearch will
-	// register the search attributes in the cluster metadata if ES is up or if
-	// `skip-schema-update` is set. This is for backward compatibility using
-	// standard visibility.
-	if h.visibilityMgr.HasStoreName(elasticsearch.PersistenceName) || indexName == "" {
-		err = h.removeSearchAttributesElasticsearch(ctx, request, indexName, currentSearchAttributes)
+	var visManagers []manager.VisibilityManager
+	if visManagerDual, ok := h.visibilityMgr.(*visibility.VisibilityManagerDual); ok {
+		visManagers = append(
+			visManagers,
+			visManagerDual.GetPrimaryVisibility(),
+			visManagerDual.GetSecondaryVisibility(),
+		)
 	} else {
-		err = h.removeSearchAttributesSQL(ctx, request, currentSearchAttributes)
+		visManagers = append(visManagers, h.visibilityMgr)
 	}
 
-	if err != nil {
-		return nil, err
+	for _, visManager := range visManagers {
+		if err := h.removeSearchAttributesInternal(ctx, request, visManager); err != nil {
+			return nil, err
+		}
 	}
+
 	return &operatorservice.RemoveSearchAttributesResponse{}, nil
+}
+
+func (h *OperatorHandlerImpl) removeSearchAttributesInternal(
+	ctx context.Context,
+	request *operatorservice.RemoveSearchAttributesRequest,
+	visManager manager.VisibilityManager,
+) error {
+	storeName := visManager.GetStoreNames()[0]
+	if storeName == elasticsearch.PersistenceName {
+		return h.removeSearchAttributesElasticsearch(ctx, request, visManager)
+	}
+	return h.removeSearchAttributesSQL(ctx, request, visManager)
 }
 
 func (h *OperatorHandlerImpl) removeSearchAttributesElasticsearch(
 	ctx context.Context,
 	request *operatorservice.RemoveSearchAttributesRequest,
-	indexName string,
-	currentSearchAttributes searchattribute.NameTypeMap,
+	visManager manager.VisibilityManager,
 ) error {
+	indexName := h.visibilityMgr.GetIndexName()
+	currentSearchAttributes, err := h.saManager.GetSearchAttributes(indexName, true)
+	if err != nil {
+		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
+	}
+
 	newCustomSearchAttributes := maps.Clone(currentSearchAttributes.Custom())
 	for _, saName := range request.GetSearchAttributes() {
 		if !currentSearchAttributes.IsDefined(saName) {
-			return serviceerror.NewNotFoundf(errSearchAttributeDoesntExistMessage, saName)
+			// Custom search attribute not found, skip it.
+			continue
 		}
 		if _, ok := newCustomSearchAttributes[saName]; !ok {
 			return serviceerror.NewInvalidArgumentf(
@@ -429,7 +406,11 @@ func (h *OperatorHandlerImpl) removeSearchAttributesElasticsearch(
 		delete(newCustomSearchAttributes, saName)
 	}
 
-	err := h.saManager.SaveSearchAttributes(ctx, indexName, newCustomSearchAttributes)
+	if len(newCustomSearchAttributes) == len(currentSearchAttributes.Custom()) {
+		return nil
+	}
+
+	err = h.saManager.SaveSearchAttributes(ctx, indexName, newCustomSearchAttributes)
 	if err != nil {
 		return serviceerror.NewUnavailablef(errUnableToSaveSearchAttributesMessage, err)
 	}
@@ -439,8 +420,14 @@ func (h *OperatorHandlerImpl) removeSearchAttributesElasticsearch(
 func (h *OperatorHandlerImpl) removeSearchAttributesSQL(
 	ctx context.Context,
 	request *operatorservice.RemoveSearchAttributesRequest,
-	currentSearchAttributes searchattribute.NameTypeMap,
+	visManager manager.VisibilityManager,
 ) error {
+	indexName := h.visibilityMgr.GetIndexName()
+	currentSearchAttributes, err := h.saManager.GetSearchAttributes(indexName, true)
+	if err != nil {
+		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
+	}
+
 	_, client, err := h.clientFactory.NewLocalFrontendClientWithTimeout(
 		frontend.DefaultTimeout,
 		frontend.DefaultLongPollTimeout,
@@ -473,7 +460,10 @@ func (h *OperatorHandlerImpl) removeSearchAttributesSQL(
 				errUnableToRemoveNonCustomSearchAttributesMessage, saName,
 			)
 		}
-		return serviceerror.NewNotFoundf(errSearchAttributeDoesntExistMessage, saName)
+	}
+
+	if len(upsertFieldToAliasMap) == 0 {
+		return nil
 	}
 
 	_, err = client.UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
@@ -503,12 +493,7 @@ func (h *OperatorHandlerImpl) ListSearchAttributes(
 		)
 	}
 
-	// TODO (rodrigozhou): Remove condition `indexName == ""`.
-	// If indexName == "", then calling addSearchAttributesElasticsearch will
-	// register the search attributes in the cluster metadata if ES is up or if
-	// `skip-schema-update` is set. This is for backward compatibility using
-	// standard visibility.
-	if h.visibilityMgr.HasStoreName(elasticsearch.PersistenceName) || indexName == "" {
+	if h.visibilityMgr.HasStoreName(elasticsearch.PersistenceName) {
 		return h.listSearchAttributesElasticsearch(ctx, indexName, searchAttributes)
 	}
 	return h.listSearchAttributesSQL(ctx, request, searchAttributes)
@@ -519,20 +504,9 @@ func (h *OperatorHandlerImpl) listSearchAttributesElasticsearch(
 	indexName string,
 	searchAttributes searchattribute.NameTypeMap,
 ) (*operatorservice.ListSearchAttributesResponse, error) {
-	var storageSchema map[string]string
-	if h.esClient != nil {
-		var err error
-		storageSchema, err = h.esClient.GetMapping(ctx, indexName)
-		if err != nil {
-			return nil, serviceerror.NewUnavailablef(
-				"unable to get mapping from Elasticsearch: %v", err,
-			)
-		}
-	}
 	return &operatorservice.ListSearchAttributesResponse{
 		CustomAttributes: searchAttributes.Custom(),
 		SystemAttributes: searchAttributes.System(),
-		StorageSchema:    storageSchema,
 	}, nil
 }
 
