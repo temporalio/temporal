@@ -108,9 +108,8 @@ type (
 var _ physicalTaskQueueManager = (*physicalTaskQueueManagerImpl)(nil)
 
 var (
-	errRemoteSyncMatchFailed     = serviceerror.NewCanceled("remote sync match failed")
-	errMissingNormalQueueName    = errors.New("missing normal queue name")
-	errDeploymentVersionNotReady = serviceerror.NewUnavailable("task queue is not yet ready to process polls for this deployment version, try again shortly")
+	errRemoteSyncMatchFailed  = serviceerror.NewCanceled("remote sync match failed")
+	errMissingNormalQueueName = errors.New("missing normal queue name")
 )
 
 func newPhysicalTaskQueueManager(
