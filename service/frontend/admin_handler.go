@@ -52,7 +52,6 @@ import (
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
-	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
@@ -82,7 +81,6 @@ type (
 
 		logger                     log.Logger
 		numberOfHistoryShards      int32
-		ESClient                   esclient.Client
 		config                     *Config
 		namespaceDLQHandler        nsreplication.DLQMessageHandler
 		eventSerializer            serialization.Serializer
@@ -119,7 +117,6 @@ type (
 		Config                              *Config
 		NamespaceReplicationQueue           persistence.NamespaceReplicationQueue
 		ReplicatorNamespaceReplicationQueue persistence.NamespaceReplicationQueue
-		EsClient                            esclient.Client
 		visibilityMgr                       manager.VisibilityManager
 		Logger                              log.Logger
 		TaskManager                         persistence.TaskManager
@@ -191,7 +188,6 @@ func NewAdminHandler(
 		),
 		eventSerializer:            args.EventSerializer,
 		visibilityMgr:              args.visibilityMgr,
-		ESClient:                   args.EsClient,
 		persistenceExecutionName:   args.PersistenceExecutionManager.GetName(),
 		namespaceReplicationQueue:  args.NamespaceReplicationQueue,
 		taskManager:                args.TaskManager,
@@ -587,37 +583,23 @@ func (adh *AdminHandler) getSearchAttributesElasticsearch(
 	indexName string,
 	searchAttributes searchattribute.NameTypeMap,
 ) (*adminservice.GetSearchAttributesResponse, error) {
-	var lastErr error
-
 	sdkClient := adh.sdkClientFactory.GetSystemClient()
 	descResp, err := sdkClient.DescribeWorkflowExecution(ctx, addsearchattributes.WorkflowName, "")
 	var wfInfo *workflowpb.WorkflowExecutionInfo
 	if err != nil {
 		// NotFound can happen when no search attributes were added and the workflow has never been executed.
 		if _, isNotFound := err.(*serviceerror.NotFound); !isNotFound {
-			lastErr = serviceerror.NewUnavailable(fmt.Sprintf("unable to get %s workflow state: %v", addsearchattributes.WorkflowName, err))
-			adh.logger.Error("getSearchAttributes error", tag.Error(lastErr))
+			err = serviceerror.NewUnavailable(fmt.Sprintf("unable to get %s workflow state: %v", addsearchattributes.WorkflowName, err))
+			adh.logger.Error("getSearchAttributes error", tag.Error(err))
+			return nil, err
 		}
 	} else {
 		wfInfo = descResp.GetWorkflowExecutionInfo()
 	}
 
-	var esMapping map[string]string
-	if adh.ESClient != nil {
-		esMapping, err = adh.ESClient.GetMapping(ctx, indexName)
-		if err != nil {
-			lastErr = serviceerror.NewUnavailable(fmt.Sprintf("unable to get mapping from Elasticsearch: %v", err))
-			adh.logger.Error("getSearchAttributes error", tag.Error(lastErr))
-		}
-	}
-
-	if lastErr != nil {
-		return nil, lastErr
-	}
 	return &adminservice.GetSearchAttributesResponse{
 		CustomAttributes:         searchAttributes.Custom(),
 		SystemAttributes:         searchAttributes.System(),
-		Mapping:                  esMapping,
 		AddWorkflowExecutionInfo: wfInfo,
 	}, nil
 }

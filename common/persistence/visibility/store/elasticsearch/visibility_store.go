@@ -1445,3 +1445,15 @@ func validateString(value string) error {
 	}
 	return nil
 }
+
+func (s *VisibilityStore) AddSearchAttributes(
+	ctx context.Context,
+	request *manager.AddSearchAttributesRequest,
+) error {
+	_, err := s.esClient.PutMapping(ctx, s.GetIndexName(), request.SearchAttributes)
+	if err != nil {
+		return err
+	}
+	_, err = s.esClient.WaitForYellowStatus(ctx, s.GetIndexName())
+	return err
+}
