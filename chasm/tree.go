@@ -232,6 +232,14 @@ func newTreeHelper(
 	return newNode(base, nil, "")
 }
 
+func (n *Node) SetRootComponent(
+	rootComponent Component,
+) {
+	root := n.root()
+	root.value = rootComponent
+	root.valueState = valueStateNeedSerialize
+}
+
 // Component retrieves a component from the tree rooted at node n
 // using the provided component reference
 // It also performs access rule, and task validation checks
