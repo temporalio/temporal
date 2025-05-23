@@ -369,6 +369,7 @@ func (s *nodeSuite) TestCollectionAttributes_StringKey() {
 	})
 }
 
+// TODO: copy of test above but for collection with int key. Is there a way to unify these tests in one?
 func (s *nodeSuite) TestCollectionAttributes_IntKey() {
 	tv := testvars.New(s.T())
 
