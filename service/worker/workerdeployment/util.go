@@ -18,9 +18,8 @@ import (
 
 const (
 	// Workflow types
-	WorkerDeploymentVersionWorkflowType  = "temporal-sys-worker-deployment-version-workflow"
-	WorkerDeploymentWorkflowType         = "temporal-sys-worker-deployment-workflow"
-	WorkerDeploymentDrainageWorkflowType = "temporal-sys-worker-deployment-version-drainage-workflow"
+	WorkerDeploymentVersionWorkflowType = "temporal-sys-worker-deployment-version-workflow"
+	WorkerDeploymentWorkflowType        = "temporal-sys-worker-deployment-workflow"
 
 	// Namespace division
 	WorkerDeploymentNamespaceDivision = "TemporalWorkerDeployment"
