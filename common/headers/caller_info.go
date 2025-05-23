@@ -7,9 +7,14 @@ import (
 )
 
 const (
-	CallerTypeOperator    = "operator"
-	CallerTypeAPI         = "api"
-	CallerTypeBackground  = "background"
+	CallerTypeOperator = "operator"
+	// CallerTypeAPI is for user foreground requests.
+	CallerTypeAPI = "api"
+	// CallerTypeBackground is mostly for user background task. Some overrides may apply.
+	CallerTypeBackground = "background"
+	// CallerTypeReplication is for global namespace live traffic.
+	CallerTypeReplication = "replication"
+	// CallerTypePreemptable is for user related maintenance operations.
 	CallerTypePreemptable = "preemptable"
 
 	CallerNameSystem = "system"
@@ -32,6 +37,10 @@ var (
 	SystemPreemptableCallerInfo = CallerInfo{
 		CallerName: CallerNameSystem,
 		CallerType: CallerTypePreemptable,
+	}
+	SystemReplicationCallerInfo = CallerInfo{
+		CallerName: CallerNameSystem,
+		CallerType: CallerTypeReplication,
 	}
 )
 
