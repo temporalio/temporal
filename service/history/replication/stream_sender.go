@@ -26,6 +26,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/service/history/configs"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
@@ -58,6 +59,7 @@ type (
 		isTieredStackEnabled    bool
 		flowController          SenderFlowController
 		sendLock                sync.Mutex
+		ssRateLimiter           ServerSchedulerRateLimiter
 	}
 )
 
@@ -65,6 +67,7 @@ func NewStreamSender(
 	server historyservice.HistoryService_StreamWorkflowReplicationMessagesServer,
 	shardContext historyi.ShardContext,
 	historyEngine historyi.Engine,
+	ssRateLimiter ServerSchedulerRateLimiter,
 	taskConverter SourceTaskConverter,
 	clientClusterName string,
 	clientClusterShardCount int32,
@@ -95,6 +98,7 @@ func NewStreamSender(
 		config:                  config,
 		isTieredStackEnabled:    config.EnableReplicationTaskTieredProcessing(),
 		flowController:          NewSenderFlowController(config, logger),
+		ssRateLimiter:           ssRateLimiter,
 	}
 }
 
@@ -529,6 +533,15 @@ Loop:
 					}
 					// continue to send task if wait operation times out.
 				}
+			}
+			if task.Priority == enumsspb.TASK_PRIORITY_LOW {
+				s.ssRateLimiter.Allow(time.Now(), quotas.NewRequest(
+					task.TaskType.String(),
+					taskSchedulerToken,
+					headers.SystemPreemptableCallerInfo.CallerName,
+					headers.SystemPreemptableCallerInfo.CallerType,
+					0,
+					""))
 			}
 			if err := s.sendToStream(&historyservice.StreamWorkflowReplicationMessagesResponse{
 				Attributes: &historyservice.StreamWorkflowReplicationMessagesResponse_Messages{
