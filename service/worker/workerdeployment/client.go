@@ -460,9 +460,12 @@ func (d *ClientImpl) ListWorkerDeployments(
 			}
 		}
 		workerDeploymentSummaries[i] = &deploymentspb.WorkerDeploymentSummary{
-			Name:          workerDeploymentInfo.DeploymentName,
-			CreateTime:    workerDeploymentInfo.CreateTime,
-			RoutingConfig: workerDeploymentInfo.RoutingConfig,
+			Name:                  workerDeploymentInfo.DeploymentName,
+			CreateTime:            workerDeploymentInfo.CreateTime,
+			RoutingConfig:         workerDeploymentInfo.RoutingConfig,
+			LatestVersionSummary:  workerDeploymentInfo.LatestVersionSummary,
+			RampingVersionSummary: workerDeploymentInfo.RampingVersionSummary,
+			CurrentVersionSummary: workerDeploymentInfo.CurrentVersionSummary,
 		}
 	}
 

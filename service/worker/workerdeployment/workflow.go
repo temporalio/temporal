@@ -749,23 +749,7 @@ func (d *WorkflowRunner) handleAddVersionToWorkerDeployment(ctx workflow.Context
 }
 
 func (d *WorkflowRunner) tryDeleteVersion(ctx workflow.Context) error {
-	var sortedSummaries []*deploymentspb.WorkerDeploymentVersionSummary
-	for _, k := range workflow.DeterministicKeys(d.State.Versions) {
-		s := d.State.Versions[k]
-		sortedSummaries = append(sortedSummaries, s)
-	}
-
-	slices.SortFunc(sortedSummaries, func(a, b *deploymentspb.WorkerDeploymentVersionSummary) int {
-		// sorts in ascending order.
-		// cmp(a, b) should return a negative number when a < b, a positive number when a > b,
-		// and zero when a == b or a and b are incomparable in the sense of a strict weak ordering.
-		if a.GetCreateTime().AsTime().After(b.GetCreateTime().AsTime()) {
-			return 1
-		} else if a.GetCreateTime().AsTime().Before(b.GetCreateTime().AsTime()) {
-			return -1
-		}
-		return 0
-	})
+	sortedSummaries := d.sortedSummaries()
 	for _, v := range sortedSummaries {
 		// this might hang on the lock
 		err := d.deleteVersion(ctx, &deploymentspb.DeleteVersionArgs{
@@ -933,15 +917,94 @@ func (d *WorkflowRunner) newUUID(ctx workflow.Context) string {
 }
 
 func (d *WorkflowRunner) updateMemo(ctx workflow.Context) error {
+
 	return workflow.UpsertMemo(ctx, map[string]any{
 		WorkerDeploymentMemoField: &deploymentspb.WorkerDeploymentWorkflowMemo{
-			DeploymentName: d.DeploymentName,
-			CreateTime:     d.State.CreateTime,
-			RoutingConfig:  d.State.RoutingConfig,
+			DeploymentName:        d.DeploymentName,
+			CreateTime:            d.State.CreateTime,
+			RoutingConfig:         d.State.RoutingConfig,
+			LatestVersionSummary:  d.getLatestVersionSummary(),
+			CurrentVersionSummary: d.getCurrentVersionSummary(),
+			RampingVersionSummary: d.getRampingVersionSummary(),
 		},
 	})
 }
 
 func (d *WorkflowRunner) setStateChanged() {
 	d.stateChanged = true
+}
+
+func (d *WorkflowRunner) sortedSummaries() []*deploymentspb.WorkerDeploymentVersionSummary {
+	var sortedSummaries []*deploymentspb.WorkerDeploymentVersionSummary
+	for _, k := range workflow.DeterministicKeys(d.State.Versions) {
+		s := d.State.Versions[k]
+		sortedSummaries = append(sortedSummaries, s)
+	}
+
+	slices.SortFunc(sortedSummaries, func(a, b *deploymentspb.WorkerDeploymentVersionSummary) int {
+		// sorts in ascending order.
+		// cmp(a, b) should return a negative number when a < b, a positive number when a > b,
+		// and zero when a == b or a and b are incomparable in the sense of a strict weak ordering.
+		if a.GetCreateTime().AsTime().After(b.GetCreateTime().AsTime()) {
+			return 1
+		} else if a.GetCreateTime().AsTime().Before(b.GetCreateTime().AsTime()) {
+			return -1
+		}
+		return 0
+	})
+	return sortedSummaries
+}
+
+func (d *WorkflowRunner) getLatestVersionSummary() *deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary {
+	sortedSummaries := d.sortedSummaries()
+	if len(sortedSummaries) == 0 {
+		return nil
+	}
+	latest_summary := sortedSummaries[len(sortedSummaries)-1]
+	return &deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary{
+		DeploymentVersion:    worker_versioning.ExternalWorkerDeploymentVersionFromString(latest_summary.GetVersion()),
+		CreateTime:           latest_summary.GetCreateTime(),
+		DrainageInfo:         latest_summary.GetDrainageInfo(),
+		CurrentSinceTime:     latest_summary.GetCurrentSinceTime(),
+		RampingSinceTime:     latest_summary.GetRampingSinceTime(),
+		RoutingUpdateTime:    latest_summary.GetRoutingUpdateTime(),
+		FirstActivationTime:  latest_summary.GetFirstActivationTime(),
+		LastDeactivationTime: latest_summary.GetLastDeactivationTime(),
+	}
+}
+
+func (d *WorkflowRunner) getCurrentVersionSummary() *deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary {
+	// The deployment workflow still uses the deprecated fields from v0.31. Hence, the current version is read from
+	// CurrentVersion and not CurrentDeploymentVersion. This shall change before GA.
+	currentVersion := d.GetState().GetRoutingConfig().GetCurrentVersion()
+	currentVersionSummary := d.GetState().GetVersions()[currentVersion]
+
+	return &deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary{
+		DeploymentVersion:    worker_versioning.ExternalWorkerDeploymentVersionFromString(currentVersion),
+		CreateTime:           currentVersionSummary.GetCreateTime(),
+		DrainageInfo:         currentVersionSummary.GetDrainageInfo(),
+		CurrentSinceTime:     currentVersionSummary.GetCurrentSinceTime(),
+		RampingSinceTime:     currentVersionSummary.GetRampingSinceTime(),
+		RoutingUpdateTime:    currentVersionSummary.GetRoutingUpdateTime(),
+		FirstActivationTime:  currentVersionSummary.GetFirstActivationTime(),
+		LastDeactivationTime: currentVersionSummary.GetLastDeactivationTime(),
+	}
+}
+
+func (d *WorkflowRunner) getRampingVersionSummary() *deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary {
+	// The deployment workflow still uses the deprecated fields from v0.31. Hence, the ramping version is read from
+	// RampingVersion and not RampingDeploymentVersion. This shall change before GA.
+	rampingVersion := d.GetState().GetRoutingConfig().GetRampingVersion()
+	rampingVersionSummary := d.GetState().GetVersions()[rampingVersion]
+
+	return &deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary{
+		DeploymentVersion:    worker_versioning.ExternalWorkerDeploymentVersionFromString(rampingVersion),
+		CreateTime:           rampingVersionSummary.GetCreateTime(),
+		DrainageInfo:         rampingVersionSummary.GetDrainageInfo(),
+		CurrentSinceTime:     rampingVersionSummary.GetCurrentSinceTime(),
+		RampingSinceTime:     rampingVersionSummary.GetRampingSinceTime(),
+		RoutingUpdateTime:    rampingVersionSummary.GetRoutingUpdateTime(),
+		FirstActivationTime:  rampingVersionSummary.GetFirstActivationTime(),
+		LastDeactivationTime: rampingVersionSummary.GetLastDeactivationTime(),
+	}
 }

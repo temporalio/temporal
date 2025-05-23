@@ -3520,9 +3520,12 @@ func (wh *WorkflowHandler) ListWorkerDeployments(ctx context.Context, request *w
 	workerDeployments := make([]*workflowservice.ListWorkerDeploymentsResponse_WorkerDeploymentSummary, len(resp))
 	for i, d := range resp {
 		workerDeployments[i] = &workflowservice.ListWorkerDeploymentsResponse_WorkerDeploymentSummary{
-			Name:          d.Name,
-			CreateTime:    d.CreateTime,
-			RoutingConfig: worker_versioning.AddV32RoutingConfigToV31(d.RoutingConfig),
+			Name:                  d.Name,
+			CreateTime:            d.CreateTime,
+			RoutingConfig:         worker_versioning.AddV32RoutingConfigToV31(d.RoutingConfig),
+			LatestVersionSummary:  d.LatestVersionSummary,
+			RampingVersionSummary: d.RampingVersionSummary,
+			CurrentVersionSummary: d.CurrentVersionSummary,
 		}
 	}
 
