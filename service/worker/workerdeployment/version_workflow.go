@@ -30,8 +30,7 @@ type (
 		lock                              workflow.Mutex
 		unsafeRefreshIntervalGetter       func() any
 		unsafeVisibilityGracePeriodGetter func() any
-		//drainageWorkflowFuture            *workflow.ChildWorkflowFuture
-		deleteVersion bool
+		deleteVersion                     bool
 		// stateChanged is used to track if the state of the workflow has undergone a local state change since the last signal/update.
 		// This prevents a workflow from continuing-as-new if the state has not changed.
 		stateChanged  bool
