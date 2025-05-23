@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"math"
 	"slices"
 	"time"
@@ -241,6 +242,11 @@ func SetupNewWorkflowForRetryOrCron(
 		}
 	}
 
+	var pinnedOverride *workflowpb.VersioningOverride
+	if o := previousExecutionInfo.GetVersioningInfo().GetVersioningOverride(); worker_versioning.OverrideIsPinned(o) {
+		pinnedOverride = o
+	}
+
 	createRequest := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                uuid.New(),
 		Namespace:                newMutableState.GetNamespaceEntry().Name().String(),
@@ -259,6 +265,7 @@ func SetupNewWorkflowForRetryOrCron(
 		CompletionCallbacks:      completionCallbacks,
 		Links:                    startLinks,
 		Priority:                 startAttr.Priority,
+		VersioningOverride:       pinnedOverride,
 	}
 
 	attempt := int32(1)
@@ -274,6 +281,14 @@ func SetupNewWorkflowForRetryOrCron(
 		// For cron: do not propagate (always start on latest version).
 		if initiator == enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY {
 			sourceVersionStamp = worker_versioning.StampIfUsingVersioning(previousMutableState.GetMostRecentWorkerVersionStamp())
+		}
+	}
+
+	var previousRunVersioningInfo *historypb.WorkflowExecutionStartedEventAttributes_SourceWorkflowVersioningInfo
+	if vi := previousExecutionInfo.GetVersioningInfo(); vi != nil {
+		previousRunVersioningInfo = &historypb.WorkflowExecutionStartedEventAttributes_SourceWorkflowVersioningInfo{
+			DeploymentVersion: vi.GetDeploymentVersion(),
+			Behavior:          vi.GetBehavior(),
 		}
 	}
 
@@ -302,6 +317,8 @@ func SetupNewWorkflowForRetryOrCron(
 		previousExecutionInfo.AutoResetPoints,
 		previousMutableState.GetExecutionState().GetRunId(),
 		firstRunID,
+		startAttr.GetParentVersioningInfo(),
+		previousRunVersioningInfo,
 	)
 	if err != nil {
 		return serviceerror.NewInternal("Failed to add workflow execution started event.")
