@@ -6,6 +6,7 @@ import (
 	"math"
 	"slices"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/pkg/errors"
@@ -77,6 +78,7 @@ type (
 		TargetClusterEndpoint string
 		TargetClusterName     string
 		VerifyInterval        time.Duration `validate:"gte=0"`
+		Concurrency           int
 		Executions            []*commonpb.WorkflowExecution
 	}
 
@@ -782,10 +784,10 @@ func (a *activities) verifyReplicationTasks(
 	heartbeat func(details replicationTasksHeartbeatDetails),
 ) (bool, error) {
 	start := time.Now()
-	progress := false
+	madeProgress := false
 	defer func() {
-		if progress {
-			// Update CheckPoint when there is a progress
+		if madeProgress {
+			// Record the last time progress was made.
 			details.CheckPoint = time.Now()
 		}
 
@@ -795,20 +797,52 @@ func (a *activities) verifyReplicationTasks(
 
 	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(interceptor.DCRedirectionContextHeaderName, "false"))
 
-	for ; details.NextIndex < len(request.Executions); details.NextIndex++ {
-		we := request.Executions[details.NextIndex]
-		r, err := a.verifySingleReplicationTask(ctx, request, remoteClient, ns, we)
-		if err != nil {
-			return false, err
+	concurrency := request.Concurrency
+	if concurrency <= 0 {
+		concurrency = 1
+	}
+
+	for details.NextIndex < len(request.Executions) {
+		end := details.NextIndex + concurrency
+		if end > len(request.Executions) {
+			end = len(request.Executions)
+		}
+		batch := request.Executions[details.NextIndex:end]
+
+		type result struct {
+			r   verifyResult
+			err error
 		}
 
-		if !r.isVerified() {
-			details.LastNotVerifiedWorkflowExecution = we
-			return false, nil
-		}
+		results := make([]result, len(batch))
+		var wg sync.WaitGroup
 
-		heartbeat(*details)
-		progress = true
+		for i, execution := range batch {
+			i := i
+			execution := execution
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				res, err := a.verifySingleReplicationTask(ctx, request, remoteClient, ns, execution)
+				results[i] = result{res, err}
+			}()
+		}
+		wg.Wait()
+
+		for i, r := range results {
+			if r.err != nil {
+				return false, r.err
+			}
+			if !r.r.isVerified() {
+				details.LastNotVerifiedWorkflowExecution = batch[i]
+				details.NextIndex += i
+				return false, nil
+			}
+
+			details.NextIndex++
+			heartbeat(*details)
+			madeProgress = true
+		}
 	}
 
 	return true, nil
