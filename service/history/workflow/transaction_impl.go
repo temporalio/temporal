@@ -18,10 +18,11 @@ import (
 
 type (
 	completionMetric struct {
-		initialized    bool
-		taskQueue      string
-		namespaceState string
-		status         enumspb.WorkflowExecutionStatus
+		initialized      bool
+		taskQueue        string
+		namespaceState   string
+		workflowTypeName string
+		status           enumspb.WorkflowExecutionStatus
 	}
 	TransactionImpl struct {
 		shard  historyi.ShardContext
@@ -680,10 +681,11 @@ func snapshotToCompletionMetric(
 		return completionMetric{initialized: false}
 	}
 	return completionMetric{
-		initialized:    true,
-		taskQueue:      workflowSnapshot.ExecutionInfo.TaskQueue,
-		namespaceState: namespaceState,
-		status:         workflowSnapshot.ExecutionState.Status,
+		initialized:      true,
+		taskQueue:        workflowSnapshot.ExecutionInfo.TaskQueue,
+		namespaceState:   namespaceState,
+		workflowTypeName: workflowSnapshot.ExecutionInfo.WorkflowTypeName,
+		status:           workflowSnapshot.ExecutionState.Status,
 	}
 }
 
@@ -695,10 +697,11 @@ func mutationToCompletionMetric(
 		return completionMetric{initialized: false}
 	}
 	return completionMetric{
-		initialized:    true,
-		taskQueue:      workflowMutation.ExecutionInfo.TaskQueue,
-		namespaceState: namespaceState,
-		status:         workflowMutation.ExecutionState.Status,
+		initialized:      true,
+		taskQueue:        workflowMutation.ExecutionInfo.TaskQueue,
+		namespaceState:   namespaceState,
+		workflowTypeName: workflowMutation.ExecutionInfo.WorkflowTypeName,
+		status:           workflowMutation.ExecutionState.Status,
 	}
 }
 
@@ -719,6 +722,7 @@ func emitCompletionMetrics(
 			namespaceName,
 			completionMetric.namespaceState,
 			completionMetric.taskQueue,
+			completionMetric.workflowTypeName,
 			completionMetric.status,
 			shardContext.GetConfig(),
 		)
