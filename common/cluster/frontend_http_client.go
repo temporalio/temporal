@@ -42,11 +42,11 @@ func (c *FrontendHTTPClientCache) Get(targetClusterName string) (*common.Fronten
 func (c *FrontendHTTPClientCache) newClientForCluster(targetClusterName string) (*common.FrontendHTTPClient, error) {
 	targetInfo, ok := c.metadata.GetAllClusterInfo()[targetClusterName]
 	if !ok {
-		return nil, serviceerror.NewNotFound(fmt.Sprintf("could not find cluster metadata for cluster %s", targetClusterName))
+		return nil, serviceerror.NewNotFoundf("could not find cluster metadata for cluster %s", targetClusterName)
 	}
 
 	if targetInfo.HTTPAddress == "" {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("HTTPAddress not configured for cluster: %s", targetClusterName))
+		return nil, serviceerror.NewInternalf("HTTPAddress not configured for cluster: %s", targetClusterName)
 	}
 	host, _, err := net.SplitHostPort(targetInfo.HTTPAddress)
 	if err != nil {

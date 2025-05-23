@@ -427,10 +427,10 @@ func (s *StreamSenderImpl) sendTasks(
 	endExclusiveWatermark int64,
 ) error {
 	if beginInclusiveWatermark > endExclusiveWatermark {
-		err := serviceerror.NewInternal(fmt.Sprintf("StreamWorkflowReplication encountered invalid task range [%v, %v)",
+		err := serviceerror.NewInternalf("StreamWorkflowReplication encountered invalid task range [%v, %v)",
 			beginInclusiveWatermark,
 			endExclusiveWatermark,
-		))
+		)
 		return err
 	}
 	if beginInclusiveWatermark == endExclusiveWatermark {
@@ -654,6 +654,14 @@ func (s *StreamSenderImpl) getTaskPriority(task tasks.Task) enumsspb.TaskPriorit
 func (s *StreamSenderImpl) getTaskTargetCluster(task tasks.Task) []string {
 	switch t := task.(type) {
 	case *tasks.SyncWorkflowStateTask:
+		return t.TargetClusters
+	case *tasks.SyncVersionedTransitionTask:
+		return t.TargetClusters
+	case *tasks.SyncHSMTask:
+		return t.TargetClusters
+	case *tasks.HistoryReplicationTask:
+		return t.TargetClusters
+	case *tasks.SyncActivityTask:
 		return t.TargetClusters
 	default:
 		return nil

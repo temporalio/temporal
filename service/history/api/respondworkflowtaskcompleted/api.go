@@ -2,7 +2,6 @@ package respondworkflowtaskcompleted
 
 import (
 	"context"
-	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -209,7 +208,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		if wftCompletedBuildId != wftStartedBuildId {
 			// Mutable state wasn't changed yet and doesn't have to be cleared.
 			releaseLeaseWithError = false
-			return nil, serviceerror.NewNotFound(fmt.Sprintf("this workflow task was dispatched to Build ID %s, not %s", wftStartedBuildId, wftCompletedBuildId))
+			return nil, serviceerror.NewNotFoundf("this workflow task was dispatched to Build ID %s, not %s", wftStartedBuildId, wftCompletedBuildId)
 		}
 	}
 
@@ -229,6 +228,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		}
 	}()
 
+	// TODO(carlydf): change condition when deprecating versionstamp
 	// It's an error if the workflow has used versioning in the past but this task has no versioning info.
 	if ms.GetMostRecentWorkerVersionStamp().GetUseVersioning() &&
 		//nolint:staticcheck // SA1019 deprecated stamp will clean up later
@@ -332,10 +332,10 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 	if err := namespaceEntry.VerifyBinaryChecksum(request.GetBinaryChecksum()); err != nil {
 		wtFailedCause = newWorkflowTaskFailedCause(
 			enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_BINARY,
-			serviceerror.NewInvalidArgument(
-				fmt.Sprintf(
-					"binary %v is marked as bad deployment",
-					request.GetBinaryChecksum())),
+			serviceerror.NewInvalidArgumentf(
+				"binary %v is marked as bad deployment",
+				//nolint:staticcheck // SA1019 deprecated stamp will clean up later
+				request.GetBinaryChecksum()),
 			false)
 	} else {
 		namespace := namespaceEntry.Name()

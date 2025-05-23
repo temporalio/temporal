@@ -11,6 +11,7 @@ import (
 	"github.com/dgryski/go-farm"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -77,7 +78,7 @@ func (s *DeploymentSuite) SetupSuite() {
 		dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace.Key(): maxConcurrentBatchOps,
 	}
 
-	s.FunctionalTestBase.SetupSuiteWithDefaultCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
+	s.FunctionalTestBase.SetupSuiteWithCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 }
 
 // pollFromDeployment calls PollWorkflowTaskQueue to start deployment related workflows
@@ -130,7 +131,7 @@ func (s *DeploymentSuite) TestDescribeDeployment_RegisterTaskQueue() {
 
 	// Querying the Deployment
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := assert.New(t)
+		a := require.New(t)
 
 		resp, err := s.FrontendClient().DescribeDeployment(ctx, &workflowservice.DescribeDeploymentRequest{
 			Namespace:  s.Namespace().String(),
@@ -171,22 +172,18 @@ func (s *DeploymentSuite) TestDescribeDeployment_RegisterTaskQueue_ConcurrentPol
 
 	// Querying the Deployment
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := assert.New(t)
+		a := require.New(t)
 
 		resp, err := s.FrontendClient().DescribeDeployment(ctx, &workflowservice.DescribeDeploymentRequest{
 			Namespace:  s.Namespace().String(),
 			Deployment: d,
 		})
-		if !a.NoError(err) {
-			return
-		}
+		a.NoError(err)
 		a.NotNil(resp.GetDeploymentInfo().GetDeployment())
 
 		a.True(d.Equal(resp.GetDeploymentInfo().GetDeployment()))
 
-		if !a.Equal(2, len(resp.GetDeploymentInfo().GetTaskQueueInfos())) {
-			return
-		}
+		a.Equal(2, len(resp.GetDeploymentInfo().GetTaskQueueInfos()))
 		a.Equal(tv.TaskQueue().GetName(), resp.GetDeploymentInfo().GetTaskQueueInfos()[0].Name)
 		a.Equal(false, resp.GetDeploymentInfo().GetIsCurrent())
 	}, time.Second*10, time.Millisecond*1000)
@@ -222,7 +219,7 @@ func (s *DeploymentSuite) TestGetCurrentDeployment_NoCurrentDeployment() {
 
 	// Verify the existence of a deployment series
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := assert.New(t)
+		a := require.New(t)
 
 		resp, err := s.FrontendClient().CountWorkflowExecutions(ctx, &workflowservice.CountWorkflowExecutionsRequest{
 			Namespace: s.Namespace().String(),
@@ -283,7 +280,7 @@ func (s *DeploymentSuite) verifyDeployments(ctx context.Context, request *workfl
 
 	// list deployment call
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := assert.New(t)
+		a := require.New(t)
 		actualDeployments, err := s.listDeploymentsAll(ctx, request)
 		a.NoError(err)
 		a.NotNil(actualDeployments)
@@ -471,7 +468,7 @@ func (s *DeploymentSuite) checkDescribeWorkflowAfterOverride(
 	expectedOverride *workflowpb.VersioningOverride,
 ) {
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := assert.New(t)
+		a := require.New(t)
 		resp, err := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: s.Namespace().String(),
 			Execution: wf,
@@ -490,7 +487,7 @@ func (s *DeploymentSuite) checkDeploymentReachability(
 	expectedReachability enumspb.DeploymentReachability,
 ) {
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := assert.New(t)
+		a := require.New(t)
 		resp, err := s.FrontendClient().GetDeploymentReachability(ctx, &workflowservice.GetDeploymentReachabilityRequest{
 			Namespace:  s.Namespace().String(),
 			Deployment: deploy,
@@ -510,7 +507,7 @@ func (s *DeploymentSuite) createDeploymentAndWaitForExist(
 
 	// Wait for the deployment to exist
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := assert.New(t)
+		a := require.New(t)
 
 		resp, err := s.FrontendClient().DescribeDeployment(ctx, &workflowservice.DescribeDeploymentRequest{
 			Namespace:  s.Namespace().String(),
@@ -1000,15 +997,13 @@ func (s *DeploymentSuite) startBatchJobWithinConcurrentJobLimit(ctx context.Cont
 
 func (s *DeploymentSuite) checkListAndWaitForBatchCompletion(ctx context.Context, jobId string) {
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := assert.New(t)
+		a := require.New(t)
 		listResp, err := s.FrontendClient().ListBatchOperations(ctx, &workflowservice.ListBatchOperationsRequest{
 			Namespace: s.Namespace().String(),
 		})
 		a.NoError(err)
 		a.Greater(len(listResp.GetOperationInfo()), 0)
-		if len(listResp.GetOperationInfo()) > 0 {
-			a.Equal(jobId, listResp.GetOperationInfo()[0].GetJobId())
-		}
+		a.Equal(jobId, listResp.GetOperationInfo()[0].GetJobId())
 	}, 10*time.Second, 50*time.Millisecond)
 
 	for {
@@ -1205,7 +1200,7 @@ func (s *DeploymentSuite) TestSetCurrent_BeforeAndAfterRegister() {
 
 	// list should say it's current (with some delay)
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := assert.New(t)
+		a := require.New(t)
 		list, err := s.FrontendClient().ListDeployments(ctx, &workflowservice.ListDeploymentsRequest{
 			Namespace: s.Namespace().String(),
 		})
@@ -1259,7 +1254,7 @@ func (s *DeploymentSuite) TestSetCurrent_BeforeAndAfterRegister() {
 
 	// list should say 2 is current and 1 is not current (with some delay)
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := assert.New(t)
+		a := require.New(t)
 		list, err := s.FrontendClient().ListDeployments(ctx, &workflowservice.ListDeploymentsRequest{
 			Namespace: s.Namespace().String(),
 		})

@@ -2,7 +2,6 @@ package resetworkflow
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/google/uuid"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -205,7 +204,7 @@ func validatePostResetOperationInputs(postResetOperations []*workflowpb.PostRese
 				return err
 			}
 		default:
-			return serviceerror.NewInvalidArgument(fmt.Sprintf("unsupported post reset operation: %T", op))
+			return serviceerror.NewInvalidArgumentf("unsupported post reset operation: %T", op)
 		}
 	}
 	return nil

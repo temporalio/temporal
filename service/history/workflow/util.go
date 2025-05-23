@@ -231,13 +231,16 @@ func GetEffectiveDeployment(versioningInfo *workflowpb.WorkflowExecutionVersioni
 
 // GetEffectiveVersioningBehavior returns the effective versioning behavior in the following
 // order:
-//  1. VersioningOverride.Behavior: this is returned when user has set a behavior override
+//  1. DeploymentVersionTransition: if there is a transition, then effective behavior is AUTO_UPGRADE.
+//  2. VersioningOverride.Behavior: this is returned when user has set a behavior override
 //     at wf start time, or later via UpdateWorkflowExecutionOptions.
-//  2. Behavior: this is returned when there is no override (most common case). Behavior is
+//  3. Behavior: this is returned when there is no override (most common case). Behavior is
 //     set based on the worker-sent deployment in the latest WFT completion.
 func GetEffectiveVersioningBehavior(versioningInfo *workflowpb.WorkflowExecutionVersioningInfo) enumspb.VersioningBehavior {
 	if versioningInfo == nil {
 		return enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED
+	} else if t := versioningInfo.GetVersionTransition(); t != nil {
+		return enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
 	} else if override := versioningInfo.GetVersioningOverride(); override != nil {
 		if override.GetAutoUpgrade() || override.GetPinned() != nil { // v0.32 override behavior
 			if override.GetAutoUpgrade() {

@@ -730,6 +730,7 @@ pollLoop:
 					tag.WorkflowID(task.event.Data.GetWorkflowId()),
 					tag.WorkflowRunID(task.event.Data.GetRunId()),
 					tag.TaskID(task.event.GetTaskId()),
+					tag.WorkflowScheduledEventID(task.event.Data.GetScheduledEventId()),
 					tag.TaskVisibilityTimestamp(timestamp.TimeValue(task.event.Data.GetCreateTime())),
 					tag.VersioningBehavior(task.event.Data.VersionDirective.GetBehavior()),
 					//nolint:staticcheck // SA1019 deprecated WorkerVersionCapabilities will clean up later
@@ -831,7 +832,7 @@ func (e *matchingEngineImpl) nonRetryableErrorsDropTask(task *internalTask, task
 		tag.WorkflowRunID(task.event.Data.GetRunId()),
 		tag.WorkflowTaskQueueName(taskQueueName),
 		tag.TaskID(task.event.GetTaskId()),
-		tag.WorkflowEventID(task.event.Data.GetScheduledEventId()),
+		tag.WorkflowScheduledEventID(task.event.Data.GetScheduledEventId()),
 		tag.Error(err),
 		tag.ErrorType(err),
 	)
@@ -950,6 +951,7 @@ pollLoop:
 					tag.WorkflowID(task.event.Data.GetWorkflowId()),
 					tag.WorkflowRunID(task.event.Data.GetRunId()),
 					tag.TaskID(task.event.GetTaskId()),
+					tag.WorkflowScheduledEventID(task.event.Data.GetScheduledEventId()),
 					tag.TaskVisibilityTimestamp(timestamp.TimeValue(task.event.Data.GetCreateTime())),
 					tag.VersioningBehavior(task.event.Data.VersionDirective.GetBehavior()),
 					//nolint:staticcheck // SA1019 deprecated WorkerVersionCapabilities will clean up later
@@ -965,6 +967,7 @@ pollLoop:
 					tag.WorkflowID(task.event.Data.GetWorkflowId()),
 					tag.WorkflowRunID(task.event.Data.GetRunId()),
 					tag.TaskID(task.event.GetTaskId()),
+					tag.WorkflowScheduledEventID(task.event.Data.GetScheduledEventId()),
 					tag.TaskVisibilityTimestamp(timestamp.TimeValue(task.event.Data.GetCreateTime())),
 					tag.VersioningBehavior(task.event.Data.VersionDirective.GetBehavior()),
 					//nolint:staticcheck // SA1019 deprecated WorkerVersionCapabilities will clean up later
@@ -1379,8 +1382,8 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 			return nil, false, err
 		}
 		if !bytes.Equal(cT, prevCT) {
-			return nil, false, serviceerror.NewFailedPrecondition(
-				fmt.Sprintf("provided conflict token '%v' does not match existing one '%v'", cT, prevCT),
+			return nil, false, serviceerror.NewFailedPreconditionf(
+				"provided conflict token '%v' does not match existing one '%v'", cT, prevCT,
 			)
 		}
 
@@ -1606,7 +1609,7 @@ func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatibility(
 				req.GetPersistUnknownBuildId(),
 			)
 		default:
-			return nil, false, serviceerror.NewInvalidArgument(fmt.Sprintf("invalid operation: %v", req.GetOperation()))
+			return nil, false, serviceerror.NewInvalidArgumentf("invalid operation: %v", req.GetOperation())
 		}
 		// Avoid mutation
 		ret := common.CloneProto(data)
@@ -2203,7 +2206,7 @@ func (e *matchingEngineImpl) ListNexusEndpoints(ctx context.Context, request *ma
 	isOwner, ownershipLostCh, err := e.checkNexusEndpointsOwnership()
 	if err != nil {
 		e.logger.Error("Failed to check Nexus endpoints ownership", tag.Error(err))
-		return nil, serviceerror.NewFailedPrecondition(fmt.Sprintf("cannot verify ownership of Nexus endpoints table: %v", err))
+		return nil, serviceerror.NewFailedPreconditionf("cannot verify ownership of Nexus endpoints table: %v", err)
 	}
 	if !isOwner {
 		e.logger.Error("Matching node doesn't think it's the Nexus endpoints table owner", tag.Error(err))

@@ -12,6 +12,7 @@ import (
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -77,7 +78,7 @@ func (s *AdvancedVisibilitySuite) SetupSuite() {
 		// Allow the scavenger to remove any build ID regardless of when it was last default for a set.
 		dynamicconfig.RemovableBuildIdDurationSinceDefault.Key(): time.Microsecond,
 	}
-	s.FunctionalTestBase.SetupSuiteWithDefaultCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
+	s.FunctionalTestBase.SetupSuiteWithCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 
 	if !testcore.UseSQLVisibility() {
 		// To ensure that Elasticsearch won't return more than defaultPageSize documents,
@@ -1804,14 +1805,13 @@ func (s *AdvancedVisibilitySuite) TestChildWorkflow_ParentWorkflow() {
 					PageSize:  testcore.DefaultPageSize,
 				},
 			)
-			assert.NoError(c, err)
-			if assert.Len(c, resp.Executions, 1) {
-				wfInfo := resp.Executions[0]
-				assert.Nil(c, wfInfo.GetParentExecution())
-				assert.NotNil(c, wfInfo.GetRootExecution())
-				assert.Equal(c, wfID, wfInfo.RootExecution.GetWorkflowId())
-				assert.Equal(c, run.GetRunID(), wfInfo.RootExecution.GetRunId())
-			}
+			require.NoError(c, err)
+			require.Len(c, resp.Executions, 1)
+			wfInfo := resp.Executions[0]
+			require.Nil(c, wfInfo.GetParentExecution())
+			require.NotNil(c, wfInfo.GetRootExecution())
+			require.Equal(c, wfID, wfInfo.RootExecution.GetWorkflowId())
+			require.Equal(c, run.GetRunID(), wfInfo.RootExecution.GetRunId())
 		},
 		testcore.WaitForESToSettle,
 		100*time.Millisecond,
@@ -1829,16 +1829,15 @@ func (s *AdvancedVisibilitySuite) TestChildWorkflow_ParentWorkflow() {
 					PageSize:  testcore.DefaultPageSize,
 				},
 			)
-			assert.NoError(c, err)
-			if assert.Len(c, resp.Executions, 1) {
-				childWfInfo = resp.Executions[0]
-				assert.NotNil(c, childWfInfo.GetParentExecution())
-				assert.Equal(c, wfID, childWfInfo.ParentExecution.GetWorkflowId())
-				assert.Equal(c, run.GetRunID(), childWfInfo.ParentExecution.GetRunId())
-				assert.NotNil(c, childWfInfo.GetRootExecution())
-				assert.Equal(c, wfID, childWfInfo.RootExecution.GetWorkflowId())
-				assert.Equal(c, run.GetRunID(), childWfInfo.RootExecution.GetRunId())
-			}
+			require.NoError(c, err)
+			require.Len(c, resp.Executions, 1)
+			childWfInfo = resp.Executions[0]
+			require.NotNil(c, childWfInfo.GetParentExecution())
+			require.Equal(c, wfID, childWfInfo.ParentExecution.GetWorkflowId())
+			require.Equal(c, run.GetRunID(), childWfInfo.ParentExecution.GetRunId())
+			require.NotNil(c, childWfInfo.GetRootExecution())
+			require.Equal(c, wfID, childWfInfo.RootExecution.GetWorkflowId())
+			require.Equal(c, run.GetRunID(), childWfInfo.RootExecution.GetRunId())
 		},
 		testcore.WaitForESToSettle,
 		100*time.Millisecond,

@@ -657,7 +657,7 @@ func (ms *MutableStateImpl) GetNexusCompletion(
 			Links:      []nexus.Link{startLink},
 		})
 		if err != nil {
-			return nil, serviceerror.NewInternal(fmt.Sprintf("failed to construct Nexus completion: %v", err))
+			return nil, serviceerror.NewInternalf("failed to construct Nexus completion: %v", err)
 		}
 		return completion, nil
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED:
@@ -731,7 +731,7 @@ func (ms *MutableStateImpl) GetNexusCompletion(
 				Links:     []nexus.Link{startLink},
 			})
 	}
-	return nil, serviceerror.NewInternal(fmt.Sprintf("invalid workflow execution status: %v", ce.GetEventType()))
+	return nil, serviceerror.NewInternalf("invalid workflow execution status: %v", ce.GetEventType())
 }
 
 // GetHSMCallbackArg converts a workflow completion event into a [persistencespb.HSMCallbackArg].
@@ -1011,7 +1011,7 @@ func (ms *MutableStateImpl) GetCloseVersion() (int64, error) {
 	// Do NOT use ms.IsWorkflowExecutionRunning() for the check.
 	// Zombie workflow is not considered running but also not closed.
 	if ms.executionState.State != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
-		return common.EmptyVersion, serviceerror.NewInternal(fmt.Sprintf("workflow still running, current state: %v", ms.executionState.State.String()))
+		return common.EmptyVersion, serviceerror.NewInternalf("workflow still running, current state: %v", ms.executionState.State.String())
 	}
 
 	// if workflow is closing in the current transation,
@@ -1117,7 +1117,7 @@ func (ms *MutableStateImpl) IsNonCurrentWorkflowGuaranteed() (bool, error) {
 	case enumsspb.WORKFLOW_EXECUTION_STATE_CORRUPTED:
 		return false, nil
 	default:
-		return false, serviceerror.NewInternal(fmt.Sprintf("unknown workflow state: %v", ms.executionState.State.String()))
+		return false, serviceerror.NewInternalf("unknown workflow state: %v", ms.executionState.State.String())
 	}
 }
 
@@ -2487,16 +2487,16 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	startEvent *historypb.HistoryEvent,
 ) error {
 	if ms.executionInfo.NamespaceId != ms.namespaceEntry.ID().String() {
-		return serviceerror.NewInternal(fmt.Sprintf("applying conflicting namespace ID: %v != %v",
-			ms.executionInfo.NamespaceId, ms.namespaceEntry.ID().String()))
+		return serviceerror.NewInternalf("applying conflicting namespace ID: %v != %v",
+			ms.executionInfo.NamespaceId, ms.namespaceEntry.ID().String())
 	}
 	if ms.executionInfo.WorkflowId != execution.GetWorkflowId() {
-		return serviceerror.NewInternal(fmt.Sprintf("applying conflicting workflow ID: %v != %v",
-			ms.executionInfo.WorkflowId, execution.GetWorkflowId()))
+		return serviceerror.NewInternalf("applying conflicting workflow ID: %v != %v",
+			ms.executionInfo.WorkflowId, execution.GetWorkflowId())
 	}
 	if ms.executionState.RunId != execution.GetRunId() {
-		return serviceerror.NewInternal(fmt.Sprintf("applying conflicting run ID: %v != %v",
-			ms.executionState.RunId, execution.GetRunId()))
+		return serviceerror.NewInternalf("applying conflicting run ID: %v != %v",
+			ms.executionState.RunId, execution.GetRunId())
 	}
 
 	ms.approximateSize -= ms.executionInfo.Size()
@@ -2727,11 +2727,11 @@ func (ms *MutableStateImpl) addCompletionCallbacks(
 	coll := callbacks.MachineCollection(ms.HSM())
 	maxCallbacksPerWorkflow := ms.config.MaxCallbacksPerWorkflow(ms.GetNamespaceEntry().Name().String())
 	if len(completionCallbacks)+coll.Size() > maxCallbacksPerWorkflow {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf(
+		return serviceerror.NewInvalidArgumentf(
 			"cannot attach more than %d callbacks to a workflow (%d callbacks already attached)",
 			maxCallbacksPerWorkflow,
 			coll.Size(),
-		))
+		)
 	}
 	for idx, cb := range completionCallbacks {
 		persistenceCB := &persistencespb.Callback{
@@ -3108,7 +3108,7 @@ func (ms *MutableStateImpl) loadSearchAttributeString(saName string) (string, er
 	}
 	val, ok := decoded.(string)
 	if !ok {
-		return "", serviceerror.NewInternal(fmt.Sprintf("invalid search attribute value stored for %s", saName))
+		return "", serviceerror.NewInternalf("invalid search attribute value stored for %s", saName)
 	}
 	return val, nil
 }
@@ -4706,7 +4706,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateAdmittedEvent(event *his
 		},
 	}
 	if _, ok := ms.executionInfo.UpdateInfos[updateID]; ok {
-		return serviceerror.NewInternal(fmt.Sprintf("Update ID %s is already present in mutable state", updateID))
+		return serviceerror.NewInternalf("Update ID %s is already present in mutable state", updateID)
 	}
 	ui := persistencespb.UpdateInfo{Value: admission}
 	ms.executionInfo.UpdateInfos[updateID] = &ui
@@ -6309,7 +6309,7 @@ func (ms *MutableStateImpl) closeTransactionHandleWorkflowTaskScheduling(
 	for _, t := range ms.currentTransactionAddedStateMachineEventTypes {
 		def, ok := ms.shard.StateMachineRegistry().EventDefinition(t)
 		if !ok {
-			return serviceerror.NewInternal(fmt.Sprintf("no event definition registered for %v", t))
+			return serviceerror.NewInternalf("no event definition registered for %v", t)
 		}
 		if def.IsWorkflowTaskTrigger() {
 			if !ms.HasPendingWorkflowTask() {
@@ -6966,6 +6966,7 @@ func (ms *MutableStateImpl) syncActivityToReplicationTask(
 				),
 				ms.pendingActivityInfoIDs,
 				activityIDs,
+				nil,
 			)
 		}
 		return nil
@@ -7156,7 +7157,7 @@ func (ms *MutableStateImpl) startTransactionHandleWorkflowTaskFailover() (bool, 
 		return false, err
 	}
 	if lastEventVersion != workflowTask.Version {
-		return false, serviceerror.NewInternal(fmt.Sprintf("MutableStateImpl encountered mismatch version, workflow task: %v, last event version %v", workflowTask.Version, lastEventVersion))
+		return false, serviceerror.NewInternalf("MutableStateImpl encountered mismatch version, workflow task: %v, last event version %v", workflowTask.Version, lastEventVersion)
 	}
 
 	// NOTE: if lastEventVersion is used here then the version transition history could decrecase
@@ -8109,9 +8110,10 @@ func (ms *MutableStateImpl) GetDeploymentTransition() *workflowpb.DeploymentTran
 
 // GetEffectiveVersioningBehavior returns the effective versioning behavior in the following
 // order:
-//  1. VersioningOverride.Behavior: this is returned when user has set a behavior override
+//  1. DeploymentVersionTransition: if there is a transition, then effective behavior is AUTO_UPGRADE.
+//  2. VersioningOverride.Behavior: this is returned when user has set a behavior override
 //     at wf start time, or later via UpdateWorkflowExecutionOptions.
-//  2. Behavior: this is returned when there is no override (most common case). Behavior is
+//  3. Behavior: this is returned when there is no override (most common case). Behavior is
 //     set based on the worker-sent deployment in the latest WFT completion.
 func (ms *MutableStateImpl) GetEffectiveVersioningBehavior() enumspb.VersioningBehavior {
 	return GetEffectiveVersioningBehavior(ms.GetExecutionInfo().GetVersioningInfo())
@@ -8123,6 +8125,7 @@ func (ms *MutableStateImpl) GetEffectiveVersioningBehavior() enumspb.VersioningB
 // activities.
 // If there is a pending workflow task that is not started yet, it'll be rescheduled after
 // transition start.
+// This method must be called with a version different from the effective version.
 func (ms *MutableStateImpl) StartDeploymentTransition(deployment *deploymentpb.Deployment) error {
 	wfBehavior := ms.GetEffectiveVersioningBehavior()
 	if wfBehavior == enumspb.VERSIONING_BEHAVIOR_PINNED {
@@ -8136,6 +8139,10 @@ func (ms *MutableStateImpl) StartDeploymentTransition(deployment *deploymentpb.D
 	if versioningInfo == nil {
 		versioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{}
 		ms.GetExecutionInfo().VersioningInfo = versioningInfo
+	}
+
+	if ms.GetEffectiveDeployment().Equal(deployment) {
+		return serviceerror.NewInternal("start transition should receive a version different from effective version")
 	}
 
 	// Only store transition in VersionTransition but read from both VersionTransition and DeploymentVersionTransition.
@@ -8156,17 +8163,20 @@ func (ms *MutableStateImpl) StartDeploymentTransition(deployment *deploymentpb.D
 	// start because its directive deployment no longer matches workflows effective deployment.
 	// If the WFT is started but not finished, we let it run its course, once it's completed, failed
 	// or timed out a new one will be scheduled.
-	if ms.HasPendingWorkflowTask() && !ms.HasStartedWorkflowTask() &&
+	if ms.HasPendingWorkflowTask() && !ms.HasStartedWorkflowTask() {
 		// Speculative WFT is directly (without transfer task) added to matching when scheduled.
 		// It is protected by timeout on both normal and sticky task queues.
 		// If there is no poller for previous deployment, it will time out,
 		// and will be rescheduled as normal WFT.
-		ms.GetPendingWorkflowTask().Type != enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
-		// sticky queue was just cleared, so the following call only generates
-		// a WorkflowTask, not a WorkflowTaskTimeoutTask.
-		err := ms.taskGenerator.GenerateScheduleWorkflowTaskTasks(ms.GetPendingWorkflowTask().ScheduledEventID)
-		if err != nil {
-			return err
+		if ms.GetPendingWorkflowTask().Type != enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
+			// sticky queue was just cleared, so the following call only generates
+			// a WorkflowTask, not a WorkflowTaskTimeoutTask.
+			err := ms.taskGenerator.GenerateScheduleWorkflowTaskTasks(ms.GetPendingWorkflowTask().ScheduledEventID)
+			if err != nil {
+				return err
+			}
+		} else {
+			ms.logInfo("start transition did not reschedule pending speculative task")
 		}
 	}
 	return nil

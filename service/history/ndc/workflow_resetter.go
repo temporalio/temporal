@@ -5,7 +5,6 @@ package ndc
 import (
 	"context"
 	"errors"
-	"fmt"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -42,7 +41,7 @@ const (
 )
 
 var (
-	errWorkflowResetterMaxChildren = serviceerror.NewInvalidArgument(fmt.Sprintf("WorkflowResetter encountered max allowed children [%d] while resetting.", maxChildrenInResetMutableState))
+	errWorkflowResetterMaxChildren = serviceerror.NewInvalidArgumentf("WorkflowResetter encountered max allowed children [%d] while resetting.", maxChildrenInResetMutableState)
 )
 
 type (
@@ -504,10 +503,10 @@ func (r *workflowResetterImpl) failWorkflowTask(
 		//  meaning workflow history has NO workflow task ever
 		//  should also allow workflow reset, the only remaining issues are
 		//  * what if workflow is a cron workflow, e.g. should add a workflow task directly or still respect the cron job
-		return serviceerror.NewInvalidArgument(fmt.Sprintf(
+		return serviceerror.NewInvalidArgumentf(
 			"Can only reset workflow to event ID in range [WorkflowTaskScheduled +1, WorkflowTaskStarted + 1]: %v",
 			baseRebuildLastEventID+1,
-		))
+		)
 	}
 
 	var err error
@@ -1095,7 +1094,7 @@ func reapplyChildEvents(mutableState historyi.MutableState, event *historypb.His
 			return err
 		}
 	default:
-		return serviceerror.NewInternal(fmt.Sprintf("WorkflowResetter encountered an unexpected child event: [%s]", event.GetEventType().String()))
+		return serviceerror.NewInternalf("WorkflowResetter encountered an unexpected child event: [%s]", event.GetEventType().String())
 	}
 	return nil
 }

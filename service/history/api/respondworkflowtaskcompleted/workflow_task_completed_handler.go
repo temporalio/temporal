@@ -311,7 +311,7 @@ func (handler *workflowTaskCompletedHandler) handleCommand(
 		// Nexus command handlers are registered in /components/nexusoperations/workflow/commands.go
 		ch, ok := handler.commandHandlerRegistry.Handler(command.GetCommandType())
 		if !ok {
-			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Unknown command type: %v", command.GetCommandType()))
+			return nil, serviceerror.NewInvalidArgumentf("Unknown command type: %v", command.GetCommandType())
 		}
 		validator := commandValidator{sizeChecker: handler.sizeLimitChecker, commandType: command.GetCommandType()}
 		err := ch(ctx, handler.mutableState, validator, handler.workflowTaskCompletedID, command)
@@ -366,7 +366,7 @@ func (handler *workflowTaskCompletedHandler) handleMessage(
 			// Update was not found in the registry and can't be resurrected.
 			return handler.failWorkflowTask(
 				enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_UPDATE_WORKFLOW_EXECUTION_MESSAGE,
-				serviceerror.NewNotFound(fmt.Sprintf("update %s wasn't found on the server. This is most likely a transient error which will be resolved automatically by retries", message.ProtocolInstanceId)))
+				serviceerror.NewNotFoundf("update %s wasn't found on the server. This is most likely a transient error which will be resolved automatically by retries", message.ProtocolInstanceId))
 		}
 
 		if err := upd.OnProtocolMessage(message, workflow.WithEffects(handler.effects, handler.mutableState)); err != nil {
@@ -376,7 +376,7 @@ func (handler *workflowTaskCompletedHandler) handleMessage(
 	default:
 		return handler.failWorkflowTask(
 			enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_UPDATE_WORKFLOW_EXECUTION_MESSAGE,
-			serviceerror.NewInvalidArgument(fmt.Sprintf("unsupported protocol type %s", protocolType)))
+			serviceerror.NewInvalidArgumentf("unsupported protocol type %s", protocolType))
 	}
 
 	return nil
@@ -407,7 +407,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandProtocolMessage(
 	}
 	return handler.failWorkflowTask(
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_UPDATE_WORKFLOW_EXECUTION_MESSAGE,
-		serviceerror.NewInvalidArgument(fmt.Sprintf("ProtocolMessageCommand referenced absent message ID %s", attr.MessageId)),
+		serviceerror.NewInvalidArgumentf("ProtocolMessageCommand referenced absent message ID %s", attr.MessageId),
 	)
 }
 
@@ -1158,7 +1158,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandUpsertWorkflowSearchAt
 	namespaceID := namespace.ID(executionInfo.NamespaceId)
 	namespaceEntry, err := handler.namespaceRegistry.GetNamespaceByID(namespaceID)
 	if err != nil {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("Unable to get namespace for namespaceID: %v.", namespaceID))
+		return nil, serviceerror.NewUnavailablef("Unable to get namespace for namespaceID: %v.", namespaceID)
 	}
 	namespace := namespaceEntry.Name()
 
@@ -1226,7 +1226,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandModifyWorkflowProperti
 	namespaceID := namespace.ID(executionInfo.NamespaceId)
 	_, err := handler.namespaceRegistry.GetNamespaceByID(namespaceID)
 	if err != nil {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("Unable to get namespace for namespaceID: %v.", namespaceID))
+		return nil, serviceerror.NewUnavailablef("Unable to get namespace for namespaceID: %v.", namespaceID)
 	}
 
 	// valid properties

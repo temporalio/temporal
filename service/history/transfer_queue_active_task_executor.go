@@ -888,14 +888,11 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		},
 	}
 
-	parentPinnedVersion := ""
 	var parentPinnedDeploymentVersion *deploymentpb.WorkerDeploymentVersion
 	var parentPinnedOverride *workflowpb.VersioningOverride
 	if attributes.TaskQueue.GetName() == mutableState.GetExecutionInfo().GetTaskQueue() {
 		// TODO (shahab): also inherit when the child TQ is different, but in the same Version
 		if mutableState.GetEffectiveVersioningBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED {
-			parentPinnedVersion = worker_versioning.WorkerDeploymentVersionToString(
-				worker_versioning.DeploymentVersionFromDeployment(mutableState.GetEffectiveDeployment()))
 			parentPinnedDeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(mutableState.GetEffectiveDeployment())
 		}
 		if worker_versioning.OverrideIsPinned(mutableState.GetExecutionInfo().GetVersioningInfo().GetVersioningOverride()) {
@@ -915,7 +912,6 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		inheritedBuildId,
 		initiatedEvent.GetUserMetadata(),
 		shouldTerminateAndStartChild,
-		parentPinnedVersion,
 		parentPinnedDeploymentVersion,
 		parentPinnedOverride,
 		priorities.Merge(mutableState.GetExecutionInfo().Priority, attributes.Priority),
@@ -1489,7 +1485,6 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 	inheritedBuildId string,
 	userMetadata *sdkpb.UserMetadata,
 	shouldTerminateAndStartChild bool,
-	parentPinnedVersion string,
 	parentPinnedDeploymentVersion *deploymentpb.WorkerDeploymentVersion,
 	parentPinnedOverride *workflowpb.VersioningOverride,
 	priority *commonpb.Priority,
@@ -1527,11 +1522,10 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 				WorkflowId: task.WorkflowID,
 				RunId:      task.RunID,
 			},
-			InitiatedId:                   task.InitiatedEventID,
-			InitiatedVersion:              task.Version,
-			Clock:                         vclock.NewVectorClock(t.shardContext.GetClusterMetadata().GetClusterID(), t.shardContext.GetShardID(), task.TaskID),
-			PinnedWorkerDeploymentVersion: parentPinnedVersion,
-			PinnedDeploymentVersion:       parentPinnedDeploymentVersion,
+			InitiatedId:             task.InitiatedEventID,
+			InitiatedVersion:        task.Version,
+			Clock:                   vclock.NewVectorClock(t.shardContext.GetClusterMetadata().GetClusterID(), t.shardContext.GetShardID(), task.TaskID),
+			PinnedDeploymentVersion: parentPinnedDeploymentVersion,
 		},
 		rootExecutionInfo,
 		t.shardContext.GetTimeSource().Now(),

@@ -364,7 +364,7 @@ func ValidateDeploymentVersionString(version string) (*deploymentspb.WorkerDeplo
 	}
 	v, err := WorkerDeploymentVersionFromString(version)
 	if err != nil {
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("invalid version string %q, expected format is \"<deployment_name>.<build_id>\"", version))
+		return nil, serviceerror.NewInvalidArgumentf("invalid version string %q, expected format is \"<deployment_name>.<build_id>\"", version)
 	}
 	return v, nil
 }
@@ -413,7 +413,8 @@ func ValidateVersioningOverride(override *workflowpb.VersioningOverride) error {
 	case enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED:
 		return serviceerror.NewInvalidArgument("override behavior is required")
 	default:
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("override behavior %s not recognized", override.GetBehavior()))
+		//nolint:staticcheck // SA1019 deprecated stamp will clean up later
+		return serviceerror.NewInvalidArgumentf("override behavior %s not recognized", override.GetBehavior())
 	}
 	return nil
 }
@@ -504,9 +505,9 @@ func ValidateTaskVersionDirective(
 		// TODO (shahab): remove this line after v1.27 is released.
 		directiveBehavior != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
 		// This must be a task scheduled before the workflow changes behavior. Matching can drop it.
-		return serviceerrors.NewObsoleteMatchingTask(fmt.Sprintf(
+		return serviceerrors.NewObsoleteMatchingTaskf(
 			"task was scheduled when workflow had versioning behavior %s, now it has versioning behavior %s.",
-			directiveBehavior, wfBehavior))
+			directiveBehavior, wfBehavior)
 	}
 
 	directiveDeployment := DirectiveDeployment(directive)
@@ -517,9 +518,9 @@ func ValidateTaskVersionDirective(
 	if !directiveDeployment.Equal(wfDeployment) {
 		// This must be a task scheduled before the workflow transitions to the current
 		// deployment. Matching can drop it.
-		return serviceerrors.NewObsoleteMatchingTask(fmt.Sprintf(
+		return serviceerrors.NewObsoleteMatchingTaskf(
 			"task was scheduled when workflow was on build %s, now it is on build %s.",
-			directiveDeployment.GetBuildId(), wfDeployment.GetBuildId()))
+			directiveDeployment.GetBuildId(), wfDeployment.GetBuildId())
 	}
 	return nil
 }
@@ -660,6 +661,11 @@ func WorkerDeploymentVersionFromString(s string) (*deploymentspb.WorkerDeploymen
 // workflowID which are used in our Worker Deployment workflows
 func GenerateDeploymentWorkflowID(deploymentName string) string {
 	return WorkerDeploymentWorkflowIDPrefix + WorkerDeploymentVersionWorkflowIDDelimeter + deploymentName
+}
+
+func GetDeploymentNameFromWorkflowID(workflowID string) string {
+	_, deploymentName, _ := strings.Cut(workflowID, WorkerDeploymentVersionWorkflowIDDelimeter)
+	return deploymentName
 }
 
 // GenerateVersionWorkflowID is a helper that generates a system accepted

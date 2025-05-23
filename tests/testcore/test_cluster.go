@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path"
 	"testing"
@@ -43,6 +44,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/testing/freeport"
 	"go.temporal.io/server/temporal"
+	"go.temporal.io/server/temporal/environment"
 	"go.temporal.io/server/tests/testutils"
 	"go.uber.org/fx"
 	"go.uber.org/multierr"
@@ -80,15 +82,12 @@ type (
 		WorkerConfig           WorkerConfig
 		ESConfig               *esclient.Config
 		MockAdminClient        map[string]adminservice.AdminServiceClient
-		FaultInjection         config.FaultInjection     `yaml:"faultInjection"`
-		DynamicConfigOverrides map[dynamicconfig.Key]any `yaml:"-"`
+		FaultInjection         *config.FaultInjection
+		DynamicConfigOverrides map[dynamicconfig.Key]any
 		EnableMTLS             bool
 		EnableMetricsCapture   bool
 		// ServiceFxOptions can be populated using WithFxOptionsForService.
 		ServiceFxOptions map[primitives.ServiceName][]fx.Option
-
-		DeprecatedFrontendAddress string `yaml:"frontendAddress"`
-		DeprecatedClusterNo       int    `yaml:"clusterno"`
 	}
 
 	TestClusterFactory interface {
@@ -143,11 +142,11 @@ type PersistenceTestBaseFactory interface {
 type defaultPersistenceTestBaseFactory struct{}
 
 func (f *defaultPersistenceTestBaseFactory) NewTestBase(options *persistencetests.TestBaseOptions) *persistencetests.TestBase {
-	options.StoreType = TestFlags.PersistenceType
-	switch TestFlags.PersistenceType {
+	options.StoreType = cliFlags.persistenceType
+	switch cliFlags.persistenceType {
 	case config.StoreTypeSQL:
 		var ops *persistencetests.TestBaseOptions
-		switch TestFlags.PersistenceDriver {
+		switch cliFlags.persistenceDriver {
 		case mysql.PluginName:
 			ops = persistencetests.GetMySQLTestClusterOption()
 		case postgresql.PluginName:
@@ -157,9 +156,10 @@ func (f *defaultPersistenceTestBaseFactory) NewTestBase(options *persistencetest
 		case sqlite.PluginName:
 			ops = persistencetests.GetSQLiteMemoryTestClusterOption()
 		default:
-			panic(fmt.Sprintf("unknown sql store driver: %v", TestFlags.PersistenceDriver))
+			//nolint:forbidigo // test code
+			panic(fmt.Sprintf("unknown sql store driver: %v", cliFlags.persistenceDriver))
 		}
-		options.SQLDBPluginName = TestFlags.PersistenceDriver
+		options.SQLDBPluginName = cliFlags.persistenceDriver
 		options.DBUsername = ops.DBUsername
 		options.DBPassword = ops.DBPassword
 		options.DBHost = ops.DBHost
@@ -169,7 +169,15 @@ func (f *defaultPersistenceTestBaseFactory) NewTestBase(options *persistencetest
 	case config.StoreTypeNoSQL:
 		// noop for now
 	default:
+		//nolint:forbidigo // test code
 		panic(fmt.Sprintf("unknown store type: %v", options.StoreType))
+	}
+
+	if cliFlags.enableFaultInjection != "" && options.FaultInjection == nil {
+		// If -enableFaultInjection is passed to the test runner, then default fault injection config is added to the persistence options.
+		// If FaultInjectionConfig is already set by test, then it means that this test requires
+		// a specific fault injection configuration that takes precedence over a default one.
+		options.FaultInjection = config.DefaultFaultInjection()
 	}
 
 	return persistencetests.NewTestBase(options)
@@ -221,7 +229,7 @@ func newClusterWithPersistenceTestBaseFactory(t *testing.T, clusterConfig *TestC
 		}
 	}
 	clusterConfig.Persistence.Logger = logger
-	clusterConfig.Persistence.FaultInjection = &clusterConfig.FaultInjection
+	clusterConfig.Persistence.FaultInjection = clusterConfig.FaultInjection
 
 	testBase := tbFactory.NewTestBase(&clusterConfig.Persistence)
 
@@ -235,10 +243,16 @@ func newClusterWithPersistenceTestBaseFactory(t *testing.T, clusterConfig *TestC
 		indexName string
 		esClient  esclient.Client
 	)
-	if !UseSQLVisibility() && clusterConfig.ESConfig != nil {
-		// Randomize index name to avoid cross tests interference.
-		for k, v := range clusterConfig.ESConfig.Indices {
-			clusterConfig.ESConfig.Indices[k] = fmt.Sprintf("%v-%v", v, uuid.New())
+	if !UseSQLVisibility() {
+		clusterConfig.ESConfig = &esclient.Config{
+			Indices: map[string]string{
+				esclient.VisibilityAppName: RandomizeStr("temporal_visibility_v1_test"),
+			},
+			URL: url.URL{
+				Host:   fmt.Sprintf("%s:%d", environment.GetESAddress(), environment.GetESPort()),
+				Scheme: "http",
+			},
+			Version: environment.GetESVersion(),
 		}
 
 		err := setupIndex(clusterConfig.ESConfig, logger)
