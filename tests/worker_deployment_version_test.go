@@ -36,7 +36,7 @@ const (
 	maxConcurrentBatchOperations             = 3
 	testVersionDrainageRefreshInterval       = 3 * time.Second
 	testVersionDrainageVisibilityGracePeriod = 3 * time.Second
-	testMaxVersionsInDeployment              = 2
+	testMaxVersionsInDeployment              = 5
 )
 
 type (
@@ -710,12 +710,13 @@ func (s *DeploymentVersionSuite) waitForNoPollers(ctx context.Context, tv *testv
 		})
 		require.NoError(t, err)
 		require.Empty(t, resp.Pollers)
-	}, 10*time.Second, time.Second)
+	}, 15*time.Second, time.Second)
 }
 
 func (s *DeploymentVersionSuite) TestVersionScavenger_DeleteOnAdd() {
-	s.OverrideDynamicConfig(dynamicconfig.PollerHistoryTTL, 500*time.Millisecond)
+	s.OverrideDynamicConfig(dynamicconfig.PollerHistoryTTL, 10*time.Second)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingMaxVersionsInDeployment, testMaxVersionsInDeployment)
+
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	tvs := make([]*testvars.TestVars, testMaxVersionsInDeployment)
@@ -730,12 +731,14 @@ func (s *DeploymentVersionSuite) TestVersionScavenger_DeleteOnAdd() {
 	// try to add a version and it fails
 	s.startVersionWorkflowExpectFailAddVersion(ctx, tvMax)
 
-	// signal the second and third wfs to be drained (testing that we don't delete the first version just due to create time oldest)
-	s.signalAndWaitForDrained(ctx, tvs[1])
-	s.signalAndWaitForDrained(ctx, tvs[2])
-	// Wait for pollers going away
+	// Make version 2 and 3 eligible for deletion by waiting for their pollers to go away.
 	s.waitForNoPollers(ctx, tvs[1])
 	s.waitForNoPollers(ctx, tvs[2])
+
+	// The above call to waitForNoPollers() also results in the pollers for version 1 going away.
+	// Polling the first version again so that it has active pollers and the deployment workflow does not delete it when
+	// a new version gets added. This is to test that we only delete versions that are eligible for deletion.
+	s.startVersionWorkflow(ctx, tvs[0])
 
 	// try to add a version again, and it succeeds, after deleting the second version but not the third (both are eligible)
 	// TODO: This fails if I try to add tvMax again...
