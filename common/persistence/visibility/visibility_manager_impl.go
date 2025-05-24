@@ -179,6 +179,13 @@ func (p *visibilityManagerImpl) GetWorkflowExecution(
 	return &manager.GetWorkflowExecutionResponse{Execution: execution}, err
 }
 
+func (p *visibilityManagerImpl) AddSearchAttributes(
+	ctx context.Context,
+	request *manager.AddSearchAttributesRequest,
+) error {
+	return p.store.AddSearchAttributes(ctx, request)
+}
+
 func (p *visibilityManagerImpl) newInternalVisibilityRequestBase(
 	request *manager.VisibilityRequestBase,
 ) (*store.InternalVisibilityRequestBase, error) {

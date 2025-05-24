@@ -730,6 +730,7 @@ pollLoop:
 					tag.WorkflowID(task.event.Data.GetWorkflowId()),
 					tag.WorkflowRunID(task.event.Data.GetRunId()),
 					tag.TaskID(task.event.GetTaskId()),
+					tag.WorkflowScheduledEventID(task.event.Data.GetScheduledEventId()),
 					tag.TaskVisibilityTimestamp(timestamp.TimeValue(task.event.Data.GetCreateTime())),
 					tag.VersioningBehavior(task.event.Data.VersionDirective.GetBehavior()),
 					//nolint:staticcheck // SA1019 deprecated WorkerVersionCapabilities will clean up later
@@ -831,7 +832,7 @@ func (e *matchingEngineImpl) nonRetryableErrorsDropTask(task *internalTask, task
 		tag.WorkflowRunID(task.event.Data.GetRunId()),
 		tag.WorkflowTaskQueueName(taskQueueName),
 		tag.TaskID(task.event.GetTaskId()),
-		tag.WorkflowEventID(task.event.Data.GetScheduledEventId()),
+		tag.WorkflowScheduledEventID(task.event.Data.GetScheduledEventId()),
 		tag.Error(err),
 		tag.ErrorType(err),
 	)
@@ -950,6 +951,7 @@ pollLoop:
 					tag.WorkflowID(task.event.Data.GetWorkflowId()),
 					tag.WorkflowRunID(task.event.Data.GetRunId()),
 					tag.TaskID(task.event.GetTaskId()),
+					tag.WorkflowScheduledEventID(task.event.Data.GetScheduledEventId()),
 					tag.TaskVisibilityTimestamp(timestamp.TimeValue(task.event.Data.GetCreateTime())),
 					tag.VersioningBehavior(task.event.Data.VersionDirective.GetBehavior()),
 					//nolint:staticcheck // SA1019 deprecated WorkerVersionCapabilities will clean up later
@@ -965,6 +967,7 @@ pollLoop:
 					tag.WorkflowID(task.event.Data.GetWorkflowId()),
 					tag.WorkflowRunID(task.event.Data.GetRunId()),
 					tag.TaskID(task.event.GetTaskId()),
+					tag.WorkflowScheduledEventID(task.event.Data.GetScheduledEventId()),
 					tag.TaskVisibilityTimestamp(timestamp.TimeValue(task.event.Data.GetCreateTime())),
 					tag.VersioningBehavior(task.event.Data.VersionDirective.GetBehavior()),
 					//nolint:staticcheck // SA1019 deprecated WorkerVersionCapabilities will clean up later
