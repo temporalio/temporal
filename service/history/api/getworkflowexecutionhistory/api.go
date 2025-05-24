@@ -183,6 +183,7 @@ func Invoke(
 		continuationToken.PersistenceToken = nil
 	}
 
+	// TODO: extract this to a func
 	// TODO: remove this after it start to support it
 	if clientName, _ := headers.GetClientNameAndVersion(ctx); clientName == headers.ClientNameCLI || clientName == headers.ClientNameUI {
 		// Pretend that there is NO transient or speculative WFT if a client is CLI or UI because they don't support it.

@@ -3026,6 +3026,10 @@ func (s *UpdateWorkflowSuite) TestScheduledSpeculativeWorkflowTask_TerminateWork
 
 	events := s.GetHistory(s.Namespace().String(), tv.WorkflowExecution())
 
+	// TODO: when WF is terminated, and WFT is only scheduled but not started is not getting failed
+	// and it also is not cleaned out from the memory and not converted to normal because when converted function
+	// is called, WF is already terminated and conversion logic is skipped.
+	// Previously, history simple didn't include WTScheduled event but with change in ths PR is does.
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
