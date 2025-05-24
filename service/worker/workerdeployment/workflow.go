@@ -983,7 +983,7 @@ func (d *WorkflowRunner) getLatestVersionSummary() *deploymentpb.WorkerDeploymen
 func (d *WorkflowRunner) getCurrentVersionSummary() *deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary {
 	// The deployment workflow still uses the deprecated fields from v0.31. Hence, the current version is read from
 	// CurrentVersion and not CurrentDeploymentVersion. This shall change before GA.
-	currentVersion := d.GetState().GetRoutingConfig().GetCurrentVersion()
+	currentVersion := d.GetState().GetRoutingConfig().GetCurrentVersion() //nolint:staticcheck
 	currentVersionSummary := d.GetState().GetVersions()[currentVersion]
 
 	if currentVersionSummary == nil {
@@ -1005,7 +1005,7 @@ func (d *WorkflowRunner) getCurrentVersionSummary() *deploymentpb.WorkerDeployme
 func (d *WorkflowRunner) getRampingVersionSummary() *deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary {
 	// The deployment workflow still uses the deprecated fields from v0.31. Hence, the ramping version is read from
 	// RampingVersion and not RampingDeploymentVersion. This shall change before GA.
-	rampingVersion := d.GetState().GetRoutingConfig().GetRampingVersion()
+	rampingVersion := d.GetState().GetRoutingConfig().GetRampingVersion() //nolint:staticcheck
 	rampingVersionSummary := d.GetState().GetVersions()[rampingVersion]
 
 	if rampingVersionSummary == nil {
