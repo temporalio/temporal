@@ -3519,6 +3519,18 @@ func (wh *WorkflowHandler) ListWorkerDeployments(ctx context.Context, request *w
 
 	workerDeployments := make([]*workflowservice.ListWorkerDeploymentsResponse_WorkerDeploymentSummary, len(resp))
 	for i, d := range resp {
+
+		// Converting the version to v0.32 format.
+		if d.GetLatestVersionSummary() != nil {
+			d.GetLatestVersionSummary().DeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromString(d.GetLatestVersionSummary().GetVersion())
+		}
+		if d.GetRampingVersionSummary() != nil {
+			d.GetRampingVersionSummary().DeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromString(d.GetRampingVersionSummary().GetVersion())
+		}
+		if d.GetCurrentVersionSummary() != nil {
+			d.GetCurrentVersionSummary().DeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromString(d.GetCurrentVersionSummary().GetVersion())
+		}
+
 		workerDeployments[i] = &workflowservice.ListWorkerDeploymentsResponse_WorkerDeploymentSummary{
 			Name:                  d.Name,
 			CreateTime:            d.CreateTime,

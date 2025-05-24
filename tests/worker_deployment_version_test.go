@@ -36,7 +36,7 @@ const (
 	maxConcurrentBatchOperations             = 3
 	testVersionDrainageRefreshInterval       = 3 * time.Second
 	testVersionDrainageVisibilityGracePeriod = 3 * time.Second
-	testMaxVersionsInDeployment              = 5
+	testMaxVersionsInDeployment              = 2
 )
 
 type (

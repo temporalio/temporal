@@ -309,6 +309,11 @@ func (d *WorkflowRunner) handleRegisterWorker(ctx workflow.Context, args *deploy
 		return err
 	}
 
+	err = d.updateMemo(ctx)
+	if err != nil {
+		return err
+	}
+
 	d.setStateChanged()
 	return nil
 }
@@ -920,7 +925,6 @@ func (d *WorkflowRunner) newUUID(ctx workflow.Context) string {
 }
 
 func (d *WorkflowRunner) updateMemo(ctx workflow.Context) error {
-
 	return workflow.UpsertMemo(ctx, map[string]any{
 		WorkerDeploymentMemoField: &deploymentspb.WorkerDeploymentWorkflowMemo{
 			DeploymentName:        d.DeploymentName,
@@ -965,7 +969,7 @@ func (d *WorkflowRunner) getLatestVersionSummary() *deploymentpb.WorkerDeploymen
 	}
 	latest_summary := sortedSummaries[len(sortedSummaries)-1]
 	return &deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary{
-		DeploymentVersion:    worker_versioning.ExternalWorkerDeploymentVersionFromString(latest_summary.GetVersion()),
+		Version:              latest_summary.GetVersion(),
 		CreateTime:           latest_summary.GetCreateTime(),
 		DrainageInfo:         latest_summary.GetDrainageInfo(),
 		CurrentSinceTime:     latest_summary.GetCurrentSinceTime(),
@@ -982,8 +986,12 @@ func (d *WorkflowRunner) getCurrentVersionSummary() *deploymentpb.WorkerDeployme
 	currentVersion := d.GetState().GetRoutingConfig().GetCurrentVersion()
 	currentVersionSummary := d.GetState().GetVersions()[currentVersion]
 
+	if currentVersionSummary == nil {
+		return nil
+	}
+
 	return &deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary{
-		DeploymentVersion:    worker_versioning.ExternalWorkerDeploymentVersionFromString(currentVersion),
+		Version:              currentVersion,
 		CreateTime:           currentVersionSummary.GetCreateTime(),
 		DrainageInfo:         currentVersionSummary.GetDrainageInfo(),
 		CurrentSinceTime:     currentVersionSummary.GetCurrentSinceTime(),
@@ -1000,8 +1008,12 @@ func (d *WorkflowRunner) getRampingVersionSummary() *deploymentpb.WorkerDeployme
 	rampingVersion := d.GetState().GetRoutingConfig().GetRampingVersion()
 	rampingVersionSummary := d.GetState().GetVersions()[rampingVersion]
 
+	if rampingVersionSummary == nil {
+		return nil
+	}
+
 	return &deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary{
-		DeploymentVersion:    worker_versioning.ExternalWorkerDeploymentVersionFromString(rampingVersion),
+		Version:              rampingVersion,
 		CreateTime:           rampingVersionSummary.GetCreateTime(),
 		DrainageInfo:         rampingVersionSummary.GetDrainageInfo(),
 		CurrentSinceTime:     rampingVersionSummary.GetCurrentSinceTime(),
