@@ -1060,6 +1060,11 @@ See DynamicRateLimitingParams comments for more details.`,
 		time.Minute,
 		`MatchingLongPollExpirationInterval is the long poll expiration interval in the matching service`,
 	)
+	MatchingTaskQueueRateLimiterRefreshInterval = NewTaskQueueDurationSetting(
+		"matching.taskQueueRateLimiterRefreshInterval",
+		time.Minute,
+		`MatchingTaskQueueRateLimiterRefreshInterval is the refresh interval for the task queue rate limiter`,
+	)
 	// TODO(pri): old matcher cleanup
 	MatchingSyncMatchWaitDuration = NewTaskQueueDurationSetting(
 		"matching.syncMatchWaitDuration",
