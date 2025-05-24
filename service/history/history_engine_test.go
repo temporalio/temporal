@@ -52,6 +52,7 @@ import (
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/api/getworkflowexecutionrawhistoryv2"
@@ -82,6 +83,7 @@ type (
 		suite.Suite
 		*require.Assertions
 		protorequire.ProtoAssertions
+		historyrequire.HistoryRequire
 
 		controller               *gomock.Controller
 		mockShard                *shard.ContextTest
@@ -127,6 +129,7 @@ func (s *engineSuite) TearDownSuite() {
 func (s *engineSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.ProtoAssertions = protorequire.New(s.T())
+	s.HistoryRequire = historyrequire.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
 	s.mockEventsReapplier = ndc.NewMockEventsReapplier(s.controller)
@@ -5676,64 +5679,55 @@ func (s *engineSuite) TestGetWorkflowExecutionHistoryWhenInternalRawHistoryIsEna
 	s.Equal(enumspb.RETRY_STATE_IN_PROGRESS, attrs.RetryState)
 }
 
-func (s *engineSuite) TestGetWorkflowExecutionHistory_RawHistoryWithTransientDecision() {
+func (s *engineSuite) TestGetWorkflowExecutionHistory_RawHistoryWithTransientWorkflowTask() {
 	we := commonpb.WorkflowExecution{WorkflowId: "wid1", RunId: uuid.New()}
-
-	engine, err := s.historyEngine.shardContext.GetEngine(context.Background())
-	s.NoError(err)
-
 	branchToken := []byte{1, 2, 3}
-	persistenceToken := []byte("some random persistence token")
-	nextPageToken, err := api.SerializeHistoryToken(&tokenspb.HistoryContinuation{
-		RunId:            we.GetRunId(),
-		FirstEventId:     common.FirstEventID,
-		NextEventId:      5,
-		PersistenceToken: persistenceToken,
-		TransientWorkflowTask: &historyspb.TransientWorkflowTaskInfo{
-			HistorySuffix: []*historypb.HistoryEvent{
-				{
-					EventId:   5,
-					EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
-				},
-				{
-					EventId:   6,
-					EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
-				},
-			},
-		},
-		BranchToken: branchToken,
+	taskqueue := "testTaskQueue"
+	identity := "testIdentity"
+
+	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache, tests.LocalNamespaceEntry,
+		we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &we, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
+	wt := addWorkflowTaskScheduledEvent(ms)
+	wft1StartedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, taskqueue, identity)
+	wft1FailedEvent := addWorkflowTaskFailedEvent(&s.Suite, ms, wt.ScheduledEventID, wft1StartedEvent.GetEventId(), identity)
+
+	versionHistory := versionhistory.NewVersionHistory(branchToken, []*historyspb.VersionHistoryItem{
+		versionhistory.NewVersionHistoryItem(int64(1), int64(0)),
 	})
-	s.NoError(err)
-	s.config.SendRawWorkflowHistory = func(string) bool { return true }
-	req := &historyservice.GetWorkflowExecutionHistoryRequest{
-		NamespaceId: tests.NamespaceID.String(),
-		Request: &workflowservice.GetWorkflowExecutionHistoryRequest{
-			Execution:              &we,
-			MaximumPageSize:        10,
-			NextPageToken:          nextPageToken,
-			WaitNewEvent:           false,
-			HistoryEventFilterType: enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT,
-			SkipArchival:           true,
-		},
-	}
+	ms.GetExecutionInfo().VersionHistories = versionhistory.NewVersionHistories(versionHistory)
+
+	// Schedule second WFT. Because previous WFT failed, this one will be transient.
+	wt2 := addWorkflowTaskScheduledEvent(ms)
+	s.NotNil(wt2)
+	s.EqualValues(2, wt2.Attempt)
+	wft2StartedEvent := addWorkflowTaskStartedEvent(ms, wt2.ScheduledEventID, taskqueue, identity)
+	s.Nil(wft2StartedEvent, "WTStarted event must be empty for transient WFT")
+	s.EqualValues(5, ms.GetNextEventID(), "WTScheduled and WTStarted events shouldn't affect NextEventID")
+
+	wfMs := workflow.TestCloneToProto(ms)
+	gweResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gweResponse, nil)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(tests.Namespace).Return(tests.NamespaceID, nil).AnyTimes()
 	historyBlob1, err := s.mockShard.GetPayloadSerializer().SerializeEvents(
 		[]*historypb.HistoryEvent{
 			{
-				EventId:   int64(3),
-				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
+				EventId:   1,
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 			},
+			{
+				EventId:   2,
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
+			},
+			wft1StartedEvent, // EventID=3
 		},
 		enumspb.ENCODING_TYPE_PROTO3,
 	)
 	s.NoError(err)
 	historyBlob2, err := s.mockShard.GetPayloadSerializer().SerializeEvents(
 		[]*historypb.HistoryEvent{
-			{
-				EventId:   int64(4),
-				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_TIMED_OUT,
-			},
+			wft1FailedEvent, // EventID=4
 		},
 		enumspb.ENCODING_TYPE_PROTO3,
 	)
@@ -5742,25 +5736,135 @@ func (s *engineSuite) TestGetWorkflowExecutionHistory_RawHistoryWithTransientDec
 		BranchToken:   branchToken,
 		MinEventID:    1,
 		MaxEventID:    5,
-		PageSize:      10,
-		NextPageToken: persistenceToken,
+		PageSize:      4,
+		NextPageToken: nil,
 		ShardID:       1,
 	}).Return(&persistence.ReadRawHistoryBranchResponse{
 		HistoryEventBlobs: []*commonpb.DataBlob{historyBlob1, historyBlob2},
-		NextPageToken:     []byte{},
+		NextPageToken:     nil,
 		Size:              1,
 	}, nil).Times(1)
 
+	s.config.SendRawWorkflowHistory = func(string) bool { return true }
+	req := &historyservice.GetWorkflowExecutionHistoryRequest{
+		NamespaceId: tests.NamespaceID.String(),
+		Request: &workflowservice.GetWorkflowExecutionHistoryRequest{
+			Execution:              &we,
+			MaximumPageSize:        4, // Requesting only 4 events but 6 will be returned (+2 transient WFT events).
+			NextPageToken:          nil,
+			WaitNewEvent:           false,
+			HistoryEventFilterType: enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT,
+			SkipArchival:           true,
+		},
+	}
 	ctx := headers.SetVersionsForTests(context.Background(), "1.10.1", headers.ClientNameGoSDK, headers.SupportedServerVersions, headers.AllFeatures)
-	resp, err := engine.GetWorkflowExecutionHistory(ctx, req)
+	ctx = interceptor.AddTelemetryContext(ctx, metrics.NoopMetricsHandler)
+	resp, err := s.historyEngine.GetWorkflowExecutionHistory(ctx, req)
 	s.NoError(err)
-	s.False(resp.Response.Archived)
 	s.Empty(resp.Response.History.Events)
 	s.Len(resp.Response.RawHistory, 3)
 	historyEvents, err := s.mockShard.GetPayloadSerializer().DeserializeEvents(resp.Response.RawHistory[2])
 	s.NoError(err)
-	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED, historyEvents[0].EventType)
-	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED, historyEvents[1].EventType)
+	s.HistoryRequire.EqualHistoryEvents(`
+  5 WorkflowTaskScheduled
+  6 WorkflowTaskStarted`, historyEvents)
+}
+
+func (s *engineSuite) TestGetWorkflowExecutionHistory_RawHistoryWithSpeculativeWorkflowTask() {
+	we := commonpb.WorkflowExecution{WorkflowId: "wid1", RunId: uuid.New()}
+	branchToken := []byte{1, 2, 3}
+	taskqueue := "testTaskQueue"
+	identity := "testIdentity"
+
+	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache, tests.LocalNamespaceEntry,
+		we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &we, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
+	wt := addWorkflowTaskScheduledEvent(ms)
+	wft1StartedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, taskqueue, identity)
+	wft1CompletedEvent := addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, wft1StartedEvent.GetEventId(), identity)
+
+	versionHistory := versionhistory.NewVersionHistory(branchToken, []*historyspb.VersionHistoryItem{
+		versionhistory.NewVersionHistoryItem(int64(1), int64(0)),
+	})
+	ms.GetExecutionInfo().VersionHistories = versionhistory.NewVersionHistories(versionHistory)
+
+	// Write MS first, and then schedule speculative WFT.
+	_, _, err := ms.CloseTransactionAsSnapshot(historyi.TransactionPolicyActive)
+	s.NoError(err)
+
+	// Schedule second WFT as speculative.
+	wt2, err := ms.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE)
+	s.NoError(err)
+	s.NotNil(wt2)
+	wft2StartedEvent := addWorkflowTaskStartedEvent(ms, wt2.ScheduledEventID, taskqueue, identity)
+	s.Nil(wft2StartedEvent, "WTStarted event must be empty for speculative WFT")
+	s.EqualValues(5, ms.GetNextEventID(), "WTScheduled and WTStarted events shouldn't affect NextEventID")
+
+	// Do not write ms because there is speculative WFT. Just serialize it.
+	wfMs := ms.CloneToProto()
+
+	gweResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gweResponse, nil)
+
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(tests.Namespace).Return(tests.NamespaceID, nil).AnyTimes()
+	historyBlob1, err := s.mockShard.GetPayloadSerializer().SerializeEvents(
+		[]*historypb.HistoryEvent{
+			{
+				EventId:   1,
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+			},
+			{
+				EventId:   2,
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
+			},
+			wft1StartedEvent, // EventID=3
+		},
+		enumspb.ENCODING_TYPE_PROTO3,
+	)
+	s.NoError(err)
+	historyBlob2, err := s.mockShard.GetPayloadSerializer().SerializeEvents(
+		[]*historypb.HistoryEvent{
+			wft1CompletedEvent, // EventID=4
+		},
+		enumspb.ENCODING_TYPE_PROTO3,
+	)
+	s.NoError(err)
+	s.mockExecutionMgr.EXPECT().ReadRawHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
+		BranchToken:   branchToken,
+		MinEventID:    1,
+		MaxEventID:    5,
+		PageSize:      4,
+		NextPageToken: nil,
+		ShardID:       1,
+	}).Return(&persistence.ReadRawHistoryBranchResponse{
+		HistoryEventBlobs: []*commonpb.DataBlob{historyBlob1, historyBlob2},
+		NextPageToken:     nil,
+		Size:              1,
+	}, nil).Times(1)
+
+	s.config.SendRawWorkflowHistory = func(string) bool { return true }
+	req := &historyservice.GetWorkflowExecutionHistoryRequest{
+		NamespaceId: tests.NamespaceID.String(),
+		Request: &workflowservice.GetWorkflowExecutionHistoryRequest{
+			Execution:              &we,
+			MaximumPageSize:        4, // Requesting only 4 events but 6 will be returned (+2 speculative WFT events).
+			NextPageToken:          nil,
+			WaitNewEvent:           false,
+			HistoryEventFilterType: enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT,
+			SkipArchival:           true,
+		},
+	}
+	ctx := headers.SetVersionsForTests(context.Background(), "1.10.1", headers.ClientNameGoSDK, headers.SupportedServerVersions, headers.AllFeatures)
+	ctx = interceptor.AddTelemetryContext(ctx, metrics.NoopMetricsHandler)
+	resp, err := s.historyEngine.GetWorkflowExecutionHistory(ctx, req)
+	s.NoError(err)
+	s.Empty(resp.Response.History.Events)
+	s.Len(resp.Response.RawHistory, 3)
+	historyEvents, err := s.mockShard.GetPayloadSerializer().DeserializeEvents(resp.Response.RawHistory[2])
+	s.NoError(err)
+	s.HistoryRequire.EqualHistoryEvents(`
+  5 WorkflowTaskScheduled
+  6 WorkflowTaskStarted`, historyEvents)
 }
 
 func (s *engineSuite) Test_GetWorkflowExecutionRawHistoryV2_FailedOnInvalidWorkflowID() {
@@ -6439,6 +6543,29 @@ func addWorkflowTaskCompletedEvent(s *suite.Suite, ms historyi.MutableState, sch
 	event, _ := ms.AddWorkflowTaskCompletedEvent(workflowTask, &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Identity: identity,
 	}, defaultWorkflowTaskCompletionLimits)
+
+	ms.FlushBufferedEvents()
+
+	return event
+}
+
+func addWorkflowTaskFailedEvent(s *suite.Suite, ms historyi.MutableState, scheduledEventID, startedEventID int64, identity string) *historypb.HistoryEvent {
+	workflowTask := ms.GetWorkflowTaskByID(scheduledEventID)
+	s.NotNil(workflowTask)
+	s.Equal(startedEventID, workflowTask.StartedEventID)
+
+	event, err := ms.AddWorkflowTaskFailedEvent(
+		workflowTask,
+		enumspb.WORKFLOW_TASK_FAILED_CAUSE_NON_DETERMINISTIC_ERROR,
+		failure.NewServerFailure("fake worker NDE", false),
+		identity,
+		nil,
+		"",
+		"",
+		"",
+		0,
+	)
+	s.NoError(err)
 
 	ms.FlushBufferedEvents()
 
