@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/gocql/gocql"
+
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -139,8 +140,6 @@ func (s *session) NewBatch(
 func (s *session) ExecuteBatch(
 	b *Batch,
 ) (retError error) {
-	defer func() { s.handleError(retError) }()
-
 	return s.Value.Load().(*gocql.Session).ExecuteBatch(b.gocqlBatch)
 }
 
@@ -148,8 +147,6 @@ func (s *session) MapExecuteBatchCAS(
 	b *Batch,
 	previous map[string]interface{},
 ) (_ bool, _ Iter, retError error) {
-	defer func() { s.handleError(retError) }()
-
 	applied, iter, err := s.Value.Load().(*gocql.Session).MapExecuteBatchCAS(b.gocqlBatch, previous)
 	return applied, iter, err
 }
@@ -157,8 +154,6 @@ func (s *session) MapExecuteBatchCAS(
 func (s *session) AwaitSchemaAgreement(
 	ctx context.Context,
 ) (retError error) {
-	defer func() { s.handleError(retError) }()
-
 	return s.Value.Load().(*gocql.Session).AwaitSchemaAgreement(ctx)
 }
 
@@ -171,16 +166,4 @@ func (s *session) Close() {
 		return
 	}
 	s.Value.Load().(*gocql.Session).Close()
-}
-
-func (s *session) handleError(
-	err error,
-) {
-	switch err {
-	case gocql.ErrNoConnections,
-		gocql.ErrSessionClosed:
-		s.refresh()
-	default:
-		// noop
-	}
 }
