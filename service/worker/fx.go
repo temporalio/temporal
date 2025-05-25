@@ -22,7 +22,6 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service"
-	"go.temporal.io/server/service/worker/addsearchattributes"
 	"go.temporal.io/server/service/worker/batcher"
 	workercommon "go.temporal.io/server/service/worker/common"
 	"go.temporal.io/server/service/worker/deletenamespace"
@@ -36,7 +35,6 @@ import (
 
 var Module = fx.Options(
 	migration.Module,
-	addsearchattributes.Module,
 	resource.Module,
 	deletenamespace.Module,
 	scheduler.Module,

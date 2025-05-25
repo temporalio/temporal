@@ -92,7 +92,7 @@ func (s *WorkerDeploymentSuite) pollFromDeploymentWithTaskQueueNumber(ctx contex
 	})
 }
 
-func (s *WorkerDeploymentSuite) pollFromDeploymentExpectFail(ctx context.Context, tv *testvars.TestVars) {
+func (s *WorkerDeploymentSuite) pollFromDeploymentExpectFail(ctx context.Context, tv *testvars.TestVars, expectedError string) {
 	_, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace:         s.Namespace().String(),
 		TaskQueue:         tv.TaskQueue(),
@@ -100,6 +100,7 @@ func (s *WorkerDeploymentSuite) pollFromDeploymentExpectFail(ctx context.Context
 		DeploymentOptions: tv.WorkerDeploymentOptions(true),
 	})
 	s.Error(err)
+	s.Equal(expectedError, err.Error())
 }
 
 func (s *WorkerDeploymentSuite) ensureCreateVersionWithExpectedTaskQueues(ctx context.Context, tv *testvars.TestVars, expectedTaskQueues int) {
@@ -208,30 +209,36 @@ func (s *WorkerDeploymentSuite) TestForceCAN_NoOpenWFS() {
 }
 
 func (s *WorkerDeploymentSuite) TestDeploymentVersionLimits() {
-	// TODO (carly): check the error messages that poller receives in each case and make sense they are informative and appropriate (e.g. do not expose internal stuff)
-
 	s.OverrideDynamicConfig(dynamicconfig.MatchingMaxVersionsInDeployment, 1)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingMaxTaskQueuesInDeploymentVersion, 1)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*120)
 	defer cancel()
 
-	tv := testvars.New(s)
+	firstDeployment := testvars.New(s).WithDeploymentSeriesNumber(1)
+	secondDeployment := testvars.New(s).WithDeploymentSeriesNumber(2)
+
+	firstDeploymentVersionOne := firstDeployment.WithBuildIDNumber(1)
+	firstDeploymentVersionTwo := firstDeployment.WithBuildIDNumber(2)
+
+	secondDeploymentVersionOne := secondDeployment.WithBuildIDNumber(1)
+
+	expectedErrorMaxVersions := fmt.Sprintf("cannot add version %v since maximum number of versions (1) have been registered in the deployment", firstDeploymentVersionTwo.DeploymentVersionString())
+	expectedErrorMaxTaskQueues := fmt.Sprintf("cannot add task queue %v since maximum number of task queues (1) have been registered in deployment", secondDeploymentVersionOne.WithTaskQueueNumber(2).TaskQueue().GetName())
 
 	// First deployment version should be fine
-	go s.pollFromDeployment(ctx, tv)
-	s.ensureCreateVersionInDeployment(tv)
+	go s.pollFromDeployment(ctx, firstDeploymentVersionOne)
+	s.ensureCreateVersionInDeployment(firstDeploymentVersionOne)
 
 	// pollers of second version in the same deployment should be rejected
-	s.pollFromDeploymentExpectFail(ctx, tv.WithBuildIDNumber(2))
+	s.pollFromDeploymentExpectFail(ctx, firstDeploymentVersionTwo, expectedErrorMaxVersions)
 
 	// But first version of another deployment fine
-	tv2 := tv.WithDeploymentSeriesNumber(2)
-	go s.pollFromDeployment(ctx, tv2)
-	s.ensureCreateVersionInDeployment(tv2)
+	go s.pollFromDeployment(ctx, secondDeploymentVersionOne)
+	s.ensureCreateVersionInDeployment(secondDeploymentVersionOne)
 
 	// pollers of the second TQ in the same deployment version should be rejected
-	s.pollFromDeploymentExpectFail(ctx, tv.WithTaskQueueNumber(2))
+	s.pollFromDeploymentExpectFail(ctx, secondDeploymentVersionOne.WithTaskQueueNumber(2), expectedErrorMaxTaskQueues)
 }
 
 func (s *WorkerDeploymentSuite) TestNamespaceDeploymentsLimit() {
@@ -250,7 +257,7 @@ func (s *WorkerDeploymentSuite) TestNamespaceDeploymentsLimit() {
 	s.ensureCreateVersionInDeployment(tv)
 
 	// pollers of the second deployment version should be rejected
-	s.pollFromDeploymentExpectFail(ctx, tv.WithDeploymentSeriesNumber(2))
+	s.pollFromDeploymentExpectFail(ctx, tv.WithDeploymentSeriesNumber(2), "Namespace deployments limit reached")
 }
 
 func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment_TwoVersions_Sorted() {
@@ -414,9 +421,12 @@ func (s *WorkerDeploymentSuite) TestConflictToken_Describe_SetCurrent_SetRamping
 }
 
 func (s *WorkerDeploymentSuite) TestConflictToken_SetCurrent_SetRamping_Wrong() {
+	s.OverrideDynamicConfig(dynamicconfig.FrontendMaskInternalErrorDetails, true)
+
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
 	tv := testvars.New(s)
+	expectedError := "conflict token mismatch"
 
 	firstVersion := tv.WithBuildIDNumber(1)
 
@@ -442,7 +452,7 @@ func (s *WorkerDeploymentSuite) TestConflictToken_SetCurrent_SetRamping_Wrong() 
 		Version:        firstVersion.DeploymentVersionString(),
 		ConflictToken:  cTWrong,
 	})
-	s.NotNil(err)
+	s.Equal(err.Error(), expectedError)
 
 	// Set first version as ramping version with wrong token
 	_, err = s.FrontendClient().SetWorkerDeploymentRampingVersion(ctx, &workflowservice.SetWorkerDeploymentRampingVersionRequest{
@@ -452,7 +462,7 @@ func (s *WorkerDeploymentSuite) TestConflictToken_SetCurrent_SetRamping_Wrong() 
 		Percentage:     5,
 		ConflictToken:  cTWrong,
 	})
-	s.NotNil(err)
+	s.Equal(err.Error(), expectedError)
 }
 
 // Testing ListWorkerDeployments
@@ -811,7 +821,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Invalid_Se
 		},
 	})
 
-	expectedError := fmt.Errorf("Ramping version %s is already current", currentVersionVars.DeploymentVersionString())
+	expectedError := fmt.Errorf("ramping version %s is already current", currentVersionVars.DeploymentVersionString())
 	s.setAndVerifyRampingVersion(ctx, currentVersionVars, false, 50, true, expectedError.Error(), nil) // setting current version to ramping should fail
 
 	resp, err = s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
@@ -1598,7 +1608,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Unversione
 	tv := testvars.New(s)
 	rampingVars := tv.WithBuildIDNumber(1)
 	s.startVersionWorkflow(ctx, rampingVars)
-	s.setAndVerifyRampingVersionUnversionedOption(ctx, rampingVars, true, false, 50, true, "Ramping version __unversioned__ is already current", nil)
+	s.setAndVerifyRampingVersionUnversionedOption(ctx, rampingVars, true, false, 50, true, "ramping version __unversioned__ is already current", nil)
 }
 
 // Should see that the ramping version of the task queues in the current version is unversioned

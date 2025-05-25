@@ -475,6 +475,8 @@ func (s *DeploymentVersionSuite) TestVersionIgnoresDrainageSignalWhenCurrentOrRa
 	}, time.Second*10, time.Millisecond*1000)
 }
 
+// Testing DeleteVersion
+
 func (s *DeploymentVersionSuite) TestDeleteVersion_DeleteCurrentVersion() {
 	// Override the dynamic config so that we can verify we don't get any unexpected masked errors.
 	s.OverrideDynamicConfig(dynamicconfig.FrontendMaskInternalErrorDetails, true)
