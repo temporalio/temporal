@@ -650,7 +650,7 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 
 	isAcceptingNewWorkflows := state.GetCurrentSinceTime() != nil || state.GetRampingSinceTime() != nil
 
-	// stopped accepting new workflows --> start drainage child wf
+	// stopped accepting new workflows --> start drainage tracking
 	if wasAcceptingNewWorkflows && !isAcceptingNewWorkflows {
 		// Version deactivated from current/ramping
 		d.VersionState.LastDeactivationTime = args.RoutingUpdateTime
@@ -708,6 +708,10 @@ func (d *VersionWorkflowRunner) syncSummary(ctx workflow.Context) {
 }
 
 func (d *VersionWorkflowRunner) refreshDrainageInfo(ctx workflow.Context) {
+	if d.VersionState.GetDrainageInfo().GetStatus() != enumspb.VERSION_DRAINAGE_STATUS_DRAINING {
+		return // only refresh when status is draining
+	}
+
 	defer func() {
 		// regardless of results mark state as dirty so we CaN in the first opportunity now that some
 		// history events are made.
@@ -717,7 +721,7 @@ func (d *VersionWorkflowRunner) refreshDrainageInfo(ctx workflow.Context) {
 	drainage := d.VersionState.GetDrainageInfo()
 	var interval time.Duration
 	var err error
-	if drainage.LastCheckedTime.AsTime() == drainage.LastCheckedTime.AsTime() {
+	if drainage.LastCheckedTime.AsTime() == drainage.LastChangedTime.AsTime() {
 		// this is the first update, so we wait according to the grace period config
 		interval, err = getSafeDurationConfig(ctx, "getVisibilityGracePeriod", d.unsafeVisibilityGracePeriodGetter, defaultVisibilityGrace)
 	} else {
