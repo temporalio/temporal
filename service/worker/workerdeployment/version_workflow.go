@@ -289,15 +289,9 @@ func (d *VersionWorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *
 	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
 
 	// Manual deletion of versions is only possible when:
-	// 1. The version is not current or ramping
+	// 1. The version is not current or ramping (checked in the deployment wf)
 	// 2. The version is not draining. (check skipped when `skip-drainage=true` )
 	// 3. The version has no active pollers.
-
-	// 1. Check if the version is not current or ramping.
-	if state.GetCurrentSinceTime() != nil || state.GetRampingSinceTime() != nil {
-		// activity won't retry on this error since version not eligible for deletion
-		return serviceerror.NewFailedPrecondition(ErrVersionIsCurrentOrRamping)
-	}
 
 	// 2. Check if the version is draining.
 	if !args.SkipDrainage {

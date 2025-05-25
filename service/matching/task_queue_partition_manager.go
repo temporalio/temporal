@@ -3,6 +3,7 @@ package matching
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -587,6 +588,7 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 			versions[k] = true
 		}
 	}
+	fmt.Printf("describe tq called in prtn %s with buildIds %v \n", pm.partition.RpcName(), buildIds)
 
 	for b := range buildIds {
 		if b == "" {
@@ -594,8 +596,10 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 		} else {
 			found := false
 			for k := range pm.versionedQueues {
+				fmt.Printf("checking version %v in prtn %s \n", k, pm.partition.RpcName())
 				// Storing the versioned queue if the buildID is a v2 based buildID or a versionID representing a worker-deployment version.
 				if k.BuildId() == b || worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(k.Deployment())) == b {
+					fmt.Printf("selected %v\n", k)
 					versions[k] = true
 					found = true
 					break
@@ -721,12 +725,20 @@ func (pm *taskQueuePartitionManagerImpl) TimeSinceLastFanOut() time.Duration {
 	return time.Since(time.Unix(0, pm.lastFanOut))
 }
 
-func (pm *taskQueuePartitionManagerImpl) UpdateTimeSinceLastFanOutAndCache(physicalInfoByBuildId map[string]map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo) {
+func (pm *taskQueuePartitionManagerImpl) UpdateTimeSinceLastFanOutAndCache(physicalInfoByBuildId map[string]map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo, upsert bool) {
 	pm.cachedPhysicalInfoByBuildIdLock.Lock()
 	defer pm.cachedPhysicalInfoByBuildIdLock.Unlock()
 
 	pm.lastFanOut = time.Now().UnixNano()
-	pm.cachedPhysicalInfoByBuildId = physicalInfoByBuildId
+	if upsert {
+		// still within the ttl of cache, so we upsert
+		for b, v := range physicalInfoByBuildId {
+			pm.cachedPhysicalInfoByBuildId[b] = v
+		}
+	} else {
+		// the existing entries in the cache are old, only keeping the new ones
+		pm.cachedPhysicalInfoByBuildId = physicalInfoByBuildId
+	}
 }
 
 func (pm *taskQueuePartitionManagerImpl) GetPhysicalTaskQueueInfoFromCache() map[string]map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo {

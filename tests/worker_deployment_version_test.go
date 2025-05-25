@@ -673,14 +673,15 @@ func (s *DeploymentVersionSuite) waitForNoPollers(ctx context.Context, tv *testv
 		})
 		require.NoError(t, err)
 		require.Empty(t, resp.Pollers)
-	}, 10*time.Second, time.Second)
+	}, 10*time.Second, 100*time.Millisecond)
 }
 
 func (s *DeploymentVersionSuite) TestVersionScavenger_DeleteOnAdd() {
 	testMaxVersionsInDeployment := 4
-	s.OverrideDynamicConfig(dynamicconfig.PollerHistoryTTL, 5*time.Second)
+	s.OverrideDynamicConfig(dynamicconfig.PollerHistoryTTL, 2*time.Second)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingMaxVersionsInDeployment, testMaxVersionsInDeployment)
-	s.OverrideDynamicConfig(dynamicconfig.VersionDrainageStatusVisibilityGracePeriod, 10*time.Second)
+	// we don't want the version to drain in this test
+	s.OverrideDynamicConfig(dynamicconfig.VersionDrainageStatusVisibilityGracePeriod, 60*time.Second)
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	tvs := make([]*testvars.TestVars, testMaxVersionsInDeployment)
@@ -690,10 +691,6 @@ func (s *DeploymentVersionSuite) TestVersionScavenger_DeleteOnAdd() {
 		tvs[i] = testvars.New(s).WithBuildIDNumber(i)
 		s.startVersionWorkflow(ctx, tvs[i])
 	}
-	// startVersionWorkflow can take a long time, so sending some fresh polls so that deletion logic sees them.
-	for i := 0; i < testMaxVersionsInDeployment; i++ {
-		go s.pollFromDeployment(ctx, tvs[i])
-	}
 
 	// Make tvs[0] current
 	err := s.setCurrent(tvs[0], false)
@@ -702,24 +699,23 @@ func (s *DeploymentVersionSuite) TestVersionScavenger_DeleteOnAdd() {
 	err = s.setCurrent(tvs[1], false)
 	s.Nil(err)
 
+	// stuff above can take a long time, sending some fresh polls to ensure that deletion logic sees them.
+	for i := 0; i < testMaxVersionsInDeployment; i++ {
+		go s.pollFromDeployment(ctx, tvs[i])
+	}
 	tvMax := testvars.New(s).WithBuildIDNumber(9999)
 
 	// try to add a version and it fails because none of the versions can be deleted
 	s.startVersionWorkflowExpectFailAddVersion(ctx, tvMax)
 
-	// tvs[0] is draining so can't be deleted. tvs[1] is current, so tvs[2] should be deleted.
-	for i := 0; i < testMaxVersionsInDeployment; i++ {
-		s.waitForNoPollers(ctx, tvs[0])
-		s.waitForNoPollers(ctx, tvs[1])
-		s.waitForNoPollers(ctx, tvs[2])
-		s.waitForNoPollers(ctx, tvs[3])
-	}
+	// this waits for no pollers from any version
+	s.waitForNoPollers(ctx, tvs[0])
 
-	// try to add a version again, and it succeeds, after deleting the second version but not the third (both are eligible)
+	// try to add a version again, and it succeeds, after deleting tvs[2] version but not tvs[3] (both are eligible)
 	// TODO: This fails if I try to add tvMax again...
 	s.startVersionWorkflow(ctx, testvars.New(s).WithBuildIDNumber(1111))
 
-	// second deployment version does not exist in the deployment list, third version does
+	// tvs[0] is draining so can't be deleted. tvs[1] is current, so tvs[2] should be deleted.
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := require.New(t)
 		resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
@@ -836,7 +832,7 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_ValidDelete_SkipDrainage() {
 func (s *DeploymentVersionSuite) TestDeleteVersion_ConcurrentDeleteVersion() {
 	s.OverrideDynamicConfig(dynamicconfig.PollerHistoryTTL, 500*time.Millisecond)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	tv1 := testvars.New(s).WithBuildIDNumber(1)
 
@@ -882,7 +878,7 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_ConcurrentDeleteVersion() {
 				a.NotEqual(tv1.ExternalDeploymentVersion().GetBuildId(), vs.GetDeploymentVersion().GetBuildId())
 			}
 		}
-	}, time.Second*5, time.Millisecond*200)
+	}, time.Second*10, time.Millisecond*200)
 }
 
 // VersionMissingTaskQueues

@@ -134,6 +134,7 @@ func (a *VersionActivities) CheckWorkerDeploymentUserDataPropagation(ctx context
 // CheckIfTaskQueuesHavePollers returns true if any of the given task queues has any pollers
 func (a *VersionActivities) CheckIfTaskQueuesHavePollers(ctx context.Context, args *deploymentspb.CheckTaskQueuesHavePollersActivityArgs) (bool, error) {
 	for tqName, tqTypes := range args.TaskQueuesAndTypes {
+		fmt.Printf("checking for pollers for %s %s %v\n", args.WorkerDeploymentVersion.BuildId, tqName, tqTypes)
 		res, err := a.matchingClient.DescribeTaskQueue(ctx, &matchingservice.DescribeTaskQueueRequest{
 			NamespaceId: a.namespace.ID().String(),
 			DescRequest: &workflowservice.DescribeTaskQueueRequest{
@@ -151,12 +152,15 @@ func (a *VersionActivities) CheckIfTaskQueuesHavePollers(ctx context.Context, ar
 		}
 		typesInfo := res.GetDescResponse().GetVersionsInfo()[worker_versioning.WorkerDeploymentVersionToString(args.WorkerDeploymentVersion)].GetTypesInfo()
 		if len(typesInfo[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].GetPollers()) > 0 {
+			fmt.Printf("has wf poller\n")
 			return true, nil
 		}
 		if len(typesInfo[int32(enumspb.TASK_QUEUE_TYPE_ACTIVITY)].GetPollers()) > 0 {
+			fmt.Printf("has act poller\n")
 			return true, nil
 		}
 		if len(typesInfo[int32(enumspb.TASK_QUEUE_TYPE_NEXUS)].GetPollers()) > 0 {
+			fmt.Printf("has nexus poller\n")
 			return true, nil
 		}
 	}

@@ -285,6 +285,9 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 	pollMetadata *pollMetadata,
 ) (*internalTask, error) {
 	c.liveness.markAlive()
+	//if c.queue.Version().IsVersioned() {
+	//	fmt.Printf("poll received in %v\n", c.queue.Version())
+	//}
 
 	c.currentPolls.Add(1)
 	defer c.currentPolls.Add(-1)
@@ -429,6 +432,9 @@ func (c *physicalTaskQueueManagerImpl) DispatchNexusTask(
 }
 
 func (c *physicalTaskQueueManagerImpl) UpdatePollerInfo(id pollerIdentity, pollMetadata *pollMetadata) {
+	if c.queue.Version().IsVersioned() {
+		fmt.Printf("poll info updated in %v\n", c.queue.Version())
+	}
 	c.pollerHistory.updatePollerInfo(id, pollMetadata)
 }
 
@@ -437,7 +443,11 @@ func (c *physicalTaskQueueManagerImpl) GetAllPollerInfo() []*taskqueuepb.PollerI
 	if c.pollerHistory == nil {
 		return nil
 	}
-	return c.pollerHistory.getPollerInfo(time.Time{})
+	res := c.pollerHistory.getPollerInfo(time.Time{})
+	if c.queue.Version().IsVersioned() {
+		fmt.Printf("poll info for %v %v\n", c.queue.Version(), res)
+	}
+	return res
 }
 
 func (c *physicalTaskQueueManagerImpl) HasPollerAfter(accessTime time.Time) bool {
