@@ -44,7 +44,7 @@ const (
 	noPollerThreshold = time.Minute * 2
 
 	// We avoid retrying failed deployment registration for this period.
-	deploymentRegisterErrorBackoff = 3 * time.Second
+	deploymentRegisterErrorBackoff = 5 * time.Second
 )
 
 type (
@@ -108,8 +108,9 @@ type (
 var _ physicalTaskQueueManager = (*physicalTaskQueueManagerImpl)(nil)
 
 var (
-	errRemoteSyncMatchFailed  = serviceerror.NewCanceled("remote sync match failed")
-	errMissingNormalQueueName = errors.New("missing normal queue name")
+	errRemoteSyncMatchFailed     = serviceerror.NewCanceled("remote sync match failed")
+	errMissingNormalQueueName    = errors.New("missing normal queue name")
+	errDeploymentVersionNotReady = serviceerror.NewUnavailable("task queue is not ready to process polls from this deployment version, try again shortly")
 )
 
 func newPhysicalTaskQueueManager(
@@ -561,9 +562,12 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 			// error is not from registration, just return it without waiting
 			return err
 		}
-		var errTooMany workerdeployment.ErrMaxTaskQueuesInDeployment
-		if errors.As(err, &errTooMany) {
-			err = errTooMany
+		var errTooManyTQs workerdeployment.ErrMaxTaskQueuesInDeployment
+		var errTooManyVersions workerdeployment.ErrMaxVersionsInDeployment
+		if errors.As(err, &errTooManyTQs) {
+			err = errTooManyTQs
+		} else if errors.As(err, &errTooManyVersions) {
+			err = errTooManyVersions
 		} else {
 			// Do not surface low level error to user
 			c.logger.Error("error while registering version", tag.Error(err))

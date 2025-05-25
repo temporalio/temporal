@@ -178,6 +178,7 @@ type Client interface {
 }
 
 type ErrMaxTaskQueuesInDeployment struct{ error }
+type ErrMaxVersionsInDeployment struct{ error }
 type ErrRegister struct{ error }
 
 // ClientImpl implements Client
@@ -237,6 +238,9 @@ func (d *ClientImpl) RegisterTaskQueueWorker(
 	if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errMaxTaskQueuesInVersionType {
 		// translate to client-side error type
 		return ErrMaxTaskQueuesInDeployment{error: errors.New(failure.Message)}
+	} else if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errTooManyVersions {
+		// translate to client-side error type
+		return ErrMaxVersionsInDeployment{error: errors.New(failure.Message)}
 	} else if failure.GetApplicationFailureInfo().GetType() == errNoChangeType {
 		return nil
 	} else if failure != nil {

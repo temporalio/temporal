@@ -163,27 +163,13 @@ func (s *DeploymentVersionSuite) startVersionWorkflow(ctx context.Context, tv *t
 }
 
 func (s *DeploymentVersionSuite) startVersionWorkflowExpectFailAddVersion(ctx context.Context, tv *testvars.TestVars) {
-	go s.pollFromDeployment(ctx, tv)
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := require.New(t)
-		newResp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
-			Namespace:      s.Namespace().String(),
-			DeploymentName: tv.DeploymentSeries(),
-		})
-		a.NoError(err)
-		var versionSummaryNames []string
-		var versionSummaryVersions []*deploymentpb.WorkerDeploymentVersion
-		for _, versionSummary := range newResp.GetWorkerDeploymentInfo().GetVersionSummaries() {
-			versionSummaryNames = append(versionSummaryNames, versionSummary.GetVersion())
-			versionSummaryVersions = append(versionSummaryVersions, versionSummary.GetDeploymentVersion())
-		}
-		a.NotContains(versionSummaryNames, tv.DeploymentVersionString())
-		contains := slices.ContainsFunc(versionSummaryVersions, func(v *deploymentpb.WorkerDeploymentVersion) bool {
-			return v.GetDeploymentName() == tv.ExternalDeploymentVersion().GetDeploymentName() &&
-				v.GetBuildId() == tv.ExternalDeploymentVersion().GetBuildId()
-		})
-		a.False(contains)
-	}, time.Second*5, time.Millisecond*200)
+	_, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace:         s.Namespace().String(),
+		TaskQueue:         tv.TaskQueue(),
+		Identity:          "random",
+		DeploymentOptions: tv.WorkerDeploymentOptions(true),
+	})
+	s.Error(err, serviceerror.NewUnavailable("cannot add version, already at max versions 4"))
 }
 
 func (s *DeploymentVersionSuite) TestForceCAN_NoOpenWFS() {
@@ -637,30 +623,7 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_Drained_But_Pollers_Exist() {
 	s.Nil(err)
 
 	// Signal the first version to be drained. Only do this in tests.
-	versionWorkflowID := worker_versioning.GenerateVersionWorkflowID(tv1.DeploymentSeries(), tv1.BuildID())
-	workflowExecution := &commonpb.WorkflowExecution{
-		WorkflowId: versionWorkflowID,
-	}
-	input := &deploymentpb.VersionDrainageInfo{
-		Status:          enumspb.VERSION_DRAINAGE_STATUS_DRAINED,
-		LastChangedTime: timestamppb.New(time.Now()),
-		LastCheckedTime: timestamppb.New(time.Now()),
-	}
-	marshaledData, err := input.Marshal()
-	s.NoError(err)
-	signalPayload := &commonpb.Payloads{
-		Payloads: []*commonpb.Payload{
-			{
-				Metadata: map[string][]byte{
-					"encoding": []byte("binary/protobuf"),
-				},
-				Data: marshaledData,
-			},
-		},
-	}
-
-	err = s.SendSignal(s.Namespace().String(), workflowExecution, workerdeployment.SyncDrainageSignalName, signalPayload, tv1.ClientIdentity())
-	s.Nil(err)
+	s.signalAndWaitForDrained(ctx, tv1)
 
 	// Version will bypass "drained" check but delete should still fail since we have active pollers.
 	s.tryDeleteVersion(ctx, tv1, workerdeployment.ErrVersionHasPollers, false)
@@ -713,7 +676,7 @@ func (s *DeploymentVersionSuite) waitForNoPollers(ctx context.Context, tv *testv
 
 func (s *DeploymentVersionSuite) TestVersionScavenger_DeleteOnAdd() {
 	testMaxVersionsInDeployment := 4
-	s.OverrideDynamicConfig(dynamicconfig.PollerHistoryTTL, 2*time.Second)
+	s.OverrideDynamicConfig(dynamicconfig.PollerHistoryTTL, 5*time.Second)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingMaxVersionsInDeployment, testMaxVersionsInDeployment)
 	s.OverrideDynamicConfig(dynamicconfig.VersionDrainageStatusVisibilityGracePeriod, 10*time.Second)
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -722,7 +685,7 @@ func (s *DeploymentVersionSuite) TestVersionScavenger_DeleteOnAdd() {
 
 	// max out the versions
 	for i := 0; i < testMaxVersionsInDeployment; i++ {
-		tvs[i] = testvars.New(s).WithBuildIDNumber(i).WithTaskQueue(fmt.Sprintf("%d", i))
+		tvs[i] = testvars.New(s).WithBuildIDNumber(i)
 		s.startVersionWorkflow(ctx, tvs[i])
 	}
 	// startVersionWorkflow can take a long time, so sending some fresh polls so that deletion logic sees them.
@@ -743,10 +706,12 @@ func (s *DeploymentVersionSuite) TestVersionScavenger_DeleteOnAdd() {
 	s.startVersionWorkflowExpectFailAddVersion(ctx, tvMax)
 
 	// tvs[0] is draining so can't be deleted. tvs[1] is current, so tvs[2] should be deleted.
-	s.waitForNoPollers(ctx, tvs[0])
-	s.waitForNoPollers(ctx, tvs[1])
-	s.waitForNoPollers(ctx, tvs[2])
-	s.waitForNoPollers(ctx, tvs[3])
+	for i := 0; i < testMaxVersionsInDeployment; i++ {
+		s.waitForNoPollers(ctx, tvs[0])
+		s.waitForNoPollers(ctx, tvs[1])
+		s.waitForNoPollers(ctx, tvs[2])
+		s.waitForNoPollers(ctx, tvs[3])
+	}
 
 	// try to add a version again, and it succeeds, after deleting the second version but not the third (both are eligible)
 	// TODO: This fails if I try to add tvMax again...

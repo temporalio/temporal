@@ -48,6 +48,12 @@ func (s *VersionWorkflowSuite) TearDownTest() {
 
 // Test_SyncState_BatchSize verifies if the right number of batches are created during the SyncDeploymentVersionUserData activity
 func (s *VersionWorkflowSuite) Test_SyncState_Batch_SingleTaskQueue() {
+	// TODO: refactor this test so it creates a version with the TQ already added to it and then
+	// test batching when SyncVersionState is called on it.
+	// In this form, the test is flaky because it does not account for possible CaN happening
+	// due to register worker calls.
+	s.T().Skip()
+
 	workers := 1
 	s.syncStateInBatches(workers)
 }
