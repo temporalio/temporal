@@ -74,7 +74,7 @@ func (d *VersionWorkflowRunner) listenToSignals(ctx workflow.Context) {
 			mergedInfo.Status = newInfo.Status
 			mergedInfo.LastChangedTime = newInfo.LastCheckedTime
 			d.VersionState.DrainageInfo = mergedInfo
-			d.syncSummary(ctx)
+			// d.syncSummary(ctx)
 		} else {
 			mergedInfo.Status = d.VersionState.DrainageInfo.Status
 			mergedInfo.LastChangedTime = d.VersionState.DrainageInfo.LastChangedTime
@@ -85,6 +85,8 @@ func (d *VersionWorkflowRunner) listenToSignals(ctx workflow.Context) {
 		// Update the future to be nil to indicate that the drainage workflow is no longer running.
 		if d.VersionState.GetDrainageInfo().GetStatus() == enumspb.VERSION_DRAINAGE_STATUS_DRAINED {
 			d.drainageWorkflowFuture = nil
+			d.VersionState.Status = enumspb.VERSION_STATUS_DRAINED
+			d.syncSummary(ctx)
 		}
 	})
 
@@ -649,6 +651,7 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 		// Version deactivated from current/ramping
 		d.VersionState.LastDeactivationTime = args.RoutingUpdateTime
 		d.startDrainage(ctx, false)
+		state.Status = enumspb.VERSION_STATUS_DRAINING
 	}
 
 	// started accepting new workflows --> stop drainage child wf if it exists
@@ -665,6 +668,13 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 			}
 			d.VersionState.DrainageInfo = nil
 		}
+	}
+
+	// Set the appropriate status for the version if it is current/ramping.
+	if state.CurrentSinceTime != nil {
+		state.Status = enumspb.VERSION_STATUS_CURRENT
+	} else if state.RampingSinceTime != nil {
+		state.Status = enumspb.VERSION_STATUS_RAMPING
 	}
 
 	return &deploymentspb.SyncVersionStateResponse{
@@ -702,6 +712,7 @@ func (d *VersionWorkflowRunner) syncSummary(ctx workflow.Context) {
 			RampingSinceTime:     d.VersionState.RampingSinceTime,
 			FirstActivationTime:  d.VersionState.FirstActivationTime,
 			LastDeactivationTime: d.VersionState.LastDeactivationTime,
+			Status:               d.VersionState.Status,
 		},
 	).Get(ctx, nil)
 	if err != nil {

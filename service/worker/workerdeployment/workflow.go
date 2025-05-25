@@ -500,6 +500,8 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 	}, nil
 
 }
+
+// TODO (Shivam): Calls to this function can be placed inside syncVersion helper function.
 func (d *WorkflowRunner) setDrainageStatus(version string, status enumspb.VersionDrainageStatus, routingUpdateTime *timestamppb.Timestamp) {
 	if summary := d.State.GetVersions()[version]; summary != nil {
 		summary.DrainageStatus = status
@@ -794,6 +796,17 @@ func (d *WorkflowRunner) syncVersion(ctx workflow.Context, targetVersion string,
 		} else {
 			summary.LastDeactivationTime = versionUpdateArgs.RoutingUpdateTime
 		}
+
+		// Setting the appropriate status for the version. The status of a version is never set to
+		// DRAINED from within the deployment workflow since the version workflow is responsible for
+		// querying visibility after which it signals the deployment workflow if the version is drained.
+		if summary.CurrentSinceTime != nil {
+			summary.Status = enumspb.VERSION_STATUS_CURRENT
+		} else if summary.RampingSinceTime != nil {
+			summary.Status = enumspb.VERSION_STATUS_RAMPING
+		} else {
+			summary.Status = enumspb.VERSION_STATUS_DRAINING
+		}
 		d.updateVersionSummary(summary)
 	}
 	return res.VersionState, err
@@ -977,6 +990,7 @@ func (d *WorkflowRunner) getLatestVersionSummary() *deploymentpb.WorkerDeploymen
 		RoutingUpdateTime:    latest_summary.GetRoutingUpdateTime(),
 		FirstActivationTime:  latest_summary.GetFirstActivationTime(),
 		LastDeactivationTime: latest_summary.GetLastDeactivationTime(),
+		Status:               latest_summary.GetStatus(),
 	}
 }
 
@@ -999,6 +1013,7 @@ func (d *WorkflowRunner) getCurrentVersionSummary() *deploymentpb.WorkerDeployme
 		RoutingUpdateTime:    currentVersionSummary.GetRoutingUpdateTime(),
 		FirstActivationTime:  currentVersionSummary.GetFirstActivationTime(),
 		LastDeactivationTime: currentVersionSummary.GetLastDeactivationTime(),
+		Status:               currentVersionSummary.GetStatus(),
 	}
 }
 
@@ -1021,5 +1036,6 @@ func (d *WorkflowRunner) getRampingVersionSummary() *deploymentpb.WorkerDeployme
 		RoutingUpdateTime:    rampingVersionSummary.GetRoutingUpdateTime(),
 		FirstActivationTime:  rampingVersionSummary.GetFirstActivationTime(),
 		LastDeactivationTime: rampingVersionSummary.GetLastDeactivationTime(),
+		Status:               rampingVersionSummary.GetStatus(),
 	}
 }
