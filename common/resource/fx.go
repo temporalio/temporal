@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/testing/testhooks"
+	"go.temporal.io/server/service/history/configs"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
@@ -73,6 +74,7 @@ type (
 // See LifetimeHooksModule for detail
 var Module = fx.Options(
 	persistenceClient.Module,
+	dynamicconfig.Module,
 	fx.Provide(HostNameProvider),
 	fx.Provide(TimeSourceProvider),
 	cluster.MetadataLifetimeHooksModule,
@@ -100,6 +102,7 @@ var Module = fx.Options(
 	fx.Provide(FrontendHTTPClientCacheProvider),
 	fx.Provide(PersistenceConfigProvider),
 	fx.Provide(health.NewServer),
+	fx.Provide(ConfigProvider),
 	deadlock.Module,
 	config.Module,
 	testhooks.Module,
@@ -192,6 +195,16 @@ func NamespaceRegistryProvider(
 		dynamicconfig.ForceSearchAttributesCacheRefreshOnRead.Get(dynamicCollection),
 		metricsHandler,
 		logger,
+	)
+}
+
+func ConfigProvider(
+	dc *dynamicconfig.Collection,
+	persistenceConfig *config.Persistence,
+) *configs.Config {
+	return configs.NewConfig(
+		dc,
+		persistenceConfig.NumHistoryShards,
 	)
 }
 
@@ -339,6 +352,7 @@ func RPCFactoryProvider(
 	resolver *membership.GRPCResolver,
 	tracingStatsHandler telemetry.ClientStatsHandler,
 	monitor membership.Monitor,
+	dynamicConfig *configs.Config,
 ) (common.RPCFactory, error) {
 	frontendURL, frontendHTTPURL, frontendHTTPPort, frontendTLSConfig, err := getFrontendConnectionDetails(cfg, tlsConfigProvider, resolver)
 	if err != nil {
@@ -351,6 +365,7 @@ func RPCFactoryProvider(
 	}
 	return rpc.NewFactory(
 		cfg,
+		dynamicConfig,
 		svcName,
 		logger,
 		tlsConfigProvider,

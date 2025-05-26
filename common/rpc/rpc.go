@@ -3,6 +3,7 @@ package rpc
 import (
 	"crypto/tls"
 	"fmt"
+	"math"
 	"math/rand"
 	"net"
 	"net/http"
@@ -20,18 +21,21 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/rpc/encryption"
+	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/temporal/environment"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/keepalive"
 )
 
 var _ common.RPCFactory = (*RPCFactory)(nil)
 
 // RPCFactory is an implementation of common.RPCFactory interface
 type RPCFactory struct {
-	config      *config.Config
-	serviceName primitives.ServiceName
-	logger      log.Logger
+	config        *config.Config
+	dynamicConfig *configs.Config
+	serviceName   primitives.ServiceName
+	logger        log.Logger
 
 	frontendURL       string
 	frontendHTTPURL   string
@@ -51,6 +55,7 @@ type RPCFactory struct {
 // conforming to the underlying configuration
 func NewFactory(
 	cfg *config.Config,
+	dynamicConfig *configs.Config,
 	sName primitives.ServiceName,
 	logger log.Logger,
 	tlsProvider encryption.TLSConfigProvider,
@@ -63,6 +68,7 @@ func NewFactory(
 ) *RPCFactory {
 	f := &RPCFactory{
 		config:            cfg,
+		dynamicConfig:     dynamicConfig,
 		serviceName:       sName,
 		logger:            logger,
 		frontendURL:       frontendURL,
@@ -115,6 +121,12 @@ func (d *RPCFactory) GetRemoteClusterClientConfig(hostname string) (*tls.Config,
 func (d *RPCFactory) GetInternodeGRPCServerOptions() ([]grpc.ServerOption, error) {
 	var opts []grpc.ServerOption
 
+	if d.dynamicConfig.EnableInterNodeServerKeepAlive() {
+		rpcConfig := d.config.Services[string(d.serviceName)].RPC
+		kep := rpcConfig.KeepAliveServerConfig.GetKeepAliveEnforcementPolicy()
+		kp := rpcConfig.KeepAliveServerConfig.GetKeepAliveServerParameters()
+		opts = append(opts, grpc.KeepaliveEnforcementPolicy(kep), grpc.KeepaliveParams(kp))
+	}
 	if d.tlsFactory != nil {
 		serverConfig, err := d.tlsFactory.GetInternodeServerConfig()
 		if err != nil {
@@ -125,11 +137,6 @@ func (d *RPCFactory) GetInternodeGRPCServerOptions() ([]grpc.ServerOption, error
 		}
 		opts = append(opts, grpc.Creds(credentials.NewTLS(serverConfig)))
 	}
-
-	rpcConfig := d.config.Services[string(d.serviceName)].RPC
-	kep := rpcConfig.KeepAliveServerConfig.GetKeepAliveEnforcementPolicy()
-	kp := rpcConfig.KeepAliveServerConfig.GetKeepAliveServerParameters()
-	opts = append(opts, grpc.KeepaliveEnforcementPolicy(kep), grpc.KeepaliveParams(kp))
 
 	return opts, nil
 }
@@ -251,6 +258,14 @@ func (d *RPCFactory) dial(hostName string, tlsClientConfig *tls.Config, dialOpti
 }
 
 func (d *RPCFactory) getClientKeepAliveConfig(serviceName primitives.ServiceName) grpc.DialOption {
+	if !d.dynamicConfig.EnableInterNodeClientKeepAlive() {
+		// default keepalive settings for clients
+		return grpc.WithKeepaliveParams(keepalive.ClientParameters{
+			Time:                time.Duration(math.MaxInt64),
+			Timeout:             20 * time.Second,
+			PermitWithoutStream: false,
+		})
+	}
 	serviceConfig := d.config.Services[string(serviceName)]
 	return grpc.WithKeepaliveParams(serviceConfig.RPC.ClientConnectionConfig.GetKeepAliveClientParameters())
 }
