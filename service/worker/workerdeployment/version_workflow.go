@@ -727,9 +727,11 @@ func (d *VersionWorkflowRunner) refreshDrainageInfo(ctx workflow.Context) {
 		return
 	}
 	timeSinceLastRefresh := workflow.Now(ctx).Sub(drainage.LastCheckedTime.AsTime())
-	if err = workflow.Sleep(ctx, interval-timeSinceLastRefresh); err != nil {
-		d.logger.Error("error while trying to sleep", tag.Error(err))
-		return
+	if interval > timeSinceLastRefresh {
+		if err = workflow.Sleep(ctx, interval-timeSinceLastRefresh); err != nil {
+			d.logger.Error("error while trying to sleep", tag.Error(err))
+			return
+		}
 	}
 
 	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)

@@ -515,18 +515,11 @@ func (d *WorkflowRunner) setDrainageStatus(version string, status enumspb.Versio
 	}
 }
 
-func (d *WorkflowRunner) validateStateBeforeAcceptingDeleteVersion(args *deploymentspb.DeleteVersionArgs) error {
+func (d *WorkflowRunner) validateDeleteVersion(args *deploymentspb.DeleteVersionArgs) error {
 	if _, ok := d.State.Versions[args.Version]; !ok {
 		return temporal.NewApplicationError("version not found in deployment", errVersionNotFound)
 	}
-	return nil
-}
 
-func (d *WorkflowRunner) validateDeleteVersion(args *deploymentspb.DeleteVersionArgs) error {
-	return d.validateStateBeforeAcceptingDeleteVersion(args)
-}
-
-func (d *WorkflowRunner) deleteVersion(ctx workflow.Context, args *deploymentspb.DeleteVersionArgs) error {
 	// Check if the version is not current or ramping. This condition is better to be checked in the
 	// deployment workflow because that's the source of truth for routing config.
 	//nolint:staticcheck // SA1019: worker versioning v0.31
@@ -534,7 +527,10 @@ func (d *WorkflowRunner) deleteVersion(ctx workflow.Context, args *deploymentspb
 		// activity won't retry on this error since version not eligible for deletion
 		return serviceerror.NewFailedPrecondition(ErrVersionIsCurrentOrRamping)
 	}
+	return nil
+}
 
+func (d *WorkflowRunner) deleteVersion(ctx workflow.Context, args *deploymentspb.DeleteVersionArgs) error {
 	// ask version to delete itself
 	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
 	var res deploymentspb.SyncVersionStateActivityResult
@@ -573,7 +569,7 @@ func (d *WorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *deploym
 	// might be accepted by the validator since the local state of the workflow contains the version which is requested to be deleted. Since this update handler
 	// enforces sequential updates, after the first update completes, the version will be removed from the local state of the deployment workflow. The second update,
 	// now already accepted by the validator, should now not be allowed to run since the initial workflow state is different.
-	err = d.validateStateBeforeAcceptingDeleteVersion(args)
+	err = d.validateDeleteVersion(args)
 	if err != nil {
 		return err
 	}
