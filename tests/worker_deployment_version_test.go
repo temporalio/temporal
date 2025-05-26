@@ -314,23 +314,24 @@ func (s *DeploymentVersionSuite) TestDrainageStatus_SetCurrentVersion_NoOpenWFs(
 	s.checkVersionDrainage(ctx, tv1, &deploymentpb.VersionDrainageInfo{}, false, false)
 	s.checkVersionDrainage(ctx, tv2, &deploymentpb.VersionDrainageInfo{}, false, false)
 
+	baseTime := time.Now()
 	// SetCurrent tv2 --> tv1 starts the child drainage workflow
 	err = s.setCurrent(tv2, true)
 	s.Nil(err)
 
 	// tv1 should now be "draining" for visibilityGracePeriod duration
-	s.checkVersionDrainage(ctx, tv1, &deploymentpb.VersionDrainageInfo{
-		Status:          enumspb.VERSION_DRAINAGE_STATUS_DRAINING,
-		LastChangedTime: nil, // don't test this now
-		LastCheckedTime: nil, // don't test this now
+	changed1, checked1 := s.checkVersionDrainage(ctx, tv1, &deploymentpb.VersionDrainageInfo{
+		Status: enumspb.VERSION_DRAINAGE_STATUS_DRAINING,
 	}, false, false)
+	s.Greater(changed1, baseTime)
+	s.GreaterOrEqual(checked1, changed1)
 
 	// tv1 should now be "drained"
-	s.checkVersionDrainage(ctx, tv1, &deploymentpb.VersionDrainageInfo{
-		Status:          enumspb.VERSION_DRAINAGE_STATUS_DRAINED,
-		LastChangedTime: nil, // don't test this now
-		LastCheckedTime: nil, // don't test this now
+	changed2, checked2 := s.checkVersionDrainage(ctx, tv1, &deploymentpb.VersionDrainageInfo{
+		Status: enumspb.VERSION_DRAINAGE_STATUS_DRAINED,
 	}, true, false)
+	s.Greater(changed2, changed1)
+	s.GreaterOrEqual(checked2, changed2)
 }
 
 func (s *DeploymentVersionSuite) TestDrainageStatus_SetCurrentVersion_YesOpenWFs() {
@@ -360,23 +361,31 @@ func (s *DeploymentVersionSuite) TestDrainageStatus_SetCurrentVersion_YesOpenWFs
 	// start a pinned workflow on v1
 	run := s.startPinnedWorkflow(ctx, tv1)
 
+	baseTime := time.Now()
 	// SetCurrent tv2 --> tv1 starts the child drainage workflow
 	err = s.setCurrent(tv2, true)
 	s.Nil(err)
 
 	// tv1 should now be "draining" for visibilityGracePeriod duration
-	s.checkVersionDrainage(ctx, tv1, &deploymentpb.VersionDrainageInfo{
-		Status:          enumspb.VERSION_DRAINAGE_STATUS_DRAINING,
-		LastChangedTime: nil, // don't test this now
-		LastCheckedTime: nil, // don't test this now
+	changed1, checked1 := s.checkVersionDrainage(ctx, tv1, &deploymentpb.VersionDrainageInfo{
+		Status: enumspb.VERSION_DRAINAGE_STATUS_DRAINING,
 	}, false, false)
+	s.Greater(changed1, baseTime)
+	s.GreaterOrEqual(checked1, changed1)
 
 	// tv1 should still be "draining" for visibilityGracePeriod duration
-	s.checkVersionDrainage(ctx, tv1, &deploymentpb.VersionDrainageInfo{
-		Status:          enumspb.VERSION_DRAINAGE_STATUS_DRAINING,
-		LastChangedTime: nil, // don't test this now
-		LastCheckedTime: nil, // don't test this now
+	changed2, checked2 := s.checkVersionDrainage(ctx, tv1, &deploymentpb.VersionDrainageInfo{
+		Status: enumspb.VERSION_DRAINAGE_STATUS_DRAINING,
 	}, true, false)
+	s.Equal(changed2, changed1)
+	s.Greater(checked2, checked1)
+
+	// tv1 should still be "draining" after a refresh intervals
+	changed3, checked3 := s.checkVersionDrainage(ctx, tv1, &deploymentpb.VersionDrainageInfo{
+		Status: enumspb.VERSION_DRAINAGE_STATUS_DRAINING,
+	}, false, true)
+	s.Equal(changed3, changed1)
+	s.Greater(checked3, checked2)
 
 	// terminate workflow
 	_, err = s.FrontendClient().TerminateWorkflowExecution(ctx, &workflowservice.TerminateWorkflowExecutionRequest{
@@ -391,11 +400,11 @@ func (s *DeploymentVersionSuite) TestDrainageStatus_SetCurrentVersion_YesOpenWFs
 	s.Nil(err)
 
 	// tv1 should now be "drained"
-	s.checkVersionDrainage(ctx, tv1, &deploymentpb.VersionDrainageInfo{
-		Status:          enumspb.VERSION_DRAINAGE_STATUS_DRAINED,
-		LastChangedTime: nil, // don't test this now
-		LastCheckedTime: nil, // don't test this now
+	changed4, checked4 := s.checkVersionDrainage(ctx, tv1, &deploymentpb.VersionDrainageInfo{
+		Status: enumspb.VERSION_DRAINAGE_STATUS_DRAINED,
 	}, false, true)
+	s.Greater(changed4, changed3)
+	s.GreaterOrEqual(checked4, changed4)
 }
 
 func (s *DeploymentVersionSuite) startPinnedWorkflow(ctx context.Context, tv *testvars.TestVars) sdkclient.WorkflowRun {
@@ -1121,13 +1130,17 @@ func (s *DeploymentVersionSuite) checkVersionDrainage(
 	tv *testvars.TestVars,
 	expectedDrainageInfo *deploymentpb.VersionDrainageInfo,
 	addGracePeriod, addRefreshInterval bool,
-) {
-	waitFor := 5 * time.Second
+) (changedTime time.Time, checkedTime time.Time) {
+	var waitFor time.Duration
 	if addGracePeriod {
 		waitFor += testVersionDrainageVisibilityGracePeriod
 	}
 	if addRefreshInterval {
 		waitFor += testVersionDrainageRefreshInterval
+	}
+	if waitFor > 0 {
+		// wait for the requested duration before looking at the result ( +1 sec for system latency)
+		time.Sleep(waitFor + 1*time.Second) //nolint:forbidigo
 	}
 
 	s.EventuallyWithT(func(t *assert.CollectT) {
@@ -1142,7 +1155,10 @@ func (s *DeploymentVersionSuite) checkVersionDrainage(
 		if expectedDrainageInfo.LastChangedTime != nil {
 			a.Equal(expectedDrainageInfo.LastChangedTime, dInfo.GetLastChangedTime())
 		}
-	}, waitFor, time.Millisecond*100)
+		changedTime = dInfo.GetLastChangedTime().AsTime()
+		checkedTime = dInfo.GetLastCheckedTime().AsTime()
+	}, 5*time.Second, time.Millisecond*100)
+	return changedTime, checkedTime
 }
 
 func (s *DeploymentVersionSuite) checkVersionIsCurrent(ctx context.Context, tv *testvars.TestVars) {
