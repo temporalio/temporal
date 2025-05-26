@@ -970,6 +970,7 @@ func (d *WorkflowRunner) getLatestVersionSummary() *deploymentpb.WorkerDeploymen
 	latest_summary := sortedSummaries[len(sortedSummaries)-1]
 	return &deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary{
 		Version:              latest_summary.GetVersion(),
+		DeploymentVersion:    worker_versioning.ExternalWorkerDeploymentVersionFromString(latest_summary.GetVersion()),
 		CreateTime:           latest_summary.GetCreateTime(),
 		DrainageInfo:         latest_summary.GetDrainageInfo(),
 		CurrentSinceTime:     latest_summary.GetCurrentSinceTime(),
@@ -992,6 +993,7 @@ func (d *WorkflowRunner) getCurrentVersionSummary() *deploymentpb.WorkerDeployme
 
 	return &deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary{
 		Version:              currentVersion,
+		DeploymentVersion:    worker_versioning.ExternalWorkerDeploymentVersionFromString(currentVersion),
 		CreateTime:           currentVersionSummary.GetCreateTime(),
 		DrainageInfo:         currentVersionSummary.GetDrainageInfo(),
 		CurrentSinceTime:     currentVersionSummary.GetCurrentSinceTime(),
@@ -1014,6 +1016,7 @@ func (d *WorkflowRunner) getRampingVersionSummary() *deploymentpb.WorkerDeployme
 
 	return &deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary{
 		Version:              rampingVersion,
+		DeploymentVersion:    worker_versioning.ExternalWorkerDeploymentVersionFromString(rampingVersion),
 		CreateTime:           rampingVersionSummary.GetCreateTime(),
 		DrainageInfo:         rampingVersionSummary.GetDrainageInfo(),
 		CurrentSinceTime:     rampingVersionSummary.GetCurrentSinceTime(),
