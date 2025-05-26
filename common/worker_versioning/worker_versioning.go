@@ -151,7 +151,7 @@ func BuildIdIfUsingVersioning(stamp *commonpb.WorkerVersionStamp) string {
 // DeploymentFromCapabilities returns the deployment if it is using versioning V3, otherwise nil.
 // It returns the deployment from the `options` if present, otherwise, from `capabilities`,
 func DeploymentFromCapabilities(capabilities *commonpb.WorkerVersionCapabilities, options *deploymentpb.WorkerDeploymentOptions) *deploymentpb.Deployment {
-	if options.GetWorkerVersioningMode() != enumspb.WORKER_VERSIONING_MODE_UNVERSIONED &&
+	if options.GetWorkerVersioningMode() == enumspb.WORKER_VERSIONING_MODE_VERSIONED &&
 		options.GetDeploymentName() != "" &&
 		options.GetBuildId() != "" {
 		return &deploymentpb.Deployment{
@@ -661,6 +661,11 @@ func WorkerDeploymentVersionFromString(s string) (*deploymentspb.WorkerDeploymen
 // workflowID which are used in our Worker Deployment workflows
 func GenerateDeploymentWorkflowID(deploymentName string) string {
 	return WorkerDeploymentWorkflowIDPrefix + WorkerDeploymentVersionWorkflowIDDelimeter + deploymentName
+}
+
+func GetDeploymentNameFromWorkflowID(workflowID string) string {
+	_, deploymentName, _ := strings.Cut(workflowID, WorkerDeploymentVersionWorkflowIDDelimeter)
+	return deploymentName
 }
 
 // GenerateVersionWorkflowID is a helper that generates a system accepted

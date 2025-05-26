@@ -19,7 +19,6 @@ import (
 	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
-	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resource"
@@ -53,7 +52,6 @@ type (
 		metricsHandler metrics.Handler
 
 		sdkClientFactory sdk.ClientFactory
-		esClient         esclient.Client
 		config           *Config
 
 		workerManager                    *workerManager
@@ -98,7 +96,6 @@ func NewService(
 	logger log.SnTaggedLogger,
 	serviceConfig *Config,
 	sdkClientFactory sdk.ClientFactory,
-	esClient esclient.Client,
 	clusterMetadata cluster.Metadata,
 	clientBean client.Bean,
 	clusterMetadataManager persistence.ClusterMetadataManager,
@@ -125,7 +122,6 @@ func NewService(
 	s := &Service{
 		config:                    serviceConfig,
 		sdkClientFactory:          sdkClientFactory,
-		esClient:                  esClient,
 		logger:                    logger,
 		clusterMetadata:           clusterMetadata,
 		clientBean:                clientBean,
