@@ -529,6 +529,7 @@ func (d *WorkflowRunner) validateDeleteVersion(args *deploymentspb.DeleteVersion
 func (d *WorkflowRunner) deleteVersion(ctx workflow.Context, args *deploymentspb.DeleteVersionArgs) error {
 	// Check if the version is not current or ramping. This condition is better to be checked in the
 	// deployment workflow because that's the source of truth for routing config.
+	//nolint:staticcheck // SA1019: worker versioning v0.31
 	if d.State.RoutingConfig.CurrentVersion == args.Version || d.State.RoutingConfig.RampingVersion == args.Version {
 		// activity won't retry on this error since version not eligible for deletion
 		return serviceerror.NewFailedPrecondition(ErrVersionIsCurrentOrRamping)
