@@ -74,7 +74,6 @@ func (d *VersionWorkflowRunner) listenToSignals(ctx workflow.Context) {
 			mergedInfo.Status = newInfo.Status
 			mergedInfo.LastChangedTime = newInfo.LastCheckedTime
 			d.VersionState.DrainageInfo = mergedInfo
-			// d.syncSummary(ctx)
 		} else {
 			mergedInfo.Status = d.VersionState.DrainageInfo.Status
 			mergedInfo.LastChangedTime = d.VersionState.DrainageInfo.LastChangedTime
@@ -86,8 +85,8 @@ func (d *VersionWorkflowRunner) listenToSignals(ctx workflow.Context) {
 		if d.VersionState.GetDrainageInfo().GetStatus() == enumspb.VERSION_DRAINAGE_STATUS_DRAINED {
 			d.drainageWorkflowFuture = nil
 			d.VersionState.Status = enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED
-			d.syncSummary(ctx)
 		}
+		d.syncSummary(ctx)
 	})
 
 	for (!workflow.GetInfo(ctx).GetContinueAsNewSuggested() && !forceCAN) || selector.HasPending() {
@@ -686,7 +685,6 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 }
 
 func (d *VersionWorkflowRunner) handleDescribeQuery() (*deploymentspb.QueryDescribeVersionResponse, error) {
-	fmt.Println("status from inside query", d.VersionState.Status)
 	return &deploymentspb.QueryDescribeVersionResponse{
 		VersionState: d.VersionState,
 	}, nil
