@@ -67,7 +67,6 @@ import (
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/worker/batcher"
-	"go.temporal.io/server/service/worker/deployment"
 	"go.temporal.io/server/service/worker/scheduler"
 	"go.temporal.io/server/service/worker/workerdeployment"
 	"google.golang.org/grpc/codes"
@@ -112,7 +111,6 @@ type (
 		clusterMetadata                               cluster.Metadata
 		historyClient                                 historyservice.HistoryServiceClient
 		matchingClient                                matchingservice.MatchingServiceClient
-		deploymentStoreClient                         deployment.DeploymentStoreClient
 		workerDeploymentClient                        workerdeployment.Client
 		archiverProvider                              provider.ArchiverProvider
 		payloadSerializer                             serialization.Serializer
@@ -143,7 +141,6 @@ func NewWorkflowHandler(
 	persistenceMetadataManager persistence.MetadataManager,
 	historyClient historyservice.HistoryServiceClient,
 	matchingClient matchingservice.MatchingServiceClient,
-	deploymentStoreClient deployment.DeploymentStoreClient,
 	workerDeploymentClient workerdeployment.Client,
 	archiverProvider provider.ArchiverProvider,
 	payloadSerializer serialization.Serializer,
@@ -184,7 +181,6 @@ func NewWorkflowHandler(
 		clusterMetadata:          clusterMetadata,
 		historyClient:            historyClient,
 		matchingClient:           matchingClient,
-		deploymentStoreClient:    deploymentStoreClient,
 		workerDeploymentClient:   workerDeploymentClient,
 		archiverProvider:         archiverProvider,
 		payloadSerializer:        payloadSerializer,

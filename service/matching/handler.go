@@ -89,7 +89,6 @@ func NewHandler(
 			params.TaskManager,
 			params.HistoryClient,
 			params.MatchingRawClient, // Use non retry client inside matching
-			params.DeploymentStoreClient,
 			params.WorkerDeploymentClient,
 			params.Config,
 			params.Logger,
