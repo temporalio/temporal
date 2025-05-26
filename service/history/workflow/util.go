@@ -199,7 +199,7 @@ func GetEffectiveDeployment(versioningInfo *workflowpb.WorkflowExecutionVersioni
 		if v := transition.GetDeploymentVersion(); v != nil { // v0.32
 			return worker_versioning.DeploymentFromExternalDeploymentVersion(v)
 		}
-		v, _ := worker_versioning.WorkerDeploymentVersionFromString(transition.GetVersion()) //nolint:staticcheck // SA1019: worker versioning v0.31
+		v, _ := worker_versioning.WorkerDeploymentVersionFromStringV31(transition.GetVersion()) //nolint:staticcheck // SA1019: worker versioning v0.31
 		return worker_versioning.DeploymentFromDeploymentVersion(v)
 	} else if transition := versioningInfo.GetDeploymentTransition(); transition != nil { // //nolint:staticcheck // SA1019: worker versioning v0.30
 		return transition.GetDeployment()
@@ -210,7 +210,7 @@ func GetEffectiveDeployment(versioningInfo *workflowpb.WorkflowExecutionVersioni
 			return worker_versioning.DeploymentFromExternalDeploymentVersion(pinnedVersion)
 		}
 		if pinned := override.GetPinnedVersion(); pinned != "" { //nolint:staticcheck // SA1019: worker versioning v0.31
-			v, _ := worker_versioning.WorkerDeploymentVersionFromString(pinned)
+			v, _ := worker_versioning.WorkerDeploymentVersionFromStringV31(pinned)
 			return worker_versioning.DeploymentFromDeploymentVersion(v)
 		}
 		return override.GetDeployment() // //nolint:staticcheck // SA1019: worker versioning v0.30
@@ -221,7 +221,7 @@ func GetEffectiveDeployment(versioningInfo *workflowpb.WorkflowExecutionVersioni
 			return worker_versioning.DeploymentFromExternalDeploymentVersion(v)
 		}
 		if v := versioningInfo.GetVersion(); v != "" { // //nolint:staticcheck // SA1019: worker versioning v0.31
-			dv, _ := worker_versioning.WorkerDeploymentVersionFromString(v)
+			dv, _ := worker_versioning.WorkerDeploymentVersionFromStringV31(v)
 			return worker_versioning.DeploymentFromDeploymentVersion(dv)
 		}
 		return versioningInfo.GetDeployment() // //nolint:staticcheck // SA1019: worker versioning v0.30

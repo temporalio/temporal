@@ -35,8 +35,11 @@ const (
 	UnversionedSearchAttribute = buildIdSearchAttributePrefixUnversioned
 	UnversionedVersionId       = "__unversioned__"
 
-	// Prefixes, Delimeters and Keys
-	WorkerDeploymentVersionIdDelimiter         = "."
+	// WorkerDeploymentVersionIdDelimiterV31 will be deleted once we stop supporting v31 version string fields
+	// in external and internal APIs. Until then, both delimiters are banned in deployment name. All
+	// deprecated version string fields in APIs keep using the old delimiter. Workflow SA uses new delimiter.
+	WorkerDeploymentVersionIdDelimiterV31      = "."
+	WorkerDeploymentVersionIdDelimiter         = ":"
 	WorkerDeploymentVersionWorkflowIDPrefix    = "temporal-sys-worker-deployment-version"
 	WorkerDeploymentWorkflowIDPrefix           = "temporal-sys-worker-deployment"
 	WorkerDeploymentVersionWorkflowIDDelimeter = ":"
@@ -150,22 +153,46 @@ func BuildIdIfUsingVersioning(stamp *commonpb.WorkerVersionStamp) string {
 
 // DeploymentFromCapabilities returns the deployment if it is using versioning V3, otherwise nil.
 // It returns the deployment from the `options` if present, otherwise, from `capabilities`,
-func DeploymentFromCapabilities(capabilities *commonpb.WorkerVersionCapabilities, options *deploymentpb.WorkerDeploymentOptions) *deploymentpb.Deployment {
-	if options.GetWorkerVersioningMode() == enumspb.WORKER_VERSIONING_MODE_VERSIONED &&
-		options.GetDeploymentName() != "" &&
-		options.GetBuildId() != "" {
-		return &deploymentpb.Deployment{
-			SeriesName: options.GetDeploymentName(),
-			BuildId:    options.GetBuildId(),
+func DeploymentFromCapabilities(capabilities *commonpb.WorkerVersionCapabilities, options *deploymentpb.WorkerDeploymentOptions) (*deploymentpb.Deployment, error) {
+	if options.GetWorkerVersioningMode() == enumspb.WORKER_VERSIONING_MODE_VERSIONED {
+		d := options.GetDeploymentName()
+		b := options.GetBuildId()
+		if d == "" {
+			return nil, serviceerror.NewInvalidArgumentf("versioned worker must have deployment name")
 		}
+		if b == "" {
+			return nil, serviceerror.NewInvalidArgumentf("versioned worker must have build id")
+		}
+		if strings.Contains(d, WorkerDeploymentVersionIdDelimiter) || strings.Contains(d, WorkerDeploymentVersionIdDelimiterV31) {
+			// TODO: allow '.' once we get rid of v31 stuff
+			return nil, serviceerror.NewInvalidArgumentf("deployment name cannot contain '%s' or '%s'", WorkerDeploymentVersionIdDelimiter, WorkerDeploymentVersionIdDelimiterV31)
+		}
+		return &deploymentpb.Deployment{
+			SeriesName: d,
+			BuildId:    b,
+		}, nil
 	}
 	if capabilities.GetUseVersioning() && capabilities.GetDeploymentSeriesName() != "" && capabilities.GetBuildId() != "" {
 		return &deploymentpb.Deployment{
 			SeriesName: capabilities.GetDeploymentSeriesName(),
 			BuildId:    capabilities.GetBuildId(),
-		}
+		}, nil
 	}
-	return nil
+	return nil, nil
+}
+
+func DeploymentNameFromCapabilities(capabilities *commonpb.WorkerVersionCapabilities, options *deploymentpb.WorkerDeploymentOptions) string {
+	if d := options.GetDeploymentName(); d != "" {
+		return d
+	}
+	return capabilities.GetDeploymentSeriesName()
+}
+
+func BuildIdFromCapabilities(capabilities *commonpb.WorkerVersionCapabilities, options *deploymentpb.WorkerDeploymentOptions) string {
+	if d := options.GetBuildId(); d != "" {
+		return d
+	}
+	return capabilities.GetBuildId()
 }
 
 func DeploymentVersionFromOptions(options *deploymentpb.WorkerDeploymentOptions) *deploymentspb.WorkerDeploymentVersion {
@@ -193,16 +220,6 @@ func DeploymentIfValid(d *deploymentpb.Deployment) *deploymentpb.Deployment {
 		return d
 	}
 	return nil
-}
-
-// DeploymentToString is intended to be used for logs and metrics only. Theoretically, it can map
-// different deployments to the string.
-// DO NOT USE IN SERVER LOGIC.
-func DeploymentToString(deployment *deploymentpb.Deployment) string {
-	if deployment == nil {
-		return "UNVERSIONED"
-	}
-	return deployment.GetSeriesName() + ":" + deployment.GetBuildId()
 }
 
 // MakeDirectiveForWorkflowTask returns a versioning directive based on the following parameters:
@@ -333,7 +350,12 @@ func ValidateDeployment(deployment *deploymentpb.Deployment) error {
 		return serviceerror.NewInvalidArgument("deployment cannot be nil")
 	}
 	if deployment.GetSeriesName() == "" {
-		return serviceerror.NewInvalidArgument("deployment series name cannot be empty")
+		return serviceerror.NewInvalidArgument("deployment name cannot be empty")
+	}
+	// TODO: remove '.' restriction once the v31 version strings are completely cleaned from external and internal API
+	if strings.Contains(deployment.GetSeriesName(), WorkerDeploymentVersionIdDelimiterV31) ||
+		strings.Contains(deployment.GetSeriesName(), WorkerDeploymentVersionIdDelimiter) {
+		return serviceerror.NewInvalidArgumentf("deployment name cannot contain '%s' or '%s'", WorkerDeploymentVersionIdDelimiterV31, WorkerDeploymentVersionIdDelimiter)
 	}
 	if deployment.GetBuildId() == "" {
 		return serviceerror.NewInvalidArgument("deployment build ID cannot be empty")
@@ -356,13 +378,13 @@ func ValidateDeploymentVersion(version *deploymentspb.WorkerDeploymentVersion) e
 	return nil
 }
 
-// ValidateDeploymentVersionString returns error if the deployment version is nil or it has empty version
+// ValidateDeploymentVersionStringV31 returns error if the deployment version is nil or it has empty version
 // or deployment name.
-func ValidateDeploymentVersionString(version string) (*deploymentspb.WorkerDeploymentVersion, error) {
+func ValidateDeploymentVersionStringV31(version string) (*deploymentspb.WorkerDeploymentVersion, error) {
 	if version == "" {
 		return nil, serviceerror.NewInvalidArgument("version is required")
 	}
-	v, err := WorkerDeploymentVersionFromString(version)
+	v, err := WorkerDeploymentVersionFromStringV31(version)
 	if err != nil {
 		return nil, serviceerror.NewInvalidArgumentf("invalid version string %q, expected format is \"<deployment_name>.<build_id>\"", version)
 	}
@@ -398,7 +420,7 @@ func ValidateVersioningOverride(override *workflowpb.VersioningOverride) error {
 		if override.GetDeployment() != nil {
 			return ValidateDeployment(override.GetDeployment())
 		} else if override.GetPinnedVersion() != "" {
-			_, err := ValidateDeploymentVersionString(override.GetPinnedVersion())
+			_, err := ValidateDeploymentVersionStringV31(override.GetPinnedVersion())
 			return err
 		} else {
 			return serviceerror.NewInvalidArgument("must provide deployment (deprecated) or pinned version if behavior is 'PINNED'")
@@ -542,13 +564,13 @@ func AddV31VersioningInfoToV32(info *workflowpb.WorkflowExecutionVersioningInfo)
 	//nolint:staticcheck // SA1019: worker versioning v0.31
 	if info.Version == "" && info.DeploymentVersion != nil {
 		//nolint:staticcheck // SA1019: worker versioning v0.31
-		info.Version = ExternalWorkerDeploymentVersionToString(info.DeploymentVersion)
+		info.Version = ExternalWorkerDeploymentVersionToStringV31(info.DeploymentVersion)
 	}
 	if t := info.VersionTransition; t != nil {
 		//nolint:staticcheck // SA1019: worker versioning v0.31
 		if t.Version == "" {
 			//nolint:staticcheck // SA1019: worker versioning v0.31
-			t.Version = ExternalWorkerDeploymentVersionToString(t.DeploymentVersion)
+			t.Version = ExternalWorkerDeploymentVersionToStringV31(t.DeploymentVersion)
 		}
 	}
 	if o := info.VersioningOverride; o != nil {
@@ -561,7 +583,7 @@ func AddV31VersioningInfoToV32(info *workflowpb.WorkflowExecutionVersioningInfo)
 				//nolint:staticcheck // SA1019: worker versioning v0.31
 				o.Behavior = enumspb.VERSIONING_BEHAVIOR_PINNED
 				//nolint:staticcheck // SA1019: worker versioning v0.31
-				o.PinnedVersion = ExternalWorkerDeploymentVersionToString(o.GetPinned().GetVersion())
+				o.PinnedVersion = ExternalWorkerDeploymentVersionToStringV31(o.GetPinned().GetVersion())
 			}
 		}
 	}
@@ -592,7 +614,7 @@ func ConvertOverrideToV32(override *workflowpb.VersioningOverride) *workflowpb.V
 			//nolint:staticcheck // SA1019: worker versioning v0.31
 			if override.GetPinnedVersion() != "" {
 				//nolint:staticcheck // SA1019: worker versioning v0.31
-				ret.GetPinned().Version = ExternalWorkerDeploymentVersionFromString(override.GetPinnedVersion())
+				ret.GetPinned().Version = ExternalWorkerDeploymentVersionFromStringV31(override.GetPinnedVersion())
 			} else {
 				//nolint:staticcheck // SA1019: worker versioning v0.30
 				ret.GetPinned().Version = ExternalWorkerDeploymentVersionFromDeployment(override.GetDeployment())
@@ -605,25 +627,32 @@ func ConvertOverrideToV32(override *workflowpb.VersioningOverride) *workflowpb.V
 	return ret
 }
 
-func WorkerDeploymentVersionToString(v *deploymentspb.WorkerDeploymentVersion) string {
+func WorkerDeploymentVersionToStringV31(v *deploymentspb.WorkerDeploymentVersion) string {
 	if v == nil {
 		return "__unversioned__"
 	}
-	return v.GetDeploymentName() + WorkerDeploymentVersionIdDelimiter + v.GetBuildId()
+	return v.GetDeploymentName() + WorkerDeploymentVersionIdDelimiterV31 + v.GetBuildId()
 }
 
 func ExternalWorkerDeploymentVersionToString(v *deploymentpb.WorkerDeploymentVersion) string {
 	if v == nil {
-		return "__unversioned__"
+		return ""
 	}
 	return v.GetDeploymentName() + WorkerDeploymentVersionIdDelimiter + v.GetBuildId()
 }
 
-func ExternalWorkerDeploymentVersionFromString(s string) *deploymentpb.WorkerDeploymentVersion {
+func ExternalWorkerDeploymentVersionToStringV31(v *deploymentpb.WorkerDeploymentVersion) string {
+	if v == nil {
+		return "__unversioned__"
+	}
+	return v.GetDeploymentName() + WorkerDeploymentVersionIdDelimiterV31 + v.GetBuildId()
+}
+
+func ExternalWorkerDeploymentVersionFromStringV31(s string) *deploymentpb.WorkerDeploymentVersion {
 	if s == "" { // unset ramp is no longer supported in v32, so all empty version strings will be treated as unversioned.
 		s = UnversionedVersionId
 	}
-	v, _ := WorkerDeploymentVersionFromString(s)
+	v, _ := WorkerDeploymentVersionFromStringV31(s)
 	if v == nil {
 		return nil
 	}
@@ -633,13 +662,26 @@ func ExternalWorkerDeploymentVersionFromString(s string) *deploymentpb.WorkerDep
 	}
 }
 
-func WorkerDeploymentVersionFromString(s string) (*deploymentspb.WorkerDeploymentVersion, error) {
+func WorkerDeploymentVersionFromStringV31(s string) (*deploymentspb.WorkerDeploymentVersion, error) {
 	if s == "__unversioned__" {
 		return nil, nil
 	}
-	before, after, found := strings.Cut(s, WorkerDeploymentVersionIdDelimiter)
-	if !found {
-		return nil, fmt.Errorf("expected delimiter %s not found in version string %s", WorkerDeploymentVersionIdDelimiter, s)
+	before, after, found := strings.Cut(s, WorkerDeploymentVersionIdDelimiterV31)
+	// Also try parsing via the v32 delimiter in case user is using an old CLI/SDK but passing new version strings.
+	before32, after32, found32 := strings.Cut(s, WorkerDeploymentVersionIdDelimiter)
+	if !found && !found32 {
+		return nil, fmt.Errorf("expected delimiter '%s' or '%s' not found in version string %s", WorkerDeploymentVersionIdDelimiter, WorkerDeploymentVersionIdDelimiterV31, s)
+	}
+	if found && found32 && len(before32) < len(before) {
+		// choose the values based on the delimiter appeared first to ensure that deployment name does not contain any of the banned delimiters
+		before = before32
+		after = after32
+	}
+	if len(before) == 0 {
+		return nil, fmt.Errorf("deployment name is empty in version string %s", s)
+	}
+	if len(after) == 0 {
+		return nil, fmt.Errorf("build id is empty in version string %s", s)
 	}
 	return &deploymentspb.WorkerDeploymentVersion{
 		DeploymentName: before,
@@ -661,7 +703,7 @@ func GetDeploymentNameFromWorkflowID(workflowID string) string {
 // GenerateVersionWorkflowID is a helper that generates a system accepted
 // workflowID which are used in our Worker Deployment Version workflows
 func GenerateVersionWorkflowID(deploymentName string, buildID string) string {
-	versionString := WorkerDeploymentVersionToString(&deploymentspb.WorkerDeploymentVersion{
+	versionString := ExternalWorkerDeploymentVersionToString(&deploymentpb.WorkerDeploymentVersion{
 		DeploymentName: deploymentName,
 		BuildId:        buildID,
 	})

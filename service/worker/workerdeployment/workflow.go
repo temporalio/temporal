@@ -289,7 +289,7 @@ func (d *WorkflowRunner) handleRegisterWorker(ctx workflow.Context, args *deploy
 
 	// Add version to local state of the workflow, if not already present.
 	err = d.addVersionToWorkerDeployment(ctx, &deploymentspb.AddVersionUpdateArgs{
-		Version:    worker_versioning.WorkerDeploymentVersionToString(args.Version),
+		Version:    worker_versioning.WorkerDeploymentVersionToStringV31(args.Version),
 		CreateTime: timestamppb.New(workflow.Now(ctx)),
 	})
 	if err != nil {
@@ -302,7 +302,7 @@ func (d *WorkflowRunner) handleRegisterWorker(ctx workflow.Context, args *deploy
 		TaskQueueName: args.TaskQueueName,
 		TaskQueueType: args.TaskQueueType,
 		MaxTaskQueues: args.MaxTaskQueues,
-		Version:       worker_versioning.WorkerDeploymentVersionToString(args.Version),
+		Version:       worker_versioning.WorkerDeploymentVersionToStringV31(args.Version),
 	}).Get(ctx, nil)
 	if err != nil {
 		var appError *temporal.ApplicationError
