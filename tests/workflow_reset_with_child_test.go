@@ -39,7 +39,7 @@ import (
 //     c: If the child was terminated/failed at the time of reset: Expect the parent to make progress by retaining the
 //     termination/failure from the child.
 type WorkflowResetWithChildSuite struct {
-	testcore.FunctionalTestSdkSuite
+	testcore.FunctionalTestBase
 }
 
 func TestWorkflowResetWithChildTestSuite(t *testing.T) {
@@ -48,7 +48,7 @@ func TestWorkflowResetWithChildTestSuite(t *testing.T) {
 }
 
 func (s *WorkflowResetWithChildSuite) SetupTest() {
-	s.FunctionalTestSdkSuite.SetupTest()
+	s.FunctionalTestBase.SetupTest()
 	s.Worker().RegisterWorkflow(s.WorkflowWithChildren)
 	s.Worker().RegisterWorkflow(s.WorkflowWithWaitingChild)
 	s.Worker().RegisterWorkflow(child)

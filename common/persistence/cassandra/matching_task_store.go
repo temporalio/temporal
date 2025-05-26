@@ -461,7 +461,7 @@ func (d *MatchingTaskStore) GetTasks(
 	}
 
 	if err := iter.Close(); err != nil {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetTasks operation failed. Error: %v", err))
+		return nil, serviceerror.NewUnavailablef("GetTasks operation failed. Error: %v", err)
 	}
 	return response, nil
 }
@@ -613,7 +613,7 @@ func (d *MatchingTaskStore) ListTaskQueueUserDataEntries(ctx context.Context, re
 	}
 
 	if err := iter.Close(); err != nil {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("ListTaskQueueUserDataEntries operation failed. Error: %v", err))
+		return nil, serviceerror.NewUnavailablef("ListTaskQueueUserDataEntries operation failed. Error: %v", err)
 	}
 	return response, nil
 }
@@ -647,7 +647,7 @@ func (d *MatchingTaskStore) GetTaskQueuesByBuildId(ctx context.Context, request 
 	}
 
 	if err := iter.Close(); err != nil {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetTaskQueuesByBuildId operation failed. Error: %v", err))
+		return nil, serviceerror.NewUnavailablef("GetTaskQueuesByBuildId operation failed. Error: %v", err)
 	}
 	return taskQueues, nil
 }

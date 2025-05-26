@@ -203,7 +203,7 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 	case *replicationspb.VersionedTransitionArtifact_SyncWorkflowStateMutationAttributes:
 		mutation = versionedTransition.GetSyncWorkflowStateMutationAttributes()
 	default:
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("unknown artifact type %T", artifactType))
+		return serviceerror.NewInvalidArgumentf("unknown artifact type %T", artifactType)
 	}
 
 	if versionedTransition.IsFirstSync {
@@ -337,7 +337,7 @@ func (r *WorkflowStateReplicatorImpl) handleFirstReplicationTask(
 	case *replicationspb.VersionedTransitionArtifact_SyncWorkflowStateMutationAttributes:
 		mutation = versionedTransition.GetSyncWorkflowStateMutationAttributes()
 	default:
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("unknown artifact type %T", artifactType))
+		return serviceerror.NewInvalidArgumentf("unknown artifact type %T", artifactType)
 	}
 	executionState, executionInfo := func() (*persistencespb.WorkflowExecutionState, *persistencespb.WorkflowExecutionInfo) {
 		if snapshot != nil {
@@ -506,13 +506,13 @@ func (r *WorkflowStateReplicatorImpl) prepareFirstReplicationTaskEvents(
 					return fmt.Errorf("failed to get event version %w, eventId: %v, versionHistory: %v", err, historyEvent.EventId, currentVersionHistory)
 				}
 				if historyEvent.EventId != expectedEventId || historyEvent.Version != expectedEventVersion {
-					return serviceerror.NewInvalidArgument(fmt.Sprintf("eventId %v, version %v is not expected, expected eventId %v, version %v", historyEvent.EventId, historyEvent.Version, expectedEventId, expectedEventVersion))
+					return serviceerror.NewInvalidArgumentf("eventId %v, version %v is not expected, expected eventId %v, version %v", historyEvent.EventId, historyEvent.Version, expectedEventId, expectedEventVersion)
 				}
 				expectedEventId++
 			}
 		}
 		if expectedEventId != lastVersionHistoryItem.EventId+1 {
-			return serviceerror.NewInvalidArgument(fmt.Sprintf("event not match. Expected eventId %v, but got %v", expectedEventId, lastVersionHistoryItem.EventId+1))
+			return serviceerror.NewInvalidArgumentf("event not match. Expected eventId %v, but got %v", expectedEventId, lastVersionHistoryItem.EventId+1)
 		}
 		return nil
 	}
@@ -1043,10 +1043,10 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 		}
 		version, err := versionhistory.GetVersionHistoryEventVersion(sourceVersionHistory, currentEventId)
 		if err != nil {
-			return serviceerror.NewInternal(fmt.Sprintf("Failed to get version for event id %v from history %v", currentEventId, sourceVersionHistory))
+			return serviceerror.NewInternalf("Failed to get version for event id %v from history %v", currentEventId, sourceVersionHistory)
 		}
 		if version != currentEventVersion {
-			return serviceerror.NewInternal(fmt.Sprintf("Event Version does not match. Expected %v, but got %v", version, currentEventVersion))
+			return serviceerror.NewInternalf("Event Version does not match. Expected %v, but got %v", version, currentEventVersion)
 		}
 		expectedEventID = currentEventId + 1
 		return nil
@@ -1184,7 +1184,7 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 		}
 	}
 	if expectedEventID != endEventID+1 {
-		return serviceerror.NewInternal(fmt.Sprintf("Event not match. Expected %v, but got %v", expectedEventID, endEventID+1))
+		return serviceerror.NewInternalf("Event not match. Expected %v, but got %v", expectedEventID, endEventID+1)
 	}
 	versionHistoryToAppend.Items = versionhistory.CopyVersionHistoryItems(sourceVersionHistory.Items)
 	localMutableState.SetHistoryBuilder(historybuilder.NewImmutableForUpdateNextEventID(sourceLastItem))
@@ -1504,11 +1504,11 @@ BackfillLoop:
 				currentAncestor = sortedAncestors[sortedAncestorsIdx]
 				branchID = currentAncestor.GetBranchId()
 				if historyBlob.nodeID < currentAncestor.GetBeginNodeId() || historyBlob.nodeID >= currentAncestor.GetEndNodeId() {
-					return serviceerror.NewInternal(
-						fmt.Sprintf("The backfill history blob node id %d is not in acestoer range [%d, %d]",
-							historyBlob.nodeID,
-							currentAncestor.GetBeginNodeId(),
-							currentAncestor.GetEndNodeId()),
+					return serviceerror.NewInternalf(
+						"The backfill history blob node id %d is not in acestoer range [%d, %d]",
+						historyBlob.nodeID,
+						currentAncestor.GetBeginNodeId(),
+						currentAncestor.GetEndNodeId(),
 					)
 				}
 			}

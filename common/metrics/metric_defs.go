@@ -280,6 +280,8 @@ const (
 	VisibilityPersistenceCountWorkflowExecutionsScope = "CountWorkflowExecutions"
 	// VisibilityPersistenceGetWorkflowExecutionScope tracks GetWorkflowExecution calls made by service to visibility persistence layer
 	VisibilityPersistenceGetWorkflowExecutionScope = "GetWorkflowExecution"
+	// VisibilityPersistenceAddSearchAttributesScope tracks AddSearchAttributes calls made by service to visibility persistence layer
+	VisibilityPersistenceAddSearchAttributesScope = "AddSearchAttributes"
 )
 
 // Common
@@ -979,7 +981,9 @@ var (
 	DynamicWorkerPoolSchedulerRejectedTasks = NewCounterDef("dynamic_worker_pool_scheduler_rejected_tasks")
 	PausedActivitiesCounter                 = NewCounterDef("paused_activities")
 
-	// Deadlock detector latency metrics
+	// Deadlock detector metrics
+	DDSuspectedDeadlocks                 = NewCounterDef("dd_suspected_deadlocks")
+	DDCurrentSuspectedDeadlocks          = NewGaugeDef("dd_current_suspected_deadlocks")
 	DDClusterMetadataLockLatency         = NewTimerDef("dd_cluster_metadata_lock_latency")
 	DDClusterMetadataCallbackLockLatency = NewTimerDef("dd_cluster_metadata_callback_lock_latency")
 	DDShardControllerLockLatency         = NewTimerDef("dd_shard_controller_lock_latency")

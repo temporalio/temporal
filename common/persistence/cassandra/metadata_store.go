@@ -105,7 +105,7 @@ func (m *MetadataStore) CreateNamespace(
 	existingRow := make(map[string]interface{})
 	applied, err := query.MapScanCAS(existingRow)
 	if err != nil {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("CreateNamespace operation failed. Inserting into namespaces table. Error: %v", err))
+		return nil, serviceerror.NewUnavailablef("CreateNamespace operation failed. Inserting into namespaces table. Error: %v", err)
 	}
 
 	if !applied {
@@ -149,7 +149,7 @@ func (m *MetadataStore) CreateNamespaceInV2Table(
 	previous := make(map[string]interface{})
 	applied, iter, err := m.session.MapExecuteBatchCAS(batch, previous)
 	if err != nil {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("CreateNamespace operation failed. Inserting into namespaces table. Error: %v", err))
+		return nil, serviceerror.NewUnavailablef("CreateNamespace operation failed. Inserting into namespaces table. Error: %v", err)
 	}
 	defer func() { _ = iter.Close() }()
 	deleteOrphanNamespace := func() {
@@ -221,7 +221,7 @@ func (m *MetadataStore) UpdateNamespace(
 	previous := make(map[string]interface{})
 	applied, iter, err := m.session.MapExecuteBatchCAS(batch, previous)
 	if err != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf("UpdateNamespace operation failed. Error: %v", err))
+		return serviceerror.NewUnavailablef("UpdateNamespace operation failed. Error: %v", err)
 	}
 	defer func() { _ = iter.Close() }()
 
@@ -252,7 +252,7 @@ func (m *MetadataStore) RenameNamespace(
 		request.Name,
 		request.Id,
 	).WithContext(ctx).Exec(); updateErr != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf("RenameNamespace operation failed to update 'namespaces_by_id' table. Error: %v", updateErr))
+		return serviceerror.NewUnavailablef("RenameNamespace operation failed to update 'namespaces_by_id' table. Error: %v", updateErr)
 	}
 
 	// Step 2.
@@ -275,7 +275,7 @@ func (m *MetadataStore) RenameNamespace(
 	previous := make(map[string]interface{})
 	applied, iter, err := m.session.MapExecuteBatchCAS(batch, previous)
 	if err != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf("RenameNamespace operation failed. Error: %v", err))
+		return serviceerror.NewUnavailablef("RenameNamespace operation failed. Error: %v", err)
 	}
 	defer func() { _ = iter.Close() }()
 
@@ -311,7 +311,7 @@ func (m *MetadataStore) GetNamespace(
 			}
 			return serviceerror.NewNamespaceNotFound(identity)
 		}
-		return serviceerror.NewUnavailable(fmt.Sprintf("GetNamespace operation failed. Error %v", err))
+		return serviceerror.NewUnavailablef("GetNamespace operation failed. Error %v", err)
 	}
 
 	namespace := request.Name
@@ -392,7 +392,7 @@ func (m *MetadataStore) ListNamespaces(
 			nextPageToken = nil
 		}
 		if err := iter.Close(); err != nil {
-			return nil, serviceerror.NewUnavailable(fmt.Sprintf("ListNamespaces operation failed. Error: %v", err))
+			return nil, serviceerror.NewUnavailablef("ListNamespaces operation failed. Error: %v", err)
 		}
 
 		if len(nextPageToken) == 0 {
@@ -484,12 +484,12 @@ func (m *MetadataStore) updateMetadataBatch(
 func (m *MetadataStore) deleteNamespace(ctx context.Context, name string, ID []byte) error {
 	query := m.session.Query(templateDeleteNamespaceByNameQueryV2, constNamespacePartition, name).WithContext(ctx)
 	if err := query.Exec(); err != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf("DeleteNamespaceByName operation failed. Error %v", err))
+		return serviceerror.NewUnavailablef("DeleteNamespaceByName operation failed. Error %v", err)
 	}
 
 	query = m.session.Query(templateDeleteNamespaceQuery, ID).WithContext(ctx)
 	if err := query.Exec(); err != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf("DeleteNamespace operation failed. Error %v", err))
+		return serviceerror.NewUnavailablef("DeleteNamespace operation failed. Error %v", err)
 	}
 
 	return nil

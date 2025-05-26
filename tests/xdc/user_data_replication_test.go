@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -267,8 +268,8 @@ func (s *UserDataReplicationTestSuite) TestUserDataIsReplicatedFromPassiveToActi
 			Namespace: namespace,
 			TaskQueue: taskQueue,
 		})
-		assert.NoError(t, err)
-		assert.Len(t, response.GetMajorVersionSets(), 1)
+		require.NoError(t, err)
+		require.Len(t, response.GetMajorVersionSets(), 1)
 	}, replicationWaitTime, replicationCheckInterval)
 }
 

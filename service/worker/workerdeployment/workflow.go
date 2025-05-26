@@ -80,10 +80,7 @@ func (d *WorkflowRunner) listenToSignals(ctx workflow.Context) {
 		var summary *deploymentspb.WorkerDeploymentVersionSummary
 		d.signalHandler.processingSignals++
 		c.Receive(ctx, &summary)
-		if _, ok := d.State.Versions[summary.GetVersion()]; !ok {
-			d.logger.Error("received summary for a non-existing version, ignoring it", "version", summary.GetVersion())
-		}
-		d.State.Versions[summary.GetVersion()] = summary
+		d.syncVersionSummaryFromVersionWorkflow(summary)
 		d.setStateChanged()
 		d.signalHandler.processingSignals--
 	})
@@ -92,6 +89,36 @@ func (d *WorkflowRunner) listenToSignals(ctx workflow.Context) {
 	for {
 		d.signalHandler.signalSelector.Select(ctx)
 	}
+}
+
+// syncVersionSummary ensures the version summary in the deployment workflow stays consistent
+// with the version workflow. This helps prevent discrepancies if they ever fall out of sync.
+func (d *WorkflowRunner) syncVersionSummaryFromVersionWorkflow(summary *deploymentspb.WorkerDeploymentVersionSummary) {
+	if _, ok := d.State.Versions[summary.GetVersion()]; !ok {
+		d.logger.Error("received summary for a non-existing version, ignoring it", "version", summary.GetVersion())
+		return
+	}
+
+	d.State.Versions[summary.GetVersion()] = summary
+}
+
+func (d *WorkflowRunner) updateVersionSummary(summary *deploymentspb.WorkerDeploymentVersionSummary) {
+	if _, ok := d.State.Versions[summary.GetVersion()]; !ok {
+		d.logger.Error("received summary for a non-existing version, ignoring it", "version", summary.GetVersion())
+		return
+	}
+
+	// Preserve create_time and first_activation_time if they exist in current summary. This is to ensure that if the version
+	// had already been activated before, we don't override the first activation time by setting it to a wrong value.
+	if existingSummary := d.State.Versions[summary.GetVersion()]; existingSummary.GetCreateTime() != nil {
+		summary.CreateTime = existingSummary.GetCreateTime()
+
+		if existingSummary.GetFirstActivationTime() != nil {
+			summary.FirstActivationTime = existingSummary.GetFirstActivationTime()
+		}
+	}
+
+	d.State.Versions[summary.GetVersion()] = summary
 }
 
 func (d *WorkflowRunner) run(ctx workflow.Context) error {
@@ -230,7 +257,7 @@ func (d *WorkflowRunner) addVersionToWorkerDeployment(ctx workflow.Context, args
 	if len(d.State.Versions) >= maxVersions {
 		err := d.tryDeleteVersion(ctx)
 		if err != nil {
-			return temporal.NewApplicationError(fmt.Sprintf("cannot add version, already at max versions %d", maxVersions), errTooManyVersions)
+			return temporal.NewApplicationError(fmt.Sprintf("cannot add version %s since maximum number of versions (%d) have been registered in the deployment", args.Version, maxVersions), errTooManyVersions)
 		}
 	}
 
@@ -274,7 +301,7 @@ func (d *WorkflowRunner) handleRegisterWorker(ctx workflow.Context, args *deploy
 		if errors.As(err, &appError) {
 			if appError.Type() == errMaxTaskQueuesInVersionType {
 				return temporal.NewApplicationError(
-					fmt.Sprintf("maximum number of task queues (%d) have been registered in deployment", args.MaxTaskQueues),
+					fmt.Sprintf("cannot add task queue %v since maximum number of task queues (%d) have been registered in deployment", args.TaskQueueName, args.MaxTaskQueues),
 					errMaxTaskQueuesInVersionType,
 				)
 			}
@@ -307,16 +334,16 @@ func (d *WorkflowRunner) validateStateBeforeAcceptingRampingUpdate(args *deploym
 	}
 
 	if args.ConflictToken != nil && !bytes.Equal(args.ConflictToken, d.State.ConflictToken) {
-		return temporal.NewApplicationError("conflict token mismatch", errConflictTokenMismatchType)
+		return temporal.NewApplicationError("conflict token mismatch", errFailedPrecondition)
 	}
 	if args.Version == d.State.RoutingConfig.CurrentVersion {
 		d.logger.Info("version can't be set to ramping since it is already current")
-		return temporal.NewApplicationError("version can't be set to ramping since it is already current", errVersionAlreadyCurrentType)
+		return temporal.NewApplicationError(fmt.Sprintf("requested ramping version %s is already current", args.Version), errFailedPrecondition)
 	}
 
 	if _, ok := d.State.Versions[args.Version]; !ok && args.Version != "" && args.Version != worker_versioning.UnversionedVersionId {
 		d.logger.Info("version not found in deployment")
-		return temporal.NewApplicationError("version not found in deployment", errVersionNotFound)
+		return temporal.NewApplicationError(fmt.Sprintf("requested ramping version %s not found in deployment", args.Version), errFailedPrecondition)
 	}
 
 	return nil
@@ -367,7 +394,7 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 		}
 
 		if prevRampingVersion != worker_versioning.UnversionedVersionId {
-			if _, err := d.syncVersion(ctx, prevRampingVersion, unsetRampUpdateArgs); err != nil {
+			if _, err := d.syncVersion(ctx, prevRampingVersion, unsetRampUpdateArgs, false); err != nil {
 				return nil, err
 			}
 		} else {
@@ -380,7 +407,7 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 
 		// Set summary drainage status immediately to draining.
 		// We know prevRampingVersion cannot have been current, so it must now be draining
-		d.setDrainageStatus(prevRampingVersion, enumspb.VERSION_DRAINAGE_STATUS_DRAINING)
+		d.setDrainageStatus(prevRampingVersion, enumspb.VERSION_DRAINAGE_STATUS_DRAINING, routingUpdateTime)
 	} else {
 		// setting ramp
 
@@ -407,7 +434,7 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 			rampingVersionUpdateTime = routingUpdateTime
 
 			// Erase summary drainage status immediately, so it is not draining/drained.
-			d.setDrainageStatus(newRampingVersion, enumspb.VERSION_DRAINAGE_STATUS_UNSPECIFIED)
+			d.setDrainageStatus(newRampingVersion, enumspb.VERSION_DRAINAGE_STATUS_UNSPECIFIED, routingUpdateTime)
 		}
 
 		setRampUpdateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
@@ -416,7 +443,7 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 			RampPercentage:    args.Percentage,
 		}
 		if newRampingVersion != worker_versioning.UnversionedVersionId {
-			if _, err := d.syncVersion(ctx, newRampingVersion, setRampUpdateArgs); err != nil {
+			if _, err := d.syncVersion(ctx, newRampingVersion, setRampUpdateArgs, true); err != nil {
 				return nil, err
 			}
 		} else {
@@ -433,7 +460,7 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 				RampPercentage:    0,   // remove ramp
 			}
 			if prevRampingVersion != worker_versioning.UnversionedVersionId {
-				if _, err := d.syncVersion(ctx, prevRampingVersion, unsetRampUpdateArgs); err != nil {
+				if _, err := d.syncVersion(ctx, prevRampingVersion, unsetRampUpdateArgs, false); err != nil {
 					return nil, err
 				}
 			} else {
@@ -443,7 +470,7 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 			}
 			// Set summary drainage status immediately to draining.
 			// We know prevRampingVersion cannot have been current, so it must now be draining
-			d.setDrainageStatus(prevRampingVersion, enumspb.VERSION_DRAINAGE_STATUS_DRAINING)
+			d.setDrainageStatus(prevRampingVersion, enumspb.VERSION_DRAINAGE_STATUS_DRAINING, routingUpdateTime)
 		}
 	}
 
@@ -468,10 +495,14 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 	}, nil
 
 }
-
-func (d *WorkflowRunner) setDrainageStatus(version string, status enumspb.VersionDrainageStatus) {
+func (d *WorkflowRunner) setDrainageStatus(version string, status enumspb.VersionDrainageStatus, routingUpdateTime *timestamppb.Timestamp) {
 	if summary := d.State.GetVersions()[version]; summary != nil {
 		summary.DrainageStatus = status
+		summary.DrainageInfo = &deploymentpb.VersionDrainageInfo{
+			Status:          status,
+			LastChangedTime: routingUpdateTime,
+			LastCheckedTime: routingUpdateTime,
+		}
 	}
 }
 
@@ -538,11 +569,11 @@ func (d *WorkflowRunner) validateStateBeforeAcceptingSetCurrent(args *deployment
 		return temporal.NewApplicationError("no change", errNoChangeType, d.State.ConflictToken)
 	}
 	if args.ConflictToken != nil && !bytes.Equal(args.ConflictToken, d.State.ConflictToken) {
-		return temporal.NewApplicationError("conflict token mismatch", errConflictTokenMismatchType)
+		return temporal.NewApplicationError("conflict token mismatch", errFailedPrecondition)
 	}
 	if _, ok := d.State.Versions[args.Version]; !ok && args.Version != worker_versioning.UnversionedVersionId {
 		d.logger.Info("version not found in deployment")
-		return temporal.NewApplicationError("version not found in deployment", errVersionNotFound)
+		return temporal.NewApplicationError(fmt.Sprintf("version %s not found in deployment", args.Version), errFailedPrecondition)
 	}
 	return nil
 }
@@ -597,24 +628,11 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 			RampingSinceTime:  nil, // remove ramp for that version if it was ramping
 			RampPercentage:    0,   // remove ramp for that version if it was ramping
 		}
-		if _, err := d.syncVersion(ctx, newCurrentVersion, currUpdateArgs); err != nil {
+		if _, err := d.syncVersion(ctx, newCurrentVersion, currUpdateArgs, true); err != nil {
 			return nil, err
 		}
 		// Erase summary drainage status immediately (in case it was previously drained/draining)
-		d.setDrainageStatus(newCurrentVersion, enumspb.VERSION_DRAINAGE_STATUS_UNSPECIFIED)
-	} else if d.State.RoutingConfig.RampingVersion == worker_versioning.UnversionedVersionId {
-		// If the new current is unversioned, and it was previously ramping, we need to tell
-		// all the task queues with unversioned ramp that they no longer have unversioned ramp.
-		// The task queues with unversioned ramp are the task queues of the previous current version.
-		// TODO (Carly): Should we ban people from changing the task queues in the current version while they have an unversioned ramp?
-		unsetRampUpdateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
-			RoutingUpdateTime: updateTime,
-			RampingSinceTime:  nil, // remove ramp
-			RampPercentage:    0,   // remove ramp
-		}
-		if err := d.syncUnversionedRamp(ctx, unsetRampUpdateArgs); err != nil {
-			return nil, err
-		}
+		d.setDrainageStatus(newCurrentVersion, enumspb.VERSION_DRAINAGE_STATUS_UNSPECIFIED, updateTime)
 	}
 	// If the new current version is unversioned and there was no unversioned ramp, all we need to
 	// do is tell the previous current version that it is not current. Then, the task queues in the
@@ -628,13 +646,30 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 			RampingSinceTime:  nil, // no change, the prev current was not ramping
 			RampPercentage:    0,   // no change, the prev current was not ramping
 		}
-		if _, err := d.syncVersion(ctx, prevCurrentVersion, prevUpdateArgs); err != nil {
+		if _, err := d.syncVersion(ctx, prevCurrentVersion, prevUpdateArgs, false); err != nil {
 			return nil, err
 		}
 		// Set summary drainage status immediately to draining.
 		// We know prevCurrentVersion cannot have been ramping, so it must now be draining
-		d.setDrainageStatus(prevCurrentVersion, enumspb.VERSION_DRAINAGE_STATUS_DRAINING)
+		d.setDrainageStatus(prevCurrentVersion, enumspb.VERSION_DRAINAGE_STATUS_DRAINING, updateTime)
 	}
+
+	//nolint:staticcheck // deprecated stuff will be cleaned
+	if newCurrentVersion == worker_versioning.UnversionedVersionId && d.State.RoutingConfig.RampingVersion == worker_versioning.UnversionedVersionId {
+		// If the new current is unversioned, and it was previously ramping, we need to tell
+		// all the task queues with unversioned ramp that they no longer have unversioned ramp.
+		// The task queues with unversioned ramp are the task queues of the previous current version.
+		// TODO (Carly): Should we ban people from changing the task queues in the current version while they have an unversioned ramp?
+		unsetRampUpdateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
+			RoutingUpdateTime: updateTime,
+			RampingSinceTime:  nil, // remove ramp
+			RampPercentage:    0,   // remove ramp
+		}
+		if err := d.syncUnversionedRamp(ctx, unsetRampUpdateArgs); err != nil {
+			return nil, err
+		}
+	}
+
 	// If the previous current version was unversioned, there is nothing in the task queues
 	// to remove, because they were implicitly unversioned. We don't have to remove any
 	// unversioned ramps, because current and ramping cannot both be unversioned.
@@ -747,7 +782,7 @@ func (d *WorkflowRunner) tryDeleteVersion(ctx workflow.Context) error {
 	return serviceerror.NewFailedPrecondition("could not add version: too many versions in deployment and none are eligible for deletion")
 }
 
-func (d *WorkflowRunner) syncVersion(ctx workflow.Context, targetVersion string, versionUpdateArgs *deploymentspb.SyncVersionStateUpdateArgs) (*deploymentspb.VersionLocalState, error) {
+func (d *WorkflowRunner) syncVersion(ctx workflow.Context, targetVersion string, versionUpdateArgs *deploymentspb.SyncVersionStateUpdateArgs, activated bool) (*deploymentspb.VersionLocalState, error) {
 	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
 	var res deploymentspb.SyncVersionStateActivityResult
 	err := workflow.ExecuteActivity(activityCtx, d.a.SyncWorkerDeploymentVersion, &deploymentspb.SyncVersionStateActivityArgs{
@@ -756,6 +791,22 @@ func (d *WorkflowRunner) syncVersion(ctx workflow.Context, targetVersion string,
 		UpdateArgs:     versionUpdateArgs,
 		RequestId:      d.newUUID(ctx),
 	}).Get(ctx, &res)
+
+	// Update the VersionSummary, stored as part of the WorkerDeploymentLocalState, for this version.
+	if err == nil {
+		summary := &deploymentspb.WorkerDeploymentVersionSummary{
+			Version:           targetVersion,
+			RoutingUpdateTime: versionUpdateArgs.RoutingUpdateTime,
+			CurrentSinceTime:  versionUpdateArgs.CurrentSinceTime,
+			RampingSinceTime:  versionUpdateArgs.RampingSinceTime,
+		}
+		if activated {
+			summary.FirstActivationTime = versionUpdateArgs.RoutingUpdateTime
+		} else {
+			summary.LastDeactivationTime = versionUpdateArgs.RoutingUpdateTime
+		}
+		d.updateVersionSummary(summary)
+	}
 	return res.VersionState, err
 }
 

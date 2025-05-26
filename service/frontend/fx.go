@@ -25,7 +25,6 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
-	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/quotas/calculator"
@@ -599,7 +598,6 @@ func AdminHandlerProvider(
 	persistenceConfig *config.Persistence,
 	configuration *Config,
 	replicatorNamespaceReplicationQueue FEReplicatorNamespaceReplicationQueue,
-	esClient esclient.Client,
 	visibilityMgr manager.VisibilityManager,
 	logger log.SnTaggedLogger,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
@@ -630,7 +628,6 @@ func AdminHandlerProvider(
 		configuration,
 		namespaceReplicationQueue,
 		replicatorNamespaceReplicationQueue,
-		esClient,
 		visibilityMgr,
 		logger,
 		taskManager,
@@ -660,7 +657,6 @@ func AdminHandlerProvider(
 
 func OperatorHandlerProvider(
 	configuration *Config,
-	esClient esclient.Client,
 	logger log.SnTaggedLogger,
 	sdkClientFactory sdk.ClientFactory,
 	metricsHandler metrics.Handler,
@@ -676,7 +672,6 @@ func OperatorHandlerProvider(
 ) *OperatorHandlerImpl {
 	args := NewOperatorHandlerImplArgs{
 		configuration,
-		esClient,
 		logger,
 		sdkClientFactory,
 		metricsHandler,
