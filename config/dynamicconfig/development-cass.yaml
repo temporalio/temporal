@@ -36,8 +36,6 @@ frontend.workerVersioningDataAPIs:
   - value: true
 frontend.workerVersioningWorkflowAPIs:
   - value: true
-system.enableDeployments:
-  - value: true
 system.enableDeploymentVersions:
   - value: true
 frontend.workerVersioningRuleAPIs:

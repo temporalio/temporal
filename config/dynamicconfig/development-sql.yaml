@@ -45,8 +45,6 @@ frontend.workerVersioningRuleAPIs:
   - value: true
 system.enableDeploymentVersions:
   - value: true
-system.enableDeployments:
-  - value: true
 frontend.enableExecuteMultiOperation:
   - value: true
 system.enableNexus:

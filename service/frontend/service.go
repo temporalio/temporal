@@ -162,9 +162,6 @@ type Config struct {
 	// Enable schedule-related RPCs
 	EnableSchedules dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
-	// Enable deployment RPCs
-	EnableDeployments dynamicconfig.BoolPropertyFnWithNamespaceFilter
-
 	// Enable deployment version RPCs
 	EnableDeploymentVersions dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
@@ -306,10 +303,7 @@ func NewConfig(
 		DeleteNamespaceConcurrentDeleteExecutionsActivities: dynamicconfig.DeleteNamespaceConcurrentDeleteExecutionsActivities.Get(dc),
 		DeleteNamespaceNamespaceDeleteDelay:                 dynamicconfig.DeleteNamespaceNamespaceDeleteDelay.Get(dc),
 
-		EnableSchedules: dynamicconfig.FrontendEnableSchedules.Get(dc),
-
-		// [cleanup-wv-pre-release]
-		EnableDeployments:        dynamicconfig.EnableDeployments.Get(dc),
+		EnableSchedules:          dynamicconfig.FrontendEnableSchedules.Get(dc),
 		EnableDeploymentVersions: dynamicconfig.EnableDeploymentVersions.Get(dc),
 
 		EnableBatcher:                   dynamicconfig.FrontendEnableBatcher.Get(dc),
