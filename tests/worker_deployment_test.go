@@ -1686,8 +1686,8 @@ func (s *WorkerDeploymentSuite) verifyTaskQueueVersioningInfo(ctx context.Contex
 		})
 		a := require.New(t)
 		a.Nil(err)
-		a.Equal(expectedCurrentVersion, tqDesc.GetVersioningInfo().GetCurrentVersion())
-		a.Equal(expectedRampingVersion, tqDesc.GetVersioningInfo().GetRampingVersion())
+		a.Equal(expectedCurrentVersion, tqDesc.GetVersioningInfo().GetCurrentVersion()) //nolint:staticcheck // SA1019: old worker versioning
+		a.Equal(expectedRampingVersion, tqDesc.GetVersioningInfo().GetRampingVersion()) //nolint:staticcheck // SA1019: old worker versioning
 		a.Equal(expectedPercentage, tqDesc.GetVersioningInfo().GetRampingVersionPercentage())
 	}, time.Second*10, time.Millisecond*1000)
 }
