@@ -285,9 +285,6 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 	pollMetadata *pollMetadata,
 ) (*internalTask, error) {
 	c.liveness.markAlive()
-	//if c.queue.Version().IsVersioned() {
-	//	fmt.Printf("poll received in %v\n", c.queue.Version())
-	//}
 
 	c.currentPolls.Add(1)
 	defer c.currentPolls.Add(-1)
@@ -444,9 +441,6 @@ func (c *physicalTaskQueueManagerImpl) GetAllPollerInfo() []*taskqueuepb.PollerI
 		return nil
 	}
 	res := c.pollerHistory.getPollerInfo(time.Time{})
-	if c.queue.Version().IsVersioned() {
-		fmt.Printf("poll info for %v %v\n", c.queue.Version(), res)
-	}
 	return res
 }
 

@@ -3,7 +3,6 @@ package matching
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sync"
 	"time"
 
@@ -588,7 +587,6 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 			versions[k] = true
 		}
 	}
-	fmt.Printf("describe tq called in prtn %s with buildIds %v \n", pm.partition.RpcName(), buildIds)
 
 	for b := range buildIds {
 		if b == "" {
@@ -596,10 +594,8 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 		} else {
 			found := false
 			for k := range pm.versionedQueues {
-				fmt.Printf("checking version %v in prtn %s \n", k, pm.partition.RpcName())
 				// Storing the versioned queue if the buildID is a v2 based buildID or a versionID representing a worker-deployment version.
 				if k.BuildId() == b || worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(k.Deployment())) == b {
-					fmt.Printf("selected %v\n", k)
 					versions[k] = true
 					found = true
 					break

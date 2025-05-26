@@ -1189,6 +1189,7 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 		}
 	}
 
+	//nolint:staticcheck // SA1019: worker versioning v2
 	buildId := attrs.GetWorkerVersion().GetBuildId()
 	if wftDeployment != nil {
 		buildId = wftDeployment.GetBuildId()

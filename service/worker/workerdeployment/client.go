@@ -700,6 +700,8 @@ func (d *ClientImpl) DeleteWorkerDeploymentVersion(
 	if failure := outcome.GetFailure(); failure != nil {
 		if failure.GetApplicationFailureInfo().GetType() == errVersionNotFound {
 			return nil
+		} else if failure.Message == ErrVersionIsCurrentOrRamping {
+			return serviceerror.NewFailedPrecondition(ErrVersionIsCurrentOrRamping) // non-retryable error to stop multiple activity attempts
 		} else if failure.GetCause().GetApplicationFailureInfo().GetType() == errFailedPrecondition {
 			return serviceerror.NewFailedPrecondition(failure.GetCause().GetMessage())
 		}
@@ -927,8 +929,6 @@ func (d *ClientImpl) DeleteVersionFromWorkerDeployment(
 			return temporal.NewNonRetryableApplicationError(ErrVersionIsDraining, errFailedPrecondition, nil) // non-retryable error to stop multiple activity attempts
 		} else if failure.Message == ErrVersionHasPollers {
 			return temporal.NewNonRetryableApplicationError(ErrVersionHasPollers, errFailedPrecondition, nil) // non-retryable error to stop multiple activity attempts
-		} else if failure.Message == ErrVersionIsCurrentOrRamping {
-			return temporal.NewNonRetryableApplicationError(ErrVersionIsCurrentOrRamping, errFailedPrecondition, nil) // non-retryable error to stop multiple activity attempts
 		}
 		return serviceerror.NewInternal(failure.Message)
 	}
