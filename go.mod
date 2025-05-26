@@ -178,4 +178,4 @@ require (
 	modernc.org/token v1.1.0 // indirect
 )
 
-replace go.temporal.io/api => go.temporal.io/api v1.49.2-0.20250525041133-bc55c12b9ead
+replace go.temporal.io/api => go.temporal.io/api v1.49.2-0.20250526114653-d20f1865bb64

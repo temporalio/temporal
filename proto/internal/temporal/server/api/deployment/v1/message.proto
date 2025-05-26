@@ -103,7 +103,7 @@ message VersionLocalState {
     }
 
     // Status of the Worker Deployment Version.
-    temporal.api.enums.v1.VersionStatus status = 14;
+    temporal.api.enums.v1.WorkerDeploymentVersionStatus status = 14;
 }
 
 // Data specific to a task queue, from the perspective of a worker deployment version.
@@ -170,7 +170,7 @@ message WorkerDeploymentVersionSummary {
     google.protobuf.Timestamp last_deactivation_time = 9;
 
     // Status of the Worker Deployment Version.
-    temporal.api.enums.v1.VersionStatus status = 10;
+    temporal.api.enums.v1.WorkerDeploymentVersionStatus status = 10;
 }
 
 // used as Worker Deployment Version workflow update input:

@@ -1077,8 +1077,8 @@ func (d *ClientImpl) updateWithStartWorkerDeploymentVersion(
 				DeploymentName: deploymentName,
 				BuildId:        buildID,
 			},
-			CreateTime:        now,
-			RoutingUpdateTime: now,
+			CreateTime:        now,                                 // TODO (Shivam): This is wrong!
+			RoutingUpdateTime: now,                                 // TODO (Shivam): This is wrong! RoutingUpdateTime should not be set to now when the version is first created.
 			CurrentSinceTime:  nil,                                 // not current
 			RampingSinceTime:  nil,                                 // not ramping
 			RampPercentage:    0,                                   // not ramping

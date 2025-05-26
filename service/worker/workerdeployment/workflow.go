@@ -264,6 +264,7 @@ func (d *WorkflowRunner) addVersionToWorkerDeployment(ctx workflow.Context, args
 	d.State.Versions[args.Version] = &deploymentspb.WorkerDeploymentVersionSummary{
 		Version:    args.Version,
 		CreateTime: args.CreateTime,
+		Status:     enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE,
 	}
 	return nil
 }
@@ -801,11 +802,11 @@ func (d *WorkflowRunner) syncVersion(ctx workflow.Context, targetVersion string,
 		// DRAINED from within the deployment workflow since the version workflow is responsible for
 		// querying visibility after which it signals the deployment workflow if the version is drained.
 		if summary.CurrentSinceTime != nil {
-			summary.Status = enumspb.VERSION_STATUS_CURRENT
+			summary.Status = enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT
 		} else if summary.RampingSinceTime != nil {
-			summary.Status = enumspb.VERSION_STATUS_RAMPING
+			summary.Status = enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING
 		} else {
-			summary.Status = enumspb.VERSION_STATUS_DRAINING
+			summary.Status = enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING
 		}
 		d.updateVersionSummary(summary)
 	}

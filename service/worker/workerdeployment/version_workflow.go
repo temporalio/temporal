@@ -85,7 +85,7 @@ func (d *VersionWorkflowRunner) listenToSignals(ctx workflow.Context) {
 		// Update the future to be nil to indicate that the drainage workflow is no longer running.
 		if d.VersionState.GetDrainageInfo().GetStatus() == enumspb.VERSION_DRAINAGE_STATUS_DRAINED {
 			d.drainageWorkflowFuture = nil
-			d.VersionState.Status = enumspb.VERSION_STATUS_DRAINED
+			d.VersionState.Status = enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED
 			d.syncSummary(ctx)
 		}
 	})
@@ -104,6 +104,9 @@ func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
 	}
 	if d.VersionState.GetCreateTime() == nil {
 		d.VersionState.CreateTime = timestamppb.New(workflow.Now(ctx))
+	}
+	if d.VersionState.Status == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_UNSPECIFIED {
+		d.VersionState.Status = enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE
 	}
 
 	// if we were draining and just continued-as-new, restart drainage child wf
@@ -651,7 +654,7 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 		// Version deactivated from current/ramping
 		d.VersionState.LastDeactivationTime = args.RoutingUpdateTime
 		d.startDrainage(ctx, false)
-		state.Status = enumspb.VERSION_STATUS_DRAINING
+		state.Status = enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING
 	}
 
 	// started accepting new workflows --> stop drainage child wf if it exists
@@ -672,9 +675,9 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 
 	// Set the appropriate status for the version if it is current/ramping.
 	if state.CurrentSinceTime != nil {
-		state.Status = enumspb.VERSION_STATUS_CURRENT
+		state.Status = enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT
 	} else if state.RampingSinceTime != nil {
-		state.Status = enumspb.VERSION_STATUS_RAMPING
+		state.Status = enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING
 	}
 
 	return &deploymentspb.SyncVersionStateResponse{
@@ -683,6 +686,7 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 }
 
 func (d *VersionWorkflowRunner) handleDescribeQuery() (*deploymentspb.QueryDescribeVersionResponse, error) {
+	fmt.Println("status from inside query", d.VersionState.Status)
 	return &deploymentspb.QueryDescribeVersionResponse{
 		VersionState: d.VersionState,
 	}, nil

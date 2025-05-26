@@ -141,7 +141,7 @@ func (s *DeploymentVersionSuite) startVersionWorkflow(ctx context.Context, tv *t
 		a.Equal(tv.DeploymentVersionString(), resp.GetWorkerDeploymentVersionInfo().GetVersion())
 		a.Equal(tv.ExternalDeploymentVersion().GetDeploymentName(), resp.GetWorkerDeploymentVersionInfo().GetDeploymentVersion().GetDeploymentName())
 		a.Equal(tv.ExternalDeploymentVersion().GetBuildId(), resp.GetWorkerDeploymentVersionInfo().GetDeploymentVersion().GetBuildId())
-		a.Equal(enumspb.VERSION_STATUS_UNSPECIFIED, resp.GetWorkerDeploymentVersionInfo().GetStatus())
+		a.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE, resp.GetWorkerDeploymentVersionInfo().GetStatus())
 
 		newResp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
 			Namespace:      s.Namespace().String(),
@@ -228,7 +228,7 @@ func (s *DeploymentVersionSuite) TestForceCAN_NoOpenWFS() {
 		a.NotNil(resp.GetWorkerDeploymentVersionInfo().GetRoutingChangedTime())
 		a.NotNil(resp.GetWorkerDeploymentVersionInfo().GetCurrentSinceTime())
 		a.Nil(resp.GetWorkerDeploymentVersionInfo().GetDrainageInfo())
-		a.Equal(enumspb.VERSION_STATUS_CURRENT, resp.GetWorkerDeploymentVersionInfo().GetStatus())
+		a.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT, resp.GetWorkerDeploymentVersionInfo().GetStatus())
 
 	}, time.Second*10, time.Millisecond*1000)
 }
@@ -253,7 +253,7 @@ func (s *DeploymentVersionSuite) TestDescribeVersion_RegisterTaskQueue() {
 		a.Equal(tv.DeploymentVersionString(), resp.GetWorkerDeploymentVersionInfo().GetVersion()) //nolint:staticcheck // SA1019: worker versioning v0.31
 		a.Equal(tv.ExternalDeploymentVersion().GetDeploymentName(), resp.GetWorkerDeploymentVersionInfo().GetDeploymentVersion().GetDeploymentName())
 		a.Equal(tv.ExternalDeploymentVersion().GetBuildId(), resp.GetWorkerDeploymentVersionInfo().GetDeploymentVersion().GetBuildId())
-		a.Equal(enumspb.VERSION_STATUS_UNSPECIFIED, resp.GetWorkerDeploymentVersionInfo().GetStatus())
+		a.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE, resp.GetWorkerDeploymentVersionInfo().GetStatus())
 
 		a.Equal(numberOfDeployments, len(resp.GetWorkerDeploymentVersionInfo().GetTaskQueueInfos()))
 		a.Equal(tv.TaskQueue().GetName(), resp.GetWorkerDeploymentVersionInfo().GetTaskQueueInfos()[0].Name)
@@ -287,7 +287,7 @@ func (s *DeploymentVersionSuite) TestDescribeVersion_RegisterTaskQueue_Concurren
 		a.Equal(tv.DeploymentVersionString(), resp.GetWorkerDeploymentVersionInfo().GetVersion()) //nolint:staticcheck // SA1019: worker versioning v0.31
 		a.Equal(tv.ExternalDeploymentVersion().GetDeploymentName(), resp.GetWorkerDeploymentVersionInfo().GetDeploymentVersion().GetDeploymentName())
 		a.Equal(tv.ExternalDeploymentVersion().GetBuildId(), resp.GetWorkerDeploymentVersionInfo().GetDeploymentVersion().GetBuildId())
-		a.Equal(enumspb.VERSION_STATUS_UNSPECIFIED, resp.GetWorkerDeploymentVersionInfo().GetStatus())
+		a.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE, resp.GetWorkerDeploymentVersionInfo().GetStatus())
 		a.Equal(2, len(resp.GetWorkerDeploymentVersionInfo().GetTaskQueueInfos()))
 		a.Equal(tv.TaskQueue().GetName(), resp.GetWorkerDeploymentVersionInfo().GetTaskQueueInfos()[0].Name)
 	}, time.Second*10, time.Millisecond*1000)
@@ -321,16 +321,16 @@ func (s *DeploymentVersionSuite) TestDrainageStatus_SetCurrentVersion_NoOpenWFs(
 	s.startVersionWorkflow(ctx, tv2)
 
 	// non-current deployments have never been used and have no drainage info
-	s.checkVersionDrainageAndVersionStatus(ctx, tv1, &deploymentpb.VersionDrainageInfo{}, enumspb.VERSION_STATUS_UNSPECIFIED, false, false)
-	s.checkVersionDrainageAndVersionStatus(ctx, tv2, &deploymentpb.VersionDrainageInfo{}, enumspb.VERSION_STATUS_UNSPECIFIED, false, false)
+	s.checkVersionDrainageAndVersionStatus(ctx, tv1, &deploymentpb.VersionDrainageInfo{}, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE, false, false)
+	s.checkVersionDrainageAndVersionStatus(ctx, tv2, &deploymentpb.VersionDrainageInfo{}, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE, false, false)
 
 	// SetCurrent tv1
 	err := s.setCurrent(tv1, true)
 	s.Nil(err)
 
 	// Both versions have no drainage info and tv1 has it's status updated to current
-	s.checkVersionDrainageAndVersionStatus(ctx, tv1, &deploymentpb.VersionDrainageInfo{}, enumspb.VERSION_STATUS_CURRENT, false, false)
-	s.checkVersionDrainageAndVersionStatus(ctx, tv2, &deploymentpb.VersionDrainageInfo{}, enumspb.VERSION_STATUS_UNSPECIFIED, false, false)
+	s.checkVersionDrainageAndVersionStatus(ctx, tv1, &deploymentpb.VersionDrainageInfo{}, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT, false, false)
+	s.checkVersionDrainageAndVersionStatus(ctx, tv2, &deploymentpb.VersionDrainageInfo{}, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE, false, false)
 
 	// SetCurrent tv2 --> tv1 starts the child drainage workflow
 	err = s.setCurrent(tv2, true)
@@ -341,14 +341,14 @@ func (s *DeploymentVersionSuite) TestDrainageStatus_SetCurrentVersion_NoOpenWFs(
 		Status:          enumspb.VERSION_DRAINAGE_STATUS_DRAINING,
 		LastChangedTime: nil, // don't test this now
 		LastCheckedTime: nil, // don't test this now
-	}, enumspb.VERSION_STATUS_DRAINING, false, false)
+	}, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING, false, false)
 
 	// tv1 should now be "drained"
 	s.checkVersionDrainageAndVersionStatus(ctx, tv1, &deploymentpb.VersionDrainageInfo{
 		Status:          enumspb.VERSION_DRAINAGE_STATUS_DRAINED,
 		LastChangedTime: nil, // don't test this now
 		LastCheckedTime: nil, // don't test this now
-	}, enumspb.VERSION_STATUS_DRAINED, false, false)
+	}, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED, false, false)
 }
 
 func (s *DeploymentVersionSuite) TestDrainageStatus_SetCurrentVersion_YesOpenWFs() {
@@ -364,16 +364,16 @@ func (s *DeploymentVersionSuite) TestDrainageStatus_SetCurrentVersion_YesOpenWFs
 	s.startVersionWorkflow(ctx, tv2)
 
 	// non-current deployments have never been used and have no drainage info
-	s.checkVersionDrainageAndVersionStatus(ctx, tv1, &deploymentpb.VersionDrainageInfo{}, enumspb.VERSION_STATUS_UNSPECIFIED, false, false)
-	s.checkVersionDrainageAndVersionStatus(ctx, tv2, &deploymentpb.VersionDrainageInfo{}, enumspb.VERSION_STATUS_UNSPECIFIED, false, false)
+	s.checkVersionDrainageAndVersionStatus(ctx, tv1, &deploymentpb.VersionDrainageInfo{}, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE, false, false)
+	s.checkVersionDrainageAndVersionStatus(ctx, tv2, &deploymentpb.VersionDrainageInfo{}, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE, false, false)
 
 	// SetCurrent tv1
 	err := s.setCurrent(tv1, true)
 	s.Nil(err)
 
 	// both versions have no drainage info and tv1 has it's status updated to current
-	s.checkVersionDrainageAndVersionStatus(ctx, tv1, &deploymentpb.VersionDrainageInfo{}, enumspb.VERSION_STATUS_CURRENT, false, false)
-	s.checkVersionDrainageAndVersionStatus(ctx, tv2, &deploymentpb.VersionDrainageInfo{}, enumspb.VERSION_STATUS_UNSPECIFIED, false, false)
+	s.checkVersionDrainageAndVersionStatus(ctx, tv1, &deploymentpb.VersionDrainageInfo{}, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT, false, false)
+	s.checkVersionDrainageAndVersionStatus(ctx, tv2, &deploymentpb.VersionDrainageInfo{}, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE, false, false)
 
 	// start a pinned workflow on v1
 	run := s.startPinnedWorkflow(ctx, tv1)
@@ -387,14 +387,14 @@ func (s *DeploymentVersionSuite) TestDrainageStatus_SetCurrentVersion_YesOpenWFs
 		Status:          enumspb.VERSION_DRAINAGE_STATUS_DRAINING,
 		LastChangedTime: nil, // don't test this now
 		LastCheckedTime: nil, // don't test this now
-	}, enumspb.VERSION_STATUS_DRAINING, false, false)
+	}, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING, false, false)
 
 	// tv1 should still be "draining" for visibilityGracePeriod duration
 	s.checkVersionDrainageAndVersionStatus(ctx, tv1, &deploymentpb.VersionDrainageInfo{
 		Status:          enumspb.VERSION_DRAINAGE_STATUS_DRAINING,
 		LastChangedTime: nil, // don't test this now
 		LastCheckedTime: nil, // don't test this now
-	}, enumspb.VERSION_STATUS_DRAINING, false, false)
+	}, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING, false, false)
 
 	// terminate workflow
 	_, err = s.FrontendClient().TerminateWorkflowExecution(ctx, &workflowservice.TerminateWorkflowExecutionRequest{
@@ -413,7 +413,7 @@ func (s *DeploymentVersionSuite) TestDrainageStatus_SetCurrentVersion_YesOpenWFs
 		Status:          enumspb.VERSION_DRAINAGE_STATUS_DRAINED,
 		LastChangedTime: nil, // don't test this now
 		LastCheckedTime: nil, // don't test this now
-	}, enumspb.VERSION_STATUS_DRAINED, false, false)
+	}, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED, false, false)
 }
 
 func (s *DeploymentVersionSuite) startPinnedWorkflow(ctx context.Context, tv *testvars.TestVars) sdkclient.WorkflowRun {
@@ -615,7 +615,7 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_DrainingVersion() {
 		Status:          enumspb.VERSION_DRAINAGE_STATUS_DRAINING,
 		LastChangedTime: nil, // don't test this now
 		LastCheckedTime: nil, // don't test this now
-	}, enumspb.VERSION_STATUS_DRAINING, false, false)
+	}, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING, false, false)
 
 	// delete should fail
 	s.tryDeleteVersion(ctx, tv1, workerdeployment.ErrVersionIsDraining, false)
@@ -1023,7 +1023,7 @@ func (s *DeploymentVersionSuite) checkVersionDrainageAndVersionStatus(
 	ctx context.Context,
 	tv *testvars.TestVars,
 	expectedDrainageInfo *deploymentpb.VersionDrainageInfo,
-	expectedStatus enumspb.VersionStatus,
+	expectedStatus enumspb.WorkerDeploymentVersionStatus,
 	addGracePeriod, addRefreshInterval bool,
 ) {
 	waitFor := 5 * time.Second
@@ -1088,7 +1088,7 @@ func (s *DeploymentVersionSuite) checkVersionIsCurrent(ctx context.Context, tv *
 		a.Equal(tv.ExternalDeploymentVersion().GetBuildId(), resp.GetWorkerDeploymentVersionInfo().GetDeploymentVersion().GetBuildId())
 
 		a.NotNil(resp.GetWorkerDeploymentVersionInfo().GetCurrentSinceTime())
-		a.Equal(enumspb.VERSION_STATUS_CURRENT, resp.GetWorkerDeploymentVersionInfo().GetStatus())
+		a.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT, resp.GetWorkerDeploymentVersionInfo().GetStatus())
 	}, time.Second*10, time.Millisecond*1000)
 }
 
@@ -1105,7 +1105,7 @@ func (s *DeploymentVersionSuite) checkVersionIsRamping(ctx context.Context, tv *
 		a.Equal(tv.ExternalDeploymentVersion().GetBuildId(), resp.GetWorkerDeploymentVersionInfo().GetDeploymentVersion().GetBuildId())
 
 		a.NotNil(resp.GetWorkerDeploymentVersionInfo().GetRampingSinceTime())
-		a.Equal(enumspb.VERSION_STATUS_RAMPING, resp.GetWorkerDeploymentVersionInfo().GetStatus())
+		a.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING, resp.GetWorkerDeploymentVersionInfo().GetStatus())
 	}, time.Second*10, time.Millisecond*1000)
 }
 
@@ -1228,7 +1228,7 @@ func (s *DeploymentVersionSuite) signalAndWaitForDrained(ctx context.Context, tv
 		resp, err := s.describeVersion(tv)
 		assert.NoError(t, err)
 		assert.Equal(t, enumspb.VERSION_DRAINAGE_STATUS_DRAINED, resp.GetWorkerDeploymentVersionInfo().GetDrainageInfo().GetStatus())
-		assert.Equal(t, enumspb.VERSION_STATUS_DRAINED, resp.GetWorkerDeploymentVersionInfo().GetStatus())
+		assert.Equal(t, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED, resp.GetWorkerDeploymentVersionInfo().GetStatus())
 	}, 10*time.Second, time.Second)
 }
 
