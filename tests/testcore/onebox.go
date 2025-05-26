@@ -50,6 +50,7 @@ import (
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service/frontend"
 	"go.temporal.io/server/service/history"
+	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/matching"
@@ -650,6 +651,7 @@ func (c *TemporalImpl) newRPCFactory(
 	monitor membership.Monitor,
 	tracingStatsHandler telemetry.ClientStatsHandler,
 	httpPort httpPort,
+	dc *dynamicconfig.Collection,
 ) (common.RPCFactory, error) {
 	host, portStr, err := net.SplitHostPort(string(grpcHostPort))
 	if err != nil {
@@ -679,6 +681,10 @@ func (c *TemporalImpl) newRPCFactory(
 	}
 	return rpc.NewFactory(
 		cfg,
+		configs.NewConfig(
+			dc,
+			c.persistenceConfig.NumHistoryShards,
+		),
 		sn,
 		logger,
 		tlsConfigProvider,
