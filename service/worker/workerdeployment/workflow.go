@@ -49,8 +49,8 @@ type (
 	}
 )
 
-// Workflow this workflow is implemented in a way that it always CaNs after some
-// history events are added and wf does not have pending work to do. This is to keep the
+// This workflow is implemented in a way such that it always CaNs after some
+// history events are added to it and when it has no pending work to do. This is to keep the
 // history clean so that we have less concern about backwards and forwards compatibility.
 // In steady state (i.e. absence of ongoing updates or signals) the wf should only have
 // a single wft in the history.

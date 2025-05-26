@@ -44,12 +44,12 @@ type (
 	}
 )
 
-// VersionWorkflow this workflow is implemented in a way that it always CaNs after some
-// history events are added and wf does not have pending work to do. This is to keep the
+// VersionWorkflow is implemented in a way where it always CaNs after some
+// history events are added to it and it has no pending work to do. This is to keep the
 // history clean so that we have less concern about backwards and forwards compatibility.
 // In steady state (i.e. absence of ongoing updates or signals) the wf should only have
 // a single wft in the history. For draining versions, the workflow history should only
-// have a single wft in the history followed by a scheduled timer for refreshing drainage
+// have a single wft in history followed by a scheduled timer for refreshing drainage
 // info.
 func VersionWorkflow(
 	ctx workflow.Context,
