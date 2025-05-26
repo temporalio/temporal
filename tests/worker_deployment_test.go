@@ -1500,6 +1500,29 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Concurrent_SameVersion_NoU
 	s.Equal(tv.DeploymentVersionString(), resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetCurrentVersion())
 }
 
+// TestConcurrentPollers_DifferentTaskQueues_SameVersion_SetCurrentVersion aims to test that when there are multiple pollers polling on different task queues,
+// all belonging to the same version, a setCurrentVersion call succeeds with all the task queues eventually having this version as the current version in their versioning info.
+func (s *WorkerDeploymentSuite) TestConcurrentPollers_DifferentTaskQueues_SameVersion_SetCurrentVersion() {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	// start 10 different pollers each polling on a different task queue but belonging to the same version
+	tv := testvars.New(s)
+
+	versions := 10
+	for i := 0; i < versions; i++ {
+		go s.startVersionWorkflow(ctx, tv.WithTaskQueueNumber(i))
+	}
+
+	// set this version as current version
+	s.setCurrentVersion(ctx, tv, worker_versioning.UnversionedVersionId, false, "")
+
+	// verify that the task queues, eventually, have this version as the current version in their versioning info
+	for i := 0; i < versions; i++ {
+		s.verifyTaskQueueVersioningInfo(ctx, tv.WithTaskQueueNumber(i).TaskQueue(), tv.DeploymentVersionString(), "", 0)
+	}
+}
+
 func (s *WorkerDeploymentSuite) TestSetRampingVersion_Concurrent_DifferentVersions_NoUnexpectedErrors() {
 	s.OverrideDynamicConfig(dynamicconfig.WorkflowExecutionMaxInFlightUpdates, 10) // this is the default
 
@@ -1656,14 +1679,17 @@ func (s *WorkerDeploymentSuite) TestTwoPollers_EnsureCreateVersion() {
 }
 
 func (s *WorkerDeploymentSuite) verifyTaskQueueVersioningInfo(ctx context.Context, tq *taskqueuepb.TaskQueue, expectedCurrentVersion, expectedRampingVersion string, expectedPercentage float32) {
-	tqDesc, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
-		Namespace: s.Namespace().String(),
-		TaskQueue: tq,
-	})
-	s.Nil(err)
-	s.Equal(expectedCurrentVersion, tqDesc.GetVersioningInfo().GetCurrentVersion())
-	s.Equal(expectedRampingVersion, tqDesc.GetVersioningInfo().GetRampingVersion())
-	s.Equal(expectedPercentage, tqDesc.GetVersioningInfo().GetRampingVersionPercentage())
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		tqDesc, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: tq,
+		})
+		a := require.New(t)
+		a.Nil(err)
+		a.Equal(expectedCurrentVersion, tqDesc.GetVersioningInfo().GetCurrentVersion())
+		a.Equal(expectedRampingVersion, tqDesc.GetVersioningInfo().GetRampingVersion())
+		a.Equal(expectedPercentage, tqDesc.GetVersioningInfo().GetRampingVersionPercentage())
+	}, time.Second*10, time.Millisecond*1000)
 }
 
 // Test that rolling back to a drained version works
