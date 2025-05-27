@@ -1452,52 +1452,89 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Concurrent_DifferentVersio
 	s.NotEqual(worker_versioning.UnversionedVersionId, resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetCurrentVersion())
 }
 
-func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Concurrent_SameVersion_NoUnexpectedErrors() {
-	s.OverrideDynamicConfig(dynamicconfig.WorkflowExecutionMaxInFlightUpdates, 10) // this is the default
+func (s *WorkerDeploymentSuite) TestResourceExhaustedErrors_Converted_To_Internal() {
+	s.OverrideDynamicConfig(dynamicconfig.WorkflowExecutionMaxInFlightUpdates, 2) // Lowering the limit to encounter ResourceExhausted errors
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 
 	tv := testvars.New(s)
-	errChan := make(chan error)
+	versions := 5
+	errChan := make(chan error, versions)
 
-	s.startVersionWorkflow(ctx, tv) // create version
-
-	// Concurrently set the same version as current version 10 times.
-	for i := 0; i < 10; i++ {
-		go func() {
-			_, err := s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
-				Namespace:               s.Namespace().String(),
-				DeploymentName:          tv.DeploymentVersion().GetDeploymentName(),
-				Version:                 tv.DeploymentVersionString(),
-				IgnoreMissingTaskQueues: true,
-				Identity:                tv.ClientIdentity(),
-			})
-			errChan <- err
-		}()
+	// Start all version workflows first
+	for i := 0; i < versions; i++ {
+		s.startVersionWorkflow(ctx, tv.WithBuildIDNumber(i))
 	}
 
-	for i := 0; i < 10; i++ {
+	// Test SetRampingVersion
+	s.testConcurrentRequestsResourceExhausted(ctx, tv, versions, errChan, "SetRampingVersion", func(i int) error {
+		_, err := s.FrontendClient().SetWorkerDeploymentRampingVersion(ctx, &workflowservice.SetWorkerDeploymentRampingVersionRequest{
+			Namespace:               s.Namespace().String(),
+			DeploymentName:          tv.DeploymentVersion().GetDeploymentName(),
+			Version:                 tv.WithBuildIDNumber(i).DeploymentVersionString(),
+			IgnoreMissingTaskQueues: true,
+			Identity:                tv.ClientIdentity(),
+			Percentage:              50,
+		})
+		return err
+	})
+
+	// Test SetCurrentVersion
+	s.testConcurrentRequestsResourceExhausted(ctx, tv, versions, errChan, "SetCurrentVersion", func(i int) error {
+		_, err := s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
+			Namespace:               s.Namespace().String(),
+			DeploymentName:          tv.DeploymentVersion().GetDeploymentName(),
+			Version:                 tv.WithBuildIDNumber(i).DeploymentVersionString(),
+			IgnoreMissingTaskQueues: true,
+			Identity:                tv.ClientIdentity(),
+		})
+		return err
+	})
+
+	// Test UpdateVersionMetadata
+	metadata := map[string]*commonpb.Payload{
+		"key1": {Data: testRandomMetadataValue},
+		"key2": {Data: testRandomMetadataValue},
+	}
+	s.testConcurrentRequestsResourceExhausted(ctx, tv, versions, errChan, "UpdateVersionMetadata", func(i int) error {
+		_, err := s.FrontendClient().UpdateWorkerDeploymentVersionMetadata(ctx, &workflowservice.UpdateWorkerDeploymentVersionMetadataRequest{
+			Namespace:     s.Namespace().String(),
+			Version:       tv.WithBuildIDNumber(i).DeploymentVersionString(),
+			UpsertEntries: metadata,
+		})
+		return err
+	})
+}
+
+func (s *WorkerDeploymentSuite) testConcurrentRequestsResourceExhausted(
+	ctx context.Context,
+	tv *testvars.TestVars,
+	versions int,
+	errChan chan error,
+	apiName string,
+	requestFn func(int) error,
+) {
+	// Launch concurrent requests
+	for i := 0; i < versions; i++ {
+		go func(i int) {
+			errChan <- requestFn(i)
+		}(i)
+	}
+
+	// Expect ResourceExhausted errors to be converted to Internal errors with the appropriate message
+	for i := 0; i < versions; i++ {
 		err := <-errChan
 		if err != nil {
 			switch err.(type) {
-			// DeadlineExceeded and ResourceExhausted are expected errors since there could be more
-			// in-flight updates than WorkflowExecutionMaxInFlightUpdates or we could get a timeout error.
-			case *serviceerror.DeadlineExceeded, *serviceerror.ResourceExhausted:
+			case *serviceerror.Internal:
+				s.Equal(err.Error(), fmt.Sprintf("Too many %s requests have been issued in rapid succession. Please throttle the request rate to avoid exceeding system resource limits.", apiName))
 				continue
 			default:
 				s.FailNow("Unexpected error: ", err)
 			}
 		}
 	}
-
-	// Verify that the current version is set.
-	resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
-		Namespace:      s.Namespace().String(),
-		DeploymentName: tv.DeploymentVersion().GetDeploymentName(),
-	})
-	s.NoError(err)
-	s.Equal(tv.DeploymentVersionString(), resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetCurrentVersion())
 }
 
 func (s *WorkerDeploymentSuite) TestSetRampingVersion_Concurrent_DifferentVersions_NoUnexpectedErrors() {

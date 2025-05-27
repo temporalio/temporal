@@ -1,6 +1,7 @@
 package workerdeployment
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -72,6 +73,7 @@ const (
 
 	ErrRampingVersionDoesNotHaveAllTaskQueues = "proposed ramping version is missing active task queues from the current version; these would become unversioned if it is set as the ramping version"
 	ErrCurrentVersionDoesNotHaveAllTaskQueues = "proposed current version is missing active task queues from the current version; these would become unversioned if it is set as the current version"
+	ErrTooManyRequests                        = "Too many %s requests have been issued in rapid succession. Please throttle the request rate to avoid exceeding system resource limits."
 )
 
 var (
@@ -144,4 +146,17 @@ func getSafeDurationConfig(ctx workflow.Context, id string, unsafeGetter func() 
 
 func durationEq(a, b any) bool {
 	return a == b
+}
+
+// isFailedPrecondition checks if the error is a FailedPrecondition error. It also checks if the FailedPrecondition error is wrapped in an ApplicationError.
+func isFailedPrecondition(err error) bool {
+	var failedPreconditionError *serviceerror.FailedPrecondition
+	var applicationError *temporal.ApplicationError
+	return errors.As(err, &failedPreconditionError) || (errors.As(err, &applicationError) && applicationError.Type() == errFailedPrecondition)
+}
+
+// isResourceExhausted checks if the error is a ResourceExhausted error.
+func isResourceExhausted(err error) bool {
+	var resourceExhausted *serviceerror.ResourceExhausted
+	return errors.As(err, &resourceExhausted)
 }

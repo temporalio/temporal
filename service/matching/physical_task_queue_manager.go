@@ -429,9 +429,6 @@ func (c *physicalTaskQueueManagerImpl) DispatchNexusTask(
 }
 
 func (c *physicalTaskQueueManagerImpl) UpdatePollerInfo(id pollerIdentity, pollMetadata *pollMetadata) {
-	if c.queue.Version().IsVersioned() {
-		fmt.Printf("poll info updated in %v\n", c.queue.Version())
-	}
 	c.pollerHistory.updatePollerInfo(id, pollMetadata)
 }
 
