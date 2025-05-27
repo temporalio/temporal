@@ -6,7 +6,6 @@ import (
 
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
-	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	sdkpb "go.temporal.io/api/sdk/v1"
@@ -834,6 +833,24 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		}
 	}
 
+	var parentVersioningInfo *historypb.WorkflowExecutionStartedEventAttributes_SourceWorkflowVersioningInfo
+	if vi := mutableState.GetExecutionInfo().GetVersioningInfo(); vi != nil {
+		parentVersioningInfo = &historypb.WorkflowExecutionStartedEventAttributes_SourceWorkflowVersioningInfo{
+			DeploymentVersion: vi.GetDeploymentVersion(),
+			Behavior:          vi.GetBehavior(),
+		}
+		if sourceTQ := mutableState.GetExecutionInfo().GetTaskQueue(); sourceTQ != attributes.GetTaskQueue().GetName() {
+			parentVersioningInfo.TaskQueue = sourceTQ
+		}
+	}
+
+	var parentPinnedOverride *workflowpb.VersioningOverride
+	if attributes.TaskQueue.GetName() == mutableState.GetExecutionInfo().GetTaskQueue() {
+		if worker_versioning.OverrideIsPinned(mutableState.GetExecutionInfo().GetVersioningInfo().GetVersioningOverride()) {
+			parentPinnedOverride = mutableState.GetExecutionInfo().GetVersioningInfo().GetVersioningOverride()
+		}
+	}
+
 	// Note: childStarted flag above is computed from the parent's history. When this is TRUE it's guaranteed that the child was succesfully started.
 	// But if it's FALSE then the child *may or maynot* be started (ex: we failed to record ChildExecutionStarted event previously.)
 	// Hence we need to check the child workflow ID and attempt to reconnect before proceeding to start a new instance of the child.
@@ -888,18 +905,6 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		},
 	}
 
-	var parentPinnedDeploymentVersion *deploymentpb.WorkerDeploymentVersion
-	var parentPinnedOverride *workflowpb.VersioningOverride
-	if attributes.TaskQueue.GetName() == mutableState.GetExecutionInfo().GetTaskQueue() {
-		// TODO (shahab): also inherit when the child TQ is different, but in the same Version
-		if mutableState.GetEffectiveVersioningBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED {
-			parentPinnedDeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(mutableState.GetEffectiveDeployment())
-		}
-		if worker_versioning.OverrideIsPinned(mutableState.GetExecutionInfo().GetVersioningInfo().GetVersioningOverride()) {
-			parentPinnedOverride = mutableState.GetExecutionInfo().GetVersioningInfo().GetVersioningOverride()
-		}
-	}
-
 	childRunID, childClock, err := t.startWorkflow(
 		ctx,
 		task,
@@ -912,8 +917,8 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		inheritedBuildId,
 		initiatedEvent.GetUserMetadata(),
 		shouldTerminateAndStartChild,
-		parentPinnedDeploymentVersion,
 		parentPinnedOverride,
+		parentVersioningInfo,
 		priorities.Merge(mutableState.GetExecutionInfo().Priority, attributes.Priority),
 	)
 	if err != nil {
@@ -1485,8 +1490,8 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 	inheritedBuildId string,
 	userMetadata *sdkpb.UserMetadata,
 	shouldTerminateAndStartChild bool,
-	parentPinnedDeploymentVersion *deploymentpb.WorkerDeploymentVersion,
 	parentPinnedOverride *workflowpb.VersioningOverride,
+	parentVersioningInfo *historypb.WorkflowExecutionStartedEventAttributes_SourceWorkflowVersioningInfo,
 	priority *commonpb.Priority,
 ) (string, *clockspb.VectorClock, error) {
 	startRequest := &workflowservice.StartWorkflowExecutionRequest{
@@ -1522,10 +1527,12 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 				WorkflowId: task.WorkflowID,
 				RunId:      task.RunID,
 			},
-			InitiatedId:             task.InitiatedEventID,
-			InitiatedVersion:        task.Version,
-			Clock:                   vclock.NewVectorClock(t.shardContext.GetClusterMetadata().GetClusterID(), t.shardContext.GetShardID(), task.TaskID),
-			PinnedDeploymentVersion: parentPinnedDeploymentVersion,
+			InitiatedId:       task.InitiatedEventID,
+			InitiatedVersion:  task.Version,
+			Clock:             vclock.NewVectorClock(t.shardContext.GetClusterMetadata().GetClusterID(), t.shardContext.GetShardID(), task.TaskID),
+			DeploymentVersion: parentVersioningInfo.GetDeploymentVersion(),
+			Behavior:          parentVersioningInfo.GetBehavior(),
+			TaskQueue:         parentVersioningInfo.GetTaskQueue(),
 		},
 		rootExecutionInfo,
 		t.shardContext.GetTimeSource().Now(),

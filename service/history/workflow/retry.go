@@ -194,6 +194,14 @@ func SetupNewWorkflowForRetryOrCron(
 				RunId:      previousExecutionInfo.RootRunId,
 			},
 		}
+		parentVersioningInfo := startAttr.GetParentVersioningInfo()
+		// only set parent versioning info task queue if different from new workflow task queue
+		if startAttr.GetTaskQueue().GetName() == parentVersioningInfo.GetTaskQueue() {
+			parentVersioningInfo.TaskQueue = ""
+		}
+		parentInfo.DeploymentVersion = parentVersioningInfo.GetDeploymentVersion()
+		parentInfo.Behavior = parentVersioningInfo.Behavior
+		parentInfo.TaskQueue = parentVersioningInfo.TaskQueue
 	}
 
 	newExecution := commonpb.WorkflowExecution{
@@ -284,12 +292,16 @@ func SetupNewWorkflowForRetryOrCron(
 		}
 	}
 
-	var previousRunVersioningInfo *historypb.WorkflowExecutionStartedEventAttributes_SourceWorkflowVersioningInfo
-	if vi := previousExecutionInfo.GetVersioningInfo(); vi != nil {
-		previousRunVersioningInfo = &historypb.WorkflowExecutionStartedEventAttributes_SourceWorkflowVersioningInfo{
-			DeploymentVersion: vi.GetDeploymentVersion(),
-			Behavior:          vi.GetBehavior(),
-		}
+	// For retry: inherit pinned version if part of a Continue-As-New or parent-child chain, but not if retrying a root workflow.
+	// For cron: always start on latest version.
+	previousRunVersioningInfo := startAttr.GetPreviousRunVersioningInfo()
+	if initiator == enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE {
+		previousRunVersioningInfo = nil
+	}
+	if previousRunVersioningInfo != nil {
+		// retry and cron always happen on the same task queue
+		// only set Task Queue if new run TQ is different from old run TQ
+		previousRunVersioningInfo.TaskQueue = ""
 	}
 
 	req := &historyservice.StartWorkflowExecutionRequest{
@@ -317,7 +329,6 @@ func SetupNewWorkflowForRetryOrCron(
 		previousExecutionInfo.AutoResetPoints,
 		previousMutableState.GetExecutionState().GetRunId(),
 		firstRunID,
-		startAttr.GetParentVersioningInfo(),
 		previousRunVersioningInfo,
 	)
 	if err != nil {

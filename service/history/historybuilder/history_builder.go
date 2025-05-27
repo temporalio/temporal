@@ -158,7 +158,7 @@ func (b *HistoryBuilder) AddWorkflowExecutionStartedEvent(
 	prevRunID string,
 	firstInChainRunID string,
 	originalRunID string,
-	parentVersioningInfo, previousRunVersioningInfo *historypb.WorkflowExecutionStartedEventAttributes_SourceWorkflowVersioningInfo,
+	previousRunVersioningInfo *historypb.WorkflowExecutionStartedEventAttributes_SourceWorkflowVersioningInfo,
 ) *historypb.HistoryEvent {
 	event := b.EventFactory.CreateWorkflowExecutionStartedEvent(
 		startTime,
@@ -167,7 +167,6 @@ func (b *HistoryBuilder) AddWorkflowExecutionStartedEvent(
 		prevRunID,
 		firstInChainRunID,
 		originalRunID,
-		parentVersioningInfo,
 		previousRunVersioningInfo,
 	)
 	if request.StartRequest.GetUserMetadata() != nil {

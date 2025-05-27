@@ -170,6 +170,7 @@ type StartWorkflowExecutionRequest struct {
 	// For top-level workflows (ie., without parent), this field must be nil.
 	RootExecutionInfo *v11.RootExecutionInfo `protobuf:"bytes,11,opt,name=root_execution_info,json=rootExecutionInfo,proto3" json:"root_execution_info,omitempty"`
 	// inherited build ID from parent/previous execution
+	// Deprecated. Use behavior, version, and task queue fields in `parent_execution_info`.
 	InheritedBuildId string `protobuf:"bytes,12,opt,name=inherited_build_id,json=inheritedBuildId,proto3" json:"inherited_build_id,omitempty"`
 	// If set, takes precedence over the Versioning Behavior sent by the SDK on Workflow Task completion.
 	// To unset the override after the workflow is running, use UpdateWorkflowExecutionOptions.

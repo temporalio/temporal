@@ -927,7 +927,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandContinueAsNewWorkflow(
 	}
 
 	if handler.mutableState.GetAssignedBuildId() == "" {
-		// TODO: this is supported in new versioning [cleanup-old-wv]
+		// TODO(carlydf): this is supported in new versioning [cleanup-old-wv]
 		if attr.InheritBuildId && attr.TaskQueue.GetName() != "" && attr.TaskQueue.Name != handler.mutableState.GetExecutionInfo().TaskQueue {
 			err := serviceerror.NewInvalidArgument("ContinueAsNew with UseCompatibleVersion cannot run on different task queue.")
 			return nil, handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_CONTINUE_AS_NEW_ATTRIBUTES, err)

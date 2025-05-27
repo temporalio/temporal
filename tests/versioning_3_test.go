@@ -1534,7 +1534,7 @@ func (s *Versioning3Suite) TestUnpinnedCaN() {
 }
 
 func (s *Versioning3Suite) testCan(behavior enumspb.VersioningBehavior) {
-	// CaN always go to the current version.
+	// CaN inherits version if pinned, goes to current version if unpinned.
 
 	tv1 := testvars.New(s).WithBuildIDNumber(1).WithWorkflowIDNumber(1)
 	tv2 := tv1.WithBuildIDNumber(2)
