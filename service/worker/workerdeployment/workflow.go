@@ -127,12 +127,29 @@ func (d *WorkflowRunner) updateVersionSummary(summary *deploymentspb.WorkerDeplo
 }
 
 func (d *WorkflowRunner) run(ctx workflow.Context) error {
-	if d.GetState().GetCreateTime() == nil {
-		if d.State == nil {
-			d.State = &deploymentspb.WorkerDeploymentLocalState{}
-		}
-		d.State.CreateTime = timestamppb.New(workflow.Now(ctx))
+	//TODO(carlydf): remove verbose logging
+	d.logger.Info("Raw workflow state at start",
+		"state_nil", d.State == nil,
+		"create_time_nil", d.GetState().GetCreateTime() == nil,
+		"routing_config_nil", d.GetState().GetRoutingConfig() == nil,
+		"raw_state", d.State)
+
+	if d.State == nil {
+		d.State = &deploymentspb.WorkerDeploymentLocalState{}
+	}
+
+	// Defensive check: ensure RoutingConfig is never nil
+	if d.State.RoutingConfig == nil {
+		d.logger.Warn("RoutingConfig was nil, initializing with default values")
 		d.State.RoutingConfig = &deploymentpb.RoutingConfig{CurrentVersion: worker_versioning.UnversionedVersionId}
+		// Update memo to persist the fixed state
+		if err := d.updateMemo(ctx); err != nil {
+			return err
+		}
+	}
+
+	if d.GetState().GetCreateTime() == nil {
+		d.State.CreateTime = timestamppb.New(workflow.Now(ctx))
 		d.State.ConflictToken, _ = workflow.Now(ctx).MarshalBinary()
 
 		// updating the memo since the RoutingConfig is updated
