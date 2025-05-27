@@ -1852,12 +1852,18 @@ func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
 
 		// take last writer for V2 rules and V3 data
 		if req.GetUserData().GetClock() == nil || current.GetClock() != nil && hlc.Greater(current.GetClock(), req.GetUserData().GetClock()) {
-			mergedData.AssignmentRules = currentVersioningData.GetAssignmentRules()
-			mergedData.RedirectRules = currentVersioningData.GetRedirectRules()
+			if mergedData != nil {
+				// v2 rules
+				mergedData.AssignmentRules = currentVersioningData.GetAssignmentRules()
+				mergedData.RedirectRules = currentVersioningData.GetRedirectRules()
+			}
 			mergedUserData.PerType = current.GetPerType()
 		} else {
-			mergedData.AssignmentRules = newVersioningData.GetAssignmentRules()
-			mergedData.RedirectRules = newVersioningData.GetRedirectRules()
+			if mergedData != nil {
+				// v2 rules
+				mergedData.AssignmentRules = newVersioningData.GetAssignmentRules()
+				mergedData.RedirectRules = newVersioningData.GetRedirectRules()
+			}
 			mergedUserData.PerType = req.GetUserData().GetPerType()
 		}
 
@@ -1880,8 +1886,10 @@ func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
 			}
 		}
 
-		// No need to keep the tombstones around after replication.
-		mergedUserData.VersioningData = ClearTombstones(mergedData)
+		if mergedData != nil {
+			// No need to keep the v1 tombstones around after replication.
+			mergedUserData.VersioningData = ClearTombstones(mergedData)
+		}
 		return mergedUserData, len(buildIdsToRevive) > 0, nil
 	})
 	return &matchingservice.ApplyTaskQueueUserDataReplicationEventResponse{}, err
