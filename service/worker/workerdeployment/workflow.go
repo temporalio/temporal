@@ -140,18 +140,6 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 		d.State = &deploymentspb.WorkerDeploymentLocalState{}
 	}
 
-	// Defensive check: ensure RoutingConfig is never nil
-	if d.State.RoutingConfig == nil {
-		d.logger.Warn("RoutingConfig was nil, initializing with default values",
-			"workflow_id", workflow.GetInfo(ctx).WorkflowExecution.ID,
-			"run_id", workflow.GetInfo(ctx).WorkflowExecution.RunID)
-		d.State.RoutingConfig = &deploymentpb.RoutingConfig{CurrentVersion: worker_versioning.UnversionedVersionId}
-		// Update memo to persist the fixed state
-		if err := d.updateMemo(ctx); err != nil {
-			return err
-		}
-	}
-
 	if d.GetState().GetCreateTime() == nil {
 		d.State.CreateTime = timestamppb.New(workflow.Now(ctx))
 		d.State.ConflictToken, _ = workflow.Now(ctx).MarshalBinary()
@@ -641,7 +629,7 @@ func (d *WorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *deploym
 }
 
 func (d *WorkflowRunner) validateStateBeforeAcceptingSetCurrent(args *deploymentspb.SetCurrentVersionArgs) error {
-	if d.State.RoutingConfig.CurrentVersion == args.Version && d.State.LastModifierIdentity == args.Identity {
+	if d.State.GetRoutingConfig().GetCurrentVersion() == args.Version && d.State.GetLastModifierIdentity() == args.Identity {
 		return temporal.NewApplicationError("no change", errNoChangeType, d.State.ConflictToken)
 	}
 	if args.ConflictToken != nil && !bytes.Equal(args.ConflictToken, d.State.ConflictToken) {
