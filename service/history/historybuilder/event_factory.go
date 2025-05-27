@@ -65,7 +65,7 @@ func (b *EventFactory) CreateWorkflowExecutionStartedEvent(
 		CompletionCallbacks:             req.CompletionCallbacks,
 		RootWorkflowExecution:           request.RootExecutionInfo.GetExecution(),
 		InheritedBuildId:                request.InheritedBuildId,
-		VersioningOverride:              request.VersioningOverride,
+		VersioningOverride:              worker_versioning.ConvertOverrideToV32(request.VersioningOverride),
 		Priority:                        req.GetPriority(),
 	}
 
@@ -76,7 +76,7 @@ func (b *EventFactory) CreateWorkflowExecutionStartedEvent(
 		attributes.ParentWorkflowExecution = parentInfo.Execution
 		attributes.ParentInitiatedEventId = parentInfo.InitiatedId
 		attributes.ParentInitiatedEventVersion = parentInfo.InitiatedVersion
-		attributes.ParentPinnedWorkerDeploymentVersion = parentInfo.PinnedWorkerDeploymentVersion
+		attributes.ParentPinnedDeploymentVersion = parentInfo.GetPinnedDeploymentVersion()
 	}
 
 	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
@@ -140,23 +140,19 @@ func (b *EventFactory) CreateWorkflowTaskCompletedEvent(
 	deployment *deploymentpb.Deployment,
 	behavior enumspb.VersioningBehavior,
 ) *historypb.HistoryEvent {
-	dv := ""
-	if deployment != nil {
-		dv = worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(deployment))
-	}
 	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{
 		WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{
-			ScheduledEventId:        scheduledEventID,
-			StartedEventId:          startedEventID,
-			Identity:                identity,
-			BinaryChecksum:          checksum,
-			WorkerVersion:           workerVersionStamp,
-			SdkMetadata:             sdkMetadata,
-			MeteringMetadata:        meteringMetadata,
-			WorkerDeploymentName:    deploymentName,
-			WorkerDeploymentVersion: dv,
-			VersioningBehavior:      behavior,
+			ScheduledEventId:     scheduledEventID,
+			StartedEventId:       startedEventID,
+			Identity:             identity,
+			BinaryChecksum:       checksum,
+			WorkerVersion:        workerVersionStamp,
+			SdkMetadata:          sdkMetadata,
+			MeteringMetadata:     meteringMetadata,
+			WorkerDeploymentName: deploymentName,
+			DeploymentVersion:    worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(deployment),
+			VersioningBehavior:   behavior,
 		},
 	}
 

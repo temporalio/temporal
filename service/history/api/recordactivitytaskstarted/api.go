@@ -55,7 +55,7 @@ func Invoke(
 			request.WorkflowExecution.WorkflowId,
 			request.WorkflowExecution.RunId,
 		),
-		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
+		func(workflowLease api.WorkflowLease) (resp *api.UpdateWorkflowAction, retErr error) {
 			mutableState := workflowLease.GetMutableState()
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return nil, consts.ErrWorkflowCompleted

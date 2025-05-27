@@ -330,15 +330,15 @@ func (mr *MocktaskQueuePartitionManagerMockRecorder) TimeSinceLastFanOut() *gomo
 }
 
 // UpdateTimeSinceLastFanOutAndCache mocks base method.
-func (m *MocktaskQueuePartitionManager) UpdateTimeSinceLastFanOutAndCache(physicalInfoByBuildId map[string]map[enums.TaskQueueType]*taskqueue0.PhysicalTaskQueueInfo) {
+func (m *MocktaskQueuePartitionManager) UpdateTimeSinceLastFanOutAndCache(physicalInfoByBuildId map[string]map[enums.TaskQueueType]*taskqueue0.PhysicalTaskQueueInfo, upsert bool) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "UpdateTimeSinceLastFanOutAndCache", physicalInfoByBuildId)
+	m.ctrl.Call(m, "UpdateTimeSinceLastFanOutAndCache", physicalInfoByBuildId, upsert)
 }
 
 // UpdateTimeSinceLastFanOutAndCache indicates an expected call of UpdateTimeSinceLastFanOutAndCache.
-func (mr *MocktaskQueuePartitionManagerMockRecorder) UpdateTimeSinceLastFanOutAndCache(physicalInfoByBuildId any) *gomock.Call {
+func (mr *MocktaskQueuePartitionManagerMockRecorder) UpdateTimeSinceLastFanOutAndCache(physicalInfoByBuildId, upsert any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateTimeSinceLastFanOutAndCache", reflect.TypeOf((*MocktaskQueuePartitionManager)(nil).UpdateTimeSinceLastFanOutAndCache), physicalInfoByBuildId)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateTimeSinceLastFanOutAndCache", reflect.TypeOf((*MocktaskQueuePartitionManager)(nil).UpdateTimeSinceLastFanOutAndCache), physicalInfoByBuildId, upsert)
 }
 
 // WaitUntilInitialized mocks base method.

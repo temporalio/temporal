@@ -95,9 +95,12 @@ func (ClusterMemberRole) EnumDescriptor() ([]byte, []int) {
 type HealthState int32
 
 const (
-	HEALTH_STATE_UNSPECIFIED      HealthState = 0
-	HEALTH_STATE_SERVING          HealthState = 1
-	HEALTH_STATE_NOT_SERVING      HealthState = 2
+	HEALTH_STATE_UNSPECIFIED HealthState = 0
+	// The host is in a healthy state.
+	HEALTH_STATE_SERVING HealthState = 1
+	// The host is unhealthy through external observation.
+	HEALTH_STATE_NOT_SERVING HealthState = 2
+	// The host has marked itself as not ready to serve traffic.
 	HEALTH_STATE_DECLINED_SERVING HealthState = 3
 )
 

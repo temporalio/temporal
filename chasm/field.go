@@ -1,7 +1,6 @@
 package chasm
 
 import (
-	"fmt"
 	"reflect"
 
 	"go.temporal.io/api/serviceerror"
@@ -71,7 +70,7 @@ func (f Field[T]) Get(chasmContext Context) (T, error) {
 		}
 		vT, isT := f.Internal.v.(T)
 		if !isT {
-			return nilT, serviceerror.NewInternal(fmt.Sprintf("internal value doesn't implement %s", reflect.TypeFor[T]().Name()))
+			return nilT, serviceerror.NewInternalf("internal value doesn't implement %s", reflect.TypeFor[T]().Name())
 		}
 		return vT, nil
 	}
@@ -90,7 +89,7 @@ func (f Field[T]) Get(chasmContext Context) (T, error) {
 		//nolint:forbidigo
 		panic("not implemented")
 	default:
-		return nilT, serviceerror.NewInternal(fmt.Sprintf("unsupported field type: %v", f.Internal.fieldType()))
+		return nilT, serviceerror.NewInternalf("unsupported field type: %v", f.Internal.fieldType())
 	}
 
 	if f.Internal.node.value == nil {
@@ -98,7 +97,7 @@ func (f Field[T]) Get(chasmContext Context) (T, error) {
 	}
 	vT, isT := f.Internal.node.value.(T)
 	if !isT {
-		return nilT, serviceerror.NewInternal(fmt.Sprintf("node value doesn't implement %s", reflect.TypeFor[T]().Name()))
+		return nilT, serviceerror.NewInternalf("node value doesn't implement %s", reflect.TypeFor[T]().Name())
 	}
 	return vT, nil
 }

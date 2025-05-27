@@ -617,13 +617,17 @@ func (pm *taskQueuePartitionManagerImpl) LegacyDescribeTaskQueue(includeTaskQueu
 		}
 		current, ramping := worker_versioning.CalculateTaskQueueVersioningInfo(perTypeUserData.GetDeploymentData())
 		info := &taskqueuepb.TaskQueueVersioningInfo{
-			CurrentVersion: worker_versioning.WorkerDeploymentVersionToString(current.GetVersion()),
-			UpdateTime:     current.GetRoutingUpdateTime(),
+			// [cleanup-wv-3.1]
+			CurrentVersion:           worker_versioning.WorkerDeploymentVersionToString(current.GetVersion()),
+			CurrentDeploymentVersion: worker_versioning.ExternalWorkerDeploymentVersionFromVersion(current.GetVersion()),
+			UpdateTime:               current.GetRoutingUpdateTime(),
 		}
 		if ramping.GetRampingSinceTime() != nil {
 			info.RampingVersionPercentage = ramping.GetRampPercentage()
 			// If task queue is ramping to unversioned, ramping will be nil, which converts to "__unversioned__"
+			// [cleanup-wv-3.1]
 			info.RampingVersion = worker_versioning.WorkerDeploymentVersionToString(ramping.GetVersion())
+			info.RampingDeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromVersion(ramping.GetVersion())
 			if info.GetUpdateTime().AsTime().Before(ramping.GetRoutingUpdateTime().AsTime()) {
 				info.UpdateTime = ramping.GetRoutingUpdateTime()
 			}
@@ -784,12 +788,20 @@ func (pm *taskQueuePartitionManagerImpl) TimeSinceLastFanOut() time.Duration {
 	return time.Since(time.Unix(0, pm.lastFanOut))
 }
 
-func (pm *taskQueuePartitionManagerImpl) UpdateTimeSinceLastFanOutAndCache(physicalInfoByBuildId map[string]map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo) {
+func (pm *taskQueuePartitionManagerImpl) UpdateTimeSinceLastFanOutAndCache(physicalInfoByBuildId map[string]map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo, upsert bool) {
 	pm.cachedPhysicalInfoByBuildIdLock.Lock()
 	defer pm.cachedPhysicalInfoByBuildIdLock.Unlock()
 
 	pm.lastFanOut = time.Now().UnixNano()
-	pm.cachedPhysicalInfoByBuildId = physicalInfoByBuildId
+	if upsert {
+		// still within the ttl of cache, so we upsert
+		for b, v := range physicalInfoByBuildId {
+			pm.cachedPhysicalInfoByBuildId[b] = v
+		}
+	} else {
+		// the existing entries in the cache are old, only keeping the new ones
+		pm.cachedPhysicalInfoByBuildId = physicalInfoByBuildId
+	}
 }
 
 func (pm *taskQueuePartitionManagerImpl) GetPhysicalTaskQueueInfoFromCache() map[string]map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo {
