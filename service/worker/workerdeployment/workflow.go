@@ -784,13 +784,15 @@ func (d *WorkflowRunner) tryDeleteVersion(ctx workflow.Context) error {
 		return 0
 	})
 	for _, v := range sortedSummaries {
-		// this might hang on the lock
-		err := d.deleteVersion(ctx, &deploymentspb.DeleteVersionArgs{
+		args := &deploymentspb.DeleteVersionArgs{
 			Identity: "try-delete-for-add-version",
 			Version:  v.Version,
-		})
-		if err == nil {
-			return nil
+		}
+		if err := d.validateDeleteVersion(args); err == nil {
+			// this might hang on the lock
+			if err = d.deleteVersion(ctx, args); err == nil {
+				return nil
+			}
 		}
 	}
 	return serviceerror.NewFailedPrecondition("could not add version: too many versions in deployment and none are eligible for deletion")
