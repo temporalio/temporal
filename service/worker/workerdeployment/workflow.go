@@ -637,6 +637,7 @@ func (d *WorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *deploym
 }
 
 func (d *WorkflowRunner) validateStateBeforeAcceptingSetCurrent(args *deploymentspb.SetCurrentVersionArgs) error {
+	//nolint:staticcheck // SA1019: worker versioning v0.31
 	if d.State.GetRoutingConfig().GetCurrentVersion() == args.Version && d.State.GetLastModifierIdentity() == args.Identity {
 		return temporal.NewApplicationError("no change", errNoChangeType, d.State.ConflictToken)
 	}
