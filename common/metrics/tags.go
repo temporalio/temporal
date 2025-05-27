@@ -42,14 +42,20 @@ const (
 	replicationTaskPriority = "replicationTaskPriority"
 	versioningBehavior      = "versioning_behavior"
 	isFirstAttempt          = "first-attempt"
+	workflowStatus          = "workflow_status"
+	queryType               = "query_type"
+	namespaceAllValue       = "all"
+	unknownValue            = "_unknown_"
+	totalMetricSuffix       = "_total"
+	tagExcludedValue        = "_tag_excluded_"
+	falseValue              = "false"
+	trueValue               = "true"
+	errorPrefix             = "*"
 
-	namespaceAllValue = "all"
-	unknownValue      = "_unknown_"
-	totalMetricSuffix = "_total"
-	tagExcludedValue  = "_tag_excluded_"
-	falseValue        = "false"
-	trueValue         = "true"
-	errorPrefix       = "*"
+	queryTypeStackTrace       = "__stack_trace"
+	queryTypeOpenSessions     = "__open_sessions"
+	queryTypeWorkflowMetadata = "__temporal_workflow_metadata"
+	queryTypeUserDefined      = "__user_defined"
 )
 
 // Tag is an interface to define metrics tags
@@ -395,6 +401,19 @@ func DestinationTag(value string) Tag {
 	}
 }
 
-func VersioningBehavior(behavior enumspb.VersioningBehavior) Tag {
+func VersioningBehaviorTag(behavior enumspb.VersioningBehavior) Tag {
 	return &tagImpl{versioningBehavior, behavior.String()}
+}
+
+func WorkflowStatusTag(status string) Tag {
+	return &tagImpl{key: workflowStatus, value: status}
+}
+
+func QueryTypeTag(queryType string) Tag {
+	if queryType == queryTypeStackTrace || queryType == queryTypeOpenSessions || queryType == queryTypeWorkflowMetadata {
+		return &tagImpl{key: queryType, value: queryType}
+	} else {
+		// group all user defined queries into a single tag value
+		return &tagImpl{key: queryType, value: queryTypeUserDefined}
+	}
 }

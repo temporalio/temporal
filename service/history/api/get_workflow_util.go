@@ -393,5 +393,6 @@ func MutableStateToGetResponse(
 		MostRecentWorkerVersionStamp: mostRecentWorkerVersionStamp,
 		TransitionHistory:            transitionhistory.CopyVersionedTransitions(mutableState.GetExecutionInfo().TransitionHistory),
 		VersioningInfo:               mutableState.GetExecutionInfo().VersioningInfo,
+		EffectiveVersioningBehavior:  mutableState.GetEffectiveVersioningBehavior(),
 	}, nil
 }

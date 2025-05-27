@@ -1193,7 +1193,6 @@ var (
 	WorkflowQueryFailureCount = NewCounterDef("workflow_query_count")
 	WorkflowQueryTimeoutCount = NewCounterDef("workflow_query_count")
 	// TODO: capture wf task timeout per NS + behavior + isFirst attempt
-	// TODO: see if we want to use the existing FailedWorkflowTasks metric or add a new one
 	// TODO: capture completed wf tasks per NS + behavior
 	// TODO: count versioning override per NS + wf original behavior + new override behavior + start vs existing wf
 	//    look in the functions that apply workflowexecutionstarted and workflowexecutionoptionsupdated events

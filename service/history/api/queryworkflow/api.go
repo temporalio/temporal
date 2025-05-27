@@ -154,6 +154,7 @@ func Invoke(
 			return queryDirectlyThroughMatching(
 				ctx,
 				msResp,
+				nsEntry,
 				request.GetNamespaceId(),
 				req,
 				shardContext,
@@ -186,31 +187,48 @@ func Invoke(
 			metrics.QueryRegistryInvalidStateCount.With(scope).Record(1)
 			return nil, err
 		}
+		msResp, err := api.GetMutableState(ctx, shardContext, workflowKey, workflowConsistencyChecker)
+		if err != nil {
+			return nil, err
+		}
+
 		switch completionState.Type {
 		case workflow.QueryCompletionTypeSucceeded:
 			result := completionState.Result
 			switch result.GetResultType() {
 			case enumspb.QUERY_RESULT_TYPE_ANSWERED:
+				emitWorkflowQueryMetrics(
+					scope,
+					nsEntry,
+					msResp,
+					req.GetQuery().GetQueryType(),
+					nil,
+				)
 				return &historyservice.QueryWorkflowResponse{
 					Response: &workflowservice.QueryWorkflowResponse{
 						QueryResult: result.GetAnswer(),
 					},
 				}, nil
 			case enumspb.QUERY_RESULT_TYPE_FAILED:
-				return nil, serviceerror.NewQueryFailedWithFailure(result.GetErrorMessage(), result.GetFailure())
+				err := serviceerror.NewQueryFailedWithFailure(result.GetErrorMessage(), result.GetFailure())
+				emitWorkflowQueryMetrics(
+					scope,
+					nsEntry,
+					msResp,
+					req.GetQuery().GetQueryType(),
+					err,
+				)
+				return nil, err
 			default:
 				metrics.QueryRegistryInvalidStateCount.With(scope).Record(1)
 				return nil, consts.ErrQueryEnteredInvalidState
 			}
 		case workflow.QueryCompletionTypeUnblocked:
-			msResp, err := api.GetMutableState(ctx, shardContext, workflowKey, workflowConsistencyChecker)
-			if err != nil {
-				return nil, err
-			}
 			req.Execution.RunId = msResp.Execution.RunId
 			return queryDirectlyThroughMatching(
 				ctx,
 				msResp,
+				nsEntry,
 				request.GetNamespaceId(),
 				req,
 				shardContext,
@@ -221,7 +239,15 @@ func Invoke(
 				priority,
 			)
 		case workflow.QueryCompletionTypeFailed:
-			return nil, completionState.Err
+			err = completionState.Err
+			emitWorkflowQueryMetrics(
+				scope,
+				nsEntry,
+				msResp,
+				req.GetQuery().GetQueryType(),
+				err,
+			)
+			return nil, err
 		default:
 			metrics.QueryRegistryInvalidStateCount.With(scope).Record(1)
 			return nil, consts.ErrQueryEnteredInvalidState
@@ -259,6 +285,7 @@ func queryWillTimeoutsBeforeFirstWorkflowTaskStart(
 func queryDirectlyThroughMatching(
 	ctx context.Context,
 	msResp *historyservice.GetMutableStateResponse,
+	nsEntry *namespace.Namespace,
 	namespaceID string,
 	queryRequest *workflowservice.QueryWorkflowRequest,
 	shard historyi.ShardContext,
@@ -346,12 +373,49 @@ func queryDirectlyThroughMatching(
 	matchingResp, err := matchingClient.QueryWorkflow(ctx, nonStickyMatchingRequest)
 	metrics.DirectQueryDispatchNonStickyLatency.With(metricsHandler).Record(time.Since(nonStickyStartTime))
 	if err != nil {
+		emitWorkflowQueryMetrics(
+			metricsHandler,
+			nsEntry,
+			msResp,
+			queryRequest.GetQuery().GetQueryType(),
+			err,
+		)
 		return nil, err
 	}
+	emitWorkflowQueryMetrics(
+		metricsHandler,
+		nsEntry,
+		msResp,
+		queryRequest.GetQuery().GetQueryType(),
+		nil,
+	)
 	metrics.DirectQueryDispatchNonStickySuccessCount.With(metricsHandler).Record(1)
 	return &historyservice.QueryWorkflowResponse{
 		Response: &workflowservice.QueryWorkflowResponse{
 			QueryResult:   matchingResp.GetQueryResult(),
 			QueryRejected: matchingResp.GetQueryRejected(),
 		}}, err
+}
+
+func emitWorkflowQueryMetrics(
+	metricsHandler metrics.Handler,
+	nsEntry *namespace.Namespace,
+	msResp *historyservice.GetMutableStateResponse,
+	queryType string,
+	err error,
+) {
+	commonTags := []metrics.Tag{
+		metrics.OperationTag(metrics.HistoryQueryWorkflowScope),
+		metrics.NamespaceTag(nsEntry.Name().String()),
+		metrics.VersioningBehaviorTag(msResp.GetEffectiveVersioningBehavior()),
+		metrics.WorkflowStatusTag(msResp.GetWorkflowStatus().String()),
+		metrics.QueryTypeTag(queryType),
+	}
+
+	if err != nil {
+		metrics.WorkflowQueryFailureCount.With(metricsHandler).Record(1, commonTags...)
+		return
+	}
+
+	metrics.WorkflowQuerySuccessCount.With(metricsHandler).Record(1, commonTags...)
 }
