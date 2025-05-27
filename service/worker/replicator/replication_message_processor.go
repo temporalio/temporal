@@ -105,7 +105,7 @@ func (p *replicationMessageProcessor) processorLoop() {
 	for {
 		select {
 		case <-timer.C:
-			p.getAndHandleNamespaceReplicationTasks()
+			p.handleReplicationTasks()
 			timer.Reset(getWaitDuration())
 		case <-p.done:
 			timer.Stop()
@@ -114,7 +114,7 @@ func (p *replicationMessageProcessor) processorLoop() {
 	}
 }
 
-func (p *replicationMessageProcessor) getAndHandleNamespaceReplicationTasks() {
+func (p *replicationMessageProcessor) handleReplicationTasks() {
 	// The following is a best effort to make sure only one worker is processing tasks for a
 	// particular source cluster. When the ring is under reconfiguration, it is possible that
 	// for a small period of time two or more workers think they are the owner and try to execute
