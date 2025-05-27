@@ -132,7 +132,9 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 		"state_nil", d.State == nil,
 		"create_time_nil", d.GetState().GetCreateTime() == nil,
 		"routing_config_nil", d.GetState().GetRoutingConfig() == nil,
-		"raw_state", d.State)
+		"raw_state", d.State,
+		"workflow_id", workflow.GetInfo(ctx).WorkflowExecution.ID,
+		"run_id", workflow.GetInfo(ctx).WorkflowExecution.RunID)
 
 	if d.State == nil {
 		d.State = &deploymentspb.WorkerDeploymentLocalState{}
@@ -140,7 +142,9 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 
 	// Defensive check: ensure RoutingConfig is never nil
 	if d.State.RoutingConfig == nil {
-		d.logger.Warn("RoutingConfig was nil, initializing with default values")
+		d.logger.Warn("RoutingConfig was nil, initializing with default values",
+			"workflow_id", workflow.GetInfo(ctx).WorkflowExecution.ID,
+			"run_id", workflow.GetInfo(ctx).WorkflowExecution.RunID)
 		d.State.RoutingConfig = &deploymentpb.RoutingConfig{CurrentVersion: worker_versioning.UnversionedVersionId}
 		// Update memo to persist the fixed state
 		if err := d.updateMemo(ctx); err != nil {
@@ -248,10 +252,25 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 	// Wait until we can continue as new or are cancelled. The workflow will continue-as-new iff
 	// there are no pending updates/signals and the state has changed.
 	err = workflow.Await(ctx, func() bool {
-		return d.deleteDeployment || // deployment is deleted -> it's ok to drop all signals and updates.
+		canContinue := d.deleteDeployment || // deployment is deleted -> it's ok to drop all signals and updates.
 			// There is no pending signal or update, but the state is dirty or forceCaN is requested:
 			(!d.signalHandler.signalSelector.HasPending() && d.signalHandler.processingSignals == 0 && workflow.AllHandlersFinished(ctx) &&
 				(d.forceCAN || d.stateChanged))
+
+		//TODO(carlydf): remove verbose logging
+		if canContinue {
+			d.logger.Info("Workflow can continue as new",
+				"workflow_id", workflow.GetInfo(ctx).WorkflowExecution.ID,
+				"run_id", workflow.GetInfo(ctx).WorkflowExecution.RunID,
+				"delete_deployment", d.deleteDeployment,
+				"has_pending_signals", d.signalHandler.signalSelector.HasPending(),
+				"processing_signals", d.signalHandler.processingSignals,
+				"all_handlers_finished", workflow.AllHandlersFinished(ctx),
+				"force_can", d.forceCAN,
+				"state_changed", d.stateChanged,
+				"routing_config", d.State.GetRoutingConfig())
+		}
+		return canContinue
 	})
 	if err != nil {
 		return err
@@ -268,7 +287,9 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 		"current_version", d.State.GetRoutingConfig().GetCurrentVersion(),
 		"ramping_version", d.State.GetRoutingConfig().GetRampingVersion(),
 		"state_changed", d.stateChanged,
-		"force_can", d.forceCAN)
+		"force_can", d.forceCAN,
+		"workflow_id", workflow.GetInfo(ctx).WorkflowExecution.ID,
+		"run_id", workflow.GetInfo(ctx).WorkflowExecution.RunID)
 
 	// We perform a continue-as-new after each update and signal is handled to ensure compatibility
 	// even if the server rolls back to a previous minor version. By continuing-as-new,
