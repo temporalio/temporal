@@ -33,7 +33,7 @@ const (
 	taskProcessorErrorRetryMaxAttampts        = 5
 )
 
-func newNamespaceReplicationMessageProcessor(
+func newReplicationMessageProcessor(
 	currentCluster string,
 	sourceCluster string,
 	logger log.Logger,
@@ -45,12 +45,12 @@ func newNamespaceReplicationMessageProcessor(
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 	matchingClient matchingservice.MatchingServiceClient,
 	namespaceRegistry namespace.Registry,
-) *namespaceReplicationMessageProcessor {
+) *replicationMessageProcessor {
 	retryPolicy := backoff.NewExponentialRetryPolicy(taskProcessorErrorRetryWait).
 		WithBackoffCoefficient(taskProcessorErrorRetryBackoffCoefficient).
 		WithMaximumAttempts(taskProcessorErrorRetryMaxAttampts)
 
-	return &namespaceReplicationMessageProcessor{
+	return &replicationMessageProcessor{
 		hostInfo:                  hostInfo,
 		serviceResolver:           serviceResolver,
 		status:                    common.DaemonStatusInitialized,
@@ -71,7 +71,7 @@ func newNamespaceReplicationMessageProcessor(
 }
 
 type (
-	namespaceReplicationMessageProcessor struct {
+	replicationMessageProcessor struct {
 		hostInfo                  membership.HostInfo
 		serviceResolver           membership.ServiceResolver
 		status                    int32
@@ -91,7 +91,7 @@ type (
 	}
 )
 
-func (p *namespaceReplicationMessageProcessor) Start() {
+func (p *replicationMessageProcessor) Start() {
 	if !atomic.CompareAndSwapInt32(&p.status, common.DaemonStatusInitialized, common.DaemonStatusStarted) {
 		return
 	}
@@ -99,7 +99,7 @@ func (p *namespaceReplicationMessageProcessor) Start() {
 	go p.processorLoop()
 }
 
-func (p *namespaceReplicationMessageProcessor) processorLoop() {
+func (p *replicationMessageProcessor) processorLoop() {
 	timer := time.NewTimer(getWaitDuration())
 
 	for {
@@ -114,7 +114,7 @@ func (p *namespaceReplicationMessageProcessor) processorLoop() {
 	}
 }
 
-func (p *namespaceReplicationMessageProcessor) getAndHandleNamespaceReplicationTasks() {
+func (p *replicationMessageProcessor) getAndHandleNamespaceReplicationTasks() {
 	// The following is a best effort to make sure only one worker is processing tasks for a
 	// particular source cluster. When the ring is under reconfiguration, it is possible that
 	// for a small period of time two or more workers think they are the owner and try to execute
@@ -176,7 +176,7 @@ func (p *namespaceReplicationMessageProcessor) getAndHandleNamespaceReplicationT
 	p.lastRetrievedMessageID = response.Messages.GetLastRetrievedMessageId()
 }
 
-func (p *namespaceReplicationMessageProcessor) putNamespaceReplicationTaskToDLQ(
+func (p *replicationMessageProcessor) putNamespaceReplicationTaskToDLQ(
 	ctx context.Context,
 	task *replicationspb.ReplicationTask,
 ) error {
@@ -205,7 +205,7 @@ func (p *namespaceReplicationMessageProcessor) putNamespaceReplicationTaskToDLQ(
 	return p.namespaceReplicationQueue.PublishToDLQ(ctx, task)
 }
 
-func (p *namespaceReplicationMessageProcessor) handleReplicationTask(
+func (p *replicationMessageProcessor) handleReplicationTask(
 	ctx context.Context,
 	task *replicationspb.ReplicationTask,
 ) error {
@@ -240,7 +240,7 @@ func (p *namespaceReplicationMessageProcessor) handleReplicationTask(
 	}
 }
 
-func (p *namespaceReplicationMessageProcessor) handleTaskQueueUserDataReplicationTask(
+func (p *replicationMessageProcessor) handleTaskQueueUserDataReplicationTask(
 	ctx context.Context,
 	attrs *replicationspb.TaskQueueUserDataAttributes,
 ) error {
@@ -268,7 +268,7 @@ func (p *namespaceReplicationMessageProcessor) handleTaskQueueUserDataReplicatio
 	return err
 }
 
-func (p *namespaceReplicationMessageProcessor) Stop() {
+func (p *replicationMessageProcessor) Stop() {
 	close(p.done)
 }
 
