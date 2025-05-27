@@ -5189,8 +5189,13 @@ func (ms *MutableStateImpl) AddStartChildWorkflowExecutionInitiatedEvent(
 		return nil, nil, err
 	}
 
-	event := ms.hBuilder.AddStartChildWorkflowExecutionInitiatedEvent(workflowTaskCompletedEventID, command, targetNamespaceID)
-	ci, err := ms.ApplyStartChildWorkflowExecutionInitiatedEvent(workflowTaskCompletedEventID, event, createRequestID)
+	event := ms.hBuilder.AddStartChildWorkflowExecutionInitiatedEvent(
+		workflowTaskCompletedEventID,
+		command,
+		targetNamespaceID,
+		createRequestID,
+	)
+	ci, err := ms.ApplyStartChildWorkflowExecutionInitiatedEvent(workflowTaskCompletedEventID, event)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -5206,10 +5211,13 @@ func (ms *MutableStateImpl) AddStartChildWorkflowExecutionInitiatedEvent(
 func (ms *MutableStateImpl) ApplyStartChildWorkflowExecutionInitiatedEvent(
 	firstEventID int64,
 	event *historypb.HistoryEvent,
-	createRequestID string,
 ) (*persistencespb.ChildExecutionInfo, error) {
 	initiatedEventID := event.GetEventId()
 	attributes := event.GetStartChildWorkflowExecutionInitiatedEventAttributes()
+	createRequestID := attributes.GetCreateRequestId()
+	if createRequestID == "" {
+		createRequestID = uuid.New()
+	}
 	ci := &persistencespb.ChildExecutionInfo{
 		Version:               event.GetVersion(),
 		InitiatedEventId:      initiatedEventID,

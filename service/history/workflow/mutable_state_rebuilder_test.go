@@ -1589,9 +1589,10 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeStartChildWorkflowExecution
 		EventTime: timestamppb.New(now),
 		EventType: evenType,
 		Attributes: &historypb.HistoryEvent_StartChildWorkflowExecutionInitiatedEventAttributes{StartChildWorkflowExecutionInitiatedEventAttributes: &historypb.StartChildWorkflowExecutionInitiatedEventAttributes{
-			Namespace:   tests.TargetNamespace.String(),
-			NamespaceId: tests.TargetNamespaceID.String(),
-			WorkflowId:  targetWorkflowID,
+			Namespace:       tests.TargetNamespace.String(),
+			NamespaceId:     tests.TargetNamespaceID.String(),
+			WorkflowId:      targetWorkflowID,
+			CreateRequestId: createRequestID,
 		}},
 	}
 
@@ -1607,7 +1608,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeStartChildWorkflowExecution
 
 	// the create request ID is generated inside, cannot assert equal
 	s.mockMutableState.EXPECT().ApplyStartChildWorkflowExecutionInitiatedEvent(
-		event.GetEventId(), protomock.Eq(event), gomock.Any(),
+		event.GetEventId(), protomock.Eq(event),
 	).Return(ci, nil)
 	s.mockUpdateVersion(event)
 	s.mockTaskGenerator.EXPECT().GenerateChildWorkflowTasks(

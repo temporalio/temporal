@@ -241,7 +241,7 @@ type (
 		ApplySignalExternalWorkflowExecutionFailedEvent(*historypb.HistoryEvent) error
 		ApplySignalExternalWorkflowExecutionInitiatedEvent(int64, *historypb.HistoryEvent, string) (*persistencespb.SignalInfo, error)
 		ApplyStartChildWorkflowExecutionFailedEvent(*historypb.HistoryEvent) error
-		ApplyStartChildWorkflowExecutionInitiatedEvent(int64, *historypb.HistoryEvent, string) (*persistencespb.ChildExecutionInfo, error)
+		ApplyStartChildWorkflowExecutionInitiatedEvent(int64, *historypb.HistoryEvent) (*persistencespb.ChildExecutionInfo, error)
 		ApplyTimerCanceledEvent(*historypb.HistoryEvent) error
 		ApplyTimerFiredEvent(*historypb.HistoryEvent) error
 		ApplyTimerStartedEvent(*historypb.HistoryEvent) (*persistencespb.TimerInfo, error)

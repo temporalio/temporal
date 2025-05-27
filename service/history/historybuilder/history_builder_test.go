@@ -1329,6 +1329,7 @@ func (s *historyBuilderSuite) TestStartChildWorkflowExecutionInitiated() {
 	parentClosePolicy := enumspb.ParentClosePolicy(rand.Int31n(int32(len(enumspb.ParentClosePolicy_name))))
 	workflowIdReusePolicy := enumspb.WorkflowIdReusePolicy(rand.Int31n(int32(len(enumspb.WorkflowIdReusePolicy_name))))
 	control := "random control"
+	createRequestID := "create-request-id"
 
 	attributes := &commandpb.StartChildWorkflowExecutionCommandAttributes{
 		Namespace:                testNamespaceName.String(),
@@ -1352,6 +1353,7 @@ func (s *historyBuilderSuite) TestStartChildWorkflowExecutionInitiated() {
 		workflowTaskCompletionEventID,
 		attributes,
 		testNamespaceID,
+		createRequestID,
 	)
 	s.Equal(event, s.flush())
 	s.Equal(&historypb.HistoryEvent{
@@ -1380,6 +1382,7 @@ func (s *historyBuilderSuite) TestStartChildWorkflowExecutionInitiated() {
 				Memo:                         testMemo,
 				SearchAttributes:             testSearchAttributes,
 				Header:                       testHeader,
+				CreateRequestId:              createRequestID,
 			},
 		},
 	}, event)
