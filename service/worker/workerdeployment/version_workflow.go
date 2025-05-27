@@ -13,9 +13,15 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/worker_versioning"
 	"google.golang.org/protobuf/types/known/timestamppb"
+)
+
+const (
+	// This key is used by controllers who manage deployment versions.
+	metadataKeyController = "temporal.io/controller"
 )
 
 type (
@@ -201,6 +207,12 @@ func (d *VersionWorkflowRunner) handleUpdateVersionMetadata(ctx workflow.Context
 	}
 
 	for _, key := range workflow.DeterministicKeys(args.UpsertEntries) {
+		if key == metadataKeyController && d.VersionState.Metadata.Entries[key] == nil {
+			// adding the controller identifier key-value for the first time, counting as a controller-managed version
+			// TODO: also check and potentially emit the controller id
+			d.metrics.Counter(metrics.WorkerDeploymentVersionCreatedManagedByController.Name()).Inc(1)
+		}
+
 		payload := args.UpsertEntries[key]
 		d.VersionState.Metadata.Entries[key] = payload
 	}

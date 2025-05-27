@@ -431,7 +431,12 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 
 		metrics.FailedWorkflowTasksCounter.With(handler.metricsHandler).Record(
 			1,
-			metrics.OperationTag(metrics.HistoryRespondWorkflowTaskCompletedScope))
+			metrics.OperationTag(metrics.HistoryRespondWorkflowTaskCompletedScope),
+			metrics.NamespaceTag(namespaceEntry.Name().String()),
+			metrics.VersioningBehavior(ms.GetEffectiveVersioningBehavior()),
+			metrics.FailureTag(wtFailedCause.failedCause.String()),
+			metrics.FirstAttemptTag(currentWorkflowTask.Attempt),
+		)
 		handler.logger.Info("Failing the workflow task.",
 			tag.Value(wtFailedCause.Message()),
 			tag.WorkflowID(token.GetWorkflowId()),

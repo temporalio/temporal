@@ -40,13 +40,16 @@ const (
 	// See server.api.enums.v1.ReplicationTaskType
 	replicationTaskType     = "replicationTaskType"
 	replicationTaskPriority = "replicationTaskPriority"
+	versioningBehavior      = "versioning_behavior"
+	isFirstAttempt          = "first-attempt"
 
 	namespaceAllValue = "all"
 	unknownValue      = "_unknown_"
 	totalMetricSuffix = "_total"
 	tagExcludedValue  = "_tag_excluded_"
-
-	errorPrefix = "*"
+	falseValue        = "false"
+	trueValue         = "true"
+	errorPrefix       = "*"
 )
 
 // Tag is an interface to define metrics tags
@@ -223,6 +226,14 @@ func FailureTag(value string) Tag {
 	return &tagImpl{key: FailureTagName, value: value}
 }
 
+func FirstAttemptTag(attempt int32) Tag {
+	value := falseValue
+	if attempt == 1 {
+		value = trueValue
+	}
+	return &tagImpl{key: isFirstAttempt, value: value}
+}
+
 func FailureSourceTag(value string) Tag {
 	if len(value) == 0 {
 		value = unknownValue
@@ -382,4 +393,8 @@ func DestinationTag(value string) Tag {
 		key:   destination,
 		value: value,
 	}
+}
+
+func VersioningBehavior(behavior enumspb.VersioningBehavior) Tag {
+	return &tagImpl{versioningBehavior, behavior.String()}
 }
