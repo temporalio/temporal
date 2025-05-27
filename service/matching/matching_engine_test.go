@@ -989,7 +989,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	s.matchingEngine.config.RangeSize = 30 // override to low number for the test
 
 	// Overriding the dynamic config so that the rate-limiter has a refresh rate of 0. By default, the rate-limiter has a refresh rate of 1 minute which is too long for this test.
-	s.matchingEngine.config.RateLimiterRefreshInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(0)
+	s.matchingEngine.config.RateLimiterRefreshInterval = 0
 	s.matchingEngine.config.AdminNamespaceToPartitionDispatchRate = dynamicconfig.GetFloatPropertyFnFilteredByNamespace(25000)
 	s.matchingEngine.config.AdminNamespaceTaskqueueToPartitionDispatchRate = dynamicconfig.GetFloatPropertyFnFilteredByTaskQueue(25000)
 
@@ -1173,7 +1173,7 @@ func (s *matchingEngineSuite) TestRateLimiterAcrossVersionedQueues() {
 	s.matchingEngine.config.MinTaskThrottlingBurstSize = dynamicconfig.GetIntPropertyFnFilteredByTaskQueue(0)
 
 	// Overriding the dynamic config so that the rate-limiter has a refresh rate of 0. By default, the rate-limiter has a refresh rate of 1 minute which is too long for this test.
-	s.matchingEngine.config.RateLimiterRefreshInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(0)
+	s.matchingEngine.config.RateLimiterRefreshInterval = 0
 
 	tl := "makeToast"
 	dbq := newUnversionedRootQueueKey(namespaceId, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)

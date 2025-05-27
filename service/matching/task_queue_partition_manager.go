@@ -107,7 +107,7 @@ func newTaskQueuePartitionManager(
 	)
 	pm.dynamicRateLimiter = quotas.NewDynamicRateLimiter(
 		pm.dynamicRateBurst,
-		tqConfig.RateLimiterRefreshInterval(),
+		tqConfig.RateLimiterRefreshInterval,
 	)
 	pm.rateLimiter = quotas.NewMultiRateLimiter([]quotas.RateLimiter{
 		pm.dynamicRateLimiter,
