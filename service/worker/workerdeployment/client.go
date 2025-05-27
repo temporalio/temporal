@@ -7,6 +7,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/dgryski/go-farm"
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
@@ -45,7 +46,6 @@ type Client interface {
 		taskQueueName string,
 		taskQueueType enumspb.TaskQueueType,
 		identity string,
-		requestID string,
 	) error
 
 	DescribeVersion(
@@ -177,7 +177,8 @@ type Client interface {
 	) error
 }
 
-type ErrMaxTaskQueuesInDeployment struct{ error }
+type ErrMaxTaskQueuesInVersion struct{ error }
+type ErrMaxVersionsInDeployment struct{ error }
 type ErrRegister struct{ error }
 
 // ClientImpl implements Client
@@ -204,10 +205,13 @@ func (d *ClientImpl) RegisterTaskQueueWorker(
 	taskQueueName string,
 	taskQueueType enumspb.TaskQueueType,
 	identity string,
-	requestID string,
 ) (retErr error) {
 	//revive:disable-next-line:defer
 	defer d.record("RegisterTaskQueueWorker", &retErr, taskQueueName, taskQueueType, identity)()
+
+	// Creating request ID out of build ID + TQ name + TQ type. Many updates may come from multiple
+	// matching partitions, we do not want them to create new update requests.
+	requestID := fmt.Sprintf("reg-ver-%v-%v-%d", farm.Fingerprint64([]byte(buildId)), farm.Fingerprint64([]byte(taskQueueName)), taskQueueType)
 
 	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.RegisterWorkerInWorkerDeploymentArgs{
 		TaskQueueName: taskQueueName,
@@ -233,7 +237,9 @@ func (d *ClientImpl) RegisterTaskQueueWorker(
 
 	if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errMaxTaskQueuesInVersionType {
 		// translate to client-side error type
-		return ErrMaxTaskQueuesInDeployment{error: errors.New(failure.Message)}
+		return ErrMaxTaskQueuesInVersion{error: errors.New(failure.Message)}
+	} else if failure.GetApplicationFailureInfo().GetType() == errTooManyVersions {
+		return ErrMaxVersionsInDeployment{error: errors.New(failure.Message)}
 	} else if failure.GetApplicationFailureInfo().GetType() == errNoChangeType {
 		return nil
 	} else if failure != nil {
@@ -531,12 +537,9 @@ func (d *ClientImpl) SetCurrentVersion(
 			res.ConflictToken = details[0].GetData()
 		}
 		return &res, nil
-	} else if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errVersionNotFound {
-		return nil, serviceerror.NewNotFound(errVersionNotFound)
 	} else if failure.GetApplicationFailureInfo().GetType() == errFailedPrecondition {
 		return nil, serviceerror.NewFailedPrecondition(failure.Message)
 	} else if failure != nil {
-		// TODO: is there an easy way to recover the original type here?
 		return nil, serviceerror.NewInternal(failure.Message)
 	}
 
@@ -623,10 +626,6 @@ func (d *ClientImpl) SetRampingVersion(
 		}
 
 		return &res, nil
-	} else if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errVersionNotFound {
-		return nil, serviceerror.NewNotFound(errVersionNotFound)
-	} else if failure.GetApplicationFailureInfo().GetType() == errVersionAlreadyCurrentType {
-		return nil, serviceerror.NewFailedPreconditionf("Ramping version %v is already current", version)
 	} else if failure.GetApplicationFailureInfo().GetType() == errFailedPrecondition {
 		return nil, serviceerror.NewFailedPrecondition(failure.Message)
 	} else if failure != nil {
@@ -701,12 +700,8 @@ func (d *ClientImpl) DeleteWorkerDeploymentVersion(
 	if failure := outcome.GetFailure(); failure != nil {
 		if failure.GetApplicationFailureInfo().GetType() == errVersionNotFound {
 			return nil
-		} else if failure.GetCause().GetApplicationFailureInfo().GetType() == ErrVersionIsCurrentOrRamping {
-			return serviceerror.NewFailedPrecondition(ErrVersionIsCurrentOrRamping)
-		} else if failure.GetCause().GetApplicationFailureInfo().GetType() == ErrVersionIsDraining {
-			return serviceerror.NewFailedPrecondition(ErrVersionIsDraining)
-		} else if failure.GetCause().GetApplicationFailureInfo().GetType() == ErrVersionHasPollers {
-			return serviceerror.NewFailedPrecondition(ErrVersionHasPollers)
+		} else if failure.GetCause().GetApplicationFailureInfo().GetType() == errFailedPrecondition {
+			return serviceerror.NewFailedPrecondition(failure.GetCause().GetMessage())
 		}
 		return serviceerror.NewInternal(failure.Message)
 	}
@@ -929,11 +924,11 @@ func (d *ClientImpl) DeleteVersionFromWorkerDeployment(
 
 	if failure := outcome.GetFailure(); failure != nil {
 		if failure.Message == ErrVersionIsDraining {
-			return temporal.NewNonRetryableApplicationError(ErrVersionIsDraining, ErrVersionIsDraining, nil) // non-retryable error to stop multiple activity attempts
+			return temporal.NewNonRetryableApplicationError(ErrVersionIsDraining, errFailedPrecondition, nil) // non-retryable error to stop multiple activity attempts
 		} else if failure.Message == ErrVersionHasPollers {
-			return temporal.NewNonRetryableApplicationError(ErrVersionHasPollers, ErrVersionHasPollers, nil) // non-retryable error to stop multiple activity attempts
+			return temporal.NewNonRetryableApplicationError(ErrVersionHasPollers, errFailedPrecondition, nil) // non-retryable error to stop multiple activity attempts
 		} else if failure.Message == ErrVersionIsCurrentOrRamping {
-			return temporal.NewNonRetryableApplicationError(ErrVersionIsCurrentOrRamping, ErrVersionIsCurrentOrRamping, nil) // non-retryable error to stop multiple activity attempts
+			return temporal.NewNonRetryableApplicationError(ErrVersionIsCurrentOrRamping, errFailedPrecondition, nil) // non-retryable error to stop multiple activity attempts
 		}
 		return serviceerror.NewInternal(failure.Message)
 	}
@@ -1274,12 +1269,21 @@ func (d *ClientImpl) record(operation string, retErr *error, args ...any) func()
 		// TODO: add metrics recording here
 
 		if *retErr != nil {
-			d.logger.Error("deployment client error",
-				tag.Error(*retErr),
-				tag.Operation(operation),
-				tag.NewDurationTag("elapsed", elapsed),
-				tag.NewAnyTag("args", args),
-			)
+			if isFailedPrecondition(*retErr) {
+				d.logger.Debug("deployment client failure due to a failed precondition",
+					tag.Error(*retErr),
+					tag.Operation(operation),
+					tag.NewDurationTag("elapsed", elapsed),
+					tag.NewAnyTag("args", args),
+				)
+			} else {
+				d.logger.Error("deployment client error",
+					tag.Error(*retErr),
+					tag.Operation(operation),
+					tag.NewDurationTag("elapsed", elapsed),
+					tag.NewAnyTag("args", args),
+				)
+			}
 		} else {
 			d.logger.Debug("deployment client success",
 				tag.Operation(operation),
@@ -1561,4 +1565,11 @@ func (d *ClientImpl) getSyncBatchSize() int32 {
 		syncBatchSize = int32(n)
 	}
 	return syncBatchSize
+}
+
+// isFailedPrecondition checks if the error is a FailedPrecondition error. It also checks if the FailedPrecondition error is wrapped in an ApplicationError.
+func isFailedPrecondition(err error) bool {
+	var failedPreconditionError *serviceerror.FailedPrecondition
+	var applicationError *temporal.ApplicationError
+	return errors.As(err, &failedPreconditionError) || (errors.As(err, &applicationError) && applicationError.Type() == errFailedPrecondition)
 }

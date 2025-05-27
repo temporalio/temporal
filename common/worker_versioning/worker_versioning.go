@@ -151,7 +151,7 @@ func BuildIdIfUsingVersioning(stamp *commonpb.WorkerVersionStamp) string {
 // DeploymentFromCapabilities returns the deployment if it is using versioning V3, otherwise nil.
 // It returns the deployment from the `options` if present, otherwise, from `capabilities`,
 func DeploymentFromCapabilities(capabilities *commonpb.WorkerVersionCapabilities, options *deploymentpb.WorkerDeploymentOptions) *deploymentpb.Deployment {
-	if options.GetWorkerVersioningMode() != enumspb.WORKER_VERSIONING_MODE_UNVERSIONED &&
+	if options.GetWorkerVersioningMode() == enumspb.WORKER_VERSIONING_MODE_VERSIONED &&
 		options.GetDeploymentName() != "" &&
 		options.GetBuildId() != "" {
 		return &deploymentpb.Deployment{
@@ -531,16 +531,6 @@ func DirectiveDeployment(directive *taskqueuespb.TaskVersionDirective) *deployme
 		return DeploymentFromDeploymentVersion(dv)
 	}
 	return directive.GetDeployment()
-}
-
-// The worker deployment manager workflows still use the v0.31 format, so call this before returning the object to readers
-// to mutatively populate the missing fields.
-func AddV32RoutingConfigToV31(r *deploymentpb.RoutingConfig) *deploymentpb.RoutingConfig {
-	//nolint:staticcheck // SA1019: worker versioning v0.31
-	r.CurrentDeploymentVersion = ExternalWorkerDeploymentVersionFromString(r.CurrentVersion)
-	//nolint:staticcheck // SA1019: worker versioning v0.31
-	r.RampingDeploymentVersion = ExternalWorkerDeploymentVersionFromString(r.RampingVersion)
-	return r
 }
 
 // We store versioning info in the modern v0.32 format, so call this before returning the object to readers

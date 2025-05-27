@@ -719,6 +719,13 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 		deploymentName = request.GetDeployment().GetSeriesName()
 	}
 
+	vb := request.VersioningBehavior
+	if request.DeploymentOptions != nil && request.DeploymentOptions.GetWorkerVersioningMode() != enumspb.WORKER_VERSIONING_MODE_VERSIONED {
+		// SDK has a bug that reports behavior if user has specified a default behavior without enabling versioning.
+		// Until that is fixed, we should adjust this value so the workflow works correctly.
+		vb = enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED
+	}
+
 	// Now write the completed event
 	event := m.ms.hBuilder.AddWorkflowTaskCompletedEvent(
 		workflowTask.ScheduledEventID,
@@ -731,7 +738,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 		deploymentName,
 		//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
 		worker_versioning.DeploymentOrVersion(request.Deployment, worker_versioning.DeploymentVersionFromOptions(request.DeploymentOptions)),
-		request.VersioningBehavior,
+		vb,
 	)
 
 	err := m.afterAddWorkflowTaskCompletedEvent(event, limits)
