@@ -136,13 +136,21 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 		"workflow_id", workflow.GetInfo(ctx).WorkflowExecution.ID,
 		"run_id", workflow.GetInfo(ctx).WorkflowExecution.RunID)
 
-	if d.State == nil {
-		d.State = &deploymentspb.WorkerDeploymentLocalState{}
-	}
-
-	if d.GetState().GetCreateTime() == nil {
-		d.State.CreateTime = timestamppb.New(workflow.Now(ctx))
-		d.State.ConflictToken, _ = workflow.Now(ctx).MarshalBinary()
+	if d.GetState().GetCreateTime() == nil ||
+		d.GetState().GetRoutingConfig() == nil ||
+		d.GetState().GetConflictToken() == nil {
+		if d.State == nil {
+			d.State = &deploymentspb.WorkerDeploymentLocalState{}
+		}
+		if d.State.CreateTime == nil {
+			d.State.CreateTime = timestamppb.New(workflow.Now(ctx))
+		}
+		if d.State.RoutingConfig == nil {
+			d.State.RoutingConfig = &deploymentpb.RoutingConfig{CurrentVersion: worker_versioning.UnversionedVersionId}
+		}
+		if d.State.ConflictToken == nil {
+			d.State.ConflictToken, _ = workflow.Now(ctx).MarshalBinary()
+		}
 
 		// updating the memo since the RoutingConfig is updated
 		if err := d.updateMemo(ctx); err != nil {
