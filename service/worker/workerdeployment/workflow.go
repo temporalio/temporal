@@ -144,7 +144,7 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 		d.State.Versions = make(map[string]*deploymentspb.WorkerDeploymentVersionSummary)
 	}
 
-	// Add logging to check state
+	//TODO(carlydf): remove verbose logging
 	d.logger.Info("Starting workflow run",
 		"create_time", d.State.GetCreateTime(),
 		"routing_config", d.State.GetRoutingConfig(),
@@ -244,7 +244,7 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 		return nil
 	}
 
-	// Log state before continue-as-new
+	//TODO(carlydf): remove verbose logging
 	d.logger.Info("Continuing workflow as new",
 		"create_time", d.State.GetCreateTime(),
 		"routing_config", d.State.GetRoutingConfig(),
@@ -628,6 +628,7 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 	}()
 
 	// Log state before update
+	//TODO(carlydf): remove verbose logging
 	d.logger.Info("Starting SetCurrent update",
 		"current_version", d.State.GetRoutingConfig().GetCurrentVersion(),
 		"new_version", args.Version,
@@ -979,7 +980,7 @@ func (d *WorkflowRunner) newUUID(ctx workflow.Context) string {
 }
 
 func (d *WorkflowRunner) updateMemo(ctx workflow.Context) error {
-	// Log state before memo update
+	//TODO(carlydf): remove verbose logging
 	d.logger.Info("Updating workflow memo",
 		"routing_config", d.State.GetRoutingConfig(),
 		"current_version", d.State.GetRoutingConfig().GetCurrentVersion(),
