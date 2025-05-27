@@ -153,12 +153,12 @@ func (p *namespaceReplicationMessageProcessor) getAndHandleNamespaceReplicationT
 	for taskIndex := range response.Messages.ReplicationTasks {
 		task := response.Messages.ReplicationTasks[taskIndex]
 		err := backoff.ThrottleRetry(func() error {
-			return p.handleNamespaceReplicationTask(taskCtx, task)
+			return p.handleReplicationTask(taskCtx, task)
 		}, p.retryPolicy, isTransientRetryableError)
 
 		if err != nil {
 			metrics.ReplicatorFailures.With(p.metricsHandler).Record(1)
-			p.logger.Error("Failed to apply namespace replication tasks", tag.Error(err))
+			p.logger.Error("Failed to apply replication tasks", tag.Error(err))
 
 			dlqErr := backoff.ThrottleRetry(func() error {
 
@@ -205,7 +205,7 @@ func (p *namespaceReplicationMessageProcessor) putNamespaceReplicationTaskToDLQ(
 	return p.namespaceReplicationQueue.PublishToDLQ(ctx, task)
 }
 
-func (p *namespaceReplicationMessageProcessor) handleNamespaceReplicationTask(
+func (p *namespaceReplicationMessageProcessor) handleReplicationTask(
 	ctx context.Context,
 	task *replicationspb.ReplicationTask,
 ) error {
@@ -222,7 +222,8 @@ func (p *namespaceReplicationMessageProcessor) handleNamespaceReplicationTask(
 		err := p.namespaceTaskExecutor.Execute(ctx, attr)
 		if err != nil {
 			p.logger.Error("unable to process namespace replication task",
-				tag.WorkflowNamespaceID(attr.Id))
+				tag.WorkflowNamespaceID(attr.Id),
+				tag.Error(err))
 		}
 		return err
 	case enumsspb.REPLICATION_TASK_TYPE_TASK_QUEUE_USER_DATA:
@@ -230,7 +231,8 @@ func (p *namespaceReplicationMessageProcessor) handleNamespaceReplicationTask(
 		err := p.handleTaskQueueUserDataReplicationTask(ctx, attr)
 		if err != nil {
 			p.logger.Error(fmt.Sprintf("unable to process task queue metadata replication task, %v", attr.TaskQueueName),
-				tag.WorkflowNamespaceID(attr.NamespaceId))
+				tag.WorkflowNamespaceID(attr.NamespaceId),
+				tag.Error(err))
 		}
 		return err
 	default:
