@@ -476,6 +476,7 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 
 	// update local state
 	d.State.RoutingConfig.RampingVersion = newRampingVersion
+	d.State.RoutingConfig.RampingDeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromString(newRampingVersion)
 	d.State.RoutingConfig.RampingVersionPercentage = args.Percentage
 	d.State.RoutingConfig.RampingVersionChangedTime = rampingVersionUpdateTime
 	d.State.ConflictToken, _ = routingUpdateTime.AsTime().MarshalBinary()
@@ -676,6 +677,7 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 
 	// update local state
 	d.State.RoutingConfig.CurrentVersion = args.Version
+	d.State.RoutingConfig.CurrentDeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromString(args.Version)
 	d.State.RoutingConfig.CurrentVersionChangedTime = updateTime
 	d.State.ConflictToken, _ = updateTime.AsTime().MarshalBinary()
 	d.State.LastModifierIdentity = args.Identity
@@ -683,6 +685,7 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 	// unset ramping version if it was set to current version
 	if d.State.RoutingConfig.CurrentVersion == d.State.RoutingConfig.RampingVersion {
 		d.State.RoutingConfig.RampingVersion = ""
+		d.State.RoutingConfig.RampingDeploymentVersion = nil
 		d.State.RoutingConfig.RampingVersionPercentage = 0
 		d.State.RoutingConfig.RampingVersionChangedTime = updateTime // since ramp was removed
 	}
