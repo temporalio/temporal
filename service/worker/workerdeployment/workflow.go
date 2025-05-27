@@ -127,12 +127,17 @@ func (d *WorkflowRunner) updateVersionSummary(summary *deploymentspb.WorkerDeplo
 }
 
 func (d *WorkflowRunner) run(ctx workflow.Context) error {
-	if d.GetState().GetCreateTime() == nil {
-		if d.State == nil {
-			d.State = &deploymentspb.WorkerDeploymentLocalState{}
-		}
-		d.State.CreateTime = timestamppb.New(workflow.Now(ctx))
+	if d.State == nil {
+		d.State = &deploymentspb.WorkerDeploymentLocalState{}
+	}
+
+	// Ensure RoutingConfig is never nil
+	if d.State.RoutingConfig == nil {
 		d.State.RoutingConfig = &deploymentpb.RoutingConfig{CurrentVersion: worker_versioning.UnversionedVersionId}
+	}
+
+	if d.GetState().GetCreateTime() == nil {
+		d.State.CreateTime = timestamppb.New(workflow.Now(ctx))
 		d.State.ConflictToken, _ = workflow.Now(ctx).MarshalBinary()
 
 		// updating the memo since the RoutingConfig is updated
