@@ -253,6 +253,17 @@ func Invoke(
 			return nil, consts.ErrQueryEnteredInvalidState
 		}
 	case <-ctx.Done():
+		msResp, err := api.GetMutableState(ctx, shardContext, workflowKey, workflowConsistencyChecker)
+		if err != nil {
+			return nil, err
+		}
+		emitWorkflowQueryMetrics(
+			scope,
+			nsEntry,
+			msResp,
+			req.GetQuery().GetQueryType(),
+			ctx.Err(),
+		)
 		metrics.ConsistentQueryTimeoutCount.With(scope).Record(1)
 		return nil, ctx.Err()
 	}
@@ -294,11 +305,18 @@ func queryDirectlyThroughMatching(
 	matchingClient matchingservice.MatchingServiceClient,
 	metricsHandler metrics.Handler,
 	priority *commonpb.Priority,
-) (*historyservice.QueryWorkflowResponse, error) {
+) (resp *historyservice.QueryWorkflowResponse, retError error) {
 
 	startTime := time.Now().UTC()
 	defer func() {
 		metrics.DirectQueryDispatchLatency.With(metricsHandler).Record(time.Since(startTime))
+		emitWorkflowQueryMetrics(
+			metricsHandler,
+			nsEntry,
+			msResp,
+			queryRequest.GetQuery().GetQueryType(),
+			retError,
+		)
 	}()
 
 	directive := worker_versioning.MakeDirectiveForWorkflowTask(
@@ -372,23 +390,6 @@ func queryDirectlyThroughMatching(
 	nonStickyStartTime := time.Now().UTC()
 	matchingResp, err := matchingClient.QueryWorkflow(ctx, nonStickyMatchingRequest)
 	metrics.DirectQueryDispatchNonStickyLatency.With(metricsHandler).Record(time.Since(nonStickyStartTime))
-	if err != nil {
-		emitWorkflowQueryMetrics(
-			metricsHandler,
-			nsEntry,
-			msResp,
-			queryRequest.GetQuery().GetQueryType(),
-			err,
-		)
-		return nil, err
-	}
-	emitWorkflowQueryMetrics(
-		metricsHandler,
-		nsEntry,
-		msResp,
-		queryRequest.GetQuery().GetQueryType(),
-		nil,
-	)
 	metrics.DirectQueryDispatchNonStickySuccessCount.With(metricsHandler).Record(1)
 	return &historyservice.QueryWorkflowResponse{
 		Response: &workflowservice.QueryWorkflowResponse{
@@ -407,13 +408,17 @@ func emitWorkflowQueryMetrics(
 	commonTags := []metrics.Tag{
 		metrics.OperationTag(metrics.HistoryQueryWorkflowScope),
 		metrics.NamespaceTag(nsEntry.Name().String()),
-		metrics.VersioningBehaviorTag(msResp.GetEffectiveVersioningBehavior()),
+		metrics.VersioningBehaviorTag(workflow.GetEffectiveVersioningBehavior(msResp.GetVersioningInfo())),
 		metrics.WorkflowStatusTag(msResp.GetWorkflowStatus().String()),
 		metrics.QueryTypeTag(queryType),
 	}
 
 	if err != nil {
-		metrics.WorkflowQueryFailureCount.With(metricsHandler).Record(1, commonTags...)
+		if common.IsContextDeadlineExceededErr(err) {
+			metrics.WorkflowQueryTimeoutCount.With(metricsHandler).Record(1, commonTags...)
+		} else {
+			metrics.WorkflowQueryFailureCount.With(metricsHandler).Record(1, commonTags...)
+		}
 		return
 	}
 

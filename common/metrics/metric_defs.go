@@ -1190,6 +1190,7 @@ var (
 	WorkflowResetCount        = NewCounterDef("workflow_reset_count")
 	WorkflowQuerySuccessCount = NewCounterDef("workflow_query_count")
 	WorkflowQueryFailureCount = NewCounterDef("workflow_query_count")
+	WorkflowQueryTimeoutCount = NewCounterDef("workflow_query_timeout_count")
 	WorkflowTasksCompleted    = NewCounterDef("workflow_tasks_completed")
 
 	// Force replication
