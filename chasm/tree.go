@@ -630,7 +630,7 @@ func (n *Node) mapKeyToString(keyV reflect.Value) (string, error) {
 	case reflect.Bool:
 		return strconv.FormatBool(keyV.Bool()), nil
 	default:
-		errMsg := fmt.Sprintf("CHASM map key must be one of %s type: %s map key type is not one of them but %s", mapKeyTypes, n.nodeName, keyV.Type().String())
+		errMsg := fmt.Sprintf("CHASM map key type for node %s must be one of [%s], got %s", n.nodeName, mapKeyTypes, keyV.Type().String())
 		softassert.Fail(n.logger, errMsg)
 		return "", serviceerror.NewInternal(errMsg)
 	}
