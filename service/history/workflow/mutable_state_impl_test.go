@@ -767,8 +767,6 @@ func (s *mutableStateSuite) createMutableStateWithVersioningBehavior(
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment, enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE)
 
-	// TODO (Shivam) - can do a metric check here for DeploymentTransition
-
 	_, wft, err = s.mutableState.AddWorkflowTaskStartedEvent(
 		wft.ScheduledEventID,
 		"",
