@@ -1541,15 +1541,28 @@ func (s *Versioning3Suite) testCan(behavior enumspb.VersioningBehavior) {
 	wfStarted := make(chan struct{}, 10)
 	currentChanged := make(chan struct{}, 10)
 
-	wf1 := func(ctx workflow.Context) (string, error) {
-		s.verifyWorkflowVersioning(tv1, vbUnspecified, nil, nil, tv1.DeploymentVersionTransition())
-		wfStarted <- struct{}{}
-		// wait for current version to change.
-		<-currentChanged
-		return "", workflow.NewContinueAsNewError(ctx, "wf")
+	wf1 := func(ctx workflow.Context, attempt int) (string, error) {
+		switch attempt {
+		case 0:
+			//if crossTq {
+			//	newCtx = workflow.WithWorkflowTaskQueue(newCtx, canxTq)
+			//}
+			s.verifyWorkflowVersioning(tv1, vbUnspecified, nil, nil, tv1.DeploymentVersionTransition())
+			wfStarted <- struct{}{}
+			// wait for current version to change.
+			<-currentChanged
+			return "", workflow.NewContinueAsNewError(ctx, "wf", attempt+1)
+		case 1:
+			//if crossTq {
+			//	newCtx = workflow.WithWorkflowTaskQueue(newCtx, canxTq)
+			//}
+			s.verifyWorkflowVersioning(tv1, vbPinned, tv1.Deployment(), nil, nil)
+			return "v1", nil
+		}
+		panic("oops")
 	}
 
-	wf2 := func(ctx workflow.Context) (string, error) {
+	wf2 := func(ctx workflow.Context, attempt int) (string, error) {
 		s.verifyWorkflowVersioning(tv2, vbUnspecified, nil, nil, tv2.DeploymentVersionTransition())
 		return "v2", nil
 	}
@@ -1606,7 +1619,11 @@ func (s *Versioning3Suite) testCan(behavior enumspb.VersioningBehavior) {
 
 	var out string
 	s.NoError(run.Get(ctx, &out))
-	s.Equal("v2", out)
+	if behavior == enumspb.VERSIONING_BEHAVIOR_PINNED {
+		s.Equal("v1", out)
+	} else {
+		s.Equal("v2", out)
+	}
 }
 
 func (s *Versioning3Suite) TestDescribeTaskQueueVersioningInfo() {
