@@ -2122,13 +2122,6 @@ the user has not specified an explicit RetryPolicy`,
 		`DefaultWorkflowRetryPolicy represents the out-of-box retry policy for unset fields
 where the user has set an explicit RetryPolicy, but not specified all the fields`,
 	)
-	FollowReusePolicyAfterConflictPolicyTerminate = NewNamespaceBoolSetting(
-		"history.followReusePolicyAfterConflictPolicyTerminate",
-		true,
-		`Follows WorkflowIdReusePolicy RejectDuplicate and AllowDuplicateFailedOnly after WorkflowIdReusePolicy TerminateExisting was applied.
-If true (the default), RejectDuplicate is disallowed and AllowDuplicateFailedOnly will be honored after TerminateExisting is applied.
-This configuration will be become the default behavior in the next release and removed subsequently.`,
-	)
 	AllowResetWithPendingChildren = NewNamespaceBoolSetting(
 		"history.allowResetWithPendingChildren",
 		true,
@@ -2392,6 +2385,11 @@ that task will be sent to DLQ.`,
 		"history.ReplicationStreamSenderLowPriorityQPS",
 		100,
 		`Maximum number of low priority replication tasks that can be sent per second per shard`,
+	)
+	ReplicationStreamEventLoopRetryMaxAttempts = NewGlobalIntSetting(
+		"history.ReplicationStreamEventLoopRetryMaxAttempts",
+		100, // 0 means retry forever
+		`Max attempts for retrying replication stream event loop`,
 	)
 	ReplicationReceiverMaxOutstandingTaskCount = NewGlobalIntSetting(
 		"history.ReplicationReceiverMaxOutstandingTaskCount",

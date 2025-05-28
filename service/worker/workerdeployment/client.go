@@ -465,10 +465,14 @@ func (d *ClientImpl) ListWorkerDeployments(
 				RoutingConfig:  &deploymentpb.RoutingConfig{CurrentVersion: worker_versioning.UnversionedVersionId},
 			}
 		}
+
 		workerDeploymentSummaries[i] = &deploymentspb.WorkerDeploymentSummary{
-			Name:          workerDeploymentInfo.DeploymentName,
-			CreateTime:    workerDeploymentInfo.CreateTime,
-			RoutingConfig: workerDeploymentInfo.RoutingConfig,
+			Name:                  workerDeploymentInfo.DeploymentName,
+			CreateTime:            workerDeploymentInfo.CreateTime,
+			RoutingConfig:         workerDeploymentInfo.RoutingConfig,
+			LatestVersionSummary:  workerDeploymentInfo.LatestVersionSummary,
+			RampingVersionSummary: workerDeploymentInfo.RampingVersionSummary,
+			CurrentVersionSummary: workerDeploymentInfo.CurrentVersionSummary,
 		}
 	}
 
@@ -1075,7 +1079,7 @@ func (d *ClientImpl) updateWithStartWorkerDeploymentVersion(
 				BuildId:        buildID,
 			},
 			CreateTime:        now,
-			RoutingUpdateTime: now,
+			RoutingUpdateTime: nil,
 			CurrentSinceTime:  nil,                                 // not current
 			RampingSinceTime:  nil,                                 // not ramping
 			RampPercentage:    0,                                   // not ramping
@@ -1321,6 +1325,7 @@ func versionStateToVersionInfo(state *deploymentspb.VersionLocalState) *deployme
 	return &deploymentpb.WorkerDeploymentVersionInfo{
 		Version:            worker_versioning.WorkerDeploymentVersionToStringV31(state.Version),
 		DeploymentVersion:  worker_versioning.ExternalWorkerDeploymentVersionFromVersion(state.Version),
+		Status:             state.Status,
 		CreateTime:         state.CreateTime,
 		RoutingChangedTime: state.RoutingUpdateTime,
 		CurrentSinceTime:   state.CurrentSinceTime,
@@ -1356,6 +1361,7 @@ func (d *ClientImpl) deploymentStateToDeploymentInfo(deploymentName string, stat
 			RampingSinceTime:     v.GetRampingSinceTime(),
 			FirstActivationTime:  v.GetFirstActivationTime(),
 			LastDeactivationTime: v.GetLastDeactivationTime(),
+			Status:               v.GetStatus(),
 		})
 	}
 
