@@ -83,7 +83,7 @@ func Invoke(
 				1,
 				metrics.OperationTag(metrics.HistoryRespondWorkflowTaskFailedScope),
 				metrics.NamespaceTag(namespaceEntry.Name().String()),
-				metrics.VersioningBehavior(mutableState.GetEffectiveVersioningBehavior()),
+				metrics.VersioningBehaviorTag(mutableState.GetEffectiveVersioningBehavior()),
 				metrics.FailureTag(request.GetCause().String()),
 				metrics.FirstAttemptTag(workflowTask.Attempt),
 			)

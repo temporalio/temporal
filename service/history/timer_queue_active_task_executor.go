@@ -312,6 +312,8 @@ func (t *timerQueueActiveTaskExecutor) processSingleActivityTimeoutTask(
 		namespace.ID(mutableState.GetExecutionInfo().NamespaceId),
 		metrics.TimerActiveTaskActivityTimeoutScope,
 		timerSequenceID.TimerType,
+		mutableState.GetEffectiveVersioningBehavior(),
+		ai.Attempt,
 	)
 	if _, err = mutableState.AddActivityTaskTimedOutEvent(
 		ai.ScheduledEventId,
@@ -380,6 +382,8 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTaskTimeoutTask(
 			namespace.ID(mutableState.GetExecutionInfo().NamespaceId),
 			operationMetricsTag,
 			enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
+			mutableState.GetEffectiveVersioningBehavior(),
+			workflowTask.Attempt,
 		)
 		if _, err := mutableState.AddWorkflowTaskTimedOutEvent(
 			workflowTask,
@@ -398,6 +402,8 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTaskTimeoutTask(
 			namespace.ID(mutableState.GetExecutionInfo().NamespaceId),
 			operationMetricsTag,
 			enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
+			mutableState.GetEffectiveVersioningBehavior(),
+			workflowTask.Attempt,
 		)
 		_, err := mutableState.AddWorkflowTaskScheduleToStartTimeoutEvent(workflowTask)
 		if err != nil {
@@ -856,6 +862,8 @@ func (t *timerQueueActiveTaskExecutor) emitTimeoutMetricScopeWithNamespaceTag(
 	namespaceID namespace.ID,
 	operation string,
 	timerType enumspb.TimeoutType,
+	effectiveVersioningBehavior enumspb.VersioningBehavior,
+	firstAttempt int32,
 ) {
 	namespaceEntry, err := t.registry.GetNamespaceByID(namespaceID)
 	if err != nil {
@@ -864,6 +872,8 @@ func (t *timerQueueActiveTaskExecutor) emitTimeoutMetricScopeWithNamespaceTag(
 	metricsScope := t.metricsHandler.WithTags(
 		metrics.OperationTag(operation),
 		metrics.NamespaceTag(namespaceEntry.Name().String()),
+		metrics.VersioningBehaviorTag(effectiveVersioningBehavior),
+		metrics.FirstAttemptTag(firstAttempt),
 	)
 	switch timerType {
 	case enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START:

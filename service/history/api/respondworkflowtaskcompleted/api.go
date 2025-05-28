@@ -433,7 +433,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			1,
 			metrics.OperationTag(metrics.HistoryRespondWorkflowTaskCompletedScope),
 			metrics.NamespaceTag(namespaceEntry.Name().String()),
-			metrics.VersioningBehavior(ms.GetEffectiveVersioningBehavior()),
+			metrics.VersioningBehaviorTag(ms.GetEffectiveVersioningBehavior()),
 			metrics.FailureTag(wtFailedCause.failedCause.String()),
 			metrics.FirstAttemptTag(currentWorkflowTask.Attempt),
 		)
