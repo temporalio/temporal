@@ -982,17 +982,7 @@ func (d *WorkflowRunner) getLatestVersionSummary() *deploymentpb.WorkerDeploymen
 		return nil
 	}
 	latest_summary := sortedSummaries[len(sortedSummaries)-1]
-	return &deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary{
-		Version:              latest_summary.GetVersion(),
-		DeploymentVersion:    worker_versioning.ExternalWorkerDeploymentVersionFromString(latest_summary.GetVersion()),
-		CreateTime:           latest_summary.GetCreateTime(),
-		DrainageInfo:         latest_summary.GetDrainageInfo(),
-		CurrentSinceTime:     latest_summary.GetCurrentSinceTime(),
-		RampingSinceTime:     latest_summary.GetRampingSinceTime(),
-		RoutingUpdateTime:    latest_summary.GetRoutingUpdateTime(),
-		FirstActivationTime:  latest_summary.GetFirstActivationTime(),
-		LastDeactivationTime: latest_summary.GetLastDeactivationTime(),
-	}
+	return d.getWorkerDeploymentInfoVersionSummary(latest_summary)
 }
 
 func (d *WorkflowRunner) getCurrentVersionSummary() *deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary {
@@ -1004,18 +994,7 @@ func (d *WorkflowRunner) getCurrentVersionSummary() *deploymentpb.WorkerDeployme
 	if currentVersionSummary == nil {
 		return nil
 	}
-
-	return &deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary{
-		Version:              currentVersion,
-		DeploymentVersion:    worker_versioning.ExternalWorkerDeploymentVersionFromString(currentVersion),
-		CreateTime:           currentVersionSummary.GetCreateTime(),
-		DrainageInfo:         currentVersionSummary.GetDrainageInfo(),
-		CurrentSinceTime:     currentVersionSummary.GetCurrentSinceTime(),
-		RampingSinceTime:     currentVersionSummary.GetRampingSinceTime(),
-		RoutingUpdateTime:    currentVersionSummary.GetRoutingUpdateTime(),
-		FirstActivationTime:  currentVersionSummary.GetFirstActivationTime(),
-		LastDeactivationTime: currentVersionSummary.GetLastDeactivationTime(),
-	}
+	return d.getWorkerDeploymentInfoVersionSummary(currentVersionSummary)
 }
 
 func (d *WorkflowRunner) getRampingVersionSummary() *deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary {
@@ -1027,16 +1006,19 @@ func (d *WorkflowRunner) getRampingVersionSummary() *deploymentpb.WorkerDeployme
 	if rampingVersionSummary == nil {
 		return nil
 	}
+	return d.getWorkerDeploymentInfoVersionSummary(rampingVersionSummary)
+}
 
+func (d *WorkflowRunner) getWorkerDeploymentInfoVersionSummary(versionSummary *deploymentspb.WorkerDeploymentVersionSummary) *deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary {
 	return &deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary{
-		Version:              rampingVersion,
-		DeploymentVersion:    worker_versioning.ExternalWorkerDeploymentVersionFromString(rampingVersion),
-		CreateTime:           rampingVersionSummary.GetCreateTime(),
-		DrainageInfo:         rampingVersionSummary.GetDrainageInfo(),
-		CurrentSinceTime:     rampingVersionSummary.GetCurrentSinceTime(),
-		RampingSinceTime:     rampingVersionSummary.GetRampingSinceTime(),
-		RoutingUpdateTime:    rampingVersionSummary.GetRoutingUpdateTime(),
-		FirstActivationTime:  rampingVersionSummary.GetFirstActivationTime(),
-		LastDeactivationTime: rampingVersionSummary.GetLastDeactivationTime(),
+		Version:              versionSummary.GetVersion(),
+		DeploymentVersion:    worker_versioning.ExternalWorkerDeploymentVersionFromString(versionSummary.GetVersion()),
+		CreateTime:           versionSummary.GetCreateTime(),
+		DrainageInfo:         versionSummary.GetDrainageInfo(),
+		CurrentSinceTime:     versionSummary.GetCurrentSinceTime(),
+		RampingSinceTime:     versionSummary.GetRampingSinceTime(),
+		RoutingUpdateTime:    versionSummary.GetRoutingUpdateTime(),
+		FirstActivationTime:  versionSummary.GetFirstActivationTime(),
+		LastDeactivationTime: versionSummary.GetLastDeactivationTime(),
 	}
 }
