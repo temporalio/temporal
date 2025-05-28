@@ -3,7 +3,6 @@ package history
 import (
 	"context"
 	"errors"
-	"fmt"
 	"math"
 	"sync"
 	"sync/atomic"
@@ -54,6 +53,8 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.uber.org/fx"
+	"google.golang.org/grpc/health"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 )
 
 type (
@@ -74,6 +75,7 @@ type (
 		persistenceShardManager      persistence.ShardManager
 		persistenceVisibilityManager manager.VisibilityManager
 		persistenceHealthSignal      persistence.HealthSignalAggregator
+		healthServer                 *health.Server
 		historyServiceResolver       membership.ServiceResolver
 		metricsHandler               metrics.Handler
 		payloadSerializer            serialization.Serializer
@@ -103,6 +105,7 @@ type (
 		PersistenceExecutionManager  persistence.ExecutionManager
 		PersistenceShardManager      persistence.ShardManager
 		PersistenceHealthSignal      persistence.HealthSignalAggregator
+		HealthServer                 *health.Server
 		PersistenceVisibilityManager manager.VisibilityManager
 		HistoryServiceResolver       membership.ServiceResolver
 		MetricsHandler               metrics.Handler
@@ -187,18 +190,29 @@ func (h *Handler) isStopped() bool {
 }
 
 func (h *Handler) DeepHealthCheck(
-	_ context.Context,
+	ctx context.Context,
 	_ *historyservice.DeepHealthCheckRequest,
 ) (_ *historyservice.DeepHealthCheckResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
 	h.startWG.Wait()
 
+	status, err := h.healthServer.Check(ctx, &healthpb.HealthCheckRequest{Service: serviceName})
+	if err != nil {
+		return nil, err
+	}
+	if status.Status != healthpb.HealthCheckResponse_SERVING {
+		metrics.HistoryHostHealthGauge.With(h.metricsHandler).Record(float64(enumsspb.HEALTH_STATE_DECLINED_SERVING))
+		return &historyservice.DeepHealthCheckResponse{State: enumsspb.HEALTH_STATE_DECLINED_SERVING}, nil
+	}
+
 	latency := h.persistenceHealthSignal.AverageLatency()
 	errRatio := h.persistenceHealthSignal.ErrorRatio()
 
 	if latency > h.config.HealthPersistenceLatencyFailure() || errRatio > h.config.HealthPersistenceErrorRatio() {
+		metrics.HistoryHostHealthGauge.With(h.metricsHandler).Record(float64(enumsspb.HEALTH_STATE_DECLINED_SERVING))
 		return &historyservice.DeepHealthCheckResponse{State: enumsspb.HEALTH_STATE_NOT_SERVING}, nil
 	}
+	metrics.HistoryHostHealthGauge.With(h.metricsHandler).Record(float64(enumsspb.HEALTH_STATE_SERVING))
 	return &historyservice.DeepHealthCheckResponse{State: enumsspb.HEALTH_STATE_SERVING}, nil
 }
 
@@ -688,7 +702,7 @@ func (h *Handler) RemoveTask(ctx context.Context, request *historyservice.Remove
 	var err error
 	category, ok := h.taskCategoryRegistry.GetCategoryByID(int(request.Category))
 	if !ok {
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid task category ID: %v", request.Category))
+		return nil, serviceerror.NewInvalidArgumentf("Invalid task category ID: %v", request.Category)
 	}
 
 	key := tasks.NewKey(
@@ -696,7 +710,7 @@ func (h *Handler) RemoveTask(ctx context.Context, request *historyservice.Remove
 		request.GetTaskId(),
 	)
 	if err := tasks.ValidateKey(key); err != nil {
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid task key: %v", err.Error()))
+		return nil, serviceerror.NewInvalidArgumentf("Invalid task key: %v", err.Error())
 	}
 
 	err = h.persistenceExecutionManager.CompleteHistoryTask(ctx, &persistence.CompleteHistoryTaskRequest{
@@ -2074,11 +2088,11 @@ func (h *Handler) StreamWorkflowReplicationMessages(
 		return err
 	}
 	if serverClusterShardID.ClusterID != int32(h.clusterMetadata.GetClusterID()) {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf(
+		return serviceerror.NewInvalidArgumentf(
 			"wrong cluster: target: %v, current: %v",
 			serverClusterShardID.ClusterID,
 			h.clusterMetadata.GetClusterID(),
-		))
+		)
 	}
 	shardContext, err := h.controller.GetShardByID(serverClusterShardID.ShardID)
 	if err != nil {

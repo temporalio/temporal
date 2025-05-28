@@ -23,7 +23,7 @@ import (
 
 type (
 	DescribeTaskQueueSuite struct {
-		testcore.FunctionalTestSuite
+		testcore.FunctionalTestBase
 	}
 )
 

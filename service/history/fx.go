@@ -16,7 +16,6 @@ import (
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
-	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/quotas/calculator"
 	"go.temporal.io/server/common/resolver"
@@ -99,6 +98,7 @@ func HandlerProvider(args NewHandlerArgs) *Handler {
 		persistenceShardManager:      args.PersistenceShardManager,
 		persistenceVisibilityManager: args.PersistenceVisibilityManager,
 		persistenceHealthSignal:      args.PersistenceHealthSignal,
+		healthServer:                 args.HealthServer,
 		historyServiceResolver:       args.HistoryServiceResolver,
 		metricsHandler:               args.MetricsHandler,
 		payloadSerializer:            args.PayloadSerializer,
@@ -136,7 +136,6 @@ func HistoryEngineFactoryProvider(
 func ConfigProvider(
 	dc *dynamicconfig.Collection,
 	persistenceConfig config.Persistence,
-	esConfig *esclient.Config,
 ) *configs.Config {
 	return configs.NewConfig(
 		dc,

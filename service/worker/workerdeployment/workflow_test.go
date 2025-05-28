@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type WorkerDeploymentSuite struct {
@@ -56,81 +57,46 @@ func (s *WorkerDeploymentSuite) Test_SetCurrentVersion_RejectStaleConcurrentUpda
 	tv := testvars.New(s.T())
 	s.env.OnUpsertMemo(mock.Anything).Return(nil)
 
-	// Adding the version to worker deployment.
-	s.env.RegisterDelayedCallback(func() {
-		s.env.UpdateWorkflow(AddVersionToWorkerDeployment, "", &testsuite.TestUpdateCallback{
-			OnReject: func(err error) {
-				s.Fail("update failed with error %v", err)
-			},
-			OnAccept: func() {
-			},
-			OnComplete: func(interface{}, error) {
-			},
-		}, &deploymentspb.AddVersionUpdateArgs{
-			Version: tv.DeploymentVersionString(),
-		})
-	}, 0*time.Millisecond)
+	var a *Activities
+	s.env.RegisterActivity(a.SyncWorkerDeploymentVersion)
+	s.env.OnActivity(a.SyncWorkerDeploymentVersion, mock.Anything, mock.Anything).Once().Return(
+		func(ctx context.Context, args *deploymentspb.SyncVersionStateActivityArgs) (*deploymentspb.SyncVersionStateActivityResult, error) {
+			return &deploymentspb.SyncVersionStateActivityResult{}, nil
+		},
+	)
+
+	updateArgs := &deploymentspb.SetCurrentVersionArgs{
+		Identity:                tv.ClientIdentity(),
+		Version:                 tv.DeploymentVersionString(),
+		IgnoreMissingTaskQueues: true,
+	}
 
 	s.env.RegisterDelayedCallback(func() {
-		updateArgs := &deploymentspb.SetCurrentVersionArgs{
-			Identity:                tv.ClientIdentity(),
-			Version:                 tv.DeploymentVersionString(),
-			IgnoreMissingTaskQueues: true,
-		}
-		// Setting the new version as current version
+		// Firing update #1
 		s.env.UpdateWorkflow(SetCurrentVersion, "", &testsuite.TestUpdateCallback{
 			OnReject: func(err error) {
 				s.Fail("update #1 should not have failed with error %v", err)
 			},
 			OnAccept: func() {
+				// Firing Update #2 which shall gets processed after Update #1 gets completed.
+				s.env.UpdateWorkflow(SetCurrentVersion, "", &testsuite.TestUpdateCallback{
+					OnReject: func(err error) {
+						s.Fail("update #2 should have been accepted by the validator")
+					},
+					OnAccept: func() {
+					},
+					OnComplete: func(a interface{}, err error) {
+						// Update #2 clears the validator and waits for the first update to complete. Once it starts
+						// being processed, it should be rejected since completion of the first update changed the state.
+						s.ErrorContains(err, errNoChangeType)
+					},
+				}, updateArgs)
 			},
 			OnComplete: func(a interface{}, err error) {
 			},
 		}, updateArgs)
-	}, 1*time.Millisecond)
 
-	// Update #1 clears the validator and is then halted during activity processing. This is
-	// to simulate the workflow giving up control which shall allow update #2 to clear the validator.
-	// However, update #2 cannot yet start being processed since update #1 holds the workflow lock and
-	// will only release it after it has completed processing.
-	haltUpdate := make(chan struct{})
-	var a *Activities
-	s.env.RegisterActivity(a.SyncWorkerDeploymentVersion)
-	s.env.OnActivity(a.SyncWorkerDeploymentVersion, mock.Anything, mock.Anything).Once().Return(
-		func(ctx context.Context, args *deploymentspb.SyncVersionStateActivityArgs) (*deploymentspb.SyncVersionStateActivityResult, error) {
-			if args.Version == tv.DeploymentVersionString() {
-				// Halt the activity to simulate workflow giving up control while processing the first update.
-				<-haltUpdate
-			}
-			return &deploymentspb.SyncVersionStateActivityResult{}, nil
-		},
-	)
-
-	s.env.RegisterDelayedCallback(func() {
-		updateArgs := &deploymentspb.SetCurrentVersionArgs{
-			Identity:                tv.ClientIdentity(),
-			Version:                 tv.DeploymentVersionString(),
-			IgnoreMissingTaskQueues: true,
-		}
-		s.env.UpdateWorkflow(SetCurrentVersion, "", &testsuite.TestUpdateCallback{
-			OnReject: func(err error) {
-				s.Fail("update #2 should have been accepted by the validator")
-			},
-			OnAccept: func() {
-			},
-			OnComplete: func(a interface{}, err error) {
-				// Update #2 clears the validator and waits for the first update to complete. Once it starts
-				// being processed, it should be rejected since completion of the first update changed the state.
-				s.ErrorContains(err, errNoChangeType)
-			},
-		}, updateArgs)
-	}, 1*time.Millisecond)
-
-	// Close the channel to unblock the activity and allow update #1 to complete.
-	// Note: This is called after update #2 begins being processed since it's fired after 2 milliseconds.
-	s.env.RegisterDelayedCallback(func() {
-		close(haltUpdate)
-	}, 2*time.Millisecond)
+	}, 0*time.Millisecond)
 
 	deploymentWorkflow := func(ctx workflow.Context, args *deploymentspb.WorkerDeploymentWorkflowArgs) error {
 		maxVersionsGetter := func() int {
@@ -143,6 +109,14 @@ func (s *WorkerDeploymentSuite) Test_SetCurrentVersion_RejectStaleConcurrentUpda
 		NamespaceName:  tv.NamespaceName().String(),
 		NamespaceId:    tv.NamespaceID().String(),
 		DeploymentName: tv.DeploymentSeries(),
+		// Add version to deployment's local state since it's a prerequisite for SetCurrentVersion.
+		State: &deploymentspb.WorkerDeploymentLocalState{
+			Versions: map[string]*deploymentspb.WorkerDeploymentVersionSummary{
+				tv.DeploymentVersionString(): {
+					Version: tv.DeploymentVersionString(),
+				},
+			},
+		},
 	})
 
 	s.True(s.env.IsWorkflowCompleted())
@@ -160,83 +134,48 @@ func (s *WorkerDeploymentSuite) Test_SetRampingVersion_RejectStaleConcurrentUpda
 	tv := testvars.New(s.T())
 	s.env.OnUpsertMemo(mock.Anything).Return(nil)
 
-	// Adding the version to worker deployment.
-	s.env.RegisterDelayedCallback(func() {
-		s.env.UpdateWorkflow(AddVersionToWorkerDeployment, "", &testsuite.TestUpdateCallback{
-			OnReject: func(err error) {
-				s.Fail("update failed with error %v", err)
-			},
-			OnAccept: func() {
-			},
-			OnComplete: func(interface{}, error) {
-			},
-		}, &deploymentspb.AddVersionUpdateArgs{
-			Version: tv.DeploymentVersionString(),
-		})
-	}, 0*time.Millisecond)
+	var a *Activities
+	s.env.RegisterActivity(a.SyncWorkerDeploymentVersion)
+	s.env.OnActivity(a.SyncWorkerDeploymentVersion, mock.Anything, mock.Anything).Once().Return(
+		func(ctx context.Context, args *deploymentspb.SyncVersionStateActivityArgs) (*deploymentspb.SyncVersionStateActivityResult, error) {
+			return &deploymentspb.SyncVersionStateActivityResult{}, nil
+		},
+	)
+
+	updateArgs := &deploymentspb.SetRampingVersionArgs{
+		Identity:                tv.ClientIdentity(),
+		Version:                 tv.DeploymentVersionString(),
+		Percentage:              50,
+		IgnoreMissingTaskQueues: true,
+	}
 
 	s.env.RegisterDelayedCallback(func() {
-		updateArgs := &deploymentspb.SetRampingVersionArgs{
-			Identity:                tv.ClientIdentity(),
-			Version:                 tv.DeploymentVersionString(),
-			Percentage:              50,
-			IgnoreMissingTaskQueues: true,
-		}
-		// Setting the new version as current version
+		// Firing Update #1.
 		s.env.UpdateWorkflow(SetRampingVersion, "", &testsuite.TestUpdateCallback{
 			OnReject: func(err error) {
 				s.Fail("update #1 should not have failed with error %v", err)
 			},
 			OnAccept: func() {
+				// Firing Update #2 which shall get processed after Update #1 gets completed.
+				s.env.UpdateWorkflow(SetRampingVersion, "", &testsuite.TestUpdateCallback{
+					OnReject: func(err error) {
+						s.Fail("update #2 should have been accepted by the validator")
+					},
+					OnAccept: func() {
+					},
+					OnComplete: func(a interface{}, err error) {
+						// Update #2 clears the validator and waits for the first update to complete. Once it starts
+						// being processed, it should be rejected since completion of the first update changed the state.
+						s.ErrorContains(err, errNoChangeType)
+					},
+				}, updateArgs)
+
 			},
 			OnComplete: func(a interface{}, err error) {
 			},
 		}, updateArgs)
-	}, 1*time.Millisecond)
 
-	// Update #1 clears the validator and is then halted during activity processing. This is
-	// to simulate the workflow giving up control which shall allow update #2 to clear the validator.
-	// However, update #2 cannot yet start being processed since update #1 holds the workflow lock and
-	// will only release it after it has completed processing.
-	haltUpdate := make(chan struct{})
-	var a *Activities
-	s.env.RegisterActivity(a.SyncWorkerDeploymentVersion)
-	s.env.OnActivity(a.SyncWorkerDeploymentVersion, mock.Anything, mock.Anything).Once().Return(
-		func(ctx context.Context, args *deploymentspb.SyncVersionStateActivityArgs) (*deploymentspb.SyncVersionStateActivityResult, error) {
-			if args.Version == tv.DeploymentVersionString() {
-				// Halt the activity to simulate workflow giving up control while processing the first update.
-				<-haltUpdate
-			}
-			return &deploymentspb.SyncVersionStateActivityResult{}, nil
-		},
-	)
-
-	s.env.RegisterDelayedCallback(func() {
-		updateArgs := &deploymentspb.SetRampingVersionArgs{
-			Identity:                tv.ClientIdentity(),
-			Version:                 tv.DeploymentVersionString(),
-			Percentage:              50,
-			IgnoreMissingTaskQueues: true,
-		}
-		s.env.UpdateWorkflow(SetRampingVersion, "", &testsuite.TestUpdateCallback{
-			OnReject: func(err error) {
-				s.Fail("update #2 should have been accepted by the validator")
-			},
-			OnAccept: func() {
-			},
-			OnComplete: func(a interface{}, err error) {
-				// Update #2 clears the validator and waits for the first update to complete. Once it starts
-				// being processed, it should be rejected since completion of the first update changed the state.
-				s.ErrorContains(err, errNoChangeType)
-			},
-		}, updateArgs)
-	}, 1*time.Millisecond)
-
-	// Close the channel to unblock the activity and allow update #1 to complete.
-	// Note: This is called after update #2 begins being processed since it's fired after 2 milliseconds.
-	s.env.RegisterDelayedCallback(func() {
-		close(haltUpdate)
-	}, 2*time.Millisecond)
+	}, 0*time.Millisecond)
 
 	deploymentWorkflow := func(ctx workflow.Context, args *deploymentspb.WorkerDeploymentWorkflowArgs) error {
 		maxVersionsGetter := func() int {
@@ -249,8 +188,14 @@ func (s *WorkerDeploymentSuite) Test_SetRampingVersion_RejectStaleConcurrentUpda
 		NamespaceName:  tv.NamespaceName().String(),
 		NamespaceId:    tv.NamespaceID().String(),
 		DeploymentName: tv.DeploymentSeries(),
+		State: &deploymentspb.WorkerDeploymentLocalState{
+			Versions: map[string]*deploymentspb.WorkerDeploymentVersionSummary{
+				tv.DeploymentVersionString(): {
+					Version: tv.DeploymentVersionString(),
+				},
+			},
+		},
 	})
-
 	s.True(s.env.IsWorkflowCompleted())
 }
 
@@ -268,47 +213,7 @@ func (s *WorkerDeploymentSuite) syncUnversionedRampInBatches(totalWorkers int) {
 	tv := testvars.New(s.T())
 	s.env.OnUpsertMemo(mock.Anything).Return(nil)
 
-	// To call the UnversionedRamp activity, we first set the current version to be tv.DeploymentVersionString() and then ramp "unversioned".
-
-	// Step 1: Register the new version in the worker deployment.
 	var a *Activities
-	s.env.OnActivity(a.RegisterWorkerInVersion, mock.Anything, mock.Anything).Once().Return(nil)
-	s.env.RegisterDelayedCallback(func() {
-		s.env.UpdateWorkflow(RegisterWorkerInWorkerDeployment, "", &testsuite.TestUpdateCallback{
-			OnReject: func(err error) {
-				s.Fail("update failed with error %v", err)
-			},
-			OnAccept: func() {
-			},
-			OnComplete: func(a interface{}, err error) {
-			},
-		}, &deploymentspb.RegisterWorkerInWorkerDeploymentArgs{
-			TaskQueueName: tv.TaskQueue().Name,
-			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-			MaxTaskQueues: 100,
-			Version:       tv.DeploymentVersion(),
-		})
-	}, 0*time.Millisecond)
-
-	// Step 2: Set current version to be tv.DeploymentVersionString()
-	s.env.OnActivity(a.SyncWorkerDeploymentVersion, mock.Anything, mock.Anything).Once().Return(nil, nil)
-	s.env.RegisterDelayedCallback(func() {
-		s.env.UpdateWorkflow(SetCurrentVersion, "", &testsuite.TestUpdateCallback{
-			OnReject: func(err error) {
-				s.Fail("update failed with error %v", err)
-			},
-			OnAccept: func() {
-			},
-			OnComplete: func(a interface{}, err error) {
-			},
-		}, &deploymentspb.SetCurrentVersionArgs{
-			Version:                 tv.DeploymentVersionString(),
-			IgnoreMissingTaskQueues: true,
-		})
-	}, 1*time.Millisecond)
-
-	// Step 3: Ramp "__unversioned__"
-
 	taskQueueInfos := make([]*deploymentpb.WorkerDeploymentVersionInfo_VersionTaskQueueInfo, totalWorkers)
 	for i := 0; i < totalWorkers; i++ {
 		taskQueueInfos[i] = &deploymentpb.WorkerDeploymentVersionInfo_VersionTaskQueueInfo{
@@ -334,6 +239,7 @@ func (s *WorkerDeploymentSuite) syncUnversionedRampInBatches(totalWorkers int) {
 	s.env.OnActivity(a.SyncDeploymentVersionUserDataFromWorkerDeployment, mock.Anything, mock.Anything).Times(totalBatches).Return(nil, nil)
 
 	s.env.RegisterDelayedCallback(func() {
+
 		s.env.UpdateWorkflow(SetRampingVersion, "", &testsuite.TestUpdateCallback{
 			OnReject: func(err error) {
 				s.Fail("update failed with error %v", err)
@@ -345,7 +251,8 @@ func (s *WorkerDeploymentSuite) syncUnversionedRampInBatches(totalWorkers int) {
 		}, &deploymentspb.SetRampingVersionArgs{
 			Version: worker_versioning.UnversionedVersionId,
 		})
-	}, 2*time.Millisecond)
+
+	}, 0*time.Millisecond)
 
 	deploymentWorkflow := func(ctx workflow.Context, args *deploymentspb.WorkerDeploymentWorkflowArgs) error {
 		maxVersionsGetter := func() int {
@@ -359,7 +266,14 @@ func (s *WorkerDeploymentSuite) syncUnversionedRampInBatches(totalWorkers int) {
 		NamespaceId:    tv.NamespaceID().String(),
 		DeploymentName: tv.DeploymentSeries(),
 		State: &deploymentspb.WorkerDeploymentLocalState{
+			CreateTime:    timestamppb.New(time.Now()),
 			SyncBatchSize: int32(s.workerDeploymentClient.getSyncBatchSize()), // initialize the sync batch size
+			// Initialize the routing config with the current version (tv.DeploymentVersionString()).
+			// This simulates a scenario where the worker deployment already has a current version,
+			// which is a prerequisite for ramping to an unversioned state.
+			RoutingConfig: &deploymentpb.RoutingConfig{
+				CurrentVersion: tv.DeploymentVersionString(),
+			},
 		},
 	})
 

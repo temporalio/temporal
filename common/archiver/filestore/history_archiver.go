@@ -29,6 +29,8 @@ import (
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence"
 )
 
 const (
@@ -49,9 +51,11 @@ var (
 
 type (
 	historyArchiver struct {
-		container *archiver.HistoryBootstrapContainer
-		fileMode  os.FileMode
-		dirMode   os.FileMode
+		executionManager persistence.ExecutionManager
+		logger           log.Logger
+		metricsHandler   metrics.Handler
+		fileMode         os.FileMode
+		dirMode          os.FileMode
 
 		// only set in test code
 		historyIterator archiver.HistoryIterator
@@ -65,14 +69,18 @@ type (
 
 // NewHistoryArchiver creates a new archiver.HistoryArchiver based on filestore
 func NewHistoryArchiver(
-	container *archiver.HistoryBootstrapContainer,
+	executionManager persistence.ExecutionManager,
+	logger log.Logger,
+	metricsHandler metrics.Handler,
 	config *config.FilestoreArchiver,
 ) (archiver.HistoryArchiver, error) {
-	return newHistoryArchiver(container, config, nil)
+	return newHistoryArchiver(executionManager, logger, metricsHandler, config, nil)
 }
 
 func newHistoryArchiver(
-	container *archiver.HistoryBootstrapContainer,
+	executionManager persistence.ExecutionManager,
+	logger log.Logger,
+	metricsHandler metrics.Handler,
 	config *config.FilestoreArchiver,
 	historyIterator archiver.HistoryIterator,
 ) (*historyArchiver, error) {
@@ -85,10 +93,12 @@ func newHistoryArchiver(
 		return nil, errInvalidDirMode
 	}
 	return &historyArchiver{
-		container:       container,
-		fileMode:        os.FileMode(fileMode),
-		dirMode:         os.FileMode(dirMode),
-		historyIterator: historyIterator,
+		executionManager: executionManager,
+		logger:           logger,
+		metricsHandler:   metricsHandler,
+		fileMode:         os.FileMode(fileMode),
+		dirMode:          os.FileMode(dirMode),
+		historyIterator:  historyIterator,
 	}, nil
 }
 
@@ -105,7 +115,7 @@ func (h *historyArchiver) Archive(
 		}
 	}()
 
-	logger := archiver.TagLoggerWithArchiveHistoryRequestAndURI(h.container.Logger, request, URI.String())
+	logger := archiver.TagLoggerWithArchiveHistoryRequestAndURI(h.logger, request, URI.String())
 
 	if err := h.ValidateURI(URI); err != nil {
 		logger.Error(archiver.ArchiveNonRetryableErrorMsg, tag.ArchivalArchiveFailReason(archiver.ErrReasonInvalidURI), tag.Error(err))
@@ -119,7 +129,7 @@ func (h *historyArchiver) Archive(
 
 	historyIterator := h.historyIterator
 	if historyIterator == nil { // will only be set by testing code
-		historyIterator = archiver.NewHistoryIterator(request, h.container.ExecutionManager, targetHistoryBlobSize)
+		historyIterator = archiver.NewHistoryIterator(request, h.executionManager, targetHistoryBlobSize)
 	}
 
 	var historyBatches []*historypb.History

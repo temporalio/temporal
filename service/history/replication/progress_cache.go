@@ -14,7 +14,6 @@ import (
 	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/configs"
-	"go.temporal.io/server/service/history/workflow"
 )
 
 type (
@@ -95,12 +94,12 @@ func (c *progressCacheImpl) updateStates(
 	}
 
 	for idx, transitions := range item.versionedTransitions {
-		if workflow.TransitionHistoryStalenessCheck(versionedTransitions, transitions[len(transitions)-1]) == nil {
+		if transitionhistory.StalenessCheck(versionedTransitions, transitions[len(transitions)-1]) == nil {
 			item.versionedTransitions[idx] = transitionhistory.CopyVersionedTransitions(versionedTransitions)
 			item.lastVersionTransitionIndex = idx
 			return true
 		}
-		if workflow.TransitionHistoryStalenessCheck(transitions, versionedTransitions[len(versionedTransitions)-1]) == nil {
+		if transitionhistory.StalenessCheck(transitions, versionedTransitions[len(versionedTransitions)-1]) == nil {
 			// incoming versioned transitions are already included in the current versioned transitions
 			return false
 		}
@@ -191,7 +190,7 @@ func (c *ReplicationProgress) VersionedTransitionSent(versionedTransition *persi
 		return false
 	}
 	for _, transitions := range c.versionedTransitions {
-		if workflow.TransitionHistoryStalenessCheck(transitions, versionedTransition) == nil {
+		if transitionhistory.StalenessCheck(transitions, versionedTransition) == nil {
 			return true
 		}
 	}

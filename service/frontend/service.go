@@ -203,14 +203,16 @@ type Config struct {
 	MaskInternalErrorDetails dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	// Health check
-	HistoryHostErrorPercentage dynamicconfig.FloatPropertyFn
+	HistoryHostErrorPercentage     dynamicconfig.FloatPropertyFn
+	HistoryHostSelfErrorProportion dynamicconfig.FloatPropertyFn
 
 	LogAllReqErrors dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	EnableEagerWorkflowStart dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
-	ActivityAPIsEnabled      dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	WorkflowRulesAPIsEnabled dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	ActivityAPIsEnabled          dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	WorkflowRulesAPIsEnabled     dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	MaxWorkflowRulesPerNamespace dynamicconfig.IntPropertyFnWithNamespaceFilter
 
 	HTTPAllowedHosts *dynamicconfig.GlobalCachedTypedValue[*regexp.Regexp]
 }
@@ -354,11 +356,13 @@ func NewConfig(
 
 		MaskInternalErrorDetails: dynamicconfig.FrontendMaskInternalErrorDetails.Get(dc),
 
-		HistoryHostErrorPercentage: dynamicconfig.HistoryHostErrorPercentage.Get(dc),
-		LogAllReqErrors:            dynamicconfig.LogAllReqErrors.Get(dc),
-		EnableEagerWorkflowStart:   dynamicconfig.EnableEagerWorkflowStart.Get(dc),
-		ActivityAPIsEnabled:        dynamicconfig.ActivityAPIsEnabled.Get(dc),
-		WorkflowRulesAPIsEnabled:   dynamicconfig.WorkflowRulesAPIsEnabled.Get(dc),
+		HistoryHostErrorPercentage:     dynamicconfig.HistoryHostErrorPercentage.Get(dc),
+		HistoryHostSelfErrorProportion: dynamicconfig.HistoryHostSelfErrorProportion.Get(dc),
+		LogAllReqErrors:                dynamicconfig.LogAllReqErrors.Get(dc),
+		EnableEagerWorkflowStart:       dynamicconfig.EnableEagerWorkflowStart.Get(dc),
+		ActivityAPIsEnabled:            dynamicconfig.ActivityAPIsEnabled.Get(dc),
+		WorkflowRulesAPIsEnabled:       dynamicconfig.WorkflowRulesAPIsEnabled.Get(dc),
+		MaxWorkflowRulesPerNamespace:   dynamicconfig.MaxWorkflowRulesPerNamespace.Get(dc),
 
 		HTTPAllowedHosts: dynamicconfig.NewGlobalCachedTypedValue(dc, dynamicconfig.FrontendHTTPAllowedHosts, func(patterns []string) (*regexp.Regexp, error) {
 			if len(patterns) == 0 {

@@ -64,6 +64,7 @@ type Config struct {
 	EnableTransitionHistory               dynamicconfig.BoolPropertyFn
 	MaxCallbacksPerWorkflow               dynamicconfig.IntPropertyFnWithNamespaceFilter
 	EnableRequestIdRefLinks               dynamicconfig.BoolPropertyFn
+	EnableChasm                           dynamicconfig.BoolPropertyFn
 
 	// EventsCache settings
 	// Change of these configs require shard restart
@@ -363,6 +364,8 @@ type Config struct {
 	BreakdownMetricsByTaskQueue dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 
 	LogAllReqErrors dynamicconfig.BoolPropertyFnWithNamespaceFilter
+
+	MaxLocalParentWorkflowVerificationDuration dynamicconfig.DurationPropertyFn
 }
 
 // NewConfig returns new service config with default values
@@ -393,6 +396,8 @@ func NewConfig(
 		MaxAutoResetPoints:                   dynamicconfig.HistoryMaxAutoResetPoints.Get(dc),
 		DefaultWorkflowTaskTimeout:           dynamicconfig.DefaultWorkflowTaskTimeout.Get(dc),
 
+		MaxLocalParentWorkflowVerificationDuration: dynamicconfig.MaxLocalParentWorkflowVerificationDuration.Get(dc),
+
 		VisibilityPersistenceMaxReadQPS:         dynamicconfig.VisibilityPersistenceMaxReadQPS.Get(dc),
 		VisibilityPersistenceMaxWriteQPS:        dynamicconfig.VisibilityPersistenceMaxWriteQPS.Get(dc),
 		VisibilityPersistenceSlowQueryThreshold: dynamicconfig.VisibilityPersistenceSlowQueryThreshold.Get(dc),
@@ -421,6 +426,7 @@ func NewConfig(
 		EnableTransitionHistory:               dynamicconfig.EnableTransitionHistory.Get(dc),
 		MaxCallbacksPerWorkflow:               dynamicconfig.MaxCallbacksPerWorkflow.Get(dc),
 		EnableRequestIdRefLinks:               dynamicconfig.EnableRequestIdRefLinks.Get(dc),
+		EnableChasm:                           dynamicconfig.EnableChasm.Get(dc),
 
 		EventsShardLevelCacheMaxSizeBytes: dynamicconfig.EventsCacheMaxSizeBytes.Get(dc),          // 512KB
 		EventsHostLevelCacheMaxSizeBytes:  dynamicconfig.EventsHostLevelCacheMaxSizeBytes.Get(dc), // 256MB

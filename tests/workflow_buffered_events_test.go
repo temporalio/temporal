@@ -24,7 +24,7 @@ import (
 )
 
 type WorkflowBufferedEventsTestSuite struct {
-	testcore.FunctionalTestSuite
+	testcore.FunctionalTestBase
 }
 
 func TestWorkflowBufferedEventsTestSuite(t *testing.T) {

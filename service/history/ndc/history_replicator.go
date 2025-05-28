@@ -298,7 +298,7 @@ func (r *HistoryReplicatorImpl) applyBackfillEvents(
 				mutableState.GetExecutionInfo().VersionHistories,
 			)
 		}
-		err := workflow.TransitionHistoryStalenessCheck(transitionHistory, versionedTransition)
+		err := transitionhistory.StalenessCheck(transitionHistory, versionedTransition)
 		if err == nil {
 			return consts.ErrDuplicate
 		}

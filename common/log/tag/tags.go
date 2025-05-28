@@ -83,7 +83,7 @@ func workflowListFilterType(listFilterType string) ZapTag {
 
 // WorkflowTimeoutType returns tag for WorkflowTimeoutType
 func WorkflowTimeoutType(timeoutType enumspb.TimeoutType) ZapTag {
-	return NewStringTag("wf-timeout-type", timeoutType.String())
+	return NewStringerTag("wf-timeout-type", timeoutType)
 }
 
 // WorkflowPollContextTimeout returns tag for WorkflowPollContextTimeout
@@ -108,7 +108,7 @@ func WorkflowType(wfType string) ZapTag {
 
 // WorkflowState returns tag for WorkflowState
 func WorkflowState(s enumsspb.WorkflowExecutionState) ZapTag {
-	return NewStringTag("wf-state", s.String())
+	return NewStringerTag("wf-state", s)
 }
 
 // WorkflowRunID returns tag for WorkflowRunID
@@ -266,7 +266,7 @@ func WorkflowBranchID(branchID string) ZapTag {
 
 // WorkflowCommandType returns tag for WorkflowCommandType
 func WorkflowCommandType(commandType enumspb.CommandType) ZapTag {
-	return NewStringTag("command-type", commandType.String())
+	return NewStringerTag("command-type", commandType)
 }
 
 // WorkflowQueryType returns tag for WorkflowQueryType
@@ -276,7 +276,7 @@ func WorkflowQueryType(qt string) ZapTag {
 
 // WorkflowTaskFailedCause returns tag for WorkflowTaskFailedCause
 func WorkflowTaskFailedCause(workflowTaskFailCause enumspb.WorkflowTaskFailedCause) ZapTag {
-	return NewStringTag("workflow-task-fail-cause", workflowTaskFailCause.String())
+	return NewStringerTag("workflow-task-fail-cause", workflowTaskFailCause)
 }
 
 // WorkflowTaskQueueType returns tag for WorkflowTaskQueueType
@@ -972,7 +972,7 @@ func BuildId(buildId string) ZapTag {
 }
 
 func VersioningBehavior(behavior enumspb.VersioningBehavior) ZapTag {
-	return NewStringTag("versioning-behavior", behavior.String())
+	return NewStringerTag("versioning-behavior", behavior)
 }
 
 func Deployment(d *deploymentpb.Deployment) ZapTag {

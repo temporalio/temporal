@@ -2215,6 +2215,7 @@ type RecordActivityTaskHeartbeatResponse struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	CancelRequested bool                   `protobuf:"varint,1,opt,name=cancel_requested,json=cancelRequested,proto3" json:"cancel_requested,omitempty"`
 	ActivityPaused  bool                   `protobuf:"varint,2,opt,name=activity_paused,json=activityPaused,proto3" json:"activity_paused,omitempty"`
+	ActivityReset   bool                   `protobuf:"varint,3,opt,name=activity_reset,json=activityReset,proto3" json:"activity_reset,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -2259,6 +2260,13 @@ func (x *RecordActivityTaskHeartbeatResponse) GetCancelRequested() bool {
 func (x *RecordActivityTaskHeartbeatResponse) GetActivityPaused() bool {
 	if x != nil {
 		return x.ActivityPaused
+	}
+	return false
+}
+
+func (x *RecordActivityTaskHeartbeatResponse) GetActivityReset() bool {
+	if x != nil {
+		return x.ActivityReset
 	}
 	return false
 }
@@ -3713,6 +3721,7 @@ type VerifyChildExecutionCompletionRecordedRequest struct {
 	ParentInitiatedId      int64                  `protobuf:"varint,4,opt,name=parent_initiated_id,json=parentInitiatedId,proto3" json:"parent_initiated_id,omitempty"`
 	ParentInitiatedVersion int64                  `protobuf:"varint,5,opt,name=parent_initiated_version,json=parentInitiatedVersion,proto3" json:"parent_initiated_version,omitempty"`
 	Clock                  *v16.VectorClock       `protobuf:"bytes,6,opt,name=clock,proto3" json:"clock,omitempty"`
+	ResendParent           bool                   `protobuf:"varint,7,opt,name=resend_parent,json=resendParent,proto3" json:"resend_parent,omitempty"`
 	unknownFields          protoimpl.UnknownFields
 	sizeCache              protoimpl.SizeCache
 }
@@ -3787,6 +3796,13 @@ func (x *VerifyChildExecutionCompletionRecordedRequest) GetClock() *v16.VectorCl
 		return x.Clock
 	}
 	return nil
+}
+
+func (x *VerifyChildExecutionCompletionRecordedRequest) GetResendParent() bool {
+	if x != nil {
+		return x.ResendParent
+	}
+	return false
 }
 
 type VerifyChildExecutionCompletionRecordedResponse struct {
@@ -6212,11 +6228,12 @@ func (*RefreshWorkflowTasksResponse) Descriptor() ([]byte, []int) {
 }
 
 type GenerateLastHistoryReplicationTasksRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	NamespaceId   string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	Execution     *v14.WorkflowExecution `protobuf:"bytes,2,opt,name=execution,proto3" json:"execution,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	NamespaceId    string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
+	Execution      *v14.WorkflowExecution `protobuf:"bytes,2,opt,name=execution,proto3" json:"execution,omitempty"`
+	TargetClusters []string               `protobuf:"bytes,3,rep,name=target_clusters,json=targetClusters,proto3" json:"target_clusters,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *GenerateLastHistoryReplicationTasksRequest) Reset() {
@@ -6259,6 +6276,13 @@ func (x *GenerateLastHistoryReplicationTasksRequest) GetNamespaceId() string {
 func (x *GenerateLastHistoryReplicationTasksRequest) GetExecution() *v14.WorkflowExecution {
 	if x != nil {
 		return x.Execution
+	}
+	return nil
+}
+
+func (x *GenerateLastHistoryReplicationTasksRequest) GetTargetClusters() []string {
+	if x != nil {
+		return x.TargetClusters
 	}
 	return nil
 }
@@ -9786,10 +9810,11 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\bis_valid\x18\x01 \x01(\bR\aisValid\"\xdd\x01\n" +
 	"\"RecordActivityTaskHeartbeatRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12p\n" +
-	"\x11heartbeat_request\x18\x02 \x01(\v2C.temporal.api.workflowservice.v1.RecordActivityTaskHeartbeatRequestR\x10heartbeatRequest:\"\x92\xc4\x03\x1e2\x1cheartbeat_request.task_token\"y\n" +
+	"\x11heartbeat_request\x18\x02 \x01(\v2C.temporal.api.workflowservice.v1.RecordActivityTaskHeartbeatRequestR\x10heartbeatRequest:\"\x92\xc4\x03\x1e2\x1cheartbeat_request.task_token\"\xa0\x01\n" +
 	"#RecordActivityTaskHeartbeatResponse\x12)\n" +
 	"\x10cancel_requested\x18\x01 \x01(\bR\x0fcancelRequested\x12'\n" +
-	"\x0factivity_paused\x18\x02 \x01(\bR\x0eactivityPaused\"\xdc\x01\n" +
+	"\x0factivity_paused\x18\x02 \x01(\bR\x0eactivityPaused\x12%\n" +
+	"\x0eactivity_reset\x18\x03 \x01(\bR\ractivityReset\"\xdc\x01\n" +
 	"#RespondActivityTaskCompletedRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12o\n" +
 	"\x10complete_request\x18\x02 \x01(\v2D.temporal.api.workflowservice.v1.RespondActivityTaskCompletedRequestR\x0fcompleteRequest:!\x92\xc4\x03\x1d2\x1bcomplete_request.task_token\"&\n" +
@@ -9872,14 +9897,15 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\x05clock\x18\x06 \x01(\v2).temporal.server.api.clock.v1.VectorClockR\x05clock\x128\n" +
 	"\x18parent_initiated_version\x18\a \x01(\x03R\x16parentInitiatedVersion\x12>\n" +
 	"\x1cchild_first_execution_run_id\x18\b \x01(\tR\x18childFirstExecutionRunId:\"\x92\xc4\x03\x1e*\x1cparent_execution.workflow_id\"'\n" +
-	"%RecordChildExecutionCompletedResponse\"\xcb\x03\n" +
+	"%RecordChildExecutionCompletedResponse\"\xf0\x03\n" +
 	"-VerifyChildExecutionCompletionRecordedRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12T\n" +
 	"\x10parent_execution\x18\x02 \x01(\v2).temporal.api.common.v1.WorkflowExecutionR\x0fparentExecution\x12R\n" +
 	"\x0fchild_execution\x18\x03 \x01(\v2).temporal.api.common.v1.WorkflowExecutionR\x0echildExecution\x12.\n" +
 	"\x13parent_initiated_id\x18\x04 \x01(\x03R\x11parentInitiatedId\x128\n" +
 	"\x18parent_initiated_version\x18\x05 \x01(\x03R\x16parentInitiatedVersion\x12?\n" +
-	"\x05clock\x18\x06 \x01(\v2).temporal.server.api.clock.v1.VectorClockR\x05clock:\"\x92\xc4\x03\x1e*\x1cparent_execution.workflow_id\"0\n" +
+	"\x05clock\x18\x06 \x01(\v2).temporal.server.api.clock.v1.VectorClockR\x05clock\x12#\n" +
+	"\rresend_parent\x18\a \x01(\bR\fresendParent:\"\x92\xc4\x03\x1e*\x1cparent_execution.workflow_id\"0\n" +
 	".VerifyChildExecutionCompletionRecordedResponse\"\xc7\x01\n" +
 	" DescribeWorkflowExecutionRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12[\n" +
@@ -10062,10 +10088,11 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\x1bRefreshWorkflowTasksRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12Z\n" +
 	"\arequest\x18\x02 \x01(\v2@.temporal.server.api.adminservice.v1.RefreshWorkflowTasksRequestR\arequest:#\x92\xc4\x03\x1f*\x1drequest.execution.workflow_id\"\x1e\n" +
-	"\x1cRefreshWorkflowTasksResponse\"\xb5\x01\n" +
+	"\x1cRefreshWorkflowTasksResponse\"\xde\x01\n" +
 	"*GenerateLastHistoryReplicationTasksRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12G\n" +
-	"\texecution\x18\x02 \x01(\v2).temporal.api.common.v1.WorkflowExecutionR\texecution:\x1b\x92\xc4\x03\x17*\x15execution.workflow_id\"\x8a\x01\n" +
+	"\texecution\x18\x02 \x01(\v2).temporal.api.common.v1.WorkflowExecutionR\texecution\x12'\n" +
+	"\x0ftarget_clusters\x18\x03 \x03(\tR\x0etargetClusters:\x1b\x92\xc4\x03\x17*\x15execution.workflow_id\"\x8a\x01\n" +
 	"+GenerateLastHistoryReplicationTasksResponse\x124\n" +
 	"\x16state_transition_count\x18\x01 \x01(\x03R\x14stateTransitionCount\x12%\n" +
 	"\x0ehistory_length\x18\x02 \x01(\x03R\rhistoryLength\"N\n" +

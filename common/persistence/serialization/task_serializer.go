@@ -1,7 +1,6 @@
 package serialization
 
 import (
-	"fmt"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -42,7 +41,7 @@ func (s *TaskSerializer) SerializeTask(
 	case tasks.CategoryIDOutbound:
 		return s.serializeOutboundTask(task)
 	default:
-		return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown task category: %v", category))
+		return nil, serviceerror.NewInternalf("Unknown task category: %v", category)
 	}
 }
 
@@ -64,7 +63,7 @@ func (s *TaskSerializer) DeserializeTask(
 	case tasks.CategoryIDOutbound:
 		return s.deserializeOutboundTask(blob)
 	default:
-		return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown task category: %v", category))
+		return nil, serviceerror.NewInternalf("Unknown task category: %v", category)
 	}
 }
 
@@ -92,7 +91,7 @@ func (s *TaskSerializer) serializeTransferTask(
 	case *tasks.ChasmTask:
 		transferTask = s.transferChasmTaskToProto(task)
 	default:
-		return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown transfer task type: %v", task))
+		return nil, serviceerror.NewInternalf("Unknown transfer task type: %v", task)
 	}
 
 	return TransferTaskInfoToBlob(transferTask)
@@ -141,7 +140,7 @@ func (s *TaskSerializer) deserializeTransferTasks(
 	case enumsspb.TASK_TYPE_CHASM:
 		task = s.transferChasmTaskFromProto(transferTask)
 	default:
-		return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown transfer task type: %v", transferTask.TaskType))
+		return nil, serviceerror.NewInternalf("Unknown transfer task type: %v", transferTask.TaskType)
 	}
 	return task, nil
 }
@@ -188,7 +187,7 @@ func (s *TaskSerializer) serializeTimerTask(
 	case *tasks.ChasmTaskPure:
 		timerTask = s.timerChasmPureTaskToProto(task)
 	default:
-		return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown timer task type: %v", task))
+		return nil, serviceerror.NewInternalf("Unknown timer task type: %v", task)
 	}
 	return TimerTaskInfoToBlob(timerTask)
 }
@@ -251,7 +250,7 @@ func (s *TaskSerializer) deserializeTimerTasks(
 	case enumsspb.TASK_TYPE_CHASM_PURE:
 		timer = s.timerChasmPureTaskFromProto(timerTask)
 	default:
-		return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown timer task type: %v", timerTask.TaskType))
+		return nil, serviceerror.NewInternalf("Unknown timer task type: %v", timerTask.TaskType)
 	}
 	return timer, nil
 }
@@ -297,7 +296,7 @@ func (s *TaskSerializer) serializeVisibilityTask(
 	case *tasks.DeleteExecutionVisibilityTask:
 		visibilityTask = s.visibilityDeleteTaskToProto(task)
 	default:
-		return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown visibility task type: %v", task))
+		return nil, serviceerror.NewInternalf("Unknown visibility task type: %v", task)
 	}
 
 	return VisibilityTaskInfoToBlob(visibilityTask)
@@ -322,7 +321,7 @@ func (s *TaskSerializer) deserializeVisibilityTasks(
 	case enumsspb.TASK_TYPE_VISIBILITY_DELETE_EXECUTION:
 		visibility = s.visibilityDeleteTaskFromProto(visibilityTask)
 	default:
-		return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown visibility task type: %v", visibilityTask.TaskType))
+		return nil, serviceerror.NewInternalf("Unknown visibility task type: %v", visibilityTask.TaskType)
 	}
 	return visibility, nil
 }
@@ -361,7 +360,7 @@ func (s *TaskSerializer) ParseReplicationTask(replicationTask *persistencespb.Re
 	case enumsspb.TASK_TYPE_REPLICATION_SYNC_VERSIONED_TRANSITION:
 		return s.replicationSyncVersionedTransitionTaskFromProto(replicationTask)
 	default:
-		return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown replication task type: %v", replicationTask.TaskType))
+		return nil, serviceerror.NewInternalf("Unknown replication task type: %v", replicationTask.TaskType)
 	}
 }
 
@@ -378,7 +377,7 @@ func (s *TaskSerializer) ParseReplicationTaskInfo(task tasks.Task) (*persistence
 	case *tasks.SyncVersionedTransitionTask:
 		return s.replicationSyncVersionedTransitionTaskToProto(task)
 	default:
-		return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown repication task type: %v", task))
+		return nil, serviceerror.NewInternalf("Unknown repication task type: %v", task)
 	}
 }
 
@@ -390,8 +389,8 @@ func (s *TaskSerializer) serializeArchivalTask(
 	case *tasks.ArchiveExecutionTask:
 		archivalTaskInfo = s.archiveExecutionTaskToProto(task)
 	default:
-		return nil, serviceerror.NewInternal(fmt.Sprintf(
-			"Unknown archival task type while serializing: %v", task))
+		return nil, serviceerror.NewInternalf(
+			"Unknown archival task type while serializing: %v", task)
 	}
 
 	return ArchivalTaskInfoToBlob(archivalTaskInfo)
@@ -409,7 +408,7 @@ func (s *TaskSerializer) deserializeArchivalTasks(
 	case enumsspb.TASK_TYPE_ARCHIVAL_ARCHIVE_EXECUTION:
 		task = s.archiveExecutionTaskFromProto(archivalTask)
 	default:
-		return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown archival task type while deserializing: %v", task))
+		return nil, serviceerror.NewInternalf("Unknown archival task type while deserializing: %v", task)
 	}
 	return task, nil
 }
@@ -1154,6 +1153,7 @@ func (s *TaskSerializer) replicationActivityTaskToProto(
 		BranchToken:       nil,
 		NewRunBranchToken: nil,
 		VisibilityTime:    timestamppb.New(activityTask.VisibilityTimestamp),
+		TargetClusters:    activityTask.TargetClusters,
 	}
 }
 
@@ -1174,6 +1174,7 @@ func (s *TaskSerializer) replicationActivityTaskFromProto(
 		Version:             activityTask.Version,
 		TaskID:              activityTask.TaskId,
 		ScheduledEventID:    activityTask.ScheduledEventId,
+		TargetClusters:      activityTask.TargetClusters,
 	}
 }
 
@@ -1194,6 +1195,7 @@ func (s *TaskSerializer) replicationHistoryTaskToProto(
 		NewRunBranchToken: historyTask.NewRunBranchToken,
 		NewRunId:          historyTask.NewRunID,
 		VisibilityTime:    timestamppb.New(historyTask.VisibilityTimestamp),
+		TargetClusters:    historyTask.TargetClusters,
 	}
 }
 
@@ -1218,6 +1220,7 @@ func (s *TaskSerializer) replicationHistoryTaskFromProto(
 		BranchToken:         historyTask.BranchToken,
 		NewRunBranchToken:   historyTask.NewRunBranchToken,
 		NewRunID:            historyTask.NewRunId,
+		TargetClusters:      historyTask.TargetClusters,
 	}
 }
 
@@ -1266,6 +1269,7 @@ func (s *TaskSerializer) replicationSyncWorkflowStateTaskToProto(
 		Version:        syncWorkflowStateTask.Version,
 		VisibilityTime: timestamppb.New(syncWorkflowStateTask.VisibilityTimestamp),
 		Priority:       syncWorkflowStateTask.Priority,
+		TargetClusters: syncWorkflowStateTask.TargetClusters,
 	}
 }
 
@@ -1286,6 +1290,7 @@ func (s *TaskSerializer) replicationSyncWorkflowStateTaskFromProto(
 		Version:             syncWorkflowStateTask.Version,
 		TaskID:              syncWorkflowStateTask.TaskId,
 		Priority:            syncWorkflowStateTask.Priority,
+		TargetClusters:      syncWorkflowStateTask.TargetClusters,
 	}
 }
 
@@ -1299,6 +1304,7 @@ func (s *TaskSerializer) replicationSyncHSMTaskToProto(
 		TaskType:       enumsspb.TASK_TYPE_REPLICATION_SYNC_HSM,
 		TaskId:         syncHSMTask.TaskID,
 		VisibilityTime: timestamppb.New(syncHSMTask.VisibilityTimestamp),
+		TargetClusters: syncHSMTask.TargetClusters,
 	}
 }
 
@@ -1317,6 +1323,7 @@ func (s *TaskSerializer) replicationSyncHSMTaskFromProto(
 		),
 		VisibilityTimestamp: visibilityTimestamp,
 		TaskID:              syncHSMTask.TaskId,
+		TargetClusters:      syncHSMTask.TargetClusters,
 	}
 }
 
@@ -1346,6 +1353,7 @@ func (s *TaskSerializer) replicationSyncVersionedTransitionTaskToProto(
 		NewRunId:               syncVersionedTransitionTask.NewRunID,
 		LastVersionHistoryItem: syncVersionedTransitionTask.LastVersionHistoryItem,
 		IsFirstTask:            syncVersionedTransitionTask.IsFirstTask,
+		TargetClusters:         syncVersionedTransitionTask.TargetClusters,
 		TaskEquivalents:        taskInfoEquivalents,
 	}, nil
 }
@@ -1383,6 +1391,7 @@ func (s *TaskSerializer) replicationSyncVersionedTransitionTaskFromProto(
 		LastVersionHistoryItem: syncVersionedTransitionTask.LastVersionHistoryItem,
 		TaskEquivalents:        taskEquivalents,
 		IsFirstTask:            syncVersionedTransitionTask.IsFirstTask,
+		TargetClusters:         syncVersionedTransitionTask.TargetClusters,
 	}, nil
 }
 
@@ -1414,7 +1423,7 @@ func (s *TaskSerializer) serializeOutboundTask(task tasks.Task) (*commonpb.DataB
 				ChasmTaskInfo: task.Info,
 			}})
 	default:
-		return nil, serviceerror.NewInternal(fmt.Sprintf("unknown outbound task type while serializing: %v", task))
+		return nil, serviceerror.NewInternalf("unknown outbound task type while serializing: %v", task)
 	}
 }
 
@@ -1453,6 +1462,6 @@ func (s *TaskSerializer) deserializeOutboundTask(blob *commonpb.DataBlob) (tasks
 			Destination:         info.Destination,
 		}, nil
 	default:
-		return nil, serviceerror.NewInternal(fmt.Sprintf("unknown outbound task type while deserializing: %v", info))
+		return nil, serviceerror.NewInternalf("unknown outbound task type while deserializing: %v", info)
 	}
 }

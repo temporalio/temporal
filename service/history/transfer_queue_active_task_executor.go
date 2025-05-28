@@ -6,6 +6,7 @@ import (
 
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	sdkpb "go.temporal.io/api/sdk/v1"
@@ -887,15 +888,14 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		},
 	}
 
-	parentPinnedVersion := ""
+	var parentPinnedDeploymentVersion *deploymentpb.WorkerDeploymentVersion
 	var parentPinnedOverride *workflowpb.VersioningOverride
 	if attributes.TaskQueue.GetName() == mutableState.GetExecutionInfo().GetTaskQueue() {
 		// TODO (shahab): also inherit when the child TQ is different, but in the same Version
 		if mutableState.GetEffectiveVersioningBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED {
-			parentPinnedVersion = worker_versioning.WorkerDeploymentVersionToString(
-				worker_versioning.DeploymentVersionFromDeployment(mutableState.GetEffectiveDeployment()))
+			parentPinnedDeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(mutableState.GetEffectiveDeployment())
 		}
-		if mutableState.GetExecutionInfo().GetVersioningInfo().GetVersioningOverride().GetBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED {
+		if worker_versioning.OverrideIsPinned(mutableState.GetExecutionInfo().GetVersioningInfo().GetVersioningOverride()) {
 			parentPinnedOverride = mutableState.GetExecutionInfo().GetVersioningInfo().GetVersioningOverride()
 		}
 	}
@@ -912,7 +912,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		inheritedBuildId,
 		initiatedEvent.GetUserMetadata(),
 		shouldTerminateAndStartChild,
-		parentPinnedVersion,
+		parentPinnedDeploymentVersion,
 		parentPinnedOverride,
 		priorities.Merge(mutableState.GetExecutionInfo().Priority, attributes.Priority),
 	)
@@ -1485,7 +1485,7 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 	inheritedBuildId string,
 	userMetadata *sdkpb.UserMetadata,
 	shouldTerminateAndStartChild bool,
-	parentPinnedVersion string,
+	parentPinnedDeploymentVersion *deploymentpb.WorkerDeploymentVersion,
 	parentPinnedOverride *workflowpb.VersioningOverride,
 	priority *commonpb.Priority,
 ) (string, *clockspb.VectorClock, error) {
@@ -1522,10 +1522,10 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 				WorkflowId: task.WorkflowID,
 				RunId:      task.RunID,
 			},
-			InitiatedId:                   task.InitiatedEventID,
-			InitiatedVersion:              task.Version,
-			Clock:                         vclock.NewVectorClock(t.shardContext.GetClusterMetadata().GetClusterID(), t.shardContext.GetShardID(), task.TaskID),
-			PinnedWorkerDeploymentVersion: parentPinnedVersion,
+			InitiatedId:             task.InitiatedEventID,
+			InitiatedVersion:        task.Version,
+			Clock:                   vclock.NewVectorClock(t.shardContext.GetClusterMetadata().GetClusterID(), t.shardContext.GetShardID(), task.TaskID),
+			PinnedDeploymentVersion: parentPinnedDeploymentVersion,
 		},
 		rootExecutionInfo,
 		t.shardContext.GetTimeSource().Now(),
@@ -1615,6 +1615,7 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 		nil,
 		nil,
 		allowResetWithPendingChildren,
+		nil,
 	)
 
 	switch err.(type) {
@@ -1781,7 +1782,7 @@ func (t *transferQueueActiveTaskExecutor) applyParentClosePolicy(
 		return err
 
 	default:
-		return serviceerror.NewInternal(fmt.Sprintf("unknown parent close policy: %v", childInfo.ParentClosePolicy))
+		return serviceerror.NewInternalf("unknown parent close policy: %v", childInfo.ParentClosePolicy)
 	}
 }
 

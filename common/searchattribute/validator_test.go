@@ -1,6 +1,7 @@
 package searchattribute
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
@@ -110,6 +111,23 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate() {
 	err = saValidator.Validate(attr, namespace)
 	s.Error(err)
 	s.Equal("StartTime attribute can't be set in SearchAttributes", err.Error())
+
+	// Validate Deployment related search attributes
+	deploymentRestrictedAttributes := []string{
+		TemporalWorkerDeploymentVersion,
+		TemporalWorkerDeployment,
+		TemporalWorkflowVersioningBehavior,
+	}
+
+	for _, restrictedAttr := range deploymentRestrictedAttributes {
+		fields = map[string]*commonpb.Payload{
+			restrictedAttr: payload.EncodeString("1.0.0"),
+		}
+		attr.IndexedFields = fields
+		err = saValidator.Validate(attr, namespace)
+		s.Error(err)
+		s.Equal(fmt.Sprintf("%s attribute can't be set in SearchAttributes", restrictedAttr), err.Error())
+	}
 }
 
 func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate_SuppressError() {

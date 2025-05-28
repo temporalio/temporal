@@ -18,6 +18,7 @@ type (
 		NextEventID         int64
 		Version             int64
 		NewRunID            string
+		TargetClusters      []string
 
 		// deprecated
 		BranchToken       []byte

@@ -21,7 +21,6 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/events"
 	historyi "go.temporal.io/server/service/history/interfaces"
-	"go.temporal.io/server/service/history/workflow"
 )
 
 func GetOrPollMutableState(
@@ -82,7 +81,7 @@ func GetOrPollMutableState(
 	transitionHistory := response.GetTransitionHistory()
 	currentVersionedTransition := transitionhistory.LastVersionedTransition(transitionHistory)
 	if len(transitionHistory) != 0 && request.VersionedTransition != nil {
-		if workflow.TransitionHistoryStalenessCheck(transitionHistory, request.VersionedTransition) != nil {
+		if transitionhistory.StalenessCheck(transitionHistory, request.VersionedTransition) != nil {
 			logger.Warn(fmt.Sprintf("Request versioned transition and transition history don't match. Request: %v, current: %v",
 				request.VersionedTransition,
 				currentVersionedTransition),
@@ -152,7 +151,7 @@ func GetOrPollMutableState(
 		transitionHistory := response.GetTransitionHistory()
 		currentVersionedTransition := transitionhistory.LastVersionedTransition(transitionHistory)
 		if len(transitionHistory) != 0 && request.VersionedTransition != nil {
-			if workflow.TransitionHistoryStalenessCheck(transitionHistory, request.VersionedTransition) != nil {
+			if transitionhistory.StalenessCheck(transitionHistory, request.VersionedTransition) != nil {
 				logger.Warn(fmt.Sprintf("Request versioned transition and transition history don't match prior to polling the mutable state. Request: %v, current: %v",
 					request.VersionedTransition,
 					currentVersionedTransition),
@@ -217,7 +216,7 @@ func GetOrPollMutableState(
 				transitionHistory := response.GetTransitionHistory()
 				currentVersionedTransition := transitionhistory.LastVersionedTransition(transitionHistory)
 				if len(transitionHistory) != 0 && request.VersionedTransition != nil {
-					if workflow.TransitionHistoryStalenessCheck(transitionHistory, request.VersionedTransition) != nil {
+					if transitionhistory.StalenessCheck(transitionHistory, request.VersionedTransition) != nil {
 						logger.Warn(fmt.Sprintf("Request versioned transition and transition history don't match after polling the mutable state. Request: %v, current: %v",
 							request.VersionedTransition,
 							currentVersionedTransition),
@@ -259,9 +258,9 @@ func GetMutableState(
 ) (_ *historyservice.GetMutableStateResponse, retError error) {
 
 	if len(workflowKey.RunID) == 0 {
-		return nil, serviceerror.NewInternal(fmt.Sprintf(
+		return nil, serviceerror.NewInternalf(
 			"getMutableState encountered empty run ID: %v", workflowKey,
-		))
+		)
 	}
 
 	workflowLease, err := workflowConsistencyChecker.GetWorkflowLease(
@@ -293,9 +292,9 @@ func GetMutableStateWithConsistencyCheck(
 ) (_ *historyservice.GetMutableStateResponse, retError error) {
 
 	if len(workflowKey.RunID) == 0 {
-		return nil, serviceerror.NewInternal(fmt.Sprintf(
+		return nil, serviceerror.NewInternalf(
 			"getMutableState encountered empty run ID: %v", workflowKey,
-		))
+		)
 	}
 
 	workflowLease, err := workflowConsistencyChecker.GetWorkflowLeaseWithConsistencyCheck(
@@ -304,7 +303,7 @@ func GetMutableStateWithConsistencyCheck(
 		func(mutableState historyi.MutableState) bool {
 			transitionHistory := mutableState.GetExecutionInfo().GetTransitionHistory()
 			if len(transitionHistory) != 0 && versionedTransition != nil {
-				return workflow.TransitionHistoryStalenessCheck(transitionHistory, versionedTransition) == nil
+				return transitionhistory.StalenessCheck(transitionHistory, versionedTransition) == nil
 			}
 
 			currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(mutableState.GetExecutionInfo().GetVersionHistories())

@@ -342,7 +342,7 @@ func (c *NexusEndpointClient) validateUpsertSpec(spec *nexuspb.EndpointSpec) err
 		if variant.Worker.GetNamespace() == "" {
 			issues.Append("target namespace not set")
 		} else if _, nsErr := c.namespaceRegistry.GetNamespace(namespace.Name(variant.Worker.GetNamespace())); nsErr != nil {
-			return serviceerror.NewFailedPrecondition(fmt.Sprintf("could not verify namespace referenced by target exists: %v", nsErr.Error()))
+			return serviceerror.NewFailedPreconditionf("could not verify namespace referenced by target exists: %v", nsErr.Error())
 		}
 
 		if err := tqid.Validate(variant.Worker.GetTaskQueue(), c.config.maxTaskQueueLength()); err != nil {
@@ -406,7 +406,7 @@ func (c *NexusEndpointClient) validatePageSize(pageSize int32) error {
 
 	maxPageSize := c.config.listMaxPageSize()
 	if pageSize > int32(maxPageSize) {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("page_size exceeds limit of %d", maxPageSize))
+		return serviceerror.NewInvalidArgumentf("page_size exceeds limit of %d", maxPageSize)
 	}
 
 	return nil

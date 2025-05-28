@@ -11,7 +11,6 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/worker_versioning"
@@ -19,9 +18,8 @@ import (
 
 const (
 	// Workflow types
-	WorkerDeploymentVersionWorkflowType  = "temporal-sys-worker-deployment-version-workflow"
-	WorkerDeploymentWorkflowType         = "temporal-sys-worker-deployment-workflow"
-	WorkerDeploymentDrainageWorkflowType = "temporal-sys-worker-deployment-version-drainage-workflow"
+	WorkerDeploymentVersionWorkflowType = "temporal-sys-worker-deployment-version-workflow"
+	WorkerDeploymentWorkflowType        = "temporal-sys-worker-deployment-workflow"
 
 	// Namespace division
 	WorkerDeploymentNamespaceDivision = "TemporalWorkerDeployment"
@@ -63,7 +61,6 @@ const (
 	errTooManyDeployments         = "errTooManyDeployments"
 	errVersionAlreadyExistsType   = "errVersionAlreadyExists"
 	errMaxTaskQueuesInVersionType = "errMaxTaskQueuesInVersion"
-	errVersionAlreadyCurrentType  = "errVersionAlreadyCurrent"
 	errVersionNotFound            = "Version not found in deployment"
 
 	errConflictTokenMismatchType = "errConflictTokenMismatch"
@@ -104,26 +101,25 @@ var (
 func validateVersionWfParams(fieldName string, field string, maxIDLengthLimit int) error {
 	// Length checks
 	if field == "" {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("%v cannot be empty", fieldName))
+		return serviceerror.NewInvalidArgumentf("%v cannot be empty", fieldName)
 	}
 
 	// Length of each field should be: (MaxIDLengthLimit - (prefix + delimeter length)) / 2
 	if len(field) > (maxIDLengthLimit-WorkerDeploymentVersionWorkflowIDInitialSize)/2 {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("size of %v larger than the maximum allowed", fieldName))
+		return serviceerror.NewInvalidArgumentf("size of %v larger than the maximum allowed", fieldName)
 	}
 
 	// deploymentName cannot have "."
 	if fieldName == WorkerDeploymentNameFieldName && strings.Contains(field, worker_versioning.WorkerDeploymentVersionIdDelimiter) {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("worker deployment name cannot contain '%s'", worker_versioning.WorkerDeploymentVersionIdDelimiter))
+		return serviceerror.NewInvalidArgumentf("worker deployment name cannot contain '%s'", worker_versioning.WorkerDeploymentVersionIdDelimiter)
 	}
 
 	// buildID or deployment name cannot start with "__"
 	if strings.HasPrefix(field, "__") {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("%v cannot start with '__'", fieldName))
+		return serviceerror.NewInvalidArgumentf("%v cannot start with '__'", fieldName)
 	}
 
-	// UTF-8 check
-	return common.ValidateUTF8String(fieldName, field)
+	return nil
 }
 
 func DecodeWorkerDeploymentMemo(memo *commonpb.Memo) *deploymentspb.WorkerDeploymentWorkflowMemo {

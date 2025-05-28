@@ -3,7 +3,6 @@ package replication
 import (
 	"context"
 	"errors"
-	"fmt"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
@@ -39,7 +38,7 @@ func ClusterIDToClusterNameShardCount(
 			return clusterName, clusterInfo.ShardCount, nil
 		}
 	}
-	return "", 0, serviceerror.NewInternal(fmt.Sprintf("unknown cluster ID: %v", clusterID))
+	return "", 0, serviceerror.NewInternalf("unknown cluster ID: %v", clusterID)
 }
 
 func WrapEventLoop(

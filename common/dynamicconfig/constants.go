@@ -18,7 +18,7 @@ var (
 		"dynamicconfig.subscriptionCallback",
 		subscriptionCallbackSettings{
 			MinWorkers:   10,
-			MaxWorkers:   100,
+			MaxWorkers:   1e9, // effectively unlimited
 			TargetDelay:  10 * time.Millisecond,
 			ShrinkFactor: 1000, // 10 seconds
 		},
@@ -735,7 +735,12 @@ This config is EXPERIMENTAL and may be changed or removed in a later release.`,
 	HistoryHostErrorPercentage = NewGlobalFloatSetting(
 		"frontend.historyHostErrorPercentage",
 		0.5,
-		`HistoryHostErrorPercentage is the percentage of hosts that are unhealthy`,
+		`HistoryHostErrorPercentage is the proportion of hosts that are unhealthy through observation external to the host and internal host health checks`,
+	)
+	HistoryHostSelfErrorProportion = NewGlobalFloatSetting(
+		"frontend.historyHostSelfErrorProportion",
+		0.05,
+		`HistoryHostStartingProportion is the proportion of hosts that have marked themselves as not ready -- this could due to waiting to acquire all shards on startup, or an internal health check failure`,
 	)
 	SendRawWorkflowHistory = NewNamespaceBoolSetting(
 		"frontend.sendRawWorkflowHistory",
@@ -1301,10 +1306,9 @@ second per poller by one physical queue manager`,
 	)
 	EnableHistoryReplicationDLQV2 = NewGlobalBoolSetting(
 		"history.enableHistoryReplicationDLQV2",
-		false,
+		true,
 		`EnableHistoryReplicationDLQV2 switches to the DLQ v2 implementation for history replication. See details in
-[go.temporal.io/server/common/persistence.QueueV2]. This feature is currently in development. Do NOT use it in
-production.`,
+[go.temporal.io/server/common/persistence.QueueV2]`,
 	)
 
 	HistoryRPS = NewGlobalIntSetting(
@@ -2327,6 +2331,12 @@ the dlq (or will drop them if not enabled)`,
 that task will be sent to DLQ.`,
 	)
 
+	MaxLocalParentWorkflowVerificationDuration = NewGlobalDurationSetting(
+		"history.maxLocalParentWorkflowVerificationDuration",
+		5*time.Minute,
+		`MaxLocalParentWorkflowVerificationDuration controls the maximum duration to verify on the local cluster before requesting to resend parent workflow.`,
+	)
+
 	ReplicationStreamSyncStatusDuration = NewGlobalDurationSetting(
 		"history.ReplicationStreamSyncStatusDuration",
 		1*time.Second,
@@ -2439,6 +2449,12 @@ that task will be sent to DLQ.`,
 		"history.enableRequestIdRefLinks",
 		false,
 		"Enable generating request ID reference links",
+	)
+
+	EnableChasm = NewGlobalBoolSetting(
+		"history.enableChasm",
+		false,
+		"Use real chasm tree implementation instead of the noop one",
 	)
 
 	// keys for worker
@@ -2695,5 +2711,17 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		"frontend.workflowRulesAPIsEnabled",
 		false,
 		`WorkflowRulesAPIsEnabled is a "feature enable" flag. `,
+	)
+
+	MaxWorkflowRulesPerNamespace = NewNamespaceIntSetting(
+		"frontend.maxWorkflowRulesPerNamespace",
+		10,
+		`Maximum number of workflow rules in a given namespace`,
+	)
+
+	SlowRequestLoggingThreshold = NewGlobalDurationSetting(
+		"rpc.slowRequestLoggingThreshold",
+		5*time.Second,
+		`SlowRequestLoggingThreshold is the threshold above which a gRPC request is considered slow and logged.`,
 	)
 )

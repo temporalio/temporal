@@ -196,39 +196,59 @@ func GetEffectiveDeployment(versioningInfo *workflowpb.WorkflowExecutionVersioni
 	if versioningInfo == nil {
 		return nil
 	} else if transition := versioningInfo.GetVersionTransition(); transition != nil {
-		v, _ := worker_versioning.WorkerDeploymentVersionFromString(transition.GetVersion())
+		if v := transition.GetDeploymentVersion(); v != nil { // v0.32
+			return worker_versioning.DeploymentFromExternalDeploymentVersion(v)
+		}
+		v, _ := worker_versioning.WorkerDeploymentVersionFromString(transition.GetVersion()) //nolint:staticcheck // SA1019: worker versioning v0.31
 		return worker_versioning.DeploymentFromDeploymentVersion(v)
-	} else if transition := versioningInfo.GetDeploymentTransition(); transition != nil {
+	} else if transition := versioningInfo.GetDeploymentTransition(); transition != nil { // //nolint:staticcheck // SA1019: worker versioning v0.30
 		return transition.GetDeployment()
 	} else if override := versioningInfo.GetVersioningOverride(); override != nil &&
-		override.GetBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED {
-		if pinned := override.GetPinnedVersion(); pinned != "" {
+		(override.GetBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED || //nolint:staticcheck // SA1019: worker versioning v0.31 and v0.30
+			override.GetPinned() != nil) {
+		if pinnedVersion := override.GetPinned().GetVersion(); pinnedVersion != nil {
+			return worker_versioning.DeploymentFromExternalDeploymentVersion(pinnedVersion)
+		}
+		if pinned := override.GetPinnedVersion(); pinned != "" { //nolint:staticcheck // SA1019: worker versioning v0.31
 			v, _ := worker_versioning.WorkerDeploymentVersionFromString(pinned)
 			return worker_versioning.DeploymentFromDeploymentVersion(v)
 		}
-		return override.GetDeployment()
-	} else if GetEffectiveVersioningBehavior(versioningInfo) != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
+		return override.GetDeployment() // //nolint:staticcheck // SA1019: worker versioning v0.30
+	} else if GetEffectiveVersioningBehavior(versioningInfo) != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED || // v0.30 and v0.31 auto-upgrade
+		versioningInfo.GetVersioningOverride().GetAutoUpgrade() { // v0.32 auto-upgrade
 		//nolint:revive // nesting will be reduced after old code clean up
-		if v := versioningInfo.GetVersion(); v != "" {
+		if v := versioningInfo.GetDeploymentVersion(); v != nil { // v0.32 auto-upgrade
+			return worker_versioning.DeploymentFromExternalDeploymentVersion(v)
+		}
+		if v := versioningInfo.GetVersion(); v != "" { // //nolint:staticcheck // SA1019: worker versioning v0.31
 			dv, _ := worker_versioning.WorkerDeploymentVersionFromString(v)
 			return worker_versioning.DeploymentFromDeploymentVersion(dv)
 		}
-		return versioningInfo.GetDeployment()
+		return versioningInfo.GetDeployment() // //nolint:staticcheck // SA1019: worker versioning v0.30
 	}
 	return nil
 }
 
 // GetEffectiveVersioningBehavior returns the effective versioning behavior in the following
 // order:
-//  1. VersioningOverride.Behavior: this is returned when user has set a behavior override
+//  1. DeploymentVersionTransition: if there is a transition, then effective behavior is AUTO_UPGRADE.
+//  2. VersioningOverride.Behavior: this is returned when user has set a behavior override
 //     at wf start time, or later via UpdateWorkflowExecutionOptions.
-//  2. Behavior: this is returned when there is no override (most common case). Behavior is
+//  3. Behavior: this is returned when there is no override (most common case). Behavior is
 //     set based on the worker-sent deployment in the latest WFT completion.
 func GetEffectiveVersioningBehavior(versioningInfo *workflowpb.WorkflowExecutionVersioningInfo) enumspb.VersioningBehavior {
 	if versioningInfo == nil {
 		return enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED
+	} else if t := versioningInfo.GetVersionTransition(); t != nil {
+		return enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
 	} else if override := versioningInfo.GetVersioningOverride(); override != nil {
-		return override.GetBehavior()
+		if override.GetAutoUpgrade() || override.GetPinned() != nil { // v0.32 override behavior
+			if override.GetAutoUpgrade() {
+				return enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
+			}
+			return enumspb.VERSIONING_BEHAVIOR_PINNED
+		}
+		return override.GetBehavior() // //nolint:staticcheck // SA1019: worker versioning v0.31 and v0.30
 	}
 	return versioningInfo.GetBehavior()
 }

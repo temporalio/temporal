@@ -3,6 +3,7 @@ package matching
 import (
 	"context"
 	"errors"
+	"math"
 	"sync"
 	"time"
 
@@ -20,9 +21,15 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/quotas"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
+)
+
+const (
+	defaultTaskDispatchRPS    = 100000.0
+	defaultTaskDispatchRPSTTL = time.Minute
 )
 
 type (
@@ -56,6 +63,15 @@ type (
 		cachedPhysicalInfoByBuildId     map[string]map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo // non-nil for root-partition
 		cachedPhysicalInfoByBuildIdLock sync.RWMutex                                                             // locks mutation of cachedPhysicalInfoByBuildId
 		lastFanOut                      int64                                                                    // serves as a TTL for cachedPhysicalInfoByBuildId
+
+		// dynamicRate is the dynamic rate & burst for rate limiter
+		dynamicRateBurst quotas.MutableRateBurst
+		// dynamicRateLimiter is the dynamic rate limiter that can be used to force refresh on new rates.
+		dynamicRateLimiter *quotas.DynamicRateLimiterImpl
+		// forceRefreshRateOnce is used to force refresh rate limit for first time
+		forceRefreshRateOnce sync.Once
+		// rateLimiter that limits the rate at which tasks can be dispatched to consumers
+		rateLimiter quotas.RateLimiter
 	}
 )
 
@@ -85,12 +101,54 @@ func newTaskQueuePartitionManager(
 		cachedPhysicalInfoByBuildId: nil,
 	}
 
+	pm.dynamicRateBurst = quotas.NewMutableRateBurst(
+		defaultTaskDispatchRPS,
+		int(defaultTaskDispatchRPS),
+	)
+	pm.dynamicRateLimiter = quotas.NewDynamicRateLimiter(
+		pm.dynamicRateBurst,
+		tqConfig.RateLimiterRefreshInterval,
+	)
+	pm.rateLimiter = quotas.NewMultiRateLimiter([]quotas.RateLimiter{
+		pm.dynamicRateLimiter,
+		quotas.NewDefaultOutgoingRateLimiter(
+			tqConfig.AdminNamespaceTaskQueueToPartitionDispatchRate,
+		),
+		quotas.NewDefaultOutgoingRateLimiter(
+			tqConfig.AdminNamespaceToPartitionDispatchRate,
+		),
+	})
+
 	defaultQ, err := newPhysicalTaskQueueManager(pm, UnversionedQueueKey(partition))
 	if err != nil {
 		return nil, err
 	}
 	pm.defaultQueue = defaultQ
 	return pm, nil
+}
+
+// UpdateRatelimit updates the task dispatch rate
+func (pm *taskQueuePartitionManagerImpl) UpdateRatelimit(rps float64) {
+	nPartitions := float64(pm.config.NumReadPartitions())
+	if nPartitions > 0 {
+		// divide the rate equally across all partitions
+		rps = rps / nPartitions
+	}
+	burst := int(math.Ceil(rps))
+
+	minTaskThrottlingBurstSize := pm.config.MinTaskThrottlingBurstSize()
+	if burst < minTaskThrottlingBurstSize {
+		burst = minTaskThrottlingBurstSize
+	}
+
+	pm.dynamicRateBurst.SetRPS(rps)
+	pm.dynamicRateBurst.SetBurst(burst)
+	pm.forceRefreshRateOnce.Do(func() {
+		// Dynamic rate limiter only refresh its rate every 1m. Before that initial 1m interval, it uses default rate
+		// which is 10K and is too large in most cases. We need to force refresh for the first time this rate is set
+		// by poller. Only need to do that once. If the rate change later, it will be refresh in 1m.
+		pm.dynamicRateLimiter.Refresh()
+	})
 }
 
 func (pm *taskQueuePartitionManagerImpl) Start() {
@@ -305,6 +363,15 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 		dbq.UpdatePollerInfo(pollerIdentity(identity), pollMetadata)
 		// update timestamp when long poll ends
 		defer dbq.UpdatePollerInfo(pollerIdentity(identity), pollMetadata)
+	}
+
+	// The desired global rate limit for the task queue comes from the
+	// poller, which lives inside the client side worker. There is
+	// one rateLimiter for this entire task queue and as we get polls,
+	// we update the ratelimiter rps if it has changed from the last
+	// value. Last poller wins if different pollers provide different values
+	if rps := pollMetadata.taskQueueMetadata.GetMaxTasksPerSecond(); rps != nil {
+		pm.UpdateRatelimit(rps.Value)
 	}
 
 	task, err := dbq.PollTask(ctx, pollMetadata)
@@ -550,13 +617,17 @@ func (pm *taskQueuePartitionManagerImpl) LegacyDescribeTaskQueue(includeTaskQueu
 		}
 		current, ramping := worker_versioning.CalculateTaskQueueVersioningInfo(perTypeUserData.GetDeploymentData())
 		info := &taskqueuepb.TaskQueueVersioningInfo{
-			CurrentVersion: worker_versioning.WorkerDeploymentVersionToString(current.GetVersion()),
-			UpdateTime:     current.GetRoutingUpdateTime(),
+			// [cleanup-wv-3.1]
+			CurrentVersion:           worker_versioning.WorkerDeploymentVersionToString(current.GetVersion()),
+			CurrentDeploymentVersion: worker_versioning.ExternalWorkerDeploymentVersionFromVersion(current.GetVersion()),
+			UpdateTime:               current.GetRoutingUpdateTime(),
 		}
 		if ramping.GetRampingSinceTime() != nil {
 			info.RampingVersionPercentage = ramping.GetRampPercentage()
 			// If task queue is ramping to unversioned, ramping will be nil, which converts to "__unversioned__"
+			// [cleanup-wv-3.1]
 			info.RampingVersion = worker_versioning.WorkerDeploymentVersionToString(ramping.GetVersion())
+			info.RampingDeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromVersion(ramping.GetVersion())
 			if info.GetUpdateTime().AsTime().Before(ramping.GetRoutingUpdateTime().AsTime()) {
 				info.UpdateTime = ramping.GetRoutingUpdateTime()
 			}
@@ -717,12 +788,20 @@ func (pm *taskQueuePartitionManagerImpl) TimeSinceLastFanOut() time.Duration {
 	return time.Since(time.Unix(0, pm.lastFanOut))
 }
 
-func (pm *taskQueuePartitionManagerImpl) UpdateTimeSinceLastFanOutAndCache(physicalInfoByBuildId map[string]map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo) {
+func (pm *taskQueuePartitionManagerImpl) UpdateTimeSinceLastFanOutAndCache(physicalInfoByBuildId map[string]map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo, upsert bool) {
 	pm.cachedPhysicalInfoByBuildIdLock.Lock()
 	defer pm.cachedPhysicalInfoByBuildIdLock.Unlock()
 
 	pm.lastFanOut = time.Now().UnixNano()
-	pm.cachedPhysicalInfoByBuildId = physicalInfoByBuildId
+	if upsert {
+		// still within the ttl of cache, so we upsert
+		for b, v := range physicalInfoByBuildId {
+			pm.cachedPhysicalInfoByBuildId[b] = v
+		}
+	} else {
+		// the existing entries in the cache are old, only keeping the new ones
+		pm.cachedPhysicalInfoByBuildId = physicalInfoByBuildId
+	}
 }
 
 func (pm *taskQueuePartitionManagerImpl) GetPhysicalTaskQueueInfoFromCache() map[string]map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo {

@@ -1,0 +1,26 @@
+# Overrides for Windows users.
+services:
+  elasticsearch-secondary:
+    image: elasticsearch:7.10.1
+    container_name: temporal-dev-elasticsearch-secondary
+    ports:
+      - "8200:8200"
+    environment:
+      # Make ES available both on _local_ and _site_,
+      # and use _local_ for the publish_host.
+      #
+      # See here for details on network configuration:
+      # https://www.elastic.co/guide/en/elasticsearch/reference/current/modules-network.html
+      - network.host=_local_,_site_
+      - network.publish_host=_local_
+      - http.port=8200-8300
+      - transport.port=8300-8400
+      # Set storage limit to low number.
+      - cluster.routing.allocation.disk.threshold_enabled=true
+      - cluster.routing.allocation.disk.watermark.low=512mb
+      - cluster.routing.allocation.disk.watermark.high=256mb
+      - cluster.routing.allocation.disk.watermark.flood_stage=128mb
+      - discovery.type=single-node
+      - ES_JAVA_OPTS=-Xms100m -Xmx100m
+    networks:
+      - temporal-dev-network
