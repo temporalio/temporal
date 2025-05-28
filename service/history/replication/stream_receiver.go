@@ -119,8 +119,8 @@ func (r *StreamReceiverImpl) Start() {
 		return
 	}
 
-	go WrapEventLoop(context.Background(), r.sendEventLoop, r.Stop, r.logger, r.MetricsHandler, r.clientShardKey, r.serverShardKey, streamRetryPolicy)
-	go WrapEventLoop(context.Background(), r.recvEventLoop, r.Stop, r.logger, r.MetricsHandler, r.clientShardKey, r.serverShardKey, streamRetryPolicy)
+	go WrapEventLoop(context.Background(), r.sendEventLoop, r.Stop, r.logger, r.MetricsHandler, r.clientShardKey, r.serverShardKey, r.Config)
+	go WrapEventLoop(context.Background(), r.recvEventLoop, r.Stop, r.logger, r.MetricsHandler, r.clientShardKey, r.serverShardKey, r.Config)
 
 	r.logger.Info("StreamReceiver started.")
 }
@@ -276,7 +276,7 @@ func (r *StreamReceiverImpl) ackMessage(
 			},
 		},
 	}); err != nil {
-		return 0, err
+		return 0, NewStreamError("stream_receiver failed to send", err)
 	}
 	metrics.ReplicationTasksRecvBacklog.With(r.MetricsHandler).Record(
 		int64(size),
@@ -303,7 +303,7 @@ func (r *StreamReceiverImpl) processMessages(
 
 	streamRespChen, err := stream.Recv()
 	if err != nil {
-		return err
+		return NewStreamError("stream_receiver failed to recv", err)
 	}
 	for streamResp := range streamRespChen {
 		if streamResp.Err != nil {
