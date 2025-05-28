@@ -468,7 +468,7 @@ func (n *Node) serialize() error {
 	case *persistencespb.ChasmNodeMetadata_DataAttributes:
 		return n.serializeDataNode()
 	case *persistencespb.ChasmNodeMetadata_CollectionAttributes:
-		return n.serializeMapNode()
+		return n.serializeCollectionNode()
 	case *persistencespb.ChasmNodeMetadata_PointerAttributes:
 		panic("not implemented")
 	default:
@@ -562,12 +562,12 @@ func (n *Node) syncSubComponentsInternal(
 				continue
 			}
 
-			mapNode := n.children[field.name]
-			if mapNode == nil {
-				mapNode = newNode(n.nodeBase, n, field.name)
-				mapNode.initSerializedCollectionNode()
-				mapNode.valueState = valueStateNeedSerialize
-				n.children[field.name] = mapNode
+			collectionNode := n.children[field.name]
+			if collectionNode == nil {
+				collectionNode = newNode(n.nodeBase, n, field.name)
+				collectionNode.initSerializedCollectionNode()
+				collectionNode.valueState = valueStateNeedSerialize
+				n.children[field.name] = collectionNode
 			}
 
 			// Validate map type.
@@ -589,14 +589,14 @@ func (n *Node) syncSubComponentsInternal(
 				return serviceerror.NewInternal(errMsg)
 			}
 
-			mapItemsToKeep := make(map[string]struct{})
+			collectionItemsToKeep := make(map[string]struct{})
 			for _, mapKeyV := range field.val.MapKeys() {
 				mapItemV := field.val.MapIndex(mapKeyV)
-				mapKeyStr, err := n.mapKeyToString(mapKeyV)
+				collectionKey, err := n.mapKeyToString(mapKeyV)
 				if err != nil {
 					return err
 				}
-				keepItem, updatedMapItemV, err := mapNode.syncSubField(mapItemV, mapKeyStr, append(nodePath, field.name))
+				keepItem, updatedMapItemV, err := collectionNode.syncSubField(mapItemV, collectionKey, append(nodePath, field.name))
 				if err != nil {
 					return err
 				}
@@ -605,10 +605,10 @@ func (n *Node) syncSubComponentsInternal(
 					field.val.SetMapIndex(mapKeyV, updatedMapItemV)
 				}
 				if keepItem {
-					mapItemsToKeep[mapKeyStr] = struct{}{}
+					collectionItemsToKeep[collectionKey] = struct{}{}
 				}
 			}
-			if err := mapNode.deleteChildren(mapItemsToKeep, append(nodePath, field.name)); err != nil {
+			if err := collectionNode.deleteChildren(collectionItemsToKeep, append(nodePath, field.name)); err != nil {
 				return err
 			}
 			childrenToKeep[field.name] = struct{}{}
@@ -787,8 +787,8 @@ func (n *Node) serializeDataNode() error {
 	return nil
 }
 
-func (n *Node) serializeMapNode() error {
-	// The map node has no data; therefore, only metadata needs to be updated.
+func (n *Node) serializeCollectionNode() error {
+	// The collection node has no data; therefore, only metadata needs to be updated.
 	n.updateLastUpdateVersionedTransition()
 	n.valueState = valueStateSynced
 	return nil
@@ -862,19 +862,19 @@ func (n *Node) deserializeComponentNode(
 				field.val.Set(chasmFieldV)
 			}
 		case fieldKindSubMap:
-			if mapNode, found := n.children[field.name]; found {
+			if collectionNode, found := n.children[field.name]; found {
 				mapFieldV := field.val
 				if mapFieldV.IsNil() {
 					mapFieldV = reflect.MakeMapWithSize(field.typ, field.val.Len())
 					field.val.Set(mapFieldV)
 				}
 
-				for mapItemName, mapItemNode := range mapNode.children {
+				for collectionItemName, collectionItemNode := range collectionNode.children {
 					// field.typ.Elem() is a go type of map item: Field[T]
 					chasmFieldV := reflect.New(field.typ.Elem()).Elem()
-					internalValue := reflect.ValueOf(newFieldInternalWithNode(mapItemNode))
+					internalValue := reflect.ValueOf(newFieldInternalWithNode(collectionItemNode))
 					chasmFieldV.FieldByName(internalFieldName).Set(internalValue)
-					mapKeyV, err := n.stringToMapKey(field.name, mapItemName, mapFieldV.Type().Key())
+					mapKeyV, err := n.stringToMapKey(field.name, collectionItemName, mapFieldV.Type().Key())
 					if err != nil {
 						return err
 					}
