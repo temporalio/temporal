@@ -3522,7 +3522,7 @@ func (wh *WorkflowHandler) ListWorkerDeployments(ctx context.Context, request *w
 		workerDeployments[i] = &workflowservice.ListWorkerDeploymentsResponse_WorkerDeploymentSummary{
 			Name:          d.Name,
 			CreateTime:    d.CreateTime,
-			RoutingConfig: worker_versioning.AddV32RoutingConfigToV31(d.RoutingConfig),
+			RoutingConfig: d.RoutingConfig,
 		}
 	}
 
@@ -3553,7 +3553,6 @@ func (wh *WorkflowHandler) DescribeWorkerDeployment(ctx context.Context, request
 		//nolint:staticcheck // SA1019: worker versioning v0.31
 		vs.DeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromString(vs.Version)
 	}
-	workerDeploymentInfo.RoutingConfig = worker_versioning.AddV32RoutingConfigToV31(workerDeploymentInfo.RoutingConfig)
 	return &workflowservice.DescribeWorkerDeploymentResponse{
 		WorkerDeploymentInfo: workerDeploymentInfo,
 		ConflictToken:        cT,

@@ -533,16 +533,6 @@ func DirectiveDeployment(directive *taskqueuespb.TaskVersionDirective) *deployme
 	return directive.GetDeployment()
 }
 
-// The worker deployment manager workflows still use the v0.31 format, so call this before returning the object to readers
-// to mutatively populate the missing fields.
-func AddV32RoutingConfigToV31(r *deploymentpb.RoutingConfig) *deploymentpb.RoutingConfig {
-	//nolint:staticcheck // SA1019: worker versioning v0.31
-	r.CurrentDeploymentVersion = ExternalWorkerDeploymentVersionFromString(r.CurrentVersion)
-	//nolint:staticcheck // SA1019: worker versioning v0.31
-	r.RampingDeploymentVersion = ExternalWorkerDeploymentVersionFromString(r.RampingVersion)
-	return r
-}
-
 // We store versioning info in the modern v0.32 format, so call this before returning the object to readers
 // to mutatively populate the missing fields.
 func AddV31VersioningInfoToV32(info *workflowpb.WorkflowExecutionVersioningInfo) *workflowpb.WorkflowExecutionVersioningInfo {
