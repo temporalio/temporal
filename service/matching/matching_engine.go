@@ -1137,10 +1137,28 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 		timeSinceLastFanOut := rootPM.TimeSinceLastFanOut()
 		lastFanOutTTL := tqConfig.TaskQueueInfoByBuildIdTTL()
 
-		// TODO bug fix: We cache the same map regardless of VersionSelection or TaskQueueTypes, so if someone queries the Activity Task Queue type of this task queue name, we cache that result and return it even if the next DescribeTQ call is about the WF TQ
+		// TODO bug fix: We cache the last response for each build ID. timeSinceLastFanOut is the last fan out time, that means some enteries in the cache can be more stale if
+		// user is calling this API back-to-back but with different version selection.
+		cacheIsFresh := timeSinceLastFanOut <= lastFanOutTTL
+		missingItemsInCache := false
 		physicalInfoByBuildId := make(map[string]map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo)
-		if timeSinceLastFanOut > lastFanOutTTL {
-			// collect internal info
+		if cacheIsFresh {
+			// fetch info from rootPartition's cache for the cached versions
+			cache := rootPM.GetPhysicalTaskQueueInfoFromCache()
+			requestedBuildIds, err := e.getBuildIds(req.Versions)
+			if err != nil {
+				return nil, err
+			}
+			for b := range requestedBuildIds {
+				if c, ok := cache[b]; ok {
+					physicalInfoByBuildId[b] = c
+				} else {
+					missingItemsInCache = true
+				}
+			}
+		}
+		if !cacheIsFresh || missingItemsInCache {
+			// Fan out to partitions to get the needed info
 			numPartitions := max(tqConfig.NumWritePartitions(), tqConfig.NumReadPartitions())
 
 			for _, taskQueueType := range req.TaskQueueTypes {
@@ -1190,10 +1208,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 				}
 			}
 			// update cache
-			rootPM.UpdateTimeSinceLastFanOutAndCache(physicalInfoByBuildId)
-		} else {
-			// fetch info from rootPartition's cache
-			physicalInfoByBuildId = rootPM.GetPhysicalTaskQueueInfoFromCache()
+			rootPM.UpdateTimeSinceLastFanOutAndCache(physicalInfoByBuildId, cacheIsFresh)
 		}
 
 		// smush internal info into versions info
@@ -1837,12 +1852,18 @@ func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
 
 		// take last writer for V2 rules and V3 data
 		if req.GetUserData().GetClock() == nil || current.GetClock() != nil && hlc.Greater(current.GetClock(), req.GetUserData().GetClock()) {
-			mergedData.AssignmentRules = currentVersioningData.GetAssignmentRules()
-			mergedData.RedirectRules = currentVersioningData.GetRedirectRules()
+			if mergedData != nil {
+				// v2 rules
+				mergedData.AssignmentRules = currentVersioningData.GetAssignmentRules()
+				mergedData.RedirectRules = currentVersioningData.GetRedirectRules()
+			}
 			mergedUserData.PerType = current.GetPerType()
 		} else {
-			mergedData.AssignmentRules = newVersioningData.GetAssignmentRules()
-			mergedData.RedirectRules = newVersioningData.GetRedirectRules()
+			if mergedData != nil {
+				// v2 rules
+				mergedData.AssignmentRules = newVersioningData.GetAssignmentRules()
+				mergedData.RedirectRules = newVersioningData.GetRedirectRules()
+			}
 			mergedUserData.PerType = req.GetUserData().GetPerType()
 		}
 
@@ -1865,8 +1886,10 @@ func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
 			}
 		}
 
-		// No need to keep the tombstones around after replication.
-		mergedUserData.VersioningData = ClearTombstones(mergedData)
+		if mergedData != nil {
+			// No need to keep the v1 tombstones around after replication.
+			mergedUserData.VersioningData = ClearTombstones(mergedData)
+		}
 		return mergedUserData, len(buildIdsToRevive) > 0, nil
 	})
 	return &matchingservice.ApplyTaskQueueUserDataReplicationEventResponse{}, err

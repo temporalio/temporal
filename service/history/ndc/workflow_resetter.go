@@ -967,7 +967,7 @@ func reapplyEvents(
 			enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_CANCELED,
 			enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TIMED_OUT,
 			enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TERMINATED:
-			if !isReset {
+			if isDuplicate(event) {
 				continue
 			}
 			err := reapplyChildEvents(mutableState, event)
@@ -1023,7 +1023,7 @@ func reapplyChildEvents(mutableState historyi.MutableState, event *historypb.His
 	case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED:
 		childEventAttributes := event.GetChildWorkflowExecutionStartedEventAttributes()
 		ci, childExists := mutableState.GetChildExecutionInfo(childEventAttributes.GetInitiatedEventId())
-		if !childExists {
+		if !childExists || ci.StartedEventId != common.EmptyEventID {
 			return nil
 		}
 		childClock := ci.Clock

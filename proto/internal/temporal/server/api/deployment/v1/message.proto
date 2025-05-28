@@ -101,6 +101,9 @@ message VersionLocalState {
         // Key: Task Queue Type
         map<int32, TaskQueueVersionData> task_queues = 1;
     }
+
+    // Status of the Worker Deployment Version.
+    temporal.api.enums.v1.WorkerDeploymentVersionStatus status = 14;
 }
 
 // Data specific to a task queue, from the perspective of a worker deployment version.
@@ -120,13 +123,6 @@ message WorkerDeploymentWorkflowArgs {
     string namespace_id = 2;
     string deployment_name = 3;
     WorkerDeploymentLocalState state = 4;
-}
-
-// used as drainage workflow input:
-message DrainageWorkflowArgs {
-    string namespace_name = 1;
-    WorkerDeploymentVersion version = 2;
-    bool is_can = 3;
 }
 
 // Local state for Worker Deployment
@@ -165,6 +161,9 @@ message WorkerDeploymentVersionSummary {
     google.protobuf.Timestamp first_activation_time = 8;
     // Timestamp when this version last stopped being current or ramping.
     google.protobuf.Timestamp last_deactivation_time = 9;
+
+    // Status of the Worker Deployment Version.
+    temporal.api.enums.v1.WorkerDeploymentVersionStatus status = 10;
 }
 
 // used as Worker Deployment Version workflow update input:
@@ -393,6 +392,9 @@ message WorkerDeploymentWorkflowMemo {
     string deployment_name = 1;
     google.protobuf.Timestamp create_time = 2;
     temporal.api.deployment.v1.RoutingConfig routing_config = 3;
+    temporal.api.deployment.v1.WorkerDeploymentInfo.WorkerDeploymentVersionSummary latest_version_summary = 4;
+    temporal.api.deployment.v1.WorkerDeploymentInfo.WorkerDeploymentVersionSummary current_version_summary = 5;
+    temporal.api.deployment.v1.WorkerDeploymentInfo.WorkerDeploymentVersionSummary ramping_version_summary = 6; 
 }
 
 // Subset of fields of WorkerDeploymentInfo returned in ListWorkerDeploymentsResponse
@@ -400,6 +402,9 @@ message WorkerDeploymentSummary {
     string name = 1;
     google.protobuf.Timestamp create_time = 2;
     temporal.api.deployment.v1.RoutingConfig routing_config = 3;
+    temporal.api.deployment.v1.WorkerDeploymentInfo.WorkerDeploymentVersionSummary latest_version_summary = 4;
+    temporal.api.deployment.v1.WorkerDeploymentInfo.WorkerDeploymentVersionSummary current_version_summary = 5;
+    temporal.api.deployment.v1.WorkerDeploymentInfo.WorkerDeploymentVersionSummary ramping_version_summary = 6;
 }
 
 // Used as Worker Deployment Version workflow activity input:
