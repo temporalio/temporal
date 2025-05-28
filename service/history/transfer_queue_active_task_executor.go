@@ -845,10 +845,8 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 	}
 
 	var parentPinnedOverride *workflowpb.VersioningOverride
-	if attributes.TaskQueue.GetName() == mutableState.GetExecutionInfo().GetTaskQueue() {
-		if worker_versioning.OverrideIsPinned(mutableState.GetExecutionInfo().GetVersioningInfo().GetVersioningOverride()) {
-			parentPinnedOverride = mutableState.GetExecutionInfo().GetVersioningInfo().GetVersioningOverride()
-		}
+	if worker_versioning.OverrideIsPinned(mutableState.GetExecutionInfo().GetVersioningInfo().GetVersioningOverride()) {
+		parentPinnedOverride = mutableState.GetExecutionInfo().GetVersioningInfo().GetVersioningOverride()
 	}
 
 	// Note: childStarted flag above is computed from the parent's history. When this is TRUE it's guaranteed that the child was succesfully started.
