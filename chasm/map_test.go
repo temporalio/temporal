@@ -5,6 +5,8 @@ import (
 	"go/parser"
 	"go/printer"
 	"go/token"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -12,8 +14,10 @@ import (
 )
 
 // Another approach would be to code generate string const.
-func TestCollectionKeyTypesMatchConst(t *testing.T) {
-	const srcFile = "collection.go"
+func TestMapKeyTypesMatchConst(t *testing.T) {
+	_, currentFile, _, ok := runtime.Caller(0)
+	require.True(t, ok, "failed to get current file path")
+	srcFile := filepath.Join(filepath.Dir(currentFile), "map.go")
 
 	fset := token.NewFileSet()
 	file, err := parser.ParseFile(fset, srcFile, nil, parser.AllErrors)
@@ -21,7 +25,7 @@ func TestCollectionKeyTypesMatchConst(t *testing.T) {
 
 	var found string
 	// Walk the top‐level declarations looking for:
-	//   type Collection[K ... , T any] map[K]T
+	//   type Map[K ... , T any] map[K]T
 	for _, decl := range file.Decls {
 		gd, ok := decl.(*ast.GenDecl)
 		if !ok || gd.Tok != token.TYPE {
@@ -29,7 +33,7 @@ func TestCollectionKeyTypesMatchConst(t *testing.T) {
 		}
 		for _, spec := range gd.Specs {
 			ts, ok := spec.(*ast.TypeSpec)
-			if !ok || ts.Name.Name != "Collection" {
+			if !ok || ts.Name.Name != "Map" {
 				continue
 			}
 			// ts.TypeParams.List[0] is the field for K
@@ -44,6 +48,6 @@ func TestCollectionKeyTypesMatchConst(t *testing.T) {
 		}
 	}
 
-	require.NotEmpty(t, found, "could not locate Collection[K …] in AST")
-	require.Equal(t, collectionKeyTypes, found)
+	require.NotEmpty(t, found, "could not locate Map[K …] in AST")
+	require.Equal(t, mapKeyTypes, found)
 }

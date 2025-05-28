@@ -65,7 +65,7 @@ type (
 
 		// Type of attributes controls the type of the node.
 		serializedNode *persistencespb.ChasmNode // serialized component | data | collection with metadata
-		value          any                       // deserialized component | data | collection
+		value          any                       // deserialized component | data | map
 
 		// valueState indicates if the value field and the persistence field serializedNode are in sync.
 		// If new value might be changed since it was deserialized and serialize method wasn't called yet, then valueState is valueStateNeedSerialize.
@@ -468,7 +468,7 @@ func (n *Node) serialize() error {
 	case *persistencespb.ChasmNodeMetadata_DataAttributes:
 		return n.serializeDataNode()
 	case *persistencespb.ChasmNodeMetadata_CollectionAttributes:
-		return n.serializeCollectionNode()
+		return n.serializeMapNode()
 	case *persistencespb.ChasmNodeMetadata_PointerAttributes:
 		panic("not implemented")
 	default:
@@ -556,59 +556,59 @@ func (n *Node) syncSubComponentsInternal(
 			if keepChild {
 				childrenToKeep[field.name] = struct{}{}
 			}
-		case fieldKindSubCollection:
+		case fieldKindSubMap:
 			if field.val.IsNil() {
-				// If Collection field is nil then delete all collection items nodes and collection node itself.
+				// If Map field is nil then delete all collection items nodes and collection node itself.
 				continue
 			}
 
-			collectionNode := n.children[field.name]
-			if collectionNode == nil {
-				collectionNode = newNode(n.nodeBase, n, field.name)
-				collectionNode.initSerializedCollectionNode()
-				collectionNode.valueState = valueStateNeedSerialize
-				n.children[field.name] = collectionNode
+			mapNode := n.children[field.name]
+			if mapNode == nil {
+				mapNode = newNode(n.nodeBase, n, field.name)
+				mapNode.initSerializedCollectionNode()
+				mapNode.valueState = valueStateNeedSerialize
+				n.children[field.name] = mapNode
 			}
 
-			// Validate collection type
+			// Validate map type.
 			if field.val.Kind() != reflect.Map {
-				errMsg := fmt.Sprintf("CHASM collection must be of map type: value of %s is not of a map type", n.nodeName)
+				errMsg := fmt.Sprintf("CHASM map must be of map type: value of %s is not of a map type", n.nodeName)
 				softassert.Fail(n.logger, errMsg)
 				return serviceerror.NewInternal(errMsg)
 			}
 
 			if len(field.val.MapKeys()) == 0 {
-				// If Collection field is empty then delete all collection items nodes and collection node itself.
+				// If Map field is empty then delete all collection items nodes and collection node itself.
 				continue
 			}
 
-			collectionValT := field.typ.Elem()
-			if collectionValT.Kind() != reflect.Struct || genericTypePrefix(collectionValT) != chasmFieldTypePrefix {
-				errMsg := fmt.Sprintf("CHASM collection value must be of Field[T] type: %s collection value type is not Field[T] but %s", n.nodeName, collectionValT)
+			mapValT := field.typ.Elem()
+			if mapValT.Kind() != reflect.Struct || genericTypePrefix(mapValT) != chasmFieldTypePrefix {
+				errMsg := fmt.Sprintf("CHASM map value must be of Field[T] type: %s collection value type is not Field[T] but %s", n.nodeName, mapValT)
 				softassert.Fail(n.logger, errMsg)
 				return serviceerror.NewInternal(errMsg)
 			}
 
-			collectionItemsToKeep := make(map[string]struct{})
-			for _, collectionKeyV := range field.val.MapKeys() {
-				collectionItemV := field.val.MapIndex(collectionKeyV)
-				collectionKeyStr, err := n.collectionKeyToString(collectionKeyV)
+			mapItemsToKeep := make(map[string]struct{})
+			for _, mapKeyV := range field.val.MapKeys() {
+				mapItemV := field.val.MapIndex(mapKeyV)
+				mapKeyStr, err := n.mapKeyToString(mapKeyV)
 				if err != nil {
 					return err
 				}
-				keepItem, updatedCollectionItemV, err := collectionNode.syncSubField(collectionItemV, collectionKeyStr, append(nodePath, field.name))
+				keepItem, updatedMapItemV, err := mapNode.syncSubField(mapItemV, mapKeyStr, append(nodePath, field.name))
 				if err != nil {
 					return err
 				}
-				if updatedCollectionItemV.IsValid() {
+				if updatedMapItemV.IsValid() {
 					// The only way to update item in the map is to set it back.
-					field.val.SetMapIndex(collectionKeyV, updatedCollectionItemV)
+					field.val.SetMapIndex(mapKeyV, updatedMapItemV)
 				}
 				if keepItem {
-					collectionItemsToKeep[collectionKeyStr] = struct{}{}
+					mapItemsToKeep[mapKeyStr] = struct{}{}
 				}
 			}
-			if err := collectionNode.deleteChildren(collectionItemsToKeep, append(nodePath, field.name)); err != nil {
+			if err := mapNode.deleteChildren(mapItemsToKeep, append(nodePath, field.name)); err != nil {
 				return err
 			}
 			childrenToKeep[field.name] = struct{}{}
@@ -619,7 +619,7 @@ func (n *Node) syncSubComponentsInternal(
 	return err
 }
 
-func (n *Node) collectionKeyToString(keyV reflect.Value) (string, error) {
+func (n *Node) mapKeyToString(keyV reflect.Value) (string, error) {
 	switch keyV.Kind() {
 	case reflect.String:
 		return keyV.String(), nil
@@ -630,13 +630,13 @@ func (n *Node) collectionKeyToString(keyV reflect.Value) (string, error) {
 	case reflect.Bool:
 		return strconv.FormatBool(keyV.Bool()), nil
 	default:
-		errMsg := fmt.Sprintf("CHASM collection key must be one of %s type: %s map key type is not one of them but %s", collectionKeyTypes, n.nodeName, keyV.Type().String())
+		errMsg := fmt.Sprintf("CHASM map key must be one of %s type: %s map key type is not one of them but %s", mapKeyTypes, n.nodeName, keyV.Type().String())
 		softassert.Fail(n.logger, errMsg)
 		return "", serviceerror.NewInternal(errMsg)
 	}
 }
 
-func (n *Node) stringToCollectionKey(nodeName string, key string, keyT reflect.Type) (reflect.Value, error) {
+func (n *Node) stringToMapKey(nodeName string, key string, keyT reflect.Type) (reflect.Value, error) {
 	var (
 		keyV reflect.Value
 		err  error
@@ -689,7 +689,7 @@ func (n *Node) stringToCollectionKey(nodeName string, key string, keyT reflect.T
 		b, err = strconv.ParseBool(key)
 		keyV = reflect.ValueOf(b)
 	default:
-		err = fmt.Errorf("unsupported type %s of kind %s: supported key types: %s", keyT.String(), keyT.Kind().String(), collectionKeyTypes)
+		err = fmt.Errorf("unsupported type %s of kind %s: supported key types: %s", keyT.String(), keyT.Kind().String(), mapKeyTypes)
 		softassert.Fail(n.logger, err.Error())
 		// Use softassert only here because this is the only case that indicates "compile" time error.
 		// The other errors below can come from data type mismatch between a component and persisted data.
@@ -700,7 +700,7 @@ func (n *Node) stringToCollectionKey(nodeName string, key string, keyT reflect.T
 	}
 
 	if err != nil {
-		err = serviceerror.NewInternalf("serialized collection %s key value %s can't be parsed to CHASM collection key type %s: %s", nodeName, key, keyT.String(), err.Error())
+		err = serviceerror.NewInternalf("serialized map %s key value %s can't be parsed to CHASM map key type %s: %s", nodeName, key, keyT.String(), err.Error())
 	}
 
 	return keyV, err
@@ -787,8 +787,8 @@ func (n *Node) serializeDataNode() error {
 	return nil
 }
 
-func (n *Node) serializeCollectionNode() error {
-	// The collection node has no data; therefore, only metadata needs to be updated.
+func (n *Node) serializeMapNode() error {
+	// The map node has no data; therefore, only metadata needs to be updated.
 	n.updateLastUpdateVersionedTransition()
 	n.valueState = valueStateSynced
 	return nil
@@ -861,24 +861,24 @@ func (n *Node) deserializeComponentNode(
 				chasmFieldV.FieldByName(internalFieldName).Set(internalValue)
 				field.val.Set(chasmFieldV)
 			}
-		case fieldKindSubCollection:
-			if collectionNode, found := n.children[field.name]; found {
-				collectionFieldV := field.val
-				if collectionFieldV.IsNil() {
-					collectionFieldV = reflect.MakeMapWithSize(field.typ, field.val.Len())
-					field.val.Set(collectionFieldV)
+		case fieldKindSubMap:
+			if mapNode, found := n.children[field.name]; found {
+				mapFieldV := field.val
+				if mapFieldV.IsNil() {
+					mapFieldV = reflect.MakeMapWithSize(field.typ, field.val.Len())
+					field.val.Set(mapFieldV)
 				}
 
-				for collectionItemName, collectionItemNode := range collectionNode.children {
+				for mapItemName, mapItemNode := range mapNode.children {
 					// field.typ.Elem() is a go type of map item: Field[T]
 					chasmFieldV := reflect.New(field.typ.Elem()).Elem()
-					internalValue := reflect.ValueOf(newFieldInternalWithNode(collectionItemNode))
+					internalValue := reflect.ValueOf(newFieldInternalWithNode(mapItemNode))
 					chasmFieldV.FieldByName(internalFieldName).Set(internalValue)
-					collectionKeyV, err := n.stringToCollectionKey(field.name, collectionItemName, collectionFieldV.Type().Key())
+					mapKeyV, err := n.stringToMapKey(field.name, mapItemName, mapFieldV.Type().Key())
 					if err != nil {
 						return err
 					}
-					collectionFieldV.SetMapIndex(collectionKeyV, chasmFieldV)
+					mapFieldV.SetMapIndex(mapKeyV, chasmFieldV)
 				}
 			}
 		}

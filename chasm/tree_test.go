@@ -260,13 +260,13 @@ func (s *nodeSuite) TestCollectionAttributes_StringKey() {
 
 	var persistedNodes map[string]*persistencespb.ChasmNode
 
-	s.Run("Sync and serialize component with collection", func() {
+	s.Run("Sync and serialize component with map", func() {
 		var nilSerializedNodes map[string]*persistencespb.ChasmNode
 		rootNode, err := NewTree(nilSerializedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
 		s.NoError(err)
 
 		rootComponent := &TestComponent{
-			SubComponents: Collection[string, *TestSubComponent1]{
+			SubComponents: Map[string, *TestSubComponent1]{
 				"SubComponent1": NewComponentField[*TestSubComponent1](nil, sc1),
 				"SubComponent2": NewComponentField[*TestSubComponent1](nil, sc2),
 			},
@@ -288,7 +288,7 @@ func (s *nodeSuite) TestCollectionAttributes_StringKey() {
 
 	s.NotNil(persistedNodes)
 
-	s.Run("Deserialize component with collection", func() {
+	s.Run("Deserialize component with map", func() {
 		rootNode, err := NewTree(persistedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
 		s.NoError(err)
 
@@ -310,7 +310,7 @@ func (s *nodeSuite) TestCollectionAttributes_StringKey() {
 		s.Equal(sc2.SubComponent1Data.GetRunId(), sc2Des.SubComponent1Data.GetRunId())
 	})
 
-	s.Run("Clear collection by setting it to nil", func() {
+	s.Run("Clear map by setting it to nil", func() {
 		rootNode, err := NewTree(persistedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
 		s.NoError(err)
 
@@ -322,13 +322,13 @@ func (s *nodeSuite) TestCollectionAttributes_StringKey() {
 		rootNode.valueState = valueStateNeedSerialize
 		rootComponent.SubComponents = nil
 
-		setCollectionNilMutations, err := rootNode.CloseTransaction()
+		mutation, err := rootNode.CloseTransaction()
 		s.NoError(err)
-		s.Len(setCollectionNilMutations.UpdatedNodes, 1, "although root component is not updated, collection is tracked as part of component, therefore root must be updated")
-		s.Len(setCollectionNilMutations.DeletedNodes, 3, "collection and 2 collection items must be deleted")
+		s.Len(mutation.UpdatedNodes, 1, "although root component is not updated, collection is tracked as part of component, therefore root must be updated")
+		s.Len(mutation.DeletedNodes, 3, "collection and 2 collection items must be deleted")
 	})
 
-	s.Run("Delete single collection item", func() {
+	s.Run("Delete single map item", func() {
 		rootNode, err := NewTree(persistedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
 		s.NoError(err)
 
@@ -341,13 +341,13 @@ func (s *nodeSuite) TestCollectionAttributes_StringKey() {
 		rootNode.valueState = valueStateNeedSerialize
 		delete(rootComponent.SubComponents, "SubComponent1")
 
-		deleteCollectionItemMutations, err := rootNode.CloseTransaction()
+		mutation, err := rootNode.CloseTransaction()
 		s.NoError(err)
-		s.Len(deleteCollectionItemMutations.UpdatedNodes, 1, "although root component is not updated, collection is tracked as part of component, therefore root must be updated")
-		s.Len(deleteCollectionItemMutations.DeletedNodes, 1, "collection item 1 must be deleted")
+		s.Len(mutation.UpdatedNodes, 1, "although root component is not updated, collection is tracked as part of component, therefore root must be updated")
+		s.Len(mutation.DeletedNodes, 1, "collection item 1 must be deleted")
 	})
 
-	s.Run("Clear collection by deleting all items", func() {
+	s.Run("Clear map by deleting all items", func() {
 		rootNode, err := NewTree(persistedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
 		s.NoError(err)
 
@@ -362,14 +362,14 @@ func (s *nodeSuite) TestCollectionAttributes_StringKey() {
 		delete(rootComponent.SubComponents, "SubComponent2")
 
 		// Now map is empty and must be deleted.
-		emptyCollectionMutations, err := rootNode.CloseTransaction()
+		mutation, err := rootNode.CloseTransaction()
 		s.NoError(err)
-		s.Len(emptyCollectionMutations.UpdatedNodes, 1, "although root component is not updated, collection is tracked as part of component, therefore root must be updated")
-		s.Len(emptyCollectionMutations.DeletedNodes, 3, "collection and 2 items must be deleted")
+		s.Len(mutation.UpdatedNodes, 1, "although root component is not updated, collection is tracked as part of component, therefore root must be updated")
+		s.Len(mutation.DeletedNodes, 3, "collection and 2 items must be deleted")
 	})
 }
 
-// TODO: copy of test above but for collection with int key. Is there a way to unify these tests in one?
+// TODO: copy of test above but for map with int key. Is there a way to unify these tests in one?
 func (s *nodeSuite) TestCollectionAttributes_IntKey() {
 	tv := testvars.New(s.T())
 
@@ -391,13 +391,13 @@ func (s *nodeSuite) TestCollectionAttributes_IntKey() {
 
 	var persistedNodes map[string]*persistencespb.ChasmNode
 
-	s.Run("Sync and serialize component with collection", func() {
+	s.Run("Sync and serialize component with map", func() {
 		var nilSerializedNodes map[string]*persistencespb.ChasmNode
 		rootNode, err := NewTree(nilSerializedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
 		s.NoError(err)
 
 		rootComponent := &TestComponent{
-			PendingActivities: Collection[int, *TestSubComponent1]{
+			PendingActivities: Map[int, *TestSubComponent1]{
 				1: NewComponentField[*TestSubComponent1](nil, sc1),
 				2: NewComponentField[*TestSubComponent1](nil, sc2),
 			},
@@ -419,7 +419,7 @@ func (s *nodeSuite) TestCollectionAttributes_IntKey() {
 
 	s.NotNil(persistedNodes)
 
-	s.Run("Deserialize component with collection", func() {
+	s.Run("Deserialize component with map", func() {
 		rootNode, err := NewTree(persistedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
 		s.NoError(err)
 
@@ -441,7 +441,7 @@ func (s *nodeSuite) TestCollectionAttributes_IntKey() {
 		s.Equal(sc2.SubComponent1Data.GetRunId(), sc2Des.SubComponent1Data.GetRunId())
 	})
 
-	s.Run("Clear collection by setting it to nil", func() {
+	s.Run("Clear map by setting it to nil", func() {
 		rootNode, err := NewTree(persistedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
 		s.NoError(err)
 
@@ -453,13 +453,13 @@ func (s *nodeSuite) TestCollectionAttributes_IntKey() {
 		rootNode.valueState = valueStateNeedSerialize
 		rootComponent.PendingActivities = nil
 
-		setCollectionNilMutations, err := rootNode.CloseTransaction()
+		mutation, err := rootNode.CloseTransaction()
 		s.NoError(err)
-		s.Len(setCollectionNilMutations.UpdatedNodes, 1, "although root component is not updated, collection is tracked as part of component, therefore root must be updated")
-		s.Len(setCollectionNilMutations.DeletedNodes, 3, "collection and 2 collection items must be deleted")
+		s.Len(mutation.UpdatedNodes, 1, "although root component is not updated, collection is tracked as part of component, therefore root must be updated")
+		s.Len(mutation.DeletedNodes, 3, "collection and 2 collection items must be deleted")
 	})
 
-	s.Run("Delete single collection item", func() {
+	s.Run("Delete single map item", func() {
 		rootNode, err := NewTree(persistedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
 		s.NoError(err)
 
@@ -468,17 +468,17 @@ func (s *nodeSuite) TestCollectionAttributes_IntKey() {
 
 		rootComponent := rootNode.value.(*TestComponent)
 
-		// Delete collection item 1.
+		// Delete map item 1.
 		rootNode.valueState = valueStateNeedSerialize
 		delete(rootComponent.PendingActivities, 1)
 
-		deleteCollectionItemMutations, err := rootNode.CloseTransaction()
+		mutation, err := rootNode.CloseTransaction()
 		s.NoError(err)
-		s.Len(deleteCollectionItemMutations.UpdatedNodes, 1, "although root component is not updated, collection is tracked as part of component, therefore root must be updated")
-		s.Len(deleteCollectionItemMutations.DeletedNodes, 1, "collection item 1 must be deleted")
+		s.Len(mutation.UpdatedNodes, 1, "although root component is not updated, collection is tracked as part of component, therefore root must be updated")
+		s.Len(mutation.DeletedNodes, 1, "collection item 1 must be deleted")
 	})
 
-	s.Run("Clear collection by deleting all items", func() {
+	s.Run("Clear map by deleting all items", func() {
 		rootNode, err := NewTree(persistedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
 		s.NoError(err)
 
@@ -487,16 +487,16 @@ func (s *nodeSuite) TestCollectionAttributes_IntKey() {
 
 		rootComponent := rootNode.value.(*TestComponent)
 
-		// Delete both collection items.
+		// Delete both map items.
 		rootNode.valueState = valueStateNeedSerialize
 		delete(rootComponent.PendingActivities, 1)
 		delete(rootComponent.PendingActivities, 2)
 
 		// Now map is empty and must be deleted.
-		emptyCollectionMutations, err := rootNode.CloseTransaction()
+		mutation, err := rootNode.CloseTransaction()
 		s.NoError(err)
-		s.Len(emptyCollectionMutations.UpdatedNodes, 1, "although root component is not updated, collection is tracked as part of component, therefore root must be updated")
-		s.Len(emptyCollectionMutations.DeletedNodes, 3, "collection and 2 items must be deleted")
+		s.Len(mutation.UpdatedNodes, 1, "although root component is not updated, collection is tracked as part of component, therefore root must be updated")
+		s.Len(mutation.DeletedNodes, 3, "collection and 2 items must be deleted")
 	})
 }
 

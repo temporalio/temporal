@@ -10,7 +10,7 @@ type defaultPathEncoder struct{}
 
 // TODO: Have a real implementation for DefaultPathEncoder
 // that handles special characters in the path and support
-// getting all immedidate children of a collection node.
+// getting all immedidate children of a map node.
 
 func (e *defaultPathEncoder) Encode(
 	_ *Node,
