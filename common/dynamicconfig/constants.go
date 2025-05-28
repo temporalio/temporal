@@ -2386,6 +2386,11 @@ that task will be sent to DLQ.`,
 		100,
 		`Maximum number of low priority replication tasks that can be sent per second per shard`,
 	)
+	ReplicationStreamEventLoopRetryMaxAttempts = NewGlobalIntSetting(
+		"history.ReplicationStreamEventLoopRetryMaxAttempts",
+		100, // 0 means retry forever
+		`Max attempts for retrying replication stream event loop`,
+	)
 	ReplicationReceiverMaxOutstandingTaskCount = NewGlobalIntSetting(
 		"history.ReplicationReceiverMaxOutstandingTaskCount",
 		500,
