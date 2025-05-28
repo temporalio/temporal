@@ -6,7 +6,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber-go/tally/v4"
 	"go.temporal.io/server/common/log"
 	"go.uber.org/mock/gomock"
 )
@@ -24,72 +23,6 @@ func TestMetricsSuite(t *testing.T) {
 func (s *MetricsSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.controller = gomock.NewController(s.T())
-}
-
-func (s *MetricsSuite) TestStatsd() {
-	statsd := &StatsdConfig{
-		HostPort: "127.0.0.1:8125",
-		Prefix:   "testStatsd",
-	}
-
-	config := new(Config)
-	config.Statsd = statsd
-	scope := NewScope(log.NewNoopLogger(), config)
-	s.NotNil(scope)
-}
-
-func (s *MetricsSuite) TestPrometheus() {
-	prom := &PrometheusConfig{
-		OnError:       "panic",
-		TimerType:     "histogram",
-		ListenAddress: "127.0.0.1:0",
-	}
-	config := new(Config)
-	config.Prometheus = prom
-	scope := NewScope(log.NewNoopLogger(), config)
-	s.NotNil(scope)
-}
-
-func (s *MetricsSuite) TestPrometheusWithSanitizeOptions() {
-	validChars := &ValidCharacters{
-		Ranges: []SanitizeRange{
-			{
-				StartRange: "a",
-				EndRange:   "z",
-			},
-			{
-				StartRange: "A",
-				EndRange:   "Z",
-			},
-			{
-				StartRange: "0",
-				EndRange:   "9",
-			},
-		},
-		SafeCharacters: "-",
-	}
-
-	prom := &PrometheusConfig{
-		OnError:       "panic",
-		TimerType:     "histogram",
-		ListenAddress: "127.0.0.1:0",
-		SanitizeOptions: &SanitizeOptions{
-			NameCharacters:       validChars,
-			KeyCharacters:        validChars,
-			ValueCharacters:      validChars,
-			ReplacementCharacter: "_",
-		},
-	}
-	config := new(Config)
-	config.Prometheus = prom
-	scope := NewScope(log.NewNoopLogger(), config)
-	s.NotNil(scope)
-}
-
-func (s *MetricsSuite) TestNoop() {
-	config := &Config{}
-	scope := NewScope(log.NewNoopLogger(), config)
-	s.Equal(tally.NoopScope, scope)
 }
 
 func (s *MetricsSuite) TestSetDefaultPerUnitHistogramBoundaries() {
@@ -146,24 +79,18 @@ func TestMetricsHandlerFromConfig(t *testing.T) {
 			expectedType: &noopMetricsHandler{},
 		},
 		{
-			name: "tally",
+			name: "prometheus config",
 			cfg: &Config{
 				Prometheus: &PrometheusConfig{
-					Framework:     FrameworkTally,
-					ListenAddress: "localhost:0",
-				},
-			},
-			expectedType: &tallyMetricsHandler{},
-		},
-		{
-			name: "opentelemetry",
-			cfg: &Config{
-				Prometheus: &PrometheusConfig{
-					Framework:     FrameworkOpentelemetry,
 					ListenAddress: "localhost:0",
 				},
 			},
 			expectedType: &otelMetricsHandler{},
+		},
+		{
+			name:         "empty config",
+			cfg:          &Config{},
+			expectedType: &noopMetricsHandler{},
 		},
 	} {
 		c := c
