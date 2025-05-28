@@ -2651,7 +2651,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 		}
 
 		if ms.executionInfo.GetVersioningInfo().GetVersioningOverride().GetPinned() != nil {
-			if ms.GetExecutionInfo().GetNamespaceId() != ms.GetExecutionInfo().GetParentNamespaceId() {
+			if ms.HasParentExecution() && ms.GetExecutionInfo().GetNamespaceId() != ms.GetExecutionInfo().GetParentNamespaceId() {
 				// don't inherit pinned version if child is in a different namespace
 				ms.executionInfo.VersioningInfo.VersioningOverride = nil
 			}
