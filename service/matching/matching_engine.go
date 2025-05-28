@@ -1134,33 +1134,27 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 			return nil, err
 		}
 
-		timeSinceLastFanOut := rootPM.TimeSinceLastFanOut()
-		lastFanOutTTL := tqConfig.TaskQueueInfoByBuildIdTTL()
-
 		// TODO bug fix: We cache the last response for each build ID. timeSinceLastFanOut is the last fan out time, that means some enteries in the cache can be more stale if
 		// user is calling this API back-to-back but with different version selection.
-		cacheIsFresh := timeSinceLastFanOut <= lastFanOutTTL
 		missingItemsInCache := false
 		physicalInfoByBuildId := make(map[string]map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo)
-		if cacheIsFresh {
-			// fetch info from rootPartition's cache for the cached versions
-			cache := rootPM.GetPhysicalTaskQueueInfoFromCache()
-			requestedBuildIds, err := e.getBuildIds(req.Versions)
-			if err != nil {
-				return nil, err
-			}
-			for b := range requestedBuildIds {
-				if c, ok := cache[b]; ok {
-					physicalInfoByBuildId[b] = c
-				} else {
-					missingItemsInCache = true
-				}
-			}
+		requestedBuildIds, err := e.getBuildIds(req.Versions)
+		if err != nil {
+			return nil, err
 		}
-		if !cacheIsFresh || missingItemsInCache {
+		for b := range requestedBuildIds {
+			c := rootPM.GetCache(b) // any expired cache entry will return nil
+			if c == nil {
+				missingItemsInCache = true
+				break // once we find a missing item, we can stop checking the cache
+			}
+			//revive:disable-next-line:unchecked-type-assertion
+			physicalInfoByBuildId[b] = c.(map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo)
+		}
+		if missingItemsInCache {
 			// Fan out to partitions to get the needed info
+			var foundBuildIds []string
 			numPartitions := max(tqConfig.NumWritePartitions(), tqConfig.NumReadPartitions())
-
 			for _, taskQueueType := range req.TaskQueueTypes {
 				for i := 0; i < numPartitions; i++ {
 					partitionResp, err := e.matchingRawClient.DescribeTaskQueuePartition(ctx, &matchingservice.DescribeTaskQueuePartitionRequest{
@@ -1178,6 +1172,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 						return nil, err
 					}
 					for buildId, vii := range partitionResp.VersionsInfoInternal {
+						foundBuildIds = append(foundBuildIds, buildId)
 						if _, ok := physicalInfoByBuildId[buildId]; !ok {
 							physicalInfoByBuildId[buildId] = make(map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo)
 						}
@@ -1207,8 +1202,10 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 					}
 				}
 			}
-			// update cache
-			rootPM.UpdateTimeSinceLastFanOutAndCache(physicalInfoByBuildId, cacheIsFresh)
+
+			for _, b := range foundBuildIds {
+				rootPM.PutCache(b, physicalInfoByBuildId[b])
+			}
 		}
 
 		// smush internal info into versions info
