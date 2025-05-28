@@ -772,6 +772,8 @@ func (d *VersionWorkflowRunner) refreshDrainageInfo(ctx workflow.Context) {
 		return
 	}
 
+	d.metrics.Counter(metrics.WorkerDeploymentVersionVisibilityQueryCount.Name()).Inc(1)
+
 	if d.VersionState.DrainageInfo == nil {
 		d.VersionState.DrainageInfo = &deploymentpb.VersionDrainageInfo{}
 	}
