@@ -1253,10 +1253,8 @@ func (s *matchingEngineSuite) TestRateLimiterAcrossVersionedQueues() {
 			resultChan <- result
 		}()
 
-		currentTime := time.Now()
-		s.Eventually(func() bool {
-			return time.Since(currentTime) > 10*time.Millisecond // Delay to allow the second poller coming in a little later.
-		}, 20*time.Millisecond, 1*time.Millisecond)
+		//nolint:forbidigo
+		time.Sleep(10 * time.Millisecond)
 	}
 
 	// Update user data of the task queue so that the activity tasks generated are not treated as independent activities.
