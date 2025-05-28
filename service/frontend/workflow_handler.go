@@ -547,9 +547,9 @@ func (wh *WorkflowHandler) ExecuteMultiOperation(
 	if err != nil {
 		var multiErr *serviceerror.MultiOperationExecution
 		if errors.As(err, &multiErr) {
-			// Trim error message for end-users.
+			// Tweak error message for end-users to match the feature name.
 			// The per-operation errors are embedded inside the error and unpacked by the SDK.
-			multiErr.Message = "MultiOperation could not be executed."
+			multiErr.Message = "Update-with-Start could not be executed."
 		}
 		return nil, err
 	}
@@ -592,7 +592,7 @@ func (wh *WorkflowHandler) convertToHistoryMultiOperationRequest(
 	}
 
 	if hasError {
-		return nil, serviceerror.NewMultiOperationExecution("MultiOperation could not be executed.", errs)
+		return nil, serviceerror.NewMultiOperationExecution("Update-with-Start could not be executed.", errs)
 	}
 
 	return &historyservice.ExecuteMultiOperationRequest{

@@ -5309,7 +5309,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 			uwsCh := sendUpdateWithStart(testcore.NewContext(), startReq, updateReq)
 			uwsRes := <-uwsCh
 			s.Error(uwsRes.err)
-			s.Equal("MultiOperation could not be executed.", uwsRes.err.Error())
+			s.Equal("Update-with-Start could not be executed.", uwsRes.err.Error())
 			errs := uwsRes.err.(*serviceerror.MultiOperationExecution).OperationErrors()
 			s.Len(errs, 2)
 			var alreadyStartedErr *serviceerror.WorkflowExecutionAlreadyStarted
@@ -5444,7 +5444,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 
 			uwsRes := <-uwsCh
 			s.Error(uwsRes.err)
-			s.Equal("MultiOperation could not be executed.", uwsRes.err.Error())
+			s.Equal("Update-with-Start could not be executed.", uwsRes.err.Error())
 			errs := uwsRes.err.(*serviceerror.MultiOperationExecution).OperationErrors()
 			s.Len(errs, 2)
 			s.Contains(errs[0].Error(), "Workflow execution already finished")
