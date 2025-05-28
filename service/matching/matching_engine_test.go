@@ -1254,7 +1254,7 @@ func (s *matchingEngineSuite) TestRateLimiterAcrossVersionedQueues() {
 		}()
 
 		//nolint:forbidigo
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(10 * time.Millisecond) // Delay to allow the second poller coming in a little later.
 	}
 
 	// Update user data of the task queue so that the activity tasks generated are not treated as independent activities.
