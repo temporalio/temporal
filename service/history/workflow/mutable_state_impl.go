@@ -2664,20 +2664,6 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 			//nolint:staticcheck // SA1019: worker versioning v0.31
 			ms.executionInfo.VersioningInfo.VersioningOverride.Behavior = enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED
 		}
-
-		// TODO(carlydf): move this logic to producer
-		//if ms.executionInfo.GetVersioningInfo().GetVersioningOverride().GetPinned() != nil {
-		//	if ms.HasParentExecution() && ms.GetExecutionInfo().GetNamespaceId() != ms.GetExecutionInfo().GetParentNamespaceId() {
-		//		// don't inherit pinned version if child is in a different namespace
-		//		ms.executionInfo.VersioningInfo.VersioningOverride = nil
-		//	}
-		//	if event.GetPreviousRunVersioningInfo().GetTaskQueue() != "" ||
-		//		event.GetParentVersioningInfo().GetTaskQueue() != "" {
-		//		// TODO(carlydf): Check if new wf Task Queue belongs to the override version
-		//		// for now, this means no inheritance if pinned override
-		//		ms.executionInfo.VersioningInfo.VersioningOverride = nil
-		//	}
-		//}
 	}
 
 	if event.GetInheritedPinnedVersion() != nil {

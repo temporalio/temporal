@@ -840,7 +840,8 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		inheritedPinnedOverride = o
 		newTQ := attributes.GetTaskQueue().GetName()
 		if newTQ != mutableState.GetExecutionInfo().GetTaskQueue() &&
-			!worker_versioning.IsTaskQueueInVersion(newTQ, worker_versioning.GetOverridePinnedVersion(inheritedPinnedOverride)) {
+			!worker_versioning.IsTaskQueueInVersion(newTQ, worker_versioning.GetOverridePinnedVersion(inheritedPinnedOverride)) ||
+			attributes.GetNamespaceId() != mutableState.GetExecutionInfo().GetNamespaceId() { // don't inherit pinned version if child is in a different namespace
 			inheritedPinnedOverride = nil
 		}
 	}
@@ -852,7 +853,8 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		newTQ := attributes.GetTaskQueue().GetName()
 		if newTQ != mutableState.GetExecutionInfo().GetTaskQueue() &&
 			// if there is a pinned override, we might already know the answer to this without asking matching again, but that can be optimized later
-			!worker_versioning.IsTaskQueueInVersion(newTQ, inheritedPinnedVersion) {
+			!worker_versioning.IsTaskQueueInVersion(newTQ, inheritedPinnedVersion) ||
+			attributes.GetNamespaceId() != mutableState.GetExecutionInfo().GetNamespaceId() { // don't inherit pinned version if child is in a different namespace
 			inheritedPinnedVersion = nil
 		}
 	}
