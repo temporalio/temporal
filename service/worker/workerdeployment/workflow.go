@@ -372,11 +372,7 @@ func (d *WorkflowRunner) handleRegisterWorker(ctx workflow.Context, args *deploy
 	}
 
 	// update memo
-	if err = d.updateMemo(ctx); err != nil {
-		return err
-	}
-
-	return nil
+	return d.updateMemo(ctx)
 }
 
 func (d *WorkflowRunner) validateDeleteDeployment() error {
