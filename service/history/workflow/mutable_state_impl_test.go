@@ -2057,7 +2057,6 @@ func (s *mutableStateSuite) TestTotalEntitiesCount() {
 
 	_, _, err = s.mutableState.AddStartChildWorkflowExecutionInitiatedEvent(
 		workflowTaskCompletedEventID,
-		uuid.New(),
 		&commandpb.StartChildWorkflowExecutionCommandAttributes{},
 		namespace.ID(uuid.New()),
 	)
@@ -2775,7 +2774,6 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 				completedEvent := completWorkflowTaskFn(ms)
 				initiatedEvent, _, err := ms.AddStartChildWorkflowExecutionInitiatedEvent(
 					completedEvent.GetEventId(),
-					uuid.New(),
 					&commandpb.StartChildWorkflowExecutionCommandAttributes{},
 					ms.GetNamespaceEntry().ID(),
 				)

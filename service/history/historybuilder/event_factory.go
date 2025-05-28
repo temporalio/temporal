@@ -807,7 +807,6 @@ func (b *EventFactory) CreateStartChildWorkflowExecutionInitiatedEvent(
 	workflowTaskCompletedEventID int64,
 	command *commandpb.StartChildWorkflowExecutionCommandAttributes,
 	targetNamespaceID namespace.ID,
-	createRequestID string,
 ) *historypb.HistoryEvent {
 	event := b.createHistoryEvent(enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_StartChildWorkflowExecutionInitiatedEventAttributes{
@@ -832,7 +831,6 @@ func (b *EventFactory) CreateStartChildWorkflowExecutionInitiatedEvent(
 			ParentClosePolicy:            command.GetParentClosePolicy(),
 			InheritBuildId:               command.InheritBuildId,
 			Priority:                     command.Priority,
-			CreateRequestId:              createRequestID,
 		},
 	}
 	return event

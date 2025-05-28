@@ -1589,10 +1589,9 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeStartChildWorkflowExecution
 		EventTime: timestamppb.New(now),
 		EventType: evenType,
 		Attributes: &historypb.HistoryEvent_StartChildWorkflowExecutionInitiatedEventAttributes{StartChildWorkflowExecutionInitiatedEventAttributes: &historypb.StartChildWorkflowExecutionInitiatedEventAttributes{
-			Namespace:       tests.TargetNamespace.String(),
-			NamespaceId:     tests.TargetNamespaceID.String(),
-			WorkflowId:      targetWorkflowID,
-			CreateRequestId: createRequestID,
+			Namespace:   tests.TargetNamespace.String(),
+			NamespaceId: tests.TargetNamespaceID.String(),
+			WorkflowId:  targetWorkflowID,
 		}},
 	}
 
