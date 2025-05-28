@@ -5113,9 +5113,7 @@ func (ms *MutableStateImpl) AddContinueAsNewEvent(
 		if command.GetTaskQueue().GetName() == parentVersioningInfo.GetTaskQueue() {
 			parentVersioningInfo.TaskQueue = ""
 		}
-		parentInfo.DeploymentVersion = parentVersioningInfo.GetDeploymentVersion()
-		parentInfo.Behavior = parentVersioningInfo.Behavior
-		parentInfo.TaskQueue = parentVersioningInfo.TaskQueue
+		parentInfo.VersioningInfo = parentVersioningInfo
 	}
 
 	continueAsNewEvent := ms.hBuilder.AddContinuedAsNewEvent(

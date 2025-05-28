@@ -199,9 +199,7 @@ func SetupNewWorkflowForRetryOrCron(
 		if startAttr.GetTaskQueue().GetName() == parentVersioningInfo.GetTaskQueue() {
 			parentVersioningInfo.TaskQueue = ""
 		}
-		parentInfo.DeploymentVersion = parentVersioningInfo.GetDeploymentVersion()
-		parentInfo.Behavior = parentVersioningInfo.Behavior
-		parentInfo.TaskQueue = parentVersioningInfo.TaskQueue
+		parentInfo.VersioningInfo = parentVersioningInfo
 	}
 
 	newExecution := commonpb.WorkflowExecution{

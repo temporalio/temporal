@@ -225,6 +225,7 @@ func (s *historyBuilderSuite) TestWorkflowExecutionStarted() {
 		prevRunID,
 		firstRunID,
 		originalRunID,
+		nil,
 	)
 	s.Equal(event, s.flush())
 	protorequire.ProtoEqual(
@@ -2399,6 +2400,7 @@ func (s *historyBuilderSuite) TestLastEventVersion() {
 		"",
 		"",
 		"",
+		nil,
 	)
 	version, ok := s.historyBuilder.LastEventVersion()
 	s.True(ok)

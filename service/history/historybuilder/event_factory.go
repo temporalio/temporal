@@ -78,11 +78,7 @@ func (b *EventFactory) CreateWorkflowExecutionStartedEvent(
 		attributes.ParentWorkflowExecution = parentInfo.Execution
 		attributes.ParentInitiatedEventId = parentInfo.InitiatedId
 		attributes.ParentInitiatedEventVersion = parentInfo.InitiatedVersion
-		attributes.ParentVersioningInfo = &historypb.WorkflowExecutionStartedEventAttributes_SourceWorkflowVersioningInfo{
-			DeploymentVersion: parentInfo.DeploymentVersion,
-			Behavior:          parentInfo.Behavior,
-			TaskQueue:         parentInfo.TaskQueue,
-		}
+		attributes.ParentVersioningInfo = parentInfo.VersioningInfo
 	}
 
 	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{

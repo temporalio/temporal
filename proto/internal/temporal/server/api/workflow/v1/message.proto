@@ -5,8 +5,7 @@ package temporal.server.api.workflow.v1;
 option go_package = "go.temporal.io/server/api/workflow/v1;workflow";
 
 import "temporal/api/common/v1/message.proto";
-import "temporal/api/deployment/v1/message.proto";
-import "temporal/api/enums/v1/workflow.proto";
+import "temporal/api/history/v1/message.proto";
 
 import "temporal/server/api/clock/v1/message.proto";
 
@@ -25,11 +24,8 @@ message ParentExecutionInfo {
     // Deprecated. Replaced with `parent_versioning_info` in WorkflowExecutionStartedEventAttributes.
     string pinned_worker_deployment_version = 7;
 
-    // Present parent is versioned. Consumer decides whether to inherit.
-    temporal.api.deployment.v1.WorkerDeploymentVersion deployment_version = 8;
-    temporal.api.enums.v1.VersioningBehavior behavior = 9;
-    // Present if different from child.
-    string task_queue = 10;
+    // Present if parent is versioned. Consumer decides whether to inherit.
+    temporal.api.history.v1.WorkflowExecutionStartedEventAttributes.SourceWorkflowVersioningInfo versioning_info = 8;
 }
 
 message RootExecutionInfo {
