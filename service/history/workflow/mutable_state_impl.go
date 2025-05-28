@@ -2677,7 +2677,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 			ms.executionInfo.VersioningInfo.Behavior = event.GetPreviousRunVersioningInfo().GetBehavior()
 		}
 	} else if event.GetParentVersioningInfo() != nil && event.GetParentVersioningInfo().GetBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED {
-		if event.GetPreviousRunVersioningInfo().GetTaskQueue() != "" {
+		if event.GetParentVersioningInfo().GetTaskQueue() != "" {
 			// TODO(carlydf): Check if new wf Task Queue belongs to the parent run's version
 			// for now, this means no inheritance
 		} else {
