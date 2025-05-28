@@ -49,6 +49,11 @@ type (
 	}
 )
 
+// This workflow is implemented in a way such that it always CaNs after some
+// history events are added to it and when it has no pending work to do. This is to keep the
+// history clean so that we have less concern about backwards and forwards compatibility.
+// In steady state (i.e. absence of ongoing updates or signals) the wf should only have
+// a single wft in the history.
 func Workflow(ctx workflow.Context, unsafeMaxVersion func() int, args *deploymentspb.WorkerDeploymentWorkflowArgs) error {
 	workflowRunner := &WorkflowRunner{
 		WorkerDeploymentWorkflowArgs: args,
@@ -72,17 +77,17 @@ func (d *WorkflowRunner) listenToSignals(ctx workflow.Context) {
 
 	d.signalHandler.signalSelector.AddReceive(forceCANSignalChannel, func(c workflow.ReceiveChannel, more bool) {
 		d.signalHandler.processingSignals++
+		defer func() { d.signalHandler.processingSignals-- }()
 		c.Receive(ctx, nil)
 		d.forceCAN = true
-		d.signalHandler.processingSignals--
 	})
 	d.signalHandler.signalSelector.AddReceive(syncVersionSummaryChannel, func(c workflow.ReceiveChannel, more bool) {
-		var summary *deploymentspb.WorkerDeploymentVersionSummary
 		d.signalHandler.processingSignals++
+		defer func() { d.signalHandler.processingSignals-- }()
+		var summary *deploymentspb.WorkerDeploymentVersionSummary
 		c.Receive(ctx, &summary)
 		d.syncVersionSummaryFromVersionWorkflow(summary)
 		d.setStateChanged()
-		d.signalHandler.processingSignals--
 	})
 
 	// Keep waiting for signals, when it's time to CaN the main goroutine will exit.
@@ -269,6 +274,7 @@ func (d *WorkflowRunner) addVersionToWorkerDeployment(ctx workflow.Context, args
 }
 
 func (d *WorkflowRunner) handleRegisterWorker(ctx workflow.Context, args *deploymentspb.RegisterWorkerInWorkerDeploymentArgs) error {
+
 	// use lock to enforce only one update at a time
 	err := d.lock.Lock(ctx)
 	if err != nil {
@@ -276,6 +282,8 @@ func (d *WorkflowRunner) handleRegisterWorker(ctx workflow.Context, args *deploy
 		return serviceerror.NewDeadlineExceeded("Could not acquire workflow lock")
 	}
 	defer func() {
+		// Even if the update doesn't change the state we mark it as dirty because of created history events.
+		d.setStateChanged()
 		d.lock.Unlock()
 	}()
 
@@ -309,12 +317,6 @@ func (d *WorkflowRunner) handleRegisterWorker(ctx workflow.Context, args *deploy
 		return err
 	}
 
-	err = d.updateMemo(ctx)
-	if err != nil {
-		return err
-	}
-
-	d.setStateChanged()
 	return nil
 }
 
@@ -326,10 +328,12 @@ func (d *WorkflowRunner) validateDeleteDeployment() error {
 }
 
 func (d *WorkflowRunner) handleDeleteDeployment(ctx workflow.Context) error {
+	// Even if the update doesn't change the state we mark it as dirty because of created history events.
+	defer d.setStateChanged()
+
 	if len(d.State.Versions) == 0 {
 		d.deleteDeployment = true
 	}
-	d.setStateChanged()
 	return nil
 }
 
@@ -367,6 +371,8 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 		return nil, serviceerror.NewDeadlineExceeded("Could not acquire workflow lock")
 	}
 	defer func() {
+		// Even if the update doesn't change the state we mark it as dirty because of created history events.
+		d.setStateChanged()
 		d.lock.Unlock()
 	}()
 
@@ -481,6 +487,7 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 
 	// update local state
 	d.State.RoutingConfig.RampingVersion = newRampingVersion
+	d.State.RoutingConfig.RampingDeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromString(newRampingVersion)
 	d.State.RoutingConfig.RampingVersionPercentage = args.Percentage
 	d.State.RoutingConfig.RampingVersionChangedTime = rampingVersionUpdateTime
 	d.State.ConflictToken, _ = routingUpdateTime.AsTime().MarshalBinary()
@@ -490,8 +497,6 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 	if err = d.updateMemo(ctx); err != nil {
 		return nil, err
 	}
-
-	d.setStateChanged()
 
 	return &deploymentspb.SetRampingVersionResponse{
 		PreviousVersion:    prevRampingVersion,
@@ -511,15 +516,19 @@ func (d *WorkflowRunner) setDrainageStatus(version string, status enumspb.Versio
 	}
 }
 
-func (d *WorkflowRunner) validateStateBeforeAcceptingDeleteVersion(args *deploymentspb.DeleteVersionArgs) error {
+func (d *WorkflowRunner) validateDeleteVersion(args *deploymentspb.DeleteVersionArgs) error {
 	if _, ok := d.State.Versions[args.Version]; !ok {
 		return temporal.NewApplicationError("version not found in deployment", errVersionNotFound)
 	}
-	return nil
-}
 
-func (d *WorkflowRunner) validateDeleteVersion(args *deploymentspb.DeleteVersionArgs) error {
-	return d.validateStateBeforeAcceptingDeleteVersion(args)
+	// Check if the version is not current or ramping. This condition is better to be checked in the
+	// deployment workflow because that's the source of truth for routing config.
+	//nolint:staticcheck // SA1019: worker versioning v0.31
+	if d.State.RoutingConfig.CurrentVersion == args.Version || d.State.RoutingConfig.RampingVersion == args.Version {
+		// activity won't retry on this error since version not eligible for deletion
+		return serviceerror.NewFailedPrecondition(ErrVersionIsCurrentOrRamping)
+	}
+	return nil
 }
 
 func (d *WorkflowRunner) deleteVersion(ctx workflow.Context, args *deploymentspb.DeleteVersionArgs) error {
@@ -551,6 +560,8 @@ func (d *WorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *deploym
 		return serviceerror.NewDeadlineExceeded("Could not acquire workflow lock")
 	}
 	defer func() {
+		// Even if the update doesn't change the state we mark it as dirty because of created history events.
+		d.setStateChanged()
 		d.lock.Unlock()
 	}()
 
@@ -559,12 +570,10 @@ func (d *WorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *deploym
 	// might be accepted by the validator since the local state of the workflow contains the version which is requested to be deleted. Since this update handler
 	// enforces sequential updates, after the first update completes, the version will be removed from the local state of the deployment workflow. The second update,
 	// now already accepted by the validator, should now not be allowed to run since the initial workflow state is different.
-	err = d.validateStateBeforeAcceptingDeleteVersion(args)
+	err = d.validateDeleteVersion(args)
 	if err != nil {
 		return err
 	}
-
-	d.setStateChanged()
 
 	return d.deleteVersion(ctx, args)
 }
@@ -595,6 +604,8 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 		return nil, serviceerror.NewDeadlineExceeded("Could not acquire workflow lock")
 	}
 	defer func() {
+		// Even if the update doesn't change the state we mark it as dirty because of created history events.
+		d.setStateChanged()
 		d.lock.Unlock()
 	}()
 
@@ -681,6 +692,7 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 
 	// update local state
 	d.State.RoutingConfig.CurrentVersion = args.Version
+	d.State.RoutingConfig.CurrentDeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromString(args.Version)
 	d.State.RoutingConfig.CurrentVersionChangedTime = updateTime
 	d.State.ConflictToken, _ = updateTime.AsTime().MarshalBinary()
 	d.State.LastModifierIdentity = args.Identity
@@ -688,6 +700,7 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 	// unset ramping version if it was set to current version
 	if d.State.RoutingConfig.CurrentVersion == d.State.RoutingConfig.RampingVersion {
 		d.State.RoutingConfig.RampingVersion = ""
+		d.State.RoutingConfig.RampingDeploymentVersion = nil
 		d.State.RoutingConfig.RampingVersionPercentage = 0
 		d.State.RoutingConfig.RampingVersionChangedTime = updateTime // since ramp was removed
 	}
@@ -696,8 +709,6 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 	if err = d.updateMemo(ctx); err != nil {
 		return nil, err
 	}
-
-	d.setStateChanged()
 
 	return &deploymentspb.SetCurrentVersionResponse{
 		PreviousVersion: prevCurrentVersion,
@@ -737,6 +748,8 @@ func (d *WorkflowRunner) getMaxVersions(ctx workflow.Context) int {
 
 // to-be-deprecated
 func (d *WorkflowRunner) handleAddVersionToWorkerDeployment(ctx workflow.Context, args *deploymentspb.AddVersionUpdateArgs) error {
+	// Even if the update doesn't change the state we mark it as dirty because of created history events.
+	defer d.setStateChanged()
 
 	maxVersions := d.getMaxVersions(ctx)
 
@@ -752,20 +765,21 @@ func (d *WorkflowRunner) handleAddVersionToWorkerDeployment(ctx workflow.Context
 		CreateTime: args.CreateTime,
 	}
 
-	d.setStateChanged()
 	return nil
 }
 
 func (d *WorkflowRunner) tryDeleteVersion(ctx workflow.Context) error {
 	sortedSummaries := d.sortedSummaries()
 	for _, v := range sortedSummaries {
-		// this might hang on the lock
-		err := d.deleteVersion(ctx, &deploymentspb.DeleteVersionArgs{
+		args := &deploymentspb.DeleteVersionArgs{
 			Identity: "try-delete-for-add-version",
 			Version:  v.Version,
-		})
-		if err == nil {
-			return nil
+		}
+		if err := d.validateDeleteVersion(args); err == nil {
+			// this might hang on the lock
+			if err = d.deleteVersion(ctx, args); err == nil {
+				return nil
+			}
 		}
 	}
 	return serviceerror.NewFailedPrecondition("could not add version: too many versions in deployment and none are eligible for deletion")

@@ -721,12 +721,20 @@ func (pm *taskQueuePartitionManagerImpl) TimeSinceLastFanOut() time.Duration {
 	return time.Since(time.Unix(0, pm.lastFanOut))
 }
 
-func (pm *taskQueuePartitionManagerImpl) UpdateTimeSinceLastFanOutAndCache(physicalInfoByBuildId map[string]map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo) {
+func (pm *taskQueuePartitionManagerImpl) UpdateTimeSinceLastFanOutAndCache(physicalInfoByBuildId map[string]map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo, upsert bool) {
 	pm.cachedPhysicalInfoByBuildIdLock.Lock()
 	defer pm.cachedPhysicalInfoByBuildIdLock.Unlock()
 
 	pm.lastFanOut = time.Now().UnixNano()
-	pm.cachedPhysicalInfoByBuildId = physicalInfoByBuildId
+	if upsert {
+		// still within the ttl of cache, so we upsert
+		for b, v := range physicalInfoByBuildId {
+			pm.cachedPhysicalInfoByBuildId[b] = v
+		}
+	} else {
+		// the existing entries in the cache are old, only keeping the new ones
+		pm.cachedPhysicalInfoByBuildId = physicalInfoByBuildId
+	}
 }
 
 func (pm *taskQueuePartitionManagerImpl) GetPhysicalTaskQueueInfoFromCache() map[string]map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo {

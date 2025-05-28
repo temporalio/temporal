@@ -44,7 +44,7 @@ const (
 	noPollerThreshold = time.Minute * 2
 
 	// We avoid retrying failed deployment registration for this period.
-	deploymentRegisterErrorBackoff = 3 * time.Second
+	deploymentRegisterErrorBackoff = 5 * time.Second
 )
 
 type (
@@ -108,8 +108,9 @@ type (
 var _ physicalTaskQueueManager = (*physicalTaskQueueManagerImpl)(nil)
 
 var (
-	errRemoteSyncMatchFailed  = serviceerror.NewCanceled("remote sync match failed")
-	errMissingNormalQueueName = errors.New("missing normal queue name")
+	errRemoteSyncMatchFailed     = serviceerror.NewCanceled("remote sync match failed")
+	errMissingNormalQueueName    = errors.New("missing normal queue name")
+	errDeploymentVersionNotReady = serviceerror.NewUnavailable("task queue is not ready to process polls from this deployment version, try again shortly")
 )
 
 func newPhysicalTaskQueueManager(
@@ -428,6 +429,9 @@ func (c *physicalTaskQueueManagerImpl) DispatchNexusTask(
 }
 
 func (c *physicalTaskQueueManagerImpl) UpdatePollerInfo(id pollerIdentity, pollMetadata *pollMetadata) {
+	if c.queue.Version().IsVersioned() {
+		fmt.Printf("poll info updated in %v\n", c.queue.Version())
+	}
 	c.pollerHistory.updatePollerInfo(id, pollMetadata)
 }
 
@@ -436,7 +440,8 @@ func (c *physicalTaskQueueManagerImpl) GetAllPollerInfo() []*taskqueuepb.PollerI
 	if c.pollerHistory == nil {
 		return nil
 	}
-	return c.pollerHistory.getPollerInfo(time.Time{})
+	res := c.pollerHistory.getPollerInfo(time.Time{})
+	return res
 }
 
 func (c *physicalTaskQueueManagerImpl) HasPollerAfter(accessTime time.Time) bool {
