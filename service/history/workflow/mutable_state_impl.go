@@ -2470,7 +2470,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionStartedEventWithOptions(
 			ms.metricsHandler.WithTags(
 				metrics.NamespaceTag(ms.namespaceEntry.Name().String()),
 				metrics.VersioningBehaviorBeforeOverrideTag(enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED),
-				metrics.VersioningBehaviorAfterOverrideTag(startRequest.GetStartRequest().GetVersioningOverride().GetBehavior()),
+				metrics.VersioningBehaviorAfterOverrideTag(startRequest.GetStartRequest().GetVersioningOverride().GetBehavior()), //nolint:staticcheck // SA1019: worker versioning v0.31
 				metrics.VersioningOverrideOnNewWorkflowTag(prevRunID == ""),
 			),
 		).Record(1)
