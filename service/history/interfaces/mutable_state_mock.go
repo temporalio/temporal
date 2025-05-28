@@ -696,9 +696,9 @@ func (mr *MockMutableStateMockRecorder) AddWorkflowExecutionStartedEvent(arg0, a
 }
 
 // AddWorkflowExecutionStartedEventWithOptions mocks base method.
-func (m *MockMutableState) AddWorkflowExecutionStartedEventWithOptions(arg0 *common.WorkflowExecution, arg1 *historyservice.StartWorkflowExecutionRequest, arg2 *workflow.ResetPoints, arg3, arg4 string, arg5 *deployment.WorkerDeploymentVersion) (*history.HistoryEvent, error) {
+func (m *MockMutableState) AddWorkflowExecutionStartedEventWithOptions(arg0 *common.WorkflowExecution, arg1 *historyservice.StartWorkflowExecutionRequest, arg2 *workflow.ResetPoints, arg3, arg4 string) (*history.HistoryEvent, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddWorkflowExecutionStartedEventWithOptions", arg0, arg1, arg2, arg3, arg4, arg5)
+	ret := m.ctrl.Call(m, "AddWorkflowExecutionStartedEventWithOptions", arg0, arg1, arg2, arg3, arg4)
 	ret0, _ := ret[0].(*history.HistoryEvent)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
