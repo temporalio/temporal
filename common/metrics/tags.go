@@ -38,15 +38,24 @@ const (
 	// Generic reason tag can be used anywhere a reason is needed.
 	reason = "reason"
 	// See server.api.enums.v1.ReplicationTaskType
-	replicationTaskType     = "replicationTaskType"
-	replicationTaskPriority = "replicationTaskPriority"
-
-	namespaceAllValue = "all"
-	unknownValue      = "_unknown_"
-	totalMetricSuffix = "_total"
-	tagExcludedValue  = "_tag_excluded_"
-
-	errorPrefix = "*"
+	replicationTaskType                 = "replicationTaskType"
+	replicationTaskPriority             = "replicationTaskPriority"
+	versioningBehavior                  = "versioning_behavior"
+	isFirstAttempt                      = "first-attempt"
+	workflowStatus                      = "workflow_status"
+	workflowBehaviorBeforeOverride      = "workflow_behavior_before_override"
+	workflowBehaviorAfterOverride       = "workflow_behavior_after_override"
+	versioningOverrideOnNewWorkflow     = "versioning_override_on_new_workflow"
+	effectiveDeploymentBeforeTransition = "effective_deployment_before_transition"
+	effectiveDeploymentAfterTransition  = "effective_deployment_after_transition"
+	queryType                           = "query_type"
+	namespaceAllValue                   = "all"
+	unknownValue                        = "_unknown_"
+	totalMetricSuffix                   = "_total"
+	tagExcludedValue                    = "_tag_excluded_"
+	falseValue                          = "false"
+	trueValue                           = "true"
+	errorPrefix                         = "*"
 )
 
 // Tag is an interface to define metrics tags
@@ -382,4 +391,24 @@ func DestinationTag(value string) Tag {
 		key:   destination,
 		value: value,
 	}
+}
+
+func VersioningBehaviorBeforeOverrideTag(behavior enumspb.VersioningBehavior) Tag {
+	return &tagImpl{key: workflowBehaviorBeforeOverride, value: behavior.String()}
+}
+
+func VersioningBehaviorAfterOverrideTag(behavior enumspb.VersioningBehavior) Tag {
+	return &tagImpl{key: workflowBehaviorAfterOverride, value: behavior.String()}
+}
+
+func VersioningOverrideOnNewWorkflowTag(isNewWorkflow bool) Tag {
+	return &tagImpl{key: versioningOverrideOnNewWorkflow, value: strconv.FormatBool(isNewWorkflow)}
+}
+
+func EffectiveDeploymentBeforeTransitionTag(version string) Tag {
+	return &tagImpl{key: effectiveDeploymentBeforeTransition, value: version}
+}
+
+func EffectiveDeploymentAfterTransitionTag(version string) Tag {
+	return &tagImpl{key: effectiveDeploymentAfterTransition, value: version}
 }
