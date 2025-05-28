@@ -1079,7 +1079,7 @@ func (d *ClientImpl) updateWithStartWorkerDeploymentVersion(
 				BuildId:        buildID,
 			},
 			CreateTime:        now,
-			RoutingUpdateTime: now,
+			RoutingUpdateTime: nil,
 			CurrentSinceTime:  nil,                                 // not current
 			RampingSinceTime:  nil,                                 // not ramping
 			RampPercentage:    0,                                   // not ramping
@@ -1324,6 +1324,7 @@ func versionStateToVersionInfo(state *deploymentspb.VersionLocalState) *deployme
 
 	return &deploymentpb.WorkerDeploymentVersionInfo{
 		Version:            worker_versioning.WorkerDeploymentVersionToString(state.Version),
+		Status:             state.Status,
 		CreateTime:         state.CreateTime,
 		RoutingChangedTime: state.RoutingUpdateTime,
 		CurrentSinceTime:   state.CurrentSinceTime,
@@ -1358,6 +1359,7 @@ func (d *ClientImpl) deploymentStateToDeploymentInfo(deploymentName string, stat
 			RampingSinceTime:     v.GetRampingSinceTime(),
 			FirstActivationTime:  v.GetFirstActivationTime(),
 			LastDeactivationTime: v.GetLastDeactivationTime(),
+			Status:               v.GetStatus(),
 		})
 	}
 
