@@ -487,7 +487,7 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 
 	// update local state
 	d.State.RoutingConfig.RampingVersion = newRampingVersion
-	d.State.RoutingConfig.RampingDeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromString(newRampingVersion)
+	d.State.RoutingConfig.RampingDeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(newRampingVersion)
 	d.State.RoutingConfig.RampingVersionPercentage = args.Percentage
 	d.State.RoutingConfig.RampingVersionChangedTime = rampingVersionUpdateTime
 	d.State.ConflictToken, _ = routingUpdateTime.AsTime().MarshalBinary()
@@ -692,7 +692,7 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 
 	// update local state
 	d.State.RoutingConfig.CurrentVersion = args.Version
-	d.State.RoutingConfig.CurrentDeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromString(args.Version)
+	d.State.RoutingConfig.CurrentDeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(args.Version)
 	d.State.RoutingConfig.CurrentVersionChangedTime = updateTime
 	d.State.ConflictToken, _ = updateTime.AsTime().MarshalBinary()
 	d.State.LastModifierIdentity = args.Identity
