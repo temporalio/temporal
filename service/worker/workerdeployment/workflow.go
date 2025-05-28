@@ -1101,7 +1101,7 @@ func (d *WorkflowRunner) getRampingVersionSummary() *deploymentpb.WorkerDeployme
 func (d *WorkflowRunner) getWorkerDeploymentInfoVersionSummary(versionSummary *deploymentspb.WorkerDeploymentVersionSummary) *deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary {
 	return &deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary{
 		Version:              versionSummary.GetVersion(),
-		DeploymentVersion:    worker_versioning.ExternalWorkerDeploymentVersionFromString(versionSummary.GetVersion()),
+		DeploymentVersion:    worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(versionSummary.GetVersion()),
 		Status:               versionSummary.GetStatus(),
 		CreateTime:           versionSummary.GetCreateTime(),
 		DrainageInfo:         versionSummary.GetDrainageInfo(),
