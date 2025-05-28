@@ -2123,6 +2123,32 @@ func (ms *MutableStateImpl) ClearTransientWorkflowTask() error {
 	return nil
 }
 
+func (ms *MutableStateImpl) ClearSpeculativeWorkflowTask() error {
+	// TODO: don't like exposing this but can't find a better way
+	// TODO: only scheduled but not started? or both?
+	if workflowTask := ms.GetPendingWorkflowTask(); workflowTask != nil && workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
+		emptyWorkflowTaskInfo := &historyi.WorkflowTaskInfo{
+			Version:             common.EmptyVersion,
+			ScheduledEventID:    common.EmptyEventID,
+			StartedEventID:      common.EmptyEventID,
+			RequestID:           emptyUUID,
+			WorkflowTaskTimeout: time.Duration(0),
+			Attempt:             1,
+			StartedTime:         timeZeroUTC,
+			ScheduledTime:       timeZeroUTC,
+
+			TaskQueue:             nil,
+			OriginalScheduledTime: timeZeroUTC,
+			Type:                  enumsspb.WORKFLOW_TASK_TYPE_UNSPECIFIED,
+
+			SuggestContinueAsNew: false,
+			HistorySizeBytes:     0,
+		}
+		ms.workflowTaskManager.UpdateWorkflowTask(emptyWorkflowTaskInfo)
+	}
+	return nil
+}
+
 func (ms *MutableStateImpl) GetAssignedBuildId() string {
 	return ms.executionInfo.AssignedBuildId
 }

@@ -191,6 +191,7 @@ type (
 		GetMostRecentWorkerVersionStamp() *commonpb.WorkerVersionStamp
 		IsTransientWorkflowTask() bool
 		ClearTransientWorkflowTask() error
+		ClearSpeculativeWorkflowTask() error
 		HasBufferedEvents() bool
 		HasAnyBufferedEvent(filter historybuilder.BufferedEventFilter) bool
 		HasStartedWorkflowTask() bool

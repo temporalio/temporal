@@ -83,6 +83,10 @@ func TimeoutWorkflow(
 		}
 	}
 
+	if workflowTask := mutableState.GetPendingWorkflowTask(); workflowTask != nil && workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
+		_ = mutableState.ClearSpeculativeWorkflowTask()
+	}
+
 	_, err := mutableState.AddTimeoutWorkflowEvent(
 		eventBatchFirstEventID,
 		retryState,
@@ -125,6 +129,12 @@ func TerminateWorkflow(
 		if wtFailedEvent != nil {
 			eventBatchFirstEventID = wtFailedEvent.GetEventId()
 		}
+	}
+
+	if workflowTask := mutableState.GetPendingWorkflowTask(); workflowTask != nil && workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
+		// TODO: don't like exposing this from MS
+		_ = mutableState.ClearSpeculativeWorkflowTask()
+		// Write scheduled event as if it was normal?
 	}
 
 	_, err := mutableState.AddWorkflowExecutionTerminatedEvent(
