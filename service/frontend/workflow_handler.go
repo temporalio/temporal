@@ -3522,6 +3522,7 @@ func (wh *WorkflowHandler) ListWorkerDeployments(ctx context.Context, request *w
 		workerDeployments[i] = &workflowservice.ListWorkerDeploymentsResponse_WorkerDeploymentSummary{
 			Name:                  d.Name,
 			CreateTime:            d.CreateTime,
+			RoutingConfig:         d.RoutingConfig,
 			LatestVersionSummary:  d.LatestVersionSummary,
 			RampingVersionSummary: d.RampingVersionSummary,
 			CurrentVersionSummary: d.CurrentVersionSummary,

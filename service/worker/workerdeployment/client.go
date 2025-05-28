@@ -465,6 +465,7 @@ func (d *ClientImpl) ListWorkerDeployments(
 				RoutingConfig:  &deploymentpb.RoutingConfig{CurrentVersion: worker_versioning.UnversionedVersionId},
 			}
 		}
+
 		workerDeploymentSummaries[i] = &deploymentspb.WorkerDeploymentSummary{
 			Name:                  workerDeploymentInfo.DeploymentName,
 			CreateTime:            workerDeploymentInfo.CreateTime,

@@ -371,6 +371,11 @@ func (d *WorkflowRunner) handleRegisterWorker(ctx workflow.Context, args *deploy
 		return err
 	}
 
+	// update memo
+	if err = d.updateMemo(ctx); err != nil {
+		return err
+	}
+
 	return nil
 }
 
