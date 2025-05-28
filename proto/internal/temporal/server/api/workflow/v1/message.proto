@@ -25,7 +25,7 @@ message ParentExecutionInfo {
     string pinned_worker_deployment_version = 7;
 
     // Present if parent is versioned. Consumer decides whether to inherit.
-    temporal.api.history.v1.WorkflowExecutionStartedEventAttributes.SourceWorkflowVersioningInfo versioning_info = 8;
+    temporal.api.history.v1.WorkflowExecutionStartedEventAttributes.SourceWorkflowVersioningInfo versioning_info = 9;
 }
 
 message RootExecutionInfo {

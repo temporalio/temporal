@@ -64,9 +64,8 @@ const (
 )
 
 type Versioning3Suite struct {
-	testcore.FunctionalTestBase
-	useV32 bool
 	WorkflowUpdateBaseSuite
+	useV32 bool
 }
 
 func NewVersioning3Suite(useV32 bool) *Versioning3Suite {
