@@ -1186,9 +1186,11 @@ var (
 	WorkerDeploymentCreated                           = NewCounterDef("worker_deployment_created")
 	WorkerDeploymentVersionCreated                    = NewCounterDef("worker_deployment_version_created")
 	WorkerDeploymentVersionCreatedManagedByController = NewCounterDef("worker_deployment_version_created_managed_by_controller")
-	WorkflowResetCount                                = NewCounterDef("workflow_reset_count")
-	WorkflowQuerySuccessCount                         = NewCounterDef("workflow_query_count")
-	WorkflowQueryFailureCount                         = NewCounterDef("workflow_query_count")
+
+	WorkflowResetCount        = NewCounterDef("workflow_reset_count")
+	WorkflowQuerySuccessCount = NewCounterDef("workflow_query_count")
+	WorkflowQueryFailureCount = NewCounterDef("workflow_query_count")
+	WorkflowTasksCompleted    = NewCounterDef("workflow_tasks_completed")
 
 	// Force replication
 	EncounterZombieWorkflowCount        = NewCounterDef("encounter_zombie_workflow_count")
