@@ -127,13 +127,30 @@ func (d *WorkflowRunner) updateVersionSummary(summary *deploymentspb.WorkerDeplo
 }
 
 func (d *WorkflowRunner) run(ctx workflow.Context) error {
-	if d.GetState().GetCreateTime() == nil {
+	// TODO(carlydf): remove verbose logging
+	d.logger.Info("Raw workflow state at start",
+		"state_nil", d.State == nil,
+		"create_time_nil", d.GetState().GetCreateTime() == nil,
+		"routing_config_nil", d.GetState().GetRoutingConfig() == nil,
+		"raw_state", d.State,
+		"workflow_id", workflow.GetInfo(ctx).WorkflowExecution.ID,
+		"run_id", workflow.GetInfo(ctx).WorkflowExecution.RunID)
+
+	if d.GetState().GetCreateTime() == nil ||
+		d.GetState().GetRoutingConfig() == nil ||
+		d.GetState().GetConflictToken() == nil {
 		if d.State == nil {
 			d.State = &deploymentspb.WorkerDeploymentLocalState{}
 		}
-		d.State.CreateTime = timestamppb.New(workflow.Now(ctx))
-		d.State.RoutingConfig = &deploymentpb.RoutingConfig{CurrentVersion: worker_versioning.UnversionedVersionId}
-		d.State.ConflictToken, _ = workflow.Now(ctx).MarshalBinary()
+		if d.State.CreateTime == nil {
+			d.State.CreateTime = timestamppb.New(workflow.Now(ctx))
+		}
+		if d.State.RoutingConfig == nil {
+			d.State.RoutingConfig = &deploymentpb.RoutingConfig{CurrentVersion: worker_versioning.UnversionedVersionId}
+		}
+		if d.State.ConflictToken == nil {
+			d.State.ConflictToken, _ = workflow.Now(ctx).MarshalBinary()
+		}
 
 		// updating the memo since the RoutingConfig is updated
 		if err := d.updateMemo(ctx); err != nil {
@@ -143,6 +160,15 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 	if d.State.Versions == nil {
 		d.State.Versions = make(map[string]*deploymentspb.WorkerDeploymentVersionSummary)
 	}
+
+	// TODO(carlydf): remove verbose logging
+	d.logger.Info("Starting workflow run",
+		"create_time", d.State.GetCreateTime(),
+		"routing_config", d.State.GetRoutingConfig(),
+		//nolint:staticcheck // SA1019: worker versioning v0.31
+		"current_version", d.State.GetRoutingConfig().GetCurrentVersion(),
+		//nolint:staticcheck // SA1019: worker versioning v0.31
+		"ramping_version", d.State.GetRoutingConfig().GetRampingVersion())
 
 	err := workflow.SetQueryHandler(ctx, QueryDescribeDeployment, func() (*deploymentspb.QueryDescribeWorkerDeploymentResponse, error) {
 		return &deploymentspb.QueryDescribeWorkerDeploymentResponse{
@@ -224,10 +250,25 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 	// Wait until we can continue as new or are cancelled. The workflow will continue-as-new iff
 	// there are no pending updates/signals and the state has changed.
 	err = workflow.Await(ctx, func() bool {
-		return d.deleteDeployment || // deployment is deleted -> it's ok to drop all signals and updates.
+		canContinue := d.deleteDeployment || // deployment is deleted -> it's ok to drop all signals and updates.
 			// There is no pending signal or update, but the state is dirty or forceCaN is requested:
 			(!d.signalHandler.signalSelector.HasPending() && d.signalHandler.processingSignals == 0 && workflow.AllHandlersFinished(ctx) &&
 				(d.forceCAN || d.stateChanged))
+
+		// TODO(carlydf): remove verbose logging
+		if canContinue {
+			d.logger.Info("Workflow can continue as new",
+				"workflow_id", workflow.GetInfo(ctx).WorkflowExecution.ID,
+				"run_id", workflow.GetInfo(ctx).WorkflowExecution.RunID,
+				"delete_deployment", d.deleteDeployment,
+				"has_pending_signals", d.signalHandler.signalSelector.HasPending(),
+				"processing_signals", d.signalHandler.processingSignals,
+				"all_handlers_finished", workflow.AllHandlersFinished(ctx),
+				"force_can", d.forceCAN,
+				"state_changed", d.stateChanged,
+				"routing_config", d.State.GetRoutingConfig())
+		}
+		return canContinue
 	})
 	if err != nil {
 		return err
@@ -236,6 +277,19 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 	if d.deleteDeployment {
 		return nil
 	}
+
+	// TODO(carlydf): remove verbose logging
+	d.logger.Info("Continuing workflow as new",
+		"create_time", d.State.GetCreateTime(),
+		"routing_config", d.State.GetRoutingConfig(),
+		//nolint:staticcheck // SA1019: worker versioning v0.31
+		"current_version", d.State.GetRoutingConfig().GetCurrentVersion(),
+		//nolint:staticcheck // SA1019: worker versioning v0.31
+		"ramping_version", d.State.GetRoutingConfig().GetRampingVersion(),
+		"state_changed", d.stateChanged,
+		"force_can", d.forceCAN,
+		"workflow_id", workflow.GetInfo(ctx).WorkflowExecution.ID,
+		"run_id", workflow.GetInfo(ctx).WorkflowExecution.RunID)
 
 	// We perform a continue-as-new after each update and signal is handled to ensure compatibility
 	// even if the server rolls back to a previous minor version. By continuing-as-new,
@@ -338,19 +392,23 @@ func (d *WorkflowRunner) handleDeleteDeployment(ctx workflow.Context) error {
 }
 
 func (d *WorkflowRunner) validateStateBeforeAcceptingRampingUpdate(args *deploymentspb.SetRampingVersionArgs) error {
-	if args.Version == d.State.RoutingConfig.RampingVersion && args.Percentage == d.State.RoutingConfig.RampingVersionPercentage && args.Identity == d.State.LastModifierIdentity {
-		return temporal.NewApplicationError("version already ramping, no change", errNoChangeType, d.State.ConflictToken)
+	//nolint:staticcheck // SA1019: worker versioning v0.31
+	if args.Version == d.State.GetRoutingConfig().GetRampingVersion() &&
+		args.Percentage == d.State.GetRoutingConfig().GetRampingVersionPercentage() &&
+		args.Identity == d.State.GetLastModifierIdentity() {
+		return temporal.NewApplicationError("version already ramping, no change", errNoChangeType, d.State.GetConflictToken())
 	}
 
-	if args.ConflictToken != nil && !bytes.Equal(args.ConflictToken, d.State.ConflictToken) {
+	if args.ConflictToken != nil && !bytes.Equal(args.ConflictToken, d.State.GetConflictToken()) {
 		return temporal.NewApplicationError("conflict token mismatch", errFailedPrecondition)
 	}
-	if args.Version == d.State.RoutingConfig.CurrentVersion {
+	//nolint:staticcheck // SA1019: worker versioning v0.31
+	if args.Version == d.State.GetRoutingConfig().GetCurrentVersion() {
 		d.logger.Info("version can't be set to ramping since it is already current")
 		return temporal.NewApplicationError(fmt.Sprintf("requested ramping version %s is already current", args.Version), errFailedPrecondition)
 	}
 
-	if _, ok := d.State.Versions[args.Version]; !ok && args.Version != "" && args.Version != worker_versioning.UnversionedVersionId {
+	if _, ok := d.State.GetVersions()[args.Version]; !ok && args.Version != "" && args.Version != worker_versioning.UnversionedVersionId {
 		d.logger.Info("version not found in deployment")
 		return temporal.NewApplicationError(fmt.Sprintf("requested ramping version %s not found in deployment", args.Version), errFailedPrecondition)
 	}
@@ -579,7 +637,8 @@ func (d *WorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *deploym
 }
 
 func (d *WorkflowRunner) validateStateBeforeAcceptingSetCurrent(args *deploymentspb.SetCurrentVersionArgs) error {
-	if d.State.RoutingConfig.CurrentVersion == args.Version && d.State.LastModifierIdentity == args.Identity {
+	//nolint:staticcheck // SA1019: worker versioning v0.31
+	if d.State.GetRoutingConfig().GetCurrentVersion() == args.Version && d.State.GetLastModifierIdentity() == args.Identity {
 		return temporal.NewApplicationError("no change", errNoChangeType, d.State.ConflictToken)
 	}
 	if args.ConflictToken != nil && !bytes.Equal(args.ConflictToken, d.State.ConflictToken) {
@@ -608,6 +667,14 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 		d.setStateChanged()
 		d.lock.Unlock()
 	}()
+
+	// Log state before update
+	// TODO(carlydf): remove verbose logging
+	d.logger.Info("Starting SetCurrent update",
+		//nolint:staticcheck // SA1019: worker versioning v0.31
+		"current_version", d.State.GetRoutingConfig().GetCurrentVersion(),
+		"new_version", args.Version,
+		"routing_config", d.State.GetRoutingConfig())
 
 	// Validating the state before starting the SetCurrent operation. This is required due to the following reason:
 	// The validator accepts/rejects updates based on the state of the deployment workflow. Theoretically, two concurrent update requests
@@ -939,6 +1006,14 @@ func (d *WorkflowRunner) newUUID(ctx workflow.Context) string {
 }
 
 func (d *WorkflowRunner) updateMemo(ctx workflow.Context) error {
+	// TODO(carlydf): remove verbose logging
+	d.logger.Info("Updating workflow memo",
+		"routing_config", d.State.GetRoutingConfig(),
+		//nolint:staticcheck // SA1019: worker versioning v0.31
+		"current_version", d.State.GetRoutingConfig().GetCurrentVersion(),
+		//nolint:staticcheck // SA1019: worker versioning v0.31
+		"ramping_version", d.State.GetRoutingConfig().GetRampingVersion())
+
 	return workflow.UpsertMemo(ctx, map[string]any{
 		WorkerDeploymentMemoField: &deploymentspb.WorkerDeploymentWorkflowMemo{
 			DeploymentName:        d.DeploymentName,
