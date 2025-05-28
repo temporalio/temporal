@@ -2097,6 +2097,21 @@ func (mr *MockMutableStateMockRecorder) GetFirstRunID(ctx any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetFirstRunID", reflect.TypeOf((*MockMutableState)(nil).GetFirstRunID), ctx)
 }
 
+// GetHistoryEvent mocks base method.
+func (m *MockMutableState) GetHistoryEvent(ctx context.Context, eventID int64) (*history.HistoryEvent, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetHistoryEvent", ctx, eventID)
+	ret0, _ := ret[0].(*history.HistoryEvent)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetHistoryEvent indicates an expected call of GetHistoryEvent.
+func (mr *MockMutableStateMockRecorder) GetHistoryEvent(ctx, eventID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetHistoryEvent", reflect.TypeOf((*MockMutableState)(nil).GetHistoryEvent), ctx, eventID)
+}
+
 // GetHistorySize mocks base method.
 func (m *MockMutableState) GetHistorySize() int64 {
 	m.ctrl.T.Helper()
