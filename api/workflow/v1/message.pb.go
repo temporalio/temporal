@@ -12,7 +12,6 @@ import (
 	unsafe "unsafe"
 
 	v1 "go.temporal.io/api/common/v1"
-	v12 "go.temporal.io/api/history/v1"
 	v11 "go.temporal.io/server/api/clock/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -40,10 +39,8 @@ type ParentExecutionInfo struct {
 	// Not set in the subsequent execution if the child workflow continues-as-new.
 	// Deprecated. Replaced with `parent_versioning_info` in WorkflowExecutionStartedEventAttributes.
 	PinnedWorkerDeploymentVersion string `protobuf:"bytes,7,opt,name=pinned_worker_deployment_version,json=pinnedWorkerDeploymentVersion,proto3" json:"pinned_worker_deployment_version,omitempty"`
-	// Present if parent is versioned. Consumer decides whether to inherit.
-	VersioningInfo *v12.WorkflowExecutionStartedEventAttributes_SourceWorkflowVersioningInfo `protobuf:"bytes,9,opt,name=versioning_info,json=versioningInfo,proto3" json:"versioning_info,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	unknownFields                 protoimpl.UnknownFields
+	sizeCache                     protoimpl.SizeCache
 }
 
 func (x *ParentExecutionInfo) Reset() {
@@ -123,13 +120,6 @@ func (x *ParentExecutionInfo) GetPinnedWorkerDeploymentVersion() string {
 		return x.PinnedWorkerDeploymentVersion
 	}
 	return ""
-}
-
-func (x *ParentExecutionInfo) GetVersioningInfo() *v12.WorkflowExecutionStartedEventAttributes_SourceWorkflowVersioningInfo {
-	if x != nil {
-		return x.VersioningInfo
-	}
-	return nil
 }
 
 type RootExecutionInfo struct {
@@ -240,7 +230,7 @@ var File_temporal_server_api_workflow_v1_message_proto protoreflect.FileDescript
 
 const file_temporal_server_api_workflow_v1_message_proto_rawDesc = "" +
 	"\n" +
-	"-temporal/server/api/workflow/v1/message.proto\x12\x1ftemporal.server.api.workflow.v1\x1a$temporal/api/common/v1/message.proto\x1a%temporal/api/history/v1/message.proto\x1a*temporal/server/api/clock/v1/message.proto\"\x82\x04\n" +
+	"-temporal/server/api/workflow/v1/message.proto\x12\x1ftemporal.server.api.workflow.v1\x1a$temporal/api/common/v1/message.proto\x1a*temporal/server/api/clock/v1/message.proto\"\xf9\x02\n" +
 	"\x13ParentExecutionInfo\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1c\n" +
 	"\tnamespace\x18\x02 \x01(\tR\tnamespace\x12G\n" +
@@ -248,8 +238,7 @@ const file_temporal_server_api_workflow_v1_message_proto_rawDesc = "" +
 	"\finitiated_id\x18\x04 \x01(\x03R\vinitiatedId\x12?\n" +
 	"\x05clock\x18\x05 \x01(\v2).temporal.server.api.clock.v1.VectorClockR\x05clock\x12+\n" +
 	"\x11initiated_version\x18\x06 \x01(\x03R\x10initiatedVersion\x12G\n" +
-	" pinned_worker_deployment_version\x18\a \x01(\tR\x1dpinnedWorkerDeploymentVersion\x12\x86\x01\n" +
-	"\x0fversioning_info\x18\t \x01(\v2].temporal.api.history.v1.WorkflowExecutionStartedEventAttributes.SourceWorkflowVersioningInfoR\x0eversioningInfo\"\\\n" +
+	" pinned_worker_deployment_version\x18\a \x01(\tR\x1dpinnedWorkerDeploymentVersion\"\\\n" +
 	"\x11RootExecutionInfo\x12G\n" +
 	"\texecution\x18\x01 \x01(\v2).temporal.api.common.v1.WorkflowExecutionR\texecution\"\xc0\x01\n" +
 	"\x11BaseExecutionInfo\x12\x15\n" +
@@ -276,18 +265,16 @@ var file_temporal_server_api_workflow_v1_message_proto_goTypes = []any{
 	(*BaseExecutionInfo)(nil),    // 2: temporal.server.api.workflow.v1.BaseExecutionInfo
 	(*v1.WorkflowExecution)(nil), // 3: temporal.api.common.v1.WorkflowExecution
 	(*v11.VectorClock)(nil),      // 4: temporal.server.api.clock.v1.VectorClock
-	(*v12.WorkflowExecutionStartedEventAttributes_SourceWorkflowVersioningInfo)(nil), // 5: temporal.api.history.v1.WorkflowExecutionStartedEventAttributes.SourceWorkflowVersioningInfo
 }
 var file_temporal_server_api_workflow_v1_message_proto_depIdxs = []int32{
 	3, // 0: temporal.server.api.workflow.v1.ParentExecutionInfo.execution:type_name -> temporal.api.common.v1.WorkflowExecution
 	4, // 1: temporal.server.api.workflow.v1.ParentExecutionInfo.clock:type_name -> temporal.server.api.clock.v1.VectorClock
-	5, // 2: temporal.server.api.workflow.v1.ParentExecutionInfo.versioning_info:type_name -> temporal.api.history.v1.WorkflowExecutionStartedEventAttributes.SourceWorkflowVersioningInfo
-	3, // 3: temporal.server.api.workflow.v1.RootExecutionInfo.execution:type_name -> temporal.api.common.v1.WorkflowExecution
-	4, // [4:4] is the sub-list for method output_type
-	4, // [4:4] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	3, // 2: temporal.server.api.workflow.v1.RootExecutionInfo.execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	3, // [3:3] is the sub-list for method output_type
+	3, // [3:3] is the sub-list for method input_type
+	3, // [3:3] is the sub-list for extension type_name
+	3, // [3:3] is the sub-list for extension extendee
+	0, // [0:3] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_api_workflow_v1_message_proto_init() }

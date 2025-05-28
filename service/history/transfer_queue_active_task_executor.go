@@ -3,6 +3,7 @@ package history
 import (
 	"context"
 	"fmt"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
@@ -833,20 +834,27 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		}
 	}
 
-	var parentVersioningInfo *historypb.WorkflowExecutionStartedEventAttributes_SourceWorkflowVersioningInfo
-	if vi := mutableState.GetExecutionInfo().GetVersioningInfo(); vi != nil {
-		parentVersioningInfo = &historypb.WorkflowExecutionStartedEventAttributes_SourceWorkflowVersioningInfo{
-			DeploymentVersion: vi.GetDeploymentVersion(),
-			Behavior:          vi.GetBehavior(),
-		}
-		if sourceTQ := mutableState.GetExecutionInfo().GetTaskQueue(); sourceTQ != attributes.GetTaskQueue().GetName() {
-			parentVersioningInfo.TaskQueue = sourceTQ
+	// Pinned override is inherited if Task Queue of new run is compatible with the override version.
+	var inheritedPinnedOverride *workflowpb.VersioningOverride
+	if o := mutableState.GetExecutionInfo().GetVersioningInfo().GetVersioningOverride(); worker_versioning.OverrideIsPinned(o) {
+		inheritedPinnedOverride = o
+		newTQ := attributes.GetTaskQueue().GetName()
+		if newTQ != mutableState.GetExecutionInfo().GetTaskQueue() &&
+			!worker_versioning.IsTaskQueueInVersion(newTQ, worker_versioning.GetOverridePinnedVersion(inheritedPinnedOverride)) {
+			inheritedPinnedOverride = nil
 		}
 	}
 
-	var parentPinnedOverride *workflowpb.VersioningOverride
-	if worker_versioning.OverrideIsPinned(mutableState.GetExecutionInfo().GetVersioningInfo().GetVersioningOverride()) {
-		parentPinnedOverride = mutableState.GetExecutionInfo().GetVersioningInfo().GetVersioningOverride()
+	// Child of pinned parent will inherit the parent's version if the Child's Task Queue belongs to that version.
+	var inheritedPinnedVersion *deploymentpb.WorkerDeploymentVersion
+	if mutableState.GetEffectiveVersioningBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED {
+		inheritedPinnedVersion = worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(mutableState.GetEffectiveDeployment())
+		newTQ := attributes.GetTaskQueue().GetName()
+		if newTQ != mutableState.GetExecutionInfo().GetTaskQueue() &&
+			// if there is a pinned override, we might already know the answer to this without asking matching again, but that can be optimized later
+			!worker_versioning.IsTaskQueueInVersion(newTQ, inheritedPinnedVersion) {
+			inheritedPinnedVersion = nil
+		}
 	}
 
 	// Note: childStarted flag above is computed from the parent's history. When this is TRUE it's guaranteed that the child was succesfully started.
@@ -915,8 +923,8 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		inheritedBuildId,
 		initiatedEvent.GetUserMetadata(),
 		shouldTerminateAndStartChild,
-		parentPinnedOverride,
-		parentVersioningInfo,
+		inheritedPinnedOverride,
+		inheritedPinnedVersion,
 		priorities.Merge(mutableState.GetExecutionInfo().Priority, attributes.Priority),
 	)
 	if err != nil {
@@ -1488,8 +1496,8 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 	inheritedBuildId string,
 	userMetadata *sdkpb.UserMetadata,
 	shouldTerminateAndStartChild bool,
-	parentPinnedOverride *workflowpb.VersioningOverride,
-	parentVersioningInfo *historypb.WorkflowExecutionStartedEventAttributes_SourceWorkflowVersioningInfo,
+	inheritedPinnedOverride *workflowpb.VersioningOverride,
+	inheritedPinnedVersion *deploymentpb.WorkerDeploymentVersion,
 	priority *commonpb.Priority,
 ) (string, *clockspb.VectorClock, error) {
 	startRequest := &workflowservice.StartWorkflowExecutionRequest{
@@ -1511,7 +1519,7 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 		Memo:                  attributes.Memo,
 		SearchAttributes:      attributes.SearchAttributes,
 		UserMetadata:          userMetadata,
-		VersioningOverride:    parentPinnedOverride,
+		VersioningOverride:    inheritedPinnedOverride,
 		Priority:              priority,
 	}
 
@@ -1528,7 +1536,6 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 			InitiatedId:      task.InitiatedEventID,
 			InitiatedVersion: task.Version,
 			Clock:            vclock.NewVectorClock(t.shardContext.GetClusterMetadata().GetClusterID(), t.shardContext.GetShardID(), task.TaskID),
-			VersioningInfo:   parentVersioningInfo,
 		},
 		rootExecutionInfo,
 		t.shardContext.GetTimeSource().Now(),
@@ -1536,6 +1543,7 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 
 	request.SourceVersionStamp = sourceVersionStamp
 	request.InheritedBuildId = inheritedBuildId
+	request.InheritedPinnedVersion = inheritedPinnedVersion
 
 	if shouldTerminateAndStartChild {
 		request.StartRequest.WorkflowIdReusePolicy = enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE

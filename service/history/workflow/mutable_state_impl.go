@@ -2257,7 +2257,6 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 	firstRunID string,
 	rootExecutionInfo *workflowspb.RootExecutionInfo,
 	links []*commonpb.Link,
-	previousRunVersioningInfo *historypb.WorkflowExecutionStartedEventAttributes_SourceWorkflowVersioningInfo,
 ) (*historypb.HistoryEvent, error) {
 	previousExecutionInfo := previousExecutionState.GetExecutionInfo()
 	taskQueue := previousExecutionInfo.TaskQueue
@@ -2295,9 +2294,28 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		return nil, err
 	}
 
+	// Pinned override is inherited if Task Queue of new run is compatible with the override version.
 	var pinnedOverride *workflowpb.VersioningOverride
 	if o := previousExecutionInfo.GetVersioningInfo().GetVersioningOverride(); worker_versioning.OverrideIsPinned(o) {
 		pinnedOverride = o
+		newTQ := command.GetTaskQueue().GetName()
+		if newTQ != previousExecutionInfo.GetTaskQueue() &&
+			!worker_versioning.IsTaskQueueInVersion(newTQ, worker_versioning.GetOverridePinnedVersion(pinnedOverride)) {
+			pinnedOverride = nil
+		}
+	}
+
+	// New run initiated by workflow ContinueAsNew of pinned run, will inherit the previous run's version if the
+	// new run's Task Queue belongs to that version.
+	var inheritedPinnedVersion *deploymentpb.WorkerDeploymentVersion
+	if previousExecutionState.GetEffectiveVersioningBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED {
+		inheritedPinnedVersion = worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(previousExecutionState.GetEffectiveDeployment())
+		newTQ := command.GetTaskQueue().GetName()
+		if newTQ != previousExecutionInfo.GetTaskQueue() &&
+			// if there is a pinned override, we might already know the answer to this without asking matching again, but that can be optimized later
+			!worker_versioning.IsTaskQueueInVersion(newTQ, inheritedPinnedVersion) {
+			inheritedPinnedVersion = nil
+		}
 	}
 
 	createRequest := &workflowservice.StartWorkflowExecutionRequest{
@@ -2352,6 +2370,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		SourceVersionStamp:       sourceVersionStamp,
 		RootExecutionInfo:        rootExecutionInfo,
 		InheritedBuildId:         inheritedBuildId,
+		InheritedPinnedVersion:   inheritedPinnedVersion,
 	}
 	if command.GetInitiator() == enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY {
 		req.Attempt = previousExecutionState.GetExecutionInfo().Attempt + 1
@@ -2369,7 +2388,6 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		previousExecutionInfo.AutoResetPoints,
 		previousExecutionState.GetExecutionState().GetRunId(),
 		firstRunID,
-		previousRunVersioningInfo,
 	)
 	if err != nil {
 		return nil, err
@@ -2417,7 +2435,6 @@ func (ms *MutableStateImpl) AddWorkflowExecutionStartedEvent(
 		nil, // resetPoints
 		"",  // prevRunID
 		execution.GetRunId(),
-		nil, // previousRunVersioningInfo
 	)
 }
 
@@ -2427,7 +2444,6 @@ func (ms *MutableStateImpl) AddWorkflowExecutionStartedEventWithOptions(
 	resetPoints *workflowpb.ResetPoints,
 	prevRunID string,
 	firstRunID string,
-	previousRunVersioningInfo *historypb.WorkflowExecutionStartedEventAttributes_SourceWorkflowVersioningInfo,
 ) (*historypb.HistoryEvent, error) {
 	opTag := tag.WorkflowActionWorkflowStarted
 	if err := ms.checkMutability(opTag); err != nil {
@@ -2449,7 +2465,6 @@ func (ms *MutableStateImpl) AddWorkflowExecutionStartedEventWithOptions(
 		prevRunID,
 		firstRunID,
 		execution.GetRunId(),
-		previousRunVersioningInfo,
 	)
 	if err := ms.ApplyWorkflowExecutionStartedEvent(
 		startRequest.GetParentExecutionInfo().GetClock(),
@@ -2650,43 +2665,27 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 			ms.executionInfo.VersioningInfo.VersioningOverride.Behavior = enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED
 		}
 
-		if ms.executionInfo.GetVersioningInfo().GetVersioningOverride().GetPinned() != nil {
-			if ms.HasParentExecution() && ms.GetExecutionInfo().GetNamespaceId() != ms.GetExecutionInfo().GetParentNamespaceId() {
-				// don't inherit pinned version if child is in a different namespace
-				ms.executionInfo.VersioningInfo.VersioningOverride = nil
-			}
-			if event.GetPreviousRunVersioningInfo().GetTaskQueue() != "" ||
-				event.GetParentVersioningInfo().GetTaskQueue() != "" {
-				// TODO(carlydf): Check if new wf Task Queue belongs to the override version
-				// for now, this means no inheritance if pinned override
-				ms.executionInfo.VersioningInfo.VersioningOverride = nil
-			}
-		}
-
+		// TODO(carlydf): move this logic to producer
+		//if ms.executionInfo.GetVersioningInfo().GetVersioningOverride().GetPinned() != nil {
+		//	if ms.HasParentExecution() && ms.GetExecutionInfo().GetNamespaceId() != ms.GetExecutionInfo().GetParentNamespaceId() {
+		//		// don't inherit pinned version if child is in a different namespace
+		//		ms.executionInfo.VersioningInfo.VersioningOverride = nil
+		//	}
+		//	if event.GetPreviousRunVersioningInfo().GetTaskQueue() != "" ||
+		//		event.GetParentVersioningInfo().GetTaskQueue() != "" {
+		//		// TODO(carlydf): Check if new wf Task Queue belongs to the override version
+		//		// for now, this means no inheritance if pinned override
+		//		ms.executionInfo.VersioningInfo.VersioningOverride = nil
+		//	}
+		//}
 	}
 
-	if event.GetPreviousRunVersioningInfo() != nil && event.GetPreviousRunVersioningInfo().GetBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED {
-		if event.GetPreviousRunVersioningInfo().GetTaskQueue() != "" {
-			// TODO(carlydf): Check if new wf Task Queue belongs to the previous run's version
-			// for now, this means no inheritance
-		} else {
-			if ms.executionInfo.VersioningInfo == nil {
-				ms.executionInfo.VersioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{}
-			}
-			ms.executionInfo.VersioningInfo.DeploymentVersion = event.GetPreviousRunVersioningInfo().GetDeploymentVersion()
-			ms.executionInfo.VersioningInfo.Behavior = event.GetPreviousRunVersioningInfo().GetBehavior()
+	if event.GetInheritedPinnedVersion() != nil {
+		if ms.executionInfo.VersioningInfo == nil {
+			ms.executionInfo.VersioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{}
 		}
-	} else if event.GetParentVersioningInfo() != nil && event.GetParentVersioningInfo().GetBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED {
-		if event.GetParentVersioningInfo().GetTaskQueue() != "" {
-			// TODO(carlydf): Check if new wf Task Queue belongs to the parent run's version
-			// for now, this means no inheritance
-		} else {
-			if ms.executionInfo.VersioningInfo == nil {
-				ms.executionInfo.VersioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{}
-			}
-			ms.executionInfo.VersioningInfo.DeploymentVersion = event.GetParentVersioningInfo().GetDeploymentVersion()
-			ms.executionInfo.VersioningInfo.Behavior = event.GetParentVersioningInfo().GetBehavior()
-		}
+		ms.executionInfo.VersioningInfo.DeploymentVersion = event.GetInheritedPinnedVersion()
+		ms.executionInfo.VersioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_PINNED
 	}
 
 	if inheritedBuildId := event.InheritedBuildId; inheritedBuildId != "" {
@@ -5103,17 +5102,6 @@ func (ms *MutableStateImpl) AddContinueAsNewEvent(
 				RunId:      ms.executionInfo.RootRunId,
 			},
 		}
-
-		startEvent, err := ms.GetStartEvent(ctx)
-		if err != nil {
-			return nil, nil, err
-		}
-		parentVersioningInfo := startEvent.GetWorkflowExecutionStartedEventAttributes().GetParentVersioningInfo()
-		// only set parent versioning info task queue if different from new workflow task queue
-		if command.GetTaskQueue().GetName() == parentVersioningInfo.GetTaskQueue() {
-			parentVersioningInfo.TaskQueue = ""
-		}
-		parentInfo.VersioningInfo = parentVersioningInfo
 	}
 
 	continueAsNewEvent := ms.hBuilder.AddContinuedAsNewEvent(
@@ -5146,17 +5134,6 @@ func (ms *MutableStateImpl) AddContinueAsNewEvent(
 		return nil, nil, err
 	}
 
-	var currentRunVersioningInfo *historypb.WorkflowExecutionStartedEventAttributes_SourceWorkflowVersioningInfo
-	if vi := ms.GetExecutionInfo().GetVersioningInfo(); vi != nil {
-		currentRunVersioningInfo = &historypb.WorkflowExecutionStartedEventAttributes_SourceWorkflowVersioningInfo{
-			DeploymentVersion: vi.GetDeploymentVersion(),
-			Behavior:          vi.GetBehavior(),
-		}
-		if currentRunTQ := ms.GetExecutionInfo().GetTaskQueue(); currentRunTQ != command.GetTaskQueue().GetName() {
-			currentRunVersioningInfo.TaskQueue = currentRunTQ
-		}
-	}
-
 	if _, err = newMutableState.addWorkflowExecutionStartedEventForContinueAsNew(
 		parentInfo,
 		&newExecution,
@@ -5165,7 +5142,6 @@ func (ms *MutableStateImpl) AddContinueAsNewEvent(
 		firstRunID,
 		rootInfo,
 		startEvent.Links,
-		currentRunVersioningInfo,
 	); err != nil {
 		return nil, nil, err
 	}

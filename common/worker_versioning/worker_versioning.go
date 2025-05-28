@@ -240,6 +240,12 @@ func MakeDirectiveForWorkflowTask(
 	return nil
 }
 
+func IsTaskQueueInVersion(tq string, version *deploymentpb.WorkerDeploymentVersion) bool {
+	// TODO(carlydf): implement this, which might require more input parameters
+	// if there is an error talking to matching, I think we should just not return false because we can't confirm
+	return false
+}
+
 // DeploymentVersionFromDeployment Temporary helper function to convert Deployment to
 // WorkerDeploymentVersion proto until we update code to use the new proto in all places.
 func DeploymentVersionFromDeployment(deployment *deploymentpb.Deployment) *deploymentspb.WorkerDeploymentVersion {
@@ -373,6 +379,18 @@ func OverrideIsPinned(override *workflowpb.VersioningOverride) bool {
 	//nolint:staticcheck // SA1019: worker versioning v0.31 and v0.30
 	return override.GetBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED ||
 		override.GetPinned().GetBehavior() == workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED
+}
+
+func GetOverridePinnedVersion(override *workflowpb.VersioningOverride) *deploymentpb.WorkerDeploymentVersion {
+	if OverrideIsPinned(override) {
+		if v := override.GetPinned().GetVersion(); v != nil {
+			return v
+		} else if v := override.GetPinnedVersion(); v != "" { //nolint:staticcheck // SA1019: worker versioning v0.31
+			return ExternalWorkerDeploymentVersionFromString(v)
+		}
+		return ExternalWorkerDeploymentVersionFromDeployment(override.GetDeployment()) //nolint:staticcheck // SA1019: worker versioning v0.30
+	}
+	return nil
 }
 
 func ValidateVersioningOverride(override *workflowpb.VersioningOverride) error {

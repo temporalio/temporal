@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	"math"
 	"slices"
 	"time"
@@ -194,12 +195,6 @@ func SetupNewWorkflowForRetryOrCron(
 				RunId:      previousExecutionInfo.RootRunId,
 			},
 		}
-		parentVersioningInfo := startAttr.GetParentVersioningInfo()
-		// only set parent versioning info task queue if different from new workflow task queue
-		if startAttr.GetTaskQueue().GetName() == parentVersioningInfo.GetTaskQueue() {
-			parentVersioningInfo.TaskQueue = ""
-		}
-		parentInfo.VersioningInfo = parentVersioningInfo
 	}
 
 	newExecution := commonpb.WorkflowExecution{
@@ -251,6 +246,20 @@ func SetupNewWorkflowForRetryOrCron(
 	var pinnedOverride *workflowpb.VersioningOverride
 	if o := previousExecutionInfo.GetVersioningInfo().GetVersioningOverride(); worker_versioning.OverrideIsPinned(o) {
 		pinnedOverride = o
+		// retries and crons always go to the same task queue, so no need to check if override version is in new task queue
+	}
+
+	// New run initiated by workflow Cron will never inherit.
+	//
+	// New run initiated by workflow Retry will only inherit if the retried run is effectively pinned at the time
+	// of retry, and the retried run inherited a pinned version when it started (ie. it is a child of a pinned
+	// parent, or a CaN of a pinned run, and is running on a Task Queue in the inherited version).
+	var inheritedPinnedVersion *deploymentpb.WorkerDeploymentVersion
+	if initiator == enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY &&
+		GetEffectiveVersioningBehavior(previousExecutionInfo.GetVersioningInfo()) == enumspb.VERSIONING_BEHAVIOR_PINNED &&
+		startAttr.GetInheritedPinnedVersion() != nil {
+		inheritedPinnedVersion = worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(GetEffectiveDeployment(previousExecutionInfo.GetVersioningInfo()))
+		// retries and crons always go to the same task queue, so no need to check if override version is in new task queue
 	}
 
 	createRequest := &workflowservice.StartWorkflowExecutionRequest{
@@ -290,18 +299,6 @@ func SetupNewWorkflowForRetryOrCron(
 		}
 	}
 
-	// For retry: inherit pinned version if part of a Continue-As-New or parent-child chain, but not if retrying a root workflow.
-	// For cron: always start on latest version.
-	previousRunVersioningInfo := startAttr.GetPreviousRunVersioningInfo()
-	if initiator == enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE {
-		previousRunVersioningInfo = nil
-	}
-	if previousRunVersioningInfo != nil {
-		// retry and cron always happen on the same task queue
-		// only set Task Queue if new run TQ is different from old run TQ
-		previousRunVersioningInfo.TaskQueue = ""
-	}
-
 	req := &historyservice.StartWorkflowExecutionRequest{
 		NamespaceId:            newMutableState.GetNamespaceEntry().ID().String(),
 		StartRequest:           createRequest,
@@ -315,6 +312,7 @@ func SetupNewWorkflowForRetryOrCron(
 		SourceVersionStamp:       sourceVersionStamp,
 		RootExecutionInfo:        rootInfo,
 		InheritedBuildId:         startAttr.InheritedBuildId,
+		InheritedPinnedVersion:   inheritedPinnedVersion,
 	}
 	workflowTimeoutTime := timestamp.TimeValue(previousExecutionInfo.WorkflowExecutionExpirationTime)
 	if !workflowTimeoutTime.IsZero() {
@@ -327,7 +325,6 @@ func SetupNewWorkflowForRetryOrCron(
 		previousExecutionInfo.AutoResetPoints,
 		previousMutableState.GetExecutionState().GetRunId(),
 		firstRunID,
-		previousRunVersioningInfo,
 	)
 	if err != nil {
 		return serviceerror.NewInternal("Failed to add workflow execution started event.")

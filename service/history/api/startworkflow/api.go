@@ -235,7 +235,7 @@ func (s *Starter) lockCurrentWorkflowExecution(
 // It returns the creationContext which can later be used to insert into the executions table.
 func (s *Starter) prepareNewWorkflow(workflowID string) (*creationParams, error) {
 	runID := primitives.NewUUID().String()
-	mutableState, err := api.NewWorkflowWithSignal( // findme carly
+	mutableState, err := api.NewWorkflowWithSignal(
 		s.shardContext,
 		s.namespace,
 		workflowID,

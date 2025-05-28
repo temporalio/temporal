@@ -107,7 +107,7 @@ type (
 			links []*commonpb.Link,
 		) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionStartedEvent(*commonpb.WorkflowExecution, *historyservice.StartWorkflowExecutionRequest) (*historypb.HistoryEvent, error)
-		AddWorkflowExecutionStartedEventWithOptions(*commonpb.WorkflowExecution, *historyservice.StartWorkflowExecutionRequest, *workflowpb.ResetPoints, string, string, *historypb.WorkflowExecutionStartedEventAttributes_SourceWorkflowVersioningInfo) (*historypb.HistoryEvent, error)
+		AddWorkflowExecutionStartedEventWithOptions(*commonpb.WorkflowExecution, *historyservice.StartWorkflowExecutionRequest, *workflowpb.ResetPoints, string, string) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionTerminatedEvent(firstEventID int64, reason string, details *commonpb.Payloads, identity string, deleteAfterTerminate bool, links []*commonpb.Link) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionOptionsUpdatedEvent(
 			versioningOverride *workflowpb.VersioningOverride,

@@ -89,6 +89,8 @@ message StartWorkflowExecutionRequest {
     temporal.api.workflow.v1.VersioningOverride versioning_override = 13;
     // If set, we verify the parent-child relationship before applying ID conflict policy WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING
     bool child_workflow_only = 14;
+    // If present, the new workflow should start on this version with pinned base behavior.
+    temporal.api.deployment.v1.WorkerDeploymentVersion inherited_pinned_version = 15;
 }
 
 message StartWorkflowExecutionResponse {

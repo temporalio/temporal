@@ -34,7 +34,6 @@ func (b *EventFactory) CreateWorkflowExecutionStartedEvent(
 	prevRunID string,
 	firstRunID string,
 	originalRunID string,
-	previousRunVersioningInfo *historypb.WorkflowExecutionStartedEventAttributes_SourceWorkflowVersioningInfo,
 ) *historypb.HistoryEvent {
 	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, startTime)
 	req := request.StartRequest
@@ -68,7 +67,7 @@ func (b *EventFactory) CreateWorkflowExecutionStartedEvent(
 		InheritedBuildId:                request.InheritedBuildId,
 		VersioningOverride:              worker_versioning.ConvertOverrideToV32(request.VersioningOverride),
 		Priority:                        req.GetPriority(),
-		PreviousRunVersioningInfo:       previousRunVersioningInfo,
+		InheritedPinnedVersion:          request.InheritedPinnedVersion,
 	}
 
 	parentInfo := request.ParentExecutionInfo
@@ -78,7 +77,6 @@ func (b *EventFactory) CreateWorkflowExecutionStartedEvent(
 		attributes.ParentWorkflowExecution = parentInfo.Execution
 		attributes.ParentInitiatedEventId = parentInfo.InitiatedId
 		attributes.ParentInitiatedEventVersion = parentInfo.InitiatedVersion
-		attributes.ParentVersioningInfo = parentInfo.VersioningInfo
 	}
 
 	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{

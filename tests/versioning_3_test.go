@@ -1279,13 +1279,7 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectInherit(crossTq bo
 	currentChanged := make(chan struct{}, 1)
 
 	childv1 := func(ctx workflow.Context) (string, error) {
-		if withOverride {
-			// if parent is base unpinned + override pinned, the base behavior and version will not be
-			// passed to the child, but the pinned override will be
-			s.verifyWorkflowVersioning(tv1Child, vbUnspecified, nil, override, nil)
-		} else {
-			s.verifyWorkflowVersioning(tv1Child, vbPinned, tv1Child.Deployment(), override, nil)
-		}
+		s.verifyWorkflowVersioning(tv1Child, vbPinned, tv1Child.Deployment(), override, nil)
 		return "v1", nil
 	}
 	wf1 := func(ctx workflow.Context) (string, error) {
