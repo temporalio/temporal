@@ -64,7 +64,7 @@ type (
 		// TimeSinceLastFanOut returns the time since the last DescribeTaskQueuePartition fan out
 		TimeSinceLastFanOut() time.Duration
 		// UpdateTimeSinceLastFanOutAndCache updates the cache and it's TTL
-		UpdateTimeSinceLastFanOutAndCache(physicalInfoByBuildId map[string]map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo)
+		UpdateTimeSinceLastFanOutAndCache(physicalInfoByBuildId map[string]map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo, upsert bool)
 		// GetPhysicalTaskQueueInfoFromCache returns the cached physicalInfoByBuildId
 		GetPhysicalTaskQueueInfoFromCache() map[string]map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo
 	}

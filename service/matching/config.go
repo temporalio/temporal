@@ -71,6 +71,7 @@ type (
 		MembershipUnloadDelay                    dynamicconfig.DurationPropertyFn
 		TaskQueueInfoByBuildIdTTL                dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 		PriorityLevels                           dynamicconfig.IntPropertyFnWithTaskQueueFilter
+		RateLimiterRefreshInterval               time.Duration
 
 		// Time to hold a poll request before returning an empty response if there are no tasks
 		LongPollExpirationInterval dynamicconfig.DurationPropertyFnWithTaskQueueFilter
@@ -159,6 +160,9 @@ type (
 
 		// TTL for cache holding TaskQueueInfoByBuildID
 		TaskQueueInfoByBuildIdTTL func() time.Duration
+
+		// Rate limiter refresh interval
+		RateLimiterRefreshInterval time.Duration
 
 		BreakdownMetricsByTaskQueue func() bool
 		BreakdownMetricsByPartition func() bool
@@ -267,6 +271,7 @@ func NewConfig(
 		MembershipUnloadDelay:                    dynamicconfig.MatchingMembershipUnloadDelay.Get(dc),
 		TaskQueueInfoByBuildIdTTL:                dynamicconfig.TaskQueueInfoByBuildIdTTL.Get(dc),
 		PriorityLevels:                           dynamicconfig.MatchingPriorityLevels.Get(dc),
+		RateLimiterRefreshInterval:               time.Minute,
 		MatchingDropNonRetryableTasks:            dynamicconfig.MatchingDropNonRetryableTasks.Get(dc),
 		MaxIDLengthLimit:                         dynamicconfig.MaxIDLengthLimit.Get(dc),
 
@@ -399,6 +404,7 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		TaskQueueInfoByBuildIdTTL: func() time.Duration {
 			return config.TaskQueueInfoByBuildIdTTL(ns.String(), taskQueueName, taskType)
 		},
+		RateLimiterRefreshInterval: config.RateLimiterRefreshInterval,
 		PollerHistoryTTL: func() time.Duration {
 			return config.PollerHistoryTTL(ns.String())
 		},

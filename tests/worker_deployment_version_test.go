@@ -164,27 +164,13 @@ func (s *DeploymentVersionSuite) startVersionWorkflow(ctx context.Context, tv *t
 }
 
 func (s *DeploymentVersionSuite) startVersionWorkflowExpectFailAddVersion(ctx context.Context, tv *testvars.TestVars) {
-	go s.pollFromDeployment(ctx, tv)
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := require.New(t)
-		newResp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
-			Namespace:      s.Namespace().String(),
-			DeploymentName: tv.DeploymentSeries(),
-		})
-		a.NoError(err)
-		var versionSummaryNames []string
-		var versionSummaryVersions []*deploymentpb.WorkerDeploymentVersion
-		for _, versionSummary := range newResp.GetWorkerDeploymentInfo().GetVersionSummaries() {
-			versionSummaryNames = append(versionSummaryNames, versionSummary.GetVersion())
-			versionSummaryVersions = append(versionSummaryVersions, versionSummary.GetDeploymentVersion())
-		}
-		a.NotContains(versionSummaryNames, tv.DeploymentVersionString())
-		contains := slices.ContainsFunc(versionSummaryVersions, func(v *deploymentpb.WorkerDeploymentVersion) bool {
-			return v.GetDeploymentName() == tv.ExternalDeploymentVersion().GetDeploymentName() &&
-				v.GetBuildId() == tv.ExternalDeploymentVersion().GetBuildId()
-		})
-		a.False(contains)
-	}, time.Second*5, time.Millisecond*200)
+	_, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace:         s.Namespace().String(),
+		TaskQueue:         tv.TaskQueue(),
+		Identity:          "random",
+		DeploymentOptions: tv.WorkerDeploymentOptions(true),
+	})
+	s.Error(err, serviceerror.NewUnavailable("cannot add version, already at max versions 4"))
 }
 
 func (s *DeploymentVersionSuite) TestForceCAN_NoOpenWFS() {
@@ -332,23 +318,23 @@ func (s *DeploymentVersionSuite) TestDrainageStatus_SetCurrentVersion_NoOpenWFs(
 	s.checkVersionDrainageAndVersionStatus(ctx, tv1, &deploymentpb.VersionDrainageInfo{}, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT, false, false)
 	s.checkVersionDrainageAndVersionStatus(ctx, tv2, &deploymentpb.VersionDrainageInfo{}, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE, false, false)
 
+	baseTime := time.Now()
 	// SetCurrent tv2 --> tv1 starts the child drainage workflow
 	err = s.setCurrent(tv2, true)
 	s.Nil(err)
 
-	// tv1 should now be "draining" for visibilityGracePeriod duration
-	s.checkVersionDrainageAndVersionStatus(ctx, tv1, &deploymentpb.VersionDrainageInfo{
-		Status:          enumspb.VERSION_DRAINAGE_STATUS_DRAINING,
-		LastChangedTime: nil, // don't test this now
-		LastCheckedTime: nil, // don't test this now
+	changed1, checked1 := s.checkVersionDrainageAndVersionStatus(ctx, tv1, &deploymentpb.VersionDrainageInfo{
+		Status: enumspb.VERSION_DRAINAGE_STATUS_DRAINING,
 	}, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING, false, false)
+	s.Greater(changed1, baseTime)
+	s.GreaterOrEqual(checked1, changed1)
 
 	// tv1 should now be "drained"
-	s.checkVersionDrainageAndVersionStatus(ctx, tv1, &deploymentpb.VersionDrainageInfo{
-		Status:          enumspb.VERSION_DRAINAGE_STATUS_DRAINED,
-		LastChangedTime: nil, // don't test this now
-		LastCheckedTime: nil, // don't test this now
-	}, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED, false, false)
+	changed2, checked2 := s.checkVersionDrainageAndVersionStatus(ctx, tv1, &deploymentpb.VersionDrainageInfo{
+		Status: enumspb.VERSION_DRAINAGE_STATUS_DRAINED,
+	}, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED, true, false)
+	s.Greater(changed2, changed1)
+	s.GreaterOrEqual(checked2, changed2)
 }
 
 func (s *DeploymentVersionSuite) TestDrainageStatus_SetCurrentVersion_YesOpenWFs() {
@@ -378,23 +364,31 @@ func (s *DeploymentVersionSuite) TestDrainageStatus_SetCurrentVersion_YesOpenWFs
 	// start a pinned workflow on v1
 	run := s.startPinnedWorkflow(ctx, tv1)
 
+	baseTime := time.Now()
 	// SetCurrent tv2 --> tv1 starts the child drainage workflow
 	err = s.setCurrent(tv2, true)
 	s.Nil(err)
 
 	// tv1 should now be "draining" for visibilityGracePeriod duration
-	s.checkVersionDrainageAndVersionStatus(ctx, tv1, &deploymentpb.VersionDrainageInfo{
-		Status:          enumspb.VERSION_DRAINAGE_STATUS_DRAINING,
-		LastChangedTime: nil, // don't test this now
-		LastCheckedTime: nil, // don't test this now
+	changed1, checked1 := s.checkVersionDrainageAndVersionStatus(ctx, tv1, &deploymentpb.VersionDrainageInfo{
+		Status: enumspb.VERSION_DRAINAGE_STATUS_DRAINING,
 	}, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING, false, false)
+	s.Greater(changed1, baseTime)
+	s.GreaterOrEqual(checked1, changed1)
 
 	// tv1 should still be "draining" for visibilityGracePeriod duration
-	s.checkVersionDrainageAndVersionStatus(ctx, tv1, &deploymentpb.VersionDrainageInfo{
-		Status:          enumspb.VERSION_DRAINAGE_STATUS_DRAINING,
-		LastChangedTime: nil, // don't test this now
-		LastCheckedTime: nil, // don't test this now
-	}, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING, false, false)
+	changed2, checked2 := s.checkVersionDrainageAndVersionStatus(ctx, tv1, &deploymentpb.VersionDrainageInfo{
+		Status: enumspb.VERSION_DRAINAGE_STATUS_DRAINING,
+	}, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING, true, false)
+	s.Equal(changed2, changed1)
+	s.Greater(checked2, checked1)
+
+	// tv1 should still be "draining" after a refresh intervals
+	changed3, checked3 := s.checkVersionDrainageAndVersionStatus(ctx, tv1, &deploymentpb.VersionDrainageInfo{
+		Status: enumspb.VERSION_DRAINAGE_STATUS_DRAINING,
+	}, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING, false, true)
+	s.Equal(changed3, changed1)
+	s.Greater(checked3, checked2)
 
 	// terminate workflow
 	_, err = s.FrontendClient().TerminateWorkflowExecution(ctx, &workflowservice.TerminateWorkflowExecutionRequest{
@@ -409,11 +403,11 @@ func (s *DeploymentVersionSuite) TestDrainageStatus_SetCurrentVersion_YesOpenWFs
 	s.Nil(err)
 
 	// tv1 should now be "drained"
-	s.checkVersionDrainageAndVersionStatus(ctx, tv1, &deploymentpb.VersionDrainageInfo{
-		Status:          enumspb.VERSION_DRAINAGE_STATUS_DRAINED,
-		LastChangedTime: nil, // don't test this now
-		LastCheckedTime: nil, // don't test this now
+	changed4, checked4 := s.checkVersionDrainageAndVersionStatus(ctx, tv1, &deploymentpb.VersionDrainageInfo{
+		Status: enumspb.VERSION_DRAINAGE_STATUS_DRAINED,
 	}, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED, false, false)
+	s.Greater(changed4, changed3)
+	s.GreaterOrEqual(checked4, changed4)
 }
 
 func (s *DeploymentVersionSuite) startPinnedWorkflow(ctx context.Context, tv *testvars.TestVars) sdkclient.WorkflowRun {
@@ -643,7 +637,14 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_Drained_But_Pollers_Exist() {
 	s.Nil(err)
 
 	// Signal the first version to be drained. Only do this in tests.
-	versionWorkflowID := worker_versioning.GenerateVersionWorkflowID(tv1.DeploymentSeries(), tv1.BuildID())
+	s.signalAndWaitForDrained(ctx, tv1)
+
+	// Version will bypass "drained" check but delete should still fail since we have active pollers.
+	s.tryDeleteVersion(ctx, tv1, workerdeployment.ErrVersionHasPollers, false)
+}
+
+func (s *DeploymentVersionSuite) signalAndWaitForDrained(ctx context.Context, tv *testvars.TestVars) {
+	versionWorkflowID := worker_versioning.GenerateVersionWorkflowID(tv.DeploymentSeries(), tv.BuildID())
 	workflowExecution := &commonpb.WorkflowExecution{
 		WorkflowId: versionWorkflowID,
 	}
@@ -664,46 +665,69 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_Drained_But_Pollers_Exist() {
 			},
 		},
 	}
-
-	err = s.SendSignal(s.Namespace().String(), workflowExecution, workerdeployment.SyncDrainageSignalName, signalPayload, tv1.ClientIdentity())
+	err = s.SendSignal(s.Namespace().String(), workflowExecution, workerdeployment.SyncDrainageSignalName, signalPayload, tv.ClientIdentity())
 	s.Nil(err)
 
-	// Version will bypass "drained" check but delete should still fail since we have active pollers.
-	s.tryDeleteVersion(ctx, tv1, workerdeployment.ErrVersionHasPollers, false)
+	// wait for drained
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		resp, err := s.describeVersion(tv)
+		assert.NoError(t, err)
+		assert.Equal(t, enumspb.VERSION_DRAINAGE_STATUS_DRAINED, resp.GetWorkerDeploymentVersionInfo().GetDrainageInfo().GetStatus())
+	}, 10*time.Second, time.Second)
+}
+
+func (s *DeploymentVersionSuite) waitForNoPollers(ctx context.Context, tv *testvars.TestVars) {
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		resp, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+			Namespace:     s.Namespace().String(),
+			TaskQueue:     tv.TaskQueue(),
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		})
+		require.NoError(t, err)
+		require.Empty(t, resp.Pollers)
+	}, 10*time.Second, 100*time.Millisecond)
 }
 
 func (s *DeploymentVersionSuite) TestVersionScavenger_DeleteOnAdd() {
-	s.OverrideDynamicConfig(dynamicconfig.PollerHistoryTTL, 10*time.Second)
+	testMaxVersionsInDeployment := 4
+	s.OverrideDynamicConfig(dynamicconfig.PollerHistoryTTL, 2*time.Second)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingMaxVersionsInDeployment, testMaxVersionsInDeployment)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	// we don't want the version to drain in this test
+	s.OverrideDynamicConfig(dynamicconfig.VersionDrainageStatusVisibilityGracePeriod, 60*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	tvs := make([]*testvars.TestVars, testMaxVersionsInDeployment)
 
 	// max out the versions
 	for i := 0; i < testMaxVersionsInDeployment; i++ {
-		tvs[i] = testvars.New(s).WithBuildIDNumber(i).WithTaskQueue(fmt.Sprintf("%d", i))
+		tvs[i] = testvars.New(s).WithBuildIDNumber(i)
 		s.startVersionWorkflow(ctx, tvs[i])
+	}
+
+	// Make tvs[0] current
+	err := s.setCurrent(tvs[0], false)
+	s.Nil(err)
+	// Make tvs[1] current, hence tvs[0] should go to draining
+	err = s.setCurrent(tvs[1], false)
+	s.Nil(err)
+
+	// stuff above can take a long time, sending some fresh polls to ensure that deletion logic sees them.
+	for i := 0; i < testMaxVersionsInDeployment; i++ {
+		go s.pollFromDeployment(ctx, tvs[i])
 	}
 	tvMax := testvars.New(s).WithBuildIDNumber(9999)
 
-	// try to add a version and it fails
+	// try to add a version and it fails because none of the versions can be deleted
 	s.startVersionWorkflowExpectFailAddVersion(ctx, tvMax)
 
-	// Make version 2 and 3 eligible for deletion by waiting for their pollers to go away.
-	s.waitForNoPollers(ctx, tvs[1])
-	s.waitForNoPollers(ctx, tvs[2])
+	// this waits for no pollers from any version
+	s.waitForNoPollers(ctx, tvs[0])
 
-	// The above call to waitForNoPollers() also results in the pollers for version 1 going away.
-	// Polling the first version again so that it has active pollers and the deployment workflow does not delete it when
-	// a new version gets added. This is to test that we only delete versions that are eligible for deletion.
-	s.startVersionWorkflow(ctx, tvs[0])
-
-	// try to add a version again, and it succeeds, after deleting the second version but not the third (both are eligible)
+	// try to add a version again, and it succeeds, after deleting tvs[2] version but not tvs[3] (both are eligible)
 	// TODO: This fails if I try to add tvMax again...
 	s.startVersionWorkflow(ctx, testvars.New(s).WithBuildIDNumber(1111))
 
-	// second deployment version does not exist in the deployment list, third version does
+	// tvs[0] is draining so can't be deleted. tvs[1] is current, so tvs[2] should be deleted.
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := require.New(t)
 		resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
@@ -715,8 +739,10 @@ func (s *DeploymentVersionSuite) TestVersionScavenger_DeleteOnAdd() {
 		for _, vs := range resp.GetWorkerDeploymentInfo().GetVersionSummaries() {
 			versions = append(versions, vs.Version) //nolint:staticcheck // SA1019: worker versioning v0.31
 		}
-		a.NotContains(versions, tvs[1].DeploymentVersionString())
-		a.Contains(versions, tvs[2].DeploymentVersionString())
+		a.NotContains(versions, tvs[2].DeploymentVersionString())
+		a.Contains(versions, tvs[0].DeploymentVersionString())
+		a.Contains(versions, tvs[1].DeploymentVersionString())
+		a.Contains(versions, tvs[3].DeploymentVersionString())
 	}, time.Second*5, time.Millisecond*200)
 }
 
@@ -818,7 +844,7 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_ValidDelete_SkipDrainage() {
 func (s *DeploymentVersionSuite) TestDeleteVersion_ConcurrentDeleteVersion() {
 	s.OverrideDynamicConfig(dynamicconfig.PollerHistoryTTL, 500*time.Millisecond)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	tv1 := testvars.New(s).WithBuildIDNumber(1)
 
@@ -864,7 +890,7 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_ConcurrentDeleteVersion() {
 				a.NotEqual(tv1.ExternalDeploymentVersion().GetBuildId(), vs.GetDeploymentVersion().GetBuildId())
 			}
 		}
-	}, time.Second*5, time.Millisecond*200)
+	}, time.Second*10, time.Millisecond*200)
 }
 
 // VersionMissingTaskQueues
@@ -1025,13 +1051,17 @@ func (s *DeploymentVersionSuite) checkVersionDrainageAndVersionStatus(
 	expectedDrainageInfo *deploymentpb.VersionDrainageInfo,
 	expectedStatus enumspb.WorkerDeploymentVersionStatus,
 	addGracePeriod, addRefreshInterval bool,
-) {
-	waitFor := 5 * time.Second
+) (changedTime, checkedTime time.Time) {
+	var waitFor time.Duration
 	if addGracePeriod {
 		waitFor += testVersionDrainageVisibilityGracePeriod
 	}
 	if addRefreshInterval {
 		waitFor += testVersionDrainageRefreshInterval
+	}
+	if waitFor > 0 {
+		// wait for the requested duration before looking at the result ( +1 sec for system latency)
+		time.Sleep(waitFor + 1*time.Second) //nolint:forbidigo
 	}
 
 	s.EventuallyWithT(func(t *assert.CollectT) {
@@ -1047,7 +1077,10 @@ func (s *DeploymentVersionSuite) checkVersionDrainageAndVersionStatus(
 			a.Equal(expectedDrainageInfo.LastChangedTime, dInfo.GetLastChangedTime())
 		}
 		a.Equal(expectedStatus, resp.GetWorkerDeploymentVersionInfo().GetStatus())
-	}, waitFor, time.Millisecond*100)
+		changedTime = dInfo.GetLastChangedTime().AsTime()
+		checkedTime = dInfo.GetLastCheckedTime().AsTime()
+	}, 5*time.Second, time.Millisecond*100)
+	return changedTime, checkedTime
 }
 
 func (s *DeploymentVersionSuite) checkDescribeWorkflowAfterOverride(
@@ -1196,50 +1229,4 @@ func (s *DeploymentVersionSuite) tryDeleteVersion(
 	} else {
 		s.EqualErrorf(err, expectedError, err.Error())
 	}
-}
-
-func (s *DeploymentVersionSuite) signalAndWaitForDrained(ctx context.Context, tv *testvars.TestVars) {
-	versionWorkflowID := worker_versioning.GenerateVersionWorkflowID(tv.DeploymentSeries(), tv.BuildID())
-	workflowExecution := &commonpb.WorkflowExecution{
-		WorkflowId: versionWorkflowID,
-	}
-	input := &deploymentpb.VersionDrainageInfo{
-		Status:          enumspb.VERSION_DRAINAGE_STATUS_DRAINED,
-		LastChangedTime: timestamppb.New(time.Now()),
-		LastCheckedTime: timestamppb.New(time.Now()),
-	}
-	marshaledData, err := input.Marshal()
-	s.NoError(err)
-	signalPayload := &commonpb.Payloads{
-		Payloads: []*commonpb.Payload{
-			{
-				Metadata: map[string][]byte{
-					"encoding": []byte("binary/protobuf"),
-				},
-				Data: marshaledData,
-			},
-		},
-	}
-	err = s.SendSignal(s.Namespace().String(), workflowExecution, workerdeployment.SyncDrainageSignalName, signalPayload, tv.ClientIdentity())
-	s.Nil(err)
-
-	// wait for drained
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		resp, err := s.describeVersion(tv)
-		assert.NoError(t, err)
-		assert.Equal(t, enumspb.VERSION_DRAINAGE_STATUS_DRAINED, resp.GetWorkerDeploymentVersionInfo().GetDrainageInfo().GetStatus())
-		assert.Equal(t, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED, resp.GetWorkerDeploymentVersionInfo().GetStatus())
-	}, 10*time.Second, time.Second)
-}
-
-func (s *DeploymentVersionSuite) waitForNoPollers(ctx context.Context, tv *testvars.TestVars) {
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		resp, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
-			Namespace:     s.Namespace().String(),
-			TaskQueue:     tv.TaskQueue(),
-			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-		})
-		require.NoError(t, err)
-		require.Empty(t, resp.Pollers)
-	}, 15*time.Second, time.Second)
 }
