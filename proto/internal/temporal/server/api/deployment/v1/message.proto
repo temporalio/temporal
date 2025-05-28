@@ -101,6 +101,9 @@ message VersionLocalState {
         // Key: Task Queue Type
         map<int32, TaskQueueVersionData> task_queues = 1;
     }
+
+    // Status of the Worker Deployment Version.
+    temporal.api.enums.v1.WorkerDeploymentVersionStatus status = 14;
 }
 
 // Data specific to a task queue, from the perspective of a worker deployment version.
@@ -158,6 +161,9 @@ message WorkerDeploymentVersionSummary {
     google.protobuf.Timestamp first_activation_time = 8;
     // Timestamp when this version last stopped being current or ramping.
     google.protobuf.Timestamp last_deactivation_time = 9;
+
+    // Status of the Worker Deployment Version.
+    temporal.api.enums.v1.WorkerDeploymentVersionStatus status = 10;
 }
 
 // used as Worker Deployment Version workflow update input:
