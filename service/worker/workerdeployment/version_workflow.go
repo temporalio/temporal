@@ -109,8 +109,6 @@ func (d *VersionWorkflowRunner) listenToSignals(ctx workflow.Context) {
 			d.VersionState.DrainageInfo = mergedInfo
 		}
 
-		// If the version is now drained, the drainage workflow has completed execution as well.
-		// Update the future to be nil to indicate that the drainage workflow is no longer running.
 		if d.VersionState.GetDrainageInfo().GetStatus() == enumspb.VERSION_DRAINAGE_STATUS_DRAINED {
 			d.VersionState.Status = enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED
 		}

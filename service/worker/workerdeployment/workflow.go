@@ -566,7 +566,6 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 
 }
 
-// TODO (Shivam): Calls to this function can be placed inside syncVersion helper function.
 func (d *WorkflowRunner) setDrainageStatus(version string, status enumspb.VersionDrainageStatus, routingUpdateTime *timestamppb.Timestamp) {
 	if summary := d.State.GetVersions()[version]; summary != nil {
 		summary.DrainageStatus = status
@@ -1103,6 +1102,7 @@ func (d *WorkflowRunner) getWorkerDeploymentInfoVersionSummary(versionSummary *d
 	return &deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary{
 		Version:              versionSummary.GetVersion(),
 		DeploymentVersion:    worker_versioning.ExternalWorkerDeploymentVersionFromString(versionSummary.GetVersion()),
+		Status:               versionSummary.GetStatus(),
 		CreateTime:           versionSummary.GetCreateTime(),
 		DrainageInfo:         versionSummary.GetDrainageInfo(),
 		CurrentSinceTime:     versionSummary.GetCurrentSinceTime(),
