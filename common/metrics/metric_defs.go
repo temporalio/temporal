@@ -1187,16 +1187,8 @@ var (
 	WorkerDeploymentVersionCreated                    = NewCounterDef("worker_deployment_version_created")
 	WorkerDeploymentVersionCreatedManagedByController = NewCounterDef("worker_deployment_version_created_managed_by_controller")
 	WorkflowResetCount                                = NewCounterDef("workflow_reset_count")
-	// TODO: implement these. tags: NS name + wf behavior + wf open vs closed + __metadata vs __stacktrace vs user-defined
-	// count both direct matching and wft paths
-	WorkflowQuerySuccessCount = NewCounterDef("workflow_query_count")
-	WorkflowQueryFailureCount = NewCounterDef("workflow_query_count")
-	WorkflowQueryTimeoutCount = NewCounterDef("workflow_query_count")
-	// TODO: capture wf task timeout per NS + behavior + isFirst attempt
-	// TODO: capture completed wf tasks per NS + behavior
-	// TODO: count versioning override per NS + wf original behavior + new override behavior + start vs existing wf
-	//    look in the functions that apply workflowexecutionstarted and workflowexecutionoptionsupdated events
-	// TODO: count wf transitions per NS + wf original behavior + new override behavior
+	WorkflowQuerySuccessCount                         = NewCounterDef("workflow_query_count")
+	WorkflowQueryFailureCount                         = NewCounterDef("workflow_query_count")
 
 	// Force replication
 	EncounterZombieWorkflowCount        = NewCounterDef("encounter_zombie_workflow_count")
