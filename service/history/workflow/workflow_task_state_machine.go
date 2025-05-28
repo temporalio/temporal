@@ -1189,13 +1189,18 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 		}
 	}
 
-	// TODO(carlydf): create reset point based on attrs.Deployment instead of the build ID.
+	//nolint:staticcheck // SA1019: worker versioning v2
+	buildId := attrs.GetWorkerVersion().GetBuildId()
+	if wftDeployment != nil {
+		buildId = wftDeployment.GetBuildId()
+	}
 	addedResetPoint := m.ms.addResetPointFromCompletion(
 		attrs.GetBinaryChecksum(),
-		attrs.GetWorkerVersion().GetBuildId(),
+		buildId,
 		event.GetEventId(),
 		limits.MaxResetPoints,
 	)
+
 	// For v3 versioned workflows (ms.GetEffectiveVersioningBehavior() != UNSPECIFIED), this will update the reachability
 	// search attribute based on the execution_info.deployment and/or override deployment if one exists. We must update the
 	// search attribute here because the reachability deployment may have just been changed by CompleteDeploymentTransition.

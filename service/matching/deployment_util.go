@@ -14,8 +14,7 @@ var (
 	// [cleanup-wv-pre-release]
 	errMissingDeployment = serviceerror.NewInvalidArgument("missing deployment")
 
-	errMissingDeploymentVersion  = serviceerror.NewInvalidArgument("missing deployment version")
-	errDeploymentVersionNotReady = serviceerror.NewUnavailable("task queue is not ready to process polls from this deployment version, try again shortly")
+	errMissingDeploymentVersion = serviceerror.NewInvalidArgument("missing deployment version")
 )
 
 // [cleanup-wv-pre-release]
