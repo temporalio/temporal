@@ -7,7 +7,6 @@ import (
 	"math"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/pborman/uuid"
@@ -67,17 +66,16 @@ type (
 
 		status int32
 
-		tokenSerializer               *tasktoken.Serializer
-		startWG                       sync.WaitGroup
-		config                        *configs.Config
-		eventNotifier                 events.Notifier
-		logger                        log.Logger
-		throttledLogger               log.Logger
-		persistenceExecutionManager   persistence.ExecutionManager
-		persistenceShardManager       persistence.ShardManager
-		persistenceVisibilityManager  manager.VisibilityManager
-		persistenceHealthSignal       persistence.HealthSignalAggregator
-		historyHealthSignalAggregator HealthSignalAggregator
+		tokenSerializer              *tasktoken.Serializer
+		startWG                      sync.WaitGroup
+		config                       *configs.Config
+		eventNotifier                events.Notifier
+		logger                       log.Logger
+		throttledLogger              log.Logger
+		persistenceExecutionManager  persistence.ExecutionManager
+		persistenceShardManager      persistence.ShardManager
+		persistenceVisibilityManager manager.VisibilityManager
+		persistenceHealthSignal      persistence.HealthSignalAggregator
 
 		healthServer           *health.Server
 		historyServiceResolver membership.ServiceResolver
@@ -109,7 +107,6 @@ type (
 		PersistenceExecutionManager  persistence.ExecutionManager
 		PersistenceShardManager      persistence.ShardManager
 		PersistenceHealthSignal      persistence.historyHealthSignalAggregator
-		HistoryHealthSignal          historyHealthSignalAggregator
 		HealthServer                 *health.Server
 		PersistenceVisibilityManager manager.VisibilityManager
 		HistoryServiceResolver       membership.ServiceResolver
@@ -169,7 +166,6 @@ func (h *Handler) Start() {
 	h.eventNotifier.Start()
 	h.controller.Start()
 	h.dlqMetricsEmitter.Start()
-	h.historyHealthSignalAggregator.Start()
 
 	h.startWG.Done()
 }
@@ -189,7 +185,6 @@ func (h *Handler) Stop() {
 	h.controller.Stop()
 	h.eventNotifier.Stop()
 	h.dlqMetricsEmitter.Stop()
-	h.historyHealthSignalAggregator.Stop()
 }
 
 func (h *Handler) isStopped() bool {
@@ -240,9 +235,7 @@ func (h *Handler) DeepHealthCheck(
 
 // IsWorkflowTaskValid - whether workflow task is still valid
 func (h *Handler) IsWorkflowTaskValid(ctx context.Context, request *historyservice.IsWorkflowTaskValidRequest) (_ *historyservice.IsWorkflowTaskValidResponse, retError error) {
-	startTime := h.timeSource.Now()
 	defer func() {
-		h.historyHealthSignalAggregator.Record("IsWorkflowTaskValid", time.Since(startTime), retError)
 		metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
 	}()
 	h.startWG.Wait()
@@ -271,9 +264,7 @@ func (h *Handler) IsWorkflowTaskValid(ctx context.Context, request *historyservi
 
 // IsActivityTaskValid - whether activity task is still valid
 func (h *Handler) IsActivityTaskValid(ctx context.Context, request *historyservice.IsActivityTaskValidRequest) (_ *historyservice.IsActivityTaskValidResponse, retError error) {
-	startTime := h.timeSource.Now()
 	defer func() {
-		h.historyHealthSignalAggregator.Record("IsActivityTaskValid", time.Since(startTime), retError)
 		metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
 	}()
 	h.startWG.Wait()
@@ -301,9 +292,7 @@ func (h *Handler) IsActivityTaskValid(ctx context.Context, request *historyservi
 }
 
 func (h *Handler) RecordActivityTaskHeartbeat(ctx context.Context, request *historyservice.RecordActivityTaskHeartbeatRequest) (_ *historyservice.RecordActivityTaskHeartbeatResponse, retError error) {
-	startTime := h.timeSource.Now()
 	defer func() {
-		h.historyHealthSignalAggregator.Record("RecordActivityTaskHeartbeat", time.Since(startTime), retError)
 		metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
 	}()
 	h.startWG.Wait()
@@ -344,9 +333,7 @@ func (h *Handler) RecordActivityTaskHeartbeat(ctx context.Context, request *hist
 
 // RecordActivityTaskStarted - Record Activity Task started.
 func (h *Handler) RecordActivityTaskStarted(ctx context.Context, request *historyservice.RecordActivityTaskStartedRequest) (_ *historyservice.RecordActivityTaskStartedResponse, retError error) {
-	startTime := h.timeSource.Now()
 	defer func() {
-		h.historyHealthSignalAggregator.Record("RecordActivityTaskStarted", time.Since(startTime), retError)
 		metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
 	}()
 	h.startWG.Wait()
@@ -380,9 +367,7 @@ func (h *Handler) RecordActivityTaskStarted(ctx context.Context, request *histor
 
 // RecordWorkflowTaskStarted - Record Workflow Task started.
 func (h *Handler) RecordWorkflowTaskStarted(ctx context.Context, request *historyservice.RecordWorkflowTaskStartedRequest) (_ *historyservice.RecordWorkflowTaskStartedResponseWithRawHistory, retError error) {
-	startTime := h.timeSource.Now()
 	defer func() {
-		h.historyHealthSignalAggregator.Record("RecordWorkflowTaskStarted", time.Since(startTime), retError)
 		metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
 	}()
 	h.startWG.Wait()
@@ -426,9 +411,7 @@ func (h *Handler) RecordWorkflowTaskStarted(ctx context.Context, request *histor
 
 // RespondActivityTaskCompleted - records completion of an activity task
 func (h *Handler) RespondActivityTaskCompleted(ctx context.Context, request *historyservice.RespondActivityTaskCompletedRequest) (_ *historyservice.RespondActivityTaskCompletedResponse, retError error) {
-	startTime := h.timeSource.Now()
 	defer func() {
-		h.historyHealthSignalAggregator.Record("RespondActivityTaskCompleted", time.Since(startTime), retError)
 		metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
 	}()
 	h.startWG.Wait()
@@ -469,9 +452,7 @@ func (h *Handler) RespondActivityTaskCompleted(ctx context.Context, request *his
 
 // RespondActivityTaskFailed - records failure of an activity task
 func (h *Handler) RespondActivityTaskFailed(ctx context.Context, request *historyservice.RespondActivityTaskFailedRequest) (_ *historyservice.RespondActivityTaskFailedResponse, retError error) {
-	startTime := h.timeSource.Now()
 	defer func() {
-		h.historyHealthSignalAggregator.Record("RespondActivityTaskFailed", time.Since(startTime), retError)
 		metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
 	}()
 	h.startWG.Wait()
@@ -512,9 +493,7 @@ func (h *Handler) RespondActivityTaskFailed(ctx context.Context, request *histor
 
 // RespondActivityTaskCanceled - records failure of an activity task
 func (h *Handler) RespondActivityTaskCanceled(ctx context.Context, request *historyservice.RespondActivityTaskCanceledRequest) (_ *historyservice.RespondActivityTaskCanceledResponse, retError error) {
-	startTime := h.timeSource.Now()
 	defer func() {
-		h.historyHealthSignalAggregator.Record("RespondActivityTaskCanceled", time.Since(startTime), retError)
 		metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
 	}()
 	h.startWG.Wait()
