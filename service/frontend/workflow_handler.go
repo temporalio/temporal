@@ -3420,7 +3420,8 @@ func (wh *WorkflowHandler) SetWorkerDeploymentCurrentVersion(ctx context.Context
 	resp, err := wh.workerDeploymentClient.SetCurrentVersion(ctx, namespaceEntry, request.DeploymentName, versionStr, request.Identity, request.IgnoreMissingTaskQueues, request.GetConflictToken())
 	if err != nil {
 		if common.IsResourceExhausted(err) {
-			return nil, serviceerror.NewResourceExhaustedf(enumspb.RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED, fmt.Sprintf(errTooManyRequests, "SetWorkerDeploymentCurrentVersion"))
+			err = fmt.Errorf(errTooManyRequests, "SetWorkerDeploymentCurrentVersion")
+			return nil, serviceerror.NewResourceExhaustedf(enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW, err.Error())
 		}
 		return nil, err
 	}
@@ -3479,7 +3480,8 @@ func (wh *WorkflowHandler) SetWorkerDeploymentRampingVersion(ctx context.Context
 	resp, err := wh.workerDeploymentClient.SetRampingVersion(ctx, namespaceEntry, request.DeploymentName, versionStr, request.GetPercentage(), request.GetIdentity(), request.IgnoreMissingTaskQueues, request.GetConflictToken())
 	if err != nil {
 		if common.IsResourceExhausted(err) {
-			return nil, serviceerror.NewResourceExhaustedf(enumspb.RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED, fmt.Sprintf(errTooManyRequests, "SetWorkerDeploymentRampingVersion"))
+			err = fmt.Errorf(errTooManyRequests, "SetWorkerDeploymentRampingVersion")
+			return nil, serviceerror.NewResourceExhaustedf(enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW, err.Error())
 		}
 		return nil, err
 	}
@@ -3583,7 +3585,8 @@ func (wh *WorkflowHandler) DeleteWorkerDeployment(ctx context.Context, request *
 	err = wh.workerDeploymentClient.DeleteWorkerDeployment(ctx, namespaceEntry, request.DeploymentName, request.Identity)
 	if err != nil {
 		if common.IsResourceExhausted(err) {
-			return nil, serviceerror.NewResourceExhaustedf(enumspb.RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED, fmt.Sprintf(errTooManyRequests, "DeleteWorkerDeployment"))
+			err = fmt.Errorf(errTooManyRequests, "DeleteWorkerDeployment")
+			return nil, serviceerror.NewResourceExhaustedf(enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW, err.Error())
 		}
 		return nil, err
 	}
@@ -3612,7 +3615,8 @@ func (wh *WorkflowHandler) DeleteWorkerDeploymentVersion(ctx context.Context, re
 	err = wh.workerDeploymentClient.DeleteWorkerDeploymentVersion(ctx, namespaceEntry, versionStr, request.SkipDrainage, request.Identity)
 	if err != nil {
 		if common.IsResourceExhausted(err) {
-			return nil, serviceerror.NewResourceExhaustedf(enumspb.RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED, fmt.Sprintf(errTooManyRequests, "DeleteWorkerDeploymentVersion"))
+			err = fmt.Errorf(errTooManyRequests, "DeleteWorkerDeploymentVersion")
+			return nil, serviceerror.NewResourceExhaustedf(enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW, err.Error())
 		}
 		return nil, err
 	}
@@ -3646,7 +3650,8 @@ func (wh *WorkflowHandler) UpdateWorkerDeploymentVersionMetadata(ctx context.Con
 	updatedMetadata, err := wh.workerDeploymentClient.UpdateVersionMetadata(ctx, namespaceEntry, versionStr, request.UpsertEntries, request.RemoveEntries, identity)
 	if err != nil {
 		if common.IsResourceExhausted(err) {
-			return nil, serviceerror.NewResourceExhaustedf(enumspb.RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED, fmt.Sprintf(errTooManyRequests, "UpdateWorkerDeploymentVersionMetadata"))
+			err = fmt.Errorf(errTooManyRequests, "UpdateWorkerDeploymentVersionMetadata")
+			return nil, serviceerror.NewResourceExhaustedf(enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW, err.Error())
 		}
 		return nil, err
 	}
