@@ -24,7 +24,6 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
-	"go.temporal.io/api/workflowservice/v1"
 	clockspb "go.temporal.io/server/api/clock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -2308,7 +2307,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		newTQ := command.GetTaskQueue().GetName()
 		newTQInPinnedVersion, err = isTaskQueueInVersionDetector(context.Background(), ms.GetNamespaceEntry().ID().String(), newTQ, inheritedPinnedVersion)
 		if err != nil {
-			return nil, fmt.Errorf("error determining child task queue presence in inherited version")
+			return nil, errors.New("error determining child task queue presence in inherited version")
 		}
 		if newTQ != previousExecutionInfo.GetTaskQueue() && !newTQInPinnedVersion {
 			inheritedPinnedVersion = nil
