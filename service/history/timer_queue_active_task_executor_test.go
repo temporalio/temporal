@@ -1735,7 +1735,6 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowExecutionTimeout_Fire() 
 		nil,
 		uuid.New(),
 		firstRunID,
-		nil,
 	)
 	s.Nil(err)
 

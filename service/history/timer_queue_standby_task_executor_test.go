@@ -1226,7 +1226,6 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowExecutionTimeout
 		nil,
 		uuid.New(),
 		firstRunID,
-		nil,
 	)
 	s.Nil(err)
 

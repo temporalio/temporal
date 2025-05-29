@@ -2257,6 +2257,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 	firstRunID string,
 	rootExecutionInfo *workflowspb.RootExecutionInfo,
 	links []*commonpb.Link,
+	isTaskQueueInVersionDetector worker_versioning.IsTaskQueueInVersionDetector,
 ) (*historypb.HistoryEvent, error) {
 	previousExecutionInfo := previousExecutionState.GetExecutionInfo()
 	taskQueue := previousExecutionInfo.TaskQueue
@@ -2294,16 +2295,10 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		return nil, err
 	}
 
-	// Pinned override is inherited if Task Queue of new run is compatible with the override version.
-	var pinnedOverride *workflowpb.VersioningOverride
-	if o := previousExecutionInfo.GetVersioningInfo().GetVersioningOverride(); worker_versioning.OverrideIsPinned(o) {
-		pinnedOverride = o
-		newTQ := command.GetTaskQueue().GetName()
-		if newTQ != previousExecutionInfo.GetTaskQueue() &&
-			!worker_versioning.IsTaskQueueInVersion(newTQ, worker_versioning.GetOverridePinnedVersion(pinnedOverride)) {
-			pinnedOverride = nil
-		}
-	}
+	// If there is a pinned override, then the effective version will be the same as the pinned override version.
+	// If this is a cross-TQ child, we don't want to ask matching the same question twice, so we re-use the result from
+	// the first matching task-queue-in-version check.
+	newTQInPinnedVersion := false
 
 	// New run initiated by workflow ContinueAsNew of pinned run, will inherit the previous run's version if the
 	// new run's Task Queue belongs to that version.
@@ -2311,10 +2306,22 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 	if previousExecutionState.GetEffectiveVersioningBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED {
 		inheritedPinnedVersion = worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(previousExecutionState.GetEffectiveDeployment())
 		newTQ := command.GetTaskQueue().GetName()
-		if newTQ != previousExecutionInfo.GetTaskQueue() &&
-			// if there is a pinned override, we might already know the answer to this without asking matching again, but that can be optimized later
-			!worker_versioning.IsTaskQueueInVersion(newTQ, inheritedPinnedVersion) {
+		newTQInPinnedVersion, err = isTaskQueueInVersionDetector(context.Background(), ms.GetNamespaceEntry().ID().String(), newTQ, inheritedPinnedVersion)
+		if err != nil {
+			return nil, fmt.Errorf("error determining child task queue presence in inherited version")
+		}
+		if newTQ != previousExecutionInfo.GetTaskQueue() && !newTQInPinnedVersion {
 			inheritedPinnedVersion = nil
+		}
+	}
+
+	// Pinned override is inherited if Task Queue of new run is compatible with the override version.
+	var pinnedOverride *workflowpb.VersioningOverride
+	if o := previousExecutionInfo.GetVersioningInfo().GetVersioningOverride(); worker_versioning.OverrideIsPinned(o) {
+		pinnedOverride = o
+		newTQ := command.GetTaskQueue().GetName()
+		if newTQ != previousExecutionInfo.GetTaskQueue() && !newTQInPinnedVersion {
+			pinnedOverride = nil
 		}
 	}
 
@@ -5054,6 +5061,7 @@ func (ms *MutableStateImpl) AddContinueAsNewEvent(
 	workflowTaskCompletedEventID int64,
 	parentNamespace namespace.Name,
 	command *commandpb.ContinueAsNewWorkflowExecutionCommandAttributes,
+	isTaskQueueInVersionDetector worker_versioning.IsTaskQueueInVersionDetector,
 ) (*historypb.HistoryEvent, historyi.MutableState, error) {
 	opTag := tag.WorkflowActionWorkflowContinueAsNew
 	if err := ms.checkMutability(opTag); err != nil {
@@ -5128,6 +5136,7 @@ func (ms *MutableStateImpl) AddContinueAsNewEvent(
 		firstRunID,
 		rootInfo,
 		startEvent.Links,
+		isTaskQueueInVersionDetector,
 	); err != nil {
 		return nil, nil, err
 	}

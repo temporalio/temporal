@@ -3,6 +3,9 @@ package worker_versioning
 import (
 	"context"
 	"fmt"
+	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/common/resource"
+	"google.golang.org/protobuf/proto"
 	"math"
 	"math/rand"
 	"strings"
@@ -240,9 +243,61 @@ func MakeDirectiveForWorkflowTask(
 	return nil
 }
 
-func IsTaskQueueInVersion(tq string, version *deploymentpb.WorkerDeploymentVersion) bool {
-	// TODO(carlydf): implement this, which might require more input parameters
-	// if there is an error talking to matching, I think we should just not return false because we can't confirm
+type IsTaskQueueInVersionDetector = func(ctx context.Context, namespaceID, tq string, version *deploymentpb.WorkerDeploymentVersion) (bool, error)
+
+func GetIsTaskQueueInVersionDetector(matchingClient resource.MatchingClient) IsTaskQueueInVersionDetector {
+	return func(ctx context.Context,
+		namespaceID, tq string,
+		version *deploymentpb.WorkerDeploymentVersion) (bool, error) {
+		resp, err := matchingClient.GetTaskQueueUserData(ctx,
+			&matchingservice.GetTaskQueueUserDataRequest{
+				NamespaceId:   namespaceID,
+				TaskQueue:     tq,
+				TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			})
+		if err != nil {
+			return false, err
+		}
+		tqData, ok := resp.GetUserData().GetData().GetPerType()[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)]
+		if !ok {
+			// The TQ is unversioned
+			return false, nil
+		}
+		return HasDeploymentVersion(tqData.GetDeploymentData(), DeploymentVersionFromDeployment(DeploymentFromExternalDeploymentVersion(version))), nil
+	}
+}
+
+// [cleanup-wv-pre-release]
+func FindDeployment(deployments *persistencespb.DeploymentData, deployment *deploymentpb.Deployment) int {
+	for i, d := range deployments.GetDeployments() { //nolint:staticcheck // SA1019: worker versioning v0.30
+		if d.Deployment.Equal(deployment) {
+			return i
+		}
+	}
+	return -1
+}
+
+func FindDeploymentVersion(deployments *persistencespb.DeploymentData, v *deploymentspb.WorkerDeploymentVersion) int {
+	for i, vd := range deployments.GetVersions() {
+		if proto.Equal(v, vd.GetVersion()) {
+			return i
+		}
+	}
+	return -1
+}
+
+//nolint:staticcheck
+func HasDeploymentVersion(deployments *persistencespb.DeploymentData, v *deploymentspb.WorkerDeploymentVersion) bool {
+	for _, d := range deployments.GetDeployments() {
+		if d.Deployment.Equal(DeploymentFromDeploymentVersion(v)) {
+			return true
+		}
+	}
+	for _, vd := range deployments.GetVersions() {
+		if proto.Equal(v, vd.GetVersion()) {
+			return true
+		}
+	}
 	return false
 }
 

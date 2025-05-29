@@ -1753,7 +1753,7 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 			if d := req.Deployment; d != nil {
 				// [cleanup-old-wv]
 				//nolint:staticcheck
-				if idx := findDeployment(deploymentData, req.Deployment); idx >= 0 {
+				if idx := worker_versioning.FindDeployment(deploymentData, req.Deployment); idx >= 0 {
 					deploymentData.Deployments[idx].Data = req.Data
 				} else {
 					deploymentData.Deployments = append(
@@ -1775,7 +1775,7 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 					} else { // set or update
 						deploymentData.UnversionedRampData = vd
 					}
-				} else if idx := findDeploymentVersion(deploymentData, vd.GetVersion()); idx >= 0 {
+				} else if idx := worker_versioning.FindDeploymentVersion(deploymentData, vd.GetVersion()); idx >= 0 {
 					old := deploymentData.Versions[idx]
 					if old.GetRoutingUpdateTime().AsTime().After(vd.GetRoutingUpdateTime().AsTime()) {
 						continue
@@ -1788,7 +1788,7 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 					deploymentData.Versions = append(deploymentData.Versions, vd)
 				}
 			} else if v := req.GetForgetVersion(); v != nil {
-				if idx := findDeploymentVersion(deploymentData, v); idx >= 0 {
+				if idx := worker_versioning.FindDeploymentVersion(deploymentData, v); idx >= 0 {
 					changed = true
 					deploymentData.Versions = append(deploymentData.Versions[:idx], deploymentData.Versions[idx+1:]...)
 				}

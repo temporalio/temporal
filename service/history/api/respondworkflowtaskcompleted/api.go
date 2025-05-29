@@ -2,6 +2,7 @@ package respondworkflowtaskcompleted
 
 import (
 	"context"
+	"go.temporal.io/server/common/resource"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -58,6 +59,7 @@ type (
 		searchAttributesValidator      *searchattribute.Validator
 		persistenceVisibilityMgr       manager.VisibilityManager
 		commandHandlerRegistry         *workflow.CommandHandlerRegistry
+		matchingRawClient              resource.MatchingRawClient
 	}
 )
 
@@ -69,6 +71,7 @@ func NewWorkflowTaskCompletedHandler(
 	searchAttributesValidator *searchattribute.Validator,
 	visibilityManager manager.VisibilityManager,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
+	matchingRawClient resource.MatchingRawClient,
 ) *WorkflowTaskCompletedHandler {
 	return &WorkflowTaskCompletedHandler{
 		config:                     shardContext.GetConfig(),
@@ -90,6 +93,7 @@ func NewWorkflowTaskCompletedHandler(
 		searchAttributesValidator:      searchAttributesValidator,
 		persistenceVisibilityMgr:       visibilityManager,
 		commandHandlerRegistry:         commandHandlerRegistry,
+		matchingRawClient:              matchingRawClient,
 	}
 }
 
@@ -375,6 +379,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			handler.searchAttributesMapperProvider,
 			hasBufferedEventsOrMessages,
 			handler.commandHandlerRegistry,
+			handler.matchingRawClient,
 		)
 
 		if responseMutations, err = workflowTaskHandler.handleCommands(

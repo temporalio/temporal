@@ -71,7 +71,6 @@ func TestHistoryBuilder_AddWorkflowExecutionStartedEvent(t *testing.T) {
 			"prev-run-id",
 			"first-run-id",
 			"original-run-id",
-			nil,
 		)
 		if e == nil {
 			t.Fatal("added event is nil")
@@ -102,7 +101,6 @@ func TestHistoryBuilder_AddWorkflowExecutionStartedEvent(t *testing.T) {
 			"prev-run-id",
 			"first-run-id",
 			"original-run-id",
-			nil,
 		)
 		if e == nil {
 			t.Fatal("added event is nil")
@@ -1229,7 +1227,7 @@ func (s *sutTestingAdapter) AddWorkflowExecutionStartedEvent(_ ...eventConfig) *
 	parentInfo := &workflowspb.ParentExecutionInfo{Namespace: "ns-1"}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{}
 	req := &historyservice.StartWorkflowExecutionRequest{StartRequest: startReq, ParentExecutionInfo: parentInfo}
-	return s.HistoryBuilder.AddWorkflowExecutionStartedEvent(s.today, req, nil, "prev-run-1", "first-run-1", "original-run-1", nil)
+	return s.HistoryBuilder.AddWorkflowExecutionStartedEvent(s.today, req, nil, "prev-run-1", "first-run-1", "original-run-1")
 }
 
 func (s *sutTestingAdapter) AddWorkflowTaskStartedEvent(_ ...eventConfig) *historypb.HistoryEvent {

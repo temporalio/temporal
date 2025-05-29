@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/worker_versioning"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -73,6 +75,7 @@ type (
 		shard                  historyi.ShardContext
 		tokenSerializer        *tasktoken.Serializer
 		commandHandlerRegistry *workflow.CommandHandlerRegistry
+		matchingRawClient      resource.MatchingRawClient
 	}
 
 	workflowTaskFailedCause struct {
@@ -111,6 +114,7 @@ func newWorkflowTaskCompletedHandler(
 	searchAttributesMapperProvider searchattribute.MapperProvider,
 	hasBufferedEventsOrMessages bool,
 	commandHandlerRegistry *workflow.CommandHandlerRegistry,
+	matchingRawClient resource.MatchingRawClient,
 ) *workflowTaskCompletedHandler {
 	return &workflowTaskCompletedHandler{
 		identity:                identity,
@@ -142,6 +146,7 @@ func newWorkflowTaskCompletedHandler(
 		shard:                  shard,
 		tokenSerializer:        tasktoken.NewSerializer(),
 		commandHandlerRegistry: commandHandlerRegistry,
+		matchingRawClient:      matchingRawClient,
 	}
 }
 
@@ -986,6 +991,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandContinueAsNewWorkflow(
 		handler.workflowTaskCompletedID,
 		parentNamespace,
 		attr,
+		worker_versioning.GetIsTaskQueueInVersionDetector(handler.matchingRawClient),
 	)
 	if err != nil {
 		return nil, err

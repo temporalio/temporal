@@ -34,6 +34,7 @@ import (
 	definition "go.temporal.io/server/common/definition"
 	namespace "go.temporal.io/server/common/namespace"
 	persistence0 "go.temporal.io/server/common/persistence"
+	worker_versioning "go.temporal.io/server/common/worker_versioning"
 	historybuilder "go.temporal.io/server/service/history/historybuilder"
 	hsm "go.temporal.io/server/service/history/hsm"
 	tasks "go.temporal.io/server/service/history/tasks"
@@ -280,9 +281,9 @@ func (mr *MockMutableStateMockRecorder) AddCompletedWorkflowEvent(arg0, arg1, ar
 }
 
 // AddContinueAsNewEvent mocks base method.
-func (m *MockMutableState) AddContinueAsNewEvent(arg0 context.Context, arg1, arg2 int64, arg3 namespace.Name, arg4 *command.ContinueAsNewWorkflowExecutionCommandAttributes) (*history.HistoryEvent, MutableState, error) {
+func (m *MockMutableState) AddContinueAsNewEvent(arg0 context.Context, arg1, arg2 int64, arg3 namespace.Name, arg4 *command.ContinueAsNewWorkflowExecutionCommandAttributes, arg5 worker_versioning.IsTaskQueueInVersionDetector) (*history.HistoryEvent, MutableState, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddContinueAsNewEvent", arg0, arg1, arg2, arg3, arg4)
+	ret := m.ctrl.Call(m, "AddContinueAsNewEvent", arg0, arg1, arg2, arg3, arg4, arg5)
 	ret0, _ := ret[0].(*history.HistoryEvent)
 	ret1, _ := ret[1].(MutableState)
 	ret2, _ := ret[2].(error)
@@ -290,9 +291,9 @@ func (m *MockMutableState) AddContinueAsNewEvent(arg0 context.Context, arg1, arg
 }
 
 // AddContinueAsNewEvent indicates an expected call of AddContinueAsNewEvent.
-func (mr *MockMutableStateMockRecorder) AddContinueAsNewEvent(arg0, arg1, arg2, arg3, arg4 any) *gomock.Call {
+func (mr *MockMutableStateMockRecorder) AddContinueAsNewEvent(arg0, arg1, arg2, arg3, arg4, arg5 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddContinueAsNewEvent", reflect.TypeOf((*MockMutableState)(nil).AddContinueAsNewEvent), arg0, arg1, arg2, arg3, arg4)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddContinueAsNewEvent", reflect.TypeOf((*MockMutableState)(nil).AddContinueAsNewEvent), arg0, arg1, arg2, arg3, arg4, arg5)
 }
 
 // AddExternalWorkflowExecutionCancelRequested mocks base method.
@@ -705,9 +706,9 @@ func (m *MockMutableState) AddWorkflowExecutionStartedEventWithOptions(arg0 *com
 }
 
 // AddWorkflowExecutionStartedEventWithOptions indicates an expected call of AddWorkflowExecutionStartedEventWithOptions.
-func (mr *MockMutableStateMockRecorder) AddWorkflowExecutionStartedEventWithOptions(arg0, arg1, arg2, arg3, arg4, arg5 any) *gomock.Call {
+func (mr *MockMutableStateMockRecorder) AddWorkflowExecutionStartedEventWithOptions(arg0, arg1, arg2, arg3, arg4 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddWorkflowExecutionStartedEventWithOptions", reflect.TypeOf((*MockMutableState)(nil).AddWorkflowExecutionStartedEventWithOptions), arg0, arg1, arg2, arg3, arg4, arg5)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddWorkflowExecutionStartedEventWithOptions", reflect.TypeOf((*MockMutableState)(nil).AddWorkflowExecutionStartedEventWithOptions), arg0, arg1, arg2, arg3, arg4)
 }
 
 // AddWorkflowExecutionTerminatedEvent mocks base method.

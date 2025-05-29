@@ -834,28 +834,34 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		}
 	}
 
-	// Pinned override is inherited if Task Queue of new run is compatible with the override version.
-	var inheritedPinnedOverride *workflowpb.VersioningOverride
-	if o := mutableState.GetExecutionInfo().GetVersioningInfo().GetVersioningOverride(); worker_versioning.OverrideIsPinned(o) {
-		inheritedPinnedOverride = o
-		newTQ := attributes.GetTaskQueue().GetName()
-		if newTQ != mutableState.GetExecutionInfo().GetTaskQueue() &&
-			!worker_versioning.IsTaskQueueInVersion(newTQ, worker_versioning.GetOverridePinnedVersion(inheritedPinnedOverride)) ||
-			attributes.GetNamespaceId() != mutableState.GetExecutionInfo().GetNamespaceId() { // don't inherit pinned version if child is in a different namespace
-			inheritedPinnedOverride = nil
-		}
-	}
+	// If there is a pinned override, then the effective version will be the same as the pinned override version.
+	// If this is a cross-TQ child, we don't want to ask matching the same question twice, so we re-use the result from
+	// the first matching task-queue-in-version check.
+	newTQInPinnedVersion := false
 
 	// Child of pinned parent will inherit the parent's version if the Child's Task Queue belongs to that version.
 	var inheritedPinnedVersion *deploymentpb.WorkerDeploymentVersion
 	if mutableState.GetEffectiveVersioningBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED {
 		inheritedPinnedVersion = worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(mutableState.GetEffectiveDeployment())
 		newTQ := attributes.GetTaskQueue().GetName()
-		if newTQ != mutableState.GetExecutionInfo().GetTaskQueue() &&
-			// if there is a pinned override, we might already know the answer to this without asking matching again, but that can be optimized later
-			!worker_versioning.IsTaskQueueInVersion(newTQ, inheritedPinnedVersion) ||
+		newTQInPinnedVersion, err = worker_versioning.GetIsTaskQueueInVersionDetector(t.matchingRawClient)(ctx, attributes.GetNamespaceId(), newTQ, inheritedPinnedVersion)
+		if err != nil {
+			return fmt.Errorf("error determining child task queue presence in inherited version")
+		}
+		if newTQ != mutableState.GetExecutionInfo().GetTaskQueue() && !newTQInPinnedVersion ||
 			attributes.GetNamespaceId() != mutableState.GetExecutionInfo().GetNamespaceId() { // don't inherit pinned version if child is in a different namespace
 			inheritedPinnedVersion = nil
+		}
+	}
+
+	// Pinned override is inherited if Task Queue of new run is compatible with the override version.
+	var inheritedPinnedOverride *workflowpb.VersioningOverride
+	if o := mutableState.GetExecutionInfo().GetVersioningInfo().GetVersioningOverride(); worker_versioning.OverrideIsPinned(o) {
+		inheritedPinnedOverride = o
+		newTQ := attributes.GetTaskQueue().GetName()
+		if newTQ != mutableState.GetExecutionInfo().GetTaskQueue() && !newTQInPinnedVersion ||
+			attributes.GetNamespaceId() != mutableState.GetExecutionInfo().GetNamespaceId() { // don't inherit pinned version if child is in a different namespace
+			inheritedPinnedOverride = nil
 		}
 	}
 

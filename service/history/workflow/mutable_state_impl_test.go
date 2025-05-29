@@ -2023,6 +2023,7 @@ func (s *mutableStateSuite) TestAddContinueAsNewEvent_Default() {
 			// All other fields will default to those in the current run.
 			WorkflowRunTimeout: s.mutableState.GetExecutionInfo().WorkflowRunTimeout,
 		},
+		nil,
 	)
 	s.NoError(err)
 
