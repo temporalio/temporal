@@ -1617,7 +1617,7 @@ func (s *WorkerDeploymentSuite) TestResourceExhaustedErrors_Converted_To_Interna
 	}
 
 	// Test SetRampingVersion
-	s.testConcurrentRequestsResourceExhausted(ctx, tv, versions, errChan, "SetRampingVersion", func(i int) error {
+	s.testConcurrentRequestsResourceExhausted(ctx, tv, versions, errChan, "SetWorkerDeploymentRampingVersion", func(i int) error {
 		_, err := s.FrontendClient().SetWorkerDeploymentRampingVersion(ctx, &workflowservice.SetWorkerDeploymentRampingVersionRequest{
 			Namespace:               s.Namespace().String(),
 			DeploymentName:          tv.DeploymentVersion().GetDeploymentName(),
@@ -1630,7 +1630,7 @@ func (s *WorkerDeploymentSuite) TestResourceExhaustedErrors_Converted_To_Interna
 	})
 
 	// Test SetCurrentVersion
-	s.testConcurrentRequestsResourceExhausted(ctx, tv, versions, errChan, "SetCurrentVersion", func(i int) error {
+	s.testConcurrentRequestsResourceExhausted(ctx, tv, versions, errChan, "SetWorkerDeploymentCurrentVersion", func(i int) error {
 		_, err := s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
 			Namespace:               s.Namespace().String(),
 			DeploymentName:          tv.DeploymentVersion().GetDeploymentName(),
@@ -1646,7 +1646,7 @@ func (s *WorkerDeploymentSuite) TestResourceExhaustedErrors_Converted_To_Interna
 		"key1": {Data: testRandomMetadataValue},
 		"key2": {Data: testRandomMetadataValue},
 	}
-	s.testConcurrentRequestsResourceExhausted(ctx, tv, versions, errChan, "UpdateVersionMetadata", func(i int) error {
+	s.testConcurrentRequestsResourceExhausted(ctx, tv, versions, errChan, "UpdateWorkerDeploymentVersionMetadata", func(i int) error {
 		_, err := s.FrontendClient().UpdateWorkerDeploymentVersionMetadata(ctx, &workflowservice.UpdateWorkerDeploymentVersionMetadataRequest{
 			Namespace:     s.Namespace().String(),
 			Version:       tv.WithBuildIDNumber(i).DeploymentVersionString(),
@@ -1676,7 +1676,7 @@ func (s *WorkerDeploymentSuite) testConcurrentRequestsResourceExhausted(
 		err := <-errChan
 		if err != nil {
 			switch err.(type) {
-			case *serviceerror.Internal:
+			case *serviceerror.ResourceExhausted:
 				s.Equal(err.Error(), fmt.Sprintf("Too many %s requests have been issued in rapid succession. Please throttle the request rate to avoid exceeding system resource limits.", apiName))
 				continue
 			default:

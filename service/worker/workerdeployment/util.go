@@ -154,9 +154,3 @@ func isFailedPrecondition(err error) bool {
 	var applicationError *temporal.ApplicationError
 	return errors.As(err, &failedPreconditionError) || (errors.As(err, &applicationError) && applicationError.Type() == errFailedPrecondition)
 }
-
-// isResourceExhausted checks if the error is a ResourceExhausted error.
-func isResourceExhausted(err error) bool {
-	var resourceExhausted *serviceerror.ResourceExhausted
-	return errors.As(err, &resourceExhausted)
-}

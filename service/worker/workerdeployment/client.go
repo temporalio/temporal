@@ -345,9 +345,6 @@ func (d *ClientImpl) UpdateVersionMetadata(
 		Meta:  &updatepb.Meta{UpdateId: requestID, Identity: identity},
 	})
 	if err != nil {
-		if isResourceExhausted(err) {
-			return nil, serviceerror.NewInternal(fmt.Sprintf(ErrTooManyRequests, "UpdateVersionMetadata"))
-		}
 		return nil, err
 	}
 
@@ -528,9 +525,6 @@ func (d *ClientImpl) SetCurrentVersion(
 		},
 	)
 	if err != nil {
-		if isResourceExhausted(err) {
-			return nil, serviceerror.NewInternal(fmt.Sprintf(ErrTooManyRequests, "SetCurrentVersion"))
-		}
 		return nil, err
 	}
 
@@ -617,9 +611,6 @@ func (d *ClientImpl) SetRampingVersion(
 		},
 	)
 	if err != nil {
-		if isResourceExhausted(err) {
-			return nil, serviceerror.NewInternal(fmt.Sprintf(ErrTooManyRequests, "SetRampingVersion"))
-		}
 		return nil, err
 	}
 
@@ -703,9 +694,6 @@ func (d *ClientImpl) DeleteWorkerDeploymentVersion(
 		},
 	)
 	if err != nil {
-		if isResourceExhausted(err) {
-			return serviceerror.NewInternal(fmt.Sprintf(ErrTooManyRequests, "DeleteWorkerDeploymentVersion"))
-		}
 		return err
 	}
 
@@ -769,9 +757,6 @@ func (d *ClientImpl) DeleteWorkerDeployment(
 		var notFound *serviceerror.NotFound
 		if errors.As(err, &notFound) {
 			return nil
-		}
-		if isResourceExhausted(err) {
-			return serviceerror.NewInternal(fmt.Sprintf(ErrTooManyRequests, "DeleteWorkerDeployment"))
 		}
 		return err
 	}
@@ -936,9 +921,6 @@ func (d *ClientImpl) DeleteVersionFromWorkerDeployment(
 		},
 	)
 	if err != nil {
-		if isResourceExhausted(err) {
-			return serviceerror.NewInternal(fmt.Sprintf(ErrTooManyRequests, "DeleteVersionFromWorkerDeployment"))
-		}
 		return err
 	}
 
