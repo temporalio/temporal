@@ -1180,6 +1180,10 @@ var (
 		WithDescription("The number of schedule actions that failed to start"),
 	)
 
+	// Worker Versioning
+	WorkerDeploymentVersioningOverrideCounter = NewCounterDef("worker_deployment_versioning_override_count")
+	StartDeploymentTransitionCounter          = NewCounterDef("start_deployment_transition_count")
+
 	// Force replication
 	EncounterZombieWorkflowCount        = NewCounterDef("encounter_zombie_workflow_count")
 	EncounterNotFoundWorkflowCount      = NewCounterDef("encounter_not_found_workflow_count")
