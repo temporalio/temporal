@@ -838,7 +838,8 @@ func (d *WorkflowRunner) syncUnversionedRamp(ctx workflow.Context, versionUpdate
 		activityCtx,
 		d.a.DescribeVersionFromWorkerDeployment,
 		&deploymentspb.DescribeVersionFromWorkerDeploymentActivityArgs{
-			Version: d.State.RoutingConfig.CurrentVersion,
+			Version: d.State.RoutingConfig.CurrentVersion, //nolint:staticcheck // SA1019: worker versioning v0.31
+
 		}).Get(ctx, &res)
 	if err != nil {
 		return err

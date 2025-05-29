@@ -73,7 +73,6 @@ const (
 
 	ErrRampingVersionDoesNotHaveAllTaskQueues = "proposed ramping version is missing active task queues from the current version; these would become unversioned if it is set as the ramping version"
 	ErrCurrentVersionDoesNotHaveAllTaskQueues = "proposed current version is missing active task queues from the current version; these would become unversioned if it is set as the current version"
-	ErrTooManyRequests                        = "Too many %s requests have been issued in rapid succession. Please throttle the request rate to avoid exceeding system resource limits."
 )
 
 var (
