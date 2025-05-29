@@ -50,7 +50,7 @@ func NewComponentPointerField[C Component](
 ) Field[C] {
 	path, exists := ctx.Ref(c)
 	if !exists {
-		// TODO (alex): error?
+		// TODO (alex): It is better return error here but constructors shouldn't return errors.
 		return NewEmptyField[C]()
 	}
 	return Field[C]{
@@ -62,7 +62,7 @@ func NewDataPointerField[D proto.Message](
 	ctx MutableContext,
 	d D,
 ) Field[D] {
-	// TODO (alex): this needs to be implmeted somehow too
+	// TODO (alex): this needs to be implemented somehow too.
 	//nolint:forbidigo
 	panic("not implemented")
 }

@@ -375,8 +375,7 @@ func (n *Node) preparePointerValue(
 }
 
 func (n *Node) findNode(path []string) *Node {
-	if len(path) == 0 {
-		// shouldn't happen. softassert?
+	if !softassert.That(n.logger, len(path) > 0, "path must have at least one element") {
 		return nil
 	}
 
@@ -845,8 +844,9 @@ func (n *Node) serializeCollectionNode() error {
 func (n *Node) serializePointerNode() error {
 	path, isPathValid := n.value.([]string)
 	if !isPathValid {
-		// TODO (alex): may be not needed. it must be always be []string
-		return serviceerror.NewInternal(fmt.Sprintf("pointer path is not []string but %T", n.value))
+		msg := fmt.Sprintf("pointer path is not []string but %T for node %s", n.value, n.nodeName)
+		softassert.Fail(n.logger, msg)
+		return serviceerror.NewInternal(msg)
 	}
 
 	// TODO: should it go to Data instead ???
