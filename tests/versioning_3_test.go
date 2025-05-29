@@ -1515,11 +1515,11 @@ func (s *Versioning3Suite) TestPinnedCaN_SameTQ() {
 }
 
 func (s *Versioning3Suite) TestPinnedCaN_CrossTQ_Inherit() {
-	s.testCan(false, vbPinned, true)
+	s.testCan(true, vbPinned, true)
 }
 
 func (s *Versioning3Suite) TestPinnedCaN_CrossTQ_NoInherit() {
-	s.testCan(false, vbPinned, false)
+	s.testCan(true, vbPinned, false)
 }
 
 func (s *Versioning3Suite) TestUnpinnedCaN() {
@@ -1599,6 +1599,19 @@ func (s *Versioning3Suite) testCan(crossTq bool, behavior enumspb.VersioningBeha
 	s.NoError(w1.Start())
 	defer w1.Stop()
 
+	if crossTq {
+		w2xtq := worker.New(sdkClient, canxTq, worker.Options{
+			DeploymentOptions: worker.DeploymentOptions{
+				Version:                   tv2.DeploymentVersionString(),
+				UseVersioning:             true,
+				DefaultVersioningBehavior: workflow.VersioningBehaviorAutoUpgrade,
+			},
+			MaxConcurrentWorkflowTaskPollers: numPollers,
+		})
+		w2xtq.RegisterWorkflowWithOptions(wf2, workflow.RegisterOptions{Name: "wf", VersioningBehavior: workflow.VersioningBehaviorPinned})
+		s.NoError(w2xtq.Start())
+		defer w2xtq.Stop()
+	}
 	w2 := worker.New(sdkClient, tv2.TaskQueue().GetName(), worker.Options{
 		DeploymentOptions: worker.DeploymentOptions{
 			UseVersioning:             true,
@@ -1631,7 +1644,7 @@ func (s *Versioning3Suite) testCan(crossTq bool, behavior enumspb.VersioningBeha
 
 	var out string
 	s.NoError(run.Get(ctx, &out))
-	if behavior == enumspb.VERSIONING_BEHAVIOR_PINNED && expectInherit {
+	if expectInherit {
 		s.Equal("v1", out)
 	} else {
 		s.Equal("v2", out)
