@@ -3401,7 +3401,7 @@ func (s *WorkflowHandlerSuite) TestExecuteMultiOperation() {
 	})
 
 	assertMultiOpsErr := func(expectedErrs []error, actual error) {
-		s.Equal("MultiOperation could not be executed.", actual.Error())
+		s.Equal("Update-with-Start could not be executed.", actual.Error())
 		s.EqualValues(expectedErrs, actual.(*serviceerror.MultiOperationExecution).OperationErrors())
 	}
 
