@@ -343,9 +343,6 @@ func queryDirectlyThroughMatching(
 		stickyStartTime := time.Now().UTC()
 		matchingResp, err := rawMatchingClient.QueryWorkflow(stickyContext, stickyMatchingRequest)
 		metrics.DirectQueryDispatchStickyLatency.With(metricsHandler).Record(time.Since(stickyStartTime))
-		if err != nil {
-			return nil, err
-		}
 		cancel()
 		if err == nil {
 			metrics.DirectQueryDispatchStickySuccessCount.With(metricsHandler).Record(1)
@@ -390,6 +387,9 @@ func queryDirectlyThroughMatching(
 	nonStickyStartTime := time.Now().UTC()
 	matchingResp, err := matchingClient.QueryWorkflow(ctx, nonStickyMatchingRequest)
 	metrics.DirectQueryDispatchNonStickyLatency.With(metricsHandler).Record(time.Since(nonStickyStartTime))
+	if err != nil {
+		return nil, err
+	}
 	metrics.DirectQueryDispatchNonStickySuccessCount.With(metricsHandler).Record(1)
 	return &historyservice.QueryWorkflowResponse{
 		Response: &workflowservice.QueryWorkflowResponse{
