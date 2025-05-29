@@ -2,6 +2,7 @@ package metrics
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"time"
 
@@ -30,57 +31,67 @@ type (
 	}
 )
 
-func NewOpenTelemetryProvider(
+// NewOpenTelemetryProviderWithStatsd creates a new OpenTelemetry provider with a StatsD exporter.
+func NewOpenTelemetryProviderWithStatsd(
 	logger log.Logger,
 	statsdConfig *StatsdConfig,
+	clientConfig *ClientConfig,
+) (*openTelemetryProviderImpl, error) {
+	// Set up StatsD exporter if config is provided
+	if statsdConfig == nil {
+		return nil, errors.New("statsd config is required to provide statsd metrics")
+	}
+	var err error
+	statsdExp, err := NewStatsdExporter(statsdConfig, logger)
+	if err != nil {
+		logger.Error("Failed to initialize statsd exporter.", tag.Error(err))
+		return nil, err
+	}
+	// Create a PeriodicReader with the StatsD exporter
+	statsdReader := sdkmetrics.NewPeriodicReader(statsdExp)
+	return newOpenTelemetryProvider(logger, statsdReader, statsdConfig, statsdExp, nil, nil, clientConfig)
+}
+
+// NewOpenTelemetryProviderWithPrometheus creates a new OpenTelemetry provider with a Prometheus exporter.
+func NewOpenTelemetryProviderWithPrometheus(
+	logger log.Logger,
 	prometheusConfig *PrometheusConfig,
 	clientConfig *ClientConfig,
 	fatalOnListenerError bool,
 ) (*openTelemetryProviderImpl, error) {
-	var readers []sdkmetrics.Reader
-	var metricServer *http.Server
-	var statsdExp *statsdExporter
-
 	// Set up Prometheus exporter if config is provided
-	if prometheusConfig != nil {
-		reg := prometheus.NewRegistry()
-		exporterOpts := []exporters.Option{exporters.WithRegisterer(reg)}
-		if clientConfig.WithoutUnitSuffix {
-			exporterOpts = append(exporterOpts, exporters.WithoutUnits())
-		}
-		if clientConfig.WithoutCounterSuffix {
-			exporterOpts = append(exporterOpts, exporters.WithoutCounterSuffixes())
-		}
-		if clientConfig.Prefix != "" {
-			exporterOpts = append(exporterOpts, exporters.WithNamespace(clientConfig.Prefix))
-		}
-		exporter, err := exporters.New(exporterOpts...)
-		if err != nil {
-			logger.Error("Failed to initialize prometheus exporter.", tag.Error(err))
-			return nil, err
-		}
-		readers = append(readers, exporter)
-		metricServer = initPrometheusListener(prometheusConfig, reg, logger, fatalOnListenerError)
+	if prometheusConfig == nil {
+		return nil, errors.New("prometheus config is required to provide prometheus metrics")
 	}
-
-	// Set up StatsD exporter if config is provided
-	if statsdConfig != nil {
-		var err error
-		statsdExp, err = NewStatsdExporter(statsdConfig, logger)
-		if err != nil {
-			logger.Error("Failed to initialize statsd exporter.", tag.Error(err))
-			return nil, err
-		}
-		// Create a PeriodicReader with the StatsD exporter
-		statsdReader := sdkmetrics.NewPeriodicReader(statsdExp)
-		readers = append(readers, statsdReader)
+	reg := prometheus.NewRegistry()
+	exporterOpts := []exporters.Option{exporters.WithRegisterer(reg)}
+	if clientConfig.WithoutUnitSuffix {
+		exporterOpts = append(exporterOpts, exporters.WithoutUnits())
 	}
-
-	// If no exporters are configured, log a warning
-	if len(readers) == 0 {
-		logger.Warn("No metric exporters configured (neither Prometheus nor StatsD)")
+	if clientConfig.WithoutCounterSuffix {
+		exporterOpts = append(exporterOpts, exporters.WithoutCounterSuffixes())
 	}
+	if clientConfig.Prefix != "" {
+		exporterOpts = append(exporterOpts, exporters.WithNamespace(clientConfig.Prefix))
+	}
+	exporter, err := exporters.New(exporterOpts...)
+	if err != nil {
+		logger.Error("Failed to initialize prometheus exporter.", tag.Error(err))
+		return nil, err
+	}
+	metricServer := initPrometheusListener(prometheusConfig, reg, logger, fatalOnListenerError)
+	return newOpenTelemetryProvider(logger, exporter, nil, nil, prometheusConfig, metricServer, clientConfig)
+}
 
+func newOpenTelemetryProvider(
+	logger log.Logger,
+	reader sdkmetrics.Reader,
+	statsdConfig *StatsdConfig,
+	statsdExporter *statsdExporter,
+	prometheusConfig *PrometheusConfig,
+	prometheusServer *http.Server,
+	clientConfig *ClientConfig,
+) (*openTelemetryProviderImpl, error) {
 	var views []sdkmetrics.View
 	for _, u := range []string{Dimensionless, Bytes, Milliseconds, Seconds} {
 		views = append(views, sdkmetrics.NewView(
@@ -96,23 +107,106 @@ func NewOpenTelemetryProvider(
 		))
 	}
 
-	meterProviderOpts := []sdkmetrics.Option{sdkmetrics.WithView(views...)}
-	for _, reader := range readers {
-		meterProviderOpts = append(meterProviderOpts, sdkmetrics.WithReader(reader))
-	}
-
-	provider := sdkmetrics.NewMeterProvider(meterProviderOpts...)
+	provider := sdkmetrics.NewMeterProvider(
+		sdkmetrics.WithReader(reader),
+		sdkmetrics.WithView(views...),
+	)
 	meter := provider.Meter("temporal")
 
 	reporter := &openTelemetryProviderImpl{
 		meter:          meter,
 		config:         prometheusConfig,
-		server:         metricServer,
-		statsdExporter: statsdExp,
+		server:         prometheusServer,
+		statsdExporter: statsdExporter,
 	}
 
 	return reporter, nil
+
 }
+
+// func NewOpenTelemetryProvider(
+// 	logger log.Logger,
+// 	statsdConfig *StatsdConfig,
+// 	prometheusConfig *PrometheusConfig,
+// 	clientConfig *ClientConfig,
+// 	fatalOnListenerError bool,
+// ) (*openTelemetryProviderImpl, error) {
+// 	var readers []sdkmetrics.Reader
+// 	var metricServer *http.Server
+// 	var statsdExp *statsdExporter
+
+// 	// Set up Prometheus exporter if config is provided
+// 	if prometheusConfig != nil {
+// 		reg := prometheus.NewRegistry()
+// 		exporterOpts := []exporters.Option{exporters.WithRegisterer(reg)}
+// 		if clientConfig.WithoutUnitSuffix {
+// 			exporterOpts = append(exporterOpts, exporters.WithoutUnits())
+// 		}
+// 		if clientConfig.WithoutCounterSuffix {
+// 			exporterOpts = append(exporterOpts, exporters.WithoutCounterSuffixes())
+// 		}
+// 		if clientConfig.Prefix != "" {
+// 			exporterOpts = append(exporterOpts, exporters.WithNamespace(clientConfig.Prefix))
+// 		}
+// 		exporter, err := exporters.New(exporterOpts...)
+// 		if err != nil {
+// 			logger.Error("Failed to initialize prometheus exporter.", tag.Error(err))
+// 			return nil, err
+// 		}
+// 		readers = append(readers, exporter)
+// 		metricServer = initPrometheusListener(prometheusConfig, reg, logger, fatalOnListenerError)
+// 	}
+
+// 	// Set up StatsD exporter if config is provided
+// 	if statsdConfig != nil {
+// 		var err error
+// 		statsdExp, err = NewStatsdExporter(statsdConfig, logger)
+// 		if err != nil {
+// 			logger.Error("Failed to initialize statsd exporter.", tag.Error(err))
+// 			return nil, err
+// 		}
+// 		// Create a PeriodicReader with the StatsD exporter
+// 		statsdReader := sdkmetrics.NewPeriodicReader(statsdExp)
+// 		readers = append(readers, statsdReader)
+// 	}
+
+// 	// If no exporters are configured, log a warning
+// 	if len(readers) == 0 {
+// 		logger.Warn("No metric exporters configured (neither Prometheus nor StatsD)")
+// 	}
+
+// 	var views []sdkmetrics.View
+// 	for _, u := range []string{Dimensionless, Bytes, Milliseconds, Seconds} {
+// 		views = append(views, sdkmetrics.NewView(
+// 			sdkmetrics.Instrument{
+// 				Kind: sdkmetrics.InstrumentKindHistogram,
+// 				Unit: u,
+// 			},
+// 			sdkmetrics.Stream{
+// 				Aggregation: sdkmetrics.AggregationExplicitBucketHistogram{
+// 					Boundaries: clientConfig.PerUnitHistogramBoundaries[u],
+// 				},
+// 			},
+// 		))
+// 	}
+
+// 	meterProviderOpts := []sdkmetrics.Option{sdkmetrics.WithView(views...)}
+// 	for _, reader := range readers {
+// 		meterProviderOpts = append(meterProviderOpts, sdkmetrics.WithReader(reader))
+// 	}
+
+// 	provider := sdkmetrics.NewMeterProvider(meterProviderOpts...)
+// 	meter := provider.Meter("temporal")
+
+// 	reporter := &openTelemetryProviderImpl{
+// 		meter:          meter,
+// 		config:         prometheusConfig,
+// 		server:         metricServer,
+// 		statsdExporter: statsdExp,
+// 	}
+
+// 	return reporter, nil
+// }
 
 func initPrometheusListener(
 	config *PrometheusConfig,

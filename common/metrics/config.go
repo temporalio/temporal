@@ -464,7 +464,7 @@ func MetricsHandlerFromConfig(logger log.Logger, c *Config) (Handler, error) {
 	fatalOnListenerError := true
 	if c.Statsd != nil && c.Statsd.Framework == FrameworkOpentelemetry {
 		// create opentelemetry provider with just statsd
-		otelProvider, err := NewOpenTelemetryProvider(logger, c.Statsd, nil, &c.ClientConfig, fatalOnListenerError)
+		otelProvider, err := NewOpenTelemetryProviderWithStatsd(logger, c.Statsd, &c.ClientConfig)
 		if err != nil {
 			logger.Fatal(err.Error())
 		}
@@ -473,7 +473,7 @@ func MetricsHandlerFromConfig(logger log.Logger, c *Config) (Handler, error) {
 
 	if c.Prometheus != nil && c.Prometheus.Framework == FrameworkOpentelemetry {
 		// create opentelemetry provider with just prometheus
-		otelProvider, err := NewOpenTelemetryProvider(logger, nil, c.Prometheus, &c.ClientConfig, fatalOnListenerError)
+		otelProvider, err := NewOpenTelemetryProviderWithPrometheus(logger, c.Prometheus, &c.ClientConfig, fatalOnListenerError)
 		if err != nil {
 			logger.Fatal(err.Error())
 		}
