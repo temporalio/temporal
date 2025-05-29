@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tasktoken"
@@ -77,6 +78,7 @@ type (
 		persistenceVisibilityManager manager.VisibilityManager
 		persistenceHealthSignal      persistence.HealthSignalAggregator
 		healthServer                 *health.Server
+		historyHealthSignal          interceptor.HealthSignalAggregator
 		historyServiceResolver       membership.ServiceResolver
 		metricsHandler               metrics.Handler
 		payloadSerializer            serialization.Serializer
@@ -106,6 +108,7 @@ type (
 		PersistenceExecutionManager  persistence.ExecutionManager
 		PersistenceShardManager      persistence.ShardManager
 		PersistenceHealthSignal      persistence.HealthSignalAggregator
+		HistoryHealthSignal          interceptor.HealthSignalAggregator
 		HealthServer                 *health.Server
 		PersistenceVisibilityManager manager.VisibilityManager
 		HistoryServiceResolver       membership.ServiceResolver
@@ -206,6 +209,11 @@ func (h *Handler) DeepHealthCheck(
 		return &historyservice.DeepHealthCheckResponse{State: enumsspb.HEALTH_STATE_DECLINED_SERVING}, nil
 	}
 
+	rsp := h.checkHistoryHealthSignals()
+	if rsp != nil {
+		return rsp, nil
+	}
+
 	latency := h.persistenceHealthSignal.AverageLatency()
 	errRatio := h.persistenceHealthSignal.ErrorRatio()
 
@@ -215,6 +223,25 @@ func (h *Handler) DeepHealthCheck(
 	}
 	metrics.HistoryHostHealthGauge.With(h.metricsHandler).Record(float64(enumsspb.HEALTH_STATE_SERVING))
 	return &historyservice.DeepHealthCheckResponse{State: enumsspb.HEALTH_STATE_SERVING}, nil
+}
+
+// checkHistoryHealthSignal checks the history health signal that is captured by the interceptor.
+func (h *Handler) checkHistoryHealthSignals() *historyservice.DeepHealthCheckResponse {
+	// Check that the RPC latency doesn't exceed the threshold.
+	if _, ok := h.historyHealthSignal.(*interceptor.NoopSignalAggregator); ok {
+		h.logger.Warn("health signal aggregator is using noop implementation")
+	}
+	if h.historyHealthSignal.AverageLatency() > h.config.HealthRPCLatencyFailure() {
+		metrics.HistoryHostHealthGauge.With(h.metricsHandler).Record(float64(enumsspb.HEALTH_STATE_NOT_SERVING))
+		return &historyservice.DeepHealthCheckResponse{State: enumsspb.HEALTH_STATE_NOT_SERVING}
+	}
+
+	// Check if the RPC error ratio exceeds the threshold
+	if h.historyHealthSignal.ErrorRatio() > h.config.HealthRPCErrorRatio() {
+		metrics.HistoryHostHealthGauge.With(h.metricsHandler).Record(float64(enumsspb.HEALTH_STATE_NOT_SERVING))
+		return &historyservice.DeepHealthCheckResponse{State: enumsspb.HEALTH_STATE_NOT_SERVING}
+	}
+	return nil
 }
 
 // IsWorkflowTaskValid - whether workflow task is still valid

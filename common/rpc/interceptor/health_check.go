@@ -57,7 +57,7 @@ type (
 		logger log.Logger
 	}
 
-	noopSignalAggregator struct{}
+	NoopSignalAggregator struct{}
 )
 
 // NewHealthSignalAggregatorImpl creates a new instance of HealthSignalAggregatorImpl
@@ -114,14 +114,14 @@ func isUnhealthyError(err error) bool {
 
 var NoopHealthSignalAggregator HealthSignalAggregator = newNoopSignalAggregator()
 
-func newNoopSignalAggregator() *noopSignalAggregator { return &noopSignalAggregator{} }
+func newNoopSignalAggregator() *NoopSignalAggregator { return &NoopSignalAggregator{} }
 
-func (a *noopSignalAggregator) Record(_ time.Duration, _ error) {}
+func (a *NoopSignalAggregator) Record(_ time.Duration, _ error) {}
 
-func (a *noopSignalAggregator) AverageLatency() float64 {
+func (a *NoopSignalAggregator) AverageLatency() float64 {
 	return 0
 }
 
-func (*noopSignalAggregator) ErrorRatio() float64 {
+func (*NoopSignalAggregator) ErrorRatio() float64 {
 	return 0
 }
