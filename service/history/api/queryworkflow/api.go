@@ -180,7 +180,7 @@ func Invoke(
 	queryID, completionCh := queryReg.BufferQuery(req.GetQuery())
 	defer queryReg.RemoveQuery(queryID)
 
-	msResp, err := api.GetMutableState(ctx, shardContext, workflowKey, workflowConsistencyChecker)
+	msResp, err := api.MutableStateToGetResponse(mutableState)
 	if err != nil {
 		return nil, err
 	}
@@ -225,6 +225,10 @@ func Invoke(
 				return nil, consts.ErrQueryEnteredInvalidState
 			}
 		case workflow.QueryCompletionTypeUnblocked:
+			msResp, err := api.GetMutableState(ctx, shardContext, workflowKey, workflowConsistencyChecker)
+			if err != nil {
+				return nil, err
+			}
 			req.Execution.RunId = msResp.Execution.RunId
 			return queryDirectlyThroughMatching(
 				ctx,
