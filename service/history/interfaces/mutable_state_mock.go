@@ -1610,6 +1610,20 @@ func (mr *MockMutableStateMockRecorder) CheckSpeculativeWorkflowTaskTimeoutTask(
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckSpeculativeWorkflowTaskTimeoutTask", reflect.TypeOf((*MockMutableState)(nil).CheckSpeculativeWorkflowTaskTimeoutTask), task)
 }
 
+// ClearSpeculativeWorkflowTask mocks base method.
+func (m *MockMutableState) ClearSpeculativeWorkflowTask() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ClearSpeculativeWorkflowTask")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ClearSpeculativeWorkflowTask indicates an expected call of ClearSpeculativeWorkflowTask.
+func (mr *MockMutableStateMockRecorder) ClearSpeculativeWorkflowTask() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClearSpeculativeWorkflowTask", reflect.TypeOf((*MockMutableState)(nil).ClearSpeculativeWorkflowTask))
+}
+
 // ClearStickyTaskQueue mocks base method.
 func (m *MockMutableState) ClearStickyTaskQueue() {
 	m.ctrl.T.Helper()

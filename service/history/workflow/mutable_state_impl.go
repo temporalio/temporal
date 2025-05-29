@@ -2125,7 +2125,7 @@ func (ms *MutableStateImpl) ClearTransientWorkflowTask() error {
 
 func (ms *MutableStateImpl) ClearSpeculativeWorkflowTask() error {
 	// TODO: don't like exposing this but can't find a better way
-	// TODO: only scheduled but not started? or both?
+	// TODO: only scheduled but not started? or both (now)?
 	if workflowTask := ms.GetPendingWorkflowTask(); workflowTask != nil && workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
 		emptyWorkflowTaskInfo := &historyi.WorkflowTaskInfo{
 			Version:             common.EmptyVersion,
