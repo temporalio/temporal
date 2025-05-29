@@ -1358,8 +1358,15 @@ func (s *Versioning3Suite) TestChildWorkflowInheritance_UnpinnedParent() {
 	s.testChildWorkflowInheritance_ExpectNoInherit(false, vbUnpinned)
 }
 
-func (s *Versioning3Suite) TestChildWorkflowInheritance_CrossTQ() {
-	// TODO: remove this test once cross-TQ inheritance is implemented
+func (s *Versioning3Suite) TestChildWorkflowInheritance_CrossTQ_Inherit() {
+	// the ExpectInherit helper polls on the child's task queue with the parent's version,
+	// so we expect the version to be inherited
+	s.testChildWorkflowInheritance_ExpectInherit(true, false, vbPinned)
+}
+
+func (s *Versioning3Suite) TestChildWorkflowInheritance_CrossTQ_NoInherit() {
+	// the ExpectNoInherit helper does NOT poll on the child's task queue with the parent's version,
+	// so we DO NOT expect the version to be inherited
 	s.testChildWorkflowInheritance_ExpectNoInherit(true, vbPinned)
 }
 
@@ -1428,19 +1435,6 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectNoInherit(crossTq 
 	})
 	s.NoError(err)
 
-	if crossTq {
-		w1xtq := worker.New(sdkClient, tv1Child.TaskQueue().GetName(), worker.Options{
-			DeploymentOptions: worker.DeploymentOptions{
-				Version:                   tv1Child.DeploymentVersionString(),
-				UseVersioning:             true,
-				DefaultVersioningBehavior: workflow.VersioningBehaviorAutoUpgrade,
-			},
-			MaxConcurrentWorkflowTaskPollers: numPollers,
-		})
-		w1xtq.RegisterWorkflowWithOptions(childv1, workflow.RegisterOptions{Name: "child", VersioningBehavior: workflow.VersioningBehaviorPinned})
-		s.NoError(w1xtq.Start())
-		defer w1xtq.Stop()
-	}
 	w1 := worker.New(sdkClient, tv1.TaskQueue().GetName(), worker.Options{
 		DeploymentOptions: worker.DeploymentOptions{
 			Version:                   tv1.DeploymentVersionString(),
