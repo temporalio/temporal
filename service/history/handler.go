@@ -106,7 +106,7 @@ type (
 		ThrottledLogger              log.ThrottledLogger
 		PersistenceExecutionManager  persistence.ExecutionManager
 		PersistenceShardManager      persistence.ShardManager
-		PersistenceHealthSignal      persistence.historyHealthSignalAggregator
+		PersistenceHealthSignal      persistence.HealthSignalAggregator
 		HealthServer                 *health.Server
 		PersistenceVisibilityManager manager.VisibilityManager
 		HistoryServiceResolver       membership.ServiceResolver
@@ -205,20 +205,6 @@ func (h *Handler) DeepHealthCheck(
 	}
 	if status.Status != healthpb.HealthCheckResponse_SERVING {
 		return &historyservice.DeepHealthCheckResponse{State: enumsspb.HEALTH_STATE_DECLINED_SERVING}, nil
-	}
-	// Check that the RPC latency doesn't exceed the threshold.
-	if _, ok := h.historyHealthSignalAggregator.(*noopSignalAggregator); ok {
-		h.logger.Warn("health signal aggregator is using noop implementation")
-	}
-	if h.historyHealthSignalAggregator.AverageLatency() > h.config.HealthRPCLatencyFailure() {
-		metrics.HistoryHostHealthGauge.With(h.metricsHandler).Record(float64(enumsspb.HEALTH_STATE_NOT_SERVING))
-		return &historyservice.DeepHealthCheckResponse{State: enumsspb.HEALTH_STATE_NOT_SERVING}, nil
-	}
-
-	// Check if the RPC error ratio exceeds the threshold
-	if h.historyHealthSignalAggregator.ErrorRatio() > h.config.HealthRPCErrorRatio() {
-		metrics.HistoryHostHealthGauge.With(h.metricsHandler).Record(float64(enumsspb.HEALTH_STATE_NOT_SERVING))
-		return &historyservice.DeepHealthCheckResponse{State: enumsspb.HEALTH_STATE_NOT_SERVING}, nil
 	}
 
 	// Check if the persistence layer is healthy.

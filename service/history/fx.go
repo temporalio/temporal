@@ -58,12 +58,12 @@ var Module = fx.Options(
 	fx.Provide(RetryableInterceptorProvider),
 	fx.Provide(TelemetryInterceptorProvider),
 	fx.Provide(RateLimitInterceptorProvider),
+	fx.Provide(HealthCheckInterceptorProvider),
 	fx.Provide(service.GrpcServerOptionsProvider),
 	fx.Provide(ESProcessorConfigProvider),
 	fx.Provide(VisibilityManagerProvider),
 	fx.Provide(ThrottledLoggerRpsFnProvider),
 	fx.Provide(PersistenceRateLimitingParamsProvider),
-	fx.Provide(HealthSignalAggregatorProvider),
 	service.PersistenceLazyLoadedServiceResolverModule,
 	fx.Provide(ServiceResolverProvider),
 	fx.Provide(EventNotifierProvider),
@@ -116,7 +116,6 @@ func HandlerProvider(args NewHandlerArgs) *Handler {
 		taskQueueManager:             args.TaskQueueManager,
 		taskCategoryRegistry:         args.TaskCategoryRegistry,
 		dlqMetricsEmitter:            args.DLQMetricsEmitter,
-		healthSignalAggregator:       args.HealthSignalAggregator,
 
 		replicationTaskFetcherFactory:    args.ReplicationTaskFetcherFactory,
 		replicationTaskConverterProvider: args.ReplicationTaskConverterFactory,
@@ -172,6 +171,23 @@ func TelemetryInterceptorProvider(
 	)
 }
 
+func HealthCheckInterceptorProvider(
+	dynamicCollection *dynamicconfig.Collection,
+	metricsHandler metrics.Handler,
+	logger log.ThrottledLogger,
+) *interceptor.HealthCheckInterceptor {
+	if dynamicconfig.HistoryHealthSignalMetricsEnabled.Get(dynamicCollection)() {
+		return interceptor.NewHealthCheckInterceptor(
+			interceptor.NewHealthSignalAggregatorImpl(
+				dynamicconfig.PersistenceHealthSignalWindowSize.Get(dynamicCollection)(),
+				dynamicconfig.PersistenceHealthSignalBufferSize.Get(dynamicCollection)(),
+				logger,
+			))
+	}
+	return interceptor.NewHealthCheckInterceptor(
+		interceptor.NoopHealthSignalAggregator,
+	)
+}
 func RateLimitInterceptorProvider(
 	serviceConfig *configs.Config,
 ) *interceptor.RateLimitInterceptor {
@@ -291,23 +307,4 @@ func ReplicationProgressCacheProvider(
 	handler metrics.Handler,
 ) replication.ProgressCache {
 	return replication.NewProgressCache(serviceConfig, logger, handler)
-}
-
-func HealthSignalAggregatorProvider(
-	dynamicCollection *dynamicconfig.Collection,
-	metricsHandler metrics.Handler,
-	logger log.ThrottledLogger,
-) HealthSignalAggregator {
-	if dynamicconfig.HistoryHealthSignalMetricsEnabled.Get(dynamicCollection)() {
-		return NewHealthSignalAggregatorImpl(
-			dynamicconfig.PersistenceHealthSignalAggregationEnabled.Get(dynamicCollection)(),
-			dynamicconfig.PersistenceHealthSignalWindowSize.Get(dynamicCollection)(),
-			dynamicconfig.PersistenceHealthSignalBufferSize.Get(dynamicCollection)(),
-			metricsHandler,
-			dynamicconfig.ShardRPSWarnLimit.Get(dynamicCollection),
-			dynamicconfig.ShardPerNsRPSWarnPercent.Get(dynamicCollection),
-			logger,
-		)
-	}
-	return NoopHealthSignalAggregator
 }
