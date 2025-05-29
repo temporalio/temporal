@@ -15,12 +15,15 @@ import (
 	"go.temporal.io/sdk/workflow"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/worker_versioning"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
+	// This key is used by controllers who manage deployment versions.
+	metadataKeyController    = "temporal.io/controller"
 	defaultVisibilityRefresh = 5 * time.Minute
 	defaultVisibilityGrace   = 3 * time.Minute
 )
@@ -229,6 +232,12 @@ func (d *VersionWorkflowRunner) handleUpdateVersionMetadata(ctx workflow.Context
 	}
 
 	for _, key := range workflow.DeterministicKeys(args.UpsertEntries) {
+		if key == metadataKeyController && d.VersionState.Metadata.Entries[key] == nil {
+			// adding the controller identifier key-value for the first time, counting as a controller-managed version
+			// TODO: also check and potentially emit the controller id
+			d.metrics.Counter(metrics.WorkerDeploymentVersionCreatedManagedByController.Name()).Inc(1)
+		}
+
 		payload := args.UpsertEntries[key]
 		d.VersionState.Metadata.Entries[key] = payload
 	}
@@ -762,6 +771,8 @@ func (d *VersionWorkflowRunner) refreshDrainageInfo(ctx workflow.Context) {
 		d.logger.Error("could not get version drainage status", tag.Error(err))
 		return
 	}
+
+	d.metrics.Counter(metrics.WorkerDeploymentVersionVisibilityQueryCount.Name()).Inc(1)
 
 	if d.VersionState.DrainageInfo == nil {
 		d.VersionState.DrainageInfo = &deploymentpb.VersionDrainageInfo{}

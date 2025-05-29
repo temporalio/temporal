@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/worker_versioning"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -156,6 +157,8 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 		if err := d.updateMemo(ctx); err != nil {
 			return err
 		}
+
+		d.metrics.Counter(metrics.WorkerDeploymentCreated.Name()).Inc(1)
 	}
 	if d.State.Versions == nil {
 		d.State.Versions = make(map[string]*deploymentspb.WorkerDeploymentVersionSummary)
@@ -325,6 +328,7 @@ func (d *WorkflowRunner) addVersionToWorkerDeployment(ctx workflow.Context, args
 		CreateTime: args.CreateTime,
 		Status:     enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE,
 	}
+	d.metrics.Counter(metrics.WorkerDeploymentVersionCreated.Name()).Inc(1)
 	return nil
 }
 
