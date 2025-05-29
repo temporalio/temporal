@@ -1189,8 +1189,8 @@ var (
 	WorkerDeploymentVersionVisibilityQueryCount       = NewCounterDef("worker_deployment_version_visibility_query_count")
 
 	WorkflowResetCount        = NewCounterDef("workflow_reset_count")
-	WorkflowQuerySuccessCount = NewCounterDef("workflow_query_count")
-	WorkflowQueryFailureCount = NewCounterDef("workflow_query_count")
+	WorkflowQuerySuccessCount = NewCounterDef("workflow_query_success_count")
+	WorkflowQueryFailureCount = NewCounterDef("workflow_query_failure_count")
 	WorkflowQueryTimeoutCount = NewCounterDef("workflow_query_timeout_count")
 	WorkflowTasksCompleted    = NewCounterDef("workflow_tasks_completed")
 
