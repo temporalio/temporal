@@ -442,6 +442,7 @@ func enqueueReplicationTasks(ctx workflow.Context, workflowExecutionsCh workflow
 					NamespaceID:           namespaceID,
 					Executions:            workflowExecutions,
 					VerifyInterval:        time.Duration(params.VerifyIntervalInSeconds) * time.Second,
+					Concurrency:           params.ConcurrentActivityCount,
 				})
 
 			pendingVerifyTasks++
