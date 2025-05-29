@@ -436,7 +436,12 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 
 		metrics.FailedWorkflowTasksCounter.With(handler.metricsHandler).Record(
 			1,
-			metrics.OperationTag(metrics.HistoryRespondWorkflowTaskCompletedScope))
+			metrics.OperationTag(metrics.HistoryRespondWorkflowTaskCompletedScope),
+			metrics.NamespaceTag(namespaceEntry.Name().String()),
+			metrics.VersioningBehaviorTag(ms.GetEffectiveVersioningBehavior()),
+			metrics.FailureTag(wtFailedCause.failedCause.String()),
+			metrics.FirstAttemptTag(currentWorkflowTask.Attempt),
+		)
 		handler.logger.Info("Failing the workflow task.",
 			tag.Value(wtFailedCause.Message()),
 			tag.WorkflowID(token.GetWorkflowId()),
@@ -481,7 +486,10 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		if request.GetForceCreateNewWorkflowTask() || // Heartbeat WT is always of Normal type.
 			wtFailedShouldCreateNewTask ||
 			hasBufferedEventsOrMessages ||
-			activityNotStartedCancelled {
+			activityNotStartedCancelled ||
+			// If the workflow has an ongoing transition to another deployment version, we should ensure
+			// it has a pending wft so it does not remain in the transition phase for long.
+			ms.GetDeploymentTransition() != nil {
 
 			newWorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_NORMAL
 

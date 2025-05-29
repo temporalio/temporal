@@ -1171,6 +1171,8 @@ func (s *matchingEngineSuite) TestRateLimiterAcrossVersionedQueues() {
 	// Set a short long poll expiration so that the pollers don't wait too long for tasks
 	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(5 * time.Second)
 	s.matchingEngine.config.MinTaskThrottlingBurstSize = dynamicconfig.GetIntPropertyFnFilteredByTaskQueue(0)
+	// Disable deployment versions since a nil DeploymentClient is used in unit tests
+	s.matchingEngine.config.EnableDeploymentVersions = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)
 
 	// Overriding the dynamic config so that the rate-limiter has a refresh rate of 0. By default, the rate-limiter has a refresh rate of 1 minute which is too long for this test.
 	s.matchingEngine.config.RateLimiterRefreshInterval = 0

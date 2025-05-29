@@ -1611,6 +1611,29 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Concurrent_SameVersion_NoU
 	s.Equal(tv.DeploymentVersionString(), resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetCurrentVersion())
 }
 
+// TestConcurrentPollers_DifferentTaskQueues_SameVersion_SetCurrentVersion aims to test that when there are multiple pollers polling on different task queues,
+// all belonging to the same version, a setCurrentVersion call succeeds with all the task queues eventually having this version as the current version in their versioning info.
+func (s *WorkerDeploymentSuite) TestConcurrentPollers_DifferentTaskQueues_SameVersion_SetCurrentVersion() {
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	defer cancel()
+
+	// start 10 different pollers each polling on a different task queue but belonging to the same version
+	tv := testvars.New(s)
+
+	versions := 10
+	for i := 0; i < versions; i++ {
+		go s.startVersionWorkflow(ctx, tv.WithTaskQueueNumber(i))
+	}
+
+	// set this version as current version
+	s.setCurrentVersion(ctx, tv, worker_versioning.UnversionedVersionId, false, "")
+
+	// verify that the task queues, eventually, have this version as the current version in their versioning info
+	for i := 0; i < versions; i++ {
+		s.verifyTaskQueueVersioningInfo(ctx, tv.WithTaskQueueNumber(i).TaskQueue(), tv.DeploymentVersionString(), "", 0)
+	}
+}
+
 func (s *WorkerDeploymentSuite) TestSetRampingVersion_Concurrent_DifferentVersions_NoUnexpectedErrors() {
 	s.OverrideDynamicConfig(dynamicconfig.WorkflowExecutionMaxInFlightUpdates, 10) // this is the default
 
@@ -1712,6 +1735,91 @@ func (s *WorkerDeploymentSuite) TestSetRampingVersion_Concurrent_SameVersion_NoU
 	s.Equal(tv.DeploymentVersionString(), resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetRampingVersion())
 }
 
+func (s *WorkerDeploymentSuite) TestResourceExhaustedErrors_Converted_To_ReadableMessage() {
+	s.OverrideDynamicConfig(dynamicconfig.WorkflowExecutionMaxInFlightUpdates, 2) // Lowering the limit to encounter ResourceExhausted errors
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+
+	tv := testvars.New(s)
+	versions := 5
+	errChan := make(chan error, versions)
+
+	// Start all version workflows first
+	for i := 0; i < versions; i++ {
+		s.startVersionWorkflow(ctx, tv.WithBuildIDNumber(i))
+	}
+
+	// Test SetRampingVersion
+	s.testConcurrentRequestsResourceExhausted(ctx, tv, versions, errChan, "SetWorkerDeploymentRampingVersion", func(i int) error {
+		_, err := s.FrontendClient().SetWorkerDeploymentRampingVersion(ctx, &workflowservice.SetWorkerDeploymentRampingVersionRequest{
+			Namespace:               s.Namespace().String(),
+			DeploymentName:          tv.DeploymentVersion().GetDeploymentName(),
+			Version:                 tv.WithBuildIDNumber(i).DeploymentVersionString(),
+			IgnoreMissingTaskQueues: true,
+			Identity:                tv.ClientIdentity(),
+			Percentage:              50,
+		})
+		return err
+	})
+
+	// Test SetCurrentVersion
+	s.testConcurrentRequestsResourceExhausted(ctx, tv, versions, errChan, "SetWorkerDeploymentCurrentVersion", func(i int) error {
+		_, err := s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
+			Namespace:               s.Namespace().String(),
+			DeploymentName:          tv.DeploymentVersion().GetDeploymentName(),
+			Version:                 tv.WithBuildIDNumber(i).DeploymentVersionString(),
+			IgnoreMissingTaskQueues: true,
+			Identity:                tv.ClientIdentity(),
+		})
+		return err
+	})
+
+	// Test UpdateVersionMetadata
+	metadata := map[string]*commonpb.Payload{
+		"key1": {Data: testRandomMetadataValue},
+		"key2": {Data: testRandomMetadataValue},
+	}
+	s.testConcurrentRequestsResourceExhausted(ctx, tv, versions, errChan, "UpdateWorkerDeploymentVersionMetadata", func(i int) error {
+		_, err := s.FrontendClient().UpdateWorkerDeploymentVersionMetadata(ctx, &workflowservice.UpdateWorkerDeploymentVersionMetadataRequest{
+			Namespace:     s.Namespace().String(),
+			Version:       tv.WithBuildIDNumber(i).DeploymentVersionString(),
+			UpsertEntries: metadata,
+		})
+		return err
+	})
+}
+
+func (s *WorkerDeploymentSuite) testConcurrentRequestsResourceExhausted(
+	ctx context.Context,
+	tv *testvars.TestVars,
+	versions int,
+	errChan chan error,
+	apiName string,
+	requestFn func(int) error,
+) {
+	// Launch concurrent requests
+	for i := 0; i < versions; i++ {
+		go func(i int) {
+			errChan <- requestFn(i)
+		}(i)
+	}
+
+	// Expect ResourceExhausted errors to be converted to Internal errors with the appropriate message
+	for i := 0; i < versions; i++ {
+		err := <-errChan
+		if err != nil {
+			switch err.(type) {
+			case *serviceerror.ResourceExhausted:
+				s.Equal(err.Error(), fmt.Sprintf("Too many %s requests have been issued in rapid succession. Please throttle the request rate to avoid exceeding Worker Deployment resource limits.", apiName))
+				continue
+			default:
+				s.FailNow("Unexpected error: ", err)
+			}
+		}
+	}
+}
+
 // Should see it fail because unversioned is already current
 func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Unversioned_UnversionedCurrent() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
@@ -1767,14 +1875,17 @@ func (s *WorkerDeploymentSuite) TestTwoPollers_EnsureCreateVersion() {
 }
 
 func (s *WorkerDeploymentSuite) verifyTaskQueueVersioningInfo(ctx context.Context, tq *taskqueuepb.TaskQueue, expectedCurrentVersion, expectedRampingVersion string, expectedPercentage float32) {
-	tqDesc, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
-		Namespace: s.Namespace().String(),
-		TaskQueue: tq,
-	})
-	s.Nil(err)
-	s.Equal(expectedCurrentVersion, tqDesc.GetVersioningInfo().GetCurrentVersion())
-	s.Equal(expectedRampingVersion, tqDesc.GetVersioningInfo().GetRampingVersion())
-	s.Equal(expectedPercentage, tqDesc.GetVersioningInfo().GetRampingVersionPercentage())
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		tqDesc, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: tq,
+		})
+		a := require.New(t)
+		a.Nil(err)
+		a.Equal(expectedCurrentVersion, tqDesc.GetVersioningInfo().GetCurrentVersion()) //nolint:staticcheck // SA1019: old worker versioning
+		a.Equal(expectedRampingVersion, tqDesc.GetVersioningInfo().GetRampingVersion()) //nolint:staticcheck // SA1019: old worker versioning
+		a.Equal(expectedPercentage, tqDesc.GetVersioningInfo().GetRampingVersionPercentage())
+	}, time.Second*10, time.Millisecond*1000)
 }
 
 // Test that rolling back to a drained version works

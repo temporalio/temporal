@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
+	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -53,16 +54,14 @@ type (
 		// is delegated to the defaultQueue.
 		defaultQueue physicalTaskQueueManager
 		// used for non-sticky versioned queues (one for each version)
-		versionedQueues                 map[PhysicalTaskQueueVersion]physicalTaskQueueManager
-		versionedQueuesLock             sync.RWMutex // locks mutation of versionedQueues
-		userDataManager                 userDataManager
-		logger                          log.Logger
-		throttledLogger                 log.ThrottledLogger
-		matchingClient                  matchingservice.MatchingServiceClient
-		metricsHandler                  metrics.Handler                                                          // namespace/taskqueue tagged metric scope
-		cachedPhysicalInfoByBuildId     map[string]map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo // non-nil for root-partition
-		cachedPhysicalInfoByBuildIdLock sync.RWMutex                                                             // locks mutation of cachedPhysicalInfoByBuildId
-		lastFanOut                      int64                                                                    // serves as a TTL for cachedPhysicalInfoByBuildId
+		versionedQueues     map[PhysicalTaskQueueVersion]physicalTaskQueueManager
+		versionedQueuesLock sync.RWMutex // locks mutation of versionedQueues
+		userDataManager     userDataManager
+		logger              log.Logger
+		throttledLogger     log.ThrottledLogger
+		matchingClient      matchingservice.MatchingServiceClient
+		metricsHandler      metrics.Handler // namespace/taskqueue tagged metric scope
+		cache               cache.Cache     // non-nil for root-partition
 
 		// dynamicRate is the dynamic rate & burst for rate limiter
 		dynamicRateBurst quotas.MutableRateBurst
@@ -74,6 +73,14 @@ type (
 		rateLimiter quotas.RateLimiter
 	}
 )
+
+func (pm *taskQueuePartitionManagerImpl) PutCache(key any, value any) {
+	pm.cache.Put(key, value)
+}
+
+func (pm *taskQueuePartitionManagerImpl) GetCache(key any) any {
+	return pm.cache.Get(key)
+}
 
 var _ taskQueuePartitionManager = (*taskQueuePartitionManagerImpl)(nil)
 
@@ -88,17 +95,22 @@ func newTaskQueuePartitionManager(
 	userDataManager userDataManager,
 ) (*taskQueuePartitionManagerImpl, error) {
 	pm := &taskQueuePartitionManagerImpl{
-		engine:                      e,
-		partition:                   partition,
-		ns:                          ns,
-		config:                      tqConfig,
-		logger:                      logger,
-		throttledLogger:             throttledLogger,
-		matchingClient:              e.matchingRawClient,
-		metricsHandler:              metricsHandler,
-		versionedQueues:             make(map[PhysicalTaskQueueVersion]physicalTaskQueueManager),
-		userDataManager:             userDataManager,
-		cachedPhysicalInfoByBuildId: nil,
+		engine:          e,
+		partition:       partition,
+		ns:              ns,
+		config:          tqConfig,
+		logger:          logger,
+		throttledLogger: throttledLogger,
+		matchingClient:  e.matchingRawClient,
+		metricsHandler:  metricsHandler,
+		versionedQueues: make(map[PhysicalTaskQueueVersion]physicalTaskQueueManager),
+		userDataManager: userDataManager,
+	}
+
+	if pm.partition.IsRoot() {
+		pm.cache = cache.New(10000, &cache.Options{
+			TTL: max(1, tqConfig.TaskQueueInfoByBuildIdTTL())}, // ensure TTL is never zero (which would disable TTL)
+		)
 	}
 
 	pm.dynamicRateBurst = quotas.NewMutableRateBurst(
@@ -779,36 +791,6 @@ func (pm *taskQueuePartitionManagerImpl) ForceLoadAllNonRootPartitions() {
 
 		}()
 	}
-}
-
-func (pm *taskQueuePartitionManagerImpl) TimeSinceLastFanOut() time.Duration {
-	pm.cachedPhysicalInfoByBuildIdLock.RLock()
-	defer pm.cachedPhysicalInfoByBuildIdLock.RUnlock()
-
-	return time.Since(time.Unix(0, pm.lastFanOut))
-}
-
-func (pm *taskQueuePartitionManagerImpl) UpdateTimeSinceLastFanOutAndCache(physicalInfoByBuildId map[string]map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo, upsert bool) {
-	pm.cachedPhysicalInfoByBuildIdLock.Lock()
-	defer pm.cachedPhysicalInfoByBuildIdLock.Unlock()
-
-	pm.lastFanOut = time.Now().UnixNano()
-	if upsert {
-		// still within the ttl of cache, so we upsert
-		for b, v := range physicalInfoByBuildId {
-			pm.cachedPhysicalInfoByBuildId[b] = v
-		}
-	} else {
-		// the existing entries in the cache are old, only keeping the new ones
-		pm.cachedPhysicalInfoByBuildId = physicalInfoByBuildId
-	}
-}
-
-func (pm *taskQueuePartitionManagerImpl) GetPhysicalTaskQueueInfoFromCache() map[string]map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo {
-	pm.cachedPhysicalInfoByBuildIdLock.RLock()
-	defer pm.cachedPhysicalInfoByBuildIdLock.RUnlock()
-
-	return pm.cachedPhysicalInfoByBuildId
 }
 
 func (pm *taskQueuePartitionManagerImpl) unloadPhysicalQueue(unloadedDbq physicalTaskQueueManager, unloadCause unloadCause) {

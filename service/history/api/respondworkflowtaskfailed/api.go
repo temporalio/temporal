@@ -7,6 +7,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/service/history/api"
@@ -41,6 +42,11 @@ func Invoke(
 			token.RunId,
 		),
 		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
+			namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(req.GetNamespaceId()))
+			if err != nil {
+				return nil, err
+			}
+
 			mutableState := workflowLease.GetMutableState()
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return nil, consts.ErrWorkflowCompleted
@@ -72,6 +78,15 @@ func Invoke(
 				0); err != nil {
 				return nil, err
 			}
+
+			metrics.FailedWorkflowTasksCounter.With(shardContext.GetMetricsHandler()).Record(
+				1,
+				metrics.OperationTag(metrics.HistoryRespondWorkflowTaskFailedScope),
+				metrics.NamespaceTag(namespaceEntry.Name().String()),
+				metrics.VersioningBehaviorTag(mutableState.GetEffectiveVersioningBehavior()),
+				metrics.FailureTag(request.GetCause().String()),
+				metrics.FirstAttemptTag(workflowTask.Attempt),
+			)
 
 			// TODO (alex-update): if it was speculative WT that failed, and there is nothing but pending updates,
 			//  new WT also should be create as speculative (or not?). Currently, it will be recreated as normal WT.

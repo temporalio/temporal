@@ -87,9 +87,16 @@ var (
 	maxTime = time.Date(2100, 1, 1, 1, 0, 0, 0, time.UTC)
 
 	// Tail room for context deadline to bail out from retry for long poll.
-	longPollTailRoom = time.Second
-
+	longPollTailRoom  = time.Second
 	errWaitForRefresh = serviceerror.NewDeadlineExceeded("waiting for schedule to refresh status of completed workflows")
+)
+
+const (
+	errTooManySetCurrentVersionRequests = "Too many SetWorkerDeploymentCurrentVersion requests have been issued in rapid succession. Please throttle the request rate to avoid exceeding Worker Deployment resource limits."
+	errTooManySetRampingVersionRequests = "Too many SetWorkerDeploymentRampingVersion requests have been issued in rapid succession. Please throttle the request rate to avoid exceeding Worker Deployment resource limits."
+	errTooManyDeleteDeploymentRequests  = "Too many DeleteWorkerDeployment requests have been issued in rapid succession. Please throttle the request rate to avoid exceeding Worker Deployment resource limits."
+	errTooManyDeleteVersionRequests     = "Too many DeleteWorkerDeploymentVersion requests have been issued in rapid succession. Please throttle the request rate to avoid exceeding Worker Deployment resource limits."
+	errTooManyVersionMetadataRequests   = "Too many UpdateWorkerDeploymentVersionMetadata requests have been issued in rapid succession. Please throttle the request rate to avoid exceeding Worker Deployment resource limits."
 )
 
 type (
@@ -98,36 +105,35 @@ type (
 		workflowservice.UnimplementedWorkflowServiceServer
 		status int32
 
-		tokenSerializer                               *tasktoken.Serializer
-		config                                        *Config
-		versionChecker                                headers.VersionChecker
-		namespaceHandler                              *namespaceHandler
-		getDefaultWorkflowRetrySettings               dynamicconfig.TypedPropertyFnWithNamespaceFilter[retrypolicy.DefaultRetrySettings]
-		followReusePolicyAfterConflictPolicyTerminate dynamicconfig.TypedPropertyFnWithNamespaceFilter[bool]
-		visibilityMgr                                 manager.VisibilityManager
-		logger                                        log.Logger
-		throttledLogger                               log.Logger
-		persistenceExecutionName                      string
-		clusterMetadataManager                        persistence.ClusterMetadataManager
-		clusterMetadata                               cluster.Metadata
-		historyClient                                 historyservice.HistoryServiceClient
-		matchingClient                                matchingservice.MatchingServiceClient
-		deploymentStoreClient                         deployment.DeploymentStoreClient
-		workerDeploymentClient                        workerdeployment.Client
-		archiverProvider                              provider.ArchiverProvider
-		payloadSerializer                             serialization.Serializer
-		namespaceRegistry                             namespace.Registry
-		saMapperProvider                              searchattribute.MapperProvider
-		saProvider                                    searchattribute.Provider
-		saValidator                                   *searchattribute.Validator
-		archivalMetadata                              archiver.ArchivalMetadata
-		healthServer                                  *health.Server
-		overrides                                     *Overrides
-		membershipMonitor                             membership.Monitor
-		healthInterceptor                             *interceptor.HealthInterceptor
-		scheduleSpecBuilder                           *scheduler.SpecBuilder
-		outstandingPollers                            collection.SyncMap[string, collection.SyncMap[string, context.CancelFunc]]
-		httpEnabled                                   bool
+		tokenSerializer                 *tasktoken.Serializer
+		config                          *Config
+		versionChecker                  headers.VersionChecker
+		namespaceHandler                *namespaceHandler
+		getDefaultWorkflowRetrySettings dynamicconfig.TypedPropertyFnWithNamespaceFilter[retrypolicy.DefaultRetrySettings]
+		visibilityMgr                   manager.VisibilityManager
+		logger                          log.Logger
+		throttledLogger                 log.Logger
+		persistenceExecutionName        string
+		clusterMetadataManager          persistence.ClusterMetadataManager
+		clusterMetadata                 cluster.Metadata
+		historyClient                   historyservice.HistoryServiceClient
+		matchingClient                  matchingservice.MatchingServiceClient
+		deploymentStoreClient           deployment.DeploymentStoreClient
+		workerDeploymentClient          workerdeployment.Client
+		archiverProvider                provider.ArchiverProvider
+		payloadSerializer               serialization.Serializer
+		namespaceRegistry               namespace.Registry
+		saMapperProvider                searchattribute.MapperProvider
+		saProvider                      searchattribute.Provider
+		saValidator                     *searchattribute.Validator
+		archivalMetadata                archiver.ArchivalMetadata
+		healthServer                    *health.Server
+		overrides                       *Overrides
+		membershipMonitor               membership.Monitor
+		healthInterceptor               *interceptor.HealthInterceptor
+		scheduleSpecBuilder             *scheduler.SpecBuilder
+		outstandingPollers              collection.SyncMap[string, collection.SyncMap[string, context.CancelFunc]]
+		httpEnabled                     bool
 	}
 )
 
@@ -174,23 +180,22 @@ func NewWorkflowHandler(
 			timeSource,
 			config,
 		),
-		getDefaultWorkflowRetrySettings:               config.DefaultWorkflowRetryPolicy,
-		followReusePolicyAfterConflictPolicyTerminate: config.FollowReusePolicyAfterConflictPolicyTerminate,
-		visibilityMgr:            visibilityMgr,
-		logger:                   logger,
-		throttledLogger:          throttledLogger,
-		persistenceExecutionName: persistenceExecutionName,
-		clusterMetadataManager:   clusterMetadataManager,
-		clusterMetadata:          clusterMetadata,
-		historyClient:            historyClient,
-		matchingClient:           matchingClient,
-		deploymentStoreClient:    deploymentStoreClient,
-		workerDeploymentClient:   workerDeploymentClient,
-		archiverProvider:         archiverProvider,
-		payloadSerializer:        payloadSerializer,
-		namespaceRegistry:        namespaceRegistry,
-		saProvider:               saProvider,
-		saMapperProvider:         saMapperProvider,
+		getDefaultWorkflowRetrySettings: config.DefaultWorkflowRetryPolicy,
+		visibilityMgr:                   visibilityMgr,
+		logger:                          logger,
+		throttledLogger:                 throttledLogger,
+		persistenceExecutionName:        persistenceExecutionName,
+		clusterMetadataManager:          clusterMetadataManager,
+		clusterMetadata:                 clusterMetadata,
+		historyClient:                   historyClient,
+		matchingClient:                  matchingClient,
+		deploymentStoreClient:           deploymentStoreClient,
+		workerDeploymentClient:          workerDeploymentClient,
+		archiverProvider:                archiverProvider,
+		payloadSerializer:               payloadSerializer,
+		namespaceRegistry:               namespaceRegistry,
+		saProvider:                      saProvider,
+		saMapperProvider:                saMapperProvider,
 		saValidator: searchattribute.NewValidator(
 			saProvider,
 			saMapperProvider,
@@ -547,9 +552,9 @@ func (wh *WorkflowHandler) ExecuteMultiOperation(
 	if err != nil {
 		var multiErr *serviceerror.MultiOperationExecution
 		if errors.As(err, &multiErr) {
-			// Trim error message for end-users.
+			// Tweak error message for end-users to match the feature name.
 			// The per-operation errors are embedded inside the error and unpacked by the SDK.
-			multiErr.Message = "MultiOperation could not be executed."
+			multiErr.Message = "Update-with-Start could not be executed."
 		}
 		return nil, err
 	}
@@ -592,7 +597,7 @@ func (wh *WorkflowHandler) convertToHistoryMultiOperationRequest(
 	}
 
 	if hasError {
-		return nil, serviceerror.NewMultiOperationExecution("MultiOperation could not be executed.", errs)
+		return nil, serviceerror.NewMultiOperationExecution("Update-with-Start could not be executed.", errs)
 	}
 
 	return &historyservice.ExecuteMultiOperationRequest{
@@ -3416,6 +3421,9 @@ func (wh *WorkflowHandler) SetWorkerDeploymentCurrentVersion(ctx context.Context
 
 	resp, err := wh.workerDeploymentClient.SetCurrentVersion(ctx, namespaceEntry, request.DeploymentName, versionStr, request.Identity, request.IgnoreMissingTaskQueues, request.GetConflictToken())
 	if err != nil {
+		if common.IsResourceExhausted(err) {
+			return nil, serviceerror.NewResourceExhaustedf(enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW, errTooManySetCurrentVersionRequests)
+		}
 		return nil, err
 	}
 
@@ -3472,6 +3480,9 @@ func (wh *WorkflowHandler) SetWorkerDeploymentRampingVersion(ctx context.Context
 
 	resp, err := wh.workerDeploymentClient.SetRampingVersion(ctx, namespaceEntry, request.DeploymentName, versionStr, request.GetPercentage(), request.GetIdentity(), request.IgnoreMissingTaskQueues, request.GetConflictToken())
 	if err != nil {
+		if common.IsResourceExhausted(err) {
+			return nil, serviceerror.NewResourceExhaustedf(enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW, errTooManySetRampingVersionRequests)
+		}
 		return nil, err
 	}
 
@@ -3576,6 +3587,9 @@ func (wh *WorkflowHandler) DeleteWorkerDeployment(ctx context.Context, request *
 
 	err = wh.workerDeploymentClient.DeleteWorkerDeployment(ctx, namespaceEntry, request.DeploymentName, request.Identity)
 	if err != nil {
+		if common.IsResourceExhausted(err) {
+			return nil, serviceerror.NewResourceExhaustedf(enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW, errTooManyDeleteDeploymentRequests)
+		}
 		return nil, err
 	}
 
@@ -3602,6 +3616,9 @@ func (wh *WorkflowHandler) DeleteWorkerDeploymentVersion(ctx context.Context, re
 
 	err = wh.workerDeploymentClient.DeleteWorkerDeploymentVersion(ctx, namespaceEntry, versionStr, request.SkipDrainage, request.Identity)
 	if err != nil {
+		if common.IsResourceExhausted(err) {
+			return nil, serviceerror.NewResourceExhaustedf(enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW, errTooManyDeleteVersionRequests)
+		}
 		return nil, err
 	}
 
@@ -3630,10 +3647,12 @@ func (wh *WorkflowHandler) UpdateWorkerDeploymentVersionMetadata(ctx context.Con
 		versionStr = worker_versioning.ExternalWorkerDeploymentVersionToString(request.GetDeploymentVersion())
 	}
 
-	// todo (Shivam): Should we get identity from the request?
 	identity := uuid.New()
 	updatedMetadata, err := wh.workerDeploymentClient.UpdateVersionMetadata(ctx, namespaceEntry, versionStr, request.UpsertEntries, request.RemoveEntries, identity)
 	if err != nil {
+		if common.IsResourceExhausted(err) {
+			return nil, serviceerror.NewResourceExhaustedf(enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW, errTooManyVersionMetadataRequests)
+		}
 		return nil, err
 	}
 
@@ -5169,8 +5188,7 @@ func (wh *WorkflowHandler) validateWorkflowIdReusePolicy(
 		return errIncompatibleIDReusePolicyTerminateIfRunning
 	}
 	if conflictPolicy == enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING &&
-		reusePolicy == enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE &&
-		wh.followReusePolicyAfterConflictPolicyTerminate(namespaceName.String()) {
+		reusePolicy == enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE {
 		return errIncompatibleIDReusePolicyRejectDuplicate
 	}
 	return nil
