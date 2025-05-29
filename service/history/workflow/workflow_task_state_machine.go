@@ -918,8 +918,8 @@ func (m *workflowTaskStateMachine) deleteWorkflowTask() {
 		RequestID:           emptyUUID,
 		WorkflowTaskTimeout: time.Duration(0),
 		Attempt:             1,
-		StartedTime:         time.Unix(0, 0).UTC(),
-		ScheduledTime:       time.Unix(0, 0).UTC(),
+		StartedTime:         timeZeroUTC,
+		ScheduledTime:       timeZeroUTC,
 
 		TaskQueue: nil,
 		// Keep the last original scheduled Timestamp, so that AddWorkflowTaskScheduledEventAsHeartbeat can continue with it.
@@ -1052,7 +1052,7 @@ func (m *workflowTaskStateMachine) GetTransientWorkflowTaskInfo(
 		scheduledEventID = m.ms.GetNextEventID()
 	}
 
-	// Create scheduled event which is not written to the history yet.
+	// Create a scheduled event which is not written to the history yet.
 	scheduledEvent := &historypb.HistoryEvent{
 		EventId:   scheduledEventID,
 		EventTime: timestamppb.New(workflowTask.ScheduledTime),
@@ -1079,9 +1079,9 @@ func (m *workflowTaskStateMachine) GetTransientWorkflowTaskInfo(
 		versioningStamp = &commonpb.WorkerVersionStamp{UseVersioning: true, BuildId: workflowTask.BuildId}
 	}
 
-	// Create started event which is not written to the history yet.
+	// Create a started event which is not written to the history yet.
 	startedEvent := &historypb.HistoryEvent{
-		// See comment above on workflowTask.StartedEventID.
+		// See the comment above on workflowTask.StartedEventID.
 		EventId:   workflowTask.StartedEventID,
 		EventTime: timestamppb.New(workflowTask.StartedTime),
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
