@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/primitives"
@@ -38,24 +39,31 @@ const (
 	// Generic reason tag can be used anywhere a reason is needed.
 	reason = "reason"
 	// See server.api.enums.v1.ReplicationTaskType
-	replicationTaskType                 = "replicationTaskType"
-	replicationTaskPriority             = "replicationTaskPriority"
-	versioningBehavior                  = "versioning_behavior"
-	isFirstAttempt                      = "first-attempt"
-	workflowStatus                      = "workflow_status"
-	workflowBehaviorBeforeOverride      = "workflow_behavior_before_override"
-	workflowBehaviorAfterOverride       = "workflow_behavior_after_override"
-	versioningOverrideOnNewWorkflow     = "versioning_override_on_new_workflow"
-	effectiveDeploymentBeforeTransition = "effective_deployment_before_transition"
-	effectiveDeploymentAfterTransition  = "effective_deployment_after_transition"
-	queryType                           = "query_type"
-	namespaceAllValue                   = "all"
-	unknownValue                        = "_unknown_"
-	totalMetricSuffix                   = "_total"
-	tagExcludedValue                    = "_tag_excluded_"
-	falseValue                          = "false"
-	trueValue                           = "true"
-	errorPrefix                         = "*"
+	replicationTaskType     = "replicationTaskType"
+	replicationTaskPriority = "replicationTaskPriority"
+	versioningBehavior      = "versioning_behavior"
+	isFirstAttempt          = "first-attempt"
+	workflowStatus          = "workflow_status"
+	behaviorBefore          = "behavior_before"
+	behaviorAfter           = "behavior_after"
+	runInitiator            = "run_initiator"
+	fromUnversioned         = "from_unversioned"
+	toUnversioned           = "to_unversioned"
+	queryType               = "query_type"
+	namespaceAllValue       = "all"
+	unknownValue            = "_unknown_"
+	totalMetricSuffix       = "_total"
+	tagExcludedValue        = "_tag_excluded_"
+	falseValue              = "false"
+	trueValue               = "true"
+	errorPrefix             = "*"
+
+	newRun      = "__new"
+	existingRun = "__existing"
+	childRun    = "__child"
+	canRun      = "__can"
+	retryRun    = "__retry"
+	cronRun     = "__cron"
 )
 
 // Tag is an interface to define metrics tags
@@ -394,21 +402,42 @@ func DestinationTag(value string) Tag {
 }
 
 func VersioningBehaviorBeforeOverrideTag(behavior enumspb.VersioningBehavior) Tag {
-	return &tagImpl{key: workflowBehaviorBeforeOverride, value: behavior.String()}
+	return &tagImpl{key: behaviorBefore, value: behavior.String()}
 }
 
 func VersioningBehaviorAfterOverrideTag(behavior enumspb.VersioningBehavior) Tag {
-	return &tagImpl{key: workflowBehaviorAfterOverride, value: behavior.String()}
+	return &tagImpl{key: behaviorAfter, value: behavior.String()}
 }
 
-func VersioningOverrideOnNewWorkflowTag(isNewWorkflow bool) Tag {
-	return &tagImpl{key: versioningOverrideOnNewWorkflow, value: strconv.FormatBool(isNewWorkflow)}
+func RunInitiatorTag(prevRunID string, attributes *historypb.WorkflowExecutionStartedEventAttributes) Tag {
+	// UpdateWorkflowExecutionOptions API is the caller
+	if attributes == nil {
+		return &tagImpl{key: runInitiator, value: existingRun}
+	}
+
+	// StartWorkflowExecution API is the caller
+	if prevRunID == "" {
+		return &tagImpl{key: runInitiator, value: newRun}
+	} else if attributes.GetInitiator() == enumspb.CONTINUE_AS_NEW_INITIATOR_WORKFLOW {
+		return &tagImpl{key: runInitiator, value: childRun}
+	} else if attributes.GetInitiator() == enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY {
+		return &tagImpl{key: runInitiator, value: retryRun}
+	} else if attributes.GetInitiator() == enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE {
+		return &tagImpl{key: runInitiator, value: cronRun}
+	}
+	return &tagImpl{key: runInitiator, value: existingRun}
 }
 
-func EffectiveDeploymentBeforeTransitionTag(version string) Tag {
-	return &tagImpl{key: effectiveDeploymentBeforeTransition, value: version}
+func FromUnversionedTag(version string) Tag {
+	if version == "_unversioned_" {
+		return &tagImpl{key: fromUnversioned, value: trueValue}
+	}
+	return &tagImpl{key: fromUnversioned, value: falseValue}
 }
 
-func EffectiveDeploymentAfterTransitionTag(version string) Tag {
-	return &tagImpl{key: effectiveDeploymentAfterTransition, value: version}
+func ToUnversionedTag(version string) Tag {
+	if version == "_unversioned_" {
+		return &tagImpl{key: toUnversioned, value: trueValue}
+	}
+	return &tagImpl{key: toUnversioned, value: falseValue}
 }

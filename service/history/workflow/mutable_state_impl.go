@@ -2470,8 +2470,8 @@ func (ms *MutableStateImpl) AddWorkflowExecutionStartedEventWithOptions(
 			ms.metricsHandler.WithTags(
 				metrics.NamespaceTag(ms.namespaceEntry.Name().String()),
 				metrics.VersioningBehaviorBeforeOverrideTag(enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED),
-				metrics.VersioningBehaviorAfterOverrideTag(startRequest.GetStartRequest().GetVersioningOverride().GetBehavior()), //nolint:staticcheck // SA1019: worker versioning v0.31
-				metrics.VersioningOverrideOnNewWorkflowTag(prevRunID == ""),
+				metrics.VersioningBehaviorAfterOverrideTag(worker_versioning.ExtractVersioningBehaviorFromOverride(startRequest.GetStartRequest().GetVersioningOverride())),
+				metrics.RunInitiatorTag(prevRunID, event.GetWorkflowExecutionStartedEventAttributes()),
 			),
 		).Record(1)
 	}
@@ -4817,18 +4817,20 @@ func (ms *MutableStateImpl) AddWorkflowExecutionOptionsUpdatedEvent(
 		links,
 	)
 	prevEffectiveVersioningBehavior := ms.GetEffectiveVersioningBehavior()
+	prevEffectiveDeployment := ms.GetEffectiveDeployment()
+
 	if err := ms.ApplyWorkflowExecutionOptionsUpdatedEvent(event); err != nil {
 		return nil, err
 	}
 
-	// Versioning Override set via UpdateWorkflowExecutionOptionsRequest
-	if versioningOverride != nil {
+	if !proto.Equal(ms.GetEffectiveDeployment(), prevEffectiveDeployment) ||
+		ms.GetEffectiveVersioningBehavior() != prevEffectiveVersioningBehavior {
 		metrics.WorkerDeploymentVersioningOverrideCounter.With(
 			ms.metricsHandler.WithTags(
 				metrics.NamespaceTag(ms.namespaceEntry.Name().String()),
 				metrics.VersioningBehaviorBeforeOverrideTag(prevEffectiveVersioningBehavior),
 				metrics.VersioningBehaviorAfterOverrideTag(ms.GetEffectiveVersioningBehavior()),
-				metrics.VersioningOverrideOnNewWorkflowTag(false),
+				metrics.RunInitiatorTag("", event.GetWorkflowExecutionStartedEventAttributes()),
 			),
 		).Record(1)
 	}
@@ -8158,8 +8160,8 @@ func (ms *MutableStateImpl) StartDeploymentTransition(deployment *deploymentpb.D
 	metrics.StartDeploymentTransitionCounter.With(
 		ms.metricsHandler.WithTags(
 			metrics.NamespaceTag(ms.namespaceEntry.Name().String()),
-			metrics.EffectiveDeploymentBeforeTransitionTag(worker_versioning.ExternalWorkerDeploymentVersionToString(worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(preTransitionEffectiveDeployment))),
-			metrics.EffectiveDeploymentAfterTransitionTag(worker_versioning.ExternalWorkerDeploymentVersionToString(worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(deployment))),
+			metrics.FromUnversionedTag(worker_versioning.ExternalWorkerDeploymentVersionToString(worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(preTransitionEffectiveDeployment))),
+			metrics.ToUnversionedTag(worker_versioning.ExternalWorkerDeploymentVersionToString(worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(deployment))),
 		),
 	).Record(1)
 
