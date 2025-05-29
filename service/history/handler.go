@@ -76,22 +76,21 @@ type (
 		persistenceShardManager      persistence.ShardManager
 		persistenceVisibilityManager manager.VisibilityManager
 		persistenceHealthSignal      persistence.HealthSignalAggregator
-
-		healthServer           *health.Server
-		historyServiceResolver membership.ServiceResolver
-		metricsHandler         metrics.Handler
-		payloadSerializer      serialization.Serializer
-		timeSource             clock.TimeSource
-		namespaceRegistry      namespace.Registry
-		saProvider             searchattribute.Provider
-		clusterMetadata        cluster.Metadata
-		archivalMetadata       archiver.ArchivalMetadata
-		hostInfoProvider       membership.HostInfoProvider
-		controller             shard.Controller
-		tracer                 trace.Tracer
-		taskQueueManager       persistence.HistoryTaskQueueManager
-		taskCategoryRegistry   tasks.TaskCategoryRegistry
-		dlqMetricsEmitter      *persistence.DLQMetricsEmitter
+		healthServer                 *health.Server
+		historyServiceResolver       membership.ServiceResolver
+		metricsHandler               metrics.Handler
+		payloadSerializer            serialization.Serializer
+		timeSource                   clock.TimeSource
+		namespaceRegistry            namespace.Registry
+		saProvider                   searchattribute.Provider
+		clusterMetadata              cluster.Metadata
+		archivalMetadata             archiver.ArchivalMetadata
+		hostInfoProvider             membership.HostInfoProvider
+		controller                   shard.Controller
+		tracer                       trace.Tracer
+		taskQueueManager             persistence.HistoryTaskQueueManager
+		taskCategoryRegistry         tasks.TaskCategoryRegistry
+		dlqMetricsEmitter            *persistence.DLQMetricsEmitter
 
 		replicationTaskFetcherFactory    replication.TaskFetcherFactory
 		replicationTaskConverterProvider replication.SourceTaskConverterProvider
