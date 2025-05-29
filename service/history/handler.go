@@ -225,7 +225,7 @@ func (h *Handler) DeepHealthCheck(
 	return &historyservice.DeepHealthCheckResponse{State: enumsspb.HEALTH_STATE_SERVING}, nil
 }
 
-// checkHistoryHealthSignal checks the history health signal that is captured by the interceptor.
+// checkHistoryHealthSignals checks the history health signal that is captured by the interceptor.
 func (h *Handler) checkHistoryHealthSignals() *historyservice.DeepHealthCheckResponse {
 	// Check that the RPC latency doesn't exceed the threshold.
 	if _, ok := h.historyHealthSignal.(*interceptor.NoopSignalAggregator); ok {
