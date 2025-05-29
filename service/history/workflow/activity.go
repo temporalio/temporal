@@ -305,7 +305,7 @@ func ResetActivity(
 
 	var originalOptions *historypb.ActivityTaskScheduledEventAttributes
 	if resetOptions {
-		event, err := mutableState.GetHistoryEvent(ctx, ai.ScheduledEventId)
+		event, err := mutableState.GetActivityScheduledEvent(ctx, ai.ScheduledEventId)
 		if err != nil {
 			return serviceerror.NewInvalidArgumentf("ActivityTaskScheduledEvent not found, %v", err)
 		}

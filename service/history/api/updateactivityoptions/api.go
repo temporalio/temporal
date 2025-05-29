@@ -353,9 +353,9 @@ func restoreOriginalOptions(
 			return nil, consts.ErrActivityNotFound
 		}
 
-		event, err := ms.GetHistoryEvent(ctx, ai.ScheduledEventId)
+		event, err := ms.GetActivityScheduledEvent(ctx, ai.ScheduledEventId)
 		if err != nil {
-			return nil, serviceerror.NewInvalidArgumentf("ActivityTaskScheduledEvent not found, %v", err)
+			return nil, err
 		}
 		attrs, ok := event.Attributes.(*historypb.HistoryEvent_ActivityTaskScheduledEventAttributes)
 		if !ok {

@@ -475,7 +475,7 @@ func (s *activityOptionsSuite) Test_updateActivityOptions_RestoreDefaultFail() {
 
 	// event not found
 	err = errors.New("some error")
-	s.mockMutableState.EXPECT().GetHistoryEvent(gomock.Any(), gomock.Any()).Return(nil, err)
+	s.mockMutableState.EXPECT().GetActivityScheduledEvent(gomock.Any(), gomock.Any()).Return(nil, err)
 	s.mockMutableState.EXPECT().GetActivityByActivityID(gomock.Any()).Return(ai, true)
 	_, err = restoreOriginalOptions(ctx, s.mockMutableState, request.GetUpdateRequest())
 	s.Error(err)
@@ -527,7 +527,7 @@ func (s *activityOptionsSuite) Test_updateActivityOptions_RestoreDefaultSuccess(
 	}
 
 	// event not found
-	s.mockMutableState.EXPECT().GetHistoryEvent(gomock.Any(), gomock.Any()).Return(he, nil)
+	s.mockMutableState.EXPECT().GetActivityScheduledEvent(gomock.Any(), gomock.Any()).Return(he, nil)
 	s.mockMutableState.EXPECT().GetActivityByActivityID(gomock.Any()).Return(ai, true)
 	s.mockMutableState.EXPECT().UpdateActivity(gomock.Any(), gomock.Any()).Return(nil)
 	response, err := restoreOriginalOptions(ctx, s.mockMutableState, request.GetUpdateRequest())

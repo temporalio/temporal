@@ -1136,23 +1136,6 @@ func (ms *MutableStateImpl) AddHistoryEvent(t enumspb.EventType, setAttributes f
 	return event
 }
 
-func (ms *MutableStateImpl) GetHistoryEvent(ctx context.Context, eventID int64) (*historypb.HistoryEvent, error) {
-	branchToken, version, err := ms.getCurrentBranchTokenAndEventVersion(eventID)
-	if err != nil {
-		return nil, err
-	}
-	wfKey := ms.GetWorkflowKey()
-	eventKey := events.EventKey{
-		NamespaceID: namespace.ID(wfKey.NamespaceID),
-		WorkflowID:  wfKey.WorkflowID,
-		RunID:       wfKey.RunID,
-		EventID:     eventID,
-		Version:     version,
-	}
-
-	return ms.eventsCache.GetEvent(ctx, ms.shard.GetShardID(), eventKey, eventID, branchToken)
-}
-
 func (ms *MutableStateImpl) LoadHistoryEvent(ctx context.Context, token []byte) (*historypb.HistoryEvent, error) {
 	ref := &tokenspb.HistoryEventRef{}
 	err := proto.Unmarshal(token, ref)
