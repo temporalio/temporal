@@ -476,7 +476,10 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		if request.GetForceCreateNewWorkflowTask() || // Heartbeat WT is always of Normal type.
 			wtFailedShouldCreateNewTask ||
 			hasBufferedEventsOrMessages ||
-			activityNotStartedCancelled {
+			activityNotStartedCancelled ||
+			// If the workflow has an ongoing transition to another deployment version, we should ensure
+			// it has a pending wft so it does not remain in the transition phase for long.
+			ms.GetDeploymentTransition() != nil {
 
 			newWorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_NORMAL
 
