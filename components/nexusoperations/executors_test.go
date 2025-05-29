@@ -1,25 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package nexusoperations_test
 
 import (
@@ -37,7 +15,6 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/converter"
-	"go.temporal.io/sdk/temporalnexus"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/backoff"
@@ -84,7 +61,7 @@ func TestProcessInvocationTask(t *testing.T) {
 			},
 		},
 	}
-	handlerNexusLink := temporalnexus.ConvertLinkWorkflowEventToNexusLink(handlerLink)
+	handlerNexusLink := nexusoperations.ConvertLinkWorkflowEventToNexusLink(handlerLink)
 
 	cases := []struct {
 		name                       string
@@ -108,7 +85,7 @@ func TestProcessInvocationTask(t *testing.T) {
 				require.Len(t, options.Links, 1)
 				var links []*commonpb.Link
 				for _, nexusLink := range options.Links {
-					link, err := temporalnexus.ConvertNexusLinkToLinkWorkflowEvent(nexusLink)
+					link, err := nexusoperations.ConvertNexusLinkToLinkWorkflowEvent(nexusLink)
 					require.NoError(t, err)
 					links = append(links, &commonpb.Link{
 						Variant: &commonpb.Link_WorkflowEvent_{
@@ -463,7 +440,7 @@ func TestProcessInvocationTask(t *testing.T) {
 			if tc.cancelBeforeStart {
 				op, err := hsm.MachineData[nexusoperations.Operation](node)
 				require.NoError(t, err)
-				_, err = op.Cancel(node, time.Now())
+				_, err = op.Cancel(node, time.Now(), 0)
 				require.NoError(t, err)
 				c, err := op.Cancelation(node)
 				require.NoError(t, err)
@@ -759,7 +736,7 @@ func TestProcessCancelationTask(t *testing.T) {
 				Node: node,
 			})
 			require.NoError(t, err)
-			_, err = op.Cancel(node, time.Now())
+			_, err = op.Cancel(node, time.Now(), 0)
 			require.NoError(t, err)
 			node, err = node.Child([]hsm.Key{nexusoperations.CancelationMachineKey})
 			require.NoError(t, err)
@@ -808,9 +785,10 @@ func TestProcessCancelationTask(t *testing.T) {
 
 			require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{
 				Config: &nexusoperations.Config{
-					Enabled:             dynamicconfig.GetBoolPropertyFn(true),
-					RequestTimeout:      dynamicconfig.GetDurationPropertyFnFilteredByDestination(tc.requestTimeout),
-					MinOperationTimeout: dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Millisecond),
+					Enabled:                             dynamicconfig.GetBoolPropertyFn(true),
+					RequestTimeout:                      dynamicconfig.GetDurationPropertyFnFilteredByDestination(tc.requestTimeout),
+					MinOperationTimeout:                 dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Millisecond),
+					RecordCancelRequestCompletionEvents: dynamicconfig.GetBoolPropertyFn(true),
 					RetryPolicy: func() backoff.RetryPolicy {
 						return backoff.NewExponentialRetryPolicy(time.Second)
 					},
@@ -866,7 +844,7 @@ func TestProcessCancelationTask_OperationCompleted(t *testing.T) {
 		Node: node,
 	})
 	require.NoError(t, err)
-	_, err = op.Cancel(node, time.Now())
+	_, err = op.Cancel(node, time.Now(), 0)
 	require.NoError(t, err)
 	_, err = nexusoperations.TransitionSucceeded.Apply(op, nexusoperations.EventSucceeded{
 		Node: node,
@@ -925,7 +903,7 @@ func TestProcessCancelationBackoffTask(t *testing.T) {
 		Node: node,
 	})
 	require.NoError(t, err)
-	_, err = op.Cancel(node, time.Now())
+	_, err = op.Cancel(node, time.Now(), 0)
 	require.NoError(t, err)
 
 	node, err = node.Child([]hsm.Key{nexusoperations.CancelationMachineKey})

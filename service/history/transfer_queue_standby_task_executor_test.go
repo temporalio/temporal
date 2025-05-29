@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package history
 
 import (
@@ -100,16 +76,17 @@ type (
 		mockArchivalMetadata archiver.MetadataMock
 		mockArchiverProvider *provider.MockArchiverProvider
 
-		workflowCache        wcache.Cache
-		logger               log.Logger
-		namespaceID          namespace.ID
-		namespaceEntry       *namespace.Namespace
-		version              int64
-		clusterName          string
-		now                  time.Time
-		timeSource           *clock.EventTimeSource
-		fetchHistoryDuration time.Duration
-		discardDuration      time.Duration
+		workflowCache             wcache.Cache
+		logger                    log.Logger
+		namespaceID               namespace.ID
+		namespaceEntry            *namespace.Namespace
+		version                   int64
+		clusterName               string
+		now                       time.Time
+		timeSource                *clock.EventTimeSource
+		localVerificationDuration time.Duration
+		fetchHistoryDuration      time.Duration
+		discardDuration           time.Duration
 
 		transferQueueStandbyTaskExecutor *transferQueueStandbyTaskExecutor
 		mockSearchAttributesProvider     *searchattribute.MockProvider
@@ -136,6 +113,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) SetupTest() {
 	s.version = s.namespaceEntry.FailoverVersion()
 	s.now = time.Now().UTC()
 	s.timeSource = clock.NewEventTimeSource().Update(s.now)
+	s.localVerificationDuration = time.Minute * 10
 	s.fetchHistoryDuration = time.Minute * 12
 	s.discardDuration = time.Minute * 30
 
@@ -604,6 +582,16 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCloseExecution() {
 		Clock:                  parentClock,
 	})
 
+	expectedVerificationWithResendParentRequest := protomock.Eq(&historyservice.VerifyChildExecutionCompletionRecordedRequest{
+		NamespaceId:            parentNamespaceID,
+		ParentExecution:        parentExecution,
+		ChildExecution:         execution,
+		ParentInitiatedId:      parentInitiatedID,
+		ParentInitiatedVersion: parentInitiatedVersion,
+		Clock:                  parentClock,
+		ResendParent:           true,
+	})
+
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespace.ID(parentNamespaceID)).Return(tests.GlobalParentNamespaceEntry, nil).AnyTimes()
 	s.clientBean.EXPECT().GetRemoteFrontendClient(tests.GlobalChildNamespaceEntry.ActiveClusterName()).Return(nil, s.mockFrontendClient, nil).AnyTimes()
 	s.mockFrontendClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), protomock.Eq(&workflowservice.DescribeWorkflowExecutionRequest{
@@ -639,17 +627,22 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCloseExecution() {
 	var resourceExhaustedErr *serviceerror.ResourceExhausted
 	s.True(errors.As(resp.ExecutionErr, &resourceExhaustedErr))
 
+	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.localVerificationDuration))
+	s.mockHistoryClient.EXPECT().VerifyChildExecutionCompletionRecorded(gomock.Any(), expectedVerificationWithResendParentRequest).Return(nil, consts.ErrWorkflowNotReady)
+	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	s.Equal(consts.ErrTaskRetry, resp.ExecutionErr)
+
 	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.fetchHistoryDuration))
-	s.mockHistoryClient.EXPECT().VerifyChildExecutionCompletionRecorded(gomock.Any(), expectedVerificationRequest).Return(nil, consts.ErrWorkflowNotReady)
+	s.mockHistoryClient.EXPECT().VerifyChildExecutionCompletionRecorded(gomock.Any(), expectedVerificationWithResendParentRequest).Return(nil, consts.ErrWorkflowNotReady)
 	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.Equal(consts.ErrTaskRetry, resp.ExecutionErr)
 
 	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.discardDuration))
-	s.mockHistoryClient.EXPECT().VerifyChildExecutionCompletionRecorded(gomock.Any(), expectedVerificationRequest).Return(nil, consts.ErrWorkflowNotReady)
+	s.mockHistoryClient.EXPECT().VerifyChildExecutionCompletionRecorded(gomock.Any(), expectedVerificationWithResendParentRequest).Return(nil, consts.ErrWorkflowNotReady)
 	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.Equal(consts.ErrTaskDiscarded, resp.ExecutionErr)
 
-	s.mockHistoryClient.EXPECT().VerifyChildExecutionCompletionRecorded(gomock.Any(), expectedVerificationRequest).Return(nil, errors.New("some random error"))
+	s.mockHistoryClient.EXPECT().VerifyChildExecutionCompletionRecorded(gomock.Any(), expectedVerificationWithResendParentRequest).Return(nil, errors.New("some random error"))
 	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.Equal(consts.ErrTaskDiscarded, resp.ExecutionErr)
 }

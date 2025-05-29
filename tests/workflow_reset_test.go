@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package tests
 
 import (
@@ -33,19 +9,23 @@ import (
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
 
 // Tests workflow reset feature
 type WorkflowResetSuite struct {
-	testcore.FunctionalTestSdkSuite
+	testcore.FunctionalTestBase
 }
 
 func TestWorkflowResetTestSuite(t *testing.T) {
@@ -215,6 +195,75 @@ func (s *WorkflowResetSuite) TestOriginalExecutionRunId() {
 		s.NoError(err)
 		s.Equal(baseRunID, baseMutableState.GetDatabaseMutableState().ExecutionInfo.OriginalExecutionRunId)
 	}
+}
+
+// Test that the workflow options are updated when the workflow is reset.
+func (s *WorkflowResetSuite) TestResetWorkflowWithOptionsUpdate() {
+	workflowID := "test-reset" + uuid.NewString()
+	ctx := testcore.NewContext()
+	runs := s.setupRuns(ctx, workflowID, 1, true)
+	currentRunID := runs[0]
+
+	override := &workflowpb.VersioningOverride{
+		Override: &workflowpb.VersioningOverride_Pinned{
+			Pinned: &workflowpb.VersioningOverride_PinnedOverride{
+				Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
+				Version: &deploymentpb.WorkerDeploymentVersion{
+					DeploymentName: "testing",
+					BuildId:        "v.123",
+				},
+			},
+		},
+	}
+
+	// Reset the workflow by providing the explicit runID (base run) to reset.
+	resp, err := s.FrontendClient().ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
+		Namespace:                 s.Namespace().String(),
+		WorkflowExecution:         &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: currentRunID},
+		Reason:                    "testing-reset",
+		RequestId:                 uuid.NewString(),
+		WorkflowTaskFinishEventId: s.getFirstWFTaskCompleteEventID(ctx, workflowID, currentRunID),
+		PostResetOperations: []*workflowpb.PostResetOperation{
+			{
+				Variant: &workflowpb.PostResetOperation_UpdateWorkflowOptions_{
+					UpdateWorkflowOptions: &workflowpb.PostResetOperation_UpdateWorkflowOptions{
+						WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{
+							VersioningOverride: override,
+						},
+						UpdateMask: &fieldmaskpb.FieldMask{
+							Paths: []string{
+								"versioning_override",
+							},
+						},
+					},
+				},
+			},
+		},
+	})
+	s.NoError(err)
+	newRunID := resp.RunId
+
+	// assert that the new run has the updated workflow options
+	var optionsUpdatedEvent *historypb.HistoryEvent
+	hist := s.SdkClient().GetWorkflowHistory(ctx, workflowID, newRunID, false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+	for hist.HasNext() {
+		event, err := hist.Next()
+		s.NoError(err)
+		if event.EventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED {
+			optionsUpdatedEvent = event
+			break
+		}
+	}
+	s.NotNil(optionsUpdatedEvent)
+	s.ProtoEqual(override, optionsUpdatedEvent.GetWorkflowExecutionOptionsUpdatedEventAttributes().GetVersioningOverride())
+
+	info, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowID, newRunID)
+	s.NoError(err)
+
+	// TODO (Carly): remove deprecated values from verification once we stop populating them
+	override.Behavior = enumspb.VERSIONING_BEHAVIOR_PINNED //nolint:staticcheck
+	override.PinnedVersion = "testing.v.123"               //nolint:staticcheck
+	s.ProtoEqual(override, info.WorkflowExecutionInfo.GetVersioningInfo().GetVersioningOverride())
 }
 
 // Helper methods

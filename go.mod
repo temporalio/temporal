@@ -47,7 +47,7 @@ require (
 	github.com/temporalio/sqlparser v0.0.0-20231115171017-f4060bcfa6cb
 	github.com/temporalio/tchannel-go v1.22.1-0.20240528171429-1db37fdea938
 	github.com/temporalio/tctl-kit v0.0.0-20250107205014-58462b03dfb2
-	github.com/uber-go/tally/v4 v4.1.17-0.20240412215630-22fe011f5ff0
+	github.com/uber-go/tally/v4 v4.1.17
 	github.com/urfave/cli v1.22.16
 	github.com/urfave/cli/v2 v2.27.5
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.59.0
@@ -59,8 +59,8 @@ require (
 	go.opentelemetry.io/otel/sdk v1.34.0
 	go.opentelemetry.io/otel/sdk/metric v1.34.0
 	go.opentelemetry.io/otel/trace v1.34.0
-	go.temporal.io/api v1.47.0
-	go.temporal.io/sdk v1.33.0
+	go.temporal.io/api v1.49.2-0.20250528164413-b08ef1e10ee0
+	go.temporal.io/sdk v1.34.0
 	go.temporal.io/version v0.3.0
 	go.uber.org/automaxprocs v1.6.0
 	go.uber.org/fx v1.23.0
@@ -69,8 +69,8 @@ require (
 	go.uber.org/zap v1.27.0
 	golang.org/x/exp v0.0.0-20250218142911-aa4b98e5adaa
 	golang.org/x/oauth2 v0.28.0
-	golang.org/x/sync v0.12.0
-	golang.org/x/text v0.23.0
+	golang.org/x/sync v0.13.0
+	golang.org/x/text v0.24.0
 	golang.org/x/time v0.10.0
 	google.golang.org/api v0.224.0
 	google.golang.org/grpc v1.71.0
@@ -159,9 +159,9 @@ require (
 	go.opentelemetry.io/proto/otlp v1.5.0
 	go.uber.org/atomic v1.11.0 // indirect
 	go.uber.org/dig v1.18.0 // indirect
-	golang.org/x/crypto v0.36.0 // indirect
-	golang.org/x/net v0.37.0 // indirect
-	golang.org/x/sys v0.31.0 // indirect
+	golang.org/x/crypto v0.37.0 // indirect
+	golang.org/x/net v0.39.0 // indirect
+	golang.org/x/sys v0.32.0 // indirect
 	google.golang.org/genproto v0.0.0-20250303144028-a0af3efb3deb // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20250303144028-a0af3efb3deb // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250303144028-a0af3efb3deb // indirect

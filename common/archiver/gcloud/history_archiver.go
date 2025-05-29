@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package gcloud
 
 import (
@@ -59,8 +35,10 @@ const (
 )
 
 type historyArchiver struct {
-	container     *archiver.HistoryBootstrapContainer
-	gcloudStorage connector.Client
+	executionManager persistence.ExecutionManager
+	logger           log.Logger
+	metricsHandler   metrics.Handler
+	gcloudStorage    connector.Client
 
 	// only set in test code
 	historyIterator archiver.HistoryIterator
@@ -80,21 +58,25 @@ type getHistoryToken struct {
 
 // NewHistoryArchiver creates a new gcloud storage HistoryArchiver
 func NewHistoryArchiver(
-	container *archiver.HistoryBootstrapContainer,
+	executionManager persistence.ExecutionManager,
+	logger log.Logger,
+	metricsHandler metrics.Handler,
 	config *config.GstorageArchiver,
 ) (archiver.HistoryArchiver, error) {
 	storage, err := connector.NewClient(context.Background(), config)
 	if err == nil {
-		return newHistoryArchiver(container, nil, storage), nil
+		return newHistoryArchiver(executionManager, logger, metricsHandler, nil, storage), nil
 	}
 	return nil, err
 }
 
-func newHistoryArchiver(container *archiver.HistoryBootstrapContainer, historyIterator archiver.HistoryIterator, storage connector.Client) archiver.HistoryArchiver {
+func newHistoryArchiver(executionManager persistence.ExecutionManager, logger log.Logger, metricsHandler metrics.Handler, historyIterator archiver.HistoryIterator, storage connector.Client) archiver.HistoryArchiver {
 	return &historyArchiver{
-		container:       container,
-		gcloudStorage:   storage,
-		historyIterator: historyIterator,
+		executionManager: executionManager,
+		logger:           logger,
+		metricsHandler:   metricsHandler,
+		gcloudStorage:    storage,
+		historyIterator:  historyIterator,
 	}
 }
 
@@ -106,7 +88,7 @@ func newHistoryArchiver(container *archiver.HistoryBootstrapContainer, historyIt
 // between retry attempts.
 // This method will be invoked after a workflow passes its retention period.
 func (h *historyArchiver) Archive(ctx context.Context, URI archiver.URI, request *archiver.ArchiveHistoryRequest, opts ...archiver.ArchiveOption) (err error) {
-	handler := h.container.MetricsHandler.WithTags(metrics.OperationTag(metrics.HistoryArchiverScope), metrics.NamespaceTag(request.Namespace))
+	handler := h.metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryArchiverScope), metrics.NamespaceTag(request.Namespace))
 	featureCatalog := archiver.GetFeatureCatalog(opts...)
 	startTime := time.Now().UTC()
 	defer func() {
@@ -126,7 +108,7 @@ func (h *historyArchiver) Archive(ctx context.Context, URI archiver.URI, request
 		}
 	}()
 
-	logger := archiver.TagLoggerWithArchiveHistoryRequestAndURI(h.container.Logger, request, URI.String())
+	logger := archiver.TagLoggerWithArchiveHistoryRequestAndURI(h.logger, request, URI.String())
 
 	if err := h.ValidateURI(URI); err != nil {
 		logger.Error(archiver.ArchiveNonRetryableErrorMsg, tag.ArchivalArchiveFailReason(archiver.ErrReasonInvalidURI), tag.Error(err))
@@ -142,7 +124,7 @@ func (h *historyArchiver) Archive(ctx context.Context, URI archiver.URI, request
 	historyIterator := h.historyIterator
 	var progress progress
 	if historyIterator == nil { // will only be set by testing code
-		historyIterator, _ = loadHistoryIterator(ctx, request, h.container.ExecutionManager, featureCatalog, &progress)
+		historyIterator, _ = loadHistoryIterator(ctx, request, h.executionManager, featureCatalog, &progress)
 	}
 
 	encoder := codec.NewJSONPBEncoder()

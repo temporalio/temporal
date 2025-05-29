@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package metrics
 
 import (
@@ -30,6 +6,7 @@ import (
 	"strings"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/primitives"
@@ -64,13 +41,30 @@ const (
 	// See server.api.enums.v1.ReplicationTaskType
 	replicationTaskType     = "replicationTaskType"
 	replicationTaskPriority = "replicationTaskPriority"
+	versioningBehavior      = "versioning_behavior"
+	isFirstAttempt          = "first-attempt"
+	workflowStatus          = "workflow_status"
+	behaviorBefore          = "behavior_before"
+	behaviorAfter           = "behavior_after"
+	runInitiator            = "run_initiator"
+	fromUnversioned         = "from_unversioned"
+	toUnversioned           = "to_unversioned"
+	queryType               = "query_type"
+	namespaceAllValue       = "all"
+	unknownValue            = "_unknown_"
+	totalMetricSuffix       = "_total"
+	tagExcludedValue        = "_tag_excluded_"
+	falseValue              = "false"
+	trueValue               = "true"
+	errorPrefix             = "*"
 
-	namespaceAllValue = "all"
-	unknownValue      = "_unknown_"
-	totalMetricSuffix = "_total"
-	tagExcludedValue  = "_tag_excluded_"
-
-	errorPrefix = "*"
+	newRun      = "new"
+	existingRun = "existing"
+	childRun    = "child"
+	canRun      = "can"
+	retryRun    = "retry"
+	cronRun     = "cron"
+	unknownRun  = "unknown"
 )
 
 // Tag is an interface to define metrics tags
@@ -406,4 +400,51 @@ func DestinationTag(value string) Tag {
 		key:   destination,
 		value: value,
 	}
+}
+
+func VersioningBehaviorBeforeOverrideTag(behavior enumspb.VersioningBehavior) Tag {
+	return &tagImpl{key: behaviorBefore, value: behavior.String()}
+}
+
+func VersioningBehaviorAfterOverrideTag(behavior enumspb.VersioningBehavior) Tag {
+	return &tagImpl{key: behaviorAfter, value: behavior.String()}
+}
+
+// RunInitiatorTag creates a tag indicating how a workflow run was initiated.
+// It handles both new workflow runs and continuations from previous runs.
+// When attributes is nil (e.g. during AddWorkflowExecutionOptionsUpdatedEvent),
+// it returns a tag indicating an existing run.
+func RunInitiatorTag(prevRunID string, attributes *historypb.WorkflowExecutionStartedEventAttributes) Tag {
+	if attributes == nil {
+		return &tagImpl{key: runInitiator, value: existingRun}
+	} else if attributes.GetParentWorkflowExecution() != nil {
+		return &tagImpl{key: runInitiator, value: childRun}
+	}
+
+	switch attributes.GetInitiator() {
+	case enumspb.CONTINUE_AS_NEW_INITIATOR_UNSPECIFIED:
+		return &tagImpl{key: runInitiator, value: newRun}
+	case enumspb.CONTINUE_AS_NEW_INITIATOR_WORKFLOW:
+		return &tagImpl{key: runInitiator, value: canRun}
+	case enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY:
+		return &tagImpl{key: runInitiator, value: retryRun}
+	case enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE:
+		return &tagImpl{key: runInitiator, value: cronRun}
+	default:
+		return &tagImpl{key: runInitiator, value: unknownRun}
+	}
+}
+
+func FromUnversionedTag(version string) Tag {
+	if version == "_unversioned_" {
+		return &tagImpl{key: fromUnversioned, value: trueValue}
+	}
+	return &tagImpl{key: fromUnversioned, value: falseValue}
+}
+
+func ToUnversionedTag(version string) Tag {
+	if version == "_unversioned_" {
+		return &tagImpl{key: toUnversioned, value: trueValue}
+	}
+	return &tagImpl{key: toUnversioned, value: falseValue}
 }

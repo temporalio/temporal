@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package tests
 
 import (
@@ -50,7 +26,6 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
-	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/testing/protoassert"
 	"go.temporal.io/server/tests/testcore"
@@ -59,7 +34,7 @@ import (
 
 type (
 	ArchivalSuite struct {
-		testcore.FunctionalTestSuite
+		testcore.FunctionalTestBase
 
 		archivalNamespace   namespace.Name
 		archivalNamespaceID namespace.ID
@@ -81,7 +56,7 @@ func (s *ArchivalSuite) SetupSuite() {
 		dynamicconfig.ArchivalProcessorArchiveDelay.Key(): time.Duration(0),
 	}
 
-	s.FunctionalTestBase.SetupSuiteWithDefaultCluster(
+	s.FunctionalTestBase.SetupSuiteWithCluster(
 		testcore.WithDynamicConfigOverrides(dynamicConfigOverrides),
 		testcore.WithArchivalEnabled(),
 	)
@@ -201,12 +176,10 @@ func (s *ArchivalSuite) TestVisibilityArchival() {
 
 // workflowIsArchived asserts that both the workflow history and workflow visibility are archived.
 func (s *ArchivalSuite) workflowIsArchived(namespaceID namespace.ID, execution *commonpb.WorkflowExecution) {
-	serviceName := string(primitives.HistoryService)
 	historyURI, err := archiver.NewURI(s.GetTestCluster().ArchiverBase().HistoryURI())
 	s.NoError(err)
 	historyArchiver, err := s.GetTestCluster().ArchiverBase().Provider().GetHistoryArchiver(
 		historyURI.Scheme(),
-		serviceName,
 	)
 	s.NoError(err)
 
@@ -214,7 +187,6 @@ func (s *ArchivalSuite) workflowIsArchived(namespaceID namespace.ID, execution *
 	s.NoError(err)
 	visibilityArchiver, err := s.GetTestCluster().ArchiverBase().Provider().GetVisibilityArchiver(
 		visibilityURI.Scheme(),
-		serviceName,
 	)
 	s.NoError(err)
 

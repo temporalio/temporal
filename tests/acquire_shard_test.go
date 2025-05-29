@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package tests
 
 import (
@@ -31,6 +7,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/tests/testcore"
@@ -126,7 +103,11 @@ func TestAcquireShard_OwnershipLostErrorSuite(t *testing.T) {
 // SetupSuite reads the shard ownership lost error fault injection config from the testdata folder.
 func (s *OwnershipLostErrorSuite) SetupSuite() {
 	s.AcquireShardSuiteBase.SetupSuite()
-	s.FunctionalTestBase.SetupSuiteWithCluster("testdata/acquire_shard_ownership_lost_error.yaml")
+	s.FunctionalTestBase.SetupSuiteWithCluster(
+		testcore.WithNumHistoryShards(1),
+		testcore.WithFaultInjectionConfig((&config.FaultInjection{}).
+			WithError(config.ShardStoreName, "UpdateShard", "ShardOwnershipLost", 1.0),
+		))
 }
 
 // TestDoesNotRetry verifies that we do not retry acquiring the shard when we get an ownership lost error.
@@ -175,7 +156,11 @@ func TestAcquireShard_DeadlineExceededErrorSuite(t *testing.T) {
 // SetupSuite reads the deadline exceeded error targeted fault injection config from the test data folder.
 func (s *DeadlineExceededErrorSuite) SetupSuite() {
 	s.AcquireShardSuiteBase.SetupSuite()
-	s.FunctionalTestBase.SetupSuiteWithCluster("testdata/acquire_shard_deadline_exceeded_error.yaml")
+	s.FunctionalTestBase.SetupSuiteWithCluster(
+		testcore.WithNumHistoryShards(1),
+		testcore.WithFaultInjectionConfig((&config.FaultInjection{}).
+			WithError(config.ShardStoreName, "UpdateShard", "DeadlineExceeded", 1.0),
+		))
 }
 
 // TestDoesRetry verifies that we do retry acquiring the shard when we get a deadline exceeded error because that should
@@ -226,7 +211,12 @@ func TestAcquireShard_EventualSuccess(t *testing.T) {
 // the next call to return a successful response.
 func (s *EventualSuccessSuite) SetupSuite() {
 	s.AcquireShardSuiteBase.SetupSuite()
-	s.FunctionalTestBase.SetupSuiteWithCluster("testdata/acquire_shard_eventual_success.yaml")
+	s.FunctionalTestBase.SetupSuiteWithCluster(
+		testcore.WithNumHistoryShards(1),
+		testcore.WithFaultInjectionConfig((&config.FaultInjection{}).
+			WithError(config.ShardStoreName, "UpdateShard", "DeadlineExceeded", 0.5).
+			WithMethodSeed(config.ShardStoreName, "UpdateShard", 43),
+		))
 }
 
 // TestEventuallySucceeds verifies that we eventually succeed in acquiring the shard when we get a deadline exceeded

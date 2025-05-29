@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package frontend
 
 import (
@@ -1712,13 +1688,15 @@ func (s *namespaceHandlerCommonSuite) TestFailoverGlobalNamespace_NotMaster() {
 
 func (s *namespaceHandlerCommonSuite) TestCreateWorkflowRule_Acceptance() {
 	namespaceName := "test-namespace"
+	identity := "identity"
+	description := "description"
 	spec := &rulespb.WorkflowRuleSpec{
 		Id: "",
 	}
 	version := int64(100)
 
 	// first call returns error, because ID is not set
-	_, err := s.handler.CreateWorkflowRule(context.Background(), spec, namespaceName)
+	_, err := s.handler.CreateWorkflowRule(context.Background(), spec, identity, description, namespaceName)
 	s.Error(err)
 
 	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{
@@ -1737,15 +1715,19 @@ func (s *namespaceHandlerCommonSuite) TestCreateWorkflowRule_Acceptance() {
 	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).Return(nil)
 
 	spec.Id = "test-id"
-	rule, err := s.handler.CreateWorkflowRule(context.Background(), spec, namespaceName)
+	rule, err := s.handler.CreateWorkflowRule(context.Background(), spec, identity, description, namespaceName)
 	s.NoError(err)
 	s.NotNil(rule)
 	s.NotNil(rule.Spec)
 	s.NotNil(rule.CreateTime)
+	s.Equal(identity, rule.CreatedByIdentity)
+	s.Equal(description, rule.Description)
 }
 
 func (s *namespaceHandlerCommonSuite) TestCreateWorkflowRule_Duplicate() {
 	namespaceName := "test-namespace"
+	identity := "identity"
+	description := "description"
 	ruleId := "test-id"
 	spec := &rulespb.WorkflowRuleSpec{
 		Id: ruleId,
@@ -1763,7 +1745,7 @@ func (s *namespaceHandlerCommonSuite) TestCreateWorkflowRule_Duplicate() {
 			},
 			Config: &persistencespb.NamespaceConfig{
 				WorkflowRules: map[string]*rulespb.WorkflowRule{
-					ruleId: &rulespb.WorkflowRule{
+					ruleId: {
 						Spec: &rulespb.WorkflowRuleSpec{Id: ruleId},
 					},
 				},
@@ -1772,7 +1754,7 @@ func (s *namespaceHandlerCommonSuite) TestCreateWorkflowRule_Duplicate() {
 		},
 	}, nil)
 
-	_, err := s.handler.CreateWorkflowRule(context.Background(), spec, namespaceName)
+	_, err := s.handler.CreateWorkflowRule(context.Background(), spec, identity, description, namespaceName)
 	s.Error(err)
 	var invalidArgument *serviceerror.InvalidArgument
 	s.ErrorAs(err, &invalidArgument)
@@ -1898,7 +1880,50 @@ func (s *namespaceHandlerCommonSuite) TestListWorkflowRules() {
 	s.NoError(err)
 	s.NotNil(rules)
 	s.Equal(0, len(rules))
+}
 
+func (s *namespaceHandlerCommonSuite) TestWorkflowRuleEviction() {
+	s.fakeClock.Update(time.Now())
+	expiredTime1 := s.fakeClock.Now().Add(-1 * time.Hour)
+	expiredTime2 := s.fakeClock.Now().Add(-2 * time.Hour)
+
+	tests := []struct {
+		name        string
+		deletedRule string
+		rules       map[string]*rulespb.WorkflowRule
+	}{
+		{
+			name: "empty map", deletedRule: "", rules: map[string]*rulespb.WorkflowRule{},
+		},
+		{
+			name: "no rule to delete", deletedRule: "", rules: map[string]*rulespb.WorkflowRule{
+				"rule 1": {Spec: &rulespb.WorkflowRuleSpec{Id: "rule 1"}},
+			},
+		},
+		{
+			name: "single rule to delete", deletedRule: "rule 1", rules: map[string]*rulespb.WorkflowRule{
+				"rule 1": {Spec: &rulespb.WorkflowRuleSpec{Id: "rule 1", ExpirationTime: timestamppb.New(expiredTime1)}},
+			},
+		},
+		{
+			name: "two candidates to delete", deletedRule: "rule 2", rules: map[string]*rulespb.WorkflowRule{
+				"rule 1": {Spec: &rulespb.WorkflowRuleSpec{Id: "rule 1", ExpirationTime: timestamppb.New(expiredTime1)}},
+				"rule 2": {Spec: &rulespb.WorkflowRuleSpec{Id: "rule 2", ExpirationTime: timestamppb.New(expiredTime2)}},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		oldLens := len(tt.rules)
+		s.handler.removeOldestExpiredWorkflowRule(tt.rules)
+		if len(tt.deletedRule) == 0 {
+			s.Equal(oldLens, len(tt.rules))
+		} else {
+			if _, exists := tt.rules[tt.deletedRule]; exists {
+				s.True(false, "Rule was not deleted")
+			}
+		}
+	}
 }
 
 func (s *namespaceHandlerCommonSuite) getRandomNamespace() string {

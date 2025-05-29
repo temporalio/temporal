@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package configs
 
 import (
@@ -206,6 +182,21 @@ var (
 	}
 
 	NamespaceReplicationInducingAPIPrioritiesOrdered = []int{0, 1, 2}
+
+	// APIs that are not considered as a namespace operation. Namespace operations are used to track the usage of a namespace.
+	// This includes some APIs, history tasks, etc.
+	operationExcludedAPIs = map[string]struct{}{
+		// Poll requests are not considered as namespace operations. We will count these operations when we try to return a task
+		// from matching service to this request.
+		"/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowTaskQueue": {},
+		"/temporal.api.workflowservice.v1.WorkflowService/PollActivityTaskQueue": {},
+
+		// Replication-related APIs are not counted as operations.
+		"/temporal.server.api.adminservice.v1.AdminService/GetWorkflowExecutionRawHistory":   {},
+		"/temporal.server.api.adminservice.v1.AdminService/GetWorkflowExecutionRawHistoryV2": {},
+		"/temporal.server.api.adminservice.v1.AdminService/ReapplyEvents":                    {},
+		"/temporal.server.api.adminservice.v1.AdminService/SyncWorkflowState":                {},
+	}
 )
 
 type (
@@ -356,4 +347,15 @@ func NewNamespaceReplicationInducingAPIPriorityRateLimiter(
 		}
 		return NamespaceReplicationInducingAPIPrioritiesOrdered[len(NamespaceReplicationInducingAPIPrioritiesOrdered)-1]
 	}, rateLimiters)
+}
+
+func IsAPIOperation(apiFullName string) bool {
+	if _, ok := operationExcludedAPIs[apiFullName]; ok {
+		return false
+	}
+
+	_, inAPI := APIToPriority[apiFullName]
+	_, inNamespaceReplicationInducingAPI := NamespaceReplicationInducingAPIToPriority[apiFullName]
+
+	return inAPI || inNamespaceReplicationInducingAPI
 }

@@ -1,28 +1,4 @@
-// The MIT License
-//
-// Copyright (pm) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (pm) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination task_queue_partition_manager_mock.go
+//go:generate mockgen -package $GOPACKAGE -source $GOFILE -destination task_queue_partition_manager_mock.go
 
 package matching
 
@@ -30,10 +6,8 @@ import (
 	"context"
 	"time"
 
-	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
-	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/tqid"
 )
@@ -85,11 +59,7 @@ type (
 		Describe(ctx context.Context, buildIds map[string]bool, includeAllActive, reportStats, reportPollers, internalTaskQueueStatus bool) (*matchingservice.DescribeTaskQueuePartitionResponse, error)
 		Partition() tqid.Partition
 		LongPollExpirationInterval() time.Duration
-		// TimeSinceLastFanOut returns the time since the last DescribeTaskQueuePartition fan out
-		TimeSinceLastFanOut() time.Duration
-		// UpdateTimeSinceLastFanOutAndCache updates the cache and it's TTL
-		UpdateTimeSinceLastFanOutAndCache(physicalInfoByBuildId map[string]map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo)
-		// GetPhysicalTaskQueueInfoFromCache returns the cached physicalInfoByBuildId
-		GetPhysicalTaskQueueInfoFromCache() map[string]map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo
+		PutCache(key any, value any)
+		GetCache(key any) any
 	}
 )

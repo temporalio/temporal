@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package workflow
 
 import (
@@ -220,39 +196,59 @@ func GetEffectiveDeployment(versioningInfo *workflowpb.WorkflowExecutionVersioni
 	if versioningInfo == nil {
 		return nil
 	} else if transition := versioningInfo.GetVersionTransition(); transition != nil {
-		v, _ := worker_versioning.WorkerDeploymentVersionFromString(transition.GetVersion())
+		if v := transition.GetDeploymentVersion(); v != nil { // v0.32
+			return worker_versioning.DeploymentFromExternalDeploymentVersion(v)
+		}
+		v, _ := worker_versioning.WorkerDeploymentVersionFromString(transition.GetVersion()) //nolint:staticcheck // SA1019: worker versioning v0.31
 		return worker_versioning.DeploymentFromDeploymentVersion(v)
-	} else if transition := versioningInfo.GetDeploymentTransition(); transition != nil {
+	} else if transition := versioningInfo.GetDeploymentTransition(); transition != nil { // //nolint:staticcheck // SA1019: worker versioning v0.30
 		return transition.GetDeployment()
 	} else if override := versioningInfo.GetVersioningOverride(); override != nil &&
-		override.GetBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED {
-		if pinned := override.GetPinnedVersion(); pinned != "" {
+		(override.GetBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED || //nolint:staticcheck // SA1019: worker versioning v0.31 and v0.30
+			override.GetPinned() != nil) {
+		if pinnedVersion := override.GetPinned().GetVersion(); pinnedVersion != nil {
+			return worker_versioning.DeploymentFromExternalDeploymentVersion(pinnedVersion)
+		}
+		if pinned := override.GetPinnedVersion(); pinned != "" { //nolint:staticcheck // SA1019: worker versioning v0.31
 			v, _ := worker_versioning.WorkerDeploymentVersionFromString(pinned)
 			return worker_versioning.DeploymentFromDeploymentVersion(v)
 		}
-		return override.GetDeployment()
-	} else if GetEffectiveVersioningBehavior(versioningInfo) != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
+		return override.GetDeployment() // //nolint:staticcheck // SA1019: worker versioning v0.30
+	} else if GetEffectiveVersioningBehavior(versioningInfo) != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED || // v0.30 and v0.31 auto-upgrade
+		versioningInfo.GetVersioningOverride().GetAutoUpgrade() { // v0.32 auto-upgrade
 		//nolint:revive // nesting will be reduced after old code clean up
-		if v := versioningInfo.GetVersion(); v != "" {
+		if v := versioningInfo.GetDeploymentVersion(); v != nil { // v0.32 auto-upgrade
+			return worker_versioning.DeploymentFromExternalDeploymentVersion(v)
+		}
+		if v := versioningInfo.GetVersion(); v != "" { // //nolint:staticcheck // SA1019: worker versioning v0.31
 			dv, _ := worker_versioning.WorkerDeploymentVersionFromString(v)
 			return worker_versioning.DeploymentFromDeploymentVersion(dv)
 		}
-		return versioningInfo.GetDeployment()
+		return versioningInfo.GetDeployment() // //nolint:staticcheck // SA1019: worker versioning v0.30
 	}
 	return nil
 }
 
 // GetEffectiveVersioningBehavior returns the effective versioning behavior in the following
 // order:
-//  1. VersioningOverride.Behavior: this is returned when user has set a behavior override
+//  1. DeploymentVersionTransition: if there is a transition, then effective behavior is AUTO_UPGRADE.
+//  2. VersioningOverride.Behavior: this is returned when user has set a behavior override
 //     at wf start time, or later via UpdateWorkflowExecutionOptions.
-//  2. Behavior: this is returned when there is no override (most common case). Behavior is
+//  3. Behavior: this is returned when there is no override (most common case). Behavior is
 //     set based on the worker-sent deployment in the latest WFT completion.
 func GetEffectiveVersioningBehavior(versioningInfo *workflowpb.WorkflowExecutionVersioningInfo) enumspb.VersioningBehavior {
 	if versioningInfo == nil {
 		return enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED
+	} else if t := versioningInfo.GetVersionTransition(); t != nil {
+		return enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
 	} else if override := versioningInfo.GetVersioningOverride(); override != nil {
-		return override.GetBehavior()
+		if override.GetAutoUpgrade() || override.GetPinned() != nil { // v0.32 override behavior
+			if override.GetAutoUpgrade() {
+				return enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
+			}
+			return enumspb.VERSIONING_BEHAVIOR_PINNED
+		}
+		return override.GetBehavior() // //nolint:staticcheck // SA1019: worker versioning v0.31 and v0.30
 	}
 	return versioningInfo.GetBehavior()
 }
@@ -288,27 +284,37 @@ func getCompletionCallbacksAsProtoSlice(ms historyi.MutableState) ([]*commonpb.C
 		if _, ok := cb.Trigger.Variant.(*persistencespb.CallbackInfo_Trigger_WorkflowClosed); !ok {
 			continue
 		}
-		cbSpec := &commonpb.Callback{}
-		switch variant := cb.Callback.Variant.(type) {
-		case *persistencespb.Callback_Nexus_:
-			cbSpec.Variant = &commonpb.Callback_Nexus_{
-				Nexus: &commonpb.Callback_Nexus{
-					Url:    variant.Nexus.GetUrl(),
-					Header: variant.Nexus.GetHeader(),
-				},
-			}
-		default:
-			data, err := proto.Marshal(cb.Callback)
-			if err != nil {
-				return nil, err
-			}
-			cbSpec.Variant = &commonpb.Callback_Internal_{
-				Internal: &commonpb.Callback_Internal{
-					Data: data,
-				},
-			}
+		cbSpec, err := PersistenceCallbackToAPICallback(cb.Callback)
+		if err != nil {
+			return nil, err
 		}
 		result = append(result, cbSpec)
 	}
 	return result, nil
+}
+
+func PersistenceCallbackToAPICallback(cb *persistencespb.Callback) (*commonpb.Callback, error) {
+	res := &commonpb.Callback{
+		Links: cb.GetLinks(),
+	}
+	switch variant := cb.Variant.(type) {
+	case *persistencespb.Callback_Nexus_:
+		res.Variant = &commonpb.Callback_Nexus_{
+			Nexus: &commonpb.Callback_Nexus{
+				Url:    variant.Nexus.GetUrl(),
+				Header: variant.Nexus.GetHeader(),
+			},
+		}
+	default:
+		data, err := proto.Marshal(cb)
+		if err != nil {
+			return nil, err
+		}
+		res.Variant = &commonpb.Callback_Internal_{
+			Internal: &commonpb.Callback_Internal{
+				Data: data,
+			},
+		}
+	}
+	return res, nil
 }

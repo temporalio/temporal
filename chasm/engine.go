@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package chasm
 
 import (
@@ -130,7 +106,11 @@ func NewEntity[C Component, I any, O any](
 		},
 		opts...,
 	)
-	return output, ref.Serialize(), err
+	if err != nil {
+		return output, nil, err
+	}
+	serializedRef, err := ref.serialize()
+	return output, serializedRef, err
 }
 
 func UpdateWithNewEntity[C Component, I any, O1 any, O2 any](
@@ -159,7 +139,11 @@ func UpdateWithNewEntity[C Component, I any, O1 any, O2 any](
 		},
 		opts...,
 	)
-	return output1, output2, ref.Serialize(), err
+	if err != nil {
+		return output1, output2, nil, err
+	}
+	serializedRef, err := ref.serialize()
+	return output1, output2, serializedRef, err
 }
 
 // TODO:
@@ -192,7 +176,11 @@ func UpdateComponent[C Component, R []byte | ComponentRef, I any, O any](
 		opts...,
 	)
 
-	return output, newRef.Serialize(), err
+	if err != nil {
+		return output, nil, err
+	}
+	serializedRef, err := newRef.serialize()
+	return output, serializedRef, err
 }
 
 func ReadComponent[C Component, R []byte | ComponentRef, I any, O any](
@@ -257,14 +245,18 @@ func PollComponent[C Component, R []byte | ComponentRef, I any, O any, T any](
 		},
 		opts...,
 	)
-	return output, newRef.Serialize(), err
+	if err != nil {
+		return output, nil, err
+	}
+	serializedRef, err := newRef.serialize()
+	return output, serializedRef, err
 }
 
 func convertComponentRef[R []byte | ComponentRef](
 	r R,
 ) (ComponentRef, error) {
 	if refToken, ok := any(r).([]byte); ok {
-		return DeserializeComponentRef(refToken)
+		return deserializeComponentRef(refToken)
 	}
 
 	//revive:disable-next-line:unchecked-type-assertion

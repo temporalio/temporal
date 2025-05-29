@@ -1,28 +1,4 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
-//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination mutable_state_mock.go
+//go:generate mockgen -package $GOPACKAGE -source $GOFILE -destination mutable_state_mock.go
 
 package interfaces
 
@@ -84,7 +60,7 @@ type (
 		AddChildWorkflowExecutionCompletedEvent(int64, *commonpb.WorkflowExecution, *historypb.WorkflowExecutionCompletedEventAttributes) (*historypb.HistoryEvent, error)
 		AddChildWorkflowExecutionFailedEvent(int64, *commonpb.WorkflowExecution, *historypb.WorkflowExecutionFailedEventAttributes) (*historypb.HistoryEvent, error)
 		AddChildWorkflowExecutionStartedEvent(*commonpb.WorkflowExecution, *commonpb.WorkflowType, int64, *commonpb.Header, *clockspb.VectorClock) (*historypb.HistoryEvent, error)
-		AddChildWorkflowExecutionTerminatedEvent(int64, *commonpb.WorkflowExecution, *historypb.WorkflowExecutionTerminatedEventAttributes) (*historypb.HistoryEvent, error)
+		AddChildWorkflowExecutionTerminatedEvent(int64, *commonpb.WorkflowExecution) (*historypb.HistoryEvent, error)
 		AddChildWorkflowExecutionTimedOutEvent(int64, *commonpb.WorkflowExecution, *historypb.WorkflowExecutionTimedOutEventAttributes) (*historypb.HistoryEvent, error)
 		AddCompletedWorkflowEvent(int64, *commandpb.CompleteWorkflowExecutionCommandAttributes, string) (*historypb.HistoryEvent, error)
 		AddContinueAsNewEvent(context.Context, int64, int64, namespace.Name, *commandpb.ContinueAsNewWorkflowExecutionCommandAttributes) (*historypb.HistoryEvent, MutableState, error)
@@ -195,6 +171,7 @@ type (
 		GetPendingActivityInfos() map[int64]*persistencespb.ActivityInfo
 		GetPendingTimerInfos() map[string]*persistencespb.TimerInfo
 		GetPendingChildExecutionInfos() map[int64]*persistencespb.ChildExecutionInfo
+		GetPendingChildIds() map[int64]struct{}
 		GetPendingRequestCancelExternalInfos() map[int64]*persistencespb.RequestCancelInfo
 		GetPendingSignalExternalInfos() map[int64]*persistencespb.SignalInfo
 		GetPendingSignalRequestedIds() []string
@@ -222,6 +199,7 @@ type (
 		IsCancelRequested() bool
 		IsWorkflowCloseAttempted() bool
 		IsCurrentWorkflowGuaranteed() bool
+		IsNonCurrentWorkflowGuaranteed() (bool, error)
 		IsSignalRequested(requestID string) bool
 		GetApproximatePersistedSize() int
 
@@ -323,7 +301,7 @@ type (
 		// CloseTransactionAsSnapshot closes the mutable state transaction (different from DB transaction) and prepares the current snapshot of the state to be persisted and bumps the DBRecordVersion.
 		// You should ideally not make any changes to the mutable state after this call.
 		CloseTransactionAsSnapshot(transactionPolicy TransactionPolicy) (*persistence.WorkflowSnapshot, []*persistence.WorkflowEvents, error)
-		GenerateMigrationTasks() ([]tasks.Task, int64, error)
+		GenerateMigrationTasks(targetClusters []string) ([]tasks.Task, int64, error)
 
 		// ContinueAsNewMinBackoff calculate minimal backoff for next ContinueAsNew run.
 		// Input backoffDuration is current backoff for next run.
@@ -333,6 +311,8 @@ type (
 		HasCompletedAnyWorkflowTask() bool
 
 		HSM() *hsm.Node
+
+		IsWorkflow() bool
 		ChasmTree() ChasmTree
 
 		// NextTransitionCount returns the next state transition count from the state transition history.
@@ -355,9 +335,10 @@ type (
 		GetEffectiveDeployment() *deploymentpb.Deployment
 		// GetEffectiveVersioningBehavior returns the effective versioning behavior in the following
 		// order:
-		//  1. VersioningOverride.Behavior: this is returned when user has set a behavior override
+		//  1. DeploymentVersionTransition: if there is a transition, then effective behavior is AUTO_UPGRADE.
+		//  2. VersioningOverride.Behavior: this is returned when user has set a behavior override
 		//     at wf start time, or later via UpdateWorkflowExecutionOptions.
-		//  2. Behavior: this is returned when there is no override (most common case). Behavior is
+		//  3. Behavior: this is returned when there is no override (most common case). Behavior is
 		//     set based on the worker-sent deployment in the latest WFT completion.
 		GetEffectiveVersioningBehavior() enumspb.VersioningBehavior
 		GetDeploymentTransition() *workflowpb.DeploymentTransition

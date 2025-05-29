@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package history
 
 import (
@@ -36,6 +12,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
@@ -124,6 +101,8 @@ func (t *timerQueueStandbyTaskExecutor) Execute(
 		err = t.executeDeleteHistoryEventTask(ctx, task)
 	case *tasks.StateMachineTimerTask:
 		err = t.executeStateMachineTimerTask(ctx, task)
+	case *tasks.ChasmTaskPure:
+		err = t.executeChasmPureTimerTask(ctx, task)
 	default:
 		err = queues.NewUnprocessableTaskError("unknown task type")
 	}
@@ -133,6 +112,48 @@ func (t *timerQueueStandbyTaskExecutor) Execute(
 		ExecutedAsActive:    false,
 		ExecutionErr:        err,
 	}
+}
+
+func (t *timerQueueStandbyTaskExecutor) executeChasmPureTimerTask(
+	ctx context.Context,
+	task *tasks.ChasmTaskPure,
+) error {
+	actionFn := func(
+		ctx context.Context,
+		wfContext historyi.WorkflowContext,
+		mutableState historyi.MutableState,
+	) (any, error) {
+		err := t.executeChasmPureTimers(
+			ctx,
+			wfContext,
+			mutableState,
+			task,
+			func(_ chasm.NodeExecutePureTask, task any) error {
+				// If this line of code is reached, the task's Validate() function succeeded, which
+				// indicates that it is still expected to run. Return ErrTaskRetry to wait for the
+				// task to complete on the active cluster, after which Validate will begun returning
+				// false.
+				return consts.ErrTaskRetry
+			},
+		)
+		if err != nil && errors.Is(err, consts.ErrTaskRetry) {
+			return &struct{}{}, nil
+		}
+
+		return nil, err
+	}
+
+	return t.processTimer(
+		ctx,
+		task,
+		actionFn,
+		getStandbyPostActionFn(
+			task,
+			t.getCurrentTime,
+			t.config.StandbyTaskMissingEventsDiscardDelay(task.GetType()),
+			t.checkWorkflowStillExistOnSourceBeforeDiscard,
+		),
+	)
 }
 
 func (t *timerQueueStandbyTaskExecutor) executeUserTimerTimeoutTask(
@@ -364,6 +385,16 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowTaskTimeoutTask(
 			return nil, err
 		}
 
+		if workflowTask.Attempt != timerTask.ScheduleAttempt {
+			return nil, nil
+		}
+
+		// We could check if workflow task is started state (since the timeout type here is START_TO_CLOSE)
+		// but that's unnecessary.
+		//
+		// Ifthe  workflow task is in scheduled state, it must have a higher attempt
+		// count and will be captured by the attempt check above.
+
 		return &struct{}{}, nil
 	}
 
@@ -526,6 +557,11 @@ func (t *timerQueueStandbyTaskExecutor) executeStateMachineTimerTask(
 			return nil, nil
 		}
 
+		if t.config.EnableUpdateWorkflowModeIgnoreCurrent() {
+			return nil, wfContext.UpdateWorkflowExecutionAsPassive(ctx, t.shardContext)
+		}
+
+		// TODO: remove following code once EnableUpdateWorkflowModeIgnoreCurrent config is deprecated.
 		if mutableState.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 			// Can't use UpdateWorkflowExecutionAsPassive since it updates the current run,
 			// and we are operating on a closed workflow.

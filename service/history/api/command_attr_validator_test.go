@@ -1,30 +1,7 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package api
 
 import (
+	"fmt"
 	"math/rand"
 	"testing"
 	"time"
@@ -223,6 +200,22 @@ func (s *commandAttrValidatorSuite) TestValidateUpsertWorkflowSearchAttributes()
 	fc, err = s.validator.ValidateUpsertWorkflowSearchAttributes(namespaceName, attributes)
 	s.NoError(err)
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, fc)
+
+	// Predefined Worker-Deployment related SA's should be rejected when they are attempted to be upserted
+	deploymentRestrictedAttributes := []string{
+		searchattribute.TemporalWorkerDeploymentVersion,
+		searchattribute.TemporalWorkerDeployment,
+		searchattribute.TemporalWorkflowVersioningBehavior,
+	}
+
+	for _, attr := range deploymentRestrictedAttributes {
+		attributes.SearchAttributes.IndexedFields = map[string]*commonpb.Payload{
+			attr: saPayload,
+		}
+		fc, err = s.validator.ValidateUpsertWorkflowSearchAttributes(namespaceName, attributes)
+		s.EqualError(err, fmt.Sprintf("%s attribute can't be set in SearchAttributes", attr))
+		s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, fc)
+	}
 }
 
 func (s *commandAttrValidatorSuite) TestValidateContinueAsNewWorkflowExecutionAttributes() {
@@ -257,6 +250,31 @@ func (s *commandAttrValidatorSuite) TestValidateContinueAsNewWorkflowExecutionAt
 	s.Equal(taskQueue, attributes.GetTaskQueue().GetName())
 	s.Equal(executionTimeout, attributes.GetWorkflowRunTimeout().AsDuration())
 	s.Equal(maxWorkflowTaskStartToCloseTimeout, attributes.GetWorkflowTaskTimeout().AsDuration())
+
+	// Predefined Worker-Deployment related SA's should be rejected when they are attempted to be set during CAN
+	saPayload, _ := searchattribute.EncodeValue([]string{"a"}, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
+	attributes.SearchAttributes = &commonpb.SearchAttributes{}
+
+	deploymentRestrictedAttributes := []string{
+		searchattribute.TemporalWorkerDeploymentVersion,
+		searchattribute.TemporalWorkerDeployment,
+		searchattribute.TemporalWorkflowVersioningBehavior,
+	}
+
+	for _, attr := range deploymentRestrictedAttributes {
+		attributes.SearchAttributes.IndexedFields = map[string]*commonpb.Payload{
+			attr: saPayload,
+		}
+		fc, err = s.validator.ValidateContinueAsNewWorkflowExecutionAttributes(
+			tests.Namespace,
+			attributes,
+			executionInfo,
+		)
+		s.EqualError(err, fmt.Sprintf("invalid SearchAttributes on ContinueAsNewWorkflowExecutionCommand: %s attribute "+
+			"can't be set in SearchAttributes. WorkflowType=%s TaskQueue=%s",
+			attr, workflowTypeName, attributes.TaskQueue))
+		s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, fc)
+	}
 }
 
 func (s *commandAttrValidatorSuite) TestValidateModifyWorkflowProperties() {

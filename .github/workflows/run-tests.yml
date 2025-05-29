@@ -1,4 +1,5 @@
 name: All Tests
+run-name: ${{ inputs.test_name }}${{ inputs.test_dbs }}
 
 on:
   pull_request:
@@ -26,7 +27,7 @@ on:
         type: string
         default: "./temporal"
       n_runs:
-        description: "Number of times to repeat the single test per database type"
+        description: "Number of times to repeat the test per database type (except for unit tests, start with n=25 or lower to avoid OOMKill)"
         type: number
         default: 1
       test_name:
@@ -82,7 +83,7 @@ jobs:
       - id: generate_output
         run: |
           shards=3
-          timeout=25   # update this to TEST_TIMEOUT if you update the Makefile
+          timeout=35   # update this to TEST_TIMEOUT if you update the Makefile
           runs_on='["ubuntu-latest"]'
           if [[ "${{ inputs.run_single_functional_test }}" == "true" || "${{ inputs.run_single_unit_test }}" == "true" ]]; then
             shards=1
@@ -308,7 +309,7 @@ jobs:
           # Not retrying failed tests intentionally here since we're trying to detect flakes.
           FAILED_TEST_RETRIES: "0"
           TEST_ARGS: "-run=${{ needs.set-up-single-test.outputs.modified_unit_test_suites }} -count=10"
-          TEST_TIMEOUT: 25
+          TEST_TIMEOUT: 35
 
   integration-test:
     if: ${{ inputs.run_single_functional_test != true && inputs.run_single_unit_test != true }}
@@ -653,7 +654,7 @@ jobs:
           echo "JOB_ID=${job_id-unknown}" >> "$GITHUB_OUTPUT"
 
       - name: Run functional test xdc
-        timeout-minutes: 25   # update this to TEST_TIMEOUT+5 if you update the Makefile
+        timeout-minutes: 35   # update this to TEST_TIMEOUT+5 if you update the Makefile
         run: make functional-test-xdc-coverage
 
       - name: Generate test summary
@@ -849,6 +850,14 @@ jobs:
     steps:
       - name: Check results
         run: |
-          if [[ -n $(echo "$RESULTS" | jq '.[] | select (. != "success")') ]]; then
-            exit 1
+          if [[ "${{ inputs.run_single_functional_test }}" != "true" ]]; then
+            # if in all-tests mode, all statuses must be success
+            if [[ -n $(echo "$RESULTS" | jq '.[] | select (. != "success")') ]]; then
+              exit 1
+            fi
+          else
+            # if in single-test mode, skipped status is ok, failure is failure
+            if [[ -n $(echo "$RESULTS" | jq '.[] | select (. == "failure")') ]]; then
+              exit 1
+            fi
           fi

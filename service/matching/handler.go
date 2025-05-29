@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package matching
 
 import (
@@ -47,6 +23,7 @@ import (
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/service/worker/deployment"
 	"go.temporal.io/server/service/worker/workerdeployment"
+	"go.uber.org/fx"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
@@ -64,6 +41,31 @@ type (
 		throttledLogger   log.Logger
 		namespaceRegistry namespace.Registry
 	}
+
+	HandlerParams struct {
+		fx.In
+
+		Config                        *Config
+		Logger                        log.Logger
+		ThrottledLogger               log.Logger
+		TaskManager                   persistence.TaskManager
+		HistoryClient                 resource.HistoryClient
+		MatchingRawClient             resource.MatchingRawClient
+		DeploymentStoreClient         deployment.DeploymentStoreClient
+		WorkerDeploymentClient        workerdeployment.Client
+		HostInfoProvider              membership.HostInfoProvider
+		MatchingServiceResolver       membership.ServiceResolver
+		MetricsHandler                metrics.Handler
+		NamespaceRegistry             namespace.Registry
+		ClusterMetadata               cluster.Metadata
+		NamespaceReplicationQueue     persistence.NamespaceReplicationQueue
+		VisibilityManager             manager.VisibilityManager
+		NexusEndpointManager          persistence.NexusEndpointManager
+		TestHooks                     testhooks.TestHooks
+		SearchAttributeProvider       searchattribute.Provider
+		SearchAttributeMapperProvider searchattribute.MapperProvider
+		RateLimiter                   TaskDispatchRateLimiter `optional:"true"`
+	}
 )
 
 const (
@@ -76,53 +78,36 @@ var (
 
 // NewHandler creates a gRPC handler for the matchingservice
 func NewHandler(
-	config *Config,
-	logger log.Logger,
-	throttledLogger log.Logger,
-	taskManager persistence.TaskManager,
-	historyClient resource.HistoryClient,
-	matchingRawClient resource.MatchingRawClient,
-	deploymentStoreClient deployment.DeploymentStoreClient,
-	workerDeploymentClient workerdeployment.Client,
-	hostInfoProvider membership.HostInfoProvider,
-	matchingServiceResolver membership.ServiceResolver,
-	metricsHandler metrics.Handler,
-	namespaceRegistry namespace.Registry,
-	clusterMetadata cluster.Metadata,
-	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
-	visibilityManager manager.VisibilityManager,
-	nexusEndpointManager persistence.NexusEndpointManager,
-	testHooks testhooks.TestHooks,
-	saProvider searchattribute.Provider,
-	saMapperProvider searchattribute.MapperProvider,
+	params HandlerParams,
 ) *Handler {
 	handler := &Handler{
-		config:          config,
-		metricsHandler:  metricsHandler,
-		logger:          logger,
-		throttledLogger: throttledLogger,
+		config:          params.Config,
+		metricsHandler:  params.MetricsHandler,
+		logger:          params.Logger,
+		throttledLogger: params.ThrottledLogger,
 		engine: NewEngine(
-			taskManager,
-			historyClient,
-			matchingRawClient, // Use non retry client inside matching
-			deploymentStoreClient,
-			workerDeploymentClient,
-			config,
-			logger,
-			throttledLogger,
-			metricsHandler,
-			namespaceRegistry,
-			hostInfoProvider,
-			matchingServiceResolver,
-			clusterMetadata,
-			namespaceReplicationQueue,
-			visibilityManager,
-			nexusEndpointManager,
-			testHooks,
-			saProvider,
-			saMapperProvider,
+			params.TaskManager,
+			params.HistoryClient,
+			params.MatchingRawClient, // Use non retry client inside matching
+			params.DeploymentStoreClient,
+			params.WorkerDeploymentClient,
+			params.Config,
+			params.Logger,
+			params.ThrottledLogger,
+			params.MetricsHandler,
+			params.NamespaceRegistry,
+			params.HostInfoProvider,
+			params.MatchingServiceResolver,
+			params.ClusterMetadata,
+			params.NamespaceReplicationQueue,
+			params.VisibilityManager,
+			params.NexusEndpointManager,
+			params.TestHooks,
+			params.SearchAttributeProvider,
+			params.SearchAttributeMapperProvider,
+			params.RateLimiter,
 		),
-		namespaceRegistry: namespaceRegistry,
+		namespaceRegistry: params.NamespaceRegistry,
 	}
 
 	// prevent from serving requests before matching engine is started and ready

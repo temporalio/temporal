@@ -1,28 +1,3 @@
-// The MIT License
-
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package metrics
 
 // Common tags for all services
@@ -305,6 +280,8 @@ const (
 	VisibilityPersistenceCountWorkflowExecutionsScope = "CountWorkflowExecutions"
 	// VisibilityPersistenceGetWorkflowExecutionScope tracks GetWorkflowExecution calls made by service to visibility persistence layer
 	VisibilityPersistenceGetWorkflowExecutionScope = "GetWorkflowExecution"
+	// VisibilityPersistenceAddSearchAttributesScope tracks AddSearchAttributes calls made by service to visibility persistence layer
+	VisibilityPersistenceAddSearchAttributesScope = "AddSearchAttributes"
 )
 
 // Common
@@ -626,6 +603,7 @@ var (
 	ServiceErrUnauthorizedCounter            = NewCounterDef("service_errors_unauthorized")
 	ServiceErrAuthorizeFailedCounter         = NewCounterDef("service_errors_authorize_failed")
 	ActionCounter                            = NewCounterDef("action")
+	OperationCounter                         = NewCounterDef("operation")
 	TlsCertsExpired                          = NewGaugeDef("certificates_expired")
 	TlsCertsExpiring                         = NewGaugeDef("certificates_expiring")
 	ServiceAuthorizationLatency              = NewTimerDef("service_authorization_latency")
@@ -722,6 +700,7 @@ var (
 	HistoryEventNotificationFanoutLatency        = NewTimerDef("history_event_notification_fanout_latency")
 	HistoryEventNotificationInFlightMessageGauge = NewGaugeDef("history_event_notification_inflight_message_gauge")
 	HistoryEventNotificationFailDeliveryCount    = NewCounterDef("history_event_notification_fail_delivery_count")
+	HistoryHostHealthGauge                       = NewGaugeDef("host_health")
 	// ArchivalTaskInvalidURI is emitted by the archival queue task executor when the history or visibility URI for an
 	// archival task is not a valid URI.
 	// We may emit this metric several times for a single task if the task is retried.
@@ -1002,7 +981,9 @@ var (
 	DynamicWorkerPoolSchedulerRejectedTasks = NewCounterDef("dynamic_worker_pool_scheduler_rejected_tasks")
 	PausedActivitiesCounter                 = NewCounterDef("paused_activities")
 
-	// Deadlock detector latency metrics
+	// Deadlock detector metrics
+	DDSuspectedDeadlocks                 = NewCounterDef("dd_suspected_deadlocks")
+	DDCurrentSuspectedDeadlocks          = NewGaugeDef("dd_current_suspected_deadlocks")
 	DDClusterMetadataLockLatency         = NewTimerDef("dd_cluster_metadata_lock_latency")
 	DDClusterMetadataCallbackLockLatency = NewTimerDef("dd_cluster_metadata_callback_lock_latency")
 	DDShardControllerLockLatency         = NewTimerDef("dd_shard_controller_lock_latency")
@@ -1044,14 +1025,18 @@ var (
 	TaskQueueStoppedCounter                           = NewCounterDef("task_queue_stopped")
 	TaskWriteThrottlePerTaskQueueCounter              = NewCounterDef("task_write_throttle_count")
 	TaskWriteLatencyPerTaskQueue                      = NewTimerDef("task_write_latency")
-	TaskLagPerTaskQueueGauge                          = NewGaugeDef("task_lag_per_tl")
-	NoRecentPollerTasksPerTaskQueueCounter            = NewCounterDef("no_poller_tasks")
-	UnknownBuildPollsCounter                          = NewCounterDef("unknown_build_polls")
-	UnknownBuildTasksCounter                          = NewCounterDef("unknown_build_tasks")
-	TaskDispatchLatencyPerTaskQueue                   = NewTimerDef("task_dispatch_latency")
-	ApproximateBacklogCount                           = NewGaugeDef("approximate_backlog_count")
-	ApproximateBacklogAgeSeconds                      = NewGaugeDef("approximate_backlog_age_seconds")
-	NonRetryableTasks                                 = NewCounterDef(
+	TaskRewrites                                      = NewCounterDef(
+		"task_rewrites",
+		WithDescription("Number of times tasks are rewritten to persistence after failing to process"),
+	)
+	TaskLagPerTaskQueueGauge               = NewGaugeDef("task_lag_per_tl")
+	NoRecentPollerTasksPerTaskQueueCounter = NewCounterDef("no_poller_tasks")
+	UnknownBuildPollsCounter               = NewCounterDef("unknown_build_polls")
+	UnknownBuildTasksCounter               = NewCounterDef("unknown_build_tasks")
+	TaskDispatchLatencyPerTaskQueue        = NewTimerDef("task_dispatch_latency")
+	ApproximateBacklogCount                = NewGaugeDef("approximate_backlog_count")
+	ApproximateBacklogAgeSeconds           = NewGaugeDef("approximate_backlog_age_seconds")
+	NonRetryableTasks                      = NewCounterDef(
 		"non_retryable_tasks",
 		WithDescription("The number of non-retryable matching tasks which are dropped due to specific errors"))
 
@@ -1176,7 +1161,7 @@ var (
 	)
 	ScheduleActionErrors = NewCounterDef(
 		"schedule_action_errors",
-		WithDescription("The number of schedule actions that failed to start"),
+		WithDescription("The number of failed attempts from starting schedule actions"),
 	)
 	ScheduleCancelWorkflowErrors = NewCounterDef(
 		"schedule_cancel_workflow_errors",
@@ -1190,6 +1175,14 @@ var (
 		"schedule_action_delay",
 		WithDescription("Delay between when scheduled actions should/actually happen"),
 	)
+	ScheduleActionDropped = NewCounterDef(
+		"schedule_action_dropped",
+		WithDescription("The number of schedule actions that failed to start"),
+	)
+
+	// Worker Versioning
+	WorkerDeploymentVersioningOverrideCounter = NewCounterDef("worker_deployment_versioning_override_count")
+	StartDeploymentTransitionCounter          = NewCounterDef("start_deployment_transition_count")
 
 	// Force replication
 	EncounterZombieWorkflowCount        = NewCounterDef("encounter_zombie_workflow_count")

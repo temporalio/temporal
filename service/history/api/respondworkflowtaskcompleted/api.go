@@ -1,32 +1,7 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package respondworkflowtaskcompleted
 
 import (
 	"context"
-	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -233,7 +208,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		if wftCompletedBuildId != wftStartedBuildId {
 			// Mutable state wasn't changed yet and doesn't have to be cleared.
 			releaseLeaseWithError = false
-			return nil, serviceerror.NewNotFound(fmt.Sprintf("this workflow task was dispatched to Build ID %s, not %s", wftStartedBuildId, wftCompletedBuildId))
+			return nil, serviceerror.NewNotFoundf("this workflow task was dispatched to Build ID %s, not %s", wftStartedBuildId, wftCompletedBuildId)
 		}
 	}
 
@@ -253,6 +228,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		}
 	}()
 
+	// TODO(carlydf): change condition when deprecating versionstamp
 	// It's an error if the workflow has used versioning in the past but this task has no versioning info.
 	if ms.GetMostRecentWorkerVersionStamp().GetUseVersioning() &&
 		//nolint:staticcheck // SA1019 deprecated stamp will clean up later
@@ -356,10 +332,10 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 	if err := namespaceEntry.VerifyBinaryChecksum(request.GetBinaryChecksum()); err != nil {
 		wtFailedCause = newWorkflowTaskFailedCause(
 			enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_BINARY,
-			serviceerror.NewInvalidArgument(
-				fmt.Sprintf(
-					"binary %v is marked as bad deployment",
-					request.GetBinaryChecksum())),
+			serviceerror.NewInvalidArgumentf(
+				"binary %v is marked as bad deployment",
+				//nolint:staticcheck // SA1019 deprecated stamp will clean up later
+				request.GetBinaryChecksum()),
 			false)
 	} else {
 		namespace := namespaceEntry.Name()

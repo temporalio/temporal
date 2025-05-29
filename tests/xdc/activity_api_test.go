@@ -1,25 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package xdc
 
 import (
@@ -30,6 +8,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	activitypb "go.temporal.io/api/activity/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -125,9 +104,9 @@ func (s *ActivityApiStateReplicationSuite) TestPauseActivityFailover() {
 	// wait for activity to start/fail few times
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := activeSDKClient.DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
-		assert.NoError(t, err)
-		assert.Len(t, description.GetPendingActivities(), 1)
-		assert.Greater(t, startedActivityCount.Load(), int32(2))
+		require.NoError(t, err)
+		require.Len(t, description.GetPendingActivities(), 1)
+		require.Greater(t, startedActivityCount.Load(), int32(2))
 	}, 5*time.Second, 200*time.Millisecond)
 
 	// pause the activity in cluster0
@@ -145,9 +124,9 @@ func (s *ActivityApiStateReplicationSuite) TestPauseActivityFailover() {
 	// verify activity is paused is cluster0
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := activeSDKClient.DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
-		assert.NoError(t, err)
-		assert.Equal(t, 1, len(description.PendingActivities))
-		assert.True(t, description.PendingActivities[0].Paused)
+		require.NoError(t, err)
+		require.Equal(t, 1, len(description.PendingActivities))
+		require.True(t, description.PendingActivities[0].Paused)
 	}, 5*time.Second, 200*time.Millisecond)
 
 	// update the activity properties in cluster0
@@ -172,12 +151,12 @@ func (s *ActivityApiStateReplicationSuite) TestPauseActivityFailover() {
 	// verify activity is updated in cluster0
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := activeSDKClient.DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
-		assert.NoError(t, err)
-		assert.NotNil(t, description.GetPendingActivities())
+		require.NoError(t, err)
+		require.NotNil(t, description.GetPendingActivities())
 		if description.GetPendingActivities() != nil {
-			assert.Equal(t, 1, len(description.PendingActivities))
-			assert.True(t, description.PendingActivities[0].Paused)
-			assert.Equal(t, int64(2), description.PendingActivities[0].CurrentRetryInterval.GetSeconds())
+			require.Equal(t, 1, len(description.PendingActivities))
+			require.True(t, description.PendingActivities[0].Paused)
+			require.Equal(t, int64(2), description.PendingActivities[0].CurrentRetryInterval.GetSeconds())
 		}
 	}, 5*time.Second, 200*time.Millisecond)
 
@@ -197,13 +176,13 @@ func (s *ActivityApiStateReplicationSuite) TestPauseActivityFailover() {
 	// verify activity is reset, updated and paused in cluster0
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := activeSDKClient.DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
-		assert.NoError(t, err)
-		assert.NotNil(t, description.GetPendingActivities())
+		require.NoError(t, err)
+		require.NotNil(t, description.GetPendingActivities())
 		if description.GetPendingActivities() != nil {
-			assert.Equal(t, 1, len(description.PendingActivities))
-			assert.True(t, description.PendingActivities[0].Paused)
-			assert.Equal(t, int32(1), description.PendingActivities[0].Attempt)
-			assert.Equal(t, int64(2), description.PendingActivities[0].CurrentRetryInterval.GetSeconds())
+			require.Equal(t, 1, len(description.PendingActivities))
+			require.True(t, description.PendingActivities[0].Paused)
+			require.Equal(t, int32(1), description.PendingActivities[0].Attempt)
+			require.Equal(t, int64(2), description.PendingActivities[0].CurrentRetryInterval.GetSeconds())
 		}
 	}, 5*time.Second, 200*time.Millisecond)
 
@@ -224,13 +203,13 @@ func (s *ActivityApiStateReplicationSuite) TestPauseActivityFailover() {
 	// verify activity is still paused in cluster1
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := standbyClient.DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
-		assert.NoError(t, err)
-		assert.NotNil(t, description.GetPendingActivities())
+		require.NoError(t, err)
+		require.NotNil(t, description.GetPendingActivities())
 		if description.GetPendingActivities() != nil {
-			assert.Equal(t, 1, len(description.PendingActivities))
-			assert.True(t, description.PendingActivities[0].Paused)
-			assert.Equal(t, int64(2), description.PendingActivities[0].CurrentRetryInterval.GetSeconds())
-			assert.Equal(t, int32(10), description.PendingActivities[0].MaximumAttempts)
+			require.Equal(t, 1, len(description.PendingActivities))
+			require.True(t, description.PendingActivities[0].Paused)
+			require.Equal(t, int64(2), description.PendingActivities[0].CurrentRetryInterval.GetSeconds())
+			require.Equal(t, int32(10), description.PendingActivities[0].MaximumAttempts)
 		}
 	}, 5*time.Second, 200*time.Millisecond)
 

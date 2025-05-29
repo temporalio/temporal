@@ -1,25 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2019 Temporal Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 syntax = "proto3";
 
 package temporal.server.api.historyservice.v1;
@@ -118,6 +96,8 @@ message StartWorkflowExecutionResponse {
     // Set if request_eager_execution is set on the start request
     temporal.api.workflowservice.v1.PollWorkflowTaskQueueResponse eager_workflow_task = 3;
     bool started = 4;
+    temporal.api.enums.v1.WorkflowExecutionStatus status = 5;
+    temporal.api.common.v1.Link link = 6;
 }
 
 message GetMutableStateRequest {
@@ -337,6 +317,7 @@ message RecordActivityTaskStartedResponse {
     temporal.server.api.clock.v1.VectorClock clock = 8;
     int64 version = 9;
     temporal.api.common.v1.Priority priority = 10;
+    temporal.api.common.v1.RetryPolicy retry_policy = 11;
 }
 
 message RespondWorkflowTaskCompletedRequest {
@@ -386,8 +367,8 @@ message RecordActivityTaskHeartbeatRequest {
 
 message RecordActivityTaskHeartbeatResponse {
     bool cancel_requested = 1;
-
     bool activity_paused = 2;
+    bool activity_reset = 3;
 }
 
 message RespondActivityTaskCompletedRequest {
@@ -575,6 +556,7 @@ message VerifyChildExecutionCompletionRecordedRequest {
     int64 parent_initiated_id = 4;
     int64 parent_initiated_version = 5;
     temporal.server.api.clock.v1.VectorClock clock = 6;
+    bool resend_parent = 7;
 }
 
 message VerifyChildExecutionCompletionRecordedResponse {
@@ -886,6 +868,7 @@ message GenerateLastHistoryReplicationTasksRequest {
 
     string namespace_id = 1;
     temporal.api.common.v1.WorkflowExecution execution = 2;
+    repeated string target_clusters = 3;
 }
 
 message GenerateLastHistoryReplicationTasksResponse {

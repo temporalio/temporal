@@ -1,28 +1,4 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
-//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination executable_mock.go
+//go:generate mockgen -package $GOPACKAGE -source $GOFILE -destination executable_mock.go
 
 package queues
 
@@ -314,10 +290,10 @@ func (e *executableImpl) Execute() (retErr error) {
 	}
 
 	defer func() {
-		if panicObj := recover(); panicObj != nil {
-			err, ok := panicObj.(error)
+		if pObj := recover(); pObj != nil {
+			err, ok := pObj.(error)
 			if !ok {
-				err = serviceerror.NewInternal(fmt.Sprintf("panic: %v", panicObj))
+				err = serviceerror.NewInternalf("panic: %v", pObj)
 			}
 
 			e.logger.Error("Panic is captured", tag.SysStackTrace(string(debug.Stack())), tag.Error(err))
@@ -346,6 +322,7 @@ func (e *executableImpl) Execute() (retErr error) {
 		priorityTaggedProvider := e.metricsHandler.WithTags(metrics.TaskPriorityTag(e.priority.String()))
 		metrics.TaskRequests.With(priorityTaggedProvider).Record(1)
 		metrics.TaskScheduleLatency.With(priorityTaggedProvider).Record(e.scheduleLatency)
+		metrics.OperationCounter.With(e.metricsHandler).Record(1)
 
 		if retErr == nil {
 			e.inMemoryNoUserLatency += e.scheduleLatency + e.attemptNoUserLatency

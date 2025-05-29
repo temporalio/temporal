@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package tests
 
 import (
@@ -37,6 +13,7 @@ import (
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -61,11 +38,11 @@ import (
 )
 
 type ActivityTestSuite struct {
-	testcore.FunctionalTestSuite
+	testcore.FunctionalTestBase
 }
 
 type ActivityClientTestSuite struct {
-	testcore.FunctionalTestSdkSuite
+	testcore.FunctionalTestBase
 }
 
 func TestActivityTestSuite(t *testing.T) {
@@ -644,7 +621,7 @@ func (s *ActivityTestSuite) TestActivityRetry() {
 	_, err := poller.PollAndProcessWorkflowTask()
 	s.NoError(err)
 
-	_, err = s.TaskPoller.PollAndHandleActivityTask(tv,
+	_, err = s.TaskPoller().PollAndHandleActivityTask(tv,
 		func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
 			s.Equal(tv.WorkflowID(), task.WorkflowExecution.GetWorkflowId())
 			s.Equal(activityName, task.ActivityType.GetName())
@@ -664,7 +641,7 @@ func (s *ActivityTestSuite) TestActivityRetry() {
 		}
 	}
 
-	_, err = s.TaskPoller.PollAndHandleActivityTask(tv,
+	_, err = s.TaskPoller().PollAndHandleActivityTask(tv,
 		func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
 			s.Equal(tv.WorkflowID(), task.WorkflowExecution.GetWorkflowId())
 			s.Equal(activityName, task.ActivityType.GetName())
@@ -1415,15 +1392,9 @@ func (s *ActivityTestSuite) TestActivityHeartBeat_RecordIdentity() {
 }
 
 func (s *ActivityTestSuite) TestActivityTaskCompleteForceCompletion() {
-	sdkClient, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.FrontendGRPCAddress(),
-		Namespace: s.Namespace().String(),
-	})
-	s.NoError(err)
-
 	activityInfo := make(chan activity.Info, 1)
 	taskQueue := testcore.RandomizeStr(s.T().Name())
-	w, wf := s.mockWorkflowWithErrorActivity(activityInfo, sdkClient, taskQueue)
+	w, wf := s.mockWorkflowWithErrorActivity(activityInfo, s.SdkClient(), taskQueue)
 	s.NoError(w.Start())
 	defer w.Stop()
 
@@ -1432,19 +1403,19 @@ func (s *ActivityTestSuite) TestActivityTaskCompleteForceCompletion() {
 		ID:        uuid.New(),
 		TaskQueue: taskQueue,
 	}
-	run, err := sdkClient.ExecuteWorkflow(ctx, workflowOptions, wf)
+	run, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, wf)
 	s.NoError(err)
 	ai := <-activityInfo
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		description, err := sdkClient.DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
-		assert.NoError(t, err)
-		assert.Equal(t, 1, len(description.PendingActivities))
-		assert.Equal(t, "mock error of an activity", description.PendingActivities[0].LastFailure.Message)
+		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
+		require.NoError(t, err)
+		require.Equal(t, 1, len(description.PendingActivities))
+		require.Equal(t, "mock error of an activity", description.PendingActivities[0].LastFailure.Message)
 	},
 		10*time.Second,
 		500*time.Millisecond)
 
-	err = sdkClient.CompleteActivityByID(ctx, s.Namespace().String(), run.GetID(), run.GetRunID(), ai.ActivityID, nil, nil)
+	err = s.SdkClient().CompleteActivityByID(ctx, s.Namespace().String(), run.GetID(), run.GetRunID(), ai.ActivityID, nil, nil)
 	s.NoError(err)
 
 	// Ensure the activity is completed and the workflow is unblcked.
@@ -1452,15 +1423,9 @@ func (s *ActivityTestSuite) TestActivityTaskCompleteForceCompletion() {
 }
 
 func (s *ActivityTestSuite) TestActivityTaskCompleteRejectCompletion() {
-	sdkClient, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.FrontendGRPCAddress(),
-		Namespace: s.Namespace().String(),
-	})
-	s.NoError(err)
-
 	activityInfo := make(chan activity.Info, 1)
 	taskQueue := testcore.RandomizeStr(s.T().Name())
-	w, wf := s.mockWorkflowWithErrorActivity(activityInfo, sdkClient, taskQueue)
+	w, wf := s.mockWorkflowWithErrorActivity(activityInfo, s.SdkClient(), taskQueue)
 	s.NoError(w.Start())
 	defer w.Stop()
 
@@ -1469,19 +1434,19 @@ func (s *ActivityTestSuite) TestActivityTaskCompleteRejectCompletion() {
 		ID:        uuid.New(),
 		TaskQueue: taskQueue,
 	}
-	run, err := sdkClient.ExecuteWorkflow(ctx, workflowOptions, wf)
+	run, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, wf)
 	s.NoError(err)
 	ai := <-activityInfo
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		description, err := sdkClient.DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
-		assert.NoError(t, err)
-		assert.Equal(t, 1, len(description.PendingActivities))
-		assert.Equal(t, "mock error of an activity", description.PendingActivities[0].LastFailure.Message)
+		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
+		require.NoError(t, err)
+		require.Equal(t, 1, len(description.PendingActivities))
+		require.Equal(t, "mock error of an activity", description.PendingActivities[0].LastFailure.Message)
 	},
 		10*time.Second,
 		500*time.Millisecond)
 
-	err = sdkClient.CompleteActivity(ctx, ai.TaskToken, nil, nil)
+	err = s.SdkClient().CompleteActivity(ctx, ai.TaskToken, nil, nil)
 	var svcErr *serviceerror.NotFound
 	s.ErrorAs(err, &svcErr, "invalid activityID or activity already timed out or invoking workflow is completed")
 }

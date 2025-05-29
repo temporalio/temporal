@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package matching
 
 import (
@@ -464,10 +440,16 @@ func (tm *priTaskMatcher) emitDispatchLatency(task *internalTask, forwarded bool
 		return // should not happen but for safety
 	}
 
+	priStr := ""
+	if pri := task.getPriority().GetPriorityKey(); pri > 0 {
+		priStr = strconv.Itoa(int(pri))
+	}
+
 	metrics.TaskDispatchLatencyPerTaskQueue.With(tm.metricsHandler).Record(
 		time.Since(timestamp.TimeValue(task.event.Data.CreateTime)),
 		metrics.StringTag("source", task.source.String()),
 		metrics.StringTag("forwarded", strconv.FormatBool(forwarded)),
+		metrics.StringTag(metrics.TaskPriorityTagName, priStr),
 	)
 }
 
@@ -549,13 +531,17 @@ func (tm *priTaskMatcher) poll(
 ) (*internalTask, error) {
 	start := time.Now()
 	pollWasForwarded := false
+	priStr := ""
 
 	defer func() {
 		// TODO(pri): can we consolidate all the metrics code below?
 		if pollMetadata.forwardedFrom == "" {
 			// Only recording for original polls
 			metrics.PollLatencyPerTaskQueue.With(tm.metricsHandler).Record(
-				time.Since(start), metrics.StringTag("forwarded", strconv.FormatBool(pollWasForwarded)))
+				time.Since(start),
+				metrics.StringTag("forwarded", strconv.FormatBool(pollWasForwarded)),
+				metrics.StringTag(metrics.TaskPriorityTagName, priStr),
+			)
 		}
 	}()
 
@@ -580,6 +566,9 @@ func (tm *priTaskMatcher) poll(
 
 	task := res.task
 	pollWasForwarded = task.isStarted()
+	if pri := task.getPriority().GetPriorityKey(); pri > 0 {
+		priStr = strconv.Itoa(int(pri))
+	}
 
 	if !task.isQuery() {
 		if task.isSyncMatchTask() {

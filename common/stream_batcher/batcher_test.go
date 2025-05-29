@@ -1,25 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package stream_batcher
 
 import (
@@ -246,6 +224,62 @@ func TestStreamBatcher_MaxItems(t *testing.T) {
 	wg.Wait()
 }
 
+// this test uses time.Sleep to allow goroutines to get into a blocked state
+//
+//nolint:forbidigo
+func TestStreamBatcher_AddTimeout(t *testing.T) {
+	clk := clock.NewEventTimeSource()
+
+	opts := BatcherOptions{
+		MaxItems: 2,
+		MinDelay: 100 * time.Millisecond,
+		MaxDelay: 400 * time.Millisecond,
+		IdleTime: 1000 * time.Millisecond,
+	}
+	process := func(items []int) (total int) {
+		for _, i := range items {
+			total += i
+		}
+		clk.Sleep(5 * time.Second)
+		return
+	}
+	sb := NewBatcher(process, opts, clk)
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		// this will time out before a response
+		ctx, cancel := clock.ContextWithTimeout(context.Background(), time.Second, clk)
+		defer cancel()
+		_, err := sb.Add(ctx, 123)
+		assert.ErrorIs(t, err, context.DeadlineExceeded)
+	}()
+	time.Sleep(time.Millisecond) // wait for it to block in Add
+	clk.AdvanceNext()
+	time.Sleep(time.Millisecond)
+	clk.AdvanceNext()
+	time.Sleep(time.Millisecond)
+	clk.AdvanceNext()
+	wg.Wait()
+
+	// we should be able to process another batch again
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		ctx, cancel := clock.ContextWithTimeout(context.Background(), 7*time.Second, clk)
+		defer cancel()
+		r, err := sb.Add(ctx, 123)
+		assert.NoError(t, err)
+		assert.Equal(t, r, 123)
+	}()
+	time.Sleep(time.Millisecond) // wait for it to block in Add
+	clk.AdvanceNext()
+	time.Sleep(time.Millisecond)
+	clk.AdvanceNext()
+	wg.Wait()
+}
+
 func TestStreamBatcher_Random(t *testing.T) {
 	// throw a lot of concurrent calls at the batcher and make sure there are no errors at
 	// least. with log statements in stream_batcher.go, you can see this does (or did at some
@@ -275,13 +309,14 @@ func TestStreamBatcher_Random(t *testing.T) {
 	for range workers {
 		running.Add(1)
 		go func() {
-			ctx := context.Background()
+			defer running.Add(-1)
 			for range events {
-				_, err := sb.Add(ctx, 1)
-				assert.NoError(t, err)
+				// 600ms is tuned to create a small-ish number of timeouts given the constants above
+				ctx, cancel := clock.ContextWithTimeout(context.Background(), 600*time.Millisecond, clk)
+				_, _ = sb.Add(ctx, 1)
+				cancel()
 				clk.Sleep(time.Duration(rand.Intn(1000)) * time.Millisecond)
 			}
-			running.Add(-1)
 		}()
 	}
 

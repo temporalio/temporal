@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package testvars
 
 import (
@@ -271,17 +247,38 @@ func (tv *TestVars) DeploymentVersion() *deploymentspb.WorkerDeploymentVersion {
 	}
 }
 
+func (tv *TestVars) ExternalDeploymentVersion() *deploymentpb.WorkerDeploymentVersion {
+	return &deploymentpb.WorkerDeploymentVersion{
+		BuildId:        tv.BuildID(),
+		DeploymentName: tv.DeploymentSeries(),
+	}
+}
+
 func (tv *TestVars) DeploymentVersionString() string {
 	return worker_versioning.WorkerDeploymentVersionToString(tv.DeploymentVersion())
 }
 
 func (tv *TestVars) DeploymentVersionTransition() *workflowpb.DeploymentVersionTransition {
-	return &workflowpb.DeploymentVersionTransition{
-		Version: tv.DeploymentVersionString(),
+	ret := &workflowpb.DeploymentVersionTransition{
+		DeploymentVersion: worker_versioning.ExternalWorkerDeploymentVersionFromVersion(tv.DeploymentVersion()),
 	}
+	// DescribeWorkflowExecution populates both fields on read, so we expect to see both fields
+	//nolint:staticcheck // SA1019: worker versioning v0.31
+	ret.Version = worker_versioning.ExternalWorkerDeploymentVersionToString(ret.GetDeploymentVersion())
+	return ret
 }
 
-func (tv *TestVars) VersioningOverridePinned() *workflowpb.VersioningOverride {
+func (tv *TestVars) VersioningOverridePinned(useV32 bool) *workflowpb.VersioningOverride {
+	if useV32 {
+		return &workflowpb.VersioningOverride{
+			Override: &workflowpb.VersioningOverride_Pinned{
+				Pinned: &workflowpb.VersioningOverride_PinnedOverride{
+					Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
+					Version:  tv.ExternalDeploymentVersion(),
+				},
+			},
+		}
+	}
 	return &workflowpb.VersioningOverride{
 		Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED,
 		PinnedVersion: tv.DeploymentVersionString(),

@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package frontend
 
 import (
@@ -49,7 +25,6 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
-	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/quotas/calculator"
@@ -110,6 +85,7 @@ var Module = fx.Options(
 	fx.Provide(NamespaceRateLimitInterceptorProvider),
 	fx.Provide(SDKVersionInterceptorProvider),
 	fx.Provide(CallerInfoInterceptorProvider),
+	fx.Provide(SlowRequestLoggerInterceptorProvider),
 	fx.Provide(MaskInternalErrorDetailsInterceptorProvider),
 	fx.Provide(GrpcServerOptionsProvider),
 	fx.Provide(VisibilityManagerProvider),
@@ -230,6 +206,7 @@ func GrpcServerOptionsProvider(
 	callerInfoInterceptor *interceptor.CallerInfoInterceptor,
 	authInterceptor *authorization.Interceptor,
 	maskInternalErrorDetailsInterceptor *interceptor.MaskInternalErrorDetailsInterceptor,
+	slowRequestLoggerInterceptor *interceptor.SlowRequestLoggerInterceptor,
 	customInterceptors []grpc.UnaryServerInterceptor,
 	metricsHandler metrics.Handler,
 ) GrpcServerOptions {
@@ -280,6 +257,7 @@ func GrpcServerOptionsProvider(
 		rateLimitInterceptor.Intercept,
 		sdkVersionInterceptor.Intercept,
 		callerInfoInterceptor.Intercept,
+		slowRequestLoggerInterceptor.Intercept,
 	}
 	if len(customInterceptors) > 0 {
 		// TODO: Deprecate WithChainedFrontendGrpcInterceptors and provide a inner custom interceptor
@@ -536,6 +514,16 @@ func CallerInfoInterceptorProvider(
 	return interceptor.NewCallerInfoInterceptor(namespaceRegistry)
 }
 
+func SlowRequestLoggerInterceptorProvider(
+	logger log.Logger,
+	dc *dynamicconfig.Collection,
+) *interceptor.SlowRequestLoggerInterceptor {
+	return interceptor.NewSlowRequestLoggerInterceptor(
+		logger,
+		dynamicconfig.SlowRequestLoggingThreshold.Get(dc),
+	)
+}
+
 func PersistenceRateLimitingParamsProvider(
 	serviceConfig *Config,
 	persistenceLazyLoadedServiceResolver service.PersistenceLazyLoadedServiceResolver,
@@ -610,7 +598,6 @@ func AdminHandlerProvider(
 	persistenceConfig *config.Persistence,
 	configuration *Config,
 	replicatorNamespaceReplicationQueue FEReplicatorNamespaceReplicationQueue,
-	esClient esclient.Client,
 	visibilityMgr manager.VisibilityManager,
 	logger log.SnTaggedLogger,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
@@ -641,7 +628,6 @@ func AdminHandlerProvider(
 		configuration,
 		namespaceReplicationQueue,
 		replicatorNamespaceReplicationQueue,
-		esClient,
 		visibilityMgr,
 		logger,
 		taskManager,
@@ -671,7 +657,6 @@ func AdminHandlerProvider(
 
 func OperatorHandlerProvider(
 	configuration *Config,
-	esClient esclient.Client,
 	logger log.SnTaggedLogger,
 	sdkClientFactory sdk.ClientFactory,
 	metricsHandler metrics.Handler,
@@ -687,7 +672,6 @@ func OperatorHandlerProvider(
 ) *OperatorHandlerImpl {
 	args := NewOperatorHandlerImplArgs{
 		configuration,
-		esClient,
 		logger,
 		sdkClientFactory,
 		metricsHandler,

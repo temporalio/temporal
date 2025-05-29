@@ -1,39 +1,13 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package matching
 
 import (
 	"context"
 	"errors"
 	"fmt"
-	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
-	"github.com/pborman/uuid"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -52,7 +26,6 @@ import (
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/worker_versioning"
-	"go.temporal.io/server/service/worker/deployment"
 	"go.temporal.io/server/service/worker/workerdeployment"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -69,6 +42,9 @@ const (
 
 	// Threshold for counting a AddTask call as a no recent poller call
 	noPollerThreshold = time.Minute * 2
+
+	// We avoid retrying failed deployment registration for this period.
+	deploymentRegisterErrorBackoff = 5 * time.Second
 )
 
 type (
@@ -103,17 +79,13 @@ type (
 		clusterMeta       cluster.Metadata
 		metricsHandler    metrics.Handler // namespace/taskqueue tagged metric scope
 		// pollerHistory stores poller which poll from this taskqueue in last few minutes
-		pollerHistory              *pollerHistory
-		currentPolls               atomic.Int64
-		taskValidator              taskValidator
-		tasksAddedInIntervals      *taskTracker
-		tasksDispatchedInIntervals *taskTracker
-		// deploymentWorkflowStarted keeps track if we have already registered the task queue worker
-		// in the deployment.
-		deploymentLock              sync.Mutex // TODO (Shivam): Rename after the pre-release versioning API's are removed.
-		deploymentRegistered        bool       // TODO (Shivam): Rename after the pre-release versioning API's are removed.
-		deploymentVersionRegistered bool       // TODO (Shivam): Rename after the pre-release versioning API's are removed.
-		deploymentRegisterError     error      // last "too many ..." error we got when registering // TODO (Shivam): Rename after the pre-release versioning API's are removed.
+		pollerHistory               *pollerHistory
+		currentPolls                atomic.Int64
+		taskValidator               taskValidator
+		tasksAddedInIntervals       *taskTracker
+		tasksDispatchedInIntervals  *taskTracker
+		deploymentRegistrationCh    chan struct{}
+		deploymentVersionRegistered bool
 		pollerScalingRateLimiter    quotas.RateLimiter
 
 		firstPoll time.Time
@@ -123,7 +95,6 @@ type (
 	matcherInterface interface {
 		Start()
 		Stop()
-		UpdateRatelimit(rpsPtr float64)
 		Rate() float64
 		Poll(ctx context.Context, pollMetadata *pollMetadata) (*internalTask, error)
 		PollForQuery(ctx context.Context, pollMetadata *pollMetadata) (*internalTask, error)
@@ -136,8 +107,9 @@ type (
 var _ physicalTaskQueueManager = (*physicalTaskQueueManagerImpl)(nil)
 
 var (
-	errRemoteSyncMatchFailed  = serviceerror.NewCanceled("remote sync match failed")
-	errMissingNormalQueueName = errors.New("missing normal queue name")
+	errRemoteSyncMatchFailed     = serviceerror.NewCanceled("remote sync match failed")
+	errMissingNormalQueueName    = errors.New("missing normal queue name")
+	errDeploymentVersionNotReady = serviceerror.NewUnavailable("task queue is not ready to process polls from this deployment version, try again shortly")
 )
 
 func newPhysicalTaskQueueManager(
@@ -176,7 +148,9 @@ func newPhysicalTaskQueueManager(
 		tasksAddedInIntervals:      newTaskTracker(clock.NewRealTimeSource()),
 		tasksDispatchedInIntervals: newTaskTracker(clock.NewRealTimeSource()),
 		pollerScalingRateLimiter:   quotas.NewDefaultOutgoingRateLimiter(pollerScalingRateLimitFn),
+		deploymentRegistrationCh:   make(chan struct{}, 1),
 	}
+	pqMgr.deploymentRegistrationCh <- struct{}{} // seed
 
 	pqMgr.pollerHistory = newPollerHistory(partitionMgr.config.PollerHistoryTTL())
 
@@ -249,7 +223,7 @@ func newPhysicalTaskQueueManager(
 				return nil, err
 			}
 		}
-		pqMgr.oldMatcher = newTaskMatcher(config, fwdr, taggedMetricsHandler)
+		pqMgr.oldMatcher = newTaskMatcher(config, fwdr, taggedMetricsHandler, pqMgr.partitionMgr.rateLimiter)
 		pqMgr.matcher = pqMgr.oldMatcher
 	}
 	return pqMgr, nil
@@ -320,26 +294,18 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 		return nil, err
 	}
 
-	// [cleanup-wv-pre-release]
-	if c.partitionMgr.engine.config.EnableDeployments(namespaceEntry.Name().String()) {
-		if err = c.ensureRegisteredInDeployment(ctx, namespaceEntry, pollMetadata); err != nil {
-			return nil, err
-		}
-	}
-
 	if c.partitionMgr.engine.config.EnableDeploymentVersions(namespaceEntry.Name().String()) {
 		if err = c.ensureRegisteredInDeploymentVersion(ctx, namespaceEntry, pollMetadata); err != nil {
 			return nil, err
 		}
 	}
 
-	// the desired global rate limit for the task queue comes from the
-	// poller, which lives inside the client side worker. There is
-	// one rateLimiter for this entire task queue and as we get polls,
-	// we update the ratelimiter rps if it has changed from the last
-	// value. Last poller wins if different pollers provide different values
+	// If the priority matcher is enabled, use the rate limiter defined in the priority matcher.
+	// TODO(pri): remove this once we have a way to set the partition-scoped rate limiter for the priority matcher.
 	if rps := pollMetadata.taskQueueMetadata.GetMaxTasksPerSecond(); rps != nil {
-		c.matcher.UpdateRatelimit(rps.Value)
+		if c.priMatcher != nil {
+			c.priMatcher.UpdateRatelimit(rps.Value)
+		}
 	}
 
 	if !namespaceEntry.ActiveInCluster(c.clusterMeta.GetCurrentClusterName()) {
@@ -461,6 +427,9 @@ func (c *physicalTaskQueueManagerImpl) DispatchNexusTask(
 }
 
 func (c *physicalTaskQueueManagerImpl) UpdatePollerInfo(id pollerIdentity, pollMetadata *pollMetadata) {
+	if c.queue.Version().IsVersioned() {
+		fmt.Printf("poll info updated in %v\n", c.queue.Version())
+	}
 	c.pollerHistory.updatePollerInfo(id, pollMetadata)
 }
 
@@ -469,7 +438,8 @@ func (c *physicalTaskQueueManagerImpl) GetAllPollerInfo() []*taskqueuepb.PollerI
 	if c.pollerHistory == nil {
 		return nil
 	}
-	return c.pollerHistory.getPollerInfo(time.Time{})
+	res := c.pollerHistory.getPollerInfo(time.Time{})
+	return res
 }
 
 func (c *physicalTaskQueueManagerImpl) HasPollerAfter(accessTime time.Time) bool {
@@ -535,87 +505,6 @@ func (c *physicalTaskQueueManagerImpl) TrySyncMatch(ctx context.Context, task *i
 	return c.oldMatcher.Offer(childCtx, task)
 }
 
-// [cleanup-wv-pre-release]
-func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeployment(
-	ctx context.Context,
-	namespaceEntry *namespace.Namespace,
-	pollMetadata *pollMetadata,
-) error {
-	workerDeployment := worker_versioning.DeploymentFromCapabilities(pollMetadata.workerVersionCapabilities, pollMetadata.deploymentOptions)
-	if workerDeployment == nil {
-		return nil
-	}
-	if !c.partitionMgr.engine.config.EnableDeployments(namespaceEntry.Name().String()) {
-		return errDeploymentsNotAllowed
-	}
-
-	// lock so that only one poll does the update and the rest wait for it
-	c.deploymentLock.Lock()
-	defer c.deploymentLock.Unlock()
-
-	if c.deploymentRegistered {
-		// deployment already registered
-		return nil
-	}
-
-	if c.deploymentRegisterError != nil {
-		// deployment not possible due to registration limits
-		return c.deploymentRegisterError
-	}
-
-	userData, _, err := c.partitionMgr.GetUserDataManager().GetUserData()
-	if err != nil {
-		return err
-	}
-
-	deploymentData := userData.GetData().GetPerType()[int32(c.queue.TaskType())].GetDeploymentData()
-	if hasDeploymentVersion(deploymentData, worker_versioning.DeploymentVersionFromDeployment(workerDeployment)) {
-		// already registered in user data, we can assume the workflow is running.
-		// TODO: consider replication scenarios where user data is replicated before
-		// the deployment workflow.
-		return nil
-	}
-
-	// we need to update the deployment workflow to tell it about this task queue
-	// TODO: add some backoff here if we got an error last time
-
-	if c.firstPoll.IsZero() {
-		c.firstPoll = c.partitionMgr.engine.timeSource.Now()
-	}
-	err = c.partitionMgr.engine.deploymentStoreClient.RegisterTaskQueueWorker(
-		ctx, namespaceEntry, workerDeployment, c.queue.TaskQueueFamily().Name(), c.queue.TaskType(), c.firstPoll,
-		"matching service", uuid.New())
-	if err != nil {
-		var errTooMany deployment.ErrMaxTaskQueuesInDeployment
-		if errors.As(err, &errTooMany) {
-			c.deploymentRegisterError = errTooMany
-		}
-		return err
-	}
-
-	// the deployment workflow will register itself in this task queue's user data.
-	// wait for it to propagate here.
-	for {
-		userData, userDataChanged, err := c.partitionMgr.GetUserDataManager().GetUserData()
-		if err != nil {
-			return err
-		}
-		deploymentData := userData.GetData().GetPerType()[int32(c.queue.TaskType())].GetDeploymentData()
-		if hasDeploymentVersion(deploymentData, worker_versioning.DeploymentVersionFromDeployment(workerDeployment)) {
-			break
-		}
-		select {
-		case <-userDataChanged:
-		case <-ctx.Done():
-			c.logger.Error("timed out waiting for deployment to appear in user data")
-			return ctx.Err()
-		}
-	}
-
-	c.deploymentRegistered = true
-	return nil
-}
-
 func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
@@ -629,18 +518,26 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 		return errMissingDeploymentVersion
 	}
 
-	// lock so that only one poll does the update and the rest wait for it
-	c.deploymentLock.Lock()
-	defer c.deploymentLock.Unlock()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-c.deploymentRegistrationCh:
+		// lock so that only one poll does the update and the rest wait for it
+		// using a channel instead of mutex so we can honor the context timeout
+	}
+
+	defer func() {
+		select {
+		// release the lock
+		case c.deploymentRegistrationCh <- struct{}{}:
+		default:
+			c.logger.Error("deploymentRegistrationCh is already unlocked")
+		}
+	}()
 
 	if c.deploymentVersionRegistered {
 		// deployment version already registered
 		return nil
-	}
-
-	if c.deploymentRegisterError != nil {
-		// deployment not possible due to registration limits
-		return c.deploymentRegisterError
 	}
 
 	userData, _, err := c.partitionMgr.GetUserDataManager().GetUserData()
@@ -661,12 +558,26 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 
 	err = c.partitionMgr.engine.workerDeploymentClient.RegisterTaskQueueWorker(
 		ctx, namespaceEntry, workerDeployment.SeriesName, workerDeployment.BuildId, c.queue.TaskQueueFamily().Name(), c.queue.TaskType(),
-		"matching service", uuid.New())
+		"matching service")
 	if err != nil {
-		var errTooMany workerdeployment.ErrMaxTaskQueuesInDeployment
-		if errors.As(err, &errTooMany) {
-			c.deploymentRegisterError = errTooMany
+		if common.IsContextDeadlineExceededErr(err) || common.IsContextCanceledErr(err) {
+			// error is not from registration, just return it without waiting
+			return err
 		}
+		var errMaxTaskQueuesInVersion workerdeployment.ErrMaxTaskQueuesInVersion
+		var errMaxVersionsInDeployment workerdeployment.ErrMaxVersionsInDeployment
+		if errors.As(err, &errMaxTaskQueuesInVersion) {
+			err = errMaxTaskQueuesInVersion
+		} else if errors.As(err, &errMaxVersionsInDeployment) {
+			err = errMaxVersionsInDeployment
+		} else {
+			// Do not surface low level error to user
+			c.logger.Error("error while registering version", tag.Error(err))
+			err = errDeploymentVersionNotReady
+		}
+		// Before retrying the error, hold the poller for some time so it does not retry immediately
+		// Parallel polls are already serialized using the lock.
+		time.Sleep(deploymentRegisterErrorBackoff)
 		return err
 	}
 

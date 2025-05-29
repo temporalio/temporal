@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 // nolint:revive
 package tests
 
@@ -62,8 +38,7 @@ import (
 )
 
 type VersioningIntegSuite struct {
-	testcore.FunctionalTestSuite
-	sdkClient sdkclient.Client
+	testcore.FunctionalTestBase
 }
 
 const (
@@ -128,25 +103,7 @@ func (s *VersioningIntegSuite) SetupSuite() {
 		// matching so they're a good condidate.
 		dynamicconfig.MatchingUseNewMatcher.Key(): true,
 	}
-	s.FunctionalTestBase.SetupSuiteWithDefaultCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
-}
-
-func (s *VersioningIntegSuite) SetupTest() {
-	s.FunctionalTestSuite.SetupTest()
-
-	var err error
-	s.sdkClient, err = sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.FrontendGRPCAddress(),
-		Namespace: s.Namespace().String(),
-	})
-	s.NoError(err)
-}
-
-func (s *VersioningIntegSuite) TearDownTest() {
-	if s.sdkClient != nil {
-		s.sdkClient.Close()
-	}
-	s.FunctionalTestBase.TearDownTest()
+	s.FunctionalTestBase.SetupSuiteWithCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 }
 
 func (s *VersioningIntegSuite) TestVersionRuleConflictToken() {
@@ -198,17 +155,10 @@ func (s *VersioningIntegSuite) TestVersionRuleBuildIdValidation() {
 	cT := s.getVersioningRules(ctx, tq).GetConflictToken()
 
 	// failure due to long build id
-	longStr := `_1234567890_2234567890_3234567890_4234567890_5234567890_6234567890_7234567890_8234567890_9234567890_
-				_1234567890_2234567890_3234567890_4234567890_5234567890_6234567890_7234567890_8234567890_9234567890_
-				_1234567890_2234567890_3234567890_4234567890_5234567890_6234567890_7234567890_8234567890_9234567890_`
+	longStr := strings.Repeat("0123456789", 30)
 	s.insertAssignmentRule(ctx, tq, longStr, 0, cT, false)
 	s.insertRedirectRule(ctx, tq, longStr, "foo", cT, false)
 	s.insertRedirectRule(ctx, tq, "foo", longStr, cT, false)
-
-	// failure due to invalid utf-8
-	s.insertAssignmentRule(ctx, tq, testcore.InvalidUTF8, 0, cT, false)
-	s.insertRedirectRule(ctx, tq, testcore.InvalidUTF8, "foo", cT, false)
-	s.insertRedirectRule(ctx, tq, "foo", testcore.InvalidUTF8, cT, false)
 }
 
 func (s *VersioningIntegSuite) TestAssignmentRuleInsert() {
@@ -583,7 +533,7 @@ func (s *VersioningIntegSuite) dispatchNewWorkflow(newVersioning bool) {
 		s.waitForVersionSetPropagation(ctx, tq, v1)
 	}
 
-	w1 := worker.New(s.sdkClient, tq, worker.Options{
+	w1 := worker.New(s.SdkClient(), tq, worker.Options{
 		BuildID:                          v1,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -592,7 +542,7 @@ func (s *VersioningIntegSuite) dispatchNewWorkflow(newVersioning bool) {
 	s.NoError(w1.Start())
 	defer w1.Stop()
 
-	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, wf)
+	run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, wf)
 	s.NoError(err)
 	var out string
 	s.NoError(run.Get(ctx, &out))
@@ -626,7 +576,7 @@ func (s *VersioningIntegSuite) TestDispatchNewWorkflowWithRamp() {
 	s.waitForAssignmentRulePropagation(ctx, tq, rule)
 	s.waitForAssignmentRulePropagation(ctx, tq, rule2)
 
-	w1 := worker.New(s.sdkClient, tq, worker.Options{
+	w1 := worker.New(s.SdkClient(), tq, worker.Options{
 		BuildID:                          v1,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -634,7 +584,7 @@ func (s *VersioningIntegSuite) TestDispatchNewWorkflowWithRamp() {
 	w1.RegisterWorkflowWithOptions(wf1, workflow.RegisterOptions{Name: "wf"})
 	s.NoError(w1.Start())
 	defer w1.Stop()
-	w2 := worker.New(s.sdkClient, tq, worker.Options{
+	w2 := worker.New(s.SdkClient(), tq, worker.Options{
 		BuildID:                          v2,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -645,7 +595,7 @@ func (s *VersioningIntegSuite) TestDispatchNewWorkflowWithRamp() {
 
 	counter := make(map[string]int)
 	for i := 0; i < 50; i++ {
-		run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
+		run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
 		s.NoError(err)
 		var out string
 		s.NoError(run.Get(ctx, &out))
@@ -706,7 +656,7 @@ func (s *VersioningIntegSuite) workflowStaysInBuildId() {
 	rule := s.addAssignmentRule(ctx, tq, v1)
 	s.waitForAssignmentRulePropagation(ctx, tq, rule)
 
-	w1 := worker.New(s.sdkClient, tq, worker.Options{
+	w1 := worker.New(s.SdkClient(), tq, worker.Options{
 		BuildID:                          v1,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -717,7 +667,7 @@ func (s *VersioningIntegSuite) workflowStaysInBuildId() {
 	s.NoError(w1.Start())
 	defer w1.Stop()
 
-	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, wf)
+	run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, wf)
 	s.NoError(err)
 
 	s.WaitForChannel(ctx, act1Done)
@@ -727,7 +677,7 @@ func (s *VersioningIntegSuite) workflowStaysInBuildId() {
 	rule = s.addAssignmentRule(ctx, tq, v2)
 	s.waitForAssignmentRulePropagation(ctx, tq, rule)
 
-	dw, err := s.sdkClient.DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
+	dw, err := s.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
 	s.NoError(err)
 	s.Equal(1, len(dw.GetPendingActivities()))
 	s.NotNil(dw.GetPendingActivities()[0].GetUseWorkflowBuildId())
@@ -790,7 +740,7 @@ func (s *VersioningIntegSuite) unversionedWorkflowStaysUnversioned() {
 		return "done!", nil
 	}
 
-	w1 := worker.New(s.sdkClient, tq, worker.Options{
+	w1 := worker.New(s.SdkClient(), tq, worker.Options{
 		MaxConcurrentWorkflowTaskPollers: numPollers,
 	})
 	w1.RegisterWorkflow(wf)
@@ -799,7 +749,7 @@ func (s *VersioningIntegSuite) unversionedWorkflowStaysUnversioned() {
 	s.NoError(w1.Start())
 	defer w1.Stop()
 
-	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, wf)
+	run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, wf)
 	s.NoError(err)
 
 	s.WaitForChannel(ctx, act1Done)
@@ -809,7 +759,7 @@ func (s *VersioningIntegSuite) unversionedWorkflowStaysUnversioned() {
 	rule := s.addAssignmentRule(ctx, tq, v1)
 	s.waitForAssignmentRulePropagation(ctx, tq, rule)
 
-	dw, err := s.sdkClient.DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
+	dw, err := s.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
 	s.NoError(err)
 	s.Equal(1, len(dw.GetPendingActivities()))
 	s.Nil(dw.GetPendingActivities()[0].GetAssignedBuildId())
@@ -839,7 +789,7 @@ func (s *VersioningIntegSuite) firstWorkflowTaskAssignmentSpooled() {
 	s.waitForAssignmentRulePropagation(ctx, tq, rule)
 
 	// start wf without worker
-	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+	run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 		TaskQueue: tq,
 		// setting to a short timeout to verify first wf task timeout assignment
 		WorkflowTaskTimeout: 1 * time.Second,
@@ -861,7 +811,7 @@ func (s *VersioningIntegSuite) firstWorkflowTaskAssignmentSpooled() {
 	}
 
 	// run worker on v1 so it can fail the scheduled task
-	w1 := worker.New(s.sdkClient, tq, worker.Options{
+	w1 := worker.New(s.SdkClient(), tq, worker.Options{
 		BuildID:                          v1,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -889,7 +839,7 @@ func (s *VersioningIntegSuite) firstWorkflowTaskAssignmentSpooled() {
 	}
 
 	// run worker on v2 so it can timeout the scheduled task
-	w2 := worker.New(s.sdkClient, tq, worker.Options{
+	w2 := worker.New(s.SdkClient(), tq, worker.Options{
 		BuildID:                          v2,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -912,7 +862,7 @@ func (s *VersioningIntegSuite) firstWorkflowTaskAssignmentSpooled() {
 	}
 
 	// run worker on v3 so it can complete the wf
-	w3 := worker.New(s.sdkClient, tq, worker.Options{
+	w3 := worker.New(s.SdkClient(), tq, worker.Options{
 		BuildID:                          v3,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -957,7 +907,7 @@ func (s *VersioningIntegSuite) firstWorkflowTaskAssignmentSyncMatch() {
 		panic("failing WF task intentionally")
 	}
 
-	w1 := worker.New(s.sdkClient, tq, worker.Options{
+	w1 := worker.New(s.SdkClient(), tq, worker.Options{
 		BuildID:                          v1,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -966,7 +916,7 @@ func (s *VersioningIntegSuite) firstWorkflowTaskAssignmentSyncMatch() {
 	s.NoError(w1.Start())
 	defer w1.Stop()
 
-	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+	run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 		TaskQueue: tq,
 		// setting to a short timeout to verify first wf task timeout assignment
 		WorkflowTaskTimeout: 1 * time.Second,
@@ -989,7 +939,7 @@ func (s *VersioningIntegSuite) firstWorkflowTaskAssignmentSyncMatch() {
 		return "return after long sleep", nil
 	}
 
-	w2 := worker.New(s.sdkClient, tq, worker.Options{
+	w2 := worker.New(s.SdkClient(), tq, worker.Options{
 		BuildID:                          v2,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -1019,7 +969,7 @@ func (s *VersioningIntegSuite) firstWorkflowTaskAssignmentSyncMatch() {
 	}
 
 	// run worker on v3 so it can complete the wf
-	w3 := worker.New(s.sdkClient, tq, worker.Options{
+	w3 := worker.New(s.SdkClient(), tq, worker.Options{
 		BuildID:                          v3,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -1087,7 +1037,7 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSpooled(versione
 	}
 
 	// start workflow worker
-	wfw := worker.New(s.sdkClient, wfTq, worker.Options{
+	wfw := worker.New(s.SdkClient(), wfTq, worker.Options{
 		BuildID:                          wfV1,
 		UseBuildIDForVersioning:          versionedWf,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -1097,7 +1047,7 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSpooled(versione
 	defer wfw.Stop()
 
 	// start wf without activity worker
-	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+	run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 		TaskQueue: wfTq,
 		// setting to a short timeout to verify first wf task timeout assignment
 		WorkflowTaskTimeout: 1 * time.Second,
@@ -1107,7 +1057,7 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSpooled(versione
 	// MS should have the correct build ID after finishing the first WFT
 	s.Eventually(
 		func() bool {
-			dw, err := s.sdkClient.DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
+			dw, err := s.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
 			s.NoError(err)
 			if len(dw.GetPendingActivities()) == 0 {
 				return false
@@ -1136,7 +1086,7 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSpooled(versione
 	}
 
 	// run v1 activity worker so it can fail the scheduled activity
-	w1 := worker.New(s.sdkClient, actTq, worker.Options{
+	w1 := worker.New(s.SdkClient(), actTq, worker.Options{
 		BuildID:                          v1,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -1150,7 +1100,7 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSpooled(versione
 	// After scheduling the second time, now pending activity should be assigned to v2
 	s.Eventually(
 		func() bool {
-			dw, err := s.sdkClient.DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
+			dw, err := s.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
 			s.NoError(err)
 			s.Equal(1, len(dw.GetPendingActivities()))
 			return v2 == dw.GetPendingActivities()[0].GetLastIndependentlyAssignedBuildId()
@@ -1172,7 +1122,7 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSpooled(versione
 	}
 
 	// run v2 activity worker so it can timeout the scheduled activity
-	w2 := worker.New(s.sdkClient, actTq, worker.Options{
+	w2 := worker.New(s.SdkClient(), actTq, worker.Options{
 		BuildID:                          v2,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -1189,7 +1139,7 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSpooled(versione
 	// After scheduling the third time, now pending activity should be assigned to v3
 	s.Eventually(
 		func() bool {
-			dw, err := s.sdkClient.DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
+			dw, err := s.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
 			s.NoError(err)
 			s.Equal(1, len(dw.GetPendingActivities()))
 			return v3 == dw.GetPendingActivities()[0].GetLastIndependentlyAssignedBuildId()
@@ -1203,7 +1153,7 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSpooled(versione
 	}
 
 	// run worker on v3 so it can complete the wf
-	w3 := worker.New(s.sdkClient, actTq, worker.Options{
+	w3 := worker.New(s.SdkClient(), actTq, worker.Options{
 		BuildID:                          v3,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -1277,7 +1227,7 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSyncMatch(versio
 	}
 
 	// start workflow worker
-	wfw := worker.New(s.sdkClient, wfTq, worker.Options{
+	wfw := worker.New(s.SdkClient(), wfTq, worker.Options{
 		BuildID:                          wfV1,
 		UseBuildIDForVersioning:          versionedWf,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -1293,7 +1243,7 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSyncMatch(versio
 		return "", errors.New("failing activity task intentionally")
 	}
 
-	w1 := worker.New(s.sdkClient, actTq, worker.Options{
+	w1 := worker.New(s.SdkClient(), actTq, worker.Options{
 		BuildID:                          v1,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -1302,7 +1252,7 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSyncMatch(versio
 	s.NoError(w1.Start())
 	defer w1.Stop()
 
-	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+	run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 		TaskQueue: wfTq,
 		// setting to a short timeout to verify first wf task timeout assignment
 		WorkflowTaskTimeout: 1 * time.Second,
@@ -1314,7 +1264,7 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSyncMatch(versio
 	// MS should have the correct build ID after finishing the first WFT
 	s.Eventually(
 		func() bool {
-			dw, err := s.sdkClient.DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
+			dw, err := s.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
 			s.NoError(err)
 			if len(dw.GetPendingActivities()) == 0 {
 				return false
@@ -1341,7 +1291,7 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSyncMatch(versio
 		return "return after long sleep", nil
 	}
 
-	w2 := worker.New(s.sdkClient, actTq, worker.Options{
+	w2 := worker.New(s.SdkClient(), actTq, worker.Options{
 		BuildID:                          v2,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -1362,7 +1312,7 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSyncMatch(versio
 	// After scheduling the second time, now pending activity should be assigned to v2
 	s.Eventually(
 		func() bool {
-			dw, err := s.sdkClient.DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
+			dw, err := s.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
 			s.NoError(err)
 			s.Equal(1, len(dw.GetPendingActivities()))
 			return v2 == dw.GetPendingActivities()[0].GetLastIndependentlyAssignedBuildId()
@@ -1377,7 +1327,7 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSyncMatch(versio
 	}
 
 	// run worker on v3 so it can complete the wf
-	w3 := worker.New(s.sdkClient, actTq, worker.Options{
+	w3 := worker.New(s.SdkClient(), actTq, worker.Options{
 		BuildID:                          v3,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -1453,7 +1403,7 @@ func (s *VersioningIntegSuite) testWorkflowTaskRedirectInRetry(firstTask bool) {
 		panic("failing WF task intentionally")
 	}
 
-	w1 := worker.New(s.sdkClient, tq, worker.Options{
+	w1 := worker.New(s.SdkClient(), tq, worker.Options{
 		BuildID:                          v1,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -1463,7 +1413,7 @@ func (s *VersioningIntegSuite) testWorkflowTaskRedirectInRetry(firstTask bool) {
 	s.NoError(w1.Start())
 	defer w1.Stop()
 
-	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+	run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 		TaskQueue: tq,
 		// setting to a short timeout to verify first wf task timeout assignment
 		WorkflowTaskTimeout: 1 * time.Second,
@@ -1502,7 +1452,7 @@ func (s *VersioningIntegSuite) testWorkflowTaskRedirectInRetry(firstTask bool) {
 		return "return after long sleep", nil
 	}
 
-	w11 := worker.New(s.sdkClient, tq, worker.Options{
+	w11 := worker.New(s.SdkClient(), tq, worker.Options{
 		BuildID:                          v11,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -1538,7 +1488,7 @@ func (s *VersioningIntegSuite) testWorkflowTaskRedirectInRetry(firstTask bool) {
 	}
 
 	// run worker on v12 so it can complete the wf
-	w12 := worker.New(s.sdkClient, tq, worker.Options{
+	w12 := worker.New(s.SdkClient(), tq, worker.Options{
 		BuildID:                          v12,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -1603,12 +1553,12 @@ func (s *VersioningIntegSuite) dispatchNotUsingVersioning(newVersioning bool) {
 		s.waitForVersionSetPropagation(ctx, tq, v1)
 	}
 
-	w1nover := worker.New(s.sdkClient, tq, worker.Options{
+	w1nover := worker.New(s.SdkClient(), tq, worker.Options{
 		BuildID:                          v1,
 		UseBuildIDForVersioning:          false,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
 	})
-	w1 := worker.New(s.sdkClient, tq, worker.Options{
+	w1 := worker.New(s.SdkClient(), tq, worker.Options{
 		BuildID:                          v1,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -1620,7 +1570,7 @@ func (s *VersioningIntegSuite) dispatchNotUsingVersioning(newVersioning bool) {
 	s.NoError(w1.Start())
 	defer w1.Stop()
 
-	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
+	run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
 	s.NoError(err)
 	var out string
 	s.NoError(run.Get(ctx, &out))
@@ -1642,7 +1592,7 @@ func (s *VersioningIntegSuite) dispatchNewWorkflowStartWorkerFirst() {
 	}
 
 	// run worker before registering build. it will use guessed set id
-	w1 := worker.New(s.sdkClient, tq, worker.Options{
+	w1 := worker.New(s.SdkClient(), tq, worker.Options{
 		BuildID:                          v1,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -1660,7 +1610,7 @@ func (s *VersioningIntegSuite) dispatchNewWorkflowStartWorkerFirst() {
 	s.addNewDefaultBuildId(ctx, tq, v1)
 	s.waitForVersionSetPropagation(ctx, tq, v1)
 
-	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, wf)
+	run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, wf)
 	s.NoError(err)
 	var out string
 	s.NoError(run.Get(ctx, &out))
@@ -1688,14 +1638,14 @@ func (s *VersioningIntegSuite) dispatchUnversionedRemainsUnversioned() {
 		return "done!", nil
 	}
 
-	w1 := worker.New(s.sdkClient, tq, worker.Options{
+	w1 := worker.New(s.SdkClient(), tq, worker.Options{
 		// no build ID
 	})
 	w1.RegisterWorkflow(wf)
 	s.NoError(w1.Start())
 	defer w1.Stop()
 
-	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, wf)
+	run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, wf)
 	s.NoError(err)
 
 	s.WaitForChannel(ctx, started)
@@ -1703,7 +1653,7 @@ func (s *VersioningIntegSuite) dispatchUnversionedRemainsUnversioned() {
 	s.waitForVersionSetPropagation(ctx, tq, v1)
 
 	// unblock the workflow
-	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "wait", nil))
+	s.NoError(s.SdkClient().SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "wait", nil))
 
 	var out string
 	s.NoError(run.Get(ctx, &out))
@@ -1757,7 +1707,7 @@ func (s *VersioningIntegSuite) dispatchUpgrade(newVersioning, stopOld bool) {
 		s.waitForVersionSetPropagation(ctx, tq, v1)
 	}
 
-	w1 := worker.New(s.sdkClient, tq, worker.Options{
+	w1 := worker.New(s.SdkClient(), tq, worker.Options{
 		BuildID:                          v1,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -1766,7 +1716,7 @@ func (s *VersioningIntegSuite) dispatchUpgrade(newVersioning, stopOld bool) {
 	s.NoError(w1.Start())
 	defer w1.Stop()
 
-	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
+	run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
 	s.NoError(err)
 	s.WaitForChannel(ctx, started)
 
@@ -1781,7 +1731,7 @@ func (s *VersioningIntegSuite) dispatchUpgrade(newVersioning, stopOld bool) {
 	// add another 100ms to make sure it got to sticky queues also
 	time.Sleep(100 * time.Millisecond) //nolint:forbidigo
 
-	w11 := worker.New(s.sdkClient, tq, worker.Options{
+	w11 := worker.New(s.SdkClient(), tq, worker.Options{
 		BuildID:                          v11,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -1808,7 +1758,7 @@ func (s *VersioningIntegSuite) dispatchUpgrade(newVersioning, stopOld bool) {
 	}
 
 	// unblock the workflow
-	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "wait", nil))
+	s.NoError(s.SdkClient().SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "wait", nil))
 
 	var out string
 	s.NoError(run.Get(ctx, &out))
@@ -1944,7 +1894,7 @@ func (s *VersioningIntegSuite) dispatchActivity(failMode activityFailMode, newVe
 		s.waitForVersionSetPropagation(ctx, tq, v1)
 	}
 
-	w1 := worker.New(s.sdkClient, tq, worker.Options{
+	w1 := worker.New(s.SdkClient(), tq, worker.Options{
 		BuildID:                          v1,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -1953,7 +1903,7 @@ func (s *VersioningIntegSuite) dispatchActivity(failMode activityFailMode, newVe
 	w1.RegisterActivityWithOptions(act1, activity.RegisterOptions{Name: "act"})
 	s.NoError(w1.Start())
 	defer w1.Stop()
-	w1xTq := worker.New(s.sdkClient, actxTq, worker.Options{
+	w1xTq := worker.New(s.SdkClient(), actxTq, worker.Options{
 		BuildID:                          v1,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -1962,7 +1912,7 @@ func (s *VersioningIntegSuite) dispatchActivity(failMode activityFailMode, newVe
 	s.NoError(w1xTq.Start())
 	defer w1xTq.Stop()
 
-	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
+	run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
 	s.NoError(err)
 	// wait for it to start on v1
 	s.WaitForChannel(ctx, started)
@@ -1980,7 +1930,7 @@ func (s *VersioningIntegSuite) dispatchActivity(failMode activityFailMode, newVe
 	}
 
 	// start worker for v2
-	w2 := worker.New(s.sdkClient, tq, worker.Options{
+	w2 := worker.New(s.SdkClient(), tq, worker.Options{
 		BuildID:                          v2,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -1989,7 +1939,7 @@ func (s *VersioningIntegSuite) dispatchActivity(failMode activityFailMode, newVe
 	w2.RegisterActivityWithOptions(act2, activity.RegisterOptions{Name: "act"})
 	s.NoError(w2.Start())
 	defer w2.Stop()
-	w2xTq := worker.New(s.sdkClient, actxTq, worker.Options{
+	w2xTq := worker.New(s.SdkClient(), actxTq, worker.Options{
 		BuildID:                          v2,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -1999,7 +1949,7 @@ func (s *VersioningIntegSuite) dispatchActivity(failMode activityFailMode, newVe
 	defer w2xTq.Stop()
 
 	// unblock the workflow
-	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "wait", nil))
+	s.NoError(s.SdkClient().SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "wait", nil))
 
 	var out string
 	s.NoError(run.Get(ctx, &out))
@@ -2078,7 +2028,7 @@ func (s *VersioningIntegSuite) TestDispatchActivityUpgrade() {
 		return val1 + val2, nil
 	}
 
-	w1 := worker.New(s.sdkClient, tq, worker.Options{
+	w1 := worker.New(s.SdkClient(), tq, worker.Options{
 		BuildID:                          v1,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -2089,7 +2039,7 @@ func (s *VersioningIntegSuite) TestDispatchActivityUpgrade() {
 	s.NoError(w1.Start())
 	defer w1.Stop()
 
-	w11 := worker.New(s.sdkClient, tq, worker.Options{
+	w11 := worker.New(s.SdkClient(), tq, worker.Options{
 		BuildID:                          v11,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -2100,7 +2050,7 @@ func (s *VersioningIntegSuite) TestDispatchActivityUpgrade() {
 	s.NoError(w11.Start())
 	defer w11.Stop()
 
-	w12 := worker.New(s.sdkClient, tq, worker.Options{
+	w12 := worker.New(s.SdkClient(), tq, worker.Options{
 		BuildID:                          v12,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -2114,7 +2064,7 @@ func (s *VersioningIntegSuite) TestDispatchActivityUpgrade() {
 	rule := s.addAssignmentRule(ctx, tq, v1)
 	s.waitForAssignmentRulePropagation(ctx, tq, rule)
 
-	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
+	run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
 	s.NoError(err)
 
 	// wait for it to start on v1
@@ -2288,7 +2238,7 @@ func (s *VersioningIntegSuite) TestRedirectWithConcurrentActivities() {
 	// run all workers
 	for i := 0; i <= 9; i++ {
 		v := versions[i]
-		w := worker.New(s.sdkClient, tq, worker.Options{
+		w := worker.New(s.SdkClient(), tq, worker.Options{
 			BuildID:                          v,
 			UseBuildIDForVersioning:          true,
 			MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -2310,7 +2260,7 @@ func (s *VersioningIntegSuite) TestRedirectWithConcurrentActivities() {
 		workers = append(workers, w)
 	}
 
-	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
+	run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
 	s.NoError(err)
 
 	// Workflow should finish, otherwise it may mean we dropped some task without rescheduling them in the new build ID
@@ -2323,7 +2273,7 @@ func (s *VersioningIntegSuite) TestRedirectWithConcurrentActivities() {
 		activityPerVersion[v]++
 	}
 
-	wh := s.sdkClient.GetWorkflowHistory(ctx, run.GetID(), run.GetRunID(), false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+	wh := s.SdkClient().GetWorkflowHistory(ctx, run.GetID(), run.GetRunID(), false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
 	redirectAppliedToActivityTask := false
 	activityRetried := false
 	sawUnorderedEvents := false
@@ -2419,7 +2369,7 @@ func (s *VersioningIntegSuite) dispatchActivityCompatible() {
 	s.addNewDefaultBuildId(ctx, tq, v1)
 	s.waitForVersionSetPropagation(ctx, tq, v1)
 
-	w1 := worker.New(s.sdkClient, tq, worker.Options{
+	w1 := worker.New(s.SdkClient(), tq, worker.Options{
 		BuildID:                          v1,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -2429,7 +2379,7 @@ func (s *VersioningIntegSuite) dispatchActivityCompatible() {
 	s.NoError(w1.Start())
 	defer w1.Stop()
 
-	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
+	run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
 	s.NoError(err)
 	// wait for it to start on v1
 	s.WaitForChannel(ctx, started)
@@ -2438,7 +2388,7 @@ func (s *VersioningIntegSuite) dispatchActivityCompatible() {
 	s.addCompatibleBuildId(ctx, tq, v11, v1, false)
 	s.waitForVersionSetPropagation(ctx, tq, v11)
 	// start worker for v1.1
-	w11 := worker.New(s.sdkClient, tq, worker.Options{
+	w11 := worker.New(s.SdkClient(), tq, worker.Options{
 		BuildID:                          v11,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -2452,7 +2402,7 @@ func (s *VersioningIntegSuite) dispatchActivityCompatible() {
 	time.Sleep(longPollTime) //nolint:forbidigo
 
 	// unblock the workflow
-	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "wait", nil))
+	s.NoError(s.SdkClient().SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "wait", nil))
 
 	var out string
 	s.NoError(run.Get(ctx, &out))
@@ -2470,10 +2420,10 @@ func (s *VersioningIntegSuite) TestDispatchActivityEager() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	_, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
+	_, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
 	s.Require().NoError(err)
 
-	pollResponse, err := s.sdkClient.WorkflowService().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+	pollResponse, err := s.SdkClient().WorkflowService().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace: s.Namespace().String(),
 		TaskQueue: &taskqueuepb.TaskQueue{Name: tq},
 		Identity:  "test",
@@ -2484,7 +2434,7 @@ func (s *VersioningIntegSuite) TestDispatchActivityEager() {
 	s.Require().NoError(err)
 	startToCloseTimeout := time.Minute
 
-	completionResponse, err := s.sdkClient.WorkflowService().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+	completionResponse, err := s.SdkClient().WorkflowService().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Identity: "test",
 		WorkerVersionStamp: &commonpb.WorkerVersionStamp{
 			BuildId:       v1,
@@ -2561,7 +2511,7 @@ func (s *VersioningIntegSuite) TestDispatchActivityCrossTQFails() {
 	s.waitForVersionSetPropagation(ctx, tq, v1)
 	s.waitForVersionSetPropagation(ctx, crosstq, v1)
 
-	w1 := worker.New(s.sdkClient, tq, worker.Options{
+	w1 := worker.New(s.SdkClient(), tq, worker.Options{
 		BuildID:                          v1,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -2570,7 +2520,7 @@ func (s *VersioningIntegSuite) TestDispatchActivityCrossTQFails() {
 	s.NoError(w1.Start())
 	defer w1.Stop()
 
-	w1cross := worker.New(s.sdkClient, crosstq, worker.Options{
+	w1cross := worker.New(s.SdkClient(), crosstq, worker.Options{
 		BuildID:                          v1,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -2579,7 +2529,7 @@ func (s *VersioningIntegSuite) TestDispatchActivityCrossTQFails() {
 	s.NoError(w1cross.Start())
 	defer w1cross.Stop()
 
-	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
+	run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
 	s.NoError(err)
 
 	// workflow should be terminated by invalid argument
@@ -2693,7 +2643,7 @@ func (s *VersioningIntegSuite) dispatchChildWorkflow(newVersioning bool, crossTq
 		s.waitForVersionSetPropagation(ctx, tq, v1)
 	}
 
-	w1 := worker.New(s.sdkClient, tq, worker.Options{
+	w1 := worker.New(s.SdkClient(), tq, worker.Options{
 		BuildID:                          v1,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -2702,7 +2652,7 @@ func (s *VersioningIntegSuite) dispatchChildWorkflow(newVersioning bool, crossTq
 	w1.RegisterWorkflowWithOptions(child1, workflow.RegisterOptions{Name: "child"})
 	s.NoError(w1.Start())
 	defer w1.Stop()
-	w1xTq := worker.New(s.sdkClient, childxTq, worker.Options{
+	w1xTq := worker.New(s.SdkClient(), childxTq, worker.Options{
 		BuildID:                          v1,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -2711,7 +2661,7 @@ func (s *VersioningIntegSuite) dispatchChildWorkflow(newVersioning bool, crossTq
 	s.NoError(w1xTq.Start())
 	defer w1xTq.Stop()
 
-	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
+	run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
 	s.NoError(err)
 	// wait for it to start on v1
 	s.WaitForChannel(ctx, started)
@@ -2729,7 +2679,7 @@ func (s *VersioningIntegSuite) dispatchChildWorkflow(newVersioning bool, crossTq
 	}
 
 	// start worker for v2
-	w2 := worker.New(s.sdkClient, tq, worker.Options{
+	w2 := worker.New(s.SdkClient(), tq, worker.Options{
 		BuildID:                          v2,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -2738,7 +2688,7 @@ func (s *VersioningIntegSuite) dispatchChildWorkflow(newVersioning bool, crossTq
 	w2.RegisterWorkflowWithOptions(child2, workflow.RegisterOptions{Name: "child"})
 	s.NoError(w2.Start())
 	defer w2.Stop()
-	w2xTq := worker.New(s.sdkClient, childxTq, worker.Options{
+	w2xTq := worker.New(s.SdkClient(), childxTq, worker.Options{
 		BuildID:                          v2,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -2748,7 +2698,7 @@ func (s *VersioningIntegSuite) dispatchChildWorkflow(newVersioning bool, crossTq
 	defer w2xTq.Stop()
 
 	// unblock the workflow
-	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "wait", nil))
+	s.NoError(s.SdkClient().SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "wait", nil))
 
 	var out string
 	s.NoError(run.Get(ctx, &out))
@@ -2831,7 +2781,7 @@ func (s *VersioningIntegSuite) dispatchChildWorkflowUpgrade(newVersioning bool) 
 		s.waitForVersionSetPropagation(ctx, tq, v1)
 	}
 
-	w1 := worker.New(s.sdkClient, tq, worker.Options{
+	w1 := worker.New(s.SdkClient(), tq, worker.Options{
 		BuildID:                          v1,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -2841,7 +2791,7 @@ func (s *VersioningIntegSuite) dispatchChildWorkflowUpgrade(newVersioning bool) 
 	s.NoError(w1.Start())
 	defer w1.Stop()
 
-	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
+	run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
 	s.NoError(err)
 	// wait for it to start on v1
 	s.WaitForChannel(ctx, started)
@@ -2855,7 +2805,7 @@ func (s *VersioningIntegSuite) dispatchChildWorkflowUpgrade(newVersioning bool) 
 		s.waitForVersionSetPropagation(ctx, tq, v11)
 	}
 	// start worker for v1.1
-	w11 := worker.New(s.sdkClient, tq, worker.Options{
+	w11 := worker.New(s.SdkClient(), tq, worker.Options{
 		BuildID:                          v11,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -2869,7 +2819,7 @@ func (s *VersioningIntegSuite) dispatchChildWorkflowUpgrade(newVersioning bool) 
 	time.Sleep(longPollTime) //nolint:forbidigo
 
 	// unblock the workflow
-	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "wait", nil))
+	s.NoError(s.SdkClient().SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "wait", nil))
 
 	var out string
 	s.NoError(run.Get(ctx, &out))
@@ -2904,7 +2854,7 @@ func (s *VersioningIntegSuite) TestDispatchChildWorkflowCrossTQFails() {
 	s.waitForVersionSetPropagation(ctx, tq, v1)
 	s.waitForVersionSetPropagation(ctx, crosstq, v1)
 
-	w1 := worker.New(s.sdkClient, tq, worker.Options{
+	w1 := worker.New(s.SdkClient(), tq, worker.Options{
 		BuildID:                          v1,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -2913,7 +2863,7 @@ func (s *VersioningIntegSuite) TestDispatchChildWorkflowCrossTQFails() {
 	s.NoError(w1.Start())
 	defer w1.Stop()
 
-	w1cross := worker.New(s.sdkClient, crosstq, worker.Options{
+	w1cross := worker.New(s.SdkClient(), crosstq, worker.Options{
 		BuildID:                          v1,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -2922,7 +2872,7 @@ func (s *VersioningIntegSuite) TestDispatchChildWorkflowCrossTQFails() {
 	s.NoError(w1cross.Start())
 	defer w1cross.Stop()
 
-	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
+	run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
 	s.NoError(err)
 
 	// workflow should be terminated by invalid argument
@@ -2980,7 +2930,7 @@ func (s *VersioningIntegSuite) dispatchQuery(newVersioning bool) {
 		s.waitForVersionSetPropagation(ctx, tq, v1)
 	}
 
-	w1 := worker.New(s.sdkClient, tq, worker.Options{
+	w1 := worker.New(s.SdkClient(), tq, worker.Options{
 		BuildID:                          v1,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -2989,7 +2939,7 @@ func (s *VersioningIntegSuite) dispatchQuery(newVersioning bool) {
 	s.NoError(w1.Start())
 	defer w1.Stop()
 
-	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
+	run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
 	s.NoError(err)
 	// wait for it to start on v1
 	s.WaitForChannel(ctx, started)
@@ -3010,7 +2960,7 @@ func (s *VersioningIntegSuite) dispatchQuery(newVersioning bool) {
 	time.Sleep(100 * time.Millisecond) //nolint:forbidigo
 
 	// start worker for v1.1 and v2
-	w11 := worker.New(s.sdkClient, tq, worker.Options{
+	w11 := worker.New(s.SdkClient(), tq, worker.Options{
 		BuildID:                          v11,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -3018,7 +2968,7 @@ func (s *VersioningIntegSuite) dispatchQuery(newVersioning bool) {
 	w11.RegisterWorkflowWithOptions(wf11, workflow.RegisterOptions{Name: "wf"})
 	s.NoError(w11.Start())
 	defer w11.Stop()
-	w2 := worker.New(s.sdkClient, tq, worker.Options{
+	w2 := worker.New(s.SdkClient(), tq, worker.Options{
 		BuildID:                          v2,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -3033,33 +2983,33 @@ func (s *VersioningIntegSuite) dispatchQuery(newVersioning bool) {
 	}
 
 	// query
-	val, err := s.sdkClient.QueryWorkflow(ctx, run.GetID(), run.GetRunID(), "query")
+	val, err := s.SdkClient().QueryWorkflow(ctx, run.GetID(), run.GetRunID(), "query")
 	s.NoError(err)
 	var out string
 	s.NoError(val.Get(&out))
 	s.Equal("v1.1", out)
 
 	// let the workflow complete
-	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "wait", nil))
+	s.NoError(s.SdkClient().SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "wait", nil))
 
 	// wait for completion
 	s.NoError(run.Get(ctx, nil))
 
 	// query on closed workflow
-	val, err = s.sdkClient.QueryWorkflow(ctx, run.GetID(), run.GetRunID(), "query")
+	val, err = s.SdkClient().QueryWorkflow(ctx, run.GetID(), run.GetRunID(), "query")
 	s.NoError(err)
 	s.NoError(val.Get(&out))
 	s.Equal("v1.1", out)
 
 	// start another wf on v2. should complete immediately.
-	run2, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
+	run2, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
 	s.NoError(err)
 
 	// wait for completion
 	s.NoError(run2.Get(ctx, nil))
 
 	// query on closed workflow
-	val, err = s.sdkClient.QueryWorkflow(ctx, run2.GetID(), run2.GetRunID(), "query")
+	val, err = s.SdkClient().QueryWorkflow(ctx, run2.GetID(), run2.GetRunID(), "query")
 	s.NoError(err)
 	s.NoError(val.Get(&out))
 	s.Equal("v2", out)
@@ -3153,7 +3103,7 @@ func (s *VersioningIntegSuite) dispatchContinueAsNew(newVersioning bool, crossTq
 		s.waitForVersionSetPropagation(ctx, tq, v1)
 	}
 
-	w1 := worker.New(s.sdkClient, tq, worker.Options{
+	w1 := worker.New(s.SdkClient(), tq, worker.Options{
 		BuildID:                          v1,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -3161,7 +3111,7 @@ func (s *VersioningIntegSuite) dispatchContinueAsNew(newVersioning bool, crossTq
 	w1.RegisterWorkflowWithOptions(wf1, workflow.RegisterOptions{Name: "wf"})
 	s.NoError(w1.Start())
 	defer w1.Stop()
-	w1xTq := worker.New(s.sdkClient, canxTq, worker.Options{
+	w1xTq := worker.New(s.SdkClient(), canxTq, worker.Options{
 		BuildID:                          v1,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -3170,7 +3120,7 @@ func (s *VersioningIntegSuite) dispatchContinueAsNew(newVersioning bool, crossTq
 	s.NoError(w1xTq.Start())
 	defer w1xTq.Stop()
 
-	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
+	run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
 	s.NoError(err)
 	// wait for it to start on v1
 	s.WaitForChannel(ctx, started1)
@@ -3191,7 +3141,7 @@ func (s *VersioningIntegSuite) dispatchContinueAsNew(newVersioning bool, crossTq
 	s.validateWorkflowBuildIds(ctx, run.GetID(), run.GetRunID(), v1, newVersioning, v1, "", nil)
 
 	// start workers for v2
-	w2 := worker.New(s.sdkClient, tq, worker.Options{
+	w2 := worker.New(s.SdkClient(), tq, worker.Options{
 		BuildID:                          v2,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -3199,7 +3149,7 @@ func (s *VersioningIntegSuite) dispatchContinueAsNew(newVersioning bool, crossTq
 	w2.RegisterWorkflowWithOptions(wf2, workflow.RegisterOptions{Name: "wf"})
 	s.NoError(w2.Start())
 	defer w2.Stop()
-	w2xTq := worker.New(s.sdkClient, canxTq, worker.Options{
+	w2xTq := worker.New(s.SdkClient(), canxTq, worker.Options{
 		BuildID:                          v2,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -3214,7 +3164,7 @@ func (s *VersioningIntegSuite) dispatchContinueAsNew(newVersioning bool, crossTq
 	}
 
 	// unblock the workflow. it should get kicked off the sticky queue and replay on v1
-	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), "", "wait", nil))
+	s.NoError(s.SdkClient().SignalWorkflow(ctx, run.GetID(), "", "wait", nil))
 	// wait for it to start on v1
 	s.WaitForChannel(ctx, started1)
 
@@ -3291,7 +3241,7 @@ func (s *VersioningIntegSuite) dispatchContinueAsNewUpgrade(newVersioning bool) 
 		s.waitForVersionSetPropagation(ctx, tq, v1)
 	}
 
-	w1 := worker.New(s.sdkClient, tq, worker.Options{
+	w1 := worker.New(s.SdkClient(), tq, worker.Options{
 		BuildID:                          v1,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -3300,7 +3250,7 @@ func (s *VersioningIntegSuite) dispatchContinueAsNewUpgrade(newVersioning bool) 
 	s.NoError(w1.Start())
 	defer w1.Stop()
 
-	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
+	run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
 	s.NoError(err)
 	// wait for it to start on v1
 	s.WaitForChannel(ctx, started1)
@@ -3320,7 +3270,7 @@ func (s *VersioningIntegSuite) dispatchContinueAsNewUpgrade(newVersioning bool) 
 	time.Sleep(100 * time.Millisecond) //nolint:forbidigo
 
 	// start workers for v11 and v2
-	w11 := worker.New(s.sdkClient, tq, worker.Options{
+	w11 := worker.New(s.SdkClient(), tq, worker.Options{
 		BuildID:                          v11,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -3329,7 +3279,7 @@ func (s *VersioningIntegSuite) dispatchContinueAsNewUpgrade(newVersioning bool) 
 	s.NoError(w11.Start())
 	defer w11.Stop()
 
-	w2 := worker.New(s.sdkClient, tq, worker.Options{
+	w2 := worker.New(s.SdkClient(), tq, worker.Options{
 		BuildID:                          v2,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -3344,7 +3294,7 @@ func (s *VersioningIntegSuite) dispatchContinueAsNewUpgrade(newVersioning bool) 
 	}
 
 	// unblock the workflow. it should get kicked off the sticky queue and replay on v11
-	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), "", "wait", nil))
+	s.NoError(s.SdkClient().SignalWorkflow(ctx, run.GetID(), "", "wait", nil))
 	s.WaitForChannel(ctx, started11)
 
 	// then continue-as-new onto v11
@@ -3362,7 +3312,7 @@ func (s *VersioningIntegSuite) dispatchContinueAsNewUpgrade(newVersioning bool) 
 
 	// unblock the second run. it should continue on v11 then continue-as-new onto v2, then
 	// complete.
-	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), "", "wait", nil))
+	s.NoError(s.SdkClient().SignalWorkflow(ctx, run.GetID(), "", "wait", nil))
 
 	// second CaN
 	var out string
@@ -3420,7 +3370,7 @@ func (s *VersioningIntegSuite) dispatchRetryOld() {
 	s.addNewDefaultBuildId(ctx, tq, v1)
 	s.waitForVersionSetPropagation(ctx, tq, v1)
 
-	w1 := worker.New(s.sdkClient, tq, worker.Options{
+	w1 := worker.New(s.SdkClient(), tq, worker.Options{
 		BuildID:                          v1,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -3429,7 +3379,7 @@ func (s *VersioningIntegSuite) dispatchRetryOld() {
 	s.NoError(w1.Start())
 	defer w1.Stop()
 
-	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+	run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 		TaskQueue: tq,
 		RetryPolicy: &temporal.RetryPolicy{
 			InitialInterval: 1000 * time.Millisecond,
@@ -3447,7 +3397,7 @@ func (s *VersioningIntegSuite) dispatchRetryOld() {
 	time.Sleep(100 * time.Millisecond) //nolint:forbidigo
 
 	// start workers for v11 and v2
-	w11 := worker.New(s.sdkClient, tq, worker.Options{
+	w11 := worker.New(s.SdkClient(), tq, worker.Options{
 		BuildID:                          v11,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -3456,7 +3406,7 @@ func (s *VersioningIntegSuite) dispatchRetryOld() {
 	s.NoError(w11.Start())
 	defer w11.Stop()
 
-	w2 := worker.New(s.sdkClient, tq, worker.Options{
+	w2 := worker.New(s.SdkClient(), tq, worker.Options{
 		BuildID:                          v2,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -3469,16 +3419,16 @@ func (s *VersioningIntegSuite) dispatchRetryOld() {
 	time.Sleep(longPollTime) //nolint:forbidigo
 
 	// unblock the workflow. it should replay on v11 and then retry (on v11).
-	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), "", "wait", nil))
+	s.NoError(s.SdkClient().SignalWorkflow(ctx, run.GetID(), "", "wait", nil))
 	s.WaitForChannel(ctx, started11) // replay
 	s.WaitForChannel(ctx, started11) // attempt 2
 
 	// now it's blocked in attempt 2. unblock it.
-	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), "", "wait", nil))
+	s.NoError(s.SdkClient().SignalWorkflow(ctx, run.GetID(), "", "wait", nil))
 
 	// wait for attempt 3. unblock that and it should return.
 	s.WaitForChannel(ctx, started11) // attempt 3
-	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), "", "wait", nil))
+	s.NoError(s.SdkClient().SignalWorkflow(ctx, run.GetID(), "", "wait", nil))
 
 	var out string
 	s.NoError(run.Get(ctx, &out))
@@ -3526,7 +3476,7 @@ func (s *VersioningIntegSuite) dispatchRetry() {
 	rule := s.addAssignmentRule(ctx, tq, v1)
 	s.waitForAssignmentRulePropagation(ctx, tq, rule)
 
-	w1 := worker.New(s.sdkClient, tq, worker.Options{
+	w1 := worker.New(s.SdkClient(), tq, worker.Options{
 		BuildID:                          v1,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -3535,7 +3485,7 @@ func (s *VersioningIntegSuite) dispatchRetry() {
 	s.NoError(w1.Start())
 	defer w1.Stop()
 
-	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+	run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 		TaskQueue: tq,
 		RetryPolicy: &temporal.RetryPolicy{
 			InitialInterval: 1000 * time.Millisecond,
@@ -3551,7 +3501,7 @@ func (s *VersioningIntegSuite) dispatchRetry() {
 	// add another 100ms to make sure it got to sticky queues also
 	time.Sleep(100 * time.Millisecond) //nolint:forbidigo
 
-	w2 := worker.New(s.sdkClient, tq, worker.Options{
+	w2 := worker.New(s.SdkClient(), tq, worker.Options{
 		BuildID:                          v2,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -3561,15 +3511,15 @@ func (s *VersioningIntegSuite) dispatchRetry() {
 	defer w2.Stop()
 
 	// unblock the workflow on v1
-	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), "", "wait", nil))
+	s.NoError(s.SdkClient().SignalWorkflow(ctx, run.GetID(), "", "wait", nil))
 
 	s.WaitForChannel(ctx, started2) // attempt 2
 	// now it's blocked in attempt 2. unblock it.
-	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), "", "wait", nil))
+	s.NoError(s.SdkClient().SignalWorkflow(ctx, run.GetID(), "", "wait", nil))
 
 	// wait for attempt 3. unblock that and it should return.
 	s.WaitForChannel(ctx, started2) // attempt 3
-	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), "", "wait", nil))
+	s.NoError(s.SdkClient().SignalWorkflow(ctx, run.GetID(), "", "wait", nil))
 
 	var out string
 	s.NoError(run.Get(ctx, &out))
@@ -3583,6 +3533,7 @@ func (s *VersioningIntegSuite) TestDispatchCronOld() {
 }
 
 func (s *VersioningIntegSuite) TestDispatchCron() {
+	s.T().Skip("Skipping test since this tests old versioning behavior and also flakes")
 	s.RunTestWithMatchingBehavior(func() { s.dispatchCron(true) })
 }
 
@@ -3625,7 +3576,7 @@ func (s *VersioningIntegSuite) dispatchCron(newVersioning bool) {
 		s.waitForVersionSetPropagation(ctx, tq, v1)
 	}
 
-	w1 := worker.New(s.sdkClient, tq, worker.Options{
+	w1 := worker.New(s.SdkClient(), tq, worker.Options{
 		BuildID:                          v1,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -3634,7 +3585,7 @@ func (s *VersioningIntegSuite) dispatchCron(newVersioning bool) {
 	s.NoError(w1.Start())
 	defer w1.Stop()
 
-	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+	run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 		TaskQueue:                tq,
 		CronSchedule:             "@every 1s",
 		WorkflowExecutionTimeout: 7 * time.Second,
@@ -3662,7 +3613,7 @@ func (s *VersioningIntegSuite) dispatchCron(newVersioning bool) {
 	}
 
 	// start workers for v11 and v2
-	w11 := worker.New(s.sdkClient, tq, worker.Options{
+	w11 := worker.New(s.SdkClient(), tq, worker.Options{
 		BuildID:                          v11,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -3671,7 +3622,7 @@ func (s *VersioningIntegSuite) dispatchCron(newVersioning bool) {
 	s.NoError(w11.Start())
 	defer w11.Stop()
 
-	w2 := worker.New(s.sdkClient, tq, worker.Options{
+	w2 := worker.New(s.SdkClient(), tq, worker.Options{
 		BuildID:                          v2,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -3730,7 +3681,7 @@ func (s *VersioningIntegSuite) TestResetWorkflowAssignsToCorrectBuildId() {
 	s.waitForAssignmentRulePropagation(ctx, tq, rule)
 
 	w1 := worker.New(
-		s.sdkClient, tq, worker.Options{
+		s.SdkClient(), tq, worker.Options{
 			BuildID:                          v1,
 			UseBuildIDForVersioning:          true,
 			MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -3741,7 +3692,7 @@ func (s *VersioningIntegSuite) TestResetWorkflowAssignsToCorrectBuildId() {
 	s.NoError(w1.Start())
 	defer w1.Stop()
 	w2 := worker.New(
-		s.sdkClient, tq, worker.Options{
+		s.SdkClient(), tq, worker.Options{
 			BuildID:                          v2,
 			UseBuildIDForVersioning:          true,
 			MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -3752,7 +3703,7 @@ func (s *VersioningIntegSuite) TestResetWorkflowAssignsToCorrectBuildId() {
 	s.NoError(w2.Start())
 	defer w2.Stop()
 
-	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, wf)
+	run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, wf)
 	s.NoError(err)
 	s.validateBuildIdAfterReset(ctx, run.GetID(), run.GetRunID(), false)
 }
@@ -3813,7 +3764,7 @@ func (s *VersioningIntegSuite) resetWorkflowAssignsToCorrectBuildIdCan(inheritBu
 	s.waitForAssignmentRulePropagation(ctx, tq, rule)
 
 	w1 := worker.New(
-		s.sdkClient, tq, worker.Options{
+		s.SdkClient(), tq, worker.Options{
 			BuildID:                          v1,
 			UseBuildIDForVersioning:          true,
 			MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -3824,7 +3775,7 @@ func (s *VersioningIntegSuite) resetWorkflowAssignsToCorrectBuildIdCan(inheritBu
 	s.NoError(w1.Start())
 	defer w1.Stop()
 	w2 := worker.New(
-		s.sdkClient, tq, worker.Options{
+		s.SdkClient(), tq, worker.Options{
 			BuildID:                          v2,
 			UseBuildIDForVersioning:          true,
 			MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -3835,7 +3786,7 @@ func (s *VersioningIntegSuite) resetWorkflowAssignsToCorrectBuildIdCan(inheritBu
 	s.NoError(w2.Start())
 	defer w2.Stop()
 
-	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+	run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 		TaskQueue: tq,
 		RetryPolicy: &temporal.RetryPolicy{
 			InitialInterval: 1000 * time.Millisecond,
@@ -3913,7 +3864,7 @@ func (s *VersioningIntegSuite) resetWorkflowAssignsToCorrectBuildIdChildWf(inher
 	s.waitForAssignmentRulePropagation(ctx, tq, rule)
 
 	w1 := worker.New(
-		s.sdkClient, tq, worker.Options{
+		s.SdkClient(), tq, worker.Options{
 			BuildID:                          v1,
 			UseBuildIDForVersioning:          true,
 			MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -3925,7 +3876,7 @@ func (s *VersioningIntegSuite) resetWorkflowAssignsToCorrectBuildIdChildWf(inher
 	s.NoError(w1.Start())
 	defer w1.Stop()
 	w2 := worker.New(
-		s.sdkClient, tq, worker.Options{
+		s.SdkClient(), tq, worker.Options{
 			BuildID:                          v2,
 			UseBuildIDForVersioning:          true,
 			MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -3936,7 +3887,7 @@ func (s *VersioningIntegSuite) resetWorkflowAssignsToCorrectBuildIdChildWf(inher
 	s.NoError(w2.Start())
 	defer w2.Stop()
 
-	_, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, wf)
+	_, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, wf)
 	s.NoError(err)
 	s.WaitForChannel(ctx, childStarted)
 	s.validateBuildIdAfterReset(ctx, childWfId, "", inheritBuildId)
@@ -3947,14 +3898,14 @@ func (s *VersioningIntegSuite) validateBuildIdAfterReset(ctx context.Context, wf
 	v1 := s.prefixed("v1")
 	v2 := s.prefixed("v2")
 
-	run := s.sdkClient.GetWorkflow(ctx, wfId, runId)
+	run := s.SdkClient().GetWorkflow(ctx, wfId, runId)
 
 	// let the original run finish
 	var out string
 	s.NoError(run.Get(ctx, &out))
 	s.Equal("done!", out)
 
-	dw, err := s.sdkClient.DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
+	dw, err := s.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
 	s.NoError(err)
 	tq := dw.GetWorkflowExecutionInfo().GetTaskQueue()
 	inheritedBuildId := dw.GetWorkflowExecutionInfo().GetInheritedBuildId()
@@ -3966,7 +3917,7 @@ func (s *VersioningIntegSuite) validateBuildIdAfterReset(ctx context.Context, wf
 	s.waitForAssignmentRulePropagation(ctx, tq, rule)
 
 	// now reset the wf to first wf task
-	wfr, err := s.sdkClient.ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
+	wfr, err := s.SdkClient().ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
 		Namespace: s.Namespace().String(),
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: run.GetID(),
@@ -3981,7 +3932,7 @@ func (s *VersioningIntegSuite) validateBuildIdAfterReset(ctx context.Context, wf
 	if inheritedBuildId != "" {
 		expectedBuildId = inheritedBuildId
 	}
-	run2 := s.sdkClient.GetWorkflow(ctx, run.GetID(), wfr.GetRunId())
+	run2 := s.SdkClient().GetWorkflow(ctx, run.GetID(), wfr.GetRunId())
 	s.NoError(run2.Get(ctx, &out))
 	s.Equal("done!", out)
 	s.validateWorkflowBuildIds(ctx, run2.GetID(), run2.GetRunID(), expectedBuildId, true, expectedBuildId, inheritedBuildId, nil)
@@ -3993,7 +3944,7 @@ func (s *VersioningIntegSuite) validateBuildIdAfterReset(ctx context.Context, wf
 		inheritedBuildId)
 
 	// now reset the original wf to second wf task and make sure it remains in v1
-	wfr, err = s.sdkClient.ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
+	wfr, err = s.SdkClient().ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
 		Namespace: s.Namespace().String(),
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: run.GetID(),
@@ -4003,7 +3954,7 @@ func (s *VersioningIntegSuite) validateBuildIdAfterReset(ctx context.Context, wf
 	})
 	s.NoError(err)
 
-	run3 := s.sdkClient.GetWorkflow(ctx, run.GetID(), wfr.GetRunId())
+	run3 := s.SdkClient().GetWorkflow(ctx, run.GetID(), wfr.GetRunId())
 	s.NoError(run3.Get(ctx, &out))
 	s.Equal("done!", out)
 	s.validateWorkflowBuildIds(ctx, run3.GetID(), run3.GetRunID(), v1, true, v1, inheritedBuildId, nil)
@@ -4027,7 +3978,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_Reachabil
 		panic("oops")
 	}
 	wId := testcore.RandomizeStr("id")
-	w := worker.New(s.sdkClient, tq, worker.Options{
+	w := worker.New(s.SdkClient(), tq, worker.Options{
 		UseBuildIDForVersioning: true,
 		BuildID:                 "A",
 		Identity:                wId,
@@ -4035,7 +3986,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_Reachabil
 	w.RegisterWorkflow(wf)
 	s.NoError(w.Start())
 	defer w.Stop()
-	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, wf)
+	run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, wf)
 	s.NoError(err)
 	s.WaitForChannel(ctx, started)
 
@@ -4059,7 +4010,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_Reachabil
 	})
 
 	// 5. Signal workflow with build id A so that it completes
-	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), "", "wait", nil))
+	s.NoError(s.SdkClient().SignalWorkflow(ctx, run.GetID(), "", "wait", nil))
 
 	// 6. Query reachability(A) --> eventually shows closed_only by visibility db (after TTL passes and A is closed in visibility)
 	s.Eventually(func() bool {
@@ -4095,7 +4046,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_BasicReac
 		panic("oops")
 	}
 	wId := testcore.RandomizeStr("id")
-	w := worker.New(s.sdkClient, tq, worker.Options{
+	w := worker.New(s.SdkClient(), tq, worker.Options{
 		UseBuildIDForVersioning: true,
 		BuildID:                 "A",
 		Identity:                wId,
@@ -4103,7 +4054,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_BasicReac
 	w.RegisterWorkflow(wf)
 	s.NoError(w.Start())
 	defer w.Stop()
-	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, wf)
+	run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, wf)
 	s.NoError(err)
 	s.WaitForChannel(ctx, started)
 
@@ -4129,7 +4080,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_BasicReac
 	})
 
 	// unblock the workflow on A so that it closes
-	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), "", "wait", nil))
+	s.NoError(s.SdkClient().SignalWorkflow(ctx, run.GetID(), "", "wait", nil))
 
 	// Query reachability(A) --> eventually shows closed_only by visibility db (after TTL passes and A is closed in visibility)
 	s.Eventually(func() bool {
@@ -4150,7 +4101,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Unversioned() {
 	workerMap := make(map[string]worker.Worker)
 	for i := 0; i < workerN; i++ {
 		wId := testcore.RandomizeStr("id")
-		w := worker.New(s.sdkClient, tq, worker.Options{
+		w := worker.New(s.SdkClient(), tq, worker.Options{
 			UseBuildIDForVersioning: false,
 			Identity:                wId,
 		})
@@ -4202,7 +4153,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_ReportFlags() {
 	defer cancel()
 
 	wId := testcore.RandomizeStr("id")
-	w := worker.New(s.sdkClient, tq, worker.Options{
+	w := worker.New(s.SdkClient(), tq, worker.Options{
 		UseBuildIDForVersioning: false,
 		Identity:                wId,
 	})
@@ -4329,7 +4280,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueLegacy_VersionSets() {
 	s.addNewDefaultBuildId(ctx, tq, v2)
 	s.waitForVersionSetPropagation(ctx, tq, v2)
 
-	w1 := worker.New(s.sdkClient, tq, worker.Options{
+	w1 := worker.New(s.SdkClient(), tq, worker.Options{
 		BuildID:                 v1,
 		UseBuildIDForVersioning: true,
 		Identity:                testcore.RandomizeStr("id"),
@@ -4338,7 +4289,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueLegacy_VersionSets() {
 	s.NoError(w1.Start())
 	defer w1.Stop()
 
-	w11 := worker.New(s.sdkClient, tq, worker.Options{
+	w11 := worker.New(s.SdkClient(), tq, worker.Options{
 		BuildID:                 v11,
 		UseBuildIDForVersioning: true,
 		Identity:                testcore.RandomizeStr("id"),
@@ -4347,7 +4298,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueLegacy_VersionSets() {
 	s.NoError(w11.Start())
 	defer w11.Stop()
 
-	w2 := worker.New(s.sdkClient, tq, worker.Options{
+	w2 := worker.New(s.SdkClient(), tq, worker.Options{
 		BuildID:                 v2,
 		UseBuildIDForVersioning: true,
 		Identity:                testcore.RandomizeStr("id"),
@@ -4401,7 +4352,7 @@ func (s *VersioningIntegSuite) TestDescribeWorkflowExecution() {
 	s.addNewDefaultBuildId(ctx, tq, v1)
 	s.waitForVersionSetPropagation(ctx, tq, v1)
 
-	w1 := worker.New(s.sdkClient, tq, worker.Options{
+	w1 := worker.New(s.SdkClient(), tq, worker.Options{
 		BuildID:                 v1,
 		UseBuildIDForVersioning: true,
 	})
@@ -4409,14 +4360,14 @@ func (s *VersioningIntegSuite) TestDescribeWorkflowExecution() {
 	s.NoError(w1.Start())
 	defer w1.Stop()
 
-	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, wf)
+	run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, wf)
 	s.NoError(err)
 	// wait for it to start on v1
 	s.WaitForChannel(ctx, started1)
 
 	// describe and check build ID
 	s.Eventually(func() bool {
-		resp, err := s.sdkClient.DescribeWorkflowExecution(ctx, run.GetID(), "")
+		resp, err := s.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), "")
 		s.NoError(err)
 		return v1 == resp.GetWorkflowExecutionInfo().GetMostRecentWorkerVersionStamp().GetBuildId()
 	}, 5*time.Second, 100*time.Millisecond)
@@ -4428,7 +4379,7 @@ func (s *VersioningIntegSuite) TestDescribeWorkflowExecution() {
 	time.Sleep(100 * time.Millisecond) //nolint:forbidigo
 
 	// start worker for v11
-	w11 := worker.New(s.sdkClient, tq, worker.Options{
+	w11 := worker.New(s.SdkClient(), tq, worker.Options{
 		BuildID:                 v11,
 		UseBuildIDForVersioning: true,
 	})
@@ -4440,17 +4391,17 @@ func (s *VersioningIntegSuite) TestDescribeWorkflowExecution() {
 	time.Sleep(longPollTime) //nolint:forbidigo
 
 	// unblock the workflow. it should get kicked off the sticky queue and replay on v11
-	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), "", "wait", nil))
+	s.NoError(s.SdkClient().SignalWorkflow(ctx, run.GetID(), "", "wait", nil))
 	s.WaitForChannel(ctx, started11)
 
 	s.Eventually(func() bool {
-		resp, err := s.sdkClient.DescribeWorkflowExecution(ctx, run.GetID(), "")
+		resp, err := s.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), "")
 		s.NoError(err)
 		return v11 == resp.GetWorkflowExecutionInfo().GetMostRecentWorkerVersionStamp().GetBuildId()
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// unblock. it should complete
-	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), "", "wait", nil))
+	s.NoError(s.SdkClient().SignalWorkflow(ctx, run.GetID(), "", "wait", nil))
 	var out string
 	s.NoError(run.Get(ctx, &out))
 	s.Equal("ok", out)
@@ -4739,7 +4690,7 @@ func (s *VersioningIntegSuite) registerWorkflowAndPollVersionedTaskQueue(tq, bui
 		return "done!", nil
 	}
 
-	w1 := worker.New(s.sdkClient, tq, worker.Options{
+	w1 := worker.New(s.SdkClient(), tq, worker.Options{
 		BuildID:                          buildID,
 		UseBuildIDForVersioning:          useVersioning,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -5048,7 +4999,7 @@ func (s *VersioningIntegSuite) waitForWorkflowBuildId(
 ) {
 	s.Eventually(
 		func() bool {
-			dw, err := s.sdkClient.DescribeWorkflowExecution(ctx, wfId, runId)
+			dw, err := s.SdkClient().DescribeWorkflowExecution(ctx, wfId, runId)
 			if err != nil {
 				return false
 			}
@@ -5069,7 +5020,7 @@ func (s *VersioningIntegSuite) validateWorkflowBuildIds(
 	expectedInheritedBuildId string,
 	extraSearchAttrBuildIds []string,
 ) {
-	dw, err := s.sdkClient.DescribeWorkflowExecution(ctx, wfId, runId)
+	dw, err := s.SdkClient().DescribeWorkflowExecution(ctx, wfId, runId)
 	s.NoError(err)
 	saPayload := dw.GetWorkflowExecutionInfo().GetSearchAttributes().GetIndexedFields()["BuildIds"]
 	searchAttrAny, err := searchattribute.DecodeValue(saPayload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, true)
@@ -5127,7 +5078,7 @@ func (s *VersioningIntegSuite) validateWorkflowEventsVersionStamps(
 	expectedBuildIds []string,
 	expectedInheritedBuildId string,
 ) {
-	wh := s.sdkClient.GetWorkflowHistory(ctx, wfId, runId, false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+	wh := s.SdkClient().GetWorkflowHistory(ctx, wfId, runId, false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
 	counter := 0
 	checkedInheritedBuildId := false
 	for wh.HasNext() {

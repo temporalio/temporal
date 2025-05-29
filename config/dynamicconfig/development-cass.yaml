@@ -22,10 +22,10 @@
 #    MaximumIntervalCoefficient: 100.0
 #    BackoffCoefficient: 2.0
 #    MaximumAttempts: 0
-#system.secondaryVisibilityWritingMode:
+# system.secondaryVisibilityWritingMode:
 #  - value: "off"
 #    constraints: {}
-#system.enableReadFromSecondaryVisibility:
+# system.enableReadFromSecondaryVisibility:
 #  - value: false
 #    constraints: {}
 #system.enableParentClosePolicyWorker:
@@ -58,3 +58,7 @@ history.ReplicationEnableUpdateWithNewTaskMerge:
   - value: true
 history.hostLevelCacheMaxSize:
   - value: 8192
+history.enableTransitionHistory:
+  - value: true
+frontend.activityAPIsEnabled:
+  - value: true

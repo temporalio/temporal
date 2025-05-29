@@ -1,25 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 syntax = "proto3";
 
 package temporal.server.api.persistence.v1;
@@ -44,6 +22,7 @@ import "temporal/server/api/enums/v1/workflow.proto";
 import "temporal/server/api/enums/v1/task.proto";
 import "temporal/server/api/enums/v1/workflow_task_type.proto";
 import "temporal/server/api/history/v1/message.proto";
+import "temporal/server/api/persistence/v1/chasm.proto";
 import "temporal/server/api/persistence/v1/queues.proto";
 import "temporal/server/api/persistence/v1/hsm.proto";
 import "temporal/server/api/persistence/v1/update.proto";
@@ -90,7 +69,7 @@ message WorkflowExecutionInfo {
     reserved 14;
     reserved 15;
     reserved 16;
-    int64 last_event_task_id = 17;
+    int64 last_running_clock = 17;
     int64 last_first_event_id = 18;
     int64 last_completed_workflow_task_started_event_id = 19;
     // Deprecated. use `WorkflowExecutionState.start_time`
@@ -313,6 +292,7 @@ message WorkflowExecutionState {
 
 message RequestIDInfo {
     temporal.api.enums.v1.EventType event_type = 1;
+    int64 event_id = 2;
 }
 
 // transfer column
@@ -341,6 +321,9 @@ message TransferTaskInfo {
     }
     oneof task_details {
         CloseExecutionTaskDetails close_execution_task_details = 16;
+
+        // If the task addresses a CHASM component, this field will be set.
+        ChasmTaskInfo chasm_task_info = 18;
     }
     // Stamp represents the version of the activity internal state, for which the timer task was created.
     // It monotonically increments when the activity options are changed.
@@ -375,6 +358,8 @@ message ReplicationTaskInfo {
     // doesn't need to be disabled.
     repeated ReplicationTaskInfo task_equivalents = 20;
     history.v1.VersionHistoryItem last_version_history_item = 21;
+    bool is_first_task = 22;
+    repeated string target_clusters= 23;
 }
 
 // visibility_task_data column
@@ -422,6 +407,11 @@ message TimerTaskInfo {
     // It monotonically increments when the activity options are changed.
     // It is used to check if activity related tasks are still relevant to  their corresponding state machine.
     int32 stamp = 16;
+
+    oneof task_details {
+        // If the task addresses a CHASM component, this field will be set.
+        ChasmTaskInfo chasm_task_info = 17;
+    }
 }
 
 message ArchivalTaskInfo {
@@ -446,8 +436,14 @@ message OutboundTaskInfo {
     // Destination of this task (e.g. protocol+host+port for callbacks).
     // Outbound tasks are grouped by this field (and the namespace ID) when scheduling.
     string destination = 7;
-    // If task addresses a sub-statemachine (e.g. callback), this field will be set.
-    StateMachineTaskInfo state_machine_info = 8;
+
+    oneof task_details {
+        // If task addresses a sub-statemachine (e.g. callback), this field will be set.
+        StateMachineTaskInfo state_machine_info = 8;
+
+        // If the task addresses a CHASM component, this field will be set.
+        ChasmTaskInfo chasm_task_info = 9;
+    }
 }
 
 message NexusInvocationTaskInfo {
@@ -460,6 +456,7 @@ message NexusCancelationTaskInfo {
 
 // activity_map column
 message ActivityInfo {
+
     int64 version = 1;
     int64 scheduled_event_batch_id = 2;
     reserved 3;
@@ -555,11 +552,45 @@ message ActivityInfo {
 
     // The deployment this activity was dispatched to most recently. Present only if the activity
     // was dispatched to a versioned worker.
+    // Deprecated. Clean up with versioning-3.1. [cleanup-old-wv]
     string last_worker_deployment_version = 44;
+
+    // The deployment version this activity was dispatched to most recently. Present only if the activity
+    // was dispatched to a versioned worker.
+    temporal.api.deployment.v1.WorkerDeploymentVersion last_deployment_version = 49;
+
 
     // Priority metadata. If this message is not present, or any fields are not
     // present, they inherit the values from the workflow.
     temporal.api.common.v1.Priority priority = 45;
+
+    message PauseInfo {
+        // The time when the activity was paused.
+        google.protobuf.Timestamp pause_time = 1;
+
+        message Manual {
+            // The identity of the actor that paused the activity.
+            string identity = 1;
+            // Reason for pausing the activity.
+            string reason = 2;
+        }
+
+        oneof paused_by {
+            // activity was paused by the manual intervention
+            Manual manual = 2;
+
+            // Id of the rule that paused the activity.
+            string rule_id = 3;
+        }
+    }
+
+    PauseInfo pause_info = 46;
+
+    // set to true if there was an activity reset while activity is still running on the worker
+    bool activity_reset = 47;
+
+    // set to true if reset heartbeat flag was set with an activity reset
+    bool reset_heartbeats = 48;
 }
 
 // timer_map column
@@ -652,6 +683,8 @@ message Callback {
         Nexus nexus = 2;
         HSM hsm = 3;
     }
+
+    repeated temporal.api.common.v1.Link links = 100;
 }
 
 message HSMCompletionCallbackArg {
@@ -693,6 +726,9 @@ message CallbackInfo {
     temporal.api.failure.v1.Failure last_attempt_failure = 7;
     // The time when the next attempt is scheduled.
     google.protobuf.Timestamp next_attempt_schedule_time = 8;
+
+    // Request ID that added the callback.
+    string request_id = 9;
 }
 
 // NexusOperationInfo contains the state of a nexus operation.
@@ -762,6 +798,9 @@ message NexusOperationCancellationInfo {
     temporal.api.failure.v1.Failure last_attempt_failure = 5;
     // The time when the next attempt is scheduled.
     google.protobuf.Timestamp next_attempt_schedule_time = 6;
+
+    // The event ID of the NEXUS_OPERATION_CANCEL_REQUESTED event for this cancelation.
+    int64 requested_event_id = 7;
 }
 
 // ResetChildInfo contains the state and actions to be performed on children when a parent workflow resumes after reset.

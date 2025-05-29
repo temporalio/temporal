@@ -1,31 +1,8 @@
-// The MIT License
-//
-// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package replication
 
 import (
 	"context"
 	"errors"
-	"fmt"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -45,7 +22,6 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/service/history/consts"
-	"go.temporal.io/server/service/history/workflow"
 )
 
 type (
@@ -144,13 +120,13 @@ func (e *ExecutableVerifyVersionedTransitionTask) Execute() error {
 	if len(transitionHistory) == 0 {
 		return nil
 	}
-	err = workflow.TransitionHistoryStalenessCheck(transitionHistory, e.ReplicationTask().VersionedTransition)
+	err = transitionhistory.StalenessCheck(transitionHistory, e.ReplicationTask().VersionedTransition)
 
 	// case 1: VersionedTransition is up-to-date on current mutable state
 	if err == nil {
 		if ms.GetNextEventId() < e.taskAttr.NextEventId {
-			return serviceerror.NewDataLoss(fmt.Sprintf("Workflow event missed. NamespaceId: %v, workflowId: %v, runId: %v, expected last eventId: %v, versionedTransition: %v",
-				e.NamespaceID, e.WorkflowID, e.RunID, e.taskAttr.NextEventId-1, e.ReplicationTask().VersionedTransition))
+			return serviceerror.NewDataLossf("Workflow event missed. NamespaceId: %v, workflowId: %v, runId: %v, expected last eventId: %v, versionedTransition: %v",
+				e.NamespaceID, e.WorkflowID, e.RunID, e.taskAttr.NextEventId-1, e.ReplicationTask().VersionedTransition)
 		}
 		return e.verifyNewRunExist(ctx)
 	}
@@ -169,6 +145,11 @@ func (e *ExecutableVerifyVersionedTransitionTask) Execute() error {
 	// case 3: state transition is on non-current branch, but no event to verify
 	if e.taskAttr.NextEventId == common2.EmptyEventID {
 		return e.verifyNewRunExist(ctx)
+	}
+
+	if len(e.taskAttr.EventVersionHistory) == 0 {
+		// no events to verify
+		return nil
 	}
 
 	targetHistory := &historyspb.VersionHistory{
@@ -213,8 +194,8 @@ func (e *ExecutableVerifyVersionedTransitionTask) verifyNewRunExist(ctx context.
 	case nil:
 		return nil
 	case *serviceerror.NotFound:
-		return serviceerror.NewDataLoss(fmt.Sprintf("workflow new run not found. NamespaceId: %v, workflowId: %v, runId: %v, newRunId: %v",
-			e.NamespaceID, e.WorkflowID, e.RunID, e.taskAttr.NewRunId))
+		return serviceerror.NewDataLossf("workflow new run not found. NamespaceId: %v, workflowId: %v, runId: %v, newRunId: %v",
+			e.NamespaceID, e.WorkflowID, e.RunID, e.taskAttr.NewRunId)
 	default:
 		return err
 	}

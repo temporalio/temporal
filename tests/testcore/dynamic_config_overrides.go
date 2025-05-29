@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package testcore
 
 import (
@@ -29,6 +5,8 @@ import (
 
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/persistence/visibility"
+	"go.temporal.io/server/components/callbacks"
+	"go.temporal.io/server/components/nexusoperations"
 )
 
 var (
@@ -44,9 +22,9 @@ var (
 	// NOTE1: settings which are not really dynamic (requires server restart to take effect) can't be overridden on test level,
 	//        i.e., must be overridden globally (1) or per test suite (2).
 	// NOTE2: per test overrides change the value for the cluster, therefore, it affects not only a specific test, but
-	//        all tests for that suite. The automatic cleanup reverts to the  previous value and tests don't affect each other.
+	//        all tests for that suite. The automatic cleanup reverts to the previous value and tests don't affect each other.
 	//        But that means tests in the same suite can't be run in parallel. This is not a problem because testify
-	//        doesn't allow parallel execution of tests in the same suite anyway. If one day, it will be allowed,
+	//        doesn't allow parallel execution of tests in the same suite anyway. If one day, it is allowed,
 	//        unique namespaces with overrides per namespace should be used for tests that require overrides.
 	dynamicConfigOverrides = map[dynamicconfig.Key]any{
 		dynamicconfig.FrontendRPS.Key():                                         3000,
@@ -70,9 +48,25 @@ var (
 		// Better to read through in tests than add artificial sleeps (which is what we previously had).
 		dynamicconfig.ForceSearchAttributesCacheRefreshOnRead.Key(): true,
 
+		// Enable raw history for functional tests.
+		// TODO (prathyush): remove this after setting it to true by default.
+		dynamicconfig.SendRawHistoryBetweenInternalServices.Key(): true,
+
 		dynamicconfig.RetentionTimerJitterDuration.Key():        time.Second,
 		dynamicconfig.EnableEagerWorkflowStart.Key():            true,
 		dynamicconfig.FrontendEnableExecuteMultiOperation.Key(): true,
 		dynamicconfig.ActivityAPIsEnabled.Key():                 true,
+		dynamicconfig.EnableTransitionHistory.Key():             true,
+
+		dynamicconfig.NumPendingChildExecutionsLimitError.Key():             ClientSuiteLimit,
+		dynamicconfig.NumPendingActivitiesLimitError.Key():                  ClientSuiteLimit,
+		dynamicconfig.NumPendingCancelRequestsLimitError.Key():              ClientSuiteLimit,
+		dynamicconfig.NumPendingSignalsLimitError.Key():                     ClientSuiteLimit,
+		dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace.Key(): ClientSuiteLimit,
+		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs.Key():          true,
+		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs.Key():      true,
+		dynamicconfig.RefreshNexusEndpointsMinWait.Key():                    1 * time.Millisecond,
+		nexusoperations.RecordCancelRequestCompletionEvents.Key():           true,
+		callbacks.AllowedAddresses.Key():                                    []any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
 	}
 )

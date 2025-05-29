@@ -1,28 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package matching
 
 import (
@@ -30,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -43,6 +19,7 @@ import (
 	"github.com/uber-go/tally/v4"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	querypb "go.temporal.io/api/query/v1"
@@ -50,6 +27,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	clockspb "go.temporal.io/server/api/clock/v1"
+	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -1010,6 +988,11 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	s.matchingEngine.config.MinTaskThrottlingBurstSize = dynamicconfig.GetIntPropertyFnFilteredByTaskQueue(0)
 	s.matchingEngine.config.RangeSize = 30 // override to low number for the test
 
+	// Overriding the dynamic config so that the rate-limiter has a refresh rate of 0. By default, the rate-limiter has a refresh rate of 1 minute which is too long for this test.
+	s.matchingEngine.config.RateLimiterRefreshInterval = 0
+	s.matchingEngine.config.AdminNamespaceToPartitionDispatchRate = dynamicconfig.GetFloatPropertyFnFilteredByNamespace(25000)
+	s.matchingEngine.config.AdminNamespaceTaskqueueToPartitionDispatchRate = dynamicconfig.GetFloatPropertyFnFilteredByTaskQueue(25000)
+
 	const initialRangeID = 102
 	namespaceId := uuid.New()
 	tl := "makeToast"
@@ -1017,19 +1000,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	s.taskManager.getQueueManagerByKey(dbq).rangeID = initialRangeID
 
 	mgr := s.newPartitionManager(dbq.partition, s.matchingEngine.config)
-	mgrImpl, ok := mgr.(*taskQueuePartitionManagerImpl).defaultQueue.(*physicalTaskQueueManagerImpl)
-	s.True(ok)
-	mgrImpl.oldMatcher.rateLimiter = quotas.NewRateLimiter(
-		defaultTaskDispatchRPS,
-		defaultTaskDispatchRPS,
-	)
-	mgrImpl.oldMatcher.dynamicRateBurst = &dynamicRateBurstWrapper{
-		MutableRateBurst: quotas.NewMutableRateBurst(
-			defaultTaskDispatchRPS,
-			defaultTaskDispatchRPS,
-		),
-		RateLimiterImpl: mgrImpl.oldMatcher.rateLimiter.(*quotas.RateLimiterImpl),
-	}
+
 	s.matchingEngine.updateTaskQueue(dbq.partition, mgr)
 	mgr.Start()
 
@@ -1178,6 +1149,195 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	s.NotNil(descResp.DescResponse.GetTaskQueueStatus())
 	numPartitions := float64(s.matchingEngine.config.NumTaskqueueWritePartitions("", "", tlType))
 	s.True(descResp.DescResponse.GetTaskQueueStatus().GetRatePerSecond()*numPartitions >= (defaultTaskDispatchRPS - 1))
+}
+
+func (s *matchingEngineSuite) TestRateLimiterAcrossVersionedQueues() {
+	/*
+		1. Start a versioned poller with maxTasksPerSecond = defaultTaskDispatchRPS
+		2. Start another versioned poller, polling a different version, maxTasksPerSecond = 0
+		3. Add tasks to both these versioned queues and notice no dispatch of tasks.
+		4. Restart the pollers with maxTasksPerSecond = defaultTaskDispatchRPS
+		5. Verify that both the pollers have received tasks.
+	*/
+
+	if s.newMatcher {
+		s.T().Skip("not supported by new matcher")
+	}
+	s.logger.Expect(testlogger.Error, "unexpected error dispatching task")
+
+	scope := tally.NewTestScope("test", nil)
+	s.matchingEngine.metricsHandler = metrics.NewTallyMetricsHandler(metrics.ClientConfig{}, scope).WithTags(metrics.ServiceNameTag(primitives.MatchingService))
+
+	// Set a short long poll expiration so that the pollers don't wait too long for tasks
+	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(5 * time.Second)
+	s.matchingEngine.config.MinTaskThrottlingBurstSize = dynamicconfig.GetIntPropertyFnFilteredByTaskQueue(0)
+	// Disable deployment versions since a nil DeploymentClient is used in unit tests
+	s.matchingEngine.config.EnableDeploymentVersions = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)
+
+	// Overriding the dynamic config so that the rate-limiter has a refresh rate of 0. By default, the rate-limiter has a refresh rate of 1 minute which is too long for this test.
+	s.matchingEngine.config.RateLimiterRefreshInterval = 0
+
+	tl := "makeToast"
+	dbq := newUnversionedRootQueueKey(namespaceId, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+	s.taskManager.getQueueManagerByKey(dbq).rangeID = initialRangeID
+
+	runID := uuid.NewRandom().String()
+	workflowID := "workflow1"
+	workflowExecution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
+	deploymentName := "test-deployment"
+
+	mgr := s.newPartitionManager(dbq.partition, s.matchingEngine.config)
+	tqPTM, ok := mgr.(*taskQueuePartitionManagerImpl)
+	s.True(ok)
+
+	s.matchingEngine.updateTaskQueue(dbq.partition, mgr)
+	mgr.Start()
+
+	taskQueue := &taskqueuepb.TaskQueue{
+		Name: tl,
+		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+	}
+	activityTypeName := "activity1"
+	activityID := "activityId1"
+	activityType := &commonpb.ActivityType{Name: activityTypeName}
+	activityInput := payloads.EncodeString("Activity1 Input")
+
+	identity := "nobody"
+
+	s.mockHistoryClient.EXPECT().RecordActivityTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, taskRequest *historyservice.RecordActivityTaskStartedRequest, arg2 ...interface{}) (*historyservice.RecordActivityTaskStartedResponse, error) {
+			s.logger.Debug("Mock Received RecordActivityTaskStartedRequest")
+			return &historyservice.RecordActivityTaskStartedResponse{
+				Attempt: 1,
+				ScheduledEvent: newActivityTaskScheduledEvent(taskRequest.ScheduledEventId, 0,
+					&commandpb.ScheduleActivityTaskCommandAttributes{
+						ActivityId: activityID,
+						TaskQueue: &taskqueuepb.TaskQueue{
+							Name: taskQueue.Name,
+							Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+						},
+						ActivityType:           activityType,
+						Input:                  activityInput,
+						ScheduleToStartTimeout: durationpb.New(1 * time.Second),
+						ScheduleToCloseTimeout: durationpb.New(2 * time.Second),
+						StartToCloseTimeout:    durationpb.New(1 * time.Second),
+						HeartbeatTimeout:       durationpb.New(1 * time.Second),
+					}),
+			}, nil
+		}).Times(2)
+
+	pollFunc := func(maxDispatch float64, buildID string) (*matchingservice.PollActivityTaskQueueResponse, error) {
+		return s.matchingEngine.PollActivityTaskQueue(context.Background(), &matchingservice.PollActivityTaskQueueRequest{
+			NamespaceId: namespaceId,
+			PollRequest: &workflowservice.PollActivityTaskQueueRequest{
+				TaskQueue:         taskQueue,
+				Identity:          identity,
+				TaskQueueMetadata: &taskqueuepb.TaskQueueMetadata{MaxTasksPerSecond: &wrapperspb.DoubleValue{Value: maxDispatch}},
+				DeploymentOptions: &deploymentpb.WorkerDeploymentOptions{
+					DeploymentName:       deploymentName,
+					BuildId:              buildID,
+					WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_VERSIONED,
+				},
+			},
+		}, metrics.NoopMetricsHandler)
+	}
+
+	const taskCount = 2
+	resultChan := make(chan *matchingservice.PollActivityTaskQueueResponse)
+
+	for i := int64(0); i < taskCount; i++ {
+		maxDispatch := defaultTaskDispatchRPS
+		if i == 1 {
+			maxDispatch = 0 // second poller overrides the dispatch rate to 0
+		}
+		go func() {
+			result, _ := pollFunc(float64(maxDispatch), strconv.FormatInt(int64(i), 10))
+			resultChan <- result
+		}()
+
+		//nolint:forbidigo
+		time.Sleep(10 * time.Millisecond) // Delay to allow the second poller coming in a little later.
+	}
+
+	// Update user data of the task queue so that the activity tasks generated are not treated as independent activities.
+	// Independent activity tasks are those if the task queue the task is scheduled on is not part of the workflow's pinned
+	// deployment.
+	updateOptions := UserDataUpdateOptions{Source: "SyncDeploymentUserData"}
+	_, err := tqPTM.GetUserDataManager().UpdateUserData(context.Background(), updateOptions, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
+
+		newData := &persistencespb.TaskQueueUserData{
+			PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+				int32(enumspb.TASK_QUEUE_TYPE_ACTIVITY): {
+					DeploymentData: &persistencespb.DeploymentData{
+						Versions: []*deploymentspb.DeploymentVersionData{
+							{
+								Version: &deploymentspb.WorkerDeploymentVersion{
+									DeploymentName: deploymentName,
+									BuildId:        strconv.FormatInt(int64(0), 10),
+								},
+								RoutingUpdateTime: timestamppb.Now(),
+								CurrentSinceTime:  timestamppb.Now(),
+							},
+							{
+								Version: &deploymentspb.WorkerDeploymentVersion{
+									DeploymentName: deploymentName,
+									BuildId:        strconv.FormatInt(int64(1), 10),
+								},
+								RoutingUpdateTime: timestamppb.Now(),
+								RampingSinceTime:  timestamppb.Now(),
+							},
+						},
+					},
+				},
+			},
+		}
+		return newData, true, nil
+	})
+	s.NoError(err)
+
+	for i := int64(0); i < taskCount; i++ {
+		scheduledEventID := i * 3
+		addRequest := matchingservice.AddActivityTaskRequest{
+			NamespaceId:            namespaceId,
+			Execution:              workflowExecution,
+			ScheduledEventId:       scheduledEventID,
+			TaskQueue:              taskQueue,
+			ScheduleToStartTimeout: timestamp.DurationFromSeconds(100),
+			VersionDirective: &taskqueuespb.TaskVersionDirective{
+				Behavior: enumspb.VERSIONING_BEHAVIOR_PINNED,
+				DeploymentVersion: &deploymentspb.WorkerDeploymentVersion{
+					DeploymentName: deploymentName,
+					BuildId:        strconv.FormatInt(int64(i), 10),
+				},
+			},
+		}
+
+		_, _, err = s.matchingEngine.AddActivityTask(context.Background(), &addRequest)
+		s.NoError(err)
+	}
+
+	// Verifying that both the pollers don't receive any tasks since the overall dispatch rate has been set to 0
+	for i := int64(0); i < taskCount; i++ {
+		receivedResult := <-resultChan
+		s.Nil(receivedResult.TaskToken)
+	}
+
+	// Restart the pollers with maxTasksPerSecond = defaultTaskDispatchRPS so that they can receive tasks
+	maxDispatch := float64(defaultTaskDispatchRPS)
+	for i := int64(0); i < taskCount; i++ {
+		go func() {
+			result, _ := pollFunc(maxDispatch, strconv.FormatInt(int64(i), 10))
+			resultChan <- result
+		}()
+	}
+
+	// Verifying that both the pollers receive the tasks which were added previously
+	for i := int64(0); i < taskCount; i++ {
+		receivedResult := <-resultChan
+
+		s.NotNil(receivedResult)
+		s.NotNil(receivedResult.TaskToken)
+	}
 }
 
 func (s *matchingEngineSuite) TestConcurrentPublishConsumeActivities() {
@@ -3165,7 +3325,7 @@ func (s *matchingEngineSuite) resetBacklogCounter(numWorkers int, taskCount int,
 
 	s.EqualValues(0, s.taskManager.getTaskCount(ptq))
 	s.EventuallyWithT(func(collect *assert.CollectT) {
-		assert.Equal(collect, int64(0), pqMgr.backlogMgr.TotalApproximateBacklogCount())
+		require.Equal(collect, int64(0), pqMgr.backlogMgr.TotalApproximateBacklogCount())
 	}, 4*time.Second, 10*time.Millisecond, "backlog counter should have been reset")
 }
 
@@ -3310,6 +3470,75 @@ func (s *matchingEngineSuite) TestNotifyNexusEndpointsOwnershipLost() {
 	s.matchingEngine.notifyNexusEndpointsOwnershipChange()
 	<-ch
 	// If the channel is unblocked the test passed.
+}
+
+func (s *matchingEngineSuite) TestPollActivityTaskQueueWithRateLimiterError() {
+	mockRateLimiter := quotas.NewMockRequestRateLimiter(s.controller)
+	rateLimiterErr := serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT, "rate limit exceeded")
+	s.matchingEngine.rateLimiter = mockRateLimiter
+
+	namespaceId := uuid.New()
+	tl := "queue"
+	taskQueue := &taskqueuepb.TaskQueue{Name: "queue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+
+	addRequest := matchingservice.AddActivityTaskRequest{
+		NamespaceId:      namespaceId,
+		Execution:        &commonpb.WorkflowExecution{WorkflowId: "workflowID", RunId: uuid.NewRandom().String()},
+		ScheduledEventId: int64(5),
+		TaskQueue:        taskQueue,
+	}
+
+	_, _, err := s.matchingEngine.AddActivityTask(context.Background(), &addRequest)
+	s.NoError(err)
+	s.EqualValues(s.taskManager.getTaskCount(newUnversionedRootQueueKey(namespaceId, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)), 1)
+
+	mockRateLimiter.EXPECT().
+		Wait(gomock.Any(), gomock.Any()).
+		Return(rateLimiterErr).Times(1)
+	s.matchingEngine.rateLimiter = mockRateLimiter
+
+	_, err = s.matchingEngine.PollActivityTaskQueue(context.Background(), &matchingservice.PollActivityTaskQueueRequest{
+		NamespaceId: namespaceId,
+		PollRequest: &workflowservice.PollActivityTaskQueueRequest{
+			TaskQueue: taskQueue,
+			Identity:  "identity",
+		},
+	}, metrics.NoopMetricsHandler)
+	s.ErrorIs(err, rateLimiterErr)
+}
+
+func (s *matchingEngineSuite) TestPollWorkflowTaskQueueWithRateLimiterError() {
+	mockRateLimiter := quotas.NewMockRequestRateLimiter(s.controller)
+	rateLimiterErr := serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT, "rate limit exceeded")
+
+	namespaceId := uuid.New()
+	tl := "queue"
+	taskQueue := &taskqueuepb.TaskQueue{Name: "queue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+
+	addRequest := matchingservice.AddWorkflowTaskRequest{
+		NamespaceId:      namespaceId,
+		Execution:        &commonpb.WorkflowExecution{WorkflowId: "workflowID", RunId: uuid.NewRandom().String()},
+		ScheduledEventId: int64(5),
+		TaskQueue:        taskQueue,
+	}
+
+	_, _, err := s.matchingEngine.AddWorkflowTask(context.Background(), &addRequest)
+	s.NoError(err)
+	s.EqualValues(s.taskManager.getTaskCount(newUnversionedRootQueueKey(namespaceId, tl, enumspb.TASK_QUEUE_TYPE_WORKFLOW)), 1)
+
+	mockRateLimiter.EXPECT().
+		Wait(gomock.Any(), gomock.Any()).
+		Return(rateLimiterErr).Times(1)
+	s.matchingEngine.rateLimiter = mockRateLimiter
+
+	_, err = s.matchingEngine.PollWorkflowTaskQueue(context.Background(), &matchingservice.PollWorkflowTaskQueueRequest{
+		NamespaceId: namespaceId,
+		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
+			TaskQueue: taskQueue,
+			Identity:  "identity",
+		},
+	}, metrics.NoopMetricsHandler)
+	s.ErrorIs(err, rateLimiterErr)
 }
 
 func (s *matchingEngineSuite) setupRecordActivityTaskStartedMock(tlName string) {
@@ -3612,7 +3841,7 @@ func (m *testTaskManager) CreateTasks(
 	}
 
 	if m.dbServiceError {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("CreateTasks operation failed during serialization. Error : %v", errors.New("failure")))
+		return nil, serviceerror.NewUnavailablef("CreateTasks operation failed during serialization. Error : %v", errors.New("failure"))
 	}
 
 	tlm := m.getQueueManager(taskQueue, namespaceId, taskType)
@@ -3662,7 +3891,7 @@ func (m *testTaskManager) GetTasks(
 	m.logger.Debug("testTaskManager.GetTasks", tag.MinLevel(request.InclusiveMinTaskID), tag.MaxLevel(request.ExclusiveMaxTaskID))
 
 	if m.generateErrorRandomly() {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetTasks operation failed"))
+		return nil, serviceerror.NewUnavailablef("GetTasks operation failed")
 	}
 
 	tlm := m.getQueueManager(request.TaskQueue, request.NamespaceID, request.TaskType)

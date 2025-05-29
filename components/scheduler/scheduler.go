@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package scheduler
 
 import (
@@ -32,6 +8,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/worker/scheduler"
 	"google.golang.org/protobuf/proto"
@@ -41,7 +18,7 @@ import (
 type (
 	// Scheduler is a top-level state machine compromised of 3 sub state machines:
 	// - Generator: buffers actions according to the schedule specification
-	// - Executor: executes buffered actions
+	// - Invoker: executes buffered actions
 	// - Backfiller: buffers actions according to requested backfills
 	//
 	// A running Scheduler will always have exactly one of each of the above sub state
@@ -69,6 +46,9 @@ const (
 
 	// The top-level scheduler only has a single, constant state.
 	SchedulerMachineStateRunning SchedulerMachineState = 0
+
+	// How many recent actions to keep on the Info.RecentActions list.
+	recentActionCount = 10
 )
 
 var (
@@ -119,7 +99,7 @@ func RegisterStateMachines(r *hsm.Registry) error {
 	if err := r.RegisterMachine(generatorMachineDefinition{}); err != nil {
 		return err
 	}
-	if err := r.RegisterMachine(executorMachineDefinition{}); err != nil {
+	if err := r.RegisterMachine(invokerMachineDefinition{}); err != nil {
 		return err
 	}
 	// TODO: add other state machines here
@@ -251,3 +231,38 @@ func (s *Scheduler) validateCachedState() {
 func (s *Scheduler) updateConflictToken() {
 	s.ConflictToken++
 }
+
+type EventRecordAction struct {
+	Node *hsm.Node
+
+	ActionCount         int64
+	OverlapSkipped      int64
+	BufferDropped       int64
+	MissedCatchupWindow int64
+	Results             []*schedulepb.ScheduleActionResult
+}
+
+// Fired when an action has been taken by the state machine scheduler and should
+// be recorded.
+var TransitionRecordAction = hsm.NewTransition(
+	[]SchedulerMachineState{SchedulerMachineStateRunning},
+	SchedulerMachineStateRunning,
+	func(s Scheduler, event EventRecordAction) (hsm.TransitionOutput, error) {
+		s.Info.ActionCount += event.ActionCount
+		s.Info.OverlapSkipped += event.OverlapSkipped
+		s.Info.BufferDropped += event.BufferDropped
+		s.Info.MissedCatchupWindow += event.MissedCatchupWindow
+
+		if len(event.Results) > 0 {
+			s.Info.RecentActions = util.SliceTail(append(s.Info.RecentActions, event.Results...), recentActionCount)
+		}
+
+		for _, result := range event.Results {
+			if result.StartWorkflowResult != nil {
+				s.Info.RunningWorkflows = append(s.Info.RunningWorkflows, result.StartWorkflowResult)
+			}
+		}
+
+		return hsm.TransitionOutput{}, nil
+	},
+)

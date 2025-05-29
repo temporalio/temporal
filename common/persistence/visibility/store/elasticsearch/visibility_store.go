@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package elasticsearch
 
 import (
@@ -352,7 +328,7 @@ func (s *VisibilityStore) AddBulkRequestAndWait(
 		}
 		// Returns non-retryable Internal error here because these errors are unexpected.
 		// Visibility task processor retries all errors though; therefore, new request will be generated for the same visibility task.
-		return serviceerror.NewInternal(fmt.Sprintf("visibility task received error: %v", err))
+		return serviceerror.NewInternalf("visibility task received error: %v", err)
 	}
 
 	if !ack {
@@ -554,14 +530,14 @@ func (s *VisibilityStore) GetWorkflowExecution(
 
 	typeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.index, false)
 	if err != nil {
-		return nil, serviceerror.NewUnavailable(
-			fmt.Sprintf("unable to read search attribute types: %v", err),
+		return nil, serviceerror.NewUnavailablef(
+			"unable to read search attribute types: %v", err,
 		)
 	}
 
 	if !result.Found {
-		return nil, serviceerror.NewNotFound(
-			fmt.Sprintf("Workflow execution with RunId %s not found", request.RunID),
+		return nil, serviceerror.NewNotFoundf(
+			"Workflow execution with RunId %s not found", request.RunID,
 		)
 	}
 
@@ -705,11 +681,11 @@ func (s *VisibilityStore) processPageToken(
 		return nil
 	}
 	if len(pageToken.SearchAfter) != len(params.Sorter) {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf(
+		return serviceerror.NewInvalidArgumentf(
 			"invalid page token for given sort fields: expected %d fields, got %d",
 			len(params.Sorter),
 			len(pageToken.SearchAfter),
-		))
+		)
 	}
 	if !s.enableManualPagination(namespaceName.String()) || !isDefaultSorter(params.Sorter) {
 		params.SearchAfter = pageToken.SearchAfter
@@ -718,17 +694,17 @@ func (s *VisibilityStore) processPageToken(
 
 	boolQuery, ok := params.Query.(*elastic.BoolQuery)
 	if !ok {
-		return serviceerror.NewInternal(fmt.Sprintf(
+		return serviceerror.NewInternalf(
 			"unexpected query type: expected %T, got %T",
 			&elastic.BoolQuery{},
 			params.Query,
-		))
+		)
 	}
 
 	saTypeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.index, false)
 	if err != nil {
-		return serviceerror.NewUnavailable(
-			fmt.Sprintf("unable to read search attribute types: %v", err),
+		return serviceerror.NewUnavailablef(
+			"unable to read search attribute types: %v", err,
 		)
 	}
 
@@ -750,7 +726,7 @@ func (s *VisibilityStore) convertQuery(
 ) (*query.QueryParams, error) {
 	saTypeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.index, false)
 	if err != nil {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("unable to read search attribute types: %v", err))
+		return nil, serviceerror.NewUnavailablef("unable to read search attribute types: %v", err)
 	}
 	nameInterceptor := NewNameInterceptor(namespace, saTypeMap, s.searchAttributesMapperProvider)
 	queryConverter := NewQueryConverter(
@@ -820,7 +796,7 @@ func (s *VisibilityStore) GetListWorkflowExecutionsResponse(
 
 	typeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.index, false)
 	if err != nil {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("unable to read search attribute types: %v", err))
+		return nil, serviceerror.NewUnavailablef("unable to read search attribute types: %v", err)
 	}
 
 	response := &store.InternalListWorkflowExecutionsResponse{
@@ -861,7 +837,7 @@ func (s *VisibilityStore) deserializePageToken(data []byte) (*visibilityPageToke
 	dec.UseNumber()
 	err := dec.Decode(&token)
 	if err != nil {
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("unable to deserialize page token: %v", err))
+		return nil, serviceerror.NewInvalidArgumentf("unable to deserialize page token: %v", err)
 	}
 	return token, nil
 }
@@ -873,7 +849,7 @@ func (s *VisibilityStore) serializePageToken(token *visibilityPageToken) ([]byte
 
 	data, err := json.Marshal(token)
 	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("unable to serialize page token: %v", err))
+		return nil, serviceerror.NewInternalf("unable to serialize page token: %v", err)
 	}
 	return data, nil
 }
@@ -911,13 +887,13 @@ func (s *VisibilityStore) GenerateESDoc(
 	typeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.index, false)
 	if err != nil {
 		metrics.ElasticsearchDocumentGenerateFailuresCount.With(s.metricsHandler).Record(1)
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("unable to read search attribute types: %v", err))
+		return nil, serviceerror.NewUnavailablef("unable to read search attribute types: %v", err)
 	}
 
 	searchAttributes, err := searchattribute.Decode(request.SearchAttributes, &typeMap, true)
 	if err != nil {
 		metrics.ElasticsearchDocumentGenerateFailuresCount.With(s.metricsHandler).Record(1)
-		return nil, serviceerror.NewInternal(fmt.Sprintf("unable to decode search attributes: %v", err))
+		return nil, serviceerror.NewInternalf("unable to decode search attributes: %v", err)
 	}
 	// This is to prevent existing tasks to fail indefinitely.
 	// If it's only invalid values error, then silently continue without them.
@@ -966,7 +942,7 @@ func (s *VisibilityStore) ParseESDoc(
 ) (*store.InternalWorkflowExecutionInfo, error) {
 	logParseError := func(fieldName string, fieldValue interface{}, err error, docID string) error {
 		metrics.ElasticsearchDocumentParseFailuresCount.With(s.metricsHandler).Record(1)
-		return serviceerror.NewInternal(fmt.Sprintf("unable to parse Elasticsearch document(%s) %q field value %q: %v", docID, fieldName, fieldValue, err))
+		return serviceerror.NewInternalf("unable to parse Elasticsearch document(%s) %q field value %q: %v", docID, fieldName, fieldValue, err)
 	}
 
 	var sourceMap map[string]interface{}
@@ -975,7 +951,7 @@ func (s *VisibilityStore) ParseESDoc(
 	d.UseNumber()
 	if err := d.Decode(&sourceMap); err != nil {
 		metrics.ElasticsearchDocumentParseFailuresCount.With(s.metricsHandler).Record(1)
-		return nil, serviceerror.NewInternal(fmt.Sprintf("unable to unmarshal JSON from Elasticsearch document(%s): %v", docID, err))
+		return nil, serviceerror.NewInternalf("unable to unmarshal JSON from Elasticsearch document(%s): %v", docID, err)
 	}
 
 	var (
@@ -1015,7 +991,7 @@ func (s *VisibilityStore) ParseESDoc(
 				continue
 			}
 			metrics.ElasticsearchDocumentParseFailuresCount.With(s.metricsHandler).Record(1)
-			return nil, serviceerror.NewInternal(fmt.Sprintf("Unable to get type for Elasticsearch document(%s) field %q: %v", docID, fieldName, err))
+			return nil, serviceerror.NewInternalf("Unable to get type for Elasticsearch document(%s) field %q: %v", docID, fieldName, err)
 		}
 
 		fieldValueParsed, err := finishParseJSONValue(fieldValue, fieldType)
@@ -1074,12 +1050,10 @@ func (s *VisibilityStore) ParseESDoc(
 		record.SearchAttributes, err = searchattribute.Encode(customSearchAttributes, &saTypeMap)
 		if err != nil {
 			metrics.ElasticsearchDocumentParseFailuresCount.With(s.metricsHandler).Record(1)
-			return nil, serviceerror.NewInternal(
-				fmt.Sprintf(
-					"Unable to encode custom search attributes of Elasticsearch document(%s): %v",
-					docID,
-					err,
-				),
+			return nil, serviceerror.NewInternalf(
+				"Unable to encode custom search attributes of Elasticsearch document(%s): %v",
+				docID,
+				err,
 			)
 		}
 		aliasedSas, err := searchattribute.AliasFields(
@@ -1100,12 +1074,10 @@ func (s *VisibilityStore) ParseESDoc(
 		record.Memo = persistence.NewDataBlob(memo, memoEncoding)
 	} else if memo != nil {
 		metrics.ElasticsearchDocumentParseFailuresCount.With(s.metricsHandler).Record(1)
-		return nil, serviceerror.NewInternal(
-			fmt.Sprintf(
-				"%q field is missing in Elasticsearch document(%s)",
-				searchattribute.MemoEncoding,
-				docID,
-			),
+		return nil, serviceerror.NewInternalf(
+			"%q field is missing in Elasticsearch document(%s)",
+			searchattribute.MemoEncoding,
+			docID,
 		)
 	}
 
@@ -1123,8 +1095,8 @@ func (s *VisibilityStore) parseCountGroupByResponse(
 	response := &manager.CountWorkflowExecutionsResponse{}
 	typeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.index, false)
 	if err != nil {
-		return nil, serviceerror.NewUnavailable(
-			fmt.Sprintf("unable to read search attribute types: %v", err),
+		return nil, serviceerror.NewUnavailablef(
+			"unable to read search attribute types: %v", err,
 		)
 	}
 	groupByTypes := make([]enumspb.IndexedValueType, len(groupByFields))
@@ -1191,7 +1163,7 @@ func (s *VisibilityStore) parseCountGroupByResponse(
 	dec := json.NewDecoder(bytes.NewReader(searchResult.Aggregations[groupByFields[0]]))
 	dec.UseNumber()
 	if err := dec.Decode(&bucketsJson); err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("unable to unmarshal json response: %v", err))
+		return nil, serviceerror.NewInternalf("unable to unmarshal json response: %v", err)
 	}
 	if err := parseInternal(map[string]any{groupByFields[0]: bucketsJson}, nil); err != nil {
 		return nil, err
@@ -1314,11 +1286,11 @@ func buildPaginationQuery(
 ) ([]elastic.Query, error) {
 	n := len(sorterFields)
 	if len(sorterFields) != len(searchAfter) {
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(
+		return nil, serviceerror.NewInvalidArgumentf(
 			"invalid page token for given sort fields: expected %d fields, got %d",
 			len(sorterFields),
 			len(searchAfter),
-		))
+		)
 	}
 
 	parsedSearchAfter := make([]any, n)
@@ -1335,10 +1307,10 @@ func buildPaginationQuery(
 
 	// The last field of sorter must be a tiebreaker, and thus cannot contain null value.
 	if parsedSearchAfter[len(parsedSearchAfter)-1] == nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf(
+		return nil, serviceerror.NewInternalf(
 			"last field of sorter cannot be a nullable field: %q has null values",
 			sorterFields[len(sorterFields)-1].name,
-		))
+		)
 	}
 
 	shouldQueries := make([]elastic.Query, 0, len(sorterFields))
@@ -1389,13 +1361,13 @@ func parsePageTokenValue(
 		enumspb.INDEXED_VALUE_TYPE_DATETIME:
 		jsonNumber, ok := jsonValue.(json.Number)
 		if !ok {
-			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(
-				"invalid page token: expected interger type, got %q", jsonValue))
+			return nil, serviceerror.NewInvalidArgumentf(
+				"invalid page token: expected interger type, got %q", jsonValue)
 		}
 		num, err := jsonNumber.Int64()
 		if err != nil {
-			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(
-				"invalid page token: expected interger type, got %v", jsonValue))
+			return nil, serviceerror.NewInvalidArgumentf(
+				"invalid page token: expected interger type, got %v", jsonValue)
 		}
 		if num == math.MaxInt64 || num == math.MinInt64 {
 			return nil, nil
@@ -1413,21 +1385,21 @@ func parsePageTokenValue(
 		case json.Number:
 			num, err := v.Float64()
 			if err != nil {
-				return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(
-					"invalid page token: expected float type, got %v", jsonValue))
+				return nil, serviceerror.NewInvalidArgumentf(
+					"invalid page token: expected float type, got %v", jsonValue)
 			}
 			return num, nil
 		case string:
 			// it can be the string representation of infinity
 			if _, err := strconv.ParseFloat(v, 64); err != nil {
-				return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(
-					"invalid page token: expected float type, got %q", jsonValue))
+				return nil, serviceerror.NewInvalidArgumentf(
+					"invalid page token: expected float type, got %q", jsonValue)
 			}
 			return nil, nil
 		default:
 			// it should never reach here
-			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(
-				"invalid page token: expected float type, got %#v", jsonValue))
+			return nil, serviceerror.NewInvalidArgumentf(
+				"invalid page token: expected float type, got %#v", jsonValue)
 		}
 
 	case enumspb.INDEXED_VALUE_TYPE_KEYWORD:
@@ -1435,23 +1407,23 @@ func parsePageTokenValue(
 			return nil, nil
 		}
 		if _, ok := jsonValue.(string); !ok {
-			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(
-				"invalid page token: expected string type, got %v", jsonValue))
+			return nil, serviceerror.NewInvalidArgumentf(
+				"invalid page token: expected string type, got %v", jsonValue)
 		}
 		return jsonValue, nil
 
 	default:
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(
+		return nil, serviceerror.NewInvalidArgumentf(
 			"invalid field type in sorter: cannot order by %q",
 			fieldName,
-		))
+		)
 	}
 }
 
 func validateDatetime(value time.Time) error {
 	if value.Before(minTime) || value.After(maxTime) {
-		return serviceerror.NewInvalidArgument(
-			fmt.Sprintf("invalid search attribute date: %v, supported range: [%v, %v]", value, minTime, maxTime),
+		return serviceerror.NewInvalidArgumentf(
+			"invalid search attribute date: %v, supported range: [%v, %v]", value, minTime, maxTime,
 		)
 	}
 	return nil
@@ -1459,13 +1431,23 @@ func validateDatetime(value time.Time) error {
 
 func validateString(value string) error {
 	if len(value) > maxStringLength {
-		return serviceerror.NewInvalidArgument(
-			fmt.Sprintf(
-				"strings with more than %d bytes are not supported (got string of len %d)",
-				maxStringLength,
-				len(value),
-			),
+		return serviceerror.NewInvalidArgumentf(
+			"strings with more than %d bytes are not supported (got string of len %d)",
+			maxStringLength,
+			len(value),
 		)
 	}
 	return nil
+}
+
+func (s *VisibilityStore) AddSearchAttributes(
+	ctx context.Context,
+	request *manager.AddSearchAttributesRequest,
+) error {
+	_, err := s.esClient.PutMapping(ctx, s.GetIndexName(), request.SearchAttributes)
+	if err != nil {
+		return err
+	}
+	_, err = s.esClient.WaitForYellowStatus(ctx, s.GetIndexName())
+	return err
 }

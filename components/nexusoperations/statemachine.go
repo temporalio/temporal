@@ -1,25 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package nexusoperations
 
 import (
@@ -228,7 +206,7 @@ func (operationMachineDefinition) CompareState(state1, state2 any) (int, error) 
 		return stage1 - stage2, nil
 	}
 	if stage1 == terminalStage && o1.State() != o2.State() {
-		return 0, serviceerror.NewInvalidArgument(fmt.Sprintf("cannot compare two distinct terminal states: %v, %v", o1.State(), o2.State()))
+		return 0, serviceerror.NewInvalidArgumentf("cannot compare two distinct terminal states: %v, %v", o1.State(), o2.State())
 	}
 	return int(attempts1 - attempts2), nil
 }
@@ -410,9 +388,11 @@ var TransitionTimedOut = hsm.NewTransition(
 // machine will stay in UNSPECIFIED state. If the Operation is in STARTED state, then transition the
 // Cancelation machine to the SCHEDULED state. Otherwise, the Cancelation machine will wait the
 // Operation machine transition to the STARTED state.
-func (o Operation) Cancel(node *hsm.Node, t time.Time) (hsm.TransitionOutput, error) {
+func (o Operation) Cancel(node *hsm.Node, t time.Time, requestedEventID int64) (hsm.TransitionOutput, error) {
 	child, err := node.AddChild(CancelationMachineKey, Cancelation{
-		NexusOperationCancellationInfo: &persistencespb.NexusOperationCancellationInfo{},
+		NexusOperationCancellationInfo: &persistencespb.NexusOperationCancellationInfo{
+			RequestedEventId: requestedEventID,
+		},
 	})
 	if err != nil {
 		// This function should be called as part of command/event handling and it should not be called
@@ -499,7 +479,7 @@ func (cancelationMachineDefinition) CompareState(state1, state2 any) (int, error
 		return stage1 - stage2, nil
 	}
 	if stage1 == terminalStage && c1.State() != c2.State() {
-		return 0, serviceerror.NewInvalidArgument(fmt.Sprintf("cannot compare two distinct terminal states: %v, %v", c1.State(), c2.State()))
+		return 0, serviceerror.NewInvalidArgumentf("cannot compare two distinct terminal states: %v, %v", c1.State(), c2.State())
 	}
 	return int(attempts1 - attempts2), nil
 }
