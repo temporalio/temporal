@@ -179,6 +179,12 @@ func Invoke(
 	}
 	queryID, completionCh := queryReg.BufferQuery(req.GetQuery())
 	defer queryReg.RemoveQuery(queryID)
+
+	msResp, err := api.GetMutableState(ctx, shardContext, workflowKey, workflowConsistencyChecker)
+	if err != nil {
+		return nil, err
+	}
+
 	workflowLease.GetReleaseFn()(nil) // release the lock - no access to mutable state beyond this point!
 	select {
 	case <-completionCh:
@@ -187,11 +193,6 @@ func Invoke(
 			metrics.QueryRegistryInvalidStateCount.With(scope).Record(1)
 			return nil, err
 		}
-		msResp, err := api.GetMutableState(ctx, shardContext, workflowKey, workflowConsistencyChecker)
-		if err != nil {
-			return nil, err
-		}
-
 		switch completionState.Type {
 		case workflow.QueryCompletionTypeSucceeded:
 			result := completionState.Result
@@ -253,10 +254,6 @@ func Invoke(
 			return nil, consts.ErrQueryEnteredInvalidState
 		}
 	case <-ctx.Done():
-		msResp, err := api.GetMutableState(ctx, shardContext, workflowKey, workflowConsistencyChecker)
-		if err != nil {
-			return nil, err
-		}
 		emitWorkflowQueryMetrics(
 			scope,
 			nsEntry,
@@ -346,6 +343,9 @@ func queryDirectlyThroughMatching(
 		stickyStartTime := time.Now().UTC()
 		matchingResp, err := rawMatchingClient.QueryWorkflow(stickyContext, stickyMatchingRequest)
 		metrics.DirectQueryDispatchStickyLatency.With(metricsHandler).Record(time.Since(stickyStartTime))
+		if err != nil {
+			return nil, err
+		}
 		cancel()
 		if err == nil {
 			metrics.DirectQueryDispatchStickySuccessCount.With(metricsHandler).Record(1)
@@ -413,14 +413,11 @@ func emitWorkflowQueryMetrics(
 		metrics.QueryTypeTag(queryType),
 	}
 
-	if err != nil {
-		if common.IsContextDeadlineExceededErr(err) {
-			metrics.WorkflowQueryTimeoutCount.With(metricsHandler).Record(1, commonTags...)
-		} else {
-			metrics.WorkflowQueryFailureCount.With(metricsHandler).Record(1, commonTags...)
-		}
-		return
+	if err == nil {
+		metrics.WorkflowQuerySuccessCount.With(metricsHandler).Record(1, commonTags...)
+	} else if common.IsContextDeadlineExceededErr(err) {
+		metrics.WorkflowQueryTimeoutCount.With(metricsHandler).Record(1, commonTags...)
+	} else {
+		metrics.WorkflowQueryFailureCount.With(metricsHandler).Record(1, commonTags...)
 	}
-
-	metrics.WorkflowQuerySuccessCount.With(metricsHandler).Record(1, commonTags...)
 }

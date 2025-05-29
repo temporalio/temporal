@@ -863,7 +863,7 @@ func (t *timerQueueActiveTaskExecutor) emitTimeoutMetricScopeWithNamespaceTag(
 	operation string,
 	timerType enumspb.TimeoutType,
 	effectiveVersioningBehavior enumspb.VersioningBehavior,
-	firstAttempt int32,
+	taskAttempt int32,
 ) {
 	namespaceEntry, err := t.registry.GetNamespaceByID(namespaceID)
 	if err != nil {
@@ -873,7 +873,7 @@ func (t *timerQueueActiveTaskExecutor) emitTimeoutMetricScopeWithNamespaceTag(
 		metrics.OperationTag(operation),
 		metrics.NamespaceTag(namespaceEntry.Name().String()),
 		metrics.VersioningBehaviorTag(effectiveVersioningBehavior),
-		metrics.FirstAttemptTag(firstAttempt),
+		metrics.FirstAttemptTag(taskAttempt),
 	)
 	switch timerType {
 	case enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START:
