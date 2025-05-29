@@ -40,6 +40,7 @@ global:
       hostPort: "127.0.0.1:8125"
       prefix: "temporal"
       flushInterval: 1s
+      framework: "opentelemetry"
 
 services:
   frontend:
