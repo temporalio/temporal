@@ -3,8 +3,8 @@ package metrics
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sort"
+	"strings"
 	"sync"
 
 	"github.com/cactus/go-statsd-client/v5/statsd"
@@ -43,16 +43,11 @@ func NewStatsdExporter(config *StatsdConfig, logger log.Logger) (*statsdExporter
 		return nil, errors.New("failed to create StatsD client")
 	}
 
-	tagSeparator := config.Reporter.TagSeparator
-	if tagSeparator == "" {
-		tagSeparator = ","
-	}
-
 	return &statsdExporter{
 		client:       client,
 		config:       config,
 		logger:       logger,
-		tagSeparator: tagSeparator,
+		tagSeparator: config.Reporter.TagSeparator,
 	}, nil
 }
 
@@ -137,15 +132,14 @@ func (e *statsdExporter) exportMetric(m metricdata.Metrics) error {
 func (e *statsdExporter) exportSumInt64(name string, data metricdata.Sum[int64]) error {
 	for _, dp := range data.DataPoints {
 		metricName := e.buildMetricName(name, dp.Attributes)
-		tags := e.buildTags(dp.Attributes)
 		if data.IsMonotonic {
 			// For monotonic sums (counters), use Inc
-			if err := e.client.Inc(metricName, dp.Value, 1.0, tags...); err != nil {
+			if err := e.client.Inc(metricName, dp.Value, 1.0); err != nil {
 				return err
 			}
 		} else {
 			// For non-monotonic sums, use Gauge
-			if err := e.client.Gauge(metricName, dp.Value, 1.0, tags...); err != nil {
+			if err := e.client.Gauge(metricName, dp.Value, 1.0); err != nil {
 				return err
 			}
 		}
@@ -156,15 +150,14 @@ func (e *statsdExporter) exportSumInt64(name string, data metricdata.Sum[int64])
 func (e *statsdExporter) exportSumFloat64(name string, data metricdata.Sum[float64]) error {
 	for _, dp := range data.DataPoints {
 		metricName := e.buildMetricName(name, dp.Attributes)
-		tags := e.buildTags(dp.Attributes)
 		if data.IsMonotonic {
 			// For monotonic sums (counters), use Inc with converted value
-			if err := e.client.Inc(metricName, int64(dp.Value), 1.0, tags...); err != nil {
+			if err := e.client.Inc(metricName, int64(dp.Value), 1.0); err != nil {
 				return err
 			}
 		} else {
 			// For non-monotonic sums, convert to int64 and use Gauge
-			if err := e.client.Gauge(metricName, int64(dp.Value), 1.0, tags...); err != nil {
+			if err := e.client.Gauge(metricName, int64(dp.Value), 1.0); err != nil {
 				return err
 			}
 		}
@@ -175,8 +168,7 @@ func (e *statsdExporter) exportSumFloat64(name string, data metricdata.Sum[float
 func (e *statsdExporter) exportGaugeInt64(name string, data metricdata.Gauge[int64]) error {
 	for _, dp := range data.DataPoints {
 		metricName := e.buildMetricName(name, dp.Attributes)
-		tags := e.buildTags(dp.Attributes)
-		if err := e.client.Gauge(metricName, dp.Value, 1.0, tags...); err != nil {
+		if err := e.client.Gauge(metricName, dp.Value, 1.0); err != nil {
 			return err
 		}
 	}
@@ -186,9 +178,8 @@ func (e *statsdExporter) exportGaugeInt64(name string, data metricdata.Gauge[int
 func (e *statsdExporter) exportGaugeFloat64(name string, data metricdata.Gauge[float64]) error {
 	for _, dp := range data.DataPoints {
 		metricName := e.buildMetricName(name, dp.Attributes)
-		tags := e.buildTags(dp.Attributes)
 		// Convert float64 to int64 for StatsD gauge
-		if err := e.client.Gauge(metricName, int64(dp.Value), 1.0, tags...); err != nil {
+		if err := e.client.Gauge(metricName, int64(dp.Value), 1.0); err != nil {
 			return err
 		}
 	}
@@ -198,29 +189,16 @@ func (e *statsdExporter) exportGaugeFloat64(name string, data metricdata.Gauge[f
 func (e *statsdExporter) exportHistogramInt64(name string, data metricdata.Histogram[int64]) error {
 	for _, dp := range data.DataPoints {
 		metricName := e.buildMetricName(name, dp.Attributes)
-		tags := e.buildTags(dp.Attributes)
 
 		// Export histogram as multiple metrics
 		// Count
-		if err := e.client.Inc(metricName+".count", int64(dp.Count), 1.0, tags...); err != nil {
+		if err := e.client.Inc(metricName+".count", int64(dp.Count), 1.0); err != nil {
 			return err
 		}
 
 		// Sum (dp.Sum is just an int64, not a pointer or optional type)
-		if err := e.client.Gauge(metricName+".sum", dp.Sum, 1.0, tags...); err != nil {
+		if err := e.client.Gauge(metricName+".sum", dp.Sum, 1.0); err != nil {
 			return err
-		}
-
-		// Buckets - use dp.Bounds field
-		if len(dp.Bounds) > 0 && len(dp.BucketCounts) > 0 {
-			for i, bound := range dp.Bounds {
-				if i < len(dp.BucketCounts) {
-					bucketName := fmt.Sprintf("%s.bucket_le_%v", metricName, bound)
-					if err := e.client.Inc(bucketName, int64(dp.BucketCounts[i]), 1.0, tags...); err != nil {
-						return err
-					}
-				}
-			}
 		}
 	}
 	return nil
@@ -229,39 +207,63 @@ func (e *statsdExporter) exportHistogramInt64(name string, data metricdata.Histo
 func (e *statsdExporter) exportHistogramFloat64(name string, data metricdata.Histogram[float64]) error {
 	for _, dp := range data.DataPoints {
 		metricName := e.buildMetricName(name, dp.Attributes)
-		tags := e.buildTags(dp.Attributes)
 
 		// Export histogram as multiple metrics
 		// Count
-		if err := e.client.Inc(metricName+".count", int64(dp.Count), 1.0, tags...); err != nil {
+		if err := e.client.Inc(metricName+".count", int64(dp.Count), 1.0); err != nil {
 			return err
 		}
 
 		// Sum (dp.Sum is just a float64, not a pointer or optional type)
-		if err := e.client.Gauge(metricName+".sum", int64(dp.Sum), 1.0, tags...); err != nil {
+		if err := e.client.Gauge(metricName+".sum", int64(dp.Sum), 1.0); err != nil {
 			return err
-		}
-
-		// Buckets - use dp.Bounds field
-		if len(dp.Bounds) > 0 && len(dp.BucketCounts) > 0 {
-			for i, bound := range dp.Bounds {
-				if i < len(dp.BucketCounts) {
-					bucketName := fmt.Sprintf("%s.bucket_le_%v", metricName, bound)
-					if err := e.client.Inc(bucketName, int64(dp.BucketCounts[i]), 1.0, tags...); err != nil {
-						return err
-					}
-				}
-			}
 		}
 	}
 	return nil
 }
 
 func (e *statsdExporter) buildMetricName(name string, attrs attribute.Set) string {
-	if e.config.Prefix != "" {
-		return e.config.Prefix + "." + name
+	if attrs.Len() == 0 {
+		return name
 	}
-	return name
+	tags := e.buildTags(attrs)
+	// if a tag separator is provided, we need to emit the tags separately.
+	if e.tagSeparator != "" {
+		return appendSeparatedTags(name, e.tagSeparator, tags)
+	}
+
+	// if no tag separator is provided, we need to embed the tags in the metric name.
+	return embedTags(name, tags)
+}
+
+// embedTags adds the sorted list of tags directly in the stat name.
+// For example, if the stat is `hello.world` and the tags are `{universe: milkyWay, planet: earth}`,
+// the stat will be emitted as `hello.world.planet.earth.universe.milkyWay`.
+func embedTags(name string, tags []statsd.Tag) string {
+	var buffer strings.Builder
+	buffer.WriteString(name)
+	for _, tag := range tags {
+		// adding "." as delimiter so that it will show as different parts in Graphite/Grafana
+		buffer.WriteString("." + tag[0] + "." + tag[1])
+	}
+
+	return buffer.String()
+}
+
+// appendSeparatedTags adds the sorted list of tags using the DogStatsd/InfluxDB supported tagging protocol.
+// For example, if the stat is `hello.world` and the tags are `{universe: milkyWay, planet: earth}` and the separator is `,`,
+// the stat will be emitted as `hello.world,planet=earth,universe=milkyWay`.
+//
+// For more details on the protocol see:
+// - Datadog: https://docs.datadoghq.com/developers/dogstatsd/datagram_shell
+// - InfluxDB: https://github.com/influxdata/telegraf/blob/ce9411343076b56dabd77fc8845cc58872d4b2e6/plugins/inputs/statsd/README.md#influx-statsd
+func appendSeparatedTags(name string, separator string, tags []statsd.Tag) string {
+	var buffer strings.Builder
+	buffer.WriteString(name)
+	for _, tag := range tags {
+		buffer.WriteString(separator + tag[0] + "=" + tag[1])
+	}
+	return buffer.String()
 }
 
 func (e *statsdExporter) buildTags(attrs attribute.Set) []statsd.Tag {
