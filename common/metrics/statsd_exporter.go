@@ -242,9 +242,9 @@ func (e *statsdExporter) buildMetricName(name string, attrs attribute.Set) strin
 func embedTags(name string, tags []statsd.Tag) string {
 	var buffer strings.Builder
 	buffer.WriteString(name)
-	for _, tag := range tags {
+	for _, tg := range tags {
 		// adding "." as delimiter so that it will show as different parts in Graphite/Grafana
-		buffer.WriteString("." + tag[0] + "." + tag[1])
+		buffer.WriteString("." + tg[0] + "." + tg[1])
 	}
 
 	return buffer.String()
@@ -260,8 +260,8 @@ func embedTags(name string, tags []statsd.Tag) string {
 func appendSeparatedTags(name string, separator string, tags []statsd.Tag) string {
 	var buffer strings.Builder
 	buffer.WriteString(name)
-	for _, tag := range tags {
-		buffer.WriteString(separator + tag[0] + "=" + tag[1])
+	for _, tg := range tags {
+		buffer.WriteString(separator + tg[0] + "=" + tg[1])
 	}
 	return buffer.String()
 }
