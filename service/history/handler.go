@@ -197,16 +197,15 @@ func (h *Handler) DeepHealthCheck(
 	defer log.CapturePanic(h.logger, &retError)
 	h.startWG.Wait()
 
-	// Ensure that the hosts are marked internally as healthy.
 	status, err := h.healthServer.Check(ctx, &healthpb.HealthCheckRequest{Service: serviceName})
 	if err != nil {
 		return nil, err
 	}
 	if status.Status != healthpb.HealthCheckResponse_SERVING {
+		metrics.HistoryHostHealthGauge.With(h.metricsHandler).Record(float64(enumsspb.HEALTH_STATE_DECLINED_SERVING))
 		return &historyservice.DeepHealthCheckResponse{State: enumsspb.HEALTH_STATE_DECLINED_SERVING}, nil
 	}
 
-	// Check if the persistence layer is healthy.
 	latency := h.persistenceHealthSignal.AverageLatency()
 	errRatio := h.persistenceHealthSignal.ErrorRatio()
 
@@ -220,9 +219,7 @@ func (h *Handler) DeepHealthCheck(
 
 // IsWorkflowTaskValid - whether workflow task is still valid
 func (h *Handler) IsWorkflowTaskValid(ctx context.Context, request *historyservice.IsWorkflowTaskValidRequest) (_ *historyservice.IsWorkflowTaskValidResponse, retError error) {
-	defer func() {
-		metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
-	}()
+	defer log.CapturePanic(h.logger, &retError)
 	h.startWG.Wait()
 
 	namespaceID := namespace.ID(request.GetNamespaceId())
@@ -249,9 +246,7 @@ func (h *Handler) IsWorkflowTaskValid(ctx context.Context, request *historyservi
 
 // IsActivityTaskValid - whether activity task is still valid
 func (h *Handler) IsActivityTaskValid(ctx context.Context, request *historyservice.IsActivityTaskValidRequest) (_ *historyservice.IsActivityTaskValidResponse, retError error) {
-	defer func() {
-		metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
-	}()
+	defer log.CapturePanic(h.logger, &retError)
 	h.startWG.Wait()
 
 	namespaceID := namespace.ID(request.GetNamespaceId())
@@ -277,9 +272,7 @@ func (h *Handler) IsActivityTaskValid(ctx context.Context, request *historyservi
 }
 
 func (h *Handler) RecordActivityTaskHeartbeat(ctx context.Context, request *historyservice.RecordActivityTaskHeartbeatRequest) (_ *historyservice.RecordActivityTaskHeartbeatResponse, retError error) {
-	defer func() {
-		metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
-	}()
+	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
 	h.startWG.Wait()
 
 	namespaceID := namespace.ID(request.GetNamespaceId())
@@ -318,9 +311,7 @@ func (h *Handler) RecordActivityTaskHeartbeat(ctx context.Context, request *hist
 
 // RecordActivityTaskStarted - Record Activity Task started.
 func (h *Handler) RecordActivityTaskStarted(ctx context.Context, request *historyservice.RecordActivityTaskStartedRequest) (_ *historyservice.RecordActivityTaskStartedResponse, retError error) {
-	defer func() {
-		metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
-	}()
+	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
 	h.startWG.Wait()
 
 	namespaceID := namespace.ID(request.GetNamespaceId())
@@ -352,9 +343,7 @@ func (h *Handler) RecordActivityTaskStarted(ctx context.Context, request *histor
 
 // RecordWorkflowTaskStarted - Record Workflow Task started.
 func (h *Handler) RecordWorkflowTaskStarted(ctx context.Context, request *historyservice.RecordWorkflowTaskStartedRequest) (_ *historyservice.RecordWorkflowTaskStartedResponseWithRawHistory, retError error) {
-	defer func() {
-		metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
-	}()
+	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
 	h.startWG.Wait()
 
 	namespaceID := namespace.ID(request.GetNamespaceId())
@@ -396,9 +385,7 @@ func (h *Handler) RecordWorkflowTaskStarted(ctx context.Context, request *histor
 
 // RespondActivityTaskCompleted - records completion of an activity task
 func (h *Handler) RespondActivityTaskCompleted(ctx context.Context, request *historyservice.RespondActivityTaskCompletedRequest) (_ *historyservice.RespondActivityTaskCompletedResponse, retError error) {
-	defer func() {
-		metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
-	}()
+	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
 	h.startWG.Wait()
 
 	namespaceID := namespace.ID(request.GetNamespaceId())
@@ -437,9 +424,7 @@ func (h *Handler) RespondActivityTaskCompleted(ctx context.Context, request *his
 
 // RespondActivityTaskFailed - records failure of an activity task
 func (h *Handler) RespondActivityTaskFailed(ctx context.Context, request *historyservice.RespondActivityTaskFailedRequest) (_ *historyservice.RespondActivityTaskFailedResponse, retError error) {
-	defer func() {
-		metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
-	}()
+	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
 	h.startWG.Wait()
 
 	namespaceID := namespace.ID(request.GetNamespaceId())
@@ -478,9 +463,7 @@ func (h *Handler) RespondActivityTaskFailed(ctx context.Context, request *histor
 
 // RespondActivityTaskCanceled - records failure of an activity task
 func (h *Handler) RespondActivityTaskCanceled(ctx context.Context, request *historyservice.RespondActivityTaskCanceledRequest) (_ *historyservice.RespondActivityTaskCanceledResponse, retError error) {
-	defer func() {
-		metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
-	}()
+	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
 	h.startWG.Wait()
 
 	namespaceID := namespace.ID(request.GetNamespaceId())
