@@ -105,36 +105,35 @@ type (
 		workflowservice.UnimplementedWorkflowServiceServer
 		status int32
 
-		tokenSerializer                               *tasktoken.Serializer
-		config                                        *Config
-		versionChecker                                headers.VersionChecker
-		namespaceHandler                              *namespaceHandler
-		getDefaultWorkflowRetrySettings               dynamicconfig.TypedPropertyFnWithNamespaceFilter[retrypolicy.DefaultRetrySettings]
-		followReusePolicyAfterConflictPolicyTerminate dynamicconfig.TypedPropertyFnWithNamespaceFilter[bool]
-		visibilityMgr                                 manager.VisibilityManager
-		logger                                        log.Logger
-		throttledLogger                               log.Logger
-		persistenceExecutionName                      string
-		clusterMetadataManager                        persistence.ClusterMetadataManager
-		clusterMetadata                               cluster.Metadata
-		historyClient                                 historyservice.HistoryServiceClient
-		matchingClient                                matchingservice.MatchingServiceClient
-		deploymentStoreClient                         deployment.DeploymentStoreClient
-		workerDeploymentClient                        workerdeployment.Client
-		archiverProvider                              provider.ArchiverProvider
-		payloadSerializer                             serialization.Serializer
-		namespaceRegistry                             namespace.Registry
-		saMapperProvider                              searchattribute.MapperProvider
-		saProvider                                    searchattribute.Provider
-		saValidator                                   *searchattribute.Validator
-		archivalMetadata                              archiver.ArchivalMetadata
-		healthServer                                  *health.Server
-		overrides                                     *Overrides
-		membershipMonitor                             membership.Monitor
-		healthInterceptor                             *interceptor.HealthInterceptor
-		scheduleSpecBuilder                           *scheduler.SpecBuilder
-		outstandingPollers                            collection.SyncMap[string, collection.SyncMap[string, context.CancelFunc]]
-		httpEnabled                                   bool
+		tokenSerializer                 *tasktoken.Serializer
+		config                          *Config
+		versionChecker                  headers.VersionChecker
+		namespaceHandler                *namespaceHandler
+		getDefaultWorkflowRetrySettings dynamicconfig.TypedPropertyFnWithNamespaceFilter[retrypolicy.DefaultRetrySettings]
+		visibilityMgr                   manager.VisibilityManager
+		logger                          log.Logger
+		throttledLogger                 log.Logger
+		persistenceExecutionName        string
+		clusterMetadataManager          persistence.ClusterMetadataManager
+		clusterMetadata                 cluster.Metadata
+		historyClient                   historyservice.HistoryServiceClient
+		matchingClient                  matchingservice.MatchingServiceClient
+		deploymentStoreClient           deployment.DeploymentStoreClient
+		workerDeploymentClient          workerdeployment.Client
+		archiverProvider                provider.ArchiverProvider
+		payloadSerializer               serialization.Serializer
+		namespaceRegistry               namespace.Registry
+		saMapperProvider                searchattribute.MapperProvider
+		saProvider                      searchattribute.Provider
+		saValidator                     *searchattribute.Validator
+		archivalMetadata                archiver.ArchivalMetadata
+		healthServer                    *health.Server
+		overrides                       *Overrides
+		membershipMonitor               membership.Monitor
+		healthInterceptor               *interceptor.HealthInterceptor
+		scheduleSpecBuilder             *scheduler.SpecBuilder
+		outstandingPollers              collection.SyncMap[string, collection.SyncMap[string, context.CancelFunc]]
+		httpEnabled                     bool
 	}
 )
 
@@ -181,23 +180,22 @@ func NewWorkflowHandler(
 			timeSource,
 			config,
 		),
-		getDefaultWorkflowRetrySettings:               config.DefaultWorkflowRetryPolicy,
-		followReusePolicyAfterConflictPolicyTerminate: config.FollowReusePolicyAfterConflictPolicyTerminate,
-		visibilityMgr:            visibilityMgr,
-		logger:                   logger,
-		throttledLogger:          throttledLogger,
-		persistenceExecutionName: persistenceExecutionName,
-		clusterMetadataManager:   clusterMetadataManager,
-		clusterMetadata:          clusterMetadata,
-		historyClient:            historyClient,
-		matchingClient:           matchingClient,
-		deploymentStoreClient:    deploymentStoreClient,
-		workerDeploymentClient:   workerDeploymentClient,
-		archiverProvider:         archiverProvider,
-		payloadSerializer:        payloadSerializer,
-		namespaceRegistry:        namespaceRegistry,
-		saProvider:               saProvider,
-		saMapperProvider:         saMapperProvider,
+		getDefaultWorkflowRetrySettings: config.DefaultWorkflowRetryPolicy,
+		visibilityMgr:                   visibilityMgr,
+		logger:                          logger,
+		throttledLogger:                 throttledLogger,
+		persistenceExecutionName:        persistenceExecutionName,
+		clusterMetadataManager:          clusterMetadataManager,
+		clusterMetadata:                 clusterMetadata,
+		historyClient:                   historyClient,
+		matchingClient:                  matchingClient,
+		deploymentStoreClient:           deploymentStoreClient,
+		workerDeploymentClient:          workerDeploymentClient,
+		archiverProvider:                archiverProvider,
+		payloadSerializer:               payloadSerializer,
+		namespaceRegistry:               namespaceRegistry,
+		saProvider:                      saProvider,
+		saMapperProvider:                saMapperProvider,
 		saValidator: searchattribute.NewValidator(
 			saProvider,
 			saMapperProvider,
@@ -554,9 +552,9 @@ func (wh *WorkflowHandler) ExecuteMultiOperation(
 	if err != nil {
 		var multiErr *serviceerror.MultiOperationExecution
 		if errors.As(err, &multiErr) {
-			// Trim error message for end-users.
+			// Tweak error message for end-users to match the feature name.
 			// The per-operation errors are embedded inside the error and unpacked by the SDK.
-			multiErr.Message = "MultiOperation could not be executed."
+			multiErr.Message = "Update-with-Start could not be executed."
 		}
 		return nil, err
 	}
@@ -599,7 +597,7 @@ func (wh *WorkflowHandler) convertToHistoryMultiOperationRequest(
 	}
 
 	if hasError {
-		return nil, serviceerror.NewMultiOperationExecution("MultiOperation could not be executed.", errs)
+		return nil, serviceerror.NewMultiOperationExecution("Update-with-Start could not be executed.", errs)
 	}
 
 	return &historyservice.ExecuteMultiOperationRequest{
@@ -3533,9 +3531,12 @@ func (wh *WorkflowHandler) ListWorkerDeployments(ctx context.Context, request *w
 	workerDeployments := make([]*workflowservice.ListWorkerDeploymentsResponse_WorkerDeploymentSummary, len(resp))
 	for i, d := range resp {
 		workerDeployments[i] = &workflowservice.ListWorkerDeploymentsResponse_WorkerDeploymentSummary{
-			Name:          d.Name,
-			CreateTime:    d.CreateTime,
-			RoutingConfig: d.RoutingConfig,
+			Name:                  d.Name,
+			CreateTime:            d.CreateTime,
+			RoutingConfig:         d.RoutingConfig,
+			LatestVersionSummary:  d.LatestVersionSummary,
+			RampingVersionSummary: d.RampingVersionSummary,
+			CurrentVersionSummary: d.CurrentVersionSummary,
 		}
 	}
 
@@ -5187,8 +5188,7 @@ func (wh *WorkflowHandler) validateWorkflowIdReusePolicy(
 		return errIncompatibleIDReusePolicyTerminateIfRunning
 	}
 	if conflictPolicy == enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING &&
-		reusePolicy == enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE &&
-		wh.followReusePolicyAfterConflictPolicyTerminate(namespaceName.String()) {
+		reusePolicy == enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE {
 		return errIncompatibleIDReusePolicyRejectDuplicate
 	}
 	return nil

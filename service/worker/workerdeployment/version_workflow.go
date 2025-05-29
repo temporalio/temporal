@@ -15,12 +15,15 @@ import (
 	"go.temporal.io/sdk/workflow"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/worker_versioning"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
+	// This key is used by controllers who manage deployment versions.
+	metadataKeyController    = "temporal.io/controller"
 	defaultVisibilityRefresh = 5 * time.Minute
 	defaultVisibilityGrace   = 3 * time.Minute
 )
@@ -108,6 +111,10 @@ func (d *VersionWorkflowRunner) listenToSignals(ctx workflow.Context) {
 			mergedInfo.LastChangedTime = d.VersionState.DrainageInfo.LastChangedTime
 			d.VersionState.DrainageInfo = mergedInfo
 		}
+
+		if d.VersionState.GetDrainageInfo().GetStatus() == enumspb.VERSION_DRAINAGE_STATUS_DRAINED {
+			d.VersionState.Status = enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED
+		}
 		d.syncSummary(ctx)
 	})
 
@@ -123,6 +130,9 @@ func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
 	}
 	if d.VersionState.GetCreateTime() == nil {
 		d.VersionState.CreateTime = timestamppb.New(workflow.Now(ctx))
+	}
+	if d.VersionState.Status == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_UNSPECIFIED {
+		d.VersionState.Status = enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE
 	}
 
 	// if we were draining and just continued-as-new, do another drainage check after waiting for appropriate time
@@ -222,6 +232,12 @@ func (d *VersionWorkflowRunner) handleUpdateVersionMetadata(ctx workflow.Context
 	}
 
 	for _, key := range workflow.DeterministicKeys(args.UpsertEntries) {
+		if key == metadataKeyController && d.VersionState.Metadata.Entries[key] == nil {
+			// adding the controller identifier key-value for the first time, counting as a controller-managed version
+			// TODO: also check and potentially emit the controller id
+			d.metrics.Counter(metrics.WorkerDeploymentVersionCreatedManagedByController.Name()).Inc(1)
+		}
+
 		payload := args.UpsertEntries[key]
 		d.VersionState.Metadata.Entries[key] = payload
 	}
@@ -574,6 +590,7 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 		// Version deactivated from current/ramping
 		d.VersionState.LastDeactivationTime = args.RoutingUpdateTime
 		d.startDrainage(ctx, false)
+		state.Status = enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING
 	}
 
 	// started accepting new workflows --> stop drainage child wf if it exists
@@ -582,6 +599,13 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 			// First time this version is activated to current/ramping
 			d.VersionState.FirstActivationTime = args.RoutingUpdateTime
 		}
+	}
+
+	// Set the appropriate status for the version if it is current/ramping.
+	if state.CurrentSinceTime != nil {
+		state.Status = enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT
+	} else if state.RampingSinceTime != nil {
+		state.Status = enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING
 	}
 
 	return &deploymentspb.SyncVersionStateResponse{
@@ -619,6 +643,7 @@ func (d *VersionWorkflowRunner) syncSummary(ctx workflow.Context) {
 			RampingSinceTime:     d.VersionState.RampingSinceTime,
 			FirstActivationTime:  d.VersionState.FirstActivationTime,
 			LastDeactivationTime: d.VersionState.LastDeactivationTime,
+			Status:               d.VersionState.Status,
 		},
 	).Get(ctx, nil)
 	if err != nil {
@@ -672,6 +697,8 @@ func (d *VersionWorkflowRunner) refreshDrainageInfo(ctx workflow.Context) {
 		return
 	}
 
+	d.metrics.Counter(metrics.WorkerDeploymentVersionVisibilityQueryCount.Name()).Inc(1)
+
 	if d.VersionState.DrainageInfo == nil {
 		d.VersionState.DrainageInfo = &deploymentpb.VersionDrainageInfo{}
 	}
@@ -680,10 +707,24 @@ func (d *VersionWorkflowRunner) refreshDrainageInfo(ctx workflow.Context) {
 	if d.VersionState.GetDrainageInfo().GetStatus() != newInfo.Status {
 		d.VersionState.DrainageInfo.Status = newInfo.Status
 		d.VersionState.DrainageInfo.LastChangedTime = newInfo.LastCheckedTime
+
+		// Update the status of the version according to the drainage status
+		d.updateVersionStatusAfterDrainageStatusChange(newInfo.Status)
 	}
 	d.syncSummary(ctx)
 }
 
 func (d *VersionWorkflowRunner) setStateChanged() {
 	d.stateChanged = true
+}
+
+func (d *VersionWorkflowRunner) updateVersionStatusAfterDrainageStatusChange(newStatus enumspb.VersionDrainageStatus) {
+	if newStatus == enumspb.VERSION_DRAINAGE_STATUS_DRAINED {
+		d.VersionState.Status = enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED
+	} else if newStatus == enumspb.VERSION_DRAINAGE_STATUS_DRAINING {
+		d.VersionState.Status = enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING
+	} else {
+		// This should only happen if we encounter an error while checking the drainage status of the version
+		d.VersionState.Status = enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_UNSPECIFIED
+	}
 }

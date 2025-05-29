@@ -321,6 +321,7 @@ const (
 	HistoryRecordActivityTaskHeartbeatScope = "RecordActivityTaskHeartbeat"
 	// HistoryRespondWorkflowTaskCompletedScope tracks RespondWorkflowTaskCompleted API calls received by service
 	HistoryRespondWorkflowTaskCompletedScope = "RespondWorkflowTaskCompleted"
+	HistoryRespondWorkflowTaskFailedScope    = "RespondWorkflowTaskFailed"
 	// HistoryRespondActivityTaskCompletedScope tracks RespondActivityTaskCompleted API calls received by service
 	HistoryRespondActivityTaskCompletedScope = "RespondActivityTaskCompleted"
 	// HistoryRespondActivityTaskFailedScope tracks RespondActivityTaskFailed API calls received by service
@@ -357,6 +358,7 @@ const (
 	HistoryReapplyEventsScope = "ReapplyEvents"
 	// HistoryQueryWorkflowScope tracks QueryWorkflow API calls received by service
 	HistoryQueryWorkflowScope = "QueryWorkflow"
+	HistoryResetWorkflowScope = "HistoryResetWorkflow"
 	// HistoryProcessDeleteHistoryEventScope tracks ProcessDeleteHistoryEvent processing calls
 	HistoryProcessDeleteHistoryEventScope = "ProcessDeleteHistoryEvent"
 	// HistoryDeleteWorkflowExecutionScope tracks DeleteWorkflowExecutions API calls
@@ -1179,6 +1181,20 @@ var (
 		"schedule_action_dropped",
 		WithDescription("The number of schedule actions that failed to start"),
 	)
+
+	// Worker Versioning
+	WorkerDeploymentCreated                           = NewCounterDef("worker_deployment_created")
+	WorkerDeploymentVersionCreated                    = NewCounterDef("worker_deployment_version_created")
+	WorkerDeploymentVersionCreatedManagedByController = NewCounterDef("worker_deployment_version_created_managed_by_controller")
+	WorkerDeploymentVersionVisibilityQueryCount       = NewCounterDef("worker_deployment_version_visibility_query_count")
+	WorkerDeploymentVersioningOverrideCounter         = NewCounterDef("worker_deployment_versioning_override_count")
+	StartDeploymentTransitionCounter                  = NewCounterDef("start_deployment_transition_count")
+
+	WorkflowResetCount        = NewCounterDef("workflow_reset_count")
+	WorkflowQuerySuccessCount = NewCounterDef("workflow_query_success_count")
+	WorkflowQueryFailureCount = NewCounterDef("workflow_query_failure_count")
+	WorkflowQueryTimeoutCount = NewCounterDef("workflow_query_timeout_count")
+	WorkflowTasksCompleted    = NewCounterDef("workflow_tasks_completed")
 
 	// Force replication
 	EncounterZombieWorkflowCount        = NewCounterDef("encounter_zombie_workflow_count")

@@ -65,7 +65,7 @@ type (
 
 		// Type of attributes controls the type of the node.
 		serializedNode *persistencespb.ChasmNode // serialized component | data | collection with metadata
-		value          any                       // deserialized component | data | collection
+		value          any                       // deserialized component | data | map
 
 		// valueState indicates if the value field and the persistence field serializedNode are in sync.
 		// If new value might be changed since it was deserialized and serialize method wasn't called yet, then valueState is valueStateNeedSerialize.
@@ -556,9 +556,9 @@ func (n *Node) syncSubComponentsInternal(
 			if keepChild {
 				childrenToKeep[field.name] = struct{}{}
 			}
-		case fieldKindSubCollection:
+		case fieldKindSubMap:
 			if field.val.IsNil() {
-				// If Collection field is nil then delete all collection items nodes and collection node itself.
+				// If Map field is nil then delete all collection items nodes and collection node itself.
 				continue
 			}
 
@@ -570,38 +570,42 @@ func (n *Node) syncSubComponentsInternal(
 				n.children[field.name] = collectionNode
 			}
 
-			// Validate collection type
+			// Validate map type.
 			if field.val.Kind() != reflect.Map {
-				return serviceerror.NewInternalf("CHASM collection must be of map[comparable]Field[T] type: value of %s is not of a map type", n.nodeName)
+				errMsg := fmt.Sprintf("CHASM map must be of map type: value of %s is not of a map type", n.nodeName)
+				softassert.Fail(n.logger, errMsg)
+				return serviceerror.NewInternal(errMsg)
 			}
 
 			if len(field.val.MapKeys()) == 0 {
-				// If Collection field is empty then delete all collection items nodes and collection node itself.
+				// If Map field is empty then delete all collection items nodes and collection node itself.
 				continue
 			}
 
-			collectionValT := field.typ.Elem()
-			if collectionValT.Kind() != reflect.Struct || genericTypePrefix(collectionValT) != chasmFieldTypePrefix {
-				return serviceerror.NewInternalf("CHASM collection must be of map[comparable]Field[T] type: %s map value type is not Field[T] but %s", n.nodeName, collectionValT)
+			mapValT := field.typ.Elem()
+			if mapValT.Kind() != reflect.Struct || genericTypePrefix(mapValT) != chasmFieldTypePrefix {
+				errMsg := fmt.Sprintf("CHASM map value must be of Field[T] type: %s collection value type is not Field[T] but %s", n.nodeName, mapValT)
+				softassert.Fail(n.logger, errMsg)
+				return serviceerror.NewInternal(errMsg)
 			}
 
 			collectionItemsToKeep := make(map[string]struct{})
-			for _, collectionKeyV := range field.val.MapKeys() {
-				collectionItemV := field.val.MapIndex(collectionKeyV)
-				collectionKeyStr, err := comparableKeyToString(n.nodeName, collectionKeyV)
+			for _, mapKeyV := range field.val.MapKeys() {
+				mapItemV := field.val.MapIndex(mapKeyV)
+				collectionKey, err := n.mapKeyToString(mapKeyV)
 				if err != nil {
 					return err
 				}
-				keepItem, updatedCollectionItemV, err := collectionNode.syncSubField(collectionItemV, collectionKeyStr, append(nodePath, field.name))
+				keepItem, updatedMapItemV, err := collectionNode.syncSubField(mapItemV, collectionKey, append(nodePath, field.name))
 				if err != nil {
 					return err
 				}
-				if updatedCollectionItemV.IsValid() {
+				if updatedMapItemV.IsValid() {
 					// The only way to update item in the map is to set it back.
-					field.val.SetMapIndex(collectionKeyV, updatedCollectionItemV)
+					field.val.SetMapIndex(mapKeyV, updatedMapItemV)
 				}
 				if keepItem {
-					collectionItemsToKeep[collectionKeyStr] = struct{}{}
+					collectionItemsToKeep[collectionKey] = struct{}{}
 				}
 			}
 			if err := collectionNode.deleteChildren(collectionItemsToKeep, append(nodePath, field.name)); err != nil {
@@ -615,7 +619,7 @@ func (n *Node) syncSubComponentsInternal(
 	return err
 }
 
-func comparableKeyToString(nodeName string, keyV reflect.Value) (string, error) {
+func (n *Node) mapKeyToString(keyV reflect.Value) (string, error) {
 	switch keyV.Kind() {
 	case reflect.String:
 		return keyV.String(), nil
@@ -626,11 +630,13 @@ func comparableKeyToString(nodeName string, keyV reflect.Value) (string, error) 
 	case reflect.Bool:
 		return strconv.FormatBool(keyV.Bool()), nil
 	default:
-		return "", serviceerror.NewInternalf("CHASM collection must be of map[comparable|string]Field[T] type: %s map key type not comparable but %s", nodeName, keyV.Type().String())
+		errMsg := fmt.Sprintf("CHASM map key type for node %s must be one of [%s], got %s", n.nodeName, mapKeyTypes, keyV.Type().String())
+		softassert.Fail(n.logger, errMsg)
+		return "", serviceerror.NewInternal(errMsg)
 	}
 }
 
-func stringToComparableKey(nodeName string, key string, keyT reflect.Type) (reflect.Value, error) {
+func (n *Node) stringToMapKey(nodeName string, key string, keyT reflect.Type) (reflect.Value, error) {
 	var (
 		keyV reflect.Value
 		err  error
@@ -683,7 +689,10 @@ func stringToComparableKey(nodeName string, key string, keyT reflect.Type) (refl
 		b, err = strconv.ParseBool(key)
 		keyV = reflect.ValueOf(b)
 	default:
-		err = fmt.Errorf("unsupported type %s of kind %s", keyT.String(), keyT.Kind().String())
+		err = fmt.Errorf("unsupported type %s of kind %s: supported key types: %s", keyT.String(), keyT.Kind().String(), mapKeyTypes)
+		softassert.Fail(n.logger, err.Error())
+		// Use softassert only here because this is the only case that indicates "compile" time error.
+		// The other errors below can come from data type mismatch between a component and persisted data.
 	}
 
 	if err == nil && !keyV.IsValid() {
@@ -691,7 +700,7 @@ func stringToComparableKey(nodeName string, key string, keyT reflect.Type) (refl
 	}
 
 	if err != nil {
-		err = serviceerror.NewInternalf("serialized collection %s key value %s can't be parsed to CHASM collection key type %s: %s", nodeName, key, keyT.String(), err.Error())
+		err = serviceerror.NewInternalf("serialized map %s key value %s can't be parsed to CHASM map key type %s: %s", nodeName, key, keyT.String(), err.Error())
 	}
 
 	return keyV, err
@@ -852,12 +861,12 @@ func (n *Node) deserializeComponentNode(
 				chasmFieldV.FieldByName(internalFieldName).Set(internalValue)
 				field.val.Set(chasmFieldV)
 			}
-		case fieldKindSubCollection:
+		case fieldKindSubMap:
 			if collectionNode, found := n.children[field.name]; found {
-				collectionFieldV := field.val
-				if collectionFieldV.IsNil() {
-					collectionFieldV = reflect.MakeMapWithSize(field.typ, field.val.Len())
-					field.val.Set(collectionFieldV)
+				mapFieldV := field.val
+				if mapFieldV.IsNil() {
+					mapFieldV = reflect.MakeMapWithSize(field.typ, field.val.Len())
+					field.val.Set(mapFieldV)
 				}
 
 				for collectionItemName, collectionItemNode := range collectionNode.children {
@@ -865,11 +874,11 @@ func (n *Node) deserializeComponentNode(
 					chasmFieldV := reflect.New(field.typ.Elem()).Elem()
 					internalValue := reflect.ValueOf(newFieldInternalWithNode(collectionItemNode))
 					chasmFieldV.FieldByName(internalFieldName).Set(internalValue)
-					collectionKeyV, err := stringToComparableKey(field.name, collectionItemName, collectionFieldV.Type().Key())
+					mapKeyV, err := n.stringToMapKey(field.name, collectionItemName, mapFieldV.Type().Key())
 					if err != nil {
 						return err
 					}
-					collectionFieldV.SetMapIndex(collectionKeyV, chasmFieldV)
+					mapFieldV.SetMapIndex(mapKeyV, chasmFieldV)
 				}
 			}
 		}
