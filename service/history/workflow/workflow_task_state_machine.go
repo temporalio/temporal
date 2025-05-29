@@ -1037,9 +1037,24 @@ func (m *workflowTaskStateMachine) GetTransientWorkflowTaskInfo(
 		return nil // this should never happen because WFT is retrieved by ScheduledEventID.
 	}
 
-	// Create scheduled and started events which are not written to the history yet.
+	scheduledEventID := workflowTask.ScheduledEventID
+	if workflowTask.StartedEventID == common.EmptyEventID {
+		// workflowTask.ScheduledEventID is not used if WFT is not started, because it has an EventID of the WFT as it was added to Matching.
+		// Because new events might come after that, they will be added to the history, but transient WFT is stayed the same.
+		// When this transient WFT is started, it is recreated, and new scheduledEventID is assigned from the GetNextEventID()
+		// (see AddWorkflowTaskStartedEvent in this file for details). This logic is duplicated here.
+
+		// In contrast, workflowTask.StartedEventID is used below in this method, because if there are new events,
+		// during start, transient WFT is converted to normal. This method is called for transient WFT only;
+		// therefore, it is guaranteed that there were no new events since transient WFT was scheduled.
+		// If this invariant is broken, validateTransientWorkflowTaskEvents function will detect it.
+
+		scheduledEventID = m.ms.GetNextEventID()
+	}
+
+	// Create scheduled event which is not written to the history yet.
 	scheduledEvent := &historypb.HistoryEvent{
-		EventId:   workflowTask.ScheduledEventID,
+		EventId:   scheduledEventID,
 		EventTime: timestamppb.New(workflowTask.ScheduledTime),
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 		Version:   m.ms.currentVersion,
@@ -1064,7 +1079,9 @@ func (m *workflowTaskStateMachine) GetTransientWorkflowTaskInfo(
 		versioningStamp = &commonpb.WorkerVersionStamp{UseVersioning: true, BuildId: workflowTask.BuildId}
 	}
 
+	// Create started event which is not written to the history yet.
 	startedEvent := &historypb.HistoryEvent{
+		// See comment above on workflowTask.StartedEventID.
 		EventId:   workflowTask.StartedEventID,
 		EventTime: timestamppb.New(workflowTask.StartedTime),
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
