@@ -81,7 +81,7 @@ type (
 		FlushBytes int `yaml:"flushBytes"`
 		// Reporter allows additional configuration of the stats reporter, e.g. with custom tagging options.
 		Reporter StatsdReporterConfig `yaml:"reporter"`
-		// Metric framework: tally/opentelemetry
+		// Metric framework: tally/opentelemetry. If not specified, it defaults to tally.
 		Framework string `yaml:"framework"`
 	}
 
@@ -461,9 +461,10 @@ func MetricsHandlerFromConfig(logger log.Logger, c *Config) (Handler, error) {
 
 	setDefaultPerUnitHistogramBoundaries(&c.ClientConfig)
 
+	fatalOnListenerError := true
 	if c.Statsd != nil && c.Statsd.Framework == FrameworkOpentelemetry {
-		fatalOnListenerError := true
-		otelProvider, err := NewOpenTelemetryProvider(logger, nil, &c.ClientConfig, fatalOnListenerError, c.Statsd)
+		// create opentelemetry provider with just statsd
+		otelProvider, err := NewOpenTelemetryProvider(logger, c.Statsd, nil, &c.ClientConfig, fatalOnListenerError)
 		if err != nil {
 			logger.Fatal(err.Error())
 		}
@@ -471,13 +472,12 @@ func MetricsHandlerFromConfig(logger log.Logger, c *Config) (Handler, error) {
 	}
 
 	if c.Prometheus != nil && c.Prometheus.Framework == FrameworkOpentelemetry {
-		fatalOnListenerError := true
-		otelProvider, err := NewOpenTelemetryProvider(logger, c.Prometheus, &c.ClientConfig, fatalOnListenerError, nil)
+		// create opentelemetry provider with just prometheus
+		otelProvider, err := NewOpenTelemetryProvider(logger, nil, c.Prometheus, &c.ClientConfig, fatalOnListenerError)
 		if err != nil {
 			logger.Fatal(err.Error())
 		}
 		return NewOtelMetricsHandler(logger, otelProvider, c.ClientConfig)
-
 	}
 
 	// fallback to tally if no framework is specified

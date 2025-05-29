@@ -32,10 +32,10 @@ type (
 
 func NewOpenTelemetryProvider(
 	logger log.Logger,
+	statsdConfig *StatsdConfig,
 	prometheusConfig *PrometheusConfig,
 	clientConfig *ClientConfig,
 	fatalOnListenerError bool,
-	statsdConfig *StatsdConfig,
 ) (*openTelemetryProviderImpl, error) {
 	var readers []sdkmetrics.Reader
 	var metricServer *http.Server
