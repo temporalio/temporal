@@ -81,11 +81,11 @@ func TestNewOpenTelemetryProviderWithStatsD(t *testing.T) {
 	counter.Add(context.Background(), 1)
 	counter.Add(context.Background(), 5)
 
-	// Wait a bit for any async operations
-	time.Sleep(100 * time.Millisecond)
-
 	// Test shutdown
-	provider.Stop(logger)
+	require.Eventually(t, func() bool {
+		provider.Stop(logger)
+		return true
+	}, time.Second, 100*time.Millisecond)
 }
 
 func TestNewOpenTelemetryProviderWithBothPrometheusAndStatsD(t *testing.T) {
@@ -124,5 +124,8 @@ func TestNewOpenTelemetryProviderWithBothPrometheusAndStatsD(t *testing.T) {
 	assert.NotNil(t, meter)
 
 	// Test shutdown
-	provider.Stop(logger)
+	require.Eventually(t, func() bool {
+		provider.Stop(logger)
+		return true
+	}, time.Second, 100*time.Millisecond)
 }

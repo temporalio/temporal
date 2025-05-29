@@ -2,6 +2,7 @@ package metrics
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"sync"
@@ -28,7 +29,7 @@ type statsdExporter struct {
 // NewStatsdExporter creates a new StatsD exporter that implements the OpenTelemetry metric.Exporter interface
 func NewStatsdExporter(config *StatsdConfig, logger log.Logger) (*statsdExporter, error) {
 	if config == nil {
-		return nil, fmt.Errorf("StatsdConfig cannot be nil")
+		return nil, errors.New("StatsdConfig cannot be nil")
 	}
 
 	// Create StatsD client
@@ -39,7 +40,7 @@ func NewStatsdExporter(config *StatsdConfig, logger log.Logger) (*statsdExporter
 
 	client, err := statsd.NewClientWithConfig(clientConfig)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create StatsD client: %w", err)
+		return nil, errors.New("failed to create StatsD client")
 	}
 
 	tagSeparator := config.Reporter.TagSeparator
@@ -80,7 +81,7 @@ func (e *statsdExporter) Export(ctx context.Context, rm *metricdata.ResourceMetr
 	defer e.mu.Unlock()
 
 	if e.shutdown {
-		return fmt.Errorf("exporter is shutdown")
+		return errors.New("exporter is shutdown")
 	}
 
 	for _, sm := range rm.ScopeMetrics {
