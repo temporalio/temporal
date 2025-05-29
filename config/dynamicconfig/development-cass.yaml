@@ -60,3 +60,5 @@ history.hostLevelCacheMaxSize:
   - value: 8192
 history.enableTransitionHistory:
   - value: true
+frontend.activityAPIsEnabled:
+  - value: true
