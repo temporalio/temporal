@@ -409,23 +409,29 @@ func VersioningBehaviorAfterOverrideTag(behavior enumspb.VersioningBehavior) Tag
 	return &tagImpl{key: behaviorAfter, value: behavior.String()}
 }
 
+// RunInitiatorTag creates a tag indicating how a workflow run was initiated.
+// It handles both new workflow runs and continuations from previous runs.
+// When attributes is nil (e.g. during AddWorkflowExecutionOptionsUpdatedEvent),
+// it returns a tag indicating an existing run.
 func RunInitiatorTag(prevRunID string, attributes *historypb.WorkflowExecutionStartedEventAttributes) Tag {
-	// UpdateWorkflowExecutionOptions API is the caller
 	if attributes == nil {
 		return &tagImpl{key: runInitiator, value: existingRun}
 	}
 
-	// StartWorkflowExecution API is the caller
 	if prevRunID == "" {
 		return &tagImpl{key: runInitiator, value: newRun}
-	} else if attributes.GetInitiator() == enumspb.CONTINUE_AS_NEW_INITIATOR_WORKFLOW {
-		return &tagImpl{key: runInitiator, value: childRun}
-	} else if attributes.GetInitiator() == enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY {
-		return &tagImpl{key: runInitiator, value: retryRun}
-	} else if attributes.GetInitiator() == enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE {
-		return &tagImpl{key: runInitiator, value: cronRun}
 	}
-	return &tagImpl{key: runInitiator, value: existingRun}
+
+	switch attributes.GetInitiator() {
+	case enumspb.CONTINUE_AS_NEW_INITIATOR_WORKFLOW:
+		return &tagImpl{key: runInitiator, value: childRun}
+	case enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY:
+		return &tagImpl{key: runInitiator, value: retryRun}
+	case enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE:
+		return &tagImpl{key: runInitiator, value: cronRun}
+	default:
+		return &tagImpl{key: runInitiator, value: existingRun}
+	}
 }
 
 func FromUnversionedTag(version string) Tag {
