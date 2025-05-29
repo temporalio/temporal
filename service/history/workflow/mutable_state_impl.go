@@ -2463,6 +2463,18 @@ func (ms *MutableStateImpl) AddWorkflowExecutionStartedEventWithOptions(
 	); err != nil {
 		return nil, err
 	}
+
+	// Versioning Override set on StartWorkflowExecutionRequest
+	if startRequest.GetStartRequest().GetVersioningOverride() != nil {
+		metrics.WorkerDeploymentVersioningOverrideCounter.With(
+			ms.metricsHandler.WithTags(
+				metrics.NamespaceTag(ms.namespaceEntry.Name().String()),
+				metrics.VersioningBehaviorBeforeOverrideTag(enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED),
+				metrics.VersioningBehaviorAfterOverrideTag(worker_versioning.ExtractVersioningBehaviorFromOverride(startRequest.GetStartRequest().GetVersioningOverride())),
+				metrics.RunInitiatorTag(prevRunID, event.GetWorkflowExecutionStartedEventAttributes()),
+			),
+		).Record(1)
+	}
 	return event, nil
 }
 
@@ -4804,9 +4816,25 @@ func (ms *MutableStateImpl) AddWorkflowExecutionOptionsUpdatedEvent(
 		attachCompletionCallbacks,
 		links,
 	)
+	prevEffectiveVersioningBehavior := ms.GetEffectiveVersioningBehavior()
+	prevEffectiveDeployment := ms.GetEffectiveDeployment()
+
 	if err := ms.ApplyWorkflowExecutionOptionsUpdatedEvent(event); err != nil {
 		return nil, err
 	}
+
+	if !proto.Equal(ms.GetEffectiveDeployment(), prevEffectiveDeployment) ||
+		ms.GetEffectiveVersioningBehavior() != prevEffectiveVersioningBehavior {
+		metrics.WorkerDeploymentVersioningOverrideCounter.With(
+			ms.metricsHandler.WithTags(
+				metrics.NamespaceTag(ms.namespaceEntry.Name().String()),
+				metrics.VersioningBehaviorBeforeOverrideTag(prevEffectiveVersioningBehavior),
+				metrics.VersioningBehaviorAfterOverrideTag(ms.GetEffectiveVersioningBehavior()),
+				metrics.RunInitiatorTag("", event.GetWorkflowExecutionStartedEventAttributes()),
+			),
+		).Record(1)
+	}
+
 	return event, nil
 }
 
@@ -4833,6 +4861,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -5180,7 +5209,6 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionContinuedAsNewEvent(
 
 func (ms *MutableStateImpl) AddStartChildWorkflowExecutionInitiatedEvent(
 	workflowTaskCompletedEventID int64,
-	createRequestID string,
 	command *commandpb.StartChildWorkflowExecutionCommandAttributes,
 	targetNamespaceID namespace.ID,
 ) (*historypb.HistoryEvent, *persistencespb.ChildExecutionInfo, error) {
@@ -5189,8 +5217,12 @@ func (ms *MutableStateImpl) AddStartChildWorkflowExecutionInitiatedEvent(
 		return nil, nil, err
 	}
 
-	event := ms.hBuilder.AddStartChildWorkflowExecutionInitiatedEvent(workflowTaskCompletedEventID, command, targetNamespaceID)
-	ci, err := ms.ApplyStartChildWorkflowExecutionInitiatedEvent(workflowTaskCompletedEventID, event, createRequestID)
+	event := ms.hBuilder.AddStartChildWorkflowExecutionInitiatedEvent(
+		workflowTaskCompletedEventID,
+		command,
+		targetNamespaceID,
+	)
+	ci, err := ms.ApplyStartChildWorkflowExecutionInitiatedEvent(workflowTaskCompletedEventID, event)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -5203,10 +5235,14 @@ func (ms *MutableStateImpl) AddStartChildWorkflowExecutionInitiatedEvent(
 	return event, ci, nil
 }
 
+// generateChildWorkflowRequestID generates a unique request ID for child workflow execution
+func (ms *MutableStateImpl) generateChildWorkflowRequestID(event *historypb.HistoryEvent) string {
+	return fmt.Sprintf("%s:%d:%d", ms.executionState.RunId, event.GetEventId(), event.GetVersion())
+}
+
 func (ms *MutableStateImpl) ApplyStartChildWorkflowExecutionInitiatedEvent(
 	firstEventID int64,
 	event *historypb.HistoryEvent,
-	createRequestID string,
 ) (*persistencespb.ChildExecutionInfo, error) {
 	initiatedEventID := event.GetEventId()
 	attributes := event.GetStartChildWorkflowExecutionInitiatedEventAttributes()
@@ -5216,7 +5252,7 @@ func (ms *MutableStateImpl) ApplyStartChildWorkflowExecutionInitiatedEvent(
 		InitiatedEventBatchId: firstEventID,
 		StartedEventId:        common.EmptyEventID,
 		StartedWorkflowId:     attributes.GetWorkflowId(),
-		CreateRequestId:       createRequestID,
+		CreateRequestId:       ms.generateChildWorkflowRequestID(event),
 		Namespace:             attributes.GetNamespace(),
 		NamespaceId:           attributes.GetNamespaceId(),
 		WorkflowTypeName:      attributes.GetWorkflowType().GetName(),
@@ -8087,7 +8123,8 @@ func (ms *MutableStateImpl) StartDeploymentTransition(deployment *deploymentpb.D
 		ms.GetExecutionInfo().VersioningInfo = versioningInfo
 	}
 
-	if ms.GetEffectiveDeployment().Equal(deployment) {
+	preTransitionEffectiveDeployment := ms.GetEffectiveDeployment()
+	if preTransitionEffectiveDeployment.Equal(deployment) {
 		return serviceerror.NewInternal("start transition should receive a version different from effective version")
 	}
 
@@ -8125,6 +8162,16 @@ func (ms *MutableStateImpl) StartDeploymentTransition(deployment *deploymentpb.D
 			ms.logInfo("start transition did not reschedule pending speculative task")
 		}
 	}
+
+	// DeploymentTransition has taken place, so we increment the DeploymentTransition metric
+	metrics.StartDeploymentTransitionCounter.With(
+		ms.metricsHandler.WithTags(
+			metrics.NamespaceTag(ms.namespaceEntry.Name().String()),
+			metrics.FromUnversionedTag(worker_versioning.ExternalWorkerDeploymentVersionToString(worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(preTransitionEffectiveDeployment))),
+			metrics.ToUnversionedTag(worker_versioning.ExternalWorkerDeploymentVersionToString(worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(deployment))),
+		),
+	).Record(1)
+
 	return nil
 }
 
