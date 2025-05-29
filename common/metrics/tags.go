@@ -412,8 +412,7 @@ func WorkflowStatusTag(status string) Tag {
 func QueryTypeTag(queryType string) Tag {
 	if queryType == queryTypeStackTrace || queryType == queryTypeOpenSessions || queryType == queryTypeWorkflowMetadata {
 		return &tagImpl{key: queryType, value: queryType}
-	} else {
-		// group all user defined queries into a single tag value
-		return &tagImpl{key: queryType, value: queryTypeUserDefined}
 	}
+	// group all user defined queries into a single tag value
+	return &tagImpl{key: queryType, value: queryTypeUserDefined}
 }
