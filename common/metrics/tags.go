@@ -62,7 +62,7 @@ const (
 	queryTypeOpenSessions     = "__open_sessions"
 	queryTypeWorkflowMetadata = "__temporal_workflow_metadata"
 	queryTypeUserDefined      = "__user_defined"
-	
+
 	newRun      = "new"
 	existingRun = "existing"
 	childRun    = "child"
@@ -415,7 +415,6 @@ func DestinationTag(value string) Tag {
 	}
 }
 
-<<<<<<< HEAD
 func VersioningBehaviorTag(behavior enumspb.VersioningBehavior) Tag {
 	return &tagImpl{versioningBehavior, behavior.String()}
 }
@@ -430,7 +429,8 @@ func QueryTypeTag(queryType string) Tag {
 	}
 	// group all user defined queries into a single tag value
 	return &tagImpl{key: queryType, value: queryTypeUserDefined}
-=======
+}
+
 func VersioningBehaviorBeforeOverrideTag(behavior enumspb.VersioningBehavior) Tag {
 	return &tagImpl{key: behaviorBefore, value: behavior.String()}
 }
@@ -476,5 +476,4 @@ func ToUnversionedTag(version string) Tag {
 		return &tagImpl{key: toUnversioned, value: trueValue}
 	}
 	return &tagImpl{key: toUnversioned, value: falseValue}
->>>>>>> main
 }
