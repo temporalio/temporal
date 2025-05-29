@@ -745,6 +745,13 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 	if err != nil {
 		return nil, err
 	}
+
+	metrics.WorkflowTasksCompleted.With(m.metricsHandler).Record(1,
+		metrics.NamespaceTag(m.ms.GetNamespaceEntry().Name().String()),
+		metrics.VersioningBehaviorTag(vb),
+		metrics.FirstAttemptTag(workflowTask.Attempt),
+	)
+
 	return event, nil
 }
 

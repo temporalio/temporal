@@ -1093,9 +1093,8 @@ func (handler *workflowTaskCompletedHandler) handleCommandStartChildWorkflow(
 
 	enums.SetDefaultWorkflowIdReusePolicy(&attr.WorkflowIdReusePolicy)
 
-	requestID := uuid.New()
 	event, _, err := handler.mutableState.AddStartChildWorkflowExecutionInitiatedEvent(
-		handler.workflowTaskCompletedID, requestID, attr, targetNamespaceID,
+		handler.workflowTaskCompletedID, attr, targetNamespaceID,
 	)
 	if err == nil {
 		// Keep track of all child initiated commands in this workflow task to validate request cancel commands

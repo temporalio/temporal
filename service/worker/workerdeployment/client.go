@@ -1576,10 +1576,3 @@ func (d *ClientImpl) getSyncBatchSize() int32 {
 	}
 	return syncBatchSize
 }
-
-// isFailedPrecondition checks if the error is a FailedPrecondition error. It also checks if the FailedPrecondition error is wrapped in an ApplicationError.
-func isFailedPrecondition(err error) bool {
-	var failedPreconditionError *serviceerror.FailedPrecondition
-	var applicationError *temporal.ApplicationError
-	return errors.As(err, &failedPreconditionError) || (errors.As(err, &applicationError) && applicationError.Type() == errFailedPrecondition)
-}

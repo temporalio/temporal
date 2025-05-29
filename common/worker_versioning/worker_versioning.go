@@ -397,6 +397,17 @@ func OverrideIsPinned(override *workflowpb.VersioningOverride) bool {
 		override.GetPinned().GetBehavior() == workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED
 }
 
+func ExtractVersioningBehaviorFromOverride(override *workflowpb.VersioningOverride) enumspb.VersioningBehavior {
+	if override.GetAutoUpgrade() {
+		return enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
+	} else if override.GetPinned() != nil {
+		return enumspb.VERSIONING_BEHAVIOR_PINNED
+	}
+
+	//nolint:staticcheck // SA1019: worker versioning v0.31
+	return override.GetBehavior()
+}
+
 func ValidateVersioningOverride(override *workflowpb.VersioningOverride) error {
 	if override == nil {
 		return nil
