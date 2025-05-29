@@ -1,0 +1,284 @@
+package metrics
+
+import (
+	"context"
+	"fmt"
+	"sort"
+	"sync"
+
+	"github.com/cactus/go-statsd-client/v5/statsd"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+)
+
+var _ metric.Exporter = (*statsdExporter)(nil)
+
+type statsdExporter struct {
+	client       statsd.Statter
+	config       *StatsdConfig
+	logger       log.Logger
+	tagSeparator string
+	mu           sync.Mutex
+	shutdown     bool
+}
+
+// NewStatsdExporter creates a new StatsD exporter that implements the OpenTelemetry metric.Exporter interface
+func NewStatsdExporter(config *StatsdConfig, logger log.Logger) (*statsdExporter, error) {
+	if config == nil {
+		return nil, fmt.Errorf("StatsdConfig cannot be nil")
+	}
+
+	// Create StatsD client
+	clientConfig := &statsd.ClientConfig{
+		Address: config.HostPort,
+		Prefix:  config.Prefix,
+	}
+
+	client, err := statsd.NewClientWithConfig(clientConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create StatsD client: %w", err)
+	}
+
+	tagSeparator := config.Reporter.TagSeparator
+	if tagSeparator == "" {
+		tagSeparator = ","
+	}
+
+	return &statsdExporter{
+		client:       client,
+		config:       config,
+		logger:       logger,
+		tagSeparator: tagSeparator,
+	}, nil
+}
+
+// Temporality implements metric.Exporter
+func (e *statsdExporter) Temporality(ik metric.InstrumentKind) metricdata.Temporality {
+	// StatsD typically uses cumulative temporality for counters and delta for gauges
+	switch ik {
+	case metric.InstrumentKindCounter, metric.InstrumentKindObservableCounter:
+		return metricdata.CumulativeTemporality
+	case metric.InstrumentKindHistogram:
+		return metricdata.CumulativeTemporality
+	default:
+		return metricdata.DeltaTemporality
+	}
+}
+
+// Aggregation implements metric.Exporter
+func (e *statsdExporter) Aggregation(ik metric.InstrumentKind) metric.Aggregation {
+	// For StatsD, we use default aggregations since StatsD handles aggregation on the server side
+	return metric.DefaultAggregationSelector(ik)
+}
+
+// Export implements metric.Exporter
+func (e *statsdExporter) Export(ctx context.Context, rm *metricdata.ResourceMetrics) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	if e.shutdown {
+		return fmt.Errorf("exporter is shutdown")
+	}
+
+	for _, sm := range rm.ScopeMetrics {
+		for _, m := range sm.Metrics {
+			if err := e.exportMetric(m); err != nil {
+				e.logger.Error("Failed to export metric to StatsD", tag.Error(err), tag.NewStringTag("metric_name", m.Name))
+			}
+		}
+	}
+
+	return nil
+}
+
+// ForceFlush implements metric.Exporter
+func (e *statsdExporter) ForceFlush(ctx context.Context) error {
+	// StatsD is UDP-based and doesn't support flushing
+	return nil
+}
+
+// Shutdown implements metric.Exporter
+func (e *statsdExporter) Shutdown(ctx context.Context) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	if e.shutdown {
+		return nil
+	}
+
+	e.shutdown = true
+	return e.client.Close()
+}
+
+func (e *statsdExporter) exportMetric(m metricdata.Metrics) error {
+	switch data := m.Data.(type) {
+	case metricdata.Sum[int64]:
+		return e.exportSumInt64(m.Name, data)
+	case metricdata.Sum[float64]:
+		return e.exportSumFloat64(m.Name, data)
+	case metricdata.Gauge[int64]:
+		return e.exportGaugeInt64(m.Name, data)
+	case metricdata.Gauge[float64]:
+		return e.exportGaugeFloat64(m.Name, data)
+	case metricdata.Histogram[int64]:
+		return e.exportHistogramInt64(m.Name, data)
+	case metricdata.Histogram[float64]:
+		return e.exportHistogramFloat64(m.Name, data)
+	default:
+		e.logger.Warn("Unsupported metric type for StatsD export", tag.NewStringTag("metric_name", m.Name))
+		return nil
+	}
+}
+
+func (e *statsdExporter) exportSumInt64(name string, data metricdata.Sum[int64]) error {
+	for _, dp := range data.DataPoints {
+		metricName := e.buildMetricName(name, dp.Attributes)
+		tags := e.buildTags(dp.Attributes)
+		if data.IsMonotonic {
+			// For monotonic sums (counters), use Inc
+			if err := e.client.Inc(metricName, dp.Value, 1.0, tags...); err != nil {
+				return err
+			}
+		} else {
+			// For non-monotonic sums, use Gauge
+			if err := e.client.Gauge(metricName, dp.Value, 1.0, tags...); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (e *statsdExporter) exportSumFloat64(name string, data metricdata.Sum[float64]) error {
+	for _, dp := range data.DataPoints {
+		metricName := e.buildMetricName(name, dp.Attributes)
+		tags := e.buildTags(dp.Attributes)
+		if data.IsMonotonic {
+			// For monotonic sums (counters), use Inc with converted value
+			if err := e.client.Inc(metricName, int64(dp.Value), 1.0, tags...); err != nil {
+				return err
+			}
+		} else {
+			// For non-monotonic sums, convert to int64 and use Gauge
+			if err := e.client.Gauge(metricName, int64(dp.Value), 1.0, tags...); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (e *statsdExporter) exportGaugeInt64(name string, data metricdata.Gauge[int64]) error {
+	for _, dp := range data.DataPoints {
+		metricName := e.buildMetricName(name, dp.Attributes)
+		tags := e.buildTags(dp.Attributes)
+		if err := e.client.Gauge(metricName, dp.Value, 1.0, tags...); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (e *statsdExporter) exportGaugeFloat64(name string, data metricdata.Gauge[float64]) error {
+	for _, dp := range data.DataPoints {
+		metricName := e.buildMetricName(name, dp.Attributes)
+		tags := e.buildTags(dp.Attributes)
+		// Convert float64 to int64 for StatsD gauge
+		if err := e.client.Gauge(metricName, int64(dp.Value), 1.0, tags...); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (e *statsdExporter) exportHistogramInt64(name string, data metricdata.Histogram[int64]) error {
+	for _, dp := range data.DataPoints {
+		metricName := e.buildMetricName(name, dp.Attributes)
+		tags := e.buildTags(dp.Attributes)
+
+		// Export histogram as multiple metrics
+		// Count
+		if err := e.client.Inc(metricName+".count", int64(dp.Count), 1.0, tags...); err != nil {
+			return err
+		}
+
+		// Sum (dp.Sum is just an int64, not a pointer or optional type)
+		if err := e.client.Gauge(metricName+".sum", dp.Sum, 1.0, tags...); err != nil {
+			return err
+		}
+
+		// Buckets - use dp.Bounds field
+		if len(dp.Bounds) > 0 && len(dp.BucketCounts) > 0 {
+			for i, bound := range dp.Bounds {
+				if i < len(dp.BucketCounts) {
+					bucketName := fmt.Sprintf("%s.bucket_le_%v", metricName, bound)
+					if err := e.client.Inc(bucketName, int64(dp.BucketCounts[i]), 1.0, tags...); err != nil {
+						return err
+					}
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func (e *statsdExporter) exportHistogramFloat64(name string, data metricdata.Histogram[float64]) error {
+	for _, dp := range data.DataPoints {
+		metricName := e.buildMetricName(name, dp.Attributes)
+		tags := e.buildTags(dp.Attributes)
+
+		// Export histogram as multiple metrics
+		// Count
+		if err := e.client.Inc(metricName+".count", int64(dp.Count), 1.0, tags...); err != nil {
+			return err
+		}
+
+		// Sum (dp.Sum is just a float64, not a pointer or optional type)
+		if err := e.client.Gauge(metricName+".sum", int64(dp.Sum), 1.0, tags...); err != nil {
+			return err
+		}
+
+		// Buckets - use dp.Bounds field
+		if len(dp.Bounds) > 0 && len(dp.BucketCounts) > 0 {
+			for i, bound := range dp.Bounds {
+				if i < len(dp.BucketCounts) {
+					bucketName := fmt.Sprintf("%s.bucket_le_%v", metricName, bound)
+					if err := e.client.Inc(bucketName, int64(dp.BucketCounts[i]), 1.0, tags...); err != nil {
+						return err
+					}
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func (e *statsdExporter) buildMetricName(name string, attrs attribute.Set) string {
+	if e.config.Prefix != "" {
+		return e.config.Prefix + "." + name
+	}
+	return name
+}
+
+func (e *statsdExporter) buildTags(attrs attribute.Set) []statsd.Tag {
+	if attrs.Len() == 0 {
+		return nil
+	}
+
+	tags := make([]statsd.Tag, 0, attrs.Len())
+	iter := attrs.Iter()
+	for iter.Next() {
+		kv := iter.Attribute()
+		tags = append(tags, statsd.Tag{string(kv.Key), kv.Value.AsString()})
+	}
+
+	// Sort tags for consistency
+	sort.Slice(tags, func(i, j int) bool {
+		return tags[i][0] < tags[j][0]
+	})
+
+	return tags
+}

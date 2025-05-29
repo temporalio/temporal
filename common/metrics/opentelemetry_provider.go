@@ -23,9 +23,10 @@ type (
 	}
 
 	openTelemetryProviderImpl struct {
-		meter  metric.Meter
-		config *PrometheusConfig
-		server *http.Server
+		meter          metric.Meter
+		config         *PrometheusConfig
+		server         *http.Server
+		statsdExporter *statsdExporter
 	}
 )
 
@@ -34,22 +35,50 @@ func NewOpenTelemetryProvider(
 	prometheusConfig *PrometheusConfig,
 	clientConfig *ClientConfig,
 	fatalOnListenerError bool,
+	statsdConfig *StatsdConfig,
 ) (*openTelemetryProviderImpl, error) {
-	reg := prometheus.NewRegistry()
-	exporterOpts := []exporters.Option{exporters.WithRegisterer(reg)}
-	if clientConfig.WithoutUnitSuffix {
-		exporterOpts = append(exporterOpts, exporters.WithoutUnits())
+	var readers []sdkmetrics.Reader
+	var metricServer *http.Server
+	var statsdExp *statsdExporter
+
+	// Set up Prometheus exporter if config is provided
+	if prometheusConfig != nil {
+		reg := prometheus.NewRegistry()
+		exporterOpts := []exporters.Option{exporters.WithRegisterer(reg)}
+		if clientConfig.WithoutUnitSuffix {
+			exporterOpts = append(exporterOpts, exporters.WithoutUnits())
+		}
+		if clientConfig.WithoutCounterSuffix {
+			exporterOpts = append(exporterOpts, exporters.WithoutCounterSuffixes())
+		}
+		if clientConfig.Prefix != "" {
+			exporterOpts = append(exporterOpts, exporters.WithNamespace(clientConfig.Prefix))
+		}
+		exporter, err := exporters.New(exporterOpts...)
+		if err != nil {
+			logger.Error("Failed to initialize prometheus exporter.", tag.Error(err))
+			return nil, err
+		}
+		readers = append(readers, exporter)
+		metricServer = initPrometheusListener(prometheusConfig, reg, logger, fatalOnListenerError)
 	}
-	if clientConfig.WithoutCounterSuffix {
-		exporterOpts = append(exporterOpts, exporters.WithoutCounterSuffixes())
+
+	// Set up StatsD exporter if config is provided
+	if statsdConfig != nil {
+		var err error
+		statsdExp, err = NewStatsdExporter(statsdConfig, logger)
+		if err != nil {
+			logger.Error("Failed to initialize statsd exporter.", tag.Error(err))
+			return nil, err
+		}
+		// Create a PeriodicReader with the StatsD exporter
+		statsdReader := sdkmetrics.NewPeriodicReader(statsdExp)
+		readers = append(readers, statsdReader)
 	}
-	if clientConfig.Prefix != "" {
-		exporterOpts = append(exporterOpts, exporters.WithNamespace(clientConfig.Prefix))
-	}
-	exporter, err := exporters.New(exporterOpts...)
-	if err != nil {
-		logger.Error("Failed to initialize prometheus exporter.", tag.Error(err))
-		return nil, err
+
+	// If no exporters are configured, log a warning
+	if len(readers) == 0 {
+		logger.Warn("No metric exporters configured (neither Prometheus nor StatsD)")
 	}
 
 	var views []sdkmetrics.View
@@ -66,16 +95,20 @@ func NewOpenTelemetryProvider(
 			},
 		))
 	}
-	provider := sdkmetrics.NewMeterProvider(
-		sdkmetrics.WithReader(exporter),
-		sdkmetrics.WithView(views...),
-	)
-	metricServer := initPrometheusListener(prometheusConfig, reg, logger, fatalOnListenerError)
+
+	meterProviderOpts := []sdkmetrics.Option{sdkmetrics.WithView(views...)}
+	for _, reader := range readers {
+		meterProviderOpts = append(meterProviderOpts, sdkmetrics.WithReader(reader))
+	}
+
+	provider := sdkmetrics.NewMeterProvider(meterProviderOpts...)
 	meter := provider.Meter("temporal")
+
 	reporter := &openTelemetryProviderImpl{
-		meter:  meter,
-		config: prometheusConfig,
-		server: metricServer,
+		meter:          meter,
+		config:         prometheusConfig,
+		server:         metricServer,
+		statsdExporter: statsdExp,
 	}
 
 	return reporter, nil
@@ -124,9 +157,21 @@ func (r *openTelemetryProviderImpl) GetMeter() metric.Meter {
 }
 
 func (r *openTelemetryProviderImpl) Stop(logger log.Logger) {
-	ctx, closeCtx := context.WithTimeout(context.Background(), time.Second)
-	defer closeCtx()
-	if err := r.server.Shutdown(ctx); !(err == nil || err == http.ErrServerClosed) {
-		logger.Error("Prometheus metrics server shutdown failure.", tag.Address(r.config.ListenAddress), tag.Error(err))
+	// Shutdown Prometheus server if it exists
+	if r.server != nil {
+		ctx, closeCtx := context.WithTimeout(context.Background(), time.Second)
+		defer closeCtx()
+		if err := r.server.Shutdown(ctx); !(err == nil || err == http.ErrServerClosed) {
+			logger.Error("Prometheus metrics server shutdown failure.", tag.Address(r.config.ListenAddress), tag.Error(err))
+		}
+	}
+
+	// Shutdown StatsD exporter if it exists
+	if r.statsdExporter != nil {
+		ctx, closeCtx := context.WithTimeout(context.Background(), time.Second)
+		defer closeCtx()
+		if err := r.statsdExporter.Shutdown(ctx); err != nil {
+			logger.Error("StatsD exporter shutdown failure.", tag.Error(err))
+		}
 	}
 }

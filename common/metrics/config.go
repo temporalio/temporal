@@ -461,7 +461,7 @@ func MetricsHandlerFromConfig(logger log.Logger, c *Config) (Handler, error) {
 
 	if c.Prometheus != nil && c.Prometheus.Framework == FrameworkOpentelemetry {
 		fatalOnListenerError := true
-		otelProvider, err := NewOpenTelemetryProvider(logger, c.Prometheus, &c.ClientConfig, fatalOnListenerError)
+		otelProvider, err := NewOpenTelemetryProvider(logger, c.Prometheus, &c.ClientConfig, fatalOnListenerError, c.Statsd)
 		if err != nil {
 			logger.Fatal(err.Error())
 		}
