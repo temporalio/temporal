@@ -136,7 +136,7 @@ func Invoke(
 		shardContext.GetMetricsHandler().WithTags(
 			metrics.NamespaceTag(namespaceEntry.Name().String()),
 			metrics.OperationTag(metrics.HistoryResetWorkflowScope),
-			metrics.VersioningBehavior(baseMutableState.GetEffectiveVersioningBehavior()),
+			metrics.VersioningBehaviorTag(baseMutableState.GetEffectiveVersioningBehavior()),
 		),
 	).Record(1)
 
