@@ -4,7 +4,6 @@ package interfaces
 
 import (
 	"context"
-	"go.temporal.io/server/common/worker_versioning"
 	"time"
 
 	commandpb "go.temporal.io/api/command/v1"
@@ -27,6 +26,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/historybuilder"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/tasks"
