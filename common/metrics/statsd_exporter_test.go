@@ -65,7 +65,7 @@ func TestNewOpenTelemetryProviderWithStatsD(t *testing.T) {
 	}
 
 	// Create OpenTelemetry provider with StatsD
-	provider, err := NewOpenTelemetryProvider(logger, nil, clientConfig, false, statsdConfig)
+	provider, err := NewOpenTelemetryProviderWithStatsd(logger, statsdConfig, clientConfig)
 	require.NoError(t, err)
 	require.NotNil(t, provider)
 
@@ -88,7 +88,7 @@ func TestNewOpenTelemetryProviderWithStatsD(t *testing.T) {
 	}, time.Second, 100*time.Millisecond)
 }
 
-func TestNewOpenTelemetryProviderWithBothPrometheusAndStatsD(t *testing.T) {
+func TestNewOpenTelemetryProviderWithPrometheus(t *testing.T) {
 	logger := log.NewNoopLogger()
 
 	// Test configuration
@@ -106,22 +106,22 @@ func TestNewOpenTelemetryProviderWithBothPrometheusAndStatsD(t *testing.T) {
 		HandlerPath:   "/metrics",
 	}
 
-	statsdConfig := &StatsdConfig{
-		HostPort: "localhost:8125",
-		Prefix:   "temporal_test",
-		Reporter: StatsdReporterConfig{
-			TagSeparator: ",",
-		},
-	}
-
-	// Create OpenTelemetry provider with both Prometheus and StatsD
-	provider, err := NewOpenTelemetryProvider(logger, prometheusConfig, clientConfig, false, statsdConfig)
+	// Create OpenTelemetry provider with Prometheus
+	provider, err := NewOpenTelemetryProviderWithPrometheus(logger, prometheusConfig, clientConfig, false)
 	require.NoError(t, err)
 	require.NotNil(t, provider)
 
 	// Test that we can get a meter
 	meter := provider.GetMeter()
 	assert.NotNil(t, meter)
+
+	// Create a simple counter to test
+	counter, err := meter.Int64Counter("test_counter")
+	require.NoError(t, err)
+
+	// Add some measurements
+	counter.Add(context.Background(), 1)
+	counter.Add(context.Background(), 5)
 
 	// Test shutdown
 	require.Eventually(t, func() bool {
