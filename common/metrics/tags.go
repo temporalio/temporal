@@ -58,12 +58,13 @@ const (
 	trueValue               = "true"
 	errorPrefix             = "*"
 
-	newRun      = "__new"
-	existingRun = "__existing"
-	childRun    = "__child"
-	canRun      = "__can"
-	retryRun    = "__retry"
-	cronRun     = "__cron"
+	newRun      = "new"
+	existingRun = "existing"
+	childRun    = "child"
+	canRun      = "can"
+	retryRun    = "retry"
+	cronRun     = "cron"
+	unknownRun  = "unknown"
 )
 
 // Tag is an interface to define metrics tags
@@ -416,21 +417,21 @@ func VersioningBehaviorAfterOverrideTag(behavior enumspb.VersioningBehavior) Tag
 func RunInitiatorTag(prevRunID string, attributes *historypb.WorkflowExecutionStartedEventAttributes) Tag {
 	if attributes == nil {
 		return &tagImpl{key: runInitiator, value: existingRun}
-	}
-
-	if prevRunID == "" {
-		return &tagImpl{key: runInitiator, value: newRun}
+	} else if attributes.GetParentWorkflowExecution() != nil {
+		return &tagImpl{key: runInitiator, value: childRun}
 	}
 
 	switch attributes.GetInitiator() {
+	case enumspb.CONTINUE_AS_NEW_INITIATOR_UNSPECIFIED:
+		return &tagImpl{key: runInitiator, value: newRun}
 	case enumspb.CONTINUE_AS_NEW_INITIATOR_WORKFLOW:
-		return &tagImpl{key: runInitiator, value: childRun}
+		return &tagImpl{key: runInitiator, value: canRun}
 	case enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY:
 		return &tagImpl{key: runInitiator, value: retryRun}
 	case enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE:
 		return &tagImpl{key: runInitiator, value: cronRun}
 	default:
-		return &tagImpl{key: runInitiator, value: existingRun}
+		return &tagImpl{key: runInitiator, value: unknownRun}
 	}
 }
 
