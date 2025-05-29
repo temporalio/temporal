@@ -40,7 +40,7 @@ func (h *HealthCheckInterceptor) UnaryIntercept(
 }
 
 type (
-	// HealthSignalAggregator interface for tracking RPC health signals
+	// HealthSignalAggregator interface for aggregating health signals
 	HealthSignalAggregator interface {
 		Record(latency time.Duration, err error)
 		AverageLatency() float64
