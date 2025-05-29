@@ -87,9 +87,11 @@ var (
 	maxTime = time.Date(2100, 1, 1, 1, 0, 0, 0, time.UTC)
 
 	// Tail room for context deadline to bail out from retry for long poll.
-	longPollTailRoom = time.Second
+	longPollTailRoom  = time.Second
+	errWaitForRefresh = serviceerror.NewDeadlineExceeded("waiting for schedule to refresh status of completed workflows")
+)
 
-	errWaitForRefresh  = serviceerror.NewDeadlineExceeded("waiting for schedule to refresh status of completed workflows")
+const (
 	errTooManyRequests = "Too many %s requests have been issued in rapid succession. Please throttle the request rate to avoid exceeding system resource limits."
 )
 
