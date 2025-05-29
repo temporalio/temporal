@@ -844,7 +844,7 @@ and deployment interaction in matching and history.`,
 	)
 	EnableDeploymentVersions = NewNamespaceBoolSetting(
 		"system.enableDeploymentVersions",
-		false,
+		true,
 		`EnableDeploymentVersions enables deployment versions (versioning v3) in all services,
 including deployment-related RPCs in the frontend, deployment version entity workflows in the worker,
 and deployment interaction in matching and history.`,
@@ -958,7 +958,7 @@ to allow waiting on the "Accepted" lifecycle stage.`,
 	)
 	FrontendEnableWorkerVersioningWorkflowAPIs = NewNamespaceBoolSetting(
 		"frontend.workerVersioningWorkflowAPIs",
-		false,
+		true,
 		`FrontendEnableWorkerVersioningWorkflowAPIs enables worker versioning in workflow progress APIs.`,
 	)
 	FrontendEnableWorkerVersioningRuleAPIs = NewNamespaceBoolSetting(
@@ -2385,6 +2385,11 @@ that task will be sent to DLQ.`,
 		"history.ReplicationStreamSenderLowPriorityQPS",
 		100,
 		`Maximum number of low priority replication tasks that can be sent per second per shard`,
+	)
+	ReplicationStreamEventLoopRetryMaxAttempts = NewGlobalIntSetting(
+		"history.ReplicationStreamEventLoopRetryMaxAttempts",
+		100, // 0 means retry forever
+		`Max attempts for retrying replication stream event loop`,
 	)
 	ReplicationReceiverMaxOutstandingTaskCount = NewGlobalIntSetting(
 		"history.ReplicationReceiverMaxOutstandingTaskCount",
