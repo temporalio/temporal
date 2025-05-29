@@ -1136,16 +1136,6 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 		}
 	}
 
-	if transition != nil {
-		// There is still a transition going on. We need to schedule a new WFT so it goes to the
-		// transition deployment this time.
-		if _, err := m.ms.AddWorkflowTaskScheduledEvent(
-			false,
-			enumsspb.WORKFLOW_TASK_TYPE_NORMAL,
-		); err != nil {
-			return err
-		}
-	}
 	// Deployment and behavior before applying the data came from the completed wft.
 	wfDeploymentBefore := m.ms.GetEffectiveDeployment()
 	wfBehaviorBefore := m.ms.GetEffectiveVersioningBehavior()
