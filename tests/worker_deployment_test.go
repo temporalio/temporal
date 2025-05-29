@@ -1601,7 +1601,7 @@ func (s *WorkerDeploymentSuite) TestSetRampingVersion_Concurrent_SameVersion_NoU
 	s.Equal(tv.DeploymentVersionString(), resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetRampingVersion())
 }
 
-func (s *WorkerDeploymentSuite) TestResourceExhaustedErrors_Converted_To_Internal() {
+func (s *WorkerDeploymentSuite) TestResourceExhaustedErrors_Converted_To_ReadableMessage() {
 	s.OverrideDynamicConfig(dynamicconfig.WorkflowExecutionMaxInFlightUpdates, 2) // Lowering the limit to encounter ResourceExhausted errors
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
@@ -1677,7 +1677,7 @@ func (s *WorkerDeploymentSuite) testConcurrentRequestsResourceExhausted(
 		if err != nil {
 			switch err.(type) {
 			case *serviceerror.ResourceExhausted:
-				s.Equal(err.Error(), fmt.Sprintf("Too many %s requests have been issued in rapid succession. Please throttle the request rate to avoid exceeding system resource limits.", apiName))
+				s.Equal(err.Error(), fmt.Sprintf("Too many %s requests have been issued in rapid succession. Please throttle the request rate to avoid exceeding Worker Deployment resource limits.", apiName))
 				continue
 			default:
 				s.FailNow("Unexpected error: ", err)
