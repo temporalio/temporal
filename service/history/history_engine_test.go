@@ -6611,7 +6611,6 @@ func addSignaledEvent(
 func addStartChildWorkflowExecutionInitiatedEvent(
 	ms historyi.MutableState,
 	workflowTaskCompletedID int64,
-	createRequestID string,
 	namespace namespace.Name,
 	namespaceID namespace.ID,
 	workflowID, workflowType, taskQueue string,
@@ -6620,7 +6619,7 @@ func addStartChildWorkflowExecutionInitiatedEvent(
 	parentClosePolicy enumspb.ParentClosePolicy,
 ) (*historypb.HistoryEvent, *persistencespb.ChildExecutionInfo) {
 
-	event, cei, _ := ms.AddStartChildWorkflowExecutionInitiatedEvent(workflowTaskCompletedID, createRequestID,
+	event, cei, _ := ms.AddStartChildWorkflowExecutionInitiatedEvent(workflowTaskCompletedID,
 		&commandpb.StartChildWorkflowExecutionCommandAttributes{
 			Namespace:                namespace.String(),
 			WorkflowId:               workflowID,
