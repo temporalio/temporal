@@ -409,18 +409,6 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 		d.lock.Unlock()
 	}()
 
-	v := workflow.GetVersion(ctx, "RefactorRegisterWorker", workflow.DefaultVersion, 1)
-	if v == workflow.DefaultVersion {
-		// wait until deployment workflow started
-		err = workflow.Await(ctx, func() bool { return d.VersionState.StartedDeploymentWorkflow })
-		if err != nil {
-			d.logger.Error("Update canceled before deployment workflow started")
-			// TODO (Carly): This is likely due to too many deployments, but make sure we excluded other possible errors here and send a proper error message all the time.
-			// TODO (Carly): mention the limit in here or make sure matching does in the error returned to the poller
-			return temporal.NewApplicationError("failed to create deployment version, likely you are exceeding the limit of allowed deployments in a namespace", errTooManyDeployments)
-		}
-	}
-
 	// Add the task queue to the local state.
 	if d.VersionState.TaskQueueFamilies == nil {
 		d.VersionState.TaskQueueFamilies = make(map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData)
@@ -443,23 +431,6 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 	}
 
 	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
-
-	if v == workflow.DefaultVersion {
-		// First try to add version to worker-deployment workflow so it rejects in case we hit the limit
-		err = workflow.ExecuteActivity(activityCtx, d.a.AddVersionToWorkerDeployment, &deploymentspb.AddVersionToWorkerDeploymentRequest{
-			DeploymentName: d.VersionState.Version.GetDeploymentName(),
-			UpdateArgs: &deploymentspb.AddVersionUpdateArgs{
-				Version:    worker_versioning.WorkerDeploymentVersionToString(d.VersionState.Version),
-				CreateTime: d.VersionState.CreateTime,
-			},
-			RequestId: d.newUUID(ctx),
-		}).Get(ctx, nil)
-		if err != nil {
-			// TODO (carly): make sure the error message that goes to the user is informative and has the limit mentioned
-			return temporal.NewApplicationError("too many versions in this deployment", errTooManyVersions)
-		}
-	}
-
 	// sync to user data
 	var syncRes deploymentspb.SyncDeploymentVersionUserDataResponse
 	err = workflow.ExecuteActivity(activityCtx, d.a.SyncDeploymentVersionUserData, &deploymentspb.SyncDeploymentVersionUserDataRequest{
@@ -529,31 +500,46 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 		Version: state.GetVersion(),
 	}
 
-	v := workflow.GetVersion(ctx, "SyncStateWithBatching", workflow.DefaultVersion, 1)
-	if v == workflow.DefaultVersion {
-		for _, tqName := range workflow.DeterministicKeys(state.TaskQueueFamilies) {
-			byType := state.TaskQueueFamilies[tqName]
-			data := &deploymentspb.DeploymentVersionData{
-				Version:           d.VersionState.Version,
-				RoutingUpdateTime: args.RoutingUpdateTime,
-				CurrentSinceTime:  args.CurrentSinceTime,
-				RampingSinceTime:  args.RampingSinceTime,
-				RampPercentage:    args.RampPercentage,
-			}
-			var types []enumspb.TaskQueueType
-			for _, tqType := range workflow.DeterministicKeys(byType.TaskQueues) {
-				types = append(types, enumspb.TaskQueueType(tqType))
-			}
-
-			syncReq.Sync = append(syncReq.Sync, &deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData{
-				Name:  tqName,
-				Types: types,
-				Data:  data,
-			})
+	// send in the task-queue families in batches of syncBatchSize
+	batches := make([][]*deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData, 0)
+	for _, tqName := range workflow.DeterministicKeys(state.TaskQueueFamilies) {
+		byType := state.TaskQueueFamilies[tqName]
+		data := &deploymentspb.DeploymentVersionData{
+			Version:           d.VersionState.Version,
+			RoutingUpdateTime: args.RoutingUpdateTime,
+			CurrentSinceTime:  args.CurrentSinceTime,
+			RampingSinceTime:  args.RampingSinceTime,
+			RampPercentage:    args.RampPercentage,
 		}
+		var types []enumspb.TaskQueueType
+		for _, tqType := range workflow.DeterministicKeys(byType.TaskQueues) {
+			types = append(types, enumspb.TaskQueueType(tqType))
+		}
+
+		syncReq.Sync = append(syncReq.Sync, &deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData{
+			Name:  tqName,
+			Types: types,
+			Data:  data,
+		})
+
+		if len(syncReq.Sync) == int(d.VersionState.SyncBatchSize) {
+			batches = append(batches, syncReq.Sync)
+			syncReq.Sync = make([]*deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData, 0) // reset the syncReq.Sync slice for the next batch
+		}
+	}
+	if len(syncReq.Sync) > 0 {
+		batches = append(batches, syncReq.Sync)
+	}
+
+	// calling SyncDeploymentVersionUserData for each batch
+	for _, batch := range batches {
 		activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
 		var syncRes deploymentspb.SyncDeploymentVersionUserDataResponse
-		err = workflow.ExecuteActivity(activityCtx, d.a.SyncDeploymentVersionUserData, syncReq).Get(ctx, &syncRes)
+
+		err = workflow.ExecuteActivity(activityCtx, d.a.SyncDeploymentVersionUserData, &deploymentspb.SyncDeploymentVersionUserDataRequest{
+			Version: state.GetVersion(),
+			Sync:    batch,
+		}).Get(ctx, &syncRes)
 		if err != nil {
 			// TODO (Shivam): Compensation functions required to roll back the local state + activity changes.
 			return nil, err
@@ -569,67 +555,6 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 			if err != nil {
 				// TODO (Shivam): Compensation functions required to roll back the local state + activity changes.
 				return nil, err
-			}
-		}
-	} else {
-
-		// send in the task-queue families in batches of syncBatchSize
-		batches := make([][]*deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData, 0)
-
-		for _, tqName := range workflow.DeterministicKeys(state.TaskQueueFamilies) {
-			byType := state.TaskQueueFamilies[tqName]
-			data := &deploymentspb.DeploymentVersionData{
-				Version:           d.VersionState.Version,
-				RoutingUpdateTime: args.RoutingUpdateTime,
-				CurrentSinceTime:  args.CurrentSinceTime,
-				RampingSinceTime:  args.RampingSinceTime,
-				RampPercentage:    args.RampPercentage,
-			}
-			var types []enumspb.TaskQueueType
-			for _, tqType := range workflow.DeterministicKeys(byType.TaskQueues) {
-				types = append(types, enumspb.TaskQueueType(tqType))
-			}
-
-			syncReq.Sync = append(syncReq.Sync, &deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData{
-				Name:  tqName,
-				Types: types,
-				Data:  data,
-			})
-
-			if len(syncReq.Sync) == int(d.VersionState.SyncBatchSize) {
-				batches = append(batches, syncReq.Sync)
-				syncReq.Sync = make([]*deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData, 0) // reset the syncReq.Sync slice for the next batch
-			}
-		}
-		if len(syncReq.Sync) > 0 {
-			batches = append(batches, syncReq.Sync)
-		}
-
-		// calling SyncDeploymentVersionUserData for each batch
-		for _, batch := range batches {
-			activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
-			var syncRes deploymentspb.SyncDeploymentVersionUserDataResponse
-
-			err = workflow.ExecuteActivity(activityCtx, d.a.SyncDeploymentVersionUserData, &deploymentspb.SyncDeploymentVersionUserDataRequest{
-				Version: state.GetVersion(),
-				Sync:    batch,
-			}).Get(ctx, &syncRes)
-			if err != nil {
-				// TODO (Shivam): Compensation functions required to roll back the local state + activity changes.
-				return nil, err
-			}
-			if len(syncRes.TaskQueueMaxVersions) > 0 {
-				// wait for propagation
-				err = workflow.ExecuteActivity(
-					activityCtx,
-					d.a.CheckWorkerDeploymentUserDataPropagation,
-					&deploymentspb.CheckWorkerDeploymentUserDataPropagationRequest{
-						TaskQueueMaxVersions: syncRes.TaskQueueMaxVersions,
-					}).Get(ctx, nil)
-				if err != nil {
-					// TODO (Shivam): Compensation functions required to roll back the local state + activity changes.
-					return nil, err
-				}
 			}
 		}
 	}
