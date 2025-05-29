@@ -3,6 +3,7 @@ package workflow
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"reflect"
 	"sort"
 	"testing"
@@ -3349,6 +3350,25 @@ func (s *mutableStateSuite) TestCollapseVisibilityTasks() {
 			},
 		)
 	}
+}
+
+func (s *mutableStateSuite) TestStartChildWorkflowRequestID() {
+	workflowTaskCompletionEventID := rand.Int63()
+	attributes := &commandpb.StartChildWorkflowExecutionCommandAttributes{}
+	event := s.mutableState.hBuilder.AddStartChildWorkflowExecutionInitiatedEvent(
+		workflowTaskCompletionEventID,
+		attributes,
+		tests.NamespaceID,
+	)
+	createRequestID := fmt.Sprintf("%s:%d:%d", s.mutableState.executionState.RunId, event.GetEventId(), event.GetVersion())
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+
+	ci, err := s.mutableState.ApplyStartChildWorkflowExecutionInitiatedEvent(
+		workflowTaskCompletionEventID,
+		event,
+	)
+	s.NoError(err)
+	s.Equal(createRequestID, ci.CreateRequestId)
 }
 
 func (s *mutableStateSuite) TestGetCloseVersion() {
