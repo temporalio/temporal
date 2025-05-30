@@ -13,12 +13,12 @@ type (
 	ClientSchedulerRateLimiter quotas.RequestRateLimiter
 )
 
-func ClientSchedulerRateLimiterProvider() (ClientSchedulerRateLimiter, error) {
+func ClientSchedulerRateLimiterProvider() ClientSchedulerRateLimiter {
 	// Experiment with no op rate limiter
-	return quotas.NoopRequestRateLimiter, nil
+	return quotas.NoopRequestRateLimiter
 }
 
-func ServerSchedulerRateLimiterProvider() (ServerSchedulerRateLimiter, error) {
+func ServerSchedulerRateLimiterProvider() ServerSchedulerRateLimiter {
 	// Experiment with no op rate limiter
-	return quotas.NoopRequestRateLimiter, nil
+	return quotas.NoopRequestRateLimiter
 }

@@ -535,13 +535,16 @@ Loop:
 				}
 			}
 			if task.Priority == enumsspb.TASK_PRIORITY_LOW {
-				s.ssRateLimiter.Allow(time.Now(), quotas.NewRequest(
+				if err := s.ssRateLimiter.Wait(s.server.Context(), quotas.NewRequest(
 					task.TaskType.String(),
 					taskSchedulerToken,
 					headers.SystemPreemptableCallerInfo.CallerName,
 					headers.SystemPreemptableCallerInfo.CallerType,
 					0,
-					""))
+					"",
+				)); err != nil {
+					return err
+				}
 			}
 			if err := s.sendToStream(&historyservice.StreamWorkflowReplicationMessagesResponse{
 				Attributes: &historyservice.StreamWorkflowReplicationMessagesResponse_Messages{
