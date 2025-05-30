@@ -402,7 +402,7 @@ func (n *Node) fieldType() fieldType {
 	}
 
 	if n.serializedNode.GetMetadata().GetPointerAttributes() != nil {
-		return fieldTypeComponentPointer
+		return fieldTypePointer
 	}
 
 	if n.serializedNode.GetMetadata().GetCollectionAttributes() != nil {
@@ -453,7 +453,7 @@ func (n *Node) initSerializedNode(ft fieldType) {
 				},
 			},
 		}
-	case fieldTypeComponentPointer:
+	case fieldTypePointer:
 		n.serializedNode = &persistencespb.ChasmNode{
 			Metadata: &persistencespb.ChasmNodeMetadata{
 				InitialVersionedTransition: &persistencespb.VersionedTransition{
@@ -849,7 +849,6 @@ func (n *Node) serializePointerNode() error {
 		return serviceerror.NewInternal(msg)
 	}
 
-	// TODO: should it go to Data instead ???
 	n.serializedNode.GetMetadata().GetPointerAttributes().NodePath = path
 	n.updateLastUpdateVersionedTransition()
 	n.valueState = valueStateSynced
@@ -992,9 +991,29 @@ func unmarshalProto(
 func (n *Node) Ref(
 	component Component,
 ) (ComponentRef, bool) {
-	// TODO: Implement this method.
-	// Currently returning an empty reference to unblock tests.
-	return ComponentRef{}, true
+	for path, node := range n.andAllChildren() {
+		// TODO: deserialize entire tree?
+		if node.value == component {
+			return ComponentRef{
+				componentPath: path,
+			}, true
+		}
+	}
+	return ComponentRef{}, false
+}
+
+func (n *Node) DataRef(
+	data proto.Message,
+) (ComponentRef, bool) {
+	for path, node := range n.andAllChildren() {
+		// TODO: deserialize entire tree?
+		if node.value == data {
+			return ComponentRef{
+				componentPath: path,
+			}, true
+		}
+	}
+	return ComponentRef{}, false
 }
 
 // Now implements the CHASM Context interface

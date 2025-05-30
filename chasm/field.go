@@ -44,27 +44,30 @@ func NewComponentField[C Component](
 	}
 }
 
-func NewComponentPointerField[C Component](
+func ComponentPointerFor[C Component](
 	ctx MutableContext,
 	c C,
-) Field[C] {
+) (Field[C], error) {
 	path, exists := ctx.Ref(c)
 	if !exists {
-		// TODO (alex): It is better return error here but constructors shouldn't return errors.
-		return NewEmptyField[C]()
+		return NewEmptyField[C](), serviceerror.NewInvalidArgumentf("component field is not found")
 	}
 	return Field[C]{
-		Internal: newFieldInternalWithValue(fieldTypeComponentPointer, path.componentPath),
-	}
+		Internal: newFieldInternalWithValue(fieldTypePointer, path.componentPath),
+	}, nil
 }
 
-func NewDataPointerField[D proto.Message](
+func DataPointerFor[D proto.Message](
 	ctx MutableContext,
 	d D,
-) Field[D] {
-	// TODO (alex): this needs to be implemented somehow too.
-	//nolint:forbidigo
-	panic("not implemented")
+) (Field[D], error) {
+	path, exists := ctx.DataRef(d)
+	if !exists {
+		return NewEmptyField[D](), serviceerror.NewInvalidArgumentf("data field is not found")
+	}
+	return Field[D]{
+		Internal: newFieldInternalWithValue(fieldTypePointer, path.componentPath),
+	}, nil
 }
 
 func (f Field[T]) Get(chasmContext Context) (T, error) {
@@ -95,7 +98,7 @@ func (f Field[T]) Get(chasmContext Context) (T, error) {
 			return nilT, err
 		}
 		nodeValue = f.Internal.node.value
-	case fieldTypeComponentPointer:
+	case fieldTypePointer:
 		if err := f.Internal.node.preparePointerValue(chasmContext); err != nil {
 			return nilT, err
 		}
@@ -103,9 +106,15 @@ func (f Field[T]) Get(chasmContext Context) (T, error) {
 		path := f.Internal.value().([]string)
 		referencedNode := f.Internal.node.root().findNode(path)
 		if referencedNode != nil {
-			// TODO (alex): can it be data pointer too? then we need new field type and call prepareDataValue here
-			if err := referencedNode.prepareComponentValue(chasmContext); err != nil {
-				return nilT, err
+			fieldT := reflect.TypeFor[T]()
+			if fieldT.AssignableTo(protoMessageT) {
+				if err := f.Internal.node.prepareDataValue(chasmContext, fieldT); err != nil {
+					return nilT, err
+				}
+			} else {
+				if err := referencedNode.prepareComponentValue(chasmContext); err != nil {
+					return nilT, err
+				}
 			}
 			nodeValue = referencedNode.value
 		}
