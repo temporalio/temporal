@@ -2248,7 +2248,7 @@ type SyncDeploymentUserDataRequest struct {
 	// Types that are valid to be assigned to Operation:
 	//
 	//	*SyncDeploymentUserDataRequest_UpdateVersionData
-	//	*SyncDeploymentUserDataRequest_ForgetVersion
+	//	*SyncDeploymentUserDataRequest_ForgetDeploymentVersion
 	Operation     isSyncDeploymentUserDataRequest_Operation `protobuf_oneof:"operation"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -2342,10 +2342,10 @@ func (x *SyncDeploymentUserDataRequest) GetUpdateVersionData() *v112.DeploymentV
 	return nil
 }
 
-func (x *SyncDeploymentUserDataRequest) GetForgetVersion() *v112.WorkerDeploymentVersion {
+func (x *SyncDeploymentUserDataRequest) GetForgetDeploymentVersion() *v111.WorkerDeploymentVersion {
 	if x != nil {
-		if x, ok := x.Operation.(*SyncDeploymentUserDataRequest_ForgetVersion); ok {
-			return x.ForgetVersion
+		if x, ok := x.Operation.(*SyncDeploymentUserDataRequest_ForgetDeploymentVersion); ok {
+			return x.ForgetDeploymentVersion
 		}
 	}
 	return nil
@@ -2360,14 +2360,15 @@ type SyncDeploymentUserDataRequest_UpdateVersionData struct {
 	UpdateVersionData *v112.DeploymentVersionData `protobuf:"bytes,6,opt,name=update_version_data,json=updateVersionData,proto3,oneof"`
 }
 
-type SyncDeploymentUserDataRequest_ForgetVersion struct {
+type SyncDeploymentUserDataRequest_ForgetDeploymentVersion struct {
 	// The version whose data should be cleaned from the task queue.
-	ForgetVersion *v112.WorkerDeploymentVersion `protobuf:"bytes,7,opt,name=forget_version,json=forgetVersion,proto3,oneof"`
+	ForgetDeploymentVersion *v111.WorkerDeploymentVersion `protobuf:"bytes,9,opt,name=forget_deployment_version,json=forgetDeploymentVersion,proto3,oneof"`
 }
 
 func (*SyncDeploymentUserDataRequest_UpdateVersionData) isSyncDeploymentUserDataRequest_Operation() {}
 
-func (*SyncDeploymentUserDataRequest_ForgetVersion) isSyncDeploymentUserDataRequest_Operation() {}
+func (*SyncDeploymentUserDataRequest_ForgetDeploymentVersion) isSyncDeploymentUserDataRequest_Operation() {
+}
 
 type SyncDeploymentUserDataResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -4429,7 +4430,7 @@ const file_temporal_server_api_matchingservice_v1_request_response_proto_rawDesc
 	"\rwait_new_data\x18\x04 \x01(\bR\vwaitNewData\x12$\n" +
 	"\x0eonly_if_loaded\x18\x06 \x01(\bR\fonlyIfLoaded\"\x81\x01\n" +
 	"\x1cGetTaskQueueUserDataResponse\x12[\n" +
-	"\tuser_data\x18\x02 \x01(\v2>.temporal.server.api.persistence.v1.VersionedTaskQueueUserDataR\buserDataJ\x04\b\x01\x10\x02\"\xeb\x04\n" +
+	"\tuser_data\x18\x02 \x01(\v2>.temporal.server.api.persistence.v1.VersionedTaskQueueUserDataR\buserDataJ\x04\b\x01\x10\x02\"\xf9\x04\n" +
 	"\x1dSyncDeploymentUserDataRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1d\n" +
 	"\n" +
@@ -4440,8 +4441,8 @@ const file_temporal_server_api_matchingservice_v1_request_response_proto_rawDesc
 	"deployment\x18\x04 \x01(\v2&.temporal.api.deployment.v1.DeploymentR\n" +
 	"deployment\x12D\n" +
 	"\x04data\x18\x05 \x01(\v20.temporal.server.api.deployment.v1.TaskQueueDataR\x04data\x12j\n" +
-	"\x13update_version_data\x18\x06 \x01(\v28.temporal.server.api.deployment.v1.DeploymentVersionDataH\x00R\x11updateVersionData\x12c\n" +
-	"\x0eforget_version\x18\a \x01(\v2:.temporal.server.api.deployment.v1.WorkerDeploymentVersionH\x00R\rforgetVersionB\v\n" +
+	"\x13update_version_data\x18\x06 \x01(\v28.temporal.server.api.deployment.v1.DeploymentVersionDataH\x00R\x11updateVersionData\x12q\n" +
+	"\x19forget_deployment_version\x18\t \x01(\v23.temporal.api.deployment.v1.WorkerDeploymentVersionH\x00R\x17forgetDeploymentVersionB\v\n" +
 	"\toperation\":\n" +
 	"\x1eSyncDeploymentUserDataResponse\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\x03R\aversion\"\xc5\x01\n" +
@@ -4671,7 +4672,7 @@ var file_temporal_server_api_matchingservice_v1_request_response_proto_goTypes =
 	(*v111.Deployment)(nil),                                            // 104: temporal.api.deployment.v1.Deployment
 	(*v112.TaskQueueData)(nil),                                         // 105: temporal.server.api.deployment.v1.TaskQueueData
 	(*v112.DeploymentVersionData)(nil),                                 // 106: temporal.server.api.deployment.v1.DeploymentVersionData
-	(*v112.WorkerDeploymentVersion)(nil),                               // 107: temporal.server.api.deployment.v1.WorkerDeploymentVersion
+	(*v111.WorkerDeploymentVersion)(nil),                               // 107: temporal.api.deployment.v1.WorkerDeploymentVersion
 	(*v110.TaskQueueUserData)(nil),                                     // 108: temporal.server.api.persistence.v1.TaskQueueUserData
 	(*v113.Request)(nil),                                               // 109: temporal.api.nexus.v1.Request
 	(*v113.HandlerError)(nil),                                          // 110: temporal.api.nexus.v1.HandlerError
@@ -4762,7 +4763,7 @@ var file_temporal_server_api_matchingservice_v1_request_response_proto_depIdxs =
 	104, // 73: temporal.server.api.matchingservice.v1.SyncDeploymentUserDataRequest.deployment:type_name -> temporal.api.deployment.v1.Deployment
 	105, // 74: temporal.server.api.matchingservice.v1.SyncDeploymentUserDataRequest.data:type_name -> temporal.server.api.deployment.v1.TaskQueueData
 	106, // 75: temporal.server.api.matchingservice.v1.SyncDeploymentUserDataRequest.update_version_data:type_name -> temporal.server.api.deployment.v1.DeploymentVersionData
-	107, // 76: temporal.server.api.matchingservice.v1.SyncDeploymentUserDataRequest.forget_version:type_name -> temporal.server.api.deployment.v1.WorkerDeploymentVersion
+	107, // 76: temporal.server.api.matchingservice.v1.SyncDeploymentUserDataRequest.forget_deployment_version:type_name -> temporal.api.deployment.v1.WorkerDeploymentVersion
 	108, // 77: temporal.server.api.matchingservice.v1.ApplyTaskQueueUserDataReplicationEventRequest.user_data:type_name -> temporal.server.api.persistence.v1.TaskQueueUserData
 	94,  // 78: temporal.server.api.matchingservice.v1.ForceLoadTaskQueuePartitionRequest.task_queue_partition:type_name -> temporal.server.api.taskqueue.v1.TaskQueuePartition
 	91,  // 79: temporal.server.api.matchingservice.v1.ForceUnloadTaskQueueRequest.task_queue_type:type_name -> temporal.api.enums.v1.TaskQueueType
@@ -4813,7 +4814,7 @@ func file_temporal_server_api_matchingservice_v1_request_response_proto_init() {
 	}
 	file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[30].OneofWrappers = []any{
 		(*SyncDeploymentUserDataRequest_UpdateVersionData)(nil),
-		(*SyncDeploymentUserDataRequest_ForgetVersion)(nil),
+		(*SyncDeploymentUserDataRequest_ForgetDeploymentVersion)(nil),
 	}
 	file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[49].OneofWrappers = []any{
 		(*DispatchNexusTaskResponse_HandlerError)(nil),

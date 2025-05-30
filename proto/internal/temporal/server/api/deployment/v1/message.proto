@@ -10,21 +10,12 @@ import "google/protobuf/timestamp.proto";
 import "temporal/api/deployment/v1/message.proto";
 import "temporal/api/common/v1/message.proto";
 
-// Identifies a Worker Deployment Version. The combination of `deployment_name` and `build_id`
-// serve as the identifier.
-message WorkerDeploymentVersion {
-    // The name of the Deployment this version belongs too.
-    string deployment_name = 1;
-    // Build ID uniquely identifies the Deployment Version within a Deployment, but the same Build
-    // ID can be used in multiple Deployments.
-    string build_id = 2;
-}
-
 // The source of truth for this data is in the WorkerDeployment entity workflows, which is
 // synced to all TQs whenever the source changes.
 message DeploymentVersionData {
+    reserved 1;
     // Nil means unversioned.
-    WorkerDeploymentVersion version = 1;
+    temporal.api.deployment.v1.WorkerDeploymentVersion deployment_version = 6;
 
     // Last time `current_since_time`, `ramping_since_time, or `ramp_percentage` of this version changed.
     google.protobuf.Timestamp routing_update_time = 2;
@@ -46,7 +37,8 @@ message DeploymentVersionData {
 
 // Local state for Worker Deployment Version
 message VersionLocalState {
-    WorkerDeploymentVersion version = 1;
+    reserved 1;
+    temporal.api.deployment.v1.WorkerDeploymentVersion deployment_version = 15;
     google.protobuf.Timestamp create_time = 2;
 
     // Last time `current_since_time`, `ramping_since_time, or `ramp_percentage` of this version changed.
@@ -130,6 +122,7 @@ message WorkerDeploymentLocalState {
     google.protobuf.Timestamp create_time = 1;
     // Encapsulates task routing information for this deployment.
     temporal.api.deployment.v1.RoutingConfig routing_config = 2;
+    // Key: version string
     map<string, WorkerDeploymentVersionSummary> versions = 3;
     bytes conflict_token = 4;
     string last_modifier_identity = 5;
@@ -138,7 +131,8 @@ message WorkerDeploymentLocalState {
 }
 
 message WorkerDeploymentVersionSummary {
-    string version = 1;
+    reserved 1;
+    temporal.api.deployment.v1.WorkerDeploymentVersion deployment_version = 11;
     google.protobuf.Timestamp create_time = 2;
     temporal.api.enums.v1.VersionDrainageStatus drainage_status = 3 [deprecated=true];
     // Information about workflow drainage to help the user determine when it is safe
@@ -171,7 +165,8 @@ message RegisterWorkerInVersionArgs {
     string task_queue_name = 1;
     temporal.api.enums.v1.TaskQueueType task_queue_type = 2;
     int32 max_task_queues = 3;
-    string version = 4;
+    reserved 4;
+    temporal.api.deployment.v1.WorkerDeploymentVersion deployment_version = 5;
 }
 
 // used as Worker Deployment workflow update input:
@@ -179,12 +174,14 @@ message RegisterWorkerInWorkerDeploymentArgs {
     string task_queue_name = 1;
     temporal.api.enums.v1.TaskQueueType task_queue_type = 2;
     int32 max_task_queues = 3;
-    WorkerDeploymentVersion version = 4;
+    reserved 4;
+    temporal.api.deployment.v1.WorkerDeploymentVersion deployment_version = 5;
 }
 
 // used as Worker Deployment workflow activity input:
 message DescribeVersionFromWorkerDeploymentActivityArgs {
-    string version = 1;
+    reserved 1;
+    temporal.api.deployment.v1.WorkerDeploymentVersion deployment_version = 2;
 }
 
 message DescribeVersionFromWorkerDeploymentActivityResult {
@@ -220,7 +217,8 @@ message SyncVersionStateResponse {
 
 // Sent from Version workflow to Worker Deployment workflow
 message AddVersionUpdateArgs {
-    string version = 1;
+    reserved 1;
+    temporal.api.deployment.v1.WorkerDeploymentVersion deployment_version = 3;
     google.protobuf.Timestamp create_time = 2;
 }
 
@@ -231,7 +229,8 @@ message SyncDrainageInfoSignalArgs {
 
 // Sent from Version workflow to Worker Deployment workflow
 message SyncDrainageStatusSignalArgs {
-    string version = 1;
+    reserved 1;
+    temporal.api.deployment.v1.WorkerDeploymentVersion deployment_version = 3;
     temporal.api.enums.v1.VersionDrainageStatus drainage_status = 2;
 }
 
@@ -254,7 +253,8 @@ message StartWorkerDeploymentRequest {
 
 // used as Worker Deployment Version workflow activity input:
 message SyncDeploymentVersionUserDataRequest {
-    WorkerDeploymentVersion version = 1;
+    reserved 1;
+    temporal.api.deployment.v1.WorkerDeploymentVersion deployment_version = 4;
     repeated SyncUserData sync = 2;
     // if true, the version will be forgotten from the task queue user data.
     bool forget_version = 3; 
@@ -278,7 +278,8 @@ message CheckWorkerDeploymentUserDataPropagationRequest {
 
 // used as Worker Deployment workflow activity input:
 message SyncUnversionedRampActivityArgs {
-    string current_version = 1;
+    reserved 1;
+    temporal.api.deployment.v1.WorkerDeploymentVersion current_deployment_version = 3;
     SyncVersionStateUpdateArgs update_args = 2;
 }
 
@@ -302,29 +303,33 @@ message UpdateVersionMetadataResponse {
 // used as Worker Deployment workflow update input:
 message SetCurrentVersionArgs {
     string identity = 1;
-    string version = 2;
+    reserved 2;
+    temporal.api.deployment.v1.WorkerDeploymentVersion deployment_version = 5;
     bool ignore_missing_task_queues = 3;
     bytes conflict_token = 4;
 }
 
 // used as Worker Deployment update response:
 message SetCurrentVersionResponse {
-    string previous_version = 1;
+    reserved 1;
+    temporal.api.deployment.v1.WorkerDeploymentVersion previous_deployment_version = 3;
     bytes conflict_token = 2;
 }
 
 // used as Worker Deployment workflow update input:
 message DeleteVersionArgs {
     string identity = 1;
-    string version = 2;
+    reserved 2;
+    temporal.api.deployment.v1.WorkerDeploymentVersion deployment_version = 4;
     bool skip_drainage = 3;
 }
 
 // used as Worker Deployment Activity input:
 message DeleteVersionActivityArgs {
     string identity = 1;
-    string deployment_name = 2;
-    string version = 3;
+    reserved 2;
+    reserved 3;
+    temporal.api.deployment.v1.WorkerDeploymentVersion deployment_version = 6;
     string request_id = 4;
     bool skip_drainage = 5;
 }
@@ -338,7 +343,8 @@ message CheckTaskQueuesHavePollersActivityArgs {
         repeated temporal.api.enums.v1.TaskQueueType types = 1;
     }
 
-    WorkerDeploymentVersion worker_deployment_version = 2;
+    reserved 2;
+    temporal.api.deployment.v1.WorkerDeploymentVersion deployment_version = 3;
 }
 
 // used as Worker Deployment workflow update input:
@@ -348,7 +354,8 @@ message DeleteDeploymentArgs {
 
 // used as Worker Deployment update response:
 message SetRampingVersionResponse {
-    string previous_version = 1;
+    reserved 1;
+    temporal.api.deployment.v1.WorkerDeploymentVersion previous_deployment_version = 4;
     float previous_percentage = 2;
     bytes conflict_token = 3;
 }
@@ -356,7 +363,8 @@ message SetRampingVersionResponse {
 // used as Worker Deployment workflow update input:
 message SetRampingVersionArgs {
     string identity = 1;
-    string version = 2;
+    reserved 2;
+    temporal.api.deployment.v1.WorkerDeploymentVersion deployment_version = 6;
     float percentage = 3;
     bool ignore_missing_task_queues = 4;
     bytes conflict_token = 5;
@@ -364,9 +372,9 @@ message SetRampingVersionArgs {
 
 // used as Worker Deployment activity input:
 message SyncVersionStateActivityArgs {
-    string deployment_name = 1;
-    // <deployment_name>.<build_id> or possibly just <version_id> in the future
-    string version = 2;
+    reserved 1;
+    reserved 2;
+    temporal.api.deployment.v1.WorkerDeploymentVersion deployment_version = 5;
     SyncVersionStateUpdateArgs update_args = 3;
     string request_id = 4;
 }
@@ -378,8 +386,10 @@ message SyncVersionStateActivityResult {
 
 // used as Worker Deployment activity input:
 message IsVersionMissingTaskQueuesArgs {
-    string prev_current_version = 1;
-    string new_current_version = 2;
+    reserved 1;
+    reserved 2;
+    temporal.api.deployment.v1.WorkerDeploymentVersion prev_current_deployment_version = 3;
+    temporal.api.deployment.v1.WorkerDeploymentVersion new_current_deployment_version = 4;
 }
 
 // used as Worker Deployment activity output:
