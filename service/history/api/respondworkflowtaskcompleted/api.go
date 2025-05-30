@@ -28,7 +28,6 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
-	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/service/history/api"
@@ -59,7 +58,7 @@ type (
 		searchAttributesValidator      *searchattribute.Validator
 		persistenceVisibilityMgr       manager.VisibilityManager
 		commandHandlerRegistry         *workflow.CommandHandlerRegistry
-		matchingRawClient              resource.MatchingRawClient
+		matchingClient                 matchingservice.MatchingServiceClient
 	}
 )
 
@@ -71,7 +70,7 @@ func NewWorkflowTaskCompletedHandler(
 	searchAttributesValidator *searchattribute.Validator,
 	visibilityManager manager.VisibilityManager,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
-	matchingRawClient resource.MatchingRawClient,
+	matchingClient matchingservice.MatchingServiceClient,
 ) *WorkflowTaskCompletedHandler {
 	return &WorkflowTaskCompletedHandler{
 		config:                     shardContext.GetConfig(),
@@ -93,7 +92,7 @@ func NewWorkflowTaskCompletedHandler(
 		searchAttributesValidator:      searchAttributesValidator,
 		persistenceVisibilityMgr:       visibilityManager,
 		commandHandlerRegistry:         commandHandlerRegistry,
-		matchingRawClient:              matchingRawClient,
+		matchingClient:                 matchingClient,
 	}
 }
 
@@ -379,7 +378,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			handler.searchAttributesMapperProvider,
 			hasBufferedEventsOrMessages,
 			handler.commandHandlerRegistry,
-			handler.matchingRawClient,
+			handler.matchingClient,
 		)
 
 		if responseMutations, err = workflowTaskHandler.handleCommands(
