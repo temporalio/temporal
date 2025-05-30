@@ -1558,7 +1558,8 @@ func (s *Versioning3Suite) testCan(crossTq bool, behavior enumspb.VersioningBeha
 			s.verifyWorkflowVersioning(tv1, vbPinned, tv1.Deployment(), nil, nil)
 			return "v1", nil
 		}
-		panic("oops")
+		s.FailNow("workflow should not get to this point")
+		return "", nil
 	}
 
 	wf2 := func(ctx workflow.Context, attempt int) (string, error) {
