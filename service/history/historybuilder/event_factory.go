@@ -151,7 +151,7 @@ func (b *EventFactory) CreateWorkflowTaskCompletedEvent(
 			SdkMetadata:          sdkMetadata,
 			MeteringMetadata:     meteringMetadata,
 			WorkerDeploymentName: deploymentName,
-			DeploymentVersion:    worker_versioning.WorkerDeploymentVersionFromDeployment(deployment),
+			DeploymentVersion:    worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(deployment),
 			VersioningBehavior:   behavior,
 		},
 	}

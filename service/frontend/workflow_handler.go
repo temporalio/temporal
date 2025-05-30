@@ -3367,7 +3367,7 @@ func (wh *WorkflowHandler) DescribeWorkerDeploymentVersion(ctx context.Context, 
 		if request.GetVersion() == "" { //nolint:staticcheck // SA1019: worker versioning v0.31
 			return nil, serviceerror.NewInvalidArgument("deployment version cannot be empty")
 		}
-		dv = worker_versioning.WorkerDeploymentVersionFromString(request.GetVersion()) //nolint:staticcheck // SA1019: worker versioning v0.31
+		dv, _ = worker_versioning.WorkerDeploymentVersionFromString(request.GetVersion()) //nolint:staticcheck // SA1019: worker versioning v0.31
 	}
 
 	info, err := wh.workerDeploymentClient.DescribeVersion(ctx, namespaceEntry, dv)
@@ -3402,7 +3402,7 @@ func (wh *WorkflowHandler) SetWorkerDeploymentCurrentVersion(ctx context.Context
 	}
 
 	if request.GetBuildId() == "" && request.GetVersion() != "" { //nolint:staticcheck // SA1019: worker versioning v0.31
-		dv := worker_versioning.WorkerDeploymentVersionFromString(request.GetVersion()) //nolint:staticcheck // SA1019: worker versioning v0.31
+		dv, _ := worker_versioning.WorkerDeploymentVersionFromString(request.GetVersion()) //nolint:staticcheck // SA1019: worker versioning v0.31
 		request.BuildId = dv.GetBuildId()
 	}
 
@@ -3444,7 +3444,7 @@ func (wh *WorkflowHandler) SetWorkerDeploymentRampingVersion(ctx context.Context
 	if request.GetBuildId() == "" {
 		if request.GetVersion() != "" { //nolint:staticcheck // SA1019: worker versioning v0.31
 			// In this case, user is using v0.31 SDK and is setting a ramp
-			dv := worker_versioning.WorkerDeploymentVersionFromString(request.GetVersion()) //nolint:staticcheck // SA1019: worker versioning v0.31
+			dv, _ := worker_versioning.WorkerDeploymentVersionFromString(request.GetVersion()) //nolint:staticcheck // SA1019: worker versioning v0.31
 			request.BuildId = dv.GetBuildId()
 		}
 		// If Version="", user is either using v0.31 SDK and unsetting a ramp, which means their percent is already 0.
@@ -3543,7 +3543,7 @@ func (wh *WorkflowHandler) DescribeWorkerDeployment(ctx context.Context, request
 
 	for _, vs := range workerDeploymentInfo.VersionSummaries {
 		//nolint:staticcheck // SA1019: worker versioning v0.31
-		vs.DeploymentVersion = worker_versioning.WorkerDeploymentVersionFromString(vs.Version)
+		vs.DeploymentVersion, _ = worker_versioning.WorkerDeploymentVersionFromString(vs.Version)
 	}
 	return &workflowservice.DescribeWorkerDeploymentResponse{
 		WorkerDeploymentInfo: workerDeploymentInfo,
@@ -3591,7 +3591,7 @@ func (wh *WorkflowHandler) DeleteWorkerDeploymentVersion(ctx context.Context, re
 		if request.GetVersion() == "" { //nolint:staticcheck // SA1019: worker versioning v0.31
 			return nil, serviceerror.NewInvalidArgument("deployment version cannot be empty")
 		}
-		request.DeploymentVersion = worker_versioning.WorkerDeploymentVersionFromString(request.GetVersion()) //nolint:staticcheck // SA1019: worker versioning v0.31
+		request.DeploymentVersion, _ = worker_versioning.WorkerDeploymentVersionFromString(request.GetVersion()) //nolint:staticcheck // SA1019: worker versioning v0.31
 	}
 
 	err = wh.workerDeploymentClient.DeleteWorkerDeploymentVersion(ctx, namespaceEntry, request)
@@ -3626,7 +3626,7 @@ func (wh *WorkflowHandler) UpdateWorkerDeploymentVersionMetadata(ctx context.Con
 		if request.GetVersion() == "" { //nolint:staticcheck // SA1019: worker versioning v0.31
 			return nil, serviceerror.NewInvalidArgument("deployment version cannot be empty")
 		}
-		request.DeploymentVersion = worker_versioning.WorkerDeploymentVersionFromString(request.GetVersion()) //nolint:staticcheck // SA1019: worker versioning v0.31
+		request.DeploymentVersion, _ = worker_versioning.WorkerDeploymentVersionFromString(request.GetVersion()) //nolint:staticcheck // SA1019: worker versioning v0.31
 	}
 
 	updatedMetadata, err := wh.workerDeploymentClient.UpdateVersionMetadata(ctx, namespaceEntry, request)

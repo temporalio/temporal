@@ -534,9 +534,9 @@ func (s *mutableStateSuite) TestEffectiveDeployment() {
 	dv2 := worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(deployment2))
 	dv3 := worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(deployment3))
 
-	deploymentVersion1 := worker_versioning.WorkerDeploymentVersionFromDeployment(deployment1)
-	deploymentVersion2 := worker_versioning.WorkerDeploymentVersionFromDeployment(deployment2)
-	deploymentVersion3 := worker_versioning.WorkerDeploymentVersionFromDeployment(deployment3)
+	deploymentVersion1 := worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(deployment1)
+	deploymentVersion2 := worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(deployment2)
+	deploymentVersion3 := worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(deployment3)
 
 	for _, useV32 := range []bool{true, false} {
 		// ------- Without override, without transition
@@ -955,7 +955,7 @@ func (s *mutableStateSuite) verifyOverrides(
 	s.Equal(expectedVersion, versioningInfo.GetVersion()) //nolint:staticcheck // SA1019: worker versioning v0.31
 	var expectedPinnedDeploymentVersion *deploymentpb.WorkerDeploymentVersion
 	if expectedDeploymentOverride != nil {
-		expectedPinnedDeploymentVersion = worker_versioning.WorkerDeploymentVersionFromDeployment(expectedDeploymentOverride)
+		expectedPinnedDeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(expectedDeploymentOverride)
 	}
 	s.Equal(expectedPinnedDeploymentVersion.GetDeploymentName(), versioningInfo.GetVersioningOverride().GetPinned().GetVersion().GetDeploymentName())
 	s.Equal(expectedPinnedDeploymentVersion.GetBuildId(), versioningInfo.GetVersioningOverride().GetPinned().GetVersion().GetBuildId())

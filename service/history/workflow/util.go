@@ -197,9 +197,9 @@ func GetEffectiveDeployment(versioningInfo *workflowpb.WorkflowExecutionVersioni
 		return nil
 	} else if transition := versioningInfo.GetVersionTransition(); transition != nil {
 		if v := transition.GetDeploymentVersion(); v != nil { // v0.32
-			return worker_versioning.DeploymentFromDeploymentVersion(v)
+			return worker_versioning.DeploymentFromExternalDeploymentVersion(v)
 		}
-		v := worker_versioning.WorkerDeploymentVersionFromString(transition.GetVersion()) //nolint:staticcheck // SA1019: worker versioning v0.31
+		v, _ := worker_versioning.WorkerDeploymentVersionFromString(transition.GetVersion()) //nolint:staticcheck // SA1019: worker versioning v0.31
 		return worker_versioning.DeploymentFromDeploymentVersion(v)
 	} else if transition := versioningInfo.GetDeploymentTransition(); transition != nil { // //nolint:staticcheck // SA1019: worker versioning v0.30
 		return transition.GetDeployment()
@@ -207,10 +207,10 @@ func GetEffectiveDeployment(versioningInfo *workflowpb.WorkflowExecutionVersioni
 		(override.GetBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED || //nolint:staticcheck // SA1019: worker versioning v0.31 and v0.30
 			override.GetPinned() != nil) {
 		if pinnedVersion := override.GetPinned().GetVersion(); pinnedVersion != nil {
-			return worker_versioning.DeploymentFromDeploymentVersion(pinnedVersion)
+			return worker_versioning.DeploymentFromExternalDeploymentVersion(pinnedVersion)
 		}
 		if pinned := override.GetPinnedVersion(); pinned != "" { //nolint:staticcheck // SA1019: worker versioning v0.31
-			v := worker_versioning.WorkerDeploymentVersionFromString(pinned)
+			v, _ := worker_versioning.WorkerDeploymentVersionFromString(pinned)
 			return worker_versioning.DeploymentFromDeploymentVersion(v)
 		}
 		return override.GetDeployment() // //nolint:staticcheck // SA1019: worker versioning v0.30
@@ -218,10 +218,10 @@ func GetEffectiveDeployment(versioningInfo *workflowpb.WorkflowExecutionVersioni
 		versioningInfo.GetVersioningOverride().GetAutoUpgrade() { // v0.32 auto-upgrade
 		//nolint:revive // nesting will be reduced after old code clean up
 		if v := versioningInfo.GetDeploymentVersion(); v != nil { // v0.32 auto-upgrade
-			return worker_versioning.DeploymentFromDeploymentVersion(v)
+			return worker_versioning.DeploymentFromExternalDeploymentVersion(v)
 		}
 		if v := versioningInfo.GetVersion(); v != "" { // //nolint:staticcheck // SA1019: worker versioning v0.31
-			dv := worker_versioning.WorkerDeploymentVersionFromString(v)
+			dv, _ := worker_versioning.WorkerDeploymentVersionFromString(v)
 			return worker_versioning.DeploymentFromDeploymentVersion(dv)
 		}
 		return versioningInfo.GetDeployment() // //nolint:staticcheck // SA1019: worker versioning v0.30

@@ -2561,7 +2561,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	if event.ParentPinnedWorkerDeploymentVersion != "" || event.ParentPinnedDeploymentVersion != nil {
 		parentPinned := event.ParentPinnedDeploymentVersion
 		if parentPinned == nil {
-			parentPinned = worker_versioning.WorkerDeploymentVersionFromString(event.ParentPinnedWorkerDeploymentVersion) //nolint:staticcheck // SA1019: worker versioning v0.31
+			parentPinned = worker_versioning.ExternalWorkerDeploymentVersionFromString(event.ParentPinnedWorkerDeploymentVersion) //nolint:staticcheck // SA1019: worker versioning v0.31
 		}
 		ms.executionInfo.VersioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{
 			Behavior:          enumspb.VERSIONING_BEHAVIOR_PINNED,
@@ -2636,7 +2636,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 			ms.executionInfo.VersioningInfo.VersioningOverride.Override = &workflowpb.VersioningOverride_Pinned{
 				Pinned: &workflowpb.VersioningOverride_PinnedOverride{
 					Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
-					Version:  worker_versioning.WorkerDeploymentVersionFromDeployment(d),
+					Version:  worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(d),
 				},
 			}
 			ms.executionInfo.VersioningInfo.VersioningOverride.Deployment = nil
@@ -2648,7 +2648,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 			ms.executionInfo.VersioningInfo.VersioningOverride.Override = &workflowpb.VersioningOverride_Pinned{
 				Pinned: &workflowpb.VersioningOverride_PinnedOverride{
 					Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
-					Version:  worker_versioning.WorkerDeploymentVersionFromString(vs),
+					Version:  worker_versioning.ExternalWorkerDeploymentVersionFromString(vs),
 				},
 			}
 			//nolint:staticcheck // SA1019: worker versioning v0.31
@@ -3530,7 +3530,7 @@ func (ms *MutableStateImpl) AddActivityTaskStartedEvent(
 
 	if deployment != nil {
 		ai.LastWorkerDeploymentVersion = worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(deployment))
-		ai.LastDeploymentVersion = worker_versioning.WorkerDeploymentVersionFromDeployment(deployment)
+		ai.LastDeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(deployment)
 	}
 
 	if !ai.HasRetryPolicy {
@@ -4884,7 +4884,7 @@ func (ms *MutableStateImpl) updateVersioningOverride(
 			ms.GetExecutionInfo().VersioningInfo.VersioningOverride.Override = &workflowpb.VersioningOverride_Pinned{
 				Pinned: &workflowpb.VersioningOverride_PinnedOverride{
 					//nolint:staticcheck // SA1019: worker versioning v0.31
-					Version:  worker_versioning.WorkerDeploymentVersionFromString(override.GetPinnedVersion()),
+					Version:  worker_versioning.ExternalWorkerDeploymentVersionFromString(override.GetPinnedVersion()),
 					Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
 				},
 			}
@@ -4905,7 +4905,7 @@ func (ms *MutableStateImpl) updateVersioningOverride(
 			ms.GetExecutionInfo().VersioningInfo.VersioningOverride.Override = &workflowpb.VersioningOverride_Pinned{
 				Pinned: &workflowpb.VersioningOverride_PinnedOverride{
 					Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
-					Version:  worker_versioning.WorkerDeploymentVersionFromDeployment(d),
+					Version:  worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(d),
 				},
 			}
 		}
@@ -4916,7 +4916,7 @@ func (ms *MutableStateImpl) updateVersioningOverride(
 			ms.GetExecutionInfo().VersioningInfo.VersioningOverride.Override = &workflowpb.VersioningOverride_Pinned{
 				Pinned: &workflowpb.VersioningOverride_PinnedOverride{
 					Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
-					Version:  worker_versioning.WorkerDeploymentVersionFromString(vs),
+					Version:  worker_versioning.ExternalWorkerDeploymentVersionFromString(vs),
 				},
 			}
 		}
@@ -8029,7 +8029,7 @@ func (ms *MutableStateImpl) GetWorkerDeploymentSA() string {
 		}
 		//nolint:staticcheck // SA1019: worker versioning v0.31
 		if vs := override.GetPinnedVersion(); vs != "" {
-			v := worker_versioning.WorkerDeploymentVersionFromString(vs)
+			v, _ := worker_versioning.WorkerDeploymentVersionFromString(vs)
 			return v.GetDeploymentName()
 		}
 		//nolint:staticcheck // SA1019: worker versioning v0.30
@@ -8043,7 +8043,7 @@ func (ms *MutableStateImpl) GetWorkerDeploymentVersionSA() string {
 	if override := versioningInfo.GetVersioningOverride(); override != nil &&
 		worker_versioning.OverrideIsPinned(override) {
 		if v := override.GetPinned().GetVersion(); v != nil {
-			return worker_versioning.WorkerDeploymentVersionToString(v)
+			return worker_versioning.ExternalWorkerDeploymentVersionToString(v)
 		}
 		//nolint:staticcheck // SA1019: worker versioning v0.31
 		if vs := override.GetPinnedVersion(); vs != "" {
@@ -8053,7 +8053,7 @@ func (ms *MutableStateImpl) GetWorkerDeploymentVersionSA() string {
 		return worker_versioning.DeploymentToString(override.GetDeployment())
 	}
 	if v := versioningInfo.GetDeploymentVersion(); v != nil {
-		return worker_versioning.WorkerDeploymentVersionToString(v)
+		return worker_versioning.ExternalWorkerDeploymentVersionToString(v)
 	}
 	//nolint:staticcheck // SA1019: worker versioning v0.31
 	return versioningInfo.GetVersion()
@@ -8078,10 +8078,10 @@ func (ms *MutableStateImpl) GetDeploymentTransition() *workflowpb.DeploymentTran
 		//nolint:staticcheck // SA1019: worker versioning v0.30
 		ret := &workflowpb.DeploymentTransition{}
 		if dv := t.GetDeploymentVersion(); dv != nil {
-			ret.Deployment = worker_versioning.DeploymentFromDeploymentVersion(dv)
+			ret.Deployment = worker_versioning.DeploymentFromExternalDeploymentVersion(dv)
 		} else {
 			//nolint:staticcheck // SA1019: worker versioning v0.31
-			v := worker_versioning.WorkerDeploymentVersionFromString(t.GetVersion())
+			v, _ := worker_versioning.WorkerDeploymentVersionFromString(t.GetVersion())
 			ret.Deployment = worker_versioning.DeploymentFromDeploymentVersion(v)
 		}
 		return ret
@@ -8134,7 +8134,7 @@ func (ms *MutableStateImpl) StartDeploymentTransition(deployment *deploymentpb.D
 	versioningInfo.DeploymentTransition = nil
 	versioningInfo.VersionTransition = &workflowpb.DeploymentVersionTransition{
 		// [cleanup-wv-3.1]
-		DeploymentVersion: worker_versioning.WorkerDeploymentVersionFromDeployment(deployment),
+		DeploymentVersion: worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(deployment),
 	}
 
 	// Because deployment is changed, we clear sticky queue to make sure the next wf task does not
@@ -8167,8 +8167,8 @@ func (ms *MutableStateImpl) StartDeploymentTransition(deployment *deploymentpb.D
 	metrics.StartDeploymentTransitionCounter.With(
 		ms.metricsHandler.WithTags(
 			metrics.NamespaceTag(ms.namespaceEntry.Name().String()),
-			metrics.FromUnversionedTag(worker_versioning.WorkerDeploymentVersionToString(worker_versioning.WorkerDeploymentVersionFromDeployment(preTransitionEffectiveDeployment))),
-			metrics.ToUnversionedTag(worker_versioning.WorkerDeploymentVersionToString(worker_versioning.WorkerDeploymentVersionFromDeployment(deployment))),
+			metrics.FromUnversionedTag(worker_versioning.ExternalWorkerDeploymentVersionToString(worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(preTransitionEffectiveDeployment))),
+			metrics.ToUnversionedTag(worker_versioning.ExternalWorkerDeploymentVersionToString(worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(deployment))),
 		),
 	).Record(1)
 
