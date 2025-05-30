@@ -7,6 +7,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/aggregate"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"google.golang.org/grpc"
 )
@@ -51,6 +52,8 @@ type (
 	HealthSignalAggregatorImpl struct {
 		status int32
 
+		aggregatorEnabled dynamicconfig.BoolPropertyFn
+
 		latencyAverage aggregate.MovingWindowAverage
 		errorRatio     aggregate.MovingWindowAverage
 
@@ -62,19 +65,25 @@ type (
 
 // NewHealthSignalAggregator creates a new instance of HealthSignalAggregatorImpl
 func NewHealthSignalAggregator(
+	logger log.Logger,
+	aggregatorEnabled dynamicconfig.BoolPropertyFn,
 	windowSize time.Duration,
 	maxBufferSize int,
-	logger log.Logger,
 ) *HealthSignalAggregatorImpl {
 	ret := &HealthSignalAggregatorImpl{
-		latencyAverage: aggregate.NewMovingWindowAvgImpl(windowSize, maxBufferSize),
-		errorRatio:     aggregate.NewMovingWindowAvgImpl(windowSize, maxBufferSize),
-		logger:         logger,
+		logger:            logger,
+		aggregatorEnabled: aggregatorEnabled,
+		latencyAverage:    aggregate.NewMovingWindowAvgImpl(windowSize, maxBufferSize),
+		errorRatio:        aggregate.NewMovingWindowAvgImpl(windowSize, maxBufferSize),
 	}
 	return ret
 }
 
 func (s *HealthSignalAggregatorImpl) Record(latency time.Duration, err error) {
+	if !s.aggregatorEnabled() {
+		s.logger.Debug("health signal aggregator is disabled")
+		return
+	}
 	s.latencyAverage.Record(latency.Milliseconds())
 
 	if isUnhealthyError(err) {
@@ -85,10 +94,16 @@ func (s *HealthSignalAggregatorImpl) Record(latency time.Duration, err error) {
 }
 
 func (s *HealthSignalAggregatorImpl) AverageLatency() float64 {
+	if !s.aggregatorEnabled() {
+		s.logger.Debug("health signal aggregator is disabled")
+	}
 	return s.latencyAverage.Average()
 }
 
 func (s *HealthSignalAggregatorImpl) ErrorRatio() float64 {
+	if !s.aggregatorEnabled() {
+		s.logger.Debug("health signal aggregator is disabled")
+	}
 	return s.errorRatio.Average()
 }
 
@@ -110,18 +125,4 @@ func isUnhealthyError(err error) bool {
 		return true
 	}
 	return false
-}
-
-var NoopHealthSignalAggregator HealthSignalAggregator = newNoopSignalAggregator()
-
-func newNoopSignalAggregator() *NoopSignalAggregator { return &NoopSignalAggregator{} }
-
-func (a *NoopSignalAggregator) Record(_ time.Duration, _ error) {}
-
-func (a *NoopSignalAggregator) AverageLatency() float64 {
-	return 0
-}
-
-func (*NoopSignalAggregator) ErrorRatio() float64 {
-	return 0
 }

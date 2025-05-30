@@ -179,9 +179,10 @@ func HealthSignalAggregatorProvider(
 	logger log.ThrottledLogger,
 ) interceptor.HealthSignalAggregator {
 	return interceptor.NewHealthSignalAggregator(
+		logger,
+		dynamicconfig.HistoryHealthSignalMetricsEnabled.Get(dynamicCollection),
 		dynamicconfig.PersistenceHealthSignalWindowSize.Get(dynamicCollection)(),
 		dynamicconfig.PersistenceHealthSignalBufferSize.Get(dynamicCollection)(),
-		logger,
 	)
 }
 
@@ -189,13 +190,8 @@ func HealthCheckInterceptorProvider(
 	dynamicCollection *dynamicconfig.Collection,
 	healthSignalAggregator *interceptor.HealthSignalAggregatorImpl,
 ) *interceptor.HealthCheckInterceptor {
-	if dynamicconfig.HistoryHealthSignalMetricsEnabled.Get(dynamicCollection)() {
-		return interceptor.NewHealthCheckInterceptor(
-			healthSignalAggregator,
-		)
-	}
 	return interceptor.NewHealthCheckInterceptor(
-		interceptor.NoopHealthSignalAggregator,
+		healthSignalAggregator,
 	)
 }
 func RateLimitInterceptorProvider(
