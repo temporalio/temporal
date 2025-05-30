@@ -3543,7 +3543,14 @@ func (wh *WorkflowHandler) DescribeWorkerDeployment(ctx context.Context, request
 
 	for _, vs := range workerDeploymentInfo.VersionSummaries {
 		//nolint:staticcheck // SA1019: worker versioning v0.31
-		vs.DeploymentVersion, _ = worker_versioning.WorkerDeploymentVersionFromStringV31(vs.Version)
+		vs.Version = worker_versioning.WorkerDeploymentVersionToStringV31(vs.DeploymentVersion)
+	}
+	if rc := workerDeploymentInfo.RoutingConfig; rc != nil {
+		//nolint:staticcheck // SA1019: worker versioning v0.31
+		workerDeploymentInfo.RoutingConfig.CurrentVersion = worker_versioning.WorkerDeploymentVersionToStringV31(rc.CurrentDeploymentVersion)
+		//nolint:staticcheck // SA1019: worker versioning v0.31
+		workerDeploymentInfo.RoutingConfig.RampingVersion = worker_versioning.WorkerDeploymentVersionToStringV31(rc.RampingDeploymentVersion)
+
 	}
 	return &workflowservice.DescribeWorkerDeploymentResponse{
 		WorkerDeploymentInfo: workerDeploymentInfo,

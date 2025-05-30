@@ -4430,7 +4430,7 @@ const file_temporal_server_api_matchingservice_v1_request_response_proto_rawDesc
 	"\rwait_new_data\x18\x04 \x01(\bR\vwaitNewData\x12$\n" +
 	"\x0eonly_if_loaded\x18\x06 \x01(\bR\fonlyIfLoaded\"\x81\x01\n" +
 	"\x1cGetTaskQueueUserDataResponse\x12[\n" +
-	"\tuser_data\x18\x02 \x01(\v2>.temporal.server.api.persistence.v1.VersionedTaskQueueUserDataR\buserDataJ\x04\b\x01\x10\x02\"\xf9\x04\n" +
+	"\tuser_data\x18\x02 \x01(\v2>.temporal.server.api.persistence.v1.VersionedTaskQueueUserDataR\buserDataJ\x04\b\x01\x10\x02\"\xff\x04\n" +
 	"\x1dSyncDeploymentUserDataRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1d\n" +
 	"\n" +
@@ -4443,7 +4443,7 @@ const file_temporal_server_api_matchingservice_v1_request_response_proto_rawDesc
 	"\x04data\x18\x05 \x01(\v20.temporal.server.api.deployment.v1.TaskQueueDataR\x04data\x12j\n" +
 	"\x13update_version_data\x18\x06 \x01(\v28.temporal.server.api.deployment.v1.DeploymentVersionDataH\x00R\x11updateVersionData\x12q\n" +
 	"\x19forget_deployment_version\x18\t \x01(\v23.temporal.api.deployment.v1.WorkerDeploymentVersionH\x00R\x17forgetDeploymentVersionB\v\n" +
-	"\toperation\":\n" +
+	"\toperationJ\x04\b\a\x10\b\":\n" +
 	"\x1eSyncDeploymentUserDataResponse\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\x03R\aversion\"\xc5\x01\n" +
 	"-ApplyTaskQueueUserDataReplicationEventRequest\x12!\n" +

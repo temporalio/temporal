@@ -326,6 +326,7 @@ message SyncDeploymentUserDataRequest {
         // The version whose data should be cleaned from the task queue.
         temporal.api.deployment.v1.WorkerDeploymentVersion forget_deployment_version = 9;
     }
+    reserved 7;
 }
 
 message SyncDeploymentUserDataResponse {
