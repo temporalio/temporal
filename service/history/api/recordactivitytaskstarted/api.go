@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	deploymentpb "go.temporal.io/api/deployment/v1"
 
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/historyservice/v1"

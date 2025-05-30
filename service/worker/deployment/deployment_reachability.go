@@ -3,9 +3,9 @@ package deployment
 import (
 	"context"
 	"fmt"
-	deploymentpb "go.temporal.io/api/deployment/v1"
 	"time"
 
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/metrics"

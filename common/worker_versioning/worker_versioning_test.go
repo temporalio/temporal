@@ -1,12 +1,12 @@
 package worker_versioning
 
 import (
-	deploymentpb "go.temporal.io/api/deployment/v1"
 	"strconv"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/primitives/timestamp"
