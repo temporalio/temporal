@@ -1279,7 +1279,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 		cacheKey := ".taskQueueStats" // starts with `.` to prevent clashing with build ID cache keys
 		if ts := pm.GetCache(cacheKey); ts != nil {
 			//revive:disable-next-line:unchecked-type-assertion
-			descrResp.DescResponse.TaskQueueStats = ts.(*taskqueuepb.TaskQueueStats)
+			descrResp.DescResponse.Stats = ts.(*taskqueuepb.TaskQueueStats)
 		} else {
 			taskQueueStats := &taskqueuepb.TaskQueueStats{}
 
@@ -1294,7 +1294,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 				if v.GetVersion() == nil || v.GetVersion().GetDeploymentName() == "" || v.GetVersion().GetBuildId() == "" {
 					continue
 				}
-				buildIds = append(buildIds, worker_versioning.WorkerDeploymentVersionToString(v.GetVersion()))
+				buildIds = append(buildIds, worker_versioning.WorkerDeploymentVersionToStringV31(v.GetVersion()))
 			}
 
 			// query each partition for stats
@@ -1326,7 +1326,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 				}
 			}
 			pm.PutCache(cacheKey, taskQueueStats)
-			descrResp.DescResponse.TaskQueueStats = taskQueueStats
+			descrResp.DescResponse.Stats = taskQueueStats
 		}
 	}
 

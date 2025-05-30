@@ -301,7 +301,7 @@ func (s *DescribeTaskQueueSuite) validateDescribeTaskQueue(
 
 		validateDescribeTaskQueueStats(
 			a,
-			workflowResp.TaskQueueStats,
+			workflowResp.Stats,
 			expectedBacklogCount[enumspb.TASK_QUEUE_TYPE_WORKFLOW],
 			maxBacklogExtraTasks[enumspb.TASK_QUEUE_TYPE_WORKFLOW],
 			expectedAddRate[enumspb.TASK_QUEUE_TYPE_WORKFLOW],
@@ -326,7 +326,7 @@ func (s *DescribeTaskQueueSuite) validateDescribeTaskQueue(
 
 		validateDescribeTaskQueueStats(
 			a,
-			activityResp.TaskQueueStats,
+			activityResp.Stats,
 			expectedBacklogCount[enumspb.TASK_QUEUE_TYPE_ACTIVITY],
 			maxBacklogExtraTasks[enumspb.TASK_QUEUE_TYPE_ACTIVITY],
 			expectedAddRate[enumspb.TASK_QUEUE_TYPE_ACTIVITY],
