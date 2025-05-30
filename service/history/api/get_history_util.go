@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 
-	"github.com/blang/semver/v4"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -489,25 +488,28 @@ func FixFollowEvents(
 func clientSupportsTranOrSpecEvents(
 	ctx context.Context,
 ) bool {
-	clientName, clientVersion := headers.GetClientNameAndVersion(ctx)
+	// clientVersion is the second return value.
+	clientName, _ := headers.GetClientNameAndVersion(ctx)
 	switch clientName {
 	// Currently, CLI and UI don't support transient/speculative WFT events in the history,
 	// because they might disappear and appear again. This support can be added later though.
 	// Adjust a version after CLI and UI start to support it.
 	case headers.ClientNameCLI:
-		ver, err := semver.Parse(clientVersion)
-		if err != nil {
-			return false
-		}
-		// TODO: Change 100.0.0 to specific version (i.e. 1.20.0) when support for transient/speculative WFT events is added.
-		return ver.GT(semver.MustParse("100.0.0"))
+		// ver, err := semver.Parse(clientVersion)
+		// if err != nil {
+		// 	return false
+		// }
+		// // TODO: Change "first.supported.version" to specific version (i.e. 1.20.0) when support for transient/speculative WFT events is added.
+		// return ver.GT(semver.MustParse("first.supported.version"))
+		return false
 	case headers.ClientNameUI:
-		ver, err := semver.Parse(clientVersion)
-		if err != nil {
-			return false
-		}
-		// TODO: Change 100.0.0 to specific version (i.e. 1.20.0) when support for transient/speculative WFT events is added.
-		return ver.GT(semver.MustParse("100.0.0"))
+		// ver, err := semver.Parse(clientVersion)
+		// if err != nil {
+		// 	return false
+		// }
+		// // TODO: Change "first.supported.version" to specific version (i.e. 2.20.0) when support for transient/speculative WFT events is added.
+		// return ver.GT(semver.MustParse("first.supported.version"))
+		return false
 	default:
 		return true
 	}
