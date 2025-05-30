@@ -468,7 +468,8 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 			RampPercentage:    0,   // remove ramp
 		}
 
-		if prevRampingVersion != worker_versioning.UnversionedVersionId {
+		// TODO (Shivam): remove the empty string check once canary stops flaking out
+		if prevRampingVersion != worker_versioning.UnversionedVersionId && prevRampingVersion != "" {
 			if _, err := d.syncVersion(ctx, prevRampingVersion, unsetRampUpdateArgs, false); err != nil {
 				return nil, err
 			}
@@ -517,7 +518,8 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 			RampingSinceTime:  rampingSinceTime,
 			RampPercentage:    args.Percentage,
 		}
-		if newRampingVersion != worker_versioning.UnversionedVersionId {
+		// TODO (Shivam): remove the empty string check once canary stops flaking out
+		if newRampingVersion != worker_versioning.UnversionedVersionId && newRampingVersion != "" {
 			if _, err := d.syncVersion(ctx, newRampingVersion, setRampUpdateArgs, true); err != nil {
 				return nil, err
 			}
@@ -534,7 +536,8 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 				RampingSinceTime:  nil, // remove ramp
 				RampPercentage:    0,   // remove ramp
 			}
-			if prevRampingVersion != worker_versioning.UnversionedVersionId {
+			// TODO (Shivam): remove the empty string check once canary stops flaking out
+			if prevRampingVersion != worker_versioning.UnversionedVersionId && prevRampingVersion != "" {
 				if _, err := d.syncVersion(ctx, prevRampingVersion, unsetRampUpdateArgs, false); err != nil {
 					return nil, err
 				}
@@ -710,7 +713,8 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 		}
 	}
 
-	if newCurrentVersion != worker_versioning.UnversionedVersionId {
+	// TODO (Shivam): remove the empty string check once canary stops flaking out
+	if newCurrentVersion != worker_versioning.UnversionedVersionId && newCurrentVersion != "" {
 		// Tell new current version that it's current
 		currUpdateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
 			RoutingUpdateTime: updateTime,
@@ -728,7 +732,8 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 	// do is tell the previous current version that it is not current. Then, the task queues in the
 	// previous current version will have no current version and will become unversioned implicitly.
 
-	if prevCurrentVersion != worker_versioning.UnversionedVersionId {
+	// TODO (Shivam): remove the empty string check once canary stops flaking out
+	if prevCurrentVersion != worker_versioning.UnversionedVersionId && prevCurrentVersion != "" {
 		// Tell previous current that it's no longer current
 		prevUpdateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
 			RoutingUpdateTime: updateTime,
