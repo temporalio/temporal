@@ -197,7 +197,7 @@ func (s *ClientMiscTestSuite) TestTooManyCancelRequests() {
 	defer cancel()
 
 	// create a large number of blocked workflows
-	numTargetWorkflows := testcore.ClientSuiteLimit*2 + 2 // at least 2 batches
+	numTargetWorkflows := testcore.ClientSuiteLimit*2 + 2 // 2 batches and some more.
 	targetWorkflow := func(ctx workflow.Context) error {
 		return workflow.Await(ctx, func() bool {
 			return false

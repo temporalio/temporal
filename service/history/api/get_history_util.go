@@ -223,7 +223,8 @@ func GetHistory(
 	return executionHistory, nextPageToken, nil
 }
 
-// TODO: need transient support too
+// GetHistoryReverse doesn't accept transientWorkflowTaskInfo and doesn't attach transient/speculative WFT events,
+// because it is used by UI only. When support for these events is added for GetHistory API, it might be added here too.
 func GetHistoryReverse(
 	ctx context.Context,
 	shardContext historyi.ShardContext,

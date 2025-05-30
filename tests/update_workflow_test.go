@@ -136,6 +136,18 @@ func (s *UpdateWorkflowSuite) TestEmptySpeculativeWorkflowTask_AcceptComplete() 
   5 WorkflowTaskScheduled // Speculative WT events are not written to the history yet.
   6 WorkflowTaskStarted
 `, task.History)
+
+					// Full history also must contain speculative WFT events.
+					s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 WorkflowTaskScheduled // Speculative WT events are not written to the history yet.
+  6 WorkflowTaskStarted
+`,
+						s.GetHistory(s.Namespace().String(), tv.WorkflowExecution()))
+
 					return s.UpdateAcceptCompleteCommands(tv), nil
 				default:
 					s.Failf("wtHandler called too many times", "wtHandler shouldn't be called %d times", wtHandlerCalls)
@@ -179,6 +191,15 @@ func (s *UpdateWorkflowSuite) TestEmptySpeculativeWorkflowTask_AcceptComplete() 
 			s.NoError(err)
 
 			updateResultCh := s.sendUpdateNoError(s.useRunID(tv, tc.useRunID, runID))
+
+			// Full history must contain speculative scheduled WFT event.
+			s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 WorkflowTaskScheduled // Speculative scheduled WFT`,
+				s.GetHistory(s.Namespace().String(), tv.WorkflowExecution()))
 
 			// Process update in workflow.
 			res, err := poller.PollAndProcessWorkflowTask(testcore.WithoutRetries)
@@ -3026,10 +3047,6 @@ func (s *UpdateWorkflowSuite) TestScheduledSpeculativeWorkflowTask_TerminateWork
 
 	events := s.GetHistory(s.Namespace().String(), tv.WorkflowExecution())
 
-	// TODO: when WF is terminated, and WFT is only scheduled but not started is not getting failed
-	// and it also is not cleaned out from the memory and not converted to normal because when converted function
-	// is called, WF is already terminated and conversion logic is skipped.
-	// Previously, history simple didn't include WTScheduled event but with change in ths PR is does.
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled

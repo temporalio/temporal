@@ -2123,7 +2123,6 @@ func (ms *MutableStateImpl) ClearTransientWorkflowTask() error {
 	return nil
 }
 
-// TODO: don't like exposing this but can't find a better way
 func (ms *MutableStateImpl) ClearSpeculativeWorkflowTask() error {
 	workflowTask := ms.GetPendingWorkflowTask()
 	if workflowTask == nil {
@@ -2133,6 +2132,7 @@ func (ms *MutableStateImpl) ClearSpeculativeWorkflowTask() error {
 		return nil
 	}
 	if workflowTask.StartedEventID != common.EmptyEventID {
+		// TODO: use softassert here.
 		return serviceerror.NewInternal("started workflow task cannot be cleared: it must be explicitly failed")
 	}
 

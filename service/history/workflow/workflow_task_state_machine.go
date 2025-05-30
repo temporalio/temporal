@@ -1034,6 +1034,7 @@ func (m *workflowTaskStateMachine) GetTransientWorkflowTaskInfo(
 ) *historyspb.TransientWorkflowTaskInfo {
 
 	if workflowTask.ScheduledEventID == common.EmptyEventID {
+		// TODO: use softassert here.
 		return nil // this should never happen because WFT is retrieved by ScheduledEventID.
 	}
 
