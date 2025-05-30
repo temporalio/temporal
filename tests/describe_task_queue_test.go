@@ -41,7 +41,7 @@ func (s *DescribeTaskQueueSuite) TestNonRoot() {
 	s.NoError(err)
 	s.NotNil(resp)
 
-	resp, err = s.FrontendClient().DescribeTaskQueue(context.Background(),
+	_, err = s.FrontendClient().DescribeTaskQueue(context.Background(),
 		&workflowservice.DescribeTaskQueueRequest{
 			Namespace:   s.Namespace().String(),
 			TaskQueue:   &taskqueuepb.TaskQueue{Name: "/_sys/foo/1", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -85,13 +85,13 @@ func (s *DescribeTaskQueueSuite) TestAddSingleTaskPerVersion_SinglePartition_Val
 }
 
 // TODO(stephanos): re-enable this test
-//func (s *DescribeTaskQueueSuite) TestAddSingleTaskPerVersion_ValidateCachedStats_NoMatchingBehaviour() {
+// func (s *DescribeTaskQueueSuite) TestAddSingleTaskPerVersion_ValidateCachedStats_NoMatchingBehaviour() {
 //	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
 //	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
 //	s.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 500*time.Millisecond)
 //
 //	s.publishConsumeWorkflowTasksValidateStatsCached(1, true)
-//}
+// }
 
 // publish 50% to default/unversioned task queue and 50% to versioned task queue
 func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateStats(workflows int, singlePartition bool) {

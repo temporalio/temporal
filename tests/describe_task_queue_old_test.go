@@ -233,7 +233,9 @@ func (s *DescribeTaskQueueOldSuite) validateDescribeTaskQueue(
 			})
 			s.NoError(err)
 			s.NotNil(resp)
+			//nolint:staticcheck // SA1019 deprecated field
 			s.Equal(1, len(resp.GetVersionsInfo()), "should be 1 because only default/unversioned queue")
+			//nolint:staticcheck // SA1019 deprecated field
 			versionInfo := resp.GetVersionsInfo()[""]
 			s.Equal(enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, versionInfo.GetTaskReachability())
 			types := versionInfo.GetTypesInfo()
@@ -270,7 +272,9 @@ func (s *DescribeTaskQueueOldSuite) validateDescribeTaskQueue(
 				})
 				a.NoError(err)
 				a.NotNil(resp)
+				//nolint:staticcheck // SA1019 deprecated field
 				a.Equal(1, len(resp.GetVersionsInfo()), "should be 1 because only default/unversioned queue")
+				//nolint:staticcheck // SA1019 deprecated field
 				versionInfo := resp.GetVersionsInfo()[""]
 				a.Equal(enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, versionInfo.GetTaskReachability())
 				types := versionInfo.GetTypesInfo()
@@ -305,6 +309,7 @@ func (s *DescribeTaskQueueOldSuite) validateDescribeTaskQueue(
 			})
 			a.NoError(err)
 			a.NotNil(resp)
+			//nolint:staticcheck // SA1019 deprecated field
 			a.Equal(resp.TaskQueueStatus.GetBacklogCountHint(), expectedBacklogCount[enumspb.TASK_QUEUE_TYPE_WORKFLOW])
 		}, 6*time.Second, 100*time.Millisecond)
 	}
