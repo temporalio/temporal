@@ -252,7 +252,7 @@ func (tv *TestVars) DeploymentVersionString() string {
 }
 
 func (tv *TestVars) DeploymentVersionStringV32() string {
-	return worker_versioning.ExternalWorkerDeploymentVersionToString(tv.ExternalDeploymentVersion())
+	return worker_versioning.ExternalWorkerDeploymentVersionToString(tv.DeploymentVersion())
 }
 
 func (tv *TestVars) DeploymentVersionTransition() *workflowpb.DeploymentVersionTransition {
