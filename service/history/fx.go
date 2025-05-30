@@ -134,7 +134,7 @@ func HistoryEngineFactoryProvider(
 
 func ConfigProvider(
 	dc *dynamicconfig.Collection,
-	persistenceConfig *config.Persistence,
+	persistenceConfig config.Persistence,
 ) *configs.Config {
 	return configs.NewConfig(
 		dc,

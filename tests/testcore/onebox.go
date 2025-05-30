@@ -650,7 +650,6 @@ func (c *TemporalImpl) newRPCFactory(
 	monitor membership.Monitor,
 	tracingStatsHandler telemetry.ClientStatsHandler,
 	httpPort httpPort,
-	dc *dynamicconfig.Collection,
 ) (common.RPCFactory, error) {
 	host, portStr, err := net.SplitHostPort(string(grpcHostPort))
 	if err != nil {

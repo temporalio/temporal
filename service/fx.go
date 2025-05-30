@@ -118,6 +118,7 @@ func NewPersistenceRateLimitingParams(
 func GrpcServerOptionsProvider(
 	params GrpcServerOptionsParams,
 ) []grpc.ServerOption {
+
 	grpcServerOptions, err := params.RpcFactory.GetInternodeGRPCServerOptions()
 	if err != nil {
 		params.Logger.Fatal("creating gRPC server options failed", tag.Error(err))
