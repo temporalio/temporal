@@ -1047,14 +1047,14 @@ func (d *WorkflowRunner) getWorkerDeploymentInfoVersionSummary(versionSummary *d
 }
 
 func (d *WorkflowRunner) setVersionSummary(dv *deploymentpb.WorkerDeploymentVersion, summary *deploymentspb.WorkerDeploymentVersionSummary) {
-	d.State.Versions[worker_versioning.ExternalWorkerDeploymentVersionToString(dv)] = summary
+	d.State.Versions[worker_versioning.ExternalWorkerDeploymentVersionToStringV31(dv)] = summary
 }
 
 func (d *WorkflowRunner) getVersionSummary(dv *deploymentpb.WorkerDeploymentVersion) (summary *deploymentspb.WorkerDeploymentVersionSummary, ok bool) {
-	summary, ok = d.State.Versions[worker_versioning.ExternalWorkerDeploymentVersionToString(dv)]
+	summary, ok = d.State.Versions[worker_versioning.ExternalWorkerDeploymentVersionToStringV31(dv)]
 	return summary, ok
 }
 
 func (d *WorkflowRunner) deleteVersionSummary(dv *deploymentpb.WorkerDeploymentVersion) {
-	delete(d.State.Versions, worker_versioning.ExternalWorkerDeploymentVersionToString(dv))
+	delete(d.State.Versions, worker_versioning.ExternalWorkerDeploymentVersionToStringV31(dv))
 }
