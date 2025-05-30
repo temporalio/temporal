@@ -294,11 +294,9 @@ func (mo *multiOp) startAndUpdateWorkflow(ctx context.Context) (*historyservice.
 		// running workflow above - but before the new workflow could be created (and locked).
 		// TODO: Consider a refactoring of the startworkflow.Starter to make this case impossible.
 		//
-		// The best way forward is to exit and retry from the top.
-		// By returning an Unavailable service error, the entire MultiOperation will be retried.
-		return nil, newMultiOpError(
-			serviceerror.NewUnavailablef("Workflow was not started: %v", startOutcome),
-			multiOpAbortedErr)
+		// Instead of returning an Unavailable error and relying on the caller to retry, retry
+		// the operation within this process by invoking the top level handler again.
+		return mo.Invoke(ctx)
 	}
 
 	// Wait for the update to complete.
