@@ -191,18 +191,18 @@ func (mr *MocktaskQueuePartitionManagerMockRecorder) HasPollerAfter(buildId, acc
 }
 
 // LegacyDescribeTaskQueue mocks base method.
-func (m *MocktaskQueuePartitionManager) LegacyDescribeTaskQueue(includeTaskQueueStatus, report_stats bool) (*matchingservice.DescribeTaskQueueResponse, error) {
+func (m *MocktaskQueuePartitionManager) LegacyDescribeTaskQueue(includeTaskQueueStatus bool) (*matchingservice.DescribeTaskQueueResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "LegacyDescribeTaskQueue", includeTaskQueueStatus, report_stats)
+	ret := m.ctrl.Call(m, "LegacyDescribeTaskQueue", includeTaskQueueStatus)
 	ret0, _ := ret[0].(*matchingservice.DescribeTaskQueueResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // LegacyDescribeTaskQueue indicates an expected call of LegacyDescribeTaskQueue.
-func (mr *MocktaskQueuePartitionManagerMockRecorder) LegacyDescribeTaskQueue(includeTaskQueueStatus, report_stats any) *gomock.Call {
+func (mr *MocktaskQueuePartitionManagerMockRecorder) LegacyDescribeTaskQueue(includeTaskQueueStatus any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LegacyDescribeTaskQueue", reflect.TypeOf((*MocktaskQueuePartitionManager)(nil).LegacyDescribeTaskQueue), includeTaskQueueStatus, report_stats)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LegacyDescribeTaskQueue", reflect.TypeOf((*MocktaskQueuePartitionManager)(nil).LegacyDescribeTaskQueue), includeTaskQueueStatus)
 }
 
 // LongPollExpirationInterval mocks base method.
