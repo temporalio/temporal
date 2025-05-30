@@ -7,6 +7,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/aggregate"
+	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"google.golang.org/grpc"
@@ -35,7 +36,11 @@ func (h *HealthCheckInterceptor) UnaryIntercept(
 	resp, err := handler(ctx, req)
 	elapsed := time.Since(startTime)
 
-	h.healthSignalAggregator.Record(elapsed, err)
+	// Skip health check recording for specific methods
+	methodName := api.MethodName(info.FullMethod)
+	if methodName != "DeepHealthCheck" { // Do not try to measure a tool with itself.
+		h.healthSignalAggregator.Record(elapsed, err)
+	}
 
 	return resp, err
 }
