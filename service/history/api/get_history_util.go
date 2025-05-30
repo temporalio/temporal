@@ -487,15 +487,15 @@ func IncludeTransientAndSpeculativeEvents(
 		if err != nil {
 			return false
 		}
-		// TODO: Change 2.0.0 to specific version (i.e. 1.20.0) when support for transient/speculative WFT events is added.
-		return ver.GT(semver.MustParse("2.0.0"))
+		// TODO: Change 100.0.0 to specific version (i.e. 1.20.0) when support for transient/speculative WFT events is added.
+		return ver.GT(semver.MustParse("100.0.0"))
 	case headers.ClientNameUI:
 		ver, err := semver.Parse(clientVersion)
 		if err != nil {
 			return false
 		}
-		// TODO: Change 2.0.0 to specific version (i.e. 1.20.0) when support for transient/speculative WFT events is added.
-		return ver.GT(semver.MustParse("2.0.0"))
+		// TODO: Change 100.0.0 to specific version (i.e. 1.20.0) when support for transient/speculative WFT events is added.
+		return ver.GT(semver.MustParse("100.0.0"))
 	default:
 		return true
 	}
