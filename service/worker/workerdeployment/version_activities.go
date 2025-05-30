@@ -68,8 +68,8 @@ func (a *VersionActivities) SyncDeploymentVersionUserData(
 					NamespaceId:    a.namespace.ID().String(),
 					TaskQueue:      syncData.Name,
 					TaskQueueTypes: syncData.Types,
-					Operation: &matchingservice.SyncDeploymentUserDataRequest_ForgetVersion{
-						ForgetVersion: input.Version,
+					Operation: &matchingservice.SyncDeploymentUserDataRequest_ForgetDeploymentVersion{
+						ForgetDeploymentVersion: input.DeploymentVersion,
 					},
 				})
 			} else {
@@ -133,7 +133,7 @@ func (a *VersionActivities) CheckWorkerDeploymentUserDataPropagation(ctx context
 
 // CheckIfTaskQueuesHavePollers returns true if any of the given task queues has any pollers
 func (a *VersionActivities) CheckIfTaskQueuesHavePollers(ctx context.Context, args *deploymentspb.CheckTaskQueuesHavePollersActivityArgs) (bool, error) {
-	versionStr := worker_versioning.ExternalWorkerDeploymentVersionToString(worker_versioning.ExternalWorkerDeploymentVersionFromVersion(args.WorkerDeploymentVersion))
+	versionStr := worker_versioning.ExternalWorkerDeploymentVersionToString(worker_versioning.ExternalWorkerDeploymentVersionFromVersion(args.DeploymentVersion))
 	for tqName, tqTypes := range args.TaskQueuesAndTypes {
 		res, err := a.matchingClient.DescribeTaskQueue(ctx, &matchingservice.DescribeTaskQueueRequest{
 			NamespaceId: a.namespace.ID().String(),
@@ -166,7 +166,7 @@ func (a *VersionActivities) CheckIfTaskQueuesHavePollers(ctx context.Context, ar
 
 func (a *VersionActivities) AddVersionToWorkerDeployment(ctx context.Context, input *deploymentspb.AddVersionToWorkerDeploymentRequest) (*deploymentspb.AddVersionToWorkerDeploymentResponse, error) {
 	logger := activity.GetLogger(ctx)
-	logger.Info("adding version to worker-deployment", "deploymentName", input.DeploymentName, "version", input.UpdateArgs.Version)
+	logger.Info("adding version to worker-deployment", "deploymentName", input.DeploymentName, "version", input.UpdateArgs.DeploymentVersion)
 	identity := "deployment-version workflow " + activity.GetInfo(ctx).WorkflowExecution.ID
 	resp, err := a.deploymentClient.AddVersionToWorkerDeployment(ctx, a.namespace, input.DeploymentName, input.UpdateArgs, identity, input.RequestId)
 	var precond *serviceerror.FailedPrecondition
@@ -176,7 +176,7 @@ func (a *VersionActivities) AddVersionToWorkerDeployment(ctx context.Context, in
 	return resp, err
 }
 
-func (a *VersionActivities) GetVersionDrainageStatus(ctx context.Context, version *deploymentspb.WorkerDeploymentVersion) (*deploymentpb.VersionDrainageInfo, error) {
+func (a *VersionActivities) GetVersionDrainageStatus(ctx context.Context, version *deploymentpb.WorkerDeploymentVersion) (*deploymentpb.VersionDrainageInfo, error) {
 	logger := activity.GetLogger(ctx)
 	response, err := a.deploymentClient.GetVersionDrainageStatus(ctx, a.namespace, worker_versioning.WorkerDeploymentVersionToStringV31(version))
 	if err != nil {

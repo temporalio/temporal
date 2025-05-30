@@ -14,7 +14,6 @@ import (
 	"go.temporal.io/sdk/workflow"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/common/testing/testvars"
-	"go.temporal.io/server/common/worker_versioning"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -67,7 +66,7 @@ func (s *WorkerDeploymentSuite) Test_SetCurrentVersion_RejectStaleConcurrentUpda
 
 	updateArgs := &deploymentspb.SetCurrentVersionArgs{
 		Identity:                tv.ClientIdentity(),
-		Version:                 tv.DeploymentVersionString(),
+		DeploymentVersion:       tv.DeploymentVersion(),
 		IgnoreMissingTaskQueues: true,
 	}
 
@@ -113,7 +112,7 @@ func (s *WorkerDeploymentSuite) Test_SetCurrentVersion_RejectStaleConcurrentUpda
 		State: &deploymentspb.WorkerDeploymentLocalState{
 			Versions: map[string]*deploymentspb.WorkerDeploymentVersionSummary{
 				tv.DeploymentVersionString(): {
-					Version: tv.DeploymentVersionString(),
+					DeploymentVersion: tv.DeploymentVersion(),
 				},
 			},
 		},
@@ -144,7 +143,7 @@ func (s *WorkerDeploymentSuite) Test_SetRampingVersion_RejectStaleConcurrentUpda
 
 	updateArgs := &deploymentspb.SetRampingVersionArgs{
 		Identity:                tv.ClientIdentity(),
-		Version:                 tv.DeploymentVersionString(),
+		DeploymentVersion:       tv.DeploymentVersion(),
 		Percentage:              50,
 		IgnoreMissingTaskQueues: true,
 	}
@@ -191,7 +190,7 @@ func (s *WorkerDeploymentSuite) Test_SetRampingVersion_RejectStaleConcurrentUpda
 		State: &deploymentspb.WorkerDeploymentLocalState{
 			Versions: map[string]*deploymentspb.WorkerDeploymentVersionSummary{
 				tv.DeploymentVersionString(): {
-					Version: tv.DeploymentVersionString(),
+					DeploymentVersion: tv.DeploymentVersion(),
 				},
 			},
 		},
@@ -242,14 +241,15 @@ func (s *WorkerDeploymentSuite) syncUnversionedRampInBatches(totalWorkers int) {
 
 		s.env.UpdateWorkflow(SetRampingVersion, "", &testsuite.TestUpdateCallback{
 			OnReject: func(err error) {
-				s.Fail("update failed with error %v", err)
+				s.Fail("update failed with error", err)
 			},
 			OnAccept: func() {
 			},
 			OnComplete: func(a interface{}, err error) {
 			},
 		}, &deploymentspb.SetRampingVersionArgs{
-			Version: worker_versioning.UnversionedVersionId,
+			DeploymentVersion: nil,
+			Percentage:        1, // make a change to routing config so that update is accepted
 		})
 
 	}, 0*time.Millisecond)
@@ -272,7 +272,7 @@ func (s *WorkerDeploymentSuite) syncUnversionedRampInBatches(totalWorkers int) {
 			// This simulates a scenario where the worker deployment already has a current version,
 			// which is a prerequisite for ramping to an unversioned state.
 			RoutingConfig: &deploymentpb.RoutingConfig{
-				CurrentVersion: tv.DeploymentVersionString(),
+				CurrentDeploymentVersion: tv.DeploymentVersion(),
 			},
 		},
 	})

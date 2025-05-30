@@ -42,6 +42,7 @@ import (
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/tests/testcore"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -1687,6 +1688,7 @@ func (s *Versioning3Suite) TestDescribeTaskQueueVersioningInfo() {
 		CurrentDeploymentVersion: worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(tv.DeploymentVersionString()),
 		CurrentVersion:           tv.DeploymentVersionString(),
 		UpdateTime:               timestamp.TimePtr(t1),
+		RampingVersion:           worker_versioning.UnversionedVersionId,
 	}, actInfo.GetVersioningInfo())
 
 	// Now ramp to unversioned
@@ -1702,8 +1704,8 @@ func (s *Versioning3Suite) TestDescribeTaskQueueVersioningInfo() {
 	s.ProtoEqual(&taskqueuepb.TaskQueueVersioningInfo{
 		CurrentDeploymentVersion: worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(tv.DeploymentVersionString()),
 		CurrentVersion:           tv.DeploymentVersionString(),
-		RampingDeploymentVersion: worker_versioning.ExternalWorkerDeploymentVersionFromStringV31("__unversioned__"),
-		RampingVersion:           "__unversioned__",
+		RampingDeploymentVersion: worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(worker_versioning.UnversionedVersionId),
+		RampingVersion:           worker_versioning.UnversionedVersionId,
 		RampingVersionPercentage: 10,
 		UpdateTime:               timestamp.TimePtr(t2),
 	}, actInfo.GetVersioningInfo())
@@ -1723,7 +1725,7 @@ func (s *Versioning3Suite) TestSyncDeploymentUserData_Update() {
 	s.syncTaskQueueDeploymentData(tv1, true, 0, false, t1, tqTypeAct)
 	data = s.getTaskQueueDeploymentData(tv, tqTypeAct)
 	s.ProtoEqual(&persistencespb.DeploymentData{Versions: []*deploymentspb.DeploymentVersionData{
-		{Version: tv1.DeploymentVersion(), CurrentSinceTime: timestamp.TimePtr(t1), RoutingUpdateTime: timestamp.TimePtr(t1)},
+		{DeploymentVersion: tv1.DeploymentVersion(), CurrentSinceTime: timestamp.TimePtr(t1), RoutingUpdateTime: timestamp.TimePtr(t1)},
 	}}, data)
 	data = s.getTaskQueueDeploymentData(tv, tqTypeWf)
 	s.Nil(data)
@@ -1733,7 +1735,7 @@ func (s *Versioning3Suite) TestSyncDeploymentUserData_Update() {
 	s.syncTaskQueueDeploymentData(tv1, false, 0, false, t0, tqTypeAct)
 	data = s.getTaskQueueDeploymentData(tv, tqTypeAct)
 	s.ProtoEqual(&persistencespb.DeploymentData{Versions: []*deploymentspb.DeploymentVersionData{
-		{Version: tv1.DeploymentVersion(), CurrentSinceTime: timestamp.TimePtr(t1), RoutingUpdateTime: timestamp.TimePtr(t1)},
+		{DeploymentVersion: tv1.DeploymentVersion(), CurrentSinceTime: timestamp.TimePtr(t1), RoutingUpdateTime: timestamp.TimePtr(t1)},
 	}}, data)
 
 	// Changing things with a newer timestamp should apply
@@ -1741,7 +1743,7 @@ func (s *Versioning3Suite) TestSyncDeploymentUserData_Update() {
 	s.syncTaskQueueDeploymentData(tv1, false, 20, false, t2, tqTypeAct)
 	data = s.getTaskQueueDeploymentData(tv, tqTypeAct)
 	s.ProtoEqual(&persistencespb.DeploymentData{Versions: []*deploymentspb.DeploymentVersionData{
-		{Version: tv1.DeploymentVersion(), CurrentSinceTime: nil, RampingSinceTime: timestamp.TimePtr(t2), RampPercentage: 20, RoutingUpdateTime: timestamp.TimePtr(t2)},
+		{DeploymentVersion: tv1.DeploymentVersion(), CurrentSinceTime: nil, RampingSinceTime: timestamp.TimePtr(t2), RampPercentage: 20, RoutingUpdateTime: timestamp.TimePtr(t2)},
 	}}, data)
 
 	// Add another version, this time to both tq types
@@ -1749,41 +1751,41 @@ func (s *Versioning3Suite) TestSyncDeploymentUserData_Update() {
 	s.syncTaskQueueDeploymentData(tv2, false, 10, false, t1, tqTypeAct, tqTypeWf)
 	data = s.getTaskQueueDeploymentData(tv, tqTypeAct)
 	s.ProtoEqual(&persistencespb.DeploymentData{Versions: []*deploymentspb.DeploymentVersionData{
-		{Version: tv1.DeploymentVersion(), CurrentSinceTime: nil, RampingSinceTime: timestamp.TimePtr(t2), RampPercentage: 20, RoutingUpdateTime: timestamp.TimePtr(t2)},
-		{Version: tv2.DeploymentVersion(), CurrentSinceTime: nil, RampingSinceTime: timestamp.TimePtr(t1), RampPercentage: 10, RoutingUpdateTime: timestamp.TimePtr(t1)},
+		{DeploymentVersion: tv1.DeploymentVersion(), CurrentSinceTime: nil, RampingSinceTime: timestamp.TimePtr(t2), RampPercentage: 20, RoutingUpdateTime: timestamp.TimePtr(t2)},
+		{DeploymentVersion: tv2.DeploymentVersion(), CurrentSinceTime: nil, RampingSinceTime: timestamp.TimePtr(t1), RampPercentage: 10, RoutingUpdateTime: timestamp.TimePtr(t1)},
 	}}, data)
 	data = s.getTaskQueueDeploymentData(tv, tqTypeWf)
 	s.ProtoEqual(&persistencespb.DeploymentData{Versions: []*deploymentspb.DeploymentVersionData{
-		{Version: tv2.DeploymentVersion(), CurrentSinceTime: nil, RampingSinceTime: timestamp.TimePtr(t1), RampPercentage: 10, RoutingUpdateTime: timestamp.TimePtr(t1)},
+		{DeploymentVersion: tv2.DeploymentVersion(), CurrentSinceTime: nil, RampingSinceTime: timestamp.TimePtr(t1), RampPercentage: 10, RoutingUpdateTime: timestamp.TimePtr(t1)},
 	}}, data)
 
 	// Make v2 current
 	s.syncTaskQueueDeploymentData(tv2, true, 0, false, t2, tqTypeAct)
 	data = s.getTaskQueueDeploymentData(tv, tqTypeAct)
 	s.ProtoEqual(&persistencespb.DeploymentData{Versions: []*deploymentspb.DeploymentVersionData{
-		{Version: tv1.DeploymentVersion(), CurrentSinceTime: nil, RampingSinceTime: timestamp.TimePtr(t2), RampPercentage: 20, RoutingUpdateTime: timestamp.TimePtr(t2)},
-		{Version: tv2.DeploymentVersion(), CurrentSinceTime: timestamp.TimePtr(t2), RoutingUpdateTime: timestamp.TimePtr(t2)},
+		{DeploymentVersion: tv1.DeploymentVersion(), CurrentSinceTime: nil, RampingSinceTime: timestamp.TimePtr(t2), RampPercentage: 20, RoutingUpdateTime: timestamp.TimePtr(t2)},
+		{DeploymentVersion: tv2.DeploymentVersion(), CurrentSinceTime: timestamp.TimePtr(t2), RoutingUpdateTime: timestamp.TimePtr(t2)},
 	}}, data)
 
 	// Forget v1
 	s.forgetTaskQueueDeploymentVersion(tv1, tqTypeAct, false)
 	data = s.getTaskQueueDeploymentData(tv, tqTypeAct)
 	s.ProtoEqual(&persistencespb.DeploymentData{Versions: []*deploymentspb.DeploymentVersionData{
-		{Version: tv2.DeploymentVersion(), CurrentSinceTime: timestamp.TimePtr(t2), RoutingUpdateTime: timestamp.TimePtr(t2)},
+		{DeploymentVersion: tv2.DeploymentVersion(), CurrentSinceTime: timestamp.TimePtr(t2), RoutingUpdateTime: timestamp.TimePtr(t2)},
 	}}, data)
 
 	// Forget v1 again should be a noop
 	s.forgetTaskQueueDeploymentVersion(tv1, tqTypeAct, false)
 	data = s.getTaskQueueDeploymentData(tv, tqTypeAct)
 	s.ProtoEqual(&persistencespb.DeploymentData{Versions: []*deploymentspb.DeploymentVersionData{
-		{Version: tv2.DeploymentVersion(), CurrentSinceTime: timestamp.TimePtr(t2), RoutingUpdateTime: timestamp.TimePtr(t2)},
+		{DeploymentVersion: tv2.DeploymentVersion(), CurrentSinceTime: timestamp.TimePtr(t2), RoutingUpdateTime: timestamp.TimePtr(t2)},
 	}}, data)
 
 	// Ramp unversioned
 	s.syncTaskQueueDeploymentData(tv2, false, 90, true, t2, tqTypeAct)
 	data = s.getTaskQueueDeploymentData(tv, tqTypeAct)
 	s.ProtoEqual(&persistencespb.DeploymentData{Versions: []*deploymentspb.DeploymentVersionData{
-		{Version: tv2.DeploymentVersion(), CurrentSinceTime: timestamp.TimePtr(t2), RoutingUpdateTime: timestamp.TimePtr(t2)},
+		{DeploymentVersion: tv2.DeploymentVersion(), CurrentSinceTime: timestamp.TimePtr(t2), RoutingUpdateTime: timestamp.TimePtr(t2)},
 	},
 		UnversionedRampData: &deploymentspb.DeploymentVersionData{RampingSinceTime: timestamp.TimePtr(t2), RampPercentage: 90, RoutingUpdateTime: timestamp.TimePtr(t2)},
 	}, data)
@@ -1888,6 +1890,9 @@ func (s *Versioning3Suite) setRampingDeployment(
 			req.Version = v //nolint:staticcheck // SA1019: worker versioning v0.31
 		}
 		_, err := s.FrontendClient().SetWorkerDeploymentRampingVersion(ctx, req)
+		if rampUnversioned && percentage > 0 && strings.Contains(err.Error(), "ramping non-zero traffic to unversioned is not supported") {
+			return true
+		}
 		var notFound *serviceerror.NotFound
 		if errors.As(err, &notFound) {
 			return false
@@ -1972,7 +1977,7 @@ func (s *Versioning3Suite) syncTaskQueueDeploymentData(
 			TaskQueueTypes: t,
 			Operation: &matchingservice.SyncDeploymentUserDataRequest_UpdateVersionData{
 				UpdateVersionData: &deploymentspb.DeploymentVersionData{
-					Version:           v,
+					DeploymentVersion: v,
 					RoutingUpdateTime: routingUpdateTime,
 					CurrentSinceTime:  currentSinceTime,
 					RampingSinceTime:  rampingSinceTime,
@@ -2000,8 +2005,8 @@ func (s *Versioning3Suite) forgetTaskQueueDeploymentVersion(
 			NamespaceId:   s.NamespaceID().String(),
 			TaskQueue:     tv.TaskQueue().GetName(),
 			TaskQueueType: t,
-			Operation: &matchingservice.SyncDeploymentUserDataRequest_ForgetVersion{
-				ForgetVersion: v,
+			Operation: &matchingservice.SyncDeploymentUserDataRequest_ForgetDeploymentVersion{
+				ForgetDeploymentVersion: v,
 			},
 		},
 	)
@@ -2027,7 +2032,7 @@ func (s *Versioning3Suite) verifyWorkflowVersioning(
 
 	versioningInfo := dwf.WorkflowExecutionInfo.GetVersioningInfo()
 	s.Equal(behavior.String(), versioningInfo.GetBehavior().String())
-	var v *deploymentspb.WorkerDeploymentVersion
+	var v *deploymentpb.WorkerDeploymentVersion
 	if versioningInfo.GetVersion() != "" { //nolint:staticcheck // SA1019: worker versioning v0.31
 		//nolint:staticcheck // SA1019: worker versioning v0.31
 		v, err = worker_versioning.WorkerDeploymentVersionFromStringV31(versioningInfo.GetVersion())
@@ -2035,7 +2040,7 @@ func (s *Versioning3Suite) verifyWorkflowVersioning(
 		s.NotNil(versioningInfo.GetDeploymentVersion()) // make sure we are always populating this whenever Version string is populated
 	}
 	if dv := versioningInfo.GetDeploymentVersion(); dv != nil {
-		v = worker_versioning.DeploymentVersionFromDeployment(worker_versioning.DeploymentFromExternalDeploymentVersion(dv))
+		v = worker_versioning.DeploymentVersionFromDeployment(worker_versioning.DeploymentFromDeploymentVersion(dv))
 	}
 	actualDeployment := worker_versioning.DeploymentFromDeploymentVersion(v)
 	if !deployment.Equal(actualDeployment) {
@@ -2527,7 +2532,7 @@ func (s *Versioning3Suite) waitForDeploymentDataPropagation(
 				}
 				versions := perTypes[int32(pt.tp)].GetDeploymentData().GetVersions()
 				for _, d := range versions {
-					if d.GetVersion().Equal(tv.DeploymentVersion()) {
+					if proto.Equal(d.GetDeploymentVersion(), tv.DeploymentVersion()) {
 						switch status {
 						case versionStatusInactive:
 							if d.GetRampingSinceTime() == nil && d.GetCurrentSinceTime() == nil {

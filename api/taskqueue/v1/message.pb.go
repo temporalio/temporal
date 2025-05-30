@@ -13,9 +13,8 @@ import (
 
 	v11 "go.temporal.io/api/deployment/v1"
 	v1 "go.temporal.io/api/enums/v1"
-	v13 "go.temporal.io/api/taskqueue/v1"
-	v12 "go.temporal.io/server/api/deployment/v1"
-	v14 "go.temporal.io/server/api/enums/v1"
+	v12 "go.temporal.io/api/taskqueue/v1"
+	v13 "go.temporal.io/server/api/enums/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	emptypb "google.golang.org/protobuf/types/known/emptypb"
@@ -45,11 +44,10 @@ type TaskVersionDirective struct {
 	Behavior v1.VersioningBehavior `protobuf:"varint,3,opt,name=behavior,proto3,enum=temporal.api.enums.v1.VersioningBehavior" json:"behavior,omitempty"`
 	// Workflow's effective deployment when the task is scheduled.
 	// Deprecated. Use deployment_version.
-	Deployment *v11.Deployment `protobuf:"bytes,4,opt,name=deployment,proto3" json:"deployment,omitempty"`
-	// Workflow's effective deployment version when the task is scheduled.
-	DeploymentVersion *v12.WorkerDeploymentVersion `protobuf:"bytes,5,opt,name=deployment_version,json=deploymentVersion,proto3" json:"deployment_version,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	Deployment    *v11.Deployment              `protobuf:"bytes,4,opt,name=deployment,proto3" json:"deployment,omitempty"`
+	Version       *v11.WorkerDeploymentVersion `protobuf:"bytes,6,opt,name=version,proto3" json:"version,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *TaskVersionDirective) Reset() {
@@ -121,9 +119,9 @@ func (x *TaskVersionDirective) GetDeployment() *v11.Deployment {
 	return nil
 }
 
-func (x *TaskVersionDirective) GetDeploymentVersion() *v12.WorkerDeploymentVersion {
+func (x *TaskVersionDirective) GetVersion() *v11.WorkerDeploymentVersion {
 	if x != nil {
-		return x.DeploymentVersion
+		return x.Version
 	}
 	return nil
 }
@@ -154,7 +152,7 @@ type InternalTaskQueueStatus struct {
 	state                   protoimpl.MessageState `protogen:"open.v1"`
 	ReadLevel               int64                  `protobuf:"varint,1,opt,name=read_level,json=readLevel,proto3" json:"read_level,omitempty"`
 	AckLevel                int64                  `protobuf:"varint,2,opt,name=ack_level,json=ackLevel,proto3" json:"ack_level,omitempty"`
-	TaskIdBlock             *v13.TaskIdBlock       `protobuf:"bytes,3,opt,name=task_id_block,json=taskIdBlock,proto3" json:"task_id_block,omitempty"`
+	TaskIdBlock             *v12.TaskIdBlock       `protobuf:"bytes,3,opt,name=task_id_block,json=taskIdBlock,proto3" json:"task_id_block,omitempty"`
 	LoadedTasks             int64                  `protobuf:"varint,4,opt,name=loaded_tasks,json=loadedTasks,proto3" json:"loaded_tasks,omitempty"`
 	ApproximateBacklogCount int64                  `protobuf:"varint,5,opt,name=approximate_backlog_count,json=approximateBacklogCount,proto3" json:"approximate_backlog_count,omitempty"`
 	MaxReadLevel            int64                  `protobuf:"varint,6,opt,name=max_read_level,json=maxReadLevel,proto3" json:"max_read_level,omitempty"`
@@ -206,7 +204,7 @@ func (x *InternalTaskQueueStatus) GetAckLevel() int64 {
 	return 0
 }
 
-func (x *InternalTaskQueueStatus) GetTaskIdBlock() *v13.TaskIdBlock {
+func (x *InternalTaskQueueStatus) GetTaskIdBlock() *v12.TaskIdBlock {
 	if x != nil {
 		return x.TaskIdBlock
 	}
@@ -281,8 +279,8 @@ func (x *TaskQueueVersionInfoInternal) GetPhysicalTaskQueueInfo() *PhysicalTaskQ
 type PhysicalTaskQueueInfo struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Unversioned workers (with `useVersioning=false`) are reported in unversioned result even if they set a Build ID.
-	Pollers                 []*v13.PollerInfo          `protobuf:"bytes,1,rep,name=pollers,proto3" json:"pollers,omitempty"`
-	TaskQueueStats          *v13.TaskQueueStats        `protobuf:"bytes,2,opt,name=task_queue_stats,json=taskQueueStats,proto3" json:"task_queue_stats,omitempty"`
+	Pollers                 []*v12.PollerInfo          `protobuf:"bytes,1,rep,name=pollers,proto3" json:"pollers,omitempty"`
+	TaskQueueStats          *v12.TaskQueueStats        `protobuf:"bytes,2,opt,name=task_queue_stats,json=taskQueueStats,proto3" json:"task_queue_stats,omitempty"`
 	InternalTaskQueueStatus []*InternalTaskQueueStatus `protobuf:"bytes,3,rep,name=internal_task_queue_status,json=internalTaskQueueStatus,proto3" json:"internal_task_queue_status,omitempty"`
 	unknownFields           protoimpl.UnknownFields
 	sizeCache               protoimpl.SizeCache
@@ -318,14 +316,14 @@ func (*PhysicalTaskQueueInfo) Descriptor() ([]byte, []int) {
 	return file_temporal_server_api_taskqueue_v1_message_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *PhysicalTaskQueueInfo) GetPollers() []*v13.PollerInfo {
+func (x *PhysicalTaskQueueInfo) GetPollers() []*v12.PollerInfo {
 	if x != nil {
 		return x.Pollers
 	}
 	return nil
 }
 
-func (x *PhysicalTaskQueueInfo) GetTaskQueueStats() *v13.TaskQueueStats {
+func (x *PhysicalTaskQueueInfo) GetTaskQueueStats() *v12.TaskQueueStats {
 	if x != nil {
 		return x.TaskQueueStats
 	}
@@ -496,7 +494,7 @@ type TaskForwardInfo struct {
 	// RPC name of the partition forwarded the task.
 	// In case of multiple hops, this is the source partition of the last hop.
 	SourcePartition string         `protobuf:"bytes,1,opt,name=source_partition,json=sourcePartition,proto3" json:"source_partition,omitempty"`
-	TaskSource      v14.TaskSource `protobuf:"varint,2,opt,name=task_source,json=taskSource,proto3,enum=temporal.server.api.enums.v1.TaskSource" json:"task_source,omitempty"`
+	TaskSource      v13.TaskSource `protobuf:"varint,2,opt,name=task_source,json=taskSource,proto3,enum=temporal.server.api.enums.v1.TaskSource" json:"task_source,omitempty"`
 	// Redirect info is not present for Query and Nexus tasks. Versioning decisions for activity/workflow
 	// tasks are made at the source partition and sent to the parent partition in this message so that parent partition
 	// does not have to make versioning decision again. For Query/Nexus tasks, this works differently as the child's
@@ -550,11 +548,11 @@ func (x *TaskForwardInfo) GetSourcePartition() string {
 	return ""
 }
 
-func (x *TaskForwardInfo) GetTaskSource() v14.TaskSource {
+func (x *TaskForwardInfo) GetTaskSource() v13.TaskSource {
 	if x != nil {
 		return x.TaskSource
 	}
-	return v14.TaskSource(0)
+	return v13.TaskSource(0)
 }
 
 func (x *TaskForwardInfo) GetRedirectInfo() *BuildIdRedirectInfo {
@@ -582,17 +580,17 @@ var File_temporal_server_api_taskqueue_v1_message_proto protoreflect.FileDescrip
 
 const file_temporal_server_api_taskqueue_v1_message_proto_rawDesc = "" +
 	"\n" +
-	".temporal/server/api/taskqueue/v1/message.proto\x12 temporal.server.api.taskqueue.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a(temporal/api/deployment/v1/message.proto\x1a&temporal/api/enums/v1/task_queue.proto\x1a$temporal/api/enums/v1/workflow.proto\x1a'temporal/api/taskqueue/v1/message.proto\x1a'temporal/server/api/enums/v1/task.proto\x1a/temporal/server/api/deployment/v1/message.proto\"\x96\x03\n" +
+	".temporal/server/api/taskqueue/v1/message.proto\x12 temporal.server.api.taskqueue.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a(temporal/api/deployment/v1/message.proto\x1a&temporal/api/enums/v1/task_queue.proto\x1a$temporal/api/enums/v1/workflow.proto\x1a'temporal/api/taskqueue/v1/message.proto\x1a'temporal/server/api/enums/v1/task.proto\"\x80\x03\n" +
 	"\x14TaskVersionDirective\x12J\n" +
 	"\x14use_assignment_rules\x18\x01 \x01(\v2\x16.google.protobuf.EmptyH\x00R\x12useAssignmentRules\x12,\n" +
 	"\x11assigned_build_id\x18\x02 \x01(\tH\x00R\x0fassignedBuildId\x12E\n" +
 	"\bbehavior\x18\x03 \x01(\x0e2).temporal.api.enums.v1.VersioningBehaviorR\bbehavior\x12F\n" +
 	"\n" +
 	"deployment\x18\x04 \x01(\v2&.temporal.api.deployment.v1.DeploymentR\n" +
-	"deployment\x12i\n" +
-	"\x12deployment_version\x18\x05 \x01(\v2:.temporal.server.api.deployment.v1.WorkerDeploymentVersionR\x11deploymentVersionB\n" +
+	"deployment\x12M\n" +
+	"\aversion\x18\x06 \x01(\v23.temporal.api.deployment.v1.WorkerDeploymentVersionR\aversionB\n" +
 	"\n" +
-	"\bbuild_id\"\xa6\x02\n" +
+	"\bbuild_idJ\x04\b\x05\x10\x06\"\xa6\x02\n" +
 	"\x17InternalTaskQueueStatus\x12\x1d\n" +
 	"\n" +
 	"read_level\x18\x01 \x01(\x03R\treadLevel\x12\x1b\n" +
@@ -649,18 +647,18 @@ var file_temporal_server_api_taskqueue_v1_message_proto_goTypes = []any{
 	(*emptypb.Empty)(nil),                // 7: google.protobuf.Empty
 	(v1.VersioningBehavior)(0),           // 8: temporal.api.enums.v1.VersioningBehavior
 	(*v11.Deployment)(nil),               // 9: temporal.api.deployment.v1.Deployment
-	(*v12.WorkerDeploymentVersion)(nil),  // 10: temporal.server.api.deployment.v1.WorkerDeploymentVersion
-	(*v13.TaskIdBlock)(nil),              // 11: temporal.api.taskqueue.v1.TaskIdBlock
-	(*v13.PollerInfo)(nil),               // 12: temporal.api.taskqueue.v1.PollerInfo
-	(*v13.TaskQueueStats)(nil),           // 13: temporal.api.taskqueue.v1.TaskQueueStats
+	(*v11.WorkerDeploymentVersion)(nil),  // 10: temporal.api.deployment.v1.WorkerDeploymentVersion
+	(*v12.TaskIdBlock)(nil),              // 11: temporal.api.taskqueue.v1.TaskIdBlock
+	(*v12.PollerInfo)(nil),               // 12: temporal.api.taskqueue.v1.PollerInfo
+	(*v12.TaskQueueStats)(nil),           // 13: temporal.api.taskqueue.v1.TaskQueueStats
 	(v1.TaskQueueType)(0),                // 14: temporal.api.enums.v1.TaskQueueType
-	(v14.TaskSource)(0),                  // 15: temporal.server.api.enums.v1.TaskSource
+	(v13.TaskSource)(0),                  // 15: temporal.server.api.enums.v1.TaskSource
 }
 var file_temporal_server_api_taskqueue_v1_message_proto_depIdxs = []int32{
 	7,  // 0: temporal.server.api.taskqueue.v1.TaskVersionDirective.use_assignment_rules:type_name -> google.protobuf.Empty
 	8,  // 1: temporal.server.api.taskqueue.v1.TaskVersionDirective.behavior:type_name -> temporal.api.enums.v1.VersioningBehavior
 	9,  // 2: temporal.server.api.taskqueue.v1.TaskVersionDirective.deployment:type_name -> temporal.api.deployment.v1.Deployment
-	10, // 3: temporal.server.api.taskqueue.v1.TaskVersionDirective.deployment_version:type_name -> temporal.server.api.deployment.v1.WorkerDeploymentVersion
+	10, // 3: temporal.server.api.taskqueue.v1.TaskVersionDirective.version:type_name -> temporal.api.deployment.v1.WorkerDeploymentVersion
 	11, // 4: temporal.server.api.taskqueue.v1.InternalTaskQueueStatus.task_id_block:type_name -> temporal.api.taskqueue.v1.TaskIdBlock
 	3,  // 5: temporal.server.api.taskqueue.v1.TaskQueueVersionInfoInternal.physical_task_queue_info:type_name -> temporal.server.api.taskqueue.v1.PhysicalTaskQueueInfo
 	12, // 6: temporal.server.api.taskqueue.v1.PhysicalTaskQueueInfo.pollers:type_name -> temporal.api.taskqueue.v1.PollerInfo
