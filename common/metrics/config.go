@@ -50,22 +50,6 @@ type (
 		// - "milliseconds"
 		// - "bytes"
 		PerUnitHistogramBoundaries map[string][]float64 `yaml:"perUnitHistogramBoundaries"`
-
-		// Following configs are added for backwards compatibility when switching from tally to opentelemetry
-		// All configs should be set to true when using opentelemetry framework to have the same behavior as tally.
-
-		// WithoutUnitSuffix controls the additional of unit suffixes to metric names.
-		// This config only takes effect when using opentelemetry framework.
-		// Note: this config only takes effect when using prometheus via opentelemetry framework
-		WithoutUnitSuffix bool `yaml:"withoutUnitSuffix"`
-		// WithoutCounterSuffix controls the additional of _total suffixes to counter metric names.
-		// This config only takes effect when using opentelemetry framework.
-		// Note: this config only takes effect when using prometheus via opentelemetry framework
-		WithoutCounterSuffix bool `yaml:"withoutCounterSuffix"`
-		// RecordTimerInSeconds controls if Timer metric should be emitted as number of seconds
-		// (instead of milliseconds).
-		// This config only takes effect when using opentelemetry framework for both statsd and prometheus.
-		RecordTimerInSeconds bool `yaml:"recordTimerInSeconds"`
 	}
 
 	// StatsdConfig contains the config items for statsd metrics reporter
@@ -143,6 +127,20 @@ type (
 		// specify which characters are valid and/or should be replaced before metrics
 		// are emitted.
 		SanitizeOptions *SanitizeOptions `yaml:"sanitizeOptions"`
+
+		// Following configs are added for backwards compatibility when switching from tally to opentelemetry
+		// All configs should be set to true when using opentelemetry framework to have the same behavior as tally.
+
+		// WithoutUnitSuffix controls the addition of unit suffixes to metric names.
+		// This config only takes effect when using prometheus via opentelemetry framework.
+		WithoutUnitSuffix bool `yaml:"withoutUnitSuffix"`
+		// WithoutCounterSuffix controls the additional of _total suffixes to counter metric names.
+		// This config only takes effect when using prometheus via opentelemetry framework.
+		WithoutCounterSuffix bool `yaml:"withoutCounterSuffix"`
+		// RecordTimerInSeconds controls if Timer metric should be emitted as number of seconds
+		// (instead of milliseconds).
+		// This config only takes effect when using prometheus via opentelemetry framework.
+		RecordTimerInSeconds bool `yaml:"recordTimerInSeconds"`
 	}
 )
 
@@ -463,23 +461,23 @@ func MetricsHandlerFromConfig(logger log.Logger, c *Config) (Handler, error) {
 
 	setDefaultPerUnitHistogramBoundaries(&c.ClientConfig)
 
-	fatalOnListenerError := true
 	if c.Statsd != nil && c.Statsd.Framework == FrameworkOpentelemetry {
 		// create opentelemetry provider with just statsd
 		otelProvider, err := NewOpenTelemetryProviderWithStatsd(logger, c.Statsd, &c.ClientConfig)
 		if err != nil {
 			logger.Fatal(err.Error())
 		}
-		return NewOtelMetricsHandler(logger, otelProvider, c.ClientConfig)
+		return NewOtelMetricsHandler(logger, otelProvider, c.ClientConfig, false)
 	}
 
 	if c.Prometheus != nil && c.Prometheus.Framework == FrameworkOpentelemetry {
 		// create opentelemetry provider with just prometheus
+		fatalOnListenerError := true
 		otelProvider, err := NewOpenTelemetryProviderWithPrometheus(logger, c.Prometheus, &c.ClientConfig, fatalOnListenerError)
 		if err != nil {
 			logger.Fatal(err.Error())
 		}
-		return NewOtelMetricsHandler(logger, otelProvider, c.ClientConfig)
+		return NewOtelMetricsHandler(logger, otelProvider, c.ClientConfig, c.Prometheus.RecordTimerInSeconds)
 	}
 
 	// fallback to tally if no framework is specified
