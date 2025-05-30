@@ -52,10 +52,12 @@ var defaultHTTPClientTraceConfig = HTTPClientTraceConfig{
 	Hooks: nil,
 }
 
+var convertDefaultHTTPClientTraceConfig = dynamicconfig.ConvertStructure(defaultHTTPClientTraceConfig)
+
 var defaultHTTPClientTraceHooks = []string{"GetConn", "GotConn", "ConnectStart", "ConnectDone", "DNSStart", "DNSDone", "TLSHandshakeStart", "TLSHandshakeDone", "WroteRequest", "GotFirstResponseByte"}
 
 func convertHTTPClientTraceConfig(in any) (HTTPClientTraceConfig, error) {
-	cfg, err := dynamicconfig.ConvertStructure(defaultHTTPClientTraceConfig)(in)
+	cfg, err := convertDefaultHTTPClientTraceConfig(in)
 	if err != nil {
 		cfg = defaultHTTPClientTraceConfig
 	}
