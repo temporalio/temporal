@@ -505,8 +505,7 @@ func mapstructureHookGeneric(f, t reflect.Type, data any) (any, error) {
 
 		out := mth.Func.Call([]reflect.Value{reflect.Zero(t), reflect.ValueOf(data)})
 		if !out[1].IsNil() {
-			err := out[1].Interface().(error)
-			return nil, err
+			return nil, out[1].Interface().(error) // nolint:revive // type checked above
 		}
 		return out[0].Interface(), nil
 	}
@@ -523,8 +522,7 @@ func mapstructureHookGeneric(f, t reflect.Type, data any) (any, error) {
 		receiver := reflect.New(t)
 		out := mth.Func.Call([]reflect.Value{receiver, reflect.ValueOf(data)})
 		if !out[0].IsNil() {
-			err := out[0].Interface().(error)
-			return nil, err
+			return nil, out[0].Interface().(error) // nolint:revive // type checked above
 		}
 		return receiver.Elem().Interface(), nil
 	}
