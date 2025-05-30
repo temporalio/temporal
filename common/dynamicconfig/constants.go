@@ -235,6 +235,7 @@ these warning are not emitted if the value is set to 0 or less`,
 		`OperatorRPSRatio is the percentage of the rate limit provided to priority rate limiters that should be used for
 operator API calls (highest priority). Should be >0.0 and <= 1.0 (defaults to 20% if not specified)`,
 	)
+	// TODO: The following 2 configs should be removed once server keepalive and client keepalive are enabled by default
 	EnableInternodeServerKeepAlive = NewGlobalBoolSetting(
 		"system.enableInternodeServerKeepAlive",
 		false,
@@ -245,6 +246,7 @@ operator API calls (highest priority). Should be >0.0 and <= 1.0 (defaults to 20
 		false,
 		`enableInternodeClientKeepAlive is the config to enable keep alive for inter-node connections on client side.`,
 	)
+
 	PersistenceQPSBurstRatio = NewGlobalFloatSetting(
 		"system.persistenceQPSBurstRatio",
 		1.0,
