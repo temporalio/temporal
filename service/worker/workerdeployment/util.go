@@ -7,6 +7,7 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/temporal"
@@ -134,6 +135,29 @@ func DecodeWorkerDeploymentMemo(memo *commonpb.Memo) *deploymentspb.WorkerDeploy
 	if err != nil {
 		return nil
 	}
+	if workerDeploymentWorkflowMemo.RoutingConfig == nil {
+		workerDeploymentWorkflowMemo.RoutingConfig = &deploymentpb.RoutingConfig{}
+	}
+	rc := workerDeploymentWorkflowMemo.RoutingConfig
+	if rc.CurrentVersion == "" {
+		rc.CurrentVersion = worker_versioning.WorkerDeploymentVersionToStringV31(rc.CurrentDeploymentVersion) //nolint:staticcheck
+	}
+	if rc.RampingVersion == "" {
+		rc.RampingVersion = worker_versioning.WorkerDeploymentVersionToStringV31(rc.RampingDeploymentVersion) //nolint:staticcheck
+	}
+
+	if latest := workerDeploymentWorkflowMemo.GetLatestVersionSummary(); latest != nil {
+		latest.Version = worker_versioning.WorkerDeploymentVersionToStringV31(latest.GetDeploymentVersion())
+	}
+
+	if current := workerDeploymentWorkflowMemo.GetCurrentVersionSummary(); current != nil {
+		current.Version = worker_versioning.WorkerDeploymentVersionToStringV31(current.GetDeploymentVersion())
+	}
+
+	if ramping := workerDeploymentWorkflowMemo.GetRampingVersionSummary(); ramping != nil {
+		ramping.Version = worker_versioning.WorkerDeploymentVersionToStringV31(ramping.GetDeploymentVersion())
+	}
+
 	return &workerDeploymentWorkflowMemo
 }
 

@@ -456,7 +456,19 @@ func (d *ClientImpl) ListWorkerDeployments(
 			workerDeploymentInfo = &deploymentspb.WorkerDeploymentWorkflowMemo{
 				DeploymentName: worker_versioning.GetDeploymentNameFromWorkflowID(ex.GetExecution().GetWorkflowId()),
 				CreateTime:     ex.GetStartTime(),
-				RoutingConfig:  &deploymentpb.RoutingConfig{CurrentVersion: worker_versioning.UnversionedVersionId},
+				RoutingConfig: &deploymentpb.RoutingConfig{
+					CurrentVersion: worker_versioning.UnversionedVersionId,
+					RampingVersion: worker_versioning.UnversionedVersionId,
+				},
+				LatestVersionSummary: &deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary{
+					Version: worker_versioning.UnversionedVersionId,
+				},
+				CurrentVersionSummary: &deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary{
+					Version: worker_versioning.UnversionedVersionId,
+				},
+				RampingVersionSummary: &deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary{
+					Version: worker_versioning.UnversionedVersionId,
+				},
 			}
 		}
 

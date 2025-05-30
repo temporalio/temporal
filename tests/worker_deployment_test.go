@@ -224,7 +224,7 @@ func (s *WorkerDeploymentSuite) TestDeploymentVersionLimits() {
 
 	secondDeploymentVersionOne := secondDeployment.WithBuildIDNumber(1)
 
-	expectedErrorMaxVersions := fmt.Sprintf("cannot add version %v since maximum number of versions (1) have been registered in the deployment", firstDeploymentVersionTwo.DeploymentVersionString())
+	expectedErrorMaxVersions := fmt.Sprintf("cannot add version '%v' since maximum number of versions (1) have been registered in the deployment", firstDeploymentVersionTwo.DeploymentVersion())
 	expectedErrorMaxTaskQueues := fmt.Sprintf("cannot add task queue %v since maximum number of task queues (1) have been registered in deployment", secondDeploymentVersionOne.WithTaskQueueNumber(2).TaskQueue().GetName())
 
 	// First deployment version should be fine
@@ -496,6 +496,7 @@ func (s *WorkerDeploymentSuite) TestListWorkerDeployments_OneVersion_OneDeployme
 		timestamppb.Now(),
 		&deploymentpb.RoutingConfig{
 			CurrentVersion: worker_versioning.UnversionedVersionId, // default current version is __unversioned__
+			RampingVersion: worker_versioning.UnversionedVersionId,
 		},
 		latestVersionSummary,
 		nil,
@@ -518,6 +519,7 @@ func (s *WorkerDeploymentSuite) TestListWorkerDeployments_TwoVersions_SameDeploy
 	routingInfo := &deploymentpb.RoutingConfig{
 		CurrentVersion:            firstVersion.DeploymentVersionString(),
 		CurrentVersionChangedTime: timestamppb.Now(),
+		RampingVersion:            worker_versioning.UnversionedVersionId,
 	}
 
 	s.startVersionWorkflow(ctx, firstVersion)
@@ -1305,6 +1307,7 @@ func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment_SetCurrentVersion()
 			RoutingConfig: &deploymentpb.RoutingConfig{
 				CurrentVersion:            firstVersion.DeploymentVersionString(),
 				CurrentVersionChangedTime: firstVersionCurrentUpdateTime,
+				RampingVersion:            worker_versioning.UnversionedVersionId,
 			},
 			VersionSummaries: []*deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary{
 				{
@@ -1341,6 +1344,7 @@ func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment_SetCurrentVersion()
 			RoutingConfig: &deploymentpb.RoutingConfig{
 				CurrentVersion:            secondVersion.DeploymentVersionString(),
 				CurrentVersionChangedTime: secondVersionCurrentUpdateTime,
+				RampingVersion:            worker_versioning.UnversionedVersionId,
 			},
 			VersionSummaries: []*deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary{
 				{
@@ -1477,6 +1481,7 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Unversioned_NoRamp() {
 			RoutingConfig: &deploymentpb.RoutingConfig{
 				CurrentVersion:            worker_versioning.UnversionedVersionId,
 				CurrentVersionChangedTime: secondCurrentUpdateTime,
+				RampingVersion:            worker_versioning.UnversionedVersionId,
 			},
 			VersionSummaries: []*deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary{
 				{
@@ -1509,10 +1514,10 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Unversioned_PromoteUnversi
 	// make the current version versioned, so that we can set ramp to unversioned
 	s.setCurrentVersion(ctx, currentVars, worker_versioning.UnversionedVersionId, true, "")
 	// set ramp to unversioned
-	s.setAndVerifyRampingVersionUnversionedOption(ctx, tv, true, false, 75, true, "",
+	s.setAndVerifyRampingVersionUnversionedOption(ctx, tv, true, false, 75, true, "ramping non-zero traffic to unversioned is not supported",
 		&workflowservice.SetWorkerDeploymentRampingVersionResponse{PreviousVersion: worker_versioning.UnversionedVersionId})
 	// check that the current version's task queues have ramping version == __unversioned__
-	s.verifyTaskQueueVersioningInfo(ctx, currentVars.TaskQueue(), currentVars.DeploymentVersionString(), worker_versioning.UnversionedVersionId, 75)
+	//	s.verifyTaskQueueVersioningInfo(ctx, currentVars.TaskQueue(), currentVars.DeploymentVersionString(), worker_versioning.UnversionedVersionId, 75)
 
 	// set current to unversioned
 	s.setCurrentVersionUnversionedOption(ctx, tv, true, currentVars.DeploymentVersionString(), true, "")
@@ -1917,6 +1922,7 @@ func (s *WorkerDeploymentSuite) TestSetRampingVersion_AfterDrained() {
 			RoutingConfig: &deploymentpb.RoutingConfig{
 				CurrentVersion:            tv1.DeploymentVersionString(),
 				CurrentVersionChangedTime: setCurrentV1UpdateTime,
+				RampingVersion:            worker_versioning.UnversionedVersionId,
 			},
 			VersionSummaries: []*deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary{
 				{
@@ -2392,6 +2398,7 @@ func (s *WorkerDeploymentSuite) createVersionsInDeployments(ctx context.Context,
 			&deploymentpb.RoutingConfig{
 				CurrentVersion:            version.DeploymentVersionString(),
 				CurrentVersionChangedTime: timestamppb.Now(),
+				RampingVersion:            worker_versioning.UnversionedVersionId,
 			},
 			currentVersionSummary, // latest version added is the current version
 			currentVersionSummary,
