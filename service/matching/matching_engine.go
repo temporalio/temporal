@@ -1317,24 +1317,13 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 				if err != nil {
 					return nil, err
 				}
-				for n, vii := range partitionResp.VersionsInfoInternal {
+				for _, vii := range partitionResp.VersionsInfoInternal {
 					partitionStats := vii.PhysicalTaskQueueInfo.TaskQueueStats
-					if req.TaskQueueType == enumspb.TASK_QUEUE_TYPE_ACTIVITY {
-						fmt.Println(
-							fmt.Sprintf("type:%s", req.TaskQueueType.String()),
-							fmt.Sprintf("partition:%d", i),
-							fmt.Sprintf("version:%s", n),
-							partitionStats.ApproximateBacklogCount)
-					}
 					taskQueueStats.ApproximateBacklogCount += partitionStats.ApproximateBacklogCount
 					taskQueueStats.ApproximateBacklogAge = largerBacklogAge(taskQueueStats.ApproximateBacklogAge, partitionStats.ApproximateBacklogAge)
 					taskQueueStats.TasksAddRate += partitionStats.TasksAddRate
 					taskQueueStats.TasksDispatchRate += partitionStats.TasksDispatchRate
 				}
-			}
-			if req.TaskQueueType == enumspb.TASK_QUEUE_TYPE_ACTIVITY {
-				fmt.Println(fmt.Sprintf("total:%s", req.TaskQueueType.String()),
-					taskQueueStats.ApproximateBacklogCount)
 			}
 			pm.PutCache(cacheKey, taskQueueStats)
 			descrResp.DescResponse.TaskQueueStats = taskQueueStats

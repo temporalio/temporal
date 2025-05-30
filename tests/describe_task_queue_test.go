@@ -2,7 +2,6 @@ package tests
 
 import (
 	"context"
-	"fmt"
 	"testing"
 	"time"
 
@@ -12,17 +11,12 @@ import (
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
-	"go.temporal.io/api/deployment/v1"
-	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -33,6 +27,7 @@ type (
 	}
 )
 
+// TODO(stephanos): add test for versioned task queues
 func TestDescribeTaskQueueSuite(t *testing.T) {
 	t.Parallel()
 	suite.Run(t, new(DescribeTaskQueueSuite))
@@ -68,7 +63,7 @@ func (s *DescribeTaskQueueSuite) TestAddSingleTaskPerVersion_ValidateStats() {
 	s.OverrideDynamicConfig(dynamicconfig.MatchingUpdateAckInterval, 5*time.Second)
 
 	s.RunTestWithMatchingBehavior(func() {
-		s.publishConsumeWorkflowTasksValidateStats(2, false) // 1 unversioned, 1 versioned
+		s.publishConsumeWorkflowTasksValidateStats(1, false)
 	})
 }
 
@@ -78,7 +73,7 @@ func (s *DescribeTaskQueueSuite) TestAddMultipleTasks_MultiplePartitions_Validat
 	s.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
 	s.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 0*time.Millisecond)
 
-	s.publishConsumeWorkflowTasksValidateStats(50, false) // 25 unversioned, 25 versioned
+	s.publishConsumeWorkflowTasksValidateStats(2, false)
 }
 
 func (s *DescribeTaskQueueSuite) TestAddSingleTaskPerVersion_SinglePartition_ValidateStats() {
@@ -86,23 +81,19 @@ func (s *DescribeTaskQueueSuite) TestAddSingleTaskPerVersion_SinglePartition_Val
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
 
-	s.publishConsumeWorkflowTasksValidateStats(2, true) // 1 unversioned, 1 versioned
+	s.publishConsumeWorkflowTasksValidateStats(1, true)
 }
 
-//func (s *DescribeTaskQueueSuite) TestAddSingleTaskPerVersion_ValidateCachedStats_NoMatchingBehaviour() {
-//	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
-//	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
-//	s.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 500*time.Millisecond)
-//
-//	s.publishConsumeWorkflowTasksValidateStatsCached(2, true) // 1 unversioned, 1 versioned
-//}
+func (s *DescribeTaskQueueSuite) TestAddSingleTaskPerVersion_ValidateCachedStats_NoMatchingBehaviour() {
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
+	s.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 500*time.Millisecond)
+
+	s.publishConsumeWorkflowTasksValidateStatsCached(1, true)
+}
 
 // publish 50% to default/unversioned task queue and 50% to versioned task queue
 func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateStats(workflows int, singlePartition bool) {
-	if workflows%2 != 0 {
-		s.T().Fatal("workflows must be an even number to ensure half of them are versioned and half are unversioned")
-	}
-
 	s.OverrideDynamicConfig(dynamicconfig.EnableDeploymentVersions, true)
 	s.OverrideDynamicConfig(dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs, true)
 
@@ -125,28 +116,6 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateStats(workfl
 
 	identity := "worker-multiple-tasks"
 	tqName := testcore.RandomizeStr("backlog-counter-task-queue")
-	deploymentOpts := s.deploymentOptions()
-
-	// manually add worker deployment version
-	_, err := s.GetTestCluster().MatchingClient().SyncDeploymentUserData(
-		testcore.NewContext(), &matchingservice.SyncDeploymentUserDataRequest{
-			NamespaceId: s.NamespaceID().String(),
-			TaskQueue:   tqName,
-			TaskQueueTypes: []enumspb.TaskQueueType{
-				enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-				enumspb.TASK_QUEUE_TYPE_ACTIVITY,
-			},
-			Operation: &matchingservice.SyncDeploymentUserDataRequest_UpdateVersionData{
-				UpdateVersionData: &deploymentspb.DeploymentVersionData{
-					Version: &deploymentspb.WorkerDeploymentVersion{
-						BuildId:        deploymentOpts.BuildId,
-						DeploymentName: deploymentOpts.DeploymentName,
-					},
-				},
-			},
-		},
-	)
-	s.NoError(err)
 
 	// enqueue workflows
 	tq := &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
@@ -165,22 +134,7 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateStats(workfl
 			Identity:            identity,
 		}
 
-		// half of them are versioned
-		if i%2 == 0 {
-			request.VersioningOverride = &workflowpb.VersioningOverride{
-				Override: &workflowpb.VersioningOverride_Pinned{
-					Pinned: &workflowpb.VersioningOverride_PinnedOverride{
-						Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
-						Version: &deploymentpb.WorkerDeploymentVersion{
-							BuildId:        deploymentOpts.BuildId,
-							DeploymentName: deploymentOpts.DeploymentName,
-						},
-					},
-				},
-			}
-		}
-
-		_, err = s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+		_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 		s.NoError(err)
 	}
 
@@ -188,8 +142,6 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateStats(workfl
 	maxBacklogExtraTasks[enumspb.TASK_QUEUE_TYPE_WORKFLOW] = maxExtraTasksAllowed
 	expectedAddRate[enumspb.TASK_QUEUE_TYPE_WORKFLOW] = workflows > 0
 	expectedDispatchRate[enumspb.TASK_QUEUE_TYPE_WORKFLOW] = false
-
-	fmt.Println("#0")
 
 	s.validateDescribeTaskQueue(tqName, expectedBacklogCount, maxBacklogExtraTasks, expectedAddRate, expectedDispatchRate, singlePartition)
 
@@ -199,9 +151,6 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateStats(workfl
 			Namespace: s.Namespace().String(),
 			TaskQueue: tq,
 			Identity:  identity,
-		}
-		if i%2 == 0 {
-			pollReq.DeploymentOptions = deploymentOpts
 		}
 
 		resp, err := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), pollReq)
@@ -230,10 +179,6 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateStats(workfl
 				},
 			},
 		}
-		if i%2 == 0 {
-			respondReq.DeploymentOptions = deploymentOpts
-			respondReq.VersioningBehavior = enumspb.VERSIONING_BEHAVIOR_PINNED
-		}
 		_, err = s.FrontendClient().RespondWorkflowTaskCompleted(testcore.NewContext(), respondReq)
 		s.NoError(err)
 	}
@@ -248,8 +193,6 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateStats(workfl
 	expectedAddRate[enumspb.TASK_QUEUE_TYPE_ACTIVITY] = workflows > 0
 	expectedDispatchRate[enumspb.TASK_QUEUE_TYPE_ACTIVITY] = false
 
-	fmt.Println("#1")
-
 	s.validateDescribeTaskQueue(tqName, expectedBacklogCount, maxBacklogExtraTasks, expectedAddRate, expectedDispatchRate, singlePartition)
 
 	// poll activity tasks
@@ -259,10 +202,6 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateStats(workfl
 			TaskQueue: tq,
 			Identity:  identity,
 		}
-		if i%2 == 0 {
-			pollReq.DeploymentOptions = deploymentOpts
-		}
-
 		resp, err := s.FrontendClient().PollActivityTaskQueue(
 			testcore.NewContext(), pollReq,
 		)
@@ -276,8 +215,6 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateStats(workfl
 	expectedBacklogCount[enumspb.TASK_QUEUE_TYPE_ACTIVITY] = int64(0)
 	expectedAddRate[enumspb.TASK_QUEUE_TYPE_ACTIVITY] = workflows > 0
 	expectedDispatchRate[enumspb.TASK_QUEUE_TYPE_ACTIVITY] = workflows > 0
-
-	fmt.Println("#2")
 
 	s.validateDescribeTaskQueue(tqName, expectedBacklogCount, maxBacklogExtraTasks, expectedAddRate, expectedDispatchRate, singlePartition)
 }
@@ -298,16 +235,11 @@ func (s *DescribeTaskQueueSuite) validateDescribeTaskQueue(
 	s.EventuallyWithT(func(c *assert.CollectT) {
 		a := require.New(c)
 
-		deploymentOpts := s.deploymentOptions()
 		resp, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
 			Namespace: s.Namespace().String(),
 			TaskQueue: &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 			ApiMode:   enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED,
 			Versions: &taskqueuepb.TaskQueueVersionSelection{
-				BuildIds: []string{worker_versioning.WorkerDeploymentVersionToString(&deploymentspb.WorkerDeploymentVersion{
-					BuildId:        deploymentOpts.BuildId,
-					DeploymentName: deploymentOpts.DeploymentName,
-				})},
 				Unversioned: true,
 			},
 			TaskQueueTypes:         nil, // both defaultVersionInfoByType
@@ -319,7 +251,7 @@ func (s *DescribeTaskQueueSuite) validateDescribeTaskQueue(
 		a.NotNil(resp)
 
 		//nolint:staticcheck // SA1019 deprecated
-		a.Equal(2, len(resp.GetVersionsInfo()), "should be 2: 1 default/unversioned + 1 versioned")
+		a.Equal(1, len(resp.GetVersionsInfo()))
 		//nolint:staticcheck // SA1019 deprecated
 		for _, v := range resp.GetVersionsInfo() {
 			a.Equal(enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, v.GetTaskReachability())
@@ -330,19 +262,18 @@ func (s *DescribeTaskQueueSuite) validateDescribeTaskQueue(
 			validateDescribeTaskQueueStats(
 				a,
 				v.GetTypesInfo()[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].Stats,
-				expectedBacklogCount[enumspb.TASK_QUEUE_TYPE_WORKFLOW]/2, // since versioning is half/half
-				maxBacklogExtraTasks[enumspb.TASK_QUEUE_TYPE_WORKFLOW]/2,
+				expectedBacklogCount[enumspb.TASK_QUEUE_TYPE_WORKFLOW],
+				maxBacklogExtraTasks[enumspb.TASK_QUEUE_TYPE_WORKFLOW],
 				expectedAddRate[enumspb.TASK_QUEUE_TYPE_WORKFLOW],
 				expectedDispatchRate[enumspb.TASK_QUEUE_TYPE_WORKFLOW])
 
-			// TODO(stephanos): fix
-			//validateDescribeTaskQueueStats(
-			//	a,
-			//	v.GetTypesInfo()[int32(enumspb.TASK_QUEUE_TYPE_ACTIVITY)].Stats,
-			//	expectedBacklogCount[enumspb.TASK_QUEUE_TYPE_ACTIVITY]/2,
-			//	maxBacklogExtraTasks[enumspb.TASK_QUEUE_TYPE_ACTIVITY]/2,
-			//	expectedAddRate[enumspb.TASK_QUEUE_TYPE_ACTIVITY],
-			//	expectedDispatchRate[enumspb.TASK_QUEUE_TYPE_ACTIVITY])
+			validateDescribeTaskQueueStats(
+				a,
+				v.GetTypesInfo()[int32(enumspb.TASK_QUEUE_TYPE_ACTIVITY)].Stats,
+				expectedBacklogCount[enumspb.TASK_QUEUE_TYPE_ACTIVITY],
+				maxBacklogExtraTasks[enumspb.TASK_QUEUE_TYPE_ACTIVITY],
+				expectedAddRate[enumspb.TASK_QUEUE_TYPE_ACTIVITY],
+				expectedDispatchRate[enumspb.TASK_QUEUE_TYPE_ACTIVITY])
 		}
 	}, 6*time.Second, 100*time.Millisecond)
 
@@ -365,7 +296,7 @@ func (s *DescribeTaskQueueSuite) validateDescribeTaskQueue(
 
 		if singlePartition {
 			//nolint:staticcheck // SA1019 deprecated field
-			a.Equal(expectedBacklogCount[enumspb.TASK_QUEUE_TYPE_WORKFLOW]/2, // only reports default queue
+			a.Equal(expectedBacklogCount[enumspb.TASK_QUEUE_TYPE_WORKFLOW],
 				workflowResp.TaskQueueStatus.GetBacklogCountHint())
 		}
 
@@ -391,7 +322,7 @@ func (s *DescribeTaskQueueSuite) validateDescribeTaskQueue(
 
 		if singlePartition {
 			//nolint:staticcheck // SA1019 deprecated field
-			a.Equal(expectedBacklogCount[enumspb.TASK_QUEUE_TYPE_ACTIVITY]/2, // only reports default queue
+			a.Equal(expectedBacklogCount[enumspb.TASK_QUEUE_TYPE_ACTIVITY],
 				activityResp.TaskQueueStatus.GetBacklogCountHint())
 		}
 
@@ -545,12 +476,4 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateStatsCached(
 	expectedAddRate[enumspb.TASK_QUEUE_TYPE_WORKFLOW] = workflows > 0
 	expectedDispatchRate[enumspb.TASK_QUEUE_TYPE_WORKFLOW] = false
 	s.validateDescribeTaskQueue(tqName, expectedBacklogCount, maxBacklogExtraTasks, expectedAddRate, expectedDispatchRate, singlePartition)
-}
-
-func (s *DescribeTaskQueueSuite) deploymentOptions() *deploymentpb.WorkerDeploymentOptions {
-	return &deployment.WorkerDeploymentOptions{
-		DeploymentName:       "describe-task-queue-test",
-		BuildId:              "build-id",
-		WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_VERSIONED,
-	}
 }
