@@ -1120,10 +1120,10 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 	req := request.GetDescRequest()
 	if req.ApiMode == enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED {
 		rootPartition, err := tqid.PartitionFromProto(req.GetTaskQueue(), request.GetNamespaceId(), req.GetTaskQueueType())
-		tqConfig := newTaskQueueConfig(rootPartition.TaskQueue(), e.config, namespace.Name(req.Namespace))
 		if err != nil {
 			return nil, err
 		}
+		tqConfig := newTaskQueueConfig(rootPartition.TaskQueue(), e.config, namespace.Name(req.Namespace))
 		if !rootPartition.IsRoot() || rootPartition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY || rootPartition.TaskType() != enumspb.TASK_QUEUE_TYPE_WORKFLOW {
 			return nil, serviceerror.NewInvalidArgument("DescribeTaskQueue must be called on the root partition of workflow task queue if api mode is DESCRIBE_TASK_QUEUE_MODE_ENHANCED")
 		}
@@ -1144,6 +1144,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 		// user is calling this API back-to-back but with different version selection.
 		missingItemsInCache := false
 		physicalInfoByBuildId := make(map[string]map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo)
+		//nolint:staticcheck // SA1019 deprecated
 		requestedBuildIds, err := e.getBuildIds(req.Versions)
 		if err != nil {
 			return nil, err
@@ -1255,6 +1256,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 			},
 		}, nil
 	}
+
 	// Otherwise, do legacy DescribeTaskQueue
 	partition, err := tqid.PartitionFromProto(req.TaskQueue, request.GetNamespaceId(), req.TaskQueueType)
 	if err != nil {
@@ -1264,7 +1266,71 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 	if err != nil {
 		return nil, err
 	}
-	return pm.LegacyDescribeTaskQueue(req.GetIncludeTaskQueueStatus())
+	//nolint:staticcheck // SA1019 deprecated
+	descrResp, err := pm.LegacyDescribeTaskQueue(req.GetIncludeTaskQueueStatus())
+	if err != nil {
+		return nil, err
+	}
+
+	if req.ReportStats {
+		if !pm.Partition().IsRoot() {
+			return nil, serviceerror.NewInvalidArgument("DescribeTaskQueue stats are only supported for the root partition")
+		}
+		cacheKey := ".taskQueueStats" // starts with `.` to prevent clashing with build ID cache keys
+		if ts := pm.GetCache(cacheKey); ts != nil {
+			//revive:disable-next-line:unchecked-type-assertion
+			descrResp.DescResponse.Stats = ts.(*taskqueuepb.TaskQueueStats)
+		} else {
+			taskQueueStats := &taskqueuepb.TaskQueueStats{}
+
+			// find all buildIds
+			var buildIds []string
+			userData, _, err := pm.GetUserDataManager().GetUserData()
+			if err != nil {
+				return nil, err
+			}
+			typedUserData := userData.GetData().GetPerType()[int32(pm.Partition().TaskType())]
+			for _, v := range typedUserData.GetDeploymentData().GetVersions() {
+				if v.GetVersion() == nil || v.GetVersion().GetDeploymentName() == "" || v.GetVersion().GetBuildId() == "" {
+					continue
+				}
+				buildIds = append(buildIds, worker_versioning.WorkerDeploymentVersionToStringV31(v.GetVersion()))
+			}
+
+			// query each partition for stats
+			// TODO(stephanos): don't query root partition again
+			for i := 0; i < pm.PartitionCount(); i++ {
+				partitionResp, err := e.matchingRawClient.DescribeTaskQueuePartition(ctx,
+					&matchingservice.DescribeTaskQueuePartitionRequest{
+						NamespaceId: request.GetNamespaceId(),
+						TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
+							TaskQueue:     req.TaskQueue.Name,
+							TaskQueueType: req.TaskQueueType,
+							PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: int32(i)},
+						},
+						Versions: &taskqueuepb.TaskQueueVersionSelection{
+							BuildIds:    buildIds,
+							Unversioned: true,
+						},
+						ReportStats: true,
+					})
+				if err != nil {
+					return nil, err
+				}
+				for _, vii := range partitionResp.VersionsInfoInternal {
+					partitionStats := vii.PhysicalTaskQueueInfo.TaskQueueStats
+					taskQueueStats.ApproximateBacklogCount += partitionStats.ApproximateBacklogCount
+					taskQueueStats.ApproximateBacklogAge = largerBacklogAge(taskQueueStats.ApproximateBacklogAge, partitionStats.ApproximateBacklogAge)
+					taskQueueStats.TasksAddRate += partitionStats.TasksAddRate
+					taskQueueStats.TasksDispatchRate += partitionStats.TasksDispatchRate
+				}
+			}
+			pm.PutCache(cacheKey, taskQueueStats)
+			descrResp.DescResponse.Stats = taskQueueStats
+		}
+	}
+
+	return descrResp, nil
 }
 
 func dedupPollers(pollerInfos []*taskqueuepb.PollerInfo) []*taskqueuepb.PollerInfo {

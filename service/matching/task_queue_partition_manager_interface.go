@@ -58,6 +58,7 @@ type (
 		LegacyDescribeTaskQueue(includeTaskQueueStatus bool) (*matchingservice.DescribeTaskQueueResponse, error)
 		Describe(ctx context.Context, buildIds map[string]bool, includeAllActive, reportStats, reportPollers, internalTaskQueueStatus bool) (*matchingservice.DescribeTaskQueuePartitionResponse, error)
 		Partition() tqid.Partition
+		PartitionCount() int
 		LongPollExpirationInterval() time.Duration
 		PutCache(key any, value any)
 		GetCache(key any) any

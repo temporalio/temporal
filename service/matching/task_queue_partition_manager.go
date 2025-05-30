@@ -740,6 +740,10 @@ func (pm *taskQueuePartitionManagerImpl) Partition() tqid.Partition {
 	return pm.partition
 }
 
+func (pm *taskQueuePartitionManagerImpl) PartitionCount() int {
+	return max(pm.config.NumWritePartitions(), pm.config.NumReadPartitions())
+}
+
 func (pm *taskQueuePartitionManagerImpl) LongPollExpirationInterval() time.Duration {
 	return pm.config.LongPollExpirationInterval()
 }
