@@ -292,7 +292,10 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 	var err error
 	dbq := pm.defaultQueue
 	versionSetUsed := false
-	deployment := worker_versioning.DeploymentFromCapabilities(pollMetadata.workerVersionCapabilities, pollMetadata.deploymentOptions)
+	deployment, err := worker_versioning.DeploymentFromCapabilities(pollMetadata.workerVersionCapabilities, pollMetadata.deploymentOptions)
+	if err != nil {
+		return nil, false, err
+	}
 
 	if deployment != nil {
 		if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
@@ -630,15 +633,15 @@ func (pm *taskQueuePartitionManagerImpl) LegacyDescribeTaskQueue(includeTaskQueu
 		current, ramping := worker_versioning.CalculateTaskQueueVersioningInfo(perTypeUserData.GetDeploymentData())
 		info := &taskqueuepb.TaskQueueVersioningInfo{
 			// [cleanup-wv-3.1]
-			CurrentVersion:           worker_versioning.WorkerDeploymentVersionToString(current.GetDeploymentVersion()),
+			CurrentVersion:           worker_versioning.WorkerDeploymentVersionToStringV31(current.GetDeploymentVersion()),
 			CurrentDeploymentVersion: current.GetDeploymentVersion(),
 			UpdateTime:               current.GetRoutingUpdateTime(),
 		}
 		if ramping.GetRampingSinceTime() != nil {
 			info.RampingVersionPercentage = ramping.GetRampPercentage()
 			// If task queue is ramping to unversioned, ramping will be nil, which converts to "__unversioned__"
-			// [cleanup-wv-3.1]
-			info.RampingVersion = worker_versioning.WorkerDeploymentVersionToString(ramping.GetDeploymentVersion())
+			//nolint:staticcheck // SA1019: [cleanup-wv-3.1]
+			info.RampingVersion = worker_versioning.WorkerDeploymentVersionToStringV31(ramping.GetDeploymentVersion())
 			info.RampingDeploymentVersion = ramping.GetDeploymentVersion()
 			if info.GetUpdateTime().AsTime().Before(ramping.GetRoutingUpdateTime().AsTime()) {
 				info.UpdateTime = ramping.GetRoutingUpdateTime()
@@ -674,7 +677,7 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 			found := false
 			for k := range pm.versionedQueues {
 				// Storing the versioned queue if the buildID is a v2 based buildID or a versionID representing a worker-deployment version.
-				if k.BuildId() == b || worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(k.Deployment())) == b {
+				if k.BuildId() == b || worker_versioning.ExternalWorkerDeploymentVersionToString(worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(k.Deployment())) == b {
 					versions[k] = true
 					found = true
 					break
@@ -723,7 +726,7 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 		// information for non-deployment related builds will only see the buildID as an entry in the versionsInfo map.
 		bid := v.BuildId()
 		if v.Deployment() != nil {
-			bid = worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(v.Deployment()))
+			bid = worker_versioning.ExternalWorkerDeploymentVersionToString(worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(v.Deployment()))
 		}
 		versionsInfo[bid] = vInfo
 	}
@@ -735,6 +738,10 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 
 func (pm *taskQueuePartitionManagerImpl) Partition() tqid.Partition {
 	return pm.partition
+}
+
+func (pm *taskQueuePartitionManagerImpl) PartitionCount() int {
+	return max(pm.config.NumWritePartitions(), pm.config.NumReadPartitions())
 }
 
 func (pm *taskQueuePartitionManagerImpl) LongPollExpirationInterval() time.Duration {
@@ -989,7 +996,7 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 		// not present in the workflow's pinned deployment. Such activities are considered
 		// independent activities and are treated as unpinned, sent to their TQ's current deployment.
 		isIndependentActivity := pm.partition.TaskType() == enumspb.TASK_QUEUE_TYPE_ACTIVITY &&
-			!hasDeploymentVersion(deploymentData, worker_versioning.DeploymentVersionFromDeployment(deployment))
+			!worker_versioning.HasDeploymentVersion(deploymentData, worker_versioning.DeploymentVersionFromDeployment(deployment))
 		if !isIndependentActivity {
 			pinnedQueue, err := pm.getVersionedQueue(ctx, "", "", deployment, true)
 			if err != nil {

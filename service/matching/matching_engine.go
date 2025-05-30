@@ -734,7 +734,9 @@ pollLoop:
 					tag.TaskVisibilityTimestamp(timestamp.TimeValue(task.event.Data.GetCreateTime())),
 					tag.VersioningBehavior(task.event.Data.VersionDirective.GetBehavior()),
 					//nolint:staticcheck // SA1019 deprecated WorkerVersionCapabilities will clean up later
-					tag.Deployment(worker_versioning.DeploymentFromCapabilities(requestClone.WorkerVersionCapabilities, requestClone.DeploymentOptions)),
+					tag.Deployment(worker_versioning.DeploymentNameFromCapabilities(requestClone.WorkerVersionCapabilities, requestClone.DeploymentOptions)),
+					//nolint:staticcheck // SA1019 deprecated WorkerVersionCapabilities will clean up later
+					tag.BuildId(worker_versioning.BuildIdFromCapabilities(requestClone.WorkerVersionCapabilities, requestClone.DeploymentOptions)),
 					tag.Error(err),
 				)
 				task.finish(nil, false)
@@ -955,7 +957,9 @@ pollLoop:
 					tag.TaskVisibilityTimestamp(timestamp.TimeValue(task.event.Data.GetCreateTime())),
 					tag.VersioningBehavior(task.event.Data.VersionDirective.GetBehavior()),
 					//nolint:staticcheck // SA1019 deprecated WorkerVersionCapabilities will clean up later
-					tag.Deployment(worker_versioning.DeploymentFromCapabilities(requestClone.WorkerVersionCapabilities, requestClone.DeploymentOptions)),
+					tag.Deployment(worker_versioning.DeploymentNameFromCapabilities(requestClone.WorkerVersionCapabilities, requestClone.DeploymentOptions)),
+					//nolint:staticcheck // SA1019 deprecated WorkerVersionCapabilities will clean up later
+					tag.BuildId(worker_versioning.BuildIdFromCapabilities(requestClone.WorkerVersionCapabilities, requestClone.DeploymentOptions)),
 					tag.Error(err),
 				)
 				task.finish(nil, false)
@@ -971,7 +975,9 @@ pollLoop:
 					tag.TaskVisibilityTimestamp(timestamp.TimeValue(task.event.Data.GetCreateTime())),
 					tag.VersioningBehavior(task.event.Data.VersionDirective.GetBehavior()),
 					//nolint:staticcheck // SA1019 deprecated WorkerVersionCapabilities will clean up later
-					tag.Deployment(worker_versioning.DeploymentFromCapabilities(requestClone.WorkerVersionCapabilities, requestClone.DeploymentOptions)),
+					tag.Deployment(worker_versioning.DeploymentNameFromCapabilities(requestClone.WorkerVersionCapabilities, requestClone.DeploymentOptions)),
+					//nolint:staticcheck // SA1019 deprecated WorkerVersionCapabilities will clean up later
+					tag.BuildId(worker_versioning.BuildIdFromCapabilities(requestClone.WorkerVersionCapabilities, requestClone.DeploymentOptions)),
 				)
 				task.finish(nil, false)
 			case *serviceerror.ResourceExhausted:
@@ -1114,10 +1120,10 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 	req := request.GetDescRequest()
 	if req.ApiMode == enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED {
 		rootPartition, err := tqid.PartitionFromProto(req.GetTaskQueue(), request.GetNamespaceId(), req.GetTaskQueueType())
-		tqConfig := newTaskQueueConfig(rootPartition.TaskQueue(), e.config, namespace.Name(req.Namespace))
 		if err != nil {
 			return nil, err
 		}
+		tqConfig := newTaskQueueConfig(rootPartition.TaskQueue(), e.config, namespace.Name(req.Namespace))
 		if !rootPartition.IsRoot() || rootPartition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY || rootPartition.TaskType() != enumspb.TASK_QUEUE_TYPE_WORKFLOW {
 			return nil, serviceerror.NewInvalidArgument("DescribeTaskQueue must be called on the root partition of workflow task queue if api mode is DESCRIBE_TASK_QUEUE_MODE_ENHANCED")
 		}
@@ -1138,6 +1144,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 		// user is calling this API back-to-back but with different version selection.
 		missingItemsInCache := false
 		physicalInfoByBuildId := make(map[string]map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo)
+		//nolint:staticcheck // SA1019 deprecated
 		requestedBuildIds, err := e.getBuildIds(req.Versions)
 		if err != nil {
 			return nil, err
@@ -1249,6 +1256,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 			},
 		}, nil
 	}
+
 	// Otherwise, do legacy DescribeTaskQueue
 	partition, err := tqid.PartitionFromProto(req.TaskQueue, request.GetNamespaceId(), req.TaskQueueType)
 	if err != nil {
@@ -1258,7 +1266,71 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 	if err != nil {
 		return nil, err
 	}
-	return pm.LegacyDescribeTaskQueue(req.GetIncludeTaskQueueStatus())
+	//nolint:staticcheck // SA1019 deprecated
+	descrResp, err := pm.LegacyDescribeTaskQueue(req.GetIncludeTaskQueueStatus())
+	if err != nil {
+		return nil, err
+	}
+
+	if req.ReportStats {
+		if !pm.Partition().IsRoot() {
+			return nil, serviceerror.NewInvalidArgument("DescribeTaskQueue stats are only supported for the root partition")
+		}
+		cacheKey := ".taskQueueStats" // starts with `.` to prevent clashing with build ID cache keys
+		if ts := pm.GetCache(cacheKey); ts != nil {
+			//revive:disable-next-line:unchecked-type-assertion
+			descrResp.DescResponse.Stats = ts.(*taskqueuepb.TaskQueueStats)
+		} else {
+			taskQueueStats := &taskqueuepb.TaskQueueStats{}
+
+			// find all buildIds
+			var buildIds []string
+			userData, _, err := pm.GetUserDataManager().GetUserData()
+			if err != nil {
+				return nil, err
+			}
+			typedUserData := userData.GetData().GetPerType()[int32(pm.Partition().TaskType())]
+			for _, v := range typedUserData.GetDeploymentData().GetVersions() {
+				if v.GetDeploymentVersion() == nil || v.GetDeploymentVersion().GetDeploymentName() == "" || v.GetDeploymentVersion().GetBuildId() == "" {
+					continue
+				}
+				buildIds = append(buildIds, worker_versioning.WorkerDeploymentVersionToStringV31(v.GetDeploymentVersion()))
+			}
+
+			// query each partition for stats
+			// TODO(stephanos): don't query root partition again
+			for i := 0; i < pm.PartitionCount(); i++ {
+				partitionResp, err := e.matchingRawClient.DescribeTaskQueuePartition(ctx,
+					&matchingservice.DescribeTaskQueuePartitionRequest{
+						NamespaceId: request.GetNamespaceId(),
+						TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
+							TaskQueue:     req.TaskQueue.Name,
+							TaskQueueType: req.TaskQueueType,
+							PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: int32(i)},
+						},
+						Versions: &taskqueuepb.TaskQueueVersionSelection{
+							BuildIds:    buildIds,
+							Unversioned: true,
+						},
+						ReportStats: true,
+					})
+				if err != nil {
+					return nil, err
+				}
+				for _, vii := range partitionResp.VersionsInfoInternal {
+					partitionStats := vii.PhysicalTaskQueueInfo.TaskQueueStats
+					taskQueueStats.ApproximateBacklogCount += partitionStats.ApproximateBacklogCount
+					taskQueueStats.ApproximateBacklogAge = largerBacklogAge(taskQueueStats.ApproximateBacklogAge, partitionStats.ApproximateBacklogAge)
+					taskQueueStats.TasksAddRate += partitionStats.TasksAddRate
+					taskQueueStats.TasksDispatchRate += partitionStats.TasksDispatchRate
+				}
+			}
+			pm.PutCache(cacheKey, taskQueueStats)
+			descrResp.DescResponse.Stats = taskQueueStats
+		}
+	}
+
+	return descrResp, nil
 }
 
 func dedupPollers(pollerInfos []*taskqueuepb.PollerInfo) []*taskqueuepb.PollerInfo {
@@ -1750,7 +1822,7 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 			if d := req.Deployment; d != nil {
 				// [cleanup-old-wv]
 				//nolint:staticcheck
-				if idx := findDeployment(deploymentData, req.Deployment); idx >= 0 {
+				if idx := worker_versioning.FindDeployment(deploymentData, req.Deployment); idx >= 0 {
 					deploymentData.Deployments[idx].Data = req.Data
 				} else {
 					deploymentData.Deployments = append(
@@ -1772,7 +1844,7 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 					} else { // set or update
 						deploymentData.UnversionedRampData = vd
 					}
-				} else if idx := findDeploymentVersion(deploymentData, vd.GetDeploymentVersion()); idx >= 0 {
+				} else if idx := worker_versioning.FindDeploymentVersion(deploymentData, vd.GetDeploymentVersion()); idx >= 0 {
 					old := deploymentData.Versions[idx]
 					if old.GetRoutingUpdateTime().AsTime().After(vd.GetRoutingUpdateTime().AsTime()) {
 						continue
@@ -1785,7 +1857,7 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 					deploymentData.Versions = append(deploymentData.Versions, vd)
 				}
 			} else if v := req.GetForgetDeploymentVersion(); v != nil {
-				if idx := findDeploymentVersion(deploymentData, v); idx >= 0 {
+				if idx := worker_versioning.FindDeploymentVersion(deploymentData, v); idx >= 0 {
 					changed = true
 					deploymentData.Versions = append(deploymentData.Versions[:idx], deploymentData.Versions[idx+1:]...)
 				}

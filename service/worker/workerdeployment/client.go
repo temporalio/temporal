@@ -321,7 +321,6 @@ func (d *ClientImpl) UpdateVersionMetadata(
 		identity,
 	)()
 	requestID := uuid.New()
-
 	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.UpdateVersionMetadataArgs{
 		UpsertEntries: request.GetUpsertEntries(),
 		RemoveEntries: request.GetRemoveEntries(),
@@ -528,6 +527,8 @@ func (d *ClientImpl) SetCurrentVersion(
 			res.ConflictToken = details[0].GetData()
 		}
 		return &res, nil
+	} else if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errVersionNotFound {
+		return nil, serviceerror.NewNotFound(errVersionNotFound)
 	} else if failure.GetApplicationFailureInfo().GetType() == errFailedPrecondition {
 		return nil, serviceerror.NewFailedPrecondition(failure.Message)
 	} else if failure != nil {
@@ -607,6 +608,8 @@ func (d *ClientImpl) SetRampingVersion(
 		}
 
 		return &res, nil
+	} else if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errVersionNotFound {
+		return nil, serviceerror.NewNotFound(errVersionNotFound)
 	} else if failure.GetApplicationFailureInfo().GetType() == errFailedPrecondition {
 		return nil, serviceerror.NewFailedPrecondition(failure.Message)
 	} else if failure != nil {
@@ -671,8 +674,8 @@ func (d *ClientImpl) DeleteWorkerDeploymentVersion(
 	if failure := outcome.GetFailure(); failure != nil {
 		if failure.GetApplicationFailureInfo().GetType() == errVersionNotFound {
 			return nil
-		} else if failure.Message == ErrVersionIsCurrentOrRamping {
-			return serviceerror.NewFailedPrecondition(ErrVersionIsCurrentOrRamping) // non-retryable error to stop multiple activity attempts
+		} else if failure.GetApplicationFailureInfo().GetType() == errFailedPrecondition {
+			return serviceerror.NewFailedPrecondition(failure.GetMessage()) // non-retryable error to stop multiple activity attempts
 		} else if failure.GetCause().GetApplicationFailureInfo().GetType() == errFailedPrecondition {
 			return serviceerror.NewFailedPrecondition(failure.GetCause().GetMessage())
 		}
@@ -1104,13 +1107,13 @@ func (d *ClientImpl) AddVersionToWorkerDeployment(
 		return nil, serviceerror.NewFailedPrecondition(failure.Message)
 	} else if failure != nil {
 		return nil, serviceerror.NewInternalf("failed to add version %s to worker deployment %v with error %v",
-			worker_versioning.WorkerDeploymentVersionToString(args.GetDeploymentVersion()), deploymentName, failure.Message)
+			worker_versioning.WorkerDeploymentVersionToStringV31(args.GetDeploymentVersion()), deploymentName, failure.Message)
 	}
 
 	success := outcome.GetSuccess()
 	if success == nil {
 		return nil, serviceerror.NewInternalf("outcome missing success and failure while adding version %s to worker deployment %v",
-			worker_versioning.WorkerDeploymentVersionToString(args.GetDeploymentVersion()), deploymentName)
+			worker_versioning.WorkerDeploymentVersionToStringV31(args.GetDeploymentVersion()), deploymentName)
 	}
 
 	return &deploymentspb.AddVersionToWorkerDeploymentResponse{}, nil
@@ -1282,7 +1285,7 @@ func versionStateToVersionInfo(state *deploymentspb.VersionLocalState) *deployme
 	}
 
 	return &deploymentpb.WorkerDeploymentVersionInfo{
-		Version:            worker_versioning.WorkerDeploymentVersionToString(state.GetDeploymentVersion()),
+		Version:            worker_versioning.WorkerDeploymentVersionToStringV31(state.GetDeploymentVersion()),
 		DeploymentVersion:  state.GetDeploymentVersion(),
 		Status:             state.Status,
 		CreateTime:         state.CreateTime,
@@ -1310,7 +1313,7 @@ func (d *ClientImpl) deploymentStateToDeploymentInfo(deploymentName string, stat
 
 	for _, v := range state.Versions {
 		workerDeploymentInfo.VersionSummaries = append(workerDeploymentInfo.VersionSummaries, &deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary{
-			Version:              worker_versioning.WorkerDeploymentVersionToString(v.GetDeploymentVersion()),
+			Version:              worker_versioning.WorkerDeploymentVersionToStringV31(v.GetDeploymentVersion()),
 			DeploymentVersion:    v.GetDeploymentVersion(),
 			CreateTime:           v.GetCreateTime(),
 			DrainageStatus:       v.GetDrainageInfo().GetStatus(), // deprecated.
@@ -1339,7 +1342,7 @@ func (d *ClientImpl) GetVersionDrainageStatus(
 	countRequest := manager.CountWorkflowExecutionsRequest{
 		NamespaceID: namespaceEntry.ID(),
 		Namespace:   namespaceEntry.Name(),
-		Query:       makeDeploymentQuery(version),
+		Query:       makeDeploymentQuery(worker_versioning.ExternalWorkerDeploymentVersionToString(worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(version))),
 	}
 	countResponse, err := d.visibilityManager.CountWorkflowExecutions(ctx, &countRequest)
 	if err != nil {
@@ -1429,6 +1432,8 @@ func (d *ClientImpl) isTaskQueueExpectedInNewVersion(
 		return false, nil
 	}
 
+	versionStr := worker_versioning.ExternalWorkerDeploymentVersionToString(prevCurrentVersionInfo.GetDeploymentVersion())
+
 	// Check if task queue has backlogged tasks or add-rate > 0
 	req := &matchingservice.DescribeTaskQueueRequest{
 		NamespaceId: namespaceEntry.ID().String(),
@@ -1440,7 +1445,7 @@ func (d *ClientImpl) isTaskQueueExpectedInNewVersion(
 			},
 			TaskQueueTypes: []enumspb.TaskQueueType{taskQueue.Type},
 			Versions: &taskqueuepb.TaskQueueVersionSelection{
-				BuildIds: []string{prevCurrentVersionInfo.GetVersion()}, // pretending the version string is a build id
+				BuildIds: []string{versionStr}, // pretending the version string is a build id
 			},
 			// Since request doesn't pass through frontend, this field is not automatically populated.
 			// Moreover, DescribeTaskQueueEnhanced requires this field to be set to WORKFLOW type.
@@ -1454,7 +1459,7 @@ func (d *ClientImpl) isTaskQueueExpectedInNewVersion(
 		return false, err
 	}
 
-	typesInfo := response.GetDescResponse().GetVersionsInfo()[prevCurrentVersionInfo.GetVersion()].GetTypesInfo()
+	typesInfo := response.GetDescResponse().GetVersionsInfo()[versionStr].GetTypesInfo()
 	if typesInfo != nil {
 		typeStats := typesInfo[int32(taskQueue.Type)]
 		if typeStats != nil && typeStats.GetStats() != nil &&

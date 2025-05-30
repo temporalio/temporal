@@ -447,6 +447,7 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 	}
 
 	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+
 	// sync to user data
 	var syncRes deploymentspb.SyncDeploymentVersionUserDataResponse
 	err = workflow.ExecuteActivity(activityCtx, d.a.SyncDeploymentVersionUserData, &deploymentspb.SyncDeploymentVersionUserDataRequest{

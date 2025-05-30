@@ -111,6 +111,11 @@ func validateVersionWfParams(fieldName string, field string, maxIDLengthLimit in
 	}
 
 	// deploymentName cannot have "."
+	// TODO: remove this restriction once the old version strings are completely cleaned from external and internal API
+	if fieldName == WorkerDeploymentNameFieldName && strings.Contains(field, worker_versioning.WorkerDeploymentVersionIdDelimiterV31) {
+		return serviceerror.NewInvalidArgumentf("worker deployment name cannot contain '%s'", worker_versioning.WorkerDeploymentVersionIdDelimiterV31)
+	}
+	// deploymentName cannot have ":"
 	if fieldName == WorkerDeploymentNameFieldName && strings.Contains(field, worker_versioning.WorkerDeploymentVersionIdDelimiter) {
 		return serviceerror.NewInvalidArgumentf("worker deployment name cannot contain '%s'", worker_versioning.WorkerDeploymentVersionIdDelimiter)
 	}

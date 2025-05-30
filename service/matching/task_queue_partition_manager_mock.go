@@ -259,6 +259,20 @@ func (mr *MocktaskQueuePartitionManagerMockRecorder) Partition() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Partition", reflect.TypeOf((*MocktaskQueuePartitionManager)(nil).Partition))
 }
 
+// PartitionCount mocks base method.
+func (m *MocktaskQueuePartitionManager) PartitionCount() int {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PartitionCount")
+	ret0, _ := ret[0].(int)
+	return ret0
+}
+
+// PartitionCount indicates an expected call of PartitionCount.
+func (mr *MocktaskQueuePartitionManagerMockRecorder) PartitionCount() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PartitionCount", reflect.TypeOf((*MocktaskQueuePartitionManager)(nil).PartitionCount))
+}
+
 // PollTask mocks base method.
 func (m *MocktaskQueuePartitionManager) PollTask(ctx context.Context, pollMetadata *pollMetadata) (*internalTask, bool, error) {
 	m.ctrl.T.Helper()

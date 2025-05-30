@@ -76,7 +76,7 @@ func makeCountRequest(
 func makeDeploymentQuery(seriesName, buildID string, open bool) string {
 	var statusFilter string
 	deploymentFilter := fmt.Sprintf("= '%s'", worker_versioning.PinnedBuildIdSearchAttribute(
-		worker_versioning.WorkerDeploymentVersionToString(&deploymentpb.WorkerDeploymentVersion{
+		worker_versioning.ExternalWorkerDeploymentVersionToString(&deploymentpb.WorkerDeploymentVersion{
 			DeploymentName: seriesName,
 			BuildId:        buildID,
 		})))
