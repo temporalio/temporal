@@ -191,18 +191,18 @@ func (mr *MocktaskQueuePartitionManagerMockRecorder) HasPollerAfter(buildId, acc
 }
 
 // LegacyDescribeTaskQueue mocks base method.
-func (m *MocktaskQueuePartitionManager) LegacyDescribeTaskQueue(includeTaskQueueStatus bool) (*matchingservice.DescribeTaskQueueResponse, error) {
+func (m *MocktaskQueuePartitionManager) LegacyDescribeTaskQueue(includeTaskQueueStatus, report_stats bool) (*matchingservice.DescribeTaskQueueResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "LegacyDescribeTaskQueue", includeTaskQueueStatus)
+	ret := m.ctrl.Call(m, "LegacyDescribeTaskQueue", includeTaskQueueStatus, report_stats)
 	ret0, _ := ret[0].(*matchingservice.DescribeTaskQueueResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // LegacyDescribeTaskQueue indicates an expected call of LegacyDescribeTaskQueue.
-func (mr *MocktaskQueuePartitionManagerMockRecorder) LegacyDescribeTaskQueue(includeTaskQueueStatus any) *gomock.Call {
+func (mr *MocktaskQueuePartitionManagerMockRecorder) LegacyDescribeTaskQueue(includeTaskQueueStatus, report_stats any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LegacyDescribeTaskQueue", reflect.TypeOf((*MocktaskQueuePartitionManager)(nil).LegacyDescribeTaskQueue), includeTaskQueueStatus)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LegacyDescribeTaskQueue", reflect.TypeOf((*MocktaskQueuePartitionManager)(nil).LegacyDescribeTaskQueue), includeTaskQueueStatus, report_stats)
 }
 
 // LongPollExpirationInterval mocks base method.
@@ -257,6 +257,20 @@ func (m *MocktaskQueuePartitionManager) Partition() tqid.Partition {
 func (mr *MocktaskQueuePartitionManagerMockRecorder) Partition() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Partition", reflect.TypeOf((*MocktaskQueuePartitionManager)(nil).Partition))
+}
+
+// PartitionCount mocks base method.
+func (m *MocktaskQueuePartitionManager) PartitionCount() int {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PartitionCount")
+	ret0, _ := ret[0].(int)
+	return ret0
+}
+
+// PartitionCount indicates an expected call of PartitionCount.
+func (mr *MocktaskQueuePartitionManagerMockRecorder) PartitionCount() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PartitionCount", reflect.TypeOf((*MocktaskQueuePartitionManager)(nil).PartitionCount))
 }
 
 // PollTask mocks base method.
