@@ -64,7 +64,7 @@ type (
 		WithoutCounterSuffix bool `yaml:"withoutCounterSuffix"`
 		// RecordTimerInSeconds controls if Timer metric should be emitted as number of seconds
 		// (instead of milliseconds).
-		// This config only takes effect when using opentelemetry framework for both statsd and prometheus.
+		// This config only takes effect when using prometheus via opentelemetry framework
 		RecordTimerInSeconds bool `yaml:"recordTimerInSeconds"`
 	}
 
