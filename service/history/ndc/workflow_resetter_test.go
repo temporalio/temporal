@@ -524,7 +524,6 @@ func (s *workflowResetterSuite) TestTerminateWorkflow() {
 	randomEventID := int64(2208)
 	mutableState.EXPECT().GetNextEventID().Return(randomEventID).AnyTimes() // This doesn't matter, GetNextEventID is not used if there is started WT.
 	mutableState.EXPECT().GetStartedWorkflowTask().Return(workflowTask)
-	mutableState.EXPECT().ClearSpeculativeWorkflowTask().Return(nil)
 	mutableState.EXPECT().AddWorkflowTaskFailedEvent(
 		workflowTask,
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_FORCE_CLOSE_COMMAND,
@@ -1226,7 +1225,6 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 					if !tc.isReset {
 						ms.EXPECT().GetNextEventID().Return(event.GetEventId() + 1)
 						ms.EXPECT().GetStartedWorkflowTask().Return(nil)
-						ms.EXPECT().ClearSpeculativeWorkflowTask().Return(nil)
 						attr := event.GetWorkflowExecutionTerminatedEventAttributes()
 						ms.EXPECT().AddWorkflowExecutionTerminatedEvent(
 							event.GetEventId()+1,

@@ -83,10 +83,6 @@ func TimeoutWorkflow(
 		}
 	}
 
-	if err := mutableState.ClearSpeculativeWorkflowTask(); err != nil {
-		return err
-	}
-
 	_, err := mutableState.AddTimeoutWorkflowEvent(
 		eventBatchFirstEventID,
 		retryState,
@@ -129,10 +125,6 @@ func TerminateWorkflow(
 		if wtFailedEvent != nil {
 			eventBatchFirstEventID = wtFailedEvent.GetEventId()
 		}
-	}
-
-	if err := mutableState.ClearSpeculativeWorkflowTask(); err != nil {
-		return err
 	}
 
 	_, err := mutableState.AddWorkflowExecutionTerminatedEvent(

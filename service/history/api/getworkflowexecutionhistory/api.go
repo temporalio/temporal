@@ -122,14 +122,14 @@ func Invoke(
 			isWorkflowRunning,
 			lastVersionHistoryItem,
 			lastVersionedTransition,
-			response.GetTransientWorkflowTask(),
+			response.GetTransientOrSpeculativeEvents(),
 			nil
 	}
 
 	isLongPoll := request.Request.GetWaitNewEvent()
 	execution := request.Request.Execution
 	var continuationToken *tokenspb.HistoryContinuation
-	var tranOrSpecWFT *historyspb.TransientWorkflowTaskInfo
+	var tranOrSpecEvents *historyspb.TransientWorkflowTaskInfo
 
 	var runID string
 	lastFirstEventID := common.FirstEventID
@@ -154,7 +154,7 @@ func Invoke(
 			if !isCloseEventOnly {
 				queryNextEventID = continuationToken.GetNextEventId()
 			}
-			continuationToken.BranchToken, _, lastFirstEventID, nextEventID, isWorkflowRunning, continuationToken.VersionHistoryItem, continuationToken.VersionedTransition, tranOrSpecWFT, err =
+			continuationToken.BranchToken, _, lastFirstEventID, nextEventID, isWorkflowRunning, continuationToken.VersionHistoryItem, continuationToken.VersionedTransition, tranOrSpecEvents, err =
 				queryMutableState(namespaceID, execution, queryNextEventID, continuationToken.BranchToken, continuationToken.VersionHistoryItem, continuationToken.VersionedTransition)
 			if err != nil {
 				return nil, err
@@ -168,7 +168,7 @@ func Invoke(
 		if !isCloseEventOnly {
 			queryNextEventID = common.FirstEventID
 		}
-		continuationToken.BranchToken, runID, lastFirstEventID, nextEventID, isWorkflowRunning, continuationToken.VersionHistoryItem, continuationToken.VersionedTransition, tranOrSpecWFT, err =
+		continuationToken.BranchToken, runID, lastFirstEventID, nextEventID, isWorkflowRunning, continuationToken.VersionHistoryItem, continuationToken.VersionedTransition, tranOrSpecEvents, err =
 			queryMutableState(namespaceID, execution, queryNextEventID, nil, nil, nil)
 		if err != nil {
 			return nil, err
@@ -181,11 +181,6 @@ func Invoke(
 		continuationToken.NextEventId = nextEventID
 		continuationToken.IsWorkflowRunning = isWorkflowRunning
 		continuationToken.PersistenceToken = nil
-	}
-
-	if !api.IncludeTransientAndSpeculativeEvents(ctx) {
-		// If a caller doesn't support transient/speculative WFT events, pretend that they don't exist.
-		tranOrSpecWFT = nil
 	}
 
 	// TODO below is a temporary solution to guard against invalid event batch
@@ -223,7 +218,7 @@ func Invoke(
 					nextEventID,
 					request.Request.GetMaximumPageSize(),
 					nil,
-					tranOrSpecWFT,
+					tranOrSpecEvents,
 					continuationToken.BranchToken,
 				)
 				if err != nil {
@@ -241,7 +236,7 @@ func Invoke(
 					nextEventID,
 					request.Request.GetMaximumPageSize(),
 					nil,
-					tranOrSpecWFT,
+					tranOrSpecEvents,
 					continuationToken.BranchToken,
 					persistenceVisibilityMgr,
 				)
@@ -286,7 +281,7 @@ func Invoke(
 					continuationToken.NextEventId,
 					request.Request.GetMaximumPageSize(),
 					continuationToken.PersistenceToken,
-					tranOrSpecWFT,
+					tranOrSpecEvents,
 					continuationToken.BranchToken,
 				)
 			} else {
@@ -299,7 +294,7 @@ func Invoke(
 					continuationToken.NextEventId,
 					request.Request.GetMaximumPageSize(),
 					continuationToken.PersistenceToken,
-					tranOrSpecWFT,
+					tranOrSpecEvents,
 					continuationToken.BranchToken,
 					persistenceVisibilityMgr,
 				)

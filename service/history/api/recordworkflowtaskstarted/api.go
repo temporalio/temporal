@@ -52,7 +52,7 @@ func Invoke(
 
 	var workflowKey definition.WorkflowKey
 	var resp *historyservice.RecordWorkflowTaskStartedResponseWithRawHistory
-	var tranOrSpecWFT *historyspb.TransientWorkflowTaskInfo
+	var tranOrSpecEvents *historyspb.TransientWorkflowTaskInfo
 
 	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
@@ -224,7 +224,7 @@ func Invoke(
 				return nil, err
 			}
 
-			tranOrSpecWFT = common.CloneProto(mutableState.GetTransientWorkflowTaskInfo(workflowTask, req.PollRequest.GetIdentity()))
+			tranOrSpecEvents = common.CloneProto(mutableState.GetTransientWorkflowTaskInfo(workflowTask, req.PollRequest.GetIdentity()))
 
 			return updateAction, nil
 		},
@@ -246,7 +246,7 @@ func Invoke(
 		workflowConsistencyChecker,
 		eventNotifier,
 		persistenceVisibilityMgr,
-		tranOrSpecWFT,
+		tranOrSpecEvents,
 		resp,
 	)
 	if err != nil {
@@ -263,7 +263,7 @@ func setHistoryForRecordWfTaskStartedResp(
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	eventNotifier events.Notifier,
 	persistenceVisibilityMgr manager.VisibilityManager,
-	tranOrSpecWFT *historyspb.TransientWorkflowTaskInfo,
+	tranOrSpecEvents *historyspb.TransientWorkflowTaskInfo,
 	response *historyservice.RecordWorkflowTaskStartedResponseWithRawHistory,
 ) (retError error) {
 
@@ -306,7 +306,7 @@ func setHistoryForRecordWfTaskStartedResp(
 			nextEventID,
 			maximumPageSize,
 			nil,
-			tranOrSpecWFT,
+			tranOrSpecEvents,
 			response.GetBranchToken(),
 		)
 	} else {
@@ -319,7 +319,7 @@ func setHistoryForRecordWfTaskStartedResp(
 			nextEventID,
 			maximumPageSize,
 			nil,
-			tranOrSpecWFT,
+			tranOrSpecEvents,
 			response.GetBranchToken(),
 			persistenceVisibilityMgr,
 		)
@@ -393,6 +393,8 @@ func CreateRecordWorkflowTaskStartedResponseWithRawHistory(
 	workflowTask *historyi.WorkflowTaskInfo,
 	wtHeartbeat bool,
 ) (*historyservice.RecordWorkflowTaskStartedResponseWithRawHistory, error) {
+	// The Result of this function is used outside of WF lock. It is important to copy/clone all fields to response.
+
 	response := &historyservice.RecordWorkflowTaskStartedResponseWithRawHistory{}
 	response.WorkflowType = &commonpb.WorkflowType{
 		Name: ms.GetWorkflowType().GetName(),

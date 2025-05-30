@@ -94,7 +94,13 @@ func GetRawHistory(
 	metricsHandler := interceptor.GetMetricsHandlerFromContext(ctx, shardContext.GetLogger()).WithTags(metrics.OperationTag(metrics.HistoryGetHistoryScope))
 	metrics.HistorySize.With(metricsHandler).Record(int64(size))
 
-	if len(nextToken) == 0 && transientWorkflowTaskInfo != nil {
+	// If
+	//    there are no more events in DB (i.e., page token is empty),
+	//    and transient/speculative WFT events are present (i.e., such WFT is in MS),
+	//    and WF is still running (i.e., last event is not completion event),
+	//    and the client supports transient/speculative WFT events in the history (i.e., not UI or CLI),
+	// then add transient/speculative events to the history.
+	if len(nextToken) == 0 && len(transientWorkflowTaskInfo.GetHistorySuffix()) > 0 && !isWorkflowCompletionEvent(lastEvent) && clientSupportsTranOrSpecEvents(ctx) {
 		if err := validateTransientWorkflowTaskEvents(nextEventID, transientWorkflowTaskInfo); err != nil {
 			logger := shardContext.GetLogger()
 			metricsHandler := interceptor.GetMetricsHandlerFromContext(ctx, logger).WithTags(metrics.OperationTag(metrics.HistoryGetRawHistoryScope))
@@ -107,13 +113,11 @@ func GetRawHistory(
 			return nil, nil, err
 		}
 
-		if len(transientWorkflowTaskInfo.HistorySuffix) > 0 {
-			blob, err := shardContext.GetPayloadSerializer().SerializeEvents(transientWorkflowTaskInfo.HistorySuffix, enumspb.ENCODING_TYPE_PROTO3)
-			if err != nil {
-				return nil, nil, err
-			}
-			rawHistory = append(rawHistory, blob)
+		blob, err := shardContext.GetPayloadSerializer().SerializeEvents(transientWorkflowTaskInfo.HistorySuffix, enumspb.ENCODING_TYPE_PROTO3)
+		if err != nil {
+			return nil, nil, err
 		}
+		rawHistory = append(rawHistory, blob)
 	}
 	return rawHistory, nextToken, nil
 }
@@ -127,7 +131,7 @@ func GetHistory(
 	nextEventID int64,
 	pageSize int32,
 	nextPageToken []byte,
-	transientWorkflowTaskInfo *historyspb.TransientWorkflowTaskInfo,
+	tranOrSpecEvents *historyspb.TransientWorkflowTaskInfo,
 	branchToken []byte,
 	persistenceVisibilityMgr manager.VisibilityManager,
 ) (*historypb.History, []byte, error) {
@@ -191,8 +195,15 @@ func GetHistory(
 			tag.WorkflowRunID(execution.GetRunId()),
 			tag.Error(err))
 	}
-	if len(nextPageToken) == 0 && transientWorkflowTaskInfo != nil {
-		if err := validateTransientWorkflowTaskEvents(nextEventID, transientWorkflowTaskInfo); err != nil {
+
+	// If
+	//    there are no more events in DB (i.e., page token is empty),
+	//    and transient/speculative WFT events are present (i.e., such WFT is in MS),
+	//    and WF is still running (i.e., last event is not completion event),
+	//    and the client supports transient/speculative WFT events in the history (i.e., not UI or CLI),
+	// then add transient/speculative events to the history.
+	if len(nextPageToken) == 0 && len(tranOrSpecEvents.GetHistorySuffix()) > 0 && !isWorkflowCompletionEvent(lastEvent) && clientSupportsTranOrSpecEvents(ctx) {
+		if err := validateTransientWorkflowTaskEvents(nextEventID, tranOrSpecEvents); err != nil {
 			metrics.ServiceErrIncompleteHistoryCounter.With(metricsHandler).Record(1)
 			logger.Error("getHistory error",
 				tag.WorkflowNamespaceID(namespaceID.String()),
@@ -200,8 +211,7 @@ func GetHistory(
 				tag.WorkflowRunID(execution.GetRunId()),
 				tag.Error(err))
 		}
-		// Append the transient workflow task events once we are done enumerating everything from the events table
-		historyEvents = append(historyEvents, transientWorkflowTaskInfo.HistorySuffix...)
+		historyEvents = append(historyEvents, tranOrSpecEvents.HistorySuffix...)
 	}
 
 	ns, err := shardContext.GetNamespaceRegistry().GetNamespaceName(namespaceID)
@@ -474,7 +484,7 @@ func FixFollowEvents(
 	return nil
 }
 
-func IncludeTransientAndSpeculativeEvents(
+func clientSupportsTranOrSpecEvents(
 	ctx context.Context,
 ) bool {
 	clientName, clientVersion := headers.GetClientNameAndVersion(ctx)
@@ -498,6 +508,20 @@ func IncludeTransientAndSpeculativeEvents(
 		return ver.GT(semver.MustParse("100.0.0"))
 	default:
 		return true
+	}
+}
+
+func isWorkflowCompletionEvent(event *historyspb.StrippedHistoryEvent) bool {
+	switch event.GetEventType() {
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED:
+		return true
+	default:
+		return false
 	}
 }
 

@@ -2123,41 +2123,6 @@ func (ms *MutableStateImpl) ClearTransientWorkflowTask() error {
 	return nil
 }
 
-func (ms *MutableStateImpl) ClearSpeculativeWorkflowTask() error {
-	workflowTask := ms.GetPendingWorkflowTask()
-	if workflowTask == nil {
-		return nil
-	}
-	if workflowTask.Type != enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
-		return nil
-	}
-	if workflowTask.StartedEventID != common.EmptyEventID {
-		// TODO: use softassert here.
-		return serviceerror.NewInternal("started workflow task cannot be cleared: it must be explicitly failed")
-	}
-
-	// TODO: Combine this with ClearTransientWorkflowTask above and with deleteWorkflowTask and failWorkflowTask
-	emptyWorkflowTaskInfo := &historyi.WorkflowTaskInfo{
-		Version:             common.EmptyVersion,
-		ScheduledEventID:    common.EmptyEventID,
-		StartedEventID:      common.EmptyEventID,
-		RequestID:           emptyUUID,
-		WorkflowTaskTimeout: time.Duration(0),
-		Attempt:             1,
-		StartedTime:         timeZeroUTC,
-		ScheduledTime:       timeZeroUTC,
-
-		TaskQueue:             nil,
-		OriginalScheduledTime: timeZeroUTC,
-		Type:                  enumsspb.WORKFLOW_TASK_TYPE_UNSPECIFIED,
-
-		SuggestContinueAsNew: false,
-		HistorySizeBytes:     0,
-	}
-	ms.workflowTaskManager.UpdateWorkflowTask(emptyWorkflowTaskInfo)
-	return nil
-}
-
 func (ms *MutableStateImpl) GetAssignedBuildId() string {
 	return ms.executionInfo.AssignedBuildId
 }
@@ -2907,7 +2872,7 @@ func (ms *MutableStateImpl) ApplyWorkflowTaskStartedEvent(
 		startedEventID, requestID, timestamp, suggestContinueAsNew, historySizeBytes, versioningStamp, redirectCounter)
 }
 
-// TODO (alex-update): Transient needs to be renamed to "TransientOrSpeculative"
+// TODO (alex-update): This needs to be renamed to "GetTransientOrSpeculativeEvents"
 func (ms *MutableStateImpl) GetTransientWorkflowTaskInfo(
 	workflowTask *historyi.WorkflowTaskInfo,
 	identity string,

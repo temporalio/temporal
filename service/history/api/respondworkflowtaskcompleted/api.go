@@ -749,7 +749,7 @@ func (handler *WorkflowTaskCompletedHandler) createPollWorkflowTaskQueueResponse
 	namespaceID namespace.ID,
 	matchingResp *matchingservice.PollWorkflowTaskQueueResponse,
 	branchToken []byte,
-	tranOrSpecWFT *historyspb.TransientWorkflowTaskInfo,
+	tranOrSpecEvents *historyspb.TransientWorkflowTaskInfo,
 	maximumPageSize int32,
 ) (_ *workflowservice.PollWorkflowTaskQueueResponse, retError error) {
 
@@ -809,7 +809,7 @@ func (handler *WorkflowTaskCompletedHandler) createPollWorkflowTaskQueueResponse
 			nextEventID,
 			maximumPageSize,
 			nil,
-			tranOrSpecWFT,
+			tranOrSpecEvents,
 			branchToken,
 			handler.persistenceVisibilityMgr,
 		)
@@ -857,7 +857,7 @@ func (handler *WorkflowTaskCompletedHandler) withNewWorkflowTask(
 	namespaceName namespace.Name,
 	request *historyservice.RespondWorkflowTaskCompletedRequest,
 	response *historyservice.RecordWorkflowTaskStartedResponse,
-	tranOrSpecWFT *historyspb.TransientWorkflowTaskInfo,
+	tranOrSpecEvents *historyspb.TransientWorkflowTaskInfo,
 ) (*workflowservice.PollWorkflowTaskQueueResponse, error) {
 	taskToken, err := handler.tokenSerializer.Deserialize(request.CompleteRequest.TaskToken)
 	if err != nil {
@@ -890,7 +890,7 @@ func (handler *WorkflowTaskCompletedHandler) withNewWorkflowTask(
 		namespace.ID(taskToken.NamespaceId),
 		matchingResp,
 		matchingResp.GetBranchToken(),
-		tranOrSpecWFT,
+		tranOrSpecEvents,
 		int32(handler.config.HistoryMaxPageSize(namespaceName.String())),
 	)
 }
