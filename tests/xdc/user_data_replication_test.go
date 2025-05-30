@@ -2,6 +2,7 @@ package xdc
 
 import (
 	"fmt"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	"testing"
 	"time"
 
@@ -273,7 +274,7 @@ func (s *UserDataReplicationTestSuite) TestUserDataIsReplicatedFromActiveToPassi
 	s.Require().NoError(err)
 
 	expectedVersionData := &deploymentspb.DeploymentVersionData{
-		Version: &deploymentspb.WorkerDeploymentVersion{
+		DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
 			BuildId:        "v1",
 			DeploymentName: "d1",
 		},
