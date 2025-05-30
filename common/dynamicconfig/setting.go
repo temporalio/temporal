@@ -32,4 +32,21 @@ type (
 		// for internal use:
 		dispatchUpdate(*Collection, any, []ConstrainedValue)
 	}
+
+	// GenericParseHookWithPointer is an interface that may be implemented by a setting type or a field
+	// contained inside a struct setting type.
+	// It must be implemented with a pointer receiver and assign the parsed value to the receiver.
+	// Type "S" is usually "string".
+	GenericParseHookWithPointer[S any] interface {
+		DynamicConfigParseHook(S) error
+	}
+
+	// GenericParseHookWithValue is an interface that may be implemented by a setting type or a field
+	// contained inside a struct setting type.
+	// It should be implemented with a non-pointer receiver that will be ignored, and return
+	// the parsed value and any parse error.
+	// Type "S" is usually "string", and "T" must be the same as the receiver type.
+	GenericParseHookWithValue[S, T any] interface {
+		DynamicConfigParseHook(S) (T, error)
+	}
 )
