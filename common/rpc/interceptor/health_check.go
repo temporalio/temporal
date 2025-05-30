@@ -14,13 +14,13 @@ import (
 
 // HealthCheckInterceptor is a gRPC interceptor that records health metrics
 type HealthCheckInterceptor struct {
-	historyHealthSignalAggregator HealthSignalAggregator
+	healthSignalAggregator HealthSignalAggregator
 }
 
 // NewHealthCheckInterceptor creates a new health check interceptor
-func NewHealthCheckInterceptor(historyHealthSignalAggregator HealthSignalAggregator) *HealthCheckInterceptor {
+func NewHealthCheckInterceptor(healthSignalAggregator HealthSignalAggregator) *HealthCheckInterceptor {
 	return &HealthCheckInterceptor{
-		historyHealthSignalAggregator: historyHealthSignalAggregator,
+		healthSignalAggregator: healthSignalAggregator,
 	}
 }
 
@@ -35,7 +35,7 @@ func (h *HealthCheckInterceptor) UnaryIntercept(
 	resp, err := handler(ctx, req)
 	elapsed := time.Since(startTime)
 
-	h.historyHealthSignalAggregator.Record(elapsed, err)
+	h.healthSignalAggregator.Record(elapsed, err)
 
 	return resp, err
 }
