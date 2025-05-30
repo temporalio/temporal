@@ -75,7 +75,7 @@ func NewVersioning3Suite(useV32 bool) *Versioning3Suite {
 func TestVersioning3FunctionalSuite(t *testing.T) {
 	t.Parallel()
 	suite.Run(t, NewVersioning3Suite(true))
-	// suite.Run(t, NewVersioning3Suite(false))
+	suite.Run(t, NewVersioning3Suite(false))
 }
 
 func (s *Versioning3Suite) SetupSuite() {
