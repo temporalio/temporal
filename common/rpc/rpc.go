@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -189,12 +190,20 @@ func getListenIP(cfg *config.RPC, logger log.Logger) net.IP {
 // CreateRemoteFrontendGRPCConnection creates connection for gRPC calls
 func (d *RPCFactory) CreateRemoteFrontendGRPCConnection(rpcAddress string) *grpc.ClientConn {
 	var tlsClientConfig *tls.Config
-	var err error
 	if d.tlsFactory != nil {
-		hostname, _, err2 := net.SplitHostPort(rpcAddress)
-		if err2 != nil {
-			d.logger.Fatal("Invalid rpcAddress for remote cluster", tag.Error(err2))
+		target := rpcAddress
+		hostname := ""
+
+		// Try parsing the address as a URI
+		if u, parseErr := url.Parse(rpcAddress); parseErr == nil && u.Scheme != "" && strings.Contains(rpcAddress, "://") {
+			target = strings.TrimPrefix(u.Path, "/") // remove any leading slashes
 		}
+
+		hostname, _, err := net.SplitHostPort(target)
+		if err != nil {
+			d.logger.Fatal("Invalid rpcAddress for remote cluster. Unable to extract host:port", tag.Error(err))
+		}
+
 		tlsClientConfig, err = d.tlsFactory.GetRemoteClusterClientConfig(hostname)
 
 		if err != nil {
