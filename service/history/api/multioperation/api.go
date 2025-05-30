@@ -294,8 +294,7 @@ func (mo *multiOp) startAndUpdateWorkflow(ctx context.Context) (*historyservice.
 		// running workflow above - but before the new workflow could be created (and locked).
 		// TODO: Consider a refactoring of the startworkflow.Starter to make this case impossible.
 		//
-		// Instead of returning an Unavailable error and relying on the caller to retry, retry
-		// the operation within this process by invoking the top level handler again.
+		// To continue, retry from the top.
 		return mo.Invoke(ctx)
 	}
 
