@@ -541,6 +541,8 @@ func (d *ClientImpl) SetCurrentVersion(
 			res.ConflictToken = details[0].GetData()
 		}
 		return &res, nil
+	} else if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errVersionNotFound {
+		return nil, serviceerror.NewNotFound(errVersionNotFound)
 	} else if failure.GetApplicationFailureInfo().GetType() == errFailedPrecondition {
 		return nil, serviceerror.NewFailedPrecondition(failure.Message)
 	} else if failure != nil {
@@ -630,6 +632,8 @@ func (d *ClientImpl) SetRampingVersion(
 		}
 
 		return &res, nil
+	} else if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errVersionNotFound {
+		return nil, serviceerror.NewNotFound(errVersionNotFound)
 	} else if failure.GetApplicationFailureInfo().GetType() == errFailedPrecondition {
 		return nil, serviceerror.NewFailedPrecondition(failure.Message)
 	} else if failure != nil {
