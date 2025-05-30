@@ -41,7 +41,6 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/testing/testhooks"
-	"go.temporal.io/server/service/history/configs"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
@@ -102,7 +101,6 @@ var Module = fx.Options(
 	fx.Provide(FrontendHTTPClientCacheProvider),
 	fx.Provide(PersistenceConfigProvider),
 	fx.Provide(health.NewServer),
-	fx.Provide(ConfigProvider),
 	deadlock.Module,
 	config.Module,
 	testhooks.Module,
@@ -195,16 +193,6 @@ func NamespaceRegistryProvider(
 		dynamicconfig.ForceSearchAttributesCacheRefreshOnRead.Get(dynamicCollection),
 		metricsHandler,
 		logger,
-	)
-}
-
-func ConfigProvider(
-	dc *dynamicconfig.Collection,
-	persistenceConfig *config.Persistence,
-) *configs.Config {
-	return configs.NewConfig(
-		dc,
-		persistenceConfig.NumHistoryShards,
 	)
 }
 
@@ -352,7 +340,7 @@ func RPCFactoryProvider(
 	resolver *membership.GRPCResolver,
 	tracingStatsHandler telemetry.ClientStatsHandler,
 	monitor membership.Monitor,
-	dynamicConfig *configs.Config,
+	dc *dynamicconfig.Collection,
 ) (common.RPCFactory, error) {
 	frontendURL, frontendHTTPURL, frontendHTTPPort, frontendTLSConfig, err := getFrontendConnectionDetails(cfg, tlsConfigProvider, resolver)
 	if err != nil {
@@ -363,9 +351,10 @@ func RPCFactoryProvider(
 	if tracingStatsHandler != nil {
 		options = append(options, grpc.WithStatsHandler(tracingStatsHandler))
 	}
-	return rpc.NewFactory(
+	enableServerKeepalive := dynamicconfig.EnableInternodeServerKeepAlive.Get(dc)()
+	enableClientKeepalive := dynamicconfig.EnableInternodeClientKeepAlive.Get(dc)()
+	factory := rpc.NewFactory(
 		cfg,
-		dynamicConfig,
 		svcName,
 		logger,
 		tlsConfigProvider,
@@ -375,7 +364,11 @@ func RPCFactoryProvider(
 		frontendTLSConfig,
 		options,
 		monitor,
-	), nil
+	)
+	factory.EnableInternodeServerKeepalive = enableServerKeepalive
+	factory.EnableInternodeClientKeepalive = enableClientKeepalive
+	logger.Info(fmt.Sprintf("RPC factory created. enableServerKeepalive: %v, enableClientKeepalive: %v", enableServerKeepalive, enableClientKeepalive))
+	return factory, nil
 }
 
 func FrontendHTTPClientCacheProvider(

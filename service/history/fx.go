@@ -6,6 +6,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
@@ -50,6 +51,7 @@ var Module = fx.Options(
 	events.Module,
 	cache.Module,
 	archival.Module,
+	fx.Provide(ConfigProvider), // might be worth just using provider for configs.Config directly
 	fx.Provide(workflow.NewCommandHandlerRegistry),
 	fx.Provide(RetryableInterceptorProvider),
 	fx.Provide(TelemetryInterceptorProvider),
@@ -128,6 +130,16 @@ func HistoryEngineFactoryProvider(
 	return &historyEngineFactory{
 		HistoryEngineFactoryParams: params,
 	}
+}
+
+func ConfigProvider(
+	dc *dynamicconfig.Collection,
+	persistenceConfig *config.Persistence,
+) *configs.Config {
+	return configs.NewConfig(
+		dc,
+		persistenceConfig.NumHistoryShards,
+	)
 }
 
 func ThrottledLoggerRpsFnProvider(serviceConfig *configs.Config) resource.ThrottledLoggerRpsFn {

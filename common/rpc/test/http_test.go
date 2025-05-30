@@ -32,7 +32,6 @@ func TestCreateLocalFrontendHTTPClient_UsingMembership(t *testing.T) {
 
 	fact := rpc.NewFactory(
 		nil,
-		nil,
 		primitives.HistoryService,
 		nil, // No logger
 		nil,
@@ -63,7 +62,6 @@ func TestCreateLocalFrontendHTTPClient_UsingFixedHostPort(t *testing.T) {
 
 	fact := rpc.NewFactory(
 		nil, // unused
-		nil,
 		primitives.HistoryService,
 		nil, // No logger
 		nil,
@@ -95,7 +93,6 @@ func TestCreateLocalFrontendHTTPClient_UsingFixedHostPort_AndTLS(t *testing.T) {
 
 	fact := rpc.NewFactory(
 		nil, // unused
-		nil,
 		primitives.HistoryService,
 		nil, // No logger
 		nil,
