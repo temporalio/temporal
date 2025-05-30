@@ -25,7 +25,6 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
@@ -3363,22 +3362,18 @@ func (wh *WorkflowHandler) DescribeWorkerDeploymentVersion(ctx context.Context, 
 		return nil, err
 	}
 
-	//nolint:staticcheck // SA1019: worker versioning v0.31
-	versionStr := request.GetVersion()
-	if versionStr == "" {
-		if request.GetDeploymentVersion() == nil {
+	dv := request.GetDeploymentVersion()
+	if dv == nil {
+		if request.GetVersion() == "" { //nolint:staticcheck // SA1019: worker versioning v0.31
 			return nil, serviceerror.NewInvalidArgument("deployment version cannot be empty")
 		}
-		versionStr = worker_versioning.ExternalWorkerDeploymentVersionToString(request.GetDeploymentVersion())
+		dv = worker_versioning.WorkerDeploymentVersionFromString(request.GetVersion()) //nolint:staticcheck // SA1019: worker versioning v0.31
 	}
 
-	info, err := wh.workerDeploymentClient.DescribeVersion(ctx, namespaceEntry, versionStr)
+	info, err := wh.workerDeploymentClient.DescribeVersion(ctx, namespaceEntry, dv)
 	if err != nil {
 		return nil, err
 	}
-
-	//nolint:staticcheck // SA1019: worker versioning v0.31
-	info.DeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromString(info.Version)
 	return &workflowservice.DescribeWorkerDeploymentVersionResponse{WorkerDeploymentVersionInfo: info}, nil
 }
 
@@ -3406,20 +3401,12 @@ func (wh *WorkflowHandler) SetWorkerDeploymentCurrentVersion(ctx context.Context
 		return nil, serviceerror.NewInvalidArgument("deployment name cannot be empty")
 	}
 
-	//nolint:staticcheck // SA1019: worker versioning v0.31
-	versionStr := request.GetVersion()
-	if versionStr == "" {
-		var v *deploymentspb.WorkerDeploymentVersion
-		if request.GetBuildId() != "" { // versioned
-			v = &deploymentspb.WorkerDeploymentVersion{
-				DeploymentName: request.GetDeploymentName(),
-				BuildId:        request.GetBuildId(),
-			}
-		}
-		versionStr = worker_versioning.WorkerDeploymentVersionToString(v)
+	if request.GetBuildId() == "" && request.GetVersion() != "" { //nolint:staticcheck // SA1019: worker versioning v0.31
+		dv := worker_versioning.WorkerDeploymentVersionFromString(request.GetVersion()) //nolint:staticcheck // SA1019: worker versioning v0.31
+		request.BuildId = dv.GetBuildId()
 	}
 
-	resp, err := wh.workerDeploymentClient.SetCurrentVersion(ctx, namespaceEntry, request.DeploymentName, versionStr, request.Identity, request.IgnoreMissingTaskQueues, request.GetConflictToken())
+	resp, err := wh.workerDeploymentClient.SetCurrentVersion(ctx, namespaceEntry, request)
 	if err != nil {
 		if common.IsResourceExhausted(err) {
 			return nil, serviceerror.NewResourceExhaustedf(enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW, errTooManySetCurrentVersionRequests)
@@ -3429,8 +3416,8 @@ func (wh *WorkflowHandler) SetWorkerDeploymentCurrentVersion(ctx context.Context
 
 	return &workflowservice.SetWorkerDeploymentCurrentVersionResponse{
 		ConflictToken:             resp.ConflictToken,
-		PreviousVersion:           resp.PreviousVersion,
-		PreviousDeploymentVersion: worker_versioning.ExternalWorkerDeploymentVersionFromString(resp.PreviousVersion),
+		PreviousVersion:           worker_versioning.WorkerDeploymentVersionToString(resp.PreviousDeploymentVersion),
+		PreviousDeploymentVersion: resp.PreviousDeploymentVersion,
 	}, nil
 }
 
@@ -3454,31 +3441,22 @@ func (wh *WorkflowHandler) SetWorkerDeploymentRampingVersion(ctx context.Context
 		return nil, err
 	}
 
-	//nolint:staticcheck // SA1019: worker versioning v0.31
-	versionStr := request.GetVersion()
-	if versionStr == "" {
-		// If v0.31 user is trying to unset the ramp, let them do it until we update the deployment manager.
-		// We know it's unsetting the ramp if Build ID is "" and percentage is 0.
-
-		// This is a v0.32 user trying to ramp to unversioned.
-		if request.GetBuildId() == "" && request.GetPercentage() > 0 {
-			versionStr = worker_versioning.UnversionedVersionId
+	if request.GetBuildId() == "" {
+		if request.GetVersion() != "" { //nolint:staticcheck // SA1019: worker versioning v0.31
+			// In this case, user is using v0.31 SDK and is setting a ramp
+			dv := worker_versioning.WorkerDeploymentVersionFromString(request.GetVersion()) //nolint:staticcheck // SA1019: worker versioning v0.31
+			request.BuildId = dv.GetBuildId()
 		}
-
-		// This is a v0.32 user trying to ramp up a version. We don't care what percentage it is.
-		if request.GetBuildId() != "" {
-			versionStr = worker_versioning.WorkerDeploymentVersionToString(&deploymentspb.WorkerDeploymentVersion{
-				DeploymentName: request.GetDeploymentName(),
-				BuildId:        request.GetBuildId(),
-			})
-		}
+		// If Version="", user is either using v0.31 SDK and unsetting a ramp, which means their percent is already 0.
+		// Or they are using v0.32 SDK and ramping with nil / unversioned target, and their percent is in [0,100].
+		// Either way, leaving BuildId="" is ok, and will result in a nil ramp target + whatever percent is given.
 	}
 
 	if request.GetPercentage() < 0 || request.GetPercentage() > 100 {
 		return nil, serviceerror.NewInvalidArgument("Percentage must be between 0 and 100 (inclusive)")
 	}
 
-	resp, err := wh.workerDeploymentClient.SetRampingVersion(ctx, namespaceEntry, request.DeploymentName, versionStr, request.GetPercentage(), request.GetIdentity(), request.IgnoreMissingTaskQueues, request.GetConflictToken())
+	resp, err := wh.workerDeploymentClient.SetRampingVersion(ctx, namespaceEntry, request)
 	if err != nil {
 		if common.IsResourceExhausted(err) {
 			return nil, serviceerror.NewResourceExhaustedf(enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW, errTooManySetRampingVersionRequests)
@@ -3488,9 +3466,9 @@ func (wh *WorkflowHandler) SetWorkerDeploymentRampingVersion(ctx context.Context
 
 	return &workflowservice.SetWorkerDeploymentRampingVersionResponse{
 		ConflictToken:             resp.ConflictToken,
-		PreviousVersion:           resp.PreviousVersion,
+		PreviousVersion:           worker_versioning.WorkerDeploymentVersionToString(resp.PreviousDeploymentVersion),
 		PreviousPercentage:        resp.PreviousPercentage,
-		PreviousDeploymentVersion: worker_versioning.ExternalWorkerDeploymentVersionFromString(resp.PreviousVersion),
+		PreviousDeploymentVersion: resp.PreviousDeploymentVersion,
 	}, nil
 }
 
@@ -3565,7 +3543,7 @@ func (wh *WorkflowHandler) DescribeWorkerDeployment(ctx context.Context, request
 
 	for _, vs := range workerDeploymentInfo.VersionSummaries {
 		//nolint:staticcheck // SA1019: worker versioning v0.31
-		vs.DeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromString(vs.Version)
+		vs.DeploymentVersion = worker_versioning.WorkerDeploymentVersionFromString(vs.Version)
 	}
 	return &workflowservice.DescribeWorkerDeploymentResponse{
 		WorkerDeploymentInfo: workerDeploymentInfo,
@@ -3608,13 +3586,15 @@ func (wh *WorkflowHandler) DeleteWorkerDeploymentVersion(ctx context.Context, re
 		return nil, err
 	}
 
-	//nolint:staticcheck // SA1019: worker versioning v0.31
-	versionStr := request.GetVersion()
-	if request.GetDeploymentVersion() != nil {
-		versionStr = worker_versioning.ExternalWorkerDeploymentVersionToString(request.GetDeploymentVersion())
+	dv := request.GetDeploymentVersion()
+	if dv == nil {
+		if request.GetVersion() == "" { //nolint:staticcheck // SA1019: worker versioning v0.31
+			return nil, serviceerror.NewInvalidArgument("deployment version cannot be empty")
+		}
+		request.DeploymentVersion = worker_versioning.WorkerDeploymentVersionFromString(request.GetVersion()) //nolint:staticcheck // SA1019: worker versioning v0.31
 	}
 
-	err = wh.workerDeploymentClient.DeleteWorkerDeploymentVersion(ctx, namespaceEntry, versionStr, request.SkipDrainage, request.Identity)
+	err = wh.workerDeploymentClient.DeleteWorkerDeploymentVersion(ctx, namespaceEntry, request)
 	if err != nil {
 		if common.IsResourceExhausted(err) {
 			return nil, serviceerror.NewResourceExhaustedf(enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW, errTooManyDeleteVersionRequests)
@@ -3641,14 +3621,15 @@ func (wh *WorkflowHandler) UpdateWorkerDeploymentVersionMetadata(ctx context.Con
 		return nil, err
 	}
 
-	//nolint:staticcheck // SA1019: worker versioning v0.31
-	versionStr := request.GetVersion()
-	if request.GetDeploymentVersion() != nil {
-		versionStr = worker_versioning.ExternalWorkerDeploymentVersionToString(request.GetDeploymentVersion())
+	dv := request.GetDeploymentVersion()
+	if dv == nil {
+		if request.GetVersion() == "" { //nolint:staticcheck // SA1019: worker versioning v0.31
+			return nil, serviceerror.NewInvalidArgument("deployment version cannot be empty")
+		}
+		request.DeploymentVersion = worker_versioning.WorkerDeploymentVersionFromString(request.GetVersion()) //nolint:staticcheck // SA1019: worker versioning v0.31
 	}
 
-	identity := uuid.New()
-	updatedMetadata, err := wh.workerDeploymentClient.UpdateVersionMetadata(ctx, namespaceEntry, versionStr, request.UpsertEntries, request.RemoveEntries, identity)
+	updatedMetadata, err := wh.workerDeploymentClient.UpdateVersionMetadata(ctx, namespaceEntry, request)
 	if err != nil {
 		if common.IsResourceExhausted(err) {
 			return nil, serviceerror.NewResourceExhaustedf(enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW, errTooManyVersionMetadataRequests)

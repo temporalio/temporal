@@ -168,9 +168,9 @@ func DeploymentFromCapabilities(capabilities *commonpb.WorkerVersionCapabilities
 	return nil
 }
 
-func DeploymentVersionFromOptions(options *deploymentpb.WorkerDeploymentOptions) *deploymentspb.WorkerDeploymentVersion {
+func DeploymentVersionFromOptions(options *deploymentpb.WorkerDeploymentOptions) *deploymentpb.WorkerDeploymentVersion {
 	if options.GetWorkerVersioningMode() == enumspb.WORKER_VERSIONING_MODE_VERSIONED {
-		return &deploymentspb.WorkerDeploymentVersion{
+		return &deploymentpb.WorkerDeploymentVersion{
 			DeploymentName: options.GetDeploymentName(),
 			BuildId:        options.GetBuildId(),
 		}
@@ -180,7 +180,7 @@ func DeploymentVersionFromOptions(options *deploymentpb.WorkerDeploymentOptions)
 
 // DeploymentOrVersion Temporary helper function to return a Deployment based on passed Deployment
 // or WorkerDeploymentVersion objects, if `v` is not nil, it'll take precedence.
-func DeploymentOrVersion(d *deploymentpb.Deployment, v *deploymentspb.WorkerDeploymentVersion) *deploymentpb.Deployment {
+func DeploymentOrVersion(d *deploymentpb.Deployment, v *deploymentpb.WorkerDeploymentVersion) *deploymentpb.Deployment {
 	if v != nil {
 		return DeploymentIfValid(DeploymentFromDeploymentVersion(v))
 	}
@@ -222,8 +222,8 @@ func MakeDirectiveForWorkflowTask(
 ) *taskqueuespb.TaskVersionDirective {
 	if behavior != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
 		return &taskqueuespb.TaskVersionDirective{
-			Behavior:          behavior,
-			DeploymentVersion: DeploymentVersionFromDeployment(deployment),
+			Behavior: behavior,
+			Version:  DeploymentVersionFromDeployment(deployment),
 		}
 	}
 	if id := BuildIdIfUsingVersioning(stamp); id != "" && assignedBuildId == "" {
@@ -242,19 +242,7 @@ func MakeDirectiveForWorkflowTask(
 
 // DeploymentVersionFromDeployment Temporary helper function to convert Deployment to
 // WorkerDeploymentVersion proto until we update code to use the new proto in all places.
-func DeploymentVersionFromDeployment(deployment *deploymentpb.Deployment) *deploymentspb.WorkerDeploymentVersion {
-	if deployment == nil {
-		return nil
-	}
-	return &deploymentspb.WorkerDeploymentVersion{
-		BuildId:        deployment.GetBuildId(),
-		DeploymentName: deployment.GetSeriesName(),
-	}
-}
-
-// ExternalWorkerDeploymentVersionFromDeployment Temporary helper function to convert Deployment to
-// WorkerDeploymentVersion proto until we update code to use the new proto in all places.
-func ExternalWorkerDeploymentVersionFromDeployment(deployment *deploymentpb.Deployment) *deploymentpb.WorkerDeploymentVersion {
+func DeploymentVersionFromDeployment(deployment *deploymentpb.Deployment) *deploymentpb.WorkerDeploymentVersion {
 	if deployment == nil {
 		return nil
 	}
@@ -264,33 +252,21 @@ func ExternalWorkerDeploymentVersionFromDeployment(deployment *deploymentpb.Depl
 	}
 }
 
-// ExternalWorkerDeploymentVersionFromVersion Temporary helper function to convert internal Worker Deployment to
+// WorkerDeploymentVersionFromDeployment Temporary helper function to convert Deployment to
 // WorkerDeploymentVersion proto until we update code to use the new proto in all places.
-func ExternalWorkerDeploymentVersionFromVersion(version *deploymentspb.WorkerDeploymentVersion) *deploymentpb.WorkerDeploymentVersion {
-	if version == nil {
+func WorkerDeploymentVersionFromDeployment(deployment *deploymentpb.Deployment) *deploymentpb.WorkerDeploymentVersion {
+	if deployment == nil {
 		return nil
 	}
 	return &deploymentpb.WorkerDeploymentVersion{
-		BuildId:        version.GetBuildId(),
-		DeploymentName: version.GetDeploymentName(),
-	}
-}
-
-// DeploymentFromExternalDeploymentVersion Temporary helper function to convert WorkerDeploymentVersion to
-// Deployment proto until we update code to use the new proto in all places.
-func DeploymentFromExternalDeploymentVersion(dv *deploymentpb.WorkerDeploymentVersion) *deploymentpb.Deployment {
-	if dv == nil {
-		return nil
-	}
-	return &deploymentpb.Deployment{
-		BuildId:    dv.GetBuildId(),
-		SeriesName: dv.GetDeploymentName(),
+		BuildId:        deployment.GetBuildId(),
+		DeploymentName: deployment.GetSeriesName(),
 	}
 }
 
 // DeploymentFromDeploymentVersion Temporary helper function to convert WorkerDeploymentVersion to
 // Deployment proto until we update code to use the new proto in all places.
-func DeploymentFromDeploymentVersion(dv *deploymentspb.WorkerDeploymentVersion) *deploymentpb.Deployment {
+func DeploymentFromDeploymentVersion(dv *deploymentpb.WorkerDeploymentVersion) *deploymentpb.Deployment {
 	if dv == nil {
 		return nil
 	}
@@ -343,7 +319,7 @@ func ValidateDeployment(deployment *deploymentpb.Deployment) error {
 
 // ValidateDeploymentVersion returns error if the deployment version is nil or it has empty version
 // or deployment name.
-func ValidateDeploymentVersion(version *deploymentspb.WorkerDeploymentVersion) error {
+func ValidateDeploymentVersion(version *deploymentpb.WorkerDeploymentVersion) error {
 	if version == nil {
 		return serviceerror.NewInvalidArgument("deployment version cannot be nil")
 	}
@@ -358,11 +334,11 @@ func ValidateDeploymentVersion(version *deploymentspb.WorkerDeploymentVersion) e
 
 // ValidateDeploymentVersionString returns error if the deployment version is nil or it has empty version
 // or deployment name.
-func ValidateDeploymentVersionString(version string) (*deploymentspb.WorkerDeploymentVersion, error) {
+func ValidateDeploymentVersionString(version string) (*deploymentpb.WorkerDeploymentVersion, error) {
 	if version == "" {
 		return nil, serviceerror.NewInvalidArgument("version is required")
 	}
-	v, err := WorkerDeploymentVersionFromString(version)
+	v, err := WorkerDeploymentVersionFromStringWithError(version)
 	if err != nil {
 		return nil, serviceerror.NewInvalidArgumentf("invalid version string %q, expected format is \"<deployment_name>.<build_id>\"", version)
 	}
@@ -436,12 +412,12 @@ func FindDeploymentVersionForWorkflowID(
 	current *deploymentspb.DeploymentVersionData,
 	ramping *deploymentspb.DeploymentVersionData,
 	workflowId string,
-) *deploymentspb.WorkerDeploymentVersion {
+) *deploymentpb.WorkerDeploymentVersion {
 	ramp := ramping.GetRampPercentage()
-	rampingVersion := ramping.GetVersion()
+	rampingVersion := ramping.GetDeploymentVersion()
 	if ramp <= 0 {
 		// No ramp
-		return current.GetVersion()
+		return current.GetDeploymentVersion()
 	} else if ramp == 100 {
 		return rampingVersion
 	}
@@ -450,7 +426,7 @@ func FindDeploymentVersionForWorkflowID(
 	if wfRampThreshold <= float64(ramp) {
 		return rampingVersion
 	}
-	return current.GetVersion()
+	return current.GetDeploymentVersion()
 }
 
 // calcRampThreshold returns a number in [0, 100) that is deterministically calculated based on the
@@ -478,7 +454,7 @@ func CalculateTaskQueueVersioningInfo(deployments *persistencespb.DeploymentData
 		if d.Data.LastBecameCurrentTime != nil {
 			if t := d.Data.LastBecameCurrentTime.AsTime(); t.After(current.GetRoutingUpdateTime().AsTime()) {
 				current = &deploymentspb.DeploymentVersionData{
-					Version:           DeploymentVersionFromDeployment(d.Deployment),
+					DeploymentVersion: DeploymentVersionFromDeployment(d.Deployment),
 					RoutingUpdateTime: d.Data.LastBecameCurrentTime,
 				}
 			}
@@ -538,7 +514,7 @@ func ValidateTaskVersionDirective(
 
 // DirectiveDeployment Temporary function until Directive proto is removed.
 func DirectiveDeployment(directive *taskqueuespb.TaskVersionDirective) *deploymentpb.Deployment {
-	if dv := directive.GetDeploymentVersion(); dv != nil {
+	if dv := directive.GetVersion(); dv != nil {
 		return DeploymentFromDeploymentVersion(dv)
 	}
 	return directive.GetDeployment()
@@ -553,13 +529,13 @@ func AddV31VersioningInfoToV32(info *workflowpb.WorkflowExecutionVersioningInfo)
 	//nolint:staticcheck // SA1019: worker versioning v0.31
 	if info.Version == "" && info.DeploymentVersion != nil {
 		//nolint:staticcheck // SA1019: worker versioning v0.31
-		info.Version = ExternalWorkerDeploymentVersionToString(info.DeploymentVersion)
+		info.Version = WorkerDeploymentVersionToString(info.DeploymentVersion)
 	}
 	if t := info.VersionTransition; t != nil {
 		//nolint:staticcheck // SA1019: worker versioning v0.31
 		if t.Version == "" {
 			//nolint:staticcheck // SA1019: worker versioning v0.31
-			t.Version = ExternalWorkerDeploymentVersionToString(t.DeploymentVersion)
+			t.Version = WorkerDeploymentVersionToString(t.DeploymentVersion)
 		}
 	}
 	if o := info.VersioningOverride; o != nil {
@@ -572,7 +548,7 @@ func AddV31VersioningInfoToV32(info *workflowpb.WorkflowExecutionVersioningInfo)
 				//nolint:staticcheck // SA1019: worker versioning v0.31
 				o.Behavior = enumspb.VERSIONING_BEHAVIOR_PINNED
 				//nolint:staticcheck // SA1019: worker versioning v0.31
-				o.PinnedVersion = ExternalWorkerDeploymentVersionToString(o.GetPinned().GetVersion())
+				o.PinnedVersion = WorkerDeploymentVersionToString(o.GetPinned().GetVersion())
 			}
 		}
 	}
@@ -603,10 +579,10 @@ func ConvertOverrideToV32(override *workflowpb.VersioningOverride) *workflowpb.V
 			//nolint:staticcheck // SA1019: worker versioning v0.31
 			if override.GetPinnedVersion() != "" {
 				//nolint:staticcheck // SA1019: worker versioning v0.31
-				ret.GetPinned().Version = ExternalWorkerDeploymentVersionFromString(override.GetPinnedVersion())
+				ret.GetPinned().Version = WorkerDeploymentVersionFromString(override.GetPinnedVersion())
 			} else {
 				//nolint:staticcheck // SA1019: worker versioning v0.30
-				ret.GetPinned().Version = ExternalWorkerDeploymentVersionFromDeployment(override.GetDeployment())
+				ret.GetPinned().Version = WorkerDeploymentVersionFromDeployment(override.GetDeployment())
 			}
 		case enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED:
 			// this won't happen, but if it did, it makes some sense for unspecified behavior to cause a nil override
@@ -616,43 +592,27 @@ func ConvertOverrideToV32(override *workflowpb.VersioningOverride) *workflowpb.V
 	return ret
 }
 
-func WorkerDeploymentVersionToString(v *deploymentspb.WorkerDeploymentVersion) string {
+func WorkerDeploymentVersionToString(v *deploymentpb.WorkerDeploymentVersion) string {
 	if v == nil {
-		return "__unversioned__"
+		return UnversionedVersionId
 	}
 	return v.GetDeploymentName() + WorkerDeploymentVersionIdDelimiter + v.GetBuildId()
 }
 
-func ExternalWorkerDeploymentVersionToString(v *deploymentpb.WorkerDeploymentVersion) string {
-	if v == nil {
-		return "__unversioned__"
-	}
-	return v.GetDeploymentName() + WorkerDeploymentVersionIdDelimiter + v.GetBuildId()
+func WorkerDeploymentVersionFromString(s string) *deploymentpb.WorkerDeploymentVersion {
+	v, _ := WorkerDeploymentVersionFromStringWithError(s)
+	return v
 }
 
-func ExternalWorkerDeploymentVersionFromString(s string) *deploymentpb.WorkerDeploymentVersion {
-	if s == "" { // unset ramp is no longer supported in v32, so all empty version strings will be treated as unversioned.
-		s = UnversionedVersionId
-	}
-	v, _ := WorkerDeploymentVersionFromString(s)
-	if v == nil {
-		return nil
-	}
-	return &deploymentpb.WorkerDeploymentVersion{
-		BuildId:        v.BuildId,
-		DeploymentName: v.DeploymentName,
-	}
-}
-
-func WorkerDeploymentVersionFromString(s string) (*deploymentspb.WorkerDeploymentVersion, error) {
-	if s == "__unversioned__" {
+func WorkerDeploymentVersionFromStringWithError(s string) (*deploymentpb.WorkerDeploymentVersion, error) {
+	if s == UnversionedVersionId || s == "" { // unset ramp is no longer supported in v32, so all empty version strings will be treated as unversioned.
 		return nil, nil
 	}
 	before, after, found := strings.Cut(s, WorkerDeploymentVersionIdDelimiter)
 	if !found {
 		return nil, fmt.Errorf("expected delimiter %s not found in version string %s", WorkerDeploymentVersionIdDelimiter, s)
 	}
-	return &deploymentspb.WorkerDeploymentVersion{
+	return &deploymentpb.WorkerDeploymentVersion{
 		DeploymentName: before,
 		BuildId:        after,
 	}, nil
@@ -672,7 +632,7 @@ func GetDeploymentNameFromWorkflowID(workflowID string) string {
 // GenerateVersionWorkflowID is a helper that generates a system accepted
 // workflowID which are used in our Worker Deployment Version workflows
 func GenerateVersionWorkflowID(deploymentName string, buildID string) string {
-	versionString := WorkerDeploymentVersionToString(&deploymentspb.WorkerDeploymentVersion{
+	versionString := WorkerDeploymentVersionToString(&deploymentpb.WorkerDeploymentVersion{
 		DeploymentName: deploymentName,
 		BuildId:        buildID,
 	})

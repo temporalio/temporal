@@ -630,16 +630,16 @@ func (pm *taskQueuePartitionManagerImpl) LegacyDescribeTaskQueue(includeTaskQueu
 		current, ramping := worker_versioning.CalculateTaskQueueVersioningInfo(perTypeUserData.GetDeploymentData())
 		info := &taskqueuepb.TaskQueueVersioningInfo{
 			// [cleanup-wv-3.1]
-			CurrentVersion:           worker_versioning.WorkerDeploymentVersionToString(current.GetVersion()),
-			CurrentDeploymentVersion: worker_versioning.ExternalWorkerDeploymentVersionFromVersion(current.GetVersion()),
+			CurrentVersion:           worker_versioning.WorkerDeploymentVersionToString(current.GetDeploymentVersion()),
+			CurrentDeploymentVersion: current.GetDeploymentVersion(),
 			UpdateTime:               current.GetRoutingUpdateTime(),
 		}
 		if ramping.GetRampingSinceTime() != nil {
 			info.RampingVersionPercentage = ramping.GetRampPercentage()
 			// If task queue is ramping to unversioned, ramping will be nil, which converts to "__unversioned__"
 			// [cleanup-wv-3.1]
-			info.RampingVersion = worker_versioning.WorkerDeploymentVersionToString(ramping.GetVersion())
-			info.RampingDeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromVersion(ramping.GetVersion())
+			info.RampingVersion = worker_versioning.WorkerDeploymentVersionToString(ramping.GetDeploymentVersion())
+			info.RampingDeploymentVersion = ramping.GetDeploymentVersion()
 			if info.GetUpdateTime().AsTime().Before(ramping.GetRoutingUpdateTime().AsTime()) {
 				info.UpdateTime = ramping.GetRoutingUpdateTime()
 			}

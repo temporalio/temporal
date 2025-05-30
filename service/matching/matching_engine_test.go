@@ -1271,7 +1271,7 @@ func (s *matchingEngineSuite) TestRateLimiterAcrossVersionedQueues() {
 					DeploymentData: &persistencespb.DeploymentData{
 						Versions: []*deploymentspb.DeploymentVersionData{
 							{
-								Version: &deploymentspb.WorkerDeploymentVersion{
+								DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
 									DeploymentName: deploymentName,
 									BuildId:        strconv.FormatInt(int64(0), 10),
 								},
@@ -1279,7 +1279,7 @@ func (s *matchingEngineSuite) TestRateLimiterAcrossVersionedQueues() {
 								CurrentSinceTime:  timestamppb.Now(),
 							},
 							{
-								Version: &deploymentspb.WorkerDeploymentVersion{
+								DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
 									DeploymentName: deploymentName,
 									BuildId:        strconv.FormatInt(int64(1), 10),
 								},
@@ -1305,7 +1305,7 @@ func (s *matchingEngineSuite) TestRateLimiterAcrossVersionedQueues() {
 			ScheduleToStartTimeout: timestamp.DurationFromSeconds(100),
 			VersionDirective: &taskqueuespb.TaskVersionDirective{
 				Behavior: enumspb.VERSIONING_BEHAVIOR_PINNED,
-				DeploymentVersion: &deploymentspb.WorkerDeploymentVersion{
+				Version: &deploymentpb.WorkerDeploymentVersion{
 					DeploymentName: deploymentName,
 					BuildId:        strconv.FormatInt(int64(i), 10),
 				},

@@ -3,10 +3,10 @@ package deployment
 import (
 	"context"
 	"fmt"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
-	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -76,7 +76,7 @@ func makeCountRequest(
 func makeDeploymentQuery(seriesName, buildID string, open bool) string {
 	var statusFilter string
 	deploymentFilter := fmt.Sprintf("= '%s'", worker_versioning.PinnedBuildIdSearchAttribute(
-		worker_versioning.WorkerDeploymentVersionToString(&deploymentspb.WorkerDeploymentVersion{
+		worker_versioning.WorkerDeploymentVersionToString(&deploymentpb.WorkerDeploymentVersion{
 			DeploymentName: seriesName,
 			BuildId:        buildID,
 		})))

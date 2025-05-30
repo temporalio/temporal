@@ -212,7 +212,7 @@ func MakeDirectiveForActivityTask(mutableState historyi.MutableState, activityIn
 	if behavior := mutableState.GetEffectiveVersioningBehavior(); behavior != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
 		d := mutableState.GetEffectiveDeployment()
 		return &taskqueuespb.TaskVersionDirective{Behavior: behavior,
-			DeploymentVersion: worker_versioning.DeploymentVersionFromDeployment(d),
+			Version: worker_versioning.DeploymentVersionFromDeployment(d),
 		}
 	}
 	if !activityInfo.UseCompatibleVersion && activityInfo.GetUseWorkflowBuildIdInfo() == nil {

@@ -14,7 +14,6 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
-	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -240,14 +239,7 @@ func (tv *TestVars) Deployment() *deploymentpb.Deployment {
 	}
 }
 
-func (tv *TestVars) DeploymentVersion() *deploymentspb.WorkerDeploymentVersion {
-	return &deploymentspb.WorkerDeploymentVersion{
-		BuildId:        tv.BuildID(),
-		DeploymentName: tv.DeploymentSeries(),
-	}
-}
-
-func (tv *TestVars) ExternalDeploymentVersion() *deploymentpb.WorkerDeploymentVersion {
+func (tv *TestVars) DeploymentVersion() *deploymentpb.WorkerDeploymentVersion {
 	return &deploymentpb.WorkerDeploymentVersion{
 		BuildId:        tv.BuildID(),
 		DeploymentName: tv.DeploymentSeries(),
@@ -260,11 +252,11 @@ func (tv *TestVars) DeploymentVersionString() string {
 
 func (tv *TestVars) DeploymentVersionTransition() *workflowpb.DeploymentVersionTransition {
 	ret := &workflowpb.DeploymentVersionTransition{
-		DeploymentVersion: worker_versioning.ExternalWorkerDeploymentVersionFromVersion(tv.DeploymentVersion()),
+		DeploymentVersion: tv.DeploymentVersion(),
 	}
 	// DescribeWorkflowExecution populates both fields on read, so we expect to see both fields
 	//nolint:staticcheck // SA1019: worker versioning v0.31
-	ret.Version = worker_versioning.ExternalWorkerDeploymentVersionToString(ret.GetDeploymentVersion())
+	ret.Version = worker_versioning.WorkerDeploymentVersionToString(ret.GetDeploymentVersion())
 	return ret
 }
 
@@ -274,7 +266,7 @@ func (tv *TestVars) VersioningOverridePinned(useV32 bool) *workflowpb.Versioning
 			Override: &workflowpb.VersioningOverride_Pinned{
 				Pinned: &workflowpb.VersioningOverride_PinnedOverride{
 					Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
-					Version:  tv.ExternalDeploymentVersion(),
+					Version:  tv.DeploymentVersion(),
 				},
 			},
 		}

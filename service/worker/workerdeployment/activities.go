@@ -26,8 +26,7 @@ func (a *Activities) SyncWorkerDeploymentVersion(ctx context.Context, args *depl
 	res, err := a.deploymentClient.SyncVersionWorkflowFromWorkerDeployment(
 		ctx,
 		a.namespace,
-		args.DeploymentName,
-		args.Version,
+		args.DeploymentVersion,
 		args.UpdateArgs,
 		identity,
 		args.RequestId,
@@ -46,12 +45,12 @@ func (a *Activities) SyncUnversionedRamp(
 ) (*deploymentspb.SyncDeploymentVersionUserDataResponse, error) {
 	logger := activity.GetLogger(ctx)
 	// Get all the task queues in the current version and put them into SyncUserData format
-	currVersionInfo, err := a.deploymentClient.DescribeVersion(ctx, a.namespace, input.CurrentVersion)
+	currVersionInfo, err := a.deploymentClient.DescribeVersion(ctx, a.namespace, input.CurrentDeploymentVersion)
 	if err != nil {
 		return nil, err
 	}
 	data := &deploymentspb.DeploymentVersionData{
-		Version:           nil,
+		DeploymentVersion: nil,
 		RoutingUpdateTime: input.UpdateArgs.RoutingUpdateTime,
 		RampingSinceTime:  input.UpdateArgs.RampingSinceTime,
 		RampPercentage:    input.UpdateArgs.RampPercentage,
@@ -127,8 +126,8 @@ func (a *Activities) IsVersionMissingTaskQueues(ctx context.Context, args *deplo
 	res, err := a.deploymentClient.IsVersionMissingTaskQueues(
 		ctx,
 		a.namespace,
-		args.PrevCurrentVersion,
-		args.NewCurrentVersion,
+		args.PrevCurrentDeploymentVersion,
+		args.NewCurrentDeploymentVersion,
 	)
 	if err != nil {
 		return nil, err
@@ -143,8 +142,7 @@ func (a *Activities) DeleteWorkerDeploymentVersion(ctx context.Context, args *de
 	err := a.deploymentClient.DeleteVersionFromWorkerDeployment(
 		ctx,
 		a.namespace,
-		args.DeploymentName,
-		args.Version,
+		args.DeploymentVersion,
 		identity,
 		args.RequestId,
 		args.SkipDrainage,
@@ -170,7 +168,7 @@ func (a *Activities) RegisterWorkerInVersion(ctx context.Context, args *deployme
 }
 
 func (a *Activities) DescribeVersionFromWorkerDeployment(ctx context.Context, args *deploymentspb.DescribeVersionFromWorkerDeploymentActivityArgs) (*deploymentspb.DescribeVersionFromWorkerDeploymentActivityResult, error) {
-	res, err := a.deploymentClient.DescribeVersion(ctx, a.namespace, args.Version)
+	res, err := a.deploymentClient.DescribeVersion(ctx, a.namespace, args.DeploymentVersion)
 	if err != nil {
 		return nil, err
 	}
@@ -202,8 +200,8 @@ func (a *Activities) SyncDeploymentVersionUserDataFromWorkerDeployment(
 					NamespaceId:    a.namespace.ID().String(),
 					TaskQueue:      syncData.Name,
 					TaskQueueTypes: syncData.Types,
-					Operation: &matchingservice.SyncDeploymentUserDataRequest_ForgetVersion{
-						ForgetVersion: input.Version,
+					Operation: &matchingservice.SyncDeploymentUserDataRequest_ForgetDeploymentVersion{
+						ForgetDeploymentVersion: input.DeploymentVersion,
 					},
 				})
 			} else {

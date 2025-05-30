@@ -893,7 +893,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 	if attributes.TaskQueue.GetName() == mutableState.GetExecutionInfo().GetTaskQueue() {
 		// TODO (shahab): also inherit when the child TQ is different, but in the same Version
 		if mutableState.GetEffectiveVersioningBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED {
-			parentPinnedDeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(mutableState.GetEffectiveDeployment())
+			parentPinnedDeploymentVersion = worker_versioning.WorkerDeploymentVersionFromDeployment(mutableState.GetEffectiveDeployment())
 		}
 		if worker_versioning.OverrideIsPinned(mutableState.GetExecutionInfo().GetVersioningInfo().GetVersioningOverride()) {
 			parentPinnedOverride = mutableState.GetExecutionInfo().GetVersioningInfo().GetVersioningOverride()

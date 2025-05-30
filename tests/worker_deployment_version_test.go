@@ -108,7 +108,7 @@ func (s *DeploymentVersionSuite) describeVersion(tv *testvars.TestVars) (*workfl
 		Namespace: s.Namespace().String(),
 	}
 	if s.useV32 {
-		req.DeploymentVersion = tv.ExternalDeploymentVersion()
+		req.DeploymentVersion = tv.DeploymentVersion()
 	} else {
 		req.Version = tv.DeploymentVersionString() //nolint:staticcheck // SA1019: worker versioning v0.31
 	}
@@ -124,7 +124,7 @@ func (s *DeploymentVersionSuite) updateMetadata(tv *testvars.TestVars, upsertEnt
 		RemoveEntries: removeEntries,
 	}
 	if s.useV32 {
-		req.DeploymentVersion = tv.ExternalDeploymentVersion()
+		req.DeploymentVersion = tv.DeploymentVersion()
 	} else {
 		req.Version = tv.DeploymentVersionString() //nolint:staticcheck // SA1019: worker versioning v0.31
 	}
@@ -139,8 +139,8 @@ func (s *DeploymentVersionSuite) startVersionWorkflow(ctx context.Context, tv *t
 		a.NoError(err)
 		// regardless of s.useV32, we want to read both version formats
 		a.Equal(tv.DeploymentVersionString(), resp.GetWorkerDeploymentVersionInfo().GetVersion())
-		a.Equal(tv.ExternalDeploymentVersion().GetDeploymentName(), resp.GetWorkerDeploymentVersionInfo().GetDeploymentVersion().GetDeploymentName())
-		a.Equal(tv.ExternalDeploymentVersion().GetBuildId(), resp.GetWorkerDeploymentVersionInfo().GetDeploymentVersion().GetBuildId())
+		a.Equal(tv.DeploymentVersion().GetDeploymentName(), resp.GetWorkerDeploymentVersionInfo().GetDeploymentVersion().GetDeploymentName())
+		a.Equal(tv.DeploymentVersion().GetBuildId(), resp.GetWorkerDeploymentVersionInfo().GetDeploymentVersion().GetBuildId())
 		a.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE, resp.GetWorkerDeploymentVersionInfo().GetStatus())
 
 		newResp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
@@ -156,8 +156,8 @@ func (s *DeploymentVersionSuite) startVersionWorkflow(ctx context.Context, tv *t
 		}
 		a.Contains(versionSummaryNames, tv.DeploymentVersionString())
 		contains := slices.ContainsFunc(versionSummaryVersions, func(v *deploymentpb.WorkerDeploymentVersion) bool {
-			return v.GetDeploymentName() == tv.ExternalDeploymentVersion().GetDeploymentName() &&
-				v.GetBuildId() == tv.ExternalDeploymentVersion().GetBuildId()
+			return v.GetDeploymentName() == tv.DeploymentVersion().GetDeploymentName() &&
+				v.GetBuildId() == tv.DeploymentVersion().GetBuildId()
 		})
 		a.True(contains)
 	}, time.Second*5, time.Millisecond*200)
@@ -203,8 +203,8 @@ func (s *DeploymentVersionSuite) TestForceCAN_NoOpenWFS() {
 			return
 		}
 		a.Equal(tv.DeploymentVersionString(), resp.GetWorkerDeploymentVersionInfo().GetVersion()) //nolint:staticcheck // SA1019: worker versioning v0.31
-		a.Equal(tv.ExternalDeploymentVersion().GetDeploymentName(), resp.GetWorkerDeploymentVersionInfo().GetDeploymentVersion().GetDeploymentName())
-		a.Equal(tv.ExternalDeploymentVersion().GetBuildId(), resp.GetWorkerDeploymentVersionInfo().GetDeploymentVersion().GetBuildId())
+		a.Equal(tv.DeploymentVersion().GetDeploymentName(), resp.GetWorkerDeploymentVersionInfo().GetDeploymentVersion().GetDeploymentName())
+		a.Equal(tv.DeploymentVersion().GetBuildId(), resp.GetWorkerDeploymentVersionInfo().GetDeploymentVersion().GetBuildId())
 
 		a.Equal(1, len(resp.GetWorkerDeploymentVersionInfo().GetTaskQueueInfos()))
 
@@ -237,8 +237,8 @@ func (s *DeploymentVersionSuite) TestDescribeVersion_RegisterTaskQueue() {
 		a.NoError(err)
 
 		a.Equal(tv.DeploymentVersionString(), resp.GetWorkerDeploymentVersionInfo().GetVersion()) //nolint:staticcheck // SA1019: worker versioning v0.31
-		a.Equal(tv.ExternalDeploymentVersion().GetDeploymentName(), resp.GetWorkerDeploymentVersionInfo().GetDeploymentVersion().GetDeploymentName())
-		a.Equal(tv.ExternalDeploymentVersion().GetBuildId(), resp.GetWorkerDeploymentVersionInfo().GetDeploymentVersion().GetBuildId())
+		a.Equal(tv.DeploymentVersion().GetDeploymentName(), resp.GetWorkerDeploymentVersionInfo().GetDeploymentVersion().GetDeploymentName())
+		a.Equal(tv.DeploymentVersion().GetBuildId(), resp.GetWorkerDeploymentVersionInfo().GetDeploymentVersion().GetBuildId())
 		a.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE, resp.GetWorkerDeploymentVersionInfo().GetStatus())
 
 		a.Equal(numberOfDeployments, len(resp.GetWorkerDeploymentVersionInfo().GetTaskQueueInfos()))
@@ -271,8 +271,8 @@ func (s *DeploymentVersionSuite) TestDescribeVersion_RegisterTaskQueue_Concurren
 			return
 		}
 		a.Equal(tv.DeploymentVersionString(), resp.GetWorkerDeploymentVersionInfo().GetVersion()) //nolint:staticcheck // SA1019: worker versioning v0.31
-		a.Equal(tv.ExternalDeploymentVersion().GetDeploymentName(), resp.GetWorkerDeploymentVersionInfo().GetDeploymentVersion().GetDeploymentName())
-		a.Equal(tv.ExternalDeploymentVersion().GetBuildId(), resp.GetWorkerDeploymentVersionInfo().GetDeploymentVersion().GetBuildId())
+		a.Equal(tv.DeploymentVersion().GetDeploymentName(), resp.GetWorkerDeploymentVersionInfo().GetDeploymentVersion().GetDeploymentName())
+		a.Equal(tv.DeploymentVersion().GetBuildId(), resp.GetWorkerDeploymentVersionInfo().GetDeploymentVersion().GetBuildId())
 		a.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE, resp.GetWorkerDeploymentVersionInfo().GetStatus())
 		a.Equal(2, len(resp.GetWorkerDeploymentVersionInfo().GetTaskQueueInfos()))
 		a.Equal(tv.TaskQueue().GetName(), resp.GetWorkerDeploymentVersionInfo().GetTaskQueueInfos()[0].Name)
@@ -517,7 +517,7 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_DeleteCurrentVersion() {
 		})
 		a.NoError(err)
 		a.Equal(tv1.DeploymentVersionString(), resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetCurrentVersion()) //nolint:staticcheck // SA1019: worker versioning v0.31
-		a.Equal(tv1.ExternalDeploymentVersion(), resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetCurrentDeploymentVersion())
+		a.Equal(tv1.DeploymentVersion(), resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetCurrentDeploymentVersion())
 	}, time.Second*5, time.Millisecond*200)
 
 }
@@ -547,7 +547,7 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_DeleteRampedVersion() {
 		})
 		a.NoError(err)
 		a.Equal(tv1.DeploymentVersionString(), resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetRampingVersion()) //nolint:staticcheck // SA1019: worker versioning v0.31
-		a.Equal(tv1.ExternalDeploymentVersion(), resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetRampingDeploymentVersion())
+		a.Equal(tv1.DeploymentVersion(), resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetRampingDeploymentVersion())
 	}, time.Second*5, time.Millisecond*200)
 }
 
@@ -577,8 +577,8 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_NoWfs() {
 		if resp != nil {
 			for _, vs := range resp.GetWorkerDeploymentInfo().GetVersionSummaries() {
 				a.NotEqual(tv1.DeploymentVersionString(), vs.Version) //nolint:staticcheck // SA1019: worker versioning v0.31
-				a.NotEqual(tv1.ExternalDeploymentVersion().GetDeploymentName(), vs.GetDeploymentVersion().GetDeploymentName())
-				a.NotEqual(tv1.ExternalDeploymentVersion().GetBuildId(), vs.GetDeploymentVersion().GetBuildId())
+				a.NotEqual(tv1.DeploymentVersion().GetDeploymentName(), vs.GetDeploymentVersion().GetDeploymentName())
+				a.NotEqual(tv1.DeploymentVersion().GetBuildId(), vs.GetDeploymentVersion().GetBuildId())
 			}
 		}
 	}, time.Second*5, time.Millisecond*200)
@@ -776,8 +776,8 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_ValidDelete() {
 		if resp != nil {
 			for _, vs := range resp.GetWorkerDeploymentInfo().GetVersionSummaries() {
 				a.NotEqual(tv1.DeploymentVersionString(), vs.Version) //nolint:staticcheck // SA1019: worker versioning v0.31
-				a.NotEqual(tv1.ExternalDeploymentVersion().GetDeploymentName(), vs.GetDeploymentVersion().GetDeploymentName())
-				a.NotEqual(tv1.ExternalDeploymentVersion().GetBuildId(), vs.GetDeploymentVersion().GetBuildId())
+				a.NotEqual(tv1.DeploymentVersion().GetDeploymentName(), vs.GetDeploymentVersion().GetDeploymentName())
+				a.NotEqual(tv1.DeploymentVersion().GetBuildId(), vs.GetDeploymentVersion().GetBuildId())
 			}
 		}
 	}, time.Second*5, time.Millisecond*200)
@@ -821,8 +821,8 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_ValidDelete_SkipDrainage() {
 		if resp != nil {
 			for _, vs := range resp.GetWorkerDeploymentInfo().GetVersionSummaries() {
 				a.NotEqual(tv1.DeploymentVersionString(), vs.Version) //nolint:staticcheck // SA1019: worker versioning v0.31
-				a.NotEqual(tv1.ExternalDeploymentVersion().GetDeploymentName(), vs.GetDeploymentVersion().GetDeploymentName())
-				a.NotEqual(tv1.ExternalDeploymentVersion().GetBuildId(), vs.GetDeploymentVersion().GetBuildId())
+				a.NotEqual(tv1.DeploymentVersion().GetDeploymentName(), vs.GetDeploymentVersion().GetDeploymentName())
+				a.NotEqual(tv1.DeploymentVersion().GetBuildId(), vs.GetDeploymentVersion().GetBuildId())
 			}
 		}
 	}, time.Second*5, time.Millisecond*200)
@@ -886,8 +886,8 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_ConcurrentDeleteVersion() {
 		if resp != nil {
 			for _, vs := range resp.GetWorkerDeploymentInfo().GetVersionSummaries() {
 				a.NotEqual(tv1.DeploymentVersionString(), vs.Version) //nolint:staticcheck // SA1019: worker versioning v0.31
-				a.NotEqual(tv1.ExternalDeploymentVersion().GetDeploymentName(), vs.GetDeploymentVersion().GetDeploymentName())
-				a.NotEqual(tv1.ExternalDeploymentVersion().GetBuildId(), vs.GetDeploymentVersion().GetBuildId())
+				a.NotEqual(tv1.DeploymentVersion().GetDeploymentName(), vs.GetDeploymentVersion().GetDeploymentName())
+				a.NotEqual(tv1.DeploymentVersion().GetBuildId(), vs.GetDeploymentVersion().GetBuildId())
 			}
 		}
 	}, time.Second*10, time.Millisecond*200)
@@ -1117,8 +1117,8 @@ func (s *DeploymentVersionSuite) checkVersionIsCurrent(ctx context.Context, tv *
 			return
 		}
 		a.Equal(tv.DeploymentVersionString(), resp.GetWorkerDeploymentVersionInfo().GetVersion()) //nolint:staticcheck // SA1019: worker versioning v0.31
-		a.Equal(tv.ExternalDeploymentVersion().GetDeploymentName(), resp.GetWorkerDeploymentVersionInfo().GetDeploymentVersion().GetDeploymentName())
-		a.Equal(tv.ExternalDeploymentVersion().GetBuildId(), resp.GetWorkerDeploymentVersionInfo().GetDeploymentVersion().GetBuildId())
+		a.Equal(tv.DeploymentVersion().GetDeploymentName(), resp.GetWorkerDeploymentVersionInfo().GetDeploymentVersion().GetDeploymentName())
+		a.Equal(tv.DeploymentVersion().GetBuildId(), resp.GetWorkerDeploymentVersionInfo().GetDeploymentVersion().GetBuildId())
 
 		a.NotNil(resp.GetWorkerDeploymentVersionInfo().GetCurrentSinceTime())
 		a.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT, resp.GetWorkerDeploymentVersionInfo().GetStatus())
@@ -1134,8 +1134,8 @@ func (s *DeploymentVersionSuite) checkVersionIsRamping(ctx context.Context, tv *
 			return
 		}
 		a.Equal(tv.DeploymentVersionString(), resp.GetWorkerDeploymentVersionInfo().GetVersion()) //nolint:staticcheck // SA1019: worker versioning v0.31
-		a.Equal(tv.ExternalDeploymentVersion().GetDeploymentName(), resp.GetWorkerDeploymentVersionInfo().GetDeploymentVersion().GetDeploymentName())
-		a.Equal(tv.ExternalDeploymentVersion().GetBuildId(), resp.GetWorkerDeploymentVersionInfo().GetDeploymentVersion().GetBuildId())
+		a.Equal(tv.DeploymentVersion().GetDeploymentName(), resp.GetWorkerDeploymentVersionInfo().GetDeploymentVersion().GetDeploymentName())
+		a.Equal(tv.DeploymentVersion().GetBuildId(), resp.GetWorkerDeploymentVersionInfo().GetDeploymentVersion().GetBuildId())
 
 		a.NotNil(resp.GetWorkerDeploymentVersionInfo().GetRampingSinceTime())
 		a.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING, resp.GetWorkerDeploymentVersionInfo().GetStatus())
@@ -1219,7 +1219,7 @@ func (s *DeploymentVersionSuite) tryDeleteVersion(
 		SkipDrainage: skipDrainage,
 	}
 	if s.useV32 {
-		req.DeploymentVersion = tv.ExternalDeploymentVersion()
+		req.DeploymentVersion = tv.DeploymentVersion()
 	} else {
 		req.Version = tv.DeploymentVersionString() //nolint:staticcheck // SA1019: worker versioning v0.31
 	}

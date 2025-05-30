@@ -82,10 +82,10 @@ func (s *VersionWorkflowSuite) syncStateInBatches(totalWorkers int) {
 		s.env.RegisterDelayedCallback(func() {
 
 			registerWorkerArgs := &deploymentspb.RegisterWorkerInVersionArgs{
-				TaskQueueName: tv.TaskQueue().Name + fmt.Sprintf("%03d", workerNum),
-				TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-				MaxTaskQueues: 100,
-				Version:       tv.DeploymentVersionString(),
+				TaskQueueName:     tv.TaskQueue().Name + fmt.Sprintf("%03d", workerNum),
+				TaskQueueType:     enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+				MaxTaskQueues:     100,
+				DeploymentVersion: tv.DeploymentVersion(),
 			}
 			s.env.UpdateWorkflow(RegisterWorkerInDeploymentVersion, "", &testsuite.TestUpdateCallback{
 				OnReject: func(err error) {
@@ -99,13 +99,13 @@ func (s *VersionWorkflowSuite) syncStateInBatches(totalWorkers int) {
 		}, 1*time.Millisecond)
 
 		s.env.OnActivity(a.SyncDeploymentVersionUserData, mock.Anything, &deploymentspb.SyncDeploymentVersionUserDataRequest{
-			Version: tv.DeploymentVersion(),
+			DeploymentVersion: tv.DeploymentVersion(),
 			Sync: []*deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData{
 				{
 					Name:  tv.TaskQueue().Name + fmt.Sprintf("%03d", workerNum),
 					Types: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW},
 					Data: &deploymentspb.DeploymentVersionData{
-						Version:           tv.DeploymentVersion(),
+						DeploymentVersion: tv.DeploymentVersion(),
 						RoutingUpdateTime: nil,
 						CurrentSinceTime:  nil,
 						RampingSinceTime:  nil,
@@ -127,8 +127,8 @@ func (s *VersionWorkflowSuite) syncStateInBatches(totalWorkers int) {
 
 	batches := make([][]*deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData, 0)
 	syncReq := &deploymentspb.SyncDeploymentVersionUserDataRequest{
-		Version:       tv.DeploymentVersion(),
-		ForgetVersion: false,
+		DeploymentVersion: tv.DeploymentVersion(),
+		ForgetVersion:     false,
 	}
 
 	s.env.RegisterDelayedCallback(func() {
@@ -156,7 +156,7 @@ func (s *VersionWorkflowSuite) syncStateInBatches(totalWorkers int) {
 			Name:  tv.TaskQueue().Name + fmt.Sprintf("%03d", i),
 			Types: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW},
 			Data: &deploymentspb.DeploymentVersionData{
-				Version:           tv.DeploymentVersion(),
+				DeploymentVersion: tv.DeploymentVersion(),
 				RoutingUpdateTime: now,
 				CurrentSinceTime:  now,
 				RampingSinceTime:  nil,
@@ -177,9 +177,9 @@ func (s *VersionWorkflowSuite) syncStateInBatches(totalWorkers int) {
 	// SyncDeploymentVersionUserData should be called # of batches times with the right batch argument.
 	for _, batch := range batches {
 		s.env.OnActivity(a.SyncDeploymentVersionUserData, mock.Anything, &deploymentspb.SyncDeploymentVersionUserDataRequest{
-			Version:       tv.DeploymentVersion(),
-			Sync:          batch,
-			ForgetVersion: false,
+			DeploymentVersion: tv.DeploymentVersion(),
+			Sync:              batch,
+			ForgetVersion:     false,
 		}).Once().Return(nil, nil)
 	}
 
@@ -188,7 +188,7 @@ func (s *VersionWorkflowSuite) syncStateInBatches(totalWorkers int) {
 		NamespaceName: tv.NamespaceName().String(),
 		NamespaceId:   tv.NamespaceID().String(),
 		VersionState: &deploymentspb.VersionLocalState{
-			Version: &deploymentspb.WorkerDeploymentVersion{
+			DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
 				DeploymentName: tv.DeploymentSeries(),
 				BuildId:        tv.BuildID(),
 			},

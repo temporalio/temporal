@@ -125,7 +125,7 @@ func (d *VersionWorkflowRunner) listenToSignals(ctx workflow.Context) {
 }
 
 func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
-	if d.GetVersionState().Version == nil {
+	if d.GetVersionState().DeploymentVersion == nil {
 		return fmt.Errorf("version cannot be nil on start")
 	}
 	if d.VersionState.GetCreateTime() == nil {
@@ -191,7 +191,7 @@ func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
 	if !d.VersionState.StartedDeploymentWorkflow {
 		activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
 		err := workflow.ExecuteActivity(activityCtx, d.a.StartWorkerDeploymentWorkflow, &deploymentspb.StartWorkerDeploymentRequest{
-			DeploymentName: d.VersionState.Version.DeploymentName,
+			DeploymentName: d.VersionState.DeploymentVersion.DeploymentName,
 			RequestId:      d.newUUID(ctx),
 		}).Get(ctx, nil)
 		if err != nil {
@@ -330,8 +330,8 @@ func (d *VersionWorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *
 
 	// sync version removal to task queues
 	syncReq := &deploymentspb.SyncDeploymentVersionUserDataRequest{
-		Version:       state.GetVersion(),
-		ForgetVersion: true,
+		DeploymentVersion: state.GetDeploymentVersion(),
+		ForgetVersion:     true,
 	}
 
 	for _, tqName := range workflow.DeterministicKeys(state.TaskQueueFamilies) {
@@ -386,8 +386,8 @@ func (d *VersionWorkflowRunner) doesVersionHaveActivePollers(ctx workflow.Contex
 		tqNameToTypes[tqName] = &deploymentspb.CheckTaskQueuesHavePollersActivityArgs_TaskQueueTypes{Types: tqTypes}
 	}
 	checkPollersReq := &deploymentspb.CheckTaskQueuesHavePollersActivityArgs{
-		TaskQueuesAndTypes:      tqNameToTypes,
-		WorkerDeploymentVersion: d.VersionState.Version,
+		TaskQueuesAndTypes: tqNameToTypes,
+		DeploymentVersion:  d.VersionState.DeploymentVersion,
 	}
 	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
 	var hasPollers bool
@@ -439,7 +439,7 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 
 	// initial data
 	data := &deploymentspb.DeploymentVersionData{
-		Version:           d.VersionState.Version,
+		DeploymentVersion: d.VersionState.DeploymentVersion,
 		RoutingUpdateTime: d.VersionState.RoutingUpdateTime,
 		CurrentSinceTime:  d.VersionState.CurrentSinceTime,
 		RampingSinceTime:  d.VersionState.RampingSinceTime,
@@ -450,7 +450,7 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 	// sync to user data
 	var syncRes deploymentspb.SyncDeploymentVersionUserDataResponse
 	err = workflow.ExecuteActivity(activityCtx, d.a.SyncDeploymentVersionUserData, &deploymentspb.SyncDeploymentVersionUserDataRequest{
-		Version: d.VersionState.Version,
+		DeploymentVersion: d.VersionState.DeploymentVersion,
 		Sync: []*deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData{
 			{
 				Name:  args.TaskQueueName,
@@ -513,7 +513,7 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 
 	// sync to task queues
 	syncReq := &deploymentspb.SyncDeploymentVersionUserDataRequest{
-		Version: state.GetVersion(),
+		DeploymentVersion: state.GetDeploymentVersion(),
 	}
 
 	// send in the task-queue families in batches of syncBatchSize
@@ -521,7 +521,7 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 	for _, tqName := range workflow.DeterministicKeys(state.TaskQueueFamilies) {
 		byType := state.TaskQueueFamilies[tqName]
 		data := &deploymentspb.DeploymentVersionData{
-			Version:           d.VersionState.Version,
+			DeploymentVersion: d.VersionState.DeploymentVersion,
 			RoutingUpdateTime: args.RoutingUpdateTime,
 			CurrentSinceTime:  args.CurrentSinceTime,
 			RampingSinceTime:  args.RampingSinceTime,
@@ -553,8 +553,8 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 		var syncRes deploymentspb.SyncDeploymentVersionUserDataResponse
 
 		err = workflow.ExecuteActivity(activityCtx, d.a.SyncDeploymentVersionUserData, &deploymentspb.SyncDeploymentVersionUserDataRequest{
-			Version: state.GetVersion(),
-			Sync:    batch,
+			DeploymentVersion: state.GetDeploymentVersion(),
+			Sync:              batch,
 		}).Get(ctx, &syncRes)
 		if err != nil {
 			// TODO (Shivam): Compensation functions required to roll back the local state + activity changes.
@@ -630,11 +630,11 @@ func (d *VersionWorkflowRunner) newUUID(ctx workflow.Context) string {
 // Sync version summary with the WorkerDeployment workflow.
 func (d *VersionWorkflowRunner) syncSummary(ctx workflow.Context) {
 	err := workflow.SignalExternalWorkflow(ctx,
-		worker_versioning.GenerateDeploymentWorkflowID(d.VersionState.Version.DeploymentName),
+		worker_versioning.GenerateDeploymentWorkflowID(d.VersionState.DeploymentVersion.DeploymentName),
 		"",
 		SyncVersionSummarySignal,
 		&deploymentspb.WorkerDeploymentVersionSummary{
-			Version:              worker_versioning.WorkerDeploymentVersionToString(d.VersionState.Version),
+			DeploymentVersion:    d.VersionState.DeploymentVersion,
 			CreateTime:           d.VersionState.CreateTime,
 			DrainageStatus:       d.VersionState.DrainageInfo.GetStatus(), // deprecated.
 			DrainageInfo:         d.VersionState.DrainageInfo,
@@ -690,7 +690,7 @@ func (d *VersionWorkflowRunner) refreshDrainageInfo(ctx workflow.Context) {
 	err = workflow.ExecuteActivity(
 		activityCtx,
 		a.GetVersionDrainageStatus,
-		d.VersionState.Version,
+		d.VersionState.DeploymentVersion,
 	).Get(ctx, &newInfo)
 	if err != nil {
 		d.logger.Error("could not get version drainage status", tag.Error(err))

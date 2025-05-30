@@ -1761,7 +1761,7 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 				}
 				changed = true
 			} else if vd := req.GetUpdateVersionData(); vd != nil {
-				if vd.GetVersion() == nil { // unversioned ramp
+				if vd.GetDeploymentVersion() == nil { // unversioned ramp
 					if deploymentData.GetUnversionedRampData().GetRoutingUpdateTime().AsTime().After(vd.GetRoutingUpdateTime().AsTime()) {
 						continue
 					}
@@ -1772,7 +1772,7 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 					} else { // set or update
 						deploymentData.UnversionedRampData = vd
 					}
-				} else if idx := findDeploymentVersion(deploymentData, vd.GetVersion()); idx >= 0 {
+				} else if idx := findDeploymentVersion(deploymentData, vd.GetDeploymentVersion()); idx >= 0 {
 					old := deploymentData.Versions[idx]
 					if old.GetRoutingUpdateTime().AsTime().After(vd.GetRoutingUpdateTime().AsTime()) {
 						continue
@@ -1784,7 +1784,7 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 					changed = true
 					deploymentData.Versions = append(deploymentData.Versions, vd)
 				}
-			} else if v := req.GetForgetVersion(); v != nil {
+			} else if v := req.GetForgetDeploymentVersion(); v != nil {
 				if idx := findDeploymentVersion(deploymentData, v); idx >= 0 {
 					changed = true
 					deploymentData.Versions = append(deploymentData.Versions[:idx], deploymentData.Versions[idx+1:]...)
