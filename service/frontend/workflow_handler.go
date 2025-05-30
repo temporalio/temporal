@@ -3452,6 +3452,10 @@ func (wh *WorkflowHandler) SetWorkerDeploymentRampingVersion(ctx context.Context
 		// Either way, leaving BuildId="" is ok, and will result in a nil ramp target + whatever percent is given.
 	}
 
+	if request.GetBuildId() == "" && request.GetPercentage() > 0 {
+		return nil, serviceerror.NewInvalidArgument("ramping non-zero traffic to unversioned is not supported")
+	}
+
 	if request.GetPercentage() < 0 || request.GetPercentage() > 100 {
 		return nil, serviceerror.NewInvalidArgument("Percentage must be between 0 and 100 (inclusive)")
 	}

@@ -404,7 +404,8 @@ func (d *WorkflowRunner) validateStateBeforeAcceptingRampingUpdate(args *deploym
 	if args.ConflictToken != nil && !bytes.Equal(args.ConflictToken, d.State.GetConflictToken()) {
 		return temporal.NewApplicationError("conflict token mismatch", errFailedPrecondition)
 	}
-	if args.DeploymentVersion.GetBuildId() == d.State.GetRoutingConfig().GetCurrentDeploymentVersion().GetBuildId() {
+	if args.DeploymentVersion.GetBuildId() == d.State.GetRoutingConfig().GetCurrentDeploymentVersion().GetBuildId() &&
+		args.DeploymentVersion != nil {
 		d.logger.Info("version can't be set to ramping since it is already current")
 		return temporal.NewApplicationError(fmt.Sprintf("requested ramping version '%v' is already current", args.DeploymentVersion), errFailedPrecondition)
 	}
@@ -862,6 +863,9 @@ func (d *WorkflowRunner) syncVersion(ctx workflow.Context, targetVersion *deploy
 }
 
 func (d *WorkflowRunner) syncUnversionedRamp(ctx workflow.Context, versionUpdateArgs *deploymentspb.SyncVersionStateUpdateArgs) error {
+	if d.State.RoutingConfig.CurrentDeploymentVersion == nil {
+		return nil
+	}
 	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
 
 	// DescribeVersion activity to get all the task queues in the current version

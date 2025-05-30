@@ -921,7 +921,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Invalid_Se
 		},
 	})
 
-	expectedError := fmt.Errorf("ramping version %s is already current", currentVersionVars.DeploymentVersionString())
+	expectedError := fmt.Errorf("ramping version '%v' is already current", currentVersionVars.DeploymentVersion())
 	s.setAndVerifyRampingVersion(ctx, currentVersionVars, false, 50, true, expectedError.Error(), nil) // setting current version to ramping should fail
 
 	resp, err = s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
@@ -1179,7 +1179,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Batching()
 
 	// verify that all the registered task-queues have "" set as their ramping version
 	for i := 0; i < taskQueues; i++ {
-		s.verifyTaskQueueVersioningInfo(ctx, tv.WithTaskQueueNumber(i).TaskQueue(), worker_versioning.UnversionedVersionId, "", 0)
+		s.verifyTaskQueueVersioningInfo(ctx, tv.WithTaskQueueNumber(i).TaskQueue(), worker_versioning.UnversionedVersionId, worker_versioning.UnversionedVersionId, 0)
 	}
 
 	// set ramping version to 50%
@@ -1253,13 +1253,14 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Unversione
 	s.setCurrentVersion(ctx, tv, worker_versioning.UnversionedVersionId, true, "")
 
 	// set ramp to unversioned which should trigger a batch of SyncDeploymentVersionUserData requests.
-	s.setAndVerifyRampingVersionUnversionedOption(ctx, tv, true, false, 75, true, "",
+	s.setAndVerifyRampingVersionUnversionedOption(ctx, tv, true, false, 75, true,
+		"ramping non-zero traffic to unversioned is not supported",
 		&workflowservice.SetWorkerDeploymentRampingVersionResponse{PreviousVersion: worker_versioning.UnversionedVersionId})
 
-	// check that the current version's task queues have ramping version == __unversioned__
-	for i := 0; i < taskQueues; i++ {
-		s.verifyTaskQueueVersioningInfo(ctx, tv.WithTaskQueueNumber(i).TaskQueue(), tv.DeploymentVersionString(), worker_versioning.UnversionedVersionId, 75)
-	}
+	//// check that the current version's task queues have ramping version == __unversioned__
+	//for i := 0; i < taskQueues; i++ {
+	//	s.verifyTaskQueueVersioningInfo(ctx, tv.WithTaskQueueNumber(i).TaskQueue(), tv.DeploymentVersionString(), worker_versioning.UnversionedVersionId, 75)
+	//}
 
 }
 
@@ -1391,7 +1392,7 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Batching() {
 
 	// verify that all the registered task-queues have "__unversioned__" as their current version
 	for i := 0; i < taskQueues; i++ {
-		s.verifyTaskQueueVersioningInfo(ctx, tv.WithTaskQueueNumber(i).TaskQueue(), worker_versioning.UnversionedVersionId, "", 0)
+		s.verifyTaskQueueVersioningInfo(ctx, tv.WithTaskQueueNumber(i).TaskQueue(), worker_versioning.UnversionedVersionId, worker_versioning.UnversionedVersionId, 0)
 	}
 
 	// set current and check that the current version's task queues have new current version
@@ -1400,7 +1401,7 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Batching() {
 
 	// verify the current version has propogated to all the registered task-queues userData
 	for i := 0; i < taskQueues; i++ {
-		s.verifyTaskQueueVersioningInfo(ctx, tv.WithTaskQueueNumber(i).TaskQueue(), tv.DeploymentVersionString(), "", 0)
+		s.verifyTaskQueueVersioningInfo(ctx, tv.WithTaskQueueNumber(i).TaskQueue(), tv.DeploymentVersionString(), worker_versioning.UnversionedVersionId, 0)
 	}
 
 	// verify if the worker-deployment has the right current version set
@@ -1451,17 +1452,17 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Unversioned_NoRamp() {
 	s.ensureCreateVersionInDeployment(currentVars)
 
 	// check that the current version's task queues have current version unversioned to start
-	s.verifyTaskQueueVersioningInfo(ctx, currentVars.TaskQueue(), worker_versioning.UnversionedVersionId, "", 0)
+	s.verifyTaskQueueVersioningInfo(ctx, currentVars.TaskQueue(), worker_versioning.UnversionedVersionId, worker_versioning.UnversionedVersionId, 0)
 
 	// set current and check that the current version's task queues have new current version
 	firstCurrentUpdateTime := timestamppb.Now()
 	s.setCurrentVersion(ctx, currentVars, worker_versioning.UnversionedVersionId, true, "")
-	s.verifyTaskQueueVersioningInfo(ctx, currentVars.TaskQueue(), currentVars.DeploymentVersionString(), "", 0)
+	s.verifyTaskQueueVersioningInfo(ctx, currentVars.TaskQueue(), currentVars.DeploymentVersionString(), worker_versioning.UnversionedVersionId, 0)
 
 	// set current unversioned and check that the current version's task queues have current version unversioned again
 	secondCurrentUpdateTime := timestamppb.Now()
 	s.setCurrentVersionUnversionedOption(ctx, currentVars, true, currentVars.DeploymentVersionString(), true, "")
-	s.verifyTaskQueueVersioningInfo(ctx, currentVars.TaskQueue(), worker_versioning.UnversionedVersionId, "", 0)
+	s.verifyTaskQueueVersioningInfo(ctx, currentVars.TaskQueue(), worker_versioning.UnversionedVersionId, worker_versioning.UnversionedVersionId, 0)
 
 	// check that deployment has current version == __unversioned__
 	resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
@@ -1517,7 +1518,7 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Unversioned_PromoteUnversi
 	s.setCurrentVersionUnversionedOption(ctx, tv, true, currentVars.DeploymentVersionString(), true, "")
 
 	// check that the current version's task queues have ramping version == "" and current version == "__unversioned__"
-	s.verifyTaskQueueVersioningInfo(ctx, currentVars.TaskQueue(), worker_versioning.UnversionedVersionId, "", 0)
+	s.verifyTaskQueueVersioningInfo(ctx, currentVars.TaskQueue(), worker_versioning.UnversionedVersionId, worker_versioning.UnversionedVersionId, 0)
 }
 
 func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Concurrent_DifferentVersions_NoUnexpectedErrors() {
@@ -1638,7 +1639,7 @@ func (s *WorkerDeploymentSuite) TestConcurrentPollers_DifferentTaskQueues_SameVe
 
 	// verify that the task queues, eventually, have this version as the current version in their versioning info
 	for i := 0; i < versions; i++ {
-		s.verifyTaskQueueVersioningInfo(ctx, tv.WithTaskQueueNumber(i).TaskQueue(), tv.DeploymentVersionString(), "", 0)
+		s.verifyTaskQueueVersioningInfo(ctx, tv.WithTaskQueueNumber(i).TaskQueue(), tv.DeploymentVersionString(), worker_versioning.UnversionedVersionId, 0)
 	}
 }
 
@@ -1828,16 +1829,6 @@ func (s *WorkerDeploymentSuite) testConcurrentRequestsResourceExhausted(
 	}
 }
 
-// Should see it fail because unversioned is already current
-func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Unversioned_UnversionedCurrent() {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-	defer cancel()
-	tv := testvars.New(s)
-	rampingVars := tv.WithBuildIDNumber(1)
-	s.startVersionWorkflow(ctx, rampingVars)
-	s.setAndVerifyRampingVersionUnversionedOption(ctx, rampingVars, true, false, 50, true, "ramping version __unversioned__ is already current", nil)
-}
-
 // Should see that the ramping version of the task queues in the current version is unversioned
 func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Unversioned_VersionedCurrent() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
@@ -1850,22 +1841,23 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Unversione
 
 	// check that the current version's task queues have ramping version == ""
 	s.setCurrentVersion(ctx, currentVars, worker_versioning.UnversionedVersionId, true, "")
-	s.verifyTaskQueueVersioningInfo(ctx, currentVars.TaskQueue(), currentVars.DeploymentVersionString(), "", 0)
+	s.verifyTaskQueueVersioningInfo(ctx, currentVars.TaskQueue(), currentVars.DeploymentVersionString(), worker_versioning.UnversionedVersionId, 0)
 
 	// set ramp to unversioned
-	s.setAndVerifyRampingVersionUnversionedOption(ctx, tv, true, false, 75, true, "",
+	s.setAndVerifyRampingVersionUnversionedOption(ctx, tv, true, false, 75, true,
+		"ramping non-zero traffic to unversioned is not supported",
 		&workflowservice.SetWorkerDeploymentRampingVersionResponse{PreviousVersion: worker_versioning.UnversionedVersionId})
 
-	// check that deployment has ramping version == __unversioned__
-	resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
-		Namespace:      s.Namespace().String(),
-		DeploymentName: tv.DeploymentSeries(),
-	})
-	s.Nil(err)
-	s.Equal(worker_versioning.UnversionedVersionId, resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetRampingVersion())
-
-	// check that the current version's task queues have ramping version == __unversioned__
-	s.verifyTaskQueueVersioningInfo(ctx, currentVars.TaskQueue(), currentVars.DeploymentVersionString(), worker_versioning.UnversionedVersionId, 75)
+	//	// check that deployment has ramping version == __unversioned__
+	//	resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+	//		Namespace:      s.Namespace().String(),
+	//		DeploymentName: tv.DeploymentSeries(),
+	//	})
+	//	s.Nil(err)
+	//	s.Equal(worker_versioning.UnversionedVersionId, resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetRampingVersion())
+	//
+	//	// check that the current version's task queues have ramping version == __unversioned__
+	//	s.verifyTaskQueueVersioningInfo(ctx, currentVars.TaskQueue(), currentVars.DeploymentVersionString(), worker_versioning.UnversionedVersionId, 75)
 }
 
 func (s *WorkerDeploymentSuite) TestTwoPollers_EnsureCreateVersion() {

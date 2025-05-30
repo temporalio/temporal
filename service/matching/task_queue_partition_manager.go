@@ -632,20 +632,18 @@ func (pm *taskQueuePartitionManagerImpl) LegacyDescribeTaskQueue(includeTaskQueu
 		}
 		current, ramping := worker_versioning.CalculateTaskQueueVersioningInfo(perTypeUserData.GetDeploymentData())
 		info := &taskqueuepb.TaskQueueVersioningInfo{
-			// [cleanup-wv-3.1]
+			//nolint:staticcheck // SA1019: [cleanup-wv-3.1]
 			CurrentVersion:           worker_versioning.WorkerDeploymentVersionToStringV31(current.GetDeploymentVersion()),
 			CurrentDeploymentVersion: current.GetDeploymentVersion(),
-			UpdateTime:               current.GetRoutingUpdateTime(),
-		}
-		if ramping.GetRampingSinceTime() != nil {
-			info.RampingVersionPercentage = ramping.GetRampPercentage()
 			// If task queue is ramping to unversioned, ramping will be nil, which converts to "__unversioned__"
 			//nolint:staticcheck // SA1019: [cleanup-wv-3.1]
-			info.RampingVersion = worker_versioning.WorkerDeploymentVersionToStringV31(ramping.GetDeploymentVersion())
-			info.RampingDeploymentVersion = ramping.GetDeploymentVersion()
-			if info.GetUpdateTime().AsTime().Before(ramping.GetRoutingUpdateTime().AsTime()) {
-				info.UpdateTime = ramping.GetRoutingUpdateTime()
-			}
+			RampingVersion:           worker_versioning.WorkerDeploymentVersionToStringV31(ramping.GetDeploymentVersion()),
+			RampingDeploymentVersion: ramping.GetDeploymentVersion(),
+			RampingVersionPercentage: ramping.GetRampPercentage(),
+			UpdateTime:               current.GetRoutingUpdateTime(),
+		}
+		if info.GetUpdateTime().AsTime().Before(ramping.GetRoutingUpdateTime().AsTime()) {
+			info.UpdateTime = ramping.GetRoutingUpdateTime()
 		}
 		resp.DescResponse.VersioningInfo = info
 	}
