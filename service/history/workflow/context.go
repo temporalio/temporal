@@ -915,7 +915,9 @@ func (c *ContextImpl) UpdateRegistry(ctx context.Context) update.Registry {
 		c.updateRegistry = update.NewRegistry(
 			c.MutableState,
 			update.WithLogger(c.logger),
-			update.WithMetrics(c.metricsHandler),
+			update.WithMetrics(c.metricsHandler.WithTags(
+				metrics.NamespaceTag(nsName),
+			)),
 			update.WithTracerProvider(trace.SpanFromContext(ctx).TracerProvider()),
 			update.WithInFlightLimit(
 				func() int {
