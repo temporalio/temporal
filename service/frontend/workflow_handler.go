@@ -3369,7 +3369,7 @@ func (wh *WorkflowHandler) DescribeWorkerDeploymentVersion(ctx context.Context, 
 		if request.GetDeploymentVersion() == nil {
 			return nil, serviceerror.NewInvalidArgument("deployment version cannot be empty")
 		}
-		versionStr = worker_versioning.ExternalWorkerDeploymentVersionToString(request.GetDeploymentVersion())
+		versionStr = worker_versioning.ExternalWorkerDeploymentVersionToStringV31(request.GetDeploymentVersion())
 	}
 
 	info, err := wh.workerDeploymentClient.DescribeVersion(ctx, namespaceEntry, versionStr)
@@ -3378,7 +3378,7 @@ func (wh *WorkflowHandler) DescribeWorkerDeploymentVersion(ctx context.Context, 
 	}
 
 	//nolint:staticcheck // SA1019: worker versioning v0.31
-	info.DeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromString(info.Version)
+	info.DeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(info.Version)
 	return &workflowservice.DescribeWorkerDeploymentVersionResponse{WorkerDeploymentVersionInfo: info}, nil
 }
 
@@ -3416,7 +3416,7 @@ func (wh *WorkflowHandler) SetWorkerDeploymentCurrentVersion(ctx context.Context
 				BuildId:        request.GetBuildId(),
 			}
 		}
-		versionStr = worker_versioning.WorkerDeploymentVersionToString(v)
+		versionStr = worker_versioning.WorkerDeploymentVersionToStringV31(v)
 	}
 
 	resp, err := wh.workerDeploymentClient.SetCurrentVersion(ctx, namespaceEntry, request.DeploymentName, versionStr, request.Identity, request.IgnoreMissingTaskQueues, request.GetConflictToken())
@@ -3430,7 +3430,7 @@ func (wh *WorkflowHandler) SetWorkerDeploymentCurrentVersion(ctx context.Context
 	return &workflowservice.SetWorkerDeploymentCurrentVersionResponse{
 		ConflictToken:             resp.ConflictToken,
 		PreviousVersion:           resp.PreviousVersion,
-		PreviousDeploymentVersion: worker_versioning.ExternalWorkerDeploymentVersionFromString(resp.PreviousVersion),
+		PreviousDeploymentVersion: worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(resp.PreviousVersion),
 	}, nil
 }
 
@@ -3467,7 +3467,7 @@ func (wh *WorkflowHandler) SetWorkerDeploymentRampingVersion(ctx context.Context
 
 		// This is a v0.32 user trying to ramp up a version. We don't care what percentage it is.
 		if request.GetBuildId() != "" {
-			versionStr = worker_versioning.WorkerDeploymentVersionToString(&deploymentspb.WorkerDeploymentVersion{
+			versionStr = worker_versioning.WorkerDeploymentVersionToStringV31(&deploymentspb.WorkerDeploymentVersion{
 				DeploymentName: request.GetDeploymentName(),
 				BuildId:        request.GetBuildId(),
 			})
@@ -3490,7 +3490,7 @@ func (wh *WorkflowHandler) SetWorkerDeploymentRampingVersion(ctx context.Context
 		ConflictToken:             resp.ConflictToken,
 		PreviousVersion:           resp.PreviousVersion,
 		PreviousPercentage:        resp.PreviousPercentage,
-		PreviousDeploymentVersion: worker_versioning.ExternalWorkerDeploymentVersionFromString(resp.PreviousVersion),
+		PreviousDeploymentVersion: worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(resp.PreviousVersion),
 	}, nil
 }
 
@@ -3565,7 +3565,7 @@ func (wh *WorkflowHandler) DescribeWorkerDeployment(ctx context.Context, request
 
 	for _, vs := range workerDeploymentInfo.VersionSummaries {
 		//nolint:staticcheck // SA1019: worker versioning v0.31
-		vs.DeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromString(vs.Version)
+		vs.DeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(vs.Version)
 	}
 	return &workflowservice.DescribeWorkerDeploymentResponse{
 		WorkerDeploymentInfo: workerDeploymentInfo,
@@ -3611,7 +3611,7 @@ func (wh *WorkflowHandler) DeleteWorkerDeploymentVersion(ctx context.Context, re
 	//nolint:staticcheck // SA1019: worker versioning v0.31
 	versionStr := request.GetVersion()
 	if request.GetDeploymentVersion() != nil {
-		versionStr = worker_versioning.ExternalWorkerDeploymentVersionToString(request.GetDeploymentVersion())
+		versionStr = worker_versioning.ExternalWorkerDeploymentVersionToStringV31(request.GetDeploymentVersion())
 	}
 
 	err = wh.workerDeploymentClient.DeleteWorkerDeploymentVersion(ctx, namespaceEntry, versionStr, request.SkipDrainage, request.Identity)
@@ -3644,7 +3644,7 @@ func (wh *WorkflowHandler) UpdateWorkerDeploymentVersionMetadata(ctx context.Con
 	//nolint:staticcheck // SA1019: worker versioning v0.31
 	versionStr := request.GetVersion()
 	if request.GetDeploymentVersion() != nil {
-		versionStr = worker_versioning.ExternalWorkerDeploymentVersionToString(request.GetDeploymentVersion())
+		versionStr = worker_versioning.ExternalWorkerDeploymentVersionToStringV31(request.GetDeploymentVersion())
 	}
 
 	identity := uuid.New()
