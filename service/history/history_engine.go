@@ -554,6 +554,7 @@ func (e *historyEngineImpl) RespondWorkflowTaskCompleted(
 		e.searchAttributesValidator,
 		e.persistenceVisibilityMgr,
 		e.workflowConsistencyChecker,
+		e.matchingClient,
 	)
 	return h.Invoke(ctx, req)
 }

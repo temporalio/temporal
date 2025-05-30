@@ -15,12 +15,15 @@ import (
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
@@ -257,6 +260,64 @@ func MakeDirectiveForWorkflowTask(
 	return nil
 }
 
+type IsWFTaskQueueInVersionDetector = func(ctx context.Context, namespaceID, tq string, version *deploymentpb.WorkerDeploymentVersion) (bool, error)
+
+func GetIsWFTaskQueueInVersionDetector(matchingClient resource.MatchingClient) IsWFTaskQueueInVersionDetector {
+	return func(ctx context.Context,
+		namespaceID, tq string,
+		version *deploymentpb.WorkerDeploymentVersion) (bool, error) {
+		resp, err := matchingClient.GetTaskQueueUserData(ctx,
+			&matchingservice.GetTaskQueueUserDataRequest{
+				NamespaceId:   namespaceID,
+				TaskQueue:     tq,
+				TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			})
+		if err != nil {
+			return false, err
+		}
+		tqData, ok := resp.GetUserData().GetData().GetPerType()[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)]
+		if !ok {
+			// The TQ is unversioned
+			return false, nil
+		}
+		return HasDeploymentVersion(tqData.GetDeploymentData(), DeploymentVersionFromDeployment(DeploymentFromExternalDeploymentVersion(version))), nil
+	}
+}
+
+// [cleanup-wv-pre-release]
+func FindDeployment(deployments *persistencespb.DeploymentData, deployment *deploymentpb.Deployment) int {
+	for i, d := range deployments.GetDeployments() { //nolint:staticcheck // SA1019: worker versioning v0.30
+		if d.Deployment.Equal(deployment) {
+			return i
+		}
+	}
+	return -1
+}
+
+func FindDeploymentVersion(deployments *persistencespb.DeploymentData, v *deploymentspb.WorkerDeploymentVersion) int {
+	for i, vd := range deployments.GetVersions() {
+		if proto.Equal(v, vd.GetVersion()) {
+			return i
+		}
+	}
+	return -1
+}
+
+//nolint:staticcheck
+func HasDeploymentVersion(deployments *persistencespb.DeploymentData, v *deploymentspb.WorkerDeploymentVersion) bool {
+	for _, d := range deployments.GetDeployments() {
+		if d.Deployment.Equal(DeploymentFromDeploymentVersion(v)) {
+			return true
+		}
+	}
+	for _, vd := range deployments.GetVersions() {
+		if proto.Equal(v, vd.GetVersion()) {
+			return true
+		}
+	}
+	return false
+}
+
 // DeploymentVersionFromDeployment Temporary helper function to convert Deployment to
 // WorkerDeploymentVersion proto until we update code to use the new proto in all places.
 func DeploymentVersionFromDeployment(deployment *deploymentpb.Deployment) *deploymentspb.WorkerDeploymentVersion {
@@ -397,6 +458,17 @@ func OverrideIsPinned(override *workflowpb.VersioningOverride) bool {
 		override.GetPinned().GetBehavior() == workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED
 }
 
+func GetOverridePinnedVersion(override *workflowpb.VersioningOverride) *deploymentpb.WorkerDeploymentVersion {
+	if OverrideIsPinned(override) {
+		if v := override.GetPinned().GetVersion(); v != nil {
+			return v
+		} else if v := override.GetPinnedVersion(); v != "" { //nolint:staticcheck // SA1019: worker versioning v0.31
+			return ExternalWorkerDeploymentVersionFromStringV31(v)
+		}
+		return ExternalWorkerDeploymentVersionFromDeployment(override.GetDeployment()) //nolint:staticcheck // SA1019: worker versioning v0.30
+	}
+	return nil
+}
 func ExtractVersioningBehaviorFromOverride(override *workflowpb.VersioningOverride) enumspb.VersioningBehavior {
 	if override.GetAutoUpgrade() {
 		return enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE

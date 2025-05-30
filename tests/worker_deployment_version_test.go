@@ -41,9 +41,9 @@ const (
 
 type (
 	DeploymentVersionSuite struct {
-		testcore.FunctionalTestBase
 		sdkClient sdkclient.Client
 		useV32    bool
+		testcore.FunctionalTestBase
 	}
 )
 

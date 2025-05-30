@@ -58,6 +58,7 @@ type (
 		searchAttributesValidator      *searchattribute.Validator
 		persistenceVisibilityMgr       manager.VisibilityManager
 		commandHandlerRegistry         *workflow.CommandHandlerRegistry
+		matchingClient                 matchingservice.MatchingServiceClient
 	}
 )
 
@@ -69,6 +70,7 @@ func NewWorkflowTaskCompletedHandler(
 	searchAttributesValidator *searchattribute.Validator,
 	visibilityManager manager.VisibilityManager,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
+	matchingClient matchingservice.MatchingServiceClient,
 ) *WorkflowTaskCompletedHandler {
 	return &WorkflowTaskCompletedHandler{
 		config:                     shardContext.GetConfig(),
@@ -90,6 +92,7 @@ func NewWorkflowTaskCompletedHandler(
 		searchAttributesValidator:      searchAttributesValidator,
 		persistenceVisibilityMgr:       visibilityManager,
 		commandHandlerRegistry:         commandHandlerRegistry,
+		matchingClient:                 matchingClient,
 	}
 }
 
@@ -375,6 +378,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			handler.searchAttributesMapperProvider,
 			hasBufferedEventsOrMessages,
 			handler.commandHandlerRegistry,
+			handler.matchingClient,
 		)
 
 		if responseMutations, err = workflowTaskHandler.handleCommands(

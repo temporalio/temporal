@@ -448,7 +448,6 @@ func (b *HistoryBuilder) AddContinuedAsNewEvent(
 	command *commandpb.ContinueAsNewWorkflowExecutionCommandAttributes,
 ) *historypb.HistoryEvent {
 	event := b.EventFactory.CreateContinuedAsNewEvent(workflowTaskCompletedEventID, newRunID, command)
-
 	event, _ = b.EventStore.add(event)
 	return event
 }
