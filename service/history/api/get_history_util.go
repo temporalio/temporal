@@ -173,10 +173,12 @@ func GetHistory(
 	var firstEvent, lastEvent *historyspb.StrippedHistoryEvent
 	if len(historyEvents) > 0 {
 		firstEvent = &historyspb.StrippedHistoryEvent{
-			EventId: historyEvents[0].GetEventId(),
+			EventId:   historyEvents[0].GetEventId(),
+			EventType: historyEvents[0].GetEventType(),
 		}
 		lastEvent = &historyspb.StrippedHistoryEvent{
-			EventId: historyEvents[len(historyEvents)-1].GetEventId(),
+			EventId:   historyEvents[len(historyEvents)-1].GetEventId(),
+			EventType: historyEvents[len(historyEvents)-1].GetEventType(),
 		}
 	}
 	if err := VerifyHistoryIsComplete(
