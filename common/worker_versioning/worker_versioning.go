@@ -7,7 +7,7 @@ import (
 	"math/rand"
 	"strings"
 
-	farm "github.com/dgryski/go-farm"
+	"github.com/dgryski/go-farm"
 	"github.com/temporalio/sqlparser"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
@@ -463,7 +463,7 @@ func GetOverridePinnedVersion(override *workflowpb.VersioningOverride) *deployme
 		if v := override.GetPinned().GetVersion(); v != nil {
 			return v
 		} else if v := override.GetPinnedVersion(); v != "" { //nolint:staticcheck // SA1019: worker versioning v0.31
-			return ExternalWorkerDeploymentVersionFromString(v)
+			return ExternalWorkerDeploymentVersionFromStringV31(v)
 		}
 		return ExternalWorkerDeploymentVersionFromDeployment(override.GetDeployment()) //nolint:staticcheck // SA1019: worker versioning v0.30
 	}
