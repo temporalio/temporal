@@ -24,8 +24,8 @@ type (
 		SubComponent1     Field[*TestSubComponent1]
 		SubComponent2     Field[*TestSubComponent2]
 		SubData1          Field[*protoMessageType]
-		SubComponents     Collection[string, *TestSubComponent1]
-		PendingActivities Collection[int, *TestSubComponent1]
+		SubComponents     Map[string, *TestSubComponent1]
+		PendingActivities Map[int, *TestSubComponent1]
 	}
 
 	TestSubComponent1 struct {

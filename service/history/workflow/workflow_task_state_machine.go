@@ -745,6 +745,13 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 	if err != nil {
 		return nil, err
 	}
+
+	metrics.WorkflowTasksCompleted.With(m.metricsHandler).Record(1,
+		metrics.NamespaceTag(m.ms.GetNamespaceEntry().Name().String()),
+		metrics.VersioningBehaviorTag(vb),
+		metrics.FirstAttemptTag(workflowTask.Attempt),
+	)
+
 	return event, nil
 }
 
@@ -1106,7 +1113,7 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 	//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
 	wftDeployment := attrs.GetDeployment()
 	if v := attrs.GetWorkerDeploymentVersion(); v != "" { //nolint:staticcheck // SA1019: worker versioning v0.31
-		dv, _ := worker_versioning.WorkerDeploymentVersionFromString(v)
+		dv, _ := worker_versioning.WorkerDeploymentVersionFromStringV31(v)
 		wftDeployment = worker_versioning.DeploymentFromDeploymentVersion(dv)
 	}
 	if v := attrs.GetDeploymentVersion(); v != nil {
@@ -1129,16 +1136,6 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 		}
 	}
 
-	if transition != nil {
-		// There is still a transition going on. We need to schedule a new WFT so it goes to the
-		// transition deployment this time.
-		if _, err := m.ms.AddWorkflowTaskScheduledEvent(
-			false,
-			enumsspb.WORKFLOW_TASK_TYPE_NORMAL,
-		); err != nil {
-			return err
-		}
-	}
 	// Deployment and behavior before applying the data came from the completed wft.
 	wfDeploymentBefore := m.ms.GetEffectiveDeployment()
 	wfBehaviorBefore := m.ms.GetEffectiveVersioningBehavior()
@@ -1164,7 +1161,7 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 		//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
 		versioningInfo.Deployment = nil
 		//nolint:staticcheck // SA1019 deprecated Version will clean up later [cleanup-wv-3.1]
-		versioningInfo.Version = worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(wftDeployment))
+		versioningInfo.Version = worker_versioning.WorkerDeploymentVersionToStringV31(worker_versioning.DeploymentVersionFromDeployment(wftDeployment))
 		versioningInfo.DeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(wftDeployment)
 	}
 
@@ -1189,13 +1186,18 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 		}
 	}
 
-	// TODO(carlydf): create reset point based on attrs.Deployment instead of the build ID.
+	//nolint:staticcheck // SA1019: worker versioning v2
+	buildId := attrs.GetWorkerVersion().GetBuildId()
+	if wftDeployment != nil {
+		buildId = wftDeployment.GetBuildId()
+	}
 	addedResetPoint := m.ms.addResetPointFromCompletion(
 		attrs.GetBinaryChecksum(),
-		attrs.GetWorkerVersion().GetBuildId(),
+		buildId,
 		event.GetEventId(),
 		limits.MaxResetPoints,
 	)
+
 	// For v3 versioned workflows (ms.GetEffectiveVersioningBehavior() != UNSPECIFIED), this will update the reachability
 	// search attribute based on the execution_info.deployment and/or override deployment if one exists. We must update the
 	// search attribute here because the reachability deployment may have just been changed by CompleteDeploymentTransition.

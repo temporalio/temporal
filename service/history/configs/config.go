@@ -275,6 +275,7 @@ type Config struct {
 	EnableReplicationTaskTieredProcessing               dynamicconfig.BoolPropertyFn
 	ReplicationStreamSenderHighPriorityQPS              dynamicconfig.IntPropertyFn
 	ReplicationStreamSenderLowPriorityQPS               dynamicconfig.IntPropertyFn
+	ReplicationStreamEventLoopRetryMaxAttempts          dynamicconfig.IntPropertyFn
 	ReplicationReceiverMaxOutstandingTaskCount          dynamicconfig.IntPropertyFn
 	ReplicationResendMaxBatchCount                      dynamicconfig.IntPropertyFn
 	ReplicationProgressCacheMaxSize                     dynamicconfig.IntPropertyFn
@@ -329,8 +330,6 @@ type Config struct {
 	EnableActivityEagerExecution  dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableEagerWorkflowStart      dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	NamespaceCacheRefreshInterval dynamicconfig.DurationPropertyFn
-
-	FollowReusePolicyAfterConflictPolicyTerminate dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	// ArchivalQueueProcessor settings
 	ArchivalProcessorSchedulerWorkerCount               dynamicconfig.TypedSubscribable[int]
@@ -537,12 +536,11 @@ func NewConfig(
 		EnableReplicationTaskTieredProcessing:               dynamicconfig.EnableReplicationTaskTieredProcessing.Get(dc),
 		ReplicationStreamSenderHighPriorityQPS:              dynamicconfig.ReplicationStreamSenderHighPriorityQPS.Get(dc),
 		ReplicationStreamSenderLowPriorityQPS:               dynamicconfig.ReplicationStreamSenderLowPriorityQPS.Get(dc),
+		ReplicationStreamEventLoopRetryMaxAttempts:          dynamicconfig.ReplicationStreamEventLoopRetryMaxAttempts.Get(dc),
 		ReplicationReceiverMaxOutstandingTaskCount:          dynamicconfig.ReplicationReceiverMaxOutstandingTaskCount.Get(dc),
 		ReplicationResendMaxBatchCount:                      dynamicconfig.ReplicationResendMaxBatchCount.Get(dc),
 		ReplicationProgressCacheMaxSize:                     dynamicconfig.ReplicationProgressCacheMaxSize.Get(dc),
 		ReplicationProgressCacheTTL:                         dynamicconfig.ReplicationProgressCacheTTL.Get(dc),
-
-		FollowReusePolicyAfterConflictPolicyTerminate: dynamicconfig.FollowReusePolicyAfterConflictPolicyTerminate.Get(dc),
 
 		MaximumBufferedEventsBatch:       dynamicconfig.MaximumBufferedEventsBatch.Get(dc),
 		MaximumBufferedEventsSizeInBytes: dynamicconfig.MaximumBufferedEventsSizeInBytes.Get(dc),

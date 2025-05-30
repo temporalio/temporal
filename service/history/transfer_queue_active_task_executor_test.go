@@ -845,7 +845,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 		},
 	}, defaultWorkflowTaskCompletionLimits)
 
-	_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
+	_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
 		Namespace:  "child namespace1",
 		WorkflowId: "child workflow1",
 		WorkflowType: &commonpb.WorkflowType{
@@ -856,7 +856,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 		ParentClosePolicy: parentClosePolicy1,
 	}, "child namespace1-ID")
 	s.Nil(err)
-	_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
+	_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
 		Namespace:  "child namespace2",
 		WorkflowId: "child workflow2",
 		WorkflowType: &commonpb.WorkflowType{
@@ -867,7 +867,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 		ParentClosePolicy: parentClosePolicy2,
 	}, "child namespace2-ID")
 	s.Nil(err)
-	_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
+	_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
 		Namespace:  "child namespace3",
 		WorkflowId: "child workflow3",
 		WorkflowType: &commonpb.WorkflowType{
@@ -970,7 +970,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 	}, defaultWorkflowTaskCompletionLimits)
 
 	for i := 0; i < 10; i++ {
-		_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
+		_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
 			WorkflowId: "child workflow" + convert.IntToString(i),
 			WorkflowType: &commonpb.WorkflowType{
 				Name: "child workflow type",
@@ -1067,7 +1067,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_ParentW
 	}, defaultWorkflowTaskCompletionLimits)
 
 	for i := 0; i < 10; i++ {
-		_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
+		_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
 			WorkflowId: "child workflow" + convert.IntToString(i),
 			WorkflowType: &commonpb.WorkflowType{
 				Name: "child workflow type",
@@ -1157,7 +1157,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 	}, defaultWorkflowTaskCompletionLimits)
 
 	for i := 0; i < 10; i++ {
-		_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
+		_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
 			WorkflowId: "child workflow" + convert.IntToString(i),
 			WorkflowType: &commonpb.WorkflowType{
 				Name: "child workflow type",
@@ -1254,7 +1254,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 		},
 	}, defaultWorkflowTaskCompletionLimits)
 
-	_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
+	_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
 		Namespace:  "child namespace1",
 		WorkflowId: "child workflow1",
 		WorkflowType: &commonpb.WorkflowType{
@@ -1266,7 +1266,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 	}, "child namespace1-ID")
 	s.NoError(err)
 
-	_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
+	_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
 		Namespace:  "child namespace1",
 		WorkflowId: "child workflow2",
 		WorkflowType: &commonpb.WorkflowType{
@@ -1938,7 +1938,6 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Su
 	event, ci := addStartChildWorkflowExecutionInitiatedEvent(
 		mutableState,
 		event.GetEventId(),
-		uuid.New(),
 		s.childNamespace,
 		s.childNamespaceID,
 		childWorkflowID,
@@ -2053,7 +2052,6 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Re
 	childInitEvent, _ := addStartChildWorkflowExecutionInitiatedEvent(
 		mutableState,
 		1111,
-		uuid.New(),
 		s.childNamespace,
 		s.childNamespaceID,
 		childWorkflowID,
@@ -2177,7 +2175,6 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Fa
 	event, ci := addStartChildWorkflowExecutionInitiatedEvent(
 		mutableState,
 		event.GetEventId(),
-		uuid.New(),
 		s.childNamespace,
 		s.childNamespaceID,
 		childWorkflowID,
@@ -2267,7 +2264,6 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Fa
 	event, _ = addStartChildWorkflowExecutionInitiatedEvent(
 		mutableState,
 		event.GetEventId(),
-		uuid.New(),
 		s.namespace,
 		s.namespaceID,
 		childWorkflowID,
@@ -2342,7 +2338,6 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Su
 	event, ci := addStartChildWorkflowExecutionInitiatedEvent(
 		mutableState,
 		event.GetEventId(),
-		uuid.New(),
 		s.childNamespace,
 		s.childNamespaceID,
 		childWorkflowID,
@@ -2446,7 +2441,6 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Du
 	event, ci := addStartChildWorkflowExecutionInitiatedEvent(
 		mutableState,
 		event.GetEventId(),
-		uuid.New(),
 		s.childNamespace,
 		s.childNamespaceID,
 		childExecution.GetWorkflowId(),
@@ -2530,7 +2524,6 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessorStartChildExecution_
 	event, ci := addStartChildWorkflowExecutionInitiatedEvent(
 		mutableState,
 		event.GetEventId(),
-		uuid.New(),
 		s.childNamespace,
 		s.childNamespaceID,
 		childExecution.GetWorkflowId(),

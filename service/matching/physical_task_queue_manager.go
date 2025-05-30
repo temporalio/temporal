@@ -44,7 +44,7 @@ const (
 	noPollerThreshold = time.Minute * 2
 
 	// We avoid retrying failed deployment registration for this period.
-	deploymentRegisterErrorBackoff = 3 * time.Second
+	deploymentRegisterErrorBackoff = 5 * time.Second
 )
 
 type (
@@ -95,7 +95,6 @@ type (
 	matcherInterface interface {
 		Start()
 		Stop()
-		UpdateRatelimit(rpsPtr float64)
 		Rate() float64
 		Poll(ctx context.Context, pollMetadata *pollMetadata) (*internalTask, error)
 		PollForQuery(ctx context.Context, pollMetadata *pollMetadata) (*internalTask, error)
@@ -108,8 +107,9 @@ type (
 var _ physicalTaskQueueManager = (*physicalTaskQueueManagerImpl)(nil)
 
 var (
-	errRemoteSyncMatchFailed  = serviceerror.NewCanceled("remote sync match failed")
-	errMissingNormalQueueName = errors.New("missing normal queue name")
+	errRemoteSyncMatchFailed     = serviceerror.NewCanceled("remote sync match failed")
+	errMissingNormalQueueName    = errors.New("missing normal queue name")
+	errDeploymentVersionNotReady = serviceerror.NewUnavailable("task queue is not ready to process polls from this deployment version, try again shortly")
 )
 
 func newPhysicalTaskQueueManager(
@@ -223,7 +223,7 @@ func newPhysicalTaskQueueManager(
 				return nil, err
 			}
 		}
-		pqMgr.oldMatcher = newTaskMatcher(config, fwdr, taggedMetricsHandler)
+		pqMgr.oldMatcher = newTaskMatcher(config, fwdr, taggedMetricsHandler, pqMgr.partitionMgr.rateLimiter)
 		pqMgr.matcher = pqMgr.oldMatcher
 	}
 	return pqMgr, nil
@@ -300,13 +300,12 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 		}
 	}
 
-	// the desired global rate limit for the task queue comes from the
-	// poller, which lives inside the client side worker. There is
-	// one rateLimiter for this entire task queue and as we get polls,
-	// we update the ratelimiter rps if it has changed from the last
-	// value. Last poller wins if different pollers provide different values
+	// If the priority matcher is enabled, use the rate limiter defined in the priority matcher.
+	// TODO(pri): remove this once we have a way to set the partition-scoped rate limiter for the priority matcher.
 	if rps := pollMetadata.taskQueueMetadata.GetMaxTasksPerSecond(); rps != nil {
-		c.matcher.UpdateRatelimit(rps.Value)
+		if c.priMatcher != nil {
+			c.priMatcher.UpdateRatelimit(rps.Value)
+		}
 	}
 
 	if !namespaceEntry.ActiveInCluster(c.clusterMeta.GetCurrentClusterName()) {
@@ -436,7 +435,8 @@ func (c *physicalTaskQueueManagerImpl) GetAllPollerInfo() []*taskqueuepb.PollerI
 	if c.pollerHistory == nil {
 		return nil
 	}
-	return c.pollerHistory.getPollerInfo(time.Time{})
+	res := c.pollerHistory.getPollerInfo(time.Time{})
+	return res
 }
 
 func (c *physicalTaskQueueManagerImpl) HasPollerAfter(accessTime time.Time) bool {
@@ -507,7 +507,10 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 	namespaceEntry *namespace.Namespace,
 	pollMetadata *pollMetadata,
 ) error {
-	workerDeployment := worker_versioning.DeploymentFromCapabilities(pollMetadata.workerVersionCapabilities, pollMetadata.deploymentOptions)
+	workerDeployment, err := worker_versioning.DeploymentFromCapabilities(pollMetadata.workerVersionCapabilities, pollMetadata.deploymentOptions)
+	if err != nil {
+		return err
+	}
 	if workerDeployment == nil {
 		return nil
 	}
@@ -543,7 +546,7 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 	}
 
 	deploymentData := userData.GetData().GetPerType()[int32(c.queue.TaskType())].GetDeploymentData()
-	if findDeploymentVersion(deploymentData, worker_versioning.DeploymentVersionFromDeployment(workerDeployment)) != -1 {
+	if worker_versioning.FindDeploymentVersion(deploymentData, worker_versioning.DeploymentVersionFromDeployment(workerDeployment)) != -1 {
 		// already registered in user data, we can assume the workflow is running.
 		// TODO: consider replication scenarios where user data is replicated before
 		// the deployment workflow.
@@ -586,7 +589,7 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 			return err
 		}
 		deploymentData := userData.GetData().GetPerType()[int32(c.queue.TaskType())].GetDeploymentData()
-		if findDeploymentVersion(deploymentData, worker_versioning.DeploymentVersionFromDeployment(workerDeployment)) >= 0 {
+		if worker_versioning.FindDeploymentVersion(deploymentData, worker_versioning.DeploymentVersionFromDeployment(workerDeployment)) >= 0 {
 			break
 		}
 		select {

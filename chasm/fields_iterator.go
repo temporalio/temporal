@@ -9,8 +9,8 @@ import (
 )
 
 const (
-	chasmFieldTypePrefix      = "chasm.Field["
-	chasmCollectionTypePrefix = "chasm.Collection["
+	chasmFieldTypePrefix = "chasm.Field["
+	chasmMapTypePrefix   = "chasm.Map["
 
 	fieldNameTag = "name"
 )
@@ -21,7 +21,7 @@ const (
 	fieldKindUnspecified fieldKind = iota
 	fieldKindData
 	fieldKindSubField
-	fieldKindSubCollection
+	fieldKindSubMap
 )
 
 type fieldInfo struct {
@@ -61,10 +61,10 @@ func fieldsOf(valueV reflect.Value) iter.Seq[fieldInfo] {
 					switch prefix {
 					case chasmFieldTypePrefix:
 						fieldK = fieldKindSubField
-					case chasmCollectionTypePrefix:
-						fieldK = fieldKindSubCollection
+					case chasmMapTypePrefix:
+						fieldK = fieldKindSubMap
 					default:
-						fieldErr = serviceerror.NewInternalf("%s.%s: unsupported field type %s: must implement proto.Message, or be chasm.Field[T] or chasm.Collection[T]", valueT, fieldN, fieldT)
+						fieldErr = serviceerror.NewInternalf("%s.%s: unsupported field type %s: must implement proto.Message, or be chasm.Field[T] or chasm.Map[T]", valueT, fieldN, fieldT)
 					}
 				}
 
