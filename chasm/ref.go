@@ -3,7 +3,9 @@ package chasm
 import (
 	"reflect"
 
+	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common"
 )
 
 var (
@@ -21,12 +23,15 @@ type ComponentRef struct {
 	EntityKey
 
 	shardID int32
-	// entityGoType for calculating the entity shardID.
-	// CHASM component author has no idea about the shardID, so they will
-	// only specify the entityGoType and left the conversion to the CHASM engine.
-	//
-	// TODO: Can we remove this field and perform the shardID conversion while
-	// creating the ComponentRef?
+	// archetype is the fully qualified type name of the root component.
+	// It is used to look up the component's registered sharding function,
+	// which determines the shardID of the entity that contains the referenced component.
+	// It is also used to validate if a given entity has the right archetype.
+	// E.g. The EntityKey can be empty and the current run of the BusinessID may have a different archetype.
+	archetype string
+	// entityGoType is used for determining the ComponetRef's shardID and archetype.
+	// When CHASM deverloper needs to create a ComponentRef, they will only provide this information,
+	// and leave the work of determining the shardID and archetype to the CHASM engine.
 	entityGoType reflect.Type
 
 	// entityLastUpdateVT is the consistency token for the entire entity.
@@ -63,13 +68,63 @@ func NewComponentRef[C Component](
 	}
 }
 
-func (r *ComponentRef) Serialize() []byte {
+// ShardingKey returns the sharding key used for determining the shardID of the run
+// that contains the referenced component.
+func (r *ComponentRef) ShardingKey(
+	registry *Registry,
+) (string, error) {
+	var rc *RegistrableComponent
+	var ok bool
+
+	if r.archetype == "" {
+		rc, ok = registry.componentOf(r.entityGoType)
+		if !ok {
+			return "", serviceerror.NewInternal("unknown chasm component type: " + r.entityGoType.String())
+		}
+		r.archetype = rc.fqType()
+	}
+
+	if rc == nil {
+		rc, ok = registry.component(r.archetype)
+		if !ok {
+			return "", serviceerror.NewInternal("unknown chasm component type: " + r.archetype)
+		}
+	}
+
+	if rc.shardingFn != nil {
+		return rc.shardingFn(r.EntityKey), nil
+	}
+	return r.EntityKey.BusinessID, nil
+}
+
+// ShardID returns the shardID of the run that contains the referenced component
+// given the total number of shards in the system.
+func (r *ComponentRef) ShardID(
+	registry *Registry,
+	numberOfShards int32,
+) (int32, error) {
+	if r.shardID != 0 {
+		return r.shardID, nil
+	}
+	shardingKey, err := r.ShardingKey(registry)
+	if err != nil {
+		return 0, err
+	}
+
+	r.shardID = common.ShardingKeyToShard(
+		shardingKey,
+		numberOfShards,
+	)
+	return r.shardID, nil
+}
+
+func (r *ComponentRef) serialize() ([]byte, error) {
 	if r == nil {
-		return nil
+		return nil, nil
 	}
 	panic("not implemented")
 }
 
-func DeserializeComponentRef(data []byte) (ComponentRef, error) {
+func deserializeComponentRef(data []byte) (ComponentRef, error) {
 	panic("not implemented")
 }

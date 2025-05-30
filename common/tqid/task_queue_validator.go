@@ -1,7 +1,6 @@
 package tqid
 
 import (
-	"fmt"
 	"strings"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -118,7 +117,7 @@ func validate(taskQueueName string, maxLength int, expectRootPartition bool) err
 	}
 
 	if expectRootPartition && strings.HasPrefix(taskQueueName, reservedTaskQueuePrefix) {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("task queue name cannot start with reserved prefix %v", reservedTaskQueuePrefix))
+		return serviceerror.NewInvalidArgumentf("task queue name cannot start with reserved prefix %v", reservedTaskQueuePrefix)
 	}
 
 	return nil

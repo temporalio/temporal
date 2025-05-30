@@ -22,7 +22,7 @@ import (
 )
 
 type WorkflowMemoTestSuite struct {
-	testcore.FunctionalTestSuite
+	testcore.FunctionalTestBase
 }
 
 func TestWorkflowMemoTestSuite(t *testing.T) {

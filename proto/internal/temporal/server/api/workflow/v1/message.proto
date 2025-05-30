@@ -20,7 +20,9 @@ message ParentExecutionInfo {
     // first starts the child workflow, and the child workflow is starting on a Task Queue belonging
     // to the same Worker Deployment Version.
     // Not set in the subsequent execution if the child workflow continues-as-new.
+    // Deprecated. Replaced with `inherited_pinned_version` in WorkflowExecutionStartedEventAttributes.
     string pinned_worker_deployment_version = 7;
+    reserved 8;
 }
 
 message RootExecutionInfo {

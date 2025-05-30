@@ -68,5 +68,5 @@ func ParseValue(sqlValue string) (interface{}, error) {
 		return floatValue, nil
 	}
 
-	return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("invalid expression: unable to parse %s", sqlValue))
+	return nil, serviceerror.NewInvalidArgumentf("invalid expression: unable to parse %s", sqlValue)
 }

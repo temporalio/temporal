@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"time"
 
-	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/primitives"
@@ -281,7 +280,7 @@ func WorkflowTaskFailedCause(workflowTaskFailCause enumspb.WorkflowTaskFailedCau
 
 // WorkflowTaskQueueType returns tag for WorkflowTaskQueueType
 func WorkflowTaskQueueType(taskQueueType enumspb.TaskQueueType) ZapTag {
-	return NewStringerTag("wf-task-queue-type", taskQueueType)
+	return NewStringTag("wf-task-queue-type", taskQueueType.String())
 }
 
 // WorkflowTaskQueueName returns tag for WorkflowTaskQueueName
@@ -632,7 +631,7 @@ func TaskVersion(taskVersion int64) ZapTag {
 }
 
 func TaskType(taskType enumsspb.TaskType) ZapTag {
-	return NewStringerTag("queue-task-type", taskType)
+	return NewStringTag("queue-task-type", taskType.String())
 }
 
 func TaskCategoryID(taskCategoryID int) ZapTag {
@@ -975,11 +974,8 @@ func VersioningBehavior(behavior enumspb.VersioningBehavior) ZapTag {
 	return NewStringerTag("versioning-behavior", behavior)
 }
 
-func Deployment(d *deploymentpb.Deployment) ZapTag {
-	if d != nil {
-		return NewAnyTag("deployment", d.SeriesName+":"+d.BuildId)
-	}
-	return NewAnyTag("deployment", "unversioned")
+func Deployment(d string) ZapTag {
+	return NewAnyTag("deployment", d)
 }
 
 func UserDataVersion(v int64) ZapTag {

@@ -7,6 +7,7 @@ import (
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -27,6 +28,16 @@ func Invoke(
 	shardContext historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (resp *historyservice.UpdateActivityOptionsResponse, retError error) {
+	updateRequest := request.GetUpdateRequest()
+
+	mask := updateRequest.GetUpdateMask()
+	if mask != nil && updateRequest.RestoreOriginal {
+		updateFields := util.ParseFieldMask(mask)
+		if len(updateFields) != 0 {
+			return nil, serviceerror.NewInvalidArgument("Both UpdateMask and RestoreOriginal are provided")
+		}
+	}
+
 	validator := api.NewCommandAttrValidator(
 		shardContext.GetNamespaceRegistry(),
 		shardContext.GetConfig(),
@@ -40,13 +51,18 @@ func Invoke(
 		nil,
 		definition.NewWorkflowKey(
 			request.NamespaceId,
-			request.GetUpdateRequest().GetExecution().GetWorkflowId(),
-			request.GetUpdateRequest().GetExecution().GetRunId(),
+			updateRequest.GetExecution().GetWorkflowId(),
+			updateRequest.GetExecution().GetRunId(),
 		),
 		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
 			mutableState := workflowLease.GetMutableState()
 			var err error
-			response, err = processActivityOptionsRequest(validator, mutableState, request)
+			if updateRequest.RestoreOriginal {
+				response, err = restoreOriginalOptions(ctx, mutableState, updateRequest)
+			} else {
+				response, err = processActivityOptionsRequest(validator, mutableState, updateRequest, request.GetNamespaceId())
+			}
+
 			if err != nil {
 				return nil, err
 			}
@@ -70,29 +86,18 @@ func Invoke(
 func processActivityOptionsRequest(
 	validator *api.CommandAttrValidator,
 	mutableState historyi.MutableState,
-	request *historyservice.UpdateActivityOptionsRequest,
+	updateRequest *workflowservice.UpdateActivityOptionsRequest,
+	namespaceID string,
 ) (*historyservice.UpdateActivityOptionsResponse, error) {
 	if !mutableState.IsWorkflowExecutionRunning() {
 		return nil, consts.ErrWorkflowCompleted
 	}
-	updateRequest := request.GetUpdateRequest()
 	mergeFrom := updateRequest.GetActivityOptions()
 	if mergeFrom == nil {
 		return nil, serviceerror.NewInvalidArgument("ActivityOptions are not provided")
 	}
 
-	var activityIDs []string
-	switch a := updateRequest.GetActivity().(type) {
-	case *workflowservice.UpdateActivityOptionsRequest_Id:
-		activityIDs = append(activityIDs, a.Id)
-	case *workflowservice.UpdateActivityOptionsRequest_Type:
-		activityType := a.Type
-		for _, ai := range mutableState.GetPendingActivityInfos() {
-			if ai.ActivityType.Name == activityType {
-				activityIDs = append(activityIDs, ai.ActivityId)
-			}
-		}
-	}
+	activityIDs := getActivityIDs(updateRequest, mutableState)
 
 	if len(activityIDs) == 0 {
 		return nil, consts.ErrActivityNotFound
@@ -114,7 +119,7 @@ func processActivityOptionsRequest(
 			return nil, consts.ErrActivityNotFound
 		}
 
-		if adjustedOptions, err = updateActivityOptions(validator, mutableState, request, ai, mergeFrom, updateFields); err != nil {
+		if adjustedOptions, err = processActivityOptionsUpdate(validator, mutableState, namespaceID, ai, mergeFrom, updateFields); err != nil {
 			return nil, err
 		}
 	}
@@ -126,10 +131,10 @@ func processActivityOptionsRequest(
 	return response, nil
 }
 
-func updateActivityOptions(
+func processActivityOptionsUpdate(
 	validator *api.CommandAttrValidator,
 	mutableState historyi.MutableState,
-	request *historyservice.UpdateActivityOptionsRequest,
+	namespaceID string,
 	ai *persistencespb.ActivityInfo,
 	mergeFrom *activitypb.ActivityOptions,
 	updateFields map[string]struct{},
@@ -152,60 +157,20 @@ func updateActivityOptions(
 	}
 
 	// update activity options
-	if err := applyActivityOptions(mergeInto, mergeFrom, updateFields); err != nil {
+	if err := mergeActivityOptions(mergeInto, mergeFrom, updateFields); err != nil {
 		return nil, err
 	}
 
 	// validate the updated options
-	adjustedOptions, err := adjustActivityOptions(validator, request.NamespaceId, ai.ActivityId, ai.ActivityType, mergeInto)
+	adjustedOptions, err := adjustActivityOptions(validator, namespaceID, ai.ActivityId, ai.ActivityType, mergeInto)
 	if err != nil {
 		return nil, err
 	}
 
-	if err = mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ historyi.MutableState) error {
-		// update activity info with new options
-		activityInfo.TaskQueue = adjustedOptions.TaskQueue.Name
-		activityInfo.ScheduleToCloseTimeout = adjustedOptions.ScheduleToCloseTimeout
-		activityInfo.ScheduleToStartTimeout = adjustedOptions.ScheduleToStartTimeout
-		activityInfo.StartToCloseTimeout = adjustedOptions.StartToCloseTimeout
-		activityInfo.HeartbeatTimeout = adjustedOptions.HeartbeatTimeout
-		activityInfo.RetryMaximumInterval = adjustedOptions.RetryPolicy.MaximumInterval
-		activityInfo.RetryBackoffCoefficient = adjustedOptions.RetryPolicy.BackoffCoefficient
-		activityInfo.RetryInitialInterval = adjustedOptions.RetryPolicy.InitialInterval
-		activityInfo.RetryMaximumAttempts = adjustedOptions.RetryPolicy.MaximumAttempts
-
-		// move forward activity version
-		activityInfo.Stamp++
-
-		// invalidate timers
-		activityInfo.TimerTaskStatus = workflow.TimerTaskStatusNone
-		return nil
-	}); err != nil {
-		return nil, err
-	}
-
-	if workflow.GetActivityState(ai) == enumspb.PENDING_ACTIVITY_STATE_SCHEDULED {
-		// in this case we always want to generate a new retry task
-
-		// two options - activity can be in backoff, or scheduled (waiting to be started)
-		// if activity in backoff
-		// 		in this case there is already old retry task
-		// 		it will be ignored because of stamp mismatch
-		// if activity is scheduled and waiting to be started
-		// 		eventually matching service will call history service (recordActivityTaskStarted)
-		// 		history service will return error based on stamp. Task will be dropped
-
-		nextScheduledTime := workflow.GetNextScheduledTime(ai)
-		err = mutableState.RegenerateActivityRetryTask(ai, nextScheduledTime)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	return adjustedOptions, nil
+	return updateActivityOptions(mutableState, ai, adjustedOptions)
 }
 
-func applyActivityOptions(
+func mergeActivityOptions(
 	mergeInto *activitypb.ActivityOptions,
 	mergeFrom *activitypb.ActivityOptions,
 	updateFields map[string]struct{},
@@ -299,4 +264,127 @@ func adjustActivityOptions(
 	ao.HeartbeatTimeout = attributes.HeartbeatTimeout
 
 	return ao, nil
+}
+
+func getActivityIDs(updateRequest *workflowservice.UpdateActivityOptionsRequest, ms historyi.MutableState) []string {
+	var activityIDs []string
+	switch a := updateRequest.GetActivity().(type) {
+	case *workflowservice.UpdateActivityOptionsRequest_Id:
+		activityIDs = append(activityIDs, a.Id)
+	case *workflowservice.UpdateActivityOptionsRequest_Type:
+		activityType := a.Type
+		for _, ai := range ms.GetPendingActivityInfos() {
+			if ai.ActivityType.Name == activityType {
+				activityIDs = append(activityIDs, ai.ActivityId)
+			}
+		}
+	}
+	return activityIDs
+}
+
+func updateActivityOptions(
+	ms historyi.MutableState,
+	ai *persistencespb.ActivityInfo,
+	activityOptions *activitypb.ActivityOptions,
+) (*activitypb.ActivityOptions, error) {
+	var err error
+	if err = ms.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ historyi.MutableState) error {
+		// update activity info with new options
+		activityInfo.TaskQueue = activityOptions.TaskQueue.Name
+		activityInfo.ScheduleToCloseTimeout = activityOptions.ScheduleToCloseTimeout
+		activityInfo.ScheduleToStartTimeout = activityOptions.ScheduleToStartTimeout
+		activityInfo.StartToCloseTimeout = activityOptions.StartToCloseTimeout
+		activityInfo.HeartbeatTimeout = activityOptions.HeartbeatTimeout
+		activityInfo.RetryMaximumInterval = activityOptions.RetryPolicy.MaximumInterval
+		activityInfo.RetryBackoffCoefficient = activityOptions.RetryPolicy.BackoffCoefficient
+		activityInfo.RetryInitialInterval = activityOptions.RetryPolicy.InitialInterval
+		activityInfo.RetryMaximumAttempts = activityOptions.RetryPolicy.MaximumAttempts
+
+		// move forward activity version
+		activityInfo.Stamp++
+
+		// invalidate timers
+		activityInfo.TimerTaskStatus = workflow.TimerTaskStatusNone
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	if workflow.GetActivityState(ai) == enumspb.PENDING_ACTIVITY_STATE_SCHEDULED {
+		// in this case we always want to generate a new retry task
+
+		// two options - activity can be in backoff, or scheduled (waiting to be started)
+		// if activity in backoff
+		// 		in this case there is already old retry task
+		// 		it will be ignored because of stamp mismatch
+		// if activity is scheduled and waiting to be started
+		// 		eventually matching service will call history service (recordActivityTaskStarted)
+		// 		history service will return error based on stamp. Task will be dropped
+
+		nextScheduledTime := workflow.GetNextScheduledTime(ai)
+		err = ms.RegenerateActivityRetryTask(ai, nextScheduledTime)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return activityOptions, nil
+
+}
+
+func restoreOriginalOptions(
+	ctx context.Context,
+	ms historyi.MutableState,
+	updateRequest *workflowservice.UpdateActivityOptionsRequest,
+) (*historyservice.UpdateActivityOptionsResponse, error) {
+
+	activityIDs := getActivityIDs(updateRequest, ms)
+
+	if len(activityIDs) == 0 {
+		return nil, consts.ErrActivityNotFound
+	}
+
+	var updatedOptions *activitypb.ActivityOptions
+
+	for _, activityId := range activityIDs {
+		ai, activityFound := ms.GetActivityByActivityID(activityId)
+
+		if !activityFound {
+			return nil, consts.ErrActivityNotFound
+		}
+
+		event, err := ms.GetActivityScheduledEvent(ctx, ai.ScheduledEventId)
+		if err != nil {
+			return nil, err
+		}
+		attrs, ok := event.Attributes.(*historypb.HistoryEvent_ActivityTaskScheduledEventAttributes)
+		if !ok {
+			return nil, serviceerror.NewInvalidArgument("ActivityTaskScheduledEvent is invalid")
+		}
+		if attrs == nil || attrs.ActivityTaskScheduledEventAttributes == nil {
+			return nil, serviceerror.NewInvalidArgument("ActivityTaskScheduledEvent is incomplete")
+		}
+
+		originalOptions := attrs.ActivityTaskScheduledEventAttributes
+
+		activityOptions := &activitypb.ActivityOptions{
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name: originalOptions.TaskQueue.Name,
+			},
+			ScheduleToCloseTimeout: originalOptions.ScheduleToCloseTimeout,
+			ScheduleToStartTimeout: originalOptions.ScheduleToStartTimeout,
+			StartToCloseTimeout:    originalOptions.StartToCloseTimeout,
+			HeartbeatTimeout:       originalOptions.HeartbeatTimeout,
+			RetryPolicy:            originalOptions.RetryPolicy,
+		}
+
+		if updatedOptions, err = updateActivityOptions(ms, ai, activityOptions); err != nil {
+			return nil, err
+		}
+
+	}
+
+	return &historyservice.UpdateActivityOptionsResponse{
+		ActivityOptions: updatedOptions,
+	}, nil
 }

@@ -10,6 +10,7 @@ import (
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -79,19 +80,10 @@ func (s *PhysicalTaskQueueManagerTestSuite) SetupTest() {
 	onFatalErr := func(unloadCause) { s.T().Fatal("user data manager called onFatalErr") }
 	udMgr := newUserDataManager(engine.taskManager, engine.matchingRawClient, onFatalErr, nil, prtn, tqConfig, engine.logger, engine.namespaceRegistry)
 
-	prtnMgr := &taskQueuePartitionManagerImpl{
-		engine:          engine,
-		partition:       prtn,
-		config:          tqConfig,
-		ns:              ns,
-		logger:          engine.logger,
-		matchingClient:  engine.matchingRawClient,
-		metricsHandler:  metrics.NoopMetricsHandler,
-		userDataManager: udMgr,
-	}
+	prtnMgr, err := newTaskQueuePartitionManager(engine, ns, prtn, tqConfig, engine.logger, nil, metrics.NoopMetricsHandler, udMgr)
+	s.NoError(err)
 	engine.partitions[prtn.Key()] = prtnMgr
 
-	var err error
 	s.tqMgr, err = newPhysicalTaskQueueManager(prtnMgr, s.physicalTaskQueueKey)
 	s.NoError(err)
 	prtnMgr.defaultQueue = s.tqMgr
@@ -191,21 +183,21 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestReaderBacklogAge() {
 	go blm.taskReader.dispatchBufferedTasks()
 
 	s.EventuallyWithT(func(collect *assert.CollectT) {
-		assert.InDelta(s.T(), time.Minute, blm.taskReader.getBacklogHeadAge(), float64(time.Second))
+		require.InDelta(s.T(), time.Minute, blm.taskReader.getBacklogHeadAge(), float64(time.Second))
 	}, time.Second, 10*time.Millisecond)
 
 	_, err := blm.pqMgr.PollTask(context.Background(), makePollMetadata(rpsInf))
 	s.NoError(err)
 
 	s.EventuallyWithT(func(collect *assert.CollectT) {
-		assert.InDelta(s.T(), 10*time.Second, blm.taskReader.getBacklogHeadAge(), float64(500*time.Millisecond))
+		require.InDelta(s.T(), 10*time.Second, blm.taskReader.getBacklogHeadAge(), float64(500*time.Millisecond))
 	}, time.Second, 10*time.Millisecond)
 
 	_, err = blm.pqMgr.PollTask(context.Background(), makePollMetadata(rpsInf))
 	s.NoError(err)
 
 	s.EventuallyWithT(func(collect *assert.CollectT) {
-		assert.Equalf(s.T(), time.Duration(0), blm.taskReader.getBacklogHeadAge(), "backlog age being reset because of no tasks in the buffer")
+		require.Equalf(s.T(), time.Duration(0), blm.taskReader.getBacklogHeadAge(), "backlog age being reset because of no tasks in the buffer")
 	}, time.Second, 10*time.Millisecond)
 }
 
@@ -359,7 +351,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestTQMDoesFinalUpdateOnIdleUnload()
 	tm, _ := s.tqMgr.partitionMgr.engine.taskManager.(*testTaskManager)
 	s.EventuallyWithT(func(collect *assert.CollectT) {
 		// will unload due to idleness
-		assert.Equal(collect, 1, tm.getUpdateCount(s.physicalTaskQueueKey))
+		require.Equal(collect, 1, tm.getUpdateCount(s.physicalTaskQueueKey))
 	}, 5*time.Second, 100*time.Millisecond)
 }
 

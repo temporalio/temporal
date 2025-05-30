@@ -15,6 +15,7 @@ import (
 
 	enums "go.temporal.io/api/enums/v1"
 	enums0 "go.temporal.io/server/api/enums/v1"
+	persistence "go.temporal.io/server/api/persistence/v1"
 	definition "go.temporal.io/server/common/definition"
 	tasks "go.temporal.io/server/service/history/tasks"
 	gomock "go.uber.org/mock/gomock"
@@ -72,6 +73,20 @@ func (m *MockNodeBackend) GetCurrentVersion() int64 {
 func (mr *MockNodeBackendMockRecorder) GetCurrentVersion() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCurrentVersion", reflect.TypeOf((*MockNodeBackend)(nil).GetCurrentVersion))
+}
+
+// GetExecutionInfo mocks base method.
+func (m *MockNodeBackend) GetExecutionInfo() *persistence.WorkflowExecutionInfo {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetExecutionInfo")
+	ret0, _ := ret[0].(*persistence.WorkflowExecutionInfo)
+	return ret0
+}
+
+// GetExecutionInfo indicates an expected call of GetExecutionInfo.
+func (mr *MockNodeBackendMockRecorder) GetExecutionInfo() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetExecutionInfo", reflect.TypeOf((*MockNodeBackend)(nil).GetExecutionInfo))
 }
 
 // GetWorkflowKey mocks base method.

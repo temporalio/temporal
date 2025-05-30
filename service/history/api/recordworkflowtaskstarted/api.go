@@ -60,7 +60,7 @@ func Invoke(
 			req.WorkflowExecution.WorkflowId,
 			req.WorkflowExecution.RunId,
 		),
-		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
+		func(workflowLease api.WorkflowLease) (res *api.UpdateWorkflowAction, retErr error) {
 			mutableState := workflowLease.GetMutableState()
 			updateRegistry := workflowLease.GetContext().UpdateRegistry(ctx)
 			if !mutableState.IsWorkflowExecutionRunning() {
@@ -141,13 +141,16 @@ func Invoke(
 				// be scheduled in the normal task because matching returned a `StickyWorkerUnavailable`
 				// error. In that case, the mutable state is not updated at task transfer time until
 				// the workflow task starts on the normal queue, and we clear MS's sticky queue.
-				return nil, serviceerrors.NewObsoleteMatchingTask("wrong task queue type")
+				return nil, serviceerrors.NewObsoleteMatchingTask("rejecting sticky poller because workflow has moved to normal queue")
 			}
 
 			wfBehavior := mutableState.GetEffectiveVersioningBehavior()
 			wfDeployment := mutableState.GetEffectiveDeployment()
 			//nolint:staticcheck // SA1019 deprecated WorkerVersionCapabilities will clean up later
-			pollerDeployment := worker_versioning.DeploymentFromCapabilities(req.PollRequest.WorkerVersionCapabilities, req.PollRequest.DeploymentOptions)
+			pollerDeployment, err := worker_versioning.DeploymentFromCapabilities(req.PollRequest.WorkerVersionCapabilities, req.PollRequest.DeploymentOptions)
+			if err != nil {
+				return nil, err
+			}
 			err = worker_versioning.ValidateTaskVersionDirective(req.GetVersionDirective(), wfBehavior, wfDeployment, req.ScheduledDeployment)
 			if err != nil {
 				return nil, err

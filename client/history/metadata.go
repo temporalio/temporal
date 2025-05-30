@@ -1,7 +1,6 @@
 package history
 
 import (
-	"fmt"
 	"strconv"
 
 	"go.temporal.io/api/serviceerror"
@@ -60,11 +59,11 @@ func parseInt32(
 	}
 	metadataValue, err := strconv.Atoi(stringValue)
 	if err != nil {
-		return 0, serviceerror.NewInvalidArgument(fmt.Sprintf(
+		return 0, serviceerror.NewInvalidArgumentf(
 			"unable to parse metadata key %v: %v",
 			metadataKey,
 			err,
-		))
+		)
 	}
 	return int32(metadataValue), nil
 }

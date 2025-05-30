@@ -106,6 +106,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 			nil, // searchattribute.MapperProvider
 			false,
 			nil, // TODO: test usage of commandHandlerRegistry?
+			nil,
 		)
 	}
 

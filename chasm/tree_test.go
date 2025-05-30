@@ -15,6 +15,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
@@ -236,6 +237,197 @@ func (s *nodeSuite) TestSerializeNode_DataAttributes() {
 	s.NotNil(node.serializedNode.GetData(), "child node serialized value must have data after serialize is called")
 	s.Equal([]byte{0xa, 0x2, 0x32, 0x32}, node.serializedNode.GetData().GetData())
 	s.Equal(valueStateSynced, node.valueState)
+}
+
+func (s *nodeSuite) TestCollectionAttributes() {
+	tv := testvars.New(s.T())
+
+	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(1)).AnyTimes()
+	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(1)).AnyTimes()
+	s.nodeBackend.EXPECT().UpdateWorkflowStateStatus(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+	s.nodeBackend.EXPECT().GetWorkflowKey().Return(tv.Any().WorkflowKey()).AnyTimes()
+
+	sc1 := &TestSubComponent1{
+		SubComponent1Data: &protoMessageType{
+			RunId: tv.WithWorkflowIDNumber(1).WorkflowID(),
+		},
+	}
+	sc2 := &TestSubComponent1{
+		SubComponent1Data: &protoMessageType{
+			RunId: tv.WithWorkflowIDNumber(2).WorkflowID(),
+		},
+	}
+
+	type testCase struct {
+		name          string
+		initComponent func() *TestComponent
+		mapField      string
+	}
+	cases := []testCase{
+		{
+			name: "of string key",
+			initComponent: func() *TestComponent {
+				return &TestComponent{
+					SubComponents: Map[string, *TestSubComponent1]{
+						"SubComponent1": NewComponentField[*TestSubComponent1](nil, sc1),
+						"SubComponent2": NewComponentField[*TestSubComponent1](nil, sc2),
+					},
+				}
+			},
+			mapField: "SubComponents",
+		},
+		{
+			name: "of int key",
+			initComponent: func() *TestComponent {
+				return &TestComponent{
+					PendingActivities: Map[int, *TestSubComponent1]{
+						1: NewComponentField[*TestSubComponent1](nil, sc1),
+						2: NewComponentField[*TestSubComponent1](nil, sc2),
+					},
+				}
+			},
+			mapField: "PendingActivities",
+		},
+	}
+
+	for _, tc := range cases {
+
+		var persistedNodes map[string]*persistencespb.ChasmNode
+
+		s.Run("Sync and serialize component with map "+tc.name, func() {
+			var nilSerializedNodes map[string]*persistencespb.ChasmNode
+			rootNode, err := NewTree(nilSerializedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+			s.NoError(err)
+
+			rootComponent := tc.initComponent()
+			rootNode.value = rootComponent
+			rootNode.valueState = valueStateNeedSerialize
+
+			mutations, err := rootNode.CloseTransaction()
+			s.NoError(err)
+			s.Len(mutations.UpdatedNodes, 4, "root, collection, and 2 collection items must be updated")
+			s.Empty(mutations.DeletedNodes)
+
+			switch tc.mapField {
+			case "SubComponents":
+				s.NotEmpty(rootNode.children[tc.mapField].children["SubComponent1"].serializedNode.GetData().GetData())
+				s.NotEmpty(rootNode.children[tc.mapField].children["SubComponent2"].serializedNode.GetData().GetData())
+			case "PendingActivities":
+				s.NotEmpty(rootNode.children[tc.mapField].children["1"].serializedNode.GetData().GetData())
+				s.NotEmpty(rootNode.children[tc.mapField].children["2"].serializedNode.GetData().GetData())
+			}
+
+			// Save it use in other subtests.
+			persistedNodes = common.CloneProtoMap(mutations.UpdatedNodes)
+		})
+
+		s.NotNil(persistedNodes)
+
+		s.Run("Deserialize component with map "+tc.name, func() {
+			rootNode, err := NewTree(persistedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+			s.NoError(err)
+
+			err = rootNode.deserialize(reflect.TypeFor[*TestComponent]())
+			s.NoError(err)
+
+			rootComponent := rootNode.value.(*TestComponent)
+
+			var sc1Field, sc2Field Field[*TestSubComponent1]
+			switch tc.mapField {
+			case "SubComponents":
+				s.NotNil(rootComponent.SubComponents)
+				s.Len(rootComponent.SubComponents, 2)
+				sc1Field, sc2Field = rootComponent.SubComponents["SubComponent1"], rootComponent.SubComponents["SubComponent2"]
+			case "PendingActivities":
+				s.NotNil(rootComponent.PendingActivities)
+				s.Len(rootComponent.PendingActivities, 2)
+				sc1Field, sc2Field = rootComponent.PendingActivities[1], rootComponent.PendingActivities[2]
+			}
+
+			chasmContext := NewMutableContext(context.Background(), rootNode)
+			sc1Des, err := sc1Field.Get(chasmContext)
+			s.NoError(err)
+			s.Equal(sc1.SubComponent1Data.GetRunId(), sc1Des.SubComponent1Data.GetRunId())
+
+			sc2Des, err := sc2Field.Get(chasmContext)
+			s.NoError(err)
+			s.Equal(sc2.SubComponent1Data.GetRunId(), sc2Des.SubComponent1Data.GetRunId())
+		})
+
+		s.Run("Clear map "+tc.name+" by setting it to nil", func() {
+			rootNode, err := NewTree(persistedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+			s.NoError(err)
+
+			err = rootNode.deserialize(reflect.TypeFor[*TestComponent]())
+			s.NoError(err)
+
+			rootComponent := rootNode.value.(*TestComponent)
+
+			rootNode.valueState = valueStateNeedSerialize
+			switch tc.mapField {
+			case "SubComponents":
+				rootComponent.SubComponents = nil
+			case "PendingActivities":
+				rootComponent.PendingActivities = nil
+			}
+
+			mutation, err := rootNode.CloseTransaction()
+			s.NoError(err)
+			s.Len(mutation.UpdatedNodes, 1, "although root component is not updated, collection is tracked as part of component, therefore root must be updated")
+			s.Len(mutation.DeletedNodes, 3, "collection and 2 collection items must be deleted")
+		})
+
+		s.Run("Delete single map "+tc.name+" item", func() {
+			rootNode, err := NewTree(persistedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+			s.NoError(err)
+
+			err = rootNode.deserialize(reflect.TypeFor[*TestComponent]())
+			s.NoError(err)
+
+			rootComponent := rootNode.value.(*TestComponent)
+
+			// Delete collection item 1.
+			rootNode.valueState = valueStateNeedSerialize
+			switch tc.mapField {
+			case "SubComponents":
+				delete(rootComponent.SubComponents, "SubComponent1")
+			case "PendingActivities":
+				delete(rootComponent.PendingActivities, 1)
+			}
+
+			mutation, err := rootNode.CloseTransaction()
+			s.NoError(err)
+			s.Len(mutation.UpdatedNodes, 1, "although root component is not updated, collection is tracked as part of component, therefore root must be updated")
+			s.Len(mutation.DeletedNodes, 1, "collection item 1 must be deleted")
+		})
+
+		s.Run("Clear map "+tc.name+" by deleting all items", func() {
+			rootNode, err := NewTree(persistedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+			s.NoError(err)
+
+			err = rootNode.deserialize(reflect.TypeFor[*TestComponent]())
+			s.NoError(err)
+
+			rootComponent := rootNode.value.(*TestComponent)
+
+			// Delete both collection items.
+			rootNode.valueState = valueStateNeedSerialize
+			switch tc.mapField {
+			case "SubComponents":
+				delete(rootComponent.SubComponents, "SubComponent1")
+				delete(rootComponent.SubComponents, "SubComponent2")
+			case "PendingActivities":
+				delete(rootComponent.PendingActivities, 1)
+				delete(rootComponent.PendingActivities, 2)
+			}
+
+			// Now map is empty and must be deleted.
+			mutation, err := rootNode.CloseTransaction()
+			s.NoError(err)
+			s.Len(mutation.UpdatedNodes, 1, "although root component is not updated, collection is tracked as part of component, therefore root must be updated")
+			s.Len(mutation.DeletedNodes, 3, "collection and 2 items must be deleted")
+		})
+	}
 }
 
 func (s *nodeSuite) TestSyncSubComponents_DeleteLeafNode() {
@@ -865,6 +1057,22 @@ func (s *nodeSuite) TestGetComponent() {
 			chasmContext: NewContext(context.Background(), root),
 			ref: ComponentRef{
 				componentPath: []string{"unknownComponent"},
+			},
+			expectedErr: errComponentNotFound,
+		},
+		{
+			name:         "archetype mismatch",
+			chasmContext: NewContext(context.Background(), root),
+			ref: ComponentRef{
+				archetype: "TestLibrary.test_sub_component_1",
+			},
+			expectedErr: errComponentNotFound,
+		},
+		{
+			name:         "entityGoType mismatch",
+			chasmContext: NewContext(context.Background(), root),
+			ref: ComponentRef{
+				entityGoType: reflect.TypeFor[*TestSubComponent2](),
 			},
 			expectedErr: errComponentNotFound,
 		},

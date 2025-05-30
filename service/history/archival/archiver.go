@@ -184,7 +184,7 @@ func (a *archiver) archiveHistory(ctx context.Context, request *Request, logger 
 	)
 	defer a.recordArchiveTargetResult(logger, time.Now(), TargetHistory, &err)
 
-	historyArchiver, err := a.archiverProvider.GetHistoryArchiver(request.HistoryURI.Scheme(), request.CallerService)
+	historyArchiver, err := a.archiverProvider.GetHistoryArchiver(request.HistoryURI.Scheme())
 	if err != nil {
 		return err
 	}
@@ -208,7 +208,7 @@ func (a *archiver) archiveVisibility(ctx context.Context, request *Request, logg
 	)
 	defer a.recordArchiveTargetResult(logger, time.Now(), TargetVisibility, &err)
 
-	visibilityArchiver, err := a.archiverProvider.GetVisibilityArchiver(request.VisibilityURI.Scheme(), request.CallerService)
+	visibilityArchiver, err := a.archiverProvider.GetVisibilityArchiver(request.VisibilityURI.Scheme())
 	if err != nil {
 		return err
 	}

@@ -81,6 +81,7 @@ type (
 		NamespaceReplicationQueue persistence.NamespaceReplicationQueue
 		ShardMgr                  *persistence.MockShardManager
 		ExecutionMgr              *persistence.MockExecutionManager
+		NexusEndpointManager      *persistence.MockNexusEndpointManager
 
 		Logger log.Logger
 	}
@@ -116,6 +117,7 @@ func NewTest(controller *gomock.Controller, serviceName primitives.ServiceName) 
 	executionMgr := persistence.NewMockExecutionManager(controller)
 	executionMgr.EXPECT().GetHistoryBranchUtil().Return(&persistence.HistoryBranchUtilImpl{}).AnyTimes()
 	namespaceReplicationQueue := persistence.NewMockNamespaceReplicationQueue(controller)
+	nexusEndpointMgr := persistence.NewMockNexusEndpointManager(controller)
 
 	membershipMonitor := membership.NewMockMonitor(controller)
 	hostInfoProvider := membership.NewMockHostInfoProvider(controller)
@@ -181,6 +183,7 @@ func NewTest(controller *gomock.Controller, serviceName primitives.ServiceName) 
 		NamespaceReplicationQueue: namespaceReplicationQueue,
 		ShardMgr:                  shardMgr,
 		ExecutionMgr:              executionMgr,
+		NexusEndpointManager:      nexusEndpointMgr,
 
 		// logger
 

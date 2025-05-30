@@ -37,6 +37,7 @@ type ParentExecutionInfo struct {
 	// first starts the child workflow, and the child workflow is starting on a Task Queue belonging
 	// to the same Worker Deployment Version.
 	// Not set in the subsequent execution if the child workflow continues-as-new.
+	// Deprecated. Replaced with `inherited_pinned_version` in WorkflowExecutionStartedEventAttributes.
 	PinnedWorkerDeploymentVersion string `protobuf:"bytes,7,opt,name=pinned_worker_deployment_version,json=pinnedWorkerDeploymentVersion,proto3" json:"pinned_worker_deployment_version,omitempty"`
 	unknownFields                 protoimpl.UnknownFields
 	sizeCache                     protoimpl.SizeCache
@@ -229,7 +230,7 @@ var File_temporal_server_api_workflow_v1_message_proto protoreflect.FileDescript
 
 const file_temporal_server_api_workflow_v1_message_proto_rawDesc = "" +
 	"\n" +
-	"-temporal/server/api/workflow/v1/message.proto\x12\x1ftemporal.server.api.workflow.v1\x1a$temporal/api/common/v1/message.proto\x1a*temporal/server/api/clock/v1/message.proto\"\xf9\x02\n" +
+	"-temporal/server/api/workflow/v1/message.proto\x12\x1ftemporal.server.api.workflow.v1\x1a$temporal/api/common/v1/message.proto\x1a*temporal/server/api/clock/v1/message.proto\"\xff\x02\n" +
 	"\x13ParentExecutionInfo\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1c\n" +
 	"\tnamespace\x18\x02 \x01(\tR\tnamespace\x12G\n" +
@@ -237,7 +238,7 @@ const file_temporal_server_api_workflow_v1_message_proto_rawDesc = "" +
 	"\finitiated_id\x18\x04 \x01(\x03R\vinitiatedId\x12?\n" +
 	"\x05clock\x18\x05 \x01(\v2).temporal.server.api.clock.v1.VectorClockR\x05clock\x12+\n" +
 	"\x11initiated_version\x18\x06 \x01(\x03R\x10initiatedVersion\x12G\n" +
-	" pinned_worker_deployment_version\x18\a \x01(\tR\x1dpinnedWorkerDeploymentVersion\"\\\n" +
+	" pinned_worker_deployment_version\x18\a \x01(\tR\x1dpinnedWorkerDeploymentVersionJ\x04\b\b\x10\t\"\\\n" +
 	"\x11RootExecutionInfo\x12G\n" +
 	"\texecution\x18\x01 \x01(\v2).temporal.api.common.v1.WorkflowExecutionR\texecution\"\xc0\x01\n" +
 	"\x11BaseExecutionInfo\x12\x15\n" +
