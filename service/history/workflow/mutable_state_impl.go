@@ -2561,7 +2561,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	if event.ParentPinnedWorkerDeploymentVersion != "" || event.ParentPinnedDeploymentVersion != nil {
 		parentPinned := event.ParentPinnedDeploymentVersion
 		if parentPinned == nil {
-			parentPinned = worker_versioning.ExternalWorkerDeploymentVersionFromString(event.ParentPinnedWorkerDeploymentVersion) //nolint:staticcheck // SA1019: worker versioning v0.31
+			parentPinned = worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(event.ParentPinnedWorkerDeploymentVersion) //nolint:staticcheck // SA1019: worker versioning v0.31
 		}
 		ms.executionInfo.VersioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{
 			Behavior:          enumspb.VERSIONING_BEHAVIOR_PINNED,
@@ -2648,7 +2648,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 			ms.executionInfo.VersioningInfo.VersioningOverride.Override = &workflowpb.VersioningOverride_Pinned{
 				Pinned: &workflowpb.VersioningOverride_PinnedOverride{
 					Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
-					Version:  worker_versioning.ExternalWorkerDeploymentVersionFromString(vs),
+					Version:  worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(vs),
 				},
 			}
 			//nolint:staticcheck // SA1019: worker versioning v0.31
@@ -3529,7 +3529,7 @@ func (ms *MutableStateImpl) AddActivityTaskStartedEvent(
 	}
 
 	if deployment != nil {
-		ai.LastWorkerDeploymentVersion = worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(deployment))
+		ai.LastWorkerDeploymentVersion = worker_versioning.WorkerDeploymentVersionToStringV31(worker_versioning.DeploymentVersionFromDeployment(deployment))
 		ai.LastDeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(deployment)
 	}
 
@@ -4884,7 +4884,7 @@ func (ms *MutableStateImpl) updateVersioningOverride(
 			ms.GetExecutionInfo().VersioningInfo.VersioningOverride.Override = &workflowpb.VersioningOverride_Pinned{
 				Pinned: &workflowpb.VersioningOverride_PinnedOverride{
 					//nolint:staticcheck // SA1019: worker versioning v0.31
-					Version:  worker_versioning.ExternalWorkerDeploymentVersionFromString(override.GetPinnedVersion()),
+					Version:  worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(override.GetPinnedVersion()),
 					Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
 				},
 			}
@@ -4916,7 +4916,7 @@ func (ms *MutableStateImpl) updateVersioningOverride(
 			ms.GetExecutionInfo().VersioningInfo.VersioningOverride.Override = &workflowpb.VersioningOverride_Pinned{
 				Pinned: &workflowpb.VersioningOverride_PinnedOverride{
 					Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
-					Version:  worker_versioning.ExternalWorkerDeploymentVersionFromString(vs),
+					Version:  worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(vs),
 				},
 			}
 		}
@@ -8029,7 +8029,7 @@ func (ms *MutableStateImpl) GetWorkerDeploymentSA() string {
 		}
 		//nolint:staticcheck // SA1019: worker versioning v0.31
 		if vs := override.GetPinnedVersion(); vs != "" {
-			v, _ := worker_versioning.WorkerDeploymentVersionFromString(vs)
+			v, _ := worker_versioning.WorkerDeploymentVersionFromStringV31(vs)
 			return v.GetDeploymentName()
 		}
 		//nolint:staticcheck // SA1019: worker versioning v0.30
@@ -8047,16 +8047,16 @@ func (ms *MutableStateImpl) GetWorkerDeploymentVersionSA() string {
 		}
 		//nolint:staticcheck // SA1019: worker versioning v0.31
 		if vs := override.GetPinnedVersion(); vs != "" {
-			return vs
+			return worker_versioning.ExternalWorkerDeploymentVersionToString(worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(vs))
 		}
 		//nolint:staticcheck // SA1019: worker versioning v0.30
-		return worker_versioning.DeploymentToString(override.GetDeployment())
+		return worker_versioning.ExternalWorkerDeploymentVersionToString(worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(override.GetDeployment()))
 	}
 	if v := versioningInfo.GetDeploymentVersion(); v != nil {
 		return worker_versioning.ExternalWorkerDeploymentVersionToString(v)
 	}
 	//nolint:staticcheck // SA1019: worker versioning v0.31
-	return versioningInfo.GetVersion()
+	return worker_versioning.ExternalWorkerDeploymentVersionToString(worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(versioningInfo.GetVersion()))
 }
 
 func (ms *MutableStateImpl) GetWorkflowVersioningBehaviorSA() enumspb.VersioningBehavior {
@@ -8081,7 +8081,7 @@ func (ms *MutableStateImpl) GetDeploymentTransition() *workflowpb.DeploymentTran
 			ret.Deployment = worker_versioning.DeploymentFromExternalDeploymentVersion(dv)
 		} else {
 			//nolint:staticcheck // SA1019: worker versioning v0.31
-			v, _ := worker_versioning.WorkerDeploymentVersionFromString(t.GetVersion())
+			v, _ := worker_versioning.WorkerDeploymentVersionFromStringV31(t.GetVersion())
 			ret.Deployment = worker_versioning.DeploymentFromDeploymentVersion(v)
 		}
 		return ret

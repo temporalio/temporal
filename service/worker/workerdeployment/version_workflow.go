@@ -447,6 +447,7 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 	}
 
 	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+
 	// sync to user data
 	var syncRes deploymentspb.SyncDeploymentVersionUserDataResponse
 	err = workflow.ExecuteActivity(activityCtx, d.a.SyncDeploymentVersionUserData, &deploymentspb.SyncDeploymentVersionUserDataRequest{
@@ -634,7 +635,7 @@ func (d *VersionWorkflowRunner) syncSummary(ctx workflow.Context) {
 		"",
 		SyncVersionSummarySignal,
 		&deploymentspb.WorkerDeploymentVersionSummary{
-			Version:              worker_versioning.WorkerDeploymentVersionToString(d.VersionState.Version),
+			Version:              worker_versioning.WorkerDeploymentVersionToStringV31(d.VersionState.Version),
 			CreateTime:           d.VersionState.CreateTime,
 			DrainageStatus:       d.VersionState.DrainageInfo.GetStatus(), // deprecated.
 			DrainageInfo:         d.VersionState.DrainageInfo,
