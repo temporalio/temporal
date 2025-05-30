@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -5570,19 +5571,17 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 
 			uwsCh := sendUpdateWithStart(testcore.NewContext(), startReq, updateReq)
 
-			_, err := s.TaskPoller().PollAndHandleWorkflowTask(tv,
-				func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-					return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
-				})
-			s.NoError(err)
-
-			_, err = s.TaskPoller().PollAndHandleWorkflowTask(tv,
-				func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-					return &workflowservice.RespondWorkflowTaskCompletedRequest{
-						Messages: s.UpdateAcceptCompleteMessages(tv, task.Messages[0]),
-					}, nil
-				})
-			s.NoError(err)
+			var updateProcessed atomic.Bool
+			for !updateProcessed.Load() {
+				_, err := s.TaskPoller().PollAndHandleWorkflowTask(tv,
+					func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+						if len(task.Messages) > 0 {
+							defer updateProcessed.Store(true)
+						}
+						return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
+					})
+				s.NoError(err)
+			}
 
 			<-uwsCh
 		})
