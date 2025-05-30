@@ -85,11 +85,11 @@ func (s *DescribeTaskQueueSuite) TestAddSingleTaskPerVersion_SinglePartition_Val
 }
 
 func (s *DescribeTaskQueueSuite) TestAddSingleTaskPerVersion_ValidateCachedStats_NoMatchingBehaviour() {
-	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
-	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 4)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 4)
 	s.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 500*time.Millisecond)
 
-	s.publishConsumeWorkflowTasksValidateStatsCached(1, true)
+	s.publishConsumeWorkflowTasksValidateStatsCached(1, false)
 }
 
 // publish 50% to default/unversioned task queue and 50% to versioned task queue
@@ -296,8 +296,7 @@ func (s *DescribeTaskQueueSuite) validateDescribeTaskQueue(
 
 		if singlePartition {
 			//nolint:staticcheck // SA1019 deprecated field
-			a.Equal(expectedBacklogCount[enumspb.TASK_QUEUE_TYPE_WORKFLOW],
-				workflowResp.TaskQueueStatus.GetBacklogCountHint())
+			a.Equal(expectedBacklogCount[enumspb.TASK_QUEUE_TYPE_WORKFLOW], workflowResp.TaskQueueStatus.GetBacklogCountHint())
 		}
 
 		validateDescribeTaskQueueStats(
@@ -322,8 +321,7 @@ func (s *DescribeTaskQueueSuite) validateDescribeTaskQueue(
 
 		if singlePartition {
 			//nolint:staticcheck // SA1019 deprecated field
-			a.Equal(expectedBacklogCount[enumspb.TASK_QUEUE_TYPE_ACTIVITY],
-				activityResp.TaskQueueStatus.GetBacklogCountHint())
+			a.Equal(expectedBacklogCount[enumspb.TASK_QUEUE_TYPE_ACTIVITY], activityResp.TaskQueueStatus.GetBacklogCountHint())
 		}
 
 		validateDescribeTaskQueueStats(
