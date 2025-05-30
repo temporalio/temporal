@@ -308,7 +308,10 @@ func (d *ClientImpl) UpdateVersionMetadata(
 	request *workflowservice.UpdateWorkerDeploymentVersionMetadataRequest,
 ) (_ *deploymentpb.VersionMetadata, retErr error) {
 	dv := request.GetDeploymentVersion()
-	identity := uuid.New() // replace with request.Identity later
+	identity := request.Identity
+	if identity == "" {
+		identity = uuid.New()
+	}
 	//revive:disable-next-line:defer
 	defer d.record(
 		"UpdateVersionMetadata",
