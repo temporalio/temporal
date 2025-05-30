@@ -30,18 +30,12 @@ global:
   pprof:
     port: 7936
   metrics:
-#     prometheus:
-# #      # specify framework to use new approach for initializing metrics and/or use opentelemetry
-# #      framework: "opentelemetry"
-#       framework: "tally"
-#       timerType: "histogram"
-#       listenAddress: "127.0.0.1:8000"
-    recordTimerInSeconds: true
-    statsd:
-      hostPort: "127.0.0.1:8125"
-      prefix: "temporal"
-      flushInterval: 1s
-      # framework: "opentelemetry"
+    prometheus:
+#      # specify framework to use new approach for initializing metrics and/or use opentelemetry
+#      framework: "opentelemetry"
+      framework: "tally"
+      timerType: "histogram"
+      listenAddress: "127.0.0.1:8000"
 
 services:
   frontend:

@@ -56,11 +56,9 @@ type (
 
 		// WithoutUnitSuffix controls the additional of unit suffixes to metric names.
 		// This config only takes effect when using opentelemetry framework.
-		// Note: this config only takes effect when using prometheus via opentelemetry framework
 		WithoutUnitSuffix bool `yaml:"withoutUnitSuffix"`
 		// WithoutCounterSuffix controls the additional of _total suffixes to counter metric names.
 		// This config only takes effect when using opentelemetry framework.
-		// Note: this config only takes effect when using prometheus via opentelemetry framework
 		WithoutCounterSuffix bool `yaml:"withoutCounterSuffix"`
 		// RecordTimerInSeconds controls if Timer metric should be emitted as number of seconds
 		// (instead of milliseconds).

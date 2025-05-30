@@ -62,7 +62,6 @@ func NewOtelMetricsHandler(
 		return nil, fmt.Errorf("failed to build metrics catalog: %w", err)
 	}
 
-	l.Info(fmt.Sprintf("otelMetricsHandler. clientConfig: %+v", cfg))
 	return &otelMetricsHandler{
 		l:                    l,
 		set:                  makeInitialSet(cfg.Tags),

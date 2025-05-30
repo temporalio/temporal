@@ -2,8 +2,6 @@ package resetworkflow
 
 import (
 	"context"
-	"fmt"
-	"time"
 
 	"github.com/google/uuid"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -29,13 +27,6 @@ func Invoke(
 	shardContext historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (_ *historyservice.ResetWorkflowExecutionResponse, retError error) {
-	startTime := time.Now()
-	defer func() {
-		time.Sleep(2 * time.Second)
-		latency := time.Since(startTime)
-		metrics.TestTimerMetric.With(shardContext.GetMetricsHandler()).Record(latency)
-		shardContext.GetLogger().Info(fmt.Sprintf("test_timer_metric: [%s]", latency))
-	}()
 	namespaceID := namespace.ID(resetRequest.GetNamespaceId())
 	err := api.ValidateNamespaceUUID(namespaceID)
 	if err != nil {
