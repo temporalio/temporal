@@ -139,23 +139,23 @@ func DecodeWorkerDeploymentMemo(memo *commonpb.Memo) *deploymentspb.WorkerDeploy
 		workerDeploymentWorkflowMemo.RoutingConfig = &deploymentpb.RoutingConfig{}
 	}
 	rc := workerDeploymentWorkflowMemo.RoutingConfig
-	if rc.CurrentVersion == "" {
+	if rc.CurrentVersion == "" { //nolint:staticcheck
 		rc.CurrentVersion = worker_versioning.WorkerDeploymentVersionToStringV31(rc.CurrentDeploymentVersion) //nolint:staticcheck
 	}
-	if rc.RampingVersion == "" {
+	if rc.RampingVersion == "" { //nolint:staticcheck
 		rc.RampingVersion = worker_versioning.WorkerDeploymentVersionToStringV31(rc.RampingDeploymentVersion) //nolint:staticcheck
 	}
 
 	if latest := workerDeploymentWorkflowMemo.GetLatestVersionSummary(); latest != nil {
-		latest.Version = worker_versioning.WorkerDeploymentVersionToStringV31(latest.GetDeploymentVersion())
+		latest.Version = worker_versioning.WorkerDeploymentVersionToStringV31(latest.GetDeploymentVersion()) //nolint:staticcheck
 	}
 
 	if current := workerDeploymentWorkflowMemo.GetCurrentVersionSummary(); current != nil {
-		current.Version = worker_versioning.WorkerDeploymentVersionToStringV31(current.GetDeploymentVersion())
+		current.Version = worker_versioning.WorkerDeploymentVersionToStringV31(current.GetDeploymentVersion()) //nolint:staticcheck
 	}
 
 	if ramping := workerDeploymentWorkflowMemo.GetRampingVersionSummary(); ramping != nil {
-		ramping.Version = worker_versioning.WorkerDeploymentVersionToStringV31(ramping.GetDeploymentVersion())
+		ramping.Version = worker_versioning.WorkerDeploymentVersionToStringV31(ramping.GetDeploymentVersion()) //nolint:staticcheck
 	}
 
 	return &workerDeploymentWorkflowMemo

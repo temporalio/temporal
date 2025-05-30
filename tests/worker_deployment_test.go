@@ -1259,10 +1259,10 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Unversione
 		"ramping non-zero traffic to unversioned is not supported",
 		&workflowservice.SetWorkerDeploymentRampingVersionResponse{PreviousVersion: worker_versioning.UnversionedVersionId})
 
-	//// check that the current version's task queues have ramping version == __unversioned__
-	//for i := 0; i < taskQueues; i++ {
-	//	s.verifyTaskQueueVersioningInfo(ctx, tv.WithTaskQueueNumber(i).TaskQueue(), tv.DeploymentVersionString(), worker_versioning.UnversionedVersionId, 75)
-	//}
+	//  // check that the current version's task queues have ramping version == __unversioned__
+	//  for i := 0; i < taskQueues; i++ {
+	//  	s.verifyTaskQueueVersioningInfo(ctx, tv.WithTaskQueueNumber(i).TaskQueue(), tv.DeploymentVersionString(), worker_versioning.UnversionedVersionId, 75)
+	//  }
 
 }
 
