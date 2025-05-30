@@ -64,7 +64,7 @@ type (
 		WithoutCounterSuffix bool `yaml:"withoutCounterSuffix"`
 		// RecordTimerInSeconds controls if Timer metric should be emitted as number of seconds
 		// (instead of milliseconds).
-		// This config only takes effect when using opentelemetry framework for both statsd and prometheus.
+		// This config only takes effect when using prometheus via opentelemetry framework
 		RecordTimerInSeconds bool `yaml:"recordTimerInSeconds"`
 	}
 
@@ -470,7 +470,7 @@ func MetricsHandlerFromConfig(logger log.Logger, c *Config) (Handler, error) {
 		if err != nil {
 			logger.Fatal(err.Error())
 		}
-		return NewOtelMetricsHandler(logger, otelProvider, c.ClientConfig)
+		return NewOtelMetricsHandler(logger, otelProvider, c.ClientConfig, false)
 	}
 
 	if c.Prometheus != nil && c.Prometheus.Framework == FrameworkOpentelemetry {
@@ -479,7 +479,7 @@ func MetricsHandlerFromConfig(logger log.Logger, c *Config) (Handler, error) {
 		if err != nil {
 			logger.Fatal(err.Error())
 		}
-		return NewOtelMetricsHandler(logger, otelProvider, c.ClientConfig)
+		return NewOtelMetricsHandler(logger, otelProvider, c.ClientConfig, c.ClientConfig.RecordTimerInSeconds)
 	}
 
 	// fallback to tally if no framework is specified

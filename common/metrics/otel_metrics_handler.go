@@ -56,6 +56,7 @@ func NewOtelMetricsHandler(
 	l log.Logger,
 	o OpenTelemetryProvider,
 	cfg ClientConfig,
+	shouldRecordTimerInSeconds bool,
 ) (*otelMetricsHandler, error) {
 	c, err := globalRegistry.buildCatalog()
 	if err != nil {
@@ -69,7 +70,7 @@ func NewOtelMetricsHandler(
 		excludeTags:          configExcludeTags(cfg),
 		catalog:              c,
 		gauges:               new(sync.Map),
-		recordTimerInSeconds: cfg.RecordTimerInSeconds,
+		recordTimerInSeconds: shouldRecordTimerInSeconds,
 	}, nil
 }
 
