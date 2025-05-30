@@ -228,9 +228,6 @@ func (h *Handler) DeepHealthCheck(
 // checkHistoryHealthSignals checks the history health signal that is captured by the interceptor.
 func (h *Handler) checkHistoryHealthSignals() *historyservice.DeepHealthCheckResponse {
 	// Check that the RPC latency doesn't exceed the threshold.
-	if _, ok := h.historyHealthSignal.(*interceptor.NoopSignalAggregator); ok {
-		h.logger.Warn("health signal aggregator is using noop implementation")
-	}
 	if h.historyHealthSignal.AverageLatency() > h.config.HealthRPCLatencyFailure() {
 		metrics.HistoryHostHealthGauge.With(h.metricsHandler).Record(float64(enumsspb.HEALTH_STATE_NOT_SERVING))
 		return &historyservice.DeepHealthCheckResponse{State: enumsspb.HEALTH_STATE_NOT_SERVING}
