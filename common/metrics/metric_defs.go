@@ -590,6 +590,7 @@ var (
 		"service_error_with_type",
 		WithDescription("The number of all service request errors by error type."),
 	)
+	TestTimerMetric                          = NewTimerDef("test_timer_metric")
 	ServiceLatency                           = NewTimerDef("service_latency")
 	ServiceLatencyNoUserLatency              = NewTimerDef("service_latency_nouserlatency")
 	ServiceLatencyUserLatency                = NewTimerDef("service_latency_userlatency")
