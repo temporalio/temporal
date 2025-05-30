@@ -503,7 +503,7 @@ func mapstructureHookGeneric(f, t reflect.Type, data any) (any, error) {
 		mth.Type.Out(0) == t &&
 		mth.Type.Out(1) == errorType {
 
-		out := mth.Func.Call([]reflect.Value{reflect.New(t).Elem(), reflect.ValueOf(data)})
+		out := mth.Func.Call([]reflect.Value{reflect.Zero(t), reflect.ValueOf(data)})
 		if !out[1].IsNil() {
 			err := out[1].Interface().(error)
 			return nil, err
