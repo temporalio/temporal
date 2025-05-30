@@ -1667,9 +1667,9 @@ func (s *Versioning3Suite) TestDescribeTaskQueueVersioningInfo() {
 	})
 	s.NoError(err)
 	s.ProtoEqual(&taskqueuepb.TaskQueueVersioningInfo{
-		CurrentDeploymentVersion: worker_versioning.ExternalWorkerDeploymentVersionFromString("__unversioned__"),
+		CurrentDeploymentVersion: worker_versioning.ExternalWorkerDeploymentVersionFromStringV31("__unversioned__"),
 		CurrentVersion:           "__unversioned__",
-		RampingDeploymentVersion: worker_versioning.ExternalWorkerDeploymentVersionFromString(tv.DeploymentVersionString()),
+		RampingDeploymentVersion: worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(tv.DeploymentVersionString()),
 		RampingVersion:           tv.DeploymentVersionString(),
 		RampingVersionPercentage: 20,
 		UpdateTime:               timestamp.TimePtr(t1),
@@ -1684,7 +1684,7 @@ func (s *Versioning3Suite) TestDescribeTaskQueueVersioningInfo() {
 	})
 	s.NoError(err)
 	s.ProtoEqual(&taskqueuepb.TaskQueueVersioningInfo{
-		CurrentDeploymentVersion: worker_versioning.ExternalWorkerDeploymentVersionFromString(tv.DeploymentVersionString()),
+		CurrentDeploymentVersion: worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(tv.DeploymentVersionString()),
 		CurrentVersion:           tv.DeploymentVersionString(),
 		UpdateTime:               timestamp.TimePtr(t1),
 	}, actInfo.GetVersioningInfo())
@@ -1700,9 +1700,9 @@ func (s *Versioning3Suite) TestDescribeTaskQueueVersioningInfo() {
 	})
 	s.NoError(err)
 	s.ProtoEqual(&taskqueuepb.TaskQueueVersioningInfo{
-		CurrentDeploymentVersion: worker_versioning.ExternalWorkerDeploymentVersionFromString(tv.DeploymentVersionString()),
+		CurrentDeploymentVersion: worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(tv.DeploymentVersionString()),
 		CurrentVersion:           tv.DeploymentVersionString(),
-		RampingDeploymentVersion: worker_versioning.ExternalWorkerDeploymentVersionFromString("__unversioned__"),
+		RampingDeploymentVersion: worker_versioning.ExternalWorkerDeploymentVersionFromStringV31("__unversioned__"),
 		RampingVersion:           "__unversioned__",
 		RampingVersionPercentage: 10,
 		UpdateTime:               timestamp.TimePtr(t2),
@@ -2029,7 +2029,8 @@ func (s *Versioning3Suite) verifyWorkflowVersioning(
 	s.Equal(behavior.String(), versioningInfo.GetBehavior().String())
 	var v *deploymentspb.WorkerDeploymentVersion
 	if versioningInfo.GetVersion() != "" { //nolint:staticcheck // SA1019: worker versioning v0.31
-		v, err = worker_versioning.WorkerDeploymentVersionFromString(versioningInfo.GetVersion())
+		//nolint:staticcheck // SA1019: worker versioning v0.31
+		v, err = worker_versioning.WorkerDeploymentVersionFromStringV31(versioningInfo.GetVersion())
 		s.NoError(err)
 		s.NotNil(versioningInfo.GetDeploymentVersion()) // make sure we are always populating this whenever Version string is populated
 	}
@@ -2592,7 +2593,7 @@ func (s *Versioning3Suite) verifyVersioningSAs(
 
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		query := fmt.Sprintf("WorkflowId = '%s' AND TemporalWorkerDeployment = '%s' AND TemporalWorkerDeploymentVersion= '%s' AND TemporalWorkflowVersioningBehavior = '%s'",
-			tv.WorkflowID(), tv.DeploymentSeries(), tv.DeploymentVersionString(), behavior.String())
+			tv.WorkflowID(), tv.DeploymentSeries(), tv.DeploymentVersionStringV32(), behavior.String())
 		resp, err := s.FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
 			Namespace: s.Namespace().String(),
 			Query:     query,
@@ -2611,7 +2612,7 @@ func (s *Versioning3Suite) verifyVersioningSAs(
 				searchAttr = searchAttrAny.([]string)
 			}
 			if behavior == enumspb.VERSIONING_BEHAVIOR_PINNED {
-				a.Contains(searchAttr, worker_versioning.PinnedBuildIdSearchAttribute(tv.DeploymentVersionString()))
+				a.Contains(searchAttr, worker_versioning.PinnedBuildIdSearchAttribute(tv.DeploymentVersionStringV32()))
 			}
 			for _, b := range usedBuilds {
 				a.Contains(searchAttr, worker_versioning.VersionedBuildIdSearchAttribute(b.BuildID()))

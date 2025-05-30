@@ -1113,7 +1113,7 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 	//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
 	wftDeployment := attrs.GetDeployment()
 	if v := attrs.GetWorkerDeploymentVersion(); v != "" { //nolint:staticcheck // SA1019: worker versioning v0.31
-		dv, _ := worker_versioning.WorkerDeploymentVersionFromString(v)
+		dv, _ := worker_versioning.WorkerDeploymentVersionFromStringV31(v)
 		wftDeployment = worker_versioning.DeploymentFromDeploymentVersion(dv)
 	}
 	if v := attrs.GetDeploymentVersion(); v != nil {
@@ -1161,7 +1161,7 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 		//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
 		versioningInfo.Deployment = nil
 		//nolint:staticcheck // SA1019 deprecated Version will clean up later [cleanup-wv-3.1]
-		versioningInfo.Version = worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(wftDeployment))
+		versioningInfo.Version = worker_versioning.WorkerDeploymentVersionToStringV31(worker_versioning.DeploymentVersionFromDeployment(wftDeployment))
 		versioningInfo.DeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(wftDeployment)
 	}
 
