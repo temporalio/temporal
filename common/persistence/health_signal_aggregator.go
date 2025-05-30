@@ -47,7 +47,7 @@ type (
 	}
 )
 
-func NewHealthSignalAggregatorImpl(
+func NewHealthSignalAggregator(
 	aggregationEnabled bool,
 	windowSize time.Duration,
 	maxBufferSize int,

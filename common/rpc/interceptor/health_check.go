@@ -60,8 +60,8 @@ type (
 	NoopSignalAggregator struct{}
 )
 
-// NewHealthSignalAggregatorImpl creates a new instance of HealthSignalAggregatorImpl
-func NewHealthSignalAggregatorImpl(
+// NewHealthSignalAggregator creates a new instance of HealthSignalAggregatorImpl
+func NewHealthSignalAggregator(
 	windowSize time.Duration,
 	maxBufferSize int,
 	logger log.Logger,
