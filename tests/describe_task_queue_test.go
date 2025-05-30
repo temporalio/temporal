@@ -42,10 +42,17 @@ func (s *DescribeTaskQueueSuite) TestNonRoot() {
 	resp, err := s.FrontendClient().DescribeTaskQueue(context.Background(), &workflowservice.DescribeTaskQueueRequest{
 		Namespace: s.Namespace().String(),
 		TaskQueue: &taskqueuepb.TaskQueue{Name: "/_sys/foo/1", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		ApiMode:   enumspb.DESCRIBE_TASK_QUEUE_MODE_UNSPECIFIED,
 	})
 	s.NoError(err)
 	s.NotNil(resp)
+
+	resp, err = s.FrontendClient().DescribeTaskQueue(context.Background(),
+		&workflowservice.DescribeTaskQueueRequest{
+			Namespace:   s.Namespace().String(),
+			TaskQueue:   &taskqueuepb.TaskQueue{Name: "/_sys/foo/1", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			ReportStats: true,
+		})
+	s.ErrorContains(err, "DescribeTaskQueue stats are only supported for the root partition")
 }
 
 func (s *DescribeTaskQueueSuite) TestAddNoTasks_ValidateStats() {

@@ -1262,19 +1262,22 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 	if err != nil {
 		return nil, err
 	}
-	rootPM, _, err := e.getTaskQueuePartitionManager(ctx, partition, true, loadCauseDescribe)
+	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, true, loadCauseDescribe)
 	if err != nil {
 		return nil, err
 	}
 	//nolint:staticcheck // SA1019 deprecated
-	descrResp, err := rootPM.LegacyDescribeTaskQueue(req.GetIncludeTaskQueueStatus())
+	descrResp, err := pm.LegacyDescribeTaskQueue(req.GetIncludeTaskQueueStatus())
 	if err != nil {
 		return nil, err
 	}
 
 	if req.ReportStats {
+		if !pm.Partition().IsRoot() {
+			return nil, serviceerror.NewInvalidArgument("DescribeTaskQueue stats are only supported for the root partition")
+		}
 		cacheKey := ".taskQueueStats" // starts with `.` to prevent clashing with build ID cache keys
-		if ts := rootPM.GetCache(cacheKey); ts != nil {
+		if ts := pm.GetCache(cacheKey); ts != nil {
 			//revive:disable-next-line:unchecked-type-assertion
 			descrResp.DescResponse.TaskQueueStats = ts.(*taskqueuepb.TaskQueueStats)
 		} else {
@@ -1282,23 +1285,21 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 
 			// find all buildIds
 			var buildIds []string
-			userData, _, err := rootPM.GetUserDataManager().GetUserData()
+			userData, _, err := pm.GetUserDataManager().GetUserData()
 			if err != nil {
 				return nil, err
 			}
-			if userData != nil {
-				typedUserData := userData.GetData().GetPerType()[int32(rootPM.Partition().TaskType())]
-				for _, v := range typedUserData.GetDeploymentData().GetVersions() {
-					if v.GetVersion() == nil || v.GetVersion().GetDeploymentName() == "" || v.GetVersion().GetBuildId() == "" {
-						continue
-					}
-					buildIds = append(buildIds, worker_versioning.WorkerDeploymentVersionToString(v.GetVersion()))
+			typedUserData := userData.GetData().GetPerType()[int32(pm.Partition().TaskType())]
+			for _, v := range typedUserData.GetDeploymentData().GetVersions() {
+				if v.GetVersion() == nil || v.GetVersion().GetDeploymentName() == "" || v.GetVersion().GetBuildId() == "" {
+					continue
 				}
+				buildIds = append(buildIds, worker_versioning.WorkerDeploymentVersionToString(v.GetVersion()))
 			}
 
 			// query each partition for stats
 			// TODO(stephanos): don't query root partition again
-			for i := 0; i < rootPM.PartitionCount(); i++ {
+			for i := 0; i < pm.PartitionCount(); i++ {
 				partitionResp, err := e.matchingRawClient.DescribeTaskQueuePartition(ctx,
 					&matchingservice.DescribeTaskQueuePartitionRequest{
 						NamespaceId: request.GetNamespaceId(),
@@ -1335,7 +1336,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 				fmt.Println(fmt.Sprintf("total:%s", req.TaskQueueType.String()),
 					taskQueueStats.ApproximateBacklogCount)
 			}
-			rootPM.PutCache(cacheKey, taskQueueStats)
+			pm.PutCache(cacheKey, taskQueueStats)
 			descrResp.DescResponse.TaskQueueStats = taskQueueStats
 		}
 	}
