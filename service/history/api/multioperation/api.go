@@ -102,31 +102,33 @@ func Invoke(
 	// TODO(stephanos): remove again
 	defer func() {
 		if retErr != nil {
-			shardContext.GetLogger().Warn(
-				"MultiOperation failed",
-				tag.Error(retErr),
-				tag.ServiceErrorType(retErr),
-				tag.NewBoolTag("leaseCreated", mo.leaseCreated),
-				tag.NewBoolTag("leaseUpdated", mo.leaseUpdated),
-				tag.NewBoolTag("applyUpdateSinceUseExisting", mo.applyUpdateSinceUseExisting),
-				tag.NewBoolTag("applyUpdateSinceExists", mo.applyUpdateSinceExists),
-				tag.NewBoolTag("applyUpdateSinceDedup", mo.applyUpdateSinceDedup),
-				tag.NewBoolTag("retryWithUnavailable", mo.retryWithUnavailable),
-				tag.NewBoolTag("updateErrOnStart", mo.updateErrOnStart),
-				tag.NewBoolTag("startErrOnStart", mo.startErrOnStart),
-				tag.NewBoolTag("workflowIsRunning", mo.workflowIsRunning),
-				tag.NewBoolTag("startingWorkflow", mo.startingWorkflow),
-				tag.NewStringTag("startOutcome", mo.startOutcome.String()),
-				tag.NewStringTag("existingWorkflowRunID", mo.existingWorkflowRunID),
-				tag.NewStringTag("existingWorkflowState", mo.existingWorkflowState.String()),
-				tag.NewStringTag("existingWorkflowStatus", mo.existingWorkflowStatus.String()),
-				tag.NewTimePtrTag("existingWorkflowStartedAt", mo.existingWorkflowStartedAt),
-				tag.NewStringTag("reqUpdateID", updateReq.GetRequest().GetRequest().GetMeta().GetUpdateId()),
-				tag.NewStringTag("reqReusePolicy", startReq.GetStartRequest().GetWorkflowIdReusePolicy().String()),
-				tag.NewStringTag("reqConflictPolicy", startReq.GetStartRequest().GetWorkflowIdConflictPolicy().String()),
-				tag.NewStringTag("reqRunID", updateReq.GetRequest().GetWorkflowExecution().GetRunId()),
-				tag.NewStringTag("reqFirstExecutionRunId", updateReq.GetRequest().GetFirstExecutionRunId()),
-				tag.WorkflowID(req.WorkflowId))
+			if shardContext.GetConfig().EnableExecuteMultiOperationErrorDebug(updateReq.GetRequest().Namespace) {
+				shardContext.GetLogger().Warn(
+					"MultiOperation failed",
+					tag.Error(retErr),
+					tag.ServiceErrorType(retErr),
+					tag.NewBoolTag("leaseCreated", mo.leaseCreated),
+					tag.NewBoolTag("leaseUpdated", mo.leaseUpdated),
+					tag.NewBoolTag("applyUpdateSinceUseExisting", mo.applyUpdateSinceUseExisting),
+					tag.NewBoolTag("applyUpdateSinceExists", mo.applyUpdateSinceExists),
+					tag.NewBoolTag("applyUpdateSinceDedup", mo.applyUpdateSinceDedup),
+					tag.NewBoolTag("retryWithUnavailable", mo.retryWithUnavailable),
+					tag.NewBoolTag("updateErrOnStart", mo.updateErrOnStart),
+					tag.NewBoolTag("startErrOnStart", mo.startErrOnStart),
+					tag.NewBoolTag("workflowIsRunning", mo.workflowIsRunning),
+					tag.NewBoolTag("startingWorkflow", mo.startingWorkflow),
+					tag.NewStringTag("startOutcome", mo.startOutcome.String()),
+					tag.NewStringTag("existingWorkflowRunID", mo.existingWorkflowRunID),
+					tag.NewStringTag("existingWorkflowState", mo.existingWorkflowState.String()),
+					tag.NewStringTag("existingWorkflowStatus", mo.existingWorkflowStatus.String()),
+					tag.NewTimePtrTag("existingWorkflowStartedAt", mo.existingWorkflowStartedAt),
+					tag.NewStringTag("reqUpdateID", updateReq.GetRequest().GetRequest().GetMeta().GetUpdateId()),
+					tag.NewStringTag("reqReusePolicy", startReq.GetStartRequest().GetWorkflowIdReusePolicy().String()),
+					tag.NewStringTag("reqConflictPolicy", startReq.GetStartRequest().GetWorkflowIdConflictPolicy().String()),
+					tag.NewStringTag("reqRunID", updateReq.GetRequest().GetWorkflowExecution().GetRunId()),
+					tag.NewStringTag("reqFirstExecutionRunId", updateReq.GetRequest().GetFirstExecutionRunId()),
+					tag.WorkflowID(req.WorkflowId))
+			}
 		}
 	}()
 
