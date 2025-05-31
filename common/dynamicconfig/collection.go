@@ -491,9 +491,9 @@ func mapstructureHookProtoEnum(f, t reflect.Type, data any) (any, error) {
 	return nil, fmt.Errorf("name %q not found in enum %s", data, t.Name())
 }
 
-// Parses generic values. See GenericParseHookWithPointer/Value.
+// Parses generic values. See GenericParseHook.
 func mapstructureHookGeneric(f, t reflect.Type, data any) (any, error) {
-	// try value receiver
+	// try hook with value receiver
 	if mth, ok := t.MethodByName("DynamicConfigParseHook"); ok &&
 		mth.Type != nil &&
 		mth.Func.IsValid() &&
@@ -508,23 +508,6 @@ func mapstructureHookGeneric(f, t reflect.Type, data any) (any, error) {
 			return nil, out[1].Interface().(error) // nolint:revive // type checked above
 		}
 		return out[0].Interface(), nil
-	}
-
-	// try pointer receiver
-	if mth, ok := reflect.PointerTo(t).MethodByName("DynamicConfigParseHook"); ok &&
-		mth.Type != nil &&
-		mth.Func.IsValid() &&
-		mth.Type.NumIn() == 2 &&
-		mth.Type.In(1) == f &&
-		mth.Type.NumOut() == 1 &&
-		mth.Type.Out(0) == errorType {
-
-		receiver := reflect.New(t)
-		out := mth.Func.Call([]reflect.Value{receiver, reflect.ValueOf(data)})
-		if !out[0].IsNil() {
-			return nil, out[0].Interface().(error) // nolint:revive // type checked above
-		}
-		return receiver.Elem().Interface(), nil
 	}
 
 	// pass through

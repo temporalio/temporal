@@ -425,7 +425,7 @@ func (s *collectionSuite) TestGetTypedProtoEnum() {
 	})
 }
 
-// someEnum is an example type for DynamicConfigParseHook that uses pointer receivers.
+// someEnum is an example type for DynamicConfigParseHook.
 type someEnum int32
 
 const (
@@ -435,44 +435,20 @@ const (
 	someEnumValueThree
 )
 
-func (e *someEnum) DynamicConfigParseHook(s string) error {
+func (someEnum) DynamicConfigParseHook(s string) (someEnum, error) {
 	switch strings.ToLower(s) {
 	case "one":
-		*e = someEnumValueOne
+		return someEnumValueOne, nil
 	case "two":
-		*e = someEnumValueTwo
+		return someEnumValueTwo, nil
 	case "three":
-		*e = someEnumValueThree
-	default:
-		return errors.New("unknown value")
-	}
-	return nil
-}
-
-// otherEnum is an example type for DynamicConfigParseHook that uses value receivers.
-type otherEnum int16
-
-const (
-	otherEnumValueUnset otherEnum = iota
-	otherEnumValueOne
-	otherEnumValueTwo
-	otherEnumValueThree
-)
-
-func (otherEnum) DynamicConfigParseHook(s string) (otherEnum, error) {
-	switch strings.ToLower(s) {
-	case "one":
-		return otherEnumValueOne, nil
-	case "two":
-		return otherEnumValueTwo, nil
-	case "three":
-		return otherEnumValueThree, nil
+		return someEnumValueThree, nil
 	default:
 		return 0, errors.New("unknown value")
 	}
 }
 
-func (s *collectionSuite) TestGetGenericParseHookPointer() {
+func (s *collectionSuite) TestGetGenericParseHook() {
 	def := someEnumValueOne
 	setting := dynamicconfig.NewGlobalTypedSetting(
 		testGetTypedPropertyKey,
@@ -496,7 +472,7 @@ func (s *collectionSuite) TestGetGenericParseHookPointer() {
 	})
 }
 
-func (s *collectionSuite) TestGetGenericParseHookPointer_Struct() {
+func (s *collectionSuite) TestGetGenericParseHookValue_Struct() {
 	type myStruct struct {
 		FieldA someEnum
 		FieldB someEnum
@@ -521,64 +497,6 @@ func (s *collectionSuite) TestGetGenericParseHookPointer_Struct() {
 		s.Equal(myStruct{
 			FieldA: someEnumValueOne,
 			FieldB: someEnumValueThree, // from default
-		}, get())
-	})
-
-	s.Run("Missing", func() {
-		s.client.SetValue(testGetTypedPropertyKey, map[string]any{"FieldA": "one", "FieldB": "four"})
-		s.Equal(def, get()) // default since there was a parse error
-	})
-}
-
-func (s *collectionSuite) TestGetGenericParseHookValue() {
-	def := otherEnumValueOne
-	setting := dynamicconfig.NewGlobalTypedSetting(
-		testGetTypedPropertyKey,
-		def,
-		"",
-	)
-	get := setting.Get(s.cln)
-
-	s.Run("Default", func() {
-		s.Equal(def, get())
-	})
-
-	s.Run("Basic", func() {
-		s.client.SetValue(testGetTypedPropertyKey, "THRee")
-		s.Equal(otherEnumValueThree, get())
-	})
-
-	s.Run("Missing", func() {
-		s.client.SetValue(testGetTypedPropertyKey, "four")
-		s.Equal(def, get()) // default since there was a parse error
-	})
-}
-
-func (s *collectionSuite) TestGetGenericParseHookValue_Struct() {
-	type myStruct struct {
-		FieldA otherEnum
-		FieldB otherEnum
-	}
-	def := myStruct{
-		FieldA: otherEnumValueTwo,
-		FieldB: otherEnumValueThree,
-	}
-	setting := dynamicconfig.NewGlobalTypedSetting(
-		testGetTypedPropertyKey,
-		def,
-		"",
-	)
-	get := setting.Get(s.cln)
-
-	s.Run("Default", func() {
-		s.Equal(def, get())
-	})
-
-	s.Run("Basic", func() {
-		s.client.SetValue(testGetTypedPropertyKey, map[string]any{"fielda": "one"})
-		s.Equal(myStruct{
-			FieldA: otherEnumValueOne,
-			FieldB: otherEnumValueThree, // from default
 		}, get())
 	})
 
