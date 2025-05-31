@@ -379,15 +379,12 @@ func (n *Node) findNode(path []string) *Node {
 		return nil
 	}
 
-	if len(path) == 1 {
-		if path[0] != n.nodeName {
-			return nil
-		}
-		return n
-	}
 	child := n.children[path[0]]
 	if child == nil {
 		return nil
+	}
+	if len(path) == 1 {
+		return child
 	}
 	return child.findNode(path[1:])
 }
@@ -774,8 +771,12 @@ func (n *Node) syncSubField(fieldV reflect.Value, fieldN string, nodePath []stri
 		// Field is not empty but tree node is not set. It means this is a new field, and a node must be created.
 		childNode := newNode(n.nodeBase, n, fieldN)
 
-		if err = assertStructPointer(reflect.TypeOf(internal.value())); err != nil {
-			return
+		switch internal.value().(type) {
+		case []string: // Pointer
+		default: // Component | Data
+			if err = assertStructPointer(reflect.TypeOf(internal.value())); err != nil {
+				return
+			}
 		}
 		childNode.value = internal.value()
 		childNode.initSerializedNode(internal.fieldType())
@@ -987,12 +988,15 @@ func unmarshalProto(
 	return value, nil
 }
 
-// Ref implements the CHASM Context interface
-func (n *Node) Ref(
+// RefC implements the CHASM Context interface
+func (n *Node) RefC(
 	component Component,
 ) (ComponentRef, bool) {
+	// TODO: return error
+	_ = n.syncSubComponents()
+
 	for path, node := range n.andAllChildren() {
-		// TODO: deserialize entire tree?
+		// TODO: deserialize entire tree to make sure that node.value is not nil?
 		if node.value == component {
 			return ComponentRef{
 				componentPath: path,
@@ -1002,11 +1006,14 @@ func (n *Node) Ref(
 	return ComponentRef{}, false
 }
 
-func (n *Node) DataRef(
+func (n *Node) RefD(
 	data proto.Message,
 ) (ComponentRef, bool) {
+	// TODO: return error
+	_ = n.syncSubComponents()
+
 	for path, node := range n.andAllChildren() {
-		// TODO: deserialize entire tree?
+		// TODO: deserialize entire tree to make sure that node.value is not nil?
 		if node.value == data {
 			return ComponentRef{
 				componentPath: path,

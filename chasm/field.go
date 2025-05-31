@@ -44,25 +44,27 @@ func NewComponentField[C Component](
 	}
 }
 
-func ComponentPointerFor[C Component](
+func ComponentPointerTo[C Component](
 	ctx MutableContext,
 	c C,
 ) (Field[C], error) {
-	path, exists := ctx.Ref(c)
+	path, exists := ctx.RefC(c)
 	if !exists {
-		return NewEmptyField[C](), serviceerror.NewInvalidArgumentf("component field is not found")
+		// TODO: ctx.RefC should return error message which should be just propagated here.
+		return NewEmptyField[C](), serviceerror.NewInvalidArgument("component field is not found")
 	}
 	return Field[C]{
 		Internal: newFieldInternalWithValue(fieldTypePointer, path.componentPath),
 	}, nil
 }
 
-func DataPointerFor[D proto.Message](
+func DataPointerTo[D proto.Message](
 	ctx MutableContext,
 	d D,
 ) (Field[D], error) {
-	path, exists := ctx.DataRef(d)
+	path, exists := ctx.RefD(d)
 	if !exists {
+		// TODO: ctx.RefD should return error message which should be just propagated here.
 		return NewEmptyField[D](), serviceerror.NewInvalidArgumentf("data field is not found")
 	}
 	return Field[D]{
