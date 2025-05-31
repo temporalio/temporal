@@ -46,6 +46,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/serviceregistry"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
@@ -147,8 +148,9 @@ type (
 		acquireShardRetryPolicy backoff.RetryPolicy
 
 		stateMachineRegistry *hsm.Registry
+		chasmRegistry        *chasm.Registry
 
-		chasmRegistry *chasm.Registry
+		serviceRegistry *serviceregistry.ServiceRegistry
 	}
 
 	remoteClusterInfo struct {
@@ -2069,6 +2071,7 @@ func newContext(
 	eventsCache events.Cache,
 	stateMachineRegistry *hsm.Registry,
 	chasmRegistry *chasm.Registry,
+	serviceRegistry *serviceregistry.ServiceRegistry,
 ) (*ContextImpl, error) {
 	hostIdentity := hostInfoProvider.HostInfo().Identity()
 	sequenceID := atomic.AddInt64(&shardContextSequenceID, 1)
@@ -2118,6 +2121,7 @@ func newContext(
 		ioSemaphore:             locks.NewPrioritySemaphore(ioConcurrency),
 		stateMachineRegistry:    stateMachineRegistry,
 		chasmRegistry:           chasmRegistry,
+		serviceRegistry:         serviceRegistry,
 	}
 	shardContext.taskKeyManager = newTaskKeyManager(
 		shardContext.taskCategoryRegistry,
