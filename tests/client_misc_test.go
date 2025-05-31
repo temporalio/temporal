@@ -197,7 +197,7 @@ func (s *ClientMiscTestSuite) TestTooManyCancelRequests() {
 	defer cancel()
 
 	// create a large number of blocked workflows
-	numTargetWorkflows := 50 // should be much greater than s.maxPendingCancelRequests
+	numTargetWorkflows := testcore.ClientSuiteLimit*2 + 2 // 2 batches and some more.
 	targetWorkflow := func(ctx workflow.Context) error {
 		return workflow.Await(ctx, func() bool {
 			return false
@@ -242,6 +242,8 @@ func (s *ClientMiscTestSuite) TestTooManyCancelRequests() {
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted // 29 below is enumspb.WORKFLOW_TASK_FAILED_CAUSE_PENDING_REQUEST_CANCEL_LIMIT_EXCEEDED
   4 WorkflowTaskFailed {"Cause":29,"Failure":{"Message":"PendingRequestCancelLimitExceeded: the number of pending requests to cancel external workflows, 10, has reached the per-workflow limit of 10"}}
+  5 WorkflowTaskScheduled // Transient WFT
+  6 WorkflowTaskStarted
 `, func() []*historypb.HistoryEvent {
 			return s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()})
 		}, 3*time.Second, 500*time.Millisecond)
@@ -260,7 +262,7 @@ func (s *ClientMiscTestSuite) TestTooManyCancelRequests() {
 		})
 		s.NoError(err)
 		numCancelRequests := len(workflowExecution.State.RequestCancelInfos)
-		s.Assert().Zero(numCancelRequests)
+		s.Zero(numCancelRequests)
 		err = s.SdkClient().CancelWorkflow(ctx, cancelerWorkflowId, "")
 		s.NoError(err)
 	})
@@ -340,6 +342,8 @@ func (s *ClientMiscTestSuite) TestTooManyPendingSignals() {
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted // 28 below is enumspb.WORKFLOW_TASK_FAILED_CAUSE_PENDING_SIGNALS_LIMIT_EXCEEDED
   4 WorkflowTaskFailed {"Cause":28,"Failure":{"Message":"PendingSignalsLimitExceeded: the number of pending signals to external workflows, 10, has reached the per-workflow limit of 10"}}
+  5 WorkflowTaskScheduled // Transient WFT
+  6 WorkflowTaskStarted
 `, func() []*historypb.HistoryEvent {
 			return s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: senderRun.GetID(), RunId: senderRun.GetRunID()})
 		}, 3*time.Second, 500*time.Millisecond)

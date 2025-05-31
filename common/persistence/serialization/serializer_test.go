@@ -217,6 +217,7 @@ func (s *temporalSerializerSuite) TestDeserializeStrippedEvents() {
 		historyEvent := &historypb.HistoryEvent{
 			EventId:   123,
 			Version:   456,
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 			EventTime: nil, // or a valid timestamp
 			// This is an extra field not present in StrippedHistoryEvent
 			Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
@@ -247,6 +248,7 @@ func (s *temporalSerializerSuite) TestDeserializeStrippedEvents() {
 		// Known fields should be preserved
 		s.EqualValues(123, deserializedEvents[0].EventId)
 		s.EqualValues(456, deserializedEvents[0].Version)
+		s.EqualValues(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, deserializedEvents[0].EventType)
 
 		reflectMsg := deserializedEvents[0].ProtoReflect()
 		s.Empty(reflectMsg.GetUnknown(), "Unknown fields should have been discarded")
