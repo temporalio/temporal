@@ -955,7 +955,11 @@ Wildcards (*) are expanded to allow any substring. By default blacklist is empty
 		`FrontendEnableExecuteMultiOperation enables the ExecuteMultiOperation API in the frontend.
 The API is under active development.`,
 	)
-
+	EnableExecuteMultiOperationErrorDebug = NewNamespaceBoolSetting(
+		"history.enableExecuteMultiOperationErrorDebug",
+		false,
+		`Enable detailed MultiOperation error debug information in the history service.`,
+	)
 	FrontendEnableUpdateWorkflowExecutionAsyncAccepted = NewNamespaceBoolSetting(
 		"frontend.enableUpdateWorkflowExecutionAsyncAccepted",
 		true,
