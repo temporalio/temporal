@@ -10,6 +10,7 @@ import (
 	"google.golang.org/grpc"
 )
 
+// HealthInterceptor rejects frontend requests if the host has not been marked as healthy.
 type (
 	HealthInterceptor struct {
 		healthy atomic.Bool

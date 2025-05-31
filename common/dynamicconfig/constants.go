@@ -203,6 +203,11 @@ response to a StartWorkflowExecution request and skipping the trip through match
 		true,
 		`PersistenceHealthSignalMetricsEnabled determines whether persistence shard RPS metrics are emitted`,
 	)
+	HistoryHealthSignalMetricsEnabled = NewGlobalBoolSetting(
+		"system.historyHealthSignalMetricsEnabled",
+		true,
+		`HistoryHealthSignalMetricsEnabled determines whether history service RPC metrics are emitted`,
+	)
 	PersistenceHealthSignalAggregationEnabled = NewGlobalBoolSetting(
 		"system.persistenceHealthSignalAggregationEnabled",
 		true,
@@ -2425,6 +2430,16 @@ that task will be sent to DLQ.`,
 		"history.healthPersistenceErrorRatio",
 		0.90,
 		"History service health check on persistence error ratio",
+	)
+	HealthRPCLatencyFailure = NewGlobalFloatSetting(
+		"history.healthRPCLatencyFailure",
+		500,
+		"History service health check on RPC average latency (millisecond) threshold",
+	)
+	HealthRPCErrorRatio = NewGlobalFloatSetting(
+		"history.healthRPCErrorRatio",
+		0.90,
+		"History service health check on RPC error ratio",
 	)
 	SendRawHistoryBetweenInternalServices = NewGlobalBoolSetting(
 		"history.sendRawHistoryBetweenInternalServices",

@@ -140,7 +140,7 @@ func HealthSignalAggregatorProvider(
 	logger log.ThrottledLogger,
 ) persistence.HealthSignalAggregator {
 	if dynamicconfig.PersistenceHealthSignalMetricsEnabled.Get(dynamicCollection)() {
-		return persistence.NewHealthSignalAggregatorImpl(
+		return persistence.NewHealthSignalAggregator(
 			dynamicconfig.PersistenceHealthSignalAggregationEnabled.Get(dynamicCollection)(),
 			dynamicconfig.PersistenceHealthSignalWindowSize.Get(dynamicCollection)(),
 			dynamicconfig.PersistenceHealthSignalBufferSize.Get(dynamicCollection)(),
