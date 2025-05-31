@@ -258,7 +258,7 @@ func (s *WorkerDeploymentSuite) TestNamespaceDeploymentsLimit() {
 	s.ensureCreateVersionInDeployment(tv)
 
 	// pollers of the second deployment version should be rejected
-	s.pollFromDeploymentExpectFail(ctx, tv.WithDeploymentSeriesNumber(2), "Namespace deployments limit reached")
+	s.pollFromDeploymentExpectFail(ctx, tv.WithDeploymentSeriesNumber(2), "reached maximum deployments in namespace (1)")
 }
 
 func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment_TwoVersions_Sorted() {

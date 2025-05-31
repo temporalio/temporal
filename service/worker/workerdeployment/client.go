@@ -179,6 +179,7 @@ type Client interface {
 
 type ErrMaxTaskQueuesInVersion struct{ error }
 type ErrMaxVersionsInDeployment struct{ error }
+type ErrMaxDeploymentsInNamespace struct{ error }
 type ErrRegister struct{ error }
 
 // ClientImpl implements Client
@@ -791,15 +792,6 @@ func (d *ClientImpl) StartWorkerDeployment(
 	//revive:disable-next-line:defer
 	defer d.record("StartWorkerDeployment", &retErr, namespaceEntry.Name(), deploymentName, identity)()
 
-	// TODO (Carly): either max page size or default page size is 1000, so if there are > 1000 this would not catch it
-	deps, _, err := d.ListWorkerDeployments(ctx, namespaceEntry, 0, nil)
-	if err != nil {
-		return err
-	}
-	if len(deps) >= d.maxDeployments(namespaceEntry.Name().String()) {
-		return serviceerror.NewFailedPrecondition("maximum deployments in namespace, delete manually to continue deploying.")
-	}
-
 	workflowID := worker_versioning.GenerateDeploymentWorkflowID(deploymentName)
 
 	input, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.WorkerDeploymentWorkflowArgs{
@@ -1020,13 +1012,20 @@ func (d *ClientImpl) updateWithStartWorkerDeployment(
 
 	workflowID := worker_versioning.GenerateDeploymentWorkflowID(deploymentName)
 
-	// TODO (Carly): either max page size or default page size is 1000, so if there are > 1000 this would not catch it
-	deps, _, err := d.ListWorkerDeployments(ctx, namespaceEntry, 0, nil)
+	_, _, err = d.DescribeWorkerDeployment(ctx, namespaceEntry, deploymentName)
 	if err != nil {
-		return nil, err
-	}
-	if len(deps) >= d.maxDeployments(namespaceEntry.Name().String()) {
-		return nil, serviceerror.NewFailedPrecondition("maximum deployments in namespace, delete manually to continue deploying.")
+		var notFound *serviceerror.NotFound
+		if errors.As(err, &notFound) {
+			// New deployment, make sure we're not exceeding the limit
+			count, err := d.countWorkerDeployments(ctx, namespaceEntry)
+			if err != nil {
+				return nil, err
+			}
+			limit := d.maxDeployments(namespaceEntry.Name().String())
+			if count >= int64(limit) {
+				return nil, ErrMaxDeploymentsInNamespace{error: errors.New(fmt.Sprintf("reached maximum deployments in namespace (%d)", limit))}
+			}
+		}
 	}
 
 	input, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.WorkerDeploymentWorkflowArgs{
@@ -1052,6 +1051,26 @@ func (d *ClientImpl) updateWithStartWorkerDeployment(
 		identity,
 		requestID,
 	)
+}
+
+func (d *ClientImpl) countWorkerDeployments(
+	ctx context.Context,
+	namespaceEntry *namespace.Namespace,
+) (count int64, retError error) {
+	query := WorkerDeploymentVisibilityBaseListQuery
+
+	persistenceResp, err := d.visibilityManager.CountWorkflowExecutions(
+		ctx,
+		&manager.CountWorkflowExecutionsRequest{
+			NamespaceID: namespaceEntry.ID(),
+			Namespace:   namespaceEntry.Name(),
+			Query:       query,
+		},
+	)
+	if err != nil {
+		return 0, err
+	}
+	return persistenceResp.Count, nil
 }
 
 func (d *ClientImpl) updateWithStartWorkerDeploymentVersion(
