@@ -85,6 +85,7 @@ var (
 	errNoMatchingConstraint = errors.New("no matching constraint in key")
 
 	protoEnumType = reflect.TypeOf((*protoreflect.Enum)(nil)).Elem()
+	errorType     = reflect.TypeOf((*error)(nil)).Elem()
 	durationType  = reflect.TypeOf(time.Duration(0))
 	stringType    = reflect.TypeOf("")
 )
@@ -454,6 +455,7 @@ func ConvertStructure[T any](def T) func(v any) (T, error) {
 			DecodeHook: mapstructure.ComposeDecodeHookFunc(
 				mapstructureHookDuration,
 				mapstructureHookProtoEnum,
+				mapstructureHookGeneric,
 			),
 		})
 		if err != nil {
@@ -487,4 +489,27 @@ func mapstructureHookProtoEnum(f, t reflect.Type, data any) (any, error) {
 		}
 	}
 	return nil, fmt.Errorf("name %q not found in enum %s", data, t.Name())
+}
+
+// Parses generic values. See GenericParseHook.
+func mapstructureHookGeneric(f, t reflect.Type, data any) (any, error) {
+	// try hook with value receiver
+	if mth, ok := t.MethodByName("DynamicConfigParseHook"); ok &&
+		mth.Type != nil &&
+		mth.Func.IsValid() &&
+		mth.Type.NumIn() == 2 &&
+		mth.Type.In(1) == f &&
+		mth.Type.NumOut() == 2 &&
+		mth.Type.Out(0) == t &&
+		mth.Type.Out(1) == errorType {
+
+		out := mth.Func.Call([]reflect.Value{reflect.Zero(t), reflect.ValueOf(data)})
+		if !out[1].IsNil() {
+			return nil, out[1].Interface().(error) // nolint:revive // type checked above
+		}
+		return out[0].Interface(), nil
+	}
+
+	// pass through
+	return data, nil
 }
