@@ -842,6 +842,7 @@ func (n *Node) serializeCollectionNode() error {
 	return nil
 }
 
+// serializePointerNode doesn't serialize anything but named this way for consistency.
 func (n *Node) serializePointerNode() error {
 	path, isPathValid := n.value.([]string)
 	if !isPathValid {
@@ -965,6 +966,7 @@ func (n *Node) deserializeDataNode(
 	return nil
 }
 
+// deserializePointerNode doesn't deserialize anything but named this way for consistency.
 func (n *Node) deserializePointerNode() error {
 	n.value = n.serializedNode.GetMetadata().GetPointerAttributes().GetNodePath()
 	n.valueState = valueStateSynced
