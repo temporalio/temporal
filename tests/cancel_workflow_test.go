@@ -228,6 +228,7 @@ func (s *CancelWorkflowSuite) TestRequestCancelWorkflowCommandExecution_TargetRu
 		}}, nil
 	}
 
+	//nolint:staticcheck // SA1019 TaskPoller replacement needs to be done holistically.
 	externalPoller := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
 		Namespace:           s.ExternalNamespace().String(),
@@ -358,6 +359,7 @@ func (s *CancelWorkflowSuite) TestRequestCancelWorkflowCommandExecution_TargetFi
 		}}, nil
 	}
 
+	//nolint:staticcheck // SA1019 TaskPoller replacement needs to be done holistically.
 	externalPoller := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
 		Namespace:           s.ExternalNamespace().String(),
