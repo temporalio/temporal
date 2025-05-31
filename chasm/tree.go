@@ -354,6 +354,41 @@ func (n *Node) prepareDataValue(
 	return nil
 }
 
+func (n *Node) preparePointerValue(
+	chasmContext Context,
+) error {
+	metadata := n.serializedNode.Metadata
+	pointerAttr := metadata.GetPointerAttributes()
+	if pointerAttr == nil {
+		return serviceerror.NewInternal(
+			fmt.Sprintf("expect chasm node to have PointerAttributes, actual attributes: %v", metadata.Attributes),
+		)
+	}
+
+	if n.valueState == valueStateNeedDeserialize {
+		if err := n.deserialize(nil); err != nil {
+			return fmt.Errorf("failed to deserialize data: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func (n *Node) findNode(path []string) *Node {
+	if !softassert.That(n.logger, len(path) > 0, "path must have at least one element") {
+		return nil
+	}
+
+	child := n.children[path[0]]
+	if child == nil {
+		return nil
+	}
+	if len(path) == 1 {
+		return child
+	}
+	return child.findNode(path[1:])
+}
+
 func (n *Node) fieldType() fieldType {
 	if n.serializedNode.GetMetadata().GetComponentAttributes() != nil {
 		return fieldTypeComponent
@@ -363,13 +398,12 @@ func (n *Node) fieldType() fieldType {
 		return fieldTypeData
 	}
 
-	if n.serializedNode.GetMetadata().GetCollectionAttributes() != nil {
-		// Collection is not a Field.
-		return fieldTypeUnspecified
+	if n.serializedNode.GetMetadata().GetPointerAttributes() != nil {
+		return fieldTypePointer
 	}
 
-	if n.serializedNode.GetMetadata().GetPointerAttributes() != nil {
-		return fieldTypeComponentPointer
+	if n.serializedNode.GetMetadata().GetCollectionAttributes() != nil {
+		softassert.Fail(n.logger, "fieldType can't be called on Collection node because Collection is not a Field")
 	}
 
 	return fieldTypeUnspecified
@@ -416,10 +450,20 @@ func (n *Node) initSerializedNode(ft fieldType) {
 				},
 			},
 		}
-	case fieldTypeComponentPointer:
-		panic("not implemented")
+	case fieldTypePointer:
+		n.serializedNode = &persistencespb.ChasmNode{
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition: &persistencespb.VersionedTransition{
+					TransitionCount:          n.backend.NextTransitionCount(),
+					NamespaceFailoverVersion: n.backend.GetCurrentVersion(),
+				},
+				Attributes: &persistencespb.ChasmNodeMetadata_PointerAttributes{
+					PointerAttributes: &persistencespb.ChasmPointerAttributes{},
+				},
+			},
+		}
 	case fieldTypeUnspecified:
-		// Do nothing. Panic?
+		softassert.Fail(n.logger, "initSerializedNode can't be called with fieldTypeUnspecified")
 	}
 }
 
@@ -470,7 +514,7 @@ func (n *Node) serialize() error {
 	case *persistencespb.ChasmNodeMetadata_CollectionAttributes:
 		return n.serializeCollectionNode()
 	case *persistencespb.ChasmNodeMetadata_PointerAttributes:
-		panic("not implemented")
+		return n.serializePointerNode()
 	default:
 		return serviceerror.NewInternal("unknown node type")
 	}
@@ -727,8 +771,12 @@ func (n *Node) syncSubField(fieldV reflect.Value, fieldN string, nodePath []stri
 		// Field is not empty but tree node is not set. It means this is a new field, and a node must be created.
 		childNode := newNode(n.nodeBase, n, fieldN)
 
-		if err = assertStructPointer(reflect.TypeOf(internal.value())); err != nil {
-			return
+		switch internal.value().(type) {
+		case []string: // Pointer
+		default: // Component | Data
+			if err = assertStructPointer(reflect.TypeOf(internal.value())); err != nil {
+				return
+			}
 		}
 		childNode.value = internal.value()
 		childNode.initSerializedNode(internal.fieldType())
@@ -794,6 +842,22 @@ func (n *Node) serializeCollectionNode() error {
 	return nil
 }
 
+// serializePointerNode doesn't serialize anything but named this way for consistency.
+func (n *Node) serializePointerNode() error {
+	path, isPathValid := n.value.([]string)
+	if !isPathValid {
+		msg := fmt.Sprintf("pointer path is not []string but %T for node %s", n.value, n.nodeName)
+		softassert.Fail(n.logger, msg)
+		return serviceerror.NewInternal(msg)
+	}
+
+	n.serializedNode.GetMetadata().GetPointerAttributes().NodePath = path
+	n.updateLastUpdateVersionedTransition()
+	n.valueState = valueStateSynced
+
+	return nil
+}
+
 func (n *Node) updateLastUpdateVersionedTransition() {
 	if n.serializedNode.GetMetadata().GetLastUpdateVersionedTransition() == nil {
 		n.serializedNode.GetMetadata().LastUpdateVersionedTransition = &persistencespb.VersionedTransition{}
@@ -826,7 +890,7 @@ func (n *Node) deserialize(
 	case *persistencespb.ChasmNodeMetadata_CollectionAttributes:
 		softassert.Fail(n.logger, "deserialize shouldn't be called on the collection node because it is deserialized with the parent component.")
 	case *persistencespb.ChasmNodeMetadata_PointerAttributes:
-		// TODO: return serviceerror.NewInternal(...) instead.
+		return n.deserializePointerNode()
 	}
 	return nil
 }
@@ -902,6 +966,13 @@ func (n *Node) deserializeDataNode(
 	return nil
 }
 
+// deserializePointerNode doesn't deserialize anything but named this way for consistency.
+func (n *Node) deserializePointerNode() error {
+	n.value = n.serializedNode.GetMetadata().GetPointerAttributes().GetNodePath()
+	n.valueState = valueStateSynced
+	return nil
+}
+
 func unmarshalProto(
 	dataBlob *commonpb.DataBlob,
 	valueT reflect.Type,
@@ -919,13 +990,39 @@ func unmarshalProto(
 	return value, nil
 }
 
-// Ref implements the CHASM Context interface
-func (n *Node) Ref(
+// RefC implements the CHASM Context interface
+func (n *Node) RefC(
 	component Component,
 ) (ComponentRef, bool) {
-	// TODO: Implement this method.
-	// Currently returning an empty reference to unblock tests.
-	return ComponentRef{}, true
+	// TODO: return error
+	_ = n.syncSubComponents()
+
+	for path, node := range n.andAllChildren() {
+		// TODO: deserialize entire tree to make sure that node.value is not nil?
+		if node.value == component {
+			return ComponentRef{
+				componentPath: path,
+			}, true
+		}
+	}
+	return ComponentRef{}, false
+}
+
+func (n *Node) RefD(
+	data proto.Message,
+) (ComponentRef, bool) {
+	// TODO: return error
+	_ = n.syncSubComponents()
+
+	for path, node := range n.andAllChildren() {
+		// TODO: deserialize entire tree to make sure that node.value is not nil?
+		if node.value == data {
+			return ComponentRef{
+				componentPath: path,
+			}, true
+		}
+	}
+	return ComponentRef{}, false
 }
 
 // Now implements the CHASM Context interface
