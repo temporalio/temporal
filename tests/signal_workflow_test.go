@@ -882,6 +882,7 @@ func (s *SignalWorkflowTestSuite) TestSignalExternalWorkflowCommand_WithoutRunID
 		}}, nil
 	}
 
+	//nolint:staticcheck // SA1019 TaskPoller replacement needs to be done holistically.
 	externalPoller := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
 		Namespace:           s.ExternalNamespace().String(),
