@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package worker
 
 import (
@@ -33,6 +9,7 @@ import (
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/sdk"
 	workercommon "go.temporal.io/server/service/worker/common"
@@ -42,6 +19,7 @@ type (
 	// workerManager maintains list of SDK workers.
 	workerManager struct {
 		status           int32
+		hostInfo         membership.HostInfo
 		logger           log.Logger
 		sdkClientFactory sdk.ClientFactory
 		workers          []sdkworker.Worker
@@ -55,8 +33,10 @@ func NewWorkerManager(
 	workerComponents []workercommon.WorkerComponent,
 	logger log.Logger,
 	sdkClientFactory sdk.ClientFactory,
+	hostInfo membership.HostInfo,
 ) *workerManager {
 	return &workerManager{
+		hostInfo:         hostInfo,
 		logger:           logger,
 		sdkClientFactory: sdkClientFactory,
 		workerComponents: workerComponents,
@@ -73,6 +53,7 @@ func (wm *workerManager) Start() {
 	}
 
 	defaultWorkerOptions := sdkworker.Options{
+		Identity: "temporal-system@" + wm.hostInfo.Identity(),
 		// TODO: add dynamic config for worker options
 		BackgroundActivityContext: headers.SetCallerType(context.Background(), headers.CallerTypeBackground),
 	}
@@ -86,6 +67,7 @@ func (wm *workerManager) Start() {
 			// use default worker
 			wc.RegisterWorkflow(defaultWorker)
 		} else {
+			wfWorkerOptions.Options.Identity = "temporal-system@" + wm.hostInfo.Identity()
 			// this worker component requires a dedicated worker
 			dedicatedWorker := wm.sdkClientFactory.NewWorker(sdkClient, wfWorkerOptions.TaskQueue, wfWorkerOptions.Options)
 			wc.RegisterWorkflow(dedicatedWorker)
@@ -102,6 +84,7 @@ func (wm *workerManager) Start() {
 
 			// this worker component requires a dedicated worker for activities
 			activityWorkerOptions.Options.DisableWorkflowWorker = true
+			activityWorkerOptions.Options.Identity = "temporal-system@" + wm.hostInfo.Identity()
 			activityWorker := wm.sdkClientFactory.NewWorker(sdkClient, activityWorkerOptions.TaskQueue, activityWorkerOptions.Options)
 			wc.RegisterActivities(activityWorker)
 			wm.workers = append(wm.workers, activityWorker)

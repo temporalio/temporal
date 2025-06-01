@@ -1,32 +1,10 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package clock
 
 import (
 	"sync"
 	"time"
+
+	"go.temporal.io/server/common/util"
 )
 
 type (
@@ -37,6 +15,7 @@ type (
 		mu     sync.RWMutex
 		now    time.Time
 		timers []*fakeTimer
+		async  bool
 	}
 
 	// fakeTimer is a fake implementation of [Timer].
@@ -63,6 +42,15 @@ func NewEventTimeSource() *EventTimeSource {
 	return &EventTimeSource{
 		now: time.Unix(0, 0),
 	}
+}
+
+// Some clients depend on the fact that the runtime's timers do _not_ run synchronously.
+// If UseAsyncTimers(true) is called, then EventTimeSource will behave that way also.
+func (ts *EventTimeSource) UseAsyncTimers(async bool) {
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+
+	ts.async = async
 }
 
 // Now return the current time.
@@ -135,12 +123,35 @@ func (ts *EventTimeSource) Advance(d time.Duration) {
 	ts.fireTimers()
 }
 
+// AdvanceNext advances to the next timer.
+func (ts *EventTimeSource) AdvanceNext() {
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+
+	if len(ts.timers) == 0 {
+		return
+	}
+	// just do linear search, this is efficient enough for now
+	tmin := ts.timers[0].deadline
+	for _, t := range ts.timers[1:] {
+		tmin = util.MinTime(tmin, t.deadline)
+	}
+	ts.now = tmin
+	ts.fireTimers()
+}
+
 // NumTimers returns the number of outstanding timers.
 func (ts *EventTimeSource) NumTimers() int {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
 
 	return len(ts.timers)
+}
+
+// Sleep is a convenience function for waiting on a new timer.
+func (ts *EventTimeSource) Sleep(d time.Duration) {
+	t, _ := ts.NewTimer(d)
+	<-t
 }
 
 // fireTimers fires all timers that are ready.
@@ -152,7 +163,11 @@ func (ts *EventTimeSource) fireTimers() {
 			t.index = n
 			n++
 		} else {
-			t.callback()
+			if ts.async {
+				go t.callback()
+			} else {
+				t.callback()
+			}
 			t.done = true
 		}
 	}

@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package persistencetests
 
 import (
@@ -65,6 +41,9 @@ func (s *ClusterMetadataManagerSuite) SetupTest() {
 
 // TearDownTest implementation
 func (s *ClusterMetadataManagerSuite) TearDownTest() {
+	// Ensure all tests clean up after themselves
+	// Todo: MetaMgr should provide api to clear all members
+	s.waitForPrune(1 * time.Second)
 	s.cancel()
 }
 
@@ -81,7 +60,7 @@ func (s *ClusterMetadataManagerSuite) TestClusterMembershipEmptyInitially() {
 	s.Empty(resp.ActiveMembers)
 }
 
-// TestClusterMembershipUpsertCanRead verifies that we can UpsertClusterMembership and read our result
+// TestClusterMembershipUpsertCanReadAny verifies that we can UpsertClusterMembership and read our result
 func (s *ClusterMetadataManagerSuite) TestClusterMembershipUpsertCanReadAny() {
 	req := &p.UpsertClusterMembershipRequest{
 		HostID:       []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
@@ -100,16 +79,12 @@ func (s *ClusterMetadataManagerSuite) TestClusterMembershipUpsertCanReadAny() {
 	s.Nil(err)
 	s.NotNil(resp)
 	s.NotEmpty(resp.ActiveMembers)
+
+	s.waitForPrune(5 * time.Second)
 }
 
-// TestClusterMembershipUpsertCanRead verifies that we can UpsertClusterMembership and read our result
+// TestClusterMembershipUpsertCanPageRead verifies that we can UpsertClusterMembership and read our result
 func (s *ClusterMetadataManagerSuite) TestClusterMembershipUpsertCanPageRead() {
-	// Expire previous records
-	// Todo: MetaMgr should provide api to clear all members
-	time.Sleep(time.Second * 3)
-	err := s.ClusterMetadataManager.PruneClusterMembership(s.ctx, &p.PruneClusterMembershipRequest{MaxRecordsPruned: 100})
-	s.Nil(err)
-
 	expectedIds := make(map[string]int, 100)
 	for i := 0; i < 100; i++ {
 		hostID := primitives.NewUUID().Downcast()
@@ -148,9 +123,7 @@ func (s *ClusterMetadataManagerSuite) TestClusterMembershipUpsertCanPageRead() {
 		s.Zero(val, "identifier was either not found in db, or shouldn't be there - "+id)
 	}
 
-	time.Sleep(time.Second * 3)
-	err = s.ClusterMetadataManager.PruneClusterMembership(s.ctx, &p.PruneClusterMembershipRequest{MaxRecordsPruned: 1000})
-	s.NoError(err)
+	s.waitForPrune(5 * time.Second)
 }
 
 func (s *ClusterMetadataManagerSuite) validateUpsert(req *p.UpsertClusterMembershipRequest, resp *p.GetClusterMembersResponse, err error) {
@@ -223,10 +196,7 @@ func (s *ClusterMetadataManagerSuite) TestClusterMembershipReadFiltersCorrectly(
 	)
 
 	s.validateUpsert(req, resp, err)
-
-	time.Sleep(time.Second * 3)
-	err = s.ClusterMetadataManager.PruneClusterMembership(s.ctx, &p.PruneClusterMembershipRequest{MaxRecordsPruned: 1000})
-	s.NoError(err)
+	s.waitForPrune(5 * time.Second)
 }
 
 // TestClusterMembershipUpsertExpiresCorrectly verifies RecordExpiry functions properly for ClusterMembership records
@@ -263,19 +233,27 @@ func (s *ClusterMetadataManagerSuite) TestClusterMembershipUpsertExpiresCorrectl
 	s.Equal(resp.ActiveMembers[0].HostID, req.HostID)
 	s.Equal(resp.ActiveMembers[0].Role, req.Role)
 
-	time.Sleep(time.Second * 2)
+	s.waitForPrune(5 * time.Second)
+}
 
-	err = s.ClusterMetadataManager.PruneClusterMembership(s.ctx, &p.PruneClusterMembershipRequest{MaxRecordsPruned: 100})
-	s.Nil(err)
+// waitForPrune waits up for the persistence backend to prune all records. Some persistence backends
+// may not remove TTL'd entries at the exact instant they should expire, so we allow some timing flexibility here.
+func (s *ClusterMetadataManagerSuite) waitForPrune(waitFor time.Duration) {
+	s.Eventually(func() bool {
+		err := s.ClusterMetadataManager.PruneClusterMembership(s.ctx, &p.PruneClusterMembershipRequest{MaxRecordsPruned: 100})
+		s.Nil(err)
 
-	resp, err = s.ClusterMetadataManager.GetClusterMembers(
-		s.ctx,
-		&p.GetClusterMembersRequest{LastHeartbeatWithin: time.Minute * 10},
-	)
+		resp, err := s.ClusterMetadataManager.GetClusterMembers(
+			s.ctx,
+			&p.GetClusterMembersRequest{LastHeartbeatWithin: time.Minute * 10},
+		)
+		s.NoError(err)
+		s.NotNil(resp)
+		return len(resp.ActiveMembers) == 0
 
-	s.Nil(err)
-	s.NotNil(resp)
-	s.Empty(resp.ActiveMembers)
+	},
+		waitFor,
+		500*time.Millisecond)
 }
 
 // TestClusterMembershipUpsertInvalidExpiry verifies we cannot specify a non-positive RecordExpiry duration

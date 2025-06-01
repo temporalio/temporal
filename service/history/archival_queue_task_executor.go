@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package history
 
 import (
@@ -38,8 +14,8 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/service/history/archival"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
-	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/cache"
@@ -53,7 +29,7 @@ import (
 // serious problem because the archival queue retries tasks forever.
 func NewArchivalQueueTaskExecutor(
 	archiver archival.Archiver,
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	workflowCache cache.Cache,
 	relocatableAttributesFetcher workflow.RelocatableAttributesFetcher,
 	metricsHandler metrics.Handler,
@@ -72,7 +48,7 @@ func NewArchivalQueueTaskExecutor(
 // archivalQueueTaskExecutor is an implementation of queues.Executor for the archival queue.
 type archivalQueueTaskExecutor struct {
 	archiver                     archival.Archiver
-	shardContext                 shard.Context
+	shardContext                 historyi.ShardContext
 	workflowCache                cache.Cache
 	metricsHandler               metrics.Handler
 	logger                       log.Logger
@@ -281,21 +257,21 @@ func (e *archivalQueueTaskExecutor) addDeletionTask(
 type lockedMutableState struct {
 	// MutableState is the mutable state that is being wrapped. You may call any method on this object safely since
 	// the state is locked.
-	workflow.MutableState
+	historyi.MutableState
 	// CloseVersion is the namespace failover when the workflow is closed. We store this here so that we don't have to
 	// call GetCloseVersion() on the mutable state object again.
 	CloseVersion int64
 	// Release is a function that releases the context of the mutable state. This function should be called when
 	// you are done with the mutable state.
-	Release cache.ReleaseCacheFunc
+	Release historyi.ReleaseWorkflowContextFunc
 }
 
 // newLockedMutableState returns a new lockedMutableState with the given mutable state,
 // last write version and release function
 func newLockedMutableState(
-	mutableState workflow.MutableState,
+	mutableState historyi.MutableState,
 	closeVersion int64,
-	releaseFunc cache.ReleaseCacheFunc,
+	releaseFunc historyi.ReleaseWorkflowContextFunc,
 ) *lockedMutableState {
 	return &lockedMutableState{
 		MutableState: mutableState,

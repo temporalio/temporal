@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package versionhistory
 
 import (
@@ -63,29 +39,47 @@ func GetVersionHistory(h *historyspb.VersionHistories, index int32) (*historyspb
 	return h.Histories[index], nil
 }
 
-// AddVersionHistory adds a VersionHistory and return the whether current branch is changed.
-func AddVersionHistory(h *historyspb.VersionHistories, v *historyspb.VersionHistory) (bool, int32, error) {
+// AddEmptyVersionHistory adds an empty VersionHistory to VersionHistories.
+// It reuses an existing empty VersionHistory if one already exists.
+// Returns:
+//   - the index of the newly added or reused empty VersionHistory.
+func AddEmptyVersionHistory(h *historyspb.VersionHistories) int32 {
+	for idx, versionHistory := range h.Histories {
+		if IsEmptyVersionHistory(versionHistory) {
+			// already have an empty version history, return its index
+			return int32(idx)
+		}
+	}
+	h.Histories = append(h.Histories, &historyspb.VersionHistory{})
+	return int32(len(h.Histories)) - 1
+}
+
+// AddVersionHistory adds a VersionHistory to VersionHistories.
+// Returns:
+//   - the index of the newly added VersionHistory
+//   - error if any
+func AddVersionHistory(h *historyspb.VersionHistories, v *historyspb.VersionHistory) (int32, error) {
 	if v == nil {
-		return false, 0, serviceerror.NewInternal("version histories is null.")
+		return 0, serviceerror.NewInternal("version histories is null.")
 	}
 
 	// assuming existing version histories inside are valid
 	incomingFirstItem, err := GetFirstVersionHistoryItem(v)
 	if err != nil {
-		return false, 0, err
+		return 0, err
 	}
 
 	currentVersionHistory, err := GetVersionHistory(h, h.CurrentVersionHistoryIndex)
 	if err != nil {
-		return false, 0, err
+		return 0, err
 	}
 	currentFirstItem, err := GetFirstVersionHistoryItem(currentVersionHistory)
 	if err != nil {
-		return false, 0, err
+		return 0, err
 	}
 
 	if incomingFirstItem.Version != currentFirstItem.Version {
-		return false, 0, serviceerror.NewInternal("version history first item does not match.")
+		return 0, serviceerror.NewInternal("version history first item does not match.")
 	}
 
 	// TODO maybe we need more strict validation
@@ -94,8 +88,32 @@ func AddVersionHistory(h *historyspb.VersionHistories, v *historyspb.VersionHist
 	h.Histories = append(h.Histories, newVersionHistory)
 	newVersionHistoryIndex := int32(len(h.Histories)) - 1
 
+	return newVersionHistoryIndex, nil
+}
+
+// AddAndSwitchVersionHistory adds a VersionHistory and switch the current branch if necessary
+// based on the Version of the last VersionHistoryItem.
+// Returns:
+//   - if the current branch has been switched or not
+//   - the index of the newly added VersionHistory
+//   - error if any
+//
+// This function should only be invoked in the event-based replication stack.
+// In the state-based replication stack, a version history could be the current even if it has a smaller version
+// compared to other version histories. This is because that version history could be associated with a
+// state transition history with higher version.
+func AddAndSwitchVersionHistory(h *historyspb.VersionHistories, v *historyspb.VersionHistory) (bool, int32, error) {
+	newVersionHistoryIndex, err := AddVersionHistory(h, v)
+	if err != nil {
+		return false, 0, err
+	}
+
 	// check if need to switch current branch
-	newLastItem, err := GetLastVersionHistoryItem(newVersionHistory)
+	newLastItem, err := GetLastVersionHistoryItem(v)
+	if err != nil {
+		return false, 0, err
+	}
+	currentVersionHistory, err := GetVersionHistory(h, h.CurrentVersionHistoryIndex)
 	if err != nil {
 		return false, 0, err
 	}
@@ -146,32 +164,7 @@ func FindFirstVersionHistoryIndexByVersionHistoryItem(h *historyspb.VersionHisto
 			return int32(versionHistoryIndex), nil
 		}
 	}
-	return 0, serviceerror.NewInternal("version histories does not contains given item.")
-}
-
-// IsVersionHistoriesRebuilt returns true if the current branch index's last write version is not the largest among all branches' last write version.
-func IsVersionHistoriesRebuilt(h *historyspb.VersionHistories) (bool, error) {
-	currentVersionHistory, err := GetCurrentVersionHistory(h)
-	if err != nil {
-		return false, err
-	}
-
-	currentLastItem, err := GetLastVersionHistoryItem(currentVersionHistory)
-	if err != nil {
-		return false, err
-	}
-
-	for _, versionHistory := range h.Histories {
-		lastItem, err := GetLastVersionHistoryItem(versionHistory)
-		if err != nil {
-			return false, err
-		}
-		if lastItem.GetVersion() > currentLastItem.GetVersion() {
-			return true, nil
-		}
-	}
-
-	return false, nil
+	return 0, serviceerror.NewInternalf("version histories does not contains given item: %v, %v", item, h)
 }
 
 // SetCurrentVersionHistoryIndex set the current VersionHistory index.
@@ -187,4 +180,13 @@ func SetCurrentVersionHistoryIndex(h *historyspb.VersionHistories, currentVersio
 // GetCurrentVersionHistory gets the current VersionHistory.
 func GetCurrentVersionHistory(h *historyspb.VersionHistories) (*historyspb.VersionHistory, error) {
 	return GetVersionHistory(h, h.GetCurrentVersionHistoryIndex())
+}
+
+// IsCurrentVersionHistoryEmpty checks if the current VersionHistory is empty.
+func IsCurrentVersionHistoryEmpty(h *historyspb.VersionHistories) (bool, error) {
+	currentVersionHistory, err := GetCurrentVersionHistory(h)
+	if err != nil {
+		return false, err
+	}
+	return IsEmptyVersionHistory(currentVersionHistory), nil
 }

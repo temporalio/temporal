@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package ndc
 
 import (
@@ -30,7 +6,7 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
-	"go.temporal.io/api/enums/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -40,8 +16,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/serialization"
-	"go.temporal.io/server/common/utf8validator"
-	"go.temporal.io/server/service/history/shard"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"google.golang.org/protobuf/proto"
@@ -71,7 +46,7 @@ type (
 	}
 
 	MutableStateInitializerImpl struct {
-		shardContext   shard.Context
+		shardContext   historyi.ShardContext
 		namespaceCache namespace.Registry
 		workflowCache  wcache.Cache
 		logger         log.Logger
@@ -79,7 +54,7 @@ type (
 )
 
 func NewMutableStateInitializer(
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	workflowCache wcache.Cache,
 	logger log.Logger,
 ) *MutableStateInitializerImpl {
@@ -215,9 +190,9 @@ func (r *MutableStateInitializerImpl) InitializeFromToken(
 
 func (r *MutableStateInitializerImpl) flushBufferEvents(
 	ctx context.Context,
-	wfContext workflow.Context,
-	mutableState workflow.MutableState,
-) (workflow.MutableState, error) {
+	wfContext historyi.WorkflowContext,
+	mutableState historyi.MutableState,
+) (historyi.MutableState, error) {
 	flusher := NewBufferEventFlusher(r.shardContext, wfContext, mutableState, r.logger)
 	_, mutableState, err := flusher.flush(ctx)
 	if err != nil {
@@ -236,11 +211,6 @@ func (r *MutableStateInitializerImpl) serializeBackfillToken(
 	dbHistorySize int64,
 	existsInDB bool,
 ) ([]byte, error) {
-	// This is ultimately for the replication rpc stream, so it's not really a request or
-	// response, but use SourceRPCResponse here since it's outgoing data.
-	if err := utf8validator.Validate(mutableState, utf8validator.SourceRPCResponse); err != nil {
-		return nil, err
-	}
 	mutableStateRow, err := mutableState.Marshal()
 	if err != nil {
 		return nil, err
@@ -273,16 +243,11 @@ func (r *MutableStateInitializerImpl) deserializeBackfillToken(
 
 	historyBackfillToken := &MutableStateToken{}
 	if err := json.Unmarshal(token, historyBackfillToken); err != nil {
-		return nil, 0, 0, false, serialization.NewDeserializationError(enums.ENCODING_TYPE_JSON, err)
+		return nil, 0, 0, false, serialization.NewDeserializationError(enumspb.ENCODING_TYPE_JSON, err)
 	}
 	err := proto.Unmarshal(historyBackfillToken.MutableStateRow, mutableState)
-	if err == nil {
-		// This is ultimately from the replication rpc stream, so it's not really a request or
-		// response, but use SourceRPCRequest here since it's incoming data.
-		err = utf8validator.Validate(mutableState, utf8validator.SourceRPCRequest)
-	}
 	if err != nil {
-		return nil, 0, 0, false, serialization.NewDeserializationError(enums.ENCODING_TYPE_PROTO3, err)
+		return nil, 0, 0, false, serialization.NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, err)
 	}
 	return mutableState, historyBackfillToken.DBRecordVersion, historyBackfillToken.DBHistorySize, historyBackfillToken.ExistsInDB, nil
 }

@@ -1,28 +1,4 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination data_interfaces_mock.go
+//go:generate mockgen -package $GOPACKAGE -source $GOFILE -destination data_interfaces_mock.go
 
 package persistence
 
@@ -82,6 +58,12 @@ const (
 	// UpdateWorkflowModeBypassCurrent update workflow, without current record
 	// NOTE: current record CANNOT point to the workflow to be updated
 	UpdateWorkflowModeBypassCurrent
+	// UpdateWorkflowModeIgnoreCurrent update workflow, without checking or update current record.
+	// This mode should only be used when we don't know if the workflow being updated is the current workflow or not in DB.
+	// For example, when updating a closed workflow, it may or may not be the current workflow.
+	// This is similar to SetWorkflowExecution, but UpdateWorkflowExecution with this mode persists the workflow as a mutation,
+	// instead of a snapshot.
+	UpdateWorkflowModeIgnoreCurrent
 )
 
 // ConflictResolveWorkflowMode conflict resolve mode
@@ -122,8 +104,11 @@ type (
 
 	// CurrentWorkflowConditionFailedError represents a failed conditional update for current workflow record
 	CurrentWorkflowConditionFailedError struct {
-		Msg              string
-		RequestID        string
+		Msg string
+		// RequestIDs contains all request IDs associated with the workflow execution, ie., contain the
+		// request ID that started the workflow execution as well as the request IDs that were attached
+		// to the workflow execution when it was running.
+		RequestIDs       map[string]*persistencespb.RequestIDInfo
 		RunID            string
 		State            enumsspb.WorkflowExecutionState
 		Status           enumspb.WorkflowExecutionStatus
@@ -356,6 +341,8 @@ type (
 		DeleteSignalInfos         map[int64]struct{}
 		UpsertSignalRequestedIDs  map[string]struct{}
 		DeleteSignalRequestedIDs  map[string]struct{}
+		UpsertChasmNodes          map[string]*persistencespb.ChasmNode
+		DeleteChasmNodes          map[string]struct{}
 		NewBufferedEvents         []*historypb.HistoryEvent
 		ClearBufferedEvents       bool
 
@@ -380,6 +367,7 @@ type (
 		RequestCancelInfos  map[int64]*persistencespb.RequestCancelInfo
 		SignalInfos         map[int64]*persistencespb.SignalInfo
 		SignalRequestedIDs  map[string]struct{}
+		ChasmNodes          map[string]*persistencespb.ChasmNode
 
 		Tasks map[tasks.Category][]tasks.Task
 
@@ -523,13 +511,26 @@ type (
 		UserData *persistencespb.VersionedTaskQueueUserData
 	}
 
-	// UpdateTaskQueueUserDataRequest is the input type for the UpdateTaskQueueUserData API
+	// UpdateTaskQueueUserDataRequest is the input type for the UpdateTaskQueueUserData API.
+	// This updates user data for multiple task queues in one namespace.
 	UpdateTaskQueueUserDataRequest struct {
-		NamespaceID     string
-		TaskQueue       string
+		NamespaceID string
+		Updates     map[string]*SingleTaskQueueUserDataUpdate // key is task queue name
+	}
+
+	SingleTaskQueueUserDataUpdate struct {
 		UserData        *persistencespb.VersionedTaskQueueUserData
 		BuildIdsAdded   []string
 		BuildIdsRemoved []string
+		// If Applied is non-nil, and this single update succeeds (while others may have
+		// failed), then it will be set to true.
+		Applied *bool
+		// If Conflicting is non-nil, and this single update fails due to a version conflict,
+		// then it will be set to true. Conflicting updates should not be retried.
+		// Note that even if Conflicting is not set to true, the update may still be
+		// conflicting, because persistence implementations may only be able to identify the
+		// first conflict in a set.
+		Conflicting *bool
 	}
 
 	ListTaskQueueUserDataEntriesRequest struct {
@@ -580,10 +581,14 @@ type (
 	CreateTasksRequest struct {
 		TaskQueueInfo *PersistedTaskQueueInfo
 		Tasks         []*persistencespb.AllocatedTaskInfo
+		// If Subqueues is present, it should be the same size as Tasks and hold the subqueue
+		// indexes that each task should be added to.
+		Subqueues []int
 	}
 
 	// CreateTasksResponse is the response to CreateTasksRequest
 	CreateTasksResponse struct {
+		UpdatedMetadata bool
 	}
 
 	PersistedTaskQueueInfo struct {
@@ -598,6 +603,7 @@ type (
 		TaskType           enumspb.TaskQueueType
 		InclusiveMinTaskID int64
 		ExclusiveMaxTaskID int64
+		Subqueue           int
 		PageSize           int
 		NextPageToken      []byte
 	}
@@ -620,7 +626,8 @@ type (
 		TaskQueueName      string
 		TaskType           enumspb.TaskQueueType
 		ExclusiveMaxTaskID int64 // Tasks less than this ID will be completed
-		Limit              int   // Limit on the max number of tasks that can be completed. Required param
+		Subqueue           int
+		Limit              int // Limit on the max number of tasks that can be completed. Required param
 	}
 
 	// CreateNamespaceRequest is used to create the namespace
@@ -704,6 +711,7 @@ type (
 		SignalInfoSize        int
 		SignalRequestIDSize   int
 		BufferedEventsSize    int
+		ChasmTotalSize        int // total size of all CHASM nodes within a record
 		// UpdateInfoSize is included in ExecutionInfoSize
 
 		// Item count for various information captured within mutable state
@@ -1152,10 +1160,13 @@ type (
 		// This data would only exist if a user uses APIs that generate it, such as the worker versioning related APIs.
 		// The caller should be prepared to gracefully handle the "NotFound" service error.
 		GetTaskQueueUserData(ctx context.Context, request *GetTaskQueueUserDataRequest) (*GetTaskQueueUserDataResponse, error)
-		// UpdateTaskQueueUserData updates the user data for a given task queue.
+		// UpdateTaskQueueUserData updates the user data for a set of task queues in one namespace.
 		// The request takes the _current_ known version along with the data to update.
 		// The caller should +1 increment the cached version number if this call succeeds.
-		// Fails with ConditionFailedError if the user data was updated concurrently.
+		// For efficiency, the store should attempt to perform these updates in as few
+		// transactions as possible.
+		// Returns an error if any individual update fails. The Applied/Conflicting fields of
+		// the individual updates may provide more information in that case.
 		UpdateTaskQueueUserData(ctx context.Context, request *UpdateTaskQueueUserDataRequest) error
 		ListTaskQueueUserDataEntries(ctx context.Context, request *ListTaskQueueUserDataEntriesRequest) (*ListTaskQueueUserDataEntriesResponse, error)
 		GetTaskQueuesByBuildId(ctx context.Context, request *GetTaskQueuesByBuildIdRequest) ([]string, error)

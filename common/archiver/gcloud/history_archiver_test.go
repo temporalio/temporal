@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package gcloud
 
 import (
@@ -30,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -42,7 +17,9 @@ import (
 	"go.temporal.io/server/common/archiver/gcloud/connector"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/util"
+	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -66,10 +43,8 @@ var (
 func (h *historyArchiverSuite) SetupTest() {
 	h.Assertions = require.New(h.T())
 	h.controller = gomock.NewController(h.T())
-	h.container = &archiver.HistoryBootstrapContainer{
-		Logger:         log.NewNoopLogger(),
-		MetricsHandler: metrics.NoopMetricsHandler,
-	}
+	h.logger = log.NewNoopLogger()
+	h.metricsHandler = metrics.NoopMetricsHandler
 	h.testArchivalURI, _ = archiver.NewURI("gs://my-bucket-cad/temporal_archival/development")
 }
 
@@ -87,8 +62,10 @@ type historyArchiverSuite struct {
 
 	controller *gomock.Controller
 
-	container       *archiver.HistoryBootstrapContainer
-	testArchivalURI archiver.URI
+	logger           log.Logger
+	metricsHandler   metrics.Handler
+	executionManager persistence.ExecutionManager
+	testArchivalURI  archiver.URI
 }
 
 func getCanceledContext() context.Context {
@@ -146,7 +123,7 @@ func (h *historyArchiverSuite) TestArchive_Fail_InvalidURI() {
 
 	historyIterator := archiver.NewMockHistoryIterator(h.controller)
 
-	historyArchiver := newHistoryArchiver(h.container, historyIterator, storageWrapper)
+	historyArchiver := newHistoryArchiver(h.executionManager, h.logger, h.metricsHandler, historyIterator, storageWrapper)
 	request := &archiver.ArchiveHistoryRequest{
 		NamespaceID:          testNamespaceID,
 		Namespace:            testNamespace,
@@ -169,7 +146,7 @@ func (h *historyArchiverSuite) TestArchive_Fail_InvalidRequest() {
 
 	historyIterator := archiver.NewMockHistoryIterator(h.controller)
 
-	historyArchiver := newHistoryArchiver(h.container, historyIterator, storageWrapper)
+	historyArchiver := newHistoryArchiver(h.executionManager, h.logger, h.metricsHandler, historyIterator, storageWrapper)
 	request := &archiver.ArchiveHistoryRequest{
 		NamespaceID:          testNamespaceID,
 		Namespace:            testNamespace,
@@ -195,7 +172,7 @@ func (h *historyArchiverSuite) TestArchive_Fail_ErrorOnReadHistory() {
 		historyIterator.EXPECT().Next(gomock.Any()).Return(nil, errors.New("some random error")),
 	)
 
-	historyArchiver := newHistoryArchiver(h.container, historyIterator, storageWrapper)
+	historyArchiver := newHistoryArchiver(h.executionManager, h.logger, h.metricsHandler, historyIterator, storageWrapper)
 	request := &archiver.ArchiveHistoryRequest{
 		NamespaceID:          testNamespaceID,
 		Namespace:            testNamespace,
@@ -228,7 +205,7 @@ func (h *historyArchiverSuite) TestArchive_Fail_TimeoutWhenReadingHistory() {
 		),
 	)
 
-	historyArchiver := newHistoryArchiver(h.container, historyIterator, storageWrapper)
+	historyArchiver := newHistoryArchiver(h.executionManager, h.logger, h.metricsHandler, historyIterator, storageWrapper)
 	request := &archiver.ArchiveHistoryRequest{
 		NamespaceID:          testNamespaceID,
 		Namespace:            testNamespace,
@@ -270,7 +247,7 @@ func (h *historyArchiverSuite) TestArchive_Fail_HistoryMutated() {
 		historyIterator.EXPECT().Next(gomock.Any()).Return(historyBlob, nil),
 	)
 
-	historyArchiver := newHistoryArchiver(h.container, historyIterator, storageWrapper)
+	historyArchiver := newHistoryArchiver(h.executionManager, h.logger, h.metricsHandler, historyIterator, storageWrapper)
 	request := &archiver.ArchiveHistoryRequest{
 		NamespaceID:          testNamespaceID,
 		Namespace:            testNamespace,
@@ -296,7 +273,7 @@ func (h *historyArchiverSuite) TestArchive_Fail_NonRetryableErrorOption() {
 		historyIterator.EXPECT().Next(gomock.Any()).Return(nil, errors.New("upload non-retryable error")),
 	)
 
-	historyArchiver := newHistoryArchiver(h.container, historyIterator, storageWrapper)
+	historyArchiver := newHistoryArchiver(h.executionManager, h.logger, h.metricsHandler, historyIterator, storageWrapper)
 	request := &archiver.ArchiveHistoryRequest{
 		NamespaceID:          testNamespaceID,
 		Namespace:            testNamespace,
@@ -342,7 +319,7 @@ func (h *historyArchiverSuite) TestArchive_Skip() {
 		historyIterator.EXPECT().Next(gomock.Any()).Return(nil, serviceerror.NewNotFound("workflow not found")),
 	)
 
-	historyArchiver := newHistoryArchiver(h.container, historyIterator, storageWrapper)
+	historyArchiver := newHistoryArchiver(h.executionManager, h.logger, h.metricsHandler, historyIterator, storageWrapper)
 	request := &archiver.ArchiveHistoryRequest{
 		NamespaceID:          testNamespaceID,
 		Namespace:            testNamespace,
@@ -402,7 +379,7 @@ func (h *historyArchiverSuite) TestArchive_Success() {
 		historyIterator.EXPECT().HasNext().Return(false),
 	)
 
-	historyArchiver := newHistoryArchiver(h.container, historyIterator, storageWrapper)
+	historyArchiver := newHistoryArchiver(h.executionManager, h.logger, h.metricsHandler, historyIterator, storageWrapper)
 
 	request := &archiver.ArchiveHistoryRequest{
 		NamespaceID:          testNamespaceID,
@@ -423,7 +400,7 @@ func (h *historyArchiverSuite) TestGet_Fail_InvalidURI() {
 	mockStorageClient := connector.NewMockGcloudStorageClient(h.controller)
 	storageWrapper, _ := connector.NewClientWithParams(mockStorageClient)
 	historyIterator := archiver.NewMockHistoryIterator(h.controller)
-	historyArchiver := newHistoryArchiver(h.container, historyIterator, storageWrapper)
+	historyArchiver := newHistoryArchiver(h.executionManager, h.logger, h.metricsHandler, historyIterator, storageWrapper)
 
 	request := &archiver.GetHistoryRequest{
 		NamespaceID: testNamespaceID,
@@ -443,7 +420,7 @@ func (h *historyArchiverSuite) TestGet_Fail_InvalidToken() {
 	mockStorageClient := connector.NewMockGcloudStorageClient(h.controller)
 	storageWrapper, _ := connector.NewClientWithParams(mockStorageClient)
 	historyIterator := archiver.NewMockHistoryIterator(h.controller)
-	historyArchiver := newHistoryArchiver(h.container, historyIterator, storageWrapper)
+	historyArchiver := newHistoryArchiver(h.executionManager, h.logger, h.metricsHandler, historyIterator, storageWrapper)
 	request := &archiver.GetHistoryRequest{
 		NamespaceID:   testNamespaceID,
 		WorkflowID:    testWorkflowID,
@@ -466,7 +443,7 @@ func (h *historyArchiverSuite) TestGet_Success_PickHighestVersion() {
 	storageWrapper.EXPECT().Query(ctx, h.testArchivalURI, gomock.Any()).Return([]string{"905702227796330300141628222723188294514017512010591354159_-24_0.history", "905702227796330300141628222723188294514017512010591354159_-25_0.history"}, nil)
 	storageWrapper.EXPECT().Get(ctx, h.testArchivalURI, "141323698701063509081739672280485489488911532452831150339470_-24_0.history").Return([]byte(exampleNewHistoryRecord), nil)
 	historyIterator := archiver.NewMockHistoryIterator(h.controller)
-	historyArchiver := newHistoryArchiver(h.container, historyIterator, storageWrapper)
+	historyArchiver := newHistoryArchiver(h.executionManager, h.logger, h.metricsHandler, historyIterator, storageWrapper)
 	request := &archiver.GetHistoryRequest{
 		NamespaceID: testNamespaceID,
 		WorkflowID:  testWorkflowID,
@@ -486,7 +463,7 @@ func (h *historyArchiverSuite) TestGet_Success_PickHighestVersion_OldJSON() {
 	storageWrapper.EXPECT().Query(ctx, h.testArchivalURI, gomock.Any()).Return([]string{"905702227796330300141628222723188294514017512010591354159_-24_0.history", "905702227796330300141628222723188294514017512010591354159_-25_0.history"}, nil)
 	storageWrapper.EXPECT().Get(ctx, h.testArchivalURI, "141323698701063509081739672280485489488911532452831150339470_-24_0.history").Return([]byte(exampleOldHistoryRecord), nil)
 	historyIterator := archiver.NewMockHistoryIterator(h.controller)
-	historyArchiver := newHistoryArchiver(h.container, historyIterator, storageWrapper)
+	historyArchiver := newHistoryArchiver(h.executionManager, h.logger, h.metricsHandler, historyIterator, storageWrapper)
 	request := &archiver.GetHistoryRequest{
 		NamespaceID: testNamespaceID,
 		WorkflowID:  testWorkflowID,
@@ -506,7 +483,7 @@ func (h *historyArchiverSuite) TestGet_Success_UseProvidedVersion() {
 	storageWrapper.EXPECT().Query(ctx, h.testArchivalURI, "141323698701063509081739672280485489488911532452831150339470").Return([]string{"905702227796330300141628222723188294514017512010591354159_-24_0.history", "905702227796330300141628222723188294514017512010591354159_-25_0.history"}, nil)
 	storageWrapper.EXPECT().Get(ctx, h.testArchivalURI, "141323698701063509081739672280485489488911532452831150339470_-25_0.history").Return([]byte(exampleNewHistoryRecord), nil)
 	historyIterator := archiver.NewMockHistoryIterator(h.controller)
-	historyArchiver := newHistoryArchiver(h.container, historyIterator, storageWrapper)
+	historyArchiver := newHistoryArchiver(h.executionManager, h.logger, h.metricsHandler, historyIterator, storageWrapper)
 	request := &archiver.GetHistoryRequest{
 		NamespaceID:          testNamespaceID,
 		WorkflowID:           testWorkflowID,
@@ -529,7 +506,7 @@ func (h *historyArchiverSuite) TestGet_Success_PageSize() {
 	storageWrapper.EXPECT().Get(ctx, h.testArchivalURI, "141323698701063509081739672280485489488911532452831150339470_-24_1.history").Return([]byte(exampleNewHistoryRecord), nil)
 
 	historyIterator := archiver.NewMockHistoryIterator(h.controller)
-	historyArchiver := newHistoryArchiver(h.container, historyIterator, storageWrapper)
+	historyArchiver := newHistoryArchiver(h.executionManager, h.logger, h.metricsHandler, historyIterator, storageWrapper)
 	request := &archiver.GetHistoryRequest{
 		NamespaceID: testNamespaceID,
 		WorkflowID:  testWorkflowID,
@@ -552,7 +529,7 @@ func (h *historyArchiverSuite) TestGet_Success_FromToken() {
 	storageWrapper.EXPECT().Get(ctx, h.testArchivalURI, "141323698701063509081739672280485489488911532452831150339470_-24_4.history").Return([]byte(exampleNewHistoryRecord), nil)
 
 	historyIterator := archiver.NewMockHistoryIterator(h.controller)
-	historyArchiver := newHistoryArchiver(h.container, historyIterator, storageWrapper)
+	historyArchiver := newHistoryArchiver(h.executionManager, h.logger, h.metricsHandler, historyIterator, storageWrapper)
 
 	token := &getHistoryToken{
 		CloseFailoverVersion: -24,
@@ -599,7 +576,7 @@ func (h *historyArchiverSuite) TestGet_NoHistory() {
 	storageWrapper.EXPECT().Query(ctx, h.testArchivalURI, "141323698701063509081739672280485489488911532452831150339470").Return([]string{}, nil)
 
 	historyIterator := archiver.NewMockHistoryIterator(h.controller)
-	historyArchiver := newHistoryArchiver(h.container, historyIterator, storageWrapper)
+	historyArchiver := newHistoryArchiver(h.executionManager, h.logger, h.metricsHandler, historyIterator, storageWrapper)
 	request := &archiver.GetHistoryRequest{
 		NamespaceID: testNamespaceID,
 		WorkflowID:  testWorkflowID,

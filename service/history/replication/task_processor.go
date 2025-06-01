@@ -1,28 +1,4 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
-//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination task_processor_mock.go
+//go:generate mockgen -package $GOPACKAGE -source $GOFILE -destination task_processor_mock.go
 
 package replication
 
@@ -53,6 +29,7 @@ import (
 	"go.temporal.io/server/common/quotas"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/configs"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -81,8 +58,8 @@ type (
 
 		sourceCluster           string
 		sourceShardID           int32
-		shard                   shard.Context
-		historyEngine           shard.Engine
+		shard                   historyi.ShardContext
+		historyEngine           historyi.Engine
 		historySerializer       serialization.Serializer
 		config                  *configs.Config
 		metricsHandler          metrics.Handler
@@ -115,8 +92,8 @@ type (
 // NewTaskProcessor creates a new replication task processor.
 func NewTaskProcessor(
 	sourceShardID int32,
-	shard shard.Context,
-	historyEngine shard.Engine,
+	shardContext historyi.ShardContext,
+	historyEngine historyi.Engine,
 	config *configs.Config,
 	metricsHandler metrics.Handler,
 	replicationTaskFetcher taskFetcher,
@@ -124,7 +101,7 @@ func NewTaskProcessor(
 	eventSerializer serialization.Serializer,
 	dlqWriter DLQWriter,
 ) TaskProcessor {
-	shardID := shard.GetShardID()
+	shardID := shardContext.GetShardID()
 	taskRetryPolicy := backoff.NewExponentialRetryPolicy(config.ReplicationTaskProcessorErrorRetryWait(shardID)).
 		WithBackoffCoefficient(config.ReplicationTaskProcessorErrorRetryBackoffCoefficient(shardID)).
 		WithMaximumInterval(config.ReplicationTaskProcessorErrorRetryMaxInterval(shardID)).
@@ -142,12 +119,12 @@ func NewTaskProcessor(
 		status:                  common.DaemonStatusInitialized,
 		sourceShardID:           sourceShardID,
 		sourceCluster:           replicationTaskFetcher.getSourceCluster(),
-		shard:                   shard,
+		shard:                   shardContext,
 		historyEngine:           historyEngine,
 		historySerializer:       eventSerializer,
 		config:                  config,
 		metricsHandler:          metricsHandler,
-		logger:                  shard.GetLogger(),
+		logger:                  shardContext.GetLogger(),
 		replicationTaskExecutor: replicationTaskExecutor,
 		dlqWriter:               dlqWriter,
 		rateLimiter: quotas.NewMultiRateLimiter([]quotas.RateLimiter{
@@ -374,7 +351,7 @@ func (p *taskProcessorImpl) handleReplicationDLQTask(
 		metrics.InstanceTag(convert.Int32ToString(p.shard.GetShardID())))
 	// The following is guaranteed to success or retry forever until processor is shutdown.
 	return backoff.ThrottleRetry(func() error {
-		err := writeTaskToDLQ(ctx, p.dlqWriter, p.shard, request.SourceClusterName, request.TaskInfo)
+		err := writeTaskToDLQ(ctx, p.dlqWriter, p.sourceShardID, request.SourceClusterName, p.shard.GetShardID(), request.TaskInfo)
 		if err != nil {
 			p.logger.Error("failed to enqueue replication task to DLQ", tag.Error(err))
 			metrics.ReplicationDLQFailed.With(p.metricsHandler).Record(

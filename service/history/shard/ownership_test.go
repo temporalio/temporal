@@ -1,34 +1,9 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package shard
 
 import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/server/common/convert"
@@ -37,7 +12,9 @@ import (
 	"go.temporal.io/server/common/resourcetest"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/configs"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tests"
+	"go.uber.org/mock/gomock"
 )
 
 type (
@@ -84,14 +61,14 @@ func (s *ownershipSuite) TestAcquireViaMembershipUpdate() {
 	s.config.NumberOfShards = 1
 	shardID := int32(1)
 
-	shard := NewMockControllableContext(s.controller)
+	shard := historyi.NewMockControllableContext(s.controller)
 	shard.EXPECT().GetEngine(gomock.Any()).Return(nil, nil).AnyTimes()
 	shard.EXPECT().AssertOwnership(gomock.Any()).Return(nil).AnyTimes()
 	shard.EXPECT().IsValid().Return(true).AnyTimes()
 
 	cf := NewMockContextFactory(s.controller)
 	cf.EXPECT().CreateContext(shardID, gomock.Any()).
-		DoAndReturn(func(_ int32, _ CloseCallback) (ControllableContext, error) {
+		DoAndReturn(func(_ int32, _ CloseCallback) (historyi.ControllableContext, error) {
 			return shard, nil
 		})
 
@@ -127,7 +104,7 @@ func (s *ownershipSuite) TestAcquireOnDemand() {
 	s.config.NumberOfShards = 1
 	shardID := int32(1)
 
-	shard := NewMockControllableContext(s.controller)
+	shard := historyi.NewMockControllableContext(s.controller)
 	cf := NewMockContextFactory(s.controller)
 	cf.EXPECT().CreateContext(shardID, gomock.Any()).Return(shard, nil).Times(1)
 
@@ -161,7 +138,7 @@ func (s *ownershipSuite) TestAcquireViaTicker() {
 
 	shardID := int32(1)
 
-	shard := NewMockControllableContext(s.controller)
+	shard := historyi.NewMockControllableContext(s.controller)
 	shard.EXPECT().GetEngine(gomock.Any()).Return(nil, nil).AnyTimes()
 	shard.EXPECT().AssertOwnership(gomock.Any()).Return(nil).AnyTimes()
 	shard.EXPECT().IsValid().Return(true).AnyTimes()

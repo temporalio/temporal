@@ -1,25 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 syntax = "proto3";
 
 package temporal.server.api.persistence.v1;
@@ -27,6 +5,7 @@ option go_package = "go.temporal.io/server/api/persistence/v1;persistence";
 
 import "google/protobuf/timestamp.proto";
 
+import "temporal/api/common/v1/message.proto";
 import "temporal/api/enums/v1/task_queue.proto";
 
 import "temporal/server/api/clock/v1/message.proto";
@@ -48,8 +27,10 @@ message TaskInfo {
     temporal.server.api.clock.v1.VectorClock clock = 7;
     // How this task should be directed. (Missing means the default for
     // TaskVersionDirective, which is unversioned.)
-    // Deprecated. No need to store this for new versioning [cleanup-old-wv]
     temporal.server.api.taskqueue.v1.TaskVersionDirective version_directive = 8;
+    // Stamp field allows to differentiate between different instances of the same task
+    int32 stamp = 9;
+    temporal.api.common.v1.Priority priority = 10;
 }
 
 // task_queue column
@@ -58,10 +39,42 @@ message TaskQueueInfo {
     string name = 2;
     temporal.api.enums.v1.TaskQueueType task_type = 3;
     temporal.api.enums.v1.TaskQueueKind kind = 4;
+    // After data is migrated into subqueues, this contains a copy of the ack level for subqueue 0.
     int64 ack_level = 5;
     google.protobuf.Timestamp expiry_time = 6;
     google.protobuf.Timestamp last_update_time = 7;
+    // After data is migrated into subqueues, this contains a copy of the count for subqueue 0.
     int64 approximate_backlog_count = 8;
+
+    // Subqueues contains one entry for each subqueue in this physical task queue.
+    // Tasks are split into subqueues to implement priority and fairness.
+    // Subqueues are indexed starting from 0, the zero subqueue is always present
+    // and corresponds to the "main" queue before subqueues were introduced.
+    //
+    // The message at index n describes the subqueue at index n.
+    //
+    // Each subqueue has its own ack level and approx backlog count, but they share
+    // the range id. For compatibility, ack level and backlog count for subqueue 0
+    // is copied into TaskQueueInfo.
+    repeated SubqueueInfo subqueues = 9;
+}
+
+message SubqueueInfo {
+    // Key is the information used by a splitting algorithm to decide which tasks should go in
+    // this subqueue. It should not change after being registered in TaskQueueInfo.
+    SubqueueKey key = 1;
+
+    // The rest are mutable state for the subqueue:
+    int64 ack_level = 2;
+    int64 approximate_backlog_count = 3;
+}
+
+message SubqueueKey {
+    // Each subqueue contains tasks from only one priority level.
+    int32 priority = 1;
+
+    // // Additionally, tasks may be split by a fairness mechanism into buckets.
+    // int32 fairness_bucket = 2;
 }
 
 message TaskKey {

@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2022 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package batcher
 
 import (
@@ -47,10 +23,12 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/sdk"
 	"golang.org/x/time/rate"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 const (
-	pageSize = 1000
+	pageSize                 = 1000
+	statusRunningQueryFilter = "ExecutionStatus='Running'"
 )
 
 var (
@@ -108,11 +86,13 @@ func (a *activities) BatchActivity(ctx context.Context, batchParams BatchParams)
 		}
 	}
 
+	adjustedQuery := a.adjustQuery(batchParams)
+
 	if startOver {
 		estimateCount := int64(len(batchParams.Executions))
-		if len(batchParams.Query) > 0 {
+		if len(adjustedQuery) > 0 {
 			resp, err := sdkClient.CountWorkflow(ctx, &workflowservice.CountWorkflowExecutionsRequest{
-				Query: batchParams.Query,
+				Query: adjustedQuery,
 			})
 			if err != nil {
 				metrics.BatcherOperationFailures.With(metricsHandler).Record(1)
@@ -136,11 +116,11 @@ func (a *activities) BatchActivity(ctx context.Context, batchParams BatchParams)
 	for {
 		executions := batchParams.Executions
 		pageToken := hbd.PageToken
-		if len(batchParams.Query) > 0 {
+		if len(adjustedQuery) > 0 {
 			resp, err := sdkClient.ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
 				PageSize:      int32(pageSize),
 				NextPageToken: pageToken,
-				Query:         batchParams.Query,
+				Query:         adjustedQuery,
 			})
 			if err != nil {
 				metrics.BatcherOperationFailures.With(metricsHandler).Record(1)
@@ -210,6 +190,20 @@ func (a *activities) getActivityLogger(ctx context.Context) log.Logger {
 		tag.WorkflowRunID(wfInfo.WorkflowExecution.RunID),
 		tag.WorkflowNamespace(wfInfo.WorkflowNamespace),
 	)
+}
+
+func (a *activities) adjustQuery(batchParams BatchParams) string {
+	if len(batchParams.Query) == 0 {
+		// don't add anything if query is empty
+		return batchParams.Query
+	}
+
+	switch batchParams.BatchType {
+	case BatchTypeTerminate, BatchTypeSignal, BatchTypeCancel, BatchTypeUpdateOptions, BatchTypeUnpauseActivities:
+		return fmt.Sprintf("(%s) AND (%s)", batchParams.Query, statusRunningQueryFilter)
+	default:
+		return batchParams.Query
+	}
 }
 
 func (a *activities) getOperationRPS(requestedRPS float64) float64 {
@@ -321,6 +315,46 @@ func startTaskProcessor(
 						})
 						return err
 					})
+			case BatchTypeUnpauseActivities:
+				err = processTask(ctx, limiter, task,
+					func(workflowID, runID string) error {
+						unpauseRequest := &workflowservice.UnpauseActivityRequest{
+							Namespace: batchParams.Namespace,
+							Execution: &commonpb.WorkflowExecution{
+								WorkflowId: workflowID,
+								RunId:      runID,
+							},
+							Identity:       "batch unpause",
+							Activity:       &workflowservice.UnpauseActivityRequest_Type{Type: batchParams.UnpauseActivitiesParams.ActivityType},
+							ResetAttempts:  !batchParams.UnpauseActivitiesParams.ResetAttempts,
+							ResetHeartbeat: batchParams.UnpauseActivitiesParams.ResetHeartbeat,
+							Jitter:         durationpb.New(batchParams.UnpauseActivitiesParams.Jitter),
+						}
+
+						if batchParams.UnpauseActivitiesParams.MatchAll {
+							unpauseRequest.Activity = &workflowservice.UnpauseActivityRequest_UnpauseAll{UnpauseAll: true}
+						} else {
+							unpauseRequest.Activity = &workflowservice.UnpauseActivityRequest_Type{Type: batchParams.UnpauseActivitiesParams.ActivityType}
+						}
+						_, err = frontendClient.UnpauseActivity(ctx, unpauseRequest)
+						return err
+					})
+
+			case BatchTypeUpdateOptions:
+				err = processTask(ctx, limiter, task,
+					func(workflowID, runID string) error {
+						var err error
+						_, err = frontendClient.UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+							Namespace: batchParams.Namespace,
+							WorkflowExecution: &commonpb.WorkflowExecution{
+								WorkflowId: workflowID,
+								RunId:      runID,
+							},
+							WorkflowExecutionOptions: batchParams.UpdateOptionsParams.WorkflowExecutionOptions,
+							UpdateMask:               batchParams.UpdateOptionsParams.UpdateMask,
+						})
+						return err
+					})
 			}
 			if err != nil {
 				metrics.BatcherProcessorFailures.With(metricsHandler).Record(1)
@@ -411,7 +445,7 @@ func getResetEventIDByOptions(
 	case *commonpb.ResetOptions_WorkflowTaskId:
 		return target.WorkflowTaskId, nil
 	case *commonpb.ResetOptions_BuildId:
-		return getResetPoint(ctx, namespaceStr, workflowExecution, frontendClient, logger, target.BuildId, resetOptions.CurrentRunOnly)
+		return getResetPoint(ctx, namespaceStr, workflowExecution, frontendClient, target.BuildId, resetOptions.CurrentRunOnly)
 	default:
 		errorMsg := fmt.Sprintf("provided reset target (%+v) is not supported.", resetOptions.Target)
 		return 0, serviceerror.NewInvalidArgument(errorMsg)
@@ -504,7 +538,6 @@ func getResetPoint(
 	namespaceStr string,
 	execution *commonpb.WorkflowExecution,
 	frontendClient workflowservice.WorkflowServiceClient,
-	logger log.Logger,
 	buildId string,
 	currentRunOnly bool,
 ) (workflowTaskEventID int64, err error) {

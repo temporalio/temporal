@@ -1,25 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package history
 
 import (
@@ -28,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	commandpb "go.temporal.io/api/command/v1"
@@ -39,7 +16,6 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
@@ -48,16 +24,19 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/cache"
+	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -125,7 +104,7 @@ func newStateMachineEnvTestContext(t *testing.T, enableTransitionHistory bool) *
 		clusterMetadata:    mockClusterMetadata,
 		executionManager:   s.mockShard.GetExecutionManager(),
 		logger:             s.mockShard.GetLogger(),
-		tokenSerializer:    common.NewProtoTaskTokenSerializer(),
+		tokenSerializer:    tasktoken.NewSerializer(),
 		metricsHandler:     s.mockShard.GetMetricsHandler(),
 		eventNotifier:      events.NewNotifier(clock.NewRealTimeSource(), metrics.NoopMetricsHandler, func(namespace.ID, string) int32 { return 1 }),
 		queueProcessors: map[tasks.Category]queues.Queue{
@@ -148,6 +127,7 @@ func TestValidateStateMachineRef(t *testing.T) {
 		mutateRef               func(*hsm.Ref)
 		mutateNode              func(*hsm.Node)
 		assertOutcome           func(*testing.T, error)
+		clearTransitionHistory  bool
 	}{
 		{
 			name:                    "TaskGenerationStale",
@@ -241,32 +221,6 @@ func TestValidateStateMachineRef(t *testing.T) {
 			},
 		},
 		{
-			name:                    "WithTransitionHistory/MachineLastUpdateTransitionInequality",
-			enableTransitionHistory: true,
-			mutateRef: func(ref *hsm.Ref) {
-				machineLastUpdateVersionedTransition := ref.StateMachineRef.MachineLastUpdateVersionedTransition
-				ref.StateMachineRef.MachineLastUpdateVersionedTransition = &persistencespb.VersionedTransition{
-					NamespaceFailoverVersion: machineLastUpdateVersionedTransition.NamespaceFailoverVersion,
-					TransitionCount:          machineLastUpdateVersionedTransition.TransitionCount + 1,
-				}
-			},
-			mutateNode: func(node *hsm.Node) {},
-			assertOutcome: func(t *testing.T, err error) {
-				require.ErrorIs(t, err, consts.ErrStaleReference)
-			},
-		},
-		{
-			name:                    "WithoutTransitionHistory/MachineTransitionInequality",
-			enableTransitionHistory: false,
-			mutateRef: func(ref *hsm.Ref) {
-				ref.StateMachineRef.MachineTransitionCount++
-			},
-			mutateNode: func(node *hsm.Node) {},
-			assertOutcome: func(t *testing.T, err error) {
-				require.ErrorIs(t, err, consts.ErrStaleReference)
-			},
-		},
-		{
 			name:                    "WithTransitionHistory/Valid",
 			enableTransitionHistory: true,
 			mutateRef: func(ref *hsm.Ref) {
@@ -275,6 +229,17 @@ func TestValidateStateMachineRef(t *testing.T) {
 			assertOutcome: func(t *testing.T, err error) {
 				require.NoError(t, err)
 			},
+		},
+		{
+			name:                    "WithTransitionHistory/TransitionHistoryCleared/Valid",
+			enableTransitionHistory: true,
+			mutateRef: func(ref *hsm.Ref) {
+			},
+			mutateNode: func(node *hsm.Node) {},
+			assertOutcome: func(t *testing.T, err error) {
+				require.NoError(t, err)
+			},
+			clearTransitionHistory: true,
 		},
 		{
 			name:                    "WithoutTransitionHistory/Valid",
@@ -286,42 +251,6 @@ func TestValidateStateMachineRef(t *testing.T) {
 				require.NoError(t, err)
 			},
 		},
-		{
-			name:                    "WithoutTransitionHistory/NodeRebuilt/MachineTransitionInequality",
-			enableTransitionHistory: true,
-			mutateRef: func(ref *hsm.Ref) {
-				// this validates we fallback to the validation logic without transition history
-				ref.StateMachineRef.MachineTransitionCount++
-			},
-			mutateNode: func(node *hsm.Node) {
-				initialVersionedTransition := node.InternalRepr().InitialVersionedTransition
-				node.InternalRepr().InitialVersionedTransition = &persistencespb.VersionedTransition{
-					NamespaceFailoverVersion: initialVersionedTransition.NamespaceFailoverVersion,
-					TransitionCount:          0, // transition history disabled when re-creating the node
-				}
-			},
-			assertOutcome: func(t *testing.T, err error) {
-				require.ErrorIs(t, err, consts.ErrStaleReference)
-			},
-		},
-		{
-			name:                    "WithoutTransitionHistory/NodeTransitioned/MachineTransitionInequality",
-			enableTransitionHistory: true,
-			mutateRef: func(ref *hsm.Ref) {
-				// this validates we fallback to the validation logic without transition history
-				ref.StateMachineRef.MachineTransitionCount++
-			},
-			mutateNode: func(node *hsm.Node) {
-				lastUpdateVersionedTransition := node.InternalRepr().LastUpdateVersionedTransition
-				node.InternalRepr().InitialVersionedTransition = &persistencespb.VersionedTransition{
-					NamespaceFailoverVersion: lastUpdateVersionedTransition.NamespaceFailoverVersion,
-					TransitionCount:          0, // transition history disabled when node transitioned.
-				}
-			},
-			assertOutcome: func(t *testing.T, err error) {
-				require.ErrorIs(t, err, consts.ErrStaleReference)
-			},
-		},
 	}
 	for _, tc := range cases {
 		tc := tc
@@ -329,7 +258,7 @@ func TestValidateStateMachineRef(t *testing.T) {
 			t.Parallel()
 			s := newStateMachineEnvTestContext(t, tc.enableTransitionHistory)
 			mutableState := s.prepareMutableStateWithTriggeredNexusCompletionCallback()
-			snapshot, _, err := mutableState.CloseTransactionAsMutation(workflow.TransactionPolicyActive)
+			snapshot, _, err := mutableState.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
 			require.NoError(t, err)
 			task := snapshot.Tasks[tasks.CategoryOutbound][0]
 			exec := stateMachineEnvironment{
@@ -339,17 +268,17 @@ func TestValidateStateMachineRef(t *testing.T) {
 				logger:         s.mockShard.GetLogger(),
 			}
 
-			cbt := task.(*tasks.StateMachineOutboundTask)
-			ref := hsm.Ref{
-				WorkflowKey:     taskWorkflowKey(task),
-				StateMachineRef: cbt.Info.Ref,
-			}
+			ref, _, err := StateMachineTask(s.mockShard.StateMachineRegistry(), task)
+			require.NoError(t, err)
 			node, err := mutableState.HSM().Child(ref.StateMachinePath())
 			require.NoError(t, err)
 			tc.mutateNode(node)
 			tc.mutateRef(&ref)
 
 			workflowContext := workflow.NewContext(s.mockShard.GetConfig(), mutableState.GetWorkflowKey(), log.NewTestLogger(), log.NewTestLogger(), metrics.NoopMetricsHandler)
+			if tc.clearTransitionHistory {
+				mutableState.GetExecutionInfo().TransitionHistory = nil
+			}
 			err = exec.validateStateMachineRef(context.Background(), workflowContext, mutableState, ref, true)
 			tc.assertOutcome(t, err)
 		})
@@ -444,12 +373,12 @@ func TestAccess(t *testing.T) {
 			s := newStateMachineEnvTestContext(t, true)
 			mutableState := s.prepareMutableStateWithTriggeredNexusCompletionCallback()
 			mutableState.GetExecutionState().State = tc.workflowState
-			snapshot, _, err := mutableState.CloseTransactionAsMutation(workflow.TransactionPolicyActive)
+			snapshot, _, err := mutableState.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
 			require.NoError(t, err)
 			persistenceMutableState := workflow.TestCloneToProto(mutableState)
 			em := s.mockShard.GetExecutionManager().(*persistence.MockExecutionManager)
 			em.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
-			em.EXPECT().SetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.SetWorkflowExecutionResponse{}, nil).Times(tc.expectedSetRequests)
+			em.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil).Times(tc.expectedSetRequests)
 
 			exec := stateMachineEnvironment{
 				shardContext:   s.mockShard,
@@ -459,11 +388,8 @@ func TestAccess(t *testing.T) {
 			}
 
 			task := snapshot.Tasks[tasks.CategoryOutbound][0]
-			cbt := task.(*tasks.StateMachineOutboundTask)
-			ref := hsm.Ref{
-				WorkflowKey:     taskWorkflowKey(task),
-				StateMachineRef: cbt.Info.Ref,
-			}
+			ref, _, err := StateMachineTask(s.mockShard.StateMachineRegistry(), task)
+			require.NoError(t, err)
 			err = exec.Access(context.Background(), ref, tc.accessType, tc.accessor)
 			tc.assertOutcome(t, err)
 		})
@@ -564,10 +490,10 @@ func TestGetCurrentWorkflowExecutionContext(t *testing.T) {
 				tests.NewDynamicConfig(),
 			)
 
-			mockMutableState := workflow.NewMockMutableState(controller)
+			mockMutableState := historyi.NewMockMutableState(controller)
 			mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(tc.currentRunRunning).Times(1)
 
-			mockWorkflowContext := workflow.NewMockContext(controller)
+			mockWorkflowContext := historyi.NewMockWorkflowContext(controller)
 			mockWorkflowContext.EXPECT().LoadMutableState(gomock.Any(), mockShard).Return(mockMutableState, nil).Times(1)
 			mockWorkflowContext.EXPECT().GetWorkflowKey().Return(definition.NewWorkflowKey(namespaceID.String(), workflowID, currentRunID)).AnyTimes()
 

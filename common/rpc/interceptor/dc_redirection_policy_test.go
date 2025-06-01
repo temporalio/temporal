@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package interceptor
 
 import (
@@ -29,7 +5,6 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/serviceerror"
@@ -38,6 +13,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.uber.org/mock/gomock"
 )
 
 type (
@@ -269,6 +245,68 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_G
 	s.Equal(2*len(selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs), callCount)
 }
 
+func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_GlobalNamespace_OneCluster() {
+	s.setupGlobalNamespaceWithOneCluster(false)
+	callCount := len(selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs) * 2
+
+	testcases := []struct {
+		name              string
+		forwardingEnabled bool
+		enableForAllAPIs  bool
+		apiWhitelisted    bool
+		expectedCallCount map[string]int
+	}{
+		{
+			name:              "Forwarding disabled",
+			expectedCallCount: map[string]int{s.currentClusterName: callCount},
+		},
+		{
+			name:              "Forwarding enabled, all APIs enabled",
+			forwardingEnabled: true,
+			enableForAllAPIs:  true,
+			expectedCallCount: map[string]int{s.alternativeClusterName: callCount},
+		},
+		{
+			name:              "Forwarding enabled, all APIs disabled, API not whitelisted",
+			forwardingEnabled: true,
+			expectedCallCount: map[string]int{s.currentClusterName: callCount},
+		},
+		{
+			name:              "Forwarding enabled, all APIs disabled, API whitelisted",
+			forwardingEnabled: true,
+			apiWhitelisted:    true,
+			expectedCallCount: map[string]int{s.alternativeClusterName: callCount},
+		},
+	}
+
+	for _, tc := range testcases {
+		s.T().Run(tc.name, func(t *testing.T) {
+			s.forwardingEnabled = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(tc.forwardingEnabled)
+			s.policy.enableForAllAPIs = tc.enableForAllAPIs
+
+			callCountByCluster := make(map[string]int)
+			callFn := func(targetCluster string) error {
+				callCountByCluster[targetCluster]++
+				return nil
+			}
+
+			apis := selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs
+			for api := range apis {
+				if !tc.apiWhitelisted {
+					api = api + "_notwhitelisted"
+				}
+				err := s.policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, api, callFn)
+				s.Nil(err)
+
+				err = s.policy.WithNamespaceRedirect(context.Background(), s.namespace, api, callFn)
+				s.Nil(err)
+			}
+
+			s.Equal(tc.expectedCallCount, callCountByCluster)
+		})
+	}
+}
+
 func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_GlobalNamespace_Forwarding_CurrentClusterToAlternativeCluster() {
 	s.setupGlobalNamespaceWithTwoReplicationCluster(true, true)
 
@@ -409,4 +447,25 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) setupGlobalNamespaceWithT
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.namespaceID).Return(namespaceEntry, nil).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespace(s.namespace).Return(namespaceEntry, nil).AnyTimes()
 	s.forwardingEnabled = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(forwardingEnabled)
+}
+
+func (s *selectedAPIsForwardingRedirectionPolicySuite) setupGlobalNamespaceWithOneCluster(isRecordActive bool) {
+	activeCluster := s.alternativeClusterName
+	if isRecordActive {
+		activeCluster = s.currentClusterName
+	}
+	namespaceEntry := namespace.NewGlobalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Id: s.namespaceID.String(), Name: s.namespace.String()},
+		&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
+		&persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: activeCluster,
+			Clusters: []string{
+				activeCluster,
+			},
+		},
+		1234, // not used
+	)
+
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.namespaceID).Return(namespaceEntry, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespace(s.namespace).Return(namespaceEntry, nil).AnyTimes()
 }

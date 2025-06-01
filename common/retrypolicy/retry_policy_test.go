@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package retrypolicy
 
 import (
@@ -158,7 +134,7 @@ func TestValidateRetryPolicy(t *testing.T) {
 				InitialInterval: durationpb.New(-22 * time.Second),
 			},
 			wantErr:       true,
-			wantErrString: "InitialInterval cannot be negative on retry policy.",
+			wantErrString: "invalid InitialInterval set on retry policy: negative duration",
 		},
 		{
 			name: "coefficient < 1",
@@ -175,7 +151,7 @@ func TestValidateRetryPolicy(t *testing.T) {
 				MaximumInterval:    durationpb.New(-2 * time.Second),
 			},
 			wantErr:       true,
-			wantErrString: "MaximumInterval cannot be negative on retry policy.",
+			wantErrString: "invalid MaximumInterval set on retry policy: negative duration",
 		},
 		{
 			name: "maximum interval in less than initial interval",

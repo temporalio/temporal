@@ -1,25 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 syntax = "proto3";
 
 package temporal.server.api.persistence.v1;
@@ -30,11 +8,12 @@ import "google/protobuf/timestamp.proto";
 
 import "temporal/api/common/v1/message.proto";
 import "temporal/api/enums/v1/common.proto";
+import "temporal/api/enums/v1/event_type.proto";
 import "temporal/api/enums/v1/workflow.proto";
 import "temporal/api/failure/v1/message.proto";
 import "temporal/api/workflow/v1/message.proto";
 import "temporal/api/history/v1/message.proto";
-
+import "temporal/api/deployment/v1/message.proto";
 
 import "temporal/server/api/clock/v1/message.proto";
 import "temporal/server/api/enums/v1/common.proto";
@@ -43,6 +22,7 @@ import "temporal/server/api/enums/v1/workflow.proto";
 import "temporal/server/api/enums/v1/task.proto";
 import "temporal/server/api/enums/v1/workflow_task_type.proto";
 import "temporal/server/api/history/v1/message.proto";
+import "temporal/server/api/persistence/v1/chasm.proto";
 import "temporal/server/api/persistence/v1/queues.proto";
 import "temporal/server/api/persistence/v1/hsm.proto";
 import "temporal/server/api/persistence/v1/update.proto";
@@ -89,7 +69,7 @@ message WorkflowExecutionInfo {
     reserved 14;
     reserved 15;
     reserved 16;
-    int64 last_event_task_id = 17;
+    int64 last_running_clock = 17;
     int64 last_first_event_id = 18;
     int64 last_completed_workflow_task_started_event_id = 19;
     // Deprecated. use `WorkflowExecutionState.start_time`
@@ -112,10 +92,12 @@ message WorkflowExecutionInfo {
     // tracks the started build ID for transient/speculative WFT. This info is used for two purposes:
     // - verify WFT completes by the same Build ID that started in the latest attempt
     // - when persisting transient/speculative WFT, the right Build ID is used in the WFT started event
+    // Deprecated. Clean up with versioning-2. [cleanup-old-wv]
     string workflow_task_build_id = 88;
     // tracks the started build ID redirect counter for transient/speculative WFT. This info is to
     // ensure the right redirect counter is used in the WFT started event created later
     // for a transient/speculative WFT.
+    // Deprecated. Clean up with versioning-2. [cleanup-old-wv]
     int64 workflow_task_build_id_redirect_counter = 89;
 
     bool cancel_requested = 29;
@@ -167,10 +149,13 @@ message WorkflowExecutionInfo {
     // Used to check if visibility close task is processed before deleting the workflow execution.
     int64 close_visibility_task_id = 65;
     google.protobuf.Timestamp close_time = 66;
-    bool close_visibility_task_completed = 67;
+    // Relocatable attributes are memo and search attributes. If they were removed, then they are not
+    // present in the mutable state, and they should be in visibility store.
+    bool relocatable_attributes_removed = 67;
     temporal.server.api.workflow.v1.BaseExecutionInfo base_execution_info = 76;
     // If using build-id based versioning: version stamp of the last worker to complete a
     // workflow tasks for this workflow.
+    // Deprecated. Clean up with versioning-2. [cleanup-old-wv]
     temporal.api.common.v1.WorkerVersionStamp most_recent_worker_version_stamp = 78;
     // The currently assigned build ID for this execution. Presence of this value means worker versioning is used
     // for this execution. Assigned build ID is selected by matching based on Worker Versioning Assignment Rules
@@ -178,12 +163,15 @@ message WorkflowExecutionInfo {
     // again, the assigned build ID may change according to the latest versioning rules.
     // Assigned build ID can also change in the middle of a execution if Compatible Redirect Rules are applied to
     // this execution.
+    // Deprecated. Clean up with versioning-2. [cleanup-old-wv]
     string assigned_build_id = 85;
     // Build ID inherited from a previous/parent execution. If present, assigned_build_id will be set to this, instead
     // of using the assignment rules.
+    // Deprecated. Clean up with versioning-2. [cleanup-old-wv]
     string inherited_build_id = 86;
     // Tracks the number of times a redirect rule is applied to this workflow. Used to apply redirects in the right
     // order when mutable state is rebuilt from history events.
+    // Deprecated. Clean up with versioning-2. [cleanup-old-wv]
     int64 build_id_redirect_counter = 87;
 
     // index of update IDs and pointers to associated history events.
@@ -249,6 +237,39 @@ message WorkflowExecutionInfo {
     VersionedTransition signal_request_ids_last_update_versioned_transition = 94;
 
     repeated StateMachineTombstoneBatch sub_state_machine_tombstone_batches = 95;
+
+    // The workflow has been reset.
+    bool workflow_was_reset = 96;
+
+    // Reset Run ID points to the new nun when this execution is reset. If the execution is reset multiple times, it points to the latest run.
+    string reset_run_id = 97;
+
+    // When present, it means the workflow execution is versioned, or is transitioning from
+    // unversioned workers to versioned ones.
+    // Note: Deployment objects inside versioning info are immutable, never change their fields.
+    // (-- api-linter: core::0203::immutable=disabled
+    //     aip.dev/not-precedent: field_behavior annotation is not yet used in this repo --)
+    temporal.api.workflow.v1.WorkflowExecutionVersioningInfo versioning_info = 98;
+
+    // This is the run id when the WorkflowExecutionStarted event was written.
+    // A workflow reset changes the execution run_id, but preserves this field so that we have a reference to the original workflow execution that was reset.
+    string original_execution_run_id = 99;
+
+    // These two fields are to record the transition history when the transition history is cleaned up due to disabling transition history
+    // Should be deprecated once the transition history is fully launched
+    repeated VersionedTransition previous_transition_history = 100;
+    VersionedTransition last_transition_history_break_point = 101;
+
+    // This is a set of child workflows that were initialized after the reset point in the parent workflow.
+    // The children are identified by the key "workflow_type:workflow_id". When the parent starts to make progress after reset, it uses this data to
+    // determine the right start policy to apply to the child. This list will include children initiated in continue-as-new runs.
+    map<string, ResetChildInfo> children_initialized_post_reset_point = 102;
+    // The worker deployment that completed the last WFT.
+    string worker_deployment_name = 103;
+
+    // Priority contains metadata that controls relative ordering of task processing
+    // when tasks are backed up in a queue.
+    temporal.api.common.v1.Priority priority = 104;
 }
 
 message ExecutionStats {
@@ -263,6 +284,15 @@ message WorkflowExecutionState {
     temporal.api.enums.v1.WorkflowExecutionStatus status = 4;
     VersionedTransition last_update_versioned_transition = 5;
     google.protobuf.Timestamp start_time = 6;
+    // Request IDs that are attached to the workflow execution. It can the request ID that started
+    // the workflow execution or request IDs that were attached to an existing running workflow
+    // execution via StartWorkflowExecutionRequest.OnConflictOptions.
+    map<string, RequestIDInfo> request_ids = 7;
+}
+
+message RequestIDInfo {
+    temporal.api.enums.v1.EventType event_type = 1;
+    int64 event_id = 2;
 }
 
 // transfer column
@@ -291,7 +321,14 @@ message TransferTaskInfo {
     }
     oneof task_details {
         CloseExecutionTaskDetails close_execution_task_details = 16;
+
+        // If the task addresses a CHASM component, this field will be set.
+        ChasmTaskInfo chasm_task_info = 18;
     }
+    // Stamp represents the version of the activity internal state, for which the timer task was created.
+    // It monotonically increments when the activity options are changed.
+    // It is used to check if activity related tasks are still relevant to  their corresponding state machine.
+    int32 stamp = 17;
 }
 
 // replication column
@@ -315,6 +352,14 @@ message ReplicationTaskInfo {
     string new_run_id = 17;
     temporal.server.api.enums.v1.TaskPriority priority = 18;
     VersionedTransition versioned_transition = 19;
+    // A list of event-based replication tasks that, together, are equivalent
+    // to this state-based task.
+    // TODO: Remove this field when state-based replication is stable and
+    // doesn't need to be disabled.
+    repeated ReplicationTaskInfo task_equivalents = 20;
+    history.v1.VersionHistoryItem last_version_history_item = 21;
+    bool is_first_task = 22;
+    repeated string target_clusters= 23;
 }
 
 // visibility_task_data column
@@ -357,6 +402,16 @@ message TimerTaskInfo {
     // If specified, the task is a for a workflow chain instead of a specific workflow run.
     // A workflow chain is identified by the run_id of the first workflow in the chain.
     string first_run_id = 15;
+
+    // Stamp represents the version of the activity internal state, for which the timer task was created.
+    // It monotonically increments when the activity options are changed.
+    // It is used to check if activity related tasks are still relevant to  their corresponding state machine.
+    int32 stamp = 16;
+
+    oneof task_details {
+        // If the task addresses a CHASM component, this field will be set.
+        ChasmTaskInfo chasm_task_info = 17;
+    }
 }
 
 message ArchivalTaskInfo {
@@ -381,12 +436,27 @@ message OutboundTaskInfo {
     // Destination of this task (e.g. protocol+host+port for callbacks).
     // Outbound tasks are grouped by this field (and the namespace ID) when scheduling.
     string destination = 7;
-    // If task addresses a sub-statemachine (e.g. callback), this field will be set.
-    StateMachineTaskInfo state_machine_info = 8;
+
+    oneof task_details {
+        // If task addresses a sub-statemachine (e.g. callback), this field will be set.
+        StateMachineTaskInfo state_machine_info = 8;
+
+        // If the task addresses a CHASM component, this field will be set.
+        ChasmTaskInfo chasm_task_info = 9;
+    }
+}
+
+message NexusInvocationTaskInfo {
+    int32 attempt = 1;
+}
+
+message NexusCancelationTaskInfo {
+    int32 attempt = 1;
 }
 
 // activity_map column
 message ActivityInfo {
+
     int64 version = 1;
     int64 scheduled_event_batch_id = 2;
     reserved 3;
@@ -427,24 +497,30 @@ message ActivityInfo {
     google.protobuf.Timestamp last_heartbeat_update_time = 32;
     // When true, it means the activity is assigned to the build ID of its workflow (only set for old versioning)
     // Deprecated. use `use_workflow_build_id`
+    // Deprecated. Clean up with versioning-2. [cleanup-old-wv]
     bool use_compatible_version = 33;
     temporal.api.common.v1.ActivityType activity_type = 34;
     // Absence of `assigned_build_id` generally means this task is on an "unversioned" task queue.
     // In rare cases, it can also mean that the task queue is versioned but we failed to write activity's
     // independently-assigned build ID to the database. This case heals automatically once the task is dispatched.
+    // Deprecated. Clean up with versioning-2. [cleanup-old-wv]
     oneof build_id_info {
         // When present, it means this activity is assigned to the build ID of its workflow.
+        // Deprecated. Clean up with versioning-2. [cleanup-old-wv]
         UseWorkflowBuildIdInfo use_workflow_build_id_info = 35;
         // This means the activity is independently versioned and not bound to the build ID of its workflow.
         // If the task fails and is scheduled again, the assigned build ID may change according to the latest versioning
         // rules. This value also updates if a redirect rule is applied to the activity task to reflect the build ID
         // of the worker who received the task.
+        // Deprecated. Clean up with versioning-2. [cleanup-old-wv]
         string last_independently_assigned_build_id = 36;
     }
     // The version stamp of the worker to whom this activity was most-recently dispatched
+    // Deprecated. Clean up with versioning-2. [cleanup-old-wv]
     temporal.api.common.v1.WorkerVersionStamp last_worker_version_stamp = 37;
     VersionedTransition last_update_versioned_transition = 38;
 
+    // Deprecated. Clean up with versioning-2. [cleanup-old-wv]
     message UseWorkflowBuildIdInfo {
         // build ID of the wf when this activity started last time (which is the build ID of
         // the worker who received this activity)
@@ -452,6 +528,69 @@ message ActivityInfo {
         // workflows redirect_counter value when this activity started last time
         int64 last_redirect_counter = 2;
     }
+
+    // The first time the activity was scheduled.
+    google.protobuf.Timestamp first_scheduled_time = 39;
+    // The last time an activity attempt completion was recorded by the server.
+    google.protobuf.Timestamp last_attempt_complete_time = 40;
+
+
+    // Stamp represents the “version” of the activity internal state (options) and can/will be changed with Activity API.
+    // It monotonically increments when the activity options are changed.
+    // It is used to check if activity related tasks are still relevant to  their corresponding state machine.
+    int32 stamp = 41;
+
+    // Paused state. When activity is paused it will not advance until unpaused.
+    // Iw will not be scheduled, timer tasks will not be processed, etc.
+    // Note: it still can be cancelled/completed.
+    bool  paused = 42;
+
+    // The deployment this activity was dispatched to most recently. Present only if the activity
+    // was dispatched to a versioned worker.
+    // Deprecated. Replaced by last_worker_deployment_version.
+    temporal.api.deployment.v1.Deployment last_started_deployment = 43;
+
+    // The deployment this activity was dispatched to most recently. Present only if the activity
+    // was dispatched to a versioned worker.
+    // Deprecated. Clean up with versioning-3.1. [cleanup-old-wv]
+    string last_worker_deployment_version = 44;
+
+    // The deployment version this activity was dispatched to most recently. Present only if the activity
+    // was dispatched to a versioned worker.
+    temporal.api.deployment.v1.WorkerDeploymentVersion last_deployment_version = 49;
+
+
+    // Priority metadata. If this message is not present, or any fields are not
+    // present, they inherit the values from the workflow.
+    temporal.api.common.v1.Priority priority = 45;
+
+    message PauseInfo {
+        // The time when the activity was paused.
+        google.protobuf.Timestamp pause_time = 1;
+
+        message Manual {
+            // The identity of the actor that paused the activity.
+            string identity = 1;
+            // Reason for pausing the activity.
+            string reason = 2;
+        }
+
+        oneof paused_by {
+            // activity was paused by the manual intervention
+            Manual manual = 2;
+
+            // Id of the rule that paused the activity.
+            string rule_id = 3;
+        }
+    }
+
+    PauseInfo pause_info = 46;
+
+    // set to true if there was an activity reset while activity is still running on the worker
+    bool activity_reset = 47;
+
+    // set to true if reset heartbeat flag was set with an activity reset
+    bool reset_heartbeats = 48;
 }
 
 // timer_map column
@@ -482,6 +621,7 @@ message ChildExecutionInfo {
     temporal.server.api.clock.v1.VectorClock clock = 13;
     string namespace_id = 14;
     VersionedTransition last_update_versioned_transition = 15;
+    temporal.api.common.v1.Priority priority = 16;
 }
 
 // request_cancel_map column
@@ -543,6 +683,8 @@ message Callback {
         Nexus nexus = 2;
         HSM hsm = 3;
     }
+
+    repeated temporal.api.common.v1.Link links = 100;
 }
 
 message HSMCompletionCallbackArg {
@@ -584,11 +726,14 @@ message CallbackInfo {
     temporal.api.failure.v1.Failure last_attempt_failure = 7;
     // The time when the next attempt is scheduled.
     google.protobuf.Timestamp next_attempt_schedule_time = 8;
+
+    // Request ID that added the callback.
+    string request_id = 9;
 }
 
 // NexusOperationInfo contains the state of a nexus operation.
 message NexusOperationInfo {
-    // Endpoint name. 
+    // Endpoint name.
     // Resolved the endpoint registry for this workflow's namespace.
     string endpoint = 1;
 
@@ -597,14 +742,14 @@ message NexusOperationInfo {
     // Operation name.
     string operation = 3;
 
-    // If set the state machine will remove itself from the HSM tree on completion.
-    bool delete_on_completion = 4;
+    // reserved due to removal of delete_on_completion
+    reserved 4;
 
     // Token for fetching the scheduled event.
     bytes scheduled_event_token = 5;
 
-    // Operation ID. Only set for asynchronous operations after a successful StartOperation call.
-    string operation_id = 6;
+    // Operation token. Only set for asynchronous operations after a successful StartOperation call.
+    string operation_token = 6;
 
     // Schedule-to-close timeout for this operation.
     // This is the only timeout settable by a workflow.
@@ -653,4 +798,13 @@ message NexusOperationCancellationInfo {
     temporal.api.failure.v1.Failure last_attempt_failure = 5;
     // The time when the next attempt is scheduled.
     google.protobuf.Timestamp next_attempt_schedule_time = 6;
+
+    // The event ID of the NEXUS_OPERATION_CANCEL_REQUESTED event for this cancelation.
+    int64 requested_event_id = 7;
+}
+
+// ResetChildInfo contains the state and actions to be performed on children when a parent workflow resumes after reset.
+message ResetChildInfo {
+    // If true, the parent workflow should terminate the child before starting it.
+    bool should_terminate_and_start = 1;
 }

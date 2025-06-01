@@ -1,42 +1,21 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package workflow
 
 import (
 	"context"
 	"fmt"
+	"math/rand"
+	"reflect"
+	"sort"
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally/v4"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -45,12 +24,13 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/server/api/clock/v1"
+	clockspb "go.temporal.io/server/api/clock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/api/taskqueue/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
@@ -59,11 +39,13 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
 	serviceerror2 "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/components/callbacks"
@@ -72,10 +54,14 @@ import (
 	"go.temporal.io/server/service/history/historybuilder"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/hsm/hsmtest"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
+	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -105,7 +91,48 @@ var (
 		},
 		Data: []byte("random data"),
 	}
-	testPayloads = &commonpb.Payloads{Payloads: []*commonpb.Payload{testPayload}}
+	testPayloads                 = &commonpb.Payloads{Payloads: []*commonpb.Payload{testPayload}}
+	workflowTaskCompletionLimits = historyi.WorkflowTaskCompletionLimits{
+		MaxResetPoints:              10,
+		MaxSearchAttributeValueSize: 1024,
+	}
+	deployment1 = &deploymentpb.Deployment{
+		SeriesName: "my_app",
+		BuildId:    "build_1",
+	}
+	deployment2 = &deploymentpb.Deployment{
+		SeriesName: "my_app",
+		BuildId:    "build_2",
+	}
+	deployment3 = &deploymentpb.Deployment{
+		SeriesName: "my_app",
+		BuildId:    "build_3",
+	}
+	versionOverrideMask = &fieldmaskpb.FieldMask{Paths: []string{"versioning_behavior_override"}}
+	pinnedOptions1      = &workflowpb.WorkflowExecutionOptions{
+		VersioningOverride: &workflowpb.VersioningOverride{
+			Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED,
+			PinnedVersion: worker_versioning.WorkerDeploymentVersionToStringV31(worker_versioning.DeploymentVersionFromDeployment(deployment1)),
+		},
+	}
+	pinnedOptions2 = &workflowpb.WorkflowExecutionOptions{
+		VersioningOverride: &workflowpb.VersioningOverride{
+			Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED,
+			PinnedVersion: worker_versioning.WorkerDeploymentVersionToStringV31(worker_versioning.DeploymentVersionFromDeployment(deployment2)),
+		},
+	}
+	pinnedOptions3 = &workflowpb.WorkflowExecutionOptions{
+		VersioningOverride: &workflowpb.VersioningOverride{
+			Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED,
+			PinnedVersion: worker_versioning.WorkerDeploymentVersionToStringV31(worker_versioning.DeploymentVersionFromDeployment(deployment3)),
+		},
+	}
+	unpinnedOptions = &workflowpb.WorkflowExecutionOptions{
+		VersioningOverride: &workflowpb.VersioningOverride{
+			Behavior: enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE,
+		},
+	}
+	emptyOptions = &workflowpb.WorkflowExecutionOptions{}
 )
 
 func TestMutableStateSuite(t *testing.T) {
@@ -139,6 +166,10 @@ func (s *mutableStateSuite) TearDownSuite() {
 
 }
 
+func (s *mutableStateSuite) Name() string {
+	return "MutableStateSuite"
+}
+
 func (s *mutableStateSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
@@ -158,9 +189,7 @@ func (s *mutableStateSuite) SetupTest() {
 	reg := hsm.NewRegistry()
 	s.Require().NoError(RegisterStateMachine(reg))
 	s.mockShard.SetStateMachineRegistry(reg)
-	// set the checksum probabilities to 100% for exercising during test
-	s.mockConfig.MutableStateChecksumGenProbability = func(namespace string) int { return 100 }
-	s.mockConfig.MutableStateChecksumVerifyProbability = func(namespace string) int { return 100 }
+
 	s.mockConfig.MutableStateActivityFailureSizeLimitWarn = func(namespace string) int { return 1 * 1024 }
 	s.mockConfig.MutableStateActivityFailureSizeLimitError = func(namespace string) int { return 2 * 1024 }
 	s.mockConfig.EnableTransitionHistory = func() bool { return true }
@@ -291,8 +320,9 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_Valid() {
 		"",
 		tq,
 		"",
-		worker_versioning.StampForBuildId("b2"),
-		&taskqueue.BuildIdRedirectInfo{AssignedBuildId: "b1"},
+		worker_versioning.StampFromBuildId("b2"),
+		&taskqueuespb.BuildIdRedirectInfo{AssignedBuildId: "b1"},
+		nil,
 		false,
 	)
 	s.NoError(err)
@@ -314,8 +344,9 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_Invalid() {
 		"",
 		tq,
 		"",
-		worker_versioning.StampForBuildId("b2"),
-		&taskqueue.BuildIdRedirectInfo{AssignedBuildId: "b0"},
+		worker_versioning.StampFromBuildId("b2"),
+		&taskqueuespb.BuildIdRedirectInfo{AssignedBuildId: "b0"},
+		nil,
 		false,
 	)
 	expectedErr := &serviceerror2.ObsoleteDispatchBuildId{}
@@ -335,7 +366,8 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_EmptyRedirectInfo() {
 		"",
 		tq,
 		"",
-		worker_versioning.StampForBuildId("b2"),
+		worker_versioning.StampFromBuildId("b2"),
+		nil,
 		nil,
 		false,
 	)
@@ -357,7 +389,8 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_EmptyStamp() {
 		tq,
 		"",
 		nil,
-		&taskqueue.BuildIdRedirectInfo{AssignedBuildId: "b1"},
+		&taskqueuespb.BuildIdRedirectInfo{AssignedBuildId: "b1"},
+		nil,
 		false,
 	)
 	expectedErr := &serviceerror2.ObsoleteDispatchBuildId{}
@@ -379,6 +412,7 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_Sticky() {
 		"",
 		sticky,
 		"",
+		nil,
 		nil,
 		nil,
 		false,
@@ -406,6 +440,7 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_StickyInvalid() {
 		"",
 		nil,
 		nil,
+		nil,
 		false,
 	)
 	expectedErr := &serviceerror2.ObsoleteDispatchBuildId{}
@@ -426,6 +461,7 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_UnexpectedSticky() {
 		"",
 		sticky,
 		"",
+		nil,
 		nil,
 		nil,
 		false,
@@ -457,7 +493,8 @@ func (s *mutableStateSuite) createVersionedMutableStateWithCompletedWFT(tq *task
 		"",
 		tq,
 		"",
-		worker_versioning.StampForBuildId("b1"),
+		worker_versioning.StampFromBuildId("b1"),
+		nil,
 		nil,
 		false,
 	)
@@ -470,15 +507,626 @@ func (s *mutableStateSuite) createVersionedMutableStateWithCompletedWFT(tq *task
 	_, err = s.mutableState.AddWorkflowTaskCompletedEvent(
 		wft,
 		&workflowservice.RespondWorkflowTaskCompletedRequest{},
-		WorkflowTaskCompletionLimits{
-			MaxResetPoints:              10,
-			MaxSearchAttributeValueSize: 1024,
-		},
+		workflowTaskCompletionLimits,
 	)
 	s.NoError(err)
 }
 
+func (s *mutableStateSuite) TestEffectiveDeployment() {
+	tv := testvars.New(s)
+	ms := TestGlobalMutableState(
+		s.mockShard,
+		s.mockEventsCache,
+		s.logger,
+		int64(12),
+		tv.WorkflowID(),
+		tv.RunID(),
+	)
+	s.Nil(ms.executionInfo.VersioningInfo)
+	s.mutableState = ms
+	s.verifyEffectiveDeployment(nil, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED)
+
+	versioningInfo := &workflowpb.WorkflowExecutionVersioningInfo{}
+	ms.executionInfo.VersioningInfo = versioningInfo
+	s.verifyEffectiveDeployment(nil, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED)
+
+	dv1 := worker_versioning.WorkerDeploymentVersionToStringV31(worker_versioning.DeploymentVersionFromDeployment(deployment1))
+	dv2 := worker_versioning.WorkerDeploymentVersionToStringV31(worker_versioning.DeploymentVersionFromDeployment(deployment2))
+	dv3 := worker_versioning.WorkerDeploymentVersionToStringV31(worker_versioning.DeploymentVersionFromDeployment(deployment3))
+
+	deploymentVersion1 := worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(deployment1)
+	deploymentVersion2 := worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(deployment2)
+	deploymentVersion3 := worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(deployment3)
+
+	for _, useV32 := range []bool{true, false} {
+		// ------- Without override, without transition
+
+		// deployment is set but behavior is not -> unversioned
+		if useV32 {
+			versioningInfo.DeploymentVersion = deploymentVersion1
+		} else {
+			versioningInfo.Version = dv1 //nolint:staticcheck // SA1019: worker versioning v0.31
+		}
+		versioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED
+		s.verifyEffectiveDeployment(nil, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED)
+
+		if useV32 {
+			versioningInfo.DeploymentVersion = deploymentVersion1
+		} else {
+			versioningInfo.Version = dv1 //nolint:staticcheck // SA1019: worker versioning v0.31
+		}
+		versioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_PINNED
+		s.verifyEffectiveDeployment(deployment1, enumspb.VERSIONING_BEHAVIOR_PINNED)
+
+		if useV32 {
+			versioningInfo.DeploymentVersion = deploymentVersion1
+		} else {
+			versioningInfo.Version = dv1 //nolint:staticcheck // SA1019: worker versioning v0.31
+		}
+		versioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
+		s.verifyEffectiveDeployment(deployment1, enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE)
+
+		// ------- With override, without transition
+
+		// deployment and behavior are not set, but override behavior is AUTO_UPGRADE -> AUTO_UPGRADE
+		if useV32 {
+			versioningInfo.DeploymentVersion = nil
+			versioningInfo.VersioningOverride = &workflowpb.VersioningOverride{
+				Override: &workflowpb.VersioningOverride_AutoUpgrade{AutoUpgrade: true},
+			}
+		} else {
+			versioningInfo.Version = "" //nolint:staticcheck // SA1019: worker versioning v0.31
+			versioningInfo.VersioningOverride = &workflowpb.VersioningOverride{
+				Behavior: enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE, //nolint:staticcheck // SA1019: worker versioning v0.31
+			}
+		}
+		versioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED
+		s.verifyEffectiveDeployment(nil, enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE)
+
+		// deployment is set, behavior is not, but override behavior is AUTO_UPGRADE -> AUTO_UPGRADE
+		if useV32 {
+			versioningInfo.DeploymentVersion = deploymentVersion1
+			versioningInfo.VersioningOverride = &workflowpb.VersioningOverride{
+				Override: &workflowpb.VersioningOverride_AutoUpgrade{AutoUpgrade: true},
+			}
+		} else {
+			versioningInfo.Version = dv1 //nolint:staticcheck // SA1019: worker versioning v0.31
+			versioningInfo.VersioningOverride = &workflowpb.VersioningOverride{
+				Behavior: enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE, //nolint:staticcheck // SA1019: worker versioning v0.31
+			}
+		}
+		versioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED
+		s.verifyEffectiveDeployment(deployment1, enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE)
+
+		// worker says PINNED, but override behavior is AUTO_UPGRADE -> AUTO_UPGRADE
+		if useV32 {
+			versioningInfo.DeploymentVersion = deploymentVersion1
+			versioningInfo.VersioningOverride = &workflowpb.VersioningOverride{
+				Override: &workflowpb.VersioningOverride_AutoUpgrade{AutoUpgrade: true},
+			}
+		} else {
+			versioningInfo.Version = dv1 //nolint:staticcheck // SA1019: worker versioning v0.31
+			versioningInfo.VersioningOverride = &workflowpb.VersioningOverride{
+				Behavior: enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE, //nolint:staticcheck // SA1019: worker versioning v0.31
+				// Technically, API should not allow deployment to be set for AUTO_UPGRADE override, but we
+				// test it this way to make sure it is ignored.
+				PinnedVersion: dv2, //nolint:staticcheck // SA1019: worker versioning v0.31
+			}
+		}
+		versioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_PINNED
+		s.verifyEffectiveDeployment(deployment1, enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE)
+
+		// deployment and behavior are not set, but override behavior is PINNED -> PINNED
+		if useV32 {
+			versioningInfo.DeploymentVersion = nil
+			versioningInfo.VersioningOverride = &workflowpb.VersioningOverride{
+				Override: &workflowpb.VersioningOverride_Pinned{Pinned: &workflowpb.VersioningOverride_PinnedOverride{
+					Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
+					Version:  deploymentVersion2,
+				}},
+			}
+		} else {
+			versioningInfo.Version = "" //nolint:staticcheck // SA1019: worker versioning v0.31
+			versioningInfo.VersioningOverride = &workflowpb.VersioningOverride{
+				Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED, //nolint:staticcheck // SA1019: worker versioning v0.31
+				PinnedVersion: dv2,                                //nolint:staticcheck // SA1019: worker versioning v0.31
+			}
+		}
+		versioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED
+		s.verifyEffectiveDeployment(deployment2, enumspb.VERSIONING_BEHAVIOR_PINNED)
+
+		// deployment is set, behavior is not, but override behavior is PINNED --> PINNED
+		if useV32 {
+			versioningInfo.DeploymentVersion = deploymentVersion1
+			versioningInfo.VersioningOverride = &workflowpb.VersioningOverride{
+				Override: &workflowpb.VersioningOverride_Pinned{Pinned: &workflowpb.VersioningOverride_PinnedOverride{
+					Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
+					Version:  deploymentVersion2,
+				}},
+			}
+		} else {
+			versioningInfo.Version = dv1 //nolint:staticcheck // SA1019: worker versioning v0.31
+			versioningInfo.VersioningOverride = &workflowpb.VersioningOverride{
+				Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED, //nolint:staticcheck // SA1019: worker versioning v0.31
+				PinnedVersion: dv2,                                //nolint:staticcheck // SA1019: worker versioning v0.31
+			}
+		}
+		versioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED
+		s.verifyEffectiveDeployment(deployment2, enumspb.VERSIONING_BEHAVIOR_PINNED)
+
+		// worker says AUTO_UPGRADE, but override behavior is PINNED --> PINNED
+		if useV32 {
+			versioningInfo.DeploymentVersion = deploymentVersion1
+			versioningInfo.VersioningOverride = &workflowpb.VersioningOverride{
+				Override: &workflowpb.VersioningOverride_Pinned{Pinned: &workflowpb.VersioningOverride_PinnedOverride{
+					Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
+					Version:  deploymentVersion2,
+				}},
+			}
+		} else {
+			versioningInfo.Version = dv1 //nolint:staticcheck // SA1019: worker versioning v0.31
+			versioningInfo.VersioningOverride = &workflowpb.VersioningOverride{
+				Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED, //nolint:staticcheck // SA1019: worker versioning v0.31
+				PinnedVersion: dv2,                                //nolint:staticcheck // SA1019: worker versioning v0.31
+			}
+		}
+		versioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
+		s.verifyEffectiveDeployment(deployment2, enumspb.VERSIONING_BEHAVIOR_PINNED)
+
+		// ------- With transition
+
+		if useV32 {
+			versioningInfo.DeploymentVersion = deploymentVersion1
+			versioningInfo.VersioningOverride = &workflowpb.VersioningOverride{
+				Override: &workflowpb.VersioningOverride_AutoUpgrade{AutoUpgrade: true},
+			}
+			versioningInfo.VersionTransition = &workflowpb.DeploymentVersionTransition{
+				DeploymentVersion: deploymentVersion3,
+			}
+		} else {
+			versioningInfo.Version = dv1 //nolint:staticcheck // SA1019: worker versioning v0.31
+			versioningInfo.VersioningOverride = &workflowpb.VersioningOverride{
+				Behavior:      enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE, //nolint:staticcheck // SA1019: worker versioning v0.31
+				PinnedVersion: dv2,                                      //nolint:staticcheck // SA1019: worker versioning v0.31
+			}
+			versioningInfo.VersionTransition = &workflowpb.DeploymentVersionTransition{
+				Version: dv3, //nolint:staticcheck // SA1019: worker versioning v0.31
+			}
+		}
+		versioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_PINNED
+		s.verifyEffectiveDeployment(deployment3, enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE)
+
+		if useV32 {
+			versioningInfo.DeploymentVersion = deploymentVersion1
+			versioningInfo.VersioningOverride = &workflowpb.VersioningOverride{
+				Override: &workflowpb.VersioningOverride_AutoUpgrade{AutoUpgrade: true},
+			}
+			versioningInfo.VersionTransition = &workflowpb.DeploymentVersionTransition{
+				DeploymentVersion: nil,
+			}
+		} else {
+			versioningInfo.Version = dv1 //nolint:staticcheck // SA1019: worker versioning v0.31
+			versioningInfo.VersioningOverride = &workflowpb.VersioningOverride{
+				// Transitioning to unversioned
+				Behavior:      enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE, //nolint:staticcheck // SA1019: worker versioning v0.31
+				PinnedVersion: dv2,                                      //nolint:staticcheck // SA1019: worker versioning v0.31
+			}
+			versioningInfo.VersionTransition = &workflowpb.DeploymentVersionTransition{
+				Version: "", //nolint:staticcheck // SA1019: worker versioning v0.31
+			}
+		}
+		versioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_PINNED
+		s.verifyEffectiveDeployment(nil, enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE)
+
+		// clear for next round
+		versioningInfo.VersioningOverride = nil
+		versioningInfo.VersionTransition = nil
+		versioningInfo.DeploymentVersion = nil
+		versioningInfo.Version = "" //nolint:staticcheck // SA1019: worker versioning v0.31
+	}
+}
+
+func (s *mutableStateSuite) verifyEffectiveDeployment(
+	expectedDeployment *deploymentpb.Deployment,
+	expectedBehavior enumspb.VersioningBehavior,
+) {
+	if !s.mutableState.GetEffectiveDeployment().Equal(expectedDeployment) {
+		s.Fail(fmt.Sprintf("expected: {%s}, actual: {%s}",
+			expectedDeployment.String(),
+			s.mutableState.GetEffectiveDeployment().String(),
+		),
+		)
+	}
+	s.Equal(expectedBehavior, s.mutableState.GetEffectiveVersioningBehavior())
+}
+
+// Creates a mutable state with first WFT completed on the given deployment and behavior set
+// to the given behavior, testing expected output after Add, Start, and Complete Workflow Task.
+func (s *mutableStateSuite) createMutableStateWithVersioningBehavior(
+	behavior enumspb.VersioningBehavior,
+	deployment *deploymentpb.Deployment,
+	tq *taskqueuepb.TaskQueue,
+) {
+	version := int64(12)
+	workflowID := "some random workflow ID"
+	runID := uuid.New()
+
+	s.mutableState = TestGlobalMutableState(
+		s.mockShard,
+		s.mockEventsCache,
+		s.logger,
+		version,
+		workflowID,
+		runID,
+	)
+
+	wft, err := s.mutableState.AddWorkflowTaskScheduledEvent(true, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+	s.NoError(err)
+	s.verifyEffectiveDeployment(nil, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED)
+
+	err = s.mutableState.StartDeploymentTransition(deployment)
+	s.NoError(err)
+	s.verifyEffectiveDeployment(deployment, enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE)
+
+	_, wft, err = s.mutableState.AddWorkflowTaskStartedEvent(
+		wft.ScheduledEventID,
+		"",
+		tq,
+		"",
+		nil,
+		nil,
+		nil,
+		false,
+	)
+	s.NoError(err)
+	s.verifyEffectiveDeployment(deployment, enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE)
+
+	_, err = s.mutableState.AddWorkflowTaskCompletedEvent(
+		wft,
+		&workflowservice.RespondWorkflowTaskCompletedRequest{
+			VersioningBehavior: behavior,
+			Deployment:         deployment, //nolint:staticcheck // SA1019: worker versioning v0.30
+		},
+		workflowTaskCompletionLimits,
+	)
+	s.verifyEffectiveDeployment(deployment, behavior)
+	s.NoError(err)
+}
+
+func (s *mutableStateSuite) TestPinnedFirstWorkflowTask() {
+	tq := &taskqueuepb.TaskQueue{Name: "tq"}
+	s.createMutableStateWithVersioningBehavior(enumspb.VERSIONING_BEHAVIOR_PINNED, deployment1, tq)
+	s.verifyEffectiveDeployment(deployment1, enumspb.VERSIONING_BEHAVIOR_PINNED)
+}
+
+func (s *mutableStateSuite) TestUnpinnedFirstWorkflowTask() {
+	tq := &taskqueuepb.TaskQueue{Name: "tq"}
+	s.createMutableStateWithVersioningBehavior(enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE, deployment1, tq)
+	s.verifyEffectiveDeployment(deployment1, enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE)
+}
+
+func (s *mutableStateSuite) TestUnpinnedTransition() {
+	tq := &taskqueuepb.TaskQueue{Name: "tq"}
+	behavior := enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
+	s.createMutableStateWithVersioningBehavior(behavior, deployment1, tq)
+
+	wft, err := s.mutableState.AddWorkflowTaskScheduledEvent(true, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+	s.NoError(err)
+	s.verifyEffectiveDeployment(deployment1, behavior)
+
+	err = s.mutableState.StartDeploymentTransition(deployment2)
+	s.NoError(err)
+	s.verifyEffectiveDeployment(deployment2, behavior)
+
+	_, wft, err = s.mutableState.AddWorkflowTaskStartedEvent(
+		wft.ScheduledEventID,
+		"",
+		tq,
+		"",
+		nil,
+		nil,
+		nil,
+		false,
+	)
+	s.NoError(err)
+	s.verifyEffectiveDeployment(deployment2, behavior)
+
+	_, err = s.mutableState.AddWorkflowTaskCompletedEvent(
+		wft,
+		&workflowservice.RespondWorkflowTaskCompletedRequest{
+			// wf is pinned in the new build
+			VersioningBehavior: enumspb.VERSIONING_BEHAVIOR_PINNED,
+			Deployment:         deployment2, //nolint:staticcheck // SA1019: worker versioning v0.30
+		},
+		workflowTaskCompletionLimits,
+	)
+	s.verifyEffectiveDeployment(deployment2, enumspb.VERSIONING_BEHAVIOR_PINNED)
+	s.NoError(err)
+}
+
+func (s *mutableStateSuite) TestUnpinnedTransitionFailed() {
+	tq := &taskqueuepb.TaskQueue{Name: "tq"}
+	behavior := enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
+	s.createMutableStateWithVersioningBehavior(behavior, deployment1, tq)
+
+	wft, err := s.mutableState.AddWorkflowTaskScheduledEvent(true, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+	s.NoError(err)
+	s.verifyEffectiveDeployment(deployment1, behavior)
+
+	err = s.mutableState.StartDeploymentTransition(deployment2)
+	s.NoError(err)
+	s.verifyEffectiveDeployment(deployment2, behavior)
+
+	_, wft, err = s.mutableState.AddWorkflowTaskStartedEvent(
+		wft.ScheduledEventID,
+		"",
+		tq,
+		"",
+		nil,
+		nil,
+		nil,
+		false,
+	)
+	s.NoError(err)
+	s.verifyEffectiveDeployment(deployment2, behavior)
+
+	_, err = s.mutableState.AddWorkflowTaskFailedEvent(
+		wft,
+		enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE,
+		failure.NewServerFailure("some random workflow task failure details", false),
+		"some random workflow task failure identity",
+		nil,
+		"",
+		"",
+		"",
+		0,
+	)
+	s.NoError(err)
+	// WFT failure does not fail transition
+	s.verifyEffectiveDeployment(deployment2, behavior)
+}
+
+func (s *mutableStateSuite) TestUnpinnedTransitionTimeout() {
+	tq := &taskqueuepb.TaskQueue{Name: "tq"}
+	behavior := enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
+	s.createMutableStateWithVersioningBehavior(behavior, deployment1, tq)
+
+	wft, err := s.mutableState.AddWorkflowTaskScheduledEvent(true, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+	s.NoError(err)
+	s.verifyEffectiveDeployment(deployment1, behavior)
+
+	err = s.mutableState.StartDeploymentTransition(deployment2)
+	s.NoError(err)
+	s.verifyEffectiveDeployment(deployment2, behavior)
+
+	_, wft, err = s.mutableState.AddWorkflowTaskStartedEvent(
+		wft.ScheduledEventID,
+		"",
+		tq,
+		"",
+		nil,
+		nil,
+		nil,
+		false,
+	)
+	s.NoError(err)
+	s.verifyEffectiveDeployment(deployment2, behavior)
+
+	_, err = s.mutableState.AddWorkflowTaskTimedOutEvent(wft)
+	s.NoError(err)
+	// WFT timeout does not fail transition
+	s.verifyEffectiveDeployment(deployment2, behavior)
+}
+
+func (s *mutableStateSuite) verifyWorkflowOptionsUpdatedEventAttr(
+	actualAttr *historypb.WorkflowExecutionOptionsUpdatedEventAttributes,
+	expectedAttr *historypb.WorkflowExecutionOptionsUpdatedEventAttributes,
+) {
+	expectedOverride := worker_versioning.ConvertOverrideToV32(expectedAttr.GetVersioningOverride())
+	actualOverride := actualAttr.GetVersioningOverride()
+	s.Equal(expectedOverride.GetPinned().GetBehavior(), actualOverride.GetPinned().GetBehavior())
+	s.Equal(expectedOverride.GetPinned().GetVersion().GetDeploymentName(), actualOverride.GetPinned().GetVersion().GetDeploymentName())
+	s.Equal(expectedOverride.GetPinned().GetVersion().GetBuildId(), actualOverride.GetPinned().GetVersion().GetBuildId())
+	s.Equal(expectedOverride.GetAutoUpgrade(), actualOverride.GetAutoUpgrade())
+
+	s.Equal(expectedOverride.GetBehavior(), actualOverride.GetBehavior())                                       //nolint:staticcheck // SA1019: worker versioning v0.31
+	s.Equal(expectedOverride.GetDeployment().GetSeriesName(), expectedOverride.GetDeployment().GetSeriesName()) //nolint:staticcheck // SA1019: worker versioning v0.30
+	s.Equal(expectedOverride.GetDeployment().GetBuildId(), expectedOverride.GetDeployment().GetBuildId())       //nolint:staticcheck // SA1019: worker versioning v0.30
+	s.Equal(expectedOverride.GetPinnedVersion(), actualOverride.GetPinnedVersion())                             //nolint:staticcheck // SA1019: worker versioning v0.31
+
+	s.Equal(actualAttr.GetUnsetVersioningOverride(), expectedAttr.GetUnsetVersioningOverride())
+}
+
+func (s *mutableStateSuite) verifyOverrides(
+	expectedBehavior, expectedBehaviorOverride enumspb.VersioningBehavior,
+	expectedDeployment, expectedDeploymentOverride *deploymentpb.Deployment,
+) {
+	versioningInfo := s.mutableState.GetExecutionInfo().GetVersioningInfo()
+	s.Equal(expectedBehavior, versioningInfo.GetBehavior())
+	if versioningInfo.GetVersioningOverride().GetAutoUpgrade() {
+		s.Equal(expectedBehaviorOverride, enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE)
+	} else if versioningInfo.GetVersioningOverride().GetPinned().GetBehavior() == workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED {
+		s.Equal(expectedBehaviorOverride, enumspb.VERSIONING_BEHAVIOR_PINNED)
+	}
+	expectedVersion := ""
+	if expectedDeployment != nil {
+		expectedVersion = worker_versioning.WorkerDeploymentVersionToStringV31(worker_versioning.DeploymentVersionFromDeployment(expectedDeployment))
+	}
+	s.Equal(expectedVersion, versioningInfo.GetVersion()) //nolint:staticcheck // SA1019: worker versioning v0.31
+	var expectedPinnedDeploymentVersion *deploymentpb.WorkerDeploymentVersion
+	if expectedDeploymentOverride != nil {
+		expectedPinnedDeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(expectedDeploymentOverride)
+	}
+	s.Equal(expectedPinnedDeploymentVersion.GetDeploymentName(), versioningInfo.GetVersioningOverride().GetPinned().GetVersion().GetDeploymentName())
+	s.Equal(expectedPinnedDeploymentVersion.GetBuildId(), versioningInfo.GetVersioningOverride().GetPinned().GetVersion().GetBuildId())
+}
+
+func (s *mutableStateSuite) TestOverride_UnpinnedBase_SetPinnedAndUnsetWithEmptyOptions() {
+	tq := &taskqueuepb.TaskQueue{Name: "tq"}
+	baseBehavior := enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
+	overrideBehavior := enumspb.VERSIONING_BEHAVIOR_PINNED
+	s.createMutableStateWithVersioningBehavior(baseBehavior, deployment1, tq)
+
+	// set pinned override
+	event, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(pinnedOptions2.GetVersioningOverride(), false, "", nil, nil)
+	s.NoError(err)
+	s.verifyEffectiveDeployment(deployment2, overrideBehavior)
+	s.verifyWorkflowOptionsUpdatedEventAttr(
+		event.GetWorkflowExecutionOptionsUpdatedEventAttributes(),
+		&historypb.WorkflowExecutionOptionsUpdatedEventAttributes{
+			VersioningOverride:      pinnedOptions2.GetVersioningOverride(),
+			UnsetVersioningOverride: false,
+		},
+	)
+	s.verifyOverrides(baseBehavior, overrideBehavior, deployment1, deployment2)
+
+	// unset pinned override with boolean
+	event, err = s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(nil, true, "", nil, nil)
+	s.NoError(err)
+	s.verifyEffectiveDeployment(deployment1, baseBehavior)
+	s.verifyWorkflowOptionsUpdatedEventAttr(
+		event.GetWorkflowExecutionOptionsUpdatedEventAttributes(),
+		&historypb.WorkflowExecutionOptionsUpdatedEventAttributes{
+			VersioningOverride:      nil,
+			UnsetVersioningOverride: true,
+		},
+	)
+	s.verifyOverrides(baseBehavior, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED, deployment1, nil)
+}
+
+func (s *mutableStateSuite) TestOverride_PinnedBase_SetUnpinnedAndUnsetWithEmptyOptions() {
+	tq := &taskqueuepb.TaskQueue{Name: "tq"}
+	baseBehavior := enumspb.VERSIONING_BEHAVIOR_PINNED
+	overrideBehavior := enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
+	s.createMutableStateWithVersioningBehavior(baseBehavior, deployment1, tq)
+
+	// set unpinned override
+	event, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(unpinnedOptions.GetVersioningOverride(), false, "", nil, nil)
+	s.NoError(err)
+	s.verifyEffectiveDeployment(deployment1, overrideBehavior)
+	s.verifyWorkflowOptionsUpdatedEventAttr(
+		event.GetWorkflowExecutionOptionsUpdatedEventAttributes(),
+		&historypb.WorkflowExecutionOptionsUpdatedEventAttributes{
+			VersioningOverride:      unpinnedOptions.GetVersioningOverride(),
+			UnsetVersioningOverride: false,
+		},
+	)
+	s.verifyOverrides(baseBehavior, overrideBehavior, deployment1, nil)
+
+	// unset pinned override with empty
+	event, err = s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(nil, true, "", nil, nil)
+	s.NoError(err)
+	s.verifyEffectiveDeployment(deployment1, baseBehavior)
+	s.verifyWorkflowOptionsUpdatedEventAttr(
+		event.GetWorkflowExecutionOptionsUpdatedEventAttributes(),
+		&historypb.WorkflowExecutionOptionsUpdatedEventAttributes{
+			VersioningOverride:      nil,
+			UnsetVersioningOverride: true,
+		},
+	)
+	s.verifyOverrides(baseBehavior, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED, deployment1, nil)
+}
+
+func (s *mutableStateSuite) TestOverride_RedirectFails() {
+	tq := &taskqueuepb.TaskQueue{Name: "tq"}
+	baseBehavior := enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
+	overrideBehavior := enumspb.VERSIONING_BEHAVIOR_PINNED
+	s.createMutableStateWithVersioningBehavior(baseBehavior, deployment1, tq)
+
+	event, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(pinnedOptions3.GetVersioningOverride(), false, "", nil, nil)
+	s.NoError(err)
+	s.verifyEffectiveDeployment(deployment3, overrideBehavior)
+	s.verifyWorkflowOptionsUpdatedEventAttr(
+		event.GetWorkflowExecutionOptionsUpdatedEventAttributes(),
+		&historypb.WorkflowExecutionOptionsUpdatedEventAttributes{
+			VersioningOverride:      pinnedOptions3.GetVersioningOverride(),
+			UnsetVersioningOverride: false,
+		},
+	)
+	s.verifyOverrides(baseBehavior, overrideBehavior, deployment1, deployment3)
+
+	// assert that transition fails
+	err = s.mutableState.StartDeploymentTransition(deployment2)
+	s.ErrorIs(err, ErrPinnedWorkflowCannotTransition)
+	s.verifyEffectiveDeployment(deployment3, overrideBehavior)
+	s.verifyOverrides(baseBehavior, overrideBehavior, deployment1, deployment3)
+}
+
+func (s *mutableStateSuite) TestOverride_BaseDeploymentUpdatedOnCompletion() {
+	s.T().Skip("TODO (Shahab)")
+	tq := &taskqueuepb.TaskQueue{Name: "tq"}
+	baseBehavior := enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
+	overrideBehavior := enumspb.VERSIONING_BEHAVIOR_PINNED
+	s.createMutableStateWithVersioningBehavior(baseBehavior, deployment1, tq)
+
+	event, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(pinnedOptions3.GetVersioningOverride(), false, "", nil, nil)
+	s.NoError(err)
+	s.verifyEffectiveDeployment(deployment3, overrideBehavior)
+	s.verifyWorkflowOptionsUpdatedEventAttr(
+		event.GetWorkflowExecutionOptionsUpdatedEventAttributes(),
+		&historypb.WorkflowExecutionOptionsUpdatedEventAttributes{
+			VersioningOverride:      pinnedOptions3.GetVersioningOverride(),
+			UnsetVersioningOverride: false,
+		},
+	)
+	s.verifyOverrides(baseBehavior, overrideBehavior, deployment1, deployment3)
+
+	// assert that redirect fails - should be its own test
+	err = s.mutableState.StartDeploymentTransition(deployment2)
+	s.ErrorIs(err, ErrPinnedWorkflowCannotTransition)
+	s.verifyEffectiveDeployment(deployment3, overrideBehavior)
+	s.verifyOverrides(baseBehavior, overrideBehavior, deployment1, deployment3) // base deployment still deployment1 here -- good
+
+	wft, err := s.mutableState.AddWorkflowTaskScheduledEvent(true, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+	s.NoError(err)
+	s.verifyEffectiveDeployment(deployment3, overrideBehavior)
+
+	_, wft, err = s.mutableState.AddWorkflowTaskStartedEvent(
+		wft.ScheduledEventID,
+		"",
+		tq,
+		"",
+		nil,
+		nil,
+		nil,
+		false,
+	)
+	s.NoError(err)
+	s.verifyEffectiveDeployment(deployment3, overrideBehavior)
+	s.verifyOverrides(baseBehavior, overrideBehavior, deployment1, deployment3)
+
+	_, err = s.mutableState.AddWorkflowTaskCompletedEvent(
+		wft,
+		&workflowservice.RespondWorkflowTaskCompletedRequest{
+			// sdk says wf is unpinned, but that does not take effect due to the override
+			VersioningBehavior: baseBehavior,
+			Deployment:         deployment2,
+		},
+		workflowTaskCompletionLimits,
+	)
+	s.NoError(err)
+	s.verifyEffectiveDeployment(deployment3, overrideBehavior)
+	s.verifyOverrides(baseBehavior, overrideBehavior, deployment2, deployment3)
+
+	// now we unset the override and check that the base deployment/behavior is in effect
+	event, err = s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(nil, true, "", nil, nil)
+	s.NoError(err)
+	s.verifyEffectiveDeployment(deployment2, baseBehavior)
+	s.verifyWorkflowOptionsUpdatedEventAttr(
+		event.GetWorkflowExecutionOptionsUpdatedEventAttributes(),
+		&historypb.WorkflowExecutionOptionsUpdatedEventAttributes{
+			VersioningOverride:      nil,
+			UnsetVersioningOverride: true,
+		},
+	)
+	s.verifyOverrides(baseBehavior, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED, deployment2, nil)
+}
+
 func (s *mutableStateSuite) TestChecksum() {
+	// set the checksum probabilities to 100% for exercising during test
+	s.mockConfig.MutableStateChecksumGenProbability = func(namespace string) int { return 100 }
+	s.mockConfig.MutableStateChecksumVerifyProbability = func(namespace string) int { return 100 }
+
 	testCases := []struct {
 		name                 string
 		enableBufferedEvents bool
@@ -487,7 +1135,7 @@ func (s *mutableStateSuite) TestChecksum() {
 		{
 			name: "closeTransactionAsSnapshot",
 			closeTxFunc: func(ms *MutableStateImpl) (*persistencespb.Checksum, error) {
-				snapshot, _, err := ms.CloseTransactionAsSnapshot(TransactionPolicyPassive)
+				snapshot, _, err := ms.CloseTransactionAsSnapshot(historyi.TransactionPolicyPassive)
 				if err != nil {
 					return nil, err
 				}
@@ -498,7 +1146,7 @@ func (s *mutableStateSuite) TestChecksum() {
 			name:                 "closeTransactionAsMutation",
 			enableBufferedEvents: true,
 			closeTxFunc: func(ms *MutableStateImpl) (*persistencespb.Checksum, error) {
-				mutation, _, err := ms.CloseTransactionAsMutation(TransactionPolicyPassive)
+				mutation, _, err := ms.CloseTransactionAsMutation(historyi.TransactionPolicyPassive)
 				if err != nil {
 					return nil, err
 				}
@@ -741,6 +1389,7 @@ func (s *mutableStateSuite) TestTransientWorkflowTaskStart_CurrentVersionChanged
 		"random identity",
 		nil,
 		nil,
+		nil,
 		false,
 	)
 	s.NoError(err)
@@ -805,12 +1454,12 @@ func (s *mutableStateSuite) TestSanitizedMutableState() {
 	)
 
 	mutableState.executionInfo.LastFirstEventTxnId = txnID
-	mutableState.executionInfo.ParentClock = &clock.VectorClock{
+	mutableState.executionInfo.ParentClock = &clockspb.VectorClock{
 		ShardId: 1,
 		Clock:   1,
 	}
 	mutableState.pendingChildExecutionInfoIDs = map[int64]*persistencespb.ChildExecutionInfo{1: {
-		Clock: &clock.VectorClock{
+		Clock: &clockspb.VectorClock{
 			ShardId: 1,
 			Clock:   1,
 		},
@@ -825,7 +1474,7 @@ func (s *mutableStateSuite) TestSanitizedMutableState() {
 	s.NoError(err)
 
 	mutableStateProto := mutableState.CloneToProto()
-	sanitizedMutableState, err := NewSanitizedMutableState(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, mutableStateProto, 0, 0)
+	sanitizedMutableState, err := NewSanitizedMutableState(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, mutableStateProto, 0)
 	s.NoError(err)
 	s.Equal(int64(0), sanitizedMutableState.executionInfo.LastFirstEventTxnId)
 	s.Nil(sanitizedMutableState.executionInfo.ParentClock)
@@ -1020,7 +1669,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchAppl
 		newWorkflowTaskScheduleEvent,
 		newWorkflowTaskStartedEvent,
 	}))
-	_, _, err = s.mutableState.CloseTransactionAsMutation(TransactionPolicyPassive)
+	_, _, err = s.mutableState.CloseTransactionAsMutation(historyi.TransactionPolicyPassive)
 	s.NoError(err)
 
 	return newWorkflowTaskScheduleEvent, newWorkflowTaskStartedEvent
@@ -1146,7 +1795,20 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistencespb.Workflow
 	}
 
 	signalRequestIDs := []string{
-		uuid.New(),
+		"signal_request_id_1",
+	}
+
+	chasmNodes := map[string]*persistencespb.ChasmNode{
+		"component-path": {
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition:    &persistencespb.VersionedTransition{NamespaceFailoverVersion: failoverVersion, TransitionCount: 1},
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: failoverVersion, TransitionCount: 90},
+				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+					ComponentAttributes: &persistencespb.ChasmComponentAttributes{},
+				},
+			},
+			Data: &commonpb.DataBlob{Data: []byte("test-data")},
+		},
 	}
 
 	bufferedEvents := []*historypb.HistoryEvent{
@@ -1170,6 +1832,7 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistencespb.Workflow
 		ChildExecutionInfos: childInfos,
 		RequestCancelInfos:  requestCancelInfo,
 		SignalInfos:         signalInfos,
+		ChasmNodes:          chasmNodes,
 		SignalRequestedIds:  signalRequestIDs,
 		BufferedEvents:      bufferedEvents,
 	}
@@ -1194,24 +1857,25 @@ func (s *mutableStateSuite) TestUpdateInfos() {
 	err = s.mutableState.UpdateCurrentVersion(namespaceEntry.FailoverVersion(), false)
 	s.NoError(err)
 
-	acceptedUpdateID := s.T().Name() + "-accepted-update-id"
-	acceptedMsgID := s.T().Name() + "-accepted-msg-id"
-	var acptEvents []*historypb.HistoryEvent
-	for i := 0; i < 2; i++ {
-		updateID := fmt.Sprintf("%s-%d", acceptedUpdateID, i)
-		acptEvent, err := s.mutableState.AddWorkflowExecutionUpdateAcceptedEvent(
-			updateID,
-			fmt.Sprintf("%s-%d", acceptedMsgID, i),
-			1,
-			&updatepb.Request{
-				Meta: &updatepb.Meta{UpdateId: updateID},
-			},
-		)
-		s.Require().NoError(err)
-		s.Require().NotNil(acptEvent)
-		acptEvents = append(acptEvents, acptEvent)
-	}
-	s.Require().Len(acptEvents, 2, "expected to create 2 UpdateAccepted events")
+	// 1st accepted update (without acceptedRequest)
+	updateID1 := fmt.Sprintf("%s-1-accepted-update-id", s.T().Name())
+	acptEvent1, err := s.mutableState.AddWorkflowExecutionUpdateAcceptedEvent(
+		updateID1,
+		fmt.Sprintf("%s-1-accepted-msg-id", s.T().Name()),
+		1,
+		nil) // no acceptedRequest!
+	s.NoError(err)
+	s.NotNil(acptEvent1)
+
+	// 2nd accepted update (with acceptedRequest)
+	updateID2 := fmt.Sprintf("%s-2-accepted-update-id", s.T().Name())
+	acptEvent2, err := s.mutableState.AddWorkflowExecutionUpdateAcceptedEvent(
+		updateID2,
+		fmt.Sprintf("%s-2-accepted-msg-id", s.T().Name()),
+		1,
+		&updatepb.Request{Meta: &updatepb.Meta{UpdateId: updateID2}})
+	s.NoError(err)
+	s.NotNil(acptEvent2)
 
 	_, err = s.mutableState.AddWorkflowExecutionUpdateCompletedEvent(
 		1234,
@@ -1222,34 +1886,35 @@ func (s *mutableStateSuite) TestUpdateInfos() {
 			},
 		},
 	)
-	s.Require().Error(err)
+	s.Error(err)
 
 	completedEvent, err := s.mutableState.AddWorkflowExecutionUpdateCompletedEvent(
-		acptEvents[0].EventId,
+		acptEvent1.EventId,
 		&updatepb.Response{
-			Meta: &updatepb.Meta{UpdateId: acptEvents[0].GetWorkflowExecutionUpdateAcceptedEventAttributes().GetProtocolInstanceId()},
+			Meta: &updatepb.Meta{UpdateId: updateID1},
 			Outcome: &updatepb.Outcome{
 				Value: &updatepb.Outcome_Success{Success: testPayloads},
 			},
 		},
 	)
-	s.Require().NoError(err)
-	s.Require().NotNil(completedEvent)
+	s.NoError(err)
+	s.NotNil(completedEvent)
 
-	s.Require().Len(cacheStore, 3, "expected 1 UpdateCompleted event + 2 UpdateAccepted events in cache")
+	s.Len(cacheStore, 3, "expected 1 UpdateCompleted event + 2 UpdateAccepted events in cache")
 
 	numCompleted := 0
 	numAccepted := 0
 	s.mutableState.VisitUpdates(func(updID string, updInfo *persistencespb.UpdateInfo) {
-		if comp := updInfo.GetCompletion(); comp != nil {
+		s.Contains([]string{updateID1, updateID2}, updID)
+		switch {
+		case updInfo.GetCompletion() != nil:
 			numCompleted++
-		}
-		if updInfo.GetAcceptance() != nil {
+		case updInfo.GetAcceptance() != nil:
 			numAccepted++
 		}
 	})
-	s.Require().Equal(numCompleted, 1, "expected 1 completed")
-	s.Require().Equal(numAccepted, 1, "expected 1 accepted")
+	s.Equal(numCompleted, 1, "expected 1 completed")
+	s.Equal(numAccepted, 1, "expected 1 accepted")
 
 	s.mockShard.Resource.ClusterMetadata.EXPECT().ClusterNameForFailoverVersion(
 		namespaceEntry.IsGlobalNamespace(),
@@ -1257,20 +1922,20 @@ func (s *mutableStateSuite) TestUpdateInfos() {
 	).Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
-	mutation, _, err := s.mutableState.CloseTransactionAsMutation(TransactionPolicyActive)
-	s.Require().NoError(err)
-	s.Require().Len(mutation.ExecutionInfo.UpdateInfos, 2,
+	mutation, _, err := s.mutableState.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
+	s.NoError(err)
+	s.Len(mutation.ExecutionInfo.UpdateInfos, 2,
 		"expected 1 completed update + 1 accepted in mutation")
 
 	// this must be done after the transaction is closed
 	// as GetUpdateOutcome relies on event version history which is only updated when closing the transaction
 	outcome, err := s.mutableState.GetUpdateOutcome(ctx, completedEvent.GetWorkflowExecutionUpdateCompletedEventAttributes().GetMeta().GetUpdateId())
-	s.Require().NoError(err)
-	s.Require().Equal(completedEvent.GetWorkflowExecutionUpdateCompletedEventAttributes().GetOutcome(), outcome)
+	s.NoError(err)
+	s.Equal(completedEvent.GetWorkflowExecutionUpdateCompletedEventAttributes().GetOutcome(), outcome)
 
 	_, err = s.mutableState.GetUpdateOutcome(ctx, "not_an_update_id")
-	s.Require().Error(err)
-	s.Require().IsType((*serviceerror.NotFound)(nil), err)
+	s.Error(err)
+	s.IsType((*serviceerror.NotFound)(nil), err)
 }
 
 func (s *mutableStateSuite) TestApplyActivityTaskStartedEvent() {
@@ -1324,10 +1989,7 @@ func (s *mutableStateSuite) TestAddContinueAsNewEvent_Default() {
 	workflowTaskCompletedEvent, err := s.mutableState.AddWorkflowTaskCompletedEvent(
 		workflowTaskInfo,
 		&workflowservice.RespondWorkflowTaskCompletedRequest{},
-		WorkflowTaskCompletionLimits{
-			MaxResetPoints:              10,
-			MaxSearchAttributeValueSize: 1024,
-		},
+		workflowTaskCompletionLimits,
 	)
 	s.NoError(err)
 
@@ -1337,6 +1999,7 @@ func (s *mutableStateSuite) TestAddContinueAsNewEvent_Default() {
 	_, err = coll.Add(
 		"test-callback-carryover",
 		callbacks.NewCallback(
+			"random-request-id",
 			timestamppb.Now(),
 			callbacks.NewWorkflowClosedTrigger(),
 			&persistencespb.Callback{
@@ -1350,6 +2013,7 @@ func (s *mutableStateSuite) TestAddContinueAsNewEvent_Default() {
 	)
 	s.NoError(err)
 
+	s.mockEventsCache.EXPECT().GetEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&historypb.HistoryEvent{}, nil)
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).Times(2)
 	_, newRunMutableState, err := s.mutableState.AddContinueAsNewEvent(
 		context.Background(),
@@ -1360,6 +2024,7 @@ func (s *mutableStateSuite) TestAddContinueAsNewEvent_Default() {
 			// All other fields will default to those in the current run.
 			WorkflowRunTimeout: s.mutableState.GetExecutionInfo().WorkflowRunTimeout,
 		},
+		nil,
 	)
 	s.NoError(err)
 
@@ -1394,7 +2059,6 @@ func (s *mutableStateSuite) TestTotalEntitiesCount() {
 
 	_, _, err = s.mutableState.AddStartChildWorkflowExecutionInitiatedEvent(
 		workflowTaskCompletedEventID,
-		uuid.New(),
 		&commandpb.StartChildWorkflowExecutionCommandAttributes{},
 		namespace.ID(uuid.New()),
 	)
@@ -1427,24 +2091,28 @@ func (s *mutableStateSuite) TestTotalEntitiesCount() {
 	)
 	s.NoError(err)
 
-	accptEvent, err := s.mutableState.AddWorkflowExecutionUpdateAcceptedEvent("random-updateId", "random", 0, &updatepb.Request{})
+	updateID := "random-updateId"
+	accptEvent, err := s.mutableState.AddWorkflowExecutionUpdateAcceptedEvent(
+		updateID, "random", 0, nil)
 	s.NoError(err)
 	s.NotNil(accptEvent)
 
-	_, err = s.mutableState.AddWorkflowExecutionUpdateCompletedEvent(accptEvent.EventId, &updatepb.Response{})
+	completedEvent, err := s.mutableState.AddWorkflowExecutionUpdateCompletedEvent(
+		accptEvent.EventId, &updatepb.Response{Meta: &updatepb.Meta{UpdateId: updateID}})
 	s.NoError(err)
+	s.NotNil(completedEvent)
 
 	_, err = s.mutableState.AddWorkflowExecutionSignaled(
 		"signalName",
 		&commonpb.Payloads{},
 		"identity",
 		&commonpb.Header{},
-		false,
+		nil,
 	)
 	s.NoError(err)
 
 	mutation, _, err := s.mutableState.CloseTransactionAsMutation(
-		TransactionPolicyActive,
+		historyi.TransactionPolicyActive,
 	)
 	s.NoError(err)
 
@@ -1466,7 +2134,7 @@ func (s *mutableStateSuite) TestSpeculativeWorkflowTaskNotPersisted() {
 		{
 			name: "CloseTransactionAsSnapshot",
 			closeTxFunc: func(ms *MutableStateImpl) (*persistencespb.WorkflowExecutionInfo, error) {
-				snapshot, _, err := ms.CloseTransactionAsSnapshot(TransactionPolicyActive)
+				snapshot, _, err := ms.CloseTransactionAsSnapshot(historyi.TransactionPolicyActive)
 				if err != nil {
 					return nil, err
 				}
@@ -1477,7 +2145,7 @@ func (s *mutableStateSuite) TestSpeculativeWorkflowTaskNotPersisted() {
 			name:                 "CloseTransactionAsMutation",
 			enableBufferedEvents: true,
 			closeTxFunc: func(ms *MutableStateImpl) (*persistencespb.WorkflowExecutionInfo, error) {
-				mutation, _, err := ms.CloseTransactionAsMutation(TransactionPolicyActive)
+				mutation, _, err := ms.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
 				if err != nil {
 					return nil, err
 				}
@@ -1572,6 +2240,7 @@ func (s *mutableStateSuite) TestRetryActivity_TruncateRetryableFailure() {
 		"worker-identity",
 		nil,
 		nil,
+		nil,
 	)
 	s.NoError(err)
 
@@ -1606,7 +2275,7 @@ func (s *mutableStateSuite) TestRetryActivity_TruncateRetryableFailure() {
 	s.Equal(activityFailure.GetMessage(), activityInfo.RetryLastFailure.Cause.GetMessage())
 }
 
-func (s *mutableStateSuite) TestUpdateBuildIdsSearchAttribute() {
+func (s *mutableStateSuite) TestupdateBuildIdsAndDeploymentSearchAttributes() {
 	versioned := func(buildId string) *commonpb.WorkerVersionStamp {
 		return &commonpb.WorkerVersionStamp{BuildId: buildId, UseVersioning: true}
 	}
@@ -1643,25 +2312,25 @@ func (s *mutableStateSuite) TestUpdateBuildIdsSearchAttribute() {
 			s.NoError(err)
 
 			// Max 0
-			err = s.mutableState.updateBuildIdsSearchAttribute(c.stamp("0.1"), 0)
+			err = s.mutableState.updateBuildIdsAndDeploymentSearchAttributes(c.stamp("0.1"), 0)
 			s.NoError(err)
 			s.Equal([]string{}, s.getBuildIdsFromMutableState())
 
-			err = s.mutableState.updateBuildIdsSearchAttribute(c.stamp("0.1"), 40)
+			err = s.mutableState.updateBuildIdsAndDeploymentSearchAttributes(c.stamp("0.1"), 40)
 			s.NoError(err)
 			s.Equal(c.searchAttribute("0.1"), s.getBuildIdsFromMutableState())
 
 			// Add the same build ID
-			err = s.mutableState.updateBuildIdsSearchAttribute(c.stamp("0.1"), 40)
+			err = s.mutableState.updateBuildIdsAndDeploymentSearchAttributes(c.stamp("0.1"), 40)
 			s.NoError(err)
 			s.Equal(c.searchAttribute("0.1"), s.getBuildIdsFromMutableState())
 
-			err = s.mutableState.updateBuildIdsSearchAttribute(c.stamp("0.2"), 40)
+			err = s.mutableState.updateBuildIdsAndDeploymentSearchAttributes(c.stamp("0.2"), 40)
 			s.NoError(err)
 			s.Equal(c.searchAttribute("0.1", "0.2"), s.getBuildIdsFromMutableState())
 
 			// Limit applies
-			err = s.mutableState.updateBuildIdsSearchAttribute(c.stamp("0.3"), 40)
+			err = s.mutableState.updateBuildIdsAndDeploymentSearchAttributes(c.stamp("0.3"), 40)
 			s.NoError(err)
 			s.Equal(c.searchAttribute("0.2", "0.3"), s.getBuildIdsFromMutableState())
 		})
@@ -1783,15 +2452,12 @@ func (s *mutableStateSuite) TestRolloverAutoResetPointsWithExpiringTime() {
 func (s *mutableStateSuite) TestCloseTransactionUpdateTransition() {
 	namespaceEntry := tests.GlobalNamespaceEntry
 
-	completWorkflowTaskFn := func(ms MutableState) {
+	completWorkflowTaskFn := func(ms historyi.MutableState) {
 		workflowTaskInfo := ms.GetStartedWorkflowTask()
 		_, err := ms.AddWorkflowTaskCompletedEvent(
 			workflowTaskInfo,
 			&workflowservice.RespondWorkflowTaskCompletedRequest{},
-			WorkflowTaskCompletionLimits{
-				MaxResetPoints:              10,
-				MaxSearchAttributeValueSize: 1024,
-			},
+			workflowTaskCompletionLimits,
 		)
 		s.NoError(err)
 	}
@@ -1799,34 +2465,18 @@ func (s *mutableStateSuite) TestCloseTransactionUpdateTransition() {
 	testCases := []struct {
 		name                       string
 		dbStateMutationFn          func(dbState *persistencespb.WorkflowMutableState)
-		txFunc                     func(ms MutableState) (*persistencespb.WorkflowExecutionInfo, error)
+		txFunc                     func(ms historyi.MutableState) (*persistencespb.WorkflowExecutionInfo, error)
 		versionedTransitionUpdated bool
 	}{
-		{
-			name: "CloseTranstionAsPassive",
-			dbStateMutationFn: func(dbState *persistencespb.WorkflowMutableState) {
-				dbState.BufferedEvents = nil
-			},
-			txFunc: func(ms MutableState) (*persistencespb.WorkflowExecutionInfo, error) {
-				completWorkflowTaskFn(ms)
-
-				mutation, _, err := ms.CloseTransactionAsMutation(TransactionPolicyPassive)
-				if err != nil {
-					return nil, err
-				}
-				return mutation.ExecutionInfo, err
-			},
-			versionedTransitionUpdated: false,
-		},
 		{
 			name: "CloseTransactionAsMutation_HistoryEvents",
 			dbStateMutationFn: func(dbState *persistencespb.WorkflowMutableState) {
 				dbState.BufferedEvents = nil
 			},
-			txFunc: func(ms MutableState) (*persistencespb.WorkflowExecutionInfo, error) {
+			txFunc: func(ms historyi.MutableState) (*persistencespb.WorkflowExecutionInfo, error) {
 				completWorkflowTaskFn(ms)
 
-				mutation, _, err := ms.CloseTransactionAsMutation(TransactionPolicyActive)
+				mutation, _, err := ms.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
 				if err != nil {
 					return nil, err
 				}
@@ -1839,7 +2489,7 @@ func (s *mutableStateSuite) TestCloseTransactionUpdateTransition() {
 			dbStateMutationFn: func(dbState *persistencespb.WorkflowMutableState) {
 				dbState.BufferedEvents = nil
 			},
-			txFunc: func(ms MutableState) (*persistencespb.WorkflowExecutionInfo, error) {
+			txFunc: func(ms historyi.MutableState) (*persistencespb.WorkflowExecutionInfo, error) {
 				var activityScheduleEventID int64
 				for activityScheduleEventID = range s.mutableState.GetPendingActivityInfos() {
 					break
@@ -1852,7 +2502,7 @@ func (s *mutableStateSuite) TestCloseTransactionUpdateTransition() {
 				)
 				s.NoError(err)
 
-				mutation, _, err := ms.CloseTransactionAsMutation(TransactionPolicyActive)
+				mutation, _, err := ms.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
 				if err != nil {
 					return nil, err
 				}
@@ -1865,13 +2515,13 @@ func (s *mutableStateSuite) TestCloseTransactionUpdateTransition() {
 			dbStateMutationFn: func(dbState *persistencespb.WorkflowMutableState) {
 				dbState.BufferedEvents = nil
 			},
-			txFunc: func(ms MutableState) (*persistencespb.WorkflowExecutionInfo, error) {
+			txFunc: func(ms historyi.MutableState) (*persistencespb.WorkflowExecutionInfo, error) {
 				for _, ai := range ms.GetPendingActivityInfos() {
 					ms.UpdateActivityProgress(ai, &workflowservice.RecordActivityTaskHeartbeatRequest{})
 					break
 				}
 
-				mutation, _, err := ms.CloseTransactionAsMutation(TransactionPolicyActive)
+				mutation, _, err := ms.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
 				if err != nil {
 					return nil, err
 				}
@@ -1884,7 +2534,7 @@ func (s *mutableStateSuite) TestCloseTransactionUpdateTransition() {
 			dbStateMutationFn: func(dbState *persistencespb.WorkflowMutableState) {
 				dbState.BufferedEvents = nil
 			},
-			txFunc: func(ms MutableState) (*persistencespb.WorkflowExecutionInfo, error) {
+			txFunc: func(ms historyi.MutableState) (*persistencespb.WorkflowExecutionInfo, error) {
 				root := ms.HSM()
 				err := hsm.MachineTransition(root, func(*MutableStateImpl) (hsm.TransitionOutput, error) {
 					return hsm.TransitionOutput{}, nil
@@ -1892,7 +2542,66 @@ func (s *mutableStateSuite) TestCloseTransactionUpdateTransition() {
 				s.NoError(err)
 				s.True(root.Dirty())
 
-				mutation, _, err := ms.CloseTransactionAsMutation(TransactionPolicyActive)
+				mutation, _, err := ms.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
+				if err != nil {
+					return nil, err
+				}
+				return mutation.ExecutionInfo, err
+			},
+			versionedTransitionUpdated: true,
+		},
+		{
+			name: "CloseTransactionAsMutation_SignalWorkflow",
+			dbStateMutationFn: func(dbState *persistencespb.WorkflowMutableState) {
+				dbState.BufferedEvents = nil
+			},
+			txFunc: func(ms historyi.MutableState) (*persistencespb.WorkflowExecutionInfo, error) {
+				_, err := ms.AddWorkflowExecutionSignaledEvent(
+					"signalName",
+					&commonpb.Payloads{},
+					"identity",
+					&commonpb.Header{},
+					nil,
+					nil,
+				)
+				if err != nil {
+					return nil, err
+				}
+
+				mutation, _, err := ms.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
+				if err != nil {
+					return nil, err
+				}
+				return mutation.ExecutionInfo, err
+			},
+			versionedTransitionUpdated: true,
+		},
+		{
+			name: "CloseTransactionAsMutation_ChasmTree",
+			dbStateMutationFn: func(dbState *persistencespb.WorkflowMutableState) {
+				dbState.BufferedEvents = nil
+			},
+			txFunc: func(ms historyi.MutableState) (*persistencespb.WorkflowExecutionInfo, error) {
+				mockChasmTree := historyi.NewMockChasmTree(s.controller)
+				mockChasmTree.EXPECT().Archetype().Return("mock-archetype").AnyTimes()
+				gomock.InOrder(
+					mockChasmTree.EXPECT().IsDirty().Return(true).AnyTimes(),
+					mockChasmTree.EXPECT().CloseTransaction().Return(chasm.NodesMutation{
+						UpdatedNodes: map[string]*persistencespb.ChasmNode{
+							"node-path": {
+								Metadata: &persistencespb.ChasmNodeMetadata{
+									Attributes: &persistencespb.ChasmNodeMetadata_DataAttributes{
+										DataAttributes: &persistencespb.ChasmDataAttributes{},
+									},
+								},
+								Data: &commonpb.DataBlob{Data: []byte("test-data")},
+							},
+						},
+					}, nil),
+				)
+				ms.(*MutableStateImpl).chasmTree = mockChasmTree
+
+				mutation, _, err := ms.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
 				if err != nil {
 					return nil, err
 				}
@@ -1905,10 +2614,28 @@ func (s *mutableStateSuite) TestCloseTransactionUpdateTransition() {
 			dbStateMutationFn: func(dbState *persistencespb.WorkflowMutableState) {
 				dbState.BufferedEvents = nil
 			},
-			txFunc: func(ms MutableState) (*persistencespb.WorkflowExecutionInfo, error) {
+			txFunc: func(ms historyi.MutableState) (*persistencespb.WorkflowExecutionInfo, error) {
 				completWorkflowTaskFn(ms)
 
-				mutation, _, err := ms.CloseTransactionAsSnapshot(TransactionPolicyActive)
+				mutation, _, err := ms.CloseTransactionAsSnapshot(historyi.TransactionPolicyActive)
+				if err != nil {
+					return nil, err
+				}
+				return mutation.ExecutionInfo, err
+			},
+			versionedTransitionUpdated: true,
+		},
+		{
+			name: "CloseTransactionAsSnapshot, from unknown to enable",
+			dbStateMutationFn: func(dbState *persistencespb.WorkflowMutableState) {
+				dbState.BufferedEvents = nil
+			},
+			txFunc: func(ms historyi.MutableState) (*persistencespb.WorkflowExecutionInfo, error) {
+				ms.GetExecutionInfo().PreviousTransitionHistory = ms.GetExecutionInfo().TransitionHistory
+				ms.GetExecutionInfo().TransitionHistory = nil
+				completWorkflowTaskFn(ms)
+
+				mutation, _, err := ms.CloseTransactionAsSnapshot(historyi.TransactionPolicyActive)
 				if err != nil {
 					return nil, err
 				}
@@ -1937,8 +2664,13 @@ func (s *mutableStateSuite) TestCloseTransactionUpdateTransition() {
 				namespaceEntry.FailoverVersion(),
 			).Return(cluster.TestCurrentClusterName).AnyTimes()
 			s.mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+			var expectedTransitionHistory []*persistencespb.VersionedTransition
+			if s.mutableState.executionInfo.TransitionHistory == nil {
+				expectedTransitionHistory = transitionhistory.CopyVersionedTransitions(s.mutableState.executionInfo.PreviousTransitionHistory)
+			} else {
+				expectedTransitionHistory = transitionhistory.CopyVersionedTransitions(s.mutableState.executionInfo.TransitionHistory)
+			}
 
-			expectedTransitionHistory := s.mutableState.executionInfo.TransitionHistory
 			if tc.versionedTransitionUpdated {
 				expectedTransitionHistory = UpdatedTransitionHistory(expectedTransitionHistory, namespaceEntry.FailoverVersion())
 			}
@@ -1959,21 +2691,18 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 	err := s.mockShard.StateMachineRegistry().RegisterMachine(stateMachineDef)
 	s.NoError(err)
 
-	completWorkflowTaskFn := func(ms MutableState) *historypb.HistoryEvent {
+	completWorkflowTaskFn := func(ms historyi.MutableState) *historypb.HistoryEvent {
 		workflowTaskInfo := ms.GetStartedWorkflowTask()
 		completedEvent, err := ms.AddWorkflowTaskCompletedEvent(
 			workflowTaskInfo,
 			&workflowservice.RespondWorkflowTaskCompletedRequest{},
-			WorkflowTaskCompletionLimits{
-				MaxResetPoints:              10,
-				MaxSearchAttributeValueSize: 1024,
-			},
+			workflowTaskCompletionLimits,
 		)
 		s.NoError(err)
 		return completedEvent
 	}
 
-	buildHSMFn := func(ms MutableState) {
+	buildHSMFn := func(ms historyi.MutableState) {
 		hsmRoot := ms.HSM()
 		child1, err := hsmRoot.AddChild(hsm.Key{Type: stateMachineDef.Type(), ID: "child_1"}, hsmtest.NewData(hsmtest.State1))
 		s.NoError(err)
@@ -1985,11 +2714,11 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 
 	testCases := []struct {
 		name   string
-		testFn func(ms MutableState)
+		testFn func(ms historyi.MutableState)
 	}{
 		{
 			name: "Activity",
-			testFn: func(ms MutableState) {
+			testFn: func(ms historyi.MutableState) {
 				completedEvent := completWorkflowTaskFn(ms)
 				scheduledEvent, _, err := ms.AddActivityTaskScheduledEvent(
 					completedEvent.GetEventId(),
@@ -1998,11 +2727,10 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 				)
 				s.NoError(err)
 
-				_, _, err = ms.CloseTransactionAsMutation(TransactionPolicyActive)
+				_, _, err = ms.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
 				s.NoError(err)
 
-				currentTransitionHistory := ms.GetExecutionInfo().TransitionHistory
-				currentVersionedTransition := currentTransitionHistory[len(currentTransitionHistory)-1]
+				currentVersionedTransition := ms.CurrentVersionedTransition()
 
 				s.Len(ms.GetPendingActivityInfos(), 2)
 				for _, ai := range ms.GetPendingActivityInfos() {
@@ -2016,7 +2744,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 		},
 		{
 			name: "UserTimer",
-			testFn: func(ms MutableState) {
+			testFn: func(ms historyi.MutableState) {
 				completedEvent := completWorkflowTaskFn(ms)
 				newTimerID := "new-timer-id"
 				_, _, err := ms.AddTimerStartedEvent(
@@ -2027,11 +2755,10 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 				)
 				s.NoError(err)
 
-				_, _, err = ms.CloseTransactionAsMutation(TransactionPolicyActive)
+				_, _, err = ms.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
 				s.NoError(err)
 
-				currentTransitionHistory := ms.GetExecutionInfo().TransitionHistory
-				currentVersionedTransition := currentTransitionHistory[len(currentTransitionHistory)-1]
+				currentVersionedTransition := ms.CurrentVersionedTransition()
 
 				s.Len(ms.GetPendingTimerInfos(), 2)
 				for _, ti := range ms.GetPendingTimerInfos() {
@@ -2045,21 +2772,19 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 		},
 		{
 			name: "ChildExecution",
-			testFn: func(ms MutableState) {
+			testFn: func(ms historyi.MutableState) {
 				completedEvent := completWorkflowTaskFn(ms)
 				initiatedEvent, _, err := ms.AddStartChildWorkflowExecutionInitiatedEvent(
 					completedEvent.GetEventId(),
-					uuid.New(),
 					&commandpb.StartChildWorkflowExecutionCommandAttributes{},
 					ms.GetNamespaceEntry().ID(),
 				)
 				s.NoError(err)
 
-				_, _, err = ms.CloseTransactionAsMutation(TransactionPolicyActive)
+				_, _, err = ms.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
 				s.NoError(err)
 
-				currentTransitionHistory := ms.GetExecutionInfo().TransitionHistory
-				currentVersionedTransition := currentTransitionHistory[len(currentTransitionHistory)-1]
+				currentVersionedTransition := ms.CurrentVersionedTransition()
 
 				s.Len(ms.GetPendingChildExecutionInfos(), 2)
 				for _, ci := range ms.GetPendingChildExecutionInfos() {
@@ -2073,7 +2798,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 		},
 		{
 			name: "RequestCancelExternal",
-			testFn: func(ms MutableState) {
+			testFn: func(ms historyi.MutableState) {
 				completedEvent := completWorkflowTaskFn(ms)
 				initiatedEvent, _, err := ms.AddRequestCancelExternalWorkflowExecutionInitiatedEvent(
 					completedEvent.GetEventId(),
@@ -2083,11 +2808,10 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 				)
 				s.NoError(err)
 
-				_, _, err = ms.CloseTransactionAsMutation(TransactionPolicyActive)
+				_, _, err = ms.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
 				s.NoError(err)
 
-				currentTransitionHistory := ms.GetExecutionInfo().TransitionHistory
-				currentVersionedTransition := currentTransitionHistory[len(currentTransitionHistory)-1]
+				currentVersionedTransition := ms.CurrentVersionedTransition()
 
 				s.Len(ms.GetPendingRequestCancelExternalInfos(), 2)
 				for _, ci := range ms.GetPendingRequestCancelExternalInfos() {
@@ -2101,7 +2825,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 		},
 		{
 			name: "SignalExternal",
-			testFn: func(ms MutableState) {
+			testFn: func(ms historyi.MutableState) {
 				completedEvent := completWorkflowTaskFn(ms)
 				initiatedEvent, _, err := ms.AddSignalExternalWorkflowExecutionInitiatedEvent(
 					completedEvent.GetEventId(),
@@ -2116,11 +2840,10 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 				)
 				s.NoError(err)
 
-				_, _, err = ms.CloseTransactionAsMutation(TransactionPolicyActive)
+				_, _, err = ms.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
 				s.NoError(err)
 
-				currentTransitionHistory := ms.GetExecutionInfo().TransitionHistory
-				currentVersionedTransition := currentTransitionHistory[len(currentTransitionHistory)-1]
+				currentVersionedTransition := ms.CurrentVersionedTransition()
 
 				s.Len(ms.GetPendingSignalExternalInfos(), 2)
 				for _, ci := range ms.GetPendingSignalExternalInfos() {
@@ -2134,74 +2857,65 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 		},
 		{
 			name: "SignalRequestedID",
-			testFn: func(ms MutableState) {
+			testFn: func(ms historyi.MutableState) {
 				ms.AddSignalRequested(uuid.New())
 
-				_, _, err := ms.CloseTransactionAsMutation(TransactionPolicyActive)
+				_, _, err := ms.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
 				s.NoError(err)
 
-				currentTransitionHistory := ms.GetExecutionInfo().TransitionHistory
-				currentVersionedTransition := currentTransitionHistory[len(currentTransitionHistory)-1]
-
+				currentVersionedTransition := ms.CurrentVersionedTransition()
 				protorequire.ProtoEqual(s.T(), currentVersionedTransition, ms.GetExecutionInfo().SignalRequestIdsLastUpdateVersionedTransition)
 			},
 		},
 		{
 			name: "UpdateInfo",
-			testFn: func(ms MutableState) {
+			testFn: func(ms historyi.MutableState) {
 				updateID := "test-updateId"
 				_, err := ms.AddWorkflowExecutionUpdateAcceptedEvent(
 					updateID,
 					"update-message-id",
 					65,
-					&updatepb.Request{
-						Meta: &updatepb.Meta{
-							UpdateId: updateID,
-						},
-					},
+					nil, // this is an optional field
 				)
 				s.NoError(err)
 
-				_, _, err = ms.CloseTransactionAsMutation(TransactionPolicyActive)
+				_, _, err = ms.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
 				s.NoError(err)
 
-				currentTransitionHistory := ms.GetExecutionInfo().TransitionHistory
-				currentVersionedTransition := currentTransitionHistory[len(currentTransitionHistory)-1]
-
+				currentVersionedTransition := ms.CurrentVersionedTransition()
 				s.Len(ms.GetExecutionInfo().UpdateInfos, 1)
 				protorequire.ProtoEqual(s.T(), currentVersionedTransition, ms.GetExecutionInfo().UpdateInfos[updateID].LastUpdateVersionedTransition)
 			},
 		},
 		{
 			name: "WorkflowTask/Completed",
-			testFn: func(ms MutableState) {
+			testFn: func(ms historyi.MutableState) {
 				completWorkflowTaskFn(ms)
 
-				_, _, err := ms.CloseTransactionAsMutation(TransactionPolicyActive)
+				_, _, err := ms.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
 				s.NoError(err)
 
-				s.Nil(ms.GetExecutionInfo().WorkflowTaskLastUpdateVersionedTransition)
+				currentVersionedTransition := ms.CurrentVersionedTransition()
+				protorequire.ProtoEqual(s.T(), currentVersionedTransition, ms.GetExecutionInfo().WorkflowTaskLastUpdateVersionedTransition)
 			},
 		},
 		{
 			name: "WorkflowTask/Scheduled",
-			testFn: func(ms MutableState) {
+			testFn: func(ms historyi.MutableState) {
 				completWorkflowTaskFn(ms)
 				_, err := ms.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
 				s.NoError(err)
 
-				_, _, err = ms.CloseTransactionAsMutation(TransactionPolicyActive)
+				_, _, err = ms.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
 				s.NoError(err)
 
-				currentTransitionHistory := ms.GetExecutionInfo().TransitionHistory
-				currentVersionedTransition := currentTransitionHistory[len(currentTransitionHistory)-1]
-
+				currentVersionedTransition := ms.CurrentVersionedTransition()
 				protorequire.ProtoEqual(s.T(), currentVersionedTransition, ms.GetExecutionInfo().WorkflowTaskLastUpdateVersionedTransition)
 			},
 		},
 		{
 			name: "Visibility",
-			testFn: func(ms MutableState) {
+			testFn: func(ms historyi.MutableState) {
 				completedEvent := completWorkflowTaskFn(ms)
 				_, err := ms.AddUpsertWorkflowSearchAttributesEvent(
 					completedEvent.EventId,
@@ -2209,18 +2923,16 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 				)
 				s.NoError(err)
 
-				_, _, err = ms.CloseTransactionAsMutation(TransactionPolicyActive)
+				_, _, err = ms.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
 				s.NoError(err)
 
-				currentTransitionHistory := ms.GetExecutionInfo().TransitionHistory
-				currentVersionedTransition := currentTransitionHistory[len(currentTransitionHistory)-1]
-
+				currentVersionedTransition := ms.CurrentVersionedTransition()
 				protorequire.ProtoEqual(s.T(), currentVersionedTransition, ms.GetExecutionInfo().VisibilityLastUpdateVersionedTransition)
 			},
 		},
 		{
 			name: "ExecutionState",
-			testFn: func(ms MutableState) {
+			testFn: func(ms historyi.MutableState) {
 				completedEvent := completWorkflowTaskFn(ms)
 				_, err := ms.AddCompletedWorkflowEvent(
 					completedEvent.EventId,
@@ -2229,27 +2941,23 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 				)
 				s.NoError(err)
 
-				_, _, err = ms.CloseTransactionAsMutation(TransactionPolicyActive)
+				_, _, err = ms.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
 				s.NoError(err)
 
-				currentTransitionHistory := ms.GetExecutionInfo().TransitionHistory
-				currentVersionedTransition := currentTransitionHistory[len(currentTransitionHistory)-1]
-
+				currentVersionedTransition := ms.CurrentVersionedTransition()
 				protorequire.ProtoEqual(s.T(), currentVersionedTransition, ms.GetExecutionState().LastUpdateVersionedTransition)
 			},
 		},
 		{
 			name: "HSM/CloseAsMutation",
-			testFn: func(ms MutableState) {
+			testFn: func(ms historyi.MutableState) {
 				completWorkflowTaskFn(ms)
 				buildHSMFn(ms)
 
-				_, _, err := ms.CloseTransactionAsMutation(TransactionPolicyActive)
+				_, _, err := ms.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
 				s.NoError(err)
 
-				currentTransitionHistory := ms.GetExecutionInfo().TransitionHistory
-				currentVersionedTransition := currentTransitionHistory[len(currentTransitionHistory)-1]
-
+				currentVersionedTransition := ms.CurrentVersionedTransition()
 				err = ms.HSM().Walk(func(n *hsm.Node) error {
 					if n.Parent == nil {
 						// skip root which is entire mutable state
@@ -2263,16 +2971,14 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 		},
 		{
 			name: "HSM/CloseAsSnapshot",
-			testFn: func(ms MutableState) {
+			testFn: func(ms historyi.MutableState) {
 				completWorkflowTaskFn(ms)
 				buildHSMFn(ms)
 
-				_, _, err := ms.CloseTransactionAsSnapshot(TransactionPolicyActive)
+				_, _, err := ms.CloseTransactionAsSnapshot(historyi.TransactionPolicyActive)
 				s.NoError(err)
 
-				currentTransitionHistory := ms.GetExecutionInfo().TransitionHistory
-				currentVersionedTransition := currentTransitionHistory[len(currentTransitionHistory)-1]
-
+				currentVersionedTransition := ms.CurrentVersionedTransition()
 				err = ms.HSM().Walk(func(n *hsm.Node) error {
 					if n.Parent == nil {
 						// skip root which is entire mutable state
@@ -2305,6 +3011,167 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 			s.mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
 			tc.testFn(s.mutableState)
+		})
+	}
+}
+
+func (s *mutableStateSuite) TestCloseTransactionHandleUnknownVersionedTransition() {
+	namespaceEntry := tests.GlobalNamespaceEntry
+
+	completWorkflowTaskFn := func(ms historyi.MutableState) {
+		workflowTaskInfo := ms.GetStartedWorkflowTask()
+		_, err := ms.AddWorkflowTaskCompletedEvent(
+			workflowTaskInfo,
+			&workflowservice.RespondWorkflowTaskCompletedRequest{},
+			historyi.WorkflowTaskCompletionLimits{
+				MaxResetPoints:              10,
+				MaxSearchAttributeValueSize: 1024,
+			},
+		)
+		s.NoError(err)
+	}
+
+	testCases := []struct {
+		name              string
+		dbStateMutationFn func(dbState *persistencespb.WorkflowMutableState)
+		txFunc            func(ms historyi.MutableState) (*persistencespb.WorkflowExecutionInfo, error)
+	}{
+		{
+			name: "CloseTransactionAsPassive", // this scenario simulate the case to clear the transition history (non state-based transition happened at passive side)
+			dbStateMutationFn: func(dbState *persistencespb.WorkflowMutableState) {
+				dbState.BufferedEvents = nil
+			},
+			txFunc: func(ms historyi.MutableState) (*persistencespb.WorkflowExecutionInfo, error) {
+				completWorkflowTaskFn(ms)
+
+				mutation, _, err := ms.CloseTransactionAsMutation(historyi.TransactionPolicyPassive)
+				if err != nil {
+					return nil, err
+				}
+				return mutation.ExecutionInfo, err
+			},
+		},
+		{
+			name: "CloseTransactionAsMutation_HistoryEvents",
+			dbStateMutationFn: func(dbState *persistencespb.WorkflowMutableState) {
+				dbState.BufferedEvents = nil
+			},
+			txFunc: func(ms historyi.MutableState) (*persistencespb.WorkflowExecutionInfo, error) {
+				completWorkflowTaskFn(ms)
+
+				mutation, _, err := ms.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
+				if err != nil {
+					return nil, err
+				}
+				return mutation.ExecutionInfo, err
+			},
+		},
+		{
+			name: "CloseTransactionAsMutation_BufferedEvents",
+			dbStateMutationFn: func(dbState *persistencespb.WorkflowMutableState) {
+				dbState.BufferedEvents = nil
+			},
+			txFunc: func(ms historyi.MutableState) (*persistencespb.WorkflowExecutionInfo, error) {
+				var activityScheduleEventID int64
+				for activityScheduleEventID = range s.mutableState.GetPendingActivityInfos() {
+					break
+				}
+				_, err := s.mutableState.AddActivityTaskTimedOutEvent(
+					activityScheduleEventID,
+					common.EmptyEventID,
+					failure.NewTimeoutFailure("test-timeout", enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START),
+					enumspb.RETRY_STATE_TIMEOUT,
+				)
+				s.NoError(err)
+
+				mutation, _, err := ms.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
+				if err != nil {
+					return nil, err
+				}
+				return mutation.ExecutionInfo, err
+			},
+		},
+		{
+			name: "CloseTransactionAsMutation_SyncActivity",
+			dbStateMutationFn: func(dbState *persistencespb.WorkflowMutableState) {
+				dbState.BufferedEvents = nil
+			},
+			txFunc: func(ms historyi.MutableState) (*persistencespb.WorkflowExecutionInfo, error) {
+				for _, ai := range ms.GetPendingActivityInfos() {
+					ms.UpdateActivityProgress(ai, &workflowservice.RecordActivityTaskHeartbeatRequest{})
+					break
+				}
+
+				mutation, _, err := ms.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
+				if err != nil {
+					return nil, err
+				}
+				return mutation.ExecutionInfo, err
+			},
+		},
+		{
+			name: "CloseTransactionAsMutation_DirtyStateMachine",
+			dbStateMutationFn: func(dbState *persistencespb.WorkflowMutableState) {
+				dbState.BufferedEvents = nil
+			},
+			txFunc: func(ms historyi.MutableState) (*persistencespb.WorkflowExecutionInfo, error) {
+				root := ms.HSM()
+				err := hsm.MachineTransition(root, func(*MutableStateImpl) (hsm.TransitionOutput, error) {
+					return hsm.TransitionOutput{}, nil
+				})
+				s.NoError(err)
+				s.True(root.Dirty())
+
+				mutation, _, err := ms.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
+				if err != nil {
+					return nil, err
+				}
+				return mutation.ExecutionInfo, err
+			},
+		},
+		{
+			name: "CloseTransactionAsSnapshot",
+			dbStateMutationFn: func(dbState *persistencespb.WorkflowMutableState) {
+				dbState.BufferedEvents = nil
+			},
+			txFunc: func(ms historyi.MutableState) (*persistencespb.WorkflowExecutionInfo, error) {
+				completWorkflowTaskFn(ms)
+
+				mutation, _, err := ms.CloseTransactionAsSnapshot(historyi.TransactionPolicyActive)
+				if err != nil {
+					return nil, err
+				}
+				return mutation.ExecutionInfo, err
+			},
+		},
+		// TODO: add a test for flushing buffered events using last event version.
+	}
+
+	for _, tc := range testCases {
+		s.T().Run(tc.name, func(t *testing.T) {
+			dbState := s.buildWorkflowMutableState()
+			if tc.dbStateMutationFn != nil {
+				tc.dbStateMutationFn(dbState)
+			}
+
+			var err error
+			s.mutableState, err = NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, namespaceEntry, dbState, 123)
+			s.NoError(err)
+			err = s.mutableState.UpdateCurrentVersion(namespaceEntry.FailoverVersion(), false)
+			s.NoError(err)
+			s.mutableState.transitionHistoryEnabled = false
+
+			s.mockShard.Resource.ClusterMetadata.EXPECT().ClusterNameForFailoverVersion(
+				namespaceEntry.IsGlobalNamespace(),
+				namespaceEntry.FailoverVersion(),
+			).Return(cluster.TestCurrentClusterName).AnyTimes()
+			s.mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+
+			s.NotNil(s.mutableState.executionInfo.TransitionHistory)
+			execInfo, err := tc.txFunc(s.mutableState)
+			s.NotNil(execInfo.PreviousTransitionHistory)
+			s.Nil(execInfo.TransitionHistory)
+			s.Nil(err)
 		})
 	}
 }
@@ -2486,6 +3353,25 @@ func (s *mutableStateSuite) TestCollapseVisibilityTasks() {
 	}
 }
 
+func (s *mutableStateSuite) TestStartChildWorkflowRequestID() {
+	workflowTaskCompletionEventID := rand.Int63()
+	attributes := &commandpb.StartChildWorkflowExecutionCommandAttributes{}
+	event := s.mutableState.hBuilder.AddStartChildWorkflowExecutionInitiatedEvent(
+		workflowTaskCompletionEventID,
+		attributes,
+		tests.NamespaceID,
+	)
+	createRequestID := fmt.Sprintf("%s:%d:%d", s.mutableState.executionState.RunId, event.GetEventId(), event.GetVersion())
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+
+	ci, err := s.mutableState.ApplyStartChildWorkflowExecutionInitiatedEvent(
+		workflowTaskCompletionEventID,
+		event,
+	)
+	s.NoError(err)
+	s.Equal(createRequestID, ci.CreateRequestId)
+}
+
 func (s *mutableStateSuite) TestGetCloseVersion() {
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
 
@@ -2501,7 +3387,7 @@ func (s *mutableStateSuite) TestGetCloseVersion() {
 	s.NoError(err)
 	_, err = s.mutableState.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
 	s.NoError(err)
-	_, _, err = s.mutableState.CloseTransactionAsMutation(TransactionPolicyActive)
+	_, _, err = s.mutableState.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
 	s.NoError(err)
 
 	_, err = s.mutableState.GetCloseVersion()
@@ -2522,7 +3408,7 @@ func (s *mutableStateSuite) TestGetCloseVersion() {
 	s.NoError(err)
 	s.Equal(expectedVersion, closeVersion)
 
-	_, _, err = s.mutableState.CloseTransactionAsMutation(TransactionPolicyActive)
+	_, _, err = s.mutableState.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
 	s.NoError(err)
 
 	// get close version after workflow is closed
@@ -2612,7 +3498,7 @@ func (s *mutableStateSuite) TestCloseTransactionPrepareReplicationTasks_HistoryT
 	}
 
 	ms := s.mutableState
-
+	ms.transitionHistoryEnabled = false
 	for _, tc := range testCases {
 		s.Run(
 			tc.name,
@@ -2621,7 +3507,7 @@ func (s *mutableStateSuite) TestCloseTransactionPrepareReplicationTasks_HistoryT
 					return
 				}
 				ms.InsertTasks[tasks.CategoryReplication] = []tasks.Task{}
-				err := ms.closeTransactionPrepareReplicationTasks(TransactionPolicyActive, eventBatches, false)
+				err := ms.closeTransactionPrepareReplicationTasks(historyi.TransactionPolicyActive, eventBatches, false)
 				if err != nil {
 					s.Fail("closeTransactionPrepareReplicationTasks failed", err)
 				}
@@ -2633,6 +3519,97 @@ func (s *mutableStateSuite) TestCloseTransactionPrepareReplicationTasks_HistoryT
 			},
 		)
 	}
+}
+
+func (s *mutableStateSuite) TestCloseTransactionPrepareReplicationTasks_SyncVersionedTransitionTask() {
+	if s.replicationMultipleBatches == true {
+		return
+	}
+	version := int64(777)
+	firstEventID := int64(2)
+	lastEventID := int64(3)
+	now := time.Now().UTC()
+	taskqueue := "taskqueue for test"
+	workflowTaskTimeout := 11 * time.Second
+	workflowTaskAttempt := int32(1)
+	eventBatches := [][]*historypb.HistoryEvent{
+		{
+			&historypb.HistoryEvent{
+				Version:   version,
+				EventId:   firstEventID,
+				EventTime: timestamppb.New(now),
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
+				Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
+					TaskQueue:           &taskqueuepb.TaskQueue{Name: taskqueue},
+					StartToCloseTimeout: durationpb.New(workflowTaskTimeout),
+					Attempt:             workflowTaskAttempt,
+				}},
+			},
+		},
+		{
+			&historypb.HistoryEvent{
+				Version:   version,
+				EventId:   lastEventID,
+				EventTime: timestamppb.New(now),
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
+				Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{
+					ScheduledEventId: firstEventID,
+					RequestId:        uuid.New(),
+				}},
+			},
+		},
+	}
+
+	ms := s.mutableState
+	ms.transitionHistoryEnabled = true
+	ms.syncActivityTasks[1] = struct{}{}
+	ms.pendingActivityInfoIDs[1] = &persistencespb.ActivityInfo{
+		Version:          version,
+		ScheduledEventId: 1,
+	}
+	ms.InsertTasks[tasks.CategoryReplication] = []tasks.Task{}
+	transitionHistory := []*persistencespb.VersionedTransition{
+		{
+			NamespaceFailoverVersion: 1,
+			TransitionCount:          10,
+		},
+	}
+	ms.executionInfo.TransitionHistory = transitionHistory
+	err := ms.closeTransactionPrepareReplicationTasks(historyi.TransactionPolicyActive, eventBatches, false)
+	s.NoError(err)
+	replicationTasks := ms.InsertTasks[tasks.CategoryReplication]
+	s.Equal(1, len(replicationTasks))
+	historyTasks := []tasks.Task{
+		&tasks.HistoryReplicationTask{
+			WorkflowKey:  s.mutableState.GetWorkflowKey(),
+			FirstEventID: firstEventID,
+			NextEventID:  firstEventID + 1,
+			Version:      version,
+		},
+		&tasks.HistoryReplicationTask{
+			WorkflowKey:  s.mutableState.GetWorkflowKey(),
+			FirstEventID: lastEventID,
+			NextEventID:  lastEventID + 1,
+			Version:      version,
+		},
+	}
+	expectedTask := &tasks.SyncVersionedTransitionTask{
+		WorkflowKey:         s.mutableState.GetWorkflowKey(),
+		VisibilityTimestamp: now,
+		Priority:            enumsspb.TASK_PRIORITY_HIGH,
+		VersionedTransition: transitionHistory[0],
+		FirstEventID:        firstEventID,
+		NextEventID:         lastEventID + 1,
+	}
+	s.Equal(enumsspb.TASK_TYPE_REPLICATION_SYNC_VERSIONED_TRANSITION, replicationTasks[0].GetType())
+	actualTask, ok := replicationTasks[0].(*tasks.SyncVersionedTransitionTask)
+	s.True(ok)
+	s.Equal(expectedTask.WorkflowKey, actualTask.WorkflowKey)
+	s.Equal(expectedTask.VersionedTransition, actualTask.VersionedTransition)
+	s.Equal(3, len(actualTask.TaskEquivalents))
+	s.Equal(historyTasks[0], actualTask.TaskEquivalents[0])
+	s.Equal(historyTasks[1], actualTask.TaskEquivalents[1])
+	s.Equal(enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY, actualTask.TaskEquivalents[2].GetType())
 }
 
 func (s *mutableStateSuite) TestMaxAllowedTimer() {
@@ -2681,7 +3658,7 @@ func (s *mutableStateSuite) TestMaxAllowedTimer() {
 			)
 			s.NoError(err)
 
-			snapshot, _, err := s.mutableState.CloseTransactionAsSnapshot(TransactionPolicyActive)
+			snapshot, _, err := s.mutableState.CloseTransactionAsSnapshot(historyi.TransactionPolicyActive)
 			s.NoError(err)
 
 			timerTasks := snapshot.Tasks[tasks.CategoryTimer]
@@ -2793,8 +3770,8 @@ func (s *mutableStateSuite) TestCloseTransactionPrepareReplicationTasks_SyncHSMT
 						s.mutableState.HSM().ClearTransactionState()
 					}
 				}
-
-				err := s.mutableState.closeTransactionPrepareReplicationTasks(TransactionPolicyActive, tc.eventBatches, tc.clearBufferEvents)
+				s.mutableState.transitionHistoryEnabled = false
+				err := s.mutableState.closeTransactionPrepareReplicationTasks(historyi.TransactionPolicyActive, tc.eventBatches, tc.clearBufferEvents)
 				s.NoError(err)
 
 				repicationTasks := s.mutableState.PopTasks()[tasks.CategoryReplication]
@@ -2810,14 +3787,106 @@ func (s *mutableStateSuite) TestCloseTransactionPrepareReplicationTasks_SyncHSMT
 	}
 }
 
+func (s *mutableStateSuite) setDisablingTransitionHistory(ms *MutableStateImpl) {
+	ms.versionedTransitionInDB = &persistencespb.VersionedTransition{
+		NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(),
+		TransitionCount:          1025,
+	}
+	ms.executionInfo.TransitionHistory = nil
+}
+
+func (s *mutableStateSuite) TestCloseTransactionPrepareReplicationTasks_SyncActivityTask() {
+	testCases := []struct {
+		name                       string
+		disablingTransitionHistory bool
+		expectedReplicationTask    []tasks.SyncActivityTask
+	}{
+		{
+			name:                       "NoDisablingTransitionHistory",
+			disablingTransitionHistory: false,
+			expectedReplicationTask: []tasks.SyncActivityTask{
+				{
+					ScheduledEventID: 100,
+				},
+			},
+		},
+		{
+			name:                       "DisablingTransitionHistory",
+			disablingTransitionHistory: true,
+			expectedReplicationTask: []tasks.SyncActivityTask{
+				{
+					ScheduledEventID: 90,
+				},
+				{
+					ScheduledEventID: 100,
+				},
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		s.T().Run(tc.name, func(t *testing.T) {
+			dbState := s.buildWorkflowMutableState()
+			dbState.ActivityInfos[100] = &persistencespb.ActivityInfo{
+				ScheduledEventId: 100,
+			}
+			ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 123)
+			s.NoError(err)
+
+			if tc.disablingTransitionHistory {
+				s.setDisablingTransitionHistory(ms)
+			}
+
+			ms.UpdateActivityProgress(ms.pendingActivityInfoIDs[100], &workflowservice.RecordActivityTaskHeartbeatRequest{})
+
+			repicationTasks := ms.syncActivityToReplicationTask(historyi.TransactionPolicyActive)
+			s.Len(repicationTasks, len(tc.expectedReplicationTask))
+			sort.Slice(repicationTasks, func(i, j int) bool {
+				return repicationTasks[i].(*tasks.SyncActivityTask).ScheduledEventID < repicationTasks[j].(*tasks.SyncActivityTask).ScheduledEventID
+			})
+			for i, task := range tc.expectedReplicationTask {
+				s.Equal(task.ScheduledEventID, repicationTasks[i].(*tasks.SyncActivityTask).ScheduledEventID)
+			}
+		})
+	}
+}
+
+func (s *mutableStateSuite) TestVersionedTransitionInDB() {
+	// case 1: versionedTransitionInDB is not nil
+	dbState := s.buildWorkflowMutableState()
+	ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 123)
+	s.NoError(err)
+
+	s.True(proto.Equal(ms.CurrentVersionedTransition(), ms.versionedTransitionInDB))
+
+	s.NoError(ms.cleanupTransaction())
+	s.True(proto.Equal(ms.CurrentVersionedTransition(), ms.versionedTransitionInDB))
+
+	ms.executionInfo.TransitionHistory = nil
+	s.NoError(ms.cleanupTransaction())
+	s.Nil(ms.versionedTransitionInDB)
+
+	// case 2: versionedTransitionInDB is nil
+	dbState = s.buildWorkflowMutableState()
+	dbState.ExecutionInfo.TransitionHistory = nil
+	ms, err = NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 123)
+	s.NoError(err)
+
+	s.Nil(ms.versionedTransitionInDB)
+
+	ms.executionInfo.TransitionHistory = UpdatedTransitionHistory(ms.executionInfo.TransitionHistory, s.namespaceEntry.FailoverVersion())
+	s.NoError(ms.cleanupTransaction())
+	s.True(proto.Equal(ms.CurrentVersionedTransition(), ms.versionedTransitionInDB))
+}
+
 func (s *mutableStateSuite) TestCloseTransactionTrackTombstones() {
 	testCases := []struct {
 		name        string
-		tombstoneFn func(ms MutableState) (*persistencespb.StateMachineTombstone, error)
+		tombstoneFn func(ms historyi.MutableState) (*persistencespb.StateMachineTombstone, error)
 	}{
 		{
 			name: "Activity",
-			tombstoneFn: func(mutableState MutableState) (*persistencespb.StateMachineTombstone, error) {
+			tombstoneFn: func(mutableState historyi.MutableState) (*persistencespb.StateMachineTombstone, error) {
 				var activityScheduleEventID int64
 				for activityScheduleEventID = range mutableState.GetPendingActivityInfos() {
 					break
@@ -2837,7 +3906,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackTombstones() {
 		},
 		{
 			name: "UserTimer",
-			tombstoneFn: func(mutableState MutableState) (*persistencespb.StateMachineTombstone, error) {
+			tombstoneFn: func(mutableState historyi.MutableState) (*persistencespb.StateMachineTombstone, error) {
 				var timerID string
 				for timerID = range mutableState.GetPendingTimerInfos() {
 					break
@@ -2852,7 +3921,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackTombstones() {
 		},
 		{
 			name: "ChildWorkflow",
-			tombstoneFn: func(mutableState MutableState) (*persistencespb.StateMachineTombstone, error) {
+			tombstoneFn: func(mutableState historyi.MutableState) (*persistencespb.StateMachineTombstone, error) {
 				var initiatedEventId int64
 				var ci *persistencespb.ChildExecutionInfo
 				for initiatedEventId, ci = range mutableState.GetPendingChildExecutionInfos() {
@@ -2875,7 +3944,6 @@ func (s *mutableStateSuite) TestCloseTransactionTrackTombstones() {
 				_, err = mutableState.AddChildWorkflowExecutionTerminatedEvent(
 					initiatedEventId,
 					childExecution,
-					nil,
 				)
 				return &persistencespb.StateMachineTombstone{
 					StateMachineKey: &persistencespb.StateMachineTombstone_ChildExecutionInitiatedEventId{
@@ -2886,7 +3954,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackTombstones() {
 		},
 		{
 			name: "RequestCancelExternal",
-			tombstoneFn: func(mutableState MutableState) (*persistencespb.StateMachineTombstone, error) {
+			tombstoneFn: func(mutableState historyi.MutableState) (*persistencespb.StateMachineTombstone, error) {
 				var initiatedEventId int64
 				for initiatedEventId = range mutableState.GetPendingRequestCancelExternalInfos() {
 					break
@@ -2908,7 +3976,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackTombstones() {
 		},
 		{
 			name: "SignalExternal",
-			tombstoneFn: func(mutableState MutableState) (*persistencespb.StateMachineTombstone, error) {
+			tombstoneFn: func(mutableState historyi.MutableState) (*persistencespb.StateMachineTombstone, error) {
 				var initiatedEventId int64
 				for initiatedEventId = range mutableState.GetPendingSignalExternalInfos() {
 					break
@@ -2929,6 +3997,29 @@ func (s *mutableStateSuite) TestCloseTransactionTrackTombstones() {
 				}, err
 			},
 		},
+		{
+			name: "CHASM",
+			tombstoneFn: func(mutableState historyi.MutableState) (*persistencespb.StateMachineTombstone, error) {
+				deletedNodePath := "deleted-node-path"
+				tombstone := &persistencespb.StateMachineTombstone{
+					StateMachineKey: &persistencespb.StateMachineTombstone_ChasmNodePath{
+						ChasmNodePath: deletedNodePath,
+					},
+				}
+
+				mockChasmTree := historyi.NewMockChasmTree(s.controller)
+				mockChasmTree.EXPECT().Archetype().Return("mock-archetype").AnyTimes()
+				gomock.InOrder(
+					mockChasmTree.EXPECT().IsDirty().Return(true).AnyTimes(),
+					mockChasmTree.EXPECT().CloseTransaction().Return(chasm.NodesMutation{
+						DeletedNodes: map[string]struct{}{deletedNodePath: {}},
+					}, nil),
+				)
+				mutableState.(*MutableStateImpl).chasmTree = mockChasmTree
+
+				return tombstone, nil
+			},
+		},
 	}
 
 	for _, tc := range testCases {
@@ -2938,8 +4029,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackTombstones() {
 			mutableState, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 123)
 			s.NoError(err)
 
-			transitionHistory := mutableState.GetExecutionInfo().TransitionHistory
-			currentVersionedTransition := transitionHistory[len(transitionHistory)-1]
+			currentVersionedTransition := mutableState.CurrentVersionedTransition()
 			newVersionedTranstion := common.CloneProto(currentVersionedTransition)
 			newVersionedTranstion.TransitionCount += 1
 
@@ -2949,7 +4039,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackTombstones() {
 			expectedTombstone, err := tc.tombstoneFn(mutableState)
 			s.NoError(err)
 
-			_, _, err = mutableState.CloseTransactionAsMutation(TransactionPolicyActive)
+			_, _, err = mutableState.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
 			s.NoError(err)
 
 			tombstoneBatches := mutableState.GetExecutionInfo().SubStateMachineTombstoneBatches
@@ -2971,4 +4061,922 @@ func tombstoneExists(
 		}
 	}
 	return false
+}
+
+func (s *mutableStateSuite) TestCloseTransactionTrackTombstones_CapIfLargerThanLimit() {
+	dbState := s.buildWorkflowMutableState()
+
+	mutableState, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 123)
+	s.NoError(err)
+	mutableState.executionInfo.SubStateMachineTombstoneBatches = []*persistencespb.StateMachineTombstoneBatch{
+		{
+			VersionedTransition: &persistencespb.VersionedTransition{
+				NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(),
+				TransitionCount:          1,
+			},
+		},
+	}
+
+	currentVersionedTransition := mutableState.CurrentVersionedTransition()
+	newVersionedTranstion := common.CloneProto(currentVersionedTransition)
+	newVersionedTranstion.TransitionCount += 1
+	signalMap := mutableState.GetPendingSignalExternalInfos()
+	for i := 0; i < s.mockConfig.MutableStateTombstoneCountLimit(); i++ {
+		signalMap[int64(76+i)] = &persistencespb.SignalInfo{
+
+			Version:               s.namespaceEntry.FailoverVersion(),
+			InitiatedEventId:      int64(76 + i),
+			InitiatedEventBatchId: 17,
+			RequestId:             uuid.New(),
+		}
+	}
+
+	_, err = mutableState.StartTransaction(s.namespaceEntry)
+	s.NoError(err)
+	var initiatedEventId int64
+	for initiatedEventId = range signalMap {
+		_, err := mutableState.AddSignalExternalWorkflowExecutionFailedEvent(
+			initiatedEventId,
+			s.namespaceEntry.Name(),
+			s.namespaceEntry.ID(),
+			uuid.New(),
+			uuid.New(),
+			"",
+			enumspb.SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED_CAUSE_EXTERNAL_WORKFLOW_EXECUTION_NOT_FOUND,
+		)
+		s.NoError(err)
+	}
+
+	_, _, err = mutableState.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
+	s.NoError(err)
+
+	tombstoneBatches := mutableState.GetExecutionInfo().SubStateMachineTombstoneBatches
+	s.Len(tombstoneBatches, 0)
+}
+
+func (s *mutableStateSuite) TestCloseTransactionTrackTombstones_OnlyTrackFirstEmpty() {
+	dbState := s.buildWorkflowMutableState()
+
+	mutableState, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 123)
+	s.NoError(err)
+	mutableState.executionInfo.SubStateMachineTombstoneBatches = []*persistencespb.StateMachineTombstoneBatch{
+		{
+			VersionedTransition: &persistencespb.VersionedTransition{
+				NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(),
+				TransitionCount:          1,
+			},
+		},
+	}
+
+	currentVersionedTransition := mutableState.CurrentVersionedTransition()
+	newVersionedTranstion := common.CloneProto(currentVersionedTransition)
+	newVersionedTranstion.TransitionCount += 1
+
+	_, err = mutableState.StartTransaction(s.namespaceEntry)
+	s.NoError(err)
+
+	_, _, err = mutableState.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
+	s.NoError(err)
+
+	tombstoneBatches := mutableState.GetExecutionInfo().SubStateMachineTombstoneBatches
+	s.Len(tombstoneBatches, 1)
+	s.Equal(int64(1), tombstoneBatches[0].VersionedTransition.TransitionCount)
+}
+
+func (s *mutableStateSuite) TestCloseTransactionGenerateCHASMRetentionTask() {
+	dbState := s.buildWorkflowMutableState()
+
+	mutableState, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 123)
+	s.NoError(err)
+
+	// First close transaction once to get rid of unrelated tasks like UserTimer and ActivityTimeout
+	_, err = mutableState.StartTransaction(s.namespaceEntry)
+	s.NoError(err)
+	_, _, err = mutableState.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
+	s.NoError(err)
+
+	// Switch to a mock CHASM tree
+	mockChasmTree := historyi.NewMockChasmTree(s.controller)
+	mutableState.chasmTree = mockChasmTree
+
+	// Not a workflow, should not generate retention task
+	mockChasmTree.EXPECT().IsDirty().Return(true).AnyTimes()
+	mockChasmTree.EXPECT().Archetype().Return("").Times(1)
+	mockChasmTree.EXPECT().CloseTransaction().Return(chasm.NodesMutation{}, nil).AnyTimes()
+	mutation, _, err := mutableState.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
+	s.NoError(err)
+	s.Empty(mutation.Tasks[tasks.CategoryTimer])
+
+	// Now make the mutable state non-workflow.
+	mockChasmTree.EXPECT().Archetype().Return("test-archetype").Times(2) // One time for each CloseTransactionAsMutation call
+	err = mutableState.UpdateWorkflowStateStatus(
+		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+	)
+	s.NoError(err)
+	mutation, _, err = mutableState.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
+	s.NoError(err)
+	s.Len(mutation.Tasks[tasks.CategoryTimer], 1)
+	s.Equal(enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT, mutation.Tasks[tasks.CategoryTimer][0].GetType())
+
+	// Already closed before, should not generate retention task again.
+	mutation, _, err = mutableState.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
+	s.NoError(err)
+	s.Empty(mutation.Tasks[tasks.CategoryTimer])
+}
+
+func (s *mutableStateSuite) TestExecutionInfoClone() {
+	newInstance := reflect.New(reflect.TypeOf(s.mutableState.executionInfo).Elem()).Interface()
+	clone, ok := newInstance.(*persistencespb.WorkflowExecutionInfo)
+	if !ok {
+		s.T().Fatal("type assertion to *persistencespb.WorkflowExecutionInfo failed")
+	}
+	clone.NamespaceId = "namespace-id"
+	clone.WorkflowId = "workflow-id"
+	err := common.MergeProtoExcludingFields(s.mutableState.executionInfo, clone, func(v any) []interface{} {
+		info, ok := v.(*persistencespb.WorkflowExecutionInfo)
+		if !ok || info == nil {
+			return nil
+		}
+		return []interface{}{
+			&info.NamespaceId,
+		}
+	})
+	s.Nil(err)
+}
+
+func (s *mutableStateSuite) addChangesForStateReplication(state *persistencespb.WorkflowMutableState) {
+	// These fields will be updated during ApplySnapshot
+	proto.Merge(state.ExecutionInfo, &persistencespb.WorkflowExecutionInfo{
+		LastUpdateTime: timestamp.TimeNowPtrUtc(),
+	})
+	proto.Merge(state.ExecutionState, &persistencespb.WorkflowExecutionState{
+		State: enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+	})
+
+	state.ActivityInfos[90].TimerTaskStatus = TimerTaskStatusCreated
+	state.TimerInfos["25"].ExpiryTime = timestamp.TimeNowPtrUtcAddDuration(time.Hour)
+	state.ChildExecutionInfos[80].StartedEventId = 84
+	state.RequestCancelInfos[70].CancelRequestId = uuid.New()
+	state.SignalInfos[75].RequestId = uuid.New()
+
+	// These infos will be deleted during ApplySnapshot
+	state.ActivityInfos[89] = &persistencespb.ActivityInfo{}
+	state.TimerInfos["to-be-deleted"] = &persistencespb.TimerInfo{}
+	state.ChildExecutionInfos[79] = &persistencespb.ChildExecutionInfo{}
+	state.RequestCancelInfos[69] = &persistencespb.RequestCancelInfo{}
+	state.SignalInfos[74] = &persistencespb.SignalInfo{}
+	state.SignalRequestedIds = []string{"to-be-deleted"}
+}
+
+func compareMapOfProto[K comparable, V proto.Message](s *mutableStateSuite, expected, actual map[K]V) {
+	s.Equal(len(expected), len(actual))
+	for k, v := range expected {
+		s.True(proto.Equal(v, actual[k]))
+	}
+}
+
+func (s *mutableStateSuite) verifyChildExecutionInfos(expectedMap, actualMap, originMap map[int64]*persistencespb.ChildExecutionInfo) {
+	s.Equal(len(expectedMap), len(actualMap))
+	for k, expected := range expectedMap {
+		actual, ok := actualMap[k]
+		s.True(ok)
+		origin := originMap[k]
+
+		s.Equal(expected.Version, actual.Version, "Version mismatch")
+		s.Equal(expected.InitiatedEventBatchId, actual.InitiatedEventBatchId, "InitiatedEventBatchId mismatch")
+		s.Equal(expected.StartedEventId, actual.StartedEventId, "StartedEventId mismatch")
+		s.Equal(expected.StartedWorkflowId, actual.StartedWorkflowId, "StartedWorkflowId mismatch")
+		s.Equal(expected.StartedRunId, actual.StartedRunId, "StartedRunId mismatch")
+		s.Equal(expected.CreateRequestId, actual.CreateRequestId, "CreateRequestId mismatch")
+		s.Equal(expected.Namespace, actual.Namespace, "Namespace mismatch")
+		s.Equal(expected.WorkflowTypeName, actual.WorkflowTypeName, "WorkflowTypeName mismatch")
+		s.Equal(expected.ParentClosePolicy, actual.ParentClosePolicy, "ParentClosePolicy mismatch")
+		s.Equal(expected.InitiatedEventId, actual.InitiatedEventId, "InitiatedEventId mismatch")
+		s.Equal(expected.NamespaceId, actual.NamespaceId, "NamespaceId mismatch")
+		s.True(proto.Equal(expected.LastUpdateVersionedTransition, actual.LastUpdateVersionedTransition), "LastUpdateVersionedTransition mismatch")
+
+		// special handled fields
+		if origin != nil {
+			s.Equal(origin.Clock, actual.Clock, "Clock mismatch")
+		}
+	}
+}
+
+func (s *mutableStateSuite) verifyActivityInfos(expectedMap, actualMap map[int64]*persistencespb.ActivityInfo) {
+	s.Equal(len(expectedMap), len(actualMap))
+	for k, expected := range expectedMap {
+		actual, ok := actualMap[k]
+		s.True(ok)
+
+		s.Equal(expected.Version, actual.Version, "Version mismatch")
+		s.Equal(expected.ScheduledEventBatchId, actual.ScheduledEventBatchId, "ScheduledEventBatchId mismatch")
+		s.True(proto.Equal(expected.ScheduledTime, actual.ScheduledTime), "ScheduledTime mismatch")
+		s.Equal(expected.StartedEventId, actual.StartedEventId, "StartedEventId mismatch")
+		s.True(proto.Equal(expected.StartedTime, actual.StartedTime), "StartedTime mismatch")
+		s.Equal(expected.ActivityId, actual.ActivityId, "ActivityId mismatch")
+		s.Equal(expected.RequestId, actual.RequestId, "RequestId mismatch")
+		s.True(proto.Equal(expected.ScheduleToStartTimeout, actual.ScheduleToStartTimeout), "ScheduleToStartTimeout mismatch")
+		s.True(proto.Equal(expected.ScheduleToCloseTimeout, actual.ScheduleToCloseTimeout), "ScheduleToCloseTimeout mismatch")
+		s.True(proto.Equal(expected.StartToCloseTimeout, actual.StartToCloseTimeout), "StartToCloseTimeout mismatch")
+		s.True(proto.Equal(expected.HeartbeatTimeout, actual.HeartbeatTimeout), "HeartbeatTimeout mismatch")
+		s.Equal(expected.CancelRequested, actual.CancelRequested, "CancelRequested mismatch")
+		s.Equal(expected.CancelRequestId, actual.CancelRequestId, "CancelRequestId mismatch")
+		s.Equal(expected.Attempt, actual.Attempt, "Attempt mismatch")
+		s.Equal(expected.TaskQueue, actual.TaskQueue, "TaskQueue mismatch")
+		s.Equal(expected.StartedIdentity, actual.StartedIdentity, "StartedIdentity mismatch")
+		s.Equal(expected.HasRetryPolicy, actual.HasRetryPolicy, "HasRetryPolicy mismatch")
+		s.True(proto.Equal(expected.RetryInitialInterval, actual.RetryInitialInterval), "RetryInitialInterval mismatch")
+		s.True(proto.Equal(expected.RetryMaximumInterval, actual.RetryMaximumInterval), "RetryMaximumInterval mismatch")
+		s.Equal(expected.RetryMaximumAttempts, actual.RetryMaximumAttempts, "RetryMaximumAttempts mismatch")
+		s.True(proto.Equal(expected.RetryExpirationTime, actual.RetryExpirationTime), "RetryExpirationTime mismatch")
+		s.Equal(expected.RetryBackoffCoefficient, actual.RetryBackoffCoefficient, "RetryBackoffCoefficient mismatch")
+		s.Equal(expected.RetryNonRetryableErrorTypes, actual.RetryNonRetryableErrorTypes, "RetryNonRetryableErrorTypes mismatch")
+		s.True(proto.Equal(expected.RetryLastFailure, actual.RetryLastFailure), "RetryLastFailure mismatch")
+		s.Equal(expected.RetryLastWorkerIdentity, actual.RetryLastWorkerIdentity, "RetryLastWorkerIdentity mismatch")
+		s.Equal(expected.ScheduledEventId, actual.ScheduledEventId, "ScheduledEventId mismatch")
+		s.True(proto.Equal(expected.LastHeartbeatDetails, actual.LastHeartbeatDetails), "LastHeartbeatDetails mismatch")
+		s.True(proto.Equal(expected.LastHeartbeatUpdateTime, actual.LastHeartbeatUpdateTime), "LastHeartbeatUpdateTime mismatch")
+		s.Equal(expected.UseCompatibleVersion, actual.UseCompatibleVersion, "UseCompatibleVersion mismatch")
+		s.True(proto.Equal(expected.ActivityType, actual.ActivityType), "ActivityType mismatch")
+		s.True(proto.Equal(expected.LastWorkerVersionStamp, actual.LastWorkerVersionStamp), "LastWorkerVersionStamp mismatch")
+		s.True(proto.Equal(expected.LastStartedDeployment, actual.LastStartedDeployment), "LastStartedDeployment mismatch")
+		s.True(proto.Equal(expected.LastUpdateVersionedTransition, actual.LastUpdateVersionedTransition), "LastUpdateVersionedTransition mismatch")
+
+		// special handled fields
+		s.Equal(int32(TimerTaskStatusNone), actual.TimerTaskStatus, "TimerTaskStatus mismatch")
+	}
+}
+
+func (s *mutableStateSuite) verifyExecutionInfo(current, target, origin *persistencespb.WorkflowExecutionInfo) {
+	// These fields should not change.
+	s.Equal(origin.WorkflowTaskVersion, current.WorkflowTaskVersion, "WorkflowTaskVersion mismatch")
+	s.Equal(origin.WorkflowTaskScheduledEventId, current.WorkflowTaskScheduledEventId, "WorkflowTaskScheduledEventId mismatch")
+	s.Equal(origin.WorkflowTaskStartedEventId, current.WorkflowTaskStartedEventId, "WorkflowTaskStartedEventId mismatch")
+	s.Equal(origin.WorkflowTaskRequestId, current.WorkflowTaskRequestId, "WorkflowTaskRequestId mismatch")
+	s.Equal(origin.WorkflowTaskTimeout, current.WorkflowTaskTimeout, "WorkflowTaskTimeout mismatch")
+	s.Equal(origin.WorkflowTaskAttempt, current.WorkflowTaskAttempt, "WorkflowTaskAttempt mismatch")
+	s.Equal(origin.WorkflowTaskStartedTime, current.WorkflowTaskStartedTime, "WorkflowTaskStartedTime mismatch")
+	s.Equal(origin.WorkflowTaskScheduledTime, current.WorkflowTaskScheduledTime, "WorkflowTaskScheduledTime mismatch")
+	s.Equal(origin.WorkflowTaskOriginalScheduledTime, current.WorkflowTaskOriginalScheduledTime, "WorkflowTaskOriginalScheduledTime mismatch")
+	s.Equal(origin.WorkflowTaskType, current.WorkflowTaskType, "WorkflowTaskType mismatch")
+	s.Equal(origin.WorkflowTaskSuggestContinueAsNew, current.WorkflowTaskSuggestContinueAsNew, "WorkflowTaskSuggestContinueAsNew mismatch")
+	s.Equal(origin.WorkflowTaskHistorySizeBytes, current.WorkflowTaskHistorySizeBytes, "WorkflowTaskHistorySizeBytes mismatch")
+	s.Equal(origin.WorkflowTaskBuildId, current.WorkflowTaskBuildId, "WorkflowTaskBuildId mismatch")
+	s.Equal(origin.WorkflowTaskBuildIdRedirectCounter, current.WorkflowTaskBuildIdRedirectCounter, "WorkflowTaskBuildIdRedirectCounter mismatch")
+	s.True(proto.Equal(origin.VersioningInfo, current.VersioningInfo), "VersioningInfo mismatch")
+	s.True(proto.Equal(origin.VersionHistories, current.VersionHistories), "VersionHistories mismatch")
+	s.True(proto.Equal(origin.ExecutionStats, current.ExecutionStats), "ExecutionStats mismatch")
+	s.Equal(origin.LastFirstEventTxnId, current.LastFirstEventTxnId, "LastFirstEventTxnId mismatch")
+	s.True(proto.Equal(origin.ParentClock, current.ParentClock), "ParentClock mismatch")
+	s.Equal(origin.CloseTransferTaskId, current.CloseTransferTaskId, "CloseTransferTaskId mismatch")
+	s.Equal(origin.CloseVisibilityTaskId, current.CloseVisibilityTaskId, "CloseVisibilityTaskId mismatch")
+	s.Equal(origin.RelocatableAttributesRemoved, current.RelocatableAttributesRemoved, "RelocatableAttributesRemoved mismatch")
+	s.Equal(origin.WorkflowExecutionTimerTaskStatus, current.WorkflowExecutionTimerTaskStatus, "WorkflowExecutionTimerTaskStatus mismatch")
+	s.Equal(origin.SubStateMachinesByType, current.SubStateMachinesByType, "SubStateMachinesByType mismatch")
+	s.Equal(origin.StateMachineTimers, current.StateMachineTimers, "StateMachineTimers mismatch")
+	s.Equal(origin.TaskGenerationShardClockTimestamp, current.TaskGenerationShardClockTimestamp, "TaskGenerationShardClockTimestamp mismatch")
+	s.Equal(origin.UpdateInfos, current.UpdateInfos, "UpdateInfos mismatch")
+
+	// These fields should be updated.
+	s.Equal(target.NamespaceId, current.NamespaceId, "NamespaceId mismatch")
+	s.Equal(target.WorkflowId, current.WorkflowId, "WorkflowId mismatch")
+	s.Equal(target.ParentNamespaceId, current.ParentNamespaceId, "ParentNamespaceId mismatch")
+	s.Equal(target.ParentWorkflowId, current.ParentWorkflowId, "ParentWorkflowId mismatch")
+	s.Equal(target.ParentRunId, current.ParentRunId, "ParentRunId mismatch")
+	s.Equal(target.ParentInitiatedId, current.ParentInitiatedId, "ParentInitiatedId mismatch")
+	s.Equal(target.CompletionEventBatchId, current.CompletionEventBatchId, "CompletionEventBatchId mismatch")
+	s.Equal(target.TaskQueue, current.TaskQueue, "TaskQueue mismatch")
+	s.Equal(target.WorkflowTypeName, current.WorkflowTypeName, "WorkflowTypeName mismatch")
+	s.True(proto.Equal(target.WorkflowExecutionTimeout, current.WorkflowExecutionTimeout), "WorkflowExecutionTimeout mismatch")
+	s.True(proto.Equal(target.WorkflowRunTimeout, current.WorkflowRunTimeout), "WorkflowRunTimeout mismatch")
+	s.True(proto.Equal(target.DefaultWorkflowTaskTimeout, current.DefaultWorkflowTaskTimeout), "DefaultWorkflowTaskTimeout mismatch")
+	s.Equal(target.LastRunningClock, current.LastRunningClock, "LastRunningClock mismatch")
+	s.Equal(target.LastFirstEventId, current.LastFirstEventId, "LastFirstEventId mismatch")
+	s.Equal(target.LastCompletedWorkflowTaskStartedEventId, current.LastCompletedWorkflowTaskStartedEventId, "LastCompletedWorkflowTaskStartedEventId mismatch")
+	s.True(proto.Equal(target.StartTime, current.StartTime), "StartTime mismatch")
+	s.True(proto.Equal(target.LastUpdateTime, current.LastUpdateTime), "LastUpdateTime mismatch")
+	s.Equal(target.CancelRequested, current.CancelRequested, "CancelRequested mismatch")
+	s.Equal(target.CancelRequestId, current.CancelRequestId, "CancelRequestId mismatch")
+	s.Equal(target.StickyTaskQueue, current.StickyTaskQueue, "StickyTaskQueue mismatch")
+	s.True(proto.Equal(target.StickyScheduleToStartTimeout, current.StickyScheduleToStartTimeout), "StickyScheduleToStartTimeout mismatch")
+	s.Equal(target.Attempt, current.Attempt, "Attempt mismatch")
+	s.True(proto.Equal(target.RetryInitialInterval, current.RetryInitialInterval), "RetryInitialInterval mismatch")
+	s.True(proto.Equal(target.RetryMaximumInterval, current.RetryMaximumInterval), "RetryMaximumInterval mismatch")
+	s.Equal(target.RetryMaximumAttempts, current.RetryMaximumAttempts, "RetryMaximumAttempts mismatch")
+	s.Equal(target.RetryBackoffCoefficient, current.RetryBackoffCoefficient, "RetryBackoffCoefficient mismatch")
+	s.True(proto.Equal(target.WorkflowExecutionExpirationTime, current.WorkflowExecutionExpirationTime), "WorkflowExecutionExpirationTime mismatch")
+	s.Equal(target.RetryNonRetryableErrorTypes, current.RetryNonRetryableErrorTypes, "RetryNonRetryableErrorTypes mismatch")
+	s.Equal(target.HasRetryPolicy, current.HasRetryPolicy, "HasRetryPolicy mismatch")
+	s.Equal(target.CronSchedule, current.CronSchedule, "CronSchedule mismatch")
+	s.Equal(target.SignalCount, current.SignalCount, "SignalCount mismatch")
+	s.Equal(target.ActivityCount, current.ActivityCount, "ActivityCount mismatch")
+	s.Equal(target.ChildExecutionCount, current.ChildExecutionCount, "ChildExecutionCount mismatch")
+	s.Equal(target.UserTimerCount, current.UserTimerCount, "UserTimerCount mismatch")
+	s.Equal(target.RequestCancelExternalCount, current.RequestCancelExternalCount, "RequestCancelExternalCount mismatch")
+	s.Equal(target.SignalExternalCount, current.SignalExternalCount, "SignalExternalCount mismatch")
+	s.Equal(target.UpdateCount, current.UpdateCount, "UpdateCount mismatch")
+	s.True(proto.Equal(target.AutoResetPoints, current.AutoResetPoints), "AutoResetPoints mismatch")
+	s.Equal(target.SearchAttributes, current.SearchAttributes, "SearchAttributes mismatch")
+	s.Equal(target.Memo, current.Memo, "Memo mismatch")
+	s.Equal(target.FirstExecutionRunId, current.FirstExecutionRunId, "FirstExecutionRunId mismatch")
+	s.True(proto.Equal(target.WorkflowRunExpirationTime, current.WorkflowRunExpirationTime), "WorkflowRunExpirationTime mismatch")
+	s.Equal(target.StateTransitionCount, current.StateTransitionCount, "StateTransitionCount mismatch")
+	s.True(proto.Equal(target.ExecutionTime, current.ExecutionTime), "ExecutionTime mismatch")
+	s.Equal(target.NewExecutionRunId, current.NewExecutionRunId, "NewExecutionRunId mismatch")
+	s.Equal(target.ParentInitiatedVersion, current.ParentInitiatedVersion, "ParentInitiatedVersion mismatch")
+	s.True(proto.Equal(target.CloseTime, current.CloseTime), "CloseTime mismatch")
+	s.True(proto.Equal(target.BaseExecutionInfo, current.BaseExecutionInfo), "BaseExecutionInfo mismatch")
+	s.True(proto.Equal(target.MostRecentWorkerVersionStamp, current.MostRecentWorkerVersionStamp), "MostRecentWorkerVersionStamp mismatch")
+	s.Equal(target.AssignedBuildId, current.AssignedBuildId, "AssignedBuildId mismatch")
+	s.Equal(target.InheritedBuildId, current.InheritedBuildId, "InheritedBuildId mismatch")
+	s.Equal(target.BuildIdRedirectCounter, current.BuildIdRedirectCounter, "BuildIdRedirectCounter mismatch")
+	s.Equal(target.SubStateMachinesByType, current.SubStateMachinesByType, "SubStateMachinesByType mismatch")
+	s.Equal(target.RootWorkflowId, current.RootWorkflowId, "RootWorkflowId mismatch")
+	s.Equal(target.RootRunId, current.RootRunId, "RootRunId mismatch")
+	s.Equal(target.StateMachineTimers, current.StateMachineTimers, "StateMachineTimers mismatch")
+	s.True(proto.Equal(target.WorkflowTaskLastUpdateVersionedTransition, current.WorkflowTaskLastUpdateVersionedTransition), "WorkflowTaskLastUpdateVersionedTransition mismatch")
+	s.True(proto.Equal(target.VisibilityLastUpdateVersionedTransition, current.VisibilityLastUpdateVersionedTransition), "VisibilityLastUpdateVersionedTransition mismatch")
+	s.True(proto.Equal(target.SignalRequestIdsLastUpdateVersionedTransition, current.SignalRequestIdsLastUpdateVersionedTransition), "SignalRequestIdsLastUpdateVersionedTransition mismatch")
+	s.Equal(target.SubStateMachineTombstoneBatches, current.SubStateMachineTombstoneBatches, "SubStateMachineTombstoneBatches mismatch")
+}
+
+func (s *mutableStateSuite) verifyMutableState(current, target, origin *MutableStateImpl) {
+	s.verifyExecutionInfo(current.executionInfo, target.executionInfo, origin.executionInfo)
+	s.True(proto.Equal(target.executionState, current.executionState), "executionState mismatch")
+
+	s.Equal(target.pendingActivityTimerHeartbeats, current.pendingActivityTimerHeartbeats, "pendingActivityTimerHeartbeats mismatch")
+	s.verifyActivityInfos(target.pendingActivityInfoIDs, current.pendingActivityInfoIDs)
+	s.Equal(target.pendingActivityIDToEventID, current.pendingActivityIDToEventID, "pendingActivityIDToEventID mismatch")
+	compareMapOfProto(s, current.pendingActivityInfoIDs, current.updateActivityInfos)
+	s.Equal(map[int64]struct{}{89: {}}, current.deleteActivityInfos, "deleteActivityInfos mismatch")
+
+	compareMapOfProto(s, target.pendingTimerInfoIDs, current.pendingTimerInfoIDs)
+	s.Equal(target.pendingTimerEventIDToID, current.pendingTimerEventIDToID, "pendingTimerEventIDToID mismatch")
+	compareMapOfProto(s, target.pendingTimerInfoIDs, current.updateTimerInfos)
+	s.Equal(map[string]struct{}{"to-be-deleted": {}}, current.deleteTimerInfos, "deleteTimerInfos mismatch")
+
+	s.verifyChildExecutionInfos(target.pendingChildExecutionInfoIDs, current.pendingChildExecutionInfoIDs, origin.pendingChildExecutionInfoIDs)
+	s.verifyChildExecutionInfos(target.pendingChildExecutionInfoIDs, current.updateChildExecutionInfos, origin.pendingChildExecutionInfoIDs)
+	s.Equal(map[int64]struct{}{79: {}}, current.deleteChildExecutionInfos, "deleteChildExecutionInfos mismatch")
+
+	compareMapOfProto(s, target.pendingRequestCancelInfoIDs, current.pendingRequestCancelInfoIDs)
+	compareMapOfProto(s, target.pendingRequestCancelInfoIDs, current.updateRequestCancelInfos)
+	s.Equal(map[int64]struct{}{69: {}}, current.deleteRequestCancelInfos, "deleteRequestCancelInfos mismatch")
+
+	compareMapOfProto(s, target.pendingSignalInfoIDs, current.pendingSignalInfoIDs)
+	compareMapOfProto(s, target.pendingSignalInfoIDs, current.updateSignalInfos)
+	s.Equal(map[int64]struct{}{74: {}}, current.deleteSignalInfos, "deleteSignalInfos mismatch")
+
+	s.Equal(target.pendingSignalRequestedIDs, current.pendingSignalRequestedIDs, "pendingSignalRequestedIDs mismatch")
+	s.Equal(target.pendingSignalRequestedIDs, current.updateSignalRequestedIDs, "updateSignalRequestedIDs mismatch")
+	s.Equal(map[string]struct{}{"to-be-deleted": {}}, current.deleteSignalRequestedIDs, "deleteSignalRequestedIDs mismatch")
+
+	s.Equal(target.currentVersion, current.currentVersion, "currentVersion mismatch")
+	s.Equal(target.totalTombstones, current.totalTombstones, "totalTombstones mismatch")
+	s.Equal(target.dbRecordVersion, current.dbRecordVersion, "dbRecordVersion mismatch")
+	s.True(proto.Equal(target.checksum, current.checksum), "checksum mismatch")
+}
+
+func (s *mutableStateSuite) buildSnapshot(state *MutableStateImpl) *persistencespb.WorkflowMutableState {
+	snapshot := &persistencespb.WorkflowMutableState{
+		ActivityInfos: map[int64]*persistencespb.ActivityInfo{
+			90: {
+				Version:                       1234,
+				ScheduledTime:                 state.pendingActivityInfoIDs[90].ScheduledTime,
+				StartedTime:                   state.pendingActivityInfoIDs[90].StartedTime,
+				ActivityId:                    "activityID_5",
+				ScheduleToStartTimeout:        timestamp.DurationPtr(time.Second * 100),
+				ScheduleToCloseTimeout:        timestamp.DurationPtr(time.Second * 200),
+				StartToCloseTimeout:           timestamp.DurationPtr(time.Second * 300),
+				HeartbeatTimeout:              timestamp.DurationPtr(time.Second * 50),
+				ScheduledEventId:              90,
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1025},
+			},
+			91: {
+				ActivityId:                    "activity_id_91",
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1025},
+			},
+		},
+		TimerInfos: map[string]*persistencespb.TimerInfo{
+			"25": {
+				Version:                       1234,
+				StartedEventId:                85,
+				ExpiryTime:                    state.pendingTimerInfoIDs["25"].ExpiryTime,
+				TimerId:                       "25",
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1025},
+			},
+			"26": {
+				TimerId:                       "26",
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1025},
+			},
+		},
+		ChildExecutionInfos: map[int64]*persistencespb.ChildExecutionInfo{
+			80: {
+				Version:                       1234,
+				InitiatedEventBatchId:         20,
+				CreateRequestId:               state.pendingChildExecutionInfoIDs[80].CreateRequestId,
+				Namespace:                     "mock namespace name",
+				WorkflowTypeName:              "code.uber.internal/test/foobar",
+				InitiatedEventId:              80,
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1025},
+			},
+			81: {
+				InitiatedEventBatchId:         81,
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1025},
+			},
+		},
+		RequestCancelInfos: map[int64]*persistencespb.RequestCancelInfo{
+			70: {
+				Version:                       1234,
+				InitiatedEventBatchId:         20,
+				CancelRequestId:               state.pendingRequestCancelInfoIDs[70].CancelRequestId,
+				InitiatedEventId:              70,
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1025},
+			},
+			71: {
+				InitiatedEventBatchId:         71,
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1025},
+			},
+		},
+		SignalInfos: map[int64]*persistencespb.SignalInfo{
+			75: {
+				Version:                       1234,
+				InitiatedEventBatchId:         17,
+				RequestId:                     state.pendingSignalInfoIDs[75].RequestId,
+				InitiatedEventId:              75,
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1025},
+			},
+			76: {
+				InitiatedEventBatchId:         76,
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1025},
+			},
+		},
+		ChasmNodes:         state.chasmTree.Snapshot(nil).Nodes,
+		SignalRequestedIds: []string{"signal_request_id_1", "signal_requested_id_2"},
+		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+			NamespaceId:                             "deadbeef-0123-4567-890a-bcdef0123456",
+			WorkflowId:                              "wId",
+			TaskQueue:                               "testTaskQueue",
+			WorkflowTypeName:                        "wType",
+			WorkflowRunTimeout:                      timestamp.DurationPtr(time.Second * 200),
+			DefaultWorkflowTaskTimeout:              timestamp.DurationPtr(time.Second * 100),
+			LastCompletedWorkflowTaskStartedEventId: 99,
+			LastUpdateTime:                          state.executionInfo.LastUpdateTime,
+			WorkflowTaskVersion:                     1234,
+			WorkflowTaskScheduledEventId:            101,
+			WorkflowTaskStartedEventId:              102,
+			WorkflowTaskTimeout:                     timestamp.DurationPtr(time.Second * 100),
+			WorkflowTaskAttempt:                     1,
+			WorkflowTaskType:                        enumsspb.WORKFLOW_TASK_TYPE_NORMAL,
+			VersionHistories: &historyspb.VersionHistories{
+				Histories: []*historyspb.VersionHistory{
+					{
+						BranchToken: []byte("token#1"),
+						Items: []*historyspb.VersionHistoryItem{
+							{EventId: 102, Version: 1234},
+						},
+					},
+				},
+			},
+			FirstExecutionRunId: state.executionInfo.FirstExecutionRunId,
+			ExecutionTime:       state.executionInfo.ExecutionTime,
+			TransitionHistory: []*persistencespb.VersionedTransition{
+				{NamespaceFailoverVersion: 1234, TransitionCount: 1024},
+				{TransitionCount: 1025},
+			},
+			SignalRequestIdsLastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1025},
+			WorkflowTaskLastUpdateVersionedTransition:     state.executionInfo.WorkflowTaskLastUpdateVersionedTransition,
+		},
+		ExecutionState: &persistencespb.WorkflowExecutionState{
+			RunId:     state.executionState.RunId,
+			State:     enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			Status:    enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			StartTime: state.executionState.StartTime,
+		},
+		NextEventId: 103,
+	}
+	return snapshot
+}
+
+func (s *mutableStateSuite) TestApplySnapshot() {
+	testCases := []struct {
+		name                        string
+		updateWorkflowTask          bool
+		speculativeTask             bool
+		expectedWorkflowTaskUpdated bool
+	}{
+		{
+			name:                        "update workflow task",
+			updateWorkflowTask:          true,
+			speculativeTask:             false,
+			expectedWorkflowTaskUpdated: true,
+		},
+		{
+			name:                        "not update workflow task",
+			updateWorkflowTask:          false,
+			speculativeTask:             false,
+			expectedWorkflowTaskUpdated: false,
+		},
+		{
+			name:                        "update speculative workflow task",
+			updateWorkflowTask:          true,
+			speculativeTask:             true,
+			expectedWorkflowTaskUpdated: true,
+		},
+		{
+			name:                        "not update speculative workflow task",
+			updateWorkflowTask:          false,
+			speculativeTask:             true,
+			expectedWorkflowTaskUpdated: false,
+		},
+	}
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			state := s.buildWorkflowMutableState()
+			s.addChangesForStateReplication(state)
+
+			chasmNodesSnapshot := chasm.NodesSnapshot{
+				Nodes: state.ChasmNodes,
+			}
+
+			originMS, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, state, 123)
+			s.NoError(err)
+
+			currentMS, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, state, 123)
+			s.NoError(err)
+			currentMockChasmTree := historyi.NewMockChasmTree(s.controller)
+			currentMockChasmTree.EXPECT().ApplySnapshot(chasmNodesSnapshot).Return(nil).Times(1)
+			currentMS.chasmTree = currentMockChasmTree
+
+			state = s.buildWorkflowMutableState()
+			state.ActivityInfos[91] = &persistencespb.ActivityInfo{
+				ActivityId: "activity_id_91",
+			}
+			state.TimerInfos["26"] = &persistencespb.TimerInfo{
+				TimerId: "26",
+			}
+			state.ChildExecutionInfos[81] = &persistencespb.ChildExecutionInfo{
+				InitiatedEventBatchId: 81,
+			}
+			state.RequestCancelInfos[71] = &persistencespb.RequestCancelInfo{
+				InitiatedEventBatchId: 71,
+			}
+			state.SignalInfos[76] = &persistencespb.SignalInfo{
+				InitiatedEventBatchId: 76,
+			}
+			state.SignalRequestedIds = append(state.SignalRequestedIds, "signal_requested_id_2")
+
+			targetMS, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, state, 123)
+			s.NoError(err)
+			targetMockChasmTree := historyi.NewMockChasmTree(s.controller)
+			targetMockChasmTree.EXPECT().Snapshot(nil).Return(chasmNodesSnapshot).Times(1)
+			targetMS.chasmTree = targetMockChasmTree
+
+			targetMS.GetExecutionInfo().TransitionHistory = UpdatedTransitionHistory(targetMS.GetExecutionInfo().TransitionHistory, targetMS.GetCurrentVersion())
+
+			// set updateXXX so LastUpdateVersionedTransition will be updated
+			targetMS.updateActivityInfos = targetMS.pendingActivityInfoIDs
+			for key := range targetMS.updateActivityInfos {
+				targetMS.activityInfosUserDataUpdated[key] = struct{}{}
+			}
+			targetMS.updateTimerInfos = targetMS.pendingTimerInfoIDs
+			for key := range targetMS.updateTimerInfos {
+				targetMS.timerInfosUserDataUpdated[key] = struct{}{}
+			}
+			targetMS.updateChildExecutionInfos = targetMS.pendingChildExecutionInfoIDs
+			targetMS.updateRequestCancelInfos = targetMS.pendingRequestCancelInfoIDs
+			targetMS.updateSignalInfos = targetMS.pendingSignalInfoIDs
+			targetMS.updateSignalRequestedIDs = targetMS.pendingSignalRequestedIDs
+
+			if tc.updateWorkflowTask {
+				// test mutation with workflow task update
+				workflowTask := &historyi.WorkflowTaskInfo{
+					ScheduledEventID: 1234,
+				}
+				targetMS.workflowTaskManager.UpdateWorkflowTask(workflowTask)
+			}
+
+			if tc.speculativeTask {
+				targetMS.executionInfo.WorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE
+			}
+
+			targetMS.closeTransactionTrackLastUpdateVersionedTransition(historyi.TransactionPolicyActive)
+
+			snapshot := s.buildSnapshot(targetMS)
+			s.Nil(snapshot.ExecutionInfo.SubStateMachinesByType)
+			err = currentMS.ApplySnapshot(snapshot)
+			s.NoError(err)
+			s.NotNil(currentMS.GetExecutionInfo().SubStateMachinesByType)
+
+			s.verifyMutableState(currentMS, targetMS, originMS)
+			s.Equal(tc.expectedWorkflowTaskUpdated, currentMS.workflowTaskUpdated)
+		})
+	}
+}
+
+func (s *mutableStateSuite) buildMutation(
+	state *MutableStateImpl,
+	tombstones []*persistencespb.StateMachineTombstoneBatch,
+) *persistencespb.WorkflowMutableStateMutation {
+	executionInfoClone := common.CloneProto(state.executionInfo)
+	executionInfoClone.SubStateMachineTombstoneBatches = nil
+	mutation := &persistencespb.WorkflowMutableStateMutation{
+		UpdatedActivityInfos:            state.pendingActivityInfoIDs,
+		UpdatedTimerInfos:               state.pendingTimerInfoIDs,
+		UpdatedChildExecutionInfos:      state.pendingChildExecutionInfoIDs,
+		UpdatedRequestCancelInfos:       state.pendingRequestCancelInfoIDs,
+		UpdatedSignalInfos:              state.pendingSignalInfoIDs,
+		UpdatedChasmNodes:               state.chasmTree.Snapshot(nil).Nodes,
+		SignalRequestedIds:              state.GetPendingSignalRequestedIds(),
+		SubStateMachineTombstoneBatches: tombstones,
+		ExecutionInfo:                   executionInfoClone,
+		ExecutionState:                  state.executionState,
+	}
+	return mutation
+}
+
+func (s *mutableStateSuite) TestApplyMutation() {
+	testCases := []struct {
+		name                        string
+		updateWorkflowTask          bool
+		speculativeTask             bool
+		expectedWorkflowTaskUpdated bool
+	}{
+		{
+			name:                        "update workflow task",
+			updateWorkflowTask:          true,
+			speculativeTask:             false,
+			expectedWorkflowTaskUpdated: true,
+		},
+		{
+			name:                        "not update workflow task",
+			updateWorkflowTask:          false,
+			speculativeTask:             false,
+			expectedWorkflowTaskUpdated: false,
+		},
+		{
+			name:                        "update speculative workflow task",
+			updateWorkflowTask:          true,
+			speculativeTask:             true,
+			expectedWorkflowTaskUpdated: true,
+		},
+		{
+			name:                        "not update speculative workflow task",
+			updateWorkflowTask:          false,
+			speculativeTask:             true,
+			expectedWorkflowTaskUpdated: false,
+		},
+	}
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			state := s.buildWorkflowMutableState()
+			s.addChangesForStateReplication(state)
+
+			originMS, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, state, 123)
+			s.NoError(err)
+			tombstones := []*persistencespb.StateMachineTombstoneBatch{
+				{
+					VersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 1},
+					StateMachineTombstones: []*persistencespb.StateMachineTombstone{
+						{
+							StateMachineKey: &persistencespb.StateMachineTombstone_ActivityScheduledEventId{
+								ActivityScheduledEventId: 10,
+							},
+						},
+					},
+				},
+			}
+			originMS.GetExecutionInfo().SubStateMachineTombstoneBatches = tombstones
+
+			currentMS, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, state, 123)
+			s.NoError(err)
+			currentMockChasmTree := historyi.NewMockChasmTree(s.controller)
+			currentMS.chasmTree = currentMockChasmTree
+
+			currentMS.GetExecutionInfo().SubStateMachineTombstoneBatches = tombstones
+
+			state = s.buildWorkflowMutableState()
+
+			targetMS, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, state, 123)
+			s.NoError(err)
+
+			targetMockChasmTree := historyi.NewMockChasmTree(s.controller)
+			updateChasmNodes := map[string]*persistencespb.ChasmNode{
+				"node-path": {
+					Metadata: &persistencespb.ChasmNodeMetadata{
+						InitialVersionedTransition:    &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 1},
+						LastUpdateVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 1},
+						Attributes:                    &persistencespb.ChasmNodeMetadata_DataAttributes{},
+					},
+					Data: &commonpb.DataBlob{Data: []byte("test-data")},
+				},
+			}
+			targetMockChasmTree.EXPECT().Snapshot(nil).Return(chasm.NodesSnapshot{
+				Nodes: updateChasmNodes,
+			})
+			targetMS.chasmTree = targetMockChasmTree
+
+			transitionHistory := targetMS.executionInfo.TransitionHistory
+			failoverVersion := transitionhistory.LastVersionedTransition(transitionHistory).NamespaceFailoverVersion
+			targetMS.executionInfo.TransitionHistory = UpdatedTransitionHistory(transitionHistory, failoverVersion)
+
+			// set updateXXX so LastUpdateVersionedTransition will be updated
+			targetMS.updateActivityInfos = targetMS.pendingActivityInfoIDs
+			for key := range targetMS.updateActivityInfos {
+				targetMS.activityInfosUserDataUpdated[key] = struct{}{}
+			}
+			targetMS.updateTimerInfos = targetMS.pendingTimerInfoIDs
+			for key := range targetMS.updateTimerInfos {
+				targetMS.timerInfosUserDataUpdated[key] = struct{}{}
+			}
+			targetMS.updateChildExecutionInfos = targetMS.pendingChildExecutionInfoIDs
+			targetMS.updateRequestCancelInfos = targetMS.pendingRequestCancelInfoIDs
+			targetMS.updateSignalInfos = targetMS.pendingSignalInfoIDs
+			targetMS.updateSignalRequestedIDs = targetMS.pendingSignalRequestedIDs
+
+			if tc.updateWorkflowTask {
+				// test mutation with workflow task update
+				workflowTask := &historyi.WorkflowTaskInfo{
+					ScheduledEventID: 1234,
+				}
+				targetMS.workflowTaskManager.UpdateWorkflowTask(workflowTask)
+			}
+
+			if tc.speculativeTask {
+				targetMS.executionInfo.WorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE
+			}
+
+			targetMS.closeTransactionTrackLastUpdateVersionedTransition(historyi.TransactionPolicyActive)
+
+			tombstonesToAdd := []*persistencespb.StateMachineTombstoneBatch{
+				{
+					VersionedTransition: targetMS.CurrentVersionedTransition(),
+					StateMachineTombstones: []*persistencespb.StateMachineTombstone{
+						{
+							StateMachineKey: &persistencespb.StateMachineTombstone_ActivityScheduledEventId{
+								ActivityScheduledEventId: 89,
+							},
+						},
+						{
+							StateMachineKey: &persistencespb.StateMachineTombstone_ActivityScheduledEventId{
+								ActivityScheduledEventId: 9999, // not exist
+							},
+						},
+						{
+							StateMachineKey: &persistencespb.StateMachineTombstone_TimerId{
+								TimerId: "to-be-deleted",
+							},
+						},
+						{
+
+							StateMachineKey: &persistencespb.StateMachineTombstone_TimerId{
+								TimerId: "not-exist",
+							},
+						},
+						{
+							StateMachineKey: &persistencespb.StateMachineTombstone_ChildExecutionInitiatedEventId{
+								ChildExecutionInitiatedEventId: 79,
+							},
+						},
+						{
+							StateMachineKey: &persistencespb.StateMachineTombstone_ChildExecutionInitiatedEventId{
+								ChildExecutionInitiatedEventId: 9998, // not exist
+							},
+						},
+						{
+							StateMachineKey: &persistencespb.StateMachineTombstone_RequestCancelInitiatedEventId{
+								RequestCancelInitiatedEventId: 69,
+							},
+						},
+						{
+							StateMachineKey: &persistencespb.StateMachineTombstone_RequestCancelInitiatedEventId{
+								RequestCancelInitiatedEventId: 9997, // not exist
+							},
+						},
+						{
+							StateMachineKey: &persistencespb.StateMachineTombstone_SignalExternalInitiatedEventId{
+								SignalExternalInitiatedEventId: 74,
+							},
+						},
+						{
+							StateMachineKey: &persistencespb.StateMachineTombstone_SignalExternalInitiatedEventId{
+								SignalExternalInitiatedEventId: 9996, // not exist
+							},
+						},
+						{
+							StateMachineKey: &persistencespb.StateMachineTombstone_ChasmNodePath{
+								ChasmNodePath: "deleted-node-path",
+							},
+						},
+					},
+				},
+			}
+			targetMS.GetExecutionInfo().SubStateMachineTombstoneBatches = append(tombstones, tombstonesToAdd...)
+			targetMS.totalTombstones = len(tombstones[0].StateMachineTombstones) + len(tombstonesToAdd[0].StateMachineTombstones)
+			mutation := s.buildMutation(targetMS, tombstonesToAdd)
+
+			currentMockChasmTree.EXPECT().ApplyMutation(chasm.NodesMutation{
+				DeletedNodes: map[string]struct{}{"deleted-node-path": {}},
+			}).Return(nil).Times(1)
+			currentMockChasmTree.EXPECT().ApplyMutation(chasm.NodesMutation{
+				UpdatedNodes: updateChasmNodes,
+			}).Return(nil).Times(1)
+
+			err = currentMS.ApplyMutation(mutation)
+			s.NoError(err)
+			s.verifyMutableState(currentMS, targetMS, originMS)
+			s.Equal(tc.expectedWorkflowTaskUpdated, currentMS.workflowTaskUpdated)
+		})
+	}
+}
+
+func (s *mutableStateSuite) TestRefreshTask_DiffCluster() {
+	version := int64(99)
+	attempt := int32(1)
+	incomingActivityInfo := &persistencespb.ActivityInfo{
+		Version: version,
+		Attempt: attempt,
+	}
+	localActivityInfo := &persistencespb.ActivityInfo{
+		Version: int64(100),
+		Attempt: incomingActivityInfo.Attempt,
+	}
+
+	s.mockShard.Resource.ClusterMetadata.EXPECT().IsVersionFromSameCluster(localActivityInfo.Version, version).Return(false)
+
+	shouldReset := s.mutableState.ShouldResetActivityTimerTaskMask(
+		localActivityInfo,
+		incomingActivityInfo,
+	)
+	s.True(shouldReset)
+}
+
+func (s *mutableStateSuite) TestRefreshTask_SameCluster_DiffAttempt() {
+	version := int64(99)
+	attempt := int32(1)
+	incomingActivityInfo := &persistencespb.ActivityInfo{
+		Version: version,
+		Attempt: attempt,
+	}
+	localActivityInfo := &persistencespb.ActivityInfo{
+		Version: version,
+		Attempt: attempt + 1,
+	}
+
+	s.mockShard.Resource.ClusterMetadata.EXPECT().IsVersionFromSameCluster(version, version).Return(true)
+
+	shouldReset := s.mutableState.ShouldResetActivityTimerTaskMask(
+		localActivityInfo,
+		incomingActivityInfo,
+	)
+	s.True(shouldReset)
+}
+
+func (s *mutableStateSuite) TestRefreshTask_SameCluster_SameAttempt() {
+	version := int64(99)
+	attempt := int32(1)
+	incomingActivityInfo := &persistencespb.ActivityInfo{
+		Version: version,
+		Attempt: attempt,
+	}
+	localActivityInfo := &persistencespb.ActivityInfo{
+		Version: version,
+		Attempt: attempt,
+	}
+
+	s.mockShard.Resource.ClusterMetadata.EXPECT().IsVersionFromSameCluster(version, version).Return(true)
+
+	shouldReset := s.mutableState.ShouldResetActivityTimerTaskMask(
+		localActivityInfo,
+		incomingActivityInfo,
+	)
+	s.False(shouldReset)
+}
+
+func (s *mutableStateSuite) TestUpdateActivityTaskStatusWithTimerHeartbeat() {
+	dbState := s.buildWorkflowMutableState()
+	scheduleEventId := int64(781)
+	dbState.ActivityInfos[scheduleEventId] = &persistencespb.ActivityInfo{
+		Version:                5,
+		ScheduledEventId:       int64(90),
+		ScheduledTime:          timestamppb.New(time.Now().UTC()),
+		StartedEventId:         common.EmptyEventID,
+		StartedTime:            timestamppb.New(time.Now().UTC()),
+		ActivityId:             "activityID_5",
+		TimerTaskStatus:        0,
+		ScheduleToStartTimeout: timestamp.DurationFromSeconds(100),
+		ScheduleToCloseTimeout: timestamp.DurationFromSeconds(200),
+		StartToCloseTimeout:    timestamp.DurationFromSeconds(300),
+		HeartbeatTimeout:       timestamp.DurationFromSeconds(50),
+	}
+	mutableState, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 123)
+	s.NoError(err)
+	originalTime := time.Now().UTC().Add(time.Second * 60)
+	mutableState.pendingActivityTimerHeartbeats[scheduleEventId] = originalTime
+	status := int32(1)
+	err = mutableState.UpdateActivityTaskStatusWithTimerHeartbeat(scheduleEventId, status, nil)
+	s.NoError(err)
+	s.Equal(status, dbState.ActivityInfos[scheduleEventId].TimerTaskStatus)
+	s.Equal(originalTime, mutableState.pendingActivityTimerHeartbeats[scheduleEventId])
 }

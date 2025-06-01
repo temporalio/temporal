@@ -1,31 +1,6 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package ndc
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -67,6 +42,7 @@ type (
 		getBaseWorkflowInfo() *workflowspb.BaseExecutionInfo
 		getVersionHistory() *historyspb.VersionHistory
 		isWorkflowReset() bool
+		stateBased() bool
 
 		skipDuplicatedEvents(skipIndex int) error
 		splitTask() (replicationTask, replicationTask, error)
@@ -85,6 +61,7 @@ type (
 		newEvents           []*historypb.HistoryEvent
 		newRunID            string
 		versionedTransition *persistencespb.VersionedTransition
+		isStateBased        bool
 		logger              log.Logger
 	}
 )
@@ -139,6 +116,7 @@ func newReplicationTaskFromRequest(
 		newEvents,
 		request.NewRunId,
 		nil,
+		false,
 	)
 }
 
@@ -152,6 +130,7 @@ func newReplicationTaskFromBatch(
 	newEvents []*historypb.HistoryEvent,
 	newRunID string,
 	versionedTransition *persistencespb.VersionedTransition,
+	isStateBased bool,
 ) (*replicationTaskImpl, error) {
 
 	if len(eventsSlice) == 0 {
@@ -181,6 +160,7 @@ func newReplicationTaskFromBatch(
 		newEvents,
 		newRunID,
 		versionedTransition,
+		isStateBased,
 	)
 }
 
@@ -194,6 +174,7 @@ func newReplicationTask(
 	newEvents []*historypb.HistoryEvent,
 	newRunID string,
 	versionedTransition *persistencespb.VersionedTransition,
+	isStateBased bool,
 ) (*replicationTaskImpl, error) {
 
 	versionHistory := &historyspb.VersionHistory{
@@ -253,6 +234,7 @@ func newReplicationTask(
 		newEvents:           newEvents,
 		newRunID:            newRunID,
 		versionedTransition: versionedTransition,
+		isStateBased:        isStateBased,
 
 		logger: logger,
 	}, nil
@@ -318,26 +300,7 @@ func (t *replicationTaskImpl) getVersionedTransition() *persistencespb.Versioned
 }
 
 func (t *replicationTaskImpl) getBaseWorkflowInfo() *workflowspb.BaseExecutionInfo {
-	if t.baseWorkflowInfo != nil {
-		return t.baseWorkflowInfo
-	}
-
-	// TODO deprecate
-	switch t.getFirstEvent().GetEventType() {
-	case enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED:
-		workflowTaskFailedEvent := t.getFirstEvent()
-		attr := workflowTaskFailedEvent.GetWorkflowTaskFailedEventAttributes()
-		baseRunID := attr.GetBaseRunId()
-		baseEventID := t.getFirstEvent().EventId - 1
-		baseEventVersion := attr.GetForkEventVersion()
-		return &workflowspb.BaseExecutionInfo{
-			RunId:                            baseRunID,
-			LowestCommonAncestorEventId:      baseEventID,
-			LowestCommonAncestorEventVersion: baseEventVersion,
-		}
-	default:
-		return nil
-	}
+	return t.baseWorkflowInfo
 }
 
 func (t *replicationTaskImpl) getVersionHistory() *historyspb.VersionHistory {
@@ -348,21 +311,11 @@ func (t *replicationTaskImpl) isWorkflowReset() bool {
 	if t.baseWorkflowInfo != nil && t.baseWorkflowInfo.LowestCommonAncestorEventId+1 == t.firstEvent.EventId {
 		return true
 	}
+	return false
+}
 
-	// TODO deprecate
-	switch t.getFirstEvent().GetEventType() {
-	case enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED:
-		workflowTaskFailedEvent := t.getFirstEvent()
-		attr := workflowTaskFailedEvent.GetWorkflowTaskFailedEventAttributes()
-		baseRunID := attr.GetBaseRunId()
-		baseEventVersion := attr.GetForkEventVersion()
-		newRunID := attr.GetNewRunId()
-
-		return len(baseRunID) > 0 && baseEventVersion != 0 && len(newRunID) > 0
-
-	default:
-		return false
-	}
+func (t *replicationTaskImpl) stateBased() bool {
+	return t.isStateBased
 }
 
 func (t *replicationTaskImpl) skipDuplicatedEvents(index int) error {
@@ -370,7 +323,7 @@ func (t *replicationTaskImpl) skipDuplicatedEvents(index int) error {
 		return nil
 	}
 	if index >= len(t.events) || index < 0 {
-		return serviceerror.NewInternal(fmt.Sprintf("Invalid skip index: Length=%v, skipIndex=%v", len(t.events), index))
+		return serviceerror.NewInternalf("Invalid skip index: Length=%v, skipIndex=%v", len(t.events), index)
 	}
 	t.events = t.events[index:]
 	t.firstEvent = t.events[0][0]
@@ -442,6 +395,14 @@ func (t *replicationTaskImpl) splitTask() (_ replicationTask, _ replicationTask,
 		newRunID:         "",
 		logger:           logger,
 	}
+	if t.stateBased() {
+		newRunTask.versionedTransition = &persistencespb.VersionedTransition{
+			NamespaceFailoverVersion: t.newEvents[0].GetVersion(),
+			TransitionCount:          1,
+		}
+		newRunTask.isStateBased = true
+	}
+
 	t.newEvents = nil
 	t.newRunID = ""
 

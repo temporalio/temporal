@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package configs
 
 import (
@@ -46,6 +22,8 @@ const (
 	DispatchNexusTaskByNamespaceAndTaskQueueAPIName = "/temporal.api.nexusservice.v1.NexusService/DispatchByNamespaceAndTaskQueue"
 	DispatchNexusTaskByEndpointAPIName              = "/temporal.api.nexusservice.v1.NexusService/DispatchByEndpoint"
 	CompleteNexusOperation                          = "/temporal.api.nexusservice.v1.NexusService/CompleteNexusOperation"
+	// PollWorkflowHistoryAPIName is used instead of GetWorkflowExecutionHistory if WaitNewEvent is true in request.
+	PollWorkflowHistoryAPIName = "/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowExecutionHistory"
 )
 
 var (
@@ -97,25 +75,48 @@ var (
 		DispatchNexusTaskByEndpointAPIName:                                                  1,
 
 		// P2: Change State APIs
-		"/temporal.api.workflowservice.v1.WorkflowService/RequestCancelWorkflowExecution": 2,
-		"/temporal.api.workflowservice.v1.WorkflowService/TerminateWorkflowExecution":     2,
-		"/temporal.api.workflowservice.v1.WorkflowService/ResetWorkflowExecution":         2,
-		"/temporal.api.workflowservice.v1.WorkflowService/DeleteWorkflowExecution":        2,
-		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkflowExecutionHistory":    2, // relatively high priority because it is required for replay
-		"/temporal.api.workflowservice.v1.WorkflowService/UpdateSchedule":                 2,
-		"/temporal.api.workflowservice.v1.WorkflowService/PatchSchedule":                  2,
-		"/temporal.api.workflowservice.v1.WorkflowService/DeleteSchedule":                 2,
-		"/temporal.api.workflowservice.v1.WorkflowService/StopBatchOperation":             2,
+		"/temporal.api.workflowservice.v1.WorkflowService/RequestCancelWorkflowExecution":        2,
+		"/temporal.api.workflowservice.v1.WorkflowService/TerminateWorkflowExecution":            2,
+		"/temporal.api.workflowservice.v1.WorkflowService/ResetWorkflowExecution":                2,
+		"/temporal.api.workflowservice.v1.WorkflowService/DeleteWorkflowExecution":               2,
+		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkflowExecutionHistory":           2, // relatively high priority because it is required for replay
+		"/temporal.api.workflowservice.v1.WorkflowService/UpdateSchedule":                        2,
+		"/temporal.api.workflowservice.v1.WorkflowService/PatchSchedule":                         2,
+		"/temporal.api.workflowservice.v1.WorkflowService/DeleteSchedule":                        2,
+		"/temporal.api.workflowservice.v1.WorkflowService/StopBatchOperation":                    2,
+		"/temporal.api.workflowservice.v1.WorkflowService/UpdateActivityOptions":                 2,
+		"/temporal.api.workflowservice.v1.WorkflowService/PauseActivity":                         2,
+		"/temporal.api.workflowservice.v1.WorkflowService/UnpauseActivity":                       2,
+		"/temporal.api.workflowservice.v1.WorkflowService/ResetActivity":                         2,
+		"/temporal.api.workflowservice.v1.WorkflowService/UpdateWorkflowExecutionOptions":        2,
+		"/temporal.api.workflowservice.v1.WorkflowService/SetCurrentDeployment":                  2, // [cleanup-wv-pre-release]
+		"/temporal.api.workflowservice.v1.WorkflowService/SetCurrentDeploymentVersion":           2, // [cleanup-wv-pre-release]
+		"/temporal.api.workflowservice.v1.WorkflowService/SetWorkerDeploymentCurrentVersion":     2,
+		"/temporal.api.workflowservice.v1.WorkflowService/SetWorkerDeploymentRampingVersion":     2,
+		"/temporal.api.workflowservice.v1.WorkflowService/DeleteWorkerDeployment":                2,
+		"/temporal.api.workflowservice.v1.WorkflowService/DeleteWorkerDeploymentVersion":         2,
+		"/temporal.api.workflowservice.v1.WorkflowService/UpdateWorkerDeploymentVersionMetadata": 2,
+		"/temporal.api.workflowservice.v1.WorkflowService/CreateWorkflowRule":                    2,
+		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorkflowRule":                  2,
+		"/temporal.api.workflowservice.v1.WorkflowService/DeleteWorkflowRule":                    2,
+		"/temporal.api.workflowservice.v1.WorkflowService/ListWorkflowRules":                     2,
+		"/temporal.api.workflowservice.v1.WorkflowService/TriggerWorkflowRule":                   2,
 
 		// P3: Status Querying APIs
-		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorkflowExecution":     3,
-		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkerBuildIdCompatibility": 3,
-		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkerVersioningRules":      3,
-		"/temporal.api.workflowservice.v1.WorkflowService/ListTaskQueuePartitions":       3,
-		"/temporal.api.workflowservice.v1.WorkflowService/QueryWorkflow":                 3,
-		"/temporal.api.workflowservice.v1.WorkflowService/DescribeSchedule":              3,
-		"/temporal.api.workflowservice.v1.WorkflowService/ListScheduleMatchingTimes":     3,
-		"/temporal.api.workflowservice.v1.WorkflowService/DescribeBatchOperation":        3,
+		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorkflowExecution":       3,
+		"/temporal.api.workflowservice.v1.WorkflowService/DescribeTaskQueue":               3,
+		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkerBuildIdCompatibility":   3,
+		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkerVersioningRules":        3,
+		"/temporal.api.workflowservice.v1.WorkflowService/ListTaskQueuePartitions":         3,
+		"/temporal.api.workflowservice.v1.WorkflowService/QueryWorkflow":                   3,
+		"/temporal.api.workflowservice.v1.WorkflowService/DescribeSchedule":                3,
+		"/temporal.api.workflowservice.v1.WorkflowService/ListScheduleMatchingTimes":       3,
+		"/temporal.api.workflowservice.v1.WorkflowService/DescribeBatchOperation":          3,
+		"/temporal.api.workflowservice.v1.WorkflowService/DescribeDeployment":              3, // [cleanup-wv-pre-release]
+		"/temporal.api.workflowservice.v1.WorkflowService/GetCurrentDeployment":            3, // [cleanup-wv-pre-release]
+		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorkerDeploymentVersion": 3,
+		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorkerDeployment":        3,
+		"/temporal.api.workflowservice.v1.WorkflowService/ListWorkerDeployments":           3,
 
 		// P4: Progress APIs
 		"/temporal.api.workflowservice.v1.WorkflowService/RecordActivityTaskHeartbeat":      4,
@@ -141,6 +142,8 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/ResetStickyTaskQueue":               5,
 		"/temporal.api.workflowservice.v1.WorkflowService/ShutdownWorker":                     5,
 		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkflowExecutionHistoryReverse": 5,
+		// GetWorkflowExecutionHistory with WaitNewEvent set to true is a long poll API. Consider it as any other poll API.
+		PollWorkflowHistoryAPIName: 5,
 
 		// P6: Informational API that aren't required for the temporal service to function
 		OpenAPIV3APIName: 6,
@@ -158,10 +161,12 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/ListArchivedWorkflowExecutions": 1,
 
 		// APIs that rely on visibility
-		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkerTaskReachability": 1,
-		"/temporal.api.workflowservice.v1.WorkflowService/ListSchedules":             1,
-		"/temporal.api.workflowservice.v1.WorkflowService/ListBatchOperations":       1,
-		"/temporal.api.workflowservice.v1.WorkflowService/DescribeTaskQueue":         1,
+		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkerTaskReachability":         1,
+		"/temporal.api.workflowservice.v1.WorkflowService/ListSchedules":                     1,
+		"/temporal.api.workflowservice.v1.WorkflowService/ListBatchOperations":               1,
+		"/temporal.api.workflowservice.v1.WorkflowService/DescribeTaskQueueWithReachability": 1, // note this isn't a real method name
+		"/temporal.api.workflowservice.v1.WorkflowService/ListDeployments":                   1,
+		"/temporal.api.workflowservice.v1.WorkflowService/GetDeploymentReachability":         1,
 	}
 
 	VisibilityAPIPrioritiesOrdered = []int{0, 1}
@@ -177,6 +182,21 @@ var (
 	}
 
 	NamespaceReplicationInducingAPIPrioritiesOrdered = []int{0, 1, 2}
+
+	// APIs that are not considered as a namespace operation. Namespace operations are used to track the usage of a namespace.
+	// This includes some APIs, history tasks, etc.
+	operationExcludedAPIs = map[string]struct{}{
+		// Poll requests are not considered as namespace operations. We will count these operations when we try to return a task
+		// from matching service to this request.
+		"/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowTaskQueue": {},
+		"/temporal.api.workflowservice.v1.WorkflowService/PollActivityTaskQueue": {},
+
+		// Replication-related APIs are not counted as operations.
+		"/temporal.server.api.adminservice.v1.AdminService/GetWorkflowExecutionRawHistory":   {},
+		"/temporal.server.api.adminservice.v1.AdminService/GetWorkflowExecutionRawHistoryV2": {},
+		"/temporal.server.api.adminservice.v1.AdminService/ReapplyEvents":                    {},
+		"/temporal.server.api.adminservice.v1.AdminService/SyncWorkflowState":                {},
+	}
 )
 
 type (
@@ -204,7 +224,7 @@ func NewNamespaceRateBurst(
 		namespaceName: namespaceName,
 		rateFn:        rateFn,
 		burstFn: func(namespace string) int {
-			return int(rateFn(namespace) * math.Max(1, burstRatioFn(namespace)))
+			return max(1, int(math.Ceil(rateFn(namespace)*burstRatioFn(namespace))))
 		},
 	}
 }
@@ -327,4 +347,15 @@ func NewNamespaceReplicationInducingAPIPriorityRateLimiter(
 		}
 		return NamespaceReplicationInducingAPIPrioritiesOrdered[len(NamespaceReplicationInducingAPIPrioritiesOrdered)-1]
 	}, rateLimiters)
+}
+
+func IsAPIOperation(apiFullName string) bool {
+	if _, ok := operationExcludedAPIs[apiFullName]; ok {
+		return false
+	}
+
+	_, inAPI := APIToPriority[apiFullName]
+	_, inNamespaceReplicationInducingAPI := NamespaceReplicationInducingAPIToPriority[apiFullName]
+
+	return inAPI || inNamespaceReplicationInducingAPI
 }

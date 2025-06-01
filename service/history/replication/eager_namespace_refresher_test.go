@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package replication
 
 import (
@@ -29,7 +5,6 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally/v4"
@@ -47,9 +22,11 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/shard"
+	"go.uber.org/mock/gomock"
 )
 
 const mockCurrentCuster = "current_cluster_1"
@@ -66,7 +43,7 @@ type (
 		eagerNamespaceRefresher     EagerNamespaceRefresher
 		logger                      log.Logger
 		clientBean                  *client.MockBean
-		mockReplicationTaskExecutor *namespace.MockReplicationTaskExecutor
+		mockReplicationTaskExecutor *nsreplication.MockTaskExecutor
 		currentCluster              string
 		mockMetricsHandler          metrics.Handler
 		remoteAdminClient           *adminservicemock.MockAdminServiceClient
@@ -84,7 +61,7 @@ func (s *EagerNamespaceRefresherSuite) SetupTest() {
 	s.remoteAdminClient = adminservicemock.NewMockAdminServiceClient(s.controller)
 	s.clientBean.EXPECT().GetRemoteAdminClient(gomock.Any()).Return(s.remoteAdminClient, nil).AnyTimes()
 	scope := tally.NewTestScope("test", nil)
-	s.mockReplicationTaskExecutor = namespace.NewMockReplicationTaskExecutor(s.controller)
+	s.mockReplicationTaskExecutor = nsreplication.NewMockTaskExecutor(s.controller)
 	s.mockMetricsHandler = metrics.NewTallyMetricsHandler(metrics.ClientConfig{}, scope).WithTags(
 		metrics.ServiceNameTag("serviceName"))
 	s.eagerNamespaceRefresher = NewEagerNamespaceRefresher(
@@ -130,7 +107,7 @@ func (s *EagerNamespaceRefresherSuite) TestUpdateNamespaceFailoverVersion() {
 			FailoverNotificationVersion: 0,
 		},
 	}
-	ns := namespace.FromPersistentState(nsResponse)
+	ns := namespace.FromPersistentState(nsResponse.Namespace)
 	s.mockNamespaceRegistry.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(ns, nil).Times(1)
 
 	s.mockMetadataManager.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{NotificationVersion: 123}, nil).Times(1)
@@ -172,7 +149,7 @@ func (s *EagerNamespaceRefresherSuite) TestUpdateNamespaceFailoverVersion_Target
 			FailoverNotificationVersion: 0,
 		},
 	}
-	ns := namespace.FromPersistentState(nsResponse)
+	ns := namespace.FromPersistentState(nsResponse.Namespace)
 	s.mockNamespaceRegistry.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(ns, nil).Times(1)
 
 	err := s.eagerNamespaceRefresher.UpdateNamespaceFailoverVersion(namespace.ID(namespaceID), targetFailoverVersion)
@@ -185,8 +162,8 @@ func (s *EagerNamespaceRefresherSuite) TestUpdateNamespaceFailoverVersion_Target
 	targetFailoverVersion := int64(100)
 	currentFailoverVersion := targetFailoverVersion - 1
 
-	nsFromCache := namespace.FromPersistentState(&persistence.GetNamespaceResponse{
-		Namespace: &persistencespb.NamespaceDetail{
+	nsFromCache := namespace.FromPersistentState(
+		&persistencespb.NamespaceDetail{
 			FailoverVersion: currentFailoverVersion,
 			Info: &persistencespb.NamespaceInfo{
 				Id:    namespace.NewID().String(),
@@ -206,8 +183,7 @@ func (s *EagerNamespaceRefresherSuite) TestUpdateNamespaceFailoverVersion_Target
 				},
 			},
 			FailoverNotificationVersion: 0,
-		},
-	})
+		})
 
 	nsFromPersistent := &persistence.GetNamespaceResponse{
 		Namespace: &persistencespb.NamespaceDetail{
@@ -294,7 +270,7 @@ func (s *EagerNamespaceRefresherSuite) TestUpdateNamespaceFailoverVersion_GetNam
 			FailoverNotificationVersion: 0,
 		},
 	}
-	ns := namespace.FromPersistentState(nsResponse)
+	ns := namespace.FromPersistentState(nsResponse.Namespace)
 	s.mockNamespaceRegistry.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(ns, nil).Times(1)
 
 	s.mockMetadataManager.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{
@@ -337,7 +313,7 @@ func (s *EagerNamespaceRefresherSuite) TestUpdateNamespaceFailoverVersion_GetMet
 			FailoverNotificationVersion: 0,
 		},
 	}
-	ns := namespace.FromPersistentState(nsResponse)
+	ns := namespace.FromPersistentState(nsResponse.Namespace)
 	s.mockNamespaceRegistry.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(ns, nil).Times(1)
 
 	s.mockMetadataManager.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{
@@ -388,7 +364,7 @@ func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_Create
 	}).Return(nsResponse, nil)
 	s.mockReplicationTaskExecutor.EXPECT().Execute(gomock.Any(), task).Return(nil).Times(1)
 	s.mockNamespaceRegistry.EXPECT().GetNamespaceByID(namespaceId).Return(nil, serviceerror.NewNamespaceNotFound("namespace not found")).Times(1)
-	s.mockNamespaceRegistry.EXPECT().RefreshNamespaceById(namespaceId).Return(namespace.FromAdminClientApiResponse(nsResponse), nil).Times(1)
+	s.mockNamespaceRegistry.EXPECT().RefreshNamespaceById(namespaceId).Return(fromAdminClientApiResponse(nsResponse), nil).Times(1)
 	ns, err := s.eagerNamespaceRefresher.SyncNamespaceFromSourceCluster(context.Background(), namespaceId, "currentCluster")
 	s.Nil(err)
 	s.Equal(namespaceId, ns.ID())
@@ -429,7 +405,7 @@ func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_Update
 	}
 	s.mockReplicationTaskExecutor.EXPECT().Execute(gomock.Any(), task).Return(nil).Times(1)
 	s.mockNamespaceRegistry.EXPECT().GetNamespaceByID(namespaceId).Return(nil, nil).Times(1)
-	s.mockNamespaceRegistry.EXPECT().RefreshNamespaceById(namespaceId).Return(namespace.FromAdminClientApiResponse(nsResponse), nil).Times(1)
+	s.mockNamespaceRegistry.EXPECT().RefreshNamespaceById(namespaceId).Return(fromAdminClientApiResponse(nsResponse), nil).Times(1)
 	ns, err := s.eagerNamespaceRefresher.SyncNamespaceFromSourceCluster(context.Background(), namespaceId, "currentCluster")
 	s.Nil(err)
 	s.Equal(namespaceId, ns.ID())
@@ -516,4 +492,39 @@ func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_Namesp
 	_, err := s.eagerNamespaceRefresher.SyncNamespaceFromSourceCluster(context.Background(), namespaceId, "currentCluster")
 	s.Error(err)
 	s.IsType(&serviceerror.FailedPrecondition{}, err)
+}
+
+func fromAdminClientApiResponse(response *adminservice.GetNamespaceResponse) *namespace.Namespace {
+	info := &persistencespb.NamespaceInfo{
+		Id:          response.GetInfo().GetId(),
+		Name:        response.GetInfo().GetName(),
+		State:       response.GetInfo().GetState(),
+		Description: response.GetInfo().GetDescription(),
+		Owner:       response.GetInfo().GetOwnerEmail(),
+		Data:        response.GetInfo().GetData(),
+	}
+	config := &persistencespb.NamespaceConfig{
+		Retention:                    response.GetConfig().GetWorkflowExecutionRetentionTtl(),
+		HistoryArchivalState:         response.GetConfig().GetHistoryArchivalState(),
+		HistoryArchivalUri:           response.GetConfig().GetHistoryArchivalUri(),
+		VisibilityArchivalState:      response.GetConfig().GetVisibilityArchivalState(),
+		VisibilityArchivalUri:        response.GetConfig().GetVisibilityArchivalUri(),
+		CustomSearchAttributeAliases: response.GetConfig().GetCustomSearchAttributeAliases(),
+	}
+	replicationConfig := &persistencespb.NamespaceReplicationConfig{
+		ActiveClusterName: response.GetReplicationConfig().GetActiveClusterName(),
+		State:             response.GetReplicationConfig().GetState(),
+		Clusters:          nsreplication.ConvertClusterReplicationConfigFromProto(response.GetReplicationConfig().GetClusters()),
+		FailoverHistory:   nsreplication.ConvertFailoverHistoryToPersistenceProto(response.GetFailoverHistory()),
+	}
+
+	return namespace.FromPersistentState(
+		&persistencespb.NamespaceDetail{
+			Info:              info,
+			Config:            config,
+			ReplicationConfig: replicationConfig,
+			ConfigVersion:     response.ConfigVersion,
+			FailoverVersion:   response.GetFailoverVersion(),
+		},
+		namespace.WithGlobalFlag(response.IsGlobalNamespace))
 }

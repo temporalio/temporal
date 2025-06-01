@@ -1,42 +1,24 @@
-// The MIT License
-//
-// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package replication
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	historyspb "go.temporal.io/server/api/history/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence/versionhistory"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	ctasks "go.temporal.io/server/common/tasks"
-	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/consts"
+	historyi "go.temporal.io/server/service/history/interfaces"
 )
 
 type (
@@ -61,6 +43,7 @@ func NewExecutableBackfillHistoryEventsTask(
 	taskID int64,
 	taskCreationTime time.Time,
 	sourceClusterName string,
+	sourceShardKey ClusterShardKey,
 	replicationTask *replicationspb.ReplicationTask,
 ) *ExecutableBackfillHistoryEventsTask {
 	task := replicationTask.GetBackfillHistoryTaskAttributes()
@@ -75,6 +58,7 @@ func NewExecutableBackfillHistoryEventsTask(
 			taskCreationTime,
 			time.Now().UTC(),
 			sourceClusterName,
+			sourceShardKey,
 			replicationTask.Priority,
 			replicationTask,
 		),
@@ -134,7 +118,7 @@ func (e *ExecutableBackfillHistoryEventsTask) Execute() error {
 		return err
 	}
 
-	return engine.BackfillHistoryEvents(ctx, &shard.BackfillHistoryEventsRequest{
+	return engine.BackfillHistoryEvents(ctx, &historyi.BackfillHistoryEventsRequest{
 		WorkflowKey:         e.WorkflowKey,
 		SourceClusterName:   e.SourceClusterName(),
 		VersionedHistory:    e.ReplicationTask().VersionedTransition,
@@ -147,6 +131,17 @@ func (e *ExecutableBackfillHistoryEventsTask) Execute() error {
 }
 
 func (e *ExecutableBackfillHistoryEventsTask) HandleErr(err error) error {
+	if errors.Is(err, consts.ErrDuplicate) {
+		e.MarkTaskDuplicated()
+		return nil
+	}
+	e.Logger.Error("BackFillHistoryEvent replication task encountered error",
+		tag.WorkflowNamespaceID(e.NamespaceID),
+		tag.WorkflowID(e.WorkflowID),
+		tag.WorkflowRunID(e.RunID),
+		tag.TaskID(e.ExecutableTask.TaskID()),
+		tag.Error(err),
+	)
 	switch taskErr := err.(type) {
 	case nil, *serviceerror.NotFound:
 		return nil
@@ -163,11 +158,20 @@ func (e *ExecutableBackfillHistoryEventsTask) HandleErr(err error) error {
 
 		if doContinue, syncStateErr := e.SyncState(
 			ctx,
-			e.ExecutableTask.SourceClusterName(),
 			taskErr,
 			ResendAttempt,
 		); syncStateErr != nil || !doContinue {
-			return err
+			if syncStateErr != nil {
+				e.Logger.Error("BackFillHistoryEvent replication task encountered error during sync state",
+					tag.WorkflowNamespaceID(e.NamespaceID),
+					tag.WorkflowID(e.WorkflowID),
+					tag.WorkflowRunID(e.RunID),
+					tag.TaskID(e.ExecutableTask.TaskID()),
+					tag.Error(syncStateErr),
+				)
+				return err
+			}
+			return nil
 		}
 		return e.Execute()
 	case *serviceerrors.RetryReplication:
@@ -180,14 +184,30 @@ func (e *ExecutableBackfillHistoryEventsTask) HandleErr(err error) error {
 		}
 		ctx, cancel := newTaskContext(namespaceName, e.Config.ReplicationTaskApplyTimeout())
 		defer cancel()
-
-		if doContinue, resendErr := e.Resend(
+		history := &historyspb.VersionHistory{
+			Items: e.taskAttr.EventVersionHistory,
+		}
+		startEvent := taskErr.StartEventId + 1
+		endEvent := taskErr.EndEventId - 1
+		startEventVersion, err := versionhistory.GetVersionHistoryEventVersion(history, startEvent)
+		if err != nil {
+			return err
+		}
+		endEventVersion, err := versionhistory.GetVersionHistoryEventVersion(history, endEvent)
+		if err != nil {
+			return err
+		}
+		if resendErr := e.BackFillEvents(
 			ctx,
 			e.ExecutableTask.SourceClusterName(),
-			taskErr,
-			ResendAttempt,
-		); resendErr != nil || !doContinue {
-			return err
+			definition.NewWorkflowKey(e.NamespaceID, e.WorkflowID, e.RunID),
+			startEvent,
+			startEventVersion,
+			endEvent,
+			endEventVersion,
+			"",
+		); resendErr != nil {
+			return resendErr
 		}
 		return e.Execute()
 	default:

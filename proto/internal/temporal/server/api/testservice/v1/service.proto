@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package temporal.server.api.testservice.v1;
+option go_package = "go.temporal.io/server/api/testservice/v1;testservice";
+
+import "temporal/server/api/testservice/v1/request_response.proto";
+
+// The greeting service definition.
+service TestService {
+  // Sends a greeting
+  rpc SendHello (SendHelloRequest) returns (SendHelloResponse) {}
+}

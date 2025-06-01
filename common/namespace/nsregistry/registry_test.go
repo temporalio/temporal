@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package nsregistry_test
 
 import (
@@ -29,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -44,6 +19,7 @@ import (
 	"go.temporal.io/server/common/namespace/nsregistry"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.uber.org/mock/gomock"
 )
 
 type (
@@ -109,7 +85,10 @@ func (s *registrySuite) TestListNamespace() {
 		},
 		NotificationVersion: namespaceNotificationVersion,
 	}
-	entry1 := namespace.FromPersistentState(namespaceRecord1)
+	entry1 := namespace.FromPersistentState(
+		namespaceRecord1.Namespace,
+		namespace.WithNotificationVersion(namespaceRecord1.NotificationVersion))
+
 	namespaceNotificationVersion++
 
 	namespaceRecord2 := &persistence.GetNamespaceResponse{
@@ -135,7 +114,10 @@ func (s *registrySuite) TestListNamespace() {
 		},
 		NotificationVersion: namespaceNotificationVersion,
 	}
-	entry2 := namespace.FromPersistentState(namespaceRecord2)
+	entry2 := namespace.FromPersistentState(
+		namespaceRecord2.Namespace,
+		namespace.WithNotificationVersion(namespaceRecord2.NotificationVersion))
+
 	namespaceNotificationVersion++
 
 	namespaceRecord3 := &persistence.GetNamespaceResponse{
@@ -232,7 +214,10 @@ func (s *registrySuite) TestRegisterStateChangeCallback_CatchUp() {
 		},
 		NotificationVersion: namespaceNotificationVersion,
 	}
-	entry1 := namespace.FromPersistentState(namespaceRecord1)
+	entry1 := namespace.FromPersistentState(
+		namespaceRecord1.Namespace,
+		namespace.WithNotificationVersion(namespaceRecord1.NotificationVersion))
+
 	namespaceNotificationVersion++
 
 	namespaceRecord2 := &persistence.GetNamespaceResponse{
@@ -259,7 +244,10 @@ func (s *registrySuite) TestRegisterStateChangeCallback_CatchUp() {
 		},
 		NotificationVersion: namespaceNotificationVersion,
 	}
-	entry2 := namespace.FromPersistentState(namespaceRecord2)
+	entry2 := namespace.FromPersistentState(
+		namespaceRecord2.Namespace,
+		namespace.WithNotificationVersion(namespaceNotificationVersion))
+
 	namespaceNotificationVersion++
 
 	s.regPersistence.EXPECT().ListNamespaces(gomock.Any(), &persistence.ListNamespacesRequest{
@@ -319,7 +307,10 @@ func (s *registrySuite) TestUpdateCache_TriggerCallBack() {
 		},
 		NotificationVersion: namespaceNotificationVersion,
 	}
-	entry1Old := namespace.FromPersistentState(namespaceRecord1Old)
+	namespaceNotificationVersion++
+	entry1Old := namespace.FromPersistentState(
+		namespaceRecord1Old.Namespace,
+		namespace.WithNotificationVersion(namespaceRecord1Old.NotificationVersion))
 	namespaceNotificationVersion++
 
 	namespaceRecord2Old := &persistence.GetNamespaceResponse{
@@ -346,7 +337,9 @@ func (s *registrySuite) TestUpdateCache_TriggerCallBack() {
 		},
 		NotificationVersion: namespaceNotificationVersion,
 	}
-	entry2Old := namespace.FromPersistentState(namespaceRecord2Old)
+	entry2Old := namespace.FromPersistentState(
+		namespaceRecord2Old.Namespace,
+		namespace.WithNotificationVersion(namespaceRecord2Old.NotificationVersion))
 	namespaceNotificationVersion++
 
 	s.regPersistence.EXPECT().ListNamespaces(gomock.Any(), &persistence.ListNamespacesRequest{
@@ -375,7 +368,9 @@ func (s *registrySuite) TestUpdateCache_TriggerCallBack() {
 		},
 		NotificationVersion: namespaceNotificationVersion,
 	}
-	entry2New := namespace.FromPersistentState(namespaceRecord2New)
+	entry2New := namespace.FromPersistentState(
+		namespaceRecord2New.Namespace,
+		namespace.WithNotificationVersion(namespaceRecord2New.NotificationVersion))
 	namespaceNotificationVersion++
 
 	namespaceRecord1New := &persistence.GetNamespaceResponse{ // only the description changed
@@ -466,7 +461,8 @@ func (s *registrySuite) TestGetTriggerListAndUpdateCache_ConcurrentAccess() {
 			FailoverVersion: 0,
 		},
 	}
-	entryOld := namespace.FromPersistentState(namespaceRecordOld)
+	entryOld := namespace.FromPersistentState(
+		namespaceRecordOld.Namespace)
 
 	s.regPersistence.EXPECT().ListNamespaces(gomock.Any(), &persistence.ListNamespacesRequest{
 		PageSize:       nsregistry.CacheRefreshPageSize,

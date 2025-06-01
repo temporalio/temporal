@@ -1,28 +1,9 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package tasks
+
+import (
+	"sync/atomic"
+	"time"
+)
 
 const (
 	WeightedChannelDefaultSize = 1000
@@ -32,19 +13,24 @@ type (
 	WeightedChannels[T Task] []*WeightedChannel[T]
 
 	WeightedChannel[T Task] struct {
-		weight  int
-		channel chan T
+		weight         int
+		channel        chan T
+		lastActiveTime atomic.Value // time.Time
+		refCount       atomic.Int32
 	}
 )
 
 func NewWeightedChannel[T Task](
 	weight int,
 	size int,
+	now time.Time,
 ) *WeightedChannel[T] {
-	return &WeightedChannel[T]{
+	c := &WeightedChannel[T]{
 		weight:  weight,
 		channel: make(chan T, size),
 	}
+	c.UpdateLastActiveTime(now)
+	return c
 }
 
 func (c *WeightedChannel[T]) Chan() chan T {
@@ -57,6 +43,26 @@ func (c *WeightedChannel[T]) Weight() int {
 
 func (c *WeightedChannel[T]) SetWeight(newWeight int) {
 	c.weight = newWeight
+}
+
+func (c *WeightedChannel[T]) LastActiveTime() time.Time {
+	return c.lastActiveTime.Load().(time.Time) // nolint:revive
+}
+
+func (c *WeightedChannel[T]) UpdateLastActiveTime(now time.Time) {
+	c.lastActiveTime.Store(now)
+}
+
+func (c *WeightedChannel[T]) IncrementRefCount() {
+	c.refCount.Add(1)
+}
+
+func (c *WeightedChannel[T]) DecrementRefCount() {
+	c.refCount.Add(-1)
+}
+
+func (c *WeightedChannel[T]) RefCount() int32 {
+	return c.refCount.Load()
 }
 
 func (c *WeightedChannel[T]) Len() int {

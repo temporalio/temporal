@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package tdbg
 
 import (
@@ -38,7 +14,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/api/history/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/codec"
@@ -48,6 +24,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/tasks"
+	"google.golang.org/protobuf/encoding/prototext"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -111,22 +88,39 @@ func AdminShowWorkflow(c *cli.Context, clientFactory ClientFactory) error {
 
 	var historyBatches []*historypb.History
 	totalSize := 0
+	var errs []error
 	for idx, b := range histories {
 		totalSize += len(b.Data)
 		fmt.Fprintf(c.App.Writer, "======== batch %v, blob len: %v ======\n", idx+1, len(b.Data))
 		historyBatch, err := serializer.DeserializeEvents(b)
 		if err != nil {
-			return fmt.Errorf("unable to deserialize Events: %s", err)
+			err := fmt.Errorf("unable to deserialize Events: %s", err)
+			fmt.Fprintln(c.App.Writer, err)
+			errs = append(errs, err)
+			continue
 		}
 		historyBatches = append(historyBatches, &historypb.History{Events: historyBatch})
 		encoder := codec.NewJSONPBEncoder()
 		data, err := encoder.EncodeHistoryEvents(historyBatch)
 		if err != nil {
-			return fmt.Errorf("unable to encode History Events: %s", err)
+			err := fmt.Errorf("unable to encode History Events: %s", err)
+			fmt.Fprintln(c.App.Writer, err)
+			text, terr := prototext.Marshal(&historypb.History{Events: historyBatch})
+			if terr == nil {
+				fmt.Fprintln(c.App.Writer, "marshal to text:")
+				fmt.Fprintln(c.App.Writer, string(text))
+			}
+			errs = append(errs, err)
+			continue
 		}
 		fmt.Fprintln(c.App.Writer, string(data))
 	}
 	fmt.Fprintf(c.App.Writer, "======== total batches %v, total blob len: %v ======\n", len(histories), totalSize)
+
+	err = errors.Join(errs...)
+	if err != nil {
+		return err
+	}
 
 	if outputFileName != "" {
 		encoder := codec.NewJSONPBEncoder()
@@ -174,7 +168,7 @@ func AdminImportWorkflow(c *cli.Context, clientFactory ClientFactory) error {
 		return fmt.Errorf("unable to deserialize History data: %s", err)
 	}
 
-	versionHistory := &history.VersionHistory{}
+	versionHistory := &historyspb.VersionHistory{}
 	for _, historyBatch := range historyBatches {
 		for _, event := range historyBatch.Events {
 			item := versionhistory.NewVersionHistoryItem(event.EventId, event.Version)
@@ -185,8 +179,7 @@ func AdminImportWorkflow(c *cli.Context, clientFactory ClientFactory) error {
 	}
 
 	var token []byte
-
-	blobs := []*commonpb.DataBlob{}
+	var blobs []*commonpb.DataBlob
 	blobSize := 0
 	for i := 0; i < len(historyBatches)+1; i++ {
 		if i < len(historyBatches) {
@@ -376,9 +369,8 @@ func AdminGetShardID(c *cli.Context) error {
 
 // getCategory first searches the registry for the category by the [tasks.Category.Name].
 func getCategory(registry tasks.TaskCategoryRegistry, key string) (tasks.Category, error) {
-	key = strings.ToLower(key)
 	for _, category := range registry.GetCategories() {
-		if category.Name() == key {
+		if strings.EqualFold(category.Name(), key) {
 			return category, nil
 		}
 	}
@@ -411,12 +403,12 @@ func AdminListShardTasks(c *cli.Context, clientFactory ClientFactory, registry t
 	req := &adminservice.ListHistoryTasksRequest{
 		ShardId:  sid,
 		Category: int32(category.ID()),
-		TaskRange: &history.TaskRange{
-			InclusiveMinTaskKey: &history.TaskKey{
+		TaskRange: &historyspb.TaskRange{
+			InclusiveMinTaskKey: &historyspb.TaskKey{
 				FireTime: timestamppb.New(minFireTime),
 				TaskId:   c.Int64(FlagMinTaskID),
 			},
-			ExclusiveMaxTaskKey: &history.TaskKey{
+			ExclusiveMaxTaskKey: &historyspb.TaskKey{
 				FireTime: timestamppb.New(maxFireTime),
 				TaskId:   c.Int64(FlagMaxTaskID),
 			},
@@ -461,6 +453,10 @@ func AdminRemoveTask(
 	}
 	var visibilityTimestamp int64
 	if category.Type() == tasks.CategoryTypeScheduled {
+		if !c.IsSet(FlagTaskVisibilityTimestamp) {
+			//nolint:errorlint
+			return fmt.Errorf("%s is required to remove %s tasks", FlagTaskVisibilityTimestamp, category.Name())
+		}
 		visibilityTimestamp = c.Int64(FlagTaskVisibilityTimestamp)
 	}
 
@@ -689,5 +685,41 @@ func AdminRebuildMutableState(c *cli.Context, clientFactory ClientFactory) error
 	} else {
 		fmt.Fprintln(c.App.Writer, "rebuild mutable state succeeded.")
 	}
+	return nil
+}
+
+// AdminReplicateWorkflow force replicates a workflow by generating replication tasks
+func AdminReplicateWorkflow(
+	c *cli.Context,
+	clientFactory ClientFactory,
+) error {
+	adminClient := clientFactory.AdminClient(c)
+
+	nsName, err := getRequiredOption(c, FlagNamespace)
+	if err != nil {
+		return err
+	}
+
+	wid, err := getRequiredOption(c, FlagWorkflowID)
+	if err != nil {
+		return err
+	}
+	rid := c.String(FlagRunID)
+
+	ctx, cancel := newContext(c)
+	defer cancel()
+
+	_, err = adminClient.GenerateLastHistoryReplicationTasks(ctx, &adminservice.GenerateLastHistoryReplicationTasksRequest{
+		Namespace: nsName,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: wid,
+			RunId:      rid,
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("unable to replicate workflow: %w", err)
+	}
+
+	fmt.Fprintln(c.App.Writer, "Replication tasks generated successfully.")
 	return nil
 }

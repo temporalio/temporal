@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package tag
 
 import (
@@ -46,6 +22,8 @@ import (
 // LoggingCallAtKey is reserved tag
 const (
 	LoggingCallAtKey = "logging-call-at"
+	WorkflowIDKey    = "wf-id"
+	WorkflowRunIDKey = "wf-run-id"
 )
 
 // ==========  Common tags defined here ==========
@@ -83,6 +61,11 @@ func Timestamp(timestamp time.Time) ZapTag {
 	return NewTimeTag("timestamp", timestamp)
 }
 
+// RequestID returns tag for RequestID
+func RequestID(requestID string) ZapTag {
+	return NewStringTag("request-id", requestID)
+}
+
 // ==========  Workflow tags defined here: ( wf is short for workflow) ==========
 
 // WorkflowAction returns tag for WorkflowAction
@@ -99,7 +82,7 @@ func workflowListFilterType(listFilterType string) ZapTag {
 
 // WorkflowTimeoutType returns tag for WorkflowTimeoutType
 func WorkflowTimeoutType(timeoutType enumspb.TimeoutType) ZapTag {
-	return NewStringTag("wf-timeout-type", timeoutType.String())
+	return NewStringerTag("wf-timeout-type", timeoutType)
 }
 
 // WorkflowPollContextTimeout returns tag for WorkflowPollContextTimeout
@@ -114,7 +97,7 @@ func WorkflowHandlerName(handlerName string) ZapTag {
 
 // WorkflowID returns tag for WorkflowID
 func WorkflowID(workflowID string) ZapTag {
-	return NewStringTag("wf-id", workflowID)
+	return NewStringTag(WorkflowIDKey, workflowID)
 }
 
 // WorkflowType returns tag for WorkflowType
@@ -124,12 +107,12 @@ func WorkflowType(wfType string) ZapTag {
 
 // WorkflowState returns tag for WorkflowState
 func WorkflowState(s enumsspb.WorkflowExecutionState) ZapTag {
-	return NewStringTag("wf-state", s.String())
+	return NewStringerTag("wf-state", s)
 }
 
 // WorkflowRunID returns tag for WorkflowRunID
 func WorkflowRunID(runID string) ZapTag {
-	return NewStringTag("wf-run-id", runID)
+	return NewStringTag(WorkflowRunIDKey, runID)
 }
 
 // WorkflowNewRunID returns tag for WorkflowNewRunID
@@ -282,7 +265,7 @@ func WorkflowBranchID(branchID string) ZapTag {
 
 // WorkflowCommandType returns tag for WorkflowCommandType
 func WorkflowCommandType(commandType enumspb.CommandType) ZapTag {
-	return NewStringTag("command-type", commandType.String())
+	return NewStringerTag("command-type", commandType)
 }
 
 // WorkflowQueryType returns tag for WorkflowQueryType
@@ -292,7 +275,7 @@ func WorkflowQueryType(qt string) ZapTag {
 
 // WorkflowTaskFailedCause returns tag for WorkflowTaskFailedCause
 func WorkflowTaskFailedCause(workflowTaskFailCause enumspb.WorkflowTaskFailedCause) ZapTag {
-	return NewStringTag("workflow-task-fail-cause", workflowTaskFailCause.String())
+	return NewStringerTag("workflow-task-fail-cause", workflowTaskFailCause)
 }
 
 // WorkflowTaskQueueType returns tag for WorkflowTaskQueueType
@@ -559,6 +542,9 @@ func CertThumbprint(thumbprint string) ZapTag {
 func WorkerComponent(v interface{}) ZapTag {
 	return NewStringTag("worker-component", fmt.Sprintf("%T", v))
 }
+
+// FailedAssertion is a tag for marking a message as a failed assertion.
+var FailedAssertion = NewBoolTag("failed-assertion", true)
 
 // history engine shard
 
@@ -984,6 +970,22 @@ func BuildId(buildId string) ZapTag {
 	return NewStringTag("build-id", buildId)
 }
 
+func VersioningBehavior(behavior enumspb.VersioningBehavior) ZapTag {
+	return NewStringerTag("versioning-behavior", behavior)
+}
+
+func Deployment(d string) ZapTag {
+	return NewAnyTag("deployment", d)
+}
+
+func UserDataVersion(v int64) ZapTag {
+	return NewInt64("user-data-version", v)
+}
+
 func Cause(cause string) ZapTag {
 	return NewStringTag("cause", cause)
+}
+
+func NexusOperation(operation string) ZapTag {
+	return NewStringTag("nexus-operation", operation)
 }

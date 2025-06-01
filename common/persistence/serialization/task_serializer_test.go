@@ -1,31 +1,8 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package serialization
 
 import (
 	"math/rand"
+	"reflect"
 	"testing"
 	"time"
 
@@ -34,9 +11,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/api/persistence/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/shuffle"
 	"go.temporal.io/server/common/testing/protorequire"
@@ -151,6 +129,22 @@ func (s *taskSerializerSuite) TestTransferChildWorkflowTask() {
 	}
 
 	s.assertEqualTasks(childWorkflowTask)
+}
+
+func (s *taskSerializerSuite) TestTransferChasmTask() {
+	transferChasmTask := &tasks.ChasmTask{
+		WorkflowKey:         s.workflowKey,
+		VisibilityTimestamp: time.Unix(0, rand.Int63()).UTC(),
+		TaskID:              rand.Int63(),
+		Category:            tasks.CategoryTransfer,
+		Info: &persistencespb.ChasmTaskInfo{
+			Data: &commonpb.DataBlob{
+				Data: []byte("some-data"),
+			},
+		},
+	}
+
+	s.assertEqualTasks(transferChasmTask)
 }
 
 func (s *taskSerializerSuite) TestTransferCloseTask() {
@@ -359,9 +353,19 @@ func (s *taskSerializerSuite) TestSyncVersionedTransitionTask() {
 		FirstEventID:        rand.Int63(),
 		NextEventID:         rand.Int63(),
 		NewRunID:            uuid.New().String(),
-		VersionedTransition: &persistence.VersionedTransition{
+		VersionedTransition: &persistencespb.VersionedTransition{
 			NamespaceFailoverVersion: rand.Int63(),
 			TransitionCount:          rand.Int63(),
+		},
+		TaskEquivalents: []tasks.Task{
+			&tasks.HistoryReplicationTask{
+				WorkflowKey:         s.workflowKey,
+				VisibilityTimestamp: time.Unix(0, 0).UTC(),
+				FirstEventID:        rand.Int63(),
+				NextEventID:         rand.Int63(),
+				Version:             rand.Int63(),
+				NewRunID:            uuid.New().String(),
+			},
 		},
 	}
 
@@ -420,29 +424,46 @@ func (s *taskSerializerSuite) TestArchiveExecutionTask() {
 	s.assertEqualTasks(task)
 }
 
+func (s *taskSerializerSuite) TestOutboundChasmTask() {
+	task := &tasks.ChasmTask{
+		WorkflowKey:         s.workflowKey,
+		VisibilityTimestamp: time.Unix(0, rand.Int63()).UTC(),
+		TaskID:              rand.Int63(),
+		Category:            tasks.CategoryOutbound,
+		Info: &persistencespb.ChasmTaskInfo{
+			Data: &commonpb.DataBlob{
+				Data: []byte("some-data"),
+			},
+		},
+		Destination: "somewhere",
+	}
+
+	s.assertEqualTasks(task)
+}
+
 func (s *taskSerializerSuite) TestStateMachineOutboundTask() {
 	task := &tasks.StateMachineOutboundTask{
 		StateMachineTask: tasks.StateMachineTask{
 			WorkflowKey:         s.workflowKey,
 			VisibilityTimestamp: time.Now().UTC(),
 			TaskID:              rand.Int63(),
-			Info: &persistence.StateMachineTaskInfo{
-				Ref: &persistence.StateMachineRef{
-					Path: []*persistence.StateMachineKey{
+			Info: &persistencespb.StateMachineTaskInfo{
+				Ref: &persistencespb.StateMachineRef{
+					Path: []*persistencespb.StateMachineKey{
 						{
 							Type: "some-type",
 							Id:   "some-id",
 						},
 					},
-					MutableStateVersionedTransition: &persistence.VersionedTransition{
+					MutableStateVersionedTransition: &persistencespb.VersionedTransition{
 						NamespaceFailoverVersion: rand.Int63(),
 						TransitionCount:          rand.Int63(),
 					},
-					MachineInitialVersionedTransition: &persistence.VersionedTransition{
+					MachineInitialVersionedTransition: &persistencespb.VersionedTransition{
 						NamespaceFailoverVersion: rand.Int63(),
 						TransitionCount:          rand.Int63(),
 					},
-					MachineLastUpdateVersionedTransition: &persistence.VersionedTransition{
+					MachineLastUpdateVersionedTransition: &persistencespb.VersionedTransition{
 						NamespaceFailoverVersion: rand.Int63(),
 						TransitionCount:          rand.Int63(),
 					},
@@ -468,6 +489,33 @@ func (s *taskSerializerSuite) TestStateMachineOutboundTask() {
 	task.Info = nil
 	deserializedTask.Info = nil
 	s.Equal(task, deserializedTask)
+}
+
+func (s *taskSerializerSuite) TestTimerChasmTask() {
+	task := &tasks.ChasmTask{
+		WorkflowKey:         s.workflowKey,
+		VisibilityTimestamp: time.Unix(0, rand.Int63()).UTC(),
+		TaskID:              rand.Int63(),
+		Category:            tasks.CategoryTimer,
+		Info: &persistencespb.ChasmTaskInfo{
+			Data: &commonpb.DataBlob{
+				Data: []byte("some-data"),
+			},
+		},
+	}
+
+	s.assertEqualTasks(task)
+}
+
+func (s *taskSerializerSuite) TestTimerChasmPureTask() {
+	task := &tasks.ChasmTaskPure{
+		WorkflowKey:         s.workflowKey,
+		VisibilityTimestamp: time.Unix(0, rand.Int63()).UTC(),
+		TaskID:              rand.Int63(),
+		Category:            tasks.CategoryTimer,
+	}
+
+	s.assertEqualTasks(task)
 }
 
 func (s *taskSerializerSuite) TestStateMachineTimerTask() {
@@ -512,5 +560,27 @@ func (s *taskSerializerSuite) assertEqualTasks(
 	s.NoError(err)
 	deserializedTask, err := s.taskSerializer.DeserializeTask(task.GetCategory(), blob)
 	s.NoError(err)
+
+	// Find all top-level protobuf fields and compare them, then unset them, as their
+	// internal state parameters can cause direct struct comparison to fail.
+	taskValue := reflect.ValueOf(task).Elem()
+	deserializedTaskValue := reflect.ValueOf(deserializedTask).Elem()
+	s.Equal(taskValue.Type(), deserializedTaskValue.Type())
+
+	for i := range deserializedTaskValue.NumField() {
+		deField := deserializedTaskValue.Field(i)
+		if !deField.CanInterface() {
+			continue
+		}
+
+		if innerProto, ok := deField.Interface().(proto.Message); ok {
+			originalProto, _ := taskValue.Field(i).Interface().(proto.Message)
+			protorequire.ProtoEqual(s.T(), originalProto, innerProto)
+
+			taskValue.Field(i).SetZero()
+			deserializedTaskValue.Field(i).SetZero()
+		}
+	}
+
 	s.Equal(task, deserializedTask)
 }

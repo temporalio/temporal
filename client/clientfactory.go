@@ -1,28 +1,4 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
-//go:generate mockgen -copyright_file ../LICENSE -package $GOPACKAGE -source $GOFILE -destination client_factory_mock.go
+//go:generate mockgen -package $GOPACKAGE -source $GOFILE -destination client_factory_mock.go
 
 package client
 
@@ -44,6 +20,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/testing/testhooks"
 	"google.golang.org/grpc"
 )
 
@@ -65,6 +42,7 @@ type (
 			monitor membership.Monitor,
 			metricsHandler metrics.Handler,
 			dc *dynamicconfig.Collection,
+			testHooks testhooks.TestHooks,
 			numberOfHistoryShards int32,
 			logger log.Logger,
 			throttledLogger log.Logger,
@@ -79,6 +57,7 @@ type (
 		monitor               membership.Monitor
 		metricsHandler        metrics.Handler
 		dynConfig             *dynamicconfig.Collection
+		testHooks             testhooks.TestHooks
 		numberOfHistoryShards int32
 		logger                log.Logger
 		throttledLogger       log.Logger
@@ -103,6 +82,7 @@ func (p *factoryProviderImpl) NewFactory(
 	monitor membership.Monitor,
 	metricsHandler metrics.Handler,
 	dc *dynamicconfig.Collection,
+	testHooks testhooks.TestHooks,
 	numberOfHistoryShards int32,
 	logger log.Logger,
 	throttledLogger log.Logger,
@@ -112,6 +92,7 @@ func (p *factoryProviderImpl) NewFactory(
 		monitor:               monitor,
 		metricsHandler:        metricsHandler,
 		dynConfig:             dc,
+		testHooks:             testHooks,
 		numberOfHistoryShards: numberOfHistoryShards,
 		logger:                logger,
 		throttledLogger:       throttledLogger,
@@ -123,7 +104,6 @@ func (cf *rpcClientFactory) NewHistoryClientWithTimeout(timeout time.Duration) (
 	if err != nil {
 		return nil, err
 	}
-
 	client := history.NewClient(
 		cf.dynConfig,
 		resolver,
@@ -150,7 +130,7 @@ func (cf *rpcClientFactory) NewMatchingClientWithTimeout(
 
 	keyResolver := newServiceKeyResolver(resolver)
 	clientProvider := func(clientKey string) (interface{}, error) {
-		connection := cf.rpcFactory.CreateInternodeGRPCConnection(clientKey)
+		connection := cf.rpcFactory.CreateMatchingGRPCConnection(clientKey)
 		return matchingservice.NewMatchingServiceClient(connection), nil
 	}
 	client := matching.NewClient(
@@ -159,7 +139,7 @@ func (cf *rpcClientFactory) NewMatchingClientWithTimeout(
 		common.NewClientCache(keyResolver, clientProvider),
 		cf.metricsHandler,
 		cf.logger,
-		matching.NewLoadBalancer(namespaceIDToName, cf.dynConfig),
+		matching.NewLoadBalancer(namespaceIDToName, cf.dynConfig, cf.testHooks),
 	)
 
 	if cf.metricsHandler != nil {

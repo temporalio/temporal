@@ -1,28 +1,4 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
-//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination buffer_event_flusher_mock.go
+//go:generate mockgen -package $GOPACKAGE -source $GOFILE -destination buffer_event_flusher_mock.go
 
 package ndc
 
@@ -31,8 +7,7 @@ import (
 
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/service/history/shard"
-	"go.temporal.io/server/service/history/workflow"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
@@ -40,15 +15,15 @@ type (
 	BufferEventFlusher interface {
 		flush(
 			ctx context.Context,
-		) (workflow.Context, workflow.MutableState, error)
+		) (historyi.WorkflowContext, historyi.MutableState, error)
 	}
 
 	BufferEventFlusherImpl struct {
-		shardContext    shard.Context
+		shardContext    historyi.ShardContext
 		clusterMetadata cluster.Metadata
 
-		wfContext    workflow.Context
-		mutableState workflow.MutableState
+		wfContext    historyi.WorkflowContext
+		mutableState historyi.MutableState
 		logger       log.Logger
 	}
 )
@@ -56,9 +31,9 @@ type (
 var _ BufferEventFlusher = (*BufferEventFlusherImpl)(nil)
 
 func NewBufferEventFlusher(
-	shardContext shard.Context,
-	wfContext workflow.Context,
-	mutableState workflow.MutableState,
+	shardContext historyi.ShardContext,
+	wfContext historyi.WorkflowContext,
+	mutableState historyi.MutableState,
 	logger log.Logger,
 ) *BufferEventFlusherImpl {
 
@@ -74,7 +49,7 @@ func NewBufferEventFlusher(
 
 func (r *BufferEventFlusherImpl) flush(
 	ctx context.Context,
-) (workflow.Context, workflow.MutableState, error) {
+) (historyi.WorkflowContext, historyi.MutableState, error) {
 	// check whether there are buffered events, if so, flush it
 	// NOTE: buffered events does not show in version history or next event id
 	if !r.mutableState.HasBufferedEvents() {

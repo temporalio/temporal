@@ -1,5 +1,3 @@
-version: "3.5"
-
 services:
   cassandra:
     image: cassandra:3.11
@@ -7,6 +5,8 @@ services:
       - "9042:9042"
     environment:
       CASSANDRA_LISTEN_ADDRESS: 127.0.0.1
+      MAX_HEAP_SIZE: "2G"
+      HEAP_NEWSIZE: "200M"
 
   mysql:
     image: mysql:8.0.29-oracle

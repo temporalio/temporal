@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package headers
 
 import (
@@ -37,6 +13,15 @@ const (
 	CallerTypePreemptable = "preemptable"
 
 	CallerNameSystem = "system"
+)
+
+var (
+	ValidCallerTypes = map[string]struct{}{
+		CallerTypeOperator:    {},
+		CallerTypeAPI:         {},
+		CallerTypeBackground:  {},
+		CallerTypePreemptable: {},
+	}
 )
 
 var (
@@ -62,7 +47,7 @@ type (
 		CallerType string
 
 		// CallOrigin is the first API method name in the call chain.
-		// Currently, it is only specified when CallerType is CallerTypeAPI
+		// Currently, its value is valid only when CallerType is CallerTypeAPI or CallerTypeOperator.
 		CallOrigin string
 	}
 )
@@ -113,9 +98,9 @@ func SetCallerInfo(
 	info CallerInfo,
 ) context.Context {
 	return setIncomingMD(ctx, map[string]string{
-		callerNameHeaderName: info.CallerName,
+		CallerNameHeaderName: info.CallerName,
 		CallerTypeHeaderName: info.CallerType,
-		callOriginHeaderName: info.CallOrigin,
+		CallOriginHeaderName: info.CallOrigin,
 	})
 }
 
@@ -125,7 +110,7 @@ func SetCallerName(
 	ctx context.Context,
 	callerName string,
 ) context.Context {
-	return setIncomingMD(ctx, map[string]string{callerNameHeaderName: callerName})
+	return setIncomingMD(ctx, map[string]string{CallerNameHeaderName: callerName})
 }
 
 // SetCallerType set caller type in the context.
@@ -143,7 +128,7 @@ func SetOrigin(
 	ctx context.Context,
 	callOrigin string,
 ) context.Context {
-	return setIncomingMD(ctx, map[string]string{callOriginHeaderName: callOrigin})
+	return setIncomingMD(ctx, map[string]string{CallOriginHeaderName: callOrigin})
 }
 
 func setIncomingMD(
@@ -169,7 +154,7 @@ func setIncomingMD(
 func GetCallerInfo(
 	ctx context.Context,
 ) CallerInfo {
-	values := GetValues(ctx, callerNameHeaderName, CallerTypeHeaderName, callOriginHeaderName)
+	values := GetValues(ctx, CallerNameHeaderName, CallerTypeHeaderName, CallOriginHeaderName)
 	return CallerInfo{
 		CallerName: values[0],
 		CallerType: values[1],

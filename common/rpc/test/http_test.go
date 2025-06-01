@@ -1,25 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package rpc
 
 import (
@@ -29,12 +7,11 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/rpc"
-	"google.golang.org/grpc"
+	"go.uber.org/mock/gomock"
 )
 
 func TestCreateLocalFrontendHTTPClient_UsingMembership(t *testing.T) {
@@ -62,7 +39,7 @@ func TestCreateLocalFrontendHTTPClient_UsingMembership(t *testing.T) {
 		membership.GRPCResolverURLForTesting(monitor, primitives.FrontendService),
 		int(port),
 		nil, // No TLS
-		[]grpc.UnaryClientInterceptor{},
+		nil,
 		monitor,
 	)
 
@@ -92,7 +69,7 @@ func TestCreateLocalFrontendHTTPClient_UsingFixedHostPort(t *testing.T) {
 		addr.String(),
 		0,   // Port is unused
 		nil, // No TLS
-		[]grpc.UnaryClientInterceptor{},
+		nil,
 		nil, // monitor should not be used
 	)
 
@@ -123,7 +100,7 @@ func TestCreateLocalFrontendHTTPClient_UsingFixedHostPort_AndTLS(t *testing.T) {
 		addr.String(),
 		0, // Port is unused
 		tlsConfig,
-		[]grpc.UnaryClientInterceptor{},
+		nil,
 		nil, // monitor should not be used
 	)
 

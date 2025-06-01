@@ -1,6 +1,11 @@
 Worker Versioning
 =================
 
+# !!! This document is Deprecated !!!
+_Please join the #safe-deploys channel in the community slack for further information._
+
+---------
+
 **Note 1:** In this iteration of Worker Versioning we deprecated the Version Set concept 
 and APIs related to it. If you are using old Worker Versioning APIs please migrate
 to the new APIs using the process [outlined in a later section](#migrating-from-version-sets).

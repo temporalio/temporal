@@ -1,38 +1,14 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package api
 
 import (
 	"context"
+	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/api/schedule/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
@@ -42,14 +18,16 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/retrypolicy"
 	"go.temporal.io/server/common/rpc/interceptor"
-	"go.temporal.io/server/common/sdk"
-	schedulerhsm "go.temporal.io/server/components/scheduler"
-	"go.temporal.io/server/service/history/hsm"
-	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/common/worker_versioning"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
-	"go.temporal.io/server/service/worker/scheduler"
 	"google.golang.org/protobuf/types/known/durationpb"
+)
+
+const (
+	// maxWorkflowTaskStartToCloseTimeout sets the Max Workflow Task start to close timeout for a Workflow
+	maxWorkflowTaskStartToCloseTimeout = 120 * time.Second
 )
 
 type (
@@ -57,16 +35,21 @@ type (
 		RunID            string
 		LastWriteVersion int64
 	}
+	CreateOrUpdateLeaseFunc func(
+		WorkflowLease,
+		historyi.ShardContext,
+		historyi.MutableState,
+	) (WorkflowLease, error)
 )
 
 func NewWorkflowWithSignal(
-	shard shard.Context,
+	shard historyi.ShardContext,
 	namespaceEntry *namespace.Namespace,
 	workflowID string,
 	runID string,
 	startRequest *historyservice.StartWorkflowExecutionRequest,
 	signalWithStartRequest *workflowservice.SignalWithStartWorkflowExecutionRequest,
-) (WorkflowLease, error) {
+) (historyi.MutableState, error) {
 	newMutableState, err := CreateMutableState(
 		shard,
 		namespaceEntry,
@@ -90,30 +73,6 @@ func NewWorkflowWithSignal(
 		return nil, err
 	}
 
-	// This workflow is created for the hsm attached to it and will not generate actual workflow tasks.
-	// This is a bit of a hacky way to distinguish between a "real" workflow and a top level state machine.
-	// This code will change as the scheduler HSM project progresses.
-	hsmOnlyWorkflow := startRequest.StartRequest.WorkflowType.Name == scheduler.WorkflowType && shard.GetConfig().UseExperimentalHsmScheduler(startRequest.StartRequest.Namespace)
-	if hsmOnlyWorkflow {
-		args := schedule.StartScheduleArgs{}
-		if err := sdk.PreferProtoDataConverter.FromPayloads(startRequest.StartRequest.Input, &args); err != nil {
-			return nil, err
-		}
-
-		// Key ID is left empty as the scheduler machine is a singleton.
-		tweakables := shard.GetConfig().HsmSchedulerTweakables(startRequest.StartRequest.Namespace)
-		node, err := newMutableState.HSM().AddChild(hsm.Key{Type: schedulerhsm.StateMachineType}, schedulerhsm.NewScheduler(&args, &tweakables))
-		if err != nil {
-			return nil, err
-		}
-		err = hsm.MachineTransition(node, func(scheduler *schedulerhsm.Scheduler) (hsm.TransitionOutput, error) {
-			return schedulerhsm.TransitionSchedulerActivate.Apply(scheduler, schedulerhsm.EventSchedulerActivate{})
-		})
-		if err != nil {
-			return nil, err
-		}
-	}
-
 	if signalWithStartRequest != nil {
 		if signalWithStartRequest.GetRequestId() != "" {
 			newMutableState.AddSignalRequested(signalWithStartRequest.GetRequestId())
@@ -123,7 +82,7 @@ func NewWorkflowWithSignal(
 			signalWithStartRequest.GetSignalInput(),
 			signalWithStartRequest.GetIdentity(),
 			signalWithStartRequest.GetHeader(),
-			signalWithStartRequest.GetSkipGenerateWorkflowTask(),
+			signalWithStartRequest.GetLinks(),
 		); err != nil {
 			return nil, err
 		}
@@ -131,17 +90,15 @@ func NewWorkflowWithSignal(
 	requestEagerExecution := startRequest.StartRequest.GetRequestEagerExecution()
 
 	var scheduledEventID int64
-	if !hsmOnlyWorkflow {
-		// Generate first workflow task event if not child WF and no first workflow task backoff
-		scheduledEventID, err = GenerateFirstWorkflowTask(
-			newMutableState,
-			startRequest.ParentExecutionInfo,
-			startEvent,
-			requestEagerExecution,
-		)
-		if err != nil {
-			return nil, err
-		}
+	// Generate first workflow task event if not child WF and no first workflow task backoff
+	scheduledEventID, err = GenerateFirstWorkflowTask(
+		newMutableState,
+		startRequest.ParentExecutionInfo,
+		startEvent,
+		requestEagerExecution,
+	)
+	if err != nil {
+		return nil, err
 	}
 
 	// If first workflow task should back off (e.g. cron or workflow retry) a workflow task will not be scheduled.
@@ -154,6 +111,7 @@ func NewWorkflowWithSignal(
 			startRequest.StartRequest.Identity,
 			nil,
 			nil,
+			nil,
 			false,
 		)
 		if err != nil {
@@ -162,28 +120,44 @@ func NewWorkflowWithSignal(
 		}
 	}
 
-	newWorkflowContext := workflow.NewContext(
-		shard.GetConfig(),
-		definition.NewWorkflowKey(
-			namespaceEntry.ID().String(),
-			workflowID,
-			runID,
+	return newMutableState, nil
+}
+
+// NOTE: must implement CreateOrUpdateLeaseFunc.
+func NewWorkflowLeaseAndContext(
+	existingLease WorkflowLease,
+	shardCtx historyi.ShardContext,
+	ms historyi.MutableState,
+) (WorkflowLease, error) {
+	// TODO(stephanos): remove this hack
+	if existingLease != nil {
+		return existingLease, nil
+	}
+	return NewWorkflowLease(
+		workflow.NewContext(
+			shardCtx.GetConfig(),
+			definition.NewWorkflowKey(
+				ms.GetNamespaceEntry().ID().String(),
+				ms.GetExecutionInfo().WorkflowId,
+				ms.GetExecutionState().RunId,
+			),
+			shardCtx.GetLogger(),
+			shardCtx.GetThrottledLogger(),
+			shardCtx.GetMetricsHandler(),
 		),
-		shard.GetLogger(),
-		shard.GetThrottledLogger(),
-		shard.GetMetricsHandler(),
-	)
-	return NewWorkflowLease(newWorkflowContext, wcache.NoopReleaseFn, newMutableState), nil
+		wcache.NoopReleaseFn,
+		ms,
+	), nil
 }
 
 func CreateMutableState(
-	shard shard.Context,
+	shard historyi.ShardContext,
 	namespaceEntry *namespace.Namespace,
 	executionTimeout *durationpb.Duration,
 	runTimeout *durationpb.Duration,
 	workflowID string,
 	runID string,
-) (workflow.MutableState, error) {
+) (historyi.MutableState, error) {
 	newMutableState := workflow.NewMutableState(
 		shard,
 		shard.GetEventsCache(),
@@ -200,7 +174,7 @@ func CreateMutableState(
 }
 
 func GenerateFirstWorkflowTask(
-	mutableState workflow.MutableState,
+	mutableState historyi.MutableState,
 	parentInfo *workflowspb.ParentExecutionInfo,
 	startEvent *historypb.HistoryEvent,
 	bypassTaskGeneration bool,
@@ -213,9 +187,9 @@ func GenerateFirstWorkflowTask(
 }
 
 func NewWorkflowVersionCheck(
-	shard shard.Context,
+	shard historyi.ShardContext,
 	prevLastWriteVersion int64,
-	newMutableState workflow.MutableState,
+	newMutableState historyi.MutableState,
 ) error {
 	if prevLastWriteVersion == common.EmptyVersion {
 		return nil
@@ -236,7 +210,7 @@ func NewWorkflowVersionCheck(
 
 func ValidateStart(
 	ctx context.Context,
-	shard shard.Context,
+	shard historyi.ShardContext,
 	namespaceEntry *namespace.Namespace,
 	workflowID string,
 	workflowInputSize int,
@@ -284,7 +258,7 @@ func ValidateStart(
 func ValidateStartWorkflowExecutionRequest(
 	ctx context.Context,
 	request *workflowservice.StartWorkflowExecutionRequest,
-	shard shard.Context,
+	shard historyi.ShardContext,
 	namespaceEntry *namespace.Namespace,
 	operation string,
 ) error {
@@ -295,14 +269,14 @@ func ValidateStartWorkflowExecutionRequest(
 	if len(request.GetRequestId()) == 0 {
 		return serviceerror.NewInvalidArgument("Missing request ID.")
 	}
-	if timestamp.DurationValue(request.GetWorkflowExecutionTimeout()) < 0 {
-		return serviceerror.NewInvalidArgument("Invalid WorkflowExecutionTimeoutSeconds.")
+	if err := timestamp.ValidateAndCapProtoDuration(request.GetWorkflowExecutionTimeout()); err != nil {
+		return serviceerror.NewInvalidArgumentf("invalid WorkflowExecutionTimeoutSeconds: %s", err.Error())
 	}
-	if timestamp.DurationValue(request.GetWorkflowRunTimeout()) < 0 {
-		return serviceerror.NewInvalidArgument("Invalid WorkflowRunTimeoutSeconds.")
+	if err := timestamp.ValidateAndCapProtoDuration(request.GetWorkflowRunTimeout()); err != nil {
+		return serviceerror.NewInvalidArgumentf("invalid WorkflowRunTimeoutSeconds: %s", err.Error())
 	}
-	if timestamp.DurationValue(request.GetWorkflowTaskTimeout()) < 0 {
-		return serviceerror.NewInvalidArgument("Invalid WorkflowTaskTimeoutSeconds.")
+	if err := timestamp.ValidateAndCapProtoDuration(request.GetWorkflowTaskTimeout()); err != nil {
+		return serviceerror.NewInvalidArgumentf("invalid WorkflowTaskTimeoutSeconds: %s", err.Error())
 	}
 	if request.TaskQueue == nil || request.TaskQueue.GetName() == "" {
 		return serviceerror.NewInvalidArgument("Missing Taskqueue.")
@@ -322,6 +296,9 @@ func ValidateStartWorkflowExecutionRequest(
 	if len(request.WorkflowType.GetName()) > maxIDLengthLimit {
 		return serviceerror.NewInvalidArgument("WorkflowType exceeds length limit.")
 	}
+	if err := worker_versioning.ValidateVersioningOverride(request.GetVersioningOverride()); err != nil {
+		return err
+	}
 	if err := retrypolicy.Validate(request.RetryPolicy); err != nil {
 		return err
 	}
@@ -339,15 +316,15 @@ func ValidateStartWorkflowExecutionRequest(
 func OverrideStartWorkflowExecutionRequest(
 	request *workflowservice.StartWorkflowExecutionRequest,
 	operation string,
-	shard shard.Context,
+	shard historyi.ShardContext,
 	metricsHandler metrics.Handler,
 ) {
 	// workflow execution timeout is left as is
 	//  if workflow execution timeout == 0 -> infinity
 
-	namespace := request.GetNamespace()
+	ns := namespace.Name(request.GetNamespace())
 
-	workflowRunTimeout := common.OverrideWorkflowRunTimeout(
+	workflowRunTimeout := overrideWorkflowRunTimeout(
 		timestamp.DurationValue(request.GetWorkflowRunTimeout()),
 		timestamp.DurationValue(request.GetWorkflowExecutionTimeout()),
 	)
@@ -356,12 +333,12 @@ func OverrideStartWorkflowExecutionRequest(
 		metrics.WorkflowRunTimeoutOverrideCount.With(metricsHandler).Record(
 			1,
 			metrics.OperationTag(operation),
-			metrics.NamespaceTag(namespace),
+			metrics.NamespaceTag(ns.String()),
 		)
 	}
 
-	workflowTaskStartToCloseTimeout := common.OverrideWorkflowTaskTimeout(
-		namespace,
+	workflowTaskStartToCloseTimeout := overrideWorkflowTaskTimeout(
+		ns,
 		timestamp.DurationValue(request.GetWorkflowTaskTimeout()),
 		timestamp.DurationValue(request.GetWorkflowRunTimeout()),
 		shard.GetConfig().DefaultWorkflowTaskTimeout,
@@ -371,7 +348,42 @@ func OverrideStartWorkflowExecutionRequest(
 		metrics.WorkflowTaskTimeoutOverrideCount.With(metricsHandler).Record(
 			1,
 			metrics.OperationTag(operation),
-			metrics.NamespaceTag(namespace),
+			metrics.NamespaceTag(ns.String()),
 		)
 	}
+}
+
+// overrideWorkflowRunTimeout override the run timeout according to execution timeout
+func overrideWorkflowRunTimeout(
+	workflowRunTimeout time.Duration,
+	workflowExecutionTimeout time.Duration,
+) time.Duration {
+
+	if workflowExecutionTimeout == 0 {
+		return workflowRunTimeout
+	} else if workflowRunTimeout == 0 {
+		return workflowExecutionTimeout
+	}
+	return min(workflowRunTimeout, workflowExecutionTimeout)
+}
+
+// overrideWorkflowTaskTimeout override the workflow task timeout according to default timeout or max timeout
+func overrideWorkflowTaskTimeout(
+	ns namespace.Name,
+	taskStartToCloseTimeout time.Duration,
+	workflowRunTimeout time.Duration,
+	getDefaultTimeoutFunc func(namespaceName string) time.Duration,
+) time.Duration {
+
+	if taskStartToCloseTimeout == 0 {
+		taskStartToCloseTimeout = getDefaultTimeoutFunc(ns.String())
+	}
+
+	taskStartToCloseTimeout = min(taskStartToCloseTimeout, maxWorkflowTaskStartToCloseTimeout)
+
+	if workflowRunTimeout == 0 {
+		return taskStartToCloseTimeout
+	}
+
+	return min(taskStartToCloseTimeout, workflowRunTimeout)
 }

@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package frontend
 
 import (
@@ -49,7 +25,6 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
-	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/quotas/calculator"
@@ -61,12 +36,13 @@ import (
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/telemetry"
-	"go.temporal.io/server/common/utf8validator"
 	nexusfrontend "go.temporal.io/server/components/nexusoperations/frontend"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/frontend/configs"
 	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/service/worker/deployment"
 	"go.temporal.io/server/service/worker/scheduler"
+	"go.temporal.io/server/service/worker/workerdeployment"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
@@ -85,7 +61,8 @@ type (
 var Module = fx.Options(
 	resource.Module,
 	scheduler.Module,
-	dynamicconfig.Module,
+	deployment.Module,
+	workerdeployment.Module,
 	// Note that with this approach routes may be registered in arbitrary order.
 	// This is okay because our routes don't have overlapping matches.
 	// The only important detail is that the PathPrefix("/") route registered in the HTTPAPIServerProvider comes last.
@@ -96,6 +73,7 @@ var Module = fx.Options(
 	fx.Provide(MuxRouterProvider),
 	fx.Provide(ConfigProvider),
 	fx.Provide(NamespaceLogInterceptorProvider),
+	fx.Provide(NamespaceHandoverInterceptorProvider),
 	fx.Provide(RedirectionInterceptorProvider),
 	fx.Provide(TelemetryInterceptorProvider),
 	fx.Provide(RetryableInterceptorProvider),
@@ -106,6 +84,7 @@ var Module = fx.Options(
 	fx.Provide(NamespaceRateLimitInterceptorProvider),
 	fx.Provide(SDKVersionInterceptorProvider),
 	fx.Provide(CallerInfoInterceptorProvider),
+	fx.Provide(SlowRequestLoggerInterceptorProvider),
 	fx.Provide(MaskInternalErrorDetailsInterceptorProvider),
 	fx.Provide(GrpcServerOptionsProvider),
 	fx.Provide(VisibilityManagerProvider),
@@ -212,20 +191,21 @@ func GrpcServerOptionsProvider(
 	serviceName primitives.ServiceName,
 	rpcFactory common.RPCFactory,
 	namespaceLogInterceptor *interceptor.NamespaceLogInterceptor,
-	namespaceRateLimiterInterceptor *interceptor.NamespaceRateLimitInterceptor,
+	namespaceRateLimiterInterceptor interceptor.NamespaceRateLimitInterceptor,
 	namespaceCountLimiterInterceptor *interceptor.ConcurrentRequestLimitInterceptor,
 	namespaceValidatorInterceptor *interceptor.NamespaceValidatorInterceptor,
+	namespaceHandoverInterceptor *interceptor.NamespaceHandoverInterceptor,
 	redirectionInterceptor *interceptor.Redirection,
 	telemetryInterceptor *interceptor.TelemetryInterceptor,
 	retryableInterceptor *interceptor.RetryableInterceptor,
 	healthInterceptor *interceptor.HealthInterceptor,
 	rateLimitInterceptor *interceptor.RateLimitInterceptor,
-	traceInterceptor telemetry.ServerTraceInterceptor,
+	traceStatsHandler telemetry.ServerStatsHandler,
 	sdkVersionInterceptor *interceptor.SDKVersionInterceptor,
 	callerInfoInterceptor *interceptor.CallerInfoInterceptor,
 	authInterceptor *authorization.Interceptor,
 	maskInternalErrorDetailsInterceptor *interceptor.MaskInternalErrorDetailsInterceptor,
-	utf8Validator *utf8validator.Validator,
+	slowRequestLoggerInterceptor *interceptor.SlowRequestLoggerInterceptor,
 	customInterceptors []grpc.UnaryServerInterceptor,
 	metricsHandler metrics.Handler,
 ) GrpcServerOptions {
@@ -258,14 +238,15 @@ func GrpcServerOptionsProvider(
 		// Mask error interceptor should be the most outer interceptor since it handle the errors format
 		// Service Error Interceptor should be the next most outer interceptor on error handling
 		maskInternalErrorDetailsInterceptor.Intercept,
-		rpc.ServiceErrorInterceptor,
+		interceptor.ServiceErrorInterceptor,
 		rpc.NewFrontendServiceErrorInterceptor(logger),
-		utf8Validator.Intercept,
 		namespaceValidatorInterceptor.NamespaceValidateIntercept,
 		namespaceLogInterceptor.Intercept, // TODO: Deprecate this with a outer custom interceptor
-		grpc.UnaryServerInterceptor(traceInterceptor),
 		metrics.NewServerMetricsContextInjectorInterceptor(),
 		authInterceptor.Intercept,
+		// Handover interceptor has to above redirection because the request will route to the correct cluster after handover completed.
+		// And retry cannot be performed before customInterceptors.
+		namespaceHandoverInterceptor.Intercept,
 		redirectionInterceptor.Intercept,
 		telemetryInterceptor.UnaryIntercept,
 		healthInterceptor.Intercept,
@@ -275,6 +256,7 @@ func GrpcServerOptionsProvider(
 		rateLimitInterceptor.Intercept,
 		sdkVersionInterceptor.Intercept,
 		callerInfoInterceptor.Intercept,
+		slowRequestLoggerInterceptor.Intercept,
 	}
 	if len(customInterceptors) > 0 {
 		// TODO: Deprecate WithChainedFrontendGrpcInterceptors and provide a inner custom interceptor
@@ -294,6 +276,9 @@ func GrpcServerOptionsProvider(
 		grpc.ChainUnaryInterceptor(unaryInterceptors...),
 		grpc.ChainStreamInterceptor(streamInterceptor...),
 	)
+	if traceStatsHandler != nil {
+		grpcServerOptions = append(grpcServerOptions, grpc.StatsHandler(traceStatsHandler))
+	}
 	return GrpcServerOptions{Options: grpcServerOptions, UnaryInterceptors: unaryInterceptors}
 }
 
@@ -346,6 +331,22 @@ func RedirectionInterceptorProvider(
 		metricsHandler,
 		timeSource,
 		clusterMetadata,
+	)
+}
+
+func NamespaceHandoverInterceptorProvider(
+	dc *dynamicconfig.Collection,
+	namespaceCache namespace.Registry,
+	logger log.Logger,
+	metricsHandler metrics.Handler,
+	timeSource clock.TimeSource,
+) *interceptor.NamespaceHandoverInterceptor {
+	return interceptor.NewNamespaceHandoverInterceptor(
+		dc,
+		namespaceCache,
+		metricsHandler,
+		logger,
+		timeSource,
 	)
 }
 
@@ -406,11 +407,12 @@ func RateLimitInterceptorProvider(
 }
 
 func MaskInternalErrorDetailsInterceptorProvider(
+	logger log.Logger,
 	serviceConfig *Config,
 	namespaceRegistry namespace.Registry,
 ) *interceptor.MaskInternalErrorDetailsInterceptor {
 	return interceptor.NewMaskInternalErrorDetailsInterceptor(
-		serviceConfig.MaskInternalErrorDetails, namespaceRegistry,
+		serviceConfig.MaskInternalErrorDetails, namespaceRegistry, logger,
 	)
 }
 
@@ -420,7 +422,7 @@ func NamespaceRateLimitInterceptorProvider(
 	namespaceRegistry namespace.Registry,
 	frontendServiceResolver membership.ServiceResolver,
 	logger log.SnTaggedLogger,
-) *interceptor.NamespaceRateLimitInterceptor {
+) interceptor.NamespaceRateLimitInterceptor {
 	var globalNamespaceRPS, globalNamespaceVisibilityRPS, globalNamespaceNamespaceReplicationInducingAPIsRPS dynamicconfig.IntPropertyFnWithNamespaceFilter
 
 	switch serviceName {
@@ -471,7 +473,7 @@ func NamespaceRateLimitInterceptorProvider(
 			)
 		},
 	)
-	return interceptor.NewNamespaceRateLimitInterceptor(namespaceRegistry, namespaceRateLimiter, map[string]int{})
+	return interceptor.NewNamespaceRateLimitInterceptor(namespaceRegistry, namespaceRateLimiter, map[string]int{}, serviceConfig.ReducePollWorkflowHistoryRequestPriority)
 }
 
 func NamespaceCountLimitInterceptorProvider(
@@ -509,6 +511,16 @@ func CallerInfoInterceptorProvider(
 	namespaceRegistry namespace.Registry,
 ) *interceptor.CallerInfoInterceptor {
 	return interceptor.NewCallerInfoInterceptor(namespaceRegistry)
+}
+
+func SlowRequestLoggerInterceptorProvider(
+	logger log.Logger,
+	dc *dynamicconfig.Collection,
+) *interceptor.SlowRequestLoggerInterceptor {
+	return interceptor.NewSlowRequestLoggerInterceptor(
+		logger,
+		dynamicconfig.SlowRequestLoggingThreshold.Get(dc),
+	)
 }
 
 func PersistenceRateLimitingParamsProvider(
@@ -552,6 +564,7 @@ func VisibilityManagerProvider(
 		serviceConfig.VisibilityPersistenceMaxReadQPS,
 		serviceConfig.VisibilityPersistenceMaxWriteQPS,
 		serviceConfig.OperatorRPSRatio,
+		serviceConfig.VisibilityPersistenceSlowQueryThreshold,
 		serviceConfig.EnableReadFromSecondaryVisibility,
 		serviceConfig.VisibilityEnableShadowReadMode,
 		dynamicconfig.GetStringPropertyFn(visibility.SecondaryVisibilityWritingModeOff), // frontend visibility never write
@@ -584,7 +597,6 @@ func AdminHandlerProvider(
 	persistenceConfig *config.Persistence,
 	configuration *Config,
 	replicatorNamespaceReplicationQueue FEReplicatorNamespaceReplicationQueue,
-	esClient esclient.Client,
 	visibilityMgr manager.VisibilityManager,
 	logger log.SnTaggedLogger,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
@@ -602,18 +614,19 @@ func AdminHandlerProvider(
 	namespaceRegistry namespace.Registry,
 	saProvider searchattribute.Provider,
 	saManager searchattribute.Manager,
+	saMapperProvider searchattribute.MapperProvider,
 	clusterMetadata cluster.Metadata,
 	healthServer *health.Server,
 	eventSerializer serialization.Serializer,
 	timeSource clock.TimeSource,
 	taskCategoryRegistry tasks.TaskCategoryRegistry,
+	matchingClient resource.MatchingClient,
 ) *AdminHandler {
 	args := NewAdminHandlerArgs{
 		persistenceConfig,
 		configuration,
 		namespaceReplicationQueue,
 		replicatorNamespaceReplicationQueue,
-		esClient,
 		visibilityMgr,
 		logger,
 		taskManager,
@@ -630,18 +643,19 @@ func AdminHandlerProvider(
 		namespaceRegistry,
 		saProvider,
 		saManager,
+		saMapperProvider,
 		clusterMetadata,
 		healthServer,
 		eventSerializer,
 		timeSource,
 		taskCategoryRegistry,
+		matchingClient,
 	}
 	return NewAdminHandler(args)
 }
 
 func OperatorHandlerProvider(
 	configuration *Config,
-	esClient esclient.Client,
 	logger log.SnTaggedLogger,
 	sdkClientFactory sdk.ClientFactory,
 	metricsHandler metrics.Handler,
@@ -652,11 +666,11 @@ func OperatorHandlerProvider(
 	clusterMetadataManager persistence.ClusterMetadataManager,
 	clusterMetadata cluster.Metadata,
 	clientFactory client.Factory,
+	namespaceRegistry namespace.Registry,
 	nexusEndpointClient *NexusEndpointClient,
 ) *OperatorHandlerImpl {
 	args := NewOperatorHandlerImplArgs{
 		configuration,
-		esClient,
 		logger,
 		sdkClientFactory,
 		metricsHandler,
@@ -667,12 +681,15 @@ func OperatorHandlerProvider(
 		clusterMetadataManager,
 		clusterMetadata,
 		clientFactory,
+		namespaceRegistry,
 		nexusEndpointClient,
 	}
 	return NewOperatorHandlerImpl(args)
 }
 
 func HandlerProvider(
+	cfg *config.Config,
+	serviceName primitives.ServiceName,
 	dcRedirectionPolicy config.DCRedirectionPolicy,
 	serviceConfig *Config,
 	versionChecker *VersionChecker,
@@ -686,6 +703,8 @@ func HandlerProvider(
 	clientBean client.Bean,
 	historyClient resource.HistoryClient,
 	matchingClient resource.MatchingClient,
+	deploymentStoreClient deployment.DeploymentStoreClient,
+	workerDeploymentStoreClient workerdeployment.Client,
 	archiverProvider provider.ArchiverProvider,
 	metricsHandler metrics.Handler,
 	payloadSerializer serialization.Serializer,
@@ -711,6 +730,8 @@ func HandlerProvider(
 		persistenceMetadataManager,
 		historyClient,
 		matchingClient,
+		deploymentStoreClient,
+		workerDeploymentStoreClient,
 		archiverProvider,
 		payloadSerializer,
 		namespaceRegistry,
@@ -723,6 +744,7 @@ func HandlerProvider(
 		membershipMonitor,
 		healthInterceptor,
 		scheduleSpecBuilder,
+		httpEnabled(cfg, serviceName),
 	)
 	return wfHandler
 }
@@ -739,12 +761,13 @@ func RegisterNexusHTTPHandler(
 	authInterceptor *authorization.Interceptor,
 	telemetryInterceptor *interceptor.TelemetryInterceptor,
 	redirectionInterceptor *interceptor.Redirection,
-	namespaceRateLimiterInterceptor *interceptor.NamespaceRateLimitInterceptor,
+	namespaceRateLimiterInterceptor interceptor.NamespaceRateLimitInterceptor,
 	namespaceCountLimiterInterceptor *interceptor.ConcurrentRequestLimitInterceptor,
 	namespaceValidatorInterceptor *interceptor.NamespaceValidatorInterceptor,
 	rateLimitInterceptor *interceptor.RateLimitInterceptor,
 	logger log.Logger,
 	router *mux.Router,
+	httpTraceProvider nexus.HTTPClientTraceProvider,
 ) {
 	h := NewNexusHTTPHandler(
 		serviceConfig,
@@ -762,6 +785,7 @@ func RegisterNexusHTTPHandler(
 		namespaceCountLimiterInterceptor,
 		rateLimitInterceptor,
 		logger,
+		httpTraceProvider,
 	)
 	h.RegisterRoutes(router)
 }
@@ -784,6 +808,15 @@ func MuxRouterProvider() *mux.Router {
 	return mux.NewRouter().UseEncodedPath()
 }
 
+func httpEnabled(cfg *config.Config, serviceName primitives.ServiceName) bool {
+	// If the service is not the frontend service, HTTP API is disabled
+	if serviceName != primitives.FrontendService {
+		return false
+	}
+	// If HTTP API port is 0, it is disabled
+	return cfg.Services[string(serviceName)].RPC.HTTPPort != 0
+}
+
 // HTTPAPIServerProvider provides an HTTP API server if enabled or nil
 // otherwise.
 func HTTPAPIServerProvider(
@@ -800,15 +833,10 @@ func HTTPAPIServerProvider(
 	logger log.Logger,
 	router *mux.Router,
 ) (*HTTPAPIServer, error) {
-	// If the service is not the frontend service, HTTP API is disabled
-	if serviceName != primitives.FrontendService {
+	if !httpEnabled(cfg, serviceName) {
 		return nil, nil
 	}
-	// If HTTP API port is 0, it is disabled
 	rpcConfig := cfg.Services[string(serviceName)].RPC
-	if rpcConfig.HTTPPort == 0 {
-		return nil, nil
-	}
 	return NewHTTPAPIServer(
 		serviceConfig,
 		rpcConfig,

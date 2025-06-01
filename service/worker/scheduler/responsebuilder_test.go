@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package scheduler
 
 import (
@@ -29,24 +5,24 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/api/common/v1"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
-	schedspb "go.temporal.io/server/api/schedule/v1"
+	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/common/log"
 	"google.golang.org/protobuf/proto"
 )
 
 func TestResponseBuilder(t *testing.T) {
 	nilLogger := log.NewNoopLogger()
-	request := schedspb.WatchWorkflowRequest{
-		Execution: &common.WorkflowExecution{WorkflowId: "workflow-id-1"},
+	request := schedulespb.WatchWorkflowRequest{
+		Execution: &commonpb.WorkflowExecution{WorkflowId: "workflow-id-1"},
 	}
 	t.Run("when execution status is RUNNING", func(t *testing.T) {
 		status := enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
 		t.Run("when LogPoll requested will return errTryAgain", func(t *testing.T) {
-			longPollRequest := schedspb.WatchWorkflowRequest{LongPoll: true}
+			longPollRequest := schedulespb.WatchWorkflowRequest{LongPoll: true}
 			rb := newResponseBuilder(&longPollRequest, status, nilLogger, eventStorageSize-recordOverheadSize)
 			event := historypb.HistoryEvent{}
 
@@ -97,14 +73,14 @@ func TestResponseBuilder(t *testing.T) {
 		t.Run("when result is smaller then maximum should place result in response", func(t *testing.T) {
 			rb := newResponseBuilder(&request, status, nilLogger, eventStorageSize-recordOverheadSize)
 			data1K := make([]byte, 1024)
-			payload := common.Payload{
+			payload := commonpb.Payload{
 				Data: data1K,
 			}
-			payloads := []*common.Payload{&payload}
+			payloads := []*commonpb.Payload{&payload}
 			event := historypb.HistoryEvent{
 				Attributes: &historypb.HistoryEvent_WorkflowExecutionCompletedEventAttributes{
 					WorkflowExecutionCompletedEventAttributes: &historypb.WorkflowExecutionCompletedEventAttributes{
-						Result: &common.Payloads{
+						Result: &commonpb.Payloads{
 							Payloads: payloads,
 						},
 					},
@@ -120,14 +96,14 @@ func TestResponseBuilder(t *testing.T) {
 		t.Run("when result is bigger then eventStorageSize will drop the result", func(t *testing.T) {
 			rb := newResponseBuilder(&request, status, nilLogger, eventStorageSize-recordOverheadSize)
 			hugeData := make([]byte, eventStorageSize-recordOverheadSize+1)
-			payload := common.Payload{
+			payload := commonpb.Payload{
 				Data: hugeData,
 			}
-			payloads := []*common.Payload{&payload}
+			payloads := []*commonpb.Payload{&payload}
 			event := historypb.HistoryEvent{
 				Attributes: &historypb.HistoryEvent_WorkflowExecutionCompletedEventAttributes{
 					WorkflowExecutionCompletedEventAttributes: &historypb.WorkflowExecutionCompletedEventAttributes{
-						Result: &common.Payloads{
+						Result: &commonpb.Payloads{
 							Payloads: payloads,
 						},
 					},
@@ -287,7 +263,7 @@ func TestResponseBuilder(t *testing.T) {
 	})
 }
 
-func assertResponseResult(t *testing.T, response *schedspb.WatchWorkflowResponse, expectedResult *common.Payloads) {
+func assertResponseResult(t *testing.T, response *schedulespb.WatchWorkflowResponse, expectedResult *commonpb.Payloads) {
 	t.Helper()
 	require.Truef(
 		t,
@@ -298,18 +274,18 @@ func assertResponseResult(t *testing.T, response *schedspb.WatchWorkflowResponse
 	)
 }
 
-func assertResponseIsNil(t *testing.T, response *schedspb.WatchWorkflowResponse) {
+func assertResponseIsNil(t *testing.T, response *schedulespb.WatchWorkflowResponse) {
 	t.Helper()
 	require.Nilf(t, response, "expected response to be nil, got %v", response)
 }
 
-func assertResponsePayload(t *testing.T, response *schedspb.WatchWorkflowResponse, expectedPayload []*common.Payload) {
+func assertResponsePayload(t *testing.T, response *schedulespb.WatchWorkflowResponse, expectedPayload []*commonpb.Payload) {
 	t.Helper()
 	var actualPayloads = response.GetResult().GetPayloads()
 	require.Equal(t, expectedPayload, actualPayloads, "incorrect response payload expected %v, got %v")
 }
 
-func assertResponseStatus(t *testing.T, response *schedspb.WatchWorkflowResponse, expectedStatus enumspb.WorkflowExecutionStatus) {
+func assertResponseStatus(t *testing.T, response *schedulespb.WatchWorkflowResponse, expectedStatus enumspb.WorkflowExecutionStatus) {
 	t.Helper()
 	require.Equal(
 		t,

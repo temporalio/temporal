@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package replication
 
 import (
@@ -32,7 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	enumspb "go.temporal.io/server/api/enums/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/channel"
 	"go.temporal.io/server/common/cluster"
@@ -315,14 +291,6 @@ func (m *StreamReceiverMonitorImpl) doReconcileOutboundStreams(
 }
 
 func (m *StreamReceiverMonitorImpl) statusMonitorLoop() {
-	var panicErr error
-	defer func() {
-		if panicErr != nil {
-			metrics.ReplicationStreamPanic.With(m.MetricsHandler).Record(1)
-		}
-	}()
-	defer log.CapturePanic(m.Logger, &panicErr)
-
 	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop()
 
@@ -336,6 +304,14 @@ func (m *StreamReceiverMonitorImpl) statusMonitorLoop() {
 	}
 }
 func (m *StreamReceiverMonitorImpl) monitorStreamStatus() {
+	var panicErr error
+	defer func() {
+		log.CapturePanic(m.Logger, &panicErr)
+		if panicErr != nil {
+			metrics.ReplicationStreamPanic.With(m.MetricsHandler).Record(1)
+		}
+	}()
+
 	if m.shutdownOnce.IsShutdown() {
 		return
 	}
@@ -361,7 +337,7 @@ func (m *StreamReceiverMonitorImpl) evaluateSingleStreamConnection(key *ClusterS
 	if previous.isTieredStackEnabled != current.isTieredStackEnabled { // there is tiered stack config change, wait until it becomes stable
 		return true
 	}
-	checkIfMakeProgress := func(priority enumspb.TaskPriority, currentAckLevel int64, currentMaxTaskId int64, previousAckLevel int64, previousMaxReplicationTaskId int64) bool {
+	checkIfMakeProgress := func(priority enumsspb.TaskPriority, currentAckLevel int64, currentMaxTaskId int64, previousAckLevel int64, previousMaxReplicationTaskId int64) bool {
 		// 2 continuous data points where ACK level is not moving forward and ACK level is behind previous Max Replication taskId
 		if currentAckLevel == previousAckLevel && currentAckLevel < previousMaxReplicationTaskId {
 			m.Logger.Error(
@@ -379,10 +355,11 @@ func (m *StreamReceiverMonitorImpl) evaluateSingleStreamConnection(key *ClusterS
 	}
 
 	if !current.isTieredStackEnabled {
-		return checkIfMakeProgress(enumspb.TASK_PRIORITY_UNSPECIFIED, current.defaultAckLevel, current.maxReplicationTaskId, previous.defaultAckLevel, previous.maxReplicationTaskId)
+		return checkIfMakeProgress(enumsspb.TASK_PRIORITY_UNSPECIFIED, current.defaultAckLevel, current.maxReplicationTaskId, previous.defaultAckLevel, previous.maxReplicationTaskId)
 	}
-	return checkIfMakeProgress(enumspb.TASK_PRIORITY_HIGH, current.highPriorityAckLevel, current.maxReplicationTaskId, previous.highPriorityAckLevel, previous.maxReplicationTaskId) &&
-		checkIfMakeProgress(enumspb.TASK_PRIORITY_LOW, current.lowPriorityAckLevel, current.maxReplicationTaskId, previous.lowPriorityAckLevel, previous.maxReplicationTaskId)
+	highPriorityResult := checkIfMakeProgress(enumsspb.TASK_PRIORITY_HIGH, current.highPriorityAckLevel, current.maxReplicationTaskId, previous.highPriorityAckLevel, previous.maxReplicationTaskId)
+	lowPriorityResult := checkIfMakeProgress(enumsspb.TASK_PRIORITY_LOW, current.lowPriorityAckLevel, current.maxReplicationTaskId, previous.lowPriorityAckLevel, previous.maxReplicationTaskId)
+	return highPriorityResult && lowPriorityResult
 }
 
 func (m *StreamReceiverMonitorImpl) generateStatusMap(inboundKeys map[ClusterShardKeyPair]struct{}) map[ClusterShardKeyPair]*streamStatus {

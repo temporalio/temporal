@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package updateworkflow
 
 import (
@@ -40,14 +16,14 @@ import (
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/effect"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/worker_versioning"
-	"go.temporal.io/server/internal/effect"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
-	"go.temporal.io/server/service/history/shard"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/update"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -59,7 +35,7 @@ const (
 )
 
 type Updater struct {
-	shardCtx                   shard.Context
+	shardCtx                   historyi.ShardContext
 	workflowConsistencyChecker api.WorkflowConsistencyChecker
 	matchingClient             matchingservice.MatchingServiceClient
 	req                        *historyservice.UpdateWorkflowExecutionRequest
@@ -73,13 +49,14 @@ type Updater struct {
 	// WARNING: any references to mutable state data *have to* be copied
 	// to avoid data races when used outside the workflow lease.
 	taskQueue              *taskqueuepb.TaskQueue
+	priority               *commonpb.Priority
 	normalTaskQueueName    string
 	scheduledEventID       int64
 	scheduleToStartTimeout time.Duration
 }
 
 func NewUpdater(
-	shardCtx shard.Context,
+	shardCtx historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	matchingClient matchingservice.MatchingServiceClient,
 	request *historyservice.UpdateWorkflowExecutionRequest,
@@ -108,7 +85,7 @@ func (u *Updater) Invoke(
 		wfKey,
 		func(lease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
 			ms := lease.GetMutableState()
-			updateReg := lease.GetContext().UpdateRegistry(ctx, ms)
+			updateReg := lease.GetContext().UpdateRegistry(ctx)
 			return u.ApplyRequest(ctx, updateReg, ms)
 		},
 		nil,
@@ -126,7 +103,7 @@ func (u *Updater) Invoke(
 func (u *Updater) ApplyRequest(
 	ctx context.Context,
 	updateReg update.Registry,
-	ms workflow.MutableState,
+	ms historyi.MutableState,
 ) (*api.UpdateWorkflowAction, error) {
 	if u.req.GetRequest().GetFirstExecutionRunId() != "" &&
 		ms.GetExecutionInfo().GetFirstExecutionRunId() != u.req.GetRequest().GetFirstExecutionRunId() {
@@ -134,7 +111,8 @@ func (u *Updater) ApplyRequest(
 	}
 
 	u.wfKey = ms.GetWorkflowKey()
-	updateID := u.req.GetRequest().GetRequest().GetMeta().GetUpdateId()
+	updateRequest := u.req.GetRequest().GetRequest()
+	updateID := updateRequest.GetMeta().GetUpdateId()
 
 	if !ms.IsWorkflowExecutionRunning() {
 		// If the WF is not running anymore, use an existing Update, if it exists for the requested ID.
@@ -177,7 +155,7 @@ func (u *Updater) ApplyRequest(
 	if u.upd, alreadyExisted, err = updateReg.FindOrCreate(ctx, updateID); err != nil {
 		return nil, err
 	}
-	if err = u.upd.Admit(u.req.GetRequest().GetRequest(), workflow.WithEffects(effect.Immediate(ctx), ms)); err != nil {
+	if err = u.upd.Admit(updateRequest, workflow.WithEffects(effect.Immediate(ctx), ms)); err != nil {
 		return nil, err
 	}
 
@@ -209,12 +187,15 @@ func (u *Updater) ApplyRequest(
 	}
 
 	u.taskQueue = common.CloneProto(newWorkflowTask.TaskQueue)
+	u.priority = common.CloneProto(ms.GetExecutionInfo().Priority)
 	u.normalTaskQueueName = ms.GetExecutionInfo().TaskQueue
 	u.directive = worker_versioning.MakeDirectiveForWorkflowTask(
 		ms.GetInheritedBuildId(),
 		ms.GetAssignedBuildId(),
 		ms.GetMostRecentWorkerVersionStamp(),
 		ms.HasCompletedAnyWorkflowTask(),
+		ms.GetEffectiveVersioningBehavior(),
+		ms.GetEffectiveDeployment(),
 	)
 
 	return &api.UpdateWorkflowAction{
@@ -231,7 +212,7 @@ func (u *Updater) OnSuccess(
 		// Speculative WFT was created and needs to be added directly to matching w/o transfer task.
 		// TODO (alex): This code is copied from transferQueueActiveTaskExecutor.processWorkflowTask.
 		//   Helper function needs to be extracted to avoid code duplication.
-		err := u.addWorkflowTaskToMatching(ctx, u.wfKey, u.taskQueue, u.scheduledEventID, u.scheduleToStartTimeout, u.directive)
+		err := u.addWorkflowTaskToMatching(ctx)
 
 		if _, isStickyWorkerUnavailable := err.(*serviceerrors.StickyWorkerUnavailable); isStickyWorkerUnavailable {
 			// If sticky worker is unavailable, switch to original normal task queue.
@@ -239,7 +220,7 @@ func (u *Updater) OnSuccess(
 				Name: u.normalTaskQueueName,
 				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 			}
-			err = u.addWorkflowTaskToMatching(ctx, u.wfKey, u.taskQueue, u.scheduledEventID, u.scheduleToStartTimeout, u.directive)
+			err = u.addWorkflowTaskToMatching(ctx)
 		}
 
 		if err != nil {
@@ -272,19 +253,12 @@ func (u *Updater) OnSuccess(
 	if err != nil {
 		return nil, err
 	}
-	resp := u.createResponse(u.wfKey, status.Outcome, status.Stage)
+	resp := u.CreateResponse(u.wfKey, status.Outcome, status.Stage)
 	return resp, nil
 }
 
 // TODO (alex-update): Consider moving this func to a better place.
-func (u *Updater) addWorkflowTaskToMatching(
-	ctx context.Context,
-	wfKey definition.WorkflowKey,
-	tq *taskqueuepb.TaskQueue,
-	scheduledEventID int64,
-	wtScheduleToStartTimeout time.Duration,
-	directive *taskqueuespb.TaskVersionDirective,
-) error {
+func (u *Updater) addWorkflowTaskToMatching(ctx context.Context) error {
 	clock, err := u.shardCtx.NewVectorClock()
 	if err != nil {
 		return err
@@ -293,14 +267,15 @@ func (u *Updater) addWorkflowTaskToMatching(
 	_, err = u.matchingClient.AddWorkflowTask(ctx, &matchingservice.AddWorkflowTaskRequest{
 		NamespaceId: u.namespaceID.String(),
 		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: wfKey.WorkflowID,
-			RunId:      wfKey.RunID,
+			WorkflowId: u.wfKey.WorkflowID,
+			RunId:      u.wfKey.RunID,
 		},
-		TaskQueue:              tq,
-		ScheduledEventId:       scheduledEventID,
-		ScheduleToStartTimeout: durationpb.New(wtScheduleToStartTimeout),
+		TaskQueue:              u.taskQueue,
+		ScheduledEventId:       u.scheduledEventID,
+		ScheduleToStartTimeout: durationpb.New(u.scheduleToStartTimeout),
 		Clock:                  clock,
-		VersionDirective:       directive,
+		VersionDirective:       u.directive,
+		Priority:               u.priority,
 	})
 	if err != nil {
 		return err
@@ -309,7 +284,7 @@ func (u *Updater) addWorkflowTaskToMatching(
 	return nil
 }
 
-func (u *Updater) createResponse(
+func (u *Updater) CreateResponse(
 	wfKey definition.WorkflowKey,
 	outcome *updatepb.Outcome,
 	stage enumspb.UpdateWorkflowExecutionLifecycleStage,

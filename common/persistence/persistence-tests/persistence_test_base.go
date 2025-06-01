@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package persistencetests
 
 import (
@@ -33,6 +9,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/suite"
+	"go.opentelemetry.io/otel/trace"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
@@ -56,7 +33,8 @@ import (
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/searchattribute"
-	"go.temporal.io/server/environment"
+	"go.temporal.io/server/common/telemetry"
+	"go.temporal.io/server/temporal/environment"
 )
 
 // TimePrecision is needed to account for database timestamp precision.
@@ -107,6 +85,7 @@ type (
 		ReplicationReadLevel      int64
 		DefaultTestCluster        PersistenceTestCluster
 		Logger                    log.Logger
+		TracerProvider            trace.TracerProvider
 	}
 
 	// PersistenceTestCluster exposes management operations on a database
@@ -191,6 +170,7 @@ func NewTestBaseForCluster(testCluster PersistenceTestCluster, logger log.Logger
 	return &TestBase{
 		DefaultTestCluster: testCluster,
 		Logger:             logger,
+		TracerProvider:     telemetry.NoopTracerProvider,
 	}
 }
 
@@ -217,6 +197,7 @@ func (s *TestBase) Setup(clusterMetadataConfig *cluster.Config) {
 		s.AbstractDataStoreFactory,
 		s.Logger,
 		metrics.NoopMetricsHandler,
+		s.TracerProvider,
 	)
 	factory := client.NewFactory(
 		dataStoreFactory,

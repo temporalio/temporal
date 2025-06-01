@@ -1,31 +1,8 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package replication
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
@@ -40,6 +17,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	ctasks "go.temporal.io/server/common/tasks"
+	"go.temporal.io/server/service/history/consts"
 )
 
 type (
@@ -48,8 +26,7 @@ type (
 
 		definition.WorkflowKey
 		ExecutableTask
-		req                    *historyservice.ReplicateWorkflowStateRequest
-		markPoisonPillAttempts int
+		req *historyservice.ReplicateWorkflowStateRequest
 	}
 )
 
@@ -64,6 +41,7 @@ func NewExecutableWorkflowStateTask(
 	taskCreationTime time.Time,
 	task *replicationspb.SyncWorkflowStateTaskAttributes,
 	sourceClusterName string,
+	sourceShardKey ClusterShardKey,
 	priority enumsspb.TaskPriority,
 	replicationTask *replicationspb.ReplicationTask,
 ) *ExecutableWorkflowStateTask {
@@ -81,6 +59,7 @@ func NewExecutableWorkflowStateTask(
 			taskCreationTime,
 			time.Now().UTC(),
 			sourceClusterName,
+			sourceShardKey,
 			priority,
 			replicationTask,
 		),
@@ -89,7 +68,6 @@ func NewExecutableWorkflowStateTask(
 			WorkflowState: task.GetWorkflowState(),
 			RemoteCluster: sourceClusterName,
 		},
-		markPoisonPillAttempts: 0,
 	}
 }
 
@@ -140,7 +118,40 @@ func (e *ExecutableWorkflowStateTask) Execute() error {
 }
 
 func (e *ExecutableWorkflowStateTask) HandleErr(err error) error {
+	if errors.Is(err, consts.ErrDuplicate) {
+		e.MarkTaskDuplicated()
+		return nil
+	}
 	switch retryErr := err.(type) {
+	case *serviceerrors.SyncState:
+		namespaceName, _, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
+			context.Background(),
+			headers.SystemPreemptableCallerInfo,
+		), e.NamespaceID)
+		if nsError != nil {
+			return err
+		}
+		ctx, cancel := newTaskContext(namespaceName, e.Config.ReplicationTaskApplyTimeout())
+		defer cancel()
+
+		if doContinue, syncStateErr := e.SyncState(
+			ctx,
+			retryErr,
+			ResendAttempt,
+		); syncStateErr != nil || !doContinue {
+			if syncStateErr != nil {
+				e.Logger.Error("SyncWorkflowState replication task encountered error during sync state",
+					tag.WorkflowNamespaceID(e.NamespaceID),
+					tag.WorkflowID(e.WorkflowID),
+					tag.WorkflowRunID(e.RunID),
+					tag.TaskID(e.ExecutableTask.TaskID()),
+					tag.Error(syncStateErr),
+				)
+				return err
+			}
+			return nil
+		}
+		return nil
 	case nil, *serviceerror.NotFound:
 		return nil
 	case *serviceerrors.RetryReplication:
@@ -176,49 +187,15 @@ func (e *ExecutableWorkflowStateTask) HandleErr(err error) error {
 }
 
 func (e *ExecutableWorkflowStateTask) MarkPoisonPill() error {
-	if e.markPoisonPillAttempts >= MarkPoisonPillMaxAttempts {
-		replicationTaskInfo := &persistencespb.ReplicationTaskInfo{
+	if e.ReplicationTask().GetRawTaskInfo() == nil {
+		e.ReplicationTask().RawTaskInfo = &persistencespb.ReplicationTaskInfo{
 			NamespaceId: e.NamespaceID,
 			WorkflowId:  e.WorkflowID,
 			RunId:       e.RunID,
 			TaskId:      e.ExecutableTask.TaskID(),
 			TaskType:    enumsspb.TASK_TYPE_REPLICATION_SYNC_WORKFLOW_STATE,
 		}
-		e.Logger.Error("MarkPoisonPill reached max attempts",
-			tag.SourceCluster(e.SourceClusterName()),
-			tag.ReplicationTask(replicationTaskInfo),
-		)
-		return nil
-	}
-	e.markPoisonPillAttempts++
-
-	shardContext, err := e.ShardController.GetShardByNamespaceWorkflow(
-		namespace.ID(e.NamespaceID),
-		e.WorkflowID,
-	)
-	if err != nil {
-		return err
 	}
 
-	// TODO: GetShardID will break GetDLQReplicationMessages we need to handle DLQ for cross shard replication.
-	taskInfo := &persistencespb.ReplicationTaskInfo{
-		NamespaceId: e.NamespaceID,
-		WorkflowId:  e.WorkflowID,
-		RunId:       e.RunID,
-		TaskId:      e.ExecutableTask.TaskID(),
-		TaskType:    enumsspb.TASK_TYPE_REPLICATION_SYNC_WORKFLOW_STATE,
-	}
-
-	e.Logger.Error("enqueue workflow state replication task to DLQ",
-		tag.ShardID(shardContext.GetShardID()),
-		tag.WorkflowNamespaceID(e.NamespaceID),
-		tag.WorkflowID(e.WorkflowID),
-		tag.WorkflowRunID(e.RunID),
-		tag.TaskID(e.ExecutableTask.TaskID()),
-	)
-
-	ctx, cancel := newTaskContext(e.NamespaceID, e.Config.ReplicationTaskApplyTimeout())
-	defer cancel()
-
-	return writeTaskToDLQ(ctx, e.DLQWriter, shardContext, e.SourceClusterName(), taskInfo)
+	return e.ExecutableTask.MarkPoisonPill()
 }

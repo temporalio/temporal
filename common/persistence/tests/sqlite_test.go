@@ -1,30 +1,8 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package tests
 
 import (
+	"context"
+	gosql "database/sql"
 	"os"
 	"path"
 	"testing"
@@ -43,7 +21,7 @@ import (
 	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
 	sqltests "go.temporal.io/server/common/persistence/sql/sqlplugin/tests"
 	"go.temporal.io/server/common/resolver"
-	"go.temporal.io/server/environment"
+	"go.temporal.io/server/temporal/environment"
 )
 
 // TODO merge the initialization with existing persistence setup
@@ -65,7 +43,7 @@ func NewSQLiteMemoryConfig() *config.SQL {
 	}
 }
 
-// NewSQLiteMemoryConfig returns a new SQLite config for test
+// NewSQLiteFileConfig returns a new SQLite config for test
 func NewSQLiteFileConfig() *config.SQL {
 	return &config.SQL{
 		User:              "",
@@ -238,6 +216,28 @@ func TestSQLiteTaskQueueTaskSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
+func TestSQLiteTaskQueueUserDataSuite(t *testing.T) {
+	cfg := NewSQLiteMemoryConfig()
+	logger := log.NewNoopLogger()
+	factory := sql.NewFactory(
+		*cfg,
+		resolver.NewNoopResolver(),
+		testSQLiteClusterName,
+		logger,
+		metrics.NoopMetricsHandler,
+	)
+	taskQueueStore, err := factory.NewTaskStore()
+	if err != nil {
+		t.Fatalf("unable to create SQLite DB: %v", err)
+	}
+	defer func() {
+		factory.Close()
+	}()
+
+	s := NewTaskQueueUserDataSuite(t, taskQueueStore, logger)
+	suite.Run(t, s)
+}
+
 func TestSQLiteFileExecutionMutableStateStoreSuite(t *testing.T) {
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
@@ -386,6 +386,32 @@ func TestSQLiteFileTaskQueueTaskSuite(t *testing.T) {
 	}()
 
 	s := NewTaskQueueTaskSuite(t, taskQueueStore, logger)
+	suite.Run(t, s)
+}
+
+func TestSQLiteFileTaskQueueUserDataSuite(t *testing.T) {
+	cfg := NewSQLiteFileConfig()
+	SetupSQLiteDatabase(t, cfg)
+	defer func() {
+		assert.NoError(t, os.Remove(cfg.DatabaseName))
+	}()
+	logger := log.NewNoopLogger()
+	factory := sql.NewFactory(
+		*cfg,
+		resolver.NewNoopResolver(),
+		testSQLiteClusterName,
+		logger,
+		metrics.NoopMetricsHandler,
+	)
+	taskQueueStore, err := factory.NewTaskStore()
+	if err != nil {
+		t.Fatalf("unable to create SQLite DB: %v", err)
+	}
+	defer func() {
+		factory.Close()
+	}()
+
+	s := NewTaskQueueUserDataSuite(t, taskQueueStore, logger)
 	suite.Run(t, s)
 }
 
@@ -721,6 +747,20 @@ func TestSQLiteHistoryExecutionTimerSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
+func TestSQLiteHistoryExecutionChasmSuite(t *testing.T) {
+	cfg := NewSQLiteMemoryConfig()
+	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
+	if err != nil {
+		t.Fatalf("unable to create SQLite DB: %v", err)
+	}
+	defer func() {
+		_ = store.Close()
+	}()
+
+	s := sqltests.NewHistoryExecutionChasmSuite(t, store)
+	suite.Run(t, s)
+}
+
 func TestSQLiteHistoryExecutionRequestCancelSuite(t *testing.T) {
 	cfg := NewSQLiteMemoryConfig()
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
@@ -1024,6 +1064,19 @@ func TestSQLiteFileHistoryExecutionTimerSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
+func TestSQLiteFileHistoryExecutionChasmSuite(t *testing.T) {
+	cfg := NewSQLiteFileConfig()
+	SetupSQLiteDatabase(t, cfg)
+	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
+	if err != nil {
+		t.Fatalf("unable to create SQLite DB: %v", err)
+	}
+	defer os.Remove(cfg.DatabaseName)
+
+	s := sqltests.NewHistoryExecutionChasmSuite(t, store)
+	suite.Run(t, s)
+}
+
 func TestSQLiteFileHistoryExecutionRequestCancelSuite(t *testing.T) {
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
@@ -1110,4 +1163,40 @@ func TestSQLiteNexusEndpointPersistence(t *testing.T) {
 		assert.NoError(t, os.Remove(cfg.DatabaseName))
 	})
 	RunNexusEndpointTestSuiteForSQL(t, factory)
+}
+
+// Go sql library will close the connection when a context is cancelled during a transaction. Since we only have one
+// connection to the sqlite database, we will lose the db in this case. We fixed this by extending the driver in
+// modernc.org/sqlite. This test verifies that fix.
+func TestSQLiteTransactionContextCancellation(t *testing.T) {
+	cfg := NewSQLiteMemoryConfig()
+	db, err := sql.NewSQLDB(sqlplugin.DbKindVisibility, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
+	if err != nil {
+		t.Fatalf("unable to create SQLite DB: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	tx, err := db.BeginTx(ctx)
+	assert.NoError(t, err)
+	_, err = tx.InsertIntoTaskQueues(ctx, &sqlplugin.TaskQueuesRow{
+		RangeHash:   0,
+		TaskQueueID: []byte("test-queue"),
+		RangeID:     0,
+		Data:        []byte("test-data"),
+	})
+	assert.NoError(t, err)
+
+	// Cancel the context before the transaction has finished.
+	cancel()
+
+	err = tx.Commit()
+	assert.ErrorIs(t, err, context.Canceled)
+
+	// Check if we still have a connection to the db.
+	_, err = db.LockTaskQueues(context.Background(), sqlplugin.TaskQueuesFilter{
+		RangeHash:   0,
+		TaskQueueID: []byte("test-queue"),
+	})
+	assert.NotContains(t, err.Error(), "no such table")
+	assert.ErrorAs(t, err, &gosql.ErrNoRows)
 }

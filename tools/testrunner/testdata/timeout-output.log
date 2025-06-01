@@ -1,0 +1,30 @@
+3 timed out test(s):
+	TestActivityApiResetClientTestSuite
+	TestNDCFuncTestSuite
+	TestActivityApiStateReplicationSuite
+
+abridged stacktrace:
+	goroutine 9 [chan receive]:
+		/golang/1.23.2/packages/pkg/mod/golang.org/toolchain@v0.0.1-go1.23.4.darwin-arm64/src/testing/testing.go:1484
+		/temporal/tests/workflow_visibility_test.go:50
+		/golang/1.23.2/packages/pkg/mod/golang.org/toolchain@v0.0.1-go1.23.4.darwin-arm64/src/testing/testing.go:1690
+
+	goroutine 10 [chan receive]:
+		/golang/1.23.2/packages/pkg/mod/golang.org/toolchain@v0.0.1-go1.23.4.darwin-arm64/src/testing/testing.go:1484
+		/temporal/tests/nexus_workflow_test.go:74
+		/golang/1.23.2/packages/pkg/mod/golang.org/toolchain@v0.0.1-go1.23.4.darwin-arm64/src/testing/testing.go:1690
+
+	goroutine 11 [select]:
+		/temporal/common/backoff/retry.go:110
+		/temporal/common/backoff/retry.go:63
+		/temporal/common/persistence/cassandra/test.go:165
+		/temporal/common/persistence/cassandra/test.go:109
+		/temporal/common/persistence/persistence-tests/persistence_test_base.go:214
+		/temporal/tests/testcore/test_cluster.go:251
+		/temporal/tests/testcore/test_cluster.go:148
+		/temporal/tests/testcore/functional_test_base.go:224
+		/temporal/tests/testcore/functional_test_sdk_suite.go:84
+		/golang/1.23.2/packages/pkg/mod/github.com/stretchr/testify@v1.10.0/suite/suite.go:157
+		/temporal/tests/activity_api_reset_test.go:58
+		/golang/1.23.2/packages/pkg/mod/golang.org/toolchain@v0.0.1-go1.23.4.darwin-arm64/src/testing/testing.go:1690
+

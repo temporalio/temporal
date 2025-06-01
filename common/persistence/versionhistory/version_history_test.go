@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package versionhistory
 
 import (
@@ -522,7 +498,7 @@ func (s *versionHistoriesSuite) TestAddGetVersionHistory() {
 	histories := NewVersionHistories(versionHistory1)
 	s.Equal(int32(0), histories.CurrentVersionHistoryIndex)
 
-	currentBranchChanged, newVersionHistoryIndex, err := AddVersionHistory(histories, versionHistory2)
+	currentBranchChanged, newVersionHistoryIndex, err := AddAndSwitchVersionHistory(histories, versionHistory2)
 	s.Nil(err)
 	s.True(currentBranchChanged)
 	s.Equal(int32(1), newVersionHistoryIndex)
@@ -552,7 +528,7 @@ func (s *versionHistoriesSuite) TestFindLCAVersionHistoryIndexAndItem_LargerEven
 	})
 
 	histories := NewVersionHistories(versionHistory1)
-	_, _, err := AddVersionHistory(histories, versionHistory2)
+	_, _, err := AddAndSwitchVersionHistory(histories, versionHistory2)
 	s.Nil(err)
 
 	versionHistoryIncoming := NewVersionHistory([]byte("branch token incoming"), []*historyspb.VersionHistoryItem{
@@ -582,7 +558,7 @@ func (s *versionHistoriesSuite) TestFindLCAVersionHistoryIndexAndItem_SameEventI
 	})
 
 	histories := NewVersionHistories(versionHistory1)
-	_, _, err := AddVersionHistory(histories, versionHistory2)
+	_, _, err := AddAndSwitchVersionHistory(histories, versionHistory2)
 	s.Nil(err)
 
 	versionHistoryIncoming := NewVersionHistory([]byte("branch token incoming"), []*historyspb.VersionHistoryItem{
@@ -612,7 +588,7 @@ func (s *versionHistoriesSuite) TestFindFirstVersionHistoryIndexByItem() {
 	})
 
 	histories := NewVersionHistories(versionHistory1)
-	_, _, err := AddVersionHistory(histories, versionHistory2)
+	_, _, err := AddAndSwitchVersionHistory(histories, versionHistory2)
 	s.Nil(err)
 
 	index, err := FindFirstVersionHistoryIndexByVersionHistoryItem(histories, NewVersionHistoryItem(8, 10))
@@ -625,46 +601,6 @@ func (s *versionHistoriesSuite) TestFindFirstVersionHistoryIndexByItem() {
 
 	_, err = FindFirstVersionHistoryIndexByVersionHistoryItem(histories, NewVersionHistoryItem(41, 4))
 	s.Error(err)
-}
-
-func (s *versionHistoriesSuite) TestCurrentVersionHistoryIndexIsInReplay() {
-	versionHistory1 := NewVersionHistory([]byte("branch token 1"), []*historyspb.VersionHistoryItem{
-		{EventId: 3, Version: 0},
-		{EventId: 5, Version: 4},
-		{EventId: 7, Version: 6},
-		{EventId: 9, Version: 10},
-	})
-	versionHistory2 := NewVersionHistory([]byte("branch token 2"), []*historyspb.VersionHistoryItem{
-		{EventId: 3, Version: 0},
-		{EventId: 5, Version: 4},
-		{EventId: 6, Version: 6},
-		{EventId: 11, Version: 12},
-	})
-
-	histories := NewVersionHistories(versionHistory1)
-	s.Equal(int32(0), histories.CurrentVersionHistoryIndex)
-
-	currentBranchChanged, newVersionHistoryIndex, err := AddVersionHistory(histories, versionHistory2)
-	s.Nil(err)
-	s.True(currentBranchChanged)
-	s.Equal(int32(1), newVersionHistoryIndex)
-	s.Equal(int32(1), histories.CurrentVersionHistoryIndex)
-
-	isInReplay, err := IsVersionHistoriesRebuilt(histories)
-	s.NoError(err)
-	s.False(isInReplay)
-
-	err = SetCurrentVersionHistoryIndex(histories, 0)
-	s.NoError(err)
-	isInReplay, err = IsVersionHistoriesRebuilt(histories)
-	s.NoError(err)
-	s.True(isInReplay)
-
-	err = SetCurrentVersionHistoryIndex(histories, 1)
-	s.NoError(err)
-	isInReplay, err = IsVersionHistoriesRebuilt(histories)
-	s.NoError(err)
-	s.False(isInReplay)
 }
 
 func (s *versionHistoriesSuite) TestIsVersionHistoryItemsInSameBranch_Same_VersionItems_Return_True() {
@@ -788,4 +724,103 @@ func (s *versionHistoriesSuite) TestSplitVersionHistoryToLocalGeneratedAndRemote
 	past, future := SplitVersionHistoryByLastLocalGeneratedItem(append(localItems, remoteItems...), 1, 1000)
 	s.Equal(localItems, past)
 	s.Equal(remoteItems, future)
+}
+
+func (s *versionHistoriesSuite) TestFindLCAVersionHistoryItemFromItems() {
+	s.findLCAVersionHistoryItemFromItemsTestBase(
+		[][]*historyspb.VersionHistoryItem{
+			{
+				{EventId: 3, Version: 1},
+				{EventId: 5, Version: 2},
+				{EventId: 7, Version: 3},
+			},
+			{
+				{EventId: 3, Version: 1},
+				{EventId: 5, Version: 2},
+				{EventId: 7, Version: 4},
+			},
+		},
+		[]*historyspb.VersionHistoryItem{
+			{EventId: 4, Version: 1},
+		},
+		&historyspb.VersionHistoryItem{EventId: 3, Version: 1},
+		0,
+		nil,
+	)
+	s.findLCAVersionHistoryItemFromItemsTestBase(
+		[][]*historyspb.VersionHistoryItem{
+			{
+				{EventId: 3, Version: 1},
+				{EventId: 5, Version: 2},
+				{EventId: 7, Version: 3},
+			},
+			{
+				{EventId: 3, Version: 1},
+				{EventId: 5, Version: 2},
+				{EventId: 7, Version: 4},
+			},
+		},
+		[]*historyspb.VersionHistoryItem{
+			{EventId: 3, Version: 1},
+			{EventId: 5, Version: 2},
+			{EventId: 6, Version: 4},
+		},
+		&historyspb.VersionHistoryItem{EventId: 6, Version: 4},
+		1,
+		nil,
+	)
+	s.findLCAVersionHistoryItemFromItemsTestBase(
+		[][]*historyspb.VersionHistoryItem{
+			{
+				{EventId: 3, Version: 1},
+				{EventId: 5, Version: 2},
+				{EventId: 7, Version: 3},
+			},
+			{
+				{EventId: 3, Version: 1},
+				{EventId: 5, Version: 2},
+				{EventId: 7, Version: 4},
+			},
+		},
+		[]*historyspb.VersionHistoryItem{
+			{EventId: 1, Version: 1},
+			{EventId: 5, Version: 5},
+			{EventId: 6, Version: 6},
+		},
+		&historyspb.VersionHistoryItem{EventId: 1, Version: 1},
+		0,
+		nil,
+	)
+}
+
+func (s *versionHistoriesSuite) TestAddEmptyVersionHistory() {
+	versionHistories := NewVersionHistories(&historyspb.VersionHistory{
+		BranchToken: []byte("random branch token"),
+		Items: []*historyspb.VersionHistoryItem{
+			{EventId: 1, Version: 1},
+			{EventId: 2, Version: 2},
+		},
+	})
+
+	idx := AddEmptyVersionHistory(versionHistories)
+	actualVersionHistory, err := GetVersionHistory(versionHistories, idx)
+	s.NoError(err)
+	s.True(IsEmptyVersionHistory(actualVersionHistory))
+
+	// Add another empty version history and check if the previous empty one is reused.
+	idx2 := AddEmptyVersionHistory(versionHistories)
+	s.Equal(idx, idx2)
+}
+
+func (s *versionHistoriesSuite) findLCAVersionHistoryItemFromItemsTestBase(
+	versionHistoryItemsA [][]*historyspb.VersionHistoryItem,
+	versionHistoryItemsB []*historyspb.VersionHistoryItem,
+	expectedItem *historyspb.VersionHistoryItem,
+	expectedIndex int32,
+	expectedError error,
+) {
+	item, index, err := FindLCAVersionHistoryItemFromItems(versionHistoryItemsA, versionHistoryItemsB)
+	s.Equal(expectedItem, item)
+	s.Equal(expectedIndex, index)
+	s.Equal(expectedError, err)
 }

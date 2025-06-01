@@ -1,25 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2023 Temporal Technologies Inc.  All rights reserved.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package nexus
 
 import (
@@ -30,9 +8,8 @@ import (
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
-	"go.temporal.io/api/enums/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/persistence/serialization"
-	"go.temporal.io/server/common/utf8validator"
 )
 
 type payloadSerializer struct{}
@@ -81,11 +58,8 @@ func (payloadSerializer) Deserialize(content *nexus.Content, v any) error {
 	switch mediaType {
 	case "application/x-temporal-payload":
 		err := payload.Unmarshal(content.Data)
-		if err == nil {
-			err = utf8validator.Validate(payload, utf8validator.SourceRPCRequest)
-		}
 		if err != nil {
-			return serialization.NewDeserializationError(enums.ENCODING_TYPE_PROTO3, err)
+			return serialization.NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, err)
 		}
 	case "application/json":
 		if len(params) == 0 {
@@ -129,11 +103,13 @@ func (payloadSerializer) Serialize(v any) (*nexus.Content, error) {
 		return nil, fmt.Errorf("%w: cannot serialize %v", errSerializer, v)
 	}
 
+	// Use the "nil" Nexus Content representation for nil Payloads.
 	if payload == nil {
-		return &nexus.Content{}, nil
+		// Use same structure as the nil serializer from the Nexus Go SDK.
+		return &nexus.Content{Header: nexus.Header{}}, nil
 	}
 
-	if payload.GetMetadata() == nil {
+	if len(payload.GetMetadata()) == 0 {
 		return xTemporalPayload(payload)
 	}
 
@@ -178,9 +154,6 @@ func (payloadSerializer) Serialize(v any) (*nexus.Content, error) {
 }
 
 func xTemporalPayload(payload *commonpb.Payload) (*nexus.Content, error) {
-	if err := utf8validator.Validate(payload, utf8validator.SourceRPCResponse); err != nil {
-		return nil, fmt.Errorf("%w: payload marshal error: %w", errSerializer, err)
-	}
 	data, err := payload.Marshal()
 	if err != nil {
 		return nil, fmt.Errorf("%w: payload marshal error: %w", errSerializer, err)

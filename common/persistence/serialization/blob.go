@@ -1,35 +1,11 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package serialization
 
 import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/codec"
-	"go.temporal.io/server/common/utf8validator"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -53,7 +29,20 @@ func WorkflowExecutionStateToBlob(info *persistencespb.WorkflowExecutionState) (
 
 func WorkflowExecutionStateFromBlob(blob []byte, encoding string) (*persistencespb.WorkflowExecutionState, error) {
 	result := &persistencespb.WorkflowExecutionState{}
-	return result, proto3Decode(blob, encoding, result)
+	if err := proto3Decode(blob, encoding, result); err != nil {
+		return nil, err
+	}
+	// Initialize the WorkflowExecutionStateDetails for old records.
+	if result.RequestIds == nil {
+		result.RequestIds = make(map[string]*persistencespb.RequestIDInfo, 1)
+	}
+	if result.CreateRequestId != "" && result.RequestIds[result.CreateRequestId] == nil {
+		result.RequestIds[result.CreateRequestId] = &persistencespb.RequestIDInfo{
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+			EventId:   common.FirstEventID,
+		}
+	}
+	return result, nil
 }
 
 func TransferTaskInfoToBlob(info *persistencespb.TransferTaskInfo) (*commonpb.DataBlob, error) {
@@ -174,16 +163,11 @@ func decode(
 }
 
 func proto3Encode(m proto.Message) (*commonpb.DataBlob, error) {
-	if err := utf8validator.Validate(m, utf8validator.SourcePersistence); err != nil {
-		return nil, NewSerializationError(enumspb.ENCODING_TYPE_PROTO3, err)
-	}
-	blob := commonpb.DataBlob{EncodingType: enumspb.ENCODING_TYPE_PROTO3}
 	data, err := proto.Marshal(m)
 	if err != nil {
 		return nil, NewSerializationError(enumspb.ENCODING_TYPE_PROTO3, err)
 	}
-	blob.Data = data
-	return &blob, nil
+	return &commonpb.DataBlob{EncodingType: enumspb.ENCODING_TYPE_PROTO3, Data: data}, nil
 }
 
 func proto3Decode(blob []byte, encoding string, result proto.Message) error {
@@ -199,9 +183,6 @@ func Proto3Decode(blob []byte, e enumspb.EncodingType, result proto.Message) err
 		return NewUnknownEncodingTypeError(e.String(), enumspb.ENCODING_TYPE_PROTO3)
 	}
 	err := proto.Unmarshal(blob, result)
-	if err == nil {
-		err = utf8validator.Validate(result, utf8validator.SourcePersistence)
-	}
 	if err != nil {
 		return NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, err)
 	}

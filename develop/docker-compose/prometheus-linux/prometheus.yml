@@ -10,3 +10,7 @@ scrape_configs:
       - targets:
           # port should match value from server config listenAddress.
           - localhost:8000
+  - job_name: tempo
+    static_configs:
+      - targets:
+          - localhost:3200

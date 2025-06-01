@@ -1,37 +1,13 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package replication
 
 import (
+	"context"
 	"errors"
 	"math"
 	"math/rand"
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -47,9 +23,11 @@ import (
 	"go.temporal.io/server/common/persistence"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/configs"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
+	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -60,8 +38,8 @@ type (
 
 		controller    *gomock.Controller
 		server        *historyservicemock.MockHistoryService_StreamWorkflowReplicationMessagesServer
-		shardContext  *shard.MockContext
-		historyEngine *shard.MockEngine
+		shardContext  *historyi.MockShardContext
+		historyEngine *historyi.MockEngine
 		taskConverter *MockSourceTaskConverter
 
 		clientShardKey ClusterShardKey
@@ -89,8 +67,9 @@ func (s *streamSenderSuite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
 	s.server = historyservicemock.NewMockHistoryService_StreamWorkflowReplicationMessagesServer(s.controller)
-	s.shardContext = shard.NewMockContext(s.controller)
-	s.historyEngine = shard.NewMockEngine(s.controller)
+	s.server.EXPECT().Context().Return(context.Background()).AnyTimes()
+	s.shardContext = historyi.NewMockShardContext(s.controller)
+	s.historyEngine = historyi.NewMockEngine(s.controller)
 	s.taskConverter = NewMockSourceTaskConverter(s.controller)
 	s.config = tests.NewDynamicConfig()
 
@@ -777,6 +756,14 @@ func (s *streamSenderSuite) TestSendTasks_WithTasks() {
 	item1.EXPECT().GetWorkflowID().Return("3").AnyTimes()
 	item2.EXPECT().GetWorkflowID().Return("2").AnyTimes()
 	item3.EXPECT().GetWorkflowID().Return("1").AnyTimes()
+	item0.EXPECT().GetVisibilityTime().Return(time.Now().UTC()).AnyTimes()
+	item1.EXPECT().GetVisibilityTime().Return(time.Now().UTC()).AnyTimes()
+	item2.EXPECT().GetVisibilityTime().Return(time.Now().UTC()).AnyTimes()
+	item3.EXPECT().GetVisibilityTime().Return(time.Now().UTC()).AnyTimes()
+	item0.EXPECT().GetType().Return(enumsspb.TASK_TYPE_REPLICATION_HISTORY).AnyTimes()
+	item1.EXPECT().GetType().Return(enumsspb.TASK_TYPE_REPLICATION_HISTORY).AnyTimes()
+	item2.EXPECT().GetType().Return(enumsspb.TASK_TYPE_REPLICATION_HISTORY).AnyTimes()
+	item3.EXPECT().GetType().Return(enumsspb.TASK_TYPE_REPLICATION_HISTORY).AnyTimes()
 	task0 := &replicationspb.ReplicationTask{
 		SourceTaskId:   beginInclusiveWatermark,
 		VisibilityTime: timestamppb.New(time.Unix(0, rand.Int63())),
@@ -887,7 +874,7 @@ func (s *streamSenderSuite) TestSendTasks_TieredStack_HighPriority() {
 			return []tasks.Task{item0, item1, item2}, nil, nil
 		},
 	)
-	s.senderFlowController.EXPECT().Wait(enumsspb.TASK_PRIORITY_HIGH).Return().Times(1)
+	s.senderFlowController.EXPECT().Wait(gomock.Any(), enumsspb.TASK_PRIORITY_HIGH).Return(nil).Times(1)
 	s.historyEngine.EXPECT().GetReplicationTasksIter(
 		gomock.Any(),
 		string(s.clientShardKey.ClusterID),
@@ -970,7 +957,7 @@ func (s *streamSenderSuite) TestSendTasks_TieredStack_LowPriority() {
 			return []tasks.Task{item0, item1, item2}, nil, nil
 		},
 	)
-	s.senderFlowController.EXPECT().Wait(enumsspb.TASK_PRIORITY_LOW).Return().Times(2)
+	s.senderFlowController.EXPECT().Wait(gomock.Any(), enumsspb.TASK_PRIORITY_LOW).Return(nil).Times(2)
 	s.historyEngine.EXPECT().GetReplicationTasksIter(
 		gomock.Any(),
 		string(s.clientShardKey.ClusterID),
@@ -1018,7 +1005,7 @@ func (s *streamSenderSuite) TestSendTasks_TieredStack_LowPriority() {
 }
 
 func (s *streamSenderSuite) TestSendEventLoop_Panic_ShouldCaptureAsError() {
-	s.historyEngine.EXPECT().SubscribeReplicationNotification().Do(func() {
+	s.historyEngine.EXPECT().SubscribeReplicationNotification("target_cluster").Do(func(_ string) {
 		panic("panic")
 	})
 	err := s.streamSender.sendEventLoop(enumsspb.TASK_PRIORITY_UNSPECIFIED)

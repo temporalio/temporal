@@ -1,28 +1,4 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
-//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination registry_mock.go
+//go:generate mockgen -package $GOPACKAGE -source $GOFILE -destination registry_mock.go
 
 package nsregistry
 
@@ -36,6 +12,7 @@ import (
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/goro"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -43,13 +20,11 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/pingable"
-	"go.temporal.io/server/internal/goro"
 	expmaps "golang.org/x/exp/maps"
 )
 
 const (
-	cacheMaxSize = 64 * 1024
-	cacheTTL     = 0 // 0 means infinity
+	readthroughCacheSize = 64 * 1024
 	// CacheRefreshFailureRetryInterval is the wait time
 	// if refreshment encounters error
 	CacheRefreshFailureRetryInterval = 1 * time.Second
@@ -66,9 +41,6 @@ const (
 )
 
 var (
-	cacheOpts = cache.Options{
-		TTL: cacheTTL,
-	}
 	readthroughNotFoundCacheOpts = cache.Options{
 		TTL: readthroughCacheTTL,
 	}
@@ -113,10 +85,12 @@ type (
 		logger                  log.Logger
 		refreshInterval         dynamicconfig.DurationPropertyFn
 
-		// cacheLock protects cachNameToID, cacheByID and stateChangeCallbacks.
-		cacheLock                     sync.RWMutex
-		cacheNameToID                 cache.Cache
-		cacheByID                     cache.Cache
+		// nsMapsLock protects nameToID, idToNamespace and stateChangeCallbacks.
+
+		nsMapsLock    sync.RWMutex
+		nameToID      map[namespace.Name]namespace.ID
+		idToNamespace map[namespace.ID]*namespace.Namespace
+
 		stateChangeCallbacks          map[any]namespace.StateChangeCallbackFn
 		stateChangedDuringReadthrough []*namespace.Namespace
 
@@ -152,23 +126,22 @@ func NewRegistry(
 		clock:                    clock.NewRealTimeSource(),
 		metricsHandler:           metricsHandler.WithTags(metrics.OperationTag(metrics.NamespaceCacheScope)),
 		logger:                   logger,
-		cacheNameToID:            cache.New(cacheMaxSize, &cacheOpts),
-		cacheByID:                cache.New(cacheMaxSize, &cacheOpts),
+		nameToID:                 make(map[namespace.Name]namespace.ID),
+		idToNamespace:            make(map[namespace.ID]*namespace.Namespace),
 		refreshInterval:          refreshInterval,
 		stateChangeCallbacks:     make(map[any]namespace.StateChangeCallbackFn),
-		readthroughNotFoundCache: cache.New(cacheMaxSize, &readthroughNotFoundCacheOpts),
+		readthroughNotFoundCache: cache.New(readthroughCacheSize, &readthroughNotFoundCacheOpts),
 
 		forceSearchAttributesCacheRefreshOnRead: forceSearchAttributesCacheRefreshOnRead,
 	}
 	return reg
 }
 
-// GetCacheSize observes the size of the by-name and by-ID caches in number of
-// entries.
-func (r *registry) GetCacheSize() (sizeOfCacheByName int64, sizeOfCacheByID int64) {
-	r.cacheLock.RLock()
-	defer r.cacheLock.RUnlock()
-	return int64(r.cacheByID.Size()), int64(r.cacheNameToID.Size())
+// GetRegistrySize observes the size of the by-name and by-ID maps.
+func (r *registry) GetRegistrySize() (idToNamespaceSize int64, nameToIDSize int64) {
+	r.nsMapsLock.RLock()
+	defer r.nsMapsLock.RUnlock()
+	return int64(len(r.idToNamespace)), int64(len(r.nameToID))
 }
 
 func (r *registry) RefreshNamespaceById(id namespace.ID) (*namespace.Namespace, error) {
@@ -178,7 +151,7 @@ func (r *registry) RefreshNamespaceById(id namespace.ID) (*namespace.Namespace, 
 	if err != nil {
 		return nil, err
 	}
-	r.updateCachesSingleNamespace(ns)
+	r.updateSingleNamespace(ns)
 	return ns, nil
 }
 
@@ -189,7 +162,7 @@ func (r *registry) Start() {
 	}
 	defer atomic.StoreInt32(&r.status, running)
 
-	// initialize the cache by initial scan
+	// initialize the namespace registry by initial scan
 	ctx := headers.SetCallerInfo(
 		context.Background(),
 		headers.SystemBackgroundCallerInfo,
@@ -197,7 +170,7 @@ func (r *registry) Start() {
 
 	err := r.refreshNamespaces(ctx)
 	if err != nil {
-		r.logger.Fatal("Unable to initialize namespace cache", tag.Error(err))
+		r.logger.Fatal("Unable to initialize namespace registry", tag.Error(err))
 	}
 	r.refresher = goro.NewHandle(ctx).Go(r.refreshLoop)
 }
@@ -220,9 +193,9 @@ func (r *registry) GetPingChecks() []pingable.Check {
 			Timeout: 10 * time.Second,
 			Ping: func() []pingable.Pingable {
 				// just checking if we can acquire the lock
-				r.cacheLock.Lock()
+				r.nsMapsLock.Lock()
 				// nolint:staticcheck
-				r.cacheLock.Unlock()
+				r.nsMapsLock.Unlock()
 				return nil
 			},
 			MetricsName: metrics.DDNamespaceRegistryLockLatency.Name(),
@@ -230,42 +203,17 @@ func (r *registry) GetPingChecks() []pingable.Check {
 	}
 }
 
-func (r *registry) getAllNamespace() map[namespace.ID]*namespace.Namespace {
-	r.cacheLock.RLock()
-	defer r.cacheLock.RUnlock()
-	return r.getAllNamespaceLocked()
-}
-
-func (r *registry) getAllNamespaceLocked() map[namespace.ID]*namespace.Namespace {
-	result := make(map[namespace.ID]*namespace.Namespace)
-
-	ite := r.cacheByID.Iterator()
-	defer ite.Close()
-
-	for ite.HasNext() {
-		entry := ite.Next()
-		id, ok := entry.Key().(namespace.ID)
-		if !ok {
-			// This can be stripped once Cache is fully typed with generics
-			r.logger.Error("Got to theoretically impossible branch: key in cache is not namespace.ID")
-			return nil
-		}
-		aResult, ok := entry.Value().(*namespace.Namespace)
-		if !ok {
-			// This can be stripped once Cache is fully typed with generics
-			r.logger.Error("Got to theoretically impossible branch: value in cache is not namespace.Namespace")
-			return nil
-		}
-		result[id] = aResult
-	}
-	return result
+func (r *registry) getAllNamespace() []*namespace.Namespace {
+	r.nsMapsLock.RLock()
+	defer r.nsMapsLock.RUnlock()
+	return expmaps.Values(r.idToNamespace)
 }
 
 func (r *registry) RegisterStateChangeCallback(key any, cb namespace.StateChangeCallbackFn) {
-	r.cacheLock.Lock()
+	r.nsMapsLock.Lock()
 	r.stateChangeCallbacks[key] = cb
-	allNamespaces := r.getAllNamespaceLocked()
-	r.cacheLock.Unlock()
+	allNamespaces := expmaps.Values(r.idToNamespace)
+	r.nsMapsLock.Unlock()
 
 	// call once for each namespace already in the registry
 	for _, ns := range allNamespaces {
@@ -274,13 +222,13 @@ func (r *registry) RegisterStateChangeCallback(key any, cb namespace.StateChange
 }
 
 func (r *registry) UnregisterStateChangeCallback(key any) {
-	r.cacheLock.Lock()
+	r.nsMapsLock.Lock()
 	delete(r.stateChangeCallbacks, key)
-	r.cacheLock.Unlock()
+	r.nsMapsLock.Unlock()
 }
 
-// GetNamespace retrieves the information from the cache if it exists, otherwise retrieves the information from metadata
-// store and writes it to the cache with an expiry before returning back
+// GetNamespace retrieves the information from the internal maps if it exists, otherwise retrieves the information from metadata
+// store and update internal entries with an expiry before returning back
 func (r *registry) GetNamespace(name namespace.Name) (*namespace.Namespace, error) {
 	if name == "" {
 		return nil, serviceerror.NewInvalidArgument("Namespace is empty.")
@@ -400,7 +348,11 @@ func (r *registry) refreshNamespaces(ctx context.Context) error {
 			return err
 		}
 		for _, namespaceDb := range response.Namespaces {
-			namespacesDb = append(namespacesDb, namespace.FromPersistentState(namespaceDb))
+			ns := namespace.FromPersistentState(
+				namespaceDb.Namespace,
+				namespace.WithGlobalFlag(namespaceDb.IsGlobalNamespace),
+				namespace.WithNotificationVersion(namespaceDb.NotificationVersion))
+			namespacesDb = append(namespacesDb, ns)
 			namespaceIDsDb[namespace.ID(namespaceDb.Namespace.Info.Id)] = struct{}{}
 		}
 		if len(response.NextPageToken) == 0 {
@@ -409,23 +361,24 @@ func (r *registry) refreshNamespaces(ctx context.Context) error {
 		request.NextPageToken = response.NextPageToken
 	}
 
-	// Make a copy of the existing namespace cache (excluding deleted), so we can calculate diff and do "compare and swap".
-	newCacheNameToID := cache.New(cacheMaxSize, &cacheOpts)
-	newCacheByID := cache.New(cacheMaxSize, &cacheOpts)
+	// Make a copy of the existing namespace maps (excluding deleted), so we can calculate diff and do atomic swap.
+	newNameToID := make(map[namespace.Name]namespace.ID)
+	newIDToNamespace := make(map[namespace.ID]*namespace.Namespace)
+
 	var deletedEntries []*namespace.Namespace
-	for _, aNamespace := range r.getAllNamespace() {
-		if _, namespaceExistsDb := namespaceIDsDb[aNamespace.ID()]; !namespaceExistsDb {
-			deletedEntries = append(deletedEntries, aNamespace)
+	for _, ns := range r.getAllNamespace() {
+		if _, namespaceExistsDb := namespaceIDsDb[ns.ID()]; !namespaceExistsDb {
+			deletedEntries = append(deletedEntries, ns)
 			continue
 		}
-		newCacheNameToID.Put(namespace.Name(aNamespace.Name()), namespace.ID(aNamespace.ID()))
-		newCacheByID.Put(namespace.ID(aNamespace.ID()), aNamespace)
+		newNameToID[ns.Name()] = ns.ID()
+		newIDToNamespace[ns.ID()] = ns
 	}
 
 	var stateChanged []*namespace.Namespace
 	for _, aNamespace := range namespacesDb {
-		oldNS := r.updateIDToNamespaceCache(newCacheByID, aNamespace.ID(), aNamespace)
-		newCacheNameToID.Put(aNamespace.Name(), aNamespace.ID())
+		oldNS := r.updateIDToNamespace(newIDToNamespace, aNamespace.ID(), aNamespace)
+		newNameToID[aNamespace.Name()] = aNamespace.ID()
 
 		if namespaceStateChanged(oldNS, aNamespace) {
 			stateChanged = append(stateChanged, aNamespace)
@@ -434,13 +387,13 @@ func (r *registry) refreshNamespaces(ctx context.Context) error {
 
 	var stateChangeCallbacks []namespace.StateChangeCallbackFn
 
-	r.cacheLock.Lock()
-	r.cacheByID = newCacheByID
-	r.cacheNameToID = newCacheNameToID
+	r.nsMapsLock.Lock()
+	r.idToNamespace = newIDToNamespace
+	r.nameToID = newNameToID
 	stateChanged = append(stateChanged, r.stateChangedDuringReadthrough...)
 	r.stateChangedDuringReadthrough = nil
 	stateChangeCallbacks = expmaps.Values(r.stateChangeCallbacks)
-	r.cacheLock.Unlock()
+	r.nsMapsLock.Unlock()
 
 	// call state change callbacks
 	for _, cb := range stateChangeCallbacks {
@@ -455,23 +408,21 @@ func (r *registry) refreshNamespaces(ctx context.Context) error {
 	return nil
 }
 
-func (r *registry) updateIDToNamespaceCache(
-	cacheByID cache.Cache,
+func (r *registry) updateIDToNamespace(
+	iDToNamespace map[namespace.ID]*namespace.Namespace,
 	id namespace.ID,
 	newNS *namespace.Namespace,
-) (oldNS *namespace.Namespace) {
-	oldCacheRec := cacheByID.Put(id, newNS)
-	if oldNS, ok := oldCacheRec.(*namespace.Namespace); ok {
-		return oldNS
-	}
-	return nil
+) *namespace.Namespace {
+	oldNS, _ := iDToNamespace[id]
+	iDToNamespace[id] = newNS
+	return oldNS
 }
 
 // getNamespace retrieves the information from the cache if it exists
 func (r *registry) getNamespace(name namespace.Name) (*namespace.Namespace, error) {
-	r.cacheLock.RLock()
-	defer r.cacheLock.RUnlock()
-	if id, ok := r.cacheNameToID.Get(name).(namespace.ID); ok {
+	r.nsMapsLock.RLock()
+	defer r.nsMapsLock.RUnlock()
+	if id, ok := r.nameToID[name]; ok {
 		return r.getNamespaceByIDLocked(id)
 	}
 	return nil, serviceerror.NewNamespaceNotFound(name.String())
@@ -479,34 +430,34 @@ func (r *registry) getNamespace(name namespace.Name) (*namespace.Namespace, erro
 
 // getNamespaceByID retrieves the information from the cache if it exists.
 func (r *registry) getNamespaceByID(id namespace.ID) (*namespace.Namespace, error) {
-	r.cacheLock.RLock()
-	defer r.cacheLock.RUnlock()
+	r.nsMapsLock.RLock()
+	defer r.nsMapsLock.RUnlock()
 	return r.getNamespaceByIDLocked(id)
 }
 
 func (r *registry) getNamespaceByIDLocked(id namespace.ID) (*namespace.Namespace, error) {
-	if ns, ok := r.cacheByID.Get(id).(*namespace.Namespace); ok {
+	if ns, ok := r.idToNamespace[id]; ok {
 		return ns, nil
 	}
 	return nil, serviceerror.NewNamespaceNotFound(id.String())
 }
 
-// getOrReadthroughNamespace retrieves the information from the cache if it exists or reads through
-// to the persistence layer and updates caches if it doesn't
+// getOrReadthroughNamespace returns namespace information if it exists or reads through
+// to the persistence layer and updates internal entry if it doesn't
 func (r *registry) getOrReadthroughNamespace(name namespace.Name) (*namespace.Namespace, error) {
 	// check main caches
-	cacheHit, cacheErr := r.getNamespace(name)
-	if cacheErr == nil {
-		return cacheHit, nil
+	ns, err := r.getNamespace(name)
+	if err == nil {
+		return ns, nil
 	}
 
 	r.readthroughLock.Lock()
 	defer r.readthroughLock.Unlock()
 
-	// check caches again in case there was an update while waiting
-	cacheHit, cacheErr = r.getNamespace(name)
-	if cacheErr == nil {
-		return cacheHit, nil
+	// check again in case there was an update while waiting
+	ns, err = r.getNamespace(name)
+	if err == nil {
+		return ns, nil
 	}
 
 	// check readthrough cache
@@ -515,33 +466,33 @@ func (r *registry) getOrReadthroughNamespace(name namespace.Name) (*namespace.Na
 	}
 
 	// readthrough to persistence layer and update readthrough cache if not found
-	ns, err := r.getNamespaceByNamePersistence(name)
+	ns, err = r.getNamespaceByNamePersistence(name)
 	if err != nil {
 		return nil, err
 	}
 
-	// update main caches if found
-	r.updateCachesSingleNamespace(ns)
+	// update main entry if found
+	r.updateSingleNamespace(ns)
 
 	return ns, nil
 }
 
-// getOrReadthroughNamespaceByID retrieves the information from the cache if it exists or reads through
-// to the persistence layer and updates caches if it doesn't
+// getOrReadthroughNamespaceByID retrieves the namespace information if it exists or reads through
+// to the persistence layer and updates internal entry if it doesn't
 func (r *registry) getOrReadthroughNamespaceByID(id namespace.ID) (*namespace.Namespace, error) {
 	// check main caches
-	cacheHit, cacheErr := r.getNamespaceByID(id)
-	if cacheErr == nil {
-		return cacheHit, nil
+	ns, err := r.getNamespaceByID(id)
+	if err == nil {
+		return ns, nil
 	}
 
 	r.readthroughLock.Lock()
 	defer r.readthroughLock.Unlock()
 
-	// check caches again in case there was an update while waiting
-	cacheHit, cacheErr = r.getNamespaceByID(id)
-	if cacheErr == nil {
-		return cacheHit, nil
+	// check again in case there was an update while waiting
+	ns, err = r.getNamespaceByID(id)
+	if err == nil {
+		return ns, nil
 	}
 
 	// check readthrough cache
@@ -550,30 +501,30 @@ func (r *registry) getOrReadthroughNamespaceByID(id namespace.ID) (*namespace.Na
 	}
 
 	// readthrough to persistence layer and update readthrough cache if not found
-	ns, err := r.getNamespaceByIDPersistence(id)
+	ns, err = r.getNamespaceByIDPersistence(id)
 	if err != nil {
 		return nil, err
 	}
 
-	// update main caches if found
-	r.updateCachesSingleNamespace(ns)
+	// update main entry if found
+	r.updateSingleNamespace(ns)
 
 	return ns, nil
 }
 
-func (r *registry) updateCachesSingleNamespace(ns *namespace.Namespace) {
-	r.cacheLock.Lock()
-	defer r.cacheLock.Unlock()
+func (r *registry) updateSingleNamespace(ns *namespace.Namespace) {
+	r.nsMapsLock.Lock()
+	defer r.nsMapsLock.Unlock()
 
-	if curEntry, ok := r.cacheByID.Get(ns.ID()).(*namespace.Namespace); ok {
+	if curEntry, ok := r.idToNamespace[ns.ID()]; ok {
 		if curEntry.NotificationVersion() >= ns.NotificationVersion() {
-			// More up to date version already put in cache by refresh
+			// More up-to-date version already stored
 			return
 		}
 	}
 
-	oldNS := r.updateIDToNamespaceCache(r.cacheByID, ns.ID(), ns)
-	r.cacheNameToID.Put(ns.Name(), ns.ID())
+	oldNS := r.updateIDToNamespace(r.idToNamespace, ns.ID(), ns)
+	r.nameToID[ns.Name()] = ns.ID()
 	if namespaceStateChanged(oldNS, ns) {
 		r.stateChangedDuringReadthrough = append(r.stateChangedDuringReadthrough, ns)
 	}
@@ -621,8 +572,10 @@ func (r *registry) getNamespacePersistence(request *persistence.GetNamespaceRequ
 	if err != nil {
 		return nil, err
 	}
-
-	return namespace.FromPersistentState(response), nil
+	return namespace.FromPersistentState(
+		response.Namespace,
+		namespace.WithGlobalFlag(response.IsGlobalNamespace),
+		namespace.WithNotificationVersion(response.NotificationVersion)), nil
 }
 
 // this test should include anything that might affect whether a namespace is active on

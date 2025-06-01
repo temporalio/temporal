@@ -1,32 +1,7 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package addtasks
 
 import (
 	"context"
-	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
@@ -34,7 +9,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/api"
-	"go.temporal.io/server/service/history/shard"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -59,18 +34,18 @@ const (
 // any validation on the shard ID because that must have been done by whoever provided the shard.Context to this method.
 func Invoke(
 	ctx context.Context,
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	deserializer TaskDeserializer,
 	numShards int,
 	req *historyservice.AddTasksRequest,
 	taskRegistry tasks.TaskCategoryRegistry,
 ) (*historyservice.AddTasksResponse, error) {
 	if len(req.Tasks) > maxTasksPerRequest {
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(
+		return nil, serviceerror.NewInvalidArgumentf(
 			"Too many tasks in request: %d > %d",
 			len(req.Tasks),
 			maxTasksPerRequest,
-		))
+		)
 	}
 
 	if len(req.Tasks) == 0 {
@@ -81,7 +56,7 @@ func Invoke(
 
 	for i, task := range req.Tasks {
 		if task == nil {
-			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Nil task at index: %d", i))
+			return nil, serviceerror.NewInvalidArgumentf("Nil task at index: %d", i)
 		}
 
 		category, err := api.GetTaskCategory(int(task.CategoryId), taskRegistry)
@@ -90,10 +65,10 @@ func Invoke(
 		}
 
 		if task.Blob == nil {
-			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(
+			return nil, serviceerror.NewInvalidArgumentf(
 				"Task blob is nil at index: %d",
 				i,
-			))
+			)
 		}
 
 		deserializedTask, err := deserializer.DeserializeTask(category, task.Blob)
@@ -103,10 +78,10 @@ func Invoke(
 
 		shardID := tasks.GetShardIDForTask(deserializedTask, numShards)
 		if shardID != int(req.ShardId) {
-			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(
+			return nil, serviceerror.NewInvalidArgumentf(
 				"Task is for wrong shard: index = %d, task shard = %d, request shard = %d",
 				i, shardID, req.ShardId,
-			))
+			)
 		}
 
 		// group by namespaceID + workflowID

@@ -1,47 +1,24 @@
-// The MIT License
-//
-// Copyright (c) 2022 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package batcher
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"testing"
 	"time"
 	"unicode"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	history "go.temporal.io/api/history/v1"
+	historypb "go.temporal.io/api/history/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/api/workflowservicemock/v1"
 	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/testing/mockapi/workflowservicemock/v1"
+	"go.uber.org/mock/gomock"
 )
 
 type activitiesSuite struct {
@@ -65,23 +42,23 @@ func TestActivitiesSuite(t *testing.T) {
 
 const NumTotalEvents = 10
 
-// pattern contains either c or f representing completed or failed task
+// Pattern contains either c or f representing completed or failed task.
 // Schedule events for each task has id of NumTotalEvents*i + 1 where i is the index of the character
-// eventId for each task has id of NumTotalEvents*i+NumTotalEvents where is is the index of the character
-func generateEventHistory(pattern string) *history.History {
-	events := make([]*history.HistoryEvent, 0)
+// EventId for each task has id of NumTotalEvents*i+NumTotalEvents where i is the index of the character
+func generateEventHistory(pattern string) *historypb.History {
+	events := make([]*historypb.HistoryEvent, 0)
 	for i, char := range pattern {
 		// add a Schedule event independent of type of event
 		scheduledEventId := int64(NumTotalEvents*i + 1)
-		scheduledEvent := history.HistoryEvent{EventId: scheduledEventId, EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED}
+		scheduledEvent := historypb.HistoryEvent{EventId: scheduledEventId, EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED}
 		events = append(events, &scheduledEvent)
 
-		event := history.HistoryEvent{EventId: int64(NumTotalEvents*i + NumTotalEvents)}
+		event := historypb.HistoryEvent{EventId: int64(NumTotalEvents*i + NumTotalEvents)}
 		switch unicode.ToLower(char) {
 		case 'c':
 			event.EventType = enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED
-			event.Attributes = &history.HistoryEvent_WorkflowTaskCompletedEventAttributes{
-				WorkflowTaskCompletedEventAttributes: &history.WorkflowTaskCompletedEventAttributes{ScheduledEventId: scheduledEventId},
+			event.Attributes = &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{
+				WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{ScheduledEventId: scheduledEventId},
 			}
 		case 'f':
 			event.EventType = enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED
@@ -89,14 +66,14 @@ func generateEventHistory(pattern string) *history.History {
 		events = append(events, &event)
 	}
 
-	return &history.History{Events: events}
+	return &historypb.History{Events: events}
 }
 
 func (s *activitiesSuite) TestGetLastWorkflowTaskEventID() {
 	namespaceStr := "test-namespace"
 	tests := []struct {
 		name                    string
-		history                 *history.History
+		history                 *historypb.History
 		wantWorkflowTaskEventID int64
 		wantErr                 bool
 	}{
@@ -145,7 +122,7 @@ func (s *activitiesSuite) TestGetFirstWorkflowTaskEventID() {
 	workflowExecution := commonpb.WorkflowExecution{}
 	tests := []struct {
 		name                    string
-		history                 *history.History
+		history                 *historypb.History
 		wantWorkflowTaskEventID int64
 		wantErr                 bool
 	}{
@@ -194,7 +171,6 @@ func (s *activitiesSuite) TestGetFirstWorkflowTaskEventID() {
 
 func (s *activitiesSuite) TestGetResetPoint() {
 	ctx := context.Background()
-	logger := log.NewTestLogger()
 	ns := "namespacename"
 	tests := []struct {
 		name                    string
@@ -303,12 +279,72 @@ func (s *activitiesSuite) TestGetResetPoint() {
 				WorkflowId: "wfid",
 				RunId:      "run1",
 			}
-			id, err := getResetPoint(ctx, ns, execution, s.mockFrontendClient, logger, tt.buildId, tt.currentRunOnly)
+			id, err := getResetPoint(ctx, ns, execution, s.mockFrontendClient, tt.buildId, tt.currentRunOnly)
 			s.Equal(tt.wantErr, err != nil)
 			s.Equal(tt.wantWorkflowTaskEventID, id)
 			if tt.wantSetRunId != "" {
 				s.Equal(tt.wantSetRunId, execution.RunId)
 			}
+		})
+	}
+}
+
+func (s *activitiesSuite) TestAdjustQuery() {
+	tests := []struct {
+		name           string
+		query          string
+		expectedResult string
+		batchType      string
+	}{
+		{
+			name:           "Empty query",
+			query:          "",
+			expectedResult: "",
+			batchType:      BatchTypeTerminate,
+		},
+		{
+			name:           "Acceptance",
+			query:          "A=B",
+			expectedResult: fmt.Sprintf("(A=B) AND (%s)", statusRunningQueryFilter),
+			batchType:      BatchTypeTerminate,
+		},
+		{
+			name:           "Acceptance with parenthesis",
+			query:          "(A=B)",
+			expectedResult: fmt.Sprintf("((A=B)) AND (%s)", statusRunningQueryFilter),
+			batchType:      BatchTypeTerminate,
+		},
+		{
+			name:           "Acceptance with multiple conditions",
+			query:          "(A=B) OR C=D",
+			expectedResult: fmt.Sprintf("((A=B) OR C=D) AND (%s)", statusRunningQueryFilter),
+			batchType:      BatchTypeTerminate,
+		},
+		{
+			name:           "Contains status - 1",
+			query:          "ExecutionStatus=Completed",
+			expectedResult: fmt.Sprintf("(ExecutionStatus=Completed) AND (%s)", statusRunningQueryFilter),
+			batchType:      BatchTypeTerminate,
+		},
+		{
+			name:           "Contains status - 2",
+			query:          "A=B OR ExecutionStatus='Completed'",
+			expectedResult: fmt.Sprintf("(A=B OR ExecutionStatus='Completed') AND (%s)", statusRunningQueryFilter),
+			batchType:      BatchTypeTerminate,
+		},
+		{
+			name:           "Not supported batch type",
+			query:          "A=B",
+			expectedResult: "A=B",
+			batchType:      "NotSupported",
+		},
+	}
+	for _, testRun := range tests {
+		s.Run(testRun.name, func() {
+			a := activities{}
+			batchParams := BatchParams{Query: testRun.query, BatchType: testRun.batchType}
+			adjustedQuery := a.adjustQuery(batchParams)
+			s.Equal(testRun.expectedResult, adjustedQuery)
 		})
 	}
 }

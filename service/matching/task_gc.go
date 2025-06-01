@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package matching
 
 import (
@@ -33,11 +9,13 @@ import (
 )
 
 type taskGC struct {
+	tqCtx  context.Context
+	db     *taskQueueDB
+	config *taskQueueConfig
+
 	lock           int64
-	db             *taskQueueDB
 	ackLevel       int64
 	lastDeleteTime time.Time
-	config         *taskQueueConfig
 }
 
 var maxTimeBetweenTaskDeletes = time.Second
@@ -53,33 +31,46 @@ var maxTimeBetweenTaskDeletes = time.Second
 //
 // Finally, the Run() method is safe to be called from multiple threads. The underlying
 // implementation will make sure only one caller executes Run() and others simply bail out
-func newTaskGC(db *taskQueueDB, config *taskQueueConfig) *taskGC {
-	return &taskGC{db: db, config: config}
+func newTaskGC(
+	tqCtx context.Context,
+	db *taskQueueDB,
+	config *taskQueueConfig,
+) *taskGC {
+	return &taskGC{
+		tqCtx:  tqCtx,
+		db:     db,
+		config: config,
+	}
 }
 
 // Run deletes a batch of completed tasks, if it's possible to do so
 // Only attempts deletion if size or time thresholds are met
-func (tgc *taskGC) Run(ctx context.Context, ackLevel int64) {
-	tgc.tryDeleteNextBatch(ctx, ackLevel, false)
+func (tgc *taskGC) Run(ackLevel int64) {
+	tgc.tryDeleteNextBatch(ackLevel, false)
 }
 
 // RunNow deletes a batch of completed tasks if it's possible to do so
 // This method attempts deletions without waiting for size/time threshold to be met
-func (tgc *taskGC) RunNow(ctx context.Context, ackLevel int64) {
-	tgc.tryDeleteNextBatch(ctx, ackLevel, true)
+func (tgc *taskGC) RunNow(ackLevel int64) {
+	tgc.tryDeleteNextBatch(ackLevel, true)
 }
 
-func (tgc *taskGC) tryDeleteNextBatch(ctx context.Context, ackLevel int64, ignoreTimeCond bool) {
+func (tgc *taskGC) tryDeleteNextBatch(ackLevel int64, ignoreTimeCond bool) {
 	if !tgc.tryLock() {
 		return
 	}
 	defer tgc.unlock()
+
 	batchSize := tgc.config.MaxTaskDeleteBatchSize()
 	if !tgc.checkPrecond(ackLevel, batchSize, ignoreTimeCond) {
 		return
 	}
 	tgc.lastDeleteTime = time.Now().UTC()
-	n, err := tgc.db.CompleteTasksLessThan(ctx, ackLevel+1, batchSize)
+
+	ctx, cancel := context.WithTimeout(tgc.tqCtx, ioTimeout)
+	defer cancel()
+
+	n, err := tgc.db.CompleteTasksLessThan(ctx, ackLevel+1, batchSize, subqueueZero)
 	if err != nil {
 		return
 	}

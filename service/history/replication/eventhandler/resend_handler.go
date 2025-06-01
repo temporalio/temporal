@@ -1,34 +1,10 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package eventhandler
 
-//go:generate mockgen -copyright_file ../../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination resend_handler_mock.go
+//go:generate mockgen -package $GOPACKAGE -source $GOFILE -destination resend_handler_mock.go
 
 import (
 	"context"
-	"fmt"
+	"errors"
 
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
@@ -44,11 +20,12 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/configs"
-	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/consts"
+	historyi "go.temporal.io/server/service/history/interfaces"
 )
 
 type (
-	historyEngineProvider func(ctx context.Context, namespaceId namespace.ID, workflowId string) (shard.Engine, error)
+	historyEngineProvider func(ctx context.Context, namespaceId namespace.ID, workflowId string) (historyi.Engine, error)
 	ResendHandler         interface {
 		ResendHistoryEvents(
 			ctx context.Context,
@@ -80,7 +57,7 @@ func NewResendHandler(
 	clientBean client.Bean,
 	serializer serialization.Serializer,
 	clusterMetadata cluster.Metadata,
-	historyEngineProvider func(ctx context.Context, namespaceId namespace.ID, workflowId string) (shard.Engine, error),
+	historyEngineProvider func(ctx context.Context, namespaceId namespace.ID, workflowId string) (historyi.Engine, error),
 	remoteHistoryFetcher HistoryPaginatedFetcher,
 	importer EventImporter,
 	logger log.Logger,
@@ -164,7 +141,7 @@ func (r *resendHandlerImpl) ResendHistoryEvents(
 
 	if startEventID != common.EmptyEventID {
 		// make sure resend is requesting from the first event when requesting local generated portion
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid Resend Request: expecting to resend from first event for local generated portion, but startEventID is %v", startEventID))
+		return serviceerror.NewInvalidArgumentf("Invalid Resend Request: expecting to resend from first event for local generated portion, but startEventID is %v", startEventID)
 	}
 	lastLocalItem := localVersionHistory[len(localVersionHistory)-1]
 	err = r.resendLocalGeneratedHistoryEvents(ctx, remoteClusterName, namespaceID, workflowID, runID, lastLocalItem.EventId, lastLocalItem.Version)
@@ -274,7 +251,7 @@ func (r *resendHandlerImpl) replicateRemoteGeneratedEvents(
 			nil,
 			"",
 		)
-		if err != nil {
+		if err != nil && !errors.Is(err, consts.ErrDuplicate) {
 			r.logger.Error("failed to replicate events",
 				tag.WorkflowNamespaceID(namespaceID.String()),
 				tag.WorkflowID(workflowID),

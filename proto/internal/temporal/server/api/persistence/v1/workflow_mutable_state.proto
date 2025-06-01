@@ -1,25 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 syntax = "proto3";
 
 package temporal.server.api.persistence.v1;
@@ -28,6 +6,7 @@ option go_package = "go.temporal.io/server/api/persistence/v1;persistence";
 import "temporal/api/history/v1/message.proto";
 import "temporal/server/api/persistence/v1/executions.proto";
 import "temporal/server/api/persistence/v1/hsm.proto";
+import "temporal/server/api/persistence/v1/chasm.proto";
 import "temporal/server/api/persistence/v1/update.proto";
 
 message WorkflowMutableState{
@@ -36,6 +15,7 @@ message WorkflowMutableState{
     map<int64, ChildExecutionInfo> child_execution_infos = 3;
     map<int64, RequestCancelInfo> request_cancel_infos = 4;
     map<int64, SignalInfo> signal_infos = 5;
+    map<string, ChasmNode> chasm_nodes = 12;
     repeated string signal_requested_ids = 6;
     WorkflowExecutionInfo execution_info = 7;
     WorkflowExecutionState execution_state = 8;
@@ -62,17 +42,16 @@ message WorkflowMutableStateMutation{
     map<int64, SignalInfo> updated_signal_infos = 5;
     map<string, UpdateInfo> updated_update_infos = 6;
     repeated StateMachineNodeMutation updated_sub_state_machines = 7;
-    
-    // The following deleted_* fields are computed based on the 
-    // sub_state_machine_tombstone_batches field of mutable state.
-    repeated int64 deleted_activities = 8;
-    repeated string deleted_timers = 9;
-    repeated int64 deleted_child_execution_infos = 10;
-    repeated int64 deleted_request_cancel_infos = 11;
-    repeated int64 deleted_signal_infos = 12;
-    repeated string deleted_update_infos = 13;
-    repeated StateMachinePath deleted_sub_state_machines = 14;
-    
+    map<string, ChasmNode> updated_chasm_nodes = 19;
+
+    reserved 8;
+    reserved 9;
+    reserved 10;
+    reserved 11;
+    reserved 12;
+    reserved 13;
+    reserved 14;
+
     repeated string signal_requested_ids = 15;
     // Partial WorkflowExecutionInfo. Some fields, such as
     // update_infos and sub_state_machines_by_type, are not populated here.
@@ -80,7 +59,9 @@ message WorkflowMutableStateMutation{
     WorkflowExecutionInfo execution_info = 16;
     WorkflowExecutionState execution_state = 17;
 
+    repeated StateMachineTombstoneBatch sub_state_machine_tombstone_batches = 18;
+
     // TODO: uncomment buffered_events field when we are ready to replicate
     // mutable state as well.
-    // repeated temporal.api.history.v1.HistoryEvent buffered_events = 18;
+    // repeated temporal.api.history.v1.HistoryEvent buffered_events = 20;
 }

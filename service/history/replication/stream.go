@@ -1,40 +1,20 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package replication
 
 import (
+	"context"
 	"errors"
-	"fmt"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/common/persistence"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/service/history/configs"
 )
 
 type (
@@ -58,62 +38,69 @@ func ClusterIDToClusterNameShardCount(
 			return clusterName, clusterInfo.ShardCount, nil
 		}
 	}
-	return "", 0, serviceerror.NewInternal(fmt.Sprintf("unknown cluster ID: %v", clusterID))
+	return "", 0, serviceerror.NewInternalf("unknown cluster ID: %v", clusterID)
 }
 
 func WrapEventLoop(
+	ctx context.Context,
 	originalEventLoop func() error,
 	streamStopper func(),
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 	fromClusterKey ClusterShardKey,
 	toClusterKey ClusterShardKey,
-	retryInterval time.Duration,
+	dc *configs.Config,
 ) {
 	defer streamStopper()
 
-	for i := 0; i < 50; i++ {
+	streamRetryPolicy := backoff.NewExponentialRetryPolicy(500 * time.Millisecond).
+		WithMaximumAttempts(dc.ReplicationStreamEventLoopRetryMaxAttempts()).
+		WithMaximumInterval(time.Second * 2)
+	ops := func() error {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		err := originalEventLoop()
 
-		if err == nil { // shutdown case
-			return
+		if err != nil {
+			var streamError *StreamError
+			if errors.As(err, &streamError) {
+				metrics.ReplicationStreamError.With(metricsHandler).Record(
+					int64(1),
+					metrics.ServiceErrorTypeTag(streamError.cause),
+					metrics.FromClusterIDTag(fromClusterKey.ClusterID),
+					metrics.ToClusterIDTag(toClusterKey.ClusterID),
+				)
+				logger.Warn("ReplicationStreamError", tag.Error(err))
+			} else {
+				metrics.ReplicationServiceError.With(metricsHandler).Record(
+					int64(1),
+					metrics.ServiceErrorTypeTag(err),
+					metrics.FromClusterIDTag(fromClusterKey.ClusterID),
+					metrics.ToClusterIDTag(toClusterKey.ClusterID),
+				)
+				logger.Error("ReplicationServiceError", tag.Error(err))
+			}
+			return err
 		}
-
-		if streamError, ok := err.(*StreamError); ok {
-			metrics.ReplicationStreamError.With(metricsHandler).Record(
-				int64(1),
-				metrics.ServiceErrorTypeTag(streamError.cause),
-				metrics.FromClusterIDTag(fromClusterKey.ClusterID),
-				metrics.ToClusterIDTag(toClusterKey.ClusterID),
-			)
-		} else {
-			metrics.ReplicationServiceError.With(metricsHandler).Record(
-				int64(1),
-				metrics.ServiceErrorTypeTag(err),
-				metrics.FromClusterIDTag(fromClusterKey.ClusterID),
-				metrics.ToClusterIDTag(toClusterKey.ClusterID),
-			)
-		}
-		// if it is not a retryable error, we will not retry and terminate the stream, then let the stream_receiver_monitor to restart it
-		if !IsRetryableError(err) {
-			return
-		}
-
-		time.Sleep(retryInterval)
+		// shutdown case
+		return nil
 	}
+	_ = backoff.ThrottleRetry(ops, streamRetryPolicy, isRetryableError)
 }
 
-func IsStreamError(err error) bool {
+func isRetryableError(err error) bool {
 	var streamError *StreamError
-	return errors.As(err, &streamError)
-}
-
-func IsRetryableError(err error) bool {
-	if shard.IsShardOwnershipLostError(err) {
+	var shardOwnershipLostError *persistence.ShardOwnershipLostError
+	var shardOwnershipLost *serviceerrors.ShardOwnershipLost
+	switch {
+	case errors.As(err, &shardOwnershipLostError):
 		return false
-	}
-	switch err.(type) {
-	case *StreamError:
+	case errors.As(err, &shardOwnershipLost):
+		return false
+	case errors.As(err, &streamError):
+		return false
+	case errors.Is(err, context.Canceled):
 		return false
 	default:
 		return true

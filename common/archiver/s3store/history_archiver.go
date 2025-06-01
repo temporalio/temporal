@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 // S3 History Archiver will archive workflow histories to amazon s3
 
 package s3store
@@ -69,8 +45,10 @@ var (
 
 type (
 	historyArchiver struct {
-		container *archiver.HistoryBootstrapContainer
-		s3cli     s3iface.S3API
+		executionManager persistence.ExecutionManager
+		logger           log.Logger
+		metricsHandler   metrics.Handler
+		s3cli            s3iface.S3API
 		// only set in test code
 		historyIterator archiver.HistoryIterator
 	}
@@ -90,14 +68,18 @@ type (
 
 // NewHistoryArchiver creates a new archiver.HistoryArchiver based on s3
 func NewHistoryArchiver(
-	container *archiver.HistoryBootstrapContainer,
+	executionManager persistence.ExecutionManager,
+	logger log.Logger,
+	metricsHandler metrics.Handler,
 	config *config.S3Archiver,
 ) (archiver.HistoryArchiver, error) {
-	return newHistoryArchiver(container, config, nil)
+	return newHistoryArchiver(executionManager, logger, metricsHandler, config, nil)
 }
 
 func newHistoryArchiver(
-	container *archiver.HistoryBootstrapContainer,
+	executionManager persistence.ExecutionManager,
+	logger log.Logger,
+	metricsHandler metrics.Handler,
 	config *config.S3Archiver,
 	historyIterator archiver.HistoryIterator,
 ) (*historyArchiver, error) {
@@ -116,9 +98,11 @@ func newHistoryArchiver(
 	}
 
 	return &historyArchiver{
-		container:       container,
-		s3cli:           s3.New(sess),
-		historyIterator: historyIterator,
+		executionManager: executionManager,
+		logger:           logger,
+		metricsHandler:   metricsHandler,
+		s3cli:            s3.New(sess),
+		historyIterator:  historyIterator,
 	}, nil
 }
 func (h *historyArchiver) Archive(
@@ -127,7 +111,7 @@ func (h *historyArchiver) Archive(
 	request *archiver.ArchiveHistoryRequest,
 	opts ...archiver.ArchiveOption,
 ) (err error) {
-	handler := h.container.MetricsHandler.WithTags(metrics.OperationTag(metrics.HistoryArchiverScope), metrics.NamespaceTag(request.Namespace))
+	handler := h.metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryArchiverScope), metrics.NamespaceTag(request.Namespace))
 	featureCatalog := archiver.GetFeatureCatalog(opts...)
 	startTime := time.Now().UTC()
 	defer func() {
@@ -144,7 +128,7 @@ func (h *historyArchiver) Archive(
 		}
 	}()
 
-	logger := archiver.TagLoggerWithArchiveHistoryRequestAndURI(h.container.Logger, request, URI.String())
+	logger := archiver.TagLoggerWithArchiveHistoryRequestAndURI(h.logger, request, URI.String())
 
 	if err := SoftValidateURI(URI); err != nil {
 		logger.Error(archiver.ArchiveNonRetryableErrorMsg, tag.ArchivalArchiveFailReason(archiver.ErrReasonInvalidURI), tag.Error(err))
@@ -159,7 +143,7 @@ func (h *historyArchiver) Archive(
 	var progress uploadProgress
 	historyIterator := h.historyIterator
 	if historyIterator == nil { // will only be set by testing code
-		historyIterator = loadHistoryIterator(ctx, request, h.container.ExecutionManager, featureCatalog, &progress)
+		historyIterator = loadHistoryIterator(ctx, request, h.executionManager, featureCatalog, &progress)
 	}
 	for historyIterator.HasNext() {
 		historyBlob, err := historyIterator.Next(ctx)

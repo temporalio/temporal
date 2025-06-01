@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package quotas
 
 import (
@@ -39,6 +15,7 @@ import (
 type ClockedRateLimiter struct {
 	rateLimiter *rate.Limiter
 	timeSource  clock.TimeSource
+	recycleCh   chan struct{}
 }
 
 var (
@@ -51,6 +28,7 @@ func NewClockedRateLimiter(rateLimiter *rate.Limiter, timeSource clock.TimeSourc
 	return ClockedRateLimiter{
 		rateLimiter: rateLimiter,
 		timeSource:  timeSource,
+		recycleCh:   make(chan struct{}),
 	}
 }
 
@@ -131,12 +109,35 @@ func (l ClockedRateLimiter) WaitN(ctx context.Context, token int) error {
 		close(waitExpired)
 	})
 	defer timer.Stop()
-	select {
-	case <-ctx.Done():
-		reservation.Cancel()
-		return fmt.Errorf("%w: %v", ErrRateLimiterWaitInterrupted, ctx.Err())
-	case <-waitExpired:
-		return nil
+
+	for {
+		select {
+		case <-ctx.Done():
+			reservation.Cancel()
+			return fmt.Errorf("%w: %v", ErrRateLimiterWaitInterrupted, ctx.Err())
+		case <-waitExpired:
+			return nil
+		case <-l.recycleCh:
+			if token > 1 {
+				break // recycling 1 token to a process requesting >1 tokens is a no-op, because we only know that at least one token was not used
+			}
+
+			// Cancel() reverses the effects of this Reservation on the rate limit as much as possible,
+			// considering that other reservations may have already been made. Normally, Cancel() indicates
+			// that the reservation holder will not perform the reserved action, so it would make the most
+			// sense to cancel the reservation whose token was just recycled. However, we don't have access
+			// to the recycled reservation anymore, and even if we did, Cancel on a reservation that
+			// has fully waited is a no-op, so instead we cancel the current reservation as a proxy.
+			//
+			// Since Cancel() just restores tokens to the rate limiter, cancelling the current 1-token
+			// reservation should have approximately the same effect on the actual rate as cancelling the
+			// recycled reservation.
+			//
+			// If the recycled reservation was for >1 token, cancelling the current 1-token reservation will
+			// lead to a slower actual rate than cancelling the original, so the approximation is conservative.
+			reservation.Cancel()
+			return nil
+		}
 	}
 }
 
@@ -150,4 +151,16 @@ func (l ClockedRateLimiter) SetBurstAt(t time.Time, newBurst int) {
 
 func (l ClockedRateLimiter) TokensAt(t time.Time) int {
 	return int(l.rateLimiter.TokensAt(t))
+}
+
+// RecycleToken should be called when the action being rate limited was not completed
+// for some reason (i.e. a task is not dispatched because it was invalid).
+// In this case, we want to immediately unblock another process that is waiting for one token
+// so that the actual rate of completed actions is as close to the intended rate limit as possible.
+// If no process is waiting for a token when RecycleToken is called, this is a no-op.
+func (l ClockedRateLimiter) RecycleToken() {
+	select {
+	case l.recycleCh <- struct{}{}:
+	default:
+	}
 }

@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package consts
 
 import (
@@ -62,8 +38,13 @@ var (
 	// ErrStaleState is the error returned during state update indicating that cached mutable state could be stale after
 	// a reload attempt.
 	ErrStaleState = staleStateError{}
+	// ErrTransitionHistoryDisabled is the error to indicate that transition history is disabled for the state machine,
+	// and request cannot be processed before it's re-enabled.
+	ErrTransitionHistoryDisabled = serviceerror.NewFailedPrecondition("Transition history disabled")
 	// ErrActivityTaskNotFound is the error to indicate activity task could be duplicate and activity already completed
 	ErrActivityTaskNotFound = serviceerror.NewNotFound("invalid activityID or activity already timed out or invoking workflow is completed")
+	// ErrActivityNotFound is the error to indicate that there is no pending activity with this ID
+	ErrActivityNotFound = serviceerror.NewNotFound("Can't find pending activity with such ID. Invalid activityID or activity already completed")
 	// ErrActivityTaskNotCancelRequested is the error to indicate activity to be canceled is not cancel requested
 	ErrActivityTaskNotCancelRequested = serviceerror.NewInvalidArgument("unable to mark activity as canceled without activity being request canceled first")
 	// ErrWorkflowCompleted is the error to indicate workflow execution already completed
@@ -151,6 +132,9 @@ var (
 		enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED: {},
 		enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT:  {},
 	}
+
+	// ErrResetRedirectLimitReached indicates a possible long chain (or a loop) of resets that cannot be handled.
+	ErrResetRedirectLimitReached = serviceerror.NewInternal("The chain of resets is too long to iterate.")
 )
 
 // StaleStateError is an indicator that after loading the state for a task it was detected as stale. It's possible that

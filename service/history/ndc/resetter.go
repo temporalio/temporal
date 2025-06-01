@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package ndc
 
 import (
@@ -38,8 +14,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/util"
-	"go.temporal.io/server/service/history/shard"
-	"go.temporal.io/server/service/history/workflow"
+	historyi "go.temporal.io/server/service/history/interfaces"
 )
 
 const (
@@ -55,11 +30,11 @@ type (
 			baseLastEventVersion int64,
 			incomingFirstEventID int64,
 			incomingFirstEventVersion int64,
-		) (workflow.MutableState, error)
+		) (historyi.MutableState, error)
 	}
 
 	resetterImpl struct {
-		shard          shard.Context
+		shard          historyi.ShardContext
 		transactionMgr TransactionManager
 		executionMgr   persistence.ExecutionManager
 		stateRebuilder StateRebuilder
@@ -67,7 +42,7 @@ type (
 		namespaceID namespace.ID
 		workflowID  string
 		baseRunID   string
-		newContext  workflow.Context
+		newContext  historyi.WorkflowContext
 		newRunID    string
 
 		logger log.Logger
@@ -77,12 +52,12 @@ type (
 var _ resetter = (*resetterImpl)(nil)
 
 func NewResetter(
-	shard shard.Context,
+	shard historyi.ShardContext,
 	transactionMgr TransactionManager,
 	namespaceID namespace.ID,
 	workflowID string,
 	baseRunID string,
-	newContext workflow.Context,
+	newContext historyi.WorkflowContext,
 	newRunID string,
 	logger log.Logger,
 ) *resetterImpl {
@@ -109,7 +84,7 @@ func (r *resetterImpl) resetWorkflow(
 	baseLastEventVersion int64,
 	incomingFirstEventID int64,
 	incomingFirstEventVersion int64,
-) (workflow.MutableState, error) {
+) (historyi.MutableState, error) {
 
 	baseBranchToken, err := r.getBaseBranchToken(
 		ctx,
@@ -152,6 +127,10 @@ func (r *resetterImpl) resetWorkflow(
 		return nil, err
 	}
 	rebuildMutableState.AddHistorySize(rebuiltHistorySize)
+
+	if err := rebuildMutableState.RefreshExpirationTimeoutTask(ctx); err != nil {
+		return nil, err
+	}
 
 	r.newContext.Clear()
 	return rebuildMutableState, nil

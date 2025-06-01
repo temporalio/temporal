@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package temporal_test
 
 import (
@@ -39,6 +15,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite" // needed to register the sqlite plugin
+	"go.temporal.io/server/common/testing/otellogger"
 	"go.temporal.io/server/service/frontend"
 	"go.temporal.io/server/temporal"
 	"go.temporal.io/server/tests/testutils"
@@ -48,9 +25,34 @@ import (
 // TestNewServer verifies that NewServer doesn't cause any fx errors, and that there are no unexpected error logs after
 // running for a few seconds.
 func TestNewServer(t *testing.T) {
-	t.Parallel()
+	startAndStopServer(t)
+}
 
+// TestNewServerWithOTEL verifies that NewServer doesn't cause any fx errors when OTEL is enabled.
+func TestNewServerWithOTEL(t *testing.T) {
+	t.Setenv("OTEL_TRACES_EXPORTER", "otlp")
+	t.Setenv("OTEL_BSP_SCHEDULE_DELAY", "100")
+	t.Setenv("OTEL_EXPORTER_OTLP_TRACES_INSECURE", "true")
+
+	t.Run("with OTEL Collector running", func(t *testing.T) {
+		otelLogger, err := otellogger.Start(t)
+		require.NoError(t, err)
+		t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", otelLogger.Addr())
+		startAndStopServer(t)
+		require.NotEmpty(t, otelLogger.Spans(), "expected at least one OTEL span")
+	})
+
+	t.Run("without OTEL Collector running", func(t *testing.T) {
+		startAndStopServer(t)
+	})
+}
+
+func startAndStopServer(t *testing.T) {
 	cfg := loadConfig(t)
+	// The prometheus reporter does not shut down in-between test runs.
+	// This will assign a random port to the prometheus reporter,
+	// so that it doesn't conflict with other tests.
+	cfg.Global.Metrics.Prometheus.ListenAddress = ":0"
 	logDetector := newErrorLogDetector(t, log.NewTestLogger())
 	logDetector.Start()
 
@@ -61,12 +63,14 @@ func TestNewServer(t *testing.T) {
 		temporal.WithChainedFrontendGrpcInterceptors(getFrontendInterceptors()),
 	)
 	require.NoError(t, err)
+
 	t.Cleanup(func() {
 		logDetector.Stop()
 		assert.NoError(t, server.Stop())
 	})
+
 	require.NoError(t, server.Start())
-	time.Sleep(10 * time.Second)
+	time.Sleep(10 * time.Second) //nolint:forbidigo
 }
 
 func loadConfig(t *testing.T) *config.Config {
@@ -159,6 +163,7 @@ func (d *errorLogDetector) Warn(msg string, tags ...tag.Tag) {
 	for _, s := range []string{
 		"error creating sdk client",
 		"Failed to poll for task",
+		"OTEL error", // logged when OTEL collector is not running
 	} {
 		if strings.Contains(msg, s) {
 			return

@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package matching
 
 import (
@@ -30,11 +6,11 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/common/cache"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
 const (
 	pollerHistoryInitMaxSize = 1000
-	pollerHistoryTTL         = 5 * time.Minute
 )
 
 type (
@@ -51,7 +27,7 @@ type pollerHistory struct {
 	history cache.Cache
 }
 
-func newPollerHistory() *pollerHistory {
+func newPollerHistory(pollerHistoryTTL time.Duration) *pollerHistory {
 	opts := &cache.Options{
 		TTL: pollerHistoryTTL,
 		Pin: false,
@@ -80,8 +56,9 @@ func (pollers *pollerHistory) getPollerInfo(earliestAccessTime time.Time) []*tas
 			result = append(result, &taskqueuepb.PollerInfo{
 				Identity:                  string(key),
 				LastAccessTime:            timestamppb.New(lastAccessTime),
-				RatePerSecond:             defaultValue(value.ratePerSecond, defaultTaskDispatchRPS),
+				RatePerSecond:             defaultRPS(value.taskQueueMetadata.GetMaxTasksPerSecond()),
 				WorkerVersionCapabilities: value.workerVersionCapabilities,
+				DeploymentOptions:         value.deploymentOptions,
 			})
 		}
 	}
@@ -89,9 +66,9 @@ func (pollers *pollerHistory) getPollerInfo(earliestAccessTime time.Time) []*tas
 	return result
 }
 
-func defaultValue[T any, P ~*T](p P, def T) T {
-	if p == nil {
-		return def
+func defaultRPS(wrapper *wrapperspb.DoubleValue) float64 {
+	if wrapper != nil {
+		return wrapper.Value
 	}
-	return *p
+	return defaultTaskDispatchRPS
 }

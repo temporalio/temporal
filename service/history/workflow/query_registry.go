@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package workflow
 
 import (
@@ -30,6 +6,7 @@ import (
 	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/service/history/consts"
+	historyi "go.temporal.io/server/service/history/interfaces"
 )
 
 var (
@@ -37,26 +14,6 @@ var (
 )
 
 type (
-	QueryRegistry interface {
-		HasBufferedQuery() bool
-		GetBufferedIDs() []string
-		HasCompletedQuery() bool
-		GetCompletedIDs() []string
-		HasUnblockedQuery() bool
-		GetUnblockedIDs() []string
-		HasFailedQuery() bool
-		GetFailedIDs() []string
-
-		GetQueryCompletionCh(string) (<-chan struct{}, error)
-		GetQueryInput(string) (*querypb.WorkflowQuery, error)
-		GetCompletionState(string) (*QueryCompletionState, error)
-
-		BufferQuery(queryInput *querypb.WorkflowQuery) (string, <-chan struct{})
-		SetCompletionState(string, *QueryCompletionState) error
-		RemoveQuery(id string)
-		Clear()
-	}
-
 	queryRegistryImpl struct {
 		sync.RWMutex
 
@@ -67,7 +24,7 @@ type (
 	}
 )
 
-func NewQueryRegistry() QueryRegistry {
+func NewQueryRegistry() historyi.QueryRegistry {
 	return &queryRegistryImpl{
 		buffered:  make(map[string]query),
 		completed: make(map[string]query),
@@ -144,7 +101,7 @@ func (r *queryRegistryImpl) GetQueryInput(id string) (*querypb.WorkflowQuery, er
 	return q.getQueryInput(), nil
 }
 
-func (r *queryRegistryImpl) GetCompletionState(id string) (*QueryCompletionState, error) {
+func (r *queryRegistryImpl) GetCompletionState(id string) (*historyi.QueryCompletionState, error) {
 	r.RLock()
 	defer r.RUnlock()
 	q, err := r.getQueryNoLock(id)
@@ -163,7 +120,7 @@ func (r *queryRegistryImpl) BufferQuery(queryInput *querypb.WorkflowQuery) (stri
 	return id, q.getCompletionCh()
 }
 
-func (r *queryRegistryImpl) SetCompletionState(id string, completionState *QueryCompletionState) error {
+func (r *queryRegistryImpl) SetCompletionState(id string, completionState *historyi.QueryCompletionState) error {
 	r.Lock()
 	defer r.Unlock()
 	q, ok := r.buffered[id]
@@ -198,7 +155,7 @@ func (r *queryRegistryImpl) Clear() {
 	r.Lock()
 	defer r.Unlock()
 	for id, q := range r.buffered {
-		_ = q.setCompletionState(&QueryCompletionState{
+		_ = q.setCompletionState(&historyi.QueryCompletionState{
 			Type: QueryCompletionTypeFailed,
 			Err:  consts.ErrBufferedQueryCleared,
 		})

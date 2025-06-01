@@ -1,12 +1,24 @@
-[![Build status](https://github.com/temporalio/temporal/actions/workflows/run-tests.yml/badge.svg?branch=main)](https://github.com/temporalio/temporal/commits/main/)
-[![Coverage Status](https://coveralls.io/repos/github/temporalio/temporal/badge.svg?branch=main)](https://coveralls.io/github/temporalio/temporal?branch=main)
-[![Discourse](https://img.shields.io/static/v1?label=Discourse&message=Get%20Help&color=informational)](https://community.temporal.io)
-[![Go Report Card][go-report-image]][go-report-url]
+<div class="title-block" style="text-align: center;" align="center">
 
-[go-report-image]: https://goreportcard.com/badge/github.com/temporalio/temporal
-[go-report-url]: https://goreportcard.com/report/github.com/temporalio/temporal
+# Temporal—durable execution platform
 
-# Temporal
+<p><img title="temporal logo" src="https://avatars.githubusercontent.com/u/56493103?s=320" width="320" height="320"></p>
+
+[![GitHub Release](https://img.shields.io/github/v/release/temporalio/temporal)](https://github.com/temporalio/temporal/releases/latest)
+[![GitHub License](https://img.shields.io/github/license/temporalio/temporal)](https://github.com/temporalio/temporal/blob/main/LICENSE)
+[![Code Coverage](https://img.shields.io/badge/codecov-report-blue)](https://app.codecov.io/gh/temporalio/temporal)
+[![Community](https://img.shields.io/static/v1?label=community&message=get%20help&color=informational)](https://community.temporal.io)
+[![Go Report Card](https://goreportcard.com/badge/github.com/temporalio/temporal)](https://goreportcard.com/report/github.com/temporalio/temporal)
+
+**[Introduction](#introduction) &nbsp;&nbsp;&bull;&nbsp;&nbsp;**
+**[Getting Started](#getting-started) &nbsp;&nbsp;&bull;&nbsp;&nbsp;**
+**[Contributing](#contributing) &nbsp;&nbsp;&bull;&nbsp;&nbsp;**
+**[Temporal Docs](https://docs.temporal.io/) &nbsp;&nbsp;&bull;&nbsp;&nbsp;**
+**[Temporal 101](https://learn.temporal.io/courses/temporal_101/)**
+
+</div>
+
+## Introduction
 
 Temporal is a durable execution platform that enables developers to build scalable applications without sacrificing productivity or reliability.
 The Temporal server executes units of application logic called Workflows in a resilient manner that automatically handles intermittent failures, and retries failed operations.
@@ -15,12 +27,6 @@ Temporal is a mature technology that originated as a fork of Uber's Cadence.
 It is developed by [Temporal Technologies](https://temporal.io/), a startup by the creators of Cadence.
 
 [![image](https://github.com/temporalio/temporal/assets/251288/693d18b5-01de-4a3b-b47b-96347b84f610)](https://youtu.be/wIpz4ioK0gI 'Getting to know Temporal')
-
-Learn more:
-
-- [Courses](https://learn.temporal.io/courses/temporal_101/)
-- [Docs](https://docs.temporal.io)
-- Internal architecture: [docs/](./docs/architecture/README.md)
 
 ## Getting Started
 
@@ -59,14 +65,15 @@ This repository contains the source code of the Temporal server. To implement Wo
 
 ## Contributing
 
-We'd love your help in making Temporal great. Please review the [internal architecture docs](./docs/architecture/README.md).
+We'd love your help in making Temporal great.
 
-See [CONTRIBUTING.md](./CONTRIBUTING.md) for how to build and run the server locally, run tests, etc.
+Helpful links to get started:
 
-If you'd like to work on or propose a new feature, first peruse [feature requests](https://community.temporal.io/c/feature-requests/6) and our [proposals repo](https://github.com/temporalio/proposals) to discover existing active and accepted proposals.
-
-Feel free to join the Temporal community [forum](https://community.temporal.io) or [Slack](https://t.mp/slack) to start a discussion or check if a feature has already been discussed.
-Once you're sure the proposal is not covered elsewhere, please follow our [proposal instructions](https://github.com/temporalio/proposals#creating-a-new-proposal) or submit a [feature request](https://community.temporal.io/c/feature-requests/6).
+- [work on or propose a new feature](https://github.com/temporalio/proposals)
+- [learn about the Temporal Server architecture](./docs/architecture/README.md)
+- [learn how to build and run the Temporal Server locally](./CONTRIBUTING.md)
+- [learn about Temporal Server testing tools and best practices](./docs/development/testing.md)
+- join the Temporal community [forum](https://community.temporal.io) and [Slack](https://t.mp/slack)
 
 ## License
 

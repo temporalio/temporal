@@ -1,25 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package callbacks
 
 import (
@@ -31,6 +9,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/queues"
@@ -58,37 +37,68 @@ func RegisterExecutor(
 	)
 }
 
-type (
-	TaskExecutorOptions struct {
-		fx.In
+type TaskExecutorOptions struct {
+	fx.In
 
-		Config             *Config
-		NamespaceRegistry  namespace.Registry
-		MetricsHandler     metrics.Handler
-		Logger             log.Logger
-		HTTPCallerProvider HTTPCallerProvider
-		HistoryClient      resource.HistoryClient
-	}
+	Config             *Config
+	NamespaceRegistry  namespace.Registry
+	MetricsHandler     metrics.Handler
+	Logger             log.Logger
+	HTTPCallerProvider HTTPCallerProvider
+	HTTPTraceProvider  commonnexus.HTTPClientTraceProvider
+	HistoryClient      resource.HistoryClient
+}
 
-	taskExecutor struct {
-		TaskExecutorOptions
-	}
+type taskExecutor struct {
+	TaskExecutorOptions
+}
 
-	invocationResult int
+// invocationResult is a marker for the callbackInvokable.Invoke result to indicate to the executor how to handle the
+// invocation outcome.
+type invocationResult interface {
+	// A marker for all possible implementations.
+	mustImplementInvocationResult()
+	error() error
+}
 
-	callbackInvokable interface {
-		// Invoke executes the callback logic and returns a result, and the error to be logged in the state machine.
-		Invoke(ctx context.Context, ns *namespace.Namespace, e taskExecutor, task InvocationTask) (invocationResult, error)
-		// WrapError provides each variant the opportunity to return a different error up the call stack than the one logged.
-		WrapError(result invocationResult, err error) error
-	}
-)
+// invocationResultFail marks an invocation as successful.
+type invocationResultOK struct{}
 
-const (
-	ok invocationResult = iota
-	retry
-	failed
-)
+func (invocationResultOK) mustImplementInvocationResult() {}
+
+func (invocationResultOK) error() error {
+	return nil
+}
+
+// invocationResultFail marks an invocation as permanently failed.
+type invocationResultFail struct {
+	err error
+}
+
+func (invocationResultFail) mustImplementInvocationResult() {}
+
+func (r invocationResultFail) error() error {
+	return r.err
+}
+
+// invocationResultRetry marks an invocation as failed with the intent to retry.
+type invocationResultRetry struct {
+	err error
+}
+
+func (invocationResultRetry) mustImplementInvocationResult() {}
+
+func (r invocationResultRetry) error() error {
+	return r.err
+}
+
+type callbackInvokable interface {
+	// Invoke executes the callback logic and returns the invocation result.
+	Invoke(ctx context.Context, ns *namespace.Namespace, e taskExecutor, task InvocationTask) invocationResult
+	// WrapError provides each variant the opportunity to wrap the error returned by the task executor for, e.g. to
+	// trigger the circuit breaker.
+	WrapError(result invocationResult, err error) error
+}
 
 func (e taskExecutor) executeInvocationTask(
 	ctx context.Context,
@@ -108,17 +118,13 @@ func (e taskExecutor) executeInvocationTask(
 
 	callCtx, cancel := context.WithTimeout(
 		ctx,
-		e.Config.RequestTimeout(ns.Name().String(), task.Destination),
+		e.Config.RequestTimeout(ns.Name().String(), task.Destination()),
 	)
 	defer cancel()
 
-	result, err := invokable.Invoke(callCtx, ns, e, task)
-
-	saveErr := e.saveResult(callCtx, env, ref, result, err)
-	if saveErr != nil {
-		return saveErr
-	}
-	return invokable.WrapError(result, err)
+	result := invokable.Invoke(callCtx, ns, e, task)
+	saveErr := e.saveResult(ctx, env, ref, result)
+	return invokable.WrapError(result, saveErr)
 }
 
 func (e taskExecutor) loadInvocationArgs(
@@ -141,7 +147,10 @@ func (e taskExecutor) loadInvocationArgs(
 			// variant struct is immutable and ok to reference without copying
 			nexusInvokable := nexusInvocation{}
 			nexusInvokable.nexus = variant.Nexus
-			nexusInvokable.completion, err = target.GetNexusCompletion(ctx)
+			nexusInvokable.completion, err = target.GetNexusCompletion(ctx, callback.GetRequestId())
+			nexusInvokable.workflowID = ref.WorkflowKey.WorkflowID
+			nexusInvokable.runID = ref.WorkflowKey.RunID
+			nexusInvokable.attempt = callback.Attempt
 			invokable = nexusInvokable
 			if err != nil {
 				return err
@@ -159,9 +168,6 @@ func (e taskExecutor) loadInvocationArgs(
 				return err
 			}
 			invokable = hsmInvokable
-			if err != nil {
-				return err
-			}
 		default:
 			return queues.NewUnprocessableTaskError(
 				fmt.Sprintf("unprocessable callback variant: %v", variant),
@@ -177,23 +183,24 @@ func (e taskExecutor) saveResult(
 	env hsm.Environment,
 	ref hsm.Ref,
 	result invocationResult,
-	callErr error,
 ) error {
 	return env.Access(ctx, ref, hsm.AccessWrite, func(node *hsm.Node) error {
 		return hsm.MachineTransition(node, func(callback Callback) (hsm.TransitionOutput, error) {
-			switch result {
-			case ok:
-				return TransitionSucceeded.Apply(callback, EventSucceeded{})
-			case retry:
+			switch result.(type) {
+			case invocationResultOK:
+				return TransitionSucceeded.Apply(callback, EventSucceeded{
+					Time: env.Now(),
+				})
+			case invocationResultRetry:
 				return TransitionAttemptFailed.Apply(callback, EventAttemptFailed{
 					Time:        env.Now(),
-					Err:         callErr,
+					Err:         result.error(),
 					RetryPolicy: e.Config.RetryPolicy(),
 				})
-			case failed:
+			case invocationResultFail:
 				return TransitionFailed.Apply(callback, EventFailed{
 					Time: env.Now(),
-					Err:  callErr,
+					Err:  result.error(),
 				})
 			default:
 				return hsm.TransitionOutput{}, queues.NewUnprocessableTaskError(fmt.Sprintf("unrecognized callback result %v", result))

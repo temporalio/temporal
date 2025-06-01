@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package forcedeleteworkflowexecution
 
 import (
@@ -29,17 +5,13 @@ import (
 	"fmt"
 	"math"
 
-	historypb "go.temporal.io/api/history/v1"
-	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 )
 
@@ -86,8 +58,7 @@ func Invoke(
 			return nil, err
 		}
 		// continue to deletion
-		warnMsg := "Unable to load mutable state when deleting workflow execution, " +
-			"will skip deleting workflow history and visibility record"
+		warnMsg := "Unable to load mutable state. Skipping workflow history deletion."
 		logger.Warn(warnMsg, tag.Error(err))
 		warnings = append(warnings, fmt.Sprintf("%s. Error: %v", warnMsg, err.Error()))
 	} else {
@@ -147,43 +118,4 @@ func Invoke(
 			Warnings: warnings,
 		},
 	}, nil
-}
-
-func getWorkflowCompletionEvent(
-	ctx context.Context,
-	shardID int32,
-	mutableState *persistencespb.WorkflowMutableState,
-	persistenceExecutionManager persistence.ExecutionManager,
-) (*historypb.HistoryEvent, error) {
-	executionInfo := mutableState.GetExecutionInfo()
-	completionEventID := mutableState.GetNextEventId() - 1
-
-	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(executionInfo.VersionHistories)
-	if err != nil {
-		return nil, err
-	}
-	version, err := versionhistory.GetVersionHistoryEventVersion(currentVersionHistory, completionEventID)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := persistenceExecutionManager.ReadHistoryBranch(ctx, &persistence.ReadHistoryBranchRequest{
-		ShardID:     shardID,
-		BranchToken: currentVersionHistory.GetBranchToken(),
-		MinEventID:  executionInfo.CompletionEventBatchId,
-		MaxEventID:  completionEventID + 1,
-		PageSize:    1,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	// find history event from batch and return back single event to caller
-	for _, e := range resp.HistoryEvents {
-		if e.EventId == completionEventID && e.Version == version {
-			return e, nil
-		}
-	}
-
-	return nil, serviceerror.NewInternal("Unable to find closed event for workflow")
 }

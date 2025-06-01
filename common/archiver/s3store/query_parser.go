@@ -1,39 +1,14 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
-//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source query_parser.go -destination query_parser_mock.go -mock_names Interface=MockQueryParser
+//go:generate mockgen -package $GOPACKAGE -source query_parser.go -destination query_parser_mock.go -mock_names Interface=MockQueryParser
 
 package s3store
 
 import (
 	"errors"
 	"fmt"
-	"strconv"
 	"time"
 
 	"github.com/temporalio/sqlparser"
-	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/sqlquery"
 	"go.temporal.io/server/common/util"
 )
 
@@ -70,10 +45,6 @@ const (
 	PrecisionMinute = "Minute"
 	PrecisionSecond = "Second"
 )
-const (
-	queryTemplate         = "select * from dummy where %s"
-	defaultDateTimeFormat = time.RFC3339
-)
 
 // NewQueryParser creates a new query parser for filestore
 func NewQueryParser() QueryParser {
@@ -81,7 +52,7 @@ func NewQueryParser() QueryParser {
 }
 
 func (p *queryParser) Parse(query string) (*parsedQuery, error) {
-	stmt, err := sqlparser.Parse(fmt.Sprintf(queryTemplate, query))
+	stmt, err := sqlparser.Parse(fmt.Sprintf(sqlquery.QueryTemplate, query))
 	if err != nil {
 		return nil, err
 	}
@@ -152,7 +123,7 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 
 	switch colNameStr {
 	case WorkflowTypeName:
-		val, err := extractStringValue(valStr)
+		val, err := sqlquery.ExtractStringValue(valStr)
 		if err != nil {
 			return err
 		}
@@ -164,7 +135,7 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 		}
 		parsedQuery.workflowTypeName = util.Ptr(val)
 	case WorkflowID:
-		val, err := extractStringValue(valStr)
+		val, err := sqlquery.ExtractStringValue(valStr)
 		if err != nil {
 			return err
 		}
@@ -176,7 +147,7 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 		}
 		parsedQuery.workflowID = util.Ptr(val)
 	case CloseTime:
-		timestamp, err := convertToTime(valStr)
+		timestamp, err := sqlquery.ConvertToTime(valStr)
 		if err != nil {
 			return err
 		}
@@ -185,7 +156,7 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 		}
 		parsedQuery.closeTime = &timestamp
 	case StartTime:
-		timestamp, err := convertToTime(valStr)
+		timestamp, err := sqlquery.ConvertToTime(valStr)
 		if err != nil {
 			return err
 		}
@@ -194,7 +165,7 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 		}
 		parsedQuery.startTime = &timestamp
 	case SearchPrecision:
-		val, err := extractStringValue(valStr)
+		val, err := sqlquery.ExtractStringValue(valStr)
 		if err != nil {
 			return err
 		}
@@ -219,27 +190,4 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 	}
 
 	return nil
-}
-
-func convertToTime(timeStr string) (time.Time, error) {
-	ts, err := strconv.ParseInt(timeStr, 10, 64)
-	if err == nil {
-		return timestamp.UnixOrZeroTime(ts), nil
-	}
-	timestampStr, err := extractStringValue(timeStr)
-	if err != nil {
-		return time.Time{}, err
-	}
-	parsedTime, err := time.Parse(defaultDateTimeFormat, timestampStr)
-	if err != nil {
-		return time.Time{}, err
-	}
-	return parsedTime, nil
-}
-
-func extractStringValue(s string) (string, error) {
-	if len(s) >= 2 && s[0] == '\'' && s[len(s)-1] == '\'' {
-		return s[1 : len(s)-1], nil
-	}
-	return "", fmt.Errorf("value %s is not a string value", s)
 }

@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package historybuilder
 
 import (
@@ -55,6 +31,8 @@ type EventStore struct {
 
 	// scheduled to started event ID mapping
 	scheduledIDToStartedID map[int64]int64
+	// request id to event ID mapping
+	requestIDToEventID map[string]int64
 
 	metricsHandler metrics.Handler
 }
@@ -150,9 +128,9 @@ func (b *EventStore) SizeInBytesOfBufferedEvents() int {
 	return size
 }
 
-func (b *EventStore) FlushBufferToCurrentBatch() map[int64]int64 {
+func (b *EventStore) FlushBufferToCurrentBatch() (map[int64]int64, map[string]int64) {
 	if len(b.dbBufferBatch) == 0 && len(b.memBufferBatch) == 0 {
-		return b.scheduledIDToStartedID
+		return b.scheduledIDToStartedID, b.requestIDToEventID
 	}
 
 	b.assertMutable()
@@ -164,7 +142,7 @@ func (b *EventStore) FlushBufferToCurrentBatch() map[int64]int64 {
 		// above will generate 2 then 1
 		b.dbBufferBatch = nil
 		b.memBufferBatch = nil
-		return b.scheduledIDToStartedID
+		return b.scheduledIDToStartedID, b.requestIDToEventID
 	}
 
 	b.dbClearBuffer = b.dbClearBuffer || len(b.dbBufferBatch) > 0
@@ -186,7 +164,7 @@ func (b *EventStore) FlushBufferToCurrentBatch() map[int64]int64 {
 
 	b.memLatestBatch = append(b.memLatestBatch, bufferBatch...)
 
-	return b.scheduledIDToStartedID
+	return b.scheduledIDToStartedID, b.requestIDToEventID
 }
 
 func (b *EventStore) FlushAndCreateNewBatch() {
@@ -207,7 +185,7 @@ func (b *EventStore) Finish(
 	}()
 
 	if flushBufferEvent {
-		_ = b.FlushBufferToCurrentBatch()
+		_, _ = b.FlushBufferToCurrentBatch()
 	}
 	b.FlushAndCreateNewBatch()
 
@@ -217,6 +195,7 @@ func (b *EventStore) Finish(
 	memBufferBatch := b.dbBufferBatch
 	memBufferBatch = append(memBufferBatch, dbBufferBatch...)
 	scheduledIDToStartedID := b.scheduledIDToStartedID
+	requestIDToEventID := b.requestIDToEventID
 
 	b.memEventsBatches = nil
 	b.memBufferBatch = nil
@@ -235,6 +214,7 @@ func (b *EventStore) Finish(
 		DBBufferBatch:          dbBufferBatch,
 		MemBufferBatch:         memBufferBatch,
 		ScheduledIDToStartedID: scheduledIDToStartedID,
+		RequestIDToEventID:     requestIDToEventID,
 	}, nil
 }
 
@@ -322,7 +302,6 @@ func (b *EventStore) bufferEvent(
 		return false
 
 	case // events generated directly from messages should not be buffered
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_REJECTED,
 		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED,
 		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_COMPLETED:
 		return false
@@ -409,6 +388,12 @@ func (b *EventStore) wireEventIDs(
 			attributes := event.GetChildWorkflowExecutionTerminatedEventAttributes()
 			if startedEventID, ok := b.scheduledIDToStartedID[attributes.GetInitiatedEventId()]; ok {
 				attributes.StartedEventId = startedEventID
+			}
+
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED:
+			attributes := event.GetWorkflowExecutionOptionsUpdatedEventAttributes()
+			if attributes.GetAttachedRequestId() != "" {
+				b.requestIDToEventID[attributes.AttachedRequestId] = event.GetEventId()
 			}
 		}
 	}

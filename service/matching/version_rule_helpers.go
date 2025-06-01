@@ -1,31 +1,6 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package matching
 
 import (
-	"fmt"
 	"math"
 	"math/rand"
 	"slices"
@@ -33,7 +8,7 @@ import (
 
 	"github.com/dgryski/go-farm"
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/api/taskqueue/v1"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -53,20 +28,20 @@ var (
 	errSourceIsVersionSetMember                          = serviceerror.NewFailedPrecondition("update breaks requirement, source build ID is already a member of a version set")
 	errPartiallyRampedAssignmentRuleIsRedirectRuleSource = serviceerror.NewFailedPrecondition("update breaks requirement, this build ID cannot be the target of a partially-ramped assignment rule because it is the source of a redirect rule")
 	errAssignmentRuleIndexOutOfBounds                    = func(idx, length int) error {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("rule index %d is out of bounds for assignment rule list of length %d", idx, length))
+		return serviceerror.NewInvalidArgumentf("rule index %d is out of bounds for assignment rule list of length %d", idx, length)
 	}
 	errSourceIsPartiallyRampedAssignmentRuleTarget = serviceerror.NewFailedPrecondition("redirect rule source build ID cannot be the target of any partially-ramped assignment rule")
 	errSourceAlreadyExists                         = func(source, target string) error {
-		return serviceerror.NewAlreadyExist(fmt.Sprintf("source %s already redirects to target %s", source, target))
+		return serviceerror.NewAlreadyExistsf("source %s already redirects to target %s", source, target)
 	}
 	errSourceNotFound = func(source string) error {
-		return serviceerror.NewNotFound(fmt.Sprintf("no redirect rule found with source ID %s", source))
+		return serviceerror.NewNotFoundf("no redirect rule found with source ID %s", source)
 	}
 	errNoRecentPollerOnCommitVersion = func(target string) error {
-		return serviceerror.NewFailedPrecondition(fmt.Sprintf("no versioned poller with build ID '%s' seen within the last %s, use force=true to commit anyways", target, versioningPollerSeenWindow.String()))
+		return serviceerror.NewFailedPreconditionf("no versioned poller with build ID '%s' seen within the last %s, use force=true to commit anyways", target, versioningPollerSeenWindow.String())
 	}
 	errExceedsMaxAssignmentRules = func(cnt, max int) error {
-		return serviceerror.NewFailedPrecondition(fmt.Sprintf("update exceeds number of assignment rules permitted in namespace (%v/%v)", cnt, max))
+		return serviceerror.NewFailedPreconditionf("update exceeds number of assignment rules permitted in namespace (%v/%v)", cnt, max)
 	}
 	// errRequireFullyRampedAssignmentRule is thrown if the task queue previously had a fully-ramped assignment rule and
 	// the requested operation would result in a list of assignment rules without a fully-ramped assigment rule, which
@@ -78,11 +53,11 @@ var (
 	// a versioned default Build ID to an unversioned default Build ID, use force=true to bypass this requirement.
 	errRequireFullyRampedAssignmentRule = serviceerror.NewFailedPrecondition("at least one fully-ramped assignment rule must exist (use force=true to bypass this requirement and set the unversioned queue as the default)")
 	errExceedsMaxRedirectRules          = func(cnt, max int) error {
-		return serviceerror.NewFailedPrecondition(fmt.Sprintf("update exceeds number of redirect rules permitted in namespace (%v/%v)", cnt, max))
+		return serviceerror.NewFailedPreconditionf("update exceeds number of redirect rules permitted in namespace (%v/%v)", cnt, max)
 	}
 	errIsCyclic                   = serviceerror.NewFailedPrecondition("update would break acyclic requirement")
 	errExceedsMaxUpstreamBuildIDs = func(cnt, max int) error {
-		return serviceerror.NewFailedPrecondition(fmt.Sprintf("update exceeds number of upstream build ids permitted in namespace (%v/%v)", cnt, max))
+		return serviceerror.NewFailedPreconditionf("update exceeds number of upstream build ids permitted in namespace (%v/%v)", cnt, max)
 	}
 	errUnversionedRedirectRuleTarget = serviceerror.NewInvalidArgument("the unversioned build ID cannot be the target of a redirect rule")
 )
@@ -309,9 +284,9 @@ func CommitBuildID(timestamp *hlc.Clock,
 	}
 
 	data.AssignmentRules = append(data.GetAssignmentRules(), &persistencespb.AssignmentRule{
-		Rule: &taskqueue.BuildIdAssignmentRule{
+		Rule: &taskqueuepb.BuildIdAssignmentRule{
 			TargetBuildId: target,
-			Ramp:          &taskqueue.BuildIdAssignmentRule_PercentageRamp{PercentageRamp: &taskqueue.RampByPercentage{RampPercentage: 100}},
+			Ramp:          &taskqueuepb.BuildIdAssignmentRule_PercentageRamp{PercentageRamp: &taskqueuepb.RampByPercentage{RampPercentage: 100}},
 		},
 		CreateTimestamp: timestamp,
 	})
@@ -330,19 +305,19 @@ func GetTimestampedWorkerVersioningRules(
 	if cT, err = clk.Marshal(); err != nil {
 		return nil, serviceerror.NewInternal("error generating conflict token")
 	}
-	activeAssignmentRules := make([]*taskqueue.TimestampedBuildIdAssignmentRule, 0)
+	activeAssignmentRules := make([]*taskqueuepb.TimestampedBuildIdAssignmentRule, 0)
 	for _, ar := range versioningData.GetAssignmentRules() {
 		if ar.GetDeleteTimestamp() == nil {
-			activeAssignmentRules = append(activeAssignmentRules, &taskqueue.TimestampedBuildIdAssignmentRule{
+			activeAssignmentRules = append(activeAssignmentRules, &taskqueuepb.TimestampedBuildIdAssignmentRule{
 				Rule:       ar.GetRule(),
 				CreateTime: hlc.ProtoTimestamp(ar.GetCreateTimestamp()),
 			})
 		}
 	}
-	activeRedirectRules := make([]*taskqueue.TimestampedCompatibleBuildIdRedirectRule, 0)
+	activeRedirectRules := make([]*taskqueuepb.TimestampedCompatibleBuildIdRedirectRule, 0)
 	for _, rr := range versioningData.GetRedirectRules() {
 		if rr.GetDeleteTimestamp() == nil {
-			activeRedirectRules = append(activeRedirectRules, &taskqueue.TimestampedCompatibleBuildIdRedirectRule{
+			activeRedirectRules = append(activeRedirectRules, &taskqueuepb.TimestampedCompatibleBuildIdRedirectRule{
 				Rule:       rr.GetRule(),
 				CreateTime: hlc.ProtoTimestamp(rr.GetCreateTimestamp()),
 			})
@@ -495,20 +470,20 @@ func given2ActualIdx(idx int32, rules []*persistencespb.AssignmentRule) int {
 }
 
 // handleAssignmentRuleNilRamp mutates and returns rule object to convert nil ramp to 100%
-func handleAssignmentRuleNilRamp(rule *taskqueue.BuildIdAssignmentRule) *taskqueue.BuildIdAssignmentRule {
+func handleAssignmentRuleNilRamp(rule *taskqueuepb.BuildIdAssignmentRule) *taskqueuepb.BuildIdAssignmentRule {
 	if rule.GetRamp() == nil {
-		rule.Ramp = &taskqueue.BuildIdAssignmentRule_PercentageRamp{PercentageRamp: &taskqueue.RampByPercentage{RampPercentage: 100}}
+		rule.Ramp = &taskqueuepb.BuildIdAssignmentRule_PercentageRamp{PercentageRamp: &taskqueuepb.RampByPercentage{RampPercentage: 100}}
 	}
 	return rule
 }
 
 // hasValidRamp returns true if the rule has a ramp percentage within [0, 100] or a ramp of nil
-func hasValidRamp(rule *taskqueue.BuildIdAssignmentRule) bool {
+func hasValidRamp(rule *taskqueuepb.BuildIdAssignmentRule) bool {
 	return rule.GetRamp() == nil || (rule.GetPercentageRamp().GetRampPercentage() >= 0 && rule.GetPercentageRamp().GetRampPercentage() <= 100)
 }
 
 // isFullyRamped returns true if the rule has a ramp percentage of 100 or a ramp of nil
-func isFullyRamped(rule *taskqueue.BuildIdAssignmentRule) bool {
+func isFullyRamped(rule *taskqueuepb.BuildIdAssignmentRule) bool {
 	return rule.GetRamp() == nil || rule.GetPercentageRamp().GetRampPercentage() == 100
 }
 

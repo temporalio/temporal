@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package worker
 
 import (
@@ -30,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 	sdkclient "go.temporal.io/sdk/client"
@@ -47,6 +23,7 @@ import (
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/testing/mocksdk"
 	workercommon "go.temporal.io/server/service/worker/common"
+	"go.uber.org/mock/gomock"
 )
 
 type perNsWorkerManagerSuite struct {
@@ -86,22 +63,22 @@ func (s *perNsWorkerManagerSuite) SetupTest() {
 		NamespaceRegistry: s.registry,
 		HostName:          "self",
 		Config: &Config{
-			PerNamespaceWorkerCount: func(ns string) int {
-				return max(1, map[string]int{"ns1": 1, "ns2": 2, "ns3": 6}[ns])
+			PerNamespaceWorkerCount: func(ns string, cb func(int)) (int, func()) {
+				return max(1, map[string]int{"ns1": 1, "ns2": 2, "ns3": 6}[ns]), func() {}
 			},
-			PerNamespaceWorkerOptions: func(ns string) sdkworker.Options {
+			PerNamespaceWorkerOptions: func(ns string, cb func(sdkworker.Options)) (sdkworker.Options, func()) {
 				switch ns {
 				case "ns1":
 					return sdkworker.Options{
 						MaxConcurrentWorkflowTaskPollers: 100,
-					}
+					}, func() {}
 				case "ns2":
 					return sdkworker.Options{
 						WorkerLocalActivitiesPerSecond: 200.0,
 						StickyScheduleToStartTimeout:   7500 * time.Millisecond,
-					}
+					}, func() {}
 				default:
-					return sdkworker.Options{}
+					return sdkworker.Options{}, func() {}
 				}
 			},
 			PerNamespaceWorkerStartRate: dynamicconfig.GetFloatPropertyFn(10),
@@ -559,6 +536,121 @@ func (s *perNsWorkerManagerSuite) TestRateLimit() {
 
 	wkr.EXPECT().Stop().AnyTimes()
 	cli.EXPECT().Close().AnyTimes()
+}
+
+func TestPerNsWorkerManagerSubscription(t *testing.T) {
+	// this is separate from the suite for more control over config
+
+	controller := gomock.NewController(t)
+	logger := log.NewTestLogger()
+	cfactory := sdk.NewMockClientFactory(controller)
+	registry := namespace.NewMockRegistry(controller)
+	hostInfo := membership.NewHostInfoFromAddress("self")
+	serviceResolver := membership.NewMockServiceResolver(controller)
+	cmp := workercommon.NewMockPerNSWorkerComponent(controller)
+	cli := mocksdk.NewMockClient(controller)
+	wkr := mocksdk.NewMockWorker(controller)
+	cfactory.EXPECT().NewClient(gomock.Any()).Return(cli).AnyTimes()
+
+	mem := dynamicconfig.NewMemoryClient()
+	dc := dynamicconfig.NewCollection(mem, logger)
+	dc.Start()
+	t.Cleanup(dc.Stop)
+	config := NewConfig(dc, nil)
+
+	manager := NewPerNamespaceWorkerManager(perNamespaceWorkerManagerInitParams{
+		Logger:            logger,
+		SdkClientFactory:  cfactory,
+		NamespaceRegistry: registry,
+		HostName:          "self",
+		Config:            config,
+		Components:        []workercommon.PerNSWorkerComponent{cmp},
+		ClusterMetadata:   clustertest.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(false, true)),
+	})
+	manager.initialRetry = 1 * time.Millisecond
+
+	registry.EXPECT().RegisterStateChangeCallback(gomock.Any(), gomock.Any())
+	serviceResolver.EXPECT().AddListener(gomock.Any(), gomock.Any())
+
+	manager.Start(hostInfo, serviceResolver)
+
+	// set up one namespace
+	ns := testns("ns1", enumspb.NAMESPACE_STATE_REGISTERED)
+	cmp.EXPECT().DedicatedWorkerOptions(gomock.Any()).
+		Return(&workercommon.PerNSDedicatedWorkerOptions{Enabled: true}).
+		AnyTimes()
+	serviceResolver.EXPECT().LookupN("ns1", 1).
+		Return([]membership.HostInfo{membership.NewHostInfoFromAddress("self")}).
+		AnyTimes()
+	serviceResolver.EXPECT().LookupN("ns1", 2).
+		Return([]membership.HostInfo{membership.NewHostInfoFromAddress("self"), membership.NewHostInfoFromAddress("self")}).
+		AnyTimes()
+
+	wait := make(chan struct{}, 100)
+	expectStop := func() {
+		wkr.EXPECT().Stop()
+		cli.EXPECT().Close().Do(func() { wait <- struct{}{} })
+	}
+	expectWorker := func(total, multiplicity, wfpollers int) {
+		cfactory.EXPECT().NewWorker(gomock.Any(), primitives.PerNSWorkerTaskQueue, gomock.Any()).
+			DoAndReturn(func(_ sdkclient.Client, _ string, options sdkworker.Options) sdkworker.Worker {
+				assert.Equal(t, wfpollers, options.MaxConcurrentWorkflowTaskPollers)
+				return wkr
+			})
+		cmp.EXPECT().Register(wkr, ns, workercommon.RegistrationDetails{TotalWorkers: total, Multiplicity: multiplicity})
+		wkr.EXPECT().Start().Do(func() { wait <- struct{}{} })
+	}
+
+	// register namespace
+	expectWorker(1, 1, 2)
+	manager.namespaceCallback(ns, false)
+	<-wait
+
+	// change worker count to 2: should stop and restart worker with more pollers
+	expectStop()
+	expectWorker(2, 2, 4)
+	revert1 := mem.OverrideSetting(dynamicconfig.WorkerPerNamespaceWorkerCount, 2)
+	<-wait
+	<-wait
+
+	// change options
+	expectStop()
+	expectWorker(2, 2, 200)
+	revert2 := mem.OverrideSetting(dynamicconfig.WorkerPerNamespaceWorkerOptions, sdkworker.Options{
+		MaxConcurrentWorkflowTaskPollers: 100,
+	})
+	<-wait
+	<-wait
+
+	// down to 0 workers
+	expectStop()
+	revert3 := mem.OverrideSetting(dynamicconfig.WorkerPerNamespaceWorkerCount, 0)
+	<-wait
+
+	// back to 2
+	expectWorker(2, 2, 200)
+	revert3()
+	<-wait
+
+	// revert count
+	expectStop()
+	expectWorker(1, 1, 100)
+	revert1()
+	<-wait
+	<-wait
+
+	// revert options
+	expectStop()
+	expectWorker(1, 1, 2)
+	revert2()
+	<-wait
+	<-wait
+
+	// stop manager
+	expectStop()
+	registry.EXPECT().UnregisterStateChangeCallback(gomock.Any())
+	serviceResolver.EXPECT().RemoveListener(gomock.Any())
+	manager.Stop()
 }
 
 func testns(name string, state enumspb.NamespaceState) *namespace.Namespace {

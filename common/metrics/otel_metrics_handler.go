@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package metrics
 
 import (
@@ -39,12 +15,13 @@ import (
 // otelMetricsHandler is an adapter around an OpenTelemetry [metric.Meter] that implements the [Handler] interface.
 type (
 	otelMetricsHandler struct {
-		l           log.Logger
-		set         attribute.Set
-		provider    OpenTelemetryProvider
-		excludeTags map[string]map[string]struct{}
-		catalog     catalog
-		gauges      *sync.Map // string -> *gaugeAdapter. note: shared between multiple otelMetricsHandlers
+		l                    log.Logger
+		set                  attribute.Set
+		provider             OpenTelemetryProvider
+		excludeTags          map[string]map[string]struct{}
+		catalog              catalog
+		gauges               *sync.Map // string -> *gaugeAdapter. note: shared between multiple otelMetricsHandlers
+		recordTimerInSeconds bool
 	}
 
 	// This is to work around the lack of synchronous gauge:
@@ -79,18 +56,21 @@ func NewOtelMetricsHandler(
 	l log.Logger,
 	o OpenTelemetryProvider,
 	cfg ClientConfig,
+	shouldRecordTimerInSeconds bool,
 ) (*otelMetricsHandler, error) {
 	c, err := globalRegistry.buildCatalog()
 	if err != nil {
 		return nil, fmt.Errorf("failed to build metrics catalog: %w", err)
 	}
+
 	return &otelMetricsHandler{
-		l:           l,
-		set:         makeInitialSet(cfg.Tags),
-		provider:    o,
-		excludeTags: configExcludeTags(cfg),
-		catalog:     c,
-		gauges:      new(sync.Map),
+		l:                    l,
+		set:                  makeInitialSet(cfg.Tags),
+		provider:             o,
+		excludeTags:          configExcludeTags(cfg),
+		catalog:              c,
+		gauges:               new(sync.Map),
+		recordTimerInSeconds: shouldRecordTimerInSeconds,
 	}, nil
 }
 
@@ -172,7 +152,14 @@ func (g *gaugeAdapterGauge) Record(v float64, tags ...Tag) {
 
 // Timer obtains a timer for the given name.
 func (omp *otelMetricsHandler) Timer(timer string) TimerIface {
-	opts := addOptions(omp, histogramOptions{metric.WithUnit(Milliseconds)}, timer)
+	if omp.recordTimerInSeconds {
+		return omp.timerInSeconds(timer)
+	}
+	return omp.timerInMilliseconds(timer)
+}
+
+func (omp *otelMetricsHandler) timerInMilliseconds(timer string) TimerIface {
+	opts := addOptions(omp, int64HistogramOptions{metric.WithUnit(Milliseconds)}, timer)
 	c, err := omp.provider.GetMeter().Int64Histogram(timer, opts...)
 	if err != nil {
 		omp.l.Error("error getting metric", tag.NewStringTag("MetricName", timer), tag.Error(err))
@@ -185,9 +172,23 @@ func (omp *otelMetricsHandler) Timer(timer string) TimerIface {
 	})
 }
 
+func (omp *otelMetricsHandler) timerInSeconds(timer string) TimerIface {
+	opts := addOptions(omp, float64HistogramOptions{metric.WithUnit(Seconds)}, timer)
+	c, err := omp.provider.GetMeter().Float64Histogram(timer, opts...)
+	if err != nil {
+		omp.l.Error("error getting metric", tag.NewStringTag("MetricName", timer), tag.Error(err))
+		return TimerFunc(func(i time.Duration, t ...Tag) {})
+	}
+
+	return TimerFunc(func(i time.Duration, t ...Tag) {
+		option := metric.WithAttributeSet(omp.makeSet(t))
+		c.Record(context.Background(), i.Seconds(), option)
+	})
+}
+
 // Histogram obtains a histogram for the given name.
 func (omp *otelMetricsHandler) Histogram(histogram string, unit MetricUnit) HistogramIface {
-	opts := addOptions(omp, histogramOptions{metric.WithUnit(string(unit))}, histogram)
+	opts := addOptions(omp, int64HistogramOptions{metric.WithUnit(string(unit))}, histogram)
 	c, err := omp.provider.GetMeter().Int64Histogram(histogram, opts...)
 	if err != nil {
 		omp.l.Error("error getting metric", tag.NewStringTag("MetricName", histogram), tag.Error(err))
@@ -202,6 +203,14 @@ func (omp *otelMetricsHandler) Histogram(histogram string, unit MetricUnit) Hist
 
 func (omp *otelMetricsHandler) Stop(l log.Logger) {
 	omp.provider.Stop(l)
+}
+
+func (omp *otelMetricsHandler) Close() error {
+	return nil
+}
+
+func (omp *otelMetricsHandler) StartBatch(_ string) BatchHandler {
+	return omp
 }
 
 // makeSet returns an otel attribute.Set with the given tags merged with the

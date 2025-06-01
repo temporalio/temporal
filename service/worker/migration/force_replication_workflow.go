@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package migration
 
 import (
@@ -33,7 +9,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
-	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/metrics"
 )
 
 type (
@@ -56,6 +32,7 @@ type (
 		Query                   string `validate:"required"` // query to list workflows for replication
 		ConcurrentActivityCount int
 		OverallRps              float64 // RPS for enqueuing of replication tasks
+		GetParentInfoRPS        float64 // RPS for getting parent child info
 		ListWorkflowsPageSize   int     // PageSize of ListWorkflow, will paginate through results.
 		PageCountPerExecution   int     // number of pages to be processed before continue as new, max is 1000.
 		NextPageToken           []byte  // used by continue as new
@@ -71,9 +48,30 @@ type (
 		LastStartTime                      time.Time
 		ContinuedAsNewCount                int
 		TaskQueueUserDataReplicationParams TaskQueueUserDataReplicationParams
+		ReplicatedWorkflowCount            int64
+		TotalForceReplicateWorkflowCount   int64
+		ReplicatedWorkflowCountPerSecond   float64
+
+		// Used to calculate QPS
+		QPSQueue QPSQueue
+		// Queue size is determined by Multiplier * Concurrency
+		EstimationMultiplier int
 
 		// Carry over the replication status after continue-as-new.
 		TaskQueueUserDataReplicationStatus TaskQueueUserDataReplicationStatus
+	}
+
+	QPSQueue struct {
+		MaxSize int
+		Data    []QPSData
+	}
+
+	QPSData struct {
+		Count     int64
+		Timestamp time.Time
+	}
+
+	ForceReplicationOutput struct {
 	}
 
 	TaskQueueUserDataReplicationStatus struct {
@@ -86,42 +84,10 @@ type (
 		LastStartTime                      time.Time
 		TaskQueueUserDataReplicationStatus TaskQueueUserDataReplicationStatus
 		ContinuedAsNewCount                int
-	}
-
-	listWorkflowsResponse struct {
-		Executions    []*commonpb.WorkflowExecution
-		NextPageToken []byte
-		Error         error
-
-		// These can be used to help report progress of the force-replication scan
-		LastCloseTime time.Time
-		LastStartTime time.Time
-	}
-
-	generateReplicationTasksRequest struct {
-		NamespaceID string
-		Executions  []*commonpb.WorkflowExecution
-		RPS         float64
-	}
-
-	verifyReplicationTasksRequest struct {
-		Namespace             string
-		NamespaceID           string
-		TargetClusterEndpoint string
-		TargetClusterName     string
-		VerifyInterval        time.Duration `validate:"gte=0"`
-		Executions            []*commonpb.WorkflowExecution
-	}
-
-	verifyReplicationTasksResponse struct{}
-
-	metadataRequest struct {
-		Namespace string
-	}
-
-	metadataResponse struct {
-		ShardCount  int32
-		NamespaceID string
+		TotalWorkflowCount                 int64
+		ReplicatedWorkflowCount            int64
+		ReplicatedWorkflowCountPerSecond   float64
+		PageTokenForRestart                []byte
 	}
 )
 
@@ -130,10 +96,14 @@ var (
 		InitialInterval: time.Second,
 		MaximumInterval: time.Second * 10,
 	}
+
+	NamespaceTagName           = "namespace"
+	ForceReplicationRpsTagName = "force_replication_rps"
 )
 
 const (
 	forceReplicationWorkflowName               = "force-replication"
+	forceTaskQueueUserDataReplicationWorkflow  = "force-task-queue-user-data-replication"
 	forceReplicationStatusQueryType            = "force-replication-status"
 	taskQueueUserDataReplicationDoneSignalType = "task-queue-user-data-replication-done"
 	taskQueueUserDataReplicationVersionMarker  = "replicate-task-queue-user-data"
@@ -147,19 +117,33 @@ const (
 )
 
 func ForceReplicationWorkflow(ctx workflow.Context, params ForceReplicationParams) error {
-	ctx = workflow.WithTaskQueue(ctx, primitives.MigrationActivityTQ)
+	// For now, we'll return the initial page token for simplicity.
+	// If we want this to be more precise, we could track processed pages.
+	startPageToken := params.NextPageToken
 
-	workflow.SetQueryHandler(ctx, forceReplicationStatusQueryType, func() (ForceReplicationStatus, error) {
+	_ = workflow.SetQueryHandler(ctx, forceReplicationStatusQueryType, func() (ForceReplicationStatus, error) {
 		return ForceReplicationStatus{
 			LastCloseTime:                      params.LastCloseTime,
 			LastStartTime:                      params.LastStartTime,
 			ContinuedAsNewCount:                params.ContinuedAsNewCount,
 			TaskQueueUserDataReplicationStatus: params.TaskQueueUserDataReplicationStatus,
+			TotalWorkflowCount:                 params.TotalForceReplicateWorkflowCount,
+			ReplicatedWorkflowCount:            params.ReplicatedWorkflowCount,
+			ReplicatedWorkflowCountPerSecond:   params.ReplicatedWorkflowCountPerSecond,
+			PageTokenForRestart:                startPageToken,
 		}, nil
 	})
 
-	if err := validateAndSetForceReplicationParams(&params); err != nil {
+	if err := validateAndSetForceReplicationParams(ctx, &params); err != nil {
 		return err
+	}
+
+	if params.TotalForceReplicateWorkflowCount == 0 {
+		wfCount, err := countWorkflowForReplication(ctx, params)
+		if err != nil {
+			return err
+		}
+		params.TotalForceReplicateWorkflowCount = wfCount
 	}
 
 	metadataResp, err := getClusterMetadata(ctx, params)
@@ -187,7 +171,7 @@ func ForceReplicationWorkflow(ctx workflow.Context, params ForceReplicationParam
 		workflowExecutionsCh.Close()
 	})
 
-	if err := enqueueReplicationTasks(ctx, workflowExecutionsCh, metadataResp.NamespaceID, params); err != nil {
+	if err := enqueueReplicationTasks(ctx, workflowExecutionsCh, metadataResp.NamespaceID, &params); err != nil {
 		return err
 	}
 
@@ -253,9 +237,6 @@ func maybeKickoffTaskQueueUserDataReplication(ctx workflow.Context, params Force
 }
 
 func ForceTaskQueueUserDataReplicationWorkflow(ctx workflow.Context, params TaskQueueUserDataReplicationParamsWithNamespace) error {
-	ctx = workflow.WithTaskQueue(ctx, primitives.MigrationActivityTQ) // children do not inherit ActivityOptions
-
-	var a *activities
 	ao := workflow.ActivityOptions{
 		// This shouldn't take "too long", just set an arbitrary long timeout here and rely on heartbeats for liveness detection.
 		StartToCloseTimeout: time.Hour * 24 * 7,
@@ -268,7 +249,7 @@ func ForceTaskQueueUserDataReplicationWorkflow(ctx workflow.Context, params Task
 	}
 
 	actx := workflow.WithActivityOptions(ctx, ao)
-
+	var a *activities
 	err := workflow.ExecuteActivity(actx, a.SeedReplicationQueueWithUserDataEntries, params).Get(ctx, nil)
 	errStr := ""
 	if err != nil {
@@ -278,7 +259,7 @@ func ForceTaskQueueUserDataReplicationWorkflow(ctx workflow.Context, params Task
 	return err
 }
 
-func validateAndSetForceReplicationParams(params *ForceReplicationParams) error {
+func validateAndSetForceReplicationParams(ctx workflow.Context, params *ForceReplicationParams) error {
 	if len(params.Namespace) == 0 {
 		return temporal.NewNonRetryableApplicationError("InvalidArgument: Namespace is required", "InvalidArgument", nil)
 	}
@@ -293,6 +274,9 @@ func validateAndSetForceReplicationParams(params *ForceReplicationParams) error 
 
 	if params.OverallRps <= 0 {
 		params.OverallRps = float64(params.ConcurrentActivityCount)
+	}
+	if params.GetParentInfoRPS <= 0 {
+		params.GetParentInfoRPS = float64(params.ConcurrentActivityCount)
 	}
 
 	if params.ListWorkflowsPageSize <= 0 {
@@ -311,12 +295,23 @@ func validateAndSetForceReplicationParams(params *ForceReplicationParams) error 
 		params.VerifyIntervalInSeconds = defaultVerifyIntervalInSeconds
 	}
 
+	if params.ReplicatedWorkflowCountPerSecond <= 0 {
+		params.ReplicatedWorkflowCountPerSecond = params.OverallRps
+	}
+
+	if params.EstimationMultiplier <= 0 {
+		params.EstimationMultiplier = 2
+	}
+
+	if params.QPSQueue.Data == nil {
+		params.QPSQueue = NewQPSQueue(params.ConcurrentActivityCount, params.EstimationMultiplier)
+		params.QPSQueue.Enqueue(ctx, params.ReplicatedWorkflowCount)
+	}
+
 	return nil
 }
 
 func getClusterMetadata(ctx workflow.Context, params ForceReplicationParams) (metadataResponse, error) {
-	var a *activities
-
 	// Get cluster metadata, we need namespace ID for history API call.
 	// TODO: remove this step.
 	lao := workflow.LocalActivityOptions{
@@ -327,13 +322,12 @@ func getClusterMetadata(ctx workflow.Context, params ForceReplicationParams) (me
 	actx := workflow.WithLocalActivityOptions(ctx, lao)
 	var metadataResp metadataResponse
 	metadataRequest := metadataRequest{Namespace: params.Namespace}
+	var a *activities
 	err := workflow.ExecuteLocalActivity(actx, a.GetMetadata, metadataRequest).Get(ctx, &metadataResp)
 	return metadataResp, err
 }
 
 func listWorkflowsForReplication(ctx workflow.Context, workflowExecutionsCh workflow.Channel, params *ForceReplicationParams) error {
-	var a *activities
-
 	ao := workflow.ActivityOptions{
 		StartToCloseTimeout: time.Hour,
 		HeartbeatTimeout:    time.Second * 30,
@@ -341,14 +335,17 @@ func listWorkflowsForReplication(ctx workflow.Context, workflowExecutionsCh work
 	}
 
 	actx := workflow.WithActivityOptions(ctx, ao)
-
+	var a *activities
 	for i := 0; i < params.PageCountPerExecution; i++ {
-		listFuture := workflow.ExecuteActivity(actx, a.ListWorkflows, &workflowservice.ListWorkflowExecutionsRequest{
-			Namespace:     params.Namespace,
-			PageSize:      int32(params.ListWorkflowsPageSize),
-			NextPageToken: params.NextPageToken,
-			Query:         params.Query,
-		})
+		listFuture := workflow.ExecuteActivity(
+			actx,
+			a.ListWorkflows,
+			&workflowservice.ListWorkflowExecutionsRequest{
+				Namespace:     params.Namespace,
+				PageSize:      int32(params.ListWorkflowsPageSize),
+				NextPageToken: params.NextPageToken,
+				Query:         params.Query,
+			})
 
 		var listResp listWorkflowsResponse
 		if err := listFuture.Get(ctx, &listResp); err != nil {
@@ -369,29 +366,60 @@ func listWorkflowsForReplication(ctx workflow.Context, workflowExecutionsCh work
 	return nil
 }
 
-func enqueueReplicationTasks(ctx workflow.Context, workflowExecutionsCh workflow.Channel, namespaceID string, params ForceReplicationParams) error {
+func countWorkflowForReplication(ctx workflow.Context, params ForceReplicationParams) (int64, error) {
+	ao := workflow.ActivityOptions{
+		StartToCloseTimeout: 2 * time.Minute,
+		RetryPolicy:         forceReplicationActivityRetryPolicy,
+	}
+
+	var a *activities
+	var output countWorkflowResponse
+	if err := workflow.ExecuteActivity(
+		workflow.WithActivityOptions(ctx, ao),
+		a.CountWorkflow,
+		&workflowservice.CountWorkflowExecutionsRequest{
+			Namespace: params.Namespace,
+			Query:     params.Query,
+		}).Get(ctx, &output); err != nil {
+		return 0, err
+	}
+
+	return output.WorkflowCount, nil
+}
+
+func enqueueReplicationTasks(ctx workflow.Context, workflowExecutionsCh workflow.Channel, namespaceID string, params *ForceReplicationParams) error {
 	selector := workflow.NewSelector(ctx)
 	pendingGenerateTasks := 0
 	pendingVerifyTasks := 0
 
 	ao := workflow.ActivityOptions{
 		StartToCloseTimeout: time.Hour,
-		HeartbeatTimeout:    time.Second * 30,
+		HeartbeatTimeout:    time.Second * 60,
 		RetryPolicy:         forceReplicationActivityRetryPolicy,
 	}
 
 	actx := workflow.WithActivityOptions(ctx, ao)
-	var a *activities
 	var futures []workflow.Future
 	var workflowExecutions []*commonpb.WorkflowExecution
 	var lastActivityErr error
+	var a *activities
+
+	var targetClusters []string
+	if params.TargetClusterName != "" {
+		targetClusters = []string{params.TargetClusterName}
+	}
 
 	for workflowExecutionsCh.Receive(ctx, &workflowExecutions) {
-		generateTaskFuture := workflow.ExecuteActivity(actx, a.GenerateReplicationTasks, &generateReplicationTasksRequest{
-			NamespaceID: namespaceID,
-			Executions:  workflowExecutions,
-			RPS:         params.OverallRps / float64(params.ConcurrentActivityCount),
-		})
+		generateTaskFuture := workflow.ExecuteActivity(
+			actx,
+			a.GenerateReplicationTasks,
+			&generateReplicationTasksRequest{
+				NamespaceID:      namespaceID,
+				Executions:       workflowExecutions,
+				RPS:              params.OverallRps / float64(params.ConcurrentActivityCount),
+				GetParentInfoRPS: params.GetParentInfoRPS / float64(params.ConcurrentActivityCount),
+				TargetClusters:   targetClusters,
+			})
 
 		pendingGenerateTasks++
 		selector.AddFuture(generateTaskFuture, func(f workflow.Future) {
@@ -404,14 +432,17 @@ func enqueueReplicationTasks(ctx workflow.Context, workflowExecutionsCh workflow
 		futures = append(futures, generateTaskFuture)
 
 		if params.EnableVerification {
-			verifyTaskFuture := workflow.ExecuteActivity(actx, a.VerifyReplicationTasks, &verifyReplicationTasksRequest{
-				TargetClusterEndpoint: params.TargetClusterEndpoint,
-				TargetClusterName:     params.TargetClusterName,
-				Namespace:             params.Namespace,
-				NamespaceID:           namespaceID,
-				Executions:            workflowExecutions,
-				VerifyInterval:        time.Duration(params.VerifyIntervalInSeconds) * time.Second,
-			})
+			verifyTaskFuture := workflow.ExecuteActivity(
+				actx,
+				a.VerifyReplicationTasks,
+				&verifyReplicationTasksRequest{
+					TargetClusterEndpoint: params.TargetClusterEndpoint,
+					TargetClusterName:     params.TargetClusterName,
+					Namespace:             params.Namespace,
+					NamespaceID:           namespaceID,
+					Executions:            workflowExecutions,
+					VerifyInterval:        time.Duration(params.VerifyIntervalInSeconds) * time.Second,
+				})
 
 			pendingVerifyTasks++
 			selector.AddFuture(verifyTaskFuture, func(f workflow.Future) {
@@ -419,6 +450,18 @@ func enqueueReplicationTasks(ctx workflow.Context, workflowExecutionsCh workflow
 
 				if err := f.Get(ctx, nil); err != nil {
 					lastActivityErr = err
+				} else {
+					// Update replication status
+					params.ReplicatedWorkflowCount += int64(len(workflowExecutions))
+					params.QPSQueue.Enqueue(ctx, params.ReplicatedWorkflowCount)
+					params.ReplicatedWorkflowCountPerSecond = params.QPSQueue.CalculateQPS()
+
+					// Report new QPS to metrics
+					tags := map[string]string{
+						metrics.OperationTagName: metrics.MigrationWorkflowScope,
+						NamespaceTagName:         params.Namespace,
+					}
+					workflow.GetMetricsHandler(ctx).WithTags(tags).Gauge(ForceReplicationRpsTagName).Update(params.ReplicatedWorkflowCountPerSecond)
 				}
 			})
 
@@ -440,4 +483,48 @@ func enqueueReplicationTasks(ctx workflow.Context, workflowExecutionsCh workflow
 	}
 
 	return nil
+}
+
+// NewQPSQueue initializes a QPSQueue to collect data points for each workflow execution.
+// The queue size is set to concurrency + 1 to account for up to 'concurrency' activities
+// running simultaneously and the initial starting point.
+func NewQPSQueue(concurrentActivityCount int, estimationMultiplier int) QPSQueue {
+	return QPSQueue{
+		Data:    make([]QPSData, 0, max(0, estimationMultiplier*concurrentActivityCount+1)),
+		MaxSize: concurrentActivityCount + 1,
+	}
+}
+
+func (q *QPSQueue) Enqueue(ctx workflow.Context, count int64) {
+	data := QPSData{Count: count, Timestamp: workflow.Now(ctx)}
+
+	// If queue length reaches max capacity, remove the oldest item
+	if len(q.Data) >= q.MaxSize {
+		q.Data = q.Data[1:]
+	}
+
+	q.Data = append(q.Data, data)
+}
+
+func (q *QPSQueue) CalculateQPS() float64 {
+	// Check if the queue has at least two items
+	if len(q.Data) < 2 {
+		return 0.0
+	}
+
+	first := q.Data[0]
+	last := q.Data[len(q.Data)-1]
+
+	// Calculate the count difference and time difference
+	countDiff := last.Count - first.Count
+	timeDiff := last.Timestamp.Sub(first.Timestamp).Seconds()
+
+	// If count difference is <= 0 or time difference is <= 0, return a rate of 0
+	if countDiff <= 0 || timeDiff <= 0 {
+		return 0.0
+	}
+
+	// Calculate the QPS
+	qps := float64(countDiff) / timeDiff
+	return qps
 }

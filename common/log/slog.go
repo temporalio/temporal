@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2023 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2023 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 // Part of this implementation was taken from https://github.com/uber-go/zap/blob/99f1811d5d2a52264a9c82505a74c2709b077a73/exp/zapslog/handler.go
 
 package log
@@ -44,8 +20,17 @@ type handler struct {
 
 var _ slog.Handler = (*handler)(nil)
 
+// SLogWrapper allows extracting an underlying slog logger.
+type SLogWrapper interface {
+	SLog() *slog.Logger
+}
+
 // NewSlogLogger creates an slog.Logger from a given logger.
 func NewSlogLogger(logger Logger) *slog.Logger {
+	// Try extracting and underlying slog logger (e.g. for Temporal CLI).
+	if sl, ok := logger.(SLogWrapper); ok {
+		return sl.SLog()
+	}
 	logger = withIncreasedSkip(logger, 3)
 	return slog.New(&handler{logger: logger, zapLogger: extractZapLogger(logger), group: "", tags: nil})
 }
@@ -89,7 +74,7 @@ func (h *handler) WithAttrs(attrs []slog.Attr) slog.Handler {
 	for _, attr := range attrs {
 		tags = append(tags, tag.NewZapTag(convertAttrToField(h.prependGroup(attr))))
 	}
-	return &handler{logger: h.logger, tags: tags, group: h.group}
+	return &handler{logger: h.logger, zapLogger: h.zapLogger, tags: tags, group: h.group}
 }
 
 // WithGroup implements slog.Handler.
@@ -98,7 +83,7 @@ func (h *handler) WithGroup(name string) slog.Handler {
 	if h.group != "" {
 		group = h.group + "." + name
 	}
-	return &handler{logger: h.logger, tags: h.tags, group: group}
+	return &handler{logger: h.logger, zapLogger: h.zapLogger, tags: h.tags, group: group}
 }
 
 func (h *handler) prependGroup(attr slog.Attr) slog.Attr {
@@ -136,7 +121,8 @@ func withIncreasedSkip(logger Logger, skip int) Logger {
 			logger: withIncreasedSkip(l.logger, skip),
 		}
 	}
-	return nil
+	// Default to not increasing the skip, it's better to have a logger than not having one.
+	return logger
 }
 
 // convertSlogToZapLevel maps slog Levels to zap Levels.

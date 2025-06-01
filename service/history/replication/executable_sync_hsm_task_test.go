@@ -1,25 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package replication
 
 import (
@@ -28,14 +6,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
-	persistencepb "go.temporal.io/server/api/persistence/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/cluster"
@@ -47,8 +23,10 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
+	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -72,6 +50,7 @@ type (
 
 		replicationTask   *replicationspb.SyncHSMAttributes
 		sourceClusterName string
+		sourceShardKey    ClusterShardKey
 
 		taskID int64
 		task   *ExecutableSyncHSMTask
@@ -114,10 +93,10 @@ func (s *executableSyncHSMTaskSuite) SetupTest() {
 				{EventId: 10, Version: 20},
 			},
 		},
-		StateMachineNode: &persistencepb.StateMachineNode{
-			Children: map[string]*persistencepb.StateMachineMap{
+		StateMachineNode: &persistencespb.StateMachineNode{
+			Children: map[string]*persistencespb.StateMachineMap{
 				"test": {
-					MachinesById: map[string]*persistencepb.StateMachineNode{
+					MachinesById: map[string]*persistencespb.StateMachineNode{
 						"machine1": {
 							Data: []byte("machine1 data"),
 						},
@@ -130,6 +109,10 @@ func (s *executableSyncHSMTaskSuite) SetupTest() {
 		},
 	}
 	s.sourceClusterName = cluster.TestCurrentClusterName
+	s.sourceShardKey = ClusterShardKey{
+		ClusterID: int32(cluster.TestCurrentClusterInitialFailoverVersion),
+		ShardID:   rand.Int31(),
+	}
 	s.mockExecutionManager = persistence.NewMockExecutionManager(s.controller)
 	s.config = tests.NewDynamicConfig()
 
@@ -152,6 +135,7 @@ func (s *executableSyncHSMTaskSuite) SetupTest() {
 		taskCreationTime,
 		s.replicationTask,
 		s.sourceClusterName,
+		s.sourceShardKey,
 		enumsspb.TASK_PRIORITY_HIGH,
 		nil,
 	)
@@ -171,14 +155,14 @@ func (s *executableSyncHSMTaskSuite) TestExecute_Process() {
 		uuid.NewString(), true, nil,
 	).AnyTimes()
 
-	shardContext := shard.NewMockContext(s.controller)
-	engine := shard.NewMockEngine(s.controller)
+	shardContext := historyi.NewMockShardContext(s.controller)
+	engine := historyi.NewMockEngine(s.controller)
 	s.shardController.EXPECT().GetShardByNamespaceWorkflow(
 		namespace.ID(s.task.NamespaceID),
 		s.task.WorkflowID,
 	).Return(shardContext, nil).AnyTimes()
 	shardContext.EXPECT().GetEngine(gomock.Any()).Return(engine, nil).AnyTimes()
-	engine.EXPECT().SyncHSM(gomock.Any(), &shard.SyncHSMRequest{
+	engine.EXPECT().SyncHSM(gomock.Any(), &historyi.SyncHSMRequest{
 		WorkflowKey: definition.WorkflowKey{
 			NamespaceID: s.task.NamespaceID,
 			WorkflowID:  s.task.WorkflowID,
@@ -224,8 +208,8 @@ func (s *executableSyncHSMTaskSuite) TestHandleErr_Resend_Success() {
 	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID).Return(
 		uuid.NewString(), true, nil,
 	).AnyTimes()
-	shardContext := shard.NewMockContext(s.controller)
-	engine := shard.NewMockEngine(s.controller)
+	shardContext := historyi.NewMockShardContext(s.controller)
+	engine := historyi.NewMockEngine(s.controller)
 	s.shardController.EXPECT().GetShardByNamespaceWorkflow(
 		namespace.ID(s.task.NamespaceID),
 		s.task.WorkflowID,
@@ -266,54 +250,26 @@ func (s *executableSyncHSMTaskSuite) TestHandleErr_Resend_Error() {
 }
 
 func (s *executableSyncHSMTaskSuite) TestMarkPoisonPill() {
-	shardID := rand.Int31()
-	shardContext := shard.NewMockContext(s.controller)
-	s.shardController.EXPECT().GetShardByNamespaceWorkflow(
-		namespace.ID(s.task.NamespaceID),
-		s.task.WorkflowID,
-	).Return(shardContext, nil).AnyTimes()
-	shardContext.EXPECT().GetShardID().Return(shardID).AnyTimes()
-	s.mockExecutionManager.EXPECT().PutReplicationTaskToDLQ(gomock.Any(), &persistence.PutReplicationTaskToDLQRequest{
-		ShardID:           shardID,
-		SourceClusterName: s.sourceClusterName,
-		TaskInfo: &persistencepb.ReplicationTaskInfo{
-			NamespaceId:    s.task.NamespaceID,
-			WorkflowId:     s.task.WorkflowID,
-			RunId:          s.task.RunID,
-			TaskId:         s.task.ExecutableTask.TaskID(),
-			TaskType:       enumsspb.TASK_TYPE_REPLICATION_SYNC_HSM,
-			VisibilityTime: timestamppb.New(s.task.TaskCreationTime()),
+	replicationTask := &replicationspb.ReplicationTask{
+		TaskType:     enumsspb.REPLICATION_TASK_TYPE_SYNC_HSM_TASK,
+		SourceTaskId: s.taskID,
+		Attributes: &replicationspb.ReplicationTask_SyncHsmAttributes{
+			SyncHsmAttributes: s.replicationTask,
 		},
-	}).Return(nil)
+		RawTaskInfo: nil,
+	}
+	s.executableTask.EXPECT().ReplicationTask().Return(replicationTask).AnyTimes()
+	s.executableTask.EXPECT().MarkPoisonPill().Times(1)
 
 	err := s.task.MarkPoisonPill()
 	s.NoError(err)
-}
 
-func (s *executableSyncHSMTaskSuite) TestMarkPoisonPill_MaxAttemptsReached() {
-	s.task.markPoisonPillAttempts = MarkPoisonPillMaxAttempts - 1
-	shardID := rand.Int31()
-	shardContext := shard.NewMockContext(s.controller)
-	s.shardController.EXPECT().GetShardByNamespaceWorkflow(
-		namespace.ID(s.task.NamespaceID),
-		s.task.WorkflowID,
-	).Return(shardContext, nil).AnyTimes()
-	shardContext.EXPECT().GetShardID().Return(shardID).AnyTimes()
-	s.mockExecutionManager.EXPECT().PutReplicationTaskToDLQ(gomock.Any(), &persistence.PutReplicationTaskToDLQRequest{
-		ShardID:           shardID,
-		SourceClusterName: s.sourceClusterName,
-		TaskInfo: &persistencepb.ReplicationTaskInfo{
-			NamespaceId:    s.task.NamespaceID,
-			WorkflowId:     s.task.WorkflowID,
-			RunId:          s.task.RunID,
-			TaskId:         s.task.ExecutableTask.TaskID(),
-			TaskType:       enumsspb.TASK_TYPE_REPLICATION_SYNC_HSM,
-			VisibilityTime: timestamppb.New(s.task.TaskCreationTime()),
-		},
-	}).Return(serviceerror.NewInternal("failed"))
-
-	err := s.task.MarkPoisonPill()
-	s.Error(err)
-	err = s.task.MarkPoisonPill()
-	s.NoError(err)
+	s.Equal(&persistencespb.ReplicationTaskInfo{
+		NamespaceId:    s.task.NamespaceID,
+		WorkflowId:     s.task.WorkflowID,
+		RunId:          s.task.RunID,
+		TaskId:         s.task.ExecutableTask.TaskID(),
+		TaskType:       enumsspb.TASK_TYPE_REPLICATION_SYNC_HSM,
+		VisibilityTime: timestamppb.New(s.task.TaskCreationTime()),
+	}, replicationTask.RawTaskInfo)
 }

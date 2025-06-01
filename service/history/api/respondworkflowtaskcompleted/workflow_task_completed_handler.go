@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package respondworkflowtaskcompleted
 
 import (
@@ -40,10 +16,12 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/effect"
 	"go.temporal.io/server/common/enums"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -51,12 +29,13 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/protocol"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/tasktoken"
-	"go.temporal.io/server/internal/effect"
-	"go.temporal.io/server/internal/protocol"
+	"go.temporal.io/server/common/worker_versioning"
+	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/configs"
-	"go.temporal.io/server/service/history/shard"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/update"
 	"google.golang.org/protobuf/proto"
@@ -77,15 +56,15 @@ type (
 		hasBufferedEventsOrMessages     bool
 		workflowTaskFailedCause         *workflowTaskFailedCause
 		activityNotStartedCancelled     bool
-		newMutableState                 workflow.MutableState
+		newMutableState                 historyi.MutableState
 		stopProcessing                  bool // should stop processing any more commands
-		mutableState                    workflow.MutableState
+		mutableState                    historyi.MutableState
 		effects                         effect.Controller
 		initiatedChildExecutionsInBatch map[string]struct{} // Set of initiated child executions in the workflow task
 		updateRegistry                  update.Registry
 
 		// validation
-		attrValidator                  *commandAttrValidator
+		attrValidator                  *api.CommandAttrValidator
 		sizeLimitChecker               *workflowSizeChecker
 		searchAttributesMapperProvider searchattribute.MapperProvider
 
@@ -93,9 +72,10 @@ type (
 		namespaceRegistry      namespace.Registry
 		metricsHandler         metrics.Handler
 		config                 *configs.Config
-		shard                  shard.Context
-		tokenSerializer        common.TaskTokenSerializer
+		shard                  historyi.ShardContext
+		tokenSerializer        *tasktoken.Serializer
 		commandHandlerRegistry *workflow.CommandHandlerRegistry
+		matchingClient         matchingservice.MatchingServiceClient
 	}
 
 	workflowTaskFailedCause struct {
@@ -121,19 +101,20 @@ type (
 func newWorkflowTaskCompletedHandler(
 	identity string,
 	workflowTaskCompletedID int64,
-	mutableState workflow.MutableState,
+	mutableState historyi.MutableState,
 	updateRegistry update.Registry,
 	effects effect.Controller,
-	attrValidator *commandAttrValidator,
+	attrValidator *api.CommandAttrValidator,
 	sizeLimitChecker *workflowSizeChecker,
 	logger log.Logger,
 	namespaceRegistry namespace.Registry,
 	metricsHandler metrics.Handler,
 	config *configs.Config,
-	shard shard.Context,
+	shard historyi.ShardContext,
 	searchAttributesMapperProvider searchattribute.MapperProvider,
 	hasBufferedEventsOrMessages bool,
 	commandHandlerRegistry *workflow.CommandHandlerRegistry,
+	matchingClient matchingservice.MatchingServiceClient,
 ) *workflowTaskCompletedHandler {
 	return &workflowTaskCompletedHandler{
 		identity:                identity,
@@ -163,8 +144,9 @@ func newWorkflowTaskCompletedHandler(
 		),
 		config:                 config,
 		shard:                  shard,
-		tokenSerializer:        common.NewProtoTaskTokenSerializer(),
+		tokenSerializer:        tasktoken.NewSerializer(),
 		commandHandlerRegistry: commandHandlerRegistry,
+		matchingClient:         matchingClient,
 	}
 }
 
@@ -173,7 +155,7 @@ func (handler *workflowTaskCompletedHandler) handleCommands(
 	commands []*commandpb.Command,
 	msgs *collection.IndexedTakeList[string, *protocolpb.Message],
 ) ([]workflowTaskResponseMutation, error) {
-	if err := handler.attrValidator.validateCommandSequence(
+	if err := handler.attrValidator.ValidateCommandSequence(
 		commands,
 	); err != nil {
 		return nil, err
@@ -228,34 +210,30 @@ func (handler *workflowTaskCompletedHandler) rejectUnprocessedUpdates(
 	wtHeartbeat bool,
 	wfKey definition.WorkflowKey,
 	workerIdentity string,
-) error {
+) {
 
 	// If server decided to fail WT (instead of completing), don't reject updates.
 	// New WT will be created, and it will deliver these updates again to the worker.
 	// Worker will do full history replay, and updates should be delivered again.
 	if handler.workflowTaskFailedCause != nil {
-		return nil
+		return
 	}
 
 	// If WT is a heartbeat WT, then it doesn't have to have messages.
 	if wtHeartbeat {
-		return nil
+		return
 	}
 
 	// If worker has just completed workflow with one of the WF completion command,
 	// then it might skip processing some updates. In this case, it doesn't indicate old SDK or bug.
-	// All unprocessed updates will be rejected with "workflow is closing" reason though.
+	// All unprocessed updates will be aborted later though.
 	if !handler.mutableState.IsWorkflowExecutionRunning() {
-		return nil
+		return
 	}
 
-	rejectedUpdateIDs, err := handler.updateRegistry.RejectUnprocessed(
+	rejectedUpdateIDs := handler.updateRegistry.RejectUnprocessed(
 		ctx,
 		handler.effects)
-
-	if err != nil {
-		return err
-	}
 
 	if len(rejectedUpdateIDs) > 0 {
 		handler.logger.Warn(
@@ -271,7 +249,6 @@ func (handler *workflowTaskCompletedHandler) rejectUnprocessedUpdates(
 
 	// At this point there must not be any updates in a Sent state.
 	// All updates which were sent on this WT are processed by worker or rejected by server.
-	return nil
 }
 
 //revive:disable:cyclomatic grandfathered
@@ -336,9 +313,10 @@ func (handler *workflowTaskCompletedHandler) handleCommand(
 		return nil, handler.handleCommandProtocolMessage(ctx, command.GetProtocolMessageCommandAttributes(), msgs)
 
 	default:
+		// Nexus command handlers are registered in /components/nexusoperations/workflow/commands.go
 		ch, ok := handler.commandHandlerRegistry.Handler(command.GetCommandType())
 		if !ok {
-			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Unknown command type: %v", command.GetCommandType()))
+			return nil, serviceerror.NewInvalidArgumentf("Unknown command type: %v", command.GetCommandType())
 		}
 		validator := commandValidator{sizeChecker: handler.sizeLimitChecker, commandType: command.GetCommandType()}
 		err := ch(ctx, handler.mutableState, validator, handler.workflowTaskCompletedID, command)
@@ -393,7 +371,7 @@ func (handler *workflowTaskCompletedHandler) handleMessage(
 			// Update was not found in the registry and can't be resurrected.
 			return handler.failWorkflowTask(
 				enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_UPDATE_WORKFLOW_EXECUTION_MESSAGE,
-				serviceerror.NewNotFound(fmt.Sprintf("update %s wasn't found on the server. This is most likely a transient error which will be resolved automatically by retries", message.ProtocolInstanceId)))
+				serviceerror.NewNotFoundf("update %s wasn't found on the server. This is most likely a transient error which will be resolved automatically by retries", message.ProtocolInstanceId))
 		}
 
 		if err := upd.OnProtocolMessage(message, workflow.WithEffects(handler.effects, handler.mutableState)); err != nil {
@@ -403,7 +381,7 @@ func (handler *workflowTaskCompletedHandler) handleMessage(
 	default:
 		return handler.failWorkflowTask(
 			enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_UPDATE_WORKFLOW_EXECUTION_MESSAGE,
-			serviceerror.NewInvalidArgument(fmt.Sprintf("unsupported protocol type %s", protocolType)))
+			serviceerror.NewInvalidArgumentf("unsupported protocol type %s", protocolType))
 	}
 
 	return nil
@@ -419,7 +397,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandProtocolMessage(
 
 	if err := handler.validateCommandAttr(
 		func() (enumspb.WorkflowTaskFailedCause, error) {
-			return handler.attrValidator.validateProtocolMessageAttributes(
+			return handler.attrValidator.ValidateProtocolMessageAttributes(
 				namespaceID,
 				attr,
 				executionInfo.WorkflowRunTimeout,
@@ -434,7 +412,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandProtocolMessage(
 	}
 	return handler.failWorkflowTask(
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_UPDATE_WORKFLOW_EXECUTION_MESSAGE,
-		serviceerror.NewInvalidArgument(fmt.Sprintf("ProtocolMessageCommand referenced absent message ID %s", attr.MessageId)),
+		serviceerror.NewInvalidArgumentf("ProtocolMessageCommand referenced absent message ID %s", attr.MessageId),
 	)
 }
 
@@ -447,7 +425,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandScheduleActivity(
 
 	if err := handler.validateCommandAttr(
 		func() (enumspb.WorkflowTaskFailedCause, error) {
-			return handler.attrValidator.validateActivityScheduleAttributes(
+			return handler.attrValidator.ValidateActivityScheduleAttributes(
 				namespaceID,
 				attr,
 				executionInfo.WorkflowRunTimeout,
@@ -480,7 +458,11 @@ func (handler *workflowTaskCompletedHandler) handleCommandScheduleActivity(
 
 	namespace := handler.mutableState.GetNamespaceEntry().Name().String()
 
-	oldVersioningUsed := handler.mutableState.GetMostRecentWorkerVersionStamp().GetUseVersioning()
+	// TODO: versioning 3 allows eager activity dispatch for both pinned and unpinned workflows, no
+	// special consideration is need. Remove the versioning logic from here. [cleanup-old-wv]
+	oldVersioningUsed := handler.mutableState.GetMostRecentWorkerVersionStamp().GetUseVersioning() &&
+		// for V3 versioning it's ok to dispatch eager activities
+		handler.mutableState.GetEffectiveVersioningBehavior() == enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED
 	newVersioningUsed := handler.mutableState.GetExecutionInfo().GetAssignedBuildId() != ""
 	versioningUsed := oldVersioningUsed || newVersioningUsed
 
@@ -543,6 +525,7 @@ func (handler *workflowTaskCompletedHandler) handlePostCommandEagerExecuteActivi
 		uuid.New(),
 		handler.identity,
 		stamp,
+		nil,
 		nil,
 	); err != nil {
 		return nil, err
@@ -610,7 +593,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandRequestCancelActivity(
 ) (*historypb.HistoryEvent, error) {
 	if err := handler.validateCommandAttr(
 		func() (enumspb.WorkflowTaskFailedCause, error) {
-			return handler.attrValidator.validateActivityCancelAttributes(attr)
+			return handler.attrValidator.ValidateActivityCancelAttributes(attr)
 		},
 	); err != nil || handler.stopProcessing {
 		return nil, err
@@ -654,7 +637,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandStartTimer(
 ) (*historypb.HistoryEvent, error) {
 	if err := handler.validateCommandAttr(
 		func() (enumspb.WorkflowTaskFailedCause, error) {
-			return handler.attrValidator.validateTimerScheduleAttributes(attr)
+			return handler.attrValidator.ValidateTimerScheduleAttributes(attr)
 		},
 	); err != nil || handler.stopProcessing {
 		return nil, err
@@ -677,7 +660,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandCompleteWorkflow(
 
 	if err := handler.validateCommandAttr(
 		func() (enumspb.WorkflowTaskFailedCause, error) {
-			return handler.attrValidator.validateCompleteWorkflowExecutionAttributes(attr)
+			return handler.attrValidator.ValidateCompleteWorkflowExecutionAttributes(attr)
 		},
 	); err != nil || handler.stopProcessing {
 		return nil, err
@@ -732,7 +715,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandFailWorkflow(
 
 	if err := handler.validateCommandAttr(
 		func() (enumspb.WorkflowTaskFailedCause, error) {
-			return handler.attrValidator.validateFailWorkflowExecutionAttributes(attr)
+			return handler.attrValidator.ValidateFailWorkflowExecutionAttributes(attr)
 		},
 	); err != nil || handler.stopProcessing {
 		return nil, err
@@ -798,7 +781,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandCancelTimer(
 ) (*historypb.HistoryEvent, error) {
 	if err := handler.validateCommandAttr(
 		func() (enumspb.WorkflowTaskFailedCause, error) {
-			return handler.attrValidator.validateTimerCancelAttributes(attr)
+			return handler.attrValidator.ValidateTimerCancelAttributes(attr)
 		},
 	); err != nil || handler.stopProcessing {
 		return nil, err
@@ -828,7 +811,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandCancelWorkflow(
 
 	if err := handler.validateCommandAttr(
 		func() (enumspb.WorkflowTaskFailedCause, error) {
-			return handler.attrValidator.validateCancelWorkflowExecutionAttributes(attr)
+			return handler.attrValidator.ValidateCancelWorkflowExecutionAttributes(attr)
 		},
 	); err != nil || handler.stopProcessing {
 		return nil, err
@@ -865,7 +848,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandRequestCancelExternalW
 
 	if err := handler.validateCommandAttr(
 		func() (enumspb.WorkflowTaskFailedCause, error) {
-			return handler.attrValidator.validateCancelExternalWorkflowExecutionAttributes(
+			return handler.attrValidator.ValidateCancelExternalWorkflowExecutionAttributes(
 				namespaceID,
 				targetNamespaceID,
 				handler.initiatedChildExecutionsInBatch,
@@ -893,7 +876,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandRecordMarker(
 ) (*historypb.HistoryEvent, error) {
 	if err := handler.validateCommandAttr(
 		func() (enumspb.WorkflowTaskFailedCause, error) {
-			return handler.attrValidator.validateRecordMarkerAttributes(attr)
+			return handler.attrValidator.ValidateRecordMarkerAttributes(attr)
 		},
 	); err != nil || handler.stopProcessing {
 		return nil, err
@@ -938,7 +921,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandContinueAsNewWorkflow(
 
 	if err := handler.validateCommandAttr(
 		func() (enumspb.WorkflowTaskFailedCause, error) {
-			return handler.attrValidator.validateContinueAsNewWorkflowExecutionAttributes(
+			return handler.attrValidator.ValidateContinueAsNewWorkflowExecutionAttributes(
 				namespaceName,
 				attr,
 				handler.mutableState.GetExecutionInfo(),
@@ -949,7 +932,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandContinueAsNewWorkflow(
 	}
 
 	if handler.mutableState.GetAssignedBuildId() == "" {
-		// TODO: this is supported in new versioning [cleanup-old-wv]
+		// TODO(carlydf): this is supported in new versioning [cleanup-old-wv]
 		if attr.InheritBuildId && attr.TaskQueue.GetName() != "" && attr.TaskQueue.Name != handler.mutableState.GetExecutionInfo().TaskQueue {
 			err := serviceerror.NewInvalidArgument("ContinueAsNew with UseCompatibleVersion cannot run on different task queue.")
 			return nil, handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_CONTINUE_AS_NEW_ATTRIBUTES, err)
@@ -1008,6 +991,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandContinueAsNewWorkflow(
 		handler.workflowTaskCompletedID,
 		parentNamespace,
 		attr,
+		worker_versioning.GetIsWFTaskQueueInVersionDetector(handler.matchingClient),
 	)
 	if err != nil {
 		return nil, err
@@ -1055,7 +1039,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandStartChildWorkflow(
 
 	if err := handler.validateCommandAttr(
 		func() (enumspb.WorkflowTaskFailedCause, error) {
-			return handler.attrValidator.validateStartChildExecutionAttributes(
+			return handler.attrValidator.ValidateStartChildExecutionAttributes(
 				parentNamespaceID,
 				targetNamespaceID,
 				targetNamespace,
@@ -1115,9 +1099,8 @@ func (handler *workflowTaskCompletedHandler) handleCommandStartChildWorkflow(
 
 	enums.SetDefaultWorkflowIdReusePolicy(&attr.WorkflowIdReusePolicy)
 
-	requestID := uuid.New()
 	event, _, err := handler.mutableState.AddStartChildWorkflowExecutionInitiatedEvent(
-		handler.workflowTaskCompletedID, requestID, attr, targetNamespaceID,
+		handler.workflowTaskCompletedID, attr, targetNamespaceID,
 	)
 	if err == nil {
 		// Keep track of all child initiated commands in this workflow task to validate request cancel commands
@@ -1143,7 +1126,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandSignalExternalWorkflow
 
 	if err := handler.validateCommandAttr(
 		func() (enumspb.WorkflowTaskFailedCause, error) {
-			return handler.attrValidator.validateSignalExternalWorkflowExecutionAttributes(
+			return handler.attrValidator.ValidateSignalExternalWorkflowExecutionAttributes(
 				namespaceID,
 				targetNamespaceID,
 				attr,
@@ -1180,7 +1163,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandUpsertWorkflowSearchAt
 	namespaceID := namespace.ID(executionInfo.NamespaceId)
 	namespaceEntry, err := handler.namespaceRegistry.GetNamespaceByID(namespaceID)
 	if err != nil {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("Unable to get namespace for namespaceID: %v.", namespaceID))
+		return nil, serviceerror.NewUnavailablef("Unable to get namespace for namespaceID: %v.", namespaceID)
 	}
 	namespace := namespaceEntry.Name()
 
@@ -1203,7 +1186,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandUpsertWorkflowSearchAt
 	// valid search attributes for upsert
 	if err := handler.validateCommandAttr(
 		func() (enumspb.WorkflowTaskFailedCause, error) {
-			return handler.attrValidator.validateUpsertWorkflowSearchAttributes(namespace, attr)
+			return handler.attrValidator.ValidateUpsertWorkflowSearchAttributes(namespace, attr)
 		},
 	); err != nil || handler.stopProcessing {
 		return nil, err
@@ -1246,16 +1229,15 @@ func (handler *workflowTaskCompletedHandler) handleCommandModifyWorkflowProperti
 	// get namespace name
 	executionInfo := handler.mutableState.GetExecutionInfo()
 	namespaceID := namespace.ID(executionInfo.NamespaceId)
-	namespaceEntry, err := handler.namespaceRegistry.GetNamespaceByID(namespaceID)
+	_, err := handler.namespaceRegistry.GetNamespaceByID(namespaceID)
 	if err != nil {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("Unable to get namespace for namespaceID: %v.", namespaceID))
+		return nil, serviceerror.NewUnavailablef("Unable to get namespace for namespaceID: %v.", namespaceID)
 	}
-	namespace := namespaceEntry.Name()
 
 	// valid properties
 	if err := handler.validateCommandAttr(
 		func() (enumspb.WorkflowTaskFailedCause, error) {
-			return handler.attrValidator.validateModifyWorkflowProperties(namespace, attr)
+			return handler.attrValidator.ValidateModifyWorkflowProperties(attr)
 		},
 	); err != nil || handler.stopProcessing {
 		return nil, err
@@ -1329,6 +1311,7 @@ func (handler *workflowTaskCompletedHandler) handleRetry(
 		newMutableState,
 		newRunID,
 		startAttr,
+		startEvent.Links,
 		nil,
 		failure,
 		backoffInterval,
@@ -1388,6 +1371,7 @@ func (handler *workflowTaskCompletedHandler) handleCron(
 		newMutableState,
 		newRunID,
 		startAttr,
+		startEvent.Links,
 		lastCompletionResult,
 		failure,
 		backoffInterval,

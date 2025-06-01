@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package history
 
 import (
@@ -40,36 +16,37 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/consts"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
-	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
-	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 type (
 	visibilityQueueTaskExecutor struct {
-		shardContext   shard.Context
+		shardContext   historyi.ShardContext
 		cache          wcache.Cache
 		logger         log.Logger
 		metricProvider metrics.Handler
 		visibilityMgr  manager.VisibilityManager
 
-		ensureCloseBeforeDelete    dynamicconfig.BoolPropertyFn
-		enableCloseWorkflowCleanup dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		ensureCloseBeforeDelete       dynamicconfig.BoolPropertyFn
+		enableCloseWorkflowCleanup    dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		relocateAttributesMinBlobSize dynamicconfig.IntPropertyFnWithNamespaceFilter
 	}
 )
 
 var errUnknownVisibilityTask = serviceerror.NewInternal("unknown visibility task")
 
 func newVisibilityQueueTaskExecutor(
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	workflowCache wcache.Cache,
 	visibilityMgr manager.VisibilityManager,
 	logger log.Logger,
 	metricProvider metrics.Handler,
 	ensureCloseBeforeDelete dynamicconfig.BoolPropertyFn,
 	enableCloseWorkflowCleanup dynamicconfig.BoolPropertyFnWithNamespaceFilter,
+	relocateAttributesMinBlobSize dynamicconfig.IntPropertyFnWithNamespaceFilter,
 ) queues.Executor {
 	return &visibilityQueueTaskExecutor{
 		shardContext:   shardContext,
@@ -78,8 +55,9 @@ func newVisibilityQueueTaskExecutor(
 		metricProvider: metricProvider,
 		visibilityMgr:  visibilityMgr,
 
-		ensureCloseBeforeDelete:    ensureCloseBeforeDelete,
-		enableCloseWorkflowCleanup: enableCloseWorkflowCleanup,
+		ensureCloseBeforeDelete:       ensureCloseBeforeDelete,
+		enableCloseWorkflowCleanup:    enableCloseWorkflowCleanup,
+		relocateAttributesMinBlobSize: relocateAttributesMinBlobSize,
 	}
 }
 
@@ -305,10 +283,24 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 	// Therefore, ctx timeout might be already expired
 	// and parentCtx (which doesn't have timeout) must be used everywhere bellow.
 
-	if t.enableCloseWorkflowCleanup(namespaceEntry.Name().String()) {
+	if t.needRunCleanUp(requestBase) {
 		return t.cleanupExecutionInfo(parentCtx, task)
 	}
 	return nil
+}
+
+func (t *visibilityQueueTaskExecutor) needRunCleanUp(
+	request *manager.VisibilityRequestBase,
+) bool {
+	if !t.enableCloseWorkflowCleanup(request.Namespace.String()) {
+		return false
+	}
+	// If there are no memo nor search attributes, then no clean up is necessary.
+	if len(request.Memo.GetFields()) == 0 && len(request.SearchAttributes.GetIndexedFields()) == 0 {
+		return false
+	}
+	minSize := t.relocateAttributesMinBlobSize(request.Namespace.String())
+	return request.Memo.Size()+request.SearchAttributes.Size() >= minSize
 }
 
 func (t *visibilityQueueTaskExecutor) processDeleteExecution(
@@ -346,7 +338,7 @@ func (t *visibilityQueueTaskExecutor) processDeleteExecution(
 func (t *visibilityQueueTaskExecutor) getVisibilityRequestBase(
 	task tasks.Task,
 	namespaceEntry *namespace.Namespace,
-	mutableState workflow.MutableState,
+	mutableState historyi.MutableState,
 ) *manager.VisibilityRequestBase {
 	var (
 		executionInfo    = mutableState.GetExecutionInfo()
@@ -444,7 +436,13 @@ func (t *visibilityQueueTaskExecutor) cleanupExecutionInfo(
 	executionInfo := mutableState.GetExecutionInfo()
 	executionInfo.Memo = nil
 	executionInfo.SearchAttributes = nil
-	executionInfo.CloseVisibilityTaskCompleted = true
+	executionInfo.RelocatableAttributesRemoved = true
+
+	if t.shardContext.GetConfig().EnableUpdateWorkflowModeIgnoreCurrent() {
+		return weContext.UpdateWorkflowExecutionAsPassive(ctx, t.shardContext)
+	}
+
+	// TODO: remove following code once EnableUpdateWorkflowModeIgnoreCurrent config is deprecated.
 	return weContext.SetWorkflowExecution(ctx, t.shardContext)
 }
 

@@ -1,25 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package sqlplugin
 
 import (
@@ -27,18 +5,18 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"errors"
-	"fmt"
 	"io"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
 	"github.com/jmoiron/sqlx"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	uberatomic "go.uber.org/atomic"
 )
 
 const (
@@ -52,13 +30,14 @@ var (
 
 type DatabaseHandle struct {
 	running      bool
-	db           uberatomic.Pointer[sqlx.DB]
+	db           atomic.Pointer[sqlx.DB]
 	connect      func() (*sqlx.DB, error)
 	needsRefresh func(error) bool
 
 	lastRefresh time.Time
 	metrics     metrics.Handler
 	logger      log.Logger
+	timeSource  clock.TimeSource
 	// Ensures only one refresh call happens at a time
 	sync.Mutex
 }
@@ -71,6 +50,7 @@ func NewDatabaseHandle(
 	needsRefresh func(error) bool,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
+	timeSource clock.TimeSource,
 ) *DatabaseHandle {
 	handle := &DatabaseHandle{
 		running:      true,
@@ -78,6 +58,7 @@ func NewDatabaseHandle(
 		needsRefresh: needsRefresh,
 		metrics:      metricsHandler,
 		logger:       logger,
+		timeSource:   timeSource,
 	}
 	handle.reconnect(true)
 	return handle
@@ -108,9 +89,8 @@ func (h *DatabaseHandle) reconnect(force bool) *sqlx.DB {
 
 	metrics.PersistenceSessionRefreshAttempts.With(h.metrics).Record(1)
 
-	now := time.Now()
+	now := h.timeSource.Now()
 	lastRefresh := h.lastRefresh
-	h.lastRefresh = now
 	if now.Sub(lastRefresh) < sessionRefreshMinInternal {
 		h.logger.Warn("sql handle: did not refresh database connection pool because the last refresh was too close",
 			tag.NewDurationTag("min_refresh_interval_seconds", sessionRefreshMinInternal))
@@ -119,6 +99,7 @@ func (h *DatabaseHandle) reconnect(force bool) *sqlx.DB {
 		return nil
 	}
 
+	h.lastRefresh = now
 	newConn, err := h.connect()
 	if err != nil {
 		h.logger.Error("sql handle: unable to refresh database connection pool", tag.Error(err))
@@ -175,7 +156,7 @@ func (h *DatabaseHandle) ConvertError(err error) error {
 		errors.Is(err, syscall.ECONNABORTED) ||
 		errors.Is(err, syscall.ECONNREFUSED) {
 		h.reconnect(true)
-		return serviceerror.NewUnavailable(fmt.Sprintf("database connection lost: %s", err.Error()))
+		return serviceerror.NewUnavailablef("database connection lost: %s", err.Error())
 	}
 	return err
 }

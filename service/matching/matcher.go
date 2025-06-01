@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package matching
 
 import (
@@ -58,12 +34,6 @@ type TaskMatcher struct {
 	// channel closed when task queue is closed, to interrupt pollers
 	closeC chan struct{}
 
-	// dynamicRate is the dynamic rate & burst for rate limiter
-	dynamicRateBurst quotas.MutableRateBurst
-	// dynamicRateLimiter is the dynamic rate limiter that can be used to force refresh on new rates.
-	dynamicRateLimiter *quotas.DynamicRateLimiterImpl
-	// forceRefreshRateOnce is used to force refresh rate limit for first time
-	forceRefreshRateOnce sync.Once
 	// rateLimiter that limits the rate at which tasks can be dispatched to consumers
 	rateLimiter quotas.RateLimiter
 
@@ -75,12 +45,6 @@ type TaskMatcher struct {
 	lastPoller             atomic.Int64 // unix nanos of most recent poll start time
 }
 
-const (
-	defaultTaskDispatchRPS                  = 100000.0
-	defaultTaskDispatchRPSTTL               = time.Minute
-	emptyBacklogAge           time.Duration = -1
-)
-
 var (
 	// Sentinel error to redirect while blocked in matcher.
 	errInterrupted    = errors.New("interrupted offer")
@@ -89,29 +53,10 @@ var (
 
 // newTaskMatcher returns a task matcher instance. The returned instance can be used by task producers and consumers to
 // find a match. Both sync matches and non-sync matches should use this implementation
-func newTaskMatcher(config *taskQueueConfig, fwdr *Forwarder, metricsHandler metrics.Handler) *TaskMatcher {
-	dynamicRateBurst := quotas.NewMutableRateBurst(
-		defaultTaskDispatchRPS,
-		int(defaultTaskDispatchRPS),
-	)
-	dynamicRateLimiter := quotas.NewDynamicRateLimiter(
-		dynamicRateBurst,
-		defaultTaskDispatchRPSTTL,
-	)
-	limiter := quotas.NewMultiRateLimiter([]quotas.RateLimiter{
-		dynamicRateLimiter,
-		quotas.NewDefaultOutgoingRateLimiter(
-			config.AdminNamespaceTaskQueueToPartitionDispatchRate,
-		),
-		quotas.NewDefaultOutgoingRateLimiter(
-			config.AdminNamespaceToPartitionDispatchRate,
-		),
-	})
+func newTaskMatcher(config *taskQueueConfig, fwdr *Forwarder, metricsHandler metrics.Handler, rateLimiter quotas.RateLimiter) *TaskMatcher {
 	return &TaskMatcher{
 		config:                 config,
-		dynamicRateBurst:       dynamicRateBurst,
-		dynamicRateLimiter:     dynamicRateLimiter,
-		rateLimiter:            limiter,
+		rateLimiter:            rateLimiter,
 		metricsHandler:         metricsHandler,
 		fwdr:                   fwdr,
 		taskC:                  make(chan *internalTask),
@@ -122,8 +67,15 @@ func newTaskMatcher(config *taskQueueConfig, fwdr *Forwarder, metricsHandler met
 	}
 }
 
+func (tm *TaskMatcher) Start() {
+}
+
 func (tm *TaskMatcher) Stop() {
 	close(tm.closeC)
+}
+
+func (tm *TaskMatcher) recycleToken(*internalTask) {
+	tm.rateLimiter.RecycleToken()
 }
 
 // Offer offers a task to a potential consumer (poller)
@@ -170,6 +122,11 @@ func (tm *TaskMatcher) Offer(ctx context.Context, task *internalTask) (bool, err
 			metrics.SyncThrottlePerTaskQueueCounter.With(tm.metricsHandler).Record(1)
 			return false, err
 		}
+		// because we waited on the rate limiter to offer this task,
+		// attach the rate limiter's RecycleToken func to the task
+		// so that if the task is later determined to be invalid,
+		// we can recycle the token it used.
+		task.recycleToken = tm.recycleToken
 	}
 
 	select {
@@ -179,10 +136,10 @@ func (tm *TaskMatcher) Offer(ctx context.Context, task *internalTask) (bool, err
 			// and return error if the response contains error
 			err := <-task.responseC
 
-			if err == nil && !task.isForwarded() {
+			if err.startErr == nil && !task.isForwarded() {
 				tm.emitDispatchLatency(task, false)
 			}
-			return true, err
+			return true, err.startErr
 		}
 		return false, nil
 	default:
@@ -193,7 +150,10 @@ func (tm *TaskMatcher) Offer(ctx context.Context, task *internalTask) (bool, err
 			if err := tm.fwdr.ForwardTask(ctx, task); err == nil {
 				// task was remotely sync matched on the parent partition
 				token.release()
-				tm.emitDispatchLatency(task, true)
+				if !task.isForwarded() {
+					// if there are multiple forwarding hops, only the initial source partition emits this metric
+					tm.emitDispatchLatency(task, true)
+				}
 				return true, nil
 			}
 			token.release()
@@ -217,7 +177,7 @@ func (tm *TaskMatcher) offerOrTimeout(ctx context.Context, task *internalTask) (
 		if task.responseC != nil {
 			select {
 			case err := <-task.responseC:
-				return true, err
+				return true, err.startErr
 			case <-ctx.Done():
 				return false, nil
 			}
@@ -245,20 +205,21 @@ func syncOfferTask[T any](
 	}
 
 	fwdrTokenC := tm.fwdrAddReqTokenC()
-	var noPollerCtxC <-chan struct{}
-
-	if returnNoPollerErr {
-		if deadline, ok := ctx.Deadline(); ok && fwdrTokenC == nil {
-			// Reserving 1sec to customize the timeout error if user is querying a workflow
-			// without having started the workers.
-			noPollerTimeout := time.Until(deadline) - time.Second
-			noPollerCtx, cancel := context.WithTimeout(ctx, noPollerTimeout)
-			noPollerCtxC = noPollerCtx.Done()
-			defer cancel()
-		}
-	}
+	var noPollerC <-chan time.Time
 
 	for {
+		if returnNoPollerErr {
+			returnNoPollerErr = false // only do this once
+			if deadline, ok := ctx.Deadline(); ok && fwdrTokenC == nil {
+				// Reserving 1sec to customize the timeout error if user is querying a workflow
+				// without having started the workers.
+				noPollerTimeout := time.Until(deadline) - returnEmptyTaskTimeBudget
+				t := time.NewTimer(noPollerTimeout)
+				noPollerC = t.C
+				defer t.Stop()
+			}
+		}
+
 		select {
 		case taskChan <- task:
 			<-task.responseC
@@ -276,7 +237,7 @@ func syncOfferTask[T any](
 				continue
 			}
 			return t, err
-		case <-noPollerCtxC:
+		case <-noPollerC:
 			// only error if there has not been a recent poller. Otherwise, let it wait for the remaining time
 			// hopping for a match, or ultimately returning the default CDE error.
 			if tm.timeSinceLastPoll() > tm.config.QueryPollerUnavailableWindow() {
@@ -315,6 +276,12 @@ func (tm *TaskMatcher) MustOffer(ctx context.Context, task *internalTask, interr
 	if err := tm.rateLimiter.Wait(ctx); err != nil {
 		return err
 	}
+
+	// because we waited on the rate limiter to offer this task,
+	// attach the rate limiter's RecycleToken func to the task
+	// so that if the task is later determined to be invalid,
+	// we can recycle the token it used.
+	task.recycleToken = tm.recycleToken
 
 	// attempt a match with local poller first. When that
 	// doesn't succeed, try both local match and remote match
@@ -392,9 +359,9 @@ forLoop:
 			}
 			cancel()
 			// at this point, we forwarded the task to a parent partition which
-			// in turn dispatched the task to a poller. Make sure we delete the
-			// task from the database
-			task.finish(nil)
+			// in turn dispatched the task to a poller, because there was no error.
+			// Make sure we delete the task from the database.
+			task.finish(nil, true)
 			tm.emitDispatchLatency(task, true)
 			return nil
 		case <-ctx.Done():
@@ -416,6 +383,7 @@ func (tm *TaskMatcher) emitDispatchLatency(task *internalTask, forwarded bool) {
 		time.Since(timestamp.TimeValue(task.event.Data.CreateTime)),
 		metrics.StringTag("source", task.source.String()),
 		metrics.StringTag("forwarded", strconv.FormatBool(forwarded)),
+		metrics.StringTag(metrics.TaskPriorityTagName, ""),
 	)
 }
 
@@ -434,33 +402,8 @@ func (tm *TaskMatcher) PollForQuery(ctx context.Context, pollMetadata *pollMetad
 	return task, err
 }
 
-// UpdateRatelimit updates the task dispatch rate
-func (tm *TaskMatcher) UpdateRatelimit(rpsPtr *float64) {
-	if rpsPtr == nil {
-		return
-	}
-
-	rps := *rpsPtr
-	nPartitions := float64(tm.numPartitions())
-	if nPartitions > 0 {
-		// divide the rate equally across all partitions
-		rps = rps / nPartitions
-	}
-	burst := int(math.Ceil(rps))
-
-	minTaskThrottlingBurstSize := tm.config.MinTaskThrottlingBurstSize()
-	if burst < minTaskThrottlingBurstSize {
-		burst = minTaskThrottlingBurstSize
-	}
-
-	tm.dynamicRateBurst.SetRPS(rps)
-	tm.dynamicRateBurst.SetBurst(burst)
-	tm.forceRefreshRateOnce.Do(func() {
-		// Dynamic rate limiter only refresh its rate every 1m. Before that initial 1m interval, it uses default rate
-		// which is 10K and is too large in most cases. We need to force refresh for the first time this rate is set
-		// by poller. Only need to do that once. If the rate change later, it will be refresh in 1m.
-		tm.dynamicRateLimiter.Refresh()
-	})
+func (tm *TaskMatcher) ReprocessAllTasks() {
+	// unused in old matcher
 }
 
 // Rate returns the current rate at which tasks are dispatched
@@ -483,7 +426,10 @@ func (tm *TaskMatcher) poll(
 		if pollMetadata.forwardedFrom == "" {
 			// Only recording for original polls
 			metrics.PollLatencyPerTaskQueue.With(tm.metricsHandler).Record(
-				time.Since(start), metrics.StringTag("forwarded", strconv.FormatBool(forwardedPoll)))
+				time.Since(start),
+				metrics.StringTag("forwarded", strconv.FormatBool(forwardedPoll)),
+				metrics.StringTag(metrics.TaskPriorityTagName, ""),
+			)
 		}
 
 		if err == nil {
@@ -643,9 +589,7 @@ func (tm *TaskMatcher) getBacklogAge() time.Duration {
 
 	oldest := int64(math.MaxInt64)
 	for createTime := range tm.backlogTasksCreateTime {
-		if createTime < oldest {
-			oldest = createTime
-		}
+		oldest = min(oldest, createTime)
 	}
 
 	return time.Since(time.Unix(0, oldest))

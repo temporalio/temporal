@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package ndc
 
 import (
@@ -38,7 +14,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/versionhistory"
-	"go.temporal.io/server/service/history/shard"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
@@ -55,7 +31,7 @@ type (
 	}
 
 	HistoryImporterImpl struct {
-		shardContext   shard.Context
+		shardContext   historyi.ShardContext
 		namespaceCache namespace.Registry
 		workflowCache  wcache.Cache
 		taskRefresher  workflow.TaskRefresher
@@ -68,7 +44,7 @@ type (
 )
 
 func NewHistoryImporter(
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	workflowCache wcache.Cache,
 	logger log.Logger,
 ) *HistoryImporterImpl {
@@ -89,28 +65,28 @@ func NewHistoryImporter(
 		mutableStateMapper: NewMutableStateMapping(
 			shardContext,
 			func(
-				wfContext workflow.Context,
-				mutableState workflow.MutableState,
+				wfContext historyi.WorkflowContext,
+				mutableState historyi.MutableState,
 				logger log.Logger,
 			) BufferEventFlusher {
 				return NewBufferEventFlusher(shardContext, wfContext, mutableState, logger)
 			},
 			func(
-				wfContext workflow.Context,
-				mutableState workflow.MutableState,
+				wfContext historyi.WorkflowContext,
+				mutableState historyi.MutableState,
 				logger log.Logger,
 			) BranchMgr {
 				return NewBranchMgr(shardContext, wfContext, mutableState, logger)
 			},
 			func(
-				wfContext workflow.Context,
-				mutableState workflow.MutableState,
+				wfContext historyi.WorkflowContext,
+				mutableState historyi.MutableState,
 				logger log.Logger,
 			) ConflictResolver {
 				return NewConflictResolver(shardContext, wfContext, mutableState, logger)
 			},
 			func(
-				state workflow.MutableState,
+				state historyi.MutableState,
 				logger log.Logger,
 			) workflow.MutableStateRebuilder {
 				return workflow.NewMutableStateRebuilder(
@@ -142,7 +118,7 @@ func (r *HistoryImporterImpl) ImportWorkflow(
 	defer func() {
 		// it is ok to clear everytime this function is invoked
 		// mutable state will be at most initialized once from shard mutable state cache
-		// mutable state will be usually initialized from input token
+		// mutable state will usually be initialized from input token
 		ndcWorkflow.GetContext().Clear()
 		ndcWorkflow.GetReleaseFn()(retError)
 	}()
@@ -189,6 +165,7 @@ func (r *HistoryImporterImpl) applyEvents(
 		nil,
 		"",
 		nil,
+		false,
 	)
 	if err != nil {
 		return nil, false, err
@@ -220,8 +197,8 @@ func (r *HistoryImporterImpl) applyEvents(
 
 func (r *HistoryImporterImpl) applyStartEventsAndSerialize(
 	ctx context.Context,
-	wfContext workflow.Context,
-	mutableState workflow.MutableState,
+	wfContext historyi.WorkflowContext,
+	mutableState historyi.MutableState,
 	mutableStateSpec MutableStateInitializationSpec,
 	task replicationTask,
 ) ([]byte, bool, error) {
@@ -246,8 +223,8 @@ func (r *HistoryImporterImpl) applyStartEventsAndSerialize(
 
 func (r *HistoryImporterImpl) applyNonStartEventsAndSerialize(
 	ctx context.Context,
-	wfContext workflow.Context,
-	mutableState workflow.MutableState,
+	wfContext historyi.WorkflowContext,
+	mutableState historyi.MutableState,
 	mutableStateSpec MutableStateInitializationSpec,
 	task replicationTask,
 	createNewBranch bool,
@@ -299,11 +276,11 @@ func (r *HistoryImporterImpl) applyNonStartEventsAndSerialize(
 
 func (r *HistoryImporterImpl) persistHistoryAndSerializeMutableState(
 	ctx context.Context,
-	mutableState workflow.MutableState,
+	mutableState historyi.MutableState,
 	mutableStateSpec MutableStateInitializationSpec,
 ) ([]byte, error) {
 	targetWorkflowSnapshot, targetWorkflowEventsSeq, err := mutableState.CloseTransactionAsSnapshot(
-		workflow.TransactionPolicyPassive,
+		historyi.TransactionPolicyPassive,
 	)
 	if err != nil {
 		return nil, err
@@ -413,7 +390,7 @@ func (r *HistoryImporterImpl) commit(
 
 	if cmpResult < 0 {
 		// imported events does not belong to current branch, update DB mutable state with new version history
-		updated, _, err := versionhistory.AddVersionHistory(
+		updated, _, err := versionhistory.AddAndSwitchVersionHistory(
 			dbNDCWorkflow.GetMutableState().GetExecutionInfo().GetVersionHistories(),
 			memCurrentVersionHistory,
 		)

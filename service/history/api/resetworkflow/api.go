@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package resetworkflow
 
 import (
@@ -30,27 +6,34 @@ import (
 	"github.com/google/uuid"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/ndc"
-	"go.temporal.io/server/service/history/shard"
 )
 
 func Invoke(
 	ctx context.Context,
 	resetRequest *historyservice.ResetWorkflowExecutionRequest,
-	shard shard.Context,
+	shardContext historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (_ *historyservice.ResetWorkflowExecutionResponse, retError error) {
 	namespaceID := namespace.ID(resetRequest.GetNamespaceId())
 	err := api.ValidateNamespaceUUID(namespaceID)
 	if err != nil {
+		return nil, err
+	}
+
+	if err := validatePostResetOperationInputs(resetRequest.ResetRequest.PostResetOperations); err != nil {
 		return nil, err
 	}
 
@@ -115,7 +98,7 @@ func Invoke(
 
 	// dedup by requestID
 	if currentWorkflowLease.GetMutableState().GetExecutionState().CreateRequestId == request.GetRequestId() {
-		shard.GetLogger().Info("Duplicated reset request",
+		shardContext.GetLogger().Info("Duplicated reset request",
 			tag.WorkflowID(workflowID),
 			tag.WorkflowRunID(currentRunID),
 			tag.WorkflowNamespaceID(namespaceID.String()))
@@ -137,11 +120,31 @@ func Invoke(
 	}
 	baseCurrentBranchToken := baseCurrentVersionHistory.GetBranchToken()
 	baseNextEventID := baseMutableState.GetNextEventID()
+	baseWorkflow := ndc.NewWorkflow(
+		shardContext.GetClusterMetadata(),
+		baseWorkflowLease.GetContext(),
+		baseWorkflowLease.GetMutableState(),
+		baseWorkflowLease.GetReleaseFn(),
+	)
 
+	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespaceID)
+	if err != nil {
+		return nil, err
+	}
+
+	metrics.WorkflowResetCount.With(
+		shardContext.GetMetricsHandler().WithTags(
+			metrics.NamespaceTag(namespaceEntry.Name().String()),
+			metrics.OperationTag(metrics.HistoryResetWorkflowScope),
+			metrics.VersioningBehaviorTag(baseMutableState.GetEffectiveVersioningBehavior()),
+		),
+	).Record(1)
+
+	allowResetWithPendingChildren := shardContext.GetConfig().AllowResetWithPendingChildren(namespaceEntry.Name().String())
 	if err := ndc.NewWorkflowResetter(
-		shard,
+		shardContext,
 		workflowConsistencyChecker.GetWorkflowCache(),
-		shard.GetLogger(),
+		shardContext.GetLogger(),
 	).ResetWorkflow(
 		ctx,
 		namespaceID,
@@ -153,8 +156,9 @@ func Invoke(
 		baseNextEventID,
 		resetRunID,
 		request.GetRequestId(),
+		baseWorkflow,
 		ndc.NewWorkflow(
-			shard.GetClusterMetadata(),
+			shardContext.GetClusterMetadata(),
 			currentWorkflowLease.GetContext(),
 			currentWorkflowLease.GetMutableState(),
 			currentWorkflowLease.GetReleaseFn(),
@@ -162,6 +166,8 @@ func Invoke(
 		request.GetReason(),
 		nil,
 		GetResetReapplyExcludeTypes(request.GetResetReapplyExcludeTypes(), request.GetResetReapplyType()),
+		allowResetWithPendingChildren,
+		resetRequest.ResetRequest.PostResetOperations,
 	); err != nil {
 		return nil, err
 	}
@@ -177,23 +183,39 @@ func Invoke(
 func GetResetReapplyExcludeTypes(
 	excludeTypes []enumspb.ResetReapplyExcludeType,
 	includeType enumspb.ResetReapplyType,
-) map[enumspb.ResetReapplyExcludeType]bool {
+) map[enumspb.ResetReapplyExcludeType]struct{} {
 	// A client who wishes to have reapplication of all supported event types should omit the deprecated
 	// reset_reapply_type field (since its default value is RESET_REAPPLY_TYPE_ALL_ELIGIBLE).
-	exclude := map[enumspb.ResetReapplyExcludeType]bool{}
+	exclude := map[enumspb.ResetReapplyExcludeType]struct{}{}
 	switch includeType {
 	case enumspb.RESET_REAPPLY_TYPE_SIGNAL:
 		// A client sending this value of the deprecated reset_reapply_type field will not have any events other than
 		// signal reapplied.
-		exclude[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_UPDATE] = true
+		exclude[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_UPDATE] = struct{}{}
 	case enumspb.RESET_REAPPLY_TYPE_NONE:
-		exclude[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL] = true
-		exclude[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_UPDATE] = true
+		exclude[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL] = struct{}{}
+		exclude[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_UPDATE] = struct{}{}
 	case enumspb.RESET_REAPPLY_TYPE_UNSPECIFIED, enumspb.RESET_REAPPLY_TYPE_ALL_ELIGIBLE:
 		// Do nothing.
 	}
 	for _, e := range excludeTypes {
-		exclude[e] = true
+		exclude[e] = struct{}{}
 	}
 	return exclude
+}
+
+// validatePostResetOperationInputs validates the optional post reset operation inputs.
+func validatePostResetOperationInputs(postResetOperations []*workflowpb.PostResetOperation) error {
+	for _, operation := range postResetOperations {
+		switch op := operation.GetVariant().(type) {
+		case *workflowpb.PostResetOperation_UpdateWorkflowOptions_:
+			opts := op.UpdateWorkflowOptions.GetWorkflowExecutionOptions()
+			if err := worker_versioning.ValidateVersioningOverride(opts.GetVersioningOverride()); err != nil {
+				return err
+			}
+		default:
+			return serviceerror.NewInvalidArgumentf("unsupported post reset operation: %T", op)
+		}
+	}
+	return nil
 }

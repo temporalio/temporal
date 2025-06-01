@@ -1,31 +1,8 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package replication
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
@@ -40,6 +17,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	ctasks "go.temporal.io/server/common/tasks"
+	"go.temporal.io/server/service/history/consts"
 )
 
 type (
@@ -51,9 +29,8 @@ type (
 		req *historyservice.SyncActivityRequest
 
 		// following fields are used only for batching functionality
-		batchable              bool
-		activityInfos          []*historyservice.ActivitySyncInfo
-		markPoisonPillAttempts int
+		batchable     bool
+		activityInfos []*historyservice.ActivitySyncInfo
 	}
 )
 
@@ -67,6 +44,7 @@ func NewExecutableActivityStateTask(
 	taskCreationTime time.Time,
 	task *replicationspb.SyncActivityTaskAttributes,
 	sourceClusterName string,
+	sourceShardKey ClusterShardKey,
 	priority enumsspb.TaskPriority,
 	replicationTask *replicationspb.ReplicationTask,
 ) *ExecutableActivityStateTask {
@@ -81,6 +59,7 @@ func NewExecutableActivityStateTask(
 			taskCreationTime,
 			time.Now().UTC(),
 			sourceClusterName,
+			sourceShardKey,
 			priority,
 			replicationTask,
 		),
@@ -102,6 +81,14 @@ func NewExecutableActivityStateTask(
 			LastStartedRedirectCounter: task.LastStartedRedirectCounter,
 			BaseExecutionInfo:          task.BaseExecutionInfo,
 			VersionHistory:             task.VersionHistory,
+			FirstScheduledTime:         task.FirstScheduledTime,
+			LastAttemptCompleteTime:    task.LastAttemptCompleteTime,
+			Stamp:                      task.Stamp,
+			Paused:                     task.Paused,
+			RetryInitialInterval:       task.RetryInitialInterval,
+			RetryMaximumInterval:       task.RetryMaximumInterval,
+			RetryMaximumAttempts:       task.RetryMaximumAttempts,
+			RetryBackoffCoefficient:    task.RetryBackoffCoefficient,
 		},
 
 		batchable: true,
@@ -119,8 +106,15 @@ func NewExecutableActivityStateTask(
 			VersionHistory:             task.VersionHistory,
 			LastStartedBuildId:         task.LastStartedBuildId,
 			LastStartedRedirectCounter: task.LastStartedRedirectCounter,
+			FirstScheduledTime:         task.FirstScheduledTime,
+			LastAttemptCompleteTime:    task.LastAttemptCompleteTime,
+			Stamp:                      task.Stamp,
+			Paused:                     task.Paused,
+			RetryInitialInterval:       task.RetryInitialInterval,
+			RetryMaximumInterval:       task.RetryMaximumInterval,
+			RetryMaximumAttempts:       task.RetryMaximumAttempts,
+			RetryBackoffCoefficient:    task.RetryBackoffCoefficient,
 		}),
-		markPoisonPillAttempts: 0,
 	}
 }
 
@@ -180,6 +174,10 @@ func (e *ExecutableActivityStateTask) Execute() error {
 }
 
 func (e *ExecutableActivityStateTask) HandleErr(err error) error {
+	if errors.Is(err, consts.ErrDuplicate) {
+		e.MarkTaskDuplicated()
+		return nil
+	}
 	switch retryErr := err.(type) {
 	case nil, *serviceerror.NotFound:
 		return nil
@@ -216,8 +214,8 @@ func (e *ExecutableActivityStateTask) HandleErr(err error) error {
 }
 
 func (e *ExecutableActivityStateTask) MarkPoisonPill() error {
-	if e.markPoisonPillAttempts >= MarkPoisonPillMaxAttempts {
-		replicationTaskInfo := &persistencespb.ReplicationTaskInfo{
+	if e.ReplicationTask().GetRawTaskInfo() == nil {
+		e.ReplicationTask().RawTaskInfo = &persistencespb.ReplicationTaskInfo{
 			NamespaceId:      e.NamespaceID,
 			WorkflowId:       e.WorkflowID,
 			RunId:            e.RunID,
@@ -226,46 +224,9 @@ func (e *ExecutableActivityStateTask) MarkPoisonPill() error {
 			ScheduledEventId: e.req.ScheduledEventId,
 			Version:          e.req.Version,
 		}
-		e.Logger.Error("MarkPoisonPill reached max attempts",
-			tag.SourceCluster(e.SourceClusterName()),
-			tag.ReplicationTask(replicationTaskInfo),
-			tag.ActivityInfo(e.req),
-		)
-		return nil
-	}
-	e.markPoisonPillAttempts++
-
-	shardContext, err := e.ShardController.GetShardByNamespaceWorkflow(
-		namespace.ID(e.NamespaceID),
-		e.WorkflowID,
-	)
-	if err != nil {
-		return err
 	}
 
-	// TODO: GetShardID will break GetDLQReplicationMessages we need to handle DLQ for cross shard replication.
-	replicationTaskInfo := &persistencespb.ReplicationTaskInfo{
-		NamespaceId:      e.NamespaceID,
-		WorkflowId:       e.WorkflowID,
-		RunId:            e.RunID,
-		TaskId:           e.ExecutableTask.TaskID(),
-		TaskType:         enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
-		ScheduledEventId: e.req.ScheduledEventId,
-		Version:          e.req.Version,
-	}
-
-	e.Logger.Error("enqueue activity state replication task to DLQ",
-		tag.ShardID(shardContext.GetShardID()),
-		tag.WorkflowNamespaceID(e.NamespaceID),
-		tag.WorkflowID(e.WorkflowID),
-		tag.WorkflowRunID(e.RunID),
-		tag.TaskID(e.ExecutableTask.TaskID()),
-	)
-
-	ctx, cancel := newTaskContext(e.NamespaceID, e.Config.ReplicationTaskApplyTimeout())
-	defer cancel()
-
-	return writeTaskToDLQ(ctx, e.DLQWriter, shardContext, e.SourceClusterName(), replicationTaskInfo)
+	return e.ExecutableTask.MarkPoisonPill()
 }
 
 func (e *ExecutableActivityStateTask) BatchWith(incomingTask BatchableTask) (TrackableExecutableTask, bool) {
@@ -307,4 +268,9 @@ func (e *ExecutableActivityStateTask) CanBatch() bool {
 
 func (e *ExecutableActivityStateTask) MarkUnbatchable() {
 	e.batchable = false
+}
+
+func (e *ExecutableActivityStateTask) Cancel() {
+	e.MarkUnbatchable()
+	e.ExecutableTask.Cancel()
 }

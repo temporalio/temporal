@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package visibility
 
 import (
@@ -64,6 +40,7 @@ func NewManager(
 	maxReadQPS dynamicconfig.IntPropertyFn,
 	maxWriteQPS dynamicconfig.IntPropertyFn,
 	operatorRPSRatio dynamicconfig.FloatPropertyFn,
+	slowQueryThreshold dynamicconfig.DurationPropertyFn,
 	enableReadFromSecondaryVisibility dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	visibilityEnableShadowReadMode dynamicconfig.BoolPropertyFn,
 	secondaryVisibilityWritingMode dynamicconfig.StringPropertyFn,
@@ -84,6 +61,7 @@ func NewManager(
 		maxReadQPS,
 		maxWriteQPS,
 		operatorRPSRatio,
+		slowQueryThreshold,
 		visibilityDisableOrderByClause,
 		visibilityEnableManualPagination,
 		metricsHandler,
@@ -108,6 +86,7 @@ func NewManager(
 		maxReadQPS,
 		maxWriteQPS,
 		operatorRPSRatio,
+		slowQueryThreshold,
 		visibilityDisableOrderByClause,
 		visibilityEnableManualPagination,
 		metricsHandler,
@@ -140,6 +119,7 @@ func newVisibilityManager(
 	maxReadQPS dynamicconfig.IntPropertyFn,
 	maxWriteQPS dynamicconfig.IntPropertyFn,
 	operatorRPSRatio dynamicconfig.FloatPropertyFn,
+	slowQueryThreshold dynamicconfig.DurationPropertyFn,
 	metricsHandler metrics.Handler,
 	visibilityPluginNameTag metrics.Tag,
 	visibilityIndexNameTag metrics.Tag,
@@ -167,6 +147,7 @@ func newVisibilityManager(
 		visManager,
 		metricsHandler,
 		logger,
+		slowQueryThreshold,
 		visibilityPluginNameTag,
 		visibilityIndexNameTag,
 	)
@@ -187,6 +168,7 @@ func newVisibilityManagerFromDataStoreConfig(
 	maxReadQPS dynamicconfig.IntPropertyFn,
 	maxWriteQPS dynamicconfig.IntPropertyFn,
 	operatorRPSRatio dynamicconfig.FloatPropertyFn,
+	slowQueryThreshold dynamicconfig.DurationPropertyFn,
 	visibilityDisableOrderByClause dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	visibilityEnableManualPagination dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 
@@ -217,6 +199,7 @@ func newVisibilityManagerFromDataStoreConfig(
 		maxReadQPS,
 		maxWriteQPS,
 		operatorRPSRatio,
+		slowQueryThreshold,
 		metricsHandler,
 		metrics.VisibilityPluginNameTag(visStore.GetName()),
 		metrics.VisibilityIndexNameTag(visStore.GetIndexName()),

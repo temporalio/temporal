@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package temporal
 
 import (
@@ -30,6 +6,8 @@ import (
 	"fmt"
 	"maps"
 	"os"
+	"sync/atomic"
+	"time"
 
 	"github.com/pborman/uuid"
 	"go.opentelemetry.io/otel"
@@ -70,7 +48,6 @@ import (
 	"go.temporal.io/server/service/history"
 	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/tasks"
-	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/matching"
 	"go.temporal.io/server/service/worker"
 	"go.uber.org/fx"
@@ -137,7 +114,6 @@ type (
 		ClientFactoryProvider client.FactoryProvider
 		DynamicConfigClient   dynamicconfig.Client
 		TLSConfigProvider     encryption.TLSConfigProvider
-		EsConfig              *esclient.Config
 		EsClient              esclient.Client
 		MetricsHandler        metrics.Handler
 	}
@@ -246,17 +222,19 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 	var esConfig *esclient.Config
 	var esClient esclient.Client
 
+	if persistenceConfig.SecondaryVisibilityConfigExist() &&
+		persistenceConfig.DataStores[persistenceConfig.SecondaryVisibilityStore].Elasticsearch != nil {
+		esConfig = persistenceConfig.DataStores[persistenceConfig.SecondaryVisibilityStore].Elasticsearch
+		esConfig.SetHttpClient(so.elasticsearchHttpClient)
+	}
 	if persistenceConfig.VisibilityConfigExist() &&
 		persistenceConfig.DataStores[persistenceConfig.VisibilityStore].Elasticsearch != nil {
 		esConfig = persistenceConfig.DataStores[persistenceConfig.VisibilityStore].Elasticsearch
-	} else if persistenceConfig.SecondaryVisibilityConfigExist() &&
-		persistenceConfig.DataStores[persistenceConfig.SecondaryVisibilityStore].Elasticsearch != nil {
-		esConfig = persistenceConfig.DataStores[persistenceConfig.SecondaryVisibilityStore].Elasticsearch
+		esConfig.SetHttpClient(so.elasticsearchHttpClient)
 	}
 
 	if esConfig != nil {
 		esHttpClient := so.elasticsearchHttpClient
-		esConfig.SetHttpClient(esHttpClient)
 		if esHttpClient == nil {
 			var err error
 			esHttpClient, err = esclient.NewAwsHttpClient(esConfig.AWSRequestSigning)
@@ -309,7 +287,6 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		ClientFactoryProvider: clientFactoryProvider,
 		DynamicConfigClient:   dcClient,
 		TLSConfigProvider:     tlsConfigProvider,
-		EsConfig:              esConfig,
 		EsClient:              esClient,
 		MetricsHandler:        metricHandler,
 	}, nil
@@ -357,7 +334,6 @@ type (
 		NamespaceLogger            resource.NamespaceLogger
 		DynamicConfigClient        dynamicconfig.Client
 		MetricsHandler             metrics.Handler
-		EsConfig                   *esclient.Config
 		EsClient                   esclient.Client
 		TlsConfigProvider          encryption.TLSConfigProvider
 		PersistenceConfig          config.Persistence
@@ -395,7 +371,6 @@ func (params ServiceProviderParamsCommon) GetCommonServiceOptions(serviceName pr
 	return fx.Options(
 		fx.Supply(
 			serviceName,
-			params.EsConfig,
 			params.PersistenceConfig,
 			params.ClusterMetadata,
 			params.Cfg,
@@ -493,7 +468,6 @@ func HistoryServiceProvider(
 	}
 
 	app := fx.New(
-		fx.Provide(workflow.NewTaskGeneratorProvider),
 		params.GetCommonServiceOptions(serviceName),
 		history.QueueModule,
 		history.Module,
@@ -611,6 +585,7 @@ func ApplyClusterMetadataConfigProvider(
 		customDataStoreFactory,
 		logger,
 		metricsHandler,
+		telemetry.NoopTracerProvider,
 	)
 	factory := persistenceFactoryProvider(persistenceClient.NewFactoryParams{
 		DataStoreFactory:           dataStoreFactory,
@@ -860,24 +835,34 @@ func verifyPersistenceCompatibleVersion(config config.Persistence, persistenceSe
 	return nil
 }
 
+type SpanExporterInputs struct {
+	fx.In
+	Lifecycyle fx.Lifecycle
+	Logger     log.Logger
+	Config     *config.Config `optional:"true"`
+}
+
 // TraceExportModule holds process-global telemetry fx state defining the set of
 // OTEL trace/span exporters used by tracing instrumentation. The following
 // types can be overriden/augmented with fx.Replace/fx.Decorate:
 //
 // - []go.opentelemetry.io/otel/sdk/trace.SpanExporter
 var TraceExportModule = fx.Options(
-	fx.Invoke(func(log log.Logger) {
-		otel.SetErrorHandler(otel.ErrorHandlerFunc(
-			func(err error) {
-				log.Warn("OTEL error", tag.Error(err), tag.ServiceErrorType(err))
-			}),
-		)
-	}),
+	fx.Provide(func(inputs SpanExporterInputs) ([]otelsdktrace.SpanExporter, error) {
+		var tracingReady atomic.Bool
+		otel.SetErrorHandler(otel.ErrorHandlerFunc(func(err error) {
+			if tracingReady.Load() { // ignore errors during startup
+				inputs.Logger.Warn("OTEL error", tag.Error(err), tag.ServiceErrorType(err))
+			}
+		}))
 
-	fx.Provide(func(lc fx.Lifecycle, c *config.Config) ([]otelsdktrace.SpanExporter, error) {
-		exportersByType, err := c.ExporterConfig.SpanExporters()
-		if err != nil {
-			return nil, err
+		exportersByType := map[telemetry.SpanExporterType]otelsdktrace.SpanExporter{}
+		if inputs.Config != nil {
+			var err error
+			exportersByType, err = inputs.Config.ExporterConfig.SpanExporters()
+			if err != nil {
+				return nil, err
+			}
 		}
 
 		exportersByTypeFromEnv, err := telemetry.SpanExportersFromEnv(os.LookupEnv)
@@ -889,9 +874,14 @@ var TraceExportModule = fx.Options(
 		maps.Copy(exportersByType, exportersByTypeFromEnv)
 
 		exporters := expmaps.Values(exportersByType)
-		lc.Append(fx.Hook{
-			OnStart: startAll(exporters),
-			OnStop:  shutdownAll(exporters),
+
+		inputs.Lifecycyle.Append(fx.Hook{
+			OnStart: func(ctx context.Context) error {
+				err = startAll(exporters)(ctx)
+				tracingReady.Store(true)
+				return err
+			},
+			OnStop: shutdownAll(exporters),
 		})
 		return exporters, nil
 	}),
@@ -906,14 +896,12 @@ var TraceExportModule = fx.Options(
 //     default: wrap each otelsdktrace.SpanExporter with otelsdktrace.NewBatchSpanProcessor
 //   - *go.opentelemetry.io/otel/sdk/resource.Resource
 //     default: resource.Default() augmented with the supplied serviceName
-//   - []go.opentelemetry.io/otel/sdk/trace.TracerProviderOption
-//     default: the provided resource.Resource and each of the otelsdktrace.SpanExporter
 //   - go.opentelemetry.io/otel/trace.TracerProvider
-//     default: otelsdktrace.NewTracerProvider with each of the otelsdktrace.TracerProviderOption
+//     default: otelnoop.NewTracerProvider()
 //   - go.opentelemetry.io/otel/ppropagation.TextMapPropagator
 //     default: propagation.TraceContext{}
-//   - telemetry.ServerTraceInterceptor
-//   - telemetry.ClientTraceInterceptor
+//   - telemetry.ServerStatsHandler
+//   - telemetry.ClientStatsHandler
 var ServiceTracingModule = fx.Options(
 	fx.Supply([]otelsdktrace.BatchSpanProcessorOption{}),
 	fx.Provide(
@@ -950,27 +938,39 @@ var ServiceTracingModule = fx.Options(
 			fx.ParamTags(``, `optional:"true"`),
 		),
 	),
-	fx.Provide(
-		func(r *otelresource.Resource, sps []otelsdktrace.SpanProcessor) []otelsdktrace.TracerProviderOption {
-			opts := make([]otelsdktrace.TracerProviderOption, 0, len(sps)+1)
-			opts = append(opts, otelsdktrace.WithResource(r))
-			for _, sp := range sps {
-				opts = append(opts, otelsdktrace.WithSpanProcessor(sp))
-			}
-			return opts
-		},
-	),
-	fx.Provide(func(lc fx.Lifecycle, opts []otelsdktrace.TracerProviderOption) trace.TracerProvider {
+	fx.Provide(func(lc fx.Lifecycle, r *otelresource.Resource, sps []otelsdktrace.SpanProcessor) trace.TracerProvider {
+		if len(sps) == 0 {
+			return telemetry.NoopTracerProvider
+		}
+		opts := make([]otelsdktrace.TracerProviderOption, 0, len(sps)+1)
+		opts = append(opts, otelsdktrace.WithResource(r))
+		for _, sp := range sps {
+			opts = append(opts, otelsdktrace.WithSpanProcessor(sp))
+		}
 		tp := otelsdktrace.NewTracerProvider(opts...)
-		lc.Append(fx.Hook{OnStop: func(ctx context.Context) error {
-			return tp.Shutdown(ctx)
-		}})
+		lc.Append(fx.Hook{
+			OnStop: func(ctx context.Context) error {
+				otel.SetErrorHandler(otel.ErrorHandlerFunc(func(err error) {
+					// ignore errors during shutdown
+				}))
+
+				shutdownCtx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+				defer cancel()
+
+				err := tp.Shutdown(shutdownCtx)
+				if errors.Is(err, context.DeadlineExceeded) {
+					// Ignore timeouts since it's okay to drop OTEL traces on shutdown.
+					// Either there's no collector, or there are too many traces left to export.
+					return nil
+				}
+				return err
+			}})
 		return tp
 	}),
 	// Haven't had use for baggage propagation yet
 	fx.Provide(func() propagation.TextMapPropagator { return propagation.TraceContext{} }),
-	fx.Provide(telemetry.NewServerTraceInterceptor),
-	fx.Provide(telemetry.NewClientTraceInterceptor),
+	fx.Provide(telemetry.NewServerStatsHandler),
+	fx.Provide(telemetry.NewClientStatsHandler),
 )
 
 func startAll(exporters []otelsdktrace.SpanExporter) func(ctx context.Context) error {
@@ -990,10 +990,15 @@ func startAll(exporters []otelsdktrace.SpanExporter) func(ctx context.Context) e
 
 func shutdownAll(exporters []otelsdktrace.SpanExporter) func(ctx context.Context) error {
 	return func(ctx context.Context) error {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+		defer cancel()
+
 		for _, e := range exporters {
-			err := e.Shutdown(ctx)
-			if err != nil {
-				return err
+			err := e.Shutdown(shutdownCtx)
+			if errors.Is(err, context.DeadlineExceeded) {
+				// Ignore timeouts since it's okay to drop OTEL traces on shutdown.
+				// Either there's no collector, or there are too many traces left to export.
+				return nil
 			}
 		}
 		return nil
@@ -1029,7 +1034,7 @@ func (l *fxLogAdapter) LogEvent(e fxevent.Event) {
 				tag.ComponentFX,
 				tag.NewStringTag("callee", e.FunctionName),
 				tag.NewStringTag("caller", e.CallerName),
-				tag.NewStringTag("runtime", e.Runtime.String()),
+				tag.NewStringerTag("runtime", e.Runtime),
 			)
 		}
 	case *fxevent.OnStopExecuting:
@@ -1051,7 +1056,7 @@ func (l *fxLogAdapter) LogEvent(e fxevent.Event) {
 				tag.ComponentFX,
 				tag.NewStringTag("callee", e.FunctionName),
 				tag.NewStringTag("caller", e.CallerName),
-				tag.NewStringTag("runtime", e.Runtime.String()),
+				tag.NewStringerTag("runtime", e.Runtime),
 			)
 		}
 	case *fxevent.Supplied:
@@ -1113,7 +1118,7 @@ func (l *fxLogAdapter) LogEvent(e fxevent.Event) {
 	case *fxevent.Stopping:
 		l.logger.Info("received signal",
 			tag.ComponentFX,
-			tag.NewStringTag("signal", e.Signal.String()))
+			tag.NewStringerTag("signal", e.Signal))
 	case *fxevent.Stopped:
 		if e.Err != nil {
 			l.logger.Error("stop failed", tag.ComponentFX, tag.Error(e.Err))

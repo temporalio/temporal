@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package historybuilder
 
 import (
@@ -29,6 +5,7 @@ import (
 
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -40,6 +17,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/worker_versioning"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -87,6 +65,9 @@ func (b *EventFactory) CreateWorkflowExecutionStartedEvent(
 		CompletionCallbacks:             req.CompletionCallbacks,
 		RootWorkflowExecution:           request.RootExecutionInfo.GetExecution(),
 		InheritedBuildId:                request.InheritedBuildId,
+		VersioningOverride:              worker_versioning.ConvertOverrideToV32(request.VersioningOverride),
+		Priority:                        req.GetPriority(),
+		InheritedPinnedVersion:          request.InheritedPinnedVersion,
 	}
 
 	parentInfo := request.ParentExecutionInfo
@@ -144,7 +125,6 @@ func (b *EventFactory) CreateWorkflowTaskStartedEvent(
 			BuildIdRedirectCounter: buildIdRedirectCounter,
 		},
 	}
-
 	return event
 }
 
@@ -156,17 +136,23 @@ func (b *EventFactory) CreateWorkflowTaskCompletedEvent(
 	workerVersionStamp *commonpb.WorkerVersionStamp,
 	sdkMetadata *sdkpb.WorkflowTaskCompletedMetadata,
 	meteringMetadata *commonpb.MeteringMetadata,
+	deploymentName string,
+	deployment *deploymentpb.Deployment,
+	behavior enumspb.VersioningBehavior,
 ) *historypb.HistoryEvent {
 	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{
 		WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{
-			ScheduledEventId: scheduledEventID,
-			StartedEventId:   startedEventID,
-			Identity:         identity,
-			BinaryChecksum:   checksum,
-			WorkerVersion:    workerVersionStamp,
-			SdkMetadata:      sdkMetadata,
-			MeteringMetadata: meteringMetadata,
+			ScheduledEventId:     scheduledEventID,
+			StartedEventId:       startedEventID,
+			Identity:             identity,
+			BinaryChecksum:       checksum,
+			WorkerVersion:        workerVersionStamp,
+			SdkMetadata:          sdkMetadata,
+			MeteringMetadata:     meteringMetadata,
+			WorkerDeploymentName: deploymentName,
+			DeploymentVersion:    worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(deployment),
+			VersioningBehavior:   behavior,
 		},
 	}
 
@@ -237,6 +223,7 @@ func (b *EventFactory) CreateActivityTaskScheduledEvent(
 			HeartbeatTimeout:             command.HeartbeatTimeout,
 			RetryPolicy:                  command.RetryPolicy,
 			UseWorkflowBuildId:           command.UseWorkflowBuildId,
+			Priority:                     command.Priority,
 		},
 	}
 	return event
@@ -374,6 +361,7 @@ func (b *EventFactory) CreateWorkflowExecutionTerminatedEvent(
 	reason string,
 	details *commonpb.Payloads,
 	identity string,
+	links []*commonpb.Link,
 ) *historypb.HistoryEvent {
 	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionTerminatedEventAttributes{
@@ -383,6 +371,28 @@ func (b *EventFactory) CreateWorkflowExecutionTerminatedEvent(
 			Identity: identity,
 		},
 	}
+	event.Links = links
+	return event
+}
+
+func (b *EventFactory) CreateWorkflowExecutionOptionsUpdatedEvent(
+	versioningOverride *workflowpb.VersioningOverride,
+	unsetVersioningOverride bool,
+	attachRequestID string,
+	attachCompletionCallbacks []*commonpb.Callback,
+	links []*commonpb.Link,
+) *historypb.HistoryEvent {
+	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED, b.timeSource.Now())
+	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionOptionsUpdatedEventAttributes{
+		WorkflowExecutionOptionsUpdatedEventAttributes: &historypb.WorkflowExecutionOptionsUpdatedEventAttributes{
+			VersioningOverride:          versioningOverride,
+			UnsetVersioningOverride:     unsetVersioningOverride,
+			AttachedRequestId:           attachRequestID,
+			AttachedCompletionCallbacks: attachCompletionCallbacks,
+		},
+	}
+	event.Links = links
+	event.WorkerMayIgnore = true
 	return event
 }
 
@@ -547,6 +557,7 @@ func (b *EventFactory) CreateWorkflowExecutionCancelRequestedEvent(request *hist
 			ExternalWorkflowExecution: request.ExternalWorkflowExecution,
 		},
 	}
+	event.Links = request.CancelRequest.Links
 	return event
 }
 
@@ -775,8 +786,8 @@ func (b *EventFactory) CreateWorkflowExecutionSignaledEvent(
 	input *commonpb.Payloads,
 	identity string,
 	header *commonpb.Header,
-	skipGenerateWorkflowTask bool,
 	externalWorkflowExecution *commonpb.WorkflowExecution,
+	links []*commonpb.Link,
 ) *historypb.HistoryEvent {
 	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{
@@ -785,10 +796,10 @@ func (b *EventFactory) CreateWorkflowExecutionSignaledEvent(
 			Input:                     input,
 			Identity:                  identity,
 			Header:                    header,
-			SkipGenerateWorkflowTask:  skipGenerateWorkflowTask,
 			ExternalWorkflowExecution: externalWorkflowExecution,
 		},
 	}
+	event.Links = links
 	return event
 }
 
@@ -819,6 +830,7 @@ func (b *EventFactory) CreateStartChildWorkflowExecutionInitiatedEvent(
 			SearchAttributes:             command.SearchAttributes,
 			ParentClosePolicy:            command.GetParentClosePolicy(),
 			InheritBuildId:               command.InheritBuildId,
+			Priority:                     command.Priority,
 		},
 	}
 	return event

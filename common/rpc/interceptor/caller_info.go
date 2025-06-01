@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package interceptor
 
 import (
@@ -73,22 +49,30 @@ func PopulateCallerInfo(
 ) context.Context {
 	callerInfo := headers.GetCallerInfo(ctx)
 
-	updateInfo := false
-	if callerInfo.CallerName == "" {
-		callerInfo.CallerName = nsNameGetter()
-		updateInfo = callerInfo.CallerName != ""
-	}
-	if callerInfo.CallerType == "" {
-		callerInfo.CallerType = headers.CallerTypeAPI
-		updateInfo = true
-	}
-	if (callerInfo.CallerType == headers.CallerTypeAPI || callerInfo.CallerType == headers.CallerTypeOperator) &&
-		callerInfo.CallOrigin == "" {
-		callerInfo.CallOrigin = methodGetter()
-		updateInfo = true
+	infoUpdated := false
+
+	nsName := nsNameGetter()
+	if callerInfo.CallerName != nsName {
+		callerInfo.CallerName = nsName
+		infoUpdated = true
 	}
 
-	if updateInfo {
+	_, isValidCallerType := headers.ValidCallerTypes[callerInfo.CallerType]
+	if !isValidCallerType {
+		callerInfo.CallerType = headers.CallerTypeAPI
+		infoUpdated = true
+	}
+
+	if callerInfo.CallerType == headers.CallerTypeAPI ||
+		callerInfo.CallerType == headers.CallerTypeOperator {
+		methodName := methodGetter()
+		if callerInfo.CallOrigin != methodName {
+			callerInfo.CallOrigin = methodName
+			infoUpdated = true
+		}
+	}
+
+	if infoUpdated {
 		ctx = headers.SetCallerInfo(ctx, callerInfo)
 	}
 

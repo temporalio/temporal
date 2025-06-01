@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package protoassert
 
 import (
@@ -52,18 +28,15 @@ func prettyPrintAny(b *strings.Builder, v reflect.Value, depth int) {
 	case reflect.Func:
 		panic("Not implemented")
 	case reflect.Interface:
-		prettyPrintStruct(b, v.Elem(), depth)
+		if v.Elem().Type().Kind() == reflect.Pointer {
+			prettyPrintPointer(b, v.Elem(), depth)
+		} else {
+			prettyPrintStruct(b, v.Elem(), depth)
+		}
 	case reflect.Map:
 		prettyPrintMap(b, v, depth)
 	case reflect.Pointer:
-		if v.IsValid() {
-			if v.IsNil() {
-				b.WriteString("nil")
-			} else {
-				b.WriteByte('&')
-				prettyPrintStruct(b, v.Elem(), depth)
-			}
-		}
+		prettyPrintPointer(b, v, depth)
 	case reflect.Slice:
 		prettyPrintSlice(b, v, depth)
 	case reflect.Struct:
@@ -78,6 +51,7 @@ func prettyPrintMap(b *strings.Builder, v reflect.Value, depth int) {
 	fmt.Fprintf(b, "map[%s]%s", v.Type().Key().Name(), v.Type().Elem().Name())
 	if v.Len() == 0 {
 		b.WriteString("{}")
+		return
 	}
 
 	b.WriteByte('{')
@@ -90,12 +64,13 @@ func prettyPrintMap(b *strings.Builder, v reflect.Value, depth int) {
 		prettyPrintAny(b, iter.Value(), depth+1)
 	}
 	indent(b, depth)
-	b.WriteByte('\n')
+	b.WriteByte('}')
 }
 
 func prettyPrintSlice(b *strings.Builder, v reflect.Value, depth int) {
 	if v.Len() == 0 {
 		b.WriteString("[]")
+		return
 	}
 	b.WriteByte('[')
 	for j := 0; j < v.Len(); j++ {
@@ -128,6 +103,18 @@ func prettyPrintStruct(b *strings.Builder, v reflect.Value, depth int) {
 	}
 	indent(b, depth)
 	b.WriteString("}")
+}
+
+func prettyPrintPointer(b *strings.Builder, v reflect.Value, depth int) {
+	if !v.IsValid() {
+		return
+	}
+	if v.IsNil() {
+		b.WriteString("nil")
+	} else {
+		b.WriteByte('&')
+		prettyPrintStruct(b, v.Elem(), depth)
+	}
 }
 
 func indent(b *strings.Builder, depth int) {

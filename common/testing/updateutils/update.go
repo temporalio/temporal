@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package updateutils
 
 import (
@@ -52,7 +28,7 @@ func New(t require.TestingT) UpdateUtils {
 	}
 }
 
-func (u UpdateUtils) UpdateAcceptCommands(tv *testvars.TestVars, messageID string) []*commandpb.Command {
+func (u UpdateUtils) UpdateAcceptCommands(tv *testvars.TestVars) []*commandpb.Command {
 	if th, ok := u.t.(helper); ok {
 		th.Helper()
 	}
@@ -60,12 +36,12 @@ func (u UpdateUtils) UpdateAcceptCommands(tv *testvars.TestVars, messageID strin
 	return []*commandpb.Command{{
 		CommandType: enumspb.COMMAND_TYPE_PROTOCOL_MESSAGE,
 		Attributes: &commandpb.Command_ProtocolMessageCommandAttributes{ProtocolMessageCommandAttributes: &commandpb.ProtocolMessageCommandAttributes{
-			MessageId: tv.MessageID("update-accepted", messageID),
+			MessageId: tv.MessageID() + "_update-accepted",
 		}},
 	}}
 }
 
-func (u UpdateUtils) UpdateCompleteCommands(tv *testvars.TestVars, messageID string) []*commandpb.Command {
+func (u UpdateUtils) UpdateCompleteCommands(tv *testvars.TestVars) []*commandpb.Command {
 	if th, ok := u.t.(helper); ok {
 		th.Helper()
 	}
@@ -73,20 +49,20 @@ func (u UpdateUtils) UpdateCompleteCommands(tv *testvars.TestVars, messageID str
 		{
 			CommandType: enumspb.COMMAND_TYPE_PROTOCOL_MESSAGE,
 			Attributes: &commandpb.Command_ProtocolMessageCommandAttributes{ProtocolMessageCommandAttributes: &commandpb.ProtocolMessageCommandAttributes{
-				MessageId: tv.MessageID("update-completed", messageID),
+				MessageId: tv.MessageID() + "_update-completed",
 			}},
 		},
 	}
 }
 
-func (u UpdateUtils) UpdateAcceptCompleteCommands(tv *testvars.TestVars, messageID string) []*commandpb.Command {
+func (u UpdateUtils) UpdateAcceptCompleteCommands(tv *testvars.TestVars) []*commandpb.Command {
 	if th, ok := u.t.(helper); ok {
 		th.Helper()
 	}
-	return append(u.UpdateAcceptCommands(tv, messageID), u.UpdateCompleteCommands(tv, messageID)...)
+	return append(u.UpdateAcceptCommands(tv), u.UpdateCompleteCommands(tv)...)
 }
 
-func (u UpdateUtils) UpdateAcceptMessages(tv *testvars.TestVars, updRequestMsg *protocolpb.Message, messageID string) []*protocolpb.Message {
+func (u UpdateUtils) UpdateAcceptMessages(tv *testvars.TestVars, updRequestMsg *protocolpb.Message) []*protocolpb.Message {
 	if th, ok := u.t.(helper); ok {
 		th.Helper()
 	}
@@ -94,7 +70,7 @@ func (u UpdateUtils) UpdateAcceptMessages(tv *testvars.TestVars, updRequestMsg *
 
 	return []*protocolpb.Message{
 		{
-			Id:                 tv.MessageID("update-accepted", messageID),
+			Id:                 tv.MessageID() + "_update-accepted",
 			ProtocolInstanceId: updRequest.GetMeta().GetUpdateId(),
 			SequencingId:       nil,
 			Body: protoutils.MarshalAny(u.t, &updatepb.Acceptance{
@@ -106,7 +82,7 @@ func (u UpdateUtils) UpdateAcceptMessages(tv *testvars.TestVars, updRequestMsg *
 	}
 }
 
-func (u UpdateUtils) UpdateCompleteMessages(tv *testvars.TestVars, updRequestMsg *protocolpb.Message, messageID string) []*protocolpb.Message {
+func (u UpdateUtils) UpdateCompleteMessages(tv *testvars.TestVars, updRequestMsg *protocolpb.Message) []*protocolpb.Message {
 	if th, ok := u.t.(helper); ok {
 		th.Helper()
 	}
@@ -114,7 +90,7 @@ func (u UpdateUtils) UpdateCompleteMessages(tv *testvars.TestVars, updRequestMsg
 
 	return []*protocolpb.Message{
 		{
-			Id:                 tv.MessageID("update-completed", messageID),
+			Id:                 tv.MessageID() + "_update-completed",
 			ProtocolInstanceId: updRequest.GetMeta().GetUpdateId(),
 			SequencingId:       nil,
 			Body: protoutils.MarshalAny(u.t, &updatepb.Response{
@@ -129,14 +105,16 @@ func (u UpdateUtils) UpdateCompleteMessages(tv *testvars.TestVars, updRequestMsg
 	}
 }
 
-func (u UpdateUtils) UpdateAcceptCompleteMessages(tv *testvars.TestVars, updRequestMsg *protocolpb.Message, messageID string) []*protocolpb.Message {
+func (u UpdateUtils) UpdateAcceptCompleteMessages(tv *testvars.TestVars, updRequestMsg *protocolpb.Message) []*protocolpb.Message {
 	if th, ok := u.t.(helper); ok {
 		th.Helper()
 	}
-	return append(u.UpdateAcceptMessages(tv, updRequestMsg, messageID), u.UpdateCompleteMessages(tv, updRequestMsg, messageID)...)
+	return append(
+		u.UpdateAcceptMessages(tv, updRequestMsg),
+		u.UpdateCompleteMessages(tv, updRequestMsg)...)
 }
 
-func (u UpdateUtils) UpdateRejectMessages(tv *testvars.TestVars, updRequestMsg *protocolpb.Message, messageID string) []*protocolpb.Message {
+func (u UpdateUtils) UpdateRejectMessages(tv *testvars.TestVars, updRequestMsg *protocolpb.Message) []*protocolpb.Message {
 	if th, ok := u.t.(helper); ok {
 		th.Helper()
 	}
@@ -144,7 +122,7 @@ func (u UpdateUtils) UpdateRejectMessages(tv *testvars.TestVars, updRequestMsg *
 
 	return []*protocolpb.Message{
 		{
-			Id:                 tv.MessageID("update-rejected", messageID),
+			Id:                 tv.MessageID() + "_update-rejected",
 			ProtocolInstanceId: updRequest.GetMeta().GetUpdateId(),
 			SequencingId:       nil,
 			Body: protoutils.MarshalAny(u.t, &updatepb.Rejection{

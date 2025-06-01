@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package tqid
 
 import (
@@ -136,7 +112,8 @@ func NewTaskQueueFamily(namespaceId string, name string) (*TaskQueueFamily, erro
 	}, nil
 }
 
-// UnsafeTaskQueueFamily should be avoided as much as possible. Use NewTaskQueueFamily instead as it validates the tq name.
+// UnsafeTaskQueueFamily returns a TaskQueueFamily object without validating the task queue name.
+// This method should only be used in logs/metrics, not in the server logic (use NewTaskQueueFamily instead).
 func UnsafeTaskQueueFamily(namespaceId string, name string) *TaskQueueFamily {
 	return &TaskQueueFamily{namespaceId, name}
 }
@@ -169,7 +146,7 @@ func PartitionFromProto(proto *taskqueuepb.TaskQueue, namespaceId string, taskTy
 	kind := proto.GetKind()
 	normalName := proto.GetNormalName()
 	if normalName != "" && kind != enumspb.TASK_QUEUE_KIND_STICKY {
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("only sticky queues can have normal name. tq: %s, normal name: %s", baseName, normalName))
+		return nil, serviceerror.NewInvalidArgumentf("only sticky queues can have normal name. tq: %s, normal name: %s", baseName, normalName)
 	}
 
 	switch kind {
@@ -367,7 +344,6 @@ func parseRpcName(rpcName string) (string, int, error) {
 		suffixOff := strings.LastIndex(rpcName, partitionDelimiter)
 		if suffixOff <= len(nonRootPartitionPrefix) {
 			return "", 0, serviceerror.NewInvalidArgument("invalid task queue partition name " + rpcName)
-			// nolint:goerr113
 		}
 		baseName = rpcName[len(nonRootPartitionPrefix):suffixOff]
 		suffix := rpcName[suffixOff+1:]

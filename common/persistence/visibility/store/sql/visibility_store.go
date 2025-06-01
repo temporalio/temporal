@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package sql
 
 import (
@@ -30,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"go.temporal.io/api/common/v1"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
@@ -328,7 +304,7 @@ func (s *VisibilityStore) countGroupByWorkflowExecutions(
 		Groups: make([]*workflowservice.CountWorkflowExecutionsResponse_AggregationGroup, 0, len(rows)),
 	}
 	for _, row := range rows {
-		groupValues := make([]*common.Payload, len(row.GroupValues))
+		groupValues := make([]*commonpb.Payload, len(row.GroupValues))
 		for i, val := range row.GroupValues {
 			groupValues[i], err = searchattribute.EncodeValue(val, groupByTypes[i])
 			if err != nil {
@@ -392,6 +368,7 @@ func (s *VisibilityStore) generateVisibilityRow(
 		ParentRunID:      request.ParentRunID,
 		RootWorkflowID:   request.RootWorkflowID,
 		RootRunID:        request.RootRunID,
+		Version:          request.TaskID,
 	}, nil
 }
 
@@ -420,7 +397,7 @@ func (s *VisibilityStore) prepareSearchAttributesForDb(
 	// If it's only invalid values error, then silently continue without them.
 	searchAttributes, err = s.ValidateCustomSearchAttributes(searchAttributes)
 	if err != nil {
-		if _, ok := err.(*store.VisibilityStoreInvalidValuesError); !ok {
+		if _, ok := err.(*serviceerror.InvalidArgument); !ok {
 			return nil, err
 		}
 	}
@@ -496,7 +473,7 @@ func (s *VisibilityStore) rowToInfo(
 func (s *VisibilityStore) processRowSearchAttributes(
 	rowSearchAttributes sqlplugin.VisibilitySearchAttributes,
 	nsName namespace.Name,
-) (*common.SearchAttributes, error) {
+) (*commonpb.SearchAttributes, error) {
 	saTypeMap, err := s.searchAttributesProvider.GetSearchAttributes(
 		s.GetIndexName(),
 		false,
@@ -538,4 +515,12 @@ func (s *VisibilityStore) processRowSearchAttributes(
 		return nil, err
 	}
 	return aliasedSas, nil
+}
+
+func (s *VisibilityStore) AddSearchAttributes(
+	ctx context.Context,
+	request *manager.AddSearchAttributesRequest,
+) error {
+	// SQL Visibility does not support modifying schema to add search attributes at this moment.
+	return serviceerror.NewUnimplemented("AddSearchAttributes operation not supported in SQL visibility")
 }

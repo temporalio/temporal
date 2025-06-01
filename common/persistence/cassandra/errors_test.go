@@ -1,47 +1,30 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package cassandra
 
 import (
 	"errors"
 	"math/rand"
 	"testing"
+	"time"
 
 	"github.com/gocql/gocql"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	enumspb "go.temporal.io/api/enums/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/testing/protorequire"
 )
 
 type (
 	cassandraErrorsSuite struct {
 		suite.Suite
 		*require.Assertions
+		protorequire.ProtoAssertions
 	}
 )
 
@@ -59,6 +42,7 @@ func (s *cassandraErrorsSuite) TearDownSuite() {
 
 func (s *cassandraErrorsSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
+	s.ProtoAssertions = protorequire.New(s.T())
 }
 
 func (s *cassandraErrorsSuite) TearDownTest() {
@@ -223,10 +207,29 @@ func (s *cassandraErrorsSuite) TestExtractCurrentWorkflowConflictError_Failed() 
 }
 
 func (s *cassandraErrorsSuite) TestExtractCurrentWorkflowConflictError_Success() {
+	requestID := uuid.New()
 	runID, _ := uuid.Parse(permanentRunID)
 	currentRunID := uuid.New()
-	workflowState := &persistencespb.WorkflowExecutionState{}
+	startTime := time.Now().UTC()
+	workflowState := &persistencespb.WorkflowExecutionState{
+		CreateRequestId: requestID.String(),
+		RunId:           currentRunID.String(),
+		State:           enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		Status:          enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		StartTime:       timestamp.TimePtr(startTime),
+		RequestIds: map[string]*persistencespb.RequestIDInfo{
+			requestID.String(): {
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+				EventId:   common.FirstEventID,
+			},
+			uuid.NewString(): {
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+				EventId:   common.BufferedEventID,
+			},
+		},
+	}
 	blob, err := serialization.WorkflowExecutionStateToBlob(workflowState)
+	lastWriteVersion := rand.Int63()
 	s.NoError(err)
 	t := rowTypeExecution
 	record := map[string]interface{}{
@@ -235,11 +238,25 @@ func (s *cassandraErrorsSuite) TestExtractCurrentWorkflowConflictError_Success()
 		"current_run_id":              gocql.UUID(currentRunID),
 		"execution_state":             blob.Data,
 		"execution_state_encoding":    blob.EncodingType.String(),
-		"workflow_last_write_version": rand.Int63(),
+		"workflow_last_write_version": lastWriteVersion,
 	}
 
 	err = extractCurrentWorkflowConflictError(record, uuid.New().String())
-	s.IsType(&p.CurrentWorkflowConditionFailedError{}, err)
+	if err, ok := err.(*p.CurrentWorkflowConditionFailedError); ok {
+		err.Msg = ""
+	}
+	s.DeepEqual(
+		&p.CurrentWorkflowConditionFailedError{
+			Msg:              "",
+			RequestIDs:       workflowState.RequestIds,
+			RunID:            workflowState.RunId,
+			State:            workflowState.State,
+			Status:           workflowState.Status,
+			LastWriteVersion: lastWriteVersion,
+			StartTime:        &startTime,
+		},
+		err,
+	)
 }
 
 func (s *cassandraErrorsSuite) TestExtractWorkflowConflictError_Failed() {

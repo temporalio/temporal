@@ -1,29 +1,8 @@
-// The MIT License
-//
-// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package replication
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
@@ -37,7 +16,8 @@ import (
 	"go.temporal.io/server/common/namespace"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	ctasks "go.temporal.io/server/common/tasks"
-	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/consts"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -53,8 +33,6 @@ type (
 		ExecutableTask
 
 		taskAttr *replicationspb.SyncHSMAttributes
-
-		markPoisonPillAttempts int
 	}
 )
 
@@ -69,6 +47,7 @@ func NewExecutableSyncHSMTask(
 	taskCreationTime time.Time,
 	task *replicationspb.SyncHSMAttributes,
 	sourceClusterName string,
+	sourceShardKey ClusterShardKey,
 	priority enumsspb.TaskPriority,
 	replicationTask *replicationspb.ReplicationTask,
 ) *ExecutableSyncHSMTask {
@@ -83,11 +62,11 @@ func NewExecutableSyncHSMTask(
 			taskCreationTime,
 			time.Now().UTC(),
 			sourceClusterName,
+			sourceShardKey,
 			priority,
 			replicationTask,
 		),
-		taskAttr:               task,
-		markPoisonPillAttempts: 0,
+		taskAttr: task,
 	}
 }
 
@@ -134,7 +113,7 @@ func (e *ExecutableSyncHSMTask) Execute() error {
 	if err != nil {
 		return err
 	}
-	return engine.SyncHSM(ctx, &shard.SyncHSMRequest{
+	return engine.SyncHSM(ctx, &historyi.SyncHSMRequest{
 		WorkflowKey:         e.WorkflowKey,
 		StateMachineNode:    e.taskAttr.StateMachineNode,
 		EventVersionHistory: e.taskAttr.VersionHistory,
@@ -143,6 +122,10 @@ func (e *ExecutableSyncHSMTask) Execute() error {
 }
 
 func (e *ExecutableSyncHSMTask) HandleErr(err error) error {
+	if errors.Is(err, consts.ErrDuplicate) {
+		e.MarkTaskDuplicated()
+		return nil
+	}
 	switch retryErr := err.(type) {
 	case nil, *serviceerror.NotFound:
 		return nil
@@ -180,50 +163,18 @@ func (e *ExecutableSyncHSMTask) HandleErr(err error) error {
 
 func (e *ExecutableSyncHSMTask) MarkPoisonPill() error {
 
-	replicationTaskInfo := e.toReplicationTaskInfo()
-
-	if e.markPoisonPillAttempts >= MarkPoisonPillMaxAttempts {
-		e.Logger.Error("MarkPoisonPill reached max attempts",
-			tag.SourceCluster(e.SourceClusterName()),
-			tag.ReplicationTask(replicationTaskInfo),
-			tag.NewAnyTag("sync-hsm-task-attr", e.taskAttr),
-		)
-		return nil
-	}
-	e.markPoisonPillAttempts++
-
-	shardContext, err := e.ShardController.GetShardByNamespaceWorkflow(
-		namespace.ID(e.NamespaceID),
-		e.WorkflowID,
-	)
-	if err != nil {
-		return err
+	if e.ReplicationTask().GetRawTaskInfo() == nil {
+		e.ReplicationTask().RawTaskInfo = &persistencespb.ReplicationTaskInfo{
+			NamespaceId:    e.NamespaceID,
+			WorkflowId:     e.WorkflowID,
+			RunId:          e.RunID,
+			TaskType:       enumsspb.TASK_TYPE_REPLICATION_SYNC_HSM,
+			TaskId:         e.ExecutableTask.TaskID(),
+			VisibilityTime: timestamppb.New(e.TaskCreationTime()),
+		}
 	}
 
-	e.Logger.Error("enqueue sync HSM replication task to DLQ",
-		tag.ShardID(shardContext.GetShardID()),
-		tag.WorkflowNamespaceID(e.NamespaceID),
-		tag.WorkflowID(e.WorkflowID),
-		tag.WorkflowRunID(e.RunID),
-		tag.TaskID(e.ExecutableTask.TaskID()),
-	)
-
-	ctx, cancel := newTaskContext(e.NamespaceID, e.Config.ReplicationTaskApplyTimeout())
-	defer cancel()
-
-	// TODO: GetShardID will break GetDLQReplicationMessages we need to handle DLQ for cross shard replication.
-	return writeTaskToDLQ(ctx, e.DLQWriter, shardContext, e.SourceClusterName(), replicationTaskInfo)
-}
-
-func (e *ExecutableSyncHSMTask) toReplicationTaskInfo() *persistencespb.ReplicationTaskInfo {
-	return &persistencespb.ReplicationTaskInfo{
-		NamespaceId:    e.NamespaceID,
-		WorkflowId:     e.WorkflowID,
-		RunId:          e.RunID,
-		TaskType:       enumsspb.TASK_TYPE_REPLICATION_SYNC_HSM,
-		TaskId:         e.ExecutableTask.TaskID(),
-		VisibilityTime: timestamppb.New(e.TaskCreationTime()),
-	}
+	return e.ExecutableTask.MarkPoisonPill()
 }
 
 // TODO: implement the following methods to batch syncHSM task if needed

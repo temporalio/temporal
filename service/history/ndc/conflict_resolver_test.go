@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package ndc
 
 import (
@@ -29,7 +5,6 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -39,9 +14,10 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/util"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
-	"go.temporal.io/server/service/history/workflow"
+	"go.uber.org/mock/gomock"
 )
 
 type (
@@ -51,8 +27,8 @@ type (
 
 		controller       *gomock.Controller
 		mockShard        *shard.ContextTest
-		mockContext      *workflow.MockContext
-		mockMutableState *workflow.MockMutableState
+		mockContext      *historyi.MockWorkflowContext
+		mockMutableState *historyi.MockMutableState
 		mockStateBuilder *MockStateRebuilder
 
 		logger log.Logger
@@ -75,8 +51,8 @@ func (s *conflictResolverSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockContext = workflow.NewMockContext(s.controller)
-	s.mockMutableState = workflow.NewMockMutableState(s.controller)
+	s.mockContext = historyi.NewMockWorkflowContext(s.controller)
+	s.mockMutableState = historyi.NewMockMutableState(s.controller)
 	s.mockStateBuilder = NewMockStateRebuilder(s.controller)
 
 	s.mockShard = shard.NewTestContext(
@@ -127,7 +103,7 @@ func (s *conflictResolverSuite) TestRebuild() {
 		[]*historyspb.VersionHistoryItem{versionhistory.NewVersionHistoryItem(lastEventID1, version)},
 	)
 	versionHistories := versionhistory.NewVersionHistories(versionHistory0)
-	_, _, err := versionhistory.AddVersionHistory(versionHistories, versionHistory1)
+	_, _, err := versionhistory.AddAndSwitchVersionHistory(versionHistories, versionHistory1)
 	s.NoError(err)
 
 	s.mockMutableState.EXPECT().GetUpdateCondition().Return(updateCondition, dbVersion).AnyTimes()
@@ -146,7 +122,7 @@ func (s *conflictResolverSuite) TestRebuild() {
 		s.workflowID,
 		s.runID,
 	)
-	mockRebuildMutableState := workflow.NewMockMutableState(s.controller)
+	mockRebuildMutableState := historyi.NewMockMutableState(s.controller)
 	mockRebuildMutableState.EXPECT().GetExecutionInfo().Return(
 		&persistencespb.WorkflowExecutionInfo{
 			VersionHistories: versionhistory.NewVersionHistories(
@@ -197,7 +173,7 @@ func (s *conflictResolverSuite) TestGetOrRebuildCurrentMutableState_NoRebuild_No
 		[]*historyspb.VersionHistoryItem{versionHistoryItem0, versionHistoryItem1},
 	)
 	versionHistories := versionhistory.NewVersionHistories(versionHistory0)
-	_, _, err := versionhistory.AddVersionHistory(versionHistories, versionHistory1)
+	_, _, err := versionhistory.AddAndSwitchVersionHistory(versionHistories, versionHistory1)
 	s.Nil(err)
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{VersionHistories: versionHistories}).AnyTimes()
 
@@ -253,7 +229,7 @@ func (s *conflictResolverSuite) TestGetOrRebuildCurrentMutableState_Rebuild() {
 	)
 
 	versionHistories := versionhistory.NewVersionHistories(versionHistory0)
-	_, _, err := versionhistory.AddVersionHistory(versionHistories, versionHistory1)
+	_, _, err := versionhistory.AddAndSwitchVersionHistory(versionHistories, versionHistory1)
 	s.Nil(err)
 
 	s.mockMutableState.EXPECT().GetUpdateCondition().Return(updateCondition, dbVersion).AnyTimes()
@@ -272,7 +248,7 @@ func (s *conflictResolverSuite) TestGetOrRebuildCurrentMutableState_Rebuild() {
 		s.workflowID,
 		s.runID,
 	)
-	mockRebuildMutableState := workflow.NewMockMutableState(s.controller)
+	mockRebuildMutableState := historyi.NewMockMutableState(s.controller)
 	mockRebuildMutableState.EXPECT().GetExecutionInfo().Return(
 		&persistencespb.WorkflowExecutionInfo{
 			VersionHistories: versionhistory.NewVersionHistories(
@@ -350,7 +326,7 @@ func (s *conflictResolverSuite) TestGetOrRebuildMutableState_Rebuild() {
 	)
 
 	versionHistories := versionhistory.NewVersionHistories(versionHistory0)
-	_, _, err := versionhistory.AddVersionHistory(versionHistories, versionHistory1)
+	_, _, err := versionhistory.AddAndSwitchVersionHistory(versionHistories, versionHistory1)
 	s.Nil(err)
 
 	s.mockMutableState.EXPECT().GetUpdateCondition().Return(updateCondition, dbVersion).AnyTimes()
@@ -369,7 +345,7 @@ func (s *conflictResolverSuite) TestGetOrRebuildMutableState_Rebuild() {
 		s.workflowID,
 		s.runID,
 	)
-	mockRebuildMutableState := workflow.NewMockMutableState(s.controller)
+	mockRebuildMutableState := historyi.NewMockMutableState(s.controller)
 	mockRebuildMutableState.EXPECT().GetExecutionInfo().Return(
 		&persistencespb.WorkflowExecutionInfo{
 			VersionHistories: versionhistory.NewVersionHistories(

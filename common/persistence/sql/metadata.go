@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package sql
 
 import (
@@ -77,7 +53,7 @@ func (m *sqlMetadataManagerV2) CreateNamespace(
 			NotificationVersion: metadata.NotificationVersion,
 		}); err != nil {
 			if m.Db.IsDupEntryError(err) {
-				return serviceerror.NewNamespaceAlreadyExists(fmt.Sprintf("name: %v", request.Name))
+				return serviceerror.NewNamespaceAlreadyExistsf("name: %v", request.Name)
 			}
 			return err
 		}
@@ -125,7 +101,7 @@ func (m *sqlMetadataManagerV2) GetNamespace(
 
 			return nil, serviceerror.NewNamespaceNotFound(identity)
 		default:
-			return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetNamespace operation failed. Error %v", err))
+			return nil, serviceerror.NewUnavailablef("GetNamespace operation failed. Error %v", err)
 		}
 	}
 
@@ -237,7 +213,7 @@ func (m *sqlMetadataManagerV2) GetMetadata(
 ) (*persistence.GetMetadataResponse, error) {
 	row, err := m.Db.SelectFromNamespaceMetadata(ctx)
 	if err != nil {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetMetadata operation failed. Error: %v", err))
+		return nil, serviceerror.NewUnavailablef("GetMetadata operation failed. Error: %v", err)
 	}
 	return &persistence.GetMetadataResponse{NotificationVersion: row.NotificationVersion}, nil
 }
@@ -259,7 +235,7 @@ func (m *sqlMetadataManagerV2) ListNamespaces(
 		if err == sql.ErrNoRows {
 			return &persistence.InternalListNamespacesResponse{}, nil
 		}
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("ListNamespaces operation failed. Failed to get namespace rows. Error: %v", err))
+		return nil, serviceerror.NewUnavailablef("ListNamespaces operation failed. Failed to get namespace rows. Error: %v", err)
 	}
 
 	var namespaces []*persistence.InternalGetNamespaceResponse
@@ -288,14 +264,14 @@ func updateMetadata(
 		NotificationVersion: oldNotificationVersion,
 	})
 	if err != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf("Failed to update namespace metadata. Error: %v", err))
+		return serviceerror.NewUnavailablef("Failed to update namespace metadata. Error: %v", err)
 	}
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf("Could not verify whether namespace metadata update occurred. Error: %v", err))
+		return serviceerror.NewUnavailablef("Could not verify whether namespace metadata update occurred. Error: %v", err)
 	} else if rowsAffected != 1 {
-		return serviceerror.NewUnavailable(fmt.Sprintf("Failed to update namespace metadata. <>1 rows affected. Error: %v", err))
+		return serviceerror.NewUnavailablef("Failed to update namespace metadata. <>1 rows affected. Error: %v", err)
 	}
 
 	return nil
@@ -307,7 +283,7 @@ func lockMetadata(
 ) (*sqlplugin.NamespaceMetadataRow, error) {
 	row, err := tx.LockNamespaceMetadata(ctx)
 	if err != nil {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("Failed to lock namespace metadata. Error: %v", err))
+		return nil, serviceerror.NewUnavailablef("Failed to lock namespace metadata. Error: %v", err)
 	}
 	return row, nil
 }

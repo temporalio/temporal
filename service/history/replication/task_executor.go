@@ -1,28 +1,4 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
-//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination task_executor_mock.go
+//go:generate mockgen -package $GOPACKAGE -source $GOFILE -destination task_executor_mock.go
 
 package replication
 
@@ -44,7 +20,7 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/deletemanager"
-	"go.temporal.io/server/service/history/shard"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
@@ -55,7 +31,7 @@ type (
 
 	TaskExecutorParams struct {
 		RemoteCluster   string // TODO: Remove this remote cluster from executor then it can use singleton.
-		Shard           shard.Context
+		Shard           historyi.ShardContext
 		HistoryResender xdc.NDCHistoryResender
 		DeleteManager   deletemanager.DeleteManager
 		WorkflowCache   wcache.Cache
@@ -66,7 +42,7 @@ type (
 	taskExecutorImpl struct {
 		currentCluster     string
 		remoteCluster      string
-		shardContext       shard.Context
+		shardContext       historyi.ShardContext
 		namespaceRegistry  namespace.Registry
 		nDCHistoryResender xdc.NDCHistoryResender
 		deleteManager      deletemanager.DeleteManager
@@ -80,7 +56,7 @@ type (
 // The executor uses by 1) DLQ replication task handler 2) history replication task processor
 func NewTaskExecutor(
 	remoteCluster string,
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	nDCHistoryResender xdc.NDCHistoryResender,
 	deleteManager deletemanager.DeleteManager,
 	workflowCache wcache.Cache,
@@ -141,6 +117,7 @@ func (e *taskExecutorImpl) handleActivityTask(
 		metrics.ServiceLatency.With(e.metricsHandler).Record(
 			time.Since(startTime),
 			metrics.OperationTag(metrics.SyncActivityTaskScope),
+			metrics.NamespaceTag(attr.GetNamespaceId()),
 		)
 	}()
 
@@ -162,7 +139,8 @@ func (e *taskExecutorImpl) handleActivityTask(
 		LastStartedRedirectCounter: attr.LastStartedRedirectCounter,
 		VersionHistory:             attr.GetVersionHistory(),
 	}
-	ctx, cancel := e.newTaskContext(ctx, attr.NamespaceId)
+	namespaceName, _ := e.namespaceRegistry.GetNamespaceName(namespace.ID(attr.NamespaceId))
+	ctx, cancel := e.newTaskContext(ctx, namespaceName)
 	defer cancel()
 
 	// This might be extra cost if the workflow belongs to local shard.
@@ -176,12 +154,16 @@ func (e *taskExecutorImpl) handleActivityTask(
 		metrics.ClientRequests.With(e.metricsHandler).Record(
 			1,
 			metrics.OperationTag(metrics.HistoryRereplicationByActivityReplicationScope),
+			metrics.NamespaceTag(namespaceName.String()),
+			metrics.ServiceRoleTag(metrics.HistoryRoleTagValue),
 		)
 		startTime := time.Now().UTC()
 		defer func() {
 			metrics.ClientLatency.With(e.metricsHandler).Record(
 				time.Since(startTime),
 				metrics.OperationTag(metrics.HistoryRereplicationByActivityReplicationScope),
+				metrics.NamespaceTag(namespaceName.String()),
+				metrics.ServiceRoleTag(metrics.HistoryRoleTagValue),
 			)
 		}()
 
@@ -233,6 +215,7 @@ func (e *taskExecutorImpl) handleHistoryReplicationTask(
 		metrics.ServiceLatency.With(e.metricsHandler).Record(
 			time.Since(startTime),
 			metrics.OperationTag(metrics.HistoryReplicationTaskScope),
+			metrics.NamespaceTag(attr.GetNamespaceId()),
 		)
 	}()
 
@@ -248,7 +231,8 @@ func (e *taskExecutorImpl) handleHistoryReplicationTask(
 		NewRunEvents: attr.NewRunEvents,
 		NewRunId:     attr.NewRunId,
 	}
-	ctx, cancel := e.newTaskContext(ctx, attr.NamespaceId)
+	namespaceName, _ := e.namespaceRegistry.GetNamespaceName(namespace.ID(attr.NamespaceId))
+	ctx, cancel := e.newTaskContext(ctx, namespaceName)
 	defer cancel()
 
 	// This might be extra cost if the workflow belongs to local shard.
@@ -262,12 +246,16 @@ func (e *taskExecutorImpl) handleHistoryReplicationTask(
 		metrics.ClientRequests.With(e.metricsHandler).Record(
 			1,
 			metrics.OperationTag(metrics.HistoryRereplicationByHistoryReplicationScope),
+			metrics.NamespaceTag(namespaceName.String()),
+			metrics.ServiceRoleTag(metrics.HistoryRoleTagValue),
 		)
 		startTime := time.Now().UTC()
 		defer func() {
 			metrics.ClientLatency.With(e.metricsHandler).Record(
 				time.Since(startTime),
 				metrics.OperationTag(metrics.HistoryRereplicationByHistoryReplicationScope),
+				metrics.NamespaceTag(namespaceName.String()),
+				metrics.ServiceRoleTag(metrics.HistoryRoleTagValue),
 			)
 		}()
 
@@ -318,7 +306,8 @@ func (e *taskExecutorImpl) handleSyncWorkflowStateTask(
 		return err
 	}
 
-	ctx, cancel := e.newTaskContext(ctx, executionInfo.NamespaceId)
+	namespaceName, _ := e.namespaceRegistry.GetNamespaceName(namespace.ID(executionInfo.NamespaceId))
+	ctx, cancel := e.newTaskContext(ctx, namespaceName)
 	defer cancel()
 
 	// This might be extra cost if the workflow belongs to local shard.
@@ -411,19 +400,16 @@ func (e *taskExecutorImpl) cleanupWorkflowExecution(ctx context.Context, namespa
 		&ex,
 		wfCtx,
 		mutableState,
-		false,
 		nil, // stage is not stored during cleanup process.
 	)
 }
 
 func (e *taskExecutorImpl) newTaskContext(
 	parentCtx context.Context,
-	namespaceID string,
+	namespaceName namespace.Name,
 ) (context.Context, context.CancelFunc) {
 	ctx, cancel := context.WithTimeout(parentCtx, replicationTimeout)
-
-	namespace, _ := e.namespaceRegistry.GetNamespaceName(namespace.ID(namespaceID))
-	ctx = headers.SetCallerName(ctx, namespace.String())
+	ctx = headers.SetCallerName(ctx, namespaceName.String())
 
 	return ctx, cancel
 }

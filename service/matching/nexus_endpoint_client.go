@@ -1,25 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package matching
 
 import (
@@ -35,9 +13,14 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
+	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/goro"
+	"go.temporal.io/server/common/headers"
 	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/util"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -79,16 +62,22 @@ type (
 		endpointsByName     map[string]*persistencespb.NexusEndpointEntry
 		tableVersionChanged chan struct{}
 
+		refreshLock              sync.Mutex // protects refreshHandle which is updated whenever node gains/loses ownership
+		refreshHandle            *goro.Handle
+		endpointsRefreshInterval dynamicconfig.DurationPropertyFn
+
 		persistence p.NexusEndpointManager
 	}
 )
 
 func newEndpointClient(
+	endpointsRefreshInterval dynamicconfig.DurationPropertyFn,
 	persistence p.NexusEndpointManager,
 ) *nexusEndpointClient {
 	return &nexusEndpointClient{
-		persistence:         persistence,
-		tableVersionChanged: make(chan struct{}),
+		endpointsRefreshInterval: endpointsRefreshInterval,
+		persistence:              persistence,
+		tableVersionChanged:      make(chan struct{}),
 	}
 }
 
@@ -108,7 +97,7 @@ func (m *nexusEndpointClient) CreateNexusEndpoint(
 	defer m.Unlock()
 
 	if _, exists := m.endpointsByName[request.spec.GetName()]; exists {
-		return nil, serviceerror.NewAlreadyExist(fmt.Sprintf("error creating Nexus endpoint. Endpoint with name %v already registered", request.spec.GetName()))
+		return nil, serviceerror.NewAlreadyExistsf("error creating Nexus endpoint. Endpoint with name %v already registered", request.spec.GetName())
 	}
 
 	entry := &persistencespb.NexusEndpointEntry{
@@ -160,11 +149,11 @@ func (m *nexusEndpointClient) UpdateNexusEndpoint(
 
 	previous, exists := m.endpointsByID[request.endpointID]
 	if !exists {
-		return nil, serviceerror.NewNotFound(fmt.Sprintf("error updating Nexus endpoint. endpoint ID %v not found", request.endpointID))
+		return nil, serviceerror.NewNotFoundf("error updating Nexus endpoint. endpoint ID %v not found", request.endpointID)
 	}
 
 	if request.version != previous.Version {
-		return nil, serviceerror.NewFailedPrecondition(fmt.Sprintf("nexus endpoint version mismatch. received: %v expected %v", request.version, previous.Version))
+		return nil, serviceerror.NewFailedPreconditionf("nexus endpoint version mismatch. received: %v expected %v", request.version, previous.Version)
 	}
 
 	entry := &persistencespb.NexusEndpointEntry{
@@ -226,7 +215,7 @@ func (m *nexusEndpointClient) DeleteNexusEndpoint(
 
 	entry, ok := m.endpointsByID[request.Id]
 	if !ok {
-		return nil, serviceerror.NewNotFound(fmt.Sprintf("error deleting nexus endpoint with ID: %v", request.Id))
+		return nil, serviceerror.NewNotFoundf("error deleting nexus endpoint with ID: %v", request.Id)
 	}
 
 	err := m.persistence.DeleteNexusEndpoint(ctx, &p.DeleteNexusEndpointRequest{
@@ -271,7 +260,7 @@ func (m *nexusEndpointClient) ListNexusEndpoints(
 	defer m.RUnlock()
 
 	if request.LastKnownTableVersion != 0 && request.LastKnownTableVersion != m.tableVersion {
-		return nil, nil, serviceerror.NewFailedPrecondition(fmt.Sprintf("nexus endpoints table version mismatch. received: %v expected %v", request.LastKnownTableVersion, m.tableVersion))
+		return nil, nil, serviceerror.NewFailedPreconditionf("nexus endpoints table version mismatch. received: %v expected %v", request.LastKnownTableVersion, m.tableVersion)
 	}
 
 	startIdx := 0
@@ -359,4 +348,56 @@ func (m *nexusEndpointClient) resetCacheStateLocked() {
 	m.endpointEntries = []*persistencespb.NexusEndpointEntry{}
 	m.endpointsByID = make(map[string]*persistencespb.NexusEndpointEntry)
 	m.endpointsByName = make(map[string]*persistencespb.NexusEndpointEntry)
+}
+
+// notifyOwnershipChanged starts or stops a background routine which watches the Nexus endpoints table version for
+// changes. This is only expected to be called from matchingEngineImpl.notifyNexusEndpointsOwnershipChange()
+func (m *nexusEndpointClient) notifyOwnershipChanged(isOwner bool) {
+	var oldHandle *goro.Handle
+
+	m.refreshLock.Lock()
+	if isOwner && m.refreshHandle == nil {
+		// Just acquired ownership. Start refresh loop on table version to catch any updates from previous owner.
+		backgroundCtx := headers.SetCallerInfo(
+			context.Background(),
+			headers.SystemBackgroundCallerInfo,
+		)
+		m.refreshHandle = goro.NewHandle(backgroundCtx)
+		m.refreshHandle.Go(m.refreshTableVersion)
+	} else if !isOwner && m.refreshHandle != nil {
+		// Just lost ownership. Stop table version refresh loop.
+		oldHandle = m.refreshHandle
+		m.refreshHandle = nil
+	}
+	m.refreshLock.Unlock()
+
+	if oldHandle != nil {
+		oldHandle.Cancel()
+		<-oldHandle.Done()
+	}
+}
+
+func (m *nexusEndpointClient) refreshTableVersion(ctx context.Context) error {
+	for ctx.Err() == nil {
+		m.checkTableVersion(ctx)
+		util.InterruptibleSleep(ctx, backoff.Jitter(m.endpointsRefreshInterval(), 0.2))
+	}
+	return ctx.Err()
+}
+
+func (m *nexusEndpointClient) checkTableVersion(ctx context.Context) {
+	// Acquire lock to make sure we are not in the middle of an update.
+	m.Lock()
+	defer m.Unlock()
+
+	resp, err := m.persistence.ListNexusEndpoints(ctx, &p.ListNexusEndpointsRequest{
+		LastKnownTableVersion: 0,
+		PageSize:              0,
+	})
+	if err != nil || resp.TableVersion != m.tableVersion {
+		m.hasLoadedEndpoints.Store(false)
+		ch := m.tableVersionChanged
+		m.tableVersionChanged = make(chan struct{})
+		close(ch)
+	}
 }

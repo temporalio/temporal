@@ -1,25 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package callbacks_test
 
 import (
@@ -30,10 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/api/enums/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -45,13 +22,13 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/hsm/hsmtest"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/worker/scheduler"
+	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -77,7 +54,7 @@ type mutableState struct {
 	completionHsm   *persistencespb.HSMCompletionCallbackArg
 }
 
-func (ms mutableState) GetNexusCompletion(ctx context.Context) (nexus.OperationCompletion, error) {
+func (ms mutableState) GetNexusCompletion(ctx context.Context, requestID string) (nexus.OperationCompletion, error) {
 	return ms.completionNexus, nil
 }
 
@@ -144,14 +121,12 @@ func TestProcessInvocationTaskNexus_Outcomes(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			namespaceRegistryMock := namespace.NewMockRegistry(ctrl)
 			namespaceRegistryMock.EXPECT().GetNamespaceByID(namespace.ID("namespace-id")).Return(
-				namespace.FromPersistentState(&persistence.GetNamespaceResponse{
-					Namespace: &persistencespb.NamespaceDetail{
-						Info: &persistencespb.NamespaceInfo{
-							Id:   "namespace-id",
-							Name: "namespace-name",
-						},
-						Config: &persistencespb.NamespaceConfig{},
+				namespace.FromPersistentState(&persistencespb.NamespaceDetail{
+					Info: &persistencespb.NamespaceInfo{
+						Id:   "namespace-id",
+						Name: "namespace-name",
 					},
+					Config: &persistencespb.NamespaceConfig{},
 				}),
 				nil,
 			)
@@ -221,7 +196,7 @@ func TestProcessInvocationTaskNexus_Outcomes(t *testing.T) {
 						},
 					},
 				},
-				callbacks.InvocationTask{Destination: "http://localhost"},
+				callbacks.NewInvocationTask("http://localhost"),
 			)
 
 			if tc.destinationDown {
@@ -276,14 +251,12 @@ func TestProcessInvocationTaskHsm_Outcomes(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			namespaceRegistryMock := namespace.NewMockRegistry(ctrl)
 			namespaceRegistryMock.EXPECT().GetNamespaceByID(namespace.ID("namespace-id")).Return(
-				namespace.FromPersistentState(&persistence.GetNamespaceResponse{
-					Namespace: &persistencespb.NamespaceDetail{
-						Info: &persistencespb.NamespaceInfo{
-							Id:   "namespace-id",
-							Name: "namespace-name",
-						},
-						Config: &persistencespb.NamespaceConfig{},
+				namespace.FromPersistentState(&persistencespb.NamespaceDetail{
+					Info: &persistencespb.NamespaceInfo{
+						Id:   "namespace-id",
+						Name: "namespace-name",
 					},
+					Config: &persistencespb.NamespaceConfig{},
 				}),
 				nil,
 			)
@@ -348,7 +321,7 @@ func TestProcessInvocationTaskHsm_Outcomes(t *testing.T) {
 				require.Equal(t, "mywid", arg.WorkflowId)
 				require.Equal(t, "myrid", arg.RunId)
 				require.Equal(t, int64(42), arg.LastEvent.EventId)
-				require.Equal(t, enums.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED, arg.LastEvent.EventType)
+				require.Equal(t, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED, arg.LastEvent.EventType)
 
 				return &historyservice.InvokeStateMachineMethodResponse{}, tc.expectedError
 			}).Times(1)
@@ -443,7 +416,7 @@ func TestProcessBackoffTask(t *testing.T) {
 }
 
 func newMutableState(t *testing.T) mutableState {
-	completionNexus, err := nexus.NewOperationCompletionSuccessful(nil, nexus.OperationCompletionSuccesfulOptions{})
+	completionNexus, err := nexus.NewOperationCompletionSuccessful(nil, nexus.OperationCompletionSuccessfulOptions{})
 	require.NoError(t, err)
 	hsmCallbackArg := &persistencespb.HSMCompletionCallbackArg{
 		NamespaceId: "mynsid",
@@ -451,7 +424,7 @@ func newMutableState(t *testing.T) mutableState {
 		RunId:       "myrid",
 		LastEvent: &historypb.HistoryEvent{
 			EventId:   42,
-			EventType: enums.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
 		},
 	}
 	return mutableState{

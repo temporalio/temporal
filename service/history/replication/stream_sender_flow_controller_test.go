@@ -1,42 +1,19 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package replication
 
 import (
+	"context"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
-	"go.temporal.io/server/api/enums/v1"
-	replicationpb "go.temporal.io/server/api/replication/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/service/history/configs"
+	"go.uber.org/mock/gomock"
 )
 
 type (
@@ -70,7 +47,7 @@ func (s *senderFlowControllerSuite) TearDownTest() {
 }
 
 func (s *senderFlowControllerSuite) TestWait_HighPriority() {
-	state := s.senderFlowCtrlImpl.flowControlStates[enums.TASK_PRIORITY_HIGH]
+	state := s.senderFlowCtrlImpl.flowControlStates[enumsspb.TASK_PRIORITY_HIGH]
 	state.rateLimiter = s.mockRateLimiter
 
 	s.mockRateLimiter.EXPECT().Wait(gomock.Any()).Return(nil)
@@ -80,14 +57,33 @@ func (s *senderFlowControllerSuite) TestWait_HighPriority() {
 
 	go func() {
 		defer wg.Done()
-		s.senderFlowCtrlImpl.Wait(enums.TASK_PRIORITY_HIGH)
+		err := s.senderFlowCtrlImpl.Wait(context.Background(), enumsspb.TASK_PRIORITY_HIGH)
+		s.NoError(err)
+	}()
+
+	wg.Wait()
+}
+
+func (s *senderFlowControllerSuite) TestWait_Error() {
+	state := s.senderFlowCtrlImpl.flowControlStates[enumsspb.TASK_PRIORITY_HIGH]
+	state.rateLimiter = s.mockRateLimiter
+
+	s.mockRateLimiter.EXPECT().Wait(gomock.Any()).Return(context.Canceled)
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	go func() {
+		defer wg.Done()
+		err := s.senderFlowCtrlImpl.Wait(context.Background(), enumsspb.TASK_PRIORITY_HIGH)
+		s.Error(err)
 	}()
 
 	wg.Wait()
 }
 
 func (s *senderFlowControllerSuite) TestWait_LowPriority() {
-	state := s.senderFlowCtrlImpl.flowControlStates[enums.TASK_PRIORITY_LOW]
+	state := s.senderFlowCtrlImpl.flowControlStates[enumsspb.TASK_PRIORITY_LOW]
 	state.rateLimiter = s.mockRateLimiter
 
 	s.mockRateLimiter.EXPECT().Wait(gomock.Any()).Return(nil)
@@ -97,7 +93,8 @@ func (s *senderFlowControllerSuite) TestWait_LowPriority() {
 
 	go func() {
 		defer wg.Done()
-		s.senderFlowCtrlImpl.Wait(enums.TASK_PRIORITY_LOW)
+		err := s.senderFlowCtrlImpl.Wait(context.Background(), enumsspb.TASK_PRIORITY_LOW)
+		s.NoError(err)
 	}()
 
 	wg.Wait()
@@ -113,7 +110,8 @@ func (s *senderFlowControllerSuite) TestWait_DefaultPriority() {
 
 	go func() {
 		defer wg.Done()
-		s.senderFlowCtrlImpl.Wait(enums.TASK_PRIORITY_UNSPECIFIED)
+		err := s.senderFlowCtrlImpl.Wait(context.Background(), enumsspb.TASK_PRIORITY_UNSPECIFIED)
+		s.NoError(err)
 	}()
 
 	wg.Wait()
@@ -121,23 +119,23 @@ func (s *senderFlowControllerSuite) TestWait_DefaultPriority() {
 
 func (s *senderFlowControllerSuite) TestRefreshReceiverFlowControlInfo() {
 	senderFlowCtrlImpl := NewSenderFlowController(s.config, s.logger)
-	state := &replicationpb.SyncReplicationState{
-		HighPriorityState: &replicationpb.ReplicationState{
-			FlowControlCommand: enums.REPLICATION_FLOW_CONTROL_COMMAND_RESUME,
+	state := &replicationspb.SyncReplicationState{
+		HighPriorityState: &replicationspb.ReplicationState{
+			FlowControlCommand: enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_RESUME,
 		},
-		LowPriorityState: &replicationpb.ReplicationState{
-			FlowControlCommand: enums.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE,
+		LowPriorityState: &replicationspb.ReplicationState{
+			FlowControlCommand: enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE,
 		},
 	}
 
 	senderFlowCtrlImpl.RefreshReceiverFlowControlInfo(state)
 
-	s.True(senderFlowCtrlImpl.flowControlStates[enums.TASK_PRIORITY_HIGH].resume)
-	s.False(senderFlowCtrlImpl.flowControlStates[enums.TASK_PRIORITY_LOW].resume)
+	s.True(senderFlowCtrlImpl.flowControlStates[enumsspb.TASK_PRIORITY_HIGH].resume)
+	s.False(senderFlowCtrlImpl.flowControlStates[enumsspb.TASK_PRIORITY_LOW].resume)
 }
 
 func (s *senderFlowControllerSuite) TestPauseToResume() {
-	state := s.senderFlowCtrlImpl.flowControlStates[enums.TASK_PRIORITY_HIGH]
+	state := s.senderFlowCtrlImpl.flowControlStates[enumsspb.TASK_PRIORITY_HIGH]
 	state.rateLimiter = s.mockRateLimiter
 
 	// Set initial state to paused
@@ -151,7 +149,8 @@ func (s *senderFlowControllerSuite) TestPauseToResume() {
 
 	go func() {
 		defer wg.Done()
-		s.senderFlowCtrlImpl.Wait(enums.TASK_PRIORITY_HIGH)
+		err := s.senderFlowCtrlImpl.Wait(context.Background(), enumsspb.TASK_PRIORITY_HIGH)
+		s.NoError(err)
 	}()
 
 	// Ensure the goroutine has time to start and block
@@ -164,7 +163,7 @@ func (s *senderFlowControllerSuite) TestPauseToResume() {
 	s.Equal(1, state.waiters)
 
 	// Transition from paused to resumed
-	s.senderFlowCtrlImpl.setState(state, enums.REPLICATION_FLOW_CONTROL_COMMAND_RESUME)
+	s.senderFlowCtrlImpl.setState(state, enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_RESUME)
 	wg.Wait()
 
 	s.Equal(0, state.waiters)

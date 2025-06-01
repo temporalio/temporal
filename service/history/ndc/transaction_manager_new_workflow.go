@@ -1,40 +1,15 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
-//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination transaction_manager_new_workflow_mock.go
+//go:generate mockgen -package $GOPACKAGE -source $GOFILE -destination transaction_manager_new_workflow_mock.go
 
 package ndc
 
 import (
 	"context"
-	"fmt"
 
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/service/history/shard"
-	"go.temporal.io/server/service/history/workflow"
+	"go.temporal.io/server/service/history/consts"
+	historyi "go.temporal.io/server/service/history/interfaces"
 )
 
 type (
@@ -46,7 +21,7 @@ type (
 	}
 
 	nDCTransactionMgrForNewWorkflowImpl struct {
-		shardContext                shard.Context
+		shardContext                historyi.ShardContext
 		transactionMgr              TransactionManager
 		bypassVersionSemanticsCheck bool
 	}
@@ -55,7 +30,7 @@ type (
 var _ transactionMgrForNewWorkflow = (*nDCTransactionMgrForNewWorkflowImpl)(nil)
 
 func newTransactionMgrForNewWorkflow(
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	transactionMgr TransactionManager,
 	bypassVersionSemanticsCheck bool,
 ) *nDCTransactionMgrForNewWorkflowImpl {
@@ -87,9 +62,12 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) dispatchForNewWorkflow(
 		namespaceID,
 		workflowID,
 	)
-	if err != nil || currentRunID == targetRunID {
+	if err != nil {
 		// error out or workflow already created
 		return err
+	}
+	if currentRunID == targetRunID {
+		return consts.ErrDuplicate
 	}
 
 	if currentRunID == "" {
@@ -156,7 +134,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsCurrent(
 ) error {
 
 	targetWorkflowSnapshot, targetWorkflowEventsSeq, err := targetWorkflow.GetMutableState().CloseTransactionAsSnapshot(
-		workflow.TransactionPolicyPassive,
+		historyi.TransactionPolicyPassive,
 	)
 	if err != nil {
 		return err
@@ -211,7 +189,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
 	if err != nil {
 		return err
 	}
-	if !r.bypassVersionSemanticsCheck && targetWorkflowPolicy != workflow.TransactionPolicyPassive {
+	if !r.bypassVersionSemanticsCheck && targetWorkflowPolicy != historyi.TransactionPolicyPassive {
 		return serviceerror.NewInternal("transactionMgrForNewWorkflow createAsZombie encountered target workflow policy not being passive")
 	}
 
@@ -220,19 +198,40 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
 	currentWorkflow.GetReleaseFn()(nil)
 	currentWorkflow = nil
 
-	targetWorkflowSnapshot, targetWorkflowEventsSeq, err := targetWorkflow.GetMutableState().CloseTransactionAsSnapshot(
+	ms := targetWorkflow.GetMutableState()
+
+	eventReapplyCandidates := ms.GetReapplyCandidateEvents()
+	targetWorkflowSnapshot, targetWorkflowEventsSeq, err := ms.CloseTransactionAsSnapshot(
 		targetWorkflowPolicy,
 	)
 	if err != nil {
 		return err
 	}
 
-	if err := targetWorkflow.GetContext().ReapplyEvents(
-		ctx,
-		r.shardContext,
-		targetWorkflowEventsSeq,
-	); err != nil {
-		return err
+	if len(targetWorkflowEventsSeq) != 0 {
+		if err := targetWorkflow.GetContext().ReapplyEvents(
+			ctx,
+			r.shardContext,
+			targetWorkflowEventsSeq,
+		); err != nil {
+			return err
+		}
+	} else if len(eventReapplyCandidates) != 0 {
+		eventsToApply := []*persistence.WorkflowEvents{
+			{
+				NamespaceID: ms.GetExecutionInfo().NamespaceId,
+				WorkflowID:  ms.GetExecutionInfo().WorkflowId,
+				RunID:       ms.GetExecutionState().RunId,
+				Events:      eventReapplyCandidates,
+			},
+		}
+		if err := targetWorkflow.GetContext().ReapplyEvents(
+			ctx,
+			r.shardContext,
+			eventsToApply,
+		); err != nil {
+			return err
+		}
 	}
 
 	// target workflow is in zombie state, no need to update current record.
@@ -245,7 +244,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
 		createMode,
 		prevRunID,
 		prevLastWriteVersion,
-		targetWorkflow.GetMutableState(),
+		ms,
 		targetWorkflowSnapshot,
 		targetWorkflowEventsSeq,
 	)
@@ -283,7 +282,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) suppressCurrentAndCreateAsCurrent(
 		targetWorkflow.GetContext(),
 		targetWorkflow.GetMutableState(),
 		currentWorkflowPolicy,
-		workflow.TransactionPolicyPassive.Ptr(),
+		historyi.TransactionPolicyPassive.Ptr(),
 	)
 }
 
@@ -326,7 +325,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) executeTransaction(
 		)
 
 	default:
-		return serviceerror.NewInternal(fmt.Sprintf("transactionMgr: encountered unknown transaction type: %v", transactionPolicy))
+		return serviceerror.NewInternalf("transactionMgr: encountered unknown transaction type: %v", transactionPolicy)
 	}
 }
 

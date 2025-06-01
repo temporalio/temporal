@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package metrics
 
 import (
@@ -33,7 +9,6 @@ import (
 	"github.com/cactus/go-statsd-client/v5/statsd"
 	prom "github.com/prometheus/client_golang/prometheus"
 	"github.com/uber-go/tally/v4"
-	"github.com/uber-go/tally/v4/m3"
 	"github.com/uber-go/tally/v4/prometheus"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -45,8 +20,6 @@ type (
 	Config struct {
 		ClientConfig `yaml:"clientConfig,inline"`
 
-		// M3 is the configuration for m3 metrics reporter
-		M3 *m3.Configuration `yaml:"m3"`
 		// Statsd is the configuration for statsd reporter
 		Statsd *StatsdConfig `yaml:"statsd"`
 		// Prometheus is the configuration for prometheus reporter
@@ -61,6 +34,11 @@ type (
 		// Each value in values list will white-list tag values to be reported as usual.
 		ExcludeTags map[string][]string `yaml:"excludeTags"`
 		// Prefix sets the prefix to all outgoing metrics
+		// When migrating from tally to opentelemetry and to be backward compatible with the existing metric names,
+		// if the prefix has a "_" suffix, add an additional "_" at the end.
+		// i.e. "temporal" -> "temporal", but "temporal_" -> "temporal__", "temporal__" -> "temporal___".
+		// This is because tally implementation blindly adds "_" as the separator between the prefix
+		// and the metric name, while opentelemetry implementation only adds it if it's not already there.
 		Prefix string `yaml:"prefix"`
 
 		// DefaultHistogramBoundaries defines the default histogram bucket
@@ -72,6 +50,22 @@ type (
 		// - "milliseconds"
 		// - "bytes"
 		PerUnitHistogramBoundaries map[string][]float64 `yaml:"perUnitHistogramBoundaries"`
+
+		// Following configs are added for backwards compatibility when switching from tally to opentelemetry
+		// All configs should be set to true when using opentelemetry framework to have the same behavior as tally.
+
+		// WithoutUnitSuffix controls the additional of unit suffixes to metric names.
+		// This config only takes effect when using opentelemetry framework.
+		// Note: this config only takes effect when using prometheus via opentelemetry framework
+		WithoutUnitSuffix bool `yaml:"withoutUnitSuffix"`
+		// WithoutCounterSuffix controls the additional of _total suffixes to counter metric names.
+		// This config only takes effect when using opentelemetry framework.
+		// Note: this config only takes effect when using prometheus via opentelemetry framework
+		WithoutCounterSuffix bool `yaml:"withoutCounterSuffix"`
+		// RecordTimerInSeconds controls if Timer metric should be emitted as number of seconds
+		// (instead of milliseconds).
+		// This config only takes effect when using prometheus via opentelemetry framework
+		RecordTimerInSeconds bool `yaml:"recordTimerInSeconds"`
 	}
 
 	// StatsdConfig contains the config items for statsd metrics reporter
@@ -89,6 +83,8 @@ type (
 		FlushBytes int `yaml:"flushBytes"`
 		// Reporter allows additional configuration of the stats reporter, e.g. with custom tagging options.
 		Reporter StatsdReporterConfig `yaml:"reporter"`
+		// Metric framework: tally/opentelemetry. If not specified, it defaults to tally.
+		Framework string `yaml:"framework"`
 	}
 
 	StatsdReporterConfig struct {
@@ -389,6 +385,12 @@ func setDefaultPerUnitHistogramBoundaries(clientConfig *ClientConfig) {
 		buckets[Bytes] = bucket
 	}
 
+	bucketInSeconds := make([]float64, len(buckets[Milliseconds]))
+	for idx, boundary := range buckets[Milliseconds] {
+		bucketInSeconds[idx] = boundary / float64(time.Second/time.Millisecond)
+	}
+	buckets[Seconds] = bucketInSeconds
+
 	clientConfig.PerUnitHistogramBoundaries = buckets
 }
 
@@ -461,15 +463,26 @@ func MetricsHandlerFromConfig(logger log.Logger, c *Config) (Handler, error) {
 
 	setDefaultPerUnitHistogramBoundaries(&c.ClientConfig)
 
-	if c.Prometheus != nil && c.Prometheus.Framework == FrameworkOpentelemetry {
-		otelProvider, err := NewOpenTelemetryProvider(logger, c.Prometheus, &c.ClientConfig)
+	fatalOnListenerError := true
+	if c.Statsd != nil && c.Statsd.Framework == FrameworkOpentelemetry {
+		// create opentelemetry provider with just statsd
+		otelProvider, err := NewOpenTelemetryProviderWithStatsd(logger, c.Statsd, &c.ClientConfig)
 		if err != nil {
 			logger.Fatal(err.Error())
 		}
-
-		return NewOtelMetricsHandler(logger, otelProvider, c.ClientConfig)
+		return NewOtelMetricsHandler(logger, otelProvider, c.ClientConfig, false)
 	}
 
+	if c.Prometheus != nil && c.Prometheus.Framework == FrameworkOpentelemetry {
+		// create opentelemetry provider with just prometheus
+		otelProvider, err := NewOpenTelemetryProviderWithPrometheus(logger, c.Prometheus, &c.ClientConfig, fatalOnListenerError)
+		if err != nil {
+			logger.Fatal(err.Error())
+		}
+		return NewOtelMetricsHandler(logger, otelProvider, c.ClientConfig, c.ClientConfig.RecordTimerInSeconds)
+	}
+
+	// fallback to tally if no framework is specified
 	return NewTallyMetricsHandler(
 		c.ClientConfig,
 		NewScope(logger, c),

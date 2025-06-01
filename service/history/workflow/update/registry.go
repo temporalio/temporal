@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package update
 
 import (
@@ -37,11 +13,12 @@ import (
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/effect"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/utf8validator"
-	"go.temporal.io/server/internal/effect"
+	"go.temporal.io/server/common/telemetry"
 	"google.golang.org/protobuf/types/known/anypb"
 )
 
@@ -55,8 +32,8 @@ type (
 		// created (false).
 		FindOrCreate(ctx context.Context, updateID string) (_ *Update, alreadyExisted bool, _ error)
 
-		// Find finds an existing Update in this Registry but does not create a
-		// new Update if no Update is found.
+		// Find an existing Update in this Registry.
+		// Returns nil if Update doesn't exist.
 		Find(ctx context.Context, updateID string) *Update
 
 		// TryResurrect tries to resurrect the Update from the protocol message,
@@ -80,13 +57,13 @@ type (
 		// RejectUnprocessed rejects all Updates that are waiting for a workflow task to be completed.
 		// This method should be called after all messages from worker are handled to make sure
 		// that worker processed (rejected or accepted) all Updates that were delivered on the workflow task.
-		RejectUnprocessed(ctx context.Context, effects effect.Controller) ([]string, error)
+		RejectUnprocessed(ctx context.Context, effects effect.Controller) []string
 
-		// Abort all incomplete Updates in the Registry.
+		// Abort immediately aborts all incomplete Updates in the Registry.
 		Abort(reason AbortReason)
 
-		// Contains returns true iff the Update exists in the Registry.
-		Contains(updateID string) bool
+		// AbortAccepted aborts all accepted Updates in the Registry.
+		AbortAccepted(reason AbortReason, effects effect.Controller)
 
 		// Clear the Registry and abort all Updates.
 		Clear()
@@ -99,6 +76,10 @@ type (
 
 		// FailoverVersion of a Mutable State at the time of Registry creation.
 		FailoverVersion() int64
+
+		// SuggestContinueAsNew returns true if the Registry is reaching its limit.
+		// Note that this does not apply to in-flight limits, as these are transient.
+		SuggestContinueAsNew() bool
 	}
 
 	registry struct {
@@ -107,13 +88,16 @@ type (
 		updates map[string]*Update
 		// A store from which Registry is constructed with NewRegistry function,
 		// and completed Updates are loaded. Practically it is a Mutable State.
-		store UpdateStore
-
-		instrumentation instrumentation
-		maxInFlight     func() int
-		maxTotal        func() int
+		store           UpdateStore
 		completedCount  int
 		failoverVersion int64
+		instrumentation instrumentation
+
+		maxTotal                              func() int
+		maxInFlightUpdateCount                func() int
+		maxInFlightUpdateSize                 func() int
+		maxTotalSuggestContinueAsNew          func() int
+		maxTotalSuggestContinueAsNewThreshold func() float64
 	}
 
 	Option func(*registry)
@@ -125,7 +109,15 @@ var _ Registry = (*registry)(nil)
 // Updates that a Registry instance will allow.
 func WithInFlightLimit(f func() int) Option {
 	return func(r *registry) {
-		r.maxInFlight = f
+		r.maxInFlightUpdateCount = f
+	}
+}
+
+// WithInFlightSizeLimit provides an optional limit to the total payload size of incomplete
+// Updates that a Registry instance will allow.
+func WithInFlightSizeLimit(f func() int) Option {
+	return func(r *registry) {
+		r.maxInFlightUpdateSize = f
 	}
 }
 
@@ -133,6 +125,14 @@ func WithInFlightLimit(f func() int) Option {
 func WithTotalLimit(f func() int) Option {
 	return func(r *registry) {
 		r.maxTotal = f
+	}
+}
+
+// WithTotalLimitSuggestCAN provides an optional threshold for suggesting ContinueAsNew
+// when the total number of Updates reaches a certain percentage of the total limit.
+func WithTotalLimitSuggestCAN(f func() float64) Option {
+	return func(r *registry) {
+		r.maxTotalSuggestContinueAsNewThreshold = f
 	}
 }
 
@@ -154,7 +154,7 @@ func WithMetrics(m metrics.Handler) Option {
 // trace.Tracer) to be used by Registry and its Updates.
 func WithTracerProvider(t trace.TracerProvider) Option {
 	return func(r *registry) {
-		r.instrumentation.tracer = t.Tracer(libraryName)
+		r.instrumentation.tracer = t.Tracer(telemetry.ComponentUpdateRegistry)
 	}
 }
 
@@ -163,12 +163,17 @@ func NewRegistry(
 	opts ...Option,
 ) Registry {
 	r := &registry{
-		updates:         make(map[string]*Update),
-		store:           store,
-		instrumentation: noopInstrumentation,
-		maxInFlight:     func() int { return math.MaxInt },
-		maxTotal:        func() int { return math.MaxInt },
-		failoverVersion: store.GetCurrentVersion(),
+		updates:                               make(map[string]*Update),
+		store:                                 store,
+		instrumentation:                       noopInstrumentation,
+		failoverVersion:                       store.GetCurrentVersion(),
+		maxTotal:                              func() int { return 0 },     // ie disabled
+		maxInFlightUpdateSize:                 func() int { return 0 },     // ie disabled
+		maxInFlightUpdateCount:                func() int { return 0 },     // ie disabled
+		maxTotalSuggestContinueAsNewThreshold: func() float64 { return 0 }, // ie disabled
+	}
+	r.maxTotalSuggestContinueAsNew = func() int {
+		return int(math.Ceil(float64(r.maxTotal()) * r.maxTotalSuggestContinueAsNewThreshold()))
 	}
 	for _, opt := range opts {
 		opt(r)
@@ -198,9 +203,10 @@ func NewRegistry(
 				withInstrumentation(&r.instrumentation),
 			)
 			if !r.store.IsWorkflowExecutionRunning() {
-				// If the Workflow is completed, accepted Update will never be completed.
-				// This will return "workflow completed" error to the pollers of outcome of accepted Updates.
-				u.abort(AbortReasonWorkflowCompleted)
+				// If the Workflow is completed, accepted Update will never be completed
+				// and therefore must be aborted.
+				// The corresponding error or failure will be returned as an Update result.
+				u.abort(AbortReasonWorkflowCompleted, effect.Immediate(context.Background()))
 			}
 			r.updates[updID] = u
 		} else if updInfo.GetCompletion() != nil {
@@ -217,7 +223,7 @@ func (r *registry) FindOrCreate(ctx context.Context, id string) (*Update, bool, 
 	if err := r.checkLimits(); err != nil {
 		return nil, false, err
 	}
-	upd := New(id, r.remover(id), withInstrumentation(&r.instrumentation))
+	upd := New(id, r.remover(id), r.payloadSizeLimiter(), withInstrumentation(&r.instrumentation))
 	r.updates[id] = upd
 	return upd, false, nil
 }
@@ -235,12 +241,7 @@ func (r *registry) TryResurrect(_ context.Context, acptOrRejMsg *protocolpb.Mess
 
 	body, err := acptOrRejMsg.Body.UnmarshalNew()
 	if err != nil {
-		return nil, invalidArgf("unable to unmarshal request: %v", err)
-	}
-
-	err = utf8validator.Validate(body, utf8validator.SourceRPCRequest)
-	if err != nil {
-		return nil, invalidArgf("unable to validate utf-8 request: %v", err)
+		return nil, serviceerror.NewInvalidArgumentf("unable to unmarshal request: %v", err)
 	}
 
 	var reqMsg *updatepb.Request
@@ -257,7 +258,7 @@ func (r *registry) TryResurrect(_ context.Context, acptOrRejMsg *protocolpb.Mess
 	}
 	reqAny, err := anypb.New(reqMsg)
 	if err != nil {
-		return nil, invalidArgf("unable to marshal request: %v", err)
+		return nil, serviceerror.NewInvalidArgumentf("unable to marshal request: %v", err)
 	}
 
 	updateID := acptOrRejMsg.ProtocolInstanceId
@@ -274,18 +275,22 @@ func (r *registry) TryResurrect(_ context.Context, acptOrRejMsg *protocolpb.Mess
 
 func (r *registry) Abort(reason AbortReason) {
 	for _, upd := range r.updates {
-		upd.abort(reason)
+		upd.abort(reason, effect.Immediate(context.Background()))
 	}
 }
 
-func (r *registry) Contains(updateID string) bool {
-	return r.updates[updateID] != nil
+func (r *registry) AbortAccepted(reason AbortReason, effects effect.Controller) {
+	for _, upd := range r.updates {
+		if upd.state.Matches(stateSet(stateProvisionallyAccepted | stateAccepted)) {
+			upd.abort(reason, effects)
+		}
+	}
 }
 
 func (r *registry) RejectUnprocessed(
 	_ context.Context,
 	effects effect.Controller,
-) ([]string, error) {
+) []string {
 	var updatesToReject []*Update
 	for _, upd := range r.updates {
 		if upd.isSent() {
@@ -296,11 +301,11 @@ func (r *registry) RejectUnprocessed(
 	var rejectedUpdateIDs []string
 	for _, upd := range updatesToReject {
 		if err := upd.reject(unprocessedUpdateFailure, effects); err != nil {
-			return nil, err
+			return nil
 		}
 		rejectedUpdateIDs = append(rejectedUpdateIDs, upd.id)
 	}
-	return rejectedUpdateIDs, nil
+	return rejectedUpdateIDs
 }
 
 func (r *registry) HasOutgoingMessages(includeAlreadySent bool) bool {
@@ -356,40 +361,91 @@ func (r *registry) Len() int {
 	return len(r.updates)
 }
 
-// remover is called when Update gets into terminal state (completed or rejected).
+// remover is called when an Update gets into a terminal state (completed or rejected).
 func (r *registry) remover(id string) updateOpt {
 	return withCompletionCallback(
 		func() {
+			if r.updates == nil {
+				return
+			}
+
+			// A rejected update is *not* counted as a completed update
+			// as that would negatively impact the registry's rate limit.
+			if upd := r.updates[id]; upd != nil && upd.acceptedEventID != common.EmptyEventID {
+				r.completedCount++
+			}
+
+			// The update was either discarded or persisted; no need to keep it here anymore.
 			delete(r.updates, id)
-			r.completedCount++
 		},
 	)
 }
 
 func (r *registry) checkLimits() error {
-	if len(r.updates) >= r.maxInFlight() {
-		r.instrumentation.countRateLimited()
-		return &serviceerror.ResourceExhausted{
-			Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT,
-			Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
-			Message: fmt.Sprintf("limit on number of concurrent in-flight updates has been reached (%v)", r.maxInFlight()),
-		}
+	if err := r.checkInFlightLimit(); err != nil {
+		return err
 	}
 	return r.checkTotalLimit()
 }
 
+func (r *registry) checkInFlightLimit() error {
+	maxInFlight := r.maxInFlightUpdateCount()
+	if maxInFlight == 0 {
+		// limit is disabled
+		return nil
+	}
+	if r.inFlightCount() >= maxInFlight {
+		r.instrumentation.countRateLimited()
+		return &serviceerror.ResourceExhausted{
+			Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT,
+			Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+			Message: fmt.Sprintf("limit on number of concurrent in-flight updates has been reached (%v)", maxInFlight),
+		}
+	}
+	return nil
+}
+
+func (r *registry) payloadSizeLimiter() updateOpt {
+	return withLimitChecker(
+		func(req *updatepb.Request) error {
+			maxInFlightUpdateSize := r.maxInFlightUpdateSize()
+			if maxInFlightUpdateSize == 0 {
+				// limit is disabled
+				return nil
+			}
+			registrySize := r.GetSize()
+			payloadBytes := req.Size()
+			if registrySize+payloadBytes >= maxInFlightUpdateSize {
+				r.instrumentation.countRegistrySizeLimited(len(r.updates), registrySize, payloadBytes)
+				return &serviceerror.ResourceExhausted{
+					Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT,
+					Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+					Message: fmt.Sprintf("limit on total payload size of in-flight updates has been reached (%v bytes)", maxInFlightUpdateSize),
+				}
+			}
+			return nil
+		},
+	)
+}
+
 func (r *registry) checkTotalLimit() error {
-	if len(r.updates)+r.completedCount >= r.maxTotal() {
+	maxTotal := r.maxTotal()
+	if maxTotal == 0 {
+		// limit is disabled
+		return nil
+	}
+	if len(r.updates)+r.completedCount >= maxTotal {
 		r.instrumentation.countTooMany()
 		return serviceerror.NewFailedPrecondition(
-			fmt.Sprintf("limit on number of total updates has been reached (%v)", r.maxTotal()),
+			fmt.Sprintf("The limit on the total number of distinct updates in this workflow has been reached (%v). "+
+				"Make sure any duplicate updates share an Update ID so the server can deduplicate them, and consider rejecting updates that you aren't going to process", maxTotal),
 		)
 	}
 	return nil
 }
 
 func (r *registry) Find(ctx context.Context, id string) *Update {
-	// Check the Admitted and Accepted Updates map first.
+	// Check the admitted and accepted Updates map first.
 	if upd, ok := r.updates[id]; ok {
 		return upd
 	}
@@ -427,4 +483,21 @@ func (r *registry) GetSize() int {
 
 func (r *registry) FailoverVersion() int64 {
 	return r.failoverVersion
+}
+
+func (r *registry) SuggestContinueAsNew() bool {
+	suggestContinueAsNewThreshold := r.maxTotalSuggestContinueAsNew()
+	if suggestContinueAsNewThreshold == 0 {
+		// suggestion is disabled
+		return false
+	}
+	if r.inFlightCount()+r.completedCount >= suggestContinueAsNewThreshold {
+		r.instrumentation.countContinueAsNewSuggestions()
+		return true
+	}
+	return false
+}
+
+func (r *registry) inFlightCount() int {
+	return len(r.updates)
 }

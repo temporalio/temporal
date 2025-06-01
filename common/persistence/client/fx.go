@@ -1,32 +1,9 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package client
 
 import (
 	"time"
 
+	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -37,9 +14,11 @@ import (
 	"go.temporal.io/server/common/persistence/faultinjection"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql"
+	"go.temporal.io/server/common/persistence/telemetry"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resolver"
+	otel "go.temporal.io/server/common/telemetry"
 	"go.uber.org/fx"
 )
 
@@ -100,10 +79,12 @@ func ClusterNameProvider(config *cluster.Config) ClusterName {
 
 func EventBlobCacheProvider(
 	dc *dynamicconfig.Collection,
+	logger log.Logger,
 ) persistence.XDCCache {
 	return persistence.NewEventsBlobCache(
 		dynamicconfig.XDCCacheMaxSizeBytes.Get(dc)(),
 		20*time.Second,
+		logger,
 	)
 }
 
@@ -180,6 +161,7 @@ func DataStoreFactoryProvider(
 	abstractDataStoreFactory AbstractDataStoreFactory,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
+	tracerProvider trace.TracerProvider,
 ) persistence.DataStoreFactory {
 
 	var dataStoreFactory persistence.DataStoreFactory
@@ -197,6 +179,11 @@ func DataStoreFactoryProvider(
 
 	if defaultStoreCfg.FaultInjection != nil {
 		dataStoreFactory = faultinjection.NewFaultInjectionDatastoreFactory(defaultStoreCfg.FaultInjection, dataStoreFactory)
+	}
+
+	tracer := tracerProvider.Tracer(otel.ComponentPersistence)
+	if otel.IsEnabled(tracer) {
+		dataStoreFactory = telemetry.NewTelemetryDataStoreFactory(dataStoreFactory, logger, tracer)
 	}
 
 	return dataStoreFactory

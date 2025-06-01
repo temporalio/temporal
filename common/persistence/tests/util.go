@@ -1,31 +1,8 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package tests
 
 import (
 	"math/rand"
+	"strings"
 	"testing"
 	"time"
 
@@ -37,7 +14,9 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common"
 	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/testing/fakedata"
 	"go.temporal.io/server/service/history/tasks"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -56,6 +35,7 @@ func RandomShardInfo(
 }
 
 func RandomSnapshot(
+	t *testing.T,
 	namespaceID string,
 	workflowID string,
 	runID string,
@@ -66,6 +46,12 @@ func RandomSnapshot(
 	dbRecordVersion int64,
 	branchToken []byte,
 ) (*p.WorkflowSnapshot, []*p.WorkflowEvents) {
+	// TODO - remove this branching when other persistence implementations land for CHASM
+	var chasmNodes map[string]*persistencespb.ChasmNode
+	if !strings.HasPrefix(t.Name(), "TestCDS") {
+		chasmNodes = RandomChasmNodeMap()
+	}
+
 	snapshot := &p.WorkflowSnapshot{
 		ExecutionInfo:  RandomExecutionInfo(namespaceID, workflowID, eventID, lastWriteVersion, branchToken),
 		ExecutionState: RandomExecutionState(runID, state, status),
@@ -78,6 +64,7 @@ func RandomSnapshot(
 		RequestCancelInfos:  RandomInt64RequestCancelInfoMap(),
 		SignalInfos:         RandomInt64SignalInfoMap(),
 		SignalRequestedIDs:  map[string]struct{}{uuid.New().String(): {}},
+		ChasmNodes:          chasmNodes,
 
 		Tasks: map[tasks.Category][]tasks.Task{
 			tasks.CategoryTransfer:    {},
@@ -112,6 +99,12 @@ func RandomMutation(
 	dbRecordVersion int64,
 	branchToken []byte,
 ) (*p.WorkflowMutation, []*p.WorkflowEvents) {
+	// TODO - remove this branching when other persistence implementations land for CHASM
+	var chasmNodes map[string]*persistencespb.ChasmNode
+	if !strings.HasPrefix(t.Name(), "TestCDS") {
+		chasmNodes = RandomChasmNodeMap()
+	}
+
 	mutation := &p.WorkflowMutation{
 		ExecutionInfo:  RandomExecutionInfo(namespaceID, workflowID, eventID, lastWriteVersion, branchToken),
 		ExecutionState: RandomExecutionState(runID, state, status),
@@ -130,6 +123,8 @@ func RandomMutation(
 		DeleteSignalInfos:         map[int64]struct{}{rand.Int63(): {}},
 		UpsertSignalRequestedIDs:  map[string]struct{}{uuid.New().String(): {}},
 		DeleteSignalRequestedIDs:  map[string]struct{}{uuid.New().String(): {}},
+		UpsertChasmNodes:          chasmNodes,
+		DeleteChasmNodes:          map[string]struct{}{uuid.New().String(): {}},
 		// NewBufferedEvents: see below
 		// ClearBufferedEvents: see below
 
@@ -170,6 +165,31 @@ func RandomMutation(
 	return mutation, []*p.WorkflowEvents{events}
 }
 
+func RandomChasmNodeMap() map[string]*persistencespb.ChasmNode {
+	return map[string]*persistencespb.ChasmNode{
+		uuid.New().String(): RandomChasmNode(),
+	}
+}
+
+func RandomChasmNode() *persistencespb.ChasmNode {
+	// Some arbitrary random data to ensure the chasm node's attributes are preserved.
+	var blobInfo persistencespb.WorkflowExecutionInfo
+	_ = fakedata.FakeStruct(&blobInfo)
+	blob, _ := serialization.ProtoEncodeBlob(&blobInfo, enumspb.ENCODING_TYPE_PROTO3)
+
+	var versionedTransition persistencespb.VersionedTransition
+	_ = fakedata.FakeStruct(&versionedTransition)
+
+	return &persistencespb.ChasmNode{
+		Metadata: &persistencespb.ChasmNodeMetadata{
+			InitialVersionedTransition:    &versionedTransition,
+			LastUpdateVersionedTransition: &versionedTransition,
+			Attributes:                    &persistencespb.ChasmNodeMetadata_DataAttributes{},
+		},
+		Data: blob,
+	}
+}
+
 func RandomExecutionInfo(
 	namespaceID string,
 	workflowID string,
@@ -190,11 +210,22 @@ func RandomExecutionState(
 	state enumsspb.WorkflowExecutionState,
 	status enumspb.WorkflowExecutionStatus,
 ) *persistencespb.WorkflowExecutionState {
+	createRequestID := uuid.NewString()
 	return &persistencespb.WorkflowExecutionState{
-		CreateRequestId: uuid.New().String(),
+		CreateRequestId: createRequestID,
 		RunId:           runID,
 		State:           state,
 		Status:          status,
+		RequestIds: map[string]*persistencespb.RequestIDInfo{
+			createRequestID: {
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+				EventId:   common.FirstEventID,
+			},
+			uuid.NewString(): {
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+				EventId:   common.BufferedEventID,
+			},
+		},
 	}
 }
 

@@ -1,37 +1,13 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package replication
 
 import (
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/suite"
-	"go.temporal.io/server/api/enums/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/tests"
+	"go.uber.org/mock/gomock"
 )
 
 type (
@@ -53,9 +29,9 @@ func (f *flowControlTestSuite) SetupTest() {
 		return &FlowControlSignal{taskTrackingCount: 150}
 	}
 
-	signals := map[enums.TaskPriority]FlowControlSignalProvider{
-		enums.TASK_PRIORITY_LOW:  lowPrioritySignal,
-		enums.TASK_PRIORITY_HIGH: highPrioritySignal,
+	signals := map[enumsspb.TaskPriority]FlowControlSignalProvider{
+		enumsspb.TASK_PRIORITY_LOW:  lowPrioritySignal,
+		enumsspb.TASK_PRIORITY_HIGH: highPrioritySignal,
 	}
 
 	f.config = tests.NewDynamicConfig()
@@ -71,21 +47,21 @@ func TestFlowControlTestSuite(t *testing.T) {
 }
 
 func (f *flowControlTestSuite) TestLowPriorityWithinLimit() {
-	actual := f.controller.GetFlowControlInfo(enums.TASK_PRIORITY_LOW)
-	expected := enums.REPLICATION_FLOW_CONTROL_COMMAND_RESUME
+	actual := f.controller.GetFlowControlInfo(enumsspb.TASK_PRIORITY_LOW)
+	expected := enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_RESUME
 	f.Equal(expected, actual)
 }
 
 func (f *flowControlTestSuite) TestHighPriorityExceedsLimit() {
-	actual := f.controller.GetFlowControlInfo(enums.TASK_PRIORITY_HIGH)
-	expected := enums.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE
+	actual := f.controller.GetFlowControlInfo(enumsspb.TASK_PRIORITY_HIGH)
+	expected := enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE
 	f.Equal(expected, actual)
 }
 
 func (f *flowControlTestSuite) TestUnknownPriority() {
-	unknownPriority := enums.TaskPriority(999) // Assuming 999 is an unknown priority
+	unknownPriority := enumsspb.TaskPriority(999) // Assuming 999 is an unknown priority
 	actual := f.controller.GetFlowControlInfo(unknownPriority)
-	expected := enums.REPLICATION_FLOW_CONTROL_COMMAND_RESUME
+	expected := enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_RESUME
 	f.Equal(expected, actual)
 }
 
@@ -94,27 +70,27 @@ func (f *flowControlTestSuite) TestBoundaryCondition() {
 		return &FlowControlSignal{taskTrackingCount: f.maxOutStandingTasks}
 	}
 
-	signals := map[enums.TaskPriority]FlowControlSignalProvider{
-		enums.TASK_PRIORITY_LOW: boundarySignal,
+	signals := map[enumsspb.TaskPriority]FlowControlSignalProvider{
+		enumsspb.TASK_PRIORITY_LOW: boundarySignal,
 	}
 
 	f.controller = NewReceiverFlowControl(signals, f.config)
 
-	actual := f.controller.GetFlowControlInfo(enums.TASK_PRIORITY_LOW)
-	expected := enums.REPLICATION_FLOW_CONTROL_COMMAND_RESUME
+	actual := f.controller.GetFlowControlInfo(enumsspb.TASK_PRIORITY_LOW)
+	expected := enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_RESUME
 	f.Equal(expected, actual)
 
 	boundarySignal = func() *FlowControlSignal {
 		return &FlowControlSignal{taskTrackingCount: f.maxOutStandingTasks + 1}
 	}
 
-	signals = map[enums.TaskPriority]FlowControlSignalProvider{
-		enums.TASK_PRIORITY_LOW: boundarySignal,
+	signals = map[enumsspb.TaskPriority]FlowControlSignalProvider{
+		enumsspb.TASK_PRIORITY_LOW: boundarySignal,
 	}
 
 	f.controller = NewReceiverFlowControl(signals, f.config)
 
-	actual = f.controller.GetFlowControlInfo(enums.TASK_PRIORITY_LOW)
-	expected = enums.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE
+	actual = f.controller.GetFlowControlInfo(enumsspb.TASK_PRIORITY_LOW)
+	expected = enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE
 	f.Equal(expected, actual)
 }

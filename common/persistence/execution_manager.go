@@ -1,33 +1,9 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package persistence
 
 import (
 	"context"
 	"errors"
-	"fmt"
+	"strings"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -400,8 +376,8 @@ func (m *executionManagerImpl) GetWorkflowExecution(
 	var notFound *serviceerror.NotFound
 	if errors.As(respErr, &notFound) {
 		// strip persistence-specific error message
-		respErr = serviceerror.NewNotFound(fmt.Sprintf(
-			"workflow execution not found for workflow ID %q and run ID %q", request.WorkflowID, request.RunID))
+		respErr = serviceerror.NewNotFoundf(
+			"workflow execution not found for workflow ID %q and run ID %q", request.WorkflowID, request.RunID)
 	}
 	if respErr != nil && response == nil {
 		// try to utilize resp as much as possible, for RebuildMutableState API
@@ -477,12 +453,12 @@ func (m *executionManagerImpl) serializeWorkflowEventBatches(
 		xdcKVs[NewXDCCacheKey(
 			definition.NewWorkflowKey(workflowEvents.NamespaceID, workflowEvents.WorkflowID, workflowEvents.RunID),
 			workflowEvents.Events[0].EventId,
-			workflowEvents.Events[len(workflowEvents.Events)-1].EventId+1,
 			workflowEvents.Events[0].Version,
 		)] = NewXDCCacheValue(
 			baseWorkflowInfo,
 			versionHistoryItems,
 			[]*commonpb.DataBlob{newEvents.Node.Events},
+			workflowEvents.Events[len(workflowEvents.Events)-1].EventId+1,
 		)
 		newEvents.ShardID = shardID
 		workflowNewEvents = append(workflowNewEvents, newEvents)
@@ -577,6 +553,9 @@ func (m *executionManagerImpl) SerializeWorkflowMutation( // unexport
 		UpsertSignalInfos: make(map[int64]*commonpb.DataBlob, len(input.UpsertSignalInfos)),
 		DeleteSignalInfos: input.DeleteSignalInfos,
 
+		UpsertChasmNodes: make(map[string]InternalChasmNode, len(input.UpsertChasmNodes)),
+		DeleteChasmNodes: input.DeleteChasmNodes,
+
 		UpsertSignalRequestedIDs: input.UpsertSignalRequestedIDs,
 		DeleteSignalRequestedIDs: input.DeleteSignalRequestedIDs,
 
@@ -642,6 +621,12 @@ func (m *executionManagerImpl) SerializeWorkflowMutation( // unexport
 		result.UpsertSignalInfos[key] = blob
 	}
 
+	nodeMap, err := m.makeInternalChasmNodeMap(input.UpsertChasmNodes)
+	if err != nil {
+		return nil, err
+	}
+	result.UpsertChasmNodes = nodeMap
+
 	if len(input.NewBufferedEvents) > 0 {
 		result.NewBufferedEvents, err = m.serializer.SerializeEvents(input.NewBufferedEvents, enumspb.ENCODING_TYPE_PROTO3)
 		if err != nil {
@@ -680,6 +665,7 @@ func (m *executionManagerImpl) SerializeWorkflowSnapshot( // unexport
 		ChildExecutionInfos: make(map[int64]*commonpb.DataBlob, len(input.ChildExecutionInfos)),
 		RequestCancelInfos:  make(map[int64]*commonpb.DataBlob, len(input.RequestCancelInfos)),
 		SignalInfos:         make(map[int64]*commonpb.DataBlob, len(input.SignalInfos)),
+		ChasmNodes:          make(map[string]InternalChasmNode, len(input.ChasmNodes)),
 
 		ExecutionInfo:      input.ExecutionInfo,
 		ExecutionState:     input.ExecutionState,
@@ -743,6 +729,11 @@ func (m *executionManagerImpl) SerializeWorkflowSnapshot( // unexport
 	for key := range input.SignalRequestedIDs {
 		result.SignalRequestedIDs[key] = struct{}{}
 	}
+	nodeMap, err := m.makeInternalChasmNodeMap(input.ChasmNodes)
+	if err != nil {
+		return nil, err
+	}
+	result.ChasmNodes = nodeMap
 
 	result.Checksum, err = m.serializer.ChecksumToBlob(input.Checksum, enumspb.ENCODING_TYPE_PROTO3)
 	if err != nil {
@@ -775,7 +766,7 @@ func (m *executionManagerImpl) GetCurrentExecution(
 	var notFound *serviceerror.NotFound
 	if errors.As(respErr, &notFound) {
 		// strip persistence-specific error message
-		respErr = serviceerror.NewNotFound(fmt.Sprintf("workflow not found for ID: %v", request.WorkflowID))
+		respErr = serviceerror.NewNotFoundf("workflow not found for ID: %v", request.WorkflowID)
 	}
 	if respErr != nil && response == nil {
 		// try to utilize resp as much as possible, for RebuildMutableState API
@@ -1010,6 +1001,7 @@ func (m *executionManagerImpl) toWorkflowMutableState(internState *InternalWorkf
 		ChildExecutionInfos: make(map[int64]*persistencespb.ChildExecutionInfo),
 		RequestCancelInfos:  make(map[int64]*persistencespb.RequestCancelInfo),
 		SignalInfos:         make(map[int64]*persistencespb.SignalInfo),
+		ChasmNodes:          make(map[string]*persistencespb.ChasmNode),
 		SignalRequestedIds:  internState.SignalRequestedIDs,
 		NextEventId:         internState.NextEventID,
 		BufferedEvents:      make([]*historypb.HistoryEvent, len(internState.BufferedEvents)),
@@ -1048,6 +1040,21 @@ func (m *executionManagerImpl) toWorkflowMutableState(internState *InternalWorkf
 			return nil, err
 		}
 		state.SignalInfos[key] = info
+	}
+	for key, internal := range internState.ChasmNodes {
+		var node *persistencespb.ChasmNode
+		var err error
+
+		if internal.CassandraBlob != nil {
+			node, err = m.serializer.ChasmNodeFromBlob(internal.CassandraBlob)
+		} else {
+			node, err = m.serializer.ChasmNodeFromBlobs(internal.Metadata, internal.Data)
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		state.ChasmNodes[key] = node
 	}
 	var err error
 	state.ExecutionInfo, err = m.serializer.WorkflowExecutionInfoFromBlob(internState.ExecutionInfo)
@@ -1156,8 +1163,44 @@ func validateTaskRange(
 			return serviceerror.NewInvalidArgument("invalid task range, taskID must be empty for scheduled task category")
 		}
 	default:
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("invalid task category type: %v", taskCategoryType))
+		return serviceerror.NewInvalidArgumentf("invalid task category type: %v", taskCategoryType)
 	}
 
 	return nil
+}
+
+func (m *executionManagerImpl) makeInternalChasmNodeMap(
+	nodes map[string]*persistencespb.ChasmNode,
+) (map[string]InternalChasmNode, error) {
+	res := make(map[string]InternalChasmNode, len(nodes))
+	isCassandra := strings.Contains(m.GetName(), "cassandra")
+
+	for path, node := range nodes {
+		var internal InternalChasmNode
+
+		// If we're running on Cassandra, set a single blob since that's how we store it.
+		if isCassandra {
+			blob, err := m.serializer.ChasmNodeToBlob(node, enumspb.ENCODING_TYPE_PROTO3)
+			if err != nil {
+				return nil, err
+			}
+			internal = InternalChasmNode{
+				CassandraBlob: blob,
+			}
+		} else {
+			// Otherwise, split the node into separate blobs.
+			metadata, data, err := m.serializer.ChasmNodeToBlobs(node, enumspb.ENCODING_TYPE_PROTO3)
+			if err != nil {
+				return nil, err
+			}
+			internal = InternalChasmNode{
+				Metadata: metadata,
+				Data:     data,
+			}
+		}
+
+		res[path] = internal
+	}
+
+	return res, nil
 }

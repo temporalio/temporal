@@ -1,46 +1,22 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package eventhandler
 
-//go:generate mockgen -copyright_file ../../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination event_importer_mock.go
+//go:generate mockgen -package $GOPACKAGE -source $GOFILE -destination event_importer_mock.go
 
 import (
 	"context"
 
-	"go.temporal.io/api/common/v1"
+	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
-	common2 "go.temporal.io/server/common"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
-	"go.temporal.io/server/service/history/shard"
+	historyi "go.temporal.io/server/service/history/interfaces"
 )
 
 const (
@@ -95,8 +71,8 @@ func (e *eventImporterImpl) ImportHistoryEventsFromBeginning(
 		namespace.ID(workflowKey.NamespaceID),
 		workflowKey.WorkflowID,
 		workflowKey.RunID,
-		common2.EmptyEventID,
-		common2.EmptyVersion,
+		common.EmptyEventID,
+		common.EmptyVersion,
 		endEventId,
 		endEventVersion,
 	)
@@ -105,20 +81,20 @@ func (e *eventImporterImpl) ImportHistoryEventsFromBeginning(
 		return err
 	}
 
-	var blobs []*common.DataBlob
+	var blobs []*commonpb.DataBlob
 	blobSize := 0
 	var token []byte
 	var versionHistory *historyspb.VersionHistory
-	eventsVersion := common2.EmptyVersion
+	eventsVersion := common.EmptyVersion
 	importFn := func() error {
 		res, err := invokeImportWorkflowExecutionCall(ctx, engine, workflowKey, blobs, versionHistory, token, e.logger)
 		if err != nil {
 			return err
 		}
 		token = res.Token
-		blobs = []*common.DataBlob{}
+		blobs = []*commonpb.DataBlob{}
 		blobSize = 0
-		eventsVersion = common2.EmptyVersion
+		eventsVersion = common.EmptyVersion
 		return nil
 	}
 	for historyIterator.HasNext() {
@@ -142,7 +118,7 @@ func (e *eventImporterImpl) ImportHistoryEventsFromBeginning(
 		if len(events) == 0 {
 			return serviceerror.NewInternal("Empty events received when importing")
 		}
-		if eventsVersion != common2.EmptyVersion && eventsVersion != events[0].GetVersion() {
+		if eventsVersion != common.EmptyVersion && eventsVersion != events[0].GetVersion() {
 			if err := importFn(); err != nil {
 				return err
 			}
@@ -180,16 +156,16 @@ func (e *eventImporterImpl) ImportHistoryEventsFromBeginning(
 
 func invokeImportWorkflowExecutionCall(
 	ctx context.Context,
-	historyEngine shard.Engine,
+	historyEngine historyi.Engine,
 	workflowKey definition.WorkflowKey,
-	historyBatches []*common.DataBlob,
+	historyBatches []*commonpb.DataBlob,
 	versionHistory *historyspb.VersionHistory,
 	token []byte,
 	logger log.Logger,
 ) (*historyservice.ImportWorkflowExecutionResponse, error) {
 	request := &historyservice.ImportWorkflowExecutionRequest{
 		NamespaceId: workflowKey.NamespaceID,
-		Execution: &common.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowKey.WorkflowID,
 			RunId:      workflowKey.RunID,
 		},

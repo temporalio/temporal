@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package archival
 
 import (
@@ -29,10 +5,9 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/api/common/v1"
+	commonpb "go.temporal.io/api/common/v1"
 	carchiver "go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/log"
@@ -45,6 +20,7 @@ import (
 	"go.temporal.io/server/common/testing/mocksdk"
 	"go.temporal.io/server/service/history/configs"
 	"go.uber.org/fx"
+	"go.uber.org/mock/gomock"
 	"go.uber.org/multierr"
 )
 
@@ -55,7 +31,7 @@ func TestArchiver(t *testing.T) {
 		ArchiveVisibilityErr error
 		RateLimiterWaitErr   error
 		Targets              []Target
-		SearchAttributes     *common.SearchAttributes
+		SearchAttributes     *commonpb.SearchAttributes
 		SearchAttributesErr  error
 		NameTypeMap          searchattribute.NameTypeMap
 		NameTypeMapErr       error
@@ -142,7 +118,7 @@ func TestArchiver(t *testing.T) {
 		{
 			Name:    "Search attribute with no embedded type information",
 			Targets: []Target{TargetVisibility},
-			SearchAttributes: &common.SearchAttributes{IndexedFields: map[string]*common.Payload{
+			SearchAttributes: &commonpb.SearchAttributes{IndexedFields: map[string]*commonpb.Payload{
 				"Text01": payload.EncodeString("value"),
 			}},
 			NameTypeMap: searchattribute.TestNameTypeMap,
@@ -152,7 +128,7 @@ func TestArchiver(t *testing.T) {
 		{
 			Name:    "Search attribute missing in type map",
 			Targets: []Target{TargetVisibility},
-			SearchAttributes: &common.SearchAttributes{IndexedFields: map[string]*common.Payload{
+			SearchAttributes: &commonpb.SearchAttributes{IndexedFields: map[string]*commonpb.Payload{
 				"Text01": payload.EncodeString("value"),
 			}},
 			NameTypeMap: searchattribute.NameTypeMap{},
@@ -164,7 +140,7 @@ func TestArchiver(t *testing.T) {
 		{
 			Name:    "Error getting name type map from search attribute provider",
 			Targets: []Target{TargetVisibility},
-			SearchAttributes: &common.SearchAttributes{IndexedFields: map[string]*common.Payload{
+			SearchAttributes: &commonpb.SearchAttributes{IndexedFields: map[string]*commonpb.Payload{
 				"Text01": payload.EncodeString("value"),
 			}},
 			NameTypeMapErr: errors.New("name-type-map-err"),
@@ -196,13 +172,13 @@ func TestArchiver(t *testing.T) {
 			require.NoError(t, err)
 
 			if c.ExpectArchiveHistory {
-				archiverProvider.EXPECT().GetHistoryArchiver(gomock.Any(), gomock.Any()).Return(historyArchiver, nil)
+				archiverProvider.EXPECT().GetHistoryArchiver(gomock.Any()).Return(historyArchiver, nil)
 				historyArchiver.EXPECT().Archive(gomock.Any(), historyURI, gomock.Any()).Return(c.ArchiveHistoryErr)
 			}
 
 			visibilityURI, err := carchiver.NewURI("test:///visibility/archival")
 			require.NoError(t, err)
-			archiverProvider.EXPECT().GetVisibilityArchiver(gomock.Any(), gomock.Any()).
+			archiverProvider.EXPECT().GetVisibilityArchiver(gomock.Any()).
 				Return(visibilityArchiver, nil).AnyTimes()
 
 			if c.ExpectArchiveVisibility {

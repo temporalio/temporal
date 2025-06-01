@@ -1,25 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package persistence
 
 import (
@@ -99,10 +77,13 @@ func (s *DLQMetricsEmitter) emitMetricsLoop() {
 		case <-s.shutdownCh:
 			return
 		case <-s.emitMetricsTimer.C:
-			if !s.shouldEmitMetrics() {
-				continue
+			if s.shouldEmitMetrics() {
+				s.emitMetrics()
+			} else {
+				// We have to clear the gauge dlq_message_count for this host when another host starts
+				// emitting this metric.
+				s.emitZeroMetrics()
 			}
-			s.emitMetrics()
 		}
 	}
 }
@@ -131,6 +112,12 @@ func (s *DLQMetricsEmitter) emitMetrics() {
 			s.logger.Error("Failed to find category from ID", tag.TaskCategoryID(id))
 		}
 		metrics.DLQMessageCount.With(s.metricsHandler).Record(float64(count), metrics.TaskCategoryTag(category.Name()))
+	}
+}
+
+func (s *DLQMetricsEmitter) emitZeroMetrics() {
+	for _, category := range s.taskCategoryRegistry.GetCategories() {
+		metrics.DLQMessageCount.With(s.metricsHandler).Record(float64(0), metrics.TaskCategoryTag(category.Name()))
 	}
 }
 

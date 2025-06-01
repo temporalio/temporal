@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package workflow
 
 import (
@@ -33,6 +9,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/server/common/payloads"
+	historyi "go.temporal.io/server/service/history/interfaces"
 )
 
 type QuerySuite struct {
@@ -50,7 +27,7 @@ func (s *QuerySuite) SetupTest() {
 
 func (s *QuerySuite) TestValidateCompletionState() {
 	testCases := []struct {
-		ts        *QueryCompletionState
+		ts        *historyi.QueryCompletionState
 		expectErr bool
 	}{
 		{
@@ -58,13 +35,13 @@ func (s *QuerySuite) TestValidateCompletionState() {
 			expectErr: true,
 		},
 		{
-			ts: &QueryCompletionState{
+			ts: &historyi.QueryCompletionState{
 				Type: QueryCompletionTypeSucceeded,
 			},
 			expectErr: true,
 		},
 		{
-			ts: &QueryCompletionState{
+			ts: &historyi.QueryCompletionState{
 				Type:   QueryCompletionTypeSucceeded,
 				Result: &querypb.WorkflowQueryResult{},
 				Err:    errors.New("err"),
@@ -72,7 +49,7 @@ func (s *QuerySuite) TestValidateCompletionState() {
 			expectErr: true,
 		},
 		{
-			ts: &QueryCompletionState{
+			ts: &historyi.QueryCompletionState{
 				Type: QueryCompletionTypeSucceeded,
 				Result: &querypb.WorkflowQueryResult{
 					ResultType: enumspb.QUERY_RESULT_TYPE_ANSWERED,
@@ -81,7 +58,7 @@ func (s *QuerySuite) TestValidateCompletionState() {
 			expectErr: true,
 		},
 		{
-			ts: &QueryCompletionState{
+			ts: &historyi.QueryCompletionState{
 				Type: QueryCompletionTypeSucceeded,
 				Result: &querypb.WorkflowQueryResult{
 					ResultType:   enumspb.QUERY_RESULT_TYPE_ANSWERED,
@@ -92,7 +69,7 @@ func (s *QuerySuite) TestValidateCompletionState() {
 			expectErr: true,
 		},
 		{
-			ts: &QueryCompletionState{
+			ts: &historyi.QueryCompletionState{
 				Type: QueryCompletionTypeSucceeded,
 				Result: &querypb.WorkflowQueryResult{
 					ResultType: enumspb.QUERY_RESULT_TYPE_FAILED,
@@ -102,7 +79,7 @@ func (s *QuerySuite) TestValidateCompletionState() {
 			expectErr: true,
 		},
 		{
-			ts: &QueryCompletionState{
+			ts: &historyi.QueryCompletionState{
 				Type: QueryCompletionTypeSucceeded,
 				Result: &querypb.WorkflowQueryResult{
 					ResultType:   enumspb.QUERY_RESULT_TYPE_FAILED,
@@ -112,7 +89,7 @@ func (s *QuerySuite) TestValidateCompletionState() {
 			expectErr: false,
 		},
 		{
-			ts: &QueryCompletionState{
+			ts: &historyi.QueryCompletionState{
 				Type: QueryCompletionTypeSucceeded,
 				Result: &querypb.WorkflowQueryResult{
 					ResultType: enumspb.QUERY_RESULT_TYPE_ANSWERED,
@@ -122,40 +99,40 @@ func (s *QuerySuite) TestValidateCompletionState() {
 			expectErr: false,
 		},
 		{
-			ts: &QueryCompletionState{
+			ts: &historyi.QueryCompletionState{
 				Type:   QueryCompletionTypeUnblocked,
 				Result: &querypb.WorkflowQueryResult{},
 			},
 			expectErr: true,
 		},
 		{
-			ts: &QueryCompletionState{
+			ts: &historyi.QueryCompletionState{
 				Type: QueryCompletionTypeUnblocked,
 				Err:  errors.New("err"),
 			},
 			expectErr: true,
 		},
 		{
-			ts: &QueryCompletionState{
+			ts: &historyi.QueryCompletionState{
 				Type: QueryCompletionTypeUnblocked,
 			},
 			expectErr: false,
 		},
 		{
-			ts: &QueryCompletionState{
+			ts: &historyi.QueryCompletionState{
 				Type: QueryCompletionTypeFailed,
 			},
 			expectErr: true,
 		},
 		{
-			ts: &QueryCompletionState{
+			ts: &historyi.QueryCompletionState{
 				Type:   QueryCompletionTypeFailed,
 				Result: &querypb.WorkflowQueryResult{},
 			},
 			expectErr: true,
 		},
 		{
-			ts: &QueryCompletionState{
+			ts: &historyi.QueryCompletionState{
 				Type: QueryCompletionTypeFailed,
 				Err:  errors.New("err"),
 			},
@@ -174,7 +151,7 @@ func (s *QuerySuite) TestValidateCompletionState() {
 }
 
 func (s *QuerySuite) TestCompletionState_Failed() {
-	completionStateFailed := &QueryCompletionState{
+	completionStateFailed := &historyi.QueryCompletionState{
 		Type: QueryCompletionTypeFailed,
 		Err:  errors.New("err"),
 	}
@@ -182,7 +159,7 @@ func (s *QuerySuite) TestCompletionState_Failed() {
 }
 
 func (s *QuerySuite) TestCompletionState_Completed() {
-	answeredCompletionState := &QueryCompletionState{
+	answeredCompletionState := &historyi.QueryCompletionState{
 		Type: QueryCompletionTypeSucceeded,
 		Result: &querypb.WorkflowQueryResult{
 			ResultType: enumspb.QUERY_RESULT_TYPE_ANSWERED,
@@ -193,13 +170,13 @@ func (s *QuerySuite) TestCompletionState_Completed() {
 }
 
 func (s *QuerySuite) TestCompletionState_Unblocked() {
-	unblockedCompletionState := &QueryCompletionState{
+	unblockedCompletionState := &historyi.QueryCompletionState{
 		Type: QueryCompletionTypeUnblocked,
 	}
 	s.testSetCompletionState(unblockedCompletionState)
 }
 
-func (s *QuerySuite) testSetCompletionState(completionState *QueryCompletionState) {
+func (s *QuerySuite) testSetCompletionState(completionState *historyi.QueryCompletionState) {
 	query := newQuery(nil)
 	ts, err := query.GetCompletionState()
 	s.Equal(errQueryNotInCompletionState, err)
@@ -213,7 +190,7 @@ func (s *QuerySuite) testSetCompletionState(completionState *QueryCompletionStat
 	s.assertCompletionStateEqual(completionState, actualCompletionState)
 }
 
-func (s *QuerySuite) assertCompletionStateEqual(expected *QueryCompletionState, actual *QueryCompletionState) {
+func (s *QuerySuite) assertCompletionStateEqual(expected *historyi.QueryCompletionState, actual *historyi.QueryCompletionState) {
 	s.Equal(expected.Type, actual.Type)
 	if expected.Err != nil {
 		s.Equal(expected.Err.Error(), actual.Err.Error())

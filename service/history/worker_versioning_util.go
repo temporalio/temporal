@@ -1,32 +1,9 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package history
 
 import (
 	"context"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
@@ -37,9 +14,8 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/consts"
-	"go.temporal.io/server/service/history/shard"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
-	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/cache"
 )
 
@@ -47,8 +23,8 @@ func updateIndependentActivityBuildId(
 	ctx context.Context,
 	task tasks.Task,
 	buildId string,
-	shardContext shard.Context,
-	transactionPolicy workflow.TransactionPolicy,
+	shardContext historyi.ShardContext,
+	transactionPolicy historyi.TransactionPolicy,
 	workflowCache cache.Cache,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
@@ -83,7 +59,7 @@ func updateIndependentActivityBuildId(
 		release(retErr)
 	}()
 
-	var mutableState workflow.MutableState
+	var mutableState historyi.MutableState
 	var scheduledEventId int64
 	var taskVersion int64
 
@@ -119,8 +95,10 @@ func updateIndependentActivityBuildId(
 		return err
 	}
 
-	ai.BuildIdInfo = &persistencespb.ActivityInfo_LastIndependentlyAssignedBuildId{LastIndependentlyAssignedBuildId: buildId}
-	err = mutableState.UpdateActivity(ai)
+	err = mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ historyi.MutableState) error {
+		activityInfo.BuildIdInfo = &persistencespb.ActivityInfo_LastIndependentlyAssignedBuildId{LastIndependentlyAssignedBuildId: buildId}
+		return nil
+	})
 	if err != nil {
 		return err
 	}
@@ -142,8 +120,8 @@ func initializeWorkflowAssignedBuildId(
 	ctx context.Context,
 	transferTask *tasks.WorkflowTask,
 	buildId string,
-	shardContext shard.Context,
-	transactionPolicy workflow.TransactionPolicy,
+	shardContext historyi.ShardContext,
+	transactionPolicy historyi.TransactionPolicy,
 	workflowCache cache.Cache,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
@@ -219,16 +197,24 @@ func initializeWorkflowAssignedBuildId(
 	)
 }
 
-func MakeDirectiveForWorkflowTask(ms workflow.MutableState) *taskqueuespb.TaskVersionDirective {
+func MakeDirectiveForWorkflowTask(ms historyi.MutableState) *taskqueuespb.TaskVersionDirective {
 	return worker_versioning.MakeDirectiveForWorkflowTask(
 		ms.GetInheritedBuildId(),
 		ms.GetAssignedBuildId(),
 		ms.GetMostRecentWorkerVersionStamp(),
 		ms.HasCompletedAnyWorkflowTask(),
+		ms.GetEffectiveVersioningBehavior(),
+		ms.GetEffectiveDeployment(),
 	)
 }
 
-func MakeDirectiveForActivityTask(mutableState workflow.MutableState, activityInfo *persistencespb.ActivityInfo) *taskqueuespb.TaskVersionDirective {
+func MakeDirectiveForActivityTask(mutableState historyi.MutableState, activityInfo *persistencespb.ActivityInfo) *taskqueuespb.TaskVersionDirective {
+	if behavior := mutableState.GetEffectiveVersioningBehavior(); behavior != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
+		d := mutableState.GetEffectiveDeployment()
+		return &taskqueuespb.TaskVersionDirective{Behavior: behavior,
+			DeploymentVersion: worker_versioning.DeploymentVersionFromDeployment(d),
+		}
+	}
 	if !activityInfo.UseCompatibleVersion && activityInfo.GetUseWorkflowBuildIdInfo() == nil {
 		return worker_versioning.MakeUseAssignmentRulesDirective()
 	} else if id := mutableState.GetAssignedBuildId(); id != "" {

@@ -1,25 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2019 Temporal Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 syntax = "proto3";
 
 package temporal.server.api.adminservice.v1;
@@ -35,6 +13,7 @@ import "temporal/api/version/v1/message.proto";
 import "temporal/api/workflow/v1/message.proto";
 import "temporal/api/namespace/v1/message.proto";
 import "temporal/api/replication/v1/message.proto";
+import "temporal/api/taskqueue/v1/message.proto";
 
 import "temporal/server/api/cluster/v1/message.proto";
 import "temporal/server/api/common/v1/dlq.proto";
@@ -49,6 +28,8 @@ import "temporal/server/api/persistence/v1/cluster_metadata.proto";
 import "temporal/server/api/persistence/v1/executions.proto";
 import "temporal/server/api/persistence/v1/workflow_mutable_state.proto";
 import "temporal/server/api/persistence/v1/tasks.proto";
+import "temporal/server/api/persistence/v1/hsm.proto";
+import "temporal/server/api/taskqueue/v1/message.proto";
 
 message RebuildMutableStateRequest {
   string namespace = 1;
@@ -400,6 +381,7 @@ message GetTaskQueueTasksRequest {
   int64 max_task_id = 5;
   int32 batch_size = 6;
   bytes next_page_token = 7;
+  int32 subqueue = 8;
 }
 
 message GetTaskQueueTasksResponse {
@@ -559,4 +541,58 @@ message DeepHealthCheckRequest {
 
 message DeepHealthCheckResponse {
   temporal.server.api.enums.v1.HealthState state = 1;
+}
+
+message SyncWorkflowStateRequest {
+  string namespace_id = 1;
+  temporal.api.common.v1.WorkflowExecution execution = 2;
+  temporal.server.api.persistence.v1.VersionedTransition versioned_transition = 3;
+  temporal.server.api.history.v1.VersionHistories version_histories = 4;
+  int32 target_cluster_id = 5;
+}
+
+message SyncWorkflowStateResponse {
+  reserved 1;
+  reserved 2;
+  reserved 3;
+  reserved 4;
+  replication.v1.VersionedTransitionArtifact versioned_transition_artifact = 5;
+}
+
+message GenerateLastHistoryReplicationTasksRequest {
+  string namespace = 1;
+  temporal.api.common.v1.WorkflowExecution execution = 2;
+}
+
+message GenerateLastHistoryReplicationTasksResponse {
+  int64 state_transition_count = 1;
+  int64 history_length = 2;
+}
+
+message DescribeTaskQueuePartitionRequest {
+  string namespace = 1;
+  temporal.server.api.taskqueue.v1.TaskQueuePartition task_queue_partition = 2;
+  // Absent means unversioned queue. Ignored for sticky partitions.
+  temporal.api.taskqueue.v1.TaskQueueVersionSelection build_ids = 3;
+}
+
+message InternalTaskQueueStatus {
+  int64 read_level = 1;
+  int64 ack_level = 2;
+  temporal.api.taskqueue.v1.TaskIdBlock task_id_block = 3;
+  int64 read_buffer_length = 4;
+}
+
+message DescribeTaskQueuePartitionResponse {
+  // contains k-v pairs of the type: buildID -> TaskQueueVersionInfoInternal
+  map<string, temporal.server.api.taskqueue.v1.TaskQueueVersionInfoInternal> versions_info_internal = 1;
+}
+
+message ForceUnloadTaskQueuePartitionRequest {
+  string namespace = 1;
+  temporal.server.api.taskqueue.v1.TaskQueuePartition task_queue_partition = 2;
+}
+
+message ForceUnloadTaskQueuePartitionResponse {
+  bool was_loaded = 1;
 }

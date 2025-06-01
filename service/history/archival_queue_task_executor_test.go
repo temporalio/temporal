@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package history_test
 
 import (
@@ -30,13 +6,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
-	"go.temporal.io/server/api/persistence/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	carchiver "go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
@@ -44,16 +19,18 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	cpersistence "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/service/history"
 	"go.temporal.io/server/service/history/archival"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
-	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/cache"
+	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -291,13 +268,13 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 		{
 			Name: "close visibility task complete",
 			Configure: func(p *params) {
-				p.CloseVisibilityTaskCompleted = true
+				p.RelocatableAttributesRemoved = true
 			},
 		},
 		{
 			Name: "get workflow execution from visibility error",
 			Configure: func(p *params) {
-				p.CloseVisibilityTaskCompleted = true
+				p.RelocatableAttributesRemoved = true
 				p.GetWorkflowExecutionError = errors.New("get workflow execution error")
 				p.ExpectedErrorSubstrings = []string{"get workflow execution error"}
 				p.ExpectArchive = false
@@ -347,9 +324,9 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 			c.Configure(&p)
 			namespaceRegistry := namespace.NewMockRegistry(p.Controller)
 			task := p.Task
-			shardContext := shard.NewMockContext(p.Controller)
+			shardContext := historyi.NewMockShardContext(p.Controller)
 			workflowCache := cache.NewMockCache(p.Controller)
-			workflowContext := workflow.NewMockContext(p.Controller)
+			workflowContext := historyi.NewMockWorkflowContext(p.Controller)
 			branchToken := []byte{42}
 			logger := log.NewNoopLogger()
 			timeSource := clock.NewRealTimeSource()
@@ -370,18 +347,18 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 			visibilityArchivalState := p.VisibilityConfig.NamespaceArchivalState
 
 			namespaceEntry := namespace.NewGlobalNamespaceForTest(
-				&persistence.NamespaceInfo{
+				&persistencespb.NamespaceInfo{
 					Id:   tests.NamespaceID.String(),
 					Name: tests.Namespace.String(),
 				},
-				&persistence.NamespaceConfig{
+				&persistencespb.NamespaceConfig{
 					Retention:               p.Retention,
 					HistoryArchivalState:    enumspb.ArchivalState(historyArchivalState),
 					HistoryArchivalUri:      p.HistoryURI,
 					VisibilityArchivalState: enumspb.ArchivalState(visibilityArchivalState),
 					VisibilityArchivalUri:   p.VisibilityURI,
 				},
-				&persistence.NamespaceReplicationConfig{
+				&persistencespb.NamespaceReplicationConfig{
 					ActiveClusterName: cluster.TestCurrentClusterName,
 					Clusters: []string{
 						cluster.TestCurrentClusterName,
@@ -395,7 +372,7 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 				Return(namespaceEntry, p.GetNamespaceByIDError).AnyTimes()
 
 			if p.MutableStateExists {
-				mutableState := workflow.NewMockMutableState(p.Controller)
+				mutableState := historyi.NewMockMutableState(p.Controller)
 				mutableState.EXPECT().IsWorkflowExecutionRunning().Return(p.IsWorkflowExecutionRunning).AnyTimes()
 				mutableState.EXPECT().GetWorkflowKey().Return(p.WorkflowKey).AnyTimes()
 				workflowContext.EXPECT().LoadMutableState(gomock.Any(), shardContext).Return(
@@ -427,14 +404,14 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 					p.ExecutionDuration,
 					p.GetWorkflowExecutionDurationError,
 				).AnyTimes()
-				executionInfo := &persistence.WorkflowExecutionInfo{
+				executionInfo := &persistencespb.WorkflowExecutionInfo{
 					NamespaceId:                  tests.NamespaceID.String(),
 					ExecutionTime:                timestamppb.New(p.ExecutionTime),
 					CloseTime:                    timestamppb.New(p.CloseTime),
-					CloseVisibilityTaskCompleted: p.CloseVisibilityTaskCompleted,
+					RelocatableAttributesRemoved: p.RelocatableAttributesRemoved,
 				}
 				mutableState.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
-				executionState := &persistence.WorkflowExecutionState{
+				executionState := &persistencespb.WorkflowExecutionState{
 					State:     0,
 					Status:    0,
 					StartTime: timestamppb.New(p.StartTime),
@@ -455,7 +432,7 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 							},
 						}
 						mutableState.EXPECT().PopTasks().Return(popTasks)
-						shardContext.EXPECT().AddTasks(gomock.Any(), &cpersistence.AddHistoryTasksRequest{
+						shardContext.EXPECT().AddTasks(gomock.Any(), &persistence.AddHistoryTasksRequest{
 							ShardID:     shardID,
 							NamespaceID: tests.NamespaceID.String(),
 							WorkflowID:  task.WorkflowID,
@@ -477,7 +454,7 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 				gomock.Any(),
 			).Return(
 				workflowContext,
-				cache.ReleaseCacheFunc(func(err error) {}),
+				historyi.ReleaseWorkflowContextFunc(func(err error) {}),
 				p.GetOrCreateWorkflowExecutionError,
 			).AnyTimes()
 
@@ -505,7 +482,7 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 			}
 
 			visibilityManager := manager.NewMockVisibilityManager(p.Controller)
-			if p.CloseVisibilityTaskCompleted {
+			if p.RelocatableAttributesRemoved {
 				visibilityManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(
 					&manager.GetWorkflowExecutionResponse{Execution: &workflowpb.WorkflowExecutionInfo{
 						Memo:             nil,
@@ -519,7 +496,7 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 				a,
 				shardContext,
 				workflowCache,
-				workflow.RelocatableAttributesFetcherProvider(visibilityManager),
+				workflow.RelocatableAttributesFetcherProvider(shardContext.GetConfig(), visibilityManager),
 				p.MetricsHandler,
 				logger,
 			)
@@ -535,6 +512,7 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 				mockMetadata,
 				logger,
 				metrics.NoopMetricsHandler,
+				telemetry.NoopTracer,
 			)
 			err := executable.Execute()
 			if len(p.ExpectedErrorSubstrings) > 0 {
@@ -584,7 +562,7 @@ type params struct {
 	GetWorkflowCloseTimeError          error
 	GetWorkflowExecutionDurationError  error
 	GetCurrentBranchTokenError         error
-	CloseVisibilityTaskCompleted       bool
+	RelocatableAttributesRemoved       bool
 	ExpectGetWorkflowExecution         bool
 	GetWorkflowExecutionError          error
 	LoadMutableStateError              error

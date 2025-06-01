@@ -1,50 +1,27 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package parentclosepolicy
 
 import (
 	"context"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
-	"go.temporal.io/api/enums/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/api/workflowservicemock/v1"
 	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/testing/mockapi/workflowservicemock/v1"
 	"go.temporal.io/server/service/history/tests"
+	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 )
 
@@ -53,6 +30,7 @@ type parentClosePolicyWorkflowSuite struct {
 	suite.Suite
 	testsuite.WorkflowTestSuite
 
+	hostInfo          membership.HostInfo
 	controller        *gomock.Controller
 	mockClientBean    *client.MockBean
 	mockHistoryClient *historyservicemock.MockHistoryServiceClient
@@ -69,6 +47,7 @@ func TestParentClosePolicyWorkflowSuite(t *testing.T) {
 func (s *parentClosePolicyWorkflowSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
+	s.hostInfo = membership.NewHostInfoFromAddress("localhost")
 	s.controller = gomock.NewController(s.T())
 	s.mockClientBean = client.NewMockBean(s.controller)
 	s.mockHistoryClient = historyservicemock.NewMockHistoryServiceClient(s.controller)
@@ -88,6 +67,7 @@ func (s *parentClosePolicyWorkflowSuite) SetupTest() {
 			NumParentClosePolicySystemWorkflows:    dynamicconfig.GetIntPropertyFn(10),
 		},
 		clientBean: s.mockClientBean,
+		hostInfo:   s.hostInfo,
 	}
 }
 
@@ -111,21 +91,21 @@ func (s *parentClosePolicyWorkflowSuite) TestProcessorActivity_SameCluster() {
 				NamespaceID: tests.ChildNamespaceID.String(),
 				WorkflowID:  "child workflowID 1",
 				RunID:       "childworkflow runID 1",
-				Policy:      enums.PARENT_CLOSE_POLICY_TERMINATE,
+				Policy:      enumspb.PARENT_CLOSE_POLICY_TERMINATE,
 			},
 			{
 				Namespace:   tests.ChildNamespace.String(),
 				NamespaceID: tests.ChildNamespaceID.String(),
 				WorkflowID:  "child workflowID 2",
 				RunID:       "childworkflow runID 2",
-				Policy:      enums.PARENT_CLOSE_POLICY_REQUEST_CANCEL,
+				Policy:      enumspb.PARENT_CLOSE_POLICY_REQUEST_CANCEL,
 			},
 			{
 				Namespace:   tests.ChildNamespace.String(),
 				NamespaceID: tests.ChildNamespaceID.String(),
 				WorkflowID:  "child workflowID 3",
 				RunID:       "childworkflow runID 3",
-				Policy:      enums.PARENT_CLOSE_POLICY_ABANDON,
+				Policy:      enumspb.PARENT_CLOSE_POLICY_ABANDON,
 			},
 		},
 	}
@@ -155,14 +135,14 @@ func (s *parentClosePolicyWorkflowSuite) TestProcessorActivity_RemoteCluster() {
 				NamespaceID: tests.ChildNamespaceID.String(),
 				WorkflowID:  "child workflowID 1",
 				RunID:       "childworkflow runID 1",
-				Policy:      enums.PARENT_CLOSE_POLICY_TERMINATE,
+				Policy:      enumspb.PARENT_CLOSE_POLICY_TERMINATE,
 			},
 			{
 				Namespace:   tests.ChildNamespace.String(),
 				NamespaceID: tests.ChildNamespaceID.String(),
 				WorkflowID:  "child workflowID 2",
 				RunID:       "childworkflow runID 2",
-				Policy:      enums.PARENT_CLOSE_POLICY_REQUEST_CANCEL,
+				Policy:      enumspb.PARENT_CLOSE_POLICY_REQUEST_CANCEL,
 			},
 		},
 	}

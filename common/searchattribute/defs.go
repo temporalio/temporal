@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package searchattribute
 
 import (
@@ -47,7 +23,6 @@ const (
 	StateTransitionCount  = "StateTransitionCount"
 	TemporalChangeVersion = "TemporalChangeVersion"
 	BinaryChecksums       = "BinaryChecksums"
-	BuildIds              = "BuildIds"
 	BatcherNamespace      = "BatcherNamespace"
 	BatcherUser           = "BatcherUser"
 	HistorySizeBytes      = "HistorySizeBytes"
@@ -81,6 +56,42 @@ const (
 	// define a custom ScheduleId search attribute, in which case the query using the ScheduleId would operate just like
 	// any other custom search attribute.
 	ScheduleID = "ScheduleId"
+
+	// TemporalPauseInfo is a search attribute that stores the information about paused entities in the workflow.
+	// Format of a single paused entity: "<key>:<value>".
+	//  * <key> is something that can be used to identify the filtering condition
+	//  * <value> is the value of the corresponding filtering condition.
+	// examples:
+	//   - for paused activities, manual pause, we may have 2 <key>:<value> pairs:
+	//     * "Activity:MyCoolActivityType"
+	//     * "Reason:ManualActivityPause"
+	//     * or
+	//     * "Policy:<some policy id>"
+	//   - for paused workflows, we may have the following <key>:<value> pairs:
+	//     * "Workflow:WorkflowID"
+	//     * "Reason:ManualWorkflowPause"
+	TemporalPauseInfo = "TemporalPauseInfo"
+
+	// BuildIds is a KeywordList that holds information about current and past build ids
+	// used by the workflow. Used for Worker Versioning
+	BuildIds = "BuildIds"
+
+	// TemporalWorkerDeploymentVersion stores the current Worker Deployment Version
+	// associated with the execution. It is updated at workflow task completion when
+	// the SDK says what Version completed the workflow task. It can have a value for
+	// unversioned workflows, if they are processed by an unversioned deployment.
+	TemporalWorkerDeploymentVersion = "TemporalWorkerDeploymentVersion"
+
+	// TemporalWorkerDeployment stores the current Worker Deployment associated with
+	// the execution. It is updated at workflow task completion when the SDK says what
+	// Worker Deployment completed the workflow task. It can have a value for
+	// unversioned workflows, if they are processed by an unversioned deployment.
+	TemporalWorkerDeployment = "TemporalWorkerDeployment"
+
+	// TemporalWorkflowVersioningBehavior stores the current Versioning Behavior of the
+	// execution. It is updated at workflow task completion when the server gets the
+	// behavior (`auto_upgrade` or `pinned`) from the SDK. Empty for unversioned workflows.
+	TemporalWorkflowVersioningBehavior = "TemporalWorkflowVersioningBehavior"
 )
 
 var (
@@ -104,8 +115,16 @@ var (
 		RootRunID:            enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	}
 
-	// predefined are internal search attributes which are passed and stored in SearchAttributes object together with custom search attributes.
-	predefined = map[string]enumspb.IndexedValueType{
+	// predefinedWhiteList contains a subset of predefined Search Attributes (SAs)
+	// that are currently allowed for use in production environments. These attributes
+	// are internal and were not originally intended for end-user usage, but may be
+	// in active use by users at the moment.
+	//
+	// The long-term plan is to deprecate and disallow the use of these attributes
+	// once it is confirmed that they are no longer being relied upon in any
+	// production workflows. Until then, this whitelist acts as a temporary allowance
+	// to ensure backward compatibility and avoid breaking existing use cases.
+	predefinedWhiteList = map[string]enumspb.IndexedValueType{
 		TemporalChangeVersion:      enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
 		BinaryChecksums:            enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
 		BuildIds:                   enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
@@ -115,6 +134,25 @@ var (
 		TemporalScheduledById:      enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		TemporalSchedulePaused:     enumspb.INDEXED_VALUE_TYPE_BOOL,
 		TemporalNamespaceDivision:  enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		TemporalPauseInfo:          enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+	}
+
+	// predefined are internal search attributes which are passed and stored in SearchAttributes object together with custom search attributes.
+	// Attributes listed here but not in predefinedWhiteList are considered internal-only and are banned from user-facing usage.
+	predefined = map[string]enumspb.IndexedValueType{
+		TemporalChangeVersion:              enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		BinaryChecksums:                    enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		BuildIds:                           enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		BatcherNamespace:                   enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		BatcherUser:                        enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		TemporalScheduledStartTime:         enumspb.INDEXED_VALUE_TYPE_DATETIME,
+		TemporalScheduledById:              enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		TemporalSchedulePaused:             enumspb.INDEXED_VALUE_TYPE_BOOL,
+		TemporalNamespaceDivision:          enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		TemporalPauseInfo:                  enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		TemporalWorkerDeploymentVersion:    enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		TemporalWorkflowVersioningBehavior: enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		TemporalWorkerDeployment:           enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	}
 
 	// reserved are internal field names that can't be used as search attribute names.

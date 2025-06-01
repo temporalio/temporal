@@ -1,42 +1,16 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Copyright (c) 2017 Xargin
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 // Package query is inspired and partially copied from by github.com/cch123/elasticsql.
 package query
 
 import (
 	"errors"
 	"fmt"
-	"strconv"
 	"strings"
 
 	"github.com/olivere/elastic/v7"
 	"github.com/temporalio/sqlparser"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/sqlquery"
 )
 
 type (
@@ -383,11 +357,11 @@ func (r *rangeCondConverter) Convert(expr sqlparser.Expr) (elastic.Query, error)
 		return nil, wrapConverterError("unable to convert left part of 'between' expression", err)
 	}
 
-	fromValue, err := ParseSqlValue(sqlparser.String(rangeCond.From))
+	fromValue, err := sqlquery.ParseValue(sqlparser.String(rangeCond.From))
 	if err != nil {
 		return nil, err
 	}
-	toValue, err := ParseSqlValue(sqlparser.String(rangeCond.To))
+	toValue, err := sqlquery.ParseValue(sqlparser.String(rangeCond.To))
 	if err != nil {
 		return nil, err
 	}
@@ -530,7 +504,7 @@ func (c *comparisonExprConverter) Convert(expr sqlparser.Expr) (elastic.Query, e
 func convertComparisonExprValue(expr sqlparser.Expr) (interface{}, error) {
 	switch e := expr.(type) {
 	case *sqlparser.SQLVal:
-		v, err := ParseSqlValue(sqlparser.String(e))
+		v, err := sqlquery.ParseValue(sqlparser.String(e))
 		if err != nil {
 			return nil, err
 		}
@@ -566,30 +540,6 @@ func convertComparisonExprValue(expr sqlparser.Expr) (interface{}, error) {
 
 func (n *notSupportedExprConverter) Convert(expr sqlparser.Expr) (elastic.Query, error) {
 	return nil, NewConverterError("%s: expression of type %T", NotSupportedErrMessage, expr)
-}
-
-// ParseSqlValue returns a string, int64 or float64 if the parsing succeeds.
-func ParseSqlValue(sqlValue string) (interface{}, error) {
-	if sqlValue == "" {
-		return "", nil
-	}
-
-	if sqlValue[0] == '\'' && sqlValue[len(sqlValue)-1] == '\'' {
-		strValue := strings.Trim(sqlValue, "'")
-		return strValue, nil
-	}
-
-	// Unquoted value must be a number. Try int64 first.
-	if intValue, err := strconv.ParseInt(sqlValue, 10, 64); err == nil {
-		return intValue, nil
-	}
-
-	// Then float64.
-	if floatValue, err := strconv.ParseFloat(sqlValue, 64); err == nil {
-		return floatValue, nil
-	}
-
-	return nil, NewConverterError("%s: unable to parse %s", InvalidExpressionErrMessage, sqlValue)
 }
 
 func convertColName(fnInterceptor FieldNameInterceptor, colNameExpr sqlparser.Expr, usage FieldNameUsage) (alias string, fieldName string, err error) {

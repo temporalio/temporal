@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package elasticsearch
 
 import (
@@ -29,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 
-	"github.com/golang/mock/gomock"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/future"
@@ -40,6 +16,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/store"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/searchattribute"
+	"go.uber.org/mock/gomock"
 )
 
 func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted() {
@@ -290,6 +267,16 @@ func (s *ESVisibilitySuite) Test_GetDocID() {
 	s.Equal(strings.Repeat("a", 475)+"~fd86a520-741e-4fd3-a788-165c445ea6f3", GetDocID(strings.Repeat("a", 475), "fd86a520-741e-4fd3-a788-165c445ea6f3"))
 	s.Equal(strings.Repeat("a", 474)+"~fd86a520-741e-4fd3-a788-165c445ea6f3", GetDocID(strings.Repeat("a", 474), "fd86a520-741e-4fd3-a788-165c445ea6f3"))
 	s.Equal(strings.Repeat("a", 400)+"~fd86a520-741e-4fd3-a788-165c445ea6f3", GetDocID(strings.Repeat("a", 400), "fd86a520-741e-4fd3-a788-165c445ea6f3"))
+
+	// construct a workflowID that contains valid utf8 prefix with multi-bytes unicode.
+	// the prefix length is exactly that it will cut on the next multi-bytes unicode.
+	// this test case is to verify that we don't produce invalid docID that consists of invalid utf8 string
+	rid := "rid"
+	prefix := strings.Repeat("a", 512-len(rid)-len(delimiter)-1)
+	wid := prefix + "中文字符"
+	docId := GetDocID(wid, rid)
+	s.True(utf8.ValidString(docId))
+	s.Equal(prefix+"~rid", docId)
 }
 
 func (s *ESVisibilitySuite) Test_GetVisibilityTaskKey() {

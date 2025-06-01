@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package persistencetests
 
 import (
@@ -1334,14 +1310,17 @@ func (m *MetadataPersistenceSuiteV2) TestListNamespaces() {
 			// so we can test == easily
 			namespace.NotificationVersion = 0
 		}
-		pageCount++
+		// Some persistence backends return an unavoidable empty final page.
+		if len(resp.Namespaces) > 0 {
+			pageCount++
+		}
 		if len(token) == 0 {
 			break
 		}
 	}
 
-	// 2 pages with data and 1 empty page which is unavoidable.
-	m.Equal(pageCount, 3)
+	// There should be 2 non-empty pages.
+	m.Equal(pageCount, 2)
 	m.Equal(len(inputNamespaces), len(outputNamespaces))
 	for _, namespace := range inputNamespaces {
 		m.DeepEqual(namespace, outputNamespaces[namespace.Namespace.Info.Id])
@@ -1415,14 +1394,17 @@ func (m *MetadataPersistenceSuiteV2) TestListNamespaces_DeletedNamespace() {
 		m.NoError(err)
 		token = resp.NextPageToken
 		listNamespacesPageSize2 = append(listNamespacesPageSize2, resp.Namespaces...)
-		pageCount++
+		// Some persistence backends return an unavoidable empty final page.
+		if len(resp.Namespaces) > 0 {
+			pageCount++
+		}
 		if len(token) == 0 {
 			break
 		}
 	}
 
-	// 1 page with data and 1 empty page which is unavoidable.
-	m.Equal(2, pageCount)
+	// There should be 1 non-empty page.
+	m.Equal(1, pageCount)
 	m.Len(listNamespacesPageSize2, 2)
 	for _, namespace := range listNamespacesPageSize2 {
 		m.NotEqual(namespace.Namespace.Info.State, enumspb.NAMESPACE_STATE_DELETED)
@@ -1435,14 +1417,17 @@ func (m *MetadataPersistenceSuiteV2) TestListNamespaces_DeletedNamespace() {
 		m.NoError(err)
 		token = resp.NextPageToken
 		listNamespacesPageSize1 = append(listNamespacesPageSize1, resp.Namespaces...)
-		pageCount++
+		// Some persistence backends return an unavoidable empty final page.
+		if len(resp.Namespaces) > 0 {
+			pageCount++
+		}
 		if len(token) == 0 {
 			break
 		}
 	}
 
-	// 2 pages with data and 1 empty page which is unavoidable.
-	m.Equal(3, pageCount)
+	// There should be 2 non-empty pages.
+	m.Equal(2, pageCount)
 	m.Len(listNamespacesPageSize1, 2)
 	for _, namespace := range listNamespacesPageSize1 {
 		m.NotEqual(namespace.Namespace.Info.State, enumspb.NAMESPACE_STATE_DELETED)

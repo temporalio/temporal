@@ -1,25 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package hsm
 
 import (
@@ -33,10 +11,6 @@ import (
 
 // ErrDuplicateRegistration is returned by a [Registry] when it detects duplicate registration.
 var ErrDuplicateRegistration = errors.New("duplicate registration")
-
-// ErrConcurrentTaskNotImplemented is returned by a [Registry] when trying to register a
-// concurrent task that did not implement the [ConcurrentTask] interface.
-var ErrConcurrentTaskNotImplemented = errors.New("concurrent task not implemented")
 
 // ErrNotRegistered is returned by a [Registry] when trying to get a type that is not registered.
 var ErrNotRegistered error = notRegisteredError{"not registered"}
@@ -130,16 +104,6 @@ func RegisterImmediateExecutor[T Task](r *Registry, executor ImmediateExecutor[T
 			existing,
 		)
 	}
-	// TODO(bergundy): Concurrent may be dependent on the task's state, this solution isn't failsafe.
-	if task.Concurrent() {
-		if _, ok := Task(task).(ConcurrentTask); !ok {
-			return fmt.Errorf(
-				"%w: %q does not implement ConcurrentTask interface",
-				ErrConcurrentTaskNotImplemented,
-				taskType,
-			)
-		}
-	}
 	r.immediateExecutors[taskType] = executor
 	return nil
 }
@@ -177,15 +141,6 @@ func RegisterTimerExecutor[T Task](r *Registry, executor TimerExecutor[T]) error
 			taskType,
 			existing,
 		)
-	}
-	if task.Concurrent() {
-		if _, ok := Task(task).(ConcurrentTask); !ok {
-			return fmt.Errorf(
-				"%w: concurrent task type %q does not implement ConcurrentTask interface",
-				ErrConcurrentTaskNotImplemented,
-				taskType,
-			)
-		}
 	}
 	r.timerExecutors[taskType] = executor
 	return nil

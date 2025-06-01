@@ -1,31 +1,8 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package quotas
 
 import (
-	"go.uber.org/atomic"
+	"math"
+	"sync/atomic"
 )
 
 type (
@@ -57,8 +34,8 @@ type (
 
 	// MutableRateBurstImpl stores the dynamic rate & burst for rate limiter
 	MutableRateBurstImpl struct {
-		rate  *atomic.Float64
-		burst *atomic.Int64
+		rate  atomic.Uint64
+		burst atomic.Int64
 	}
 
 	MutableRateBurst interface {
@@ -129,14 +106,15 @@ func NewMutableRateBurst(
 	rate float64,
 	burst int,
 ) *MutableRateBurstImpl {
-	return &MutableRateBurstImpl{
-		rate:  atomic.NewFloat64(rate),
-		burst: atomic.NewInt64(int64(burst)),
-	}
+	d := &MutableRateBurstImpl{}
+	d.SetRPS(rate)
+	d.SetBurst(burst)
+
+	return d
 }
 
 func (d *MutableRateBurstImpl) SetRPS(rate float64) {
-	d.rate.Store(rate)
+	d.rate.Store(math.Float64bits(rate))
 }
 
 func (d *MutableRateBurstImpl) SetBurst(burst int) {
@@ -144,7 +122,7 @@ func (d *MutableRateBurstImpl) SetBurst(burst int) {
 }
 
 func (d *MutableRateBurstImpl) Rate() float64 {
-	return d.rate.Load()
+	return math.Float64frombits(d.rate.Load())
 }
 
 func (d *MutableRateBurstImpl) Burst() int {

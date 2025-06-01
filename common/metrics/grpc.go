@@ -1,34 +1,10 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package metrics
 
 import (
 	"context"
 	"sync"
 
-	metricspb "go.temporal.io/server/api/metrics/v1"
+	metricsspb "go.temporal.io/server/api/metrics/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"google.golang.org/grpc"
@@ -84,7 +60,7 @@ func NewClientMetricsTrailerPropagatorInterceptor(logger log.Logger) grpc.UnaryC
 
 		for _, baggageString := range baggageStrings {
 			baggageBytes := []byte(baggageString)
-			metricsBaggage := &metricspb.Baggage{}
+			metricsBaggage := &metricsspb.Baggage{}
 			unmarshalErr := metricsBaggage.Unmarshal(baggageBytes)
 			if unmarshalErr != nil {
 				logger.Error("unable to unmarshal metrics baggage from trailer", tag.Error(unmarshalErr))
@@ -122,7 +98,7 @@ func NewServerMetricsTrailerPropagatorInterceptor(logger log.Logger) grpc.UnaryS
 			return resp, err
 		}
 
-		metricsBaggage := &metricspb.Baggage{CountersInt: make(map[string]int64)}
+		metricsBaggage := &metricsspb.Baggage{CountersInt: make(map[string]int64)}
 
 		metricsCtx.Lock()
 		for k, v := range metricsCtx.CountersInt {

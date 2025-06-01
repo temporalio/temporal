@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package tasks
 
 import (
@@ -31,6 +7,8 @@ import (
 	"time"
 
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 )
 
@@ -50,6 +28,8 @@ type (
 		ChannelWeightFn ChannelWeightFn[K]
 		// Optional, if specified, re-evaluate task channel weight when channel is not empty
 		ChannelWeightUpdateCh chan struct{}
+		// Optional, if specified, delete inactive channels after this duration
+		InactiveChannelDeletionDelay dynamicconfig.DurationPropertyFn
 	}
 
 	// TaskChannelKeyFn is the function for mapping a task to its task channel (key)
@@ -66,6 +46,7 @@ type (
 		fifoScheduler Scheduler[T]
 		logger        log.Logger
 
+		ts           clock.TimeSource
 		notifyChan   chan struct{}
 		shutdownChan chan struct{}
 		shutdownWG   sync.WaitGroup
@@ -100,6 +81,7 @@ func NewInterleavedWeightedRoundRobinScheduler[T Task, K comparable](
 	return &InterleavedWeightedRoundRobinScheduler[T, K]{
 		status: common.DaemonStatusInitialized,
 
+		ts:            clock.NewRealTimeSource(),
 		fifoScheduler: fifoScheduler,
 		logger:        logger,
 
@@ -127,6 +109,9 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) Start() {
 
 	s.shutdownWG.Add(1)
 	go s.eventLoop()
+
+	s.shutdownWG.Add(1)
+	go s.cleanupLoop()
 
 	s.logger.Info("interleaved weighted round robin task scheduler started")
 }
@@ -164,7 +149,8 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) Submit(
 	// there are tasks pending dispatching, need to respect round roubin weight
 	// or currently unable to submit to fifo scheduler, either due to buffer is full
 	// or exceeding rate limit
-	channel := s.getOrCreateTaskChannel(s.options.TaskChannelKeyFn(task))
+	channel, releaseFn := s.getOrCreateTaskChannel(s.options.TaskChannelKeyFn(task))
+	defer releaseFn()
 	channel.Chan() <- task
 	s.notifyDispatcher()
 }
@@ -178,7 +164,8 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) TrySubmit(
 	}
 
 	// there are tasks pending dispatching, need to respect round roubin weight
-	channel := s.getOrCreateTaskChannel(s.options.TaskChannelKeyFn(task))
+	channel, releaseFn := s.getOrCreateTaskChannel(s.options.TaskChannelKeyFn(task))
+	defer releaseFn()
 	select {
 	case channel.Chan() <- task:
 		s.notifyDispatcher()
@@ -202,14 +189,57 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) eventLoop() {
 	}
 }
 
+func (s *InterleavedWeightedRoundRobinScheduler[T, K]) cleanupLoop() {
+	defer s.shutdownWG.Done()
+	if s.options.InactiveChannelDeletionDelay == nil {
+		return
+	}
+	ch, _ := s.ts.NewTimer(s.options.InactiveChannelDeletionDelay())
+	for {
+		select {
+		case <-ch:
+			s.doCleanup()
+			ch, _ = s.ts.NewTimer(s.options.InactiveChannelDeletionDelay())
+		case <-s.shutdownChan:
+			return
+		}
+	}
+}
+
+func (s *InterleavedWeightedRoundRobinScheduler[T, K]) doCleanup() {
+	s.Lock()
+	defer s.Unlock()
+	var keysToDelete []K
+	cleanupDelay := s.options.InactiveChannelDeletionDelay()
+	now := s.ts.Now()
+	for k, weightedChan := range s.weightedChannels {
+		if now.Sub(weightedChan.LastActiveTime()) > cleanupDelay &&
+			len(weightedChan.Chan()) == 0 &&
+			weightedChan.RefCount() == 0 {
+
+			keysToDelete = append(keysToDelete, k)
+			continue
+		}
+	}
+
+	for _, k := range keysToDelete {
+		delete(s.weightedChannels, k)
+	}
+
+	if len(keysToDelete) > 0 {
+		s.flattenWeightedChannelsLocked()
+	}
+}
+
 func (s *InterleavedWeightedRoundRobinScheduler[T, K]) getOrCreateTaskChannel(
 	channelKey K,
-) *WeightedChannel[T] {
+) (*WeightedChannel[T], func()) {
 	s.RLock()
 	channel, ok := s.weightedChannels[channelKey]
 	if ok {
+		channel.IncrementRefCount()
 		s.RUnlock()
-		return channel
+		return channel, channel.DecrementRefCount
 	}
 	s.RUnlock()
 
@@ -218,15 +248,17 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) getOrCreateTaskChannel(
 
 	channel, ok = s.weightedChannels[channelKey]
 	if ok {
-		return channel
+		channel.IncrementRefCount()
+		return channel, channel.DecrementRefCount
 	}
 
 	weight := s.options.ChannelWeightFn(channelKey)
-	channel = NewWeightedChannel[T](weight, WeightedChannelDefaultSize)
+	channel = NewWeightedChannel[T](weight, WeightedChannelDefaultSize, s.ts.Now())
 	s.weightedChannels[channelKey] = channel
 
 	s.flattenWeightedChannelsLocked()
-	return channel
+	channel.IncrementRefCount()
+	return channel, channel.DecrementRefCount
 }
 
 func (s *InterleavedWeightedRoundRobinScheduler[T, K]) flattenWeightedChannelsLocked() {
@@ -237,6 +269,11 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) flattenWeightedChannelsLo
 	sort.Sort(weightedChannels)
 
 	iwrrChannels := make(WeightedChannels[T], 0, len(weightedChannels))
+	if len(weightedChannels) == 0 {
+		s.iwrrChannels.Store(iwrrChannels)
+		return
+	}
+
 	maxWeight := weightedChannels[len(weightedChannels)-1].Weight()
 	for round := maxWeight - 1; round > -1; round-- {
 		for index := len(weightedChannels) - 1; index > -1 && weightedChannels[index].Weight() > round; index-- {
@@ -306,10 +343,12 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) doDispatchTasksWithWeight
 	channels WeightedChannels[T],
 ) {
 	numTasks := int64(0)
+	now := s.ts.Now()
 LoopDispatch:
 	for _, channel := range channels {
 		select {
 		case task := <-channel.Chan():
+			channel.UpdateLastActiveTime(now)
 			s.fifoScheduler.Submit(task)
 			numTasks++
 		default:

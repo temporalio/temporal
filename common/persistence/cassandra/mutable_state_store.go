@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package cassandra
 
 import (
@@ -33,7 +9,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -81,6 +56,7 @@ const (
 
 	templateGetWorkflowExecutionQuery = `SELECT execution, execution_encoding, execution_state, execution_state_encoding, next_event_id, activity_map, activity_map_encoding, timer_map, timer_map_encoding, ` +
 		`child_executions_map, child_executions_map_encoding, request_cancel_map, request_cancel_map_encoding, signal_map, signal_map_encoding, signal_requested, buffered_events_list, ` +
+		`chasm_node_map, chasm_node_map_encoding, ` +
 		`checksum, checksum_encoding, db_record_version ` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
@@ -233,6 +209,26 @@ const (
 		`and visibility_ts = ? ` +
 		`and task_id = ? `
 
+	templateResetChasmNodeQuery = `UPDATE executions ` +
+		`SET chasm_node_map = ?, chasm_node_map_encoding = ? ` +
+		`WHERE shard_id = ? ` +
+		`and type = ? ` +
+		`and namespace_id = ? ` +
+		`and workflow_id = ? ` +
+		`and run_id = ? ` +
+		`and visibility_ts = ? ` +
+		`and task_id = ? `
+
+	templateUpdateChasmNodeQuery = `UPDATE executions ` +
+		`SET chasm_node_map[ ? ] = ?, chasm_node_map_encoding = ? ` +
+		`WHERE shard_id = ? ` +
+		`and type = ? ` +
+		`and namespace_id = ? ` +
+		`and workflow_id = ? ` +
+		`and run_id = ? ` +
+		`and visibility_ts = ? ` +
+		`and task_id = ? `
+
 	templateResetSignalInfoQuery = `UPDATE executions ` +
 		`SET signal_map = ?, signal_map_encoding = ? ` +
 		`WHERE shard_id = ? ` +
@@ -324,6 +320,16 @@ const (
 		`and task_id = ? `
 
 	templateDeleteSignalInfoQuery = `DELETE signal_map[ ? ] ` +
+		`FROM executions ` +
+		`WHERE shard_id = ? ` +
+		`and type = ? ` +
+		`and namespace_id = ? ` +
+		`and workflow_id = ? ` +
+		`and run_id = ? ` +
+		`and visibility_ts = ? ` +
+		`and task_id = ? `
+
+	templateDeleteChasmNodeQuery = `DELETE chasm_node_map[ ? ] ` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
@@ -426,7 +432,7 @@ func (d *MutableStateStore) CreateWorkflowExecution(
 		requestCurrentRunID = ""
 
 	default:
-		return nil, serviceerror.NewInternal(fmt.Sprintf("CreateWorkflowExecution: unknown mode: %v", request.Mode))
+		return nil, serviceerror.NewInternalf("CreateWorkflowExecution: unknown mode: %v", request.Mode)
 	}
 
 	if err := applyWorkflowSnapshotBatchAsNew(batch,
@@ -498,7 +504,7 @@ func (d *MutableStateStore) GetWorkflowExecution(
 
 	state, err := mutableStateFromRow(result)
 	if err != nil {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetWorkflowExecution operation failed. Error: %v", err))
+		return nil, serviceerror.NewUnavailablef("GetWorkflowExecution operation failed. Error: %v", err)
 	}
 
 	activityInfos := make(map[int64]*commonpb.DataBlob)
@@ -542,6 +548,22 @@ func (d *MutableStateStore) GetWorkflowExecution(
 	state.SignalInfos = signalInfos
 	state.SignalRequestedIDs = gocql.UUIDsToStringSlice(result["signal_requested"])
 
+	chasmNodeBlobs := make(map[string]p.InternalChasmNode)
+	chasmNodeEncoding, ok := result["chasm_node_map_encoding"].(string)
+	if !ok {
+		return nil, serviceerror.NewInternal("GetWorkflowExecution failed: unknown chasm_node_map_encoding type")
+	}
+	chasmNodeBytes, ok := result["chasm_node_map"].(map[string][]byte)
+	if !ok {
+		return nil, serviceerror.NewInternal("GetWorkflowExecution failed: unknown chasm_node_map type")
+	}
+	for key, value := range chasmNodeBytes {
+		chasmNodeBlobs[key] = p.InternalChasmNode{
+			CassandraBlob: p.NewDataBlob(value, chasmNodeEncoding),
+		}
+	}
+	state.ChasmNodes = chasmNodeBlobs
+
 	eList := result["buffered_events_list"].([]map[string]interface{})
 	bufferedEventsBlobs := make([]*commonpb.DataBlob, 0, len(eList))
 	for _, v := range eList {
@@ -580,6 +602,9 @@ func (d *MutableStateStore) UpdateWorkflowExecution(
 	shardID := request.ShardID
 
 	switch request.Mode {
+	case p.UpdateWorkflowModeIgnoreCurrent:
+		// noop
+
 	case p.UpdateWorkflowModeBypassCurrent:
 		if err := d.assertNotCurrentExecution(
 			ctx,
@@ -622,6 +647,7 @@ func (d *MutableStateStore) UpdateWorkflowExecution(
 		} else {
 			lastWriteVersion := updateWorkflow.LastWriteVersion
 
+			// TODO: double encoding execution state? already in updateWorkflow.ExecutionStateBlob
 			executionStateDatablob, err := serialization.WorkflowExecutionStateToBlob(updateWorkflow.ExecutionState)
 			if err != nil {
 				return err
@@ -645,7 +671,7 @@ func (d *MutableStateStore) UpdateWorkflowExecution(
 		}
 
 	default:
-		return serviceerror.NewInternal(fmt.Sprintf("UpdateWorkflowExecution: unknown mode: %v", request.Mode))
+		return serviceerror.NewInternalf("UpdateWorkflowExecution: unknown mode: %v", request.Mode)
 	}
 
 	if err := applyWorkflowMutationBatch(batch, shardID, &updateWorkflow); err != nil {
@@ -738,68 +764,39 @@ func (d *MutableStateStore) ConflictResolveWorkflowExecution(
 
 	case p.ConflictResolveWorkflowModeUpdateCurrent:
 		executionState := resetWorkflow.ExecutionState
+		executionStateBlob := resetWorkflow.ExecutionStateBlob
 		lastWriteVersion := resetWorkflow.LastWriteVersion
 		if newWorkflow != nil {
 			lastWriteVersion = newWorkflow.LastWriteVersion
 			executionState = newWorkflow.ExecutionState
-		}
-		runID := executionState.RunId
-		createRequestID := executionState.CreateRequestId
-		state := executionState.State
-		status := executionState.Status
-
-		executionStateDatablob, err := serialization.WorkflowExecutionStateToBlob(&persistencespb.WorkflowExecutionState{
-			RunId:           runID,
-			CreateRequestId: createRequestID,
-			State:           state,
-			Status:          status,
-		})
-		if err != nil {
-			return serviceerror.NewUnavailable(fmt.Sprintf("ConflictResolveWorkflowExecution operation failed. Error: %v", err))
+			executionStateBlob = newWorkflow.ExecutionStateBlob
 		}
 
 		if currentWorkflow != nil {
 			currentRunID = currentWorkflow.ExecutionState.RunId
-
-			batch.Query(templateUpdateCurrentWorkflowExecutionQuery,
-				runID,
-				executionStateDatablob.Data,
-				executionStateDatablob.EncodingType.String(),
-				lastWriteVersion,
-				state,
-				shardID,
-				rowTypeExecution,
-				namespaceID,
-				workflowID,
-				permanentRunID,
-				defaultVisibilityTimestamp,
-				rowTypeExecutionTaskID,
-				currentRunID,
-			)
-
 		} else {
 			// reset workflow is current
 			currentRunID = resetWorkflow.ExecutionState.RunId
-
-			batch.Query(templateUpdateCurrentWorkflowExecutionQuery,
-				runID,
-				executionStateDatablob.Data,
-				executionStateDatablob.EncodingType.String(),
-				lastWriteVersion,
-				state,
-				shardID,
-				rowTypeExecution,
-				namespaceID,
-				workflowID,
-				permanentRunID,
-				defaultVisibilityTimestamp,
-				rowTypeExecutionTaskID,
-				currentRunID,
-			)
 		}
 
+		batch.Query(templateUpdateCurrentWorkflowExecutionQuery,
+			executionState.RunId,
+			executionStateBlob.Data,
+			executionStateBlob.EncodingType.String(),
+			lastWriteVersion,
+			executionState.State,
+			shardID,
+			rowTypeExecution,
+			namespaceID,
+			workflowID,
+			permanentRunID,
+			defaultVisibilityTimestamp,
+			rowTypeExecutionTaskID,
+			currentRunID,
+		)
+
 	default:
-		return serviceerror.NewInternal(fmt.Sprintf("ConflictResolveWorkflowExecution: unknown mode: %v", request.Mode))
+		return serviceerror.NewInternalf("ConflictResolveWorkflowExecution: unknown mode: %v", request.Mode)
 	}
 
 	if err := applyWorkflowSnapshotBatchAsReset(batch, shardID, &resetWorkflow); err != nil {
@@ -890,7 +887,7 @@ func (d *MutableStateStore) assertNotCurrentExecution(
 	} else if resp.RunID == runID {
 		return &p.CurrentWorkflowConditionFailedError{
 			Msg:              fmt.Sprintf("Assertion on current record failed. Current run ID is not expected: %v", resp.RunID),
-			RequestID:        "",
+			RequestIDs:       nil,
 			RunID:            "",
 			State:            enumsspb.WORKFLOW_EXECUTION_STATE_UNSPECIFIED,
 			Status:           enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED,
@@ -961,7 +958,7 @@ func (d *MutableStateStore) GetCurrentExecution(
 	currentRunID := gocql.UUIDToString(result["current_run_id"])
 	executionStateBlob, err := executionStateBlobFromRow(result)
 	if err != nil {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetCurrentExecution operation failed. Error: %v", err))
+		return nil, serviceerror.NewUnavailablef("GetCurrentExecution operation failed. Error: %v", err)
 	}
 
 	// TODO: fix blob ExecutionState in storage should not be a blob.

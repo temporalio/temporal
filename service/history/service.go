@@ -1,30 +1,7 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package history
 
 import (
+	"context"
 	"net"
 	"time"
 
@@ -34,6 +11,7 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/configs"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
@@ -54,6 +32,7 @@ type (
 		membershipMonitor membership.Monitor
 		metricsHandler    metrics.Handler
 		healthServer      *health.Server
+		readinessCancel   context.CancelFunc
 	}
 )
 
@@ -91,7 +70,19 @@ func (s *Service) Start() {
 
 	historyservice.RegisterHistoryServiceServer(s.server, s.handler)
 	healthpb.RegisterHealthServer(s.server, s.healthServer)
-	s.healthServer.SetServingStatus(serviceName, healthpb.HealthCheckResponse_SERVING)
+
+	// start as NOT_SERVING, update to SERVING after initial shards acquired
+	s.healthServer.SetServingStatus(serviceName, healthpb.HealthCheckResponse_NOT_SERVING)
+	readinessCtx, readinessCancel := context.WithCancel(context.Background())
+	s.readinessCancel = readinessCancel
+	go func() {
+		if s.handler.controller.InitialShardsAcquired(readinessCtx) == nil {
+			// add a few seconds for stabilization
+			if util.InterruptibleSleep(readinessCtx, 5*time.Second) == nil {
+				s.healthServer.SetServingStatus(serviceName, healthpb.HealthCheckResponse_SERVING)
+			}
+		}
+	}()
 
 	reflection.Register(s.server)
 
@@ -119,22 +110,48 @@ func (s *Service) Start() {
 
 // Stop stops the service
 func (s *Service) Stop() {
-	s.logger.Info("ShutdownHandler: Evicting self from membership ring")
-	_ = s.membershipMonitor.EvictSelf()
+	s.readinessCancel()
 
-	if delay := s.config.ShutdownDrainDuration(); delay > 0 {
-		s.logger.Info("ShutdownHandler: delaying for shutdown drain",
-			tag.NewDurationTag("shutdownDrainDuration", delay))
-		time.Sleep(delay)
+	// remove self from membership ring and wait for traffic to drain
+	var err error
+	var waitTime time.Duration
+	if align := s.config.AlignMembershipChange(); align > 0 {
+		propagation := s.membershipMonitor.ApproximateMaxPropagationTime()
+		asOf := util.NextAlignedTime(time.Now().Add(propagation), align)
+		s.logger.Info("ShutdownHandler: Evicting self from membership ring as of", tag.Timestamp(asOf))
+		waitTime, err = s.membershipMonitor.EvictSelfAt(asOf)
+	} else {
+		s.logger.Info("ShutdownHandler: Evicting self from membership ring immediately")
+		err = s.membershipMonitor.EvictSelf()
 	}
-
+	if err != nil {
+		s.logger.Error("ShutdownHandler: Failed to evict self from membership ring", tag.Error(err))
+	}
 	s.healthServer.SetServingStatus(serviceName, healthpb.HealthCheckResponse_NOT_SERVING)
 
+	s.logger.Info("ShutdownHandler: Waiting for drain")
+	if waitTime > 0 {
+		time.Sleep(
+			waitTime + // wait for membership change
+				s.config.ShardLingerTimeLimit() + // after membership change shards may linger before close
+				s.config.ShardFinalizerTimeout(), // and then take this long to run a finalizer
+		)
+	} else {
+		time.Sleep(s.config.ShutdownDrainDuration())
+	}
+
+	// Stop shard controller. We should have waited long enough for all shards to realize they
+	// lost ownership and close, but if not, this will definitely close them.
 	s.logger.Info("ShutdownHandler: Initiating shardController shutdown")
 	s.handler.controller.Stop()
 
-	// TODO: Change this to GracefulStop when integration tests are refactored.
-	s.server.Stop()
+	// All grpc handlers should be cancelled now. Give them a little time to return.
+	t := time.AfterFunc(2*time.Second, func() {
+		s.logger.Info("ShutdownHandler: Drain time expired, stopping all traffic")
+		s.server.Stop()
+	})
+	s.server.GracefulStop()
+	t.Stop()
 
 	s.handler.Stop()
 	s.visibilityManager.Close()

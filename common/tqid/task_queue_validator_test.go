@@ -1,25 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package tqid
 
 import (
@@ -27,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 )
@@ -40,6 +17,7 @@ func TestNormalizeAndValidate(t *testing.T) {
 		maxIDLengthLimit int
 		expectedError    string
 		expectedKind     enumspb.TaskQueueKind
+		validAsPartition bool
 	}{
 		{
 			name:             "Nil task queue",
@@ -96,22 +74,7 @@ func TestNormalizeAndValidate(t *testing.T) {
 			maxIDLengthLimit: 100,
 			expectedError:    "task queue name cannot start with reserved prefix /_sys/",
 			expectedKind:     enumspb.TASK_QUEUE_KIND_NORMAL,
-		},
-		{
-			name:             "Valid UTF-8 name",
-			taskQueue:        &taskqueuepb.TaskQueue{Name: "válid-nàmé"},
-			defaultVal:       "",
-			maxIDLengthLimit: 100,
-			expectedError:    "",
-			expectedKind:     enumspb.TASK_QUEUE_KIND_NORMAL,
-		},
-		{
-			name:             "Invalid UTF-8 name",
-			taskQueue:        &taskqueuepb.TaskQueue{Name: string([]byte{0xff, 0xfe, 0xfd})},
-			defaultVal:       "",
-			maxIDLengthLimit: 100,
-			expectedError:    "taskQueue \"\\xff\\xfe\\xfd\" is not a valid UTF-8 string",
-			expectedKind:     enumspb.TASK_QUEUE_KIND_NORMAL,
+			validAsPartition: true,
 		},
 		{
 			name:             "Sticky queue with valid normal name",
@@ -119,14 +82,6 @@ func TestNormalizeAndValidate(t *testing.T) {
 			defaultVal:       "",
 			maxIDLengthLimit: 100,
 			expectedError:    "",
-			expectedKind:     enumspb.TASK_QUEUE_KIND_STICKY,
-		},
-		{
-			name:             "Sticky queue with invalid UTF-8 normal name",
-			taskQueue:        &taskqueuepb.TaskQueue{Name: "sticky", Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: string([]byte{0xff, 0xfe, 0xfd})},
-			defaultVal:       "",
-			maxIDLengthLimit: 100,
-			expectedError:    "taskQueue \"\\xff\\xfe\\xfd\" is not a valid UTF-8 string",
 			expectedKind:     enumspb.TASK_QUEUE_KIND_STICKY,
 		},
 		{
@@ -158,6 +113,15 @@ func TestNormalizeAndValidate(t *testing.T) {
 			err := NormalizeAndValidate(tt.taskQueue, tt.defaultVal, tt.maxIDLengthLimit)
 
 			if tt.expectedError == "" {
+				assert.NoError(t, err)
+			} else {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.expectedError)
+			}
+
+			err = NormalizeAndValidatePartition(tt.taskQueue, tt.defaultVal, tt.maxIDLengthLimit)
+
+			if tt.expectedError == "" || tt.validAsPartition {
 				assert.NoError(t, err)
 			} else {
 				assert.Error(t, err)

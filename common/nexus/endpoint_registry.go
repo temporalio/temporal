@@ -1,31 +1,8 @@
-// The MIT License
-//
-// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package nexus
 
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -37,6 +14,7 @@ import (
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/future"
+	"go.temporal.io/server/common/goro"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -44,7 +22,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/util"
-	"go.temporal.io/server/internal/goro"
 )
 
 type (
@@ -73,15 +50,14 @@ type (
 	EndpointRegistryImpl struct {
 		config *EndpointRegistryConfig
 
-		dataReady chan struct{}
+		dataReady atomic.Pointer[dataReady]
 
 		dataLock        sync.RWMutex // Protects tableVersion and endpoints.
 		tableVersion    int64
 		endpointsByID   map[string]*persistencespb.NexusEndpointEntry // Mapping of endpoint ID -> endpoint.
 		endpointsByName map[string]*persistencespb.NexusEndpointEntry // Mapping of endpoint name -> endpoint.
 
-		refreshPoller atomic.Pointer[goro.Handle]
-		cancelDcSub   func()
+		cancelDcSub func()
 
 		matchingClient matchingservice.MatchingServiceClient
 		persistence    p.NexusEndpointManager
@@ -89,7 +65,14 @@ type (
 
 		readThroughCacheByID cache.Cache
 	}
+
+	dataReady struct {
+		refresh *goro.Handle  // handle to refresh goroutine
+		ready   chan struct{} // channel that clients can wait on for state changes
+	}
 )
+
+var ErrNexusDisabled = serviceerror.NewFailedPrecondition("nexus is disabled")
 
 func NewEndpointRegistryConfig(dc *dynamicconfig.Collection) *EndpointRegistryConfig {
 	config := &EndpointRegistryConfig{
@@ -113,7 +96,6 @@ func NewEndpointRegistry(
 ) *EndpointRegistryImpl {
 	return &EndpointRegistryImpl{
 		config:          config,
-		dataReady:       make(chan struct{}),
 		endpointsByID:   make(map[string]*persistencespb.NexusEndpointEntry),
 		endpointsByName: make(map[string]*persistencespb.NexusEndpointEntry),
 		matchingClient:  matchingClient,
@@ -141,22 +123,30 @@ func (r *EndpointRegistryImpl) StopLifecycle() {
 }
 
 func (r *EndpointRegistryImpl) setEnabled(enabled bool) {
-	oldPoller := r.refreshPoller.Load()
-	if oldPoller == nil && enabled {
+	oldReady := r.dataReady.Load()
+	if oldReady == nil && enabled {
 		backgroundCtx := headers.SetCallerInfo(
 			context.Background(),
 			headers.SystemBackgroundCallerInfo,
 		)
-		newPoller := goro.NewHandle(backgroundCtx)
-		oldPoller = r.refreshPoller.Swap(newPoller)
-		if oldPoller == nil {
-			newPoller.Go(r.refreshEndpointsLoop)
+		newReady := &dataReady{
+			refresh: goro.NewHandle(backgroundCtx),
+			ready:   make(chan struct{}),
 		}
-	} else if oldPoller != nil && !enabled {
-		oldPoller = r.refreshPoller.Swap(nil)
-		if oldPoller != nil {
-			oldPoller.Cancel()
-			<-oldPoller.Done()
+		if r.dataReady.CompareAndSwap(oldReady, newReady) {
+			newReady.refresh.Go(func(ctx context.Context) error {
+				return r.refreshEndpointsLoop(ctx, newReady)
+			})
+		}
+	} else if oldReady != nil && !enabled {
+		if r.dataReady.CompareAndSwap(oldReady, nil) {
+			oldReady.refresh.Cancel()
+			<-oldReady.refresh.Done()
+			// If oldReady.ready was not already closed here, callers blocked in waitUntilInitialized
+			// will block indefinitely (until context timeout). If we wanted to wake them up, we
+			// could close ready here, but we would need to use a sync.Once to avoid closing it
+			// twice. Then waitUntilInitialized would need to reload r.dataReady to check that the
+			// wakeup was due to data being ready rather than this close.
 		}
 	}
 }
@@ -170,7 +160,7 @@ func (r *EndpointRegistryImpl) GetByName(ctx context.Context, _ namespace.ID, en
 	r.dataLock.RUnlock()
 
 	if !ok {
-		return nil, serviceerror.NewNotFound(fmt.Sprintf("could not find Nexus endpoint by name: %v", endpointName))
+		return nil, serviceerror.NewNotFoundf("could not find Nexus endpoint by name: %v", endpointName)
 	}
 	return endpoint, nil
 }
@@ -206,47 +196,58 @@ func (r *EndpointRegistryImpl) GetByID(ctx context.Context, id string) (*persist
 }
 
 func (r *EndpointRegistryImpl) waitUntilInitialized(ctx context.Context) error {
+	dataReady := r.dataReady.Load()
+	if dataReady == nil {
+		return ErrNexusDisabled
+	}
 	select {
-	case <-r.dataReady:
+	case <-dataReady.ready:
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
 	}
 }
 
-func (r *EndpointRegistryImpl) refreshEndpointsLoop(ctx context.Context) error {
+func (r *EndpointRegistryImpl) refreshEndpointsLoop(ctx context.Context, dataReady *dataReady) error {
 	hasLoadedEndpointData := false
 
 	for ctx.Err() == nil {
-		minWaitTime := r.config.refreshMinWait()
 		start := time.Now()
+		enforceMinWait := true
 		if !hasLoadedEndpointData {
 			// Loading endpoints for the first time after being (re)enabled, so load with fallback to persistence
 			// and unblock any threads waiting on r.dataReady if successful.
 			err := backoff.ThrottleRetryContext(ctx, r.loadEndpoints, r.config.refreshRetryPolicy, nil)
 			if err == nil {
 				hasLoadedEndpointData = true
-				close(r.dataReady)
+				enforceMinWait = false
+				// Note: do not reload r.dataReady here, use value from argument to ensure that
+				// each channel is closed no more than once.
+				close(dataReady.ready)
 			}
 		} else {
+			r.dataLock.Lock()
+			prevTableVersion := r.tableVersion
+			r.dataLock.Unlock()
+
 			// Endpoints have previously been loaded, so just keep them up to date with long poll requests to
 			// matching, without fallback to persistence. Ignoring long poll errors since we will just retry
 			// on next loop iteration.
 			_ = backoff.ThrottleRetryContext(ctx, r.refreshEndpoints, r.config.refreshRetryPolicy, nil)
+
+			r.dataLock.Lock()
+			enforceMinWait = prevTableVersion == r.tableVersion
+			r.dataLock.Unlock()
 		}
 		elapsed := time.Since(start)
 
-		// In general, we want to start a new call immediately on completion of the previous
-		// one. But if the remote is broken and returns success immediately, we might end up
-		// spinning. So enforce a minimum wait time that increases as long as we keep getting
-		// very fast replies.
-		if elapsed < minWaitTime {
+		minWaitTime := r.config.refreshMinWait()
+		// In general, we want to start a new call immediately on completion of the previous one. But if the remote is
+		// broken and returns success immediately, we might end up spinning. So enforce a minimum wait time that
+		// increases as long as we keep getting very fast replies. Only enforce the min wait if the remote does not
+		// return new data.
+		if enforceMinWait && elapsed < minWaitTime {
 			util.InterruptibleSleep(ctx, minWaitTime-elapsed)
-			// Don't let this get near our call timeout, otherwise we can't tell the difference
-			// between a fast reply and a timeout.
-			minWaitTime = min(minWaitTime*2, r.config.refreshLongPollTimeout()/2)
-		} else {
-			minWaitTime = r.config.refreshMinWait()
 		}
 	}
 

@@ -22,10 +22,10 @@
 #    MaximumIntervalCoefficient: 100.0
 #    BackoffCoefficient: 2.0
 #    MaximumAttempts: 0
-#system.secondaryVisibilityWritingMode:
+# system.secondaryVisibilityWritingMode:
 #  - value: "off"
 #    constraints: {}
-#system.enableReadFromSecondaryVisibility:
+# system.enableReadFromSecondaryVisibility:
 #  - value: false
 #    constraints: {}
 #system.enableParentClosePolicyWorker:
@@ -35,6 +35,14 @@ system.enableEagerWorkflowStart:
 frontend.workerVersioningDataAPIs:
   - value: true
 frontend.workerVersioningWorkflowAPIs:
+  - value: true
+system.enableDeployments:
+  - value: true
+system.enableDeploymentVersions:
+  - value: true
+frontend.workerVersioningRuleAPIs:
+  - value: true
+frontend.enableExecuteMultiOperation:
   - value: true
 system.enableNexus:
   - value: true
@@ -48,7 +56,9 @@ matching.queryWorkflowTaskTimeoutLogRate:
   - value: 1.0
 history.ReplicationEnableUpdateWithNewTaskMerge:
   - value: true
-history.enableWorkflowExecutionTimeoutTimer:
-  - value: true
 history.hostLevelCacheMaxSize:
   - value: 8192
+history.enableTransitionHistory:
+  - value: true
+frontend.activityAPIsEnabled:
+  - value: true

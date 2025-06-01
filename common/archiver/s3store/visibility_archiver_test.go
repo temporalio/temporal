@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package s3store
 
 import (
@@ -35,7 +11,6 @@ import (
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/request"
 	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
@@ -52,6 +27,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/util"
+	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -60,7 +36,8 @@ type visibilityArchiverSuite struct {
 	suite.Suite
 	s3cli *mocks.MockS3API
 
-	container         *archiver.VisibilityBootstrapContainer
+	logger            log.Logger
+	metricsHandler    metrics.Handler
 	visibilityRecords []*archiverspb.VisibilityRecord
 
 	controller      *gomock.Controller
@@ -117,9 +94,10 @@ func (s *visibilityArchiverSuite) TestValidateURI() {
 
 func (s *visibilityArchiverSuite) newTestVisibilityArchiver() *visibilityArchiver {
 	return &visibilityArchiver{
-		container:   s.container,
-		s3cli:       s.s3cli,
-		queryParser: NewQueryParser(),
+		logger:         s.logger,
+		metricsHandler: s.metricsHandler,
+		s3cli:          s.s3cli,
+		queryParser:    NewQueryParser(),
 	}
 }
 
@@ -132,10 +110,8 @@ func (s *visibilityArchiverSuite) SetupSuite() {
 
 	s.testArchivalURI, err = archiver.NewURI(testBucketURI)
 	s.Require().NoError(err)
-	s.container = &archiver.VisibilityBootstrapContainer{
-		Logger:         log.NewNoopLogger(),
-		MetricsHandler: metrics.NoopMetricsHandler,
-	}
+	s.logger = log.NewNoopLogger()
+	s.metricsHandler = metrics.NoopMetricsHandler
 }
 
 func (s *visibilityArchiverSuite) TearDownSuite() {

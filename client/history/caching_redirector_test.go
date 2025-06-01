@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package history
 
 import (
@@ -30,16 +6,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.uber.org/mock/gomock"
 )
 
 type (
@@ -66,14 +43,26 @@ func (s *cachingRedirectorSuite) SetupTest() {
 	s.connections = NewMockconnectionPool(s.controller)
 	s.logger = log.NewNoopLogger()
 	s.resolver = membership.NewMockServiceResolver(s.controller)
+	s.resolver.EXPECT().AddListener(cachingRedirectorListener, gomock.Any()).Return(nil).AnyTimes()
+	s.resolver.EXPECT().RemoveListener(cachingRedirectorListener).Return(nil).AnyTimes()
 }
 
 func (s *cachingRedirectorSuite) TearDownTest() {
 	s.controller.Finish()
 }
 
+func (s *cachingRedirectorSuite) newCachingDirector(staleTTL time.Duration) *cachingRedirector {
+	return newCachingRedirector(
+		s.connections,
+		s.resolver,
+		s.logger,
+		dynamicconfig.GetDurationPropertyFn(staleTTL),
+	)
+}
+
 func (s *cachingRedirectorSuite) TestShardCheck() {
-	r := newCachingRedirector(s.connections, s.resolver, s.logger)
+	r := s.newCachingDirector(0)
+	defer r.stop()
 
 	invalErr := &serviceerror.InvalidArgument{}
 	err := r.execute(
@@ -113,7 +102,8 @@ func cacheRetainingTest(s *cachingRedirectorSuite, opErr error, verify func(erro
 		}
 		return opErr
 	}
-	r := newCachingRedirector(s.connections, s.resolver, s.logger)
+	r := newCachingRedirector(s.connections, s.resolver, s.logger, dynamicconfig.GetDurationPropertyFn(0))
+	defer r.stop()
 
 	for i := 0; i < 3; i++ {
 		err := r.execute(
@@ -160,7 +150,8 @@ func hostDownErrorTest(s *cachingRedirectorSuite, clientOp clientOperation, veri
 		resetConnectBackoff(clientConn).
 		Times(1)
 
-	r := newCachingRedirector(s.connections, s.resolver, s.logger)
+	r := s.newCachingDirector(0)
+	defer r.stop()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
@@ -203,7 +194,8 @@ func (s *cachingRedirectorSuite) TestShardOwnershipLostErrors() {
 	mockClient1 := historyservicemock.NewMockHistoryServiceClient(s.controller)
 	mockClient2 := historyservicemock.NewMockHistoryServiceClient(s.controller)
 
-	r := newCachingRedirector(s.connections, s.resolver, s.logger)
+	r := s.newCachingDirector(0)
+	defer r.stop()
 	opCalls := 1
 	doExecute := func() error {
 		return r.execute(
@@ -345,7 +337,8 @@ func (s *cachingRedirectorSuite) TestClientForTargetByShard() {
 		resetConnectBackoff(clientConn).
 		Times(1)
 
-	r := newCachingRedirector(s.connections, s.resolver, s.logger)
+	r := s.newCachingDirector(0)
+	defer r.stop()
 	cli, err := r.clientForShardID(shardID)
 	s.NoError(err)
 	s.Equal(mockClient, cli)
@@ -354,4 +347,71 @@ func (s *cachingRedirectorSuite) TestClientForTargetByShard() {
 	cli, err = r.clientForShardID(shardID)
 	s.NoError(err)
 	s.Equal(mockClient, cli)
+}
+
+func (s *cachingRedirectorSuite) TestStaleTTL() {
+	testAddr1 := rpcAddress("testaddr1")
+	shardID := int32(1)
+	mockClient1 := historyservicemock.NewMockHistoryServiceClient(s.controller)
+	clientConn1 := clientConnection{
+		historyClient: mockClient1,
+	}
+
+	staleTTL := 500 * time.Millisecond
+	r := s.newCachingDirector(staleTTL)
+	defer r.stop()
+
+	// Trigger the creation of a cache entry for the shard.
+	s.resolver.EXPECT().
+		Lookup(convert.Int32ToString(shardID)).
+		Return(membership.NewHostInfoFromAddress(string(testAddr1)), nil).
+		Times(1)
+
+	s.connections.EXPECT().
+		getOrCreateClientConn(testAddr1).
+		Return(clientConn1).
+		Times(1)
+	s.connections.EXPECT().
+		resetConnectBackoff(clientConn1).
+		Times(1)
+
+	cli, err := r.clientForShardID(shardID)
+	s.NoError(err)
+	s.Equal(mockClient1, cli)
+
+	// Now simulate a membership update that changes the shard owner.
+	mockClient2 := historyservicemock.NewMockHistoryServiceClient(s.controller)
+	clientConn2 := clientConnection{
+		historyClient: mockClient2,
+	}
+	testAddr2 := rpcAddress("testaddr2")
+	s.resolver.EXPECT().
+		Lookup(convert.Int32ToString(shardID)).
+		Return(membership.NewHostInfoFromAddress(string(testAddr2)), nil).
+		Times(1)
+
+	// Simulate the update, should see the entry marked as stale.
+	r.membershipUpdateCh <- &membership.ChangedEvent{}
+	s.Eventually(func() bool {
+		r.mu.RLock()
+		defer r.mu.RUnlock()
+		entry := r.mu.cache[shardID]
+		return !entry.staleAt.IsZero()
+	}, 4*staleTTL, staleTTL)
+
+	s.resolver.EXPECT().
+		Lookup(convert.Int32ToString(shardID)).
+		Return(membership.NewHostInfoFromAddress(string(testAddr2)), nil).
+		Times(1)
+	s.connections.EXPECT().
+		getOrCreateClientConn(testAddr2).
+		Return(clientConn2).
+		Times(1)
+	s.connections.EXPECT().
+		resetConnectBackoff(clientConn2).
+		Times(1)
+
+	cli, err = r.clientForShardID(shardID)
+	s.NoError(err)
+	s.Equal(mockClient2, cli)
 }

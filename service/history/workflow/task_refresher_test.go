@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package workflow
 
 import (
@@ -29,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -45,9 +20,11 @@ import (
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/hsm/hsmtest"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
+	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -63,7 +40,7 @@ type (
 		mockTaskGenerator     *MockTaskGenerator
 
 		namespaceEntry       *namespace.Namespace
-		mutableState         MutableState
+		mutableState         historyi.MutableState
 		stateMachineRegistry *hsm.Registry
 
 		taskRefresher *TaskRefresherImpl
@@ -556,55 +533,85 @@ func (s *taskRefresherSuite) TestRefreshActivityTasks() {
 			},
 		},
 	}
-	mutableState, err := NewMutableStateFromDB(
-		s.mockShard,
-		s.mockShard.GetEventsCache(),
-		log.NewTestLogger(),
-		tests.LocalNamespaceEntry,
-		mutableStateRecord,
-		10,
-	)
-	s.NoError(err)
 
-	// only the first activity will actually refresh the transfer activity task
-	scheduledEvent := &historypb.HistoryEvent{
-		EventId:   5,
-		Version:   common.EmptyVersion,
-		EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
-		Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{
-			ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{},
+	testCase := []struct {
+		name                         string
+		minVersionedTransition       *persistencespb.VersionedTransition
+		getActivityScheduledEventIDs []int64
+		generateActivityTaskIDs      []int64
+		expectedTimerTaskStatus      map[int64]int32
+		expectedRefreshedTasks       []tasks.Task
+	}{
+		{
+			name: "PartialRefresh",
+			minVersionedTransition: &persistencespb.VersionedTransition{
+				TransitionCount:          4,
+				NamespaceFailoverVersion: common.EmptyVersion,
+			},
+			getActivityScheduledEventIDs: []int64{5},
+			generateActivityTaskIDs:      []int64{5},
+			expectedTimerTaskStatus: map[int64]int32{
+				5: TimerTaskStatusCreatedScheduleToStart,
+				6: TimerTaskStatusCreatedStartToClose,
+				7: TimerTaskStatusCreatedScheduleToStart,
+			},
+		},
+		{
+			name:                         "FullRefresh",
+			minVersionedTransition:       EmptyVersionedTransition,
+			getActivityScheduledEventIDs: []int64{5, 7},
+			generateActivityTaskIDs:      []int64{5, 7},
+			expectedTimerTaskStatus: map[int64]int32{
+				5: TimerTaskStatusNone,
+				6: TimerTaskStatusNone,
+				7: TimerTaskStatusCreatedScheduleToStart,
+			},
+			expectedRefreshedTasks: []tasks.Task{
+				&tasks.ActivityTimeoutTask{
+					WorkflowKey:         s.mutableState.GetWorkflowKey(),
+					VisibilityTimestamp: mutableStateRecord.ActivityInfos[7].ScheduledTime.AsTime().Add(mutableStateRecord.ActivityInfos[7].ScheduleToStartTimeout.AsDuration()),
+					EventID:             7,
+					TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
+					Attempt:             0,
+				},
+			},
 		},
 	}
-	s.mockShard.MockEventsCache.EXPECT().GetEvent(
-		gomock.Any(),
-		s.mockShard.GetShardID(),
-		events.EventKey{
-			NamespaceID: tests.NamespaceID,
-			WorkflowID:  tests.WorkflowID,
-			RunID:       tests.RunID,
-			EventID:     int64(5),
-			Version:     common.EmptyVersion,
-		},
-		int64(4),
-		branchToken,
-	).Return(scheduledEvent, nil).Times(1)
 
-	s.mockTaskGenerator.EXPECT().GenerateActivityTasks(int64(5)).Return(nil).Times(1)
+	for _, tc := range testCase {
+		s.T().Run(tc.name, func(t *testing.T) {
+			mutableState, err := NewMutableStateFromDB(
+				s.mockShard,
+				s.mockShard.GetEventsCache(),
+				log.NewTestLogger(),
+				tests.LocalNamespaceEntry,
+				mutableStateRecord,
+				10,
+			)
+			s.NoError(err)
+			for _, eventID := range tc.generateActivityTaskIDs {
+				s.mockTaskGenerator.EXPECT().GenerateActivityTasks(int64(eventID)).Return(nil).Times(1)
+			}
 
-	err = s.taskRefresher.refreshTasksForActivity(context.Background(), mutableState, s.mockTaskGenerator, &persistencespb.VersionedTransition{
-		TransitionCount:          4,
-		NamespaceFailoverVersion: common.EmptyVersion,
-	})
-	s.NoError(err)
+			err = s.taskRefresher.refreshTasksForActivity(context.Background(), mutableState, s.mockTaskGenerator, tc.minVersionedTransition)
+			s.NoError(err)
 
-	pendingActivityInfos := mutableState.GetPendingActivityInfos()
-	s.Len(pendingActivityInfos, 3)
-	s.Equal(int32(TimerTaskStatusNone), pendingActivityInfos[5].TimerTaskStatus)
-	s.Equal(int32(TimerTaskStatusNone), pendingActivityInfos[6].TimerTaskStatus)
-	s.Equal(int32(TimerTaskStatusCreatedScheduleToStart), pendingActivityInfos[7].TimerTaskStatus)
+			pendingActivityInfos := mutableState.GetPendingActivityInfos()
+			s.Len(pendingActivityInfos, 3)
+			s.Equal(tc.expectedTimerTaskStatus[5], pendingActivityInfos[5].TimerTaskStatus)
+			s.Equal(tc.expectedTimerTaskStatus[6], pendingActivityInfos[6].TimerTaskStatus)
+			s.Equal(tc.expectedTimerTaskStatus[7], pendingActivityInfos[7].TimerTaskStatus)
 
-	refreshedTasks := mutableState.PopTasks()
-	s.Empty(refreshedTasks[tasks.CategoryTimer])
+			refreshedTasks := mutableState.PopTasks()
+			s.Len(refreshedTasks[tasks.CategoryTimer], len(tc.expectedRefreshedTasks))
+			for idx, task := range refreshedTasks[tasks.CategoryTimer] {
+				if activityTimeoutTask, ok := task.(*tasks.ActivityTimeoutTask); ok {
+					s.Equal(tc.expectedRefreshedTasks[idx], activityTimeoutTask)
+				}
+			}
+		})
+	}
+
 }
 
 func (s *taskRefresherSuite) TestRefreshUserTimer() {
@@ -713,6 +720,17 @@ func (s *taskRefresherSuite) TestRefreshChildWorkflowTasks() {
 					NamespaceFailoverVersion: common.EmptyVersion,
 				},
 			},
+			7: {
+				InitiatedEventBatchId: 4,
+				InitiatedEventId:      7,
+				StartedEventId:        8,
+				CreateRequestId:       uuid.New(),
+				StartedWorkflowId:     "child-workflow-id-7",
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{
+					TransitionCount:          5,
+					NamespaceFailoverVersion: common.EmptyVersion,
+				},
+			},
 		},
 	}
 	mutableState, err := NewMutableStateFromDB(
@@ -725,36 +743,62 @@ func (s *taskRefresherSuite) TestRefreshChildWorkflowTasks() {
 	)
 	s.NoError(err)
 
-	// only the second child workflow will refresh the child workflow task
-	initEvent := &historypb.HistoryEvent{
-		EventId:   6,
-		Version:   common.EmptyVersion,
-		EventType: enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED,
-		Attributes: &historypb.HistoryEvent_StartChildWorkflowExecutionInitiatedEventAttributes{
-			StartChildWorkflowExecutionInitiatedEventAttributes: &historypb.StartChildWorkflowExecutionInitiatedEventAttributes{},
+	testcases := []struct {
+		name                   string
+		hasPendingChildIds     bool
+		expectedRefreshedTasks []int64
+	}{
+		{
+			name:                   "has pending child ids",
+			hasPendingChildIds:     true,
+			expectedRefreshedTasks: []int64{6},
+		},
+		{
+			name:                   "no pending child ids",
+			hasPendingChildIds:     false,
+			expectedRefreshedTasks: []int64{6, 7},
 		},
 	}
-	s.mockShard.MockEventsCache.EXPECT().GetEvent(
-		gomock.Any(),
-		s.mockShard.GetShardID(),
-		events.EventKey{
-			NamespaceID: tests.NamespaceID,
-			WorkflowID:  tests.WorkflowID,
-			RunID:       tests.RunID,
-			EventID:     int64(6),
-			Version:     common.EmptyVersion,
-		},
-		int64(4),
-		branchToken,
-	).Return(initEvent, nil).Times(1)
+	for _, tc := range testcases {
+		s.T().Run(tc.name, func(t *testing.T) {
+			for _, eventID := range tc.expectedRefreshedTasks {
+				// only the second child workflow will refresh the child workflow task
+				initEvent := &historypb.HistoryEvent{
+					EventId:   eventID,
+					Version:   common.EmptyVersion,
+					EventType: enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED,
+					Attributes: &historypb.HistoryEvent_StartChildWorkflowExecutionInitiatedEventAttributes{
+						StartChildWorkflowExecutionInitiatedEventAttributes: &historypb.StartChildWorkflowExecutionInitiatedEventAttributes{},
+					},
+				}
+				s.mockShard.MockEventsCache.EXPECT().GetEvent(
+					gomock.Any(),
+					s.mockShard.GetShardID(),
+					events.EventKey{
+						NamespaceID: tests.NamespaceID,
+						WorkflowID:  tests.WorkflowID,
+						RunID:       tests.RunID,
+						EventID:     int64(eventID),
+						Version:     common.EmptyVersion,
+					},
+					int64(4),
+					branchToken,
+				).Return(initEvent, nil).Times(1)
 
-	s.mockTaskGenerator.EXPECT().GenerateChildWorkflowTasks(initEvent).Return(nil).Times(1)
+				s.mockTaskGenerator.EXPECT().GenerateChildWorkflowTasks(initEvent).Return(nil).Times(1)
+			}
 
-	err = s.taskRefresher.refreshTasksForChildWorkflow(context.Background(), mutableState, s.mockTaskGenerator, &persistencespb.VersionedTransition{
-		TransitionCount:          4,
-		NamespaceFailoverVersion: common.EmptyVersion,
-	})
-	s.NoError(err)
+			var previousPendingChildIds map[int64]struct{}
+			if tc.hasPendingChildIds {
+				previousPendingChildIds = mutableState.GetPendingChildIds()
+			}
+			err = s.taskRefresher.refreshTasksForChildWorkflow(context.Background(), mutableState, s.mockTaskGenerator, &persistencespb.VersionedTransition{
+				TransitionCount:          4,
+				NamespaceFailoverVersion: common.EmptyVersion,
+			}, previousPendingChildIds)
+			s.NoError(err)
+		})
+	}
 }
 
 func (s *taskRefresherSuite) TestRefreshRequestCancelExternalTasks() {
@@ -1003,6 +1047,7 @@ func (s *taskRefresherSuite) TestRefreshSubStateMachineTasks() {
 		if node.Parent == nil {
 			return nil
 		}
+		// After the transition, the LastUpdateVersionedTransition should have transition count 4.
 		return hsm.MachineTransition(node, func(_ *hsmtest.Data) (hsm.TransitionOutput, error) {
 			return hsm.TransitionOutput{}, nil
 		})
@@ -1027,6 +1072,20 @@ func (s *taskRefresherSuite) TestRefreshSubStateMachineTasks() {
 	)
 	s.NoError(err)
 	refreshedTasks = s.mutableState.PopTasks()
+	s.Len(refreshedTasks[tasks.CategoryOutbound], 3)
+	s.Len(s.mutableState.GetExecutionInfo().StateMachineTimers, 3)
+	s.Len(refreshedTasks[tasks.CategoryTimer], 1)
+	s.False(hsmRoot.Dirty())
+
+	err = s.taskRefresher.refreshTasksForSubStateMachines(
+		s.mutableState,
+		&persistencespb.VersionedTransition{
+			NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(),
+			TransitionCount:          5,
+		},
+	)
+	s.NoError(err)
+	refreshedTasks = s.mutableState.PopTasks()
 	s.Empty(refreshedTasks)
 	s.False(hsmRoot.Dirty())
 }
@@ -1044,8 +1103,8 @@ func newMockTaskGeneratorProvider(
 }
 
 func (m *mockTaskGeneratorProvider) NewTaskGenerator(
-	_ shard.Context,
-	_ MutableState,
+	_ historyi.ShardContext,
+	_ historyi.MutableState,
 ) TaskGenerator {
 	return m.mockTaskGenerator
 }

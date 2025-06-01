@@ -1,32 +1,7 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package persistence
 
 import (
 	"context"
-	"fmt"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -34,6 +9,12 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
+
+// Subqueue zero corresponds to "the queue" before migrating metadata to subqueues.
+// For SQL: metadata operations apply to subqueue zero only, while tasks are stored in
+// multiple subqueues.
+// For Cassandra: subqueues are represented in the row type.
+const SubqueueZero = 0
 
 type taskManagerImpl struct {
 	taskStore  TaskStore
@@ -192,12 +173,15 @@ func (m *taskManagerImpl) CreateTasks(
 	for i, task := range request.Tasks {
 		taskBlob, err := m.serializer.TaskInfoToBlob(task, enumspb.ENCODING_TYPE_PROTO3)
 		if err != nil {
-			return nil, serviceerror.NewUnavailable(fmt.Sprintf("CreateTasks operation failed during serialization. Error : %v", err))
+			return nil, serviceerror.NewUnavailablef("CreateTasks operation failed during serialization. Error : %v", err)
 		}
 		tasks[i] = &InternalCreateTask{
 			TaskId:     task.GetTaskId(),
 			ExpiryTime: task.Data.ExpiryTime,
 			Task:       taskBlob,
+		}
+		if i < len(request.Subqueues) {
+			tasks[i].Subqueue = request.Subqueues[i]
 		}
 	}
 	internalRequest := &InternalCreateTasksRequest{
@@ -227,7 +211,7 @@ func (m *taskManagerImpl) GetTasks(
 	for i, taskBlob := range internalResp.Tasks {
 		task, err := m.serializer.TaskInfoFromBlob(taskBlob)
 		if err != nil {
-			return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetTasks failed to deserialize task: %s", err.Error()))
+			return nil, serviceerror.NewUnavailablef("GetTasks failed to deserialize task: %s", err.Error())
 		}
 		tasks[i] = task
 	}
@@ -256,17 +240,23 @@ func (m *taskManagerImpl) GetTaskQueueUserData(ctx context.Context, request *Get
 
 // UpdateTaskQueueUserData implements TaskManager
 func (m *taskManagerImpl) UpdateTaskQueueUserData(ctx context.Context, request *UpdateTaskQueueUserDataRequest) error {
-	userData, err := m.serializer.TaskQueueUserDataToBlob(request.UserData.Data, enumspb.ENCODING_TYPE_PROTO3)
-	if err != nil {
-		return err
-	}
 	internalRequest := &InternalUpdateTaskQueueUserDataRequest{
-		NamespaceID:     request.NamespaceID,
-		TaskQueue:       request.TaskQueue,
-		Version:         request.UserData.Version,
-		UserData:        userData,
-		BuildIdsAdded:   request.BuildIdsAdded,
-		BuildIdsRemoved: request.BuildIdsRemoved,
+		NamespaceID: request.NamespaceID,
+		Updates:     make(map[string]*InternalSingleTaskQueueUserDataUpdate, len(request.Updates)),
+	}
+	for taskQueue, update := range request.Updates {
+		userData, err := m.serializer.TaskQueueUserDataToBlob(update.UserData.Data, enumspb.ENCODING_TYPE_PROTO3)
+		if err != nil {
+			return err
+		}
+		internalRequest.Updates[taskQueue] = &InternalSingleTaskQueueUserDataUpdate{
+			Version:         update.UserData.Version,
+			UserData:        userData,
+			BuildIdsAdded:   update.BuildIdsAdded,
+			BuildIdsRemoved: update.BuildIdsRemoved,
+			Applied:         update.Applied,
+			Conflicting:     update.Conflicting,
+		}
 	}
 	return m.taskStore.UpdateTaskQueueUserData(ctx, internalRequest)
 }

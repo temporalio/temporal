@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package namespace
 
 import (
@@ -32,19 +8,18 @@ import (
 	"github.com/google/uuid"
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
-	"go.temporal.io/api/replication/v1"
+	rulespb "go.temporal.io/api/rules/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/util"
+	expmaps "golang.org/x/exp/maps"
 )
 
 type (
 	// Mutation changes a Namespace "in-flight" during a Clone operation.
 	Mutation interface {
-		apply(*persistence.GetNamespaceResponse)
+		apply(*Namespace)
 	}
 
 	// BadBinaryError is an error type carrying additional information about
@@ -102,74 +77,44 @@ func NewID() ID {
 	return ID(uuid.NewString())
 }
 
-func FromPersistentState(record *persistence.GetNamespaceResponse) *Namespace {
-	return &Namespace{
-		info:                        record.Namespace.Info,
-		config:                      record.Namespace.Config,
-		replicationConfig:           record.Namespace.ReplicationConfig,
-		configVersion:               record.Namespace.ConfigVersion,
-		failoverVersion:             record.Namespace.FailoverVersion,
-		isGlobalNamespace:           record.IsGlobalNamespace,
-		failoverNotificationVersion: record.Namespace.FailoverNotificationVersion,
-		notificationVersion:         record.NotificationVersion,
+func FromPersistentState(
+	detail *persistencespb.NamespaceDetail,
+	mutations ...Mutation,
+) *Namespace {
+	ns := &Namespace{
+		info:                        detail.Info,
+		config:                      detail.Config,
+		replicationConfig:           detail.ReplicationConfig,
+		configVersion:               detail.ConfigVersion,
+		failoverVersion:             detail.FailoverVersion,
+		failoverNotificationVersion: detail.FailoverNotificationVersion,
 		customSearchAttributesMapper: CustomSearchAttributesMapper{
-			fieldToAlias: record.Namespace.Config.CustomSearchAttributeAliases,
-			aliasToField: util.InverseMap(record.Namespace.Config.CustomSearchAttributeAliases),
+			fieldToAlias: detail.Config.CustomSearchAttributeAliases,
+			aliasToField: util.InverseMap(detail.Config.CustomSearchAttributeAliases),
 		},
 	}
+
+	for _, m := range mutations {
+		m.apply(ns)
+	}
+
+	return ns
 }
 
-func FromAdminClientApiResponse(response *adminservice.GetNamespaceResponse) *Namespace {
-	info := &persistencespb.NamespaceInfo{
-		Id:          response.GetInfo().GetId(),
-		Name:        response.GetInfo().GetName(),
-		State:       response.GetInfo().GetState(),
-		Description: response.GetInfo().GetDescription(),
-		Owner:       response.GetInfo().GetOwnerEmail(),
-		Data:        response.GetInfo().GetData(),
+func (ns *Namespace) Clone(mutations ...Mutation) *Namespace {
+	detail := &persistencespb.NamespaceDetail{
+		Info:                        common.CloneProto(ns.info),
+		Config:                      common.CloneProto(ns.config),
+		ReplicationConfig:           common.CloneProto(ns.replicationConfig),
+		ConfigVersion:               ns.configVersion,
+		FailoverNotificationVersion: ns.failoverNotificationVersion,
+		FailoverVersion:             ns.failoverVersion,
 	}
-	config := &persistencespb.NamespaceConfig{
-		Retention:                    response.GetConfig().GetWorkflowExecutionRetentionTtl(),
-		HistoryArchivalState:         response.GetConfig().GetHistoryArchivalState(),
-		HistoryArchivalUri:           response.GetConfig().GetHistoryArchivalUri(),
-		VisibilityArchivalState:      response.GetConfig().GetVisibilityArchivalState(),
-		VisibilityArchivalUri:        response.GetConfig().GetVisibilityArchivalUri(),
-		CustomSearchAttributeAliases: response.GetConfig().GetCustomSearchAttributeAliases(),
+	defaultMutations := []Mutation{
+		WithGlobalFlag(ns.isGlobalNamespace),
+		WithNotificationVersion(ns.notificationVersion),
 	}
-	replicationConfig := &persistencespb.NamespaceReplicationConfig{
-		ActiveClusterName: response.GetReplicationConfig().GetActiveClusterName(),
-		State:             response.GetReplicationConfig().GetState(),
-		Clusters:          ConvertClusterReplicationConfigFromProto(response.GetReplicationConfig().GetClusters()),
-		FailoverHistory:   convertFailoverHistoryToPersistenceProto(response.GetFailoverHistory()),
-	}
-	return &Namespace{
-		info:              info,
-		config:            config,
-		replicationConfig: replicationConfig,
-		configVersion:     response.GetConfigVersion(),
-		failoverVersion:   response.GetFailoverVersion(),
-		isGlobalNamespace: response.GetIsGlobalNamespace(),
-	}
-}
-
-func (ns *Namespace) Clone(ms ...Mutation) *Namespace {
-	newns := *ns
-	r := persistence.GetNamespaceResponse{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info:                        common.CloneProto(newns.info),
-			Config:                      common.CloneProto(newns.config),
-			ReplicationConfig:           common.CloneProto(newns.replicationConfig),
-			ConfigVersion:               newns.configVersion,
-			FailoverNotificationVersion: newns.failoverNotificationVersion,
-			FailoverVersion:             newns.failoverVersion,
-		},
-		IsGlobalNamespace:   newns.isGlobalNamespace,
-		NotificationVersion: newns.notificationVersion,
-	}
-	for _, m := range ms {
-		m.apply(&r)
-	}
-	return FromPersistentState(&r)
+	return FromPersistentState(detail, append(defaultMutations, mutations...)...)
 }
 
 // VisibilityArchivalState observes the visibility archive configuration (state
@@ -262,13 +207,6 @@ func (ns *Namespace) IsOnCluster(clusterName string) bool {
 	return false
 }
 
-// FailoverHistory returns the a copy of failover history for this namespace.
-func (ns *Namespace) FailoverHistory() []*replication.FailoverStatus {
-	return convertFailoverHistoryToReplicationProto(
-		ns.replicationConfig.GetFailoverHistory(),
-	)
-}
-
 // ConfigVersion return the namespace config version
 func (ns *Namespace) ConfigVersion() int64 {
 	return ns.configVersion
@@ -334,8 +272,24 @@ func (ns *Namespace) Retention() time.Duration {
 	return ns.config.Retention.AsDuration()
 }
 
+// CustomSearchAttributesMapper is a part of temporary solution. Do not use this method.
 func (ns *Namespace) CustomSearchAttributesMapper() CustomSearchAttributesMapper {
 	return ns.customSearchAttributesMapper
+}
+
+func (ns *Namespace) GetWorkflowRules() []*rulespb.WorkflowRule {
+	if ns.config.WorkflowRules == nil {
+		return nil
+	}
+	return expmaps.Values(ns.config.WorkflowRules)
+}
+
+func (ns *Namespace) GetWorkflowRule(ruleID string) (*rulespb.WorkflowRule, bool) {
+	if ns.config.WorkflowRules == nil {
+		return nil, false
+	}
+	result, ok := ns.config.WorkflowRules[ruleID]
+	return result, ok
 }
 
 // Error returns the reason associated with this bad binary.

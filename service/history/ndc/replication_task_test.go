@@ -1,39 +1,16 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package ndc
 
 import (
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
+	"go.uber.org/mock/gomock"
 )
 
 type (
@@ -179,6 +156,7 @@ func (s *replicationTaskSuite) TestSkipDuplicatedEvents_ValidInput_SkipEvents() 
 		nil,
 		"",
 		nil,
+		false,
 	)
 	err := task.skipDuplicatedEvents(1)
 	s.NoError(err)
@@ -220,6 +198,7 @@ func (s *replicationTaskSuite) TestSkipDuplicatedEvents_InvalidInput_ErrorOut() 
 		nil,
 		"",
 		nil,
+		false,
 	)
 	err := task.skipDuplicatedEvents(2)
 	s.Error(err)
@@ -257,10 +236,43 @@ func (s *replicationTaskSuite) TestSkipDuplicatedEvents_ZeroInput_DoNothing() {
 		nil,
 		"",
 		nil,
+		false,
 	)
 	err := task.skipDuplicatedEvents(0)
 	s.NoError(err)
 	s.Equal(2, len(task.getEvents()))
 	s.Equal(slice1, task.getEvents()[0])
 	s.Equal(slice2, task.getEvents()[1])
+}
+
+func (s *replicationTaskSuite) TestResetInfo() {
+	workflowKey := definition.WorkflowKey{
+		WorkflowID: uuid.New(),
+		RunID:      uuid.New(),
+	}
+	slice1 := []*historypb.HistoryEvent{
+		{
+			EventId:   13,
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED,
+		},
+		{
+			EventId: 14,
+		},
+	}
+
+	task, _ := newReplicationTask(
+		s.clusterMetadata,
+		nil,
+		workflowKey,
+		nil,
+		nil,
+		[][]*historypb.HistoryEvent{slice1},
+		nil,
+		"",
+		nil,
+		false,
+	)
+	info := task.getBaseWorkflowInfo()
+	s.Nil(info)
+	s.False(task.isWorkflowReset())
 }

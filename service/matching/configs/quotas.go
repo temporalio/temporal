@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package configs
 
 import (
@@ -51,10 +27,12 @@ var (
 		"/temporal.server.api.matchingservice.v1.MatchingService/GetTaskQueueUserData":                   1,
 		"/temporal.server.api.matchingservice.v1.MatchingService/ApplyTaskQueueUserDataReplicationEvent": 1,
 		"/temporal.server.api.matchingservice.v1.MatchingService/GetBuildIdTaskQueueMapping":             1,
+		"/temporal.server.api.matchingservice.v1.MatchingService/ForceUnloadTaskQueuePartition":          1,
 		"/temporal.server.api.matchingservice.v1.MatchingService/ForceUnloadTaskQueue":                   1,
 		"/temporal.server.api.matchingservice.v1.MatchingService/ForceLoadTaskQueuePartition":            1,
 		"/temporal.server.api.matchingservice.v1.MatchingService/UpdateTaskQueueUserData":                1,
 		"/temporal.server.api.matchingservice.v1.MatchingService/ReplicateTaskQueueUserData":             1,
+		"/temporal.server.api.matchingservice.v1.MatchingService/CheckTaskQueueUserDataPropagation":      1,
 		"/temporal.server.api.matchingservice.v1.MatchingService/PollNexusTaskQueue":                     1,
 		"/temporal.server.api.matchingservice.v1.MatchingService/RespondNexusTaskCompleted":              1,
 		"/temporal.server.api.matchingservice.v1.MatchingService/RespondNexusTaskFailed":                 1,
@@ -66,6 +44,7 @@ var (
 		"/temporal.server.api.matchingservice.v1.MatchingService/UpdateWorkerVersioningRules":            1,
 		"/temporal.server.api.matchingservice.v1.MatchingService/GetWorkerVersioningRules":               1,
 		"/temporal.server.api.matchingservice.v1.MatchingService/DescribeTaskQueuePartition":             1,
+		"/temporal.server.api.matchingservice.v1.MatchingService/SyncDeploymentUserData":                 1,
 	}
 
 	APIPrioritiesOrdered = []int{0, 1}

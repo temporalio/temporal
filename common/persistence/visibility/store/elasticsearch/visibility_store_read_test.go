@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package elasticsearch
 
 import (
@@ -34,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/olivere/elastic/v7"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -52,6 +27,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/testing/protorequire"
+	"go.uber.org/mock/gomock"
 )
 
 type (
@@ -1728,7 +1704,7 @@ func (s *ESVisibilitySuite) TestProcessPageToken() {
 			pageToken:        &visibilityPageToken{SearchAfter: []any{"foo", "bar"}},
 			resSearchAfter:   nil,
 			resQuery:         baseQuery,
-			resError:         serviceerror.NewInvalidArgument("Invalid page token for given sort fields: expected 1 fields, got 2"),
+			resError:         serviceerror.NewInvalidArgument("invalid page token for given sort fields: expected 1 fields, got 2"),
 		},
 		{
 			name:             "not using default sorter",
@@ -1913,7 +1889,7 @@ func (s *ESVisibilitySuite) Test_buildPaginationQuery() {
 				json.Number(fmt.Sprintf("%d", startTime.UnixNano())),
 			},
 			res: nil,
-			err: serviceerror.NewInvalidArgument("Invalid page token for given sort fields: expected 3 fields, got 2"),
+			err: serviceerror.NewInvalidArgument("invalid page token for given sort fields: expected 3 fields, got 2"),
 		},
 		{
 			name: "invalid token: last value null",
@@ -1922,7 +1898,7 @@ func (s *ESVisibilitySuite) Test_buildPaginationQuery() {
 			},
 			searchAfter: []any{datetimeNull},
 			res:         nil,
-			err:         serviceerror.NewInternal("Last field of sorter cannot be a nullable field: \"CloseTime\" has null values"),
+			err:         serviceerror.NewInternal("last field of sorter cannot be a nullable field: \"CloseTime\" has null values"),
 		},
 	}
 
@@ -2053,28 +2029,28 @@ func (s *ESVisibilitySuite) Test_parsePageTokenValue() {
 			value: "123",
 			tp:    enumspb.INDEXED_VALUE_TYPE_INT,
 			res:   nil,
-			err:   serviceerror.NewInvalidArgument("Invalid page token: expected interger type, got \"123\""),
+			err:   serviceerror.NewInvalidArgument("invalid page token: expected interger type, got \"123\""),
 		},
 		{
 			name:  "DoubleFieldError",
 			value: "foo",
 			tp:    enumspb.INDEXED_VALUE_TYPE_DOUBLE,
 			res:   nil,
-			err:   serviceerror.NewInvalidArgument("Invalid page token: expected float type, got \"foo\""),
+			err:   serviceerror.NewInvalidArgument("invalid page token: expected float type, got \"foo\""),
 		},
 		{
 			name:  "KeywordFieldError",
 			value: 123,
 			tp:    enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 			res:   nil,
-			err:   serviceerror.NewInvalidArgument("Invalid page token: expected string type, got 123"),
+			err:   serviceerror.NewInvalidArgument("invalid page token: expected string type, got 123"),
 		},
 		{
 			name:  "TextFieldError",
 			value: "foo",
 			tp:    enumspb.INDEXED_VALUE_TYPE_TEXT,
 			res:   nil,
-			err:   serviceerror.NewInvalidArgument("Invalid field type in sorter: cannot order by \"TextFieldError\""),
+			err:   serviceerror.NewInvalidArgument("invalid field type in sorter: cannot order by \"TextFieldError\""),
 		},
 	}
 

@@ -1,28 +1,4 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
-//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination conflict_resolver_mock.go
+//go:generate mockgen -package $GOPACKAGE -source $GOFILE -destination conflict_resolver_mock.go
 
 package ndc
 
@@ -36,8 +12,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/util"
-	"go.temporal.io/server/service/history/shard"
-	"go.temporal.io/server/service/history/workflow"
+	historyi "go.temporal.io/server/service/history/interfaces"
 )
 
 type (
@@ -46,19 +21,19 @@ type (
 			ctx context.Context,
 			branchIndex int32,
 			incomingVersion int64,
-		) (workflow.MutableState, bool, error)
+		) (historyi.MutableState, bool, error)
 		GetOrRebuildMutableState(
 			ctx context.Context,
 			branchIndex int32,
-		) (workflow.MutableState, bool, error)
+		) (historyi.MutableState, bool, error)
 	}
 
 	ConflictResolverImpl struct {
-		shard          shard.Context
+		shard          historyi.ShardContext
 		stateRebuilder StateRebuilder
 
-		context      workflow.Context
-		mutableState workflow.MutableState
+		context      historyi.WorkflowContext
+		mutableState historyi.MutableState
 		logger       log.Logger
 	}
 )
@@ -66,9 +41,9 @@ type (
 var _ ConflictResolver = (*ConflictResolverImpl)(nil)
 
 func NewConflictResolver(
-	shard shard.Context,
-	context workflow.Context,
-	mutableState workflow.MutableState,
+	shard historyi.ShardContext,
+	wfContext historyi.WorkflowContext,
+	mutableState historyi.MutableState,
 	logger log.Logger,
 ) *ConflictResolverImpl {
 
@@ -76,7 +51,7 @@ func NewConflictResolver(
 		shard:          shard,
 		stateRebuilder: NewStateRebuilder(shard, logger),
 
-		context:      context,
+		context:      wfContext,
 		mutableState: mutableState,
 		logger:       logger,
 	}
@@ -86,7 +61,7 @@ func (r *ConflictResolverImpl) GetOrRebuildCurrentMutableState(
 	ctx context.Context,
 	branchIndex int32,
 	incomingVersion int64,
-) (workflow.MutableState, bool, error) {
+) (historyi.MutableState, bool, error) {
 	versionHistories := r.mutableState.GetExecutionInfo().GetVersionHistories()
 	currentVersionHistoryIndex := versionHistories.GetCurrentVersionHistoryIndex()
 	currentVersionHistory, err := versionhistory.GetVersionHistory(versionHistories, currentVersionHistoryIndex)
@@ -112,14 +87,14 @@ func (r *ConflictResolverImpl) GetOrRebuildCurrentMutableState(
 func (r *ConflictResolverImpl) GetOrRebuildMutableState(
 	ctx context.Context,
 	branchIndex int32,
-) (workflow.MutableState, bool, error) {
+) (historyi.MutableState, bool, error) {
 	return r.getOrRebuildMutableStateByIndex(ctx, branchIndex)
 }
 
 func (r *ConflictResolverImpl) getOrRebuildMutableStateByIndex(
 	ctx context.Context,
 	branchIndex int32,
-) (workflow.MutableState, bool, error) {
+) (historyi.MutableState, bool, error) {
 
 	versionHistories := r.mutableState.GetExecutionInfo().GetVersionHistories()
 	currentVersionHistoryIndex := versionHistories.GetCurrentVersionHistoryIndex()
@@ -143,7 +118,7 @@ func (r *ConflictResolverImpl) rebuild(
 	ctx context.Context,
 	branchIndex int32,
 	requestID string,
-) (workflow.MutableState, error) {
+) (historyi.MutableState, error) {
 
 	versionHistories := r.mutableState.GetExecutionInfo().GetVersionHistories()
 	replayVersionHistory, err := versionhistory.GetVersionHistory(versionHistories, branchIndex)
@@ -182,6 +157,8 @@ func (r *ConflictResolverImpl) rebuild(
 	// after rebuilt verification
 	rebuildVersionHistories := rebuildMutableState.GetExecutionInfo().GetVersionHistories()
 	rebuildVersionHistory, err := versionhistory.GetCurrentVersionHistory(rebuildVersionHistories)
+	rebuildMutableState.GetExecutionInfo().PreviousTransitionHistory = r.mutableState.GetExecutionInfo().PreviousTransitionHistory
+	rebuildMutableState.GetExecutionInfo().LastTransitionHistoryBreakPoint = r.mutableState.GetExecutionInfo().LastTransitionHistoryBreakPoint
 	if err != nil {
 		return nil, err
 	}
@@ -191,10 +168,6 @@ func (r *ConflictResolverImpl) rebuild(
 	}
 
 	// set the current branch index to target branch index
-	// set the version history back
-	//
-	// caller can use the IsVersionHistoriesRebuilt function in VersionHistories
-	// telling whether mutable state is rebuilt, before apply new history events
 	if err := versionhistory.SetCurrentVersionHistoryIndex(versionHistories, branchIndex); err != nil {
 		return nil, err
 	}

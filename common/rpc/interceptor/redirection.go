@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package interceptor
 
 import (
@@ -45,6 +21,8 @@ import (
 	"google.golang.org/grpc/metadata"
 )
 
+// Note the nexusoperations component references these headers and adds them to a list of disallowed headers for users to set.
+// If any other headers are added for internal use, they should be added to the disallowed headers list.
 const (
 	DCRedirectionContextHeaderName = "xdc-redirection"
 	DCRedirectionApiHeaderName     = "xdc-redirection-api"
@@ -121,10 +99,35 @@ var (
 		"GetWorkerVersioningRules":         func() any { return &workflowservice.GetWorkerVersioningRulesResponse{} },
 		"GetWorkerTaskReachability":        func() any { return &workflowservice.GetWorkerTaskReachabilityResponse{} },
 
-		"StartBatchOperation":    func() any { return &workflowservice.StartBatchOperationResponse{} },
-		"StopBatchOperation":     func() any { return &workflowservice.StopBatchOperationResponse{} },
-		"DescribeBatchOperation": func() any { return &workflowservice.DescribeBatchOperationResponse{} },
-		"ListBatchOperations":    func() any { return &workflowservice.ListBatchOperationsResponse{} },
+		"StartBatchOperation":            func() any { return &workflowservice.StartBatchOperationResponse{} },
+		"StopBatchOperation":             func() any { return &workflowservice.StopBatchOperationResponse{} },
+		"DescribeBatchOperation":         func() any { return &workflowservice.DescribeBatchOperationResponse{} },
+		"ListBatchOperations":            func() any { return &workflowservice.ListBatchOperationsResponse{} },
+		"UpdateActivityOptions":          func() any { return &workflowservice.UpdateActivityOptionsResponse{} },
+		"PauseActivity":                  func() any { return &workflowservice.PauseActivityResponse{} },
+		"UnpauseActivity":                func() any { return &workflowservice.UnpauseActivityResponse{} },
+		"ResetActivity":                  func() any { return &workflowservice.ResetActivityResponse{} },
+		"UpdateWorkflowExecutionOptions": func() any { return &workflowservice.UpdateWorkflowExecutionOptionsResponse{} },
+
+		"DescribeDeployment":                    func() any { return &workflowservice.DescribeDeploymentResponse{} },        // [cleanup-wv-pre-release]
+		"ListDeployments":                       func() any { return &workflowservice.ListDeploymentsResponse{} },           // [cleanup-wv-pre-release]
+		"GetDeploymentReachability":             func() any { return &workflowservice.GetDeploymentReachabilityResponse{} }, // [cleanup-wv-pre-release]
+		"GetCurrentDeployment":                  func() any { return &workflowservice.GetCurrentDeploymentResponse{} },      // [cleanup-wv-pre-release]
+		"SetCurrentDeployment":                  func() any { return &workflowservice.SetCurrentDeploymentResponse{} },      // [cleanup-wv-pre-release]
+		"DescribeWorkerDeployment":              func() any { return &workflowservice.DescribeWorkerDeploymentResponse{} },
+		"DescribeWorkerDeploymentVersion":       func() any { return &workflowservice.DescribeWorkerDeploymentVersionResponse{} },
+		"SetWorkerDeploymentCurrentVersion":     func() any { return &workflowservice.SetWorkerDeploymentCurrentVersionResponse{} },
+		"SetWorkerDeploymentRampingVersion":     func() any { return &workflowservice.SetWorkerDeploymentRampingVersionResponse{} },
+		"ListWorkerDeployments":                 func() any { return &workflowservice.ListWorkerDeploymentsResponse{} },
+		"DeleteWorkerDeployment":                func() any { return &workflowservice.DeleteWorkerDeploymentResponse{} },
+		"DeleteWorkerDeploymentVersion":         func() any { return &workflowservice.DeleteWorkerDeploymentVersionResponse{} },
+		"UpdateWorkerDeploymentVersionMetadata": func() any { return &workflowservice.UpdateWorkerDeploymentVersionMetadataResponse{} },
+
+		"CreateWorkflowRule":   func() any { return &workflowservice.CreateWorkflowRuleResponse{} },
+		"DescribeWorkflowRule": func() any { return &workflowservice.DescribeWorkflowRuleResponse{} },
+		"DeleteWorkflowRule":   func() any { return &workflowservice.DeleteWorkflowRuleResponse{} },
+		"ListWorkflowRules":    func() any { return &workflowservice.ListWorkflowRulesResponse{} },
+		"TriggerWorkflowRule":  func() any { return &workflowservice.TriggerWorkflowRuleResponse{} },
 	}
 )
 
@@ -215,7 +218,7 @@ func (i *Redirection) handleLocalAPIInvocation(
 ) (_ any, retError error) {
 	scope, startTime := i.BeforeCall(dcRedirectionMetricsPrefix + methodName)
 	defer func() {
-		i.AfterCall(scope, startTime, i.currentClusterName, retError)
+		i.AfterCall(scope, startTime, i.currentClusterName, "local", retError)
 	}()
 	return handler(ctx, req)
 }
@@ -235,7 +238,7 @@ func (i *Redirection) handleRedirectAPIInvocation(
 
 	scope, startTime := i.BeforeCall(dcRedirectionMetricsPrefix + methodName)
 	defer func() {
-		i.AfterCall(scope, startTime, clusterName, retError)
+		i.AfterCall(scope, startTime, clusterName, namespaceName.String(), retError)
 	}()
 
 	err = i.redirectionPolicy.WithNamespaceRedirect(ctx, namespaceName, methodName, func(targetDC string) error {
@@ -269,13 +272,16 @@ func (i *Redirection) AfterCall(
 	metricsHandler metrics.Handler,
 	startTime time.Time,
 	clusterName string,
+	namespaceName string,
 	retError error,
 ) {
 	metricsHandler = metricsHandler.WithTags(metrics.TargetClusterTag(clusterName))
-	metrics.ClientRedirectionRequests.With(metricsHandler).Record(1)
 	metrics.ClientRedirectionLatency.With(metricsHandler).Record(i.timeSource.Now().Sub(startTime))
+	metricsHandler = metricsHandler.WithTags(metrics.NamespaceTag(namespaceName))
+	metrics.ClientRedirectionRequests.With(metricsHandler).Record(1)
 	if retError != nil {
-		metrics.ClientRedirectionFailures.With(metricsHandler).Record(1)
+		metrics.ClientRedirectionFailures.With(metricsHandler).Record(1,
+			metrics.ServiceErrorTypeTag(retError))
 	}
 }
 

@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package sqlplugin
 
 import (
@@ -43,6 +19,7 @@ import (
 
 var (
 	ErrInvalidKeywordListDataType = errors.New("Unexpected data type in keyword list")
+	VersionColumnName             = "_version"
 )
 
 type (
@@ -72,6 +49,11 @@ type (
 		ParentRunID          *string
 		RootWorkflowID       string
 		RootRunID            string
+
+		// Version must be at the end because the version column has to be the last column in the insert statement.
+		// Otherwise we may do partial updates as the version changes halfway through.
+		// This is because MySQL doesn't support row versioning in a way that prevents out-of-order updates.
+		Version int64 `db:"_version"`
 	}
 
 	// VisibilitySelectFilter contains the column names within executions_visibility table that

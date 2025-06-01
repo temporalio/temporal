@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package workflow
 
 import (
@@ -31,6 +7,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/checksum"
 	"go.temporal.io/server/common/util"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	expmaps "golang.org/x/exp/maps"
 )
 
@@ -38,7 +15,7 @@ const (
 	mutableStateChecksumPayloadV1 = int32(1)
 )
 
-func generateMutableStateChecksum(ms MutableState) (*persistencespb.Checksum, error) {
+func generateMutableStateChecksum(ms historyi.MutableState) (*persistencespb.Checksum, error) {
 	payload := newMutableStateChecksumPayload(ms)
 	csum, err := checksum.GenerateCRC32(payload, mutableStateChecksumPayloadV1)
 	if err != nil {
@@ -48,7 +25,7 @@ func generateMutableStateChecksum(ms MutableState) (*persistencespb.Checksum, er
 }
 
 func verifyMutableStateChecksum(
-	ms MutableState,
+	ms historyi.MutableState,
 	csum *persistencespb.Checksum,
 ) error {
 	if csum.Version != mutableStateChecksumPayloadV1 {
@@ -58,7 +35,7 @@ func verifyMutableStateChecksum(
 	return checksum.Verify(payload, csum)
 }
 
-func newMutableStateChecksumPayload(ms MutableState) *checksumspb.MutableStateChecksumPayload {
+func newMutableStateChecksumPayload(ms historyi.MutableState) *checksumspb.MutableStateChecksumPayload {
 	executionInfo := ms.GetExecutionInfo()
 	executionState := ms.GetExecutionState()
 	payload := &checksumspb.MutableStateChecksumPayload{
@@ -105,5 +82,10 @@ func newMutableStateChecksumPayload(ms MutableState) *checksumspb.MutableStateCh
 	requestCancelIDs := expmaps.Keys(ms.GetPendingRequestCancelExternalInfos())
 	util.SortSlice(requestCancelIDs)
 	payload.PendingReqCancelInitiatedEventIds = requestCancelIDs
+
+	chasmNodePaths := expmaps.Keys(ms.ChasmTree().Snapshot(nil).Nodes)
+	util.SortSlice(chasmNodePaths)
+	payload.PendingChasmNodePaths = chasmNodePaths
+
 	return payload
 }

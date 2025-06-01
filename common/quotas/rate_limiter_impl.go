@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package quotas
 
 import (
@@ -60,12 +36,12 @@ func NewRateLimiter(newRPS float64, newBurst int) *RateLimiterImpl {
 	return rl
 }
 
-// SetRate set the rate of the rate limiter
+// SetRPS sets the rate of the rate limiter
 func (rl *RateLimiterImpl) SetRPS(rps float64) {
 	rl.refreshInternalRateLimiterImpl(&rps, nil)
 }
 
-// SetBurst set the burst of the rate limiter
+// SetBurst sets the burst of the rate limiter
 func (rl *RateLimiterImpl) SetBurst(burst int) {
 	rl.refreshInternalRateLimiterImpl(nil, &burst)
 }
@@ -78,7 +54,7 @@ func (rl *RateLimiterImpl) ReserveN(now time.Time, n int) Reservation {
 	return rl.ClockedRateLimiter.ReserveN(now, n)
 }
 
-// SetRateBurst set the rps & burst of the rate limiter
+// SetRateBurst sets the rps & burst of the rate limiter
 func (rl *RateLimiterImpl) SetRateBurst(rps float64, burst int) {
 	rl.refreshInternalRateLimiterImpl(&rps, &burst)
 }
@@ -131,4 +107,9 @@ func (rl *RateLimiterImpl) refreshInternalRateLimiterImpl(
 		rl.SetLimitAt(now, rate.Limit(rl.rps))
 		rl.SetBurstAt(now, rl.burst)
 	}
+}
+
+// RecycleToken returns a token to the rate limiter
+func (rl *RateLimiterImpl) RecycleToken() {
+	rl.ClockedRateLimiter.RecycleToken()
 }

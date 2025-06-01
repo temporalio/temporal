@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package common
 
 import (
@@ -29,10 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"reflect"
 	"strings"
 	"sync"
 	"time"
-	"unicode/utf8"
 
 	"github.com/dgryski/go-farm"
 	commonpb "go.temporal.io/api/common/v1"
@@ -129,6 +105,8 @@ const (
 	FailureReasonMutableStateSizeExceedsLimit = "Workflow mutable state size exceeds limit."
 	// FailureReasonTransactionSizeExceedsLimit is the failureReason for when transaction cannot be committed because it exceeds size limit
 	FailureReasonTransactionSizeExceedsLimit = "Transaction size exceeds limit."
+	// FailureReasonWorkflowTerminationDueToVersionConflict is the failureReason for when workflow is terminated due to version conflict
+	FailureReasonWorkflowTerminationDueToVersionConflict = "Terminate Workflow Due To Version Conflict."
 )
 
 var (
@@ -144,7 +122,7 @@ var (
 
 var (
 	// ErrNamespaceHandover is error indicating namespace is in handover state and cannot process request.
-	ErrNamespaceHandover = serviceerror.NewUnavailable(fmt.Sprintf("Namespace replication in %s state.", enumspb.REPLICATION_STATE_HANDOVER.String()))
+	ErrNamespaceHandover = serviceerror.NewUnavailablef("Namespace replication in %s state.", enumspb.REPLICATION_STATE_HANDOVER)
 )
 
 // AwaitWaitGroup calls Wait on the given wait
@@ -337,17 +315,27 @@ func IsServiceClientTransientError(err error) bool {
 }
 
 func IsServiceHandlerRetryableError(err error) bool {
-	if err.Error() == ErrNamespaceHandover.Error() {
+	if IsNamespaceHandoverError(err) {
 		return false
 	}
 
-	switch err.(type) {
+	switch err := err.(type) {
 	case *serviceerror.Internal,
 		*serviceerror.Unavailable:
 		return true
+	case *serviceerror.MultiOperationExecution:
+		for _, opErr := range err.OperationErrors() {
+			if opErr != nil && IsServiceHandlerRetryableError(opErr) {
+				return true
+			}
+		}
 	}
 
 	return false
+}
+
+func IsNamespaceHandoverError(err error) bool {
+	return err.Error() == ErrNamespaceHandover.Error()
 }
 
 func IsStickyWorkerUnavailable(err error) bool {
@@ -392,8 +380,15 @@ func WorkflowIDToHistoryShard(
 	workflowID string,
 	numberOfShards int32,
 ) int32 {
-	idBytes := []byte(namespaceID + "_" + workflowID)
-	hash := farm.Fingerprint32(idBytes)
+	return ShardingKeyToShard(namespaceID+"_"+workflowID, numberOfShards)
+}
+
+// ShardingKeyToShard is used to map a sharding key to a shardID.
+func ShardingKeyToShard(
+	shardingKey string,
+	numberOfShards int32,
+) int32 {
+	hash := farm.Fingerprint32([]byte(shardingKey))
 	return int32(hash%uint32(numberOfShards)) + 1 // ShardID starts with 1
 }
 
@@ -448,11 +443,10 @@ func VerifyShardIDMapping(
 	if thisShardID%shardCountMin == thatShardID%shardCountMin {
 		return nil
 	}
-	return serviceerror.NewInternal(
-		fmt.Sprintf("shard ID mapping verification failed; shard count: %v vs %v, shard ID: %v vs %v",
-			thisShardCount, thatShardCount,
-			thisShardID, thatShardID,
-		),
+	return serviceerror.NewInternalf(
+		"shard ID mapping verification failed; shard count: %v vs %v, shard ID: %v vs %v",
+		thisShardCount, thatShardCount,
+		thisShardID, thatShardID,
 	)
 }
 
@@ -513,7 +507,6 @@ func CreateMatchingPollWorkflowTaskQueueResponse(historyResponse *historyservice
 		Attempt:                    historyResponse.GetAttempt(),
 		NextEventId:                historyResponse.NextEventId,
 		StickyExecutionEnabled:     historyResponse.StickyExecutionEnabled,
-		TransientWorkflowTask:      historyResponse.TransientWorkflowTask,
 		WorkflowExecutionTaskQueue: historyResponse.WorkflowExecutionTaskQueue,
 		BranchToken:                historyResponse.BranchToken,
 		ScheduledTime:              historyResponse.ScheduledTime,
@@ -528,9 +521,6 @@ func CreateMatchingPollWorkflowTaskQueueResponse(historyResponse *historyservice
 }
 
 // CreateHistoryStartWorkflowRequest create a start workflow request for history.
-// Note: this mutates startRequest by unsetting the fields ContinuedFailure and
-// LastCompletionResult (these should only be set on workflows created by the scheduler
-// worker).
 // Assumes startRequest is valid. See frontend workflow_handler for detailed validation logic.
 func CreateHistoryStartWorkflowRequest(
 	namespaceID string,
@@ -539,6 +529,12 @@ func CreateHistoryStartWorkflowRequest(
 	rootExecutionInfo *workflowspb.RootExecutionInfo,
 	now time.Time,
 ) *historyservice.StartWorkflowExecutionRequest {
+	// We include the original startRequest in the forwarded request to History, but
+	// we don't want to send workflow payloads twice. We deep copy to a new struct,
+	// rather than mutate the request, to accommodate internal retries.
+	if startRequest.ContinuedFailure != nil || startRequest.LastCompletionResult != nil {
+		startRequest = CloneProto(startRequest)
+	}
 	histRequest := &historyservice.StartWorkflowExecutionRequest{
 		NamespaceId:              namespaceID,
 		StartRequest:             startRequest,
@@ -549,6 +545,7 @@ func CreateHistoryStartWorkflowRequest(
 		ContinuedFailure:         startRequest.ContinuedFailure,
 		LastCompletionResult:     startRequest.LastCompletionResult,
 		RootExecutionInfo:        rootExecutionInfo,
+		VersioningOverride:       startRequest.GetVersioningOverride(),
 	}
 	startRequest.ContinuedFailure = nil
 	startRequest.LastCompletionResult = nil
@@ -656,51 +653,21 @@ func GetPayloadsMapSize(data map[string]*commonpb.Payloads) int {
 	return size
 }
 
-// OverrideWorkflowRunTimeout override the run timeout according to execution timeout
-func OverrideWorkflowRunTimeout(
-	workflowRunTimeout time.Duration,
-	workflowExecutionTimeout time.Duration,
-) time.Duration {
-
-	if workflowExecutionTimeout == 0 {
-		return workflowRunTimeout
-	} else if workflowRunTimeout == 0 {
-		return workflowExecutionTimeout
-	}
-	return min(workflowRunTimeout, workflowExecutionTimeout)
-}
-
-// OverrideWorkflowTaskTimeout override the workflow task timeout according to default timeout or max timeout
-func OverrideWorkflowTaskTimeout(
-	namespace string,
-	taskStartToCloseTimeout time.Duration,
-	workflowRunTimeout time.Duration,
-	getDefaultTimeoutFunc func(namespace string) time.Duration,
-) time.Duration {
-
-	if taskStartToCloseTimeout == 0 {
-		taskStartToCloseTimeout = getDefaultTimeoutFunc(namespace)
-	}
-
-	taskStartToCloseTimeout = min(taskStartToCloseTimeout, MaxWorkflowTaskStartToCloseTimeout)
-
-	if workflowRunTimeout == 0 {
-		return taskStartToCloseTimeout
-	}
-
-	return min(taskStartToCloseTimeout, workflowRunTimeout)
-}
-
 // CloneProto is a generic typed version of proto.Clone from proto.
 func CloneProto[T proto.Message](v T) T {
 	return proto.Clone(v).(T)
 }
 
-func ValidateUTF8String(fieldName string, strValue string) error {
-	if !utf8.ValidString(strValue) {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("%s %v is not a valid UTF-8 string", fieldName, strValue))
+func CloneProtoMap[K comparable, T proto.Message](src map[K]T) map[K]T {
+	if src == nil {
+		return nil
 	}
-	return nil
+
+	result := make(map[K]T, len(src))
+	for k, v := range src {
+		result[k] = CloneProto(v)
+	}
+	return result
 }
 
 // DiscardUnknownProto discards unknown fields in a proto message.
@@ -712,4 +679,52 @@ func DiscardUnknownProto(m proto.Message) error {
 		}
 		return nil
 	})
+}
+
+// MergeProtoExcludingFields merges fields from source into target, excluding specific fields.
+// The fields to exclude are specified as pointers to fields in the target struct.
+func MergeProtoExcludingFields(target, source proto.Message, doNotSyncFunc func(v any) []interface{}) error {
+	if target == nil || source == nil {
+		return serviceerror.NewInvalidArgument("target and source cannot be nil")
+	}
+
+	if reflect.TypeOf(target) != reflect.TypeOf(source) {
+		return serviceerror.NewInvalidArgument("target and source must be of the same type")
+	}
+
+	excludeFields := doNotSyncFunc(target)
+	excludeSet := make(map[string]struct{}, len(excludeFields))
+	for _, fieldPtr := range excludeFields {
+		fieldName, err := getFieldNameFromStruct(target, fieldPtr)
+		if err != nil {
+			return err
+		}
+		excludeSet[fieldName] = struct{}{}
+	}
+
+	srcVal := reflect.ValueOf(source).Elem()
+	dstVal := reflect.ValueOf(target).Elem()
+	for i := 0; i < srcVal.NumField(); i++ {
+		field := srcVal.Type().Field(i)
+		if _, exclude := excludeSet[field.Name]; !exclude {
+			srcField := srcVal.Field(i)
+			dstField := dstVal.Field(i)
+			if dstField.CanSet() {
+				dstField.Set(srcField)
+			}
+		}
+	}
+
+	return nil
+}
+
+func getFieldNameFromStruct(structPtr interface{}, fieldPtr interface{}) (string, error) {
+	structVal := reflect.ValueOf(structPtr).Elem()
+	for i := 0; i < structVal.NumField(); i++ {
+		field := structVal.Field(i)
+		if field.CanSet() && field.Addr().Interface() == fieldPtr {
+			return structVal.Type().Field(i).Name, nil
+		}
+	}
+	return "", serviceerror.NewInternal("field not found in the struct")
 }

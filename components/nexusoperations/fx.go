@@ -1,25 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package nexusoperations
 
 import (
@@ -117,7 +95,7 @@ func ClientProviderFactory(
 			Transport: ResponseSizeLimiter{transport},
 		}, nil
 	})
-	return func(ctx context.Context, namespaceID string, entry *persistencespb.NexusEndpointEntry, service string) (*nexus.Client, error) {
+	return func(ctx context.Context, namespaceID string, entry *persistencespb.NexusEndpointEntry, service string) (*nexus.HTTPClient, error) {
 		var url string
 		var httpClient *http.Client
 		switch variant := entry.Endpoint.Spec.Target.Variant.(type) {
@@ -138,14 +116,18 @@ func ClientProviderFactory(
 		if clusterInfo, ok := clusterMetadata.GetAllClusterInfo()[clusterMetadata.GetCurrentClusterName()]; ok {
 			httpCaller = func(r *http.Request) (*http.Response, error) {
 				r.Header.Set(NexusCallbackSourceHeader, clusterInfo.ClusterID)
-				return httpClient.Do(r)
+				resp, callErr := httpClient.Do(r)
+				commonnexus.SetFailureSourceOnContext(ctx, resp)
+				return resp, callErr
 			}
 		}
-		return nexus.NewClient(nexus.ClientOptions{
+		return nexus.NewHTTPClient(nexus.HTTPClientOptions{
 			BaseURL:    url,
 			Service:    service,
 			HTTPCaller: httpCaller,
 			Serializer: commonnexus.PayloadSerializer,
+			// TODO(bergundy): Remove this after the 1.27 release. It's here for compatibility with old server implementations.
+			UseOperationID: true,
 		})
 	}, nil
 }
