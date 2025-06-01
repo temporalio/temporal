@@ -253,7 +253,7 @@ func (n *Node) Component(
 		return nil, errComponentNotFound
 	}
 
-	node, ok := n.getNodeByPath(ref.componentPath)
+	node, ok := n.findNode(ref.componentPath)
 	if !ok {
 		return nil, errComponentNotFound
 	}
@@ -374,21 +374,6 @@ func (n *Node) preparePointerValue(
 	return nil
 }
 
-func (n *Node) findNode(path []string) *Node {
-	if !softassert.That(n.logger, len(path) > 0, "path must have at least one element") {
-		return nil
-	}
-
-	child := n.children[path[0]]
-	if child == nil {
-		return nil
-	}
-	if len(path) == 1 {
-		return child
-	}
-	return child.findNode(path[1:])
-}
-
 func (n *Node) fieldType() fieldType {
 	if n.serializedNode.GetMetadata().GetComponentAttributes() != nil {
 		return fieldTypeComponent
@@ -419,7 +404,7 @@ func assertStructPointer(t reflect.Type) error {
 	}
 
 	if t.Kind() != reflect.Ptr || t.Elem().Kind() != reflect.Struct {
-		return serviceerror.NewInternal("only pointer to struct is supported for tree node value")
+		return serviceerror.NewInternalf("only pointer to struct is supported for tree node value: got %s", t.String())
 	}
 	return nil
 }
@@ -771,12 +756,19 @@ func (n *Node) syncSubField(fieldV reflect.Value, fieldN string, nodePath []stri
 		// Field is not empty but tree node is not set. It means this is a new field, and a node must be created.
 		childNode := newNode(n.nodeBase, n, fieldN)
 
-		switch internal.value().(type) {
-		case []string: // Pointer
-		default: // Component | Data
+		switch internal.fieldType() {
+		case fieldTypePointer:
+			if _, ok := internal.value().([]string); !ok {
+				err = serviceerror.NewInternalf("value must be of type []string for the field of pointer type: got %T", internal.value())
+				return
+			}
+		case fieldTypeData, fieldTypeComponent:
 			if err = assertStructPointer(reflect.TypeOf(internal.value())); err != nil {
 				return
 			}
+		default:
+			err = serviceerror.NewInternalf("unexpected field type: %d", internal.fieldType())
+			return
 		}
 		childNode.value = internal.value()
 		childNode.initSerializedNode(internal.fieldType())
@@ -990,39 +982,42 @@ func unmarshalProto(
 	return value, nil
 }
 
-// RefC implements the CHASM Context interface
-func (n *Node) RefC(
+// Ref implements the CHASM Context interface
+func (n *Node) Ref(
 	component Component,
-) (ComponentRef, bool) {
-	// TODO: return error
-	_ = n.syncSubComponents()
+) (ComponentRef, error) {
+	if err := n.syncSubComponents(); err != nil {
+		return ComponentRef{}, err
+	}
 
 	for path, node := range n.andAllChildren() {
 		// TODO: deserialize entire tree to make sure that node.value is not nil?
 		if node.value == component {
 			return ComponentRef{
 				componentPath: path,
-			}, true
+			}, nil
 		}
 	}
-	return ComponentRef{}, false
+	return ComponentRef{}, errComponentNotFound
 }
 
-func (n *Node) RefD(
+func (n *Node) refData(
 	data proto.Message,
-) (ComponentRef, bool) {
+) (ComponentRef, error) {
 	// TODO: return error
-	_ = n.syncSubComponents()
+	if err := n.syncSubComponents(); err != nil {
+		return ComponentRef{}, err
+	}
 
 	for path, node := range n.andAllChildren() {
 		// TODO: deserialize entire tree to make sure that node.value is not nil?
 		if node.value == data {
 			return ComponentRef{
 				componentPath: path,
-			}, true
+			}, nil
 		}
 	}
-	return ComponentRef{}, false
+	return ComponentRef{}, errComponentNotFound
 }
 
 // Now implements the CHASM Context interface
@@ -1514,7 +1509,7 @@ func (n *Node) applyDeletions(
 			return err
 		}
 
-		node, ok := n.getNodeByPath(path)
+		node, ok := n.findNode(path)
 		if !ok {
 			// Already deleted.
 			// This could happen when:
@@ -1541,7 +1536,7 @@ func (n *Node) applyUpdates(
 			return err
 		}
 
-		node, ok := n.getNodeByPath(path)
+		node, ok := n.findNode(path)
 		if !ok {
 			// Node doesn't exist, we need to create it.
 			n.setSerializedNode(path, updatedNode)
@@ -1593,7 +1588,7 @@ func (n *Node) path() []string {
 	return append(n.parent.path(), n.nodeName)
 }
 
-func (n *Node) getNodeByPath(
+func (n *Node) findNode(
 	path []string,
 ) (*Node, bool) {
 	if len(path) == 0 {
@@ -1605,7 +1600,7 @@ func (n *Node) getNodeByPath(
 	if !ok {
 		return nil, false
 	}
-	return childNode.getNodeByPath(path[1:])
+	return childNode.findNode(path[1:])
 }
 
 func (n *Node) delete(

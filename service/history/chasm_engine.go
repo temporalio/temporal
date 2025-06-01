@@ -85,7 +85,7 @@ func (e *ChasmEngine) UpdateComponent(
 		return chasm.ComponentRef{}, err
 	}
 
-	newRef, ok := mutableContext.RefC(component)
+	newRef, ok := mutableContext.Ref(component)
 	if !ok {
 		return chasm.ComponentRef{}, serviceerror.NewInternal(
 			fmt.Sprintf("component not found in the new component tree after mutation, componentRef: %+v", ref),

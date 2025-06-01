@@ -48,10 +48,9 @@ func ComponentPointerTo[C Component](
 	ctx MutableContext,
 	c C,
 ) (Field[C], error) {
-	path, exists := ctx.RefC(c)
-	if !exists {
-		// TODO: ctx.RefC should return error message which should be just propagated here.
-		return NewEmptyField[C](), serviceerror.NewInvalidArgument("component field is not found")
+	path, err := ctx.Ref(c)
+	if err != nil {
+		return NewEmptyField[C](), err
 	}
 	return Field[C]{
 		Internal: newFieldInternalWithValue(fieldTypePointer, path.componentPath),
@@ -62,10 +61,9 @@ func DataPointerTo[D proto.Message](
 	ctx MutableContext,
 	d D,
 ) (Field[D], error) {
-	path, exists := ctx.RefD(d)
-	if !exists {
-		// TODO: ctx.RefD should return error message which should be just propagated here.
-		return NewEmptyField[D](), serviceerror.NewInvalidArgumentf("data field is not found")
+	path, err := ctx.refData(d)
+	if err != nil {
+		return NewEmptyField[D](), err
 	}
 	return Field[D]{
 		Internal: newFieldInternalWithValue(fieldTypePointer, path.componentPath),
@@ -106,8 +104,7 @@ func (f Field[T]) Get(chasmContext Context) (T, error) {
 		}
 		//nolint:revive // value is guaranteed to be of type []string.
 		path := f.Internal.value().([]string)
-		referencedNode := f.Internal.node.root().findNode(path)
-		if referencedNode != nil {
+		if referencedNode, found := f.Internal.node.root().findNode(path); found {
 			fieldT := reflect.TypeFor[T]()
 			if fieldT.AssignableTo(protoMessageT) {
 				if err := f.Internal.node.prepareDataValue(chasmContext, fieldT); err != nil {

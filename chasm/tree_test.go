@@ -1227,7 +1227,7 @@ func (s *nodeSuite) TestGetComponent() {
 			if tc.expectedErr == nil {
 				// s.Equal(tc.expectedComponent, component)
 
-				node, ok := root.getNodeByPath(tc.ref.componentPath)
+				node, ok := root.findNode(tc.ref.componentPath)
 				s.True(ok)
 				s.Equal(component, node.value)
 				s.Equal(tc.valueState, node.valueState)
