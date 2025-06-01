@@ -508,10 +508,11 @@ type (
 
 	// S3Archiver contains the config for S3 archiver
 	S3Archiver struct {
-		Region           string  `yaml:"region"`
-		Endpoint         *string `yaml:"endpoint"`
-		S3ForcePathStyle bool    `yaml:"s3ForcePathStyle"`
-		LogLevel         uint    `yaml:"logLevel"`
+		Region               string  `yaml:"region"`
+		Endpoint             *string `yaml:"endpoint"`
+		S3ForcePathStyle     bool    `yaml:"s3ForcePathStyle"`
+		WithSearchAttributes bool    `yaml:"withSearchAttributes"`
+		LogLevel             uint    `yaml:"logLevel"`
 	}
 
 	// PublicClient is the config for internal nodes (history/matching/worker) connecting to
