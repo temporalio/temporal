@@ -4,7 +4,6 @@ package frontend
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/pborman/uuid"
