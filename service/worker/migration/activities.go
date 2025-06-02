@@ -984,17 +984,23 @@ func (a *activities) checkReplicationOnRemoteCluster(ctx context.Context, waitRe
 		if !logged {
 			logged = true
 			if !hasClusterInfo {
-				a.logger.Info("Wait handover missing remote cluster info", tag.ShardID(shard.ShardId), tag.ClusterName(waitRequest.CatchupCluster))
+				a.logger.Info("Wait catchup missing remote cluster info", tag.ShardID(shard.ShardId), tag.ClusterName(waitRequest.CatchupCluster))
 				// this is not expected, so fail activity to surface the error, but retryPolicy will keep retrying.
 				return false, temporal.NewNonRetryableApplicationError(fmt.Sprintf("GetReplicationStatus response for shard %d does not contains remote cluster %s", shard.ShardId, waitRequest.CatchupCluster), "", nil)
 			}
 
-			a.logger.Info("Wait handover not ready",
+			a.logger.Info("Wait catchup not ready",
 				tag.NewInt32("ShardId", shard.ShardId),
 				tag.NewInt64("AckedTaskId", clusterInfo.AckedTaskId),
 				tag.NewStringTag("Namespace", waitRequest.Namespace),
 				tag.NewStringTag("CatchupCluster", waitRequest.CatchupCluster),
+				tag.NewStringTag("TargetCluster", waitRequest.TargetCluster),
 				tag.NewInt64("targetAckIDOnShard", targetAckIDOnShard[shard.ShardId]),
+				tag.NewInt64("MaxReplicationTaskId", shard.MaxReplicationTaskId),
+				tag.NewDurationTag("ActualLagging", shard.MaxReplicationTaskVisibilityTime.AsTime().Sub(clusterInfo.AckedTaskVisibilityTime.AsTime())),
+				tag.NewTimeTag("MaxReplicationTaskVisibilityTime", shard.MaxReplicationTaskVisibilityTime.AsTime()),
+				tag.NewTimeTag("AckedTaskVisibilityTime", clusterInfo.AckedTaskVisibilityTime.AsTime()),
+				tag.NewInt64("ActualLaggingTasks", shard.MaxReplicationTaskId-clusterInfo.AckedTaskId),
 			)
 
 		}
