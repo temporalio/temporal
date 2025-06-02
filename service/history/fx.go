@@ -177,7 +177,7 @@ func HealthSignalAggregatorProvider(
 	dynamicCollection *dynamicconfig.Collection,
 	metricsHandler metrics.Handler,
 	logger log.ThrottledLogger,
-) *interceptor.HealthSignalAggregatorImpl {
+) interceptor.HealthSignalAggregator {
 	return interceptor.NewHealthSignalAggregator(
 		logger,
 		dynamicconfig.HistoryHealthSignalMetricsEnabled.Get(dynamicCollection),
@@ -188,7 +188,7 @@ func HealthSignalAggregatorProvider(
 
 func HealthCheckInterceptorProvider(
 	dynamicCollection *dynamicconfig.Collection,
-	healthSignalAggregator *interceptor.HealthSignalAggregatorImpl,
+	healthSignalAggregator interceptor.HealthSignalAggregator,
 ) *interceptor.HealthCheckInterceptor {
 	return interceptor.NewHealthCheckInterceptor(
 		healthSignalAggregator,
