@@ -20,12 +20,13 @@ type (
 	TestComponent    struct {
 		UnimplementedComponent
 
-		ComponentData     *protoMessageType
-		SubComponent1     Field[*TestSubComponent1]
-		SubComponent2     Field[*TestSubComponent2]
-		SubData1          Field[*protoMessageType]
-		SubComponents     Collection[string, *TestSubComponent1]
-		PendingActivities Collection[int, *TestSubComponent1]
+		ComponentData         *protoMessageType
+		SubComponent1         Field[*TestSubComponent1]
+		SubComponent2         Field[*TestSubComponent2]
+		SubData1              Field[*protoMessageType]
+		SubComponents         Map[string, *TestSubComponent1]
+		PendingActivities     Map[int, *TestSubComponent1]
+		SubComponent11Pointer Field[*TestSubComponent11]
 	}
 
 	TestSubComponent1 struct {

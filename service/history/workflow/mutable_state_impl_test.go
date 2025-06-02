@@ -3,6 +3,7 @@ package workflow
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"reflect"
 	"sort"
 	"testing"
@@ -111,19 +112,19 @@ var (
 	pinnedOptions1      = &workflowpb.WorkflowExecutionOptions{
 		VersioningOverride: &workflowpb.VersioningOverride{
 			Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED,
-			PinnedVersion: worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(deployment1)),
+			PinnedVersion: worker_versioning.WorkerDeploymentVersionToStringV31(worker_versioning.DeploymentVersionFromDeployment(deployment1)),
 		},
 	}
 	pinnedOptions2 = &workflowpb.WorkflowExecutionOptions{
 		VersioningOverride: &workflowpb.VersioningOverride{
 			Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED,
-			PinnedVersion: worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(deployment2)),
+			PinnedVersion: worker_versioning.WorkerDeploymentVersionToStringV31(worker_versioning.DeploymentVersionFromDeployment(deployment2)),
 		},
 	}
 	pinnedOptions3 = &workflowpb.WorkflowExecutionOptions{
 		VersioningOverride: &workflowpb.VersioningOverride{
 			Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED,
-			PinnedVersion: worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(deployment3)),
+			PinnedVersion: worker_versioning.WorkerDeploymentVersionToStringV31(worker_versioning.DeploymentVersionFromDeployment(deployment3)),
 		},
 	}
 	unpinnedOptions = &workflowpb.WorkflowExecutionOptions{
@@ -529,9 +530,9 @@ func (s *mutableStateSuite) TestEffectiveDeployment() {
 	ms.executionInfo.VersioningInfo = versioningInfo
 	s.verifyEffectiveDeployment(nil, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED)
 
-	dv1 := worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(deployment1))
-	dv2 := worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(deployment2))
-	dv3 := worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(deployment3))
+	dv1 := worker_versioning.WorkerDeploymentVersionToStringV31(worker_versioning.DeploymentVersionFromDeployment(deployment1))
+	dv2 := worker_versioning.WorkerDeploymentVersionToStringV31(worker_versioning.DeploymentVersionFromDeployment(deployment2))
+	dv3 := worker_versioning.WorkerDeploymentVersionToStringV31(worker_versioning.DeploymentVersionFromDeployment(deployment3))
 
 	deploymentVersion1 := worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(deployment1)
 	deploymentVersion2 := worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(deployment2)
@@ -949,7 +950,7 @@ func (s *mutableStateSuite) verifyOverrides(
 	}
 	expectedVersion := ""
 	if expectedDeployment != nil {
-		expectedVersion = worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(expectedDeployment))
+		expectedVersion = worker_versioning.WorkerDeploymentVersionToStringV31(worker_versioning.DeploymentVersionFromDeployment(expectedDeployment))
 	}
 	s.Equal(expectedVersion, versioningInfo.GetVersion()) //nolint:staticcheck // SA1019: worker versioning v0.31
 	var expectedPinnedDeploymentVersion *deploymentpb.WorkerDeploymentVersion
@@ -2023,6 +2024,7 @@ func (s *mutableStateSuite) TestAddContinueAsNewEvent_Default() {
 			// All other fields will default to those in the current run.
 			WorkflowRunTimeout: s.mutableState.GetExecutionInfo().WorkflowRunTimeout,
 		},
+		nil,
 	)
 	s.NoError(err)
 
@@ -2057,7 +2059,6 @@ func (s *mutableStateSuite) TestTotalEntitiesCount() {
 
 	_, _, err = s.mutableState.AddStartChildWorkflowExecutionInitiatedEvent(
 		workflowTaskCompletedEventID,
-		uuid.New(),
 		&commandpb.StartChildWorkflowExecutionCommandAttributes{},
 		namespace.ID(uuid.New()),
 	)
@@ -2775,7 +2776,6 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 				completedEvent := completWorkflowTaskFn(ms)
 				initiatedEvent, _, err := ms.AddStartChildWorkflowExecutionInitiatedEvent(
 					completedEvent.GetEventId(),
-					uuid.New(),
 					&commandpb.StartChildWorkflowExecutionCommandAttributes{},
 					ms.GetNamespaceEntry().ID(),
 				)
@@ -3351,6 +3351,25 @@ func (s *mutableStateSuite) TestCollapseVisibilityTasks() {
 			},
 		)
 	}
+}
+
+func (s *mutableStateSuite) TestStartChildWorkflowRequestID() {
+	workflowTaskCompletionEventID := rand.Int63()
+	attributes := &commandpb.StartChildWorkflowExecutionCommandAttributes{}
+	event := s.mutableState.hBuilder.AddStartChildWorkflowExecutionInitiatedEvent(
+		workflowTaskCompletionEventID,
+		attributes,
+		tests.NamespaceID,
+	)
+	createRequestID := fmt.Sprintf("%s:%d:%d", s.mutableState.executionState.RunId, event.GetEventId(), event.GetVersion())
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+
+	ci, err := s.mutableState.ApplyStartChildWorkflowExecutionInitiatedEvent(
+		workflowTaskCompletionEventID,
+		event,
+	)
+	s.NoError(err)
+	s.Equal(createRequestID, ci.CreateRequestId)
 }
 
 func (s *mutableStateSuite) TestGetCloseVersion() {

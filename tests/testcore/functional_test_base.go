@@ -66,10 +66,9 @@ type (
 		// TODO (alex): this doesn't have to be a separate field. All usages can be replaced with values from testCluster itself.
 		testClusterConfig *TestClusterConfig
 
-		namespace   namespace.Name
-		namespaceID namespace.ID
-		// TODO (alex): rename to externalNamespace
-		foreignNamespace namespace.Name
+		namespace         namespace.Name
+		namespaceID       namespace.ID
+		externalNamespace namespace.Name
 
 		// Fields used by SDK based tests.
 		sdkClient sdkclient.Client
@@ -181,8 +180,8 @@ func (s *FunctionalTestBase) NamespaceID() namespace.ID {
 	return s.namespaceID
 }
 
-func (s *FunctionalTestBase) ForeignNamespace() namespace.Name {
-	return s.foreignNamespace
+func (s *FunctionalTestBase) ExternalNamespace() namespace.Name {
+	return s.externalNamespace
 }
 
 func (s *FunctionalTestBase) FrontendGRPCAddress() string {
@@ -257,8 +256,8 @@ func (s *FunctionalTestBase) SetupSuiteWithCluster(options ...TestClusterOption)
 	s.namespaceID, err = s.RegisterNamespace(s.Namespace(), 1, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
 	s.Require().NoError(err)
 
-	s.foreignNamespace = namespace.Name(RandomizeStr("foreign-namespace"))
-	_, err = s.RegisterNamespace(s.ForeignNamespace(), 1, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
+	s.externalNamespace = namespace.Name(RandomizeStr("external-namespace"))
+	_, err = s.RegisterNamespace(s.ExternalNamespace(), 1, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
 	s.Require().NoError(err)
 }
 
@@ -361,7 +360,7 @@ func (s *FunctionalTestBase) setupSdk() {
 
 func (s *FunctionalTestBase) TearDownCluster() {
 	s.Require().NoError(s.MarkNamespaceAsDeleted(s.Namespace()))
-	s.Require().NoError(s.MarkNamespaceAsDeleted(s.ForeignNamespace()))
+	s.Require().NoError(s.MarkNamespaceAsDeleted(s.ExternalNamespace()))
 
 	if s.testCluster != nil {
 		s.Require().NoError(s.testCluster.TearDownCluster())

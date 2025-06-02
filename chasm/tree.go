@@ -65,7 +65,7 @@ type (
 
 		// Type of attributes controls the type of the node.
 		serializedNode *persistencespb.ChasmNode // serialized component | data | collection with metadata
-		value          any                       // deserialized component | data | collection
+		value          any                       // deserialized component | data | map
 
 		// valueState indicates if the value field and the persistence field serializedNode are in sync.
 		// If new value might be changed since it was deserialized and serialize method wasn't called yet, then valueState is valueStateNeedSerialize.
@@ -253,7 +253,7 @@ func (n *Node) Component(
 		return nil, errComponentNotFound
 	}
 
-	node, ok := n.getNodeByPath(ref.componentPath)
+	node, ok := n.findNode(ref.componentPath)
 	if !ok {
 		return nil, errComponentNotFound
 	}
@@ -354,6 +354,26 @@ func (n *Node) prepareDataValue(
 	return nil
 }
 
+func (n *Node) preparePointerValue(
+	chasmContext Context,
+) error {
+	metadata := n.serializedNode.Metadata
+	pointerAttr := metadata.GetPointerAttributes()
+	if pointerAttr == nil {
+		return serviceerror.NewInternal(
+			fmt.Sprintf("expect chasm node to have PointerAttributes, actual attributes: %v", metadata.Attributes),
+		)
+	}
+
+	if n.valueState == valueStateNeedDeserialize {
+		if err := n.deserialize(nil); err != nil {
+			return fmt.Errorf("failed to deserialize data: %w", err)
+		}
+	}
+
+	return nil
+}
+
 func (n *Node) fieldType() fieldType {
 	if n.serializedNode.GetMetadata().GetComponentAttributes() != nil {
 		return fieldTypeComponent
@@ -363,13 +383,12 @@ func (n *Node) fieldType() fieldType {
 		return fieldTypeData
 	}
 
-	if n.serializedNode.GetMetadata().GetCollectionAttributes() != nil {
-		// Collection is not a Field.
-		return fieldTypeUnspecified
+	if n.serializedNode.GetMetadata().GetPointerAttributes() != nil {
+		return fieldTypePointer
 	}
 
-	if n.serializedNode.GetMetadata().GetPointerAttributes() != nil {
-		return fieldTypeComponentPointer
+	if n.serializedNode.GetMetadata().GetCollectionAttributes() != nil {
+		softassert.Fail(n.logger, "fieldType can't be called on Collection node because Collection is not a Field")
 	}
 
 	return fieldTypeUnspecified
@@ -385,7 +404,7 @@ func assertStructPointer(t reflect.Type) error {
 	}
 
 	if t.Kind() != reflect.Ptr || t.Elem().Kind() != reflect.Struct {
-		return serviceerror.NewInternal("only pointer to struct is supported for tree node value")
+		return serviceerror.NewInternalf("only pointer to struct is supported for tree node value: got %s", t.String())
 	}
 	return nil
 }
@@ -416,10 +435,20 @@ func (n *Node) initSerializedNode(ft fieldType) {
 				},
 			},
 		}
-	case fieldTypeComponentPointer:
-		panic("not implemented")
+	case fieldTypePointer:
+		n.serializedNode = &persistencespb.ChasmNode{
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition: &persistencespb.VersionedTransition{
+					TransitionCount:          n.backend.NextTransitionCount(),
+					NamespaceFailoverVersion: n.backend.GetCurrentVersion(),
+				},
+				Attributes: &persistencespb.ChasmNodeMetadata_PointerAttributes{
+					PointerAttributes: &persistencespb.ChasmPointerAttributes{},
+				},
+			},
+		}
 	case fieldTypeUnspecified:
-		// Do nothing. Panic?
+		softassert.Fail(n.logger, "initSerializedNode can't be called with fieldTypeUnspecified")
 	}
 }
 
@@ -470,7 +499,7 @@ func (n *Node) serialize() error {
 	case *persistencespb.ChasmNodeMetadata_CollectionAttributes:
 		return n.serializeCollectionNode()
 	case *persistencespb.ChasmNodeMetadata_PointerAttributes:
-		panic("not implemented")
+		return n.serializePointerNode()
 	default:
 		return serviceerror.NewInternal("unknown node type")
 	}
@@ -556,9 +585,9 @@ func (n *Node) syncSubComponentsInternal(
 			if keepChild {
 				childrenToKeep[field.name] = struct{}{}
 			}
-		case fieldKindSubCollection:
+		case fieldKindSubMap:
 			if field.val.IsNil() {
-				// If Collection field is nil then delete all collection items nodes and collection node itself.
+				// If Map field is nil then delete all collection items nodes and collection node itself.
 				continue
 			}
 
@@ -570,38 +599,42 @@ func (n *Node) syncSubComponentsInternal(
 				n.children[field.name] = collectionNode
 			}
 
-			// Validate collection type
+			// Validate map type.
 			if field.val.Kind() != reflect.Map {
-				return serviceerror.NewInternalf("CHASM collection must be of map[comparable]Field[T] type: value of %s is not of a map type", n.nodeName)
+				errMsg := fmt.Sprintf("CHASM map must be of map type: value of %s is not of a map type", n.nodeName)
+				softassert.Fail(n.logger, errMsg)
+				return serviceerror.NewInternal(errMsg)
 			}
 
 			if len(field.val.MapKeys()) == 0 {
-				// If Collection field is empty then delete all collection items nodes and collection node itself.
+				// If Map field is empty then delete all collection items nodes and collection node itself.
 				continue
 			}
 
-			collectionValT := field.typ.Elem()
-			if collectionValT.Kind() != reflect.Struct || genericTypePrefix(collectionValT) != chasmFieldTypePrefix {
-				return serviceerror.NewInternalf("CHASM collection must be of map[comparable]Field[T] type: %s map value type is not Field[T] but %s", n.nodeName, collectionValT)
+			mapValT := field.typ.Elem()
+			if mapValT.Kind() != reflect.Struct || genericTypePrefix(mapValT) != chasmFieldTypePrefix {
+				errMsg := fmt.Sprintf("CHASM map value must be of Field[T] type: %s collection value type is not Field[T] but %s", n.nodeName, mapValT)
+				softassert.Fail(n.logger, errMsg)
+				return serviceerror.NewInternal(errMsg)
 			}
 
 			collectionItemsToKeep := make(map[string]struct{})
-			for _, collectionKeyV := range field.val.MapKeys() {
-				collectionItemV := field.val.MapIndex(collectionKeyV)
-				collectionKeyStr, err := comparableKeyToString(n.nodeName, collectionKeyV)
+			for _, mapKeyV := range field.val.MapKeys() {
+				mapItemV := field.val.MapIndex(mapKeyV)
+				collectionKey, err := n.mapKeyToString(mapKeyV)
 				if err != nil {
 					return err
 				}
-				keepItem, updatedCollectionItemV, err := collectionNode.syncSubField(collectionItemV, collectionKeyStr, append(nodePath, field.name))
+				keepItem, updatedMapItemV, err := collectionNode.syncSubField(mapItemV, collectionKey, append(nodePath, field.name))
 				if err != nil {
 					return err
 				}
-				if updatedCollectionItemV.IsValid() {
+				if updatedMapItemV.IsValid() {
 					// The only way to update item in the map is to set it back.
-					field.val.SetMapIndex(collectionKeyV, updatedCollectionItemV)
+					field.val.SetMapIndex(mapKeyV, updatedMapItemV)
 				}
 				if keepItem {
-					collectionItemsToKeep[collectionKeyStr] = struct{}{}
+					collectionItemsToKeep[collectionKey] = struct{}{}
 				}
 			}
 			if err := collectionNode.deleteChildren(collectionItemsToKeep, append(nodePath, field.name)); err != nil {
@@ -615,7 +648,7 @@ func (n *Node) syncSubComponentsInternal(
 	return err
 }
 
-func comparableKeyToString(nodeName string, keyV reflect.Value) (string, error) {
+func (n *Node) mapKeyToString(keyV reflect.Value) (string, error) {
 	switch keyV.Kind() {
 	case reflect.String:
 		return keyV.String(), nil
@@ -626,11 +659,13 @@ func comparableKeyToString(nodeName string, keyV reflect.Value) (string, error) 
 	case reflect.Bool:
 		return strconv.FormatBool(keyV.Bool()), nil
 	default:
-		return "", serviceerror.NewInternalf("CHASM collection must be of map[comparable|string]Field[T] type: %s map key type not comparable but %s", nodeName, keyV.Type().String())
+		errMsg := fmt.Sprintf("CHASM map key type for node %s must be one of [%s], got %s", n.nodeName, mapKeyTypes, keyV.Type().String())
+		softassert.Fail(n.logger, errMsg)
+		return "", serviceerror.NewInternal(errMsg)
 	}
 }
 
-func stringToComparableKey(nodeName string, key string, keyT reflect.Type) (reflect.Value, error) {
+func (n *Node) stringToMapKey(nodeName string, key string, keyT reflect.Type) (reflect.Value, error) {
 	var (
 		keyV reflect.Value
 		err  error
@@ -683,7 +718,10 @@ func stringToComparableKey(nodeName string, key string, keyT reflect.Type) (refl
 		b, err = strconv.ParseBool(key)
 		keyV = reflect.ValueOf(b)
 	default:
-		err = fmt.Errorf("unsupported type %s of kind %s", keyT.String(), keyT.Kind().String())
+		err = fmt.Errorf("unsupported type %s of kind %s: supported key types: %s", keyT.String(), keyT.Kind().String(), mapKeyTypes)
+		softassert.Fail(n.logger, err.Error())
+		// Use softassert only here because this is the only case that indicates "compile" time error.
+		// The other errors below can come from data type mismatch between a component and persisted data.
 	}
 
 	if err == nil && !keyV.IsValid() {
@@ -691,7 +729,7 @@ func stringToComparableKey(nodeName string, key string, keyT reflect.Type) (refl
 	}
 
 	if err != nil {
-		err = serviceerror.NewInternalf("serialized collection %s key value %s can't be parsed to CHASM collection key type %s: %s", nodeName, key, keyT.String(), err.Error())
+		err = serviceerror.NewInternalf("serialized map %s key value %s can't be parsed to CHASM map key type %s: %s", nodeName, key, keyT.String(), err.Error())
 	}
 
 	return keyV, err
@@ -718,7 +756,18 @@ func (n *Node) syncSubField(fieldV reflect.Value, fieldN string, nodePath []stri
 		// Field is not empty but tree node is not set. It means this is a new field, and a node must be created.
 		childNode := newNode(n.nodeBase, n, fieldN)
 
-		if err = assertStructPointer(reflect.TypeOf(internal.value())); err != nil {
+		switch internal.fieldType() {
+		case fieldTypePointer:
+			if _, ok := internal.value().([]string); !ok {
+				err = serviceerror.NewInternalf("value must be of type []string for the field of pointer type: got %T", internal.value())
+				return
+			}
+		case fieldTypeData, fieldTypeComponent:
+			if err = assertStructPointer(reflect.TypeOf(internal.value())); err != nil {
+				return
+			}
+		default:
+			err = serviceerror.NewInternalf("unexpected field type: %d", internal.fieldType())
 			return
 		}
 		childNode.value = internal.value()
@@ -785,6 +834,22 @@ func (n *Node) serializeCollectionNode() error {
 	return nil
 }
 
+// serializePointerNode doesn't serialize anything but named this way for consistency.
+func (n *Node) serializePointerNode() error {
+	path, isPathValid := n.value.([]string)
+	if !isPathValid {
+		msg := fmt.Sprintf("pointer path is not []string but %T for node %s", n.value, n.nodeName)
+		softassert.Fail(n.logger, msg)
+		return serviceerror.NewInternal(msg)
+	}
+
+	n.serializedNode.GetMetadata().GetPointerAttributes().NodePath = path
+	n.updateLastUpdateVersionedTransition()
+	n.valueState = valueStateSynced
+
+	return nil
+}
+
 func (n *Node) updateLastUpdateVersionedTransition() {
 	if n.serializedNode.GetMetadata().GetLastUpdateVersionedTransition() == nil {
 		n.serializedNode.GetMetadata().LastUpdateVersionedTransition = &persistencespb.VersionedTransition{}
@@ -817,7 +882,7 @@ func (n *Node) deserialize(
 	case *persistencespb.ChasmNodeMetadata_CollectionAttributes:
 		softassert.Fail(n.logger, "deserialize shouldn't be called on the collection node because it is deserialized with the parent component.")
 	case *persistencespb.ChasmNodeMetadata_PointerAttributes:
-		// TODO: return serviceerror.NewInternal(...) instead.
+		return n.deserializePointerNode()
 	}
 	return nil
 }
@@ -852,12 +917,12 @@ func (n *Node) deserializeComponentNode(
 				chasmFieldV.FieldByName(internalFieldName).Set(internalValue)
 				field.val.Set(chasmFieldV)
 			}
-		case fieldKindSubCollection:
+		case fieldKindSubMap:
 			if collectionNode, found := n.children[field.name]; found {
-				collectionFieldV := field.val
-				if collectionFieldV.IsNil() {
-					collectionFieldV = reflect.MakeMapWithSize(field.typ, field.val.Len())
-					field.val.Set(collectionFieldV)
+				mapFieldV := field.val
+				if mapFieldV.IsNil() {
+					mapFieldV = reflect.MakeMapWithSize(field.typ, field.val.Len())
+					field.val.Set(mapFieldV)
 				}
 
 				for collectionItemName, collectionItemNode := range collectionNode.children {
@@ -865,11 +930,11 @@ func (n *Node) deserializeComponentNode(
 					chasmFieldV := reflect.New(field.typ.Elem()).Elem()
 					internalValue := reflect.ValueOf(newFieldInternalWithNode(collectionItemNode))
 					chasmFieldV.FieldByName(internalFieldName).Set(internalValue)
-					collectionKeyV, err := stringToComparableKey(field.name, collectionItemName, collectionFieldV.Type().Key())
+					mapKeyV, err := n.stringToMapKey(field.name, collectionItemName, mapFieldV.Type().Key())
 					if err != nil {
 						return err
 					}
-					collectionFieldV.SetMapIndex(collectionKeyV, chasmFieldV)
+					mapFieldV.SetMapIndex(mapKeyV, chasmFieldV)
 				}
 			}
 		}
@@ -889,6 +954,13 @@ func (n *Node) deserializeDataNode(
 	}
 
 	n.value = value.Interface()
+	n.valueState = valueStateSynced
+	return nil
+}
+
+// deserializePointerNode doesn't deserialize anything but named this way for consistency.
+func (n *Node) deserializePointerNode() error {
+	n.value = n.serializedNode.GetMetadata().GetPointerAttributes().GetNodePath()
 	n.valueState = valueStateSynced
 	return nil
 }
@@ -913,10 +985,39 @@ func unmarshalProto(
 // Ref implements the CHASM Context interface
 func (n *Node) Ref(
 	component Component,
-) (ComponentRef, bool) {
-	// TODO: Implement this method.
-	// Currently returning an empty reference to unblock tests.
-	return ComponentRef{}, true
+) (ComponentRef, error) {
+	if err := n.syncSubComponents(); err != nil {
+		return ComponentRef{}, err
+	}
+
+	for path, node := range n.andAllChildren() {
+		// TODO: deserialize entire tree to make sure that node.value is not nil?
+		if node.value == component {
+			return ComponentRef{
+				componentPath: path,
+			}, nil
+		}
+	}
+	return ComponentRef{}, errComponentNotFound
+}
+
+func (n *Node) refData(
+	data proto.Message,
+) (ComponentRef, error) {
+	// TODO: return error
+	if err := n.syncSubComponents(); err != nil {
+		return ComponentRef{}, err
+	}
+
+	for path, node := range n.andAllChildren() {
+		// TODO: deserialize entire tree to make sure that node.value is not nil?
+		if node.value == data {
+			return ComponentRef{
+				componentPath: path,
+			}, nil
+		}
+	}
+	return ComponentRef{}, errComponentNotFound
 }
 
 // Now implements the CHASM Context interface
@@ -1408,7 +1509,7 @@ func (n *Node) applyDeletions(
 			return err
 		}
 
-		node, ok := n.getNodeByPath(path)
+		node, ok := n.findNode(path)
 		if !ok {
 			// Already deleted.
 			// This could happen when:
@@ -1435,7 +1536,7 @@ func (n *Node) applyUpdates(
 			return err
 		}
 
-		node, ok := n.getNodeByPath(path)
+		node, ok := n.findNode(path)
 		if !ok {
 			// Node doesn't exist, we need to create it.
 			n.setSerializedNode(path, updatedNode)
@@ -1487,7 +1588,7 @@ func (n *Node) path() []string {
 	return append(n.parent.path(), n.nodeName)
 }
 
-func (n *Node) getNodeByPath(
+func (n *Node) findNode(
 	path []string,
 ) (*Node, bool) {
 	if len(path) == 0 {
@@ -1499,7 +1600,7 @@ func (n *Node) getNodeByPath(
 	if !ok {
 		return nil, false
 	}
-	return childNode.getNodeByPath(path[1:])
+	return childNode.findNode(path[1:])
 }
 
 func (n *Node) delete(

@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/server/api/adminservice/v1"
+	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -23,6 +24,7 @@ import (
 	"go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/worker/migration"
 	"go.temporal.io/server/service/worker/scanner/build_ids"
@@ -247,6 +249,97 @@ func (s *UserDataReplicationTestSuite) TestUserDataIsReplicatedFromActiveToPassi
 		}
 		return len(response.GetResponse().GetAssignmentRules()) == 1 &&
 			len(response.GetResponse().GetCompatibleRedirectRules()) == 1
+	}, replicationWaitTime, replicationCheckInterval)
+}
+
+func (s *UserDataReplicationTestSuite) TestUserDataIsReplicatedFromActiveToPassiveV3() {
+	namespace := s.T().Name() + "-" + common.GenerateRandomString(5)
+	taskQueue := "versioned"
+	ctx := testcore.NewContext()
+	activeFrontendClient := s.clusters[0].FrontendClient()
+	activeMatchingClient := s.clusters[0].MatchingClient()
+	standbyMatchingClient := s.clusters[1].MatchingClient()
+	regReq := &workflowservice.RegisterNamespaceRequest{
+		Namespace:                        namespace,
+		IsGlobalNamespace:                true,
+		Clusters:                         s.clusterReplicationConfig(),
+		ActiveClusterName:                s.clusters[0].ClusterName(),
+		WorkflowExecutionRetentionPeriod: durationpb.New(7 * time.Hour * 24),
+	}
+	_, err := activeFrontendClient.RegisterNamespace(ctx, regReq)
+	s.NoError(err)
+
+	description, err := activeFrontendClient.DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{Namespace: namespace})
+	s.Require().NoError(err)
+
+	expectedVersionData := &deploymentspb.DeploymentVersionData{
+		Version: &deploymentspb.WorkerDeploymentVersion{
+			BuildId:        "v1",
+			DeploymentName: "d1",
+		},
+		RampingSinceTime: timestamp.TimePtr(time.Now()),
+		RampPercentage:   10,
+	}
+
+	_, err = activeMatchingClient.SyncDeploymentUserData(ctx, &matchingservice.SyncDeploymentUserDataRequest{
+		NamespaceId:    description.GetNamespaceInfo().GetId(),
+		TaskQueue:      taskQueue,
+		TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW, enumspb.TASK_QUEUE_TYPE_ACTIVITY, enumspb.TASK_QUEUE_TYPE_NEXUS},
+		Operation: &matchingservice.SyncDeploymentUserDataRequest_UpdateVersionData{
+			UpdateVersionData: expectedVersionData,
+		},
+	})
+	s.NoError(err)
+
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		// Call matching directly in case frontend is configured to redirect API calls to the active cluster
+		response, err := standbyMatchingClient.GetTaskQueueUserData(ctx, &matchingservice.GetTaskQueueUserDataRequest{
+			NamespaceId:   description.GetNamespaceInfo().Id,
+			TaskQueue:     taskQueue,
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		})
+		a := assert.New(t)
+		a.NoError(err)
+		if perType := response.GetUserData().GetData().GetPerType(); a.NotNil(perType) {
+			for tqType := 1; tqType <= 3; tqType++ {
+				data := perType[int32(tqType)].GetDeploymentData()
+				if a.Equal(1, len(data.GetVersions())) {
+					a.True(data.GetVersions()[0].Equal(expectedVersionData))
+				}
+			}
+		}
+	}, replicationWaitTime, replicationCheckInterval)
+
+	// make another change to test that merging works
+
+	expectedVersionData.RampPercentage = 20
+	_, err = activeMatchingClient.SyncDeploymentUserData(ctx, &matchingservice.SyncDeploymentUserDataRequest{
+		NamespaceId:    description.GetNamespaceInfo().GetId(),
+		TaskQueue:      taskQueue,
+		TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW, enumspb.TASK_QUEUE_TYPE_ACTIVITY, enumspb.TASK_QUEUE_TYPE_NEXUS},
+		Operation: &matchingservice.SyncDeploymentUserDataRequest_UpdateVersionData{
+			UpdateVersionData: expectedVersionData,
+		},
+	})
+	s.NoError(err)
+
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		// Call matching directly in case frontend is configured to redirect API calls to the active cluster
+		response, err := standbyMatchingClient.GetTaskQueueUserData(ctx, &matchingservice.GetTaskQueueUserDataRequest{
+			NamespaceId:   description.GetNamespaceInfo().Id,
+			TaskQueue:     taskQueue,
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		})
+		a := assert.New(t)
+		a.NoError(err)
+		if perType := response.GetUserData().GetData().GetPerType(); a.NotNil(perType) {
+			for tqType := 1; tqType <= 3; tqType++ {
+				data := perType[int32(tqType)].GetDeploymentData()
+				if a.Equal(1, len(data.GetVersions())) {
+					a.True(data.GetVersions()[0].Equal(expectedVersionData))
+				}
+			}
+		}
 	}, replicationWaitTime, replicationCheckInterval)
 }
 

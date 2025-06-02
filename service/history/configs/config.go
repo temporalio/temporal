@@ -50,19 +50,16 @@ type Config struct {
 	// HistoryCache settings
 	// Change of these configs require shard restart
 	HistoryCacheLimitSizeBased            bool
-	HistoryCacheInitialSize               dynamicconfig.IntPropertyFn
-	HistoryShardLevelCacheMaxSize         dynamicconfig.IntPropertyFn
-	HistoryShardLevelCacheMaxSizeBytes    dynamicconfig.IntPropertyFn
 	HistoryHostLevelCacheMaxSize          dynamicconfig.IntPropertyFn
 	HistoryHostLevelCacheMaxSizeBytes     dynamicconfig.IntPropertyFn
 	HistoryCacheTTL                       dynamicconfig.DurationPropertyFn
 	HistoryCacheNonUserContextLockTimeout dynamicconfig.DurationPropertyFn
-	EnableHostLevelHistoryCache           dynamicconfig.BoolPropertyFn
 	EnableNexus                           dynamicconfig.BoolPropertyFn
 	EnableWorkflowExecutionTimeoutTimer   dynamicconfig.BoolPropertyFn
 	EnableUpdateWorkflowModeIgnoreCurrent dynamicconfig.BoolPropertyFn
 	EnableTransitionHistory               dynamicconfig.BoolPropertyFn
 	MaxCallbacksPerWorkflow               dynamicconfig.IntPropertyFnWithNamespaceFilter
+	EnableExecuteMultiOperationErrorDebug dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableRequestIdRefLinks               dynamicconfig.BoolPropertyFn
 	EnableChasm                           dynamicconfig.BoolPropertyFn
 
@@ -275,6 +272,7 @@ type Config struct {
 	EnableReplicationTaskTieredProcessing               dynamicconfig.BoolPropertyFn
 	ReplicationStreamSenderHighPriorityQPS              dynamicconfig.IntPropertyFn
 	ReplicationStreamSenderLowPriorityQPS               dynamicconfig.IntPropertyFn
+	ReplicationStreamEventLoopRetryMaxAttempts          dynamicconfig.IntPropertyFn
 	ReplicationReceiverMaxOutstandingTaskCount          dynamicconfig.IntPropertyFn
 	ReplicationResendMaxBatchCount                      dynamicconfig.IntPropertyFn
 	ReplicationProgressCacheMaxSize                     dynamicconfig.IntPropertyFn
@@ -329,8 +327,6 @@ type Config struct {
 	EnableActivityEagerExecution  dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableEagerWorkflowStart      dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	NamespaceCacheRefreshInterval dynamicconfig.DurationPropertyFn
-
-	FollowReusePolicyAfterConflictPolicyTerminate dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	// ArchivalQueueProcessor settings
 	ArchivalProcessorSchedulerWorkerCount               dynamicconfig.TypedSubscribable[int]
@@ -411,17 +407,14 @@ func NewConfig(
 		EmitShardLagLog: dynamicconfig.EmitShardLagLog.Get(dc),
 		// HistoryCacheLimitSizeBased should not change during runtime.
 		HistoryCacheLimitSizeBased:            dynamicconfig.HistoryCacheSizeBasedLimit.Get(dc)(),
-		HistoryCacheInitialSize:               dynamicconfig.HistoryCacheInitialSize.Get(dc),
-		HistoryShardLevelCacheMaxSize:         dynamicconfig.HistoryCacheMaxSize.Get(dc),
-		HistoryShardLevelCacheMaxSizeBytes:    dynamicconfig.HistoryCacheMaxSizeBytes.Get(dc),
 		HistoryHostLevelCacheMaxSize:          dynamicconfig.HistoryCacheHostLevelMaxSize.Get(dc),
 		HistoryHostLevelCacheMaxSizeBytes:     dynamicconfig.HistoryCacheHostLevelMaxSizeBytes.Get(dc),
 		HistoryCacheTTL:                       dynamicconfig.HistoryCacheTTL.Get(dc),
 		HistoryCacheNonUserContextLockTimeout: dynamicconfig.HistoryCacheNonUserContextLockTimeout.Get(dc),
-		EnableHostLevelHistoryCache:           dynamicconfig.EnableHostHistoryCache.Get(dc),
 		EnableNexus:                           dynamicconfig.EnableNexus.Get(dc),
 		EnableWorkflowExecutionTimeoutTimer:   dynamicconfig.EnableWorkflowExecutionTimeoutTimer.Get(dc),
 		EnableUpdateWorkflowModeIgnoreCurrent: dynamicconfig.EnableUpdateWorkflowModeIgnoreCurrent.Get(dc),
+		EnableExecuteMultiOperationErrorDebug: dynamicconfig.EnableExecuteMultiOperationErrorDebug.Get(dc),
 		EnableTransitionHistory:               dynamicconfig.EnableTransitionHistory.Get(dc),
 		MaxCallbacksPerWorkflow:               dynamicconfig.MaxCallbacksPerWorkflow.Get(dc),
 		EnableRequestIdRefLinks:               dynamicconfig.EnableRequestIdRefLinks.Get(dc),
@@ -537,12 +530,11 @@ func NewConfig(
 		EnableReplicationTaskTieredProcessing:               dynamicconfig.EnableReplicationTaskTieredProcessing.Get(dc),
 		ReplicationStreamSenderHighPriorityQPS:              dynamicconfig.ReplicationStreamSenderHighPriorityQPS.Get(dc),
 		ReplicationStreamSenderLowPriorityQPS:               dynamicconfig.ReplicationStreamSenderLowPriorityQPS.Get(dc),
+		ReplicationStreamEventLoopRetryMaxAttempts:          dynamicconfig.ReplicationStreamEventLoopRetryMaxAttempts.Get(dc),
 		ReplicationReceiverMaxOutstandingTaskCount:          dynamicconfig.ReplicationReceiverMaxOutstandingTaskCount.Get(dc),
 		ReplicationResendMaxBatchCount:                      dynamicconfig.ReplicationResendMaxBatchCount.Get(dc),
 		ReplicationProgressCacheMaxSize:                     dynamicconfig.ReplicationProgressCacheMaxSize.Get(dc),
 		ReplicationProgressCacheTTL:                         dynamicconfig.ReplicationProgressCacheTTL.Get(dc),
-
-		FollowReusePolicyAfterConflictPolicyTerminate: dynamicconfig.FollowReusePolicyAfterConflictPolicyTerminate.Get(dc),
 
 		MaximumBufferedEventsBatch:       dynamicconfig.MaximumBufferedEventsBatch.Get(dc),
 		MaximumBufferedEventsSizeInBytes: dynamicconfig.MaximumBufferedEventsSizeInBytes.Get(dc),

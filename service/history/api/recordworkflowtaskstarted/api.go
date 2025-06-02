@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
@@ -51,6 +52,7 @@ func Invoke(
 
 	var workflowKey definition.WorkflowKey
 	var resp *historyservice.RecordWorkflowTaskStartedResponseWithRawHistory
+	var tranOrSpecEvents *historyspb.TransientWorkflowTaskInfo
 
 	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
@@ -80,8 +82,8 @@ func Invoke(
 			// Check to see if mutable cache is stale in some extreme cassandra failure cases.
 			// For speculative and transient WFT scheduledEventID is always ahead of NextEventID.
 			// Because there is a clock check above the stack, this should never happen.
-			transientWFT := workflowTask.Attempt > 1
-			if workflowTask.Type != enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE && !transientWFT &&
+			isWFTTransient := workflowTask.Attempt > 1
+			if workflowTask.Type != enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE && !isWFTTransient &&
 				scheduledEventID >= mutableState.GetNextEventID() {
 
 				metrics.StaleMutableStateCounter.With(metricsScope).Record(1)
@@ -94,7 +96,7 @@ func Invoke(
 			if workflowTask.StartedEventID != common.EmptyEventID {
 				// If workflow task is started as part of the current request scope then return a positive response
 				if workflowTask.RequestID == requestID {
-					resp, err = CreateRecordWorkflowTaskStartedResponseWithRawHistory(ctx, mutableState, updateRegistry, workflowTask, req.PollRequest.GetIdentity(), false)
+					resp, err = CreateRecordWorkflowTaskStartedResponseWithRawHistory(ctx, mutableState, updateRegistry, workflowTask, false)
 					if err != nil {
 						return nil, err
 					}
@@ -147,7 +149,10 @@ func Invoke(
 			wfBehavior := mutableState.GetEffectiveVersioningBehavior()
 			wfDeployment := mutableState.GetEffectiveDeployment()
 			//nolint:staticcheck // SA1019 deprecated WorkerVersionCapabilities will clean up later
-			pollerDeployment := worker_versioning.DeploymentFromCapabilities(req.PollRequest.WorkerVersionCapabilities, req.PollRequest.DeploymentOptions)
+			pollerDeployment, err := worker_versioning.DeploymentFromCapabilities(req.PollRequest.WorkerVersionCapabilities, req.PollRequest.DeploymentOptions)
+			if err != nil {
+				return nil, err
+			}
 			err = worker_versioning.ValidateTaskVersionDirective(req.GetVersionDirective(), wfBehavior, wfDeployment, req.ScheduledDeployment)
 			if err != nil {
 				return nil, err
@@ -213,12 +218,13 @@ func Invoke(
 				mutableState,
 				updateRegistry,
 				workflowTask,
-				req.PollRequest.GetIdentity(),
 				false,
 			)
 			if err != nil {
 				return nil, err
 			}
+
+			tranOrSpecEvents = common.CloneProto(mutableState.GetTransientWorkflowTaskInfo(workflowTask, req.PollRequest.GetIdentity()))
 
 			return updateAction, nil
 		},
@@ -240,6 +246,7 @@ func Invoke(
 		workflowConsistencyChecker,
 		eventNotifier,
 		persistenceVisibilityMgr,
+		tranOrSpecEvents,
 		resp,
 	)
 	if err != nil {
@@ -256,6 +263,7 @@ func setHistoryForRecordWfTaskStartedResp(
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	eventNotifier events.Notifier,
 	persistenceVisibilityMgr manager.VisibilityManager,
+	tranOrSpecEvents *historyspb.TransientWorkflowTaskInfo,
 	response *historyservice.RecordWorkflowTaskStartedResponseWithRawHistory,
 ) (retError error) {
 
@@ -298,7 +306,7 @@ func setHistoryForRecordWfTaskStartedResp(
 			nextEventID,
 			maximumPageSize,
 			nil,
-			response.GetTransientWorkflowTask(),
+			tranOrSpecEvents,
 			response.GetBranchToken(),
 		)
 	} else {
@@ -311,7 +319,7 @@ func setHistoryForRecordWfTaskStartedResp(
 			nextEventID,
 			maximumPageSize,
 			nil,
-			response.GetTransientWorkflowTask(),
+			tranOrSpecEvents,
 			response.GetBranchToken(),
 			persistenceVisibilityMgr,
 		)
@@ -323,12 +331,11 @@ func setHistoryForRecordWfTaskStartedResp(
 	var continuation []byte
 	if len(persistenceToken) != 0 {
 		continuation, err = api.SerializeHistoryToken(&tokenspb.HistoryContinuation{
-			RunId:                 workflowKey.GetRunID(),
-			FirstEventId:          firstEventID,
-			NextEventId:           nextEventID,
-			PersistenceToken:      persistenceToken,
-			TransientWorkflowTask: response.GetTransientWorkflowTask(),
-			BranchToken:           response.GetBranchToken(),
+			RunId:            workflowKey.GetRunID(),
+			FirstEventId:     firstEventID,
+			NextEventId:      nextEventID,
+			PersistenceToken: persistenceToken,
+			BranchToken:      response.GetBranchToken(),
 		})
 		if err != nil {
 			return err
@@ -352,10 +359,9 @@ func CreateRecordWorkflowTaskStartedResponse(
 	ms historyi.MutableState,
 	updateRegistry update.Registry,
 	workflowTask *historyi.WorkflowTaskInfo,
-	identity string,
 	wtHeartbeat bool,
 ) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
-	rawResp, err := CreateRecordWorkflowTaskStartedResponseWithRawHistory(ctx, ms, updateRegistry, workflowTask, identity, wtHeartbeat)
+	rawResp, err := CreateRecordWorkflowTaskStartedResponseWithRawHistory(ctx, ms, updateRegistry, workflowTask, wtHeartbeat)
 	if err != nil {
 		return nil, err
 	}
@@ -367,7 +373,6 @@ func CreateRecordWorkflowTaskStartedResponse(
 		NextEventId:                rawResp.NextEventId,
 		Attempt:                    rawResp.Attempt,
 		StickyExecutionEnabled:     rawResp.StickyExecutionEnabled,
-		TransientWorkflowTask:      rawResp.TransientWorkflowTask,
 		WorkflowExecutionTaskQueue: rawResp.WorkflowExecutionTaskQueue,
 		BranchToken:                rawResp.BranchToken,
 		ScheduledTime:              rawResp.ScheduledTime,
@@ -386,11 +391,14 @@ func CreateRecordWorkflowTaskStartedResponseWithRawHistory(
 	ms historyi.MutableState,
 	updateRegistry update.Registry,
 	workflowTask *historyi.WorkflowTaskInfo,
-	identity string,
 	wtHeartbeat bool,
 ) (*historyservice.RecordWorkflowTaskStartedResponseWithRawHistory, error) {
+	// The Result of this function is used outside of WF lock. It is important to copy/clone all fields to response.
+
 	response := &historyservice.RecordWorkflowTaskStartedResponseWithRawHistory{}
-	response.WorkflowType = ms.GetWorkflowType()
+	response.WorkflowType = &commonpb.WorkflowType{
+		Name: ms.GetWorkflowType().GetName(),
+	}
 	executionInfo := ms.GetExecutionInfo()
 	if executionInfo.LastCompletedWorkflowTaskStartedEventId != common.EmptyEventID {
 		response.PreviousStartedEventId = executionInfo.LastCompletedWorkflowTaskStartedEventId
@@ -411,14 +419,12 @@ func CreateRecordWorkflowTaskStartedResponseWithRawHistory(
 	response.StartedTime = timestamppb.New(workflowTask.StartedTime)
 	response.Version = workflowTask.Version
 
-	// TODO (alex-update): Transient needs to be renamed to "TransientOrSpeculative"
-	response.TransientWorkflowTask = ms.GetTransientWorkflowTaskInfo(workflowTask, identity)
-
 	currentBranchToken, err := ms.GetCurrentBranchToken()
 	if err != nil {
 		return nil, err
 	}
-	response.BranchToken = currentBranchToken
+	response.BranchToken = make([]byte, len(currentBranchToken))
+	copy(response.BranchToken, currentBranchToken)
 
 	qr := ms.GetQueryRegistry()
 	bufferedQueryIDs := qr.GetBufferedIDs()

@@ -3,7 +3,6 @@ package history
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
@@ -57,12 +56,10 @@ func (e *ChasmEngine) UpdateComponent(
 	mutableState := executionLease.GetMutableState()
 	chasmTree, ok := mutableState.ChasmTree().(*chasm.Node)
 	if !ok {
-		return chasm.ComponentRef{}, serviceerror.NewInternal(
-			fmt.Sprintf(
-				"CHASM tree implementation not properly wired up, encountered type: %T, expected type: %T",
-				mutableState.ChasmTree(),
-				&chasm.Node{},
-			),
+		return chasm.ComponentRef{}, serviceerror.NewInternalf(
+			"CHASM tree implementation not properly wired up, encountered type: %T, expected type: %T",
+			mutableState.ChasmTree(),
+			&chasm.Node{},
 		)
 	}
 
@@ -85,11 +82,9 @@ func (e *ChasmEngine) UpdateComponent(
 		return chasm.ComponentRef{}, err
 	}
 
-	newRef, ok := mutableContext.Ref(component)
-	if !ok {
-		return chasm.ComponentRef{}, serviceerror.NewInternal(
-			fmt.Sprintf("component not found in the new component tree after mutation, componentRef: %+v", ref),
-		)
+	newRef, err := mutableContext.Ref(component)
+	if err != nil {
+		return chasm.ComponentRef{}, serviceerror.NewInternalf("componentRef: %+v: %s", ref, err)
 	}
 
 	return newRef, nil
@@ -113,12 +108,10 @@ func (e *ChasmEngine) ReadComponent(
 
 	chasmTree, ok := executionLease.GetMutableState().ChasmTree().(*chasm.Node)
 	if !ok {
-		return serviceerror.NewInternal(
-			fmt.Sprintf(
-				"CHASM tree implementation not properly wired up, encountered type: %T, expected type: %T",
-				executionLease.GetMutableState().ChasmTree(),
-				&chasm.Node{},
-			),
+		return serviceerror.NewInternalf(
+			"CHASM tree implementation not properly wired up, encountered type: %T, expected type: %T",
+			executionLease.GetMutableState().ChasmTree(),
+			&chasm.Node{},
 		)
 	}
 
