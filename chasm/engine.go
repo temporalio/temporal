@@ -5,15 +5,15 @@ import (
 )
 
 type engine interface {
-	newInstance(
+	newEntity(
 		context.Context,
-		EntityKey,
+		ComponentRef,
 		func(MutableContext) (Component, error),
 		...TransitionOption,
 	) (ComponentRef, error)
-	updateWithNewInstance(
+	updateWithNewEntity(
 		context.Context,
-		EntityKey,
+		ComponentRef,
 		func(MutableContext) (Component, error),
 		func(MutableContext, Component) error,
 		...TransitionOption,
@@ -45,6 +45,7 @@ type BusinessIDReusePolicy int
 
 const (
 	BusinessIDReusePolicyAllowDuplicate BusinessIDReusePolicy = iota
+	BusinessIDReusePolicyAllowDuplicateFailedOnly
 	BusinessIDReusePolicyRejectDuplicate
 )
 
@@ -53,13 +54,18 @@ type BusinessIDConflictPolicy int
 const (
 	BusinessIDConflictPolicyFail BusinessIDConflictPolicy = iota
 	BusinessIDConflictPolicyTermiateExisting
-	BusinessIDConflictPolicyUseExisting
+	// TODO: Do we want to support UseExisting conflict policy?
+	// BusinessIDConflictPolicyUseExisting
 )
 
-type transitionOptions struct {
+type TransitionOptions struct {
+	ReusePolicy    BusinessIDReusePolicy
+	ConflictPolicy BusinessIDConflictPolicy
+	RequestID      string
+	Speculative    bool
 }
 
-type TransitionOption func(*transitionOptions)
+type TransitionOption func(*TransitionOptions)
 
 // (only) this transition will not be persisted
 // The next non-speculative transition will persist this transition as well.
@@ -69,7 +75,9 @@ type TransitionOption func(*transitionOptions)
 // TODO: we need to figure out a way to run the tasks
 // generated in a speculative transition
 func WithSpeculative() TransitionOption {
-	panic("not implemented")
+	return func(opts *TransitionOptions) {
+		opts.Speculative = true
+	}
 }
 
 // this only applies to NewEntity and UpdateWithNewEntity
@@ -77,7 +85,19 @@ func WithBusinessIDPolicy(
 	reusePolicy BusinessIDReusePolicy,
 	conflictPolicy BusinessIDConflictPolicy,
 ) TransitionOption {
-	panic("not implemented")
+	return func(opts *TransitionOptions) {
+		opts.ReusePolicy = reusePolicy
+		opts.ConflictPolicy = conflictPolicy
+	}
+}
+
+// this only applies to NewEntity and UpdateWithNewEntity
+func WithRequestID(
+	requestID string,
+) TransitionOption {
+	return func(opts *TransitionOptions) {
+		opts.RequestID = requestID
+	}
 }
 
 // Not needed for V1
@@ -95,9 +115,9 @@ func NewEntity[C Component, I any, O any](
 	opts ...TransitionOption,
 ) (O, []byte, error) {
 	var output O
-	ref, err := engineFromContext(ctx).newInstance(
+	ref, err := engineFromContext(ctx).newEntity(
 		ctx,
-		key,
+		NewComponentRef[C](key),
 		func(ctx MutableContext) (Component, error) {
 			var c C
 			var err error
@@ -123,9 +143,9 @@ func UpdateWithNewEntity[C Component, I any, O1 any, O2 any](
 ) (O1, O2, []byte, error) {
 	var output1 O1
 	var output2 O2
-	ref, err := engineFromContext(ctx).updateWithNewInstance(
+	ref, err := engineFromContext(ctx).updateWithNewEntity(
 		ctx,
-		key,
+		NewComponentRef[C](key),
 		func(ctx MutableContext) (Component, error) {
 			var c C
 			var err error

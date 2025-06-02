@@ -2233,7 +2233,7 @@ func (ms *MutableStateImpl) DeleteSignalRequested(
 	ms.approximateSize -= len(requestID)
 }
 
-func (ms *MutableStateImpl) attachRequestID(
+func (ms *MutableStateImpl) AttachRequestID(
 	requestID string,
 	eventType enumspb.EventType,
 	eventID int64,
@@ -2245,6 +2245,9 @@ func (ms *MutableStateImpl) attachRequestID(
 	ms.executionState.RequestIds[requestID] = &persistencespb.RequestIDInfo{
 		EventType: eventType,
 		EventId:   eventID,
+	}
+	if eventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
+		ms.executionState.CreateRequestId = requestID
 	}
 	ms.approximateSize += ms.executionState.Size()
 }
@@ -2532,15 +2535,10 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 			ms.executionState.RunId, execution.GetRunId())
 	}
 
-	ms.approximateSize -= ms.executionInfo.Size()
-	ms.approximateSize -= ms.executionState.Size()
 	event := startEvent.GetWorkflowExecutionStartedEventAttributes()
-	ms.executionState.CreateRequestId = requestID
-	ms.executionState.RequestIds[requestID] = &persistencespb.RequestIDInfo{
-		EventType: startEvent.EventType,
-		EventId:   startEvent.EventId,
-	}
+	ms.AttachRequestID(requestID, startEvent.EventType, startEvent.EventId)
 
+	ms.approximateSize -= ms.executionInfo.Size()
 	ms.executionInfo.FirstExecutionRunId = event.GetFirstExecutionRunId()
 	ms.executionInfo.TaskQueue = event.TaskQueue.GetName()
 	ms.executionInfo.WorkflowTypeName = event.WorkflowType.GetName()
@@ -2549,6 +2547,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	ms.executionInfo.DefaultWorkflowTaskTimeout = event.GetWorkflowTaskTimeout()
 	ms.executionInfo.OriginalExecutionRunId = event.GetOriginalExecutionRunId()
 
+	ms.approximateSize -= ms.executionState.Size()
 	if err := ms.addCompletionCallbacks(
 		startEvent,
 		requestID,
@@ -4884,7 +4883,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 		return err
 	}
 	if attributes.GetAttachedRequestId() != "" {
-		ms.attachRequestID(attributes.GetAttachedRequestId(), event.EventType, event.EventId)
+		ms.AttachRequestID(attributes.GetAttachedRequestId(), event.EventType, event.EventId)
 	}
 	if len(attributes.GetAttachedCompletionCallbacks()) > 0 {
 		if err := ms.addCompletionCallbacks(
