@@ -184,5 +184,5 @@ func (v PhysicalTaskQueueVersion) MetricsTagValue() string {
 	} else if v.deploymentSeriesName == "" {
 		return v.buildId
 	}
-	return v.deploymentSeriesName + "/" + v.buildId
+	return v.deploymentSeriesName + ":" + v.buildId
 }
