@@ -52,9 +52,9 @@ func (s *fieldsIteratorSuite) TestGenericTypePrefix() {
 			expected: chasmFieldTypePrefix,
 		},
 		{
-			name:     "Collection type",
-			input:    Collection[int]{},
-			expected: chasmCollectionTypePrefix,
+			name:     "Map type",
+			input:    Map[string, int]{},
+			expected: chasmMapTypePrefix,
 		},
 		{
 			name:     "Non-generic type",
@@ -83,10 +83,10 @@ func (s *fieldsIteratorSuite) TestChasmFieldTypePrefix() {
 	s.True(strings.HasPrefix(fT.String(), chasmFieldTypePrefix))
 }
 
-func (s *fieldsIteratorSuite) TestChasmCollectionTypePrefix() {
-	c := Collection[any]{}
+func (s *fieldsIteratorSuite) TestChasmMapTypePrefix() {
+	c := Map[string, any]{}
 	cT := reflect.TypeOf(c)
-	s.True(strings.HasPrefix(cT.String(), chasmCollectionTypePrefix))
+	s.True(strings.HasPrefix(cT.String(), chasmMapTypePrefix))
 }
 
 func (s *fieldsIteratorSuite) TestFieldsOf() {
@@ -96,8 +96,8 @@ func (s *fieldsIteratorSuite) TestFieldsOf() {
 	}
 
 	type noDataField struct {
-		SubField      Field[string]
-		SubCollection Collection[int]
+		SubField Field[string]
+		SubMap   Map[string, int]
 	}
 
 	type twoDataFields struct {
@@ -121,21 +121,21 @@ func (s *fieldsIteratorSuite) TestFieldsOf() {
 			name: "Valid component with one data field",
 			input: &struct {
 				UnimplementedComponent
-				DataField     *protoMessageType
-				SubField      Field[string]
-				SubCollection Collection[int]
+				DataField *protoMessageType
+				SubField  Field[string]
+				SubMap    Map[string, int]
 			}{},
-			expectedKinds:  []fieldKind{fieldKindData, fieldKindSubField, fieldKindSubCollection},
-			expectedNames:  []string{"DataField", "SubField", "SubCollection"},
-			expectedTypes:  []string{"*persistence.WorkflowExecutionState", "chasm.Field[string]", "chasm.Collection[int]"},
+			expectedKinds:  []fieldKind{fieldKindData, fieldKindSubField, fieldKindSubMap},
+			expectedNames:  []string{"DataField", "SubField", "SubMap"},
+			expectedTypes:  []string{"*persistence.WorkflowExecutionState", "chasm.Field[string]", "chasm.Map[string,int]"},
 			expectedErrors: []string{"", "", ""},
 		},
 		{
 			name:           "Component with no data field",
 			input:          &noDataField{},
-			expectedKinds:  []fieldKind{fieldKindSubField, fieldKindSubCollection, fieldKindUnspecified},
-			expectedNames:  []string{"SubField", "SubCollection", ""},
-			expectedTypes:  []string{"chasm.Field[string]", "chasm.Collection[int]", ""},
+			expectedKinds:  []fieldKind{fieldKindSubField, fieldKindSubMap, fieldKindUnspecified},
+			expectedNames:  []string{"SubField", "SubMap", ""},
+			expectedTypes:  []string{"chasm.Field[string]", "chasm.Map[string,int]", ""},
 			expectedErrors: []string{"", "", "*chasm.noDataField: no data field (implements proto.Message) found"},
 		},
 		{

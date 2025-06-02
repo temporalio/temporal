@@ -80,9 +80,38 @@ func TestCalculateTaskQueueVersioningInfo(t *testing.T) {
 			data: &persistencespb.DeploymentData{
 				Versions: []*deploymentspb.DeploymentVersionData{
 					{Version: v1, RampPercentage: 50, RoutingUpdateTime: t1, RampingSinceTime: t1},
-					// Passing only deployment name without version
-					{Version: nil, RampPercentage: 20, RoutingUpdateTime: t2, RampingSinceTime: t2},
 				},
+				UnversionedRampData: &deploymentspb.DeploymentVersionData{Version: nil, RampPercentage: 20, RoutingUpdateTime: t2, RampingSinceTime: t2},
+			},
+		},
+		{name: "ramp 100%",
+			wantCurrent: &deploymentspb.DeploymentVersionData{Version: v1, RoutingUpdateTime: t1, CurrentSinceTime: t1},
+			wantRamping: &deploymentspb.DeploymentVersionData{Version: v2, RoutingUpdateTime: t2, RampPercentage: 100, RampingSinceTime: t2},
+			data: &persistencespb.DeploymentData{
+				Versions: []*deploymentspb.DeploymentVersionData{
+					{Version: v1, RoutingUpdateTime: t1, CurrentSinceTime: t1},
+					{Version: v2, RampPercentage: 100, RoutingUpdateTime: t2, RampingSinceTime: t2},
+				},
+			},
+		},
+		{name: "ramp to unversioned 100%",
+			wantCurrent: &deploymentspb.DeploymentVersionData{Version: v1, RoutingUpdateTime: t1, CurrentSinceTime: t1},
+			wantRamping: &deploymentspb.DeploymentVersionData{Version: nil, RoutingUpdateTime: t2, RampPercentage: 100, RampingSinceTime: t2},
+			data: &persistencespb.DeploymentData{
+				Versions: []*deploymentspb.DeploymentVersionData{
+					{Version: v1, RoutingUpdateTime: t1, CurrentSinceTime: t1},
+				},
+				UnversionedRampData: &deploymentspb.DeploymentVersionData{Version: nil, RampPercentage: 100, RoutingUpdateTime: t2, RampingSinceTime: t2},
+			},
+		},
+		{name: "ramp to unversioned 100% without current",
+			wantCurrent: nil,
+			wantRamping: &deploymentspb.DeploymentVersionData{Version: nil, RoutingUpdateTime: t2, RampPercentage: 100, RampingSinceTime: t2},
+			data: &persistencespb.DeploymentData{
+				Versions: []*deploymentspb.DeploymentVersionData{
+					{Version: v1, RoutingUpdateTime: t1, CurrentSinceTime: nil},
+				},
+				UnversionedRampData: &deploymentspb.DeploymentVersionData{Version: nil, RampPercentage: 100, RoutingUpdateTime: t2, RampingSinceTime: t2},
 			},
 		},
 	}

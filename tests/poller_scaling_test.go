@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -26,8 +27,7 @@ import (
 )
 
 type PollerScalingIntegSuite struct {
-	testcore.FunctionalTestSuite
-	sdkClient sdkclient.Client
+	testcore.FunctionalTestBase
 }
 
 func (s *PollerScalingIntegSuite) mustToPayload(v any) *commonpb.Payload {
@@ -49,24 +49,7 @@ func (s *PollerScalingIntegSuite) SetupSuite() {
 		dynamicconfig.MatchingNumTaskqueueWritePartitions.Key():    1,
 		dynamicconfig.MatchingPollerScalingBacklogAgeScaleUp.Key(): 50 * time.Millisecond,
 	}
-	s.FunctionalTestBase.SetupSuiteWithDefaultCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
-}
-
-func (s *PollerScalingIntegSuite) SetupTest() {
-	s.FunctionalTestSuite.SetupTest()
-
-	var err error
-	s.sdkClient, err = sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.FrontendGRPCAddress(),
-		Namespace: s.Namespace().String(),
-	})
-	s.NoError(err)
-}
-
-func (s *PollerScalingIntegSuite) TearDownTest() {
-	if s.sdkClient != nil {
-		s.sdkClient.Close()
-	}
+	s.FunctionalTestBase.SetupSuiteWithCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 }
 
 func (s *PollerScalingIntegSuite) TestPollerScalingSimpleBacklog() {
@@ -96,7 +79,7 @@ func (s *PollerScalingIntegSuite) TestPollerScalingSimpleBacklog() {
 
 	// Queue up a couple workflows
 	for i := 0; i < 5; i++ {
-		_, err := s.sdkClient.ExecuteWorkflow(
+		_, err := s.SdkClient().ExecuteWorkflow(
 			ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
 		s.NoError(err)
 	}
@@ -109,10 +92,9 @@ func (s *PollerScalingIntegSuite) TestPollerScalingSimpleBacklog() {
 			Namespace: s.Namespace().String(),
 			TaskQueue: &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		})
-		assert.NoError(t, err)
-		if assert.NotNil(t, resp.PollerScalingDecision) {
-			assert.GreaterOrEqual(t, int32(1), resp.PollerScalingDecision.PollRequestDeltaSuggestion)
-		}
+		require.NoError(t, err)
+		require.NotNil(t, resp.PollerScalingDecision)
+		require.GreaterOrEqual(t, int32(1), resp.PollerScalingDecision.PollRequestDeltaSuggestion)
 
 		// Start enough activities / nexus tasks to ensure we will see scale up decisions
 		commands := make([]*commandpb.Command, 0, 5)
@@ -145,7 +127,7 @@ func (s *PollerScalingIntegSuite) TestPollerScalingSimpleBacklog() {
 			TaskToken: resp.TaskToken,
 			Commands:  commands,
 		})
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	}, 20*time.Second, 200*time.Millisecond)
 
 	// Wait to ensure add rate exceeds dispatch rate & backlog age grows
@@ -158,9 +140,9 @@ func (s *PollerScalingIntegSuite) TestPollerScalingSimpleBacklog() {
 			TaskQueueTypes: []enumspb.TaskQueueType{tqtyp},
 			ReportStats:    true,
 		})
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		stats := res.GetVersionsInfo()[""].TypesInfo[int32(tqtyp)].Stats
-		assert.GreaterOrEqual(t, stats.ApproximateBacklogAge.AsDuration(), 200*time.Millisecond)
+		require.GreaterOrEqual(t, stats.ApproximateBacklogAge.AsDuration(), 200*time.Millisecond)
 	}, 20*time.Second, 200*time.Millisecond)
 
 	actResp, err := feClient.PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
@@ -194,7 +176,7 @@ func (s *PollerScalingIntegSuite) TestPollerScalingDecisionsAreSeenProbabilistic
 	// Fire off workflows until polling stops
 	go func() {
 		for {
-			_, _ = s.sdkClient.ExecuteWorkflow(
+			_, _ = s.SdkClient().ExecuteWorkflow(
 				longctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
 			select {
 			case <-ctx.Done():

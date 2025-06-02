@@ -839,8 +839,8 @@ func TestUserData_Propagation(t *testing.T) {
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			for i := 1; i < N; i++ {
 				d, _, err := managers[i].GetUserData()
-				assert.NoError(c, err, "number", i)
-				assert.Equal(c, iter+1, int(d.GetVersion()), "number", i)
+				require.NoError(c, err, "number", i)
+				require.Equal(c, iter+1, int(d.GetVersion()), "number", i)
 			}
 		}, 5*time.Second, 10*time.Millisecond, "failed to propagate")
 		t.Log("Propagation time:", time.Since(start))

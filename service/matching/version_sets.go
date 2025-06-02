@@ -3,7 +3,6 @@ package matching
 import (
 	"crypto/sha256"
 	"encoding/base64"
-	"fmt"
 	"slices"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -46,7 +45,7 @@ func ToBuildIdOrderingResponse(data *persistencespb.VersioningData, maxSets int)
 func checkVersionSetLimits(g *persistencespb.VersioningData, maxSets, maxBuildIds int) error {
 	sets := g.GetVersionSets()
 	if maxSets > 0 && len(sets) > maxSets {
-		return serviceerror.NewFailedPrecondition(fmt.Sprintf("update would exceed number of compatible version sets permitted in namespace dynamic config (%v/%v)", len(sets), maxSets))
+		return serviceerror.NewFailedPreconditionf("update would exceed number of compatible version sets permitted in namespace dynamic config (%v/%v)", len(sets), maxSets)
 	}
 	if maxBuildIds == 0 {
 		return nil
@@ -56,7 +55,7 @@ func checkVersionSetLimits(g *persistencespb.VersioningData, maxSets, maxBuildId
 		numBuildIds += len(set.GetBuildIds())
 	}
 	if numBuildIds > maxBuildIds {
-		return serviceerror.NewFailedPrecondition(fmt.Sprintf("update would exceed number of build IDs permitted in namespace dynamic config (%v/%v)", numBuildIds, maxBuildIds))
+		return serviceerror.NewFailedPreconditionf("update would exceed number of build IDs permitted in namespace dynamic config (%v/%v)", numBuildIds, maxBuildIds)
 	}
 	return nil
 }
@@ -196,7 +195,7 @@ func updateVersionSetImpl(timestamp *hlc.Clock, data *persistencespb.VersioningD
 		}
 		// If it's not already in the sets, add it as the new default set
 		if targetSetIdx != -1 {
-			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("version %s already exists", targetedVersion))
+			return nil, serviceerror.NewInvalidArgumentf("version %s already exists", targetedVersion)
 		}
 
 		data.VersionSets = append(data.GetVersionSets(), &persistencespb.CompatibleVersionSet{
@@ -209,23 +208,23 @@ func updateVersionSetImpl(timestamp *hlc.Clock, data *persistencespb.VersioningD
 		compatVer := addNew.GetExistingCompatibleBuildId()
 		compatSetIdx, _ := worker_versioning.FindBuildId(data, compatVer)
 		if compatSetIdx == -1 {
-			return nil, serviceerror.NewNotFound(
-				fmt.Sprintf("targeted compatible_version %v not found", compatVer))
+			return nil, serviceerror.NewNotFoundf(
+				"targeted compatible_version %v not found", compatVer)
 		}
 		if targetSetIdx != -1 {
 			// If the version does exist, this operation can't do anything meaningful, but we can fail if the user
 			// says the version is now compatible with some different set.
 			if compatSetIdx == targetSetIdx {
 				if addNew.GetMakeSetDefault() && targetSetIdx != numExistingSets-1 {
-					return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("version %s already exists and is not default for queue", targetedVersion))
+					return nil, serviceerror.NewInvalidArgumentf("version %s already exists and is not default for queue", targetedVersion)
 				}
 				if versionInSetIdx != len(data.GetVersionSets()[targetSetIdx].BuildIds)-1 {
-					return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("version %s already exists and is not default in set", targetedVersion))
+					return nil, serviceerror.NewInvalidArgumentf("version %s already exists and is not default in set", targetedVersion)
 				}
 				// Make the operation idempotent
 				return data, nil
 			}
-			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("%s requested to be made compatible with %s but both versions exist and are incompatible", targetedVersion, compatVer))
+			return nil, serviceerror.NewInvalidArgumentf("%s requested to be made compatible with %s but both versions exist and are incompatible", targetedVersion, compatVer)
 		}
 
 		lastIdx := len(data.VersionSets[compatSetIdx].BuildIds)
@@ -239,7 +238,7 @@ func updateVersionSetImpl(timestamp *hlc.Clock, data *persistencespb.VersioningD
 		}
 	} else if req.GetPromoteSetByBuildId() != "" {
 		if targetSetIdx == -1 {
-			return nil, serviceerror.NewNotFound(fmt.Sprintf("targeted version %v not found", targetedVersion))
+			return nil, serviceerror.NewNotFoundf("targeted version %v not found", targetedVersion)
 		}
 		if targetSetIdx == numExistingSets-1 {
 			// Make the request idempotent
@@ -248,7 +247,7 @@ func updateVersionSetImpl(timestamp *hlc.Clock, data *persistencespb.VersioningD
 		makeDefaultSet(data, targetSetIdx, timestamp)
 	} else if req.GetPromoteBuildIdWithinSet() != "" {
 		if targetSetIdx == -1 {
-			return nil, serviceerror.NewNotFound(fmt.Sprintf("targeted version %v not found", targetedVersion))
+			return nil, serviceerror.NewNotFoundf("targeted version %v not found", targetedVersion)
 		}
 		if versionInSetIdx == len(data.GetVersionSets()[targetSetIdx].BuildIds)-1 {
 			// Make the request idempotent
@@ -257,12 +256,12 @@ func updateVersionSetImpl(timestamp *hlc.Clock, data *persistencespb.VersioningD
 		makeVersionInSetDefault(data, targetSetIdx, versionInSetIdx, timestamp)
 	} else if mergeSets := req.GetMergeSets(); mergeSets != nil {
 		if targetSetIdx == -1 {
-			return nil, serviceerror.NewNotFound(fmt.Sprintf("targeted primary version %v not found", targetedVersion))
+			return nil, serviceerror.NewNotFoundf("targeted primary version %v not found", targetedVersion)
 		}
 		secondaryBuildID := mergeSets.GetSecondarySetBuildId()
 		secondarySetIdx, _ := worker_versioning.FindBuildId(data, secondaryBuildID)
 		if secondarySetIdx == -1 {
-			return nil, serviceerror.NewNotFound(fmt.Sprintf("targeted secondary version %v not found", secondaryBuildID))
+			return nil, serviceerror.NewNotFoundf("targeted secondary version %v not found", secondaryBuildID)
 		}
 		if targetSetIdx == secondarySetIdx {
 			// Nothing to be done

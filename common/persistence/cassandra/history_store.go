@@ -2,7 +2,6 @@ package cassandra
 
 import (
 	"context"
-	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
@@ -145,12 +144,12 @@ func (h *HistoryStore) ReadHistoryBranch(
 
 	treeID, err := primitives.ValidateUUID(branch.TreeId)
 	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("ReadHistoryBranch - Gocql TreeId UUID cast failed. Error: %v", err))
+		return nil, serviceerror.NewInternalf("ReadHistoryBranch - Gocql TreeId UUID cast failed. Error: %v", err)
 	}
 
 	branchID, err := primitives.ValidateUUID(request.BranchID)
 	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("ReadHistoryBranch - Gocql BranchId UUID cast failed. Error: %v", err))
+		return nil, serviceerror.NewInternalf("ReadHistoryBranch - Gocql BranchId UUID cast failed. Error: %v", err)
 	}
 
 	var queryString string
@@ -178,7 +177,7 @@ func (h *HistoryStore) ReadHistoryBranch(
 	}
 
 	if err := iter.Close(); err != nil {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("ReadHistoryBranch. Close operation failed. Error: %v", err))
+		return nil, serviceerror.NewUnavailablef("ReadHistoryBranch. Close operation failed. Error: %v", err)
 	}
 
 	return &p.InternalReadHistoryBranchResponse{
@@ -244,12 +243,12 @@ func (h *HistoryStore) ForkHistoryBranch(
 
 	cqlTreeID, err := primitives.ValidateUUID(forkB.TreeId)
 	if err != nil {
-		return serviceerror.NewInternal(fmt.Sprintf("ForkHistoryBranch - Gocql TreeId UUID cast failed. Error: %v", err))
+		return serviceerror.NewInternalf("ForkHistoryBranch - Gocql TreeId UUID cast failed. Error: %v", err)
 	}
 
 	cqlNewBranchID, err := primitives.ValidateUUID(request.NewBranchID)
 	if err != nil {
-		return serviceerror.NewInternal(fmt.Sprintf("ForkHistoryBranch - Gocql NewBranchID UUID cast failed. Error: %v", err))
+		return serviceerror.NewInternalf("ForkHistoryBranch - Gocql NewBranchID UUID cast failed. Error: %v", err)
 	}
 	query := h.Session.Query(v2templateInsertTree, cqlTreeID, cqlNewBranchID, datablob.Data, datablob.EncodingType.String()).WithContext(ctx)
 	err = query.Exec()
@@ -330,7 +329,7 @@ func (h *HistoryStore) GetAllHistoryTreeBranches(
 	}
 
 	if err := iter.Close(); err != nil {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetAllHistoryTreeBranches. Close operation failed. Error: %v", err))
+		return nil, serviceerror.NewUnavailablef("GetAllHistoryTreeBranches. Close operation failed. Error: %v", err)
 	}
 
 	response := &p.InternalGetAllHistoryTreeBranchesResponse{
@@ -354,7 +353,7 @@ func (h *HistoryStore) GetHistoryTreeContainingBranch(
 
 	treeID, err := primitives.ValidateUUID(branch.TreeId)
 	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("ReadHistoryBranch. Gocql TreeId UUID cast failed. Error: %v", err))
+		return nil, serviceerror.NewInternalf("ReadHistoryBranch. Gocql TreeId UUID cast failed. Error: %v", err)
 	}
 	query := h.Session.Query(v2templateReadAllBranches, treeID).WithContext(ctx)
 

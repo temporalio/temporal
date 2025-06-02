@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
-	"os"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -40,13 +39,11 @@ import (
 	test "go.temporal.io/server/common/testing"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/history/consts"
-	"go.temporal.io/server/temporal/environment"
 	"go.temporal.io/server/tests/testcore"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
-	"gopkg.in/yaml.v3"
 )
 
 type (
@@ -86,18 +83,7 @@ func (s *NDCFunctionalTestSuite) SetupSuite() {
 	s.serializer = serialization.NewSerializer()
 	s.testClusterFactory = testcore.NewTestClusterFactory()
 
-	fileName := "../testdata/ndc_clusters.yaml"
-	if testcore.TestFlags.TestClusterConfigFile != "" {
-		fileName = testcore.TestFlags.TestClusterConfigFile
-	}
-	environment.SetupEnv()
-
-	confContent, err := os.ReadFile(fileName)
-	s.Require().NoError(err)
-	confContent = []byte(os.ExpandEnv(string(confContent)))
-
-	var clusterConfigs []*testcore.TestClusterConfig
-	s.Require().NoError(yaml.Unmarshal(confContent, &clusterConfigs))
+	clusterConfigs := clustersConfig("cluster-a", "cluster-b", "cluster-c")
 	clusterConfigs[0].WorkerConfig = testcore.WorkerConfig{DisableWorker: true}
 	clusterConfigs[1].WorkerConfig = testcore.WorkerConfig{DisableWorker: true}
 

@@ -6,7 +6,6 @@ package workflow
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
@@ -377,9 +376,6 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 			if _, err := b.mutableState.ApplyStartChildWorkflowExecutionInitiatedEvent(
 				firstEvent.GetEventId(),
 				event,
-				// create a new request ID which is used by transfer queue processor
-				// if namespace is failed over at this point
-				uuid.New(),
 			); err != nil {
 				return nil, err
 			}
@@ -613,11 +609,11 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 			if newRunID == "" {
 				newRunID = continuedAsNewRunID
 			} else if newRunID != continuedAsNewRunID {
-				return nil, serviceerror.NewInternal(fmt.Sprintf(
+				return nil, serviceerror.NewInternalf(
 					"ApplyEvents encounted newRunID mismatch for continuedAsNew event, task newRunID: %v, event newRunID: %v",
 					newRunID,
 					continuedAsNewRunID,
-				))
+				)
 			}
 
 			if err := b.mutableState.ApplyWorkflowExecutionContinuedAsNewEvent(
@@ -659,7 +655,7 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 		default:
 			def, ok := b.shard.StateMachineRegistry().EventDefinition(event.GetEventType())
 			if !ok {
-				return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Unknown event type: %v", event.GetEventType()))
+				return nil, serviceerror.NewInvalidArgumentf("Unknown event type: %v", event.GetEventType())
 			}
 			if err := def.Apply(b.mutableState.HSM(), event); err != nil {
 				return nil, err

@@ -82,12 +82,15 @@ message StartWorkflowExecutionRequest {
     // For top-level workflows (ie., without parent), this field must be nil.
     temporal.server.api.workflow.v1.RootExecutionInfo root_execution_info = 11;
     // inherited build ID from parent/previous execution
+    // Deprecated. Use behavior, version, and task queue fields in `parent_execution_info`.
     string inherited_build_id = 12;
     // If set, takes precedence over the Versioning Behavior sent by the SDK on Workflow Task completion.
     // To unset the override after the workflow is running, use UpdateWorkflowExecutionOptions.
     temporal.api.workflow.v1.VersioningOverride versioning_override = 13;
     // If set, we verify the parent-child relationship before applying ID conflict policy WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING
     bool child_workflow_only = 14;
+    // If present, the new workflow should start on this version with pinned base behavior.
+    temporal.api.deployment.v1.WorkerDeploymentVersion inherited_pinned_version = 15;
 }
 
 message StartWorkflowExecutionResponse {
@@ -143,6 +146,7 @@ message GetMutableStateResponse {
     string inherited_build_id = 23;
     repeated temporal.server.api.persistence.v1.VersionedTransition transition_history = 24;
     temporal.api.workflow.v1.WorkflowExecutionVersioningInfo versioning_info = 25;
+    temporal.server.api.history.v1.TransientWorkflowTaskInfo transient_or_speculative_events = 26;
 }
 
 message PollMutableStateRequest {
@@ -241,7 +245,7 @@ message RecordWorkflowTaskStartedResponse {
     int64 next_event_id = 5;
     int32 attempt = 6;
     bool sticky_execution_enabled = 7;
-    temporal.server.api.history.v1.TransientWorkflowTaskInfo transient_workflow_task = 8;
+    reserved 8;
     temporal.api.taskqueue.v1.TaskQueue workflow_execution_task_queue = 9;
     reserved 10;
     bytes branch_token = 11;
@@ -268,7 +272,7 @@ message RecordWorkflowTaskStartedResponseWithRawHistory {
     int64 next_event_id = 5;
     int32 attempt = 6;
     bool sticky_execution_enabled = 7;
-    temporal.server.api.history.v1.TransientWorkflowTaskInfo transient_workflow_task = 8;
+    reserved 8;
     temporal.api.taskqueue.v1.TaskQueue workflow_execution_task_queue = 9;
     reserved 10;
     bytes branch_token = 11;
@@ -556,6 +560,7 @@ message VerifyChildExecutionCompletionRecordedRequest {
     int64 parent_initiated_id = 4;
     int64 parent_initiated_version = 5;
     temporal.server.api.clock.v1.VectorClock clock = 6;
+    bool resend_parent = 7;
 }
 
 message VerifyChildExecutionCompletionRecordedResponse {

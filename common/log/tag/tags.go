@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"time"
 
-	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/primitives"
@@ -975,11 +974,8 @@ func VersioningBehavior(behavior enumspb.VersioningBehavior) ZapTag {
 	return NewStringerTag("versioning-behavior", behavior)
 }
 
-func Deployment(d *deploymentpb.Deployment) ZapTag {
-	if d != nil {
-		return NewAnyTag("deployment", d.SeriesName+":"+d.BuildId)
-	}
-	return NewAnyTag("deployment", "unversioned")
+func Deployment(d string) ZapTag {
+	return NewAnyTag("deployment", d)
 }
 
 func UserDataVersion(v int64) ZapTag {

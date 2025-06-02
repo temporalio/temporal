@@ -1,8 +1,6 @@
 package nsmanager
 
 import (
-	"fmt"
-
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -93,7 +91,7 @@ func (d *Validator) validateClusterName(
 	clusterName string,
 ) error {
 	if info, ok := d.clusterMetadata.GetAllClusterInfo()[clusterName]; !ok || !info.Enabled {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid cluster name: %v", clusterName))
+		return serviceerror.NewInvalidArgumentf("Invalid cluster name: %v", clusterName)
 	}
 	return nil
 }

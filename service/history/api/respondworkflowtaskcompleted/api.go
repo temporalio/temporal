@@ -2,7 +2,6 @@ package respondworkflowtaskcompleted
 
 import (
 	"context"
-	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -12,6 +11,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
@@ -59,6 +59,7 @@ type (
 		searchAttributesValidator      *searchattribute.Validator
 		persistenceVisibilityMgr       manager.VisibilityManager
 		commandHandlerRegistry         *workflow.CommandHandlerRegistry
+		matchingClient                 matchingservice.MatchingServiceClient
 	}
 )
 
@@ -70,6 +71,7 @@ func NewWorkflowTaskCompletedHandler(
 	searchAttributesValidator *searchattribute.Validator,
 	visibilityManager manager.VisibilityManager,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
+	matchingClient matchingservice.MatchingServiceClient,
 ) *WorkflowTaskCompletedHandler {
 	return &WorkflowTaskCompletedHandler{
 		config:                     shardContext.GetConfig(),
@@ -91,6 +93,7 @@ func NewWorkflowTaskCompletedHandler(
 		searchAttributesValidator:      searchAttributesValidator,
 		persistenceVisibilityMgr:       visibilityManager,
 		commandHandlerRegistry:         commandHandlerRegistry,
+		matchingClient:                 matchingClient,
 	}
 }
 
@@ -209,7 +212,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		if wftCompletedBuildId != wftStartedBuildId {
 			// Mutable state wasn't changed yet and doesn't have to be cleared.
 			releaseLeaseWithError = false
-			return nil, serviceerror.NewNotFound(fmt.Sprintf("this workflow task was dispatched to Build ID %s, not %s", wftStartedBuildId, wftCompletedBuildId))
+			return nil, serviceerror.NewNotFoundf("this workflow task was dispatched to Build ID %s, not %s", wftStartedBuildId, wftCompletedBuildId)
 		}
 	}
 
@@ -229,6 +232,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		}
 	}()
 
+	// TODO(carlydf): change condition when deprecating versionstamp
 	// It's an error if the workflow has used versioning in the past but this task has no versioning info.
 	if ms.GetMostRecentWorkerVersionStamp().GetUseVersioning() &&
 		//nolint:staticcheck // SA1019 deprecated stamp will clean up later
@@ -332,10 +336,10 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 	if err := namespaceEntry.VerifyBinaryChecksum(request.GetBinaryChecksum()); err != nil {
 		wtFailedCause = newWorkflowTaskFailedCause(
 			enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_BINARY,
-			serviceerror.NewInvalidArgument(
-				fmt.Sprintf(
-					"binary %v is marked as bad deployment",
-					request.GetBinaryChecksum())),
+			serviceerror.NewInvalidArgumentf(
+				"binary %v is marked as bad deployment",
+				//nolint:staticcheck // SA1019 deprecated stamp will clean up later
+				request.GetBinaryChecksum()),
 			false)
 	} else {
 		namespace := namespaceEntry.Name()
@@ -375,6 +379,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			handler.searchAttributesMapperProvider,
 			hasBufferedEventsOrMessages,
 			handler.commandHandlerRegistry,
+			handler.matchingClient,
 		)
 
 		if responseMutations, err = workflowTaskHandler.handleCommands(
@@ -431,7 +436,12 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 
 		metrics.FailedWorkflowTasksCounter.With(handler.metricsHandler).Record(
 			1,
-			metrics.OperationTag(metrics.HistoryRespondWorkflowTaskCompletedScope))
+			metrics.OperationTag(metrics.HistoryRespondWorkflowTaskCompletedScope),
+			metrics.NamespaceTag(namespaceEntry.Name().String()),
+			metrics.VersioningBehaviorTag(ms.GetEffectiveVersioningBehavior()),
+			metrics.FailureTag(wtFailedCause.failedCause.String()),
+			metrics.FirstAttemptTag(currentWorkflowTask.Attempt),
+		)
 		handler.logger.Info("Failing the workflow task.",
 			tag.Value(wtFailedCause.Message()),
 			tag.WorkflowID(token.GetWorkflowId()),
@@ -476,7 +486,10 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		if request.GetForceCreateNewWorkflowTask() || // Heartbeat WT is always of Normal type.
 			wtFailedShouldCreateNewTask ||
 			hasBufferedEventsOrMessages ||
-			activityNotStartedCancelled {
+			activityNotStartedCancelled ||
+			// If the workflow has an ongoing transition to another deployment version, we should ensure
+			// it has a pending wft so it does not remain in the transition phase for long.
+			ms.GetDeploymentTransition() != nil {
 
 			newWorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_NORMAL
 
@@ -700,7 +713,6 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			ms,
 			updateRegistry,
 			newWorkflowTask,
-			request.GetIdentity(),
 			request.GetForceCreateNewWorkflowTask(),
 		)
 		if err != nil {
@@ -709,7 +721,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		// sticky is always enabled when worker request for new workflow task from RespondWorkflowTaskCompleted
 		resp.StartedResponse.StickyExecutionEnabled = true
 
-		resp.NewWorkflowTask, err = handler.withNewWorkflowTask(ctx, namespaceEntry.Name(), req, resp.StartedResponse)
+		resp.NewWorkflowTask, err = handler.withNewWorkflowTask(ctx, namespaceEntry.Name(), req, resp.StartedResponse, ms.GetTransientWorkflowTaskInfo(newWorkflowTask, request.GetIdentity()))
 		if err != nil {
 			return nil, err
 		}
@@ -737,6 +749,7 @@ func (handler *WorkflowTaskCompletedHandler) createPollWorkflowTaskQueueResponse
 	namespaceID namespace.ID,
 	matchingResp *matchingservice.PollWorkflowTaskQueueResponse,
 	branchToken []byte,
+	tranOrSpecEvents *historyspb.TransientWorkflowTaskInfo,
 	maximumPageSize int32,
 ) (_ *workflowservice.PollWorkflowTaskQueueResponse, retError error) {
 
@@ -796,7 +809,7 @@ func (handler *WorkflowTaskCompletedHandler) createPollWorkflowTaskQueueResponse
 			nextEventID,
 			maximumPageSize,
 			nil,
-			matchingResp.GetTransientWorkflowTask(),
+			tranOrSpecEvents,
 			branchToken,
 			handler.persistenceVisibilityMgr,
 		)
@@ -806,12 +819,11 @@ func (handler *WorkflowTaskCompletedHandler) createPollWorkflowTaskQueueResponse
 
 		if len(persistenceToken) != 0 {
 			continuation, err = api.SerializeHistoryToken(&tokenspb.HistoryContinuation{
-				RunId:                 matchingResp.WorkflowExecution.GetRunId(),
-				FirstEventId:          firstEventID,
-				NextEventId:           nextEventID,
-				PersistenceToken:      persistenceToken,
-				TransientWorkflowTask: matchingResp.GetTransientWorkflowTask(),
-				BranchToken:           branchToken,
+				RunId:            matchingResp.WorkflowExecution.GetRunId(),
+				FirstEventId:     firstEventID,
+				NextEventId:      nextEventID,
+				PersistenceToken: persistenceToken,
+				BranchToken:      branchToken,
 			})
 			if err != nil {
 				return nil, err
@@ -845,6 +857,7 @@ func (handler *WorkflowTaskCompletedHandler) withNewWorkflowTask(
 	namespaceName namespace.Name,
 	request *historyservice.RespondWorkflowTaskCompletedRequest,
 	response *historyservice.RecordWorkflowTaskStartedResponse,
+	tranOrSpecEvents *historyspb.TransientWorkflowTaskInfo,
 ) (*workflowservice.PollWorkflowTaskQueueResponse, error) {
 	taskToken, err := handler.tokenSerializer.Deserialize(request.CompleteRequest.TaskToken)
 	if err != nil {
@@ -877,6 +890,7 @@ func (handler *WorkflowTaskCompletedHandler) withNewWorkflowTask(
 		namespace.ID(taskToken.NamespaceId),
 		matchingResp,
 		matchingResp.GetBranchToken(),
+		tranOrSpecEvents,
 		int32(handler.config.HistoryMaxPageSize(namespaceName.String())),
 	)
 }

@@ -27,7 +27,7 @@ import (
 )
 
 type WorkflowFailuresTestSuite struct {
-	testcore.FunctionalTestSuite
+	testcore.FunctionalTestBase
 }
 
 func TestWorkflowFailuresTestSuite(t *testing.T) {
@@ -378,5 +378,6 @@ func (s *WorkflowFailuresTestSuite) TestRespondWorkflowTaskCompleted_ReturnsErro
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
-  4 WorkflowTaskFailed`, historyEvents)
+  4 WorkflowTaskFailed
+  5 WorkflowTaskScheduled`, historyEvents)
 }

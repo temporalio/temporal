@@ -32,7 +32,7 @@ import (
 )
 
 type QueryWorkflowSuite struct {
-	testcore.FunctionalTestSdkSuite
+	testcore.FunctionalTestBase
 }
 
 func TestQueryWorkflowSuite(t *testing.T) {

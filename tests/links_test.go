@@ -17,7 +17,7 @@ import (
 )
 
 type LinksSuite struct {
-	testcore.FunctionalTestSdkSuite
+	testcore.FunctionalTestBase
 }
 
 func TestLinksTestSuite(t *testing.T) {

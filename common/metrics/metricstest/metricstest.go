@@ -83,7 +83,7 @@ func NewHandler(logger log.Logger, clientConfig metrics.ClientConfig) (*Handler,
 	)
 	meter := provider.Meter("temporal")
 
-	otelHandler, err := metrics.NewOtelMetricsHandler(logger, &otelProvider{meter: meter}, clientConfig)
+	otelHandler, err := metrics.NewOtelMetricsHandler(logger, &otelProvider{meter: meter}, clientConfig, false)
 	if err != nil {
 		return nil, err
 	}

@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -94,7 +93,13 @@ func GetRawHistory(
 	metricsHandler := interceptor.GetMetricsHandlerFromContext(ctx, shardContext.GetLogger()).WithTags(metrics.OperationTag(metrics.HistoryGetHistoryScope))
 	metrics.HistorySize.With(metricsHandler).Record(int64(size))
 
-	if len(nextToken) == 0 && transientWorkflowTaskInfo != nil {
+	// If
+	//    there are no more events in DB (i.e., page token is empty),
+	//    and transient/speculative WFT events are present (i.e., such WFT is in MS),
+	//    and WF is still running (i.e., last event is not completion event),
+	//    and the client supports transient/speculative WFT events in the history (i.e., not UI or CLI),
+	// then add transient/speculative events to the history.
+	if len(nextToken) == 0 && len(transientWorkflowTaskInfo.GetHistorySuffix()) > 0 && !isWorkflowCompletionEvent(lastEvent) && clientSupportsTranOrSpecEvents(ctx) {
 		if err := validateTransientWorkflowTaskEvents(nextEventID, transientWorkflowTaskInfo); err != nil {
 			logger := shardContext.GetLogger()
 			metricsHandler := interceptor.GetMetricsHandlerFromContext(ctx, logger).WithTags(metrics.OperationTag(metrics.HistoryGetRawHistoryScope))
@@ -107,13 +112,11 @@ func GetRawHistory(
 			return nil, nil, err
 		}
 
-		if len(transientWorkflowTaskInfo.HistorySuffix) > 0 {
-			blob, err := shardContext.GetPayloadSerializer().SerializeEvents(transientWorkflowTaskInfo.HistorySuffix, enumspb.ENCODING_TYPE_PROTO3)
-			if err != nil {
-				return nil, nil, err
-			}
-			rawHistory = append(rawHistory, blob)
+		blob, err := shardContext.GetPayloadSerializer().SerializeEvents(transientWorkflowTaskInfo.HistorySuffix, enumspb.ENCODING_TYPE_PROTO3)
+		if err != nil {
+			return nil, nil, err
 		}
+		rawHistory = append(rawHistory, blob)
 	}
 	return rawHistory, nextToken, nil
 }
@@ -127,7 +130,7 @@ func GetHistory(
 	nextEventID int64,
 	pageSize int32,
 	nextPageToken []byte,
-	transientWorkflowTaskInfo *historyspb.TransientWorkflowTaskInfo,
+	tranOrSpecEvents *historyspb.TransientWorkflowTaskInfo,
 	branchToken []byte,
 	persistenceVisibilityMgr manager.VisibilityManager,
 ) (*historypb.History, []byte, error) {
@@ -169,10 +172,12 @@ func GetHistory(
 	var firstEvent, lastEvent *historyspb.StrippedHistoryEvent
 	if len(historyEvents) > 0 {
 		firstEvent = &historyspb.StrippedHistoryEvent{
-			EventId: historyEvents[0].GetEventId(),
+			EventId:   historyEvents[0].GetEventId(),
+			EventType: historyEvents[0].GetEventType(),
 		}
 		lastEvent = &historyspb.StrippedHistoryEvent{
-			EventId: historyEvents[len(historyEvents)-1].GetEventId(),
+			EventId:   historyEvents[len(historyEvents)-1].GetEventId(),
+			EventType: historyEvents[len(historyEvents)-1].GetEventType(),
 		}
 	}
 	if err := VerifyHistoryIsComplete(
@@ -191,8 +196,15 @@ func GetHistory(
 			tag.WorkflowRunID(execution.GetRunId()),
 			tag.Error(err))
 	}
-	if len(nextPageToken) == 0 && transientWorkflowTaskInfo != nil {
-		if err := validateTransientWorkflowTaskEvents(nextEventID, transientWorkflowTaskInfo); err != nil {
+
+	// If
+	//    there are no more events in DB (i.e., page token is empty),
+	//    and transient/speculative WFT events are present (i.e., such WFT is in MS),
+	//    and WF is still running (i.e., last event is not completion event),
+	//    and the client supports transient/speculative WFT events in the history (i.e., not UI or CLI),
+	// then add transient/speculative events to the history.
+	if len(nextPageToken) == 0 && len(tranOrSpecEvents.GetHistorySuffix()) > 0 && !isWorkflowCompletionEvent(lastEvent) && clientSupportsTranOrSpecEvents(ctx) {
+		if err := validateTransientWorkflowTaskEvents(nextEventID, tranOrSpecEvents); err != nil {
 			metrics.ServiceErrIncompleteHistoryCounter.With(metricsHandler).Record(1)
 			logger.Error("getHistory error",
 				tag.WorkflowNamespaceID(namespaceID.String()),
@@ -200,8 +212,7 @@ func GetHistory(
 				tag.WorkflowRunID(execution.GetRunId()),
 				tag.Error(err))
 		}
-		// Append the transient workflow task events once we are done enumerating everything from the events table
-		historyEvents = append(historyEvents, transientWorkflowTaskInfo.HistorySuffix...)
+		historyEvents = append(historyEvents, tranOrSpecEvents.HistorySuffix...)
 	}
 
 	ns, err := shardContext.GetNamespaceRegistry().GetNamespaceName(namespaceID)
@@ -223,6 +234,8 @@ func GetHistory(
 	return executionHistory, nextPageToken, nil
 }
 
+// GetHistoryReverse doesn't accept transientWorkflowTaskInfo and doesn't attach transient/speculative WFT events,
+// because it is used by UI only. When support for these events is added for GetHistory API, it might be added here too.
 func GetHistoryReverse(
 	ctx context.Context,
 	shardContext historyi.ShardContext,
@@ -300,7 +313,7 @@ func ProcessOutgoingSearchAttributes(
 ) error {
 	saTypeMap, err := saProvider.GetSearchAttributes(persistenceVisibilityMgr.GetIndexName(), false)
 	if err != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf(consts.ErrUnableToGetSearchAttributesMessage, err))
+		return serviceerror.NewUnavailablef(consts.ErrUnableToGetSearchAttributesMessage, err)
 	}
 	for _, event := range events {
 		var searchAttributes *commonpb.SearchAttributes
@@ -336,12 +349,11 @@ func validateTransientWorkflowTaskEvents(
 	for i, event := range transientWorkflowTaskInfo.HistorySuffix {
 		expectedEventID := eventIDOffset + int64(i)
 		if event.GetEventId() != expectedEventID {
-			return serviceerror.NewInternal(
-				fmt.Sprintf(
-					"invalid transient workflow task at position %v; expected event ID %v, found event ID %v",
-					i,
-					expectedEventID,
-					event.GetEventId()))
+			return serviceerror.NewInternalf(
+				"invalid transient workflow task at position %v; expected event ID %v, found event ID %v",
+				i,
+				expectedEventID,
+				event.GetEventId())
 		}
 	}
 
@@ -372,7 +384,7 @@ func VerifyHistoryIsComplete(
 	if !isFirstPage { // at least one page of history has been read previously
 		if firstEvent.GetEventId() <= expectedFirstEventID {
 			// not first page and no events have been read in the previous pages - not possible
-			return serviceerror.NewDataLoss(fmt.Sprintf("Invalid history: expected first eventID to be > %v but got %v", expectedFirstEventID, firstEvent.GetEventId()))
+			return serviceerror.NewDataLossf("Invalid history: expected first eventID to be > %v but got %v", expectedFirstEventID, firstEvent.GetEventId())
 		}
 		expectedFirstEventID = firstEvent.GetEventId()
 	}
@@ -391,7 +403,7 @@ func VerifyHistoryIsComplete(
 		return nil
 	}
 
-	return serviceerror.NewDataLoss(fmt.Sprintf("Incomplete history: expected events [%v-%v] but got events [%v-%v] of length %v: isFirstPage=%v,isLastPage=%v,pageSize=%v",
+	return serviceerror.NewDataLossf("Incomplete history: expected events [%v-%v] but got events [%v-%v] of length %v: isFirstPage=%v,isLastPage=%v,pageSize=%v",
 		expectedFirstEventID,
 		expectedLastEventID,
 		firstEvent.GetEventId(),
@@ -399,7 +411,7 @@ func VerifyHistoryIsComplete(
 		eventCount,
 		isFirstPage,
 		isLastPage,
-		pageSize))
+		pageSize)
 }
 
 // ProcessInternalRawHistory processes history in the field response.History.
@@ -471,6 +483,50 @@ func FixFollowEvents(
 		}
 	}
 	return nil
+}
+
+func clientSupportsTranOrSpecEvents(
+	ctx context.Context,
+) bool {
+	// clientVersion is the second return value.
+	clientName, _ := headers.GetClientNameAndVersion(ctx)
+	switch clientName {
+	// Currently, CLI and UI don't support transient/speculative WFT events in the history,
+	// because they might disappear and appear again. This support can be added later though.
+	// Adjust a version after CLI and UI start to support it.
+	case headers.ClientNameCLI:
+		// ver, err := semver.Parse(clientVersion)
+		// if err != nil {
+		// 	return false
+		// }
+		// // TODO: Change "first.supported.version" to specific version (i.e. 1.20.0) when support for transient/speculative WFT events is added.
+		// return ver.GT(semver.MustParse("first.supported.version"))
+		return false
+	case headers.ClientNameUI:
+		// ver, err := semver.Parse(clientVersion)
+		// if err != nil {
+		// 	return false
+		// }
+		// // TODO: Change "first.supported.version" to specific version (i.e. 2.20.0) when support for transient/speculative WFT events is added.
+		// return ver.GT(semver.MustParse("first.supported.version"))
+		return false
+	default:
+		return true
+	}
+}
+
+func isWorkflowCompletionEvent(event *historyspb.StrippedHistoryEvent) bool {
+	switch event.GetEventType() {
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED:
+		return true
+	default:
+		return false
+	}
 }
 
 func makeFakeContinuedAsNewEvent(

@@ -2,7 +2,6 @@ package addtasks
 
 import (
 	"context"
-	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
@@ -42,11 +41,11 @@ func Invoke(
 	taskRegistry tasks.TaskCategoryRegistry,
 ) (*historyservice.AddTasksResponse, error) {
 	if len(req.Tasks) > maxTasksPerRequest {
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(
+		return nil, serviceerror.NewInvalidArgumentf(
 			"Too many tasks in request: %d > %d",
 			len(req.Tasks),
 			maxTasksPerRequest,
-		))
+		)
 	}
 
 	if len(req.Tasks) == 0 {
@@ -57,7 +56,7 @@ func Invoke(
 
 	for i, task := range req.Tasks {
 		if task == nil {
-			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Nil task at index: %d", i))
+			return nil, serviceerror.NewInvalidArgumentf("Nil task at index: %d", i)
 		}
 
 		category, err := api.GetTaskCategory(int(task.CategoryId), taskRegistry)
@@ -66,10 +65,10 @@ func Invoke(
 		}
 
 		if task.Blob == nil {
-			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(
+			return nil, serviceerror.NewInvalidArgumentf(
 				"Task blob is nil at index: %d",
 				i,
-			))
+			)
 		}
 
 		deserializedTask, err := deserializer.DeserializeTask(category, task.Blob)
@@ -79,10 +78,10 @@ func Invoke(
 
 		shardID := tasks.GetShardIDForTask(deserializedTask, numShards)
 		if shardID != int(req.ShardId) {
-			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(
+			return nil, serviceerror.NewInvalidArgumentf(
 				"Task is for wrong shard: index = %d, task shard = %d, request shard = %d",
 				i, shardID, req.ShardId,
-			))
+			)
 		}
 
 		// group by namespaceID + workflowID
