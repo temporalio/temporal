@@ -54,7 +54,7 @@ type (
 	}
 
 	// HealthSignalAggregatorImpl implements HealthSignalAggregator
-	HealthSignalAggregatorImpl struct {
+	healthSignalAggregatorImpl struct {
 		status int32
 
 		aggregatorEnabled dynamicconfig.BoolPropertyFn
@@ -74,8 +74,8 @@ func NewHealthSignalAggregator(
 	aggregatorEnabled dynamicconfig.BoolPropertyFn,
 	windowSize time.Duration,
 	maxBufferSize int,
-) *HealthSignalAggregatorImpl {
-	ret := &HealthSignalAggregatorImpl{
+) *healthSignalAggregatorImpl {
+	ret := &healthSignalAggregatorImpl{
 		logger:            logger,
 		aggregatorEnabled: aggregatorEnabled,
 		latencyAverage:    aggregate.NewMovingWindowAvgImpl(windowSize, maxBufferSize),
@@ -84,7 +84,7 @@ func NewHealthSignalAggregator(
 	return ret
 }
 
-func (s *HealthSignalAggregatorImpl) Record(latency time.Duration, err error) {
+func (s *healthSignalAggregatorImpl) Record(latency time.Duration, err error) {
 	if !s.aggregatorEnabled() {
 		s.logger.Debug("health signal aggregator is disabled")
 		return
@@ -98,14 +98,14 @@ func (s *HealthSignalAggregatorImpl) Record(latency time.Duration, err error) {
 	}
 }
 
-func (s *HealthSignalAggregatorImpl) AverageLatency() float64 {
+func (s *healthSignalAggregatorImpl) AverageLatency() float64 {
 	if !s.aggregatorEnabled() {
 		s.logger.Debug("health signal aggregator is disabled")
 	}
 	return s.latencyAverage.Average()
 }
 
-func (s *HealthSignalAggregatorImpl) ErrorRatio() float64 {
+func (s *healthSignalAggregatorImpl) ErrorRatio() float64 {
 	if !s.aggregatorEnabled() {
 		s.logger.Debug("health signal aggregator is disabled")
 	}
