@@ -566,10 +566,13 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 		}
 		var errMaxTaskQueuesInVersion workerdeployment.ErrMaxTaskQueuesInVersion
 		var errMaxVersionsInDeployment workerdeployment.ErrMaxVersionsInDeployment
+		var errMaxDeploymentsInNamespace workerdeployment.ErrMaxDeploymentsInNamespace
 		if errors.As(err, &errMaxTaskQueuesInVersion) {
 			err = errMaxTaskQueuesInVersion
 		} else if errors.As(err, &errMaxVersionsInDeployment) {
 			err = errMaxVersionsInDeployment
+		} else if errors.As(err, &errMaxDeploymentsInNamespace) {
+			err = errMaxDeploymentsInNamespace
 		} else {
 			// Do not surface low level error to user
 			c.logger.Error("error while registering version", tag.Error(err))
