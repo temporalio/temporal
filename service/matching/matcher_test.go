@@ -10,6 +10,7 @@ import (
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 	querypb "go.temporal.io/api/query/v1"
@@ -22,6 +23,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/tqid"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
@@ -50,6 +52,16 @@ func TestMatcherSuite(t *testing.T) {
 	suite.Run(t, new(MatcherTestSuite))
 }
 
+func (t *MatcherTestSuite) newDefaultRateLimiter() quotas.RateLimiter {
+	return quotas.NewDynamicRateLimiter(
+		quotas.NewMutableRateBurst(
+			defaultTaskDispatchRPS,
+			int(defaultTaskDispatchRPS),
+		),
+		defaultTaskDispatchRPSTTL,
+	)
+}
+
 func (t *MatcherTestSuite) SetupTest() {
 	t.controller = gomock.NewController(t.T())
 	t.client = matchingservicemock.NewMockMatchingServiceClient(t.controller)
@@ -71,11 +83,11 @@ func (t *MatcherTestSuite) SetupTest() {
 	t.childConfig = tlCfg
 	t.fwdr, err = newForwarder(&t.childConfig.forwarderConfig, t.queue, t.client)
 	t.Assert().NoError(err)
-	t.childMatcher = newTaskMatcher(tlCfg, t.fwdr, metrics.NoopMetricsHandler)
+	t.childMatcher = newTaskMatcher(tlCfg, t.fwdr, metrics.NoopMetricsHandler, t.newDefaultRateLimiter())
 	t.childMatcher.Start()
 
 	t.rootConfig = newTaskQueueConfig(prtn.TaskQueue(), cfg, "test-namespace")
-	t.rootMatcher = newTaskMatcher(t.rootConfig, nil, metrics.NoopMetricsHandler)
+	t.rootMatcher = newTaskMatcher(t.rootConfig, nil, metrics.NoopMetricsHandler, t.newDefaultRateLimiter())
 	t.rootMatcher.Start()
 }
 
@@ -205,7 +217,7 @@ func (t *MatcherTestSuite) TestRejectSyncMatchWhenBacklog() {
 
 	// Wait for the task to be added to the map
 	t.EventuallyWithT(func(c *assert.CollectT) {
-		assert.False(c, t.rootMatcher.isBacklogNegligible())
+		require.False(c, t.rootMatcher.isBacklogNegligible())
 	}, 30*time.Second, 1*time.Millisecond)
 
 	// should not allow sync match when there is an old task in backlog

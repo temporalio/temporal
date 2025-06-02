@@ -3,7 +3,6 @@ package replication
 import (
 	"context"
 	"errors"
-	"fmt"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
@@ -15,12 +14,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
-)
-
-var (
-	streamRetryPolicy = backoff.NewExponentialRetryPolicy(500 * time.Millisecond).
-		WithMaximumAttempts(100).
-		WithMaximumInterval(time.Second * 2)
+	"go.temporal.io/server/service/history/configs"
 )
 
 type (
@@ -44,7 +38,7 @@ func ClusterIDToClusterNameShardCount(
 			return clusterName, clusterInfo.ShardCount, nil
 		}
 	}
-	return "", 0, serviceerror.NewInternal(fmt.Sprintf("unknown cluster ID: %v", clusterID))
+	return "", 0, serviceerror.NewInternalf("unknown cluster ID: %v", clusterID)
 }
 
 func WrapEventLoop(
@@ -55,10 +49,13 @@ func WrapEventLoop(
 	metricsHandler metrics.Handler,
 	fromClusterKey ClusterShardKey,
 	toClusterKey ClusterShardKey,
-	retryPolicy backoff.RetryPolicy,
+	dc *configs.Config,
 ) {
 	defer streamStopper()
 
+	streamRetryPolicy := backoff.NewExponentialRetryPolicy(500 * time.Millisecond).
+		WithMaximumAttempts(dc.ReplicationStreamEventLoopRetryMaxAttempts()).
+		WithMaximumInterval(time.Second * 2)
 	ops := func() error {
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -89,7 +86,7 @@ func WrapEventLoop(
 		// shutdown case
 		return nil
 	}
-	_ = backoff.ThrottleRetry(ops, retryPolicy, isRetryableError)
+	_ = backoff.ThrottleRetry(ops, streamRetryPolicy, isRetryableError)
 }
 
 func isRetryableError(err error) bool {

@@ -170,7 +170,7 @@ func (m *sqlExecutionStore) createWorkflowExecutionTx(
 		}
 
 	default:
-		return nil, serviceerror.NewInternal(fmt.Sprintf("CreteWorkflowExecution: unknown mode: %v", request.Mode))
+		return nil, serviceerror.NewInternalf("CreteWorkflowExecution: unknown mode: %v", request.Mode)
 	}
 
 	row := sqlplugin.CurrentExecutionsRow{
@@ -219,9 +219,9 @@ func (m *sqlExecutionStore) GetWorkflowExecution(
 	case nil:
 		// noop
 	case sql.ErrNoRows:
-		return nil, serviceerror.NewNotFound(fmt.Sprintf("Workflow executionsRow not found.  WorkflowId: %v, RunId: %v", workflowID, runID))
+		return nil, serviceerror.NewNotFoundf("Workflow executionsRow not found.  WorkflowId: %v, RunId: %v", workflowID, runID)
 	default:
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetWorkflowExecution: failed. Error: %v", err))
+		return nil, serviceerror.NewUnavailablef("GetWorkflowExecution: failed. Error: %v", err)
 	}
 
 	state := &p.InternalWorkflowMutableState{
@@ -240,7 +240,7 @@ func (m *sqlExecutionStore) GetWorkflowExecution(
 		runID,
 	)
 	if err != nil {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetWorkflowExecution: failed to get activity info. Error: %v", err))
+		return nil, serviceerror.NewUnavailablef("GetWorkflowExecution: failed to get activity info. Error: %v", err)
 	}
 
 	state.TimerInfos, err = getTimerInfoMap(ctx,
@@ -251,7 +251,7 @@ func (m *sqlExecutionStore) GetWorkflowExecution(
 		runID,
 	)
 	if err != nil {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetWorkflowExecution: failed to get timer info. Error: %v", err))
+		return nil, serviceerror.NewUnavailablef("GetWorkflowExecution: failed to get timer info. Error: %v", err)
 	}
 
 	state.ChildExecutionInfos, err = getChildExecutionInfoMap(ctx,
@@ -262,7 +262,7 @@ func (m *sqlExecutionStore) GetWorkflowExecution(
 		runID,
 	)
 	if err != nil {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetWorkflowExecution: failed to get child executionsRow info. Error: %v", err))
+		return nil, serviceerror.NewUnavailablef("GetWorkflowExecution: failed to get child executionsRow info. Error: %v", err)
 	}
 
 	state.RequestCancelInfos, err = getRequestCancelInfoMap(ctx,
@@ -273,7 +273,7 @@ func (m *sqlExecutionStore) GetWorkflowExecution(
 		runID,
 	)
 	if err != nil {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetWorkflowExecution: failed to get request cancel info. Error: %v", err))
+		return nil, serviceerror.NewUnavailablef("GetWorkflowExecution: failed to get request cancel info. Error: %v", err)
 	}
 
 	state.SignalInfos, err = getSignalInfoMap(ctx,
@@ -284,7 +284,7 @@ func (m *sqlExecutionStore) GetWorkflowExecution(
 		runID,
 	)
 	if err != nil {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetWorkflowExecution: failed to get signal info. Error: %v", err))
+		return nil, serviceerror.NewUnavailablef("GetWorkflowExecution: failed to get signal info. Error: %v", err)
 	}
 
 	state.BufferedEvents, err = getBufferedEvents(ctx,
@@ -295,7 +295,7 @@ func (m *sqlExecutionStore) GetWorkflowExecution(
 		runID,
 	)
 	if err != nil {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetWorkflowExecution: failed to get buffered events. Error: %v", err))
+		return nil, serviceerror.NewUnavailablef("GetWorkflowExecution: failed to get buffered events. Error: %v", err)
 	}
 
 	state.ChasmNodes, err = getChasmNodeMap(ctx,
@@ -306,7 +306,7 @@ func (m *sqlExecutionStore) GetWorkflowExecution(
 		runID,
 	)
 	if err != nil {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetWorkflowExecution: failed to get CHASM nodes. Error: %v", err))
+		return nil, serviceerror.NewUnavailablef("GetWorkflowExecution: failed to get CHASM nodes. Error: %v", err)
 	}
 
 	state.SignalRequestedIDs, err = getSignalsRequested(ctx,
@@ -317,7 +317,7 @@ func (m *sqlExecutionStore) GetWorkflowExecution(
 		runID,
 	)
 	if err != nil {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetWorkflowExecution: failed to get signals requested. Error: %v", err))
+		return nil, serviceerror.NewUnavailablef("GetWorkflowExecution: failed to get signals requested. Error: %v", err)
 	}
 
 	return &p.InternalGetWorkflowExecutionResponse{
@@ -420,7 +420,7 @@ func (m *sqlExecutionStore) updateWorkflowExecutionTx(
 		}
 
 	default:
-		return serviceerror.NewUnavailable(fmt.Sprintf("UpdateWorkflowExecution: unknown mode: %v", request.Mode))
+		return serviceerror.NewUnavailablef("UpdateWorkflowExecution: unknown mode: %v", request.Mode)
 	}
 
 	if err := applyWorkflowMutationTx(ctx, tx, shardID, &updateWorkflow); err != nil {
@@ -531,7 +531,7 @@ func (m *sqlExecutionStore) conflictResolveWorkflowExecutionTx(
 		}
 
 	default:
-		return serviceerror.NewUnavailable(fmt.Sprintf("ConflictResolveWorkflowExecution: unknown mode: %v", request.Mode))
+		return serviceerror.NewUnavailablef("ConflictResolveWorkflowExecution: unknown mode: %v", request.Mode)
 	}
 
 	if err := applyWorkflowSnapshotTxAsReset(ctx,
@@ -679,7 +679,7 @@ func (m *sqlExecutionStore) GetCurrentExecution(
 		if err == sql.ErrNoRows {
 			return nil, serviceerror.NewNotFound(err.Error())
 		}
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetCurrentExecution operation failed. Error: %v", err))
+		return nil, serviceerror.NewUnavailablef("GetCurrentExecution operation failed. Error: %v", err)
 	}
 
 	return &p.InternalGetCurrentExecutionResponse{

@@ -258,9 +258,9 @@ func GetMutableState(
 ) (_ *historyservice.GetMutableStateResponse, retError error) {
 
 	if len(workflowKey.RunID) == 0 {
-		return nil, serviceerror.NewInternal(fmt.Sprintf(
+		return nil, serviceerror.NewInternalf(
 			"getMutableState encountered empty run ID: %v", workflowKey,
-		))
+		)
 	}
 
 	workflowLease, err := workflowConsistencyChecker.GetWorkflowLease(
@@ -292,9 +292,9 @@ func GetMutableStateWithConsistencyCheck(
 ) (_ *historyservice.GetMutableStateResponse, retError error) {
 
 	if len(workflowKey.RunID) == 0 {
-		return nil, serviceerror.NewInternal(fmt.Sprintf(
+		return nil, serviceerror.NewInternalf(
 			"getMutableState encountered empty run ID: %v", workflowKey,
-		))
+		)
 	}
 
 	workflowLease, err := workflowConsistencyChecker.GetWorkflowLeaseWithConsistencyCheck(
@@ -351,6 +351,7 @@ func MutableStateToGetResponse(
 	executionInfo := mutableState.GetExecutionInfo()
 	workflowState, workflowStatus := mutableState.GetWorkflowStateStatus()
 	lastFirstEventID, lastFirstEventTxnID := mutableState.GetLastFirstEventIDTxnID()
+	currentWorkflowTask := mutableState.GetPendingWorkflowTask()
 
 	var mostRecentWorkerVersionStamp *commonpb.WorkerVersionStamp
 	if mrwvs := mutableState.GetExecutionInfo().GetMostRecentWorkerVersionStamp(); mrwvs != nil {
@@ -393,5 +394,6 @@ func MutableStateToGetResponse(
 		MostRecentWorkerVersionStamp: mostRecentWorkerVersionStamp,
 		TransitionHistory:            transitionhistory.CopyVersionedTransitions(mutableState.GetExecutionInfo().TransitionHistory),
 		VersioningInfo:               mutableState.GetExecutionInfo().VersioningInfo,
+		TransientOrSpeculativeEvents: common.CloneProto(mutableState.GetTransientWorkflowTaskInfo(currentWorkflowTask, "")),
 	}, nil
 }

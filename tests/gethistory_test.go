@@ -28,15 +28,15 @@ import (
 )
 
 type RawHistorySuite struct {
-	testcore.FunctionalTestSuite
+	testcore.FunctionalTestBase
 }
 
 type RawHistoryClientSuite struct {
-	testcore.FunctionalTestSdkSuite
+	testcore.FunctionalTestBase
 }
 
 type GetHistoryFunctionalSuite struct {
-	testcore.FunctionalTestSuite
+	testcore.FunctionalTestBase
 	EnableTransitionHistory bool
 }
 
@@ -78,14 +78,14 @@ func (s *GetHistoryFunctionalSuite) SetupSuite() {
 	dynamicConfigOverrides := map[dynamicconfig.Key]any{
 		dynamicconfig.EnableTransitionHistory.Key(): s.EnableTransitionHistory,
 	}
-	s.FunctionalTestBase.SetupSuiteWithDefaultCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
+	s.FunctionalTestBase.SetupSuiteWithCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 }
 
 func (s *RawHistorySuite) SetupSuite() {
 	dynamicConfigOverrides := map[dynamicconfig.Key]any{
 		dynamicconfig.SendRawWorkflowHistory.Key(): true,
 	}
-	s.FunctionalTestBase.SetupSuiteWithDefaultCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
+	s.FunctionalTestBase.SetupSuiteWithCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 }
 
 func (s *GetHistoryFunctionalSuite) TestGetWorkflowExecutionHistory_All() {

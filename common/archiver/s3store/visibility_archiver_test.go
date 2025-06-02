@@ -36,7 +36,8 @@ type visibilityArchiverSuite struct {
 	suite.Suite
 	s3cli *mocks.MockS3API
 
-	container         *archiver.VisibilityBootstrapContainer
+	logger            log.Logger
+	metricsHandler    metrics.Handler
 	visibilityRecords []*archiverspb.VisibilityRecord
 
 	controller      *gomock.Controller
@@ -93,9 +94,10 @@ func (s *visibilityArchiverSuite) TestValidateURI() {
 
 func (s *visibilityArchiverSuite) newTestVisibilityArchiver() *visibilityArchiver {
 	return &visibilityArchiver{
-		container:   s.container,
-		s3cli:       s.s3cli,
-		queryParser: NewQueryParser(),
+		logger:         s.logger,
+		metricsHandler: s.metricsHandler,
+		s3cli:          s.s3cli,
+		queryParser:    NewQueryParser(),
 	}
 }
 
@@ -108,10 +110,8 @@ func (s *visibilityArchiverSuite) SetupSuite() {
 
 	s.testArchivalURI, err = archiver.NewURI(testBucketURI)
 	s.Require().NoError(err)
-	s.container = &archiver.VisibilityBootstrapContainer{
-		Logger:         log.NewNoopLogger(),
-		MetricsHandler: metrics.NoopMetricsHandler,
-	}
+	s.logger = log.NewNoopLogger()
+	s.metricsHandler = metrics.NoopMetricsHandler
 }
 
 func (s *visibilityArchiverSuite) TearDownSuite() {
