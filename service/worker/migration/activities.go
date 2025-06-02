@@ -994,6 +994,7 @@ func (a *activities) checkReplicationOnRemoteCluster(ctx context.Context, waitRe
 				tag.NewInt64("AckedTaskId", clusterInfo.AckedTaskId),
 				tag.NewStringTag("Namespace", waitRequest.Namespace),
 				tag.NewStringTag("CatchupCluster", waitRequest.CatchupCluster),
+				tag.NewStringTag("TargetCluster", waitRequest.TargetCluster),
 				tag.NewInt64("targetAckIDOnShard", targetAckIDOnShard[shard.ShardId]),
 				tag.NewInt64("MaxReplicationTaskId", shard.MaxReplicationTaskId),
 				tag.NewDurationTag("ActualLagging", shard.MaxReplicationTaskVisibilityTime.AsTime().Sub(clusterInfo.AckedTaskVisibilityTime.AsTime())),
