@@ -423,6 +423,34 @@ func (d *ClientImpl) DescribeWorkerDeployment(
 	return dInfo, queryResponse.GetState().GetConflictToken(), nil
 }
 
+func (d *ClientImpl) workerDeploymentExists(
+	ctx context.Context,
+	namespaceEntry *namespace.Namespace,
+	deploymentName string,
+) (bool, error) {
+	deploymentWorkflowID := worker_versioning.GenerateDeploymentWorkflowID(deploymentName)
+
+	res, err := d.historyClient.DescribeWorkflowExecution(ctx, &historyservice.DescribeWorkflowExecutionRequest{
+		NamespaceId: namespaceEntry.ID().String(),
+		Request: &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: namespaceEntry.Name().String(),
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: deploymentWorkflowID,
+			},
+		},
+	})
+	if err != nil {
+		var notFound *serviceerror.NotFound
+		if errors.As(err, &notFound) {
+			return false, nil
+		}
+		return false, err
+	}
+
+	// Deployment exists only if the entity wf is running
+	return res.GetWorkflowExecutionInfo().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, nil
+}
+
 func (d *ClientImpl) ListWorkerDeployments(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
@@ -1012,19 +1040,19 @@ func (d *ClientImpl) updateWithStartWorkerDeployment(
 
 	workflowID := worker_versioning.GenerateDeploymentWorkflowID(deploymentName)
 
-	_, _, err = d.DescribeWorkerDeployment(ctx, namespaceEntry, deploymentName)
+	exists, err := d.workerDeploymentExists(ctx, namespaceEntry, deploymentName)
 	if err != nil {
-		var notFound *serviceerror.NotFound
-		if errors.As(err, &notFound) {
-			// New deployment, make sure we're not exceeding the limit
-			count, err := d.countWorkerDeployments(ctx, namespaceEntry)
-			if err != nil {
-				return nil, err
-			}
-			limit := d.maxDeployments(namespaceEntry.Name().String())
-			if count >= int64(limit) {
-				return nil, ErrMaxDeploymentsInNamespace{error: errors.New(fmt.Sprintf("reached maximum deployments in namespace (%d)", limit))}
-			}
+		return nil, err
+	}
+	if !exists {
+		// New deployment, make sure we're not exceeding the limit
+		count, err := d.countWorkerDeployments(ctx, namespaceEntry)
+		if err != nil {
+			return nil, err
+		}
+		limit := d.maxDeployments(namespaceEntry.Name().String())
+		if count >= int64(limit) {
+			return nil, ErrMaxDeploymentsInNamespace{error: errors.New(fmt.Sprintf("reached maximum deployments in namespace (%d)", limit))}
 		}
 	}
 
