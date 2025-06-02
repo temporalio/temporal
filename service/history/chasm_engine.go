@@ -3,6 +3,7 @@ package history
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -270,7 +271,15 @@ func (e *ChasmEngine) createNewEntity(
 	)
 	mutableState.AttachRequestID(options.RequestID, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, 0)
 
-	chasmTree := mutableState.ChasmTree().(*chasm.Node)
+	chasmTree, ok := mutableState.ChasmTree().(*chasm.Node)
+	if !ok {
+		return newEntityParams{}, serviceerror.NewInternalf(
+			"CHASM tree implementation not properly wired up, encountered type: %T, expected type: %T",
+			mutableState.ChasmTree(),
+			&chasm.Node{},
+		)
+	}
+
 	chasmContext := chasm.NewMutableContext(ctx, chasmTree)
 	rootComponent, err := newFn(chasmContext)
 	if err != nil {
