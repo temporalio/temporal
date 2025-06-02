@@ -953,6 +953,7 @@ func (s *streamSenderSuite) TestSendTasks_TieredStack_LowPriority() {
 		nil, nil, &persistencespb.NamespaceReplicationConfig{
 			Clusters: []string{"source_cluster", "target_cluster"},
 		}, 100), nil).AnyTimes()
+	mockRegistry.EXPECT().GetNamespaceName(namespace.ID("1")).Return(namespace.Name("test"), nil).AnyTimes()
 	s.shardContext.EXPECT().GetNamespaceRegistry().Return(mockRegistry).AnyTimes()
 	iter := collection.NewPagingIterator[tasks.Task](
 		func(paginationToken []byte) ([]tasks.Task, []byte, error) {
