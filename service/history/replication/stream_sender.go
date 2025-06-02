@@ -535,10 +535,17 @@ Loop:
 				}
 			}
 			if task.Priority == enumsspb.TASK_PRIORITY_LOW {
+				nsName, err := s.shardContext.GetNamespaceRegistry().GetNamespaceName(
+					namespace.ID(item.GetNamespaceID()),
+				)
+				if err != nil {
+					// if there is error, then blindly send the task, better safe than sorry
+					nsName = namespace.EmptyName
+				}
 				if err := s.ssRateLimiter.Wait(s.server.Context(), quotas.NewRequest(
 					task.TaskType.String(),
 					taskSchedulerToken,
-					headers.SystemPreemptableCallerInfo.CallerName,
+					nsName.String(),
 					headers.SystemPreemptableCallerInfo.CallerType,
 					0,
 					"",
