@@ -232,6 +232,14 @@ func newTreeHelper(
 	return newNode(base, nil, "")
 }
 
+func (n *Node) SetRootComponent(
+	rootComponent Component,
+) {
+	root := n.root()
+	root.value = rootComponent
+	root.valueState = valueStateNeedSerialize
+}
+
 // Component retrieves a component from the tree rooted at node n
 // using the provided component reference
 // It also performs access rule, and task validation checks
@@ -253,7 +261,7 @@ func (n *Node) Component(
 		return nil, errComponentNotFound
 	}
 
-	node, ok := n.getNodeByPath(ref.componentPath)
+	node, ok := n.findNode(ref.componentPath)
 	if !ok {
 		return nil, errComponentNotFound
 	}
@@ -354,6 +362,26 @@ func (n *Node) prepareDataValue(
 	return nil
 }
 
+func (n *Node) preparePointerValue(
+	chasmContext Context,
+) error {
+	metadata := n.serializedNode.Metadata
+	pointerAttr := metadata.GetPointerAttributes()
+	if pointerAttr == nil {
+		return serviceerror.NewInternal(
+			fmt.Sprintf("expect chasm node to have PointerAttributes, actual attributes: %v", metadata.Attributes),
+		)
+	}
+
+	if n.valueState == valueStateNeedDeserialize {
+		if err := n.deserialize(nil); err != nil {
+			return fmt.Errorf("failed to deserialize data: %w", err)
+		}
+	}
+
+	return nil
+}
+
 func (n *Node) fieldType() fieldType {
 	if n.serializedNode.GetMetadata().GetComponentAttributes() != nil {
 		return fieldTypeComponent
@@ -363,13 +391,12 @@ func (n *Node) fieldType() fieldType {
 		return fieldTypeData
 	}
 
-	if n.serializedNode.GetMetadata().GetCollectionAttributes() != nil {
-		// Collection is not a Field.
-		return fieldTypeUnspecified
+	if n.serializedNode.GetMetadata().GetPointerAttributes() != nil {
+		return fieldTypePointer
 	}
 
-	if n.serializedNode.GetMetadata().GetPointerAttributes() != nil {
-		return fieldTypeComponentPointer
+	if n.serializedNode.GetMetadata().GetCollectionAttributes() != nil {
+		softassert.Fail(n.logger, "fieldType can't be called on Collection node because Collection is not a Field")
 	}
 
 	return fieldTypeUnspecified
@@ -385,7 +412,7 @@ func assertStructPointer(t reflect.Type) error {
 	}
 
 	if t.Kind() != reflect.Ptr || t.Elem().Kind() != reflect.Struct {
-		return serviceerror.NewInternal("only pointer to struct is supported for tree node value")
+		return serviceerror.NewInternalf("only pointer to struct is supported for tree node value: got %s", t.String())
 	}
 	return nil
 }
@@ -416,10 +443,20 @@ func (n *Node) initSerializedNode(ft fieldType) {
 				},
 			},
 		}
-	case fieldTypeComponentPointer:
-		panic("not implemented")
+	case fieldTypePointer:
+		n.serializedNode = &persistencespb.ChasmNode{
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition: &persistencespb.VersionedTransition{
+					TransitionCount:          n.backend.NextTransitionCount(),
+					NamespaceFailoverVersion: n.backend.GetCurrentVersion(),
+				},
+				Attributes: &persistencespb.ChasmNodeMetadata_PointerAttributes{
+					PointerAttributes: &persistencespb.ChasmPointerAttributes{},
+				},
+			},
+		}
 	case fieldTypeUnspecified:
-		// Do nothing. Panic?
+		softassert.Fail(n.logger, "initSerializedNode can't be called with fieldTypeUnspecified")
 	}
 }
 
@@ -470,7 +507,7 @@ func (n *Node) serialize() error {
 	case *persistencespb.ChasmNodeMetadata_CollectionAttributes:
 		return n.serializeCollectionNode()
 	case *persistencespb.ChasmNodeMetadata_PointerAttributes:
-		panic("not implemented")
+		return n.serializePointerNode()
 	default:
 		return serviceerror.NewInternal("unknown node type")
 	}
@@ -727,7 +764,18 @@ func (n *Node) syncSubField(fieldV reflect.Value, fieldN string, nodePath []stri
 		// Field is not empty but tree node is not set. It means this is a new field, and a node must be created.
 		childNode := newNode(n.nodeBase, n, fieldN)
 
-		if err = assertStructPointer(reflect.TypeOf(internal.value())); err != nil {
+		switch internal.fieldType() {
+		case fieldTypePointer:
+			if _, ok := internal.value().([]string); !ok {
+				err = serviceerror.NewInternalf("value must be of type []string for the field of pointer type: got %T", internal.value())
+				return
+			}
+		case fieldTypeData, fieldTypeComponent:
+			if err = assertStructPointer(reflect.TypeOf(internal.value())); err != nil {
+				return
+			}
+		default:
+			err = serviceerror.NewInternalf("unexpected field type: %d", internal.fieldType())
 			return
 		}
 		childNode.value = internal.value()
@@ -794,6 +842,22 @@ func (n *Node) serializeCollectionNode() error {
 	return nil
 }
 
+// serializePointerNode doesn't serialize anything but named this way for consistency.
+func (n *Node) serializePointerNode() error {
+	path, isPathValid := n.value.([]string)
+	if !isPathValid {
+		msg := fmt.Sprintf("pointer path is not []string but %T for node %s", n.value, n.nodeName)
+		softassert.Fail(n.logger, msg)
+		return serviceerror.NewInternal(msg)
+	}
+
+	n.serializedNode.GetMetadata().GetPointerAttributes().NodePath = path
+	n.updateLastUpdateVersionedTransition()
+	n.valueState = valueStateSynced
+
+	return nil
+}
+
 func (n *Node) updateLastUpdateVersionedTransition() {
 	if n.serializedNode.GetMetadata().GetLastUpdateVersionedTransition() == nil {
 		n.serializedNode.GetMetadata().LastUpdateVersionedTransition = &persistencespb.VersionedTransition{}
@@ -826,7 +890,7 @@ func (n *Node) deserialize(
 	case *persistencespb.ChasmNodeMetadata_CollectionAttributes:
 		softassert.Fail(n.logger, "deserialize shouldn't be called on the collection node because it is deserialized with the parent component.")
 	case *persistencespb.ChasmNodeMetadata_PointerAttributes:
-		// TODO: return serviceerror.NewInternal(...) instead.
+		return n.deserializePointerNode()
 	}
 	return nil
 }
@@ -902,6 +966,13 @@ func (n *Node) deserializeDataNode(
 	return nil
 }
 
+// deserializePointerNode doesn't deserialize anything but named this way for consistency.
+func (n *Node) deserializePointerNode() error {
+	n.value = n.serializedNode.GetMetadata().GetPointerAttributes().GetNodePath()
+	n.valueState = valueStateSynced
+	return nil
+}
+
 func unmarshalProto(
 	dataBlob *commonpb.DataBlob,
 	valueT reflect.Type,
@@ -922,10 +993,39 @@ func unmarshalProto(
 // Ref implements the CHASM Context interface
 func (n *Node) Ref(
 	component Component,
-) (ComponentRef, bool) {
-	// TODO: Implement this method.
-	// Currently returning an empty reference to unblock tests.
-	return ComponentRef{}, true
+) (ComponentRef, error) {
+	if err := n.syncSubComponents(); err != nil {
+		return ComponentRef{}, err
+	}
+
+	for path, node := range n.andAllChildren() {
+		// TODO: deserialize entire tree to make sure that node.value is not nil?
+		if node.value == component {
+			return ComponentRef{
+				componentPath: path,
+			}, nil
+		}
+	}
+	return ComponentRef{}, errComponentNotFound
+}
+
+func (n *Node) refData(
+	data proto.Message,
+) (ComponentRef, error) {
+	// TODO: return error
+	if err := n.syncSubComponents(); err != nil {
+		return ComponentRef{}, err
+	}
+
+	for path, node := range n.andAllChildren() {
+		// TODO: deserialize entire tree to make sure that node.value is not nil?
+		if node.value == data {
+			return ComponentRef{
+				componentPath: path,
+			}, nil
+		}
+	}
+	return ComponentRef{}, errComponentNotFound
 }
 
 // Now implements the CHASM Context interface
@@ -1417,7 +1517,7 @@ func (n *Node) applyDeletions(
 			return err
 		}
 
-		node, ok := n.getNodeByPath(path)
+		node, ok := n.findNode(path)
 		if !ok {
 			// Already deleted.
 			// This could happen when:
@@ -1444,7 +1544,7 @@ func (n *Node) applyUpdates(
 			return err
 		}
 
-		node, ok := n.getNodeByPath(path)
+		node, ok := n.findNode(path)
 		if !ok {
 			// Node doesn't exist, we need to create it.
 			n.setSerializedNode(path, updatedNode)
@@ -1496,7 +1596,7 @@ func (n *Node) path() []string {
 	return append(n.parent.path(), n.nodeName)
 }
 
-func (n *Node) getNodeByPath(
+func (n *Node) findNode(
 	path []string,
 ) (*Node, bool) {
 	if len(path) == 0 {
@@ -1508,7 +1608,7 @@ func (n *Node) getNodeByPath(
 	if !ok {
 		return nil, false
 	}
-	return childNode.getNodeByPath(path[1:])
+	return childNode.findNode(path[1:])
 }
 
 func (n *Node) delete(

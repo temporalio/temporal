@@ -235,6 +235,18 @@ these warning are not emitted if the value is set to 0 or less`,
 		`OperatorRPSRatio is the percentage of the rate limit provided to priority rate limiters that should be used for
 operator API calls (highest priority). Should be >0.0 and <= 1.0 (defaults to 20% if not specified)`,
 	)
+	// TODO: The following 2 configs should be removed once server keepalive and client keepalive are enabled by default
+	EnableInternodeServerKeepAlive = NewGlobalBoolSetting(
+		"system.enableInternodeServerKeepAlive",
+		false,
+		`enableInternodeServerKeepAlive is the config to enable keep alive for inter-node connections on server side.`,
+	)
+	EnableInternodeClientKeepAlive = NewGlobalBoolSetting(
+		"system.enableInternodeClientKeepAlive",
+		false,
+		`enableInternodeClientKeepAlive is the config to enable keep alive for inter-node connections on client side.`,
+	)
+
 	PersistenceQPSBurstRatio = NewGlobalFloatSetting(
 		"system.persistenceQPSBurstRatio",
 		1.0,
@@ -943,7 +955,11 @@ Wildcards (*) are expanded to allow any substring. By default blacklist is empty
 		`FrontendEnableExecuteMultiOperation enables the ExecuteMultiOperation API in the frontend.
 The API is under active development.`,
 	)
-
+	EnableExecuteMultiOperationErrorDebug = NewNamespaceBoolSetting(
+		"history.enableExecuteMultiOperationErrorDebug",
+		false,
+		`Enable detailed MultiOperation error debug information in the history service.`,
+	)
 	FrontendEnableUpdateWorkflowExecutionAsyncAccepted = NewNamespaceBoolSetting(
 		"frontend.enableUpdateWorkflowExecutionAsyncAccepted",
 		true,
@@ -1361,22 +1377,6 @@ See DynamicRateLimitingParams comments for more details.`,
 and HistoryCacheHostLevelMaxSizeBytes. Otherwise, entry count in the history cache will be limited by
 HistoryCacheMaxSize and HistoryCacheHostLevelMaxSize.`,
 	)
-	HistoryCacheInitialSize = NewGlobalIntSetting(
-		"history.cacheInitialSize",
-		128,
-		`HistoryCacheInitialSize is initial size of history cache`,
-	)
-	HistoryCacheMaxSize = NewGlobalIntSetting(
-		"history.cacheMaxSize",
-		512,
-		`HistoryCacheMaxSize is the maximum number of entries in the shard level history cache`,
-	)
-	HistoryCacheMaxSizeBytes = NewGlobalIntSetting(
-		"history.cacheMaxSizeBytes",
-		512*4*1024,
-		`HistoryCacheMaxSizeBytes is the maximum size of the shard level history cache in bytes. This is only used if
-HistoryCacheSizeBasedLimit is set to true.`,
-	)
 	HistoryCacheTTL = NewGlobalDurationSetting(
 		"history.cacheTTL",
 		time.Hour,
@@ -1387,11 +1387,6 @@ HistoryCacheSizeBasedLimit is set to true.`,
 		500*time.Millisecond,
 		`HistoryCacheNonUserContextLockTimeout controls how long non-user call (callerType != API or Operator)
 will wait on workflow lock acquisition. Requires service restart to take effect.`,
-	)
-	EnableHostHistoryCache = NewGlobalBoolSetting(
-		"history.enableHostHistoryCache",
-		true,
-		`EnableHostHistoryCache controls if the history cache is host level`,
 	)
 	HistoryCacheHostLevelMaxSize = NewGlobalIntSetting(
 		"history.hostLevelCacheMaxSize",

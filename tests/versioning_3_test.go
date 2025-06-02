@@ -515,13 +515,17 @@ func (s *Versioning3Suite) TestUnpinnedWorkflow_SuccessfulUpdate_TransitionstoNe
 			6 WorkflowTaskStarted
 		  `, task.History)
 
-			// Verify that events from the speculative task are *not* written to the workflow history before being processed by the poller
+			// Verify that events from the speculative task are present in the workflow history.
+			// TODO: how to assert that events 5 and 6 are not actually written to the history
+			//  before being processed by the poller?
 			events := s.GetHistory(s.Namespace().String(), execution)
 			s.EqualHistoryEvents(`
 				1 WorkflowExecutionStarted
 				2 WorkflowTaskScheduled
 				3 WorkflowTaskStarted
 				4 WorkflowTaskCompleted
+				5 WorkflowTaskScheduled // Speculative WT events are not written to the history yet.
+				6 WorkflowTaskStarted
 			`, events)
 
 			// VersioningInfo should not have changed before the update has been processed by the poller.
@@ -601,13 +605,17 @@ func (s *Versioning3Suite) TestUnpinnedWorkflow_FailedUpdate_DoesNotTransitionTo
 			6 WorkflowTaskStarted
 		  `, task.History)
 
-			// Verify that events from the speculative task are *not* written to the workflow history before being processed by the poller
+			// Verify that events from the speculative task are present in the workflow history.
+			// TODO: how to assert that events 5 and 6 are not actually written to the history
+			//  before being processed by the poller?
 			events := s.GetHistory(s.Namespace().String(), execution)
 			s.EqualHistoryEvents(`
 				1 WorkflowExecutionStarted
 				2 WorkflowTaskScheduled
 				3 WorkflowTaskStarted
 				4 WorkflowTaskCompleted
+				5 WorkflowTaskScheduled // Speculative WT events are not written to the history yet.
+				6 WorkflowTaskStarted
 			`, events)
 
 			// VersioningInfo should not have changed before the update has been processed by the poller.

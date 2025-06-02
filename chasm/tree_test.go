@@ -430,6 +430,93 @@ func (s *nodeSuite) TestCollectionAttributes() {
 	}
 }
 
+func (s *nodeSuite) TestPointerAttributes() {
+	tv := testvars.New(s.T())
+
+	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(1)).AnyTimes()
+	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(1)).AnyTimes()
+	s.nodeBackend.EXPECT().UpdateWorkflowStateStatus(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+	s.nodeBackend.EXPECT().GetWorkflowKey().Return(tv.Any().WorkflowKey()).AnyTimes()
+
+	var persistedNodes map[string]*persistencespb.ChasmNode
+
+	sc11 := &TestSubComponent11{
+		SubComponent11Data: &protoMessageType{
+			RunId: tv.WithWorkflowIDNumber(11).WorkflowID(),
+		},
+	}
+
+	s.Run("Sync and serialize component with pointer", func() {
+		var nilSerializedNodes map[string]*persistencespb.ChasmNode
+		rootNode, err := NewTree(nilSerializedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+		s.NoError(err)
+
+		sc1 := &TestSubComponent1{
+			SubComponent1Data: &protoMessageType{
+				RunId: tv.WithWorkflowIDNumber(1).WorkflowID(),
+			},
+			SubComponent11: NewComponentField[*TestSubComponent11](nil, sc11),
+		}
+
+		rootComponent := &TestComponent{
+			SubComponent1: NewComponentField[*TestSubComponent1](nil, sc1),
+		}
+
+		rootNode.value = rootComponent
+		rootNode.valueState = valueStateNeedSerialize
+
+		ctx := NewMutableContext(context.Background(), rootNode)
+		rootComponent.SubComponent11Pointer, err = ComponentPointerTo(ctx, sc11)
+		s.NoError(err)
+		s.Equal([]string{"SubComponent1", "SubComponent11"}, rootComponent.SubComponent11Pointer.Internal.v)
+
+		mutations, err := rootNode.CloseTransaction()
+		s.NoError(err)
+		s.Len(mutations.UpdatedNodes, 4, "root, SubComponent1, SubComponent11, and SubComponent11Pointer must be updated")
+		s.Empty(mutations.DeletedNodes)
+
+		s.Equal([]string{"SubComponent1", "SubComponent11"}, rootNode.children["SubComponent11Pointer"].serializedNode.GetMetadata().GetPointerAttributes().GetNodePath())
+
+		// Save it use in other subtests.
+		persistedNodes = common.CloneProtoMap(mutations.UpdatedNodes)
+	})
+
+	s.NotNil(persistedNodes)
+
+	s.Run("Deserialize pointer component", func() {
+		rootNode, err := NewTree(persistedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+		s.NoError(err)
+
+		err = rootNode.deserialize(reflect.TypeFor[*TestComponent]())
+		s.NoError(err)
+
+		rootComponent := rootNode.value.(*TestComponent)
+
+		chasmContext := NewMutableContext(context.Background(), rootNode)
+		sc11Des, err := rootComponent.SubComponent11Pointer.Get(chasmContext)
+		s.NoError(err)
+		s.NotNil(sc11Des)
+		s.Equal(sc11.SubComponent11Data.GetRunId(), sc11Des.SubComponent11Data.GetRunId())
+	})
+
+	s.Run("Clear pointer by setting it to the empty field", func() {
+		rootNode, err := NewTree(persistedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+		s.NoError(err)
+
+		err = rootNode.deserialize(reflect.TypeFor[*TestComponent]())
+		s.NoError(err)
+
+		rootComponent := rootNode.value.(*TestComponent)
+
+		rootComponent.SubComponent11Pointer = NewEmptyField[*TestSubComponent11]()
+
+		mutation, err := rootNode.CloseTransaction()
+		s.NoError(err)
+		s.Empty(mutation.UpdatedNodes, "no nodes should be updated")
+		s.Len(mutation.DeletedNodes, 1, "SubComponent11Pointer must be deleted")
+	})
+}
+
 func (s *nodeSuite) TestSyncSubComponents_DeleteLeafNode() {
 	node := s.testComponentTree()
 
@@ -1140,7 +1227,7 @@ func (s *nodeSuite) TestGetComponent() {
 			if tc.expectedErr == nil {
 				// s.Equal(tc.expectedComponent, component)
 
-				node, ok := root.getNodeByPath(tc.ref.componentPath)
+				node, ok := root.findNode(tc.ref.componentPath)
 				s.True(ok)
 				s.Equal(component, node.value)
 				s.Equal(tc.valueState, node.valueState)

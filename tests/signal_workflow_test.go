@@ -399,9 +399,9 @@ func (s *SignalWorkflowTestSuite) TestSignalExternalWorkflowCommand() {
 	s.NoError(err0)
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
-	foreignRequest := &workflowservice.StartWorkflowExecutionRequest{
+	externalRequest := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
-		Namespace:           s.ForeignNamespace().String(),
+		Namespace:           s.ExternalNamespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
@@ -410,9 +410,9 @@ func (s *SignalWorkflowTestSuite) TestSignalExternalWorkflowCommand() {
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
-	we2, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), foreignRequest)
+	we2, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), externalRequest)
 	s.NoError(err0)
-	s.Logger.Info("StartWorkflowExecution on foreign Namespace", tag.WorkflowNamespace(s.ForeignNamespace().String()), tag.WorkflowRunID(we2.RunId))
+	s.Logger.Info("StartWorkflowExecution on external Namespace", tag.WorkflowNamespace(s.ExternalNamespace().String()), tag.WorkflowRunID(we2.RunId))
 
 	activityCount := int32(1)
 	activityCounter := int32(0)
@@ -445,7 +445,7 @@ func (s *SignalWorkflowTestSuite) TestSignalExternalWorkflowCommand() {
 		return []*commandpb.Command{{
 			CommandType: enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_SignalExternalWorkflowExecutionCommandAttributes{SignalExternalWorkflowExecutionCommandAttributes: &commandpb.SignalExternalWorkflowExecutionCommandAttributes{
-				Namespace: s.ForeignNamespace().String(),
+				Namespace: s.ExternalNamespace().String(),
 				Execution: &commonpb.WorkflowExecution{
 					WorkflowId: id,
 					RunId:      we2.GetRunId(),
@@ -473,19 +473,19 @@ func (s *SignalWorkflowTestSuite) TestSignalExternalWorkflowCommand() {
 	}
 
 	workflowComplete := false
-	foreignActivityCount := int32(1)
-	foreignActivityCounter := int32(0)
+	externalActivityCount := int32(1)
+	externalActivityCounter := int32(0)
 	var signalEvent *historypb.HistoryEvent
-	foreignwtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
-		if foreignActivityCounter < foreignActivityCount {
-			foreignActivityCounter++
+	externalWFTHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+		if externalActivityCounter < externalActivityCount {
+			externalActivityCounter++
 			buf := new(bytes.Buffer)
-			s.Nil(binary.Write(buf, binary.LittleEndian, foreignActivityCounter))
+			s.Nil(binary.Write(buf, binary.LittleEndian, externalActivityCounter))
 
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-					ActivityId:             convert.Int32ToString(foreignActivityCounter),
+					ActivityId:             convert.Int32ToString(externalActivityCounter),
 					ActivityType:           &commonpb.ActivityType{Name: activityName},
 					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
@@ -513,31 +513,32 @@ func (s *SignalWorkflowTestSuite) TestSignalExternalWorkflowCommand() {
 		}}, nil
 	}
 
-	foreignPoller := &testcore.TaskPoller{
+	//nolint:staticcheck // SA1019 TaskPoller replacement needs to be done holistically.
+	externalPoller := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
-		Namespace:           s.ForeignNamespace().String(),
+		Namespace:           s.ExternalNamespace().String(),
 		TaskQueue:           taskQueue,
 		Identity:            identity,
-		WorkflowTaskHandler: foreignwtHandler,
+		WorkflowTaskHandler: externalWFTHandler,
 		ActivityTaskHandler: atHandler,
 		Logger:              s.Logger,
 		T:                   s.T(),
 	}
 
-	// Start both current and foreign workflows to make some progress.
+	// Start both current and external workflows to make some progress.
 	_, err := poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
-	_, err = foreignPoller.PollAndProcessWorkflowTask()
-	s.Logger.Info("foreign PollAndProcessWorkflowTask", tag.Error(err))
+	_, err = externalPoller.PollAndProcessWorkflowTask()
+	s.Logger.Info("external PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
-	err = foreignPoller.PollAndProcessActivityTask(false)
-	s.Logger.Info("foreign PollAndProcessActivityTask", tag.Error(err))
+	err = externalPoller.PollAndProcessActivityTask(false)
+	s.Logger.Info("external PollAndProcessActivityTask", tag.Error(err))
 	s.NoError(err)
 
-	// Signal the foreign workflow with this command.
+	// Signal the external workflow with this command.
 	_, err = poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
@@ -574,8 +575,8 @@ CheckHistoryLoopForSignalSent:
  11 ExternalWorkflowExecutionSignaled {"InitiatedEventId":10,"WorkflowExecution":{"RunId":"%s","WorkflowId":"%s"}}
  12 WorkflowTaskScheduled`, we2.RunId, id), historyEvents)
 
-	// Process signal in workflow for foreign workflow
-	_, err = foreignPoller.PollAndProcessWorkflowTask(testcore.WithDumpHistory)
+	// Process signal in workflow for external workflow
+	_, err = externalPoller.PollAndProcessWorkflowTask(testcore.WithDumpHistory)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -771,9 +772,9 @@ func (s *SignalWorkflowTestSuite) TestSignalExternalWorkflowCommand_WithoutRunID
 	s.NoError(err0)
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
-	foreignRequest := &workflowservice.StartWorkflowExecutionRequest{
+	externalRequest := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
-		Namespace:           s.ForeignNamespace().String(),
+		Namespace:           s.ExternalNamespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
@@ -782,9 +783,9 @@ func (s *SignalWorkflowTestSuite) TestSignalExternalWorkflowCommand_WithoutRunID
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
-	we2, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), foreignRequest)
+	we2, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), externalRequest)
 	s.NoError(err0)
-	s.Logger.Info("StartWorkflowExecution on foreign Namespace", tag.WorkflowNamespace(s.ForeignNamespace().String()), tag.WorkflowRunID(we2.RunId))
+	s.Logger.Info("StartWorkflowExecution on external Namespace", tag.WorkflowNamespace(s.ExternalNamespace().String()), tag.WorkflowRunID(we2.RunId))
 
 	activityCount := int32(1)
 	activityCounter := int32(0)
@@ -814,7 +815,7 @@ func (s *SignalWorkflowTestSuite) TestSignalExternalWorkflowCommand_WithoutRunID
 		return []*commandpb.Command{{
 			CommandType: enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_SignalExternalWorkflowExecutionCommandAttributes{SignalExternalWorkflowExecutionCommandAttributes: &commandpb.SignalExternalWorkflowExecutionCommandAttributes{
-				Namespace: s.ForeignNamespace().String(),
+				Namespace: s.ExternalNamespace().String(),
 				Execution: &commonpb.WorkflowExecution{
 					WorkflowId: id,
 					// No RunID in command
@@ -841,19 +842,19 @@ func (s *SignalWorkflowTestSuite) TestSignalExternalWorkflowCommand_WithoutRunID
 	}
 
 	workflowComplete := false
-	foreignActivityCount := int32(1)
-	foreignActivityCounter := int32(0)
+	externalActivityCount := int32(1)
+	externalActivityCounter := int32(0)
 	var signalEvent *historypb.HistoryEvent
-	foreignwtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
-		if foreignActivityCounter < foreignActivityCount {
-			foreignActivityCounter++
+	externalWFTHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+		if externalActivityCounter < externalActivityCount {
+			externalActivityCounter++
 			buf := new(bytes.Buffer)
-			s.Nil(binary.Write(buf, binary.LittleEndian, foreignActivityCounter))
+			s.Nil(binary.Write(buf, binary.LittleEndian, externalActivityCounter))
 
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-					ActivityId:             convert.Int32ToString(foreignActivityCounter),
+					ActivityId:             convert.Int32ToString(externalActivityCounter),
 					ActivityType:           &commonpb.ActivityType{Name: activityName},
 					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
@@ -881,31 +882,32 @@ func (s *SignalWorkflowTestSuite) TestSignalExternalWorkflowCommand_WithoutRunID
 		}}, nil
 	}
 
-	foreignPoller := &testcore.TaskPoller{
+	//nolint:staticcheck // SA1019 TaskPoller replacement needs to be done holistically.
+	externalPoller := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
-		Namespace:           s.ForeignNamespace().String(),
+		Namespace:           s.ExternalNamespace().String(),
 		TaskQueue:           taskQueue,
 		Identity:            identity,
-		WorkflowTaskHandler: foreignwtHandler,
+		WorkflowTaskHandler: externalWFTHandler,
 		ActivityTaskHandler: atHandler,
 		Logger:              s.Logger,
 		T:                   s.T(),
 	}
 
-	// Start both current and foreign workflows to make some progress.
+	// Start both current and external workflows to make some progress.
 	_, err := poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
-	_, err = foreignPoller.PollAndProcessWorkflowTask()
-	s.Logger.Info("foreign PollAndProcessWorkflowTask", tag.Error(err))
+	_, err = externalPoller.PollAndProcessWorkflowTask()
+	s.Logger.Info("external PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
-	err = foreignPoller.PollAndProcessActivityTask(false)
-	s.Logger.Info("foreign PollAndProcessActivityTask", tag.Error(err))
+	err = externalPoller.PollAndProcessActivityTask(false)
+	s.Logger.Info("external PollAndProcessActivityTask", tag.Error(err))
 	s.NoError(err)
 
-	// Signal the foreign workflow with this command.
+	// Signal the external workflow with this command.
 	_, err = poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
@@ -943,8 +945,8 @@ CheckHistoryLoopForSignalSent:
  11 ExternalWorkflowExecutionSignaled {"InitiatedEventId":10,"WorkflowExecution":{"RunId":"","WorkflowId":"%s"}}
  12 WorkflowTaskScheduled`, id), historyEvents)
 
-	// Process signal in workflow for foreign workflow
-	_, err = foreignPoller.PollAndProcessWorkflowTask(testcore.WithDumpHistory)
+	// Process signal in workflow for external workflow
+	_, err = externalPoller.PollAndProcessWorkflowTask(testcore.WithDumpHistory)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -1009,7 +1011,7 @@ func (s *SignalWorkflowTestSuite) TestSignalExternalWorkflowCommand_UnKnownTarge
 		return []*commandpb.Command{{
 			CommandType: enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_SignalExternalWorkflowExecutionCommandAttributes{SignalExternalWorkflowExecutionCommandAttributes: &commandpb.SignalExternalWorkflowExecutionCommandAttributes{
-				Namespace: s.ForeignNamespace().String(),
+				Namespace: s.ExternalNamespace().String(),
 				Execution: &commonpb.WorkflowExecution{
 					WorkflowId: "workflow_not_exist",
 					RunId:      we.GetRunId(),
@@ -1040,7 +1042,7 @@ func (s *SignalWorkflowTestSuite) TestSignalExternalWorkflowCommand_UnKnownTarge
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
-	// Signal the foreign workflow with this command.
+	// Signal the external workflow with this command.
 	_, err = poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
@@ -1162,7 +1164,7 @@ func (s *SignalWorkflowTestSuite) TestSignalExternalWorkflowCommand_SignalSelf()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
-	// Signal the foreign workflow with this command.
+	// Signal the external workflow with this command.
 	_, err = poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)

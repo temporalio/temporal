@@ -51,7 +51,6 @@ var Module = fx.Options(
 	events.Module,
 	cache.Module,
 	archival.Module,
-	dynamicconfig.Module,
 	fx.Provide(ConfigProvider), // might be worth just using provider for configs.Config directly
 	fx.Provide(workflow.NewCommandHandlerRegistry),
 	fx.Provide(RetryableInterceptorProvider),
