@@ -13,10 +13,32 @@ import (
 	"google.golang.org/grpc"
 )
 
-// HealthCheckInterceptor is a gRPC interceptor that records health metrics
-type HealthCheckInterceptor struct {
-	healthSignalAggregator HealthSignalAggregator
-}
+type (
+
+	// HealthCheckInterceptor is a gRPC interceptor that records health metrics
+	HealthCheckInterceptor struct {
+		healthSignalAggregator HealthSignalAggregator
+	}
+
+	// HealthSignalAggregator interface for aggregating health signals
+	HealthSignalAggregator interface {
+		Record(latency time.Duration, err error)
+		AverageLatency() float64
+		ErrorRatio() float64
+	}
+
+	// HealthSignalAggregatorImpl implements HealthSignalAggregator
+	healthSignalAggregatorImpl struct {
+		status int32
+
+		aggregatorEnabled dynamicconfig.BoolPropertyFn
+
+		latencyAverage aggregate.MovingWindowAverage
+		errorRatio     aggregate.MovingWindowAverage
+
+		logger log.Logger
+	}
+)
 
 // NewHealthCheckInterceptor creates a new health check interceptor
 func NewHealthCheckInterceptor(healthSignalAggregator HealthSignalAggregator) *HealthCheckInterceptor {
@@ -44,29 +66,6 @@ func (h *HealthCheckInterceptor) UnaryIntercept(
 
 	return resp, err
 }
-
-type (
-	// HealthSignalAggregator interface for aggregating health signals
-	HealthSignalAggregator interface {
-		Record(latency time.Duration, err error)
-		AverageLatency() float64
-		ErrorRatio() float64
-	}
-
-	// HealthSignalAggregatorImpl implements HealthSignalAggregator
-	healthSignalAggregatorImpl struct {
-		status int32
-
-		aggregatorEnabled dynamicconfig.BoolPropertyFn
-
-		latencyAverage aggregate.MovingWindowAverage
-		errorRatio     aggregate.MovingWindowAverage
-
-		logger log.Logger
-	}
-
-	NoopSignalAggregator struct{}
-)
 
 // NewHealthSignalAggregator creates a new instance of HealthSignalAggregatorImpl
 func NewHealthSignalAggregator(
