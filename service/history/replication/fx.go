@@ -164,6 +164,7 @@ func replicationStreamLowPrioritySchedulerProvider(
 	rateLimiter ClientSchedulerRateLimiter,
 	timeSource clock.TimeSource,
 	config *configs.Config,
+	nsRegistry namespace.Registry,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 	lc fx.Lifecycle,
@@ -201,15 +202,24 @@ func replicationStreamLowPrioritySchedulerProvider(
 	}
 	taskQuotaRequestFn := func(t TrackableExecutableTask) quotas.Request {
 		var taskType string
+		var nsName namespace.Name
 		replicationTask := t.ReplicationTask()
 		if replicationTask != nil {
 			taskType = replicationTask.TaskType.String()
-		}
 
+			rawTaskInfo := replicationTask.GetRawTaskInfo()
+			if rawTaskInfo != nil {
+				var err error
+				nsName, err = nsRegistry.GetNamespaceName(namespace.ID(replicationTask.GetRawTaskInfo().NamespaceId))
+				if err != nil {
+					nsName = namespace.EmptyName
+				}
+			}
+		}
 		return quotas.NewRequest(
 			taskType,
 			taskSchedulerToken,
-			headers.SystemPreemptableCallerInfo.CallerName,
+			nsName.String(),
 			headers.SystemPreemptableCallerInfo.CallerType,
 			0,
 			"")
