@@ -1,10 +1,7 @@
 package cassandra
 
 import (
-	"os"
-
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/temporal/environment"
 	"go.temporal.io/server/tools/common/schema/test"
 )
 
@@ -16,9 +13,6 @@ type (
 )
 
 func (s *SetupSchemaTestSuite) SetupSuite() {
-	if err := os.Setenv("CASSANDRA_HOST", environment.GetCassandraAddress()); err != nil {
-		s.Logger.Fatal("Failed to set CASSANDRA_HOST", tag.Error(err))
-	}
 	client, err := newTestCQLClient(systemKeyspace)
 	if err != nil {
 		s.Logger.Fatal("Error creating CQLClient", tag.Error(err))
