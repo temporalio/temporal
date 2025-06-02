@@ -26,7 +26,7 @@ type (
 		Stop()
 	}
 
-	HealthSignalAggregatorImpl struct {
+	healthSignalAggregatorImpl struct {
 		status     int32
 		shutdownCh chan struct{}
 
@@ -55,8 +55,8 @@ func NewHealthSignalAggregator(
 	perShardRPSWarnLimit dynamicconfig.IntPropertyFn,
 	perShardPerNsRPSWarnLimit dynamicconfig.FloatPropertyFn,
 	logger log.Logger,
-) *HealthSignalAggregatorImpl {
-	ret := &HealthSignalAggregatorImpl{
+) *healthSignalAggregatorImpl {
+	ret := &healthSignalAggregatorImpl{
 		status:                    common.DaemonStatusInitialized,
 		shutdownCh:                make(chan struct{}),
 		requestCounts:             make(map[int32]map[string]int64),
@@ -79,14 +79,14 @@ func NewHealthSignalAggregator(
 	return ret
 }
 
-func (s *HealthSignalAggregatorImpl) Start() {
+func (s *healthSignalAggregatorImpl) Start() {
 	if !atomic.CompareAndSwapInt32(&s.status, common.DaemonStatusInitialized, common.DaemonStatusStarted) {
 		return
 	}
 	go s.emitMetricsLoop()
 }
 
-func (s *HealthSignalAggregatorImpl) Stop() {
+func (s *healthSignalAggregatorImpl) Stop() {
 	if !atomic.CompareAndSwapInt32(&s.status, common.DaemonStatusStarted, common.DaemonStatusStopped) {
 		return
 	}
@@ -94,7 +94,7 @@ func (s *HealthSignalAggregatorImpl) Stop() {
 	s.emitMetricsTimer.Stop()
 }
 
-func (s *HealthSignalAggregatorImpl) Record(callerSegment int32, namespace string, latency time.Duration, err error) {
+func (s *healthSignalAggregatorImpl) Record(callerSegment int32, namespace string, latency time.Duration, err error) {
 	if s.aggregationEnabled {
 		s.latencyAverage.Record(latency.Milliseconds())
 
@@ -110,15 +110,15 @@ func (s *HealthSignalAggregatorImpl) Record(callerSegment int32, namespace strin
 	}
 }
 
-func (s *HealthSignalAggregatorImpl) AverageLatency() float64 {
+func (s *healthSignalAggregatorImpl) AverageLatency() float64 {
 	return s.latencyAverage.Average()
 }
 
-func (s *HealthSignalAggregatorImpl) ErrorRatio() float64 {
+func (s *healthSignalAggregatorImpl) ErrorRatio() float64 {
 	return s.errorRatio.Average()
 }
 
-func (s *HealthSignalAggregatorImpl) incrementShardRequestCount(shardID int32, namespace string) {
+func (s *healthSignalAggregatorImpl) incrementShardRequestCount(shardID int32, namespace string) {
 	s.requestsLock.Lock()
 	defer s.requestsLock.Unlock()
 	if s.requestCounts[shardID] == nil {
@@ -131,7 +131,7 @@ func (s *HealthSignalAggregatorImpl) incrementShardRequestCount(shardID int32, n
 // If that is over the limit, print a log line. Per-shard-per-namespace RPC limit for namespaces
 // is configured in dynamic config. This will allow us to see if some namespaces had hit
 // this limit in any of the shards.
-func (s *HealthSignalAggregatorImpl) emitMetricsLoop() {
+func (s *healthSignalAggregatorImpl) emitMetricsLoop() {
 	for {
 		select {
 		case <-s.shutdownCh:
