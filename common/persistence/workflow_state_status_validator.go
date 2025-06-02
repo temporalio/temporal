@@ -1,8 +1,6 @@
 package persistence
 
 import (
-	"fmt"
-
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -44,7 +42,7 @@ func ValidateCreateWorkflowStateStatus(
 	// validate workflow state & status
 	if (state == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED && status == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING) ||
 		(state != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED && status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING) {
-		return serviceerror.NewInternal(fmt.Sprintf("Create workflow with invalid state: %v or status: %v", state, status))
+		return serviceerror.NewInternalf("Create workflow with invalid state: %v or status: %v", state, status)
 	}
 	return nil
 }
@@ -65,7 +63,7 @@ func ValidateUpdateWorkflowStateStatus(
 	// validate workflow state & status
 	if (state == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED && status == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING) ||
 		(state != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED && status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING) {
-		return serviceerror.NewInternal(fmt.Sprintf("Update workflow with invalid state: %v or status: %v", state, status))
+		return serviceerror.NewInternalf("Update workflow with invalid state: %v or status: %v", state, status)
 	}
 	return nil
 }
@@ -76,7 +74,7 @@ func validateWorkflowState(
 ) error {
 
 	if _, ok := validWorkflowStates[state]; !ok {
-		return serviceerror.NewInternal(fmt.Sprintf("Invalid workflow state: %v", state))
+		return serviceerror.NewInternalf("Invalid workflow state: %v", state)
 	}
 
 	return nil
@@ -88,7 +86,7 @@ func validateWorkflowStatus(
 ) error {
 
 	if _, ok := validWorkflowStatuses[status]; !ok {
-		return serviceerror.NewInternal(fmt.Sprintf("Invalid workflow status: %v", status))
+		return serviceerror.NewInternalf("Invalid workflow status: %v", status)
 	}
 
 	return nil

@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"errors"
-	"fmt"
 	"io"
 	"sync"
 	"sync/atomic"
@@ -157,7 +156,7 @@ func (h *DatabaseHandle) ConvertError(err error) error {
 		errors.Is(err, syscall.ECONNABORTED) ||
 		errors.Is(err, syscall.ECONNREFUSED) {
 		h.reconnect(true)
-		return serviceerror.NewUnavailable(fmt.Sprintf("database connection lost: %s", err.Error()))
+		return serviceerror.NewUnavailablef("database connection lost: %s", err.Error())
 	}
 	return err
 }

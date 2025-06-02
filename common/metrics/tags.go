@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/primitives"
@@ -40,13 +41,35 @@ const (
 	// See server.api.enums.v1.ReplicationTaskType
 	replicationTaskType     = "replicationTaskType"
 	replicationTaskPriority = "replicationTaskPriority"
+	versioningBehavior      = "versioning_behavior"
+	isFirstAttempt          = "first-attempt"
+	workflowStatus          = "workflow_status"
+	behaviorBefore          = "behavior_before"
+	behaviorAfter           = "behavior_after"
+	runInitiator            = "run_initiator"
+	fromUnversioned         = "from_unversioned"
+	toUnversioned           = "to_unversioned"
+	queryTypeTag            = "query_type"
+	namespaceAllValue       = "all"
+	unknownValue            = "_unknown_"
+	totalMetricSuffix       = "_total"
+	tagExcludedValue        = "_tag_excluded_"
+	falseValue              = "false"
+	trueValue               = "true"
+	errorPrefix             = "*"
 
-	namespaceAllValue = "all"
-	unknownValue      = "_unknown_"
-	totalMetricSuffix = "_total"
-	tagExcludedValue  = "_tag_excluded_"
+	queryTypeStackTrace       = "__stack_trace"
+	queryTypeOpenSessions     = "__open_sessions"
+	queryTypeWorkflowMetadata = "__temporal_workflow_metadata"
+	queryTypeUserDefined      = "__user_defined"
 
-	errorPrefix = "*"
+	newRun      = "new"
+	existingRun = "existing"
+	childRun    = "child"
+	canRun      = "can"
+	retryRun    = "retry"
+	cronRun     = "cron"
+	unknownRun  = "unknown"
 )
 
 // Tag is an interface to define metrics tags
@@ -223,6 +246,14 @@ func FailureTag(value string) Tag {
 	return &tagImpl{key: FailureTagName, value: value}
 }
 
+func FirstAttemptTag(attempt int32) Tag {
+	value := falseValue
+	if attempt == 1 {
+		value = trueValue
+	}
+	return &tagImpl{key: isFirstAttempt, value: value}
+}
+
 func FailureSourceTag(value string) Tag {
 	if len(value) == 0 {
 		value = unknownValue
@@ -382,4 +413,67 @@ func DestinationTag(value string) Tag {
 		key:   destination,
 		value: value,
 	}
+}
+
+func VersioningBehaviorTag(behavior enumspb.VersioningBehavior) Tag {
+	return &tagImpl{versioningBehavior, behavior.String()}
+}
+
+func WorkflowStatusTag(status string) Tag {
+	return &tagImpl{key: workflowStatus, value: status}
+}
+
+func QueryTypeTag(queryType string) Tag {
+	if queryType == queryTypeStackTrace || queryType == queryTypeOpenSessions || queryType == queryTypeWorkflowMetadata {
+		return &tagImpl{key: queryType, value: queryType}
+	}
+	// group all user defined queries into a single tag value
+	return &tagImpl{key: queryTypeTag, value: queryTypeUserDefined}
+}
+
+func VersioningBehaviorBeforeOverrideTag(behavior enumspb.VersioningBehavior) Tag {
+	return &tagImpl{key: behaviorBefore, value: behavior.String()}
+}
+
+func VersioningBehaviorAfterOverrideTag(behavior enumspb.VersioningBehavior) Tag {
+	return &tagImpl{key: behaviorAfter, value: behavior.String()}
+}
+
+// RunInitiatorTag creates a tag indicating how a workflow run was initiated.
+// It handles both new workflow runs and continuations from previous runs.
+// When attributes is nil (e.g. during AddWorkflowExecutionOptionsUpdatedEvent),
+// it returns a tag indicating an existing run.
+func RunInitiatorTag(prevRunID string, attributes *historypb.WorkflowExecutionStartedEventAttributes) Tag {
+	if attributes == nil {
+		return &tagImpl{key: runInitiator, value: existingRun}
+	} else if attributes.GetParentWorkflowExecution() != nil {
+		return &tagImpl{key: runInitiator, value: childRun}
+	}
+
+	switch attributes.GetInitiator() {
+	case enumspb.CONTINUE_AS_NEW_INITIATOR_UNSPECIFIED:
+		return &tagImpl{key: runInitiator, value: newRun}
+	case enumspb.CONTINUE_AS_NEW_INITIATOR_WORKFLOW:
+		return &tagImpl{key: runInitiator, value: canRun}
+	case enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY:
+		return &tagImpl{key: runInitiator, value: retryRun}
+	case enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE:
+		return &tagImpl{key: runInitiator, value: cronRun}
+	default:
+		return &tagImpl{key: runInitiator, value: unknownRun}
+	}
+}
+
+func FromUnversionedTag(version string) Tag {
+	if version == "_unversioned_" {
+		return &tagImpl{key: fromUnversioned, value: trueValue}
+	}
+	return &tagImpl{key: fromUnversioned, value: falseValue}
+}
+
+func ToUnversionedTag(version string) Tag {
+	if version == "_unversioned_" {
+		return &tagImpl{key: toUnversioned, value: trueValue}
+	}
+	return &tagImpl{key: toUnversioned, value: falseValue}
 }

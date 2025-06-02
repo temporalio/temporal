@@ -1,6 +1,7 @@
 package workerdeployment
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -18,9 +19,8 @@ import (
 
 const (
 	// Workflow types
-	WorkerDeploymentVersionWorkflowType  = "temporal-sys-worker-deployment-version-workflow"
-	WorkerDeploymentWorkflowType         = "temporal-sys-worker-deployment-workflow"
-	WorkerDeploymentDrainageWorkflowType = "temporal-sys-worker-deployment-version-drainage-workflow"
+	WorkerDeploymentVersionWorkflowType = "temporal-sys-worker-deployment-version-workflow"
+	WorkerDeploymentWorkflowType        = "temporal-sys-worker-deployment-workflow"
 
 	// Namespace division
 	WorkerDeploymentNamespaceDivision = "TemporalWorkerDeployment"
@@ -62,7 +62,6 @@ const (
 	errTooManyDeployments         = "errTooManyDeployments"
 	errVersionAlreadyExistsType   = "errVersionAlreadyExists"
 	errMaxTaskQueuesInVersionType = "errMaxTaskQueuesInVersion"
-	errVersionAlreadyCurrentType  = "errVersionAlreadyCurrent"
 	errVersionNotFound            = "Version not found in deployment"
 
 	errConflictTokenMismatchType = "errConflictTokenMismatch"
@@ -103,22 +102,27 @@ var (
 func validateVersionWfParams(fieldName string, field string, maxIDLengthLimit int) error {
 	// Length checks
 	if field == "" {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("%v cannot be empty", fieldName))
+		return serviceerror.NewInvalidArgumentf("%v cannot be empty", fieldName)
 	}
 
 	// Length of each field should be: (MaxIDLengthLimit - (prefix + delimeter length)) / 2
 	if len(field) > (maxIDLengthLimit-WorkerDeploymentVersionWorkflowIDInitialSize)/2 {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("size of %v larger than the maximum allowed", fieldName))
+		return serviceerror.NewInvalidArgumentf("size of %v larger than the maximum allowed", fieldName)
 	}
 
 	// deploymentName cannot have "."
+	// TODO: remove this restriction once the old version strings are completely cleaned from external and internal API
+	if fieldName == WorkerDeploymentNameFieldName && strings.Contains(field, worker_versioning.WorkerDeploymentVersionIdDelimiterV31) {
+		return serviceerror.NewInvalidArgumentf("worker deployment name cannot contain '%s'", worker_versioning.WorkerDeploymentVersionIdDelimiterV31)
+	}
+	// deploymentName cannot have ":"
 	if fieldName == WorkerDeploymentNameFieldName && strings.Contains(field, worker_versioning.WorkerDeploymentVersionIdDelimiter) {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("worker deployment name cannot contain '%s'", worker_versioning.WorkerDeploymentVersionIdDelimiter))
+		return serviceerror.NewInvalidArgumentf("worker deployment name cannot contain '%s'", worker_versioning.WorkerDeploymentVersionIdDelimiter)
 	}
 
 	// buildID or deployment name cannot start with "__"
 	if strings.HasPrefix(field, "__") {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("%v cannot start with '__'", fieldName))
+		return serviceerror.NewInvalidArgumentf("%v cannot start with '__'", fieldName)
 	}
 
 	return nil
@@ -146,4 +150,11 @@ func getSafeDurationConfig(ctx workflow.Context, id string, unsafeGetter func() 
 
 func durationEq(a, b any) bool {
 	return a == b
+}
+
+// isFailedPrecondition checks if the error is a FailedPrecondition error. It also checks if the FailedPrecondition error is wrapped in an ApplicationError.
+func isFailedPrecondition(err error) bool {
+	var failedPreconditionError *serviceerror.FailedPrecondition
+	var applicationError *temporal.ApplicationError
+	return errors.As(err, &failedPreconditionError) || (errors.As(err, &applicationError) && applicationError.Type() == errFailedPrecondition)
 }

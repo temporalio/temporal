@@ -1,8 +1,6 @@
 package persistence
 
 import (
-	"fmt"
-
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 )
@@ -45,7 +43,7 @@ func ValidateCreateWorkflowModeState(
 		return nil
 
 	default:
-		return serviceerror.NewInternal(fmt.Sprintf("unknown mode: %v", mode))
+		return serviceerror.NewInternalf("unknown mode: %v", mode)
 	}
 }
 
@@ -135,7 +133,7 @@ func ValidateUpdateWorkflowModeState(
 		return nil
 
 	default:
-		return serviceerror.NewInternal(fmt.Sprintf("unknown mode: %v", mode))
+		return serviceerror.NewInternalf("unknown mode: %v", mode)
 	}
 }
 
@@ -256,7 +254,7 @@ func ValidateConflictResolveWorkflowModeState(
 
 		// precondition
 		if currentWorkflowMutation != nil {
-			return serviceerror.NewInternal(fmt.Sprintf("Invalid workflow conflict resolve mode %v, encountered current workflow", mode))
+			return serviceerror.NewInternalf("Invalid workflow conflict resolve mode %v, encountered current workflow", mode)
 		}
 
 		// case 1
@@ -287,7 +285,7 @@ func ValidateConflictResolveWorkflowModeState(
 		return nil
 
 	default:
-		return serviceerror.NewInternal(fmt.Sprintf("unknown mode: %v", mode))
+		return serviceerror.NewInternalf("unknown mode: %v", mode)
 	}
 }
 
@@ -300,7 +298,7 @@ func checkWorkflowState(state enumsspb.WorkflowExecutionState) error {
 		enumsspb.WORKFLOW_EXECUTION_STATE_CORRUPTED:
 		return nil
 	default:
-		return serviceerror.NewInternal(fmt.Sprintf("unknown workflow state: %v", state))
+		return serviceerror.NewInternalf("unknown workflow state: %v", state)
 	}
 }
 
@@ -308,11 +306,10 @@ func newInvalidCreateWorkflowMode(
 	mode CreateWorkflowMode,
 	workflowState enumsspb.WorkflowExecutionState,
 ) error {
-	return serviceerror.NewInternal(fmt.Sprintf(
+	return serviceerror.NewInternalf(
 		"Invalid workflow create mode %v, state: %v",
 		mode,
 		workflowState,
-	),
 	)
 }
 
@@ -320,11 +317,10 @@ func newInvalidUpdateWorkflowMode(
 	mode UpdateWorkflowMode,
 	currentWorkflowState enumsspb.WorkflowExecutionState,
 ) error {
-	return serviceerror.NewInternal(fmt.Sprintf(
+	return serviceerror.NewInternalf(
 		"Invalid workflow update mode %v, state: %v",
 		mode,
 		currentWorkflowState,
-	),
 	)
 }
 
@@ -333,12 +329,11 @@ func newInvalidUpdateWorkflowWithNewMode(
 	currentWorkflowState enumsspb.WorkflowExecutionState,
 	newWorkflowState enumsspb.WorkflowExecutionState,
 ) error {
-	return serviceerror.NewInternal(fmt.Sprintf(
+	return serviceerror.NewInternalf(
 		"Invalid workflow update mode %v, current state: %v, new state: %v",
 		mode,
 		currentWorkflowState,
 		newWorkflowState,
-	),
 	)
 }
 
@@ -346,11 +341,10 @@ func newInvalidConflictResolveWorkflowMode(
 	mode ConflictResolveWorkflowMode,
 	resetWorkflowState enumsspb.WorkflowExecutionState,
 ) error {
-	return serviceerror.NewInternal(fmt.Sprintf(
+	return serviceerror.NewInternalf(
 		"Invalid workflow conflict resolve mode %v, reset state: %v",
 		mode,
 		resetWorkflowState,
-	),
 	)
 }
 
@@ -359,12 +353,11 @@ func newInvalidConflictResolveWorkflowWithNewMode(
 	resetWorkflowState enumsspb.WorkflowExecutionState,
 	newWorkflowState enumsspb.WorkflowExecutionState,
 ) error {
-	return serviceerror.NewInternal(fmt.Sprintf(
+	return serviceerror.NewInternalf(
 		"Invalid workflow conflict resolve mode %v, reset state: %v, new state: %v",
 		mode,
 		resetWorkflowState,
 		newWorkflowState,
-	),
 	)
 }
 
@@ -373,12 +366,11 @@ func newInvalidConflictResolveWorkflowWithCurrentMode(
 	resetWorkflowState enumsspb.WorkflowExecutionState,
 	currentWorkflowState enumsspb.WorkflowExecutionState,
 ) error {
-	return serviceerror.NewInternal(fmt.Sprintf(
+	return serviceerror.NewInternalf(
 		"Invalid workflow conflict resolve mode %v, reset state: %v, current state: %v",
 		mode,
 		resetWorkflowState,
 		currentWorkflowState,
-	),
 	)
 }
 
@@ -388,12 +380,11 @@ func newInvalidConflictResolveWorkflowWithCurrentWithNewMode(
 	newWorkflowState enumsspb.WorkflowExecutionState,
 	currentWorkflowState enumsspb.WorkflowExecutionState,
 ) error {
-	return serviceerror.NewInternal(fmt.Sprintf(
+	return serviceerror.NewInternalf(
 		"Invalid workflow conflict resolve mode %v, reset state: %v, new state: %v, current state: %v",
 		mode,
 		resetWorkflowState,
 		newWorkflowState,
 		currentWorkflowState,
-	),
 	)
 }

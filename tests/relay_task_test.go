@@ -9,6 +9,7 @@ import (
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/log/tag"
@@ -17,7 +18,7 @@ import (
 )
 
 type RelayTaskTestSuite struct {
-	testcore.FunctionalTestSuite
+	testcore.FunctionalTestBase
 }
 
 func TestRelayTaskTestSuite(t *testing.T) {
@@ -92,13 +93,7 @@ func (s *RelayTaskTestSuite) TestRelayWorkflowTaskTimeout() {
 	s.NotNil(newTask)
 	s.NotNil(newTask.WorkflowTask)
 
-	//nolint:forbidigo
-	time.Sleep(time.Second * 2) // wait 2s for relay workflow task to timeout
-	workflowTaskTimeout := false
-	for i := 0; i < 3; i++ {
-		events := s.GetHistory(s.Namespace().String(), workflowExecution)
-		if len(events) == 8 {
-			s.EqualHistoryEvents(`
+	s.WaitForHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
@@ -106,14 +101,13 @@ func (s *RelayTaskTestSuite) TestRelayWorkflowTaskTimeout() {
   5 MarkerRecorded
   6 WorkflowTaskScheduled
   7 WorkflowTaskStarted
-  8 WorkflowTaskTimedOut {"ScheduledEventId":6,"StartedEventId":7,"TimeoutType":1} // TIMEOUT_TYPE_START_TO_CLOSE`, events)
-			workflowTaskTimeout = true
-			break
-		}
-		time.Sleep(time.Second) //nolint:forbidigo
-	}
-	// verify relay workflow task timeout
-	s.True(workflowTaskTimeout)
+  8 WorkflowTaskTimedOut {"ScheduledEventId":6,"StartedEventId":7,"TimeoutType":1} // TIMEOUT_TYPE_START_TO_CLOSE
+  9 WorkflowTaskScheduled // Transient WFT
+`,
+		func() []*historypb.HistoryEvent {
+			return s.GetHistory(s.Namespace().String(), workflowExecution)
+		},
+		3*time.Second, 500*time.Millisecond)
 
 	// Now complete workflow
 	_, err = poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory, testcore.WithExpectedAttemptCount(2))

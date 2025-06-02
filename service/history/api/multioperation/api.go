@@ -8,11 +8,13 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/tasktoken"
@@ -22,6 +24,7 @@ import (
 	"go.temporal.io/server/service/history/api/updateworkflow"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 var multiOpAbortedErr = serviceerror.NewMultiOperationAborted("Operation was aborted.")
@@ -43,6 +46,23 @@ type (
 
 		updater *updateworkflow.Updater
 		starter *startworkflow.Starter
+
+		// TODO(stephanos): remove again
+		leaseCreated                bool
+		leaseUpdated                bool
+		applyUpdateSinceUseExisting bool
+		applyUpdateSinceExists      bool
+		applyUpdateSinceDedup       bool
+		retryWithUnavailable        bool
+		updateErrOnStart            bool
+		startErrOnStart             bool
+		workflowIsRunning           bool
+		startingWorkflow            bool
+		startOutcome                startworkflow.StartOutcome
+		existingWorkflowRunID       string
+		existingWorkflowState       enumsspb.WorkflowExecutionState
+		existingWorkflowStatus      enumspb.WorkflowExecutionStatus
+		existingWorkflowStartedAt   *timestamppb.Timestamp
 	}
 )
 
@@ -55,7 +75,7 @@ func Invoke(
 	visibilityManager manager.VisibilityManager,
 	matchingClient matchingservice.MatchingServiceClient,
 	testHooks testhooks.TestHooks,
-) (*historyservice.ExecuteMultiOperationResponse, error) {
+) (_ *historyservice.ExecuteMultiOperationResponse, retErr error) {
 	if len(req.Operations) != 2 {
 		return nil, serviceerror.NewInvalidArgument("expected exactly 2 operations")
 	}
@@ -78,6 +98,39 @@ func Invoke(
 		updateReq:          updateReq,
 		startReq:           startReq,
 	}
+
+	// TODO(stephanos): remove again
+	defer func() {
+		if retErr != nil {
+			if shardContext.GetConfig().EnableExecuteMultiOperationErrorDebug(updateReq.GetRequest().Namespace) {
+				shardContext.GetLogger().Warn(
+					"MultiOperation failed",
+					tag.Error(retErr),
+					tag.ServiceErrorType(retErr),
+					tag.NewBoolTag("leaseCreated", mo.leaseCreated),
+					tag.NewBoolTag("leaseUpdated", mo.leaseUpdated),
+					tag.NewBoolTag("applyUpdateSinceUseExisting", mo.applyUpdateSinceUseExisting),
+					tag.NewBoolTag("applyUpdateSinceExists", mo.applyUpdateSinceExists),
+					tag.NewBoolTag("applyUpdateSinceDedup", mo.applyUpdateSinceDedup),
+					tag.NewBoolTag("retryWithUnavailable", mo.retryWithUnavailable),
+					tag.NewBoolTag("updateErrOnStart", mo.updateErrOnStart),
+					tag.NewBoolTag("startErrOnStart", mo.startErrOnStart),
+					tag.NewBoolTag("workflowIsRunning", mo.workflowIsRunning),
+					tag.NewBoolTag("startingWorkflow", mo.startingWorkflow),
+					tag.NewStringTag("startOutcome", mo.startOutcome.String()),
+					tag.NewStringTag("existingWorkflowRunID", mo.existingWorkflowRunID),
+					tag.NewStringTag("existingWorkflowState", mo.existingWorkflowState.String()),
+					tag.NewStringTag("existingWorkflowStatus", mo.existingWorkflowStatus.String()),
+					tag.NewTimePtrTag("existingWorkflowStartedAt", mo.existingWorkflowStartedAt),
+					tag.NewStringTag("reqUpdateID", updateReq.GetRequest().GetRequest().GetMeta().GetUpdateId()),
+					tag.NewStringTag("reqReusePolicy", startReq.GetStartRequest().GetWorkflowIdReusePolicy().String()),
+					tag.NewStringTag("reqConflictPolicy", startReq.GetStartRequest().GetWorkflowIdConflictPolicy().String()),
+					tag.NewStringTag("reqRunID", updateReq.GetRequest().GetWorkflowExecution().GetRunId()),
+					tag.NewStringTag("reqFirstExecutionRunId", updateReq.GetRequest().GetFirstExecutionRunId()),
+					tag.WorkflowID(req.WorkflowId))
+			}
+		}
+	}()
 
 	var err error
 	mo.starter, err = startworkflow.NewStarter(
@@ -110,6 +163,10 @@ func (mo *multiOp) Invoke(ctx context.Context) (*historyservice.ExecuteMultiOper
 
 	// Workflow already exists.
 	if workflowLease != nil {
+		mo.existingWorkflowRunID = workflowLease.GetContext().GetWorkflowKey().RunID
+		mo.existingWorkflowState = workflowLease.GetMutableState().GetExecutionState().GetState()
+		mo.existingWorkflowStatus = workflowLease.GetMutableState().GetExecutionState().GetStatus()
+		mo.existingWorkflowStartedAt = workflowLease.GetMutableState().GetExecutionState().GetStartTime()
 		updateID := mo.updateReq.Request.Request.Meta.GetUpdateId()
 
 		// If Update is complete, return it.
@@ -128,18 +185,23 @@ func (mo *multiOp) Invoke(ctx context.Context) (*historyservice.ExecuteMultiOper
 
 		// If Workflow is running ...
 		if workflowLease.GetMutableState().IsWorkflowExecutionRunning() {
+			mo.workflowIsRunning = true
+
 			// If Start is deduped, apply new/attach to update.
 			if canDedup(mo.startReq, workflowLease) {
+				mo.applyUpdateSinceDedup = true
 				return mo.updateWorkflow(ctx, workflowLease) // lease released inside
 			}
 
 			// If Update exists, attach to update.
 			if upd := workflowLease.GetContext().UpdateRegistry(ctx).Find(ctx, updateID); upd != nil {
+				mo.applyUpdateSinceExists = true
 				return mo.updateWorkflow(ctx, workflowLease) // lease released inside
 			}
 
 			// If conflict policy allows re-using the workflow, apply the update.
 			if mo.startReq.StartRequest.WorkflowIdConflictPolicy == enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING {
+				mo.applyUpdateSinceUseExisting = true
 				return mo.updateWorkflow(ctx, workflowLease) // lease released inside
 			}
 		}
@@ -165,6 +227,8 @@ func (mo *multiOp) workflowLeaseCallback(
 		var res api.WorkflowLease
 
 		if existingLease == nil {
+			mo.leaseCreated = true
+
 			// Create a new *locked* workflow context. This is important since without the lock, task processing
 			// would try to modify the mutable state concurrently. Once the Starter completes, it will release the lock.
 			//
@@ -184,6 +248,8 @@ func (mo *multiOp) workflowLeaseCallback(
 			}
 			res = api.NewWorkflowLease(workflowContext, releaseFunc, ms)
 		} else {
+			mo.leaseUpdated = true
+
 			// TODO(stephanos): remove this hack
 			// If the lease already exists, but the update needs to be re-applied since it was aborted due to a conflict.
 			res = existingLease
@@ -277,16 +343,24 @@ func (mo *multiOp) updateWorkflow(
 }
 
 func (mo *multiOp) startAndUpdateWorkflow(ctx context.Context) (*historyservice.ExecuteMultiOperationResponse, error) {
+	mo.startingWorkflow = true
+
 	startResp, startOutcome, err := mo.starter.Invoke(ctx)
+	mo.startOutcome = startOutcome
 	if err != nil {
 		// An update error occurred.
 		if errors.As(err, &updateError{}) {
+			mo.updateErrOnStart = true
 			return nil, newMultiOpError(multiOpAbortedErr, err)
 		}
+
 		// A start error occurred.
+		mo.startErrOnStart = true
 		return nil, newMultiOpError(err, multiOpAbortedErr)
 	}
 	if startOutcome != startworkflow.StartNew {
+		mo.retryWithUnavailable = true
+
 		// The workflow was meant to be started - but was actually *not* started.
 		// The problem is that the update has not been applied.
 		//
@@ -297,7 +371,7 @@ func (mo *multiOp) startAndUpdateWorkflow(ctx context.Context) (*historyservice.
 		// The best way forward is to exit and retry from the top.
 		// By returning an Unavailable service error, the entire MultiOperation will be retried.
 		return nil, newMultiOpError(
-			serviceerror.NewUnavailable(fmt.Sprintf("Workflow was not started: %v", startOutcome)),
+			serviceerror.NewUnavailablef("Workflow was not started: %v", startOutcome),
 			multiOpAbortedErr)
 	}
 

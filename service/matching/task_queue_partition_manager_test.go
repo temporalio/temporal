@@ -603,11 +603,11 @@ func (m *mockUserDataManager) GetUserData() (*persistencespb.VersionedTaskQueueU
 func (m *mockUserDataManager) UpdateUserData(_ context.Context, _ UserDataUpdateOptions, updateFn UserDataUpdateFunc) (int64, error) {
 	m.Lock()
 	defer m.Unlock()
-	data, _, err := updateFn(m.data.Data)
+	data, _, err := updateFn(m.data.GetData())
 	if err != nil {
 		return 0, err
 	}
-	m.data = &persistencespb.VersionedTaskQueueUserData{Data: data, Version: m.data.Version + 1}
+	m.data = &persistencespb.VersionedTaskQueueUserData{Data: data, Version: m.data.GetVersion() + 1}
 	return m.data.Version, nil
 }
 

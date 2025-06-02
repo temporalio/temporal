@@ -146,6 +146,16 @@ func (m *visibilityManagerRateLimited) GetWorkflowExecution(
 	return m.delegate.GetWorkflowExecution(ctx, request)
 }
 
+func (m *visibilityManagerRateLimited) AddSearchAttributes(
+	ctx context.Context,
+	request *manager.AddSearchAttributesRequest,
+) error {
+	if ok := allow(ctx, "AddSearchAttributes", m.readRateLimiter); !ok {
+		return persistence.ErrPersistenceSystemLimitExceeded
+	}
+	return m.delegate.AddSearchAttributes(ctx, request)
+}
+
 func allow(
 	ctx context.Context,
 	api string,

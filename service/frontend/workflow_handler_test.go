@@ -639,23 +639,12 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_InvalidWorkflowIdReuse
 		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING,
 	}
 
-	// by default, disallow
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
 	resp, err := wh.StartWorkflowExecution(context.Background(), req)
 	s.Nil(resp)
 	s.Equal(err, serviceerror.NewInvalidArgument(
 		"Invalid WorkflowIDReusePolicy: WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE cannot be used together with WorkflowIdConflictPolicy WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING"))
-
-	// allow if explicitly allowed
-	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).Return(nil, nil)
-	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespace.NewID(), nil)
-	s.mockHistoryClient.EXPECT().StartWorkflowExecution(gomock.Any(), gomock.Any()).Return(&historyservice.StartWorkflowExecutionResponse{Started: true}, nil)
-
-	config.FollowReusePolicyAfterConflictPolicyTerminate = dc.GetBoolPropertyFnFilteredByNamespace(false)
-	wh = s.getWorkflowHandler(config)
-	_, err = wh.StartWorkflowExecution(context.Background(), req)
-	s.NoError(err)
 }
 
 func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_DefaultWorkflowIdDuplicationPolicies() {
@@ -1112,8 +1101,8 @@ func (s *WorkflowHandlerSuite) TestRegisterNamespace_Failure_InvalidArchivalURI(
 	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNamespaceNotFound("missing-namespace"))
 	s.mockHistoryArchiver.EXPECT().ValidateURI(gomock.Any()).Return(nil)
 	s.mockVisibilityArchiver.EXPECT().ValidateURI(gomock.Any()).Return(errors.New("invalid URI"))
-	s.mockArchiverProvider.EXPECT().GetHistoryArchiver(gomock.Any(), gomock.Any()).Return(s.mockHistoryArchiver, nil)
-	s.mockArchiverProvider.EXPECT().GetVisibilityArchiver(gomock.Any(), gomock.Any()).Return(s.mockVisibilityArchiver, nil)
+	s.mockArchiverProvider.EXPECT().GetHistoryArchiver(gomock.Any()).Return(s.mockHistoryArchiver, nil)
+	s.mockArchiverProvider.EXPECT().GetVisibilityArchiver(gomock.Any()).Return(s.mockVisibilityArchiver, nil)
 
 	wh := s.getWorkflowHandler(s.newConfig())
 
@@ -1139,8 +1128,8 @@ func (s *WorkflowHandlerSuite) TestRegisterNamespace_Success_EnabledWithNoArchiv
 	}, nil)
 	s.mockHistoryArchiver.EXPECT().ValidateURI(gomock.Any()).Return(nil)
 	s.mockVisibilityArchiver.EXPECT().ValidateURI(gomock.Any()).Return(nil)
-	s.mockArchiverProvider.EXPECT().GetHistoryArchiver(gomock.Any(), gomock.Any()).Return(s.mockHistoryArchiver, nil)
-	s.mockArchiverProvider.EXPECT().GetVisibilityArchiver(gomock.Any(), gomock.Any()).Return(s.mockVisibilityArchiver, nil)
+	s.mockArchiverProvider.EXPECT().GetHistoryArchiver(gomock.Any()).Return(s.mockHistoryArchiver, nil)
+	s.mockArchiverProvider.EXPECT().GetVisibilityArchiver(gomock.Any()).Return(s.mockVisibilityArchiver, nil)
 
 	wh := s.getWorkflowHandler(s.newConfig())
 
@@ -1161,8 +1150,8 @@ func (s *WorkflowHandlerSuite) TestRegisterNamespace_Success_EnabledWithArchival
 	}, nil)
 	s.mockHistoryArchiver.EXPECT().ValidateURI(gomock.Any()).Return(nil)
 	s.mockVisibilityArchiver.EXPECT().ValidateURI(gomock.Any()).Return(nil)
-	s.mockArchiverProvider.EXPECT().GetHistoryArchiver(gomock.Any(), gomock.Any()).Return(s.mockHistoryArchiver, nil)
-	s.mockArchiverProvider.EXPECT().GetVisibilityArchiver(gomock.Any(), gomock.Any()).Return(s.mockVisibilityArchiver, nil)
+	s.mockArchiverProvider.EXPECT().GetHistoryArchiver(gomock.Any()).Return(s.mockHistoryArchiver, nil)
+	s.mockArchiverProvider.EXPECT().GetVisibilityArchiver(gomock.Any()).Return(s.mockVisibilityArchiver, nil)
 
 	wh := s.getWorkflowHandler(s.newConfig())
 
@@ -1467,7 +1456,7 @@ func (s *WorkflowHandlerSuite) TestUpdateNamespace_Failure_UpdateExistingArchiva
 	s.mockArchivalMetadata.EXPECT().GetHistoryConfig().Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "some random URI"))
 	s.mockArchivalMetadata.EXPECT().GetVisibilityConfig().Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "some random URI"))
 	s.mockHistoryArchiver.EXPECT().ValidateURI(gomock.Any()).Return(nil)
-	s.mockArchiverProvider.EXPECT().GetHistoryArchiver(gomock.Any(), gomock.Any()).Return(s.mockHistoryArchiver, nil)
+	s.mockArchiverProvider.EXPECT().GetHistoryArchiver(gomock.Any()).Return(s.mockHistoryArchiver, nil)
 
 	wh := s.getWorkflowHandler(s.newConfig())
 
@@ -1492,7 +1481,7 @@ func (s *WorkflowHandlerSuite) TestUpdateNamespace_Failure_InvalidArchivalURI() 
 	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(getNamespaceResp, nil)
 	s.mockArchivalMetadata.EXPECT().GetHistoryConfig().Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "some random URI"))
 	s.mockHistoryArchiver.EXPECT().ValidateURI(gomock.Any()).Return(errors.New("invalid URI"))
-	s.mockArchiverProvider.EXPECT().GetHistoryArchiver(gomock.Any(), gomock.Any()).Return(s.mockHistoryArchiver, nil)
+	s.mockArchiverProvider.EXPECT().GetHistoryArchiver(gomock.Any()).Return(s.mockHistoryArchiver, nil)
 
 	wh := s.getWorkflowHandler(s.newConfig())
 
@@ -1522,8 +1511,8 @@ func (s *WorkflowHandlerSuite) TestUpdateNamespace_Success_ArchivalEnabledToArch
 	s.mockArchivalMetadata.EXPECT().GetVisibilityConfig().Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "some random URI"))
 	s.mockHistoryArchiver.EXPECT().ValidateURI(gomock.Any()).Return(nil)
 	s.mockVisibilityArchiver.EXPECT().ValidateURI(gomock.Any()).Return(nil)
-	s.mockArchiverProvider.EXPECT().GetHistoryArchiver(gomock.Any(), gomock.Any()).Return(s.mockHistoryArchiver, nil)
-	s.mockArchiverProvider.EXPECT().GetVisibilityArchiver(gomock.Any(), gomock.Any()).Return(s.mockVisibilityArchiver, nil)
+	s.mockArchiverProvider.EXPECT().GetHistoryArchiver(gomock.Any()).Return(s.mockHistoryArchiver, nil)
+	s.mockArchiverProvider.EXPECT().GetVisibilityArchiver(gomock.Any()).Return(s.mockVisibilityArchiver, nil)
 
 	wh := s.getWorkflowHandler(s.newConfig())
 
@@ -1586,8 +1575,8 @@ func (s *WorkflowHandlerSuite) TestUpdateNamespace_Success_ArchivalEnabledToArch
 	s.mockArchivalMetadata.EXPECT().GetVisibilityConfig().Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "some random URI"))
 	s.mockHistoryArchiver.EXPECT().ValidateURI(gomock.Any()).Return(nil)
 	s.mockVisibilityArchiver.EXPECT().ValidateURI(gomock.Any()).Return(nil)
-	s.mockArchiverProvider.EXPECT().GetHistoryArchiver(gomock.Any(), gomock.Any()).Return(s.mockHistoryArchiver, nil)
-	s.mockArchiverProvider.EXPECT().GetVisibilityArchiver(gomock.Any(), gomock.Any()).Return(s.mockVisibilityArchiver, nil)
+	s.mockArchiverProvider.EXPECT().GetHistoryArchiver(gomock.Any()).Return(s.mockHistoryArchiver, nil)
+	s.mockArchiverProvider.EXPECT().GetVisibilityArchiver(gomock.Any()).Return(s.mockVisibilityArchiver, nil)
 
 	wh := s.getWorkflowHandler(s.newConfig())
 
@@ -1622,8 +1611,8 @@ func (s *WorkflowHandlerSuite) TestUpdateNamespace_Success_ArchivalEnabledToEnab
 	s.mockArchivalMetadata.EXPECT().GetVisibilityConfig().Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "some random URI"))
 	s.mockHistoryArchiver.EXPECT().ValidateURI(gomock.Any()).Return(nil)
 	s.mockVisibilityArchiver.EXPECT().ValidateURI(gomock.Any()).Return(nil)
-	s.mockArchiverProvider.EXPECT().GetHistoryArchiver(gomock.Any(), gomock.Any()).Return(s.mockHistoryArchiver, nil)
-	s.mockArchiverProvider.EXPECT().GetVisibilityArchiver(gomock.Any(), gomock.Any()).Return(s.mockVisibilityArchiver, nil)
+	s.mockArchiverProvider.EXPECT().GetHistoryArchiver(gomock.Any()).Return(s.mockHistoryArchiver, nil)
+	s.mockArchiverProvider.EXPECT().GetVisibilityArchiver(gomock.Any()).Return(s.mockVisibilityArchiver, nil)
 
 	wh := s.getWorkflowHandler(s.newConfig())
 
@@ -1659,8 +1648,8 @@ func (s *WorkflowHandlerSuite) TestUpdateNamespace_Success_ArchivalNeverEnabledT
 	s.mockArchivalMetadata.EXPECT().GetVisibilityConfig().Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "some random URI"))
 	s.mockHistoryArchiver.EXPECT().ValidateURI(gomock.Any()).Return(nil)
 	s.mockVisibilityArchiver.EXPECT().ValidateURI(gomock.Any()).Return(nil)
-	s.mockArchiverProvider.EXPECT().GetHistoryArchiver(gomock.Any(), gomock.Any()).Return(s.mockHistoryArchiver, nil)
-	s.mockArchiverProvider.EXPECT().GetVisibilityArchiver(gomock.Any(), gomock.Any()).Return(s.mockVisibilityArchiver, nil)
+	s.mockArchiverProvider.EXPECT().GetHistoryArchiver(gomock.Any()).Return(s.mockHistoryArchiver, nil)
+	s.mockArchiverProvider.EXPECT().GetVisibilityArchiver(gomock.Any()).Return(s.mockVisibilityArchiver, nil)
 
 	wh := s.getWorkflowHandler(s.newConfig())
 
@@ -1800,7 +1789,7 @@ func (s *WorkflowHandlerSuite) TestGetArchivedHistory_Success_GetFirstPage() {
 		NextPageToken:  nextPageToken,
 		HistoryBatches: []*historypb.History{historyBatch1, historyBatch2},
 	}, nil)
-	s.mockArchiverProvider.EXPECT().GetHistoryArchiver(gomock.Any(), gomock.Any()).Return(s.mockHistoryArchiver, nil)
+	s.mockArchiverProvider.EXPECT().GetHistoryArchiver(gomock.Any()).Return(s.mockHistoryArchiver, nil)
 
 	wh := s.getWorkflowHandler(s.newConfig())
 
@@ -1890,7 +1879,7 @@ func (s *WorkflowHandlerSuite) TestListArchivedVisibility_Success() {
 	), nil).AnyTimes()
 	s.mockArchivalMetadata.EXPECT().GetVisibilityConfig().Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "random URI")).Times(2)
 	s.mockVisibilityArchiver.EXPECT().Query(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&archiver.QueryVisibilityResponse{}, nil)
-	s.mockArchiverProvider.EXPECT().GetVisibilityArchiver(gomock.Any(), gomock.Any()).Return(s.mockVisibilityArchiver, nil)
+	s.mockArchiverProvider.EXPECT().GetVisibilityArchiver(gomock.Any()).Return(s.mockVisibilityArchiver, nil)
 	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes("", false)
 
 	wh := s.getWorkflowHandler(s.newConfig())
@@ -3412,7 +3401,7 @@ func (s *WorkflowHandlerSuite) TestExecuteMultiOperation() {
 	})
 
 	assertMultiOpsErr := func(expectedErrs []error, actual error) {
-		s.Equal("MultiOperation could not be executed.", actual.Error())
+		s.Equal("Update-with-Start could not be executed.", actual.Error())
 		s.EqualValues(expectedErrs, actual.(*serviceerror.MultiOperationExecution).OperationErrors())
 	}
 

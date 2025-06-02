@@ -36,6 +36,13 @@ type (
 		ScanWorkflowExecutions(ctx context.Context, request *manager.ListWorkflowExecutionsRequestV2) (*InternalListWorkflowExecutionsResponse, error)
 		CountWorkflowExecutions(ctx context.Context, request *manager.CountWorkflowExecutionsRequest) (*manager.CountWorkflowExecutionsResponse, error)
 		GetWorkflowExecution(ctx context.Context, request *manager.GetWorkflowExecutionRequest) (*InternalGetWorkflowExecutionResponse, error)
+
+		// Admin APIs
+
+		// AddSearchAttributes makes schema changes to add the search attributes. This function must be
+		// idempotent, ie., if a search attribute already exists, this function must be no-op, and must
+		// not return any error.
+		AddSearchAttributes(ctx context.Context, request *manager.AddSearchAttributesRequest) error
 	}
 
 	// InternalWorkflowExecutionInfo is visibility info for internal response
