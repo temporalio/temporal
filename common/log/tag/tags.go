@@ -989,3 +989,18 @@ func Cause(cause string) ZapTag {
 func NexusOperation(operation string) ZapTag {
 	return NewStringTag("nexus-operation", operation)
 }
+
+// WorkflowRuleID returns tag for WorkflowRuleID
+func WorkflowRuleID(ruleID string) ZapTag {
+	return NewStringTag("wf-rule-id", ruleID)
+}
+
+// URL returns tag for URL
+func URL(url string) ZapTag {
+	return NewStringTag("url", url)
+}
+
+// TaskPriority returns tag for TaskPriority
+func TaskPriority(priority string) ZapTag {
+	return NewStringTag("task-priority", priority)
+}
