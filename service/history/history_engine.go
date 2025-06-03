@@ -126,6 +126,20 @@ type (
 		NDCActivityStateReplicator ndc.ActivityStateReplicator `optional:"true"`
 		NDCWorkflowStateReplicator ndc.WorkflowStateReplicator `optional:"true"`
 		NDCHSMStateReplicator      ndc.HSMStateReplicator      `optional:"true"`
+
+		// API handler deps
+		// TODO: make these able to be pointers so indirect deps can be shared instead of
+		// expanding recursively
+		GetOrPollMutableState              api.GetOrPollMutableStateDeps
+		QueryWorkflow                      queryworkflow.Deps
+		DescribeMutableState               describemutablestate.Deps
+		DescribeWorkflow                   describeworkflow.Deps
+		RecordWorkflowTaskStarted          recordworkflowtaskstarted.Deps
+		RespondWorkflowTaskCompleted       respondworkflowtaskcompleted.Deps
+		GetWorkflowExecutionHistory        getworkflowexecutionhistory.Deps
+		GetWorkflowExecutionHistoryReverse getworkflowexecutionhistoryreverse.Deps
+		GetWorkflowExecutionRawHistory     getworkflowexecutionrawhistory.Deps
+		GetWorkflowExecutionRawHistoryV2   getworkflowexecutionrawhistoryv2.Deps
 	}
 
 	historyEngineImpl struct {
@@ -157,6 +171,7 @@ var engineFx = fx.Options(
 	fx.Provide(newSearchAttributeValidator),
 	fx.Provide(replication.NewLazyDLQHandler),
 	fx.Provide(tasktoken.NewSerializer),
+	fx.Provide(api.NewCommandAttrValidator), // used to construct respondworkflowtaskcompleted.Deps
 	fx.Provide(fx.Annotate(headers.NewDefaultVersionChecker, fx.As(new(headers.VersionChecker)))),
 	fx.Provide(func(tp trace.TracerProvider) trace.Tracer { return tp.Tracer(consts.LibraryName) }),
 	fx.Provide(func(shard historyi.ShardContext, factories []QueueFactory, cache wcache.Cache) map[tasks.Category]queues.Queue {
@@ -336,7 +351,7 @@ func (e *historyEngineImpl) GetMutableState(
 	ctx context.Context,
 	request *historyservice.GetMutableStateRequest,
 ) (*historyservice.GetMutableStateResponse, error) {
-	return api.GetOrPollMutableState(ctx, e.deps.ShardContext, request, e.deps.WorkflowConsistencyChecker, e.deps.EventNotifier)
+	return e.deps.GetOrPollMutableState.Invoke(ctx, request)
 }
 
 // PollMutableState retrieves the mutable state of the workflow execution with long polling
@@ -345,9 +360,8 @@ func (e *historyEngineImpl) PollMutableState(
 	request *historyservice.PollMutableStateRequest,
 ) (*historyservice.PollMutableStateResponse, error) {
 
-	response, err := api.GetOrPollMutableState(
+	response, err := e.deps.GetOrPollMutableState.Invoke(
 		ctx,
-		e.deps.ShardContext,
 		&historyservice.GetMutableStateRequest{
 			NamespaceId:         request.GetNamespaceId(),
 			Execution:           request.Execution,
@@ -355,8 +369,6 @@ func (e *historyEngineImpl) PollMutableState(
 			CurrentBranchToken:  request.CurrentBranchToken,
 			VersionHistoryItem:  request.GetVersionHistoryItem(),
 		},
-		e.deps.WorkflowConsistencyChecker,
-		e.deps.EventNotifier,
 	)
 	if err != nil {
 		return nil, err
@@ -383,15 +395,15 @@ func (e *historyEngineImpl) PollMutableState(
 func (e *historyEngineImpl) QueryWorkflow(
 	ctx context.Context,
 	request *historyservice.QueryWorkflowRequest,
-) (_ *historyservice.QueryWorkflowResponse, retErr error) {
-	return queryworkflow.Invoke(ctx, request, e.deps.ShardContext, e.deps.WorkflowConsistencyChecker, e.deps.RawMatchingClient, e.deps.MatchingClient)
+) (*historyservice.QueryWorkflowResponse, error) {
+	return e.deps.QueryWorkflow.Invoke(ctx, request)
 }
 
 func (e *historyEngineImpl) DescribeMutableState(
 	ctx context.Context,
 	request *historyservice.DescribeMutableStateRequest,
 ) (response *historyservice.DescribeMutableStateResponse, retError error) {
-	return describemutablestate.Invoke(ctx, request, e.deps.ShardContext, e.deps.WorkflowConsistencyChecker)
+	return e.deps.DescribeMutableState.Invoke(ctx, request)
 }
 
 // ResetStickyTaskQueue reset the volatile information in mutable state of a given workflow.
@@ -410,14 +422,7 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 	ctx context.Context,
 	request *historyservice.DescribeWorkflowExecutionRequest,
 ) (_ *historyservice.DescribeWorkflowExecutionResponse, retError error) {
-	return describeworkflow.Invoke(
-		ctx,
-		request,
-		e.deps.ShardContext,
-		e.deps.WorkflowConsistencyChecker,
-		e.deps.PersistenceVisibilityMgr,
-		e.deps.OutboundQueueCBPool,
-	)
+	return e.deps.DescribeWorkflow.Invoke(ctx, request)
 }
 
 func (e *historyEngineImpl) RecordActivityTaskStarted(
@@ -447,14 +452,9 @@ func (e *historyEngineImpl) RecordWorkflowTaskStarted(
 	ctx context.Context,
 	request *historyservice.RecordWorkflowTaskStartedRequest,
 ) (*historyservice.RecordWorkflowTaskStartedResponseWithRawHistory, error) {
-	return recordworkflowtaskstarted.Invoke(
+	return e.deps.RecordWorkflowTaskStarted.Invoke(
 		ctx,
 		request,
-		e.deps.ShardContext,
-		e.deps.Config,
-		e.deps.EventNotifier,
-		e.deps.PersistenceVisibilityMgr,
-		e.deps.WorkflowConsistencyChecker,
 	)
 }
 
@@ -463,17 +463,7 @@ func (e *historyEngineImpl) RespondWorkflowTaskCompleted(
 	ctx context.Context,
 	req *historyservice.RespondWorkflowTaskCompletedRequest,
 ) (*historyservice.RespondWorkflowTaskCompletedResponse, error) {
-	h := respondworkflowtaskcompleted.NewWorkflowTaskCompletedHandler(
-		e.deps.ShardContext,
-		e.deps.TokenSerializer,
-		e.deps.EventNotifier,
-		e.deps.CommandHandlerRegistry,
-		e.deps.SearchAttributesValidator,
-		e.deps.PersistenceVisibilityMgr,
-		e.deps.WorkflowConsistencyChecker,
-		e.deps.MatchingClient,
-	)
-	return h.Invoke(ctx, req)
+	return e.deps.RespondWorkflowTaskCompleted.Invoke(ctx, req)
 }
 
 // RespondWorkflowTaskFailed fails a workflow task
@@ -908,25 +898,25 @@ func (e *historyEngineImpl) GetWorkflowExecutionHistory(
 	ctx context.Context,
 	request *historyservice.GetWorkflowExecutionHistoryRequest,
 ) (_ *historyservice.GetWorkflowExecutionHistoryResponseWithRaw, retError error) {
-	return getworkflowexecutionhistory.Invoke(ctx, e.deps.ShardContext, e.deps.WorkflowConsistencyChecker, e.deps.VersionChecker, e.deps.EventNotifier, request, e.deps.PersistenceVisibilityMgr)
+	return e.deps.GetWorkflowExecutionHistory.Invoke(ctx, request)
 }
 
 func (e *historyEngineImpl) GetWorkflowExecutionHistoryReverse(
 	ctx context.Context,
 	request *historyservice.GetWorkflowExecutionHistoryReverseRequest,
 ) (_ *historyservice.GetWorkflowExecutionHistoryReverseResponse, retError error) {
-	return getworkflowexecutionhistoryreverse.Invoke(ctx, e.deps.ShardContext, e.deps.WorkflowConsistencyChecker, e.deps.EventNotifier, request, e.deps.PersistenceVisibilityMgr)
+	return e.deps.GetWorkflowExecutionHistoryReverse.Invoke(ctx, request)
 }
 
 func (e *historyEngineImpl) GetWorkflowExecutionRawHistory(ctx context.Context, request *historyservice.GetWorkflowExecutionRawHistoryRequest) (*historyservice.GetWorkflowExecutionRawHistoryResponse, error) {
-	return getworkflowexecutionrawhistory.Invoke(ctx, e.deps.ShardContext, e.deps.WorkflowConsistencyChecker, e.deps.EventNotifier, request)
+	return e.deps.GetWorkflowExecutionRawHistory.Invoke(ctx, request)
 }
 
 func (e *historyEngineImpl) GetWorkflowExecutionRawHistoryV2(
 	ctx context.Context,
 	request *historyservice.GetWorkflowExecutionRawHistoryV2Request,
 ) (_ *historyservice.GetWorkflowExecutionRawHistoryV2Response, retError error) {
-	return getworkflowexecutionrawhistoryv2.Invoke(ctx, e.deps.ShardContext, e.deps.WorkflowConsistencyChecker, e.deps.EventNotifier, request)
+	return e.deps.GetWorkflowExecutionRawHistoryV2.Invoke(ctx, request)
 }
 
 func (e *historyEngineImpl) AddTasks(

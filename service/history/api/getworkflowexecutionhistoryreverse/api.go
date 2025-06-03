@@ -18,15 +18,24 @@ import (
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
 	historyi "go.temporal.io/server/service/history/interfaces"
+	"go.uber.org/fx"
 )
 
-func Invoke(
+type Deps struct {
+	fx.In
+
+	ShardContext               historyi.ShardContext
+	WorkflowConsistencyChecker api.WorkflowConsistencyChecker
+	EventNotifier              events.Notifier
+	PersistenceVisibilityMgr   manager.VisibilityManager
+
+	GetOrPollMutableState api.GetOrPollMutableStateDeps
+	TrimHistoryNode       api.TrimHistoryNodeDeps
+}
+
+func (deps *Deps) Invoke(
 	ctx context.Context,
-	shardContext historyi.ShardContext,
-	workflowConsistencyChecker api.WorkflowConsistencyChecker,
-	eventNotifier events.Notifier,
 	request *historyservice.GetWorkflowExecutionHistoryReverseRequest,
-	persistenceVisibilityMgr manager.VisibilityManager,
 ) (_ *historyservice.GetWorkflowExecutionHistoryReverseResponse, retError error) {
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	err := api.ValidateNamespaceUUID(namespaceID)
@@ -41,9 +50,8 @@ func Invoke(
 		currentBranchToken []byte,
 		versionHistoryItem *historyspb.VersionHistoryItem,
 	) ([]byte, string, int64, *historyspb.VersionHistoryItem, error) {
-		response, err := api.GetOrPollMutableState(
+		response, err := deps.GetOrPollMutableState.Invoke(
 			ctx,
-			shardContext,
 			&historyservice.GetMutableStateRequest{
 				NamespaceId:         namespaceUUID.String(),
 				Execution:           execution,
@@ -51,8 +59,6 @@ func Invoke(
 				CurrentBranchToken:  currentBranchToken,
 				VersionHistoryItem:  versionHistoryItem,
 			},
-			workflowConsistencyChecker,
-			eventNotifier,
 		)
 		if err != nil {
 			return nil, "", 0, nil, err
@@ -110,11 +116,8 @@ func Invoke(
 	//  long term solution should check event batch pointing backwards within history store
 	defer func() {
 		if _, ok := retError.(*serviceerror.DataLoss); ok {
-			api.TrimHistoryNode(
+			deps.TrimHistoryNode.Invoke(
 				ctx,
-				shardContext,
-				workflowConsistencyChecker,
-				eventNotifier,
 				namespaceID.String(),
 				execution.GetWorkflowId(),
 				execution.GetRunId(),
@@ -127,7 +130,7 @@ func Invoke(
 	// return all events
 	history, continuationToken.PersistenceToken, continuationToken.NextEventId, err = api.GetHistoryReverse(
 		ctx,
-		shardContext,
+		deps.ShardContext,
 		namespaceID,
 		execution,
 		continuationToken.NextEventId,
@@ -135,7 +138,7 @@ func Invoke(
 		req.GetMaximumPageSize(),
 		continuationToken.PersistenceToken,
 		continuationToken.BranchToken,
-		persistenceVisibilityMgr,
+		deps.PersistenceVisibilityMgr,
 	)
 
 	if err != nil {
