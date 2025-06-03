@@ -493,10 +493,9 @@ func mapstructureHookProtoEnum(f, t reflect.Type, data any) (any, error) {
 
 // Parses generic values. See GenericParseHook.
 func mapstructureHookGeneric(f, t reflect.Type, data any) (any, error) {
-	// try hook with value receiver
 	if mth, ok := t.MethodByName("DynamicConfigParseHook"); ok &&
-		mth.Type != nil &&
 		mth.Func.IsValid() &&
+		mth.Type != nil &&
 		mth.Type.NumIn() == 2 &&
 		mth.Type.In(1) == f &&
 		mth.Type.NumOut() == 2 &&
@@ -505,7 +504,10 @@ func mapstructureHookGeneric(f, t reflect.Type, data any) (any, error) {
 
 		out := mth.Func.Call([]reflect.Value{reflect.Zero(t), reflect.ValueOf(data)})
 		if !out[1].IsNil() {
-			return nil, out[1].Interface().(error) // nolint:revive // type checked above
+			if err, ok := out[1].Interface().(error); ok {
+				return nil, err
+			}
+			return nil, errors.New("failed to convert DynamicConfigParseHook error")
 		}
 		return out[0].Interface(), nil
 	}
