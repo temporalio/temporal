@@ -1568,6 +1568,18 @@ func (mr *MockMutableStateMockRecorder) ApplyWorkflowTaskTimedOutEvent(arg0 any)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplyWorkflowTaskTimedOutEvent", reflect.TypeOf((*MockMutableState)(nil).ApplyWorkflowTaskTimedOutEvent), arg0)
 }
 
+// AttachRequestID mocks base method.
+func (m *MockMutableState) AttachRequestID(requestID string, eventType enums.EventType, eventID int64) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "AttachRequestID", requestID, eventType, eventID)
+}
+
+// AttachRequestID indicates an expected call of AttachRequestID.
+func (mr *MockMutableStateMockRecorder) AttachRequestID(requestID, eventType, eventID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AttachRequestID", reflect.TypeOf((*MockMutableState)(nil).AttachRequestID), requestID, eventType, eventID)
+}
+
 // ChasmTree mocks base method.
 func (m *MockMutableState) ChasmTree() ChasmTree {
 	m.ctrl.T.Helper()

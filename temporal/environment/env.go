@@ -7,45 +7,35 @@ import (
 	"strconv"
 )
 
-// TODO (alex): this file is used by tests only. It should be moved to tests dir.
+// Server code does not use environment variables directly.
+// Server uses a config file which can be build using config_template.yaml and environment variables.
+// Helpers in this file are used by:
+//   - persistence tests,
+//   - functional tests,
+//   - database tools (default values for flags).
+// The only exception is GetLocalhostIP() which is used to bind listeners (gRPC and ringpop).
 
 const (
-	// LocalhostIP default localhost
-	LocalhostIP = "LOCALHOST_IP"
-	// Localhost default hostname
-	LocalhostIPDefault = "127.0.0.1"
+	localhostIPEnv     = "LOCALHOST_IP"
+	localhostIPDefault = "127.0.0.1"
 
-	// CassandraSeeds env
-	CassandraSeeds = "CASSANDRA_SEEDS"
-	// CassandraPort env
-	CassandraPort = "CASSANDRA_PORT"
-	// CassandraDefaultPort Cassandra default port
-	CassandraDefaultPort = 9042
+	cassandraSeedsEnv    = "CASSANDRA_SEEDS"
+	cassandraPortEnv     = "CASSANDRA_PORT"
+	cassandraDefaultPort = 9042
 
-	// MySQLSeeds env
-	MySQLSeeds = "MYSQL_SEEDS"
-	// MySQLPort env
-	MySQLPort = "MYSQL_PORT"
-	// MySQLDefaultPort MySQL default port
-	MySQLDefaultPort = 3306
+	mySQLSeedsEnv    = "MYSQL_SEEDS"
+	mySQLPortEnv     = "MYSQL_PORT"
+	mySQLDefaultPort = 3306
 
-	// ESSeeds env
-	ESSeeds = "ES_SEEDS"
-	// ESPort env
-	ESPort = "ES_PORT"
-	// ESDefaultPort ES default port
-	ESDefaultPort = 9200
-	// ESVersion is the ElasticSearch version
-	ESVersion = "ES_VERSION"
-	// ESDefaultVersion is the default version
-	ESDefaultVersion = "v7"
+	esSeedsEnv       = "ES_SEEDS"
+	esPortEnv        = "ES_PORT"
+	esVersion        = "ES_VERSION"
+	esDefaultPortEnv = 9200
+	esDefaultVersion = "v7"
 
-	// PostgresSeeds env
-	PostgresSeeds = "POSTGRES_SEEDS"
-	// PostgresPort env
-	PostgresPort = "POSTGRES_PORT"
-	// PostgresDefaultPort Postgres default port
-	PostgresDefaultPort = 5432
+	postgresSeedsEnv    = "POSTGRES_SEEDS"
+	postgresPortEnv     = "POSTGRES_PORT"
+	postgresDefaultPort = 5432
 )
 
 func lookupLocalhostIP(domain string) string {
@@ -54,21 +44,19 @@ func lookupLocalhostIP(domain string) string {
 	ips, err := net.LookupIP(domain)
 	if err != nil || len(ips) == 0 {
 		// fallback to default instead of error
-		return LocalhostIPDefault
+		return localhostIPDefault
 	}
-	var listenIp net.IP
 	for _, ip := range ips {
-		listenIp = ip
-		if listenIp.To4() != nil {
-			break
+		if ip4 := ip.To4(); ip4 != nil {
+			return ip4.String()
 		}
 	}
-	return listenIp.String()
+	return ips[len(ips)-1].String()
 }
 
 // GetLocalhostIP returns the ip address of the localhost domain
 func GetLocalhostIP() string {
-	localhostIP := os.Getenv(LocalhostIP)
+	localhostIP := os.Getenv(localhostIPEnv)
 	ip := net.ParseIP(localhostIP)
 	if ip != nil {
 		// if localhost is an ip return it
@@ -80,7 +68,7 @@ func GetLocalhostIP() string {
 
 // GetCassandraAddress return the cassandra address
 func GetCassandraAddress() string {
-	addr := os.Getenv(CassandraSeeds)
+	addr := os.Getenv(cassandraSeedsEnv)
 	if addr == "" {
 		addr = GetLocalhostIP()
 	}
@@ -89,20 +77,20 @@ func GetCassandraAddress() string {
 
 // GetCassandraPort return the cassandra port
 func GetCassandraPort() int {
-	port := os.Getenv(CassandraPort)
+	port := os.Getenv(cassandraPortEnv)
 	if port == "" {
-		return CassandraDefaultPort
+		return cassandraDefaultPort
 	}
 	p, err := strconv.Atoi(port)
 	if err != nil {
 		//nolint:forbidigo // used in test code only
-		panic(fmt.Sprintf("error getting env %v", CassandraPort))
+		panic(fmt.Sprintf("error getting env %v", cassandraPortEnv))
 	}
 	return p
 }
 
 func GetESAddress() string {
-	addr := os.Getenv(ESSeeds)
+	addr := os.Getenv(esSeedsEnv)
 	if addr == "" {
 		addr = GetLocalhostIP()
 	}
@@ -110,29 +98,29 @@ func GetESAddress() string {
 }
 
 func GetESPort() int {
-	port := os.Getenv(ESPort)
+	port := os.Getenv(esPortEnv)
 	if port == "" {
-		return ESDefaultPort
+		return esDefaultPortEnv
 	}
 	p, err := strconv.Atoi(port)
 	if err != nil {
 		//nolint:forbidigo // used in test code only
-		panic(fmt.Sprintf("error getting env %v", ESPort))
+		panic(fmt.Sprintf("error getting env %v", esPortEnv))
 	}
 	return p
 }
 
 func GetESVersion() string {
-	version := os.Getenv(ESVersion)
+	version := os.Getenv(esVersion)
 	if version == "" {
-		version = ESDefaultVersion
+		version = esDefaultVersion
 	}
 	return version
 }
 
 // GetMySQLAddress return the cassandra address
 func GetMySQLAddress() string {
-	addr := os.Getenv(MySQLSeeds)
+	addr := os.Getenv(mySQLSeedsEnv)
 	if addr == "" {
 		addr = GetLocalhostIP()
 	}
@@ -141,21 +129,21 @@ func GetMySQLAddress() string {
 
 // GetMySQLPort return the MySQL port
 func GetMySQLPort() int {
-	port := os.Getenv(MySQLPort)
+	port := os.Getenv(mySQLPortEnv)
 	if port == "" {
-		return MySQLDefaultPort
+		return mySQLDefaultPort
 	}
 	p, err := strconv.Atoi(port)
 	if err != nil {
 		//nolint:forbidigo // used in test code only
-		panic(fmt.Sprintf("error getting env %v", MySQLPort))
+		panic(fmt.Sprintf("error getting env %v", mySQLPortEnv))
 	}
 	return p
 }
 
 // GetPostgreSQLAddress return the Postgres address
 func GetPostgreSQLAddress() string {
-	addr := os.Getenv(PostgresSeeds)
+	addr := os.Getenv(postgresSeedsEnv)
 	if addr == "" {
 		addr = GetLocalhostIP()
 	}
@@ -164,14 +152,14 @@ func GetPostgreSQLAddress() string {
 
 // GetPostgreSQLPort return the Postgres port
 func GetPostgreSQLPort() int {
-	port := os.Getenv(PostgresPort)
+	port := os.Getenv(postgresPortEnv)
 	if port == "" {
-		return PostgresDefaultPort
+		return postgresDefaultPort
 	}
 	p, err := strconv.Atoi(port)
 	if err != nil {
 		//nolint:forbidigo // used in test code only
-		panic(fmt.Sprintf("error getting env %v", PostgresPort))
+		panic(fmt.Sprintf("error getting env %v", postgresPortEnv))
 	}
 	return p
 }

@@ -39,7 +39,7 @@ func buildCLIOptions() *cli.App {
 	app.Flags = []cli.Flag{
 		cli.StringFlag{
 			Name:   schema.CLIFlagEndpoint,
-			Value:  "127.0.0.1",
+			Value:  environment.GetCassandraAddress(),
 			Usage:  "hostname or ip address of cassandra host to connect to",
 			EnvVar: "CASSANDRA_HOST",
 		},

@@ -502,7 +502,7 @@ func (t *transferQueueActiveTaskExecutor) processCancelExecution(
 		requestCancelInfo,
 		attributes,
 	); err != nil {
-		t.logger.Debug(fmt.Sprintf("Failed to cancel external workflow execution. Error: %v", err))
+		t.logger.Debug("Failed to cancel external workflow execution", tag.Error(err))
 
 		// Check to see if the error is non-transient, in which case add RequestCancelFailed
 		// event and complete transfer task by returning nil error.
