@@ -97,7 +97,7 @@ func (m *executionManagerImpl) ForkHistoryBranch(
 		Info:        request.Info,
 	}
 
-	treeInfoBlob, err := m.serializer.HistoryTreeInfoToBlob(treeInfo, enumspb.ENCODING_TYPE_PROTO3)
+	treeInfoBlob, err := m.serializer.HistoryTreeInfoToBlob(treeInfo)
 	if err != nil {
 		return nil, err
 	}
@@ -356,7 +356,7 @@ func (m *executionManagerImpl) serializeAppendHistoryNodesRequest(
 	}
 
 	// nodeID will be the first eventID
-	blob, err := m.serializer.SerializeEvents(request.Events, enumspb.ENCODING_TYPE_PROTO3)
+	blob, err := m.serializer.SerializeEvents(request.Events)
 	if err != nil {
 		return nil, err
 	}
@@ -389,7 +389,7 @@ func (m *executionManagerImpl) serializeAppendHistoryNodesRequest(
 			BranchInfo:  branch,
 			ForkTime:    timestamp.TimeNowPtrUtc(),
 			Info:        request.Info,
-		}, enumspb.ENCODING_TYPE_PROTO3)
+		})
 		if err != nil {
 			return nil, err
 		}
@@ -457,7 +457,7 @@ func (m *executionManagerImpl) serializeAppendRawHistoryNodesRequest(
 			BranchInfo:  branch,
 			ForkTime:    timestamp.TimeNowPtrUtc(),
 			Info:        request.Info,
-		}, enumspb.ENCODING_TYPE_PROTO3)
+		})
 		if err != nil {
 			return nil, err
 		}

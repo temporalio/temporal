@@ -748,7 +748,7 @@ func (s *HistoryEventsSuite) appendRawHistoryBatches(
 	branchToken []byte,
 	packet HistoryEventsPacket,
 ) {
-	blob, err := s.serializer.SerializeEvents(packet.events, enumspb.ENCODING_TYPE_PROTO3)
+	blob, err := s.serializer.SerializeEvents(packet.events)
 	s.NoError(err)
 	_, err = s.store.AppendRawHistoryNodes(s.Ctx, &p.AppendRawHistoryNodesRequest{
 		ShardID:           shardID,
