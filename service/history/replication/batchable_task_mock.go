@@ -13,6 +13,7 @@ import (
 	reflect "reflect"
 	time "time"
 
+	repication "go.temporal.io/server/api/replication/v1"
 	backoff "go.temporal.io/server/common/backoff"
 	tasks "go.temporal.io/server/common/tasks"
 	gomock "go.uber.org/mock/gomock"
@@ -199,6 +200,20 @@ func (m *MockBatchableTask) QueueID() any {
 func (mr *MockBatchableTaskMockRecorder) QueueID() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueueID", reflect.TypeOf((*MockBatchableTask)(nil).QueueID))
+}
+
+// ReplicationTask mocks base method.
+func (m *MockBatchableTask) ReplicationTask() *repication.ReplicationTask {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ReplicationTask")
+	ret0, _ := ret[0].(*repication.ReplicationTask)
+	return ret0
+}
+
+// ReplicationTask indicates an expected call of ReplicationTask.
+func (mr *MockBatchableTaskMockRecorder) ReplicationTask() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplicationTask", reflect.TypeOf((*MockBatchableTask)(nil).ReplicationTask))
 }
 
 // Reschedule mocks base method.
