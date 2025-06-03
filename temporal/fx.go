@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/cassandra"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/persistence/visibility"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
@@ -125,6 +126,7 @@ var (
 			NewServerFxImpl,
 			ServerOptionsProvider,
 			resource.ArchivalMetadataProvider,
+			resource.SerializerProvider,
 			TaskCategoryRegistryProvider,
 			PersistenceFactoryProvider,
 			HistoryServiceProvider,
@@ -569,6 +571,7 @@ func WorkerServiceProvider(
 func ApplyClusterMetadataConfigProvider(
 	logger log.Logger,
 	svc *config.Config,
+	payloadSerializer serialization.Serializer,
 	persistenceServiceResolver resolver.ServiceResolver,
 	persistenceFactoryProvider persistenceClient.FactoryProviderFn,
 	customDataStoreFactory persistenceClient.AbstractDataStoreFactory,
@@ -592,6 +595,7 @@ func ApplyClusterMetadataConfigProvider(
 		Cfg:                        &svc.Persistence,
 		PersistenceMaxQPS:          nil,
 		PersistenceNamespaceMaxQPS: nil,
+		PayloadSerializer:          payloadSerializer,
 		ClusterName:                persistenceClient.ClusterName(svc.ClusterMetadata.CurrentClusterName),
 		MetricsHandler:             metricsHandler,
 		Logger:                     logger,

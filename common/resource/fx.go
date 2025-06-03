@@ -145,15 +145,14 @@ func TimeSourceProvider() clock.TimeSource {
 }
 
 func SerializerProvider() serialization.Serializer {
-	encoding := strings.ToLower(os.Getenv(serialization.EncodingEnvVar))
-	var helper serialization.EncodingHelper
-	switch encoding {
+	var helper serialization.Codec
+	switch strings.ToLower(os.Getenv(serialization.CodecEnvVar)) {
 	case "json":
-		helper = serialization.NewJSONEncodingHelper()
+		helper = serialization.NewJsonCodec()
 	default:
-		helper = serialization.NewProto3EncodingHelper()
+		helper = serialization.NewProto3Codec()
 	}
-	return serialization.NewSerializerWithHelper(helper)
+	return serialization.NewSerializerWithCodec(helper)
 }
 
 func SearchAttributeMapperProviderProvider(

@@ -31,6 +31,7 @@ import (
 
 var (
 	protoMessageT = reflect.TypeFor[proto.Message]()
+	protoCodec    = serialization.NewProto3Codec()
 )
 
 var (
@@ -526,7 +527,7 @@ func (n *Node) serializeComponentNode() error {
 		var blob *commonpb.DataBlob
 		if !field.val.IsNil() {
 			var err error
-			if blob, err = serialization.ProtoEncodeBlob(field.val.Interface().(proto.Message), enumspb.ENCODING_TYPE_PROTO3); err != nil {
+			if blob, err = protoCodec.Encode(field.val.Interface().(proto.Message)); err != nil {
 				return err
 			}
 		}
@@ -824,7 +825,7 @@ func (n *Node) serializeDataNode() error {
 	var blob *commonpb.DataBlob
 	if protoValue != nil {
 		var err error
-		if blob, err = serialization.ProtoEncodeBlob(protoValue, enumspb.ENCODING_TYPE_PROTO3); err != nil {
+		if blob, err = protoCodec.Encode(protoValue); err != nil {
 			return err
 		}
 	}
@@ -983,7 +984,7 @@ func unmarshalProto(
 
 	value := reflect.New(valueT.Elem())
 
-	if err := serialization.ProtoDecodeBlob(dataBlob, value.Interface().(proto.Message)); err != nil {
+	if err := protoCodec.Decode(dataBlob, value.Interface().(proto.Message)); err != nil {
 		return reflect.Value{}, err
 	}
 
@@ -1921,7 +1922,7 @@ func serializeTask(
 ) (*commonpb.DataBlob, error) {
 	protoValue, ok := task.(proto.Message)
 	if ok {
-		return serialization.ProtoEncodeBlob(protoValue, enumspb.ENCODING_TYPE_PROTO3)
+		return protoCodec.Encode(protoValue)
 	}
 
 	taskGoType := registrableTask.goType
@@ -1957,7 +1958,7 @@ func serializeTask(
 		protoMessageFound = true
 
 		var err error
-		blob, err = serialization.ProtoEncodeBlob(fieldV.Interface().(proto.Message), enumspb.ENCODING_TYPE_PROTO3)
+		blob, err = protoCodec.Encode(fieldV.Interface().(proto.Message))
 		if err != nil {
 			return nil, err
 		}
