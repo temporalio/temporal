@@ -1,7 +1,9 @@
 package dynamicconfig_test
 
 import (
+	"errors"
 	"maps"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -51,19 +53,16 @@ func TestCollectionSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-func (s *collectionSuite) SetupSuite() {
+func (s *collectionSuite) SetupTest() {
+	dynamicconfig.ResetRegistryForTest()
 	s.client = newTestSubscribableClient()
 	logger := log.NewNoopLogger()
 	s.cln = dynamicconfig.NewCollection(s.client, logger)
 	s.cln.Start()
 }
 
-func (s *collectionSuite) TearDownSuite() {
+func (s *collectionSuite) TearDownTest() {
 	s.cln.Stop()
-}
-
-func (s *collectionSuite) SetupTest() {
-	dynamicconfig.ResetRegistryForTest()
 }
 
 func (s *collectionSuite) TestGetIntProperty() {
@@ -423,6 +422,87 @@ func (s *collectionSuite) TestGetTypedProtoEnum() {
 	s.Run("WrongType", func() {
 		s.client.SetValue(testGetTypedPropertyKey, true)
 		s.Equal(def, get())
+	})
+}
+
+// someEnum is an example type for DynamicConfigParseHook.
+type someEnum int32
+
+const (
+	someEnumValueUnset someEnum = iota
+	someEnumValueOne
+	someEnumValueTwo
+	someEnumValueThree
+)
+
+func (someEnum) DynamicConfigParseHook(s string) (someEnum, error) {
+	switch strings.ToLower(s) {
+	case "one":
+		return someEnumValueOne, nil
+	case "two":
+		return someEnumValueTwo, nil
+	case "three":
+		return someEnumValueThree, nil
+	default:
+		return 0, errors.New("unknown value")
+	}
+}
+
+func (s *collectionSuite) TestGetGenericParseHook() {
+	def := someEnumValueOne
+	setting := dynamicconfig.NewGlobalTypedSetting(
+		testGetTypedPropertyKey,
+		def,
+		"",
+	)
+	get := setting.Get(s.cln)
+
+	s.Run("Default", func() {
+		s.Equal(def, get())
+	})
+
+	s.Run("Basic", func() {
+		s.client.SetValue(testGetTypedPropertyKey, "THRee")
+		s.Equal(someEnumValueThree, get())
+	})
+
+	s.Run("Missing", func() {
+		s.client.SetValue(testGetTypedPropertyKey, "four")
+		s.Equal(def, get()) // default since there was a parse error
+	})
+}
+
+func (s *collectionSuite) TestGetGenericParseHookValue_Struct() {
+	type myStruct struct {
+		FieldA someEnum
+		FieldB someEnum
+	}
+	def := myStruct{
+		FieldA: someEnumValueTwo,
+		FieldB: someEnumValueThree,
+	}
+	setting := dynamicconfig.NewGlobalTypedSetting(
+		testGetTypedPropertyKey,
+		def,
+		"",
+	)
+	get := setting.Get(s.cln)
+
+	s.Run("Default", func() {
+		s.Equal(def, get())
+	})
+
+	s.Run("Basic", func() {
+		s.client.SetValue(testGetTypedPropertyKey, map[string]any{"fielda": "one"})
+		s.Equal(myStruct{
+			FieldA: someEnumValueOne,
+			FieldB: someEnumValueThree, // from default
+		}, get())
+	})
+
+	s.Run("Missing", func() {
+		s.client.SetValue(testGetTypedPropertyKey, map[string]any{"FieldA": "one", "FieldB": "four"})
+		s.Equal(def, get()) // default since there was a parse error
 	})
 }
 
