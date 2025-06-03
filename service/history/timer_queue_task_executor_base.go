@@ -37,6 +37,7 @@ var (
 type (
 	timerQueueTaskExecutorBase struct {
 		stateMachineEnvironment
+		chasmEngine        chasm.Engine
 		currentClusterName string
 		registry           namespace.Registry
 		deleteManager      deletemanager.DeleteManager
@@ -51,6 +52,7 @@ func newTimerQueueTaskExecutorBase(
 	workflowCache wcache.Cache,
 	deleteManager deletemanager.DeleteManager,
 	matchingRawClient resource.MatchingRawClient,
+	chasmEngine chasm.Engine,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 	config *configs.Config,
@@ -65,6 +67,7 @@ func newTimerQueueTaskExecutorBase(
 		},
 		currentClusterName: shardContext.GetClusterMetadata().GetCurrentClusterName(),
 		registry:           shardContext.GetNamespaceRegistry(),
+		chasmEngine:        chasmEngine,
 		deleteManager:      deleteManager,
 		matchingRawClient:  matchingRawClient,
 		config:             config,

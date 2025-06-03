@@ -66,6 +66,7 @@ type (
 		mockNamespaceCache      *namespace.MockRegistry
 		mockMatchingClient      *matchingservicemock.MockMatchingServiceClient
 		mockClusterMetadata     *cluster.MockMetadata
+		mockChasmEngine         *chasm.MockEngine
 
 		mockHistoryEngine *historyEngineImpl
 		mockDeleteManager *deletemanager.MockDeleteManager
@@ -105,6 +106,7 @@ func (s *timerQueueActiveTaskExecutorSuite) SetupTest() {
 	s.mockTimerProcessor = queues.NewMockQueue(s.controller)
 	s.mockVisibilityProcessor = queues.NewMockQueue(s.controller)
 	s.mockArchivalProcessor = queues.NewMockQueue(s.controller)
+	s.mockChasmEngine = chasm.NewMockEngine(s.controller)
 	s.mockTxProcessor.EXPECT().Category().Return(tasks.CategoryTransfer).AnyTimes()
 	s.mockTimerProcessor.EXPECT().Category().Return(tasks.CategoryTimer).AnyTimes()
 	s.mockVisibilityProcessor.EXPECT().Category().Return(tasks.CategoryVisibility).AnyTimes()
@@ -182,6 +184,7 @@ func (s *timerQueueActiveTaskExecutorSuite) SetupTest() {
 		metrics.NoopMetricsHandler,
 		s.config,
 		s.mockShard.Resource.GetMatchingClient(),
+		s.mockChasmEngine,
 	).(*timerQueueActiveTaskExecutor)
 }
 
@@ -1962,6 +1965,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteChasmPureTimerTask_Execut
 		metrics.NoopMetricsHandler,
 		s.config,
 		s.mockShard.Resource.GetMatchingClient(),
+		s.mockChasmEngine,
 	).(*timerQueueActiveTaskExecutor)
 
 	// Execution should succeed.
@@ -2079,6 +2083,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteStateMachineTimerTask_Exe
 		metrics.NoopMetricsHandler,
 		s.config,
 		s.mockShard.Resource.GetMatchingClient(),
+		s.mockChasmEngine,
 	).(*timerQueueActiveTaskExecutor)
 
 	err = timerQueueActiveTaskExecutor.executeStateMachineTimerTask(context.Background(), task)

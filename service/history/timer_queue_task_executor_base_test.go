@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
@@ -34,6 +35,7 @@ type (
 		controller        *gomock.Controller
 		mockDeleteManager *deletemanager.MockDeleteManager
 		mockCache         *wcache.MockCache
+		mockChasmEngine   *chasm.MockEngine
 
 		testShardContext           *shard.ContextTest
 		timerQueueTaskExecutorBase *timerQueueTaskExecutorBase
@@ -57,6 +59,7 @@ func (s *timerQueueTaskExecutorBaseSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockDeleteManager = deletemanager.NewMockDeleteManager(s.controller)
 	s.mockCache = wcache.NewMockCache(s.controller)
+	s.mockChasmEngine = chasm.NewMockEngine(s.controller)
 
 	config := tests.NewDynamicConfig()
 	s.testShardContext = shard.NewTestContext(
@@ -75,6 +78,7 @@ func (s *timerQueueTaskExecutorBaseSuite) SetupTest() {
 		s.mockCache,
 		s.mockDeleteManager,
 		s.testShardContext.Resource.MatchingClient,
+		s.mockChasmEngine,
 		s.testShardContext.GetLogger(),
 		metrics.NoopMetricsHandler,
 		config,
