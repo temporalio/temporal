@@ -32,6 +32,7 @@ import (
 
 var (
 	errNoTimerFired = serviceerror.NewNotFound("no expired timer to fire found")
+	errNoChasmTree  = serviceerror.NewInternal("mutable state associated with CHASM task has no CHASM tree")
 )
 
 type (
@@ -264,6 +265,7 @@ func (t *timerQueueTaskExecutorBase) executeChasmPureTimers(
 	tree := ms.ChasmTree()
 	if tree == nil {
 		return serviceerror.NewInternal("mutable state associated with CHASM task has no CHASM tree")
+		return errNoChasmTree
 	}
 
 	// Because the persistence layer can lose precision on the task compared to the

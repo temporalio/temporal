@@ -2020,55 +2020,108 @@ func (n *Node) ExecutePureTask(baseCtx context.Context, taskInstance any) error 
 	return nil
 }
 
-// ExecuteSideEffectTask executes the given ChasmTask without hydrating the CHASM
-// tree from mutable state.
-func ExecuteSideEffectTask(
+// ValidateSideEffectTask runs a side effect task's associated validator,
+// returning the deserialized task instance if the task is valid.
+//
+// If validation succeeds but the task is invalid, nil is returned to signify the
+// task can be skipped/deleted.
+//
+// If validation fails, that error is returned.
+func (n *Node) ValidateSideEffectTask(
+	ctx context.Context,
+	registry *Registry,
+	taskInfo *persistencespb.ChasmTaskInfo,
+) (any, error) {
+	taskType := taskInfo.Type
+	registrableTask, ok := registry.task(taskType)
+	if !ok {
+		return nil, serviceerror.NewInternalf("unknown task type '%s'", taskType)
+	}
+
+	if registrableTask.isPureTask {
+		return nil, serviceerror.NewInternalf("ValidateSideEffectTask called on a Pure task '%s'", taskType)
+	}
+
+	taskValue, err := deserializeTask(registrableTask, taskInfo.Data)
+	if err != nil {
+		return nil, err
+	}
+	taskInstance := taskValue.Interface()
+
+	validateCtx := NewContext(ctx, n)
+	// Component must be hydrated before the task's validator is called.
+	err = n.prepareComponentValue(validateCtx)
+	if err != nil {
+		return nil, err
+	}
+
+	valid, err := n.validateTask(validateCtx, taskInstance)
+	if err != nil {
+		return nil, err
+	}
+	if !valid {
+		return nil, nil
+	}
+
+	return taskInstance, nil
+}
+
+// ExecuteSideEffectTask executes the given ChasmTask on its associated node
+// without holding the entity lock. The task is validated before execution.
+//
+// ctx should have a CHASM engine already set.
+func (n *Node) ExecuteSideEffectTask(
 	ctx context.Context,
 	registry *Registry,
 	entityKey EntityKey,
 	taskInfo *persistencespb.ChasmTaskInfo,
 ) error {
+	if engineFromContext(ctx) == nil {
+		return serviceerror.NewInternal("no CHASM engine set on context")
+	}
+
 	taskType := taskInfo.Type
 	registrableTask, ok := registry.task(taskType)
 	if !ok {
-		return fmt.Errorf("unknown task type '%s'", taskType)
+		return serviceerror.NewInternalf("unknown task type '%s'", taskType)
 	}
 
-	if registrableTask.isPureTask {
-		return fmt.Errorf("ExecuteSideEffectTask called on a Pure task '%s'", taskType)
+	executor := registrableTask.handler
+	if executor == nil {
+		return serviceerror.NewInternalf("no handler registered for task type '%s'", taskType)
 	}
 
 	// TODO - update ComponentRef to use the encoded path, and then leave decoding
 	// until access/dereference time.
-	// TODO - use DefaultPathEncoder directly, when it lands
+	path, err := n.pathEncoder.Decode(taskInfo.Ref.Path)
+	if err != nil {
+		return serviceerror.NewInternalf("failed to decode path '%s'", taskInfo.Ref.Path)
+	}
+
 	ref := ComponentRef{
 		EntityKey:          entityKey,
 		entityLastUpdateVT: taskInfo.Ref.ComponentLastUpdateVersionedTransition,
-		componentPath:      []string{""}, // TODO
+		componentPath:      path,
 		componentInitialVT: taskInfo.Ref.ComponentInitialVersionedTransition,
+
+		// Validate the Ref only once it is accessed by the task's executor.
+		validationFn: makeValidationFn(registrableTask),
 	}
 
-	// We can't run the validator up-front because we haven't hydrated the component.
-	// Instead, attach it to the Ref instead, and the component will be validated
-	// upon access.
-	ref.validationFn = makeValidationFn(registrableTask)
-
-	executor := registrableTask.handler
-	if executor == nil {
-		return fmt.Errorf("no handler registered for task type '%s'", taskType)
-	}
-
-	taskValue, err := deserializeTask(registrableTask, taskInfo.Data)
+	taskInstance, err := n.ValidateSideEffectTask(ctx, registry, taskInfo)
 	if err != nil {
 		return err
 	}
+	if taskInstance == nil {
+		// Task is invalid, can be cleared.
+		return nil
+	}
 
-	// TODO - Side Effect tasks should include the CHASM engine on the context
 	fn := reflect.ValueOf(executor).MethodByName("Execute")
 	result := fn.Call([]reflect.Value{
 		reflect.ValueOf(ctx),
 		reflect.ValueOf(ref),
-		reflect.ValueOf(taskValue.Interface()),
+		reflect.ValueOf(taskInstance),
 	})
 	if !result[0].IsNil() {
 		//nolint:revive // type cast result is unchecked

@@ -940,13 +940,45 @@ func (t *timerQueueActiveTaskExecutor) executeChasmSideEffectTimerTask(
 		return nil
 	}
 
+	wfCtx, release, err := getWorkflowExecutionContextForTask(ctx, t.shardContext, t.cache, task)
+	if err != nil {
+		return err
+	}
+	defer func() { release(err) }()
+
+	ms, err := loadMutableStateForTimerTask(ctx, t.shardContext, wfCtx, task, t.metricsHandler, t.logger)
+	if err != nil {
+		return err
+	}
+	if ms == nil {
+		return nil
+	}
+
+	// Because CHASM timers can target closed workflows, we need to specifically
+	// exclude zombie workflows, instead of merely checking that the workflow is
+	// running.
+	if ms.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
+		return consts.ErrWorkflowZombie
+	}
+
+	tree := ms.ChasmTree()
+	if tree == nil {
+		return errNoChasmTree
+	}
+
+	// Now that we've loaded the CHASM tree, we can release the lock before task
+	// execution. The task's executor must do its own locking as needed.
+	release(nil)
+
 	entityKey := chasm.EntityKey{
 		NamespaceID: task.NamespaceID,
 		BusinessID:  task.WorkflowID,
 		EntityID:    task.RunID,
 	}
-	return chasm.ExecuteSideEffectTask(
-		ctx,
+
+	engineCtx := chasm.NewEngineContext(ctx, t.chasmEngine)
+	return tree.ExecuteSideEffectTask(
+		engineCtx,
 		t.shardContext.ChasmRegistry(),
 		entityKey,
 		task.Info,

@@ -2082,7 +2082,9 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 	root, err := NewTree(persistenceNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
 	s.NoError(err)
 	s.NotNil(root)
-	ctx := context.Background()
+
+	mockEngine := NewMockEngine(s.controller)
+	ctx := NewEngineContext(context.Background(), mockEngine)
 
 	expectExecute := func(result error) {
 		rt.handler.(*MockSideEffectTaskExecutor[any, *TestSideEffectTask]).EXPECT().
@@ -2093,18 +2095,93 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 			).Return(result).Times(1)
 	}
 
-	rt.validator = func(Context, Component) error {
-		return nil
+	expectValidate := func(retValue bool, errValue error) {
+		rt.validator.(*MockTaskValidator[any, *TestSideEffectTask]).EXPECT().
+			Validate(gomock.Any(), gomock.Any(), gomock.Any()).Return(retValue, errValue).Times(1)
 	}
 
 	// Succeed task execution.
 	expectExecute(nil)
-	err = ExecuteSideEffectTask(ctx, s.registry, entityKey, taskInfo)
+	expectValidate(true, nil)
+	err = root.ExecuteSideEffectTask(ctx, s.registry, entityKey, taskInfo)
 	s.NoError(err)
 
 	// Fail task execution.
 	expectedErr := errors.New("dummy error")
 	expectExecute(expectedErr)
-	err = ExecuteSideEffectTask(ctx, s.registry, entityKey, taskInfo)
+	expectValidate(true, nil)
+	err = root.ExecuteSideEffectTask(ctx, s.registry, entityKey, taskInfo)
+	s.ErrorIs(expectedErr, err)
+
+	// Fail task validation (no-op).
+	expectValidate(false, nil)
+	err = root.ExecuteSideEffectTask(ctx, s.registry, entityKey, taskInfo)
+	s.NoError(err)
+}
+
+func (s *nodeSuite) TestValidateSideEffectTask() {
+	persistenceNodes := map[string]*persistencespb.ChasmNode{
+		"": {
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+						Type: "TestLibrary.test_component",
+					},
+				},
+			},
+		},
+	}
+
+	taskInfo := &persistencespb.ChasmTaskInfo{
+		Ref: &persistencespb.ChasmComponentRef{
+			ComponentInitialVersionedTransition: &persistencespb.VersionedTransition{
+				TransitionCount: 1,
+			},
+			ComponentLastUpdateVersionedTransition: &persistencespb.VersionedTransition{
+				TransitionCount: 1,
+			},
+			Path: "",
+		},
+		Type: "TestLibrary.test_side_effect_task",
+		Data: &commonpb.DataBlob{
+			Data:         nil,
+			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
+		},
+	}
+
+	rt, ok := s.registry.Task("TestLibrary.test_side_effect_task")
+	s.True(ok)
+
+	root, err := NewTree(persistenceNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+	s.NoError(err)
+	s.NotNil(root)
+
+	mockEngine := NewMockEngine(s.controller)
+	ctx := NewEngineContext(context.Background(), mockEngine)
+
+	expectValidate := func(retValue bool, errValue error) {
+		rt.validator.(*MockTaskValidator[any, *TestSideEffectTask]).EXPECT().
+			Validate(gomock.Any(), gomock.Any(), gomock.Any()).Return(retValue, errValue).Times(1)
+	}
+
+	// Succeed validation as valid.
+	expectValidate(true, nil)
+	task, err := root.ValidateSideEffectTask(ctx, s.registry, taskInfo)
+	s.NotNil(task)
+	s.IsType(&TestSideEffectTask{}, task)
+	s.NoError(err)
+
+	// Succeed validation as invalid.
+	expectValidate(false, nil)
+	task, err = root.ValidateSideEffectTask(ctx, s.registry, taskInfo)
+	s.Nil(task)
+	s.NoError(err)
+
+	// Fail validation.
+	expectedErr := errors.New("validation failed")
+	expectValidate(false, expectedErr)
+	task, err = root.ValidateSideEffectTask(ctx, s.registry, taskInfo)
+	s.Nil(task)
 	s.ErrorIs(expectedErr, err)
 }
