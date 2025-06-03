@@ -117,6 +117,7 @@ func HandlerProvider(args NewHandlerArgs) *Handler {
 		replicationTaskFetcherFactory:    args.ReplicationTaskFetcherFactory,
 		replicationTaskConverterProvider: args.ReplicationTaskConverterFactory,
 		streamReceiverMonitor:            args.StreamReceiverMonitor,
+		replicationServerRateLimiter:     args.ReplicationServerRateLimiter,
 	}
 
 	// prevent us from trying to serve requests before shard controller is started and ready
