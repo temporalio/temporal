@@ -42,7 +42,6 @@ var Module = fx.Options(
 	deployment.Module, // [cleanup-wv-pre-release]
 	workerdeployment.Module,
 	dlq.Module,
-	dynamicconfig.Module,
 	fx.Provide(
 		func(c resource.HistoryClient) dlq.HistoryClient {
 			return c

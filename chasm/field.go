@@ -44,20 +44,30 @@ func NewComponentField[C Component](
 	}
 }
 
-func NewComponentPointerField[C Component](
+func ComponentPointerTo[C Component](
 	ctx MutableContext,
 	c C,
-) Field[C] {
-	//nolint:forbidigo
-	panic("not implemented")
+) (Field[C], error) {
+	path, err := ctx.Ref(c)
+	if err != nil {
+		return NewEmptyField[C](), err
+	}
+	return Field[C]{
+		Internal: newFieldInternalWithValue(fieldTypePointer, path.componentPath),
+	}, nil
 }
 
-func NewDataPointerField[D proto.Message](
+func DataPointerTo[D proto.Message](
 	ctx MutableContext,
 	d D,
-) Field[D] {
-	//nolint:forbidigo
-	panic("not implemented")
+) (Field[D], error) {
+	path, err := ctx.refData(d)
+	if err != nil {
+		return NewEmptyField[D](), err
+	}
+	return Field[D]{
+		Internal: newFieldInternalWithValue(fieldTypePointer, path.componentPath),
+	}, nil
 }
 
 func (f Field[T]) Get(chasmContext Context) (T, error) {
@@ -75,27 +85,46 @@ func (f Field[T]) Get(chasmContext Context) (T, error) {
 		return vT, nil
 	}
 
+	var nodeValue any
 	switch f.Internal.fieldType() {
 	case fieldTypeComponent:
 		if err := f.Internal.node.prepareComponentValue(chasmContext); err != nil {
 			return nilT, err
 		}
+		nodeValue = f.Internal.node.value
 	case fieldTypeData:
 		// For data fields, T is always a concrete type.
 		if err := f.Internal.node.prepareDataValue(chasmContext, reflect.TypeFor[T]()); err != nil {
 			return nilT, err
 		}
-	case fieldTypeComponentPointer:
-		//nolint:forbidigo
-		panic("not implemented")
+		nodeValue = f.Internal.node.value
+	case fieldTypePointer:
+		if err := f.Internal.node.preparePointerValue(chasmContext); err != nil {
+			return nilT, err
+		}
+		//nolint:revive // value is guaranteed to be of type []string.
+		path := f.Internal.value().([]string)
+		if referencedNode, found := f.Internal.node.root().findNode(path); found {
+			fieldT := reflect.TypeFor[T]()
+			if fieldT.AssignableTo(protoMessageT) {
+				if err := f.Internal.node.prepareDataValue(chasmContext, fieldT); err != nil {
+					return nilT, err
+				}
+			} else {
+				if err := referencedNode.prepareComponentValue(chasmContext); err != nil {
+					return nilT, err
+				}
+			}
+			nodeValue = referencedNode.value
+		}
 	default:
 		return nilT, serviceerror.NewInternalf("unsupported field type: %v", f.Internal.fieldType())
 	}
 
-	if f.Internal.node.value == nil {
+	if nodeValue == nil {
 		return nilT, nil
 	}
-	vT, isT := f.Internal.node.value.(T)
+	vT, isT := nodeValue.(T)
 	if !isT {
 		return nilT, serviceerror.NewInternalf("node value doesn't implement %s", reflect.TypeFor[T]().Name())
 	}

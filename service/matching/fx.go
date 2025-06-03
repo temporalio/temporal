@@ -28,7 +28,6 @@ import (
 
 var Module = fx.Options(
 	resource.Module,
-	dynamicconfig.Module,
 	deployment.Module,
 	workerdeployment.Module,
 	fx.Provide(ConfigProvider),

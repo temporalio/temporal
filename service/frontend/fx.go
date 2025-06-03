@@ -61,7 +61,6 @@ type (
 var Module = fx.Options(
 	resource.Module,
 	scheduler.Module,
-	dynamicconfig.Module,
 	deployment.Module,
 	workerdeployment.Module,
 	// Note that with this approach routes may be registered in arbitrary order.

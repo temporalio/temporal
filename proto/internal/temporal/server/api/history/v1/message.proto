@@ -6,6 +6,7 @@ option go_package = "go.temporal.io/server/api/history/v1;history";
 
 import "google/protobuf/timestamp.proto";
 
+import "temporal/api/enums/v1/event_type.proto";
 import "temporal/api/history/v1/message.proto";
 
 message TransientWorkflowTaskInfo {
@@ -44,9 +45,11 @@ message TaskRange {
     TaskKey exclusive_max_task_key = 2;
 }
 
-// StrippedHistoryEvent is a stripped down version of HistoryEvent that only contains the event_id and version.
+// StrippedHistoryEvent is a stripped down version of HistoryEvent that only contains very minimum number of fields.
+// IMPORTANT: field numbers must be exactly the same as in history.HistoryEvent message.
 message StrippedHistoryEvent {
     int64 event_id = 1;
+    temporal.api.enums.v1.EventType event_type = 3;
     int64 version = 4;
 }
 

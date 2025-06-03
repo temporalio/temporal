@@ -50,19 +50,16 @@ type Config struct {
 	// HistoryCache settings
 	// Change of these configs require shard restart
 	HistoryCacheLimitSizeBased            bool
-	HistoryCacheInitialSize               dynamicconfig.IntPropertyFn
-	HistoryShardLevelCacheMaxSize         dynamicconfig.IntPropertyFn
-	HistoryShardLevelCacheMaxSizeBytes    dynamicconfig.IntPropertyFn
 	HistoryHostLevelCacheMaxSize          dynamicconfig.IntPropertyFn
 	HistoryHostLevelCacheMaxSizeBytes     dynamicconfig.IntPropertyFn
 	HistoryCacheTTL                       dynamicconfig.DurationPropertyFn
 	HistoryCacheNonUserContextLockTimeout dynamicconfig.DurationPropertyFn
-	EnableHostLevelHistoryCache           dynamicconfig.BoolPropertyFn
 	EnableNexus                           dynamicconfig.BoolPropertyFn
 	EnableWorkflowExecutionTimeoutTimer   dynamicconfig.BoolPropertyFn
 	EnableUpdateWorkflowModeIgnoreCurrent dynamicconfig.BoolPropertyFn
 	EnableTransitionHistory               dynamicconfig.BoolPropertyFn
 	MaxCallbacksPerWorkflow               dynamicconfig.IntPropertyFnWithNamespaceFilter
+	EnableExecuteMultiOperationErrorDebug dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableRequestIdRefLinks               dynamicconfig.BoolPropertyFn
 	EnableChasm                           dynamicconfig.BoolPropertyFn
 
@@ -358,8 +355,9 @@ type Config struct {
 
 	HealthPersistenceLatencyFailure dynamicconfig.FloatPropertyFn
 	HealthPersistenceErrorRatio     dynamicconfig.FloatPropertyFn
-
-	BreakdownMetricsByTaskQueue dynamicconfig.BoolPropertyFnWithTaskQueueFilter
+	HealthRPCLatencyFailure         dynamicconfig.FloatPropertyFn
+	HealthRPCErrorRatio             dynamicconfig.FloatPropertyFn
+	BreakdownMetricsByTaskQueue     dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 
 	LogAllReqErrors dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
@@ -410,17 +408,14 @@ func NewConfig(
 		EmitShardLagLog: dynamicconfig.EmitShardLagLog.Get(dc),
 		// HistoryCacheLimitSizeBased should not change during runtime.
 		HistoryCacheLimitSizeBased:            dynamicconfig.HistoryCacheSizeBasedLimit.Get(dc)(),
-		HistoryCacheInitialSize:               dynamicconfig.HistoryCacheInitialSize.Get(dc),
-		HistoryShardLevelCacheMaxSize:         dynamicconfig.HistoryCacheMaxSize.Get(dc),
-		HistoryShardLevelCacheMaxSizeBytes:    dynamicconfig.HistoryCacheMaxSizeBytes.Get(dc),
 		HistoryHostLevelCacheMaxSize:          dynamicconfig.HistoryCacheHostLevelMaxSize.Get(dc),
 		HistoryHostLevelCacheMaxSizeBytes:     dynamicconfig.HistoryCacheHostLevelMaxSizeBytes.Get(dc),
 		HistoryCacheTTL:                       dynamicconfig.HistoryCacheTTL.Get(dc),
 		HistoryCacheNonUserContextLockTimeout: dynamicconfig.HistoryCacheNonUserContextLockTimeout.Get(dc),
-		EnableHostLevelHistoryCache:           dynamicconfig.EnableHostHistoryCache.Get(dc),
 		EnableNexus:                           dynamicconfig.EnableNexus.Get(dc),
 		EnableWorkflowExecutionTimeoutTimer:   dynamicconfig.EnableWorkflowExecutionTimeoutTimer.Get(dc),
 		EnableUpdateWorkflowModeIgnoreCurrent: dynamicconfig.EnableUpdateWorkflowModeIgnoreCurrent.Get(dc),
+		EnableExecuteMultiOperationErrorDebug: dynamicconfig.EnableExecuteMultiOperationErrorDebug.Get(dc),
 		EnableTransitionHistory:               dynamicconfig.EnableTransitionHistory.Get(dc),
 		MaxCallbacksPerWorkflow:               dynamicconfig.MaxCallbacksPerWorkflow.Get(dc),
 		EnableRequestIdRefLinks:               dynamicconfig.EnableRequestIdRefLinks.Get(dc),
@@ -681,6 +676,8 @@ func NewConfig(
 
 		HealthPersistenceLatencyFailure: dynamicconfig.HealthPersistenceLatencyFailure.Get(dc),
 		HealthPersistenceErrorRatio:     dynamicconfig.HealthPersistenceErrorRatio.Get(dc),
+		HealthRPCLatencyFailure:         dynamicconfig.HealthRPCLatencyFailure.Get(dc),
+		HealthRPCErrorRatio:             dynamicconfig.HealthRPCErrorRatio.Get(dc),
 
 		BreakdownMetricsByTaskQueue: dynamicconfig.MetricsBreakdownByTaskQueue.Get(dc),
 

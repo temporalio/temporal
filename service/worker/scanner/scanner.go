@@ -265,9 +265,9 @@ func (s *Scanner) startWorkflow(
 		if _, ok := err.(*serviceerror.WorkflowExecutionAlreadyStarted); ok {
 			return nil
 		}
-		s.context.logger.Error("error starting "+workflowType+" workflow", tag.Error(err))
+		s.context.logger.Error("error starting workflow", tag.WorkflowType(workflowType), tag.Error(err))
 		return err
 	}
-	s.context.logger.Info(workflowType + " workflow successfully started")
+	s.context.logger.Info("workflow successfully started", tag.WorkflowType(workflowType))
 	return nil
 }

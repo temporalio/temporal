@@ -326,7 +326,8 @@ func (s *SyncStateRetrieverImpl) getNewRunInfo(ctx context.Context, namespaceId 
 	switch err.(type) {
 	case nil:
 	case *serviceerror.NotFound:
-		s.logger.Info(fmt.Sprintf("SyncWorkflowState new run not found, newRunId: %v", newRunId),
+		s.logger.Info("SyncWorkflowState new run not found",
+			tag.WorkflowNewRunID(newRunId),
 			tag.WorkflowNamespaceID(namespaceId.String()),
 			tag.WorkflowID(execution.WorkflowId),
 			tag.WorkflowRunID(execution.RunId))
@@ -350,7 +351,8 @@ func (s *SyncStateRetrieverImpl) getNewRunInfo(ctx context.Context, namespaceId 
 	switch err.(type) {
 	case nil:
 	case *serviceerror.NotFound:
-		s.logger.Info(fmt.Sprintf("SyncWorkflowState new run event not found, newRunId: %v", newRunId),
+		s.logger.Info("SyncWorkflowState new run event not found",
+			tag.WorkflowNewRunID(newRunId),
 			tag.WorkflowNamespaceID(namespaceId.String()),
 			tag.WorkflowID(execution.WorkflowId),
 			tag.WorkflowRunID(execution.RunId))
@@ -359,7 +361,8 @@ func (s *SyncStateRetrieverImpl) getNewRunInfo(ctx context.Context, namespaceId 
 		return nil, err
 	}
 	if len(newRunEvents) == 0 {
-		s.logger.Info(fmt.Sprintf("SyncWorkflowState new run event is empty, newRunId: %v", newRunId),
+		s.logger.Info("SyncWorkflowState new run event is empty",
+			tag.WorkflowNewRunID(newRunId),
 			tag.WorkflowNamespaceID(namespaceId.String()),
 			tag.WorkflowID(execution.WorkflowId),
 			tag.WorkflowRunID(execution.RunId))
