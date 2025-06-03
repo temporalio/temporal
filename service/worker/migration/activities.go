@@ -975,7 +975,7 @@ func (a *activities) checkReplicationOnRemoteCluster(ctx context.Context, waitRe
 				continue
 			}
 			// WE are all caught up
-			if shard.MaxReplicationTaskId <= clusterInfo.AckedTaskId {
+			if clusterInfo.AckedTaskId >= shard.MaxReplicationTaskId {
 				readyShardCount++
 				continue
 			}
