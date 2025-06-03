@@ -264,7 +264,6 @@ func (t *timerQueueTaskExecutorBase) executeChasmPureTimers(
 
 	tree := ms.ChasmTree()
 	if tree == nil {
-		return serviceerror.NewInternal("mutable state associated with CHASM task has no CHASM tree")
 		return errNoChasmTree
 	}
 
