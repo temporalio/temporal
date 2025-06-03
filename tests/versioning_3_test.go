@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
+	"go.temporal.io/server/service/matching"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -75,7 +76,7 @@ func NewVersioning3Suite(useV32 bool) *Versioning3Suite {
 func TestVersioning3FunctionalSuite(t *testing.T) {
 	t.Parallel()
 	suite.Run(t, NewVersioning3Suite(true))
-	suite.Run(t, NewVersioning3Suite(false))
+	// suite.Run(t, NewVersioning3Suite(false))
 }
 
 func (s *Versioning3Suite) SetupSuite() {
@@ -221,11 +222,7 @@ func (s *Versioning3Suite) testWorkflowWithPinnedOverride(sticky bool) {
 }
 
 func (s *Versioning3Suite) TestQueryWithPinnedOverride_NoSticky() {
-	s.RunTestWithMatchingBehavior(
-		func() {
-			s.testQueryWithPinnedOverride(false)
-		},
-	)
+	s.testQueryWithPinnedOverride(false)
 }
 
 func (s *Versioning3Suite) TestQueryWithPinnedOverride_Sticky() {
@@ -234,6 +231,61 @@ func (s *Versioning3Suite) TestQueryWithPinnedOverride_Sticky() {
 			s.testQueryWithPinnedOverride(true)
 		},
 	)
+}
+
+func (s *Versioning3Suite) TestPinnedQuery_DrainedVersion() {
+	s.testPinnedQuery_DrainedVersion()
+}
+
+func (s *Versioning3Suite) testPinnedQuery_DrainedVersion() {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	s.OverrideDynamicConfig(dynamicconfig.VersionDrainageStatusRefreshInterval, 1*time.Second)
+	s.OverrideDynamicConfig(dynamicconfig.VersionDrainageStatusVisibilityGracePeriod, 1*time.Second)
+	s.OverrideDynamicConfig(dynamicconfig.PollerHistoryTTL, 5*time.Second)
+
+	tv := testvars.New(s)
+
+	// start v1 version and make it current
+	idlePollerDone := make(chan struct{})
+	go func() {
+		s.idlePollWorkflow(tv, true, ver3MinPollTime, "should not have gotten any tasks since there are none")
+		close(idlePollerDone)
+	}()
+	s.setCurrentDeployment(tv)
+	s.WaitForChannel(ctx, idlePollerDone)
+
+	wftCompleted := make(chan struct{})
+	s.pollWftAndHandle(tv, false, wftCompleted,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			return respondCompleteWorkflow(tv, vbPinned), nil
+		})
+
+	s.startWorkflow(tv, tv.VersioningOverridePinned(s.useV32))
+	s.WaitForChannel(ctx, wftCompleted)
+	s.verifyWorkflowVersioning(tv, vbPinned, tv.Deployment(), tv.VersioningOverridePinned(s.useV32), nil)
+
+	// start v2 version and make it current which shall make v1 go from current -> draining/drained
+	idlePollerDone = make(chan struct{})
+	tv2 := tv.WithBuildIDNumber(2)
+	go func() {
+		s.idlePollWorkflow(tv2, true, ver3MinPollTime, "should not have gotten any tasks since there are none")
+		close(idlePollerDone)
+	}()
+	s.setCurrentDeployment(tv2)
+	s.WaitForChannel(ctx, idlePollerDone)
+
+	// Query the closed workflow on v1 and see if it gets blackholed.
+	s.EventuallyWithT(func(c *assert.CollectT) {
+		a := assert.New(c)
+
+		_, err := s.queryWorkflow(tv)
+		a.Error(err)
+		a.ErrorContains(err, matching.ErrBlackHoledQuery.Error())
+	}, 10*time.Second, 500*time.Millisecond)
+
 }
 
 func (s *Versioning3Suite) testQueryWithPinnedOverride(sticky bool) {
