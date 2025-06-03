@@ -75,6 +75,7 @@ type (
 		mockAdminClient     *adminservicemock.MockAdminServiceClient
 		mockDeleteManager   *deletemanager.MockDeleteManager
 		mockMatchingClient  *matchingservicemock.MockMatchingServiceClient
+		mockChasmEngine     *chasm.MockEngine
 
 		config               *configs.Config
 		workflowCache        wcache.Cache
@@ -123,6 +124,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) SetupTest() {
 	s.mockTxProcessor.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
 	s.mockTimerProcessor.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
 	s.clientBean = client.NewMockBean(s.controller)
+	s.mockChasmEngine = chasm.NewMockEngine(s.controller)
 
 	s.mockShard = shard.NewTestContextWithTimeSource(
 		s.controller,
@@ -186,6 +188,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) SetupTest() {
 		s.workflowCache,
 		s.mockDeleteManager,
 		s.mockMatchingClient,
+		s.mockChasmEngine,
 		s.logger,
 		metrics.NoopMetricsHandler,
 		s.clusterName,
@@ -1743,6 +1746,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_Ex
 		mockCache,
 		s.mockDeleteManager,
 		s.mockMatchingClient,
+		s.mockChasmEngine,
 		s.logger,
 		metrics.NoopMetricsHandler,
 		s.clusterName,
@@ -1850,6 +1854,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_Va
 		mockCache,
 		s.mockDeleteManager,
 		s.mockMatchingClient,
+		s.mockChasmEngine,
 		s.logger,
 		metrics.NoopMetricsHandler,
 		s.clusterName,
@@ -1952,6 +1957,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_St
 		mockCache,
 		s.mockDeleteManager,
 		s.mockMatchingClient,
+		s.mockChasmEngine,
 		s.logger,
 		metrics.NoopMetricsHandler,
 		s.clusterName,
@@ -2052,6 +2058,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteChasmPureTimerTask_Execu
 		mockCache,
 		s.mockDeleteManager,
 		s.mockMatchingClient,
+		s.mockChasmEngine,
 		s.logger,
 		metrics.NoopMetricsHandler,
 		s.clusterName,

@@ -1,10 +1,12 @@
+//go:generate mockgen -package $GOPACKAGE -source $GOFILE -destination engine_mock.go
+
 package chasm
 
 import (
 	"context"
 )
 
-type engine interface {
+type Engine interface {
 	newEntity(
 		context.Context,
 		ComponentRef,
@@ -290,17 +292,17 @@ const engineCtxKey engineCtxKeyType = "chasmEngine"
 // this will be done by the nexus handler?
 // alternatively the engine can be a global variable,
 // but not a good practice in fx.
-func newEngineContext(
+func NewEngineContext(
 	ctx context.Context,
-	engine engine,
+	engine Engine,
 ) context.Context {
 	return context.WithValue(ctx, engineCtxKey, engine)
 }
 
 func engineFromContext(
 	ctx context.Context,
-) engine {
-	e, ok := ctx.Value(engineCtxKey).(engine)
+) Engine {
+	e, ok := ctx.Value(engineCtxKey).(Engine)
 	if !ok {
 		return nil
 	}
