@@ -27,6 +27,7 @@ import (
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/tasks"
+	"go.uber.org/fx"
 )
 
 //go:generate mockgen -package $GOPACKAGE -source $GOFILE -destination shard_context_mock.go
@@ -106,6 +107,9 @@ type (
 		GetFinalizer() *finalizer.Finalizer
 
 		ChasmRegistry() *chasm.Registry
+
+		// Get all dependencies as an fx.Option suitable for supplying to new container.
+		SupplyAllDependencies() fx.Option
 	}
 
 	// A ControllableContext is a Context plus other methods needed by

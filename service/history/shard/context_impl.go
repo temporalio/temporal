@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/finalizer"
 	"go.temporal.io/server/common/future"
+	"go.temporal.io/server/common/fxutil"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
@@ -82,6 +83,7 @@ var (
 type (
 	contextState int32
 
+	// These are fields of ContextImpl that are constructed by fx.
 	contextImplDeps struct {
 		fx.In
 
@@ -117,7 +119,7 @@ type (
 		// We can use a struct to separate them without any indirection in memory.
 		deps struct {
 			ContextFactoryParams // pass-through deps from factory
-			contextImplDeps      // other deps
+			contextImplDeps      // deps constructed by fx
 		}
 
 		// state is protected by stateLock
@@ -2042,6 +2044,7 @@ func (s *ContextImpl) acquireShard() {
 }
 
 var shardContextFx = fx.Options(
+	fxutil.LogAdapter,
 	fx.Provide(func(hostInfoProvider membership.HostInfoProvider) hostIdentity {
 		return hostIdentity(hostInfoProvider.HostInfo().Identity())
 	}),
@@ -2213,6 +2216,16 @@ func (s *ContextImpl) StateMachineRegistry() *hsm.Registry {
 
 func (s *ContextImpl) ChasmRegistry() *chasm.Registry {
 	return s.deps.ChasmRegistry
+}
+
+func (s *ContextImpl) SupplyAllDependencies() fx.Option {
+	return fx.Options(
+		fxutil.SupplyAllFields(s.deps.ContextFactoryParams),
+		// replace loggers with our tagged ones
+		fx.Decorate(func() (log.Logger, log.ThrottledLogger) {
+			return s.deps.TaggedLogger, s.deps.ThrottledLogger
+		}),
+	)
 }
 
 func (s *ContextImpl) GetCachedWorkflowContext(

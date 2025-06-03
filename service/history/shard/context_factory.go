@@ -7,6 +7,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/fxutil"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
@@ -78,11 +79,10 @@ func (c *contextFactoryImpl) CreateContext(
 		shardContextFx,
 		fx.Supply(shardID),
 		fx.Supply(closeCallback),
-		fx.Supply(MakeFxOut(c.params)), // reflection magic to supply all fields individually
+		fxutil.SupplyAllFields(c.params), // reflection magic to supply all fields individually
 		fx.Populate(&shard),
 	)
-	// Note that we do not call app.Start() or app.Run(), we're not using the lifecycle
-	// features here (yet?).
+	// Note that we do not call app.Start() or app.Run(), we're not using the lifecycle features here (yet?).
 	if app.Err() != nil {
 		return nil, app.Err()
 	}
