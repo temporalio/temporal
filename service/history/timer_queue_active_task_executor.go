@@ -52,6 +52,7 @@ func newTimerQueueActiveTaskExecutor(
 	metricProvider metrics.Handler,
 	config *configs.Config,
 	matchingRawClient resource.MatchingRawClient,
+	chasmEngine chasm.Engine,
 ) queues.Executor {
 	return &timerQueueActiveTaskExecutor{
 		timerQueueTaskExecutorBase: newTimerQueueTaskExecutorBase(
@@ -59,6 +60,7 @@ func newTimerQueueActiveTaskExecutor(
 			workflowCache,
 			workflowDeleteManager,
 			matchingRawClient,
+			chasmEngine,
 			logger,
 			metricProvider,
 			config,
