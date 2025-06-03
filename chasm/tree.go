@@ -1739,13 +1739,15 @@ func isComponentTaskExpired(
 }
 
 // EachPureTask runs the callback for all expired/runnable pure tasks within the
-// CHASM tree (including invalid tasks). The CHASM tree is left untouched, even
+// CHASM tree (excluding invalid tasks). The CHASM tree is left untouched, even
 // if invalid tasks are detected (these are cleaned up as part of transaction
 // close).
 func (n *Node) EachPureTask(
 	referenceTime time.Time,
 	callback func(executor NodeExecutePureTask, task any) error,
 ) error {
+	ctx := NewContext(context.Background(), n)
+
 	// Walk the tree to find all runnable tasks.
 	for _, node := range n.andAllChildren() {
 		// Skip nodes that aren't serialized yet.
@@ -1759,6 +1761,12 @@ func (n *Node) EachPureTask(
 			continue
 		}
 
+		// Hydrate nodes before the task validator is called.
+		err := node.prepareComponentValue(ctx)
+		if err != nil {
+			return err
+		}
+
 		for _, task := range componentAttr.GetPureTasks() {
 			if !isComponentTaskExpired(referenceTime, task) {
 				// Pure tasks are stored in-order, so we can skip scanning the rest once we hit
@@ -1769,6 +1777,15 @@ func (n *Node) EachPureTask(
 			taskValue, err := node.deserializeComponentTask(task)
 			if err != nil {
 				return err
+			}
+
+			valid, err := n.validateTask(ctx, taskValue)
+			if err != nil {
+				return err
+			}
+			if !valid {
+				// Skip invalid tasks.
+				continue
 			}
 
 			if err = callback(node, taskValue); err != nil {

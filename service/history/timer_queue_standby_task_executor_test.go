@@ -2095,13 +2095,11 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteChasmPureTimerTask_Execu
 	}
 
 	// Mock the CHASM tree and execute interface.
-	mockEach := chasm.NewMockNodeExecutePureTask(s.controller)
 	chasmTree := historyi.NewMockChasmTree(s.controller)
-	chasmTree.EXPECT().EachPureTask(gomock.Any(), gomock.Any()).
-		Times(1).Do(
-		func(_ time.Time, callback func(executor chasm.NodeExecutePureTask, task any) error) error {
-			return callback(mockEach, nil)
-		})
+	expectEachPureTask := func(err error) {
+		chasmTree.EXPECT().EachPureTask(gomock.Any(), gomock.Any()).
+			Times(1).Return(err)
+	}
 
 	// Mock mutable state.
 	ms := historyi.NewMockMutableState(s.controller)
@@ -2128,13 +2126,12 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteChasmPureTimerTask_Execu
 	}
 
 	wfCtx := historyi.NewMockWorkflowContext(s.controller)
-	wfCtx.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(ms, nil)
-	// wfCtx.EXPECT().UpdateWorkflowExecutionAsActive(gomock.Any(), gomock.Any())
+	wfCtx.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(ms, nil).AnyTimes()
 
 	mockCache := wcache.NewMockCache(s.controller)
 	mockCache.EXPECT().GetOrCreateWorkflowExecution(
 		gomock.Any(), s.mockShard, gomock.Any(), execution, locks.PriorityLow,
-	).Return(wfCtx, wcache.NoopReleaseFn, nil)
+	).Return(wfCtx, wcache.NoopReleaseFn, nil).AnyTimes()
 
 	//nolint:revive // unchecked-type-assertion
 	timerQueueStandbyTaskExecutor := newTimerQueueStandbyTaskExecutor(
@@ -2150,9 +2147,24 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteChasmPureTimerTask_Execu
 		s.clientBean,
 	).(*timerQueueStandbyTaskExecutor)
 
+	// All tasks were invalid.
+	expectEachPureTask(nil)
 	resp := timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
 	s.NotNil(resp)
 	s.NoError(resp.ExecutionErr)
+
+	// Tasks should retry.
+	expectEachPureTask(consts.ErrTaskRetry)
+	resp = timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
+	s.NotNil(resp)
+	s.ErrorIs(consts.ErrTaskRetry, resp.ExecutionErr)
+
+	// Validation failed.
+	expectedErr := errors.New("validation error")
+	expectEachPureTask(expectedErr)
+	resp = timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
+	s.NotNil(resp)
+	s.ErrorIs(expectedErr, resp.ExecutionErr)
 }
 
 func (s *timerQueueStandbyTaskExecutorSuite) createPersistenceMutableState(
