@@ -429,11 +429,15 @@ jobs:
             persistence_driver: cassandra
             containers: [cassandra, elasticsearch]
             es_version: v7
+            # Cassandra tests need a larger instance
+            runs_on_override: ubuntu-latest-8-cores
           - name: cass_es8
             persistence_type: nosql
             persistence_driver: cassandra
             containers: [cassandra, elasticsearch8]
             es_version: v8
+            # Cassandra tests need a larger instance
+            runs_on_override: ubuntu-latest-8-cores
           - name: sqlite
             persistence_type: sql
             persistence_driver: sqlite
@@ -450,7 +454,7 @@ jobs:
             persistence_type: sql
             persistence_driver: postgres12_pgx
             containers: [postgresql]
-    runs-on: ${{ matrix.runs-on }}
+    runs-on: ${{ matrix.runs_on_override || matrix.runs-on }}
     env:
       TEST_TOTAL_SHARDS: ${{ needs.set-up-single-test.outputs.total_shards }}
       TEST_SHARD_INDEX: ${{ matrix.shard_index }}
@@ -499,7 +503,7 @@ jobs:
         id: get_job_id
         run: |
           set -eu
-          test_job_name="Functional test (${{matrix.runs-on}}, ${{matrix.shard_index}}, ${{matrix.name}})"
+          test_job_name="Functional test (${{ matrix.runs_on_override || matrix.runs-on }}, ${{matrix.shard_index}}, ${{matrix.name}})"
           job_url="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs?per_page=100"
           # curl or jq might silently fail, but we are okay with that.
           # We don't want to fail the job if we can't get the job id.          
@@ -549,7 +553,7 @@ jobs:
         uses: actions/upload-artifact@v4.4.3
         if: ${{ !cancelled() && !inputs.run_single_functional_test }}
         with:
-          name: junit-xml--${{github.run_id}}--${{steps.get_job_id.outputs.JOB_ID}}--${{github.run_attempt}}--${{matrix.runs-on}}--${{matrix.name}}--${{matrix.shard_index}}--functional-test
+          name: junit-xml--${{github.run_id}}--${{steps.get_job_id.outputs.JOB_ID}}--${{github.run_attempt}}--${{ matrix.runs_on_override || matrix.runs-on }}--${{matrix.name}}--${{matrix.shard_index}}--functional-test
           path: .testoutput
           include-hidden-files: true
           retention-days: 28
@@ -580,11 +584,15 @@ jobs:
             persistence_driver: elasticsearch
             parallel_flags: ""
             containers: [cassandra, elasticsearch]
+            # Cassandra tests need a larger instance
+            runs_on_override: ubuntu-latest-8-cores
           - name: cass_es8
             persistence_type: nosql
             persistence_driver: elasticsearch
             parallel_flags: ""
             containers: [cassandra, elasticsearch8]
+            # Cassandra tests need a larger instance
+            runs_on_override: ubuntu-latest-8-cores
           - name: mysql8
             persistence_type: sql
             persistence_driver: mysql8
@@ -600,7 +608,7 @@ jobs:
             persistence_driver: postgres12_pgx
             parallel_flags: "-parallel=2" # reduce parallelism for postgres
             containers: [postgresql]
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runs_on_override || 'ubuntu-latest' }}
     env:
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
@@ -723,11 +731,15 @@ jobs:
             persistence_driver: elasticsearch
             containers: [cassandra, elasticsearch]
             es_version: v7
+            # Cassandra tests need a larger instance
+            runs_on_override: ubuntu-latest-8-cores
           - name: cass_es8
             persistence_type: nosql
             persistence_driver: elasticsearch
             containers: [cassandra, elasticsearch8]
             es_version: v8
+            # Cassandra tests need a larger instance
+            runs_on_override: ubuntu-latest-8-cores
           - name: mysql8
             persistence_type: sql
             persistence_driver: mysql8
@@ -740,7 +752,7 @@ jobs:
             persistence_type: sql
             persistence_driver: postgres12_pgx
             containers: [postgresql]
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runs_on_override || 'ubuntu-latest' }}
     env:
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
