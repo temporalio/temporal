@@ -97,6 +97,7 @@ func (f *memoryScheduledQueueFactory) CreateQueue(
 		f.metricsHandler,
 		shardCtx.GetConfig(),
 		nil,
+		nil,
 	)
 	if f.executorWrapper != nil {
 		speculativeWorkflowTaskTimeoutExecutor = f.executorWrapper.Wrap(speculativeWorkflowTaskTimeoutExecutor)
