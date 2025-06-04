@@ -23,6 +23,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/worker_versioning"
@@ -66,7 +67,8 @@ type (
 		tqCtx       context.Context
 		tqCtxCancel context.CancelFunc
 
-		cancelSub         func()
+		cancelMatcherSub  func()
+		cancelFairnessSub func()
 		backlogMgr        backlogManager
 		liveness          *liveness
 		oldMatcher        *TaskMatcher // TODO(pri): old matcher cleanup
@@ -170,18 +172,31 @@ func newPhysicalTaskQueueManager(
 	isSticky := queue.Partition().Kind() == enumspb.TASK_QUEUE_KIND_STICKY
 	isChild := !isSticky && !queue.Partition().IsRoot()
 
-	newMatcher, cancelSub := config.NewMatcher(func(bool) {
+	newMatcher, cancelMatcherSub := config.NewMatcher(func(bool) {
 		// unload on change to NewMatcher so that we can reload with the new setting:
 		pqMgr.UnloadFromPartitionManager(unloadCauseConfigChange)
 	})
-	pqMgr.cancelSub = cancelSub
+	pqMgr.cancelMatcherSub = cancelMatcherSub
+
+	newFairness, cancelFairnessSub := config.EnableFairness(func(bool) {
+		// unload on change so that we can reload with the new setting:
+		pqMgr.UnloadFromPartitionManager(unloadCauseConfigChange)
+	})
+	pqMgr.cancelFairnessSub = cancelFairnessSub
+
+	var taskManager persistence.TaskManager
+	if newFairness {
+		taskManager = e.FairTaskManager
+	} else {
+		taskManager = e.taskManager
+	}
 
 	if newMatcher {
 		pqMgr.backlogMgr = newPriBacklogManager(
 			tqCtx,
 			pqMgr,
 			config,
-			e.taskManager,
+			taskManager,
 			logger,
 			throttledLogger,
 			e.matchingRawClient,
@@ -211,7 +226,7 @@ func newPhysicalTaskQueueManager(
 			tqCtx,
 			pqMgr,
 			config,
-			e.taskManager,
+			taskManager,
 			logger,
 			throttledLogger,
 			e.matchingRawClient,
@@ -258,7 +273,8 @@ func (c *physicalTaskQueueManagerImpl) Stop(unloadCause unloadCause) {
 	) {
 		return
 	}
-	c.cancelSub()
+	c.cancelMatcherSub()
+	c.cancelFairnessSub()
 	// this may attempt to write one final ack update, do this before canceling tqCtx
 	c.backlogMgr.Stop()
 	c.matcher.Stop()

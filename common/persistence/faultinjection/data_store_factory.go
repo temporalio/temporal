@@ -53,6 +53,25 @@ func (d *FaultInjectionDataStoreFactory) NewTaskStore() (persistence.TaskStore, 
 	return d.taskStore, nil
 }
 
+// TODO(fairness): cleanup; rename to NewTaskStore
+func (d *FaultInjectionDataStoreFactory) NewTaskFairnessStore() (persistence.TaskStore, error) {
+	if d.taskStore == nil {
+		baseStore, err := d.baseFactory.NewTaskFairnessStore()
+		if err != nil {
+			return nil, err
+		}
+		if storeConfig, ok := d.fiConfig.Targets.DataStores[config.TaskStoreName]; ok && len(storeConfig.Methods) > 0 {
+			d.taskStore = newFaultInjectionTaskStore(
+				baseStore,
+				newStoreFaultGenerator(&storeConfig),
+			)
+		} else {
+			d.taskStore = baseStore
+		}
+	}
+	return d.taskStore, nil
+}
+
 func (d *FaultInjectionDataStoreFactory) NewShardStore() (persistence.ShardStore, error) {
 	if d.shardStore == nil {
 		baseStore, err := d.baseFactory.NewShardStore()
