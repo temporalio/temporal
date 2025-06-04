@@ -23,6 +23,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/worker_versioning"
@@ -66,7 +67,8 @@ type (
 		tqCtx       context.Context
 		tqCtxCancel context.CancelFunc
 
-		cancelSub         func()
+		cancelMatcherSub  func()
+		cancelFairnessSub func()
 		backlogMgr        backlogManager
 		liveness          *liveness
 		oldMatcher        *TaskMatcher // TODO(pri): old matcher cleanup
@@ -114,6 +116,7 @@ var (
 
 	backlogTagClassic  = tag.NewStringTag("backlog", "classic")
 	backlogTagPriority = tag.NewStringTag("backlog", "priority")
+	backlogTagFairness = tag.NewStringTag("backlog", "fairness")
 )
 
 func newPhysicalTaskQueueManager(
@@ -123,6 +126,7 @@ func newPhysicalTaskQueueManager(
 	e := partitionMgr.engine
 	config := partitionMgr.config
 	buildIdTagValue := queue.Version().MetricsTagValue()
+	buildIdTag := tag.WorkerBuildId(buildIdTagValue)
 	taggedMetricsHandler := partitionMgr.metricsHandler.WithTags(
 		metrics.OperationTag(metrics.MatchingTaskQueueMgrScope),
 		metrics.WorkerBuildIdTag(buildIdTagValue, config.BreakdownMetricsByBuildID()))
@@ -170,15 +174,29 @@ func newPhysicalTaskQueueManager(
 	isSticky := queue.Partition().Kind() == enumspb.TASK_QUEUE_KIND_STICKY
 	isChild := !isSticky && !queue.Partition().IsRoot()
 
-	newMatcher, cancelSub := config.NewMatcher(func(bool) {
+	newMatcher, cancelMatcherSub := config.NewMatcher(func(bool) {
 		// unload on change to NewMatcher so that we can reload with the new setting:
 		pqMgr.UnloadFromPartitionManager(unloadCauseConfigChange)
 	})
-	pqMgr.cancelSub = cancelSub
+	pqMgr.cancelMatcherSub = cancelMatcherSub
 
-	buildIdTag := tag.WorkerBuildId(buildIdTagValue)
+	newFairness, cancelFairnessSub := config.EnableFairness(func(bool) {
+		// unload on change so that we can reload with the new setting:
+		pqMgr.UnloadFromPartitionManager(unloadCauseConfigChange)
+	})
+	pqMgr.cancelFairnessSub = cancelFairnessSub
+
+	var taskManager persistence.TaskManager
+	if newFairness {
+		taskManager = e.FairTaskManager
+	} else {
+		taskManager = e.taskManager
+	}
+
 	backlogTag := backlogTagClassic
-	if newMatcher {
+	if newFairness {
+		backlogTag = backlogTagFairness
+	} else if newMatcher {
 		backlogTag = backlogTagPriority
 	}
 	pqMgr.logger = log.With(partitionMgr.logger, buildIdTag, backlogTag)
@@ -189,7 +207,7 @@ func newPhysicalTaskQueueManager(
 			tqCtx,
 			pqMgr,
 			config,
-			e.taskManager,
+			taskManager,
 			pqMgr.logger,
 			pqMgr.throttledLogger,
 			e.matchingRawClient,
@@ -219,7 +237,7 @@ func newPhysicalTaskQueueManager(
 			tqCtx,
 			pqMgr,
 			config,
-			e.taskManager,
+			taskManager,
 			pqMgr.logger,
 			pqMgr.throttledLogger,
 			e.matchingRawClient,
@@ -266,7 +284,8 @@ func (c *physicalTaskQueueManagerImpl) Stop(unloadCause unloadCause) {
 	) {
 		return
 	}
-	c.cancelSub()
+	c.cancelMatcherSub()
+	c.cancelFairnessSub()
 	// this may attempt to write one final ack update, do this before canceling tqCtx
 	c.backlogMgr.Stop()
 	c.matcher.Stop()
