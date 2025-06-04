@@ -50,6 +50,18 @@ func (d *TelemetryDataStoreFactory) NewTaskStore() (persistence.TaskStore, error
 	return d.taskStore, nil
 }
 
+// TODO(fairness): cleanup; rename to NewTaskStore
+func (d *TelemetryDataStoreFactory) NewTaskFairnessStore() (persistence.TaskStore, error) {
+	if d.taskStore == nil {
+		baseStore, err := d.baseFactory.NewTaskFairnessStore()
+		if err != nil {
+			return nil, err
+		}
+		d.taskStore = newTelemetryTaskStore(baseStore, d.logger, d.tracer)
+	}
+	return d.taskStore, nil
+}
+
 func (d *TelemetryDataStoreFactory) NewShardStore() (persistence.ShardStore, error) {
 	if d.shardStore == nil {
 		baseStore, err := d.baseFactory.NewShardStore()
