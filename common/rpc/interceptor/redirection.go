@@ -123,11 +123,13 @@ var (
 		"DeleteWorkerDeploymentVersion":         func() any { return &workflowservice.DeleteWorkerDeploymentVersionResponse{} },
 		"UpdateWorkerDeploymentVersionMetadata": func() any { return &workflowservice.UpdateWorkerDeploymentVersionMetadataResponse{} },
 
-		"CreateWorkflowRule":   func() any { return &workflowservice.CreateWorkflowRuleResponse{} },
-		"DescribeWorkflowRule": func() any { return &workflowservice.DescribeWorkflowRuleResponse{} },
-		"DeleteWorkflowRule":   func() any { return &workflowservice.DeleteWorkflowRuleResponse{} },
-		"ListWorkflowRules":    func() any { return &workflowservice.ListWorkflowRulesResponse{} },
-		"TriggerWorkflowRule":  func() any { return &workflowservice.TriggerWorkflowRuleResponse{} },
+		"CreateWorkflowRule":    func() any { return &workflowservice.CreateWorkflowRuleResponse{} },
+		"DescribeWorkflowRule":  func() any { return &workflowservice.DescribeWorkflowRuleResponse{} },
+		"DeleteWorkflowRule":    func() any { return &workflowservice.DeleteWorkflowRuleResponse{} },
+		"ListWorkflowRules":     func() any { return &workflowservice.ListWorkflowRulesResponse{} },
+		"TriggerWorkflowRule":   func() any { return &workflowservice.TriggerWorkflowRuleResponse{} },
+		"RecordWorkerHeartbeat": func() any { return &workflowservice.RecordWorkerHeartbeatResponse{} },
+		"ListWorkers":           func() any { return &workflowservice.ListWorkersResponse{} },
 	}
 )
 
