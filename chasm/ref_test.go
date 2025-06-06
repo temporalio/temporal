@@ -34,6 +34,8 @@ func (s *componentRefSuite) SetupTest() {
 	s.NoError(err)
 }
 
+// TODO: TestArchetype
+
 func (s *componentRefSuite) TestShardingKey() {
 	tv := testvars.New(s.T())
 	entityKey := EntityKey{
@@ -51,21 +53,4 @@ func (s *componentRefSuite) TestShardingKey() {
 
 	s.Equal(rc.shardingFn(entityKey), shardingKey)
 	s.Equal(rc.FqType(), ref.archetype)
-}
-
-func (s *componentRefSuite) TestShardID() {
-	tv := testvars.New(s.T())
-	entityKey := EntityKey{
-		tv.NamespaceID().String(),
-		tv.WorkflowID(),
-		tv.RunID(),
-	}
-	ref := NewComponentRef[*TestComponent](entityKey)
-
-	shardID, err := ref.ShardID(s.registry, 10)
-	s.NoError(err)
-
-	// Here we are just checking that the shardID field is populated in the ref.
-	// The actual shardID value is not that important.
-	s.Equal(shardID, ref.shardID)
 }

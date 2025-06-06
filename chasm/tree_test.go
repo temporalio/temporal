@@ -114,7 +114,7 @@ func (s *nodeSuite) TestNewTree() {
 		persistenceNodes["child2/grandchild1"],
 	}
 
-	root, err := NewTree(persistenceNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+	root, err := s.newTestTree(persistenceNodes)
 	s.NoError(err)
 	s.NotNil(root)
 
@@ -296,7 +296,7 @@ func (s *nodeSuite) TestCollectionAttributes() {
 
 		s.Run("Sync and serialize component with map "+tc.name, func() {
 			var nilSerializedNodes map[string]*persistencespb.ChasmNode
-			rootNode, err := NewTree(nilSerializedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+			rootNode, err := s.newTestTree(nilSerializedNodes)
 			s.NoError(err)
 
 			rootComponent := tc.initComponent()
@@ -324,7 +324,7 @@ func (s *nodeSuite) TestCollectionAttributes() {
 		s.NotNil(persistedNodes)
 
 		s.Run("Deserialize component with map "+tc.name, func() {
-			rootNode, err := NewTree(persistedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+			rootNode, err := s.newTestTree(persistedNodes)
 			s.NoError(err)
 
 			err = rootNode.deserialize(reflect.TypeFor[*TestComponent]())
@@ -355,7 +355,7 @@ func (s *nodeSuite) TestCollectionAttributes() {
 		})
 
 		s.Run("Clear map "+tc.name+" by setting it to nil", func() {
-			rootNode, err := NewTree(persistedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+			rootNode, err := s.newTestTree(persistedNodes)
 			s.NoError(err)
 
 			err = rootNode.deserialize(reflect.TypeFor[*TestComponent]())
@@ -378,7 +378,7 @@ func (s *nodeSuite) TestCollectionAttributes() {
 		})
 
 		s.Run("Delete single map "+tc.name+" item", func() {
-			rootNode, err := NewTree(persistedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+			rootNode, err := s.newTestTree(persistedNodes)
 			s.NoError(err)
 
 			err = rootNode.deserialize(reflect.TypeFor[*TestComponent]())
@@ -402,7 +402,7 @@ func (s *nodeSuite) TestCollectionAttributes() {
 		})
 
 		s.Run("Clear map "+tc.name+" by deleting all items", func() {
-			rootNode, err := NewTree(persistedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+			rootNode, err := s.newTestTree(persistedNodes)
 			s.NoError(err)
 
 			err = rootNode.deserialize(reflect.TypeFor[*TestComponent]())
@@ -448,7 +448,7 @@ func (s *nodeSuite) TestPointerAttributes() {
 
 	s.Run("Sync and serialize component with pointer", func() {
 		var nilSerializedNodes map[string]*persistencespb.ChasmNode
-		rootNode, err := NewTree(nilSerializedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+		rootNode, err := s.newTestTree(nilSerializedNodes)
 		s.NoError(err)
 
 		sc1 := &TestSubComponent1{
@@ -484,7 +484,7 @@ func (s *nodeSuite) TestPointerAttributes() {
 	s.NotNil(persistedNodes)
 
 	s.Run("Deserialize pointer component", func() {
-		rootNode, err := NewTree(persistedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+		rootNode, err := s.newTestTree(persistedNodes)
 		s.NoError(err)
 
 		err = rootNode.deserialize(reflect.TypeFor[*TestComponent]())
@@ -500,7 +500,7 @@ func (s *nodeSuite) TestPointerAttributes() {
 	})
 
 	s.Run("Clear pointer by setting it to the empty field", func() {
-		rootNode, err := NewTree(persistedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+		rootNode, err := s.newTestTree(persistedNodes)
 		s.NoError(err)
 
 		err = rootNode.deserialize(reflect.TypeFor[*TestComponent]())
@@ -560,7 +560,7 @@ func (s *nodeSuite) TestDeserializeNode_EmptyPersistence() {
 	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(1)).Times(1) // for InitialVersionedTransition
 	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(1)).Times(1)
 
-	node, err := NewTree(serializedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+	node, err := s.newTestTree(serializedNodes)
 	s.NoError(err)
 	s.Nil(node.value)
 	s.NotNil(node.serializedNode)
@@ -579,7 +579,7 @@ func (s *nodeSuite) TestDeserializeNode_EmptyPersistence() {
 func (s *nodeSuite) TestDeserializeNode_ComponentAttributes() {
 	serializedNodes := testComponentSerializedNodes()
 
-	node, err := NewTree(serializedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+	node, err := s.newTestTree(serializedNodes)
 	s.NoError(err)
 	s.Nil(node.value)
 	s.NotNil(node.serializedNode)
@@ -607,7 +607,7 @@ func (s *nodeSuite) TestDeserializeNode_ComponentAttributes() {
 func (s *nodeSuite) TestDeserializeNode_DataAttributes() {
 	serializedNodes := testComponentSerializedNodes()
 
-	node, err := NewTree(serializedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+	node, err := s.newTestTree(serializedNodes)
 	s.NoError(err)
 	s.Nil(node.value)
 	s.NotNil(node.serializedNode)
@@ -639,7 +639,7 @@ func (s *nodeSuite) TestFieldInterface() {
 	}
 
 	serializedNodes := testComponentSerializedNodes()
-	node, err := NewTree(serializedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+	node, err := s.newTestTree(serializedNodes)
 	s.NoError(err)
 	s.Nil(node.value)
 	s.NotNil(node.serializedNode)
@@ -722,7 +722,7 @@ func (s *nodeSuite) TestNodeSnapshot() {
 		},
 	}
 
-	root, err := NewTree(persistenceNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+	root, err := s.newTestTree(persistenceNodes)
 	s.NoError(err)
 	s.NotNil(root)
 
@@ -769,7 +769,7 @@ func (s *nodeSuite) TestApplyMutation() {
 			},
 		},
 	}
-	root, err := NewTree(persistenceNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+	root, err := s.newTestTree(persistenceNodes)
 	s.NoError(err)
 
 	// This decoded value should be reset after applying the mutation
@@ -858,7 +858,7 @@ func (s *nodeSuite) TestApplySnapshot() {
 			},
 		},
 	}
-	root, err := NewTree(persistenceNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+	root, err := s.newTestTree(persistenceNodes)
 	s.NoError(err)
 
 	// Set a decoded value that should be reset after applying the snapshot.
@@ -977,7 +977,7 @@ func (s *nodeSuite) TestCarryOverTaskStatus() {
 			},
 		},
 	}
-	root, err := NewTree(persistenceNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+	root, err := s.newTestTree(persistenceNodes)
 	s.NoError(err)
 
 	mutations := NodesMutation{
@@ -1109,14 +1109,7 @@ func (s *nodeSuite) TestCarryOverTaskStatus() {
 }
 
 func (s *nodeSuite) TestGetComponent() {
-	root, err := NewTree(
-		testComponentSerializedNodes(),
-		s.registry,
-		s.timeSource,
-		s.nodeBackend,
-		s.nodePathEncoder,
-		s.logger,
-	)
+	root, err := s.newTestTree(testComponentSerializedNodes())
 	s.NoError(err)
 
 	errValidation := errors.New("some random validation error")
@@ -1342,7 +1335,7 @@ func (s *nodeSuite) TestCloseTransaction_EmptyNode() {
 
 	var nilSerializedNodes map[string]*persistencespb.ChasmNode
 	// Create an empty tree.
-	node, err := NewTree(nilSerializedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+	node, err := s.newTestTree(nilSerializedNodes)
 	s.NoError(err)
 	s.Nil(node.value)
 
@@ -1458,7 +1451,7 @@ func (s *nodeSuite) TestCloseTransaction_InvalidateComponentTasks() {
 			},
 		},
 	}
-	root, err := NewTree(persistenceNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+	root, err := s.newTestTree(persistenceNodes)
 	s.NoError(err)
 
 	// The idea is to mark the node as dirty by accessing it with a mutable context.
@@ -1512,7 +1505,7 @@ func (s *nodeSuite) TestCloseTransaction_NewComponentTasks() {
 			},
 		},
 	}
-	root, err := NewTree(persistenceNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+	root, err := s.newTestTree(persistenceNodes)
 	s.NoError(err)
 
 	mutableContext := NewMutableContext(context.Background(), root)
@@ -1636,7 +1629,7 @@ func (s *nodeSuite) TestCloseTransaction_GeneratePhysicalSideEffectTasks() {
 		},
 	}
 
-	root, err := NewTree(persistenceNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+	root, err := s.newTestTree(persistenceNodes)
 	s.NoError(err)
 
 	err = root.ApplyMutation(mutation)
@@ -1730,7 +1723,7 @@ func (s *nodeSuite) TestCloseTransaction_GeneratePhysicalPureTask() {
 		},
 	}
 
-	root, err := NewTree(persistenceNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+	root, err := s.newTestTree(persistenceNodes)
 	s.NoError(err)
 
 	err = root.ApplyMutation(mutation)
@@ -1847,7 +1840,7 @@ func (s *nodeSuite) testComponentTree() *Node {
 
 	var nilSerializedNodes map[string]*persistencespb.ChasmNode
 	// Create an empty tree.
-	node, err := NewTree(nilSerializedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+	node, err := s.newTestTree(nilSerializedNodes)
 	s.NoError(err)
 	s.Nil(node.value)
 
@@ -1959,7 +1952,7 @@ func (s *nodeSuite) TestEachPureTask() {
 		},
 	}
 
-	root, err := NewTree(persistenceNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+	root, err := s.newTestTree(persistenceNodes)
 	s.NoError(err)
 	s.NotNil(root)
 
@@ -2000,7 +1993,7 @@ func (s *nodeSuite) TestExecutePureTask() {
 	rt, ok := s.registry.Task("TestLibrary.test_pure_task")
 	s.True(ok)
 
-	root, err := NewTree(persistenceNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+	root, err := s.newTestTree(persistenceNodes)
 	s.NoError(err)
 	s.NotNil(root)
 	ctx := context.Background()
@@ -2042,4 +2035,10 @@ func (s *nodeSuite) TestExecutePureTask() {
 	expectValidate(false, expectedErr)
 	err = root.ExecutePureTask(ctx, pureTask)
 	s.ErrorIs(expectedErr, err)
+}
+
+func (s *nodeSuite) newTestTree(
+	serializedNodes map[string]*persistencespb.ChasmNode,
+) (*Node, error) {
+	return NewTree(serializedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
 }

@@ -151,7 +151,7 @@ func (s *chasmEngineSuite) TestNewEntity_BrandNew() {
 	).Times(1)
 
 	// TODO: validate returned component once Ref() method of chasm tree is implememented.
-	_, err := s.engine.NewEntity(
+	_, _, err := s.engine.NewEntity(
 		context.Background(),
 		ref,
 		s.newTestEntityFn(newActivityID),
@@ -186,7 +186,7 @@ func (s *chasmEngineSuite) TestNewEntity_RequestIDDedup() {
 	).Times(1)
 
 	// TODO: validate returned component once Ref() method of chasm tree is implememented.
-	_, err := s.engine.NewEntity(
+	_, _, err := s.engine.NewEntity(
 		context.Background(),
 		ref,
 		s.newTestEntityFn(newActivityID),
@@ -228,7 +228,7 @@ func (s *chasmEngineSuite) TestNewEntity_ReusePolicy_AllowDuplicate() {
 	).Times(1)
 
 	// TODO: validate returned component once Ref() method of chasm tree is implememented.
-	_, err := s.engine.NewEntity(
+	_, _, err := s.engine.NewEntity(
 		context.Background(),
 		ref,
 		s.newTestEntityFn(newActivityID),
@@ -273,7 +273,7 @@ func (s *chasmEngineSuite) TestNewEntity_ReusePolicy_FailedOnly_Success() {
 	).Times(1)
 
 	// TODO: validate returned component once Ref() method of chasm tree is implememented.
-	_, err := s.engine.NewEntity(
+	_, _, err := s.engine.NewEntity(
 		context.Background(),
 		ref,
 		s.newTestEntityFn(newActivityID),
@@ -308,7 +308,7 @@ func (s *chasmEngineSuite) TestNewEntity_ReusePolicy_FailedOnly_Fail() {
 	).Times(1)
 
 	// TODO: validate returned component once Ref() method of chasm tree is implememented.
-	_, err := s.engine.NewEntity(
+	_, _, err := s.engine.NewEntity(
 		context.Background(),
 		ref,
 		s.newTestEntityFn(newActivityID),
@@ -343,7 +343,7 @@ func (s *chasmEngineSuite) TestNewEntity_ReusePolicy_RejectDuplicate() {
 	).Times(1)
 
 	// TODO: validate returned component once Ref() method of chasm tree is implememented.
-	_, err := s.engine.NewEntity(
+	_, _, err := s.engine.NewEntity(
 		context.Background(),
 		ref,
 		s.newTestEntityFn(newActivityID),
