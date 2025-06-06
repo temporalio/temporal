@@ -136,6 +136,7 @@ type sharedTestLoggerState struct {
 	}
 	mode            Mode
 	logExpectations bool
+	logCaller       bool
 	level           zapcore.Level
 }
 
@@ -145,6 +146,9 @@ type TestLogger struct {
 	wrapped log.Logger
 	state   *sharedTestLoggerState
 	tags    []tag.Tag
+	// If false the caller will not be logged by Zap. This is used when we process the
+	// logs from a subprocesses' STDOUT as we don't care about where in the main process
+	// the call came from, just where it was logged by the child.
 }
 
 type LoggerOption func(*TestLogger)
@@ -183,6 +187,15 @@ func LogLevel(level zapcore.Level) LoggerOption {
 	}
 }
 
+// WithoutCaller stops the TestLogger from logging the caller.
+// This is primarily intended for use when parsing log.Logger-generated logs in files
+// or coming from subprocesses.
+func WithoutCaller() LoggerOption {
+	return func(t *TestLogger) {
+		t.state.logCaller = false
+	}
+}
+
 // SetLogLevel overrides the temporal test log level during this test.
 func SetLogLevel(tt CleanupCapableT, level zapcore.Level) LoggerOption {
 	return func(t *TestLogger) {
@@ -206,6 +219,7 @@ func NewTestLogger(t TestingT, mode Mode, opts ...LoggerOption) *TestLogger {
 			t:               t,
 			logExpectations: false,
 			level:           zapcore.DebugLevel,
+			logCaller:       true,
 			mode:            mode,
 		},
 	}
@@ -215,16 +229,32 @@ func NewTestLogger(t TestingT, mode Mode, opts ...LoggerOption) *TestLogger {
 		opt(tl)
 	}
 	if tl.wrapped == nil {
-		tl.wrapped = log.NewZapLogger(
-			log.BuildZapLogger(
-				log.Config{
-					Level:  cmp.Or(os.Getenv(log.TestLogLevelEnvVar), tl.state.level.String()),
-					Format: cmp.Or(os.Getenv(log.TestLogFormatEnvVar), "console"),
-				}).
-				WithOptions(
-					zap.AddStacktrace(zap.ErrorLevel), // only include stack traces for logs with level error and above
-				)).
-			Skip(1)
+		writer := zaptest.NewTestingWriter(t)
+		var enc zapcore.Encoder
+		format := cmp.Or(os.Getenv(log.TestLogFormatEnvVar), "console")
+		switch strings.ToLower(format) {
+		case "console":
+			enc = zapcore.NewConsoleEncoder(log.DefaultZapEncoderConfig)
+		case "json":
+			enc = zapcore.NewJSONEncoder(log.DefaultZapEncoderConfig)
+		default:
+			t.Fatalf("unknown log encoding %q", format)
+		}
+		level := tl.state.level
+		if levelV := os.Getenv(log.TestLogLevelEnvVar); levelV != "" {
+			level = log.ParseZapLevel(levelV)
+		}
+		core := zapcore.NewCore(enc, writer, level)
+		zapOptions := []zap.Option{
+			// Send zap errors to the same writer and mark the test as failed if
+			// that happens.
+			zap.ErrorOutput(writer.WithMarkFailed(true)),
+			zap.AddStacktrace(zap.ErrorLevel), // only include stack traces for logs with level error and above
+			zap.WithCaller(tl.state.logCaller),
+		}
+
+		// Skip(1) skips the TestLogger itself
+		tl.wrapped = log.NewZapLogger(zap.New(core, zapOptions...)).Skip(1)
 	}
 
 	// Only possible with a *testing.T until *rapid.T supports `Cleanup`
