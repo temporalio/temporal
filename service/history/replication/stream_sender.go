@@ -34,7 +34,10 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-const TaskMaxSkipCount int = 1000
+const (
+	TaskMaxSkipCount           int = 1000
+	SyncTaskIntervalMultiplier     = 3
+)
 
 type (
 	StreamSender interface {
@@ -54,6 +57,7 @@ type (
 		clientShardKey          ClusterShardKey
 		serverShardKey          ClusterShardKey
 		clientClusterShardCount int32
+		recvSignalChan          chan struct{}
 		shutdownChan            channel.ShutdownOnce
 		config                  *configs.Config
 		isTieredStackEnabled    bool
@@ -94,6 +98,7 @@ func NewStreamSender(
 		clientShardKey:          clientShardKey,
 		serverShardKey:          serverShardKey,
 		clientClusterShardCount: clientClusterShardCount,
+		recvSignalChan:          make(chan struct{}, 1),
 		shutdownChan:            channel.NewShutdownOnce(),
 		config:                  config,
 		isTieredStackEnabled:    config.EnableReplicationTaskTieredProcessing(),
@@ -126,7 +131,7 @@ func (s *StreamSenderImpl) Start() {
 	}
 
 	go WrapEventLoop(s.server.Context(), s.recvEventLoop, s.Stop, s.logger, s.metrics, s.clientShardKey, s.serverShardKey, s.config)
-
+	go s.recvMonitor()
 	s.logger.Info("StreamSender started.")
 }
 
@@ -173,6 +178,12 @@ func (s *StreamSenderImpl) recvEventLoop() (retErr error) {
 		if s.isTieredStackEnabled != s.config.EnableReplicationTaskTieredProcessing() {
 			return NewStreamError("StreamSender detected tiered stack change, restart the stream", nil)
 		}
+		select {
+		case s.recvSignalChan <- struct{}{}:
+		default:
+			// signal channel is full. Continue
+		}
+
 		req, err := s.server.Recv()
 		if err != nil {
 			return NewStreamError("StreamSender failed to receive", err)
@@ -193,6 +204,22 @@ func (s *StreamSenderImpl) recvEventLoop() (retErr error) {
 		}
 	}
 	return nil
+}
+
+func (s *StreamSenderImpl) recvMonitor() {
+	heartbeatTimeout := time.NewTimer(s.config.ReplicationStreamSyncStatusDuration() * SyncTaskIntervalMultiplier)
+	defer heartbeatTimeout.Stop()
+
+	for !s.shutdownChan.IsShutdown() {
+		select {
+		case <-s.recvSignalChan:
+			heartbeatTimeout.Stop()
+			heartbeatTimeout = time.NewTimer(s.config.ReplicationStreamSyncStatusDuration() * SyncTaskIntervalMultiplier)
+		case <-heartbeatTimeout.C:
+			s.Stop()
+			return
+		}
+	}
 }
 
 func (s *StreamSenderImpl) sendEventLoop(priority enumsspb.TaskPriority) (retErr error) {
@@ -407,7 +434,7 @@ func (s *StreamSenderImpl) sendLive(
 	newTaskNotificationChan <-chan struct{},
 	beginInclusiveWatermark int64,
 ) error {
-	syncStatusTimer := time.NewTimer(s.config.ReplicationStreamSyncDuration())
+	syncStatusTimer := time.NewTimer(s.config.ReplicationStreamSendEmptyTaskDuration())
 	defer syncStatusTimer.Stop()
 	sendTasks := func() error {
 		endExclusiveWatermark := s.shardContext.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).TaskID
@@ -420,7 +447,7 @@ func (s *StreamSenderImpl) sendLive(
 		}
 		beginInclusiveWatermark = endExclusiveWatermark
 		syncStatusTimer.Stop()
-		syncStatusTimer = time.NewTimer(s.config.ReplicationStreamSyncDuration())
+		syncStatusTimer = time.NewTimer(s.config.ReplicationStreamSendEmptyTaskDuration())
 		return nil
 	}
 
