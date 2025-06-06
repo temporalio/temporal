@@ -5820,10 +5820,6 @@ func (wh *WorkflowHandler) UpdateActivityOptions(
 ) (_ *workflowservice.UpdateActivityOptionsResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
-	if !wh.config.ActivityAPIsEnabled(request.GetNamespace()) {
-		return nil, serviceerror.NewUnimplemented("method UpdateActivityOptions not implemented")
-	}
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
@@ -5859,10 +5855,6 @@ func (wh *WorkflowHandler) PauseActivity(
 ) (_ *workflowservice.PauseActivityResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
-	if !wh.config.ActivityAPIsEnabled(request.GetNamespace()) {
-		return nil, serviceerror.NewUnimplemented("method PauseActivity not implemented")
-	}
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
@@ -5895,10 +5887,6 @@ func (wh *WorkflowHandler) UnpauseActivity(
 ) (_ *workflowservice.UnpauseActivityResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
-	if !wh.config.ActivityAPIsEnabled(request.GetNamespace()) {
-		return nil, serviceerror.NewUnimplemented("method UnpauseActivity not implemented")
-	}
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
@@ -5930,10 +5918,6 @@ func (wh *WorkflowHandler) ResetActivity(
 	ctx context.Context, request *workflowservice.ResetActivityRequest,
 ) (_ *workflowservice.ResetActivityResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
-
-	if !wh.config.ActivityAPIsEnabled(request.GetNamespace()) {
-		return nil, serviceerror.NewUnimplemented("method ResetActivity not implemented")
-	}
 
 	if request == nil {
 		return nil, errRequestNotSet

@@ -42,8 +42,6 @@ func (s *ActivityApiStateReplicationSuite) SetupSuite() {
 	if s.dynamicConfigOverrides == nil {
 		s.dynamicConfigOverrides = make(map[dynamicconfig.Key]interface{})
 	}
-	s.dynamicConfigOverrides[dynamicconfig.ActivityAPIsEnabled.Key()] = true
-
 	s.setupSuite()
 }
 
