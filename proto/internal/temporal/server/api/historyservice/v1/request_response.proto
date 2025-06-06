@@ -146,7 +146,6 @@ message GetMutableStateResponse {
     string inherited_build_id = 23;
     repeated temporal.server.api.persistence.v1.VersionedTransition transition_history = 24;
     temporal.api.workflow.v1.WorkflowExecutionVersioningInfo versioning_info = 25;
-    temporal.server.api.history.v1.TransientWorkflowTaskInfo transient_or_speculative_events = 26;
 }
 
 message PollMutableStateRequest {
@@ -245,7 +244,7 @@ message RecordWorkflowTaskStartedResponse {
     int64 next_event_id = 5;
     int32 attempt = 6;
     bool sticky_execution_enabled = 7;
-    reserved 8;
+    temporal.server.api.history.v1.TransientWorkflowTaskInfo transient_workflow_task = 8;
     temporal.api.taskqueue.v1.TaskQueue workflow_execution_task_queue = 9;
     reserved 10;
     bytes branch_token = 11;
@@ -272,7 +271,7 @@ message RecordWorkflowTaskStartedResponseWithRawHistory {
     int64 next_event_id = 5;
     int32 attempt = 6;
     bool sticky_execution_enabled = 7;
-    reserved 8;
+    temporal.server.api.history.v1.TransientWorkflowTaskInfo transient_workflow_task = 8;
     temporal.api.taskqueue.v1.TaskQueue workflow_execution_task_queue = 9;
     reserved 10;
     bytes branch_token = 11;
