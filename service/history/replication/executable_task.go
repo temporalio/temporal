@@ -48,11 +48,11 @@ const (
 )
 
 var (
-	TaskRetryPolicy = backoff.NewExponentialRetryPolicy(1 * time.Second).
-			WithBackoffCoefficient(1.2).
-			WithMaximumInterval(5 * time.Second).
-			WithMaximumAttempts(80).
-			WithExpirationInterval(10 * time.Minute)
+	TaskRetryExpirationInterval = 10 * time.Minute
+	TaskRetryPolicy             = backoff.NewExponentialRetryPolicy(1 * time.Second).
+					WithBackoffCoefficient(1.2).
+					WithMaximumInterval(5 * time.Second).
+					WithMaximumAttempts(80)
 	ErrResendAttemptExceeded = serviceerror.NewInternal("resend history attempts exceeded")
 )
 
@@ -261,7 +261,11 @@ func (e *ExecutableTaskImpl) IsRetryableError(err error) bool {
 }
 
 func (e *ExecutableTaskImpl) RetryPolicy() backoff.RetryPolicy {
-	return TaskRetryPolicy
+	// Limit the retry expiration interval to half of the keep alive max connection age to
+	// avoid stream stuck by error task. If the retry expiration interval is greater than the
+	// keep alive max connection age, the error task will keep retrying until the connection is
+	// closed and never go to DLQ.
+	return TaskRetryPolicy.WithExpirationInterval(min(TaskRetryExpirationInterval, e.Config.KeepAliveMaxConnectionAge()/2))
 }
 
 func (e *ExecutableTaskImpl) State() ctasks.State {

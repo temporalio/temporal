@@ -362,6 +362,8 @@ type Config struct {
 	LogAllReqErrors dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	MaxLocalParentWorkflowVerificationDuration dynamicconfig.DurationPropertyFn
+
+	KeepAliveMaxConnectionAge dynamicconfig.DurationPropertyFn
 }
 
 // NewConfig returns new service config with default values
@@ -682,6 +684,8 @@ func NewConfig(
 		BreakdownMetricsByTaskQueue: dynamicconfig.MetricsBreakdownByTaskQueue.Get(dc),
 
 		LogAllReqErrors: dynamicconfig.LogAllReqErrors.Get(dc),
+
+		KeepAliveMaxConnectionAge: dynamicconfig.KeepAliveMaxConnectionAge.Get(dc),
 	}
 
 	return cfg
