@@ -62,6 +62,7 @@ func (*noopChasmTree) ExecuteSideEffectTask(
 	registry *chasm.Registry,
 	entityKey chasm.EntityKey,
 	taskInfo *persistencespb.ChasmTaskInfo,
+	validate func(chasm.NodeBackend, chasm.Context, chasm.Component) error,
 ) error {
 	return nil
 }

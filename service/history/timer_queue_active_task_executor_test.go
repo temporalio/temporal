@@ -1873,46 +1873,6 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteChasmPureTimerTask_Zombie
 	s.ErrorIs(resp.ExecutionErr, consts.ErrWorkflowZombie)
 }
 
-func (s *timerQueueActiveTaskExecutorSuite) TestExecuteChasmSideEffectTimerTask_ZombieWorkflow() {
-	execution := &commonpb.WorkflowExecution{
-		WorkflowId: uuid.New(),
-		RunId:      uuid.New(),
-	}
-
-	// Start the workflow with an event, and then push it into zombie state.
-	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
-	startedEvent, err := mutableState.AddWorkflowExecutionStartedEvent(
-		execution,
-		&historyservice.StartWorkflowExecutionRequest{
-			NamespaceId:  s.namespaceID.String(),
-			StartRequest: &workflowservice.StartWorkflowExecutionRequest{},
-		},
-	)
-	s.Nil(err)
-	mutableState.GetExecutionState().State = enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE
-
-	// Add a valid timer task.
-	timerTask := &tasks.ChasmTask{
-		WorkflowKey: definition.NewWorkflowKey(
-			s.namespaceID.String(),
-			execution.GetWorkflowId(),
-			execution.GetRunId(),
-		),
-		VisibilityTimestamp: s.now,
-		TaskID:              s.mustGenerateTaskID(),
-		Info: &persistencespb.ChasmTaskInfo{
-			Ref: &persistencespb.ChasmComponentRef{},
-		},
-	}
-
-	persistenceMutableState := s.createPersistenceMutableState(mutableState, startedEvent.GetEventId(), startedEvent.GetVersion())
-	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
-
-	// Execution should fail due to zombie.
-	resp := s.timerQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
-	s.ErrorIs(resp.ExecutionErr, consts.ErrWorkflowZombie)
-}
-
 func (s *timerQueueActiveTaskExecutorSuite) TestExecuteStateMachineTimerTask_ZombieWorkflow() {
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
@@ -1956,6 +1916,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteChasmSideEffectTimerTask_
 	// Mock the CHASM tree.
 	chasmTree := historyi.NewMockChasmTree(s.controller)
 	chasmTree.EXPECT().ExecuteSideEffectTask(
+		gomock.Any(),
 		gomock.Any(),
 		gomock.Any(),
 		gomock.Any(),

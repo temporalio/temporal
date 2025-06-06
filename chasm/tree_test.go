@@ -1185,7 +1185,7 @@ func (s *nodeSuite) TestGetComponent() {
 					NamespaceFailoverVersion: 1,
 					TransitionCount:          1,
 				},
-				validationFn: func(_ Context, _ Component) error {
+				validationFn: func(_ NodeBackend, _ Context, _ Component) error {
 					return errValidation
 				},
 			},
@@ -1200,7 +1200,7 @@ func (s *nodeSuite) TestGetComponent() {
 					NamespaceFailoverVersion: 1,
 					TransitionCount:          1,
 				},
-				validationFn: func(_ Context, _ Component) error {
+				validationFn: func(_ NodeBackend, _ Context, _ Component) error {
 					return nil
 				},
 			},
@@ -2094,29 +2094,21 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 				gomock.Any(),
 			).Return(result).Times(1)
 	}
-
-	expectValidate := func(retValue bool, errValue error) {
-		rt.validator.(*MockTaskValidator[any, *TestSideEffectTask]).EXPECT().
-			Validate(gomock.Any(), gomock.Any(), gomock.Any()).Return(retValue, errValue).Times(1)
+	// This won't be called until access time.
+	dummyValidationFn := func(_ NodeBackend, _ Context, _ Component) error {
+		return nil
 	}
 
 	// Succeed task execution.
 	expectExecute(nil)
-	expectValidate(true, nil)
-	err = root.ExecuteSideEffectTask(ctx, s.registry, entityKey, taskInfo)
+	err = root.ExecuteSideEffectTask(ctx, s.registry, entityKey, taskInfo, dummyValidationFn)
 	s.NoError(err)
 
 	// Fail task execution.
 	expectedErr := errors.New("dummy error")
 	expectExecute(expectedErr)
-	expectValidate(true, nil)
-	err = root.ExecuteSideEffectTask(ctx, s.registry, entityKey, taskInfo)
+	err = root.ExecuteSideEffectTask(ctx, s.registry, entityKey, taskInfo, dummyValidationFn)
 	s.ErrorIs(expectedErr, err)
-
-	// Fail task validation (no-op).
-	expectValidate(false, nil)
-	err = root.ExecuteSideEffectTask(ctx, s.registry, entityKey, taskInfo)
-	s.NoError(err)
 }
 
 func (s *nodeSuite) TestValidateSideEffectTask() {

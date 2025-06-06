@@ -936,10 +936,6 @@ func (t *timerQueueActiveTaskExecutor) executeChasmSideEffectTimerTask(
 	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
 
-	if !queues.IsTimeExpired(task, t.Now(), task.GetVisibilityTime()) {
-		return nil
-	}
-
 	wfCtx, release, err := getWorkflowExecutionContextForTask(ctx, t.shardContext, t.cache, task)
 	if err != nil {
 		return err
@@ -950,16 +946,6 @@ func (t *timerQueueActiveTaskExecutor) executeChasmSideEffectTimerTask(
 	if err != nil {
 		return err
 	}
-	if ms == nil {
-		return nil
-	}
-
-	// Because CHASM timers can target closed workflows, we need to specifically
-	// exclude zombie workflows, instead of merely checking that the workflow is
-	// running.
-	if ms.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
-		return consts.ErrWorkflowZombie
-	}
 
 	tree := ms.ChasmTree()
 	if tree == nil {
@@ -967,7 +953,8 @@ func (t *timerQueueActiveTaskExecutor) executeChasmSideEffectTimerTask(
 	}
 
 	// Now that we've loaded the CHASM tree, we can release the lock before task
-	// execution. The task's executor must do its own locking as needed.
+	// execution. The task's executor must do its own locking as needed, and additional
+	// mutable state validations will run at access time.
 	release(nil)
 
 	entityKey := chasm.EntityKey{
@@ -976,12 +963,32 @@ func (t *timerQueueActiveTaskExecutor) executeChasmSideEffectTimerTask(
 		EntityID:    task.RunID,
 	}
 
+	validate := func(backend chasm.NodeBackend, _ chasm.Context, _ chasm.Component) error {
+		// Because CHASM timers can target closed workflows, we need to specifically
+		// exclude zombie workflows, instead of merely checking that the workflow is
+		// running.
+		if backend.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
+			return consts.ErrWorkflowZombie
+		}
+
+		// Validate task generation. We don't need to refresh tasks as we re-generate
+		// CHASM tasks on transaction close.
+		taskID := task.TaskID
+		tgClock := backend.GetExecutionInfo().TaskGenerationShardClockTimestamp
+		if tgClock != 0 && taskID != 0 && taskID < tgClock {
+			return consts.ErrStaleReference
+		}
+
+		return nil
+	}
+
 	engineCtx := chasm.NewEngineContext(ctx, t.chasmEngine)
 	return tree.ExecuteSideEffectTask(
 		engineCtx,
 		t.shardContext.ChasmRegistry(),
 		entityKey,
 		task.Info,
+		validate,
 	)
 }
 

@@ -136,6 +136,7 @@ type (
 	// where MutableState is defined.
 	NodeBackend interface {
 		// TODO: Add methods needed from MutateState here.
+		GetExecutionState() *persistencespb.WorkflowExecutionState
 		GetExecutionInfo() *persistencespb.WorkflowExecutionInfo
 		GetCurrentVersion() int64
 		NextTransitionCount() int64
@@ -296,7 +297,7 @@ func (n *Node) Component(
 	// }
 
 	if ref.validationFn != nil {
-		if err := ref.validationFn(chasmContext, componentValue); err != nil {
+		if err := ref.validationFn(node.root().backend, chasmContext, componentValue); err != nil {
 			return nil, err
 		}
 	}
@@ -2029,7 +2030,8 @@ func (n *Node) ExecutePureTask(baseCtx context.Context, taskInstance any) error 
 }
 
 // ValidateSideEffectTask runs a side effect task's associated validator,
-// returning the deserialized task instance if the task is valid.
+// returning the deserialized task instance if the task is valid. Intended for
+// use by standby executors.
 //
 // If validation succeeds but the task is invalid, nil is returned to signify the
 // task can be skipped/deleted.
@@ -2083,6 +2085,7 @@ func (n *Node) ExecuteSideEffectTask(
 	registry *Registry,
 	entityKey EntityKey,
 	taskInfo *persistencespb.ChasmTaskInfo,
+	validate func(NodeBackend, Context, Component) error,
 ) error {
 	if engineFromContext(ctx) == nil {
 		return serviceerror.NewInternal("no CHASM engine set on context")
@@ -2092,6 +2095,10 @@ func (n *Node) ExecuteSideEffectTask(
 	registrableTask, ok := registry.task(taskType)
 	if !ok {
 		return serviceerror.NewInternalf("unknown task type '%s'", taskType)
+	}
+
+	if registrableTask.isPureTask {
+		return serviceerror.NewInternalf("ExecuteSideEffectTask called on a Pure task '%s'", taskType)
 	}
 
 	executor := registrableTask.handler
@@ -2113,17 +2120,14 @@ func (n *Node) ExecuteSideEffectTask(
 		componentInitialVT: taskInfo.Ref.ComponentInitialVersionedTransition,
 
 		// Validate the Ref only once it is accessed by the task's executor.
-		validationFn: makeValidationFn(registrableTask),
+		validationFn: makeValidationFn(registrableTask, validate),
 	}
 
-	taskInstance, err := n.ValidateSideEffectTask(ctx, registry, taskInfo)
+	taskValue, err := deserializeTask(registrableTask, taskInfo.Data)
 	if err != nil {
 		return err
 	}
-	if taskInstance == nil {
-		// Task is invalid, can be cleared.
-		return nil
-	}
+	taskInstance := taskValue.Interface()
 
 	fn := reflect.ValueOf(executor).MethodByName("Execute")
 	result := fn.Call([]reflect.Value{
@@ -2140,12 +2144,24 @@ func (n *Node) ExecuteSideEffectTask(
 }
 
 // makeValidationFn adapts the TaskValidator interface to the ComponentRef's
-// validation callback format.
-func makeValidationFn(registrableTask *RegistrableTask) func(Context, Component) error {
-	return func(ctx Context, component Component) error {
+// validation callback format. Returns a validation function that wraps the
+// given validation callback to be called before the RegistrableTask's registered
+// validator callback. Intended for use to validate mutable state at access time.
+func makeValidationFn(
+	registrableTask *RegistrableTask,
+	validate func(NodeBackend, Context, Component) error,
+) func(NodeBackend, Context, Component) error {
+	return func(backend NodeBackend, ctx Context, component Component) error {
+		// Call the provided validation callback.
+		err := validate(backend, ctx, component)
+		if err != nil {
+			return err
+		}
+
 		// Call the TaskValidator interface.
 		fn := reflect.ValueOf(registrableTask.validator).MethodByName("Validate")
 		result := fn.Call([]reflect.Value{
+			reflect.ValueOf(backend),
 			reflect.ValueOf(ctx),
 			reflect.ValueOf(component),
 		})
