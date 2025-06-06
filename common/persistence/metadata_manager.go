@@ -50,7 +50,7 @@ func (m *metadataManagerImpl) CreateNamespace(
 	ctx context.Context,
 	request *CreateNamespaceRequest,
 ) (*CreateNamespaceResponse, error) {
-	datablob, err := m.serializer.NamespaceDetailToBlob(request.Namespace, enumspb.ENCODING_TYPE_PROTO3)
+	datablob, err := m.serializer.NamespaceDetailToBlob(request.Namespace)
 	if err != nil {
 		return nil, err
 	}
@@ -78,7 +78,7 @@ func (m *metadataManagerImpl) UpdateNamespace(
 	ctx context.Context,
 	request *UpdateNamespaceRequest,
 ) error {
-	datablob, err := m.serializer.NamespaceDetailToBlob(request.Namespace, enumspb.ENCODING_TYPE_PROTO3)
+	datablob, err := m.serializer.NamespaceDetailToBlob(request.Namespace)
 	if err != nil {
 		return err
 	}
@@ -111,7 +111,7 @@ func (m *metadataManagerImpl) RenameNamespace(
 	previousName := ns.Namespace.Info.Name
 	ns.Namespace.Info.Name = request.NewName
 
-	nsDataBlob, err := m.serializer.NamespaceDetailToBlob(ns.Namespace, enumspb.ENCODING_TYPE_PROTO3)
+	nsDataBlob, err := m.serializer.NamespaceDetailToBlob(ns.Namespace)
 	if err != nil {
 		return err
 	}

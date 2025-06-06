@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/persistence/serialization"
 	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite" // needed to register the sqlite plugin
 	"go.temporal.io/server/common/testing/otellogger"
 	"go.temporal.io/server/service/frontend"
@@ -25,6 +26,13 @@ import (
 // TestNewServer verifies that NewServer doesn't cause any fx errors, and that there are no unexpected error logs after
 // running for a few seconds.
 func TestNewServer(t *testing.T) {
+	startAndStopServer(t)
+}
+
+// TestNewServerWithJsonEncoding verifies that NewServer runs with JSON payload encoding.
+func TestNewServerWithJsonEncoding(t *testing.T) {
+	t.Setenv(serialization.CodecEnvVar, "json")
+
 	startAndStopServer(t)
 }
 

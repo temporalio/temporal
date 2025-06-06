@@ -750,7 +750,7 @@ func (adh *AdminHandler) unaliasAndValidateSearchAttributes(historyBatches []*co
 			continue
 		}
 
-		unaliasedBatch, err := adh.eventSerializer.SerializeEvents(events, enumspb.ENCODING_TYPE_PROTO3)
+		unaliasedBatch, err := adh.eventSerializer.SerializeEvents(events)
 		if err != nil {
 			return nil, serviceerror.NewInvalidArgument(err.Error())
 		}
@@ -1565,7 +1565,7 @@ func (adh *AdminHandler) ResendReplicationTasks(
 			versionHistory []*historyspb.VersionHistoryItem,
 		) error {
 			for _, event := range events {
-				historyBlob, err1 := adh.eventSerializer.SerializeEvents(event, enumspb.ENCODING_TYPE_PROTO3)
+				historyBlob, err1 := adh.eventSerializer.SerializeEvents(event)
 				if err1 != nil {
 					return err1
 				}

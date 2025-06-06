@@ -180,7 +180,7 @@ func createNamespaceIfNotExists(db sqlplugin.DB, namespace *NamespaceConfig) err
 		return nil
 	}
 
-	blob, err := serialization.NewSerializer().NamespaceDetailToBlob(namespace.Detail, enumspb.ENCODING_TYPE_PROTO3)
+	blob, err := serialization.NewSerializer().NamespaceDetailToBlob(namespace.Detail)
 	if err != nil {
 		return err
 	}

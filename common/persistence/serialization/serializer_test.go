@@ -49,88 +49,93 @@ func (s *temporalSerializerSuite) SetupTest() {
 }
 
 func (s *temporalSerializerSuite) TestSerializer() {
-	concurrency := 1
-	startWG := sync.WaitGroup{}
-	doneWG := sync.WaitGroup{}
-
-	startWG.Add(1)
-	doneWG.Add(concurrency)
-
-	eventType := enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED
-	event0 := &historypb.HistoryEvent{
-		EventId:   999,
-		EventTime: timestamppb.New(time.Date(2020, 8, 22, 0, 0, 0, 0, time.UTC)),
-		EventType: eventType,
-		Attributes: &historypb.HistoryEvent_ActivityTaskCompletedEventAttributes{
-			ActivityTaskCompletedEventAttributes: &historypb.ActivityTaskCompletedEventAttributes{
-				Result:           payloads.EncodeString("result-1-event-1"),
-				ScheduledEventId: 4,
-				StartedEventId:   5,
-				Identity:         "event-1",
-			},
+	for _, tc := range []struct {
+		name       string
+		serializer Serializer
+	}{
+		{
+			name:       "Default",
+			serializer: NewSerializer(),
 		},
+		{
+			name:       "WithJsonCodec",
+			serializer: NewSerializerWithCodec(NewJsonCodec()),
+		},
+	} {
+		s.Run(tc.name, func() {
+			concurrency := 1
+			startWG := sync.WaitGroup{}
+			doneWG := sync.WaitGroup{}
+
+			startWG.Add(1)
+			doneWG.Add(concurrency)
+
+			eventType := enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED
+			event0 := &historypb.HistoryEvent{
+				EventId:   999,
+				EventTime: timestamppb.New(time.Date(2020, 8, 22, 0, 0, 0, 0, time.UTC)),
+				EventType: eventType,
+				Attributes: &historypb.HistoryEvent_ActivityTaskCompletedEventAttributes{
+					ActivityTaskCompletedEventAttributes: &historypb.ActivityTaskCompletedEventAttributes{
+						Result:           payloads.EncodeString("result-1-event-1"),
+						ScheduledEventId: 4,
+						StartedEventId:   5,
+						Identity:         "event-1",
+					},
+				},
+			}
+
+			history0 := &historypb.History{Events: []*historypb.HistoryEvent{event0, event0}}
+
+			for i := 0; i < concurrency; i++ {
+				go func() {
+					startWG.Wait()
+					defer doneWG.Done()
+
+					// serialize event
+					nilEvent, err := tc.serializer.SerializeEvent(nil)
+					s.Nil(err)
+					s.Nil(nilEvent)
+
+					data, err := tc.serializer.SerializeEvent(event0)
+					s.Nil(err)
+					s.NotNil(data)
+
+					// serialize batch events
+					nilEvents, err := tc.serializer.SerializeEvents(nil)
+					s.Nil(err)
+					s.NotNil(nilEvents)
+
+					dsProto, err := tc.serializer.SerializeEvents(history0.Events)
+					s.Nil(err)
+					s.NotNil(dsProto)
+
+					// deserialize event
+					dNilEvent, err := tc.serializer.DeserializeEvent(nilEvent)
+					s.Nil(err)
+					s.Nil(dNilEvent)
+
+					event2, err := tc.serializer.DeserializeEvent(data)
+					s.Nil(err)
+					s.ProtoEqual(event0, event2)
+
+					// deserialize events
+					dNilEvents, err := tc.serializer.DeserializeEvents(nilEvents)
+					s.Nil(err)
+					s.Nil(dNilEvents)
+
+					events, err := tc.serializer.DeserializeEvents(dsProto)
+					history2 := &historypb.History{Events: events}
+					s.Nil(err)
+					s.ProtoEqual(history0, history2)
+				}()
+			}
+
+			startWG.Done()
+			succ := common.AwaitWaitGroup(&doneWG, 10*time.Second)
+			s.True(succ, "test timed out")
+		})
 	}
-
-	history0 := &historypb.History{Events: []*historypb.HistoryEvent{event0, event0}}
-
-	for i := 0; i < concurrency; i++ {
-
-		go func() {
-			startWG.Wait()
-			defer doneWG.Done()
-
-			// serialize event
-			nilEvent, err := s.serializer.SerializeEvent(nil, enumspb.ENCODING_TYPE_PROTO3)
-			s.Nil(err)
-			s.Nil(nilEvent)
-
-			_, err = s.serializer.SerializeEvent(event0, enumspb.ENCODING_TYPE_UNSPECIFIED)
-			s.NotNil(err)
-			_, ok := err.(*UnknownEncodingTypeError)
-			s.True(ok)
-
-			dProto, err := s.serializer.SerializeEvent(event0, enumspb.ENCODING_TYPE_PROTO3)
-			s.Nil(err)
-			s.NotNil(dProto)
-
-			// serialize batch events
-			nilEvents, err := s.serializer.SerializeEvents(nil, enumspb.ENCODING_TYPE_PROTO3)
-			s.Nil(err)
-			s.NotNil(nilEvents)
-
-			_, err = s.serializer.SerializeEvents(history0.Events, enumspb.ENCODING_TYPE_UNSPECIFIED)
-			s.NotNil(err)
-			_, ok = err.(*UnknownEncodingTypeError)
-			s.True(ok)
-
-			dsProto, err := s.serializer.SerializeEvents(history0.Events, enumspb.ENCODING_TYPE_PROTO3)
-			s.Nil(err)
-			s.NotNil(dsProto)
-
-			// deserialize event
-			dNilEvent, err := s.serializer.DeserializeEvent(nilEvent)
-			s.Nil(err)
-			s.Nil(dNilEvent)
-
-			event2, err := s.serializer.DeserializeEvent(dProto)
-			s.Nil(err)
-			s.ProtoEqual(event0, event2)
-
-			// deserialize events
-			dNilEvents, err := s.serializer.DeserializeEvents(nilEvents)
-			s.Nil(err)
-			s.Nil(dNilEvents)
-
-			events, err := s.serializer.DeserializeEvents(dsProto)
-			history2 := &historypb.History{Events: events}
-			s.Nil(err)
-			s.ProtoEqual(history0, history2)
-		}()
-	}
-
-	startWG.Done()
-	succ := common.AwaitWaitGroup(&doneWG, 10*time.Second)
-	s.True(succ, "test timed out")
 }
 
 func (s *temporalSerializerSuite) TestSerializeShardInfo_EmptyMapSlice() {
@@ -149,7 +154,7 @@ func (s *temporalSerializerSuite) TestSerializeShardInfo_EmptyMapSlice() {
 	}
 	shardInfo.ReplicationDlqAckLevel = make(map[string]int64)
 
-	blob, err := s.serializer.ShardInfoToBlob(&shardInfo, enumspb.ENCODING_TYPE_PROTO3)
+	blob, err := s.serializer.ShardInfoToBlob(&shardInfo)
 	s.NoError(err)
 
 	deserializedShardInfo, err := s.serializer.ShardInfoFromBlob(blob)
@@ -164,7 +169,7 @@ func (s *temporalSerializerSuite) TestSerializeShardInfo_Random() {
 	err := fakedata.FakeStruct(&shardInfo)
 	s.NoError(err)
 
-	blob, err := s.serializer.ShardInfoToBlob(&shardInfo, enumspb.ENCODING_TYPE_PROTO3)
+	blob, err := s.serializer.ShardInfoToBlob(&shardInfo)
 	s.NoError(err)
 
 	deserializedShardInfo, err := s.serializer.ShardInfoFromBlob(blob)
@@ -175,84 +180,100 @@ func (s *temporalSerializerSuite) TestSerializeShardInfo_Random() {
 }
 
 func (s *temporalSerializerSuite) TestDeserializeStrippedEvents() {
-	// 1. Nil data blob
-	s.Run("NilDataBlob", func() {
-		events, err := s.serializer.DeserializeStrippedEvents(nil)
-		s.NoError(err)
-		s.Nil(events)
-	})
+	for _, tc := range []struct {
+		name       string
+		serializer Serializer
+	}{
+		{
+			name:       "Default",
+			serializer: NewSerializer(),
+		},
+		{
+			name:       "WithJsonCodec",
+			serializer: NewSerializerWithCodec(NewJsonCodec()),
+		},
+	} {
+		s.Run(tc.name, func() {
+			// 1. Nil data blob
+			s.Run("NilDataBlob", func() {
+				events, err := tc.serializer.DeserializeStrippedEvents(nil)
+				s.NoError(err)
+				s.Nil(events)
+			})
 
-	// 2. Empty data
-	s.Run("EmptyDataBlob", func() {
-		// Data is nil
-		events, err := s.serializer.DeserializeStrippedEvents(&commonpb.DataBlob{
-			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
-			Data:         nil,
+			// 2. Empty data
+			s.Run("EmptyDataBlob", func() {
+				// Data is nil
+				events, err := tc.serializer.DeserializeStrippedEvents(&commonpb.DataBlob{
+					EncodingType: enumspb.ENCODING_TYPE_PROTO3,
+					Data:         nil,
+				})
+				s.NoError(err)
+				s.Nil(events)
+
+				// Data is empty byte array
+				events, err = tc.serializer.DeserializeStrippedEvents(&commonpb.DataBlob{
+					EncodingType: enumspb.ENCODING_TYPE_PROTO3,
+					Data:         []byte{},
+				})
+				s.NoError(err)
+				s.Nil(events)
+			})
+
+			// 3. Unknown encoding type
+			s.Run("UnknownEncodingType", func() {
+				_, err := tc.serializer.DeserializeStrippedEvents(&commonpb.DataBlob{
+					EncodingType: enumspb.ENCODING_TYPE_UNSPECIFIED, // Not handled by our switch
+					Data:         []byte("irrelevant-data"),
+				})
+				s.Error(err)
+				s.Contains(err.Error(), "unknown or unsupported encoding type")
+			})
+
+			// 4. Proper proto decoding, discarding unknown fields
+			s.Run("ProtoDiscardUnknownFields", func() {
+				// Build a HistoryEvent that contains fields *not* present in StrippedHistoryEvent
+				historyEvent := &historypb.HistoryEvent{
+					EventId:   123,
+					Version:   456,
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+					EventTime: nil, // or a valid timestamp
+					// This is an extra field not present in StrippedHistoryEvent
+					Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
+						WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
+							WorkflowType: &commonpb.WorkflowType{Name: "some-workflow-type"},
+						},
+					},
+				}
+
+				historyEvents := &historypb.History{
+					Events: []*historypb.HistoryEvent{historyEvent},
+				}
+
+				// Marshal to protobuf
+				data, err := historyEvents.Marshal()
+				s.Require().NoError(err)
+
+				dataBlob := &commonpb.DataBlob{
+					EncodingType: enumspb.ENCODING_TYPE_PROTO3,
+					Data:         data,
+				}
+
+				// Deserialize into StrippedHistoryEvents (should drop unknown fields)
+				deserializedEvents, err := tc.serializer.DeserializeStrippedEvents(dataBlob)
+				s.NoError(err)
+				s.Require().Len(deserializedEvents, 1)
+
+				// Known fields should be preserved
+				s.EqualValues(123, deserializedEvents[0].EventId)
+				s.EqualValues(456, deserializedEvents[0].Version)
+				s.EqualValues(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, deserializedEvents[0].EventType)
+
+				reflectMsg := deserializedEvents[0].ProtoReflect()
+				s.Empty(reflectMsg.GetUnknown(), "Unknown fields should have been discarded")
+			})
 		})
-		s.NoError(err)
-		s.Nil(events)
-
-		// Data is empty byte array
-		events, err = s.serializer.DeserializeStrippedEvents(&commonpb.DataBlob{
-			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
-			Data:         []byte{},
-		})
-		s.NoError(err)
-		s.Nil(events)
-	})
-
-	// 3. Unknown encoding type
-	s.Run("UnknownEncodingType", func() {
-		_, err := s.serializer.DeserializeStrippedEvents(&commonpb.DataBlob{
-			EncodingType: enumspb.ENCODING_TYPE_JSON, // Not handled by our switch
-			Data:         []byte("irrelevant-data"),
-		})
-		s.Error(err)
-		s.Contains(err.Error(), "unknown or unsupported encoding type")
-	})
-
-	// 4. Proper proto decoding, discarding unknown fields
-	s.Run("ProtoDiscardUnknownFields", func() {
-		// Build a HistoryEvent that contains fields *not* present in StrippedHistoryEvent
-		historyEvent := &historypb.HistoryEvent{
-			EventId:   123,
-			Version:   456,
-			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
-			EventTime: nil, // or a valid timestamp
-			// This is an extra field not present in StrippedHistoryEvent
-			Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
-				WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
-					WorkflowType: &commonpb.WorkflowType{Name: "some-workflow-type"},
-				},
-			},
-		}
-
-		historyEvents := &historypb.History{
-			Events: []*historypb.HistoryEvent{historyEvent},
-		}
-
-		// Marshal to protobuf
-		data, err := historyEvents.Marshal()
-		s.Require().NoError(err)
-
-		dataBlob := &commonpb.DataBlob{
-			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
-			Data:         data,
-		}
-
-		// Deserialize into StrippedHistoryEvents (should drop unknown fields)
-		deserializedEvents, err := s.serializer.DeserializeStrippedEvents(dataBlob)
-		s.NoError(err)
-		s.Require().Len(deserializedEvents, 1)
-
-		// Known fields should be preserved
-		s.EqualValues(123, deserializedEvents[0].EventId)
-		s.EqualValues(456, deserializedEvents[0].Version)
-		s.EqualValues(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, deserializedEvents[0].EventType)
-
-		reflectMsg := deserializedEvents[0].ProtoReflect()
-		s.Empty(reflectMsg.GetUnknown(), "Unknown fields should have been discarded")
-	})
+	}
 }
 
 func (s *temporalSerializerSuite) TestSerializeWorkflowExecutionState() {
@@ -262,7 +283,7 @@ func (s *temporalSerializerSuite) TestSerializeWorkflowExecutionState() {
 	err := fakedata.FakeStruct(state)
 	s.NoError(err)
 
-	blob, err := s.serializer.WorkflowExecutionStateToBlob(state, enumspb.ENCODING_TYPE_PROTO3)
+	blob, err := s.serializer.WorkflowExecutionStateToBlob(state)
 	s.NoError(err)
 
 	deserializedState, err := s.serializer.WorkflowExecutionStateFromBlob(blob)
@@ -276,7 +297,7 @@ func (s *temporalSerializerSuite) TestSerializeWorkflowExecutionState() {
 	}
 	s.ProtoEqual(state, deserializedState)
 
-	blob, err = s.serializer.WorkflowExecutionStateToBlob(state, enumspb.ENCODING_TYPE_PROTO3)
+	blob, err = s.serializer.WorkflowExecutionStateToBlob(state)
 	s.NoError(err)
 
 	deserializedState, err = s.serializer.WorkflowExecutionStateFromBlob(blob)

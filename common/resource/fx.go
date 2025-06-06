@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strings"
 	"time"
 
 	"go.temporal.io/api/workflowservice/v1"
@@ -86,7 +87,7 @@ var Module = fx.Options(
 		func(p namespace.Registry) pingable.Pingable { return p },
 		fx.ResultTags(`group:"deadlockDetectorRoots"`),
 	)),
-	fx.Provide(serialization.NewSerializer),
+	fx.Provide(SerializerProvider),
 	fx.Provide(ClientFactoryProvider),
 	fx.Provide(ClientBeanProvider),
 	fx.Provide(FrontendClientProvider),
@@ -141,6 +142,17 @@ func HostNameProvider() (HostName, error) {
 
 func TimeSourceProvider() clock.TimeSource {
 	return clock.NewRealTimeSource()
+}
+
+func SerializerProvider() serialization.Serializer {
+	var helper serialization.Codec
+	switch strings.ToLower(os.Getenv(serialization.CodecEnvVar)) {
+	case "json":
+		helper = serialization.NewJsonCodec()
+	default:
+		helper = serialization.NewProto3Codec()
+	}
+	return serialization.NewSerializerWithCodec(helper)
 }
 
 func SearchAttributeMapperProviderProvider(

@@ -8,7 +8,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
-	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -219,7 +218,7 @@ func (s *eventImporterSuite) TestImportHistoryEvents_ImportAllLocalAndCommit() {
 func serializeEvents(serializer serialization.Serializer, events [][]*historypb.HistoryEvent) []*commonpb.DataBlob {
 	blobs := []*commonpb.DataBlob{}
 	for _, batch := range events {
-		blob, err := serializer.SerializeEvents(batch, enumspb.ENCODING_TYPE_PROTO3)
+		blob, err := serializer.SerializeEvents(batch)
 		if err != nil {
 			panic(err)
 		}
