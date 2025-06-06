@@ -10,6 +10,7 @@
 package interfaces
 
 import (
+	context "context"
 	reflect "reflect"
 	time "time"
 
@@ -128,6 +129,20 @@ func (mr *MockChasmTreeMockRecorder) EachPureTask(deadline, callback any) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EachPureTask", reflect.TypeOf((*MockChasmTree)(nil).EachPureTask), deadline, callback)
 }
 
+// ExecuteSideEffectTask mocks base method.
+func (m *MockChasmTree) ExecuteSideEffectTask(ctx context.Context, registry *chasm.Registry, entityKey chasm.EntityKey, taskInfo *persistence.ChasmTaskInfo, validate func(chasm.NodeBackend, chasm.Context, chasm.Component) error) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ExecuteSideEffectTask", ctx, registry, entityKey, taskInfo, validate)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ExecuteSideEffectTask indicates an expected call of ExecuteSideEffectTask.
+func (mr *MockChasmTreeMockRecorder) ExecuteSideEffectTask(ctx, registry, entityKey, taskInfo, validate any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteSideEffectTask", reflect.TypeOf((*MockChasmTree)(nil).ExecuteSideEffectTask), ctx, registry, entityKey, taskInfo, validate)
+}
+
 // IsDirty mocks base method.
 func (m *MockChasmTree) IsDirty() bool {
 	m.ctrl.T.Helper()
@@ -182,4 +197,19 @@ func (m *MockChasmTree) Terminate(arg0 chasm.TerminateComponentRequest) error {
 func (mr *MockChasmTreeMockRecorder) Terminate(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Terminate", reflect.TypeOf((*MockChasmTree)(nil).Terminate), arg0)
+}
+
+// ValidateSideEffectTask mocks base method.
+func (m *MockChasmTree) ValidateSideEffectTask(ctx context.Context, registry *chasm.Registry, taskInfo *persistence.ChasmTaskInfo) (any, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ValidateSideEffectTask", ctx, registry, taskInfo)
+	ret0, _ := ret[0].(any)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ValidateSideEffectTask indicates an expected call of ValidateSideEffectTask.
+func (mr *MockChasmTreeMockRecorder) ValidateSideEffectTask(ctx, registry, taskInfo any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidateSideEffectTask", reflect.TypeOf((*MockChasmTree)(nil).ValidateSideEffectTask), ctx, registry, taskInfo)
 }

@@ -89,6 +89,20 @@ func (mr *MockNodeBackendMockRecorder) GetExecutionInfo() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetExecutionInfo", reflect.TypeOf((*MockNodeBackend)(nil).GetExecutionInfo))
 }
 
+// GetExecutionState mocks base method.
+func (m *MockNodeBackend) GetExecutionState() *persistence.WorkflowExecutionState {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetExecutionState")
+	ret0, _ := ret[0].(*persistence.WorkflowExecutionState)
+	return ret0
+}
+
+// GetExecutionState indicates an expected call of GetExecutionState.
+func (mr *MockNodeBackendMockRecorder) GetExecutionState() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetExecutionState", reflect.TypeOf((*MockNodeBackend)(nil).GetExecutionState))
+}
+
 // GetWorkflowKey mocks base method.
 func (m *MockNodeBackend) GetWorkflowKey() definition.WorkflowKey {
 	m.ctrl.T.Helper()
