@@ -2725,6 +2725,24 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	return nil
 }
 
+func (ms *MutableStateImpl) getCompletionCallbackId(
+	event *historypb.HistoryEvent,
+	requestID string,
+	idx int,
+) string {
+	id := ""
+	// This is for backwards compatibility: callbacks were initially only attached when the workflow
+	// execution started, but now they can be attached while the workflow is running.
+	if event != nil && event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
+		// Use the start event version and ID as part of the callback ID to ensure that callbacks have unique
+		// IDs that are deterministically created across clusters.
+		id = fmt.Sprintf("%d-%d-%d", event.GetVersion(), event.GetEventId(), idx)
+	} else {
+		id = fmt.Sprintf("cb-%s-%d", requestID, idx)
+	}
+	return id
+}
+
 func (ms *MutableStateImpl) addCompletionCallbacks(
 	event *historypb.HistoryEvent,
 	requestID string,
@@ -2758,21 +2776,28 @@ func (ms *MutableStateImpl) addCompletionCallbacks(
 			}
 		}
 		machine := callbacks.NewCallback(requestID, event.EventTime, callbacks.NewWorkflowClosedTrigger(), persistenceCB)
-		id := ""
-		// This is for backwards compatibility: callbacks were initially only attached when the workflow
-		// execution started, but now they can be attached while the workflow is running.
-		if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
-			// Use the start event version and ID as part of the callback ID to ensure that callbacks have unique
-			// IDs that are deterministically created across clusters.
-			id = fmt.Sprintf("%d-%d-%d", event.GetVersion(), event.GetEventId(), idx)
-		} else {
-			id = fmt.Sprintf("cb-%s-%d", requestID, idx)
-		}
+		id := ms.getCompletionCallbackId(event, requestID, idx)
 		if _, err := coll.Add(id, machine); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func (ms *MutableStateImpl) GetExistingCompletionCallbackCount(
+	event *historypb.HistoryEvent,
+	requestID string,
+	completionCallbacks []*commonpb.Callback,
+) int {
+	coll := callbacks.MachineCollection(ms.HSM())
+	count := 0
+	for idx := range completionCallbacks {
+		id := ms.getCompletionCallbackId(event, requestID, idx)
+		if _, err := coll.Node(id); err == nil {
+			count++
+		}
+	}
+	return count
 }
 
 // AddFirstWorkflowTaskScheduled adds the first workflow task scheduled event unless it should be delayed as indicated
