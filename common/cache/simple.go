@@ -7,8 +7,8 @@ import (
 )
 
 var (
-	// DummyCreateTime is the create time used by all entries in the cache.
-	DummyCreateTime = time.Time{}
+	// DummyLastAccessTime is the last access time used by all entries in the cache.
+	DummyLastAccessTime = time.Time{}
 )
 
 type (
@@ -65,9 +65,9 @@ func (e *simpleEntry) Value() interface{} {
 	return e.value
 }
 
-// CreateTime is not implemented for simple cache entries
-func (e *simpleEntry) CreateTime() time.Time {
-	return DummyCreateTime
+// LastAccessTime is not implemented for simple cache entries
+func (e *simpleEntry) LastAccessTime() time.Time {
+	return DummyLastAccessTime
 }
 
 // NewSimple creates a new simple cache with given options.
@@ -154,6 +154,8 @@ func (c *simple) Iterator() Iterator {
 	}
 	return iterator
 }
+
+func (c *simple) Stop() {}
 
 func (c *simple) putInternal(key interface{}, value interface{}, allowUpdate bool) interface{} {
 	elt := c.accessMap[key]
