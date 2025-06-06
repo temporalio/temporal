@@ -223,6 +223,7 @@ func NewTestLogger(t TestingT, mode Mode, opts ...LoggerOption) *TestLogger {
 			mode:            mode,
 		},
 	}
+	tl.state.mu.expectations = make(map[Level]*list.List)
 	tl.state.failOnError.Store(true)
 	tl.state.failOnDPanic.Store(true)
 	for _, opt := range opts {
