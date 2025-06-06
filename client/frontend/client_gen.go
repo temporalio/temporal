@@ -399,6 +399,16 @@ func (c *clientImpl) ListWorkerDeployments(
 	return c.client.ListWorkerDeployments(ctx, request, opts...)
 }
 
+func (c *clientImpl) ListWorkers(
+	ctx context.Context,
+	request *workflowservice.ListWorkersRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.ListWorkersResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.ListWorkers(ctx, request, opts...)
+}
+
 func (c *clientImpl) ListWorkflowExecutions(
 	ctx context.Context,
 	request *workflowservice.ListWorkflowExecutionsRequest,
@@ -507,6 +517,16 @@ func (c *clientImpl) RecordActivityTaskHeartbeatById(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.RecordActivityTaskHeartbeatById(ctx, request, opts...)
+}
+
+func (c *clientImpl) RecordWorkerHeartbeat(
+	ctx context.Context,
+	request *workflowservice.RecordWorkerHeartbeatRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.RecordWorkerHeartbeatResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.RecordWorkerHeartbeat(ctx, request, opts...)
 }
 
 func (c *clientImpl) RegisterNamespace(

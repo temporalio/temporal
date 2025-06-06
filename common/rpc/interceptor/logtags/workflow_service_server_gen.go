@@ -177,6 +177,10 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 		return nil
 	case *workflowservice.ListWorkerDeploymentsResponse:
 		return nil
+	case *workflowservice.ListWorkersRequest:
+		return nil
+	case *workflowservice.ListWorkersResponse:
+		return nil
 	case *workflowservice.ListWorkflowExecutionsRequest:
 		return nil
 	case *workflowservice.ListWorkflowExecutionsResponse:
@@ -241,6 +245,10 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 			tag.WorkflowRunID(r.GetRunId()),
 		}
 	case *workflowservice.RecordActivityTaskHeartbeatByIdResponse:
+		return nil
+	case *workflowservice.RecordWorkerHeartbeatRequest:
+		return nil
+	case *workflowservice.RecordWorkerHeartbeatResponse:
 		return nil
 	case *workflowservice.RegisterNamespaceRequest:
 		return nil
