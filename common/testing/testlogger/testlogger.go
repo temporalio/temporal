@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -18,14 +19,17 @@ import (
 	"go.uber.org/zap/zaptest"
 )
 
-type Level string
+//go:generate stringer -type Level -trimprefix Level -output testlogger.gen.go
+type Level int
 
 const (
-	Debug Level = "debug"
-	Info  Level = "info"
-	Warn  Level = "warn"
-	// Panics, DPanics, and Fatal logs are considered errors
-	Error Level = "error"
+	Debug Level = iota
+	Info
+	Warn
+	Error
+	Fatal
+	DPanic
+	Panic
 )
 
 type Mode string
@@ -56,10 +60,6 @@ type TestingT interface {
 type CleanupCapableT interface {
 	TestingT
 	Cleanup(func())
-}
-
-func (l Level) String() string {
-	return string(l)
 }
 
 // Expectations represent errors we expect to happen in tests.
@@ -125,14 +125,14 @@ func (m matcher) Matches(msg string, tags []tag.Tag) bool {
 }
 
 type sharedTestLoggerState struct {
-	panicOnDPanic atomic.Bool
-	panicOnError  atomic.Bool
-	t             TestingT
-	mu            struct {
+	failOnDPanic atomic.Bool
+	failOnError  atomic.Bool
+	failOnFatal  atomic.Bool
+	t            TestingT
+	mu           struct {
 		sync.RWMutex
 		expectations map[Level]*list.List // Map[Level]List[matcher]
 		closed       bool
-		failed       bool
 	}
 	mode            Mode
 	logExpectations bool
@@ -149,13 +149,13 @@ type TestLogger struct {
 
 type LoggerOption func(*TestLogger)
 
-func DontPanicOnError(t *TestLogger) *TestLogger {
-	t.state.panicOnError.Store(false)
+func DontFailOnError(t *TestLogger) *TestLogger {
+	t.state.failOnError.Store(false)
 	return t
 }
 
-func DontPanicOnDPanic(t *TestLogger) *TestLogger {
-	t.state.panicOnDPanic.Store(false)
+func DontFailOnDPanic(t *TestLogger) *TestLogger {
+	t.state.failOnDPanic.Store(false)
 	return t
 }
 
@@ -209,14 +209,8 @@ func NewTestLogger(t TestingT, mode Mode, opts ...LoggerOption) *TestLogger {
 			mode:            mode,
 		},
 	}
-	tl.state.panicOnError.Store(true)
-	tl.state.panicOnDPanic.Store(true)
-	tl.state.mu.expectations = map[Level]*list.List{
-		Debug: list.New(),
-		Info:  list.New(),
-		Warn:  list.New(),
-		Error: list.New(),
-	}
+	tl.state.failOnError.Store(true)
+	tl.state.failOnDPanic.Store(true)
 	for _, opt := range opts {
 		opt(tl)
 	}
@@ -243,17 +237,6 @@ func NewTestLogger(t TestingT, mode Mode, opts ...LoggerOption) *TestLogger {
 	return tl
 }
 
-// ResetFailureStatus resets the failure state, returning the previous value.
-// This is useful to verify that no unexpected errors were logged after the test
-// completed (together with DontPanicOnError and/or DontPanicOnDPanic).
-func (tl *TestLogger) ResetFailureStatus() bool {
-	tl.state.mu.Lock()
-	defer tl.state.mu.Unlock()
-	prevFailed := tl.state.mu.failed
-	tl.state.mu.failed = false
-	return prevFailed
-}
-
 // Expect instructs the logger to expect certain errors, as specified by the msg and tag arguments.
 // Depending on the Mode of the test logger, the expectation either acts as an entry in a
 // blocklist (FailOnExpectedErrorOnly) or an allowlist (FailOnAnyUnexpectedError).
@@ -268,7 +251,12 @@ func (tl *TestLogger) Expect(level Level, msg string, tags ...tag.Tag) *Expectat
 		lvl:        level,
 	}
 	m := newMatcher(msg, tags, e)
-	e.e = tl.state.mu.expectations[level].PushBack(m)
+	expectations, ok := tl.state.mu.expectations[level]
+	if !ok {
+		expectations = list.New()
+		tl.state.mu.expectations[level] = expectations
+	}
+	e.e = expectations.PushBack(m)
 	return e
 }
 
@@ -281,23 +269,42 @@ func (tl *TestLogger) Forget(e *Expectation) {
 }
 
 func (tl *TestLogger) shouldFailTest(level Level, msg string, tags []tag.Tag) bool {
-	expectations := tl.state.mu.expectations[level]
-	for e := expectations.Front(); e != nil; e = e.Next() {
-		m, ok := e.Value.(matcher)
-		if !ok {
-			tl.state.t.Fatalf("Bug in TestLogger: invalid %T value in matcher list", e.Value)
+	// Only check expectations if they've been registered for this level.
+	if expectations, found := tl.state.mu.expectations[level]; found {
+		for e := expectations.Front(); e != nil; e = e.Next() {
+			m, ok := e.Value.(matcher)
+			if !ok {
+				tl.state.t.Fatalf("Bug in TestLogger: invalid %T value in matcher list", e.Value)
+			}
+			if m.Matches(msg, tags) {
+				return tl.state.mode == FailOnExpectedErrorOnly
+			}
 		}
-		if m.Matches(msg, tags) {
-			return tl.state.mode == FailOnExpectedErrorOnly
-		}
+	}
+	if level < Error {
+		// We don't care about a lack of debug/info/warn expectations, only > Error
+		return false
 	}
 	return tl.state.mode == FailOnAnyUnexpectedError
 }
 
-// PanicOnError overrides the behavior of this logger. It returns the previous value
+// FailOnDPanic overrides the behavior of this logger. It returns the previous value
 // so that it can be restored later.
-func (tl *TestLogger) PanicOnError(v bool) bool {
-	return tl.state.panicOnError.Swap(v)
+func (tl *TestLogger) FailOnDPanic(b bool) bool {
+	return tl.state.failOnDPanic.Swap(b)
+}
+
+// FailOnError overrides the behavior of this logger. It returns the previous value
+// so that it can be restored later.
+func (tl *TestLogger) FailOnError(b bool) bool {
+	return tl.state.failOnError.Swap(b)
+}
+
+// FailOnDPanic overrides the behavior of this logger. It returns the previous value
+// so that it can be restored later.
+// Note that Fatal-level logs still panic
+func (tl *TestLogger) FailOnFatal(b bool) bool {
+	return tl.state.failOnFatal.Swap(b)
 }
 
 func (tl *TestLogger) mergeWithLoggerTags(tags []tag.Tag) []tag.Tag {
@@ -332,9 +339,9 @@ func (tl *TestLogger) DPanic(msg string, tags ...tag.Tag) {
 	tags = tl.mergeWithLoggerTags(tags)
 	// note, actual panic'ing in wrapped is turned off so we can control.
 	tl.wrapped.DPanic(msg, tags...)
-	if tl.state.panicOnDPanic.Load() && tl.shouldFailTest(Error, msg, tags) {
+	if tl.state.failOnDPanic.Load() && tl.shouldFailTest(DPanic, msg, tags) {
 		tl.state.t.Helper()
-		panic(failureMessage("DPanic", msg, tags))
+		tl.failTest(DPanic, msg, tags...)
 	}
 }
 
@@ -363,19 +370,14 @@ func (tl *TestLogger) Error(msg string, tags ...tag.Tag) {
 	}
 	tl.state.mu.RUnlock()
 
-	if tl.state.panicOnError.Load() {
+	if tl.state.failOnError.Load() {
 		tl.state.t.Helper()
 		tl.wrapped.Error(msg, tags...)
-		panic(failureMessage("Error", msg, tags))
+		tl.failTest(Error, msg, tags...)
 	}
 
 	// Labeling the error as unexpected; so it can easily be identified later.
-	tl.wrapped.Error(errorMessage("Error", msg), tags...)
-
-	// Not panic'ing, so marking the test as failed.
-	tl.state.mu.Lock()
-	tl.state.mu.failed = true
-	tl.state.mu.Unlock()
+	tl.wrapped.Error(errorMessage(Error, msg), tags...)
 }
 
 // Fatal implements log.Logger.
@@ -385,8 +387,18 @@ func (tl *TestLogger) Fatal(msg string, tags ...tag.Tag) {
 	if tl.state.mu.closed {
 		return
 	}
+	tags = tl.mergeWithLoggerTags(tags)
 	tl.state.t.Helper()
-	tl.state.t.Fatal(failureMessage("Fatal", msg, tl.mergeWithLoggerTags(tags)))
+	if tl.state.failOnFatal.Load() && tl.shouldFailTest(Fatal, msg, tags) {
+		tl.failTest(Fatal, msg, tags...)
+	}
+	// Panic to emulate a fatal in a way we can catch.
+	// Use of this requires that the testing code catches the ensuing panic
+	// NOTE: This will not work if the code under test that catches panics, but we've no other option.
+	tl.wrapped.Error(fmt.Sprintf("FATAL: %s", msg), tags...)
+	if tl.state.failOnFatal.Load() {
+		panic(message(Fatal, msg, tags))
+	}
 }
 
 // Info implements log.Logger.
@@ -406,8 +418,14 @@ func (tl *TestLogger) Panic(msg string, tags ...tag.Tag) {
 	if tl.state.mu.closed {
 		return
 	}
+	tags = tl.mergeWithLoggerTags(tags)
 	tl.state.t.Helper()
-	tl.state.t.Fatal(failureMessage("Panic", msg, tl.mergeWithLoggerTags(tags)))
+	// Forcibly fail the test when required as otherwise panics can be caught.
+	if !tl.shouldFailTest(Panic, msg, tags) {
+		tl.state.t.Helper()
+		tl.failTest(Panic, msg, tags...)
+	}
+	tl.wrapped.Panic(message(Panic, msg, tags))
 }
 
 // Warn implements log.Logger.
@@ -418,6 +436,30 @@ func (tl *TestLogger) Warn(msg string, tags ...tag.Tag) {
 		return
 	}
 	tl.wrapped.Warn(msg, tl.mergeWithLoggerTags(tags)...)
+}
+
+// failTest fails the test while dumping the stack, allowing us to know where in the code
+// the failure arose.
+func (tl *TestLogger) failTest(level Level, msg string, tags ...tag.Tag) {
+	tl.state.t.Helper()
+	skip := 2                   // skip the invocation of failTest and the log.Logger function that called it
+	pcs := make([]uintptr, 128) // 128 is likely larger that we'll ever need.
+	frameCount := runtime.Callers(skip, pcs)
+
+	// runtime.Callers truncates the recorded stacktrace to fit the provided slice.
+	// Just keep doubling in size until we have enough space.
+	for frameCount == len(pcs) {
+		pcs = make([]uintptr, len(pcs)*2)
+		frameCount = runtime.Callers(skip+2, pcs)
+	}
+
+	stackFrames := runtime.CallersFrames(pcs)
+	var stackTrace strings.Builder
+	for frame, more := stackFrames.Next(); more; frame, more = stackFrames.Next() {
+		fmt.Fprintf(&stackTrace, "%s:%d %s\n", frame.File, frame.Line, frame.Function)
+	}
+
+	tl.state.t.Fatalf("%s\n%s", failureMessage(level, msg, tags), stackTrace)
 }
 
 // WithTags gives you a new logger, copying the tags of the source, appending the provided new Tags
@@ -459,7 +501,7 @@ func (tl *TestLogger) With(tags ...tag.Tag) log.Logger {
 }
 
 // Format the log.Logger tags and such into a useful message
-func failureMessage(level string, msg string, tags []tag.Tag) string {
+func failureMessage(level Level, msg string, tags []tag.Tag) string {
 	var b strings.Builder
 	b.WriteString("FAIL: ")
 	b.WriteString(errorMessage(level, msg))
@@ -472,12 +514,27 @@ func failureMessage(level string, msg string, tags []tag.Tag) string {
 	return b.String()
 }
 
-func errorMessage(level string, msg string) string {
+func errorMessage(level Level, msg string) string {
 	var b strings.Builder
 	b.WriteString("Unexpected ")
-	b.WriteString(level)
+	b.WriteString(level.String())
 	b.WriteString(" log encountered: ")
 	b.WriteString(msg)
+	return b.String()
+}
+
+func message(level Level, msg string, tags []tag.Tag) string {
+	var b strings.Builder
+	b.WriteString(level.String())
+	b.WriteRune(':')
+	b.WriteString(msg)
+	b.WriteString("\" ")
+	for _, t := range tags {
+		b.WriteString(t.Key())
+		b.WriteString("=")
+		b.WriteString(formatValue(t))
+		b.WriteString(" ")
+	}
 	return b.String()
 }
 
