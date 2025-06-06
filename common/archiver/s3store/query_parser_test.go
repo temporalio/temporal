@@ -22,7 +22,7 @@ func TestQueryParserSuite(t *testing.T) {
 
 func (s *queryParserSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
-	s.parser = NewQueryParser()
+	s.parser = NewQueryParser(false)
 }
 
 func (s *queryParserSuite) TestParseWorkflowIDAndWorkflowTypeName() {
