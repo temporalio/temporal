@@ -61,6 +61,20 @@ func (mr *MockNodeBackendMockRecorder) AddTasks(arg0 ...any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddTasks", reflect.TypeOf((*MockNodeBackend)(nil).AddTasks), arg0...)
 }
 
+// CurrentVersionedTransition mocks base method.
+func (m *MockNodeBackend) CurrentVersionedTransition() *persistence.VersionedTransition {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CurrentVersionedTransition")
+	ret0, _ := ret[0].(*persistence.VersionedTransition)
+	return ret0
+}
+
+// CurrentVersionedTransition indicates an expected call of CurrentVersionedTransition.
+func (mr *MockNodeBackendMockRecorder) CurrentVersionedTransition() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CurrentVersionedTransition", reflect.TypeOf((*MockNodeBackend)(nil).CurrentVersionedTransition))
+}
+
 // GetCurrentVersion mocks base method.
 func (m *MockNodeBackend) GetCurrentVersion() int64 {
 	m.ctrl.T.Helper()

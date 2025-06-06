@@ -44,16 +44,23 @@ func NewComponentField[C Component](
 	}
 }
 
+// TODO: The Component|DataPointerTo() implementation below can't handle the case
+// where Pointer is created in the NewEntity transition, as the tree structure is
+// unknown to the framework yet.
+//
+// To handle that case, we have to store the Component value in the field when
+// the Pointer field is created and resolve the pointer at the end of the transition
+// i.e. when closing the transaction.
 func ComponentPointerTo[C Component](
 	ctx MutableContext,
 	c C,
 ) (Field[C], error) {
-	path, err := ctx.Ref(c)
+	path, err := ctx.componentNodePath(c)
 	if err != nil {
 		return NewEmptyField[C](), err
 	}
 	return Field[C]{
-		Internal: newFieldInternalWithValue(fieldTypePointer, path.componentPath),
+		Internal: newFieldInternalWithValue(fieldTypePointer, path),
 	}, nil
 }
 
@@ -61,12 +68,12 @@ func DataPointerTo[D proto.Message](
 	ctx MutableContext,
 	d D,
 ) (Field[D], error) {
-	path, err := ctx.refData(d)
+	path, err := ctx.dataNodePath(d)
 	if err != nil {
 		return NewEmptyField[D](), err
 	}
 	return Field[D]{
-		Internal: newFieldInternalWithValue(fieldTypePointer, path.componentPath),
+		Internal: newFieldInternalWithValue(fieldTypePointer, path),
 	}, nil
 }
 
