@@ -359,5 +359,7 @@ type (
 
 		DeleteSubStateMachine(path *persistencespb.StateMachinePath) error
 		IsSubStateMachineDeleted() bool
+
+		GetExistingCompletionCallbackCount(event *historypb.HistoryEvent, requestID string, completionCallbacks []*commonpb.Callback) int
 	}
 )

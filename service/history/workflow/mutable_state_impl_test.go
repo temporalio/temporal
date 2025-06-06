@@ -188,6 +188,7 @@ func (s *mutableStateSuite) SetupTest() {
 	)
 	reg := hsm.NewRegistry()
 	s.Require().NoError(RegisterStateMachine(reg))
+	s.Require().NoError(callbacks.RegisterStateMachine(reg))
 	s.mockShard.SetStateMachineRegistry(reg)
 
 	s.mockConfig.MutableStateActivityFailureSizeLimitWarn = func(namespace string) int { return 1 * 1024 }
@@ -1993,8 +1994,6 @@ func (s *mutableStateSuite) TestAddContinueAsNewEvent_Default() {
 	)
 	s.NoError(err)
 
-	err = callbacks.RegisterStateMachine(s.mockShard.StateMachineRegistry())
-	s.NoError(err)
 	coll := callbacks.MachineCollection(s.mutableState.HSM())
 	_, err = coll.Add(
 		"test-callback-carryover",
@@ -4979,4 +4978,251 @@ func (s *mutableStateSuite) TestUpdateActivityTaskStatusWithTimerHeartbeat() {
 	s.NoError(err)
 	s.Equal(status, dbState.ActivityInfos[scheduleEventId].TimerTaskStatus)
 	s.Equal(originalTime, mutableState.pendingActivityTimerHeartbeats[scheduleEventId])
+}
+
+func (s *mutableStateSuite) TestGetExistingCompletionCallbackCount() {
+	testCases := []struct {
+		name           string
+		eventType      enumspb.EventType
+		eventID        int64
+		requestID      string
+		callbacks      []*commonpb.Callback
+		callbacksToAdd []*commonpb.Callback
+		expectedCount  int
+	}{
+		{
+			name:           "no_callbacks",
+			eventType:      enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+			eventID:        100,
+			requestID:      "test-request-id",
+			callbacks:      []*commonpb.Callback{},
+			callbacksToAdd: []*commonpb.Callback{},
+			expectedCount:  0,
+		},
+		{
+			name:      "no_existing_callbacks_found",
+			eventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+			eventID:   100,
+			requestID: "test-request-id",
+			callbacks: []*commonpb.Callback{
+				{
+					Variant: &commonpb.Callback_Nexus_{
+						Nexus: &commonpb.Callback_Nexus{
+							Url: "http://example.com",
+							Header: map[string]string{
+								"test": "value",
+							},
+						},
+					},
+				},
+				{
+					Variant: &commonpb.Callback_Nexus_{
+						Nexus: &commonpb.Callback_Nexus{
+							Url: "http://example2.com",
+							Header: map[string]string{
+								"test": "value2",
+							},
+						},
+					},
+				},
+			},
+			callbacksToAdd: []*commonpb.Callback{},
+			expectedCount:  0,
+		},
+		{
+			name:      "some_existing_callbacks_found",
+			eventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+			eventID:   100,
+			requestID: "test-request-id",
+			callbacks: []*commonpb.Callback{
+				{
+					Variant: &commonpb.Callback_Nexus_{
+						Nexus: &commonpb.Callback_Nexus{
+							Url: "http://example.com",
+							Header: map[string]string{
+								"test": "value",
+							},
+						},
+					},
+				},
+				{
+					Variant: &commonpb.Callback_Nexus_{
+						Nexus: &commonpb.Callback_Nexus{
+							Url: "http://example2.com",
+							Header: map[string]string{
+								"test": "value2",
+							},
+						},
+					},
+				},
+				{
+					Variant: &commonpb.Callback_Nexus_{
+						Nexus: &commonpb.Callback_Nexus{
+							Url: "http://example3.com",
+							Header: map[string]string{
+								"test": "value3",
+							},
+						},
+					},
+				},
+			},
+			callbacksToAdd: []*commonpb.Callback{
+				{
+					Variant: &commonpb.Callback_Nexus_{
+						Nexus: &commonpb.Callback_Nexus{
+							Url: "http://example.com",
+							Header: map[string]string{
+								"test": "value",
+							},
+						},
+					},
+				},
+			},
+			expectedCount: 1,
+		},
+		{
+			name:      "all_existing_callbacks_found",
+			eventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+			eventID:   100,
+			requestID: "test-request-id",
+			callbacks: []*commonpb.Callback{
+				{
+					Variant: &commonpb.Callback_Nexus_{
+						Nexus: &commonpb.Callback_Nexus{
+							Url: "http://example.com",
+							Header: map[string]string{
+								"test": "value",
+							},
+						},
+					},
+				},
+				{
+					Variant: &commonpb.Callback_Nexus_{
+						Nexus: &commonpb.Callback_Nexus{
+							Url: "http://example2.com",
+							Header: map[string]string{
+								"test": "value2",
+							},
+						},
+					},
+				},
+			},
+			callbacksToAdd: []*commonpb.Callback{
+				{
+					Variant: &commonpb.Callback_Nexus_{
+						Nexus: &commonpb.Callback_Nexus{
+							Url: "http://example.com",
+							Header: map[string]string{
+								"test": "value",
+							},
+						},
+					},
+				},
+				{
+					Variant: &commonpb.Callback_Nexus_{
+						Nexus: &commonpb.Callback_Nexus{
+							Url: "http://example2.com",
+							Header: map[string]string{
+								"test": "value2",
+							},
+						},
+					},
+				},
+			},
+			expectedCount: 2,
+		},
+		{
+			name:      "workflow_started_event_type",
+			eventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+			eventID:   1,
+			requestID: "test-request-id",
+			callbacks: []*commonpb.Callback{
+				{
+					Variant: &commonpb.Callback_Nexus_{
+						Nexus: &commonpb.Callback_Nexus{
+							Url: "http://example.com",
+							Header: map[string]string{
+								"test": "value",
+							},
+						},
+					},
+				},
+			},
+			callbacksToAdd: []*commonpb.Callback{
+				{
+					Variant: &commonpb.Callback_Nexus_{
+						Nexus: &commonpb.Callback_Nexus{
+							Url: "http://example.com",
+							Header: map[string]string{
+								"test": "value",
+							},
+						},
+					},
+				},
+			},
+			expectedCount: 1,
+		},
+		{
+			name:      "mixed_existing_and_non_existing_callbacks",
+			eventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+			eventID:   100,
+			requestID: "test-request-id",
+			callbacks: []*commonpb.Callback{
+				{
+					Variant: &commonpb.Callback_Nexus_{
+						Nexus: &commonpb.Callback_Nexus{
+							Url: "http://existing.com",
+							Header: map[string]string{
+								"test": "existing",
+							},
+						},
+					},
+				},
+				{
+					Variant: &commonpb.Callback_Nexus_{
+						Nexus: &commonpb.Callback_Nexus{
+							Url: "http://new.com",
+							Header: map[string]string{
+								"test": "new",
+							},
+						},
+					},
+				},
+			},
+			callbacksToAdd: []*commonpb.Callback{
+				{
+					Variant: &commonpb.Callback_Nexus_{
+						Nexus: &commonpb.Callback_Nexus{
+							Url: "http://existing.com",
+							Header: map[string]string{
+								"test": "existing",
+							},
+						},
+					},
+				},
+			},
+			expectedCount: 1,
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			s.SetupSubTest()
+
+			event := &historypb.HistoryEvent{
+				EventId:   tc.eventID,
+				EventType: tc.eventType,
+				Version:   1,
+			}
+
+			// Add callbacks to the mutable state if specified
+			if len(tc.callbacksToAdd) > 0 {
+				err := s.mutableState.addCompletionCallbacks(event, tc.requestID, tc.callbacksToAdd)
+				s.NoError(err)
+			}
+
+			count := s.mutableState.GetExistingCompletionCallbackCount(event, tc.requestID, tc.callbacks)
+			s.Equal(tc.expectedCount, count)
+		})
+	}
 }

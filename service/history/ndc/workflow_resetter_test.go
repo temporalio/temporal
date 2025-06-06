@@ -15,6 +15,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	clockspb "go.temporal.io/server/api/clock/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -1555,4 +1556,139 @@ func (s *workflowResetterSuite) TestWorkflowRestartAfterExecutionTimeout() {
 	)
 	s.NoError(err)
 	s.Equal(resetMutableState, resetWorkflow.GetMutableState())
+}
+
+func (s *workflowResetterSuite) TestReapplyEvents_WorkflowOptionsUpdated_CompletionCallbackErrors() {
+	testCases := []struct {
+		name                  string
+		existingCallbacks     int
+		totalCallbacks        int
+		hasVersioningOverride bool
+		expectedErrorContains string
+	}{
+		{
+			name:                  "all_callbacks_exist_with_additional_updates",
+			existingCallbacks:     3,
+			totalCallbacks:        3,
+			hasVersioningOverride: true,
+			expectedErrorContains: "unable to reapply WorkflowExecutionOptionsUpdated event: all 3 completion callbacks are already attached but the event contains additional workflow option updates",
+		},
+		{
+			name:                  "partial_callbacks_exist",
+			existingCallbacks:     2,
+			totalCallbacks:        5,
+			hasVersioningOverride: false,
+			expectedErrorContains: "unable to reapply WorkflowExecutionOptionsUpdated event: partial completion callback state detected (2 of 5 callbacks already exist)",
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			ms := historyi.NewMockMutableState(s.controller)
+			smReg := hsm.NewRegistry()
+			s.NoError(workflow.RegisterStateMachine(smReg))
+			root, err := hsm.NewRoot(smReg, workflow.StateMachineType, nil, make(map[string]*persistencespb.StateMachineMap), nil)
+			s.NoError(err)
+			ms.EXPECT().HSM().Return(root).AnyTimes()
+
+			// Create completion callbacks
+			callbacks := make([]*commonpb.Callback, tc.totalCallbacks)
+			for i := 0; i < tc.totalCallbacks; i++ {
+				callbacks[i] = &commonpb.Callback{
+					Variant: &commonpb.Callback_Nexus_{
+						Nexus: &commonpb.Callback_Nexus{
+							Url: "http://example.com",
+							Header: map[string]string{
+								"test": "value",
+							},
+						},
+					},
+				}
+			}
+
+			// Create the event
+			event := &historypb.HistoryEvent{
+				EventId:   101,
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+				Attributes: &historypb.HistoryEvent_WorkflowExecutionOptionsUpdatedEventAttributes{
+					WorkflowExecutionOptionsUpdatedEventAttributes: &historypb.WorkflowExecutionOptionsUpdatedEventAttributes{
+						AttachedRequestId:           "test-request-id",
+						AttachedCompletionCallbacks: callbacks,
+					},
+				},
+			}
+
+			// Add versioning override if specified
+			if tc.hasVersioningOverride {
+				event.GetWorkflowExecutionOptionsUpdatedEventAttributes().VersioningOverride = &workflowpb.VersioningOverride{
+					Behavior: enumspb.VERSIONING_BEHAVIOR_PINNED,
+				}
+			}
+
+			// Mock the GetExistingCompletionCallbackCount method
+			ms.EXPECT().GetExistingCompletionCallbackCount(
+				event,
+				"test-request-id",
+				callbacks,
+			).Return(tc.existingCallbacks)
+
+			events := []*historypb.HistoryEvent{event}
+
+			// Call reapplyEvents and expect an error
+			appliedEvents, err := reapplyEvents(context.Background(), ms, nil, smReg, events, nil, "", true)
+			s.Error(err)
+			s.Contains(err.Error(), tc.expectedErrorContains)
+			s.Empty(appliedEvents)
+		})
+	}
+}
+
+func (s *workflowResetterSuite) TestReapplyEvents_WorkflowOptionsUpdated_CompletionCallbacksSkip() {
+	ms := historyi.NewMockMutableState(s.controller)
+	smReg := hsm.NewRegistry()
+	s.NoError(workflow.RegisterStateMachine(smReg))
+	root, err := hsm.NewRoot(smReg, workflow.StateMachineType, nil, make(map[string]*persistencespb.StateMachineMap), nil)
+	s.NoError(err)
+	ms.EXPECT().HSM().Return(root).AnyTimes()
+
+	// Create completion callbacks
+	callbacks := []*commonpb.Callback{
+		{
+			Variant: &commonpb.Callback_Nexus_{
+				Nexus: &commonpb.Callback_Nexus{
+					Url: "http://example.com",
+					Header: map[string]string{
+						"test": "value",
+					},
+				},
+			},
+		},
+	}
+
+	// Create the event where all callbacks exist but no other updates
+	event := &historypb.HistoryEvent{
+		EventId:   101,
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+		Attributes: &historypb.HistoryEvent_WorkflowExecutionOptionsUpdatedEventAttributes{
+			WorkflowExecutionOptionsUpdatedEventAttributes: &historypb.WorkflowExecutionOptionsUpdatedEventAttributes{
+				AttachedRequestId:           "test-request-id",
+				AttachedCompletionCallbacks: callbacks,
+				// No VersioningOverride and UnsetVersioningOverride is false
+			},
+		},
+	}
+
+	// Mock the GetExistingCompletionCallbackCount method - all callbacks already exist
+	ms.EXPECT().GetExistingCompletionCallbackCount(
+		event,
+		"test-request-id",
+		callbacks,
+	).Return(1) // All 1 callback already exists
+
+	events := []*historypb.HistoryEvent{event}
+
+	// Call reapplyEvents - should skip the event (no error, no applied events)
+	appliedEvents, err := reapplyEvents(context.Background(), ms, nil, smReg, events, nil, "", true)
+	s.NoError(err)
+	s.Empty(appliedEvents) // Event should be skipped
 }
