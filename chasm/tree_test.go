@@ -1959,11 +1959,22 @@ func (s *nodeSuite) TestEachPureTask() {
 		},
 	}
 
+	rt, ok := s.registry.Task("TestLibrary.test_pure_task")
+	s.True(ok)
+
+	expectValidate := func(retValue bool, errValue error) {
+		rt.validator.(*MockTaskValidator[any, *TestPureTask]).EXPECT().
+			Validate(gomock.Any(), gomock.Any(), gomock.Any()).Return(retValue, errValue).Times(1)
+	}
+
 	root, err := NewTree(persistenceNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
 	s.NoError(err)
 	s.NotNil(root)
 
 	actualTaskCount := 0
+	for range 3 {
+		expectValidate(true, nil)
+	}
 	err = root.EachPureTask(now.Add(time.Minute), func(executor NodeExecutePureTask, task any) error {
 		s.NotNil(executor)
 
