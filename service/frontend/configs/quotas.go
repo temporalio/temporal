@@ -101,7 +101,6 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/DeleteWorkflowRule":                    2,
 		"/temporal.api.workflowservice.v1.WorkflowService/ListWorkflowRules":                     2,
 		"/temporal.api.workflowservice.v1.WorkflowService/TriggerWorkflowRule":                   2,
-		"/temporal.api.workflowservice.v1.WorkflowService/RecordWorkerHeartbeat":                 2,
 
 		// P3: Status Querying APIs
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorkflowExecution":       3,
@@ -118,7 +117,6 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorkerDeploymentVersion": 3,
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorkerDeployment":        3,
 		"/temporal.api.workflowservice.v1.WorkflowService/ListWorkerDeployments":           3,
-		"/temporal.api.workflowservice.v1.WorkflowService/ListWorkers":                     2,
 
 		// P4: Progress APIs
 		"/temporal.api.workflowservice.v1.WorkflowService/RecordActivityTaskHeartbeat":      4,
@@ -144,6 +142,8 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/ResetStickyTaskQueue":               5,
 		"/temporal.api.workflowservice.v1.WorkflowService/ShutdownWorker":                     5,
 		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkflowExecutionHistoryReverse": 5,
+		"/temporal.api.workflowservice.v1.WorkflowService/RecordWorkerHeartbeat":              5,
+
 		// GetWorkflowExecutionHistory with WaitNewEvent set to true is a long poll API. Consider it as any other poll API.
 		PollWorkflowHistoryAPIName: 5,
 
@@ -161,6 +161,7 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/ListClosedWorkflowExecutions":   1,
 		"/temporal.api.workflowservice.v1.WorkflowService/ListWorkflowExecutions":         1,
 		"/temporal.api.workflowservice.v1.WorkflowService/ListArchivedWorkflowExecutions": 1,
+		"/temporal.api.workflowservice.v1.WorkflowService/ListWorkers":                    1,
 
 		// APIs that rely on visibility
 		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkerTaskReachability":         1,
