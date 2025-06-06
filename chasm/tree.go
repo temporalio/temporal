@@ -143,6 +143,7 @@ type (
 		GetExecutionInfo() *persistencespb.WorkflowExecutionInfo
 		GetCurrentVersion() int64
 		NextTransitionCount() int64
+		CurrentVersionedTransition() *persistencespb.VersionedTransition
 		GetWorkflowKey() definition.WorkflowKey
 		AddTasks(...tasks.Task)
 		UpdateWorkflowStateStatus(
@@ -1004,39 +1005,71 @@ func unmarshalProto(
 // Ref implements the CHASM Context interface
 func (n *Node) Ref(
 	component Component,
-) (ComponentRef, error) {
-	if err := n.syncSubComponents(); err != nil {
-		return ComponentRef{}, err
-	}
+) ([]byte, error) {
+	// No need to update tree structure here. If a Component can only be found after
+	// syncSubComponents() is called, it means the component is created in the
+	// current transition and don't have a reference yet.
 
 	for path, node := range n.andAllChildren() {
-		// TODO: deserialize entire tree to make sure that node.value is not nil?
 		if node.value == component {
-			return ComponentRef{
-				componentPath: path,
-			}, nil
+			workflowKey := node.backend.GetWorkflowKey()
+			ref := ComponentRef{
+				EntityKey: EntityKey{
+					NamespaceID: workflowKey.NamespaceID,
+					BusinessID:  workflowKey.WorkflowID,
+					EntityID:    workflowKey.RunID,
+				},
+				archetype: n.root().serializedNode.GetMetadata().GetComponentAttributes().Type,
+				// TODO: Consider using node's LastUpdateVersionedTransition for checking staleness here.
+				// Using VersionedTransition of the entire tree might be too strict.
+				entityLastUpdateVT: transitionhistory.CopyVersionedTransition(node.backend.CurrentVersionedTransition()),
+				componentPath:      path,
+				componentInitialVT: node.serializedNode.GetMetadata().GetInitialVersionedTransition(),
+			}
+			return ref.Serialize(n.registry)
 		}
 	}
-	return ComponentRef{}, errComponentNotFound
+	return nil, errComponentNotFound
 }
 
-func (n *Node) refData(
-	data proto.Message,
-) (ComponentRef, error) {
-	// TODO: return error
+// componentNodePath implements the CHASM Context interface
+func (n *Node) componentNodePath(
+	component Component,
+) ([]string, error) {
+	// TODO: keep track of deserilized value and
+	// only invoke syncSubComponents() when there's no match for the component.
 	if err := n.syncSubComponents(); err != nil {
-		return ComponentRef{}, err
+		return nil, err
 	}
 
+	// It's uncessary to deserialize entire tree as calling this method means
+	// caller already have the deserialized value.
 	for path, node := range n.andAllChildren() {
-		// TODO: deserialize entire tree to make sure that node.value is not nil?
-		if node.value == data {
-			return ComponentRef{
-				componentPath: path,
-			}, nil
+		if node.value == component {
+			return path, nil
 		}
 	}
-	return ComponentRef{}, errComponentNotFound
+	return nil, errComponentNotFound
+}
+
+// dataNodePath implements the CHASM Context interface
+func (n *Node) dataNodePath(
+	data proto.Message,
+) ([]string, error) {
+	// TODO: keep track of deserialized node value and
+	// only invoke syncSubComponents() when there's no match for the component.
+	if err := n.syncSubComponents(); err != nil {
+		return nil, err
+	}
+
+	// It's uncessary to deserialize entire tree as calling this method means
+	// caller already have the deserialized value.
+	for path, node := range n.andAllChildren() {
+		if node.value == data {
+			return path, nil
+		}
+	}
+	return nil, errComponentNotFound
 }
 
 // Now implements the CHASM Context interface
@@ -1328,13 +1361,11 @@ func (n *Node) closeTransactionGeneratePhysicalSideEffectTasks() error {
 				Destination:         sideEffectTask.Destination,
 				Category:            category,
 				Info: &persistencespb.ChasmTaskInfo{
-					Ref: &persistencespb.ChasmComponentRef{
-						ComponentInitialVersionedTransition:    updatedNode.Metadata.InitialVersionedTransition,
-						ComponentLastUpdateVersionedTransition: updatedNode.Metadata.LastUpdateVersionedTransition,
-						Path:                                   encodedPath,
-					},
-					Type: sideEffectTask.Type,
-					Data: sideEffectTask.Data,
+					ComponentInitialVersionedTransition:    updatedNode.Metadata.InitialVersionedTransition,
+					ComponentLastUpdateVersionedTransition: updatedNode.Metadata.LastUpdateVersionedTransition,
+					Path:                                   encodedPath,
+					Type:                                   sideEffectTask.Type,
+					Data:                                   sideEffectTask.Data,
 				},
 			}
 			n.backend.AddTasks(physicalTask)
@@ -2214,16 +2245,16 @@ func (n *Node) ExecuteSideEffectTask(
 
 	// TODO - update ComponentRef to use the encoded path, and then leave decoding
 	// until access/dereference time.
-	path, err := n.pathEncoder.Decode(taskInfo.Ref.Path)
+	path, err := n.pathEncoder.Decode(taskInfo.Path)
 	if err != nil {
-		return serviceerror.NewInternalf("failed to decode path '%s'", taskInfo.Ref.Path)
+		return serviceerror.NewInternalf("failed to decode path '%s'", taskInfo.Path)
 	}
 
 	ref := ComponentRef{
 		EntityKey:          entityKey,
-		entityLastUpdateVT: taskInfo.Ref.ComponentLastUpdateVersionedTransition,
+		entityLastUpdateVT: taskInfo.ComponentLastUpdateVersionedTransition,
 		componentPath:      path,
-		componentInitialVT: taskInfo.Ref.ComponentInitialVersionedTransition,
+		componentInitialVT: taskInfo.ComponentInitialVersionedTransition,
 
 		// Validate the Ref only once it is accessed by the task's executor.
 		validationFn: makeValidationFn(registrableTask, validate),
