@@ -918,8 +918,8 @@ func (m *workflowTaskStateMachine) deleteWorkflowTask() {
 		RequestID:           emptyUUID,
 		WorkflowTaskTimeout: time.Duration(0),
 		Attempt:             1,
-		StartedTime:         timeZeroUTC,
-		ScheduledTime:       timeZeroUTC,
+		StartedTime:         time.Unix(0, 0).UTC(),
+		ScheduledTime:       time.Unix(0, 0).UTC(),
 
 		TaskQueue: nil,
 		// Keep the last original scheduled Timestamp, so that AddWorkflowTaskScheduledEventAsHeartbeat can continue with it.
@@ -1033,29 +1033,9 @@ func (m *workflowTaskStateMachine) GetTransientWorkflowTaskInfo(
 	identity string,
 ) *historyspb.TransientWorkflowTaskInfo {
 
-	if workflowTask.ScheduledEventID == common.EmptyEventID {
-		// TODO: use softassert here.
-		return nil // this should never happen because WFT is retrieved by ScheduledEventID.
-	}
-
-	scheduledEventID := workflowTask.ScheduledEventID
-	if workflowTask.StartedEventID == common.EmptyEventID {
-		// workflowTask.ScheduledEventID is not used if WFT is not started, because it has an EventID of the WFT as it was added to Matching.
-		// Because new events might come after that, they will be added to the history, but transient WFT is stayed the same.
-		// When this transient WFT is started, it is recreated, and new scheduledEventID is assigned from the GetNextEventID()
-		// (see AddWorkflowTaskStartedEvent in this file for details). This logic is duplicated here.
-
-		// In contrast, workflowTask.StartedEventID is used below in this method, because if there are new events,
-		// during start, transient WFT is converted to normal. This method is called for transient WFT only;
-		// therefore, it is guaranteed that there were no new events since transient WFT was scheduled.
-		// If this invariant is broken, validateTransientWorkflowTaskEvents function will detect it.
-
-		scheduledEventID = m.ms.GetNextEventID()
-	}
-
-	// Create a scheduled event which is not written to the history yet.
+	// Create scheduled and started events which are not written to the history yet.
 	scheduledEvent := &historypb.HistoryEvent{
-		EventId:   scheduledEventID,
+		EventId:   workflowTask.ScheduledEventID,
 		EventTime: timestamppb.New(workflowTask.ScheduledTime),
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 		Version:   m.ms.currentVersion,
@@ -1068,21 +1048,13 @@ func (m *workflowTaskStateMachine) GetTransientWorkflowTaskInfo(
 		},
 	}
 
-	if workflowTask.StartedEventID == common.EmptyEventID {
-		return &historyspb.TransientWorkflowTaskInfo{
-			HistorySuffix: []*historypb.HistoryEvent{scheduledEvent},
-		}
-	}
-
 	var versioningStamp *commonpb.WorkerVersionStamp
 	if workflowTask.BuildId != "" {
 		// fill out the stamp value of the transient WFT based on MS data
 		versioningStamp = &commonpb.WorkerVersionStamp{UseVersioning: true, BuildId: workflowTask.BuildId}
 	}
 
-	// Create a started event which is not written to the history yet.
 	startedEvent := &historypb.HistoryEvent{
-		// See the comment above on workflowTask.StartedEventID.
 		EventId:   workflowTask.StartedEventID,
 		EventTime: timestamppb.New(workflowTask.StartedTime),
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,

@@ -535,6 +535,7 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueues() {
 		BacklogCountHint:       0,
 		StickyExecutionEnabled: true,
 		Query:                  nil,
+		TransientWorkflowTask:  nil,
 		WorkflowExecutionTaskQueue: &taskqueuepb.TaskQueue{
 			Name: tl,
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
