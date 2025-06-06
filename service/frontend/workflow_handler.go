@@ -6072,3 +6072,24 @@ func (wh *WorkflowHandler) ListWorkflowRules(
 	}
 	return &workflowservice.ListWorkflowRulesResponse{Rules: workflowRules}, nil
 }
+
+// WorkerHeartbeat receive heartbeat request from the worker
+// and forwards it to the corresponding matching service.
+func (wh *WorkflowHandler) RecordWorkerHeartbeat(
+	_ context.Context, request *workflowservice.RecordWorkerHeartbeatRequest,
+) (*workflowservice.RecordWorkerHeartbeatResponse, error) {
+	if !wh.config.WorkerHeartbeatsEnabled(request.GetNamespace()) {
+		return nil, serviceerror.NewUnimplemented("method RecordWorkerHeartbeat not supported")
+	}
+	return nil, serviceerror.NewUnimplemented("method RecordWorkerHeartbeat not supported")
+}
+
+// ListWorkers is a visibility API to list worker status information in a specific namespace.
+func (wh *WorkflowHandler) ListWorkers(
+	_ context.Context, request *workflowservice.ListWorkersRequest,
+) (*workflowservice.ListWorkersResponse, error) {
+	if !wh.config.ListWorkersEnabled(request.GetNamespace()) {
+		return nil, serviceerror.NewUnimplemented("method ListWorkers not supported")
+	}
+	return nil, serviceerror.NewUnimplemented("method ListWorkers not supported")
+}
