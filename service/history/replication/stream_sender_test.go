@@ -1051,9 +1051,10 @@ func (s *streamSenderSuite) TestRecvEventLoop_RpcError_ShouldReturnStreamError()
 }
 
 func (s *streamSenderSuite) TestRecvMonitor() {
-	s.server.EXPECT().Recv().Do(func() {
-		time.Sleep(time.Second)
-	})
+	s.server.EXPECT().Recv().Do(
+		func() {
+			<-s.server.Context().Done()
+		})
 	go func() {
 		_ = s.streamSender.recvEventLoop()
 	}()
