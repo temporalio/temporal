@@ -1143,3 +1143,70 @@ func (s *executableTaskSuite) TestSyncState() {
 	s.NoError(err)
 	s.True(doContinue)
 }
+
+func (s *executableTaskSuite) TestRetryPolicy_DefaultExpiration() {
+	// Test case where TaskRetryExpirationInterval is smaller than KeepAliveMaxConnectionAge/2
+	s.config.KeepAliveMaxConnectionAge = dynamicconfig.GetDurationPropertyFn(40 * time.Minute)
+
+	retryPolicy := s.task.RetryPolicy()
+	s.NotNil(retryPolicy)
+
+	// Test that with normal elapsed time, it returns a valid delay
+	normalDelay := retryPolicy.ComputeNextDelay(time.Minute, 1, nil)
+	s.True(normalDelay > 0)
+
+	// Test that when elapsed time exceeds expiration interval, it returns done (-1)
+	expiredElapsedTime := TaskRetryExpirationInterval + time.Second
+	delay := retryPolicy.ComputeNextDelay(expiredElapsedTime, 1, nil)
+	s.Equal(time.Duration(-1), delay) // done = -1
+}
+
+func (s *executableTaskSuite) TestRetryPolicy_LimitedByKeepAlive() {
+	// Test case where KeepAliveMaxConnectionAge/2 is smaller than TaskRetryExpirationInterval
+	s.config.KeepAliveMaxConnectionAge = dynamicconfig.GetDurationPropertyFn(5 * time.Minute)
+
+	retryPolicy := s.task.RetryPolicy()
+	s.NotNil(retryPolicy)
+
+	// Test that with normal elapsed time, it returns a valid delay
+	normalDelay := retryPolicy.ComputeNextDelay(time.Minute, 1, nil)
+	s.True(normalDelay > 0)
+
+	// Test that when elapsed time exceeds the limited expiration interval, it returns done (-1)
+	expectedMaxInterval := s.config.KeepAliveMaxConnectionAge() / 2
+	expiredElapsedTime := expectedMaxInterval + time.Second
+	delay := retryPolicy.ComputeNextDelay(expiredElapsedTime, 1, nil)
+	s.Equal(time.Duration(-1), delay) // done = -1
+}
+
+func (s *executableTaskSuite) TestRetryPolicy_ExpirationIntervalSelection() {
+	// Test that the retry policy correctly selects the minimum between
+	// TaskRetryExpirationInterval and KeepAliveMaxConnectionAge/2
+
+	// Case 1: KeepAliveMaxConnectionAge/2 > TaskRetryExpirationInterval
+	// Should use TaskRetryExpirationInterval
+	s.config.KeepAliveMaxConnectionAge = dynamicconfig.GetDurationPropertyFn(30 * time.Minute)
+	retryPolicy1 := s.task.RetryPolicy()
+
+	// Should stop retrying when elapsed time reaches TaskRetryExpirationInterval
+	delay1 := retryPolicy1.ComputeNextDelay(TaskRetryExpirationInterval+time.Second, 1, nil)
+	s.Equal(time.Duration(-1), delay1)
+
+	// Should still retry when elapsed time is less than TaskRetryExpirationInterval
+	delay2 := retryPolicy1.ComputeNextDelay(TaskRetryExpirationInterval-time.Minute, 1, nil)
+	s.True(delay2 > 0)
+
+	// Case 2: KeepAliveMaxConnectionAge/2 < TaskRetryExpirationInterval
+	// Should use KeepAliveMaxConnectionAge/2
+	s.config.KeepAliveMaxConnectionAge = dynamicconfig.GetDurationPropertyFn(8 * time.Minute)
+	retryPolicy2 := s.task.RetryPolicy()
+	expectedLimit := 4 * time.Minute // KeepAliveMaxConnectionAge/2
+
+	// Should stop retrying when elapsed time reaches KeepAliveMaxConnectionAge/2
+	delay3 := retryPolicy2.ComputeNextDelay(expectedLimit+time.Second, 1, nil)
+	s.Equal(time.Duration(-1), delay3)
+
+	// Should still retry when elapsed time is less than KeepAliveMaxConnectionAge/2
+	delay4 := retryPolicy2.ComputeNextDelay(expectedLimit-time.Minute, 1, nil)
+	s.True(delay4 > 0)
+}
