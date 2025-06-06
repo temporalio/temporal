@@ -163,4 +163,9 @@ service MatchingService {
     rpc	DeleteNexusEndpoint(DeleteNexusEndpointRequest) returns (DeleteNexusEndpointResponse) {}
     // List all registered services.
     rpc	ListNexusEndpoints(ListNexusEndpointsRequest) returns (ListNexusEndpointsResponse) {}
+
+    // RecordWorkerHeartbeat receive heartbeat request from the worker.
+    rpc RecordWorkerHeartbeat (RecordWorkerHeartbeatRequest) returns (RecordWorkerHeartbeatResponse) {}
+    // ListWorkers is a visibility API to list worker status information in a specific namespace.
+    rpc ListWorkers (ListWorkersRequest) returns (ListWorkersResponse) {}
 }

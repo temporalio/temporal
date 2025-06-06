@@ -218,3 +218,38 @@ func (c *clientImpl) getClientForTaskQueuePartition(
 	}
 	return client.(matchingservice.MatchingServiceClient), nil
 }
+
+/*
+func (c *clientImpl) RecordWorkerHeartbear(
+	ctx context.Context,
+	request *workflowservice.RecordWorkerHeartbeatRequest) (*matchingservice.PollWorkflowTaskQueueResponse, error) {
+
+	routingKey := fmt.Sprintf("RecordWorkerHeartbear_%S", request.GetNamespaceId())
+	client, err := c.clients.GetClientForKey(routingKey)
+	if err != nil {
+		return nil, err
+	}
+
+	matchingServiceClient := client.(matchingservice.MatchingServiceClient)
+	if matchingServiceClient == nil {
+		return nil, fmt.Errorf("failed to get matching service client for routing key: %s", routingKey)
+	}
+	matchingServiceClient.RecordWorkerHeartbear(request.WorkerHeartbeat)
+
+	c.clients
+	request = common.CloneProto(request)
+	client, release, err := c.pickClientForRead(
+		request.GetPollRequest().GetTaskQueue(),
+		request.GetNamespaceId(),
+		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		request.GetForwardedSource())
+	if err != nil {
+		return nil, err
+	}
+	if release != nil {
+		defer release()
+	}
+	ctx, cancel := c.createLongPollContext(ctx)
+	defer cancel()
+	return client.PollWorkflowTaskQueue(ctx, request, opts...)
+}*/

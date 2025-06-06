@@ -91,6 +91,10 @@ func (wt *WorkflowTags) extractFromMatchingServiceServerMessage(message any) []t
 		return nil
 	case *matchingservice.ListTaskQueuePartitionsResponse:
 		return nil
+	case *matchingservice.ListWorkersRequest:
+		return nil
+	case *matchingservice.ListWorkersResponse:
+		return nil
 	case *matchingservice.PollActivityTaskQueueRequest:
 		return nil
 	case *matchingservice.PollActivityTaskQueueResponse:
@@ -115,6 +119,10 @@ func (wt *WorkflowTags) extractFromMatchingServiceServerMessage(message any) []t
 			tag.WorkflowRunID(r.GetQueryRequest().GetExecution().GetRunId()),
 		}
 	case *matchingservice.QueryWorkflowResponse:
+		return nil
+	case *matchingservice.RecordWorkerHeartbeatRequest:
+		return nil
+	case *matchingservice.RecordWorkerHeartbeatResponse:
 		return nil
 	case *matchingservice.ReplicateTaskQueueUserDataRequest:
 		return nil
