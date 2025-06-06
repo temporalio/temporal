@@ -216,6 +216,7 @@ func (s *StreamSenderImpl) recvMonitor() {
 			heartbeatTimeout.Stop()
 			heartbeatTimeout = time.NewTimer(s.config.ReplicationStreamSyncStatusDuration() * SyncTaskIntervalMultiplier)
 		case <-heartbeatTimeout.C:
+			s.logger.Warn(''"StreamSender failed to receive sync status from target cluster")
 			s.Stop()
 			return
 		}
