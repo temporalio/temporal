@@ -428,6 +428,7 @@ func (tl *TestLogger) Fatal(msg string, tags ...tag.Tag) {
 	// NOTE: This will not work if the code under test that catches panics, but we've no other option.
 	tl.wrapped.Error(fmt.Sprintf("FATAL: %s", msg), tags...)
 	if tl.state.failOnFatal.Load() {
+		//nolint:forbidigo
 		panic(message(Fatal, msg, tags))
 	}
 }
