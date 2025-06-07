@@ -289,7 +289,9 @@ func makeGetMatchingClient(reqType reflect.Type) string {
 		tqt = fieldWithPath{path: "enumspb.TASK_QUEUE_TYPE_UNSPECIFIED"}
 		nsID = findOneNestedField(t, "NamespaceId", "request", 1)
 	case "UpdateTaskQueueUserDataRequest",
-		"ReplicateTaskQueueUserDataRequest":
+		"ReplicateTaskQueueUserDataRequest",
+		"RecordWorkerHeartbeatRequest",
+		"ListWorkersRequest":
 		// Always route these requests to the same matching node by namespace.
 		tq = fieldWithPath{path: "\"not-applicable\""}
 		tqt = fieldWithPath{path: "enumspb.TASK_QUEUE_TYPE_UNSPECIFIED"}

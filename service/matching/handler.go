@@ -6,6 +6,7 @@ import (
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -530,6 +531,20 @@ func (h *Handler) DeleteNexusEndpoint(ctx context.Context, request *matchingserv
 func (h *Handler) ListNexusEndpoints(ctx context.Context, request *matchingservice.ListNexusEndpointsRequest) (_ *matchingservice.ListNexusEndpointsResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
 	return h.engine.ListNexusEndpoints(ctx, request)
+}
+
+// RecordWorkerHeartbeat receive heartbeat request from the worker.
+func (h *Handler) RecordWorkerHeartbeat(
+	context.Context, *matchingservice.RecordWorkerHeartbeatRequest,
+) (*matchingservice.RecordWorkerHeartbeatResponse, error) {
+	return nil, serviceerror.NewUnimplemented("RecordWorkerHeartbeat is not implemented")
+}
+
+// ListWorkers is a visibility API to list worker status information in a specific namespace.
+func (h *Handler) ListWorkers(
+	context.Context, *matchingservice.ListWorkersRequest,
+) (*matchingservice.ListWorkersResponse, error) {
+	return nil, serviceerror.NewUnimplemented("RecordWorkerHeartbeat is not implemented")
 }
 
 func (h *Handler) namespaceName(id namespace.ID) namespace.Name {
