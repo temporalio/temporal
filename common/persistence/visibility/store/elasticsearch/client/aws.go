@@ -46,7 +46,7 @@ func NewAwsHttpClient(config ESAWSRequestSigningConfig) (*http.Client, error) {
 
 		awsCredentials = awsSession.Config.Credentials
 	default:
-		return nil, fmt.Errorf("unknown AWS credential provider specified: %+v. Accepted options are 'static', 'environment' or 'session'", config.CredentialProvider)
+		return nil, fmt.Errorf("unknown AWS credential provider specified: %+v. Accepted options are 'static', 'environment' or 'aws-sdk-default'", config.CredentialProvider)
 	}
 
 	return elasticaws.NewV4SigningClient(awsCredentials, config.Region), nil
