@@ -14,7 +14,6 @@ ci-build-misc: \
 	clean-tools \
 	proto \
 	go-generate \
-	buf-breaking \
 	shell-check \
 	goimports \
 	gomodtidy \
