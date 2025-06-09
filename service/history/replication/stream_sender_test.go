@@ -73,9 +73,6 @@ func (s *streamSenderSuite) SetupTest() {
 	s.historyEngine = historyi.NewMockEngine(s.controller)
 	s.taskConverter = NewMockSourceTaskConverter(s.controller)
 	s.config = tests.NewDynamicConfig()
-	s.config.ReplicationStreamSyncStatusDuration = func() time.Duration {
-		return time.Millisecond
-	}
 	s.clientShardKey = NewClusterShardKey(rand.Int31(), 1)
 	s.serverShardKey = NewClusterShardKey(rand.Int31(), 1)
 	s.shardContext.EXPECT().GetEngine(gomock.Any()).Return(s.historyEngine, nil).AnyTimes()
@@ -1050,14 +1047,14 @@ func (s *streamSenderSuite) TestRecvEventLoop_RpcError_ShouldReturnStreamError()
 	s.IsType(&StreamError{}, err)
 }
 
-func (s *streamSenderSuite) TestRecvMonitor() {
-	s.server.EXPECT().Recv().Do(
-		func() {
-			<-s.server.Context().Done()
-		})
-	go func() {
-		_ = s.streamSender.recvEventLoop()
-	}()
-	s.streamSender.recvMonitor()
+func (s *streamSenderSuite) TestLivenessMonitor() {
+
+	livenessMonitor(
+		s.streamSender.recvSignalChan,
+		time.Millisecond,
+		s.streamSender.shutdownChan,
+		s.streamSender.Stop,
+		s.streamSender.logger,
+	)
 	s.False(s.streamSender.IsValid())
 }
