@@ -4,7 +4,6 @@ package elasticsearch
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -13,7 +12,6 @@ import (
 	"time"
 
 	"github.com/dgryski/go-farm"
-	"github.com/olivere/elastic/v7"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -34,7 +32,7 @@ type (
 		Stop()
 	}
 
-	// processorImpl implements Processor, it's an agent of elastic.BulkProcessor
+	// processorImpl implements Processor, it's an agent of ES bulk processor
 	processorImpl struct {
 		status                  int32
 		bulkProcessor           client.BulkProcessor
@@ -159,7 +157,7 @@ func (p *processorImpl) Add(request *client.BulkableRequest, visibilityTaskKey s
 	defer p.shutdownLock.RUnlock()
 
 	if atomic.LoadInt32(&p.status) == common.DaemonStatusStopped {
-		p.logger.Warn("Rejecting ES request for visibility task key because processor has been shut down.", tag.Key(visibilityTaskKey), tag.ESDocID(request.ID), tag.Value(request.Doc))
+		p.logger.Warn("Rejecting ES request for visibility task key because processor has been shut down.", tag.Key(visibilityTaskKey), tag.ESDocID(request.ID), tag.Value(request.Document))
 		newFuture.future.Set(false, errVisibilityShutdown)
 		return newFuture.future
 	}
@@ -170,7 +168,7 @@ func (p *processorImpl) Add(request *client.BulkableRequest, visibilityTaskKey s
 			p.logger.Fatal(fmt.Sprintf("mapToAckFuture has item of a wrong type %T (%T expected).", value, &ackFuture{}), tag.Value(key))
 		}
 
-		p.logger.Warn("Skipping duplicate ES request for visibility task key.", tag.Key(visibilityTaskKey), tag.ESDocID(request.ID), tag.Value(request.Doc), tag.NewDurationTag("interval-between-duplicates", newFuture.createdAt.Sub(existingFuture.createdAt)))
+		p.logger.Warn("Skipping duplicate ES request for visibility task key.", tag.Key(visibilityTaskKey), tag.ESDocID(request.ID), tag.Value(request.Document), tag.NewDurationTag("interval-between-duplicates", newFuture.createdAt.Sub(existingFuture.createdAt)))
 		metrics.ElasticsearchBulkProcessorDuplicateRequest.With(p.metricsHandler).Record(1)
 		newFuture = existingFuture
 		return nil
@@ -183,7 +181,7 @@ func (p *processorImpl) Add(request *client.BulkableRequest, visibilityTaskKey s
 }
 
 // bulkBeforeAction is triggered before bulk processor commit
-func (p *processorImpl) bulkBeforeAction(_ int64, requests []elastic.BulkableRequest) {
+func (p *processorImpl) bulkBeforeAction(_ int64, requests []*client.BulkableRequest) {
 	metrics.ElasticsearchBulkProcessorRequests.With(p.metricsHandler).Record(int64(len(requests)))
 	p.metricsHandler.Histogram(metrics.ElasticsearchBulkProcessorBulkSize.Name(), metrics.ElasticsearchBulkProcessorBulkSize.Unit()).
 		Record(int64(len(requests)))
@@ -205,13 +203,25 @@ func (p *processorImpl) bulkBeforeAction(_ int64, requests []elastic.BulkableReq
 }
 
 // bulkAfterAction is triggered after bulk processor commit
-func (p *processorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRequest, response *elastic.BulkResponse, err error) {
+func (p *processorImpl) bulkAfterAction(_ int64, requests []*client.BulkableRequest, response *client.BulkResponse, err error) {
 	if err != nil {
 		const logFirstNRequests = 5
 		var httpStatus int
-		var esErr *elastic.Error
-		if errors.As(err, &esErr) {
-			httpStatus = esErr.Status
+
+		// For V8 client, extract status from error message if possible
+		errStr := err.Error()
+		if strings.Contains(errStr, "400") {
+			httpStatus = 400
+		} else if strings.Contains(errStr, "401") {
+			httpStatus = 401
+		} else if strings.Contains(errStr, "403") {
+			httpStatus = 403
+		} else if strings.Contains(errStr, "404") {
+			httpStatus = 404
+		} else if strings.Contains(errStr, "409") {
+			httpStatus = 409
+		} else if strings.Contains(errStr, "500") {
+			httpStatus = 500
 		}
 
 		var logRequests strings.Builder
@@ -255,14 +265,14 @@ func (p *processorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRequ
 			continue
 		}
 
-		if !isSuccess(responseItem) {
+		if !isSuccessResponseItem(responseItem) {
 			p.logger.Error("ES request failed.",
-				tag.ESResponseStatus(responseItem.Status),
-				tag.ESResponseError(extractErrorReason(responseItem)),
+				tag.ESResponseStatus(getResponseItemStatus(responseItem)),
+				tag.ESResponseError(extractErrorReasonFromResponseItem(responseItem)),
 				tag.Key(visibilityTaskKey),
 				tag.ESDocID(docID),
 				tag.ESRequest(request.String()))
-			metrics.ElasticsearchBulkProcessorFailures.With(p.metricsHandler).Record(1, metrics.HttpStatusTag(responseItem.Status))
+			metrics.ElasticsearchBulkProcessorFailures.With(p.metricsHandler).Record(1, metrics.HttpStatusTag(getResponseItemStatus(responseItem)))
 			p.notifyResult(visibilityTaskKey, false)
 			continue
 		}
@@ -275,16 +285,56 @@ func (p *processorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRequ
 		Record(int64(p.mapToAckFuture.Len()))
 }
 
-func (p *processorImpl) buildResponseIndex(response *elastic.BulkResponse) map[string]*elastic.BulkResponseItem {
-	result := make(map[string]*elastic.BulkResponseItem)
+func (p *processorImpl) buildResponseIndex(response *client.BulkResponse) map[string]map[string]interface{} {
+	result := make(map[string]map[string]interface{})
 	for _, operationResponseItemMap := range response.Items {
-		for _, responseItem := range operationResponseItemMap {
-			existingResponseItem, duplicateID := result[responseItem.Id]
-			// In some rare cases, there might be duplicate document Ids in the same bulk.
-			// (for example, if two sequential upsert search attributes operation for the same workflow run end up being in the same bulk request)
-			// In this case, item with greater status code (error) will overwrite existing item with smaller status code.
-			if !duplicateID || existingResponseItem.Status < responseItem.Status {
-				result[responseItem.Id] = responseItem
+		for _, responseItemRaw := range operationResponseItemMap {
+			// Convert interface{} to map[string]interface{}
+			responseItem, ok := responseItemRaw.(map[string]interface{})
+			if !ok {
+				continue
+			}
+
+			// Extract ID and status from the response item
+			var id string
+			var status int
+
+			if idVal, ok := responseItem["_id"]; ok {
+				if idStr, ok := idVal.(string); ok {
+					id = idStr
+				}
+			}
+
+			if statusVal, ok := responseItem["status"]; ok {
+				if statusFloat, ok := statusVal.(float64); ok {
+					status = int(statusFloat)
+				} else if statusInt, ok := statusVal.(int); ok {
+					status = statusInt
+				}
+			}
+
+			if id != "" {
+				existingResponseItem, duplicateID := result[id]
+				// In some rare cases, there might be duplicate document Ids in the same bulk.
+				// (for example, if two sequential upsert search attributes operation for the same workflow run end up being in the same bulk request)
+				// In this case, item with greater status code (error) will overwrite existing item with smaller status code.
+				if !duplicateID {
+					result[id] = responseItem
+				} else {
+					// Check existing status
+					var existingStatus int
+					if statusVal, ok := existingResponseItem["status"]; ok {
+						if statusFloat, ok := statusVal.(float64); ok {
+							existingStatus = int(statusFloat)
+						} else if statusInt, ok := statusVal.(int); ok {
+							existingStatus = statusInt
+						}
+					}
+
+					if existingStatus < status {
+						result[id] = responseItem
+					}
+				}
 			}
 		}
 	}
@@ -304,89 +354,34 @@ func (p *processorImpl) notifyResult(visibilityTaskKey string, ack bool) {
 	})
 }
 
-func (p *processorImpl) extractVisibilityTaskKey(request elastic.BulkableRequest) string {
-	req, err := request.Source()
-	if err != nil {
-		p.logger.Error("Unable to get ES request source.", tag.Error(err), tag.ESRequest(request.String()))
+func (p *processorImpl) extractVisibilityTaskKey(request *client.BulkableRequest) string {
+	if request.RequestType == client.BulkableRequestTypeIndex {
+		// For index requests, look in the document
+		if request.Document != nil {
+			if k, ok := request.Document[searchattribute.VisibilityTaskKey]; ok {
+				if str, ok := k.(string); ok {
+					return str
+				}
+				// If visibility task key exists but is not a string, this is a programming error
+				panic(fmt.Sprintf("VisibilityTaskKey must be a string, got %T", k))
+			}
+		}
+		p.logger.Error("Unable to extract VisibilityTaskKey from ES request.", tag.ESRequest(request.String()))
 		metrics.ElasticsearchBulkProcessorCorruptedData.With(p.metricsHandler).Record(1)
 		return ""
-	}
-
-	if len(req) == 2 { // index or update requests
-		var body map[string]interface{}
-		if err = json.Unmarshal([]byte(req[1]), &body); err != nil {
-			p.logger.Error("Unable to unmarshal ES request body.", tag.Error(err))
-			metrics.ElasticsearchBulkProcessorCorruptedData.With(p.metricsHandler).Record(1)
-			return ""
-		}
-
-		k, ok := body[searchattribute.VisibilityTaskKey]
-		if !ok {
-			p.logger.Error("Unable to extract VisibilityTaskKey from ES request.", tag.ESRequest(request.String()))
-			metrics.ElasticsearchBulkProcessorCorruptedData.With(p.metricsHandler).Record(1)
-			return ""
-		}
-		return k.(string)
 	} else { // delete requests
 		return p.extractDocID(request)
 	}
 }
 
-func (p *processorImpl) extractDocID(request elastic.BulkableRequest) string {
-	req, err := request.Source()
-	if err != nil {
-		p.logger.Error("Unable to get ES request source.", tag.Error(err), tag.ESRequest(request.String()))
-		metrics.ElasticsearchBulkProcessorCorruptedData.With(p.metricsHandler).Record(1)
-
-		return ""
-	}
-
-	var body map[string]map[string]interface{}
-	if err = json.Unmarshal([]byte(req[0]), &body); err != nil {
-		p.logger.Error("Unable to unmarshal ES request body.", tag.Error(err), tag.ESRequest(request.String()))
-		metrics.ElasticsearchBulkProcessorCorruptedData.With(p.metricsHandler).Record(1)
-		return ""
-	}
-
-	// There should be only one operation "index" or "delete".
-	for _, opMap := range body {
-		_id, ok := opMap["_id"]
-		if ok {
-			return _id.(string)
-		}
+func (p *processorImpl) extractDocID(request *client.BulkableRequest) string {
+	// For our new implementation, just return the ID directly
+	if request.ID != "" {
+		return request.ID
 	}
 
 	p.logger.Error("Unable to extract _id from ES request.", tag.ESRequest(request.String()))
 	metrics.ElasticsearchBulkProcessorCorruptedData.With(p.metricsHandler).Record(1)
-	return ""
-}
-
-func isSuccess(item *elastic.BulkResponseItem) bool {
-	if item.Status >= 200 && item.Status < 300 {
-		return true
-	}
-
-	// Ignore version conflict.
-	if item.Status == 409 {
-		return true
-	}
-
-	if item.Status == 404 {
-		if item.Error != nil && item.Error.Type == "index_not_found_exception" {
-			return false
-		}
-
-		// Ignore document not found during delete operation.
-		return true
-	}
-
-	return false
-}
-
-func extractErrorReason(resp *elastic.BulkResponseItem) string {
-	if resp.Error != nil {
-		return resp.Error.Reason
-	}
 	return ""
 }
 
@@ -423,4 +418,61 @@ func (a *ackFuture) done(ack bool, metricsHandler metrics.Handler) {
 	if !a.startedAt.IsZero() {
 		metrics.ElasticsearchBulkProcessorCommitLatency.With(metricsHandler).Record(doneAt.Sub(a.startedAt))
 	}
+}
+
+// Helper functions to extract information from Elasticsearch bulk response items
+func getResponseItemStatus(item map[string]interface{}) int {
+	if statusVal, ok := item["status"]; ok {
+		if statusFloat, ok := statusVal.(float64); ok {
+			return int(statusFloat)
+		} else if statusInt, ok := statusVal.(int); ok {
+			return statusInt
+		}
+	}
+	return 0
+}
+
+func getResponseItemError(item map[string]interface{}) map[string]interface{} {
+	if errorVal, ok := item["error"]; ok {
+		if errorMap, ok := errorVal.(map[string]interface{}); ok {
+			return errorMap
+		}
+	}
+	return nil
+}
+
+func isSuccessResponseItem(item map[string]interface{}) bool {
+	status := getResponseItemStatus(item)
+	if status >= 200 && status < 300 {
+		return true
+	}
+
+	// Ignore version conflict.
+	if status == 409 {
+		return true
+	}
+
+	if status == 404 {
+		errorInfo := getResponseItemError(item)
+		if errorInfo != nil {
+			if errorType, ok := errorInfo["type"].(string); ok && errorType == "index_not_found_exception" {
+				return false
+			}
+		}
+
+		// Ignore document not found during delete operation.
+		return true
+	}
+
+	return false
+}
+
+func extractErrorReasonFromResponseItem(item map[string]interface{}) string {
+	errorInfo := getResponseItemError(item)
+	if errorInfo != nil {
+		if reason, ok := errorInfo["reason"].(string); ok {
+			return reason
+		}
+	}
+	return ""
 }
