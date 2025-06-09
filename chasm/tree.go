@@ -2052,6 +2052,7 @@ func (n *Node) ValidateSideEffectTask(
 		return nil, serviceerror.NewInternalf("ValidateSideEffectTask called on a Pure task '%s'", taskType)
 	}
 
+	// TODO - cache deserialized task
 	taskValue, err := deserializeTask(registrableTask, taskInfo.Data)
 	if err != nil {
 		return nil, err
@@ -2077,7 +2078,10 @@ func (n *Node) ValidateSideEffectTask(
 }
 
 // ExecuteSideEffectTask executes the given ChasmTask on its associated node
-// without holding the entity lock. The task is validated before execution.
+// without holding the entity lock.
+//
+// WARNING: This method *must not* access the node's properties without first
+// locking the entity.
 //
 // ctx should have a CHASM engine already set.
 func (n *Node) ExecuteSideEffectTask(
