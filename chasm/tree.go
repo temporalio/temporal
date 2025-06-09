@@ -61,7 +61,7 @@ type (
 
 		parent   *Node
 		children map[string]*Node // child name (path segment) -> child node
-		nodeName string           // key of this node in parent's children map.
+		nodeName string           // key of this node in parent's children map, empty string for root node.
 
 		// Type of attributes controls the type of the node.
 		serializedNode *persistencespb.ChasmNode // serialized component | data | collection with metadata
@@ -565,7 +565,7 @@ func (n *Node) syncSubComponents() error {
 	if n.value == nil {
 		return nil
 	}
-	return n.syncSubComponentsInternal(RootPath)
+	return n.syncSubComponentsInternal(rootPath)
 }
 
 func (n *Node) syncSubComponentsInternal(
@@ -1590,7 +1590,7 @@ func (n *Node) encodedPath() (string, error) {
 
 func (n *Node) path() []string {
 	if n.parent == nil {
-		return []string{n.nodeName}
+		return []string{}
 	}
 
 	return append(n.parent.path(), n.nodeName)
