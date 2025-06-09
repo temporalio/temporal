@@ -27,6 +27,7 @@ import (
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testvars"
+	"go.temporal.io/server/service/history/workflow/update"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -2952,7 +2953,7 @@ func (s *UpdateWorkflowSuite) TestStartedSpeculativeWorkflowTask_TerminateWorkfl
 	s.Error(updateResult.err)
 	var notFound *serviceerror.NotFound
 	s.ErrorAs(updateResult.err, &notFound)
-	s.Equal("workflow execution already completed", updateResult.err.Error())
+	s.ErrorContains(updateResult.err, update.WorkflowCompletedErr.Error())
 	s.Nil(updateResult.response)
 
 	s.Equal(2, wtHandlerCalls)
@@ -3039,7 +3040,7 @@ func (s *UpdateWorkflowSuite) TestScheduledSpeculativeWorkflowTask_TerminateWork
 	s.Error(updateResult.err)
 	var notFound *serviceerror.NotFound
 	s.ErrorAs(updateResult.err, &notFound)
-	s.Equal("workflow execution already completed", updateResult.err.Error())
+	s.ErrorContains(updateResult.err, update.WorkflowCompletedErr.Error())
 	s.Nil(updateResult.response)
 
 	s.Equal(1, wtHandlerCalls)
@@ -3083,10 +3084,10 @@ func (s *UpdateWorkflowSuite) TestCompleteWorkflow_AbortUpdates() {
 			name:        "update admitted",
 			description: "update in stateAdmitted must get an error",
 			updateErr: map[string]string{
-				"workflow completed":                      "workflow execution already completed",
+				"workflow completed":                      update.WorkflowCompletedErr.Error(),
 				"workflow continued as new without runID": "workflow operation can not be applied because workflow is closing",
 				"workflow continued as new with runID":    "workflow operation can not be applied because workflow is closing",
-				"workflow failed":                         "workflow execution already completed",
+				"workflow failed":                         update.WorkflowCompletedErr.Error(),
 			},
 			updateFailure: "",
 			commands:      func(_ *testvars.TestVars) []*commandpb.Command { return nil },

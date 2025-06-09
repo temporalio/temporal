@@ -8,8 +8,10 @@ import (
 )
 
 var (
-	registryClearedErr  = errors.New("update registry was cleared")
-	workflowTaskFailErr = serviceerror.NewWorkflowNotReady("Unable to perform workflow execution update due to unexpected workflow task failure.")
+	registryClearedErr       = errors.New("update registry was cleared")
+	WorkflowUpdateAbortedErr = serviceerror.NewUnavailable("workflow update was aborted")
+	WorkflowCompletedErr     = serviceerror.NewNotFound("update aborted by closing workflow")
+	workflowTaskFailErr      = serviceerror.NewWorkflowNotReady("Unable to perform workflow execution update due to unexpected workflow task failure.")
 )
 
 var (
@@ -17,7 +19,7 @@ var (
 		Message: "Workflow Update is rejected because it wasn't processed by worker. Probably, Workflow Update is not supported by the worker.",
 		Source:  "Server",
 		FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
-			Type:         "UnprocessedUpdate",
+			Type:         "UnprocessedUpdategit",
 			NonRetryable: true,
 		}},
 	}

@@ -18,10 +18,6 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 )
 
-var (
-	WorkflowUpdateAbortedErr = serviceerror.NewUnavailable("Workflow Update was aborted.")
-)
-
 type (
 	// Update docs are at /docs/architecture/workflow-update.md.
 	Update struct {
