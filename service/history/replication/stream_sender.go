@@ -35,8 +35,8 @@ import (
 )
 
 const (
-	TaskMaxSkipCount           int = 1000
-	SyncTaskIntervalMultiplier int = 3
+	TaskMaxSkipCount           = 1000
+	SyncTaskIntervalMultiplier = 3
 )
 
 type (
