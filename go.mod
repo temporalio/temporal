@@ -13,7 +13,6 @@ require (
 	github.com/blang/semver/v4 v4.0.0
 	github.com/cactus/go-statsd-client/v5 v5.1.0
 	github.com/dgryski/go-farm v0.0.0-20240924180020-3414d57e47da
-	github.com/elastic/go-elasticsearch/v8 v8.18.0
 	github.com/emirpasic/gods v1.18.1
 	github.com/fatih/color v1.18.0
 	github.com/go-faker/faker/v4 v4.6.0
@@ -34,6 +33,7 @@ require (
 	github.com/mitchellh/mapstructure v1.5.0
 	github.com/nexus-rpc/sdk-go v0.3.0
 	github.com/olekukonko/tablewriter v0.0.5
+	github.com/olivere/elastic/v7 v7.0.32
 	github.com/pborman/uuid v1.2.1
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.21.0
@@ -80,7 +80,11 @@ require (
 	modernc.org/sqlite v1.34.1
 )
 
-require github.com/elastic/elastic-transport-go/v8 v8.7.0 // indirect
+require (
+	github.com/josharian/intern v1.0.0 // indirect
+	github.com/json-iterator/go v1.1.12 // indirect
+	github.com/mailru/easyjson v0.7.7 // indirect
+)
 
 require (
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.6.10 // indirect
@@ -117,7 +121,7 @@ require (
 	github.com/apache/thrift v0.21.0 // indirect
 	github.com/aws/aws-sdk-go-v2 v1.36.3
 	github.com/aws/aws-sdk-go-v2/config v1.29.15
-	github.com/aws/aws-sdk-go-v2/credentials v1.17.68
+	github.com/aws/aws-sdk-go-v2/credentials v1.17.68 // indirect
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.80.1
 	github.com/benbjohnson/clock v1.3.5 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
