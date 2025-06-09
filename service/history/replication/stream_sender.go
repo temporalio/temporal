@@ -131,7 +131,7 @@ func (s *StreamSenderImpl) Start() {
 	}
 
 	go WrapEventLoop(s.server.Context(), s.recvEventLoop, s.Stop, s.logger, s.metrics, s.clientShardKey, s.serverShardKey, s.config)
-	go s.recvMonitor()
+	go livenessMonitor(s.recvSignalChan, s.config.ReplicationStreamSyncStatusDuration()*SyncTaskIntervalMultiplier, s.shutdownChan, s.Stop, s.logger)
 	s.logger.Info("StreamSender started.")
 }
 
@@ -204,28 +204,6 @@ func (s *StreamSenderImpl) recvEventLoop() (retErr error) {
 		}
 	}
 	return nil
-}
-
-func (s *StreamSenderImpl) recvMonitor() {
-	heartbeatTimeout := time.NewTimer(s.config.ReplicationStreamSyncStatusDuration() * SyncTaskIntervalMultiplier)
-	defer heartbeatTimeout.Stop()
-
-	for !s.shutdownChan.IsShutdown() {
-		select {
-		case <-s.recvSignalChan:
-			if !heartbeatTimeout.Stop() {
-				select {
-				case <-heartbeatTimeout.C:
-				default:
-				}
-			}
-			heartbeatTimeout.Reset(s.config.ReplicationStreamSyncStatusDuration() * SyncTaskIntervalMultiplier)
-		case <-heartbeatTimeout.C:
-			s.logger.Warn("StreamSender failed to receive sync status from target cluster")
-			s.Stop()
-			return
-		}
-	}
 }
 
 func (s *StreamSenderImpl) sendEventLoop(priority enumsspb.TaskPriority) (retErr error) {

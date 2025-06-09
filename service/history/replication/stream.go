@@ -8,6 +8,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/channel"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -87,6 +88,34 @@ func WrapEventLoop(
 		return nil
 	}
 	_ = backoff.ThrottleRetry(ops, streamRetryPolicy, isRetryableError)
+}
+
+func livenessMonitor(
+	signalChan <-chan struct{},
+	timeout time.Duration,
+	shutdownChan channel.ShutdownOnce,
+	stopStream func(),
+	logger log.Logger,
+) {
+	heartbeatTimeout := time.NewTimer(timeout)
+	defer heartbeatTimeout.Stop()
+
+	for !shutdownChan.IsShutdown() {
+		select {
+		case <-signalChan:
+			if !heartbeatTimeout.Stop() {
+				select {
+				case <-heartbeatTimeout.C:
+				default:
+				}
+			}
+			heartbeatTimeout.Reset(timeout)
+		case <-heartbeatTimeout.C:
+			logger.Warn("Stream failed to receive sync status from target cluster")
+			stopStream()
+			return
+		}
+	}
 }
 
 func isRetryableError(err error) bool {
