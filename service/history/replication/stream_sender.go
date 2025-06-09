@@ -36,7 +36,7 @@ import (
 
 const (
 	TaskMaxSkipCount           = 1000
-	SyncTaskIntervalMultiplier = 3
+	SyncTaskIntervalMultiplier = 10
 )
 
 type (
@@ -213,8 +213,13 @@ func (s *StreamSenderImpl) recvMonitor() {
 	for !s.shutdownChan.IsShutdown() {
 		select {
 		case <-s.recvSignalChan:
-			heartbeatTimeout.Stop()
-			heartbeatTimeout = time.NewTimer(s.config.ReplicationStreamSyncStatusDuration() * SyncTaskIntervalMultiplier)
+			if !heartbeatTimeout.Stop() {
+				select {
+				case <-heartbeatTimeout.C:
+				default:
+				}
+			}
+			heartbeatTimeout.Reset(s.config.ReplicationStreamSyncStatusDuration() * SyncTaskIntervalMultiplier)
 		case <-heartbeatTimeout.C:
 			s.logger.Warn("StreamSender failed to receive sync status from target cluster")
 			s.Stop()
@@ -447,8 +452,13 @@ func (s *StreamSenderImpl) sendLive(
 			return err
 		}
 		beginInclusiveWatermark = endExclusiveWatermark
-		syncStatusTimer.Stop()
-		syncStatusTimer = time.NewTimer(s.config.ReplicationStreamSendEmptyTaskDuration())
+		if !syncStatusTimer.Stop() {
+			select {
+			case <-syncStatusTimer.C:
+			default:
+			}
+		}
+		syncStatusTimer.Reset(s.config.ReplicationStreamSendEmptyTaskDuration())
 		return nil
 	}
 
