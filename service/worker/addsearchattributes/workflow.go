@@ -5,10 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"maps"
-	"net/http"
+	"strings"
 	"time"
 
-	"github.com/olivere/elastic/v7"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
@@ -134,17 +133,31 @@ func (a *activities) AddESMappingFieldActivity(ctx context.Context, params Workf
 }
 
 func (a *activities) isRetryableError(err error) bool {
-	var esErr *elastic.Error
-	if !errors.As(err, &esErr) {
-		return true
+	// For V8 client, we check status codes from HTTP errors
+	// This is a simplified approach since go-elasticsearch v8 doesn't have a specific Error type
+	errStr := err.Error()
+
+	// Check for common non-retryable status codes in error message
+	if containsAnyOfSubstrings(errStr, []string{
+		"400", "Bad Request",
+		"401", "Unauthorized",
+		"403", "Forbidden",
+		"404", "Not Found",
+		"409", "Conflict",
+	}) {
+		return false
 	}
 
-	switch esErr.Status {
-	case http.StatusBadRequest, http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound, http.StatusConflict:
-		return false
-	default:
-		return true
+	return true
+}
+
+func containsAnyOfSubstrings(str string, substrings []string) bool {
+	for _, substr := range substrings {
+		if strings.Contains(str, substr) {
+			return true
+		}
 	}
+	return false
 }
 
 func (a *activities) WaitForYellowStatusActivity(ctx context.Context, indexName string) error {
