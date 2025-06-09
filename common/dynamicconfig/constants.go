@@ -960,11 +960,7 @@ Wildcards (*) are expanded to allow any substring. By default blacklist is empty
 		`FrontendEnableExecuteMultiOperation enables the ExecuteMultiOperation API in the frontend.
 The API is under active development.`,
 	)
-	EnableExecuteMultiOperationErrorDebug = NewNamespaceBoolSetting(
-		"history.enableExecuteMultiOperationErrorDebug",
-		false,
-		`Enable detailed MultiOperation error debug information in the history service.`,
-	)
+
 	FrontendEnableUpdateWorkflowExecutionAsyncAccepted = NewNamespaceBoolSetting(
 		"frontend.enableUpdateWorkflowExecutionAsyncAccepted",
 		true,
@@ -2707,12 +2703,6 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		"system.logAllReqErrors",
 		false,
 		`When set to true, logs all RPC/request errors for the namespace, not just unexpected ones.`,
-	)
-
-	ActivityAPIsEnabled = NewNamespaceBoolSetting(
-		"frontend.activityAPIsEnabled",
-		false,
-		`ActivityAPIsEnabled is a "feature enable" flag. `,
 	)
 
 	WorkflowRulesAPIsEnabled = NewNamespaceBoolSetting(
