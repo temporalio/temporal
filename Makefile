@@ -8,7 +8,7 @@ bins: temporal-server temporal-cassandra-tool temporal-sql-tool tdbg
 # Install all tools, recompile proto files, run all possible checks and tests (long but comprehensive).
 all: clean proto bins check test
 
-# Used in CI
+# Used in CI.
 ci-build-misc: \
 	print-go-version \
 	clean-tools \
@@ -369,6 +369,7 @@ lint-protos: $(BUF) $(INTERNAL_BINPB)
 	@printf $(COLOR) "Linting proto definitions..."
 	@$(BUF) lint $(INTERNAL_BINPB)
 
+# Edit proto/internal/buf.yaml to exclude specific files from this check.
 buf-breaking: $(BUF) $(API_BINPB) $(INTERNAL_BINPB)
 	@printf $(COLOR) "Run buf breaking proto changes check..."
 	@env BUF=$(BUF) API_BINPB=$(API_BINPB) INTERNAL_BINPB=$(INTERNAL_BINPB) MAIN_BRANCH=$(MAIN_BRANCH) \
