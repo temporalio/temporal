@@ -27,6 +27,7 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/fxutil"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
@@ -359,7 +360,7 @@ func (c *TemporalImpl) startFrontend() {
 			temporal.ServiceTracingModule,
 			frontend.Module,
 			fx.Populate(&namespaceRegistry, &rpcFactory, &historyRawClient, &matchingRawClient, &grpcResolver),
-			temporal.FxLogAdapter,
+			fxutil.LogAdapter,
 			c.getFxOptionsForService(primitives.FrontendService),
 		)
 		err := app.Err()
@@ -433,7 +434,7 @@ func (c *TemporalImpl) startHistory() {
 			history.QueueModule,
 			history.Module,
 			replication.Module,
-			temporal.FxLogAdapter,
+			fxutil.LogAdapter,
 			c.getFxOptionsForService(primitives.HistoryService),
 			fx.Populate(&namespaceRegistry),
 		)
@@ -488,7 +489,7 @@ func (c *TemporalImpl) startMatching() {
 			temporal.TraceExportModule,
 			temporal.ServiceTracingModule,
 			matching.Module,
-			temporal.FxLogAdapter,
+			fxutil.LogAdapter,
 			c.getFxOptionsForService(primitives.MatchingService),
 			fx.Populate(&namespaceRegistry),
 		)
@@ -553,7 +554,7 @@ func (c *TemporalImpl) startWorker() {
 			temporal.TraceExportModule,
 			temporal.ServiceTracingModule,
 			worker.Module,
-			temporal.FxLogAdapter,
+			fxutil.LogAdapter,
 			c.getFxOptionsForService(primitives.WorkerService),
 			fx.Populate(&namespaceRegistry),
 		)
