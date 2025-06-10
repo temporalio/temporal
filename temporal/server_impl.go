@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
@@ -36,6 +37,7 @@ type (
 		persistenceFactoryProvider persistenceClient.FactoryProviderFn
 		metricsHandler             metrics.Handler
 		tracerProvider             trace.TracerProvider
+		payloadSerializer          serialization.Serializer
 	}
 )
 
@@ -57,6 +59,7 @@ func NewServerFxImpl(
 	namespaceLogger resource.NamespaceLogger,
 	stoppedCh chan interface{},
 	servicesGroup ServicesGroupIn,
+	payloadSerializer serialization.Serializer,
 	persistenceConfig config.Persistence,
 	clusterMetadata *cluster.Config,
 	persistenceFactoryProvider persistenceClient.FactoryProviderFn,
@@ -66,6 +69,7 @@ func NewServerFxImpl(
 		so:                         opts,
 		stoppedCh:                  stoppedCh,
 		logger:                     logger,
+		payloadSerializer:          payloadSerializer,
 		namespaceLogger:            namespaceLogger,
 		persistenceConfig:          persistenceConfig,
 		clusterMetadata:            clusterMetadata,
@@ -88,6 +92,7 @@ func (s *ServerImpl) Start(ctx context.Context) error {
 		ctx,
 		&s.persistenceConfig,
 		s.clusterMetadata.CurrentClusterName,
+		s.payloadSerializer,
 		s.so.persistenceServiceResolver,
 		s.persistenceFactoryProvider,
 		s.logger,
@@ -143,6 +148,7 @@ func initSystemNamespaces(
 	ctx context.Context,
 	cfg *config.Persistence,
 	currentClusterName string,
+	payloadSerializer serialization.Serializer,
 	persistenceServiceResolver resolver.ServiceResolver,
 	persistenceFactoryProvider persistenceClient.FactoryProviderFn,
 	logger log.Logger,
@@ -165,6 +171,7 @@ func initSystemNamespaces(
 		Cfg:                        cfg,
 		PersistenceMaxQPS:          nil,
 		PersistenceNamespaceMaxQPS: nil,
+		PayloadSerializer:          payloadSerializer,
 		ClusterName:                persistenceClient.ClusterName(currentClusterName),
 		MetricsHandler:             metricsHandler,
 		Logger:                     logger,

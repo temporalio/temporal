@@ -5722,14 +5722,12 @@ func (s *engineSuite) TestGetWorkflowExecutionHistory_RawHistoryWithTransientWor
 			},
 			wft1StartedEvent, // EventID=3
 		},
-		enumspb.ENCODING_TYPE_PROTO3,
 	)
 	s.NoError(err)
 	historyBlob2, err := s.mockShard.GetPayloadSerializer().SerializeEvents(
 		[]*historypb.HistoryEvent{
 			wft1FailedEvent, // EventID=4
 		},
-		enumspb.ENCODING_TYPE_PROTO3,
 	)
 	s.NoError(err)
 	s.mockExecutionMgr.EXPECT().ReadRawHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
@@ -5819,14 +5817,12 @@ func (s *engineSuite) TestGetWorkflowExecutionHistory_RawHistoryWithSpeculativeW
 			},
 			wft1StartedEvent, // EventID=3
 		},
-		enumspb.ENCODING_TYPE_PROTO3,
 	)
 	s.NoError(err)
 	historyBlob2, err := s.mockShard.GetPayloadSerializer().SerializeEvents(
 		[]*historypb.HistoryEvent{
 			wft1CompletedEvent, // EventID=4
 		},
-		enumspb.ENCODING_TYPE_PROTO3,
 	)
 	s.NoError(err)
 	s.mockExecutionMgr.EXPECT().ReadRawHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{

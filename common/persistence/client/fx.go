@@ -47,6 +47,7 @@ type (
 		ClusterName                        ClusterName
 		ServiceName                        primitives.ServiceName
 		MetricsHandler                     metrics.Handler
+		PayloadSerializer                  serialization.Serializer
 		Logger                             log.Logger
 		HealthSignals                      persistence.HealthSignalAggregator
 		DynamicRateLimitingParams          DynamicRateLimitingParams
@@ -125,7 +126,7 @@ func FactoryProvider(
 		systemRequestRateLimiter,
 		namespaceRequestRateLimiter,
 		shardRequestRateLimiter,
-		serialization.NewSerializer(),
+		params.PayloadSerializer,
 		params.EventBlobCache,
 		string(params.ClusterName),
 		params.MetricsHandler,

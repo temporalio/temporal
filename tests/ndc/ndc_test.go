@@ -2112,7 +2112,7 @@ func (s *NDCFunctionalTestSuite) generateNewRunHistory(
 		}},
 	}
 
-	eventBlob, err := s.serializer.SerializeEvents([]*historypb.HistoryEvent{newRunFirstEvent}, enumspb.ENCODING_TYPE_PROTO3)
+	eventBlob, err := s.serializer.SerializeEvents([]*historypb.HistoryEvent{newRunFirstEvent})
 	s.NoError(err)
 
 	return eventBlob, newRunID
@@ -2133,7 +2133,7 @@ func (s *NDCFunctionalTestSuite) generateEventBlobs(
 	)
 	// must serialize events batch after attempt on continue as new as generateNewRunHistory will
 	// modify the NewExecutionRunId attr
-	eventBlob, err := s.serializer.SerializeEvents(batch.Events, enumspb.ENCODING_TYPE_PROTO3)
+	eventBlob, err := s.serializer.SerializeEvents(batch.Events)
 	s.NoError(err)
 	return eventBlob, newRunEventBlob, newRunID
 }
@@ -2409,7 +2409,7 @@ func (s *NDCFunctionalTestSuite) setupRemoteFrontendClients() {
 func (s *NDCFunctionalTestSuite) sizeOfHistoryEvents(
 	events []*historypb.HistoryEvent,
 ) int64 {
-	blob, err := serialization.NewSerializer().SerializeEvents(events, enumspb.ENCODING_TYPE_PROTO3)
+	blob, err := serialization.NewSerializer().SerializeEvents(events)
 	s.NoError(err)
 	return int64(len(blob.Data))
 }

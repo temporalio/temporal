@@ -553,7 +553,7 @@ func (s *chasmEngineSuite) buildPersistenceMutableState(
 func (s *chasmEngineSuite) serializeComponentState(
 	state proto.Message,
 ) *commonpb.DataBlob {
-	blob, err := serialization.ProtoEncodeBlob(state, enumspb.ENCODING_TYPE_PROTO3)
+	blob, err := serialization.NewProto3Codec().Encode(state)
 	s.NoError(err)
 	return blob
 }

@@ -19,7 +19,6 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/testing/protoassert"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testlogger"
@@ -1240,7 +1239,7 @@ func (s *nodeSuite) TestSerializeDeserializeTask() {
 	payload := &commonpb.Payload{
 		Data: []byte("some-random-data"),
 	}
-	expectedBlob, err := serialization.ProtoEncodeBlob(payload, enumspb.ENCODING_TYPE_PROTO3)
+	expectedBlob, err := protoCodec.Encode(payload)
 	s.NoError(err)
 
 	testCases := []struct {
@@ -1414,7 +1413,7 @@ func (s *nodeSuite) TestCloseTransaction_InvalidateComponentTasks() {
 	payload := &commonpb.Payload{
 		Data: []byte("some-random-data"),
 	}
-	taskBlob, err := serialization.ProtoEncodeBlob(payload, enumspb.ENCODING_TYPE_PROTO3)
+	taskBlob, err := protoCodec.Encode(payload)
 	s.NoError(err)
 
 	persistenceNodes := map[string]*persistencespb.ChasmNode{
@@ -1880,7 +1879,7 @@ func (s *nodeSuite) TestEachPureTask() {
 	payload := &commonpb.Payload{
 		Data: []byte("some-random-data"),
 	}
-	taskBlob, err := serialization.ProtoEncodeBlob(payload, enumspb.ENCODING_TYPE_PROTO3)
+	taskBlob, err := protoCodec.Encode(payload)
 	s.NoError(err)
 
 	// Set up a tree with expired and unexpired pure tasks.

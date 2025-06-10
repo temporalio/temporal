@@ -193,7 +193,7 @@ func (s *taskProcessorSuite) TestHandleReplicationTask_History() {
 		Version: 1,
 	}}
 	serializer := s.mockResource.GetPayloadSerializer()
-	data, err := serializer.SerializeEvents(events, enumspb.ENCODING_TYPE_PROTO3)
+	data, err := serializer.SerializeEvents(events)
 	s.NoError(err)
 
 	task := &replicationspb.ReplicationTask{
@@ -418,7 +418,7 @@ func (s *taskProcessorSuite) TestConvertTaskToDLQTask_History() {
 		Version: 1,
 	}}
 	serializer := s.mockResource.GetPayloadSerializer()
-	data, err := serializer.SerializeEvents(events, enumspb.ENCODING_TYPE_PROTO3)
+	data, err := serializer.SerializeEvents(events)
 	s.NoError(err)
 
 	task := &replicationspb.ReplicationTask{
@@ -468,7 +468,7 @@ func (s *taskProcessorSuite) TestPaginationFn_Success_More() {
 		Version: 1,
 	}}
 	serializer := s.mockResource.GetPayloadSerializer()
-	data, err := serializer.SerializeEvents(events, enumspb.ENCODING_TYPE_PROTO3)
+	data, err := serializer.SerializeEvents(events)
 	s.NoError(err)
 
 	syncShardTask := &replicationspb.SyncShardStatus{
@@ -541,7 +541,7 @@ func (s *taskProcessorSuite) TestPaginationFn_Success_NoMore() {
 		Version: 1,
 	}}
 	serializer := s.mockResource.GetPayloadSerializer()
-	data, err := serializer.SerializeEvents(events, enumspb.ENCODING_TYPE_PROTO3)
+	data, err := serializer.SerializeEvents(events)
 	s.NoError(err)
 
 	syncShardTask := &replicationspb.SyncShardStatus{

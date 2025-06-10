@@ -512,10 +512,7 @@ func (s *nDCHistoryResenderSuite) TestGetHistory() {
 }
 
 func (s *nDCHistoryResenderSuite) serializeEvents(events []*historypb.HistoryEvent) *commonpb.DataBlob {
-	blob, err := s.serializer.SerializeEvents(events, enumspb.ENCODING_TYPE_PROTO3)
+	blob, err := s.serializer.SerializeEvents(events)
 	s.Nil(err)
-	return &commonpb.DataBlob{
-		EncodingType: enumspb.ENCODING_TYPE_PROTO3,
-		Data:         blob.Data,
-	}
+	return blob
 }

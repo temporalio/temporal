@@ -10,7 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
-	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -138,13 +137,13 @@ func (s *executableHistoryTaskSuite) SetupTest() {
 	eventsBlob, _ := s.eventSerializer.SerializeEvents([]*historypb.HistoryEvent{{
 		EventId: firstEventID,
 		Version: version,
-	}}, enumspb.ENCODING_TYPE_PROTO3)
+	}})
 	s.events, _ = s.eventSerializer.DeserializeEvents(eventsBlob)
 	s.eventsBatches = [][]*historypb.HistoryEvent{s.events}
 	newEventsBlob, _ := s.eventSerializer.SerializeEvents([]*historypb.HistoryEvent{{
 		EventId: 1,
 		Version: version,
-	}}, enumspb.ENCODING_TYPE_PROTO3)
+	}})
 	s.newRunEvents, _ = s.eventSerializer.DeserializeEvents(newEventsBlob)
 	s.newRunID = uuid.NewString()
 
@@ -550,8 +549,8 @@ func (s *executableHistoryTaskSuite) buildExecutableHistoryTask(
 	versionHistoryItems []*historyspb.VersionHistoryItem,
 	workflowKey definition.WorkflowKey,
 ) *ExecutableHistoryTask {
-	eventsBlob, _ := s.eventSerializer.SerializeEvents(events[0], enumspb.ENCODING_TYPE_PROTO3)
-	newRunEventsBlob, _ := s.eventSerializer.SerializeEvents(newRunEvents, enumspb.ENCODING_TYPE_PROTO3)
+	eventsBlob, _ := s.eventSerializer.SerializeEvents(events[0])
+	newRunEventsBlob, _ := s.eventSerializer.SerializeEvents(newRunEvents)
 	replicationTaskAttribute := &replicationspb.HistoryTaskAttributes{
 		WorkflowId:          workflowKey.WorkflowID,
 		NamespaceId:         workflowKey.NamespaceID,
