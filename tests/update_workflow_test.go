@@ -2953,7 +2953,7 @@ func (s *UpdateWorkflowSuite) TestStartedSpeculativeWorkflowTask_TerminateWorkfl
 	s.Error(updateResult.err)
 	var notFound *serviceerror.NotFound
 	s.ErrorAs(updateResult.err, &notFound)
-	s.ErrorContains(updateResult.err, update.WorkflowCompletedErr.Error())
+	s.ErrorContains(updateResult.err, update.AbortedByWorkflowClosingErr.Error())
 	s.Nil(updateResult.response)
 
 	s.Equal(2, wtHandlerCalls)
@@ -3040,7 +3040,7 @@ func (s *UpdateWorkflowSuite) TestScheduledSpeculativeWorkflowTask_TerminateWork
 	s.Error(updateResult.err)
 	var notFound *serviceerror.NotFound
 	s.ErrorAs(updateResult.err, &notFound)
-	s.ErrorContains(updateResult.err, update.WorkflowCompletedErr.Error())
+	s.ErrorContains(updateResult.err, update.AbortedByWorkflowClosingErr.Error())
 	s.Nil(updateResult.response)
 
 	s.Equal(1, wtHandlerCalls)
@@ -3084,10 +3084,10 @@ func (s *UpdateWorkflowSuite) TestCompleteWorkflow_AbortUpdates() {
 			name:        "update admitted",
 			description: "update in stateAdmitted must get an error",
 			updateErr: map[string]string{
-				"workflow completed":                      update.WorkflowCompletedErr.Error(),
+				"workflow completed":                      update.AbortedByWorkflowClosingErr.Error(),
 				"workflow continued as new without runID": "workflow operation can not be applied because workflow is closing",
 				"workflow continued as new with runID":    "workflow operation can not be applied because workflow is closing",
-				"workflow failed":                         update.WorkflowCompletedErr.Error(),
+				"workflow failed":                         update.AbortedByWorkflowClosingErr.Error(),
 			},
 			updateFailure: "",
 			commands:      func(_ *testvars.TestVars) []*commandpb.Command { return nil },

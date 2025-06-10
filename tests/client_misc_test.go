@@ -579,7 +579,7 @@ func (s *ClientMiscTestSuite) TestWorkflowCanBeCompletedDespiteAdmittedUpdate() 
 	s.Error(updateErr)
 	var notFound *serviceerror.NotFound
 	s.ErrorAs(updateErr, &notFound)
-	s.ErrorContains(updateErr, update.WorkflowCompletedErr.Error())
+	s.ErrorContains(updateErr, update.AbortedByWorkflowClosingErr.Error())
 	updateHandle := <-updateHandleCh
 	s.Nil(updateHandle)
 	// Uncomment the following when durable admitted is implemented.

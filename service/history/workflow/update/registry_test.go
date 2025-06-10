@@ -671,7 +671,7 @@ func TestAbort(t *testing.T) {
 	upd1 := reg.Find(context.Background(), tv.WithUpdateIDNumber(1).UpdateID())
 	require.NotNil(t, upd1)
 	status1, err := upd1.WaitLifecycleStage(context.Background(), 0, 2*time.Second)
-	require.Equal(t, update.WorkflowCompletedErr, err)
+	require.Equal(t, update.AbortedByWorkflowClosingErr, err)
 	require.Nil(t, status1)
 
 	upd2 := reg.Find(context.Background(), tv.WithUpdateIDNumber(2).UpdateID())
@@ -708,7 +708,7 @@ func TestClear(t *testing.T) {
 		defer wg.Done()
 		_, err := upd.WaitLifecycleStage(
 			context.Background(), enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED, 2*time.Second)
-		require.Equal(t, update.WorkflowUpdateAbortedErr, err)
+		require.Equal(t, update.AbortedByServerErr, err)
 	}()
 
 	reg.Clear()

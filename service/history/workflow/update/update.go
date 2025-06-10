@@ -222,7 +222,7 @@ func (u *Update) WaitLifecycleStage(
 	// This error will be retried (by history service handler, or history service client in frontend,
 	// or SDK, or user client). This will recreate Update in the Registry.
 	if errors.Is(err, registryClearedErr) {
-		return nil, WorkflowUpdateAbortedErr
+		return nil, AbortedByServerErr
 	}
 
 	// TODO: assert(err == nil)
