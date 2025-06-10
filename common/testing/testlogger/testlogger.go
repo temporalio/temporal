@@ -454,7 +454,7 @@ func (tl *TestLogger) Panic(msg string, tags ...tag.Tag) {
 	tags = tl.mergeWithLoggerTags(tags)
 	tl.state.t.Helper()
 	// Forcibly fail the test when required as otherwise panics can be caught.
-	if !tl.shouldFailTest(Panic, msg, tags) {
+	if tl.shouldFailTest(Panic, msg, tags) {
 		tl.state.t.Helper()
 		tl.failTest(Panic, msg, tags...)
 	}
