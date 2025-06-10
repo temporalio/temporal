@@ -649,9 +649,7 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalBeforeTransientWork
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
-  4 WorkflowTaskFailed
-  5 WorkflowTaskScheduled // Transient WFT
-`, s.GetHistory(s.Namespace().String(), we))
+  4 WorkflowTaskFailed`, s.GetHistory(s.Namespace().String(), we))
 
 	_, err0 = s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace:         s.Namespace().String(),
@@ -667,9 +665,7 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalBeforeTransientWork
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
   4 WorkflowTaskFailed
-  5 WorkflowExecutionSignaled
-  6 WorkflowTaskScheduled // Still a Transient WFT which ID was reassigned from 5 to 6. MS and Matching still have it as 5. 
-`, s.GetHistory(s.Namespace().String(), we))
+  5 WorkflowExecutionSignaled`, s.GetHistory(s.Namespace().String(), we))
 
 	// start this transient workflow task, the attempt should be cleared and it becomes again a regular workflow task
 	resp1, err1 := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
@@ -773,9 +769,7 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterTransientWorkf
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
-  4 WorkflowTaskFailed
-  5 WorkflowTaskScheduled // Transient WFT
-`, s.GetHistory(s.Namespace().String(), we))
+  4 WorkflowTaskFailed`, s.GetHistory(s.Namespace().String(), we))
 
 	// start workflow task to make signals into bufferedEvents
 	_, err1 := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
@@ -789,10 +783,7 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterTransientWorkf
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
-  4 WorkflowTaskFailed
-  5 WorkflowTaskScheduled // Transient WFT
-  6 WorkflowTaskStarted
-`, s.GetHistory(s.Namespace().String(), we))
+  4 WorkflowTaskFailed`, s.GetHistory(s.Namespace().String(), we))
 
 	// this signal should be buffered
 	_, err0 = s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
@@ -808,10 +799,7 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterTransientWorkf
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
-  4 WorkflowTaskFailed
-  5 WorkflowTaskScheduled // Signal is buffered (not in the history), WFT is still transient.
-  6 WorkflowTaskStarted
-`, s.GetHistory(s.Namespace().String(), we))
+  4 WorkflowTaskFailed`, s.GetHistory(s.Namespace().String(), we))
 
 	// then terminate the workflow
 	_, err := s.FrontendClient().TerminateWorkflowExecution(testcore.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
@@ -894,8 +882,7 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterTransientWorkf
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
-  4 WorkflowTaskFailed
-  5 WorkflowTaskScheduled // Transient WFT `, s.GetHistory(s.Namespace().String(), we))
+  4 WorkflowTaskFailed`, s.GetHistory(s.Namespace().String(), we))
 
 	// start workflow task to make signals into bufferedEvents
 	resp1, err1 := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
@@ -909,9 +896,7 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterTransientWorkf
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
-  4 WorkflowTaskFailed
-  5 WorkflowTaskScheduled // Transient WFT
-  6 WorkflowTaskStarted`, s.GetHistory(s.Namespace().String(), we))
+  4 WorkflowTaskFailed`, s.GetHistory(s.Namespace().String(), we))
 
 	// this signal should be buffered
 	_, err0 = s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
@@ -927,9 +912,7 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterTransientWorkf
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
-  4 WorkflowTaskFailed
-  5 WorkflowTaskScheduled // Transient WFT
-  6 WorkflowTaskStarted`, s.GetHistory(s.Namespace().String(), we))
+  4 WorkflowTaskFailed`, s.GetHistory(s.Namespace().String(), we))
 
 	// fail this workflow task to flush buffer
 	_, err2 := s.FrontendClient().RespondWorkflowTaskFailed(testcore.NewContext(), &workflowservice.RespondWorkflowTaskFailedRequest{

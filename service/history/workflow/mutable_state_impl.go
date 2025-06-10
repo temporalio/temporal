@@ -2871,14 +2871,11 @@ func (ms *MutableStateImpl) ApplyWorkflowTaskStartedEvent(
 		startedEventID, requestID, timestamp, suggestContinueAsNew, historySizeBytes, versioningStamp, redirectCounter)
 }
 
-// TODO (alex-update): This needs to be renamed to "GetTransientOrSpeculativeEvents"
+// TODO (alex-update): 	Transient needs to be renamed to "TransientOrSpeculative"
 func (ms *MutableStateImpl) GetTransientWorkflowTaskInfo(
 	workflowTask *historyi.WorkflowTaskInfo,
 	identity string,
 ) *historyspb.TransientWorkflowTaskInfo {
-	if workflowTask == nil {
-		return nil
-	}
 	if !ms.IsTransientWorkflowTask() && workflowTask.Type != enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
 		return nil
 	}
