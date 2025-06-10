@@ -535,11 +535,10 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 				}
 			}
 		}
-		pollerDeployment := worker_versioning.DeploymentFromDeploymentVersion(worker_versioning.DeploymentVersionFromOptions(request.GetDeploymentOptions()))
-		wfDeployment := ms.GetEffectiveDeployment()
-		if !pollerDeployment.Equal(wfDeployment) {
-			// Do not return new wft to worker if it's version does not match wf's
-			// let the task go through matching and get dispatched to the right worker
+
+		if ms.GetDeploymentTransition() != nil {
+			// Do not return new wft to worker if the workflow is transitioning to a different deployment version.
+			// Let the task go through matching and get dispatched to the right worker
 			bypassTaskGeneration = false
 		}
 
