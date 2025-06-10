@@ -77,12 +77,12 @@ func TestDefaultPathEncoder_EncodeDecode(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		enc, err := e.Encode(tt.node, tt.path)
+		encoded, err := e.Encode(tt.node, tt.path)
 		require.NoError(t, err)
-		require.Equal(t, tt.encoded, enc)
+		require.Equal(t, tt.encoded, encoded)
 
-		dec, err := e.Decode(enc)
+		decodedPath, err := e.Decode(encoded)
 		require.NoError(t, err)
-		require.Equal(t, tt.path, dec)
+		require.Equal(t, tt.path, decodedPath)
 	}
 }
