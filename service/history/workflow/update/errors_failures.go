@@ -10,7 +10,7 @@ import (
 var (
 	registryClearedErr       = errors.New("update registry was cleared")
 	WorkflowUpdateAbortedErr = serviceerror.NewUnavailable("workflow update was aborted")
-	WorkflowCompletedErr     = serviceerror.NewNotFound("update aborted by closing workflow")
+	WorkflowCompletedErr     = serviceerror.NewNotFound("workflow update was aborted by closing workflow")
 	workflowTaskFailErr      = serviceerror.NewWorkflowNotReady("Unable to perform workflow execution update due to unexpected workflow task failure.")
 )
 
