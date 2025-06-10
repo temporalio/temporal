@@ -26,6 +26,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
+	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client/aws"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/util"
@@ -120,7 +121,7 @@ func NewVisibilityStore(
 	esHttpClient := cfg.GetHttpClient()
 	if esHttpClient == nil {
 		var err error
-		esHttpClient, err = client.NewAwsHttpClient(cfg.AWSRequestSigning)
+		esHttpClient, err = aws.NewAwsHttpClient(cfg.AWSRequestSigning)
 		if err != nil {
 			return nil, fmt.Errorf("unable to create AWS HTTP client for Elasticsearch: %w", err)
 		}

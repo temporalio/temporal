@@ -5,12 +5,12 @@
 
 set -eu -o pipefail
 
-# Clean and build the lite binary
-echo "Building temporal-server with lite tag..."
-BUILD_TAG=lite make clean temporal-server
+binary_path='test_binary'
 
-# The actual binary should be at this path (adjust if different)
-binary_path="./temporal-server"
+# Clean and build the lite binary
+echo "Building binary with lite tag..."
+#BUILD_TAG=lite make clean temporal-server
+rm -f test_binary && go test -tags test_dep,lite -count=0 -c -o $binary_path ./tests
 
 # Check if the binary exists
 if [[ ! -f "$binary_path" ]]; then

@@ -1,4 +1,6 @@
-package client
+//go:build !lite
+
+package aws
 
 import (
 	"fmt"
@@ -10,9 +12,10 @@ import (
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	elasticaws "github.com/olivere/elastic/v7/aws/v4"
+	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 )
 
-func NewAwsHttpClient(config ESAWSRequestSigningConfig) (*http.Client, error) {
+func NewAwsHttpClient(config client.ESAWSRequestSigningConfig) (*http.Client, error) {
 	if !config.Enabled {
 		return nil, nil
 	}
