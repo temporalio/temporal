@@ -5,6 +5,7 @@ package chasm
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"iter"
 	"reflect"
@@ -34,7 +35,8 @@ var (
 )
 
 var (
-	errComponentNotFound = serviceerror.NewNotFound("component not found")
+	errComponentNotFound    = serviceerror.NewNotFound("component not found")
+	errTaskValidationFailed = errors.New("task validation failed")
 )
 
 type valueState uint8
@@ -134,6 +136,7 @@ type (
 	// where MutableState is defined.
 	NodeBackend interface {
 		// TODO: Add methods needed from MutateState here.
+		GetExecutionState() *persistencespb.WorkflowExecutionState
 		GetExecutionInfo() *persistencespb.WorkflowExecutionInfo
 		GetCurrentVersion() int64
 		NextTransitionCount() int64
@@ -294,7 +297,7 @@ func (n *Node) Component(
 	// }
 
 	if ref.validationFn != nil {
-		if err := ref.validationFn(chasmContext, componentValue); err != nil {
+		if err := ref.validationFn(node.root().backend, chasmContext, componentValue); err != nil {
 			return nil, err
 		}
 	}
@@ -1982,7 +1985,7 @@ func (n *Node) ExecutePureTask(baseCtx context.Context, taskInstance any) error 
 		return fmt.Errorf("ExecutePureTask called on a SideEffect task '%s'", registrableTask.fqType())
 	}
 
-	ctx := NewContext(baseCtx, n)
+	ctx := NewMutableContext(baseCtx, n)
 
 	// Ensure this node's component value is hydrated before execution. Component
 	// will also check access rules.
@@ -2024,4 +2027,160 @@ func (n *Node) ExecutePureTask(baseCtx context.Context, taskInstance any) error 
 	// See: https://github.com/temporalio/temporal/pull/7701#discussion_r2072026993
 
 	return nil
+}
+
+// ValidateSideEffectTask runs a side effect task's associated validator,
+// returning the deserialized task instance if the task is valid. Intended for
+// use by standby executors.
+//
+// If validation succeeds but the task is invalid, nil is returned to signify the
+// task can be skipped/deleted.
+//
+// If validation fails, that error is returned.
+func (n *Node) ValidateSideEffectTask(
+	ctx context.Context,
+	registry *Registry,
+	taskInfo *persistencespb.ChasmTaskInfo,
+) (any, error) {
+	taskType := taskInfo.Type
+	registrableTask, ok := registry.task(taskType)
+	if !ok {
+		return nil, serviceerror.NewInternalf("unknown task type '%s'", taskType)
+	}
+
+	if registrableTask.isPureTask {
+		return nil, serviceerror.NewInternalf("ValidateSideEffectTask called on a Pure task '%s'", taskType)
+	}
+
+	// TODO - cache deserialized task
+	taskValue, err := deserializeTask(registrableTask, taskInfo.Data)
+	if err != nil {
+		return nil, err
+	}
+	taskInstance := taskValue.Interface()
+
+	validateCtx := NewContext(ctx, n)
+	// Component must be hydrated before the task's validator is called.
+	err = n.prepareComponentValue(validateCtx)
+	if err != nil {
+		return nil, err
+	}
+
+	valid, err := n.validateTask(validateCtx, taskInstance)
+	if err != nil {
+		return nil, err
+	}
+	if !valid {
+		return nil, nil
+	}
+
+	return taskInstance, nil
+}
+
+// ExecuteSideEffectTask executes the given ChasmTask on its associated node
+// without holding the entity lock.
+//
+// WARNING: This method *must not* access the node's properties without first
+// locking the entity.
+//
+// ctx should have a CHASM engine already set.
+func (n *Node) ExecuteSideEffectTask(
+	ctx context.Context,
+	registry *Registry,
+	entityKey EntityKey,
+	taskInfo *persistencespb.ChasmTaskInfo,
+	validate func(NodeBackend, Context, Component) error,
+) error {
+	if engineFromContext(ctx) == nil {
+		return serviceerror.NewInternal("no CHASM engine set on context")
+	}
+
+	taskType := taskInfo.Type
+	registrableTask, ok := registry.task(taskType)
+	if !ok {
+		return serviceerror.NewInternalf("unknown task type '%s'", taskType)
+	}
+
+	if registrableTask.isPureTask {
+		return serviceerror.NewInternalf("ExecuteSideEffectTask called on a Pure task '%s'", taskType)
+	}
+
+	executor := registrableTask.handler
+	if executor == nil {
+		return serviceerror.NewInternalf("no handler registered for task type '%s'", taskType)
+	}
+
+	// TODO - update ComponentRef to use the encoded path, and then leave decoding
+	// until access/dereference time.
+	path, err := n.pathEncoder.Decode(taskInfo.Ref.Path)
+	if err != nil {
+		return serviceerror.NewInternalf("failed to decode path '%s'", taskInfo.Ref.Path)
+	}
+
+	ref := ComponentRef{
+		EntityKey:          entityKey,
+		entityLastUpdateVT: taskInfo.Ref.ComponentLastUpdateVersionedTransition,
+		componentPath:      path,
+		componentInitialVT: taskInfo.Ref.ComponentInitialVersionedTransition,
+
+		// Validate the Ref only once it is accessed by the task's executor.
+		validationFn: makeValidationFn(registrableTask, validate),
+	}
+
+	taskValue, err := deserializeTask(registrableTask, taskInfo.Data)
+	if err != nil {
+		return err
+	}
+	taskInstance := taskValue.Interface()
+
+	fn := reflect.ValueOf(executor).MethodByName("Execute")
+	result := fn.Call([]reflect.Value{
+		reflect.ValueOf(ctx),
+		reflect.ValueOf(ref),
+		reflect.ValueOf(taskInstance),
+	})
+	if !result[0].IsNil() {
+		//nolint:revive // type cast result is unchecked
+		return result[0].Interface().(error)
+	}
+
+	return nil
+}
+
+// makeValidationFn adapts the TaskValidator interface to the ComponentRef's
+// validation callback format. Returns a validation function that wraps the
+// given validation callback to be called before the RegistrableTask's registered
+// validator callback. Intended for use to validate mutable state at access time.
+func makeValidationFn(
+	registrableTask *RegistrableTask,
+	validate func(NodeBackend, Context, Component) error,
+) func(NodeBackend, Context, Component) error {
+	return func(backend NodeBackend, ctx Context, component Component) error {
+		// Call the provided validation callback.
+		err := validate(backend, ctx, component)
+		if err != nil {
+			return err
+		}
+
+		// Call the TaskValidator interface.
+		fn := reflect.ValueOf(registrableTask.validator).MethodByName("Validate")
+		result := fn.Call([]reflect.Value{
+			reflect.ValueOf(backend),
+			reflect.ValueOf(ctx),
+			reflect.ValueOf(component),
+		})
+
+		// Handle err.
+		if !result[1].IsNil() {
+			//nolint:revive // type cast result is unchecked
+			return result[1].Interface().(error)
+		}
+
+		// Handle bool result.
+		if !result[0].Bool() {
+			return errTaskValidationFailed
+		}
+
+		return nil
+	}
 }

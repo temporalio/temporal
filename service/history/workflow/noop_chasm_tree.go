@@ -1,6 +1,7 @@
 package workflow
 
 import (
+	"context"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
@@ -54,4 +55,22 @@ func (*noopChasmTree) IsStale(chasm.ComponentRef) error {
 
 func (*noopChasmTree) Component(chasm.Context, chasm.ComponentRef) (chasm.Component, error) {
 	return nil, serviceerror.NewInternal("Component() method invoked on noop CHASM tree")
+}
+
+func (*noopChasmTree) ExecuteSideEffectTask(
+	ctx context.Context,
+	registry *chasm.Registry,
+	entityKey chasm.EntityKey,
+	taskInfo *persistencespb.ChasmTaskInfo,
+	validate func(chasm.NodeBackend, chasm.Context, chasm.Component) error,
+) error {
+	return nil
+}
+
+func (*noopChasmTree) ValidateSideEffectTask(
+	ctx context.Context,
+	registry *chasm.Registry,
+	taskInfo *persistencespb.ChasmTaskInfo,
+) (any, error) {
+	return nil, nil
 }

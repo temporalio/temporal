@@ -105,6 +105,8 @@ func (t *timerQueueStandbyTaskExecutor) Execute(
 		err = t.executeStateMachineTimerTask(ctx, task)
 	case *tasks.ChasmTaskPure:
 		err = t.executeChasmPureTimerTask(ctx, task)
+	case *tasks.ChasmTask:
+		err = t.executeChasmSideEffectTimerTask(ctx, task)
 	default:
 		err = queues.NewUnprocessableTaskError("unknown task type")
 	}
@@ -153,6 +155,51 @@ func (t *timerQueueStandbyTaskExecutor) executeChasmPureTimerTask(
 			task,
 			t.getCurrentTime,
 			t.config.StandbyTaskMissingEventsDiscardDelay(task.GetType()),
+			t.checkWorkflowStillExistOnSourceBeforeDiscard,
+		),
+	)
+}
+
+func (t *timerQueueStandbyTaskExecutor) executeChasmSideEffectTimerTask(
+	ctx context.Context,
+	task *tasks.ChasmTask,
+) error {
+	actionFn := func(
+		ctx context.Context,
+		wfContext historyi.WorkflowContext,
+		ms historyi.MutableState,
+	) (any, error) {
+		// Because CHASM timers can target closed workflows, we need to specifically
+		// exclude zombie workflows, instead of merely checking that the workflow is
+		// running.
+		if ms.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
+			return nil, consts.ErrWorkflowZombie
+		}
+
+		tree := ms.ChasmTree()
+		if tree == nil {
+			return nil, errNoChasmTree
+		}
+
+		taskInstance, err := tree.ValidateSideEffectTask(ctx, t.shardContext.ChasmRegistry(), task.Info)
+		if err == nil && taskInstance != nil {
+			// If a taskInstance is returned, the task is still valid, and we should keep
+			// it around.
+			return &struct{}{}, nil
+		}
+
+		return nil, err
+	}
+
+	return t.processTimer(
+		ctx,
+		task,
+		actionFn,
+		getStandbyPostActionFn(
+			task,
+			t.getCurrentTime,
+			t.config.StandbyTaskMissingEventsDiscardDelay(task.GetType()),
+			// TODO - replace this with a method for CHASM components
 			t.checkWorkflowStillExistOnSourceBeforeDiscard,
 		),
 	)
