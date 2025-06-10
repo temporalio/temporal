@@ -109,8 +109,7 @@ func livenessMonitor(
 			case <-signalChan:
 				continue
 			default:
-				// No liveness signal received. Stop the stream.
-				logger.Warn("Stream failed to receive sync status from target cluster")
+				logger.Warn("No liveness signal received. Stop the replication stream.")
 				stopStream()
 				return
 			}
