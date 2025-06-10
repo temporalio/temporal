@@ -52,7 +52,7 @@ func validateCatchupParams(params *CatchUpParams) error {
 		return temporal.NewNonRetryableApplicationError("InvalidArgument: Namespace is required", "InvalidArgument", nil)
 	}
 	if len(params.CatchupCluster) == 0 {
-		return temporal.NewNonRetryableApplicationError("InvalidArgument: RemoteCluster is required", "InvalidArgument", nil)
+		return temporal.NewNonRetryableApplicationError("InvalidArgument: CatchupCluster is required", "InvalidArgument", nil)
 	}
 
 	return nil
