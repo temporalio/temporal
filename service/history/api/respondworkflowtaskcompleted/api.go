@@ -536,6 +536,12 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			}
 		}
 
+		if ms.GetDeploymentTransition() != nil {
+			// Do not return new wft to worker if the workflow is transitioning to a different deployment version.
+			// Let the task go through matching and get dispatched to the right worker
+			bypassTaskGeneration = false
+		}
+
 		var newWTErr error
 		// If we checked WT heartbeat timeout before and WT wasn't timed out,
 		// then OriginalScheduledTime needs to be carried over to the new WT.
