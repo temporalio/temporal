@@ -48,11 +48,11 @@ var reasonStateMatrix = map[reasonState]failureError{
 	reasonState{r: AbortReasonRegistryCleared, st: stateProvisionallyAborted}: {f: nil, err: nil},
 	reasonState{r: AbortReasonRegistryCleared, st: stateAborted}:              {f: nil, err: nil},
 
-	// If the Workflow is completed, then pre-accepted Updates are aborted with non-retryable ErrWorkflowCompleted error.
-	reasonState{r: AbortReasonWorkflowCompleted, st: stateCreated}:               {f: nil, err: consts.ErrWorkflowCompleted},
-	reasonState{r: AbortReasonWorkflowCompleted, st: stateProvisionallyAdmitted}: {f: nil, err: consts.ErrWorkflowCompleted},
-	reasonState{r: AbortReasonWorkflowCompleted, st: stateAdmitted}:              {f: nil, err: consts.ErrWorkflowCompleted},
-	reasonState{r: AbortReasonWorkflowCompleted, st: stateSent}:                  {f: nil, err: consts.ErrWorkflowCompleted},
+	// If the Workflow is completed, then pre-accepted Updates are aborted with non-retryable error.
+	reasonState{r: AbortReasonWorkflowCompleted, st: stateCreated}:               {f: nil, err: AbortedByWorkflowClosingErr},
+	reasonState{r: AbortReasonWorkflowCompleted, st: stateProvisionallyAdmitted}: {f: nil, err: AbortedByWorkflowClosingErr},
+	reasonState{r: AbortReasonWorkflowCompleted, st: stateAdmitted}:              {f: nil, err: AbortedByWorkflowClosingErr},
+	reasonState{r: AbortReasonWorkflowCompleted, st: stateSent}:                  {f: nil, err: AbortedByWorkflowClosingErr},
 	// Accepted Updates are failed with special server failure because if a client knows that Update has been accepted,
 	// it expects any following requests to return an Update result (or failure) but not an error.
 	// There can be different types of Update failures coming from worker and a client must handle them anyway.
