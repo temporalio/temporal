@@ -535,6 +535,13 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 				}
 			}
 		}
+		pollerDeployment := worker_versioning.DeploymentFromDeploymentVersion(worker_versioning.DeploymentVersionFromOptions(request.GetDeploymentOptions()))
+		wfDeployment := ms.GetEffectiveDeployment()
+		if !pollerDeployment.Equal(wfDeployment) {
+			// Do not return new wft to worker if it's version does not match wf's
+			// let the task go through matching and get dispatched to the right worker
+			bypassTaskGeneration = false
+		}
 
 		var newWTErr error
 		// If we checked WT heartbeat timeout before and WT wasn't timed out,
