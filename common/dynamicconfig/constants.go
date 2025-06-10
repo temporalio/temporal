@@ -2412,6 +2412,11 @@ that task will be sent to DLQ.`,
 		time.Minute,
 		`ReplicationStreamSyncDuration is the interval to sync status when there is no replication task`,
 	)
+	ReplicationEnableRateLimit = NewGlobalBoolSetting(
+		"history.ReplicationEnableRateLimit",
+		true,
+		`ReplicationEnableRateLimit is the feature flag to enable replication global rate limiter`,
+	)
 	WorkflowIdReuseMinimalInterval = NewNamespaceDurationSetting(
 		"history.workflowIdReuseMinimalInterval",
 		1*time.Second,
