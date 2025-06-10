@@ -20,7 +20,7 @@ const (
 )
 
 var (
-	rootPath []string
+	rootPath = []string{}
 )
 
 // The Encode method encodes node path in a way that the following uses cases can be
@@ -96,7 +96,7 @@ func (e *defaultPathEncoder) Decode(
 		return rootPath, nil
 	}
 
-	segments := make([]string, 0, 3)
+	path := make([]string, 0, 3)
 	var b strings.Builder
 	escaped := false
 	for _, r := range encodedPath {
@@ -116,7 +116,7 @@ func (e *defaultPathEncoder) Decode(
 		}
 
 		if r == '$' || r == '#' {
-			segments = append(segments, b.String())
+			path = append(path, b.String())
 			b.Reset()
 			continue
 		}
@@ -127,6 +127,6 @@ func (e *defaultPathEncoder) Decode(
 		return nil, serviceerror.NewInternalf("encoded path ends with escape character: %v", encodedPath)
 	}
 
-	segments = append(segments, b.String())
-	return segments, nil
+	path = append(path, b.String())
+	return path, nil
 }
