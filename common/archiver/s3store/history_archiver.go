@@ -1,3 +1,5 @@
+//go:build !lite
+
 // S3 History Archiver will archive workflow histories to amazon s3
 
 package s3store

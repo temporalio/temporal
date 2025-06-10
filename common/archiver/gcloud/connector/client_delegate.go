@@ -1,3 +1,5 @@
+//go:build !lite
+
 //go:generate mockgen -package $GOPACKAGE -source $GOFILE -destination client_delegate_mock.go
 
 package connector

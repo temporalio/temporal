@@ -1,5 +1,7 @@
 //go:generate mockgen -package $GOPACKAGE -source query_parser.go -destination query_parser_mock.go -mock_names Interface=MockQueryParser
 
+//go:build !lite
+
 package gcloud
 
 import (

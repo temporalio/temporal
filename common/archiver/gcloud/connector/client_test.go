@@ -1,3 +1,5 @@
+//go:build !lite
+
 package connector_test
 
 import (
