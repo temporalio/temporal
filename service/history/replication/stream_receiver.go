@@ -27,6 +27,7 @@ const (
 	ReceiverModeSingleStack ReceiverMode = 1 // default mode. It only uses High Priority Task Tracker for processing tasks.
 	ReceiverModeTieredStack ReceiverMode = 2
 
+	// ReceiveTaskIntervalMultiplier is based on ReplicationStreamSendEmptyTaskDuration. Default duration: 1 min.
 	ReceiveTaskIntervalMultiplier = 3
 )
 

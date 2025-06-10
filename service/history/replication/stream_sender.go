@@ -35,7 +35,9 @@ import (
 )
 
 const (
-	TaskMaxSkipCount           = 1000
+	TaskMaxSkipCount = 1000
+
+	// SyncTaskIntervalMultiplier is based on ReplicationStreamSyncStatusDuration. Default duration is 1s.
 	SyncTaskIntervalMultiplier = 10
 )
 

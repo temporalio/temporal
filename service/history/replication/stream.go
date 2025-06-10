@@ -99,14 +99,16 @@ func livenessMonitor(
 ) {
 	heartbeatTimeout := time.NewTicker(timeout)
 	defer heartbeatTimeout.Stop()
-	lastSignalTimestamp := time.Now().UTC()
 
 	for !shutdownChan.IsShutdown() {
 		select {
-		case <-signalChan:
-			lastSignalTimestamp = time.Now().UTC()
+		case <-shutdownChan.Channel():
+			return
 		case <-heartbeatTimeout.C:
-			if time.Now().UTC().Sub(lastSignalTimestamp) >= timeout {
+			select {
+			case <-signalChan:
+				continue
+			default:
 				logger.Warn("Stream failed to receive sync status from target cluster")
 				stopStream()
 				return
