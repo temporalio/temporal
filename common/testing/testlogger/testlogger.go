@@ -226,6 +226,7 @@ func NewTestLogger(t TestingT, mode Mode, opts ...LoggerOption) *TestLogger {
 	tl.state.mu.expectations = make(map[Level]*list.List)
 	tl.state.failOnError.Store(true)
 	tl.state.failOnDPanic.Store(true)
+	tl.state.failOnFatal.Store(true)
 	for _, opt := range opts {
 		opt(tl)
 	}
@@ -313,7 +314,7 @@ func (tl *TestLogger) shouldFailTest(level Level, msg string, tags []tag.Tag) bo
 		}
 	}
 	if level < Error {
-		// We don't care about a lack of debug/info/warn expectations, only > Error
+		// We don't care about a lack of debug/info/warn expectations, only Error and above
 		return false
 	}
 	return tl.state.mode == FailOnAnyUnexpectedError
@@ -331,7 +332,7 @@ func (tl *TestLogger) FailOnError(b bool) bool {
 	return tl.state.failOnError.Swap(b)
 }
 
-// FailOnDPanic overrides the behavior of this logger. It returns the previous value
+// FailOnFatal overrides the behavior of this logger. It returns the previous value
 // so that it can be restored later.
 // Note that Fatal-level logs still panic
 func (tl *TestLogger) FailOnFatal(b bool) bool {
@@ -491,7 +492,7 @@ func (tl *TestLogger) failTest(level Level, msg string, tags ...tag.Tag) {
 		fmt.Fprintf(&stackTrace, "%s:%d %s\n", frame.File, frame.Line, frame.Function)
 	}
 
-	tl.state.t.Fatalf("%s\n%s", failureMessage(level, msg, tags), stackTrace)
+	tl.state.t.Fatalf("%s\n%s", failureMessage(level, msg, tags), stackTrace.String())
 }
 
 // WithTags gives you a new logger, copying the tags of the source, appending the provided new Tags
