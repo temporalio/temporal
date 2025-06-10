@@ -20,6 +20,21 @@ const (
 	TestLogLevelEnvVar  = "TEMPORAL_TEST_LOG_LEVEL"  // set to "debug" for debug level logs in tests
 )
 
+var DefaultZapEncoderConfig = zapcore.EncoderConfig{
+	TimeKey:        "ts",
+	LevelKey:       "level",
+	NameKey:        "logger",
+	CallerKey:      zapcore.OmitKey, // we use our own caller
+	FunctionKey:    zapcore.OmitKey,
+	MessageKey:     "msg",
+	StacktraceKey:  "stacktrace",
+	LineEnding:     zapcore.DefaultLineEnding,
+	EncodeLevel:    zapcore.LowercaseLevelEncoder,
+	EncodeTime:     zapcore.ISO8601TimeEncoder,
+	EncodeDuration: zapcore.SecondsDurationEncoder,
+	EncodeCaller:   zapcore.ShortCallerEncoder,
+}
+
 type (
 	// zapLogger is logger backed up by zap.Logger.
 	zapLogger struct {
@@ -175,20 +190,7 @@ func (l *zapLogger) Skip(extraSkip int) Logger {
 }
 
 func buildZapLogger(cfg Config, disableCaller bool) *zap.Logger {
-	encodeConfig := zapcore.EncoderConfig{
-		TimeKey:        "ts",
-		LevelKey:       "level",
-		NameKey:        "logger",
-		CallerKey:      zapcore.OmitKey, // we use our own caller
-		FunctionKey:    zapcore.OmitKey,
-		MessageKey:     "msg",
-		StacktraceKey:  "stacktrace",
-		LineEnding:     zapcore.DefaultLineEnding,
-		EncodeLevel:    zapcore.LowercaseLevelEncoder,
-		EncodeTime:     zapcore.ISO8601TimeEncoder,
-		EncodeDuration: zapcore.SecondsDurationEncoder,
-		EncodeCaller:   zapcore.ShortCallerEncoder,
-	}
+	encodeConfig := DefaultZapEncoderConfig
 	if disableCaller {
 		encodeConfig.CallerKey = zapcore.OmitKey
 		encodeConfig.EncodeCaller = nil
@@ -206,7 +208,7 @@ func buildZapLogger(cfg Config, disableCaller bool) *zap.Logger {
 		encoding = "console"
 	}
 	config := zap.Config{
-		Level:            zap.NewAtomicLevelAt(parseZapLevel(cfg.Level)),
+		Level:            zap.NewAtomicLevelAt(ParseZapLevel(cfg.Level)),
 		Development:      cfg.Development,
 		Sampling:         nil,
 		Encoding:         encoding,
@@ -250,7 +252,7 @@ func buildCLIZapLogger() *zap.Logger {
 	return logger
 }
 
-func parseZapLevel(level string) zapcore.Level {
+func ParseZapLevel(level string) zapcore.Level {
 	switch strings.ToLower(level) {
 	case "debug":
 		return zap.DebugLevel

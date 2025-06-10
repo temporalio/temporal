@@ -11,7 +11,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
@@ -536,6 +535,12 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			}
 		}
 
+		if ms.GetDeploymentTransition() != nil {
+			// Do not return new wft to worker if the workflow is transitioning to a different deployment version.
+			// Let the task go through matching and get dispatched to the right worker
+			bypassTaskGeneration = false
+		}
+
 		var newWTErr error
 		// If we checked WT heartbeat timeout before and WT wasn't timed out,
 		// then OriginalScheduledTime needs to be carried over to the new WT.
@@ -716,6 +721,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			ms,
 			updateRegistry,
 			newWorkflowTask,
+			request.GetIdentity(),
 			request.GetForceCreateNewWorkflowTask(),
 		)
 		if err != nil {
@@ -724,7 +730,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		// sticky is always enabled when worker request for new workflow task from RespondWorkflowTaskCompleted
 		resp.StartedResponse.StickyExecutionEnabled = true
 
-		resp.NewWorkflowTask, err = handler.withNewWorkflowTask(ctx, namespaceEntry.Name(), req, resp.StartedResponse, ms.GetTransientWorkflowTaskInfo(newWorkflowTask, request.GetIdentity()))
+		resp.NewWorkflowTask, err = handler.withNewWorkflowTask(ctx, namespaceEntry.Name(), req, resp.StartedResponse)
 		if err != nil {
 			return nil, err
 		}
@@ -752,7 +758,6 @@ func (handler *WorkflowTaskCompletedHandler) createPollWorkflowTaskQueueResponse
 	namespaceID namespace.ID,
 	matchingResp *matchingservice.PollWorkflowTaskQueueResponse,
 	branchToken []byte,
-	tranOrSpecEvents *historyspb.TransientWorkflowTaskInfo,
 	maximumPageSize int32,
 ) (_ *workflowservice.PollWorkflowTaskQueueResponse, retError error) {
 
@@ -812,7 +817,7 @@ func (handler *WorkflowTaskCompletedHandler) createPollWorkflowTaskQueueResponse
 			nextEventID,
 			maximumPageSize,
 			nil,
-			tranOrSpecEvents,
+			matchingResp.GetTransientWorkflowTask(),
 			branchToken,
 			handler.persistenceVisibilityMgr,
 		)
@@ -822,11 +827,12 @@ func (handler *WorkflowTaskCompletedHandler) createPollWorkflowTaskQueueResponse
 
 		if len(persistenceToken) != 0 {
 			continuation, err = api.SerializeHistoryToken(&tokenspb.HistoryContinuation{
-				RunId:            matchingResp.WorkflowExecution.GetRunId(),
-				FirstEventId:     firstEventID,
-				NextEventId:      nextEventID,
-				PersistenceToken: persistenceToken,
-				BranchToken:      branchToken,
+				RunId:                 matchingResp.WorkflowExecution.GetRunId(),
+				FirstEventId:          firstEventID,
+				NextEventId:           nextEventID,
+				PersistenceToken:      persistenceToken,
+				TransientWorkflowTask: matchingResp.GetTransientWorkflowTask(),
+				BranchToken:           branchToken,
 			})
 			if err != nil {
 				return nil, err
@@ -860,7 +866,6 @@ func (handler *WorkflowTaskCompletedHandler) withNewWorkflowTask(
 	namespaceName namespace.Name,
 	request *historyservice.RespondWorkflowTaskCompletedRequest,
 	response *historyservice.RecordWorkflowTaskStartedResponse,
-	tranOrSpecEvents *historyspb.TransientWorkflowTaskInfo,
 ) (*workflowservice.PollWorkflowTaskQueueResponse, error) {
 	taskToken, err := handler.tokenSerializer.Deserialize(request.CompleteRequest.TaskToken)
 	if err != nil {
@@ -893,7 +898,6 @@ func (handler *WorkflowTaskCompletedHandler) withNewWorkflowTask(
 		namespace.ID(taskToken.NamespaceId),
 		matchingResp,
 		matchingResp.GetBranchToken(),
-		tranOrSpecEvents,
 		int32(handler.config.HistoryMaxPageSize(namespaceName.String())),
 	)
 }
