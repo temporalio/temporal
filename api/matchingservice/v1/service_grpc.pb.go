@@ -195,7 +195,9 @@ type MatchingServiceClient interface {
 	ListNexusEndpoints(ctx context.Context, in *ListNexusEndpointsRequest, opts ...grpc.CallOption) (*ListNexusEndpointsResponse, error)
 	// RecordWorkerHeartbeat receive heartbeat request from the worker.
 	RecordWorkerHeartbeat(ctx context.Context, in *RecordWorkerHeartbeatRequest, opts ...grpc.CallOption) (*RecordWorkerHeartbeatResponse, error)
-	// ListWorkers is a visibility API to list worker status information in a specific namespace.
+	// ListWorkers retrieves a list of workers in the specified namespace that match the provided filters.
+	// Supports pagination for large result sets. Returns an empty list if no workers match the criteria.
+	// Returns an error if the namespace doesn't exist.
 	ListWorkers(ctx context.Context, in *ListWorkersRequest, opts ...grpc.CallOption) (*ListWorkersResponse, error)
 }
 
@@ -652,7 +654,9 @@ type MatchingServiceServer interface {
 	ListNexusEndpoints(context.Context, *ListNexusEndpointsRequest) (*ListNexusEndpointsResponse, error)
 	// RecordWorkerHeartbeat receive heartbeat request from the worker.
 	RecordWorkerHeartbeat(context.Context, *RecordWorkerHeartbeatRequest) (*RecordWorkerHeartbeatResponse, error)
-	// ListWorkers is a visibility API to list worker status information in a specific namespace.
+	// ListWorkers retrieves a list of workers in the specified namespace that match the provided filters.
+	// Supports pagination for large result sets. Returns an empty list if no workers match the criteria.
+	// Returns an error if the namespace doesn't exist.
 	ListWorkers(context.Context, *ListWorkersRequest) (*ListWorkersResponse, error)
 	mustEmbedUnimplementedMatchingServiceServer()
 }

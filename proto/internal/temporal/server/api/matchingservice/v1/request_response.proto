@@ -546,7 +546,7 @@ message ListNexusEndpointsResponse {
 
 message RecordWorkerHeartbeatRequest {
     string namespace_id = 1;
-    temporal.api.workflowservice.v1.RecordWorkerHeartbeatRequest api_request = 3;
+    temporal.api.workflowservice.v1.RecordWorkerHeartbeatRequest heartbeart_request = 2;
 }
 
 message RecordWorkerHeartbeatResponse {
@@ -555,12 +555,10 @@ message RecordWorkerHeartbeatResponse {
 
 message ListWorkersRequest {
     string namespace_id = 1;
-    temporal.api.workflowservice.v1.ListWorkersRequest api_request = 3;
+    temporal.api.workflowservice.v1.ListWorkersRequest list_request = 2;
 }
 
 message ListWorkersResponse {
     repeated temporal.api.worker.v1.WorkerInfo workers_info = 1;
-
-    // Next page token
     bytes next_page_token = 2;
 }

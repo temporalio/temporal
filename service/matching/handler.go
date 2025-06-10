@@ -540,11 +540,11 @@ func (h *Handler) RecordWorkerHeartbeat(
 	return nil, serviceerror.NewUnimplemented("RecordWorkerHeartbeat is not implemented")
 }
 
-// ListWorkers is a visibility API to list worker status information in a specific namespace.
+// ListWorkers retrieves a list of workers in the specified namespace that match the provided filters.
 func (h *Handler) ListWorkers(
 	context.Context, *matchingservice.ListWorkersRequest,
 ) (*matchingservice.ListWorkersResponse, error) {
-	return nil, serviceerror.NewUnimplemented("RecordWorkerHeartbeat is not implemented")
+	return nil, serviceerror.NewUnimplemented("ListWorkers is not implemented")
 }
 
 func (h *Handler) namespaceName(id namespace.ID) namespace.Name {

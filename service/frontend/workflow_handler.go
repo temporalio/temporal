@@ -6072,8 +6072,8 @@ func (wh *WorkflowHandler) RecordWorkerHeartbeat(
 	}
 
 	_, err = wh.matchingClient.RecordWorkerHeartbeat(ctx, &matchingservice.RecordWorkerHeartbeatRequest{
-		NamespaceId: namespaceID.String(),
-		ApiRequest:  request,
+		NamespaceId:       namespaceID.String(),
+		HeartbeartRequest: request,
 	})
 
 	if err != nil {
@@ -6083,7 +6083,7 @@ func (wh *WorkflowHandler) RecordWorkerHeartbeat(
 	return &workflowservice.RecordWorkerHeartbeatResponse{}, nil
 }
 
-// ListWorkers is a visibility API to list worker status information in a specific namespace.
+// ListWorkers retrieves a list of workers in the specified namespace that match the provided filters.
 func (wh *WorkflowHandler) ListWorkers(
 	ctx context.Context, request *workflowservice.ListWorkersRequest,
 ) (*workflowservice.ListWorkersResponse, error) {
@@ -6098,7 +6098,7 @@ func (wh *WorkflowHandler) ListWorkers(
 
 	resp, err := wh.matchingClient.ListWorkers(ctx, &matchingservice.ListWorkersRequest{
 		NamespaceId: namespaceID.String(),
-		ApiRequest:  request,
+		ListRequest: request,
 	})
 
 	if err != nil {
