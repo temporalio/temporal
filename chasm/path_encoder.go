@@ -23,6 +23,27 @@ var (
 	rootPath []string
 )
 
+// The Encode method encodes node path in a way that the following uses cases can be
+// achieved by doing a simple a range query in DB based on prefixes of the encoded path:
+// 1. Getting all nodes for a chasm tree.
+// 2. Getting all nodes for a sub-tree.
+// 3. Getting all immediate children of a Collection node.
+// Additionally, it allows getting all ancestor nodes of a given node.
+//
+// It does so by using a different separator for a node which is a direct child of a Collection node.
+// The two separators used ('$' and '#') are next to each other in terms of values, which ensures all
+// children for a node are grouped together. Additionally, all immediate children of a Collection node
+// are grouped together as well.
+//
+// To get a sub-tree (say a node with name "foo"), we want to use a query look like the following:
+//
+//	path >= "foo" AND path < "foo[something]"
+//
+// and we need to know the minimal value of [something] that can possibly be in the encoded path.
+// This is achieved by escpaing '\', '$', '#', and also every code point less than '#'.
+// Since the escapth charater itself is larger than '#', the minimal value is '%' and our query becomes:
+//
+//	path >= "foo" AND path < "foo%"
 func (e *defaultPathEncoder) Encode(
 	node *Node,
 	path []string,
