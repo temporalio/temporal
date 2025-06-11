@@ -1964,7 +1964,7 @@ func (s *nodeSuite) TestEachPureTask() {
 	s.NotNil(root)
 
 	actualTaskCount := 0
-	err = root.EachPureTask(now.Add(time.Minute), func(executor NodeExecutePureTask, task any) error {
+	err = root.EachPureTask(now.Add(time.Minute), func(executor NodePureTask, task any) error {
 		s.NotNil(executor)
 
 		_, ok := task.(*TestPureTask)

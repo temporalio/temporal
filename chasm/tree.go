@@ -158,10 +158,11 @@ type (
 		Decode(encodedPath string) ([]string, error)
 	}
 
-	// NodeExecutePureTask is intended to be implemented and used within the CHASM
+	// NodePureTask is intended to be implemented and used within the CHASM
 	// framework only.
-	NodeExecutePureTask interface {
+	NodePureTask interface {
 		ExecutePureTask(baseCtx context.Context, taskInstance any) error
+		ValidatePureTask(baseCtx context.Context, taskInstance any) (bool, error)
 	}
 )
 
@@ -1260,6 +1261,7 @@ func (n *Node) deserializeComponentTask(
 	return taskValue.Interface(), nil
 }
 
+// validateTask runs taskInstance's registered validation handler.
 func (n *Node) validateTask(
 	validateContext Context,
 	taskInstance any,
@@ -1744,8 +1746,10 @@ func isComponentTaskExpired(
 // close).
 func (n *Node) EachPureTask(
 	referenceTime time.Time,
-	callback func(executor NodeExecutePureTask, task any) error,
+	callback func(executor NodePureTask, task any) error,
 ) error {
+	ctx := NewContext(context.Background(), n)
+
 	// Walk the tree to find all runnable tasks.
 	for _, node := range n.andAllChildren() {
 		// Skip nodes that aren't serialized yet.
@@ -1757,6 +1761,12 @@ func (n *Node) EachPureTask(
 		// Skip nodes that aren't components.
 		if componentAttr == nil {
 			continue
+		}
+
+		// Hydrate nodes before the task validator is called.
+		err := node.prepareComponentValue(ctx)
+		if err != nil {
+			return err
 		}
 
 		for _, task := range componentAttr.GetPureTasks() {
@@ -2027,6 +2037,17 @@ func (n *Node) ExecutePureTask(baseCtx context.Context, taskInstance any) error 
 	// See: https://github.com/temporalio/temporal/pull/7701#discussion_r2072026993
 
 	return nil
+}
+
+// ValidatePureTask runs a pure task's associated validator, returning true
+// if the task is valid. Intended for use by standby executors as part of
+// EachPureTask's callback.
+func (n *Node) ValidatePureTask(
+	ctx context.Context,
+	taskInstance any,
+) (bool, error) {
+	validateCtx := NewContext(ctx, n)
+	return n.validateTask(validateCtx, taskInstance)
 }
 
 // ValidateSideEffectTask runs a side effect task's associated validator,
