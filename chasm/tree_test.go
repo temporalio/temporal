@@ -1305,7 +1305,7 @@ func (s *nodeSuite) TestCloseTransaction_Success() {
 	tv := testvars.New(s.T())
 
 	chasmCtx := NewMutableContext(context.Background(), node)
-	tc, err := node.Component(chasmCtx, ComponentRef{componentPath: RootPath})
+	tc, err := node.Component(chasmCtx, ComponentRef{componentPath: rootPath})
 	s.NoError(err)
 	tc.(*TestComponent).SubData1 = NewEmptyField[*protoMessageType]()
 	tc.(*TestComponent).ComponentData = &protoMessageType{CreateRequestId: tv.Any().String()}
@@ -1363,7 +1363,7 @@ func (s *nodeSuite) TestCloseTransaction_LifecycleChange() {
 	tv := testvars.New(s.T())
 
 	chasmCtx := NewMutableContext(context.Background(), node)
-	_, err := node.Component(chasmCtx, ComponentRef{componentPath: RootPath})
+	_, err := node.Component(chasmCtx, ComponentRef{componentPath: rootPath})
 	s.NoError(err)
 
 	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(1)).AnyTimes()
@@ -1378,7 +1378,7 @@ func (s *nodeSuite) TestCloseTransaction_LifecycleChange() {
 	s.NoError(err)
 
 	// Test force terminate case
-	_, err = node.Component(chasmCtx, ComponentRef{componentPath: RootPath})
+	_, err = node.Component(chasmCtx, ComponentRef{componentPath: rootPath})
 	s.NoError(err)
 	node.terminated = true
 	s.nodeBackend.EXPECT().UpdateWorkflowStateStatus(
@@ -1389,7 +1389,7 @@ func (s *nodeSuite) TestCloseTransaction_LifecycleChange() {
 	s.NoError(err)
 	node.terminated = false
 
-	tc, err := node.Component(chasmCtx, ComponentRef{componentPath: RootPath})
+	tc, err := node.Component(chasmCtx, ComponentRef{componentPath: rootPath})
 	s.NoError(err)
 	tc.(*TestComponent).Complete(chasmCtx)
 	s.nodeBackend.EXPECT().UpdateWorkflowStateStatus(
@@ -1399,7 +1399,7 @@ func (s *nodeSuite) TestCloseTransaction_LifecycleChange() {
 	_, err = node.CloseTransaction()
 	s.NoError(err)
 
-	tc, err = node.Component(chasmCtx, ComponentRef{componentPath: RootPath})
+	tc, err = node.Component(chasmCtx, ComponentRef{componentPath: rootPath})
 	s.NoError(err)
 	tc.(*TestComponent).Fail(chasmCtx)
 	s.nodeBackend.EXPECT().UpdateWorkflowStateStatus(
@@ -1826,7 +1826,7 @@ func (e *testNodePathEncoder) Decode(
 	encodedPath string,
 ) ([]string, error) {
 	if encodedPath == "" {
-		return []string{}, nil
+		return rootPath, nil
 	}
 	return strings.Split(encodedPath, "/"), nil
 }
@@ -1858,7 +1858,7 @@ func (s *nodeSuite) testComponentTree() *Node {
 	s.IsType(&TestComponent{}, node.value)
 	s.Equal(valueStateSynced, node.valueState)
 
-	tc, err := node.Component(NewMutableContext(context.Background(), node), ComponentRef{componentPath: RootPath})
+	tc, err := node.Component(NewMutableContext(context.Background(), node), ComponentRef{componentPath: rootPath})
 	s.NoError(err)
 	s.Equal(valueStateNeedSerialize, node.valueState)
 	// Create subcomponents by assigning fields to TestComponent instance.

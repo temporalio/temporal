@@ -114,7 +114,7 @@ func (s *fieldSuite) TestFieldGetComponent() {
 
 	chasmContext := NewMutableContext(context.Background(), node)
 
-	c, err := node.Component(chasmContext, ComponentRef{componentPath: RootPath})
+	c, err := node.Component(chasmContext, ComponentRef{componentPath: rootPath})
 	s.NoError(err)
 	s.NotNil(c)
 
