@@ -199,32 +199,32 @@ func (mr *MockNodePathEncoderMockRecorder) Encode(node, path any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Encode", reflect.TypeOf((*MockNodePathEncoder)(nil).Encode), node, path)
 }
 
-// MockNodeExecutePureTask is a mock of NodeExecutePureTask interface.
-type MockNodeExecutePureTask struct {
+// MockNodePureTask is a mock of NodePureTask interface.
+type MockNodePureTask struct {
 	ctrl     *gomock.Controller
-	recorder *MockNodeExecutePureTaskMockRecorder
+	recorder *MockNodePureTaskMockRecorder
 	isgomock struct{}
 }
 
-// MockNodeExecutePureTaskMockRecorder is the mock recorder for MockNodeExecutePureTask.
-type MockNodeExecutePureTaskMockRecorder struct {
-	mock *MockNodeExecutePureTask
+// MockNodePureTaskMockRecorder is the mock recorder for MockNodePureTask.
+type MockNodePureTaskMockRecorder struct {
+	mock *MockNodePureTask
 }
 
-// NewMockNodeExecutePureTask creates a new mock instance.
-func NewMockNodeExecutePureTask(ctrl *gomock.Controller) *MockNodeExecutePureTask {
-	mock := &MockNodeExecutePureTask{ctrl: ctrl}
-	mock.recorder = &MockNodeExecutePureTaskMockRecorder{mock}
+// NewMockNodePureTask creates a new mock instance.
+func NewMockNodePureTask(ctrl *gomock.Controller) *MockNodePureTask {
+	mock := &MockNodePureTask{ctrl: ctrl}
+	mock.recorder = &MockNodePureTaskMockRecorder{mock}
 	return mock
 }
 
 // EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockNodeExecutePureTask) EXPECT() *MockNodeExecutePureTaskMockRecorder {
+func (m *MockNodePureTask) EXPECT() *MockNodePureTaskMockRecorder {
 	return m.recorder
 }
 
 // ExecutePureTask mocks base method.
-func (m *MockNodeExecutePureTask) ExecutePureTask(baseCtx context.Context, taskInstance any) error {
+func (m *MockNodePureTask) ExecutePureTask(baseCtx context.Context, taskInstance any) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ExecutePureTask", baseCtx, taskInstance)
 	ret0, _ := ret[0].(error)
@@ -232,7 +232,22 @@ func (m *MockNodeExecutePureTask) ExecutePureTask(baseCtx context.Context, taskI
 }
 
 // ExecutePureTask indicates an expected call of ExecutePureTask.
-func (mr *MockNodeExecutePureTaskMockRecorder) ExecutePureTask(baseCtx, taskInstance any) *gomock.Call {
+func (mr *MockNodePureTaskMockRecorder) ExecutePureTask(baseCtx, taskInstance any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecutePureTask", reflect.TypeOf((*MockNodeExecutePureTask)(nil).ExecutePureTask), baseCtx, taskInstance)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecutePureTask", reflect.TypeOf((*MockNodePureTask)(nil).ExecutePureTask), baseCtx, taskInstance)
+}
+
+// ValidatePureTask mocks base method.
+func (m *MockNodePureTask) ValidatePureTask(baseCtx context.Context, taskInstance any) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ValidatePureTask", baseCtx, taskInstance)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ValidatePureTask indicates an expected call of ValidatePureTask.
+func (mr *MockNodePureTaskMockRecorder) ValidatePureTask(baseCtx, taskInstance any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidatePureTask", reflect.TypeOf((*MockNodePureTask)(nil).ValidatePureTask), baseCtx, taskInstance)
 }

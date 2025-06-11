@@ -2088,7 +2088,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteChasmSideEffectTimerTask
 	s.ErrorIs(expectedErr, resp.ExecutionErr)
 }
 
-func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteChasmPureTimerTask_ExecutesAllPureTimers() {
+func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteChasmPureTimerTask_ValidatesAllPureTimers() {
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: tests.WorkflowKey.WorkflowID,
 		RunId:      tests.WorkflowKey.RunID,

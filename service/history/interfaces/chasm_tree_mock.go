@@ -116,7 +116,7 @@ func (mr *MockChasmTreeMockRecorder) Component(arg0, arg1 any) *gomock.Call {
 }
 
 // EachPureTask mocks base method.
-func (m *MockChasmTree) EachPureTask(deadline time.Time, callback func(chasm.NodeExecutePureTask, any) error) error {
+func (m *MockChasmTree) EachPureTask(deadline time.Time, callback func(chasm.NodePureTask, any) error) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "EachPureTask", deadline, callback)
 	ret0, _ := ret[0].(error)
