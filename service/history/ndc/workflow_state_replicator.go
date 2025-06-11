@@ -380,6 +380,44 @@ func (r *WorkflowStateReplicatorImpl) handleFirstReplicationTask(
 		executionState.RunId,
 		timestamp.TimeValue(executionState.StartTime),
 	)
+	err = localMutableState.SetHistoryTree(executionInfo.WorkflowExecutionTimeout, executionInfo.WorkflowRunTimeout, executionState.RunId)
+	if err != nil {
+		return err
+	}
+	err = r.bringLocalEventsUpToSourceCurrentBranch(
+		ctx,
+		namespace.ID(executionInfo.NamespaceId),
+		executionInfo.WorkflowId,
+		executionState.RunId,
+		sourceClusterName,
+		wfCtx,
+		localMutableState,
+		executionInfo.VersionHistories,
+		versionedTransition.EventBatches,
+		true,
+	)
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		if retErr == nil {
+			return
+		}
+		currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(localMutableState.GetExecutionInfo().VersionHistories)
+		if err != nil {
+			r.logger.Error("failed to get current version history", tag.Error(err))
+			return
+		}
+
+		if err := r.shardContext.GetExecutionManager().DeleteHistoryBranch(ctx, &persistence.DeleteHistoryBranchRequest{
+			ShardID:     r.shardContext.GetShardID(),
+			BranchToken: currentVersionHistory.BranchToken,
+		}); err != nil {
+			r.logger.Error("failed to clean up workflow execution", tag.Error(err))
+		}
+	}()
+
 	if mutation != nil {
 		err = localMutableState.ApplyMutation(mutation.StateMutation)
 	} else {
@@ -388,23 +426,6 @@ func (r *WorkflowStateReplicatorImpl) handleFirstReplicationTask(
 	if err != nil {
 		return err
 	}
-
-	localBranchToken, err := r.prepareFirstReplicationTaskEvents(ctx, executionInfo, executionState, versionedTransition.EventBatches, sourceClusterName, localMutableState)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if retErr == nil || localBranchToken == nil {
-			return
-		}
-
-		if err := r.shardContext.GetExecutionManager().DeleteHistoryBranch(ctx, &persistence.DeleteHistoryBranchRequest{
-			ShardID:     r.shardContext.GetShardID(),
-			BranchToken: localBranchToken,
-		}); err != nil {
-			r.logger.Error("failed to clean up workflow execution", tag.Error(err))
-		}
-	}()
 
 	if versionedTransition.NewRunInfo != nil {
 		err = r.createNewRunWorkflow(
@@ -599,6 +620,7 @@ func (r *WorkflowStateReplicatorImpl) applyMutation(
 		localMutableState,
 		mutation.StateMutation.ExecutionInfo.VersionHistories,
 		versionedTransition.EventBatches,
+		false,
 	)
 	if err != nil {
 		return err
@@ -657,7 +679,7 @@ func (r *WorkflowStateReplicatorImpl) applySnapshot(
 			versionHistories = localMutableState.GetExecutionInfo().VersionHistories
 		}
 		return serviceerrors.NewSyncState(
-			"failed to apply mutation due to missing task snapshot",
+			"failed to apply snapshot due to missing snapshot attributes",
 			namespaceID.String(),
 			workflowID,
 			runID,
@@ -735,6 +757,7 @@ func (r *WorkflowStateReplicatorImpl) applySnapshotWhenWorkflowExist(
 		localMutableState,
 		sourceMutableState.ExecutionInfo.VersionHistories,
 		eventBlobs,
+		false,
 	)
 	if err != nil {
 		return err
@@ -959,6 +982,7 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 	localMutableState historyi.MutableState,
 	sourceVersionHistories *historyspb.VersionHistories,
 	eventBlobs []*commonpb.DataBlob,
+	isNewMutableState bool,
 ) error {
 	sourceVersionHistory, err := versionhistory.GetCurrentVersionHistory(sourceVersionHistories)
 	if err != nil {
@@ -980,36 +1004,12 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 		return nil
 	}
 
-	index, isNewBranch, err := func() (int32, bool, error) {
-		lcaItem, index, err := versionhistory.FindLCAVersionHistoryItemAndIndex(localMutableState.GetExecutionInfo().VersionHistories, sourceVersionHistory)
-		if err != nil {
-			return 0, false, err
-		}
-
-		localHistory, err := versionhistory.GetVersionHistory(localVersionHistories, index)
-		if err != nil {
-			return 0, false, err
-		}
-		if versionhistory.IsLCAVersionHistoryItemAppendable(localHistory, lcaItem) {
-			return index, false, nil
-		}
-		newVersionHistory, err := versionhistory.CopyVersionHistoryUntilLCAVersionHistoryItem(localHistory, lcaItem)
-		if err != nil {
-			return 0, false, err
-		}
-		branchManager := NewBranchMgr(r.shardContext, wfCtx, localMutableState, r.logger)
-		newVersionHistoryIndex, err := branchManager.createNewBranch(
-			ctx,
-			localHistory.GetBranchToken(),
-			lcaItem.GetEventId(),
-			newVersionHistory,
-		)
-		if err != nil {
-			return 0, false, err
-		}
-
-		return newVersionHistoryIndex, true, nil
-	}()
+	index, isNewBranch, err := r.getBranchToAppend(
+		ctx,
+		wfCtx,
+		localMutableState,
+		sourceVersionHistory,
+		isNewMutableState)
 	localVersionHistories.CurrentVersionHistoryIndex = index
 	if err != nil {
 		return err
@@ -1018,10 +1018,19 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 	if err != nil {
 		return err
 	}
-	localLastItem, err := versionhistory.GetLastVersionHistoryItem(versionHistoryToAppend)
-	if err != nil {
-		return err
+	var localLastItem *historyspb.VersionHistoryItem
+	if isNewMutableState {
+		localLastItem = &historyspb.VersionHistoryItem{
+			EventId: 0,
+			Version: 0,
+		}
+	} else {
+		localLastItem, err = versionhistory.GetLastVersionHistoryItem(versionHistoryToAppend)
+		if err != nil {
+			return err
+		}
 	}
+
 	sourceLastItem, err := versionhistory.GetLastVersionHistoryItem(sourceVersionHistory)
 	if err != nil {
 		return err
@@ -1189,6 +1198,47 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 	versionHistoryToAppend.Items = versionhistory.CopyVersionHistoryItems(sourceVersionHistory.Items)
 	localMutableState.SetHistoryBuilder(historybuilder.NewImmutableForUpdateNextEventID(sourceLastItem))
 	return nil
+}
+
+func (r *WorkflowStateReplicatorImpl) getBranchToAppend(
+	ctx context.Context,
+	wfCtx historyi.WorkflowContext,
+	localMutableState historyi.MutableState,
+	sourceVersionHistory *historyspb.VersionHistory,
+	isNewMutableState bool,
+) (int32, bool, error) {
+	if isNewMutableState {
+		return 0, true, nil
+	}
+
+	localVersionHistories := localMutableState.GetExecutionInfo().VersionHistories
+	lcaItem, index, err := versionhistory.FindLCAVersionHistoryItemAndIndex(localVersionHistories, sourceVersionHistory)
+	if err != nil {
+		return 0, false, err
+	}
+
+	localHistory, err := versionhistory.GetVersionHistory(localVersionHistories, index)
+	if err != nil {
+		return 0, false, err
+	}
+
+	if versionhistory.IsLCAVersionHistoryItemAppendable(localHistory, lcaItem) {
+		return index, false, nil
+	}
+
+	newVersionHistory, err := versionhistory.CopyVersionHistoryUntilLCAVersionHistoryItem(localHistory, lcaItem)
+	if err != nil {
+		return 0, false, err
+	}
+
+	newIndex, err := NewBranchMgr(r.shardContext, wfCtx, localMutableState, r.logger).createNewBranch(
+		ctx, localHistory.GetBranchToken(), lcaItem.GetEventId(), newVersionHistory,
+	)
+	if err != nil {
+		return 0, false, err
+	}
+
+	return newIndex, true, nil
 }
 
 func (r *WorkflowStateReplicatorImpl) applySnapshotWhenWorkflowNotExist(
