@@ -238,7 +238,9 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 	if ms.GetMostRecentWorkerVersionStamp().GetUseVersioning() &&
 		//nolint:staticcheck // SA1019 deprecated stamp will clean up later
 		!request.GetWorkerVersionStamp().GetUseVersioning() &&
-		request.GetDeploymentOptions().GetWorkerVersioningMode() != enumspb.WORKER_VERSIONING_MODE_VERSIONED {
+		request.GetDeploymentOptions().GetWorkerVersioningMode() != enumspb.WORKER_VERSIONING_MODE_VERSIONED &&
+		// This check is not needed for V3 versioning
+		ms.GetEffectiveVersioningBehavior() == enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
 		// Mutable state wasn't changed yet and doesn't have to be cleared.
 		releaseLeaseWithError = false
 		return nil, serviceerror.NewInvalidArgument("Workflow using versioning must continue to use versioning.")
