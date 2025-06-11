@@ -42,14 +42,14 @@ func (s *priorityAssignerSuite) TestAssign_SelectedTaskTypes() {
 	mockExecutable := NewMockExecutable(s.controller)
 	mockExecutable.EXPECT().GetType().Return(enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT).Times(1)
 
-	s.Equal(tasks.PriorityBackground, s.priorityAssigner.Assign(mockExecutable))
+	s.Equal(tasks.PriorityPreemptable, s.priorityAssigner.Assign(mockExecutable))
 }
 
 func (s *priorityAssignerSuite) TestAssign_UnknownTaskTypes() {
 	mockExecutable := NewMockExecutable(s.controller)
 	mockExecutable.EXPECT().GetType().Return(enumsspb.TaskType(1234)).Times(1)
 
-	s.Equal(tasks.PriorityBackground, s.priorityAssigner.Assign(mockExecutable))
+	s.Equal(tasks.PriorityPreemptable, s.priorityAssigner.Assign(mockExecutable))
 }
 
 func (s *priorityAssignerSuite) TestAssign_HighPriorityTaskTypes() {
@@ -78,7 +78,7 @@ func (s *priorityAssignerSuite) TestAssign_BackgroundPriorityTaskTypes() {
 		mockExecutable := NewMockExecutable(s.controller)
 		mockExecutable.EXPECT().GetType().Return(taskType).Times(1)
 
-		s.Equal(tasks.PriorityBackground, s.priorityAssigner.Assign(mockExecutable))
+		s.Equal(tasks.PriorityPreemptable, s.priorityAssigner.Assign(mockExecutable))
 	}
 }
 

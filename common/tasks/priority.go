@@ -27,34 +27,34 @@ const (
 )
 
 var (
-	PriorityHigh       = getPriority(highPriorityClass, mediumPrioritySubclass)
-	PriorityLow        = getPriority(highPriorityClass, lowPrioritySubclass)
-	PriorityBackground = getPriority(lowPriorityClass, mediumPrioritySubclass)
+	PriorityHigh        = getPriority(highPriorityClass, mediumPrioritySubclass)
+	PriorityLow         = getPriority(highPriorityClass, lowPrioritySubclass)
+	PriorityPreemptable = getPriority(lowPriorityClass, mediumPrioritySubclass)
 )
 
 var (
 	PriorityName = map[Priority]string{
-		PriorityHigh:       "high",
-		PriorityLow:        "low",
-		PriorityBackground: "background",
+		PriorityHigh:        "high",
+		PriorityLow:         "low",
+		PriorityPreemptable: "preemptable",
 	}
 
 	PriorityValue = map[string]Priority{
 		"high":       PriorityHigh,
 		"low":        PriorityLow,
-		"background": PriorityBackground,
+		"background": PriorityPreemptable,
 	}
 
 	CallerTypeToPriority = map[string]Priority{
 		headers.CallerTypeBackgroundHigh: PriorityHigh,
 		headers.CallerTypeBackgroundLow:  PriorityLow,
-		headers.CallerTypePreemptable:    PriorityBackground,
+		headers.CallerTypePreemptable:    PriorityPreemptable,
 	}
 
 	PriorityToCallerType = map[Priority]string{
-		PriorityHigh:       headers.CallerTypeBackgroundHigh,
-		PriorityLow:        headers.CallerTypeBackgroundLow,
-		PriorityBackground: headers.CallerTypePreemptable,
+		PriorityHigh:        headers.CallerTypeBackgroundHigh,
+		PriorityLow:         headers.CallerTypeBackgroundLow,
+		PriorityPreemptable: headers.CallerTypePreemptable,
 	}
 )
 

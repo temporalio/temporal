@@ -345,7 +345,7 @@ func (s *executableSuite) TestExecute_CallerInfo() {
 	s.NoError(executable.Execute())
 
 	executable = s.newTestExecutable(func(p *params) {
-		p.priorityAssigner = queues.NewStaticPriorityAssigner(ctasks.PriorityBackground)
+		p.priorityAssigner = queues.NewStaticPriorityAssigner(ctasks.PriorityPreemptable)
 	})
 	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).DoAndReturn(
 		func(ctx context.Context, _ queues.Executable) queues.ExecuteResponse {

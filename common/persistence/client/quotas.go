@@ -272,7 +272,7 @@ func RequestPriorityFn(req quotas.Request) int {
 			return priority
 		}
 		return CallerTypeDefaultPriority[req.CallerType]
-	case headers.CallerTypeBackgroundHigh:
+	case headers.CallerTypeBackgroundHigh, headers.CallerTypeBackgroundLow:
 		if priority, ok := BackgroundTypeAPIPriorityOverride[req.API]; ok {
 			return priority
 		}

@@ -8,16 +8,16 @@ import (
 
 var (
 	DefaultActiveTaskPriorityWeight = map[tasks.Priority]int{
-		tasks.PriorityHigh:       10,
-		tasks.PriorityLow:        9,
-		tasks.PriorityBackground: 1,
+		tasks.PriorityHigh:        10,
+		tasks.PriorityLow:         9,
+		tasks.PriorityPreemptable: 1,
 	}
 
 	DefaultStandbyTaskPriorityWeight = map[tasks.Priority]int{
 		// we basically treat standby tasks as low priority tasks
-		tasks.PriorityHigh:       1,
-		tasks.PriorityLow:        1,
-		tasks.PriorityBackground: 1,
+		tasks.PriorityHigh:        1,
+		tasks.PriorityLow:         1,
+		tasks.PriorityPreemptable: 1,
 	}
 )
 
