@@ -7,7 +7,7 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	workersb "go.temporal.io/api/worker/v1"
+	workerpb "go.temporal.io/api/worker/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
@@ -554,9 +554,9 @@ func (h *Handler) ListWorkers(
 	if err != nil {
 		return nil, err
 	}
-	var workersInfo []*workersb.WorkerInfo
+	var workersInfo []*workerpb.WorkerInfo
 	for _, heartbeat := range workersHeartbeats {
-		workersInfo = append(workersInfo, &workersb.WorkerInfo{
+		workersInfo = append(workersInfo, &workerpb.WorkerInfo{
 			WorkerHeartbeat: heartbeat,
 		})
 	}

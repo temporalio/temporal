@@ -177,10 +177,8 @@ func TestRegistryImpl_ListWorkers(t *testing.T) {
 				assert.Error(t, err, "expected an error for non-existent namespace")
 				assert.Nil(t, result, "result should be nil when an error occurs")
 				return
-			} else {
-				assert.NoError(t, err, "unexpected error when listing workers")
 			}
-
+			assert.NoError(t, err, "unexpected error when listing workers")
 			assert.Len(t, result, tt.expectedCount, "unexpected number of workers returned")
 
 			// Check that all expected workers are present
