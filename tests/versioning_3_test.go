@@ -771,14 +771,22 @@ func (s *Versioning3Suite) testUnpinnedWorkflowWithRamp(toUnversioned bool) {
 }
 
 func (s *Versioning3Suite) TestTransitionFromWft_Sticky() {
-	s.testTransitionFromWft(true)
+	s.testTransitionFromWft(true, false)
 }
 
 func (s *Versioning3Suite) TestTransitionFromWft_NoSticky() {
-	s.testTransitionFromWft(false)
+	s.testTransitionFromWft(false, false)
 }
 
-func (s *Versioning3Suite) testTransitionFromWft(sticky bool) {
+func (s *Versioning3Suite) TestTransitionFromWft_Sticky_ToUnversioned() {
+	s.testTransitionFromWft(true, true)
+}
+
+func (s *Versioning3Suite) TestTransitionFromWft_NoSticky_ToUnversioned() {
+	s.testTransitionFromWft(false, true)
+}
+
+func (s *Versioning3Suite) testTransitionFromWft(sticky bool, toUnversioned bool) {
 	// Wf runs one WFT and one AT on d1, then the second WFT is redirected to d2 and
 	// transitions the wf with it.
 
@@ -809,16 +817,29 @@ func (s *Versioning3Suite) testTransitionFromWft(sticky bool) {
 		})
 	s.verifyWorkflowVersioning(tv1, vbUnpinned, tv1.Deployment(), nil, nil)
 
-	// Set B as the current deployment
-	s.updateTaskQueueDeploymentData(tv2, true, 0, false, 0, tqTypeWf, tqTypeAct)
+	if toUnversioned {
+		// unset A as current
+		s.updateTaskQueueDeploymentData(tv1, false, 0, false, 0, tqTypeWf, tqTypeAct)
 
-	s.pollWftAndHandle(tv2, false, nil,
-		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-			s.NotNil(task)
-			s.verifyWorkflowVersioning(tv1, vbUnpinned, tv1.Deployment(), nil, tv2.DeploymentVersionTransition())
-			return respondCompleteWorkflow(tv2, vbUnpinned), nil
-		})
-	s.verifyWorkflowVersioning(tv2, vbUnpinned, tv2.Deployment(), nil, nil)
+		s.unversionedPollWftAndHandle(tv1, false, nil,
+			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+				s.NotNil(task)
+				s.verifyWorkflowVersioning(tv1, vbUnpinned, tv1.Deployment(), nil, &workflowpb.DeploymentVersionTransition{Version: "__unversioned__"})
+				return respondCompleteWorkflowUnversioned(tv1), nil
+			})
+		s.verifyWorkflowVersioning(tv1, vbUnspecified, nil, nil, nil)
+	} else {
+		// Set B as the current deployment
+		s.updateTaskQueueDeploymentData(tv2, true, 0, false, 0, tqTypeWf, tqTypeAct)
+
+		s.pollWftAndHandle(tv2, false, nil,
+			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+				s.NotNil(task)
+				s.verifyWorkflowVersioning(tv1, vbUnpinned, tv1.Deployment(), nil, tv2.DeploymentVersionTransition())
+				return respondCompleteWorkflow(tv2, vbUnpinned), nil
+			})
+		s.verifyWorkflowVersioning(tv2, vbUnpinned, tv2.Deployment(), nil, nil)
+	}
 }
 
 func (s *Versioning3Suite) TestDoubleTransition() {
@@ -2160,6 +2181,24 @@ func respondCompleteWorkflow(
 			DeploymentName:       tv.DeploymentSeries(),
 			WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_VERSIONED,
 		},
+	}
+}
+
+func respondCompleteWorkflowUnversioned(
+	tv *testvars.TestVars,
+) *workflowservice.RespondWorkflowTaskCompletedRequest {
+	return &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Commands: []*commandpb.Command{
+			{
+				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
+					CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+						Result: tv.Any().Payloads(),
+					},
+				},
+			},
+		},
+		ForceCreateNewWorkflowTask: false,
 	}
 }
 
