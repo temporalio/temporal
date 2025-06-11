@@ -1185,7 +1185,7 @@ func (s *nodeSuite) TestGetComponent() {
 					NamespaceFailoverVersion: 1,
 					TransitionCount:          1,
 				},
-				validationFn: func(_ Context, _ Component) error {
+				validationFn: func(_ NodeBackend, _ Context, _ Component) error {
 					return errValidation
 				},
 			},
@@ -1200,7 +1200,7 @@ func (s *nodeSuite) TestGetComponent() {
 					NamespaceFailoverVersion: 1,
 					TransitionCount:          1,
 				},
-				validationFn: func(_ Context, _ Component) error {
+				validationFn: func(_ NodeBackend, _ Context, _ Component) error {
 					return nil
 				},
 			},
@@ -1305,7 +1305,7 @@ func (s *nodeSuite) TestCloseTransaction_Success() {
 	tv := testvars.New(s.T())
 
 	chasmCtx := NewMutableContext(context.Background(), node)
-	tc, err := node.Component(chasmCtx, ComponentRef{componentPath: RootPath})
+	tc, err := node.Component(chasmCtx, ComponentRef{componentPath: rootPath})
 	s.NoError(err)
 	tc.(*TestComponent).SubData1 = NewEmptyField[*protoMessageType]()
 	tc.(*TestComponent).ComponentData = &protoMessageType{CreateRequestId: tv.Any().String()}
@@ -1363,7 +1363,7 @@ func (s *nodeSuite) TestCloseTransaction_LifecycleChange() {
 	tv := testvars.New(s.T())
 
 	chasmCtx := NewMutableContext(context.Background(), node)
-	_, err := node.Component(chasmCtx, ComponentRef{componentPath: RootPath})
+	_, err := node.Component(chasmCtx, ComponentRef{componentPath: rootPath})
 	s.NoError(err)
 
 	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(1)).AnyTimes()
@@ -1378,7 +1378,7 @@ func (s *nodeSuite) TestCloseTransaction_LifecycleChange() {
 	s.NoError(err)
 
 	// Test force terminate case
-	_, err = node.Component(chasmCtx, ComponentRef{componentPath: RootPath})
+	_, err = node.Component(chasmCtx, ComponentRef{componentPath: rootPath})
 	s.NoError(err)
 	node.terminated = true
 	s.nodeBackend.EXPECT().UpdateWorkflowStateStatus(
@@ -1389,7 +1389,7 @@ func (s *nodeSuite) TestCloseTransaction_LifecycleChange() {
 	s.NoError(err)
 	node.terminated = false
 
-	tc, err := node.Component(chasmCtx, ComponentRef{componentPath: RootPath})
+	tc, err := node.Component(chasmCtx, ComponentRef{componentPath: rootPath})
 	s.NoError(err)
 	tc.(*TestComponent).Complete(chasmCtx)
 	s.nodeBackend.EXPECT().UpdateWorkflowStateStatus(
@@ -1399,7 +1399,7 @@ func (s *nodeSuite) TestCloseTransaction_LifecycleChange() {
 	_, err = node.CloseTransaction()
 	s.NoError(err)
 
-	tc, err = node.Component(chasmCtx, ComponentRef{componentPath: RootPath})
+	tc, err = node.Component(chasmCtx, ComponentRef{componentPath: rootPath})
 	s.NoError(err)
 	tc.(*TestComponent).Fail(chasmCtx)
 	s.nodeBackend.EXPECT().UpdateWorkflowStateStatus(
@@ -1826,7 +1826,7 @@ func (e *testNodePathEncoder) Decode(
 	encodedPath string,
 ) ([]string, error) {
 	if encodedPath == "" {
-		return []string{}, nil
+		return rootPath, nil
 	}
 	return strings.Split(encodedPath, "/"), nil
 }
@@ -1858,7 +1858,7 @@ func (s *nodeSuite) testComponentTree() *Node {
 	s.IsType(&TestComponent{}, node.value)
 	s.Equal(valueStateSynced, node.valueState)
 
-	tc, err := node.Component(NewMutableContext(context.Background(), node), ComponentRef{componentPath: RootPath})
+	tc, err := node.Component(NewMutableContext(context.Background(), node), ComponentRef{componentPath: rootPath})
 	s.NoError(err)
 	s.Equal(valueStateNeedSerialize, node.valueState)
 	// Create subcomponents by assigning fields to TestComponent instance.
@@ -2041,5 +2041,139 @@ func (s *nodeSuite) TestExecutePureTask() {
 	// Error during task validation (no execution occurs).
 	expectValidate(false, expectedErr)
 	err = root.ExecutePureTask(ctx, pureTask)
+	s.ErrorIs(expectedErr, err)
+}
+
+func (s *nodeSuite) TestExecuteSideEffectTask() {
+	persistenceNodes := map[string]*persistencespb.ChasmNode{
+		"": {
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+						Type: "TestLibrary.test_component",
+					},
+				},
+			},
+		},
+	}
+
+	taskInfo := &persistencespb.ChasmTaskInfo{
+		Ref: &persistencespb.ChasmComponentRef{
+			ComponentInitialVersionedTransition: &persistencespb.VersionedTransition{
+				TransitionCount: 1,
+			},
+			ComponentLastUpdateVersionedTransition: &persistencespb.VersionedTransition{
+				TransitionCount: 1,
+			},
+			Path: "",
+		},
+		Type: "TestLibrary.test_side_effect_task",
+		Data: &commonpb.DataBlob{
+			Data:         nil,
+			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
+		},
+	}
+	entityKey := EntityKey{}
+
+	rt, ok := s.registry.Task("TestLibrary.test_side_effect_task")
+	s.True(ok)
+
+	root, err := NewTree(persistenceNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+	s.NoError(err)
+	s.NotNil(root)
+
+	mockEngine := NewMockEngine(s.controller)
+	ctx := NewEngineContext(context.Background(), mockEngine)
+
+	expectExecute := func(result error) {
+		rt.handler.(*MockSideEffectTaskExecutor[any, *TestSideEffectTask]).EXPECT().
+			Execute(
+				gomock.Any(),
+				gomock.Any(),
+				gomock.Any(),
+			).Return(result).Times(1)
+	}
+	// This won't be called until access time.
+	dummyValidationFn := func(_ NodeBackend, _ Context, _ Component) error {
+		return nil
+	}
+
+	// Succeed task execution.
+	expectExecute(nil)
+	err = root.ExecuteSideEffectTask(ctx, s.registry, entityKey, taskInfo, dummyValidationFn)
+	s.NoError(err)
+
+	// Fail task execution.
+	expectedErr := errors.New("dummy error")
+	expectExecute(expectedErr)
+	err = root.ExecuteSideEffectTask(ctx, s.registry, entityKey, taskInfo, dummyValidationFn)
+	s.ErrorIs(expectedErr, err)
+}
+
+func (s *nodeSuite) TestValidateSideEffectTask() {
+	persistenceNodes := map[string]*persistencespb.ChasmNode{
+		"": {
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+						Type: "TestLibrary.test_component",
+					},
+				},
+			},
+		},
+	}
+
+	taskInfo := &persistencespb.ChasmTaskInfo{
+		Ref: &persistencespb.ChasmComponentRef{
+			ComponentInitialVersionedTransition: &persistencespb.VersionedTransition{
+				TransitionCount: 1,
+			},
+			ComponentLastUpdateVersionedTransition: &persistencespb.VersionedTransition{
+				TransitionCount: 1,
+			},
+			Path: "",
+		},
+		Type: "TestLibrary.test_side_effect_task",
+		Data: &commonpb.DataBlob{
+			Data:         nil,
+			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
+		},
+	}
+
+	rt, ok := s.registry.Task("TestLibrary.test_side_effect_task")
+	s.True(ok)
+
+	root, err := NewTree(persistenceNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+	s.NoError(err)
+	s.NotNil(root)
+
+	mockEngine := NewMockEngine(s.controller)
+	ctx := NewEngineContext(context.Background(), mockEngine)
+
+	expectValidate := func(retValue bool, errValue error) {
+		rt.validator.(*MockTaskValidator[any, *TestSideEffectTask]).EXPECT().
+			Validate(gomock.Any(), gomock.Any(), gomock.Any()).Return(retValue, errValue).Times(1)
+	}
+
+	// Succeed validation as valid.
+	expectValidate(true, nil)
+	task, err := root.ValidateSideEffectTask(ctx, s.registry, taskInfo)
+	s.NotNil(task)
+	s.IsType(&TestSideEffectTask{}, task)
+	s.NoError(err)
+
+	// Succeed validation as invalid.
+	expectValidate(false, nil)
+	task, err = root.ValidateSideEffectTask(ctx, s.registry, taskInfo)
+	s.Nil(task)
+	s.NoError(err)
+
+	// Fail validation.
+	expectedErr := errors.New("validation failed")
+	expectValidate(false, expectedErr)
+	task, err = root.ValidateSideEffectTask(ctx, s.registry, taskInfo)
+	s.Nil(task)
 	s.ErrorIs(expectedErr, err)
 }

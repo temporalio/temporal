@@ -445,6 +445,17 @@ func (s *streamReceiverSuite) TestRecvEventLoop_Panic_Captured() {
 	s.streamReceiver.recvEventLoop() // should not cause panic
 }
 
+func (s *streamReceiverSuite) TestLivenessMonitor() {
+	livenessMonitor(
+		s.streamReceiver.recvSignalChan,
+		time.Millisecond,
+		s.streamReceiver.shutdownChan,
+		s.streamReceiver.Stop,
+		s.streamReceiver.logger,
+	)
+	s.False(s.streamReceiver.IsValid())
+}
+
 func (s *mockStream) Send(
 	req *adminservice.StreamWorkflowReplicationMessagesRequest,
 ) error {
