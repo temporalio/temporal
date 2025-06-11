@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package matching
 
 import (
@@ -33,6 +9,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/future"
@@ -57,8 +34,18 @@ type (
 		Stop()
 		WaitUntilInitialized(context.Context) error
 		SpoolTask(taskInfo *persistencespb.TaskInfo) error
+		// BacklogCountHint returns the number of backlog tasks loaded in memory now.
+		// It's returned as a hint to the SDK to influence polling behavior (sticky vs normal).
 		BacklogCountHint() int64
 		BacklogStatus() *taskqueuepb.TaskQueueStatus
+		// TotalApproximateBacklogCount returns an estimate of the total size of the backlog in
+		// persistence. It may be off in either direction.
+		TotalApproximateBacklogCount() int64
+		BacklogHeadAge() time.Duration
+		InternalStatus() []*taskqueuespb.InternalTaskQueueStatus
+
+		// TODO(pri): remove
+		getDB() *taskQueueDB
 	}
 
 	backlogManagerImpl struct {
@@ -68,7 +55,7 @@ type (
 		taskWriter       *taskWriter
 		taskReader       *taskReader // reads tasks from db and async matches it with poller
 		taskGC           *taskGC
-		taskAckManager   ackManager // tracks ackLevel for delivered messages
+		taskAckManager   *ackManager // tracks ackLevel for delivered messages
 		config           *taskQueueConfig
 		logger           log.Logger
 		throttledLogger  log.ThrottledLogger
@@ -103,11 +90,11 @@ func newBacklogManager(
 		config:           config,
 		initializedError: future.NewFuture[struct{}](),
 	}
-	bmg.db = newTaskQueueDB(bmg, taskManager, pqMgr.QueueKey(), logger)
+	bmg.db = newTaskQueueDB(config, taskManager, pqMgr.QueueKey(), logger, metricsHandler)
 	bmg.taskWriter = newTaskWriter(bmg)
 	bmg.taskReader = newTaskReader(bmg)
 	bmg.taskAckManager = newAckManager(bmg.db, logger)
-	bmg.taskGC = newTaskGC(tqCtx, bmg.db, bmg.config)
+	bmg.taskGC = newTaskGC(tqCtx, bmg.db, config)
 
 	return bmg
 }
@@ -147,7 +134,7 @@ func (c *backlogManagerImpl) Stop() {
 		ctx, cancel := context.WithTimeout(c.tqCtx, ioTimeout)
 		defer cancel()
 
-		_ = c.db.UpdateState(ctx, ackLevel)
+		_ = c.db.OldUpdateState(ctx, ackLevel)
 		c.taskGC.RunNow(ackLevel)
 	}
 }
@@ -168,7 +155,7 @@ func (c *backlogManagerImpl) WaitUntilInitialized(ctx context.Context) error {
 }
 
 func (c *backlogManagerImpl) SpoolTask(taskInfo *persistencespb.TaskInfo) error {
-	_, err := c.taskWriter.appendTask(taskInfo)
+	err := c.taskWriter.appendTask(taskInfo)
 	c.signalIfFatal(err)
 	if err == nil {
 		c.taskReader.Signal()
@@ -176,6 +163,7 @@ func (c *backlogManagerImpl) SpoolTask(taskInfo *persistencespb.TaskInfo) error 
 	return err
 }
 
+// TODO(pri): old matcher cleanup
 func (c *backlogManagerImpl) processSpooledTask(
 	ctx context.Context,
 	task *internalTask,
@@ -183,19 +171,49 @@ func (c *backlogManagerImpl) processSpooledTask(
 	return c.pqMgr.ProcessSpooledTask(ctx, task)
 }
 
+func (c *backlogManagerImpl) addSpooledTask(task *internalTask) error {
+	return c.pqMgr.AddSpooledTask(task)
+}
+
 func (c *backlogManagerImpl) BacklogCountHint() int64 {
 	return c.taskAckManager.getBacklogCountHint()
+}
+
+func (c *backlogManagerImpl) BacklogHeadAge() time.Duration {
+	return c.taskReader.getBacklogHeadAge()
 }
 
 func (c *backlogManagerImpl) BacklogStatus() *taskqueuepb.TaskQueueStatus {
 	taskIDBlock := rangeIDToTaskIDBlock(c.db.RangeID(), c.config.RangeSize)
 	return &taskqueuepb.TaskQueueStatus{
-		ReadLevel:        c.taskAckManager.getReadLevel(),
-		AckLevel:         c.taskAckManager.getAckLevel(),
-		BacklogCountHint: c.db.getApproximateBacklogCount(), // use getApproximateBacklogCount instead of BacklogCountHint since it's more accurate
+		ReadLevel: c.taskAckManager.getReadLevel(),
+		AckLevel:  c.taskAckManager.getAckLevel(),
+		// use getApproximateBacklogCount instead of BacklogCountHint since it's more accurate
+		BacklogCountHint: c.db.getApproximateBacklogCount(subqueueZero),
 		TaskIdBlock: &taskqueuepb.TaskIdBlock{
 			StartId: taskIDBlock.start,
 			EndId:   taskIDBlock.end,
+		},
+	}
+}
+
+func (c *backlogManagerImpl) TotalApproximateBacklogCount() int64 {
+	return c.db.getTotalApproximateBacklogCount()
+}
+
+func (c *backlogManagerImpl) InternalStatus() []*taskqueuespb.InternalTaskQueueStatus {
+	currentTaskIDBlock := c.taskWriter.getCurrentTaskIDBlock()
+	return []*taskqueuespb.InternalTaskQueueStatus{
+		&taskqueuespb.InternalTaskQueueStatus{
+			ReadLevel: c.taskAckManager.getReadLevel(),
+			AckLevel:  c.taskAckManager.getAckLevel(),
+			TaskIdBlock: &taskqueuepb.TaskIdBlock{
+				StartId: currentTaskIDBlock.start,
+				EndId:   currentTaskIDBlock.end,
+			},
+			LoadedTasks:             c.taskAckManager.getBacklogCountHint(),
+			MaxReadLevel:            c.db.GetMaxReadLevel(subqueueZero),
+			ApproximateBacklogCount: c.db.getApproximateBacklogCount(subqueueZero),
 		},
 	}
 }
@@ -204,16 +222,17 @@ func (c *backlogManagerImpl) BacklogStatus() *taskqueuepb.TaskQueueStatus {
 // here. As part of completion:
 //   - task is deleted from the database when err is nil
 //   - new task is created and current task is deleted when err is not nil
-func (c *backlogManagerImpl) completeTask(task *persistencespb.AllocatedTaskInfo, err error) {
+func (c *backlogManagerImpl) completeTask(itask *internalTask, err error) {
+	task := itask.event.AllocatedTaskInfo
 	if err != nil {
 		// failed to start the task.
 		// We cannot just remove it from persistence because then it will be lost.
 		// We handle this by writing the task back to persistence with a higher taskID.
 		// This will allow subsequent tasks to make progress, and hopefully by the time this task is picked-up
 		// again the underlying reason for failing to start will be resolved.
+		metrics.TaskRewrites.With(c.metricsHandler).Record(1)
 		err = executeWithRetry(context.Background(), func(_ context.Context) error {
-			_, err := c.taskWriter.appendTask(task.Data)
-			return err
+			return c.taskWriter.appendTask(task.Data)
 		})
 
 		if err != nil {
@@ -235,7 +254,14 @@ func (c *backlogManagerImpl) completeTask(task *persistencespb.AllocatedTaskInfo
 		c.taskReader.Signal()
 	}
 
-	ackLevel := c.taskAckManager.completeTask(task.GetTaskId())
+	ackLevel, numAcked := c.taskAckManager.completeTask(task.GetTaskId())
+	if numAcked > 0 {
+		var backlogHead time.Time
+		if nanos := c.taskReader.backlogHeadCreateTime.Load(); nanos > 0 {
+			backlogHead = time.Unix(0, nanos)
+		}
+		c.db.updateBacklogStats(-numAcked, backlogHead)
+	}
 	c.taskGC.Run(ackLevel)
 }
 
@@ -264,4 +290,8 @@ func executeWithRetry(
 
 func (c *backlogManagerImpl) queueKey() *PhysicalTaskQueueKey {
 	return c.pqMgr.QueueKey()
+}
+
+func (c *backlogManagerImpl) getDB() *taskQueueDB {
+	return c.db
 }

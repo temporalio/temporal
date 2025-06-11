@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2022 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package batcher
 
 import (
@@ -66,9 +42,9 @@ func TestActivitiesSuite(t *testing.T) {
 
 const NumTotalEvents = 10
 
-// pattern contains either c or f representing completed or failed task
+// Pattern contains either c or f representing completed or failed task.
 // Schedule events for each task has id of NumTotalEvents*i + 1 where i is the index of the character
-// eventId for each task has id of NumTotalEvents*i+NumTotalEvents where is is the index of the character
+// EventId for each task has id of NumTotalEvents*i+NumTotalEvents where i is the index of the character
 func generateEventHistory(pattern string) *historypb.History {
 	events := make([]*historypb.HistoryEvent, 0)
 	for i, char := range pattern {

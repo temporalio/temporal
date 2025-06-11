@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package update_test
 
 import (
@@ -36,11 +12,11 @@ import (
 	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
+	"go.temporal.io/server/common/effect"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/payloads"
 	. "go.temporal.io/server/common/testing/protoutils"
 	"go.temporal.io/server/common/testing/testvars"
-	"go.temporal.io/server/internal/effect"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/workflow/update"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -189,16 +165,16 @@ func TestUpdateState(t *testing.T) {
 					}()
 
 					err := admit(t, readonlyStore, upd) // NOTE the store!
-					require.ErrorIs(t, consts.ErrWorkflowCompleted, err)
+					require.ErrorIs(t, update.AbortedByWorkflowClosingErr, err)
 					effects.Apply(context.Background())
 
 					// ensure waiter received response
 					waiterRes := <-ch
-					require.EqualExportedValues(t, consts.ErrWorkflowCompleted, waiterRes)
+					require.EqualExportedValues(t, update.AbortedByWorkflowClosingErr, waiterRes)
 
 					// new waiter receives same response
 					_, err = upd.WaitLifecycleStage(immediateCtx, UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, immediateTimeout)
-					require.ErrorIs(t, err, consts.ErrWorkflowCompleted)
+					require.ErrorIs(t, err, update.AbortedByWorkflowClosingErr)
 				},
 			}, {
 				title:        "fail to transition to stateSent",
@@ -232,14 +208,14 @@ func TestUpdateState(t *testing.T) {
 				apply: func() {
 					abort(t, store, upd, update.AbortReasonRegistryCleared)
 					effects.Apply(context.Background())
-					assertAborted(t, upd, update.WorkflowUpdateAbortedErr)
+					assertAborted(t, upd, update.AbortedByServerErr)
 				},
 			}, {
 				title: "aborted because Workflow completed",
 				apply: func() {
 					abort(t, store, upd, update.AbortReasonWorkflowCompleted)
 					effects.Apply(context.Background())
-					assertAborted(t, upd, consts.ErrWorkflowCompleted)
+					assertAborted(t, upd, update.AbortedByWorkflowClosingErr)
 				},
 			}, {
 				title: "aborted because Workflow completing",
@@ -332,14 +308,14 @@ func TestUpdateState(t *testing.T) {
 				apply: func() {
 					abort(t, store, upd, update.AbortReasonRegistryCleared)
 					effects.Apply(context.Background())
-					assertAborted(t, upd, update.WorkflowUpdateAbortedErr)
+					assertAborted(t, upd, update.AbortedByServerErr)
 				},
 			}, {
 				title: "aborted because Workflow completed",
 				apply: func() {
 					abort(t, store, upd, update.AbortReasonWorkflowCompleted)
 					effects.Apply(context.Background())
-					assertAborted(t, upd, consts.ErrWorkflowCompleted)
+					assertAborted(t, upd, update.AbortedByWorkflowClosingErr)
 				},
 			}, {
 				title: "aborted because Workflow completing",
@@ -465,16 +441,16 @@ func TestUpdateState(t *testing.T) {
 					effects.Apply(context.Background())
 
 					status, err := upd.WaitLifecycleStage(immediateCtx, UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED, immediateTimeout)
-					require.ErrorIs(t, err, consts.ErrWorkflowCompleted)
+					require.ErrorIs(t, err, update.AbortedByWorkflowClosingErr)
 					require.Nil(t, status)
 
 					// ensure waiter received response
 					waiterRes := <-ch
-					require.EqualExportedValues(t, consts.ErrWorkflowCompleted, waiterRes)
+					require.EqualExportedValues(t, update.AbortedByWorkflowClosingErr, waiterRes)
 
 					// new waiter still sees same result
 					_, err = upd.WaitLifecycleStage(immediateCtx, UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, immediateTimeout)
-					require.EqualExportedValues(t, consts.ErrWorkflowCompleted, err)
+					require.EqualExportedValues(t, update.AbortedByWorkflowClosingErr, err)
 				},
 			}, {
 				title: "transition to stateRejected",
@@ -659,14 +635,14 @@ func TestUpdateState(t *testing.T) {
 				apply: func() {
 					abort(t, store, upd, update.AbortReasonRegistryCleared)
 					effects.Apply(context.Background())
-					assertAborted(t, upd, update.WorkflowUpdateAbortedErr)
+					assertAborted(t, upd, update.AbortedByServerErr)
 				},
 			}, {
 				title: "aborted because Workflow completed",
 				apply: func() {
 					abort(t, store, upd, update.AbortReasonWorkflowCompleted)
 					effects.Apply(context.Background())
-					assertAborted(t, upd, consts.ErrWorkflowCompleted)
+					assertAborted(t, upd, update.AbortedByWorkflowClosingErr)
 				},
 			}, {
 				title: "aborted because Workflow completing",

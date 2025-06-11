@@ -1,33 +1,9 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package matching
 
 import (
 	"context"
 	"errors"
-	"fmt"
+	"sync/atomic"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -42,14 +18,10 @@ import (
 )
 
 type (
-	writeTaskResponse struct {
-		err                 error
-		persistenceResponse *persistence.CreateTasksResponse
-	}
-
 	writeTaskRequest struct {
+		subqueue   int // for priTaskWriter only
 		taskInfo   *persistencespb.TaskInfo
-		responseCh chan<- *writeTaskResponse
+		responseCh chan<- error
 	}
 
 	taskIDBlock struct {
@@ -57,19 +29,15 @@ type (
 		end   int64
 	}
 
-	idBlockAllocator interface {
-		RenewLease(context.Context) (taskQueueState, error)
-		RangeID() int64
-	}
-
 	// taskWriter writes tasks sequentially to persistence
 	taskWriter struct {
-		backlogMgr  *backlogManagerImpl
-		config      *taskQueueConfig
-		appendCh    chan *writeTaskRequest
-		taskIDBlock taskIDBlock
-		logger      log.Logger
-		idAlloc     idBlockAllocator
+		backlogMgr         *backlogManagerImpl
+		config             *taskQueueConfig
+		db                 *taskQueueDB
+		logger             log.Logger
+		appendCh           chan *writeTaskRequest
+		taskIDBlock        taskIDBlock
+		currentTaskIDBlock taskIDBlock // copy of taskIDBlock for safe concurrent access via getCurrentTaskIDBlock()
 	}
 )
 
@@ -87,10 +55,10 @@ func newTaskWriter(
 	return &taskWriter{
 		backlogMgr:  backlogMgr,
 		config:      backlogMgr.config,
+		db:          backlogMgr.db,
+		logger:      backlogMgr.logger,
 		appendCh:    make(chan *writeTaskRequest, backlogMgr.config.OutstandingTaskAppendsThreshold()),
 		taskIDBlock: noTaskIDs,
-		logger:      backlogMgr.logger,
-		idAlloc:     backlogMgr.db,
 	}
 }
 
@@ -109,24 +77,25 @@ func (w *taskWriter) initReadWriteState() error {
 		return err
 	}
 	w.taskIDBlock = rangeIDToTaskIDBlock(state.rangeID, w.config.RangeSize)
-	w.backlogMgr.db.SetMaxReadLevel(w.taskIDBlock.start - 1)
+	w.currentTaskIDBlock = w.taskIDBlock
 	w.backlogMgr.taskAckManager.setAckLevel(state.ackLevel)
+
 	return nil
 }
 
 func (w *taskWriter) appendTask(
 	taskInfo *persistencespb.TaskInfo,
-) (*persistence.CreateTasksResponse, error) {
+) error {
 
 	select {
 	case <-w.backlogMgr.tqCtx.Done():
-		return nil, errShutdown
+		return errShutdown
 	default:
 		// noop
 	}
 
 	startTime := time.Now().UTC()
-	ch := make(chan *writeTaskResponse)
+	ch := make(chan error)
 	req := &writeTaskRequest{
 		taskInfo:   taskInfo,
 		responseCh: ch,
@@ -135,17 +104,17 @@ func (w *taskWriter) appendTask(
 	select {
 	case w.appendCh <- req:
 		select {
-		case r := <-ch:
+		case err := <-ch:
 			metrics.TaskWriteLatencyPerTaskQueue.With(w.backlogMgr.metricsHandler).Record(time.Since(startTime))
-			return r.persistenceResponse, r.err
+			return err
 		case <-w.backlogMgr.tqCtx.Done():
 			// if we are shutting down, this request will never make
 			// it to cassandra, just bail out and fail this request
-			return nil, errShutdown
+			return errShutdown
 		}
 	default: // channel is full, throttle
 		metrics.TaskWriteThrottlePerTaskQueueCounter.With(w.backlogMgr.metricsHandler).Record(1)
-		return nil, &serviceerror.ResourceExhausted{
+		return &serviceerror.ResourceExhausted{
 			Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED,
 			Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
 			Message: "Too many outstanding appends to the task queue",
@@ -173,9 +142,8 @@ func (w *taskWriter) allocTaskIDs(count int) ([]int64, error) {
 func (w *taskWriter) appendTasks(
 	taskIDs []int64,
 	reqs []*writeTaskRequest,
-) (*persistence.CreateTasksResponse, error) {
-
-	resp, err := w.backlogMgr.db.CreateTasks(w.backlogMgr.tqCtx, taskIDs, reqs)
+) error {
+	_, err := w.db.CreateTasks(w.backlogMgr.tqCtx, taskIDs, reqs)
 	if err != nil {
 		w.backlogMgr.signalIfFatal(err)
 		w.logger.Error("Persistent store operation failure",
@@ -183,17 +151,19 @@ func (w *taskWriter) appendTasks(
 			tag.Error(err),
 			tag.WorkflowTaskQueueName(w.backlogMgr.queueKey().PersistenceName()),
 			tag.WorkflowTaskQueueType(w.backlogMgr.queueKey().TaskType()))
-		return nil, err
+		return err
 	}
-	return resp, nil
+	return nil
 }
 
 func (w *taskWriter) taskWriterLoop() {
 	err := w.initReadWriteState()
 	w.backlogMgr.SetInitializedError(err)
 
-writerLoop:
 	for {
+		atomic.StoreInt64(&w.currentTaskIDBlock.start, w.taskIDBlock.start)
+		atomic.StoreInt64(&w.currentTaskIDBlock.end, w.taskIDBlock.end)
+
 		select {
 		case request := <-w.appendCh:
 			// read a batch of requests from the channel
@@ -202,13 +172,12 @@ writerLoop:
 			batchSize := len(reqs)
 
 			taskIDs, err := w.allocTaskIDs(batchSize)
-			if err != nil {
-				w.sendWriteResponse(reqs, nil, err)
-				continue writerLoop
+			if err == nil {
+				err = w.appendTasks(taskIDs, reqs)
 			}
-
-			resp, err := w.appendTasks(taskIDs, reqs)
-			w.sendWriteResponse(reqs, resp, err)
+			for _, req := range reqs {
+				req.responseCh <- err
+			}
 
 		case <-w.backlogMgr.tqCtx.Done():
 			return
@@ -229,28 +198,13 @@ readLoop:
 	return reqs
 }
 
-func (w *taskWriter) sendWriteResponse(
-	reqs []*writeTaskRequest,
-	persistenceResponse *persistence.CreateTasksResponse,
-	err error,
-) {
-	for _, req := range reqs {
-		resp := &writeTaskResponse{
-			err:                 err,
-			persistenceResponse: persistenceResponse,
-		}
-
-		req.responseCh <- resp
-	}
-}
-
 func (w *taskWriter) renewLeaseWithRetry(
 	retryPolicy backoff.RetryPolicy,
 	retryErrors backoff.IsRetryable,
 ) (taskQueueState, error) {
 	var newState taskQueueState
 	op := func(ctx context.Context) (err error) {
-		newState, err = w.idAlloc.RenewLease(ctx)
+		newState, err = w.db.RenewLease(ctx)
 		return
 	}
 	metrics.LeaseRequestPerTaskQueueCounter.With(w.backlogMgr.metricsHandler).Record(1)
@@ -263,15 +217,9 @@ func (w *taskWriter) renewLeaseWithRetry(
 }
 
 func (w *taskWriter) allocTaskIDBlock(prevBlockEnd int64) (taskIDBlock, error) {
-	currBlock := rangeIDToTaskIDBlock(w.idAlloc.RangeID(), w.config.RangeSize)
+	currBlock := rangeIDToTaskIDBlock(w.db.RangeID(), w.config.RangeSize)
 	if currBlock.end != prevBlockEnd {
-		return taskIDBlock{},
-			fmt.Errorf(
-				"%w: allocTaskIDBlock: invalid state: prevBlockEnd:%v != currTaskIDBlock:%+v",
-				errNonContiguousBlocks,
-				prevBlockEnd,
-				currBlock,
-			)
+		return taskIDBlock{}, errNonContiguousBlocks
 	}
 	state, err := w.renewLeaseWithRetry(persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
 	if err != nil {
@@ -281,4 +229,12 @@ func (w *taskWriter) allocTaskIDBlock(prevBlockEnd int64) (taskIDBlock, error) {
 		return taskIDBlock{}, err
 	}
 	return rangeIDToTaskIDBlock(state.rangeID, w.config.RangeSize), nil
+}
+
+// getCurrentTaskIDBlock returns the current taskIDBlock. Safe to be called concurrently.
+func (w *taskWriter) getCurrentTaskIDBlock() taskIDBlock {
+	return taskIDBlock{
+		start: atomic.LoadInt64(&w.currentTaskIDBlock.start),
+		end:   atomic.LoadInt64(&w.currentTaskIDBlock.end),
+	}
 }

@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package interceptor
 
 import (
@@ -45,6 +21,7 @@ import (
 	"go.temporal.io/server/common/rpc/interceptor/logtags"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/service/frontend/configs"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -79,11 +56,12 @@ var (
 )
 
 var (
-	respondWorkflowTaskCompleted = "RespondWorkflowTaskCompleted"
-	pollActivityTaskQueue        = "PollActivityTaskQueue"
-	startWorkflowExecution       = "StartWorkflowExecution"
-	executeMultiOperation        = "ExecuteMultiOperation"
-	queryWorkflow                = "QueryWorkflow"
+	respondWorkflowTaskCompleted   = "RespondWorkflowTaskCompleted"
+	pollActivityTaskQueue          = "PollActivityTaskQueue"
+	startWorkflowExecution         = "StartWorkflowExecution"
+	executeMultiOperation          = "ExecuteMultiOperation"
+	queryWorkflow                  = "QueryWorkflow"
+	updateWorkflowExecutionOptions = "UpdateWorkflowExecutionOptions"
 
 	grpcActions = map[string]struct{}{
 		startWorkflowExecution:             {},
@@ -91,6 +69,7 @@ var (
 		respondWorkflowTaskCompleted:       {},
 		pollActivityTaskQueue:              {},
 		queryWorkflow:                      {},
+		updateWorkflowExecutionOptions:     {},
 		"RecordActivityTaskHeartbeat":      {},
 		"RecordActivityTaskHeartbeatById":  {},
 		"ResetWorkflowExecution":           {},
@@ -132,9 +111,9 @@ func NewTelemetryInterceptor(
 	}
 }
 
-// Use this method to override scope used for reporting a metric.
+// telemetryUnaryOverrideOperationTag is used to override scope used for reporting a metric.
 // Ideally this method should never be used.
-func (ti *TelemetryInterceptor) unaryOverrideOperationTag(fullName, operation string, req any) string {
+func telemetryUnaryOverrideOperationTag(fullName, operation string, req any) string {
 	if strings.HasPrefix(fullName, api.WorkflowServicePrefix) {
 		// GetWorkflowExecutionHistory method handles both long poll and regular calls.
 		// Current plan is to eventually split GetWorkflowExecutionHistory into two APIs,
@@ -159,12 +138,12 @@ func (ti *TelemetryInterceptor) unaryOverrideOperationTag(fullName, operation st
 			}
 		}
 	}
-	return ti.overrideOperationTag(fullName, operation)
+	return telemetryOverrideOperationTag(fullName, operation)
 }
 
-// Use this method to override scope used for reporting a metric.
+// telemetryOverrideOperationTag is used to override scope used for reporting a metric.
 // Ideally this method should never be used.
-func (ti *TelemetryInterceptor) overrideOperationTag(fullName, operation string) string {
+func telemetryOverrideOperationTag(fullName, operation string) string {
 	// prepend Operator prefix to Operator APIs
 	if strings.HasPrefix(fullName, api.OperatorServicePrefix) {
 		return "Operator" + operation
@@ -196,6 +175,13 @@ func (ti *TelemetryInterceptor) UnaryIntercept(
 	}()
 
 	resp, err := handler(ctx, req)
+
+	if configs.IsAPIOperation(info.FullMethod) {
+		metrics.OperationCounter.With(metricsHandler).Record(
+			1,
+			metrics.TaskTypeTag(""), // Added to make tags consistent with history task executor.
+		)
+	}
 
 	if err != nil {
 		ti.HandleError(req, info.FullMethod, metricsHandler, logTags, err, nsName)
@@ -262,6 +248,11 @@ func (ti *TelemetryInterceptor) emitActionMetric(
 		}
 		if resp.Started {
 			metrics.ActionCounter.With(metricsHandler).Record(1, metrics.ActionType("grpc_"+methodName))
+		} else {
+			typedReq, ok := req.(*workflowservice.StartWorkflowExecutionRequest)
+			if ok && typedReq.GetWorkflowIdConflictPolicy() == enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING && typedReq.GetOnConflictOptions() != nil {
+				metrics.ActionCounter.With(metricsHandler).Record(1, metrics.ActionType("grpc_"+methodName+"_UpdateWorkflowExecutionOptions"))
+			}
 		}
 	case executeMultiOperation:
 		resp, ok := result.(*workflowservice.ExecuteMultiOperationResponse)
@@ -272,6 +263,16 @@ func (ti *TelemetryInterceptor) emitActionMetric(
 			if startResp := resp.GetResponses()[0].GetStartWorkflow(); startResp != nil {
 				if startResp.Started {
 					metrics.ActionCounter.With(metricsHandler).Record(1, metrics.ActionType("grpc_"+methodName))
+				} else {
+					typedReq, ok := req.(*workflowservice.ExecuteMultiOperationRequest)
+					if !ok || typedReq == nil || len(typedReq.Operations) == 0 {
+						return
+					}
+
+					if typedReq.GetOperations()[0].GetStartWorkflow().GetWorkflowIdConflictPolicy() == enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING &&
+						typedReq.GetOperations()[0].GetStartWorkflow().GetOnConflictOptions() != nil {
+						metrics.ActionCounter.With(metricsHandler).Record(1, metrics.ActionType("grpc_"+methodName+"_UpdateWorkflowExecutionOptions"))
+					}
 				}
 			}
 		}
@@ -359,7 +360,7 @@ func (ti *TelemetryInterceptor) unaryMetricsHandlerLogTags(req any,
 	fullMethod string,
 	methodName string,
 	nsName namespace.Name) (metrics.Handler, []tag.Tag) {
-	overridedMethodName := ti.unaryOverrideOperationTag(fullMethod, methodName, req)
+	overridedMethodName := telemetryUnaryOverrideOperationTag(fullMethod, methodName, req)
 
 	if nsName == "" {
 		return ti.metricsHandler.WithTags(metrics.OperationTag(overridedMethodName), metrics.NamespaceUnknownTag()),
@@ -373,7 +374,7 @@ func (ti *TelemetryInterceptor) streamMetricsHandlerLogTags(
 	fullMethod string,
 	methodName string,
 ) (metrics.Handler, []tag.Tag) {
-	overridedMethodName := ti.overrideOperationTag(fullMethod, methodName)
+	overridedMethodName := telemetryOverrideOperationTag(fullMethod, methodName)
 	return ti.metricsHandler.WithTags(
 		metrics.OperationTag(overridedMethodName),
 		metrics.NamespaceUnknownTag(),
@@ -417,14 +418,7 @@ func (ti *TelemetryInterceptor) logError(
 		return
 	}
 
-	// We mask these two error types in MaskInternalErrorDetailsInterceptor, so we need the hash to find the actual
-	// error message.
-	if statusCode == codes.Internal || statusCode == codes.Unknown {
-		errorHash := common.ErrorHash(err)
-		logTags = append(logTags, tag.NewStringTag("hash", errorHash))
-	}
-
-	logTags = append(logTags, tag.NewStringTag("grpc_code", statusCode.String()))
+	logTags = append(logTags, tag.NewStringerTag("grpc_code", statusCode))
 	logTags = append(logTags, ti.workflowTags.Extract(req, fullMethod)...)
 
 	ti.logger.Error("service failures", append(logTags, tag.Error(err))...)

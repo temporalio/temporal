@@ -1,32 +1,7 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package respondworkflowtaskcompleted
 
 import (
 	"context"
-	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -43,6 +18,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/effect"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
@@ -54,7 +30,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/tasktoken"
-	"go.temporal.io/server/internal/effect"
+	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/api/recordworkflowtaskstarted"
 	"go.temporal.io/server/service/history/configs"
@@ -83,6 +59,7 @@ type (
 		searchAttributesValidator      *searchattribute.Validator
 		persistenceVisibilityMgr       manager.VisibilityManager
 		commandHandlerRegistry         *workflow.CommandHandlerRegistry
+		matchingClient                 matchingservice.MatchingServiceClient
 	}
 )
 
@@ -94,6 +71,7 @@ func NewWorkflowTaskCompletedHandler(
 	searchAttributesValidator *searchattribute.Validator,
 	visibilityManager manager.VisibilityManager,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
+	matchingClient matchingservice.MatchingServiceClient,
 ) *WorkflowTaskCompletedHandler {
 	return &WorkflowTaskCompletedHandler{
 		config:                     shardContext.GetConfig(),
@@ -115,6 +93,7 @@ func NewWorkflowTaskCompletedHandler(
 		searchAttributesValidator:      searchAttributesValidator,
 		persistenceVisibilityMgr:       visibilityManager,
 		commandHandlerRegistry:         commandHandlerRegistry,
+		matchingClient:                 matchingClient,
 	}
 }
 
@@ -215,6 +194,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 	}
 
 	behavior := request.GetVersioningBehavior()
+	deployment := worker_versioning.DeploymentFromDeploymentVersion(worker_versioning.DeploymentVersionFromOptions(request.GetDeploymentOptions()))
 	//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
 	if behavior != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED && request.GetDeployment() == nil &&
 		(request.GetDeploymentOptions() == nil || request.GetDeploymentOptions().GetWorkerVersioningMode() != enumspb.WORKER_VERSIONING_MODE_VERSIONED) {
@@ -233,7 +213,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		if wftCompletedBuildId != wftStartedBuildId {
 			// Mutable state wasn't changed yet and doesn't have to be cleared.
 			releaseLeaseWithError = false
-			return nil, serviceerror.NewNotFound(fmt.Sprintf("this workflow task was dispatched to Build ID %s, not %s", wftStartedBuildId, wftCompletedBuildId))
+			return nil, serviceerror.NewNotFoundf("this workflow task was dispatched to Build ID %s, not %s", wftStartedBuildId, wftCompletedBuildId)
 		}
 	}
 
@@ -253,6 +233,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		}
 	}()
 
+	// TODO(carlydf): change condition when deprecating versionstamp
 	// It's an error if the workflow has used versioning in the past but this task has no versioning info.
 	if ms.GetMostRecentWorkerVersionStamp().GetUseVersioning() &&
 		//nolint:staticcheck // SA1019 deprecated stamp will clean up later
@@ -327,7 +308,8 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		metrics.CompleteWorkflowTaskWithStickyEnabledCounter.With(handler.metricsHandler).Record(
 			1,
 			metrics.OperationTag(metrics.HistoryRespondWorkflowTaskCompletedScope))
-		if assignedBuildId == "" || assignedBuildId == wftCompletedBuildId {
+		if (assignedBuildId == "" || assignedBuildId == wftCompletedBuildId) &&
+			(ms.GetDeploymentTransition() == nil || ms.GetDeploymentTransition().GetDeployment().Equal(deployment)) {
 			// TODO: clean up. this is not applicable to V3
 			// For versioned workflows, only set sticky queue if the WFT is completed by the WF's current build ID.
 			// It is possible that the WF has been redirected to another build ID since this WFT started, in that case
@@ -356,10 +338,10 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 	if err := namespaceEntry.VerifyBinaryChecksum(request.GetBinaryChecksum()); err != nil {
 		wtFailedCause = newWorkflowTaskFailedCause(
 			enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_BINARY,
-			serviceerror.NewInvalidArgument(
-				fmt.Sprintf(
-					"binary %v is marked as bad deployment",
-					request.GetBinaryChecksum())),
+			serviceerror.NewInvalidArgumentf(
+				"binary %v is marked as bad deployment",
+				//nolint:staticcheck // SA1019 deprecated stamp will clean up later
+				request.GetBinaryChecksum()),
 			false)
 	} else {
 		namespace := namespaceEntry.Name()
@@ -399,6 +381,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			handler.searchAttributesMapperProvider,
 			hasBufferedEventsOrMessages,
 			handler.commandHandlerRegistry,
+			handler.matchingClient,
 		)
 
 		if responseMutations, err = workflowTaskHandler.handleCommands(
@@ -455,7 +438,12 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 
 		metrics.FailedWorkflowTasksCounter.With(handler.metricsHandler).Record(
 			1,
-			metrics.OperationTag(metrics.HistoryRespondWorkflowTaskCompletedScope))
+			metrics.OperationTag(metrics.HistoryRespondWorkflowTaskCompletedScope),
+			metrics.NamespaceTag(namespaceEntry.Name().String()),
+			metrics.VersioningBehaviorTag(ms.GetEffectiveVersioningBehavior()),
+			metrics.FailureTag(wtFailedCause.failedCause.String()),
+			metrics.FirstAttemptTag(currentWorkflowTask.Attempt),
+		)
 		handler.logger.Info("Failing the workflow task.",
 			tag.Value(wtFailedCause.Message()),
 			tag.WorkflowID(token.GetWorkflowId()),
@@ -500,7 +488,10 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		if request.GetForceCreateNewWorkflowTask() || // Heartbeat WT is always of Normal type.
 			wtFailedShouldCreateNewTask ||
 			hasBufferedEventsOrMessages ||
-			activityNotStartedCancelled {
+			activityNotStartedCancelled ||
+			// If the workflow has an ongoing transition to another deployment version, we should ensure
+			// it has a pending wft so it does not remain in the transition phase for long.
+			ms.GetDeploymentTransition() != nil {
 
 			newWorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_NORMAL
 
@@ -542,6 +533,12 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 					bypassTaskGeneration = false
 				}
 			}
+		}
+
+		if ms.GetDeploymentTransition() != nil {
+			// Do not return new wft to worker if the workflow is transitioning to a different deployment version.
+			// Let the task go through matching and get dispatched to the right worker
+			bypassTaskGeneration = false
 		}
 
 		var newWTErr error

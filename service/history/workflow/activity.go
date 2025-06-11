@@ -29,14 +29,21 @@ import (
 	"math/rand"
 	"time"
 
+	activitypb "go.temporal.io/api/activity/v1"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
+	historypb "go.temporal.io/api/history/v1"
+	rulespb "go.temporal.io/api/rules/v1"
+	"go.temporal.io/api/serviceerror"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
+	"go.temporal.io/server/service/history/workflow/matcher"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -77,6 +84,16 @@ func UpdateActivityInfoForRetries(
 	ai.TimerTaskStatus = TimerTaskStatusNone
 	ai.RetryLastWorkerIdentity = ai.StartedIdentity
 	ai.RetryLastFailure = failure
+	// this flag means the user resets the activity with "--reset-heartbeat" flag
+	// server sends heartbeat details to the worker with the new activity attempt
+	// if the current attempt was still running - worker can still send new heartbeats, and even complete the activity
+	// so for the current activity attempt server continue to accept the heartbeats, but reset it for the new attempt
+	if ai.ResetHeartbeats {
+		ai.LastHeartbeatDetails = nil
+		ai.LastHeartbeatUpdateTime = nil
+	}
+	ai.ActivityReset = false
+	ai.ResetHeartbeats = false
 
 	return ai
 }
@@ -92,6 +109,8 @@ func GetPendingActivityInfo(
 	p := &workflowpb.PendingActivityInfo{
 		ActivityId:                  ai.ActivityId,
 		LastWorkerDeploymentVersion: ai.LastWorkerDeploymentVersion,
+		LastDeploymentVersion:       ai.LastDeploymentVersion,
+		Priority:                    ai.Priority,
 	}
 	if ai.GetUseWorkflowBuildIdInfo() != nil {
 		p.AssignedBuildId = &workflowpb.PendingActivityInfo_UseWorkflowBuildId{UseWorkflowBuildId: &emptypb.Empty{}}
@@ -148,6 +167,65 @@ func GetPendingActivityInfo(
 		}
 	}
 
+	if ai.Paused {
+		// adjust activity state for paused activities
+		if p.State == enumspb.PENDING_ACTIVITY_STATE_SCHEDULED {
+			// this state means activity is not running on the worker
+			// if activity is paused on server and not running on worker - mark it as PAUSED
+			p.State = enumspb.PENDING_ACTIVITY_STATE_PAUSED
+		} else if p.State == enumspb.PENDING_ACTIVITY_STATE_STARTED {
+			// this state means activity is running on the worker
+			// if activity is paused on server, but still running on worker - mark it as PAUSE_REQUESTED
+			p.State = enumspb.PENDING_ACTIVITY_STATE_PAUSE_REQUESTED
+		} // if state is CANCEL_REQUESTEd - it is not modified
+
+		// fill activity pause info
+		if ai.PauseInfo != nil {
+			p.PauseInfo = &workflowpb.PendingActivityInfo_PauseInfo{
+				PauseTime: ai.PauseInfo.PauseTime,
+			}
+			if ai.PauseInfo.GetManual() != nil {
+				p.PauseInfo.PausedBy = &workflowpb.PendingActivityInfo_PauseInfo_Manual_{
+					Manual: &workflowpb.PendingActivityInfo_PauseInfo_Manual{
+						Identity: ai.PauseInfo.GetManual().Identity,
+						Reason:   ai.PauseInfo.GetManual().Reason,
+					},
+				}
+			} else {
+				ruleId := ai.PauseInfo.GetRuleId()
+				p.PauseInfo.PausedBy = &workflowpb.PendingActivityInfo_PauseInfo_Rule_{
+					Rule: &workflowpb.PendingActivityInfo_PauseInfo_Rule{
+						RuleId: ruleId,
+					},
+				}
+				rule, ok := mutableState.GetNamespaceEntry().GetWorkflowRule(ruleId)
+				if ok {
+					p.PauseInfo.PausedBy.(*workflowpb.PendingActivityInfo_PauseInfo_Rule_).Rule.Identity = rule.CreatedByIdentity
+					p.PauseInfo.PausedBy.(*workflowpb.PendingActivityInfo_PauseInfo_Rule_).Rule.Reason = rule.Description
+				}
+			}
+		}
+	}
+
+	p.ActivityOptions = &activitypb.ActivityOptions{
+		TaskQueue: &taskqueuepb.TaskQueue{
+			// we may need to return sticky task queue name here
+			Name:       ai.TaskQueue,
+			NormalName: ai.TaskQueue,
+		},
+		ScheduleToCloseTimeout: ai.ScheduleToCloseTimeout,
+		ScheduleToStartTimeout: ai.ScheduleToStartTimeout,
+		StartToCloseTimeout:    ai.StartToCloseTimeout,
+		HeartbeatTimeout:       ai.HeartbeatTimeout,
+
+		RetryPolicy: &commonpb.RetryPolicy{
+			InitialInterval:    ai.RetryInitialInterval,
+			BackoffCoefficient: ai.RetryBackoffCoefficient,
+			MaximumInterval:    ai.RetryMaximumInterval,
+			MaximumAttempts:    ai.RetryMaximumAttempts,
+		},
+	}
+
 	return p, nil
 }
 
@@ -174,7 +252,11 @@ func GetNextScheduledTime(ai *persistencespb.ActivityInfo) time.Time {
 	return nextScheduledTime
 }
 
-func PauseActivity(mutableState historyi.MutableState, activityId string) error {
+func PauseActivity(
+	mutableState historyi.MutableState,
+	activityId string,
+	pauseInfo *persistencespb.ActivityInfo_PauseInfo,
+) error {
 	if !mutableState.IsWorkflowExecutionRunning() {
 		return consts.ErrWorkflowCompleted
 	}
@@ -197,16 +279,19 @@ func PauseActivity(mutableState historyi.MutableState, activityId string) error 
 			activityInfo.Stamp++
 		}
 		activityInfo.Paused = true
+		activityInfo.PauseInfo = pauseInfo
 		return nil
 	})
 }
 
 func ResetActivity(
+	ctx context.Context,
 	shardContext historyi.ShardContext,
 	mutableState historyi.MutableState,
 	activityId string,
 	resetHeartbeats bool,
 	keepPaused bool,
+	resetOptions bool,
 	jitter time.Duration,
 ) error {
 	if !mutableState.IsWorkflowExecutionRunning() {
@@ -218,13 +303,48 @@ func ResetActivity(
 		return consts.ErrActivityNotFound
 	}
 
+	var originalOptions *historypb.ActivityTaskScheduledEventAttributes
+	if resetOptions {
+		event, err := mutableState.GetActivityScheduledEvent(ctx, ai.ScheduledEventId)
+		if err != nil {
+			return serviceerror.NewInvalidArgumentf("ActivityTaskScheduledEvent not found, %v", err)
+		}
+		attrs, ok := event.Attributes.(*historypb.HistoryEvent_ActivityTaskScheduledEventAttributes)
+		if !ok {
+			return serviceerror.NewInvalidArgument("ActivityTaskScheduledEvent is invalid")
+		}
+		if attrs == nil || attrs.ActivityTaskScheduledEventAttributes == nil {
+			return serviceerror.NewInvalidArgument("ActivityTaskScheduledEvent is incomplete")
+		}
+
+		originalOptions = attrs.ActivityTaskScheduledEventAttributes
+	}
+
 	return mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, ms historyi.MutableState) error {
 		// reset the number of attempts
-		ai.Attempt = 1
-
+		activityInfo.Attempt = 1
+		activityInfo.ActivityReset = true
 		if resetHeartbeats {
-			activityInfo.LastHeartbeatDetails = nil
-			activityInfo.LastHeartbeatUpdateTime = nil
+			activityInfo.ResetHeartbeats = true
+		}
+
+		if resetOptions {
+			// update activity info with new options
+			activityInfo.TaskQueue = originalOptions.TaskQueue.Name
+			activityInfo.ScheduleToCloseTimeout = originalOptions.ScheduleToCloseTimeout
+			activityInfo.ScheduleToStartTimeout = originalOptions.ScheduleToStartTimeout
+			activityInfo.StartToCloseTimeout = originalOptions.StartToCloseTimeout
+			activityInfo.HeartbeatTimeout = originalOptions.HeartbeatTimeout
+			activityInfo.RetryMaximumInterval = originalOptions.RetryPolicy.MaximumInterval
+			activityInfo.RetryBackoffCoefficient = originalOptions.RetryPolicy.BackoffCoefficient
+			activityInfo.RetryInitialInterval = originalOptions.RetryPolicy.InitialInterval
+			activityInfo.RetryMaximumAttempts = originalOptions.RetryPolicy.MaximumAttempts
+
+			// move forward activity version
+			activityInfo.Stamp++
+
+			// invalidate timers
+			activityInfo.TimerTaskStatus = TimerTaskStatusNone
 		}
 
 		// if activity is running, or it is paused and we don't want to unpause - we don't need to do anything
@@ -232,13 +352,19 @@ func ResetActivity(
 			return nil
 		}
 
-		ai.Stamp++
-		if ai.Paused && !keepPaused {
-			ai.Paused = false
+		activityInfo.Stamp++
+		if activityInfo.Paused && !keepPaused {
+			activityInfo.Paused = false
 		}
 
 		// if activity is not running - we need to regenerate the retry task as schedule activity immediately
-		if GetActivityState(ai) == enumspb.PENDING_ACTIVITY_STATE_SCHEDULED {
+		if GetActivityState(activityInfo) == enumspb.PENDING_ACTIVITY_STATE_SCHEDULED {
+			// we reset heartbeat was requested we also should reset heartbeat details and timer
+			if resetHeartbeats {
+				ai.LastHeartbeatDetails = nil
+				ai.LastHeartbeatUpdateTime = nil
+			}
+
 			scheduleTime := shardContext.GetTimeSource().Now().UTC()
 			if jitter != 0 {
 				randomOffset := time.Duration(rand.Int63n(int64(jitter)))
@@ -253,6 +379,13 @@ func ResetActivity(
 	})
 }
 
+func unpauseActivityInfo(ai *persistencespb.ActivityInfo) {
+	ai.Paused = false
+	ai.PauseInfo = nil
+	ai.Stamp++
+
+}
+
 func UnpauseActivity(
 	shardContext historyi.ShardContext,
 	mutableState historyi.MutableState,
@@ -262,8 +395,7 @@ func UnpauseActivity(
 	jitter time.Duration,
 ) error {
 	if err := mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, ms historyi.MutableState) error {
-		activityInfo.Paused = false
-		activityInfo.Stamp++
+		unpauseActivityInfo(activityInfo)
 
 		if resetAttempts {
 			activityInfo.Attempt = 1
@@ -302,8 +434,7 @@ func UnpauseActivityWithResume(
 ) (*historyservice.UnpauseActivityResponse, error) {
 
 	if err := mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, ms historyi.MutableState) error {
-		activityInfo.Stamp++
-		activityInfo.Paused = false
+		unpauseActivityInfo(activityInfo)
 
 		// regenerate the retry task if needed
 		if GetActivityState(ai) == enumspb.PENDING_ACTIVITY_STATE_SCHEDULED {
@@ -328,8 +459,7 @@ func UnpauseActivityWithReset(
 	jitter time.Duration,
 ) (*historyservice.UnpauseActivityResponse, error) {
 	if err := mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, ms historyi.MutableState) error {
-		activityInfo.Paused = false
-		activityInfo.Stamp++
+		unpauseActivityInfo(activityInfo)
 
 		// reset the number of attempts
 		activityInfo.Attempt = 1
@@ -395,4 +525,27 @@ func needRegenerateRetryTask(ai *persistencespb.ActivityInfo, scheduleNewRun boo
 	// activity is running, scheduleNewRun flag is NOT provided
 	// in this case we don't need to do anything
 	return false
+}
+
+func MatchWorkflowRule(
+	executionInfo *persistencespb.WorkflowExecutionInfo,
+	executionState *persistencespb.WorkflowExecutionState,
+	ai *persistencespb.ActivityInfo,
+	rule *rulespb.WorkflowRuleSpec,
+) (bool, error) {
+	// match visibility query
+	visibilityQuery := rule.GetVisibilityQuery()
+	if visibilityQuery != "" {
+		match, err := matcher.MatchMutableState(executionInfo, executionState, rule.GetVisibilityQuery())
+		if err != nil || !match {
+			return false, err
+		}
+	}
+
+	// match activity query
+	activityTrigger := rule.GetActivityStart()
+	if activityTrigger == nil {
+		return false, nil
+	}
+	return matcher.MatchActivity(ai, activityTrigger.GetPredicate())
 }

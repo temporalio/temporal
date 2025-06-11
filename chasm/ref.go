@@ -1,31 +1,11 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package chasm
 
 import (
+	"reflect"
+
+	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common"
 )
 
 var (
@@ -41,50 +21,109 @@ type EntityKey struct {
 type ComponentRef struct {
 	EntityKey
 
-	// Fully qualified component type name for routing.
-	rootComponentType string
-	// We could also make the routing infomation clear with
-	// routingKey string
-
-	// We can also simply put shardID here.
-	// TODO: Remove one of shardID and rootComponentType.
 	shardID int32
+	// archetype is the fully qualified type name of the root component.
+	// It is used to look up the component's registered sharding function,
+	// which determines the shardID of the entity that contains the referenced component.
+	// It is also used to validate if a given entity has the right archetype.
+	// E.g. The EntityKey can be empty and the current run of the BusinessID may have a different archetype.
+	archetype string
+	// entityGoType is used for determining the ComponetRef's shardID and archetype.
+	// When CHASM deverloper needs to create a ComponentRef, they will only provide this information,
+	// and leave the work of determining the shardID and archetype to the CHASM engine.
+	entityGoType reflect.Type
 
-	// Fully qualified component type name.
-	// From the component type, we can find the component struct definition,
+	// entityLastUpdateVT is the consistency token for the entire entity.
+	entityLastUpdateVT *persistencespb.VersionedTransition
+
+	// componentType is the fully qualified component type name.
+	// It is for performing partial loading more efficiently in future versions of CHASM.
+	//
+	// From the componentType, we can find the registered component struct definition,
 	// then use reflection to find sub-components and understand if those sub-components
 	// need to be loaded or not.
 	// We only need to do this for sub-components, path for parent/ancenstor components
-	// can be inferred from the current component path.
-	componentType      string
-	componentPath      []string
-	componentInitialVT *persistencespb.VersionedTransition // this identifies a component
-	entityLastUpdateVT *persistencespb.VersionedTransition // this is consistency token
+	// can be inferred from the current component path and they always needs to be loaded.
+	//
+	// componentType string
 
-	validationFn func(Context, Component) error
+	// componentPath and componentInitialVT are used to identify a component.
+	componentPath      []string
+	componentInitialVT *persistencespb.VersionedTransition
+
+	validationFn func(NodeBackend, Context, Component) error
 }
 
+// NewComponentRef creates a new ComponentRef with a registered root component go type.
+//
 // In V1, if you don't have a ref,
-// then you can only interact with the top level entity.
-func NewComponentRef(
+// then you can only interact with the (top level) entity.
+func NewComponentRef[C Component](
 	entityKey EntityKey,
-	rootComponentType string,
 ) ComponentRef {
 	return ComponentRef{
-		EntityKey: entityKey,
-		// we probably don't even need this,
-		// can make the function generic and find the type from registry
-		rootComponentType: rootComponentType,
+		EntityKey:    entityKey,
+		entityGoType: reflect.TypeFor[C](),
 	}
 }
 
-func (r *ComponentRef) Serialize() []byte {
+// ShardingKey returns the sharding key used for determining the shardID of the run
+// that contains the referenced component.
+func (r *ComponentRef) ShardingKey(
+	registry *Registry,
+) (string, error) {
+	var rc *RegistrableComponent
+	var ok bool
+
+	if r.archetype == "" {
+		rc, ok = registry.componentOf(r.entityGoType)
+		if !ok {
+			return "", serviceerror.NewInternal("unknown chasm component type: " + r.entityGoType.String())
+		}
+		r.archetype = rc.fqType()
+	}
+
+	if rc == nil {
+		rc, ok = registry.component(r.archetype)
+		if !ok {
+			return "", serviceerror.NewInternal("unknown chasm component type: " + r.archetype)
+		}
+	}
+
+	if rc.shardingFn != nil {
+		return rc.shardingFn(r.EntityKey), nil
+	}
+	return r.EntityKey.BusinessID, nil
+}
+
+// ShardID returns the shardID of the run that contains the referenced component
+// given the total number of shards in the system.
+func (r *ComponentRef) ShardID(
+	registry *Registry,
+	numberOfShards int32,
+) (int32, error) {
+	if r.shardID != 0 {
+		return r.shardID, nil
+	}
+	shardingKey, err := r.ShardingKey(registry)
+	if err != nil {
+		return 0, err
+	}
+
+	r.shardID = common.ShardingKeyToShard(
+		shardingKey,
+		numberOfShards,
+	)
+	return r.shardID, nil
+}
+
+func (r *ComponentRef) serialize() ([]byte, error) {
 	if r == nil {
-		return nil
+		return nil, nil
 	}
 	panic("not implemented")
 }
 
-func DeserializeComponentRef(data []byte) (ComponentRef, error) {
+func deserializeComponentRef(data []byte) (ComponentRef, error) {
 	panic("not implemented")
 }

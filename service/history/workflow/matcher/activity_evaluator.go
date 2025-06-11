@@ -1,25 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2025 Temporal Technologies Inc.  All rights reserved.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package matcher
 
 import (
@@ -29,15 +7,15 @@ import (
 	"github.com/temporalio/sqlparser"
 	enumspb "go.temporal.io/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/sqlquery"
-	"go.temporal.io/server/service/history/workflow"
 )
 
 // Supported Fields
 const (
 	activityIDColName              = "ActivityId"
 	activityTypeNameColName        = "ActivityType"
-	activityStatusColName          = "ActivityStatus"
+	activityStateColName           = "ActivityState"
 	activityAttemptsColName        = "Attempts"
 	activityBackoffIntervalColName = "BackoffInterval"
 	activityLastFailureColName     = "LastFailure"
@@ -152,12 +130,12 @@ func (m *activityMatchEvaluator) evaluateComparison(expr *sqlparser.ComparisonEx
 			return false, err
 		}
 		return m.compareActivityId(val, expr.Operator)
-	case activityStatusColName:
+	case activityStateColName:
 		val, err := sqlquery.ExtractStringValue(valStr)
 		if err != nil {
 			return false, err
 		}
-		return m.compareActivityStatus(val, expr.Operator)
+		return m.compareActivityState(val, expr.Operator)
 	case activityAttemptsColName:
 		val, err := sqlquery.ExtractIntValue(valStr)
 		if err != nil {
@@ -237,18 +215,18 @@ func (m *activityMatchEvaluator) compareActivityId(activityId string, operation 
 	return compareQueryString(activityId, existingActivityId, operation, workflowIDColName)
 }
 
-func (m *activityMatchEvaluator) compareActivityStatus(status string, operator string) (bool, error) {
+func (m *activityMatchEvaluator) compareActivityState(status string, operator string) (bool, error) {
 	if m.ai.Paused {
-		return compareQueryString(status, "Paused", operator, activityStatusColName)
+		return compareQueryString(status, "Paused", operator, activityStateColName)
 	}
-	activityState := workflow.GetActivityState(m.ai)
-	switch activityState { //nolint:exhaustive
+
+	switch activityState := getActivityState(m.ai); activityState { //nolint:exhaustive
 	case enumspb.PENDING_ACTIVITY_STATE_CANCEL_REQUESTED:
-		return compareQueryString(status, activityState.String(), operator, activityStatusColName)
+		return compareQueryString(status, activityState.String(), operator, activityStateColName)
 	case enumspb.PENDING_ACTIVITY_STATE_STARTED:
-		return compareQueryString(status, activityState.String(), operator, activityStatusColName)
+		return compareQueryString(status, activityState.String(), operator, activityStateColName)
 	case enumspb.PENDING_ACTIVITY_STATE_SCHEDULED:
-		return compareQueryString(status, activityState.String(), operator, activityStatusColName)
+		return compareQueryString(status, activityState.String(), operator, activityStateColName)
 	default:
 		return false, NewMatcherError("unknown or unsupported activity status: %s", status)
 	}
@@ -314,4 +292,15 @@ func (m *activityMatchEvaluator) compareStartTimeBetween(fromTime time.Time, toT
 	}
 	startTime := m.ai.GetStartedTime().AsTime()
 	return startTime.Compare(fromTime) >= 0 && startTime.Compare(toTime) <= 0, nil
+}
+
+func getActivityState(ai *persistencespb.ActivityInfo) enumspb.PendingActivityState {
+	activityState := enumspb.PENDING_ACTIVITY_STATE_SCHEDULED
+	if ai.CancelRequested {
+		activityState = enumspb.PENDING_ACTIVITY_STATE_CANCEL_REQUESTED
+	}
+	if ai.StartedEventId != common.EmptyEventID {
+		activityState = enumspb.PENDING_ACTIVITY_STATE_STARTED
+	}
+	return activityState
 }

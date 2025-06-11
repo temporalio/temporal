@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package frontend
 
 import (
@@ -174,7 +150,6 @@ func (s *adminHandlerSuite) SetupTest() {
 		cfg,
 		s.mockResource.GetNamespaceReplicationQueue(),
 		s.mockProducer,
-		s.mockResource.ESClient,
 		s.mockVisibilityMgr,
 		s.mockResource.GetLogger(),
 		s.mockResource.GetTaskManager(),
@@ -362,7 +337,6 @@ func (s *adminHandlerSuite) Test_GetSearchAttributes_EmptyIndexName() {
 	s.mockVisibilityMgr.EXPECT().GetIndexName().Return("").AnyTimes()
 	mockSdkClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), "temporal-sys-add-search-attributes-workflow", "").Return(
 		&workflowservice.DescribeWorkflowExecutionResponse{}, nil)
-	s.mockResource.ESClient.EXPECT().GetMapping(gomock.Any(), "").Return(map[string]string{"col": "type"}, nil)
 	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("", true).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
 
 	resp, err = handler.GetSearchAttributes(ctx, &adminservice.GetSearchAttributesRequest{Namespace: s.namespace.String()})
@@ -383,7 +357,6 @@ func (s *adminHandlerSuite) Test_GetSearchAttributes_NonEmptyIndexName() {
 
 	mockSdkClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), "temporal-sys-add-search-attributes-workflow", "").Return(
 		&workflowservice.DescribeWorkflowExecutionResponse{}, nil)
-	s.mockResource.ESClient.EXPECT().GetMapping(gomock.Any(), "random-index-name").Return(map[string]string{"col": "type"}, nil)
 	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("random-index-name", true).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
 	resp, err := handler.GetSearchAttributes(ctx, &adminservice.GetSearchAttributesRequest{})
 	s.NoError(err)
@@ -391,7 +364,6 @@ func (s *adminHandlerSuite) Test_GetSearchAttributes_NonEmptyIndexName() {
 
 	mockSdkClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), "temporal-sys-add-search-attributes-workflow", "").Return(
 		&workflowservice.DescribeWorkflowExecutionResponse{}, nil)
-	s.mockResource.ESClient.EXPECT().GetMapping(gomock.Any(), "another-index-name").Return(map[string]string{"col": "type"}, nil)
 	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("another-index-name", true).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
 	resp, err = handler.GetSearchAttributes(ctx, &adminservice.GetSearchAttributesRequest{IndexName: "another-index-name"})
 	s.NoError(err)
@@ -399,7 +371,6 @@ func (s *adminHandlerSuite) Test_GetSearchAttributes_NonEmptyIndexName() {
 
 	mockSdkClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), "temporal-sys-add-search-attributes-workflow", "").Return(
 		nil, errors.New("random error"))
-	s.mockResource.ESClient.EXPECT().GetMapping(gomock.Any(), "random-index-name").Return(map[string]string{"col": "type"}, nil)
 	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("random-index-name", true).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
 	resp, err = handler.GetSearchAttributes(ctx, &adminservice.GetSearchAttributesRequest{Namespace: s.namespace.String()})
 	s.Error(err)
@@ -1808,15 +1779,15 @@ func (s *adminHandlerSuite) TestDescribeTaskQueuePartition() {
 			TasksAddRate:            0,
 			TasksDispatchRate:       0,
 		},
-		InternalTaskQueueStatus: &taskqueuespb.InternalTaskQueueStatus{
+		InternalTaskQueueStatus: []*taskqueuespb.InternalTaskQueueStatus{&taskqueuespb.InternalTaskQueueStatus{
 			ReadLevel: 0,
 			AckLevel:  0,
 			TaskIdBlock: &taskqueuepb.TaskIdBlock{
 				StartId: 0,
 				EndId:   0,
 			},
-			ReadBufferLength: 0,
-		},
+			LoadedTasks: 0,
+		}},
 	}
 	versionedPhysicalTaskQueueInfo := &taskqueuespb.PhysicalTaskQueueInfo{
 		Pollers: []*taskqueuepb.PollerInfo(nil),
@@ -1826,15 +1797,15 @@ func (s *adminHandlerSuite) TestDescribeTaskQueuePartition() {
 			TasksAddRate:            10.21,
 			TasksDispatchRate:       10.50,
 		},
-		InternalTaskQueueStatus: &taskqueuespb.InternalTaskQueueStatus{
+		InternalTaskQueueStatus: []*taskqueuespb.InternalTaskQueueStatus{&taskqueuespb.InternalTaskQueueStatus{
 			ReadLevel: 1,
 			AckLevel:  1,
 			TaskIdBlock: &taskqueuepb.TaskIdBlock{
 				StartId: 1,
 				EndId:   1000,
 			},
-			ReadBufferLength: 10,
-		},
+			LoadedTasks: 10,
+		}},
 	}
 
 	matchingMockResponse := &matchingservice.DescribeTaskQueuePartitionResponse{

@@ -1,25 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2023 Temporal Technologies Inc.  All rights reserved.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package frontend
 
 import (
@@ -72,7 +50,7 @@ type nexusContext struct {
 	endpointName                         string
 	claims                               *authorization.Claims
 	namespaceValidationInterceptor       *interceptor.NamespaceValidatorInterceptor
-	namespaceRateLimitInterceptor        *interceptor.NamespaceRateLimitInterceptor
+	namespaceRateLimitInterceptor        interceptor.NamespaceRateLimitInterceptor
 	namespaceConcurrencyLimitInterceptor *interceptor.ConcurrentRequestLimitInterceptor
 	rateLimitInterceptor                 *interceptor.RateLimitInterceptor
 	responseHeaders                      map[string]string
@@ -148,13 +126,16 @@ func (c *operationContext) augmentContext(ctx context.Context, header nexus.Head
 	if userAgent, ok := header[headerUserAgent]; ok {
 		parts := strings.Split(userAgent, clientNameVersionDelim)
 		if len(parts) == 2 {
-			return metadata.NewIncomingContext(ctx, metadata.New(map[string]string{
-				headers.ClientNameHeaderName:    parts[0],
-				headers.ClientVersionHeaderName: parts[1],
-			}))
+			mdIncoming, ok := metadata.FromIncomingContext(ctx)
+			if !ok {
+				mdIncoming = metadata.MD{}
+			}
+			mdIncoming.Set(headers.ClientNameHeaderName, parts[0])
+			mdIncoming.Set(headers.ClientVersionHeaderName, parts[1])
+			ctx = metadata.NewIncomingContext(ctx, mdIncoming)
 		}
 	}
-	return ctx
+	return headers.Propagate(ctx)
 }
 
 func (c *operationContext) interceptRequest(
@@ -185,7 +166,7 @@ func (c *operationContext) interceptRequest(
 			c.metricsHandler = c.metricsHandler.WithTags(metrics.OutcomeTag("request_forwarded"))
 			handler, forwardStartTime := c.redirectionInterceptor.BeforeCall(c.apiName)
 			c.cleanupFunctions = append(c.cleanupFunctions, func(_ map[string]string, retErr error) {
-				c.redirectionInterceptor.AfterCall(handler, forwardStartTime, c.namespace.ActiveClusterName(), retErr)
+				c.redirectionInterceptor.AfterCall(handler, forwardStartTime, c.namespace.ActiveClusterName(), c.namespace.Name().String(), retErr)
 			})
 			return serviceerror.NewNamespaceNotActive(
 				c.namespaceName,
@@ -446,7 +427,7 @@ func (h *nexusHandler) StartOperation(
 	// Convert to standard Nexus SDK response.
 	switch t := response.GetOutcome().(type) {
 	case *matchingservice.DispatchNexusTaskResponse_HandlerError:
-		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error"))
+		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error:" + t.HandlerError.GetErrorType()))
 
 		oc.nexusContext.setFailureSource(commonnexus.FailureSourceWorker)
 
@@ -489,7 +470,7 @@ func (h *nexusHandler) StartOperation(
 		}
 	}
 	// This is the worker's fault.
-	oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error"))
+	oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error:EMPTY_OUTCOME"))
 
 	oc.nexusContext.setFailureSource(commonnexus.FailureSourceWorker)
 
@@ -503,7 +484,7 @@ func parseLinks(links []*nexuspb.Link, logger log.Logger) []nexus.Link {
 		if err != nil {
 			// TODO(rodrigozhou): links are non-essential for the execution of the workflow,
 			// so ignoring the error for now; we will revisit how to handle these errors later.
-			logger.Error(fmt.Sprintf("failed to parse link url: %s", link.Url), tag.Error(err))
+			logger.Error("failed to parse link url", tag.URL(link.Url), tag.Error(err))
 			continue
 		}
 		nexusLinks = append(nexusLinks, nexus.Link{
@@ -605,7 +586,7 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 	// Convert to standard Nexus SDK response.
 	switch t := response.GetOutcome().(type) {
 	case *matchingservice.DispatchNexusTaskResponse_HandlerError:
-		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error"))
+		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error:" + t.HandlerError.GetErrorType()))
 
 		oc.nexusContext.setFailureSource(commonnexus.FailureSourceWorker)
 
@@ -616,7 +597,7 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 		return nil
 	}
 	// This is the worker's fault.
-	oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error"))
+	oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error:EMPTY_OUTCOME"))
 
 	oc.nexusContext.setFailureSource(commonnexus.FailureSourceWorker)
 
@@ -697,7 +678,11 @@ func (h *nexusHandler) nexusClientForActiveCluster(oc *operationContext, service
 			TaskQueue: oc.taskQueue,
 		}))
 	if err != nil {
-		oc.logger.Error(fmt.Sprintf("failed to forward Nexus request. error constructing ServiceBaseURL. baseURL=%s namespace=%s task_queue=%s", httpClient.BaseURL(), oc.namespaceName, oc.taskQueue), tag.Error(err))
+		oc.logger.Error("failed to forward Nexus request. error constructing ServiceBaseURL",
+			tag.URL(httpClient.BaseURL()),
+			tag.WorkflowNamespace(oc.namespaceName),
+			tag.WorkflowTaskQueueName(oc.taskQueue),
+			tag.Error(err))
 		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("request_forwarding_failed"))
 		return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "request forwarding failed")
 	}

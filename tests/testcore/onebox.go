@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package testcore
 
 import (
@@ -245,7 +221,6 @@ func (c *TemporalImpl) Start() error {
 	if err := c.createSystemNamespace(); err != nil {
 		return err
 	}
-
 	c.startMatching()
 	c.startHistory()
 	c.startFrontend()
@@ -377,7 +352,6 @@ func (c *TemporalImpl) startFrontend() {
 			fx.Provide(func() dynamicconfig.Client { return c.dcClient }),
 			fx.Decorate(func() testhooks.TestHooks { return c.testHooks }),
 			fx.Provide(resource.DefaultSnTaggedLoggerProvider),
-			fx.Provide(func() *esclient.Config { return c.esConfig }),
 			fx.Provide(func() esclient.Client { return c.esClient }),
 			fx.Provide(c.GetTLSConfigProvider),
 			fx.Provide(c.GetTaskCategoryRegistry),
@@ -427,6 +401,7 @@ func (c *TemporalImpl) startHistory() {
 				serviceName,
 				c.mockAdminClient,
 			),
+			fx.Provide(c.configProvider),
 			fx.Provide(c.GetMetricsHandler),
 			fx.Provide(func() listenHostPort { return listenHostPort(host) }),
 			fx.Provide(func() httpPort { return mustPortFromAddress(c.FrontendHTTPAddress()) }),
@@ -450,7 +425,6 @@ func (c *TemporalImpl) startHistory() {
 			fx.Provide(func() dynamicconfig.Client { return c.dcClient }),
 			fx.Decorate(func() testhooks.TestHooks { return c.testHooks }),
 			fx.Provide(resource.DefaultSnTaggedLoggerProvider),
-			fx.Provide(func() *esclient.Config { return c.esConfig }),
 			fx.Provide(func() esclient.Client { return c.esClient }),
 			fx.Provide(c.GetTLSConfigProvider),
 			fx.Provide(c.GetTaskCategoryRegistry),
@@ -488,6 +462,7 @@ func (c *TemporalImpl) startMatching() {
 				serviceName,
 				c.mockAdminClient,
 			),
+			fx.Provide(c.configProvider),
 			fx.Provide(c.GetMetricsHandler),
 			fx.Provide(func() listenHostPort { return listenHostPort(host) }),
 			fx.Provide(func() httpPort { return mustPortFromAddress(c.FrontendHTTPAddress()) }),
@@ -506,7 +481,6 @@ func (c *TemporalImpl) startMatching() {
 			fx.Provide(func() visibility.VisibilityStoreFactory { return c.visibilityStoreFactory }),
 			fx.Provide(func() dynamicconfig.Client { return c.dcClient }),
 			fx.Decorate(func() testhooks.TestHooks { return c.testHooks }),
-			fx.Provide(func() *esclient.Config { return c.esConfig }),
 			fx.Provide(func() esclient.Client { return c.esClient }),
 			fx.Provide(c.GetTLSConfigProvider),
 			fx.Provide(resource.DefaultSnTaggedLoggerProvider),
@@ -545,11 +519,13 @@ func (c *TemporalImpl) startWorker() {
 		var namespaceRegistry namespace.Registry
 		logger := log.With(c.logger, tag.Host(host))
 		app := fx.New(
+
 			fx.Supply(
 				c.copyPersistenceConfig(),
 				serviceName,
 				c.mockAdminClient,
 			),
+			fx.Provide(c.configProvider),
 			fx.Provide(c.GetMetricsHandler),
 			fx.Provide(func() listenHostPort { return listenHostPort(host) }),
 			fx.Provide(func() httpPort { return mustPortFromAddress(c.FrontendHTTPAddress()) }),
@@ -572,7 +548,6 @@ func (c *TemporalImpl) startWorker() {
 			fx.Decorate(func() testhooks.TestHooks { return c.testHooks }),
 			fx.Provide(resource.DefaultSnTaggedLoggerProvider),
 			fx.Provide(func() esclient.Client { return c.esClient }),
-			fx.Provide(func() *esclient.Config { return c.esConfig }),
 			fx.Provide(c.GetTLSConfigProvider),
 			fx.Provide(c.GetTaskCategoryRegistry),
 			temporal.TraceExportModule,
@@ -656,6 +631,16 @@ func (c *TemporalImpl) frontendConfigProvider() *config.Config {
 	}
 }
 
+func (c *TemporalImpl) configProvider(serviceName primitives.ServiceName) *config.Config {
+	return &config.Config{
+		Services: map[string]config.Service{
+			string(serviceName): {
+				RPC: config.RPC{},
+			},
+		},
+	}
+}
+
 func (c *TemporalImpl) newRPCFactory(
 	sn primitives.ServiceName,
 	grpcHostPort listenHostPort,
@@ -684,8 +669,16 @@ func (c *TemporalImpl) newRPCFactory(
 	if tracingStatsHandler != nil {
 		options = append(options, grpc.WithStatsHandler(tracingStatsHandler))
 	}
+	rpcConfig := config.RPC{BindOnIP: host, GRPCPort: port, HTTPPort: int(httpPort)}
+	cfg := &config.Config{
+		Services: map[string]config.Service{
+			string(sn): {
+				RPC: rpcConfig,
+			},
+		},
+	}
 	return rpc.NewFactory(
-		&config.RPC{BindOnIP: host, GRPCPort: port, HTTPPort: int(httpPort)},
+		cfg,
 		sn,
 		logger,
 		tlsConfigProvider,

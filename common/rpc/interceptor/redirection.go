@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package interceptor
 
 import (
@@ -146,6 +122,14 @@ var (
 		"DeleteWorkerDeployment":                func() any { return &workflowservice.DeleteWorkerDeploymentResponse{} },
 		"DeleteWorkerDeploymentVersion":         func() any { return &workflowservice.DeleteWorkerDeploymentVersionResponse{} },
 		"UpdateWorkerDeploymentVersionMetadata": func() any { return &workflowservice.UpdateWorkerDeploymentVersionMetadataResponse{} },
+
+		"CreateWorkflowRule":    func() any { return &workflowservice.CreateWorkflowRuleResponse{} },
+		"DescribeWorkflowRule":  func() any { return &workflowservice.DescribeWorkflowRuleResponse{} },
+		"DeleteWorkflowRule":    func() any { return &workflowservice.DeleteWorkflowRuleResponse{} },
+		"ListWorkflowRules":     func() any { return &workflowservice.ListWorkflowRulesResponse{} },
+		"TriggerWorkflowRule":   func() any { return &workflowservice.TriggerWorkflowRuleResponse{} },
+		"RecordWorkerHeartbeat": func() any { return &workflowservice.RecordWorkerHeartbeatResponse{} },
+		"ListWorkers":           func() any { return &workflowservice.ListWorkersResponse{} },
 	}
 )
 
@@ -236,7 +220,7 @@ func (i *Redirection) handleLocalAPIInvocation(
 ) (_ any, retError error) {
 	scope, startTime := i.BeforeCall(dcRedirectionMetricsPrefix + methodName)
 	defer func() {
-		i.AfterCall(scope, startTime, i.currentClusterName, retError)
+		i.AfterCall(scope, startTime, i.currentClusterName, "local", retError)
 	}()
 	return handler(ctx, req)
 }
@@ -256,7 +240,7 @@ func (i *Redirection) handleRedirectAPIInvocation(
 
 	scope, startTime := i.BeforeCall(dcRedirectionMetricsPrefix + methodName)
 	defer func() {
-		i.AfterCall(scope, startTime, clusterName, retError)
+		i.AfterCall(scope, startTime, clusterName, namespaceName.String(), retError)
 	}()
 
 	err = i.redirectionPolicy.WithNamespaceRedirect(ctx, namespaceName, methodName, func(targetDC string) error {
@@ -290,13 +274,16 @@ func (i *Redirection) AfterCall(
 	metricsHandler metrics.Handler,
 	startTime time.Time,
 	clusterName string,
+	namespaceName string,
 	retError error,
 ) {
 	metricsHandler = metricsHandler.WithTags(metrics.TargetClusterTag(clusterName))
-	metrics.ClientRedirectionRequests.With(metricsHandler).Record(1)
 	metrics.ClientRedirectionLatency.With(metricsHandler).Record(i.timeSource.Now().Sub(startTime))
+	metricsHandler = metricsHandler.WithTags(metrics.NamespaceTag(namespaceName))
+	metrics.ClientRedirectionRequests.With(metricsHandler).Record(1)
 	if retError != nil {
-		metrics.ClientRedirectionFailures.With(metricsHandler).Record(1)
+		metrics.ClientRedirectionFailures.With(metricsHandler).Record(1,
+			metrics.ServiceErrorTypeTag(retError))
 	}
 }
 

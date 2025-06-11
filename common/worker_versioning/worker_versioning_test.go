@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package worker_versioning
 
 import (
@@ -104,9 +80,38 @@ func TestCalculateTaskQueueVersioningInfo(t *testing.T) {
 			data: &persistencespb.DeploymentData{
 				Versions: []*deploymentspb.DeploymentVersionData{
 					{Version: v1, RampPercentage: 50, RoutingUpdateTime: t1, RampingSinceTime: t1},
-					// Passing only deployment name without version
-					{Version: nil, RampPercentage: 20, RoutingUpdateTime: t2, RampingSinceTime: t2},
 				},
+				UnversionedRampData: &deploymentspb.DeploymentVersionData{Version: nil, RampPercentage: 20, RoutingUpdateTime: t2, RampingSinceTime: t2},
+			},
+		},
+		{name: "ramp 100%",
+			wantCurrent: &deploymentspb.DeploymentVersionData{Version: v1, RoutingUpdateTime: t1, CurrentSinceTime: t1},
+			wantRamping: &deploymentspb.DeploymentVersionData{Version: v2, RoutingUpdateTime: t2, RampPercentage: 100, RampingSinceTime: t2},
+			data: &persistencespb.DeploymentData{
+				Versions: []*deploymentspb.DeploymentVersionData{
+					{Version: v1, RoutingUpdateTime: t1, CurrentSinceTime: t1},
+					{Version: v2, RampPercentage: 100, RoutingUpdateTime: t2, RampingSinceTime: t2},
+				},
+			},
+		},
+		{name: "ramp to unversioned 100%",
+			wantCurrent: &deploymentspb.DeploymentVersionData{Version: v1, RoutingUpdateTime: t1, CurrentSinceTime: t1},
+			wantRamping: &deploymentspb.DeploymentVersionData{Version: nil, RoutingUpdateTime: t2, RampPercentage: 100, RampingSinceTime: t2},
+			data: &persistencespb.DeploymentData{
+				Versions: []*deploymentspb.DeploymentVersionData{
+					{Version: v1, RoutingUpdateTime: t1, CurrentSinceTime: t1},
+				},
+				UnversionedRampData: &deploymentspb.DeploymentVersionData{Version: nil, RampPercentage: 100, RoutingUpdateTime: t2, RampingSinceTime: t2},
+			},
+		},
+		{name: "ramp to unversioned 100% without current",
+			wantCurrent: nil,
+			wantRamping: &deploymentspb.DeploymentVersionData{Version: nil, RoutingUpdateTime: t2, RampPercentage: 100, RampingSinceTime: t2},
+			data: &persistencespb.DeploymentData{
+				Versions: []*deploymentspb.DeploymentVersionData{
+					{Version: v1, RoutingUpdateTime: t1, CurrentSinceTime: nil},
+				},
+				UnversionedRampData: &deploymentspb.DeploymentVersionData{Version: nil, RampPercentage: 100, RoutingUpdateTime: t2, RampingSinceTime: t2},
 			},
 		},
 	}

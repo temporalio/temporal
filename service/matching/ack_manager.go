@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package matching
 
 import (
@@ -41,12 +17,12 @@ type ackManager struct {
 	outstandingTasks *treemap.Map // TaskID->acked
 	readLevel        int64        // Maximum TaskID inserted into outstandingTasks
 	ackLevel         int64        // Maximum TaskID below which all tasks are acked
-	backlogCountHint atomic.Int64
+	backlogCountHint atomic.Int64 // TODO(pri): old matcher cleanup, task reader tracks this now
 	logger           log.Logger
 }
 
-func newAckManager(db *taskQueueDB, logger log.Logger) ackManager {
-	return ackManager{
+func newAckManager(db *taskQueueDB, logger log.Logger) *ackManager {
+	return &ackManager{
 		db:               db,
 		logger:           logger,
 		outstandingTasks: treemap.NewWith(godsutils.Int64Comparator),
@@ -118,19 +94,19 @@ func (m *ackManager) setAckLevel(ackLevel int64) {
 	}
 }
 
-func (m *ackManager) completeTask(taskID int64) int64 {
+func (m *ackManager) completeTask(taskID int64) (newAckLevel, numberOfAckedTasks int64) {
 	m.Lock()
 	defer m.Unlock()
 
 	macked, found := m.outstandingTasks.Get(taskID)
 	if !found {
-		return m.ackLevel
+		return m.ackLevel, 0
 	}
 
 	acked := macked.(bool)
 	if acked {
 		// don't adjust ack level if nothing has changed
-		return m.ackLevel
+		return m.ackLevel, 0
 	}
 
 	// TODO the ack level management should be done by a dedicated coroutine
@@ -139,7 +115,6 @@ func (m *ackManager) completeTask(taskID int64) int64 {
 	m.backlogCountHint.Add(-1)
 
 	// Adjust the ack level as far as we can
-	var numberOfAckedTasks int64
 	for {
 		min, acked := m.outstandingTasks.Min()
 		if min == nil || !acked.(bool) {
@@ -149,10 +124,7 @@ func (m *ackManager) completeTask(taskID int64) int64 {
 		m.outstandingTasks.Remove(min)
 		numberOfAckedTasks += 1
 	}
-	if numberOfAckedTasks > 0 {
-		m.db.updateApproximateBacklogCount(-numberOfAckedTasks)
-	}
-	return m.ackLevel
+	return m.ackLevel, numberOfAckedTasks
 }
 
 func (m *ackManager) getBacklogCountHint() int64 {

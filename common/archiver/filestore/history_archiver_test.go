@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package filestore
 
 import (
@@ -42,6 +18,8 @@ import (
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/tests/testutils"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -68,7 +46,9 @@ type historyArchiverSuite struct {
 	*require.Assertions
 	suite.Suite
 
-	container          *archiver.HistoryBootstrapContainer
+	logger             log.Logger
+	executionManager   persistence.ExecutionManager
+	metricsHandler     metrics.Handler
 	testArchivalURI    archiver.URI
 	testGetDirectory   string
 	historyBatchesV1   []*historypb.History
@@ -96,9 +76,8 @@ func (s *historyArchiverSuite) TearDownSuite() {
 
 func (s *historyArchiverSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
-	s.container = &archiver.HistoryBootstrapContainer{
-		Logger: log.NewNoopLogger(),
-	}
+	s.logger = log.NewNoopLogger()
+	s.metricsHandler = metrics.NoopMetricsHandler
 }
 
 func (s *historyArchiverSuite) TestValidateURI() {
@@ -580,9 +559,9 @@ func (s *historyArchiverSuite) newTestHistoryArchiver(historyIterator archiver.H
 		FileMode: testFileModeStr,
 		DirMode:  testDirModeStr,
 	}
-	archiver, err := newHistoryArchiver(s.container, config, historyIterator)
+	a, err := newHistoryArchiver(s.executionManager, s.logger, s.metricsHandler, config, historyIterator)
 	s.NoError(err)
-	return archiver
+	return a
 }
 
 func (s *historyArchiverSuite) setupHistoryDirectory() {

@@ -1,31 +1,8 @@
-// The MIT License
-//
-// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package nexus
 
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -37,6 +14,7 @@ import (
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/future"
+	"go.temporal.io/server/common/goro"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -44,7 +22,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/util"
-	"go.temporal.io/server/internal/goro"
 )
 
 type (
@@ -183,7 +160,7 @@ func (r *EndpointRegistryImpl) GetByName(ctx context.Context, _ namespace.ID, en
 	r.dataLock.RUnlock()
 
 	if !ok {
-		return nil, serviceerror.NewNotFound(fmt.Sprintf("could not find Nexus endpoint by name: %v", endpointName))
+		return nil, serviceerror.NewNotFoundf("could not find Nexus endpoint by name: %v", endpointName)
 	}
 	return endpoint, nil
 }

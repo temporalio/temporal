@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package schema
 
 import (
@@ -30,7 +6,6 @@ import (
 	// should not be used for anything more important (password hashes etc.). Marking it as #nosec because of how it's
 	// being used.
 	"crypto/md5" // #nosec
-	"embed"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -38,7 +13,6 @@ import (
 	"io/fs"
 	"os"
 	"path"
-	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -216,12 +190,7 @@ func (task *UpdateTask) buildChangeSet(currVer string) ([]changeSet, error) {
 	var result []changeSet
 
 	for _, vd := range verDirs {
-		var dirPath string
-		if _, ok := fsys.(embed.FS); ok {
-			dirPath = path.Join(dir, vd)
-		} else {
-			dirPath = filepath.Join(dir, vd)
-		}
+		dirPath := path.Join(dir, vd)
 
 		m, e := readManifest(fsys, dirPath)
 		if e != nil {
@@ -259,12 +228,7 @@ func (task *UpdateTask) parseSQLStmts(fsys fs.FS, dir string, manifest *manifest
 	result := make([]string, 0, 4)
 
 	for _, file := range manifest.SchemaUpdateCqlFiles {
-		var schemaPath string
-		if _, ok := fsys.(embed.FS); ok {
-			schemaPath = path.Join(dir, file)
-		} else {
-			schemaPath = filepath.Join(dir, file)
-		}
+		schemaPath := path.Join(dir, file)
 		task.logger.Info("Processing schema file: " + schemaPath)
 		schemaBuf, err := fs.ReadFile(fsys, schemaPath)
 		if err != nil {
@@ -302,12 +266,8 @@ func validateCQLStmts(stmts []string) error {
 
 // readManifest reads the json manifest at dirPath into a manifest struct.
 func readManifest(fsys fs.FS, dirPath string) (*manifest, error) {
-	var manifestPath string
-	if _, ok := fsys.(embed.FS); ok {
-		manifestPath = path.Join(dirPath, manifestFileName)
-	} else {
-		manifestPath = filepath.Join(dirPath, manifestFileName)
-	}
+	manifestPath := path.Join(dirPath, manifestFileName)
+
 	jsonBlob, err := fs.ReadFile(fsys, manifestPath)
 	if err != nil {
 		return nil, err

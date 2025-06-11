@@ -1,32 +1,10 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package backoff
 
 import (
 	"math"
 	"math/rand"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"go.temporal.io/server/common/clock"
@@ -48,6 +26,9 @@ const (
 var (
 	// DisabledRetryPolicy is a retry policy that never retries
 	DisabledRetryPolicy RetryPolicy = &disabledRetryPolicyImpl{}
+
+	// common 'globalToFile' rand instance, used in adding jitter to next interval in retry policy
+	jitterRand atomic.Pointer[rand.Rand]
 )
 
 type (
@@ -189,15 +170,20 @@ func (p *ExponentialRetryPolicy) ComputeNextDelay(elapsedTime time.Duration, num
 		return done
 	}
 
+	nextInterval = p.addJitter(nextInterval)
+
+	return time.Duration(nextInterval)
+}
+
+func (p *ExponentialRetryPolicy) addJitter(nextInterval float64) float64 {
 	// add jitter to avoid global synchronization
 	jitterPortion := int(0.2 * nextInterval)
 	// Prevent overflow
 	if jitterPortion < 1 {
 		jitterPortion = 1
 	}
-	nextInterval = nextInterval*0.8 + float64(rand.Intn(jitterPortion))
-
-	return time.Duration(nextInterval)
+	nextInterval = nextInterval*0.8 + float64(getJitterRand().Intn(jitterPortion))
+	return nextInterval
 }
 
 func (r *disabledRetryPolicyImpl) ComputeNextDelay(_ time.Duration, _ int, _ error) time.Duration {
@@ -281,4 +267,54 @@ func (p *ConstantDelayRetryPolicy) ComputeNextDelay(_ time.Duration, attempt int
 
 func addJitter(duration time.Duration, jitterPct float64) time.Duration {
 	return duration * time.Duration(1+jitterPct*rand.Float64())
+}
+
+func getJitterRand() *rand.Rand {
+	if r := jitterRand.Load(); r != nil {
+		return r
+	}
+	r := rand.New(NewRetryLockedSource())
+
+	if !jitterRand.CompareAndSwap(nil, r) {
+		// Two different goroutines called some top-level
+		// function at the same time. While the results in
+		// that case are unpredictable, if we just use r here,
+		// and we are using a seed, we will most likely return
+		// the same value for both calls. That doesn't seem ideal.
+		// Just use the first one to get in.
+		return jitterRand.Load()
+	}
+
+	return r
+}
+
+// We want to wrap our rng source with mutex, because the one in math/rand is used by other clients,
+// so all of them are contending for the same mutex.
+// Proper solution will be to use standard thread safe Rng source, but until Go 2 it seems it will not happen.
+// See the following discussions for details
+// https://github.com/golang/go/issues/24121 <- main
+// https://github.com/stripe/veneur/pull/466 -< make rng source faster
+// https://github.com/golang/go/issues/25057
+// https://github.com/golang/go/issues/21393
+
+type RetryLockedSource struct {
+	lk sync.Mutex
+	s  rand.Source
+}
+
+func (r *RetryLockedSource) Int63() int64 {
+	r.lk.Lock()
+	defer r.lk.Unlock()
+	return r.s.Int63()
+}
+
+func (r *RetryLockedSource) Seed(seed int64) {
+	panic("internal error: call to RetryLockedSource.Seed")
+}
+
+func NewRetryLockedSource() *RetryLockedSource {
+	return &RetryLockedSource{
+		lk: sync.Mutex{},
+		s:  rand.NewSource(time.Now().UnixNano()),
+	}
 }

@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package history
 
 import (
@@ -578,6 +554,7 @@ func (e *historyEngineImpl) RespondWorkflowTaskCompleted(
 		e.searchAttributesValidator,
 		e.persistenceVisibilityMgr,
 		e.workflowConsistencyChecker,
+		e.matchingClient,
 	)
 	return h.Invoke(ctx, req)
 }
@@ -719,7 +696,7 @@ func (e *historyEngineImpl) VerifyChildExecutionCompletionRecorded(
 	ctx context.Context,
 	req *historyservice.VerifyChildExecutionCompletionRecordedRequest,
 ) (*historyservice.VerifyChildExecutionCompletionRecordedResponse, error) {
-	return verifychildworkflowcompletionrecorded.Invoke(ctx, req, e.workflowConsistencyChecker)
+	return verifychildworkflowcompletionrecorded.Invoke(ctx, req, e.workflowConsistencyChecker, e.shardContext)
 }
 
 func (e *historyEngineImpl) ReplicateEventsV2(
@@ -899,8 +876,10 @@ func (e *historyEngineImpl) GetReplicationMessages(
 	return replicationapi.GetTasks(ctx, e.shardContext, e.replicationAckMgr, pollingCluster, ackMessageID, ackTimestamp, queryMessageID)
 }
 
-func (e *historyEngineImpl) SubscribeReplicationNotification() (<-chan struct{}, string) {
-	return e.replicationAckMgr.SubscribeNotification()
+func (e *historyEngineImpl) SubscribeReplicationNotification(
+	clusterName string,
+) (notifyCh <-chan struct{}, subscribeId string) {
+	return e.replicationAckMgr.SubscribeNotification(clusterName)
 }
 
 func (e *historyEngineImpl) UnsubscribeReplicationNotification(subscriberID string) {

@@ -1,33 +1,8 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
-//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination timer_sequence_mock.go
+//go:generate mockgen -package $GOPACKAGE -source $GOFILE -destination timer_sequence_mock.go
 
 package workflow
 
 import (
-	"fmt"
 	"sort"
 	"time"
 
@@ -113,7 +88,7 @@ func (t *timerSequenceImpl) CreateNextUserTimer() (bool, error) {
 
 	timerInfo, ok := t.mutableState.GetUserTimerInfoByEventID(firstTimerTask.EventID)
 	if !ok {
-		return false, serviceerror.NewInternal(fmt.Sprintf("unable to load timer info %v", firstTimerTask.EventID))
+		return false, serviceerror.NewInternalf("unable to load timer info %v", firstTimerTask.EventID)
 	}
 	// mark timer task mask as indication that timer task is generated
 	// here TaskID is misleading attr, should be called timer created flag or something
@@ -152,7 +127,7 @@ func (t *timerSequenceImpl) CreateNextActivityTimer() (bool, error) {
 
 	activityInfo, ok := t.mutableState.GetActivityInfo(firstTimerTask.EventID)
 	if !ok {
-		return false, serviceerror.NewInternal(fmt.Sprintf("unable to load activity info %v", firstTimerTask.EventID))
+		return false, serviceerror.NewInternalf("unable to load activity info %v", firstTimerTask.EventID)
 	}
 	// mark timer task mask as indication that timer task is generated
 	activityInfo.TimerTaskStatus |= timerTypeToTimerMask(firstTimerTask.TimerType)

@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package dynamicconfig
 
 import (
@@ -37,12 +13,12 @@ import (
 
 	"github.com/mitchellh/mapstructure"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/goro"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/pingable"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/util"
-	"go.temporal.io/server/internal/goro"
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
@@ -109,6 +85,7 @@ var (
 	errNoMatchingConstraint = errors.New("no matching constraint in key")
 
 	protoEnumType = reflect.TypeOf((*protoreflect.Enum)(nil)).Elem()
+	errorType     = reflect.TypeOf((*error)(nil)).Elem()
 	durationType  = reflect.TypeOf(time.Duration(0))
 	stringType    = reflect.TypeOf("")
 )
@@ -478,6 +455,7 @@ func ConvertStructure[T any](def T) func(v any) (T, error) {
 			DecodeHook: mapstructure.ComposeDecodeHookFunc(
 				mapstructureHookDuration,
 				mapstructureHookProtoEnum,
+				mapstructureHookGeneric,
 			),
 		})
 		if err != nil {
@@ -511,4 +489,29 @@ func mapstructureHookProtoEnum(f, t reflect.Type, data any) (any, error) {
 		}
 	}
 	return nil, fmt.Errorf("name %q not found in enum %s", data, t.Name())
+}
+
+// Parses generic values. See GenericParseHook.
+func mapstructureHookGeneric(f, t reflect.Type, data any) (any, error) {
+	if mth, ok := t.MethodByName("DynamicConfigParseHook"); ok &&
+		mth.Func.IsValid() &&
+		mth.Type != nil &&
+		mth.Type.NumIn() == 2 &&
+		mth.Type.In(1) == f &&
+		mth.Type.NumOut() == 2 &&
+		mth.Type.Out(0) == t &&
+		mth.Type.Out(1) == errorType {
+
+		out := mth.Func.Call([]reflect.Value{reflect.Zero(t), reflect.ValueOf(data)})
+		if !out[1].IsNil() {
+			if err, ok := out[1].Interface().(error); ok {
+				return nil, err
+			}
+			return nil, errors.New("failed to convert DynamicConfigParseHook error")
+		}
+		return out[0].Interface(), nil
+	}
+
+	// pass through
+	return data, nil
 }

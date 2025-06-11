@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package chasm
 
 import (
@@ -60,12 +36,12 @@ func (r *Registry) Register(lib Library) error {
 		return err
 	}
 	for _, c := range lib.Components() {
-		if err := r.registerComponent(lib.Name(), c); err != nil {
+		if err := r.registerComponent(lib, c); err != nil {
 			return err
 		}
 	}
 	for _, t := range lib.Tasks() {
-		if err := r.registerTask(lib.Name(), t); err != nil {
+		if err := r.registerTask(lib, t); err != nil {
 			return err
 		}
 	}
@@ -92,20 +68,29 @@ func (r *Registry) taskFor(taskInstance any) (*RegistrableTask, bool) {
 	return rt, ok
 }
 
-func (r *Registry) fqn(libName, name string) string {
-	return libName + "." + name
+func (r *Registry) componentOf(componentGoType reflect.Type) (*RegistrableComponent, bool) {
+	rc, ok := r.componentByGoType[componentGoType]
+	return rc, ok
+}
+
+func (r *Registry) taskOf(taskGoType reflect.Type) (*RegistrableTask, bool) {
+	rt, ok := r.taskByGoType[taskGoType]
+	return rt, ok
 }
 
 func (r *Registry) registerComponent(
-	libName string,
+	lib namer,
 	rc *RegistrableComponent,
 ) error {
 	if err := r.validateName(rc.componentType); err != nil {
 		return err
 	}
-	fqn := r.fqn(libName, rc.componentType)
+	fqn := fullyQualifiedName(lib.Name(), rc.componentType)
 	if _, ok := r.componentByType[fqn]; ok {
 		return fmt.Errorf("component %s is already registered", fqn)
+	}
+	if rc.library != nil {
+		return fmt.Errorf("component %s is already registered in library %s", fqn, rc.library.Name())
 	}
 	// rc.goType implements Component interface; therefore, it must be a struct.
 	// This check to protect against the interface itself being registered.
@@ -116,20 +101,25 @@ func (r *Registry) registerComponent(
 	if _, ok := r.componentByGoType[rc.goType]; ok {
 		return fmt.Errorf("component type %s is already registered", rc.goType.String())
 	}
+
+	rc.library = lib
 	r.componentByType[fqn] = rc
 	r.componentByGoType[rc.goType] = rc
 	return nil
 }
 func (r *Registry) registerTask(
-	libName string,
+	lib namer,
 	rt *RegistrableTask,
 ) error {
 	if err := r.validateName(rt.taskType); err != nil {
 		return err
 	}
-	fqn := r.fqn(libName, rt.taskType)
+	fqn := fullyQualifiedName(lib.Name(), rt.taskType)
 	if _, ok := r.taskByType[fqn]; ok {
 		return fmt.Errorf("task %s is already registered", fqn)
+	}
+	if rt.library != nil {
+		return fmt.Errorf("task %s is already registered in library %s", fqn, rt.library.Name())
 	}
 	if !(rt.goType.Kind() == reflect.Struct ||
 		(rt.goType.Kind() == reflect.Ptr && rt.goType.Elem().Kind() == reflect.Struct)) {
@@ -145,6 +135,7 @@ func (r *Registry) registerTask(
 		return fmt.Errorf("component type %s must be and interface or struct that implements Component interface", rt.componentGoType.String())
 	}
 
+	rt.library = lib
 	r.taskByType[fqn] = rt
 	r.taskByGoType[rt.goType] = rt
 	return nil

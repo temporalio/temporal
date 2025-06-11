@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package matching
 
 import (
@@ -34,6 +10,7 @@ import (
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 	querypb "go.temporal.io/api/query/v1"
@@ -46,6 +23,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/tqid"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
@@ -74,6 +52,16 @@ func TestMatcherSuite(t *testing.T) {
 	suite.Run(t, new(MatcherTestSuite))
 }
 
+func (t *MatcherTestSuite) newDefaultRateLimiter() quotas.RateLimiter {
+	return quotas.NewDynamicRateLimiter(
+		quotas.NewMutableRateBurst(
+			defaultTaskDispatchRPS,
+			int(defaultTaskDispatchRPS),
+		),
+		defaultTaskDispatchRPSTTL,
+	)
+}
+
 func (t *MatcherTestSuite) SetupTest() {
 	t.controller = gomock.NewController(t.T())
 	t.client = matchingservicemock.NewMockMatchingServiceClient(t.controller)
@@ -89,19 +77,23 @@ func (t *MatcherTestSuite) SetupTest() {
 	tlCfg.forwarderConfig = forwarderConfig{
 		ForwarderMaxOutstandingPolls: func() int { return 1 },
 		ForwarderMaxOutstandingTasks: func() int { return 1 },
-		ForwarderMaxRatePerSecond:    func() int { return 2 },
+		ForwarderMaxRatePerSecond:    func() float64 { return 2 },
 		ForwarderMaxChildrenPerNode:  func() int { return 20 },
 	}
 	t.childConfig = tlCfg
 	t.fwdr, err = newForwarder(&t.childConfig.forwarderConfig, t.queue, t.client)
 	t.Assert().NoError(err)
-	t.childMatcher = newTaskMatcher(tlCfg, t.fwdr, metrics.NoopMetricsHandler)
+	t.childMatcher = newTaskMatcher(tlCfg, t.fwdr, metrics.NoopMetricsHandler, t.newDefaultRateLimiter())
+	t.childMatcher.Start()
 
 	t.rootConfig = newTaskQueueConfig(prtn.TaskQueue(), cfg, "test-namespace")
-	t.rootMatcher = newTaskMatcher(t.rootConfig, nil, metrics.NoopMetricsHandler)
+	t.rootMatcher = newTaskMatcher(t.rootConfig, nil, metrics.NoopMetricsHandler, t.newDefaultRateLimiter())
+	t.rootMatcher.Start()
 }
 
 func (t *MatcherTestSuite) TearDownTest() {
+	t.childMatcher.Stop()
+	t.rootMatcher.Stop()
 	t.controller.Finish()
 }
 
@@ -225,7 +217,7 @@ func (t *MatcherTestSuite) TestRejectSyncMatchWhenBacklog() {
 
 	// Wait for the task to be added to the map
 	t.EventuallyWithT(func(c *assert.CollectT) {
-		assert.False(c, t.rootMatcher.isBacklogNegligible())
+		require.False(c, t.rootMatcher.isBacklogNegligible())
 	}, 30*time.Second, 1*time.Millisecond)
 
 	// should not allow sync match when there is an old task in backlog
@@ -748,7 +740,7 @@ func (t *MatcherTestSuite) TestMustOfferRemoteMatch() {
 	}()
 
 	taskCompleted := false
-	completionFunc := func(*persistencespb.AllocatedTaskInfo, error) {
+	completionFunc := func(*internalTask, taskResponse) {
 		taskCompleted = true
 	}
 

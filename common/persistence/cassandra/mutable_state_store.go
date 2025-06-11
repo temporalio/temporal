@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package cassandra
 
 import (
@@ -456,7 +432,7 @@ func (d *MutableStateStore) CreateWorkflowExecution(
 		requestCurrentRunID = ""
 
 	default:
-		return nil, serviceerror.NewInternal(fmt.Sprintf("CreateWorkflowExecution: unknown mode: %v", request.Mode))
+		return nil, serviceerror.NewInternalf("CreateWorkflowExecution: unknown mode: %v", request.Mode)
 	}
 
 	if err := applyWorkflowSnapshotBatchAsNew(batch,
@@ -528,7 +504,7 @@ func (d *MutableStateStore) GetWorkflowExecution(
 
 	state, err := mutableStateFromRow(result)
 	if err != nil {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetWorkflowExecution operation failed. Error: %v", err))
+		return nil, serviceerror.NewUnavailablef("GetWorkflowExecution operation failed. Error: %v", err)
 	}
 
 	activityInfos := make(map[int64]*commonpb.DataBlob)
@@ -572,7 +548,7 @@ func (d *MutableStateStore) GetWorkflowExecution(
 	state.SignalInfos = signalInfos
 	state.SignalRequestedIDs = gocql.UUIDsToStringSlice(result["signal_requested"])
 
-	chasmNodeBlobs := make(map[string]*commonpb.DataBlob)
+	chasmNodeBlobs := make(map[string]p.InternalChasmNode)
 	chasmNodeEncoding, ok := result["chasm_node_map_encoding"].(string)
 	if !ok {
 		return nil, serviceerror.NewInternal("GetWorkflowExecution failed: unknown chasm_node_map_encoding type")
@@ -582,7 +558,9 @@ func (d *MutableStateStore) GetWorkflowExecution(
 		return nil, serviceerror.NewInternal("GetWorkflowExecution failed: unknown chasm_node_map type")
 	}
 	for key, value := range chasmNodeBytes {
-		chasmNodeBlobs[key] = p.NewDataBlob(value, chasmNodeEncoding)
+		chasmNodeBlobs[key] = p.InternalChasmNode{
+			CassandraBlob: p.NewDataBlob(value, chasmNodeEncoding),
+		}
 	}
 	state.ChasmNodes = chasmNodeBlobs
 
@@ -624,6 +602,9 @@ func (d *MutableStateStore) UpdateWorkflowExecution(
 	shardID := request.ShardID
 
 	switch request.Mode {
+	case p.UpdateWorkflowModeIgnoreCurrent:
+		// noop
+
 	case p.UpdateWorkflowModeBypassCurrent:
 		if err := d.assertNotCurrentExecution(
 			ctx,
@@ -690,7 +671,7 @@ func (d *MutableStateStore) UpdateWorkflowExecution(
 		}
 
 	default:
-		return serviceerror.NewInternal(fmt.Sprintf("UpdateWorkflowExecution: unknown mode: %v", request.Mode))
+		return serviceerror.NewInternalf("UpdateWorkflowExecution: unknown mode: %v", request.Mode)
 	}
 
 	if err := applyWorkflowMutationBatch(batch, shardID, &updateWorkflow); err != nil {
@@ -815,7 +796,7 @@ func (d *MutableStateStore) ConflictResolveWorkflowExecution(
 		)
 
 	default:
-		return serviceerror.NewInternal(fmt.Sprintf("ConflictResolveWorkflowExecution: unknown mode: %v", request.Mode))
+		return serviceerror.NewInternalf("ConflictResolveWorkflowExecution: unknown mode: %v", request.Mode)
 	}
 
 	if err := applyWorkflowSnapshotBatchAsReset(batch, shardID, &resetWorkflow); err != nil {
@@ -977,7 +958,7 @@ func (d *MutableStateStore) GetCurrentExecution(
 	currentRunID := gocql.UUIDToString(result["current_run_id"])
 	executionStateBlob, err := executionStateBlobFromRow(result)
 	if err != nil {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetCurrentExecution operation failed. Error: %v", err))
+		return nil, serviceerror.NewUnavailablef("GetCurrentExecution operation failed. Error: %v", err)
 	}
 
 	// TODO: fix blob ExecutionState in storage should not be a blob.

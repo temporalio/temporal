@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package temporal
 
 import (
@@ -31,6 +7,7 @@ import (
 	"maps"
 	"os"
 	"sync/atomic"
+	"time"
 
 	"github.com/pborman/uuid"
 	"go.opentelemetry.io/otel"
@@ -137,7 +114,6 @@ type (
 		ClientFactoryProvider client.FactoryProvider
 		DynamicConfigClient   dynamicconfig.Client
 		TLSConfigProvider     encryption.TLSConfigProvider
-		EsConfig              *esclient.Config
 		EsClient              esclient.Client
 		MetricsHandler        metrics.Handler
 	}
@@ -246,17 +222,19 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 	var esConfig *esclient.Config
 	var esClient esclient.Client
 
+	if persistenceConfig.SecondaryVisibilityConfigExist() &&
+		persistenceConfig.DataStores[persistenceConfig.SecondaryVisibilityStore].Elasticsearch != nil {
+		esConfig = persistenceConfig.DataStores[persistenceConfig.SecondaryVisibilityStore].Elasticsearch
+		esConfig.SetHttpClient(so.elasticsearchHttpClient)
+	}
 	if persistenceConfig.VisibilityConfigExist() &&
 		persistenceConfig.DataStores[persistenceConfig.VisibilityStore].Elasticsearch != nil {
 		esConfig = persistenceConfig.DataStores[persistenceConfig.VisibilityStore].Elasticsearch
-	} else if persistenceConfig.SecondaryVisibilityConfigExist() &&
-		persistenceConfig.DataStores[persistenceConfig.SecondaryVisibilityStore].Elasticsearch != nil {
-		esConfig = persistenceConfig.DataStores[persistenceConfig.SecondaryVisibilityStore].Elasticsearch
+		esConfig.SetHttpClient(so.elasticsearchHttpClient)
 	}
 
 	if esConfig != nil {
 		esHttpClient := so.elasticsearchHttpClient
-		esConfig.SetHttpClient(esHttpClient)
 		if esHttpClient == nil {
 			var err error
 			esHttpClient, err = esclient.NewAwsHttpClient(esConfig.AWSRequestSigning)
@@ -309,7 +287,6 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		ClientFactoryProvider: clientFactoryProvider,
 		DynamicConfigClient:   dcClient,
 		TLSConfigProvider:     tlsConfigProvider,
-		EsConfig:              esConfig,
 		EsClient:              esClient,
 		MetricsHandler:        metricHandler,
 	}, nil
@@ -357,7 +334,6 @@ type (
 		NamespaceLogger            resource.NamespaceLogger
 		DynamicConfigClient        dynamicconfig.Client
 		MetricsHandler             metrics.Handler
-		EsConfig                   *esclient.Config
 		EsClient                   esclient.Client
 		TlsConfigProvider          encryption.TLSConfigProvider
 		PersistenceConfig          config.Persistence
@@ -395,7 +371,6 @@ func (params ServiceProviderParamsCommon) GetCommonServiceOptions(serviceName pr
 	return fx.Options(
 		fx.Supply(
 			serviceName,
-			params.EsConfig,
 			params.PersistenceConfig,
 			params.ClusterMetadata,
 			params.Cfg,
@@ -978,7 +953,17 @@ var ServiceTracingModule = fx.Options(
 				otel.SetErrorHandler(otel.ErrorHandlerFunc(func(err error) {
 					// ignore errors during shutdown
 				}))
-				return tp.Shutdown(ctx)
+
+				shutdownCtx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+				defer cancel()
+
+				err := tp.Shutdown(shutdownCtx)
+				if errors.Is(err, context.DeadlineExceeded) {
+					// Ignore timeouts since it's okay to drop OTEL traces on shutdown.
+					// Either there's no collector, or there are too many traces left to export.
+					return nil
+				}
+				return err
 			}})
 		return tp
 	}),
@@ -1005,10 +990,15 @@ func startAll(exporters []otelsdktrace.SpanExporter) func(ctx context.Context) e
 
 func shutdownAll(exporters []otelsdktrace.SpanExporter) func(ctx context.Context) error {
 	return func(ctx context.Context) error {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+		defer cancel()
+
 		for _, e := range exporters {
-			err := e.Shutdown(ctx)
-			if err != nil {
-				return err
+			err := e.Shutdown(shutdownCtx)
+			if errors.Is(err, context.DeadlineExceeded) {
+				// Ignore timeouts since it's okay to drop OTEL traces on shutdown.
+				// Either there's no collector, or there are too many traces left to export.
+				return nil
 			}
 		}
 		return nil
@@ -1044,7 +1034,7 @@ func (l *fxLogAdapter) LogEvent(e fxevent.Event) {
 				tag.ComponentFX,
 				tag.NewStringTag("callee", e.FunctionName),
 				tag.NewStringTag("caller", e.CallerName),
-				tag.NewStringTag("runtime", e.Runtime.String()),
+				tag.NewStringerTag("runtime", e.Runtime),
 			)
 		}
 	case *fxevent.OnStopExecuting:
@@ -1066,7 +1056,7 @@ func (l *fxLogAdapter) LogEvent(e fxevent.Event) {
 				tag.ComponentFX,
 				tag.NewStringTag("callee", e.FunctionName),
 				tag.NewStringTag("caller", e.CallerName),
-				tag.NewStringTag("runtime", e.Runtime.String()),
+				tag.NewStringerTag("runtime", e.Runtime),
 			)
 		}
 	case *fxevent.Supplied:
@@ -1128,7 +1118,7 @@ func (l *fxLogAdapter) LogEvent(e fxevent.Event) {
 	case *fxevent.Stopping:
 		l.logger.Info("received signal",
 			tag.ComponentFX,
-			tag.NewStringTag("signal", e.Signal.String()))
+			tag.NewStringerTag("signal", e.Signal))
 	case *fxevent.Stopped:
 		if e.Err != nil {
 			l.logger.Error("stop failed", tag.ComponentFX, tag.Error(e.Err))

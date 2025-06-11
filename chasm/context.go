@@ -1,32 +1,10 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package chasm
 
 import (
 	"context"
 	"time"
+
+	"google.golang.org/protobuf/proto"
 )
 
 type Context interface {
@@ -35,7 +13,8 @@ type Context interface {
 
 	// NOTE: component created in the current transaction won't have a ref
 	// this is a Ref to the component state at the start of the transition
-	Ref(Component) (ComponentRef, bool)
+	Ref(Component) (ComponentRef, error)
+	refData(proto.Message) (ComponentRef, error)
 	Now(Component) time.Time
 
 	// Intent() OperationIntent
@@ -60,4 +39,59 @@ type MutableContext interface {
 	// If we provide this method, then the method on the engine doesn't need to
 	// return a Ref
 	// NewRef(Component) (ComponentRef, bool)
+}
+
+type ContextImpl struct {
+	ctx context.Context
+
+	// Not embedding the Node here to avoid exposing AddTask() method on Node,
+	// so that ContextImpl won't implement MutableContext interface.
+	root *Node
+}
+
+type MutableContextImpl struct {
+	*ContextImpl
+}
+
+func NewContext(
+	ctx context.Context,
+	root *Node,
+) *ContextImpl {
+	return &ContextImpl{
+		ctx:  ctx,
+		root: root,
+	}
+}
+
+func (c *ContextImpl) Ref(component Component) (ComponentRef, error) {
+	return c.root.Ref(component)
+}
+
+func (c *ContextImpl) refData(data proto.Message) (ComponentRef, error) {
+	return c.root.refData(data)
+}
+
+func (c *ContextImpl) Now(component Component) time.Time {
+	return c.root.Now(component)
+}
+
+func (c *ContextImpl) getContext() context.Context {
+	return c.ctx
+}
+
+func NewMutableContext(
+	ctx context.Context,
+	root *Node,
+) *MutableContextImpl {
+	return &MutableContextImpl{
+		ContextImpl: NewContext(ctx, root),
+	}
+}
+
+func (c *MutableContextImpl) AddTask(
+	component Component,
+	attributes TaskAttributes,
+	payload any,
+) error {
+	return c.root.AddTask(component, attributes, payload)
 }

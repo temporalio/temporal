@@ -21,11 +21,13 @@ import (
 	protocol "go.temporal.io/api/protocol/v1"
 	query "go.temporal.io/api/query/v1"
 	replication "go.temporal.io/api/replication/v1"
+	rules "go.temporal.io/api/rules/v1"
 	schedule "go.temporal.io/api/schedule/v1"
 	sdk "go.temporal.io/api/sdk/v1"
 	taskqueue "go.temporal.io/api/taskqueue/v1"
 	update "go.temporal.io/api/update/v1"
 	version "go.temporal.io/api/version/v1"
+	worker "go.temporal.io/api/worker/v1"
 	workflow "go.temporal.io/api/workflow/v1"
 	workflowservice "go.temporal.io/api/workflowservice/v1"
 	anypb "google.golang.org/protobuf/types/known/anypb"
@@ -71,12 +73,14 @@ func init() {
 	importMap["temporal/api/protocol/v1/message.proto"] = protocol.File_temporal_api_protocol_v1_message_proto
 	importMap["temporal/api/query/v1/message.proto"] = query.File_temporal_api_query_v1_message_proto
 	importMap["temporal/api/replication/v1/message.proto"] = replication.File_temporal_api_replication_v1_message_proto
+	importMap["temporal/api/rules/v1/message.proto"] = rules.File_temporal_api_rules_v1_message_proto
 	importMap["temporal/api/schedule/v1/message.proto"] = schedule.File_temporal_api_schedule_v1_message_proto
 	importMap["temporal/api/sdk/v1/task_complete_metadata.proto"] = sdk.File_temporal_api_sdk_v1_task_complete_metadata_proto
 	importMap["temporal/api/sdk/v1/user_metadata.proto"] = sdk.File_temporal_api_sdk_v1_user_metadata_proto
 	importMap["temporal/api/taskqueue/v1/message.proto"] = taskqueue.File_temporal_api_taskqueue_v1_message_proto
 	importMap["temporal/api/update/v1/message.proto"] = update.File_temporal_api_update_v1_message_proto
 	importMap["temporal/api/version/v1/message.proto"] = version.File_temporal_api_version_v1_message_proto
+	importMap["temporal/api/worker/v1/message.proto"] = worker.File_temporal_api_worker_v1_message_proto
 	importMap["temporal/api/workflow/v1/message.proto"] = workflow.File_temporal_api_workflow_v1_message_proto
 	importMap["temporal/api/workflowservice/v1/request_response.proto"] = workflowservice.File_temporal_api_workflowservice_v1_request_response_proto
 }

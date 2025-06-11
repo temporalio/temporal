@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package scheduler
 
 import (
@@ -61,7 +37,7 @@ func RegisterGeneratorExecutors(registry *hsm.Registry, options GeneratorTaskExe
 
 func (e generatorTaskExecutor) executeBufferTask(env hsm.Environment, node *hsm.Node, task BufferTask) error {
 	schedulerNode := node.Parent
-	scheduler, err := loadScheduler(schedulerNode)
+	scheduler, err := loadScheduler(schedulerNode, false)
 	if err != nil {
 		return err
 	}
@@ -86,8 +62,8 @@ func (e generatorTaskExecutor) executeBufferTask(env hsm.Environment, node *hsm.
 	t2 := env.Now().UTC()
 	if t2.Before(t1) {
 		logger.Warn("Time went backwards",
-			tag.NewStringTag("time", t1.String()),
-			tag.NewStringTag("time", t2.String()))
+			tag.NewStringerTag("time", t1),
+			tag.NewStringerTag("time", t2))
 		t2 = t1
 	}
 

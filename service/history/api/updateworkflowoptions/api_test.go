@@ -1,35 +1,28 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package updateworkflowoptions
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
+	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/historyservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/cluster/clustertest"
+	"go.temporal.io/server/common/locks"
+	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/service/history/api"
+	historyi "go.temporal.io/server/service/history/interfaces"
+	"go.temporal.io/server/service/history/tests"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
+	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
@@ -57,65 +50,178 @@ var (
 
 func TestMergeOptions_VersionOverrideMask(t *testing.T) {
 	updateMask := &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}}
-	opts := &workflowpb.WorkflowExecutionOptions{}
+	input := emptyOptions
 
 	// Merge unpinned into empty options
-	opts, err := applyWorkflowExecutionOptions(opts, unpinnedOverrideOptions, updateMask)
+	merged, err := mergeWorkflowExecutionOptions(input, unpinnedOverrideOptions, updateMask)
 	if err != nil {
 		t.Error(err)
 	}
-	assert.True(t, proto.Equal(unpinnedOverrideOptions, opts))
+	assert.EqualExportedValues(t, unpinnedOverrideOptions, merged)
 
 	// Merge pinned_A into unpinned options
-	opts, err = applyWorkflowExecutionOptions(opts, pinnedOverrideOptionsA, updateMask)
+	merged, err = mergeWorkflowExecutionOptions(input, pinnedOverrideOptionsA, updateMask)
 	if err != nil {
 		t.Error(err)
 	}
-	assert.True(t, proto.Equal(pinnedOverrideOptionsA, opts))
+	assert.EqualExportedValues(t, pinnedOverrideOptionsA, merged)
 
 	// Merge pinned_B into pinned_A options
-	opts, err = applyWorkflowExecutionOptions(opts, pinnedOverrideOptionsB, updateMask)
+	merged, err = mergeWorkflowExecutionOptions(input, pinnedOverrideOptionsB, updateMask)
 	if err != nil {
 		t.Error(err)
 	}
-	assert.True(t, proto.Equal(pinnedOverrideOptionsB, opts))
+	assert.EqualExportedValues(t, pinnedOverrideOptionsB, merged)
 
 	// Unset versioning override
-	opts, err = applyWorkflowExecutionOptions(opts, emptyOptions, updateMask)
+	merged, err = mergeWorkflowExecutionOptions(input, emptyOptions, updateMask)
 	if err != nil {
 		t.Error(err)
 	}
-	assert.True(t, proto.Equal(emptyOptions, opts))
+	assert.EqualExportedValues(t, emptyOptions, merged)
 }
 
-func TestMergeOptions_PartialUpdateMask(t *testing.T) {
+func TestMergeOptions_PartialMask(t *testing.T) {
 	bothUpdateMask := &fieldmaskpb.FieldMask{Paths: []string{"versioning_override.behavior", "versioning_override.deployment"}}
 	behaviorOnlyUpdateMask := &fieldmaskpb.FieldMask{Paths: []string{"versioning_override.behavior"}}
 	deploymentOnlyUpdateMask := &fieldmaskpb.FieldMask{Paths: []string{"versioning_override.deployment"}}
-	_, err := applyWorkflowExecutionOptions(&workflowpb.WorkflowExecutionOptions{}, unpinnedOverrideOptions, behaviorOnlyUpdateMask)
+
+	_, err := mergeWorkflowExecutionOptions(emptyOptions, unpinnedOverrideOptions, behaviorOnlyUpdateMask)
 	assert.Error(t, err)
-	_, err = applyWorkflowExecutionOptions(&workflowpb.WorkflowExecutionOptions{}, unpinnedOverrideOptions, deploymentOnlyUpdateMask)
+
+	_, err = mergeWorkflowExecutionOptions(emptyOptions, unpinnedOverrideOptions, deploymentOnlyUpdateMask)
 	assert.Error(t, err)
-	opts, err := applyWorkflowExecutionOptions(&workflowpb.WorkflowExecutionOptions{}, unpinnedOverrideOptions, bothUpdateMask)
+
+	merged, err := mergeWorkflowExecutionOptions(emptyOptions, unpinnedOverrideOptions, bothUpdateMask)
 	assert.NoError(t, err)
-	assert.True(t, proto.Equal(unpinnedOverrideOptions, opts))
+	assert.EqualExportedValues(t, unpinnedOverrideOptions, merged)
 }
 
-func TestMergeOptions_EmptyPathsMask(t *testing.T) {
+func TestMergeOptions_EmptyMask(t *testing.T) {
 	emptyUpdateMask := &fieldmaskpb.FieldMask{Paths: []string{}}
-	opts, err := applyWorkflowExecutionOptions(&workflowpb.WorkflowExecutionOptions{}, unpinnedOverrideOptions, emptyUpdateMask)
+	input := pinnedOverrideOptionsB
+
+	// Don't merge anything
+	merged, err := mergeWorkflowExecutionOptions(input, pinnedOverrideOptionsA, emptyUpdateMask)
 	assert.NoError(t, err)
-	assert.True(t, proto.Equal(emptyOptions, opts))
+	assert.EqualExportedValues(t, input, merged)
+
+	// Don't merge anything
+	merged, err = mergeWorkflowExecutionOptions(input, nil, emptyUpdateMask)
+	assert.NoError(t, err)
+	assert.EqualExportedValues(t, input, merged)
 }
 
 func TestMergeOptions_AsteriskMask(t *testing.T) {
 	asteriskUpdateMask := &fieldmaskpb.FieldMask{Paths: []string{"*"}}
-	_, err := applyWorkflowExecutionOptions(&workflowpb.WorkflowExecutionOptions{}, unpinnedOverrideOptions, asteriskUpdateMask)
+	_, err := mergeWorkflowExecutionOptions(emptyOptions, unpinnedOverrideOptions, asteriskUpdateMask)
 	assert.Error(t, err)
 }
 
 func TestMergeOptions_FooMask(t *testing.T) {
 	fooUpdateMask := &fieldmaskpb.FieldMask{Paths: []string{"foo"}}
-	_, err := applyWorkflowExecutionOptions(&workflowpb.WorkflowExecutionOptions{}, unpinnedOverrideOptions, fooUpdateMask)
+	_, err := mergeWorkflowExecutionOptions(emptyOptions, unpinnedOverrideOptions, fooUpdateMask)
 	assert.Error(t, err)
+}
+
+type (
+	// updateWorkflowOptionsSuite contains tests for the UpdateWorkflowOptions API.
+	updateWorkflowOptionsSuite struct {
+		suite.Suite
+		*require.Assertions
+
+		controller        *gomock.Controller
+		shardContext      *historyi.MockShardContext
+		namespaceRegistry *namespace.MockRegistry
+
+		workflowCache              *wcache.MockCache
+		workflowConsistencyChecker api.WorkflowConsistencyChecker
+
+		currentContext      *historyi.MockWorkflowContext
+		currentMutableState *historyi.MockMutableState
+	}
+)
+
+func TestUpdateWorkflowOptionsSuite(t *testing.T) {
+	s := new(updateWorkflowOptionsSuite)
+	suite.Run(t, s)
+}
+
+func (s *updateWorkflowOptionsSuite) SetupTest() {
+	s.Assertions = require.New(s.T())
+
+	s.controller = gomock.NewController(s.T())
+	s.namespaceRegistry = namespace.NewMockRegistry(s.controller)
+	s.namespaceRegistry.EXPECT().GetNamespaceByID(tests.GlobalNamespaceEntry.ID()).Return(tests.GlobalNamespaceEntry, nil)
+
+	s.shardContext = historyi.NewMockShardContext(s.controller)
+	s.shardContext.EXPECT().GetNamespaceRegistry().Return(s.namespaceRegistry)
+	s.shardContext.EXPECT().GetClusterMetadata().Return(clustertest.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(true, true)))
+
+	// mock a mutable state with an existing versioning override
+	s.currentMutableState = historyi.NewMockMutableState(s.controller)
+	s.currentMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+		WorkflowId: tests.WorkflowID,
+		VersioningInfo: &workflowpb.WorkflowExecutionVersioningInfo{
+			VersioningOverride: &workflowpb.VersioningOverride{
+				Behavior:      enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE,
+				PinnedVersion: "X.123",
+			},
+		},
+	}).AnyTimes()
+	s.currentMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+		RunId: tests.RunID,
+	}).AnyTimes()
+
+	s.currentContext = historyi.NewMockWorkflowContext(s.controller)
+	s.currentContext.EXPECT().LoadMutableState(gomock.Any(), s.shardContext).Return(s.currentMutableState, nil)
+
+	s.workflowCache = wcache.NewMockCache(s.controller)
+	s.workflowCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), locks.PriorityHigh).
+		Return(s.currentContext, wcache.NoopReleaseFn, nil)
+
+	s.workflowConsistencyChecker = api.NewWorkflowConsistencyChecker(
+		s.shardContext,
+		s.workflowCache,
+	)
+}
+
+func (s *updateWorkflowOptionsSuite) TearDownTest() {
+	s.controller.Finish()
+}
+
+func (s *updateWorkflowOptionsSuite) TestInvoke_Success() {
+
+	expectedOverrideOptions := &workflowpb.WorkflowExecutionOptions{
+		VersioningOverride: &workflowpb.VersioningOverride{
+			Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED,
+			PinnedVersion: "X.A",
+		},
+	}
+	s.currentMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true)
+	s.currentMutableState.EXPECT().AddWorkflowExecutionOptionsUpdatedEvent(expectedOverrideOptions.VersioningOverride, false, "", nil, nil).Return(&historypb.HistoryEvent{}, nil)
+	s.currentContext.EXPECT().UpdateWorkflowExecutionAsActive(gomock.Any(), s.shardContext).Return(nil)
+
+	updateReq := &historyservice.UpdateWorkflowExecutionOptionsRequest{
+		NamespaceId: tests.NamespaceID.String(),
+		UpdateRequest: &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+			Namespace: tests.Namespace.String(),
+			WorkflowExecution: &commonpb.WorkflowExecution{
+				WorkflowId: tests.WorkflowID,
+				RunId:      tests.RunID,
+			},
+			WorkflowExecutionOptions: expectedOverrideOptions,
+			UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
+		},
+	}
+
+	resp, err := Invoke(
+		context.Background(),
+		updateReq,
+		s.shardContext,
+		s.workflowConsistencyChecker,
+	)
+	s.NoError(err)
+	s.NotNil(resp)
+	proto.Equal(expectedOverrideOptions, resp.GetWorkflowExecutionOptions())
 }

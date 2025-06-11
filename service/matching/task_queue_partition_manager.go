@@ -1,32 +1,9 @@
-// The MIT License
-//
-// Copyright (pm) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (pm) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package matching
 
 import (
 	"context"
 	"errors"
+	"math"
 	"sync"
 	"time"
 
@@ -39,14 +16,21 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
+	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/quotas"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
+)
+
+const (
+	defaultTaskDispatchRPS    = 100000.0
+	defaultTaskDispatchRPSTTL = time.Minute
 )
 
 type (
@@ -70,18 +54,33 @@ type (
 		// is delegated to the defaultQueue.
 		defaultQueue physicalTaskQueueManager
 		// used for non-sticky versioned queues (one for each version)
-		versionedQueues                 map[PhysicalTaskQueueVersion]physicalTaskQueueManager
-		versionedQueuesLock             sync.RWMutex // locks mutation of versionedQueues
-		userDataManager                 userDataManager
-		logger                          log.Logger
-		throttledLogger                 log.ThrottledLogger
-		matchingClient                  matchingservice.MatchingServiceClient
-		metricsHandler                  metrics.Handler                                                          // namespace/taskqueue tagged metric scope
-		cachedPhysicalInfoByBuildId     map[string]map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo // non-nil for root-partition
-		cachedPhysicalInfoByBuildIdLock sync.RWMutex                                                             // locks mutation of cachedPhysicalInfoByBuildId
-		lastFanOut                      int64                                                                    // serves as a TTL for cachedPhysicalInfoByBuildId
+		versionedQueues     map[PhysicalTaskQueueVersion]physicalTaskQueueManager
+		versionedQueuesLock sync.RWMutex // locks mutation of versionedQueues
+		userDataManager     userDataManager
+		logger              log.Logger
+		throttledLogger     log.ThrottledLogger
+		matchingClient      matchingservice.MatchingServiceClient
+		metricsHandler      metrics.Handler // namespace/taskqueue tagged metric scope
+		cache               cache.Cache     // non-nil for root-partition
+
+		// dynamicRate is the dynamic rate & burst for rate limiter
+		dynamicRateBurst quotas.MutableRateBurst
+		// dynamicRateLimiter is the dynamic rate limiter that can be used to force refresh on new rates.
+		dynamicRateLimiter *quotas.DynamicRateLimiterImpl
+		// forceRefreshRateOnce is used to force refresh rate limit for first time
+		forceRefreshRateOnce sync.Once
+		// rateLimiter that limits the rate at which tasks can be dispatched to consumers
+		rateLimiter quotas.RateLimiter
 	}
 )
+
+func (pm *taskQueuePartitionManagerImpl) PutCache(key any, value any) {
+	pm.cache.Put(key, value)
+}
+
+func (pm *taskQueuePartitionManagerImpl) GetCache(key any) any {
+	return pm.cache.Get(key)
+}
 
 var _ taskQueuePartitionManager = (*taskQueuePartitionManagerImpl)(nil)
 
@@ -96,18 +95,41 @@ func newTaskQueuePartitionManager(
 	userDataManager userDataManager,
 ) (*taskQueuePartitionManagerImpl, error) {
 	pm := &taskQueuePartitionManagerImpl{
-		engine:                      e,
-		partition:                   partition,
-		ns:                          ns,
-		config:                      tqConfig,
-		logger:                      logger,
-		throttledLogger:             throttledLogger,
-		matchingClient:              e.matchingRawClient,
-		metricsHandler:              metricsHandler,
-		versionedQueues:             make(map[PhysicalTaskQueueVersion]physicalTaskQueueManager),
-		userDataManager:             userDataManager,
-		cachedPhysicalInfoByBuildId: nil,
+		engine:          e,
+		partition:       partition,
+		ns:              ns,
+		config:          tqConfig,
+		logger:          logger,
+		throttledLogger: throttledLogger,
+		matchingClient:  e.matchingRawClient,
+		metricsHandler:  metricsHandler,
+		versionedQueues: make(map[PhysicalTaskQueueVersion]physicalTaskQueueManager),
+		userDataManager: userDataManager,
 	}
+
+	if pm.partition.IsRoot() {
+		pm.cache = cache.New(10000, &cache.Options{
+			TTL: max(1, tqConfig.TaskQueueInfoByBuildIdTTL())}, // ensure TTL is never zero (which would disable TTL)
+		)
+	}
+
+	pm.dynamicRateBurst = quotas.NewMutableRateBurst(
+		defaultTaskDispatchRPS,
+		int(defaultTaskDispatchRPS),
+	)
+	pm.dynamicRateLimiter = quotas.NewDynamicRateLimiter(
+		pm.dynamicRateBurst,
+		tqConfig.RateLimiterRefreshInterval,
+	)
+	pm.rateLimiter = quotas.NewMultiRateLimiter([]quotas.RateLimiter{
+		pm.dynamicRateLimiter,
+		quotas.NewDefaultOutgoingRateLimiter(
+			tqConfig.AdminNamespaceTaskQueueToPartitionDispatchRate,
+		),
+		quotas.NewDefaultOutgoingRateLimiter(
+			tqConfig.AdminNamespaceToPartitionDispatchRate,
+		),
+	})
 
 	defaultQ, err := newPhysicalTaskQueueManager(pm, UnversionedQueueKey(partition))
 	if err != nil {
@@ -115,6 +137,30 @@ func newTaskQueuePartitionManager(
 	}
 	pm.defaultQueue = defaultQ
 	return pm, nil
+}
+
+// UpdateRatelimit updates the task dispatch rate
+func (pm *taskQueuePartitionManagerImpl) UpdateRatelimit(rps float64) {
+	nPartitions := float64(pm.config.NumReadPartitions())
+	if nPartitions > 0 {
+		// divide the rate equally across all partitions
+		rps = rps / nPartitions
+	}
+	burst := int(math.Ceil(rps))
+
+	minTaskThrottlingBurstSize := pm.config.MinTaskThrottlingBurstSize()
+	if burst < minTaskThrottlingBurstSize {
+		burst = minTaskThrottlingBurstSize
+	}
+
+	pm.dynamicRateBurst.SetRPS(rps)
+	pm.dynamicRateBurst.SetBurst(burst)
+	pm.forceRefreshRateOnce.Do(func() {
+		// Dynamic rate limiter only refresh its rate every 1m. Before that initial 1m interval, it uses default rate
+		// which is 10K and is too large in most cases. We need to force refresh for the first time this rate is set
+		// by poller. Only need to do that once. If the rate change later, it will be refresh in 1m.
+		pm.dynamicRateLimiter.Refresh()
+	})
 }
 
 func (pm *taskQueuePartitionManagerImpl) Start() {
@@ -159,6 +205,7 @@ func (pm *taskQueuePartitionManagerImpl) AddTask(
 	var spoolQueue, syncMatchQueue physicalTaskQueueManager
 	directive := params.taskInfo.GetVersionDirective()
 	// spoolQueue will be nil iff task is forwarded.
+reredirectTask:
 	spoolQueue, syncMatchQueue, _, err = pm.getPhysicalQueuesForAdd(ctx, directive, params.forwardInfo, params.taskInfo.GetRunId(), params.taskInfo.GetWorkflowId())
 	if err != nil {
 		return "", false, err
@@ -197,7 +244,12 @@ func (pm *taskQueuePartitionManagerImpl) AddTask(
 			// For sync-match case, History has already received the build ID in the Record*TaskStarted call.
 			// By omitting the build ID from this response we help History immediately know that no MS update is needed.
 			return "", syncMatched, err
+		} else if errors.Is(err, errReprocessTask) {
+			// We get this if userdata changed while the task was blocked in TrySyncMatch
+			// (only for backlog tasks forwarded to root with the new matcher)
+			goto reredirectTask
 		}
+		// other errors are ignored and we try to spool the task
 	}
 
 	if spoolQueue == nil {
@@ -240,7 +292,10 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 	var err error
 	dbq := pm.defaultQueue
 	versionSetUsed := false
-	deployment := worker_versioning.DeploymentFromCapabilities(pollMetadata.workerVersionCapabilities, pollMetadata.deploymentOptions)
+	deployment, err := worker_versioning.DeploymentFromCapabilities(pollMetadata.workerVersionCapabilities, pollMetadata.deploymentOptions)
+	if err != nil {
+		return nil, false, err
+	}
 
 	if deployment != nil {
 		if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
@@ -325,6 +380,15 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 		defer dbq.UpdatePollerInfo(pollerIdentity(identity), pollMetadata)
 	}
 
+	// The desired global rate limit for the task queue comes from the
+	// poller, which lives inside the client side worker. There is
+	// one rateLimiter for this entire task queue and as we get polls,
+	// we update the ratelimiter rps if it has changed from the last
+	// value. Last poller wins if different pollers provide different values
+	if rps := pollMetadata.taskQueueMetadata.GetMaxTasksPerSecond(); rps != nil {
+		pm.UpdateRatelimit(rps.Value)
+	}
+
 	task, err := dbq.PollTask(ctx, pollMetadata)
 
 	if task != nil {
@@ -334,6 +398,7 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 	return task, versionSetUsed, err
 }
 
+// TODO(pri): old matcher cleanup
 func (pm *taskQueuePartitionManagerImpl) ProcessSpooledTask(
 	ctx context.Context,
 	task *internalTask,
@@ -389,11 +454,64 @@ func (pm *taskQueuePartitionManagerImpl) ProcessSpooledTask(
 	}
 }
 
+func (pm *taskQueuePartitionManagerImpl) AddSpooledTask(
+	ctx context.Context,
+	task *internalTask,
+	backlogQueue *PhysicalTaskQueueKey,
+) error {
+	taskInfo := task.event.GetData()
+	// This task came from taskReader so task.event is always set here.
+	directive := taskInfo.GetVersionDirective()
+	assignedBuildId := backlogQueue.Version().BuildId()
+	if assignedBuildId != "" {
+		// construct directive based on the build ID of the spool queue
+		directive = worker_versioning.MakeBuildIdDirective(assignedBuildId)
+	}
+	newBacklogQueue, syncMatchQueue, _, err := pm.getPhysicalQueuesForAdd(
+		ctx,
+		directive,
+		nil,
+		taskInfo.GetRunId(),
+		taskInfo.GetWorkflowId(),
+	)
+	if err != nil {
+		return err
+	}
+	// set redirect info if spoolQueue and syncMatchQueue build ids are different
+	if assignedBuildId != syncMatchQueue.QueueKey().Version().BuildId() {
+		task.redirectInfo = &taskqueuespb.BuildIdRedirectInfo{
+			AssignedBuildId: assignedBuildId,
+		}
+	} else {
+		// make sure to reset redirectInfo in case it was set in a previous loop cycle
+		task.redirectInfo = nil
+	}
+	if !backlogQueue.version.Deployment().Equal(newBacklogQueue.QueueKey().version.Deployment()) {
+		// Backlog queue has changed, spool to the new queue. This should happen rarely: when
+		// activity of pinned workflow was determined independent and sent to the default queue
+		// but now at dispatch time, the determination is different because the activity pollers
+		// on the pinned deployment have reached server.
+		// TODO: before spooling, try to sync-match the task on the new queue
+		err = newBacklogQueue.SpoolTask(taskInfo)
+		if err != nil {
+			// return the error so task_reader retries the outer call
+			return err
+		}
+		// Finish the task because now it is copied to the other backlog. It should be considered
+		// invalid because a poller did not receive the task.
+		task.finish(nil, false)
+		return nil
+	}
+	syncMatchQueue.AddSpooledTaskToMatcher(task)
+	return nil
+}
+
 func (pm *taskQueuePartitionManagerImpl) DispatchQueryTask(
 	ctx context.Context,
 	taskID string,
 	request *matchingservice.QueryWorkflowRequest,
 ) (*matchingservice.QueryWorkflowResponse, error) {
+reredirectTask:
 	_, syncMatchQueue, _, err := pm.getPhysicalQueuesForAdd(ctx,
 		request.VersionDirective,
 		// We do not pass forwardInfo because we want the parent partition to make fresh versioning decision. Note that
@@ -413,7 +531,12 @@ func (pm *taskQueuePartitionManagerImpl) DispatchQueryTask(
 		pm.defaultQueue.MarkAlive()
 	}
 
-	return syncMatchQueue.DispatchQueryTask(ctx, taskID, request)
+	res, err := syncMatchQueue.DispatchQueryTask(ctx, taskID, request)
+	if errors.Is(err, errReprocessTask) {
+		// We get this if userdata changed while the task was blocked in DispatchQueryTask
+		goto reredirectTask
+	}
+	return res, err
 }
 
 func (pm *taskQueuePartitionManagerImpl) DispatchNexusTask(
@@ -421,6 +544,7 @@ func (pm *taskQueuePartitionManagerImpl) DispatchNexusTask(
 	taskId string,
 	request *matchingservice.DispatchNexusTaskRequest,
 ) (*matchingservice.DispatchNexusTaskResponse, error) {
+reredirectTask:
 	_, syncMatchQueue, _, err := pm.getPhysicalQueuesForAdd(ctx,
 		worker_versioning.MakeUseAssignmentRulesDirective(),
 		// We do not pass forwardInfo because we want the parent partition to make fresh versioning decision. Note that
@@ -440,7 +564,12 @@ func (pm *taskQueuePartitionManagerImpl) DispatchNexusTask(
 		pm.defaultQueue.MarkAlive()
 	}
 
-	return syncMatchQueue.DispatchNexusTask(ctx, taskId, request)
+	res, err := syncMatchQueue.DispatchNexusTask(ctx, taskId, request)
+	if errors.Is(err, errReprocessTask) {
+		// We get this if userdata changed while the task was blocked in DispatchNexusTask
+		goto reredirectTask
+	}
+	return res, err
 }
 
 func (pm *taskQueuePartitionManagerImpl) GetUserDataManager() userDataManager {
@@ -503,13 +632,17 @@ func (pm *taskQueuePartitionManagerImpl) LegacyDescribeTaskQueue(includeTaskQueu
 		}
 		current, ramping := worker_versioning.CalculateTaskQueueVersioningInfo(perTypeUserData.GetDeploymentData())
 		info := &taskqueuepb.TaskQueueVersioningInfo{
-			CurrentVersion: worker_versioning.WorkerDeploymentVersionToString(current.GetVersion()),
-			UpdateTime:     current.GetRoutingUpdateTime(),
+			//nolint:staticcheck // SA1019: [cleanup-wv-3.1]
+			CurrentVersion:           worker_versioning.WorkerDeploymentVersionToStringV31(current.GetVersion()),
+			CurrentDeploymentVersion: worker_versioning.ExternalWorkerDeploymentVersionFromVersion(current.GetVersion()),
+			UpdateTime:               current.GetRoutingUpdateTime(),
 		}
 		if ramping.GetRampingSinceTime() != nil {
 			info.RampingVersionPercentage = ramping.GetRampPercentage()
 			// If task queue is ramping to unversioned, ramping will be nil, which converts to "__unversioned__"
-			info.RampingVersion = worker_versioning.WorkerDeploymentVersionToString(ramping.GetVersion())
+			//nolint:staticcheck // SA1019: [cleanup-wv-3.1]
+			info.RampingVersion = worker_versioning.WorkerDeploymentVersionToStringV31(ramping.GetVersion())
+			info.RampingDeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromVersion(ramping.GetVersion())
 			if info.GetUpdateTime().AsTime().Before(ramping.GetRoutingUpdateTime().AsTime()) {
 				info.UpdateTime = ramping.GetRoutingUpdateTime()
 			}
@@ -544,7 +677,7 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 			found := false
 			for k := range pm.versionedQueues {
 				// Storing the versioned queue if the buildID is a v2 based buildID or a versionID representing a worker-deployment version.
-				if k.BuildId() == b || worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(k.Deployment())) == b {
+				if k.BuildId() == b || worker_versioning.ExternalWorkerDeploymentVersionToString(worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(k.Deployment())) == b {
 					versions[k] = true
 					found = true
 					break
@@ -593,7 +726,7 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 		// information for non-deployment related builds will only see the buildID as an entry in the versionsInfo map.
 		bid := v.BuildId()
 		if v.Deployment() != nil {
-			bid = worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(v.Deployment()))
+			bid = worker_versioning.ExternalWorkerDeploymentVersionToString(worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(v.Deployment()))
 		}
 		versionsInfo[bid] = vInfo
 	}
@@ -605,6 +738,10 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 
 func (pm *taskQueuePartitionManagerImpl) Partition() tqid.Partition {
 	return pm.partition
+}
+
+func (pm *taskQueuePartitionManagerImpl) PartitionCount() int {
+	return max(pm.config.NumWritePartitions(), pm.config.NumReadPartitions())
 }
 
 func (pm *taskQueuePartitionManagerImpl) LongPollExpirationInterval() time.Duration {
@@ -661,28 +798,6 @@ func (pm *taskQueuePartitionManagerImpl) ForceLoadAllNonRootPartitions() {
 
 		}()
 	}
-}
-
-func (pm *taskQueuePartitionManagerImpl) TimeSinceLastFanOut() time.Duration {
-	pm.cachedPhysicalInfoByBuildIdLock.RLock()
-	defer pm.cachedPhysicalInfoByBuildIdLock.RUnlock()
-
-	return time.Since(time.Unix(0, pm.lastFanOut))
-}
-
-func (pm *taskQueuePartitionManagerImpl) UpdateTimeSinceLastFanOutAndCache(physicalInfoByBuildId map[string]map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo) {
-	pm.cachedPhysicalInfoByBuildIdLock.Lock()
-	defer pm.cachedPhysicalInfoByBuildIdLock.Unlock()
-
-	pm.lastFanOut = time.Now().UnixNano()
-	pm.cachedPhysicalInfoByBuildId = physicalInfoByBuildId
-}
-
-func (pm *taskQueuePartitionManagerImpl) GetPhysicalTaskQueueInfoFromCache() map[string]map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo {
-	pm.cachedPhysicalInfoByBuildIdLock.RLock()
-	defer pm.cachedPhysicalInfoByBuildIdLock.RUnlock()
-
-	return pm.cachedPhysicalInfoByBuildId
 }
 
 func (pm *taskQueuePartitionManagerImpl) unloadPhysicalQueue(unloadedDbq physicalTaskQueueManager, unloadCause unloadCause) {
@@ -881,7 +996,7 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 		// not present in the workflow's pinned deployment. Such activities are considered
 		// independent activities and are treated as unpinned, sent to their TQ's current deployment.
 		isIndependentActivity := pm.partition.TaskType() == enumspb.TASK_QUEUE_TYPE_ACTIVITY &&
-			!hasDeploymentVersion(deploymentData, worker_versioning.DeploymentVersionFromDeployment(deployment))
+			!worker_versioning.HasDeploymentVersion(deploymentData, worker_versioning.DeploymentVersionFromDeployment(deployment))
 		if !isIndependentActivity {
 			pinnedQueue, err := pm.getVersionedQueue(ctx, "", "", deployment, true)
 			if err != nil {
@@ -1075,4 +1190,16 @@ func (pm *taskQueuePartitionManagerImpl) getPerTypeUserData() (*persistencespb.T
 	}
 	perType := userData.GetData().GetPerType()[int32(pm.Partition().TaskType())]
 	return perType, userDataChanged, nil
+}
+
+func (pm *taskQueuePartitionManagerImpl) userDataChanged() {
+	// Notify all queues so they can re-evaluate their backlog.
+	pm.versionedQueuesLock.RLock()
+	for _, vq := range pm.versionedQueues {
+		go vq.UserDataChanged()
+	}
+	pm.versionedQueuesLock.RUnlock()
+
+	// Do this one in this goroutine.
+	pm.defaultQueue.UserDataChanged()
 }

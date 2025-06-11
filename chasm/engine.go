@@ -1,26 +1,4 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
+//go:generate mockgen -package $GOPACKAGE -source $GOFILE -destination engine_mock.go
 
 package chasm
 
@@ -28,16 +6,16 @@ import (
 	"context"
 )
 
-type engine interface {
-	newInstance(
+type Engine interface {
+	newEntity(
 		context.Context,
-		EntityKey,
+		ComponentRef,
 		func(MutableContext) (Component, error),
 		...TransitionOption,
 	) (ComponentRef, error)
-	updateWithNewInstance(
+	updateWithNewEntity(
 		context.Context,
-		EntityKey,
+		ComponentRef,
 		func(MutableContext) (Component, error),
 		func(MutableContext, Component) error,
 		...TransitionOption,
@@ -69,6 +47,7 @@ type BusinessIDReusePolicy int
 
 const (
 	BusinessIDReusePolicyAllowDuplicate BusinessIDReusePolicy = iota
+	BusinessIDReusePolicyAllowDuplicateFailedOnly
 	BusinessIDReusePolicyRejectDuplicate
 )
 
@@ -77,13 +56,18 @@ type BusinessIDConflictPolicy int
 const (
 	BusinessIDConflictPolicyFail BusinessIDConflictPolicy = iota
 	BusinessIDConflictPolicyTermiateExisting
-	BusinessIDConflictPolicyUseExisting
+	// TODO: Do we want to support UseExisting conflict policy?
+	// BusinessIDConflictPolicyUseExisting
 )
 
-type transitionOptions struct {
+type TransitionOptions struct {
+	ReusePolicy    BusinessIDReusePolicy
+	ConflictPolicy BusinessIDConflictPolicy
+	RequestID      string
+	Speculative    bool
 }
 
-type TransitionOption func(*transitionOptions)
+type TransitionOption func(*TransitionOptions)
 
 // (only) this transition will not be persisted
 // The next non-speculative transition will persist this transition as well.
@@ -93,7 +77,9 @@ type TransitionOption func(*transitionOptions)
 // TODO: we need to figure out a way to run the tasks
 // generated in a speculative transition
 func WithSpeculative() TransitionOption {
-	panic("not implemented")
+	return func(opts *TransitionOptions) {
+		opts.Speculative = true
+	}
 }
 
 // this only applies to NewEntity and UpdateWithNewEntity
@@ -101,7 +87,19 @@ func WithBusinessIDPolicy(
 	reusePolicy BusinessIDReusePolicy,
 	conflictPolicy BusinessIDConflictPolicy,
 ) TransitionOption {
-	panic("not implemented")
+	return func(opts *TransitionOptions) {
+		opts.ReusePolicy = reusePolicy
+		opts.ConflictPolicy = conflictPolicy
+	}
+}
+
+// this only applies to NewEntity and UpdateWithNewEntity
+func WithRequestID(
+	requestID string,
+) TransitionOption {
+	return func(opts *TransitionOptions) {
+		opts.RequestID = requestID
+	}
 }
 
 // Not needed for V1
@@ -119,9 +117,9 @@ func NewEntity[C Component, I any, O any](
 	opts ...TransitionOption,
 ) (O, []byte, error) {
 	var output O
-	ref, err := engineFromContext(ctx).newInstance(
+	ref, err := engineFromContext(ctx).newEntity(
 		ctx,
-		key,
+		NewComponentRef[C](key),
 		func(ctx MutableContext) (Component, error) {
 			var c C
 			var err error
@@ -130,7 +128,11 @@ func NewEntity[C Component, I any, O any](
 		},
 		opts...,
 	)
-	return output, ref.Serialize(), err
+	if err != nil {
+		return output, nil, err
+	}
+	serializedRef, err := ref.serialize()
+	return output, serializedRef, err
 }
 
 func UpdateWithNewEntity[C Component, I any, O1 any, O2 any](
@@ -143,9 +145,9 @@ func UpdateWithNewEntity[C Component, I any, O1 any, O2 any](
 ) (O1, O2, []byte, error) {
 	var output1 O1
 	var output2 O2
-	ref, err := engineFromContext(ctx).updateWithNewInstance(
+	ref, err := engineFromContext(ctx).updateWithNewEntity(
 		ctx,
-		key,
+		NewComponentRef[C](key),
 		func(ctx MutableContext) (Component, error) {
 			var c C
 			var err error
@@ -159,7 +161,11 @@ func UpdateWithNewEntity[C Component, I any, O1 any, O2 any](
 		},
 		opts...,
 	)
-	return output1, output2, ref.Serialize(), err
+	if err != nil {
+		return output1, output2, nil, err
+	}
+	serializedRef, err := ref.serialize()
+	return output1, output2, serializedRef, err
 }
 
 // TODO:
@@ -192,7 +198,11 @@ func UpdateComponent[C Component, R []byte | ComponentRef, I any, O any](
 		opts...,
 	)
 
-	return output, newRef.Serialize(), err
+	if err != nil {
+		return output, nil, err
+	}
+	serializedRef, err := newRef.serialize()
+	return output, serializedRef, err
 }
 
 func ReadComponent[C Component, R []byte | ComponentRef, I any, O any](
@@ -257,14 +267,18 @@ func PollComponent[C Component, R []byte | ComponentRef, I any, O any, T any](
 		},
 		opts...,
 	)
-	return output, newRef.Serialize(), err
+	if err != nil {
+		return output, nil, err
+	}
+	serializedRef, err := newRef.serialize()
+	return output, serializedRef, err
 }
 
 func convertComponentRef[R []byte | ComponentRef](
 	r R,
 ) (ComponentRef, error) {
 	if refToken, ok := any(r).([]byte); ok {
-		return DeserializeComponentRef(refToken)
+		return deserializeComponentRef(refToken)
 	}
 
 	//revive:disable-next-line:unchecked-type-assertion
@@ -278,17 +292,17 @@ const engineCtxKey engineCtxKeyType = "chasmEngine"
 // this will be done by the nexus handler?
 // alternatively the engine can be a global variable,
 // but not a good practice in fx.
-func newEngineContext(
+func NewEngineContext(
 	ctx context.Context,
-	engine engine,
+	engine Engine,
 ) context.Context {
 	return context.WithValue(ctx, engineCtxKey, engine)
 }
 
 func engineFromContext(
 	ctx context.Context,
-) engine {
-	e, ok := ctx.Value(engineCtxKey).(engine)
+) Engine {
+	e, ok := ctx.Value(engineCtxKey).(Engine)
 	if !ok {
 		return nil
 	}

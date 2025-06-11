@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package ndc
 
 import (
@@ -919,47 +895,57 @@ func (s *workflowResetterSuite) TestReapplyEvents_WithPendingChildren() {
 		{name: "apply child timeout event", events: []*historypb.HistoryEvent{childExecutionTimeoutEvent}},
 		{name: "apply child terminated event", events: []*historypb.HistoryEvent{childExecutionTerminatedEvent}},
 	}
-	mutableState := historyi.NewMockMutableState(s.controller)
-	mutableState.EXPECT().GetChildExecutionInfo(testInitiatedEventID).
-		Times(len(testcases)). // GetChildExecutionInfo should be called exactly once for each test case.
-		Return(&persistencespb.ChildExecutionInfo{Clock: testChildClock}, true)
+	resetcases := []struct {
+		name    string
+		isReset bool
+	}{
+		{name: "reset", isReset: true},
+		{name: "no reset", isReset: false},
+	}
+	for _, tcReset := range resetcases {
+		mutableState := historyi.NewMockMutableState(s.controller)
+		mutableState.EXPECT().GetChildExecutionInfo(testInitiatedEventID).
+			Times(len(testcases)). // GetChildExecutionInfo should be called exactly once for each test case.
+			Return(&persistencespb.ChildExecutionInfo{Clock: testChildClock}, true)
 
-	// Each of the events must be picked with the correct args exactly once.
-	mutableState.EXPECT().AddChildWorkflowExecutionStartedEvent(testChildWFExecution, testChildWFType, testInitiatedEventID, testStartEventHeader, testChildClock).Return(nil, nil).Times(1)
-	mutableState.EXPECT().AddChildWorkflowExecutionCompletedEvent(
-		testInitiatedEventID,
-		testChildWFExecution,
-		&historypb.WorkflowExecutionCompletedEventAttributes{Result: testCompletedEventResult},
-	).Return(nil, nil).Times(1)
-	mutableState.EXPECT().AddStartChildWorkflowExecutionFailedEvent(
-		testInitiatedEventID,
-		enumspb.START_CHILD_WORKFLOW_EXECUTION_FAILED_CAUSE_NAMESPACE_NOT_FOUND,
-		&historypb.StartChildWorkflowExecutionInitiatedEventAttributes{WorkflowId: testChildWFExecution.WorkflowId},
-	).Return(nil, nil).Times(1)
-	mutableState.EXPECT().AddChildWorkflowExecutionFailedEvent(
-		testInitiatedEventID,
-		testChildWFExecution,
-		&historypb.WorkflowExecutionFailedEventAttributes{Failure: &failurepb.Failure{}, RetryState: enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE},
-	).Return(nil, nil).Times(1)
-	mutableState.EXPECT().AddChildWorkflowExecutionCanceledEvent(
-		testInitiatedEventID,
-		testChildWFExecution,
-		&historypb.WorkflowExecutionCanceledEventAttributes{Details: &commonpb.Payloads{}},
-	).Return(nil, nil).Times(1)
-	mutableState.EXPECT().AddChildWorkflowExecutionTimedOutEvent(
-		testInitiatedEventID,
-		testChildWFExecution,
-		&historypb.WorkflowExecutionTimedOutEventAttributes{RetryState: enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE},
-	).Return(nil, nil).Times(1)
-	mutableState.EXPECT().AddChildWorkflowExecutionTerminatedEvent(
-		testInitiatedEventID,
-		testChildWFExecution,
-		nil,
-	).Return(nil, nil).Times(1)
+		// Each of the events must be picked with the correct args exactly once.
+		mutableState.EXPECT().AddChildWorkflowExecutionStartedEvent(testChildWFExecution, testChildWFType, testInitiatedEventID, testStartEventHeader, testChildClock).Return(nil, nil).Times(1)
+		mutableState.EXPECT().AddChildWorkflowExecutionCompletedEvent(
+			testInitiatedEventID,
+			testChildWFExecution,
+			&historypb.WorkflowExecutionCompletedEventAttributes{Result: testCompletedEventResult},
+		).Return(nil, nil).Times(1)
+		mutableState.EXPECT().AddStartChildWorkflowExecutionFailedEvent(
+			testInitiatedEventID,
+			enumspb.START_CHILD_WORKFLOW_EXECUTION_FAILED_CAUSE_NAMESPACE_NOT_FOUND,
+			&historypb.StartChildWorkflowExecutionInitiatedEventAttributes{WorkflowId: testChildWFExecution.WorkflowId},
+		).Return(nil, nil).Times(1)
+		mutableState.EXPECT().AddChildWorkflowExecutionFailedEvent(
+			testInitiatedEventID,
+			testChildWFExecution,
+			&historypb.WorkflowExecutionFailedEventAttributes{Failure: &failurepb.Failure{}, RetryState: enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE},
+		).Return(nil, nil).Times(1)
+		mutableState.EXPECT().AddChildWorkflowExecutionCanceledEvent(
+			testInitiatedEventID,
+			testChildWFExecution,
+			&historypb.WorkflowExecutionCanceledEventAttributes{Details: &commonpb.Payloads{}},
+		).Return(nil, nil).Times(1)
+		mutableState.EXPECT().AddChildWorkflowExecutionTimedOutEvent(
+			testInitiatedEventID,
+			testChildWFExecution,
+			&historypb.WorkflowExecutionTimedOutEventAttributes{RetryState: enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE},
+		).Return(nil, nil).Times(1)
+		mutableState.EXPECT().AddChildWorkflowExecutionTerminatedEvent(
+			testInitiatedEventID,
+			testChildWFExecution,
+		).Return(nil, nil).Times(1)
 
-	for _, tc := range testcases {
-		_, err := reapplyEvents(context.Background(), mutableState, nil, nil, tc.events, nil, "", true)
-		s.NoError(err)
+		for _, tc := range testcases {
+			s.Run(tc.name+" "+tcReset.name, func() {
+				_, err := reapplyEvents(context.Background(), mutableState, nil, nil, tc.events, nil, "", tcReset.isReset)
+				s.NoError(err)
+			})
+		}
 	}
 }
 
@@ -1007,15 +993,26 @@ func (s *workflowResetterSuite) TestReapplyEvents_WithNoPendingChildren() {
 		{name: "apply child timeout event", events: []*historypb.HistoryEvent{childExecutionTimeoutEvent}},
 		{name: "apply child terminated event", events: []*historypb.HistoryEvent{childExecutionTerminatedEvent}},
 	}
-	mutableState := historyi.NewMockMutableState(s.controller)
-	// GetChildExecutionInfo should be called exactly once for each test case and none of the Add event methods must be called.
-	mutableState.EXPECT().GetChildExecutionInfo(testInitiatedEventID).
-		Times(len(testCases)).
-		Return(nil, false)
+	resetcases := []struct {
+		name    string
+		isReset bool
+	}{
+		{name: "reset", isReset: true},
+		{name: "no reset", isReset: false},
+	}
+	for _, tcReset := range resetcases {
+		mutableState := historyi.NewMockMutableState(s.controller)
+		// GetChildExecutionInfo should be called exactly once for each test case and none of the Add event methods must be called.
+		mutableState.EXPECT().GetChildExecutionInfo(testInitiatedEventID).
+			Times(len(testCases)).
+			Return(nil, false)
 
-	for _, tc := range testCases {
-		_, err := reapplyEvents(context.Background(), mutableState, nil, nil, tc.events, nil, "", true)
-		s.NoError(err)
+		for _, tc := range testCases {
+			s.Run(tc.name+" "+tcReset.name, func() {
+				_, err := reapplyEvents(context.Background(), mutableState, nil, nil, tc.events, nil, "", tcReset.isReset)
+				s.NoError(err)
+			})
+		}
 	}
 }
 

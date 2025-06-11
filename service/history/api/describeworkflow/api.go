@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package describeworkflow
 
 import (
@@ -154,17 +130,32 @@ func Invoke(
 			InheritedBuildId:             executionInfo.InheritedBuildId,
 			FirstRunId:                   executionInfo.FirstExecutionRunId,
 			VersioningInfo:               executionInfo.VersioningInfo,
+			WorkerDeploymentName:         executionInfo.WorkerDeploymentName,
+			Priority:                     executionInfo.Priority,
 		},
 		WorkflowExtendedInfo: &workflowpb.WorkflowExecutionExtendedInfo{
 			ExecutionExpirationTime: executionInfo.WorkflowExecutionExpirationTime,
 			RunExpirationTime:       executionInfo.WorkflowRunExpirationTime,
 			OriginalStartTime:       startEvent.EventTime,
 			CancelRequested:         executionInfo.CancelRequested,
+			ResetRunId:              executionInfo.ResetRunId,
+			RequestIdInfos:          make(map[string]*workflowpb.RequestIdInfo),
 		},
 	}
 
 	if mutableState.IsResetRun() {
 		result.WorkflowExtendedInfo.LastResetTime = executionState.StartTime
+	}
+
+	for requestID, requestIDInfo := range mutableState.GetExecutionState().GetRequestIds() {
+		info := &workflowpb.RequestIdInfo{
+			EventType: requestIDInfo.EventType,
+			Buffered:  requestIDInfo.EventId == common.BufferedEventID,
+		}
+		if !info.Buffered {
+			info.EventId = requestIDInfo.EventId
+		}
+		result.WorkflowExtendedInfo.RequestIdInfos[requestID] = info
 	}
 
 	if executionInfo.ParentRunId != "" {
@@ -319,20 +310,14 @@ func buildCallbackInfo(
 	callback callbacks.Callback,
 	outboundQueueCBPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool,
 ) (*workflowpb.CallbackInfo, error) {
-	destination := ""
-	cbSpec := &commonpb.Callback{}
-	switch variant := callback.Callback.Variant.(type) {
-	case *persistencespb.Callback_Nexus_:
-		cbSpec.Variant = &commonpb.Callback_Nexus_{
-			Nexus: &commonpb.Callback_Nexus{
-				Url:    variant.Nexus.GetUrl(),
-				Header: variant.Nexus.GetHeader(),
-			},
-		}
-		destination = variant.Nexus.GetUrl()
-	default:
+	if callback.Callback.GetNexus() == nil {
 		// Ignore non-nexus callbacks for now (there aren't any just yet).
 		return nil, nil
+	}
+
+	cbSpec, err := workflow.PersistenceCallbackToAPICallback(callback.Callback)
+	if err != nil {
+		return nil, err
 	}
 
 	var state enumspb.CallbackState
@@ -356,7 +341,7 @@ func buildCallbackInfo(
 		cb := outboundQueueCBPool.Get(tasks.TaskGroupNamespaceIDAndDestination{
 			TaskGroup:   callbacks.TaskTypeInvocation,
 			NamespaceID: namespaceID.String(),
-			Destination: destination,
+			Destination: cbSpec.GetNexus().GetUrl(),
 		})
 		if cb.State() != gobreaker.StateClosed {
 			state = enumspb.CALLBACK_STATE_BLOCKED

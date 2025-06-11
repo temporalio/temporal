@@ -1,25 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2025 Temporal Technologies Inc.  All rights reserved.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package matcher
 
 import (
@@ -27,9 +5,9 @@ import (
 	"time"
 
 	"github.com/temporalio/sqlparser"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/sqlquery"
-	historyi "go.temporal.io/server/service/history/interfaces"
 )
 
 // Supported Fields
@@ -41,11 +19,17 @@ const (
 )
 
 type mutableStateMatchEvaluator struct {
-	ms historyi.MutableState
+	executionInfo  *persistencespb.WorkflowExecutionInfo
+	executionState *persistencespb.WorkflowExecutionState
 }
 
-func newMutableStateMatchEvaluator(ms historyi.MutableState) *mutableStateMatchEvaluator {
-	return &mutableStateMatchEvaluator{ms: ms}
+func newMutableStateMatchEvaluator(
+	executionInfo *persistencespb.WorkflowExecutionInfo,
+	executionState *persistencespb.WorkflowExecutionState) *mutableStateMatchEvaluator {
+	return &mutableStateMatchEvaluator{
+		executionInfo:  executionInfo,
+		executionState: executionState,
+	}
 }
 
 func (m *mutableStateMatchEvaluator) Evaluate(query string) (bool, error) {
@@ -197,12 +181,12 @@ func (m *mutableStateMatchEvaluator) evaluateRange(expr *sqlparser.RangeCond) (b
 }
 
 func (m *mutableStateMatchEvaluator) compareWorkflowType(workflowType string, operation string) (bool, error) {
-	existingWorkflowType := m.ms.GetExecutionInfo().WorkflowTypeName
+	existingWorkflowType := m.executionInfo.WorkflowTypeName
 	return compareQueryString(existingWorkflowType, workflowType, operation, workflowTypeNameColName)
 }
 
 func (m *mutableStateMatchEvaluator) compareWorkflowID(workflowID string, operation string) (bool, error) {
-	existingWorkflowId := m.ms.GetExecutionInfo().WorkflowId
+	existingWorkflowId := m.executionInfo.WorkflowId
 	return compareQueryString(workflowID, existingWorkflowId, operation, workflowIDColName)
 }
 
@@ -210,7 +194,7 @@ func (m *mutableStateMatchEvaluator) compareWorkflowStatus(status string, operat
 	if len(status) == 0 {
 		return false, NewMatcherError("workflow status cannot be empty")
 	}
-	msStatus := m.ms.GetExecutionState().Status.String()
+	msStatus := m.executionState.Status.String()
 	switch operation {
 	case sqlparser.EqualStr:
 		return msStatus == status, nil
@@ -226,7 +210,7 @@ func (m *mutableStateMatchEvaluator) compareStartTime(val string, operation stri
 	if err != nil {
 		return false, err
 	}
-	startTime := m.ms.GetExecutionState().StartTime.AsTime()
+	startTime := m.executionState.StartTime.AsTime()
 	switch operation {
 	case sqlparser.GreaterEqualStr:
 		return startTime.Compare(expectedTime) >= 0, nil
@@ -246,7 +230,7 @@ func (m *mutableStateMatchEvaluator) compareStartTime(val string, operation stri
 }
 
 func (m *mutableStateMatchEvaluator) compareStartTimeBetween(fromTime time.Time, toTime time.Time) (bool, error) {
-	startTime := m.ms.GetExecutionState().StartTime.AsTime()
+	startTime := m.executionState.StartTime.AsTime()
 	lc := startTime.Compare(fromTime)
 	rc := startTime.Compare(toTime)
 	return lc >= 0 && rc <= 0, nil

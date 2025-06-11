@@ -1,30 +1,7 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package history
 
 import (
+	"context"
 	"net"
 	"time"
 
@@ -55,6 +32,7 @@ type (
 		membershipMonitor membership.Monitor
 		metricsHandler    metrics.Handler
 		healthServer      *health.Server
+		readinessCancel   context.CancelFunc
 	}
 )
 
@@ -92,7 +70,19 @@ func (s *Service) Start() {
 
 	historyservice.RegisterHistoryServiceServer(s.server, s.handler)
 	healthpb.RegisterHealthServer(s.server, s.healthServer)
-	s.healthServer.SetServingStatus(serviceName, healthpb.HealthCheckResponse_SERVING)
+
+	// start as NOT_SERVING, update to SERVING after initial shards acquired
+	s.healthServer.SetServingStatus(serviceName, healthpb.HealthCheckResponse_NOT_SERVING)
+	readinessCtx, readinessCancel := context.WithCancel(context.Background())
+	s.readinessCancel = readinessCancel
+	go func() {
+		if s.handler.controller.InitialShardsAcquired(readinessCtx) == nil {
+			// add a few seconds for stabilization
+			if util.InterruptibleSleep(readinessCtx, 5*time.Second) == nil {
+				s.healthServer.SetServingStatus(serviceName, healthpb.HealthCheckResponse_SERVING)
+			}
+		}
+	}()
 
 	reflection.Register(s.server)
 
@@ -120,6 +110,8 @@ func (s *Service) Start() {
 
 // Stop stops the service
 func (s *Service) Stop() {
+	s.readinessCancel()
+
 	// remove self from membership ring and wait for traffic to drain
 	var err error
 	var waitTime time.Duration

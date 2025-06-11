@@ -1,52 +1,20 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package chasm
 
 import (
 	"reflect"
 
+	"go.temporal.io/api/serviceerror"
 	"google.golang.org/protobuf/proto"
 )
 
-// This struct needs to be create via reflection
-// but reflection can't set prviate fields...
+const (
+	// Used by reflection.
+	internalFieldName = "Internal"
+)
+
 type Field[T any] struct {
+	// This struct needs to be created via reflection, but reflection can't set private fields.
 	Internal fieldInternal
-}
-
-type fieldInternal struct {
-	fieldType int // data, component, componentPointer
-	component reflect.Value
-
-	// backingNode *nodeInfo
-}
-
-func (d *Field[T]) Get(Context) (T, error) {
-	// remember to handle d == nil case
-
-	panic("not implemented")
 }
 
 // re. Data v.s. Component.
@@ -60,19 +28,9 @@ func (d *Field[T]) Get(Context) (T, error) {
 func NewDataField[D proto.Message](
 	ctx MutableContext,
 	d D,
-) *Field[D] {
-	return &Field[D]{}
-}
-
-type componentFieldOptions struct {
-	detached bool
-}
-
-type ComponentFieldOption func(*componentFieldOptions)
-
-func ComponentFieldDetached() ComponentFieldOption {
-	return func(o *componentFieldOptions) {
-		o.detached = true
+) Field[D] {
+	return Field[D]{
+		Internal: newFieldInternalWithValue(fieldTypeData, d),
 	}
 }
 
@@ -80,26 +38,99 @@ func NewComponentField[C Component](
 	ctx MutableContext,
 	c C,
 	options ...ComponentFieldOption,
-) *Field[C] {
-	return &Field[C]{
-		Internal: fieldInternal{
-			component: reflect.ValueOf(c),
-		},
+) Field[C] {
+	return Field[C]{
+		Internal: newFieldInternalWithValue(fieldTypeComponent, c),
 	}
 }
 
-func NewComponentPointerField[C Component](
+func ComponentPointerTo[C Component](
 	ctx MutableContext,
 	c C,
-) *Field[C] {
-	panic("not implemented")
+) (Field[C], error) {
+	path, err := ctx.Ref(c)
+	if err != nil {
+		return NewEmptyField[C](), err
+	}
+	return Field[C]{
+		Internal: newFieldInternalWithValue(fieldTypePointer, path.componentPath),
+	}, nil
 }
 
-func NewDataPointerField[D proto.Message](
+func DataPointerTo[D proto.Message](
 	ctx MutableContext,
 	d D,
-) *Field[D] {
-	panic("not implemented")
+) (Field[D], error) {
+	path, err := ctx.refData(d)
+	if err != nil {
+		return NewEmptyField[D](), err
+	}
+	return Field[D]{
+		Internal: newFieldInternalWithValue(fieldTypePointer, path.componentPath),
+	}, nil
 }
 
-type Collection[T any] map[string]*Field[T]
+func (f Field[T]) Get(chasmContext Context) (T, error) {
+	var nilT T
+
+	// If node is nil, then there is nothing to deserialize from, return value (even if it is also nil).
+	if f.Internal.node == nil {
+		if f.Internal.v == nil {
+			return nilT, nil
+		}
+		vT, isT := f.Internal.v.(T)
+		if !isT {
+			return nilT, serviceerror.NewInternalf("internal value doesn't implement %s", reflect.TypeFor[T]().Name())
+		}
+		return vT, nil
+	}
+
+	var nodeValue any
+	switch f.Internal.fieldType() {
+	case fieldTypeComponent:
+		if err := f.Internal.node.prepareComponentValue(chasmContext); err != nil {
+			return nilT, err
+		}
+		nodeValue = f.Internal.node.value
+	case fieldTypeData:
+		// For data fields, T is always a concrete type.
+		if err := f.Internal.node.prepareDataValue(chasmContext, reflect.TypeFor[T]()); err != nil {
+			return nilT, err
+		}
+		nodeValue = f.Internal.node.value
+	case fieldTypePointer:
+		if err := f.Internal.node.preparePointerValue(chasmContext); err != nil {
+			return nilT, err
+		}
+		//nolint:revive // value is guaranteed to be of type []string.
+		path := f.Internal.value().([]string)
+		if referencedNode, found := f.Internal.node.root().findNode(path); found {
+			fieldT := reflect.TypeFor[T]()
+			if fieldT.AssignableTo(protoMessageT) {
+				if err := f.Internal.node.prepareDataValue(chasmContext, fieldT); err != nil {
+					return nilT, err
+				}
+			} else {
+				if err := referencedNode.prepareComponentValue(chasmContext); err != nil {
+					return nilT, err
+				}
+			}
+			nodeValue = referencedNode.value
+		}
+	default:
+		return nilT, serviceerror.NewInternalf("unsupported field type: %v", f.Internal.fieldType())
+	}
+
+	if nodeValue == nil {
+		return nilT, nil
+	}
+	vT, isT := nodeValue.(T)
+	if !isT {
+		return nilT, serviceerror.NewInternalf("node value doesn't implement %s", reflect.TypeFor[T]().Name())
+	}
+	return vT, nil
+}
+
+func NewEmptyField[T any]() Field[T] {
+	return Field[T]{}
+}

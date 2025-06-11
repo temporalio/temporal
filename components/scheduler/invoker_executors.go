@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package scheduler
 
 import (
@@ -62,6 +38,14 @@ type (
 
 	invokerTaskExecutor struct {
 		InvokerTaskExecutorOptions
+	}
+
+	// Per-task context.
+	invokerTaskExecutorContext struct {
+		context.Context
+
+		actionsTaken int
+		maxActions   int
 	}
 
 	rateLimitedError struct {
@@ -111,7 +95,7 @@ func (e invokerTaskExecutor) executeExecuteTask(
 
 	// Load Scheduler and Invoker's current states.
 	err := env.Access(ctx, ref, hsm.AccessRead, func(node *hsm.Node) error {
-		s, err := loadScheduler(node.Parent)
+		s, err := loadScheduler(node.Parent, true)
 		if err != nil {
 			return err
 		}
@@ -140,10 +124,10 @@ func (e invokerTaskExecutor) executeExecuteTask(
 
 	// Terminate, cancel, and start workflows. The result struct contains the
 	// complete outcome of all requests executed in a single batch.
-	actionsTaken := 0
-	result = result.Append(e.terminateWorkflows(ctx, logger, *scheduler, &actionsTaken, invoker.GetTerminateWorkflows()))
-	result = result.Append(e.cancelWorkflows(ctx, logger, *scheduler, &actionsTaken, invoker.GetCancelWorkflows()))
-	sres, startResults := e.startWorkflows(ctx, logger, env, *scheduler, &actionsTaken, eligibleStarts)
+	ictx := e.newInvokerTaskExecutorContext(ctx, *scheduler)
+	result = result.Append(e.terminateWorkflows(ictx, logger, *scheduler, invoker.GetTerminateWorkflows()))
+	result = result.Append(e.cancelWorkflows(ictx, logger, *scheduler, invoker.GetCancelWorkflows()))
+	sres, startResults := e.startWorkflows(ictx, logger, env, *scheduler, eligibleStarts)
 	result = result.Append(sres)
 
 	// Write results.
@@ -151,7 +135,6 @@ func (e invokerTaskExecutor) executeExecuteTask(
 		// Record completed executions on the Invoker.
 		err := hsm.MachineTransition(node, func(i Invoker) (hsm.TransitionOutput, error) {
 			return TransitionRecordExecution.Apply(i, EventRecordExecution{
-				Node:          node,
 				executeResult: result,
 			})
 		})
@@ -162,7 +145,6 @@ func (e invokerTaskExecutor) executeExecuteTask(
 		// Record action results on the Scheduler.
 		return hsm.MachineTransition(node.Parent, func(s Scheduler) (hsm.TransitionOutput, error) {
 			return TransitionRecordAction.Apply(s, EventRecordAction{
-				Node:        node,
 				ActionCount: int64(len(startResults)),
 				Results:     startResults,
 			})
@@ -170,28 +152,27 @@ func (e invokerTaskExecutor) executeExecuteTask(
 	})
 }
 
-// shouldYield returns true when the immediate task should complete/spawn a new task.
-func (e invokerTaskExecutor) shouldYield(scheduler Scheduler, actionsTaken int) bool {
-	tweakables := e.Config.Tweakables(scheduler.Namespace)
-	maxActions := tweakables.MaxActionsPerExecution
-	return actionsTaken >= maxActions
+// takeNextAction increments the context's actionTaken counter, returning true if
+// the action should be executed, and false if the task should instead yield.
+func (c *invokerTaskExecutorContext) takeNextAction() bool {
+	taken := c.actionsTaken
+	c.actionsTaken++
+	return taken < c.maxActions
 }
 
 // cancelWorkflows does a best-effort attempt to cancel all workflow executions provided in targets.
 func (e invokerTaskExecutor) cancelWorkflows(
-	ctx context.Context,
+	ctx invokerTaskExecutorContext,
 	logger log.Logger,
 	scheduler Scheduler,
-	actionsTaken *int,
 	targets []*commonpb.WorkflowExecution,
 ) (result executeResult) {
 	for _, wf := range targets {
-		if e.shouldYield(scheduler, *actionsTaken) {
+		if !ctx.takeNextAction() {
 			break
 		}
 
 		err := e.cancelWorkflow(ctx, scheduler, wf)
-		*actionsTaken++
 		if err != nil {
 			logger.Error("Failed to cancel workflow", tag.Error(err), tag.WorkflowID(wf.WorkflowId))
 			e.MetricsHandler.Counter(metrics.ScheduleCancelWorkflowErrors.Name()).Record(1)
@@ -203,21 +184,19 @@ func (e invokerTaskExecutor) cancelWorkflows(
 	return
 }
 
-// terminateWorkflows does a best-effort attempt to cancel all workflow executions provided in targets.
+// terminateWorkflows does a best-effort attempt to terminate all workflow executions provided in targets.
 func (e invokerTaskExecutor) terminateWorkflows(
-	ctx context.Context,
+	ctx invokerTaskExecutorContext,
 	logger log.Logger,
 	scheduler Scheduler,
-	actionsTaken *int,
 	targets []*commonpb.WorkflowExecution,
 ) (result executeResult) {
 	for _, wf := range targets {
-		if e.shouldYield(scheduler, *actionsTaken) {
+		if !ctx.takeNextAction() {
 			break
 		}
 
 		err := e.terminateWorkflow(ctx, scheduler, wf)
-		*actionsTaken++
 		if err != nil {
 			logger.Error("Failed to terminate workflow", tag.Error(err), tag.WorkflowID(wf.WorkflowId))
 			e.MetricsHandler.Counter(metrics.ScheduleTerminateWorkflowErrors.Name()).Record(1)
@@ -231,11 +210,10 @@ func (e invokerTaskExecutor) terminateWorkflows(
 
 // startWorkflows executes the provided list of starts, returning a result with their outcomes.
 func (e invokerTaskExecutor) startWorkflows(
-	ctx context.Context,
+	ctx invokerTaskExecutorContext,
 	logger log.Logger,
 	env hsm.Environment,
 	scheduler Scheduler,
-	actionsTaken *int,
 	starts []*schedulespb.BufferedStart,
 ) (result executeResult, startResults []*schedulepb.ScheduleActionResult) {
 	metricsWithTag := e.MetricsHandler.WithTags(
@@ -245,12 +223,11 @@ func (e invokerTaskExecutor) startWorkflows(
 		// Starts that haven't been executed yet will remain in `BufferedStarts`,
 		// without change, so another ExecuteTask will be immediately created to continue
 		// processing in a new task.
-		if e.shouldYield(scheduler, *actionsTaken) {
+		if !ctx.takeNextAction() {
 			break
 		}
 
 		startResult, err := e.startWorkflow(ctx, env, scheduler, start)
-		*actionsTaken++
 		if err != nil {
 			logger.Error("Failed to start workflow", tag.Error(err))
 
@@ -281,7 +258,7 @@ func (e invokerTaskExecutor) startWorkflows(
 
 func (e invokerTaskExecutor) executeProcessBufferTask(env hsm.Environment, node *hsm.Node, task ProcessBufferTask) error {
 	schedulerNode := node.Parent
-	scheduler, err := loadScheduler(schedulerNode)
+	scheduler, err := loadScheduler(schedulerNode, false)
 	if err != nil {
 		return err
 	}
@@ -297,7 +274,6 @@ func (e invokerTaskExecutor) executeProcessBufferTask(env hsm.Environment, node 
 	if executionInfo == nil || len(invoker.GetBufferedStarts()) == 0 {
 		return hsm.MachineTransition(node, func(e Invoker) (hsm.TransitionOutput, error) {
 			return TransitionFinishProcessing.Apply(e, EventFinishProcessing{
-				Node:              node,
 				LastProcessedTime: env.Now(),
 				processBufferResult: processBufferResult{
 					DiscardStarts: invoker.GetBufferedStarts(),
@@ -334,7 +310,6 @@ func (e invokerTaskExecutor) executeProcessBufferTask(env hsm.Environment, node 
 		// Processing will be rescheduled for the earliest backing off start.
 		return hsm.MachineTransition(node, func(i Invoker) (hsm.TransitionOutput, error) {
 			return TransitionRetryProcessing.Apply(i, EventRetryProcessing{
-				Node:                node,
 				LastProcessedTime:   env.Now(),
 				processBufferResult: result,
 			})
@@ -345,7 +320,6 @@ func (e invokerTaskExecutor) executeProcessBufferTask(env hsm.Environment, node 
 	// closed. We can kick off ready starts and transition to waiting.
 	return hsm.MachineTransition(node, func(i Invoker) (hsm.TransitionOutput, error) {
 		return TransitionFinishProcessing.Apply(i, EventFinishProcessing{
-			Node:                node,
 			LastProcessedTime:   env.Now(),
 			processBufferResult: result,
 		})
@@ -610,4 +584,18 @@ func newRateLimitedError(delay time.Duration) error {
 
 func (r *rateLimitedError) Error() string {
 	return fmt.Sprintf("rate limited for %s", r.delay)
+}
+
+func (e invokerTaskExecutor) newInvokerTaskExecutorContext(
+	ctx context.Context,
+	scheduler Scheduler,
+) invokerTaskExecutorContext {
+	tweakables := e.Config.Tweakables(scheduler.Namespace)
+	maxActions := tweakables.MaxActionsPerExecution
+
+	return invokerTaskExecutorContext{
+		Context:      ctx,
+		actionsTaken: 0,
+		maxActions:   maxActions,
+	}
 }

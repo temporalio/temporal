@@ -1,33 +1,8 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package matching
 
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -41,6 +16,7 @@ import (
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/future"
+	"go.temporal.io/server/common/goro"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -48,7 +24,6 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/util"
-	"go.temporal.io/server/internal/goro"
 )
 
 const (
@@ -97,12 +72,13 @@ type (
 	// to/from the persistence layer passes through userDataManager of the owning partition.
 	// All other partitions long-poll the latest user data from the owning partition.
 	userDataManagerImpl struct {
-		lock            sync.Mutex
-		onFatalErr      func(unloadCause)
-		partition       tqid.Partition
-		userData        *persistencespb.VersionedTaskQueueUserData
-		userDataChanged chan struct{}
-		userDataState   userDataState
+		lock              sync.Mutex
+		onFatalErr        func(unloadCause)
+		onUserDataChanged func() // if set, call this in new goroutine when user data changes
+		partition         tqid.Partition
+		userData          *persistencespb.VersionedTaskQueueUserData
+		userDataChanged   chan struct{}
+		userDataState     userDataState
 		// only set if this partition owns user data of its task queue
 		store             persistence.TaskManager
 		config            *taskQueueConfig
@@ -132,6 +108,7 @@ func newUserDataManager(
 	store persistence.TaskManager,
 	matchingClient matchingservice.MatchingServiceClient,
 	onFatalErr func(unloadCause),
+	onUserDataChanged func(),
 	partition tqid.Partition,
 	config *taskQueueConfig,
 	logger log.Logger,
@@ -139,6 +116,7 @@ func newUserDataManager(
 ) *userDataManagerImpl {
 	m := &userDataManagerImpl{
 		onFatalErr:        onFatalErr,
+		onUserDataChanged: onUserDataChanged,
 		partition:         partition,
 		userDataChanged:   make(chan struct{}),
 		config:            config,
@@ -199,6 +177,9 @@ func (m *userDataManagerImpl) setUserDataLocked(userData *persistencespb.Version
 	m.userData = userData
 	close(m.userDataChanged)
 	m.userDataChanged = make(chan struct{})
+	if m.onUserDataChanged != nil {
+		go m.onUserDataChanged()
+	}
 }
 
 // Sets user data enabled/disabled and marks the future ready (if it's not ready yet).
@@ -504,7 +485,7 @@ func (m *userDataManagerImpl) updateUserData(
 		preUpdateData = &persistencespb.TaskQueueUserData{}
 	}
 	if options.KnownVersion > 0 && preUpdateVersion != options.KnownVersion {
-		return nil, false, serviceerror.NewFailedPrecondition(fmt.Sprintf("user data version mismatch: requested: %d, current: %d", options.KnownVersion, preUpdateVersion))
+		return nil, false, serviceerror.NewFailedPreconditionf("user data version mismatch: requested: %d, current: %d", options.KnownVersion, preUpdateVersion)
 	}
 	updatedUserData, shouldReplicate, err := updateFn(preUpdateData)
 	if err == errUserDataUnmodified {
@@ -528,7 +509,7 @@ func (m *userDataManagerImpl) updateUserData(
 				return nil, false, err
 			}
 			if numTaskQueues >= options.TaskQueueLimitPerBuildId {
-				return nil, false, serviceerror.NewFailedPrecondition(fmt.Sprintf("Exceeded max task queues allowed to be mapped to a single build ID: %d", options.TaskQueueLimitPerBuildId))
+				return nil, false, serviceerror.NewFailedPreconditionf("Exceeded max task queues allowed to be mapped to a single build ID: %d", options.TaskQueueLimitPerBuildId)
 			}
 		}
 	}

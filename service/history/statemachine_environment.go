@@ -1,25 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package history
 
 import (
@@ -37,11 +15,11 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
-	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
@@ -240,7 +218,7 @@ func (e *stateMachineEnvironment) validateStateMachineRef(
 		return e.validateStateMachineRefWithoutTransitionHistory(ms, ref, potentialStaleState)
 	}
 
-	err := workflow.TransitionHistoryStalenessCheck(
+	err := transitionhistory.StalenessCheck(
 		ms.GetExecutionInfo().GetTransitionHistory(),
 		ref.StateMachineRef.MutableStateVersionedTransition,
 	)
@@ -261,7 +239,7 @@ func (e *stateMachineEnvironment) validateStateMachineRef(
 		return e.validateStateMachineRefWithoutTransitionHistory(ms, ref, potentialStaleState)
 	}
 
-	if workflow.CompareVersionedTransition(
+	if transitionhistory.Compare(
 		ref.StateMachineRef.MachineInitialVersionedTransition,
 		node.InternalRepr().GetInitialVersionedTransition(),
 	) != 0 {
@@ -395,6 +373,11 @@ func (e *stateMachineEnvironment) Access(ctx context.Context, ref hsm.Ref, acces
 		return nil
 	}
 
+	if e.shardContext.GetConfig().EnableUpdateWorkflowModeIgnoreCurrent() {
+		return wfCtx.UpdateWorkflowExecutionAsActive(ctx, e.shardContext)
+	}
+
+	// TODO: remove following code once EnableUpdateWorkflowModeIgnoreCurrent config is deprecated.
 	if ms.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		// Can't use UpdateWorkflowExecutionAsActive since it updates the current run, and we are operating on closed
 		// workflows.

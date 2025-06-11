@@ -1,32 +1,7 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package ndc
 
 import (
 	"context"
-	"os"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -54,12 +29,10 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	test "go.temporal.io/server/common/testing"
 	"go.temporal.io/server/common/testing/protorequire"
-	"go.temporal.io/server/environment"
 	"go.temporal.io/server/service/history/replication/eventhandler"
 	"go.temporal.io/server/tests/testcore"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
-	"gopkg.in/yaml.v3"
 )
 
 type (
@@ -96,20 +69,7 @@ func (s *NDCReplicationTaskBatchingTestSuite) SetupSuite() {
 	s.testClusterFactory = testcore.NewTestClusterFactory()
 	s.passiveClusterName = "cluster-b"
 
-	fileName := "../testdata/ndc_clusters.yaml"
-	if testcore.TestFlags.TestClusterConfigFile != "" {
-		fileName = testcore.TestFlags.TestClusterConfigFile
-	}
-	environment.SetupEnv()
-	s.standByTaskID = 0
-
-	confContent, err := os.ReadFile(fileName)
-	s.Require().NoError(err)
-	confContent = []byte(os.ExpandEnv(string(confContent)))
-
-	var clusterConfigs []*testcore.TestClusterConfig
-	s.Require().NoError(yaml.Unmarshal(confContent, &clusterConfigs))
-
+	clusterConfigs := clustersConfig("cluster-a", "cluster-b")
 	passiveClusterConfig := clusterConfigs[1]
 	passiveClusterConfig.WorkerConfig = testcore.WorkerConfig{DisableWorker: true}
 	passiveClusterConfig.DynamicConfigOverrides = map[dynamicconfig.Key]any{
@@ -137,7 +97,6 @@ func (s *NDCReplicationTaskBatchingTestSuite) SetupSuite() {
 	passiveClusterConfig.MockAdminClient = s.mockAdminClient
 
 	passiveClusterConfig.ClusterMetadata.MasterClusterName = s.passiveClusterName
-	delete(passiveClusterConfig.ClusterMetadata.ClusterInformation, "cluster-c") // ndc_clusters.yaml has 3 clusters, but we only need 2 for this test
 	cluster, err := s.testClusterFactory.NewCluster(s.T(), passiveClusterConfig, log.With(s.logger, tag.ClusterName(clusterName[0])))
 	s.Require().NoError(err)
 	s.passtiveCluster = cluster

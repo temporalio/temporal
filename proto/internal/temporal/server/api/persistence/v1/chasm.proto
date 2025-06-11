@@ -1,25 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2025 Temporal Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 syntax = "proto3";
 
 package temporal.server.api.persistence.v1;
@@ -31,6 +9,14 @@ import "temporal/server/api/persistence/v1/hsm.proto";
 import "temporal/api/common/v1/message.proto";
 
 message ChasmNode {
+    // Metadata present for all nodes. 
+    ChasmNodeMetadata metadata = 1;
+
+    // User data for any type of node that stores it.
+    temporal.api.common.v1.DataBlob data = 2;
+}
+
+message ChasmNodeMetadata {
     // Versioned transition when the node was instantiated.
     VersionedTransition initial_versioned_transition = 1;
     // Versioned transition when the node was last updated.
@@ -53,20 +39,57 @@ message ChasmComponentAttributes {
         temporal.api.common.v1.DataBlob data = 4;
         // Versioned transition of the Entity when the task was created.
         VersionedTransition versioned_transition = 5;
+        // The xth task generated in this versioned transition.
+        // Together with the versioned transition, this is a unique identifier for
+        // this task.
+        int64 versioned_transition_offset = 6;
+        // If a physical task is created for this task in this cluster.
+        // NOTE: this is a cluster-specific field and can not be replicated.
+        // Changes to this field also doesn't require an increase in versioned transition. 
+        int32 physical_task_status = 7;
     }
 
     // Fully qualified type name of a registered component.
     string type = 1;
-    temporal.api.common.v1.DataBlob data = 2;
-    repeated Task tasks = 3;
+    // Tasks are in their insertion order, 
+    // i.e. by versioned transtion and versioned_transition_offset.
+    repeated Task side_effect_tasks = 2;
+    // Tasks are ordered by their scheduled time, breaking ties by
+    // versioned transition and versioned_transition_offset. 
+    repeated Task pure_tasks = 3;
 }
 
-message ChasmDataAttributes {
-    temporal.api.common.v1.DataBlob data = 1;
-}
+message ChasmDataAttributes {}
 
 message ChasmCollectionAttributes {}
 
 message ChasmPointerAttributes {
     repeated string node_path = 1;
+}
+
+// ChasmComponentRef references a specific component within a CHASM tree
+// (assuming you already have a reference to the tree/entity).
+message ChasmComponentRef {
+    // Initial versioned transition of the entity being referenced.
+    VersionedTransition component_initial_versioned_transition = 1;
+
+    // Last updated transition of the entity being referenced at the time the
+    // reference was created. Can be used to invalidate this reference.
+    VersionedTransition component_last_update_versioned_transition = 2;
+
+    // Encoded full path to the component.
+    string path = 3;
+}
+
+// ChasmTaskInfo includes component-facing task metadata
+message ChasmTaskInfo {
+    // Reference to the component responsible for this task.
+    ChasmComponentRef ref = 1;
+
+    // Task type (registered by components).
+    string type = 2;
+
+    // Opaque attached task data. May be nil. Usable by components, not the CHASM
+    // framework itself.
+    temporal.api.common.v1.DataBlob data = 3;
 }

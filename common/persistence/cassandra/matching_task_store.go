@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package cassandra
 
 import (
@@ -155,6 +131,23 @@ const (
 	// Not much of a need to make this configurable, we're just reading some strings
 	listTaskQueueNamesByBuildIdPageSize = 100
 )
+
+const (
+	// Row types for table tasks. Lower bit only: see rowTypeTaskInSubqueue for more details.
+	rowTypeTask = iota
+	rowTypeTaskQueue
+)
+
+// We steal some upper bits of the "row type" field to hold a subqueue index.
+// Subqueue 0 must be the same as rowTypeTask (before subqueues were introduced).
+// 00000000: task in subqueue 0 (rowTypeTask)
+// 00000001: task queue metadata (rowTypeTaskQueue)
+// xxxxxx1x: reserved
+// 00000100: task in subqueue 1
+// nnnnnn00: task in subqueue n, etc.
+func rowTypeTaskInSubqueue(subqueue int) int {
+	return subqueue<<2 | rowTypeTask // nolint:staticcheck
+}
 
 type (
 	MatchingTaskStore struct {
@@ -353,7 +346,7 @@ func (d *MatchingTaskStore) CreateTasks(
 				namespaceID,
 				taskQueue,
 				taskQueueType,
-				rowTypeTask,
+				rowTypeTaskInSubqueue(task.Subqueue),
 				task.TaskId,
 				task.Task.Data,
 				task.Task.EncodingType.String())
@@ -362,7 +355,7 @@ func (d *MatchingTaskStore) CreateTasks(
 				namespaceID,
 				taskQueue,
 				taskQueueType,
-				rowTypeTask,
+				rowTypeTaskInSubqueue(task.Subqueue),
 				task.TaskId,
 				task.Task.Data,
 				task.Task.EncodingType.String(),
@@ -396,7 +389,7 @@ func (d *MatchingTaskStore) CreateTasks(
 		}
 	}
 
-	return &p.CreateTasksResponse{}, nil
+	return &p.CreateTasksResponse{UpdatedMetadata: true}, nil
 }
 
 func GetTaskTTL(expireTime *timestamppb.Timestamp) int64 {
@@ -425,7 +418,7 @@ func (d *MatchingTaskStore) GetTasks(
 		request.NamespaceID,
 		request.TaskQueue,
 		request.TaskType,
-		rowTypeTask,
+		rowTypeTaskInSubqueue(request.Subqueue),
 		request.InclusiveMinTaskID,
 		request.ExclusiveMaxTaskID,
 	).WithContext(ctx)
@@ -468,7 +461,7 @@ func (d *MatchingTaskStore) GetTasks(
 	}
 
 	if err := iter.Close(); err != nil {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetTasks operation failed. Error: %v", err))
+		return nil, serviceerror.NewUnavailablef("GetTasks operation failed. Error: %v", err)
 	}
 	return response, nil
 }
@@ -485,7 +478,7 @@ func (d *MatchingTaskStore) CompleteTasksLessThan(
 		request.NamespaceID,
 		request.TaskQueueName,
 		request.TaskType,
-		rowTypeTask,
+		rowTypeTaskInSubqueue(request.Subqueue),
 		request.ExclusiveMaxTaskID,
 	).WithContext(ctx)
 	err := query.Exec()
@@ -620,7 +613,7 @@ func (d *MatchingTaskStore) ListTaskQueueUserDataEntries(ctx context.Context, re
 	}
 
 	if err := iter.Close(); err != nil {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("ListTaskQueueUserDataEntries operation failed. Error: %v", err))
+		return nil, serviceerror.NewUnavailablef("ListTaskQueueUserDataEntries operation failed. Error: %v", err)
 	}
 	return response, nil
 }
@@ -654,7 +647,7 @@ func (d *MatchingTaskStore) GetTaskQueuesByBuildId(ctx context.Context, request 
 	}
 
 	if err := iter.Close(); err != nil {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetTaskQueuesByBuildId operation failed. Error: %v", err))
+		return nil, serviceerror.NewUnavailablef("GetTaskQueuesByBuildId operation failed. Error: %v", err)
 	}
 	return taskQueues, nil
 }

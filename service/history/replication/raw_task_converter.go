@@ -1,28 +1,4 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
-//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination raw_task_converter_mock.go
+//go:generate mockgen -package $GOPACKAGE -source $GOFILE -destination raw_task_converter_mock.go
 
 package replication
 
@@ -44,12 +20,14 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/configs"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -170,6 +148,13 @@ func convertActivityStateReplicationTask(
 			if lastStartedBuildId == "" {
 				lastStartedBuildId = activityInfo.GetUseWorkflowBuildIdInfo().GetLastUsedBuildId()
 			}
+			// We will use field to distinguish between nil and zero value for backward compatibility
+			retryInitialInterval := activityInfo.RetryInitialInterval
+			if retryInitialInterval == nil {
+				retryInitialInterval = &durationpb.Duration{
+					Nanos: 0,
+				}
+			}
 
 			return &replicationspb.ReplicationTask{
 				TaskType:     enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK,
@@ -197,7 +182,7 @@ func convertActivityStateReplicationTask(
 						LastAttemptCompleteTime:    activityInfo.LastAttemptCompleteTime,
 						Stamp:                      activityInfo.Stamp,
 						Paused:                     activityInfo.Paused,
-						RetryInitialInterval:       activityInfo.RetryInitialInterval,
+						RetryInitialInterval:       retryInitialInterval,
 						RetryMaximumInterval:       activityInfo.RetryMaximumInterval,
 						RetryMaximumAttempts:       activityInfo.RetryMaximumAttempts,
 						RetryBackoffCoefficient:    activityInfo.RetryBackoffCoefficient,
@@ -679,25 +664,40 @@ func (c *syncVersionedTransitionTaskConverter) convert(
 		return nil, err
 	}
 	currentHistoryCopy := versionhistory.CopyVersionHistory(currentHistory)
+	var syncStateResult *SyncStateResult
+	if taskInfo.IsFirstTask {
+		syncStateResult, err = c.syncStateRetriever.GetSyncWorkflowStateArtifactFromMutableStateForNewWorkflow(
+			ctx,
+			taskInfo.NamespaceID,
+			&commonpb.WorkflowExecution{
+				WorkflowId: taskInfo.WorkflowID,
+				RunId:      taskInfo.RunID,
+			},
+			mutableState,
+			releaseFunc,
+			taskInfo.VersionedTransition,
+		)
+	} else {
+		syncStateResult, err = c.syncStateRetriever.GetSyncWorkflowStateArtifactFromMutableState(
+			ctx,
+			taskInfo.NamespaceID,
+			&commonpb.WorkflowExecution{
+				WorkflowId: taskInfo.WorkflowID,
+				RunId:      taskInfo.RunID,
+			},
+			mutableState,
+			progress.LastSyncedTransition(),
+			targetHistoryItems,
+			releaseFunc,
+		)
+	}
 
-	result, err := c.syncStateRetriever.GetSyncWorkflowStateArtifactFromMutableState(
-		ctx,
-		taskInfo.NamespaceID,
-		&commonpb.WorkflowExecution{
-			WorkflowId: taskInfo.WorkflowID,
-			RunId:      taskInfo.RunID,
-		},
-		mutableState,
-		progress.LastSyncedTransition(),
-		targetHistoryItems,
-		releaseFunc,
-	)
 	if err != nil {
 		return nil, err
 	}
 	// do not access mutable state after this point
 
-	err = c.replicationCache.Update(taskInfo.RunID, targetClusterID, result.VersionedTransitionHistory, currentHistoryCopy.Items)
+	err = c.replicationCache.Update(taskInfo.RunID, targetClusterID, syncStateResult.VersionedTransitionHistory, currentHistoryCopy.Items)
 	if err != nil {
 		return nil, err
 	}
@@ -706,7 +706,7 @@ func (c *syncVersionedTransitionTaskConverter) convert(
 		SourceTaskId: taskInfo.TaskID,
 		Attributes: &replicationspb.ReplicationTask_SyncVersionedTransitionTaskAttributes{
 			SyncVersionedTransitionTaskAttributes: &replicationspb.SyncVersionedTransitionTaskAttributes{
-				VersionedTransitionArtifact: result.VersionedTransitionArtifact,
+				VersionedTransitionArtifact: syncStateResult.VersionedTransitionArtifact,
 				NamespaceId:                 taskInfo.NamespaceID,
 				WorkflowId:                  taskInfo.WorkflowID,
 				RunId:                       taskInfo.RunID,
@@ -718,7 +718,7 @@ func (c *syncVersionedTransitionTaskConverter) convert(
 }
 
 func (c *syncVersionedTransitionTaskConverter) onCurrentBranch(mutableState historyi.MutableState, versionedTransition *persistencespb.VersionedTransition) bool {
-	return workflow.TransitionHistoryStalenessCheck(mutableState.GetExecutionInfo().TransitionHistory, versionedTransition) == nil
+	return transitionhistory.StalenessCheck(mutableState.GetExecutionInfo().TransitionHistory, versionedTransition) == nil
 }
 
 func (c *syncVersionedTransitionTaskConverter) generateVerifyVersionedTransitionTask(
@@ -730,20 +730,27 @@ func (c *syncVersionedTransitionTaskConverter) generateVerifyVersionedTransition
 		return nil, err
 	}
 	var nextEventId = taskInfo.NextEventID
-	if nextEventId == common.EmptyEventID {
+	if nextEventId == common.EmptyEventID && taskInfo.LastVersionHistoryItem != nil {
 		nextEventId = taskInfo.LastVersionHistoryItem.GetEventId() + 1
 	}
-	lastEventVersion, err := versionhistory.GetVersionHistoryEventVersion(currentHistory, nextEventId-1)
-	if err != nil {
-		return nil, err
+
+	var eventVersionHistory []*historyspb.VersionHistoryItem
+	if nextEventId != common.EmptyEventID {
+		lastEventVersion, err := versionhistory.GetVersionHistoryEventVersion(currentHistory, nextEventId-1)
+		if err != nil {
+			return nil, err
+		}
+		capItems, err := versionhistory.CopyVersionHistoryUntilLCAVersionHistoryItem(currentHistory, &historyspb.VersionHistoryItem{
+			EventId: nextEventId - 1,
+			Version: lastEventVersion,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		eventVersionHistory = capItems.Items
 	}
-	capItems, err := versionhistory.CopyVersionHistoryUntilLCAVersionHistoryItem(currentHistory, &historyspb.VersionHistoryItem{
-		EventId: nextEventId - 1,
-		Version: lastEventVersion,
-	})
-	if err != nil {
-		return nil, err
-	}
+
 	return &replicationspb.ReplicationTask{
 		TaskType:     enumsspb.REPLICATION_TASK_TYPE_VERIFY_VERSIONED_TRANSITION_TASK,
 		SourceTaskId: taskInfo.TaskID,
@@ -753,7 +760,7 @@ func (c *syncVersionedTransitionTaskConverter) generateVerifyVersionedTransition
 				WorkflowId:          taskInfo.WorkflowID,
 				RunId:               taskInfo.RunID,
 				NewRunId:            taskInfo.NewRunID,
-				EventVersionHistory: capItems.Items,
+				EventVersionHistory: eventVersionHistory,
 				NextEventId:         nextEventId,
 			},
 		},
@@ -767,6 +774,12 @@ func (c *syncVersionedTransitionTaskConverter) generateBackfillHistoryTask(
 	taskInfo *tasks.SyncVersionedTransitionTask,
 	targetClusterID int32,
 ) (*replicationspb.ReplicationTask, error) {
+	if taskInfo.FirstEventID == common.EmptyEventID &&
+		taskInfo.NextEventID == common.EmptyEventID &&
+		len(taskInfo.NewRunID) == 0 {
+		return nil, nil
+	}
+
 	historyItems, taskEvents, taskNewEvents, _, err := getVersionHistoryAndEventsWithNewRun(
 		ctx,
 		c.shardContext,

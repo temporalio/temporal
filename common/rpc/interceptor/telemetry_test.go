@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package interceptor
 
 import (
@@ -35,6 +11,7 @@ import (
 	protocolpb "go.temporal.io/api/protocol/v1"
 	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/api"
@@ -82,6 +59,17 @@ func TestEmitActionMetric(t *testing.T) {
 			expectEmitMetrics: true,
 		},
 		{
+			methodName: startWorkflow,
+			fullName:   api.WorkflowServicePrefix + startWorkflow,
+			req: &workflowservice.StartWorkflowExecutionRequest{
+				Namespace:                "test-namespace",
+				OnConflictOptions:        &workflowpb.OnConflictOptions{},
+				WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
+			},
+			resp:              &workflowservice.StartWorkflowExecutionResponse{Started: false},
+			expectEmitMetrics: true,
+		},
+		{
 			methodName: executeMultiOps,
 			fullName:   api.WorkflowServicePrefix + executeMultiOps,
 			resp: &workflowservice.ExecuteMultiOperationResponse{
@@ -116,6 +104,36 @@ func TestEmitActionMetric(t *testing.T) {
 					{
 						Response: &workflowservice.ExecuteMultiOperationResponse_Response_UpdateWorkflow{
 							UpdateWorkflow: &workflowservice.UpdateWorkflowExecutionResponse{},
+						},
+					},
+				},
+			},
+			expectEmitMetrics: true,
+		},
+		{
+			methodName: executeMultiOps,
+			fullName:   api.WorkflowServicePrefix + executeMultiOps,
+			resp: &workflowservice.ExecuteMultiOperationResponse{
+				Responses: []*workflowservice.ExecuteMultiOperationResponse_Response{
+					{
+						Response: &workflowservice.ExecuteMultiOperationResponse_Response_StartWorkflow{
+							StartWorkflow: &workflowservice.StartWorkflowExecutionResponse{
+								Started: false,
+							},
+						},
+					},
+				},
+			},
+			req: &workflowservice.ExecuteMultiOperationRequest{
+				Namespace: "test-namespace",
+				Operations: []*workflowservice.ExecuteMultiOperationRequest_Operation{
+					{
+						Operation: &workflowservice.ExecuteMultiOperationRequest_Operation_StartWorkflow{
+							StartWorkflow: &workflowservice.StartWorkflowExecutionRequest{
+								Namespace:                "test-namespace",
+								OnConflictOptions:        &workflowpb.OnConflictOptions{},
+								WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
+							},
 						},
 					},
 				},
@@ -212,6 +230,24 @@ func TestEmitActionMetric(t *testing.T) {
 			req: &workflowservice.QueryWorkflowRequest{
 				Query: &querypb.WorkflowQuery{
 					QueryType: "some_type",
+				},
+			},
+			expectEmitMetrics: true,
+		},
+		{
+			methodName: updateWorkflowExecutionOptions,
+			fullName:   api.WorkflowServicePrefix + updateWorkflowExecutionOptions,
+			req: &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+				Namespace: "test-namespace",
+				WorkflowExecution: &commonpb.WorkflowExecution{
+					WorkflowId: "test-workflow-id",
+					RunId:      "test-run-id",
+				},
+				WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{
+					VersioningOverride: &workflowpb.VersioningOverride{
+						Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED,
+						PinnedVersion: "fake-version",
+					},
 				},
 			},
 			expectEmitMetrics: true,
@@ -409,14 +445,6 @@ func TestHandleError(t *testing.T) {
 }
 
 func TestOperationOverwrite(t *testing.T) {
-	controller := gomock.NewController(t)
-	register := namespace.NewMockRegistry(controller)
-	metricsHandler := metrics.NewMockHandler(controller)
-	telemetry := NewTelemetryInterceptor(register,
-		metricsHandler,
-		log.NewNoopLogger(),
-		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false))
-
 	testCases := []struct {
 		methodName        string
 		fullName          string
@@ -441,20 +469,13 @@ func TestOperationOverwrite(t *testing.T) {
 
 	for _, tt := range testCases {
 		t.Run(tt.methodName, func(t *testing.T) {
-			operation := telemetry.overrideOperationTag(tt.fullName, tt.methodName)
+			operation := telemetryOverrideOperationTag(tt.fullName, tt.methodName)
 			assert.Equal(t, tt.expectedOperation, operation)
 		})
 	}
 }
 
 func TestOperationOverride(t *testing.T) {
-	controller := gomock.NewController(t)
-	register := namespace.NewMockRegistry(controller)
-	metricsHandler := metrics.NewMockHandler(controller)
-	telemetry := NewTelemetryInterceptor(register, metricsHandler,
-		log.NewNoopLogger(),
-		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false))
-
 	wid := "test_workflow_id"
 	rid := "test_run_id"
 
@@ -520,7 +541,7 @@ func TestOperationOverride(t *testing.T) {
 
 	for _, tt := range testCases {
 		t.Run(tt.methodName, func(t *testing.T) {
-			operation := telemetry.unaryOverrideOperationTag(tt.fullName, tt.methodName, tt.req)
+			operation := telemetryUnaryOverrideOperationTag(tt.fullName, tt.methodName, tt.req)
 			assert.Equal(t, tt.expectedOperation, operation)
 		})
 	}

@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package migration
 
 import (
@@ -158,7 +134,7 @@ func ForceReplicationWorkflow(ctx workflow.Context, params ForceReplicationParam
 		}, nil
 	})
 
-	if err := validateAndSetForceReplicationParams(&params); err != nil {
+	if err := validateAndSetForceReplicationParams(ctx, &params); err != nil {
 		return err
 	}
 
@@ -283,7 +259,7 @@ func ForceTaskQueueUserDataReplicationWorkflow(ctx workflow.Context, params Task
 	return err
 }
 
-func validateAndSetForceReplicationParams(params *ForceReplicationParams) error {
+func validateAndSetForceReplicationParams(ctx workflow.Context, params *ForceReplicationParams) error {
 	if len(params.Namespace) == 0 {
 		return temporal.NewNonRetryableApplicationError("InvalidArgument: Namespace is required", "InvalidArgument", nil)
 	}
@@ -329,7 +305,7 @@ func validateAndSetForceReplicationParams(params *ForceReplicationParams) error 
 
 	if params.QPSQueue.Data == nil {
 		params.QPSQueue = NewQPSQueue(params.ConcurrentActivityCount, params.EstimationMultiplier)
-		params.QPSQueue.Enqueue(params.ReplicatedWorkflowCount)
+		params.QPSQueue.Enqueue(ctx, params.ReplicatedWorkflowCount)
 	}
 
 	return nil
@@ -428,6 +404,11 @@ func enqueueReplicationTasks(ctx workflow.Context, workflowExecutionsCh workflow
 	var lastActivityErr error
 	var a *activities
 
+	var targetClusters []string
+	if params.TargetClusterName != "" {
+		targetClusters = []string{params.TargetClusterName}
+	}
+
 	for workflowExecutionsCh.Receive(ctx, &workflowExecutions) {
 		generateTaskFuture := workflow.ExecuteActivity(
 			actx,
@@ -437,6 +418,7 @@ func enqueueReplicationTasks(ctx workflow.Context, workflowExecutionsCh workflow
 				Executions:       workflowExecutions,
 				RPS:              params.OverallRps / float64(params.ConcurrentActivityCount),
 				GetParentInfoRPS: params.GetParentInfoRPS / float64(params.ConcurrentActivityCount),
+				TargetClusters:   targetClusters,
 			})
 
 		pendingGenerateTasks++
@@ -471,7 +453,7 @@ func enqueueReplicationTasks(ctx workflow.Context, workflowExecutionsCh workflow
 				} else {
 					// Update replication status
 					params.ReplicatedWorkflowCount += int64(len(workflowExecutions))
-					params.QPSQueue.Enqueue(params.ReplicatedWorkflowCount)
+					params.QPSQueue.Enqueue(ctx, params.ReplicatedWorkflowCount)
 					params.ReplicatedWorkflowCountPerSecond = params.QPSQueue.CalculateQPS()
 
 					// Report new QPS to metrics
@@ -513,8 +495,8 @@ func NewQPSQueue(concurrentActivityCount int, estimationMultiplier int) QPSQueue
 	}
 }
 
-func (q *QPSQueue) Enqueue(count int64) {
-	data := QPSData{Count: count, Timestamp: time.Now()}
+func (q *QPSQueue) Enqueue(ctx workflow.Context, count int64) {
+	data := QPSData{Count: count, Timestamp: workflow.Now(ctx)}
 
 	// If queue length reaches max capacity, remove the oldest item
 	if len(q.Data) >= q.MaxSize {

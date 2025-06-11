@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package replication
 
 import (
@@ -34,14 +10,17 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/client"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/quotas"
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
@@ -65,6 +44,8 @@ var Module = fx.Provide(
 		return m
 	},
 	NewExecutionManagerDLQWriter,
+	ClientSchedulerRateLimiterProvider,
+	ServerSchedulerRateLimiterProvider,
 	replicationTaskConverterFactoryProvider,
 	replicationTaskExecutorProvider,
 	fx.Annotated{
@@ -180,8 +161,12 @@ func replicationStreamHighPrioritySchedulerProvider(
 }
 
 func replicationStreamLowPrioritySchedulerProvider(
+	rateLimiter ClientSchedulerRateLimiter,
+	timeSource clock.TimeSource,
 	config *configs.Config,
+	nsRegistry namespace.Registry,
 	logger log.Logger,
+	metricsHandler metrics.Handler,
 	lc fx.Lifecycle,
 ) ctasks.Scheduler[TrackableExecutableTask] {
 	queueFactory := func(task TrackableExecutableTask) ctasks.SequentialTaskQueue[TrackableExecutableTask] {
@@ -215,6 +200,33 @@ func replicationStreamLowPrioritySchedulerProvider(
 	channelWeightFn := func(key ClusterChannelKey) int {
 		return 1
 	}
+	taskQuotaRequestFn := func(t TrackableExecutableTask) quotas.Request {
+		var taskType string
+		var nsName namespace.Name
+		replicationTask := t.ReplicationTask()
+		if replicationTask != nil {
+			taskType = replicationTask.TaskType.String()
+
+			rawTaskInfo := replicationTask.GetRawTaskInfo()
+			if rawTaskInfo != nil {
+				var err error
+				nsName, err = nsRegistry.GetNamespaceName(namespace.ID(replicationTask.GetRawTaskInfo().NamespaceId))
+				if err != nil {
+					nsName = namespace.EmptyName
+				}
+			}
+		}
+		return quotas.NewRequest(
+			taskType,
+			taskSchedulerToken,
+			nsName.String(),
+			headers.SystemPreemptableCallerInfo.CallerType,
+			0,
+			"")
+	}
+	taskMetricsTagsFn := func(e TrackableExecutableTask) []metrics.Tag {
+		return nil
+	}
 	// This creates a per cluster channel.
 	// They share the same weight so it just does a round-robin on all clusters' tasks.
 	rrScheduler := ctasks.NewInterleavedWeightedRoundRobinScheduler(
@@ -225,8 +237,18 @@ func replicationStreamLowPrioritySchedulerProvider(
 		scheduler,
 		logger,
 	)
-	lc.Append(fx.StartStopHook(rrScheduler.Start, rrScheduler.Stop))
-	return rrScheduler
+	ts := ctasks.NewRateLimitedScheduler[TrackableExecutableTask](
+		rrScheduler,
+		rateLimiter,
+		timeSource,
+		taskQuotaRequestFn,
+		taskMetricsTagsFn,
+		ctasks.RateLimitedSchedulerOptions{},
+		logger,
+		metricsHandler,
+	)
+	lc.Append(fx.StartStopHook(ts.Start, ts.Stop))
+	return ts
 }
 
 func sequentialTaskQueueFactoryProvider(

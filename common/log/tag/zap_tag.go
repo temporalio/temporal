@@ -1,30 +1,7 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package tag
 
 import (
+	"fmt"
 	"time"
 
 	"go.uber.org/zap"
@@ -66,12 +43,6 @@ func (t ZapTag) Value() interface{} {
 	return nil
 }
 
-func NewBinaryTag(key string, value []byte) ZapTag {
-	return ZapTag{
-		field: zap.Binary(key, value),
-	}
-}
-
 func NewStringTag(key string, value string) ZapTag {
 	return ZapTag{
 		field: zap.String(key, value),
@@ -81,6 +52,32 @@ func NewStringTag(key string, value string) ZapTag {
 func NewStringsTag(key string, value []string) ZapTag {
 	return ZapTag{
 		field: zap.Strings(key, value),
+	}
+}
+
+// NewStringerTag returns a tag that will lazily generate the string representation
+// of the provided fmt.Stringer value. Note that it does **not** cache the result, so
+// you should use `NewStringTag` instead if the tag is applied to the logger itself using
+// `log.With`.
+//
+// These are still useful if the String() implementation is complicated, especially if
+// you have lots of Debug-level logs that are ignored in production.
+func NewStringerTag(key string, value fmt.Stringer) ZapTag {
+	return ZapTag{
+		field: zap.Stringer(key, value),
+	}
+}
+
+// NewStringersTag returns a tag that will lazily generate the string representation
+// of the provided fmt.Stringer values. Note that it does **not** cache the results, so
+// you should use `NewStringsTag` instead if the tag is applied to the logger itself using
+// `log.With`.
+//
+// These are still useful if the String() implementation is complicated, especially if
+// you have lots of Debug-level logs that are ignored in production.
+func NewStringersTag(key string, value []fmt.Stringer) ZapTag {
+	return ZapTag{
+		field: zap.Stringers(key, value),
 	}
 }
 
@@ -147,5 +144,11 @@ func NewTimePtrTag(key string, value *timestamppb.Timestamp) ZapTag {
 func NewAnyTag(key string, value interface{}) ZapTag {
 	return ZapTag{
 		field: zap.Any(key, value),
+	}
+}
+
+func NewBinaryTag(key string, value []byte) ZapTag {
+	return ZapTag{
+		field: zap.Binary(key, value),
 	}
 }

@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package temporal.server.api.testservice.v1;
+option go_package = "go.temporal.io/server/api/testservice/v1;testservice";
+
+message SendHelloRequest {
+  string name = 1;
+}
+
+message SendHelloResponse {
+  string message = 1;
+}

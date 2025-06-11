@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package shard
 
 import (
@@ -38,12 +14,14 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/goro"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
@@ -53,7 +31,6 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resourcetest"
-	"go.temporal.io/server/internal/goro"
 	"go.temporal.io/server/service/history/configs"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
@@ -74,6 +51,7 @@ type (
 		mockServiceResolver *membership.MockServiceResolver
 
 		hostInfo          membership.HostInfo
+		otherHostInfo     membership.HostInfo
 		mockShardManager  *persistence.MockShardManager
 		mockEngineFactory *MockEngineFactory
 
@@ -141,6 +119,7 @@ func (s *controllerSuite) SetupTest() {
 	s.mockServiceResolver = s.mockResource.HistoryServiceResolver
 	s.mockClusterMetadata = s.mockResource.ClusterMetadata
 	s.hostInfo = s.mockResource.GetHostInfo()
+	s.otherHostInfo = membership.NewHostInfoFromAddress("other")
 	s.mockHostInfoProvider = s.mockResource.HostInfoProvider
 	s.mockHostInfoProvider.EXPECT().HostInfo().Return(s.hostInfo).AnyTimes()
 
@@ -359,11 +338,10 @@ func (s *controllerSuite) TestHistoryEngineClosed() {
 
 	workerWG.Wait()
 
-	differentHostInfo := membership.NewHostInfoFromAddress("another-host")
 	for shardID := int32(1); shardID <= 2; shardID++ {
 		mockEngine := historyEngines[shardID]
 		mockEngine.EXPECT().Stop().Return()
-		s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).Return(differentHostInfo, nil).AnyTimes()
+		s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).Return(s.otherHostInfo, nil).AnyTimes()
 		s.shardController.CloseShardByID(shardID)
 	}
 
@@ -643,6 +621,10 @@ func (s *controllerSuite) TestShardControllerFuzz() {
 				}, nil
 			}).AnyTimes()
 		s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+		s.mockShardManager.EXPECT().AssertShardOwnership(gomock.Any(), &persistence.AssertShardOwnershipRequest{
+			ShardID: shardID,
+			RangeID: 6,
+		}).Return(nil).AnyTimes()
 	}
 
 	randomLoadedShard := func() (int32, historyi.ShardContext) {
@@ -737,10 +719,6 @@ func (s *controllerSuite) TestShardLingerTimeout() {
 	mockEngine := historyi.NewMockEngine(s.controller)
 	historyEngines[shardID] = mockEngine
 	s.setupMocksForAcquireShard(shardID, mockEngine, 5, 6, true)
-	s.mockShardManager.EXPECT().AssertShardOwnership(gomock.Any(), &persistence.AssertShardOwnershipRequest{
-		ShardID: shardID,
-		RangeID: 6,
-	}).Return(nil).MinTimes(1)
 
 	s.shardController.acquireShards(context.Background())
 
@@ -850,25 +828,47 @@ func (s *controllerSuite) TestShardLingerSuccess() {
 // TestShardCounter verifies that we can subscribe to shard count updates, receive them when shards are acquired, and
 // unsubscribe from the updates when needed.
 func (s *controllerSuite) TestShardCounter() {
+	const totalShards = 5
+	s.config.NumberOfShards = totalShards
+
+	var ownedShards atomic.Int32
+	s.mockServiceResolver.EXPECT().Lookup(gomock.Any()).DoAndReturn(func(key string) (membership.HostInfo, error) {
+		if i, err := strconv.Atoi(key); err != nil {
+			return nil, err
+		} else if i <= int(ownedShards.Load()) {
+			return s.hostInfo, nil
+		}
+		return s.otherHostInfo, nil
+	}).AnyTimes()
+
+	mockEngine := historyi.NewMockEngine(s.controller)
+	for i := range totalShards {
+		s.setupMocksForAcquireShard(int32(i+1), mockEngine, 5, 6, false)
+	}
+
 	// subscribe to shard count updates
 	sub1 := s.shardController.SubscribeShardCount()
 
 	// validate that we get the initial shard count
 	s.Empty(sub1.ShardCount(), "Should not publish shard count before acquiring shards")
-	s.setupAndAcquireShards(2)
+	ownedShards.Store(2)
+	s.shardController.acquireShards(context.Background())
 	s.Equal(2, <-sub1.ShardCount(), "Should publish shard count after acquiring shards")
 	s.Empty(sub1.ShardCount(), "Shard count channel should be drained")
 
 	// acquire shards twice to validate that this does not block even if there's no capacity left on the channel
-	s.setupAndAcquireShards(3)
-	s.setupAndAcquireShards(4)
+	ownedShards.Store(3)
+	s.shardController.acquireShards(context.Background())
+	ownedShards.Store(4)
+	s.shardController.acquireShards(context.Background())
 	s.Equal(3, <-sub1.ShardCount(), "Shard count is buffered, so we should only get the first value")
 	s.Empty(sub1.ShardCount(), "Shard count channel should be drained")
 
 	// unsubscribe and validate that the channel is closed, but the other subscriber is still receiving updates
 	sub2 := s.shardController.SubscribeShardCount()
 	sub1.Unsubscribe()
-	s.setupAndAcquireShards(4)
+	ownedShards.Store(4)
+	s.shardController.acquireShards(context.Background())
 	_, ok := <-sub1.ShardCount()
 	s.False(ok, "Channel should be closed because sub1 is canceled")
 	sub1.Unsubscribe() // should not panic if called twice
@@ -876,15 +876,175 @@ func (s *controllerSuite) TestShardCounter() {
 	sub2.Unsubscribe()
 }
 
-// setupAndAcquireShards sets up the mocks for acquiring the given number of shards and then calls acquireShards. It is
-// safe to call this multiple times throughout a test.
-func (s *controllerSuite) setupAndAcquireShards(numShards int) {
-	s.config.NumberOfShards = int32(numShards)
+type readinessMockState struct {
+	ownership   sync.Map
+	assertError sync.Map
+	assertDelay sync.Map
+}
+
+func (s *controllerSuite) setupMocksForReadiness() *readinessMockState {
+	state := &readinessMockState{}
+	state.ownership.Store(1, true)
+	state.ownership.Store(3, true)
+	state.ownership.Store(5, true)
+
+	s.config.NumberOfShards = 5
+
+	s.mockServiceResolver.EXPECT().Lookup(gomock.Any()).DoAndReturn(func(key string) (membership.HostInfo, error) {
+		if i, err := strconv.Atoi(key); err != nil {
+			return nil, err
+		} else if owned, ok := state.ownership.Load(i); ok && owned.(bool) {
+			return s.hostInfo, nil
+		}
+		return s.otherHostInfo, nil
+	}).AnyTimes()
+
+	state.ownership.Range(func(shardID, owned any) bool {
+		if owned.(bool) {
+			s.setupMockForReadiness(int32(shardID.(int)), state)
+		}
+		return true
+	})
+
+	return state
+}
+
+func (s *controllerSuite) setupMockForReadiness(shardID int32, state *readinessMockState) {
 	mockEngine := historyi.NewMockEngine(s.controller)
-	for shardID := 1; shardID <= numShards; shardID++ {
-		s.setupMocksForAcquireShard(int32(shardID), mockEngine, 5, 6, false)
-	}
+	mockEngine.EXPECT().Start()
+	mockEngine.EXPECT().Stop().AnyTimes()
+	mockEngine.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
+	s.mockEngineFactory.EXPECT().CreateEngine(contextMatcher(shardID)).Return(mockEngine)
+	s.mockShardManager.EXPECT().GetOrCreateShard(gomock.Any(), getOrCreateShardRequestMatcher(shardID)).Return(
+		&persistence.GetOrCreateShardResponse{
+			ShardInfo: &persistencespb.ShardInfo{
+				ShardId:                shardID,
+				Owner:                  s.hostInfo.Identity(),
+				RangeId:                5,
+				ReplicationDlqAckLevel: map[string]int64{},
+				QueueStates:            s.queueStates(),
+			},
+		}, nil)
+	s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), updateShardRequestMatcher(persistence.UpdateShardRequest{
+		ShardInfo: &persistencespb.ShardInfo{
+			ShardId:                shardID,
+			Owner:                  s.hostInfo.Identity(),
+			RangeId:                6,
+			StolenSinceRenew:       1,
+			ReplicationDlqAckLevel: map[string]int64{},
+			QueueStates:            s.queueStates(),
+		},
+		PreviousRangeID: 5,
+	})).Return(nil)
+
+	// nolint:forbidigo // deliberately blocking
+	s.mockShardManager.EXPECT().AssertShardOwnership(gomock.Any(), &persistence.AssertShardOwnershipRequest{
+		ShardID: shardID,
+		RangeID: 6,
+	}).DoAndReturn(func(context.Context, *persistence.AssertShardOwnershipRequest) error {
+		if delay, ok := state.assertDelay.Load(int(shardID)); ok {
+			time.Sleep(delay.(time.Duration))
+		}
+		if err, ok := state.assertError.Load(int(shardID)); ok {
+			return err.(error)
+		}
+		return nil
+	}).MinTimes(1)
+}
+
+func (s *controllerSuite) TestReadiness_Ready() {
+	_ = s.setupMocksForReadiness()
+
+	// not ready yet
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
+	defer cancel()
+	s.ErrorIs(s.shardController.InitialShardsAcquired(ctx), context.DeadlineExceeded)
+
+	// acquire
 	s.shardController.acquireShards(context.Background())
+
+	// now should be ready
+	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	s.NoError(s.shardController.InitialShardsAcquired(ctx))
+}
+
+func (s *controllerSuite) TestReadiness_Error() {
+	state := s.setupMocksForReadiness()
+
+	// use an error that will not cause controller to re-acquire
+	state.assertError.Store(3, serviceerror.NewResourceExhausted(0, ""))
+
+	// acquire
+	s.shardController.acquireShards(context.Background())
+
+	// shard 3 failed in AssertShardOwnership even though it passed UpdateShard, should be not ready yet
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
+	defer cancel()
+	s.ErrorIs(s.shardController.InitialShardsAcquired(ctx), context.DeadlineExceeded)
+
+	// fix error and try again
+	state.assertError.Delete(3)
+	s.shardController.acquireShards(context.Background())
+
+	// now should be ready
+	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	s.NoError(s.shardController.InitialShardsAcquired(ctx))
+}
+
+func (s *controllerSuite) TestReadiness_Blocked() {
+	s.config.ShardIOConcurrency = dynamicconfig.GetIntPropertyFn(10) // allow second assert to run while first is blocked
+	state := s.setupMocksForReadiness()
+
+	state.assertDelay.Store(3, time.Hour)
+
+	// acquire
+	s.shardController.acquireShards(context.Background())
+
+	// shard 3 is blocked in AssertShardOwnership
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
+	defer cancel()
+	s.ErrorIs(s.shardController.InitialShardsAcquired(ctx), context.DeadlineExceeded)
+
+	// acquire again (e.g. membership changed)
+	state.assertDelay.Delete(3)
+	s.shardController.acquireShards(context.Background())
+
+	// now should be ready
+	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	s.NoError(s.shardController.InitialShardsAcquired(ctx))
+}
+
+func (s *controllerSuite) TestReadiness_MembershipChanged() {
+	state := s.setupMocksForReadiness()
+
+	state.assertDelay.Store(3, time.Hour)
+
+	// acquire
+	s.shardController.acquireShards(context.Background())
+
+	// shard 3 is blocked in AssertShardOwnership
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
+	defer cancel()
+	s.ErrorIs(s.shardController.InitialShardsAcquired(ctx), context.DeadlineExceeded)
+
+	// change membership, now we own 2, 4, and 5, we don't care about 3 anymore
+	state.ownership.Clear()
+	state.ownership.Store(2, true)
+	state.ownership.Store(4, true)
+	state.ownership.Store(5, true)
+	s.setupMockForReadiness(2, state)
+	s.setupMockForReadiness(4, state)
+
+	// acquire again
+	s.shardController.acquireShards(context.Background())
+
+	// now should be ready
+	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	s.NoError(s.shardController.InitialShardsAcquired(ctx))
 }
 
 func (s *controllerSuite) setupMocksForAcquireShard(
@@ -928,6 +1088,10 @@ func (s *controllerSuite) setupMocksForAcquireShard(
 		},
 		PreviousRangeID: currentRangeID,
 	})).Return(nil).MinTimes(minTimes)
+	s.mockShardManager.EXPECT().AssertShardOwnership(gomock.Any(), &persistence.AssertShardOwnershipRequest{
+		ShardID: shardID,
+		RangeID: newRangeID,
+	}).Return(nil).AnyTimes()
 }
 
 func (s *controllerSuite) queueStates() map[int32]*persistencespb.QueueState {

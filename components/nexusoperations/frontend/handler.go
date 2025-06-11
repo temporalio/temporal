@@ -1,25 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package frontend
 
 import (
@@ -42,7 +20,6 @@ import (
 	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/sdk/temporalnexus"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/cluster"
@@ -55,12 +32,11 @@ import (
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc/interceptor"
+	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/frontend/configs"
 	"go.uber.org/fx"
-	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
-	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -92,7 +68,7 @@ type HandlerOptions struct {
 	HistoryClient                        resource.HistoryClient
 	TelemetryInterceptor                 *interceptor.TelemetryInterceptor
 	NamespaceValidationInterceptor       *interceptor.NamespaceValidatorInterceptor
-	NamespaceRateLimitInterceptor        *interceptor.NamespaceRateLimitInterceptor
+	NamespaceRateLimitInterceptor        interceptor.NamespaceRateLimitInterceptor
 	NamespaceConcurrencyLimitInterceptor *interceptor.ConcurrentRequestLimitInterceptor
 	RateLimitInterceptor                 *interceptor.RateLimitInterceptor
 	AuthInterceptor                      *authorization.Interceptor
@@ -189,7 +165,7 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexus.Comp
 	for _, nexusLink := range r.Links {
 		switch nexusLink.Type {
 		case string((&commonpb.Link_WorkflowEvent{}).ProtoReflect().Descriptor().FullName()):
-			link, err := temporalnexus.ConvertNexusLinkToLinkWorkflowEvent(nexusLink)
+			link, err := nexusoperations.ConvertNexusLinkToLinkWorkflowEvent(nexusLink)
 			if err != nil {
 				// TODO(rodrigozhou): links are non-essential for the execution of the workflow,
 				// so ignoring the error for now; we will revisit how to handle these errors later.
@@ -253,8 +229,9 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexus.Comp
 		if errors.As(err, &namespaceInactiveErr) {
 			return nexus.HandlerErrorf(nexus.HandlerErrorTypeUnavailable, "cluster inactive")
 		}
-		if st, ok := status.FromError(err); ok && st.Code() == codes.NotFound {
-			return nexus.HandlerErrorf(nexus.HandlerErrorTypeNotFound, "operation not found")
+		var notFoundErr *serviceerror.NotFound
+		if errors.As(err, &notFoundErr) {
+			return commonnexus.ConvertGRPCError(err, true)
 		}
 		return commonnexus.ConvertGRPCError(err, false)
 	}
@@ -304,6 +281,7 @@ func (h *completionHandler) forwardCompleteOperation(ctx context.Context, r *nex
 		return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
 	}
 
+	// TODO: The following response handling logic is duplicated in the nexus_invocation executor. Eventually it should live in the Nexus SDK.
 	body, err := readAndReplaceBody(resp)
 	if err != nil {
 		h.Logger.Error("unable to read HTTP response for forwarded request", tag.Operation(apiName), tag.WorkflowNamespace(rCtx.namespace.Name().String()), tag.Error(err))
@@ -382,13 +360,16 @@ func (c *requestContext) augmentContext(ctx context.Context, header http.Header)
 	if userAgent := header.Get(http.CanonicalHeaderKey(headerUserAgent)); userAgent != "" {
 		parts := strings.Split(userAgent, clientNameVersionDelim)
 		if len(parts) == 2 {
-			return metadata.NewIncomingContext(ctx, metadata.New(map[string]string{
-				headers.ClientNameHeaderName:    parts[0],
-				headers.ClientVersionHeaderName: parts[1],
-			}))
+			mdIncoming, ok := metadata.FromIncomingContext(ctx)
+			if !ok {
+				mdIncoming = metadata.MD{}
+			}
+			mdIncoming.Set(headers.ClientNameHeaderName, parts[0])
+			mdIncoming.Set(headers.ClientVersionHeaderName, parts[1])
+			ctx = metadata.NewIncomingContext(ctx, mdIncoming)
 		}
 	}
-	return ctx
+	return headers.Propagate(ctx)
 }
 
 func (c *requestContext) capturePanicAndRecordMetrics(ctxPtr *context.Context, errPtr *error) {
@@ -479,7 +460,7 @@ func (c *requestContext) interceptRequest(ctx context.Context, request *nexus.Co
 			c.forwarded = true
 			handler, forwardStartTime := c.RedirectionInterceptor.BeforeCall(methodNameForMetrics)
 			c.cleanupFunctions = append(c.cleanupFunctions, func(retErr error) {
-				c.RedirectionInterceptor.AfterCall(handler, forwardStartTime, c.namespace.ActiveClusterName(), retErr)
+				c.RedirectionInterceptor.AfterCall(handler, forwardStartTime, c.namespace.ActiveClusterName(), c.namespace.Name().String(), retErr)
 			})
 			// Handler methods should have special logic to forward requests if this method returns a serviceerror.NamespaceNotActive error.
 			return serviceerror.NewNamespaceNotActive(c.namespace.Name().String(), c.ClusterMetadata.GetCurrentClusterName(), c.namespace.ActiveClusterName())

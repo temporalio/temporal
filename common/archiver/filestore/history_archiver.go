@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 // Filestore History Archiver will archive workflow histories to local disk.
 
 // Each Archive() request results in a file named in the format of
@@ -53,6 +29,8 @@ import (
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence"
 )
 
 const (
@@ -73,9 +51,11 @@ var (
 
 type (
 	historyArchiver struct {
-		container *archiver.HistoryBootstrapContainer
-		fileMode  os.FileMode
-		dirMode   os.FileMode
+		executionManager persistence.ExecutionManager
+		logger           log.Logger
+		metricsHandler   metrics.Handler
+		fileMode         os.FileMode
+		dirMode          os.FileMode
 
 		// only set in test code
 		historyIterator archiver.HistoryIterator
@@ -89,14 +69,18 @@ type (
 
 // NewHistoryArchiver creates a new archiver.HistoryArchiver based on filestore
 func NewHistoryArchiver(
-	container *archiver.HistoryBootstrapContainer,
+	executionManager persistence.ExecutionManager,
+	logger log.Logger,
+	metricsHandler metrics.Handler,
 	config *config.FilestoreArchiver,
 ) (archiver.HistoryArchiver, error) {
-	return newHistoryArchiver(container, config, nil)
+	return newHistoryArchiver(executionManager, logger, metricsHandler, config, nil)
 }
 
 func newHistoryArchiver(
-	container *archiver.HistoryBootstrapContainer,
+	executionManager persistence.ExecutionManager,
+	logger log.Logger,
+	metricsHandler metrics.Handler,
 	config *config.FilestoreArchiver,
 	historyIterator archiver.HistoryIterator,
 ) (*historyArchiver, error) {
@@ -109,10 +93,12 @@ func newHistoryArchiver(
 		return nil, errInvalidDirMode
 	}
 	return &historyArchiver{
-		container:       container,
-		fileMode:        os.FileMode(fileMode),
-		dirMode:         os.FileMode(dirMode),
-		historyIterator: historyIterator,
+		executionManager: executionManager,
+		logger:           logger,
+		metricsHandler:   metricsHandler,
+		fileMode:         os.FileMode(fileMode),
+		dirMode:          os.FileMode(dirMode),
+		historyIterator:  historyIterator,
 	}, nil
 }
 
@@ -129,7 +115,7 @@ func (h *historyArchiver) Archive(
 		}
 	}()
 
-	logger := archiver.TagLoggerWithArchiveHistoryRequestAndURI(h.container.Logger, request, URI.String())
+	logger := archiver.TagLoggerWithArchiveHistoryRequestAndURI(h.logger, request, URI.String())
 
 	if err := h.ValidateURI(URI); err != nil {
 		logger.Error(archiver.ArchiveNonRetryableErrorMsg, tag.ArchivalArchiveFailReason(archiver.ErrReasonInvalidURI), tag.Error(err))
@@ -143,7 +129,7 @@ func (h *historyArchiver) Archive(
 
 	historyIterator := h.historyIterator
 	if historyIterator == nil { // will only be set by testing code
-		historyIterator = archiver.NewHistoryIterator(request, h.container.ExecutionManager, targetHistoryBlobSize)
+		historyIterator = archiver.NewHistoryIterator(request, h.executionManager, targetHistoryBlobSize)
 	}
 
 	var historyBatches []*historypb.History

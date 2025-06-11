@@ -1,33 +1,8 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package history
 
 import (
 	"context"
 	"errors"
-	"fmt"
 	"math"
 	"sync"
 	"sync/atomic"
@@ -61,6 +36,7 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tasktoken"
@@ -78,6 +54,8 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.uber.org/fx"
+	"google.golang.org/grpc/health"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 )
 
 type (
@@ -98,6 +76,8 @@ type (
 		persistenceShardManager      persistence.ShardManager
 		persistenceVisibilityManager manager.VisibilityManager
 		persistenceHealthSignal      persistence.HealthSignalAggregator
+		healthServer                 *health.Server
+		historyHealthSignal          interceptor.HealthSignalAggregator
 		historyServiceResolver       membership.ServiceResolver
 		metricsHandler               metrics.Handler
 		payloadSerializer            serialization.Serializer
@@ -116,6 +96,7 @@ type (
 		replicationTaskFetcherFactory    replication.TaskFetcherFactory
 		replicationTaskConverterProvider replication.SourceTaskConverterProvider
 		streamReceiverMonitor            replication.StreamReceiverMonitor
+		replicationServerRateLimiter     replication.ServerSchedulerRateLimiter
 	}
 
 	NewHandlerArgs struct {
@@ -127,6 +108,8 @@ type (
 		PersistenceExecutionManager  persistence.ExecutionManager
 		PersistenceShardManager      persistence.ShardManager
 		PersistenceHealthSignal      persistence.HealthSignalAggregator
+		HistoryHealthSignal          interceptor.HealthSignalAggregator
+		HealthServer                 *health.Server
 		PersistenceVisibilityManager manager.VisibilityManager
 		HistoryServiceResolver       membership.ServiceResolver
 		MetricsHandler               metrics.Handler
@@ -147,6 +130,7 @@ type (
 		ReplicationTaskFetcherFactory   replication.TaskFetcherFactory
 		ReplicationTaskConverterFactory replication.SourceTaskConverterProvider
 		StreamReceiverMonitor           replication.StreamReceiverMonitor
+		ReplicationServerRateLimiter    replication.ServerSchedulerRateLimiter
 	}
 )
 
@@ -211,19 +195,51 @@ func (h *Handler) isStopped() bool {
 }
 
 func (h *Handler) DeepHealthCheck(
-	_ context.Context,
+	ctx context.Context,
 	_ *historyservice.DeepHealthCheckRequest,
 ) (_ *historyservice.DeepHealthCheckResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
 	h.startWG.Wait()
 
+	status, err := h.healthServer.Check(ctx, &healthpb.HealthCheckRequest{Service: serviceName})
+	if err != nil {
+		return nil, err
+	}
+	if status.Status != healthpb.HealthCheckResponse_SERVING {
+		metrics.HistoryHostHealthGauge.With(h.metricsHandler).Record(float64(enumsspb.HEALTH_STATE_DECLINED_SERVING))
+		return &historyservice.DeepHealthCheckResponse{State: enumsspb.HEALTH_STATE_DECLINED_SERVING}, nil
+	}
+
+	rsp := h.checkHistoryHealthSignals()
+	if rsp != nil {
+		return rsp, nil
+	}
+
 	latency := h.persistenceHealthSignal.AverageLatency()
 	errRatio := h.persistenceHealthSignal.ErrorRatio()
 
 	if latency > h.config.HealthPersistenceLatencyFailure() || errRatio > h.config.HealthPersistenceErrorRatio() {
+		metrics.HistoryHostHealthGauge.With(h.metricsHandler).Record(float64(enumsspb.HEALTH_STATE_NOT_SERVING))
 		return &historyservice.DeepHealthCheckResponse{State: enumsspb.HEALTH_STATE_NOT_SERVING}, nil
 	}
+	metrics.HistoryHostHealthGauge.With(h.metricsHandler).Record(float64(enumsspb.HEALTH_STATE_SERVING))
 	return &historyservice.DeepHealthCheckResponse{State: enumsspb.HEALTH_STATE_SERVING}, nil
+}
+
+// checkHistoryHealthSignals checks the history health signal that is captured by the interceptor.
+func (h *Handler) checkHistoryHealthSignals() *historyservice.DeepHealthCheckResponse {
+	// Check that the RPC latency doesn't exceed the threshold.
+	if h.historyHealthSignal.AverageLatency() > h.config.HealthRPCLatencyFailure() {
+		metrics.HistoryHostHealthGauge.With(h.metricsHandler).Record(float64(enumsspb.HEALTH_STATE_NOT_SERVING))
+		return &historyservice.DeepHealthCheckResponse{State: enumsspb.HEALTH_STATE_NOT_SERVING}
+	}
+
+	// Check if the RPC error ratio exceeds the threshold
+	if h.historyHealthSignal.ErrorRatio() > h.config.HealthRPCErrorRatio() {
+		metrics.HistoryHostHealthGauge.With(h.metricsHandler).Record(float64(enumsspb.HEALTH_STATE_NOT_SERVING))
+		return &historyservice.DeepHealthCheckResponse{State: enumsspb.HEALTH_STATE_NOT_SERVING}
+	}
+	return nil
 }
 
 // IsWorkflowTaskValid - whether workflow task is still valid
@@ -712,7 +728,7 @@ func (h *Handler) RemoveTask(ctx context.Context, request *historyservice.Remove
 	var err error
 	category, ok := h.taskCategoryRegistry.GetCategoryByID(int(request.Category))
 	if !ok {
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid task category ID: %v", request.Category))
+		return nil, serviceerror.NewInvalidArgumentf("Invalid task category ID: %v", request.Category)
 	}
 
 	key := tasks.NewKey(
@@ -720,7 +736,7 @@ func (h *Handler) RemoveTask(ctx context.Context, request *historyservice.Remove
 		request.GetTaskId(),
 	)
 	if err := tasks.ValidateKey(key); err != nil {
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid task key: %v", err.Error()))
+		return nil, serviceerror.NewInvalidArgumentf("Invalid task key: %v", err.Error())
 	}
 
 	err = h.persistenceExecutionManager.CompleteHistoryTask(ctx, &persistence.CompleteHistoryTaskRequest{
@@ -2098,11 +2114,11 @@ func (h *Handler) StreamWorkflowReplicationMessages(
 		return err
 	}
 	if serverClusterShardID.ClusterID != int32(h.clusterMetadata.GetClusterID()) {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf(
+		return serviceerror.NewInvalidArgumentf(
 			"wrong cluster: target: %v, current: %v",
 			serverClusterShardID.ClusterID,
 			h.clusterMetadata.GetClusterID(),
-		))
+		)
 	}
 	shardContext, err := h.controller.GetShardByID(serverClusterShardID.ShardID)
 	if err != nil {
@@ -2129,6 +2145,7 @@ func (h *Handler) StreamWorkflowReplicationMessages(
 		server,
 		shardContext,
 		engine,
+		h.replicationServerRateLimiter,
 		h.replicationTaskConverterProvider(
 			engine,
 			shardContext,
@@ -2141,8 +2158,8 @@ func (h *Handler) StreamWorkflowReplicationMessages(
 		replication.NewClusterShardKey(serverClusterShardID.ClusterID, serverClusterShardID.ShardID),
 		h.config,
 	)
-	h.streamReceiverMonitor.RegisterInboundStream(streamSender)
 	streamSender.Start()
+	h.streamReceiverMonitor.RegisterInboundStream(streamSender)
 	defer streamSender.Stop()
 	streamSender.Wait()
 	return nil

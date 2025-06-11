@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package config
 
 import (
@@ -62,7 +38,7 @@ func (s *LoaderSuite) SetupTest() {
 func (s *LoaderSuite) TestBaseYaml() {
 	dir := testutils.MkdirTemp(s.T(), "", "loader.testBaseYaml")
 
-	data := buildConfig("", "")
+	data := buildConfig(false, "", "")
 	err := os.WriteFile(path(dir, "base.yaml"), []byte(data), fileMode)
 	s.Nil(err)
 
@@ -83,10 +59,10 @@ func (s *LoaderSuite) TestBaseYaml() {
 func (s *LoaderSuite) TestHierarchy() {
 	dir := testutils.MkdirTemp(s.T(), "", "loader.testHierarchy")
 
-	s.createFile(dir, "base.yaml", "", "")
-	s.createFile(dir, "development.yaml", "development", "")
-	s.createFile(dir, "prod.yaml", "prod", "")
-	s.createFile(dir, "prod_dca.yaml", "prod", "dca")
+	s.createFile(dir, "base.yaml", false, "", "")
+	s.createFile(dir, "development.yaml", false, "development", "")
+	s.createFile(dir, "prod.yaml", true, "prod", "")
+	s.createFile(dir, "prod_dca.yaml", true, "prod", "dca")
 
 	testCases := []struct {
 		env   string
@@ -100,9 +76,9 @@ func (s *LoaderSuite) TestHierarchy() {
 		{"development", "", "hello_development_", "world_development_"},
 		{"development", "dca", "hello_development_", "world_development_"},
 		{"development", "pdx", "hello_development_", "world_development_"},
-		{"prod", "", "hello_prod_", "world_prod_"},
-		{"prod", "dca", "hello_prod_dca", "world_prod_dca"},
-		{"prod", "pdx", "hello_prod_", "world_prod_"},
+		{"prod", "", "HELLO_PROD_", "world_prod_"},
+		{"prod", "dca", "HELLO_PROD_DCA", "world_prod_dca"},
+		{"prod", "pdx", "HELLO_PROD_", "world_prod_"},
 	}
 
 	for _, tc := range testCases {
@@ -120,15 +96,22 @@ func (s *LoaderSuite) TestInvalidPath() {
 	s.NotNil(err)
 }
 
-func (s *LoaderSuite) createFile(dir string, file string, env string, zone string) {
-	err := os.WriteFile(path(dir, file), []byte(buildConfig(env, zone)), fileMode)
+func (s *LoaderSuite) createFile(dir string, file string, template bool, env string, zone string) {
+	err := os.WriteFile(path(dir, file), []byte(buildConfig(template, env, zone)), fileMode)
 	s.Nil(err)
 }
 
-func buildConfig(env, zone string) string {
+func buildConfig(template bool, env, zone string) string {
+	comment := ""
+	if template {
+		comment = "# enable-template\n"
+	}
 	item1 := concat("hello", concat(env, zone))
+	if template {
+		item1 = `{{ "` + item1 + `" | upper }}`
+	}
 	item2 := concat("world", concat(env, zone))
-	return `
+	return comment + `
     items:
       item1: ` + item1 + `
       item2: ` + item2

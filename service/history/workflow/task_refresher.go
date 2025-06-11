@@ -1,28 +1,4 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
-//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination task_refresher_mock.go
+//go:generate mockgen -package $GOPACKAGE -source $GOFILE -destination task_refresher_mock.go
 
 package workflow
 
@@ -34,6 +10,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/hsm"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -57,6 +34,7 @@ type (
 			ctx context.Context,
 			mutableState historyi.MutableState,
 			minVersionedTransition *persistencespb.VersionedTransition,
+			previousPendingChildIds map[int64]struct{},
 		) error
 	}
 
@@ -89,23 +67,18 @@ func (r *TaskRefresherImpl) Refresh(
 		mutableState.GetExecutionInfo().TaskGenerationShardClockTimestamp = r.shard.CurrentVectorClock().GetClock()
 	}
 
-	return r.PartialRefresh(ctx, mutableState, EmptyVersionedTransition)
+	return r.PartialRefresh(ctx, mutableState, EmptyVersionedTransition, nil)
 }
 
 func (r *TaskRefresherImpl) PartialRefresh(
 	ctx context.Context,
 	mutableState historyi.MutableState,
 	minVersionedTransition *persistencespb.VersionedTransition,
+	previousPendingChildIds map[int64]struct{},
 ) error {
-	if CompareVersionedTransition(minVersionedTransition, EmptyVersionedTransition) != 0 {
-		// Perform a sanity check to make sure that the minVersionedTransition, if provided,
-		// is on the current branch of transition history.
-		if err := TransitionHistoryStalenessCheck(
-			mutableState.GetExecutionInfo().TransitionHistory,
-			minVersionedTransition,
-		); err != nil {
-			return err
-		}
+	// TODO: handle task refresh for non workflow mutable states.
+	if !mutableState.IsWorkflow() {
+		return nil
 	}
 
 	taskGenerator := r.taskGeneratorProvider.NewTaskGenerator(
@@ -169,6 +142,7 @@ func (r *TaskRefresherImpl) PartialRefresh(
 		mutableState,
 		taskGenerator,
 		minVersionedTransition,
+		previousPendingChildIds,
 	); err != nil {
 		return err
 	}
@@ -218,7 +192,7 @@ func RefreshTasksForWorkflowStart(
 	}
 
 	// Skip task generation if workflow state has not been updated since minVersionedTransition.
-	if CompareVersionedTransition(
+	if transitionhistory.Compare(
 		executionState.LastUpdateVersionedTransition,
 		minVersionedTransition,
 	) < 0 {
@@ -266,7 +240,7 @@ func (r *TaskRefresherImpl) refreshTasksForWorkflowClose(
 	}
 
 	// Skip task generation if workflow state has not been updated since minVersionedTransition.
-	if CompareVersionedTransition(
+	if transitionhistory.Compare(
 		executionState.LastUpdateVersionedTransition,
 		minVersionedTransition,
 	) < 0 {
@@ -298,7 +272,7 @@ func (r *TaskRefresherImpl) refreshTasksForRecordWorkflowStarted(
 
 	// Skip task generation if no transition since minVersionedTransition requires
 	// an update in the visibility record.
-	if CompareVersionedTransition(
+	if transitionhistory.Compare(
 		mutableState.GetExecutionInfo().VisibilityLastUpdateVersionedTransition,
 		minVersionedTransition,
 	) < 0 {
@@ -332,7 +306,7 @@ func (r *TaskRefresherImpl) refreshWorkflowTaskTasks(
 	}
 
 	// Skip task generation if workflow task has not been updated since minVersionedTransition.
-	if CompareVersionedTransition(
+	if transitionhistory.Compare(
 		mutableState.GetExecutionInfo().WorkflowTaskLastUpdateVersionedTransition,
 		minVersionedTransition,
 	) < 0 {
@@ -381,14 +355,14 @@ func (r *TaskRefresherImpl) refreshTasksForActivity(
 	for _, activityInfo := range pendingActivityInfos {
 
 		// Skip task generation if this activity has not been updated since minVersionedTransition.
-		if CompareVersionedTransition(
+		if transitionhistory.Compare(
 			activityInfo.LastUpdateVersionedTransition,
 			minVersionedTransition,
 		) < 0 {
 			continue
 		}
 
-		if CompareVersionedTransition(minVersionedTransition, EmptyVersionedTransition) == 0 { // Full refresh
+		if transitionhistory.Compare(minVersionedTransition, EmptyVersionedTransition) == 0 { // Full refresh
 			activityInfo.TimerTaskStatus = TimerTaskStatusNone // clear activity timer task mask for later activity timer task re-generation
 			if err := mutableState.UpdateActivityTaskStatusWithTimerHeartbeat(
 				activityInfo.ScheduledEventId,
@@ -409,13 +383,8 @@ func (r *TaskRefresherImpl) refreshTasksForActivity(
 			continue
 		}
 
-		scheduleEvent, err := mutableState.GetActivityScheduledEvent(ctx, activityInfo.ScheduledEventId)
-		if err != nil {
-			return err
-		}
-
 		if err := taskGenerator.GenerateActivityTasks(
-			scheduleEvent.GetEventId(),
+			activityInfo.ScheduledEventId,
 		); err != nil {
 			return err
 		}
@@ -445,7 +414,7 @@ func (r *TaskRefresherImpl) refreshTasksForTimer(
 	for _, timerInfo := range pendingTimerInfos {
 
 		// Skip task generation if this user timer has not been updated since minVersionedTransition.
-		if CompareVersionedTransition(
+		if transitionhistory.Compare(
 			timerInfo.LastUpdateVersionedTransition,
 			minVersionedTransition,
 		) < 0 {
@@ -476,17 +445,25 @@ func (r *TaskRefresherImpl) refreshTasksForChildWorkflow(
 	mutableState historyi.MutableState,
 	taskGenerator TaskGenerator,
 	minVersionedTransition *persistencespb.VersionedTransition,
+	previousPendingChildIds map[int64]struct{},
 ) error {
 
 	pendingChildWorkflowInfos := mutableState.GetPendingChildExecutionInfos()
 
 	for _, childWorkflowInfo := range pendingChildWorkflowInfos {
-		if childWorkflowInfo.StartedEventId != common.EmptyEventID {
-			continue
+		// Skip task generation if this child workflow has already been started.
+		// This is an optimization to avoid generating duplicate tasks.
+		// However, if this child workflow was not in the previous pending child IDs,
+		// we still need to generate tasks even if it's started, because this means
+		// the child workflow was just added to the mutable state.
+		if _, ok := previousPendingChildIds[childWorkflowInfo.InitiatedEventId]; ok {
+			if childWorkflowInfo.StartedEventId != common.EmptyEventID {
+				continue
+			}
 		}
 
 		// Skip task generation if this child workflow has not been updated since minVersionedTransition.
-		if CompareVersionedTransition(
+		if transitionhistory.Compare(
 			childWorkflowInfo.LastUpdateVersionedTransition,
 			minVersionedTransition,
 		) < 0 {
@@ -525,7 +502,7 @@ func (r *TaskRefresherImpl) refreshTasksForRequestCancelExternalWorkflow(
 	for _, requestCancelInfo := range pendingRequestCancelInfos {
 
 		// Skip task generation if this cancel external request has not been updated since minVersionedTransition.
-		if CompareVersionedTransition(
+		if transitionhistory.Compare(
 			requestCancelInfo.LastUpdateVersionedTransition,
 			minVersionedTransition,
 		) < 0 {
@@ -564,7 +541,7 @@ func (r *TaskRefresherImpl) refreshTasksForSignalExternalWorkflow(
 	for _, signalInfo := range pendingSignalInfos {
 
 		// Skip task generation if this signal external request has not been updated since minVersionedTransition.
-		if CompareVersionedTransition(
+		if transitionhistory.Compare(
 			signalInfo.LastUpdateVersionedTransition,
 			minVersionedTransition,
 		) < 0 {
@@ -598,13 +575,12 @@ func (r *TaskRefresherImpl) refreshTasksForWorkflowSearchAttr(
 
 	// Skip task generation if no transition since minVersionedTransition requires
 	// an update in the visibility record.
-	if CompareVersionedTransition(
+	if transitionhistory.Compare(
 		mutableState.GetExecutionInfo().VisibilityLastUpdateVersionedTransition,
 		minVersionedTransition,
 	) < 0 {
 		return nil
 	}
-
 	return taskGenerator.GenerateUpsertVisibilityTask()
 }
 
@@ -642,7 +618,7 @@ func (r *TaskRefresherImpl) refreshTasksForSubStateMachines(
 		}
 
 		// Skip task generation if this state machine node has not been updated since minVersionedTransition.
-		if CompareVersionedTransition(
+		if transitionhistory.Compare(
 			node.InternalRepr().LastUpdateVersionedTransition,
 			minVersionedTransition,
 		) < 0 {

@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package shard
 
 import (
@@ -452,7 +428,7 @@ func (s *ContextImpl) UpdateRemoteReaderInfo(
 	clusterName, _, ok := clusterNameInfoFromClusterID(s.clusterMetadata.GetAllClusterInfo(), clusterID)
 	if !ok {
 		// cluster is not present in cluster metadata map
-		return serviceerror.NewInternal(fmt.Sprintf("unknown cluster ID: %v", clusterID))
+		return serviceerror.NewInternalf("unknown cluster ID: %v", clusterID)
 	}
 
 	s.wLock()
@@ -1357,7 +1333,7 @@ Loop:
 			metrics.ShardInfoScheduledQueueLagTimer.With(metricsHandler).
 				Record(lag, metrics.TaskCategoryTag(category.Name()))
 		default:
-			s.contextTaggedLogger.Error("Unknown task category type", tag.NewStringTag("task-category", category.Type().String()))
+			s.contextTaggedLogger.Error("Unknown task category type", tag.NewStringerTag("task-category", category.Type()))
 		}
 	}
 }
@@ -1705,7 +1681,7 @@ func (s *ContextImpl) transition(request contextRequest) error {
 	case contextStateAcquired:
 		switch request := request.(type) {
 		case contextRequestAcquire:
-			return nil // nothing to to do, already acquired
+			return nil // nothing to do, already acquired
 		case contextRequestLost:
 			setStateAcquiring()
 			return nil

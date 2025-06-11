@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2024 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package workerdeployment
 
 import (
@@ -31,6 +7,7 @@ import (
 	"fmt"
 	"sync"
 
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -42,6 +19,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/worker_versioning"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -155,6 +133,7 @@ func (a *VersionActivities) CheckWorkerDeploymentUserDataPropagation(ctx context
 
 // CheckIfTaskQueuesHavePollers returns true if any of the given task queues has any pollers
 func (a *VersionActivities) CheckIfTaskQueuesHavePollers(ctx context.Context, args *deploymentspb.CheckTaskQueuesHavePollersActivityArgs) (bool, error) {
+	versionStr := worker_versioning.ExternalWorkerDeploymentVersionToString(worker_versioning.ExternalWorkerDeploymentVersionFromVersion(args.WorkerDeploymentVersion))
 	for tqName, tqTypes := range args.TaskQueuesAndTypes {
 		res, err := a.matchingClient.DescribeTaskQueue(ctx, &matchingservice.DescribeTaskQueueRequest{
 			NamespaceId: a.namespace.ID().String(),
@@ -162,7 +141,7 @@ func (a *VersionActivities) CheckIfTaskQueuesHavePollers(ctx context.Context, ar
 				Namespace:      a.namespace.Name().String(),
 				TaskQueue:      &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 				ApiMode:        enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED,
-				Versions:       &taskqueuepb.TaskQueueVersionSelection{BuildIds: []string{worker_versioning.WorkerDeploymentVersionToString(args.WorkerDeploymentVersion)}},
+				Versions:       &taskqueuepb.TaskQueueVersionSelection{BuildIds: []string{versionStr}},
 				ReportPollers:  true,
 				TaskQueueType:  enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 				TaskQueueTypes: tqTypes.Types,
@@ -171,7 +150,7 @@ func (a *VersionActivities) CheckIfTaskQueuesHavePollers(ctx context.Context, ar
 		if err != nil {
 			return false, fmt.Errorf("error describing task queue with name %s: %s", tqName, err)
 		}
-		typesInfo := res.GetDescResponse().GetVersionsInfo()[worker_versioning.WorkerDeploymentVersionToString(args.WorkerDeploymentVersion)].GetTypesInfo()
+		typesInfo := res.GetDescResponse().GetVersionsInfo()[versionStr].GetTypesInfo()
 		if len(typesInfo[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].GetPollers()) > 0 {
 			return true, nil
 		}
@@ -195,4 +174,18 @@ func (a *VersionActivities) AddVersionToWorkerDeployment(ctx context.Context, in
 		return nil, temporal.NewNonRetryableApplicationError("failed to add version to deployment", errTooManyVersions, err)
 	}
 	return resp, err
+}
+
+func (a *VersionActivities) GetVersionDrainageStatus(ctx context.Context, version *deploymentspb.WorkerDeploymentVersion) (*deploymentpb.VersionDrainageInfo, error) {
+	logger := activity.GetLogger(ctx)
+	response, err := a.deploymentClient.GetVersionDrainageStatus(ctx, a.namespace, worker_versioning.WorkerDeploymentVersionToStringV31(version))
+	if err != nil {
+		logger.Error("error counting workflows for drainage status", "error", err)
+		return nil, err
+	}
+	return &deploymentpb.VersionDrainageInfo{
+		Status:          response,
+		LastChangedTime: nil, // ignored; whether Status changed will be evaluated by the receiver
+		LastCheckedTime: timestamppb.Now(),
+	}, nil
 }

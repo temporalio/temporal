@@ -1,32 +1,9 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package config
 
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -40,7 +17,12 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/telemetry"
+	"google.golang.org/grpc/keepalive"
 	"gopkg.in/yaml.v3"
+)
+
+const (
+	infinity = time.Duration(math.MaxInt64)
 )
 
 type (
@@ -107,6 +89,39 @@ type (
 		// forwarded from HTTP to gRPC. Any value with a trailing * will match the prefix before
 		// the asterisk (eg. `x-internal-*`)
 		HTTPAdditionalForwardedHeaders []string `yaml:"httpAdditionalForwardedHeaders"`
+		// KeepAliveServerConfig keep alive configuration for the server
+		KeepAliveServerConfig KeepAliveServerConfig `yaml:"keepAliveServerConfig"`
+		// ClientConnectionConfig defines the connection config used by other services
+		// when they create a gRPC client connection to this service.
+		ClientConnectionConfig ClientConnectionConfig `yaml:"clientConnectionConfig"`
+	}
+
+	KeepAliveServerParameters struct {
+		MaxConnectionIdle     *time.Duration `yaml:"maxConnectionIdle"`
+		MaxConnectionAge      *time.Duration `yaml:"maxConnectionAge"`
+		MaxConnectionAgeGrace *time.Duration `yaml:"maxConnectionAgeGrace"`
+		Time                  *time.Duration `yaml:"keepAliveTime"`
+		Timeout               *time.Duration `yaml:"keepAliveTimeout"`
+	}
+
+	KeepAliveClientParameters struct {
+		Time                *time.Duration `yaml:"keepAliveTime"`
+		Timeout             *time.Duration `yaml:"keepAliveTimeout"`
+		PermitWithoutStream *bool          `yaml:"keepAlivePermitWithoutStream"`
+	}
+
+	ClientConnectionConfig struct {
+		KeepAliveClientConfig *KeepAliveClientParameters `yaml:"keepAliveClientParameters"`
+	}
+
+	KeepAliveServerEnforcementPolicy struct {
+		MinTime             *time.Duration `yaml:"minTime"`
+		PermitWithoutStream *bool          `yaml:"permitWithoutStream"`
+	}
+
+	KeepAliveServerConfig struct {
+		KeepAliveServerParameters  *KeepAliveServerParameters        `yaml:"keepAliveServerParameters"`
+		KeepAliveEnforcementPolicy *KeepAliveServerEnforcementPolicy `yaml:"keepAliveEnforcementPolicy"`
 	}
 
 	// Global contains config items that apply process-wide to all services
@@ -651,4 +666,136 @@ func (p *JWTKeyProvider) HasSourceURIsConfigured() bool {
 		}
 	}
 	return false
+}
+
+func (k *KeepAliveServerConfig) GetKeepAliveServerParameters() keepalive.ServerParameters {
+	// the default config is same as grpc default config, same for the below client config and enforcement policy
+	defaultConfig := keepalive.ServerParameters{
+		MaxConnectionIdle:     infinity,
+		MaxConnectionAge:      infinity,
+		MaxConnectionAgeGrace: infinity,
+		Time:                  2 * time.Hour,
+		Timeout:               20 * time.Second,
+	}
+	if k == nil || k.KeepAliveServerParameters == nil {
+		return defaultConfig
+	}
+	kp := k.KeepAliveServerParameters
+	if kp.MaxConnectionIdle != nil {
+		defaultConfig.MaxConnectionIdle = *kp.MaxConnectionIdle
+	}
+	if kp.MaxConnectionAge != nil {
+		defaultConfig.MaxConnectionAge = *kp.MaxConnectionAge
+	}
+	if kp.MaxConnectionAgeGrace != nil {
+		defaultConfig.MaxConnectionAgeGrace = *kp.MaxConnectionAgeGrace
+	}
+	if kp.Time != nil {
+		defaultConfig.Time = *kp.Time
+	}
+	if kp.Timeout != nil {
+		defaultConfig.Timeout = *kp.Timeout
+	}
+	return defaultConfig
+}
+
+func (c *ClientConnectionConfig) GetKeepAliveClientParameters() keepalive.ClientParameters {
+	defaultConfig := keepalive.ClientParameters{
+		Time:                infinity,
+		Timeout:             20 * time.Second,
+		PermitWithoutStream: false,
+	}
+
+	if c == nil || c.KeepAliveClientConfig == nil {
+		return defaultConfig
+	}
+
+	if c.KeepAliveClientConfig.Time != nil {
+		defaultConfig.Time = *c.KeepAliveClientConfig.Time
+	}
+	if c.KeepAliveClientConfig.Timeout != nil {
+		defaultConfig.Timeout = *c.KeepAliveClientConfig.Timeout
+	}
+	if c.KeepAliveClientConfig.PermitWithoutStream != nil {
+		defaultConfig.PermitWithoutStream = *c.KeepAliveClientConfig.PermitWithoutStream
+	}
+
+	return defaultConfig
+}
+
+func (k *KeepAliveServerConfig) GetKeepAliveEnforcementPolicy() keepalive.EnforcementPolicy {
+	defaultConfig := keepalive.EnforcementPolicy{
+		MinTime:             5 * time.Minute,
+		PermitWithoutStream: false,
+	}
+
+	if k == nil || k.KeepAliveEnforcementPolicy == nil {
+		return defaultConfig
+	}
+
+	if k.KeepAliveEnforcementPolicy.MinTime != nil {
+		defaultConfig.MinTime = *k.KeepAliveEnforcementPolicy.MinTime
+	}
+	if k.KeepAliveEnforcementPolicy.PermitWithoutStream != nil {
+		defaultConfig.PermitWithoutStream = *k.KeepAliveEnforcementPolicy.PermitWithoutStream
+	}
+
+	return defaultConfig
+}
+
+func (fi *FaultInjection) WithError(storeName DataStoreName, methodName, errorName string, probability float64) *FaultInjection {
+	if fi == nil {
+		return nil
+	}
+	m := fi.method(storeName, methodName)
+	m.Errors[errorName] = probability
+	fi.Targets.DataStores[storeName].Methods[methodName] = m
+	return fi
+}
+
+func (fi *FaultInjection) WithMethodSeed(storeName DataStoreName, methodName string, seed int64) *FaultInjection {
+	if fi == nil {
+		return nil
+	}
+	m := fi.method(storeName, methodName)
+	m.Seed = seed
+	fi.Targets.DataStores[storeName].Methods[methodName] = m
+	return fi
+}
+
+func (fi *FaultInjection) method(storeName DataStoreName, methodName string) FaultInjectionMethodConfig {
+	if fi.Targets.DataStores == nil {
+		fi.Targets.DataStores = map[DataStoreName]FaultInjectionDataStoreConfig{}
+	}
+	store, ok := fi.Targets.DataStores[storeName]
+	if !ok {
+		store = FaultInjectionDataStoreConfig{Methods: map[string]FaultInjectionMethodConfig{}}
+	}
+	method, ok := store.Methods[methodName]
+	if !ok {
+		method = FaultInjectionMethodConfig{Errors: map[string]float64{}}
+	}
+	store.Methods[methodName] = method
+	fi.Targets.DataStores[storeName] = store
+	return method
+}
+
+func DefaultFaultInjection() *FaultInjection {
+	fiCfg := &FaultInjection{}
+	return fiCfg.
+		WithError(ExecutionStoreName, "CreateWorkflowExecution", "ResourceExhausted", 0.01).
+		WithError(ExecutionStoreName, "CreateWorkflowExecution", "Timeout", 0.01).
+		WithError(ExecutionStoreName, "CreateWorkflowExecution", "ExecuteAndTimeout", 0.01).
+		WithError(ExecutionStoreName, "UpdateWorkflowExecution", "ResourceExhausted", 0.01).
+		WithError(ExecutionStoreName, "UpdateWorkflowExecution", "Timeout", 0.01).
+		WithError(ExecutionStoreName, "UpdateWorkflowExecution", "ExecuteAndTimeout", 0.01).
+		WithError(ExecutionStoreName, "GetWorkflowExecution", "ResourceExhausted", 0.01).
+		WithError(ExecutionStoreName, "GetWorkflowExecution", "Timeout", 0.01).
+		WithError(ExecutionStoreName, "GetCurrentExecution", "ResourceExhausted", 0.01).
+		WithError(ExecutionStoreName, "GetCurrentExecution", "Timeout", 0.01).
+		WithError(ExecutionStoreName, "AppendHistoryNodes", "ResourceExhausted", 0.01).
+		WithError(ExecutionStoreName, "AppendHistoryNodes", "Timeout", 0.01).
+		WithError(ExecutionStoreName, "AppendHistoryNodes", "ExecuteAndTimeout", 0.01).
+		WithError(ExecutionStoreName, "ReadHistoryBranch", "ResourceExhausted", 0.01).
+		WithError(ExecutionStoreName, "ReadHistoryBranch", "Timeout", 0.01)
 }

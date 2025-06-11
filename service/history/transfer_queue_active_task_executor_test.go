@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package history
 
 import (
@@ -869,7 +845,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 		},
 	}, defaultWorkflowTaskCompletionLimits)
 
-	_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
+	_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
 		Namespace:  "child namespace1",
 		WorkflowId: "child workflow1",
 		WorkflowType: &commonpb.WorkflowType{
@@ -880,7 +856,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 		ParentClosePolicy: parentClosePolicy1,
 	}, "child namespace1-ID")
 	s.Nil(err)
-	_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
+	_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
 		Namespace:  "child namespace2",
 		WorkflowId: "child workflow2",
 		WorkflowType: &commonpb.WorkflowType{
@@ -891,7 +867,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 		ParentClosePolicy: parentClosePolicy2,
 	}, "child namespace2-ID")
 	s.Nil(err)
-	_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
+	_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
 		Namespace:  "child namespace3",
 		WorkflowId: "child workflow3",
 		WorkflowType: &commonpb.WorkflowType{
@@ -994,7 +970,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 	}, defaultWorkflowTaskCompletionLimits)
 
 	for i := 0; i < 10; i++ {
-		_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
+		_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
 			WorkflowId: "child workflow" + convert.IntToString(i),
 			WorkflowType: &commonpb.WorkflowType{
 				Name: "child workflow type",
@@ -1091,7 +1067,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_ParentW
 	}, defaultWorkflowTaskCompletionLimits)
 
 	for i := 0; i < 10; i++ {
-		_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
+		_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
 			WorkflowId: "child workflow" + convert.IntToString(i),
 			WorkflowType: &commonpb.WorkflowType{
 				Name: "child workflow type",
@@ -1181,7 +1157,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 	}, defaultWorkflowTaskCompletionLimits)
 
 	for i := 0; i < 10; i++ {
-		_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
+		_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
 			WorkflowId: "child workflow" + convert.IntToString(i),
 			WorkflowType: &commonpb.WorkflowType{
 				Name: "child workflow type",
@@ -1278,7 +1254,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 		},
 	}, defaultWorkflowTaskCompletionLimits)
 
-	_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
+	_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
 		Namespace:  "child namespace1",
 		WorkflowId: "child workflow1",
 		WorkflowType: &commonpb.WorkflowType{
@@ -1290,7 +1266,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 	}, "child namespace1-ID")
 	s.NoError(err)
 
-	_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
+	_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
 		Namespace:  "child namespace1",
 		WorkflowId: "child workflow2",
 		WorkflowType: &commonpb.WorkflowType{
@@ -1390,7 +1366,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_DeleteA
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 	mockDeleteMgr := deletemanager.NewMockDeleteManager(s.controller)
-	mockDeleteMgr.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	mockDeleteMgr.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 	s.transferQueueActiveTaskExecutor.workflowDeleteManager = mockDeleteMgr
 	resp := s.transferQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.NoError(resp.ExecutionErr)
@@ -1962,7 +1938,6 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Su
 	event, ci := addStartChildWorkflowExecutionInitiatedEvent(
 		mutableState,
 		event.GetEventId(),
-		uuid.New(),
 		s.childNamespace,
 		s.childNamespaceID,
 		childWorkflowID,
@@ -2077,7 +2052,6 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Re
 	childInitEvent, _ := addStartChildWorkflowExecutionInitiatedEvent(
 		mutableState,
 		1111,
-		uuid.New(),
 		s.childNamespace,
 		s.childNamespaceID,
 		childWorkflowID,
@@ -2201,7 +2175,6 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Fa
 	event, ci := addStartChildWorkflowExecutionInitiatedEvent(
 		mutableState,
 		event.GetEventId(),
-		uuid.New(),
 		s.childNamespace,
 		s.childNamespaceID,
 		childWorkflowID,
@@ -2291,7 +2264,6 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Fa
 	event, _ = addStartChildWorkflowExecutionInitiatedEvent(
 		mutableState,
 		event.GetEventId(),
-		uuid.New(),
 		s.namespace,
 		s.namespaceID,
 		childWorkflowID,
@@ -2366,7 +2338,6 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Su
 	event, ci := addStartChildWorkflowExecutionInitiatedEvent(
 		mutableState,
 		event.GetEventId(),
-		uuid.New(),
 		s.childNamespace,
 		s.childNamespaceID,
 		childWorkflowID,
@@ -2470,7 +2441,6 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Du
 	event, ci := addStartChildWorkflowExecutionInitiatedEvent(
 		mutableState,
 		event.GetEventId(),
-		uuid.New(),
 		s.childNamespace,
 		s.childNamespaceID,
 		childExecution.GetWorkflowId(),
@@ -2554,7 +2524,6 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessorStartChildExecution_
 	event, ci := addStartChildWorkflowExecutionInitiatedEvent(
 		mutableState,
 		event.GetEventId(),
-		uuid.New(),
 		s.childNamespace,
 		s.childNamespaceID,
 		childExecution.GetWorkflowId(),
@@ -2747,7 +2716,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestPendingCloseExecutionTasks() 
 			mockWorkflowDeleteManager := deletemanager.NewMockDeleteManager(ctrl)
 			if c.ShouldDelete {
 				mockWorkflowDeleteManager.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any(), gomock.Any(),
-					gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
+					gomock.Any(), gomock.Any(), gomock.Any())
 			}
 
 			executor := &transferQueueActiveTaskExecutor{

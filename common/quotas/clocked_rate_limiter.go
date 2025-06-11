@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package quotas
 
 import (
@@ -143,7 +119,7 @@ func (l ClockedRateLimiter) WaitN(ctx context.Context, token int) error {
 			return nil
 		case <-l.recycleCh:
 			if token > 1 {
-				break // recycling 1 token to a process requesting >1 tokens is a no-op
+				break // recycling 1 token to a process requesting >1 tokens is a no-op, because we only know that at least one token was not used
 			}
 
 			// Cancel() reverses the effects of this Reservation on the rate limit as much as possible,
@@ -182,31 +158,6 @@ func (l ClockedRateLimiter) TokensAt(t time.Time) int {
 // In this case, we want to immediately unblock another process that is waiting for one token
 // so that the actual rate of completed actions is as close to the intended rate limit as possible.
 // If no process is waiting for a token when RecycleToken is called, this is a no-op.
-//
-// Since we don't know how many tokens were reserved by the process calling recycle, we will only unblock
-// new reservations that are for one token (otherwise we could recycle a 1-token-reservation and unblock
-// a 100-token-reservation). If all waiting processes are waiting for >1 tokens, this is a no-op.
-//
-// Because recycleCh is an unbuffered channel, the token will be reused for the next waiter as long
-// as there exists a waiter at the time RecycleToken is called. Usually the attempted rate is consistently
-// above or below the limit for a period of time, so if rate limiting is in effect and recycling matters,
-// most likely there will be a waiter. If the actual rate is erratically bouncing to either side of the
-// rate limit AND we perform many recycles, this will drop some recycled tokens.
-// If that situation turns out to be common, we may want to make it a buffered channel instead.
-//
-// Our goal is to ensure that each token in our bucket is used every second, meaning the time between
-// taking and successfully using a token must be <= 1s. For this to be true, we must have:
-//
-//	time_to_recycle * number_of_recycles_per_second <= 1s
-//	time_to_recycle * probability_of_recycle * number_of_attempts_per_second <= 1s
-//
-// Therefore, it is also possible for this strategy to be inaccurate if the delay between taking and
-// successfully using a token is greater than one second.
-//
-// Currently, RecycleToken is called when we take a token to attempt a matching task dispatch and
-// then later find out (usually via RPC to History) that the task should not be dispatched.
-// If history rpc takes 10ms --> 100 opportunities for the token to be used that second --> 99% recycle probability is ok.
-// If recycle probability is 50% --> need at least 2 opportunities for token to be used --> 500ms history rpc time is ok.
 func (l ClockedRateLimiter) RecycleToken() {
 	select {
 	case l.recycleCh <- struct{}{}:

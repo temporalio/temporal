@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package scheduler
 
 import (
@@ -1069,6 +1045,7 @@ func (s *scheduler) updateCustomSearchAttributes(searchAttributes *commonpb.Sear
 	}
 
 	upsertMap := map[string]any{}
+	//workflowcheck:ignore (map iteration order does not affect history)
 	for key, valuePayload := range searchAttributes.GetIndexedFields() {
 		var value any
 		if err := payload.Decode(valuePayload, &value); err != nil {
@@ -1080,6 +1057,7 @@ func (s *scheduler) updateCustomSearchAttributes(searchAttributes *commonpb.Sear
 
 	//nolint:staticcheck // SA1019 Use untyped version for backwards compatibility.
 	currentSearchAttributes := workflow.GetInfo(s.ctx).SearchAttributes
+	//workflowcheck:ignore (map iteration order does not affect history)
 	for key, currentValuePayload := range currentSearchAttributes.GetIndexedFields() {
 		// This might violate determinism when a new system search attribute is added
 		// and the user already had a custom search attribute with same name. This is
@@ -1114,6 +1092,7 @@ func (s *scheduler) updateMemoAndSearchAttributes() {
 	var currentInfoBytes []byte
 	var currentInfo schedulepb.ScheduleListInfo
 
+	//workflowcheck:ignore (proto.Equal is falsely flagged as non-deterministic)
 	if currentInfoPayload == nil ||
 		payload.Decode(currentInfoPayload, &currentInfoBytes) != nil ||
 		currentInfo.Unmarshal(currentInfoBytes) != nil ||
@@ -1347,6 +1326,7 @@ func (s *scheduler) startWorkflow(
 			LastCompletionResult:     lastCompletionResult,
 			ContinuedFailure:         continuedFailure,
 			UserMetadata:             newWorkflow.UserMetadata,
+			Priority:                 newWorkflow.Priority,
 		},
 	}
 	for {

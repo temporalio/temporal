@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package resource
 
 import (
@@ -97,6 +73,7 @@ type (
 // See LifetimeHooksModule for detail
 var Module = fx.Options(
 	persistenceClient.Module,
+	dynamicconfig.Module,
 	fx.Provide(HostNameProvider),
 	fx.Provide(TimeSourceProvider),
 	cluster.MetadataLifetimeHooksModule,
@@ -110,8 +87,6 @@ var Module = fx.Options(
 		fx.ResultTags(`group:"deadlockDetectorRoots"`),
 	)),
 	fx.Provide(serialization.NewSerializer),
-	fx.Provide(HistoryBootstrapContainerProvider),
-	fx.Provide(VisibilityBootstrapContainerProvider),
 	fx.Provide(ClientFactoryProvider),
 	fx.Provide(ClientBeanProvider),
 	fx.Provide(FrontendClientProvider),
@@ -124,7 +99,6 @@ var Module = fx.Options(
 	fx.Provide(MatchingClientProvider),
 	membership.GRPCResolverModule,
 	fx.Provide(FrontendHTTPClientCacheProvider),
-	fx.Invoke(RegisterBootstrapContainer),
 	fx.Provide(PersistenceConfigProvider),
 	fx.Provide(health.NewServer),
 	deadlock.Module,
@@ -275,45 +249,6 @@ func RuntimeMetricsReporterProvider(
 	)
 }
 
-func VisibilityBootstrapContainerProvider(
-	logger log.SnTaggedLogger,
-	metricsHandler metrics.Handler,
-	clusterMetadata cluster.Metadata,
-) *archiver.VisibilityBootstrapContainer {
-	return &archiver.VisibilityBootstrapContainer{
-		Logger:          logger,
-		MetricsHandler:  metricsHandler,
-		ClusterMetadata: clusterMetadata,
-	}
-}
-
-func HistoryBootstrapContainerProvider(
-	logger log.SnTaggedLogger,
-	metricsHandler metrics.Handler,
-	clusterMetadata cluster.Metadata,
-	executionManager persistence.ExecutionManager,
-) *archiver.HistoryBootstrapContainer {
-	return &archiver.HistoryBootstrapContainer{
-		ExecutionManager: executionManager,
-		Logger:           logger,
-		MetricsHandler:   metricsHandler,
-		ClusterMetadata:  clusterMetadata,
-	}
-}
-
-func RegisterBootstrapContainer(
-	archiverProvider provider.ArchiverProvider,
-	serviceName primitives.ServiceName,
-	visibilityArchiverBootstrapContainer *archiver.VisibilityBootstrapContainer,
-	historyArchiverBootstrapContainer *archiver.HistoryBootstrapContainer,
-) error {
-	return archiverProvider.RegisterBootstrapContainer(
-		string(serviceName),
-		historyArchiverBootstrapContainer,
-		visibilityArchiverBootstrapContainer,
-	)
-}
-
 func HistoryRawClientProvider(clientBean client.Bean) HistoryRawClient {
 	return clientBean.GetHistoryClient()
 }
@@ -357,8 +292,19 @@ func ArchivalMetadataProvider(dc *dynamicconfig.Collection, cfg *config.Config) 
 	)
 }
 
-func ArchiverProviderProvider(cfg *config.Config) provider.ArchiverProvider {
-	return provider.NewArchiverProvider(cfg.Archival.History.Provider, cfg.Archival.Visibility.Provider)
+func ArchiverProviderProvider(
+	cfg *config.Config,
+	persistenceExecutionManager persistence.ExecutionManager,
+	logger log.SnTaggedLogger,
+	metricsHandler metrics.Handler,
+) provider.ArchiverProvider {
+	return provider.NewArchiverProvider(
+		cfg.Archival.History.Provider,
+		cfg.Archival.Visibility.Provider,
+		persistenceExecutionManager,
+		logger,
+		metricsHandler,
+	)
 }
 
 func SdkClientFactoryProvider(
@@ -394,8 +340,8 @@ func RPCFactoryProvider(
 	resolver *membership.GRPCResolver,
 	tracingStatsHandler telemetry.ClientStatsHandler,
 	monitor membership.Monitor,
+	dc *dynamicconfig.Collection,
 ) (common.RPCFactory, error) {
-	svcCfg := cfg.Services[string(svcName)]
 	frontendURL, frontendHTTPURL, frontendHTTPPort, frontendTLSConfig, err := getFrontendConnectionDetails(cfg, tlsConfigProvider, resolver)
 	if err != nil {
 		return nil, err
@@ -405,9 +351,10 @@ func RPCFactoryProvider(
 	if tracingStatsHandler != nil {
 		options = append(options, grpc.WithStatsHandler(tracingStatsHandler))
 	}
-
-	return rpc.NewFactory(
-		&svcCfg.RPC,
+	enableServerKeepalive := dynamicconfig.EnableInternodeServerKeepAlive.Get(dc)()
+	enableClientKeepalive := dynamicconfig.EnableInternodeClientKeepAlive.Get(dc)()
+	factory := rpc.NewFactory(
+		cfg,
 		svcName,
 		logger,
 		tlsConfigProvider,
@@ -417,7 +364,11 @@ func RPCFactoryProvider(
 		frontendTLSConfig,
 		options,
 		monitor,
-	), nil
+	)
+	factory.EnableInternodeServerKeepalive = enableServerKeepalive
+	factory.EnableInternodeClientKeepalive = enableClientKeepalive
+	logger.Debug(fmt.Sprintf("RPC factory created. enableServerKeepalive: %v, enableClientKeepalive: %v", enableServerKeepalive, enableClientKeepalive))
+	return factory, nil
 }
 
 func FrontendHTTPClientCacheProvider(

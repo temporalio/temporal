@@ -1,42 +1,19 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package deadlock
 
 import (
 	"context"
 	"runtime/pprof"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/goro"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/pingable"
-	"go.temporal.io/server/internal/goro"
 	"go.uber.org/fx"
 	"google.golang.org/grpc/health"
 )
@@ -69,6 +46,9 @@ type (
 		roots          []pingable.Pingable
 		pools          []*goro.AdaptivePool
 		loops          goro.Group
+
+		// number of suspected deadlocks that have not resolved yet
+		current atomic.Int64
 	}
 
 	loopContext struct {
@@ -77,6 +57,11 @@ type (
 		p    *goro.AdaptivePool
 	}
 )
+
+// CurrentSuspected returns the number of currently unresolved suspected deadlocks.
+func (dd *deadlockDetector) CurrentSuspected() int64 {
+	return dd.current.Load()
+}
 
 func NewDeadlockDetector(params params) *deadlockDetector {
 	return &deadlockDetector{
@@ -126,6 +111,8 @@ func (dd *deadlockDetector) Stop() error {
 func (dd *deadlockDetector) detected(name string) {
 	dd.logger.Error("potential deadlock detected", tag.Name(name))
 
+	metrics.DDSuspectedDeadlocks.With(dd.metricsHandler).Record(1)
+
 	if dd.config.DumpGoroutines() {
 		dd.dumpGoroutines()
 	}
@@ -158,6 +145,11 @@ func (dd *deadlockDetector) dumpGoroutines() {
 	dd.logger.Info(b.String())
 }
 
+func (dd *deadlockDetector) adjustCurrent(delta int64) {
+	dd.current.Add(delta)
+	metrics.DDCurrentSuspectedDeadlocks.With(dd.metricsHandler).Record(float64(dd.current.Load()))
+}
+
 func (lc *loopContext) run(ctx context.Context) error {
 	for {
 		// ping blocks until it has passed all checks to a worker goroutine (using an
@@ -185,6 +177,7 @@ func (lc *loopContext) ping(ctx context.Context, pingables []pingable.Pingable) 
 func (lc *loopContext) check(ctx context.Context, check pingable.Check) {
 	lc.dd.logger.Debug("starting ping check", tag.Name(check.Name))
 	startTime := time.Now().UTC()
+	resolved := make(chan struct{})
 
 	// Using AfterFunc is cheaper than creating another goroutine to be the waiter, since
 	// we expect to always cancel it. If the go runtime is so messed up that it can't
@@ -194,13 +187,21 @@ func (lc *loopContext) check(ctx context.Context, check pingable.Check) {
 			// deadlock detector was stopped
 			return
 		}
+		lc.dd.adjustCurrent(1)
+
 		lc.dd.detected(check.Name)
+
+		// Wait and see if Ping() returns past the timeout. If it's a true deadlock, it'll
+		// block here forever.
+		<-resolved
+		lc.dd.adjustCurrent(-1)
 	})
 	newPingables := check.Ping()
 	t.Stop()
 	if len(check.MetricsName) > 0 {
 		lc.dd.metricsHandler.Timer(check.MetricsName).Record(time.Since(startTime))
 	}
+	close(resolved)
 
 	lc.dd.logger.Debug("ping check succeeded", tag.Name(check.Name))
 

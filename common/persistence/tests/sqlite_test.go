@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package tests
 
 import (
@@ -45,7 +21,7 @@ import (
 	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
 	sqltests "go.temporal.io/server/common/persistence/sql/sqlplugin/tests"
 	"go.temporal.io/server/common/resolver"
-	"go.temporal.io/server/environment"
+	"go.temporal.io/server/temporal/environment"
 )
 
 // TODO merge the initialization with existing persistence setup
@@ -67,7 +43,7 @@ func NewSQLiteMemoryConfig() *config.SQL {
 	}
 }
 
-// NewSQLiteMemoryConfig returns a new SQLite config for test
+// NewSQLiteFileConfig returns a new SQLite config for test
 func NewSQLiteFileConfig() *config.SQL {
 	return &config.SQL{
 		User:              "",
@@ -771,6 +747,20 @@ func TestSQLiteHistoryExecutionTimerSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
+func TestSQLiteHistoryExecutionChasmSuite(t *testing.T) {
+	cfg := NewSQLiteMemoryConfig()
+	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
+	if err != nil {
+		t.Fatalf("unable to create SQLite DB: %v", err)
+	}
+	defer func() {
+		_ = store.Close()
+	}()
+
+	s := sqltests.NewHistoryExecutionChasmSuite(t, store)
+	suite.Run(t, s)
+}
+
 func TestSQLiteHistoryExecutionRequestCancelSuite(t *testing.T) {
 	cfg := NewSQLiteMemoryConfig()
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
@@ -1071,6 +1061,19 @@ func TestSQLiteFileHistoryExecutionTimerSuite(t *testing.T) {
 	defer os.Remove(cfg.DatabaseName)
 
 	s := sqltests.NewHistoryExecutionTimerSuite(t, store)
+	suite.Run(t, s)
+}
+
+func TestSQLiteFileHistoryExecutionChasmSuite(t *testing.T) {
+	cfg := NewSQLiteFileConfig()
+	SetupSQLiteDatabase(t, cfg)
+	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
+	if err != nil {
+		t.Fatalf("unable to create SQLite DB: %v", err)
+	}
+	defer os.Remove(cfg.DatabaseName)
+
+	s := sqltests.NewHistoryExecutionChasmSuite(t, store)
 	suite.Run(t, s)
 }
 

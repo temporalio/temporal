@@ -1,31 +1,9 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package dynamicconfig_test
 
 import (
+	"errors"
 	"maps"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -75,19 +53,16 @@ func TestCollectionSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-func (s *collectionSuite) SetupSuite() {
+func (s *collectionSuite) SetupTest() {
+	dynamicconfig.ResetRegistryForTest()
 	s.client = newTestSubscribableClient()
 	logger := log.NewNoopLogger()
 	s.cln = dynamicconfig.NewCollection(s.client, logger)
 	s.cln.Start()
 }
 
-func (s *collectionSuite) TearDownSuite() {
+func (s *collectionSuite) TearDownTest() {
 	s.cln.Stop()
-}
-
-func (s *collectionSuite) SetupTest() {
-	dynamicconfig.ResetRegistryForTest()
 }
 
 func (s *collectionSuite) TestGetIntProperty() {
@@ -447,6 +422,87 @@ func (s *collectionSuite) TestGetTypedProtoEnum() {
 	s.Run("WrongType", func() {
 		s.client.SetValue(testGetTypedPropertyKey, true)
 		s.Equal(def, get())
+	})
+}
+
+// someEnum is an example type for DynamicConfigParseHook.
+type someEnum int32
+
+const (
+	someEnumValueUnset someEnum = iota
+	someEnumValueOne
+	someEnumValueTwo
+	someEnumValueThree
+)
+
+func (someEnum) DynamicConfigParseHook(s string) (someEnum, error) {
+	switch strings.ToLower(s) {
+	case "one":
+		return someEnumValueOne, nil
+	case "two":
+		return someEnumValueTwo, nil
+	case "three":
+		return someEnumValueThree, nil
+	default:
+		return 0, errors.New("unknown value")
+	}
+}
+
+func (s *collectionSuite) TestGetGenericParseHook() {
+	def := someEnumValueOne
+	setting := dynamicconfig.NewGlobalTypedSetting(
+		testGetTypedPropertyKey,
+		def,
+		"",
+	)
+	get := setting.Get(s.cln)
+
+	s.Run("Default", func() {
+		s.Equal(def, get())
+	})
+
+	s.Run("Basic", func() {
+		s.client.SetValue(testGetTypedPropertyKey, "THRee")
+		s.Equal(someEnumValueThree, get())
+	})
+
+	s.Run("Missing", func() {
+		s.client.SetValue(testGetTypedPropertyKey, "four")
+		s.Equal(def, get()) // default since there was a parse error
+	})
+}
+
+func (s *collectionSuite) TestGetGenericParseHookValue_Struct() {
+	type myStruct struct {
+		FieldA someEnum
+		FieldB someEnum
+	}
+	def := myStruct{
+		FieldA: someEnumValueTwo,
+		FieldB: someEnumValueThree,
+	}
+	setting := dynamicconfig.NewGlobalTypedSetting(
+		testGetTypedPropertyKey,
+		def,
+		"",
+	)
+	get := setting.Get(s.cln)
+
+	s.Run("Default", func() {
+		s.Equal(def, get())
+	})
+
+	s.Run("Basic", func() {
+		s.client.SetValue(testGetTypedPropertyKey, map[string]any{"fielda": "one"})
+		s.Equal(myStruct{
+			FieldA: someEnumValueOne,
+			FieldB: someEnumValueThree, // from default
+		}, get())
+	})
+
+	s.Run("Missing", func() {
+		s.client.SetValue(testGetTypedPropertyKey, map[string]any{"FieldA": "one", "FieldB": "four"})
+		s.Equal(def, get()) // default since there was a parse error
 	})
 }
 

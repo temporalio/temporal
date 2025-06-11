@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package tests
 
 import (
@@ -35,6 +11,7 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -47,8 +24,10 @@ import (
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/tests/testcore"
@@ -56,7 +35,7 @@ import (
 )
 
 type WorkflowTestSuite struct {
-	testcore.FunctionalTestSuite
+	testcore.FunctionalTestBase
 }
 
 func TestWorkflowTestSuite(t *testing.T) {
@@ -83,7 +62,21 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution() {
 		request := makeRequest()
 		we, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 		s.NoError(err)
-		s.True(we.Started)
+		requireStartedAndRunning(s.T(), we)
+		s.ProtoEqual(
+			&commonpb.Link_WorkflowEvent{
+				Namespace:  s.Namespace().String(),
+				WorkflowId: request.WorkflowId,
+				RunId:      we.RunId,
+				Reference: &commonpb.Link_WorkflowEvent_EventRef{
+					EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+						EventId:   1,
+						EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+					},
+				},
+			},
+			we.Link.GetWorkflowEvent(),
+		)
 
 		// Validate the default value for WorkflowTaskTimeoutSeconds
 		historyEvents := s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{
@@ -100,11 +93,39 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution() {
 
 		we0, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 		s.NoError(err0)
-		s.True(we0.Started)
+		requireStartedAndRunning(s.T(), we0)
+		s.ProtoEqual(
+			&commonpb.Link_WorkflowEvent{
+				Namespace:  s.Namespace().String(),
+				WorkflowId: request.WorkflowId,
+				RunId:      we0.RunId,
+				Reference: &commonpb.Link_WorkflowEvent_EventRef{
+					EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+						EventId:   1,
+						EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+					},
+				},
+			},
+			we0.Link.GetWorkflowEvent(),
+		)
 
 		we1, err1 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 		s.NoError(err1)
-		s.True(we1.Started)
+		requireStartedAndRunning(s.T(), we1)
+		s.ProtoEqual(
+			&commonpb.Link_WorkflowEvent{
+				Namespace:  s.Namespace().String(),
+				WorkflowId: request.WorkflowId,
+				RunId:      we1.RunId,
+				Reference: &commonpb.Link_WorkflowEvent_EventRef{
+					EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+						EventId:   1,
+						EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+					},
+				},
+			},
+			we1.Link.GetWorkflowEvent(),
+		)
 
 		s.Equal(we0.RunId, we1.RunId)
 	})
@@ -113,7 +134,7 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution() {
 		request := makeRequest()
 		we, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 		s.NoError(err)
-		s.True(we.Started)
+		requireStartedAndRunning(s.T(), we)
 
 		request.RequestId = uuid.New()
 
@@ -140,17 +161,46 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting() {
 
 	we0, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err0)
-	s.True(we0.Started)
+	requireStartedAndRunning(s.T(), we0)
+	s.ProtoEqual(
+		&commonpb.Link_WorkflowEvent{
+			Namespace:  s.Namespace().String(),
+			WorkflowId: request.WorkflowId,
+			RunId:      we0.RunId,
+			Reference: &commonpb.Link_WorkflowEvent_EventRef{
+				EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+					EventId:   1,
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+				},
+			},
+		},
+		we0.Link.GetWorkflowEvent(),
+	)
 
 	request.RequestId = uuid.New()
 	request.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING
 	we1, err1 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err1)
 	s.Equal(we0.RunId, we1.RunId)
-	s.False(we1.Started)
+	requireNotStartedButRunning(s.T(), we1)
+	s.ProtoEqual(
+		&commonpb.Link_WorkflowEvent{
+			Namespace:  s.Namespace().String(),
+			WorkflowId: request.WorkflowId,
+			RunId:      we1.RunId,
+			Reference: &commonpb.Link_WorkflowEvent_EventRef{
+				EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+					EventId:   1,
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+				},
+			},
+		},
+		we1.Link.GetWorkflowEvent(),
+	)
 }
 
 func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting_OnConflictOptions() {
+	s.OverrideDynamicConfig(dynamicconfig.EnableRequestIdRefLinks, true)
 	s.OverrideDynamicConfig(
 		callbacks.AllowedAddresses,
 		[]any{
@@ -233,7 +283,21 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting_OnConflictOpt
 
 			we0, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 			s.NoError(err0)
-			s.True(we0.Started)
+			requireStartedAndRunning(s.T(), we0)
+			s.ProtoEqual(
+				&commonpb.Link_WorkflowEvent{
+					Namespace:  s.Namespace().String(),
+					WorkflowId: request.WorkflowId,
+					RunId:      we0.RunId,
+					Reference: &commonpb.Link_WorkflowEvent_EventRef{
+						EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+							EventId:   1,
+							EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+						},
+					},
+				},
+				we0.Link.GetWorkflowEvent(),
+			)
 
 			historyEvents := s.GetHistory(
 				s.Namespace().String(),
@@ -293,7 +357,21 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting_OnConflictOpt
 			}
 			s.NoError(err1)
 			s.Equal(we0.RunId, we1.RunId)
-			s.False(we1.Started)
+			requireNotStartedButRunning(s.T(), we1)
+			s.ProtoEqual(
+				&commonpb.Link_WorkflowEvent{
+					Namespace:  s.Namespace().String(),
+					WorkflowId: request.WorkflowId,
+					RunId:      we1.RunId,
+					Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
+						RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
+							RequestId: request.RequestId,
+							EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+						},
+					},
+				},
+				we1.Link.GetWorkflowEvent(),
+			)
 
 			historyEvents = s.GetHistory(
 				s.Namespace().String(),
@@ -365,6 +443,7 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting_OnConflictOpt
 }
 
 func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting_OnConflictOptions_Dedup() {
+	s.OverrideDynamicConfig(dynamicconfig.EnableRequestIdRefLinks, true)
 	tv := testvars.New(s.T())
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:          tv.RequestID(),
@@ -379,7 +458,21 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting_OnConflictOpt
 
 	we0, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err0)
-	s.True(we0.Started)
+	requireStartedAndRunning(s.T(), we0)
+	s.ProtoEqual(
+		&commonpb.Link_WorkflowEvent{
+			Namespace:  s.Namespace().String(),
+			WorkflowId: request.WorkflowId,
+			RunId:      we0.RunId,
+			Reference: &commonpb.Link_WorkflowEvent_EventRef{
+				EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+					EventId:   1,
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+				},
+			},
+		},
+		we0.Link.GetWorkflowEvent(),
+	)
 
 	request.RequestId = uuid.New()
 	request.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING
@@ -389,7 +482,21 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting_OnConflictOpt
 	we1, err1 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err1)
 	s.Equal(we0.RunId, we1.RunId)
-	s.False(we1.Started)
+	requireNotStartedButRunning(s.T(), we1)
+	s.ProtoEqual(
+		&commonpb.Link_WorkflowEvent{
+			Namespace:  s.Namespace().String(),
+			WorkflowId: request.WorkflowId,
+			RunId:      we1.RunId,
+			Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
+				RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
+					RequestId: request.RequestId,
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+				},
+			},
+		},
+		we1.Link.GetWorkflowEvent(),
+	)
 
 	historyEvents := s.GetHistory(
 		s.Namespace().String(),
@@ -410,7 +517,21 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting_OnConflictOpt
 	we2, err2 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err2)
 	s.Equal(we0.RunId, we2.RunId)
-	s.False(we2.Started)
+	requireNotStartedButRunning(s.T(), we2)
+	s.ProtoEqual(
+		&commonpb.Link_WorkflowEvent{
+			Namespace:  s.Namespace().String(),
+			WorkflowId: request.WorkflowId,
+			RunId:      we2.RunId,
+			Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
+				RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
+					RequestId: request.RequestId,
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+				},
+			},
+		},
+		we2.Link.GetWorkflowEvent(),
+	)
 
 	// History events must be the same as before.
 	historyEvents = s.GetHistory(
@@ -435,11 +556,25 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting_OnConflictOpt
 	we3, err3 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err3)
 	s.Equal(we0.RunId, we3.RunId)
-	s.True(we3.Started) // Original request was the start request.
-
+	requireStartedAndRunning(s.T(), we3) // Original request was the start request.
+	s.ProtoEqual(
+		&commonpb.Link_WorkflowEvent{
+			Namespace:  s.Namespace().String(),
+			WorkflowId: request.WorkflowId,
+			RunId:      we3.RunId,
+			Reference: &commonpb.Link_WorkflowEvent_EventRef{
+				EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+					EventId:   1,
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+				},
+			},
+		},
+		we3.Link.GetWorkflowEvent(),
+	)
 }
 
 func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting_OnConflictOptions_NoDedup() {
+	s.OverrideDynamicConfig(dynamicconfig.EnableRequestIdRefLinks, true)
 	tv := testvars.New(s.T())
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:          uuid.New(),
@@ -454,7 +589,21 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting_OnConflictOpt
 
 	we0, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err0)
-	s.True(we0.Started)
+	requireStartedAndRunning(s.T(), we0)
+	s.ProtoEqual(
+		&commonpb.Link_WorkflowEvent{
+			Namespace:  s.Namespace().String(),
+			WorkflowId: request.WorkflowId,
+			RunId:      we0.RunId,
+			Reference: &commonpb.Link_WorkflowEvent_EventRef{
+				EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+					EventId:   1,
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+				},
+			},
+		},
+		we0.Link.GetWorkflowEvent(),
+	)
 
 	// New RequestId, but not attaching it.
 	request.RequestId = uuid.New()
@@ -462,7 +611,21 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting_OnConflictOpt
 	we1, err1 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err1)
 	s.Equal(we0.RunId, we1.RunId)
-	s.False(we1.Started)
+	requireNotStartedButRunning(s.T(), we1)
+	s.ProtoEqual(
+		&commonpb.Link_WorkflowEvent{
+			Namespace:  s.Namespace().String(),
+			WorkflowId: request.WorkflowId,
+			RunId:      we1.RunId,
+			Reference: &commonpb.Link_WorkflowEvent_EventRef{
+				EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+					EventId:   1,
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+				},
+			},
+		},
+		we1.Link.GetWorkflowEvent(),
+	)
 
 	// Since OnConflictOptions is nil, no history event is added.
 	historyEvents := s.GetHistory(
@@ -485,7 +648,21 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting_OnConflictOpt
 	we2, err2 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err2)
 	s.Equal(we0.RunId, we2.RunId)
-	s.False(we2.Started)
+	requireNotStartedButRunning(s.T(), we2)
+	s.ProtoEqual(
+		&commonpb.Link_WorkflowEvent{
+			Namespace:  s.Namespace().String(),
+			WorkflowId: request.WorkflowId,
+			RunId:      we2.RunId,
+			Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
+				RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
+					RequestId: request.RequestId,
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+				},
+			},
+		},
+		we2.Link.GetWorkflowEvent(),
+	)
 
 	historyEvents = s.GetHistory(
 		s.Namespace().String(),
@@ -546,6 +723,20 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_Terminate() {
 
 			we0, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 			s.NoError(err0)
+			s.ProtoEqual(
+				&commonpb.Link_WorkflowEvent{
+					Namespace:  s.Namespace().String(),
+					WorkflowId: request.WorkflowId,
+					RunId:      we0.RunId,
+					Reference: &commonpb.Link_WorkflowEvent_EventRef{
+						EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+							EventId:   1,
+							EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+						},
+					},
+				},
+				we0.Link.GetWorkflowEvent(),
+			)
 
 			request.RequestId = uuid.New()
 			request.WorkflowIdReusePolicy = tc.WorkflowIdReusePolicy
@@ -553,6 +744,20 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_Terminate() {
 			we1, err1 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 			s.NoError(err1)
 			s.NotEqual(we0.RunId, we1.RunId)
+			s.ProtoEqual(
+				&commonpb.Link_WorkflowEvent{
+					Namespace:  s.Namespace().String(),
+					WorkflowId: request.WorkflowId,
+					RunId:      we1.RunId,
+					Reference: &commonpb.Link_WorkflowEvent_EventRef{
+						EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+							EventId:   1,
+							EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+						},
+					},
+				},
+				we1.Link.GetWorkflowEvent(),
+			)
 
 			descResp, err := s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
 				Namespace: s.Namespace().String(),
@@ -595,6 +800,20 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecutionWithDelay() {
 	reqStartTime := time.Now()
 	we0, startErr := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(startErr)
+	s.ProtoEqual(
+		&commonpb.Link_WorkflowEvent{
+			Namespace:  s.Namespace().String(),
+			WorkflowId: request.WorkflowId,
+			RunId:      we0.RunId,
+			Reference: &commonpb.Link_WorkflowEvent_EventRef{
+				EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+					EventId:   1,
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+				},
+			},
+		},
+		we0.Link.GetWorkflowEvent(),
+	)
 
 	delayEndTime := time.Now()
 	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
@@ -833,6 +1052,8 @@ func (s *WorkflowTestSuite) TestSequentialWorkflow() {
 		s.Equal(tv.ActivityType().Name, task.ActivityType.Name)
 		s.Equal(tv.WithActivityIDNumber(int(expectedActivity)).ActivityID(), task.ActivityId)
 		s.Equal(expectedActivity, s.DecodePayloadsByteSliceInt32(task.Input))
+		s.NotNil(task.RetryPolicy)
+		s.Equal(int64(1), task.RetryPolicy.InitialInterval.Seconds) // server default
 		expectedActivity++
 
 		return payloads.EncodeString("Activity Result"), false, nil
@@ -1336,4 +1557,80 @@ func (s *WorkflowTestSuite) TestWorkflowRetryFailures() {
   3 WorkflowTaskStarted
   4 WorkflowTaskCompleted
   5 WorkflowExecutionFailed`, events)
+}
+
+// TestStartWorkflowExecution_Invalid_DeploymentSearchAttributes verifies that Worker Deployment related
+// search attributes cannot be used on StartWorkflowExecution.
+func (s *WorkflowTestSuite) TestStartWorkflowExecution_Invalid_DeploymentSearchAttributes() {
+	tv := testvars.New(s.T())
+	makeRequest := func(saFieldName string) *workflowservice.StartWorkflowExecutionRequest {
+		return &workflowservice.StartWorkflowExecutionRequest{
+			RequestId:          uuid.New(),
+			Namespace:          s.Namespace().String(),
+			WorkflowId:         testcore.RandomizeStr(s.T().Name()),
+			WorkflowType:       tv.WorkflowType(),
+			TaskQueue:          tv.TaskQueue(),
+			Input:              nil,
+			WorkflowRunTimeout: durationpb.New(100 * time.Second),
+			Identity:           tv.WorkerIdentity(),
+			SearchAttributes: &commonpb.SearchAttributes{
+				IndexedFields: map[string]*commonpb.Payload{
+					saFieldName: payload.EncodeString("1.0.0"),
+				},
+			},
+		}
+	}
+
+	s.Run(searchattribute.TemporalWorkerDeploymentVersion, func() {
+		request := makeRequest(searchattribute.TemporalWorkerDeploymentVersion)
+		_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+		s.Error(err)
+		var invalidArgument *serviceerror.InvalidArgument
+		s.ErrorAs(err, &invalidArgument)
+	})
+
+	s.Run(searchattribute.TemporalWorkerDeployment, func() {
+		request := makeRequest(searchattribute.TemporalWorkerDeployment)
+		_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+		s.Error(err)
+		var invalidArgument *serviceerror.InvalidArgument
+		s.ErrorAs(err, &invalidArgument)
+	})
+
+	s.Run(searchattribute.TemporalWorkflowVersioningBehavior, func() {
+		request := makeRequest(searchattribute.TemporalWorkflowVersioningBehavior)
+		_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+		s.Error(err)
+		var invalidArgument *serviceerror.InvalidArgument
+		s.ErrorAs(err, &invalidArgument)
+	})
+
+	// These are currently allowed since they are in the predefinedWhiteList. Once it's confirmed that they are not being used,
+	// we can remove them from the predefinedWhiteList.
+	s.Run(searchattribute.BatcherUser, func() {
+		request := makeRequest(searchattribute.BatcherUser)
+		_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+		s.NoError(err)
+	})
+
+	s.Run(searchattribute.BatcherNamespace, func() {
+		request := makeRequest(searchattribute.BatcherNamespace)
+		_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+		s.NoError(err)
+	})
+
+}
+
+func requireNotStartedButRunning(t *testing.T, resp *workflowservice.StartWorkflowExecutionResponse) {
+	t.Helper()
+	require.False(t, resp.Started)
+	require.Equalf(t, resp.Status, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		"Expected workflow to be running, but got %s", resp.Status)
+}
+
+func requireStartedAndRunning(t *testing.T, resp *workflowservice.StartWorkflowExecutionResponse) {
+	t.Helper()
+	require.True(t, resp.Started)
+	require.Equalf(t, resp.Status, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		"Expected workflow to be running, but got %s", resp.Status)
 }

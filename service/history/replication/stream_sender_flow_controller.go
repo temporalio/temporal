@@ -1,34 +1,9 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
-//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination stream_sender_flow_controller_mock.go
+//go:generate mockgen -package $GOPACKAGE -source $GOFILE -destination stream_sender_flow_controller_mock.go
 
 package replication
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"time"
 
@@ -50,7 +25,7 @@ type (
 	}
 	SenderFlowController interface {
 		// Wait will block go routine until the sender is allowed to send a task
-		Wait(priority enumsspb.TaskPriority)
+		Wait(ctx context.Context, priority enumsspb.TaskPriority) error
 		RefreshReceiverFlowControlInfo(syncState *replicationspb.SyncReplicationState)
 	}
 	SenderFlowControllerImpl struct {
@@ -111,30 +86,30 @@ func (s *SenderFlowControllerImpl) setState(state *flowControlState, flowControl
 	}
 }
 
-func (s *SenderFlowControllerImpl) Wait(priority enumsspb.TaskPriority) {
+func (s *SenderFlowControllerImpl) Wait(ctx context.Context, priority enumsspb.TaskPriority) error {
 	state, ok := s.flowControlStates[priority]
-	waitForRateLimiter := func(rateLimiter quotas.RateLimiter) {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute) // to avoid infinite wait
+	waitForRateLimiter := func(rateLimiter quotas.RateLimiter) error {
+		childCtx, cancel := context.WithTimeout(ctx, 2*time.Minute) // to avoid infinite wait
 		defer cancel()
-		err := rateLimiter.Wait(ctx)
+		err := rateLimiter.Wait(childCtx)
 		if err != nil {
 			s.logger.Error("error waiting for rate limiter", tag.Error(err))
+			return err
 		}
-		return
+		return nil
 	}
 	if !ok {
-		waitForRateLimiter(s.defaultRateLimiter)
-		return
+		return waitForRateLimiter(s.defaultRateLimiter)
 	}
 
 	state.mu.Lock()
 	if !state.resume {
 		state.waiters++
-		s.logger.Info(fmt.Sprintf("%v sender is paused", priority.String()))
+		s.logger.Info("sender is paused", tag.TaskPriority(priority.String()))
 		state.cond.Wait()
-		s.logger.Info(fmt.Sprintf("%s sender is resumed", priority.String()))
+		s.logger.Info("sender is resumed", tag.TaskPriority(priority.String()))
 		state.waiters--
 	}
 	state.mu.Unlock()
-	waitForRateLimiter(state.rateLimiter)
+	return waitForRateLimiter(state.rateLimiter)
 }

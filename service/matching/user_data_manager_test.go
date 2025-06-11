@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package matching
 
 import (
@@ -39,6 +15,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -51,6 +28,13 @@ import (
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 )
+
+type tqmTestOpts struct {
+	config              *Config
+	dbq                 *PhysicalTaskQueueKey
+	matchingClientMock  *matchingservicemock.MockMatchingServiceClient
+	expectUserDataError bool
+}
 
 func createUserDataManager(
 	t *testing.T,
@@ -82,7 +66,7 @@ func createUserDataManager(
 		onFatalErr = func(unloadCause) { t.Fatal("user data manager called onFatalErr") }
 	}
 
-	return newUserDataManager(tm, testOpts.matchingClientMock, onFatalErr, testOpts.dbq.Partition(), newTaskQueueConfig(testOpts.dbq.Partition().TaskQueue(), testOpts.config, ns), logger, mockNamespaceCache)
+	return newUserDataManager(tm, testOpts.matchingClientMock, onFatalErr, nil, testOpts.dbq.Partition(), newTaskQueueConfig(testOpts.dbq.Partition().TaskQueue(), testOpts.config, ns), logger, mockNamespaceCache)
 }
 
 func TestUserData_LoadOnInit(t *testing.T) {
@@ -855,8 +839,8 @@ func TestUserData_Propagation(t *testing.T) {
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			for i := 1; i < N; i++ {
 				d, _, err := managers[i].GetUserData()
-				assert.NoError(c, err, "number", i)
-				assert.Equal(c, iter+1, int(d.GetVersion()), "number", i)
+				require.NoError(c, err, "number", i)
+				require.Equal(c, iter+1, int(d.GetVersion()), "number", i)
 			}
 		}, 5*time.Second, 10*time.Millisecond, "failed to propagate")
 		t.Log("Propagation time:", time.Since(start))
@@ -970,4 +954,12 @@ func TestUserData_CheckPropagation(t *testing.T) {
 			return false
 		}
 	}, 100*time.Millisecond, 5*time.Millisecond, "CheckTaskQueueUserDataPropagation did not return fast enough")
+}
+
+func defaultTqmTestOpts(controller *gomock.Controller) *tqmTestOpts {
+	return &tqmTestOpts{
+		config:             defaultTestConfig(),
+		dbq:                defaultTqId(),
+		matchingClientMock: matchingservicemock.NewMockMatchingServiceClient(controller),
+	}
 }

@@ -1,28 +1,4 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
-//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination executable_mock.go
+//go:generate mockgen -package $GOPACKAGE -source $GOFILE -destination executable_mock.go
 
 package queues
 
@@ -314,10 +290,10 @@ func (e *executableImpl) Execute() (retErr error) {
 	}
 
 	defer func() {
-		if panicObj := recover(); panicObj != nil {
-			err, ok := panicObj.(error)
+		if pObj := recover(); pObj != nil {
+			err, ok := pObj.(error)
 			if !ok {
-				err = serviceerror.NewInternal(fmt.Sprintf("panic: %v", panicObj))
+				err = serviceerror.NewInternalf("panic: %v", pObj)
 			}
 
 			e.logger.Error("Panic is captured", tag.SysStackTrace(string(debug.Stack())), tag.Error(err))
@@ -346,6 +322,7 @@ func (e *executableImpl) Execute() (retErr error) {
 		priorityTaggedProvider := e.metricsHandler.WithTags(metrics.TaskPriorityTag(e.priority.String()))
 		metrics.TaskRequests.With(priorityTaggedProvider).Record(1)
 		metrics.TaskScheduleLatency.With(priorityTaggedProvider).Record(e.scheduleLatency)
+		metrics.OperationCounter.With(e.metricsHandler).Record(1)
 
 		if retErr == nil {
 			e.inMemoryNoUserLatency += e.scheduleLatency + e.attemptNoUserLatency
@@ -403,6 +380,15 @@ func (e *executableImpl) writeToDLQ(ctx context.Context) error {
 	}
 	metrics.TaskDLQSendLatency.With(e.metricsHandler).Record(e.timeSource.Now().Sub(start))
 	return err
+}
+
+func (e *executableImpl) isUserError(err error) bool {
+	// All namespace level resource exhausted errors are considered user errors.
+	var resourceExhaustedErr *serviceerror.ResourceExhausted
+	if ok := errors.As(err, &resourceExhaustedErr); !ok {
+		return false
+	}
+	return resourceExhaustedErr.Scope == enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE
 }
 
 func (e *executableImpl) isSafeToDropError(err error) bool {
@@ -519,47 +505,22 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 	}
 
 	defer func() {
-		if !errors.Is(retErr, consts.ErrResourceExhaustedBusyWorkflow) &&
-			!errors.Is(retErr, consts.ErrResourceExhaustedAPSLimit) {
-			// if err is due to workflow busy or APS limit, do not take any latency related to this attempt into account
+		// If err is due to user error, do not take any latency related to this attempt into account
+		if !e.isUserError(retErr) {
 			e.inMemoryNoUserLatency += e.scheduleLatency + e.attemptNoUserLatency
-		}
-
-		if retErr != nil {
-			e.Lock()
-			defer e.Unlock()
-
-			e.attempt++
-			if e.attempt > taskCriticalLogMetricAttempts {
-				metrics.TaskAttempt.With(e.metricsHandler).Record(int64(e.attempt))
-				e.logger.Error("Critical error processing task, retrying.",
-					tag.Attempt(int32(e.attempt)),
-					tag.UnexpectedErrorAttempts(int32(e.unexpectedErrorAttempts)),
-					tag.Error(err),
-					tag.OperationCritical)
-			}
 		}
 	}()
 
-	if len(e.dlqErrorPattern()) > 0 {
-		match, mErr := regexp.MatchString(e.dlqErrorPattern(), err.Error())
-		if mErr != nil {
-			e.logger.Error(fmt.Sprintf("Failed to match task processing error with %s", dynamicconfig.HistoryTaskDLQErrorPattern.Key()))
-		} else if match {
-			e.logger.Error(
-				fmt.Sprintf("Error matches with %s. Marking task as terminally failed, will send to DLQ",
-					dynamicconfig.HistoryTaskDLQErrorPattern.Key()),
-				tag.Error(err),
-				tag.ErrorType(err))
-			e.terminalFailureCause = err
-			metrics.TaskTerminalFailures.With(e.metricsHandler).Record(1)
-			return fmt.Errorf("%w: %v", ErrTerminalTaskFailure, err)
-		}
+	if matchedErr := e.matchDLQErrorPattern(err); matchedErr != nil {
+		e.incAttempt()
+		return matchedErr
 	}
 
 	if e.isSafeToDropError(err) {
 		return nil
 	}
+
+	attempt := e.incAttempt()
 
 	if ok, rewrittenErr := e.isExpectedRetryableError(err); ok {
 		return rewrittenErr
@@ -568,7 +529,18 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 	// Unexpected errors handled below
 	e.unexpectedErrorAttempts++
 	metrics.TaskFailures.With(e.metricsHandler).Record(1)
-	e.logger.Warn("Fail to process task", tag.Error(err), tag.ErrorType(err), tag.UnexpectedErrorAttempts(int32(e.unexpectedErrorAttempts)), tag.LifeCycleProcessingFailed)
+	logger := log.With(e.logger,
+		tag.Error(err),
+		tag.ErrorType(err),
+		tag.Attempt(int32(attempt)),
+		tag.UnexpectedErrorAttempts(int32(e.unexpectedErrorAttempts)),
+		tag.LifeCycleProcessingFailed,
+	)
+	if attempt > taskCriticalLogMetricAttempts {
+		logger.Error("Critical error processing task, retrying.", tag.OperationCritical)
+	} else {
+		logger.Warn("Fail to process task")
+	}
 
 	if e.isUnexpectedNonRetryableError(err) {
 		// Terminal errors are likely due to data corruption.
@@ -597,6 +569,29 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 	}
 
 	return err
+}
+
+func (e *executableImpl) matchDLQErrorPattern(err error) error {
+	if len(e.dlqErrorPattern()) <= 0 {
+		return nil
+	}
+	match, mErr := regexp.MatchString(e.dlqErrorPattern(), err.Error())
+	if mErr != nil {
+		e.logger.Error(fmt.Sprintf("Failed to match task processing error with %s", dynamicconfig.HistoryTaskDLQErrorPattern.Key()))
+		return nil
+	}
+	if !match {
+		return nil
+	}
+
+	e.logger.Error(
+		fmt.Sprintf("Error matches with %s. Marking task as terminally failed, will send to DLQ",
+			dynamicconfig.HistoryTaskDLQErrorPattern.Key()),
+		tag.Error(err),
+		tag.ErrorType(err))
+	e.terminalFailureCause = err
+	metrics.TaskTerminalFailures.With(e.metricsHandler).Record(1)
+	return fmt.Errorf("%w: %v", ErrTerminalTaskFailure, err)
 }
 
 func (e *executableImpl) IsRetryableError(err error) bool {
@@ -673,8 +668,8 @@ func (e *executableImpl) Nack(err error) {
 
 	if !submitted {
 		backoffDuration := e.backoffDuration(err, e.Attempt())
-		if !errors.Is(err, consts.ErrResourceExhaustedBusyWorkflow) &&
-			!errors.Is(err, consts.ErrResourceExhaustedAPSLimit) {
+		// If err is due to user error, do not take any latency related to this attempt into account
+		if !e.isUserError(err) {
 			e.inMemoryNoUserLatency += backoffDuration
 		}
 
@@ -811,6 +806,18 @@ func (e *executableImpl) updatePriority() {
 	if e.priority > e.lowestPriority {
 		e.lowestPriority = e.priority
 	}
+}
+
+func (e *executableImpl) incAttempt() int {
+	e.Lock()
+	e.attempt++
+	attempt := e.attempt
+	e.Unlock()
+
+	if attempt > taskCriticalLogMetricAttempts {
+		metrics.TaskAttempt.With(e.metricsHandler).Record(int64(attempt))
+	}
+	return attempt
 }
 
 func (e *executableImpl) resetAttempt() {

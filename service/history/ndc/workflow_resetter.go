@@ -1,41 +1,17 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
-//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination workflow_resetter_mock.go
+//go:generate mockgen -package $GOPACKAGE -source $GOFILE -destination workflow_resetter_mock.go
 
 package ndc
 
 import (
 	"context"
 	"errors"
-	"fmt"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -50,6 +26,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/util"
+	"go.temporal.io/server/service/history/api/updateworkflowoptions"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -64,7 +41,7 @@ const (
 )
 
 var (
-	errWorkflowResetterMaxChildren = serviceerror.NewInvalidArgument(fmt.Sprintf("WorkflowResetter encountered max allowed children [%d] while resetting.", maxChildrenInResetMutableState))
+	errWorkflowResetterMaxChildren = serviceerror.NewInvalidArgumentf("WorkflowResetter encountered max allowed children [%d] while resetting.", maxChildrenInResetMutableState)
 )
 
 type (
@@ -88,6 +65,7 @@ type (
 			additionalReapplyEvents []*historypb.HistoryEvent,
 			resetReapplyExcludeTypes map[enumspb.ResetReapplyExcludeType]struct{},
 			allowResetWithPendingChildren bool,
+			postResetOperations []*workflowpb.PostResetOperation,
 		) error
 	}
 
@@ -143,6 +121,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 	additionalReapplyEvents []*historypb.HistoryEvent,
 	resetReapplyExcludeTypes map[enumspb.ResetReapplyExcludeType]struct{},
 	allowResetWithPendingChildren bool,
+	postResetOperations []*workflowpb.PostResetOperation,
 ) (retError error) {
 
 	namespaceEntry, err := r.namespaceRegistry.GetNamespaceByID(namespaceID)
@@ -246,6 +225,10 @@ func (r *workflowResetterImpl) ResetWorkflow(
 		return err
 	}
 	if _, err := r.reapplyEvents(ctx, resetMS, additionalReapplyEvents, nil); err != nil {
+		return err
+	}
+
+	if err := r.performPostResetOperations(ctx, resetMS, postResetOperations); err != nil {
 		return err
 	}
 
@@ -520,10 +503,10 @@ func (r *workflowResetterImpl) failWorkflowTask(
 		//  meaning workflow history has NO workflow task ever
 		//  should also allow workflow reset, the only remaining issues are
 		//  * what if workflow is a cron workflow, e.g. should add a workflow task directly or still respect the cron job
-		return serviceerror.NewInvalidArgument(fmt.Sprintf(
+		return serviceerror.NewInvalidArgumentf(
 			"Can only reset workflow to event ID in range [WorkflowTaskScheduled +1, WorkflowTaskStarted + 1]: %v",
 			baseRebuildLastEventID+1,
-		))
+		)
 	}
 
 	var err error
@@ -984,7 +967,7 @@ func reapplyEvents(
 			enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_CANCELED,
 			enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TIMED_OUT,
 			enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TERMINATED:
-			if !isReset {
+			if isDuplicate(event) {
 				continue
 			}
 			err := reapplyChildEvents(mutableState, event)
@@ -1040,7 +1023,7 @@ func reapplyChildEvents(mutableState historyi.MutableState, event *historypb.His
 	case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED:
 		childEventAttributes := event.GetChildWorkflowExecutionStartedEventAttributes()
 		ci, childExists := mutableState.GetChildExecutionInfo(childEventAttributes.GetInitiatedEventId())
-		if !childExists {
+		if !childExists || ci.StartedEventId != common.EmptyEventID {
 			return nil
 		}
 		childClock := ci.Clock
@@ -1107,11 +1090,11 @@ func reapplyChildEvents(mutableState historyi.MutableState, event *historypb.His
 		if !childExists {
 			return nil
 		}
-		if _, err := mutableState.AddChildWorkflowExecutionTerminatedEvent(childEventAttributes.GetInitiatedEventId(), childEventAttributes.WorkflowExecution, nil); err != nil {
+		if _, err := mutableState.AddChildWorkflowExecutionTerminatedEvent(childEventAttributes.GetInitiatedEventId(), childEventAttributes.WorkflowExecution); err != nil {
 			return err
 		}
 	default:
-		return serviceerror.NewInternal(fmt.Sprintf("WorkflowResetter encountered an unexpected child event: [%s]", event.GetEventType().String()))
+		return serviceerror.NewInternalf("WorkflowResetter encountered an unexpected child event: [%s]", event.GetEventType().String())
 	}
 	return nil
 }
@@ -1159,4 +1142,18 @@ func (r *workflowResetterImpl) shouldExcludeAllReapplyEvents(excludeTypes map[en
 		}
 	}
 	return true
+}
+
+// performPostResetOperations performs the optional post reset operations on the reset workflow.
+func (r *workflowResetterImpl) performPostResetOperations(ctx context.Context, resetMS historyi.MutableState, postResetOperations []*workflowpb.PostResetOperation) error {
+	for _, operation := range postResetOperations {
+		switch op := operation.GetVariant().(type) {
+		case *workflowpb.PostResetOperation_UpdateWorkflowOptions_:
+			_, _, err := updateworkflowoptions.MergeAndApply(resetMS, op.UpdateWorkflowOptions.GetWorkflowExecutionOptions(), op.UpdateWorkflowOptions.GetUpdateMask())
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }

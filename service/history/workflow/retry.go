@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package workflow
 
 import (
@@ -32,11 +8,13 @@ import (
 
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	clockspb "go.temporal.io/server/api/clock/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -188,6 +166,7 @@ func SetupNewWorkflowForRetryOrCron(
 	newMutableState historyi.MutableState,
 	newRunID string,
 	startAttr *historypb.WorkflowExecutionStartedEventAttributes,
+	startLinks []*commonpb.Link,
 	lastCompletionResult *commonpb.Payloads,
 	failure *failurepb.Failure,
 	backoffInterval time.Duration,
@@ -256,6 +235,33 @@ func SetupNewWorkflowForRetryOrCron(
 	// validateContinueAsNewWorkflowExecutionAttributes
 	runTimeout := startAttr.GetWorkflowRunTimeout()
 
+	var completionCallbacks []*commonpb.Callback
+	if initiator == enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY {
+		completionCallbacks, err = getCompletionCallbacksAsProtoSlice(previousMutableState)
+		if err != nil {
+			return err
+		}
+	}
+
+	var pinnedOverride *workflowpb.VersioningOverride
+	if o := previousExecutionInfo.GetVersioningInfo().GetVersioningOverride(); worker_versioning.OverrideIsPinned(o) {
+		pinnedOverride = o
+		// retries and crons always go to the same task queue, so no need to check if override version is in new task queue
+	}
+
+	// New run initiated by workflow Cron will never inherit.
+	//
+	// New run initiated by workflow Retry will only inherit if the retried run is effectively pinned at the time
+	// of retry, and the retried run inherited a pinned version when it started (ie. it is a child of a pinned
+	// parent, or a CaN of a pinned run, and is running on a Task Queue in the inherited version).
+	var inheritedPinnedVersion *deploymentpb.WorkerDeploymentVersion
+	if initiator == enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY &&
+		GetEffectiveVersioningBehavior(previousExecutionInfo.GetVersioningInfo()) == enumspb.VERSIONING_BEHAVIOR_PINNED &&
+		startAttr.GetInheritedPinnedVersion() != nil {
+		inheritedPinnedVersion = worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(GetEffectiveDeployment(previousExecutionInfo.GetVersioningInfo()))
+		// retries and crons always go to the same task queue, so no need to check if override version is in new task queue
+	}
+
 	createRequest := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                uuid.New(),
 		Namespace:                newMutableState.GetNamespaceEntry().Name().String(),
@@ -271,7 +277,10 @@ func SetupNewWorkflowForRetryOrCron(
 		CronSchedule:             startAttr.CronSchedule,
 		Memo:                     startAttr.Memo,
 		SearchAttributes:         startAttr.SearchAttributes,
-		CompletionCallbacks:      startAttr.CompletionCallbacks,
+		CompletionCallbacks:      completionCallbacks,
+		Links:                    startLinks,
+		Priority:                 startAttr.Priority,
+		VersioningOverride:       pinnedOverride,
 	}
 
 	attempt := int32(1)
@@ -303,6 +312,7 @@ func SetupNewWorkflowForRetryOrCron(
 		SourceVersionStamp:       sourceVersionStamp,
 		RootExecutionInfo:        rootInfo,
 		InheritedBuildId:         startAttr.InheritedBuildId,
+		InheritedPinnedVersion:   inheritedPinnedVersion,
 	}
 	workflowTimeoutTime := timestamp.TimeValue(previousExecutionInfo.WorkflowExecutionExpirationTime)
 	if !workflowTimeoutTime.IsZero() {

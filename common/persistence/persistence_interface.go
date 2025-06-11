@@ -1,28 +1,4 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
-//go:generate mockgen -copyright_file ../../LICENSE -package mock -source $GOFILE -destination mock/store_mock.go -aux_files go.temporal.io/server/common/persistence=data_interfaces.go
+//go:generate mockgen -package mock -source $GOFILE -destination mock/store_mock.go -aux_files go.temporal.io/server/common/persistence=data_interfaces.go
 
 package persistence
 
@@ -326,6 +302,7 @@ type (
 		TaskId     int64
 		ExpiryTime *timestamppb.Timestamp
 		Task       *commonpb.DataBlob
+		Subqueue   int
 	}
 
 	InternalGetTasksResponse struct {
@@ -410,7 +387,7 @@ type (
 		ChildExecutionInfos map[int64]*commonpb.DataBlob  `json:",omitempty"` // ChildExecutionInfo
 		RequestCancelInfos  map[int64]*commonpb.DataBlob  `json:",omitempty"` // RequestCancelInfo
 		SignalInfos         map[int64]*commonpb.DataBlob  `json:",omitempty"` // SignalInfo
-		ChasmNodes          map[string]*commonpb.DataBlob `json:",omitempty"` // persistencespb.ChasmNode
+		ChasmNodes          map[string]InternalChasmNode  `json:",omitempty"` // persistencespb.ChasmNode
 		SignalRequestedIDs  []string                      `json:",omitempty"`
 		ExecutionInfo       *commonpb.DataBlob            // WorkflowExecutionInfo
 		ExecutionState      *commonpb.DataBlob            // WorkflowExecutionState
@@ -462,7 +439,7 @@ type (
 		DeleteRequestCancelInfos  map[int64]struct{}            `json:",omitempty"`
 		UpsertSignalInfos         map[int64]*commonpb.DataBlob  `json:",omitempty"`
 		DeleteSignalInfos         map[int64]struct{}            `json:",omitempty"`
-		UpsertChasmNodes          map[string]*commonpb.DataBlob `json:",omitempty"`
+		UpsertChasmNodes          map[string]InternalChasmNode  `json:",omitempty"`
 		DeleteChasmNodes          map[string]struct{}           `json:",omitempty"`
 		UpsertSignalRequestedIDs  map[string]struct{}           `json:",omitempty"`
 		DeleteSignalRequestedIDs  map[string]struct{}           `json:",omitempty"`
@@ -497,7 +474,7 @@ type (
 		ChildExecutionInfos map[int64]*commonpb.DataBlob  `json:",omitempty"`
 		RequestCancelInfos  map[int64]*commonpb.DataBlob  `json:",omitempty"`
 		SignalInfos         map[int64]*commonpb.DataBlob  `json:",omitempty"`
-		ChasmNodes          map[string]*commonpb.DataBlob `json:",omitempty"`
+		ChasmNodes          map[string]InternalChasmNode  `json:",omitempty"`
 		SignalRequestedIDs  map[string]struct{}           `json:",omitempty"`
 
 		Tasks map[tasks.Category][]InternalHistoryTask `json:",omitempty"`
@@ -505,6 +482,19 @@ type (
 		Condition int64
 
 		Checksum *commonpb.DataBlob
+	}
+
+	InternalChasmNode struct {
+		Metadata *commonpb.DataBlob
+		Data     *commonpb.DataBlob
+
+		// Only set when Cassandra is used as the persistence layer. When set, Metadata
+		// and Data will be unset. *No* code outside of the ExecutionManager or Cassandra
+		// store should reference this field.
+		//
+		// As an optimization to avoid an extra encode/deocde step, the Cassandra version
+		// is encoded in a single blob up-front.
+		CassandraBlob *commonpb.DataBlob
 	}
 
 	InternalGetCurrentExecutionResponse struct {

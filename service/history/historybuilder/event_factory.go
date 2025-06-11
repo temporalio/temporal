@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package historybuilder
 
 import (
@@ -89,7 +65,9 @@ func (b *EventFactory) CreateWorkflowExecutionStartedEvent(
 		CompletionCallbacks:             req.CompletionCallbacks,
 		RootWorkflowExecution:           request.RootExecutionInfo.GetExecution(),
 		InheritedBuildId:                request.InheritedBuildId,
-		VersioningOverride:              request.VersioningOverride,
+		VersioningOverride:              worker_versioning.ConvertOverrideToV32(request.VersioningOverride),
+		Priority:                        req.GetPriority(),
+		InheritedPinnedVersion:          request.InheritedPinnedVersion,
 	}
 
 	parentInfo := request.ParentExecutionInfo
@@ -99,7 +77,6 @@ func (b *EventFactory) CreateWorkflowExecutionStartedEvent(
 		attributes.ParentWorkflowExecution = parentInfo.Execution
 		attributes.ParentInitiatedEventId = parentInfo.InitiatedId
 		attributes.ParentInitiatedEventVersion = parentInfo.InitiatedVersion
-		attributes.ParentPinnedWorkerDeploymentVersion = parentInfo.PinnedWorkerDeploymentVersion
 	}
 
 	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
@@ -163,23 +140,19 @@ func (b *EventFactory) CreateWorkflowTaskCompletedEvent(
 	deployment *deploymentpb.Deployment,
 	behavior enumspb.VersioningBehavior,
 ) *historypb.HistoryEvent {
-	dv := ""
-	if deployment != nil {
-		dv = worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(deployment))
-	}
 	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{
 		WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{
-			ScheduledEventId:        scheduledEventID,
-			StartedEventId:          startedEventID,
-			Identity:                identity,
-			BinaryChecksum:          checksum,
-			WorkerVersion:           workerVersionStamp,
-			SdkMetadata:             sdkMetadata,
-			MeteringMetadata:        meteringMetadata,
-			WorkerDeploymentName:    deploymentName,
-			WorkerDeploymentVersion: dv,
-			VersioningBehavior:      behavior,
+			ScheduledEventId:     scheduledEventID,
+			StartedEventId:       startedEventID,
+			Identity:             identity,
+			BinaryChecksum:       checksum,
+			WorkerVersion:        workerVersionStamp,
+			SdkMetadata:          sdkMetadata,
+			MeteringMetadata:     meteringMetadata,
+			WorkerDeploymentName: deploymentName,
+			DeploymentVersion:    worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(deployment),
+			VersioningBehavior:   behavior,
 		},
 	}
 
@@ -250,6 +223,7 @@ func (b *EventFactory) CreateActivityTaskScheduledEvent(
 			HeartbeatTimeout:             command.HeartbeatTimeout,
 			RetryPolicy:                  command.RetryPolicy,
 			UseWorkflowBuildId:           command.UseWorkflowBuildId,
+			Priority:                     command.Priority,
 		},
 	}
 	return event
@@ -856,6 +830,7 @@ func (b *EventFactory) CreateStartChildWorkflowExecutionInitiatedEvent(
 			SearchAttributes:             command.SearchAttributes,
 			ParentClosePolicy:            command.GetParentClosePolicy(),
 			InheritBuildId:               command.InheritBuildId,
+			Priority:                     command.Priority,
 		},
 	}
 	return event

@@ -30,6 +30,8 @@
 #    constraints: {}
 #system.enableParentClosePolicyWorker:
 #  - value: true
+# matching.PollerHistoryTTL:
+#   - value: 1s
 system.enableEagerWorkflowStart:
   - value: true
 limit.maxIDLength:
@@ -59,7 +61,7 @@ matching.queryWorkflowTaskTimeoutLogRate:
   - value: 1.0
 history.ReplicationEnableUpdateWithNewTaskMerge:
   - value: true
-history.enableWorkflowExecutionTimeoutTimer:
-  - value: true
 history.hostLevelCacheMaxSize:
   - value: 8192
+history.enableTransitionHistory:
+  - value: true

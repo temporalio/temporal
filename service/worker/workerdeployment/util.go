@@ -1,30 +1,7 @@
-// The MIT License
-//
-// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2024 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package workerdeployment
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -35,7 +12,6 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/worker_versioning"
@@ -43,9 +19,8 @@ import (
 
 const (
 	// Workflow types
-	WorkerDeploymentVersionWorkflowType  = "temporal-sys-worker-deployment-version-workflow"
-	WorkerDeploymentWorkflowType         = "temporal-sys-worker-deployment-workflow"
-	WorkerDeploymentDrainageWorkflowType = "temporal-sys-worker-deployment-version-drainage-workflow"
+	WorkerDeploymentVersionWorkflowType = "temporal-sys-worker-deployment-version-workflow"
+	WorkerDeploymentWorkflowType        = "temporal-sys-worker-deployment-workflow"
 
 	// Namespace division
 	WorkerDeploymentNamespaceDivision = "TemporalWorkerDeployment"
@@ -87,12 +62,17 @@ const (
 	errTooManyDeployments         = "errTooManyDeployments"
 	errVersionAlreadyExistsType   = "errVersionAlreadyExists"
 	errMaxTaskQueuesInVersionType = "errMaxTaskQueuesInVersion"
-	errVersionAlreadyCurrentType  = "errVersionAlreadyCurrent"
-	errVersionIsDraining          = "Version cannot be deleted since it is draining."
 	errVersionNotFound            = "Version not found in deployment"
-	errVersionHasPollers          = "Version cannot be deleted since it has active pollers."
-	errVersionIsCurrentOrRamping  = "Version cannot be deleted since it is current or ramping."
-	errConflictTokenMismatchType  = "errConflictTokenMismatch"
+
+	errConflictTokenMismatchType = "errConflictTokenMismatch"
+	errFailedPrecondition        = "FailedPrecondition"
+
+	ErrVersionIsDraining         = "Version cannot be deleted since it is draining."
+	ErrVersionHasPollers         = "Version cannot be deleted since it has active pollers."
+	ErrVersionIsCurrentOrRamping = "Version cannot be deleted since it is current or ramping."
+
+	ErrRampingVersionDoesNotHaveAllTaskQueues = "proposed ramping version is missing active task queues from the current version; these would become unversioned if it is set as the ramping version"
+	ErrCurrentVersionDoesNotHaveAllTaskQueues = "proposed current version is missing active task queues from the current version; these would become unversioned if it is set as the current version"
 )
 
 var (
@@ -122,26 +102,30 @@ var (
 func validateVersionWfParams(fieldName string, field string, maxIDLengthLimit int) error {
 	// Length checks
 	if field == "" {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("%v cannot be empty", fieldName))
+		return serviceerror.NewInvalidArgumentf("%v cannot be empty", fieldName)
 	}
 
 	// Length of each field should be: (MaxIDLengthLimit - (prefix + delimeter length)) / 2
 	if len(field) > (maxIDLengthLimit-WorkerDeploymentVersionWorkflowIDInitialSize)/2 {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("size of %v larger than the maximum allowed", fieldName))
+		return serviceerror.NewInvalidArgumentf("size of %v larger than the maximum allowed", fieldName)
 	}
 
 	// deploymentName cannot have "."
+	// TODO: remove this restriction once the old version strings are completely cleaned from external and internal API
+	if fieldName == WorkerDeploymentNameFieldName && strings.Contains(field, worker_versioning.WorkerDeploymentVersionIdDelimiterV31) {
+		return serviceerror.NewInvalidArgumentf("worker deployment name cannot contain '%s'", worker_versioning.WorkerDeploymentVersionIdDelimiterV31)
+	}
+	// deploymentName cannot have ":"
 	if fieldName == WorkerDeploymentNameFieldName && strings.Contains(field, worker_versioning.WorkerDeploymentVersionIdDelimiter) {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("worker deployment name cannot contain '%s'", worker_versioning.WorkerDeploymentVersionIdDelimiter))
+		return serviceerror.NewInvalidArgumentf("worker deployment name cannot contain '%s'", worker_versioning.WorkerDeploymentVersionIdDelimiter)
 	}
 
 	// buildID or deployment name cannot start with "__"
 	if strings.HasPrefix(field, "__") {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("%v cannot start with '__'", fieldName))
+		return serviceerror.NewInvalidArgumentf("%v cannot start with '__'", fieldName)
 	}
 
-	// UTF-8 check
-	return common.ValidateUTF8String(fieldName, field)
+	return nil
 }
 
 func DecodeWorkerDeploymentMemo(memo *commonpb.Memo) *deploymentspb.WorkerDeploymentWorkflowMemo {
@@ -166,4 +150,11 @@ func getSafeDurationConfig(ctx workflow.Context, id string, unsafeGetter func() 
 
 func durationEq(a, b any) bool {
 	return a == b
+}
+
+// isFailedPrecondition checks if the error is a FailedPrecondition error. It also checks if the FailedPrecondition error is wrapped in an ApplicationError.
+func isFailedPrecondition(err error) bool {
+	var failedPreconditionError *serviceerror.FailedPrecondition
+	var applicationError *temporal.ApplicationError
+	return errors.As(err, &failedPreconditionError) || (errors.As(err, &applicationError) && applicationError.Type() == errFailedPrecondition)
 }

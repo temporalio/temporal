@@ -1,32 +1,6 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package versionhistory
 
 import (
-	"fmt"
-
 	"go.temporal.io/api/serviceerror"
 	historyspb "go.temporal.io/server/api/history/v1"
 )
@@ -63,6 +37,21 @@ func GetVersionHistory(h *historyspb.VersionHistories, index int32) (*historyspb
 	}
 
 	return h.Histories[index], nil
+}
+
+// AddEmptyVersionHistory adds an empty VersionHistory to VersionHistories.
+// It reuses an existing empty VersionHistory if one already exists.
+// Returns:
+//   - the index of the newly added or reused empty VersionHistory.
+func AddEmptyVersionHistory(h *historyspb.VersionHistories) int32 {
+	for idx, versionHistory := range h.Histories {
+		if IsEmptyVersionHistory(versionHistory) {
+			// already have an empty version history, return its index
+			return int32(idx)
+		}
+	}
+	h.Histories = append(h.Histories, &historyspb.VersionHistory{})
+	return int32(len(h.Histories)) - 1
 }
 
 // AddVersionHistory adds a VersionHistory to VersionHistories.
@@ -175,7 +164,7 @@ func FindFirstVersionHistoryIndexByVersionHistoryItem(h *historyspb.VersionHisto
 			return int32(versionHistoryIndex), nil
 		}
 	}
-	return 0, serviceerror.NewInternal(fmt.Sprintf("version histories does not contains given item: %v, %v", item, h))
+	return 0, serviceerror.NewInternalf("version histories does not contains given item: %v, %v", item, h)
 }
 
 // SetCurrentVersionHistoryIndex set the current VersionHistory index.
@@ -191,4 +180,13 @@ func SetCurrentVersionHistoryIndex(h *historyspb.VersionHistories, currentVersio
 // GetCurrentVersionHistory gets the current VersionHistory.
 func GetCurrentVersionHistory(h *historyspb.VersionHistories) (*historyspb.VersionHistory, error) {
 	return GetVersionHistory(h, h.GetCurrentVersionHistoryIndex())
+}
+
+// IsCurrentVersionHistoryEmpty checks if the current VersionHistory is empty.
+func IsCurrentVersionHistoryEmpty(h *historyspb.VersionHistories) (bool, error) {
+	currentVersionHistory, err := GetCurrentVersionHistory(h)
+	if err != nil {
+		return false, err
+	}
+	return IsEmptyVersionHistory(currentVersionHistory), nil
 }

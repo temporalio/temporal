@@ -1,25 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package nexusoperations
 
 import (
@@ -38,7 +16,6 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/sdk/temporalnexus"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
@@ -140,7 +117,7 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 	}
 
 	if e.Config.CallbackURLTemplate() == "unset" {
-		return serviceerror.NewInternal(fmt.Sprintf("dynamic config %q is unset", CallbackURLTemplate.Key().String()))
+		return serviceerror.NewInternalf("dynamic config %q is unset", CallbackURLTemplate.Key().String())
 	}
 	// TODO(bergundy): Consider caching this template.
 	callbackURLTemplate, err := template.New("NexusCallbackURL").Parse(e.Config.CallbackURLTemplate())
@@ -176,6 +153,9 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 	// TODO(bergundy): Remove this before the 1.27 release.
 	smRef := common.CloneProto(ref.StateMachineRef)
 	smRef.MachineTransitionCount = 0
+
+	// Set ms VT to initial version because workflow may switch to a different branch.
+	smRef.MutableStateVersionedTransition = smRef.MachineInitialVersionedTransition
 
 	token, err := e.CallbackTokenGenerator.Tokenize(&tokenspb.NexusOperationCompletion{
 		NamespaceId: ref.WorkflowKey.NamespaceID,
@@ -331,7 +311,7 @@ func (e taskExecutor) loadOperationArgs(
 		args.scheduleToCloseTimeout = event.GetNexusOperationScheduledEventAttributes().GetScheduleToCloseTimeout().AsDuration()
 		args.payload = event.GetNexusOperationScheduledEventAttributes().GetInput()
 		args.header = event.GetNexusOperationScheduledEventAttributes().GetNexusHeader()
-		args.nexusLink = temporalnexus.ConvertLinkWorkflowEventToNexusLink(&commonpb.Link_WorkflowEvent{
+		args.nexusLink = ConvertLinkWorkflowEventToNexusLink(&commonpb.Link_WorkflowEvent{
 			Namespace:  ns.Name().String(),
 			WorkflowId: ref.WorkflowKey.WorkflowID,
 			RunId:      ref.WorkflowKey.RunID,
@@ -367,7 +347,7 @@ func (e taskExecutor) saveResult(ctx context.Context, env hsm.Environment, ref h
 			for _, nexusLink := range result.Links {
 				switch nexusLink.Type {
 				case string((&commonpb.Link_WorkflowEvent{}).ProtoReflect().Descriptor().FullName()):
-					link, err := temporalnexus.ConvertNexusLinkToLinkWorkflowEvent(nexusLink)
+					link, err := ConvertNexusLinkToLinkWorkflowEvent(nexusLink)
 					if err != nil {
 						// TODO(rodrigozhou): links are non-essential for the execution of the workflow,
 						// so ignoring the error for now; we will revisit how to handle these errors later.
@@ -545,7 +525,7 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 			handlerError := nexus.HandlerErrorf(nexus.HandlerErrorTypeNotFound, "endpoint not registered")
 
 			// The endpoint is not registered, immediately fail the invocation.
-			return e.saveCancelationResult(ctx, env, ref, handlerError)
+			return e.saveCancelationResult(ctx, env, ref, handlerError, args.scheduledEventID)
 		}
 		return err
 	}
@@ -612,7 +592,7 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 		e.Logger.Error("Nexus CancelOperation request failed", tag.Error(callErr))
 	}
 
-	err = e.saveCancelationResult(ctx, env, ref, callErr)
+	err = e.saveCancelationResult(ctx, env, ref, callErr, args.scheduledEventID)
 
 	if callErr != nil && isDestinationDown(callErr) {
 		err = queues.NewDestinationDownError(callErr.Error(), err)
@@ -625,6 +605,7 @@ type cancelArgs struct {
 	service, operation, token, endpointID, endpointName, requestID string
 	scheduledTime                                                  time.Time
 	scheduleToCloseTimeout                                         time.Duration
+	scheduledEventID                                               int64
 }
 
 // loadArgsForCancelation loads state from the operation state machine that's the parent of the cancelation machine the
@@ -648,12 +629,16 @@ func (e taskExecutor) loadArgsForCancelation(ctx context.Context, env hsm.Enviro
 		args.requestID = op.RequestId
 		args.scheduledTime = op.ScheduledTime.AsTime()
 		args.scheduleToCloseTimeout = op.ScheduleToCloseTimeout.AsDuration()
+		args.scheduledEventID, err = hsm.EventIDFromToken(op.ScheduledEventToken)
+		if err != nil {
+			return err
+		}
 		return nil
 	})
 	return
 }
 
-func (e taskExecutor) saveCancelationResult(ctx context.Context, env hsm.Environment, ref hsm.Ref, callErr error) error {
+func (e taskExecutor) saveCancelationResult(ctx context.Context, env hsm.Environment, ref hsm.Ref, callErr error, scheduledEventID int64) error {
 	return env.Access(ctx, ref, hsm.AccessWrite, func(n *hsm.Node) error {
 		return hsm.MachineTransition(n, func(c Cancelation) (hsm.TransitionOutput, error) {
 			if callErr != nil {
@@ -664,6 +649,20 @@ func (e taskExecutor) saveCancelationResult(ctx context.Context, env hsm.Environ
 					return hsm.TransitionOutput{}, err
 				}
 				if !isRetryable {
+					if e.Config.RecordCancelRequestCompletionEvents() {
+						n.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUEST_FAILED, func(e *historypb.HistoryEvent) {
+							// nolint:revive // We must mutate here even if the linter doesn't like it.
+							e.Attributes = &historypb.HistoryEvent_NexusOperationCancelRequestFailedEventAttributes{
+								NexusOperationCancelRequestFailedEventAttributes: &historypb.NexusOperationCancelRequestFailedEventAttributes{
+									ScheduledEventId: scheduledEventID,
+									RequestedEventId: c.RequestedEventId,
+									Failure:          failure,
+								},
+							}
+							// nolint:revive // We must mutate here even if the linter doesn't like it.
+							e.WorkerMayIgnore = true // For compatibility with older SDKs.
+						})
+					}
 					return TransitionCancelationFailed.Apply(c, EventCancelationFailed{
 						Time:    env.Now(),
 						Failure: failure,
@@ -680,6 +679,19 @@ func (e taskExecutor) saveCancelationResult(ctx context.Context, env hsm.Environ
 			// Cancelation request transmitted successfully.
 			// The operation is not yet canceled and may ignore our request, the outcome will be known via the
 			// completion callback.
+			if e.Config.RecordCancelRequestCompletionEvents() {
+				n.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUEST_COMPLETED, func(e *historypb.HistoryEvent) {
+					// nolint:revive // We must mutate here even if the linter doesn't like it.
+					e.Attributes = &historypb.HistoryEvent_NexusOperationCancelRequestCompletedEventAttributes{
+						NexusOperationCancelRequestCompletedEventAttributes: &historypb.NexusOperationCancelRequestCompletedEventAttributes{
+							ScheduledEventId: scheduledEventID,
+							RequestedEventId: c.RequestedEventId,
+						},
+					}
+					// nolint:revive // We must mutate here even if the linter doesn't like it.
+					e.WorkerMayIgnore = true // For compatibility with older SDKs.
+				})
+			}
 			return TransitionCancelationSucceeded.Apply(c, EventCancelationSucceeded{
 				Time: env.Now(),
 				Node: n,

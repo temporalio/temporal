@@ -1,32 +1,7 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package api
 
 import (
 	"context"
-	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -324,7 +299,7 @@ func ProcessOutgoingSearchAttributes(
 ) error {
 	saTypeMap, err := saProvider.GetSearchAttributes(persistenceVisibilityMgr.GetIndexName(), false)
 	if err != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf(consts.ErrUnableToGetSearchAttributesMessage, err))
+		return serviceerror.NewUnavailablef(consts.ErrUnableToGetSearchAttributesMessage, err)
 	}
 	for _, event := range events {
 		var searchAttributes *commonpb.SearchAttributes
@@ -360,12 +335,11 @@ func validateTransientWorkflowTaskEvents(
 	for i, event := range transientWorkflowTaskInfo.HistorySuffix {
 		expectedEventID := eventIDOffset + int64(i)
 		if event.GetEventId() != expectedEventID {
-			return serviceerror.NewInternal(
-				fmt.Sprintf(
-					"invalid transient workflow task at position %v; expected event ID %v, found event ID %v",
-					i,
-					expectedEventID,
-					event.GetEventId()))
+			return serviceerror.NewInternalf(
+				"invalid transient workflow task at position %v; expected event ID %v, found event ID %v",
+				i,
+				expectedEventID,
+				event.GetEventId())
 		}
 	}
 
@@ -396,7 +370,7 @@ func VerifyHistoryIsComplete(
 	if !isFirstPage { // at least one page of history has been read previously
 		if firstEvent.GetEventId() <= expectedFirstEventID {
 			// not first page and no events have been read in the previous pages - not possible
-			return serviceerror.NewDataLoss(fmt.Sprintf("Invalid history: expected first eventID to be > %v but got %v", expectedFirstEventID, firstEvent.GetEventId()))
+			return serviceerror.NewDataLossf("Invalid history: expected first eventID to be > %v but got %v", expectedFirstEventID, firstEvent.GetEventId())
 		}
 		expectedFirstEventID = firstEvent.GetEventId()
 	}
@@ -415,7 +389,7 @@ func VerifyHistoryIsComplete(
 		return nil
 	}
 
-	return serviceerror.NewDataLoss(fmt.Sprintf("Incomplete history: expected events [%v-%v] but got events [%v-%v] of length %v: isFirstPage=%v,isLastPage=%v,pageSize=%v",
+	return serviceerror.NewDataLossf("Incomplete history: expected events [%v-%v] but got events [%v-%v] of length %v: isFirstPage=%v,isLastPage=%v,pageSize=%v",
 		expectedFirstEventID,
 		expectedLastEventID,
 		firstEvent.GetEventId(),
@@ -423,7 +397,7 @@ func VerifyHistoryIsComplete(
 		eventCount,
 		isFirstPage,
 		isLastPage,
-		pageSize))
+		pageSize)
 }
 
 // ProcessInternalRawHistory processes history in the field response.History.

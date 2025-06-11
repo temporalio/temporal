@@ -1,28 +1,4 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
-//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination sync_state_retriever_mock.go
+//go:generate mockgen -package $GOPACKAGE -source $GOFILE -destination sync_state_retriever_mock.go
 
 package replication
 
@@ -81,6 +57,14 @@ type (
 			targetVersionHistories [][]*historyspb.VersionHistoryItem,
 			releaseFunc historyi.ReleaseWorkflowContextFunc,
 		) (*SyncStateResult, error)
+		GetSyncWorkflowStateArtifactFromMutableStateForNewWorkflow(
+			ctx context.Context,
+			namespaceID string,
+			execution *commonpb.WorkflowExecution,
+			mutableState historyi.MutableState,
+			releaseFunc historyi.ReleaseWorkflowContextFunc,
+			taskVersionedTransition *persistencespb.VersionedTransition,
+		) (*SyncStateResult, error)
 	}
 
 	SyncStateRetrieverImpl struct {
@@ -125,7 +109,7 @@ func (s *SyncStateRetrieverImpl) GetSyncWorkflowStateArtifact(
 			if targetCurrentVersionedTransition == nil {
 				return true
 			}
-			return !errors.Is(workflow.TransitionHistoryStalenessCheck(mutableState.GetExecutionInfo().TransitionHistory, targetCurrentVersionedTransition), consts.ErrStaleState)
+			return !errors.Is(transitionhistory.StalenessCheck(mutableState.GetExecutionInfo().TransitionHistory, targetCurrentVersionedTransition), consts.ErrStaleState)
 		},
 		definition.WorkflowKey{
 			NamespaceID: namespaceID,
@@ -163,7 +147,7 @@ func (s *SyncStateRetrieverImpl) GetSyncWorkflowStateArtifact(
 		}
 	}
 
-	return s.getSyncStateResult(ctx, namespaceID, execution, mutableState, targetCurrentVersionedTransition, versionHistoriesItems, releaseFunc)
+	return s.getSyncStateResult(ctx, namespaceID, execution, mutableState, targetCurrentVersionedTransition, versionHistoriesItems, releaseFunc, false)
 }
 
 func (s *SyncStateRetrieverImpl) GetSyncWorkflowStateArtifactFromMutableState(
@@ -175,7 +159,22 @@ func (s *SyncStateRetrieverImpl) GetSyncWorkflowStateArtifactFromMutableState(
 	targetVersionHistories [][]*historyspb.VersionHistoryItem,
 	releaseFunc historyi.ReleaseWorkflowContextFunc,
 ) (_ *SyncStateResult, retError error) {
-	return s.getSyncStateResult(ctx, namespaceID, execution, mu, targetCurrentVersionedTransition, targetVersionHistories, releaseFunc)
+	return s.getSyncStateResult(ctx, namespaceID, execution, mu, targetCurrentVersionedTransition, targetVersionHistories, releaseFunc, false)
+}
+
+func (s *SyncStateRetrieverImpl) GetSyncWorkflowStateArtifactFromMutableStateForNewWorkflow(
+	ctx context.Context,
+	namespaceID string,
+	execution *commonpb.WorkflowExecution,
+	mu historyi.MutableState,
+	releaseFunc historyi.ReleaseWorkflowContextFunc,
+	taskVersionedTransition *persistencespb.VersionedTransition,
+) (_ *SyncStateResult, retError error) {
+	targetVersionedTransition := &persistencespb.VersionedTransition{
+		NamespaceFailoverVersion: taskVersionedTransition.NamespaceFailoverVersion,
+		TransitionCount:          0,
+	}
+	return s.getSyncStateResult(ctx, namespaceID, execution, mu, targetVersionedTransition, nil, releaseFunc, true)
 }
 
 func (s *SyncStateRetrieverImpl) getSyncStateResult(
@@ -186,25 +185,29 @@ func (s *SyncStateRetrieverImpl) getSyncStateResult(
 	targetCurrentVersionedTransition *persistencespb.VersionedTransition,
 	targetVersionHistories [][]*historyspb.VersionHistoryItem,
 	cacheReleaseFunc historyi.ReleaseWorkflowContextFunc,
+	isNewWorkflow bool,
 ) (_ *SyncStateResult, retError error) {
 	shouldReturnMutation := func() bool {
 		if targetCurrentVersionedTransition == nil {
 			return false
 		}
+		tombstoneBatch := mutableState.GetExecutionInfo().SubStateMachineTombstoneBatches
+		if isNewWorkflow && len(tombstoneBatch) != 0 && tombstoneBatch[0].VersionedTransition.TransitionCount == 1 {
+			return true
+		}
 		// not on the same branch
-		if workflow.TransitionHistoryStalenessCheck(mutableState.GetExecutionInfo().TransitionHistory, targetCurrentVersionedTransition) != nil {
+		if transitionhistory.StalenessCheck(mutableState.GetExecutionInfo().TransitionHistory, targetCurrentVersionedTransition) != nil {
 			return false
 		}
-		tombstoneBatch := mutableState.GetExecutionInfo().SubStateMachineTombstoneBatches
 		if len(tombstoneBatch) == 0 {
 			return false
 		}
 		if mutableState.GetExecutionInfo().LastTransitionHistoryBreakPoint != nil &&
 			// the target transition falls into the previous break point, need to send snapshot
-			workflow.CompareVersionedTransition(mutableState.GetExecutionInfo().LastTransitionHistoryBreakPoint, targetCurrentVersionedTransition) >= 0 {
+			transitionhistory.Compare(mutableState.GetExecutionInfo().LastTransitionHistoryBreakPoint, targetCurrentVersionedTransition) >= 0 {
 			return false
 		}
-		if workflow.CompareVersionedTransition(tombstoneBatch[0].VersionedTransition, targetCurrentVersionedTransition) <= 0 {
+		if transitionhistory.Compare(tombstoneBatch[0].VersionedTransition, targetCurrentVersionedTransition) <= 0 {
 			return true
 		}
 
@@ -238,6 +241,7 @@ func (s *SyncStateRetrieverImpl) getSyncStateResult(
 			},
 		}
 	}
+	versionedTransitionArtifact.IsFirstSync = isNewWorkflow
 
 	newRunId := mutableState.GetExecutionInfo().NewExecutionRunId
 	sourceVersionHistories := versionhistory.CopyVersionHistories(mutableState.GetExecutionInfo().VersionHistories)
@@ -259,9 +263,26 @@ func (s *SyncStateRetrieverImpl) getSyncStateResult(
 		WorkflowID:  execution.WorkflowId,
 		RunID:       execution.RunId,
 	}
-	events, err := s.getSyncStateEvents(ctx, wfKey, targetVersionHistories, sourceVersionHistories)
-	if err != nil {
-		return nil, err
+	var events []*commonpb.DataBlob
+	var err error
+	if isNewWorkflow {
+		sourceHistory, err := versionhistory.GetCurrentVersionHistory(sourceVersionHistories)
+		if err != nil {
+			return nil, err
+		}
+		sourceLastItem, err := versionhistory.GetLastVersionHistoryItem(sourceHistory)
+		if err != nil {
+			return nil, err
+		}
+		events, err = s.getEventsBlob(ctx, wfKey, sourceHistory, 1, sourceLastItem.GetEventId()+1, false)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		events, err = s.getSyncStateEvents(ctx, wfKey, targetVersionHistories, sourceVersionHistories)
+		if err != nil {
+			return nil, err
+		}
 	}
 	versionedTransitionArtifact.EventBatches = events
 	result := &SyncStateResult{
@@ -305,7 +326,8 @@ func (s *SyncStateRetrieverImpl) getNewRunInfo(ctx context.Context, namespaceId 
 	switch err.(type) {
 	case nil:
 	case *serviceerror.NotFound:
-		s.logger.Info(fmt.Sprintf("SyncWorkflowState new run not found, newRunId: %v", newRunId),
+		s.logger.Info("SyncWorkflowState new run not found",
+			tag.WorkflowNewRunID(newRunId),
 			tag.WorkflowNamespaceID(namespaceId.String()),
 			tag.WorkflowID(execution.WorkflowId),
 			tag.WorkflowRunID(execution.RunId))
@@ -329,7 +351,8 @@ func (s *SyncStateRetrieverImpl) getNewRunInfo(ctx context.Context, namespaceId 
 	switch err.(type) {
 	case nil:
 	case *serviceerror.NotFound:
-		s.logger.Info(fmt.Sprintf("SyncWorkflowState new run event not found, newRunId: %v", newRunId),
+		s.logger.Info("SyncWorkflowState new run event not found",
+			tag.WorkflowNewRunID(newRunId),
 			tag.WorkflowNamespaceID(namespaceId.String()),
 			tag.WorkflowID(execution.WorkflowId),
 			tag.WorkflowRunID(execution.RunId))
@@ -338,7 +361,8 @@ func (s *SyncStateRetrieverImpl) getNewRunInfo(ctx context.Context, namespaceId 
 		return nil, err
 	}
 	if len(newRunEvents) == 0 {
-		s.logger.Info(fmt.Sprintf("SyncWorkflowState new run event is empty, newRunId: %v", newRunId),
+		s.logger.Info("SyncWorkflowState new run event is empty",
+			tag.WorkflowNewRunID(newRunId),
 			tag.WorkflowNamespaceID(namespaceId.String()),
 			tag.WorkflowID(execution.WorkflowId),
 			tag.WorkflowRunID(execution.RunId))
@@ -352,10 +376,10 @@ func (s *SyncStateRetrieverImpl) getNewRunInfo(ctx context.Context, namespaceId 
 
 func (s *SyncStateRetrieverImpl) getMutation(
 	mutableState historyi.MutableState,
-	versionedTransition *persistencespb.VersionedTransition,
+	exclusiveMinVT *persistencespb.VersionedTransition,
 ) (*persistencespb.WorkflowMutableStateMutation, error) {
 	rootNode := mutableState.HSM()
-	updatedStateMachine, err := s.getUpdatedSubStateMachine(rootNode, versionedTransition)
+	updatedStateMachine, err := s.getUpdatedSubStateMachine(rootNode, exclusiveMinVT)
 	if err != nil {
 		return nil, err
 	}
@@ -364,25 +388,25 @@ func (s *SyncStateRetrieverImpl) getMutation(
 	tombstoneBatch := executionInfo.SubStateMachineTombstoneBatches
 	var tombstones []*persistencespb.StateMachineTombstoneBatch
 	for i, tombstone := range tombstoneBatch {
-		if workflow.CompareVersionedTransition(tombstone.VersionedTransition, versionedTransition) > 0 {
+		if transitionhistory.Compare(tombstone.VersionedTransition, exclusiveMinVT) > 0 {
 			tombstones = tombstoneBatch[i:]
 			break
 		}
 	}
 
 	var signalRequestedIds []string
-	if workflow.CompareVersionedTransition(executionInfo.SignalRequestIdsLastUpdateVersionedTransition, versionedTransition) > 0 {
+	if transitionhistory.Compare(executionInfo.SignalRequestIdsLastUpdateVersionedTransition, exclusiveMinVT) > 0 {
 		signalRequestedIds = mutableState.GetPendingSignalRequestedIds()
 	}
 
 	mutation := &persistencespb.WorkflowMutableStateMutation{
-		UpdatedActivityInfos:            getUpdatedInfo(mutableState.GetPendingActivityInfos(), versionedTransition),
-		UpdatedTimerInfos:               getUpdatedInfo(mutableState.GetPendingTimerInfos(), versionedTransition),
-		UpdatedChildExecutionInfos:      getUpdatedInfo(mutableState.GetPendingChildExecutionInfos(), versionedTransition),
-		UpdatedRequestCancelInfos:       getUpdatedInfo(mutableState.GetPendingRequestCancelExternalInfos(), versionedTransition),
-		UpdatedSignalInfos:              getUpdatedInfo(mutableState.GetPendingSignalExternalInfos(), versionedTransition),
-		UpdatedUpdateInfos:              getUpdatedInfo(executionInfo.UpdateInfos, versionedTransition),
-		UpdatedChasmNodes:               mutableState.ChasmTree().Snapshot(versionedTransition).Nodes,
+		UpdatedActivityInfos:            getUpdatedInfo(mutableState.GetPendingActivityInfos(), exclusiveMinVT),
+		UpdatedTimerInfos:               getUpdatedInfo(mutableState.GetPendingTimerInfos(), exclusiveMinVT),
+		UpdatedChildExecutionInfos:      getUpdatedInfo(mutableState.GetPendingChildExecutionInfos(), exclusiveMinVT),
+		UpdatedRequestCancelInfos:       getUpdatedInfo(mutableState.GetPendingRequestCancelExternalInfos(), exclusiveMinVT),
+		UpdatedSignalInfos:              getUpdatedInfo(mutableState.GetPendingSignalExternalInfos(), exclusiveMinVT),
+		UpdatedUpdateInfos:              getUpdatedInfo(executionInfo.UpdateInfos, exclusiveMinVT),
+		UpdatedChasmNodes:               mutableState.ChasmTree().Snapshot(exclusiveMinVT).Nodes,
 		UpdatedSubStateMachines:         updatedStateMachine,
 		SubStateMachineTombstoneBatches: tombstones,
 		SignalRequestedIds:              signalRequestedIds,
@@ -468,7 +492,7 @@ func (s *SyncStateRetrieverImpl) getEventsBlob(
 }
 
 func (s *SyncStateRetrieverImpl) getSyncStateEvents(ctx context.Context, workflowKey definition.WorkflowKey, targetVersionHistories [][]*historyspb.VersionHistoryItem, sourceVersionHistories *historyspb.VersionHistories) ([]*commonpb.DataBlob, error) {
-	if targetVersionHistories == nil {
+	if targetVersionHistories == nil || sourceVersionHistories == nil {
 		// return nil, so target will retrieve the missing events from source
 		return nil, nil
 	}
@@ -476,6 +500,14 @@ func (s *SyncStateRetrieverImpl) getSyncStateEvents(ctx context.Context, workflo
 	if err != nil {
 		return nil, err
 	}
+
+	if versionhistory.IsEmptyVersionHistory(sourceHistory) {
+		return nil, nil
+	}
+
+	// TODO: we may need to handle the case where mutable state only starts to generate events during middle of its execution.
+	// In that case targetVersionHistories maybe empty and sourceVersionHistories is not empty.
+	// The LCA logic doesn't work in that case today.
 	lcaItem, _, err := versionhistory.FindLCAVersionHistoryItemFromItems(targetVersionHistories, sourceHistory.Items)
 	if err != nil {
 		return nil, err
@@ -497,7 +529,7 @@ func isInfoUpdated(subStateMachine lastUpdatedStateTransitionGetter, versionedTr
 		return false
 	}
 	lastUpdate := subStateMachine.GetLastUpdateVersionedTransition()
-	return workflow.CompareVersionedTransition(lastUpdate, versionedTransition) > 0
+	return transitionhistory.Compare(lastUpdate, versionedTransition) > 0
 }
 
 func getUpdatedInfo[K comparable, V lastUpdatedStateTransitionGetter](subStateMachine map[K]V, versionedTransition *persistencespb.VersionedTransition) map[K]V {

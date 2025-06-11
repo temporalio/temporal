@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package replication
 
 import (
@@ -60,6 +36,7 @@ import (
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -360,26 +337,30 @@ func (s *rawTaskConverterSuite) TestConvertActivityStateReplicationTask_Activity
 	result, err := convertActivityStateReplicationTask(ctx, s.shardContext, task, s.workflowCache)
 	s.NoError(err)
 	s.NotNil(result)
+	retryInitialInterval := &durationpb.Duration{
+		Nanos: 0,
+	}
 	s.ProtoEqual(&replicationspb.ReplicationTask{
 		SourceTaskId: taskID,
 		TaskType:     enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK,
 		Attributes: &replicationspb.ReplicationTask_SyncActivityTaskAttributes{
 			SyncActivityTaskAttributes: &replicationspb.SyncActivityTaskAttributes{
-				NamespaceId:        s.namespaceID,
-				WorkflowId:         s.workflowID,
-				RunId:              s.runID,
-				Version:            activityVersion,
-				ScheduledEventId:   activityScheduledEventID,
-				ScheduledTime:      timestamppb.New(activityScheduledTime),
-				StartedEventId:     activityStartedEventID,
-				StartedTime:        nil,
-				LastHeartbeatTime:  nil,
-				Details:            activityDetails,
-				Attempt:            activityAttempt,
-				LastFailure:        activityLastFailure,
-				LastWorkerIdentity: activityLastWorkerIdentity,
-				BaseExecutionInfo:  baseWorkflowInfo,
-				VersionHistory:     versionHistory,
+				NamespaceId:          s.namespaceID,
+				WorkflowId:           s.workflowID,
+				RunId:                s.runID,
+				Version:              activityVersion,
+				ScheduledEventId:     activityScheduledEventID,
+				ScheduledTime:        timestamppb.New(activityScheduledTime),
+				StartedEventId:       activityStartedEventID,
+				StartedTime:          nil,
+				LastHeartbeatTime:    nil,
+				Details:              activityDetails,
+				Attempt:              activityAttempt,
+				LastFailure:          activityLastFailure,
+				LastWorkerIdentity:   activityLastWorkerIdentity,
+				BaseExecutionInfo:    baseWorkflowInfo,
+				VersionHistory:       versionHistory,
+				RetryInitialInterval: retryInitialInterval,
 			},
 		},
 		VisibilityTime: timestamppb.New(task.VisibilityTimestamp),
@@ -466,26 +447,30 @@ func (s *rawTaskConverterSuite) TestConvertActivityStateReplicationTask_Activity
 
 	result, err := convertActivityStateReplicationTask(ctx, s.shardContext, task, s.workflowCache)
 	s.NoError(err)
+	retryInitialInterval := &durationpb.Duration{
+		Nanos: 0,
+	}
 	s.ProtoEqual(&replicationspb.ReplicationTask{
 		SourceTaskId: taskID,
 		TaskType:     enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK,
 		Attributes: &replicationspb.ReplicationTask_SyncActivityTaskAttributes{
 			SyncActivityTaskAttributes: &replicationspb.SyncActivityTaskAttributes{
-				NamespaceId:        s.namespaceID,
-				WorkflowId:         s.workflowID,
-				RunId:              s.runID,
-				Version:            activityVersion,
-				ScheduledEventId:   activityScheduledEventID,
-				ScheduledTime:      timestamppb.New(activityScheduledTime),
-				StartedEventId:     activityStartedEventID,
-				StartedTime:        timestamppb.New(activityStartedTime),
-				LastHeartbeatTime:  timestamppb.New(activityHeartbeatTime),
-				Details:            activityDetails,
-				Attempt:            activityAttempt,
-				LastFailure:        activityLastFailure,
-				LastWorkerIdentity: activityLastWorkerIdentity,
-				BaseExecutionInfo:  baseWorkflowInfo,
-				VersionHistory:     versionHistory,
+				NamespaceId:          s.namespaceID,
+				WorkflowId:           s.workflowID,
+				RunId:                s.runID,
+				Version:              activityVersion,
+				ScheduledEventId:     activityScheduledEventID,
+				ScheduledTime:        timestamppb.New(activityScheduledTime),
+				StartedEventId:       activityStartedEventID,
+				StartedTime:          timestamppb.New(activityStartedTime),
+				LastHeartbeatTime:    timestamppb.New(activityHeartbeatTime),
+				Details:              activityDetails,
+				Attempt:              activityAttempt,
+				LastFailure:          activityLastFailure,
+				LastWorkerIdentity:   activityLastWorkerIdentity,
+				BaseExecutionInfo:    baseWorkflowInfo,
+				VersionHistory:       versionHistory,
+				RetryInitialInterval: retryInitialInterval,
 			},
 		},
 		VisibilityTime: timestamppb.New(task.VisibilityTimestamp),
@@ -1484,6 +1469,131 @@ func (s *rawTaskConverterSuite) TestConvertSyncVersionedTransitionTask_Mutation(
 		s.mutableState,
 		nil,
 		nil,
+		gomock.Any(),
+	).Return(syncResult, nil)
+	converter := newSyncVersionedTransitionTaskConverter(s.shardContext, s.workflowCache, nil, s.progressCache, s.executionManager, s.syncStateRetriever, s.logger)
+	result, err := convertSyncVersionedTransitionTask(ctx, task, targetClusterID, converter)
+	s.NoError(err)
+	s.Equal(&replicationspb.ReplicationTask{
+		TaskType:     enumsspb.REPLICATION_TASK_TYPE_SYNC_VERSIONED_TRANSITION_TASK,
+		SourceTaskId: task.TaskID,
+		Attributes: &replicationspb.ReplicationTask_SyncVersionedTransitionTaskAttributes{
+			SyncVersionedTransitionTaskAttributes: &replicationspb.SyncVersionedTransitionTaskAttributes{
+				VersionedTransitionArtifact: &replicationspb.VersionedTransitionArtifact{
+					StateAttributes: &replicationspb.VersionedTransitionArtifact_SyncWorkflowStateSnapshotAttributes{
+						SyncWorkflowStateSnapshotAttributes: &replicationspb.SyncWorkflowStateSnapshotAttributes{
+							State: syncResult.VersionedTransitionArtifact.GetSyncWorkflowStateSnapshotAttributes().State,
+						},
+					},
+				},
+				NamespaceId: s.namespaceID,
+				WorkflowId:  s.workflowID,
+				RunId:       s.runID,
+			},
+		},
+		VersionedTransition: task.VersionedTransition,
+		VisibilityTime:      timestamppb.New(task.VisibilityTimestamp),
+	}, result)
+	s.True(s.lockReleased)
+}
+
+func (s *rawTaskConverterSuite) TestConvertSyncVersionedTransitionTask_FirstTask_Mutation() {
+	ctx := context.Background()
+	targetClusterID := int32(3)
+	firstEventID := int64(999)
+	nextEventID := int64(1911)
+	version := int64(1)
+	taskID := int64(1444)
+	task := &tasks.SyncVersionedTransitionTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			s.namespaceID,
+			s.workflowID,
+			s.runID,
+		),
+		VisibilityTimestamp: time.Now().UTC(),
+		TaskID:              taskID,
+		FirstEventID:        firstEventID,
+		NextEventID:         nextEventID,
+		VersionedTransition: &persistencespb.VersionedTransition{
+			NamespaceFailoverVersion: version,
+			TransitionCount:          3,
+		},
+		IsFirstTask: true,
+	}
+
+	versionHistoryItems := []*historyspb.VersionHistoryItem{
+		{
+			EventId: nextEventID,
+			Version: version,
+		},
+	}
+	versionHistory := &historyspb.VersionHistory{
+		BranchToken: []byte("branch token"),
+		Items:       versionHistoryItems,
+	}
+	versionHistories := &historyspb.VersionHistories{
+		CurrentVersionHistoryIndex: 0,
+		Histories: []*historyspb.VersionHistory{
+			versionHistory,
+		},
+	}
+
+	transitionHistory := []*persistencespb.VersionedTransition{
+		{NamespaceFailoverVersion: 1, TransitionCount: 3},
+		{NamespaceFailoverVersion: 3, TransitionCount: 6},
+	}
+
+	s.workflowCache.EXPECT().GetOrCreateWorkflowExecution(
+		gomock.Any(),
+		s.shardContext,
+		namespace.ID(s.namespaceID),
+		&commonpb.WorkflowExecution{
+			WorkflowId: s.workflowID,
+			RunId:      s.runID,
+		},
+		locks.PriorityLow,
+	).Return(s.workflowContext, s.releaseFn, nil)
+	s.workflowContext.EXPECT().LoadMutableState(gomock.Any(), s.shardContext).Return(s.mutableState, nil).Times(1)
+	s.mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+		VersionHistories:  versionHistories,
+		TransitionHistory: transitionHistory,
+	}).Times(2)
+	s.mutableState.EXPECT().HasBufferedEvents().Return(false).Times(1)
+
+	s.progressCache.EXPECT().Get(
+		s.runID,
+		targetClusterID,
+	).Return(nil)
+
+	s.progressCache.EXPECT().Update(
+		s.runID,
+		targetClusterID,
+		transitionHistory,
+		versionHistoryItems,
+	).Return(nil)
+	syncResult := &SyncStateResult{
+		VersionedTransitionArtifact: &replicationspb.VersionedTransitionArtifact{
+			StateAttributes: &replicationspb.VersionedTransitionArtifact_SyncWorkflowStateSnapshotAttributes{
+				SyncWorkflowStateSnapshotAttributes: &replicationspb.SyncWorkflowStateSnapshotAttributes{
+					State: &persistencespb.WorkflowMutableState{
+						Checksum: &persistencespb.Checksum{
+							Value: []byte("test-checksum"),
+						},
+					},
+				},
+			},
+		},
+		VersionedTransitionHistory: transitionHistory,
+	}
+	s.syncStateRetriever.EXPECT().GetSyncWorkflowStateArtifactFromMutableStateForNewWorkflow(
+		ctx,
+		s.namespaceID,
+		&commonpb.WorkflowExecution{
+			WorkflowId: s.workflowID,
+			RunId:      s.runID,
+		},
+		s.mutableState,
+		gomock.Any(),
 		gomock.Any(),
 	).Return(syncResult, nil)
 	converter := newSyncVersionedTransitionTaskConverter(s.shardContext, s.workflowCache, nil, s.progressCache, s.executionManager, s.syncStateRetriever, s.logger)

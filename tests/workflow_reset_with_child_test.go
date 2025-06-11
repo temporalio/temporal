@@ -1,25 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2025 Temporal Technologies Inc.  All rights reserved.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package tests
 
 import (
@@ -61,7 +39,7 @@ import (
 //     c: If the child was terminated/failed at the time of reset: Expect the parent to make progress by retaining the
 //     termination/failure from the child.
 type WorkflowResetWithChildSuite struct {
-	testcore.FunctionalTestSdkSuite
+	testcore.FunctionalTestBase
 }
 
 func TestWorkflowResetWithChildTestSuite(t *testing.T) {
@@ -70,7 +48,7 @@ func TestWorkflowResetWithChildTestSuite(t *testing.T) {
 }
 
 func (s *WorkflowResetWithChildSuite) SetupTest() {
-	s.FunctionalTestSdkSuite.SetupTest()
+	s.FunctionalTestBase.SetupTest()
 	s.Worker().RegisterWorkflow(s.WorkflowWithChildren)
 	s.Worker().RegisterWorkflow(s.WorkflowWithWaitingChild)
 	s.Worker().RegisterWorkflow(child)
@@ -590,14 +568,6 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild_AfterStartingChild() {
 	firstRun, err := s.SdkClient().ExecuteWorkflow(ctx, options, s.WorkflowWithWaitingChild, false, false)
 	s.NoError(err)
 
-	// save child init initialChildExecutions for later comparison.
-	var initialChildExecutions []*commonpb.WorkflowExecution
-	s.Eventually(func() bool {
-		initialChildExecutions = s.getChildWFIDsFromHistory(ctx, wfID, firstRun.GetRunID())
-		return len(initialChildExecutions) == 1
-
-	}, 5*time.Second, 100*time.Millisecond)
-
 	resetRequest := &workflowservice.ResetWorkflowExecutionRequest{
 		Namespace: s.Namespace().String(),
 		WorkflowExecution: &commonpb.WorkflowExecution{
@@ -607,10 +577,20 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild_AfterStartingChild() {
 		Reason: "integration test",
 	}
 
+	// save child init initialChildExecutions for later comparison.
+	var initialChildExecutions []*commonpb.WorkflowExecution
+	s.Eventually(func() bool {
+		initialChildExecutions = s.getChildWFIDsFromHistory(ctx, wfID, firstRun.GetRunID())
+		if len(initialChildExecutions) == 0 {
+			return false
+		}
+		resetRequest.WorkflowTaskFinishEventId = s.getWorkflowTaskFinishEventIdAfterChildInit(ctx, wfID, firstRun.GetRunID(), initialChildExecutions[0].WorkflowId)
+		return resetRequest.WorkflowTaskFinishEventId != 0
+	}, 5*time.Second, 100*time.Millisecond)
+
 	// resetting the new workflow execution after child-1 while child-1 is still running
 	resetRequest.RequestId = "reset-request-2"
 	resetRequest.WorkflowExecution.RunId = firstRun.GetRunID()
-	resetRequest.WorkflowTaskFinishEventId = s.getWorkflowTaskFinishEventIdAfterChildInit(ctx, wfID, firstRun.GetRunID(), initialChildExecutions[0].WorkflowId)
 	resp, err := s.SdkClient().ResetWorkflowExecution(context.Background(), resetRequest)
 	s.NoError(err)
 

@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package matching
 
 import (
@@ -120,7 +96,7 @@ dispatchLoop:
 			if !ok { // Task queue getTasks pump is shutdown
 				break dispatchLoop
 			}
-			task := newInternalTaskFromBacklog(taskInfo, tr.backlogMgr.completeTask)
+			task := newInternalTaskFromBacklog(taskInfo, tr.completeTask)
 			for ctx.Err() == nil {
 				tr.updateBacklogAge(task)
 				taskCtx, cancel := context.WithTimeout(ctx, taskReaderOfferTimeout)
@@ -145,6 +121,10 @@ dispatchLoop:
 			return
 		}
 	}
+}
+
+func (tr *taskReader) completeTask(task *internalTask, res taskResponse) {
+	tr.backlogMgr.completeTask(task, res.startErr)
 }
 
 // nolint:revive // can improve this later
@@ -220,7 +200,7 @@ func (tr *taskReader) getTaskBatchWithRange(
 	readLevel int64,
 	maxReadLevel int64,
 ) ([]*persistencespb.AllocatedTaskInfo, error) {
-	response, err := tr.backlogMgr.db.GetTasks(ctx, readLevel+1, maxReadLevel+1, tr.backlogMgr.config.GetTasksBatchSize())
+	response, err := tr.backlogMgr.db.GetTasks(ctx, subqueueZero, readLevel+1, maxReadLevel+1, tr.backlogMgr.config.GetTasksBatchSize())
 	if err != nil {
 		return nil, err
 	}
@@ -239,7 +219,7 @@ type getTasksBatchResponse struct {
 func (tr *taskReader) getTaskBatch(ctx context.Context) (*getTasksBatchResponse, error) {
 	var tasks []*persistencespb.AllocatedTaskInfo
 	readLevel := tr.backlogMgr.taskAckManager.getReadLevel()
-	maxReadLevel := tr.backlogMgr.db.GetMaxReadLevel()
+	maxReadLevel := tr.backlogMgr.db.GetMaxReadLevel(subqueueZero)
 
 	// counter i is used to break and let caller check whether taskqueue is still alive and needs to resume read.
 	for i := 0; i < 10 && readLevel < maxReadLevel; i++ {
@@ -302,7 +282,7 @@ func (tr *taskReader) addSingleTaskToBuffer(
 
 func (tr *taskReader) persistAckBacklogCountLevel(ctx context.Context) error {
 	ackLevel := tr.backlogMgr.taskAckManager.getAckLevel()
-	return tr.backlogMgr.db.UpdateState(ctx, ackLevel)
+	return tr.backlogMgr.db.OldUpdateState(ctx, ackLevel)
 }
 
 func (tr *taskReader) logger() log.Logger {

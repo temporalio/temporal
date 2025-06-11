@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2024 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package workerdeployment
 
 import (
@@ -82,7 +58,6 @@ func (a *Activities) SyncUnversionedRamp(
 	}
 	var taskQueueSyncs []*deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData
 	for _, tqInfo := range currVersionInfo.GetTaskQueueInfos() {
-		// TODO (Carly): group by TQs by name and make only one sync req per name
 		taskQueueSyncs = append(taskQueueSyncs, &deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData{
 			Name:  tqInfo.GetName(),
 			Types: []enumspb.TaskQueueType{tqInfo.GetType()},
@@ -192,4 +167,73 @@ func (a *Activities) RegisterWorkerInVersion(ctx context.Context, args *deployme
 		return err
 	}
 	return nil
+}
+
+func (a *Activities) DescribeVersionFromWorkerDeployment(ctx context.Context, args *deploymentspb.DescribeVersionFromWorkerDeploymentActivityArgs) (*deploymentspb.DescribeVersionFromWorkerDeploymentActivityResult, error) {
+	res, err := a.deploymentClient.DescribeVersion(ctx, a.namespace, args.Version)
+	if err != nil {
+		return nil, err
+	}
+	return &deploymentspb.DescribeVersionFromWorkerDeploymentActivityResult{
+		TaskQueueInfos: res.TaskQueueInfos,
+	}, nil
+}
+
+func (a *Activities) SyncDeploymentVersionUserDataFromWorkerDeployment(
+	ctx context.Context,
+	input *deploymentspb.SyncDeploymentVersionUserDataRequest,
+) (*deploymentspb.SyncDeploymentVersionUserDataResponse, error) {
+	logger := activity.GetLogger(ctx)
+
+	errs := make(chan error)
+
+	var lock sync.Mutex
+	maxVersionByName := make(map[string]int64)
+
+	for _, e := range input.Sync {
+		go func(syncData *deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData) {
+			logger.Info("syncing task queue userdata for deployment version", "taskQueue", syncData.Name, "types", syncData.Types)
+
+			var res *matchingservice.SyncDeploymentUserDataResponse
+			var err error
+
+			if input.ForgetVersion {
+				res, err = a.matchingClient.SyncDeploymentUserData(ctx, &matchingservice.SyncDeploymentUserDataRequest{
+					NamespaceId:    a.namespace.ID().String(),
+					TaskQueue:      syncData.Name,
+					TaskQueueTypes: syncData.Types,
+					Operation: &matchingservice.SyncDeploymentUserDataRequest_ForgetVersion{
+						ForgetVersion: input.Version,
+					},
+				})
+			} else {
+				res, err = a.matchingClient.SyncDeploymentUserData(ctx, &matchingservice.SyncDeploymentUserDataRequest{
+					NamespaceId:    a.namespace.ID().String(),
+					TaskQueue:      syncData.Name,
+					TaskQueueTypes: syncData.Types,
+					Operation: &matchingservice.SyncDeploymentUserDataRequest_UpdateVersionData{
+						UpdateVersionData: syncData.Data,
+					},
+				})
+			}
+
+			if err != nil {
+				logger.Error("syncing task queue userdata", "taskQueue", syncData.Name, "types", syncData.Types, "error", err)
+			} else {
+				lock.Lock()
+				maxVersionByName[syncData.Name] = max(maxVersionByName[syncData.Name], res.Version)
+				lock.Unlock()
+			}
+			errs <- err
+		}(e)
+	}
+
+	var err error
+	for range input.Sync {
+		err = cmp.Or(err, <-errs)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &deploymentspb.SyncDeploymentVersionUserDataResponse{TaskQueueMaxVersions: maxVersionByName}, nil
 }
