@@ -11,7 +11,6 @@ import (
 	sync "sync"
 	unsafe "unsafe"
 
-	v11 "go.temporal.io/api/enums/v1"
 	v1 "go.temporal.io/api/history/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -333,12 +332,10 @@ func (x *TaskRange) GetExclusiveMaxTaskKey() *TaskKey {
 	return nil
 }
 
-// StrippedHistoryEvent is a stripped down version of HistoryEvent that only contains very minimum number of fields.
-// IMPORTANT: field numbers must be exactly the same as in history.HistoryEvent message.
+// StrippedHistoryEvent is a stripped down version of HistoryEvent that only contains the event_id and version.
 type StrippedHistoryEvent struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	EventId       int64                  `protobuf:"varint,1,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
-	EventType     v11.EventType          `protobuf:"varint,3,opt,name=event_type,json=eventType,proto3,enum=temporal.api.enums.v1.EventType" json:"event_type,omitempty"`
 	Version       int64                  `protobuf:"varint,4,opt,name=version,proto3" json:"version,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -379,13 +376,6 @@ func (x *StrippedHistoryEvent) GetEventId() int64 {
 		return x.EventId
 	}
 	return 0
-}
-
-func (x *StrippedHistoryEvent) GetEventType() v11.EventType {
-	if x != nil {
-		return x.EventType
-	}
-	return v11.EventType(0)
 }
 
 func (x *StrippedHistoryEvent) GetVersion() int64 {
@@ -443,7 +433,7 @@ var File_temporal_server_api_history_v1_message_proto protoreflect.FileDescripto
 
 const file_temporal_server_api_history_v1_message_proto_rawDesc = "" +
 	"\n" +
-	",temporal/server/api/history/v1/message.proto\x12\x1etemporal.server.api.history.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a&temporal/api/enums/v1/event_type.proto\x1a%temporal/api/history/v1/message.proto\"u\n" +
+	",temporal/server/api/history/v1/message.proto\x12\x1etemporal.server.api.history.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a%temporal/api/history/v1/message.proto\"u\n" +
 	"\x19TransientWorkflowTaskInfo\x12L\n" +
 	"\x0ehistory_suffix\x18\x03 \x03(\v2%.temporal.api.history.v1.HistoryEventR\rhistorySuffixJ\x04\b\x01\x10\x02J\x04\b\x02\x10\x03\"I\n" +
 	"\x12VersionHistoryItem\x12\x19\n" +
@@ -460,11 +450,9 @@ const file_temporal_server_api_history_v1_message_proto_rawDesc = "" +
 	"\tfire_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\bfireTime\"\xc7\x01\n" +
 	"\tTaskRange\x12\\\n" +
 	"\x16inclusive_min_task_key\x18\x01 \x01(\v2'.temporal.server.api.history.v1.TaskKeyR\x13inclusiveMinTaskKey\x12\\\n" +
-	"\x16exclusive_max_task_key\x18\x02 \x01(\v2'.temporal.server.api.history.v1.TaskKeyR\x13exclusiveMaxTaskKey\"\x8c\x01\n" +
+	"\x16exclusive_max_task_key\x18\x02 \x01(\v2'.temporal.server.api.history.v1.TaskKeyR\x13exclusiveMaxTaskKey\"K\n" +
 	"\x14StrippedHistoryEvent\x12\x19\n" +
-	"\bevent_id\x18\x01 \x01(\x03R\aeventId\x12?\n" +
-	"\n" +
-	"event_type\x18\x03 \x01(\x0e2 .temporal.api.enums.v1.EventTypeR\teventType\x12\x18\n" +
+	"\bevent_id\x18\x01 \x01(\x03R\aeventId\x12\x18\n" +
 	"\aversion\x18\x04 \x01(\x03R\aversion\"e\n" +
 	"\x15StrippedHistoryEvents\x12L\n" +
 	"\x06events\x18\x01 \x03(\v24.temporal.server.api.history.v1.StrippedHistoryEventR\x06eventsB.Z,go.temporal.io/server/api/history/v1;historyb\x06proto3"
@@ -493,22 +481,20 @@ var file_temporal_server_api_history_v1_message_proto_goTypes = []any{
 	(*StrippedHistoryEvents)(nil),     // 7: temporal.server.api.history.v1.StrippedHistoryEvents
 	(*v1.HistoryEvent)(nil),           // 8: temporal.api.history.v1.HistoryEvent
 	(*timestamppb.Timestamp)(nil),     // 9: google.protobuf.Timestamp
-	(v11.EventType)(0),                // 10: temporal.api.enums.v1.EventType
 }
 var file_temporal_server_api_history_v1_message_proto_depIdxs = []int32{
-	8,  // 0: temporal.server.api.history.v1.TransientWorkflowTaskInfo.history_suffix:type_name -> temporal.api.history.v1.HistoryEvent
-	1,  // 1: temporal.server.api.history.v1.VersionHistory.items:type_name -> temporal.server.api.history.v1.VersionHistoryItem
-	2,  // 2: temporal.server.api.history.v1.VersionHistories.histories:type_name -> temporal.server.api.history.v1.VersionHistory
-	9,  // 3: temporal.server.api.history.v1.TaskKey.fire_time:type_name -> google.protobuf.Timestamp
-	4,  // 4: temporal.server.api.history.v1.TaskRange.inclusive_min_task_key:type_name -> temporal.server.api.history.v1.TaskKey
-	4,  // 5: temporal.server.api.history.v1.TaskRange.exclusive_max_task_key:type_name -> temporal.server.api.history.v1.TaskKey
-	10, // 6: temporal.server.api.history.v1.StrippedHistoryEvent.event_type:type_name -> temporal.api.enums.v1.EventType
-	6,  // 7: temporal.server.api.history.v1.StrippedHistoryEvents.events:type_name -> temporal.server.api.history.v1.StrippedHistoryEvent
-	8,  // [8:8] is the sub-list for method output_type
-	8,  // [8:8] is the sub-list for method input_type
-	8,  // [8:8] is the sub-list for extension type_name
-	8,  // [8:8] is the sub-list for extension extendee
-	0,  // [0:8] is the sub-list for field type_name
+	8, // 0: temporal.server.api.history.v1.TransientWorkflowTaskInfo.history_suffix:type_name -> temporal.api.history.v1.HistoryEvent
+	1, // 1: temporal.server.api.history.v1.VersionHistory.items:type_name -> temporal.server.api.history.v1.VersionHistoryItem
+	2, // 2: temporal.server.api.history.v1.VersionHistories.histories:type_name -> temporal.server.api.history.v1.VersionHistory
+	9, // 3: temporal.server.api.history.v1.TaskKey.fire_time:type_name -> google.protobuf.Timestamp
+	4, // 4: temporal.server.api.history.v1.TaskRange.inclusive_min_task_key:type_name -> temporal.server.api.history.v1.TaskKey
+	4, // 5: temporal.server.api.history.v1.TaskRange.exclusive_max_task_key:type_name -> temporal.server.api.history.v1.TaskKey
+	6, // 6: temporal.server.api.history.v1.StrippedHistoryEvents.events:type_name -> temporal.server.api.history.v1.StrippedHistoryEvent
+	7, // [7:7] is the sub-list for method output_type
+	7, // [7:7] is the sub-list for method input_type
+	7, // [7:7] is the sub-list for extension type_name
+	7, // [7:7] is the sub-list for extension extendee
+	0, // [0:7] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_api_history_v1_message_proto_init() }

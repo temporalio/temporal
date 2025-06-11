@@ -44,23 +44,22 @@ func Invoke(
 
 	isCloseEventOnly := request.Request.GetHistoryEventFilterType() == enumspb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT
 
-	// this function returns the following 8 things:
+	// this function returns the following 7 things,
 	// 1. the current branch token (to use to retrieve history events)
 	// 2. the workflow run ID
 	// 3. the last first event ID (the event ID of the last batch of events in the history)
 	// 4. the last first event transaction id
 	// 5. the next event ID
 	// 6. whether the workflow is running
-	// 7. transient/speculative workflow task info
-	// 8. error if any
-	queryMutableState := func(
+	// 7. error if any
+	queryHistory := func(
 		namespaceUUID namespace.ID,
 		execution *commonpb.WorkflowExecution,
 		expectedNextEventID int64,
 		currentBranchToken []byte,
 		versionHistoryItem *historyspb.VersionHistoryItem,
 		versionedTransition *persistencespb.VersionedTransition,
-	) ([]byte, string, int64, int64, bool, *historyspb.VersionHistoryItem, *persistencespb.VersionedTransition, *historyspb.TransientWorkflowTaskInfo, error) {
+	) ([]byte, string, int64, int64, bool, *historyspb.VersionHistoryItem, *persistencespb.VersionedTransition, error) {
 		response, err := api.GetOrPollMutableState(
 			ctx,
 			shardContext,
@@ -101,17 +100,17 @@ func Invoke(
 			)
 		}
 		if err != nil {
-			return nil, "", 0, 0, false, nil, nil, nil, err
+			return nil, "", 0, 0, false, nil, nil, err
 		}
 
 		isWorkflowRunning := response.GetWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
 		currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(response.GetVersionHistories())
 		if err != nil {
-			return nil, "", 0, 0, false, nil, nil, nil, err
+			return nil, "", 0, 0, false, nil, nil, err
 		}
 		lastVersionHistoryItem, err := versionhistory.GetLastVersionHistoryItem(currentVersionHistory)
 		if err != nil {
-			return nil, "", 0, 0, false, nil, nil, nil, err
+			return nil, "", 0, 0, false, nil, nil, err
 		}
 
 		lastVersionedTransition := transitionhistory.LastVersionedTransition(response.GetTransitionHistory())
@@ -122,14 +121,12 @@ func Invoke(
 			isWorkflowRunning,
 			lastVersionHistoryItem,
 			lastVersionedTransition,
-			response.GetTransientOrSpeculativeEvents(),
 			nil
 	}
 
 	isLongPoll := request.Request.GetWaitNewEvent()
 	execution := request.Request.Execution
 	var continuationToken *tokenspb.HistoryContinuation
-	var tranOrSpecEvents *historyspb.TransientWorkflowTaskInfo
 
 	var runID string
 	lastFirstEventID := common.FirstEventID
@@ -154,8 +151,8 @@ func Invoke(
 			if !isCloseEventOnly {
 				queryNextEventID = continuationToken.GetNextEventId()
 			}
-			continuationToken.BranchToken, _, lastFirstEventID, nextEventID, isWorkflowRunning, continuationToken.VersionHistoryItem, continuationToken.VersionedTransition, tranOrSpecEvents, err =
-				queryMutableState(namespaceID, execution, queryNextEventID, continuationToken.BranchToken, continuationToken.VersionHistoryItem, continuationToken.VersionedTransition)
+			continuationToken.BranchToken, _, lastFirstEventID, nextEventID, isWorkflowRunning, continuationToken.VersionHistoryItem, continuationToken.VersionedTransition, err =
+				queryHistory(namespaceID, execution, queryNextEventID, continuationToken.BranchToken, continuationToken.VersionHistoryItem, continuationToken.VersionedTransition)
 			if err != nil {
 				return nil, err
 			}
@@ -168,8 +165,8 @@ func Invoke(
 		if !isCloseEventOnly {
 			queryNextEventID = common.FirstEventID
 		}
-		continuationToken.BranchToken, runID, lastFirstEventID, nextEventID, isWorkflowRunning, continuationToken.VersionHistoryItem, continuationToken.VersionedTransition, tranOrSpecEvents, err =
-			queryMutableState(namespaceID, execution, queryNextEventID, nil, nil, nil)
+		continuationToken.BranchToken, runID, lastFirstEventID, nextEventID, isWorkflowRunning, continuationToken.VersionHistoryItem, continuationToken.VersionedTransition, err =
+			queryHistory(namespaceID, execution, queryNextEventID, nil, nil, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -218,7 +215,7 @@ func Invoke(
 					nextEventID,
 					request.Request.GetMaximumPageSize(),
 					nil,
-					tranOrSpecEvents,
+					continuationToken.TransientWorkflowTask,
 					continuationToken.BranchToken,
 				)
 				if err != nil {
@@ -236,7 +233,7 @@ func Invoke(
 					nextEventID,
 					request.Request.GetMaximumPageSize(),
 					nil,
-					tranOrSpecEvents,
+					continuationToken.TransientWorkflowTask,
 					continuationToken.BranchToken,
 					persistenceVisibilityMgr,
 				)
@@ -281,7 +278,7 @@ func Invoke(
 					continuationToken.NextEventId,
 					request.Request.GetMaximumPageSize(),
 					continuationToken.PersistenceToken,
-					tranOrSpecEvents,
+					continuationToken.TransientWorkflowTask,
 					continuationToken.BranchToken,
 				)
 			} else {
@@ -294,7 +291,7 @@ func Invoke(
 					continuationToken.NextEventId,
 					request.Request.GetMaximumPageSize(),
 					continuationToken.PersistenceToken,
-					tranOrSpecEvents,
+					continuationToken.TransientWorkflowTask,
 					continuationToken.BranchToken,
 					persistenceVisibilityMgr,
 				)

@@ -960,11 +960,7 @@ Wildcards (*) are expanded to allow any substring. By default blacklist is empty
 		`FrontendEnableExecuteMultiOperation enables the ExecuteMultiOperation API in the frontend.
 The API is under active development.`,
 	)
-	EnableExecuteMultiOperationErrorDebug = NewNamespaceBoolSetting(
-		"history.enableExecuteMultiOperationErrorDebug",
-		false,
-		`Enable detailed MultiOperation error debug information in the history service.`,
-	)
+
 	FrontendEnableUpdateWorkflowExecutionAsyncAccepted = NewNamespaceBoolSetting(
 		"frontend.enableUpdateWorkflowExecutionAsyncAccepted",
 		true,
@@ -2411,6 +2407,11 @@ that task will be sent to DLQ.`,
 		time.Hour,
 		`ReplicationProgressCacheTTL is TTL of replication progress cache`,
 	)
+	ReplicationStreamSyncDuration = NewGlobalDurationSetting(
+		"history.ReplicationStreamSyncDuration",
+		time.Minute,
+		`ReplicationStreamSyncDuration is the interval to sync status when there is no replication task`,
+	)
 	WorkflowIdReuseMinimalInterval = NewNamespaceDurationSetting(
 		"history.workflowIdReuseMinimalInterval",
 		1*time.Second,
@@ -2704,12 +2705,6 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		`When set to true, logs all RPC/request errors for the namespace, not just unexpected ones.`,
 	)
 
-	ActivityAPIsEnabled = NewNamespaceBoolSetting(
-		"frontend.activityAPIsEnabled",
-		false,
-		`ActivityAPIsEnabled is a "feature enable" flag. `,
-	)
-
 	WorkflowRulesAPIsEnabled = NewNamespaceBoolSetting(
 		"frontend.workflowRulesAPIsEnabled",
 		false,
@@ -2726,5 +2721,17 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		"rpc.slowRequestLoggingThreshold",
 		5*time.Second,
 		`SlowRequestLoggingThreshold is the threshold above which a gRPC request is considered slow and logged.`,
+	)
+
+	WorkerHeartbeatsEnabled = NewNamespaceBoolSetting(
+		"frontend.WorkerHeartbeatsEnabled",
+		false,
+		`WorkerHeartbeatsEnabled is a "feature enable" flag. It allows workers to send periodic heartbeats to the server.`,
+	)
+
+	ListWorkersEnabled = NewNamespaceBoolSetting(
+		"frontend.ListWorkersEnabled",
+		false,
+		`ListWorkersEnabled is a "feature enable" flag. It allows clients to get workers heartbeat information.`,
 	)
 )

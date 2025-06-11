@@ -407,18 +407,33 @@ func (s *StreamSenderImpl) sendLive(
 	newTaskNotificationChan <-chan struct{},
 	beginInclusiveWatermark int64,
 ) error {
+	syncStatusTimer := time.NewTimer(s.config.ReplicationStreamSyncDuration())
+	defer syncStatusTimer.Stop()
+	sendTasks := func() error {
+		endExclusiveWatermark := s.shardContext.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).TaskID
+		if err := s.sendTasks(
+			priority,
+			beginInclusiveWatermark,
+			endExclusiveWatermark,
+		); err != nil {
+			return err
+		}
+		beginInclusiveWatermark = endExclusiveWatermark
+		syncStatusTimer.Stop()
+		syncStatusTimer = time.NewTimer(s.config.ReplicationStreamSyncDuration())
+		return nil
+	}
+
 	for {
 		select {
 		case <-newTaskNotificationChan:
-			endExclusiveWatermark := s.shardContext.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).TaskID
-			if err := s.sendTasks(
-				priority,
-				beginInclusiveWatermark,
-				endExclusiveWatermark,
-			); err != nil {
+			if err := sendTasks(); err != nil {
 				return err
 			}
-			beginInclusiveWatermark = endExclusiveWatermark
+		case <-syncStatusTimer.C:
+			if err := sendTasks(); err != nil {
+				return err
+			}
 		case <-s.shutdownChan.Channel():
 			return nil
 		}
