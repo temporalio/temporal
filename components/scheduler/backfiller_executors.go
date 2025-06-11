@@ -61,7 +61,7 @@ func (e backfillerTaskExecutor) executeBackfillTask(env hsm.Environment, node *h
 	var result backfillProgressResult
 
 	schedulerNode := node.Parent
-	scheduler, err := loadScheduler(schedulerNode)
+	scheduler, err := loadScheduler(schedulerNode, false)
 	if err != nil {
 		return err
 	}

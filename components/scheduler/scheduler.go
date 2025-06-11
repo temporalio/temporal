@@ -244,7 +244,6 @@ func (s *Scheduler) EnqueueBufferedStarts(
 	}
 	err = hsm.MachineTransition(invokerNode, func(e Invoker) (hsm.TransitionOutput, error) {
 		return TransitionEnqueue.Apply(e, EventEnqueue{
-			Node:           invokerNode,
 			BufferedStarts: starts,
 		})
 	})

@@ -107,7 +107,7 @@ func (backfillerMachineDefinition) Deserialize(body []byte) (any, error) {
 }
 
 func (backfillerMachineDefinition) CompareState(a any, b any) (int, error) {
-	panic("TODO: CompareState not yet implemented for Executor")
+	panic("TODO: CompareState not yet implemented for Backfiller") //nolint:forbidigo // this code is being immediately moved to CHASM
 }
 
 func (b Backfiller) RequestType() BackfillRequestType {
