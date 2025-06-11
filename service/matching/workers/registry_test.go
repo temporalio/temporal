@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	workersb "go.temporal.io/api/worker/v1"
+	workerpb "go.temporal.io/api/worker/v1"
 )
 
 func TestRegistryImpl_RecordWorkerHeartbeat(t *testing.T) {
@@ -12,16 +12,16 @@ func TestRegistryImpl_RecordWorkerHeartbeat(t *testing.T) {
 		name            string
 		setup           func(*registryImpl)
 		nsID            string
-		workerHeartbeat *workersb.WorkerHeartbeat
+		workerHeartbeat *workerpb.WorkerHeartbeat
 		expectedWorkers int
 		expectedInStore bool
-		heartbeatCheck  func(*workersb.WorkerHeartbeat)
+		heartbeatCheck  func(*workerpb.WorkerHeartbeat)
 	}{
 		{
 			name:  "record worker in new namespace",
 			setup: func(r *registryImpl) {},
 			nsID:  "namespace1",
-			workerHeartbeat: &workersb.WorkerHeartbeat{
+			workerHeartbeat: &workerpb.WorkerHeartbeat{
 				WorkerInstanceKey: "worker1",
 			},
 			expectedWorkers: 1,
@@ -30,13 +30,13 @@ func TestRegistryImpl_RecordWorkerHeartbeat(t *testing.T) {
 		{
 			name: "record worker in existing namespace",
 			setup: func(r *registryImpl) {
-				r.workersStore["namespace1"] = make(map[string]*workersb.WorkerHeartbeat)
-				r.workersStore["namespace1"]["existing-worker"] = &workersb.WorkerHeartbeat{
+				r.workersStore["namespace1"] = make(map[string]*workerpb.WorkerHeartbeat)
+				r.workersStore["namespace1"]["existing-worker"] = &workerpb.WorkerHeartbeat{
 					WorkerInstanceKey: "existing-worker",
 				}
 			},
 			nsID: "namespace1",
-			workerHeartbeat: &workersb.WorkerHeartbeat{
+			workerHeartbeat: &workerpb.WorkerHeartbeat{
 				WorkerInstanceKey: "worker2",
 			},
 			expectedWorkers: 2,
@@ -45,20 +45,20 @@ func TestRegistryImpl_RecordWorkerHeartbeat(t *testing.T) {
 		{
 			name: "update existing worker",
 			setup: func(r *registryImpl) {
-				r.workersStore["namespace1"] = make(map[string]*workersb.WorkerHeartbeat)
-				r.workersStore["namespace1"]["worker1"] = &workersb.WorkerHeartbeat{
+				r.workersStore["namespace1"] = make(map[string]*workerpb.WorkerHeartbeat)
+				r.workersStore["namespace1"]["worker1"] = &workerpb.WorkerHeartbeat{
 					WorkerInstanceKey: "worker1",
 					TaskQueue:         "tq1",
 				}
 			},
 			nsID: "namespace1",
-			workerHeartbeat: &workersb.WorkerHeartbeat{
+			workerHeartbeat: &workerpb.WorkerHeartbeat{
 				WorkerInstanceKey: "worker1", // Same key, should update
 				TaskQueue:         "tq2",
 			},
 			expectedWorkers: 1,
 			expectedInStore: true,
-			heartbeatCheck: func(h *workersb.WorkerHeartbeat) {
+			heartbeatCheck: func(h *workerpb.WorkerHeartbeat) {
 				assert.Equal(t, "tq2", h.TaskQueue, "worker heartbeat should be updated with new task queue")
 			},
 		},
@@ -67,7 +67,7 @@ func TestRegistryImpl_RecordWorkerHeartbeat(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := &registryImpl{
-				workersStore: make(map[string]map[string]*workersb.WorkerHeartbeat),
+				workersStore: make(map[string]map[string]*workerpb.WorkerHeartbeat),
 			}
 			tt.setup(r)
 
@@ -109,7 +109,7 @@ func TestRegistryImpl_ListWorkers(t *testing.T) {
 		{
 			name: "list workers from empty namespace",
 			setup: func(r *registryImpl) {
-				r.workersStore["empty-ns"] = make(map[string]*workersb.WorkerHeartbeat)
+				r.workersStore["empty-ns"] = make(map[string]*workerpb.WorkerHeartbeat)
 			},
 			nsID:            "empty-ns",
 			expectedCount:   0,
@@ -118,8 +118,8 @@ func TestRegistryImpl_ListWorkers(t *testing.T) {
 		{
 			name: "list single worker",
 			setup: func(r *registryImpl) {
-				r.workersStore["namespace1"] = make(map[string]*workersb.WorkerHeartbeat)
-				r.workersStore["namespace1"]["worker1"] = &workersb.WorkerHeartbeat{
+				r.workersStore["namespace1"] = make(map[string]*workerpb.WorkerHeartbeat)
+				r.workersStore["namespace1"]["worker1"] = &workerpb.WorkerHeartbeat{
 					WorkerInstanceKey: "worker1",
 				}
 			},
@@ -130,14 +130,14 @@ func TestRegistryImpl_ListWorkers(t *testing.T) {
 		{
 			name: "list multiple workers",
 			setup: func(r *registryImpl) {
-				r.workersStore["namespace1"] = make(map[string]*workersb.WorkerHeartbeat)
-				r.workersStore["namespace1"]["worker1"] = &workersb.WorkerHeartbeat{
+				r.workersStore["namespace1"] = make(map[string]*workerpb.WorkerHeartbeat)
+				r.workersStore["namespace1"]["worker1"] = &workerpb.WorkerHeartbeat{
 					WorkerInstanceKey: "worker1",
 				}
-				r.workersStore["namespace1"]["worker2"] = &workersb.WorkerHeartbeat{
+				r.workersStore["namespace1"]["worker2"] = &workerpb.WorkerHeartbeat{
 					WorkerInstanceKey: "worker2",
 				}
-				r.workersStore["namespace1"]["worker3"] = &workersb.WorkerHeartbeat{
+				r.workersStore["namespace1"]["worker3"] = &workerpb.WorkerHeartbeat{
 					WorkerInstanceKey: "worker3",
 				}
 			},
@@ -149,13 +149,13 @@ func TestRegistryImpl_ListWorkers(t *testing.T) {
 			name: "list workers from specific namespace only",
 			setup: func(r *registryImpl) {
 				// Setup namespace1
-				r.workersStore["namespace1"] = make(map[string]*workersb.WorkerHeartbeat)
-				r.workersStore["namespace1"]["worker1"] = &workersb.WorkerHeartbeat{
+				r.workersStore["namespace1"] = make(map[string]*workerpb.WorkerHeartbeat)
+				r.workersStore["namespace1"]["worker1"] = &workerpb.WorkerHeartbeat{
 					WorkerInstanceKey: "worker1",
 				}
 				// Setup namespace2
-				r.workersStore["namespace2"] = make(map[string]*workersb.WorkerHeartbeat)
-				r.workersStore["namespace2"]["worker2"] = &workersb.WorkerHeartbeat{
+				r.workersStore["namespace2"] = make(map[string]*workerpb.WorkerHeartbeat)
+				r.workersStore["namespace2"]["worker2"] = &workerpb.WorkerHeartbeat{
 					WorkerInstanceKey: "worker2",
 				}
 			},
@@ -168,7 +168,7 @@ func TestRegistryImpl_ListWorkers(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := &registryImpl{
-				workersStore: make(map[string]map[string]*workersb.WorkerHeartbeat),
+				workersStore: make(map[string]map[string]*workerpb.WorkerHeartbeat),
 			}
 			tt.setup(r)
 
