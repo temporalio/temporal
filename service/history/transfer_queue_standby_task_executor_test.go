@@ -22,6 +22,7 @@ import (
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
@@ -71,6 +72,7 @@ type (
 		mockFrontendClient  *workflowservicemock.MockWorkflowServiceClient
 		mockHistoryClient   *historyservicemock.MockHistoryServiceClient
 		mockMatchingClient  *matchingservicemock.MockMatchingServiceClient
+		mockChasmEngine     chasm.Engine
 
 		mockExecutionMgr     *persistence.MockExecutionManager
 		mockArchivalMetadata archiver.MetadataMock
@@ -176,6 +178,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) SetupTest() {
 	s.workflowCache = wcache.NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler)
 	s.logger = s.mockShard.GetLogger()
 	s.mockFrontendClient = s.mockShard.Resource.FrontendClient
+	s.mockChasmEngine = chasm.NewMockEngine(s.controller)
 
 	s.mockArchivalMetadata.SetHistoryEnabledByDefault()
 	s.mockArchivalMetadata.SetVisibilityEnabledByDefault()
@@ -201,6 +204,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) SetupTest() {
 		s.mockShard.Resource.HistoryClient,
 		s.mockShard.Resource.MatchingClient,
 		s.mockVisibilityManager,
+		s.mockChasmEngine,
 		s.clientBean,
 	).(*transferQueueStandbyTaskExecutor)
 }

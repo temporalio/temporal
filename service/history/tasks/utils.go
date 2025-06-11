@@ -50,6 +50,11 @@ func InitializeLogger(
 	)
 }
 
+// GetChasmTaskEventID is a dummy getter for CHASM tasks, as Components don't have events.
+func GetChasmTaskEventID() (int64, bool) {
+	return 0, false
+}
+
 func GetTransferTaskEventID(
 	transferTask Task,
 ) (int64, bool) {
@@ -71,6 +76,8 @@ func GetTransferTaskEventID(
 		eventID = task.InitiatedEventID
 	case *ResetWorkflowTask:
 		eventID = common.FirstEventID
+	case *ChasmTask:
+		return GetChasmTaskEventID()
 	case *FakeTask:
 		// no-op
 	default:
@@ -104,9 +111,9 @@ func GetTimerTaskEventID(
 	case *StateMachineTimerTask:
 		eventID = common.FirstEventID
 	case *ChasmTaskPure:
-		return 0, false // CHASM components do not have events
+		return GetChasmTaskEventID()
 	case *ChasmTask:
-		return 0, false // CHASM components do not have events
+		return GetChasmTaskEventID()
 	case *FakeTask:
 		// no-op
 	default:

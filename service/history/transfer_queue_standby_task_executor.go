@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
@@ -55,6 +56,7 @@ func newTransferQueueStandbyTaskExecutor(
 	historyRawClient resource.HistoryRawClient,
 	matchingRawClient resource.MatchingRawClient,
 	visibilityManager manager.VisibilityManager,
+	chasmEngine chasm.Engine,
 	clientBean client.Bean,
 ) queues.Executor {
 	return &transferQueueStandbyTaskExecutor{
@@ -66,6 +68,7 @@ func newTransferQueueStandbyTaskExecutor(
 			historyRawClient,
 			matchingRawClient,
 			visibilityManager,
+			chasmEngine,
 		),
 		clusterName: clusterName,
 		clientBean:  clientBean,
@@ -104,6 +107,8 @@ func (t *transferQueueStandbyTaskExecutor) Execute(
 		err = t.processCloseExecution(ctx, task)
 	case *tasks.DeleteExecutionTask:
 		err = t.processDeleteExecutionTask(ctx, task, false)
+	case *tasks.ChasmTask:
+		err = t.executeChasmSideEffectTimerTask(ctx, task)
 	default:
 		err = errUnknownTransferTask
 	}
@@ -113,6 +118,38 @@ func (t *transferQueueStandbyTaskExecutor) Execute(
 		ExecutedAsActive:    false,
 		ExecutionErr:        err,
 	}
+}
+
+func (t *transferQueueStandbyTaskExecutor) executeChasmSideEffectTimerTask(
+	ctx context.Context,
+	task *tasks.ChasmTask,
+) error {
+	actionFn := func(
+		ctx context.Context,
+		wfContext historyi.WorkflowContext,
+		ms historyi.MutableState,
+	) (any, error) {
+		return validateChasmSideEffectTask(
+			ctx,
+			t.shardContext.ChasmRegistry(),
+			ms,
+			task,
+		)
+	}
+
+	return t.processTransfer(
+		ctx,
+		true,
+		task,
+		actionFn,
+		getStandbyPostActionFn(
+			task,
+			t.getCurrentTime,
+			t.config.StandbyTaskMissingEventsDiscardDelay(task.GetType()),
+			// TODO - replace this with a method for CHASM components
+			t.checkWorkflowStillExistOnSourceBeforeDiscard,
+		),
+	)
 }
 
 func (t *transferQueueStandbyTaskExecutor) processActivityTask(
