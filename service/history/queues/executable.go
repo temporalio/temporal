@@ -249,7 +249,9 @@ func (e *executableImpl) Execute() (retErr error) {
 	var callerInfo headers.CallerInfo
 	switch e.priority {
 	case ctasks.PriorityHigh:
-		callerInfo = headers.NewBackgroundCallerInfo(ns.String())
+		callerInfo = headers.NewBackgroundHighCallerInfo(ns.String())
+	case ctasks.PriorityLow:
+		callerInfo = headers.NewBackgroundLowCallerInfo(ns.String())
 	default:
 		// priority low or unknown
 		callerInfo = headers.NewPreemptableCallerInfo(ns.String())

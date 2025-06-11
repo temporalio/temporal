@@ -29,7 +29,7 @@ var (
 	// ArchivalTaskPriorities is the map of task priority to weight for the archival queue.
 	// The archival queue only uses the low task priority, so we only define a weight for that priority.
 	ArchivalTaskPriorities = configs.ConvertWeightsToDynamicConfigValue(map[ctasks.Priority]int{
-		ctasks.PriorityLow: 10,
+		ctasks.PriorityBackground: 10,
 	})
 )
 

@@ -749,7 +749,7 @@ func (pm *taskQueuePartitionManagerImpl) LongPollExpirationInterval() time.Durat
 }
 
 func (pm *taskQueuePartitionManagerImpl) callerInfoContext(ctx context.Context) context.Context {
-	return headers.SetCallerInfo(ctx, headers.NewBackgroundCallerInfo(pm.ns.Name().String()))
+	return headers.SetCallerInfo(ctx, headers.NewBackgroundHighCallerInfo(pm.ns.Name().String()))
 }
 
 // ForceLoadAllNonRootPartitions spins off go routines which make RPC calls to all the
