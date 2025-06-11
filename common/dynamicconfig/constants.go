@@ -2407,10 +2407,10 @@ that task will be sent to DLQ.`,
 		time.Hour,
 		`ReplicationProgressCacheTTL is TTL of replication progress cache`,
 	)
-	ReplicationStreamSyncDuration = NewGlobalDurationSetting(
-		"history.ReplicationStreamSyncDuration",
+	ReplicationStreamSendEmptyTaskDuration = NewGlobalDurationSetting(
+		"history.ReplicationStreamSendEmptyTaskDuration",
 		time.Minute,
-		`ReplicationStreamSyncDuration is the interval to sync status when there is no replication task`,
+		`ReplicationStreamSendEmptyTaskDuration is the interval to sync status when there is no replication task`,
 	)
 	WorkflowIdReuseMinimalInterval = NewNamespaceDurationSetting(
 		"history.workflowIdReuseMinimalInterval",
