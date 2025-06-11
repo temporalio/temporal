@@ -68,7 +68,7 @@ type (
 		SearchAttributeProvider       searchattribute.Provider
 		SearchAttributeMapperProvider searchattribute.MapperProvider
 		RateLimiter                   TaskDispatchRateLimiter `optional:"true"`
-		workersRegistry               workers.Registry
+		WorkersRegistry               workers.Registry
 	}
 )
 
@@ -112,7 +112,7 @@ func NewHandler(
 			params.RateLimiter,
 		),
 		namespaceRegistry: params.NamespaceRegistry,
-		workersRegistry:   params.workersRegistry,
+		workersRegistry:   params.WorkersRegistry,
 	}
 
 	// prevent from serving requests before matching engine is started and ready
