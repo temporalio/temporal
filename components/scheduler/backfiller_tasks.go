@@ -58,7 +58,7 @@ func (BackfillTask) Destination() string {
 }
 
 func (BackfillTask) Validate(_ *persistencespb.StateMachineRef, node *hsm.Node) error {
-	// Backfiller only has a single task/state, so no validation is done here.
+	// TODO - Validate that a task's attempt count matches the backfiller machine's attempt count.
 	return nil
 }
 

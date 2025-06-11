@@ -128,20 +128,6 @@ func (e backfillerTaskExecutor) executeBackfillTask(env hsm.Environment, node *h
 	})
 }
 
-func (backfillerTaskExecutor) enqueue(schedulerNode *hsm.Node, starts []*schedulespb.BufferedStart) error {
-	invokerNode, err := schedulerNode.Child([]hsm.Key{InvokerMachineKey})
-	if err != nil {
-		return err
-	}
-	err = hsm.MachineTransition(invokerNode, func(e Invoker) (hsm.TransitionOutput, error) {
-		return TransitionEnqueue.Apply(e, EventEnqueue{
-			Node:           invokerNode,
-			BufferedStarts: starts,
-		})
-	})
-	return err
-}
-
 // processBackfill processes a Backfiller's BackfillRequest.
 func (e backfillerTaskExecutor) processBackfill(
 	env hsm.Environment,

@@ -275,7 +275,7 @@ func (s *Scheduler) EnqueueBufferedStarts(
 	return err
 }
 
-// RequestImmediate spawns a new Backfiller node to the scheduler tree for a
+// RequestBackfill spawns a new Backfiller node to the scheduler tree for a
 // BackfillRequest.
 func (s Scheduler) RequestBackfill(
 	env hsm.Environment,
