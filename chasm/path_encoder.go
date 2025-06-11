@@ -40,8 +40,8 @@ var (
 //	path >= "foo" AND path < "foo[something]"
 //
 // and we need to know the minimal value of [something] that can possibly be in the encoded path.
-// This is achieved by escpaing '\', '$', '#', and also every code point less than '#'.
-// Since the escapth charater itself is larger than '#', the minimal value is '%' and our query becomes:
+// This is achieved by escaping '\', '$', '#', and also every code point less than '#'.
+// Since the escaped character itself is larger than '#', the minimal value is '%' and our query becomes:
 //
 //	path >= "foo" AND path < "foo%"
 func (e *defaultPathEncoder) Encode(
