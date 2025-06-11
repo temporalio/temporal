@@ -6,8 +6,8 @@ import (
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	workersb "go.temporal.io/api/worker/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
@@ -22,6 +22,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/tqid"
+	"go.temporal.io/server/service/matching/workers"
 	"go.temporal.io/server/service/worker/deployment"
 	"go.temporal.io/server/service/worker/workerdeployment"
 	"go.uber.org/fx"
@@ -41,6 +42,7 @@ type (
 		startWG           sync.WaitGroup
 		throttledLogger   log.Logger
 		namespaceRegistry namespace.Registry
+		workersRegistry   workers.Registry
 	}
 
 	HandlerParams struct {
@@ -66,6 +68,7 @@ type (
 		SearchAttributeProvider       searchattribute.Provider
 		SearchAttributeMapperProvider searchattribute.MapperProvider
 		RateLimiter                   TaskDispatchRateLimiter `optional:"true"`
+		workersRegistry               workers.Registry
 	}
 )
 
@@ -109,6 +112,7 @@ func NewHandler(
 			params.RateLimiter,
 		),
 		namespaceRegistry: params.NamespaceRegistry,
+		workersRegistry:   params.workersRegistry,
 	}
 
 	// prevent from serving requests before matching engine is started and ready
@@ -535,16 +539,30 @@ func (h *Handler) ListNexusEndpoints(ctx context.Context, request *matchingservi
 
 // RecordWorkerHeartbeat receive heartbeat request from the worker.
 func (h *Handler) RecordWorkerHeartbeat(
-	context.Context, *matchingservice.RecordWorkerHeartbeatRequest,
+	_ context.Context, request *matchingservice.RecordWorkerHeartbeatRequest,
 ) (*matchingservice.RecordWorkerHeartbeatResponse, error) {
-	return nil, serviceerror.NewUnimplemented("RecordWorkerHeartbeat is not implemented")
+	h.workersRegistry.RecordWorkerHeartbeat(request.GetNamespaceId(), request.GetHeartbeartRequest().GetWorkerHeartbeat())
+	return &matchingservice.RecordWorkerHeartbeatResponse{}, nil
 }
 
 // ListWorkers retrieves a list of workers in the specified namespace that match the provided filters.
 func (h *Handler) ListWorkers(
-	context.Context, *matchingservice.ListWorkersRequest,
+	_ context.Context, request *matchingservice.ListWorkersRequest,
 ) (*matchingservice.ListWorkersResponse, error) {
-	return nil, serviceerror.NewUnimplemented("ListWorkers is not implemented")
+	workersHeartbeats, err := h.workersRegistry.ListWorkers(
+		request.GetNamespaceId(), request.GetListRequest().GetQuery(), request.GetListRequest().GetNextPageToken())
+	if err != nil {
+		return nil, err
+	}
+	var workersInfo []*workersb.WorkerInfo
+	for _, heartbeat := range workersHeartbeats {
+		workersInfo = append(workersInfo, &workersb.WorkerInfo{
+			WorkerHeartbeat: heartbeat,
+		})
+	}
+	return &matchingservice.ListWorkersResponse{
+		WorkersInfo: workersInfo,
+	}, nil
 }
 
 func (h *Handler) namespaceName(id namespace.ID) namespace.Name {
