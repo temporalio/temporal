@@ -39,7 +39,7 @@ type (
 		config         *configs.Config
 	}
 	SourceTaskConverter interface {
-		Convert(task tasks.Task, targetClusterID int32) (*replicationspb.ReplicationTask, error)
+		Convert(task tasks.Task, targetClusterID int32, priority enumsspb.TaskPriority) (*replicationspb.ReplicationTask, error)
 	}
 	SourceTaskConverterProvider func(
 		historyEngine historyi.Engine,
@@ -77,6 +77,7 @@ func NewSourceTaskConverter(
 func (c *SourceTaskConverterImpl) Convert(
 	task tasks.Task,
 	targetClusterID int32,
+	priority enumsspb.TaskPriority,
 ) (*replicationspb.ReplicationTask, error) {
 
 	var ctx context.Context
@@ -92,7 +93,6 @@ func (c *SourceTaskConverterImpl) Convert(
 	if namespaceEntry != nil {
 		nsName = namespaceEntry.Name().String()
 	}
-	priority := getTaskPriority(task)
 	callerInfo := getReplicaitonCallerInfo(priority)
 	ctx, cancel = newTaskContext(nsName, c.config.ReplicationTaskApplyTimeout(), callerInfo)
 	defer cancel()
