@@ -3765,7 +3765,7 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 		// we noticed some "running workflows" aren't running anymore. poke the workflow to
 		// refresh, but don't wait for the state to change. ignore errors.
 		go func() {
-			disconnectedCtx := headers.SetCallerInfo(context.Background(), headers.NewBackgroundCallerInfo(request.Namespace))
+			disconnectedCtx := headers.SetCallerInfo(context.Background(), headers.NewBackgroundHighCallerInfo(request.Namespace))
 			_, _ = wh.historyClient.SignalWorkflowExecution(disconnectedCtx, &historyservice.SignalWorkflowExecutionRequest{
 				NamespaceId: namespaceID.String(),
 				SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{

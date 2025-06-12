@@ -510,7 +510,7 @@ func (e *ChasmEngine) getExecutionLease(
 
 	lockPriority := locks.PriorityHigh
 	callerType := headers.GetCallerInfo(ctx).CallerType
-	if callerType == headers.CallerTypeBackground || callerType == headers.CallerTypePreemptable {
+	if callerType == headers.CallerTypeBackgroundHigh || callerType == headers.CallerTypeBackgroundLow || callerType == headers.CallerTypePreemptable {
 		lockPriority = locks.PriorityLow
 	}
 

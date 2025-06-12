@@ -2384,7 +2384,7 @@ func (e *matchingEngineImpl) getUserDataBatcher(namespaceId namespace.ID) *strea
 func (e *matchingEngineImpl) applyUserDataUpdateBatch(namespaceId namespace.ID, batch []*userDataUpdate) error {
 	ctx, cancel := context.WithTimeout(context.Background(), ioTimeout)
 	// TODO: should use namespace name here
-	ctx = headers.SetCallerInfo(ctx, headers.NewBackgroundCallerInfo(namespaceId.String()))
+	ctx = headers.SetCallerInfo(ctx, headers.NewBackgroundHighCallerInfo(namespaceId.String()))
 	defer cancel()
 
 	// convert to map
