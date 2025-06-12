@@ -1644,11 +1644,11 @@ func (n *Node) resetTaskStatus() bool {
 	}
 
 	reset := false
-	for _, tasks := range [][]*persistencespb.ChasmComponentAttributes_Task{
+	for _, componentTasks := range [][]*persistencespb.ChasmComponentAttributes_Task{
 		componentAttr.PureTasks,
 		componentAttr.SideEffectTasks,
 	} {
-		for _, t := range tasks {
+		for _, t := range componentTasks {
 			if !reset && t.PhysicalTaskStatus == physicalTaskStatusCreated {
 				reset = true
 			}
