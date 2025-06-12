@@ -185,3 +185,72 @@ func TestFindDeploymentVersionForWorkflowID_PartialRamp(t *testing.T) {
 		})
 	}
 }
+
+func TestWorkerDeploymentVersionFromStringV32(t *testing.T) {
+	tests := []struct {
+		name        string
+		input       string
+		expected    *deploymentspb.WorkerDeploymentVersion
+		expectedErr string
+	}{
+		{
+			name:  "valid version",
+			input: "my-deployment:build-123",
+			expected: &deploymentspb.WorkerDeploymentVersion{
+				DeploymentName: "my-deployment",
+				BuildId:        "build-123",
+			},
+		},
+		{
+			name:  "multiple delimiters",
+			input: "my-deployment:build-123:extra",
+			expected: &deploymentspb.WorkerDeploymentVersion{
+				DeploymentName: "my-deployment",
+				BuildId:        "build-123:extra",
+			},
+		},
+		{
+			name:     "skip unversioned",
+			input:    UnversionedVersionId,
+			expected: nil,
+		},
+		{
+			name:        "empty string",
+			input:       "",
+			expectedErr: "expected delimiter ':' not found in version string ",
+		},
+		{
+			name:        "only delimiter",
+			input:       WorkerDeploymentVersionIdDelimiter,
+			expectedErr: "deployment name is empty in version string :",
+		},
+		{
+			name:        "missing delimiter",
+			input:       "my-deployment-build-123",
+			expectedErr: "expected delimiter ':' not found in version string my-deployment-build-123",
+		},
+		{
+			name:        "empty deployment name",
+			input:       ":build-123",
+			expectedErr: "deployment name is empty in version string :build-123",
+		},
+		{
+			name:        "empty build id",
+			input:       "my-deployment:",
+			expectedErr: "build id is empty in version string my-deployment:",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := WorkerDeploymentVersionFromStringV32(tt.input)
+			if tt.expectedErr != "" {
+				assert.NotNil(t, err)
+				assert.EqualError(t, err, tt.expectedErr)
+			} else {
+				assert.Nil(t, err)
+				assert.Equal(t, tt.expected, result)
+			}
+		})
+	}
+}
