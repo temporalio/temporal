@@ -4700,6 +4700,12 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		return nil, err
 	}
 
+	var testDecodeBatchParams *batcher.BatchParams
+	err = sdk.PreferProtoDataConverter.FromPayloads(inputPayload, &testDecodeBatchParams)
+	if err != nil {
+		return nil, err
+	}
+
 	memo := &commonpb.Memo{
 		Fields: map[string]*commonpb.Payload{
 			batcher.BatchOperationTypeMemo: payload.EncodeString(operationType),
