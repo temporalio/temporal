@@ -4,10 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/pborman/uuid"
-	batchpb "go.temporal.io/api/batch/v1"
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"slices"
 	"strings"
 	"sync"
@@ -15,9 +11,11 @@ import (
 	"time"
 
 	"github.com/dgryski/go-farm"
+	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -33,6 +31,8 @@ import (
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/worker/workerdeployment"
 	"go.temporal.io/server/tests/testcore"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -1406,7 +1406,6 @@ func (s *DeploymentVersionSuite) TestBatchUpdateWorkflowExecutionOptions_SetPinn
 				UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
 			},
 		},
-		//Executions: workflows,
 		VisibilityQuery: fmt.Sprintf("WorkflowType='%s'", workflowType),
 		JobId:           batchJobId,
 		Reason:          "test",
@@ -1474,21 +1473,16 @@ func (s *DeploymentVersionSuite) checkListAndWaitForBatchCompletion(ctx context.
 		}
 	}, 10*time.Second, 50*time.Millisecond)
 
-	for {
-		//time.Sleep(2 * time.Second)
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
 		descResp, err := s.FrontendClient().DescribeBatchOperation(ctx, &workflowservice.DescribeBatchOperationRequest{
 			Namespace: s.Namespace().String(),
 			JobId:     jobId,
 		})
-		s.NoError(err)
-		if descResp.GetState() == enumspb.BATCH_OPERATION_STATE_FAILED {
-			s.Fail(fmt.Sprintf("batch operation failed. description: %+v", descResp))
-			return
-		} else if descResp.GetState() == enumspb.BATCH_OPERATION_STATE_COMPLETED {
-			return
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
+		a.NoError(err)
+		a.NotEqual(enumspb.BATCH_OPERATION_STATE_FAILED, descResp.GetState(), fmt.Sprintf("batch operation failed. description: %+v", descResp))
+		a.Equal(enumspb.BATCH_OPERATION_STATE_COMPLETED, descResp.GetState())
+	}, 10*time.Second, 50*time.Millisecond)
 }
 
 func (s *DeploymentVersionSuite) makePinnedOverride(tv *testvars.TestVars) *workflowpb.VersioningOverride {
