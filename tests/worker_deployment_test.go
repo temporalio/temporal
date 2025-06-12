@@ -2412,7 +2412,7 @@ func (s *WorkerDeploymentSuite) verifyWorkerDeploymentSummary(
 		return false
 	}
 	if expectedSummary.CreateTime.AsTime().Sub(actualSummary.CreateTime.AsTime()) > maxDurationBetweenTimeStamps {
-		s.Logger.Info("Create time mismatch")
+		fmt.Println("Create time mismatch - expected: ", expectedSummary.CreateTime.AsTime(), "actual: ", actualSummary.CreateTime.AsTime())
 		return false
 	}
 
