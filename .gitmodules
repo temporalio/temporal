@@ -1,3 +1,7 @@
 [submodule "develop/docker-compose/grafana/provisioning/temporalio-dashboards"]
 	path = develop/docker-compose/grafana/provisioning/temporalio-dashboards
 	url = https://github.com/temporalio/dashboards
+[submodule "proto/api"]
+	url = /Users/sivagirishramesh/Documents/Work/Temporal-dev/api
+	branch = TaskQueueConfigApi
+	path = proto/api

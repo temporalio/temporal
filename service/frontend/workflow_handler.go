@@ -6110,3 +6110,27 @@ func (wh *WorkflowHandler) ListWorkers(
 		NextPageToken: resp.GetNextPageToken(),
 	}, nil
 }
+
+// UpdateTaskQueueConfig : updates the indivudal task queue rate limit or fairnessKey Rate limit
+func (wh *WorkflowHandler) UpdateTaskQueueConfig(
+	ctx context.Context, request *workflowservice.UpdateTaskQueueConfigRequest,
+) (*workflowservice.UpdateTaskQueueConfigResponse, error) {
+	namespaceName := namespace.Name(request.GetNamespace())
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := wh.matchingClient.UpdateTaskQueueConfig(ctx, &matchingservice.UpdateTaskQueueConfigRequest{
+		NamespaceId:           namespaceID.String(),
+		UpdateTaskqueueConfig: request,
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.UpdateTaskQueueConfigResponse{
+		Configs: resp.UpdatedTaskqueueConfig,
+	}, nil
+}

@@ -116,6 +116,9 @@ message DeploymentData {
 // Container for all persistent user data that varies per task queue type within a family.
 message TaskQueueTypeUserData {
     DeploymentData deployment_data = 1;
+
+    // For future use: description, rate limits, manual partition control, etc...
+    temporal.api.taskqueue.v1.TaskQueueConfig task_queue_config = 2;
 }
 
 // Container for all persistent user provided data for a task queue family.
@@ -134,7 +137,6 @@ message TaskQueueUserData {
     // Map from task queue type (workflow, activity, nexus) to per-type data.
     map<int32, TaskQueueTypeUserData> per_type = 3;
 
-    // For future use: description, rate limits, manual partition control, etc...
 }
 
 // Simple wrapper that includes a TaskQueueUserData and its storage version.

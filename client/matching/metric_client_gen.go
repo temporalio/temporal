@@ -373,6 +373,20 @@ func (c *metricClient) UpdateNexusEndpoint(
 	return c.client.UpdateNexusEndpoint(ctx, request, opts...)
 }
 
+func (c *metricClient) UpdateTaskQueueConfig(
+	ctx context.Context,
+	request *matchingservice.UpdateTaskQueueConfigRequest,
+	opts ...grpc.CallOption,
+) (_ *matchingservice.UpdateTaskQueueConfigResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "MatchingClientUpdateTaskQueueConfig")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.UpdateTaskQueueConfig(ctx, request, opts...)
+}
+
 func (c *metricClient) UpdateTaskQueueUserData(
 	ctx context.Context,
 	request *matchingservice.UpdateTaskQueueUserDataRequest,
