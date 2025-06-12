@@ -2708,6 +2708,9 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 		}
 	}
 
+	// This will include override and inheritance, but not transition, because WF never starts with a transition
+	ms.executionInfo.WorkerDeploymentName = ms.GetEffectiveDeployment().GetSeriesName()
+
 	if inheritedBuildId := event.InheritedBuildId; inheritedBuildId != "" {
 		ms.executionInfo.InheritedBuildId = inheritedBuildId
 		if err := ms.UpdateBuildIdAssignment(inheritedBuildId); err != nil {
@@ -4951,8 +4954,15 @@ func (ms *MutableStateImpl) updateVersioningOverride(
 			}
 		}
 
-	} else if ms.GetExecutionInfo().GetVersioningInfo() != nil {
+		if o := ms.GetExecutionInfo().VersioningInfo.VersioningOverride; worker_versioning.OverrideIsPinned(o) {
+			ms.GetExecutionInfo().WorkerDeploymentName = o.GetPinned().GetVersion().GetDeploymentName()
+		}
+
+	} else if vi := ms.GetExecutionInfo().GetVersioningInfo(); vi != nil {
 		ms.GetExecutionInfo().VersioningInfo.VersioningOverride = nil
+		ms.GetExecutionInfo().WorkerDeploymentName = vi.GetDeploymentVersion().GetDeploymentName()
+	} else {
+		ms.GetExecutionInfo().WorkerDeploymentName = ""
 	}
 
 	if !proto.Equal(ms.GetEffectiveDeployment(), previousEffectiveDeployment) ||
