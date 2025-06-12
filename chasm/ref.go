@@ -10,7 +10,6 @@ import (
 
 var (
 	defaultShardingFn = func(key EntityKey) string { return key.NamespaceID + "_" + key.BusinessID }
-	RootPath          []string
 )
 
 type EntityKey struct {
@@ -52,7 +51,7 @@ type ComponentRef struct {
 	componentPath      []string
 	componentInitialVT *persistencespb.VersionedTransition
 
-	validationFn func(Context, Component) error
+	validationFn func(NodeBackend, Context, Component) error
 }
 
 // NewComponentRef creates a new ComponentRef with a registered root component go type.

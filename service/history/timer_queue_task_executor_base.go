@@ -32,6 +32,7 @@ import (
 
 var (
 	errNoTimerFired = serviceerror.NewNotFound("no expired timer to fire found")
+	errNoChasmTree  = serviceerror.NewInternal("mutable state associated with CHASM task has no CHASM tree")
 )
 
 type (
@@ -252,7 +253,7 @@ func (t *timerQueueTaskExecutorBase) executeChasmPureTimers(
 	workflowContext historyi.WorkflowContext,
 	ms historyi.MutableState,
 	task *tasks.ChasmTaskPure,
-	execute func(executor chasm.NodeExecutePureTask, task any) error,
+	callback func(node chasm.NodePureTask, task any) error,
 ) error {
 	// Because CHASM timers can target closed workflows, we need to specifically
 	// exclude zombie workflows, instead of merely checking that the workflow is
@@ -263,7 +264,7 @@ func (t *timerQueueTaskExecutorBase) executeChasmPureTimers(
 
 	tree := ms.ChasmTree()
 	if tree == nil {
-		return serviceerror.NewInternal("mutable state associated with CHASM task has no CHASM tree")
+		return errNoChasmTree
 	}
 
 	// Because the persistence layer can lose precision on the task compared to the
@@ -273,7 +274,7 @@ func (t *timerQueueTaskExecutorBase) executeChasmPureTimers(
 	// See also queues.IsTimeExpired.
 	referenceTime := util.MaxTime(t.Now(), task.GetKey().FireTime)
 
-	return tree.EachPureTask(referenceTime, execute)
+	return tree.EachPureTask(referenceTime, callback)
 }
 
 // executeStateMachineTimers gets the state machine timers, processes the expired timers,
