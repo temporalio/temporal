@@ -4635,12 +4635,12 @@ func (wh *WorkflowHandler) StartBatchOperation(
 			}
 			resetParams.ResetOptions = encodedResetOptions
 			resetParams.PostResetOperations = make([][]byte, len(op.ResetOperation.PostResetOperations))
-			for _, postResetOperation := range op.ResetOperation.PostResetOperations {
+			for i, postResetOperation := range op.ResetOperation.PostResetOperations {
 				encodedPostResetOperations, err := protojson.Marshal(postResetOperation)
 				if err != nil {
 					return nil, err
 				}
-				resetParams.PostResetOperations = append(resetParams.PostResetOperations, encodedPostResetOperations)
+				resetParams.PostResetOperations[i] = encodedPostResetOperations
 			}
 		} else {
 			// TODO: remove support for old fields later
