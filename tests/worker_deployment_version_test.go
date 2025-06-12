@@ -57,7 +57,7 @@ var (
 func TestDeploymentVersionSuite(t *testing.T) {
 	t.Parallel()
 	suite.Run(t, &DeploymentVersionSuite{useV32: true})
-	//suite.Run(t, &DeploymentVersionSuite{useV32: false})
+	suite.Run(t, &DeploymentVersionSuite{useV32: false})
 }
 
 func (s *DeploymentVersionSuite) SetupSuite() {
@@ -1421,30 +1421,30 @@ func (s *DeploymentVersionSuite) TestBatchUpdateWorkflowExecutionOptions_SetPinn
 		s.checkDescribeWorkflowAfterOverride(ctx, wf, pinnedOverride)
 	}
 
-	//// unset with empty update opts with mutation mask
-	//batchJobId = uuid.New()
-	//err = s.startBatchJobWithinConcurrentJobLimit(ctx, &workflowservice.StartBatchOperationRequest{
-	//	Namespace:  s.Namespace().String(),
-	//	JobId:      batchJobId,
-	//	Reason:     "test",
-	//	Executions: workflows,
-	//	Operation: &workflowservice.StartBatchOperationRequest_UpdateWorkflowOptionsOperation{
-	//		UpdateWorkflowOptionsOperation: &batchpb.BatchOperationUpdateWorkflowExecutionOptions{
-	//			Identity:                 uuid.New(),
-	//			WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{},
-	//			UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
-	//		},
-	//	},
-	//})
-	//s.NoError(err)
-	//
-	//// wait til batch completes
-	//s.checkListAndWaitForBatchCompletion(ctx, batchJobId)
-	//
-	//// check all the workflows
-	//for _, wf := range workflows {
-	//	s.checkDescribeWorkflowAfterOverride(ctx, wf, nil)
-	//}
+	// unset with empty update opts with mutation mask
+	batchJobId = uuid.New()
+	err = s.startBatchJobWithinConcurrentJobLimit(ctx, &workflowservice.StartBatchOperationRequest{
+		Namespace:  s.Namespace().String(),
+		JobId:      batchJobId,
+		Reason:     "test",
+		Executions: workflows,
+		Operation: &workflowservice.StartBatchOperationRequest_UpdateWorkflowOptionsOperation{
+			UpdateWorkflowOptionsOperation: &batchpb.BatchOperationUpdateWorkflowExecutionOptions{
+				Identity:                 uuid.New(),
+				WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{},
+				UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
+			},
+		},
+	})
+	s.NoError(err)
+
+	// wait til batch completes
+	s.checkListAndWaitForBatchCompletion(ctx, batchJobId)
+
+	// check all the workflows
+	for _, wf := range workflows {
+		s.checkDescribeWorkflowAfterOverride(ctx, wf, nil)
+	}
 }
 
 func (s *DeploymentVersionSuite) startBatchJobWithinConcurrentJobLimit(ctx context.Context, req *workflowservice.StartBatchOperationRequest) error {
