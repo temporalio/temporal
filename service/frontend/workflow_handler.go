@@ -74,6 +74,7 @@ import (
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -4628,11 +4629,19 @@ func (wh *WorkflowHandler) StartBatchOperation(
 			if op.ResetOperation.Options.Target == nil {
 				return nil, serviceerror.NewInvalidArgument("batch reset missing target")
 			}
-			encoded, err := op.ResetOperation.Options.Marshal()
+			encodedResetOptions, err := op.ResetOperation.Options.Marshal()
 			if err != nil {
 				return nil, err
 			}
-			resetParams.ResetOptions = encoded
+			resetParams.ResetOptions = encodedResetOptions
+			resetParams.PostResetOperations = make([][]byte, len(op.ResetOperation.PostResetOperations))
+			for _, postResetOperation := range op.ResetOperation.PostResetOperations {
+				encodedPostResetOperations, err := protojson.Marshal(postResetOperation)
+				if err != nil {
+					return nil, err
+				}
+				resetParams.PostResetOperations = append(resetParams.PostResetOperations, encodedPostResetOperations)
+			}
 		} else {
 			// TODO: remove support for old fields later
 			resetType := op.ResetOperation.GetResetType()
