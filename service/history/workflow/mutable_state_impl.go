@@ -2255,6 +2255,9 @@ func (ms *MutableStateImpl) AttachRequestID(
 func (ms *MutableStateImpl) HasRequestID(
 	requestID string,
 ) bool {
+	if ms.executionState.RequestIds == nil {
+		return false
+	}
 	_, ok := ms.executionState.RequestIds[requestID]
 	return ok
 }
