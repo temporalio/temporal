@@ -14,24 +14,33 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 	historyi "go.temporal.io/server/service/history/interfaces"
+	"go.uber.org/fx"
 )
 
-func GetOrPollMutableState(
-	ctx context.Context,
-	shardContext historyi.ShardContext,
-	request *historyservice.GetMutableStateRequest,
-	workflowConsistencyChecker WorkflowConsistencyChecker,
-	eventNotifier events.Notifier,
-) (*historyservice.GetMutableStateResponse, error) {
+type GetOrPollMutableStateDeps struct {
+	fx.In
 
-	logger := shardContext.GetLogger()
+	ShardContext               historyi.ShardContext
+	Logger                     log.Logger
+	WorkflowConsistencyChecker WorkflowConsistencyChecker
+	EventNotifier              events.Notifier
+	NamespaceRegistry          namespace.Registry
+	Config                     *configs.Config
+}
+
+func (deps *GetOrPollMutableStateDeps) Invoke(
+	ctx context.Context,
+	request *historyservice.GetMutableStateRequest,
+) (*historyservice.GetMutableStateResponse, error) {
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	err := ValidateNamespaceUUID(namespaceID)
 	if err != nil {
@@ -39,7 +48,7 @@ func GetOrPollMutableState(
 	}
 
 	if len(request.Execution.RunId) == 0 {
-		request.Execution.RunId, err = workflowConsistencyChecker.GetCurrentRunID(
+		request.Execution.RunId, err = deps.WorkflowConsistencyChecker.GetCurrentRunID(
 			ctx,
 			request.NamespaceId,
 			request.Execution.WorkflowId,
@@ -56,12 +65,12 @@ func GetOrPollMutableState(
 	)
 	response, err := GetMutableStateWithConsistencyCheck(
 		ctx,
-		shardContext,
+		deps.ShardContext,
 		workflowKey,
 		request.VersionHistoryItem.GetVersion(),
 		request.VersionHistoryItem.GetEventId(),
 		request.VersionedTransition,
-		workflowConsistencyChecker,
+		deps.WorkflowConsistencyChecker,
 	)
 	if err != nil {
 		return nil, err
@@ -82,7 +91,7 @@ func GetOrPollMutableState(
 	currentVersionedTransition := transitionhistory.LastVersionedTransition(transitionHistory)
 	if len(transitionHistory) != 0 && request.VersionedTransition != nil {
 		if transitionhistory.StalenessCheck(transitionHistory, request.VersionedTransition) != nil {
-			logger.Warn(fmt.Sprintf("Request versioned transition and transition history don't match. Request: %v, current: %v",
+			deps.Logger.Warn(fmt.Sprintf("Request versioned transition and transition history don't match. Request: %v, current: %v",
 				request.VersionedTransition,
 				currentVersionedTransition),
 				tag.WorkflowNamespaceID(workflowKey.GetNamespaceID()),
@@ -103,7 +112,7 @@ func GetOrPollMutableState(
 		if err != nil {
 			return nil, err
 		}
-		logger.Warn("Request history branch and current history branch don't match",
+		deps.Logger.Warn("Request history branch and current history branch don't match",
 			tag.Value(logItem),
 			tag.TokenLastEventVersion(request.VersionHistoryItem.GetVersion()),
 			tag.TokenLastEventID(request.VersionHistoryItem.GetEventId()),
@@ -125,20 +134,20 @@ func GetOrPollMutableState(
 	// if caller decide to long poll on workflow execution
 	// and the event ID we are looking for is smaller than current next event ID
 	if expectedNextEventID >= response.GetNextEventId() && response.GetWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-		subscriberID, channel, err := eventNotifier.WatchHistoryEvent(workflowKey)
+		subscriberID, channel, err := deps.EventNotifier.WatchHistoryEvent(workflowKey)
 		if err != nil {
 			return nil, err
 		}
-		defer func() { _ = eventNotifier.UnwatchHistoryEvent(workflowKey, subscriberID) }()
+		defer func() { _ = deps.EventNotifier.UnwatchHistoryEvent(workflowKey, subscriberID) }()
 		// check again in case the next event ID is updated
 		response, err = GetMutableStateWithConsistencyCheck(
 			ctx,
-			shardContext,
+			deps.ShardContext,
 			workflowKey,
 			request.VersionHistoryItem.GetVersion(),
 			request.VersionHistoryItem.GetEventId(),
 			request.VersionedTransition,
-			workflowConsistencyChecker,
+			deps.WorkflowConsistencyChecker,
 		)
 		if err != nil {
 			return nil, err
@@ -152,7 +161,7 @@ func GetOrPollMutableState(
 		currentVersionedTransition := transitionhistory.LastVersionedTransition(transitionHistory)
 		if len(transitionHistory) != 0 && request.VersionedTransition != nil {
 			if transitionhistory.StalenessCheck(transitionHistory, request.VersionedTransition) != nil {
-				logger.Warn(fmt.Sprintf("Request versioned transition and transition history don't match prior to polling the mutable state. Request: %v, current: %v",
+				deps.Logger.Warn(fmt.Sprintf("Request versioned transition and transition history don't match prior to polling the mutable state. Request: %v, current: %v",
 					request.VersionedTransition,
 					currentVersionedTransition),
 					tag.WorkflowNamespaceID(workflowKey.GetNamespaceID()),
@@ -166,7 +175,7 @@ func GetOrPollMutableState(
 			if err != nil {
 				return nil, err
 			}
-			logger.Warn("Request history branch and current history branch don't match prior to polling the mutable state",
+			deps.Logger.Warn("Request history branch and current history branch don't match prior to polling the mutable state",
 				tag.Value(logItem),
 				tag.TokenLastEventVersion(request.VersionHistoryItem.GetVersion()),
 				tag.TokenLastEventID(request.VersionHistoryItem.GetEventId()),
@@ -179,11 +188,11 @@ func GetOrPollMutableState(
 			return response, nil
 		}
 
-		namespaceRegistry, err := shardContext.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
+		namespaceRegistry, err := deps.NamespaceRegistry.GetNamespaceByID(namespaceID)
 		if err != nil {
 			return nil, err
 		}
-		timer := time.NewTimer(shardContext.GetConfig().LongPollExpirationInterval(namespaceRegistry.Name().String()))
+		timer := time.NewTimer(deps.Config.LongPollExpirationInterval(namespaceRegistry.Name().String()))
 		defer timer.Stop()
 		for {
 			select {
@@ -217,7 +226,7 @@ func GetOrPollMutableState(
 				currentVersionedTransition := transitionhistory.LastVersionedTransition(transitionHistory)
 				if len(transitionHistory) != 0 && request.VersionedTransition != nil {
 					if transitionhistory.StalenessCheck(transitionHistory, request.VersionedTransition) != nil {
-						logger.Warn(fmt.Sprintf("Request versioned transition and transition history don't match after polling the mutable state. Request: %v, current: %v",
+						deps.Logger.Warn(fmt.Sprintf("Request versioned transition and transition history don't match after polling the mutable state. Request: %v, current: %v",
 							request.VersionedTransition,
 							currentVersionedTransition),
 							tag.WorkflowNamespaceID(workflowKey.GetNamespaceID()),
@@ -227,7 +236,7 @@ func GetOrPollMutableState(
 					}
 				}
 				if !versionhistory.ContainsVersionHistoryItem(eventVersionHistory, request.VersionHistoryItem) {
-					logger.Warn("Request history branch and current history branch don't match after polling the mutable state",
+					deps.Logger.Warn("Request history branch and current history branch don't match after polling the mutable state",
 						tag.Value(notifiedEventVersionItem),
 						tag.TokenLastEventVersion(request.VersionHistoryItem.GetVersion()),
 						tag.TokenLastEventID(request.VersionHistoryItem.GetEventId()),

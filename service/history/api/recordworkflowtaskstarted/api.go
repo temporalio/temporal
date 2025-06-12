@@ -28,20 +28,29 @@ import (
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/update"
+	"go.uber.org/fx"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+type Deps struct {
+	fx.In
+
+	ShardContext               historyi.ShardContext
+	Config                     *configs.Config
+	MetricsHandler             metrics.Handler
+	EventNotifier              events.Notifier
+	PersistenceVisibilityMgr   manager.VisibilityManager
+	WorkflowConsistencyChecker api.WorkflowConsistencyChecker
+
+	TrimHistoryNode api.TrimHistoryNodeDeps
+}
+
 //nolint:revive // cyclomatic complexity
-func Invoke(
+func (deps *Deps) Invoke(
 	ctx context.Context,
 	req *historyservice.RecordWorkflowTaskStartedRequest,
-	shardContext historyi.ShardContext,
-	config *configs.Config,
-	eventNotifier events.Notifier,
-	persistenceVisibilityMgr manager.VisibilityManager,
-	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (*historyservice.RecordWorkflowTaskStartedResponseWithRawHistory, error) {
-	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(req.GetNamespaceId()))
+	namespaceEntry, err := api.GetActiveNamespace(deps.ShardContext, namespace.ID(req.GetNamespaceId()))
 	if err != nil {
 		return nil, err
 	}
@@ -75,7 +84,7 @@ func Invoke(
 				return nil, serviceerror.NewNotFound("Workflow task not found.")
 			}
 
-			metricsScope := shardContext.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.HistoryRecordWorkflowTaskStartedScope))
+			metricsScope := deps.MetricsHandler.WithTags(metrics.OperationTag(metrics.HistoryRecordWorkflowTaskStartedScope))
 
 			// Check to see if mutable cache is stale in some extreme cassandra failure cases.
 			// For speculative and transient WFT scheduledEventID is always ahead of NextEventID.
@@ -207,7 +216,7 @@ func Invoke(
 					metricsScope,
 					namespaceName.String(),
 					tqPartition,
-					config.BreakdownMetricsByTaskQueue(namespaceName.String(), tqPartition.TaskQueue().Name(), enumspb.TASK_QUEUE_TYPE_WORKFLOW),
+					deps.Config.BreakdownMetricsByTaskQueue(namespaceName.String(), tqPartition.TaskQueue().Name(), enumspb.TASK_QUEUE_TYPE_WORKFLOW),
 				),
 			).Record(workflowScheduleToStartLatency)
 
@@ -226,23 +235,19 @@ func Invoke(
 			return updateAction, nil
 		},
 		nil,
-		shardContext,
-		workflowConsistencyChecker,
+		deps.ShardContext,
+		deps.WorkflowConsistencyChecker,
 	)
 
 	if err != nil {
 		return nil, err
 	}
 
-	maxHistoryPageSize := int32(config.HistoryMaxPageSize(namespaceEntry.Name().String()))
-	err = setHistoryForRecordWfTaskStartedResp(
+	maxHistoryPageSize := int32(deps.Config.HistoryMaxPageSize(namespaceEntry.Name().String()))
+	err = deps.setHistoryForRecordWfTaskStartedResp(
 		ctx,
-		shardContext,
 		workflowKey,
 		maxHistoryPageSize,
-		workflowConsistencyChecker,
-		eventNotifier,
-		persistenceVisibilityMgr,
 		resp,
 	)
 	if err != nil {
@@ -251,14 +256,10 @@ func Invoke(
 	return resp, nil
 }
 
-func setHistoryForRecordWfTaskStartedResp(
+func (deps *Deps) setHistoryForRecordWfTaskStartedResp(
 	ctx context.Context,
-	shardContext historyi.ShardContext,
 	workflowKey definition.WorkflowKey,
 	maximumPageSize int32,
-	workflowConsistencyChecker api.WorkflowConsistencyChecker,
-	eventNotifier events.Notifier,
-	persistenceVisibilityMgr manager.VisibilityManager,
 	response *historyservice.RecordWorkflowTaskStartedResponseWithRawHistory,
 ) (retError error) {
 
@@ -274,11 +275,8 @@ func setHistoryForRecordWfTaskStartedResp(
 	//  long term solution should check event batch pointing backwards within history store
 	defer func() {
 		if _, ok := retError.(*serviceerror.DataLoss); ok {
-			api.TrimHistoryNode(
+			deps.TrimHistoryNode.Invoke(
 				ctx,
-				shardContext,
-				workflowConsistencyChecker,
-				eventNotifier,
 				workflowKey.GetNamespaceID(),
 				workflowKey.GetWorkflowID(),
 				workflowKey.GetRunID(),
@@ -286,7 +284,7 @@ func setHistoryForRecordWfTaskStartedResp(
 		}
 	}()
 
-	isInternalRawHistoryEnabled := shardContext.GetConfig().SendRawHistoryBetweenInternalServices()
+	isInternalRawHistoryEnabled := deps.Config.SendRawHistoryBetweenInternalServices()
 	var rawHistory []*commonpb.DataBlob
 	var persistenceToken []byte
 	var history *historypb.History
@@ -294,7 +292,7 @@ func setHistoryForRecordWfTaskStartedResp(
 	if isInternalRawHistoryEnabled {
 		rawHistory, persistenceToken, err = api.GetRawHistory(
 			ctx,
-			shardContext,
+			deps.ShardContext,
 			namespace.ID(workflowKey.GetNamespaceID()),
 			&commonpb.WorkflowExecution{WorkflowId: workflowKey.GetWorkflowID(), RunId: workflowKey.GetRunID()},
 			firstEventID,
@@ -307,7 +305,7 @@ func setHistoryForRecordWfTaskStartedResp(
 	} else {
 		history, persistenceToken, err = api.GetHistory(
 			ctx,
-			shardContext,
+			deps.ShardContext,
 			namespace.ID(workflowKey.GetNamespaceID()),
 			&commonpb.WorkflowExecution{WorkflowId: workflowKey.GetWorkflowID(), RunId: workflowKey.GetRunID()},
 			firstEventID,
@@ -316,7 +314,7 @@ func setHistoryForRecordWfTaskStartedResp(
 			nil,
 			response.GetTransientWorkflowTask(),
 			response.GetBranchToken(),
-			persistenceVisibilityMgr,
+			deps.PersistenceVisibilityMgr,
 		)
 	}
 	if err != nil {

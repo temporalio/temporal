@@ -10,13 +10,19 @@ import (
 	"go.temporal.io/server/service/history/api"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow"
+	"go.uber.org/fx"
 )
 
-func Invoke(
+type Deps struct {
+	fx.In
+
+	ShardContext               historyi.ShardContext
+	WorkflowConsistencyChecker api.WorkflowConsistencyChecker
+}
+
+func (deps *Deps) Invoke(
 	ctx context.Context,
 	req *historyservice.DescribeMutableStateRequest,
-	shardContext historyi.ShardContext,
-	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (_ *historyservice.DescribeMutableStateResponse, retError error) {
 	namespaceID := namespace.ID(req.GetNamespaceId())
 	err := api.ValidateNamespaceUUID(namespaceID)
@@ -24,7 +30,7 @@ func Invoke(
 		return nil, err
 	}
 
-	workflowLease, err := workflowConsistencyChecker.GetWorkflowLease(
+	workflowLease, err := deps.WorkflowConsistencyChecker.GetWorkflowLease(
 		ctx,
 		nil,
 		definition.NewWorkflowKey(
@@ -47,7 +53,7 @@ func Invoke(
 
 	// clear mutable state to force reload from persistence. This API returns both cached and persisted version.
 	workflowLease.GetContext().Clear()
-	mutableState, err := workflowLease.GetContext().LoadMutableState(ctx, shardContext)
+	mutableState, err := workflowLease.GetContext().LoadMutableState(ctx, deps.ShardContext)
 	if err != nil {
 		return nil, err
 	}

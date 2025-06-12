@@ -10,25 +10,37 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/service/history/api"
+	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
-	historyi "go.temporal.io/server/service/history/interfaces"
+	"go.uber.org/fx"
 )
 
-func Invoke(
+type Deps struct {
+	fx.In
+
+	WorkflowConsistencyChecker api.WorkflowConsistencyChecker
+	EventNotifier              events.Notifier
+	NamespaceRegistry          namespace.Registry
+	Config                     *configs.Config
+	ExecutionManager           persistence.ExecutionManager
+	Logger                     log.Logger
+
+	GetOrPollMutableState api.GetOrPollMutableStateDeps
+}
+
+func (deps *Deps) Invoke(
 	ctx context.Context,
-	shardContext historyi.ShardContext,
-	workflowConsistencyChecker api.WorkflowConsistencyChecker,
-	eventNotifier events.Notifier,
 	request *historyservice.GetWorkflowExecutionRawHistoryV2Request,
 ) (_ *historyservice.GetWorkflowExecutionRawHistoryV2Response, retError error) {
-	ns, err := shardContext.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(request.GetNamespaceId()))
+	ns, err := deps.NamespaceRegistry.GetNamespaceByID(namespace.ID(request.GetNamespaceId()))
 	if err != nil {
 		return nil, err
 	}
@@ -38,15 +50,12 @@ func Invoke(
 	var pageToken *tokenspb.RawHistoryContinuation
 	var targetVersionHistory *historyspb.VersionHistory
 	if req.NextPageToken == nil {
-		response, err := api.GetOrPollMutableState(
+		response, err := deps.GetOrPollMutableState.Invoke(
 			ctx,
-			shardContext,
 			&historyservice.GetMutableStateRequest{
 				NamespaceId: ns.ID().String(),
 				Execution:   execution,
 			},
-			workflowConsistencyChecker,
-			eventNotifier,
 		)
 		if err != nil {
 			return nil, err
@@ -100,9 +109,9 @@ func Invoke(
 	shardID := common.WorkflowIDToHistoryShard(
 		ns.ID().String(),
 		execution.GetWorkflowId(),
-		shardContext.GetConfig().NumberOfShards,
+		deps.Config.NumberOfShards,
 	)
-	rawHistoryResponse, err := shardContext.GetExecutionManager().ReadRawHistoryBranch(ctx, &persistence.ReadHistoryBranchRequest{
+	rawHistoryResponse, err := deps.ExecutionManager.ReadRawHistoryBranch(ctx, &persistence.ReadHistoryBranchRequest{
 		BranchToken: targetVersionHistory.GetBranchToken(),
 		// GetWorkflowExecutionRawHistoryV2 is exclusive exclusive.
 		// ReadRawHistoryBranch is inclusive exclusive.
@@ -129,7 +138,7 @@ func Invoke(
 
 	pageToken.PersistenceToken = rawHistoryResponse.NextPageToken
 	size := rawHistoryResponse.Size
-	metricsHandler := interceptor.GetMetricsHandlerFromContext(ctx, shardContext.GetLogger()).WithTags(metrics.OperationTag(metrics.HistoryGetWorkflowExecutionRawHistoryV2Scope))
+	metricsHandler := interceptor.GetMetricsHandlerFromContext(ctx, deps.Logger).WithTags(metrics.OperationTag(metrics.HistoryGetWorkflowExecutionRawHistoryV2Scope))
 	metrics.HistorySize.With(metricsHandler).Record(
 		int64(size),
 		metrics.NamespaceTag(ns.Name().String()),

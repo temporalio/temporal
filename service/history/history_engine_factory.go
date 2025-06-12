@@ -2,20 +2,15 @@ package history
 
 import (
 	"go.opentelemetry.io/otel/trace"
-	"go.temporal.io/server/client"
+	"go.temporal.io/server/common/fxutil"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/resource"
-	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/testing/testhooks"
-	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/circuitbreakerpool"
-	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/replication"
-	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.uber.org/fx"
@@ -25,22 +20,17 @@ type (
 	HistoryEngineFactoryParams struct {
 		fx.In
 
-		ClientBean                      client.Bean
 		MatchingClient                  resource.MatchingClient
-		SdkClientFactory                sdk.ClientFactory
-		EventNotifier                   events.Notifier
-		Config                          *configs.Config
 		RawMatchingClient               resource.MatchingRawClient
+		EventNotifier                   events.Notifier
 		WorkflowCache                   wcache.Cache
 		ReplicationProgressCache        replication.ProgressCache
-		EventSerializer                 serialization.Serializer
 		QueueFactories                  []QueueFactory `group:"queueFactory"`
 		ReplicationTaskFetcherFactory   replication.TaskFetcherFactory
 		ReplicationTaskExecutorProvider replication.TaskExecutorProvider
 		TracerProvider                  trace.TracerProvider
 		PersistenceVisibilityMgr        manager.VisibilityManager
 		EventBlobCache                  persistence.XDCCache
-		TaskCategoryRegistry            tasks.TaskCategoryRegistry
 		ReplicationDLQWriter            replication.DLQWriter
 		CommandHandlerRegistry          *workflow.CommandHandlerRegistry
 		OutboundQueueCBPool             *circuitbreakerpool.OutboundQueueCircuitBreakerPool
@@ -55,28 +45,23 @@ type (
 func (f *historyEngineFactory) CreateEngine(
 	shard historyi.ShardContext,
 ) historyi.Engine {
-	return NewEngineWithShardContext(
-		shard,
-		f.ClientBean,
-		f.MatchingClient,
-		f.SdkClientFactory,
-		f.EventNotifier,
-		f.Config,
-		f.RawMatchingClient,
-		f.WorkflowCache,
-		f.ReplicationProgressCache,
-		f.EventSerializer,
-		f.QueueFactories,
-		f.ReplicationTaskFetcherFactory,
-		f.ReplicationTaskExecutorProvider,
-		api.NewWorkflowConsistencyChecker(shard, f.WorkflowCache),
-		f.TracerProvider,
-		f.PersistenceVisibilityMgr,
-		f.EventBlobCache,
-		f.TaskCategoryRegistry,
-		f.ReplicationDLQWriter,
-		f.CommandHandlerRegistry,
-		f.OutboundQueueCBPool,
-		f.TestHooks,
+	globalOptions := fx.Options()
+	if shard.GetClusterMetadata().IsGlobalNamespaceEnabled() {
+		globalOptions = globalEngineFx
+	}
+
+	var engine *historyEngineImpl
+	app := fx.New(
+		engineFx,
+		fx.Supply(fx.Annotate(shard, fx.As(new(historyi.ShardContext)))),
+		shard.SupplyAllDependencies(),                        // reflection magic to supply all shard dependencies individually
+		fxutil.SupplyAllFields(f.HistoryEngineFactoryParams), // reflection magic to supply all engine dependencies individually
+		globalOptions,
+		fx.Populate(&engine),
 	)
+	if app.Err() != nil {
+		panic("history engine init: " + app.Err().Error())
+	}
+	// Note that we do not call app.Start() or app.Run(), we're not using the lifecycle features here (yet?).
+	return engine
 }

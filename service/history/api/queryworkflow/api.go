@@ -12,45 +12,60 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/api/resetstickytaskqueue"
+	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow"
+	"go.uber.org/fx"
 )
 
 // Fail query fast if workflow task keeps failing (attempt >= 3).
 const failQueryWorkflowTaskAttemptCount = 3
 
-func Invoke(
+type Deps struct {
+	fx.In
+
+	ShardContext               historyi.ShardContext
+	MetricsHandler             metrics.Handler
+	NamespaceRegistry          namespace.Registry
+	Logger                     log.Logger
+	ClusterMetadata            cluster.Metadata
+	Config                     *configs.Config
+	WorkflowConsistencyChecker api.WorkflowConsistencyChecker
+	RawMatchingClient          resource.MatchingRawClient
+	MatchingClient             resource.MatchingClient
+}
+
+func (deps *Deps) Invoke(
 	ctx context.Context,
 	request *historyservice.QueryWorkflowRequest,
-	shardContext historyi.ShardContext,
-	workflowConsistencyChecker api.WorkflowConsistencyChecker,
-	rawMatchingClient matchingservice.MatchingServiceClient,
-	matchingClient matchingservice.MatchingServiceClient,
 ) (_ *historyservice.QueryWorkflowResponse, retError error) {
-	scope := shardContext.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.HistoryQueryWorkflowScope))
+	scope := deps.MetricsHandler.WithTags(metrics.OperationTag(metrics.HistoryQueryWorkflowScope))
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	err := api.ValidateNamespaceUUID(namespaceID)
 	if err != nil {
 		return nil, err
 	}
-	nsEntry, err := shardContext.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
+	nsEntry, err := deps.NamespaceRegistry.GetNamespaceByID(namespaceID)
 	if err != nil {
 		return nil, err
 	}
 
 	if len(request.Request.Execution.RunId) == 0 {
-		request.Request.Execution.RunId, err = workflowConsistencyChecker.GetCurrentRunID(
+		request.Request.Execution.RunId, err = deps.WorkflowConsistencyChecker.GetCurrentRunID(
 			ctx,
 			request.NamespaceId,
 			request.Request.Execution.WorkflowId,
@@ -65,7 +80,7 @@ func Invoke(
 		request.Request.Execution.WorkflowId,
 		request.Request.Execution.RunId,
 	)
-	workflowLease, err := workflowConsistencyChecker.GetWorkflowLease(
+	workflowLease, err := deps.WorkflowConsistencyChecker.GetWorkflowLease(
 		ctx,
 		nil,
 		workflowKey,
@@ -119,7 +134,7 @@ func Invoke(
 	if mutableState.GetExecutionInfo().WorkflowTaskAttempt >= failQueryWorkflowTaskAttemptCount {
 		// while workflow task is failing, the query to that workflow will also fail. Failing fast here to prevent wasting
 		// resources to load history for a query that will fail.
-		shardContext.GetLogger().Info("Fail query fast due to WorkflowTask in failed state.",
+		deps.Logger.Info("Fail query fast due to WorkflowTask in failed state.",
 			tag.WorkflowNamespace(request.Request.Namespace),
 			tag.WorkflowNamespaceID(workflowKey.NamespaceID),
 			tag.WorkflowID(workflowKey.WorkflowID),
@@ -141,7 +156,7 @@ func Invoke(
 		// 1. the namespace is not active, in this case history is immutable so a query dispatched at any time is consistent
 		// 2. the workflow is not running, whenever a workflow is not running dispatching query directly is consistent
 		// 3. if there is no pending or started workflow tasks it means no events came before query arrived, so its safe to dispatch directly
-		safeToDispatchDirectly := !nsEntry.ActiveInCluster(shardContext.GetClusterMetadata().GetCurrentClusterName()) ||
+		safeToDispatchDirectly := !nsEntry.ActiveInCluster(deps.ClusterMetadata.GetCurrentClusterName()) ||
 			!mutableState.IsWorkflowExecutionRunning() ||
 			(!mutableState.HasPendingWorkflowTask() && !mutableState.HasStartedWorkflowTask())
 		if safeToDispatchDirectly {
@@ -151,16 +166,12 @@ func Invoke(
 			}
 			workflowLease.GetReleaseFn()(nil) // release the lock - no access to mutable state beyond this point!
 			req.Execution.RunId = msResp.Execution.RunId
-			return queryDirectlyThroughMatching(
+			return deps.queryDirectlyThroughMatching(
 				ctx,
 				msResp,
 				nsEntry,
 				request.GetNamespaceId(),
 				req,
-				shardContext,
-				workflowConsistencyChecker,
-				rawMatchingClient,
-				matchingClient,
 				scope,
 				priority,
 			)
@@ -173,7 +184,7 @@ func Invoke(
 	defer func() { metrics.WorkflowTaskQueryLatency.With(scope).Record(time.Since(startTime)) }()
 
 	queryReg := mutableState.GetQueryRegistry()
-	if len(queryReg.GetBufferedIDs()) >= shardContext.GetConfig().MaxBufferedQueryCount() {
+	if len(queryReg.GetBufferedIDs()) >= deps.Config.MaxBufferedQueryCount() {
 		metrics.QueryBufferExceededCount.With(scope).Record(1)
 		return nil, consts.ErrConsistentQueryBufferExceeded
 	}
@@ -225,21 +236,17 @@ func Invoke(
 				return nil, consts.ErrQueryEnteredInvalidState
 			}
 		case workflow.QueryCompletionTypeUnblocked:
-			msResp, err := api.GetMutableState(ctx, shardContext, workflowKey, workflowConsistencyChecker)
+			msResp, err := api.GetMutableState(ctx, deps.ShardContext, workflowKey, deps.WorkflowConsistencyChecker)
 			if err != nil {
 				return nil, err
 			}
 			req.Execution.RunId = msResp.Execution.RunId
-			return queryDirectlyThroughMatching(
+			return deps.queryDirectlyThroughMatching(
 				ctx,
 				msResp,
 				nsEntry,
 				request.GetNamespaceId(),
 				req,
-				shardContext,
-				workflowConsistencyChecker,
-				rawMatchingClient,
-				matchingClient,
 				scope,
 				priority,
 			)
@@ -294,25 +301,21 @@ func queryWillTimeoutsBeforeFirstWorkflowTaskStart(
 	return false, nil
 }
 
-func queryDirectlyThroughMatching(
+func (deps *Deps) queryDirectlyThroughMatching(
 	ctx context.Context,
 	msResp *historyservice.GetMutableStateResponse,
 	nsEntry *namespace.Namespace,
 	namespaceID string,
 	queryRequest *workflowservice.QueryWorkflowRequest,
-	shard historyi.ShardContext,
-	workflowConsistencyChecker api.WorkflowConsistencyChecker,
-	rawMatchingClient matchingservice.MatchingServiceClient,
-	matchingClient matchingservice.MatchingServiceClient,
-	metricsHandler metrics.Handler,
+	scope metrics.Handler,
 	priority *commonpb.Priority,
 ) (resp *historyservice.QueryWorkflowResponse, retError error) {
 
 	startTime := time.Now().UTC()
 	defer func() {
-		metrics.DirectQueryDispatchLatency.With(metricsHandler).Record(time.Since(startTime))
+		metrics.DirectQueryDispatchLatency.With(scope).Record(time.Since(startTime))
 		emitWorkflowQueryMetrics(
-			metricsHandler,
+			scope,
 			nsEntry,
 			msResp,
 			queryRequest.GetQuery().GetQueryType(),
@@ -331,7 +334,7 @@ func queryDirectlyThroughMatching(
 
 	if msResp.GetIsStickyTaskQueueEnabled() &&
 		len(msResp.GetStickyTaskQueue().GetName()) != 0 &&
-		shard.GetConfig().EnableStickyQuery(queryRequest.GetNamespace()) {
+		deps.Config.EnableStickyQuery(queryRequest.GetNamespace()) {
 
 		stickyMatchingRequest := &matchingservice.QueryWorkflowRequest{
 			NamespaceId:      namespaceID,
@@ -345,11 +348,11 @@ func queryDirectlyThroughMatching(
 		// a really short deadline, causing we clear the stickiness
 		stickyContext, cancel := rpc.ResetContextTimeout(ctx, timestamp.DurationValue(msResp.GetStickyTaskQueueScheduleToStartTimeout()))
 		stickyStartTime := time.Now().UTC()
-		matchingResp, err := rawMatchingClient.QueryWorkflow(stickyContext, stickyMatchingRequest)
-		metrics.DirectQueryDispatchStickyLatency.With(metricsHandler).Record(time.Since(stickyStartTime))
+		matchingResp, err := deps.RawMatchingClient.QueryWorkflow(stickyContext, stickyMatchingRequest)
+		metrics.DirectQueryDispatchStickyLatency.With(scope).Record(time.Since(stickyStartTime))
 		cancel()
 		if err == nil {
-			metrics.DirectQueryDispatchStickySuccessCount.With(metricsHandler).Record(1)
+			metrics.DirectQueryDispatchStickySuccessCount.With(scope).Record(1)
 			return &historyservice.QueryWorkflowResponse{
 				Response: &workflowservice.QueryWorkflowResponse{
 					QueryResult:   matchingResp.GetQueryResult(),
@@ -365,18 +368,18 @@ func queryDirectlyThroughMatching(
 			_, err := resetstickytaskqueue.Invoke(resetContext, &historyservice.ResetStickyTaskQueueRequest{
 				NamespaceId: namespaceID,
 				Execution:   queryRequest.GetExecution(),
-			}, shard, workflowConsistencyChecker)
-			metrics.DirectQueryDispatchClearStickinessLatency.With(metricsHandler).Record(time.Since(clearStickinessStartTime))
+			}, deps.ShardContext, deps.WorkflowConsistencyChecker)
+			metrics.DirectQueryDispatchClearStickinessLatency.With(scope).Record(time.Since(clearStickinessStartTime))
 			cancel()
 			if err != nil && err != consts.ErrWorkflowCompleted {
 				return nil, err
 			}
-			metrics.DirectQueryDispatchClearStickinessSuccessCount.With(metricsHandler).Record(1)
+			metrics.DirectQueryDispatchClearStickinessSuccessCount.With(scope).Record(1)
 		}
 	}
 
 	if err := common.IsValidContext(ctx); err != nil {
-		metrics.DirectQueryDispatchTimeoutBeforeNonStickyCount.With(metricsHandler).Record(1)
+		metrics.DirectQueryDispatchTimeoutBeforeNonStickyCount.With(scope).Record(1)
 		return nil, err
 	}
 
@@ -389,12 +392,12 @@ func queryDirectlyThroughMatching(
 	}
 
 	nonStickyStartTime := time.Now().UTC()
-	matchingResp, err := matchingClient.QueryWorkflow(ctx, nonStickyMatchingRequest)
-	metrics.DirectQueryDispatchNonStickyLatency.With(metricsHandler).Record(time.Since(nonStickyStartTime))
+	matchingResp, err := deps.MatchingClient.QueryWorkflow(ctx, nonStickyMatchingRequest)
+	metrics.DirectQueryDispatchNonStickyLatency.With(scope).Record(time.Since(nonStickyStartTime))
 	if err != nil {
 		return nil, err
 	}
-	metrics.DirectQueryDispatchNonStickySuccessCount.With(metricsHandler).Record(1)
+	metrics.DirectQueryDispatchNonStickySuccessCount.With(scope).Record(1)
 	return &historyservice.QueryWorkflowResponse{
 		Response: &workflowservice.QueryWorkflowResponse{
 			QueryResult:   matchingResp.GetQueryResult(),

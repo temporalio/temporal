@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
@@ -25,10 +26,12 @@ import (
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/circuitbreakerpool"
+	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/hsm"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
+	"go.uber.org/fx"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -53,13 +56,20 @@ func clonePayloadMap(source map[string]*commonpb.Payload) map[string]*commonpb.P
 	return target
 }
 
-func Invoke(
+type Deps struct {
+	fx.In
+
+	Shard                      historyi.ShardContext
+	WorkflowConsistencyChecker api.WorkflowConsistencyChecker
+	PersistenceVisibilityMgr   manager.VisibilityManager
+	OutboundQueueCBPool        *circuitbreakerpool.OutboundQueueCircuitBreakerPool
+	Logger                     log.Logger
+	Config                     *configs.Config
+}
+
+func (deps *Deps) Invoke(
 	ctx context.Context,
 	req *historyservice.DescribeWorkflowExecutionRequest,
-	shard historyi.ShardContext,
-	workflowConsistencyChecker api.WorkflowConsistencyChecker,
-	persistenceVisibilityMgr manager.VisibilityManager,
-	outboundQueueCBPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool,
 ) (_ *historyservice.DescribeWorkflowExecutionResponse, retError error) {
 	namespaceID := namespace.ID(req.GetNamespaceId())
 	err := api.ValidateNamespaceUUID(namespaceID)
@@ -67,7 +77,7 @@ func Invoke(
 		return nil, err
 	}
 
-	workflowLease, err := workflowConsistencyChecker.GetWorkflowLease(
+	workflowLease, err := deps.WorkflowConsistencyChecker.GetWorkflowLease(
 		ctx,
 		nil,
 		definition.NewWorkflowKey(
@@ -181,7 +191,7 @@ func Invoke(
 	}
 
 	for _, ai := range mutableState.GetPendingActivityInfos() {
-		p, err := workflow.GetPendingActivityInfo(ctx, shard, mutableState, ai)
+		p, err := workflow.GetPendingActivityInfo(ctx, deps.Shard, mutableState, ai)
 		if err != nil {
 			return nil, err
 		}
@@ -214,12 +224,12 @@ func Invoke(
 	}
 
 	relocatableAttrsFetcher := workflow.RelocatableAttributesFetcherProvider(
-		shard.GetConfig(),
-		persistenceVisibilityMgr,
+		deps.Config,
+		deps.PersistenceVisibilityMgr,
 	)
 	relocatableAttributes, err := relocatableAttrsFetcher.Fetch(ctx, mutableState)
 	if err != nil {
-		shard.GetLogger().Error(
+		deps.Logger.Error(
 			"Failed to fetch relocatable attributes",
 			tag.WorkflowNamespaceID(namespaceID.String()),
 			tag.WorkflowID(executionInfo.WorkflowId),
@@ -241,7 +251,7 @@ func Invoke(
 	for _, node := range cbs {
 		callback, err := cbColl.Data(node.Key.ID)
 		if err != nil {
-			shard.GetLogger().Error(
+			deps.Logger.Error(
 				"failed to load callback data while building describe response",
 				tag.WorkflowNamespaceID(namespaceID.String()),
 				tag.WorkflowID(executionInfo.WorkflowId),
@@ -251,9 +261,9 @@ func Invoke(
 			return nil, serviceerror.NewInternal("failed to construct describe response")
 		}
 
-		callbackInfo, err := buildCallbackInfo(namespaceID, callback, outboundQueueCBPool)
+		callbackInfo, err := buildCallbackInfo(namespaceID, callback, deps.OutboundQueueCBPool)
 		if err != nil {
-			shard.GetLogger().Error(
+			deps.Logger.Error(
 				"failed to build callback info while building describe response",
 				tag.WorkflowNamespaceID(namespaceID.String()),
 				tag.WorkflowID(executionInfo.WorkflowId),
@@ -274,7 +284,7 @@ func Invoke(
 	for _, node := range ops {
 		op, err := opColl.Data(node.Key.ID)
 		if err != nil {
-			shard.GetLogger().Error(
+			deps.Logger.Error(
 				"failed to load Nexus operation data while building describe response",
 				tag.WorkflowNamespaceID(namespaceID.String()),
 				tag.WorkflowID(executionInfo.WorkflowId),
@@ -284,9 +294,9 @@ func Invoke(
 			return nil, serviceerror.NewInternal("failed to construct describe response")
 		}
 
-		operationInfo, err := buildPendingNexusOperationInfo(namespaceID, node, op, outboundQueueCBPool)
+		operationInfo, err := buildPendingNexusOperationInfo(namespaceID, node, op, deps.OutboundQueueCBPool)
 		if err != nil {
-			shard.GetLogger().Error(
+			deps.Logger.Error(
 				"failed to build Nexus operation info while building describe response",
 				tag.WorkflowNamespaceID(namespaceID.String()),
 				tag.WorkflowID(executionInfo.WorkflowId),

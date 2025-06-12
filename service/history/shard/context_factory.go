@@ -7,6 +7,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/fxutil"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
@@ -35,75 +36,55 @@ type (
 	ContextFactoryParams struct {
 		fx.In
 
-		ArchivalMetadata            archiver.ArchivalMetadata
-		ClientBean                  client.Bean
-		ClusterMetadata             cluster.Metadata
-		Config                      *configs.Config
-		PersistenceConfig           config.Persistence
-		EngineFactory               EngineFactory
-		HistoryClient               resource.HistoryClient
-		HistoryServiceResolver      membership.ServiceResolver
-		HostInfoProvider            membership.HostInfoProvider
-		Logger                      log.Logger
-		MetricsHandler              metrics.Handler
-		NamespaceRegistry           namespace.Registry
-		PayloadSerializer           serialization.Serializer
-		PersistenceExecutionManager persistence.ExecutionManager
-		PersistenceShardManager     persistence.ShardManager
-		SaMapperProvider            searchattribute.MapperProvider
-		SaProvider                  searchattribute.Provider
-		ThrottledLogger             log.ThrottledLogger
-		TimeSource                  clock.TimeSource
-		TaskCategoryRegistry        tasks.TaskCategoryRegistry
-		EventsCache                 events.Cache
-
-		StateMachineRegistry *hsm.Registry
-		ChasmRegistry        *chasm.Registry
+		ArchivalMetadata       archiver.ArchivalMetadata
+		ClientBean             client.Bean
+		ClusterMetadata        cluster.Metadata
+		Config                 *configs.Config
+		PersistenceConfig      config.Persistence
+		EngineFactory          EngineFactory
+		HistoryClient          resource.HistoryClient
+		HistoryServiceResolver membership.ServiceResolver
+		HostInfoProvider       membership.HostInfoProvider
+		BaseLogger             log.Logger
+		BaseThrottledLogger    log.ThrottledLogger
+		MetricsHandler         metrics.Handler
+		NamespaceRegistry      namespace.Registry
+		PayloadSerializer      serialization.Serializer
+		ExecutionManager       persistence.ExecutionManager
+		ShardManager           persistence.ShardManager
+		SaMapperProvider       searchattribute.MapperProvider
+		SaProvider             searchattribute.Provider
+		TimeSource             clock.TimeSource
+		TaskCategoryRegistry   tasks.TaskCategoryRegistry
+		HostLevelEventsCache   events.Cache
+		StateMachineRegistry   *hsm.Registry
+		ChasmRegistry          *chasm.Registry
 	}
 
 	contextFactoryImpl struct {
-		*ContextFactoryParams
+		params ContextFactoryParams
 	}
 )
 
 func ContextFactoryProvider(params ContextFactoryParams) ContextFactory {
-	return &contextFactoryImpl{
-		ContextFactoryParams: &params,
-	}
+	return &contextFactoryImpl{params: params}
 }
 
 func (c *contextFactoryImpl) CreateContext(
 	shardID int32,
 	closeCallback CloseCallback,
 ) (historyi.ControllableContext, error) {
-	shard, err := newContext(
-		shardID,
-		c.EngineFactory,
-		c.Config,
-		c.PersistenceConfig,
-		closeCallback,
-		c.Logger,
-		c.ThrottledLogger,
-		c.PersistenceExecutionManager,
-		c.PersistenceShardManager,
-		c.ClientBean,
-		c.HistoryClient,
-		c.MetricsHandler,
-		c.PayloadSerializer,
-		c.TimeSource,
-		c.NamespaceRegistry,
-		c.SaProvider,
-		c.SaMapperProvider,
-		c.ClusterMetadata,
-		c.ArchivalMetadata,
-		c.HostInfoProvider,
-		c.TaskCategoryRegistry,
-		c.EventsCache,
-		c.StateMachineRegistry,
-		c.ChasmRegistry,
+	var shard *ContextImpl
+	app := fx.New(
+		shardContextFx,
+		fx.Supply(shardID),
+		fx.Supply(closeCallback),
+		fxutil.SupplyAllFields(c.params), // reflection magic to supply all fields individually
+		fx.Populate(&shard),
 	)
-	if err != nil {
-		return nil, err
+	// Note that we do not call app.Start() or app.Run(), we're not using the lifecycle features here (yet?).
+	if app.Err() != nil {
+		return nil, app.Err()
 	}
 	shard.start()
 	return shard, nil
