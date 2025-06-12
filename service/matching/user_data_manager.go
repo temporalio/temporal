@@ -683,7 +683,7 @@ func (m *userDataManagerImpl) setUserDataForNonOwningPartition(userData *persist
 
 func (m *userDataManagerImpl) callerInfoContext(ctx context.Context) context.Context {
 	ns, _ := m.namespaceRegistry.GetNamespaceName(namespace.ID(m.partition.NamespaceId()))
-	return headers.SetCallerInfo(ctx, headers.NewBackgroundCallerInfo(ns.String()))
+	return headers.SetCallerInfo(ctx, headers.NewBackgroundHighCallerInfo(ns.String()))
 }
 
 func (m *userDataManagerImpl) logNewUserData(message string, data *persistencespb.VersionedTaskQueueUserData, tags ...tag.Tag) {

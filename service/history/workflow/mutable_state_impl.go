@@ -6033,7 +6033,7 @@ func (ms *MutableStateImpl) isStateDirty() bool {
 		ms.executionStateUpdated ||
 		ms.workflowTaskUpdated ||
 		(ms.stateMachineNode != nil && ms.stateMachineNode.Dirty()) ||
-		ms.chasmTree.IsDirty() ||
+		ms.chasmTree.IsStateDirty() ||
 		ms.isResetStateUpdated
 }
 

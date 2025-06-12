@@ -2585,7 +2585,7 @@ func (s *mutableStateSuite) TestCloseTransactionUpdateTransition() {
 				mockChasmTree := historyi.NewMockChasmTree(s.controller)
 				mockChasmTree.EXPECT().Archetype().Return("mock-archetype").AnyTimes()
 				gomock.InOrder(
-					mockChasmTree.EXPECT().IsDirty().Return(true).AnyTimes(),
+					mockChasmTree.EXPECT().IsStateDirty().Return(true).AnyTimes(),
 					mockChasmTree.EXPECT().CloseTransaction().Return(chasm.NodesMutation{
 						UpdatedNodes: map[string]*persistencespb.ChasmNode{
 							"node-path": {
@@ -4010,7 +4010,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackTombstones() {
 				mockChasmTree := historyi.NewMockChasmTree(s.controller)
 				mockChasmTree.EXPECT().Archetype().Return("mock-archetype").AnyTimes()
 				gomock.InOrder(
-					mockChasmTree.EXPECT().IsDirty().Return(true).AnyTimes(),
+					mockChasmTree.EXPECT().IsStateDirty().Return(true).AnyTimes(),
 					mockChasmTree.EXPECT().CloseTransaction().Return(chasm.NodesMutation{
 						DeletedNodes: map[string]struct{}{deletedNodePath: {}},
 					}, nil),
@@ -4160,7 +4160,7 @@ func (s *mutableStateSuite) TestCloseTransactionGenerateCHASMRetentionTask() {
 	mutableState.chasmTree = mockChasmTree
 
 	// Not a workflow, should not generate retention task
-	mockChasmTree.EXPECT().IsDirty().Return(true).AnyTimes()
+	mockChasmTree.EXPECT().IsStateDirty().Return(true).AnyTimes()
 	mockChasmTree.EXPECT().Archetype().Return("").Times(1)
 	mockChasmTree.EXPECT().CloseTransaction().Return(chasm.NodesMutation{}, nil).AnyTimes()
 	mutation, _, err := mutableState.CloseTransactionAsMutation(historyi.TransactionPolicyActive)

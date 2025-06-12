@@ -940,6 +940,7 @@ var (
 	ReplicationNonEmptyDLQCount                    = NewCounterDef("replication_dlq_non_empty")
 	ReplicationOutlierNamespace                    = NewCounterDef("replication_outlier_namespace")
 	ReplicationDuplicatedTaskCount                 = NewCounterDef("replication_duplicated_task")
+	ReplicationRateLimitLatency                    = NewTimerDef("replication_sender_rate_limit_latency")
 	EventReapplySkippedCount                       = NewCounterDef("event_reapply_skipped_count")
 	DirectQueryDispatchLatency                     = NewTimerDef("direct_query_dispatch_latency")
 	DirectQueryDispatchStickyLatency               = NewTimerDef("direct_query_dispatch_sticky_latency")
