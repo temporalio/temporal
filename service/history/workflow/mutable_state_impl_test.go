@@ -6,6 +6,7 @@ import (
 	"math/rand"
 	"reflect"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -4980,228 +4981,101 @@ func (s *mutableStateSuite) TestUpdateActivityTaskStatusWithTimerHeartbeat() {
 	s.Equal(originalTime, mutableState.pendingActivityTimerHeartbeats[scheduleEventId])
 }
 
-func (s *mutableStateSuite) TestGetExistingCompletionCallbackCount() {
+func (s *mutableStateSuite) TestHasRequestID() {
 	testCases := []struct {
-		name           string
-		eventType      enumspb.EventType
-		eventID        int64
-		requestID      string
-		callbacks      []*commonpb.Callback
-		callbacksToAdd []*commonpb.Callback
-		expectedCount  int
+		name          string
+		requestID     string
+		setupFunc     func(ms *MutableStateImpl) // Setup function to prepare the mutable state
+		expectedFound bool
 	}{
 		{
-			name:           "no_callbacks",
-			eventType:      enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
-			eventID:        100,
-			requestID:      "test-request-id",
-			callbacks:      []*commonpb.Callback{},
-			callbacksToAdd: []*commonpb.Callback{},
-			expectedCount:  0,
+			name:      "empty_request_id",
+			requestID: "",
+			setupFunc: func(ms *MutableStateImpl) {
+				// No setup needed
+			},
+			expectedFound: false,
 		},
 		{
-			name:      "no_existing_callbacks_found",
-			eventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
-			eventID:   100,
-			requestID: "test-request-id",
-			callbacks: []*commonpb.Callback{
-				{
-					Variant: &commonpb.Callback_Nexus_{
-						Nexus: &commonpb.Callback_Nexus{
-							Url: "http://example.com",
-							Header: map[string]string{
-								"test": "value",
-							},
-						},
-					},
-				},
-				{
-					Variant: &commonpb.Callback_Nexus_{
-						Nexus: &commonpb.Callback_Nexus{
-							Url: "http://example2.com",
-							Header: map[string]string{
-								"test": "value2",
-							},
-						},
-					},
-				},
+			name:      "request_id_not_found",
+			requestID: "non-existent-request-id",
+			setupFunc: func(ms *MutableStateImpl) {
+				// No setup needed
 			},
-			callbacksToAdd: []*commonpb.Callback{},
-			expectedCount:  0,
+			expectedFound: false,
 		},
 		{
-			name:      "some_existing_callbacks_found",
-			eventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
-			eventID:   100,
-			requestID: "test-request-id",
-			callbacks: []*commonpb.Callback{
-				{
-					Variant: &commonpb.Callback_Nexus_{
-						Nexus: &commonpb.Callback_Nexus{
-							Url: "http://example.com",
-							Header: map[string]string{
-								"test": "value",
-							},
-						},
-					},
-				},
-				{
-					Variant: &commonpb.Callback_Nexus_{
-						Nexus: &commonpb.Callback_Nexus{
-							Url: "http://example2.com",
-							Header: map[string]string{
-								"test": "value2",
-							},
-						},
-					},
-				},
-				{
-					Variant: &commonpb.Callback_Nexus_{
-						Nexus: &commonpb.Callback_Nexus{
-							Url: "http://example3.com",
-							Header: map[string]string{
-								"test": "value3",
-							},
-						},
-					},
-				},
+			name:      "request_id_found",
+			requestID: "existing-request-id",
+			setupFunc: func(ms *MutableStateImpl) {
+				// Add request ID to execution state
+				ms.AttachRequestID("existing-request-id", enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED, 100)
 			},
-			callbacksToAdd: []*commonpb.Callback{
-				{
-					Variant: &commonpb.Callback_Nexus_{
-						Nexus: &commonpb.Callback_Nexus{
-							Url: "http://example.com",
-							Header: map[string]string{
-								"test": "value",
-							},
-						},
-					},
-				},
-			},
-			expectedCount: 1,
+			expectedFound: true,
 		},
 		{
-			name:      "all_existing_callbacks_found",
-			eventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
-			eventID:   100,
-			requestID: "test-request-id",
-			callbacks: []*commonpb.Callback{
-				{
-					Variant: &commonpb.Callback_Nexus_{
-						Nexus: &commonpb.Callback_Nexus{
-							Url: "http://example.com",
-							Header: map[string]string{
-								"test": "value",
-							},
-						},
-					},
-				},
-				{
-					Variant: &commonpb.Callback_Nexus_{
-						Nexus: &commonpb.Callback_Nexus{
-							Url: "http://example2.com",
-							Header: map[string]string{
-								"test": "value2",
-							},
-						},
-					},
-				},
+			name:      "multiple_request_ids_found_target",
+			requestID: "target-request-id",
+			setupFunc: func(ms *MutableStateImpl) {
+				// Add multiple request IDs
+				ms.AttachRequestID("request-id-1", enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED, 101)
+				ms.AttachRequestID("target-request-id", enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED, 102)
+				ms.AttachRequestID("request-id-3", enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED, 103)
 			},
-			callbacksToAdd: []*commonpb.Callback{
-				{
-					Variant: &commonpb.Callback_Nexus_{
-						Nexus: &commonpb.Callback_Nexus{
-							Url: "http://example.com",
-							Header: map[string]string{
-								"test": "value",
-							},
-						},
-					},
-				},
-				{
-					Variant: &commonpb.Callback_Nexus_{
-						Nexus: &commonpb.Callback_Nexus{
-							Url: "http://example2.com",
-							Header: map[string]string{
-								"test": "value2",
-							},
-						},
-					},
-				},
-			},
-			expectedCount: 2,
+			expectedFound: true,
 		},
 		{
-			name:      "workflow_started_event_type",
-			eventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
-			eventID:   1,
-			requestID: "test-request-id",
-			callbacks: []*commonpb.Callback{
-				{
-					Variant: &commonpb.Callback_Nexus_{
-						Nexus: &commonpb.Callback_Nexus{
-							Url: "http://example.com",
-							Header: map[string]string{
-								"test": "value",
-							},
-						},
-					},
-				},
+			name:      "multiple_request_ids_not_found_target",
+			requestID: "missing-request-id",
+			setupFunc: func(ms *MutableStateImpl) {
+				// Add multiple request IDs, but not the target one
+				ms.AttachRequestID("request-id-1", enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED, 104)
+				ms.AttachRequestID("request-id-2", enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED, 105)
+				ms.AttachRequestID("request-id-3", enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED, 106)
 			},
-			callbacksToAdd: []*commonpb.Callback{
-				{
-					Variant: &commonpb.Callback_Nexus_{
-						Nexus: &commonpb.Callback_Nexus{
-							Url: "http://example.com",
-							Header: map[string]string{
-								"test": "value",
-							},
-						},
-					},
-				},
-			},
-			expectedCount: 1,
+			expectedFound: false,
 		},
 		{
-			name:      "mixed_existing_and_non_existing_callbacks",
-			eventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
-			eventID:   100,
-			requestID: "test-request-id",
-			callbacks: []*commonpb.Callback{
-				{
-					Variant: &commonpb.Callback_Nexus_{
-						Nexus: &commonpb.Callback_Nexus{
-							Url: "http://existing.com",
-							Header: map[string]string{
-								"test": "existing",
-							},
-						},
-					},
-				},
-				{
-					Variant: &commonpb.Callback_Nexus_{
-						Nexus: &commonpb.Callback_Nexus{
-							Url: "http://new.com",
-							Header: map[string]string{
-								"test": "new",
-							},
-						},
-					},
-				},
+			name:      "request_id_case_sensitive",
+			requestID: "Case-Sensitive-ID",
+			setupFunc: func(ms *MutableStateImpl) {
+				// Add request ID with different case
+				ms.AttachRequestID("case-sensitive-id", enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED, 107)
 			},
-			callbacksToAdd: []*commonpb.Callback{
-				{
-					Variant: &commonpb.Callback_Nexus_{
-						Nexus: &commonpb.Callback_Nexus{
-							Url: "http://existing.com",
-							Header: map[string]string{
-								"test": "existing",
-							},
-						},
-					},
-				},
+			expectedFound: false,
+		},
+		{
+			name:      "request_id_exact_match",
+			requestID: "exact-match-id",
+			setupFunc: func(ms *MutableStateImpl) {
+				// Add exact match
+				ms.AttachRequestID("exact-match-id", enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED, 108)
 			},
-			expectedCount: 1,
+			expectedFound: true,
+		},
+		{
+			name:      "request_id_with_special_characters",
+			requestID: "request-id-with-$pecial-ch@racters_123",
+			setupFunc: func(ms *MutableStateImpl) {
+				ms.AttachRequestID("request-id-with-$pecial-ch@racters_123", enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED, 109)
+			},
+			expectedFound: true,
+		},
+		{
+			name:      "uuid_style_request_id",
+			requestID: "12345678-1234-1234-1234-123456789abc",
+			setupFunc: func(ms *MutableStateImpl) {
+				ms.AttachRequestID("12345678-1234-1234-1234-123456789abc", enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED, 110)
+			},
+			expectedFound: true,
+		},
+		{
+			name:      "very_long_request_id",
+			requestID: "very-long-request-id-" + strings.Repeat("x", 100),
+			setupFunc: func(ms *MutableStateImpl) {
+				ms.AttachRequestID("very-long-request-id-"+strings.Repeat("x", 100), enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED, 111)
+			},
+			expectedFound: true,
 		},
 	}
 
@@ -5209,20 +5083,61 @@ func (s *mutableStateSuite) TestGetExistingCompletionCallbackCount() {
 		s.Run(tc.name, func() {
 			s.SetupSubTest()
 
-			event := &historypb.HistoryEvent{
-				EventId:   tc.eventID,
-				EventType: tc.eventType,
-				Version:   1,
-			}
+			// Setup the mutable state
+			tc.setupFunc(s.mutableState)
 
-			// Add callbacks to the mutable state if specified
-			if len(tc.callbacksToAdd) > 0 {
-				err := s.mutableState.addCompletionCallbacks(event, tc.requestID, tc.callbacksToAdd)
-				s.NoError(err)
-			}
+			// Test HasRequestID
+			found := s.mutableState.HasRequestID(tc.requestID)
+			s.Equal(tc.expectedFound, found, "HasRequestID result should match expected")
 
-			count := s.mutableState.GetExistingCompletionCallbackCount(event, tc.requestID, tc.callbacks)
-			s.Equal(tc.expectedCount, count)
+			// Verify the request ID existence directly in the execution state if expected to be found
+			if tc.expectedFound && tc.requestID != "" {
+				_, exists := s.mutableState.executionState.RequestIds[tc.requestID]
+				s.True(exists, "Request ID should exist in execution state RequestIds map")
+			}
 		})
+	}
+}
+
+func (s *mutableStateSuite) TestHasRequestID_StateConsistency() {
+	s.SetupTest()
+
+	// Test that HasRequestID is consistent with AttachRequestID
+	requestID := "consistency-test-request-id"
+
+	// Initially should not exist
+	s.False(s.mutableState.HasRequestID(requestID))
+
+	// After attaching, should exist
+	s.mutableState.AttachRequestID(requestID, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED, 200)
+	s.True(s.mutableState.HasRequestID(requestID))
+
+	// Should still exist after multiple calls
+	s.True(s.mutableState.HasRequestID(requestID))
+	s.True(s.mutableState.HasRequestID(requestID))
+}
+
+func (s *mutableStateSuite) TestHasRequestID_EmptyExecutionState() {
+	s.SetupTest()
+
+	// Ensure execution state has no request IDs initially
+	if s.mutableState.executionState.RequestIds == nil {
+		s.mutableState.executionState.RequestIds = make(map[string]*persistencespb.RequestIDInfo)
+	}
+
+	// Clear any existing request IDs
+	for k := range s.mutableState.executionState.RequestIds {
+		delete(s.mutableState.executionState.RequestIds, k)
+	}
+
+	// Test various request IDs on empty state
+	testRequestIDs := []string{
+		"",
+		"test-id",
+		"another-id",
+	}
+
+	for _, requestID := range testRequestIDs {
+		s.False(s.mutableState.HasRequestID(requestID), "Should return false for request ID: %s", requestID)
 	}
 }

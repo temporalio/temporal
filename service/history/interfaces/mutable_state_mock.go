@@ -2095,20 +2095,6 @@ func (mr *MockMutableStateMockRecorder) GetExecutionState() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetExecutionState", reflect.TypeOf((*MockMutableState)(nil).GetExecutionState))
 }
 
-// GetExistingCompletionCallbackCount mocks base method.
-func (m *MockMutableState) GetExistingCompletionCallbackCount(event *history.HistoryEvent, requestID string, completionCallbacks []*common.Callback) int {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetExistingCompletionCallbackCount", event, requestID, completionCallbacks)
-	ret0, _ := ret[0].(int)
-	return ret0
-}
-
-// GetExistingCompletionCallbackCount indicates an expected call of GetExistingCompletionCallbackCount.
-func (mr *MockMutableStateMockRecorder) GetExistingCompletionCallbackCount(event, requestID, completionCallbacks any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetExistingCompletionCallbackCount", reflect.TypeOf((*MockMutableState)(nil).GetExistingCompletionCallbackCount), event, requestID, completionCallbacks)
-}
-
 // GetFirstRunID mocks base method.
 func (m *MockMutableState) GetFirstRunID(ctx context.Context) (string, error) {
 	m.ctrl.T.Helper()
@@ -2769,6 +2755,20 @@ func (m *MockMutableState) HasPendingWorkflowTask() bool {
 func (mr *MockMutableStateMockRecorder) HasPendingWorkflowTask() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasPendingWorkflowTask", reflect.TypeOf((*MockMutableState)(nil).HasPendingWorkflowTask))
+}
+
+// HasRequestID mocks base method.
+func (m *MockMutableState) HasRequestID(requestID string) bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HasRequestID", requestID)
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// HasRequestID indicates an expected call of HasRequestID.
+func (mr *MockMutableStateMockRecorder) HasRequestID(requestID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasRequestID", reflect.TypeOf((*MockMutableState)(nil).HasRequestID), requestID)
 }
 
 // HasStartedWorkflowTask mocks base method.

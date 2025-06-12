@@ -931,24 +931,20 @@ func reapplyEvents(
 			}
 			attr := event.GetWorkflowExecutionOptionsUpdatedEventAttributes()
 			callbacks := attr.GetAttachedCompletionCallbacks()
-			if len(callbacks) > 0 {
-				// check if all completion callbacks exist
-				existingCbs := mutableState.GetExistingCompletionCallbackCount(event, attr.GetAttachedRequestId(), callbacks)
-				if existingCbs == len(callbacks) {
+			requestID := attr.GetAttachedRequestId()
+			if len(callbacks) > 0 && requestID != "" {
+				if mutableState.HasRequestID(requestID) {
 					if attr.GetVersioningOverride() == nil && !attr.GetUnsetVersioningOverride() {
-						// if all completion callbacks exist, and no other updates in the event, we should skip the event
+						// if completion callbacks exist, and no other updates in the event, we should skip the event
 						continue
 					}
-					return reappliedEvents, serviceerror.NewInternalf("unable to reapply WorkflowExecutionOptionsUpdated event: all %d completion callbacks are already attached but the event contains additional workflow option updates", existingCbs)
-				}
-				if existingCbs > 0 && existingCbs != len(callbacks) {
-					return reappliedEvents, serviceerror.NewInternalf("unable to reapply WorkflowExecutionOptionsUpdated event: partial completion callback state detected (%d of %d callbacks already exist)", existingCbs, len(callbacks))
+					return reappliedEvents, serviceerror.NewInternalf("unable to reapply WorkflowExecutionOptionsUpdated event: %d completion callbacks are already attached but the event contains additional workflow option updates", len(callbacks))
 				}
 			}
 			if _, err := mutableState.AddWorkflowExecutionOptionsUpdatedEvent(
 				attr.GetVersioningOverride(),
 				attr.GetUnsetVersioningOverride(),
-				attr.GetAttachedRequestId(),
+				requestID,
 				callbacks,
 				event.Links,
 			); err != nil {

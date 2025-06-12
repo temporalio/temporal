@@ -1561,24 +1561,17 @@ func (s *workflowResetterSuite) TestWorkflowRestartAfterExecutionTimeout() {
 func (s *workflowResetterSuite) TestReapplyEvents_WorkflowOptionsUpdated_CompletionCallbackErrors() {
 	testCases := []struct {
 		name                  string
-		existingCallbacks     int
+		requestIDExists       bool
 		totalCallbacks        int
 		hasVersioningOverride bool
 		expectedErrorContains string
 	}{
 		{
-			name:                  "all_callbacks_exist_with_additional_updates",
-			existingCallbacks:     3,
+			name:                  "callbacks_exist_with_additional_updates",
+			requestIDExists:       true,
 			totalCallbacks:        3,
 			hasVersioningOverride: true,
-			expectedErrorContains: "unable to reapply WorkflowExecutionOptionsUpdated event: all 3 completion callbacks are already attached but the event contains additional workflow option updates",
-		},
-		{
-			name:                  "partial_callbacks_exist",
-			existingCallbacks:     2,
-			totalCallbacks:        5,
-			hasVersioningOverride: false,
-			expectedErrorContains: "unable to reapply WorkflowExecutionOptionsUpdated event: partial completion callback state detected (2 of 5 callbacks already exist)",
+			expectedErrorContains: "unable to reapply WorkflowExecutionOptionsUpdated event: 3 completion callbacks are already attached but the event contains additional workflow option updates",
 		},
 	}
 
@@ -1625,12 +1618,7 @@ func (s *workflowResetterSuite) TestReapplyEvents_WorkflowOptionsUpdated_Complet
 				}
 			}
 
-			// Mock the GetExistingCompletionCallbackCount method
-			ms.EXPECT().GetExistingCompletionCallbackCount(
-				event,
-				"test-request-id",
-				callbacks,
-			).Return(tc.existingCallbacks)
+			ms.EXPECT().HasRequestID("test-request-id").Return(tc.requestIDExists)
 
 			events := []*historypb.HistoryEvent{event}
 
@@ -1678,12 +1666,7 @@ func (s *workflowResetterSuite) TestReapplyEvents_WorkflowOptionsUpdated_Complet
 		},
 	}
 
-	// Mock the GetExistingCompletionCallbackCount method - all callbacks already exist
-	ms.EXPECT().GetExistingCompletionCallbackCount(
-		event,
-		"test-request-id",
-		callbacks,
-	).Return(1) // All 1 callback already exists
+	ms.EXPECT().HasRequestID("test-request-id").Return(true)
 
 	events := []*historypb.HistoryEvent{event}
 
