@@ -684,9 +684,17 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 				}
 			}
 			if !found {
-				// still add it as a v2 version because user explicitly asked for the stats, we'd
-				// make sure to load the TQ.
-				versions[PhysicalTaskQueueVersion{buildId: b}] = true
+				dv, _ := worker_versioning.WorkerDeploymentVersionFromStringV32(b)
+				if dv != nil {
+					// Add v3 version.
+					versions[PhysicalTaskQueueVersion{
+						buildId:              dv.BuildId,
+						deploymentSeriesName: dv.DeploymentName,
+					}] = true
+				} else {
+					// Still add v2 version because user explicitly asked for the stats, we'd make sure to load the TQ.
+					versions[PhysicalTaskQueueVersion{buildId: b}] = true
+				}
 			}
 		}
 	}

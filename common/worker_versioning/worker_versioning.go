@@ -712,9 +712,16 @@ func ConvertOverrideToV32(override *workflowpb.VersioningOverride) *workflowpb.V
 
 func WorkerDeploymentVersionToStringV31(v *deploymentspb.WorkerDeploymentVersion) string {
 	if v == nil {
-		return "__unversioned__"
+		return UnversionedVersionId
 	}
 	return v.GetDeploymentName() + WorkerDeploymentVersionIdDelimiterV31 + v.GetBuildId()
+}
+
+func WorkerDeploymentVersionToStringV32(v *deploymentspb.WorkerDeploymentVersion) string {
+	if v == nil {
+		return ""
+	}
+	return v.GetDeploymentName() + WorkerDeploymentVersionIdDelimiter + v.GetBuildId()
 }
 
 func ExternalWorkerDeploymentVersionToString(v *deploymentpb.WorkerDeploymentVersion) string {
@@ -726,7 +733,7 @@ func ExternalWorkerDeploymentVersionToString(v *deploymentpb.WorkerDeploymentVer
 
 func ExternalWorkerDeploymentVersionToStringV31(v *deploymentpb.WorkerDeploymentVersion) string {
 	if v == nil {
-		return "__unversioned__"
+		return UnversionedVersionId
 	}
 	return v.GetDeploymentName() + WorkerDeploymentVersionIdDelimiterV31 + v.GetBuildId()
 }
@@ -746,7 +753,7 @@ func ExternalWorkerDeploymentVersionFromStringV31(s string) *deploymentpb.Worker
 }
 
 func WorkerDeploymentVersionFromStringV31(s string) (*deploymentspb.WorkerDeploymentVersion, error) {
-	if s == "__unversioned__" {
+	if s == UnversionedVersionId {
 		return nil, nil
 	}
 	before, after, found := strings.Cut(s, WorkerDeploymentVersionIdDelimiterV31)
@@ -759,6 +766,26 @@ func WorkerDeploymentVersionFromStringV31(s string) (*deploymentspb.WorkerDeploy
 		// choose the values based on the delimiter appeared first to ensure that deployment name does not contain any of the banned delimiters
 		before = before32
 		after = after32
+	}
+	if len(before) == 0 {
+		return nil, fmt.Errorf("deployment name is empty in version string %s", s)
+	}
+	if len(after) == 0 {
+		return nil, fmt.Errorf("build id is empty in version string %s", s)
+	}
+	return &deploymentspb.WorkerDeploymentVersion{
+		DeploymentName: before,
+		BuildId:        after,
+	}, nil
+}
+
+func WorkerDeploymentVersionFromStringV32(s string) (*deploymentspb.WorkerDeploymentVersion, error) {
+	if s == UnversionedVersionId {
+		return nil, nil
+	}
+	before, after, found := strings.Cut(s, WorkerDeploymentVersionIdDelimiter)
+	if !found {
+		return nil, fmt.Errorf("expected delimiter '%s' not found in version string %s", WorkerDeploymentVersionIdDelimiter, s)
 	}
 	if len(before) == 0 {
 		return nil, fmt.Errorf("deployment name is empty in version string %s", s)

@@ -1294,7 +1294,8 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 				if v.GetVersion() == nil || v.GetVersion().GetDeploymentName() == "" || v.GetVersion().GetBuildId() == "" {
 					continue
 				}
-				buildIds = append(buildIds, worker_versioning.WorkerDeploymentVersionToStringV31(v.GetVersion()))
+				buildId := worker_versioning.WorkerDeploymentVersionToStringV32(v.GetVersion())
+				buildIds = append(buildIds, buildId)
 			}
 
 			// query each partition for stats
