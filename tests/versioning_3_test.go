@@ -68,14 +68,10 @@ type Versioning3Suite struct {
 	useV32 bool
 }
 
-func NewVersioning3Suite(useV32 bool) *Versioning3Suite {
-	return &Versioning3Suite{useV32: useV32}
-}
-
 func TestVersioning3FunctionalSuite(t *testing.T) {
 	t.Parallel()
-	suite.Run(t, NewVersioning3Suite(true))
-	suite.Run(t, NewVersioning3Suite(false))
+	suite.Run(t, &Versioning3Suite{useV32: true})
+	suite.Run(t, &Versioning3Suite{useV32: false})
 }
 
 func (s *Versioning3Suite) SetupSuite() {
@@ -2072,6 +2068,9 @@ func (s *Versioning3Suite) verifyWorkflowVersioning(
 		s.Equal(override.GetPinned().GetVersion().GetBuildId(), versioningInfo.GetVersioningOverride().GetPinned().GetVersion().GetBuildId())
 		s.Equal(override.GetPinned().GetVersion().GetDeploymentName(), versioningInfo.GetVersioningOverride().GetPinned().GetVersion().GetDeploymentName())
 		s.Equal(override.GetPinned().GetBehavior(), versioningInfo.GetVersioningOverride().GetPinned().GetBehavior())
+		if worker_versioning.OverrideIsPinned(override) {
+			s.Equal(override.GetPinned().GetVersion().GetDeploymentName(), dwf.WorkflowExecutionInfo.GetWorkerDeploymentName())
+		}
 	} else {
 		// v0.31 override
 		s.Equal(override.GetBehavior().String(), versioningInfo.GetVersioningOverride().GetBehavior().String())                                             //nolint:staticcheck // SA1019: worker versioning v0.31
@@ -2080,6 +2079,10 @@ func (s *Versioning3Suite) verifyWorkflowVersioning(
 				override.GetPinnedVersion(), //nolint:staticcheck // SA1019: worker versioning v0.31
 				actualOverrideDeployment,
 			))
+		}
+		if worker_versioning.OverrideIsPinned(override) {
+			d, _ := worker_versioning.WorkerDeploymentVersionFromStringV31(override.GetPinnedVersion()) //nolint:staticcheck // SA1019: worker versioning v0.31
+			s.Equal(d.GetDeploymentName(), dwf.WorkflowExecutionInfo.GetWorkerDeploymentName())
 		}
 	}
 
