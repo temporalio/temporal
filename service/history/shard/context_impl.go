@@ -428,7 +428,7 @@ func (s *ContextImpl) UpdateRemoteReaderInfo(
 	clusterName, _, ok := clusterNameInfoFromClusterID(s.clusterMetadata.GetAllClusterInfo(), clusterID)
 	if !ok {
 		// cluster is not present in cluster metadata map
-		return serviceerror.NewInternal(fmt.Sprintf("unknown cluster ID: %v", clusterID))
+		return serviceerror.NewInternalf("unknown cluster ID: %v", clusterID)
 	}
 
 	s.wLock()
@@ -1333,7 +1333,7 @@ Loop:
 			metrics.ShardInfoScheduledQueueLagTimer.With(metricsHandler).
 				Record(lag, metrics.TaskCategoryTag(category.Name()))
 		default:
-			s.contextTaggedLogger.Error("Unknown task category type", tag.NewStringTag("task-category", category.Type().String()))
+			s.contextTaggedLogger.Error("Unknown task category type", tag.NewStringerTag("task-category", category.Type()))
 		}
 	}
 }
@@ -2272,7 +2272,7 @@ func (s *ContextImpl) newDetachedContext(
 
 func (s *ContextImpl) newIOContext() (context.Context, context.CancelFunc) {
 	ctx, cancel := context.WithTimeout(s.lifecycleCtx, s.config.ShardIOTimeout())
-	ctx = headers.SetCallerInfo(ctx, headers.SystemBackgroundCallerInfo)
+	ctx = headers.SetCallerInfo(ctx, headers.SystemBackgroundHighCallerInfo)
 
 	return ctx, cancel
 }

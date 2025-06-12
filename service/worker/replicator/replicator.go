@@ -40,7 +40,7 @@ type (
 		replicationCleanupGroup          goro.Group
 
 		namespaceProcessorsLock sync.Mutex
-		namespaceProcessors     map[string]*namespaceReplicationMessageProcessor
+		namespaceProcessors     map[string]*replicationMessageProcessor
 		matchingClient          matchingservice.MatchingServiceClient
 		namespaceRegistry       namespace.Registry
 	}
@@ -69,7 +69,7 @@ func NewReplicator(
 		serviceResolver:                  serviceResolver,
 		clusterMetadata:                  clusterMetadata,
 		namespaceReplicationTaskExecutor: namespaceReplicationTaskExecutor,
-		namespaceProcessors:              make(map[string]*namespaceReplicationMessageProcessor),
+		namespaceProcessors:              make(map[string]*replicationMessageProcessor),
 		clientBean:                       clientBean,
 		logger:                           log.With(logger, tag.ComponentReplicator),
 		metricsHandler:                   metricsHandler,
@@ -139,7 +139,7 @@ func (r *Replicator) listenToClusterMetadataChange() {
 						// This should never happen as cluster metadata should have the up-to-date data.
 						panic(fmt.Sprintf("Bug found in cluster metadata with error %v", err))
 					}
-					processor := newNamespaceReplicationMessageProcessor(
+					processor := newReplicationMessageProcessor(
 						currentClusterName,
 						clusterName,
 						log.With(r.logger, tag.ComponentReplicationTaskProcessor, tag.SourceCluster(clusterName)),

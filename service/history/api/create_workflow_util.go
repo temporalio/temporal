@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -271,13 +270,13 @@ func ValidateStartWorkflowExecutionRequest(
 		return serviceerror.NewInvalidArgument("Missing request ID.")
 	}
 	if err := timestamp.ValidateAndCapProtoDuration(request.GetWorkflowExecutionTimeout()); err != nil {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("invalid WorkflowExecutionTimeoutSeconds: %s", err.Error()))
+		return serviceerror.NewInvalidArgumentf("invalid WorkflowExecutionTimeoutSeconds: %s", err.Error())
 	}
 	if err := timestamp.ValidateAndCapProtoDuration(request.GetWorkflowRunTimeout()); err != nil {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("invalid WorkflowRunTimeoutSeconds: %s", err.Error()))
+		return serviceerror.NewInvalidArgumentf("invalid WorkflowRunTimeoutSeconds: %s", err.Error())
 	}
 	if err := timestamp.ValidateAndCapProtoDuration(request.GetWorkflowTaskTimeout()); err != nil {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("invalid WorkflowTaskTimeoutSeconds: %s", err.Error()))
+		return serviceerror.NewInvalidArgumentf("invalid WorkflowTaskTimeoutSeconds: %s", err.Error())
 	}
 	if request.TaskQueue == nil || request.TaskQueue.GetName() == "" {
 		return serviceerror.NewInvalidArgument("Missing Taskqueue.")

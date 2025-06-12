@@ -18,10 +18,6 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 )
 
-var (
-	WorkflowUpdateAbortedErr = serviceerror.NewUnavailable("Workflow Update was aborted.")
-)
-
 type (
 	// Update docs are at /docs/architecture/workflow-update.md.
 	Update struct {
@@ -226,7 +222,7 @@ func (u *Update) WaitLifecycleStage(
 	// This error will be retried (by history service handler, or history service client in frontend,
 	// or SDK, or user client). This will recreate Update in the Registry.
 	if errors.Is(err, registryClearedErr) {
-		return nil, WorkflowUpdateAbortedErr
+		return nil, AbortedByServerErr
 	}
 
 	// TODO: assert(err == nil)
@@ -331,7 +327,7 @@ func (u *Update) Admit(
 	// Marshal Update request here to return InvalidArgument to the API caller if it can't be marshaled.
 	reqAny, err := anypb.New(req)
 	if err != nil {
-		return invalidArgf("unable to unmarshal request: %v", err)
+		return serviceerror.NewInvalidArgumentf("unable to unmarshal request: %v", err)
 	}
 	u.request = reqAny
 
@@ -369,16 +365,16 @@ func (u *Update) OnProtocolMessage(
 	eventStore EventStore,
 ) error {
 	if protocolMsg == nil {
-		return invalidArgf("Update %s received nil message", u.id)
+		return serviceerror.NewInvalidArgumentf("Update %s received nil message", u.id)
 	}
 
 	if protocolMsg.Body == nil {
-		return invalidArgf("Update %s received message with nil body", u.id)
+		return serviceerror.NewInvalidArgumentf("Update %s received message with nil body", u.id)
 	}
 
 	body, err := protocolMsg.Body.UnmarshalNew()
 	if err != nil {
-		return invalidArgf("unable to unmarshal request: %v", err)
+		return serviceerror.NewInvalidArgumentf("unable to unmarshal request: %v", err)
 	}
 
 	// If no new events can be added to the event store (e.g., workflow is completed),
@@ -399,7 +395,7 @@ func (u *Update) OnProtocolMessage(
 	case *updatepb.Response:
 		return u.onResponseMsg(updMsg, eventStore)
 	default:
-		return invalidArgf("Message type %T not supported", body)
+		return serviceerror.NewInvalidArgumentf("Message type %T not supported", body)
 	}
 }
 
@@ -493,7 +489,7 @@ func (u *Update) onAcceptanceMsg(
 	if u.request != nil {
 		acceptedRequest = &updatepb.Request{}
 		if err := u.request.UnmarshalTo(acceptedRequest); err != nil {
-			return internalErrorf("unable to unmarshal original request: %v", err)
+			return serviceerror.NewInternalf("unable to unmarshal original request: %v", err)
 		}
 	}
 
@@ -654,7 +650,7 @@ func (u *Update) checkStateSet(msg proto.Message, allowed stateSet) error {
 		return nil
 	}
 	u.instrumentation.invalidStateTransition(u.id, msg, u.state)
-	return invalidArgf("invalid state transition attempted for Update %s: "+
+	return serviceerror.NewInvalidArgumentf("invalid state transition attempted for Update %s: "+
 		"received %T message while in state %s", u.id, msg, u.state)
 }
 

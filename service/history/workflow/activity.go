@@ -1,3 +1,27 @@
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
 package workflow
 
 import (
@@ -5,9 +29,14 @@ import (
 	"math/rand"
 	"time"
 
+	activitypb "go.temporal.io/api/activity/v1"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
+	historypb "go.temporal.io/api/history/v1"
 	rulespb "go.temporal.io/api/rules/v1"
+	"go.temporal.io/api/serviceerror"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -55,6 +84,16 @@ func UpdateActivityInfoForRetries(
 	ai.TimerTaskStatus = TimerTaskStatusNone
 	ai.RetryLastWorkerIdentity = ai.StartedIdentity
 	ai.RetryLastFailure = failure
+	// this flag means the user resets the activity with "--reset-heartbeat" flag
+	// server sends heartbeat details to the worker with the new activity attempt
+	// if the current attempt was still running - worker can still send new heartbeats, and even complete the activity
+	// so for the current activity attempt server continue to accept the heartbeats, but reset it for the new attempt
+	if ai.ResetHeartbeats {
+		ai.LastHeartbeatDetails = nil
+		ai.LastHeartbeatUpdateTime = nil
+	}
+	ai.ActivityReset = false
+	ai.ResetHeartbeats = false
 
 	return ai
 }
@@ -70,6 +109,7 @@ func GetPendingActivityInfo(
 	p := &workflowpb.PendingActivityInfo{
 		ActivityId:                  ai.ActivityId,
 		LastWorkerDeploymentVersion: ai.LastWorkerDeploymentVersion,
+		LastDeploymentVersion:       ai.LastDeploymentVersion,
 		Priority:                    ai.Priority,
 	}
 	if ai.GetUseWorkflowBuildIdInfo() != nil {
@@ -167,6 +207,25 @@ func GetPendingActivityInfo(
 		}
 	}
 
+	p.ActivityOptions = &activitypb.ActivityOptions{
+		TaskQueue: &taskqueuepb.TaskQueue{
+			// we may need to return sticky task queue name here
+			Name:       ai.TaskQueue,
+			NormalName: ai.TaskQueue,
+		},
+		ScheduleToCloseTimeout: ai.ScheduleToCloseTimeout,
+		ScheduleToStartTimeout: ai.ScheduleToStartTimeout,
+		StartToCloseTimeout:    ai.StartToCloseTimeout,
+		HeartbeatTimeout:       ai.HeartbeatTimeout,
+
+		RetryPolicy: &commonpb.RetryPolicy{
+			InitialInterval:    ai.RetryInitialInterval,
+			BackoffCoefficient: ai.RetryBackoffCoefficient,
+			MaximumInterval:    ai.RetryMaximumInterval,
+			MaximumAttempts:    ai.RetryMaximumAttempts,
+		},
+	}
+
 	return p, nil
 }
 
@@ -226,11 +285,13 @@ func PauseActivity(
 }
 
 func ResetActivity(
+	ctx context.Context,
 	shardContext historyi.ShardContext,
 	mutableState historyi.MutableState,
 	activityId string,
 	resetHeartbeats bool,
 	keepPaused bool,
+	resetOptions bool,
 	jitter time.Duration,
 ) error {
 	if !mutableState.IsWorkflowExecutionRunning() {
@@ -242,13 +303,48 @@ func ResetActivity(
 		return consts.ErrActivityNotFound
 	}
 
+	var originalOptions *historypb.ActivityTaskScheduledEventAttributes
+	if resetOptions {
+		event, err := mutableState.GetActivityScheduledEvent(ctx, ai.ScheduledEventId)
+		if err != nil {
+			return serviceerror.NewInvalidArgumentf("ActivityTaskScheduledEvent not found, %v", err)
+		}
+		attrs, ok := event.Attributes.(*historypb.HistoryEvent_ActivityTaskScheduledEventAttributes)
+		if !ok {
+			return serviceerror.NewInvalidArgument("ActivityTaskScheduledEvent is invalid")
+		}
+		if attrs == nil || attrs.ActivityTaskScheduledEventAttributes == nil {
+			return serviceerror.NewInvalidArgument("ActivityTaskScheduledEvent is incomplete")
+		}
+
+		originalOptions = attrs.ActivityTaskScheduledEventAttributes
+	}
+
 	return mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, ms historyi.MutableState) error {
 		// reset the number of attempts
-		ai.Attempt = 1
-
+		activityInfo.Attempt = 1
+		activityInfo.ActivityReset = true
 		if resetHeartbeats {
-			activityInfo.LastHeartbeatDetails = nil
-			activityInfo.LastHeartbeatUpdateTime = nil
+			activityInfo.ResetHeartbeats = true
+		}
+
+		if resetOptions {
+			// update activity info with new options
+			activityInfo.TaskQueue = originalOptions.TaskQueue.Name
+			activityInfo.ScheduleToCloseTimeout = originalOptions.ScheduleToCloseTimeout
+			activityInfo.ScheduleToStartTimeout = originalOptions.ScheduleToStartTimeout
+			activityInfo.StartToCloseTimeout = originalOptions.StartToCloseTimeout
+			activityInfo.HeartbeatTimeout = originalOptions.HeartbeatTimeout
+			activityInfo.RetryMaximumInterval = originalOptions.RetryPolicy.MaximumInterval
+			activityInfo.RetryBackoffCoefficient = originalOptions.RetryPolicy.BackoffCoefficient
+			activityInfo.RetryInitialInterval = originalOptions.RetryPolicy.InitialInterval
+			activityInfo.RetryMaximumAttempts = originalOptions.RetryPolicy.MaximumAttempts
+
+			// move forward activity version
+			activityInfo.Stamp++
+
+			// invalidate timers
+			activityInfo.TimerTaskStatus = TimerTaskStatusNone
 		}
 
 		// if activity is running, or it is paused and we don't want to unpause - we don't need to do anything
@@ -256,13 +352,19 @@ func ResetActivity(
 			return nil
 		}
 
-		ai.Stamp++
-		if ai.Paused && !keepPaused {
-			ai.Paused = false
+		activityInfo.Stamp++
+		if activityInfo.Paused && !keepPaused {
+			activityInfo.Paused = false
 		}
 
 		// if activity is not running - we need to regenerate the retry task as schedule activity immediately
-		if GetActivityState(ai) == enumspb.PENDING_ACTIVITY_STATE_SCHEDULED {
+		if GetActivityState(activityInfo) == enumspb.PENDING_ACTIVITY_STATE_SCHEDULED {
+			// we reset heartbeat was requested we also should reset heartbeat details and timer
+			if resetHeartbeats {
+				ai.LastHeartbeatDetails = nil
+				ai.LastHeartbeatUpdateTime = nil
+			}
+
 			scheduleTime := shardContext.GetTimeSource().Now().UTC()
 			if jitter != 0 {
 				randomOffset := time.Duration(rand.Int63n(int64(jitter)))

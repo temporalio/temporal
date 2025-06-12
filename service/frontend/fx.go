@@ -25,7 +25,6 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
-	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/quotas/calculator"
@@ -62,7 +61,6 @@ type (
 var Module = fx.Options(
 	resource.Module,
 	scheduler.Module,
-	dynamicconfig.Module,
 	deployment.Module,
 	workerdeployment.Module,
 	// Note that with this approach routes may be registered in arbitrary order.
@@ -86,6 +84,7 @@ var Module = fx.Options(
 	fx.Provide(NamespaceRateLimitInterceptorProvider),
 	fx.Provide(SDKVersionInterceptorProvider),
 	fx.Provide(CallerInfoInterceptorProvider),
+	fx.Provide(SlowRequestLoggerInterceptorProvider),
 	fx.Provide(MaskInternalErrorDetailsInterceptorProvider),
 	fx.Provide(GrpcServerOptionsProvider),
 	fx.Provide(VisibilityManagerProvider),
@@ -206,6 +205,7 @@ func GrpcServerOptionsProvider(
 	callerInfoInterceptor *interceptor.CallerInfoInterceptor,
 	authInterceptor *authorization.Interceptor,
 	maskInternalErrorDetailsInterceptor *interceptor.MaskInternalErrorDetailsInterceptor,
+	slowRequestLoggerInterceptor *interceptor.SlowRequestLoggerInterceptor,
 	customInterceptors []grpc.UnaryServerInterceptor,
 	metricsHandler metrics.Handler,
 ) GrpcServerOptions {
@@ -256,6 +256,7 @@ func GrpcServerOptionsProvider(
 		rateLimitInterceptor.Intercept,
 		sdkVersionInterceptor.Intercept,
 		callerInfoInterceptor.Intercept,
+		slowRequestLoggerInterceptor.Intercept,
 	}
 	if len(customInterceptors) > 0 {
 		// TODO: Deprecate WithChainedFrontendGrpcInterceptors and provide a inner custom interceptor
@@ -512,6 +513,16 @@ func CallerInfoInterceptorProvider(
 	return interceptor.NewCallerInfoInterceptor(namespaceRegistry)
 }
 
+func SlowRequestLoggerInterceptorProvider(
+	logger log.Logger,
+	dc *dynamicconfig.Collection,
+) *interceptor.SlowRequestLoggerInterceptor {
+	return interceptor.NewSlowRequestLoggerInterceptor(
+		logger,
+		dynamicconfig.SlowRequestLoggingThreshold.Get(dc),
+	)
+}
+
 func PersistenceRateLimitingParamsProvider(
 	serviceConfig *Config,
 	persistenceLazyLoadedServiceResolver service.PersistenceLazyLoadedServiceResolver,
@@ -586,7 +597,6 @@ func AdminHandlerProvider(
 	persistenceConfig *config.Persistence,
 	configuration *Config,
 	replicatorNamespaceReplicationQueue FEReplicatorNamespaceReplicationQueue,
-	esClient esclient.Client,
 	visibilityMgr manager.VisibilityManager,
 	logger log.SnTaggedLogger,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
@@ -617,7 +627,6 @@ func AdminHandlerProvider(
 		configuration,
 		namespaceReplicationQueue,
 		replicatorNamespaceReplicationQueue,
-		esClient,
 		visibilityMgr,
 		logger,
 		taskManager,
@@ -647,7 +656,6 @@ func AdminHandlerProvider(
 
 func OperatorHandlerProvider(
 	configuration *Config,
-	esClient esclient.Client,
 	logger log.SnTaggedLogger,
 	sdkClientFactory sdk.ClientFactory,
 	metricsHandler metrics.Handler,
@@ -663,7 +671,6 @@ func OperatorHandlerProvider(
 ) *OperatorHandlerImpl {
 	args := NewOperatorHandlerImplArgs{
 		configuration,
-		esClient,
 		logger,
 		sdkClientFactory,
 		metricsHandler,

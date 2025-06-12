@@ -6,7 +6,6 @@ import (
 	"context"
 	"sync/atomic"
 	"time"
-	"unicode/utf8"
 
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
@@ -59,8 +58,6 @@ type (
 		finalizer *finalizer.Finalizer
 	}
 
-	NewCacheFn func(config *configs.Config, logger log.Logger, handler metrics.Handler) Cache
-
 	Key struct {
 		// Those are exported because some unit tests uses the cache directly.
 		// TODO: Update the unit tests and make those fields private.
@@ -88,24 +85,6 @@ func NewHostLevelCache(
 	maxSize := config.HistoryHostLevelCacheMaxSize()
 	if config.HistoryCacheLimitSizeBased {
 		maxSize = config.HistoryHostLevelCacheMaxSizeBytes()
-	}
-	return newCache(
-		maxSize,
-		config.HistoryCacheTTL(),
-		config.HistoryCacheNonUserContextLockTimeout(),
-		logger,
-		handler,
-	)
-}
-
-func NewShardLevelCache(
-	config *configs.Config,
-	logger log.Logger,
-	handler metrics.Handler,
-) Cache {
-	maxSize := config.HistoryShardLevelCacheMaxSize()
-	if config.HistoryCacheLimitSizeBased {
-		maxSize = config.HistoryShardLevelCacheMaxSizeBytes()
 	}
 	return newCache(
 		maxSize,
@@ -421,12 +400,6 @@ func (c *cacheImpl) validateWorkflowID(
 	if workflowID == "" {
 		return serviceerror.NewInvalidArgument("Can't load workflow execution.  WorkflowId not set.")
 	}
-
-	if !utf8.ValidString(workflowID) {
-		// We know workflow cannot exist with invalid utf8 string as WorkflowID.
-		return serviceerror.NewNotFound("Workflow not exists.")
-	}
-
 	return nil
 }
 

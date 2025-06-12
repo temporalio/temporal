@@ -109,10 +109,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelation() {
 			},
 			Identity: "test",
 		})
-		assert.NoError(t, err)
-		if err != nil {
-			return
-		}
+		require.NoError(t, err)
 		_, err = s.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
 			Identity:  "test",
 			TaskToken: pollResp.TaskToken,
@@ -130,7 +127,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelation() {
 				},
 			},
 		})
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	}, time.Second*20, time.Millisecond*200)
 
 	// Poll and wait for the "started" event to be recorded.
@@ -173,21 +170,15 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelation() {
 	// Poll and wait for the cancelation request to go through.
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
-		assert.NoError(t, err)
-		if err != nil {
-			return
-		}
-		assert.Equal(t, 1, len(desc.PendingNexusOperations))
-		if len(desc.PendingNexusOperations) < 1 {
-			return
-		}
+		require.NoError(t, err)
+		require.Equal(t, 1, len(desc.PendingNexusOperations))
 		op := desc.PendingNexusOperations[0]
-		assert.Equal(t, pollResp.History.Events[scheduledEventIdx].EventId, op.ScheduledEventId)
-		assert.Equal(t, endpointName, op.Endpoint)
-		assert.Equal(t, "service", op.Service)
-		assert.Equal(t, "operation", op.Operation)
-		assert.Equal(t, enumspb.PENDING_NEXUS_OPERATION_STATE_STARTED, op.State)
-		assert.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SUCCEEDED, op.CancellationInfo.State)
+		require.Equal(t, pollResp.History.Events[scheduledEventIdx].EventId, op.ScheduledEventId)
+		require.Equal(t, endpointName, op.Endpoint)
+		require.Equal(t, "service", op.Service)
+		require.Equal(t, "operation", op.Operation)
+		require.Equal(t, enumspb.PENDING_NEXUS_OPERATION_STATE_STARTED, op.State)
+		require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SUCCEEDED, op.CancellationInfo.State)
 	}, time.Second*10, time.Millisecond*30)
 
 	err = s.SdkClient().TerminateWorkflow(ctx, run.GetID(), run.GetRunID(), "test")
@@ -253,10 +244,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSyncCompletion() {
 			},
 			Identity: "test",
 		})
-		assert.NoError(t, err)
-		if err != nil {
-			return
-		}
+		require.NoError(t, err)
 		_, err = s.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
 			Identity:  "test",
 			TaskToken: pollResp.TaskToken,
@@ -274,7 +262,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSyncCompletion() {
 				},
 			},
 		})
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	}, time.Second*20, time.Millisecond*200)
 
 	pollResp, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
@@ -372,10 +360,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSyncCompletion_LargePayload()
 			},
 			Identity: "test",
 		})
-		assert.NoError(t, err)
-		if err != nil {
-			return
-		}
+		require.NoError(t, err)
 		_, err = s.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
 			Identity:  "test",
 			TaskToken: pollResp.TaskToken,
@@ -393,7 +378,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSyncCompletion_LargePayload()
 				},
 			},
 		})
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	}, time.Second*20, time.Millisecond*200)
 
 	pollResp, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
@@ -1054,10 +1039,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncFailure() {
 			},
 			Identity: "test",
 		})
-		assert.NoError(t, err)
-		if err != nil {
-			return
-		}
+		require.NoError(t, err)
 		_, err = s.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
 			Identity:  "test",
 			TaskToken: pollResp.TaskToken,
@@ -1075,7 +1057,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncFailure() {
 				},
 			},
 		})
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	}, time.Second*20, time.Millisecond*200)
 
 	// Poll and verify that the "started" event was recorded.
@@ -1966,15 +1948,9 @@ func (s *NexusWorkflowTestSuite) TestNexusSyncOperationErrorRehydration() {
 				require.EventuallyWithT(t, func(t *assert.CollectT) {
 					desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
 					require.NoError(t, err)
-					if err != nil {
-						return
-					}
-					assert.Len(t, desc.PendingNexusOperations, 1)
-					if len(desc.PendingNexusOperations) != 1 {
-						return
-					}
+					require.Len(t, desc.PendingNexusOperations, 1)
 					f = desc.PendingNexusOperations[0].LastAttemptFailure
-					assert.NotNil(t, f)
+					require.NotNil(t, f)
 
 				}, 10*time.Second, 100*time.Millisecond)
 				s.GetTestCluster().Host().CaptureMetricsHandler().StopCapture(capture)

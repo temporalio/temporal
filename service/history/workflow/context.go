@@ -2,7 +2,6 @@ package workflow
 
 import (
 	"context"
-	"fmt"
 
 	"go.opentelemetry.io/otel/trace"
 	commonpb "go.temporal.io/api/common/v1"
@@ -11,6 +10,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
@@ -677,7 +677,7 @@ func (c *ContextImpl) mergeUpdateWithNewReplicationTasks(
 		newRunID = task.RunID
 	default:
 		// Handle unexpected types or log an error if this case is not expected
-		return serviceerror.NewInternal(fmt.Sprintf("unexpected replication task type for new run task %T", newRunTask))
+		return serviceerror.NewInternalf("unexpected replication task type for new run task %T", newRunTask)
 	}
 	taskUpdated := false
 
@@ -862,7 +862,7 @@ func (c *ContextImpl) ReapplyEvents(
 	}
 	if sourceAdminClient == nil {
 		// TODO: will this ever happen?
-		return serviceerror.NewInternal(fmt.Sprintf("cannot find cluster config %v to do reapply", activeCluster))
+		return serviceerror.NewInternalf("cannot find cluster config %v to do reapply", activeCluster)
 	}
 
 	_, err = sourceAdminClient.ReapplyEvents(
@@ -1077,6 +1077,14 @@ func (c *ContextImpl) forceTerminateWorkflow(
 	mutableState, err := c.LoadMutableState(ctx, shardContext)
 	if err != nil {
 		return err
+	}
+
+	if !mutableState.IsWorkflow() {
+		return mutableState.ChasmTree().Terminate(chasm.TerminateComponentRequest{
+			Identity: consts.IdentityHistoryService,
+			Reason:   failureReason,
+			Details:  nil,
+		})
 	}
 
 	return TerminateWorkflow(

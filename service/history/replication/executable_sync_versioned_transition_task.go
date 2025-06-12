@@ -3,7 +3,6 @@ package replication
 import (
 	"context"
 	"errors"
-	"fmt"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
@@ -169,7 +168,7 @@ func (e *ExecutableSyncVersionedTransitionTask) HandleErr(err error) error {
 		case *replicationspb.VersionedTransitionArtifact_SyncWorkflowStateMutationAttributes:
 			mutation = e.taskAttr.VersionedTransitionArtifact.GetSyncWorkflowStateMutationAttributes()
 		default:
-			return serviceerror.NewInvalidArgument(fmt.Sprintf("unknown artifact type %T", artifactType))
+			return serviceerror.NewInvalidArgumentf("unknown artifact type %T", artifactType)
 		}
 		versionHistories := func() *historyspb.VersionHistories {
 			if snapshot != nil {

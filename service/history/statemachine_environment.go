@@ -20,7 +20,6 @@ import (
 	"go.temporal.io/server/service/history/hsm"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
-	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
@@ -219,7 +218,7 @@ func (e *stateMachineEnvironment) validateStateMachineRef(
 		return e.validateStateMachineRefWithoutTransitionHistory(ms, ref, potentialStaleState)
 	}
 
-	err := workflow.TransitionHistoryStalenessCheck(
+	err := transitionhistory.StalenessCheck(
 		ms.GetExecutionInfo().GetTransitionHistory(),
 		ref.StateMachineRef.MutableStateVersionedTransition,
 	)
@@ -341,11 +340,12 @@ func (e *stateMachineEnvironment) validateNotZombieWorkflow(
 func (e *stateMachineEnvironment) Access(ctx context.Context, ref hsm.Ref, accessType hsm.AccessType, accessor func(*hsm.Node) error) (retErr error) {
 	wfCtx, release, ms, err := e.getValidatedMutableState(
 		ctx, ref.WorkflowKey, func(workflowContext historyi.WorkflowContext, ms historyi.MutableState, potentialStaleState bool) error {
-			// For task references we never want to access a zombie workflow, even if the machine is accessed for read.
+			accessTypeForZombieValidation := accessType
 			if ref.TaskID != 0 {
-				accessType = hsm.AccessWrite
+				// For task references we never want to access a zombie workflow, even if the machine is accessed for read.
+				accessTypeForZombieValidation = hsm.AccessWrite
 			}
-			if err := e.validateNotZombieWorkflow(ms, accessType); err != nil {
+			if err := e.validateNotZombieWorkflow(ms, accessTypeForZombieValidation); err != nil {
 				return err
 			}
 			return e.validateStateMachineRef(ctx, workflowContext, ms, ref, potentialStaleState)

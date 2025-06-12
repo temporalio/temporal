@@ -81,11 +81,11 @@ func (s *fieldSuite) TestFieldGetSimple() {
 				Internal: newFieldInternalWithValue(
 					fieldTypeComponent,
 					&TestSubComponent1{SubComponent1Data: &protoMessageType{
-						ActivityId: "component-data",
+						CreateRequestId: "component-data",
 					}},
 				)},
 			expected: &TestSubComponent1{SubComponent1Data: &protoMessageType{
-				ActivityId: "component-data",
+				CreateRequestId: "component-data",
 			}},
 		},
 		{
@@ -114,7 +114,7 @@ func (s *fieldSuite) TestFieldGetComponent() {
 
 	chasmContext := NewMutableContext(context.Background(), node)
 
-	c, err := node.Component(chasmContext, ComponentRef{componentPath: RootPath})
+	c, err := node.Component(chasmContext, ComponentRef{componentPath: rootPath})
 	s.NoError(err)
 	s.NotNil(c)
 
@@ -124,13 +124,13 @@ func (s *fieldSuite) TestFieldGetComponent() {
 	s.NoError(err)
 	s.NotNil(sc1)
 	s.ProtoEqual(&protoMessageType{
-		ActivityId: "sub-component1-data",
+		CreateRequestId: "sub-component1-data",
 	}, sc1.SubComponent1Data)
 
 	sd1, err := tc.SubData1.Get(chasmContext)
 	s.NoError(err)
 	s.NotNil(sd1)
 	s.ProtoEqual(&protoMessageType{
-		ActivityId: "sub-data1",
+		CreateRequestId: "sub-data1",
 	}, sd1)
 }

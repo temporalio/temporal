@@ -19,7 +19,7 @@ func GenerateTask(
 	shard historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (_ *historyservice.GenerateLastHistoryReplicationTasksResponse, retError error) {
-	namespaceEntry, err := api.GetActiveNamespace(shard, namespace.ID(request.GetNamespaceId()))
+	namespaceEntry, err := api.GetNamespace(shard, namespace.ID(request.GetNamespaceId()))
 	if err != nil {
 		return nil, err
 	}
@@ -41,7 +41,7 @@ func GenerateTask(
 	defer func() { workflowLease.GetReleaseFn()(retError) }()
 
 	mutableState := workflowLease.GetMutableState()
-	replicationTasks, stateTransitionCount, err := mutableState.GenerateMigrationTasks()
+	replicationTasks, stateTransitionCount, err := mutableState.GenerateMigrationTasks(request.GetTargetClusters())
 	if err != nil {
 		return nil, err
 	}

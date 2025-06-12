@@ -18,11 +18,11 @@ type (
 
 var (
 	CallerTypeDefaultPriority = map[string]int{
-		headers.CallerTypeOperator:    0,
-		headers.CallerTypeAPI:         2,
-		headers.CallerTypeBackground:  4,
-		headers.CallerTypeReplication: 5,
-		headers.CallerTypePreemptable: 6,
+		headers.CallerTypeOperator:       0,
+		headers.CallerTypeAPI:            2,
+		headers.CallerTypeBackgroundHigh: 4,
+		headers.CallerTypeBackgroundLow:  5,
+		headers.CallerTypePreemptable:    6,
 	}
 
 	APITypeCallOriginPriorityOverride = map[string]int{
@@ -272,14 +272,12 @@ func RequestPriorityFn(req quotas.Request) int {
 			return priority
 		}
 		return CallerTypeDefaultPriority[req.CallerType]
-	case headers.CallerTypeBackground:
+	case headers.CallerTypeBackgroundHigh, headers.CallerTypeBackgroundLow:
 		if priority, ok := BackgroundTypeAPIPriorityOverride[req.API]; ok {
 			return priority
 		}
 		return CallerTypeDefaultPriority[req.CallerType]
 	case headers.CallerTypePreemptable:
-		return CallerTypeDefaultPriority[req.CallerType]
-	case headers.CallerTypeReplication:
 		return CallerTypeDefaultPriority[req.CallerType]
 	default:
 		// default requests to API priority to be consistent with existing behavior

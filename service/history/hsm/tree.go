@@ -585,7 +585,7 @@ func MachineTransition[T any](n *Node, transitionFn func(T) (TransitionOutput, e
 		NamespaceFailoverVersion: n.backend.GetCurrentVersion(),
 		// The transition count for the backend is only incremented when closing the current transaction,
 		// but any change to state machine node is a state transtion,
-		// so we can safely using next transition count here is safe.
+		// so we can safely using next transition count here.
 		TransitionCount: n.backend.NextTransitionCount(),
 	}
 	// Rollback on error
@@ -697,7 +697,7 @@ func GenerateEventLoadToken(event *historypb.HistoryEvent) ([]byte, error) {
 
 	// Attributes is always a struct with a single field (e.g: HistoryEvent_NexusOperationScheduledEventAttributes)
 	if attrs.Kind() != reflect.Struct || attrs.NumField() != 1 {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("got an invalid event structure: %v", event.EventType))
+		return nil, serviceerror.NewInternalf("got an invalid event structure: %v", event.EventType)
 	}
 
 	f := attrs.Field(0).Interface()
@@ -712,7 +712,7 @@ func GenerateEventLoadToken(event *historypb.HistoryEvent) ([]byte, error) {
 	} else {
 		// By default, events aren't referenceable as they may end up buffered.
 		// This limitation may be relaxed later and the platform would need a way to fix references to buffered events.
-		return nil, serviceerror.NewInternal(fmt.Sprintf("cannot reference event: %v", event.EventType))
+		return nil, serviceerror.NewInternalf("cannot reference event: %v", event.EventType)
 	}
 	ref := &tokenspb.HistoryEventRef{
 		EventId:      event.EventId,

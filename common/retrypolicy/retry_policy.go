@@ -1,7 +1,6 @@
 package retrypolicy
 
 import (
-	"fmt"
 	"strings"
 	"time"
 
@@ -69,13 +68,13 @@ func Validate(policy *commonpb.RetryPolicy) error {
 		return nil
 	}
 	if err := timestamp.ValidateAndCapProtoDuration(policy.GetInitialInterval()); err != nil {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("invalid InitialInterval set on retry policy: %v", err))
+		return serviceerror.NewInvalidArgumentf("invalid InitialInterval set on retry policy: %v", err)
 	}
 	if policy.GetBackoffCoefficient() < 1 {
 		return serviceerror.NewInvalidArgument("BackoffCoefficient cannot be less than 1 on retry policy.")
 	}
 	if err := timestamp.ValidateAndCapProtoDuration(policy.GetMaximumInterval()); err != nil {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("invalid MaximumInterval set on retry policy: %v", err))
+		return serviceerror.NewInvalidArgumentf("invalid MaximumInterval set on retry policy: %v", err)
 	}
 	if timestamp.DurationValue(policy.GetMaximumInterval()) > 0 && timestamp.DurationValue(policy.GetMaximumInterval()) < timestamp.DurationValue(policy.GetInitialInterval()) {
 		return serviceerror.NewInvalidArgument("MaximumInterval cannot be less than InitialInterval on retry policy.")
@@ -89,7 +88,7 @@ func Validate(policy *commonpb.RetryPolicy) error {
 			timeoutTypeValue := nrt[len(TimeoutFailureTypePrefix):]
 			timeoutType, err := enumspb.TimeoutTypeFromString(timeoutTypeValue)
 			if err != nil || enumspb.TimeoutType(timeoutType) == enumspb.TIMEOUT_TYPE_UNSPECIFIED {
-				return serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid timeout type value: %v.", timeoutTypeValue))
+				return serviceerror.NewInvalidArgumentf("Invalid timeout type value: %v.", timeoutTypeValue)
 			}
 		}
 	}

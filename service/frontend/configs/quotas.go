@@ -142,6 +142,8 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/ResetStickyTaskQueue":               5,
 		"/temporal.api.workflowservice.v1.WorkflowService/ShutdownWorker":                     5,
 		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkflowExecutionHistoryReverse": 5,
+		"/temporal.api.workflowservice.v1.WorkflowService/RecordWorkerHeartbeat":              5,
+
 		// GetWorkflowExecutionHistory with WaitNewEvent set to true is a long poll API. Consider it as any other poll API.
 		PollWorkflowHistoryAPIName: 5,
 
@@ -159,6 +161,7 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/ListClosedWorkflowExecutions":   1,
 		"/temporal.api.workflowservice.v1.WorkflowService/ListWorkflowExecutions":         1,
 		"/temporal.api.workflowservice.v1.WorkflowService/ListArchivedWorkflowExecutions": 1,
+		"/temporal.api.workflowservice.v1.WorkflowService/ListWorkers":                    1,
 
 		// APIs that rely on visibility
 		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkerTaskReachability":         1,
@@ -182,6 +185,21 @@ var (
 	}
 
 	NamespaceReplicationInducingAPIPrioritiesOrdered = []int{0, 1, 2}
+
+	// APIs that are not considered as a namespace operation. Namespace operations are used to track the usage of a namespace.
+	// This includes some APIs, history tasks, etc.
+	operationExcludedAPIs = map[string]struct{}{
+		// Poll requests are not considered as namespace operations. We will count these operations when we try to return a task
+		// from matching service to this request.
+		"/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowTaskQueue": {},
+		"/temporal.api.workflowservice.v1.WorkflowService/PollActivityTaskQueue": {},
+
+		// Replication-related APIs are not counted as operations.
+		"/temporal.server.api.adminservice.v1.AdminService/GetWorkflowExecutionRawHistory":   {},
+		"/temporal.server.api.adminservice.v1.AdminService/GetWorkflowExecutionRawHistoryV2": {},
+		"/temporal.server.api.adminservice.v1.AdminService/ReapplyEvents":                    {},
+		"/temporal.server.api.adminservice.v1.AdminService/SyncWorkflowState":                {},
+	}
 )
 
 type (
@@ -332,4 +350,15 @@ func NewNamespaceReplicationInducingAPIPriorityRateLimiter(
 		}
 		return NamespaceReplicationInducingAPIPrioritiesOrdered[len(NamespaceReplicationInducingAPIPrioritiesOrdered)-1]
 	}, rateLimiters)
+}
+
+func IsAPIOperation(apiFullName string) bool {
+	if _, ok := operationExcludedAPIs[apiFullName]; ok {
+		return false
+	}
+
+	_, inAPI := APIToPriority[apiFullName]
+	_, inNamespaceReplicationInducingAPI := NamespaceReplicationInducingAPIToPriority[apiFullName]
+
+	return inAPI || inNamespaceReplicationInducingAPI
 }

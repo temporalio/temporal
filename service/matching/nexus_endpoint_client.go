@@ -97,7 +97,7 @@ func (m *nexusEndpointClient) CreateNexusEndpoint(
 	defer m.Unlock()
 
 	if _, exists := m.endpointsByName[request.spec.GetName()]; exists {
-		return nil, serviceerror.NewAlreadyExist(fmt.Sprintf("error creating Nexus endpoint. Endpoint with name %v already registered", request.spec.GetName()))
+		return nil, serviceerror.NewAlreadyExistsf("error creating Nexus endpoint. Endpoint with name %v already registered", request.spec.GetName())
 	}
 
 	entry := &persistencespb.NexusEndpointEntry{
@@ -149,11 +149,11 @@ func (m *nexusEndpointClient) UpdateNexusEndpoint(
 
 	previous, exists := m.endpointsByID[request.endpointID]
 	if !exists {
-		return nil, serviceerror.NewNotFound(fmt.Sprintf("error updating Nexus endpoint. endpoint ID %v not found", request.endpointID))
+		return nil, serviceerror.NewNotFoundf("error updating Nexus endpoint. endpoint ID %v not found", request.endpointID)
 	}
 
 	if request.version != previous.Version {
-		return nil, serviceerror.NewFailedPrecondition(fmt.Sprintf("nexus endpoint version mismatch. received: %v expected %v", request.version, previous.Version))
+		return nil, serviceerror.NewFailedPreconditionf("nexus endpoint version mismatch. received: %v expected %v", request.version, previous.Version)
 	}
 
 	entry := &persistencespb.NexusEndpointEntry{
@@ -215,7 +215,7 @@ func (m *nexusEndpointClient) DeleteNexusEndpoint(
 
 	entry, ok := m.endpointsByID[request.Id]
 	if !ok {
-		return nil, serviceerror.NewNotFound(fmt.Sprintf("error deleting nexus endpoint with ID: %v", request.Id))
+		return nil, serviceerror.NewNotFoundf("error deleting nexus endpoint with ID: %v", request.Id)
 	}
 
 	err := m.persistence.DeleteNexusEndpoint(ctx, &p.DeleteNexusEndpointRequest{
@@ -260,7 +260,7 @@ func (m *nexusEndpointClient) ListNexusEndpoints(
 	defer m.RUnlock()
 
 	if request.LastKnownTableVersion != 0 && request.LastKnownTableVersion != m.tableVersion {
-		return nil, nil, serviceerror.NewFailedPrecondition(fmt.Sprintf("nexus endpoints table version mismatch. received: %v expected %v", request.LastKnownTableVersion, m.tableVersion))
+		return nil, nil, serviceerror.NewFailedPreconditionf("nexus endpoints table version mismatch. received: %v expected %v", request.LastKnownTableVersion, m.tableVersion)
 	}
 
 	startIdx := 0
@@ -360,7 +360,7 @@ func (m *nexusEndpointClient) notifyOwnershipChanged(isOwner bool) {
 		// Just acquired ownership. Start refresh loop on table version to catch any updates from previous owner.
 		backgroundCtx := headers.SetCallerInfo(
 			context.Background(),
-			headers.SystemBackgroundCallerInfo,
+			headers.SystemBackgroundHighCallerInfo,
 		)
 		m.refreshHandle = goro.NewHandle(backgroundCtx)
 		m.refreshHandle.Go(m.refreshTableVersion)

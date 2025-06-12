@@ -249,9 +249,11 @@ func (e *executableImpl) Execute() (retErr error) {
 	var callerInfo headers.CallerInfo
 	switch e.priority {
 	case ctasks.PriorityHigh:
-		callerInfo = headers.NewBackgroundCallerInfo(ns.String())
+		callerInfo = headers.NewBackgroundHighCallerInfo(ns.String())
+	case ctasks.PriorityLow:
+		callerInfo = headers.NewBackgroundLowCallerInfo(ns.String())
 	default:
-		// priority low or unknown
+		// priority preemptable or unknown
 		callerInfo = headers.NewPreemptableCallerInfo(ns.String())
 	}
 	ctx := headers.SetCallerInfo(
@@ -290,10 +292,10 @@ func (e *executableImpl) Execute() (retErr error) {
 	}
 
 	defer func() {
-		if panicObj := recover(); panicObj != nil {
-			err, ok := panicObj.(error)
+		if pObj := recover(); pObj != nil {
+			err, ok := pObj.(error)
 			if !ok {
-				err = serviceerror.NewInternal(fmt.Sprintf("panic: %v", panicObj))
+				err = serviceerror.NewInternalf("panic: %v", pObj)
 			}
 
 			e.logger.Error("Panic is captured", tag.SysStackTrace(string(debug.Stack())), tag.Error(err))
@@ -322,6 +324,7 @@ func (e *executableImpl) Execute() (retErr error) {
 		priorityTaggedProvider := e.metricsHandler.WithTags(metrics.TaskPriorityTag(e.priority.String()))
 		metrics.TaskRequests.With(priorityTaggedProvider).Record(1)
 		metrics.TaskScheduleLatency.With(priorityTaggedProvider).Record(e.scheduleLatency)
+		metrics.OperationCounter.With(e.metricsHandler).Record(1)
 
 		if retErr == nil {
 			e.inMemoryNoUserLatency += e.scheduleLatency + e.attemptNoUserLatency

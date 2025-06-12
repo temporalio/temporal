@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -17,6 +18,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/deletemanager"
@@ -30,11 +32,13 @@ import (
 
 var (
 	errNoTimerFired = serviceerror.NewNotFound("no expired timer to fire found")
+	errNoChasmTree  = serviceerror.NewInternal("mutable state associated with CHASM task has no CHASM tree")
 )
 
 type (
 	timerQueueTaskExecutorBase struct {
 		stateMachineEnvironment
+		chasmEngine        chasm.Engine
 		currentClusterName string
 		registry           namespace.Registry
 		deleteManager      deletemanager.DeleteManager
@@ -49,6 +53,7 @@ func newTimerQueueTaskExecutorBase(
 	workflowCache wcache.Cache,
 	deleteManager deletemanager.DeleteManager,
 	matchingRawClient resource.MatchingRawClient,
+	chasmEngine chasm.Engine,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 	config *configs.Config,
@@ -63,6 +68,7 @@ func newTimerQueueTaskExecutorBase(
 		},
 		currentClusterName: shardContext.GetClusterMetadata().GetCurrentClusterName(),
 		registry:           shardContext.GetNamespaceRegistry(),
+		chasmEngine:        chasmEngine,
 		deleteManager:      deleteManager,
 		matchingRawClient:  matchingRawClient,
 		config:             config,
@@ -240,8 +246,39 @@ func (t *timerQueueTaskExecutorBase) executeSingleStateMachineTimer(
 	return nil
 }
 
-// executeStateMachineTimers gets the state machine timers, processed the expired timers,
-// and return a slice of unprocessed timers.
+// executeChasmPureTimers walks a CHASM tree for expired pure task timers,
+// executes them, and returns a count of timers processed.
+func (t *timerQueueTaskExecutorBase) executeChasmPureTimers(
+	ctx context.Context,
+	workflowContext historyi.WorkflowContext,
+	ms historyi.MutableState,
+	task *tasks.ChasmTaskPure,
+	callback func(node chasm.NodePureTask, task any) error,
+) error {
+	// Because CHASM timers can target closed workflows, we need to specifically
+	// exclude zombie workflows, instead of merely checking that the workflow is
+	// running.
+	if ms.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
+		return consts.ErrWorkflowZombie
+	}
+
+	tree := ms.ChasmTree()
+	if tree == nil {
+		return errNoChasmTree
+	}
+
+	// Because the persistence layer can lose precision on the task compared to the
+	// physical task stored in the queue, we take the max of both here. Time is also
+	// truncated to a common (millisecond) precision later on.
+	//
+	// See also queues.IsTimeExpired.
+	referenceTime := util.MaxTime(t.Now(), task.GetKey().FireTime)
+
+	return tree.EachPureTask(referenceTime, callback)
+}
+
+// executeStateMachineTimers gets the state machine timers, processes the expired timers,
+// and returns a count of timers processed.
 func (t *timerQueueTaskExecutorBase) executeStateMachineTimers(
 	ctx context.Context,
 	workflowContext historyi.WorkflowContext,

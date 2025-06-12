@@ -114,7 +114,6 @@ type (
 		ClientFactoryProvider client.FactoryProvider
 		DynamicConfigClient   dynamicconfig.Client
 		TLSConfigProvider     encryption.TLSConfigProvider
-		EsConfig              *esclient.Config
 		EsClient              esclient.Client
 		MetricsHandler        metrics.Handler
 	}
@@ -223,17 +222,19 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 	var esConfig *esclient.Config
 	var esClient esclient.Client
 
+	if persistenceConfig.SecondaryVisibilityConfigExist() &&
+		persistenceConfig.DataStores[persistenceConfig.SecondaryVisibilityStore].Elasticsearch != nil {
+		esConfig = persistenceConfig.DataStores[persistenceConfig.SecondaryVisibilityStore].Elasticsearch
+		esConfig.SetHttpClient(so.elasticsearchHttpClient)
+	}
 	if persistenceConfig.VisibilityConfigExist() &&
 		persistenceConfig.DataStores[persistenceConfig.VisibilityStore].Elasticsearch != nil {
 		esConfig = persistenceConfig.DataStores[persistenceConfig.VisibilityStore].Elasticsearch
-	} else if persistenceConfig.SecondaryVisibilityConfigExist() &&
-		persistenceConfig.DataStores[persistenceConfig.SecondaryVisibilityStore].Elasticsearch != nil {
-		esConfig = persistenceConfig.DataStores[persistenceConfig.SecondaryVisibilityStore].Elasticsearch
+		esConfig.SetHttpClient(so.elasticsearchHttpClient)
 	}
 
 	if esConfig != nil {
 		esHttpClient := so.elasticsearchHttpClient
-		esConfig.SetHttpClient(esHttpClient)
 		if esHttpClient == nil {
 			var err error
 			esHttpClient, err = esclient.NewAwsHttpClient(esConfig.AWSRequestSigning)
@@ -286,7 +287,6 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		ClientFactoryProvider: clientFactoryProvider,
 		DynamicConfigClient:   dcClient,
 		TLSConfigProvider:     tlsConfigProvider,
-		EsConfig:              esConfig,
 		EsClient:              esClient,
 		MetricsHandler:        metricHandler,
 	}, nil
@@ -334,7 +334,6 @@ type (
 		NamespaceLogger            resource.NamespaceLogger
 		DynamicConfigClient        dynamicconfig.Client
 		MetricsHandler             metrics.Handler
-		EsConfig                   *esclient.Config
 		EsClient                   esclient.Client
 		TlsConfigProvider          encryption.TLSConfigProvider
 		PersistenceConfig          config.Persistence
@@ -372,7 +371,6 @@ func (params ServiceProviderParamsCommon) GetCommonServiceOptions(serviceName pr
 	return fx.Options(
 		fx.Supply(
 			serviceName,
-			params.EsConfig,
 			params.PersistenceConfig,
 			params.ClusterMetadata,
 			params.Cfg,
@@ -626,7 +624,7 @@ func ApplyClusterMetadataConfigProvider(
 			tag.ClusterName(clusterMetadata.CurrentClusterName))
 		return svc.ClusterMetadata, svc.Persistence, missingCurrentClusterMetadataErr
 	}
-	ctx = headers.SetCallerInfo(ctx, headers.SystemBackgroundCallerInfo)
+	ctx = headers.SetCallerInfo(ctx, headers.SystemBackgroundHighCallerInfo)
 	resp, err := clusterMetadataManager.GetClusterMetadata(
 		ctx,
 		&persistence.GetClusterMetadataRequest{ClusterName: clusterMetadata.CurrentClusterName},
@@ -1036,7 +1034,7 @@ func (l *fxLogAdapter) LogEvent(e fxevent.Event) {
 				tag.ComponentFX,
 				tag.NewStringTag("callee", e.FunctionName),
 				tag.NewStringTag("caller", e.CallerName),
-				tag.NewStringTag("runtime", e.Runtime.String()),
+				tag.NewStringerTag("runtime", e.Runtime),
 			)
 		}
 	case *fxevent.OnStopExecuting:
@@ -1058,7 +1056,7 @@ func (l *fxLogAdapter) LogEvent(e fxevent.Event) {
 				tag.ComponentFX,
 				tag.NewStringTag("callee", e.FunctionName),
 				tag.NewStringTag("caller", e.CallerName),
-				tag.NewStringTag("runtime", e.Runtime.String()),
+				tag.NewStringerTag("runtime", e.Runtime),
 			)
 		}
 	case *fxevent.Supplied:
@@ -1120,7 +1118,7 @@ func (l *fxLogAdapter) LogEvent(e fxevent.Event) {
 	case *fxevent.Stopping:
 		l.logger.Info("received signal",
 			tag.ComponentFX,
-			tag.NewStringTag("signal", e.Signal.String()))
+			tag.NewStringerTag("signal", e.Signal))
 	case *fxevent.Stopped:
 		if e.Err != nil {
 			l.logger.Error("stop failed", tag.ComponentFX, tag.Error(e.Err))

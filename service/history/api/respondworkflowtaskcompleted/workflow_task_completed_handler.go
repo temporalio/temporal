@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/collection"
@@ -31,6 +32,7 @@ import (
 	"go.temporal.io/server/common/protocol"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/configs"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -73,6 +75,7 @@ type (
 		shard                  historyi.ShardContext
 		tokenSerializer        *tasktoken.Serializer
 		commandHandlerRegistry *workflow.CommandHandlerRegistry
+		matchingClient         matchingservice.MatchingServiceClient
 	}
 
 	workflowTaskFailedCause struct {
@@ -111,6 +114,7 @@ func newWorkflowTaskCompletedHandler(
 	searchAttributesMapperProvider searchattribute.MapperProvider,
 	hasBufferedEventsOrMessages bool,
 	commandHandlerRegistry *workflow.CommandHandlerRegistry,
+	matchingClient matchingservice.MatchingServiceClient,
 ) *workflowTaskCompletedHandler {
 	return &workflowTaskCompletedHandler{
 		identity:                identity,
@@ -142,6 +146,7 @@ func newWorkflowTaskCompletedHandler(
 		shard:                  shard,
 		tokenSerializer:        tasktoken.NewSerializer(),
 		commandHandlerRegistry: commandHandlerRegistry,
+		matchingClient:         matchingClient,
 	}
 }
 
@@ -311,7 +316,7 @@ func (handler *workflowTaskCompletedHandler) handleCommand(
 		// Nexus command handlers are registered in /components/nexusoperations/workflow/commands.go
 		ch, ok := handler.commandHandlerRegistry.Handler(command.GetCommandType())
 		if !ok {
-			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Unknown command type: %v", command.GetCommandType()))
+			return nil, serviceerror.NewInvalidArgumentf("Unknown command type: %v", command.GetCommandType())
 		}
 		validator := commandValidator{sizeChecker: handler.sizeLimitChecker, commandType: command.GetCommandType()}
 		err := ch(ctx, handler.mutableState, validator, handler.workflowTaskCompletedID, command)
@@ -366,7 +371,7 @@ func (handler *workflowTaskCompletedHandler) handleMessage(
 			// Update was not found in the registry and can't be resurrected.
 			return handler.failWorkflowTask(
 				enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_UPDATE_WORKFLOW_EXECUTION_MESSAGE,
-				serviceerror.NewNotFound(fmt.Sprintf("update %s wasn't found on the server. This is most likely a transient error which will be resolved automatically by retries", message.ProtocolInstanceId)))
+				serviceerror.NewNotFoundf("update %s wasn't found on the server. This is most likely a transient error which will be resolved automatically by retries", message.ProtocolInstanceId))
 		}
 
 		if err := upd.OnProtocolMessage(message, workflow.WithEffects(handler.effects, handler.mutableState)); err != nil {
@@ -376,7 +381,7 @@ func (handler *workflowTaskCompletedHandler) handleMessage(
 	default:
 		return handler.failWorkflowTask(
 			enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_UPDATE_WORKFLOW_EXECUTION_MESSAGE,
-			serviceerror.NewInvalidArgument(fmt.Sprintf("unsupported protocol type %s", protocolType)))
+			serviceerror.NewInvalidArgumentf("unsupported protocol type %s", protocolType))
 	}
 
 	return nil
@@ -407,7 +412,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandProtocolMessage(
 	}
 	return handler.failWorkflowTask(
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_UPDATE_WORKFLOW_EXECUTION_MESSAGE,
-		serviceerror.NewInvalidArgument(fmt.Sprintf("ProtocolMessageCommand referenced absent message ID %s", attr.MessageId)),
+		serviceerror.NewInvalidArgumentf("ProtocolMessageCommand referenced absent message ID %s", attr.MessageId),
 	)
 }
 
@@ -927,7 +932,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandContinueAsNewWorkflow(
 	}
 
 	if handler.mutableState.GetAssignedBuildId() == "" {
-		// TODO: this is supported in new versioning [cleanup-old-wv]
+		// TODO(carlydf): this is supported in new versioning [cleanup-old-wv]
 		if attr.InheritBuildId && attr.TaskQueue.GetName() != "" && attr.TaskQueue.Name != handler.mutableState.GetExecutionInfo().TaskQueue {
 			err := serviceerror.NewInvalidArgument("ContinueAsNew with UseCompatibleVersion cannot run on different task queue.")
 			return nil, handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_CONTINUE_AS_NEW_ATTRIBUTES, err)
@@ -986,6 +991,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandContinueAsNewWorkflow(
 		handler.workflowTaskCompletedID,
 		parentNamespace,
 		attr,
+		worker_versioning.GetIsWFTaskQueueInVersionDetector(handler.matchingClient),
 	)
 	if err != nil {
 		return nil, err
@@ -1093,9 +1099,8 @@ func (handler *workflowTaskCompletedHandler) handleCommandStartChildWorkflow(
 
 	enums.SetDefaultWorkflowIdReusePolicy(&attr.WorkflowIdReusePolicy)
 
-	requestID := uuid.New()
 	event, _, err := handler.mutableState.AddStartChildWorkflowExecutionInitiatedEvent(
-		handler.workflowTaskCompletedID, requestID, attr, targetNamespaceID,
+		handler.workflowTaskCompletedID, attr, targetNamespaceID,
 	)
 	if err == nil {
 		// Keep track of all child initiated commands in this workflow task to validate request cancel commands
@@ -1158,7 +1163,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandUpsertWorkflowSearchAt
 	namespaceID := namespace.ID(executionInfo.NamespaceId)
 	namespaceEntry, err := handler.namespaceRegistry.GetNamespaceByID(namespaceID)
 	if err != nil {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("Unable to get namespace for namespaceID: %v.", namespaceID))
+		return nil, serviceerror.NewUnavailablef("Unable to get namespace for namespaceID: %v.", namespaceID)
 	}
 	namespace := namespaceEntry.Name()
 
@@ -1226,7 +1231,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandModifyWorkflowProperti
 	namespaceID := namespace.ID(executionInfo.NamespaceId)
 	_, err := handler.namespaceRegistry.GetNamespaceByID(namespaceID)
 	if err != nil {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("Unable to get namespace for namespaceID: %v.", namespaceID))
+		return nil, serviceerror.NewUnavailablef("Unable to get namespace for namespaceID: %v.", namespaceID)
 	}
 
 	// valid properties

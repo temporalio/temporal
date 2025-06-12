@@ -404,6 +404,11 @@ func enqueueReplicationTasks(ctx workflow.Context, workflowExecutionsCh workflow
 	var lastActivityErr error
 	var a *activities
 
+	var targetClusters []string
+	if params.TargetClusterName != "" {
+		targetClusters = []string{params.TargetClusterName}
+	}
+
 	for workflowExecutionsCh.Receive(ctx, &workflowExecutions) {
 		generateTaskFuture := workflow.ExecuteActivity(
 			actx,
@@ -413,6 +418,7 @@ func enqueueReplicationTasks(ctx workflow.Context, workflowExecutionsCh workflow
 				Executions:       workflowExecutions,
 				RPS:              params.OverallRps / float64(params.ConcurrentActivityCount),
 				GetParentInfoRPS: params.GetParentInfoRPS / float64(params.ConcurrentActivityCount),
+				TargetClusters:   targetClusters,
 			})
 
 		pendingGenerateTasks++

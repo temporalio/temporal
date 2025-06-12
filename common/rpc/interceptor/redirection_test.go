@@ -183,6 +183,8 @@ func (s *redirectionInterceptorSuite) TestGlobalAPI() {
 		"DeleteWorkflowRule":                    {},
 		"ListWorkflowRules":                     {},
 		"TriggerWorkflowRule":                   {},
+		"RecordWorkerHeartbeat":                 {},
+		"ListWorkers":                           {},
 	}, apis)
 }
 

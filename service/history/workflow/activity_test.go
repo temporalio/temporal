@@ -263,6 +263,7 @@ func (s *activitySuite) TestGetPendingActivityInfoHasRetryPolicy() {
 		RetryInitialInterval:    durationpb.New(time.Minute),
 		RetryBackoffCoefficient: 1.0,
 		RetryMaximumAttempts:    10,
+		TaskQueue:               "task-queue",
 	}
 
 	s.mockMutableState.EXPECT().GetActivityType(gomock.Any(), gomock.Any()).Return(&activityType, nil).Times(1)
@@ -281,6 +282,17 @@ func (s *activitySuite) TestGetPendingActivityInfoHasRetryPolicy() {
 	s.Equal(durationpb.New(2*time.Minute), pi.CurrentRetryInterval)
 	s.Equal(ai.ScheduledTime, pi.ScheduledTime)
 	s.Equal(ai.LastAttemptCompleteTime, pi.LastAttemptCompleteTime)
+	s.NotNil(pi.ActivityOptions)
+	s.NotNil(pi.ActivityOptions.RetryPolicy)
+	s.Equal(ai.TaskQueue, pi.ActivityOptions.TaskQueue.Name)
+	s.Equal(ai.ScheduleToCloseTimeout, pi.ActivityOptions.ScheduleToCloseTimeout)
+	s.Equal(ai.ScheduleToStartTimeout, pi.ActivityOptions.ScheduleToStartTimeout)
+	s.Equal(ai.StartToCloseTimeout, pi.ActivityOptions.StartToCloseTimeout)
+	s.Equal(ai.HeartbeatTimeout, pi.ActivityOptions.HeartbeatTimeout)
+	s.Equal(ai.RetryMaximumInterval, pi.ActivityOptions.RetryPolicy.MaximumInterval)
+	s.Equal(ai.RetryInitialInterval, pi.ActivityOptions.RetryPolicy.InitialInterval)
+	s.Equal(ai.RetryBackoffCoefficient, pi.ActivityOptions.RetryPolicy.BackoffCoefficient)
+	s.Equal(ai.RetryMaximumAttempts, pi.ActivityOptions.RetryPolicy.MaximumAttempts)
 }
 
 func (s *activitySuite) AddActivityInfo() *persistencespb.ActivityInfo {
@@ -331,7 +343,8 @@ func (s *activitySuite) TestResetPausedActivityAcceptance() {
 	s.Equal(ai.PauseInfo.GetManual().Reason, "test_reason")
 
 	prevStamp = ai.Stamp
-	err = ResetActivity(s.mockShard, s.mutableState, ai.ActivityId, false, true, 0)
+	err = ResetActivity(context.Background(), s.mockShard, s.mutableState, ai.ActivityId,
+		false, true, false, 0)
 	s.NoError(err)
 	s.Equal(int32(1), ai.Attempt, "ActivityInfo.Attempt is not reset")
 	s.Equal(prevStamp, ai.Stamp, "ActivityInfo.Stamp should not change")
@@ -360,7 +373,8 @@ func (s *activitySuite) TestResetAndUnPauseActivityAcceptance() {
 	s.Equal(ai.PauseInfo.GetManual().Reason, "test_reason")
 
 	prevStamp = ai.Stamp
-	err = ResetActivity(s.mockShard, s.mutableState, ai.ActivityId, false, false, 0)
+	err = ResetActivity(context.Background(), s.mockShard, s.mutableState, ai.ActivityId,
+		false, false, false, 0)
 	s.NoError(err)
 	s.Equal(int32(1), ai.Attempt, "ActivityInfo.Attempt is not reset")
 	s.NotEqual(prevStamp, ai.Stamp, "ActivityInfo.Stamp should change")

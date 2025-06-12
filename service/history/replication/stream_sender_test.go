@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/quotas"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/configs"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -72,7 +73,6 @@ func (s *streamSenderSuite) SetupTest() {
 	s.historyEngine = historyi.NewMockEngine(s.controller)
 	s.taskConverter = NewMockSourceTaskConverter(s.controller)
 	s.config = tests.NewDynamicConfig()
-
 	s.clientShardKey = NewClusterShardKey(rand.Int31(), 1)
 	s.serverShardKey = NewClusterShardKey(rand.Int31(), 1)
 	s.shardContext.EXPECT().GetEngine(gomock.Any()).Return(s.historyEngine, nil).AnyTimes()
@@ -83,6 +83,7 @@ func (s *streamSenderSuite) SetupTest() {
 		s.server,
 		s.shardContext,
 		s.historyEngine,
+		quotas.NoopRequestRateLimiter,
 		s.taskConverter,
 		"target_cluster",
 		2,
@@ -951,6 +952,7 @@ func (s *streamSenderSuite) TestSendTasks_TieredStack_LowPriority() {
 		nil, nil, &persistencespb.NamespaceReplicationConfig{
 			Clusters: []string{"source_cluster", "target_cluster"},
 		}, 100), nil).AnyTimes()
+	mockRegistry.EXPECT().GetNamespaceName(namespace.ID("1")).Return(namespace.Name("test"), nil).AnyTimes()
 	s.shardContext.EXPECT().GetNamespaceRegistry().Return(mockRegistry).AnyTimes()
 	iter := collection.NewPagingIterator[tasks.Task](
 		func(paginationToken []byte) ([]tasks.Task, []byte, error) {
@@ -1043,4 +1045,16 @@ func (s *streamSenderSuite) TestRecvEventLoop_RpcError_ShouldReturnStreamError()
 	s.Error(err)
 	s.Error(err, "rpc error")
 	s.IsType(&StreamError{}, err)
+}
+
+func (s *streamSenderSuite) TestLivenessMonitor() {
+
+	livenessMonitor(
+		s.streamSender.recvSignalChan,
+		time.Millisecond,
+		s.streamSender.shutdownChan,
+		s.streamSender.Stop,
+		s.streamSender.logger,
+	)
+	s.False(s.streamSender.IsValid())
 }

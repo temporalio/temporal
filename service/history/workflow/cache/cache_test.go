@@ -515,12 +515,12 @@ func (s *workflowCacheSuite) TestCacheImpl_lockWorkflowExecution() {
 		},
 		{
 			name:       "Non API context with timeout without locking beforehand should return an error",
-			callerType: headers.CallerTypeBackground,
+			callerType: headers.CallerTypeBackgroundHigh,
 		},
 		{
 			name:             "Non API context with timeout and locking beforehand should return an error",
 			shouldLockBefore: true,
-			callerType:       headers.CallerTypeBackground,
+			callerType:       headers.CallerTypeBackgroundHigh,
 			wantErr:          true,
 		},
 	}

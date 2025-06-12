@@ -1,7 +1,7 @@
 package ndc
 
 import (
-	"fmt"
+	"cmp"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -324,7 +324,7 @@ func (t *replicationTaskImpl) skipDuplicatedEvents(index int) error {
 		return nil
 	}
 	if index >= len(t.events) || index < 0 {
-		return serviceerror.NewInternal(fmt.Sprintf("Invalid skip index: Length=%v, skipIndex=%v", len(t.events), index))
+		return serviceerror.NewInternalf("Invalid skip index: Length=%v, skipIndex=%v", len(t.events), index)
 	}
 	t.events = t.events[index:]
 	t.firstEvent = t.events[0][0]
@@ -520,8 +520,7 @@ func deserializeBlob(
 	if blob == nil {
 		return nil, nil
 	}
-
-	blob.EncodingType = enumspb.ENCODING_TYPE_PROTO3
+	blob.EncodingType = cmp.Or(blob.EncodingType, enumspb.ENCODING_TYPE_PROTO3)
 	return historySerializer.DeserializeEvents(blob)
 }
 
@@ -534,7 +533,7 @@ func DeserializeBlobs(
 		return eventBatches, nil
 	}
 	for _, blob := range blobs {
-		blob.EncodingType = enumspb.ENCODING_TYPE_PROTO3
+		blob.EncodingType = cmp.Or(blob.EncodingType, enumspb.ENCODING_TYPE_PROTO3)
 		events, err := historySerializer.DeserializeEvents(blob)
 		if err != nil {
 			return nil, err

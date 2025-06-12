@@ -1,9 +1,7 @@
 package tqid
 
 import (
-	"fmt"
 	"strings"
-	"unicode/utf8"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -118,12 +116,8 @@ func validate(taskQueueName string, maxLength int, expectRootPartition bool) err
 		return serviceerror.NewInvalidArgument("taskQueue length exceeds limit")
 	}
 
-	if !utf8.ValidString(taskQueueName) {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("taskQueue %q is not a valid UTF-8 string", taskQueueName))
-	}
-
 	if expectRootPartition && strings.HasPrefix(taskQueueName, reservedTaskQueuePrefix) {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("task queue name cannot start with reserved prefix %v", reservedTaskQueuePrefix))
+		return serviceerror.NewInvalidArgumentf("task queue name cannot start with reserved prefix %v", reservedTaskQueuePrefix)
 	}
 
 	return nil

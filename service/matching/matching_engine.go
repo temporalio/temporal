@@ -730,10 +730,13 @@ pollLoop:
 					tag.WorkflowID(task.event.Data.GetWorkflowId()),
 					tag.WorkflowRunID(task.event.Data.GetRunId()),
 					tag.TaskID(task.event.GetTaskId()),
+					tag.WorkflowScheduledEventID(task.event.Data.GetScheduledEventId()),
 					tag.TaskVisibilityTimestamp(timestamp.TimeValue(task.event.Data.GetCreateTime())),
 					tag.VersioningBehavior(task.event.Data.VersionDirective.GetBehavior()),
 					//nolint:staticcheck // SA1019 deprecated WorkerVersionCapabilities will clean up later
-					tag.Deployment(worker_versioning.DeploymentFromCapabilities(requestClone.WorkerVersionCapabilities, requestClone.DeploymentOptions)),
+					tag.Deployment(worker_versioning.DeploymentNameFromCapabilities(requestClone.WorkerVersionCapabilities, requestClone.DeploymentOptions)),
+					//nolint:staticcheck // SA1019 deprecated WorkerVersionCapabilities will clean up later
+					tag.BuildId(worker_versioning.BuildIdFromCapabilities(requestClone.WorkerVersionCapabilities, requestClone.DeploymentOptions)),
 					tag.Error(err),
 				)
 				task.finish(nil, false)
@@ -831,7 +834,7 @@ func (e *matchingEngineImpl) nonRetryableErrorsDropTask(task *internalTask, task
 		tag.WorkflowRunID(task.event.Data.GetRunId()),
 		tag.WorkflowTaskQueueName(taskQueueName),
 		tag.TaskID(task.event.GetTaskId()),
-		tag.WorkflowEventID(task.event.Data.GetScheduledEventId()),
+		tag.WorkflowScheduledEventID(task.event.Data.GetScheduledEventId()),
 		tag.Error(err),
 		tag.ErrorType(err),
 	)
@@ -950,10 +953,13 @@ pollLoop:
 					tag.WorkflowID(task.event.Data.GetWorkflowId()),
 					tag.WorkflowRunID(task.event.Data.GetRunId()),
 					tag.TaskID(task.event.GetTaskId()),
+					tag.WorkflowScheduledEventID(task.event.Data.GetScheduledEventId()),
 					tag.TaskVisibilityTimestamp(timestamp.TimeValue(task.event.Data.GetCreateTime())),
 					tag.VersioningBehavior(task.event.Data.VersionDirective.GetBehavior()),
 					//nolint:staticcheck // SA1019 deprecated WorkerVersionCapabilities will clean up later
-					tag.Deployment(worker_versioning.DeploymentFromCapabilities(requestClone.WorkerVersionCapabilities, requestClone.DeploymentOptions)),
+					tag.Deployment(worker_versioning.DeploymentNameFromCapabilities(requestClone.WorkerVersionCapabilities, requestClone.DeploymentOptions)),
+					//nolint:staticcheck // SA1019 deprecated WorkerVersionCapabilities will clean up later
+					tag.BuildId(worker_versioning.BuildIdFromCapabilities(requestClone.WorkerVersionCapabilities, requestClone.DeploymentOptions)),
 					tag.Error(err),
 				)
 				task.finish(nil, false)
@@ -965,10 +971,13 @@ pollLoop:
 					tag.WorkflowID(task.event.Data.GetWorkflowId()),
 					tag.WorkflowRunID(task.event.Data.GetRunId()),
 					tag.TaskID(task.event.GetTaskId()),
+					tag.WorkflowScheduledEventID(task.event.Data.GetScheduledEventId()),
 					tag.TaskVisibilityTimestamp(timestamp.TimeValue(task.event.Data.GetCreateTime())),
 					tag.VersioningBehavior(task.event.Data.VersionDirective.GetBehavior()),
 					//nolint:staticcheck // SA1019 deprecated WorkerVersionCapabilities will clean up later
-					tag.Deployment(worker_versioning.DeploymentFromCapabilities(requestClone.WorkerVersionCapabilities, requestClone.DeploymentOptions)),
+					tag.Deployment(worker_versioning.DeploymentNameFromCapabilities(requestClone.WorkerVersionCapabilities, requestClone.DeploymentOptions)),
+					//nolint:staticcheck // SA1019 deprecated WorkerVersionCapabilities will clean up later
+					tag.BuildId(worker_versioning.BuildIdFromCapabilities(requestClone.WorkerVersionCapabilities, requestClone.DeploymentOptions)),
 				)
 				task.finish(nil, false)
 			case *serviceerror.ResourceExhausted:
@@ -1111,10 +1120,10 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 	req := request.GetDescRequest()
 	if req.ApiMode == enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED {
 		rootPartition, err := tqid.PartitionFromProto(req.GetTaskQueue(), request.GetNamespaceId(), req.GetTaskQueueType())
-		tqConfig := newTaskQueueConfig(rootPartition.TaskQueue(), e.config, namespace.Name(req.Namespace))
 		if err != nil {
 			return nil, err
 		}
+		tqConfig := newTaskQueueConfig(rootPartition.TaskQueue(), e.config, namespace.Name(req.Namespace))
 		if !rootPartition.IsRoot() || rootPartition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY || rootPartition.TaskType() != enumspb.TASK_QUEUE_TYPE_WORKFLOW {
 			return nil, serviceerror.NewInvalidArgument("DescribeTaskQueue must be called on the root partition of workflow task queue if api mode is DESCRIBE_TASK_QUEUE_MODE_ENHANCED")
 		}
@@ -1131,15 +1140,28 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 			return nil, err
 		}
 
-		timeSinceLastFanOut := rootPM.TimeSinceLastFanOut()
-		lastFanOutTTL := tqConfig.TaskQueueInfoByBuildIdTTL()
-
-		// TODO bug fix: We cache the same map regardless of VersionSelection or TaskQueueTypes, so if someone queries the Activity Task Queue type of this task queue name, we cache that result and return it even if the next DescribeTQ call is about the WF TQ
+		// TODO bug fix: We cache the last response for each build ID. timeSinceLastFanOut is the last fan out time, that means some enteries in the cache can be more stale if
+		// user is calling this API back-to-back but with different version selection.
+		missingItemsInCache := false
 		physicalInfoByBuildId := make(map[string]map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo)
-		if timeSinceLastFanOut > lastFanOutTTL {
-			// collect internal info
+		//nolint:staticcheck // SA1019 deprecated
+		requestedBuildIds, err := e.getBuildIds(req.Versions)
+		if err != nil {
+			return nil, err
+		}
+		for b := range requestedBuildIds {
+			c := rootPM.GetCache(b) // any expired cache entry will return nil
+			if c == nil {
+				missingItemsInCache = true
+				break // once we find a missing item, we can stop checking the cache
+			}
+			//revive:disable-next-line:unchecked-type-assertion
+			physicalInfoByBuildId[b] = c.(map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo)
+		}
+		if missingItemsInCache {
+			// Fan out to partitions to get the needed info
+			var foundBuildIds []string
 			numPartitions := max(tqConfig.NumWritePartitions(), tqConfig.NumReadPartitions())
-
 			for _, taskQueueType := range req.TaskQueueTypes {
 				for i := 0; i < numPartitions; i++ {
 					partitionResp, err := e.matchingRawClient.DescribeTaskQueuePartition(ctx, &matchingservice.DescribeTaskQueuePartitionRequest{
@@ -1157,6 +1179,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 						return nil, err
 					}
 					for buildId, vii := range partitionResp.VersionsInfoInternal {
+						foundBuildIds = append(foundBuildIds, buildId)
 						if _, ok := physicalInfoByBuildId[buildId]; !ok {
 							physicalInfoByBuildId[buildId] = make(map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo)
 						}
@@ -1186,11 +1209,10 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 					}
 				}
 			}
-			// update cache
-			rootPM.UpdateTimeSinceLastFanOutAndCache(physicalInfoByBuildId)
-		} else {
-			// fetch info from rootPartition's cache
-			physicalInfoByBuildId = rootPM.GetPhysicalTaskQueueInfoFromCache()
+
+			for _, b := range foundBuildIds {
+				rootPM.PutCache(b, physicalInfoByBuildId[b])
+			}
 		}
 
 		// smush internal info into versions info
@@ -1234,6 +1256,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 			},
 		}, nil
 	}
+
 	// Otherwise, do legacy DescribeTaskQueue
 	partition, err := tqid.PartitionFromProto(req.TaskQueue, request.GetNamespaceId(), req.TaskQueueType)
 	if err != nil {
@@ -1243,7 +1266,71 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 	if err != nil {
 		return nil, err
 	}
-	return pm.LegacyDescribeTaskQueue(req.GetIncludeTaskQueueStatus())
+	//nolint:staticcheck // SA1019 deprecated
+	descrResp, err := pm.LegacyDescribeTaskQueue(req.GetIncludeTaskQueueStatus())
+	if err != nil {
+		return nil, err
+	}
+
+	if req.ReportStats {
+		if !pm.Partition().IsRoot() {
+			return nil, serviceerror.NewInvalidArgument("DescribeTaskQueue stats are only supported for the root partition")
+		}
+		cacheKey := ".taskQueueStats" // starts with `.` to prevent clashing with build ID cache keys
+		if ts := pm.GetCache(cacheKey); ts != nil {
+			//revive:disable-next-line:unchecked-type-assertion
+			descrResp.DescResponse.Stats = ts.(*taskqueuepb.TaskQueueStats)
+		} else {
+			taskQueueStats := &taskqueuepb.TaskQueueStats{}
+
+			// find all buildIds
+			var buildIds []string
+			userData, _, err := pm.GetUserDataManager().GetUserData()
+			if err != nil {
+				return nil, err
+			}
+			typedUserData := userData.GetData().GetPerType()[int32(pm.Partition().TaskType())]
+			for _, v := range typedUserData.GetDeploymentData().GetVersions() {
+				if v.GetVersion() == nil || v.GetVersion().GetDeploymentName() == "" || v.GetVersion().GetBuildId() == "" {
+					continue
+				}
+				buildIds = append(buildIds, worker_versioning.WorkerDeploymentVersionToStringV31(v.GetVersion()))
+			}
+
+			// query each partition for stats
+			// TODO(stephanos): don't query root partition again
+			for i := 0; i < pm.PartitionCount(); i++ {
+				partitionResp, err := e.matchingRawClient.DescribeTaskQueuePartition(ctx,
+					&matchingservice.DescribeTaskQueuePartitionRequest{
+						NamespaceId: request.GetNamespaceId(),
+						TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
+							TaskQueue:     req.TaskQueue.Name,
+							TaskQueueType: req.TaskQueueType,
+							PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: int32(i)},
+						},
+						Versions: &taskqueuepb.TaskQueueVersionSelection{
+							BuildIds:    buildIds,
+							Unversioned: true,
+						},
+						ReportStats: true,
+					})
+				if err != nil {
+					return nil, err
+				}
+				for _, vii := range partitionResp.VersionsInfoInternal {
+					partitionStats := vii.PhysicalTaskQueueInfo.TaskQueueStats
+					taskQueueStats.ApproximateBacklogCount += partitionStats.ApproximateBacklogCount
+					taskQueueStats.ApproximateBacklogAge = largerBacklogAge(taskQueueStats.ApproximateBacklogAge, partitionStats.ApproximateBacklogAge)
+					taskQueueStats.TasksAddRate += partitionStats.TasksAddRate
+					taskQueueStats.TasksDispatchRate += partitionStats.TasksDispatchRate
+				}
+			}
+			pm.PutCache(cacheKey, taskQueueStats)
+			descrResp.DescResponse.Stats = taskQueueStats
+		}
+	}
+
+	return descrResp, nil
 }
 
 func dedupPollers(pollerInfos []*taskqueuepb.PollerInfo) []*taskqueuepb.PollerInfo {
@@ -1379,8 +1466,8 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 			return nil, false, err
 		}
 		if !bytes.Equal(cT, prevCT) {
-			return nil, false, serviceerror.NewFailedPrecondition(
-				fmt.Sprintf("provided conflict token '%v' does not match existing one '%v'", cT, prevCT),
+			return nil, false, serviceerror.NewFailedPreconditionf(
+				"provided conflict token '%v' does not match existing one '%v'", cT, prevCT,
 			)
 		}
 
@@ -1606,7 +1693,7 @@ func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatibility(
 				req.GetPersistUnknownBuildId(),
 			)
 		default:
-			return nil, false, serviceerror.NewInvalidArgument(fmt.Sprintf("invalid operation: %v", req.GetOperation()))
+			return nil, false, serviceerror.NewInvalidArgumentf("invalid operation: %v", req.GetOperation())
 		}
 		// Avoid mutation
 		ret := common.CloneProto(data)
@@ -1735,7 +1822,7 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 			if d := req.Deployment; d != nil {
 				// [cleanup-old-wv]
 				//nolint:staticcheck
-				if idx := findDeployment(deploymentData, req.Deployment); idx >= 0 {
+				if idx := worker_versioning.FindDeployment(deploymentData, req.Deployment); idx >= 0 {
 					deploymentData.Deployments[idx].Data = req.Data
 				} else {
 					deploymentData.Deployments = append(
@@ -1757,7 +1844,7 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 					} else { // set or update
 						deploymentData.UnversionedRampData = vd
 					}
-				} else if idx := findDeploymentVersion(deploymentData, vd.GetVersion()); idx >= 0 {
+				} else if idx := worker_versioning.FindDeploymentVersion(deploymentData, vd.GetVersion()); idx >= 0 {
 					old := deploymentData.Versions[idx]
 					if old.GetRoutingUpdateTime().AsTime().After(vd.GetRoutingUpdateTime().AsTime()) {
 						continue
@@ -1770,7 +1857,7 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 					deploymentData.Versions = append(deploymentData.Versions, vd)
 				}
 			} else if v := req.GetForgetVersion(); v != nil {
-				if idx := findDeploymentVersion(deploymentData, v); idx >= 0 {
+				if idx := worker_versioning.FindDeploymentVersion(deploymentData, v); idx >= 0 {
 					changed = true
 					deploymentData.Versions = append(deploymentData.Versions[:idx], deploymentData.Versions[idx+1:]...)
 				}
@@ -1834,12 +1921,18 @@ func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
 
 		// take last writer for V2 rules and V3 data
 		if req.GetUserData().GetClock() == nil || current.GetClock() != nil && hlc.Greater(current.GetClock(), req.GetUserData().GetClock()) {
-			mergedData.AssignmentRules = currentVersioningData.GetAssignmentRules()
-			mergedData.RedirectRules = currentVersioningData.GetRedirectRules()
+			if mergedData != nil {
+				// v2 rules
+				mergedData.AssignmentRules = currentVersioningData.GetAssignmentRules()
+				mergedData.RedirectRules = currentVersioningData.GetRedirectRules()
+			}
 			mergedUserData.PerType = current.GetPerType()
 		} else {
-			mergedData.AssignmentRules = newVersioningData.GetAssignmentRules()
-			mergedData.RedirectRules = newVersioningData.GetRedirectRules()
+			if mergedData != nil {
+				// v2 rules
+				mergedData.AssignmentRules = newVersioningData.GetAssignmentRules()
+				mergedData.RedirectRules = newVersioningData.GetRedirectRules()
+			}
 			mergedUserData.PerType = req.GetUserData().GetPerType()
 		}
 
@@ -1862,8 +1955,10 @@ func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
 			}
 		}
 
-		// No need to keep the tombstones around after replication.
-		mergedUserData.VersioningData = ClearTombstones(mergedData)
+		if mergedData != nil {
+			// No need to keep the v1 tombstones around after replication.
+			mergedUserData.VersioningData = ClearTombstones(mergedData)
+		}
 		return mergedUserData, len(buildIdsToRevive) > 0, nil
 	})
 	return &matchingservice.ApplyTaskQueueUserDataReplicationEventResponse{}, err
@@ -2203,7 +2298,7 @@ func (e *matchingEngineImpl) ListNexusEndpoints(ctx context.Context, request *ma
 	isOwner, ownershipLostCh, err := e.checkNexusEndpointsOwnership()
 	if err != nil {
 		e.logger.Error("Failed to check Nexus endpoints ownership", tag.Error(err))
-		return nil, serviceerror.NewFailedPrecondition(fmt.Sprintf("cannot verify ownership of Nexus endpoints table: %v", err))
+		return nil, serviceerror.NewFailedPreconditionf("cannot verify ownership of Nexus endpoints table: %v", err)
 	}
 	if !isOwner {
 		e.logger.Error("Matching node doesn't think it's the Nexus endpoints table owner", tag.Error(err))
@@ -2289,7 +2384,7 @@ func (e *matchingEngineImpl) getUserDataBatcher(namespaceId namespace.ID) *strea
 func (e *matchingEngineImpl) applyUserDataUpdateBatch(namespaceId namespace.ID, batch []*userDataUpdate) error {
 	ctx, cancel := context.WithTimeout(context.Background(), ioTimeout)
 	// TODO: should use namespace name here
-	ctx = headers.SetCallerInfo(ctx, headers.NewBackgroundCallerInfo(namespaceId.String()))
+	ctx = headers.SetCallerInfo(ctx, headers.NewBackgroundHighCallerInfo(namespaceId.String()))
 	defer cancel()
 
 	// convert to map
@@ -2615,6 +2710,13 @@ func (e *matchingEngineImpl) recordWorkflowTaskStarted(
 	pollReq *workflowservice.PollWorkflowTaskQueueRequest,
 	task *internalTask,
 ) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
+
+	metrics.OperationCounter.With(e.metricsHandler).Record(
+		1,
+		metrics.OperationTag("RecordWorkflowTaskStarted"),
+		metrics.NamespaceTag(pollReq.Namespace),
+		metrics.TaskTypeTag(""), // Added to make tags consistent with history task executor.
+	)
 	if e.rateLimiter != nil {
 		err := e.rateLimiter.Wait(ctx, quotas.Request{
 			API:        "RecordWorkflowTaskStarted",
@@ -2665,6 +2767,13 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 	pollReq *workflowservice.PollActivityTaskQueueRequest,
 	task *internalTask,
 ) (*historyservice.RecordActivityTaskStartedResponse, error) {
+
+	metrics.OperationCounter.With(e.metricsHandler).Record(
+		1,
+		metrics.OperationTag("RecordActivityTaskStarted"),
+		metrics.NamespaceTag(pollReq.Namespace),
+		metrics.TaskTypeTag(""), // Added to make tags consistent with history task executor.
+	)
 	if e.rateLimiter != nil {
 		err := e.rateLimiter.Wait(ctx, quotas.Request{
 			API:        "RecordActivityTaskStarted",

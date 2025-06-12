@@ -915,6 +915,7 @@ func (m *executionManagerImpl) readHistoryBranch(
 	dataLossTags := func(cause string) []tag.Tag {
 		return []tag.Tag{
 			tag.Cause(cause),
+			tag.ShardID(request.ShardID),
 			tag.WorkflowBranchToken(request.BranchToken),
 			tag.WorkflowFirstEventID(firstEvent.GetEventId()),
 			tag.FirstEventVersion(firstEvent.GetVersion()),

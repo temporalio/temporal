@@ -36,6 +36,9 @@ type (
 		ScanWorkflowExecutions(ctx context.Context, request *ListWorkflowExecutionsRequestV2) (*ListWorkflowExecutionsResponse, error)
 		CountWorkflowExecutions(ctx context.Context, request *CountWorkflowExecutionsRequest) (*CountWorkflowExecutionsResponse, error)
 		GetWorkflowExecution(ctx context.Context, request *GetWorkflowExecutionRequest) (*GetWorkflowExecutionResponse, error)
+
+		// Admin APIs
+		AddSearchAttributes(ctx context.Context, request *AddSearchAttributesRequest) error
 	}
 
 	VisibilityRequestBase struct {
@@ -141,6 +144,10 @@ type (
 	// GetWorkflowExecutionResponse is response to GetWorkflowExecution
 	GetWorkflowExecutionResponse struct {
 		Execution *workflowpb.WorkflowExecutionInfo
+	}
+
+	AddSearchAttributesRequest struct {
+		SearchAttributes map[string]enumspb.IndexedValueType
 	}
 )
 

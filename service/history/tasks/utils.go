@@ -13,14 +13,19 @@ func Tags(
 	// TODO: convert this to a method GetEventID on task interface
 	// or remove this tag as the value is visible in the Task tag value.
 	taskEventID := common.EmptyEventID
+	taskEidOk := false
 	taskCategory := task.GetCategory()
 	switch taskCategory.ID() {
 	case CategoryIDTransfer:
-		taskEventID = GetTransferTaskEventID(task)
+		taskEventID, taskEidOk = GetTransferTaskEventID(task)
 	case CategoryIDTimer, CategoryIDMemoryTimer:
-		taskEventID = GetTimerTaskEventID(task)
+		taskEventID, taskEidOk = GetTimerTaskEventID(task)
 	default:
 		// no-op, other task categories don't have task eventID
+	}
+
+	if !taskEidOk {
+		taskEventID = common.EmptyEventID
 	}
 
 	return []tag.Tag{
@@ -47,7 +52,7 @@ func InitializeLogger(
 
 func GetTransferTaskEventID(
 	transferTask Task,
-) int64 {
+) (int64, bool) {
 	eventID := int64(0)
 	switch task := transferTask.(type) {
 	case *ActivityTask:
@@ -71,12 +76,12 @@ func GetTransferTaskEventID(
 	default:
 		panic(serviceerror.NewInternal("unknown transfer task"))
 	}
-	return eventID
+	return eventID, true
 }
 
 func GetTimerTaskEventID(
 	timerTask Task,
-) int64 {
+) (int64, bool) {
 	eventID := int64(0)
 
 	switch task := timerTask.(type) {
@@ -98,10 +103,14 @@ func GetTimerTaskEventID(
 		eventID = common.FirstEventID
 	case *StateMachineTimerTask:
 		eventID = common.FirstEventID
+	case *ChasmTaskPure:
+		return 0, false // CHASM components do not have events
+	case *ChasmTask:
+		return 0, false // CHASM components do not have events
 	case *FakeTask:
 		// no-op
 	default:
 		panic(serviceerror.NewInternal("unknown timer task"))
 	}
-	return eventID
+	return eventID, true
 }
