@@ -2252,6 +2252,16 @@ func (ms *MutableStateImpl) AttachRequestID(
 	ms.approximateSize += ms.executionState.Size()
 }
 
+func (ms *MutableStateImpl) HasRequestID(
+	requestID string,
+) bool {
+	if ms.executionState.RequestIds == nil {
+		return false
+	}
+	_, ok := ms.executionState.RequestIds[requestID]
+	return ok
+}
+
 func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 	parentExecutionInfo *workflowspb.ParentExecutionInfo,
 	execution *commonpb.WorkflowExecution,
