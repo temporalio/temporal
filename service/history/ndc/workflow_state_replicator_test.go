@@ -1190,7 +1190,7 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_W
 		NodeID:            27,
 		Info:              persistence.BuildHistoryGarbageCleanupInfo(namespaceID, s.workflowID, s.runID),
 	}).Return(nil, nil).Times(1)
-	err = s.workflowStateReplicator.bringLocalEventsUpToSourceCurrentBranch(
+	_, err = s.workflowStateReplicator.bringLocalEventsUpToSourceCurrentBranch(
 		context.Background(),
 		namespace.ID(namespaceID),
 		s.workflowID,
@@ -1337,7 +1337,7 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_W
 		NodeID:            5,
 		Info:              persistence.BuildHistoryGarbageCleanupInfo(namespaceID, s.workflowID, s.runID),
 	}).Return(nil, nil).Times(1)
-	err = s.workflowStateReplicator.bringLocalEventsUpToSourceCurrentBranch(
+	_, err = s.workflowStateReplicator.bringLocalEventsUpToSourceCurrentBranch(
 		context.Background(),
 		namespace.ID(namespaceID),
 		s.workflowID,
@@ -1499,7 +1499,7 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_W
 		NodeID:            25,
 		Info:              persistence.BuildHistoryGarbageCleanupInfo(namespaceID, s.workflowID, s.runID),
 	}).Return(nil, nil).Times(1)
-	err = s.workflowStateReplicator.bringLocalEventsUpToSourceCurrentBranch(
+	_, err = s.workflowStateReplicator.bringLocalEventsUpToSourceCurrentBranch(
 		context.Background(),
 		namespace.ID(namespaceID),
 		s.workflowID,
@@ -1584,7 +1584,7 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_C
 		NewBranchToken: forkedBranchToken,
 	}, nil)
 	mockMutableState.EXPECT().SetHistoryBuilder(gomock.Any()).Times(1)
-	err := s.workflowStateReplicator.bringLocalEventsUpToSourceCurrentBranch(
+	newRunBranch, err := s.workflowStateReplicator.bringLocalEventsUpToSourceCurrentBranch(
 		context.Background(),
 		namespace.ID(namespaceID),
 		s.workflowID,
@@ -1599,4 +1599,5 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_C
 
 	s.Equal(forkedBranchToken, localVersionHistoryies.Histories[2].BranchToken)
 	s.Equal(int32(2), localVersionHistoryies.CurrentVersionHistoryIndex)
+	s.NotNil(newRunBranch)
 }
