@@ -62,7 +62,9 @@ import (
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -2477,6 +2479,155 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Reset(
 	_, err = wh.StartBatchOperation(context.Background(), request)
 	s.NoError(err)
 }
+
+func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Reset_WithPostResetOperations() {
+	testNamespace := namespace.Name("test-namespace")
+	namespaceID := namespace.ID(uuid.NewString())
+	executions := []*commonpb.WorkflowExecution{
+		{
+			WorkflowId: uuid.NewString(),
+			RunId:      uuid.NewString(),
+		},
+	}
+	reason := "reason"
+	identity := "identity"
+	config := s.newConfig()
+	wh := s.getWorkflowHandler(config)
+
+	// Create post-reset operations to test the serialization fix
+	postResetOps := []*workflowpb.PostResetOperation{
+		{
+			Variant: &workflowpb.PostResetOperation_UpdateWorkflowOptions_{
+				UpdateWorkflowOptions: &workflowpb.PostResetOperation_UpdateWorkflowOptions{
+					WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{},
+					UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
+				},
+			},
+		},
+	}
+
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespaceID, nil).AnyTimes()
+	s.mockHistoryClient.EXPECT().StartWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(
+			_ context.Context,
+			request *historyservice.StartWorkflowExecutionRequest,
+			_ ...grpc.CallOption,
+		) (*historyservice.StartWorkflowExecutionResponse, error) {
+			s.Equal(namespaceID.String(), request.NamespaceId)
+			s.Equal(batcher.BatchWFTypeName, request.StartRequest.WorkflowType.Name)
+			s.Equal(primitives.PerNSWorkerTaskQueue, request.StartRequest.TaskQueue.Name)
+			s.Equal(enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE, request.StartRequest.WorkflowIdReusePolicy)
+			s.Equal(identity, request.StartRequest.Identity)
+			s.Equal(payload.EncodeString(batcher.BatchTypeReset), request.StartRequest.Memo.Fields[batcher.BatchOperationTypeMemo])
+			s.Equal(payload.EncodeString(reason), request.StartRequest.Memo.Fields[batcher.BatchReasonMemo])
+			s.Equal(payload.EncodeString(identity), request.StartRequest.SearchAttributes.IndexedFields[searchattribute.BatcherUser])
+
+			// Decode the input and verify PostResetOperations are correctly set
+			var batchParams batcher.BatchParams
+			err := payloads.Decode(request.StartRequest.Input, &batchParams)
+			s.NoError(err)
+
+			// Verify that PostResetOperations slice has the correct length and no nil values
+			s.Len(batchParams.ResetParams.PostResetOperations, len(postResetOps))
+
+			// Ensure no nil values exist in the slice
+			for i, encoded := range batchParams.ResetParams.PostResetOperations {
+				s.NotNil(encoded, "PostResetOperations[%d] should not be nil", i)
+				s.Greater(len(encoded), 0, "PostResetOperations[%d] should not be empty", i)
+
+				// Verify we can unmarshal back to the original operation
+				var decodedOp workflowpb.PostResetOperation
+				err := protojson.Unmarshal(encoded, &decodedOp)
+				s.NoError(err, "Should be able to unmarshal PostResetOperations[%d]", i)
+
+				// Verify the content matches the original
+				s.Equal(postResetOps[i].GetVariant(), decodedOp.GetVariant())
+			}
+
+			return &historyservice.StartWorkflowExecutionResponse{}, nil
+		},
+	)
+	s.mockVisibilityMgr.EXPECT().CountWorkflowExecutions(gomock.Any(), gomock.Any()).Return(&manager.CountWorkflowExecutionsResponse{Count: 0}, nil)
+
+	request := &workflowservice.StartBatchOperationRequest{
+		Namespace: testNamespace.String(),
+		JobId:     uuid.NewString(),
+		Operation: &workflowservice.StartBatchOperationRequest_ResetOperation{
+			ResetOperation: &batchpb.BatchOperationReset{
+				Options: &commonpb.ResetOptions{
+					Target: &commonpb.ResetOptions_WorkflowTaskId{
+						WorkflowTaskId: 10,
+					},
+				},
+				PostResetOperations: postResetOps,
+				Identity:            identity,
+			},
+		},
+		Reason:     reason,
+		Executions: executions,
+	}
+
+	_, err := wh.StartBatchOperation(context.Background(), request)
+	s.NoError(err)
+}
+
+func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Reset_EmptyPostResetOperations() {
+	testNamespace := namespace.Name("test-namespace")
+	namespaceID := namespace.ID(uuid.NewString())
+	executions := []*commonpb.WorkflowExecution{
+		{
+			WorkflowId: uuid.NewString(),
+			RunId:      uuid.NewString(),
+		},
+	}
+	reason := "reason"
+	identity := "identity"
+	config := s.newConfig()
+	wh := s.getWorkflowHandler(config)
+
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespaceID, nil).AnyTimes()
+	s.mockHistoryClient.EXPECT().StartWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(
+			_ context.Context,
+			request *historyservice.StartWorkflowExecutionRequest,
+			_ ...grpc.CallOption,
+		) (*historyservice.StartWorkflowExecutionResponse, error) {
+			// Decode the input and verify PostResetOperations slice is properly initialized
+			var batchParams batcher.BatchParams
+			err := payloads.Decode(request.StartRequest.Input, &batchParams)
+			s.NoError(err)
+
+			// When PostResetOperations is empty, the slice should be empty, not nil
+			s.NotNil(batchParams.ResetParams.PostResetOperations)
+			s.Len(batchParams.ResetParams.PostResetOperations, 0)
+
+			return &historyservice.StartWorkflowExecutionResponse{}, nil
+		},
+	)
+	s.mockVisibilityMgr.EXPECT().CountWorkflowExecutions(gomock.Any(), gomock.Any()).Return(&manager.CountWorkflowExecutionsResponse{Count: 0}, nil)
+
+	request := &workflowservice.StartBatchOperationRequest{
+		Namespace: testNamespace.String(),
+		JobId:     uuid.NewString(),
+		Operation: &workflowservice.StartBatchOperationRequest_ResetOperation{
+			ResetOperation: &batchpb.BatchOperationReset{
+				Options: &commonpb.ResetOptions{
+					Target: &commonpb.ResetOptions_WorkflowTaskId{
+						WorkflowTaskId: 10,
+					},
+				},
+				PostResetOperations: []*workflowpb.PostResetOperation{}, // Empty slice
+				Identity:            identity,
+			},
+		},
+		Reason:     reason,
+		Executions: executions,
+	}
+
+	_, err := wh.StartBatchOperation(context.Background(), request)
+	s.NoError(err)
+}
+
 func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_TooMany() {
 	testNamespace := namespace.Name("test-namespace")
 	namespaceID := namespace.ID(uuid.NewString())
