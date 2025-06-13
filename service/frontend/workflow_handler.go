@@ -4647,6 +4647,17 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		operationType = batcher.BatchTypeUpdateOptions
 		updateOptionsParams.WorkflowExecutionOptions = op.UpdateWorkflowOptionsOperation.GetWorkflowExecutionOptions()
 		updateOptionsParams.UpdateMask = op.UpdateWorkflowOptionsOperation.GetUpdateMask()
+		// TODO(carlydf): remove hacky usage of deprecated fields later, after adding support for oneof in BatchParams encoder
+		if o := updateOptionsParams.WorkflowExecutionOptions.VersioningOverride; o.GetOverride() != nil {
+			deprecatedOverride := &workflowpb.VersioningOverride{}
+			if o.GetAutoUpgrade() {
+				deprecatedOverride.Behavior = enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE //nolint:staticcheck // SA1019: worker versioning v0.31
+			} else if o.GetPinned().GetBehavior() == workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED {
+				deprecatedOverride.Behavior = enumspb.VERSIONING_BEHAVIOR_PINNED                                                            //nolint:staticcheck // SA1019: worker versioning v0.31
+				deprecatedOverride.PinnedVersion = worker_versioning.ExternalWorkerDeploymentVersionToStringV31(o.GetPinned().GetVersion()) //nolint:staticcheck // SA1019: worker versioning v0.31
+			}
+			updateOptionsParams.WorkflowExecutionOptions.VersioningOverride = deprecatedOverride
+		}
 	case *workflowservice.StartBatchOperationRequest_UnpauseActivitiesOperation:
 		operationType = batcher.BatchTypeUnpauseActivities
 		if op.UnpauseActivitiesOperation == nil {
