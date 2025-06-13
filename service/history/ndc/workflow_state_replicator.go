@@ -384,7 +384,7 @@ func (r *WorkflowStateReplicatorImpl) handleFirstReplicationTask(
 	if err != nil {
 		return err
 	}
-	newRunBranchToken, err := r.bringLocalEventsUpToSourceCurrentBranch(
+	newBranchToken, err := r.bringLocalEventsUpToSourceCurrentBranch(
 		ctx,
 		namespace.ID(executionInfo.NamespaceId),
 		executionInfo.WorkflowId,
@@ -397,7 +397,7 @@ func (r *WorkflowStateReplicatorImpl) handleFirstReplicationTask(
 		true,
 	)
 	defer func() {
-		r.deleteNewBranchWhenError(ctx, newRunBranchToken, retErr)
+		r.deleteNewBranchWhenError(ctx, newBranchToken, retErr)
 	}()
 	if err != nil {
 		return err
