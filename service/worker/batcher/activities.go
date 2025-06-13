@@ -24,6 +24,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/sdk"
 	"golang.org/x/time/rate"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -79,7 +80,7 @@ func (a *activities) BatchActivity(ctx context.Context, batchParams BatchParams)
 		batchParams.ResetParams.postResetOperations = make([]*workflowpb.PostResetOperation, len(postOps))
 		for i, serializedOp := range postOps {
 			op := &workflowpb.PostResetOperation{}
-			if err := op.Unmarshal(serializedOp); err != nil {
+			if err := protojson.Unmarshal(serializedOp, op); err != nil {
 				logger.Error("Failed to deserialize batch post reset operation", tag.Error(err))
 				return hbd, err
 			}
