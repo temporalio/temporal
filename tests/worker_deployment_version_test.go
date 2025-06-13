@@ -1100,25 +1100,25 @@ func (s *DeploymentVersionSuite) checkDescribeWorkflowAfterOverride(
 
 		if s.useV32 {
 			// v0.32 override
-			s.Equal(expectedOverride.GetAutoUpgrade(), actualOverride.GetAutoUpgrade())
-			s.Equal(expectedOverride.GetPinned().GetVersion().GetBuildId(), actualOverride.GetPinned().GetVersion().GetBuildId())
-			s.Equal(expectedOverride.GetPinned().GetVersion().GetDeploymentName(), actualOverride.GetPinned().GetVersion().GetDeploymentName())
-			s.Equal(expectedOverride.GetPinned().GetBehavior(), actualOverride.GetPinned().GetBehavior())
+			a.Equal(expectedOverride.GetAutoUpgrade(), actualOverride.GetAutoUpgrade())
+			a.Equal(expectedOverride.GetPinned().GetVersion().GetBuildId(), actualOverride.GetPinned().GetVersion().GetBuildId())
+			a.Equal(expectedOverride.GetPinned().GetVersion().GetDeploymentName(), actualOverride.GetPinned().GetVersion().GetDeploymentName())
+			a.Equal(expectedOverride.GetPinned().GetBehavior(), actualOverride.GetPinned().GetBehavior())
 			if worker_versioning.OverrideIsPinned(expectedOverride) {
-				s.Equal(expectedOverride.GetPinned().GetVersion().GetDeploymentName(), resp.GetWorkflowExecutionInfo().GetWorkerDeploymentName())
+				a.Equal(expectedOverride.GetPinned().GetVersion().GetDeploymentName(), resp.GetWorkflowExecutionInfo().GetWorkerDeploymentName())
 			}
 		} else {
 			// v0.31 override
-			s.Equal(expectedOverride.GetBehavior().String(), actualOverride.GetBehavior().String())                                             //nolint:staticcheck // SA1019: worker versioning v0.31
+			a.Equal(expectedOverride.GetBehavior().String(), actualOverride.GetBehavior().String())                                             //nolint:staticcheck // SA1019: worker versioning v0.31
 			if actualOverrideDeployment := actualOverride.GetPinnedVersion(); expectedOverride.GetPinnedVersion() != actualOverrideDeployment { //nolint:staticcheck // SA1019: worker versioning v0.31
-				s.Fail(fmt.Sprintf("pinned override mismatch. expected: {%s}, actual: {%s}",
+				a.Fail(fmt.Sprintf("pinned override mismatch. expected: {%s}, actual: {%s}",
 					expectedOverride.GetPinnedVersion(), //nolint:staticcheck // SA1019: worker versioning v0.31
 					actualOverrideDeployment,
 				))
 			}
 			if worker_versioning.OverrideIsPinned(expectedOverride) {
 				d, _ := worker_versioning.WorkerDeploymentVersionFromStringV31(expectedOverride.GetPinnedVersion()) //nolint:staticcheck // SA1019: worker versioning v0.31
-				s.Equal(d.GetDeploymentName(), resp.GetWorkflowExecutionInfo().GetWorkerDeploymentName())
+				a.Equal(d.GetDeploymentName(), resp.GetWorkflowExecutionInfo().GetWorkerDeploymentName())
 			}
 		}
 	}, 5*time.Second, 50*time.Millisecond)
