@@ -227,43 +227,6 @@ func (this *ChasmPointerAttributes) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
-// Marshal an object of type ChasmComponentRef to the protobuf v3 wire format
-func (val *ChasmComponentRef) Marshal() ([]byte, error) {
-	return proto.Marshal(val)
-}
-
-// Unmarshal an object of type ChasmComponentRef from the protobuf v3 wire format
-func (val *ChasmComponentRef) Unmarshal(buf []byte) error {
-	return proto.Unmarshal(buf, val)
-}
-
-// Size returns the size of the object, in bytes, once serialized
-func (val *ChasmComponentRef) Size() int {
-	return proto.Size(val)
-}
-
-// Equal returns whether two ChasmComponentRef values are equivalent by recursively
-// comparing the message's fields.
-// For more information see the documentation for
-// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
-func (this *ChasmComponentRef) Equal(that interface{}) bool {
-	if that == nil {
-		return this == nil
-	}
-
-	var that1 *ChasmComponentRef
-	switch t := that.(type) {
-	case *ChasmComponentRef:
-		that1 = t
-	case ChasmComponentRef:
-		that1 = &t
-	default:
-		return false
-	}
-
-	return proto.Equal(this, that1)
-}
-
 // Marshal an object of type ChasmTaskInfo to the protobuf v3 wire format
 func (val *ChasmTaskInfo) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
@@ -293,6 +256,43 @@ func (this *ChasmTaskInfo) Equal(that interface{}) bool {
 	case *ChasmTaskInfo:
 		that1 = t
 	case ChasmTaskInfo:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type ChasmComponentRef to the protobuf v3 wire format
+func (val *ChasmComponentRef) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type ChasmComponentRef from the protobuf v3 wire format
+func (val *ChasmComponentRef) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *ChasmComponentRef) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two ChasmComponentRef values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *ChasmComponentRef) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *ChasmComponentRef
+	switch t := that.(type) {
+	case *ChasmComponentRef:
+		that1 = t
+	case ChasmComponentRef:
 		that1 = &t
 	default:
 		return false
