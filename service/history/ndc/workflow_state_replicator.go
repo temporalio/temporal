@@ -959,7 +959,7 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 		historyEvents = append(historyEvents, events)
 	}
 
-	prevTxnID := common.EmptyEventTaskID
+	prevTxnID := localMutableState.GetExecutionInfo().LastFirstEventTxnId
 	fetchFromRemoteAndAppend := func(
 		startID, // exclusive
 		startVersion,
@@ -1087,6 +1087,7 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 	}
 	versionHistoryToAppend.Items = versionhistory.CopyVersionHistoryItems(sourceVersionHistory.Items)
 	localMutableState.SetHistoryBuilder(historybuilder.NewImmutableForUpdateNextEventID(sourceLastItem))
+	localMutableState.GetExecutionInfo().LastFirstEventTxnId = prevTxnID
 	return nil
 }
 

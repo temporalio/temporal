@@ -30,6 +30,14 @@ func (*noopChasmTree) ApplySnapshot(chasm.NodesSnapshot) error {
 	return nil
 }
 
+func (*noopChasmTree) RefreshTasks() error {
+	return nil
+}
+
+func (*noopChasmTree) IsStateDirty() bool {
+	return false
+}
+
 func (*noopChasmTree) IsDirty() bool {
 	return false
 }

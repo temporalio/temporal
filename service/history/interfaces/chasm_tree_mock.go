@@ -171,6 +171,34 @@ func (mr *MockChasmTreeMockRecorder) IsStale(arg0 any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsStale", reflect.TypeOf((*MockChasmTree)(nil).IsStale), arg0)
 }
 
+// IsStateDirty mocks base method.
+func (m *MockChasmTree) IsStateDirty() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsStateDirty")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// IsStateDirty indicates an expected call of IsStateDirty.
+func (mr *MockChasmTreeMockRecorder) IsStateDirty() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsStateDirty", reflect.TypeOf((*MockChasmTree)(nil).IsStateDirty))
+}
+
+// RefreshTasks mocks base method.
+func (m *MockChasmTree) RefreshTasks() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RefreshTasks")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RefreshTasks indicates an expected call of RefreshTasks.
+func (mr *MockChasmTreeMockRecorder) RefreshTasks() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshTasks", reflect.TypeOf((*MockChasmTree)(nil).RefreshTasks))
+}
+
 // Snapshot mocks base method.
 func (m *MockChasmTree) Snapshot(arg0 *persistence.VersionedTransition) chasm.NodesSnapshot {
 	m.ctrl.T.Helper()
