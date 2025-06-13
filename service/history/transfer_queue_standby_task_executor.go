@@ -108,7 +108,7 @@ func (t *transferQueueStandbyTaskExecutor) Execute(
 	case *tasks.DeleteExecutionTask:
 		err = t.processDeleteExecutionTask(ctx, task, false)
 	case *tasks.ChasmTask:
-		err = t.executeChasmSideEffectTimerTask(ctx, task)
+		err = t.executeChasmSideEffectTransferTask(ctx, task)
 	default:
 		err = errUnknownTransferTask
 	}
@@ -120,7 +120,7 @@ func (t *transferQueueStandbyTaskExecutor) Execute(
 	}
 }
 
-func (t *transferQueueStandbyTaskExecutor) executeChasmSideEffectTimerTask(
+func (t *transferQueueStandbyTaskExecutor) executeChasmSideEffectTransferTask(
 	ctx context.Context,
 	task *tasks.ChasmTask,
 ) error {
@@ -517,7 +517,7 @@ func (t *transferQueueStandbyTaskExecutor) processTransfer(
 		return err
 	}
 
-	if !mutableState.IsWorkflowExecutionRunning() && !processTaskIfClosed {
+	if !processTaskIfClosed && !mutableState.IsWorkflowExecutionRunning() {
 		// workflow already finished, no need to process transfer task.
 		return nil
 	}

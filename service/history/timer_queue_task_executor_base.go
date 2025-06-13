@@ -31,8 +31,9 @@ import (
 )
 
 var (
-	errNoTimerFired = serviceerror.NewNotFound("no expired timer to fire found")
-	errNoChasmTree  = serviceerror.NewInternal("mutable state associated with CHASM task has no CHASM tree")
+	errNoTimerFired        = serviceerror.NewNotFound("no expired timer to fire found")
+	errNoChasmTree         = serviceerror.NewInternal("mutable state associated with CHASM task has no CHASM tree")
+	errNoChasmMutableState = serviceerror.NewInternal("mutable state couldn't be loaded for a CHASM task")
 )
 
 type (

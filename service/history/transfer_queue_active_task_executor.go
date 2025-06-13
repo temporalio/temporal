@@ -142,7 +142,7 @@ func (t *transferQueueActiveTaskExecutor) Execute(
 	case *tasks.DeleteExecutionTask:
 		err = t.processDeleteExecutionTask(ctx, task)
 	case *tasks.ChasmTask:
-		err = t.executeChasmSideEffectTimerTask(ctx, task)
+		err = t.executeChasmSideEffectTransferTask(ctx, task)
 	default:
 		err = errUnknownTransferTask
 	}
@@ -154,7 +154,7 @@ func (t *transferQueueActiveTaskExecutor) Execute(
 	}
 }
 
-func (t *transferQueueActiveTaskExecutor) executeChasmSideEffectTimerTask(
+func (t *transferQueueActiveTaskExecutor) executeChasmSideEffectTransferTask(
 	ctx context.Context,
 	task *tasks.ChasmTask,
 ) error {
@@ -172,7 +172,7 @@ func (t *transferQueueActiveTaskExecutor) executeChasmSideEffectTimerTask(
 		return err
 	}
 	if ms == nil {
-		return nil
+		return errNoChasmMutableState
 	}
 
 	tree := ms.ChasmTree()

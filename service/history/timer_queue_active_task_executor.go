@@ -947,7 +947,7 @@ func (t *timerQueueActiveTaskExecutor) executeChasmSideEffectTimerTask(
 		return err
 	}
 	if ms == nil {
-		return nil
+		return errNoChasmMutableState
 	}
 
 	tree := ms.ChasmTree()
@@ -987,7 +987,7 @@ func (t *timerQueueActiveTaskExecutor) executeChasmPureTimerTask(
 		return err
 	}
 	if ms == nil {
-		return nil
+		return errNoChasmMutableState
 	}
 
 	// Execute all fired pure tasks for a component while holding the workflow lock.
