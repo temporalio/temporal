@@ -5141,3 +5141,102 @@ func (s *mutableStateSuite) TestHasRequestID_EmptyExecutionState() {
 		s.False(s.mutableState.HasRequestID(requestID), "Should return false for request ID: %s", requestID)
 	}
 }
+
+func (s *mutableStateSuite) TestAddWorkflowExecutionOptionsUpdatedEvent_ValidationLogic() {
+	testCases := []struct {
+		name                      string
+		versioningOverride        *workflowpb.VersioningOverride
+		unsetVersioningOverride   bool
+		attachRequestID           string
+		attachCompletionCallbacks []*commonpb.Callback
+		expectedError             bool
+		expectedErrorMessage      string
+	}{
+		{
+			name:                      "completion_callbacks_with_versioning_override_should_fail",
+			versioningOverride:        &workflowpb.VersioningOverride{Override: &workflowpb.VersioningOverride_AutoUpgrade{AutoUpgrade: true}},
+			unsetVersioningOverride:   false,
+			attachRequestID:           "test-request-id",
+			attachCompletionCallbacks: []*commonpb.Callback{{Variant: &commonpb.Callback_Nexus_{}}},
+			expectedError:             true,
+			expectedErrorMessage:      "unable to add WorkflowExecutionOptionsUpdated event: completion callbacks are already attached but the event contains additional workflow option updates",
+		},
+		{
+			name:                      "completion_callbacks_with_unset_versioning_override_should_fail",
+			versioningOverride:        nil,
+			unsetVersioningOverride:   true,
+			attachRequestID:           "test-request-id",
+			attachCompletionCallbacks: []*commonpb.Callback{{Variant: &commonpb.Callback_Nexus_{}}},
+			expectedError:             true,
+			expectedErrorMessage:      "unable to add WorkflowExecutionOptionsUpdated event: completion callbacks are already attached but the event contains additional workflow option updates",
+		},
+		{
+			name:                      "completion_callbacks_with_both_versioning_options_should_fail",
+			versioningOverride:        &workflowpb.VersioningOverride{Override: &workflowpb.VersioningOverride_AutoUpgrade{AutoUpgrade: true}},
+			unsetVersioningOverride:   true,
+			attachRequestID:           "test-request-id",
+			attachCompletionCallbacks: []*commonpb.Callback{{Variant: &commonpb.Callback_Nexus_{}}},
+			expectedError:             true,
+			expectedErrorMessage:      "unable to add WorkflowExecutionOptionsUpdated event: completion callbacks are already attached but the event contains additional workflow option updates",
+		},
+		{
+			name:                      "completion_callbacks_only_should_succeed",
+			versioningOverride:        nil,
+			unsetVersioningOverride:   false,
+			attachRequestID:           "test-request-id",
+			attachCompletionCallbacks: []*commonpb.Callback{{Variant: &commonpb.Callback_Nexus_{}}},
+			expectedError:             false,
+		},
+		{
+			name:                      "versioning_override_only_should_succeed",
+			versioningOverride:        &workflowpb.VersioningOverride{Override: &workflowpb.VersioningOverride_AutoUpgrade{AutoUpgrade: true}},
+			unsetVersioningOverride:   false,
+			attachRequestID:           "",
+			attachCompletionCallbacks: nil,
+			expectedError:             false,
+		},
+		{
+			name:                      "unset_versioning_override_only_should_succeed",
+			versioningOverride:        nil,
+			unsetVersioningOverride:   true,
+			attachRequestID:           "",
+			attachCompletionCallbacks: nil,
+			expectedError:             false,
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			s.SetupSubTest()
+
+			// Call the method under test
+			event, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(
+				tc.versioningOverride,
+				tc.unsetVersioningOverride,
+				tc.attachRequestID,
+				tc.attachCompletionCallbacks,
+				nil, // links
+			)
+
+			if tc.expectedError {
+				s.Error(err, "Expected error but got none")
+				s.Nil(event, "Event should be nil when error occurs")
+				if tc.expectedErrorMessage != "" {
+					s.Contains(err.Error(), tc.expectedErrorMessage, "Error message should contain expected text")
+				}
+			} else {
+				s.NoError(err, "Expected no error but got: %v", err)
+				s.NotNil(event, "Event should not be nil when successful")
+				s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED, event.EventType, "Event type should be correct")
+
+				// Verify event attributes
+				attributes := event.GetWorkflowExecutionOptionsUpdatedEventAttributes()
+				s.NotNil(attributes, "Event attributes should not be nil")
+				s.Equal(tc.attachRequestID, attributes.GetAttachedRequestId(), "Attached request ID should match")
+				s.Equal(tc.versioningOverride, attributes.GetVersioningOverride(), "Versioning override should match")
+				s.Equal(tc.unsetVersioningOverride, attributes.GetUnsetVersioningOverride(), "Unset versioning override should match")
+				s.Len(attributes.GetAttachedCompletionCallbacks(), len(tc.attachCompletionCallbacks), "Number of completion callbacks should match")
+			}
+		})
+	}
+}
