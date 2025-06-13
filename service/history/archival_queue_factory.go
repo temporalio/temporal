@@ -100,9 +100,8 @@ func newQueueFactoryBase(params ArchivalQueueFactoryParams) QueueFactoryBase {
 // CreateQueue creates a new archival queue for the given shard.
 func (f *archivalQueueFactory) CreateQueue(
 	shard historyi.ShardContext,
-	workflowCache wcache.Cache,
 ) queues.Queue {
-	executor := f.newArchivalTaskExecutor(shard, workflowCache)
+	executor := f.newArchivalTaskExecutor(shard, f.WorkflowCache)
 	if f.ExecutorWrapper != nil {
 		executor = f.ExecutorWrapper.Wrap(executor)
 	}
