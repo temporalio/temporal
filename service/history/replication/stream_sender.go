@@ -483,7 +483,8 @@ func (s *StreamSenderImpl) sendTasks(
 		})
 	}
 
-	ctx := headers.SetCallerInfo(s.server.Context(), headers.SystemPreemptableCallerInfo)
+	callerInfo := getReplicaitonCallerInfo(priority)
+	ctx := headers.SetCallerInfo(s.server.Context(), callerInfo)
 	iter, err := s.historyEngine.GetReplicationTasksIter(
 		ctx,
 		string(s.clientShardKey.ClusterID),
@@ -551,7 +552,7 @@ Loop:
 					metrics.ReplicationTaskPriorityTag(priority),
 				)
 			}()
-			task, err := s.taskConverter.Convert(item, s.clientShardKey.ClusterID)
+			task, err := s.taskConverter.Convert(item, s.clientShardKey.ClusterID, priority)
 			if err != nil {
 				return err
 			}
