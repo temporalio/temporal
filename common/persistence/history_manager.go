@@ -1083,6 +1083,9 @@ func (m *executionManagerImpl) filterHistoryNodesReverse(
 		if lastNodeID == defaultLastNodeID {
 			lastNodeID = node.NodeID
 		}
+		if lastTransactionID == 0 {
+			m.logger.Warn("lastTransactionID is not set, this should not happen")
+		}
 		if lastTransactionID != 0 && // in the case where the lastTransactionID is not set, we will not compare
 			node.TransactionID != lastTransactionID {
 			continue
