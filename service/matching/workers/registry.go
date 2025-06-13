@@ -77,7 +77,7 @@ func (b *bucket) evictByTTL(expireBefore time.Time) int {
 		if front == nil {
 			break
 		}
-		e := front.Value.(*entry)
+		e := front.Value.(*entry) //nolint:revive
 		if !e.lastSeen.Before(expireBefore) {
 			break
 		}
@@ -118,7 +118,7 @@ func NewRegistry(
 		ticker:      time.NewTicker(evictionInterval),
 		hashFn: func(s string) uint32 {
 			h := fnv.New32a()
-			h.Write([]byte(s))
+			h.Write([]byte(s)) //nolint:revive
 			return h.Sum32()
 		},
 		quit: make(chan struct{}),
@@ -206,7 +206,7 @@ func (m *Registry) evictByCapacity() {
 			b.mu.Lock()
 			front := b.order.Front()
 			if front != nil {
-				e := front.Value.(*entry)
+				e := front.Value.(*entry) //nolint:revive
 				if e.lastSeen.Before(threshold) {
 					b.order.Remove(front)
 					delete(b.namespaces[e.namespace], e.hb.WorkerInstanceKey)
