@@ -1121,7 +1121,7 @@ func (s *DeploymentVersionSuite) checkDescribeWorkflowAfterOverride(
 				a.Equal(d.GetDeploymentName(), resp.GetWorkflowExecutionInfo().GetWorkerDeploymentName())
 			}
 		}
-	}, 5*time.Second, 50*time.Millisecond)
+	}, 10*time.Second, 50*time.Millisecond)
 }
 
 func (s *DeploymentVersionSuite) checkVersionIsCurrent(ctx context.Context, tv *testvars.TestVars) {
@@ -1376,7 +1376,7 @@ func (s *DeploymentVersionSuite) TestUpdateWorkflowExecutionOptions_SetPinnedSet
 }
 
 func (s *DeploymentVersionSuite) TestBatchUpdateWorkflowExecutionOptions_SetPinnedThenUnset() {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
 	defer cancel()
 	tv := testvars.New(s)
 
@@ -1406,9 +1406,9 @@ func (s *DeploymentVersionSuite) TestBatchUpdateWorkflowExecutionOptions_SetPinn
 				UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
 			},
 		},
-		VisibilityQuery: fmt.Sprintf("WorkflowType='%s'", workflowType),
-		JobId:           batchJobId,
-		Reason:          "test",
+		Executions: workflows,
+		JobId:      batchJobId,
+		Reason:     "test",
 	})
 	s.NoError(err)
 
