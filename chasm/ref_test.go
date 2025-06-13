@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"go.temporal.io/server/api/persistence/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.uber.org/mock/gomock"
@@ -84,12 +84,12 @@ func (s *componentRefSuite) TestSerializeDeserialize() {
 	ref := ComponentRef{
 		EntityKey:    entityKey,
 		entityGoType: reflect.TypeFor[*TestComponent](),
-		entityLastUpdateVT: &persistence.VersionedTransition{
+		entityLastUpdateVT: &persistencespb.VersionedTransition{
 			NamespaceFailoverVersion: tv.Namespace().FailoverVersion(),
 			TransitionCount:          tv.Any().Int64(),
 		},
 		componentPath: []string{tv.Any().String(), tv.Any().String()},
-		componentInitialVT: &persistence.VersionedTransition{
+		componentInitialVT: &persistencespb.VersionedTransition{
 			NamespaceFailoverVersion: tv.Namespace().FailoverVersion(),
 			TransitionCount:          tv.Any().Int64(),
 		},
