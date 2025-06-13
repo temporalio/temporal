@@ -54,6 +54,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/testing/protoassert"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/tests"
@@ -62,7 +63,6 @@ import (
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
-	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -81,6 +81,7 @@ const (
 type (
 	WorkflowHandlerSuite struct {
 		suite.Suite
+		protorequire.ProtoAssertions
 		*require.Assertions
 
 		controller                         *gomock.Controller
@@ -2537,11 +2538,11 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Reset_
 
 				// Verify we can unmarshal back to the original operation
 				var decodedOp workflowpb.PostResetOperation
-				err := protojson.Unmarshal(encoded, &decodedOp)
+				err := decodedOp.Unmarshal(encoded)
 				s.NoError(err, "Should be able to unmarshal PostResetOperations[%d]", i)
 
 				// Verify the content matches the original
-				s.Equal(postResetOps[i].GetVariant(), decodedOp.GetVariant())
+				s.ProtoEqual(postResetOps[i], &decodedOp)
 			}
 
 			return &historyservice.StartWorkflowExecutionResponse{}, nil
