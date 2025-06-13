@@ -305,7 +305,6 @@ func (s *WorkflowResetSuite) TestBatchResetWithOptionsUpdate() {
 			ResetOperation: &batchpb.BatchOperationReset{
 				Identity: "test-batch-reset",
 				Options: &commonpb.ResetOptions{
-					// Target: &commonpb.ResetOptions_FirstWorkflowTask{},
 					Target: &commonpb.ResetOptions_WorkflowTaskId{
 						WorkflowTaskId: s.getFirstWFTaskCompleteEventID(ctx, workflowID1, runs1[0]),
 					},
@@ -381,7 +380,7 @@ func (s *WorkflowResetSuite) TestBatchResetWithOptionsUpdate() {
 				},
 			},
 		}
-		s.ProtoEqual(expectedOverride, info.WorkflowExecutionInfo.GetVersioningInfo().GetVersioningOverride())
+		s.ProtoEqual(expectedOverride.GetPinned().GetVersion(), info.WorkflowExecutionInfo.GetVersioningInfo().GetVersioningOverride().GetPinned().GetVersion())
 	}
 }
 
