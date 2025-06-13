@@ -4849,10 +4849,6 @@ func (ms *MutableStateImpl) AddWorkflowExecutionOptionsUpdatedEvent(
 	attachCompletionCallbacks []*commonpb.Callback,
 	links []*commonpb.Link,
 ) (*historypb.HistoryEvent, error) {
-	if len(attachCompletionCallbacks) > 0 && (versioningOverride != nil || unsetVersioningOverride) {
-		return nil, serviceerror.NewInvalidArgument("unable to add WorkflowExecutionOptionsUpdated event: completion callbacks are already attached but the event contains additional workflow option updates")
-	}
-
 	if err := ms.checkMutability(tag.WorkflowActionWorkflowOptionsUpdated); err != nil {
 		return nil, err
 	}
