@@ -873,7 +873,7 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 	sourceVersionHistories *historyspb.VersionHistories,
 	eventBlobs []*commonpb.DataBlob,
 	isNewMutableState bool,
-) error {
+) (retErr error) {
 	sourceVersionHistory, err := versionhistory.GetCurrentVersionHistory(sourceVersionHistories)
 	if err != nil {
 		return err
@@ -900,10 +900,27 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 		localMutableState,
 		sourceVersionHistory,
 		isNewMutableState)
-	localVersionHistories.CurrentVersionHistoryIndex = index
 	if err != nil {
 		return err
 	}
+	localVersionHistories.CurrentVersionHistoryIndex = index
+	defer func() {
+		if retErr == nil || !isNewBranch {
+			return
+		}
+		currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(localVersionHistories)
+		if err != nil {
+			r.logger.Error("failed to get current version history", tag.Error(err))
+			return
+		}
+
+		if err := r.shardContext.GetExecutionManager().DeleteHistoryBranch(ctx, &persistence.DeleteHistoryBranchRequest{
+			ShardID:     r.shardContext.GetShardID(),
+			BranchToken: currentVersionHistory.BranchToken,
+		}); err != nil {
+			r.logger.Error("failed to clean up branch", tag.Error(err))
+		}
+	}()
 	versionHistoryToAppend, err := versionhistory.GetVersionHistory(localVersionHistories, index)
 	if err != nil {
 		return err
