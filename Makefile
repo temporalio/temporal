@@ -80,9 +80,12 @@ GOINSTALL := GOBIN=$(ROOT)/$(LOCALBIN) go install
 
 OTEL ?= false
 ifeq ($(OTEL),true)
-	export OTEL_BSP_SCHEDULE_DELAY=100 # in ms
 	export OTEL_EXPORTER_OTLP_TRACES_INSECURE=true
 	export OTEL_TRACES_EXPORTER=otlp
+endif
+OTEL_DEBUG ?= false
+ifeq ($(OTEL_DEBUG),true)
+	export OTEL_BSP_SCHEDULE_DELAY=100 # in ms
 	export TEMPORAL_OTEL_DEBUG=true
 endif
 
