@@ -190,6 +190,10 @@ func (h *Handler) Stop() {
 	h.dlqMetricsEmitter.Stop()
 }
 
+func (h *Handler) Identity() string {
+	return h.hostInfoProvider.HostInfo().Identity()
+}
+
 func (h *Handler) isStopped() bool {
 	return atomic.LoadInt32(&h.status) == common.DaemonStatusStopped
 }

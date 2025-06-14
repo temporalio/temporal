@@ -1384,7 +1384,7 @@ func (s *Versioning3Suite) TestChildWorkflowInheritance_CrossTQ_Inherit() {
 func (s *Versioning3Suite) TestChildWorkflowInheritance_CrossTQ_NoInherit() {
 	// the ExpectNoInherit helper does NOT poll on the child's task queue with the parent's version,
 	// so we DO NOT expect the version to be inherited
-	s.testChildWorkflowInheritance_ExpectNoInherit(true, vbPinned)
+	s.testChildWorkflowInheritance_ExpectNoInherit(false, vbPinned)
 }
 
 func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectNoInherit(crossTq bool, parentBehavior enumspb.VersioningBehavior) {

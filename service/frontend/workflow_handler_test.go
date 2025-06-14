@@ -161,33 +161,7 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 	s.mockVisibilityMgr.EXPECT().GetIndexName().Return(esIndexName).AnyTimes()
 	healthInterceptor := interceptor.NewHealthInterceptor()
 	healthInterceptor.SetHealthy(true)
-	return NewWorkflowHandler(
-		config,
-		s.mockProducer,
-		s.mockResource.GetVisibilityManager(),
-		s.mockResource.GetLogger(),
-		s.mockResource.GetThrottledLogger(),
-		s.mockResource.GetExecutionManager().GetName(),
-		s.mockResource.GetClusterMetadataManager(),
-		s.mockResource.GetMetadataManager(),
-		s.mockResource.GetHistoryClient(),
-		s.mockResource.GetMatchingClient(),
-		nil,
-		nil,
-		s.mockResource.GetArchiverProvider(),
-		s.mockResource.GetPayloadSerializer(),
-		s.mockResource.GetNamespaceRegistry(),
-		s.mockResource.GetSearchAttributesMapperProvider(),
-		s.mockResource.GetSearchAttributesProvider(),
-		s.mockResource.GetClusterMetadata(),
-		s.mockResource.GetArchivalMetadata(),
-		health.NewServer(),
-		clock.NewRealTimeSource(),
-		s.mockResource.GetMembershipMonitor(),
-		healthInterceptor,
-		scheduler.NewSpecBuilder(),
-		true,
-	)
+	return NewWorkflowHandler(config, s.mockProducer, s.mockResource.GetVisibilityManager(), s.mockResource.GetLogger(), s.mockResource.GetThrottledLogger(), s.mockResource.GetExecutionManager().GetName(), s.mockResource.GetClusterMetadataManager(), s.mockResource.GetMetadataManager(), s.mockResource.GetHistoryClient(), s.mockResource.GetMatchingClient(), nil, nil, s.mockResource.GetArchiverProvider(), s.mockResource.GetPayloadSerializer(), s.mockResource.GetNamespaceRegistry(), s.mockResource.GetSearchAttributesMapperProvider(), s.mockResource.GetSearchAttributesProvider(), s.mockResource.GetClusterMetadata(), s.mockResource.GetArchivalMetadata(), health.NewServer(), clock.NewRealTimeSource(), s.mockResource.GetMembershipMonitor(), nil, healthInterceptor, scheduler.NewSpecBuilder(), true)
 }
 
 func (s *WorkflowHandlerSuite) TestDisableListVisibilityByFilter() {

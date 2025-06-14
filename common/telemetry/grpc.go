@@ -148,6 +148,9 @@ func (c *customServerStatsHandler) HandleRPC(ctx context.Context, stat stats.RPC
 
 		// annotate with gRPC response payload
 		if c.isDebug {
+			if s.Payload == nil {
+				return
+			}
 			//revive:disable-next-line:unchecked-type-assertion
 			respMsg := s.Payload.(proto.Message)
 			payload, _ := protojson.Marshal(respMsg)
