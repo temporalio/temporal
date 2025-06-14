@@ -51,7 +51,7 @@ func (pollers *pollerHistory) getPollerInfo(earliestAccessTime time.Time) []*tas
 		entry := ite.Next()
 		key := entry.Key().(pollerIdentity)
 		value := entry.Value().(*pollerInfo)
-		lastAccessTime := entry.CreateTime()
+		lastAccessTime := entry.LastAccessTime()
 		if earliestAccessTime.Before(lastAccessTime) {
 			result = append(result, &taskqueuepb.PollerInfo{
 				Identity:                  string(key),
