@@ -40,13 +40,25 @@ func (a *attempt) run(ctx context.Context, args []string) (string, error) {
 			args[i] = junitReportFlag + a.junitReport.path
 		}
 	}
+
 	log.Printf("starting test attempt #%d: %v %v",
 		a.number, a.runner.gotestsumExecutable, strings.Join(args, " "))
+
 	cmd := exec.CommandContext(ctx, a.runner.gotestsumExecutable, args...)
 	var output strings.Builder
 	cmd.Stdout = io.MultiWriter(os.Stdout, &output)
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
+
+	if a.number > 0 {
+		cmd.Env = append(os.Environ(),
+			"OTEL_EXPORTER_OTLP_TRACES_INSECURE=true",
+			"OTEL_TRACES_EXPORTER=otlp",
+			"OTEL_BSP_SCHEDULE_DELAY=100",
+			"TEMPORAL_OTEL_DEBUG=true",
+		)
+	}
+
 	if err := cmd.Run(); err != nil {
 		return output.String(), err
 	}
