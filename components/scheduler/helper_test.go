@@ -45,7 +45,7 @@ func (root) IsWorkflowExecutionRunning() bool {
 
 func newFakeEnv() *fakeEnv {
 	return &fakeEnv{
-		now: time.Now(),
+		now: time.Now().UTC(),
 	}
 }
 
@@ -171,4 +171,20 @@ func opLogTasks(node *hsm.Node) (tasks []hsm.Task, err error) {
 	}
 
 	return tasks, nil
+}
+
+// opLogTaskMap returns a map from task type -> []hsm.Task{}.
+func opLogTaskMap(node *hsm.Node) (map[string][]hsm.Task, error) {
+	result := make(map[string][]hsm.Task)
+	tasks, err := opLogTasks(node)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, task := range tasks {
+		key := task.Type()
+		result[key] = append(result[key], task)
+	}
+
+	return result, nil
 }

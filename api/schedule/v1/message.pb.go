@@ -1175,14 +1175,26 @@ func (x *InvokerInternal) GetLastProcessedTime() *timestamppb.Timestamp {
 }
 
 // State machine scheduler's Backfiller internal state. Backfill requests are 1:1
-// with Backfiller nodes.
+// with Backfiller nodes. Backfiller nodes also handle immediate trigger requests.
 type BackfillerInternal struct {
-	state   protoimpl.MessageState `protogen:"open.v1"`
-	Request *v11.BackfillRequest   `protobuf:"bytes,1,opt,name=request,proto3" json:"request,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Request:
+	//
+	//	*BackfillerInternal_BackfillRequest
+	//	*BackfillerInternal_TriggerRequest
+	Request isBackfillerInternal_Request `protobuf_oneof:"request"`
+	// Every Backfiller should be assigned a unique ID upon creation, used
+	// for deduplication.
+	BackfillId string `protobuf:"bytes,5,opt,name=backfill_id,json=backfillId,proto3" json:"backfill_id,omitempty"`
 	// Backfiller waits for the next_invocation_time before buffering more actions.
-	NextInvocationTime *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=next_invocation_time,json=nextInvocationTime,proto3" json:"next_invocation_time,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	NextInvocationTime *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=next_invocation_time,json=nextInvocationTime,proto3" json:"next_invocation_time,omitempty"`
+	// High water mark.
+	LastProcessedTime *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=last_processed_time,json=lastProcessedTime,proto3" json:"last_processed_time,omitempty"`
+	// Attempt count, incremented when the buffer is full and the Backfiller
+	// needs to back off before retrying to fill.
+	Attempt       int64 `protobuf:"varint,8,opt,name=attempt,proto3" json:"attempt,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *BackfillerInternal) Reset() {
@@ -1215,11 +1227,36 @@ func (*BackfillerInternal) Descriptor() ([]byte, []int) {
 	return file_temporal_server_api_schedule_v1_message_proto_rawDescGZIP(), []int{15}
 }
 
-func (x *BackfillerInternal) GetRequest() *v11.BackfillRequest {
+func (x *BackfillerInternal) GetRequest() isBackfillerInternal_Request {
 	if x != nil {
 		return x.Request
 	}
 	return nil
+}
+
+func (x *BackfillerInternal) GetBackfillRequest() *v11.BackfillRequest {
+	if x != nil {
+		if x, ok := x.Request.(*BackfillerInternal_BackfillRequest); ok {
+			return x.BackfillRequest
+		}
+	}
+	return nil
+}
+
+func (x *BackfillerInternal) GetTriggerRequest() *v11.TriggerImmediatelyRequest {
+	if x != nil {
+		if x, ok := x.Request.(*BackfillerInternal_TriggerRequest); ok {
+			return x.TriggerRequest
+		}
+	}
+	return nil
+}
+
+func (x *BackfillerInternal) GetBackfillId() string {
+	if x != nil {
+		return x.BackfillId
+	}
+	return ""
 }
 
 func (x *BackfillerInternal) GetNextInvocationTime() *timestamppb.Timestamp {
@@ -1228,6 +1265,37 @@ func (x *BackfillerInternal) GetNextInvocationTime() *timestamppb.Timestamp {
 	}
 	return nil
 }
+
+func (x *BackfillerInternal) GetLastProcessedTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.LastProcessedTime
+	}
+	return nil
+}
+
+func (x *BackfillerInternal) GetAttempt() int64 {
+	if x != nil {
+		return x.Attempt
+	}
+	return 0
+}
+
+type isBackfillerInternal_Request interface {
+	isBackfillerInternal_Request()
+}
+
+type BackfillerInternal_BackfillRequest struct {
+	BackfillRequest *v11.BackfillRequest `protobuf:"bytes,1,opt,name=backfill_request,json=backfillRequest,proto3,oneof"`
+}
+
+type BackfillerInternal_TriggerRequest struct {
+	// When set, immediately buffer a single manual action.
+	TriggerRequest *v11.TriggerImmediatelyRequest `protobuf:"bytes,2,opt,name=trigger_request,json=triggerRequest,proto3,oneof"`
+}
+
+func (*BackfillerInternal_BackfillRequest) isBackfillerInternal_Request() {}
+
+func (*BackfillerInternal_TriggerRequest) isBackfillerInternal_Request() {}
 
 var File_temporal_server_api_schedule_v1_message_proto protoreflect.FileDescriptor
 
@@ -1325,10 +1393,16 @@ const file_temporal_server_api_schedule_v1_message_proto_rawDesc = "" +
 	"\x0fbuffered_starts\x18\x02 \x03(\v2..temporal.server.api.schedule.v1.BufferedStartR\x0ebufferedStarts\x12T\n" +
 	"\x10cancel_workflows\x18\x03 \x03(\v2).temporal.api.common.v1.WorkflowExecutionR\x0fcancelWorkflows\x12Z\n" +
 	"\x13terminate_workflows\x18\x04 \x03(\v2).temporal.api.common.v1.WorkflowExecutionR\x12terminateWorkflows\x12J\n" +
-	"\x13last_processed_time\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\x11lastProcessedTime\"\xa7\x01\n" +
-	"\x12BackfillerInternal\x12C\n" +
-	"\arequest\x18\x01 \x01(\v2).temporal.api.schedule.v1.BackfillRequestR\arequest\x12L\n" +
-	"\x14next_invocation_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x12nextInvocationTimeB0Z.go.temporal.io/server/api/schedule/v1;scheduleb\x06proto3"
+	"\x13last_processed_time\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\x11lastProcessedTime\"\xac\x03\n" +
+	"\x12BackfillerInternal\x12V\n" +
+	"\x10backfill_request\x18\x01 \x01(\v2).temporal.api.schedule.v1.BackfillRequestH\x00R\x0fbackfillRequest\x12^\n" +
+	"\x0ftrigger_request\x18\x02 \x01(\v23.temporal.api.schedule.v1.TriggerImmediatelyRequestH\x00R\x0etriggerRequest\x12\x1f\n" +
+	"\vbackfill_id\x18\x05 \x01(\tR\n" +
+	"backfillId\x12L\n" +
+	"\x14next_invocation_time\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\x12nextInvocationTime\x12J\n" +
+	"\x13last_processed_time\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\x11lastProcessedTime\x12\x18\n" +
+	"\aattempt\x18\b \x01(\x03R\aattemptB\t\n" +
+	"\arequestB0Z.go.temporal.io/server/api/schedule/v1;scheduleb\x06proto3"
 
 var (
 	file_temporal_server_api_schedule_v1_message_proto_rawDescOnce sync.Once
@@ -1373,6 +1447,7 @@ var file_temporal_server_api_schedule_v1_message_proto_goTypes = []any{
 	(v1.WorkflowExecutionStatus)(0),           // 26: temporal.api.enums.v1.WorkflowExecutionStatus
 	(*v14.StartWorkflowExecutionRequest)(nil), // 27: temporal.api.workflowservice.v1.StartWorkflowExecutionRequest
 	(v15.SchedulerInvokerState)(0),            // 28: temporal.server.api.enums.v1.SchedulerInvokerState
+	(*v11.TriggerImmediatelyRequest)(nil),     // 29: temporal.api.schedule.v1.TriggerImmediatelyRequest
 }
 var file_temporal_server_api_schedule_v1_message_proto_depIdxs = []int32{
 	16, // 0: temporal.server.api.schedule.v1.BufferedStart.nominal_time:type_name -> google.protobuf.Timestamp
@@ -1413,13 +1488,15 @@ var file_temporal_server_api_schedule_v1_message_proto_depIdxs = []int32{
 	25, // 35: temporal.server.api.schedule.v1.InvokerInternal.cancel_workflows:type_name -> temporal.api.common.v1.WorkflowExecution
 	25, // 36: temporal.server.api.schedule.v1.InvokerInternal.terminate_workflows:type_name -> temporal.api.common.v1.WorkflowExecution
 	16, // 37: temporal.server.api.schedule.v1.InvokerInternal.last_processed_time:type_name -> google.protobuf.Timestamp
-	18, // 38: temporal.server.api.schedule.v1.BackfillerInternal.request:type_name -> temporal.api.schedule.v1.BackfillRequest
-	16, // 39: temporal.server.api.schedule.v1.BackfillerInternal.next_invocation_time:type_name -> google.protobuf.Timestamp
-	40, // [40:40] is the sub-list for method output_type
-	40, // [40:40] is the sub-list for method input_type
-	40, // [40:40] is the sub-list for extension type_name
-	40, // [40:40] is the sub-list for extension extendee
-	0,  // [0:40] is the sub-list for field type_name
+	18, // 38: temporal.server.api.schedule.v1.BackfillerInternal.backfill_request:type_name -> temporal.api.schedule.v1.BackfillRequest
+	29, // 39: temporal.server.api.schedule.v1.BackfillerInternal.trigger_request:type_name -> temporal.api.schedule.v1.TriggerImmediatelyRequest
+	16, // 40: temporal.server.api.schedule.v1.BackfillerInternal.next_invocation_time:type_name -> google.protobuf.Timestamp
+	16, // 41: temporal.server.api.schedule.v1.BackfillerInternal.last_processed_time:type_name -> google.protobuf.Timestamp
+	42, // [42:42] is the sub-list for method output_type
+	42, // [42:42] is the sub-list for method input_type
+	42, // [42:42] is the sub-list for extension type_name
+	42, // [42:42] is the sub-list for extension extendee
+	0,  // [0:42] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_api_schedule_v1_message_proto_init() }
@@ -1430,6 +1507,10 @@ func file_temporal_server_api_schedule_v1_message_proto_init() {
 	file_temporal_server_api_schedule_v1_message_proto_msgTypes[6].OneofWrappers = []any{
 		(*WatchWorkflowResponse_Result)(nil),
 		(*WatchWorkflowResponse_Failure)(nil),
+	}
+	file_temporal_server_api_schedule_v1_message_proto_msgTypes[15].OneofWrappers = []any{
+		(*BackfillerInternal_BackfillRequest)(nil),
+		(*BackfillerInternal_TriggerRequest)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
