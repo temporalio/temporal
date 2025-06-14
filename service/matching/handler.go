@@ -43,6 +43,7 @@ type (
 		throttledLogger   log.Logger
 		namespaceRegistry namespace.Registry
 		workersRegistry   workers.Registry
+		hostInfoProvider  membership.HostInfoProvider
 	}
 
 	HandlerParams struct {
@@ -85,10 +86,11 @@ func NewHandler(
 	params HandlerParams,
 ) *Handler {
 	handler := &Handler{
-		config:          params.Config,
-		metricsHandler:  params.MetricsHandler,
-		logger:          params.Logger,
-		throttledLogger: params.ThrottledLogger,
+		config:           params.Config,
+		metricsHandler:   params.MetricsHandler,
+		logger:           params.Logger,
+		throttledLogger:  params.ThrottledLogger,
+		hostInfoProvider: params.HostInfoProvider,
 		engine: NewEngine(
 			params.TaskManager,
 			params.HistoryClient,
@@ -130,6 +132,10 @@ func (h *Handler) Start() {
 // Stop stops the handler
 func (h *Handler) Stop() {
 	h.engine.Stop()
+}
+
+func (h *Handler) Identity() string {
+	return h.hostInfoProvider.HostInfo().Identity()
 }
 
 func (h *Handler) opMetricsHandler(

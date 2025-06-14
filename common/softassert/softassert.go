@@ -25,8 +25,7 @@ func That(logger log.Logger, condition bool, msg string) bool {
 	return condition
 }
 
-// Fail logs an error message indicating a failed assertion.
-// It works the same as That, but does not require a condition.
-func Fail(logger log.Logger, msg string) {
-	logger.Error("failed assertion: "+msg, tag.FailedAssertion)
+func Fail(logger log.Logger, msg string, tags ...tag.Tag) {
+	// By using the same prefix for all assertions, they can be reliably found in logs.
+	logger.Error("failed assertion: "+msg, append(tags, tag.FailedAssertion)...)
 }
