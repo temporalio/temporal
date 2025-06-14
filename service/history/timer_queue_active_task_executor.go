@@ -946,6 +946,9 @@ func (t *timerQueueActiveTaskExecutor) executeChasmSideEffectTimerTask(
 	if err != nil {
 		return err
 	}
+	if ms == nil {
+		return errNoChasmMutableState
+	}
 
 	tree := ms.ChasmTree()
 	if tree == nil {
@@ -957,38 +960,12 @@ func (t *timerQueueActiveTaskExecutor) executeChasmSideEffectTimerTask(
 	// mutable state validations will run at access time.
 	release(nil)
 
-	entityKey := chasm.EntityKey{
-		NamespaceID: task.NamespaceID,
-		BusinessID:  task.WorkflowID,
-		EntityID:    task.RunID,
-	}
-
-	validate := func(backend chasm.NodeBackend, _ chasm.Context, _ chasm.Component) error {
-		// Because CHASM timers can target closed workflows, we need to specifically
-		// exclude zombie workflows, instead of merely checking that the workflow is
-		// running.
-		if backend.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
-			return consts.ErrWorkflowZombie
-		}
-
-		// Validate task generation. We don't need to refresh tasks as we re-generate
-		// CHASM tasks on transaction close.
-		taskID := task.TaskID
-		tgClock := backend.GetExecutionInfo().TaskGenerationShardClockTimestamp
-		if tgClock != 0 && taskID != 0 && taskID < tgClock {
-			return consts.ErrStaleReference
-		}
-
-		return nil
-	}
-
-	engineCtx := chasm.NewEngineContext(ctx, t.chasmEngine)
-	return tree.ExecuteSideEffectTask(
-		engineCtx,
+	return executeChasmSideEffectTask(
+		ctx,
+		t.chasmEngine,
 		t.shardContext.ChasmRegistry(),
-		entityKey,
-		task.Info,
-		validate,
+		tree,
+		task,
 	)
 }
 
@@ -1010,7 +987,7 @@ func (t *timerQueueActiveTaskExecutor) executeChasmPureTimerTask(
 		return err
 	}
 	if ms == nil {
-		return nil
+		return errNoChasmMutableState
 	}
 
 	// Execute all fired pure tasks for a component while holding the workflow lock.

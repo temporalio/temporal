@@ -22,6 +22,7 @@ import (
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
@@ -71,6 +72,7 @@ type (
 		mockFrontendClient  *workflowservicemock.MockWorkflowServiceClient
 		mockHistoryClient   *historyservicemock.MockHistoryServiceClient
 		mockMatchingClient  *matchingservicemock.MockMatchingServiceClient
+		mockChasmEngine     chasm.Engine
 
 		mockExecutionMgr     *persistence.MockExecutionManager
 		mockArchivalMetadata archiver.MetadataMock
@@ -176,6 +178,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) SetupTest() {
 	s.workflowCache = wcache.NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler)
 	s.logger = s.mockShard.GetLogger()
 	s.mockFrontendClient = s.mockShard.Resource.FrontendClient
+	s.mockChasmEngine = chasm.NewMockEngine(s.controller)
 
 	s.mockArchivalMetadata.SetHistoryEnabledByDefault()
 	s.mockArchivalMetadata.SetVisibilityEnabledByDefault()
@@ -201,6 +204,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) SetupTest() {
 		s.mockShard.Resource.HistoryClient,
 		s.mockShard.Resource.MatchingClient,
 		s.mockVisibilityManager,
+		s.mockChasmEngine,
 		s.clientBean,
 	).(*transferQueueStandbyTaskExecutor)
 }
@@ -276,6 +280,89 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Pending(
 	s.mockMatchingClient.EXPECT().AddActivityTask(gomock.Any(), gomock.Any(), gomock.Any()).Return(&matchingservice.AddActivityTaskResponse{}, nil)
 	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.Nil(resp.ExecutionErr)
+}
+
+func (s *transferQueueStandbyTaskExecutorSuite) TestExecuteChasmSideEffectTransferTask_ExecutesTask() {
+	execution := &commonpb.WorkflowExecution{
+		WorkflowId: tests.WorkflowKey.WorkflowID,
+		RunId:      tests.WorkflowKey.RunID,
+	}
+
+	// Mock the CHASM tree.
+	chasmTree := historyi.NewMockChasmTree(s.controller)
+	expectValidate := func(taskValue any, err error) {
+		chasmTree.EXPECT().ValidateSideEffectTask(
+			gomock.Any(),
+			gomock.Any(),
+			gomock.Any(),
+		).Times(1).Return(taskValue, err)
+	}
+
+	// Mock mutable state.
+	ms := historyi.NewMockMutableState(s.controller)
+	info := &persistencespb.WorkflowExecutionInfo{}
+	ms.EXPECT().GetCurrentVersion().Return(int64(2)).AnyTimes()
+	ms.EXPECT().NextTransitionCount().Return(int64(0)).AnyTimes() // emulate transition history disabled.
+	ms.EXPECT().GetNextEventID().Return(int64(2)).AnyTimes()
+	ms.EXPECT().GetExecutionInfo().Return(info).AnyTimes()
+	ms.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey).AnyTimes()
+	ms.EXPECT().GetExecutionState().Return(
+		&persistencespb.WorkflowExecutionState{Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING},
+	).AnyTimes()
+	ms.EXPECT().ChasmTree().Return(chasmTree).AnyTimes()
+
+	// Add a valid transfer task.
+	transferTask := &tasks.ChasmTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			s.namespaceID.String(),
+			execution.GetWorkflowId(),
+			execution.GetRunId(),
+		),
+		VisibilityTimestamp: s.now,
+		TaskID:              s.mustGenerateTaskID(),
+		Info:                &persistencespb.ChasmTaskInfo{},
+	}
+
+	wfCtx := historyi.NewMockWorkflowContext(s.controller)
+	wfCtx.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(ms, nil).AnyTimes()
+
+	mockCache := wcache.NewMockCache(s.controller)
+	mockCache.EXPECT().GetOrCreateWorkflowExecution(
+		gomock.Any(), s.mockShard, gomock.Any(), execution, gomock.Any(),
+	).Return(wfCtx, wcache.NoopReleaseFn, nil).AnyTimes()
+
+	//nolint:revive // unchecked-type-assertion
+	transferQueueStandbyTaskExecutor := newTransferQueueStandbyTaskExecutor(
+		s.mockShard,
+		mockCache,
+		s.logger,
+		metrics.NoopMetricsHandler,
+		s.clusterName,
+		s.mockShard.Resource.HistoryClient,
+		s.mockShard.Resource.MatchingClient,
+		s.mockVisibilityManager,
+		s.mockChasmEngine,
+		s.clientBean,
+	).(*transferQueueStandbyTaskExecutor)
+
+	// Validation succeeds, task should retry.
+	expectValidate(struct{}{}, nil)
+	resp := transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	s.NotNil(resp)
+	s.ErrorIs(consts.ErrTaskRetry, resp.ExecutionErr)
+
+	// Validation succeeds but task is invalid.
+	expectValidate(nil, nil)
+	resp = transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	s.NotNil(resp)
+	s.NoError(resp.ExecutionErr)
+
+	// Validation fails, processing should fail.
+	expectedErr := errors.New("validation error")
+	expectValidate(nil, expectedErr)
+	resp = transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	s.NotNil(resp)
+	s.ErrorIs(expectedErr, resp.ExecutionErr)
 }
 
 func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Success() {

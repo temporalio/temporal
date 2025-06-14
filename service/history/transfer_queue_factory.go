@@ -111,6 +111,7 @@ func (f *transferQueueFactory) CreateQueue(
 		f.HistoryRawClient,
 		f.MatchingRawClient,
 		f.VisibilityManager,
+		nil, // TODO - wire in chasm.Engine
 	)
 
 	standbyExecutor := newTransferQueueStandbyTaskExecutor(
@@ -122,6 +123,7 @@ func (f *transferQueueFactory) CreateQueue(
 		f.HistoryRawClient,
 		f.MatchingRawClient,
 		f.VisibilityManager,
+		nil, // TODO - wire in chasm.Engine
 		f.ClientBean,
 	)
 
