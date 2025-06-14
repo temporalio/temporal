@@ -334,11 +334,6 @@ func (s *transferQueueActiveTaskExecutorSuite) TestExecuteChasmSideEffectTransfe
 		VisibilityTimestamp: s.now,
 		TaskID:              s.mustGenerateTaskID(),
 		Info: &persistencespb.ChasmTaskInfo{
-			Ref: &persistencespb.ChasmComponentRef{
-				ComponentInitialVersionedTransition:    &persistencespb.VersionedTransition{},
-				ComponentLastUpdateVersionedTransition: &persistencespb.VersionedTransition{},
-				Path:                                   "",
-			},
 			Type: "Testlib.TestSideEffectTask",
 			Data: &commonpb.DataBlob{
 				EncodingType: enumspb.ENCODING_TYPE_PROTO3,
