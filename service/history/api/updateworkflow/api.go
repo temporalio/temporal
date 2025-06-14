@@ -26,6 +26,7 @@ import (
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/update"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -264,19 +265,21 @@ func (u *Updater) addWorkflowTaskToMatching(ctx context.Context) error {
 		return err
 	}
 
-	_, err = u.matchingClient.AddWorkflowTask(ctx, &matchingservice.AddWorkflowTaskRequest{
-		NamespaceId: u.namespaceID.String(),
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: u.wfKey.WorkflowID,
-			RunId:      u.wfKey.RunID,
-		},
-		TaskQueue:              u.taskQueue,
-		ScheduledEventId:       u.scheduledEventID,
-		ScheduleToStartTimeout: durationpb.New(u.scheduleToStartTimeout),
-		Clock:                  clock,
-		VersionDirective:       u.directive,
-		Priority:               u.priority,
-	})
+	_, err = u.matchingClient.AddWorkflowTask(
+		metadata.NewOutgoingContext(ctx, metadata.Pairs("x-speculative-workflow-task", "true")),
+		&matchingservice.AddWorkflowTaskRequest{
+			NamespaceId: u.namespaceID.String(),
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: u.wfKey.WorkflowID,
+				RunId:      u.wfKey.RunID,
+			},
+			TaskQueue:              u.taskQueue,
+			ScheduledEventId:       u.scheduledEventID,
+			ScheduleToStartTimeout: durationpb.New(u.scheduleToStartTimeout),
+			Clock:                  clock,
+			VersionDirective:       u.directive,
+			Priority:               u.priority,
+		})
 	if err != nil {
 		return err
 	}
