@@ -53,7 +53,7 @@ func (s *NDCFunctionalTestSuite) TestReplicationMessageDLQ() {
 		expectedDLQMsgs[firstEventID] = true
 	}
 
-	// Applying replication messages through fetcher is Async.
+	// Applying replication messages through fetcher is ReqOnly.
 	// So we need to retry a couple of times.
 Loop:
 	for i := 0; i < 60; i++ {

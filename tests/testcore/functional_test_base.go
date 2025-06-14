@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/intercept"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc"
@@ -43,6 +44,7 @@ import (
 	"go.temporal.io/server/common/testing/updateutils"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.uber.org/fx"
+	"google.golang.org/grpc"
 )
 
 type (
@@ -87,6 +89,8 @@ type (
 		EnableMTLS             bool
 		FaultInjectionConfig   *config.FaultInjection
 		NumHistoryShards       int32
+		AdditionalInterceptors []grpc.UnaryServerInterceptor
+		PersistenceInterceptor intercept.PersistenceInterceptor
 	}
 	TestClusterOption func(params *TestClusterParams)
 )
@@ -112,6 +116,18 @@ func init() {
 func WithFxOptionsForService(serviceName primitives.ServiceName, options ...fx.Option) TestClusterOption {
 	return func(params *TestClusterParams) {
 		params.ServiceOptions[serviceName] = append(params.ServiceOptions[serviceName], options...)
+	}
+}
+
+func WithAdditionalGrpcInterceptors(interceptors ...grpc.UnaryServerInterceptor) TestClusterOption {
+	return func(params *TestClusterParams) {
+		params.AdditionalInterceptors = interceptors
+	}
+}
+
+func WithPersistenceInterceptor(interceptor intercept.PersistenceInterceptor) TestClusterOption {
+	return func(params *TestClusterParams) {
+		params.PersistenceInterceptor = interceptor
 	}
 }
 
@@ -245,6 +261,8 @@ func (s *FunctionalTestBase) SetupSuiteWithCluster(options ...TestClusterOption)
 		EnableMetricsCapture:   true,
 		EnableArchival:         params.ArchivalEnabled,
 		EnableMTLS:             params.EnableMTLS,
+		AdditionalInterceptors: params.AdditionalInterceptors,
+		PersistenceInterceptor: params.PersistenceInterceptor,
 	}
 
 	var err error
@@ -366,6 +384,7 @@ func (s *FunctionalTestBase) TearDownCluster() {
 	if s.testCluster != nil {
 		s.Require().NoError(s.testCluster.TearDownCluster())
 	}
+	s.testCluster.TearDownCluster()
 }
 
 // **IMPORTANT**: When overridding this, make sure to invoke `s.FunctionalTestBase.TearDownTest()`.
@@ -383,7 +402,7 @@ func (s *FunctionalTestBase) checkNoUnexpectedErrorLogs() {
 	if tl, ok := s.Logger.(*testlogger.TestLogger); ok {
 		if tl.ResetFailureStatus() {
 			s.Fail(`Failing test as unexpected error logs were found.
-Look for 'Unexpected Error log encountered'.`)
+	Look for 'Unexpected Error log encountered'.`)
 		}
 	}
 }

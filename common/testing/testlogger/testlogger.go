@@ -226,11 +226,11 @@ func NewTestLogger(t TestingT, mode Mode, opts ...LoggerOption) *TestLogger {
 				log.Config{
 					Level:  cmp.Or(os.Getenv(log.TestLogLevelEnvVar), tl.state.level.String()),
 					Format: cmp.Or(os.Getenv(log.TestLogFormatEnvVar), "console"),
-				}).
-				WithOptions(
-					zap.AddStacktrace(zap.ErrorLevel), // only include stack traces for logs with level error and above
-				)).
-			Skip(1)
+				}).WithOptions(
+				// TODO?
+				zap.AddStacktrace(zap.ErrorLevel), // only include stack traces for logs with level error and above
+			),
+		).Skip(1)
 	}
 
 	// Only possible with a *testing.T until *rapid.T supports `Cleanup`
