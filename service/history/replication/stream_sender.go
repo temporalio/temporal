@@ -483,7 +483,8 @@ func (s *StreamSenderImpl) sendTasks(
 		})
 	}
 
-	ctx := headers.SetCallerInfo(s.server.Context(), headers.SystemPreemptableCallerInfo)
+	callerInfo := getReplicaitonCallerInfo(priority)
+	ctx := headers.SetCallerInfo(s.server.Context(), callerInfo)
 	iter, err := s.historyEngine.GetReplicationTasksIter(
 		ctx,
 		string(s.clientShardKey.ClusterID),
@@ -551,7 +552,7 @@ Loop:
 					metrics.ReplicationTaskPriorityTag(priority),
 				)
 			}()
-			task, err := s.taskConverter.Convert(item, s.clientShardKey.ClusterID)
+			task, err := s.taskConverter.Convert(item, s.clientShardKey.ClusterID, priority)
 			if err != nil {
 				return err
 			}
@@ -567,7 +568,7 @@ Loop:
 					// continue to send task if wait operation times out.
 				}
 			}
-			if task.Priority == enumsspb.TASK_PRIORITY_LOW {
+			if s.config.ReplicationEnableRateLimit() && task.Priority == enumsspb.TASK_PRIORITY_LOW {
 				nsName, err := s.shardContext.GetNamespaceRegistry().GetNamespaceName(
 					namespace.ID(item.GetNamespaceID()),
 				)
@@ -575,6 +576,7 @@ Loop:
 					// if there is error, then blindly send the task, better safe than sorry
 					nsName = namespace.EmptyName
 				}
+				rlStartTime := time.Now().UTC()
 				if err := s.ssRateLimiter.Wait(s.server.Context(), quotas.NewRequest(
 					task.TaskType.String(),
 					taskSchedulerToken,
@@ -585,6 +587,7 @@ Loop:
 				)); err != nil {
 					return err
 				}
+				metrics.ReplicationRateLimitLatency.With(s.metrics).Record(time.Since(rlStartTime), metrics.OperationTag(TaskOperationTag(task)))
 			}
 			if err := s.sendToStream(&historyservice.StreamWorkflowReplicationMessagesResponse{
 				Attributes: &historyservice.StreamWorkflowReplicationMessagesResponse_Messages{
