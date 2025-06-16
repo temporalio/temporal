@@ -725,7 +725,11 @@ var (
 	SyncShardFromRemoteFailure = NewCounterDef("syncshard_remote_failed")
 	FinalizerRuns              = NewCounterDef(
 		"finalizer_runs",
-		WithDescription("The total number of finalizer runs. Tag `failure` identified failes runs."),
+		WithDescription("The number of finalizer runs."),
+	)
+	FinalizerRunTimeouts = NewCounterDef(
+		"finalizer_run_timeouts",
+		WithDescription("The number of finalizer run timeouts."),
 	)
 	FinalizerItemsCompleted = NewCounterDef(
 		"finalizer_items_completed",

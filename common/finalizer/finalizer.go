@@ -135,12 +135,11 @@ func (f *Finalizer) Run(
 
 	var completedCallbacks int
 	defer func() {
-		var tags []metrics.Tag
 		unfinishedItems := int64(totalCount - completedCallbacks)
+		metrics.FinalizerRuns.With(f.metricsHandler).Record(1)
 		if unfinishedItems > 0 {
-			tags = append(tags, metrics.FailureTag("timeout"))
+			metrics.FinalizerRunTimeouts.With(f.metricsHandler).Record(1)
 		}
-		metrics.FinalizerRuns.With(f.metricsHandler).Record(1, tags...)
 		metrics.FinalizerItemsCompleted.With(f.metricsHandler).Record(int64(completedCallbacks))
 		metrics.FinalizerItemsUnfinished.With(f.metricsHandler).Record(unfinishedItems)
 	}()
