@@ -2254,7 +2254,6 @@ func (n *Node) ExecuteSideEffectTask(
 	if err != nil {
 		return err
 	}
-	taskInstance := taskValue.Interface()
 
 	ref := ComponentRef{
 		EntityKey:          entityKey,
@@ -2263,14 +2262,14 @@ func (n *Node) ExecuteSideEffectTask(
 		componentInitialVT: taskInfo.ComponentInitialVersionedTransition,
 
 		// Validate the Ref only once it is accessed by the task's executor.
-		validationFn: makeValidationFn(registrableTask, validate, taskInstance),
+		validationFn: makeValidationFn(registrableTask, validate, taskValue),
 	}
 
 	fn := reflect.ValueOf(executor).MethodByName("Execute")
 	result := fn.Call([]reflect.Value{
 		reflect.ValueOf(ctx),
 		reflect.ValueOf(ref),
-		reflect.ValueOf(taskInstance),
+		taskValue,
 	})
 	if !result[0].IsNil() {
 		//nolint:revive // type cast result is unchecked
@@ -2287,7 +2286,7 @@ func (n *Node) ExecuteSideEffectTask(
 func makeValidationFn(
 	registrableTask *RegistrableTask,
 	validate func(NodeBackend, Context, Component) error,
-	taskInstance any,
+	taskValue reflect.Value,
 ) func(NodeBackend, Context, Component) error {
 	return func(backend NodeBackend, ctx Context, component Component) error {
 		// Call the provided validation callback.
@@ -2301,7 +2300,7 @@ func makeValidationFn(
 		result := fn.Call([]reflect.Value{
 			reflect.ValueOf(ctx),
 			reflect.ValueOf(component),
-			reflect.ValueOf(taskInstance),
+			taskValue,
 		})
 
 		// Handle err.

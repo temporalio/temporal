@@ -2386,8 +2386,8 @@ func (s *nodeSuite) TestValidateSideEffectTask() {
 	expectValidate := func(retValue bool, errValue error) {
 		rt.validator.(*MockTaskValidator[any, *TestSideEffectTask]).EXPECT().
 			Validate(
-				gomock.AssignableToTypeOf((*Context)(nil)),
-				gomock.AssignableToTypeOf((*Component)(nil)),
+				gomock.AssignableToTypeOf((*ContextImpl)(nil)),
+				gomock.AssignableToTypeOf((*TestComponent)(nil)),
 				gomock.AssignableToTypeOf(&TestSideEffectTask{}),
 			).Return(retValue, errValue).Times(1)
 	}
