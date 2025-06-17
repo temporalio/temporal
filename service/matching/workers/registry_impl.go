@@ -163,8 +163,10 @@ func newRegistryImpl(numBuckets int,
 
 // bucketFor hashes the namespace to select a bucket.
 func (m *registryImpl) getBucket(nsID namespace.ID) *bucket {
+	m.hasher.Reset()
 	m.hasher.WriteString(nsID.String()) //nolint:revive
-	idx := int(m.hasher.Sum64() % uint64(len(m.buckets)))
+	hs := m.hasher.Sum64()
+	idx := int(hs % uint64(len(m.buckets)))
 
 	return m.buckets[idx]
 }
