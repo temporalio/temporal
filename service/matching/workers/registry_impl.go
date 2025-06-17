@@ -153,6 +153,8 @@ func newRegistryImpl(numBuckets int,
 		hasher:           &maphash.Hash{},
 		quit:             make(chan struct{}),
 	}
+	m.hasher.Reset()
+
 	for i := range m.buckets {
 		m.buckets[i] = newBucket()
 	}
@@ -161,9 +163,8 @@ func newRegistryImpl(numBuckets int,
 
 // bucketFor hashes the namespace to select a bucket.
 func (m *registryImpl) getBucket(nsID namespace.ID) *bucket {
-	m.hasher.Reset()
 	m.hasher.WriteString(nsID.String()) //nolint:revive
-	idx := int(m.hasher.Sum64()) % len(m.buckets)
+	idx := int(m.hasher.Sum64() % uint64(len(m.buckets)))
 
 	return m.buckets[idx]
 }
