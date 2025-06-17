@@ -487,12 +487,6 @@ func enqueueReplicationTasks(ctx workflow.Context, workflowExecutionsCh workflow
 		}
 	}
 
-	for _, future := range futures {
-		if err := future.Get(ctx, nil); err != nil {
-			return err
-		}
-	}
-
 	return nil
 }
 

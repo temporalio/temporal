@@ -36,7 +36,7 @@ func TestForceReplicationWorkflow(t *testing.T) {
 	namespaceID := uuid.New()
 
 	var a *activities
-	env.OnActivity(a.CountWorkflow, mock.Anything, mock.Anything).Return(&countWorkflowResponse{WorkflowCount: 10}, nil)
+	env.OnActivity(a.CountWorkflow, mock.Anything, mock.Anything).Return(&countWorkflowResponse{WorkflowCount: 4}, nil)
 	env.OnActivity(a.GetMetadata, mock.Anything, metadataRequest{Namespace: "test-ns"}).Return(&metadataResponse{ShardCount: 4, NamespaceID: namespaceID}, nil)
 
 	totalPageCount := 4
@@ -94,7 +94,7 @@ func TestForceReplicationWorkflow(t *testing.T) {
 	assert.Equal(t, closeTime, status.LastCloseTime)
 	assert.True(t, status.TaskQueueUserDataReplicationStatus.Done)
 	assert.Equal(t, "", status.TaskQueueUserDataReplicationStatus.FailureMessage)
-	assert.Equal(t, int64(10), status.TotalWorkflowCount)
+	assert.Equal(t, int64(4), status.TotalWorkflowCount)
 	assert.Equal(t, int64(4), status.ReplicatedWorkflowCount)
 	assert.Equal(t, []byte(nil), status.PageTokenForRestart)
 }
