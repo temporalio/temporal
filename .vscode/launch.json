@@ -32,15 +32,32 @@
 			]
 		},
 		{
-			"name": "Debug Active Server",
+			"name": "Debug cluster-a Server",
 			"type": "go",
 			"request": "launch",
 			"mode": "debug",
 			"program": "${workspaceFolder}/cmd/server",
 			"cwd": "${workspaceFolder}",
 			"args": [
+				"--config",
+				"../configs",
 				"--env",
-				"development-active",
+				"cluster-a",				
+				"start",
+			]
+		},
+		{
+			"name": "Debug cluster-b Server",
+			"type": "go",
+			"request": "launch",
+			"mode": "debug",
+			"program": "${workspaceFolder}/cmd/server",
+			"cwd": "${workspaceFolder}",
+			"args": [
+				"--config",
+				"../configs",
+				"--env",
+				"cluster-b",				
 				"start",
 			]
 		},
