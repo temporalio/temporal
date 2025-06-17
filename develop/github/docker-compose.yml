@@ -51,3 +51,47 @@ services:
       - discovery.type=single-node
       - xpack.security.enabled=false
       - ES_JAVA_OPTS=-Xms1g -Xmx1g
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.127.0
+    ports:
+      - "4317:4317"
+    volumes:
+      - /tmp:/out:rw
+    environment:
+      OTEL_CONFIG: |
+        receivers:
+          otlp:
+            protocols:
+              grpc:
+                endpoint: 0.0.0.0:4317
+        processors:
+          batch:
+            timeout: 1s          
+            send_batch_size: 100
+            send_batch_max_size: 1000
+          # Remove superfluous attributes to save space
+          transform:
+            trace_statements:
+              - context: resource
+                statements:
+                  - delete_matching_keys(attributes, "host\\..*")
+                  - delete_matching_keys(attributes, "os\\..*")
+                  - delete_matching_keys(attributes, "process\\..*")
+                  - delete_matching_keys(attributes, "service.version")
+              - context: span
+                statements:
+                  - delete_matching_keys(attributes, "net\\..*")
+                  - delete_matching_keys(attributes, "rpc.system")
+                  - delete_matching_keys(attributes, "rpc.request.headers\\..*")
+        exporters:
+          file:
+            path: /out/traces.json
+            flush_interval: 1s
+        service:
+          pipelines:
+            traces:
+              receivers: [otlp]
+              processors: [transform, batch]
+              exporters: [file]
+    command: [ "--config", "env:OTEL_CONFIG" ]
