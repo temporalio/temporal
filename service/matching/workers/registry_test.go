@@ -107,58 +107,58 @@ func TestRegistryImpl_ListWorkers(t *testing.T) {
 			expectedCount:   0,
 			expectedWorkers: []string{},
 		},
-		//{
-		//	name: "list workers from empty namespace",
-		//	setup: func(r *registryImpl) {
-		//	},
-		//	nsID:            "empty-ns",
-		//	expectedCount:   0,
-		//	expectedWorkers: []string{},
-		//},
-		//{
-		//	name: "list single worker",
-		//	setup: func(r *registryImpl) {
-		//		r.upsertHeartbeat("namespace1", &workerpb.WorkerHeartbeat{
-		//			WorkerInstanceKey: "worker1",
-		//		})
-		//	},
-		//	nsID:            "namespace1",
-		//	expectedCount:   1,
-		//	expectedWorkers: []string{"worker1"},
-		//},
-		//{
-		//	name: "list multiple workers",
-		//	setup: func(r *registryImpl) {
-		//		r.upsertHeartbeat("namespace1", &workerpb.WorkerHeartbeat{
-		//			WorkerInstanceKey: "worker1",
-		//		})
-		//		r.upsertHeartbeat("namespace1", &workerpb.WorkerHeartbeat{
-		//			WorkerInstanceKey: "worker2",
-		//		})
-		//		r.upsertHeartbeat("namespace1", &workerpb.WorkerHeartbeat{
-		//			WorkerInstanceKey: "worker3",
-		//		})
-		//	},
-		//	nsID:            "namespace1",
-		//	expectedCount:   3,
-		//	expectedWorkers: []string{"worker1", "worker2", "worker3"},
-		//},
-		//{
-		//	name: "list workers from specific namespace only",
-		//	setup: func(r *registryImpl) {
-		//		// Setup namespace1
-		//		r.upsertHeartbeat("namespace1", &workerpb.WorkerHeartbeat{
-		//			WorkerInstanceKey: "worker1",
-		//		})
-		//		// Setup namespace2
-		//		r.upsertHeartbeat("namespace2", &workerpb.WorkerHeartbeat{
-		//			WorkerInstanceKey: "worker2",
-		//		})
-		//	},
-		//	nsID:            "namespace1",
-		//	expectedCount:   1,
-		//	expectedWorkers: []string{"worker1"},
-		//},
+		{
+			name: "list workers from empty namespace",
+			setup: func(r *registryImpl) {
+			},
+			nsID:            "empty-ns",
+			expectedCount:   0,
+			expectedWorkers: []string{},
+		},
+		{
+			name: "list single worker",
+			setup: func(r *registryImpl) {
+				r.upsertHeartbeat("namespace1", &workerpb.WorkerHeartbeat{
+					WorkerInstanceKey: "worker1",
+				})
+			},
+			nsID:            "namespace1",
+			expectedCount:   1,
+			expectedWorkers: []string{"worker1"},
+		},
+		{
+			name: "list multiple workers",
+			setup: func(r *registryImpl) {
+				r.upsertHeartbeat("namespace1", &workerpb.WorkerHeartbeat{
+					WorkerInstanceKey: "worker1",
+				})
+				r.upsertHeartbeat("namespace1", &workerpb.WorkerHeartbeat{
+					WorkerInstanceKey: "worker2",
+				})
+				r.upsertHeartbeat("namespace1", &workerpb.WorkerHeartbeat{
+					WorkerInstanceKey: "worker3",
+				})
+			},
+			nsID:            "namespace1",
+			expectedCount:   3,
+			expectedWorkers: []string{"worker1", "worker2", "worker3"},
+		},
+		{
+			name: "list workers from specific namespace only",
+			setup: func(r *registryImpl) {
+				// Setup namespace1
+				r.upsertHeartbeat("namespace1", &workerpb.WorkerHeartbeat{
+					WorkerInstanceKey: "worker1",
+				})
+				// Setup namespace2
+				r.upsertHeartbeat("namespace2", &workerpb.WorkerHeartbeat{
+					WorkerInstanceKey: "worker2",
+				})
+			},
+			nsID:            "namespace1",
+			expectedCount:   1,
+			expectedWorkers: []string{"worker1"},
+		},
 	}
 
 	for _, tt := range tests {
