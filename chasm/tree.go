@@ -2250,6 +2250,12 @@ func (n *Node) ExecuteSideEffectTask(
 		return serviceerror.NewInternalf("failed to decode path '%s'", taskInfo.Path)
 	}
 
+	taskValue, err := deserializeTask(registrableTask, taskInfo.Data)
+	if err != nil {
+		return err
+	}
+	taskInstance := taskValue.Interface()
+
 	ref := ComponentRef{
 		EntityKey:          entityKey,
 		entityLastUpdateVT: taskInfo.ComponentLastUpdateVersionedTransition,
@@ -2257,14 +2263,8 @@ func (n *Node) ExecuteSideEffectTask(
 		componentInitialVT: taskInfo.ComponentInitialVersionedTransition,
 
 		// Validate the Ref only once it is accessed by the task's executor.
-		validationFn: makeValidationFn(registrableTask, validate),
+		validationFn: makeValidationFn(registrableTask, validate, taskInstance),
 	}
-
-	taskValue, err := deserializeTask(registrableTask, taskInfo.Data)
-	if err != nil {
-		return err
-	}
-	taskInstance := taskValue.Interface()
 
 	fn := reflect.ValueOf(executor).MethodByName("Execute")
 	result := fn.Call([]reflect.Value{
@@ -2287,6 +2287,7 @@ func (n *Node) ExecuteSideEffectTask(
 func makeValidationFn(
 	registrableTask *RegistrableTask,
 	validate func(NodeBackend, Context, Component) error,
+	taskInstance any,
 ) func(NodeBackend, Context, Component) error {
 	return func(backend NodeBackend, ctx Context, component Component) error {
 		// Call the provided validation callback.
@@ -2298,9 +2299,9 @@ func makeValidationFn(
 		// Call the TaskValidator interface.
 		fn := reflect.ValueOf(registrableTask.validator).MethodByName("Validate")
 		result := fn.Call([]reflect.Value{
-			reflect.ValueOf(backend),
 			reflect.ValueOf(ctx),
 			reflect.ValueOf(component),
+			reflect.ValueOf(taskInstance),
 		})
 
 		// Handle err.
