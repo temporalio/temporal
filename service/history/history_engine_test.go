@@ -5725,7 +5725,6 @@ func (s *engineSuite) TestGetWorkflowExecutionHistory_RawHistoryWithTransientDec
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
 			},
 		},
-		enumspb.ENCODING_TYPE_PROTO3,
 	)
 	s.NoError(err)
 	historyBlob2, err := s.mockShard.GetPayloadSerializer().SerializeEvents(
@@ -5735,7 +5734,6 @@ func (s *engineSuite) TestGetWorkflowExecutionHistory_RawHistoryWithTransientDec
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_TIMED_OUT,
 			},
 		},
-		enumspb.ENCODING_TYPE_PROTO3,
 	)
 	s.NoError(err)
 	s.mockExecutionMgr.EXPECT().ReadRawHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
