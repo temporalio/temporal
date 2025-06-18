@@ -1811,6 +1811,15 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistencespb.Workflow
 			},
 			Data: &commonpb.DataBlob{Data: []byte("test-data")},
 		},
+		"component-path/collection": {
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition:    &persistencespb.VersionedTransition{NamespaceFailoverVersion: failoverVersion, TransitionCount: 1},
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: failoverVersion, TransitionCount: 90},
+				Attributes: &persistencespb.ChasmNodeMetadata_CollectionAttributes{
+					CollectionAttributes: &persistencespb.ChasmCollectionAttributes{},
+				},
+			},
+		},
 	}
 
 	bufferedEvents := []*historypb.HistoryEvent{
@@ -4770,6 +4779,13 @@ func (s *mutableStateSuite) TestApplyMutation() {
 						Attributes:                    &persistencespb.ChasmNodeMetadata_DataAttributes{},
 					},
 					Data: &commonpb.DataBlob{Data: []byte("test-data")},
+				},
+				"node-path/collection-node": {
+					Metadata: &persistencespb.ChasmNodeMetadata{
+						InitialVersionedTransition:    &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 1},
+						LastUpdateVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 1},
+						Attributes:                    &persistencespb.ChasmNodeMetadata_CollectionAttributes{},
+					},
 				},
 			}
 			targetMockChasmTree.EXPECT().Snapshot(nil).Return(chasm.NodesSnapshot{
