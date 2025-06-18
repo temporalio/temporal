@@ -79,7 +79,7 @@ func (m *MockPureTaskExecutor[C, T]) EXPECT() *MockPureTaskExecutorMockRecorder[
 }
 
 // Execute mocks base method.
-func (m *MockPureTaskExecutor[C, T]) Execute(arg0 Context, arg1 C, arg2 T) error {
+func (m *MockPureTaskExecutor[C, T]) Execute(arg0 MutableContext, arg1 C, arg2 T) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Execute", arg0, arg1, arg2)
 	ret0, _ := ret[0].(error)

@@ -2243,7 +2243,7 @@ func (s *nodeSuite) TestExecutePureTask() {
 	expectExecute := func(result error) {
 		rt.handler.(*MockPureTaskExecutor[any, *TestPureTask]).EXPECT().
 			Execute(
-				gomock.Any(),
+				gomock.AssignableToTypeOf(&MutableContextImpl{}),
 				gomock.AssignableToTypeOf(&TestComponent{}),
 				gomock.Eq(pureTask),
 			).Return(result).Times(1)
