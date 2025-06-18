@@ -77,13 +77,13 @@ func (s *DescribeTaskQueueSuite) TestAddNoTasks_ValidateStats() {
 	s.publishConsumeWorkflowTasksValidateStats(0, false)
 }
 
-func (s *DescribeTaskQueueSuite) TestAddSingleTaskPerVersion_ValidateStats() {
+func (s *DescribeTaskQueueSuite) TestAddSingleTask_Single_Partition_ValidateStats() {
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingUpdateAckInterval, 5*time.Second)
 	s.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond)
 
-	s.RunTestWithMatchingBehavior(func() {
-		s.publishConsumeWorkflowTasksValidateStats(2, false) // 1 unversioned, 1 versioned
-	})
+	s.publishConsumeWorkflowTasksValidateStats(2, true) // 1 unversioned, 1 versioned
 }
 
 func (s *DescribeTaskQueueSuite) TestAddMultipleTasks_MultiplePartitions_ValidateStats() {
@@ -92,40 +92,51 @@ func (s *DescribeTaskQueueSuite) TestAddMultipleTasks_MultiplePartitions_Validat
 	s.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
 	s.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond)
 
-	s.publishConsumeWorkflowTasksValidateStats(50, false) // 25 unversioned, 25 versioned
+	s.RunTestWithMatchingBehavior(func() {
+		s.publishConsumeWorkflowTasksValidateStats(50, false) // 25 unversioned, 25 versioned
+	})
 }
 
 // NOTE: Cache _eviction_ is already covered by the other tests.
 func (s *DescribeTaskQueueSuite) TestAddMultipleTasks_MultiplePartitions_ValidateStats_Cached() {
 	s.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
-	s.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Minute) // using a long TTL to verify caching
+	s.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Hour) // using a long TTL to verify caching
 
 	tqName := testcore.RandomizeStr("backlog-counter-task-queue")
 	workflows := 50 // 25 unversioned, 25 versioned
 
 	// Expect at least *one* of the workflow/activity tasks to be in the stats.
 	expectations := TaskQueueExpectations{
-		BacklogCount:     1,
-		MaxExtraTasks:    workflows,
+		BacklogCount:     1,         // ie at least one task in the backlog
+		MaxExtraTasks:    workflows, // ie at most all tasks can be in the backlog
 		ExpectedAddRate:  true,
 		ExpectedDispatch: true,
 	}
 
+	// Enqueue all workflows, 50/50 split between unversioned and versioned.
 	s.enqueueWorkflows(workflows, tqName)
-	s.enqueueActivitiesForEachWorkflow(2, tqName) // to prevent flakiness, ensure 1 task per version was added
+
+	// Enqueue 2 activities, ie 1 per version, to make sure the workflow backlog has some tasks.
+	s.enqueueActivitiesForEachWorkflow(2, tqName)
 
 	// Expect the workflow backlog to be non-empty now.
+	// This query will cache the stats for the remainder of the test.
 	s.validateDescribeTaskQueueByType(tqName, enumspb.TASK_QUEUE_TYPE_WORKFLOW, expectations, false)
 
+	// Enqueue remaining activities.
 	s.enqueueActivitiesForEachWorkflow(workflows-2, tqName)
-	s.pollActivities(2, tqName) // to prevent flakiness, ensure 1 task per version was added
+
+	// Poll 2 activities, ie 1 per version, to make sure the activity backlog has some tasks.
+	s.pollActivities(2, tqName)
 
 	// Expect the activity backlog to be non-empty now.
+	// This query will cache the stats for the remainder of the test.
 	s.validateDescribeTaskQueueByType(tqName, enumspb.TASK_QUEUE_TYPE_ACTIVITY, expectations, false)
 
+	// Poll remaining activities.
 	s.pollActivities(workflows-2, tqName)
 
-	// Despite polling all the workflows/activies; the stats won't have changed at all since they were cached.
+	// Despite having polled all the workflows/activies; the stats won't have changed at all since they were cached.
 	s.validateDescribeTaskQueueByType(tqName, enumspb.TASK_QUEUE_TYPE_WORKFLOW, expectations, false)
 	s.validateDescribeTaskQueueByType(tqName, enumspb.TASK_QUEUE_TYPE_ACTIVITY, expectations, false)
 }
@@ -212,6 +223,7 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateStats(workfl
 func (s *DescribeTaskQueueSuite) enqueueWorkflows(count int, tqName string) {
 	deploymentOpts := s.deploymentOptions()
 
+	// tie new deployment version to the task queue before adding tasks to it
 	_, err := s.GetTestCluster().MatchingClient().SyncDeploymentUserData(
 		testcore.NewContext(), &matchingservice.SyncDeploymentUserDataRequest{
 			NamespaceId: s.NamespaceID().String(),
@@ -362,8 +374,46 @@ func (s *DescribeTaskQueueSuite) validateDescribeTaskQueueByType(
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// ==== Enhanced API Mode
+	s.validateDescribeTaskQueueWithEnhancedModeByType(ctx, tq, taskQueueType, expectation)
+	s.validateDescribeTaskQueueWithDefaultModeByType(ctx, tq, taskQueueType, expectation, singlePartition)
+}
 
+func (s *DescribeTaskQueueSuite) validateDescribeTaskQueueWithDefaultModeByType(
+	ctx context.Context,
+	tq string,
+	taskQueueType enumspb.TaskQueueType,
+	expectation TaskQueueExpectations,
+	singlePartition bool,
+) {
+	s.EventuallyWithT(func(c *assert.CollectT) {
+		a := require.New(c)
+
+		resp, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+			Namespace:              s.Namespace().String(),
+			TaskQueue:              &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			TaskQueueType:          taskQueueType,
+			IncludeTaskQueueStatus: true,
+			ReportStats:            true,
+		})
+		a.NoError(err)
+		a.NotNil(resp)
+
+		if singlePartition {
+			//nolint:staticcheck // SA1019 deprecated field
+			a.EqualValues(expectation.BacklogCount/2, // only reports default queue
+				resp.TaskQueueStatus.GetBacklogCountHint())
+		}
+
+		validateDescribeTaskQueueStats(a, resp.Stats, expectation)
+	}, 5*time.Second, 100*time.Millisecond)
+}
+
+func (s *DescribeTaskQueueSuite) validateDescribeTaskQueueWithEnhancedModeByType(
+	ctx context.Context,
+	tq string,
+	taskQueueType enumspb.TaskQueueType,
+	expectation TaskQueueExpectations,
+) {
 	s.EventuallyWithT(func(c *assert.CollectT) {
 		a := require.New(c)
 
@@ -406,30 +456,6 @@ func (s *DescribeTaskQueueSuite) validateDescribeTaskQueueByType(
 				ExpectedDispatch: expectation.ExpectedDispatch,
 			})
 		}
-	}, 5*time.Second, 100*time.Millisecond)
-
-	// ==== Default API Mode
-
-	s.EventuallyWithT(func(c *assert.CollectT) {
-		a := require.New(c)
-
-		resp, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
-			Namespace:              s.Namespace().String(),
-			TaskQueue:              &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-			TaskQueueType:          taskQueueType,
-			IncludeTaskQueueStatus: true,
-			ReportStats:            true,
-		})
-		a.NoError(err)
-		a.NotNil(resp)
-
-		if singlePartition {
-			//nolint:staticcheck // SA1019 deprecated field
-			a.Equal(expectation.BacklogCount/2, // only reports default queue
-				resp.TaskQueueStatus.GetBacklogCountHint())
-		}
-
-		validateDescribeTaskQueueStats(a, resp.Stats, expectation)
 	}, 5*time.Second, 100*time.Millisecond)
 }
 
