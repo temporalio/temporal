@@ -132,8 +132,8 @@ func (t *timerQueueStandbyTaskExecutor) executeChasmPureTimerTask(
 			wfContext,
 			mutableState,
 			task,
-			func(node chasm.NodePureTask, task any) error {
-				ok, err := node.ValidatePureTask(ctx, task)
+			func(node chasm.NodePureTask, taskAttributes chasm.TaskAttributes, task any) error {
+				ok, err := node.ValidatePureTask(ctx, taskAttributes, task)
 				if err != nil {
 					return err
 				}

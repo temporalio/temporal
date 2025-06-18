@@ -997,10 +997,10 @@ func (t *timerQueueActiveTaskExecutor) executeChasmPureTimerTask(
 		wfCtx,
 		ms,
 		task,
-		func(executor chasm.NodePureTask, task any) error {
+		func(executor chasm.NodePureTask, taskAttributes chasm.TaskAttributes, taskInstance any) error {
 			// ExecutePureTask also calls the task's validator. Invalid tasks will no-op
 			// succeed.
-			if err := executor.ExecutePureTask(ctx, task); err != nil {
+			if err := executor.ExecutePureTask(ctx, taskAttributes, taskInstance); err != nil {
 				return err
 			}
 

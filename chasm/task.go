@@ -14,15 +14,15 @@ type (
 	}
 
 	SideEffectTaskExecutor[C any, T any] interface {
-		Execute(context.Context, ComponentRef, T) error
+		Execute(context.Context, ComponentRef, TaskAttributes, T) error
 	}
 
 	PureTaskExecutor[C any, T any] interface {
-		Execute(MutableContext, C, T) error
+		Execute(MutableContext, C, TaskAttributes, T) error
 	}
 
 	TaskValidator[C any, T any] interface {
-		Validate(Context, C, T) (bool, error)
+		Validate(Context, C, TaskAttributes, T) (bool, error)
 	}
 )
 
