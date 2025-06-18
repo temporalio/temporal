@@ -45,7 +45,7 @@ type (
 
 	TestSubComponent2 struct {
 		UnimplementedComponent
-		SubComponent2Data protoMessageType
+		SubComponent2Data *protoMessageType
 	}
 
 	TestSubComponent interface {

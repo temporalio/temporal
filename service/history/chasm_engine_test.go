@@ -140,18 +140,19 @@ func (s *chasmEngineSuite) TestNewEntity_BrandNew() {
 	)
 	newActivityID := tv.ActivityID()
 
+	var runID string
 	s.mockExecutionManager.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(
 			_ context.Context,
 			request *persistence.CreateWorkflowExecutionRequest,
 		) (*persistence.CreateWorkflowExecutionResponse, error) {
 			s.validateCreateRequest(request, newActivityID, "", 0)
+			runID = request.NewWorkflowSnapshot.ExecutionState.RunId
 			return tests.CreateWorkflowExecutionResponse, nil
 		},
 	).Times(1)
 
-	// TODO: validate returned component once Ref() method of chasm tree is implememented.
-	_, err := s.engine.NewEntity(
+	entityKey, serializedRef, err := s.engine.NewEntity(
 		context.Background(),
 		ref,
 		s.newTestEntityFn(newActivityID),
@@ -161,6 +162,13 @@ func (s *chasmEngineSuite) TestNewEntity_BrandNew() {
 		),
 	)
 	s.NoError(err)
+	expectedEntityKey := chasm.EntityKey{
+		NamespaceID: string(tests.NamespaceID),
+		BusinessID:  tv.WorkflowID(),
+		EntityID:    runID,
+	}
+	s.Equal(expectedEntityKey, entityKey)
+	s.validateNewEntityResponseRef(serializedRef, expectedEntityKey)
 }
 
 func (s *chasmEngineSuite) TestNewEntity_RequestIDDedup() {
@@ -185,14 +193,21 @@ func (s *chasmEngineSuite) TestNewEntity_RequestIDDedup() {
 		),
 	).Times(1)
 
-	// TODO: validate returned component once Ref() method of chasm tree is implememented.
-	_, err := s.engine.NewEntity(
+	entityKey, serializedRef, err := s.engine.NewEntity(
 		context.Background(),
 		ref,
 		s.newTestEntityFn(newActivityID),
 		chasm.WithRequestID(tv.RequestID()),
 	)
 	s.NoError(err)
+
+	expectedEntityKey := chasm.EntityKey{
+		NamespaceID: string(tests.NamespaceID),
+		BusinessID:  tv.WorkflowID(),
+		EntityID:    tv.RunID(),
+	}
+	s.Equal(expectedEntityKey, entityKey)
+	s.validateNewEntityResponseRef(serializedRef, expectedEntityKey)
 }
 
 func (s *chasmEngineSuite) TestNewEntity_ReusePolicy_AllowDuplicate() {
@@ -213,6 +228,7 @@ func (s *chasmEngineSuite) TestNewEntity_ReusePolicy_AllowDuplicate() {
 		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 	)
 
+	var runID string
 	s.mockExecutionManager.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).Return(
 		nil,
 		currentRunConditionFailedErr,
@@ -223,12 +239,12 @@ func (s *chasmEngineSuite) TestNewEntity_ReusePolicy_AllowDuplicate() {
 			request *persistence.CreateWorkflowExecutionRequest,
 		) (*persistence.CreateWorkflowExecutionResponse, error) {
 			s.validateCreateRequest(request, newActivityID, tv.RunID(), currentRunConditionFailedErr.LastWriteVersion)
+			runID = request.NewWorkflowSnapshot.ExecutionState.RunId
 			return tests.CreateWorkflowExecutionResponse, nil
 		},
 	).Times(1)
 
-	// TODO: validate returned component once Ref() method of chasm tree is implememented.
-	_, err := s.engine.NewEntity(
+	entityKey, serializedRef, err := s.engine.NewEntity(
 		context.Background(),
 		ref,
 		s.newTestEntityFn(newActivityID),
@@ -238,6 +254,14 @@ func (s *chasmEngineSuite) TestNewEntity_ReusePolicy_AllowDuplicate() {
 		),
 	)
 	s.NoError(err)
+
+	expectedEntityKey := chasm.EntityKey{
+		NamespaceID: string(tests.NamespaceID),
+		BusinessID:  tv.WorkflowID(),
+		EntityID:    runID,
+	}
+	s.Equal(expectedEntityKey, entityKey)
+	s.validateNewEntityResponseRef(serializedRef, expectedEntityKey)
 }
 
 func (s *chasmEngineSuite) TestNewEntity_ReusePolicy_FailedOnly_Success() {
@@ -258,6 +282,7 @@ func (s *chasmEngineSuite) TestNewEntity_ReusePolicy_FailedOnly_Success() {
 		enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
 	)
 
+	var runID string
 	s.mockExecutionManager.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).Return(
 		nil,
 		currentRunConditionFailedErr,
@@ -268,12 +293,12 @@ func (s *chasmEngineSuite) TestNewEntity_ReusePolicy_FailedOnly_Success() {
 			request *persistence.CreateWorkflowExecutionRequest,
 		) (*persistence.CreateWorkflowExecutionResponse, error) {
 			s.validateCreateRequest(request, newActivityID, tv.RunID(), currentRunConditionFailedErr.LastWriteVersion)
+			runID = request.NewWorkflowSnapshot.ExecutionState.RunId
 			return tests.CreateWorkflowExecutionResponse, nil
 		},
 	).Times(1)
 
-	// TODO: validate returned component once Ref() method of chasm tree is implememented.
-	_, err := s.engine.NewEntity(
+	entityKey, serializedRef, err := s.engine.NewEntity(
 		context.Background(),
 		ref,
 		s.newTestEntityFn(newActivityID),
@@ -283,6 +308,14 @@ func (s *chasmEngineSuite) TestNewEntity_ReusePolicy_FailedOnly_Success() {
 		),
 	)
 	s.NoError(err)
+
+	expectedEntityKey := chasm.EntityKey{
+		NamespaceID: string(tests.NamespaceID),
+		BusinessID:  tv.WorkflowID(),
+		EntityID:    runID,
+	}
+	s.Equal(expectedEntityKey, entityKey)
+	s.validateNewEntityResponseRef(serializedRef, expectedEntityKey)
 }
 
 func (s *chasmEngineSuite) TestNewEntity_ReusePolicy_FailedOnly_Fail() {
@@ -307,8 +340,7 @@ func (s *chasmEngineSuite) TestNewEntity_ReusePolicy_FailedOnly_Fail() {
 		),
 	).Times(1)
 
-	// TODO: validate returned component once Ref() method of chasm tree is implememented.
-	_, err := s.engine.NewEntity(
+	_, _, err := s.engine.NewEntity(
 		context.Background(),
 		ref,
 		s.newTestEntityFn(newActivityID),
@@ -342,8 +374,7 @@ func (s *chasmEngineSuite) TestNewEntity_ReusePolicy_RejectDuplicate() {
 		),
 	).Times(1)
 
-	// TODO: validate returned component once Ref() method of chasm tree is implememented.
-	_, err := s.engine.NewEntity(
+	_, _, err := s.engine.NewEntity(
 		context.Background(),
 		ref,
 		s.newTestEntityFn(newActivityID),
@@ -389,6 +420,19 @@ func (s *chasmEngineSuite) validateCreateRequest(
 	err := serialization.Proto3Decode(updatedNode.Data.Data, updatedNode.Data.EncodingType, activityInfo)
 	s.NoError(err)
 	s.Equal(expectedActivityID, activityInfo.ActivityId)
+}
+
+func (s *chasmEngineSuite) validateNewEntityResponseRef(
+	serializedRef []byte,
+	expectedEntityKey chasm.EntityKey,
+) {
+	deserializedRef, err := chasm.DeserializeComponentRef(serializedRef)
+	s.NoError(err)
+	s.Equal(expectedEntityKey, deserializedRef.EntityKey)
+
+	archetype, err := deserializedRef.Archetype(s.registry)
+	s.NoError(err)
+	s.Equal("TestLibrary.test_component", archetype)
 }
 
 func (s *chasmEngineSuite) currentRunConditionFailedErr(

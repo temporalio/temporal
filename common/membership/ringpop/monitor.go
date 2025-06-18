@@ -85,7 +85,7 @@ func newMonitor(
 	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
 	lifecycleCtx = headers.SetCallerInfo(
 		lifecycleCtx,
-		headers.SystemBackgroundCallerInfo,
+		headers.SystemBackgroundHighCallerInfo,
 	)
 
 	rpo := &monitor{

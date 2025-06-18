@@ -438,7 +438,8 @@ func (r *registry) checkTotalLimit() error {
 		r.instrumentation.countTooMany()
 		return serviceerror.NewFailedPrecondition(
 			fmt.Sprintf("The limit on the total number of distinct updates in this workflow has been reached (%v). "+
-				"Make sure any duplicate updates share an Update ID so the server can deduplicate them, and consider rejecting updates that you aren't going to process", maxTotal),
+				"Make sure any duplicate updates share an Update ID so the server can deduplicate them, and consider rejecting updates that you aren't going to process. "+
+				"You can also Continue-as-New to avoid this; we recommend you check Continue-as-New Suggested in your Workflow.", maxTotal),
 		)
 	}
 	return nil

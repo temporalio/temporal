@@ -36,7 +36,7 @@ func TestExecuteBufferTask_ProcessTimeRangeFails(t *testing.T) {
 	// If ProcessTimeRange fails, we should fail the task as an internal error.
 	specProcessor := scheduler.NewMockSpecProcessor(ctrl)
 	specProcessor.EXPECT().ProcessTimeRange(
-		gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+		gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 	).Return(nil, errors.New("processTimeRange bug"))
 
 	registerGeneratorExecutor(t, ctrl, registry, specProcessor)

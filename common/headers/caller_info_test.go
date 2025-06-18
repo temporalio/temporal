@@ -48,13 +48,13 @@ func (s *callerInfoSuite) TestSetCallerType() {
 	info := GetCallerInfo(ctx)
 	s.Empty(info.CallerType)
 
-	ctx = SetCallerType(ctx, CallerTypeBackground)
+	ctx = SetCallerType(ctx, CallerTypeBackgroundHigh)
 	info = GetCallerInfo(ctx)
-	s.Equal(CallerTypeBackground, info.CallerType)
+	s.Equal(CallerTypeBackgroundHigh, info.CallerType)
 
 	ctx = SetCallerName(ctx, "")
 	info = GetCallerInfo(ctx)
-	s.Equal(CallerTypeBackground, info.CallerType)
+	s.Equal(CallerTypeBackgroundHigh, info.CallerType)
 
 	ctx = SetCallerType(ctx, CallerTypeAPI)
 	info = GetCallerInfo(ctx)
@@ -129,7 +129,7 @@ func (s *callerInfoSuite) TestSetCallerInfo_NoExistingCallerInfo() {
 
 func (s *callerInfoSuite) TestSetCallerInfo_WithExistingCallerInfo() {
 	callerName := CallerNameSystem
-	callerType := CallerTypeBackground
+	callerType := CallerTypeBackgroundHigh
 	callOrigin := "methodName"
 
 	ctx := SetCallerName(context.Background(), callerName)

@@ -2252,6 +2252,16 @@ func (ms *MutableStateImpl) AttachRequestID(
 	ms.approximateSize += ms.executionState.Size()
 }
 
+func (ms *MutableStateImpl) HasRequestID(
+	requestID string,
+) bool {
+	if ms.executionState.RequestIds == nil {
+		return false
+	}
+	_, ok := ms.executionState.RequestIds[requestID]
+	return ok
+}
+
 func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 	parentExecutionInfo *workflowspb.ParentExecutionInfo,
 	execution *commonpb.WorkflowExecution,
@@ -2708,6 +2718,9 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 		}
 	}
 
+	// This will include override and inheritance, but not transition, because WF never starts with a transition
+	ms.executionInfo.WorkerDeploymentName = ms.GetEffectiveDeployment().GetSeriesName()
+
 	if inheritedBuildId := event.InheritedBuildId; inheritedBuildId != "" {
 		ms.executionInfo.InheritedBuildId = inheritedBuildId
 		if err := ms.UpdateBuildIdAssignment(inheritedBuildId); err != nil {
@@ -2871,14 +2884,11 @@ func (ms *MutableStateImpl) ApplyWorkflowTaskStartedEvent(
 		startedEventID, requestID, timestamp, suggestContinueAsNew, historySizeBytes, versioningStamp, redirectCounter)
 }
 
-// TODO (alex-update): This needs to be renamed to "GetTransientOrSpeculativeEvents"
+// TODO (alex-update): 	Transient needs to be renamed to "TransientOrSpeculative"
 func (ms *MutableStateImpl) GetTransientWorkflowTaskInfo(
 	workflowTask *historyi.WorkflowTaskInfo,
 	identity string,
 ) *historyspb.TransientWorkflowTaskInfo {
-	if workflowTask == nil {
-		return nil
-	}
 	if !ms.IsTransientWorkflowTask() && workflowTask.Type != enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
 		return nil
 	}
@@ -4954,8 +4964,15 @@ func (ms *MutableStateImpl) updateVersioningOverride(
 			}
 		}
 
-	} else if ms.GetExecutionInfo().GetVersioningInfo() != nil {
+		if o := ms.GetExecutionInfo().VersioningInfo.VersioningOverride; worker_versioning.OverrideIsPinned(o) {
+			ms.GetExecutionInfo().WorkerDeploymentName = o.GetPinned().GetVersion().GetDeploymentName()
+		}
+
+	} else if vi := ms.GetExecutionInfo().GetVersioningInfo(); vi != nil {
 		ms.GetExecutionInfo().VersioningInfo.VersioningOverride = nil
+		ms.GetExecutionInfo().WorkerDeploymentName = vi.GetDeploymentVersion().GetDeploymentName()
+	} else {
+		ms.GetExecutionInfo().WorkerDeploymentName = ""
 	}
 
 	if !proto.Equal(ms.GetEffectiveDeployment(), previousEffectiveDeployment) ||
@@ -6026,7 +6043,7 @@ func (ms *MutableStateImpl) isStateDirty() bool {
 		ms.executionStateUpdated ||
 		ms.workflowTaskUpdated ||
 		(ms.stateMachineNode != nil && ms.stateMachineNode.Dirty()) ||
-		ms.chasmTree.IsDirty() ||
+		ms.chasmTree.IsStateDirty() ||
 		ms.isResetStateUpdated
 }
 

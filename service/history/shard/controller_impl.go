@@ -387,7 +387,7 @@ func (c *ControllerImpl) acquireShards(ctx context.Context) {
 		metrics.AcquireShardsLatency.With(c.taggedMetricsHandler).Record(time.Since(startTime))
 	}()
 
-	ctx = headers.SetCallerInfo(ctx, headers.SystemBackgroundCallerInfo)
+	ctx = headers.SetCallerInfo(ctx, headers.SystemBackgroundHighCallerInfo)
 
 	// Readiness check: if we haven't marked readiness yet, then we need to set up a context to
 	// run the readiness check on owned shards.

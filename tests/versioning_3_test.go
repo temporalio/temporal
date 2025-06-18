@@ -68,14 +68,10 @@ type Versioning3Suite struct {
 	useV32 bool
 }
 
-func NewVersioning3Suite(useV32 bool) *Versioning3Suite {
-	return &Versioning3Suite{useV32: useV32}
-}
-
 func TestVersioning3FunctionalSuite(t *testing.T) {
 	t.Parallel()
-	suite.Run(t, NewVersioning3Suite(true))
-	suite.Run(t, NewVersioning3Suite(false))
+	suite.Run(t, &Versioning3Suite{useV32: true})
+	suite.Run(t, &Versioning3Suite{useV32: false})
 }
 
 func (s *Versioning3Suite) SetupSuite() {
@@ -514,17 +510,13 @@ func (s *Versioning3Suite) TestUnpinnedWorkflow_SuccessfulUpdate_TransitionstoNe
 			6 WorkflowTaskStarted
 		  `, task.History)
 
-			// Verify that events from the speculative task are present in the workflow history.
-			// TODO: how to assert that events 5 and 6 are not actually written to the history
-			//  before being processed by the poller?
+			// Verify that events from the speculative task are *not* written to the workflow history before being processed by the poller
 			events := s.GetHistory(s.Namespace().String(), execution)
 			s.EqualHistoryEvents(`
 				1 WorkflowExecutionStarted
 				2 WorkflowTaskScheduled
 				3 WorkflowTaskStarted
 				4 WorkflowTaskCompleted
-				5 WorkflowTaskScheduled // Speculative WT events are not written to the history yet.
-				6 WorkflowTaskStarted
 			`, events)
 
 			// VersioningInfo should not have changed before the update has been processed by the poller.
@@ -604,17 +596,13 @@ func (s *Versioning3Suite) TestUnpinnedWorkflow_FailedUpdate_DoesNotTransitionTo
 			6 WorkflowTaskStarted
 		  `, task.History)
 
-			// Verify that events from the speculative task are present in the workflow history.
-			// TODO: how to assert that events 5 and 6 are not actually written to the history
-			//  before being processed by the poller?
+			// Verify that events from the speculative task are *not* written to the workflow history before being processed by the poller
 			events := s.GetHistory(s.Namespace().String(), execution)
 			s.EqualHistoryEvents(`
 				1 WorkflowExecutionStarted
 				2 WorkflowTaskScheduled
 				3 WorkflowTaskStarted
 				4 WorkflowTaskCompleted
-				5 WorkflowTaskScheduled // Speculative WT events are not written to the history yet.
-				6 WorkflowTaskStarted
 			`, events)
 
 			// VersioningInfo should not have changed before the update has been processed by the poller.
@@ -779,14 +767,22 @@ func (s *Versioning3Suite) testUnpinnedWorkflowWithRamp(toUnversioned bool) {
 }
 
 func (s *Versioning3Suite) TestTransitionFromWft_Sticky() {
-	s.testTransitionFromWft(true)
+	s.testTransitionFromWft(true, false)
 }
 
 func (s *Versioning3Suite) TestTransitionFromWft_NoSticky() {
-	s.testTransitionFromWft(false)
+	s.testTransitionFromWft(false, false)
 }
 
-func (s *Versioning3Suite) testTransitionFromWft(sticky bool) {
+func (s *Versioning3Suite) TestTransitionFromWft_Sticky_ToUnversioned() {
+	s.testTransitionFromWft(true, true)
+}
+
+func (s *Versioning3Suite) TestTransitionFromWft_NoSticky_ToUnversioned() {
+	s.testTransitionFromWft(false, true)
+}
+
+func (s *Versioning3Suite) testTransitionFromWft(sticky bool, toUnversioned bool) {
 	// Wf runs one WFT and one AT on d1, then the second WFT is redirected to d2 and
 	// transitions the wf with it.
 
@@ -817,16 +813,29 @@ func (s *Versioning3Suite) testTransitionFromWft(sticky bool) {
 		})
 	s.verifyWorkflowVersioning(tv1, vbUnpinned, tv1.Deployment(), nil, nil)
 
-	// Set B as the current deployment
-	s.updateTaskQueueDeploymentData(tv2, true, 0, false, 0, tqTypeWf, tqTypeAct)
+	if toUnversioned {
+		// unset A as current
+		s.updateTaskQueueDeploymentData(tv1, false, 0, false, 0, tqTypeWf, tqTypeAct)
 
-	s.pollWftAndHandle(tv2, false, nil,
-		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-			s.NotNil(task)
-			s.verifyWorkflowVersioning(tv1, vbUnpinned, tv1.Deployment(), nil, tv2.DeploymentVersionTransition())
-			return respondCompleteWorkflow(tv2, vbUnpinned), nil
-		})
-	s.verifyWorkflowVersioning(tv2, vbUnpinned, tv2.Deployment(), nil, nil)
+		s.unversionedPollWftAndHandle(tv1, false, nil,
+			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+				s.NotNil(task)
+				s.verifyWorkflowVersioning(tv1, vbUnpinned, tv1.Deployment(), nil, &workflowpb.DeploymentVersionTransition{Version: "__unversioned__"})
+				return respondCompleteWorkflowUnversioned(tv1), nil
+			})
+		s.verifyWorkflowVersioning(tv1, vbUnspecified, nil, nil, nil)
+	} else {
+		// Set B as the current deployment
+		s.updateTaskQueueDeploymentData(tv2, true, 0, false, 0, tqTypeWf, tqTypeAct)
+
+		s.pollWftAndHandle(tv2, false, nil,
+			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+				s.NotNil(task)
+				s.verifyWorkflowVersioning(tv1, vbUnpinned, tv1.Deployment(), nil, tv2.DeploymentVersionTransition())
+				return respondCompleteWorkflow(tv2, vbUnpinned), nil
+			})
+		s.verifyWorkflowVersioning(tv2, vbUnpinned, tv2.Deployment(), nil, nil)
+	}
 }
 
 func (s *Versioning3Suite) TestDoubleTransition() {
@@ -2059,6 +2068,9 @@ func (s *Versioning3Suite) verifyWorkflowVersioning(
 		s.Equal(override.GetPinned().GetVersion().GetBuildId(), versioningInfo.GetVersioningOverride().GetPinned().GetVersion().GetBuildId())
 		s.Equal(override.GetPinned().GetVersion().GetDeploymentName(), versioningInfo.GetVersioningOverride().GetPinned().GetVersion().GetDeploymentName())
 		s.Equal(override.GetPinned().GetBehavior(), versioningInfo.GetVersioningOverride().GetPinned().GetBehavior())
+		if worker_versioning.OverrideIsPinned(override) {
+			s.Equal(override.GetPinned().GetVersion().GetDeploymentName(), dwf.WorkflowExecutionInfo.GetWorkerDeploymentName())
+		}
 	} else {
 		// v0.31 override
 		s.Equal(override.GetBehavior().String(), versioningInfo.GetVersioningOverride().GetBehavior().String())                                             //nolint:staticcheck // SA1019: worker versioning v0.31
@@ -2067,6 +2079,10 @@ func (s *Versioning3Suite) verifyWorkflowVersioning(
 				override.GetPinnedVersion(), //nolint:staticcheck // SA1019: worker versioning v0.31
 				actualOverrideDeployment,
 			))
+		}
+		if worker_versioning.OverrideIsPinned(override) {
+			d, _ := worker_versioning.WorkerDeploymentVersionFromStringV31(override.GetPinnedVersion()) //nolint:staticcheck // SA1019: worker versioning v0.31
+			s.Equal(d.GetDeploymentName(), dwf.WorkflowExecutionInfo.GetWorkerDeploymentName())
 		}
 	}
 
@@ -2168,6 +2184,24 @@ func respondCompleteWorkflow(
 			DeploymentName:       tv.DeploymentSeries(),
 			WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_VERSIONED,
 		},
+	}
+}
+
+func respondCompleteWorkflowUnversioned(
+	tv *testvars.TestVars,
+) *workflowservice.RespondWorkflowTaskCompletedRequest {
+	return &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Commands: []*commandpb.Command{
+			{
+				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
+					CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+						Result: tv.Any().Payloads(),
+					},
+				},
+			},
+		},
+		ForceCreateNewWorkflowTask: false,
 	}
 }
 

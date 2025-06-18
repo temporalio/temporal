@@ -10,6 +10,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/locks"
@@ -54,6 +55,7 @@ type (
 		searchAttributesProvider searchattribute.Provider
 		visibilityManager        manager.VisibilityManager
 		workflowDeleteManager    deletemanager.DeleteManager
+		chasmEngine              chasm.Engine
 	}
 )
 
@@ -65,6 +67,7 @@ func newTransferQueueTaskExecutorBase(
 	historyRawClient resource.HistoryRawClient,
 	matchingRawClient resource.MatchingRawClient,
 	visibilityManager manager.VisibilityManager,
+	chasmEngine chasm.Engine,
 ) *transferQueueTaskExecutorBase {
 	return &transferQueueTaskExecutorBase{
 		currentClusterName:       shardContext.GetClusterMetadata().GetCurrentClusterName(),
@@ -85,6 +88,7 @@ func newTransferQueueTaskExecutorBase(
 			shardContext.GetTimeSource(),
 			visibilityManager,
 		),
+		chasmEngine: chasmEngine,
 	}
 }
 

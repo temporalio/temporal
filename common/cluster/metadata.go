@@ -208,7 +208,7 @@ func (m *metadataImpl) Start() {
 	// TODO: specify a timeout for the context
 	ctx := headers.SetCallerInfo(
 		context.TODO(),
-		headers.SystemBackgroundCallerInfo,
+		headers.SystemBackgroundHighCallerInfo,
 	)
 	err := m.refreshClusterMetadata(ctx)
 	if err != nil {

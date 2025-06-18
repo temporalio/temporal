@@ -31,14 +31,14 @@ func (s *LogSuite) SetupTest() {
 }
 
 func (s *LogSuite) TestParseLogLevel() {
-	s.Equal(zap.DebugLevel, parseZapLevel("debug"))
-	s.Equal(zap.InfoLevel, parseZapLevel("info"))
-	s.Equal(zap.WarnLevel, parseZapLevel("warn"))
-	s.Equal(zap.ErrorLevel, parseZapLevel("error"))
-	s.Equal(zap.FatalLevel, parseZapLevel("fatal"))
-	s.Equal(zap.DPanicLevel, parseZapLevel("dpanic"))
-	s.Equal(zap.PanicLevel, parseZapLevel("panic"))
-	s.Equal(zap.InfoLevel, parseZapLevel("unknown"))
+	s.Equal(zap.DebugLevel, ParseZapLevel("debug"))
+	s.Equal(zap.InfoLevel, ParseZapLevel("info"))
+	s.Equal(zap.WarnLevel, ParseZapLevel("warn"))
+	s.Equal(zap.ErrorLevel, ParseZapLevel("error"))
+	s.Equal(zap.FatalLevel, ParseZapLevel("fatal"))
+	s.Equal(zap.DPanicLevel, ParseZapLevel("dpanic"))
+	s.Equal(zap.PanicLevel, ParseZapLevel("panic"))
+	s.Equal(zap.InfoLevel, ParseZapLevel("unknown"))
 }
 
 func (s *LogSuite) TestNewLogger() {

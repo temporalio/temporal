@@ -2757,6 +2757,20 @@ func (mr *MockMutableStateMockRecorder) HasPendingWorkflowTask() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasPendingWorkflowTask", reflect.TypeOf((*MockMutableState)(nil).HasPendingWorkflowTask))
 }
 
+// HasRequestID mocks base method.
+func (m *MockMutableState) HasRequestID(requestID string) bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HasRequestID", requestID)
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// HasRequestID indicates an expected call of HasRequestID.
+func (mr *MockMutableStateMockRecorder) HasRequestID(requestID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasRequestID", reflect.TypeOf((*MockMutableState)(nil).HasRequestID), requestID)
+}
+
 // HasStartedWorkflowTask mocks base method.
 func (m *MockMutableState) HasStartedWorkflowTask() bool {
 	m.ctrl.T.Helper()

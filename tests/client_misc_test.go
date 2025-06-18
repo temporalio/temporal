@@ -31,6 +31,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/worker_versioning"
+	"go.temporal.io/server/service/history/workflow/update"
 	"go.temporal.io/server/tests/testcore"
 	"go.uber.org/multierr"
 )
@@ -197,7 +198,7 @@ func (s *ClientMiscTestSuite) TestTooManyCancelRequests() {
 	defer cancel()
 
 	// create a large number of blocked workflows
-	numTargetWorkflows := testcore.ClientSuiteLimit*2 + 2 // 2 batches and some more.
+	numTargetWorkflows := 50 // should be much greater than s.maxPendingCancelRequests
 	targetWorkflow := func(ctx workflow.Context) error {
 		return workflow.Await(ctx, func() bool {
 			return false
@@ -242,8 +243,6 @@ func (s *ClientMiscTestSuite) TestTooManyCancelRequests() {
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted // 29 below is enumspb.WORKFLOW_TASK_FAILED_CAUSE_PENDING_REQUEST_CANCEL_LIMIT_EXCEEDED
   4 WorkflowTaskFailed {"Cause":29,"Failure":{"Message":"PendingRequestCancelLimitExceeded: the number of pending requests to cancel external workflows, 10, has reached the per-workflow limit of 10"}}
-  5 WorkflowTaskScheduled // Transient WFT
-  6 WorkflowTaskStarted
 `, func() []*historypb.HistoryEvent {
 			return s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()})
 		}, 3*time.Second, 500*time.Millisecond)
@@ -262,7 +261,7 @@ func (s *ClientMiscTestSuite) TestTooManyCancelRequests() {
 		})
 		s.NoError(err)
 		numCancelRequests := len(workflowExecution.State.RequestCancelInfos)
-		s.Zero(numCancelRequests)
+		s.Assert().Zero(numCancelRequests)
 		err = s.SdkClient().CancelWorkflow(ctx, cancelerWorkflowId, "")
 		s.NoError(err)
 	})
@@ -342,8 +341,6 @@ func (s *ClientMiscTestSuite) TestTooManyPendingSignals() {
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted // 28 below is enumspb.WORKFLOW_TASK_FAILED_CAUSE_PENDING_SIGNALS_LIMIT_EXCEEDED
   4 WorkflowTaskFailed {"Cause":28,"Failure":{"Message":"PendingSignalsLimitExceeded: the number of pending signals to external workflows, 10, has reached the per-workflow limit of 10"}}
-  5 WorkflowTaskScheduled // Transient WFT
-  6 WorkflowTaskStarted
 `, func() []*historypb.HistoryEvent {
 			return s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: senderRun.GetID(), RunId: senderRun.GetRunID()})
 		}, 3*time.Second, 500*time.Millisecond)
@@ -578,7 +575,7 @@ func (s *ClientMiscTestSuite) TestWorkflowCanBeCompletedDespiteAdmittedUpdate() 
 	s.Error(updateErr)
 	var notFound *serviceerror.NotFound
 	s.ErrorAs(updateErr, &notFound)
-	s.Equal("workflow execution already completed", updateErr.Error())
+	s.ErrorContains(updateErr, update.AbortedByWorkflowClosingErr.Error())
 	updateHandle := <-updateHandleCh
 	s.Nil(updateHandle)
 	// Uncomment the following when durable admitted is implemented.

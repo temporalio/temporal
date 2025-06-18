@@ -11,6 +11,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/activity"
 	sdkclient "go.temporal.io/sdk/client"
@@ -70,6 +71,19 @@ func (a *activities) BatchActivity(ctx context.Context, batchParams BatchParams)
 		if err := batchParams.ResetParams.resetOptions.Unmarshal(b); err != nil {
 			logger.Error("Failed to deserialize batch reset options", tag.Error(err))
 			return hbd, err
+		}
+	}
+
+	// Deserialize batch post reset operations if set
+	if postOps := batchParams.ResetParams.PostResetOperations; postOps != nil {
+		batchParams.ResetParams.postResetOperations = make([]*workflowpb.PostResetOperation, len(postOps))
+		for i, serializedOp := range postOps {
+			op := &workflowpb.PostResetOperation{}
+			if err := op.Unmarshal(serializedOp); err != nil {
+				logger.Error("Failed to deserialize batch post reset operation", tag.Error(err))
+				return hbd, err
+			}
+			batchParams.ResetParams.postResetOperations[i] = op
 		}
 	}
 
@@ -312,6 +326,7 @@ func startTaskProcessor(
 							WorkflowTaskFinishEventId: eventId,
 							ResetReapplyType:          resetReapplyType,
 							ResetReapplyExcludeTypes:  resetReapplyExcludeTypes,
+							PostResetOperations:       batchParams.ResetParams.postResetOperations,
 						})
 						return err
 					})

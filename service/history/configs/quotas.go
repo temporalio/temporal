@@ -13,13 +13,14 @@ const (
 
 var (
 	CallerTypeToPriority = map[string]int{
-		headers.CallerTypeOperator:    OperatorPriority,
-		headers.CallerTypeAPI:         1,
-		headers.CallerTypeBackground:  2,
-		headers.CallerTypePreemptable: 3,
+		headers.CallerTypeOperator:       OperatorPriority,
+		headers.CallerTypeAPI:            1,
+		headers.CallerTypeBackgroundHigh: 2,
+		headers.CallerTypeBackgroundLow:  3,
+		headers.CallerTypePreemptable:    4,
 	}
 
-	APIPrioritiesOrdered = []int{OperatorPriority, 1, 2, 3}
+	APIPrioritiesOrdered = []int{OperatorPriority, 1, 2, 3, 4}
 )
 
 func NewPriorityRateLimiter(

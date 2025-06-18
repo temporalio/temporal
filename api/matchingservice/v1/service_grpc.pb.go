@@ -52,6 +52,8 @@ const (
 	MatchingService_UpdateNexusEndpoint_FullMethodName                    = "/temporal.server.api.matchingservice.v1.MatchingService/UpdateNexusEndpoint"
 	MatchingService_DeleteNexusEndpoint_FullMethodName                    = "/temporal.server.api.matchingservice.v1.MatchingService/DeleteNexusEndpoint"
 	MatchingService_ListNexusEndpoints_FullMethodName                     = "/temporal.server.api.matchingservice.v1.MatchingService/ListNexusEndpoints"
+	MatchingService_RecordWorkerHeartbeat_FullMethodName                  = "/temporal.server.api.matchingservice.v1.MatchingService/RecordWorkerHeartbeat"
+	MatchingService_ListWorkers_FullMethodName                            = "/temporal.server.api.matchingservice.v1.MatchingService/ListWorkers"
 )
 
 // MatchingServiceClient is the client API for MatchingService service.
@@ -191,6 +193,12 @@ type MatchingServiceClient interface {
 	DeleteNexusEndpoint(ctx context.Context, in *DeleteNexusEndpointRequest, opts ...grpc.CallOption) (*DeleteNexusEndpointResponse, error)
 	// List all registered services.
 	ListNexusEndpoints(ctx context.Context, in *ListNexusEndpointsRequest, opts ...grpc.CallOption) (*ListNexusEndpointsResponse, error)
+	// RecordWorkerHeartbeat receive heartbeat request from the worker.
+	RecordWorkerHeartbeat(ctx context.Context, in *RecordWorkerHeartbeatRequest, opts ...grpc.CallOption) (*RecordWorkerHeartbeatResponse, error)
+	// ListWorkers retrieves a list of workers in the specified namespace that match the provided filters.
+	// Supports pagination for large result sets. Returns an empty list if no workers match the criteria.
+	// Returns an error if the namespace doesn't exist.
+	ListWorkers(ctx context.Context, in *ListWorkersRequest, opts ...grpc.CallOption) (*ListWorkersResponse, error)
 }
 
 type matchingServiceClient struct {
@@ -489,6 +497,24 @@ func (c *matchingServiceClient) ListNexusEndpoints(ctx context.Context, in *List
 	return out, nil
 }
 
+func (c *matchingServiceClient) RecordWorkerHeartbeat(ctx context.Context, in *RecordWorkerHeartbeatRequest, opts ...grpc.CallOption) (*RecordWorkerHeartbeatResponse, error) {
+	out := new(RecordWorkerHeartbeatResponse)
+	err := c.cc.Invoke(ctx, MatchingService_RecordWorkerHeartbeat_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *matchingServiceClient) ListWorkers(ctx context.Context, in *ListWorkersRequest, opts ...grpc.CallOption) (*ListWorkersResponse, error) {
+	out := new(ListWorkersResponse)
+	err := c.cc.Invoke(ctx, MatchingService_ListWorkers_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // MatchingServiceServer is the server API for MatchingService service.
 // All implementations must embed UnimplementedMatchingServiceServer
 // for forward compatibility
@@ -626,6 +652,12 @@ type MatchingServiceServer interface {
 	DeleteNexusEndpoint(context.Context, *DeleteNexusEndpointRequest) (*DeleteNexusEndpointResponse, error)
 	// List all registered services.
 	ListNexusEndpoints(context.Context, *ListNexusEndpointsRequest) (*ListNexusEndpointsResponse, error)
+	// RecordWorkerHeartbeat receive heartbeat request from the worker.
+	RecordWorkerHeartbeat(context.Context, *RecordWorkerHeartbeatRequest) (*RecordWorkerHeartbeatResponse, error)
+	// ListWorkers retrieves a list of workers in the specified namespace that match the provided filters.
+	// Supports pagination for large result sets. Returns an empty list if no workers match the criteria.
+	// Returns an error if the namespace doesn't exist.
+	ListWorkers(context.Context, *ListWorkersRequest) (*ListWorkersResponse, error)
 	mustEmbedUnimplementedMatchingServiceServer()
 }
 
@@ -728,6 +760,12 @@ func (UnimplementedMatchingServiceServer) DeleteNexusEndpoint(context.Context, *
 }
 func (UnimplementedMatchingServiceServer) ListNexusEndpoints(context.Context, *ListNexusEndpointsRequest) (*ListNexusEndpointsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListNexusEndpoints not implemented")
+}
+func (UnimplementedMatchingServiceServer) RecordWorkerHeartbeat(context.Context, *RecordWorkerHeartbeatRequest) (*RecordWorkerHeartbeatResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RecordWorkerHeartbeat not implemented")
+}
+func (UnimplementedMatchingServiceServer) ListWorkers(context.Context, *ListWorkersRequest) (*ListWorkersResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListWorkers not implemented")
 }
 func (UnimplementedMatchingServiceServer) mustEmbedUnimplementedMatchingServiceServer() {}
 
@@ -1318,6 +1356,42 @@ func _MatchingService_ListNexusEndpoints_Handler(srv interface{}, ctx context.Co
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MatchingService_RecordWorkerHeartbeat_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RecordWorkerHeartbeatRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MatchingServiceServer).RecordWorkerHeartbeat(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MatchingService_RecordWorkerHeartbeat_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MatchingServiceServer).RecordWorkerHeartbeat(ctx, req.(*RecordWorkerHeartbeatRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MatchingService_ListWorkers_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListWorkersRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MatchingServiceServer).ListWorkers(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MatchingService_ListWorkers_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MatchingServiceServer).ListWorkers(ctx, req.(*ListWorkersRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // MatchingService_ServiceDesc is the grpc.ServiceDesc for MatchingService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1452,6 +1526,14 @@ var MatchingService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListNexusEndpoints",
 			Handler:    _MatchingService_ListNexusEndpoints_Handler,
+		},
+		{
+			MethodName: "RecordWorkerHeartbeat",
+			Handler:    _MatchingService_RecordWorkerHeartbeat_Handler,
+		},
+		{
+			MethodName: "ListWorkers",
+			Handler:    _MatchingService_ListWorkers_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

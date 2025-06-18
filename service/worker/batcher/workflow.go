@@ -79,6 +79,11 @@ type (
 		// json dataconverter, which doesn't support the "oneof" field in ResetOptions.
 		ResetOptions []byte
 		resetOptions *commonpb.ResetOptions // deserialized version
+
+		// This is a slice of serialized workflowpb.PostResetOperation.
+		// For the same reason as ResetOptions, we manually serialize/deserialize it.
+		PostResetOperations [][]byte
+		postResetOperations []*workflowpb.PostResetOperation
 		// Deprecated fields:
 		ResetType        enumspb.ResetType
 		ResetReapplyType enumspb.ResetReapplyType

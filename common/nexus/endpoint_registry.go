@@ -127,7 +127,7 @@ func (r *EndpointRegistryImpl) setEnabled(enabled bool) {
 	if oldReady == nil && enabled {
 		backgroundCtx := headers.SetCallerInfo(
 			context.Background(),
-			headers.SystemBackgroundCallerInfo,
+			headers.SystemBackgroundHighCallerInfo,
 		)
 		newReady := &dataReady{
 			refresh: goro.NewHandle(backgroundCtx),

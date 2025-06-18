@@ -39,7 +39,7 @@ func NewPrioritySchedulerRateLimiter(
 		}
 
 		// default to low priority
-		return int(tasks.PriorityLow)
+		return int(tasks.PriorityPreemptable)
 	}
 
 	priorityToRateLimiters := make(map[int]quotas.RequestRateLimiter, len(tasks.PriorityName))

@@ -360,7 +360,7 @@ func (m *nexusEndpointClient) notifyOwnershipChanged(isOwner bool) {
 		// Just acquired ownership. Start refresh loop on table version to catch any updates from previous owner.
 		backgroundCtx := headers.SetCallerInfo(
 			context.Background(),
-			headers.SystemBackgroundCallerInfo,
+			headers.SystemBackgroundHighCallerInfo,
 		)
 		m.refreshHandle = goro.NewHandle(backgroundCtx)
 		m.refreshHandle.Go(m.refreshTableVersion)

@@ -51,7 +51,7 @@ func (vc *VersionChecker) Start() {
 			// TODO: specify a timeout for the context
 			ctx := headers.SetCallerInfo(
 				context.TODO(),
-				headers.SystemBackgroundCallerInfo,
+				headers.SystemBackgroundHighCallerInfo,
 			)
 
 			go vc.versionCheckLoop(ctx)

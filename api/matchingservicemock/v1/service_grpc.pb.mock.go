@@ -422,6 +422,26 @@ func (mr *MockMatchingServiceClientMockRecorder) ListTaskQueuePartitions(ctx, in
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListTaskQueuePartitions", reflect.TypeOf((*MockMatchingServiceClient)(nil).ListTaskQueuePartitions), varargs...)
 }
 
+// ListWorkers mocks base method.
+func (m *MockMatchingServiceClient) ListWorkers(ctx context.Context, in *matchingservice.ListWorkersRequest, opts ...grpc.CallOption) (*matchingservice.ListWorkersResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "ListWorkers", varargs...)
+	ret0, _ := ret[0].(*matchingservice.ListWorkersResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListWorkers indicates an expected call of ListWorkers.
+func (mr *MockMatchingServiceClientMockRecorder) ListWorkers(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListWorkers", reflect.TypeOf((*MockMatchingServiceClient)(nil).ListWorkers), varargs...)
+}
+
 // PollActivityTaskQueue mocks base method.
 func (m *MockMatchingServiceClient) PollActivityTaskQueue(ctx context.Context, in *matchingservice.PollActivityTaskQueueRequest, opts ...grpc.CallOption) (*matchingservice.PollActivityTaskQueueResponse, error) {
 	m.ctrl.T.Helper()
@@ -500,6 +520,26 @@ func (mr *MockMatchingServiceClientMockRecorder) QueryWorkflow(ctx, in any, opts
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryWorkflow", reflect.TypeOf((*MockMatchingServiceClient)(nil).QueryWorkflow), varargs...)
+}
+
+// RecordWorkerHeartbeat mocks base method.
+func (m *MockMatchingServiceClient) RecordWorkerHeartbeat(ctx context.Context, in *matchingservice.RecordWorkerHeartbeatRequest, opts ...grpc.CallOption) (*matchingservice.RecordWorkerHeartbeatResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "RecordWorkerHeartbeat", varargs...)
+	ret0, _ := ret[0].(*matchingservice.RecordWorkerHeartbeatResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RecordWorkerHeartbeat indicates an expected call of RecordWorkerHeartbeat.
+func (mr *MockMatchingServiceClientMockRecorder) RecordWorkerHeartbeat(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecordWorkerHeartbeat", reflect.TypeOf((*MockMatchingServiceClient)(nil).RecordWorkerHeartbeat), varargs...)
 }
 
 // ReplicateTaskQueueUserData mocks base method.
@@ -991,6 +1031,21 @@ func (mr *MockMatchingServiceServerMockRecorder) ListTaskQueuePartitions(arg0, a
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListTaskQueuePartitions", reflect.TypeOf((*MockMatchingServiceServer)(nil).ListTaskQueuePartitions), arg0, arg1)
 }
 
+// ListWorkers mocks base method.
+func (m *MockMatchingServiceServer) ListWorkers(arg0 context.Context, arg1 *matchingservice.ListWorkersRequest) (*matchingservice.ListWorkersResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListWorkers", arg0, arg1)
+	ret0, _ := ret[0].(*matchingservice.ListWorkersResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListWorkers indicates an expected call of ListWorkers.
+func (mr *MockMatchingServiceServerMockRecorder) ListWorkers(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListWorkers", reflect.TypeOf((*MockMatchingServiceServer)(nil).ListWorkers), arg0, arg1)
+}
+
 // PollActivityTaskQueue mocks base method.
 func (m *MockMatchingServiceServer) PollActivityTaskQueue(arg0 context.Context, arg1 *matchingservice.PollActivityTaskQueueRequest) (*matchingservice.PollActivityTaskQueueResponse, error) {
 	m.ctrl.T.Helper()
@@ -1049,6 +1104,21 @@ func (m *MockMatchingServiceServer) QueryWorkflow(arg0 context.Context, arg1 *ma
 func (mr *MockMatchingServiceServerMockRecorder) QueryWorkflow(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryWorkflow", reflect.TypeOf((*MockMatchingServiceServer)(nil).QueryWorkflow), arg0, arg1)
+}
+
+// RecordWorkerHeartbeat mocks base method.
+func (m *MockMatchingServiceServer) RecordWorkerHeartbeat(arg0 context.Context, arg1 *matchingservice.RecordWorkerHeartbeatRequest) (*matchingservice.RecordWorkerHeartbeatResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RecordWorkerHeartbeat", arg0, arg1)
+	ret0, _ := ret[0].(*matchingservice.RecordWorkerHeartbeatResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RecordWorkerHeartbeat indicates an expected call of RecordWorkerHeartbeat.
+func (mr *MockMatchingServiceServerMockRecorder) RecordWorkerHeartbeat(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecordWorkerHeartbeat", reflect.TypeOf((*MockMatchingServiceServer)(nil).RecordWorkerHeartbeat), arg0, arg1)
 }
 
 // ReplicateTaskQueueUserData mocks base method.

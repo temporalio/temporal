@@ -92,7 +92,7 @@ func (factory *factory) getMonitor() *monitor {
 		ctx, cancel := context.WithTimeout(context.Background(), persistenceOperationTimeout)
 		defer cancel()
 
-		ctx = headers.SetCallerInfo(ctx, headers.SystemBackgroundCallerInfo)
+		ctx = headers.SetCallerInfo(ctx, headers.SystemBackgroundHighCallerInfo)
 		currentClusterMetadata, err := factory.MetadataManager.GetCurrentClusterMetadata(ctx)
 		if err != nil {
 			factory.Logger.Fatal("Failed to get current cluster ID", tag.Error(err))

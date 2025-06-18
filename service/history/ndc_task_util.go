@@ -21,7 +21,9 @@ import (
 )
 
 type (
-	taskEventIDGetter        func(task tasks.Task) int64
+	// taskEventIDGetter must return either a valid event ID and a boolean `true`, or
+	// a boolean `false` indicating that no event ID checks should take place.
+	taskEventIDGetter        func(task tasks.Task) (int64, bool)
 	mutableStateStaleChecker func(task tasks.Task, executionInfo *persistencespb.WorkflowExecutionInfo) bool
 )
 
@@ -159,8 +161,10 @@ func loadMutableStateForTask(
 
 	// Validation based on eventID is not good enough as certain operation does not generate events.
 	// For example, scheduling transient workflow task, or starting activities that have retry policy.
-	eventID := getEventID(task)
-	if eventID < mutableState.GetNextEventID() {
+	//
+	// Some tasks don't have an associated eventID (CHASM tasks).
+	eventID, eidOk := getEventID(task)
+	if !eidOk || eventID < mutableState.GetNextEventID() {
 		return mutableState, nil
 	}
 

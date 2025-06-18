@@ -723,10 +723,24 @@ var (
 	)
 	SyncShardFromRemoteCounter = NewCounterDef("syncshard_remote_count")
 	SyncShardFromRemoteFailure = NewCounterDef("syncshard_remote_failed")
-	FinalizerItemsCompleted    = NewCounterDef("finalizer_items_completed")
-	FinalizerItemsUnfinished   = NewCounterDef("finalizer_items_unfinished")
-	FinalizerLatency           = NewTimerDef("finalizer_latency")
-	TaskRequests               = NewCounterDef(
+	FinalizerRuns              = NewCounterDef(
+		"finalizer_runs",
+		WithDescription("The number of finalizer runs."),
+	)
+	FinalizerRunTimeouts = NewCounterDef(
+		"finalizer_run_timeouts",
+		WithDescription("The number of finalizer run timeouts."),
+	)
+	FinalizerItemsCompleted = NewCounterDef(
+		"finalizer_items_completed",
+		WithDescription("The number of finalizer items that were completed successfully."),
+	)
+	FinalizerItemsUnfinished = NewCounterDef(
+		"finalizer_items_unfinished",
+		WithDescription("The number of finalizer items that were aborted before completion."),
+	)
+	FinalizerLatency = NewTimerDef("finalizer_latency")
+	TaskRequests     = NewCounterDef(
 		"task_requests",
 		WithDescription("The number of history tasks processed."),
 	)
@@ -940,6 +954,7 @@ var (
 	ReplicationNonEmptyDLQCount                    = NewCounterDef("replication_dlq_non_empty")
 	ReplicationOutlierNamespace                    = NewCounterDef("replication_outlier_namespace")
 	ReplicationDuplicatedTaskCount                 = NewCounterDef("replication_duplicated_task")
+	ReplicationRateLimitLatency                    = NewTimerDef("replication_sender_rate_limit_latency")
 	EventReapplySkippedCount                       = NewCounterDef("event_reapply_skipped_count")
 	DirectQueryDispatchLatency                     = NewTimerDef("direct_query_dispatch_latency")
 	DirectQueryDispatchStickyLatency               = NewTimerDef("direct_query_dispatch_sticky_latency")

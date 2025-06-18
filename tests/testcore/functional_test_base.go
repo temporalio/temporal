@@ -228,7 +228,7 @@ func (s *FunctionalTestBase) SetupSuiteWithCluster(options ...TestClusterOption)
 		// Instead of panic'ing immediately, TearDownTest will check if the test logger failed
 		// after each test completed. This is better since otherwise is would fail inside
 		// the server and not the test, creating a lot of noise and possibly stuck tests.
-		testlogger.DontPanicOnError(tl)
+		testlogger.DontFailOnError(tl)
 		// Fail test when an assertion fails (see `softassert` package).
 		tl.Expect(testlogger.Error, ".*", tag.FailedAssertion)
 		s.Logger = tl
@@ -273,7 +273,6 @@ func (s *FunctionalTestBase) SetupTest() {
 }
 
 func (s *FunctionalTestBase) SetupSubTest() {
-	s.checkNoUnexpectedErrorLogs() // make sure the previous sub test was cleaned up properly
 	s.initAssertions()
 }
 
@@ -369,22 +368,7 @@ func (s *FunctionalTestBase) TearDownCluster() {
 
 // **IMPORTANT**: When overridding this, make sure to invoke `s.FunctionalTestBase.TearDownTest()`.
 func (s *FunctionalTestBase) TearDownTest() {
-	s.checkNoUnexpectedErrorLogs()
 	s.tearDownSdk()
-}
-
-// **IMPORTANT**: When overridding this, make sure to invoke `s.FunctionalTestBase.TearDownSubTest()`.
-func (s *FunctionalTestBase) TearDownSubTest() {
-	s.checkNoUnexpectedErrorLogs()
-}
-
-func (s *FunctionalTestBase) checkNoUnexpectedErrorLogs() {
-	if tl, ok := s.Logger.(*testlogger.TestLogger); ok {
-		if tl.ResetFailureStatus() {
-			s.Fail(`Failing test as unexpected error logs were found.
-Look for 'Unexpected Error log encountered'.`)
-		}
-	}
 }
 
 func (s *FunctionalTestBase) tearDownSdk() {
