@@ -165,8 +165,8 @@ type (
 	// NodePureTask is intended to be implemented and used within the CHASM
 	// framework only.
 	NodePureTask interface {
-		ExecutePureTask(baseCtx context.Context, taskInstance any) error
-		ValidatePureTask(baseCtx context.Context, taskInstance any) (bool, error)
+		ExecutePureTask(baseCtx context.Context, taskAttributes TaskAttributes, taskInstance any) error
+		ValidatePureTask(baseCtx context.Context, taskAttributes TaskAttributes, taskInstance any) (bool, error)
 	}
 )
 
@@ -1228,7 +1228,14 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 				return false
 			}
 
-			valid, err := node.validateTask(validateContext, existingTaskInstance)
+			valid, err := node.validateTask(
+				validateContext,
+				TaskAttributes{
+					ScheduledTime: existingTask.ScheduledTime.AsTime(),
+					Destination:   existingTask.Destination,
+				},
+				existingTaskInstance,
+			)
 			if err != nil {
 				validationErr = err
 				return false
@@ -1309,6 +1316,7 @@ func (n *Node) deserializeComponentTask(
 // validateTask runs taskInstance's registered validation handler.
 func (n *Node) validateTask(
 	validateContext Context,
+	taskAttributes TaskAttributes,
 	taskInstance any,
 ) (bool, error) {
 	registableTask, ok := n.registry.taskFor(taskInstance)
@@ -1324,6 +1332,7 @@ func (n *Node) validateTask(
 	retValues := validateMethod.Call([]reflect.Value{
 		reflect.ValueOf(validateContext),
 		reflect.ValueOf(n.value),
+		reflect.ValueOf(taskAttributes),
 		reflect.ValueOf(taskInstance),
 	})
 	if !retValues[1].IsNil() {
@@ -1858,7 +1867,7 @@ func isComponentTaskExpired(
 // close).
 func (n *Node) EachPureTask(
 	referenceTime time.Time,
-	callback func(executor NodePureTask, task any) error,
+	callback func(executor NodePureTask, taskAttributes TaskAttributes, task any) error,
 ) error {
 	ctx := NewContext(context.Background(), n)
 
@@ -1893,7 +1902,12 @@ func (n *Node) EachPureTask(
 				return err
 			}
 
-			if err = callback(node, taskValue); err != nil {
+			taskAttributes := TaskAttributes{
+				ScheduledTime: task.ScheduledTime.AsTime(),
+				Destination:   task.Destination,
+			}
+
+			if err = callback(node, taskAttributes, taskValue); err != nil {
 				return err
 			}
 		}
@@ -2097,7 +2111,11 @@ func serializeTask(
 
 // ExecutePureTask validates and then executes the given taskInstance against the
 // node's component. Executing an invalid task is a no-op (no error returned).
-func (n *Node) ExecutePureTask(baseCtx context.Context, taskInstance any) error {
+func (n *Node) ExecutePureTask(
+	baseCtx context.Context,
+	taskAttributes TaskAttributes,
+	taskInstance any,
+) error {
 	registrableTask, ok := n.registry.taskFor(taskInstance)
 	if !ok {
 		return fmt.Errorf("unknown task type for task instance goType '%s'", reflect.TypeOf(taskInstance).Name())
@@ -2117,7 +2135,7 @@ func (n *Node) ExecutePureTask(baseCtx context.Context, taskInstance any) error 
 	}
 
 	// Run the task's registered value before execution.
-	valid, err := n.validateTask(ctx, taskInstance)
+	valid, err := n.validateTask(ctx, taskAttributes, taskInstance)
 	if err != nil {
 		return err
 	}
@@ -2134,6 +2152,7 @@ func (n *Node) ExecutePureTask(baseCtx context.Context, taskInstance any) error 
 	result := fn.Call([]reflect.Value{
 		reflect.ValueOf(ctx),
 		reflect.ValueOf(component),
+		reflect.ValueOf(taskAttributes),
 		reflect.ValueOf(taskInstance),
 	})
 	if !result[0].IsNil() {
@@ -2156,10 +2175,11 @@ func (n *Node) ExecutePureTask(baseCtx context.Context, taskInstance any) error 
 // EachPureTask's callback.
 func (n *Node) ValidatePureTask(
 	ctx context.Context,
+	taskAttributes TaskAttributes,
 	taskInstance any,
 ) (bool, error) {
 	validateCtx := NewContext(ctx, n)
-	return n.validateTask(validateCtx, taskInstance)
+	return n.validateTask(validateCtx, taskAttributes, taskInstance)
 }
 
 // ValidateSideEffectTask runs a side effect task's associated validator,
@@ -2173,6 +2193,7 @@ func (n *Node) ValidatePureTask(
 func (n *Node) ValidateSideEffectTask(
 	ctx context.Context,
 	registry *Registry,
+	taskAttributes TaskAttributes,
 	taskInfo *persistencespb.ChasmTaskInfo,
 ) (any, error) {
 	taskType := taskInfo.Type
@@ -2199,7 +2220,7 @@ func (n *Node) ValidateSideEffectTask(
 		return nil, err
 	}
 
-	valid, err := n.validateTask(validateCtx, taskInstance)
+	valid, err := n.validateTask(validateCtx, taskAttributes, taskInstance)
 	if err != nil {
 		return nil, err
 	}
@@ -2221,6 +2242,7 @@ func (n *Node) ExecuteSideEffectTask(
 	ctx context.Context,
 	registry *Registry,
 	entityKey EntityKey,
+	taskAttributes TaskAttributes,
 	taskInfo *persistencespb.ChasmTaskInfo,
 	validate func(NodeBackend, Context, Component) error,
 ) error {
@@ -2263,13 +2285,14 @@ func (n *Node) ExecuteSideEffectTask(
 		componentInitialVT: taskInfo.ComponentInitialVersionedTransition,
 
 		// Validate the Ref only once it is accessed by the task's executor.
-		validationFn: makeValidationFn(registrableTask, validate, taskValue),
+		validationFn: makeValidationFn(registrableTask, validate, taskAttributes, taskValue),
 	}
 
 	fn := reflect.ValueOf(executor).MethodByName("Execute")
 	result := fn.Call([]reflect.Value{
 		reflect.ValueOf(ctx),
 		reflect.ValueOf(ref),
+		reflect.ValueOf(taskAttributes),
 		taskValue,
 	})
 	if !result[0].IsNil() {
@@ -2287,6 +2310,7 @@ func (n *Node) ExecuteSideEffectTask(
 func makeValidationFn(
 	registrableTask *RegistrableTask,
 	validate func(NodeBackend, Context, Component) error,
+	taskAttributes TaskAttributes,
 	taskValue reflect.Value,
 ) func(NodeBackend, Context, Component) error {
 	return func(backend NodeBackend, ctx Context, component Component) error {
@@ -2301,6 +2325,7 @@ func makeValidationFn(
 		result := fn.Call([]reflect.Value{
 			reflect.ValueOf(ctx),
 			reflect.ValueOf(component),
+			reflect.ValueOf(taskAttributes),
 			taskValue,
 		})
 

@@ -52,7 +52,7 @@ func (*noopChasmTree) Archetype() string {
 
 func (*noopChasmTree) EachPureTask(
 	deadline time.Time,
-	callback func(executor chasm.NodePureTask, task any) error,
+	callback func(executor chasm.NodePureTask, taskAttributes chasm.TaskAttributes, task any) error,
 ) error {
 	return nil
 }
@@ -69,6 +69,7 @@ func (*noopChasmTree) ExecuteSideEffectTask(
 	ctx context.Context,
 	registry *chasm.Registry,
 	entityKey chasm.EntityKey,
+	taskAttributes chasm.TaskAttributes,
 	taskInfo *persistencespb.ChasmTaskInfo,
 	validate func(chasm.NodeBackend, chasm.Context, chasm.Component) error,
 ) error {
@@ -78,6 +79,7 @@ func (*noopChasmTree) ExecuteSideEffectTask(
 func (*noopChasmTree) ValidateSideEffectTask(
 	ctx context.Context,
 	registry *chasm.Registry,
+	taskAttributes chasm.TaskAttributes,
 	taskInfo *persistencespb.ChasmTaskInfo,
 ) (any, error) {
 	return nil, nil
