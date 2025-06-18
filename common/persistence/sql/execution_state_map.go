@@ -478,7 +478,7 @@ func updateChasmNodes(
 	if len(chasmNodes) > 0 {
 		rows := make([]sqlplugin.ChasmNodeMapsRow, 0, len(chasmNodes))
 		for path, node := range chasmNodes {
-			rows = append(rows, sqlplugin.ChasmNodeMapsRow{
+			row := sqlplugin.ChasmNodeMapsRow{
 				ShardID:          shardID,
 				NamespaceID:      namespaceID,
 				WorkflowID:       workflowID,
@@ -486,9 +486,12 @@ func updateChasmNodes(
 				ChasmPath:        path,
 				Metadata:         node.Metadata.Data,
 				MetadataEncoding: node.Metadata.EncodingType.String(),
-				Data:             node.Data.Data,
-				DataEncoding:     node.Data.EncodingType.String(),
-			})
+			}
+			if node.Data != nil {
+				row.Data = node.Data.Data
+				row.DataEncoding = node.Data.EncodingType.String()
+			}
+			rows = append(rows, row)
 		}
 		if _, err := tx.ReplaceIntoChasmNodeMaps(ctx, rows); err != nil {
 			return serviceerror.NewUnavailablef("Failed to update CHASM nodes. Failed to execute update query. Error: %v", err)

@@ -26,6 +26,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/log/tag"
@@ -2283,28 +2284,43 @@ func (s *FunctionalClustersTestSuite) TestLocalNamespaceMigration() {
 	s.Equal(s.clusters[1].ClusterName(), nsResp2.ReplicationConfig.ActiveClusterName)
 
 	// verify all wf in ns is now available in cluster2
-	client1, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.clusters[1].Host().FrontendGRPCAddress(),
-		Namespace: namespace,
-	})
-	s.NoError(err)
 	feClient1 := s.clusters[1].FrontendClient()
+	adminClient1 := s.clusters[1].AdminClient()
 	verify := func(wfID string, expectedRunID string) {
-		desc1, err := client1.DescribeWorkflowExecution(testCtx, wfID, "")
-		s.NoError(err)
-		s.Equal(expectedRunID, desc1.WorkflowExecutionInfo.Execution.RunId)
-		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, desc1.WorkflowExecutionInfo.Status)
-		resp, err := feClient1.GetWorkflowExecutionHistoryReverse(testCtx, &workflowservice.GetWorkflowExecutionHistoryReverseRequest{
+		desc1, err := adminClient1.DescribeMutableState(testCtx, &adminservice.DescribeMutableStateRequest{
 			Namespace: namespace,
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: wfID,
-				RunId:      expectedRunID,
 			},
-			MaximumPageSize: 1,
-			NextPageToken:   nil,
 		})
 		s.NoError(err)
-		s.True(len(resp.GetHistory().GetEvents()) > 0)
+		s.Equal(expectedRunID, desc1.DatabaseMutableState.ExecutionState.RunId)
+		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, desc1.DatabaseMutableState.ExecutionState.Status)
+		expectedEventId := desc1.DatabaseMutableState.NextEventId - 1
+		var nextPageToken []byte
+		for {
+			resp, err := feClient1.GetWorkflowExecutionHistoryReverse(testCtx, &workflowservice.GetWorkflowExecutionHistoryReverseRequest{
+				Namespace: namespace,
+				Execution: &commonpb.WorkflowExecution{
+					WorkflowId: wfID,
+					RunId:      expectedRunID,
+				},
+				MaximumPageSize: 256,
+				NextPageToken:   nil,
+			})
+			s.NoError(err)
+			for _, event := range resp.GetHistory().GetEvents() {
+				s.Equal(expectedEventId, event.EventId)
+				expectedEventId--
+			}
+			if len(nextPageToken) <= 0 {
+				break
+			}
+			nextPageToken = resp.NextPageToken
+		}
+		s.Equal(int64(0), expectedEventId)
+		s.NoError(err)
+
 		listWorkflowResp, err := feClient1.ListClosedWorkflowExecutions(
 			testCtx,
 			&workflowservice.ListClosedWorkflowExecutionsRequest{

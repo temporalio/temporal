@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
@@ -67,6 +68,7 @@ func newTransferQueueActiveTaskExecutor(
 	historyRawClient resource.HistoryRawClient,
 	matchingRawClient resource.MatchingRawClient,
 	visibilityManager manager.VisibilityManager,
+	chasmEngine chasm.Engine,
 ) queues.Executor {
 	return &transferQueueActiveTaskExecutor{
 		transferQueueTaskExecutorBase: newTransferQueueTaskExecutorBase(
@@ -77,6 +79,7 @@ func newTransferQueueActiveTaskExecutor(
 			historyRawClient,
 			matchingRawClient,
 			visibilityManager,
+			chasmEngine,
 		),
 		workflowResetter: ndc.NewWorkflowResetter(
 			shard,
@@ -138,6 +141,8 @@ func (t *transferQueueActiveTaskExecutor) Execute(
 		err = t.processResetWorkflow(ctx, task)
 	case *tasks.DeleteExecutionTask:
 		err = t.processDeleteExecutionTask(ctx, task)
+	case *tasks.ChasmTask:
+		err = t.executeChasmSideEffectTransferTask(ctx, task)
 	default:
 		err = errUnknownTransferTask
 	}
@@ -147,6 +152,46 @@ func (t *transferQueueActiveTaskExecutor) Execute(
 		ExecutedAsActive:    true,
 		ExecutionErr:        err,
 	}
+}
+
+func (t *transferQueueActiveTaskExecutor) executeChasmSideEffectTransferTask(
+	ctx context.Context,
+	task *tasks.ChasmTask,
+) error {
+	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
+	defer cancel()
+
+	weContext, release, err := getWorkflowExecutionContextForTask(ctx, t.shardContext, t.cache, task)
+	if err != nil {
+		return err
+	}
+	defer func() { release(err) }()
+
+	ms, err := loadMutableStateForTransferTask(ctx, t.shardContext, weContext, task, t.metricHandler, t.logger)
+	if err != nil {
+		return err
+	}
+	if ms == nil {
+		return errNoChasmMutableState
+	}
+
+	tree := ms.ChasmTree()
+	if tree == nil {
+		return errNoChasmTree
+	}
+
+	// Now that we've loaded the CHASM tree, we can release the lock before task
+	// execution. The task's executor must do its own locking as needed, and additional
+	// mutable state validations will run at access time.
+	release(nil)
+
+	return executeChasmSideEffectTask(
+		ctx,
+		t.chasmEngine,
+		t.shardContext.ChasmRegistry(),
+		tree,
+		task,
+	)
 }
 
 func (t *transferQueueActiveTaskExecutor) processDeleteExecutionTask(ctx context.Context,

@@ -136,7 +136,7 @@ VALUES (:shard_id, :namespace_id, :workflow_id, :run_id, :data, :data_encoding)`
 
 	deleteBufferedEventsQuery = `DELETE FROM buffered_events WHERE shard_id=? AND namespace_id=? AND workflow_id=? AND run_id=?`
 	getBufferedEventsQuery    = `SELECT data, data_encoding FROM buffered_events WHERE
-shard_id=? AND namespace_id=? AND workflow_id=? AND run_id=?`
+shard_id=? AND namespace_id=? AND workflow_id=? AND run_id=? ORDER BY id`
 
 	insertReplicationTaskDLQQuery = `
 INSERT INTO replication_tasks_dlq 

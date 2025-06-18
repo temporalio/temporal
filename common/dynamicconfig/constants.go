@@ -2036,6 +2036,11 @@ archivalQueueProcessor`,
 		0.9,
 		`WorkflowExecutionMaxTotalUpdatesSuggestContinueAsNewThreshold is the percentage threshold of total updates that any given workflow execution can receive before suggesting to continue-as-new.`,
 	)
+	EnableUpdateWithStartRetryOnClosedWorkflowAbort = NewNamespaceBoolSetting(
+		"history.enableUpdateWithStartRetryOnClosedWorkflowAbort",
+		true,
+		`EnableUpdateWithStartRetryOnClosedWorkflowAbort enables retrying Update-with-Start's update if it was aborted by a closing workflow.`,
+	)
 
 	ReplicatorTaskBatchSize = NewGlobalIntSetting(
 		"history.replicatorTaskBatchSize",
@@ -2407,10 +2412,15 @@ that task will be sent to DLQ.`,
 		time.Hour,
 		`ReplicationProgressCacheTTL is TTL of replication progress cache`,
 	)
-	ReplicationStreamSyncDuration = NewGlobalDurationSetting(
-		"history.ReplicationStreamSyncDuration",
+	ReplicationStreamSendEmptyTaskDuration = NewGlobalDurationSetting(
+		"history.ReplicationStreamSendEmptyTaskDuration",
 		time.Minute,
-		`ReplicationStreamSyncDuration is the interval to sync status when there is no replication task`,
+		`ReplicationStreamSendEmptyTaskDuration is the interval to sync status when there is no replication task`,
+	)
+	ReplicationEnableRateLimit = NewGlobalBoolSetting(
+		"history.ReplicationEnableRateLimit",
+		true,
+		`ReplicationEnableRateLimit is the feature flag to enable replication global rate limiter`,
 	)
 	WorkflowIdReuseMinimalInterval = NewNamespaceDurationSetting(
 		"history.workflowIdReuseMinimalInterval",

@@ -18,10 +18,6 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 )
 
-var (
-	WorkflowUpdateAbortedErr = serviceerror.NewUnavailable("Workflow Update was aborted.")
-)
-
 type (
 	// Update docs are at /docs/architecture/workflow-update.md.
 	Update struct {
@@ -226,7 +222,7 @@ func (u *Update) WaitLifecycleStage(
 	// This error will be retried (by history service handler, or history service client in frontend,
 	// or SDK, or user client). This will recreate Update in the Registry.
 	if errors.Is(err, registryClearedErr) {
-		return nil, WorkflowUpdateAbortedErr
+		return nil, AbortedByServerErr
 	}
 
 	// TODO: assert(err == nil)
