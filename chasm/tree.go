@@ -2279,6 +2279,7 @@ func (n *Node) ExecuteSideEffectTask(
 
 	ref := ComponentRef{
 		EntityKey:          entityKey,
+		archetype:          n.Archetype(),
 		entityLastUpdateVT: taskInfo.ComponentLastUpdateVersionedTransition,
 		componentPath:      path,
 		componentInitialVT: taskInfo.ComponentInitialVersionedTransition,
