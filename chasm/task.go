@@ -18,7 +18,7 @@ type (
 	}
 
 	PureTaskExecutor[C any, T any] interface {
-		Execute(Context, C, T) error
+		Execute(MutableContext, C, T) error
 	}
 
 	TaskValidator[C any, T any] interface {
