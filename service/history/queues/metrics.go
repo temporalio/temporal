@@ -151,11 +151,14 @@ func GetOutboundTaskTypeTagValue(task tasks.Task, isActive bool) string {
 		prefix = "OutboundStandby"
 	}
 
-	outbound, ok := task.(*tasks.StateMachineOutboundTask)
-	if !ok {
+	switch task := task.(type) {
+	case *tasks.StateMachineOutboundTask:
+		return prefix + "." + task.StateMachineTaskType()
+	case *tasks.ChasmTask:
+		return prefix + "." + task.Info.Type
+	default:
 		return prefix + "Unknown"
 	}
-	return prefix + "." + outbound.StateMachineTaskType()
 }
 
 func GetTimerStateMachineTaskTypeTagValue(taskType string, isActive bool) string {
