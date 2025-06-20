@@ -1,31 +1,6 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package matching
 
 import (
-	"fmt"
 	"math"
 	"math/rand"
 	"slices"
@@ -53,20 +28,20 @@ var (
 	errSourceIsVersionSetMember                          = serviceerror.NewFailedPrecondition("update breaks requirement, source build ID is already a member of a version set")
 	errPartiallyRampedAssignmentRuleIsRedirectRuleSource = serviceerror.NewFailedPrecondition("update breaks requirement, this build ID cannot be the target of a partially-ramped assignment rule because it is the source of a redirect rule")
 	errAssignmentRuleIndexOutOfBounds                    = func(idx, length int) error {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("rule index %d is out of bounds for assignment rule list of length %d", idx, length))
+		return serviceerror.NewInvalidArgumentf("rule index %d is out of bounds for assignment rule list of length %d", idx, length)
 	}
 	errSourceIsPartiallyRampedAssignmentRuleTarget = serviceerror.NewFailedPrecondition("redirect rule source build ID cannot be the target of any partially-ramped assignment rule")
 	errSourceAlreadyExists                         = func(source, target string) error {
-		return serviceerror.NewAlreadyExist(fmt.Sprintf("source %s already redirects to target %s", source, target))
+		return serviceerror.NewAlreadyExistsf("source %s already redirects to target %s", source, target)
 	}
 	errSourceNotFound = func(source string) error {
-		return serviceerror.NewNotFound(fmt.Sprintf("no redirect rule found with source ID %s", source))
+		return serviceerror.NewNotFoundf("no redirect rule found with source ID %s", source)
 	}
 	errNoRecentPollerOnCommitVersion = func(target string) error {
-		return serviceerror.NewFailedPrecondition(fmt.Sprintf("no versioned poller with build ID '%s' seen within the last %s, use force=true to commit anyways", target, versioningPollerSeenWindow.String()))
+		return serviceerror.NewFailedPreconditionf("no versioned poller with build ID '%s' seen within the last %s, use force=true to commit anyways", target, versioningPollerSeenWindow.String())
 	}
 	errExceedsMaxAssignmentRules = func(cnt, max int) error {
-		return serviceerror.NewFailedPrecondition(fmt.Sprintf("update exceeds number of assignment rules permitted in namespace (%v/%v)", cnt, max))
+		return serviceerror.NewFailedPreconditionf("update exceeds number of assignment rules permitted in namespace (%v/%v)", cnt, max)
 	}
 	// errRequireFullyRampedAssignmentRule is thrown if the task queue previously had a fully-ramped assignment rule and
 	// the requested operation would result in a list of assignment rules without a fully-ramped assigment rule, which
@@ -78,11 +53,11 @@ var (
 	// a versioned default Build ID to an unversioned default Build ID, use force=true to bypass this requirement.
 	errRequireFullyRampedAssignmentRule = serviceerror.NewFailedPrecondition("at least one fully-ramped assignment rule must exist (use force=true to bypass this requirement and set the unversioned queue as the default)")
 	errExceedsMaxRedirectRules          = func(cnt, max int) error {
-		return serviceerror.NewFailedPrecondition(fmt.Sprintf("update exceeds number of redirect rules permitted in namespace (%v/%v)", cnt, max))
+		return serviceerror.NewFailedPreconditionf("update exceeds number of redirect rules permitted in namespace (%v/%v)", cnt, max)
 	}
 	errIsCyclic                   = serviceerror.NewFailedPrecondition("update would break acyclic requirement")
 	errExceedsMaxUpstreamBuildIDs = func(cnt, max int) error {
-		return serviceerror.NewFailedPrecondition(fmt.Sprintf("update exceeds number of upstream build ids permitted in namespace (%v/%v)", cnt, max))
+		return serviceerror.NewFailedPreconditionf("update exceeds number of upstream build ids permitted in namespace (%v/%v)", cnt, max)
 	}
 	errUnversionedRedirectRuleTarget = serviceerror.NewInvalidArgument("the unversioned build ID cannot be the target of a redirect rule")
 )

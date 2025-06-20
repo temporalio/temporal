@@ -28,7 +28,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          submodules: true
 
       - uses: actions/setup-go@v5
         with:
@@ -36,12 +36,35 @@ jobs:
           check-latest: true
 
       - uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: lint protobuf definitions
         run: |
           make lint-protos
 
   lint-api:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+          check-latest: true
+
+      - uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: lint protobuf API definitions
+        run: |
+          make lint-api
+          
+
+  lint-workflows:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -54,10 +77,11 @@ jobs:
           check-latest: true
 
       - uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: lint protobuf API definitions
-        run: |
-          make lint-api
+      - name: lint system workflows with workflowcheck
+        run: make workflowcheck
 
   fmt-imports:
     runs-on: ubuntu-latest

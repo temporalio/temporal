@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package resetworkflow
 
 import (
@@ -30,13 +6,16 @@ import (
 	"github.com/google/uuid"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/ndc"
@@ -51,6 +30,10 @@ func Invoke(
 	namespaceID := namespace.ID(resetRequest.GetNamespaceId())
 	err := api.ValidateNamespaceUUID(namespaceID)
 	if err != nil {
+		return nil, err
+	}
+
+	if err := validatePostResetOperationInputs(resetRequest.ResetRequest.PostResetOperations); err != nil {
 		return nil, err
 	}
 
@@ -148,6 +131,15 @@ func Invoke(
 	if err != nil {
 		return nil, err
 	}
+
+	metrics.WorkflowResetCount.With(
+		shardContext.GetMetricsHandler().WithTags(
+			metrics.NamespaceTag(namespaceEntry.Name().String()),
+			metrics.OperationTag(metrics.HistoryResetWorkflowScope),
+			metrics.VersioningBehaviorTag(baseMutableState.GetEffectiveVersioningBehavior()),
+		),
+	).Record(1)
+
 	allowResetWithPendingChildren := shardContext.GetConfig().AllowResetWithPendingChildren(namespaceEntry.Name().String())
 	if err := ndc.NewWorkflowResetter(
 		shardContext,
@@ -175,6 +167,7 @@ func Invoke(
 		nil,
 		GetResetReapplyExcludeTypes(request.GetResetReapplyExcludeTypes(), request.GetResetReapplyType()),
 		allowResetWithPendingChildren,
+		resetRequest.ResetRequest.PostResetOperations,
 	); err != nil {
 		return nil, err
 	}
@@ -209,4 +202,20 @@ func GetResetReapplyExcludeTypes(
 		exclude[e] = struct{}{}
 	}
 	return exclude
+}
+
+// validatePostResetOperationInputs validates the optional post reset operation inputs.
+func validatePostResetOperationInputs(postResetOperations []*workflowpb.PostResetOperation) error {
+	for _, operation := range postResetOperations {
+		switch op := operation.GetVariant().(type) {
+		case *workflowpb.PostResetOperation_UpdateWorkflowOptions_:
+			opts := op.UpdateWorkflowOptions.GetWorkflowExecutionOptions()
+			if err := worker_versioning.ValidateVersioningOverride(opts.GetVersioningOverride()); err != nil {
+				return err
+			}
+		default:
+			return serviceerror.NewInvalidArgumentf("unsupported post reset operation: %T", op)
+		}
+	}
+	return nil
 }

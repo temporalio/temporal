@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package common
 
 import (
@@ -33,7 +9,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"unicode/utf8"
 
 	"github.com/dgryski/go-farm"
 	commonpb "go.temporal.io/api/common/v1"
@@ -147,7 +122,7 @@ var (
 
 var (
 	// ErrNamespaceHandover is error indicating namespace is in handover state and cannot process request.
-	ErrNamespaceHandover = serviceerror.NewUnavailable(fmt.Sprintf("Namespace replication in %s state.", enumspb.REPLICATION_STATE_HANDOVER.String()))
+	ErrNamespaceHandover = serviceerror.NewUnavailablef("Namespace replication in %s state.", enumspb.REPLICATION_STATE_HANDOVER)
 )
 
 // AwaitWaitGroup calls Wait on the given wait
@@ -405,8 +380,15 @@ func WorkflowIDToHistoryShard(
 	workflowID string,
 	numberOfShards int32,
 ) int32 {
-	idBytes := []byte(namespaceID + "_" + workflowID)
-	hash := farm.Fingerprint32(idBytes)
+	return ShardingKeyToShard(namespaceID+"_"+workflowID, numberOfShards)
+}
+
+// ShardingKeyToShard is used to map a sharding key to a shardID.
+func ShardingKeyToShard(
+	shardingKey string,
+	numberOfShards int32,
+) int32 {
+	hash := farm.Fingerprint32([]byte(shardingKey))
 	return int32(hash%uint32(numberOfShards)) + 1 // ShardID starts with 1
 }
 
@@ -461,11 +443,10 @@ func VerifyShardIDMapping(
 	if thisShardID%shardCountMin == thatShardID%shardCountMin {
 		return nil
 	}
-	return serviceerror.NewInternal(
-		fmt.Sprintf("shard ID mapping verification failed; shard count: %v vs %v, shard ID: %v vs %v",
-			thisShardCount, thatShardCount,
-			thisShardID, thatShardID,
-		),
+	return serviceerror.NewInternalf(
+		"shard ID mapping verification failed; shard count: %v vs %v, shard ID: %v vs %v",
+		thisShardCount, thatShardCount,
+		thisShardID, thatShardID,
 	)
 }
 
@@ -678,11 +659,16 @@ func CloneProto[T proto.Message](v T) T {
 	return proto.Clone(v).(T)
 }
 
-func ValidateUTF8String(fieldName string, strValue string) error {
-	if !utf8.ValidString(strValue) {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("%s %v is not a valid UTF-8 string", fieldName, strValue))
+func CloneProtoMap[K comparable, T proto.Message](src map[K]T) map[K]T {
+	if src == nil {
+		return nil
 	}
-	return nil
+
+	result := make(map[K]T, len(src))
+	for k, v := range src {
+		result[k] = CloneProto(v)
+	}
+	return result
 }
 
 // DiscardUnknownProto discards unknown fields in a proto message.

@@ -1,25 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package ndc
 
 import (
@@ -251,11 +229,7 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_LocalEventVersionSuperSet() {
 
 	// Only asserting state sync happens here
 	// There are other tests asserting the actual state sync result
-	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.UpdateWorkflowExecutionResponse{
-		UpdateMutableStateStats: persistence.MutableStateStatistics{
-			HistoryStatistics: &persistence.HistoryStatistics{},
-		},
-	}, nil).Times(1)
+	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil).Times(1)
 
 	err := s.nDCHSMStateReplicator.SyncHSMState(context.Background(), &historyi.SyncHSMRequest{
 		WorkflowKey: s.workflowKey,
@@ -455,11 +429,7 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_IncomingLastUpdateVersionNewer() {
 		DBRecordVersion: 777,
 	}, nil).Times(1)
 
-	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.UpdateWorkflowExecutionResponse{
-		UpdateMutableStateStats: persistence.MutableStateStatistics{
-			HistoryStatistics: &persistence.HistoryStatistics{},
-		},
-	}, nil).Times(1)
+	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil).Times(1)
 
 	err := s.nDCHSMStateReplicator.SyncHSMState(context.Background(), &historyi.SyncHSMRequest{
 		WorkflowKey:         s.workflowKey,
@@ -501,11 +471,7 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_IncomingLastUpdateVersionedTransit
 		DBRecordVersion: 777,
 	}, nil).Times(1)
 
-	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.UpdateWorkflowExecutionResponse{
-		UpdateMutableStateStats: persistence.MutableStateStatistics{
-			HistoryStatistics: &persistence.HistoryStatistics{},
-		},
-	}, nil).Times(1)
+	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil).Times(1)
 
 	err := s.nDCHSMStateReplicator.SyncHSMState(context.Background(), &historyi.SyncHSMRequest{
 		WorkflowKey:         s.workflowKey,
@@ -563,11 +529,7 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_IncomingStateNewer_WorkflowOpen() 
 			s.Empty(request.UpdateWorkflowEvents)
 			s.Empty(request.NewWorkflowEvents)
 			s.Empty(request.NewWorkflowSnapshot)
-			return &persistence.UpdateWorkflowExecutionResponse{
-				UpdateMutableStateStats: persistence.MutableStateStatistics{
-					HistoryStatistics: &persistence.HistoryStatistics{},
-				},
-			}, nil
+			return tests.UpdateWorkflowExecutionResponse, nil
 		},
 	).Times(1)
 
@@ -615,11 +577,7 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_IncomingStateNewer_WorkflowZombie(
 		func(ctx context.Context, request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
 			s.Equal(persistence.UpdateWorkflowModeBypassCurrent, request.Mode)
 			// other fields are tested in TestSyncHSM_IncomingStateNewer_WorkflowOpen
-			return &persistence.UpdateWorkflowExecutionResponse{
-				UpdateMutableStateStats: persistence.MutableStateStatistics{
-					HistoryStatistics: &persistence.HistoryStatistics{},
-				},
-			}, nil
+			return tests.UpdateWorkflowExecutionResponse, nil
 		},
 	).Times(1)
 
@@ -663,19 +621,19 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_IncomingStateNewer_WorkflowClosed(
 		DBRecordVersion: 777,
 	}, nil).Times(1)
 
-	s.mockExecutionMgr.EXPECT().SetWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(ctx context.Context, request *persistence.SetWorkflowExecutionRequest) (*persistence.SetWorkflowExecutionResponse, error) {
-
-			subStateMachineByType := request.SetWorkflowSnapshot.ExecutionInfo.SubStateMachinesByType
+	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
+			s.Equal(persistence.UpdateWorkflowModeIgnoreCurrent, request.Mode)
+			subStateMachineByType := request.UpdateWorkflowMutation.ExecutionInfo.SubStateMachinesByType
 			s.Len(subStateMachineByType, 1)
 			machines := subStateMachineByType[s.stateMachineDef.Type()]
 			s.Len(machines.MachinesById, 1)
 			machine := machines.MachinesById["child1"]
 			s.Equal([]byte(hsmtest.State3), machine.Data)
 			s.Equal(int64(24), machine.TransitionCount) // transition count is cluster local and should only be increamented by 1
-			s.Len(request.SetWorkflowSnapshot.Tasks[tasks.CategoryTimer], 1)
-			s.Len(request.SetWorkflowSnapshot.Tasks[tasks.CategoryOutbound], 1)
-			return &persistence.SetWorkflowExecutionResponse{}, nil
+			s.Len(request.UpdateWorkflowMutation.Tasks[tasks.CategoryTimer], 1)
+			s.Len(request.UpdateWorkflowMutation.Tasks[tasks.CategoryOutbound], 1)
+			return tests.UpdateWorkflowExecutionResponse, nil
 		},
 	).Times(1)
 

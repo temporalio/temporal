@@ -1,33 +1,8 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package sql
 
 import (
 	"context"
 	"database/sql"
-	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
@@ -60,7 +35,7 @@ func updateSignalsRequested(
 			})
 		}
 		if _, err := tx.ReplaceIntoSignalsRequestedSets(ctx, rows); err != nil {
-			return serviceerror.NewUnavailable(fmt.Sprintf("Failed to update signals requested. Failed to execute update query. Error: %v", err))
+			return serviceerror.NewUnavailablef("Failed to update signals requested. Failed to execute update query. Error: %v", err)
 		}
 	}
 
@@ -72,7 +47,7 @@ func updateSignalsRequested(
 			RunID:       runID,
 			SignalIDs:   convert.StringSetToSlice(deleteIDs),
 		}); err != nil {
-			return serviceerror.NewUnavailable(fmt.Sprintf("Failed to update signals requested. Failed to execute delete query. Error: %v", err))
+			return serviceerror.NewUnavailablef("Failed to update signals requested. Failed to execute delete query. Error: %v", err)
 		}
 	}
 	return nil
@@ -94,7 +69,7 @@ func getSignalsRequested(
 		RunID:       runID,
 	})
 	if err != nil && err != sql.ErrNoRows {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("Failed to get signals requested. Error: %v", err))
+		return nil, serviceerror.NewUnavailablef("Failed to get signals requested. Error: %v", err)
 	}
 	var ret = make([]string, len(rows))
 	for i, s := range rows {
@@ -118,7 +93,7 @@ func deleteSignalsRequestedSet(
 		WorkflowID:  workflowID,
 		RunID:       runID,
 	}); err != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf("Failed to delete signals requested set. Error: %v", err))
+		return serviceerror.NewUnavailablef("Failed to delete signals requested set. Error: %v", err)
 	}
 	return nil
 }
@@ -146,7 +121,7 @@ func updateBufferedEvents(
 	}
 
 	if _, err := tx.InsertIntoBufferedEvents(ctx, []sqlplugin.BufferedEventsRow{row}); err != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf("updateBufferedEvents operation failed. Error: %v", err))
+		return serviceerror.NewUnavailablef("updateBufferedEvents operation failed. Error: %v", err)
 	}
 	return nil
 }
@@ -167,7 +142,7 @@ func getBufferedEvents(
 		RunID:       runID,
 	})
 	if err != nil && err != sql.ErrNoRows {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("getBufferedEvents operation failed. Select failed: %v", err))
+		return nil, serviceerror.NewUnavailablef("getBufferedEvents operation failed. Select failed: %v", err)
 	}
 	var result []*commonpb.DataBlob
 	for _, row := range rows {
@@ -191,7 +166,7 @@ func deleteBufferedEvents(
 		WorkflowID:  workflowID,
 		RunID:       runID,
 	}); err != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf("updateBufferedEvents delete operation failed. Error: %v", err))
+		return serviceerror.NewUnavailablef("updateBufferedEvents delete operation failed. Error: %v", err)
 	}
 	return nil
 }

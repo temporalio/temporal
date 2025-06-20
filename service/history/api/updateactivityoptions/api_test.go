@@ -1,28 +1,8 @@
-// The MIT License
-//
-// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package updateactivityoptions
 
 import (
+	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -32,6 +12,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	activitypb "go.temporal.io/api/activity/v1"
 	commonpb "go.temporal.io/api/common/v1"
+	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -49,6 +30,7 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
@@ -150,7 +132,7 @@ func TestApplyActivityOptionsAcceptance(t *testing.T) {
 		updateFields := util.ParseFieldMask(tc.mask)
 
 		t.Run(tc.name, func(t *testing.T) {})
-		err := applyActivityOptions(tc.mergeInto, tc.mergeFrom, updateFields)
+		err := mergeActivityOptions(tc.mergeInto, tc.mergeFrom, updateFields)
 		assert.NoError(t, err)
 		assert.Equal(t, tc.mergeInto.RetryPolicy.InitialInterval, tc.expected.RetryPolicy.InitialInterval, "RetryInitialInterval")
 		assert.Equal(t, tc.mergeInto.RetryPolicy.MaximumInterval, tc.expected.RetryPolicy.MaximumInterval, "RetryMaximumInterval")
@@ -169,23 +151,23 @@ func TestApplyActivityOptionsAcceptance(t *testing.T) {
 
 func TestApplyActivityOptionsErrors(t *testing.T) {
 	var err error
-	err = applyActivityOptions(&activitypb.ActivityOptions{}, &activitypb.ActivityOptions{},
+	err = mergeActivityOptions(&activitypb.ActivityOptions{}, &activitypb.ActivityOptions{},
 		util.ParseFieldMask(&fieldmaskpb.FieldMask{Paths: []string{"retry_policy.maximum_interval"}}))
 	assert.Error(t, err)
 
-	err = applyActivityOptions(&activitypb.ActivityOptions{}, &activitypb.ActivityOptions{},
+	err = mergeActivityOptions(&activitypb.ActivityOptions{}, &activitypb.ActivityOptions{},
 		util.ParseFieldMask(&fieldmaskpb.FieldMask{Paths: []string{"retry_policy.maximum_attempts"}}))
 	assert.Error(t, err)
 
-	err = applyActivityOptions(&activitypb.ActivityOptions{}, &activitypb.ActivityOptions{},
+	err = mergeActivityOptions(&activitypb.ActivityOptions{}, &activitypb.ActivityOptions{},
 		util.ParseFieldMask(&fieldmaskpb.FieldMask{Paths: []string{"retry_policy.backoff_coefficient"}}))
 	assert.Error(t, err)
 
-	err = applyActivityOptions(&activitypb.ActivityOptions{}, &activitypb.ActivityOptions{},
+	err = mergeActivityOptions(&activitypb.ActivityOptions{}, &activitypb.ActivityOptions{},
 		util.ParseFieldMask(&fieldmaskpb.FieldMask{Paths: []string{"retry_policy.initial_interval"}}))
 	assert.Error(t, err)
 
-	err = applyActivityOptions(&activitypb.ActivityOptions{}, &activitypb.ActivityOptions{},
+	err = mergeActivityOptions(&activitypb.ActivityOptions{}, &activitypb.ActivityOptions{},
 		util.ParseFieldMask(&fieldmaskpb.FieldMask{Paths: []string{"taskQueue.name"}}))
 	assert.Error(t, err)
 
@@ -221,7 +203,7 @@ func TestApplyActivityOptionsReset(t *testing.T) {
 
 	updateFields := util.ParseFieldMask(fullMask)
 
-	err := applyActivityOptions(options,
+	err := mergeActivityOptions(options,
 		&activitypb.ActivityOptions{
 			RetryPolicy: &commonpb.RetryPolicy{
 				MaximumAttempts:    5,
@@ -255,7 +237,9 @@ type (
 
 		executionInfo *persistencespb.WorkflowExecutionInfo
 
-		validator *api.CommandAttrValidator
+		validator                  *api.CommandAttrValidator
+		workflowCache              *wcache.MockCache
+		workflowConsistencyChecker api.WorkflowConsistencyChecker
 
 		logger log.Logger
 	}
@@ -310,6 +294,12 @@ func (s *activityOptionsSuite) SetupTest() {
 		s.mockShard.GetConfig(),
 		nil,
 	)
+
+	s.workflowCache = wcache.NewMockCache(s.controller)
+	s.workflowConsistencyChecker = api.NewWorkflowConsistencyChecker(
+		s.mockShard,
+		s.workflowCache,
+	)
 }
 
 func (s *activityOptionsSuite) TearDownTest() {
@@ -322,7 +312,7 @@ func (s *activityOptionsSuite) Test_updateActivityOptionsWfNotRunning() {
 
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false)
 
-	_, err := processActivityOptionsRequest(s.validator, s.mockMutableState, request)
+	_, err := processActivityOptionsRequest(s.validator, s.mockMutableState, request.GetUpdateRequest(), request.GetNamespaceId())
 	s.Error(err)
 	s.ErrorAs(err, &consts.ErrWorkflowCompleted)
 }
@@ -344,7 +334,7 @@ func (s *activityOptionsSuite) Test_updateActivityOptionsWfNoActivity() {
 
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true)
 	s.mockMutableState.EXPECT().GetActivityByActivityID(gomock.Any()).Return(nil, false)
-	_, err := processActivityOptionsRequest(s.validator, s.mockMutableState, request)
+	_, err := processActivityOptionsRequest(s.validator, s.mockMutableState, request.GetUpdateRequest(), request.GetNamespaceId())
 	s.Error(err)
 	s.ErrorAs(err, &consts.ErrActivityNotFound)
 }
@@ -407,8 +397,140 @@ func (s *activityOptionsSuite) Test_updateActivityOptionsAcceptance() {
 		},
 	}
 
-	response, err := processActivityOptionsRequest(s.validator, s.mockMutableState, request)
+	response, err := processActivityOptionsRequest(
+		s.validator, s.mockMutableState, request.GetUpdateRequest(), request.GetNamespaceId())
 
 	s.NoError(err)
 	s.NotNil(response)
+}
+
+func (s *activityOptionsSuite) Test_updateActivityOptions_RestoreDefaultFail() {
+	updateMask := &fieldmaskpb.FieldMask{
+		Paths: []string{
+			"task_queue.name",
+			"schedule_to_close_timeout",
+			"schedule_to_start_timeout",
+			"start_to_close_timeout",
+			"heartbeat_timeout",
+			"retry_policy.backoff_coefficient",
+			"retry_policy.initial_interval",
+			"retry_policy.maximum_interval",
+			"retry_policy.maximum_attempts",
+		},
+	}
+
+	options := &activitypb.ActivityOptions{
+		TaskQueue:              &taskqueuepb.TaskQueue{Name: "task_queue_name"},
+		ScheduleToCloseTimeout: durationpb.New(2 * time.Second),
+		StartToCloseTimeout:    durationpb.New(2 * time.Second),
+		ScheduleToStartTimeout: durationpb.New(2 * time.Second),
+		HeartbeatTimeout:       durationpb.New(2 * time.Second),
+		RetryPolicy: &commonpb.RetryPolicy{
+			MaximumInterval:    durationpb.New(2 * time.Second),
+			MaximumAttempts:    5,
+			BackoffCoefficient: 1.0,
+			InitialInterval:    durationpb.New(2 * time.Second),
+		},
+	}
+
+	request := &historyservice.UpdateActivityOptionsRequest{
+		UpdateRequest: &workflowservice.UpdateActivityOptionsRequest{
+			ActivityOptions: options,
+			UpdateMask:      updateMask,
+			Activity:        &workflowservice.UpdateActivityOptionsRequest_Id{Id: "activity_id"},
+			RestoreOriginal: true,
+		},
+	}
+	ctx := context.Background()
+
+	// both restore flag and update mask are set
+	_, err := Invoke(ctx, request, s.mockShard, s.workflowConsistencyChecker)
+	s.Error(err)
+
+	// not pending activity with such type
+	request.UpdateRequest.ActivityOptions = nil
+	request.UpdateRequest.UpdateMask = nil
+	request.UpdateRequest.Activity = &workflowservice.UpdateActivityOptionsRequest_Type{Type: "activity_type"}
+	activityInfos := map[int64]*persistencespb.ActivityInfo{}
+	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(activityInfos)
+	_, err = restoreOriginalOptions(ctx, s.mockMutableState, request.GetUpdateRequest())
+	s.Error(err)
+
+	// not pending activity with such id
+	request.UpdateRequest.ActivityOptions = nil
+	request.UpdateRequest.UpdateMask = nil
+	request.UpdateRequest.Activity = &workflowservice.UpdateActivityOptionsRequest_Id{Id: "activity_id"}
+	s.mockMutableState.EXPECT().GetActivityByActivityID(gomock.Any()).Return(nil, false)
+	_, err = restoreOriginalOptions(ctx, s.mockMutableState, request.GetUpdateRequest())
+	s.Error(err)
+
+	ai := &persistencespb.ActivityInfo{
+		ActivityId: "activity_id",
+		ActivityType: &commonpb.ActivityType{
+			Name: "activity_type",
+		},
+		TaskQueue:        "task_queue_name",
+		ScheduledEventId: 1,
+	}
+
+	// event not found
+	err = errors.New("some error")
+	s.mockMutableState.EXPECT().GetActivityScheduledEvent(gomock.Any(), gomock.Any()).Return(nil, err)
+	s.mockMutableState.EXPECT().GetActivityByActivityID(gomock.Any()).Return(ai, true)
+	_, err = restoreOriginalOptions(ctx, s.mockMutableState, request.GetUpdateRequest())
+	s.Error(err)
+}
+
+func (s *activityOptionsSuite) Test_updateActivityOptions_RestoreDefaultSuccess() {
+	request := &historyservice.UpdateActivityOptionsRequest{
+		UpdateRequest: &workflowservice.UpdateActivityOptionsRequest{
+			Activity:        &workflowservice.UpdateActivityOptionsRequest_Id{Id: "activity_id"},
+			RestoreOriginal: true,
+		},
+	}
+	ctx := context.Background()
+
+	ai := &persistencespb.ActivityInfo{
+		ActivityId: "activity_id",
+		ActivityType: &commonpb.ActivityType{
+			Name: "activity_type",
+		},
+		TaskQueue:        "task_queue_name",
+		ScheduledEventId: 1,
+		StartedEventId:   2,
+	}
+
+	he := &historypb.HistoryEvent{
+		EventId: -123,
+		Version: 123,
+		Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{
+			ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{
+				ActivityId: "activity_id",
+				ActivityType: &commonpb.ActivityType{
+					Name: "activity_type",
+				},
+				TaskQueue: &taskqueuepb.TaskQueue{
+					Name: "task_queue_name",
+				},
+				ScheduleToCloseTimeout: durationpb.New(2 * time.Second),
+				StartToCloseTimeout:    durationpb.New(2 * time.Second),
+				ScheduleToStartTimeout: durationpb.New(2 * time.Second),
+				HeartbeatTimeout:       durationpb.New(2 * time.Second),
+				RetryPolicy: &commonpb.RetryPolicy{
+					MaximumInterval:    durationpb.New(2 * time.Second),
+					MaximumAttempts:    5,
+					BackoffCoefficient: 1.0,
+					InitialInterval:    durationpb.New(2 * time.Second),
+				},
+			},
+		},
+	}
+
+	// event not found
+	s.mockMutableState.EXPECT().GetActivityScheduledEvent(gomock.Any(), gomock.Any()).Return(he, nil)
+	s.mockMutableState.EXPECT().GetActivityByActivityID(gomock.Any()).Return(ai, true)
+	s.mockMutableState.EXPECT().UpdateActivity(gomock.Any(), gomock.Any()).Return(nil)
+	response, err := restoreOriginalOptions(ctx, s.mockMutableState, request.GetUpdateRequest())
+	s.NotNil(response)
+	s.NoError(err)
 }

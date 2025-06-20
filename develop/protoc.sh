@@ -26,16 +26,13 @@ color "Generate proto mocks..."
 find "$new" -name service.pb.go -o -name service_grpc.pb.go | while read -r src; do
   dst=$(echo "$src" | sed -e 's,service/,servicemock/,' -e 's,[.]go$,.mock.go,')
   pkg=$(basename "$(dirname "$(dirname "$dst")")")
-  $MOCKGEN -copyright_file LICENSE -package "$pkg" -source "$src" -destination "$dst"
+  $MOCKGEN -package "$pkg" -source "$src" -destination "$dst"
   # Since we're generating mocks from files in incorrect locations, mockgen
   # writes incorrect imports. Fix them manually. The awkward sed/rm invocation
   # is to work on linux and macos.
   sed -i.replaced "s,$new/temporal/server/,," "$dst"
   rm -f "$dst.replaced"
 done
-
-color "Update license headers for proto files..."
-go run ./cmd/tools/copyright/licensegen.go --scanDir "$new"
 
 color "Modify history service server interface..."
 sed -i.bak \

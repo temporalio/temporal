@@ -1,32 +1,7 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package cassandra
 
 import (
 	"context"
-	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
@@ -169,12 +144,12 @@ func (h *HistoryStore) ReadHistoryBranch(
 
 	treeID, err := primitives.ValidateUUID(branch.TreeId)
 	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("ReadHistoryBranch - Gocql TreeId UUID cast failed. Error: %v", err))
+		return nil, serviceerror.NewInternalf("ReadHistoryBranch - Gocql TreeId UUID cast failed. Error: %v", err)
 	}
 
 	branchID, err := primitives.ValidateUUID(request.BranchID)
 	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("ReadHistoryBranch - Gocql BranchId UUID cast failed. Error: %v", err))
+		return nil, serviceerror.NewInternalf("ReadHistoryBranch - Gocql BranchId UUID cast failed. Error: %v", err)
 	}
 
 	var queryString string
@@ -202,7 +177,7 @@ func (h *HistoryStore) ReadHistoryBranch(
 	}
 
 	if err := iter.Close(); err != nil {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("ReadHistoryBranch. Close operation failed. Error: %v", err))
+		return nil, serviceerror.NewUnavailablef("ReadHistoryBranch. Close operation failed. Error: %v", err)
 	}
 
 	return &p.InternalReadHistoryBranchResponse{
@@ -268,12 +243,12 @@ func (h *HistoryStore) ForkHistoryBranch(
 
 	cqlTreeID, err := primitives.ValidateUUID(forkB.TreeId)
 	if err != nil {
-		return serviceerror.NewInternal(fmt.Sprintf("ForkHistoryBranch - Gocql TreeId UUID cast failed. Error: %v", err))
+		return serviceerror.NewInternalf("ForkHistoryBranch - Gocql TreeId UUID cast failed. Error: %v", err)
 	}
 
 	cqlNewBranchID, err := primitives.ValidateUUID(request.NewBranchID)
 	if err != nil {
-		return serviceerror.NewInternal(fmt.Sprintf("ForkHistoryBranch - Gocql NewBranchID UUID cast failed. Error: %v", err))
+		return serviceerror.NewInternalf("ForkHistoryBranch - Gocql NewBranchID UUID cast failed. Error: %v", err)
 	}
 	query := h.Session.Query(v2templateInsertTree, cqlTreeID, cqlNewBranchID, datablob.Data, datablob.EncodingType.String()).WithContext(ctx)
 	err = query.Exec()
@@ -354,7 +329,7 @@ func (h *HistoryStore) GetAllHistoryTreeBranches(
 	}
 
 	if err := iter.Close(); err != nil {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetAllHistoryTreeBranches. Close operation failed. Error: %v", err))
+		return nil, serviceerror.NewUnavailablef("GetAllHistoryTreeBranches. Close operation failed. Error: %v", err)
 	}
 
 	response := &p.InternalGetAllHistoryTreeBranchesResponse{
@@ -378,7 +353,7 @@ func (h *HistoryStore) GetHistoryTreeContainingBranch(
 
 	treeID, err := primitives.ValidateUUID(branch.TreeId)
 	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("ReadHistoryBranch. Gocql TreeId UUID cast failed. Error: %v", err))
+		return nil, serviceerror.NewInternalf("ReadHistoryBranch. Gocql TreeId UUID cast failed. Error: %v", err)
 	}
 	query := h.Session.Query(v2templateReadAllBranches, treeID).WithContext(ctx)
 

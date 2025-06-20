@@ -1,32 +1,9 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package scheduler
 
 import (
 	"time"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -36,7 +13,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination spec_processor_mock.go
+//go:generate mockgen -package $GOPACKAGE -source $GOFILE -destination spec_processor_mock.go
 
 type (
 	// SpecProcessor is used by the Generator and Backfiller to generate buffered
@@ -48,9 +25,13 @@ type (
 		// The parameter manual is propagated to the returned BufferedStarts. When the limit
 		// is set to a non-nil pointer, it will be decremented for each buffered start, and
 		// the function will return early should limit reach 0.
+		//
+		// If backfillID is set, it will be used to generate request IDs.
 		ProcessTimeRange(
 			scheduler Scheduler,
 			start, end time.Time,
+			overlapPolicy enumspb.ScheduleOverlapPolicy,
+			backfillID string,
 			manual bool,
 			limit *int,
 		) (*ProcessedTimeRange, error)
@@ -75,11 +56,13 @@ type (
 func (s SpecProcessorImpl) ProcessTimeRange(
 	scheduler Scheduler,
 	start, end time.Time,
+	overlapPolicy enumspb.ScheduleOverlapPolicy,
+	backfillID string,
 	manual bool,
 	limit *int,
 ) (*ProcessedTimeRange, error) {
 	tweakables := s.Config.Tweakables(scheduler.Namespace)
-	overlapPolicy := scheduler.overlapPolicy()
+	overlapPolicy = scheduler.resolveOverlapPolicy(overlapPolicy)
 
 	s.Logger.Debug("ProcessTimeRange",
 		tag.NewTimeTag("start", start),
@@ -118,7 +101,7 @@ func (s SpecProcessorImpl) ProcessTimeRange(
 			continue
 		}
 
-		if end.Sub(next.Next) > catchupWindow {
+		if !manual && end.Sub(next.Next) > catchupWindow {
 			s.Logger.Warn("Schedule missed catchup window",
 				tag.NewTimeTag("now", end),
 				tag.NewTimeTag("time", next.Next))
@@ -135,7 +118,7 @@ func (s SpecProcessorImpl) ProcessTimeRange(
 			ActualTime:    timestamppb.New(next.Next),
 			OverlapPolicy: overlapPolicy,
 			Manual:        manual,
-			RequestId:     generateRequestID(scheduler, "", next.Nominal, next.Next),
+			RequestId:     generateRequestID(scheduler, backfillID, next.Nominal, next.Next),
 		})
 		lastAction = next.Next
 

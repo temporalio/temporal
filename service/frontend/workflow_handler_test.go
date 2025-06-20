@@ -1,32 +1,10 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package frontend
 
 import (
 	"context"
 	"errors"
+	"fmt"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -75,6 +53,9 @@ import (
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/testing/protoassert"
+	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/worker/batcher"
@@ -83,6 +64,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -99,6 +81,7 @@ const (
 type (
 	WorkflowHandlerSuite struct {
 		suite.Suite
+		protorequire.ProtoAssertions
 		*require.Assertions
 
 		controller                         *gomock.Controller
@@ -659,23 +642,12 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_InvalidWorkflowIdReuse
 		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING,
 	}
 
-	// by default, disallow
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
 	resp, err := wh.StartWorkflowExecution(context.Background(), req)
 	s.Nil(resp)
 	s.Equal(err, serviceerror.NewInvalidArgument(
 		"Invalid WorkflowIDReusePolicy: WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE cannot be used together with WorkflowIdConflictPolicy WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING"))
-
-	// allow if explicitly allowed
-	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).Return(nil, nil)
-	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespace.NewID(), nil)
-	s.mockHistoryClient.EXPECT().StartWorkflowExecution(gomock.Any(), gomock.Any()).Return(&historyservice.StartWorkflowExecutionResponse{Started: true}, nil)
-
-	config.FollowReusePolicyAfterConflictPolicyTerminate = dc.GetBoolPropertyFnFilteredByNamespace(false)
-	wh = s.getWorkflowHandler(config)
-	_, err = wh.StartWorkflowExecution(context.Background(), req)
-	s.NoError(err)
 }
 
 func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_DefaultWorkflowIdDuplicationPolicies() {
@@ -704,7 +676,7 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_DefaultWorkflowIdDupli
 func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidLinks() {
 	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).AnyTimes().Return(nil, nil)
 	config := s.newConfig()
-	config.RPS = dc.GetIntPropertyFn(10)
+	config.MaxLinksPerRequest = dc.GetIntPropertyFnFilteredByNamespace(10)
 	wh := s.getWorkflowHandler(config)
 
 	req := &workflowservice.StartWorkflowExecutionRequest{
@@ -828,6 +800,112 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidLinks() 
 	s.ErrorContains(err, "batch job link must not have an empty job ID")
 }
 
+func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidCallbackLinks() {
+	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).AnyTimes().Return(nil, nil)
+	config := s.newConfig()
+	wh := s.getWorkflowHandler(config)
+
+	req := &workflowservice.StartWorkflowExecutionRequest{
+		Namespace:  "test-namespace",
+		WorkflowId: "workflow-id",
+		WorkflowType: &commonpb.WorkflowType{
+			Name: "workflow-type",
+		},
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: "task-queue",
+		},
+		RequestId: uuid.NewString(),
+		CompletionCallbacks: []*commonpb.Callback{
+			{
+				Variant: &commonpb.Callback_Internal_{
+					Internal: &commonpb.Callback_Internal{},
+				},
+				Links: []*commonpb.Link{
+					{
+						Variant: &commonpb.Link_WorkflowEvent_{
+							WorkflowEvent: &commonpb.Link_WorkflowEvent{},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	var invalidArgument *serviceerror.InvalidArgument
+	_, err := wh.StartWorkflowExecution(context.Background(), req)
+	s.ErrorAs(err, &invalidArgument)
+	s.ErrorContains(err, "workflow event link must not have an empty namespace field")
+}
+
+func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidAggregatedLinks() {
+	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).AnyTimes().Return(nil, nil)
+	config := s.newConfig()
+	config.MaxLinksPerRequest = dc.GetIntPropertyFnFilteredByNamespace(10)
+	config.CallbackEndpointConfigs = dc.GetTypedPropertyFnFilteredByNamespace([]callbacks.AddressMatchRule{
+		{
+			Regexp:        regexp.MustCompile(`.*`),
+			AllowInsecure: true,
+		},
+	})
+	wh := s.getWorkflowHandler(config)
+
+	req := &workflowservice.StartWorkflowExecutionRequest{
+		Namespace:  "test-namespace",
+		WorkflowId: "workflow-id",
+		WorkflowType: &commonpb.WorkflowType{
+			Name: "workflow-type",
+		},
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: "task-queue",
+		},
+		RequestId: uuid.NewString(),
+		CompletionCallbacks: []*commonpb.Callback{
+			{
+				Variant: &commonpb.Callback_Nexus_{
+					Nexus: &commonpb.Callback_Nexus{
+						Url: "http://localhost/test",
+					},
+				},
+				Links: []*commonpb.Link{
+					{
+						Variant: &commonpb.Link_WorkflowEvent_{
+							WorkflowEvent: &commonpb.Link_WorkflowEvent{},
+						},
+					},
+					{
+						Variant: &commonpb.Link_WorkflowEvent_{
+							WorkflowEvent: &commonpb.Link_WorkflowEvent{
+								Namespace:  "dont-care",
+								WorkflowId: "dont-care",
+								RunId:      "run-id-0",
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	// add 10 links and one of them is duplicated in the callback
+	req.Links = []*commonpb.Link{}
+	for i := 0; i < 10; i++ {
+		req.Links = append(req.Links, &commonpb.Link{
+			Variant: &commonpb.Link_WorkflowEvent_{
+				WorkflowEvent: &commonpb.Link_WorkflowEvent{
+					Namespace:  "dont-care",
+					WorkflowId: "dont-care",
+					RunId:      fmt.Sprintf("run-id-%d", i),
+				},
+			},
+		})
+	}
+
+	var invalidArgument *serviceerror.InvalidArgument
+	_, err := wh.StartWorkflowExecution(context.Background(), req)
+	s.ErrorAs(err, &invalidArgument)
+	s.ErrorContains(err, "cannot attach more than 10 links per request, got 11")
+}
+
 func (s *WorkflowHandlerSuite) TestSignalWithStartWorkflowExecution_InvalidWorkflowIdConflictPolicy() {
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
@@ -892,7 +970,7 @@ func (s *WorkflowHandlerSuite) TestSignalWithStartWorkflowExecution_DefaultWorkf
 func (s *WorkflowHandlerSuite) TestSignalWithStartWorkflowExecution_Failed_InvalidLinks() {
 	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).AnyTimes().Return(nil, nil)
 	config := s.newConfig()
-	config.RPS = dc.GetIntPropertyFn(10)
+	config.MaxLinksPerRequest = dc.GetIntPropertyFnFilteredByNamespace(10)
 	wh := s.getWorkflowHandler(config)
 
 	req := &workflowservice.SignalWithStartWorkflowExecutionRequest{
@@ -928,7 +1006,7 @@ func (s *WorkflowHandlerSuite) TestSignalWithStartWorkflowExecution_Failed_Inval
 func (s *WorkflowHandlerSuite) TestSignalWorkflowExecution_Failed_InvalidLinks() {
 	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).AnyTimes().Return(nil, nil)
 	config := s.newConfig()
-	config.RPS = dc.GetIntPropertyFn(10)
+	config.MaxLinksPerRequest = dc.GetIntPropertyFnFilteredByNamespace(10)
 	wh := s.getWorkflowHandler(config)
 
 	req := &workflowservice.SignalWorkflowExecutionRequest{
@@ -960,7 +1038,7 @@ func (s *WorkflowHandlerSuite) TestSignalWorkflowExecution_Failed_InvalidLinks()
 func (s *WorkflowHandlerSuite) TestTerminateWorkflowExecution_Failed_InvalidLinks() {
 	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).AnyTimes().Return(nil, nil)
 	config := s.newConfig()
-	config.RPS = dc.GetIntPropertyFn(10)
+	config.MaxLinksPerRequest = dc.GetIntPropertyFnFilteredByNamespace(10)
 	wh := s.getWorkflowHandler(config)
 
 	req := &workflowservice.TerminateWorkflowExecutionRequest{
@@ -991,7 +1069,7 @@ func (s *WorkflowHandlerSuite) TestTerminateWorkflowExecution_Failed_InvalidLink
 func (s *WorkflowHandlerSuite) TestRequestCancelWorkflowExecution_Failed_InvalidLinks() {
 	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).AnyTimes().Return(nil, nil)
 	config := s.newConfig()
-	config.RPS = dc.GetIntPropertyFn(10)
+	config.MaxLinksPerRequest = dc.GetIntPropertyFnFilteredByNamespace(10)
 	wh := s.getWorkflowHandler(config)
 
 	req := &workflowservice.RequestCancelWorkflowExecutionRequest{
@@ -1026,8 +1104,8 @@ func (s *WorkflowHandlerSuite) TestRegisterNamespace_Failure_InvalidArchivalURI(
 	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNamespaceNotFound("missing-namespace"))
 	s.mockHistoryArchiver.EXPECT().ValidateURI(gomock.Any()).Return(nil)
 	s.mockVisibilityArchiver.EXPECT().ValidateURI(gomock.Any()).Return(errors.New("invalid URI"))
-	s.mockArchiverProvider.EXPECT().GetHistoryArchiver(gomock.Any(), gomock.Any()).Return(s.mockHistoryArchiver, nil)
-	s.mockArchiverProvider.EXPECT().GetVisibilityArchiver(gomock.Any(), gomock.Any()).Return(s.mockVisibilityArchiver, nil)
+	s.mockArchiverProvider.EXPECT().GetHistoryArchiver(gomock.Any()).Return(s.mockHistoryArchiver, nil)
+	s.mockArchiverProvider.EXPECT().GetVisibilityArchiver(gomock.Any()).Return(s.mockVisibilityArchiver, nil)
 
 	wh := s.getWorkflowHandler(s.newConfig())
 
@@ -1053,8 +1131,8 @@ func (s *WorkflowHandlerSuite) TestRegisterNamespace_Success_EnabledWithNoArchiv
 	}, nil)
 	s.mockHistoryArchiver.EXPECT().ValidateURI(gomock.Any()).Return(nil)
 	s.mockVisibilityArchiver.EXPECT().ValidateURI(gomock.Any()).Return(nil)
-	s.mockArchiverProvider.EXPECT().GetHistoryArchiver(gomock.Any(), gomock.Any()).Return(s.mockHistoryArchiver, nil)
-	s.mockArchiverProvider.EXPECT().GetVisibilityArchiver(gomock.Any(), gomock.Any()).Return(s.mockVisibilityArchiver, nil)
+	s.mockArchiverProvider.EXPECT().GetHistoryArchiver(gomock.Any()).Return(s.mockHistoryArchiver, nil)
+	s.mockArchiverProvider.EXPECT().GetVisibilityArchiver(gomock.Any()).Return(s.mockVisibilityArchiver, nil)
 
 	wh := s.getWorkflowHandler(s.newConfig())
 
@@ -1075,8 +1153,8 @@ func (s *WorkflowHandlerSuite) TestRegisterNamespace_Success_EnabledWithArchival
 	}, nil)
 	s.mockHistoryArchiver.EXPECT().ValidateURI(gomock.Any()).Return(nil)
 	s.mockVisibilityArchiver.EXPECT().ValidateURI(gomock.Any()).Return(nil)
-	s.mockArchiverProvider.EXPECT().GetHistoryArchiver(gomock.Any(), gomock.Any()).Return(s.mockHistoryArchiver, nil)
-	s.mockArchiverProvider.EXPECT().GetVisibilityArchiver(gomock.Any(), gomock.Any()).Return(s.mockVisibilityArchiver, nil)
+	s.mockArchiverProvider.EXPECT().GetHistoryArchiver(gomock.Any()).Return(s.mockHistoryArchiver, nil)
+	s.mockArchiverProvider.EXPECT().GetVisibilityArchiver(gomock.Any()).Return(s.mockVisibilityArchiver, nil)
 
 	wh := s.getWorkflowHandler(s.newConfig())
 
@@ -1381,7 +1459,7 @@ func (s *WorkflowHandlerSuite) TestUpdateNamespace_Failure_UpdateExistingArchiva
 	s.mockArchivalMetadata.EXPECT().GetHistoryConfig().Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "some random URI"))
 	s.mockArchivalMetadata.EXPECT().GetVisibilityConfig().Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "some random URI"))
 	s.mockHistoryArchiver.EXPECT().ValidateURI(gomock.Any()).Return(nil)
-	s.mockArchiverProvider.EXPECT().GetHistoryArchiver(gomock.Any(), gomock.Any()).Return(s.mockHistoryArchiver, nil)
+	s.mockArchiverProvider.EXPECT().GetHistoryArchiver(gomock.Any()).Return(s.mockHistoryArchiver, nil)
 
 	wh := s.getWorkflowHandler(s.newConfig())
 
@@ -1406,7 +1484,7 @@ func (s *WorkflowHandlerSuite) TestUpdateNamespace_Failure_InvalidArchivalURI() 
 	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(getNamespaceResp, nil)
 	s.mockArchivalMetadata.EXPECT().GetHistoryConfig().Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "some random URI"))
 	s.mockHistoryArchiver.EXPECT().ValidateURI(gomock.Any()).Return(errors.New("invalid URI"))
-	s.mockArchiverProvider.EXPECT().GetHistoryArchiver(gomock.Any(), gomock.Any()).Return(s.mockHistoryArchiver, nil)
+	s.mockArchiverProvider.EXPECT().GetHistoryArchiver(gomock.Any()).Return(s.mockHistoryArchiver, nil)
 
 	wh := s.getWorkflowHandler(s.newConfig())
 
@@ -1436,8 +1514,8 @@ func (s *WorkflowHandlerSuite) TestUpdateNamespace_Success_ArchivalEnabledToArch
 	s.mockArchivalMetadata.EXPECT().GetVisibilityConfig().Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "some random URI"))
 	s.mockHistoryArchiver.EXPECT().ValidateURI(gomock.Any()).Return(nil)
 	s.mockVisibilityArchiver.EXPECT().ValidateURI(gomock.Any()).Return(nil)
-	s.mockArchiverProvider.EXPECT().GetHistoryArchiver(gomock.Any(), gomock.Any()).Return(s.mockHistoryArchiver, nil)
-	s.mockArchiverProvider.EXPECT().GetVisibilityArchiver(gomock.Any(), gomock.Any()).Return(s.mockVisibilityArchiver, nil)
+	s.mockArchiverProvider.EXPECT().GetHistoryArchiver(gomock.Any()).Return(s.mockHistoryArchiver, nil)
+	s.mockArchiverProvider.EXPECT().GetVisibilityArchiver(gomock.Any()).Return(s.mockVisibilityArchiver, nil)
 
 	wh := s.getWorkflowHandler(s.newConfig())
 
@@ -1500,8 +1578,8 @@ func (s *WorkflowHandlerSuite) TestUpdateNamespace_Success_ArchivalEnabledToArch
 	s.mockArchivalMetadata.EXPECT().GetVisibilityConfig().Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "some random URI"))
 	s.mockHistoryArchiver.EXPECT().ValidateURI(gomock.Any()).Return(nil)
 	s.mockVisibilityArchiver.EXPECT().ValidateURI(gomock.Any()).Return(nil)
-	s.mockArchiverProvider.EXPECT().GetHistoryArchiver(gomock.Any(), gomock.Any()).Return(s.mockHistoryArchiver, nil)
-	s.mockArchiverProvider.EXPECT().GetVisibilityArchiver(gomock.Any(), gomock.Any()).Return(s.mockVisibilityArchiver, nil)
+	s.mockArchiverProvider.EXPECT().GetHistoryArchiver(gomock.Any()).Return(s.mockHistoryArchiver, nil)
+	s.mockArchiverProvider.EXPECT().GetVisibilityArchiver(gomock.Any()).Return(s.mockVisibilityArchiver, nil)
 
 	wh := s.getWorkflowHandler(s.newConfig())
 
@@ -1536,8 +1614,8 @@ func (s *WorkflowHandlerSuite) TestUpdateNamespace_Success_ArchivalEnabledToEnab
 	s.mockArchivalMetadata.EXPECT().GetVisibilityConfig().Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "some random URI"))
 	s.mockHistoryArchiver.EXPECT().ValidateURI(gomock.Any()).Return(nil)
 	s.mockVisibilityArchiver.EXPECT().ValidateURI(gomock.Any()).Return(nil)
-	s.mockArchiverProvider.EXPECT().GetHistoryArchiver(gomock.Any(), gomock.Any()).Return(s.mockHistoryArchiver, nil)
-	s.mockArchiverProvider.EXPECT().GetVisibilityArchiver(gomock.Any(), gomock.Any()).Return(s.mockVisibilityArchiver, nil)
+	s.mockArchiverProvider.EXPECT().GetHistoryArchiver(gomock.Any()).Return(s.mockHistoryArchiver, nil)
+	s.mockArchiverProvider.EXPECT().GetVisibilityArchiver(gomock.Any()).Return(s.mockVisibilityArchiver, nil)
 
 	wh := s.getWorkflowHandler(s.newConfig())
 
@@ -1573,8 +1651,8 @@ func (s *WorkflowHandlerSuite) TestUpdateNamespace_Success_ArchivalNeverEnabledT
 	s.mockArchivalMetadata.EXPECT().GetVisibilityConfig().Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "some random URI"))
 	s.mockHistoryArchiver.EXPECT().ValidateURI(gomock.Any()).Return(nil)
 	s.mockVisibilityArchiver.EXPECT().ValidateURI(gomock.Any()).Return(nil)
-	s.mockArchiverProvider.EXPECT().GetHistoryArchiver(gomock.Any(), gomock.Any()).Return(s.mockHistoryArchiver, nil)
-	s.mockArchiverProvider.EXPECT().GetVisibilityArchiver(gomock.Any(), gomock.Any()).Return(s.mockVisibilityArchiver, nil)
+	s.mockArchiverProvider.EXPECT().GetHistoryArchiver(gomock.Any()).Return(s.mockHistoryArchiver, nil)
+	s.mockArchiverProvider.EXPECT().GetVisibilityArchiver(gomock.Any()).Return(s.mockVisibilityArchiver, nil)
 
 	wh := s.getWorkflowHandler(s.newConfig())
 
@@ -1714,7 +1792,7 @@ func (s *WorkflowHandlerSuite) TestGetArchivedHistory_Success_GetFirstPage() {
 		NextPageToken:  nextPageToken,
 		HistoryBatches: []*historypb.History{historyBatch1, historyBatch2},
 	}, nil)
-	s.mockArchiverProvider.EXPECT().GetHistoryArchiver(gomock.Any(), gomock.Any()).Return(s.mockHistoryArchiver, nil)
+	s.mockArchiverProvider.EXPECT().GetHistoryArchiver(gomock.Any()).Return(s.mockHistoryArchiver, nil)
 
 	wh := s.getWorkflowHandler(s.newConfig())
 
@@ -1804,7 +1882,7 @@ func (s *WorkflowHandlerSuite) TestListArchivedVisibility_Success() {
 	), nil).AnyTimes()
 	s.mockArchivalMetadata.EXPECT().GetVisibilityConfig().Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "random URI")).Times(2)
 	s.mockVisibilityArchiver.EXPECT().Query(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&archiver.QueryVisibilityResponse{}, nil)
-	s.mockArchiverProvider.EXPECT().GetVisibilityArchiver(gomock.Any(), gomock.Any()).Return(s.mockVisibilityArchiver, nil)
+	s.mockArchiverProvider.EXPECT().GetVisibilityArchiver(gomock.Any()).Return(s.mockVisibilityArchiver, nil)
 	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes("", false)
 
 	wh := s.getWorkflowHandler(s.newConfig())
@@ -2402,6 +2480,155 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Reset(
 	_, err = wh.StartBatchOperation(context.Background(), request)
 	s.NoError(err)
 }
+
+func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Reset_WithPostResetOperations() {
+	testNamespace := namespace.Name("test-namespace")
+	namespaceID := namespace.ID(uuid.NewString())
+	executions := []*commonpb.WorkflowExecution{
+		{
+			WorkflowId: uuid.NewString(),
+			RunId:      uuid.NewString(),
+		},
+	}
+	reason := "reason"
+	identity := "identity"
+	config := s.newConfig()
+	wh := s.getWorkflowHandler(config)
+
+	// Create post-reset operations to test the serialization fix
+	postResetOps := []*workflowpb.PostResetOperation{
+		{
+			Variant: &workflowpb.PostResetOperation_UpdateWorkflowOptions_{
+				UpdateWorkflowOptions: &workflowpb.PostResetOperation_UpdateWorkflowOptions{
+					WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{},
+					UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
+				},
+			},
+		},
+	}
+
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespaceID, nil).AnyTimes()
+	s.mockHistoryClient.EXPECT().StartWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(
+			_ context.Context,
+			request *historyservice.StartWorkflowExecutionRequest,
+			_ ...grpc.CallOption,
+		) (*historyservice.StartWorkflowExecutionResponse, error) {
+			s.Equal(namespaceID.String(), request.NamespaceId)
+			s.Equal(batcher.BatchWFTypeName, request.StartRequest.WorkflowType.Name)
+			s.Equal(primitives.PerNSWorkerTaskQueue, request.StartRequest.TaskQueue.Name)
+			s.Equal(enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE, request.StartRequest.WorkflowIdReusePolicy)
+			s.Equal(identity, request.StartRequest.Identity)
+			s.Equal(payload.EncodeString(batcher.BatchTypeReset), request.StartRequest.Memo.Fields[batcher.BatchOperationTypeMemo])
+			s.Equal(payload.EncodeString(reason), request.StartRequest.Memo.Fields[batcher.BatchReasonMemo])
+			s.Equal(payload.EncodeString(identity), request.StartRequest.SearchAttributes.IndexedFields[searchattribute.BatcherUser])
+
+			// Decode the input and verify PostResetOperations are correctly set
+			var batchParams batcher.BatchParams
+			err := payloads.Decode(request.StartRequest.Input, &batchParams)
+			s.NoError(err)
+
+			// Verify that PostResetOperations slice has the correct length and no nil values
+			s.Len(batchParams.ResetParams.PostResetOperations, len(postResetOps))
+
+			// Ensure no nil values exist in the slice
+			for i, encoded := range batchParams.ResetParams.PostResetOperations {
+				s.NotNil(encoded, "PostResetOperations[%d] should not be nil", i)
+				s.Greater(len(encoded), 0, "PostResetOperations[%d] should not be empty", i)
+
+				// Verify we can unmarshal back to the original operation
+				var decodedOp workflowpb.PostResetOperation
+				err := decodedOp.Unmarshal(encoded)
+				s.NoError(err, "Should be able to unmarshal PostResetOperations[%d]", i)
+
+				// Verify the content matches the original
+				s.ProtoEqual(postResetOps[i], &decodedOp)
+			}
+
+			return &historyservice.StartWorkflowExecutionResponse{}, nil
+		},
+	)
+	s.mockVisibilityMgr.EXPECT().CountWorkflowExecutions(gomock.Any(), gomock.Any()).Return(&manager.CountWorkflowExecutionsResponse{Count: 0}, nil)
+
+	request := &workflowservice.StartBatchOperationRequest{
+		Namespace: testNamespace.String(),
+		JobId:     uuid.NewString(),
+		Operation: &workflowservice.StartBatchOperationRequest_ResetOperation{
+			ResetOperation: &batchpb.BatchOperationReset{
+				Options: &commonpb.ResetOptions{
+					Target: &commonpb.ResetOptions_WorkflowTaskId{
+						WorkflowTaskId: 10,
+					},
+				},
+				PostResetOperations: postResetOps,
+				Identity:            identity,
+			},
+		},
+		Reason:     reason,
+		Executions: executions,
+	}
+
+	_, err := wh.StartBatchOperation(context.Background(), request)
+	s.NoError(err)
+}
+
+func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Reset_EmptyPostResetOperations() {
+	testNamespace := namespace.Name("test-namespace")
+	namespaceID := namespace.ID(uuid.NewString())
+	executions := []*commonpb.WorkflowExecution{
+		{
+			WorkflowId: uuid.NewString(),
+			RunId:      uuid.NewString(),
+		},
+	}
+	reason := "reason"
+	identity := "identity"
+	config := s.newConfig()
+	wh := s.getWorkflowHandler(config)
+
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespaceID, nil).AnyTimes()
+	s.mockHistoryClient.EXPECT().StartWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(
+			_ context.Context,
+			request *historyservice.StartWorkflowExecutionRequest,
+			_ ...grpc.CallOption,
+		) (*historyservice.StartWorkflowExecutionResponse, error) {
+			// Decode the input and verify PostResetOperations slice is properly initialized
+			var batchParams batcher.BatchParams
+			err := payloads.Decode(request.StartRequest.Input, &batchParams)
+			s.NoError(err)
+
+			// When PostResetOperations is empty, the slice should be empty, not nil
+			s.NotNil(batchParams.ResetParams.PostResetOperations)
+			s.Len(batchParams.ResetParams.PostResetOperations, 0)
+
+			return &historyservice.StartWorkflowExecutionResponse{}, nil
+		},
+	)
+	s.mockVisibilityMgr.EXPECT().CountWorkflowExecutions(gomock.Any(), gomock.Any()).Return(&manager.CountWorkflowExecutionsResponse{Count: 0}, nil)
+
+	request := &workflowservice.StartBatchOperationRequest{
+		Namespace: testNamespace.String(),
+		JobId:     uuid.NewString(),
+		Operation: &workflowservice.StartBatchOperationRequest_ResetOperation{
+			ResetOperation: &batchpb.BatchOperationReset{
+				Options: &commonpb.ResetOptions{
+					Target: &commonpb.ResetOptions_WorkflowTaskId{
+						WorkflowTaskId: 10,
+					},
+				},
+				PostResetOperations: []*workflowpb.PostResetOperation{}, // Empty slice
+				Identity:            identity,
+			},
+		},
+		Reason:     reason,
+		Executions: executions,
+	}
+
+	_, err := wh.StartBatchOperation(context.Background(), request)
+	s.NoError(err)
+}
+
 func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_TooMany() {
 	testNamespace := namespace.Name("test-namespace")
 	namespaceID := namespace.ID(uuid.NewString())
@@ -3011,11 +3238,139 @@ func TestValidateRequestId(t *testing.T) {
 	err := validateRequestId(&req.RequestId, 100)
 	assert.Nil(t, err)
 	assert.Len(t, req.RequestId, 36) // new UUID length
+}
 
-	req.RequestId = "\x87\x01"
-	err = validateRequestId(&req.RequestId, 100)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "not a valid UTF-8 string")
+func TestDedupLinksFromCallbacks(t *testing.T) {
+	links := []*commonpb.Link{
+		{
+			Variant: &commonpb.Link_WorkflowEvent_{
+				WorkflowEvent: &commonpb.Link_WorkflowEvent{
+					Namespace:  "test-ns",
+					WorkflowId: "test-workflow-id",
+					RunId:      "test-run-id",
+					Reference: &commonpb.Link_WorkflowEvent_EventRef{
+						EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+							EventId:   3,
+							EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
+						},
+					},
+				},
+			},
+		},
+		{
+			Variant: &commonpb.Link_WorkflowEvent_{
+				WorkflowEvent: &commonpb.Link_WorkflowEvent{
+					Namespace:  "test-ns",
+					WorkflowId: "test-workflow-id",
+					RunId:      "test-run-id",
+					Reference: &commonpb.Link_WorkflowEvent_EventRef{
+						EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+							EventId:   5,
+							EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
+						},
+					},
+				},
+			},
+		},
+		{
+			Variant: &commonpb.Link_WorkflowEvent_{
+				WorkflowEvent: &commonpb.Link_WorkflowEvent{
+					Namespace:  "test-ns",
+					WorkflowId: "test-workflow-id",
+					RunId:      "test-run-id",
+					Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
+						RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
+							RequestId: "test-request-id",
+							EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+						},
+					},
+				},
+			},
+		},
+	}
+	callbacks := []*commonpb.Callback{
+		{
+			Variant: &commonpb.Callback_Nexus_{
+				Nexus: &commonpb.Callback_Nexus{},
+			},
+			Links: []*commonpb.Link{
+				{
+					Variant: &commonpb.Link_WorkflowEvent_{
+						WorkflowEvent: &commonpb.Link_WorkflowEvent{
+							Namespace:  "test-ns",
+							WorkflowId: "test-workflow-id",
+							RunId:      "test-run-id",
+							Reference: &commonpb.Link_WorkflowEvent_EventRef{
+								EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+									EventId:   3,
+									EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
+								},
+							},
+						},
+					},
+				},
+				{
+					Variant: &commonpb.Link_WorkflowEvent_{
+						WorkflowEvent: &commonpb.Link_WorkflowEvent{
+							Namespace:  "test-ns",
+							WorkflowId: "test-workflow-id",
+							RunId:      "test-run-id",
+							Reference: &commonpb.Link_WorkflowEvent_EventRef{
+								EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+									EventId:   5,
+									EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			Variant: &commonpb.Callback_Internal_{
+				Internal: &commonpb.Callback_Internal{},
+			},
+			Links: []*commonpb.Link{
+				{
+					Variant: &commonpb.Link_WorkflowEvent_{
+						WorkflowEvent: &commonpb.Link_WorkflowEvent{
+							Namespace:  "test-ns",
+							WorkflowId: "test-workflow-id",
+							RunId:      "test-run-id",
+							Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
+								RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
+									RequestId: "test-request-id",
+									EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	dedupedLinks := dedupLinksFromCallbacks(links, callbacks)
+	assert.Len(t, dedupedLinks, 1)
+	protoassert.ProtoEqual(
+		t,
+		&commonpb.Link{
+			Variant: &commonpb.Link_WorkflowEvent_{
+				WorkflowEvent: &commonpb.Link_WorkflowEvent{
+					Namespace:  "test-ns",
+					WorkflowId: "test-workflow-id",
+					RunId:      "test-run-id",
+					Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
+						RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
+							RequestId: "test-request-id",
+							EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+						},
+					},
+				},
+			},
+		},
+		dedupedLinks[0],
+	)
 }
 
 func (s *WorkflowHandlerSuite) Test_DeleteWorkflowExecution() {
@@ -3198,7 +3553,7 @@ func (s *WorkflowHandlerSuite) TestExecuteMultiOperation() {
 	})
 
 	assertMultiOpsErr := func(expectedErrs []error, actual error) {
-		s.Equal("MultiOperation could not be executed.", actual.Error())
+		s.Equal("Update-with-Start could not be executed.", actual.Error())
 		s.EqualValues(expectedErrs, actual.(*serviceerror.MultiOperationExecution).OperationErrors())
 	}
 

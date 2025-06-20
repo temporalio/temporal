@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package history
 
 import (
@@ -48,6 +24,7 @@ import (
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/backoff"
@@ -105,6 +82,7 @@ type (
 		mockClusterMetadata          *cluster.MockMetadata
 		mockSearchAttributesProvider *searchattribute.MockProvider
 		mockVisibilityManager        *manager.MockVisibilityManager
+		mockChasmEngine              chasm.Engine
 
 		mockExecutionMgr            *persistence.MockExecutionManager
 		mockArchivalMetadata        archiver.MetadataMock
@@ -218,6 +196,7 @@ func (s *transferQueueActiveTaskExecutorSuite) SetupTest() {
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.namespaceEntry.IsGlobalNamespace(), s.version).Return(s.mockClusterMetadata.GetCurrentClusterName()).AnyTimes()
 	s.mockArchivalMetadata.SetHistoryEnabledByDefault()
 	s.mockArchivalMetadata.SetVisibilityEnabledByDefault()
+	s.mockChasmEngine = chasm.NewMockEngine(s.controller)
 
 	s.workflowCache = wcache.NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler)
 	s.logger = s.mockShard.GetLogger()
@@ -248,6 +227,7 @@ func (s *transferQueueActiveTaskExecutorSuite) SetupTest() {
 		s.mockShard.Resource.HistoryClient,
 		s.mockShard.Resource.MatchingClient,
 		s.mockVisibilityManager,
+		s.mockChasmEngine,
 	).(*transferQueueActiveTaskExecutor)
 	s.transferQueueActiveTaskExecutor.parentClosePolicyClient = s.mockParentClosePolicyClient
 }
@@ -312,6 +292,81 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Success()
 	s.mockMatchingClient.EXPECT().AddActivityTask(gomock.Any(), protomock.Eq(s.createAddActivityTaskRequest(transferTask, ai)), gomock.Any()).Return(&matchingservice.AddActivityTaskResponse{}, nil)
 
 	resp := s.transferQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	s.Nil(resp.ExecutionErr)
+}
+
+func (s *transferQueueActiveTaskExecutorSuite) TestExecuteChasmSideEffectTransferTask_ExecutesTask() {
+	execution := &commonpb.WorkflowExecution{
+		WorkflowId: tests.WorkflowKey.WorkflowID,
+		RunId:      tests.WorkflowKey.RunID,
+	}
+
+	// Mock the CHASM tree.
+	chasmTree := historyi.NewMockChasmTree(s.controller)
+	chasmTree.EXPECT().ExecuteSideEffectTask(
+		gomock.Any(),
+		gomock.Any(),
+		gomock.Any(),
+		gomock.Any(),
+		gomock.Any(),
+		gomock.Any(),
+	).Times(1).Return(nil)
+
+	// Mock mutable state.
+	ms := historyi.NewMockMutableState(s.controller)
+	info := &persistencespb.WorkflowExecutionInfo{}
+	ms.EXPECT().GetCurrentVersion().Return(int64(2)).AnyTimes()
+	ms.EXPECT().NextTransitionCount().Return(int64(0)).AnyTimes() // emulate transition history disabled.
+	ms.EXPECT().GetNextEventID().Return(int64(2)).AnyTimes()
+	ms.EXPECT().GetExecutionInfo().Return(info).AnyTimes()
+	ms.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey).AnyTimes()
+	ms.EXPECT().GetExecutionState().Return(
+		&persistencespb.WorkflowExecutionState{Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING},
+	).AnyTimes()
+	ms.EXPECT().ChasmTree().Return(chasmTree).AnyTimes()
+
+	// Add a valid transfer task.
+	transferTask := &tasks.ChasmTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			s.namespaceID.String(),
+			execution.GetWorkflowId(),
+			execution.GetRunId(),
+		),
+		VisibilityTimestamp: s.now,
+		TaskID:              s.mustGenerateTaskID(),
+		Info: &persistencespb.ChasmTaskInfo{
+			Type: "Testlib.TestSideEffectTask",
+			Data: &commonpb.DataBlob{
+				EncodingType: enumspb.ENCODING_TYPE_PROTO3,
+			},
+		},
+	}
+
+	wfCtx := historyi.NewMockWorkflowContext(s.controller)
+	wfCtx.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(ms, nil)
+
+	mockCache := wcache.NewMockCache(s.controller)
+	mockCache.EXPECT().GetOrCreateWorkflowExecution(
+		gomock.Any(), s.mockShard, gomock.Any(), execution, gomock.Any(),
+	).Return(wfCtx, wcache.NoopReleaseFn, nil)
+
+	//nolint:revive // unchecked-type-assertion
+	transferQueueActiveTaskExecutor := newTransferQueueActiveTaskExecutor(
+		s.mockShard,
+		mockCache,
+		nil,
+		s.logger,
+		metrics.NoopMetricsHandler,
+		tests.NewDynamicConfig(),
+		s.mockShard.Resource.HistoryClient,
+		s.mockShard.Resource.MatchingClient,
+		s.mockVisibilityManager,
+		s.mockChasmEngine,
+	).(*transferQueueActiveTaskExecutor)
+
+	// Execution should succeed.
+	resp := transferQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	s.NotNil(resp)
 	s.Nil(resp.ExecutionErr)
 }
 
@@ -869,7 +924,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 		},
 	}, defaultWorkflowTaskCompletionLimits)
 
-	_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
+	_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
 		Namespace:  "child namespace1",
 		WorkflowId: "child workflow1",
 		WorkflowType: &commonpb.WorkflowType{
@@ -880,7 +935,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 		ParentClosePolicy: parentClosePolicy1,
 	}, "child namespace1-ID")
 	s.Nil(err)
-	_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
+	_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
 		Namespace:  "child namespace2",
 		WorkflowId: "child workflow2",
 		WorkflowType: &commonpb.WorkflowType{
@@ -891,7 +946,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 		ParentClosePolicy: parentClosePolicy2,
 	}, "child namespace2-ID")
 	s.Nil(err)
-	_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
+	_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
 		Namespace:  "child namespace3",
 		WorkflowId: "child workflow3",
 		WorkflowType: &commonpb.WorkflowType{
@@ -994,7 +1049,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 	}, defaultWorkflowTaskCompletionLimits)
 
 	for i := 0; i < 10; i++ {
-		_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
+		_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
 			WorkflowId: "child workflow" + convert.IntToString(i),
 			WorkflowType: &commonpb.WorkflowType{
 				Name: "child workflow type",
@@ -1091,7 +1146,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_ParentW
 	}, defaultWorkflowTaskCompletionLimits)
 
 	for i := 0; i < 10; i++ {
-		_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
+		_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
 			WorkflowId: "child workflow" + convert.IntToString(i),
 			WorkflowType: &commonpb.WorkflowType{
 				Name: "child workflow type",
@@ -1181,7 +1236,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 	}, defaultWorkflowTaskCompletionLimits)
 
 	for i := 0; i < 10; i++ {
-		_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
+		_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
 			WorkflowId: "child workflow" + convert.IntToString(i),
 			WorkflowType: &commonpb.WorkflowType{
 				Name: "child workflow type",
@@ -1278,7 +1333,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 		},
 	}, defaultWorkflowTaskCompletionLimits)
 
-	_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
+	_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
 		Namespace:  "child namespace1",
 		WorkflowId: "child workflow1",
 		WorkflowType: &commonpb.WorkflowType{
@@ -1290,7 +1345,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 	}, "child namespace1-ID")
 	s.NoError(err)
 
-	_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
+	_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
 		Namespace:  "child namespace1",
 		WorkflowId: "child workflow2",
 		WorkflowType: &commonpb.WorkflowType{
@@ -1390,7 +1445,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_DeleteA
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 	mockDeleteMgr := deletemanager.NewMockDeleteManager(s.controller)
-	mockDeleteMgr.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	mockDeleteMgr.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 	s.transferQueueActiveTaskExecutor.workflowDeleteManager = mockDeleteMgr
 	resp := s.transferQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.NoError(resp.ExecutionErr)
@@ -1962,7 +2017,6 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Su
 	event, ci := addStartChildWorkflowExecutionInitiatedEvent(
 		mutableState,
 		event.GetEventId(),
-		uuid.New(),
 		s.childNamespace,
 		s.childNamespaceID,
 		childWorkflowID,
@@ -2077,7 +2131,6 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Re
 	childInitEvent, _ := addStartChildWorkflowExecutionInitiatedEvent(
 		mutableState,
 		1111,
-		uuid.New(),
 		s.childNamespace,
 		s.childNamespaceID,
 		childWorkflowID,
@@ -2201,7 +2254,6 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Fa
 	event, ci := addStartChildWorkflowExecutionInitiatedEvent(
 		mutableState,
 		event.GetEventId(),
-		uuid.New(),
 		s.childNamespace,
 		s.childNamespaceID,
 		childWorkflowID,
@@ -2291,7 +2343,6 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Fa
 	event, _ = addStartChildWorkflowExecutionInitiatedEvent(
 		mutableState,
 		event.GetEventId(),
-		uuid.New(),
 		s.namespace,
 		s.namespaceID,
 		childWorkflowID,
@@ -2366,7 +2417,6 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Su
 	event, ci := addStartChildWorkflowExecutionInitiatedEvent(
 		mutableState,
 		event.GetEventId(),
-		uuid.New(),
 		s.childNamespace,
 		s.childNamespaceID,
 		childWorkflowID,
@@ -2470,7 +2520,6 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Du
 	event, ci := addStartChildWorkflowExecutionInitiatedEvent(
 		mutableState,
 		event.GetEventId(),
-		uuid.New(),
 		s.childNamespace,
 		s.childNamespaceID,
 		childExecution.GetWorkflowId(),
@@ -2554,7 +2603,6 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessorStartChildExecution_
 	event, ci := addStartChildWorkflowExecutionInitiatedEvent(
 		mutableState,
 		event.GetEventId(),
-		uuid.New(),
 		s.childNamespace,
 		s.childNamespaceID,
 		childExecution.GetWorkflowId(),
@@ -2747,7 +2795,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestPendingCloseExecutionTasks() 
 			mockWorkflowDeleteManager := deletemanager.NewMockDeleteManager(ctrl)
 			if c.ShouldDelete {
 				mockWorkflowDeleteManager.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any(), gomock.Any(),
-					gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
+					gomock.Any(), gomock.Any(), gomock.Any())
 			}
 
 			executor := &transferQueueActiveTaskExecutor{

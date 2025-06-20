@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package history
 
 import (
@@ -36,6 +12,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/definition"
@@ -75,6 +52,7 @@ func newTimerQueueActiveTaskExecutor(
 	metricProvider metrics.Handler,
 	config *configs.Config,
 	matchingRawClient resource.MatchingRawClient,
+	chasmEngine chasm.Engine,
 ) queues.Executor {
 	return &timerQueueActiveTaskExecutor{
 		timerQueueTaskExecutorBase: newTimerQueueTaskExecutorBase(
@@ -82,6 +60,7 @@ func newTimerQueueActiveTaskExecutor(
 			workflowCache,
 			workflowDeleteManager,
 			matchingRawClient,
+			chasmEngine,
 			logger,
 			metricProvider,
 			config,
@@ -138,6 +117,10 @@ func (t *timerQueueActiveTaskExecutor) Execute(
 		err = t.executeDeleteHistoryEventTask(ctx, task)
 	case *tasks.StateMachineTimerTask:
 		err = t.executeStateMachineTimerTask(ctx, task)
+	case *tasks.ChasmTaskPure:
+		err = t.executeChasmPureTimerTask(ctx, task)
+	case *tasks.ChasmTask:
+		err = t.executeChasmSideEffectTimerTask(ctx, task)
 	default:
 		err = queues.NewUnprocessableTaskError("unknown task type")
 	}
@@ -333,6 +316,8 @@ func (t *timerQueueActiveTaskExecutor) processSingleActivityTimeoutTask(
 		namespace.ID(mutableState.GetExecutionInfo().NamespaceId),
 		metrics.TimerActiveTaskActivityTimeoutScope,
 		timerSequenceID.TimerType,
+		mutableState.GetEffectiveVersioningBehavior(),
+		ai.Attempt,
 	)
 	if _, err = mutableState.AddActivityTaskTimedOutEvent(
 		ai.ScheduledEventId,
@@ -401,6 +386,8 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTaskTimeoutTask(
 			namespace.ID(mutableState.GetExecutionInfo().NamespaceId),
 			operationMetricsTag,
 			enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
+			mutableState.GetEffectiveVersioningBehavior(),
+			workflowTask.Attempt,
 		)
 		if _, err := mutableState.AddWorkflowTaskTimedOutEvent(
 			workflowTask,
@@ -419,6 +406,8 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTaskTimeoutTask(
 			namespace.ID(mutableState.GetExecutionInfo().NamespaceId),
 			operationMetricsTag,
 			enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
+			mutableState.GetEffectiveVersioningBehavior(),
+			workflowTask.Attempt,
 		)
 		_, err := mutableState.AddWorkflowTaskScheduleToStartTimeoutEvent(workflowTask)
 		if err != nil {
@@ -837,6 +826,11 @@ func (t *timerQueueActiveTaskExecutor) executeStateMachineTimerTask(
 		return nil
 	}
 
+	if t.config.EnableUpdateWorkflowModeIgnoreCurrent() {
+		return wfCtx.UpdateWorkflowExecutionAsActive(ctx, t.shardContext)
+	}
+
+	// TODO: remove following code once EnableUpdateWorkflowModeIgnoreCurrent config is deprecated.
 	if ms.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		// Can't use UpdateWorkflowExecutionAsActive since it updates the current run, and we are operating on a
 		// closed workflow.
@@ -872,6 +866,8 @@ func (t *timerQueueActiveTaskExecutor) emitTimeoutMetricScopeWithNamespaceTag(
 	namespaceID namespace.ID,
 	operation string,
 	timerType enumspb.TimeoutType,
+	effectiveVersioningBehavior enumspb.VersioningBehavior,
+	taskAttempt int32,
 ) {
 	namespaceEntry, err := t.registry.GetNamespaceByID(namespaceID)
 	if err != nil {
@@ -880,6 +876,8 @@ func (t *timerQueueActiveTaskExecutor) emitTimeoutMetricScopeWithNamespaceTag(
 	metricsScope := t.metricsHandler.WithTags(
 		metrics.OperationTag(operation),
 		metrics.NamespaceTag(namespaceEntry.Name().String()),
+		metrics.VersioningBehaviorTag(effectiveVersioningBehavior),
+		metrics.FirstAttemptTag(taskAttempt),
 	)
 	switch timerType {
 	case enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START:
@@ -903,7 +901,7 @@ func (t *timerQueueActiveTaskExecutor) processActivityWorkflowRules(
 		return nil
 	}
 
-	activityChanged := workflow.ActivityMatchWorkflowRules(ms, t.logger, ai)
+	activityChanged := workflow.ActivityMatchWorkflowRules(ms, t.shardContext.GetTimeSource(), t.logger, ai)
 	if !activityChanged {
 		return nil
 	}
@@ -929,4 +927,105 @@ func (t *timerQueueActiveTaskExecutor) processActivityWorkflowRules(
 	}
 
 	return nil
+}
+
+func (t *timerQueueActiveTaskExecutor) executeChasmSideEffectTimerTask(
+	ctx context.Context,
+	task *tasks.ChasmTask,
+) error {
+	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
+	defer cancel()
+
+	wfCtx, release, err := getWorkflowExecutionContextForTask(ctx, t.shardContext, t.cache, task)
+	if err != nil {
+		return err
+	}
+	defer func() { release(err) }()
+
+	ms, err := loadMutableStateForTimerTask(ctx, t.shardContext, wfCtx, task, t.metricsHandler, t.logger)
+	if err != nil {
+		return err
+	}
+	if ms == nil {
+		return errNoChasmMutableState
+	}
+
+	tree := ms.ChasmTree()
+	if tree == nil {
+		return errNoChasmTree
+	}
+
+	// Now that we've loaded the CHASM tree, we can release the lock before task
+	// execution. The task's executor must do its own locking as needed, and additional
+	// mutable state validations will run at access time.
+	release(nil)
+
+	return executeChasmSideEffectTask(
+		ctx,
+		t.chasmEngine,
+		t.shardContext.ChasmRegistry(),
+		tree,
+		task,
+	)
+}
+
+func (t *timerQueueActiveTaskExecutor) executeChasmPureTimerTask(
+	ctx context.Context,
+	task *tasks.ChasmTaskPure,
+) error {
+	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
+	defer cancel()
+
+	wfCtx, release, err := getWorkflowExecutionContextForTask(ctx, t.shardContext, t.cache, task)
+	if err != nil {
+		return err
+	}
+	defer func() { release(err) }()
+
+	ms, err := loadMutableStateForTimerTask(ctx, t.shardContext, wfCtx, task, t.metricsHandler, t.logger)
+	if err != nil {
+		return err
+	}
+	if ms == nil {
+		return errNoChasmMutableState
+	}
+
+	// Execute all fired pure tasks for a component while holding the workflow lock.
+	processedTimers := 0
+	err = t.executeChasmPureTimers(
+		ctx,
+		wfCtx,
+		ms,
+		task,
+		func(executor chasm.NodePureTask, taskAttributes chasm.TaskAttributes, taskInstance any) error {
+			// ExecutePureTask also calls the task's validator. Invalid tasks will no-op
+			// succeed.
+			if err := executor.ExecutePureTask(ctx, taskAttributes, taskInstance); err != nil {
+				return err
+			}
+
+			processedTimers += 1
+			return nil
+		},
+	)
+	if err != nil {
+		return err
+	}
+
+	// Commit changes only if we processed any timers.
+	if processedTimers == 0 {
+		return nil
+	}
+
+	if t.config.EnableUpdateWorkflowModeIgnoreCurrent() {
+		return wfCtx.UpdateWorkflowExecutionAsActive(ctx, t.shardContext)
+	}
+
+	// TODO: remove following code once EnableUpdateWorkflowModeIgnoreCurrent config is deprecated.
+	if ms.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+		// Can't use UpdateWorkflowExecutionAsActive since it updates the current run, and we are operating on a
+		// closed workflow.
+		return wfCtx.SubmitClosedWorkflowSnapshot(ctx, t.shardContext, historyi.TransactionPolicyActive)
+	}
+	return wfCtx.UpdateWorkflowExecutionAsActive(ctx, t.shardContext)
 }

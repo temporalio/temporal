@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package gcloud
 
 import (
@@ -37,6 +13,7 @@ import (
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/gcloud/connector"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/searchattribute"
@@ -55,9 +32,10 @@ var (
 
 type (
 	visibilityArchiver struct {
-		container     *archiver.VisibilityBootstrapContainer
-		gcloudStorage connector.Client
-		queryParser   QueryParser
+		logger         log.Logger
+		metricsHandler metrics.Handler
+		gcloudStorage  connector.Client
+		queryParser    QueryParser
 	}
 
 	queryVisibilityToken struct {
@@ -72,18 +50,19 @@ type (
 	}
 )
 
-func newVisibilityArchiver(container *archiver.VisibilityBootstrapContainer, storage connector.Client) *visibilityArchiver {
+func newVisibilityArchiver(logger log.Logger, metricsHandler metrics.Handler, storage connector.Client) *visibilityArchiver {
 	return &visibilityArchiver{
-		container:     container,
-		gcloudStorage: storage,
-		queryParser:   NewQueryParser(),
+		logger:         logger,
+		metricsHandler: metricsHandler,
+		gcloudStorage:  storage,
+		queryParser:    NewQueryParser(),
 	}
 }
 
 // NewVisibilityArchiver creates a new archiver.VisibilityArchiver based on filestore
-func NewVisibilityArchiver(container *archiver.VisibilityBootstrapContainer, config *config.GstorageArchiver) (archiver.VisibilityArchiver, error) {
-	storage, err := connector.NewClient(context.Background(), config)
-	return newVisibilityArchiver(container, storage), err
+func NewVisibilityArchiver(logger log.Logger, metricsHandler metrics.Handler, cfg *config.GstorageArchiver) (archiver.VisibilityArchiver, error) {
+	storage, err := connector.NewClient(context.Background(), cfg)
+	return newVisibilityArchiver(logger, metricsHandler, storage), err
 }
 
 // Archive is used to archive one workflow visibility record.
@@ -92,7 +71,7 @@ func NewVisibilityArchiver(container *archiver.VisibilityBootstrapContainer, con
 // Please make sure your implementation is lossless. If any in-memory batching mechanism is used, then those batched records will be lost during server restarts.
 // This method will be invoked when workflow closes. Note that because of conflict resolution, it is possible for a workflow to through the closing process multiple times, which means that this method can be invoked more than once after a workflow closes.
 func (v *visibilityArchiver) Archive(ctx context.Context, URI archiver.URI, request *archiverspb.VisibilityRecord, opts ...archiver.ArchiveOption) (err error) {
-	handler := v.container.MetricsHandler.WithTags(metrics.OperationTag(metrics.HistoryArchiverScope), metrics.NamespaceTag(request.Namespace))
+	handler := v.metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryArchiverScope), metrics.NamespaceTag(request.Namespace))
 	featureCatalog := archiver.GetFeatureCatalog(opts...)
 	startTime := time.Now().UTC()
 	defer func() {
@@ -109,7 +88,7 @@ func (v *visibilityArchiver) Archive(ctx context.Context, URI archiver.URI, requ
 		}
 	}()
 
-	logger := archiver.TagLoggerWithArchiveVisibilityRequestAndURI(v.container.Logger, request, URI.String())
+	logger := archiver.TagLoggerWithArchiveVisibilityRequestAndURI(v.logger, request, URI.String())
 
 	if err := v.ValidateURI(URI); err != nil {
 		if isRetryableError(err) {

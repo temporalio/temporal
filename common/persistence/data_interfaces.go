@@ -1,28 +1,4 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination data_interfaces_mock.go
+//go:generate mockgen -package $GOPACKAGE -source $GOFILE -destination data_interfaces_mock.go
 
 package persistence
 
@@ -82,6 +58,12 @@ const (
 	// UpdateWorkflowModeBypassCurrent update workflow, without current record
 	// NOTE: current record CANNOT point to the workflow to be updated
 	UpdateWorkflowModeBypassCurrent
+	// UpdateWorkflowModeIgnoreCurrent update workflow, without checking or update current record.
+	// This mode should only be used when we don't know if the workflow being updated is the current workflow or not in DB.
+	// For example, when updating a closed workflow, it may or may not be the current workflow.
+	// This is similar to SetWorkflowExecution, but UpdateWorkflowExecution with this mode persists the workflow as a mutation,
+	// instead of a snapshot.
+	UpdateWorkflowModeIgnoreCurrent
 )
 
 // ConflictResolveWorkflowMode conflict resolve mode

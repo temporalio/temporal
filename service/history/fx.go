@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package history
 
 import (
@@ -40,7 +16,6 @@ import (
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
-	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/quotas/calculator"
 	"go.temporal.io/server/common/resolver"
@@ -76,12 +51,13 @@ var Module = fx.Options(
 	events.Module,
 	cache.Module,
 	archival.Module,
-	dynamicconfig.Module,
 	fx.Provide(ConfigProvider), // might be worth just using provider for configs.Config directly
 	fx.Provide(workflow.NewCommandHandlerRegistry),
 	fx.Provide(RetryableInterceptorProvider),
 	fx.Provide(TelemetryInterceptorProvider),
 	fx.Provide(RateLimitInterceptorProvider),
+	fx.Provide(HealthSignalAggregatorProvider),
+	fx.Provide(HealthCheckInterceptorProvider),
 	fx.Provide(service.GrpcServerOptionsProvider),
 	fx.Provide(ESProcessorConfigProvider),
 	fx.Provide(VisibilityManagerProvider),
@@ -123,6 +99,8 @@ func HandlerProvider(args NewHandlerArgs) *Handler {
 		persistenceShardManager:      args.PersistenceShardManager,
 		persistenceVisibilityManager: args.PersistenceVisibilityManager,
 		persistenceHealthSignal:      args.PersistenceHealthSignal,
+		healthServer:                 args.HealthServer,
+		historyHealthSignal:          args.HistoryHealthSignal,
 		historyServiceResolver:       args.HistoryServiceResolver,
 		metricsHandler:               args.MetricsHandler,
 		payloadSerializer:            args.PayloadSerializer,
@@ -142,6 +120,7 @@ func HandlerProvider(args NewHandlerArgs) *Handler {
 		replicationTaskFetcherFactory:    args.ReplicationTaskFetcherFactory,
 		replicationTaskConverterProvider: args.ReplicationTaskConverterFactory,
 		streamReceiverMonitor:            args.StreamReceiverMonitor,
+		replicationServerRateLimiter:     args.ReplicationServerRateLimiter,
 	}
 
 	// prevent us from trying to serve requests before shard controller is started and ready
@@ -160,7 +139,6 @@ func HistoryEngineFactoryProvider(
 func ConfigProvider(
 	dc *dynamicconfig.Collection,
 	persistenceConfig config.Persistence,
-	esConfig *esclient.Config,
 ) *configs.Config {
 	return configs.NewConfig(
 		dc,
@@ -193,6 +171,27 @@ func TelemetryInterceptorProvider(
 	)
 }
 
+func HealthSignalAggregatorProvider(
+	dynamicCollection *dynamicconfig.Collection,
+	metricsHandler metrics.Handler,
+	logger log.ThrottledLogger,
+) interceptor.HealthSignalAggregator {
+	return interceptor.NewHealthSignalAggregator(
+		logger,
+		dynamicconfig.HistoryHealthSignalMetricsEnabled.Get(dynamicCollection),
+		dynamicconfig.PersistenceHealthSignalWindowSize.Get(dynamicCollection)(),
+		dynamicconfig.PersistenceHealthSignalBufferSize.Get(dynamicCollection)(),
+	)
+}
+
+func HealthCheckInterceptorProvider(
+	dynamicCollection *dynamicconfig.Collection,
+	healthSignalAggregator interceptor.HealthSignalAggregator,
+) *interceptor.HealthCheckInterceptor {
+	return interceptor.NewHealthCheckInterceptor(
+		healthSignalAggregator,
+	)
+}
 func RateLimitInterceptorProvider(
 	serviceConfig *configs.Config,
 ) *interceptor.RateLimitInterceptor {

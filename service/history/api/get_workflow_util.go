@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package api
 
 import (
@@ -45,7 +21,6 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/events"
 	historyi "go.temporal.io/server/service/history/interfaces"
-	"go.temporal.io/server/service/history/workflow"
 )
 
 func GetOrPollMutableState(
@@ -106,7 +81,7 @@ func GetOrPollMutableState(
 	transitionHistory := response.GetTransitionHistory()
 	currentVersionedTransition := transitionhistory.LastVersionedTransition(transitionHistory)
 	if len(transitionHistory) != 0 && request.VersionedTransition != nil {
-		if workflow.TransitionHistoryStalenessCheck(transitionHistory, request.VersionedTransition) != nil {
+		if transitionhistory.StalenessCheck(transitionHistory, request.VersionedTransition) != nil {
 			logger.Warn(fmt.Sprintf("Request versioned transition and transition history don't match. Request: %v, current: %v",
 				request.VersionedTransition,
 				currentVersionedTransition),
@@ -176,7 +151,7 @@ func GetOrPollMutableState(
 		transitionHistory := response.GetTransitionHistory()
 		currentVersionedTransition := transitionhistory.LastVersionedTransition(transitionHistory)
 		if len(transitionHistory) != 0 && request.VersionedTransition != nil {
-			if workflow.TransitionHistoryStalenessCheck(transitionHistory, request.VersionedTransition) != nil {
+			if transitionhistory.StalenessCheck(transitionHistory, request.VersionedTransition) != nil {
 				logger.Warn(fmt.Sprintf("Request versioned transition and transition history don't match prior to polling the mutable state. Request: %v, current: %v",
 					request.VersionedTransition,
 					currentVersionedTransition),
@@ -241,7 +216,7 @@ func GetOrPollMutableState(
 				transitionHistory := response.GetTransitionHistory()
 				currentVersionedTransition := transitionhistory.LastVersionedTransition(transitionHistory)
 				if len(transitionHistory) != 0 && request.VersionedTransition != nil {
-					if workflow.TransitionHistoryStalenessCheck(transitionHistory, request.VersionedTransition) != nil {
+					if transitionhistory.StalenessCheck(transitionHistory, request.VersionedTransition) != nil {
 						logger.Warn(fmt.Sprintf("Request versioned transition and transition history don't match after polling the mutable state. Request: %v, current: %v",
 							request.VersionedTransition,
 							currentVersionedTransition),
@@ -283,9 +258,9 @@ func GetMutableState(
 ) (_ *historyservice.GetMutableStateResponse, retError error) {
 
 	if len(workflowKey.RunID) == 0 {
-		return nil, serviceerror.NewInternal(fmt.Sprintf(
+		return nil, serviceerror.NewInternalf(
 			"getMutableState encountered empty run ID: %v", workflowKey,
-		))
+		)
 	}
 
 	workflowLease, err := workflowConsistencyChecker.GetWorkflowLease(
@@ -317,9 +292,9 @@ func GetMutableStateWithConsistencyCheck(
 ) (_ *historyservice.GetMutableStateResponse, retError error) {
 
 	if len(workflowKey.RunID) == 0 {
-		return nil, serviceerror.NewInternal(fmt.Sprintf(
+		return nil, serviceerror.NewInternalf(
 			"getMutableState encountered empty run ID: %v", workflowKey,
-		))
+		)
 	}
 
 	workflowLease, err := workflowConsistencyChecker.GetWorkflowLeaseWithConsistencyCheck(
@@ -328,7 +303,7 @@ func GetMutableStateWithConsistencyCheck(
 		func(mutableState historyi.MutableState) bool {
 			transitionHistory := mutableState.GetExecutionInfo().GetTransitionHistory()
 			if len(transitionHistory) != 0 && versionedTransition != nil {
-				return workflow.TransitionHistoryStalenessCheck(transitionHistory, versionedTransition) == nil
+				return transitionhistory.StalenessCheck(transitionHistory, versionedTransition) == nil
 			}
 
 			currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(mutableState.GetExecutionInfo().GetVersionHistories())

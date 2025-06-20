@@ -1,34 +1,9 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
-//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination workflow_task_state_machine_mock.go
+//go:generate mockgen -package $GOPACKAGE -source $GOFILE -destination workflow_task_state_machine_mock.go
 
 package workflow
 
 import (
 	"cmp"
-	"fmt"
 	"math"
 	"time"
 
@@ -197,7 +172,7 @@ func (m *workflowTaskStateMachine) ApplyWorkflowTaskStartedEvent(
 	if workflowTask == nil {
 		workflowTask = m.GetWorkflowTaskByID(scheduledEventID)
 		if workflowTask == nil {
-			return nil, serviceerror.NewInternal(fmt.Sprintf("unable to find workflow task: %v", scheduledEventID))
+			return nil, serviceerror.NewInternalf("unable to find workflow task: %v", scheduledEventID)
 		}
 		// Transient workflow task events are not applied but attempt count in mutable state
 		// can be updated from previous workflow task failed/timeout event.
@@ -744,6 +719,13 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 		deploymentName = request.GetDeployment().GetSeriesName()
 	}
 
+	vb := request.VersioningBehavior
+	if request.DeploymentOptions != nil && request.DeploymentOptions.GetWorkerVersioningMode() != enumspb.WORKER_VERSIONING_MODE_VERSIONED {
+		// SDK has a bug that reports behavior if user has specified a default behavior without enabling versioning.
+		// Until that is fixed, we should adjust this value so the workflow works correctly.
+		vb = enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED
+	}
+
 	// Now write the completed event
 	event := m.ms.hBuilder.AddWorkflowTaskCompletedEvent(
 		workflowTask.ScheduledEventID,
@@ -756,13 +738,20 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 		deploymentName,
 		//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
 		worker_versioning.DeploymentOrVersion(request.Deployment, worker_versioning.DeploymentVersionFromOptions(request.DeploymentOptions)),
-		request.VersioningBehavior,
+		vb,
 	)
 
 	err := m.afterAddWorkflowTaskCompletedEvent(event, limits)
 	if err != nil {
 		return nil, err
 	}
+
+	metrics.WorkflowTasksCompleted.With(m.metricsHandler).Record(1,
+		metrics.NamespaceTag(m.ms.GetNamespaceEntry().Name().String()),
+		metrics.VersioningBehaviorTag(vb),
+		metrics.FirstAttemptTag(workflowTask.Attempt),
+	)
+
 	return event, nil
 }
 
@@ -1123,9 +1112,12 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 
 	//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
 	wftDeployment := attrs.GetDeployment()
-	if v := attrs.GetWorkerDeploymentVersion(); v != "" {
-		dv, _ := worker_versioning.WorkerDeploymentVersionFromString(v)
+	if v := attrs.GetWorkerDeploymentVersion(); v != "" { //nolint:staticcheck // SA1019: worker versioning v0.31
+		dv, _ := worker_versioning.WorkerDeploymentVersionFromStringV31(v)
 		wftDeployment = worker_versioning.DeploymentFromDeploymentVersion(dv)
+	}
+	if v := attrs.GetDeploymentVersion(); v != nil {
+		wftDeployment = worker_versioning.DeploymentFromExternalDeploymentVersion(v)
 	}
 	wftBehavior := attrs.GetVersioningBehavior()
 	versioningInfo := m.ms.GetExecutionInfo().GetVersioningInfo()
@@ -1137,23 +1129,13 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 		// the transition started, the current wft was already started. In this case, we allow the
 		// started wft to run and when completed, we create another wft immediately.
 		if transition.GetDeployment().Equal(wftDeployment) {
-			versioningInfo.DeploymentTransition = nil
+			versioningInfo.DeploymentTransition = nil //nolint:staticcheck // SA1019: worker versioning v0.30
 			versioningInfo.VersionTransition = nil
 			transition = nil
 			completedTransition = true
 		}
 	}
 
-	if transition != nil {
-		// There is still a transition going on. We need to schedule a new WFT so it goes to the
-		// transition deployment this time.
-		if _, err := m.ms.AddWorkflowTaskScheduledEvent(
-			false,
-			enumsspb.WORKFLOW_TASK_TYPE_NORMAL,
-		); err != nil {
-			return err
-		}
-	}
 	// Deployment and behavior before applying the data came from the completed wft.
 	wfDeploymentBefore := m.ms.GetEffectiveDeployment()
 	wfBehaviorBefore := m.ms.GetEffectiveVersioningBehavior()
@@ -1163,6 +1145,8 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 		if versioningInfo != nil {
 			versioningInfo.Behavior = wftBehavior
 			// Deployment Version is not set for unversioned workers.
+			versioningInfo.DeploymentVersion = nil
+			//nolint:staticcheck // SA1019 deprecated Version will clean up later
 			versioningInfo.Version = ""
 			//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
 			versioningInfo.Deployment = nil
@@ -1176,7 +1160,9 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 		// Only populating the new field.
 		//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
 		versioningInfo.Deployment = nil
-		versioningInfo.Version = worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(wftDeployment))
+		//nolint:staticcheck // SA1019 deprecated Version will clean up later [cleanup-wv-3.1]
+		versioningInfo.Version = worker_versioning.WorkerDeploymentVersionToStringV31(worker_versioning.DeploymentVersionFromDeployment(wftDeployment))
+		versioningInfo.DeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(wftDeployment)
 	}
 
 	// Deployment and behavior after applying the data came from the completed wft.
@@ -1200,13 +1186,18 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 		}
 	}
 
-	// TODO: create reset point based on attrs.Deployment instead of the build ID.
+	//nolint:staticcheck // SA1019: worker versioning v2
+	buildId := attrs.GetWorkerVersion().GetBuildId()
+	if wftDeployment != nil {
+		buildId = wftDeployment.GetBuildId()
+	}
 	addedResetPoint := m.ms.addResetPointFromCompletion(
 		attrs.GetBinaryChecksum(),
-		attrs.GetWorkerVersion().GetBuildId(),
+		buildId,
 		event.GetEventId(),
 		limits.MaxResetPoints,
 	)
+
 	// For v3 versioned workflows (ms.GetEffectiveVersioningBehavior() != UNSPECIFIED), this will update the reachability
 	// search attribute based on the execution_info.deployment and/or override deployment if one exists. We must update the
 	// search attribute here because the reachability deployment may have just been changed by CompleteDeploymentTransition.
@@ -1321,7 +1312,7 @@ func (m *workflowTaskStateMachine) convertSpeculativeWorkflowTaskToNormal() erro
 	)
 
 	if scheduledEvent.EventId != wt.ScheduledEventID {
-		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, scheduled event Id: %d for normal workflow task doesn't match the one from speculative workflow task: %d", scheduledEvent.EventId, wt.ScheduledEventID))
+		return serviceerror.NewInternalf("it could be a bug, scheduled event Id: %d for normal workflow task doesn't match the one from speculative workflow task: %d", scheduledEvent.EventId, wt.ScheduledEventID)
 	}
 
 	if wtAlreadyStarted := wt.StartedEventID != common.EmptyEventID; wtAlreadyStarted {

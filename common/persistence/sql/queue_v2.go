@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package sql
 
 import (
@@ -76,11 +52,11 @@ func (q *queueV2) EnqueueMessage(
 	}
 	tx, err := q.Db.BeginTx(ctx)
 	if err != nil {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf(
+		return nil, serviceerror.NewUnavailablef(
 			"EnqueueMessage failed for queue with type: %v and name: %v. BeginTx operation failed. Error: %v",
 			request.QueueType,
 			request.QueueName,
-			err),
+			err,
 		)
 	}
 	nextMessageID, err := q.getNextMessageID(ctx, request.QueueType, request.QueueName, tx)
@@ -89,11 +65,11 @@ func (q *queueV2) EnqueueMessage(
 		if rollBackErr != nil {
 			q.SqlStore.logger.Error("transaction rollback error", tag.Error(rollBackErr))
 		}
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf(
+		return nil, serviceerror.NewUnavailablef(
 			"EnqueueMessage failed for queue with type: %v and name: %v. failed to get next messageId. Error: %v",
 			request.QueueType,
 			request.QueueName,
-			err),
+			err,
 		)
 	}
 	_, err = tx.InsertIntoQueueV2Messages(ctx, []sqlplugin.QueueV2MessageRow{
@@ -104,20 +80,20 @@ func (q *queueV2) EnqueueMessage(
 		if rollBackErr != nil {
 			q.SqlStore.logger.Error("transaction rollback error", tag.Error(rollBackErr))
 		}
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf(
+		return nil, serviceerror.NewUnavailablef(
 			"EnqueueMessage failed for queue with type: %v and name: %v. InsertIntoQueueV2Messages operation failed. Error: %v",
 			request.QueueType,
 			request.QueueName,
-			err),
+			err,
 		)
 	}
 
 	if err := tx.Commit(); err != nil {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf(
+		return nil, serviceerror.NewUnavailablef(
 			"EnqueueMessage failed for queue with type: %v and name: %v. commit operation failed. Error: %v",
 			request.QueueType,
 			request.QueueName,
-			err),
+			err,
 		)
 	}
 	return &persistence.InternalEnqueueMessageResponse{Metadata: persistence.MessageMetadata{ID: nextMessageID}}, err
@@ -152,11 +128,11 @@ func (q *queueV2) ReadMessages(
 		PageSize:     request.PageSize,
 	})
 	if err != nil {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf(
+		return nil, serviceerror.NewUnavailablef(
 			"ReadMessages failed for queue with type: %v and name: %v. RangeSelectFromQueueV2Messages operation failed. Error: %v",
 			request.QueueType,
 			request.QueueName,
-			err),
+			err,
 		)
 	}
 	var messages []persistence.QueueV2Message
@@ -228,11 +204,11 @@ func (q *queueV2) CreateQueue(
 		)
 	}
 	if err != nil {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf(
+		return nil, serviceerror.NewUnavailablef(
 			"CreateQueue failed for queue with type: %v and name: %v. InsertIntoQueueV2Metadata operation failed. Error: %v",
 			request.QueueType,
 			request.QueueName,
-			err),
+			err,
 		)
 	}
 	return &persistence.InternalCreateQueueResponse{}, nil
@@ -258,20 +234,20 @@ func (q *queueV2) RangeDeleteMessages(
 		}
 		partition, err := persistence.GetPartitionForQueueV2(request.QueueType, request.QueueName, qm)
 		if err != nil {
-			return serviceerror.NewUnavailable(fmt.Sprintf(
+			return serviceerror.NewUnavailablef(
 				"RangeDeleteMessages failed for queue with type: %v and name: %v. GetPartitionForQueueV2 operation failed. Error: %v",
 				request.QueueType,
 				request.QueueName,
-				err),
+				err,
 			)
 		}
 		maxMessageID, ok, err := q.getMaxMessageID(ctx, request.QueueType, request.QueueName, tx)
 		if err != nil {
-			return serviceerror.NewUnavailable(fmt.Sprintf(
+			return serviceerror.NewUnavailablef(
 				"RangeDeleteMessages failed for queue with type: %v and name: %v. failed to get MaxMessageID. Error: %v",
 				request.QueueType,
 				request.QueueName,
-				err),
+				err,
 			)
 		}
 		if !ok {
@@ -299,11 +275,11 @@ func (q *queueV2) RangeDeleteMessages(
 		}
 		_, err = tx.RangeDeleteFromQueueV2Messages(ctx, msgFilter)
 		if err != nil {
-			return serviceerror.NewUnavailable(fmt.Sprintf(
+			return serviceerror.NewUnavailablef(
 				"RangeDeleteMessages failed for queue with type: %v and name: %v. RangeDeleteFromQueueV2Messages operation failed. Error: %v",
 				request.QueueType,
 				request.QueueName,
-				err),
+				err,
 			)
 		}
 		partition.MinMessageId = deleteRange.NewMinMessageID
@@ -316,11 +292,11 @@ func (q *queueV2) RangeDeleteMessages(
 		}
 		_, err = tx.UpdateQueueV2Metadata(ctx, &row)
 		if err != nil {
-			return serviceerror.NewUnavailable(fmt.Sprintf(
+			return serviceerror.NewUnavailablef(
 				"RangeDeleteMessages failed for queue with type: %v and name: %v. UpdateQueueV2Metadata operation failed. Error: %v",
 				request.QueueType,
 				request.QueueName,
-				err),
+				err,
 			)
 		}
 		resp = &persistence.InternalRangeDeleteMessagesResponse{
@@ -359,8 +335,8 @@ func (q *queueV2) getQueueMetadata(
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, persistence.NewQueueNotFoundError(queueType, queueName)
 		}
-		return nil, serviceerror.NewUnavailable(
-			fmt.Sprintf("failed to get metadata for queue with type: %v and name: %v. Error: %v", queueType, queueName, err),
+		return nil, serviceerror.NewUnavailablef(
+			"failed to get metadata for queue with type: %v and name: %v. Error: %v", queueType, queueName, err,
 		)
 	}
 	return q.extractQueueMetadata(metadata)
@@ -436,10 +412,10 @@ func (q *queueV2) ListQueues(
 		PageOffset: offset,
 	})
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf(
+		return nil, serviceerror.NewUnavailablef(
 			"ListQueues failed for type: %v. SelectNameFromQueueV2Metadata operation failed. Error: %v",
 			request.QueueType,
-			err),
+			err,
 		)
 	}
 	var queues []persistence.QueueInfo
@@ -471,11 +447,11 @@ func (q *queueV2) getMessageCount(
 ) (int64, error) {
 	nextMessageID, err := q.getNextMessageID(ctx, row.QueueType, row.QueueName, q.Db)
 	if err != nil {
-		return 0, serviceerror.NewUnavailable(fmt.Sprintf(
+		return 0, serviceerror.NewUnavailablef(
 			"getNextMessageID operation failed for queue with type %v and name %v. Error: %v",
 			row.QueueType,
 			row.QueueName,
-			err),
+			err,
 		)
 	}
 	qm, err := q.extractQueueMetadata(row)

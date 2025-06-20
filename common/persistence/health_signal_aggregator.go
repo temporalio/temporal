@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package persistence
 
 import (
@@ -50,7 +26,7 @@ type (
 		Stop()
 	}
 
-	HealthSignalAggregatorImpl struct {
+	healthSignalAggregatorImpl struct {
 		status     int32
 		shutdownCh chan struct{}
 
@@ -71,7 +47,7 @@ type (
 	}
 )
 
-func NewHealthSignalAggregatorImpl(
+func NewHealthSignalAggregator(
 	aggregationEnabled bool,
 	windowSize time.Duration,
 	maxBufferSize int,
@@ -79,8 +55,8 @@ func NewHealthSignalAggregatorImpl(
 	perShardRPSWarnLimit dynamicconfig.IntPropertyFn,
 	perShardPerNsRPSWarnLimit dynamicconfig.FloatPropertyFn,
 	logger log.Logger,
-) *HealthSignalAggregatorImpl {
-	ret := &HealthSignalAggregatorImpl{
+) *healthSignalAggregatorImpl {
+	ret := &healthSignalAggregatorImpl{
 		status:                    common.DaemonStatusInitialized,
 		shutdownCh:                make(chan struct{}),
 		requestCounts:             make(map[int32]map[string]int64),
@@ -103,14 +79,14 @@ func NewHealthSignalAggregatorImpl(
 	return ret
 }
 
-func (s *HealthSignalAggregatorImpl) Start() {
+func (s *healthSignalAggregatorImpl) Start() {
 	if !atomic.CompareAndSwapInt32(&s.status, common.DaemonStatusInitialized, common.DaemonStatusStarted) {
 		return
 	}
 	go s.emitMetricsLoop()
 }
 
-func (s *HealthSignalAggregatorImpl) Stop() {
+func (s *healthSignalAggregatorImpl) Stop() {
 	if !atomic.CompareAndSwapInt32(&s.status, common.DaemonStatusStarted, common.DaemonStatusStopped) {
 		return
 	}
@@ -118,7 +94,7 @@ func (s *HealthSignalAggregatorImpl) Stop() {
 	s.emitMetricsTimer.Stop()
 }
 
-func (s *HealthSignalAggregatorImpl) Record(callerSegment int32, namespace string, latency time.Duration, err error) {
+func (s *healthSignalAggregatorImpl) Record(callerSegment int32, namespace string, latency time.Duration, err error) {
 	if s.aggregationEnabled {
 		s.latencyAverage.Record(latency.Milliseconds())
 
@@ -134,15 +110,15 @@ func (s *HealthSignalAggregatorImpl) Record(callerSegment int32, namespace strin
 	}
 }
 
-func (s *HealthSignalAggregatorImpl) AverageLatency() float64 {
+func (s *healthSignalAggregatorImpl) AverageLatency() float64 {
 	return s.latencyAverage.Average()
 }
 
-func (s *HealthSignalAggregatorImpl) ErrorRatio() float64 {
+func (s *healthSignalAggregatorImpl) ErrorRatio() float64 {
 	return s.errorRatio.Average()
 }
 
-func (s *HealthSignalAggregatorImpl) incrementShardRequestCount(shardID int32, namespace string) {
+func (s *healthSignalAggregatorImpl) incrementShardRequestCount(shardID int32, namespace string) {
 	s.requestsLock.Lock()
 	defer s.requestsLock.Unlock()
 	if s.requestCounts[shardID] == nil {
@@ -151,7 +127,11 @@ func (s *HealthSignalAggregatorImpl) incrementShardRequestCount(shardID int32, n
 	s.requestCounts[shardID][namespace]++
 }
 
-func (s *HealthSignalAggregatorImpl) emitMetricsLoop() {
+// Traverse through all shards and get the per-namespace persistence RPS for all shards.
+// If that is over the limit, print a log line. Per-shard-per-namespace RPC limit for namespaces
+// is configured in dynamic config. This will allow us to see if some namespaces had hit
+// this limit in any of the shards.
+func (s *healthSignalAggregatorImpl) emitMetricsLoop() {
 	for {
 		select {
 		case <-s.shutdownCh:

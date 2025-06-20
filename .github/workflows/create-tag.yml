@@ -9,6 +9,10 @@ on:
       tag:
         description: "Tag for new version (1.23.4)"
         required: true
+      skip_deps_check:
+        type: boolean
+        description: "Skip dependencies version check (you can skip only when creating non-release tags)"
+        default: false
       release_notes:
         type: boolean
         description: "Create draft release notes"
@@ -37,6 +41,7 @@ jobs:
         with:
           app-id: ${{ secrets.TEMPORAL_CICD_APP_ID }}
           private-key: ${{ secrets.TEMPORAL_CICD_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
 
       - name: Checkout
         uses: actions/checkout@v4
@@ -71,6 +76,35 @@ jobs:
               echo "tag_with_v=v${TAG}" >> "$GITHUB_OUTPUT"
               echo "tag_no_v=${TAG}" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Validate API and SDK dependencies
+        env:
+          SKIP_CHECK: ${{ github.event.inputs.skip_deps_check }}
+          TAG: ${{ steps.new_version.outputs.tag_with_v }}
+        run: |
+          SEMVER_RE='^v[0-9]+\.[0-9]+\.[0-9]+$'
+
+          if [[ "$SKIP_CHECK" == "true" ]]; then
+            if [[ ! "$TAG" =~ $SEMVER_RE ]]; then
+              echo "::notice::Skipping dependencies check"
+              exit 0
+            fi
+            echo "::warning::Cannot skip dependencies check when creating a potential release tag $TAG"
+          fi
+
+          MODULES=( "go.temporal.io/api" "go.temporal.io/sdk" )
+          for module in "${MODULES[@]}"; do
+            version=$(go list -f '{{.Version}}' -m "$module")
+            if [[ ! "$version" =~ $SEMVER_RE ]]; then
+              echo "::error::Using non-tagged version of module $module with version $version"
+              exit 1
+            fi
+            replace=$(go list -f '{{.Replace}}' -m "$module")
+            if [[ "$replace" != "<nil>" ]]; then
+              echo "::error::Module $module is replaced with $replace"
+              exit 1
+            fi
+          done
 
       - name: Update Server version
         if: ${{ steps.get_current_version.outputs.CURRENT_VERSION != github.event.inputs.tag }}

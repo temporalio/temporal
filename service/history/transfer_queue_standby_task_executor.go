@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package history
 
 import (
@@ -35,6 +11,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
@@ -79,6 +56,7 @@ func newTransferQueueStandbyTaskExecutor(
 	historyRawClient resource.HistoryRawClient,
 	matchingRawClient resource.MatchingRawClient,
 	visibilityManager manager.VisibilityManager,
+	chasmEngine chasm.Engine,
 	clientBean client.Bean,
 ) queues.Executor {
 	return &transferQueueStandbyTaskExecutor{
@@ -90,6 +68,7 @@ func newTransferQueueStandbyTaskExecutor(
 			historyRawClient,
 			matchingRawClient,
 			visibilityManager,
+			chasmEngine,
 		),
 		clusterName: clusterName,
 		clientBean:  clientBean,
@@ -128,6 +107,8 @@ func (t *transferQueueStandbyTaskExecutor) Execute(
 		err = t.processCloseExecution(ctx, task)
 	case *tasks.DeleteExecutionTask:
 		err = t.processDeleteExecutionTask(ctx, task, false)
+	case *tasks.ChasmTask:
+		err = t.executeChasmSideEffectTransferTask(ctx, task)
 	default:
 		err = errUnknownTransferTask
 	}
@@ -137,6 +118,38 @@ func (t *transferQueueStandbyTaskExecutor) Execute(
 		ExecutedAsActive:    false,
 		ExecutionErr:        err,
 	}
+}
+
+func (t *transferQueueStandbyTaskExecutor) executeChasmSideEffectTransferTask(
+	ctx context.Context,
+	task *tasks.ChasmTask,
+) error {
+	actionFn := func(
+		ctx context.Context,
+		wfContext historyi.WorkflowContext,
+		ms historyi.MutableState,
+	) (any, error) {
+		return validateChasmSideEffectTask(
+			ctx,
+			t.shardContext.ChasmRegistry(),
+			ms,
+			task,
+		)
+	}
+
+	return t.processTransfer(
+		ctx,
+		true,
+		task,
+		actionFn,
+		getStandbyPostActionFn(
+			task,
+			t.getCurrentTime,
+			t.config.StandbyTaskMissingEventsDiscardDelay(task.GetType()),
+			// TODO - replace this with a method for CHASM components
+			t.checkWorkflowStillExistOnSourceBeforeDiscard,
+		),
+	)
 }
 
 func (t *transferQueueStandbyTaskExecutor) processActivityTask(
@@ -262,6 +275,11 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 		}
 
 		if verifyCompletionRecorded {
+			now := t.getCurrentTime()
+			taskTime := transferTask.GetVisibilityTime()
+			localVerificationTime := taskTime.Add(t.config.MaxLocalParentWorkflowVerificationDuration())
+			resendParent := now.After(localVerificationTime) && t.config.EnableTransitionHistory()
+
 			_, err := t.historyRawClient.VerifyChildExecutionCompletionRecorded(ctx, &historyservice.VerifyChildExecutionCompletionRecordedRequest{
 				NamespaceId: executionInfo.ParentNamespaceId,
 				ParentExecution: &commonpb.WorkflowExecution{
@@ -275,6 +293,7 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 				ParentInitiatedId:      executionInfo.ParentInitiatedId,
 				ParentInitiatedVersion: executionInfo.ParentInitiatedVersion,
 				Clock:                  executionInfo.ParentClock,
+				ResendParent:           resendParent,
 			})
 			switch err.(type) {
 			case nil, *serviceerror.NamespaceNotFound, *serviceerror.Unimplemented:
@@ -498,7 +517,7 @@ func (t *transferQueueStandbyTaskExecutor) processTransfer(
 		return err
 	}
 
-	if !mutableState.IsWorkflowExecutionRunning() && !processTaskIfClosed {
+	if !processTaskIfClosed && !mutableState.IsWorkflowExecutionRunning() {
 		// workflow already finished, no need to process transfer task.
 		return nil
 	}

@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package sql
 
 import (
@@ -131,7 +107,7 @@ func (q *sqlQueue) DeleteMessagesBefore(
 		MaxMessageID: messageID - 1,
 	})
 	if err != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf("DeleteMessagesBefore operation failed. Error %v", err))
+		return serviceerror.NewUnavailablef("DeleteMessagesBefore operation failed. Error %v", err)
 	}
 	return nil
 }
@@ -148,7 +124,7 @@ func (q *sqlQueue) UpdateAckLevel(
 			Version:      metadata.Version,
 		})
 		if err != nil {
-			return serviceerror.NewUnavailable(fmt.Sprintf("UpdateAckLevel operation failed. Error %v", err))
+			return serviceerror.NewUnavailablef("UpdateAckLevel operation failed. Error %v", err)
 		}
 		rowsAffected, err := result.RowsAffected()
 		if err != nil {
@@ -173,7 +149,7 @@ func (q *sqlQueue) GetAckLevels(
 		QueueType: q.queueType,
 	})
 	if err != nil {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetAckLevels operation failed. Error %v", err))
+		return nil, serviceerror.NewUnavailablef("GetAckLevels operation failed. Error %v", err)
 	}
 
 	return &persistence.InternalQueueMetadata{
@@ -221,7 +197,7 @@ func (q *sqlQueue) ReadMessagesFromDLQ(
 	if len(pageToken) != 0 {
 		lastReadMessageID, err := deserializePageToken(pageToken)
 		if err != nil {
-			return nil, nil, serviceerror.NewInternal(fmt.Sprintf("invalid next page token %v", pageToken))
+			return nil, nil, serviceerror.NewInternalf("invalid next page token %v", pageToken)
 		}
 		firstMessageID = lastReadMessageID
 	}
@@ -233,7 +209,7 @@ func (q *sqlQueue) ReadMessagesFromDLQ(
 		PageSize:     pageSize,
 	})
 	if err != nil {
-		return nil, nil, serviceerror.NewUnavailable(fmt.Sprintf("ReadMessagesFromDLQ operation failed. Error %v", err))
+		return nil, nil, serviceerror.NewUnavailablef("ReadMessagesFromDLQ operation failed. Error %v", err)
 	}
 
 	var messages []*persistence.QueueMessage
@@ -263,7 +239,7 @@ func (q *sqlQueue) DeleteMessageFromDLQ(
 		MessageID: messageID,
 	})
 	if err != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf("DeleteMessageFromDLQ operation failed. Error %v", err))
+		return serviceerror.NewUnavailablef("DeleteMessageFromDLQ operation failed. Error %v", err)
 	}
 	return nil
 }
@@ -279,7 +255,7 @@ func (q *sqlQueue) RangeDeleteMessagesFromDLQ(
 		MaxMessageID: lastMessageID,
 	})
 	if err != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf("RangeDeleteMessagesFromDLQ operation failed. Error %v", err))
+		return serviceerror.NewUnavailablef("RangeDeleteMessagesFromDLQ operation failed. Error %v", err)
 	}
 	return nil
 }
@@ -296,7 +272,7 @@ func (q *sqlQueue) UpdateDLQAckLevel(
 			DataEncoding: metadata.Blob.EncodingType.String(),
 		})
 		if err != nil {
-			return serviceerror.NewUnavailable(fmt.Sprintf("UpdateDLQAckLevel operation failed. Error %v", err))
+			return serviceerror.NewUnavailablef("UpdateDLQAckLevel operation failed. Error %v", err)
 		}
 		rowsAffected, err := result.RowsAffected()
 		if err != nil {
@@ -321,7 +297,7 @@ func (q *sqlQueue) GetDLQAckLevels(
 		QueueType: q.getDLQTypeFromQueueType(),
 	})
 	if err != nil {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetDLQAckLevels operation failed. Error %v", err))
+		return nil, serviceerror.NewUnavailablef("GetDLQAckLevels operation failed. Error %v", err)
 	}
 
 	return &persistence.InternalQueueMetadata{
@@ -351,7 +327,7 @@ func (q *sqlQueue) initializeQueueMetadata(
 			DataEncoding: blob.EncodingType.String(),
 		})
 		if err != nil {
-			return serviceerror.NewUnavailable(fmt.Sprintf("initializeQueueMetadata operation failed. Error %v", err))
+			return serviceerror.NewUnavailablef("initializeQueueMetadata operation failed. Error %v", err)
 		}
 		rowsAffected, err := result.RowsAffected()
 		if err != nil {
@@ -383,7 +359,7 @@ func (q *sqlQueue) initializeDLQMetadata(
 			DataEncoding: blob.EncodingType.String(),
 		})
 		if err != nil {
-			return serviceerror.NewUnavailable(fmt.Sprintf("initializeDLQMetadata operation failed. Error %v", err))
+			return serviceerror.NewUnavailablef("initializeDLQMetadata operation failed. Error %v", err)
 		}
 		rowsAffected, err := result.RowsAffected()
 		if err != nil {

@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package scheduler
 
 import (
@@ -388,6 +364,19 @@ func (s *specSuite) TestSpecExclude() {
 		time.Date(2022, 3, 23, 15, 00, 0, 89000000, time.UTC),
 		time.Date(2022, 3, 23, 16, 30, 0, 687000000, time.UTC),
 	)
+}
+
+func (s *specSuite) TestExcludeAll() {
+	cs, err := s.specBuilder.NewCompiledSpec(&schedulepb.ScheduleSpec{
+		Interval: []*schedulepb.IntervalSpec{
+			{Interval: durationpb.New(7 * 24 * time.Hour)},
+		},
+		ExcludeCalendar: []*schedulepb.CalendarSpec{
+			&schedulepb.CalendarSpec{Second: "*", Minute: "*", Hour: "*"},
+		},
+	})
+	s.NoError(err)
+	s.Zero(cs.GetNextTime("", time.Date(2022, 3, 23, 12, 53, 2, 9, time.UTC)))
 }
 
 func (s *specSuite) TestSpecStartTime() {

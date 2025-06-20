@@ -1,32 +1,9 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package chasm
 
 import (
 	"reflect"
 
+	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 )
 
@@ -43,13 +20,15 @@ type EntityKey struct {
 type ComponentRef struct {
 	EntityKey
 
-	shardID int32
-	// entityGoType for calculating the entity shardID.
-	// CHASM component author has no idea about the shardID, so they will
-	// only specify the entityGoType and left the conversion to the CHASM engine.
-	//
-	// TODO: Can we remove this field and perform the shardID conversion while
-	// creating the ComponentRef?
+	// archetype is the fully qualified type name of the root component.
+	// It is used to look up the component's registered sharding function,
+	// which determines the shardID of the entity that contains the referenced component.
+	// It is also used to validate if a given entity has the right archetype.
+	// E.g. The EntityKey can be empty and the current run of the BusinessID may have a different archetype.
+	archetype string
+	// entityGoType is used for determining the ComponetRef's archetype.
+	// When CHASM deverloper needs to create a ComponentRef, they will only provide this information,
+	// and leave the work of determining archetype to the CHASM engine.
 	entityGoType reflect.Type
 
 	// entityLastUpdateVT is the consistency token for the entire entity.
@@ -70,7 +49,7 @@ type ComponentRef struct {
 	componentPath      []string
 	componentInitialVT *persistencespb.VersionedTransition
 
-	validationFn func(Context, Component) error
+	validationFn func(NodeBackend, Context, Component) error
 }
 
 // NewComponentRef creates a new ComponentRef with a registered root component go type.
@@ -86,13 +65,82 @@ func NewComponentRef[C Component](
 	}
 }
 
-func (r *ComponentRef) Serialize() []byte {
-	if r == nil {
-		return nil
+func (r *ComponentRef) Archetype(
+	registry *Registry,
+) (string, error) {
+	if r.archetype != "" {
+		return r.archetype, nil
 	}
-	panic("not implemented")
+
+	rc, ok := registry.componentOf(r.entityGoType)
+	if !ok {
+		return "", serviceerror.NewInternal("unknown chasm component type: " + r.entityGoType.String())
+	}
+	r.archetype = rc.fqType()
+
+	return r.archetype, nil
 }
 
+// ShardingKey returns the sharding key used for determining the shardID of the run
+// that contains the referenced component.
+func (r *ComponentRef) ShardingKey(
+	registry *Registry,
+) (string, error) {
+
+	archetype, err := r.Archetype(registry)
+	if err != nil {
+		return "", err
+	}
+
+	rc, ok := registry.component(archetype)
+	if !ok {
+		return "", serviceerror.NewInternal("unknown chasm component type: " + archetype)
+	}
+
+	return rc.shardingFn(r.EntityKey), nil
+}
+
+func (r *ComponentRef) Serialize(
+	registry *Registry,
+) ([]byte, error) {
+	if r == nil {
+		return nil, nil
+	}
+
+	archetype, err := r.Archetype(registry)
+	if err != nil {
+		return nil, err
+	}
+
+	pRef := persistencespb.ChasmComponentRef{
+		NamespaceId:                         r.NamespaceID,
+		BusinessId:                          r.BusinessID,
+		EntityId:                            r.EntityID,
+		Archetype:                           archetype,
+		EntityVersionedTransition:           r.entityLastUpdateVT,
+		ComponentPath:                       r.componentPath,
+		ComponentInitialVersionedTransition: r.componentInitialVT,
+	}
+	return pRef.Marshal()
+}
+
+// DeserializeComponentRef deserializes a byte slice into a ComponentRef.
+// Provides caller the access to information including EntityKey, Archetype, and ShardingKey.
 func DeserializeComponentRef(data []byte) (ComponentRef, error) {
-	panic("not implemented")
+	var pRef persistencespb.ChasmComponentRef
+	if err := pRef.Unmarshal(data); err != nil {
+		return ComponentRef{}, err
+	}
+
+	return ComponentRef{
+		EntityKey: EntityKey{
+			NamespaceID: pRef.NamespaceId,
+			BusinessID:  pRef.BusinessId,
+			EntityID:    pRef.EntityId,
+		},
+		archetype:          pRef.Archetype,
+		entityLastUpdateVT: pRef.EntityVersionedTransition,
+		componentPath:      pRef.ComponentPath,
+		componentInitialVT: pRef.ComponentInitialVersionedTransition,
+	}, nil
 }

@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package replication
 
 import (
@@ -45,6 +21,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/quotas"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/configs"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -96,7 +73,6 @@ func (s *streamSenderSuite) SetupTest() {
 	s.historyEngine = historyi.NewMockEngine(s.controller)
 	s.taskConverter = NewMockSourceTaskConverter(s.controller)
 	s.config = tests.NewDynamicConfig()
-
 	s.clientShardKey = NewClusterShardKey(rand.Int31(), 1)
 	s.serverShardKey = NewClusterShardKey(rand.Int31(), 1)
 	s.shardContext.EXPECT().GetEngine(gomock.Any()).Return(s.historyEngine, nil).AnyTimes()
@@ -107,6 +83,7 @@ func (s *streamSenderSuite) SetupTest() {
 		s.server,
 		s.shardContext,
 		s.historyEngine,
+		quotas.NoopRequestRateLimiter,
 		s.taskConverter,
 		"target_cluster",
 		2,
@@ -818,10 +795,10 @@ func (s *streamSenderSuite) TestSendTasks_WithTasks() {
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
 	).Return(iter, nil)
-	s.taskConverter.EXPECT().Convert(item0, s.clientShardKey.ClusterID).Return(task0, nil)
-	s.taskConverter.EXPECT().Convert(item1, s.clientShardKey.ClusterID).Times(0)
-	s.taskConverter.EXPECT().Convert(item2, s.clientShardKey.ClusterID).Return(task2, nil)
-	s.taskConverter.EXPECT().Convert(item3, s.clientShardKey.ClusterID).Times(0)
+	s.taskConverter.EXPECT().Convert(item0, s.clientShardKey.ClusterID, enumsspb.TASK_PRIORITY_UNSPECIFIED).Return(task0, nil)
+	s.taskConverter.EXPECT().Convert(item1, s.clientShardKey.ClusterID, gomock.Any()).Times(0)
+	s.taskConverter.EXPECT().Convert(item2, s.clientShardKey.ClusterID, enumsspb.TASK_PRIORITY_UNSPECIFIED).Return(task2, nil)
+	s.taskConverter.EXPECT().Convert(item3, s.clientShardKey.ClusterID, gomock.Any()).Times(0)
 	gomock.InOrder(
 		s.server.EXPECT().Send(&historyservice.StreamWorkflowReplicationMessagesResponse{
 			Attributes: &historyservice.StreamWorkflowReplicationMessagesResponse_Messages{
@@ -905,7 +882,7 @@ func (s *streamSenderSuite) TestSendTasks_TieredStack_HighPriority() {
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
 	).Return(iter, nil)
-	s.taskConverter.EXPECT().Convert(item1, s.clientShardKey.ClusterID).Return(task1, nil)
+	s.taskConverter.EXPECT().Convert(item1, s.clientShardKey.ClusterID, item1.Priority).Return(task1, nil)
 
 	gomock.InOrder(
 		s.server.EXPECT().Send(&historyservice.StreamWorkflowReplicationMessagesResponse{
@@ -975,6 +952,7 @@ func (s *streamSenderSuite) TestSendTasks_TieredStack_LowPriority() {
 		nil, nil, &persistencespb.NamespaceReplicationConfig{
 			Clusters: []string{"source_cluster", "target_cluster"},
 		}, 100), nil).AnyTimes()
+	mockRegistry.EXPECT().GetNamespaceName(namespace.ID("1")).Return(namespace.Name("test"), nil).AnyTimes()
 	s.shardContext.EXPECT().GetNamespaceRegistry().Return(mockRegistry).AnyTimes()
 	iter := collection.NewPagingIterator[tasks.Task](
 		func(paginationToken []byte) ([]tasks.Task, []byte, error) {
@@ -988,8 +966,8 @@ func (s *streamSenderSuite) TestSendTasks_TieredStack_LowPriority() {
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
 	).Return(iter, nil)
-	s.taskConverter.EXPECT().Convert(item0, s.clientShardKey.ClusterID).Return(task0, nil)
-	s.taskConverter.EXPECT().Convert(item0, s.clientShardKey.ClusterID).Return(task2, nil)
+	s.taskConverter.EXPECT().Convert(item0, s.clientShardKey.ClusterID, item0.Priority).Return(task0, nil)
+	s.taskConverter.EXPECT().Convert(item0, s.clientShardKey.ClusterID, item0.Priority).Return(task2, nil)
 
 	gomock.InOrder(
 		s.server.EXPECT().Send(&historyservice.StreamWorkflowReplicationMessagesResponse{
@@ -1067,4 +1045,16 @@ func (s *streamSenderSuite) TestRecvEventLoop_RpcError_ShouldReturnStreamError()
 	s.Error(err)
 	s.Error(err, "rpc error")
 	s.IsType(&StreamError{}, err)
+}
+
+func (s *streamSenderSuite) TestLivenessMonitor() {
+
+	livenessMonitor(
+		s.streamSender.recvSignalChan,
+		time.Millisecond,
+		s.streamSender.shutdownChan,
+		s.streamSender.Stop,
+		s.streamSender.logger,
+	)
+	s.False(s.streamSender.IsValid())
 }

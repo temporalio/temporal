@@ -1,25 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package tqid
 
 import (
@@ -99,35 +77,11 @@ func TestNormalizeAndValidate(t *testing.T) {
 			validAsPartition: true,
 		},
 		{
-			name:             "Valid UTF-8 name",
-			taskQueue:        &taskqueuepb.TaskQueue{Name: "válid-nàmé"},
-			defaultVal:       "",
-			maxIDLengthLimit: 100,
-			expectedError:    "",
-			expectedKind:     enumspb.TASK_QUEUE_KIND_NORMAL,
-		},
-		{
-			name:             "Invalid UTF-8 name",
-			taskQueue:        &taskqueuepb.TaskQueue{Name: string([]byte{0xff, 0xfe, 0xfd})},
-			defaultVal:       "",
-			maxIDLengthLimit: 100,
-			expectedError:    "taskQueue \"\\xff\\xfe\\xfd\" is not a valid UTF-8 string",
-			expectedKind:     enumspb.TASK_QUEUE_KIND_NORMAL,
-		},
-		{
 			name:             "Sticky queue with valid normal name",
 			taskQueue:        &taskqueuepb.TaskQueue{Name: "sticky", Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: "normal"},
 			defaultVal:       "",
 			maxIDLengthLimit: 100,
 			expectedError:    "",
-			expectedKind:     enumspb.TASK_QUEUE_KIND_STICKY,
-		},
-		{
-			name:             "Sticky queue with invalid UTF-8 normal name",
-			taskQueue:        &taskqueuepb.TaskQueue{Name: "sticky", Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: string([]byte{0xff, 0xfe, 0xfd})},
-			defaultVal:       "",
-			maxIDLengthLimit: 100,
-			expectedError:    "taskQueue \"\\xff\\xfe\\xfd\" is not a valid UTF-8 string",
 			expectedKind:     enumspb.TASK_QUEUE_KIND_STICKY,
 		},
 		{

@@ -12,6 +12,7 @@ breaking:
   # Uncomment this to temporarily ignore specific files or directories:
   ignore:
     # example: - temporal/server/api/.../message.proto
+    - temporal/server/api/persistence/v1/chasm.proto
 
 lint:
   use:

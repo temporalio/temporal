@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package queryworkflow
 
 import (
@@ -178,6 +154,7 @@ func Invoke(
 			return queryDirectlyThroughMatching(
 				ctx,
 				msResp,
+				nsEntry,
 				request.GetNamespaceId(),
 				req,
 				shardContext,
@@ -202,6 +179,12 @@ func Invoke(
 	}
 	queryID, completionCh := queryReg.BufferQuery(req.GetQuery())
 	defer queryReg.RemoveQuery(queryID)
+
+	msResp, err := api.MutableStateToGetResponse(mutableState)
+	if err != nil {
+		return nil, err
+	}
+
 	workflowLease.GetReleaseFn()(nil) // release the lock - no access to mutable state beyond this point!
 	select {
 	case <-completionCh:
@@ -215,13 +198,28 @@ func Invoke(
 			result := completionState.Result
 			switch result.GetResultType() {
 			case enumspb.QUERY_RESULT_TYPE_ANSWERED:
+				emitWorkflowQueryMetrics(
+					scope,
+					nsEntry,
+					msResp,
+					req.GetQuery().GetQueryType(),
+					nil,
+				)
 				return &historyservice.QueryWorkflowResponse{
 					Response: &workflowservice.QueryWorkflowResponse{
 						QueryResult: result.GetAnswer(),
 					},
 				}, nil
 			case enumspb.QUERY_RESULT_TYPE_FAILED:
-				return nil, serviceerror.NewQueryFailedWithFailure(result.GetErrorMessage(), result.GetFailure())
+				err := serviceerror.NewQueryFailedWithFailure(result.GetErrorMessage(), result.GetFailure())
+				emitWorkflowQueryMetrics(
+					scope,
+					nsEntry,
+					msResp,
+					req.GetQuery().GetQueryType(),
+					err,
+				)
+				return nil, err
 			default:
 				metrics.QueryRegistryInvalidStateCount.With(scope).Record(1)
 				return nil, consts.ErrQueryEnteredInvalidState
@@ -235,6 +233,7 @@ func Invoke(
 			return queryDirectlyThroughMatching(
 				ctx,
 				msResp,
+				nsEntry,
 				request.GetNamespaceId(),
 				req,
 				shardContext,
@@ -245,12 +244,27 @@ func Invoke(
 				priority,
 			)
 		case workflow.QueryCompletionTypeFailed:
-			return nil, completionState.Err
+			err = completionState.Err
+			emitWorkflowQueryMetrics(
+				scope,
+				nsEntry,
+				msResp,
+				req.GetQuery().GetQueryType(),
+				err,
+			)
+			return nil, err
 		default:
 			metrics.QueryRegistryInvalidStateCount.With(scope).Record(1)
 			return nil, consts.ErrQueryEnteredInvalidState
 		}
 	case <-ctx.Done():
+		emitWorkflowQueryMetrics(
+			scope,
+			nsEntry,
+			msResp,
+			req.GetQuery().GetQueryType(),
+			ctx.Err(),
+		)
 		metrics.ConsistentQueryTimeoutCount.With(scope).Record(1)
 		return nil, ctx.Err()
 	}
@@ -283,6 +297,7 @@ func queryWillTimeoutsBeforeFirstWorkflowTaskStart(
 func queryDirectlyThroughMatching(
 	ctx context.Context,
 	msResp *historyservice.GetMutableStateResponse,
+	nsEntry *namespace.Namespace,
 	namespaceID string,
 	queryRequest *workflowservice.QueryWorkflowRequest,
 	shard historyi.ShardContext,
@@ -291,11 +306,18 @@ func queryDirectlyThroughMatching(
 	matchingClient matchingservice.MatchingServiceClient,
 	metricsHandler metrics.Handler,
 	priority *commonpb.Priority,
-) (*historyservice.QueryWorkflowResponse, error) {
+) (resp *historyservice.QueryWorkflowResponse, retError error) {
 
 	startTime := time.Now().UTC()
 	defer func() {
 		metrics.DirectQueryDispatchLatency.With(metricsHandler).Record(time.Since(startTime))
+		emitWorkflowQueryMetrics(
+			metricsHandler,
+			nsEntry,
+			msResp,
+			queryRequest.GetQuery().GetQueryType(),
+			retError,
+		)
 	}()
 
 	directive := worker_versioning.MakeDirectiveForWorkflowTask(
@@ -378,4 +400,28 @@ func queryDirectlyThroughMatching(
 			QueryResult:   matchingResp.GetQueryResult(),
 			QueryRejected: matchingResp.GetQueryRejected(),
 		}}, err
+}
+
+func emitWorkflowQueryMetrics(
+	metricsHandler metrics.Handler,
+	nsEntry *namespace.Namespace,
+	msResp *historyservice.GetMutableStateResponse,
+	queryType string,
+	err error,
+) {
+	commonTags := []metrics.Tag{
+		metrics.OperationTag(metrics.HistoryQueryWorkflowScope),
+		metrics.NamespaceTag(nsEntry.Name().String()),
+		metrics.VersioningBehaviorTag(workflow.GetEffectiveVersioningBehavior(msResp.GetVersioningInfo())),
+		metrics.WorkflowStatusTag(msResp.GetWorkflowStatus().String()),
+		metrics.QueryTypeTag(queryType),
+	}
+
+	if err == nil {
+		metrics.WorkflowQuerySuccessCount.With(metricsHandler).Record(1, commonTags...)
+	} else if common.IsContextDeadlineExceededErr(err) {
+		metrics.WorkflowQueryTimeoutCount.With(metricsHandler).Record(1, commonTags...)
+	} else {
+		metrics.WorkflowQueryFailureCount.With(metricsHandler).Record(1, commonTags...)
+	}
 }

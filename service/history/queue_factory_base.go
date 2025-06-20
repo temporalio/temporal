@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package history
 
 import (
@@ -58,14 +34,8 @@ type (
 		Start()
 		Stop()
 
-		// TODO:
-		// 1. Remove the cache parameter after workflow cache become a host level component
-		// and it can be provided as a parameter when creating a QueueFactory instance.
-		// Currently, workflow cache is shard level, but we can't get it from shard or engine interface,
-		// as that will lead to a cycle dependency issue between shard and workflow package.
-		// 2. Move this interface to queues package after 1 is done so that there's no cycle dependency
-		// between workflow and queues package.
-		CreateQueue(shardContext historyi.ShardContext, cache wcache.Cache) queues.Queue
+		// TODO: Move this interface to queues package
+		CreateQueue(shardContext historyi.ShardContext) queues.Queue
 	}
 
 	QueueFactoryBaseParams struct {
@@ -73,6 +43,7 @@ type (
 
 		NamespaceRegistry    namespace.Registry
 		ClusterMetadata      cluster.Metadata
+		WorkflowCache        wcache.Cache
 		Config               *configs.Config
 		TimeSource           clock.TimeSource
 		MetricsHandler       metrics.Handler

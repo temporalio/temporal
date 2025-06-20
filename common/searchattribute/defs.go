@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package searchattribute
 
 import (
@@ -139,7 +115,30 @@ var (
 		RootRunID:            enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	}
 
+	// predefinedWhiteList contains a subset of predefined Search Attributes (SAs)
+	// that are currently allowed for use in production environments. These attributes
+	// are internal and were not originally intended for end-user usage, but may be
+	// in active use by users at the moment.
+	//
+	// The long-term plan is to deprecate and disallow the use of these attributes
+	// once it is confirmed that they are no longer being relied upon in any
+	// production workflows. Until then, this whitelist acts as a temporary allowance
+	// to ensure backward compatibility and avoid breaking existing use cases.
+	predefinedWhiteList = map[string]enumspb.IndexedValueType{
+		TemporalChangeVersion:      enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		BinaryChecksums:            enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		BuildIds:                   enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		BatcherNamespace:           enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		BatcherUser:                enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		TemporalScheduledStartTime: enumspb.INDEXED_VALUE_TYPE_DATETIME,
+		TemporalScheduledById:      enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		TemporalSchedulePaused:     enumspb.INDEXED_VALUE_TYPE_BOOL,
+		TemporalNamespaceDivision:  enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		TemporalPauseInfo:          enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+	}
+
 	// predefined are internal search attributes which are passed and stored in SearchAttributes object together with custom search attributes.
+	// Attributes listed here but not in predefinedWhiteList are considered internal-only and are banned from user-facing usage.
 	predefined = map[string]enumspb.IndexedValueType{
 		TemporalChangeVersion:              enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
 		BinaryChecksums:                    enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,

@@ -1,28 +1,4 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
-//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination stream_receiver_mock.go
+//go:generate mockgen -package $GOPACKAGE -source $GOFILE -destination stream_receiver_mock.go
 
 package replication
 
@@ -50,6 +26,9 @@ const (
 	ReceiverModeUnset       ReceiverMode = 0
 	ReceiverModeSingleStack ReceiverMode = 1 // default mode. It only uses High Priority Task Tracker for processing tasks.
 	ReceiverModeTieredStack ReceiverMode = 2
+
+	// ReceiveTaskIntervalMultiplier is based on ReplicationStreamSendEmptyTaskDuration. Default duration: 1 min.
+	ReceiveTaskIntervalMultiplier = 3
 )
 
 type (
@@ -73,6 +52,7 @@ type (
 		taskConverter           ExecutableTaskConverter
 		receiverMode            ReceiverMode
 		flowController          ReceiverFlowController
+		recvSignalChan          chan struct{}
 	}
 )
 
@@ -130,6 +110,7 @@ func NewStreamReceiver(
 		taskConverter:  taskConverter,
 		receiverMode:   ReceiverModeUnset,
 		flowController: NewReceiverFlowControl(taskTrackerMap, processToolBox.Config),
+		recvSignalChan: make(chan struct{}, 1),
 	}
 }
 
@@ -143,9 +124,9 @@ func (r *StreamReceiverImpl) Start() {
 		return
 	}
 
-	go WrapEventLoop(context.Background(), r.sendEventLoop, r.Stop, r.logger, r.MetricsHandler, r.clientShardKey, r.serverShardKey, streamRetryPolicy)
-	go WrapEventLoop(context.Background(), r.recvEventLoop, r.Stop, r.logger, r.MetricsHandler, r.clientShardKey, r.serverShardKey, streamRetryPolicy)
-
+	go WrapEventLoop(context.Background(), r.sendEventLoop, r.Stop, r.logger, r.MetricsHandler, r.clientShardKey, r.serverShardKey, r.Config)
+	go WrapEventLoop(context.Background(), r.recvEventLoop, r.Stop, r.logger, r.MetricsHandler, r.clientShardKey, r.serverShardKey, r.Config)
+	go livenessMonitor(r.recvSignalChan, r.Config.ReplicationStreamSendEmptyTaskDuration()*ReceiveTaskIntervalMultiplier, r.shutdownChan, r.Stop, r.logger)
 	r.logger.Info("StreamReceiver started.")
 }
 
@@ -300,7 +281,7 @@ func (r *StreamReceiverImpl) ackMessage(
 			},
 		},
 	}); err != nil {
-		return 0, err
+		return 0, NewStreamError("stream_receiver failed to send", err)
 	}
 	metrics.ReplicationTasksRecvBacklog.With(r.MetricsHandler).Record(
 		int64(size),
@@ -327,9 +308,14 @@ func (r *StreamReceiverImpl) processMessages(
 
 	streamRespChen, err := stream.Recv()
 	if err != nil {
-		return err
+		return NewStreamError("stream_receiver failed to recv", err)
 	}
 	for streamResp := range streamRespChen {
+		select {
+		case r.recvSignalChan <- struct{}{}:
+		default:
+			// signal channel is full. Continue
+		}
 		if streamResp.Err != nil {
 			return streamResp.Err
 		}
@@ -372,7 +358,7 @@ func (r *StreamReceiverImpl) getTrackerAndSchedulerByPriority(priority enumsspb.
 	case enumsspb.TASK_PRIORITY_LOW:
 		return r.lowPriorityTaskTracker, r.ProcessToolBox.LowPriorityTaskScheduler, nil
 	default:
-		return nil, nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Unknown task priority: %v", priority))
+		return nil, nil, serviceerror.NewInvalidArgumentf("Unknown task priority: %v", priority)
 	}
 }
 
@@ -415,7 +401,7 @@ func ValidateTasksHaveSamePriority(messageBatchPriority enumsspb.TaskPriority, t
 	}
 	for _, task := range tasks {
 		if task.Priority != messageBatchPriority {
-			return serviceerror.NewInvalidArgument(fmt.Sprintf("Task priority does not match batch priority: %v, %v", task.Priority, messageBatchPriority))
+			return serviceerror.NewInvalidArgumentf("Task priority does not match batch priority: %v, %v", task.Priority, messageBatchPriority)
 		}
 	}
 	return nil

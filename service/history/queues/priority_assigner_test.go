@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package queues
 
 import (
@@ -66,30 +42,52 @@ func (s *priorityAssignerSuite) TestAssign_SelectedTaskTypes() {
 	mockExecutable := NewMockExecutable(s.controller)
 	mockExecutable.EXPECT().GetType().Return(enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT).Times(1)
 
-	s.Equal(tasks.PriorityLow, s.priorityAssigner.Assign(mockExecutable))
+	s.Equal(tasks.PriorityPreemptable, s.priorityAssigner.Assign(mockExecutable))
 }
 
 func (s *priorityAssignerSuite) TestAssign_UnknownTaskTypes() {
 	mockExecutable := NewMockExecutable(s.controller)
 	mockExecutable.EXPECT().GetType().Return(enumsspb.TaskType(1234)).Times(1)
 
-	s.Equal(tasks.PriorityLow, s.priorityAssigner.Assign(mockExecutable))
+	s.Equal(tasks.PriorityPreemptable, s.priorityAssigner.Assign(mockExecutable))
 }
 
 func (s *priorityAssignerSuite) TestAssign_HighPriorityTaskTypes() {
-	mockExecutable := NewMockExecutable(s.controller)
-	mockExecutable.EXPECT().GetType().Return(enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER).Times(1)
+	for _, taskType := range []enumsspb.TaskType{
+		enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER,
+		enumsspb.TASK_TYPE_USER_TIMER,
+		enumsspb.TASK_TYPE_WORKFLOW_BACKOFF_TIMER,
+		enumsspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK,
+		enumsspb.TASK_TYPE_TRANSFER_ACTIVITY_TASK,
+	} {
+		mockExecutable := NewMockExecutable(s.controller)
+		mockExecutable.EXPECT().GetType().Return(taskType).Times(1)
 
-	s.Equal(tasks.PriorityHigh, s.priorityAssigner.Assign(mockExecutable))
+		s.Equal(tasks.PriorityHigh, s.priorityAssigner.Assign(mockExecutable))
+	}
 }
 
-func (s *priorityAssignerSuite) TestAssign_LowPriorityTaskTypes() {
+func (s *priorityAssignerSuite) TestAssign_BackgroundPriorityTaskTypes() {
 	for _, taskType := range []enumsspb.TaskType{
 		enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT,
 		enumsspb.TASK_TYPE_TRANSFER_DELETE_EXECUTION,
 		enumsspb.TASK_TYPE_VISIBILITY_DELETE_EXECUTION,
 		enumsspb.TASK_TYPE_ARCHIVAL_ARCHIVE_EXECUTION,
 		enumsspb.TASK_TYPE_UNSPECIFIED,
+	} {
+		mockExecutable := NewMockExecutable(s.controller)
+		mockExecutable.EXPECT().GetType().Return(taskType).Times(1)
+
+		s.Equal(tasks.PriorityPreemptable, s.priorityAssigner.Assign(mockExecutable))
+	}
+}
+
+func (s *priorityAssignerSuite) TestAssign_LowPriorityTaskTypes() {
+	for _, taskType := range []enumsspb.TaskType{
+		enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT,
+		enumsspb.TASK_TYPE_WORKFLOW_TASK_TIMEOUT,
+		enumsspb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT,
+		enumsspb.TASK_TYPE_WORKFLOW_EXECUTION_TIMEOUT,
 	} {
 		mockExecutable := NewMockExecutable(s.controller)
 		mockExecutable.EXPECT().GetType().Return(taskType).Times(1)

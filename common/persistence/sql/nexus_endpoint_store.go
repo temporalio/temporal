@@ -1,25 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package sql
 
 import (
@@ -65,7 +43,7 @@ func (s *sqlNexusEndpointStore) CreateOrUpdateNexusEndpoint(
 ) error {
 	id, retErr := primitives.ParseUUID(request.Endpoint.ID)
 	if retErr != nil {
-		return serviceerror.NewInternal(fmt.Sprintf("unable to parse endpoint ID as UUID: %v", retErr))
+		return serviceerror.NewInternalf("unable to parse endpoint ID as UUID: %v", retErr)
 	}
 
 	retErr = s.txExecute(ctx, "CreateOrUpdateNexusEndpoint", func(tx sqlplugin.Tx) error {
@@ -115,13 +93,13 @@ func (s *sqlNexusEndpointStore) GetNexusEndpoint(
 ) (*p.InternalNexusEndpoint, error) {
 	id, err := primitives.ParseUUID(request.ID)
 	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("unable to parse endpoint ID as UUID: %v", err))
+		return nil, serviceerror.NewInternalf("unable to parse endpoint ID as UUID: %v", err)
 	}
 
 	row, err := s.Db.GetNexusEndpointByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, serviceerror.NewNotFound(fmt.Sprintf("Nexus endpoint with ID `%v` not found", request.ID))
+			return nil, serviceerror.NewNotFoundf("Nexus endpoint with ID `%v` not found", request.ID)
 		}
 		s.logger.Error(fmt.Sprintf("error getting Nexus endpoint with ID %v", request.ID), tag.Error(err))
 		return nil, serviceerror.NewUnavailable(err.Error())
@@ -203,7 +181,7 @@ func (s *sqlNexusEndpointStore) DeleteNexusEndpoint(
 ) error {
 	id, retErr := primitives.ParseUUID(request.ID)
 	if retErr != nil {
-		return serviceerror.NewInternal(fmt.Sprintf("unable to parse endpoint ID as UUID: %v", retErr))
+		return serviceerror.NewInternalf("unable to parse endpoint ID as UUID: %v", retErr)
 	}
 
 	retErr = s.txExecute(ctx, "DeleteNexusEndpoint", func(tx sqlplugin.Tx) error {
@@ -223,10 +201,10 @@ func (s *sqlNexusEndpointStore) DeleteNexusEndpoint(
 		nRows, err := result.RowsAffected()
 		if err != nil {
 			s.logger.Error("error getting RowsAffected during DeleteNexusEndpoint", tag.Error(err))
-			return serviceerror.NewUnavailable(fmt.Sprintf("rowsAffected returned error: %v", err))
+			return serviceerror.NewUnavailablef("rowsAffected returned error: %v", err)
 		}
 		if nRows != 1 {
-			return serviceerror.NewNotFound(fmt.Sprintf("nexus endpoint not found for ID: %v", request.ID))
+			return serviceerror.NewNotFoundf("nexus endpoint not found for ID: %v", request.ID)
 		}
 
 		return nil

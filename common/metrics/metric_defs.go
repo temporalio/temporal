@@ -1,28 +1,3 @@
-// The MIT License
-
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package metrics
 
 // Common tags for all services
@@ -305,6 +280,8 @@ const (
 	VisibilityPersistenceCountWorkflowExecutionsScope = "CountWorkflowExecutions"
 	// VisibilityPersistenceGetWorkflowExecutionScope tracks GetWorkflowExecution calls made by service to visibility persistence layer
 	VisibilityPersistenceGetWorkflowExecutionScope = "GetWorkflowExecution"
+	// VisibilityPersistenceAddSearchAttributesScope tracks AddSearchAttributes calls made by service to visibility persistence layer
+	VisibilityPersistenceAddSearchAttributesScope = "AddSearchAttributes"
 )
 
 // Common
@@ -344,6 +321,7 @@ const (
 	HistoryRecordActivityTaskHeartbeatScope = "RecordActivityTaskHeartbeat"
 	// HistoryRespondWorkflowTaskCompletedScope tracks RespondWorkflowTaskCompleted API calls received by service
 	HistoryRespondWorkflowTaskCompletedScope = "RespondWorkflowTaskCompleted"
+	HistoryRespondWorkflowTaskFailedScope    = "RespondWorkflowTaskFailed"
 	// HistoryRespondActivityTaskCompletedScope tracks RespondActivityTaskCompleted API calls received by service
 	HistoryRespondActivityTaskCompletedScope = "RespondActivityTaskCompleted"
 	// HistoryRespondActivityTaskFailedScope tracks RespondActivityTaskFailed API calls received by service
@@ -380,6 +358,7 @@ const (
 	HistoryReapplyEventsScope = "ReapplyEvents"
 	// HistoryQueryWorkflowScope tracks QueryWorkflow API calls received by service
 	HistoryQueryWorkflowScope = "QueryWorkflow"
+	HistoryResetWorkflowScope = "HistoryResetWorkflow"
 	// HistoryProcessDeleteHistoryEventScope tracks ProcessDeleteHistoryEvent processing calls
 	HistoryProcessDeleteHistoryEventScope = "ProcessDeleteHistoryEvent"
 	// HistoryDeleteWorkflowExecutionScope tracks DeleteWorkflowExecutions API calls
@@ -626,6 +605,7 @@ var (
 	ServiceErrUnauthorizedCounter            = NewCounterDef("service_errors_unauthorized")
 	ServiceErrAuthorizeFailedCounter         = NewCounterDef("service_errors_authorize_failed")
 	ActionCounter                            = NewCounterDef("action")
+	OperationCounter                         = NewCounterDef("operation")
 	TlsCertsExpired                          = NewGaugeDef("certificates_expired")
 	TlsCertsExpiring                         = NewGaugeDef("certificates_expiring")
 	ServiceAuthorizationLatency              = NewTimerDef("service_authorization_latency")
@@ -722,6 +702,7 @@ var (
 	HistoryEventNotificationFanoutLatency        = NewTimerDef("history_event_notification_fanout_latency")
 	HistoryEventNotificationInFlightMessageGauge = NewGaugeDef("history_event_notification_inflight_message_gauge")
 	HistoryEventNotificationFailDeliveryCount    = NewCounterDef("history_event_notification_fail_delivery_count")
+	HistoryHostHealthGauge                       = NewGaugeDef("host_health")
 	// ArchivalTaskInvalidURI is emitted by the archival queue task executor when the history or visibility URI for an
 	// archival task is not a valid URI.
 	// We may emit this metric several times for a single task if the task is retried.
@@ -742,10 +723,24 @@ var (
 	)
 	SyncShardFromRemoteCounter = NewCounterDef("syncshard_remote_count")
 	SyncShardFromRemoteFailure = NewCounterDef("syncshard_remote_failed")
-	FinalizerItemsCompleted    = NewCounterDef("finalizer_items_completed")
-	FinalizerItemsUnfinished   = NewCounterDef("finalizer_items_unfinished")
-	FinalizerLatency           = NewTimerDef("finalizer_latency")
-	TaskRequests               = NewCounterDef(
+	FinalizerRuns              = NewCounterDef(
+		"finalizer_runs",
+		WithDescription("The number of finalizer runs."),
+	)
+	FinalizerRunTimeouts = NewCounterDef(
+		"finalizer_run_timeouts",
+		WithDescription("The number of finalizer run timeouts."),
+	)
+	FinalizerItemsCompleted = NewCounterDef(
+		"finalizer_items_completed",
+		WithDescription("The number of finalizer items that were completed successfully."),
+	)
+	FinalizerItemsUnfinished = NewCounterDef(
+		"finalizer_items_unfinished",
+		WithDescription("The number of finalizer items that were aborted before completion."),
+	)
+	FinalizerLatency = NewTimerDef("finalizer_latency")
+	TaskRequests     = NewCounterDef(
 		"task_requests",
 		WithDescription("The number of history tasks processed."),
 	)
@@ -959,6 +954,7 @@ var (
 	ReplicationNonEmptyDLQCount                    = NewCounterDef("replication_dlq_non_empty")
 	ReplicationOutlierNamespace                    = NewCounterDef("replication_outlier_namespace")
 	ReplicationDuplicatedTaskCount                 = NewCounterDef("replication_duplicated_task")
+	ReplicationRateLimitLatency                    = NewTimerDef("replication_sender_rate_limit_latency")
 	EventReapplySkippedCount                       = NewCounterDef("event_reapply_skipped_count")
 	DirectQueryDispatchLatency                     = NewTimerDef("direct_query_dispatch_latency")
 	DirectQueryDispatchStickyLatency               = NewTimerDef("direct_query_dispatch_sticky_latency")
@@ -1002,7 +998,9 @@ var (
 	DynamicWorkerPoolSchedulerRejectedTasks = NewCounterDef("dynamic_worker_pool_scheduler_rejected_tasks")
 	PausedActivitiesCounter                 = NewCounterDef("paused_activities")
 
-	// Deadlock detector latency metrics
+	// Deadlock detector metrics
+	DDSuspectedDeadlocks                 = NewCounterDef("dd_suspected_deadlocks")
+	DDCurrentSuspectedDeadlocks          = NewGaugeDef("dd_current_suspected_deadlocks")
 	DDClusterMetadataLockLatency         = NewTimerDef("dd_cluster_metadata_lock_latency")
 	DDClusterMetadataCallbackLockLatency = NewTimerDef("dd_cluster_metadata_callback_lock_latency")
 	DDShardControllerLockLatency         = NewTimerDef("dd_shard_controller_lock_latency")
@@ -1180,7 +1178,7 @@ var (
 	)
 	ScheduleActionErrors = NewCounterDef(
 		"schedule_action_errors",
-		WithDescription("The number of schedule actions that failed to start"),
+		WithDescription("The number of failed attempts from starting schedule actions"),
 	)
 	ScheduleCancelWorkflowErrors = NewCounterDef(
 		"schedule_cancel_workflow_errors",
@@ -1194,6 +1192,24 @@ var (
 		"schedule_action_delay",
 		WithDescription("Delay between when scheduled actions should/actually happen"),
 	)
+	ScheduleActionDropped = NewCounterDef(
+		"schedule_action_dropped",
+		WithDescription("The number of schedule actions that failed to start"),
+	)
+
+	// Worker Versioning
+	WorkerDeploymentCreated                           = NewCounterDef("worker_deployment_created")
+	WorkerDeploymentVersionCreated                    = NewCounterDef("worker_deployment_version_created")
+	WorkerDeploymentVersionCreatedManagedByController = NewCounterDef("worker_deployment_version_created_managed_by_controller")
+	WorkerDeploymentVersionVisibilityQueryCount       = NewCounterDef("worker_deployment_version_visibility_query_count")
+	WorkerDeploymentVersioningOverrideCounter         = NewCounterDef("worker_deployment_versioning_override_count")
+	StartDeploymentTransitionCounter                  = NewCounterDef("start_deployment_transition_count")
+
+	WorkflowResetCount        = NewCounterDef("workflow_reset_count")
+	WorkflowQuerySuccessCount = NewCounterDef("workflow_query_success_count")
+	WorkflowQueryFailureCount = NewCounterDef("workflow_query_failure_count")
+	WorkflowQueryTimeoutCount = NewCounterDef("workflow_query_timeout_count")
+	WorkflowTasksCompleted    = NewCounterDef("workflow_tasks_completed")
 
 	// Force replication
 	EncounterZombieWorkflowCount        = NewCounterDef("encounter_zombie_workflow_count")

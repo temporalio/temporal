@@ -1,32 +1,9 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package rpc
 
 import (
 	"crypto/tls"
 	"fmt"
+	"math"
 	"math/rand"
 	"net"
 	"net/http"
@@ -47,6 +24,7 @@ import (
 	"go.temporal.io/server/temporal/environment"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/keepalive"
 )
 
 var _ common.RPCFactory = (*RPCFactory)(nil)
@@ -69,6 +47,10 @@ type RPCFactory struct {
 	// A OnceValues wrapper for createLocalFrontendHTTPClient.
 	localFrontendClient      func() (*common.FrontendHTTPClient, error)
 	interNodeGrpcConnections cache.Cache
+
+	// TODO: Remove these flags once the keepalive settings are rolled out
+	EnableInternodeServerKeepalive bool
+	EnableInternodeClientKeepalive bool
 }
 
 // NewFactory builds a new RPCFactory
@@ -139,6 +121,12 @@ func (d *RPCFactory) GetRemoteClusterClientConfig(hostname string) (*tls.Config,
 func (d *RPCFactory) GetInternodeGRPCServerOptions() ([]grpc.ServerOption, error) {
 	var opts []grpc.ServerOption
 
+	if d.EnableInternodeServerKeepalive {
+		rpcConfig := d.config.Services[string(d.serviceName)].RPC
+		kep := rpcConfig.KeepAliveServerConfig.GetKeepAliveEnforcementPolicy()
+		kp := rpcConfig.KeepAliveServerConfig.GetKeepAliveServerParameters()
+		opts = append(opts, grpc.KeepaliveEnforcementPolicy(kep), grpc.KeepaliveParams(kp))
+	}
 	if d.tlsFactory != nil {
 		serverConfig, err := d.tlsFactory.GetInternodeServerConfig()
 		if err != nil {
@@ -149,11 +137,6 @@ func (d *RPCFactory) GetInternodeGRPCServerOptions() ([]grpc.ServerOption, error
 		}
 		opts = append(opts, grpc.Creds(credentials.NewTLS(serverConfig)))
 	}
-
-	rpcConfig := d.config.Services[string(d.serviceName)].RPC
-	kep := rpcConfig.KeepAliveServerConfig.GetKeepAliveEnforcementPolicy()
-	kp := rpcConfig.KeepAliveServerConfig.GetKeepAliveServerParameters()
-	opts = append(opts, grpc.KeepaliveEnforcementPolicy(kep), grpc.KeepaliveParams(kp))
 
 	return opts, nil
 }
@@ -275,8 +258,17 @@ func (d *RPCFactory) dial(hostName string, tlsClientConfig *tls.Config, dialOpti
 }
 
 func (d *RPCFactory) getClientKeepAliveConfig(serviceName primitives.ServiceName) grpc.DialOption {
-	serviceConfig := d.config.Services[string(serviceName)]
-	return grpc.WithKeepaliveParams(serviceConfig.RPC.ClientConnectionConfig.GetKeepAliveClientParameters())
+	// default keepalive settings for clients
+	params := keepalive.ClientParameters{
+		Time:                time.Duration(math.MaxInt64),
+		Timeout:             20 * time.Second,
+		PermitWithoutStream: false,
+	}
+	if d.EnableInternodeClientKeepalive {
+		serviceConfig := d.config.Services[string(serviceName)]
+		params = serviceConfig.RPC.ClientConnectionConfig.GetKeepAliveClientParameters()
+	}
+	return grpc.WithKeepaliveParams(params)
 }
 
 func (d *RPCFactory) GetTLSConfigProvider() encryption.TLSConfigProvider {

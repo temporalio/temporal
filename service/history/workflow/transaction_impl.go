@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package workflow
 
 import (
@@ -42,10 +18,11 @@ import (
 
 type (
 	completionMetric struct {
-		initialized    bool
-		taskQueue      string
-		namespaceState string
-		status         enumspb.WorkflowExecutionStatus
+		initialized      bool
+		taskQueue        string
+		namespaceState   string
+		workflowTypeName string
+		status           enumspb.WorkflowExecutionStatus
 	}
 	TransactionImpl struct {
 		shard  historyi.ShardContext
@@ -371,9 +348,10 @@ func createWorkflowExecution(
 		switch err.(type) {
 		case *persistence.CurrentWorkflowConditionFailedError,
 			*persistence.WorkflowConditionFailedError,
-			*persistence.ConditionFailedError:
+			*persistence.ConditionFailedError,
+			*serviceerror.ResourceExhausted:
 			// it is possible that workflow already exists and caller need to apply
-			// workflow ID reuse policy
+			// workflow ID reuse policy, or the error is resource exhausted.
 			return nil, err
 		default:
 			shardContext.GetLogger().Error(
@@ -703,10 +681,11 @@ func snapshotToCompletionMetric(
 		return completionMetric{initialized: false}
 	}
 	return completionMetric{
-		initialized:    true,
-		taskQueue:      workflowSnapshot.ExecutionInfo.TaskQueue,
-		namespaceState: namespaceState,
-		status:         workflowSnapshot.ExecutionState.Status,
+		initialized:      true,
+		taskQueue:        workflowSnapshot.ExecutionInfo.TaskQueue,
+		namespaceState:   namespaceState,
+		workflowTypeName: workflowSnapshot.ExecutionInfo.WorkflowTypeName,
+		status:           workflowSnapshot.ExecutionState.Status,
 	}
 }
 
@@ -718,10 +697,11 @@ func mutationToCompletionMetric(
 		return completionMetric{initialized: false}
 	}
 	return completionMetric{
-		initialized:    true,
-		taskQueue:      workflowMutation.ExecutionInfo.TaskQueue,
-		namespaceState: namespaceState,
-		status:         workflowMutation.ExecutionState.Status,
+		initialized:      true,
+		taskQueue:        workflowMutation.ExecutionInfo.TaskQueue,
+		namespaceState:   namespaceState,
+		workflowTypeName: workflowMutation.ExecutionInfo.WorkflowTypeName,
+		status:           workflowMutation.ExecutionState.Status,
 	}
 }
 
@@ -742,6 +722,7 @@ func emitCompletionMetrics(
 			namespaceName,
 			completionMetric.namespaceState,
 			completionMetric.taskQueue,
+			completionMetric.workflowTypeName,
 			completionMetric.status,
 			shardContext.GetConfig(),
 		)

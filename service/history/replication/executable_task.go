@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package replication
 
 import (
@@ -56,7 +32,7 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 )
 
-//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination executable_task_mock.go
+//go:generate mockgen -package $GOPACKAGE -source $GOFILE -destination executable_task_mock.go
 
 const (
 	taskStatePending = int32(ctasks.TaskStatePending)
@@ -127,6 +103,7 @@ type (
 			newRunId string,
 		) error
 		MarkTaskDuplicated()
+		GetPriority() enumsspb.TaskPriority
 	}
 	ExecutableTaskImpl struct {
 		ProcessToolBox
@@ -158,7 +135,6 @@ func NewExecutableTask(
 	taskReceivedTime time.Time,
 	sourceClusterName string,
 	sourceShardKey ClusterShardKey,
-	priority enumsspb.TaskPriority,
 	replicationTask *replicationspb.ReplicationTask,
 ) *ExecutableTaskImpl {
 	return &ExecutableTaskImpl{
@@ -169,7 +145,7 @@ func NewExecutableTask(
 		taskReceivedTime:       taskReceivedTime,
 		sourceClusterName:      sourceClusterName,
 		sourceShardKey:         sourceShardKey,
-		taskPriority:           priority,
+		taskPriority:           replicationTask.GetPriority(),
 		replicationTask:        replicationTask,
 		taskState:              taskStatePending,
 		attempt:                1,
@@ -303,6 +279,10 @@ func (e *ExecutableTaskImpl) Attempt() int {
 
 func (e *ExecutableTaskImpl) MarkTaskDuplicated() {
 	e.isDuplicated = true
+}
+
+func (e *ExecutableTaskImpl) GetPriority() enumsspb.TaskPriority {
+	return e.taskPriority
 }
 
 func (e *ExecutableTaskImpl) emitFinishMetrics(
@@ -539,15 +519,15 @@ func (e *ExecutableTaskImpl) BackFillEvents(
 			endEventVersion,
 		)
 		if !iterator.HasNext() {
-			return serviceerror.NewInternal(fmt.Sprintf("failed to get new run history when backfill"))
+			return serviceerror.NewInternalf("failed to get new run history when backfill")
 		}
 		batch, err := iterator.Next()
 		if err != nil {
-			return serviceerror.NewInternal(fmt.Sprintf("failed to get new run history when backfill: %v", err))
+			return serviceerror.NewInternalf("failed to get new run history when backfill: %v", err)
 		}
 		events, err := e.EventSerializer.DeserializeEvents(batch.RawEventBatch)
 		if err != nil {
-			return serviceerror.NewInternal(fmt.Sprintf("failed to deserailize run history events when backfill: %v", err))
+			return serviceerror.NewInternalf("failed to deserailize run history events when backfill: %v", err)
 		}
 		newRunEvents = events
 	}
@@ -566,7 +546,7 @@ func (e *ExecutableTaskImpl) BackFillEvents(
 		}
 		err := engine.BackfillHistoryEvents(ctx, backFillRequest)
 		if err != nil {
-			return serviceerror.NewInternal(fmt.Sprintf("failed to backfill: %v", err))
+			return serviceerror.NewInternalf("failed to backfill: %v", err)
 		}
 		eventsBatch = nil
 		versionHistory = nil
@@ -751,7 +731,7 @@ func (e *ExecutableTaskImpl) GetNamespaceInfo(
 	case nil:
 		if e.replicationTask.VersionedTransition != nil && e.replicationTask.VersionedTransition.NamespaceFailoverVersion > namespaceEntry.FailoverVersion() {
 			if !e.ProcessToolBox.Config.EnableReplicationEagerRefreshNamespace() {
-				return "", false, serviceerror.NewInternal(fmt.Sprintf("cannot process task because namespace failover version is not up to date, task version: %v, namespace version: %v", e.replicationTask.VersionedTransition.NamespaceFailoverVersion, namespaceEntry.FailoverVersion()))
+				return "", false, serviceerror.NewInternalf("cannot process task because namespace failover version is not up to date, task version: %v, namespace version: %v", e.replicationTask.VersionedTransition.NamespaceFailoverVersion, namespaceEntry.FailoverVersion())
 			}
 			_, err = e.ProcessToolBox.EagerNamespaceRefresher.SyncNamespaceFromSourceCluster(ctx, namespace.ID(namespaceID), e.sourceClusterName)
 			if err != nil {
@@ -776,7 +756,7 @@ func (e *ExecutableTaskImpl) GetNamespaceInfo(
 	}
 	// need to make sure ns in cache is up-to-date
 	if e.replicationTask.VersionedTransition != nil && namespaceEntry.FailoverVersion() < e.replicationTask.VersionedTransition.NamespaceFailoverVersion {
-		return "", false, serviceerror.NewInternal(fmt.Sprintf("cannot process task because namespace failover version is not up to date after sync, task version: %v, namespace version: %v", e.replicationTask.VersionedTransition.NamespaceFailoverVersion, namespaceEntry.FailoverVersion()))
+		return "", false, serviceerror.NewInternalf("cannot process task because namespace failover version is not up to date after sync, task version: %v, namespace version: %v", e.replicationTask.VersionedTransition.NamespaceFailoverVersion, namespaceEntry.FailoverVersion())
 	}
 
 	e.namespace.Store(namespaceEntry.Name())
@@ -825,7 +805,11 @@ func (e *ExecutableTaskImpl) MarkPoisonPill() error {
 		tag.ReplicationTask(taskInfo),
 	)
 
-	ctx, cancel := newTaskContext(e.replicationTask.RawTaskInfo.NamespaceId, e.Config.ReplicationTaskApplyTimeout())
+	ctx, cancel := newTaskContext(
+		e.replicationTask.RawTaskInfo.NamespaceId,
+		e.Config.ReplicationTaskApplyTimeout(),
+		headers.SystemPreemptableCallerInfo,
+	)
 	defer cancel()
 
 	return writeTaskToDLQ(ctx, e.DLQWriter, e.sourceShardKey.ShardID, e.SourceClusterName(), shardContext.GetShardID(), taskInfo)
@@ -834,11 +818,21 @@ func (e *ExecutableTaskImpl) MarkPoisonPill() error {
 func newTaskContext(
 	namespaceName string,
 	timeout time.Duration,
+	callerInfo headers.CallerInfo,
 ) (context.Context, context.CancelFunc) {
 	ctx := headers.SetCallerInfo(
 		context.Background(),
-		headers.SystemPreemptableCallerInfo,
+		callerInfo,
 	)
 	ctx = headers.SetCallerName(ctx, namespaceName)
 	return context.WithTimeout(ctx, timeout)
+}
+
+func getReplicaitonCallerInfo(priority enumsspb.TaskPriority) headers.CallerInfo {
+	switch priority {
+	case enumsspb.TASK_PRIORITY_LOW:
+		return headers.SystemPreemptableCallerInfo
+	default:
+		return headers.SystemBackgroundLowCallerInfo
+	}
 }

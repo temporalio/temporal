@@ -1,25 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2025 Temporal Technologies Inc.  All rights reserved.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package tests
 
 import (
@@ -44,7 +22,7 @@ import (
 )
 
 type PriorityFairnessSuite struct {
-	testcore.FunctionalTestSuite
+	testcore.FunctionalTestBase
 }
 
 func TestPriorityFairnessSuite(t *testing.T) {
@@ -57,7 +35,7 @@ func (s *PriorityFairnessSuite) SetupSuite() {
 		dynamicconfig.MatchingUseNewMatcher.Key():     true,
 		dynamicconfig.MatchingGetTasksBatchSize.Key(): 20,
 	}
-	s.FunctionalTestSuite.SetupSuiteWithDefaultCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
+	s.FunctionalTestBase.SetupSuiteWithCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 }
 
 func (s *PriorityFairnessSuite) TestPriority_Activity_Basic() {
@@ -81,7 +59,7 @@ func (s *PriorityFairnessSuite) TestPriority_Activity_Basic() {
 
 	// process workflow tasks
 	for range N {
-		_, err := s.TaskPoller.PollAndHandleWorkflowTask(
+		_, err := s.TaskPoller().PollAndHandleWorkflowTask(
 			tv,
 			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 				s.Equal(3, len(task.History.Events))
@@ -122,7 +100,7 @@ func (s *PriorityFairnessSuite) TestPriority_Activity_Basic() {
 	// process activity tasks
 	var runs []int
 	for range N * Levels {
-		_, err := s.TaskPoller.PollAndHandleActivityTask(
+		_, err := s.TaskPoller().PollAndHandleActivityTask(
 			tv,
 			func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
 				var wfidx, pri int
@@ -165,7 +143,7 @@ func (s *PriorityFairnessSuite) TestSubqueue_Migration() {
 
 	// process workflow tasks and create 300 activities
 	for range 100 {
-		_, err := s.TaskPoller.PollAndHandleWorkflowTask(
+		_, err := s.TaskPoller().PollAndHandleWorkflowTask(
 			tv,
 			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 				s.Equal(3, len(task.History.Events))
@@ -197,7 +175,7 @@ func (s *PriorityFairnessSuite) TestSubqueue_Migration() {
 	}
 
 	processActivity := func() {
-		_, err := s.TaskPoller.PollAndHandleActivityTask(
+		_, err := s.TaskPoller().PollAndHandleActivityTask(
 			tv,
 			func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
 				nothing, err := payloads.Encode()

@@ -1,28 +1,4 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
-//go:generate mockgen -copyright_file ../../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination cache_mock.go
+//go:generate mockgen -package $GOPACKAGE -source $GOFILE -destination cache_mock.go
 
 package cache
 
@@ -30,7 +6,6 @@ import (
 	"context"
 	"sync/atomic"
 	"time"
-	"unicode/utf8"
 
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
@@ -83,8 +58,6 @@ type (
 		finalizer *finalizer.Finalizer
 	}
 
-	NewCacheFn func(config *configs.Config, logger log.Logger, handler metrics.Handler) Cache
-
 	Key struct {
 		// Those are exported because some unit tests uses the cache directly.
 		// TODO: Update the unit tests and make those fields private.
@@ -112,24 +85,6 @@ func NewHostLevelCache(
 	maxSize := config.HistoryHostLevelCacheMaxSize()
 	if config.HistoryCacheLimitSizeBased {
 		maxSize = config.HistoryHostLevelCacheMaxSizeBytes()
-	}
-	return newCache(
-		maxSize,
-		config.HistoryCacheTTL(),
-		config.HistoryCacheNonUserContextLockTimeout(),
-		logger,
-		handler,
-	)
-}
-
-func NewShardLevelCache(
-	config *configs.Config,
-	logger log.Logger,
-	handler metrics.Handler,
-) Cache {
-	maxSize := config.HistoryShardLevelCacheMaxSize()
-	if config.HistoryCacheLimitSizeBased {
-		maxSize = config.HistoryShardLevelCacheMaxSizeBytes()
 	}
 	return newCache(
 		maxSize,
@@ -445,12 +400,6 @@ func (c *cacheImpl) validateWorkflowID(
 	if workflowID == "" {
 		return serviceerror.NewInvalidArgument("Can't load workflow execution.  WorkflowId not set.")
 	}
-
-	if !utf8.ValidString(workflowID) {
-		// We know workflow cannot exist with invalid utf8 string as WorkflowID.
-		return serviceerror.NewNotFound("Workflow not exists.")
-	}
-
 	return nil
 }
 

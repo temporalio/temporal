@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package tests
 
 import (
@@ -35,12 +11,13 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/api/adminservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/tests/testcore"
 )
 
 type AdminTestSuite struct {
-	testcore.FunctionalTestSdkSuite
+	testcore.FunctionalTestBase
 }
 
 func TestAdminTestSuite(t *testing.T) {
@@ -123,18 +100,23 @@ func (s *AdminTestSuite) TestAdminRebuildMutableState() {
 	s.Equal(response1.DatabaseMutableState.ExecutionInfo.VersionHistories, response2.DatabaseMutableState.ExecutionInfo.VersionHistories)
 	s.Equal(response1.DatabaseMutableState.ExecutionInfo.StateTransitionCount, response2.DatabaseMutableState.ExecutionInfo.StateTransitionCount)
 
-	// rebuild explicitly sets start time, thus start time will change after rebuild
 	s.Equal(response1.DatabaseMutableState.ExecutionState.CreateRequestId, response2.DatabaseMutableState.ExecutionState.CreateRequestId)
 	s.Equal(response1.DatabaseMutableState.ExecutionState.RunId, response2.DatabaseMutableState.ExecutionState.RunId)
 	s.Equal(response1.DatabaseMutableState.ExecutionState.State, response2.DatabaseMutableState.ExecutionState.State)
 	s.Equal(response1.DatabaseMutableState.ExecutionState.Status, response2.DatabaseMutableState.ExecutionState.Status)
-	s.Equal(response1.DatabaseMutableState.ExecutionState.LastUpdateVersionedTransition, response2.DatabaseMutableState.ExecutionState.LastUpdateVersionedTransition)
 
+	// From transition history perspective, Rebuild is considered as an update to the workflow and updates
+	// all sub state machines in the workflow, which includes the workflow ExecutionState.
+	s.Equal(&persistencespb.VersionedTransition{
+		NamespaceFailoverVersion: response1.DatabaseMutableState.ExecutionState.LastUpdateVersionedTransition.NamespaceFailoverVersion,
+		TransitionCount:          response1.DatabaseMutableState.ExecutionInfo.StateTransitionCount + 1,
+	}, response2.DatabaseMutableState.ExecutionState.LastUpdateVersionedTransition)
+
+	// Rebuild explicitly sets start time, thus start time will change after rebuild.
 	s.NotNil(response1.DatabaseMutableState.ExecutionState.StartTime)
 	s.NotNil(response2.DatabaseMutableState.ExecutionState.StartTime)
 
 	timeBefore := timestamp.TimeValue(response1.DatabaseMutableState.ExecutionState.StartTime)
 	timeAfter := timestamp.TimeValue(response2.DatabaseMutableState.ExecutionState.StartTime)
-
 	s.False(timeAfter.Before(timeBefore))
 }

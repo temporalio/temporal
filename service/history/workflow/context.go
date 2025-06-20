@@ -1,32 +1,7 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package workflow
 
 import (
 	"context"
-	"fmt"
 
 	"go.opentelemetry.io/otel/trace"
 	commonpb "go.temporal.io/api/common/v1"
@@ -35,6 +10,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
@@ -331,13 +307,15 @@ func (c *ContextImpl) ConflictResolveWorkflowExecution(
 
 	eventsToReapply := resetWorkflowEventsSeq
 	if len(resetWorkflowEventsSeq) == 0 {
-		eventsToReapply = []*persistence.WorkflowEvents{
-			{
-				NamespaceID: c.workflowKey.NamespaceID,
-				WorkflowID:  c.workflowKey.WorkflowID,
-				RunID:       c.workflowKey.RunID,
-				Events:      resetMutableState.GetReapplyCandidateEvents(),
-			},
+		if reapplyCandidateEvents := resetMutableState.GetReapplyCandidateEvents(); len(reapplyCandidateEvents) != 0 {
+			eventsToReapply = []*persistence.WorkflowEvents{
+				{
+					NamespaceID: c.workflowKey.NamespaceID,
+					WorkflowID:  c.workflowKey.WorkflowID,
+					RunID:       c.workflowKey.RunID,
+					Events:      reapplyCandidateEvents,
+				},
+			}
 		}
 	}
 
@@ -402,10 +380,15 @@ func (c *ContextImpl) UpdateWorkflowExecutionAsActive(
 		}
 	}
 
+	updateMode, err := c.updateWorkflowMode()
+	if err != nil {
+		return err
+	}
+
 	err = c.UpdateWorkflowExecutionWithNew(
 		ctx,
 		shardContext,
-		persistence.UpdateWorkflowModeUpdateCurrent,
+		updateMode,
 		nil,
 		nil,
 		historyi.TransactionPolicyActive,
@@ -454,10 +437,15 @@ func (c *ContextImpl) UpdateWorkflowExecutionAsPassive(
 	shardContext historyi.ShardContext,
 ) error {
 
+	updateMode, err := c.updateWorkflowMode()
+	if err != nil {
+		return err
+	}
+
 	return c.UpdateWorkflowExecutionWithNew(
 		ctx,
 		shardContext,
-		persistence.UpdateWorkflowModeUpdateCurrent,
+		updateMode,
 		nil,
 		nil,
 		historyi.TransactionPolicyPassive,
@@ -532,13 +520,15 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 
 	eventsToReapply := updateWorkflowEventsSeq
 	if len(updateWorkflowEventsSeq) == 0 {
-		eventsToReapply = []*persistence.WorkflowEvents{
-			{
-				NamespaceID: c.workflowKey.NamespaceID,
-				WorkflowID:  c.workflowKey.WorkflowID,
-				RunID:       c.workflowKey.RunID,
-				Events:      c.MutableState.GetReapplyCandidateEvents(),
-			},
+		if reapplyCandidateEvents := c.MutableState.GetReapplyCandidateEvents(); len(reapplyCandidateEvents) != 0 {
+			eventsToReapply = []*persistence.WorkflowEvents{
+				{
+					NamespaceID: c.workflowKey.NamespaceID,
+					WorkflowID:  c.workflowKey.WorkflowID,
+					RunID:       c.workflowKey.RunID,
+					Events:      reapplyCandidateEvents,
+				},
+			}
 		}
 	}
 
@@ -687,7 +677,7 @@ func (c *ContextImpl) mergeUpdateWithNewReplicationTasks(
 		newRunID = task.RunID
 	default:
 		// Handle unexpected types or log an error if this case is not expected
-		return serviceerror.NewInternal(fmt.Sprintf("unexpected replication task type for new run task %T", newRunTask))
+		return serviceerror.NewInternalf("unexpected replication task type for new run task %T", newRunTask)
 	}
 	taskUpdated := false
 
@@ -739,6 +729,12 @@ func (c *ContextImpl) updateWorkflowExecutionEventReapply(
 	eventBatch1 []*persistence.WorkflowEvents,
 	eventBatch2 []*persistence.WorkflowEvents,
 ) error {
+	if updateMode == persistence.UpdateWorkflowModeIgnoreCurrent {
+		if len(eventBatch1) != 0 || len(eventBatch2) != 0 {
+			return serviceerror.NewInternal("encountered events reapplication without knowing if workflow is current. Events generated for a close workflow?")
+		}
+		return nil
+	}
 
 	if updateMode != persistence.UpdateWorkflowModeBypassCurrent {
 		return nil
@@ -766,6 +762,27 @@ func (c *ContextImpl) conflictResolveEventReapply(
 	eventBatches = append(eventBatches, eventBatch1...)
 	eventBatches = append(eventBatches, eventBatch2...)
 	return c.ReapplyEvents(ctx, shardContext, eventBatches)
+}
+
+func (c *ContextImpl) updateWorkflowMode() (persistence.UpdateWorkflowMode, error) {
+	updateMode := persistence.UpdateWorkflowModeUpdateCurrent
+	if !c.config.EnableUpdateWorkflowModeIgnoreCurrent() {
+		return persistence.UpdateWorkflowModeUpdateCurrent, nil
+	}
+
+	updateMode = persistence.UpdateWorkflowModeIgnoreCurrent
+	if c.MutableState.IsCurrentWorkflowGuaranteed() {
+		updateMode = persistence.UpdateWorkflowModeUpdateCurrent
+	}
+
+	guaranteed, err := c.MutableState.IsNonCurrentWorkflowGuaranteed()
+	if err != nil {
+		return updateMode, err
+	}
+	if guaranteed {
+		updateMode = persistence.UpdateWorkflowModeBypassCurrent
+	}
+	return updateMode, nil
 }
 
 func (c *ContextImpl) ReapplyEvents(
@@ -845,7 +862,7 @@ func (c *ContextImpl) ReapplyEvents(
 	}
 	if sourceAdminClient == nil {
 		// TODO: will this ever happen?
-		return serviceerror.NewInternal(fmt.Sprintf("cannot find cluster config %v to do reapply", activeCluster))
+		return serviceerror.NewInternalf("cannot find cluster config %v to do reapply", activeCluster)
 	}
 
 	_, err = sourceAdminClient.ReapplyEvents(
@@ -873,6 +890,11 @@ func (c *ContextImpl) RefreshTasks(
 		return err
 	}
 
+	if c.config.EnableUpdateWorkflowModeIgnoreCurrent() {
+		return c.UpdateWorkflowExecutionAsPassive(ctx, shardContext)
+	}
+
+	// TODO: remove following code once EnableUpdateWorkflowModeIgnoreCurrent config is deprecated.
 	if !mutableState.IsWorkflowExecutionRunning() {
 		// Can't use UpdateWorkflowExecutionAsPassive since it updates the current run,
 		// and we are operating on a closed workflow.
@@ -1055,6 +1077,14 @@ func (c *ContextImpl) forceTerminateWorkflow(
 	mutableState, err := c.LoadMutableState(ctx, shardContext)
 	if err != nil {
 		return err
+	}
+
+	if !mutableState.IsWorkflow() {
+		return mutableState.ChasmTree().Terminate(chasm.TerminateComponentRequest{
+			Identity: consts.IdentityHistoryService,
+			Reason:   failureReason,
+			Details:  nil,
+		})
 	}
 
 	return TerminateWorkflow(

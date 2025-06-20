@@ -1,31 +1,7 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package ndc
 
 import (
-	"fmt"
+	"cmp"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -348,7 +324,7 @@ func (t *replicationTaskImpl) skipDuplicatedEvents(index int) error {
 		return nil
 	}
 	if index >= len(t.events) || index < 0 {
-		return serviceerror.NewInternal(fmt.Sprintf("Invalid skip index: Length=%v, skipIndex=%v", len(t.events), index))
+		return serviceerror.NewInternalf("Invalid skip index: Length=%v, skipIndex=%v", len(t.events), index)
 	}
 	t.events = t.events[index:]
 	t.firstEvent = t.events[0][0]
@@ -544,8 +520,7 @@ func deserializeBlob(
 	if blob == nil {
 		return nil, nil
 	}
-
-	blob.EncodingType = enumspb.ENCODING_TYPE_PROTO3
+	blob.EncodingType = cmp.Or(blob.EncodingType, enumspb.ENCODING_TYPE_PROTO3)
 	return historySerializer.DeserializeEvents(blob)
 }
 
@@ -558,7 +533,7 @@ func DeserializeBlobs(
 		return eventBatches, nil
 	}
 	for _, blob := range blobs {
-		blob.EncodingType = enumspb.ENCODING_TYPE_PROTO3
+		blob.EncodingType = cmp.Or(blob.EncodingType, enumspb.ENCODING_TYPE_PROTO3)
 		events, err := historySerializer.DeserializeEvents(blob)
 		if err != nil {
 			return nil, err

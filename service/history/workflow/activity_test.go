@@ -1,25 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2024 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package workflow
 
 import (
@@ -285,6 +263,7 @@ func (s *activitySuite) TestGetPendingActivityInfoHasRetryPolicy() {
 		RetryInitialInterval:    durationpb.New(time.Minute),
 		RetryBackoffCoefficient: 1.0,
 		RetryMaximumAttempts:    10,
+		TaskQueue:               "task-queue",
 	}
 
 	s.mockMutableState.EXPECT().GetActivityType(gomock.Any(), gomock.Any()).Return(&activityType, nil).Times(1)
@@ -303,6 +282,17 @@ func (s *activitySuite) TestGetPendingActivityInfoHasRetryPolicy() {
 	s.Equal(durationpb.New(2*time.Minute), pi.CurrentRetryInterval)
 	s.Equal(ai.ScheduledTime, pi.ScheduledTime)
 	s.Equal(ai.LastAttemptCompleteTime, pi.LastAttemptCompleteTime)
+	s.NotNil(pi.ActivityOptions)
+	s.NotNil(pi.ActivityOptions.RetryPolicy)
+	s.Equal(ai.TaskQueue, pi.ActivityOptions.TaskQueue.Name)
+	s.Equal(ai.ScheduleToCloseTimeout, pi.ActivityOptions.ScheduleToCloseTimeout)
+	s.Equal(ai.ScheduleToStartTimeout, pi.ActivityOptions.ScheduleToStartTimeout)
+	s.Equal(ai.StartToCloseTimeout, pi.ActivityOptions.StartToCloseTimeout)
+	s.Equal(ai.HeartbeatTimeout, pi.ActivityOptions.HeartbeatTimeout)
+	s.Equal(ai.RetryMaximumInterval, pi.ActivityOptions.RetryPolicy.MaximumInterval)
+	s.Equal(ai.RetryInitialInterval, pi.ActivityOptions.RetryPolicy.InitialInterval)
+	s.Equal(ai.RetryBackoffCoefficient, pi.ActivityOptions.RetryPolicy.BackoffCoefficient)
+	s.Equal(ai.RetryMaximumAttempts, pi.ActivityOptions.RetryPolicy.MaximumAttempts)
 }
 
 func (s *activitySuite) AddActivityInfo() *persistencespb.ActivityInfo {
@@ -335,12 +325,26 @@ func (s *activitySuite) TestResetPausedActivityAcceptance() {
 	ai := s.AddActivityInfo()
 
 	prevStamp := ai.Stamp
-	err := PauseActivity(s.mutableState, ai.ActivityId)
+	pauseInfo := &persistencespb.ActivityInfo_PauseInfo{
+		PauseTime: timestamppb.New(time.Now()),
+		PausedBy: &persistencespb.ActivityInfo_PauseInfo_Manual_{
+			Manual: &persistencespb.ActivityInfo_PauseInfo_Manual{
+				Identity: "test_identity",
+				Reason:   "test_reason",
+			},
+		},
+	}
+
+	err := PauseActivity(s.mutableState, ai.ActivityId, pauseInfo)
 	s.NoError(err)
 	s.NotEqual(prevStamp, ai.Stamp, "ActivityInfo.Stamp should change")
+	s.NotNil(ai.PauseInfo)
+	s.Equal(ai.PauseInfo.GetManual().Identity, "test_identity")
+	s.Equal(ai.PauseInfo.GetManual().Reason, "test_reason")
 
 	prevStamp = ai.Stamp
-	err = ResetActivity(s.mockShard, s.mutableState, ai.ActivityId, false, true, 0)
+	err = ResetActivity(context.Background(), s.mockShard, s.mutableState, ai.ActivityId,
+		false, true, false, 0)
 	s.NoError(err)
 	s.Equal(int32(1), ai.Attempt, "ActivityInfo.Attempt is not reset")
 	s.Equal(prevStamp, ai.Stamp, "ActivityInfo.Stamp should not change")
@@ -351,12 +355,26 @@ func (s *activitySuite) TestResetAndUnPauseActivityAcceptance() {
 	ai := s.AddActivityInfo()
 
 	prevStamp := ai.Stamp
-	err := PauseActivity(s.mutableState, ai.ActivityId)
+	pauseInfo := &persistencespb.ActivityInfo_PauseInfo{
+		PauseTime: timestamppb.New(time.Now()),
+		PausedBy: &persistencespb.ActivityInfo_PauseInfo_Manual_{
+			Manual: &persistencespb.ActivityInfo_PauseInfo_Manual{
+				Identity: "test_identity",
+				Reason:   "test_reason",
+			},
+		},
+	}
+
+	err := PauseActivity(s.mutableState, ai.ActivityId, pauseInfo)
 	s.NoError(err)
 	s.NotEqual(prevStamp, ai.Stamp, "ActivityInfo.Stamp should change")
+	s.NotNil(ai.PauseInfo)
+	s.Equal(ai.PauseInfo.GetManual().Identity, "test_identity")
+	s.Equal(ai.PauseInfo.GetManual().Reason, "test_reason")
 
 	prevStamp = ai.Stamp
-	err = ResetActivity(s.mockShard, s.mutableState, ai.ActivityId, false, false, 0)
+	err = ResetActivity(context.Background(), s.mockShard, s.mutableState, ai.ActivityId,
+		false, false, false, 0)
 	s.NoError(err)
 	s.Equal(int32(1), ai.Attempt, "ActivityInfo.Attempt is not reset")
 	s.NotEqual(prevStamp, ai.Stamp, "ActivityInfo.Stamp should change")
@@ -367,8 +385,9 @@ func (s *activitySuite) TestUnpauseActivityWithResumeAcceptance() {
 	ai := s.AddActivityInfo()
 
 	prevStamp := ai.Stamp
-	err := PauseActivity(s.mutableState, ai.ActivityId)
+	err := PauseActivity(s.mutableState, ai.ActivityId, nil)
 	s.NoError(err)
+	s.Nil(ai.PauseInfo)
 
 	s.Equal(int32(1), ai.Attempt, "ActivityInfo.Attempt is shouldn't change")
 	s.NotEqual(prevStamp, ai.Stamp, "ActivityInfo.Stamp should change")
@@ -386,7 +405,7 @@ func (s *activitySuite) TestUnpauseActivityWithNewRun() {
 	ai := s.AddActivityInfo()
 
 	prevStamp := ai.Stamp
-	err := PauseActivity(s.mutableState, ai.ActivityId)
+	err := PauseActivity(s.mutableState, ai.ActivityId, nil)
 	s.NoError(err)
 
 	s.Equal(int32(1), ai.Attempt, "ActivityInfo.Attempt is shouldn't change")
@@ -409,8 +428,17 @@ func (s *activitySuite) TestUnpauseActivityWithResetAcceptance() {
 	ai := s.AddActivityInfo()
 
 	prevStamp := ai.Stamp
-	err := PauseActivity(s.mutableState, ai.ActivityId)
+	pauseInfo := &persistencespb.ActivityInfo_PauseInfo{
+		PauseTime: timestamppb.New(time.Now()),
+		PausedBy: &persistencespb.ActivityInfo_PauseInfo_RuleId{
+			RuleId: "rule_id",
+		},
+	}
+
+	err := PauseActivity(s.mutableState, ai.ActivityId, pauseInfo)
 	s.NoError(err)
+	s.NotNil(ai.PauseInfo)
+	s.Equal(ai.PauseInfo.GetRuleId(), "rule_id")
 
 	s.Equal(int32(1), ai.Attempt, "ActivityInfo.Attempt is shouldn't change")
 	s.NotEqual(prevStamp, ai.Stamp, "ActivityInfo.Stamp should change")

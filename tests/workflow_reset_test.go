@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package tests
 
 import (
@@ -31,21 +7,26 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/suite"
+	batchpb "go.temporal.io/api/batch/v1"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
 
 // Tests workflow reset feature
 type WorkflowResetSuite struct {
-	testcore.FunctionalTestSdkSuite
+	testcore.FunctionalTestBase
 }
 
 func TestWorkflowResetTestSuite(t *testing.T) {
@@ -217,6 +198,192 @@ func (s *WorkflowResetSuite) TestOriginalExecutionRunId() {
 	}
 }
 
+// Test that the workflow options are updated when the workflow is reset.
+func (s *WorkflowResetSuite) TestResetWorkflowWithOptionsUpdate() {
+	workflowID := "test-reset" + uuid.NewString()
+	ctx := testcore.NewContext()
+	runs := s.setupRuns(ctx, workflowID, 1, true)
+	currentRunID := runs[0]
+
+	override := &workflowpb.VersioningOverride{
+		Override: &workflowpb.VersioningOverride_Pinned{
+			Pinned: &workflowpb.VersioningOverride_PinnedOverride{
+				Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
+				Version: &deploymentpb.WorkerDeploymentVersion{
+					DeploymentName: "testing",
+					BuildId:        "v.123",
+				},
+			},
+		},
+	}
+
+	// Reset the workflow by providing the explicit runID (base run) to reset.
+	resp, err := s.FrontendClient().ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
+		Namespace:                 s.Namespace().String(),
+		WorkflowExecution:         &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: currentRunID},
+		Reason:                    "testing-reset",
+		RequestId:                 uuid.NewString(),
+		WorkflowTaskFinishEventId: s.getFirstWFTaskCompleteEventID(ctx, workflowID, currentRunID),
+		PostResetOperations: []*workflowpb.PostResetOperation{
+			{
+				Variant: &workflowpb.PostResetOperation_UpdateWorkflowOptions_{
+					UpdateWorkflowOptions: &workflowpb.PostResetOperation_UpdateWorkflowOptions{
+						WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{
+							VersioningOverride: override,
+						},
+						UpdateMask: &fieldmaskpb.FieldMask{
+							Paths: []string{
+								"versioning_override",
+							},
+						},
+					},
+				},
+			},
+		},
+	})
+	s.NoError(err)
+	newRunID := resp.RunId
+
+	// assert that the new run has the updated workflow options
+	var optionsUpdatedEvent *historypb.HistoryEvent
+	hist := s.SdkClient().GetWorkflowHistory(ctx, workflowID, newRunID, false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+	for hist.HasNext() {
+		event, err := hist.Next()
+		s.NoError(err)
+		if event.EventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED {
+			optionsUpdatedEvent = event
+			break
+		}
+	}
+	s.NotNil(optionsUpdatedEvent)
+	s.ProtoEqual(override, optionsUpdatedEvent.GetWorkflowExecutionOptionsUpdatedEventAttributes().GetVersioningOverride())
+
+	info, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowID, newRunID)
+	s.NoError(err)
+
+	// TODO (Carly): remove deprecated values from verification once we stop populating them
+	override.Behavior = enumspb.VERSIONING_BEHAVIOR_PINNED //nolint:staticcheck
+	override.PinnedVersion = "testing.v.123"               //nolint:staticcheck
+	s.ProtoEqual(override, info.WorkflowExecutionInfo.GetVersioningInfo().GetVersioningOverride())
+}
+
+// Test batch reset operation with version update as post reset operation
+func (s *WorkflowResetSuite) TestBatchResetWithOptionsUpdate() {
+	ctx := testcore.NewContext()
+
+	// Create 2 workflows for batch reset
+	workflowID1 := "test-batch-reset-1-" + uuid.NewString()
+	workflowID2 := "test-batch-reset-2-" + uuid.NewString()
+
+	runs1 := s.setupRuns(ctx, workflowID1, 1, true)
+	runs2 := s.setupRuns(ctx, workflowID2, 1, true)
+
+	// Create versioning override for post-reset operations
+	override := &workflowpb.VersioningOverride{
+		Override: &workflowpb.VersioningOverride_Pinned{
+			Pinned: &workflowpb.VersioningOverride_PinnedOverride{
+				Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
+				Version: &deploymentpb.WorkerDeploymentVersion{
+					DeploymentName: "batch-testing",
+					BuildId:        "v.456",
+				},
+			},
+		},
+	}
+
+	// Start batch reset operation
+	batchJobID := "batch-reset-job-" + uuid.NewString()
+	_, err := s.FrontendClient().StartBatchOperation(ctx, &workflowservice.StartBatchOperationRequest{
+		Namespace: s.Namespace().String(),
+		JobId:     batchJobID,
+		Reason:    "testing-batch-reset-with-options",
+		Executions: []*commonpb.WorkflowExecution{
+			{WorkflowId: workflowID1, RunId: runs1[0]},
+			{WorkflowId: workflowID2, RunId: runs2[0]},
+		},
+		Operation: &workflowservice.StartBatchOperationRequest_ResetOperation{
+			ResetOperation: &batchpb.BatchOperationReset{
+				Identity: "test-batch-reset",
+				Options: &commonpb.ResetOptions{
+					Target: &commonpb.ResetOptions_WorkflowTaskId{
+						WorkflowTaskId: s.getFirstWFTaskCompleteEventID(ctx, workflowID1, runs1[0]),
+					},
+				},
+				PostResetOperations: []*workflowpb.PostResetOperation{
+					{
+						Variant: &workflowpb.PostResetOperation_UpdateWorkflowOptions_{
+							UpdateWorkflowOptions: &workflowpb.PostResetOperation_UpdateWorkflowOptions{
+								WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{
+									VersioningOverride: override,
+								},
+								UpdateMask: &fieldmaskpb.FieldMask{
+									Paths: []string{
+										"versioning_override",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	})
+	s.NoError(err)
+
+	// Wait for batch operation to complete
+	s.Eventually(func() bool {
+		resp, err := s.FrontendClient().DescribeBatchOperation(ctx, &workflowservice.DescribeBatchOperationRequest{
+			Namespace: s.Namespace().String(),
+			JobId:     batchJobID,
+		})
+		if err != nil {
+			return false
+		}
+		return resp.State == enumspb.BATCH_OPERATION_STATE_COMPLETED
+	}, 20*time.Second, 1*time.Second, "Batch operation should complete")
+
+	// Get the new run IDs after reset
+	// The workflows should be terminated and new runs started
+	newWorkflows := s.getLatestRunsForWorkflows(ctx, []string{workflowID1, workflowID2})
+	s.Len(newWorkflows, 2)
+
+	// Verify both workflows have the options updated event and correct versioning override
+	for i, workflowID := range []string{workflowID1, workflowID2} {
+		newRunID := newWorkflows[i]
+
+		// Find the options updated event in history
+		var optionsUpdatedEvent *historypb.HistoryEvent
+		hist := s.SdkClient().GetWorkflowHistory(ctx, workflowID, newRunID, false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+		for hist.HasNext() {
+			event, err := hist.Next()
+			s.NoError(err)
+			if event.EventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED {
+				optionsUpdatedEvent = event
+				break
+			}
+		}
+		s.NotNil(optionsUpdatedEvent, "Workflow %s should have options updated event", workflowID)
+		s.ProtoEqual(override, optionsUpdatedEvent.GetWorkflowExecutionOptionsUpdatedEventAttributes().GetVersioningOverride())
+
+		// Verify the workflow execution info has the correct versioning override
+		info, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowID, newRunID)
+		s.NoError(err)
+
+		expectedOverride := &workflowpb.VersioningOverride{
+			Override: &workflowpb.VersioningOverride_Pinned{
+				Pinned: &workflowpb.VersioningOverride_PinnedOverride{
+					Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
+					Version: &deploymentpb.WorkerDeploymentVersion{
+						DeploymentName: "batch-testing",
+						BuildId:        "v.456",
+					},
+				},
+			},
+		}
+		s.ProtoEqual(expectedOverride.GetPinned().GetVersion(), info.WorkflowExecutionInfo.GetVersioningInfo().GetVersioningOverride().GetPinned().GetVersion())
+	}
+}
+
 // Helper methods
 
 // getFirstWFTaskCompleteEventID finds the first event corresponding to workflow task completion. This can be used as a good reset point for tests in this suite.
@@ -350,4 +517,16 @@ func (s *WorkflowResetSuite) prepareSingleRun(ctx context.Context, workflowID st
 	})
 	s.NoError(err)
 	return run.GetRunID()
+}
+
+// getLatestRunsForWorkflows gets the latest run IDs for the given workflow IDs
+func (s *WorkflowResetSuite) getLatestRunsForWorkflows(ctx context.Context, workflowIDs []string) []string {
+	var runIDs []string
+	for _, workflowID := range workflowIDs {
+		// Describe the workflow to get the latest run
+		info, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowID, "")
+		s.NoError(err)
+		runIDs = append(runIDs, info.WorkflowExecutionInfo.Execution.RunId)
+	}
+	return runIDs
 }

@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package tests
 
 import (
@@ -36,6 +12,7 @@ import (
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -77,9 +54,8 @@ const (
 )
 
 type AdvancedVisibilitySuite struct {
-	testcore.FunctionalTestSuite
+	testcore.FunctionalTestBase
 
-	sdkClient sdkclient.Client
 	// client for the system namespace
 	sysSDKClient sdkclient.Client
 }
@@ -102,7 +78,7 @@ func (s *AdvancedVisibilitySuite) SetupSuite() {
 		// Allow the scavenger to remove any build ID regardless of when it was last default for a set.
 		dynamicconfig.RemovableBuildIdDurationSinceDefault.Key(): time.Microsecond,
 	}
-	s.FunctionalTestBase.SetupSuiteWithDefaultCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
+	s.FunctionalTestBase.SetupSuiteWithCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 
 	if !testcore.UseSQLVisibility() {
 		// To ensure that Elasticsearch won't return more than defaultPageSize documents,
@@ -112,10 +88,6 @@ func (s *AdvancedVisibilitySuite) SetupSuite() {
 	}
 
 	var err error
-	s.sdkClient, err = sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.FrontendGRPCAddress(),
-		Namespace: s.Namespace().String(),
-	})
 	s.Require().NoError(err)
 
 	s.sysSDKClient, err = sdkclient.Dial(sdkclient.Options{
@@ -126,7 +98,7 @@ func (s *AdvancedVisibilitySuite) SetupSuite() {
 }
 
 func (s *AdvancedVisibilitySuite) TearDownSuite() {
-	s.sdkClient.Close()
+	s.sysSDKClient.Close()
 	s.FunctionalTestBase.TearDownSuite()
 }
 
@@ -1797,7 +1769,6 @@ func (s *AdvancedVisibilitySuite) TestChildWorkflow_ParentWorkflow() {
 		childWfID   = testcore.RandomizeStr(s.T().Name())
 		childWfType = "child-wf-type-" + wfID
 		wfType      = "wf-type-" + wfID
-		taskQueue   = "task-queue-" + wfID
 	)
 
 	childWf := func(ctx workflow.Context) error {
@@ -1812,19 +1783,16 @@ func (s *AdvancedVisibilitySuite) TestChildWorkflow_ParentWorkflow() {
 			Get(ctx, nil)
 	}
 
-	w := worker.New(s.sdkClient, taskQueue, worker.Options{})
-	w.RegisterWorkflowWithOptions(wf, workflow.RegisterOptions{Name: wfType})
-	w.RegisterWorkflowWithOptions(childWf, workflow.RegisterOptions{Name: childWfType})
-	s.Require().NoError(w.Start())
+	s.Worker().RegisterWorkflowWithOptions(wf, workflow.RegisterOptions{Name: wfType})
+	s.Worker().RegisterWorkflowWithOptions(childWf, workflow.RegisterOptions{Name: childWfType})
 
 	startOptions := sdkclient.StartWorkflowOptions{
 		ID:        wfID,
-		TaskQueue: taskQueue,
+		TaskQueue: s.TaskQueue(),
 	}
-	run, err := s.sdkClient.ExecuteWorkflow(ctx, startOptions, wfType)
+	run, err := s.SdkClient().ExecuteWorkflow(ctx, startOptions, wfType)
 	s.NoError(err)
 	s.NoError(run.Get(ctx, nil))
-	w.Stop()
 
 	// check main workflow doesn't have parent workflow and root is itself
 	s.EventuallyWithT(
@@ -1837,14 +1805,13 @@ func (s *AdvancedVisibilitySuite) TestChildWorkflow_ParentWorkflow() {
 					PageSize:  testcore.DefaultPageSize,
 				},
 			)
-			assert.NoError(c, err)
-			if assert.Len(c, resp.Executions, 1) {
-				wfInfo := resp.Executions[0]
-				assert.Nil(c, wfInfo.GetParentExecution())
-				assert.NotNil(c, wfInfo.GetRootExecution())
-				assert.Equal(c, wfID, wfInfo.RootExecution.GetWorkflowId())
-				assert.Equal(c, run.GetRunID(), wfInfo.RootExecution.GetRunId())
-			}
+			require.NoError(c, err)
+			require.Len(c, resp.Executions, 1)
+			wfInfo := resp.Executions[0]
+			require.Nil(c, wfInfo.GetParentExecution())
+			require.NotNil(c, wfInfo.GetRootExecution())
+			require.Equal(c, wfID, wfInfo.RootExecution.GetWorkflowId())
+			require.Equal(c, run.GetRunID(), wfInfo.RootExecution.GetRunId())
 		},
 		testcore.WaitForESToSettle,
 		100*time.Millisecond,
@@ -1862,16 +1829,15 @@ func (s *AdvancedVisibilitySuite) TestChildWorkflow_ParentWorkflow() {
 					PageSize:  testcore.DefaultPageSize,
 				},
 			)
-			assert.NoError(c, err)
-			if assert.Len(c, resp.Executions, 1) {
-				childWfInfo = resp.Executions[0]
-				assert.NotNil(c, childWfInfo.GetParentExecution())
-				assert.Equal(c, wfID, childWfInfo.ParentExecution.GetWorkflowId())
-				assert.Equal(c, run.GetRunID(), childWfInfo.ParentExecution.GetRunId())
-				assert.NotNil(c, childWfInfo.GetRootExecution())
-				assert.Equal(c, wfID, childWfInfo.RootExecution.GetWorkflowId())
-				assert.Equal(c, run.GetRunID(), childWfInfo.RootExecution.GetRunId())
-			}
+			require.NoError(c, err)
+			require.Len(c, resp.Executions, 1)
+			childWfInfo = resp.Executions[0]
+			require.NotNil(c, childWfInfo.GetParentExecution())
+			require.Equal(c, wfID, childWfInfo.ParentExecution.GetWorkflowId())
+			require.Equal(c, run.GetRunID(), childWfInfo.ParentExecution.GetRunId())
+			require.NotNil(c, childWfInfo.GetRootExecution())
+			require.Equal(c, wfID, childWfInfo.RootExecution.GetWorkflowId())
+			require.Equal(c, run.GetRunID(), childWfInfo.RootExecution.GetRunId())
 		},
 		testcore.WaitForESToSettle,
 		100*time.Millisecond,
@@ -2054,7 +2020,7 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_VersionedWorke
 	s.Require().NoError(err)
 
 	// Start first worker
-	w1 := worker.New(s.sdkClient, taskQueue, worker.Options{
+	w1 := worker.New(s.SdkClient(), taskQueue, worker.Options{
 		BuildID:                      buildIdv1,
 		UseBuildIDForVersioning:      true,
 		StickyScheduleToStartTimeout: time.Second,
@@ -2067,7 +2033,7 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_VersionedWorke
 		ID:        id,
 		TaskQueue: taskQueue,
 	}
-	run, err := s.sdkClient.ExecuteWorkflow(ctx, startOptions, workflowType)
+	run, err := s.SdkClient().ExecuteWorkflow(ctx, startOptions, workflowType)
 	s.NoError(err)
 
 	<-startedCh
@@ -2097,7 +2063,7 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_VersionedWorke
 	s.Require().NoError(err)
 
 	// Start v1.1 worker
-	w11 := worker.New(s.sdkClient, taskQueue, worker.Options{
+	w11 := worker.New(s.SdkClient(), taskQueue, worker.Options{
 		BuildID:                 buildIdv11,
 		UseBuildIDForVersioning: true,
 	})
@@ -2107,7 +2073,7 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_VersionedWorke
 	defer w11.Stop()
 
 	// Resume workflow execution and wait for first task after CAN
-	err = s.sdkClient.SignalWorkflow(ctx, id, "", "continue", nil)
+	err = s.SdkClient().SignalWorkflow(ctx, id, "", "continue", nil)
 	s.Require().NoError(err)
 
 	err = run.GetWithOptions(ctx, nil, sdkclient.WorkflowRunGetOptions{DisableFollowingRuns: true})
@@ -2125,10 +2091,10 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_VersionedWorke
 	s.Equal([]string{worker_versioning.VersionedBuildIdSearchAttribute(buildIdv11)}, buildIDs)
 
 	// Resume and wait for the workflow CAN for the last time
-	err = s.sdkClient.SignalWorkflow(ctx, id, "", "continue", nil)
+	err = s.SdkClient().SignalWorkflow(ctx, id, "", "continue", nil)
 	s.Require().NoError(err)
 
-	run = s.sdkClient.GetWorkflow(ctx, id, secondRunId)
+	run = s.SdkClient().GetWorkflow(ctx, id, secondRunId)
 	err = run.GetWithOptions(ctx, nil, sdkclient.WorkflowRunGetOptions{DisableFollowingRuns: true})
 	s.Require().ErrorAs(err, &canError)
 
@@ -2196,7 +2162,7 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnReset() {
 	s.Require().NoError(err)
 
 	// Start a worker
-	w := worker.New(s.sdkClient, taskQueue, worker.Options{
+	w := worker.New(s.SdkClient(), taskQueue, worker.Options{
 		BuildID:                      buildIdv1,
 		UseBuildIDForVersioning:      true,
 		StickyScheduleToStartTimeout: time.Second,
@@ -2210,7 +2176,7 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnReset() {
 		ID:        id,
 		TaskQueue: taskQueue,
 	}
-	run, err := s.sdkClient.ExecuteWorkflow(ctx, startOptions, workflowType)
+	run, err := s.SdkClient().ExecuteWorkflow(ctx, startOptions, workflowType)
 	s.Require().NoError(err)
 
 	err = run.GetWithOptions(ctx, nil, sdkclient.WorkflowRunGetOptions{DisableFollowingRuns: true})
@@ -2220,7 +2186,7 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnReset() {
 	// Confirm first WFT is complete before resetting
 	<-startedCh
 
-	resetResult, err := s.sdkClient.ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
+	resetResult, err := s.SdkClient().ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
 		Namespace:                 s.Namespace().String(),
 		WorkflowExecution:         &commonpb.WorkflowExecution{WorkflowId: id},
 		WorkflowTaskFinishEventId: 3,
@@ -2271,7 +2237,7 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnRetry() {
 	s.Require().NoError(err)
 
 	// Start a worker
-	w := worker.New(s.sdkClient, taskQueue, worker.Options{
+	w := worker.New(s.SdkClient(), taskQueue, worker.Options{
 		BuildID:                      buildIdv1,
 		UseBuildIDForVersioning:      true,
 		StickyScheduleToStartTimeout: time.Second,
@@ -2289,7 +2255,7 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnRetry() {
 			MaximumAttempts: 2,
 		},
 	}
-	run, err := s.sdkClient.ExecuteWorkflow(ctx, startOptions, workflowType)
+	run, err := s.SdkClient().ExecuteWorkflow(ctx, startOptions, workflowType)
 	s.Require().NoError(err)
 	s.Require().Error(run.Get(ctx, nil))
 
@@ -2606,14 +2572,15 @@ func (s *AdvancedVisibilitySuite) TestBuildIdScavenger_DeletesUnusedBuildId() {
 	err = run.Get(ctx, nil)
 	s.Require().NoError(err)
 
-	compatibility, err := s.sdkClient.GetWorkerBuildIdCompatibility(ctx, &sdkclient.GetWorkerBuildIdCompatibilityOptions{
+	//nolint:staticcheck // SA1019 legacy test.
+	compatibility, err := s.SdkClient().GetWorkerBuildIdCompatibility(ctx, &sdkclient.GetWorkerBuildIdCompatibilityOptions{
 		TaskQueue: tq,
 	})
 	s.Require().NoError(err)
 	s.Require().Equal(1, len(compatibility.Sets))
 	s.Require().Equal([]string{buildIdv1}, compatibility.Sets[0].BuildIDs)
 	// Make sure the build ID was removed from the build ID->task queue mapping
-	res, err := s.sdkClient.WorkflowService().GetWorkerTaskReachability(ctx, &workflowservice.GetWorkerTaskReachabilityRequest{
+	res, err := s.SdkClient().WorkflowService().GetWorkerTaskReachability(ctx, &workflowservice.GetWorkerTaskReachabilityRequest{
 		Namespace: s.Namespace().String(),
 		BuildIds:  []string{buildIdv0},
 	})

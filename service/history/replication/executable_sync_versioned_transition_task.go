@@ -1,31 +1,8 @@
-// The MIT License
-//
-// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package replication
 
 import (
 	"context"
 	"errors"
-	"fmt"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
@@ -77,7 +54,6 @@ func NewExecutableSyncVersionedTransitionTask(
 			time.Now().UTC(),
 			sourceClusterName,
 			sourceShardKey,
-			replicationTask.Priority,
 			replicationTask,
 		),
 		taskAttr: task,
@@ -93,9 +69,10 @@ func (e *ExecutableSyncVersionedTransitionTask) Execute() error {
 		return nil
 	}
 
+	callerInfo := getReplicaitonCallerInfo(e.GetPriority())
 	namespaceName, apply, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
 		context.Background(),
-		headers.SystemPreemptableCallerInfo,
+		callerInfo,
 	), e.NamespaceID)
 	if nsError != nil {
 		return nsError
@@ -114,7 +91,7 @@ func (e *ExecutableSyncVersionedTransitionTask) Execute() error {
 		return nil
 	}
 
-	ctx, cancel := newTaskContext(namespaceName, e.Config.ReplicationTaskApplyTimeout())
+	ctx, cancel := newTaskContext(namespaceName, e.Config.ReplicationTaskApplyTimeout(), callerInfo)
 	defer cancel()
 	shardContext, err := e.ShardController.GetShardByNamespaceWorkflow(
 		namespace.ID(e.NamespaceID),
@@ -142,16 +119,17 @@ func (e *ExecutableSyncVersionedTransitionTask) HandleErr(err error) error {
 		tag.TaskID(e.ExecutableTask.TaskID()),
 		tag.Error(err),
 	)
+	callerInfo := getReplicaitonCallerInfo(e.GetPriority())
 	switch taskErr := err.(type) {
 	case *serviceerrors.SyncState:
 		namespaceName, _, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
 			context.Background(),
-			headers.SystemPreemptableCallerInfo,
+			callerInfo,
 		), e.NamespaceID)
 		if nsError != nil {
 			return err
 		}
-		ctx, cancel := newTaskContext(namespaceName, e.Config.ReplicationTaskApplyTimeout())
+		ctx, cancel := newTaskContext(namespaceName, e.Config.ReplicationTaskApplyTimeout(), callerInfo)
 		defer cancel()
 
 		if doContinue, syncStateErr := e.SyncState(
@@ -175,12 +153,12 @@ func (e *ExecutableSyncVersionedTransitionTask) HandleErr(err error) error {
 	case *serviceerrors.RetryReplication:
 		namespaceName, _, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
 			context.Background(),
-			headers.SystemPreemptableCallerInfo,
+			callerInfo,
 		), e.NamespaceID)
 		if nsError != nil {
 			return err
 		}
-		ctx, cancel := newTaskContext(namespaceName, e.Config.ReplicationTaskApplyTimeout())
+		ctx, cancel := newTaskContext(namespaceName, e.Config.ReplicationTaskApplyTimeout(), callerInfo)
 		defer cancel()
 		var mutation *replicationspb.SyncWorkflowStateMutationAttributes
 		var snapshot *replicationspb.SyncWorkflowStateSnapshotAttributes
@@ -190,7 +168,7 @@ func (e *ExecutableSyncVersionedTransitionTask) HandleErr(err error) error {
 		case *replicationspb.VersionedTransitionArtifact_SyncWorkflowStateMutationAttributes:
 			mutation = e.taskAttr.VersionedTransitionArtifact.GetSyncWorkflowStateMutationAttributes()
 		default:
-			return serviceerror.NewInvalidArgument(fmt.Sprintf("unknown artifact type %T", artifactType))
+			return serviceerror.NewInvalidArgumentf("unknown artifact type %T", artifactType)
 		}
 		versionHistories := func() *historyspb.VersionHistories {
 			if snapshot != nil {

@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package tests
 
 import (
@@ -46,7 +22,6 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
-	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
@@ -587,7 +562,7 @@ func (t *resetTest) run() {
 		},
 	)
 	t.Equal(runID, resp.RunId)
-	t.False(resp.Started)
+	requireNotStartedButRunning(t.T(), resp)
 
 	for i := 1; i <= t.totalSignals; i++ {
 		t.sendSignalAndProcessWFT(poller)
@@ -718,7 +693,7 @@ func (t *resetTest) run() {
 		},
 	)
 	t.Equal(newRunId, resp.RunId)
-	t.False(resp.Started)
+	requireNotStartedButRunning(t.T(), resp)
 
 	// History events must be the same.
 	events = t.GetHistory(t.Namespace().String(), t.tv.WorkflowExecution())
@@ -975,24 +950,11 @@ func CaNOnceWorkflow(ctx workflow.Context, input string) (string, error) {
 }
 
 func (s *ResetWorkflowTestSuite) TestResetWorkflow_ResetAfterContinueAsNew() {
-	id := "functional-reset-workflow-test"
-	tq := "functional-reset-workflow-test-taskqueue"
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	// get sdkClient
-	sdkClient, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.FrontendGRPCAddress(),
-		Namespace: s.Namespace().String(),
-	})
-	s.NoError(err)
-
-	// start workflow that does CaN once
-	w := worker.New(sdkClient, tq, worker.Options{Identity: id})
-	w.RegisterWorkflow(CaNOnceWorkflow)
-	s.NoError(w.Start())
-	defer w.Stop()
-	run, err := sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, CaNOnceWorkflow, "")
+	s.Worker().RegisterWorkflow(CaNOnceWorkflow)
+	run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: s.TaskQueue()}, CaNOnceWorkflow, "")
 	s.NoError(err)
 
 	// wait for your workflow and its CaN to complete

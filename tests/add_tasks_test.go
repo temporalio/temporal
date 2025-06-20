@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package tests
 
 import (
@@ -58,11 +34,10 @@ import (
 type (
 	// AddTasksSuite is a separate suite because we need to override the history service's executable wrapper.
 	AddTasksSuite struct {
-		testcore.FunctionalTestSuite
+		testcore.FunctionalTestBase
 
 		shardController *faultyShardController
 		worker          worker.Worker
-		sdkClient       sdkclient.Client
 		skippedTasks    chan tasks.Task
 
 		shouldSkip   atomic.Bool
@@ -143,7 +118,7 @@ func (e *noopExecutor) shouldExecute(task tasks.Task) bool {
 // SetupSuite creates the test cluster and registers the executorWrapper with the history service.
 func (s *AddTasksSuite) SetupSuite() {
 	// Set up the test cluster and register our executable wrapper.
-	s.FunctionalTestBase.SetupSuiteWithDefaultCluster(testcore.WithFxOptionsForService(
+	s.FunctionalTestBase.SetupSuiteWithCluster(testcore.WithFxOptionsForService(
 		primitives.HistoryService,
 		fx.Provide(
 			func() queues.ExecutorWrapper {
@@ -158,13 +133,6 @@ func (s *AddTasksSuite) SetupSuite() {
 		),
 	),
 	)
-	// Get an SDK client so that we can call ExecuteWorkflow.
-	s.sdkClient = s.newSDKClient()
-}
-
-func (s *AddTasksSuite) TearDownSuite() {
-	s.sdkClient.Close()
-	s.FunctionalTestBase.TearDownSuite()
 }
 
 func (s *AddTasksSuite) TestAddTasks_Ok() {
@@ -183,8 +151,7 @@ func (s *AddTasksSuite) TestAddTasks_Ok() {
 	} {
 		s.Run(tc.name, func() {
 			// Register a workflow which does nothing.
-			taskQueue := testcore.RandomizeStr("add-tasks-test-queue")
-			w := worker.New(s.sdkClient, taskQueue, worker.Options{DeadlockDetectionTimeout: 0})
+			w := worker.New(s.SdkClient(), s.TaskQueue(), worker.Options{DeadlockDetectionTimeout: 0})
 			myWorkflow := func(ctx workflow.Context) error {
 				return nil
 			}
@@ -202,9 +169,9 @@ func (s *AddTasksSuite) TestAddTasks_Ok() {
 			timeout := 5 * debug.TimeoutMultiplier * time.Second
 			ctx, cancel := context.WithTimeout(ctx, timeout)
 			defer cancel()
-			run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+			run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 				ID:        workflowID,
-				TaskQueue: taskQueue,
+				TaskQueue: s.TaskQueue(),
 			}, myWorkflow)
 			s.NoError(err)
 
@@ -267,13 +234,4 @@ func (s *AddTasksSuite) TestAddTasks_GetEngineErr() {
 	})
 	s.Error(err)
 	s.ErrorContains(err, (*s.getEngineErr.Load()).Error())
-}
-
-func (s *AddTasksSuite) newSDKClient() sdkclient.Client {
-	client, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.FrontendGRPCAddress(),
-		Namespace: s.Namespace().String(),
-	})
-	s.Require().NoError(err)
-	return client
 }
