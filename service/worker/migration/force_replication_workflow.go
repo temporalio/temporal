@@ -448,11 +448,12 @@ func enqueueReplicationTasks(ctx workflow.Context, workflowExecutionsCh workflow
 			selector.AddFuture(verifyTaskFuture, func(f workflow.Future) {
 				pendingVerifyTasks--
 
-				if err := f.Get(ctx, nil); err != nil {
+				var verifyTaskResponse verifyReplicationTasksResponse
+				if err := f.Get(ctx, &verifyTaskResponse); err != nil {
 					lastActivityErr = err
 				} else {
 					// Update replication status
-					params.ReplicatedWorkflowCount += int64(len(workflowExecutions))
+					params.ReplicatedWorkflowCount += int64(verifyTaskResponse.VerifiedWorkflowCount)
 					params.QPSQueue.Enqueue(ctx, params.ReplicatedWorkflowCount)
 					params.ReplicatedWorkflowCountPerSecond = params.QPSQueue.CalculateQPS()
 
@@ -476,9 +477,13 @@ func enqueueReplicationTasks(ctx workflow.Context, workflowExecutionsCh workflow
 		}
 	}
 
-	for _, future := range futures {
-		if err := future.Get(ctx, nil); err != nil {
-			return err
+	totalPendingTasks := pendingGenerateTasks + pendingVerifyTasks
+	for totalPendingTasks > 0 {
+		// Wait for all in-flight activities to complete
+		selector.Select(ctx)
+		totalPendingTasks -= 1
+		if lastActivityErr != nil {
+			return lastActivityErr
 		}
 	}
 

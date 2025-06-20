@@ -36,7 +36,7 @@ func TestForceReplicationWorkflow(t *testing.T) {
 	namespaceID := uuid.New()
 
 	var a *activities
-	env.OnActivity(a.CountWorkflow, mock.Anything, mock.Anything).Return(&countWorkflowResponse{WorkflowCount: 10}, nil)
+	env.OnActivity(a.CountWorkflow, mock.Anything, mock.Anything).Return(&countWorkflowResponse{WorkflowCount: 4}, nil)
 	env.OnActivity(a.GetMetadata, mock.Anything, metadataRequest{Namespace: "test-ns"}).Return(&metadataResponse{ShardCount: 4, NamespaceID: namespaceID}, nil)
 
 	totalPageCount := 4
@@ -50,7 +50,7 @@ func TestForceReplicationWorkflow(t *testing.T) {
 		currentPageCount++
 		if currentPageCount < totalPageCount {
 			return &listWorkflowsResponse{
-				Executions:    []*commonpb.WorkflowExecution{},
+				Executions:    []*commonpb.WorkflowExecution{{WorkflowId: "wf-1"}},
 				NextPageToken: []byte("fake-page-token"),
 				LastStartTime: startTime,
 				LastCloseTime: closeTime,
@@ -65,13 +65,13 @@ func TestForceReplicationWorkflow(t *testing.T) {
 		}, nil
 	}).Times(totalPageCount)
 	env.OnActivity(a.GenerateReplicationTasks, mock.Anything, mock.Anything).Return(nil).Times(totalPageCount)
-	env.OnActivity(a.VerifyReplicationTasks, mock.Anything, mock.Anything).Return(verifyReplicationTasksResponse{}, nil).Times(totalPageCount)
+	env.OnActivity(a.VerifyReplicationTasks, mock.Anything, mock.Anything).Return(verifyReplicationTasksResponse{VerifiedWorkflowCount: 1}, nil).Times(totalPageCount)
 
 	env.OnActivity(a.SeedReplicationQueueWithUserDataEntries, mock.Anything, mock.Anything).Return(nil).Times(1)
 	env.ExecuteWorkflow(ForceReplicationWorkflow, ForceReplicationParams{
 		Namespace:               "test-ns",
 		Query:                   "",
-		ConcurrentActivityCount: 2,
+		ConcurrentActivityCount: 100,
 		OverallRps:              10,
 		ListWorkflowsPageSize:   1,
 		PageCountPerExecution:   4,
@@ -94,8 +94,8 @@ func TestForceReplicationWorkflow(t *testing.T) {
 	assert.Equal(t, closeTime, status.LastCloseTime)
 	assert.True(t, status.TaskQueueUserDataReplicationStatus.Done)
 	assert.Equal(t, "", status.TaskQueueUserDataReplicationStatus.FailureMessage)
-	assert.Equal(t, int64(10), status.TotalWorkflowCount)
-	assert.Equal(t, int64(0), status.ReplicatedWorkflowCount)
+	assert.Equal(t, int64(4), status.TotalWorkflowCount)
+	assert.Equal(t, int64(4), status.ReplicatedWorkflowCount)
 	assert.Equal(t, []byte(nil), status.PageTokenForRestart)
 }
 
