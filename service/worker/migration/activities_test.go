@@ -149,6 +149,7 @@ func (s *activitiesSuite) TestVerifyReplicationTasks_Success() {
 		Namespace:         mockedNamespace,
 		NamespaceID:       mockedNamespaceID,
 		TargetClusterName: remoteCluster,
+		Concurrency:       1,
 		Executions:        []*commonpb.WorkflowExecution{execution1, execution2},
 	}
 
@@ -223,6 +224,7 @@ func (s *activitiesSuite) TestVerifyReplicationTasks_SkipWorkflowExecution() {
 		Namespace:         mockedNamespace,
 		NamespaceID:       mockedNamespaceID,
 		TargetClusterName: remoteCluster,
+		Concurrency:       1,
 		Executions:        []*commonpb.WorkflowExecution{execution1},
 	}
 
@@ -262,6 +264,7 @@ func (s *activitiesSuite) TestVerifyReplicationTasks_FailedNotFound() {
 		Namespace:         mockedNamespace,
 		NamespaceID:       mockedNamespaceID,
 		TargetClusterName: remoteCluster,
+		Concurrency:       1,
 		Executions:        []*commonpb.WorkflowExecution{execution1},
 	}
 
@@ -298,6 +301,7 @@ func (s *activitiesSuite) TestVerifyReplicationTasks_AlreadyVerified() {
 		Namespace:         mockedNamespace,
 		NamespaceID:       mockedNamespaceID,
 		TargetClusterName: remoteCluster,
+		Concurrency:       1,
 		Executions:        []*commonpb.WorkflowExecution{execution1, execution2},
 	}
 
@@ -318,6 +322,7 @@ func (s *activitiesSuite) Test_verifySingleReplicationTask() {
 		Namespace:         mockedNamespace,
 		NamespaceID:       mockedNamespaceID,
 		TargetClusterName: remoteCluster,
+		Concurrency:       1,
 		Executions:        []*commonpb.WorkflowExecution{execution1, execution2},
 	}
 	ctx := context.TODO()
@@ -399,6 +404,7 @@ func (s *activitiesSuite) Test_verifyReplicationTasks() {
 		Namespace:         mockedNamespace,
 		NamespaceID:       mockedNamespaceID,
 		TargetClusterName: remoteCluster,
+		Concurrency:       1,
 	}
 
 	ctx := context.TODO()
@@ -485,6 +491,7 @@ func (s *activitiesSuite) Test_verifyReplicationTasksNoProgress() {
 		Namespace:         mockedNamespace,
 		NamespaceID:       mockedNamespaceID,
 		TargetClusterName: remoteCluster,
+		Concurrency:       1,
 		Executions:        createExecutions(s.mockRemoteClient, []executionState{executionFound, executionFound, executionNotfound, executionFound}, 0),
 	}
 
@@ -527,6 +534,7 @@ func (s *activitiesSuite) Test_verifyReplicationTasksSkipRetention() {
 		Namespace:         mockedNamespace,
 		NamespaceID:       mockedNamespaceID,
 		TargetClusterName: remoteCluster,
+		Concurrency:       1,
 		Executions:        []*commonpb.WorkflowExecution{execution1},
 	}
 
