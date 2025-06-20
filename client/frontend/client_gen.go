@@ -849,6 +849,16 @@ func (c *clientImpl) UpdateSchedule(
 	return c.client.UpdateSchedule(ctx, request, opts...)
 }
 
+func (c *clientImpl) UpdateTaskQueueConfig(
+	ctx context.Context,
+	request *workflowservice.UpdateTaskQueueConfigRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.UpdateTaskQueueConfigResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.UpdateTaskQueueConfig(ctx, request, opts...)
+}
+
 func (c *clientImpl) UpdateWorkerBuildIdCompatibility(
 	ctx context.Context,
 	request *workflowservice.UpdateWorkerBuildIdCompatibilityRequest,
