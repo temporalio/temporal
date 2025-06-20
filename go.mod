@@ -177,7 +177,3 @@ require (
 	modernc.org/strutil v1.2.1 // indirect
 	modernc.org/token v1.1.0 // indirect
 )
-
-replace go.temporal.io/api => /Users/sivagirishramesh/Documents/Work/Temporal-dev/api-go
-
-replace go.temporal.io/sdk => /Users/sivagirishramesh/Documents/Work/Temporal-dev/sdk-go

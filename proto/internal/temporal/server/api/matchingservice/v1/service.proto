@@ -173,10 +173,10 @@ service MatchingService {
     rpc ListWorkers (ListWorkersRequest) returns (ListWorkersResponse) {}
 
     // (-- api-linter: core::0134::method-signature=disabled
-    //     aip.dev/not-precedent: UpdateNexusEndpoint RPC doesn't follow Google API format. --)
+    //     aip.dev/not-precedent: UpdateTaskQueueConfig RPC doesn't follow Google API format. --)
     // (-- api-linter: core::0134::response-message-name=disabled
-    //     aip.dev/not-precedent: UpdateNexusEndpoint RPC doesn't follow Google API format. --)
+    //     aip.dev/not-precedent: UpdateTaskQueueConfig RPC doesn't follow Google API format. --)
     // (-- api-linter: core::0134::request-resource-required=disabled
-    //     aip.dev/not-precedent: UpdateNexusEndpoint RPC doesn't follow Google API format. --)
+    //     aip.dev/not-precedent: UpdateTaskQueueConfig RPC doesn't follow Google API format. --)
     rpc UpdateTaskQueueConfig (UpdateTaskQueueConfigRequest) returns (UpdateTaskQueueConfigResponse) {} 
 }
