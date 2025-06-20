@@ -100,3 +100,15 @@ type CircuitBreakerSettings struct {
 	// Timeout: Period of open state before changing to half-open state (default 60s).`
 	Timeout time.Duration
 }
+
+type CacheActiveExpirySettings struct {
+	Enabled         bool
+	LoopInterval    time.Duration
+	MaxEntryPerCall int
+}
+
+var DefaultHistoryCacheActiveExpirySettings = CacheActiveExpirySettings{
+	Enabled:         false,
+	LoopInterval:    1 * time.Minute,
+	MaxEntryPerCall: 1024,
+}
