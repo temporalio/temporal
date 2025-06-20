@@ -14,6 +14,7 @@ import (
 	reflect "reflect"
 	time "time"
 
+	enums "go.temporal.io/server/api/enums/v1"
 	repication "go.temporal.io/server/api/replication/v1"
 	backoff "go.temporal.io/server/common/backoff"
 	definition "go.temporal.io/server/common/definition"
@@ -138,6 +139,20 @@ func (m *MockExecutableTask) GetNamespaceInfo(ctx context.Context, namespaceID s
 func (mr *MockExecutableTaskMockRecorder) GetNamespaceInfo(ctx, namespaceID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNamespaceInfo", reflect.TypeOf((*MockExecutableTask)(nil).GetNamespaceInfo), ctx, namespaceID)
+}
+
+// GetPriority mocks base method.
+func (m *MockExecutableTask) GetPriority() enums.TaskPriority {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetPriority")
+	ret0, _ := ret[0].(enums.TaskPriority)
+	return ret0
+}
+
+// GetPriority indicates an expected call of GetPriority.
+func (mr *MockExecutableTaskMockRecorder) GetPriority() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPriority", reflect.TypeOf((*MockExecutableTask)(nil).GetPriority))
 }
 
 // IsRetryableError mocks base method.

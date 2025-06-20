@@ -132,8 +132,8 @@ func (t *timerQueueStandbyTaskExecutor) executeChasmPureTimerTask(
 			wfContext,
 			mutableState,
 			task,
-			func(node chasm.NodePureTask, task any) error {
-				ok, err := node.ValidatePureTask(ctx, task)
+			func(node chasm.NodePureTask, taskAttributes chasm.TaskAttributes, task any) error {
+				ok, err := node.ValidatePureTask(ctx, taskAttributes, task)
 				if err != nil {
 					return err
 				}
@@ -177,26 +177,12 @@ func (t *timerQueueStandbyTaskExecutor) executeChasmSideEffectTimerTask(
 		wfContext historyi.WorkflowContext,
 		ms historyi.MutableState,
 	) (any, error) {
-		// Because CHASM timers can target closed workflows, we need to specifically
-		// exclude zombie workflows, instead of merely checking that the workflow is
-		// running.
-		if ms.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
-			return nil, consts.ErrWorkflowZombie
-		}
-
-		tree := ms.ChasmTree()
-		if tree == nil {
-			return nil, errNoChasmTree
-		}
-
-		taskInstance, err := tree.ValidateSideEffectTask(ctx, t.shardContext.ChasmRegistry(), task.Info)
-		if err == nil && taskInstance != nil {
-			// If a taskInstance is returned, the task is still valid, and we should keep
-			// it around.
-			return &struct{}{}, nil
-		}
-
-		return nil, err
+		return validateChasmSideEffectTask(
+			ctx,
+			t.shardContext.ChasmRegistry(),
+			ms,
+			task,
+		)
 	}
 
 	return t.processTimer(

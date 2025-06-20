@@ -19,23 +19,27 @@ type ChasmTree interface {
 	Snapshot(*persistencespb.VersionedTransition) chasm.NodesSnapshot
 	ApplyMutation(chasm.NodesMutation) error
 	ApplySnapshot(chasm.NodesSnapshot) error
+	RefreshTasks() error
+	IsStateDirty() bool
 	IsDirty() bool
 	Terminate(chasm.TerminateComponentRequest) error
 	Archetype() string
 	EachPureTask(
 		deadline time.Time,
-		callback func(executor chasm.NodePureTask, task any) error,
+		callback func(executor chasm.NodePureTask, taskAttributes chasm.TaskAttributes, task any) error,
 	) error
 	ExecuteSideEffectTask(
 		ctx context.Context,
 		registry *chasm.Registry,
 		entityKey chasm.EntityKey,
+		taskAttributes chasm.TaskAttributes,
 		taskInfo *persistencespb.ChasmTaskInfo,
 		validate func(chasm.NodeBackend, chasm.Context, chasm.Component) error,
 	) error
 	ValidateSideEffectTask(
 		ctx context.Context,
 		registry *chasm.Registry,
+		taskAttributes chasm.TaskAttributes,
 		taskInfo *persistencespb.ChasmTaskInfo,
 	) (any, error)
 	IsStale(chasm.ComponentRef) error

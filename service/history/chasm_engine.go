@@ -9,6 +9,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/locks"
@@ -72,12 +73,12 @@ func (e *ChasmEngine) NewEntity(
 	entityRef chasm.ComponentRef,
 	newFn func(chasm.MutableContext) (chasm.Component, error),
 	opts ...chasm.TransitionOption,
-) (newEntityRef chasm.ComponentRef, retErr error) {
+) (entityKey chasm.EntityKey, newEntityRef []byte, retErr error) {
 	options := e.constructTransitionOptions(opts...)
 
 	shardContext, err := e.getShardContext(entityRef)
 	if err != nil {
-		return chasm.ComponentRef{}, err
+		return chasm.EntityKey{}, nil, err
 	}
 
 	currentEntityReleaseFn, err := e.lockCurrentEntity(
@@ -87,7 +88,7 @@ func (e *ChasmEngine) NewEntity(
 		entityRef.BusinessID,
 	)
 	if err != nil {
-		return chasm.ComponentRef{}, err
+		return chasm.EntityKey{}, nil, err
 	}
 	defer func() {
 		currentEntityReleaseFn(retErr)
@@ -101,7 +102,7 @@ func (e *ChasmEngine) NewEntity(
 		options,
 	)
 	if err != nil {
-		return chasm.ComponentRef{}, err
+		return chasm.EntityKey{}, nil, err
 	}
 
 	currentRunInfo, hasCurrentRun, err := e.persistAsBrandNew(
@@ -110,10 +111,14 @@ func (e *ChasmEngine) NewEntity(
 		newEntityParams,
 	)
 	if err != nil {
-		return chasm.ComponentRef{}, err
+		return chasm.EntityKey{}, nil, err
 	}
 	if !hasCurrentRun {
-		return newEntityParams.entityRef, nil
+		serializedRef, err := newEntityParams.entityRef.Serialize(e.registry)
+		if err != nil {
+			return chasm.EntityKey{}, nil, err
+		}
+		return newEntityParams.entityRef.EntityKey, serializedRef, nil
 	}
 
 	return e.handleEntityConflict(
@@ -130,11 +135,11 @@ func (e *ChasmEngine) UpdateComponent(
 	ref chasm.ComponentRef,
 	updateFn func(chasm.MutableContext, chasm.Component) error,
 	opts ...chasm.TransitionOption,
-) (updatedRef chasm.ComponentRef, retError error) {
+) (updatedRef []byte, retError error) {
 
 	shardContext, executionLease, err := e.getExecutionLease(ctx, ref)
 	if err != nil {
-		return chasm.ComponentRef{}, err
+		return nil, err
 	}
 	defer func() {
 		executionLease.GetReleaseFn()(retError)
@@ -143,7 +148,7 @@ func (e *ChasmEngine) UpdateComponent(
 	mutableState := executionLease.GetMutableState()
 	chasmTree, ok := mutableState.ChasmTree().(*chasm.Node)
 	if !ok {
-		return chasm.ComponentRef{}, serviceerror.NewInternalf(
+		return nil, serviceerror.NewInternalf(
 			"CHASM tree implementation not properly wired up, encountered type: %T, expected type: %T",
 			mutableState.ChasmTree(),
 			&chasm.Node{},
@@ -153,11 +158,11 @@ func (e *ChasmEngine) UpdateComponent(
 	mutableContext := chasm.NewMutableContext(ctx, chasmTree)
 	component, err := chasmTree.Component(mutableContext, ref)
 	if err != nil {
-		return chasm.ComponentRef{}, err
+		return nil, err
 	}
 
 	if err := updateFn(mutableContext, component); err != nil {
-		return chasm.ComponentRef{}, err
+		return nil, err
 	}
 
 	// TODO: Support WithSpeculative() TransitionOption.
@@ -166,15 +171,15 @@ func (e *ChasmEngine) UpdateComponent(
 		ctx,
 		shardContext,
 	); err != nil {
-		return chasm.ComponentRef{}, err
+		return nil, err
 	}
 
-	newRef, err := mutableContext.Ref(component)
+	newSerializedRef, err := mutableContext.Ref(component)
 	if err != nil {
-		return chasm.ComponentRef{}, serviceerror.NewInternalf("componentRef: %+v: %s", ref, err)
+		return nil, serviceerror.NewInternalf("componentRef: %+v: %s", ref, err)
 	}
 
-	return newRef, nil
+	return newSerializedRef, nil
 }
 
 func (e *ChasmEngine) ReadComponent(
@@ -359,11 +364,15 @@ func (e *ChasmEngine) handleEntityConflict(
 	newEntityParams newEntityParams,
 	currentRunInfo currentRunInfo,
 	options chasm.TransitionOptions,
-) (chasm.ComponentRef, error) {
+) (chasm.EntityKey, []byte, error) {
 	// Check if this a retired request using requestID.
 	if _, ok := currentRunInfo.RequestIDs[options.RequestID]; ok {
 		newEntityParams.entityRef.EntityID = currentRunInfo.RunID
-		return newEntityParams.entityRef, nil
+		serializedRef, err := newEntityParams.entityRef.Serialize(e.registry)
+		if err != nil {
+			return chasm.EntityKey{}, nil, err
+		}
+		return newEntityParams.entityRef.EntityKey, serializedRef, nil
 	}
 
 	// Verify failover version and make sure it won't go backwards even if the case of split brain.
@@ -375,7 +384,7 @@ func (e *ChasmEngine) handleEntityConflict(
 			nsEntry.IsGlobalNamespace(),
 			currentRunInfo.LastWriteVersion,
 		)
-		return chasm.ComponentRef{}, serviceerror.NewNamespaceNotActive(
+		return chasm.EntityKey{}, nil, serviceerror.NewNamespaceNotActive(
 			nsEntry.Name().String(),
 			clusterMetadata.GetCurrentClusterName(),
 			clusterName,
@@ -388,7 +397,7 @@ func (e *ChasmEngine) handleEntityConflict(
 	case enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED:
 		return e.handleReusePolicy(ctx, shardContext, newEntityParams, currentRunInfo, options.ReusePolicy)
 	default:
-		return chasm.ComponentRef{}, serviceerror.NewInternal(
+		return chasm.EntityKey{}, nil, serviceerror.NewInternal(
 			fmt.Sprintf("unexpected current run state when creating new entity: %v", currentRunInfo.State),
 		)
 	}
@@ -400,10 +409,10 @@ func (e *ChasmEngine) handleConflictPolicy(
 	newEntityParams newEntityParams,
 	currentRunInfo currentRunInfo,
 	conflictPolicy chasm.BusinessIDConflictPolicy,
-) (chasm.ComponentRef, error) {
+) (chasm.EntityKey, []byte, error) {
 	switch conflictPolicy {
 	case chasm.BusinessIDConflictPolicyFail:
-		return chasm.ComponentRef{}, serviceerror.NewWorkflowExecutionAlreadyStarted(
+		return chasm.EntityKey{}, nil, serviceerror.NewWorkflowExecutionAlreadyStarted(
 			fmt.Sprintf(
 				"CHASM execution still running. BusinessID: %s, RunID: %s, ID Conflict Policy: %v",
 				newEntityParams.entityRef.EntityKey.BusinessID,
@@ -415,11 +424,11 @@ func (e *ChasmEngine) handleConflictPolicy(
 		)
 	case chasm.BusinessIDConflictPolicyTermiateExisting:
 		// TODO: handle BusinessIDConflictPolicyTermiateExisting
-		return chasm.ComponentRef{}, serviceerror.NewUnimplemented("ID Conflict Policy Terminate Existing is not yet supported")
+		return chasm.EntityKey{}, nil, serviceerror.NewUnimplemented("ID Conflict Policy Terminate Existing is not yet supported")
 	// case chasm.BusinessIDConflictPolicyUseExisting:
-	// 	return chasm.ComponentRef{}, serviceerror.NewUnimplemented("ID Conflict Policy Use Existing is not yet supported")
+	// 	return chasm.EntityKey{}, nil, serviceerror.NewUnimplemented("ID Conflict Policy Use Existing is not yet supported")
 	default:
-		return chasm.ComponentRef{}, serviceerror.NewInternal(
+		return chasm.EntityKey{}, nil, serviceerror.NewInternal(
 			fmt.Sprintf("unknown business ID conflict policy for newEntity: %v", conflictPolicy),
 		)
 	}
@@ -431,14 +440,14 @@ func (e *ChasmEngine) handleReusePolicy(
 	newEntityParams newEntityParams,
 	currentRunInfo currentRunInfo,
 	reusePolicy chasm.BusinessIDReusePolicy,
-) (chasm.ComponentRef, error) {
+) (chasm.EntityKey, []byte, error) {
 	switch reusePolicy {
 	case chasm.BusinessIDReusePolicyAllowDuplicate:
 		// No more check needed.
 		// Fallthrough to persist the new entity as current run.
 	case chasm.BusinessIDReusePolicyAllowDuplicateFailedOnly:
 		if _, ok := consts.FailedWorkflowStatuses[currentRunInfo.Status]; !ok {
-			return chasm.ComponentRef{}, serviceerror.NewWorkflowExecutionAlreadyStarted(
+			return chasm.EntityKey{}, nil, serviceerror.NewWorkflowExecutionAlreadyStarted(
 				fmt.Sprintf(
 					"CHASM execution already completed successfully. BusinessID: %s, RunID: %s, ID Reuse Policy: %v",
 					newEntityParams.entityRef.EntityKey.BusinessID,
@@ -451,7 +460,7 @@ func (e *ChasmEngine) handleReusePolicy(
 		}
 		// Fallthrough to persist the new entity as current run.
 	case chasm.BusinessIDReusePolicyRejectDuplicate:
-		return chasm.ComponentRef{}, serviceerror.NewWorkflowExecutionAlreadyStarted(
+		return chasm.EntityKey{}, nil, serviceerror.NewWorkflowExecutionAlreadyStarted(
 			fmt.Sprintf(
 				"CHASM execution already finished. BusinessID: %s, RunID: %s, ID Reuse Policy: %v",
 				newEntityParams.entityRef.EntityKey.BusinessID,
@@ -462,7 +471,7 @@ func (e *ChasmEngine) handleReusePolicy(
 			currentRunInfo.RunID,
 		)
 	default:
-		return chasm.ComponentRef{}, serviceerror.NewInternal(
+		return chasm.EntityKey{}, nil, serviceerror.NewInternal(
 			fmt.Sprintf("unknown business ID reuse policy for newEntity: %v", reusePolicy),
 		)
 	}
@@ -478,18 +487,27 @@ func (e *ChasmEngine) handleReusePolicy(
 		newEntityParams.events,
 	)
 	if err != nil {
-		return chasm.ComponentRef{}, err
+		return chasm.EntityKey{}, nil, err
 	}
-	return newEntityParams.entityRef, nil
+
+	serializedRef, err := newEntityParams.entityRef.Serialize(e.registry)
+	if err != nil {
+		return chasm.EntityKey{}, nil, err
+	}
+	return newEntityParams.entityRef.EntityKey, serializedRef, nil
 }
 
 func (e *ChasmEngine) getShardContext(
 	ref chasm.ComponentRef,
 ) (historyi.ShardContext, error) {
-	shardID, err := ref.ShardID(e.registry, e.config.NumberOfShards)
+	shardingKey, err := ref.ShardingKey(e.registry)
 	if err != nil {
 		return nil, err
 	}
+	shardID := common.ShardingKeyToShard(
+		shardingKey,
+		e.config.NumberOfShards,
+	)
 
 	return e.shardController.GetShardByID(shardID)
 }
