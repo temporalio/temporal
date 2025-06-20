@@ -202,15 +202,15 @@ type MatchingServiceClient interface {
 	ListWorkers(ctx context.Context, in *ListWorkersRequest, opts ...grpc.CallOption) (*ListWorkersResponse, error)
 	// (-- api-linter: core::0134::method-signature=disabled
 	//
-	//	aip.dev/not-precedent: UpdateNexusEndpoint RPC doesn't follow Google API format. --)
+	//	aip.dev/not-precedent: UpdateTaskQueueConfig RPC doesn't follow Google API format. --)
 	//
 	// (-- api-linter: core::0134::response-message-name=disabled
 	//
-	//	aip.dev/not-precedent: UpdateNexusEndpoint RPC doesn't follow Google API format. --)
+	//	aip.dev/not-precedent: UpdateTaskQueueConfig RPC doesn't follow Google API format. --)
 	//
 	// (-- api-linter: core::0134::request-resource-required=disabled
 	//
-	//	aip.dev/not-precedent: UpdateNexusEndpoint RPC doesn't follow Google API format. --)
+	//	aip.dev/not-precedent: UpdateTaskQueueConfig RPC doesn't follow Google API format. --)
 	UpdateTaskQueueConfig(ctx context.Context, in *UpdateTaskQueueConfigRequest, opts ...grpc.CallOption) (*UpdateTaskQueueConfigResponse, error)
 }
 
@@ -682,15 +682,15 @@ type MatchingServiceServer interface {
 	ListWorkers(context.Context, *ListWorkersRequest) (*ListWorkersResponse, error)
 	// (-- api-linter: core::0134::method-signature=disabled
 	//
-	//	aip.dev/not-precedent: UpdateNexusEndpoint RPC doesn't follow Google API format. --)
+	//	aip.dev/not-precedent: UpdateTaskQueueConfig RPC doesn't follow Google API format. --)
 	//
 	// (-- api-linter: core::0134::response-message-name=disabled
 	//
-	//	aip.dev/not-precedent: UpdateNexusEndpoint RPC doesn't follow Google API format. --)
+	//	aip.dev/not-precedent: UpdateTaskQueueConfig RPC doesn't follow Google API format. --)
 	//
 	// (-- api-linter: core::0134::request-resource-required=disabled
 	//
-	//	aip.dev/not-precedent: UpdateNexusEndpoint RPC doesn't follow Google API format. --)
+	//	aip.dev/not-precedent: UpdateTaskQueueConfig RPC doesn't follow Google API format. --)
 	UpdateTaskQueueConfig(context.Context, *UpdateTaskQueueConfigRequest) (*UpdateTaskQueueConfigResponse, error)
 	mustEmbedUnimplementedMatchingServiceServer()
 }
