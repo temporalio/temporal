@@ -97,12 +97,13 @@ func OutboundTaskInfoFromBlob(blob []byte, encoding string) (*persistencespb.Out
 
 func QueueMetadataToBlob(metadata *persistencespb.QueueMetadata) (*commonpb.DataBlob, error) {
 	// TODO change ENCODING_TYPE_JSON to ENCODING_TYPE_PROTO3
-	return encode(metadata, enumspb.ENCODING_TYPE_JSON)
+	return codec.EncodeBlob(metadata, enumspb.ENCODING_TYPE_JSON)
 }
 
 func QueueMetadataFromBlob(blob []byte, encoding string) (*persistencespb.QueueMetadata, error) {
 	result := &persistencespb.QueueMetadata{}
-	return result, decode(blob, encoding, result)
+	enc, _ := enumspb.EncodingTypeFromString(encoding)
+	return result, codec.DecodeBlob(&commonpb.DataBlob{Data: blob, EncodingType: enc}, result)
 }
 
 func QueueStateToBlob(info *persistencespb.QueueState) (*commonpb.DataBlob, error) {
@@ -112,54 +113,6 @@ func QueueStateToBlob(info *persistencespb.QueueState) (*commonpb.DataBlob, erro
 func QueueStateFromBlob(blob []byte, encoding string) (*persistencespb.QueueState, error) {
 	result := &persistencespb.QueueState{}
 	return result, proto3Decode(blob, encoding, result)
-}
-
-func encode(
-	object proto.Message,
-	encoding enumspb.EncodingType,
-) (*commonpb.DataBlob, error) {
-	if object == nil {
-		return &commonpb.DataBlob{
-			Data:         nil,
-			EncodingType: encoding,
-		}, nil
-	}
-
-	switch encoding {
-	case enumspb.ENCODING_TYPE_JSON:
-		blob, err := codec.NewJSONPBEncoder().Encode(object)
-		if err != nil {
-			return nil, err
-		}
-		return &commonpb.DataBlob{
-			Data:         blob,
-			EncodingType: enumspb.ENCODING_TYPE_JSON,
-		}, nil
-	case enumspb.ENCODING_TYPE_PROTO3:
-		return proto3Encode(object)
-	default:
-		return nil, NewUnknownEncodingTypeError(encoding.String(), enumspb.ENCODING_TYPE_JSON, enumspb.ENCODING_TYPE_PROTO3)
-	}
-}
-
-func decode(
-	blob []byte,
-	encoding string,
-	result proto.Message,
-) error {
-	if blob == nil {
-		return nil
-	}
-
-	enc, _ := enumspb.EncodingTypeFromString(encoding)
-	switch enc {
-	case enumspb.ENCODING_TYPE_JSON:
-		return codec.NewJSONPBEncoder().Decode(blob, result)
-	case enumspb.ENCODING_TYPE_PROTO3:
-		return proto3Decode(blob, encoding, result)
-	default:
-		return NewUnknownEncodingTypeError(encoding, enumspb.ENCODING_TYPE_JSON, enumspb.ENCODING_TYPE_PROTO3)
-	}
 }
 
 func proto3Encode(m proto.Message) (*commonpb.DataBlob, error) {
