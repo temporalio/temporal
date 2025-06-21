@@ -6,9 +6,10 @@ import (
 	"strconv"
 	"strings"
 
-	"go.temporal.io/server/common/log/tag"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+
+	"go.temporal.io/server/common/log/tag"
 )
 
 const (
@@ -23,8 +24,10 @@ const (
 type (
 	// zapLogger is logger backed up by zap.Logger.
 	zapLogger struct {
-		zl   *zap.Logger
-		skip int
+		zl     *zap.Logger
+		skip   int
+		baseZl *zap.Logger // original, without tags, for building new tagged versions
+		tags   []tag.Tag   // my tags, for passing to clones
 	}
 )
 
@@ -58,8 +61,9 @@ func NewCLILogger() *zapLogger {
 // NewZapLogger returns a new zap based logger from zap.Logger
 func NewZapLogger(zl *zap.Logger) *zapLogger {
 	return &zapLogger{
-		zl:   zl,
-		skip: skipForZapLogger,
+		zl:     zl,
+		skip:   skipForZapLogger,
+		baseZl: zl,
 	}
 }
 
@@ -157,13 +161,21 @@ func (l *zapLogger) Fatal(msg string, tags ...tag.Tag) {
 	}
 }
 
+// With handles the provided tags as "upserts", replacing any matching keys with new values.
 func (l *zapLogger) With(tags ...tag.Tag) Logger {
+	cloneTags := mergeTags(l.tags, tags)
+	return l.cloneWithTags(cloneTags)
+}
+
+func (l *zapLogger) cloneWithTags(tags []tag.Tag) Logger {
 	fields := make([]zap.Field, len(tags))
 	l.fillFields(tags, fields)
-	zl := l.zl.With(fields...)
+	zl := l.baseZl.With(fields...)
 	return &zapLogger{
-		zl:   zl,
-		skip: l.skip,
+		zl:     zl,
+		skip:   l.skip,
+		baseZl: l.baseZl,
+		tags:   tags,
 	}
 }
 
@@ -172,6 +184,24 @@ func (l *zapLogger) Skip(extraSkip int) Logger {
 		zl:   l.zl,
 		skip: l.skip + extraSkip,
 	}
+}
+
+func mergeTags(oldTags, newTags []tag.Tag) (tags []tag.Tag) {
+	if oldTags == nil {
+		return newTags
+	}
+	tagMap := make(map[string]tag.Tag, len(oldTags)+len(newTags))
+	for _, t := range oldTags {
+		tagMap[t.Key()] = t
+	}
+	for _, t := range newTags {
+		tagMap[t.Key()] = t
+	}
+	tags = make([]tag.Tag, 0, len(tagMap))
+	for _, t := range tagMap {
+		tags = append(tags, t)
+	}
+	return tags
 }
 
 func buildZapLogger(cfg Config, disableCaller bool) *zap.Logger {
