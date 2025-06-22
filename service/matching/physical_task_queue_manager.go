@@ -110,7 +110,7 @@ var (
 	errRemoteSyncMatchFailed     = serviceerror.NewCanceled("remote sync match failed")
 	errMissingNormalQueueName    = errors.New("missing normal queue name")
 	errDeploymentVersionNotReady = serviceerror.NewUnavailable("task queue is not ready to process polls from this deployment version, try again shortly")
-	ErrBlackHoledQuery           = serviceerror.NewFailedPrecondition("You are trying to query a closed Workflow that is PINNED to Worker Deployment Version my-app.v1, but my-app.v1 is drained and has no pollers to answer the query.  Immediately: You can re-deploy Workers in this Deployment Version to take those queries, or you can workflow update-options to change your workflow to AUTO_UPGRADE.  For the future: In your infrastructure, consider waiting longer after the last queried timestamp as reported in Describe Deployment before you sunset Workers.  Or mark this workflow as AUTO_UPGRADE.")
+	ErrBlackHoledQuery           = "You are trying to query a closed Workflow that is PINNED to Worker Deployment Version %s, but %s is drained and has no pollers to answer the query. Immediately: You can re-deploy Workers in this Deployment Version to take those queries, or you can workflow update-options to change your workflow to AUTO_UPGRADE. For the future: In your infrastructure, consider waiting longer after the last queried timestamp as reported in Describe Deployment before you sunset Workers. Or mark this workflow as AUTO_UPGRADE."
 )
 
 func newPhysicalTaskQueueManager(

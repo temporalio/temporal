@@ -279,7 +279,9 @@ func (s *Versioning3Suite) testPinnedQuery_DrainedVersion() {
 
 		_, err := s.queryWorkflow(tv)
 		a.Error(err)
-		a.ErrorContains(err, matching.ErrBlackHoledQuery.Error())
+
+		versionStr := worker_versioning.ExternalWorkerDeploymentVersionToString(worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(tv.Deployment()))
+		a.ErrorContains(err, fmt.Sprintf(matching.ErrBlackHoledQuery, versionStr, versionStr))
 	}, 10*time.Second, 500*time.Millisecond)
 
 }

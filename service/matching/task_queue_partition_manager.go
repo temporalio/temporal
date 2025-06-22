@@ -1006,13 +1006,16 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 			return nil, nil, nil, err
 		}
 
-		// Preventing Query tasks from being independently dispatched to a drained version with no workers.
+		// Preventing Query tasks from being dispatched to a drained version with no workers
 		if isQuery {
 			for _, versionData := range deploymentData.GetVersions() {
 				if versionData.GetVersion() != nil && worker_versioning.DeploymentVersionFromDeployment(deployment).Equal(versionData.GetVersion()) {
-					// Check if the version is drained + has no workers (TODO: Shivam)
 					if versionData.GetStatus() == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED && len(pm.GetAllPollerInfo()) == 0 {
-						return nil, nil, nil, ErrBlackHoledQuery
+						versionStr := worker_versioning.ExternalWorkerDeploymentVersionToString(worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(deployment))
+						return nil, nil, nil, serviceerror.NewFailedPreconditionf(ErrBlackHoledQuery,
+							versionStr,
+							versionStr,
+						)
 					}
 				}
 			}
