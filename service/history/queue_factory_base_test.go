@@ -26,6 +26,7 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
+	"go.temporal.io/server/service/history/workflow/cache"
 	"go.uber.org/fx"
 	"go.uber.org/mock/gomock"
 )
@@ -152,4 +153,5 @@ type unusedDependencies struct {
 	archival.Archiver
 	workflow.RelocatableAttributesFetcher
 	persistence.HistoryTaskQueueManager
+	cache.Cache
 }

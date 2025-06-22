@@ -59,7 +59,6 @@ type Config struct {
 	EnableUpdateWorkflowModeIgnoreCurrent dynamicconfig.BoolPropertyFn
 	EnableTransitionHistory               dynamicconfig.BoolPropertyFn
 	MaxCallbacksPerWorkflow               dynamicconfig.IntPropertyFnWithNamespaceFilter
-	EnableExecuteMultiOperationErrorDebug dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableRequestIdRefLinks               dynamicconfig.BoolPropertyFn
 	EnableChasm                           dynamicconfig.BoolPropertyFn
 
@@ -277,6 +276,8 @@ type Config struct {
 	ReplicationResendMaxBatchCount                      dynamicconfig.IntPropertyFn
 	ReplicationProgressCacheMaxSize                     dynamicconfig.IntPropertyFn
 	ReplicationProgressCacheTTL                         dynamicconfig.DurationPropertyFn
+	ReplicationStreamSendEmptyTaskDuration              dynamicconfig.DurationPropertyFn
+	ReplicationEnableRateLimit                          dynamicconfig.BoolPropertyFn
 
 	// The following are used by consistent query
 	MaxBufferedQueryCount dynamicconfig.IntPropertyFn
@@ -346,6 +347,7 @@ type Config struct {
 	WorkflowExecutionMaxInFlightUpdatePayloads                    dynamicconfig.IntPropertyFnWithNamespaceFilter
 	WorkflowExecutionMaxTotalUpdates                              dynamicconfig.IntPropertyFnWithNamespaceFilter
 	WorkflowExecutionMaxTotalUpdatesSuggestContinueAsNewThreshold dynamicconfig.FloatPropertyFnWithNamespaceFilter
+	EnableUpdateWithStartRetryOnClosedWorkflowAbort               dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	SendRawHistoryBetweenInternalServices dynamicconfig.BoolPropertyFn
 	SendRawWorkflowHistory                dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -355,8 +357,9 @@ type Config struct {
 
 	HealthPersistenceLatencyFailure dynamicconfig.FloatPropertyFn
 	HealthPersistenceErrorRatio     dynamicconfig.FloatPropertyFn
-
-	BreakdownMetricsByTaskQueue dynamicconfig.BoolPropertyFnWithTaskQueueFilter
+	HealthRPCLatencyFailure         dynamicconfig.FloatPropertyFn
+	HealthRPCErrorRatio             dynamicconfig.FloatPropertyFn
+	BreakdownMetricsByTaskQueue     dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 
 	LogAllReqErrors dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
@@ -414,7 +417,6 @@ func NewConfig(
 		EnableNexus:                           dynamicconfig.EnableNexus.Get(dc),
 		EnableWorkflowExecutionTimeoutTimer:   dynamicconfig.EnableWorkflowExecutionTimeoutTimer.Get(dc),
 		EnableUpdateWorkflowModeIgnoreCurrent: dynamicconfig.EnableUpdateWorkflowModeIgnoreCurrent.Get(dc),
-		EnableExecuteMultiOperationErrorDebug: dynamicconfig.EnableExecuteMultiOperationErrorDebug.Get(dc),
 		EnableTransitionHistory:               dynamicconfig.EnableTransitionHistory.Get(dc),
 		MaxCallbacksPerWorkflow:               dynamicconfig.MaxCallbacksPerWorkflow.Get(dc),
 		EnableRequestIdRefLinks:               dynamicconfig.EnableRequestIdRefLinks.Get(dc),
@@ -535,6 +537,8 @@ func NewConfig(
 		ReplicationResendMaxBatchCount:                      dynamicconfig.ReplicationResendMaxBatchCount.Get(dc),
 		ReplicationProgressCacheMaxSize:                     dynamicconfig.ReplicationProgressCacheMaxSize.Get(dc),
 		ReplicationProgressCacheTTL:                         dynamicconfig.ReplicationProgressCacheTTL.Get(dc),
+		ReplicationEnableRateLimit:                          dynamicconfig.ReplicationEnableRateLimit.Get(dc),
+		ReplicationStreamSendEmptyTaskDuration:              dynamicconfig.ReplicationStreamSendEmptyTaskDuration.Get(dc),
 
 		MaximumBufferedEventsBatch:       dynamicconfig.MaximumBufferedEventsBatch.Get(dc),
 		MaximumBufferedEventsSizeInBytes: dynamicconfig.MaximumBufferedEventsSizeInBytes.Get(dc),
@@ -667,6 +671,7 @@ func NewConfig(
 		WorkflowExecutionMaxInFlightUpdatePayloads:                    dynamicconfig.WorkflowExecutionMaxInFlightUpdatePayloads.Get(dc),
 		WorkflowExecutionMaxTotalUpdates:                              dynamicconfig.WorkflowExecutionMaxTotalUpdates.Get(dc),
 		WorkflowExecutionMaxTotalUpdatesSuggestContinueAsNewThreshold: dynamicconfig.WorkflowExecutionMaxTotalUpdatesSuggestContinueAsNewThreshold.Get(dc),
+		EnableUpdateWithStartRetryOnClosedWorkflowAbort:               dynamicconfig.EnableUpdateWithStartRetryOnClosedWorkflowAbort.Get(dc),
 
 		SendRawHistoryBetweenInternalServices:    dynamicconfig.SendRawHistoryBetweenInternalServices.Get(dc),
 		SendRawWorkflowHistory:                   dynamicconfig.SendRawWorkflowHistory.Get(dc),
@@ -675,6 +680,8 @@ func NewConfig(
 
 		HealthPersistenceLatencyFailure: dynamicconfig.HealthPersistenceLatencyFailure.Get(dc),
 		HealthPersistenceErrorRatio:     dynamicconfig.HealthPersistenceErrorRatio.Get(dc),
+		HealthRPCLatencyFailure:         dynamicconfig.HealthRPCLatencyFailure.Get(dc),
+		HealthRPCErrorRatio:             dynamicconfig.HealthRPCErrorRatio.Get(dc),
 
 		BreakdownMetricsByTaskQueue: dynamicconfig.MetricsBreakdownByTaskQueue.Get(dc),
 

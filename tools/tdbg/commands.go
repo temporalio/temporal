@@ -10,7 +10,6 @@ import (
 	"github.com/temporalio/tctl-kit/pkg/color"
 	"github.com/urfave/cli/v2"
 	commonpb "go.temporal.io/api/common/v1"
-	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -184,7 +183,7 @@ func AdminImportWorkflow(c *cli.Context, clientFactory ClientFactory) error {
 	for i := 0; i < len(historyBatches)+1; i++ {
 		if i < len(historyBatches) {
 			historyBatch := historyBatches[i]
-			blob, err := serializer.SerializeEvents(historyBatch.Events, enumspb.ENCODING_TYPE_PROTO3)
+			blob, err := serializer.SerializeEvents(historyBatch.Events)
 			if err != nil {
 				return fmt.Errorf("unable to deserialize Events: %s", err)
 			}

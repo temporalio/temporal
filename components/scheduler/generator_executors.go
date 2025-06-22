@@ -67,7 +67,7 @@ func (e generatorTaskExecutor) executeBufferTask(env hsm.Environment, node *hsm.
 		t2 = t1
 	}
 
-	res, err := e.SpecProcessor.ProcessTimeRange(scheduler, t1, t2, false, nil)
+	res, err := e.SpecProcessor.ProcessTimeRange(scheduler, t1, t2, scheduler.overlapPolicy(), "", false, nil)
 	if err != nil {
 		// An error here should be impossible, send to the DLQ.
 		logger.Error("Error processing time range", tag.Error(err))
@@ -79,22 +79,14 @@ func (e generatorTaskExecutor) executeBufferTask(env hsm.Environment, node *hsm.
 		)
 	}
 
-	// Transition the Invoker sub state machine to execute the new buffered actions.
-	invokerNode, err := schedulerNode.Child([]hsm.Key{InvokerMachineKey})
+	// Transition the invoker sub state machine to execute the new buffered actions.
+	err = scheduler.EnqueueBufferedStarts(schedulerNode, res.BufferedStarts)
 	if err != nil {
 		return fmt.Errorf(
 			"%w: %w",
-			serviceerror.NewInternal("Scheduler is missing its Executor node"),
+			serviceerror.NewInternal("Scheduler's Generator failed to enqueue BufferedStarts"),
 			err,
 		)
-	}
-	err = hsm.MachineTransition(invokerNode, func(e Invoker) (hsm.TransitionOutput, error) {
-		return TransitionEnqueue.Apply(e, EventEnqueue{
-			BufferedStarts: res.BufferedStarts,
-		})
-	})
-	if err != nil {
-		return err
 	}
 
 	// Write Generator internal state, flushing the high water mark to persistence.

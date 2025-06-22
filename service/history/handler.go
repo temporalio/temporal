@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tasktoken"
@@ -76,6 +77,7 @@ type (
 		persistenceVisibilityManager manager.VisibilityManager
 		persistenceHealthSignal      persistence.HealthSignalAggregator
 		healthServer                 *health.Server
+		historyHealthSignal          interceptor.HealthSignalAggregator
 		historyServiceResolver       membership.ServiceResolver
 		metricsHandler               metrics.Handler
 		payloadSerializer            serialization.Serializer
@@ -94,6 +96,7 @@ type (
 		replicationTaskFetcherFactory    replication.TaskFetcherFactory
 		replicationTaskConverterProvider replication.SourceTaskConverterProvider
 		streamReceiverMonitor            replication.StreamReceiverMonitor
+		replicationServerRateLimiter     replication.ServerSchedulerRateLimiter
 	}
 
 	NewHandlerArgs struct {
@@ -105,6 +108,7 @@ type (
 		PersistenceExecutionManager  persistence.ExecutionManager
 		PersistenceShardManager      persistence.ShardManager
 		PersistenceHealthSignal      persistence.HealthSignalAggregator
+		HistoryHealthSignal          interceptor.HealthSignalAggregator
 		HealthServer                 *health.Server
 		PersistenceVisibilityManager manager.VisibilityManager
 		HistoryServiceResolver       membership.ServiceResolver
@@ -126,6 +130,7 @@ type (
 		ReplicationTaskFetcherFactory   replication.TaskFetcherFactory
 		ReplicationTaskConverterFactory replication.SourceTaskConverterProvider
 		StreamReceiverMonitor           replication.StreamReceiverMonitor
+		ReplicationServerRateLimiter    replication.ServerSchedulerRateLimiter
 	}
 )
 
@@ -205,15 +210,36 @@ func (h *Handler) DeepHealthCheck(
 		return &historyservice.DeepHealthCheckResponse{State: enumsspb.HEALTH_STATE_DECLINED_SERVING}, nil
 	}
 
+	rsp := h.checkHistoryHealthSignals()
+	if rsp != nil {
+		return rsp, nil
+	}
+
 	latency := h.persistenceHealthSignal.AverageLatency()
 	errRatio := h.persistenceHealthSignal.ErrorRatio()
 
 	if latency > h.config.HealthPersistenceLatencyFailure() || errRatio > h.config.HealthPersistenceErrorRatio() {
-		metrics.HistoryHostHealthGauge.With(h.metricsHandler).Record(float64(enumsspb.HEALTH_STATE_DECLINED_SERVING))
+		metrics.HistoryHostHealthGauge.With(h.metricsHandler).Record(float64(enumsspb.HEALTH_STATE_NOT_SERVING))
 		return &historyservice.DeepHealthCheckResponse{State: enumsspb.HEALTH_STATE_NOT_SERVING}, nil
 	}
 	metrics.HistoryHostHealthGauge.With(h.metricsHandler).Record(float64(enumsspb.HEALTH_STATE_SERVING))
 	return &historyservice.DeepHealthCheckResponse{State: enumsspb.HEALTH_STATE_SERVING}, nil
+}
+
+// checkHistoryHealthSignals checks the history health signal that is captured by the interceptor.
+func (h *Handler) checkHistoryHealthSignals() *historyservice.DeepHealthCheckResponse {
+	// Check that the RPC latency doesn't exceed the threshold.
+	if h.historyHealthSignal.AverageLatency() > h.config.HealthRPCLatencyFailure() {
+		metrics.HistoryHostHealthGauge.With(h.metricsHandler).Record(float64(enumsspb.HEALTH_STATE_NOT_SERVING))
+		return &historyservice.DeepHealthCheckResponse{State: enumsspb.HEALTH_STATE_NOT_SERVING}
+	}
+
+	// Check if the RPC error ratio exceeds the threshold
+	if h.historyHealthSignal.ErrorRatio() > h.config.HealthRPCErrorRatio() {
+		metrics.HistoryHostHealthGauge.With(h.metricsHandler).Record(float64(enumsspb.HEALTH_STATE_NOT_SERVING))
+		return &historyservice.DeepHealthCheckResponse{State: enumsspb.HEALTH_STATE_NOT_SERVING}
+	}
+	return nil
 }
 
 // IsWorkflowTaskValid - whether workflow task is still valid
@@ -2119,6 +2145,7 @@ func (h *Handler) StreamWorkflowReplicationMessages(
 		server,
 		shardContext,
 		engine,
+		h.replicationServerRateLimiter,
 		h.replicationTaskConverterProvider(
 			engine,
 			shardContext,

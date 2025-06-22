@@ -10,7 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
-	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -98,13 +97,13 @@ func (s *executableBackfillHistoryEventsTaskSuite) SetupTest() {
 	eventsBlob, _ := s.eventSerializer.SerializeEvents([]*historypb.HistoryEvent{{
 		EventId: s.firstEventID,
 		Version: s.version,
-	}}, enumspb.ENCODING_TYPE_PROTO3)
+	}})
 	s.events, _ = s.eventSerializer.DeserializeEvents(eventsBlob)
 	s.eventsBatches = [][]*historypb.HistoryEvent{s.events}
 	newEventsBlob, _ := s.eventSerializer.SerializeEvents([]*historypb.HistoryEvent{{
 		EventId: 1,
 		Version: s.version,
-	}}, enumspb.ENCODING_TYPE_PROTO3)
+	}})
 	s.newRunEvents, _ = s.eventSerializer.DeserializeEvents(newEventsBlob)
 	s.newRunID = uuid.NewString()
 
@@ -167,6 +166,7 @@ func (s *executableBackfillHistoryEventsTaskSuite) SetupTest() {
 	s.executableTask.EXPECT().TaskID().Return(s.taskID).AnyTimes()
 	s.executableTask.EXPECT().SourceClusterName().Return(s.sourceClusterName).AnyTimes()
 	s.executableTask.EXPECT().TaskCreationTime().Return(taskCreationTime).AnyTimes()
+	s.executableTask.EXPECT().GetPriority().Return(enumsspb.TASK_PRIORITY_HIGH).AnyTimes()
 }
 
 func (s *executableBackfillHistoryEventsTaskSuite) TearDownTest() {

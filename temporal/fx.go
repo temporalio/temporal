@@ -624,7 +624,7 @@ func ApplyClusterMetadataConfigProvider(
 			tag.ClusterName(clusterMetadata.CurrentClusterName))
 		return svc.ClusterMetadata, svc.Persistence, missingCurrentClusterMetadataErr
 	}
-	ctx = headers.SetCallerInfo(ctx, headers.SystemBackgroundCallerInfo)
+	ctx = headers.SetCallerInfo(ctx, headers.SystemBackgroundHighCallerInfo)
 	resp, err := clusterMetadataManager.GetClusterMetadata(
 		ctx,
 		&persistence.GetClusterMetadataRequest{ClusterName: clusterMetadata.CurrentClusterName},

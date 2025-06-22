@@ -55,7 +55,7 @@ func (wm *workerManager) Start() {
 	defaultWorkerOptions := sdkworker.Options{
 		Identity: "temporal-system@" + wm.hostInfo.Identity(),
 		// TODO: add dynamic config for worker options
-		BackgroundActivityContext: headers.SetCallerType(context.Background(), headers.CallerTypeBackground),
+		BackgroundActivityContext: headers.SetCallerType(context.Background(), headers.CallerTypeBackgroundHigh),
 	}
 	sdkClient := wm.sdkClientFactory.GetSystemClient()
 	defaultWorker := wm.sdkClientFactory.NewWorker(sdkClient, primitives.DefaultWorkerTaskQueue, defaultWorkerOptions)

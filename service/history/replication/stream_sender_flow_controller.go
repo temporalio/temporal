@@ -4,7 +4,6 @@ package replication
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"time"
 
@@ -106,9 +105,9 @@ func (s *SenderFlowControllerImpl) Wait(ctx context.Context, priority enumsspb.T
 	state.mu.Lock()
 	if !state.resume {
 		state.waiters++
-		s.logger.Info(fmt.Sprintf("%v sender is paused", priority.String()))
+		s.logger.Info("sender is paused", tag.TaskPriority(priority.String()))
 		state.cond.Wait()
-		s.logger.Info(fmt.Sprintf("%s sender is resumed", priority.String()))
+		s.logger.Info("sender is resumed", tag.TaskPriority(priority.String()))
 		state.waiters--
 	}
 	state.mu.Unlock()

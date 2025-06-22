@@ -23,6 +23,7 @@ type (
 
 		NamespaceRegistry namespace.Registry
 		ClusterMetadata   cluster.Metadata
+		WorkflowCache     wcache.Cache
 		Config            *configs.Config
 		TimeSource        clock.TimeSource
 		MetricsHandler    metrics.Handler
@@ -38,6 +39,7 @@ type (
 
 		namespaceRegistry namespace.Registry
 		clusterMetadata   cluster.Metadata
+		workflowCache     wcache.Cache
 		timeSource        clock.TimeSource
 		metricsHandler    metrics.Handler
 		tracer            trace.Tracer
@@ -66,6 +68,7 @@ func NewMemoryScheduledQueueFactory(
 		priorityAssigner:  queues.NewPriorityAssigner(),
 		namespaceRegistry: params.NamespaceRegistry,
 		clusterMetadata:   params.ClusterMetadata,
+		workflowCache:     params.WorkflowCache,
 		timeSource:        params.TimeSource,
 		metricsHandler:    metricsHandler,
 		tracer:            params.TracerProvider.Tracer(telemetry.ComponentQueueMemory),
@@ -84,18 +87,18 @@ func (f *memoryScheduledQueueFactory) Stop() {
 
 func (f *memoryScheduledQueueFactory) CreateQueue(
 	shardCtx historyi.ShardContext,
-	workflowCache wcache.Cache,
 ) queues.Queue {
 
 	// Reuse TimerQueueActiveTaskExecutor only to executeWorkflowTaskTimeoutTask.
 	// Unused dependencies are nil.
 	speculativeWorkflowTaskTimeoutExecutor := newTimerQueueActiveTaskExecutor(
 		shardCtx,
-		workflowCache,
+		f.workflowCache,
 		nil,
 		f.logger,
 		f.metricsHandler,
 		shardCtx.GetConfig(),
+		nil,
 		nil,
 	)
 	if f.executorWrapper != nil {
