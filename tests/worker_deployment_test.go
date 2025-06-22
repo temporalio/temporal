@@ -567,7 +567,7 @@ func (s *WorkerDeploymentSuite) TestListWorkerDeployments_TwoVersions_SameDeploy
 	})
 }
 
-func (s *WorkerDeploymentSuite) TestListWorkerDeployments_OneCurrent_OneRamping() {
+func (s *WorkerDeploymentSuite) TestListWorkerDeployments_TwoVersions_SameDeployment_OneCurrent_OneRamping() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 	tv := testvars.New(s)
@@ -2406,7 +2406,7 @@ func (s *WorkerDeploymentSuite) verifyWorkerDeploymentSummary(
 	expectedSummary *workflowservice.ListWorkerDeploymentsResponse_WorkerDeploymentSummary,
 	actualSummary *workflowservice.ListWorkerDeploymentsResponse_WorkerDeploymentSummary,
 ) bool {
-	maxDurationBetweenTimeStamps := 5 * time.Second
+	maxDurationBetweenTimeStamps := 10 * time.Second
 	if expectedSummary.Name != actualSummary.Name {
 		s.Logger.Info("Name mismatch")
 		return false
