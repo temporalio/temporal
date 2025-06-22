@@ -700,12 +700,14 @@ func (d *VersionWorkflowRunner) updateVersionStatusAfterDrainageStatusChange(ctx
 		d.VersionState.Status = enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_UNSPECIFIED
 	}
 
-	// Include this in a patch
-
-	err := d.syncVersionStatusToTaskQueues(ctx)
-	if err != nil {
-		d.logger.Error("failed to sync version status after drainage status change", "error", err)
+	v := workflow.GetVersion(ctx, "Step1", workflow.DefaultVersion, 0)
+	if v != workflow.DefaultVersion {
+		err := d.syncVersionStatusToTaskQueues(ctx)
+		if err != nil {
+			d.logger.Error("failed to sync version status after drainage status change", "error", err)
+		}
 	}
+
 }
 
 // syncVersionStatusToTaskQueues syncs the current version status to all task queues.
