@@ -191,6 +191,7 @@ func (l *zapLogger) Skip(extraSkip int) Logger {
 	}
 }
 
+// mergeTags MAY update oldTags in place
 func mergeTags(oldTags, newTags []tag.Tag) []tag.Tag {
 	// Even if oldTags empty, we don't just return newTags because we need to de-dupe it.
 	for _, t := range newTags {
