@@ -3,6 +3,7 @@ package log
 import (
 	"os"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -164,6 +165,9 @@ func (l *zapLogger) Fatal(msg string, tags ...tag.Tag) {
 // With handles the provided tags as "upserts", replacing any matching keys with new values.
 func (l *zapLogger) With(tags ...tag.Tag) Logger {
 	cloneTags := mergeTags(l.tags, tags)
+	if l.baseZl == nil {
+		l.baseZl = l.zl
+	}
 	return l.cloneWithTags(cloneTags)
 }
 
@@ -181,27 +185,24 @@ func (l *zapLogger) cloneWithTags(tags []tag.Tag) Logger {
 
 func (l *zapLogger) Skip(extraSkip int) Logger {
 	return &zapLogger{
-		zl:   l.zl,
-		skip: l.skip + extraSkip,
+		zl:     l.zl,
+		skip:   l.skip + extraSkip,
+		baseZl: l.baseZl,
 	}
 }
 
-func mergeTags(oldTags, newTags []tag.Tag) (tags []tag.Tag) {
+func mergeTags(oldTags, newTags []tag.Tag) []tag.Tag {
 	if oldTags == nil {
 		return newTags
 	}
-	tagMap := make(map[string]tag.Tag, len(oldTags)+len(newTags))
-	for _, t := range oldTags {
-		tagMap[t.Key()] = t
-	}
 	for _, t := range newTags {
-		tagMap[t.Key()] = t
+		if i := slices.IndexFunc(oldTags, func(ti tag.Tag) bool { return ti.Key() == t.Key() }); i >= 0 {
+			oldTags[i] = t
+		} else {
+			oldTags = append(oldTags, t)
+		}
 	}
-	tags = make([]tag.Tag, 0, len(tagMap))
-	for _, t := range tagMap {
-		tags = append(tags, t)
-	}
-	return tags
+	return oldTags
 }
 
 func buildZapLogger(cfg Config, disableCaller bool) *zap.Logger {

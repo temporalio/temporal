@@ -99,7 +99,7 @@ func TestDefaultLogger(t *testing.T) {
 	withLogger = With(withLogger, tag.NewStringTag("xray", "zulu"))
 	withLogger.Info("Log message with tag")
 
-	// put Stdout back to normal state 
+	// put Stdout back to normal state
 	require.Nil(t, w.Close())
 	os.Stdout = old // restoring the real stdout
 	out := <-outC
@@ -109,9 +109,9 @@ func TestDefaultLogger(t *testing.T) {
 	lineNum := fmt.Sprintf("%v", par+1)
 	assert.Regexp(t, `{"level":"info","msg":"test info","error":"test error","wf-action":"add-workflow-started-event","logging-call-at":".*zap_logger_test.go:`+lineNum+`"}`+"\n", out)
 
-	assert.Regexp(t, `xray`, out)
-	assert.NotRegexp(t, `yankee`, out)
-	assert.Regexp(t, `zulu`, out)
+	assert.Regexp(t, `xray`, out) // key
+	assert.NotRegexp(t, `yankee`, out) // replaced value
+	assert.Regexp(t, `zulu`, out) // override value
 }
 
 func TestThrottleLogger(t *testing.T) {
