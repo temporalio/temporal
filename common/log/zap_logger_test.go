@@ -12,10 +12,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"go.uber.org/zap"
-
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/tests/testutils"
+	"go.uber.org/zap"
 )
 
 type LogSuite struct {
@@ -110,10 +109,10 @@ func TestDefaultLogger(t *testing.T) {
 	lineNum := fmt.Sprintf("%v", par+1)
 	assert.Regexp(t, `{"level":"info","msg":"test info","error":"test error","wf-action":"add-workflow-started-event","logging-call-at":".*zap_logger_test.go:`+lineNum+`"}`+"\n", out)
 
-	assert.NotRegexp(t, `alpha`, out) // replaced value
-	assert.Regexp(t, `xray`, out) // key
+	assert.NotRegexp(t, `alpha`, out)  // replaced value
+	assert.Regexp(t, `xray`, out)      // key
 	assert.NotRegexp(t, `yankee`, out) // replaced value
-	assert.Regexp(t, `zulu`, out) // override value
+	assert.Regexp(t, `zulu`, out)      // override value
 }
 
 func TestThrottleLogger(t *testing.T) {
