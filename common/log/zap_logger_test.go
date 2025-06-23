@@ -95,7 +95,8 @@ func TestDefaultLogger(t *testing.T) {
 	logger.With(tag.Error(fmt.Errorf("test error"))).Info("test info", tag.WorkflowActionWorkflowStarted)
 
 	// Test tags with duplicate keys are replaced
-	withLogger := With(logger, tag.NewStringTag("xray", "yankee"))
+	withLogger := With(logger,
+		tag.NewStringTag("xray", "alpha"), tag.NewStringTag("xray", "yankee")) // alpha will never be seen
 	withLogger = With(withLogger, tag.NewStringTag("xray", "zulu"))
 	withLogger.Info("Log message with tag")
 
@@ -109,6 +110,7 @@ func TestDefaultLogger(t *testing.T) {
 	lineNum := fmt.Sprintf("%v", par+1)
 	assert.Regexp(t, `{"level":"info","msg":"test info","error":"test error","wf-action":"add-workflow-started-event","logging-call-at":".*zap_logger_test.go:`+lineNum+`"}`+"\n", out)
 
+	assert.NotRegexp(t, `alpha`, out) // replaced value
 	assert.Regexp(t, `xray`, out) // key
 	assert.NotRegexp(t, `yankee`, out) // replaced value
 	assert.Regexp(t, `zulu`, out) // override value

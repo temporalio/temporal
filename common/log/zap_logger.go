@@ -192,9 +192,7 @@ func (l *zapLogger) Skip(extraSkip int) Logger {
 }
 
 func mergeTags(oldTags, newTags []tag.Tag) []tag.Tag {
-	if oldTags == nil {
-		return newTags
-	}
+	// Even if oldTags empty, we don't just return newTags because we need to de-dupe it.
 	for _, t := range newTags {
 		if i := slices.IndexFunc(oldTags, func(ti tag.Tag) bool { return ti.Key() == t.Key() }); i >= 0 {
 			oldTags[i] = t
