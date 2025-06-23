@@ -2,7 +2,7 @@ package workers
 
 import (
 	"container/list"
-	"context"
+	//"context"
 	"hash/maphash"
 	"sync"
 	"sync/atomic"
@@ -43,12 +43,12 @@ type (
 	registryImpl struct {
 		buckets          []*bucket     // buckets for partitioning the keyspace
 		maxItems         int64         // maximum number of entries allowed across all buckets
-		tTL              time.Duration // time after which entries are considered expired
+		ttl              time.Duration // time after which entries are considered expired
 		minEvictAge      time.Duration // minimum age of entries to consider for eviction
 		evictionInterval time.Duration // interval for periodic eviction checks
 		total            atomic.Int64  // atomic counter of total entries
 		quit             chan struct{} // channel to signal shutdown of the eviction loop
-		hasher           *maphash.Hash // hasher for hashing namespace IDs to buckets
+		seed             maphash.Seed  // seed for the hasher, used to ensure consistent hashing
 	}
 )
 
@@ -91,6 +91,28 @@ func (b *bucket) upsertHeartbeat(nsID namespace.ID, hb *workerpb.WorkerHeartbeat
 	return true
 }
 
+// filterWorkers returns all WorkerHeartbeats in a namespace
+// for which predicate(hb) returns true.
+func (b *bucket) filterWorkers(
+	nsID namespace.ID,
+	predicate func(*workerpb.WorkerHeartbeat) bool,
+) []*workerpb.WorkerHeartbeat {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	mp := b.namespaces[nsID]
+	if mp == nil {
+		return nil
+	}
+	out := make([]*workerpb.WorkerHeartbeat, 0, len(mp))
+	for _, e := range mp {
+		if predicate(e.hb) {
+			out = append(out, e.hb)
+		}
+	}
+	return out
+}
+
 // evictByTTL removes entries older than expireBefore from this bucket.
 // Returns the number of entries removed.
 func (b *bucket) evictByTTL(expireBefore time.Time) int {
@@ -114,6 +136,23 @@ func (b *bucket) evictByTTL(expireBefore time.Time) int {
 	return removed
 }
 
+func (b *bucket) evictByCapacity(threshold time.Time) bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	front := b.order.Front()
+	if front == nil {
+		return false
+	}
+
+	e := front.Value.(*entry) //nolint:revive
+	if !e.lastSeen.Before(threshold) {
+		return false
+	}
+	b.order.Remove(front)
+	delete(b.namespaces[e.nsID], e.hb.WorkerInstanceKey)
+	return true
+}
+
 // NewRegistry creates a workers heartbeat registry with the given parameters.
 func NewRegistry(lc fx.Lifecycle) Registry {
 	m := newRegistryImpl(
@@ -124,16 +163,7 @@ func NewRegistry(lc fx.Lifecycle) Registry {
 		defaultEvictionInterval,
 	)
 
-	lc.Append(fx.Hook{
-		OnStart: func(ctx context.Context) error {
-			m.Start()
-			return nil
-		},
-		OnStop: func(ctx context.Context) error {
-			m.Stop()
-			return nil
-		},
-	})
+	lc.Append(fx.StartStopHook(m.Start, m.Stop))
 
 	return m
 }
@@ -147,13 +177,12 @@ func newRegistryImpl(numBuckets int,
 	m := &registryImpl{
 		buckets:          make([]*bucket, numBuckets),
 		maxItems:         maxItems,
-		tTL:              ttl,
+		ttl:              ttl,
 		minEvictAge:      minEvictAge,
 		evictionInterval: evictionInterval,
-		hasher:           &maphash.Hash{},
+		seed:             maphash.MakeSeed(),
 		quit:             make(chan struct{}),
 	}
-	m.hasher.Reset()
 
 	for i := range m.buckets {
 		m.buckets[i] = newBucket()
@@ -163,9 +192,10 @@ func newRegistryImpl(numBuckets int,
 
 // bucketFor hashes the namespace to select a bucket.
 func (m *registryImpl) getBucket(nsID namespace.ID) *bucket {
-	m.hasher.Reset()
-	m.hasher.WriteString(nsID.String()) //nolint:revive
-	hs := m.hasher.Sum64()
+	var h maphash.Hash
+	h.SetSeed(m.seed)
+	h.WriteString(nsID.String()) //nolint:revive
+	hs := h.Sum64()
 	idx := int(hs % uint64(len(m.buckets)))
 
 	return m.buckets[idx]
@@ -180,27 +210,19 @@ func (m *registryImpl) upsertHeartbeat(nsID namespace.ID, hb *workerpb.WorkerHea
 	}
 }
 
-// listWorkers returns all WorkerHeartbeats in a namespace
+// filterWorkers returns all WorkerHeartbeats in a namespace
 // for which predicate(hb) returns true.
 func (m *registryImpl) filterWorkers(
 	nsID namespace.ID,
 	predicate func(*workerpb.WorkerHeartbeat) bool,
 ) []*workerpb.WorkerHeartbeat {
 	b := m.getBucket(nsID)
-	b.mu.Lock()
-	defer b.mu.Unlock()
 
-	mp := b.namespaces[nsID]
-	if mp == nil {
+	if b == nil {
 		return nil
 	}
-	out := make([]*workerpb.WorkerHeartbeat, 0, len(mp))
-	for _, e := range mp {
-		if predicate(e.hb) {
-			out = append(out, e.hb)
-		}
-	}
-	return out
+	return b.filterWorkers(nsID, predicate)
+
 }
 
 // evictLoop periodically triggers TTL and capacity-based eviction.
@@ -220,7 +242,7 @@ func (m *registryImpl) evictLoop() {
 
 // evictByTTL removes expired entries across all buckets.
 func (m *registryImpl) evictByTTL() {
-	expireBefore := time.Now().Add(-m.tTL)
+	expireBefore := time.Now().Add(-m.ttl)
 	var removed int64
 	for _, b := range m.buckets {
 		removed += int64(b.evictByTTL(expireBefore))
@@ -239,18 +261,10 @@ func (m *registryImpl) evictByCapacity() {
 			if m.total.Load() <= m.maxItems {
 				return
 			}
-			b.mu.Lock()
-			front := b.order.Front()
-			if front != nil {
-				e := front.Value.(*entry) //nolint:revive
-				if e.lastSeen.Before(threshold) {
-					b.order.Remove(front)
-					delete(b.namespaces[e.nsID], e.hb.WorkerInstanceKey)
-					removedAny = true
-					m.total.Add(-1)
-				}
+			if b.evictByCapacity(threshold) {
+				removedAny = true
+				m.total.Add(-1)
 			}
-			b.mu.Unlock()
 		}
 		if !removedAny {
 			break
@@ -271,6 +285,7 @@ func (m *registryImpl) Stop() {
 func (m *registryImpl) RecordWorkerHeartbeat(nsID namespace.ID, workerHeartbeat *workerpb.WorkerHeartbeat) {
 	m.upsertHeartbeat(nsID, workerHeartbeat)
 }
+
 func (m *registryImpl) ListWorkers(nsID namespace.ID, _ string, _ []byte) ([]*workerpb.WorkerHeartbeat, error) {
 	return m.filterWorkers(nsID, func(heartbeat *workerpb.WorkerHeartbeat) bool {
 		return true
