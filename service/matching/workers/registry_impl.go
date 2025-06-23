@@ -2,7 +2,6 @@ package workers
 
 import (
 	"container/list"
-	//"context"
 	"hash/maphash"
 	"sync"
 	"sync/atomic"
