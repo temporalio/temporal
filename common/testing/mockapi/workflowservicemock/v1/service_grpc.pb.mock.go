@@ -822,6 +822,26 @@ func (mr *MockWorkflowServiceClientMockRecorder) ListWorkerDeployments(ctx, in a
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListWorkerDeployments", reflect.TypeOf((*MockWorkflowServiceClient)(nil).ListWorkerDeployments), varargs...)
 }
 
+// ListWorkers mocks base method.
+func (m *MockWorkflowServiceClient) ListWorkers(ctx context.Context, in *workflowservice.ListWorkersRequest, opts ...grpc.CallOption) (*workflowservice.ListWorkersResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "ListWorkers", varargs...)
+	ret0, _ := ret[0].(*workflowservice.ListWorkersResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListWorkers indicates an expected call of ListWorkers.
+func (mr *MockWorkflowServiceClientMockRecorder) ListWorkers(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListWorkers", reflect.TypeOf((*MockWorkflowServiceClient)(nil).ListWorkers), varargs...)
+}
+
 // ListWorkflowExecutions mocks base method.
 func (m *MockWorkflowServiceClient) ListWorkflowExecutions(ctx context.Context, in *workflowservice.ListWorkflowExecutionsRequest, opts ...grpc.CallOption) (*workflowservice.ListWorkflowExecutionsResponse, error) {
 	m.ctrl.T.Helper()
@@ -1040,6 +1060,26 @@ func (mr *MockWorkflowServiceClientMockRecorder) RecordActivityTaskHeartbeatById
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecordActivityTaskHeartbeatById", reflect.TypeOf((*MockWorkflowServiceClient)(nil).RecordActivityTaskHeartbeatById), varargs...)
+}
+
+// RecordWorkerHeartbeat mocks base method.
+func (m *MockWorkflowServiceClient) RecordWorkerHeartbeat(ctx context.Context, in *workflowservice.RecordWorkerHeartbeatRequest, opts ...grpc.CallOption) (*workflowservice.RecordWorkerHeartbeatResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "RecordWorkerHeartbeat", varargs...)
+	ret0, _ := ret[0].(*workflowservice.RecordWorkerHeartbeatResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RecordWorkerHeartbeat indicates an expected call of RecordWorkerHeartbeat.
+func (mr *MockWorkflowServiceClientMockRecorder) RecordWorkerHeartbeat(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecordWorkerHeartbeat", reflect.TypeOf((*MockWorkflowServiceClient)(nil).RecordWorkerHeartbeat), varargs...)
 }
 
 // RegisterNamespace mocks base method.

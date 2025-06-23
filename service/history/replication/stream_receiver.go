@@ -26,6 +26,9 @@ const (
 	ReceiverModeUnset       ReceiverMode = 0
 	ReceiverModeSingleStack ReceiverMode = 1 // default mode. It only uses High Priority Task Tracker for processing tasks.
 	ReceiverModeTieredStack ReceiverMode = 2
+
+	// ReceiveTaskIntervalMultiplier is based on ReplicationStreamSendEmptyTaskDuration. Default duration: 1 min.
+	ReceiveTaskIntervalMultiplier = 3
 )
 
 type (
@@ -49,6 +52,7 @@ type (
 		taskConverter           ExecutableTaskConverter
 		receiverMode            ReceiverMode
 		flowController          ReceiverFlowController
+		recvSignalChan          chan struct{}
 	}
 )
 
@@ -106,6 +110,7 @@ func NewStreamReceiver(
 		taskConverter:  taskConverter,
 		receiverMode:   ReceiverModeUnset,
 		flowController: NewReceiverFlowControl(taskTrackerMap, processToolBox.Config),
+		recvSignalChan: make(chan struct{}, 1),
 	}
 }
 
@@ -121,7 +126,7 @@ func (r *StreamReceiverImpl) Start() {
 
 	go WrapEventLoop(context.Background(), r.sendEventLoop, r.Stop, r.logger, r.MetricsHandler, r.clientShardKey, r.serverShardKey, r.Config)
 	go WrapEventLoop(context.Background(), r.recvEventLoop, r.Stop, r.logger, r.MetricsHandler, r.clientShardKey, r.serverShardKey, r.Config)
-
+	go livenessMonitor(r.recvSignalChan, r.Config.ReplicationStreamSendEmptyTaskDuration()*ReceiveTaskIntervalMultiplier, r.shutdownChan, r.Stop, r.logger)
 	r.logger.Info("StreamReceiver started.")
 }
 
@@ -306,6 +311,11 @@ func (r *StreamReceiverImpl) processMessages(
 		return NewStreamError("stream_receiver failed to recv", err)
 	}
 	for streamResp := range streamRespChen {
+		select {
+		case r.recvSignalChan <- struct{}{}:
+		default:
+			// signal channel is full. Continue
+		}
 		if streamResp.Err != nil {
 			return streamResp.Err
 		}

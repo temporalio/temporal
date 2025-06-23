@@ -1142,25 +1142,41 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 
 		// TODO bug fix: We cache the last response for each build ID. timeSinceLastFanOut is the last fan out time, that means some enteries in the cache can be more stale if
 		// user is calling this API back-to-back but with different version selection.
+		cacheKeyFunc := func(buildId string, taskQueueType enumspb.TaskQueueType) string {
+			return fmt.Sprintf("%s.%s", buildId, taskQueueType.String())
+		}
 		missingItemsInCache := false
-		physicalInfoByBuildId := make(map[string]map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo)
+		physicalTqInfos := make(map[string]map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo)
 		//nolint:staticcheck // SA1019 deprecated
 		requestedBuildIds, err := e.getBuildIds(req.Versions)
 		if err != nil {
 			return nil, err
 		}
-		for b := range requestedBuildIds {
-			c := rootPM.GetCache(b) // any expired cache entry will return nil
-			if c == nil {
-				missingItemsInCache = true
-				break // once we find a missing item, we can stop checking the cache
+
+		for buildId := range requestedBuildIds {
+			physicalTqInfos[buildId] = make(map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo)
+			//nolint:staticcheck // SA1019 deprecated
+			for _, taskQueueType := range req.TaskQueueTypes {
+				cacheKey := cacheKeyFunc(buildId, taskQueueType)
+				cachedInfo := rootPM.GetCache(cacheKey) // any expired cache entry will return nil
+				if cachedInfo == nil {
+					missingItemsInCache = true
+					break // once we find a missing item, we can stop checking the cache
+				}
+				//revive:disable-next-line:unchecked-type-assertion
+				physicalTqInfos[buildId][taskQueueType] = cachedInfo.(*taskqueuespb.PhysicalTaskQueueInfo)
 			}
-			//revive:disable-next-line:unchecked-type-assertion
-			physicalInfoByBuildId[b] = c.(map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo)
+			if missingItemsInCache {
+				break // stop checking other build IDs if we already found missing items
+			}
 		}
+
 		if missingItemsInCache {
 			// Fan out to partitions to get the needed info
-			var foundBuildIds []string
+			var foundItems []struct {
+				buildId       string
+				taskQueueType enumspb.TaskQueueType
+			}
 			numPartitions := max(tqConfig.NumWritePartitions(), tqConfig.NumReadPartitions())
 			for _, taskQueueType := range req.TaskQueueTypes {
 				for i := 0; i < numPartitions; i++ {
@@ -1179,20 +1195,22 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 						return nil, err
 					}
 					for buildId, vii := range partitionResp.VersionsInfoInternal {
-						foundBuildIds = append(foundBuildIds, buildId)
-						if _, ok := physicalInfoByBuildId[buildId]; !ok {
-							physicalInfoByBuildId[buildId] = make(map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo)
+						foundItems = append(foundItems, struct {
+							buildId       string
+							taskQueueType enumspb.TaskQueueType
+						}{buildId, taskQueueType})
+
+						if _, ok := physicalTqInfos[buildId]; !ok {
+							physicalTqInfos[buildId] = make(map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo)
 						}
-						if physInfo, ok := physicalInfoByBuildId[buildId][taskQueueType]; !ok {
-							physicalInfoByBuildId[buildId][taskQueueType] = vii.PhysicalTaskQueueInfo
+						if physInfo, ok := physicalTqInfos[buildId][taskQueueType]; !ok {
+							physicalTqInfos[buildId][taskQueueType] = vii.PhysicalTaskQueueInfo
 						} else {
 							var mergedStats *taskqueuepb.TaskQueueStats
 
-							// only report Task Queue Statistics if requested.
 							if req.GetReportStats() {
-								totalStats := physicalInfoByBuildId[buildId][taskQueueType].TaskQueueStats
+								totalStats := physicalTqInfos[buildId][taskQueueType].TaskQueueStats
 								partitionStats := vii.PhysicalTaskQueueInfo.TaskQueueStats
-
 								mergedStats = &taskqueuepb.TaskQueueStats{
 									ApproximateBacklogCount: totalStats.ApproximateBacklogCount + partitionStats.ApproximateBacklogCount,
 									ApproximateBacklogAge:   largerBacklogAge(totalStats.ApproximateBacklogAge, partitionStats.ApproximateBacklogAge),
@@ -1200,24 +1218,26 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 									TasksDispatchRate:       totalStats.TasksDispatchRate + partitionStats.TasksDispatchRate,
 								}
 							}
-							merged := &taskqueuespb.PhysicalTaskQueueInfo{
+
+							physicalTqInfos[buildId][taskQueueType] = &taskqueuespb.PhysicalTaskQueueInfo{
 								Pollers:        dedupPollers(append(physInfo.GetPollers(), vii.PhysicalTaskQueueInfo.GetPollers()...)),
 								TaskQueueStats: mergedStats,
 							}
-							physicalInfoByBuildId[buildId][taskQueueType] = merged
 						}
 					}
 				}
 			}
 
-			for _, b := range foundBuildIds {
-				rootPM.PutCache(b, physicalInfoByBuildId[b])
+			// put the found items into cache
+			for _, item := range foundItems {
+				physicalTqInfo := physicalTqInfos[item.buildId][item.taskQueueType]
+				rootPM.PutCache(cacheKeyFunc(item.buildId, item.taskQueueType), physicalTqInfo)
 			}
 		}
 
 		// smush internal info into versions info
 		versionsInfo := make(map[string]*taskqueuepb.TaskQueueVersionInfo, 0)
-		for bid, typeMap := range physicalInfoByBuildId {
+		for bid, typeMap := range physicalTqInfos {
 			typesInfo := make(map[int32]*taskqueuepb.TaskQueueTypeInfo, 0)
 			for taskQueueType, physicalInfo := range typeMap {
 				typesInfo[int32(taskQueueType)] = &taskqueuepb.TaskQueueTypeInfo{
@@ -1294,7 +1314,8 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 				if v.GetVersion() == nil || v.GetVersion().GetDeploymentName() == "" || v.GetVersion().GetBuildId() == "" {
 					continue
 				}
-				buildIds = append(buildIds, worker_versioning.WorkerDeploymentVersionToStringV31(v.GetVersion()))
+				buildId := worker_versioning.WorkerDeploymentVersionToStringV32(v.GetVersion())
+				buildIds = append(buildIds, buildId)
 			}
 
 			// query each partition for stats
@@ -2384,7 +2405,7 @@ func (e *matchingEngineImpl) getUserDataBatcher(namespaceId namespace.ID) *strea
 func (e *matchingEngineImpl) applyUserDataUpdateBatch(namespaceId namespace.ID, batch []*userDataUpdate) error {
 	ctx, cancel := context.WithTimeout(context.Background(), ioTimeout)
 	// TODO: should use namespace name here
-	ctx = headers.SetCallerInfo(ctx, headers.NewBackgroundCallerInfo(namespaceId.String()))
+	ctx = headers.SetCallerInfo(ctx, headers.NewBackgroundHighCallerInfo(namespaceId.String()))
 	defer cancel()
 
 	// convert to map

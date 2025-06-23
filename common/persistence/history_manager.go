@@ -6,7 +6,6 @@ import (
 
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
-	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -97,7 +96,7 @@ func (m *executionManagerImpl) ForkHistoryBranch(
 		Info:        request.Info,
 	}
 
-	treeInfoBlob, err := m.serializer.HistoryTreeInfoToBlob(treeInfo, enumspb.ENCODING_TYPE_PROTO3)
+	treeInfoBlob, err := m.serializer.HistoryTreeInfoToBlob(treeInfo)
 	if err != nil {
 		return nil, err
 	}
@@ -356,7 +355,7 @@ func (m *executionManagerImpl) serializeAppendHistoryNodesRequest(
 	}
 
 	// nodeID will be the first eventID
-	blob, err := m.serializer.SerializeEvents(request.Events, enumspb.ENCODING_TYPE_PROTO3)
+	blob, err := m.serializer.SerializeEvents(request.Events)
 	if err != nil {
 		return nil, err
 	}
@@ -389,7 +388,7 @@ func (m *executionManagerImpl) serializeAppendHistoryNodesRequest(
 			BranchInfo:  branch,
 			ForkTime:    timestamp.TimeNowPtrUtc(),
 			Info:        request.Info,
-		}, enumspb.ENCODING_TYPE_PROTO3)
+		})
 		if err != nil {
 			return nil, err
 		}
@@ -457,7 +456,7 @@ func (m *executionManagerImpl) serializeAppendRawHistoryNodesRequest(
 			BranchInfo:  branch,
 			ForkTime:    timestamp.TimeNowPtrUtc(),
 			Info:        request.Info,
-		}, enumspb.ENCODING_TYPE_PROTO3)
+		})
 		if err != nil {
 			return nil, err
 		}
@@ -915,6 +914,7 @@ func (m *executionManagerImpl) readHistoryBranch(
 	dataLossTags := func(cause string) []tag.Tag {
 		return []tag.Tag{
 			tag.Cause(cause),
+			tag.ShardID(request.ShardID),
 			tag.WorkflowBranchToken(request.BranchToken),
 			tag.WorkflowFirstEventID(firstEvent.GetEventId()),
 			tag.FirstEventVersion(firstEvent.GetVersion()),
@@ -1082,7 +1082,11 @@ func (m *executionManagerImpl) filterHistoryNodesReverse(
 		if lastNodeID == defaultLastNodeID {
 			lastNodeID = node.NodeID
 		}
-		if node.TransactionID != lastTransactionID {
+		if lastTransactionID == 0 {
+			m.logger.Warn("lastTransactionID is not set, this should not happen")
+		}
+		if lastTransactionID != 0 && // in the case where the lastTransactionID is not set, we will not compare
+			node.TransactionID != lastTransactionID {
 			continue
 		}
 

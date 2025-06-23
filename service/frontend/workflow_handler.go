@@ -3765,7 +3765,7 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 		// we noticed some "running workflows" aren't running anymore. poke the workflow to
 		// refresh, but don't wait for the state to change. ignore errors.
 		go func() {
-			disconnectedCtx := headers.SetCallerInfo(context.Background(), headers.NewBackgroundCallerInfo(request.Namespace))
+			disconnectedCtx := headers.SetCallerInfo(context.Background(), headers.NewBackgroundHighCallerInfo(request.Namespace))
 			_, _ = wh.historyClient.SignalWorkflowExecution(disconnectedCtx, &historyservice.SignalWorkflowExecutionRequest{
 				NamespaceId: namespaceID.String(),
 				SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{
@@ -4628,11 +4628,19 @@ func (wh *WorkflowHandler) StartBatchOperation(
 			if op.ResetOperation.Options.Target == nil {
 				return nil, serviceerror.NewInvalidArgument("batch reset missing target")
 			}
-			encoded, err := op.ResetOperation.Options.Marshal()
+			encodedResetOptions, err := op.ResetOperation.Options.Marshal()
 			if err != nil {
 				return nil, err
 			}
-			resetParams.ResetOptions = encoded
+			resetParams.ResetOptions = encodedResetOptions
+			resetParams.PostResetOperations = make([][]byte, len(op.ResetOperation.PostResetOperations))
+			for i, postResetOperation := range op.ResetOperation.PostResetOperations {
+				encodedPostResetOperations, err := postResetOperation.Marshal()
+				if err != nil {
+					return nil, err
+				}
+				resetParams.PostResetOperations[i] = encodedPostResetOperations
+			}
 		} else {
 			// TODO: remove support for old fields later
 			resetType := op.ResetOperation.GetResetType()
@@ -4647,6 +4655,17 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		operationType = batcher.BatchTypeUpdateOptions
 		updateOptionsParams.WorkflowExecutionOptions = op.UpdateWorkflowOptionsOperation.GetWorkflowExecutionOptions()
 		updateOptionsParams.UpdateMask = op.UpdateWorkflowOptionsOperation.GetUpdateMask()
+		// TODO(carlydf): remove hacky usage of deprecated fields later, after adding support for oneof in BatchParams encoder
+		if o := updateOptionsParams.WorkflowExecutionOptions.VersioningOverride; o.GetOverride() != nil {
+			deprecatedOverride := &workflowpb.VersioningOverride{}
+			if o.GetAutoUpgrade() {
+				deprecatedOverride.Behavior = enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE //nolint:staticcheck // SA1019: worker versioning v0.31
+			} else if o.GetPinned().GetBehavior() == workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED {
+				deprecatedOverride.Behavior = enumspb.VERSIONING_BEHAVIOR_PINNED                                                            //nolint:staticcheck // SA1019: worker versioning v0.31
+				deprecatedOverride.PinnedVersion = worker_versioning.ExternalWorkerDeploymentVersionToStringV31(o.GetPinned().GetVersion()) //nolint:staticcheck // SA1019: worker versioning v0.31
+			}
+			updateOptionsParams.WorkflowExecutionOptions.VersioningOverride = deprecatedOverride
+		}
 	case *workflowservice.StartBatchOperationRequest_UnpauseActivitiesOperation:
 		operationType = batcher.BatchTypeUnpauseActivities
 		if op.UnpauseActivitiesOperation == nil {
@@ -5820,10 +5839,6 @@ func (wh *WorkflowHandler) UpdateActivityOptions(
 ) (_ *workflowservice.UpdateActivityOptionsResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
-	if !wh.config.ActivityAPIsEnabled(request.GetNamespace()) {
-		return nil, serviceerror.NewUnimplemented("method UpdateActivityOptions not implemented")
-	}
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
@@ -5859,10 +5874,6 @@ func (wh *WorkflowHandler) PauseActivity(
 ) (_ *workflowservice.PauseActivityResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
-	if !wh.config.ActivityAPIsEnabled(request.GetNamespace()) {
-		return nil, serviceerror.NewUnimplemented("method PauseActivity not implemented")
-	}
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
@@ -5895,10 +5906,6 @@ func (wh *WorkflowHandler) UnpauseActivity(
 ) (_ *workflowservice.UnpauseActivityResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
-	if !wh.config.ActivityAPIsEnabled(request.GetNamespace()) {
-		return nil, serviceerror.NewUnimplemented("method UnpauseActivity not implemented")
-	}
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
@@ -5930,10 +5937,6 @@ func (wh *WorkflowHandler) ResetActivity(
 	ctx context.Context, request *workflowservice.ResetActivityRequest,
 ) (_ *workflowservice.ResetActivityResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
-
-	if !wh.config.ActivityAPIsEnabled(request.GetNamespace()) {
-		return nil, serviceerror.NewUnimplemented("method ResetActivity not implemented")
-	}
 
 	if request == nil {
 		return nil, errRequestNotSet
@@ -6071,4 +6074,58 @@ func (wh *WorkflowHandler) ListWorkflowRules(
 		return nil, err
 	}
 	return &workflowservice.ListWorkflowRulesResponse{Rules: workflowRules}, nil
+}
+
+// RecordWorkerHeartbeat receive heartbeat request from the worker
+// and forwards it to the corresponding matching service.
+func (wh *WorkflowHandler) RecordWorkerHeartbeat(
+	ctx context.Context, request *workflowservice.RecordWorkerHeartbeatRequest,
+) (*workflowservice.RecordWorkerHeartbeatResponse, error) {
+	if !wh.config.WorkerHeartbeatsEnabled(request.GetNamespace()) {
+		return nil, serviceerror.NewUnimplemented("method RecordWorkerHeartbeat not supported")
+	}
+	namespaceName := namespace.Name(request.GetNamespace())
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = wh.matchingClient.RecordWorkerHeartbeat(ctx, &matchingservice.RecordWorkerHeartbeatRequest{
+		NamespaceId:       namespaceID.String(),
+		HeartbeartRequest: request,
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.RecordWorkerHeartbeatResponse{}, nil
+}
+
+// ListWorkers retrieves a list of workers in the specified namespace that match the provided filters.
+func (wh *WorkflowHandler) ListWorkers(
+	ctx context.Context, request *workflowservice.ListWorkersRequest,
+) (*workflowservice.ListWorkersResponse, error) {
+	if !wh.config.ListWorkersEnabled(request.GetNamespace()) {
+		return nil, serviceerror.NewUnimplemented("method ListWorkers not supported")
+	}
+	namespaceName := namespace.Name(request.GetNamespace())
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := wh.matchingClient.ListWorkers(ctx, &matchingservice.ListWorkersRequest{
+		NamespaceId: namespaceID.String(),
+		ListRequest: request,
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.ListWorkersResponse{
+		WorkersInfo:   resp.GetWorkersInfo(),
+		NextPageToken: resp.GetNextPageToken(),
+	}, nil
 }

@@ -119,6 +119,8 @@ func (t *timerQueueActiveTaskExecutor) Execute(
 		err = t.executeStateMachineTimerTask(ctx, task)
 	case *tasks.ChasmTaskPure:
 		err = t.executeChasmPureTimerTask(ctx, task)
+	case *tasks.ChasmTask:
+		err = t.executeChasmSideEffectTimerTask(ctx, task)
 	default:
 		err = queues.NewUnprocessableTaskError("unknown task type")
 	}
@@ -927,6 +929,46 @@ func (t *timerQueueActiveTaskExecutor) processActivityWorkflowRules(
 	return nil
 }
 
+func (t *timerQueueActiveTaskExecutor) executeChasmSideEffectTimerTask(
+	ctx context.Context,
+	task *tasks.ChasmTask,
+) error {
+	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
+	defer cancel()
+
+	wfCtx, release, err := getWorkflowExecutionContextForTask(ctx, t.shardContext, t.cache, task)
+	if err != nil {
+		return err
+	}
+	defer func() { release(err) }()
+
+	ms, err := loadMutableStateForTimerTask(ctx, t.shardContext, wfCtx, task, t.metricsHandler, t.logger)
+	if err != nil {
+		return err
+	}
+	if ms == nil {
+		return errNoChasmMutableState
+	}
+
+	tree := ms.ChasmTree()
+	if tree == nil {
+		return errNoChasmTree
+	}
+
+	// Now that we've loaded the CHASM tree, we can release the lock before task
+	// execution. The task's executor must do its own locking as needed, and additional
+	// mutable state validations will run at access time.
+	release(nil)
+
+	return executeChasmSideEffectTask(
+		ctx,
+		t.chasmEngine,
+		t.shardContext.ChasmRegistry(),
+		tree,
+		task,
+	)
+}
+
 func (t *timerQueueActiveTaskExecutor) executeChasmPureTimerTask(
 	ctx context.Context,
 	task *tasks.ChasmTaskPure,
@@ -945,7 +987,7 @@ func (t *timerQueueActiveTaskExecutor) executeChasmPureTimerTask(
 		return err
 	}
 	if ms == nil {
-		return nil
+		return errNoChasmMutableState
 	}
 
 	// Execute all fired pure tasks for a component while holding the workflow lock.
@@ -955,10 +997,10 @@ func (t *timerQueueActiveTaskExecutor) executeChasmPureTimerTask(
 		wfCtx,
 		ms,
 		task,
-		func(executor chasm.NodeExecutePureTask, task any) error {
+		func(executor chasm.NodePureTask, taskAttributes chasm.TaskAttributes, taskInstance any) error {
 			// ExecutePureTask also calls the task's validator. Invalid tasks will no-op
 			// succeed.
-			if err := executor.ExecutePureTask(ctx, task); err != nil {
+			if err := executor.ExecutePureTask(ctx, taskAttributes, taskInstance); err != nil {
 				return err
 			}
 

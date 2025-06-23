@@ -432,6 +432,6 @@ func createCheckpointRetryPolicy() backoff.RetryPolicy {
 
 func newQueueIOContext() (context.Context, context.CancelFunc) {
 	ctx, cancel := context.WithTimeout(context.Background(), queueIOTimeout)
-	ctx = headers.SetCallerInfo(ctx, headers.SystemBackgroundCallerInfo)
+	ctx = headers.SetCallerInfo(ctx, headers.SystemBackgroundHighCallerInfo)
 	return ctx, cancel
 }

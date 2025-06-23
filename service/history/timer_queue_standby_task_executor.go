@@ -105,6 +105,8 @@ func (t *timerQueueStandbyTaskExecutor) Execute(
 		err = t.executeStateMachineTimerTask(ctx, task)
 	case *tasks.ChasmTaskPure:
 		err = t.executeChasmPureTimerTask(ctx, task)
+	case *tasks.ChasmTask:
+		err = t.executeChasmSideEffectTimerTask(ctx, task)
 	default:
 		err = queues.NewUnprocessableTaskError("unknown task type")
 	}
@@ -130,12 +132,20 @@ func (t *timerQueueStandbyTaskExecutor) executeChasmPureTimerTask(
 			wfContext,
 			mutableState,
 			task,
-			func(_ chasm.NodeExecutePureTask, task any) error {
-				// If this line of code is reached, the task's Validate() function succeeded, which
-				// indicates that it is still expected to run. Return ErrTaskRetry to wait for the
-				// task to complete on the active cluster, after which Validate will begun returning
-				// false.
-				return consts.ErrTaskRetry
+			func(node chasm.NodePureTask, taskAttributes chasm.TaskAttributes, task any) error {
+				ok, err := node.ValidatePureTask(ctx, taskAttributes, task)
+				if err != nil {
+					return err
+				}
+
+				// When Validate succeeds, the task is still expected to run. Return ErrTaskRetry
+				// to wait for the task to complete on the active cluster, after which Validate
+				// will begin returning false.
+				if ok {
+					return consts.ErrTaskRetry
+				}
+
+				return nil
 			},
 		)
 		if err != nil && errors.Is(err, consts.ErrTaskRetry) {
@@ -153,6 +163,37 @@ func (t *timerQueueStandbyTaskExecutor) executeChasmPureTimerTask(
 			task,
 			t.getCurrentTime,
 			t.config.StandbyTaskMissingEventsDiscardDelay(task.GetType()),
+			t.checkWorkflowStillExistOnSourceBeforeDiscard,
+		),
+	)
+}
+
+func (t *timerQueueStandbyTaskExecutor) executeChasmSideEffectTimerTask(
+	ctx context.Context,
+	task *tasks.ChasmTask,
+) error {
+	actionFn := func(
+		ctx context.Context,
+		wfContext historyi.WorkflowContext,
+		ms historyi.MutableState,
+	) (any, error) {
+		return validateChasmSideEffectTask(
+			ctx,
+			t.shardContext.ChasmRegistry(),
+			ms,
+			task,
+		)
+	}
+
+	return t.processTimer(
+		ctx,
+		task,
+		actionFn,
+		getStandbyPostActionFn(
+			task,
+			t.getCurrentTime,
+			t.config.StandbyTaskMissingEventsDiscardDelay(task.GetType()),
+			// TODO - replace this with a method for CHASM components
 			t.checkWorkflowStillExistOnSourceBeforeDiscard,
 		),
 	)

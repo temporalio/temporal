@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/testing/protorequire"
@@ -109,12 +110,12 @@ func (s *fieldSuite) TestFieldGetSimple() {
 func (s *fieldSuite) TestFieldGetComponent() {
 	serializedNodes := testComponentSerializedNodes()
 
-	node, err := NewTree(serializedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+	node, err := s.newTestTree(serializedNodes)
 	s.NoError(err)
 
 	chasmContext := NewMutableContext(context.Background(), node)
 
-	c, err := node.Component(chasmContext, ComponentRef{componentPath: RootPath})
+	c, err := node.Component(chasmContext, ComponentRef{componentPath: rootPath})
 	s.NoError(err)
 	s.NotNil(c)
 
@@ -133,4 +134,17 @@ func (s *fieldSuite) TestFieldGetComponent() {
 	s.ProtoEqual(&protoMessageType{
 		CreateRequestId: "sub-data1",
 	}, sd1)
+}
+
+func (s *fieldSuite) newTestTree(
+	serializedNodes map[string]*persistencespb.ChasmNode,
+) (*Node, error) {
+	return NewTree(
+		serializedNodes,
+		s.registry,
+		s.timeSource,
+		s.nodeBackend,
+		s.nodePathEncoder,
+		s.logger,
+	)
 }

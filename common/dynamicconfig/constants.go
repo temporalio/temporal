@@ -960,11 +960,7 @@ Wildcards (*) are expanded to allow any substring. By default blacklist is empty
 		`FrontendEnableExecuteMultiOperation enables the ExecuteMultiOperation API in the frontend.
 The API is under active development.`,
 	)
-	EnableExecuteMultiOperationErrorDebug = NewNamespaceBoolSetting(
-		"history.enableExecuteMultiOperationErrorDebug",
-		false,
-		`Enable detailed MultiOperation error debug information in the history service.`,
-	)
+
 	FrontendEnableUpdateWorkflowExecutionAsyncAccepted = NewNamespaceBoolSetting(
 		"frontend.enableUpdateWorkflowExecutionAsyncAccepted",
 		true,
@@ -2040,6 +2036,11 @@ archivalQueueProcessor`,
 		0.9,
 		`WorkflowExecutionMaxTotalUpdatesSuggestContinueAsNewThreshold is the percentage threshold of total updates that any given workflow execution can receive before suggesting to continue-as-new.`,
 	)
+	EnableUpdateWithStartRetryOnClosedWorkflowAbort = NewNamespaceBoolSetting(
+		"history.enableUpdateWithStartRetryOnClosedWorkflowAbort",
+		true,
+		`EnableUpdateWithStartRetryOnClosedWorkflowAbort enables retrying Update-with-Start's update if it was aborted by a closing workflow.`,
+	)
 
 	ReplicatorTaskBatchSize = NewGlobalIntSetting(
 		"history.replicatorTaskBatchSize",
@@ -2411,6 +2412,16 @@ that task will be sent to DLQ.`,
 		time.Hour,
 		`ReplicationProgressCacheTTL is TTL of replication progress cache`,
 	)
+	ReplicationStreamSendEmptyTaskDuration = NewGlobalDurationSetting(
+		"history.ReplicationStreamSendEmptyTaskDuration",
+		time.Minute,
+		`ReplicationStreamSendEmptyTaskDuration is the interval to sync status when there is no replication task`,
+	)
+	ReplicationEnableRateLimit = NewGlobalBoolSetting(
+		"history.ReplicationEnableRateLimit",
+		true,
+		`ReplicationEnableRateLimit is the feature flag to enable replication global rate limiter`,
+	)
 	WorkflowIdReuseMinimalInterval = NewNamespaceDurationSetting(
 		"history.workflowIdReuseMinimalInterval",
 		1*time.Second,
@@ -2704,12 +2715,6 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		`When set to true, logs all RPC/request errors for the namespace, not just unexpected ones.`,
 	)
 
-	ActivityAPIsEnabled = NewNamespaceBoolSetting(
-		"frontend.activityAPIsEnabled",
-		false,
-		`ActivityAPIsEnabled is a "feature enable" flag. `,
-	)
-
 	WorkflowRulesAPIsEnabled = NewNamespaceBoolSetting(
 		"frontend.workflowRulesAPIsEnabled",
 		false,
@@ -2726,5 +2731,17 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		"rpc.slowRequestLoggingThreshold",
 		5*time.Second,
 		`SlowRequestLoggingThreshold is the threshold above which a gRPC request is considered slow and logged.`,
+	)
+
+	WorkerHeartbeatsEnabled = NewNamespaceBoolSetting(
+		"frontend.WorkerHeartbeatsEnabled",
+		false,
+		`WorkerHeartbeatsEnabled is a "feature enable" flag. It allows workers to send periodic heartbeats to the server.`,
+	)
+
+	ListWorkersEnabled = NewNamespaceBoolSetting(
+		"frontend.ListWorkersEnabled",
+		false,
+		`ListWorkersEnabled is a "feature enable" flag. It allows clients to get workers heartbeat information.`,
 	)
 )

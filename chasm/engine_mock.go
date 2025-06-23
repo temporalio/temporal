@@ -41,16 +41,17 @@ func (m *MockEngine) EXPECT() *MockEngineMockRecorder {
 }
 
 // newEntity mocks base method.
-func (m *MockEngine) newEntity(arg0 context.Context, arg1 ComponentRef, arg2 func(MutableContext) (Component, error), arg3 ...TransitionOption) (ComponentRef, error) {
+func (m *MockEngine) newEntity(arg0 context.Context, arg1 ComponentRef, arg2 func(MutableContext) (Component, error), arg3 ...TransitionOption) (EntityKey, []byte, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1, arg2}
 	for _, a := range arg3 {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "newEntity", varargs...)
-	ret0, _ := ret[0].(ComponentRef)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret0, _ := ret[0].(EntityKey)
+	ret1, _ := ret[1].([]byte)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
 }
 
 // newEntity indicates an expected call of newEntity.
@@ -61,14 +62,14 @@ func (mr *MockEngineMockRecorder) newEntity(arg0, arg1, arg2 any, arg3 ...any) *
 }
 
 // pollComponent mocks base method.
-func (m *MockEngine) pollComponent(arg0 context.Context, arg1 ComponentRef, arg2 func(Context, Component) (any, bool, error), arg3 func(MutableContext, Component, any) error, arg4 ...TransitionOption) (ComponentRef, error) {
+func (m *MockEngine) pollComponent(arg0 context.Context, arg1 ComponentRef, arg2 func(Context, Component) (any, bool, error), arg3 func(MutableContext, Component, any) error, arg4 ...TransitionOption) ([]byte, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1, arg2, arg3}
 	for _, a := range arg4 {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "pollComponent", varargs...)
-	ret0, _ := ret[0].(ComponentRef)
+	ret0, _ := ret[0].([]byte)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -100,14 +101,14 @@ func (mr *MockEngineMockRecorder) readComponent(arg0, arg1, arg2 any, arg3 ...an
 }
 
 // updateComponent mocks base method.
-func (m *MockEngine) updateComponent(arg0 context.Context, arg1 ComponentRef, arg2 func(MutableContext, Component) error, arg3 ...TransitionOption) (ComponentRef, error) {
+func (m *MockEngine) updateComponent(arg0 context.Context, arg1 ComponentRef, arg2 func(MutableContext, Component) error, arg3 ...TransitionOption) ([]byte, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1, arg2}
 	for _, a := range arg3 {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "updateComponent", varargs...)
-	ret0, _ := ret[0].(ComponentRef)
+	ret0, _ := ret[0].([]byte)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -120,16 +121,17 @@ func (mr *MockEngineMockRecorder) updateComponent(arg0, arg1, arg2 any, arg3 ...
 }
 
 // updateWithNewEntity mocks base method.
-func (m *MockEngine) updateWithNewEntity(arg0 context.Context, arg1 ComponentRef, arg2 func(MutableContext) (Component, error), arg3 func(MutableContext, Component) error, arg4 ...TransitionOption) (ComponentRef, error) {
+func (m *MockEngine) updateWithNewEntity(arg0 context.Context, arg1 ComponentRef, arg2 func(MutableContext) (Component, error), arg3 func(MutableContext, Component) error, arg4 ...TransitionOption) (EntityKey, []byte, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1, arg2, arg3}
 	for _, a := range arg4 {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "updateWithNewEntity", varargs...)
-	ret0, _ := ret[0].(ComponentRef)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret0, _ := ret[0].(EntityKey)
+	ret1, _ := ret[1].([]byte)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
 }
 
 // updateWithNewEntity indicates an expected call of updateWithNewEntity.

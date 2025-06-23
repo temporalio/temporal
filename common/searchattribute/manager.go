@@ -118,7 +118,7 @@ func (m *managerImpl) refreshCache(saCache cache, now time.Time) (cache, error) 
 	// TODO: specify a timeout for the context
 	ctx := headers.SetCallerInfo(
 		context.TODO(),
-		headers.SystemBackgroundCallerInfo,
+		headers.SystemBackgroundHighCallerInfo,
 	)
 
 	clusterMetadata, err := m.clusterMetadataManager.GetCurrentClusterMetadata(ctx)

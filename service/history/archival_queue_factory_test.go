@@ -62,7 +62,7 @@ func TestArchivalQueueFactory(t *testing.T) {
 			TracerProvider:    noop.NewTracerProvider(),
 		},
 	})
-	queue := queueFactory.CreateQueue(mockShard, nil)
+	queue := queueFactory.CreateQueue(mockShard)
 
 	require.NotNil(t, queue)
 	assert.Equal(t, tasks.CategoryArchival, queue.Category())
