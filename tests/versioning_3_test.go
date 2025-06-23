@@ -303,7 +303,8 @@ func (s *Versioning3Suite) testPinnedQuery_DrainedVersion(pollersPresent bool) {
 	}, time.Second*10, time.Millisecond*1000)
 
 	if !pollersPresent {
-		time.Sleep(1 * time.Second) // simulate the pollers going away, which should make the query fail as now the version is drained + has no pollers polling it
+		// simulate the pollers going away, which should make the query fail as now the version is drained + has no pollers polling it
+		time.Sleep(1 * time.Second) //nolint:forbidigo
 		versionStr := worker_versioning.ExternalWorkerDeploymentVersionToString(worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(tv.Deployment()))
 
 		_, err := s.queryWorkflow(tv)
