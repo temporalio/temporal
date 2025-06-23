@@ -218,7 +218,11 @@ func (s *Versioning3Suite) testWorkflowWithPinnedOverride(sticky bool) {
 }
 
 func (s *Versioning3Suite) TestQueryWithPinnedOverride_NoSticky() {
-	s.testQueryWithPinnedOverride(false)
+	s.RunTestWithMatchingBehavior(
+		func() {
+			s.testQueryWithPinnedOverride(false)
+		},
+	)
 }
 
 func (s *Versioning3Suite) TestQueryWithPinnedOverride_Sticky() {
@@ -230,7 +234,11 @@ func (s *Versioning3Suite) TestQueryWithPinnedOverride_Sticky() {
 }
 
 func (s *Versioning3Suite) TestPinnedQuery_DrainedVersion() {
-	s.testPinnedQuery_DrainedVersion()
+	s.RunTestWithMatchingBehavior(
+		func() {
+			s.testPinnedQuery_DrainedVersion()
+		},
+	)
 }
 
 func (s *Versioning3Suite) testPinnedQuery_DrainedVersion() {
