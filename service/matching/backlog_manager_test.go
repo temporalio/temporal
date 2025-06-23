@@ -28,12 +28,12 @@ type BacklogManagerTestSuite struct {
 	ptqMgr     *MockphysicalTaskQueueManager
 }
 
-func TestBacklogManagerTestSuite(t *testing.T) {
+func TestBacklogManager_Suite(t *testing.T) {
 	t.Parallel()
 	suite.Run(t, &BacklogManagerTestSuite{newMatcher: false})
 }
 
-func TestBacklogManagerWithNewMatcherTestSuite(t *testing.T) {
+func TestBacklogManager_Pri_Suite(t *testing.T) {
 	t.Parallel()
 	suite.Run(t, &BacklogManagerTestSuite{newMatcher: true})
 }

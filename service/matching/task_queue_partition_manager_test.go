@@ -47,12 +47,12 @@ type PartitionManagerTestSuite struct {
 }
 
 // TODO(pri): cleanup; delete this
-func TestTaskQueuePartitionManagerSuite(t *testing.T) {
+func TestTaskQueuePartitionManager_Suite(t *testing.T) {
 	t.Parallel()
 	suite.Run(t, &PartitionManagerTestSuite{newMatcher: false})
 }
 
-func TestTaskQueuePartitionManagerWithNewMatcherSuite(t *testing.T) {
+func TestTaskQueuePartitionManager_Pri_Suite(t *testing.T) {
 	t.Parallel()
 	suite.Run(t, &PartitionManagerTestSuite{newMatcher: true})
 }
