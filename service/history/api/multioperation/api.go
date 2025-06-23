@@ -121,18 +121,37 @@ func Invoke(
 	ns := namespaceEntry.Name().String()
 	// TODO(stephan): remove dynamic config again
 	if shardContext.GetConfig().EnableUpdateWithStartRetryOnClosedWorkflowAbort(ns) {
-		if !uws.workflowWasStarted && uws.updateWasAbortedByClosingWorkflow(err) {
+		if uws.noStartButUpdateWasAbortedByClosingWorkflow(err) {
+			testhooks.Call(uws.testHooks, testhooks.UpdateWithStartOnClosingWorkflowRetry)
+
 			uws2, err2 := newUpdateWithStart()
 			if err2 != nil {
 				return nil, err2
 			}
 			res, err = uws2.Invoke(ctx)
+
+			// If the Update-with-Start encountered the same error of a closing workflow again, it will convert
+			// the error to Aborted (which is a retryable error) to allow the client to retry the operation.
+			if shardContext.GetConfig().EnableUpdateWithStartRetryableErrorOnClosedWorkflowAbort(ns) {
+				if uws2.noStartButUpdateWasAbortedByClosingWorkflow(err) {
+					var multiOpsErr *serviceerror.MultiOperationExecution
+					if errors.As(err, &multiOpsErr) {
+						return nil, serviceerror.NewMultiOperationExecution(multiOpsErr.Error(), []error{
+							multiOpsErr.OperationErrors()[0],
+							serviceerror.NewAborted(multiOpsErr.OperationErrors()[1].Error()), // changed from NotFound to Aborted!
+						})
+					}
+				}
+			}
 		}
 	}
 	return res, err
 }
 
-func (uws *updateWithStart) updateWasAbortedByClosingWorkflow(err error) bool {
+func (uws *updateWithStart) noStartButUpdateWasAbortedByClosingWorkflow(err error) bool {
+	if uws.workflowWasStarted {
+		return false
+	}
 	var multiOpsErr *serviceerror.MultiOperationExecution
 	if ok := errors.As(err, &multiOpsErr); !ok {
 		return false
