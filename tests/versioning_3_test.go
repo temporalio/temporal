@@ -233,25 +233,35 @@ func (s *Versioning3Suite) TestQueryWithPinnedOverride_Sticky() {
 	)
 }
 
-func (s *Versioning3Suite) TestPinnedQuery_DrainedVersion() {
+func (s *Versioning3Suite) TestPinnedQuery_DrainedVersion_PollersAbsent() {
 	s.RunTestWithMatchingBehavior(
 		func() {
-			s.testPinnedQuery_DrainedVersion()
+			s.testPinnedQuery_DrainedVersion(false)
 		},
 	)
 }
 
-func (s *Versioning3Suite) testPinnedQuery_DrainedVersion() {
+func (s *Versioning3Suite) TestPinnedQuery_DrainedVersion_PollersPresent() {
+	s.RunTestWithMatchingBehavior(
+		func() {
+			s.testPinnedQuery_DrainedVersion(true)
+		},
+	)
+}
+
+func (s *Versioning3Suite) testPinnedQuery_DrainedVersion(pollersPresent bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	s.OverrideDynamicConfig(dynamicconfig.VersionDrainageStatusRefreshInterval, 1*time.Second)
 	s.OverrideDynamicConfig(dynamicconfig.VersionDrainageStatusVisibilityGracePeriod, 1*time.Second)
-	s.OverrideDynamicConfig(dynamicconfig.PollerHistoryTTL, 5*time.Second)
+	if !pollersPresent {
+		s.OverrideDynamicConfig(dynamicconfig.PollerHistoryTTL, 500*time.Millisecond)
+	}
 
 	tv := testvars.New(s)
 
-	// start v1 version and make it current
+	// create version v1 and make it current
 	idlePollerDone := make(chan struct{})
 	go func() {
 		s.idlePollWorkflow(tv, true, ver3MinPollTime, "should not have gotten any tasks since there are none")
@@ -271,7 +281,7 @@ func (s *Versioning3Suite) testPinnedQuery_DrainedVersion() {
 	s.WaitForChannel(ctx, wftCompleted)
 	s.verifyWorkflowVersioning(tv, vbPinned, tv.Deployment(), tv.VersioningOverridePinned(s.useV32), nil)
 
-	// start v2 version and make it current which shall make v1 go from current -> draining/drained
+	// create version v2 and make it current which shall make v1 go from current -> draining/drained
 	idlePollerDone = make(chan struct{})
 	tv2 := tv.WithBuildIDNumber(2)
 	go func() {
@@ -281,16 +291,28 @@ func (s *Versioning3Suite) testPinnedQuery_DrainedVersion() {
 	s.setCurrentDeployment(tv2)
 	s.WaitForChannel(ctx, idlePollerDone)
 
-	// Query the closed workflow on v1 and see if it gets blackholed.
-	s.EventuallyWithT(func(c *assert.CollectT) {
-		a := assert.New(c)
+	// wait for v2 to become drained
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := require.New(t)
+		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
+			Namespace: s.Namespace().String(),
+			Version:   tv.DeploymentVersionString(),
+		})
+		a.NoError(err)
+		a.Equal(enumspb.VERSION_DRAINAGE_STATUS_DRAINED, resp.GetWorkerDeploymentVersionInfo().GetDrainageInfo().GetStatus())
+	}, time.Second*10, time.Millisecond*1000)
+
+	if !pollersPresent {
+		time.Sleep(1 * time.Second) // simulate the pollers going away, which should make the query fail as now the version is drained + has no pollers polling it
+		versionStr := worker_versioning.ExternalWorkerDeploymentVersionToString(worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(tv.Deployment()))
 
 		_, err := s.queryWorkflow(tv)
-		a.Error(err)
-
-		versionStr := worker_versioning.ExternalWorkerDeploymentVersionToString(worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(tv.Deployment()))
-		a.ErrorContains(err, fmt.Sprintf(matching.ErrBlackHoledQuery, versionStr, versionStr))
-	}, 10*time.Second, 500*time.Millisecond)
+		s.Error(err)
+		s.ErrorContains(err, fmt.Sprintf(matching.ErrBlackHoledQuery, versionStr, versionStr))
+	} else {
+		// since the version still has pollers, the query should succeed
+		s.pollAndQueryWorkflow(tv, false)
+	}
 
 }
 
