@@ -41,11 +41,14 @@ message TaskVersionDirective {
 }
 
 message InternalTaskQueueStatus {
+    int64 read_level_pass = 7;
     int64 read_level = 1;
+    int64 ack_level_pass = 8;
     int64 ack_level = 2;
     temporal.api.taskqueue.v1.TaskIdBlock task_id_block = 3;
     int64 loaded_tasks = 4;
     int64 approximate_backlog_count = 5;
+    int64 max_read_level_pass = 9;
     int64 max_read_level = 6;
 }
 

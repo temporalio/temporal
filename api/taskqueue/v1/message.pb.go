@@ -152,11 +152,14 @@ func (*TaskVersionDirective_AssignedBuildId) isTaskVersionDirective_BuildId() {}
 
 type InternalTaskQueueStatus struct {
 	state                   protoimpl.MessageState `protogen:"open.v1"`
+	ReadLevelPass           int64                  `protobuf:"varint,7,opt,name=read_level_pass,json=readLevelPass,proto3" json:"read_level_pass,omitempty"`
 	ReadLevel               int64                  `protobuf:"varint,1,opt,name=read_level,json=readLevel,proto3" json:"read_level,omitempty"`
+	AckLevelPass            int64                  `protobuf:"varint,8,opt,name=ack_level_pass,json=ackLevelPass,proto3" json:"ack_level_pass,omitempty"`
 	AckLevel                int64                  `protobuf:"varint,2,opt,name=ack_level,json=ackLevel,proto3" json:"ack_level,omitempty"`
 	TaskIdBlock             *v13.TaskIdBlock       `protobuf:"bytes,3,opt,name=task_id_block,json=taskIdBlock,proto3" json:"task_id_block,omitempty"`
 	LoadedTasks             int64                  `protobuf:"varint,4,opt,name=loaded_tasks,json=loadedTasks,proto3" json:"loaded_tasks,omitempty"`
 	ApproximateBacklogCount int64                  `protobuf:"varint,5,opt,name=approximate_backlog_count,json=approximateBacklogCount,proto3" json:"approximate_backlog_count,omitempty"`
+	MaxReadLevelPass        int64                  `protobuf:"varint,9,opt,name=max_read_level_pass,json=maxReadLevelPass,proto3" json:"max_read_level_pass,omitempty"`
 	MaxReadLevel            int64                  `protobuf:"varint,6,opt,name=max_read_level,json=maxReadLevel,proto3" json:"max_read_level,omitempty"`
 	unknownFields           protoimpl.UnknownFields
 	sizeCache               protoimpl.SizeCache
@@ -192,9 +195,23 @@ func (*InternalTaskQueueStatus) Descriptor() ([]byte, []int) {
 	return file_temporal_server_api_taskqueue_v1_message_proto_rawDescGZIP(), []int{1}
 }
 
+func (x *InternalTaskQueueStatus) GetReadLevelPass() int64 {
+	if x != nil {
+		return x.ReadLevelPass
+	}
+	return 0
+}
+
 func (x *InternalTaskQueueStatus) GetReadLevel() int64 {
 	if x != nil {
 		return x.ReadLevel
+	}
+	return 0
+}
+
+func (x *InternalTaskQueueStatus) GetAckLevelPass() int64 {
+	if x != nil {
+		return x.AckLevelPass
 	}
 	return 0
 }
@@ -223,6 +240,13 @@ func (x *InternalTaskQueueStatus) GetLoadedTasks() int64 {
 func (x *InternalTaskQueueStatus) GetApproximateBacklogCount() int64 {
 	if x != nil {
 		return x.ApproximateBacklogCount
+	}
+	return 0
+}
+
+func (x *InternalTaskQueueStatus) GetMaxReadLevelPass() int64 {
+	if x != nil {
+		return x.MaxReadLevelPass
 	}
 	return 0
 }
@@ -592,14 +616,17 @@ const file_temporal_server_api_taskqueue_v1_message_proto_rawDesc = "" +
 	"deployment\x12i\n" +
 	"\x12deployment_version\x18\x05 \x01(\v2:.temporal.server.api.deployment.v1.WorkerDeploymentVersionR\x11deploymentVersionB\n" +
 	"\n" +
-	"\bbuild_id\"\xa6\x02\n" +
-	"\x17InternalTaskQueueStatus\x12\x1d\n" +
+	"\bbuild_id\"\xa3\x03\n" +
+	"\x17InternalTaskQueueStatus\x12&\n" +
+	"\x0fread_level_pass\x18\a \x01(\x03R\rreadLevelPass\x12\x1d\n" +
 	"\n" +
-	"read_level\x18\x01 \x01(\x03R\treadLevel\x12\x1b\n" +
+	"read_level\x18\x01 \x01(\x03R\treadLevel\x12$\n" +
+	"\x0eack_level_pass\x18\b \x01(\x03R\fackLevelPass\x12\x1b\n" +
 	"\tack_level\x18\x02 \x01(\x03R\backLevel\x12J\n" +
 	"\rtask_id_block\x18\x03 \x01(\v2&.temporal.api.taskqueue.v1.TaskIdBlockR\vtaskIdBlock\x12!\n" +
 	"\floaded_tasks\x18\x04 \x01(\x03R\vloadedTasks\x12:\n" +
-	"\x19approximate_backlog_count\x18\x05 \x01(\x03R\x17approximateBacklogCount\x12$\n" +
+	"\x19approximate_backlog_count\x18\x05 \x01(\x03R\x17approximateBacklogCount\x12-\n" +
+	"\x13max_read_level_pass\x18\t \x01(\x03R\x10maxReadLevelPass\x12$\n" +
 	"\x0emax_read_level\x18\x06 \x01(\x03R\fmaxReadLevel\"\x90\x01\n" +
 	"\x1cTaskQueueVersionInfoInternal\x12p\n" +
 	"\x18physical_task_queue_info\x18\x02 \x01(\v27.temporal.server.api.taskqueue.v1.PhysicalTaskQueueInfoR\x15physicalTaskQueueInfo\"\xa5\x02\n" +
