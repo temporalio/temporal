@@ -34,17 +34,17 @@ func rowTypeTaskInSubqueue(subqueue int) int {
 }
 
 func getTaskTTL(expireTime *timestamppb.Timestamp) int64 {
-	var ttl int64
-	if expireTime != nil && !expireTime.AsTime().IsZero() {
-		expiryTtl := convert.Int64Ceil(time.Until(expireTime.AsTime()).Seconds())
-
-		// 0 means no ttl, we dont want that.
-		// Todo: Come back and correctly ignore expired in-memory tasks before persisting
-		if expiryTtl < 1 {
-			expiryTtl = 1
-		}
-
-		ttl = expiryTtl
+	if expireTime == nil || expireTime.AsTime().IsZero() {
+		return 0
 	}
-	return ttl
+
+	expiryTtl := convert.Int64Ceil(time.Until(expireTime.AsTime()).Seconds())
+
+	// 0 means no ttl, we dont want that.
+	// Todo: Come back and correctly ignore expired in-memory tasks before persisting
+	if expiryTtl < 1 {
+		expiryTtl = 1
+	}
+
+	return expiryTtl
 }
