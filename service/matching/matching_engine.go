@@ -109,7 +109,7 @@ type (
 	matchingEngineImpl struct {
 		status                        int32
 		taskManager                   persistence.TaskManager
-		FairTaskManager               persistence.FairTaskManager
+		fairTaskManager               persistence.FairTaskManager
 		historyClient                 resource.HistoryClient
 		matchingRawClient             resource.MatchingRawClient
 		deploymentStoreClient         deployment.DeploymentStoreClient
@@ -217,7 +217,7 @@ func NewEngine(
 	e := &matchingEngineImpl{
 		status:                        common.DaemonStatusInitialized,
 		taskManager:                   taskManager,
-		FairTaskManager:               FairTaskManager,
+		fairTaskManager:               FairTaskManager,
 		historyClient:                 historyClient,
 		matchingRawClient:             matchingRawClient,
 		deploymentStoreClient:         deploymentStoreClient,
