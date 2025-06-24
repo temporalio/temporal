@@ -177,7 +177,7 @@ func (m *taskManagerImpl) CreateTasks(
 		}
 		tasks[i] = &InternalCreateTask{
 			TaskId:     task.TaskId,
-			Pass:       task.PassNumber,
+			Pass:       task.TaskPass,
 			ExpiryTime: task.Data.ExpiryTime,
 			Task:       taskBlob,
 		}

@@ -14,7 +14,7 @@ import "temporal/server/api/taskqueue/v1/message.proto";
 // task column
 message AllocatedTaskInfo {
     TaskInfo data = 1;
-    int64 pass_number = 3;
+    int64 task_pass = 3;
     int64 task_id = 2;
 }
 
@@ -67,7 +67,7 @@ message SubqueueInfo {
 
     // The rest are mutable state for the subqueue:
     int64 ack_level_pass = 4;
-    int64 ack_level = 2;
+    int64 ack_level_id = 2;
     int64 approximate_backlog_count = 3;
 
     // Max read level keeps track of the highest task level ever written, but is only

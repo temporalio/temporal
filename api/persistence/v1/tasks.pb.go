@@ -31,7 +31,7 @@ const (
 type AllocatedTaskInfo struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Data          *TaskInfo              `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"`
-	PassNumber    int64                  `protobuf:"varint,3,opt,name=pass_number,json=passNumber,proto3" json:"pass_number,omitempty"`
+	TaskPass      int64                  `protobuf:"varint,3,opt,name=task_pass,json=taskPass,proto3" json:"task_pass,omitempty"`
 	TaskId        int64                  `protobuf:"varint,2,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -74,9 +74,9 @@ func (x *AllocatedTaskInfo) GetData() *TaskInfo {
 	return nil
 }
 
-func (x *AllocatedTaskInfo) GetPassNumber() int64 {
+func (x *AllocatedTaskInfo) GetTaskPass() int64 {
 	if x != nil {
-		return x.PassNumber
+		return x.TaskPass
 	}
 	return 0
 }
@@ -335,7 +335,7 @@ type SubqueueInfo struct {
 	Key *SubqueueKey `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
 	// The rest are mutable state for the subqueue:
 	AckLevelPass            int64 `protobuf:"varint,4,opt,name=ack_level_pass,json=ackLevelPass,proto3" json:"ack_level_pass,omitempty"`
-	AckLevel                int64 `protobuf:"varint,2,opt,name=ack_level,json=ackLevel,proto3" json:"ack_level,omitempty"`
+	AckLevelId              int64 `protobuf:"varint,2,opt,name=ack_level_id,json=ackLevelId,proto3" json:"ack_level_id,omitempty"`
 	ApproximateBacklogCount int64 `protobuf:"varint,3,opt,name=approximate_backlog_count,json=approximateBacklogCount,proto3" json:"approximate_backlog_count,omitempty"`
 	// Max read level keeps track of the highest task level ever written, but is only
 	// maintained best-effort. Do not trust these values.
@@ -391,9 +391,9 @@ func (x *SubqueueInfo) GetAckLevelPass() int64 {
 	return 0
 }
 
-func (x *SubqueueInfo) GetAckLevel() int64 {
+func (x *SubqueueInfo) GetAckLevelId() int64 {
 	if x != nil {
-		return x.AckLevel
+		return x.AckLevelId
 	}
 	return 0
 }
@@ -520,11 +520,10 @@ var File_temporal_server_api_persistence_v1_tasks_proto protoreflect.FileDescrip
 
 const file_temporal_server_api_persistence_v1_tasks_proto_rawDesc = "" +
 	"\n" +
-	".temporal/server/api/persistence/v1/tasks.proto\x12\"temporal.server.api.persistence.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\x1a&temporal/api/enums/v1/task_queue.proto\x1a*temporal/server/api/clock/v1/message.proto\x1a.temporal/server/api/taskqueue/v1/message.proto\"\x8f\x01\n" +
+	".temporal/server/api/persistence/v1/tasks.proto\x12\"temporal.server.api.persistence.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\x1a&temporal/api/enums/v1/task_queue.proto\x1a*temporal/server/api/clock/v1/message.proto\x1a.temporal/server/api/taskqueue/v1/message.proto\"\x8b\x01\n" +
 	"\x11AllocatedTaskInfo\x12@\n" +
-	"\x04data\x18\x01 \x01(\v2,.temporal.server.api.persistence.v1.TaskInfoR\x04data\x12\x1f\n" +
-	"\vpass_number\x18\x03 \x01(\x03R\n" +
-	"passNumber\x12\x17\n" +
+	"\x04data\x18\x01 \x01(\v2,.temporal.server.api.persistence.v1.TaskInfoR\x04data\x12\x1b\n" +
+	"\ttask_pass\x18\x03 \x01(\x03R\btaskPass\x12\x17\n" +
 	"\atask_id\x18\x02 \x01(\x03R\x06taskId\"\x87\x04\n" +
 	"\bTaskInfo\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1f\n" +
@@ -551,11 +550,12 @@ const file_temporal_server_api_persistence_v1_tasks_proto_rawDesc = "" +
 	"expiryTime\x12D\n" +
 	"\x10last_update_time\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\x0elastUpdateTime\x12:\n" +
 	"\x19approximate_backlog_count\x18\b \x01(\x03R\x17approximateBacklogCount\x12N\n" +
-	"\tsubqueues\x18\t \x03(\v20.temporal.server.api.persistence.v1.SubqueueInfoR\tsubqueues\"\xaa\x02\n" +
+	"\tsubqueues\x18\t \x03(\v20.temporal.server.api.persistence.v1.SubqueueInfoR\tsubqueues\"\xaf\x02\n" +
 	"\fSubqueueInfo\x12A\n" +
 	"\x03key\x18\x01 \x01(\v2/.temporal.server.api.persistence.v1.SubqueueKeyR\x03key\x12$\n" +
-	"\x0eack_level_pass\x18\x04 \x01(\x03R\fackLevelPass\x12\x1b\n" +
-	"\tack_level\x18\x02 \x01(\x03R\backLevel\x12:\n" +
+	"\x0eack_level_pass\x18\x04 \x01(\x03R\fackLevelPass\x12 \n" +
+	"\fack_level_id\x18\x02 \x01(\x03R\n" +
+	"ackLevelId\x12:\n" +
 	"\x19approximate_backlog_count\x18\x03 \x01(\x03R\x17approximateBacklogCount\x12-\n" +
 	"\x13max_read_level_pass\x18\x05 \x01(\x03R\x10maxReadLevelPass\x12)\n" +
 	"\x11max_read_level_id\x18\x06 \x01(\x03R\x0emaxReadLevelId\")\n" +

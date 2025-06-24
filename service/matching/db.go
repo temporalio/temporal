@@ -138,7 +138,7 @@ func (db *taskQueueDB) RenewLease(
 	}
 	return taskQueueState{
 		rangeID:   db.rangeID,
-		ackLevel:  db.subqueues[subqueueZero].AckLevel, // TODO(pri): cleanup, only used by old backlog manager
+		ackLevel:  db.subqueues[subqueueZero].AckLevelId, // TODO(pri): cleanup, only used by old backlog manager
 		subqueues: db.cloneSubqueues(),
 	}, nil
 }
@@ -186,7 +186,7 @@ func (db *taskQueueDB) takeOverTaskQueueLocked(
 		// In this case, ensureDefaultSubqueuesLocked already initialized subqueue 0 to have
 		// ackLevel and maxReadLevel 0, so we don't need to initialize them.
 		softassert.That(db.logger, db.subqueues[0].maxReadLevel == 0, "should have maxReadLevel 0 here")
-		softassert.That(db.logger, db.subqueues[0].AckLevel == 0, "should have ackLevel 0 here")
+		softassert.That(db.logger, db.subqueues[0].AckLevelId == 0, "should have ackLevel 0 here")
 		return nil
 
 	default:
@@ -237,7 +237,7 @@ func (db *taskQueueDB) OldUpdateState(
 		PrevRangeID:   db.rangeID,
 	})
 	if err == nil {
-		db.subqueues[subqueueZero].AckLevel = ackLevel
+		db.subqueues[subqueueZero].AckLevelId = ackLevel
 	}
 	db.emitBacklogGaugesLocked()
 	return err
@@ -265,12 +265,12 @@ func (db *taskQueueDB) updateAckLevelAndBacklogStats(subqueue int, newAckLevel i
 
 	db.lastChange = time.Now()
 	dbQueue := db.subqueues[subqueue]
-	if newAckLevel < dbQueue.AckLevel {
+	if newAckLevel < dbQueue.AckLevelId {
 		softassert.Fail(db.logger,
 			fmt.Sprintf("ack level in subqueue %d should not move backwards (from %v to %v)",
-				subqueue, dbQueue.AckLevel, newAckLevel))
+				subqueue, dbQueue.AckLevelId, newAckLevel))
 	}
-	dbQueue.AckLevel = newAckLevel
+	dbQueue.AckLevelId = newAckLevel
 
 	if newAckLevel == db.getMaxReadLevelLocked(subqueue) {
 		// Reset approximateBacklogCount to fix the count divergence issue
@@ -480,7 +480,7 @@ func (db *taskQueueDB) cachedQueueInfo() *persistencespb.TaskQueueInfo {
 		Name:                    db.queue.PersistenceName(),
 		TaskType:                db.queue.TaskType(),
 		Kind:                    db.queue.Partition().Kind(),
-		AckLevel:                db.subqueues[subqueueZero].AckLevel, // backwards compatibility
+		AckLevel:                db.subqueues[subqueueZero].AckLevelId, // backwards compatibility
 		ExpiryTime:              db.expiryTime(),
 		LastUpdateTime:          timestamp.TimeNowPtrUtc(),
 		ApproximateBacklogCount: db.subqueues[subqueueZero].ApproximateBacklogCount, // backwards compatibility
@@ -505,7 +505,7 @@ func (db *taskQueueDB) emitBacklogGaugesLocked() {
 		oldestTime = minNonZeroTime(oldestTime, s.oldestTime)
 		// note: this metric is only an estimation for the lag.
 		// taskID in DB may not be continuous, especially when task list ownership changes.
-		totalLag += s.maxReadLevel - s.AckLevel
+		totalLag += s.maxReadLevel - s.AckLevelId
 	}
 
 	metrics.ApproximateBacklogCount.With(db.metricsHandler).Record(float64(approximateBacklogCount))
@@ -541,7 +541,7 @@ func (db *taskQueueDB) ensureDefaultSubqueuesLocked(
 		// If we are transitioning from no-subqueues to subqueues, initialize subqueue 0 with
 		// the ack level and approx count from TaskQueueInfo.
 		if len(subqueues) == 1 {
-			subqueues[subqueueZero].AckLevel = initAckLevel
+			subqueues[subqueueZero].AckLevelId = initAckLevel
 			subqueues[subqueueZero].ApproximateBacklogCount = initApproxCount
 		}
 	}
@@ -554,7 +554,7 @@ func (db *taskQueueDB) newSubqueueLocked(key *persistencespb.SubqueueKey) *dbSub
 
 	s := &dbSubqueue{maxReadLevel: initAckLevel}
 	s.Key = key
-	s.AckLevel = initAckLevel
+	s.AckLevelId = initAckLevel
 	return s
 }
 
