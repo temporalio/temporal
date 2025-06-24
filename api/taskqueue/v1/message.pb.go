@@ -151,16 +151,18 @@ func (*TaskVersionDirective_UseAssignmentRules) isTaskVersionDirective_BuildId()
 func (*TaskVersionDirective_AssignedBuildId) isTaskVersionDirective_BuildId() {}
 
 type InternalTaskQueueStatus struct {
-	state                   protoimpl.MessageState `protogen:"open.v1"`
-	ReadLevelPass           int64                  `protobuf:"varint,7,opt,name=read_level_pass,json=readLevelPass,proto3" json:"read_level_pass,omitempty"`
-	ReadLevel               int64                  `protobuf:"varint,1,opt,name=read_level,json=readLevel,proto3" json:"read_level,omitempty"`
-	AckLevelPass            int64                  `protobuf:"varint,8,opt,name=ack_level_pass,json=ackLevelPass,proto3" json:"ack_level_pass,omitempty"`
-	AckLevel                int64                  `protobuf:"varint,2,opt,name=ack_level,json=ackLevel,proto3" json:"ack_level,omitempty"`
-	TaskIdBlock             *v13.TaskIdBlock       `protobuf:"bytes,3,opt,name=task_id_block,json=taskIdBlock,proto3" json:"task_id_block,omitempty"`
-	LoadedTasks             int64                  `protobuf:"varint,4,opt,name=loaded_tasks,json=loadedTasks,proto3" json:"loaded_tasks,omitempty"`
-	ApproximateBacklogCount int64                  `protobuf:"varint,5,opt,name=approximate_backlog_count,json=approximateBacklogCount,proto3" json:"approximate_backlog_count,omitempty"`
-	MaxReadLevelPass        int64                  `protobuf:"varint,9,opt,name=max_read_level_pass,json=maxReadLevelPass,proto3" json:"max_read_level_pass,omitempty"`
-	MaxReadLevel            int64                  `protobuf:"varint,6,opt,name=max_read_level,json=maxReadLevel,proto3" json:"max_read_level,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// read_level_pass and read_level (and ack_level_pass and ack_level, etc.) form a
+	// "fairness level" as a pair, so put them next to each other.
+	ReadLevelPass           int64            `protobuf:"varint,7,opt,name=read_level_pass,json=readLevelPass,proto3" json:"read_level_pass,omitempty"`
+	ReadLevel               int64            `protobuf:"varint,1,opt,name=read_level,json=readLevel,proto3" json:"read_level,omitempty"`
+	AckLevelPass            int64            `protobuf:"varint,8,opt,name=ack_level_pass,json=ackLevelPass,proto3" json:"ack_level_pass,omitempty"`
+	AckLevel                int64            `protobuf:"varint,2,opt,name=ack_level,json=ackLevel,proto3" json:"ack_level,omitempty"`
+	TaskIdBlock             *v13.TaskIdBlock `protobuf:"bytes,3,opt,name=task_id_block,json=taskIdBlock,proto3" json:"task_id_block,omitempty"`
+	LoadedTasks             int64            `protobuf:"varint,4,opt,name=loaded_tasks,json=loadedTasks,proto3" json:"loaded_tasks,omitempty"`
+	ApproximateBacklogCount int64            `protobuf:"varint,5,opt,name=approximate_backlog_count,json=approximateBacklogCount,proto3" json:"approximate_backlog_count,omitempty"`
+	MaxReadLevelPass        int64            `protobuf:"varint,9,opt,name=max_read_level_pass,json=maxReadLevelPass,proto3" json:"max_read_level_pass,omitempty"`
+	MaxReadLevel            int64            `protobuf:"varint,6,opt,name=max_read_level,json=maxReadLevel,proto3" json:"max_read_level,omitempty"`
 	unknownFields           protoimpl.UnknownFields
 	sizeCache               protoimpl.SizeCache
 }

@@ -598,10 +598,13 @@ type (
 
 	// GetTasksRequest is used to retrieve tasks of a task queue
 	GetTasksRequest struct {
-		NamespaceID        string
-		TaskQueue          string
-		TaskType           enumspb.TaskQueueType
-		InclusiveMinPass   int64 // FairTaskManager only
+		NamespaceID string
+		TaskQueue   string
+		TaskType    enumspb.TaskQueueType
+		// If InclusiveMinPass is set, return tasks greater or equal to <InclusiveMinPass,
+		// InclusiveMinTaskID> with no upper bound. InclusiveMinPass must be >= 1 for fair task
+		// manager and must be 0 for classic task manager.
+		InclusiveMinPass   int64
 		InclusiveMinTaskID int64
 		ExclusiveMaxTaskID int64
 		Subqueue           int
