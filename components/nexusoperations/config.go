@@ -172,16 +172,14 @@ func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 		DisallowedOperationHeaders: dynamicconfig.NewGlobalCachedTypedValue(dc, DisallowedOperationHeaders, func(keys []string) ([]string, error) {
 			// Override with defaults unless explicitly set.
 			// Note that this prevents the ability to unset the config but that's an acceptable limitation.
-			var out []string
 			if len(keys) == 0 {
-				out = slices.Clone(defaultDisallowedOperationHeaders)
-			} else {
-				out = slices.Clone(keys)
+				keys = defaultDisallowedOperationHeaders
 			}
-			for i, k := range out {
-				out[i] = strings.ToLower(k)
+			keys = slices.Clone(keys)
+			for i, k := range keys {
+				keys[i] = strings.ToLower(k)
 			}
-			return out, nil
+			return keys, nil
 		}).Get,
 		MaxOperationScheduleToCloseTimeout:  MaxOperationScheduleToCloseTimeout.Get(dc),
 		PayloadSizeLimit:                    dynamicconfig.BlobSizeLimitError.Get(dc),
