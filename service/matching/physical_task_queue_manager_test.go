@@ -52,11 +52,11 @@ type PhysicalTaskQueueManagerTestSuite struct {
 }
 
 // TODO(pri): cleanup; delete this
-func TestPhysicalTaskQueueManagerTestSuite(t *testing.T) {
+func TestPhysicalTaskQueueManager_Classic_Suite(t *testing.T) {
 	suite.Run(t, &PhysicalTaskQueueManagerTestSuite{newMatcher: false})
 }
 
-func TestPhysicalTaskQueueManagerWithNewMatcherTestSuite(t *testing.T) {
+func TestPhysicalTaskQueueManager_Pri_Suite(t *testing.T) {
 	suite.Run(t, &PhysicalTaskQueueManagerTestSuite{newMatcher: true})
 }
 
@@ -357,7 +357,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestTQMDoesFinalUpdateOnIdleUnload()
 
 func (s *PhysicalTaskQueueManagerTestSuite) TestTQMDoesNotDoFinalUpdateOnOwnershipLost() {
 	// TODO: use mocks instead of testTaskManager so we can do synchronization better instead of sleeps
-	s.config.UpdateAckInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(200 * time.Millisecond)
+	s.config.UpdateAckInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(100 * time.Millisecond)
 	s.tqMgr.Start()
 
 	// wait for goroutines to start and to acquire rangeid lock
@@ -378,7 +378,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestTQMDoesNotDoFinalUpdateOnOwnersh
 	// on the next periodic write, it'll fail due to conflict and unload the task queue
 	s.Eventually(func() bool {
 		return s.tqMgr.tqCtx.Err() != nil
-	}, 5*time.Second, 100*time.Millisecond)
+	}, 5*time.Second, 20*time.Millisecond)
 
 	// no additional updates (the failed periodic update counts as "1")
 	s.Equal(1, tm.getUpdateCount(s.physicalTaskQueueKey))

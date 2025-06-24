@@ -3,6 +3,7 @@ package testcore
 import (
 	"flag"
 
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
@@ -29,4 +30,8 @@ func UseSQLVisibility() bool {
 	default:
 		return false
 	}
+}
+
+func UseCassandraPersistence() bool {
+	return cliFlags.persistenceType == config.StoreTypeNoSQL && cliFlags.persistenceDriver == "cassandra"
 }

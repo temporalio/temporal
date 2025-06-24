@@ -167,6 +167,9 @@ func newPhysicalTaskQueueManager(
 		pqMgr.partitionMgr.engine.historyClient,
 	)
 
+	isSticky := queue.Partition().Kind() == enumspb.TASK_QUEUE_KIND_STICKY
+	isChild := !isSticky && !queue.Partition().IsRoot()
+
 	newMatcher, cancelSub := config.NewMatcher(func(bool) {
 		// unload on change to NewMatcher so that we can reload with the new setting:
 		pqMgr.UnloadFromPartitionManager(unloadCauseConfigChange)
@@ -186,7 +189,7 @@ func newPhysicalTaskQueueManager(
 		)
 		var fwdr *priForwarder
 		var err error
-		if !queue.Partition().IsRoot() && queue.Partition().Kind() != enumspb.TASK_QUEUE_KIND_STICKY {
+		if isChild {
 			// Every DB Queue needs its own forwarder so that the throttles do not interfere
 			fwdr, err = newPriForwarder(&config.forwarderConfig, queue, e.matchingRawClient)
 			if err != nil {
@@ -216,7 +219,7 @@ func newPhysicalTaskQueueManager(
 		)
 		var fwdr *Forwarder
 		var err error
-		if !queue.Partition().IsRoot() && queue.Partition().Kind() != enumspb.TASK_QUEUE_KIND_STICKY {
+		if isChild {
 			// Every DB Queue needs its own forwarder so that the throttles do not interfere
 			fwdr, err = newForwarder(&config.forwarderConfig, queue, e.matchingRawClient)
 			if err != nil {
