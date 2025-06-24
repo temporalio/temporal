@@ -601,10 +601,12 @@ type (
 		NamespaceID        string
 		TaskQueue          string
 		TaskType           enumspb.TaskQueueType
+		InclusiveMinPass   int64 // FairTaskManager only
 		InclusiveMinTaskID int64
 		ExclusiveMaxTaskID int64
 		Subqueue           int
 		PageSize           int
+		UseLimit           bool // If true, use LIMIT in the query
 		NextPageToken      []byte
 	}
 
@@ -619,6 +621,7 @@ type (
 		NamespaceID        string
 		TaskQueueName      string
 		TaskType           enumspb.TaskQueueType
+		ExclusiveMaxPass   int64 // If set, delete tasks less than <ExclusiveMaxPass, ExclusiveMaxTaskID>
 		ExclusiveMaxTaskID int64 // Tasks less than this ID will be completed
 		Subqueue           int
 		Limit              int // Limit on the max number of tasks that can be completed. Required param

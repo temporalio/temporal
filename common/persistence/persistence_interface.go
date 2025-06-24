@@ -33,8 +33,8 @@ type (
 		Close()
 		// NewTaskStore returns a new task store
 		NewTaskStore() (TaskStore, error)
-		// NewTaskStore returns a new task store
-		NewTaskFairnessStore() (TaskStore, error)
+		// NewFairTaskStore returns a new task store with fairness enabled
+		NewFairTaskStore() (TaskStore, error)
 		// NewShardStore returns a new shard store
 		NewShardStore() (ShardStore, error)
 		// NewMetadataStore returns a new metadata store
@@ -69,8 +69,6 @@ type (
 		UpdateTaskQueue(ctx context.Context, request *InternalUpdateTaskQueueRequest) (*UpdateTaskQueueResponse, error)
 		ListTaskQueue(ctx context.Context, request *ListTaskQueueRequest) (*InternalListTaskQueueResponse, error)
 		DeleteTaskQueue(ctx context.Context, request *DeleteTaskQueueRequest) error
-		GetTaskQueuesByBuildId(ctx context.Context, request *GetTaskQueuesByBuildIdRequest) ([]string, error)
-		CountTaskQueuesByBuildId(ctx context.Context, request *CountTaskQueuesByBuildIdRequest) (int, error)
 
 		CreateTasks(ctx context.Context, request *InternalCreateTasksRequest) (*CreateTasksResponse, error)
 		GetTasks(ctx context.Context, request *GetTasksRequest) (*InternalGetTasksResponse, error)
@@ -79,6 +77,8 @@ type (
 		GetTaskQueueUserData(ctx context.Context, request *GetTaskQueueUserDataRequest) (*InternalGetTaskQueueUserDataResponse, error)
 		UpdateTaskQueueUserData(ctx context.Context, request *InternalUpdateTaskQueueUserDataRequest) error
 		ListTaskQueueUserDataEntries(ctx context.Context, request *ListTaskQueueUserDataEntriesRequest) (*InternalListTaskQueueUserDataEntriesResponse, error)
+		GetTaskQueuesByBuildId(ctx context.Context, request *GetTaskQueuesByBuildIdRequest) ([]string, error)
+		CountTaskQueuesByBuildId(ctx context.Context, request *CountTaskQueuesByBuildIdRequest) (int, error)
 	}
 
 	// MetadataStore is a lower level of MetadataManager

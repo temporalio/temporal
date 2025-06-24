@@ -1,41 +1,14 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package cassandra
 
 import (
 	"context"
 	"fmt"
+	"math"
 	"strings"
-	"time"
 
-	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/server/common/convert"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
-	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 const (
@@ -43,27 +16,29 @@ const (
 		`namespace_id, task_queue_name, task_queue_type, type, pass, task_id, task, task_encoding) ` +
 		`VALUES(?, ?, ?, ?, ?, ?, ?, ?)`
 
-	templateCreateTaskWithTTLQuery_v2 = `INSERT INTO tasks_v2 (` +
-		`namespace_id, task_queue_name, task_queue_type, type, pass, task_id, task, task_encoding) ` +
-		`VALUES(?, ?, ?, ?, ?, ?, ?, ?) USING TTL ?`
-
 	templateGetTasksQuery_v2 = `SELECT task_id, task, task_encoding ` +
-		`FROM tasks ` +
+		`FROM tasks_v2 ` +
 		`WHERE namespace_id = ? ` +
 		`and task_queue_name = ? ` +
 		`and task_queue_type = ? ` +
 		`and type = ? ` +
-		`and pass = 0 ` + // TODO(fairness): provide pass
-		`and task_id >= ? ` +
-		`and task_id < ?`
+		`and (pass, task_id) >= (?, ?)`
+
+	templateGetTasksQuery_v2_limit = `SELECT task_id, task, task_encoding ` +
+		`FROM tasks_v2 ` +
+		`WHERE namespace_id = ? ` +
+		`and task_queue_name = ? ` +
+		`and task_queue_type = ? ` +
+		`and type = ? ` +
+		`and (pass, task_id) >= (?, ?) ` +
+		`LIMIT ?`
 
 	templateCompleteTasksLessThanQuery_v2 = `DELETE FROM tasks_v2 ` +
 		`WHERE namespace_id = ? ` +
 		`AND task_queue_name = ? ` +
 		`AND task_queue_type = ? ` +
 		`AND type = ? ` +
-		`and pass = 0 ` + // TODO(fairness): provide pass
-		`AND task_id < ? `
+		`and (pass, task_id) < (?, ?)`
 
 	templateGetTaskQueueQuery_v2 = `SELECT ` +
 		`range_id, ` +
@@ -74,7 +49,7 @@ const (
 		`and task_queue_name = ? ` +
 		`and task_queue_type = ? ` +
 		`and type = ? ` +
-		`and pass = 0 ` + // TODO(fairness): provide pass
+		`and pass = 0 ` +
 		`and task_id = ?`
 
 	templateInsertTaskQueueQuery_v2 = `INSERT INTO tasks_v2 (` +
@@ -101,27 +76,6 @@ const (
 		`and task_id = ? ` +
 		`IF range_id = ?`
 
-	templateUpdateTaskQueueQueryWithTTLPart1_v2 = `INSERT INTO tasks_v2 (` +
-		`namespace_id, ` +
-		`task_queue_name, ` +
-		`task_queue_type, ` +
-		`type, ` +
-		`pass, ` +
-		`task_id ` +
-		`) VALUES (?, ?, ?, ?, 0, ?) USING TTL ?`
-
-	templateUpdateTaskQueueQueryWithTTLPart2_v2 = `UPDATE tasks_v2 USING TTL ? SET ` +
-		`range_id = ?, ` +
-		`task_queue = ?, ` +
-		`task_queue_encoding = ? ` +
-		`WHERE namespace_id = ? ` +
-		`and task_queue_name = ? ` +
-		`and task_queue_type = ? ` +
-		`and type = ? ` +
-		`and pass = 0 ` +
-		`and task_id = ? ` +
-		`IF range_id = ?`
-
 	templateDeleteTaskQueueQuery_v2 = `DELETE FROM tasks_v2 ` +
 		`WHERE namespace_id = ? ` +
 		`AND task_queue_name = ? ` +
@@ -134,14 +88,13 @@ const (
 
 // matchingTaskStoreV2 is a fork of matchingTaskStoreV1 that uses a new task schema.
 // All methods and queries were duplicated (even if they didn't change) to reduce the shared code.
-// Eventually, the original matchingTaskStoreV1 will be removed; and it this can be
-// renamed to matchingTaskStoreV1.
+// Eventually, the original matchingTaskStoreV1 will be removed.
 type matchingTaskStoreV2 struct {
-	*userDataStore
+	userDataStore
 }
 
 func newMatchingTaskStoreV2(
-	userDataStore *userDataStore,
+	userDataStore userDataStore,
 ) *matchingTaskStoreV2 {
 	return &matchingTaskStoreV2{userDataStore: userDataStore}
 }
@@ -208,53 +161,19 @@ func (d *matchingTaskStoreV2) UpdateTaskQueue(
 	ctx context.Context,
 	request *p.InternalUpdateTaskQueueRequest,
 ) (*p.UpdateTaskQueueResponse, error) {
-	var err error
-	var applied bool
 	previous := make(map[string]interface{})
-	if request.TaskQueueKind == enumspb.TASK_QUEUE_KIND_STICKY { // if task_queue is sticky, then update with TTL
-		if request.ExpiryTime == nil {
-			return nil, serviceerror.NewInternal("ExpiryTime cannot be nil for sticky task queue")
-		}
-		expiryTTL := convert.Int64Ceil(time.Until(timestamp.TimeValue(request.ExpiryTime)).Seconds())
-		if expiryTTL >= maxCassandraTTL {
-			expiryTTL = maxCassandraTTL
-		}
-		batch := d.Session.NewBatch(gocql.LoggedBatch).WithContext(ctx)
-		batch.Query(templateUpdateTaskQueueQueryWithTTLPart1_v2,
-			request.NamespaceID,
-			request.TaskQueue,
-			request.TaskType,
-			rowTypeTaskQueue,
-			taskQueueTaskID,
-			expiryTTL,
-		)
-		batch.Query(templateUpdateTaskQueueQueryWithTTLPart2_v2,
-			expiryTTL,
-			request.RangeID,
-			request.TaskQueueInfo.Data,
-			request.TaskQueueInfo.EncodingType.String(),
-			request.NamespaceID,
-			request.TaskQueue,
-			request.TaskType,
-			rowTypeTaskQueue,
-			taskQueueTaskID,
-			request.PrevRangeID,
-		)
-		applied, _, err = d.Session.MapExecuteBatchCAS(batch, previous)
-	} else {
-		query := d.Session.Query(templateUpdateTaskQueueQuery_v2,
-			request.RangeID,
-			request.TaskQueueInfo.Data,
-			request.TaskQueueInfo.EncodingType.String(),
-			request.NamespaceID,
-			request.TaskQueue,
-			request.TaskType,
-			rowTypeTaskQueue,
-			taskQueueTaskID,
-			request.PrevRangeID,
-		).WithContext(ctx)
-		applied, err = query.MapScanCAS(previous)
-	}
+	query := d.Session.Query(templateUpdateTaskQueueQuery_v2,
+		request.RangeID,
+		request.TaskQueueInfo.Data,
+		request.TaskQueueInfo.EncodingType.String(),
+		request.NamespaceID,
+		request.TaskQueue,
+		request.TaskType,
+		rowTypeTaskQueue,
+		taskQueueTaskID,
+		request.PrevRangeID,
+	).WithContext(ctx)
+	applied, err := query.MapScanCAS(previous)
 
 	if err != nil {
 		return nil, gocql.ConvertError("UpdateTaskQueue", err)
@@ -319,30 +238,19 @@ func (d *matchingTaskStoreV2) CreateTasks(
 	taskQueueType := request.TaskType
 
 	for _, task := range request.Tasks {
-		ttl := getTaskTTL(task.ExpiryTime)
-
-		if ttl <= 0 || ttl > maxCassandraTTL {
-			batch.Query(templateCreateTaskQuery_v2,
-				namespaceID,
-				taskQueue,
-				taskQueueType,
-				rowTypeTaskInSubqueue(task.Subqueue),
-				task.Pass,
-				task.TaskId,
-				task.Task.Data,
-				task.Task.EncodingType.String())
-		} else {
-			batch.Query(templateCreateTaskWithTTLQuery_v2,
-				namespaceID,
-				taskQueue,
-				taskQueueType,
-				rowTypeTaskInSubqueue(task.Subqueue),
-				task.Pass,
-				task.TaskId,
-				task.Task.Data,
-				task.Task.EncodingType.String(),
-				ttl)
+		if task.Pass == 0 {
+			return nil, serviceerror.NewInternal("invalid fair queue task missing pass number")
 		}
+
+		batch.Query(templateCreateTaskQuery_v2,
+			namespaceID,
+			taskQueue,
+			taskQueueType,
+			rowTypeTaskInSubqueue(task.Subqueue),
+			task.Pass,
+			task.TaskId,
+			task.Task.Data,
+			task.Task.EncodingType.String())
 	}
 
 	// The following query is used to ensure that range_id didn't change
@@ -379,16 +287,34 @@ func (d *matchingTaskStoreV2) GetTasks(
 	ctx context.Context,
 	request *p.GetTasksRequest,
 ) (*p.InternalGetTasksResponse, error) {
+	// Require starting from pass 1.
+	if request.InclusiveMinPass < 1 || request.ExclusiveMaxTaskID != math.MaxInt64 {
+		return nil, serviceerror.NewInternal("invalid GetTasks request on fair queue")
+	}
+
 	// Reading taskqueue tasks need to be quorum level consistent, otherwise we could lose tasks
-	query := d.Session.Query(templateGetTasksQuery_v2,
-		request.NamespaceID,
-		request.TaskQueue,
-		request.TaskType,
-		rowTypeTaskInSubqueue(request.Subqueue),
-		request.InclusiveMinTaskID,
-		request.ExclusiveMaxTaskID,
-	).WithContext(ctx)
-	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
+	var query gocql.Query
+	if request.UseLimit {
+		query = d.Session.Query(templateGetTasksQuery_v2_limit,
+			request.NamespaceID,
+			request.TaskQueue,
+			request.TaskType,
+			rowTypeTaskInSubqueue(request.Subqueue),
+			request.InclusiveMinPass,
+			request.InclusiveMinTaskID,
+			request.PageSize,
+		)
+	} else {
+		query = d.Session.Query(templateGetTasksQuery_v2,
+			request.NamespaceID,
+			request.TaskQueue,
+			request.TaskType,
+			rowTypeTaskInSubqueue(request.Subqueue),
+			request.InclusiveMinPass,
+			request.InclusiveMinTaskID,
+		)
+	}
+	iter := query.WithContext(ctx).PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 
 	response := &p.InternalGetTasksResponse{}
 	task := make(map[string]interface{})
@@ -406,7 +332,6 @@ func (d *matchingTaskStoreV2) GetTasks(
 		if !ok {
 			var byteSliceType []byte
 			return nil, newPersistedTypeMismatchError("task", byteSliceType, rawTask, task)
-
 		}
 
 		rawEncoding, ok := task["task_encoding"]
@@ -439,12 +364,18 @@ func (d *matchingTaskStoreV2) CompleteTasksLessThan(
 	ctx context.Context,
 	request *p.CompleteTasksLessThanRequest,
 ) (int, error) {
+	// Require starting from pass 1.
+	if request.ExclusiveMaxPass < 1 {
+		return 0, serviceerror.NewInternal("invalid CompleteTasksLessThan request on fair queue")
+	}
+
 	query := d.Session.Query(
 		templateCompleteTasksLessThanQuery_v2,
 		request.NamespaceID,
 		request.TaskQueueName,
 		request.TaskType,
 		rowTypeTaskInSubqueue(request.Subqueue),
+		request.ExclusiveMaxPass,
 		request.ExclusiveMaxTaskID,
 	).WithContext(ctx)
 	err := query.Exec()

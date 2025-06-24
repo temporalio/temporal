@@ -1,27 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package cassandra
 
 import (
@@ -125,11 +101,11 @@ const (
 )
 
 type matchingTaskStoreV1 struct {
-	*userDataStore
+	userDataStore
 }
 
 func newMatchingTaskStoreV1(
-	userDataStore *userDataStore,
+	userDataStore userDataStore,
 ) *matchingTaskStoreV1 {
 	return &matchingTaskStoreV1{userDataStore: userDataStore}
 }
@@ -307,6 +283,10 @@ func (d *matchingTaskStoreV1) CreateTasks(
 	taskQueueType := request.TaskType
 
 	for _, task := range request.Tasks {
+		if task.Pass != 0 {
+			return nil, serviceerror.NewInternal("invalid non-fair queue task with pass number")
+		}
+
 		ttl := getTaskTTL(task.ExpiryTime)
 
 		if ttl <= 0 || ttl > maxCassandraTTL {
@@ -365,6 +345,10 @@ func (d *matchingTaskStoreV1) GetTasks(
 	ctx context.Context,
 	request *p.GetTasksRequest,
 ) (*p.InternalGetTasksResponse, error) {
+	if request.InclusiveMinPass != 0 {
+		return nil, serviceerror.NewInternal("invalid GetTasks request on queue")
+	}
+
 	// Reading taskqueue tasks need to be quorum level consistent, otherwise we could lose tasks
 	query := d.Session.Query(templateGetTasksQuery,
 		request.NamespaceID,
@@ -392,7 +376,6 @@ func (d *matchingTaskStoreV1) GetTasks(
 		if !ok {
 			var byteSliceType []byte
 			return nil, newPersistedTypeMismatchError("task", byteSliceType, rawTask, task)
-
 		}
 
 		rawEncoding, ok := task["task_encoding"]
@@ -425,6 +408,10 @@ func (d *matchingTaskStoreV1) CompleteTasksLessThan(
 	ctx context.Context,
 	request *p.CompleteTasksLessThanRequest,
 ) (int, error) {
+	if request.ExclusiveMaxPass != 0 {
+		return 0, serviceerror.NewInternal("invalid CompleteTasksLessThan request on queue")
+	}
+
 	query := d.Session.Query(
 		templateCompleteTasksLessThanQuery,
 		request.NamespaceID,
