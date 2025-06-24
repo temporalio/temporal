@@ -67,8 +67,7 @@ func (f *Factory) NewTaskStore() (p.TaskStore, error) {
 }
 
 // NewTaskStore returns a new task store
-// TODO(fairness): cleanup; rename to NewTaskStore
-func (f *Factory) NewTaskFairnessStore() (p.TaskStore, error) {
+func (f *Factory) NewFairTaskStore() (p.TaskStore, error) {
 	return NewMatchingTaskStore(f.session, f.logger, true), nil
 }
 
