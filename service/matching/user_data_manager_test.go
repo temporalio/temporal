@@ -45,7 +45,7 @@ func createUserDataManager(
 
 	logger := log.NewTestLogger()
 	ns := namespace.Name("ns-name")
-	tm := newTestTaskManager(logger)
+	tm := newTestTaskManager(logger, false)
 	mockNamespaceCache := namespace.NewMockRegistry(controller)
 	mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(&namespace.Namespace{}, nil).AnyTimes()
 	mockNamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).Return(ns, nil).AnyTimes()

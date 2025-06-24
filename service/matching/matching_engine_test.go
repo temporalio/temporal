@@ -88,9 +88,10 @@ type (
 		hostInfoForResolver      membership.HostInfo
 		mockNexusEndpointManager *persistence.MockNexusEndpointManager
 
-		matchingEngine *matchingEngineImpl
-		taskManager    *testTaskManager
-		logger         *testlogger.TestLogger
+		matchingEngine  *matchingEngineImpl
+		taskManager     *testTaskManager
+		fairTaskManager *testTaskManager
+		logger          *testlogger.TestLogger
 	}
 )
 
@@ -105,7 +106,8 @@ func createTestMatchingEngine(
 	matchingClient matchingservice.MatchingServiceClient,
 	namespaceRegistry namespace.Registry,
 ) *matchingEngineImpl {
-	tm := newTestTaskManager(logger)
+	tm := newTestTaskManager(logger, false)
+	ftm := newTestTaskManager(logger, true)
 	mockVisibilityManager := manager.NewMockVisibilityManager(controller)
 	mockVisibilityManager.EXPECT().Close().AnyTimes()
 	mockHistoryClient := historyservicemock.NewMockHistoryServiceClient(controller)
@@ -120,7 +122,7 @@ func createTestMatchingEngine(
 	mockServiceResolver.EXPECT().RemoveListener(gomock.Any()).AnyTimes()
 	mockNexusEndpointManager := persistence.NewMockNexusEndpointManager(controller)
 	mockNexusEndpointManager.EXPECT().ListNexusEndpoints(gomock.Any(), gomock.Any()).Return(&persistence.ListNexusEndpointsResponse{}, nil).AnyTimes()
-	return newMatchingEngine(config, tm, mockHistoryClient, logger, namespaceRegistry, matchingClient, mockVisibilityManager, mockHostInfoProvider, mockServiceResolver, mockNexusEndpointManager)
+	return newMatchingEngine(config, tm, ftm, mockHistoryClient, logger, namespaceRegistry, matchingClient, mockVisibilityManager, mockHostInfoProvider, mockServiceResolver, mockNexusEndpointManager)
 }
 
 func createMockNamespaceCache(controller *gomock.Controller, nsName namespace.Name) (*namespace.Namespace, *namespace.MockRegistry) {
@@ -160,7 +162,8 @@ func (s *matchingEngineSuite) SetupTest() {
 		Return(&matchingservice.ReplicateTaskQueueUserDataResponse{}, nil).AnyTimes()
 	s.mockMatchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any()).
 		Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{WasUnloaded: true}, nil).AnyTimes()
-	s.taskManager = newTestTaskManager(s.logger)
+	s.taskManager = newTestTaskManager(s.logger, false)
+	s.fairTaskManager = newTestTaskManager(s.logger, true)
 	s.ns, s.mockNamespaceCache = createMockNamespaceCache(s.controller, matchingTestNamespace)
 	s.mockVisibilityManager = manager.NewMockVisibilityManager(s.controller)
 	s.mockVisibilityManager.EXPECT().Close().AnyTimes()
@@ -177,7 +180,7 @@ func (s *matchingEngineSuite) SetupTest() {
 	s.mockNexusEndpointManager = persistence.NewMockNexusEndpointManager(s.controller)
 	s.mockNexusEndpointManager.EXPECT().ListNexusEndpoints(gomock.Any(), gomock.Any()).Return(&persistence.ListNexusEndpointsResponse{}, nil).AnyTimes()
 
-	s.matchingEngine = s.newMatchingEngine(s.newConfig(), s.taskManager)
+	s.matchingEngine = s.newMatchingEngine(s.newConfig(), s.taskManager, s.fairTaskManager)
 	s.matchingEngine.Start()
 }
 
@@ -194,22 +197,24 @@ func (s *matchingEngineSuite) TearDownTest() {
 }
 
 func (s *matchingEngineSuite) newMatchingEngine(
-	config *Config, taskMgr persistence.TaskManager,
+	config *Config, taskMgr persistence.TaskManager, fairTaskMgr persistence.FairTaskManager,
 ) *matchingEngineImpl {
-	return newMatchingEngine(config, taskMgr, s.mockHistoryClient, s.logger, s.mockNamespaceCache, s.mockMatchingClient, s.mockVisibilityManager,
+	return newMatchingEngine(config, taskMgr, fairTaskMgr, s.mockHistoryClient, s.logger, s.mockNamespaceCache, s.mockMatchingClient, s.mockVisibilityManager,
 		s.mockHostInfoProvider, s.mockServiceResolver, s.mockNexusEndpointManager)
 }
 
 func newMatchingEngine(
-	config *Config, taskMgr persistence.TaskManager, mockHistoryClient historyservice.HistoryServiceClient,
+	config *Config, taskMgr persistence.TaskManager, fairTaskMgr persistence.FairTaskManager,
+	mockHistoryClient historyservice.HistoryServiceClient,
 	logger log.Logger, mockNamespaceCache namespace.Registry, mockMatchingClient matchingservice.MatchingServiceClient,
 	mockVisibilityManager manager.VisibilityManager, mockHostInfoProvider membership.HostInfoProvider,
 	mockServiceResolver membership.ServiceResolver, nexusEndpointManager persistence.NexusEndpointManager,
 ) *matchingEngineImpl {
 	return &matchingEngineImpl{
-		taskManager:   taskMgr,
-		historyClient: mockHistoryClient,
-		partitions:    make(map[tqid.PartitionKey]taskQueuePartitionManager),
+		taskManager:     taskMgr,
+		FairTaskManager: fairTaskMgr,
+		historyClient:   mockHistoryClient,
+		partitions:      make(map[tqid.PartitionKey]taskQueuePartitionManager),
 		gaugeMetrics: gaugeMetrics{
 			loadedTaskQueueFamilyCount:    make(map[taskQueueCounterKey]int),
 			loadedTaskQueueCount:          make(map[taskQueueCounterKey]int),
@@ -1763,7 +1768,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 
 	engines := make([]*matchingEngineImpl, engineCount)
 	for p := 0; p < engineCount; p++ {
-		e := s.newMatchingEngine(s.newConfig(), s.taskManager)
+		e := s.newMatchingEngine(s.newConfig(), s.taskManager, s.fairTaskManager)
 		e.config.RangeSize = rangeSize
 		engines[p] = e
 		e.Start()
@@ -1924,7 +1929,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesWorkflowTasksRangeStealing() {
 
 	engines := make([]*matchingEngineImpl, engineCount)
 	for p := 0; p < engineCount; p++ {
-		e := s.newMatchingEngine(s.newConfig(), s.taskManager)
+		e := s.newMatchingEngine(s.newConfig(), s.taskManager, s.fairTaskManager)
 		e.config.RangeSize = rangeSize
 		engines[p] = e
 		e.Start()
@@ -2855,7 +2860,7 @@ func (s *matchingEngineSuite) TestUnloadOnMembershipChange() {
 
 	config := s.newConfig()
 	config.MembershipUnloadDelay = dynamicconfig.GetDurationPropertyFn(10 * time.Millisecond)
-	e := s.newMatchingEngine(config, s.taskManager)
+	e := s.newMatchingEngine(config, s.taskManager, s.fairTaskManager)
 	e.Start()
 	defer e.Stop()
 
