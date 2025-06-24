@@ -283,7 +283,7 @@ func (d *matchingTaskStoreV1) CreateTasks(
 	taskQueueType := request.TaskType
 
 	for _, task := range request.Tasks {
-		if task.Pass != 0 {
+		if task.TaskPass != 0 {
 			return nil, serviceerror.NewInternal("invalid non-fair queue task with pass number")
 		}
 

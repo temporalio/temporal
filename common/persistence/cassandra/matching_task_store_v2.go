@@ -238,7 +238,7 @@ func (d *matchingTaskStoreV2) CreateTasks(
 	taskQueueType := request.TaskType
 
 	for _, task := range request.Tasks {
-		if task.Pass == 0 {
+		if task.TaskPass == 0 {
 			return nil, serviceerror.NewInternal("invalid fair queue task missing pass number")
 		}
 
@@ -247,7 +247,7 @@ func (d *matchingTaskStoreV2) CreateTasks(
 			taskQueue,
 			taskQueueType,
 			rowTypeTaskInSubqueue(task.Subqueue),
-			task.Pass,
+			task.TaskPass,
 			task.TaskId,
 			task.Task.Data,
 			task.Task.EncodingType.String())

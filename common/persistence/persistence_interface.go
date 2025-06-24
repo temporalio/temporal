@@ -305,8 +305,8 @@ type (
 	}
 
 	InternalCreateTask struct {
+		TaskPass   int64
 		TaskId     int64
-		Pass       int64
 		ExpiryTime *timestamppb.Timestamp
 		Task       *commonpb.DataBlob
 		Subqueue   int
