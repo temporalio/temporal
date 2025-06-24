@@ -3,7 +3,6 @@ package tests
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -194,11 +193,12 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_IncreaseAttemptsO
 
 	var startedActivityCount atomic.Int32
 	activityPausedCn := make(chan struct{})
+	activityErr := errors.New("activity-failed-while-paused")
 
 	activityFunction := func() (string, error) {
 		startedActivityCount.Add(1)
 		s.WaitForChannel(ctx, activityPausedCn)
-		return "done!", fmt.Errorf("activity failed after being paused")
+		return "done!", activityErr
 	}
 
 	workflowFn := s.makeWorkflowFunc(activityFunction)
