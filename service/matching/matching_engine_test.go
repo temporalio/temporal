@@ -3800,7 +3800,7 @@ func (m *testTaskManager) CompleteTasksLessThan(
 	for _, key := range keys {
 		level := key.(fairLevel)
 		if m.fairness {
-			if fairLevelLess(level, fairLevel{pass: request.ExclusiveMaxPass, id: request.ExclusiveMaxTaskID}) {
+			if level.less(fairLevel{pass: request.ExclusiveMaxPass, id: request.ExclusiveMaxTaskID}) {
 				tlm.tasks.Remove(level)
 			}
 		} else {
@@ -3932,7 +3932,7 @@ func (m *testTaskManager) GetTasks(
 	for it.Next() && len(tasks) < request.PageSize {
 		level := it.Key().(fairLevel)
 		if m.fairness {
-			if fairLevelLess(level, fairLevel{pass: request.InclusiveMinPass, id: request.InclusiveMinTaskID}) {
+			if level.less(fairLevel{pass: request.InclusiveMinPass, id: request.InclusiveMinTaskID}) {
 				continue
 			}
 		} else {

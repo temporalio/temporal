@@ -15,33 +15,37 @@ type fairLevel struct {
 	id   int64
 }
 
-func (l fairLevel) String() string {
-	return fmt.Sprintf("<%d,%d>", l.pass, l.id)
+func (a fairLevel) String() string {
+	return fmt.Sprintf("<%d,%d>", a.pass, a.id)
 }
 
-func fairLevelLess(a, b fairLevel) bool {
+// Returns true if a < b lexicographically.
+func (a fairLevel) less(b fairLevel) bool {
 	return a.pass < b.pass || a.pass == b.pass && a.id < b.id
 }
 
+// Use with treemap
 func fairLevelComparator(aany, bany any) int {
 	a := aany.(fairLevel) // nolint:revive
 	b := bany.(fairLevel) // nolint:revive
-	if fairLevelLess(a, b) {
+	if a.less(b) {
 		return -1
-	} else if fairLevelLess(b, a) {
+	} else if b.less(a) {
 		return 1
 	}
 	return 0
 }
 
-func fairLevelMax(a, b fairLevel) fairLevel {
-	if fairLevelLess(a, b) {
+// Returns the max of a and b.
+func (a fairLevel) max(b fairLevel) fairLevel {
+	if a.less(b) {
 		return b
 	}
 	return a
 }
 
-func fairLevelPlusOne(a fairLevel) fairLevel {
+// Returns the next highest fair level.
+func (a fairLevel) inc() fairLevel {
 	return fairLevel{pass: a.pass, id: a.id + 1}
 }
 
@@ -56,9 +60,9 @@ func protoFairLevel(l *taskqueuespb.FairLevel) fairLevel {
 	return fairLevel{pass: l.TaskPass, id: l.TaskId}
 }
 
-func (l fairLevel) toProto() *taskqueuespb.FairLevel {
-	if (l == fairLevel{}) {
+func (a fairLevel) toProto() *taskqueuespb.FairLevel {
+	if (a == fairLevel{}) {
 		return nil
 	}
-	return &taskqueuespb.FairLevel{TaskPass: l.pass, TaskId: l.id}
+	return &taskqueuespb.FairLevel{TaskPass: a.pass, TaskId: a.id}
 }
