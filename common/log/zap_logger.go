@@ -7,9 +7,10 @@ import (
 	"strconv"
 	"strings"
 
-	"go.temporal.io/server/common/log/tag"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+
+	"go.temporal.io/server/common/log/tag"
 )
 
 const (
@@ -205,17 +206,19 @@ func (l *zapLogger) Skip(extraSkip int) Logger {
 	}
 }
 
-// mergeTags MAY update oldTags in place
-func mergeTags(oldTags, newTags []tag.Tag) []tag.Tag {
+func mergeTags(oldTags, newTags []tag.Tag) (outTags []tag.Tag) {
 	// Even if oldTags empty, we don't just return newTags because we need to de-dupe it.
+	outTags = slices.Clone(oldTags)
 	for _, t := range newTags {
-		if i := slices.IndexFunc(oldTags, func(ti tag.Tag) bool { return ti.Key() == t.Key() }); i >= 0 {
-			oldTags[i] = t
+		if i := slices.IndexFunc(outTags, func(ti tag.Tag) bool {
+			return ti.Key() == t.Key()
+		}); i >= 0 {
+			outTags[i] = t
 		} else {
-			oldTags = append(oldTags, t)
+			outTags = append(outTags, t)
 		}
 	}
-	return oldTags
+	return outTags
 }
 
 func buildZapLogger(cfg Config, disableCaller bool) *zap.Logger {
