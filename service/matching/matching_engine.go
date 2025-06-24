@@ -1271,23 +1271,6 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 				TaskReachability: reachability,
 			}
 		}
-
-		e.logger.Debug("ShowTaskQueueConfig : " + strconv.FormatBool(req.ShowTaskQueueConfig))
-		if req.ShowTaskQueueConfig {
-			taskQueueUserData := userData.PerType[int32(req.TaskQueueType)]
-			taskQueueConfig := taskQueueUserData.TaskQueueConfig
-			return &matchingservice.DescribeTaskQueueResponse{
-				DescResponse: &workflowservice.DescribeTaskQueueResponse{
-					VersionsInfo: versionsInfo,
-					Configs:      taskQueueConfig,
-				},
-			}, nil
-		}
-		return &matchingservice.DescribeTaskQueueResponse{
-			DescResponse: &workflowservice.DescribeTaskQueueResponse{
-				VersionsInfo: versionsInfo,
-			},
-		}, nil
 	}
 
 	// Otherwise, do legacy DescribeTaskQueue
@@ -1371,7 +1354,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 		}
 		taskQueueType := req.GetTaskQueueType()
 		taskQueueUserData := userData.GetData().GetPerType()[int32(taskQueueType)]
-		descrResp.DescResponse.Configs = taskQueueUserData.TaskQueueConfig
+		descrResp.DescResponse.Configs = taskQueueUserData.GetTaskQueueConfig()
 	}
 
 	return descrResp, nil
@@ -1924,6 +1907,7 @@ func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
 	ctx context.Context,
 	req *matchingservice.ApplyTaskQueueUserDataReplicationEventRequest,
 ) (*matchingservice.ApplyTaskQueueUserDataReplicationEventResponse, error) {
+	e.logger.Info("Hi we are replicating")
 	namespaceID := namespace.ID(req.GetNamespaceId())
 	ns, err := e.namespaceRegistry.GetNamespaceByID(namespaceID)
 	if err != nil {
@@ -2901,17 +2885,63 @@ func largerBacklogAge(rootBacklogAge *durationpb.Duration, currentPartitionAge *
 	return currentPartitionAge
 }
 
+func buildQueueRateLimitConfig(update *workflowservice.UpdateTaskQueueConfigRequest_UpdateQueueRateLimit, ts *timestamppb.Timestamp) *taskqueuepb.RateLimitConfig {
+	if update == nil || update.RateLimit == nil {
+		return nil
+	}
+
+	return &taskqueuepb.RateLimitConfig{
+		RateLimit: &taskqueuepb.RateLimit{
+			RequestsPerSecond: update.RateLimit.GetRequestsPerSecond(),
+		},
+		Metadata: &taskqueuepb.ConfigMetadata{
+			Reason:     update.RateLimit.GetReason(),
+			UpdateTime: ts,
+		},
+	}
+}
+
+func prepareTaskQueueUserData(
+	tqud *persistencespb.TaskQueueUserData,
+	taskQueueType enumspb.TaskQueueType,
+) (*persistencespb.TaskQueueUserData, int32) {
+
+	data := common.CloneProto(tqud)
+	if data == nil {
+		data = &persistencespb.TaskQueueUserData{}
+	}
+
+	if data.PerType == nil {
+		data.PerType = make(map[int32]*persistencespb.TaskQueueTypeUserData)
+	}
+
+	tqType := int32(taskQueueType)
+
+	if data.PerType[tqType] == nil {
+		data.PerType[tqType] = &persistencespb.TaskQueueTypeUserData{}
+	}
+
+	if data.PerType[tqType].TaskQueueConfig == nil {
+		data.PerType[tqType].TaskQueueConfig = &taskqueuepb.TaskQueueConfig{}
+	}
+
+	return data, tqType
+}
+
 func (e *matchingEngineImpl) UpdateTaskQueueConfig(ctx context.Context, request *matchingservice.UpdateTaskQueueConfigRequest) (*matchingservice.UpdateTaskQueueConfigResponse, error) {
 	taskQueueFamily, err := tqid.NewTaskQueueFamily(request.NamespaceId, request.UpdateTaskqueueConfig.GetTaskQueueName())
 	if err != nil {
 		return nil, err
 	}
 
+	if request.GetUpdateTaskqueueConfig() == nil {
+		return &matchingservice.UpdateTaskQueueConfigResponse{}, err
+	}
+
 	taskQueueType := request.UpdateTaskqueueConfig.TaskQueueType
 	tqm, _, err := e.getTaskQueuePartitionManager(ctx,
 		taskQueueFamily.TaskQueue(taskQueueType).RootPartition(),
 		true, loadCauseOtherWrite)
-
 	if err != nil {
 		return nil, err
 	}
@@ -2921,47 +2951,33 @@ func (e *matchingEngineImpl) UpdateTaskQueueConfig(ctx context.Context, request 
 	e.logger.Debug("Updating TaskQueueConfig")
 	_, err = tqm.GetUserDataManager().UpdateUserData(ctx, updateOptions,
 		func(tqud *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
-			data := common.CloneProto(tqud)
-			if data == nil {
-				data = &persistencespb.TaskQueueUserData{}
-			}
-			if data.PerType == nil {
-				data.PerType = make(map[int32]*persistencespb.TaskQueueTypeUserData)
-			}
-			tqType := int32(request.UpdateTaskqueueConfig.TaskQueueType)
+			data, tqType := prepareTaskQueueUserData(tqud, taskQueueType)
 
-			if data.PerType[tqType] == nil {
-				data.PerType[tqType] = &persistencespb.TaskQueueTypeUserData{}
-			}
-
-			if data.PerType[tqType].TaskQueueConfig == nil {
-				data.PerType[tqType].TaskQueueConfig = &taskqueuepb.TaskQueueConfig{}
-			}
-
-			// Last-writer-wins: check if incoming update is newer than stored tqud.Clock
+			// Update timestamp from hlc clock
 			existingClock := data.Clock
 			if existingClock == nil {
 				existingClock = hlc.Zero(e.clusterMeta.GetClusterID())
 			}
-
 			now := hlc.Next(existingClock, e.timeSource)
-
-			utcTimeNow := e.timeSource.Now().UTC()
+			protoTs := hlc.ProtoTimestamp(now) // conver hlc time to proto timestamp
 			// Update relevant config fields
 			cfg := data.PerType[tqType].TaskQueueConfig
 			changed := false
 
 			// Queue Rate Limit
-			queueRateLimit := request.UpdateTaskqueueConfig.UpdateQueueRateLimit
+			updateTaskQueueConfig := request.GetUpdateTaskqueueConfig()
+			queueRateLimit := updateTaskQueueConfig.GetUpdateQueueRateLimit()
 			if queueRateLimit != nil {
+				cfg.QueueRateLimit = buildQueueRateLimitConfig(queueRateLimit, protoTs)
+				changed = true
+			} else {
 				queueRateLimitConfig := &taskqueuepb.RateLimitConfig{
 					RateLimit: &taskqueuepb.RateLimit{
-						RequestsPerSecond: queueRateLimit.RateLimit.RequestsPerSecond,
+						RequestsPerSecond: 0.0,
 					},
 					Metadata: &taskqueuepb.ConfigMetadata{
-						Reason:     queueRateLimit.RateLimit.Reason, // assuming getters are defined
-						Source:     "updateTaskQueueConfig",         // or "system"/"worker" depending on your context
-						UpdateTime: timestamppb.New(utcTimeNow),     // convert HLC to protobuf timestamp
+						Reason:     "Empty queueRateLimit received; defaulting to nil",
+						UpdateTime: protoTs,
 					},
 				}
 				cfg.QueueRateLimit = queueRateLimitConfig
@@ -2978,7 +2994,7 @@ func (e *matchingEngineImpl) UpdateTaskQueueConfig(ctx context.Context, request 
 					Metadata: &taskqueuepb.ConfigMetadata{
 						Reason:     fairnessQueueRateLimit.RateLimit.Reason, // assuming getters are defined
 						Source:     "updateTaskQueueConfig",                 // or "system"/"worker" depending on your context
-						UpdateTime: timestamppb.New(utcTimeNow),             // convert HLC to protobuf timestamp
+						UpdateTime: protoTs,                                 // convert HLC to protobuf timestamp
 					},
 				}
 				cfg.FairnessKeysRateLimitDefault = fairnessQueueRateLimitConfig

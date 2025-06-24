@@ -55,6 +55,8 @@ persistence:
           enableHostVerification: false
           serverName: ""
 global:
+  enableGlobalNamespace: true
+  enableRemoteAdmin: true
   membership:
     maxJoinDuration: 30s
     broadcastAddress: "127.0.0.1"
@@ -95,7 +97,7 @@ services:
       bindOnLocalHost: true
 
 clusterMetadata:
-  enableGlobalNamespace: false
+  enableGlobalNamespace: true
   failoverVersionIncrement: 10
   masterClusterName: "active"
   currentClusterName: "active"
@@ -104,8 +106,14 @@ clusterMetadata:
       enabled: true
       initialFailoverVersion: 1
       rpcName: "frontend"
-      rpcAddress: "localhost:7233"
-      httpAddres: "localhost:7243"
+      rpcAddress: "127.0.0.1:7233"
+      httpAddress: "127.0.0.1:7243"
+    active-b:
+      enabled: true
+      initialFailoverVersion: 2
+      rpcName: "frontend"
+      rpcAddress: "127.0.0.1:8233"
+      httpAddress: "127.0.0.1:8243"
 
 dcRedirectionPolicy:
   policy: "noop"

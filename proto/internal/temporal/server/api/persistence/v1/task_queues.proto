@@ -117,7 +117,6 @@ message DeploymentData {
 message TaskQueueTypeUserData {
     DeploymentData deployment_data = 1;
 
-    // For future use: description, rate limits, manual partition control, etc...
     temporal.api.taskqueue.v1.TaskQueueConfig task_queue_config = 2;
 }
 

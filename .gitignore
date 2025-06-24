@@ -37,3 +37,16 @@
 
 # Git SPR: https://github.com/ejoffe/spr
 .spr.yml
+
+cluster-start.sh
+cmd/server/__debug_bin1678716940
+config/development-sqlite-file2.yaml
+default
+default-b
+default-b-shm
+default-b-wal
+default-shm
+default-wal
+logs/
+.vscode/launch.json
+Makefile

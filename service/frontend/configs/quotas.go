@@ -101,7 +101,7 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/DeleteWorkflowRule":                    2,
 		"/temporal.api.workflowservice.v1.WorkflowService/ListWorkflowRules":                     2,
 		"/temporal.api.workflowservice.v1.WorkflowService/TriggerWorkflowRule":                   2,
-		"/temporal.api..workflowservice.v1.WorkflowService/UpdateTaskQueueConfig":                2, // [TaskQueueConfig - api]
+		"/temporal.api.workflowservice.v1.WorkflowService/UpdateTaskQueueConfig":                 2,
 
 		// P3: Status Querying APIs
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorkflowExecution":       3,
