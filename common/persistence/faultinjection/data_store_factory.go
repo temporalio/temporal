@@ -53,10 +53,9 @@ func (d *FaultInjectionDataStoreFactory) NewTaskStore() (persistence.TaskStore, 
 	return d.taskStore, nil
 }
 
-// TODO(fairness): cleanup; rename to NewTaskStore
-func (d *FaultInjectionDataStoreFactory) NewTaskFairnessStore() (persistence.TaskStore, error) {
+func (d *FaultInjectionDataStoreFactory) NewFairTaskStore() (persistence.TaskStore, error) {
 	if d.taskStore == nil {
-		baseStore, err := d.baseFactory.NewTaskFairnessStore()
+		baseStore, err := d.baseFactory.NewFairTaskStore()
 		if err != nil {
 			return nil, err
 		}
