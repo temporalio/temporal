@@ -154,7 +154,7 @@ func (c *priBacklogManagerImpl) loadSubqueuesLocked(subqueues []persistencespb.S
 	// existing subqueues never changes. If we change that, this logic will need to change.
 	for i := range subqueues {
 		if i >= len(c.subqueues) {
-			r := newPriTaskReader(c, i, subqueues[i].AckLevelId)
+			r := newPriTaskReader(c, i, subqueues[i].AckLevel)
 			r.Start()
 			c.subqueues = append(c.subqueues, r)
 		}

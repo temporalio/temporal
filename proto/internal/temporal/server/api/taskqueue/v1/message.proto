@@ -40,18 +40,21 @@ message TaskVersionDirective {
     temporal.server.api.deployment.v1.WorkerDeploymentVersion deployment_version = 5;
 }
 
+message FairLevel {
+    int64 task_pass = 1;
+    int64 task_id = 2;
+}
+
 message InternalTaskQueueStatus {
-    // read_level_pass and read_level (and ack_level_pass and ack_level, etc.) form a
-    // "fairness level" as a pair, so put them next to each other.
-    int64 read_level_pass = 7;
     int64 read_level = 1;
-    int64 ack_level_pass = 8;
+    FairLevel fair_read_level = 7;
     int64 ack_level = 2;
+    FairLevel fair_ack_level = 8;
     temporal.api.taskqueue.v1.TaskIdBlock task_id_block = 3;
     int64 loaded_tasks = 4;
     int64 approximate_backlog_count = 5;
-    int64 max_read_level_pass = 9;
     int64 max_read_level = 6;
+    FairLevel fair_max_read_level = 9;
 }
 
 message TaskQueueVersionInfoInternal {

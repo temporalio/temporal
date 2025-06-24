@@ -334,17 +334,14 @@ type SubqueueInfo struct {
 	// this subqueue. It should not change after being registered in TaskQueueInfo.
 	Key *SubqueueKey `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
 	// The rest are mutable state for the subqueue:
-	AckLevelPass            int64 `protobuf:"varint,4,opt,name=ack_level_pass,json=ackLevelPass,proto3" json:"ack_level_pass,omitempty"`
-	AckLevelId              int64 `protobuf:"varint,2,opt,name=ack_level_id,json=ackLevelId,proto3" json:"ack_level_id,omitempty"`
-	ApproximateBacklogCount int64 `protobuf:"varint,3,opt,name=approximate_backlog_count,json=approximateBacklogCount,proto3" json:"approximate_backlog_count,omitempty"`
+	AckLevel                int64          `protobuf:"varint,2,opt,name=ack_level,json=ackLevel,proto3" json:"ack_level,omitempty"`
+	FairAckLevel            *v11.FairLevel `protobuf:"bytes,4,opt,name=fair_ack_level,json=fairAckLevel,proto3" json:"fair_ack_level,omitempty"`
+	ApproximateBacklogCount int64          `protobuf:"varint,3,opt,name=approximate_backlog_count,json=approximateBacklogCount,proto3" json:"approximate_backlog_count,omitempty"`
 	// Max read level keeps track of the highest task level ever written, but is only
 	// maintained best-effort. Do not trust these values.
-	MaxReadLevelPass int64 `protobuf:"varint,5,opt,name=max_read_level_pass,json=maxReadLevelPass,proto3" json:"max_read_level_pass,omitempty"`
-	// Max read level keeps track of the highest task level ever written, but is only
-	// maintained best-effort. Do not trust these values.
-	MaxReadLevelId int64 `protobuf:"varint,6,opt,name=max_read_level_id,json=maxReadLevelId,proto3" json:"max_read_level_id,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	FairMaxReadLevel *v11.FairLevel `protobuf:"bytes,5,opt,name=fair_max_read_level,json=fairMaxReadLevel,proto3" json:"fair_max_read_level,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *SubqueueInfo) Reset() {
@@ -384,18 +381,18 @@ func (x *SubqueueInfo) GetKey() *SubqueueKey {
 	return nil
 }
 
-func (x *SubqueueInfo) GetAckLevelPass() int64 {
+func (x *SubqueueInfo) GetAckLevel() int64 {
 	if x != nil {
-		return x.AckLevelPass
+		return x.AckLevel
 	}
 	return 0
 }
 
-func (x *SubqueueInfo) GetAckLevelId() int64 {
+func (x *SubqueueInfo) GetFairAckLevel() *v11.FairLevel {
 	if x != nil {
-		return x.AckLevelId
+		return x.FairAckLevel
 	}
-	return 0
+	return nil
 }
 
 func (x *SubqueueInfo) GetApproximateBacklogCount() int64 {
@@ -405,18 +402,11 @@ func (x *SubqueueInfo) GetApproximateBacklogCount() int64 {
 	return 0
 }
 
-func (x *SubqueueInfo) GetMaxReadLevelPass() int64 {
+func (x *SubqueueInfo) GetFairMaxReadLevel() *v11.FairLevel {
 	if x != nil {
-		return x.MaxReadLevelPass
+		return x.FairMaxReadLevel
 	}
-	return 0
-}
-
-func (x *SubqueueInfo) GetMaxReadLevelId() int64 {
-	if x != nil {
-		return x.MaxReadLevelId
-	}
-	return 0
+	return nil
 }
 
 type SubqueueKey struct {
@@ -550,15 +540,13 @@ const file_temporal_server_api_persistence_v1_tasks_proto_rawDesc = "" +
 	"expiryTime\x12D\n" +
 	"\x10last_update_time\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\x0elastUpdateTime\x12:\n" +
 	"\x19approximate_backlog_count\x18\b \x01(\x03R\x17approximateBacklogCount\x12N\n" +
-	"\tsubqueues\x18\t \x03(\v20.temporal.server.api.persistence.v1.SubqueueInfoR\tsubqueues\"\xaf\x02\n" +
+	"\tsubqueues\x18\t \x03(\v20.temporal.server.api.persistence.v1.SubqueueInfoR\tsubqueues\"\xd9\x02\n" +
 	"\fSubqueueInfo\x12A\n" +
-	"\x03key\x18\x01 \x01(\v2/.temporal.server.api.persistence.v1.SubqueueKeyR\x03key\x12$\n" +
-	"\x0eack_level_pass\x18\x04 \x01(\x03R\fackLevelPass\x12 \n" +
-	"\fack_level_id\x18\x02 \x01(\x03R\n" +
-	"ackLevelId\x12:\n" +
-	"\x19approximate_backlog_count\x18\x03 \x01(\x03R\x17approximateBacklogCount\x12-\n" +
-	"\x13max_read_level_pass\x18\x05 \x01(\x03R\x10maxReadLevelPass\x12)\n" +
-	"\x11max_read_level_id\x18\x06 \x01(\x03R\x0emaxReadLevelId\")\n" +
+	"\x03key\x18\x01 \x01(\v2/.temporal.server.api.persistence.v1.SubqueueKeyR\x03key\x12\x1b\n" +
+	"\tack_level\x18\x02 \x01(\x03R\backLevel\x12Q\n" +
+	"\x0efair_ack_level\x18\x04 \x01(\v2+.temporal.server.api.taskqueue.v1.FairLevelR\ffairAckLevel\x12:\n" +
+	"\x19approximate_backlog_count\x18\x03 \x01(\x03R\x17approximateBacklogCount\x12Z\n" +
+	"\x13fair_max_read_level\x18\x05 \x01(\v2+.temporal.server.api.taskqueue.v1.FairLevelR\x10fairMaxReadLevel\")\n" +
 	"\vSubqueueKey\x12\x1a\n" +
 	"\bpriority\x18\x01 \x01(\x05R\bpriority\"[\n" +
 	"\aTaskKey\x127\n" +
@@ -591,6 +579,7 @@ var file_temporal_server_api_persistence_v1_tasks_proto_goTypes = []any{
 	(*v12.Priority)(nil),             // 9: temporal.api.common.v1.Priority
 	(v13.TaskQueueType)(0),           // 10: temporal.api.enums.v1.TaskQueueType
 	(v13.TaskQueueKind)(0),           // 11: temporal.api.enums.v1.TaskQueueKind
+	(*v11.FairLevel)(nil),            // 12: temporal.server.api.taskqueue.v1.FairLevel
 }
 var file_temporal_server_api_persistence_v1_tasks_proto_depIdxs = []int32{
 	1,  // 0: temporal.server.api.persistence.v1.AllocatedTaskInfo.data:type_name -> temporal.server.api.persistence.v1.TaskInfo
@@ -605,12 +594,14 @@ var file_temporal_server_api_persistence_v1_tasks_proto_depIdxs = []int32{
 	6,  // 9: temporal.server.api.persistence.v1.TaskQueueInfo.last_update_time:type_name -> google.protobuf.Timestamp
 	3,  // 10: temporal.server.api.persistence.v1.TaskQueueInfo.subqueues:type_name -> temporal.server.api.persistence.v1.SubqueueInfo
 	4,  // 11: temporal.server.api.persistence.v1.SubqueueInfo.key:type_name -> temporal.server.api.persistence.v1.SubqueueKey
-	6,  // 12: temporal.server.api.persistence.v1.TaskKey.fire_time:type_name -> google.protobuf.Timestamp
-	13, // [13:13] is the sub-list for method output_type
-	13, // [13:13] is the sub-list for method input_type
-	13, // [13:13] is the sub-list for extension type_name
-	13, // [13:13] is the sub-list for extension extendee
-	0,  // [0:13] is the sub-list for field type_name
+	12, // 12: temporal.server.api.persistence.v1.SubqueueInfo.fair_ack_level:type_name -> temporal.server.api.taskqueue.v1.FairLevel
+	12, // 13: temporal.server.api.persistence.v1.SubqueueInfo.fair_max_read_level:type_name -> temporal.server.api.taskqueue.v1.FairLevel
+	6,  // 14: temporal.server.api.persistence.v1.TaskKey.fire_time:type_name -> google.protobuf.Timestamp
+	15, // [15:15] is the sub-list for method output_type
+	15, // [15:15] is the sub-list for method input_type
+	15, // [15:15] is the sub-list for extension type_name
+	15, // [15:15] is the sub-list for extension extendee
+	0,  // [0:15] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_api_persistence_v1_tasks_proto_init() }

@@ -66,16 +66,14 @@ message SubqueueInfo {
     SubqueueKey key = 1;
 
     // The rest are mutable state for the subqueue:
-    int64 ack_level_pass = 4;
-    int64 ack_level_id = 2;
+    int64 ack_level = 2;
+    temporal.server.api.taskqueue.v1.FairLevel fair_ack_level = 4;
+
     int64 approximate_backlog_count = 3;
 
     // Max read level keeps track of the highest task level ever written, but is only
     // maintained best-effort. Do not trust these values.
-    int64 max_read_level_pass = 5;
-    // Max read level keeps track of the highest task level ever written, but is only
-    // maintained best-effort. Do not trust these values.
-    int64 max_read_level_id = 6;
+    temporal.server.api.taskqueue.v1.FairLevel fair_max_read_level = 5;
 }
 
 message SubqueueKey {
