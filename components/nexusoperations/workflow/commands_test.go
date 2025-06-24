@@ -46,12 +46,21 @@ type testContext struct {
 }
 
 var defaultConfig = &nexusoperations.Config{
-	Enabled:                            dynamicconfig.GetBoolPropertyFn(true),
-	MaxServiceNameLength:               dynamicconfig.GetIntPropertyFnFilteredByNamespace(len("service")),
-	MaxOperationNameLength:             dynamicconfig.GetIntPropertyFnFilteredByNamespace(len("op")),
-	MaxConcurrentOperations:            dynamicconfig.GetIntPropertyFnFilteredByNamespace(2),
-	MaxOperationHeaderSize:             dynamicconfig.GetIntPropertyFnFilteredByNamespace(20),
-	DisallowedOperationHeaders:         dynamicconfig.GetTypedPropertyFn([]string{"request-timeout"}),
+	Enabled:                 dynamicconfig.GetBoolPropertyFn(true),
+	MaxServiceNameLength:    dynamicconfig.GetIntPropertyFnFilteredByNamespace(len("service")),
+	MaxOperationNameLength:  dynamicconfig.GetIntPropertyFnFilteredByNamespace(len("op")),
+	MaxConcurrentOperations: dynamicconfig.GetIntPropertyFnFilteredByNamespace(2),
+	MaxOperationHeaderSize:  dynamicconfig.GetIntPropertyFnFilteredByNamespace(20),
+	DisallowedOperationHeaders: dynamicconfig.NewGlobalCachedTypedValue(dynamicconfig.NewCollection(
+		&dynamicconfig.StaticClient{
+			nexusoperations.DisallowedOperationHeaders.Key(): []string{"request-timeout"},
+		},
+		nil,
+	),
+		nexusoperations.DisallowedOperationHeaders,
+		func([]string) ([]string, error) {
+			return []string{"request-timeout"}, nil
+		}),
 	MaxOperationScheduleToCloseTimeout: dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Hour * 24),
 	EndpointNotFoundAlwaysNonRetryable: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 }
