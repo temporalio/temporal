@@ -189,9 +189,7 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_IncreaseAttemptsO
 	 * 4. Validate activity failed
 	 * 5. Validate number of activity attempts increased
 	 */
-
-	// TODO: reduce timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 3000*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	var startedActivityCount atomic.Int32
@@ -363,6 +361,7 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WhileWaiting() {
 	err = workflowRun.Get(ctx, &out)
 
 	s.NoError(err)
+	
 }
 
 func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WhileRetryNoWait() {
