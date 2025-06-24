@@ -1,6 +1,7 @@
 package nexusoperations
 
 import (
+	"slices"
 	"strings"
 	"time"
 
@@ -171,13 +172,16 @@ func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 		DisallowedOperationHeaders: dynamicconfig.NewGlobalCachedTypedValue(dc, DisallowedOperationHeaders, func(keys []string) ([]string, error) {
 			// Override with defaults unless explicitly set.
 			// Note that this prevents the ability to unset the config but that's an acceptable limitation.
+			var out []string
 			if len(keys) == 0 {
-				keys = defaultDisallowedOperationHeaders
+				out = slices.Clone(defaultDisallowedOperationHeaders)
+			} else {
+				out = slices.Clone(keys)
 			}
-			for i, k := range keys {
-				keys[i] = strings.ToLower(k)
+			for i, k := range out {
+				out[i] = strings.ToLower(k)
 			}
-			return keys, nil
+			return out, nil
 		}).Get,
 		MaxOperationScheduleToCloseTimeout:  MaxOperationScheduleToCloseTimeout.Get(dc),
 		PayloadSizeLimit:                    dynamicconfig.BlobSizeLimitError.Get(dc),
