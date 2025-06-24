@@ -52,7 +52,7 @@ type PhysicalTaskQueueManagerTestSuite struct {
 }
 
 // TODO(pri): cleanup; delete this
-func TestPhysicalTaskQueueManager_Suite(t *testing.T) {
+func TestPhysicalTaskQueueManager_Classic_Suite(t *testing.T) {
 	suite.Run(t, &PhysicalTaskQueueManagerTestSuite{newMatcher: false})
 }
 

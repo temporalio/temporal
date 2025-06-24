@@ -132,7 +132,7 @@ func createMockNamespaceCache(controller *gomock.Controller, nsName namespace.Na
 }
 
 // TODO(pri): cleanup; delete this
-func TestMatchingEngine_Suite(t *testing.T) {
+func TestMatchingEngine_Classic_Suite(t *testing.T) {
 	suite.Run(t, &matchingEngineSuite{newMatcher: false})
 }
 

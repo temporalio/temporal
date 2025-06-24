@@ -105,7 +105,7 @@ func (w *priTaskWriter) appendTask(
 	}
 }
 
-func (w *priTaskWriter) allocTaskIDs(reqs []*writeTaskRequest) error {
+func (w *priTaskWriter) assignTaskIDs(reqs []*writeTaskRequest) error {
 	for i := range reqs {
 		if w.taskIDBlock.start > w.taskIDBlock.end {
 			// we ran out of current allocation block
@@ -168,7 +168,7 @@ func (w *priTaskWriter) taskWriterLoop() {
 			reqs = append(reqs[:0], request)
 			reqs = w.getWriteBatch(reqs)
 
-			err := w.allocTaskIDs(reqs)
+			err := w.assignTaskIDs(reqs)
 			if err == nil {
 				err = w.appendTasks(reqs)
 			}
