@@ -262,7 +262,7 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_IncreaseAttemptsO
 		require.NotNil(t, description.PendingActivities[0].PauseInfo.GetManual())
 		require.Equal(t, testIdentity, description.PendingActivities[0].PauseInfo.GetManual().Identity)
 		require.Equal(t, testReason, description.PendingActivities[0].PauseInfo.GetManual().Reason)
-	}, 500*time.Second, 500*time.Millisecond)
+	}, 5*time.Second, 500*time.Millisecond)
 }
 
 func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WhileWaiting() {
@@ -361,7 +361,7 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WhileWaiting() {
 	err = workflowRun.Get(ctx, &out)
 
 	s.NoError(err)
-	
+
 }
 
 func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WhileRetryNoWait() {
