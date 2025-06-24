@@ -146,6 +146,7 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WhileRunning() {
 	s.True(description.PendingActivities[0].Paused)
 
 	// wait long enough for activity to retry if pause is not working
+	// Note: because activity is retried we expect the attempts to be incremented
 	err = util.InterruptibleSleep(ctx, 2*time.Second)
 	s.NoError(err)
 
@@ -154,7 +155,7 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WhileRunning() {
 	s.NoError(err)
 	s.Equal(1, len(description.PendingActivities))
 	s.True(description.PendingActivities[0].Paused)
-	s.Equal(int32(1), description.PendingActivities[0].Attempt)
+	s.Equal(int32(2), description.PendingActivities[0].Attempt)
 	s.NotNil(description.PendingActivities[0].LastFailure)
 	s.Equal(activityErr.Error(), description.PendingActivities[0].LastFailure.Message)
 	s.NotNil(description.PendingActivities[0].PauseInfo)
