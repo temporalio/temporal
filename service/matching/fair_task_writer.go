@@ -2,6 +2,7 @@ package matching
 
 import (
 	"context"
+	"math/rand"
 	"sync/atomic"
 	"time"
 
@@ -13,14 +14,22 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/service/matching/counter"
+)
+
+const (
+	// minWeight * strideFactor must be >= 1
+	strideFactor = 1000
+	minWeight    = 0.001
 )
 
 type (
-	// fairTaskWriter writes tasks persistence split among subqueues
+	// fairTaskWriter writes tasks with stride scheduling
 	fairTaskWriter struct {
-		backlogMgr         *priBacklogManagerImpl
+		backlogMgr         *fairBacklogManagerImpl
 		config             *taskQueueConfig
 		db                 *taskQueueDB
+		counter            counter.Counter
 		logger             log.Logger
 		appendCh           chan *writeTaskRequest
 		taskIDBlock        taskIDBlock
@@ -29,12 +38,14 @@ type (
 )
 
 func newFairTaskWriter(
-	backlogMgr *priBacklogManagerImpl,
+	backlogMgr *fairBacklogManagerImpl,
+	cntr counter.Counter,
 ) *fairTaskWriter {
 	return &fairTaskWriter{
 		backlogMgr:  backlogMgr,
 		config:      backlogMgr.config,
 		db:          backlogMgr.db,
+		counter:     cntr,
 		logger:      backlogMgr.logger,
 		appendCh:    make(chan *writeTaskRequest, backlogMgr.config.OutstandingTaskAppendsThreshold()),
 		taskIDBlock: noTaskIDs,
@@ -86,7 +97,7 @@ func (w *fairTaskWriter) appendTask(
 	}
 }
 
-func (w *fairTaskWriter) assignTaskIDs(reqs []*writeTaskRequest) error {
+func (w *fairTaskWriter) allocTaskIDs(reqs []*writeTaskRequest) error {
 	for i := range reqs {
 		if w.taskIDBlock.start > w.taskIDBlock.end {
 			// we ran out of current allocation block
@@ -102,20 +113,30 @@ func (w *fairTaskWriter) assignTaskIDs(reqs []*writeTaskRequest) error {
 	return nil
 }
 
-func (w *fairTaskWriter) appendTasks(reqs []*writeTaskRequest) error {
-	resp, err := w.db.CreateTasks(w.backlogMgr.tqCtx, reqs)
-	if err != nil {
-		w.backlogMgr.signalIfFatal(err)
-		w.logger.Error("Persistent store operation failure",
-			tag.StoreOperationCreateTask,
-			tag.Error(err),
-			tag.WorkflowTaskQueueName(w.backlogMgr.queueKey().PersistenceName()),
-			tag.WorkflowTaskQueueType(w.backlogMgr.queueKey().TaskType()))
-		return err
-	}
+func (w *fairTaskWriter) pickPasses(tasks []*writeTaskRequest, bases []fairLevel) {
+	// TODO(fairness): get this from config
+	var overrideWeights map[string]float32
 
-	w.backlogMgr.signalReaders(resp)
-	return nil
+	for i, task := range tasks {
+		key := task.taskInfo.Priority.GetFairnessKey()
+
+		weight, ok := overrideWeights[key]
+		if !ok {
+			weight = task.taskInfo.Priority.GetFairnessWeight()
+		}
+		if weight <= 0.0 {
+			weight = 1.0
+		} else if weight < minWeight {
+			weight = minWeight
+		}
+
+		inc := max(1, int64(strideFactor/weight))
+
+		base := bases[task.subqueue].pass
+		base += int64(rand.Float64() * float64(inc)) // randomize keys within "initial" pass
+
+		tasks[i].pass = w.counter.GetPass(key, base, inc)
+	}
 }
 
 func (w *fairTaskWriter) initState() error {
@@ -143,22 +164,34 @@ func (w *fairTaskWriter) taskWriterLoop() {
 		atomic.StoreInt64(&w.currentTaskIDBlock.start, w.taskIDBlock.start)
 		atomic.StoreInt64(&w.currentTaskIDBlock.end, w.taskIDBlock.end)
 
+		var req *writeTaskRequest
 		select {
-		case request := <-w.appendCh:
-			// read a batch of requests from the channel
-			reqs = append(reqs[:0], request)
-			reqs = w.getWriteBatch(reqs)
-
-			err := w.assignTaskIDs(reqs)
-			if err == nil {
-				err = w.appendTasks(reqs)
-			}
-			for _, req := range reqs {
-				req.responseCh <- err
-			}
-
 		case <-w.backlogMgr.tqCtx.Done():
 			return
+		case req = <-w.appendCh:
+		}
+
+		// read a batch of requests from the channel
+		reqs = append(reqs[:0], req)
+		reqs = w.getWriteBatch(reqs)
+
+		err := w.allocTaskIDs(reqs)
+
+		if err == nil {
+			bases, unpin := w.backlogMgr.getAndPinAckLevels()
+			w.pickPasses(reqs, bases)
+			var resp createFairTasksResponse
+			resp, err = w.db.CreateFairTasks(w.backlogMgr.tqCtx, reqs)
+			if err == nil {
+				w.backlogMgr.wroteNewTasks(resp)
+			} else {
+				w.logger.Error("Persistent store operation failure", tag.StoreOperationCreateTask, tag.Error(err))
+				w.backlogMgr.signalIfFatal(err)
+			}
+			unpin(err) // note this must be called after wroteNewTasks!
+		}
+		for _, req := range reqs {
+			req.responseCh <- err
 		}
 	}
 }

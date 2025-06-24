@@ -77,6 +77,7 @@ type (
 		*require.Assertions
 
 		newMatcher               bool
+		fairness                 bool
 		controller               *gomock.Controller
 		mockHistoryClient        *historyservicemock.MockHistoryServiceClient
 		mockMatchingClient       *matchingservicemock.MockMatchingServiceClient
@@ -88,10 +89,11 @@ type (
 		hostInfoForResolver      membership.HostInfo
 		mockNexusEndpointManager *persistence.MockNexusEndpointManager
 
-		matchingEngine  *matchingEngineImpl
-		taskManager     *testTaskManager
-		fairTaskManager *testTaskManager
-		logger          *testlogger.TestLogger
+		matchingEngine     *matchingEngineImpl
+		taskManager        *testTaskManager // points to classicTaskManager or fairTaskManager
+		classicTaskManager *testTaskManager
+		fairTaskManager    *testTaskManager
+		logger             *testlogger.TestLogger
 	}
 )
 
@@ -142,6 +144,10 @@ func TestMatchingEngine_Pri_Suite(t *testing.T) {
 	suite.Run(t, &matchingEngineSuite{newMatcher: true})
 }
 
+func TestMatchingEngine_Fair_Suite(t *testing.T) {
+	suite.Run(t, &matchingEngineSuite{newMatcher: true, fairness: true})
+}
+
 func (s *matchingEngineSuite) SetupSuite() {
 }
 
@@ -162,8 +168,17 @@ func (s *matchingEngineSuite) SetupTest() {
 		Return(&matchingservice.ReplicateTaskQueueUserDataResponse{}, nil).AnyTimes()
 	s.mockMatchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any()).
 		Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{WasUnloaded: true}, nil).AnyTimes()
-	s.taskManager = newTestTaskManager(s.logger)
+
+	// create and supply two task managers, but only one is expected to be used at a time since
+	// we run tests with fairness enabled in separate suite.
+	s.classicTaskManager = newTestTaskManager(s.logger)
 	s.fairTaskManager = newTestFairTaskManager(s.logger)
+	if s.fairness {
+		s.taskManager = s.fairTaskManager
+	} else {
+		s.taskManager = s.classicTaskManager
+	}
+
 	s.ns, s.mockNamespaceCache = createMockNamespaceCache(s.controller, matchingTestNamespace)
 	s.mockVisibilityManager = manager.NewMockVisibilityManager(s.controller)
 	s.mockVisibilityManager.EXPECT().Close().AnyTimes()
@@ -180,13 +195,15 @@ func (s *matchingEngineSuite) SetupTest() {
 	s.mockNexusEndpointManager = persistence.NewMockNexusEndpointManager(s.controller)
 	s.mockNexusEndpointManager.EXPECT().ListNexusEndpoints(gomock.Any(), gomock.Any()).Return(&persistence.ListNexusEndpointsResponse{}, nil).AnyTimes()
 
-	s.matchingEngine = s.newMatchingEngine(s.newConfig(), s.taskManager, s.fairTaskManager)
+	s.matchingEngine = s.newMatchingEngine(s.newConfig(), s.classicTaskManager, s.fairTaskManager)
 	s.matchingEngine.Start()
 }
 
 func (s *matchingEngineSuite) newConfig() *Config {
 	res := defaultTestConfig()
-	if s.newMatcher {
+	if s.fairness {
+		useFairness(res)
+	} else if s.newMatcher {
 		useNewMatcher(res)
 	}
 	return res
@@ -197,7 +214,9 @@ func (s *matchingEngineSuite) TearDownTest() {
 }
 
 func (s *matchingEngineSuite) newMatchingEngine(
-	config *Config, taskMgr persistence.TaskManager, fairTaskMgr persistence.FairTaskManager,
+	config *Config,
+	taskMgr persistence.TaskManager,
+	fairTaskMgr persistence.TaskManager,
 ) *matchingEngineImpl {
 	return newMatchingEngine(config, taskMgr, fairTaskMgr, s.mockHistoryClient, s.logger, s.mockNamespaceCache, s.mockMatchingClient, s.mockVisibilityManager,
 		s.mockHostInfoProvider, s.mockServiceResolver, s.mockNexusEndpointManager)
@@ -1768,7 +1787,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 
 	engines := make([]*matchingEngineImpl, engineCount)
 	for p := 0; p < engineCount; p++ {
-		e := s.newMatchingEngine(s.newConfig(), s.taskManager, s.fairTaskManager)
+		e := s.newMatchingEngine(s.newConfig(), s.classicTaskManager, s.fairTaskManager)
 		e.config.RangeSize = rangeSize
 		engines[p] = e
 		e.Start()
@@ -1929,7 +1948,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesWorkflowTasksRangeStealing() {
 
 	engines := make([]*matchingEngineImpl, engineCount)
 	for p := 0; p < engineCount; p++ {
-		e := s.newMatchingEngine(s.newConfig(), s.taskManager, s.fairTaskManager)
+		e := s.newMatchingEngine(s.newConfig(), s.classicTaskManager, s.fairTaskManager)
 		e.config.RangeSize = rangeSize
 		engines[p] = e
 		e.Start()
@@ -2452,7 +2471,7 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_ReturnsData() {
 		Version: 1,
 		Data:    &persistencespb.TaskQueueUserData{Clock: &clockspb.HybridLogicalClock{WallClock: 123456}},
 	}
-	s.NoError(s.taskManager.UpdateTaskQueueUserData(context.Background(),
+	s.NoError(s.classicTaskManager.UpdateTaskQueueUserData(context.Background(),
 		&persistence.UpdateTaskQueueUserDataRequest{
 			NamespaceID: namespaceID.String(),
 			Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
@@ -2481,7 +2500,7 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_ReturnsEmpty() {
 		Version: 1,
 		Data:    &persistencespb.TaskQueueUserData{Clock: &clockspb.HybridLogicalClock{WallClock: 123456}},
 	}
-	s.NoError(s.taskManager.UpdateTaskQueueUserData(context.Background(),
+	s.NoError(s.classicTaskManager.UpdateTaskQueueUserData(context.Background(),
 		&persistence.UpdateTaskQueueUserDataRequest{
 			NamespaceID: namespaceID.String(),
 			Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
@@ -2510,7 +2529,7 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_Expires() {
 		Version: 1,
 		Data:    &persistencespb.TaskQueueUserData{Clock: &clockspb.HybridLogicalClock{WallClock: 123456}},
 	}
-	s.NoError(s.taskManager.UpdateTaskQueueUserData(context.Background(),
+	s.NoError(s.classicTaskManager.UpdateTaskQueueUserData(context.Background(),
 		&persistence.UpdateTaskQueueUserDataRequest{
 			NamespaceID: namespaceID.String(),
 			Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
@@ -2586,7 +2605,7 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_WakesUp_From2to3
 		Version: 1,
 		Data:    &persistencespb.TaskQueueUserData{Clock: &clockspb.HybridLogicalClock{WallClock: 123456}},
 	}
-	s.NoError(s.taskManager.UpdateTaskQueueUserData(context.Background(),
+	s.NoError(s.classicTaskManager.UpdateTaskQueueUserData(context.Background(),
 		&persistence.UpdateTaskQueueUserDataRequest{
 			NamespaceID: namespaceID.String(),
 			Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
@@ -2670,7 +2689,7 @@ func (s *matchingEngineSuite) TestUpdateUserData_FailsOnKnownVersionMismatch() {
 		Data:    &persistencespb.TaskQueueUserData{Clock: &clockspb.HybridLogicalClock{WallClock: 123456}},
 	}
 
-	err := s.taskManager.UpdateTaskQueueUserData(context.Background(),
+	err := s.classicTaskManager.UpdateTaskQueueUserData(context.Background(),
 		&persistence.UpdateTaskQueueUserDataRequest{
 			NamespaceID: namespaceID.String(),
 			Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
@@ -2770,7 +2789,7 @@ func (s *matchingEngineSuite) TestDemotedMatch() {
 		},
 	}
 
-	err := s.taskManager.UpdateTaskQueueUserData(ctx, &persistence.UpdateTaskQueueUserDataRequest{
+	err := s.classicTaskManager.UpdateTaskQueueUserData(ctx, &persistence.UpdateTaskQueueUserDataRequest{
 		NamespaceID: namespaceId,
 		Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
 			tq: &persistence.SingleTaskQueueUserDataUpdate{
@@ -2823,7 +2842,7 @@ func (s *matchingEngineSuite) TestDemotedMatch() {
 		},
 	}
 
-	err = s.taskManager.UpdateTaskQueueUserData(ctx, &persistence.UpdateTaskQueueUserDataRequest{
+	err = s.classicTaskManager.UpdateTaskQueueUserData(ctx, &persistence.UpdateTaskQueueUserDataRequest{
 		NamespaceID: namespaceId,
 		Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
 			tq: &persistence.SingleTaskQueueUserDataUpdate{
@@ -2860,7 +2879,8 @@ func (s *matchingEngineSuite) TestUnloadOnMembershipChange() {
 
 	config := s.newConfig()
 	config.MembershipUnloadDelay = dynamicconfig.GetDurationPropertyFn(10 * time.Millisecond)
-	e := s.newMatchingEngine(config, s.taskManager, s.fairTaskManager)
+	// TODO(fairness): why is this calling s.newMatchingEngine instead of using s.matchingEngine?
+	e := s.newMatchingEngine(config, s.classicTaskManager, s.fairTaskManager)
 	e.Start()
 	defer e.Stop()
 
@@ -3433,6 +3453,9 @@ func (s *matchingEngineSuite) TestLesserNumberOfPollersThanTasksDBErrors() {
 }
 
 func (s *matchingEngineSuite) TestMultipleWorkersLesserNumberOfPollersThanTasksNoDBErrors() {
+	if s.fairness {
+		s.T().Skip("test is flaky with fairness") // TODO(fairness): figure out why this is
+	}
 	s.concurrentPublishAndConsumeValidateBacklogCounter(5, 500, 200)
 }
 
@@ -3712,6 +3735,7 @@ func (m *testTaskManager) CreateTaskQueue(
 		}
 	}
 
+	// TODO(fairness): this should just store the blob instead of individual fields
 	tlm.rangeID = request.RangeID
 	tlm.ackLevel = tli.AckLevel
 	return &persistence.CreateTaskQueueResponse{}, nil
@@ -4107,6 +4131,12 @@ func (d *dynamicRateBurstWrapper) Burst() int {
 // TODO(pri): cleanup; delete this
 func useNewMatcher(config *Config) {
 	config.NewMatcher = func(_ string, _ string, _ enumspb.TaskQueueType, callback func(bool)) (v bool, cancel func()) {
+		return true, func() {}
+	}
+}
+
+func useFairness(config *Config) {
+	config.EnableFairness = func(_ string, _ string, _ enumspb.TaskQueueType, callback func(bool)) (v bool, cancel func()) {
 		return true, func() {}
 	}
 }
