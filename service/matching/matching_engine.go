@@ -110,7 +110,7 @@ type (
 	matchingEngineImpl struct {
 		status                        int32
 		taskManager                   persistence.TaskManager
-		FairTaskManager               persistence.FairTaskManager
+		fairTaskManager               persistence.FairTaskManager
 		historyClient                 resource.HistoryClient
 		matchingRawClient             resource.MatchingRawClient
 		deploymentStoreClient         deployment.DeploymentStoreClient
@@ -193,7 +193,7 @@ var _ Engine = (*matchingEngineImpl)(nil) // Asserts that interface is indeed im
 // NewEngine creates an instance of matching engine
 func NewEngine(
 	taskManager persistence.TaskManager,
-	FairTaskManager persistence.FairTaskManager,
+	fairTaskManager persistence.FairTaskManager,
 	historyClient resource.HistoryClient,
 	matchingRawClient resource.MatchingRawClient,
 	deploymentStoreClient deployment.DeploymentStoreClient, // [wv-cleanup-pre-release]
@@ -218,7 +218,7 @@ func NewEngine(
 	e := &matchingEngineImpl{
 		status:                        common.DaemonStatusInitialized,
 		taskManager:                   taskManager,
-		FairTaskManager:               FairTaskManager,
+		fairTaskManager:               fairTaskManager,
 		historyClient:                 historyClient,
 		matchingRawClient:             matchingRawClient,
 		deploymentStoreClient:         deploymentStoreClient,
