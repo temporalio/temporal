@@ -371,9 +371,9 @@ func (w *workerQueryEngine) compareTime(receivedTime time.Time, expectedTime tim
 	case sqlparser.LessThanStr:
 		return receivedTime.Before(expectedTime), nil
 	case sqlparser.EqualStr:
-		return receivedTime == expectedTime, nil
+		return receivedTime.Equal(expectedTime), nil
 	case sqlparser.NotEqualStr:
-		return receivedTime != expectedTime, nil
+		return !receivedTime.Equal(expectedTime), nil
 	default:
 		return false, NewQueryError("%s: operation %s is not supported", invalidExpressionErrMessage, operation)
 	}
