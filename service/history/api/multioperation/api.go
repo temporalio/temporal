@@ -62,6 +62,7 @@ func Invoke(
 	if err != nil {
 		return nil, err
 	}
+	ns := namespaceEntry.Name().String()
 
 	if len(req.Operations) != 2 {
 		return nil, serviceerror.NewInvalidArgument("expected exactly 2 operations")
@@ -115,40 +116,48 @@ func Invoke(
 	}
 
 	res, err := uws.Invoke(ctx)
-	// When an Update is admitted but not yet accepted, it can be aborted by a closing workflow.
-	// Since - compared to an Update - Update-with-Start has the ability to start a new workflow, the
-	// server will retry the Update-with-Start operation (but only once to keep latency and resource usage low).
-	ns := namespaceEntry.Name().String()
-	// TODO(stephan): remove dynamic config again
-	if shardContext.GetConfig().EnableUpdateWithStartRetryOnClosedWorkflowAbort(ns) {
-		if uws.noStartButUpdateWasAbortedByClosingWorkflow(err) {
-			testhooks.Call(uws.testHooks, testhooks.UpdateWithStartOnClosingWorkflowRetry)
+	if err != nil {
+		// When an Update is admitted but not yet accepted, it can be aborted by a closing workflow.
+		// Since - compared to an Update - Update-with-Start has the ability to start a new workflow, the
+		// server will retry the Update-with-Start operation (but only once to keep latency and resource usage low).
+		// TODO(stephan): remove dynamic config again
+		allowServerSideRetry := shardContext.GetConfig().EnableUpdateWithStartRetryOnClosedWorkflowAbort(ns)
+		if !allowServerSideRetry || !uws.updateOnlyWasAbortedByClosingWorkflow(err) {
+			return nil, err
+		}
 
-			uws2, err2 := newUpdateWithStart()
-			if err2 != nil {
-				return nil, err2
-			}
-			res, err = uws2.Invoke(ctx)
+		// Re-create to ensure the state is clean.
+		uws, err = newUpdateWithStart()
+		if err != nil {
+			return nil, err
+		}
 
+		testhooks.Call(uws.testHooks, testhooks.UpdateWithStartOnClosingWorkflowRetry)
+
+		res, err = uws.Invoke(ctx)
+		if err != nil {
 			// If the Update-with-Start encountered the same error of a closing workflow again, it will convert
 			// the error to Aborted (which is a retryable error) to allow the client to retry the operation.
-			if shardContext.GetConfig().EnableUpdateWithStartRetryableErrorOnClosedWorkflowAbort(ns) {
-				if uws2.noStartButUpdateWasAbortedByClosingWorkflow(err) {
-					var multiOpsErr *serviceerror.MultiOperationExecution
-					if errors.As(err, &multiOpsErr) {
-						return nil, serviceerror.NewMultiOperationExecution(multiOpsErr.Error(), []error{
-							multiOpsErr.OperationErrors()[0],
-							serviceerror.NewAborted(multiOpsErr.OperationErrors()[1].Error()), // changed from NotFound to Aborted!
-						})
-					}
-				}
+			// TODO(stephan): remove dynamic config again
+			allowClientSideRetry := shardContext.GetConfig().EnableUpdateWithStartRetryableErrorOnClosedWorkflowAbort(ns)
+			if !allowClientSideRetry || !uws.updateOnlyWasAbortedByClosingWorkflow(err) {
+				return res, err
+			}
+
+			var multiOpsErr *serviceerror.MultiOperationExecution
+			if errors.As(err, &multiOpsErr) {
+				return nil, serviceerror.NewMultiOperationExecution(multiOpsErr.Error(), []error{
+					multiOpsErr.OperationErrors()[0],
+					serviceerror.NewAborted(multiOpsErr.OperationErrors()[1].Error()), // changed from NotFound to Aborted!
+				})
 			}
 		}
 	}
-	return res, err
+
+	return res, nil
 }
 
-func (uws *updateWithStart) noStartButUpdateWasAbortedByClosingWorkflow(err error) bool {
+func (uws *updateWithStart) updateOnlyWasAbortedByClosingWorkflow(err error) bool {
 	if uws.workflowWasStarted {
 		return false
 	}
