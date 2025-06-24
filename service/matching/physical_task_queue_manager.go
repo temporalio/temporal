@@ -186,7 +186,7 @@ func newPhysicalTaskQueueManager(
 
 	var taskManager persistence.TaskManager
 	if newFairness {
-		taskManager = e.FairTaskManager
+		taskManager = e.fairTaskManager
 	} else {
 		taskManager = e.taskManager
 	}
