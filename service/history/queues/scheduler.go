@@ -106,10 +106,18 @@ func NewScheduler(
 			)
 		}
 
-		return configs.ConvertDynamicConfigValueToWeights(
+		weight, ok := configs.ConvertDynamicConfigValueToWeights(
 			namespaceWeights(namespaceName.String()),
 			logger,
 		)[key.Priority]
+		if !ok {
+			weight = configs.DefaultPriorityWeight
+			logger.Warn("Task priority weight not specified, using default weight",
+				tag.TaskPriority(key.Priority.String()),
+				tag.NewInt("priority-weight", weight),
+			)
+		}
+		return weight
 	}
 	channelWeightUpdateCh := make(chan struct{}, 1)
 	fifoSchedulerOptions := &tasks.FIFOSchedulerOptions{
