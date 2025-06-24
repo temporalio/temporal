@@ -40,9 +40,9 @@ var (
 	}
 
 	PriorityValue = map[string]Priority{
-		"high":       PriorityHigh,
-		"low":        PriorityLow,
-		"background": PriorityPreemptable,
+		"high":        PriorityHigh,
+		"low":         PriorityLow,
+		"preemptable": PriorityPreemptable,
 	}
 
 	CallerTypeToPriority = map[string]Priority{
