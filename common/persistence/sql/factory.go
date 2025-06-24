@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sync"
 
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -75,10 +76,7 @@ func (f *Factory) NewTaskStore() (p.TaskStore, error) {
 
 // NewFairTaskStore returns a new task store
 func (f *Factory) NewFairTaskStore() (p.TaskStore, error) {
-	// We don't have an implementation of fair TaskStore for SQL yet.
-	// Don't return an error, because fx won't allow the process to start at all, so just
-	// return nil and let it crash if someone tries to use it.
-	return nil, nil
+	return nil, serviceerror.NewUnimplemented("not implemented for sql")
 }
 
 // NewShardStore returns a new shard store
