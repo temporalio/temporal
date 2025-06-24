@@ -212,18 +212,8 @@ func TestCassandraTaskQueueSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-// TODO(fairness): cleanup; rename to TestCassandraTaskQueueSuite
-func TestCassandraTaskFairnessQueueSuite(t *testing.T) {
-	testData, tearDown := setUpCassandraTest(t)
-	defer tearDown()
-
-	taskQueueStore, err := testData.Factory.NewTaskFairnessStore()
-	if err != nil {
-		t.Fatalf("unable to create Cassandra DB: %v", err)
-	}
-
-	s := NewTaskQueueSuite(t, taskQueueStore, testData.Logger)
-	suite.Run(t, s)
+func TestCassandraFairTaskQueueSuite(t *testing.T) {
+	// TODO(fairness): adapt test suite for fair task store
 }
 
 func TestCassandraTaskQueueTaskSuite(t *testing.T) {
@@ -237,6 +227,10 @@ func TestCassandraTaskQueueTaskSuite(t *testing.T) {
 
 	s := NewTaskQueueTaskSuite(t, taskQueueStore, testData.Logger)
 	suite.Run(t, s)
+}
+
+func TestCassandraFairTaskQueueTaskSuite(t *testing.T) {
+	// TODO(fairness): adapt test suite for fair task store
 }
 
 func TestCassandraTaskQueueUserDataSuite(t *testing.T) {
