@@ -41,7 +41,7 @@ func TestBacklogManager_Pri_Suite(t *testing.T) {
 func (s *BacklogManagerTestSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.logger = testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
-	s.taskMgr = newTestTaskManager(s.logger, false)
+	s.taskMgr = newTestTaskManager(s.logger)
 
 	cfg := NewConfig(dynamicconfig.NewNoopCollection())
 	f, _ := tqid.NewTaskQueueFamily("", "test-queue")

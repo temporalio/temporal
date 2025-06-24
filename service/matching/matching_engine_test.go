@@ -106,8 +106,8 @@ func createTestMatchingEngine(
 	matchingClient matchingservice.MatchingServiceClient,
 	namespaceRegistry namespace.Registry,
 ) *matchingEngineImpl {
-	tm := newTestTaskManager(logger, false)
-	ftm := newTestTaskManager(logger, true)
+	tm := newTestTaskManager(logger)
+	ftm := newTestFairTaskManager(logger)
 	mockVisibilityManager := manager.NewMockVisibilityManager(controller)
 	mockVisibilityManager.EXPECT().Close().AnyTimes()
 	mockHistoryClient := historyservicemock.NewMockHistoryServiceClient(controller)
@@ -162,8 +162,8 @@ func (s *matchingEngineSuite) SetupTest() {
 		Return(&matchingservice.ReplicateTaskQueueUserDataResponse{}, nil).AnyTimes()
 	s.mockMatchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any()).
 		Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{WasUnloaded: true}, nil).AnyTimes()
-	s.taskManager = newTestTaskManager(s.logger, false)
-	s.fairTaskManager = newTestTaskManager(s.logger, true)
+	s.taskManager = newTestTaskManager(s.logger)
+	s.fairTaskManager = newTestFairTaskManager(s.logger)
 	s.ns, s.mockNamespaceCache = createMockNamespaceCache(s.controller, matchingTestNamespace)
 	s.mockVisibilityManager = manager.NewMockVisibilityManager(s.controller)
 	s.mockVisibilityManager.EXPECT().Close().AnyTimes()
@@ -212,7 +212,7 @@ func newMatchingEngine(
 ) *matchingEngineImpl {
 	return &matchingEngineImpl{
 		taskManager:     taskMgr,
-		FairTaskManager: fairTaskMgr,
+		fairTaskManager: fairTaskMgr,
 		historyClient:   mockHistoryClient,
 		partitions:      make(map[tqid.PartitionKey]taskQueuePartitionManager),
 		gaugeMetrics: gaugeMetrics{
@@ -3625,8 +3625,12 @@ type dbTaskQueueKey struct {
 	taskType        enumspb.TaskQueueType
 }
 
-func newTestTaskManager(logger log.Logger, fairness bool) *testTaskManager {
-	return &testTaskManager{queues: make(map[dbTaskQueueKey]*testPhysicalTaskQueueManager), logger: logger, fairness: fairness}
+func newTestTaskManager(logger log.Logger) *testTaskManager {
+	return &testTaskManager{queues: make(map[dbTaskQueueKey]*testPhysicalTaskQueueManager), logger: logger}
+}
+
+func newTestFairTaskManager(logger log.Logger) *testTaskManager {
+	return &testTaskManager{queues: make(map[dbTaskQueueKey]*testPhysicalTaskQueueManager), logger: logger, fairness: true}
 }
 
 func (m *testTaskManager) GetName() string {
@@ -3873,9 +3877,9 @@ func (m *testTaskManager) CreateTasks(
 		if task.GetTaskId() <= 0 {
 			panic(fmt.Errorf("invalid taskID=%v", task.GetTaskId()))
 		}
-		if m.fairness && task.PassNumber == 0 {
+		if m.fairness && task.TaskPass == 0 {
 			return nil, serviceerror.NewInternal("invalid fair queue task missing pass number")
-		} else if !m.fairness && task.PassNumber != 0 {
+		} else if !m.fairness && task.TaskPass != 0 {
 			return nil, serviceerror.NewInternal("invalid non-fair queue task with pass number")
 		}
 
