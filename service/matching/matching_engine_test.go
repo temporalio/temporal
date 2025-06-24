@@ -2084,7 +2084,7 @@ func (s *matchingEngineSuite) TestAddTaskAfterStartFailure() {
 
 	task2, _, err := s.matchingEngine.pollTask(context.Background(), dbq.partition, &pollMetadata{})
 	s.NoError(err)
-	s.EqualValues(task1.event.Data, task2.event.Data)
+	protoassert.ProtoEqual(s.T(), task1.event.Data, task2.event.Data)
 	s.NotEqual(task1.event.GetTaskId(), task2.event.GetTaskId(), "IDs should not match")
 
 	task2.finish(nil, true)
