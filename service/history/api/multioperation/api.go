@@ -141,16 +141,15 @@ func Invoke(
 			// TODO(stephan): remove dynamic config again
 			allowClientSideRetry := shardContext.GetConfig().EnableUpdateWithStartRetryableErrorOnClosedWorkflowAbort(ns)
 			if !allowClientSideRetry || !uws.updateOnlyWasAbortedByClosingWorkflow(err) {
-				return res, err
+				return nil, err
 			}
 
 			var multiOpsErr *serviceerror.MultiOperationExecution
-			if errors.As(err, &multiOpsErr) {
-				return nil, serviceerror.NewMultiOperationExecution(multiOpsErr.Error(), []error{
-					multiOpsErr.OperationErrors()[0],
-					serviceerror.NewAborted(multiOpsErr.OperationErrors()[1].Error()), // changed from NotFound to Aborted!
-				})
-			}
+			errors.As(err, &multiOpsErr)
+			return nil, serviceerror.NewMultiOperationExecution(multiOpsErr.Error(), []error{
+				multiOpsErr.OperationErrors()[0],
+				serviceerror.NewAborted(multiOpsErr.OperationErrors()[1].Error()), // changed from NotFound to Aborted!
+			})
 		}
 	}
 
