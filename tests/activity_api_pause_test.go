@@ -3,6 +3,7 @@ package tests
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -180,6 +181,92 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WhileRunning() {
 	s.NoError(err)
 }
 
+func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_IncreaseAttemptsOnFailure() {
+	/*
+	 * 1. Run an activity that runs forever
+	 * 2. Pause the activity
+	 * 3. Send a failure signal to the activity
+	 * 4. Validate activity failed
+	 * 5. Validate number of activity attempts increased
+	 */
+
+	// TODO: reduce timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 3000*time.Second)
+	defer cancel()
+
+	var startedActivityCount atomic.Int32
+	activityPausedCn := make(chan struct{})
+
+	activityFunction := func() (string, error) {
+		startedActivityCount.Add(1)
+		s.WaitForChannel(ctx, activityPausedCn)
+		return "done!", fmt.Errorf("activity failed after being paused")
+	}
+
+	workflowFn := s.makeWorkflowFunc(activityFunction)
+
+	s.Worker().RegisterWorkflow(workflowFn)
+	s.Worker().RegisterActivity(activityFunction)
+
+	workflowOptions := sdkclient.StartWorkflowOptions{
+		ID:        testcore.RandomizeStr("wf_id-" + s.T().Name()),
+		TaskQueue: s.TaskQueue(),
+	}
+
+	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
+	s.NoError(err)
+
+	// wait for activity to start
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+		require.NoError(t, err)
+		require.Len(t, description.PendingActivities, 1)
+		require.Equal(t, int32(1), startedActivityCount.Load())
+	}, 5*time.Second, 500*time.Millisecond)
+
+	// pause activity
+	testIdentity := "test-identity"
+	testReason := "test-reason"
+	pauseRequest := &workflowservice.PauseActivityRequest{
+		Namespace: s.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: workflowRun.GetID(),
+		},
+		Activity: &workflowservice.PauseActivityRequest_Id{Id: "activity-id"},
+		Identity: testIdentity,
+		Reason:   testReason,
+	}
+	resp, err := s.FrontendClient().PauseActivity(ctx, pauseRequest)
+	s.NoError(err)
+	s.NotNil(resp)
+
+	// make sure activity is paused on server while running on worker
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+		require.NoError(t, err)
+		require.Len(t, description.PendingActivities, 1)
+		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_PAUSE_REQUESTED, description.PendingActivities[0].State)
+		require.Equal(t, int32(1), startedActivityCount.Load())
+	}, 5*time.Second, 500*time.Millisecond)
+
+	// End the activity
+	activityPausedCn <- struct{}{}
+
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+		require.NoError(t, err)
+		require.NotNil(t, description)
+		require.Equal(t, 1, len(description.PendingActivities))
+		require.True(t, description.PendingActivities[0].Paused)
+		require.Equal(t, int32(2), description.PendingActivities[0].Attempt)
+		require.NotNil(t, description.PendingActivities[0].LastFailure)
+		require.NotNil(t, description.PendingActivities[0].PauseInfo)
+		require.NotNil(t, description.PendingActivities[0].PauseInfo.GetManual())
+		require.Equal(t, testIdentity, description.PendingActivities[0].PauseInfo.GetManual().Identity)
+		require.Equal(t, testReason, description.PendingActivities[0].PauseInfo.GetManual().Reason)
+	}, 500*time.Second, 500*time.Millisecond)
+}
+
 func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WhileWaiting() {
 	// In this case, pause happens when activity is in retry state.
 	// Make sure that activity is paused and then unpaused.
@@ -276,7 +363,6 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WhileWaiting() {
 	err = workflowRun.Get(ctx, &out)
 
 	s.NoError(err)
-
 }
 
 func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WhileRetryNoWait() {
