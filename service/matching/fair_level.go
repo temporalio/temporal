@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 )
 
 // fairLevel is a pair of "pass" and "id". Pass is a number that can be assigned to cause
@@ -45,5 +46,19 @@ func fairLevelPlusOne(a fairLevel) fairLevel {
 }
 
 func allocatedTaskFairLevel(t *persistencespb.AllocatedTaskInfo) fairLevel {
-	return fairLevel{pass: t.PassNumber, id: t.TaskId}
+	return fairLevel{pass: t.TaskPass, id: t.TaskId}
+}
+
+func protoFairLevel(l *taskqueuespb.FairLevel) fairLevel {
+	if l == nil {
+		return fairLevel{}
+	}
+	return fairLevel{pass: l.TaskPass, id: l.TaskId}
+}
+
+func (l fairLevel) toProto() *taskqueuespb.FairLevel {
+	if (l == fairLevel{}) {
+		return nil
+	}
+	return &taskqueuespb.FairLevel{TaskPass: l.pass, TaskId: l.id}
 }
