@@ -1,7 +1,6 @@
 package sql
 
 import (
-	"errors"
 	"fmt"
 	"sync"
 
@@ -76,7 +75,10 @@ func (f *Factory) NewTaskStore() (p.TaskStore, error) {
 
 // NewFairTaskStore returns a new task store
 func (f *Factory) NewFairTaskStore() (p.TaskStore, error) {
-	return nil, errors.New("not implemented")
+	// We don't have an implementation of fair TaskStore for SQL yet.
+	// Don't return an error, because fx won't allow the process to start at all, so just
+	// return nil and let it crash if someone tries to use it.
+	return nil, nil
 }
 
 // NewShardStore returns a new shard store
