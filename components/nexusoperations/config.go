@@ -149,7 +149,7 @@ type Config struct {
 	MaxOperationNameLength              dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxOperationTokenLength             dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxOperationHeaderSize              dynamicconfig.IntPropertyFnWithNamespaceFilter
-	DisallowedOperationHeaders          dynamicconfig.TypedPropertyFn[[]string]
+	DisallowedOperationHeaders          *dynamicconfig.GlobalCachedTypedValue[[]string]
 	MaxOperationScheduleToCloseTimeout  dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	PayloadSizeLimit                    dynamicconfig.IntPropertyFnWithNamespaceFilter
 	CallbackURLTemplate                 dynamicconfig.StringPropertyFn
@@ -178,7 +178,7 @@ func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 				keys[i] = strings.ToLower(k)
 			}
 			return keys, nil
-		}).Get,
+		}),
 		MaxOperationScheduleToCloseTimeout:  MaxOperationScheduleToCloseTimeout.Get(dc),
 		PayloadSizeLimit:                    dynamicconfig.BlobSizeLimitError.Get(dc),
 		CallbackURLTemplate:                 CallbackURLTemplate.Get(dc),
