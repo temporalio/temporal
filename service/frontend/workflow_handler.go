@@ -3984,9 +3984,8 @@ func (wh *WorkflowHandler) PatchSchedule(ctx context.Context, request *workflows
 		return nil, err
 	}
 
-	// Set the timestamp to timestamppb.Now if unset
-	if request.Patch.GetTriggerImmediately() != nil && request.Patch.GetTriggerImmediately().TriggerTime == nil {
-		request.Patch.GetTriggerImmediately().TriggerTime = timestamppb.Now()
+	if trigger := request.Patch.GetTriggerImmediately(); trigger != nil && trigger.ScheduledTime == nil {
+		trigger.ScheduledTime = timestamppb.Now()
 	}
 
 	sizeLimitError := wh.config.BlobSizeLimitError(request.GetNamespace())

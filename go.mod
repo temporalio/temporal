@@ -60,8 +60,8 @@ require (
 	go.opentelemetry.io/otel/sdk v1.34.0
 	go.opentelemetry.io/otel/sdk/metric v1.34.0
 	go.opentelemetry.io/otel/trace v1.34.0
-	go.temporal.io/api v1.50.1-0.20250625152634-34d23b4cdd1f
-	go.temporal.io/sdk v1.34.1-0.20250625152830-475c2ace36af
+	go.temporal.io/api v1.50.1-0.20250625183119-acbf7084b4bc
+	go.temporal.io/sdk v1.34.0
 	go.temporal.io/version v0.3.0
 	go.uber.org/automaxprocs v1.6.0
 	go.uber.org/fx v1.23.0
@@ -183,7 +183,3 @@ require (
 	modernc.org/strutil v1.2.1 // indirect
 	modernc.org/token v1.1.0 // indirect
 )
-
-// replace go.temporal.io/api => ../api-go
-
-// replace go.temporal.io/sdk => ../sdk-go

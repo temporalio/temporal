@@ -409,7 +409,7 @@ func (s *scheduler) processPatch(patch *schedulepb.SchedulePatch) {
 	s.logger.Debug("Schedule patch")
 
 	if trigger := patch.TriggerImmediately; trigger != nil {
-		now := timestamp.TimeValue(trigger.TriggerTime)
+		now := timestamp.TimeValue(trigger.ScheduledTime)
 		if now.IsZero() {
 			now = s.now()
 		}
