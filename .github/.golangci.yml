@@ -23,6 +23,10 @@ issues:
       linters:
         - forbidigo
     - path: _test\.go|tests/.+\.go
+      text: "panic"
+      linters:
+        - forbidigo
+    - path: _test\.go|tests/.+\.go
       text: "(cyclomatic|cognitive)"  # false positives when using subtests
       linters:
         - revive
