@@ -70,8 +70,10 @@ func TestActivityInfoMatchEvaluator_LogicalOperations(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			e := newWorkerQueryEngine("nsID", tt.query)
-			match, err := e.EvaluateWorker(hb)
+			engine, err := newWorkerQueryEngine("nsID", tt.query)
+			assert.NoError(t, err)
+
+			match, err := engine.EvaluateWorker(hb)
 			if tt.expectedError {
 				assert.Error(t, err)
 			} else {
@@ -188,8 +190,10 @@ func TestActivityInfoMatchEvaluator_SupportedFields(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			e := newWorkerQueryEngine("nsID", tt.query)
-			match, err := e.EvaluateWorker(hb)
+			engine, err := newWorkerQueryEngine("nsID", tt.query)
+			assert.NoError(t, err)
+
+			match, err := engine.EvaluateWorker(hb)
 			assert.NoError(t, err)
 			assert.Equal(t, tt.expectedMatch, match)
 		})
@@ -315,8 +319,9 @@ func TestActivityInfoMatchEvaluator_SupportedTimeFields(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			for _, colName := range []string{workerStartTimeColName, workerHeartbeatTimeColName} {
 				query := fmt.Sprintf(tt.query, colName)
-				e := newWorkerQueryEngine("nsID", query)
-				match, err := e.EvaluateWorker(hb)
+				engine, err := newWorkerQueryEngine("nsID", query)
+				assert.NoError(t, err)
+				match, err := engine.EvaluateWorker(hb)
 				assert.NoError(t, err)
 				assert.Equal(t, tt.expectedMatch, match)
 			}

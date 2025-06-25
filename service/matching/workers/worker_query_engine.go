@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/temporalio/sqlparser"
+	"go.temporal.io/api/serviceerror"
 	workerpb "go.temporal.io/api/worker/v1"
 	"go.temporal.io/server/common/sqlquery"
 )
@@ -23,9 +24,16 @@ const (
 	workerStatusColName         = "WorkerStatus"
 )
 
+const (
+	malformedSqlQueryErrMessage = "malformed query"
+	notSupportedErrMessage      = "operation is not supported"
+	invalidExpressionErrMessage = "invalid expression"
+)
+
 /*
 FilterWorkers filters the list of per-namespace worker heartbeats against the provided query.
-The query should be a valid SQL query with WHERE clause.
+The query should be a valid SQL query without WHERE clause.
+
 Query is used to filter workers based on worker heartbeat info.
 The following worker status attributes are expected are supported as part of the query:
 * WorkerInstanceKey
@@ -48,7 +56,7 @@ The query can have conditions on multiple fields.
 Date time fields should be in RFC3339 format.
 Example query:
 
-	"WHERE TaskQueue = 'my_task_queue' AND LastHeartbeatTime < '2023-10-27T10:30:00Z' "
+	"TaskQueue = 'my_task_queue' AND LastHeartbeatTime < '2023-10-27T10:30:00Z' "
 
 Different fields can support different operators.
   - string fields (e.g., WorkerIdentity, HostName, TaskQueue, DeploymentName, SdkName, SdkVersion):
@@ -65,11 +73,17 @@ Errors are:
  - the provided namespace doesn't exist.
 */
 
-func newWorkerQueryEngine(nsID string, query string) *workerQueryEngine {
-	return &workerQueryEngine{
+func newWorkerQueryEngine(nsID string, query string) (*workerQueryEngine, error) {
+	engine := &workerQueryEngine{
 		nsID:  nsID,
 		query: query,
 	}
+
+	err := engine.validateQuery()
+	if err != nil {
+		return nil, err
+	}
+	return engine, nil
 }
 
 type WorkerHeartbeatPropertyFunc func(*workerpb.WorkerHeartbeat) string
@@ -83,12 +97,18 @@ var (
 			return hb.WorkerIdentity
 		},
 		workerHostNameColName: func(hb *workerpb.WorkerHeartbeat) string {
+			if hb.HostInfo == nil {
+				return ""
+			}
 			return hb.HostInfo.HostName
 		},
 		workerTaskQueueColName: func(hb *workerpb.WorkerHeartbeat) string {
 			return hb.TaskQueue
 		},
 		workerDeploymentNameColName: func(hb *workerpb.WorkerHeartbeat) string {
+			if hb.DeploymentVersion == nil {
+				return ""
+			}
 			return hb.DeploymentVersion.DeploymentName
 		},
 		workerSdkNameColName: func(hb *workerpb.WorkerHeartbeat) string {
@@ -104,43 +124,48 @@ var (
 )
 
 type workerQueryEngine struct {
-	nsID          string // Namespace ID
-	query         string
-	currentWorker *workerpb.WorkerHeartbeat // Current worker heartbeat being evaluated
+	nsID                  string // Namespace ID
+	query                 string
+	parsedWhereExpression sqlparser.Expr
+	currentWorker         *workerpb.WorkerHeartbeat // Current worker heartbeat being evaluated
 }
 
 func (w *workerQueryEngine) EvaluateWorker(hb *workerpb.WorkerHeartbeat) (bool, error) {
-	query, err := prepareQuery(w.query)
-	if err != nil {
-		return false, err
-	}
-
-	whereCause, err := getWhereCause(query)
-	if err != nil {
-		return false, err
-	}
 
 	w.currentWorker = hb
-	return w.evaluateExpression(whereCause)
+	return w.evaluateExpression(w.parsedWhereExpression)
+}
+
+func (w *workerQueryEngine) validateQuery() error {
+	query, err := prepareQuery(w.query)
+	if err != nil {
+		return err
+	}
+
+	w.parsedWhereExpression, err = getWhereCause(query)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func getWhereCause(query string) (sqlparser.Expr, error) {
 	stmt, err := sqlparser.Parse(query)
 	if err != nil {
-		return nil, NewQueryError("%s: %v", malformedSqlQueryErrMessage, err)
+		return nil, serviceerror.NewInvalidArgumentf("%s: %v", malformedSqlQueryErrMessage, err)
 	}
 
 	selectStmt, isSelect := stmt.(*sqlparser.Select)
 	if !isSelect {
-		return nil, NewQueryError("%s: statement must be 'select' not %T", notSupportedErrMessage, stmt)
+		return nil, serviceerror.NewInvalidArgumentf("%s: statement must be 'select' not %T", notSupportedErrMessage, stmt)
 	}
 
 	if selectStmt.Limit != nil {
-		return nil, NewQueryError("%s: 'limit' clause", notSupportedErrMessage)
+		return nil, serviceerror.NewInvalidArgumentf("%s: 'limit' clause", notSupportedErrMessage)
 	}
 
 	if selectStmt.Where == nil {
-		return nil, NewQueryError("%s: 'where' clause is missing", notSupportedErrMessage)
+		return nil, serviceerror.NewInvalidArgumentf("%s: 'where' clause is missing", notSupportedErrMessage)
 	}
 
 	return selectStmt.Where.Expr, nil
@@ -166,7 +191,7 @@ func prepareQuery(query string) (string, error) {
 func (w *workerQueryEngine) evaluateExpression(expr sqlparser.Expr) (bool, error) {
 
 	if expr == nil {
-		return false, NewQueryError("input expression cannot be nil")
+		return false, serviceerror.NewInvalidArgumentf("input expression cannot be nil")
 	}
 
 	switch e := (expr).(type) {
@@ -181,21 +206,21 @@ func (w *workerQueryEngine) evaluateExpression(expr sqlparser.Expr) (bool, error
 	case *sqlparser.RangeCond:
 		return w.evaluateRange(e)
 	case *sqlparser.IsExpr:
-		return false, NewQueryError("%s: 'is' expression", notSupportedErrMessage)
+		return false, serviceerror.NewInvalidArgumentf("%s: 'is' expression", notSupportedErrMessage)
 	case *sqlparser.NotExpr:
-		return false, NewQueryError("%s: 'not' expression", notSupportedErrMessage)
+		return false, serviceerror.NewInvalidArgumentf("%s: 'not' expression", notSupportedErrMessage)
 	case *sqlparser.FuncExpr:
-		return false, NewQueryError("%s: function expression", notSupportedErrMessage)
+		return false, serviceerror.NewInvalidArgumentf("%s: function expression", notSupportedErrMessage)
 	case *sqlparser.ColName:
-		return false, NewQueryError("incomplete expression")
+		return false, serviceerror.NewInvalidArgumentf("incomplete expression")
 	default:
-		return false, NewQueryError("%s: expression of type %T", notSupportedErrMessage, expr)
+		return false, serviceerror.NewInvalidArgumentf("%s: expression of type %T", notSupportedErrMessage, expr)
 	}
 }
 
 func (w *workerQueryEngine) evaluateAnd(expr *sqlparser.AndExpr) (bool, error) {
 	if expr == nil {
-		return false, NewQueryError("And expression input expression cannot be nil")
+		return false, serviceerror.NewInvalidArgumentf("And expression input expression cannot be nil")
 	}
 	if leftResult, err := w.evaluateExpression(expr.Left); err != nil || !leftResult {
 		return leftResult, err
@@ -207,7 +232,7 @@ func (w *workerQueryEngine) evaluateAnd(expr *sqlparser.AndExpr) (bool, error) {
 
 func (w *workerQueryEngine) evaluateOr(expr *sqlparser.OrExpr) (bool, error) {
 	if expr == nil {
-		return false, NewQueryError("Or expression input expression cannot be nil")
+		return false, serviceerror.NewInvalidArgumentf("Or expression input expression cannot be nil")
 	}
 	if leftResult, err := w.evaluateExpression(expr.Left); err != nil || leftResult {
 		return leftResult, err
@@ -218,17 +243,17 @@ func (w *workerQueryEngine) evaluateOr(expr *sqlparser.OrExpr) (bool, error) {
 
 func (w *workerQueryEngine) evaluateComparison(expr *sqlparser.ComparisonExpr) (bool, error) {
 	if expr == nil {
-		return false, NewQueryError("ComparisonExpr input expression cannot be nil")
+		return false, serviceerror.NewInvalidArgumentf("ComparisonExpr input expression cannot be nil")
 	}
 
 	colNameExpr, ok := expr.Left.(*sqlparser.ColName)
 	if !ok {
-		return false, NewQueryError("invalid filter name: %s", sqlparser.String(expr.Left))
+		return false, serviceerror.NewInvalidArgumentf("invalid filter name: %s", sqlparser.String(expr.Left))
 	}
 	colName := sqlparser.String(colNameExpr)
 	valExpr, ok := expr.Right.(*sqlparser.SQLVal)
 	if !ok {
-		return false, NewQueryError("invalid value: %s", sqlparser.String(expr.Right))
+		return false, serviceerror.NewInvalidArgumentf("invalid value: %s", sqlparser.String(expr.Right))
 	}
 	valStr := sqlparser.String(valExpr)
 
@@ -243,40 +268,40 @@ func (w *workerQueryEngine) evaluateComparison(expr *sqlparser.ComparisonExpr) (
 		workerStatusColName:
 		propertyFunc, ok := propertyMapFuncs[colName]
 		if !ok {
-			return false, NewQueryError("unknown or unsupported worker heartbeat search field: %s", colName)
+			return false, serviceerror.NewInvalidArgumentf("unknown or unsupported worker heartbeat search field: %s", colName)
 		}
 		val, err := sqlquery.ExtractStringValue(valStr)
 		if err != nil {
-			return false, NewQueryError("invalid value for %s: %v", colName, err)
+			return false, serviceerror.NewInvalidArgumentf("invalid value for %s: %v", colName, err)
 		}
 		existingVal := propertyFunc(w.currentWorker)
 		return compareQueryString(val, existingVal, expr.Operator, colName)
 	case workerStartTimeColName:
 		expectedTime, err := sqlquery.ConvertToTime(valStr)
 		if err != nil {
-			return false, NewQueryError("invalid value for %s: %v", colName, err)
+			return false, serviceerror.NewInvalidArgumentf("invalid value for %s: %v", colName, err)
 		}
 		receivedTime := w.currentWorker.GetStartTime().AsTime()
 		return w.compareTime(receivedTime, expectedTime, expr.Operator)
 	case workerHeartbeatTimeColName:
 		expectedTime, err := sqlquery.ConvertToTime(valStr)
 		if err != nil {
-			return false, NewQueryError("invalid value for %s: %v", colName, err)
+			return false, serviceerror.NewInvalidArgumentf("invalid value for %s: %v", colName, err)
 		}
 		receivedTime := w.currentWorker.GetHeartbeatTime().AsTime()
 		return w.compareTime(receivedTime, expectedTime, expr.Operator)
 	default:
-		return false, NewQueryError("unknown or unsupported worker heartbeat search field: %s", colName)
+		return false, serviceerror.NewInvalidArgumentf("unknown or unsupported worker heartbeat search field: %s", colName)
 	}
 }
 
 func (w *workerQueryEngine) evaluateRange(expr *sqlparser.RangeCond) (bool, error) {
 	if expr == nil {
-		return false, NewQueryError("RangeCond input expression cannot be nil")
+		return false, serviceerror.NewInvalidArgumentf("RangeCond input expression cannot be nil")
 	}
 	colName, ok := expr.Left.(*sqlparser.ColName)
 	if !ok {
-		return false, NewQueryError("unknown or unsupported column name: %s", sqlparser.String(expr.Left))
+		return false, serviceerror.NewInvalidArgumentf("unknown or unsupported column name: %s", sqlparser.String(expr.Left))
 	}
 	colNameStr := sqlparser.String(colName)
 
@@ -308,18 +333,18 @@ func (w *workerQueryEngine) evaluateRange(expr *sqlparser.RangeCond) (bool, erro
 			result := w.compareTimeBetween(fromValue, toValue, timeValue)
 			return !result, nil
 		default:
-			return false, NewQueryError("%s: range condition operator must be 'between' or 'not between'. Got %s",
+			return false, serviceerror.NewInvalidArgumentf("%s: range condition operator must be 'between' or 'not between'. Got %s",
 				invalidExpressionErrMessage, expr.Operator)
 		}
 
 	default:
-		return false, NewQueryError("unknown or unsupported column name: %s", colNameStr)
+		return false, serviceerror.NewInvalidArgumentf("unknown or unsupported column name: %s", colNameStr)
 	}
 }
 
 func compareQueryString(inStr string, expectedStr string, operation string, colName string) (bool, error) {
 	if len(inStr) == 0 {
-		return false, NewQueryError("%s cannot be empty", colName)
+		return false, serviceerror.NewInvalidArgumentf("%s cannot be empty", colName)
 	}
 	switch operation {
 	case sqlparser.EqualStr:
@@ -331,7 +356,7 @@ func compareQueryString(inStr string, expectedStr string, operation string, colN
 	case sqlparser.NotStartsWithStr:
 		return !strings.HasPrefix(expectedStr, inStr), nil
 	default:
-		return false, NewQueryError("%s: operation %s is not supported for %s column", invalidExpressionErrMessage, operation, colName)
+		return false, serviceerror.NewInvalidArgumentf("%s: operation %s is not supported for %s column", invalidExpressionErrMessage, operation, colName)
 	}
 }
 
@@ -350,7 +375,7 @@ func (w *workerQueryEngine) getTimeValue(colName string) (time.Time, error) {
 		return w.currentWorker.GetHeartbeatTime().AsTime(), nil
 
 	default:
-		return zeroTime, NewQueryError("unknown or unsupported column name: %s", colName)
+		return zeroTime, serviceerror.NewInvalidArgumentf("unknown or unsupported column name: %s", colName)
 	}
 }
 
@@ -375,6 +400,6 @@ func (w *workerQueryEngine) compareTime(receivedTime time.Time, expectedTime tim
 	case sqlparser.NotEqualStr:
 		return !receivedTime.Equal(expectedTime), nil
 	default:
-		return false, NewQueryError("%s: operation %s is not supported", invalidExpressionErrMessage, operation)
+		return false, serviceerror.NewInvalidArgumentf("%s: operation %s is not supported", invalidExpressionErrMessage, operation)
 	}
 }
