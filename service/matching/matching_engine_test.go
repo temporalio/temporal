@@ -3683,12 +3683,12 @@ type testPhysicalTaskQueueManager struct {
 	getTasksCount           int
 	getUserDataCount        int
 	updateCount             int
-	tasks                   *treemap.Map
+	tasks                   treemap.Map
 	userData                *persistencespb.VersionedTaskQueueUserData
 }
 
 func newTestTaskQueueManager() *testPhysicalTaskQueueManager {
-	return &testPhysicalTaskQueueManager{tasks: treemap.NewWith(fairLevelComparator)}
+	return &testPhysicalTaskQueueManager{tasks: *newFairLevelTreeMap()}
 }
 
 func (m *testPhysicalTaskQueueManager) RangeID() int64 {

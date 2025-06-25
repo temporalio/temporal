@@ -3,6 +3,7 @@ package matching
 import (
 	"fmt"
 
+	"github.com/emirpasic/gods/maps/treemap"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 )
@@ -24,16 +25,16 @@ func (a fairLevel) less(b fairLevel) bool {
 	return a.pass < b.pass || a.pass == b.pass && a.id < b.id
 }
 
-// Use with treemap
-func fairLevelComparator(aany, bany any) int {
-	a := aany.(fairLevel) // nolint:revive
-	b := bany.(fairLevel) // nolint:revive
-	if a.less(b) {
-		return -1
-	} else if b.less(a) {
-		return 1
-	}
-	return 0
+func newFairLevelTreeMap() *treemap.Map {
+	return treemap.NewWith(func(aany, bany any) int {
+		a, b := aany.(fairLevel), bany.(fairLevel) // nolint:revive
+		if a.less(b) {
+			return -1
+		} else if b.less(a) {
+			return 1
+		}
+		return 0
+	})
 }
 
 // Returns the max of a and b.

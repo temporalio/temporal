@@ -14,10 +14,13 @@ func TestFairLevelLess(t *testing.T) {
 }
 
 func TestFairLevelComparator(t *testing.T) {
-	assert.Equal(t, -1, fairLevelComparator(fairLevel{pass: 10, id: 100}, fairLevel{pass: 10, id: 105}))
-	assert.Equal(t, 0, fairLevelComparator(fairLevel{pass: 10, id: 100}, fairLevel{pass: 10, id: 100}))
-	assert.Equal(t, -1, fairLevelComparator(fairLevel{pass: 10, id: 100}, fairLevel{pass: 11, id: 100}))
-	assert.Equal(t, 1, fairLevelComparator(fairLevel{pass: 10, id: 100}, fairLevel{pass: 5, id: 105}))
+	m := newFairLevelTreeMap()
+	a, b, c, d := fairLevel{pass: 10, id: 105}, fairLevel{pass: 10, id: 100}, fairLevel{pass: 11, id: 100}, fairLevel{pass: 5, id: 105}
+	m.Put(a, nil)
+	m.Put(b, nil)
+	m.Put(c, nil)
+	m.Put(d, nil)
+	assert.Equal(t, m.Keys(), []any{d, b, a, c})
 }
 
 func TestFairLevelMax(t *testing.T) {
