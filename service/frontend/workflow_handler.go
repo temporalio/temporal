@@ -78,6 +78,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 var _ Handler = (*WorkflowHandler)(nil)
@@ -3981,6 +3982,11 @@ func (wh *WorkflowHandler) PatchSchedule(ctx context.Context, request *workflows
 	inputPayloads, err := sdk.PreferProtoDataConverter.ToPayloads(request.Patch)
 	if err != nil {
 		return nil, err
+	}
+
+	// Set the timestamp to timestamppb.Now if unset
+	if request.Patch.GetTriggerImmediately() != nil && request.Patch.GetTriggerImmediately().TriggerTime == nil {
+		request.Patch.GetTriggerImmediately().TriggerTime = timestamppb.Now()
 	}
 
 	sizeLimitError := wh.config.BlobSizeLimitError(request.GetNamespace())
