@@ -80,6 +80,13 @@ type (
 	}
 )
 
+func (res taskResponse) err() error {
+	if res.forwarded {
+		return res.forwardErr
+	}
+	return res.startErr
+}
+
 func newInternalTaskForSyncMatch(
 	info *persistencespb.TaskInfo,
 	forwardInfo *taskqueuespb.TaskForwardInfo,

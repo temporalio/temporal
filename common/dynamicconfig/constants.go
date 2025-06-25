@@ -223,17 +223,6 @@ response to a StartWorkflowExecution request and skipping the trip through match
 		5000,
 		`PersistenceHealthSignalBufferSize is the maximum number of persistence signals to buffer in memory per signal key`,
 	)
-	ShardRPSWarnLimit = NewGlobalIntSetting(
-		"system.shardRPSWarnLimit",
-		50,
-		`ShardRPSWarnLimit is the per-shard RPS limit for warning`,
-	)
-	ShardPerNsRPSWarnPercent = NewGlobalFloatSetting(
-		"system.shardPerNsRPSWarnPercent",
-		0.8,
-		`ShardPerNsRPSWarnPercent is the per-shard per-namespace RPS limit for warning as a percentage of ShardRPSWarnLimit
-these warning are not emitted if the value is set to 0 or less`,
-	)
 	OperatorRPSRatio = NewGlobalFloatSetting(
 		"system.operatorRPSRatio",
 		0.2,
@@ -2040,6 +2029,11 @@ archivalQueueProcessor`,
 		"history.enableUpdateWithStartRetryOnClosedWorkflowAbort",
 		true,
 		`EnableUpdateWithStartRetryOnClosedWorkflowAbort enables retrying Update-with-Start's update if it was aborted by a closing workflow.`,
+	)
+	EnableUpdateWithStartRetryableErrorOnClosedWorkflowAbort = NewNamespaceBoolSetting(
+		"history.enableUpdateWithStartRetryableErrorOnClosedWorkflowAbort",
+		true,
+		`EnableUpdateWithStartRetryableErrorOnClosedWorkflowAbort enables sending back a retryable status code when the Update-with-Start's update was aborted by a closing workflow.`,
 	)
 
 	ReplicatorTaskBatchSize = NewGlobalIntSetting(

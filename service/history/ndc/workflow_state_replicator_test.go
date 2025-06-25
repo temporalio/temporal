@@ -344,7 +344,7 @@ func (s *workflowReplicatorSuite) Test_ApplyWorkflowState_Ancestors() {
 	var historyBlobs []*commonpb.DataBlob
 	var nodeIds []int64
 	for _, history := range expectedHistory {
-		blob, err := serializer.SerializeEvents(history.GetEvents(), enumspb.ENCODING_TYPE_PROTO3)
+		blob, err := serializer.SerializeEvents(history.GetEvents())
 		s.NoError(err)
 		historyBlobs = append(historyBlobs, blob)
 		nodeIds = append(nodeIds, history.GetEvents()[0].GetEventId())
@@ -1090,11 +1090,11 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_W
 		{EventId: 27, Version: 2}, {EventId: 28, Version: 2},
 		{EventId: 29, Version: 2}, {EventId: 30, Version: 2},
 	}
-	blobs, err := serializer.SerializeEvents(requestedEvents, enumspb.ENCODING_TYPE_PROTO3)
+	blobs, err := serializer.SerializeEvents(requestedEvents)
 	s.NoError(err)
-	gapBlobs, err := serializer.SerializeEvents(gapEvents, enumspb.ENCODING_TYPE_PROTO3)
+	gapBlobs, err := serializer.SerializeEvents(gapEvents)
 	s.NoError(err)
-	tailBlobs, err := serializer.SerializeEvents(tailEvents, enumspb.ENCODING_TYPE_PROTO3)
+	tailBlobs, err := serializer.SerializeEvents(tailEvents)
 	s.NoError(err)
 	mockMutableState := historyi.NewMockMutableState(s.controller)
 	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
@@ -1243,11 +1243,11 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_W
 	tailEvents := []*historypb.HistoryEvent{
 		{EventId: 5, Version: 2}, {EventId: 6, Version: 2},
 	}
-	blobs, err := serializer.SerializeEvents(requestedEvents, enumspb.ENCODING_TYPE_PROTO3)
+	blobs, err := serializer.SerializeEvents(requestedEvents)
 	s.NoError(err)
-	gapBlobs, err := serializer.SerializeEvents(gapEvents, enumspb.ENCODING_TYPE_PROTO3)
+	gapBlobs, err := serializer.SerializeEvents(gapEvents)
 	s.NoError(err)
-	tailBlobs, err := serializer.SerializeEvents(tailEvents, enumspb.ENCODING_TYPE_PROTO3)
+	tailBlobs, err := serializer.SerializeEvents(tailEvents)
 	s.NoError(err)
 	mockMutableState := historyi.NewMockMutableState(s.controller)
 	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
@@ -1411,11 +1411,11 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_W
 		{EventId: 28, Version: 2},
 		{EventId: 29, Version: 2}, {EventId: 30, Version: 2},
 	}
-	blobs, err := serializer.SerializeEvents(requestedEvents, enumspb.ENCODING_TYPE_PROTO3)
+	blobs, err := serializer.SerializeEvents(requestedEvents)
 	s.NoError(err)
-	gapBlobs, err := serializer.SerializeEvents(gapEvents, enumspb.ENCODING_TYPE_PROTO3)
+	gapBlobs, err := serializer.SerializeEvents(gapEvents)
 	s.NoError(err)
-	tailBlobs, err := serializer.SerializeEvents(tailEvents, enumspb.ENCODING_TYPE_PROTO3)
+	tailBlobs, err := serializer.SerializeEvents(tailEvents)
 	s.NoError(err)
 	mockMutableState := historyi.NewMockMutableState(s.controller)
 	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{

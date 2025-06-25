@@ -57,6 +57,7 @@ import (
 	"go.temporal.io/server/common/quotas"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/testing/protoassert"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
@@ -131,11 +132,11 @@ func createMockNamespaceCache(controller *gomock.Controller, nsName namespace.Na
 }
 
 // TODO(pri): cleanup; delete this
-func TestMatchingEngineSuite(t *testing.T) {
+func TestMatchingEngine_Classic_Suite(t *testing.T) {
 	suite.Run(t, &matchingEngineSuite{newMatcher: false})
 }
 
-func TestMatchingEngineWithNewMatcherSuite(t *testing.T) {
+func TestMatchingEngine_Pri_Suite(t *testing.T) {
 	suite.Run(t, &matchingEngineSuite{newMatcher: true})
 }
 
@@ -2464,7 +2465,7 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_ReturnsData() {
 		LastKnownUserDataVersion: 0,
 	})
 	s.NoError(err)
-	s.Equal(res.UserData, userData)
+	protoassert.ProtoEqual(s.T(), res.UserData, userData)
 }
 
 func (s *matchingEngineSuite) TestGetTaskQueueUserData_ReturnsEmpty() {
@@ -3675,14 +3676,14 @@ type testPhysicalTaskQueueManager struct {
 	userData                *persistencespb.VersionedTaskQueueUserData
 }
 
+func newTestTaskQueueManager() *testPhysicalTaskQueueManager {
+	return &testPhysicalTaskQueueManager{tasks: treemap.NewWith(godsutils.Int64Comparator)}
+}
+
 func (m *testPhysicalTaskQueueManager) RangeID() int64 {
 	m.Lock()
 	defer m.Unlock()
 	return m.rangeID
-}
-
-func newTestTaskQueueManager() *testPhysicalTaskQueueManager {
-	return &testPhysicalTaskQueueManager{tasks: treemap.NewWith(godsutils.Int64Comparator)}
 }
 
 func (m *testTaskManager) CreateTaskQueue(
@@ -3705,7 +3706,6 @@ func (m *testTaskManager) CreateTaskQueue(
 	return &persistence.CreateTaskQueueResponse{}, nil
 }
 
-// UpdateTaskQueue provides a mock function with given fields: request
 func (m *testTaskManager) UpdateTaskQueue(
 	_ context.Context,
 	request *persistence.UpdateTaskQueueRequest,
@@ -3822,7 +3822,6 @@ func (m *testTaskManager) generateErrorRandomly() bool {
 	return false
 }
 
-// CreateTask provides a mock function with given fields: request
 func (m *testTaskManager) CreateTasks(
 	_ context.Context,
 	request *persistence.CreateTasksRequest,
@@ -3872,10 +3871,7 @@ func (m *testTaskManager) CreateTasks(
 
 	// Then insert all tasks if no errors
 	for _, task := range request.Tasks {
-		tlm.tasks.Put(task.GetTaskId(), &persistencespb.AllocatedTaskInfo{
-			Data:   task.Data,
-			TaskId: task.GetTaskId(),
-		})
+		tlm.tasks.Put(task.GetTaskId(), common.CloneProto(task))
 		tlm.createTaskCount++
 		tlm.ApproximateBacklogCount++
 	}
@@ -3883,12 +3879,11 @@ func (m *testTaskManager) CreateTasks(
 	return &persistence.CreateTasksResponse{}, nil
 }
 
-// GetTasks provides a mock function with given fields: request
 func (m *testTaskManager) GetTasks(
 	_ context.Context,
 	request *persistence.GetTasksRequest,
 ) (*persistence.GetTasksResponse, error) {
-	m.logger.Debug("testTaskManager.GetTasks", tag.MinLevel(request.InclusiveMinTaskID), tag.MaxLevel(request.ExclusiveMaxTaskID))
+	m.logger.Debug("testTaskManager.GetTasks", tag.Value(request))
 
 	if m.generateErrorRandomly() {
 		return nil, serviceerror.NewUnavailablef("GetTasks operation failed")
@@ -3900,7 +3895,7 @@ func (m *testTaskManager) GetTasks(
 	var tasks []*persistencespb.AllocatedTaskInfo
 
 	it := tlm.tasks.Iterator()
-	for it.Next() {
+	for it.Next() && len(tasks) < request.PageSize {
 		taskID := it.Key().(int64)
 		if taskID < request.InclusiveMinTaskID {
 			continue
@@ -3911,9 +3906,7 @@ func (m *testTaskManager) GetTasks(
 		tasks = append(tasks, it.Value().(*persistencespb.AllocatedTaskInfo))
 	}
 	tlm.getTasksCount++
-	return &persistence.GetTasksResponse{
-		Tasks: tasks,
-	}, nil
+	return &persistence.GetTasksResponse{Tasks: tasks}, nil
 }
 
 // getTaskCount returns number of tasks in a task queue
