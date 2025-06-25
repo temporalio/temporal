@@ -274,11 +274,10 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_IncreaseAttemptsO
 	}, 5*time.Second, 500*time.Millisecond)
 
 	// Let the workflow finish gracefully
-
-	// 2. set the flag to make activity succeed on next attempt
+	// set the flag to make activity succeed on next attempt
 	shouldSucceed.Store(true)
 
-	// 3. unpause the activity
+	// unpause the activity
 	unpauseRequest := &workflowservice.UnpauseActivityRequest{
 		Namespace: s.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{
