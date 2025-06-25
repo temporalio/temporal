@@ -856,6 +856,7 @@ var TraceExportModule = fx.Options(
 			}
 		}))
 
+		// (1) Exporters from config.
 		exportersByType := map[telemetry.SpanExporterType]otelsdktrace.SpanExporter{}
 		if inputs.Config != nil {
 			var err error
@@ -865,16 +866,21 @@ var TraceExportModule = fx.Options(
 			}
 		}
 
+		// (2) Exporters from env variables.
 		exportersByTypeFromEnv, err := telemetry.SpanExportersFromEnv(os.LookupEnv)
 		if err != nil {
 			return nil, err
 		}
 
-		// config-defined exporters override env-defined exporters with the same type
-		maps.Copy(exportersByType, exportersByTypeFromEnv)
+		// (3) Exporters from code (ie from testing).
+		customExportersByType := inputs.Config.ExporterConfig.CustomExporters
 
+		// Merge exporters.
+		maps.Copy(exportersByType, exportersByTypeFromEnv) // env overrides config
+		maps.Copy(exportersByType, customExportersByType)  // custom overrides all
 		exporters := expmaps.Values(exportersByType)
 
+		// Configure exporters' lifecycle hooks.
 		inputs.Lifecycyle.Append(fx.Hook{
 			OnStart: func(ctx context.Context) error {
 				err = startAll(exporters)(ctx)

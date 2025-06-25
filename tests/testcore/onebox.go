@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
@@ -110,6 +111,7 @@ type (
 		serviceFxOptions      map[primitives.ServiceName][]fx.Option
 		taskCategoryRegistry  tasks.TaskCategoryRegistry
 		grpcClientInterceptor *grpcinject.Interceptor
+		spanExporters         map[telemetry.SpanExporterType]sdktrace.SpanExporter
 	}
 
 	// FrontendConfig is the config for the frontend service
@@ -165,6 +167,7 @@ type (
 		ServiceFxOptions         map[primitives.ServiceName][]fx.Option
 		TaskCategoryRegistry     tasks.TaskCategoryRegistry
 		HostsByProtocolByService map[transferProtocol]map[primitives.ServiceName]static.Hosts
+		SpanExporters            map[telemetry.SpanExporterType]sdktrace.SpanExporter
 	}
 
 	listenHostPort string
@@ -206,6 +209,7 @@ func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 		taskCategoryRegistry:     params.TaskCategoryRegistry,
 		hostsByProtocolByService: params.HostsByProtocolByService,
 		grpcClientInterceptor:    grpcinject.NewInterceptor(),
+		spanExporters:            params.SpanExporters,
 	}
 
 	for k, v := range dynamicConfigOverrides {
@@ -639,6 +643,9 @@ func (c *TemporalImpl) frontendConfigProvider() *config.Config {
 				},
 			},
 		},
+		ExporterConfig: telemetry.ExportConfig{
+			CustomExporters: c.spanExporters,
+		},
 	}
 }
 
@@ -648,6 +655,9 @@ func (c *TemporalImpl) configProvider(serviceName primitives.ServiceName) *confi
 			string(serviceName): {
 				RPC: config.RPC{},
 			},
+		},
+		ExporterConfig: telemetry.ExportConfig{
+			CustomExporters: c.spanExporters,
 		},
 	}
 }

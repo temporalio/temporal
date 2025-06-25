@@ -517,10 +517,11 @@ jobs:
       - name: Run functional test
         if: ${{ inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
         timeout-minutes: ${{ fromJSON(needs.set-up-single-test.outputs.github_timeout) }} # make sure this is larger than the test timeout in the Makefile
-        run: make OTEL=true functional-test-coverage
+        run: make functional-test-coverage
         env:
           TEST_ARGS: ${{ needs.set-up-single-test.outputs.single_test_args }}
-          TEST_TEMPORAL_OTEL_OUTPUT: ${{ github.workspace }}/.testoutput
+          TEMPORAL_TEST_OTEL_OUTPUT: ${{ github.workspace }}/.testoutput
+          TEMPORAL_OTEL_DEBUG: true
 
       - name: Generate test summary
         uses: mikepenz/action-junit-report@v5.0.0-rc01
@@ -671,9 +672,10 @@ jobs:
 
       - name: Run functional test xdc
         timeout-minutes: 35   # update this to TEST_TIMEOUT+5 if you update the Makefile
-        run: make OTEL=true functional-test-xdc-coverage
+        run: make functional-test-xdc-coverage
         env:
-          TEST_TEMPORAL_OTEL_OUTPUT: ${{ github.workspace }}/.testoutput
+          TEMPORAL_TEST_OTEL_OUTPUT: ${{ github.workspace }}/.testoutput
+          TEMPORAL_OTEL_DEBUG: true
 
       - name: Generate test summary
         uses: mikepenz/action-junit-report@v5.0.0-rc01
@@ -825,9 +827,10 @@ jobs:
 
       - name: Run functional test ndc
         timeout-minutes: 15
-        run: make OTEL=true functional-test-ndc-coverage
+        run: make functional-test-ndc-coverage
         env:
-          TEST_TEMPORAL_OTEL_OUTPUT: ${{ github.workspace }}/.testoutput
+          TEMPORAL_TEST_OTEL_OUTPUT: ${{ github.workspace }}/.testoutput
+          TEMPORAL_OTEL_DEBUG: true
 
       - name: Upload code coverage to Codecov
         uses: codecov/codecov-action@v5
