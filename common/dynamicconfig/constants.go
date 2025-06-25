@@ -2030,6 +2030,11 @@ archivalQueueProcessor`,
 		true,
 		`EnableUpdateWithStartRetryOnClosedWorkflowAbort enables retrying Update-with-Start's update if it was aborted by a closing workflow.`,
 	)
+	EnableUpdateWithStartRetryableErrorOnClosedWorkflowAbort = NewNamespaceBoolSetting(
+		"history.enableUpdateWithStartRetryableErrorOnClosedWorkflowAbort",
+		true,
+		`EnableUpdateWithStartRetryableErrorOnClosedWorkflowAbort enables sending back a retryable status code when the Update-with-Start's update was aborted by a closing workflow.`,
+	)
 
 	ReplicatorTaskBatchSize = NewGlobalIntSetting(
 		"history.replicatorTaskBatchSize",
