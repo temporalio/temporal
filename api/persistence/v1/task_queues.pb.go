@@ -523,10 +523,9 @@ func (x *DeploymentData) GetUnversionedRampData() *v12.DeploymentVersionData {
 
 // Container for all persistent user data that varies per task queue type within a family.
 type TaskQueueTypeUserData struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	DeploymentData *DeploymentData        `protobuf:"bytes,1,opt,name=deployment_data,json=deploymentData,proto3" json:"deployment_data,omitempty"`
-	// For future use: description, rate limits, manual partition control, etc...
-	TaskQueueConfig *v11.TaskQueueConfig `protobuf:"bytes,2,opt,name=task_queue_config,json=taskQueueConfig,proto3" json:"task_queue_config,omitempty"`
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	DeploymentData  *DeploymentData        `protobuf:"bytes,1,opt,name=deployment_data,json=deploymentData,proto3" json:"deployment_data,omitempty"`
+	TaskQueueConfig *v11.TaskQueueConfig   `protobuf:"bytes,2,opt,name=task_queue_config,json=taskQueueConfig,proto3" json:"task_queue_config,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
