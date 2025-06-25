@@ -195,11 +195,15 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_IncreaseAttemptsO
 	var startedActivityCount atomic.Int32
 	activityPausedCn := make(chan struct{})
 	activityErr := errors.New("activity-failed-while-paused")
+	shouldSucceed := false
 
 	activityFunction := func() (string, error) {
 		startedActivityCount.Add(1)
 		s.WaitForChannel(ctx, activityPausedCn)
-		return "done!", activityErr
+		if shouldSucceed {
+			return "done!", nil
+		}
+		return "", activityErr
 	}
 
 	workflowFn := s.makeWorkflowFunc(activityFunction)
@@ -263,7 +267,35 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_IncreaseAttemptsO
 		require.NotNil(t, description.PendingActivities[0].PauseInfo.GetManual())
 		require.Equal(t, testIdentity, description.PendingActivities[0].PauseInfo.GetManual().Identity)
 		require.Equal(t, testReason, description.PendingActivities[0].PauseInfo.GetManual().Reason)
+		require.Equal(t, int32(1), startedActivityCount.Load())
 	}, 5*time.Second, 500*time.Millisecond)
+
+	// Let the workflow finish gracefully
+
+	// 2. set the flag to make activity succeed on next attempt
+	shouldSucceed = true
+
+	// 3. unpause the activity
+	unpauseRequest := &workflowservice.UnpauseActivityRequest{
+		Namespace: s.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: workflowRun.GetID(),
+		},
+		Activity: &workflowservice.UnpauseActivityRequest_Id{Id: "activity-id"},
+	}
+	unpauseResp, err := s.FrontendClient().UnpauseActivity(ctx, unpauseRequest)
+	s.NoError(err)
+	s.NotNil(unpauseResp)
+
+	// 4. wait for activity to complete
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		require.Equal(t, int32(2), startedActivityCount.Load())
+	}, 5*time.Second, 100*time.Millisecond)
+
+	var out string
+	err = workflowRun.Get(ctx, &out)
+
+	s.NoError(err)
 }
 
 func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WhileWaiting() {
