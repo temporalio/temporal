@@ -42,7 +42,7 @@ type (
 	zapLogger struct {
 		zl     *zap.Logger
 		skip   int
-		baseZl *zap.Logger // original, without tags, for building new tagged versions
+		baseZl *zap.Logger // original, without tags, for cloning new tagged versions, because Zap doesn't dedupe :(
 		tags   []tag.Tag   // my tags, for passing to clones
 	}
 )
@@ -177,7 +177,13 @@ func (l *zapLogger) Fatal(msg string, tags ...tag.Tag) {
 	}
 }
 
-// With handles the provided tags as "upserts", replacing any matching keys with new values.
+// With() handles the provided tags as "upserts", replacing any matching keys with new values.
+// Note that we distinguish between the following two seemingly identical lines:
+//
+//	logger.With(logger, tag.NewStringTag("foo", "bar")).Info("msg")
+//	logger.Info("msg", tag.NewStringTag("foo", "bar")
+//
+// by deduping "foo" against any existing "foo" tags *only in the former*
 func (l *zapLogger) With(tags ...tag.Tag) Logger {
 	cloneTags := mergeTags(l.tags, tags)
 	if l.baseZl == nil {
