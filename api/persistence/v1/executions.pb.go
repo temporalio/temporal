@@ -329,7 +329,7 @@ type WorkflowExecutionInfo struct {
 	// Priority contains metadata that controls relative ordering of task processing
 	// when tasks are backed up in a queue.
 	Priority *v12.Priority `protobuf:"bytes,104,opt,name=priority,proto3" json:"priority,omitempty"`
-	// Run ID of the execution that supersedes this one (via terminate, reset, or continue-as-new).
+	// Run ID of the execution that supersedes this one (via terminate or continue-as-new).
 	SuccessorRunId string `protobuf:"bytes,105,opt,name=successor_run_id,json=successorRunId,proto3" json:"successor_run_id,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
