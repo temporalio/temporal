@@ -473,7 +473,7 @@ func enqueueReplicationTasks(ctx workflow.Context, workflowExecutionsCh workflow
 		}
 	}
 
-	for selector.HasPending() {
+	for pendingGenerateTasks > 0 || pendingVerifyTasks > 0 {
 		selector.Select(ctx)
 		if lastActivityErr != nil {
 			return lastActivityErr
