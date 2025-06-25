@@ -487,15 +487,9 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 		}
 	}()
 
-	updateWorkflow, updateWorkflowEventsSeq, err := c.MutableState.CloseTransactionAsMutation(
-		updateWorkflowTransactionPolicy,
-	)
-	if err != nil {
-		return err
-	}
-
 	var newWorkflow *persistence.WorkflowSnapshot
 	var newWorkflowEventsSeq []*persistence.WorkflowEvents
+	var err error
 	if newContext != nil && newMutableState != nil && newWorkflowTransactionPolicy != nil {
 		defer func() {
 			if retError != nil {
@@ -509,6 +503,14 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 		if err != nil {
 			return err
 		}
+		c.MutableState.SetSuccessorRunID(newWorkflow.ExecutionState.RunId)
+	}
+
+	updateWorkflow, updateWorkflowEventsSeq, err := c.MutableState.CloseTransactionAsMutation(
+		updateWorkflowTransactionPolicy,
+	)
+	if err != nil {
+		return err
 	}
 
 	if err := c.mergeUpdateWithNewReplicationTasks(
@@ -547,7 +549,6 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 	if _, _, err := NewTransaction(shardContext).UpdateWorkflowExecution(
 		ctx,
 		updateMode,
-
 		c.MutableState.GetCurrentVersion(),
 		updateWorkflow,
 		updateWorkflowEventsSeq,
