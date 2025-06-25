@@ -22,6 +22,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
+	schedulepb "go.temporal.io/api/schedule/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
@@ -3690,4 +3691,171 @@ func (s *WorkflowHandlerSuite) TestShutdownWorker() {
 	if err != nil {
 		s.Fail("ShutdownWorker failed:", err)
 	}
+}
+
+func (s *WorkflowHandlerSuite) TestPatchSchedule_TriggerImmediatelyScheduledTime() {
+	config := s.newConfig()
+	config.EnableSchedules = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	wh := s.getWorkflowHandler(config)
+	ctx := context.Background()
+
+	scheduleID := "test-schedule-id"
+	requestID := "test-request-id"
+
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Eq(s.testNamespace)).Return(s.testNamespaceID, nil).AnyTimes()
+
+	tests := []struct {
+		name                    string
+		setupTrigger            func() *schedulepb.TriggerImmediatelyRequest
+		expectScheduledTimeSet  bool
+		expectHistoryClientCall bool
+	}{
+		{
+			name: "trigger with nil ScheduledTime should get timestamp set",
+			setupTrigger: func() *schedulepb.TriggerImmediatelyRequest {
+				return &schedulepb.TriggerImmediatelyRequest{
+					OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP,
+					ScheduledTime: nil,
+				}
+			},
+			expectScheduledTimeSet:  true,
+			expectHistoryClientCall: true,
+		},
+		{
+			name: "trigger with existing ScheduledTime should not be modified",
+			setupTrigger: func() *schedulepb.TriggerImmediatelyRequest {
+				existingTime := timestamppb.New(time.Date(2023, 1, 1, 12, 0, 0, 0, time.UTC))
+				return &schedulepb.TriggerImmediatelyRequest{
+					OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP,
+					ScheduledTime: existingTime,
+				}
+			},
+			expectScheduledTimeSet:  false, // Should not modify existing time
+			expectHistoryClientCall: true,
+		},
+		{
+			name: "no trigger should not call history client",
+			setupTrigger: func() *schedulepb.TriggerImmediatelyRequest {
+				return nil
+			},
+			expectScheduledTimeSet:  false,
+			expectHistoryClientCall: true, // Will still call but without trigger
+		},
+	}
+
+	for _, tt := range tests {
+		s.Run(tt.name, func() {
+			trigger := tt.setupTrigger()
+
+			patch := &schedulepb.SchedulePatch{}
+			if trigger != nil {
+				patch.TriggerImmediately = trigger
+			}
+
+			request := &workflowservice.PatchScheduleRequest{
+				Namespace:  s.testNamespace.String(),
+				ScheduleId: scheduleID,
+				RequestId:  requestID,
+				Patch:      patch,
+				Identity:   "test-identity",
+			}
+
+			// Capture the original ScheduledTime if it exists
+			var originalScheduledTime *timestamppb.Timestamp
+			if trigger != nil {
+				originalScheduledTime = trigger.ScheduledTime
+			}
+
+			if tt.expectHistoryClientCall {
+				s.mockHistoryClient.EXPECT().SignalWorkflowExecution(
+					gomock.Any(),
+					gomock.Any(),
+				).Return(&historyservice.SignalWorkflowExecutionResponse{}, nil).Times(1)
+			}
+
+			beforeCall := time.Now()
+			resp, err := wh.PatchSchedule(ctx, request)
+			afterCall := time.Now()
+
+			s.NoError(err)
+			s.NotNil(resp)
+
+			if trigger != nil {
+				if tt.expectScheduledTimeSet {
+					// Verify that ScheduledTime was set and is recent
+					s.NotNil(trigger.ScheduledTime, "ScheduledTime should have been set")
+					s.Nil(originalScheduledTime, "Original ScheduledTime should have been nil")
+
+					scheduledTime := trigger.ScheduledTime.AsTime()
+					s.True(scheduledTime.After(beforeCall) || scheduledTime.Equal(beforeCall),
+						"ScheduledTime should be at or after the call start time")
+					s.True(scheduledTime.Before(afterCall) || scheduledTime.Equal(afterCall),
+						"ScheduledTime should be at or before the call end time")
+				} else {
+					// Verify that existing ScheduledTime was not modified
+					if originalScheduledTime != nil {
+						s.Equal(originalScheduledTime.AsTime(), trigger.ScheduledTime.AsTime(),
+							"Existing ScheduledTime should not have been modified")
+					}
+				}
+			}
+		})
+	}
+}
+
+func (s *WorkflowHandlerSuite) TestPatchSchedule_ValidationAndErrors() {
+	config := s.newConfig()
+	config.EnableSchedules = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	wh := s.getWorkflowHandler(config)
+	ctx := context.Background()
+
+	s.Run("nil request should return error", func() {
+		resp, err := wh.PatchSchedule(ctx, nil)
+		s.Nil(resp)
+		s.Equal(errRequestNotSet, err)
+	})
+
+	s.Run("schedules disabled should return error", func() {
+		disabledConfig := s.newConfig()
+		disabledConfig.EnableSchedules = dc.GetBoolPropertyFnFilteredByNamespace(false)
+		disabledWh := s.getWorkflowHandler(disabledConfig)
+
+		request := &workflowservice.PatchScheduleRequest{
+			Namespace:  s.testNamespace.String(),
+			ScheduleId: "test-schedule",
+			Patch:      &schedulepb.SchedulePatch{},
+		}
+
+		resp, err := disabledWh.PatchSchedule(ctx, request)
+		s.Nil(resp)
+		s.Equal(errSchedulesNotAllowed, err)
+	})
+
+	s.Run("request ID too long should return error", func() {
+		longRequestID := strings.Repeat("a", common.ScheduleNotesSizeLimit+1)
+		request := &workflowservice.PatchScheduleRequest{
+			Namespace:  s.testNamespace.String(),
+			ScheduleId: "test-schedule",
+			RequestId:  longRequestID,
+			Patch:      &schedulepb.SchedulePatch{},
+		}
+
+		resp, err := wh.PatchSchedule(ctx, request)
+		s.Nil(resp)
+		s.Equal(errRequestIDTooLong, err)
+	})
+
+	s.Run("invalid namespace should return error", func() {
+		s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Eq(namespace.Name("invalid-namespace"))).Return(namespace.ID(""), errors.New("namespace not found")).Times(1)
+
+		request := &workflowservice.PatchScheduleRequest{
+			Namespace:  "invalid-namespace",
+			ScheduleId: "test-schedule",
+			Patch:      &schedulepb.SchedulePatch{},
+		}
+
+		resp, err := wh.PatchSchedule(ctx, request)
+		s.Nil(resp)
+		s.Error(err)
+	})
 }
