@@ -15,7 +15,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite" // needed to register the sqlite plugin
-	"go.temporal.io/server/common/testing/otellogger"
+	"go.temporal.io/server/common/testing/testtelemetry"
 	"go.temporal.io/server/service/frontend"
 	"go.temporal.io/server/temporal"
 	"go.temporal.io/server/tests/testutils"
@@ -35,11 +35,11 @@ func TestNewServerWithOTEL(t *testing.T) {
 	t.Setenv("OTEL_EXPORTER_OTLP_TRACES_INSECURE", "true")
 
 	t.Run("with OTEL Collector running", func(t *testing.T) {
-		otelLogger, err := otellogger.Start(t)
+		collector, err := testtelemetry.StartMemoryCollector(t)
 		require.NoError(t, err)
-		t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", otelLogger.Addr())
+		t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", collector.Addr())
 		startAndStopServer(t)
-		require.NotEmpty(t, otelLogger.Spans(), "expected at least one OTEL span")
+		require.NotEmpty(t, collector.Spans(), "expected at least one OTEL span")
 	})
 
 	t.Run("without OTEL Collector running", func(t *testing.T) {
