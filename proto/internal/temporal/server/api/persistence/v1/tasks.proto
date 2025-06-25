@@ -72,9 +72,6 @@ message SubqueueInfo {
 message SubqueueKey {
     // Each subqueue contains tasks from only one priority level.
     int32 priority = 1;
-
-    // // Additionally, tasks may be split by a fairness mechanism into buckets.
-    // int32 fairness_bucket = 2;
 }
 
 message TaskKey {

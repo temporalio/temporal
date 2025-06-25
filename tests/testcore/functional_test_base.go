@@ -5,9 +5,12 @@ import (
 	"cmp"
 	"context"
 	"encoding/binary"
+	"fmt"
 	"maps"
 	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/dgryski/go-farm"
@@ -36,6 +39,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/testing/historyrequire"
+	"go.temporal.io/server/common/testing/otellogger"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testhooks"
@@ -43,6 +47,8 @@ import (
 	"go.temporal.io/server/common/testing/updateutils"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.uber.org/fx"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 )
 
 type (
@@ -60,7 +66,8 @@ type (
 		historyrequire.HistoryRequire
 		updateutils.UpdateUtils
 
-		Logger log.Logger
+		Logger        log.Logger
+		otelCollector *otellogger.OTELLogger
 
 		testCluster *TestCluster
 		// TODO (alex): this doesn't have to be a separate field. All usages can be replaced with values from testCluster itself.
@@ -234,6 +241,34 @@ func (s *FunctionalTestBase) SetupSuiteWithCluster(options ...TestClusterOption)
 		s.Logger = tl
 	}
 
+	// Initialize the OTEL collector, if OTEL is enabled.
+	// Must be done before the test cluster is created, so that the collector can be used by the test cluster.
+	if otelOutputDir := os.Getenv("TEST_TEMPORAL_OTEL_OUTPUT"); otelOutputDir != "" {
+		// Create an OTEL collector.
+		collector, err := otellogger.Start(s.T())
+		s.Require().NoError(err)
+
+		// Direct the OTEL exporter to the collector.
+		_ = os.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", collector.Addr())
+
+		// When the suite is done, write all traces to a file if the suite failed.
+		s.T().Cleanup(func() {
+			_ = os.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
+
+			if s.T().Failed() {
+				fileName := s.T().Name()
+				fileName = strings.ReplaceAll(fileName, "/", "-")
+				fileName = strings.ReplaceAll(fileName, " ", "-")
+				fileName = filepath.Join(otelOutputDir, fmt.Sprintf("traces.%s_%d.json", fileName, time.Now().Unix()))
+				if err := collector.WriteFile(fileName); err != nil {
+					s.T().Logf("failed to write OTEL traces: %v", err)
+				} else {
+					s.T().Logf("wrote OTEL traces to %s", fileName)
+				}
+			}
+		})
+	}
+
 	s.testClusterConfig = &TestClusterConfig{
 		FaultInjection: params.FaultInjectionConfig,
 		HistoryConfig: HistoryConfig{
@@ -270,6 +305,9 @@ func (s *FunctionalTestBase) SetupTest() {
 	s.initAssertions()
 	s.setupSdk()
 	s.taskPoller = taskpoller.New(s.T(), s.FrontendClient(), s.Namespace().String())
+	s.testCluster.host.grpcClientInterceptor.Set(func(ctx context.Context) context.Context {
+		return metadata.AppendToOutgoingContext(ctx, "temporal-test-name", s.T().Name())
+	})
 }
 
 func (s *FunctionalTestBase) SetupSubTest() {
@@ -339,9 +377,15 @@ func (s *FunctionalTestBase) setupSdk() {
 		Namespace: s.Namespace().String(),
 		Logger:    log.NewSdkLogger(s.Logger),
 	}
-	if s.GetTestCluster().Host().TlsConfigProvider() != nil {
-		clientOptions.ConnectionOptions = sdkclient.ConnectionOptions{
-			TLS: s.GetTestCluster().Host().TlsConfigProvider().FrontendClientConfig,
+
+	if provider := s.testCluster.host.tlsConfigProvider; provider != nil {
+		clientOptions.ConnectionOptions.TLS = provider.FrontendClientConfig
+	}
+
+	if interceptor := s.testCluster.host.grpcClientInterceptor; interceptor != nil {
+		clientOptions.ConnectionOptions.DialOptions = []grpc.DialOption{
+			grpc.WithUnaryInterceptor(interceptor.Unary()),
+			grpc.WithStreamInterceptor(interceptor.Stream()),
 		}
 	}
 
@@ -369,6 +413,7 @@ func (s *FunctionalTestBase) TearDownCluster() {
 // **IMPORTANT**: When overridding this, make sure to invoke `s.FunctionalTestBase.TearDownTest()`.
 func (s *FunctionalTestBase) TearDownTest() {
 	s.tearDownSdk()
+	s.testCluster.host.grpcClientInterceptor.Set(nil)
 }
 
 func (s *FunctionalTestBase) tearDownSdk() {
