@@ -5657,6 +5657,11 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 			// wait until the update is admitted
 			s.waitUpdateAdmitted(tv)
 
+			s.InjectHook(testhooks.UpdateWithStartOnClosingWorkflowRetry, func() {
+				_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), startWorkflowReq(tv))
+				s.NoError(err)
+			})
+
 			// complete workflow (twice including retry)
 			for i := 0; i < 2; i++ {
 				_, err := s.TaskPoller().PollAndHandleWorkflowTask(tv,
@@ -5675,12 +5680,14 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 				s.NoError(err)
 			}
 
+			// ensure update-with-start returns retryable error
 			uwsRes := <-uwsCh
 			s.Error(uwsRes.err)
 			errs := uwsRes.err.(*serviceerror.MultiOperationExecution).OperationErrors()
 			s.Len(errs, 2)
-			s.Equal(nil, errs[0])
+			s.Equal("Operation was aborted.", errs[0].Error())
 			s.ErrorContains(errs[1], update.AbortedByWorkflowClosingErr.Error())
+			s.IsType(&serviceerror.Aborted{}, errs[1])
 		})
 
 		s.Run("do not retry when workflow was started", func() {
