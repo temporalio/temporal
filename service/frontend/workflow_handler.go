@@ -3979,13 +3979,13 @@ func (wh *WorkflowHandler) PatchSchedule(ctx context.Context, request *workflows
 		return nil, errNotesTooLong
 	}
 
+	if trigger := request.Patch.GetTriggerImmediately(); trigger != nil && trigger.ScheduledTime == nil {
+		trigger.ScheduledTime = timestamppb.Now()
+	}
+
 	inputPayloads, err := sdk.PreferProtoDataConverter.ToPayloads(request.Patch)
 	if err != nil {
 		return nil, err
-	}
-
-	if trigger := request.Patch.GetTriggerImmediately(); trigger != nil && trigger.ScheduledTime == nil {
-		trigger.ScheduledTime = timestamppb.Now()
 	}
 
 	sizeLimitError := wh.config.BlobSizeLimitError(request.GetNamespace())
