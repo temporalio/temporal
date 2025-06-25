@@ -473,11 +473,8 @@ func enqueueReplicationTasks(ctx workflow.Context, workflowExecutionsCh workflow
 		}
 	}
 
-	totalPendingTasks := pendingGenerateTasks + pendingVerifyTasks
-	for totalPendingTasks > 0 {
-		// Wait for all in-flight activities to complete
+	for selector.HasPending() {
 		selector.Select(ctx)
-		totalPendingTasks -= 1
 		if lastActivityErr != nil {
 			return lastActivityErr
 		}
