@@ -399,7 +399,6 @@ func enqueueReplicationTasks(ctx workflow.Context, workflowExecutionsCh workflow
 	}
 
 	actx := workflow.WithActivityOptions(ctx, ao)
-	var futures []workflow.Future
 	var workflowExecutions []*commonpb.WorkflowExecution
 	var lastActivityErr error
 	var a *activities
@@ -429,7 +428,6 @@ func enqueueReplicationTasks(ctx workflow.Context, workflowExecutionsCh workflow
 				lastActivityErr = err
 			}
 		})
-		futures = append(futures, generateTaskFuture)
 
 		if params.EnableVerification {
 			verifyTaskFuture := workflow.ExecuteActivity(
@@ -465,8 +463,6 @@ func enqueueReplicationTasks(ctx workflow.Context, workflowExecutionsCh workflow
 					workflow.GetMetricsHandler(ctx).WithTags(tags).Gauge(ForceReplicationRpsTagName).Update(params.ReplicatedWorkflowCountPerSecond)
 				}
 			})
-
-			futures = append(futures, verifyTaskFuture)
 		}
 
 		for pendingGenerateTasks >= params.ConcurrentActivityCount || pendingVerifyTasks >= params.ConcurrentActivityCount {
