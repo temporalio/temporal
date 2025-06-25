@@ -6150,6 +6150,6 @@ func (wh *WorkflowHandler) UpdateTaskQueueConfig(
 	}
 
 	return &workflowservice.UpdateTaskQueueConfigResponse{
-		Configs: resp.UpdatedTaskqueueConfig,
+		Config: resp.UpdatedTaskqueueConfig,
 	}, nil
 }

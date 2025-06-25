@@ -1354,7 +1354,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 		}
 		taskQueueType := req.GetTaskQueueType()
 		taskQueueUserData := userData.GetData().GetPerType()[int32(taskQueueType)]
-		descrResp.DescResponse.Configs = taskQueueUserData.GetTaskQueueConfig()
+		descrResp.DescResponse.Config = taskQueueUserData.GetTaskQueueConfig()
 	}
 
 	return descrResp, nil
