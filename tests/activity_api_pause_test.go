@@ -195,14 +195,17 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_IncreaseAttemptsO
 	var startedActivityCount atomic.Int32
 	activityPausedCn := make(chan struct{})
 	activityErr := errors.New("activity-failed-while-paused")
-	// shouldSucceed := false
+	var shouldSucceed atomic.Bool
 
 	activityFunction := func() (string, error) {
 		startedActivityCount.Add(1)
-		s.WaitForChannel(ctx, activityPausedCn)
-		// if shouldSucceed {
-		// 	return "done!", nil
-		// }
+		if startedActivityCount.Load() == 1 {
+			s.WaitForChannel(ctx, activityPausedCn)
+			return "", activityErr
+		}
+		if shouldSucceed.Load() {
+			return "done!", nil
+		}
 		return "", activityErr
 	}
 
@@ -273,7 +276,7 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_IncreaseAttemptsO
 	// Let the workflow finish gracefully
 
 	// 2. set the flag to make activity succeed on next attempt
-	// shouldSucceed = true
+	shouldSucceed.Store(true)
 
 	// 3. unpause the activity
 	unpauseRequest := &workflowservice.UnpauseActivityRequest{
