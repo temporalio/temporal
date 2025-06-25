@@ -289,7 +289,7 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_IncreaseAttemptsO
 	s.NoError(err)
 	s.NotNil(unpauseResp)
 
-	// 4. wait for activity to complete
+	// wait for activity to complete
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		require.Equal(t, int32(2), startedActivityCount.Load())
 	}, 5*time.Second, 100*time.Millisecond)
