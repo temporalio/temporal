@@ -3871,7 +3871,7 @@ func (m *testTaskManager) CreateTasks(
 
 	// First validate the entire batch
 	for _, task := range request.Tasks {
-		level := allocatedTaskFairLevel(task)
+		level := fairLevelFromAllocatedTask(task)
 		m.logger.Debug("testTaskManager.CreateTask", tag.ShardRangeID(rangeID), tag.TaskKey(level), tag.Value(task.Data))
 
 		if task.GetTaskId() <= 0 {
@@ -3899,7 +3899,7 @@ func (m *testTaskManager) CreateTasks(
 
 	// Then insert all tasks if no errors
 	for _, task := range request.Tasks {
-		tlm.tasks.Put(allocatedTaskFairLevel(task), common.CloneProto(task))
+		tlm.tasks.Put(fairLevelFromAllocatedTask(task), common.CloneProto(task))
 		tlm.createTaskCount++
 		tlm.ApproximateBacklogCount++ // TODO(fairness): this looks wrong, manager should not be setting this
 	}

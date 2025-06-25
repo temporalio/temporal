@@ -50,11 +50,11 @@ func (a fairLevel) inc() fairLevel {
 	return fairLevel{pass: a.pass, id: a.id + 1}
 }
 
-func allocatedTaskFairLevel(t *persistencespb.AllocatedTaskInfo) fairLevel {
+func fairLevelFromAllocatedTask(t *persistencespb.AllocatedTaskInfo) fairLevel {
 	return fairLevel{pass: t.TaskPass, id: t.TaskId}
 }
 
-func protoFairLevel(l *taskqueuespb.FairLevel) fairLevel {
+func fairLevelFromProto(l *taskqueuespb.FairLevel) fairLevel {
 	if l == nil {
 		return fairLevel{}
 	}
