@@ -3704,7 +3704,7 @@ func (s *WorkflowHandlerSuite) TestPatchSchedule_TriggerImmediatelyScheduledTime
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Eq(s.testNamespace)).Return(s.testNamespaceID, nil).AnyTimes()
 
-	tests := []struct {
+	testCases := []struct {
 		name                    string
 		setupTrigger            func() *schedulepb.TriggerImmediatelyRequest
 		expectScheduledTimeSet  bool
@@ -3743,7 +3743,7 @@ func (s *WorkflowHandlerSuite) TestPatchSchedule_TriggerImmediatelyScheduledTime
 		},
 	}
 
-	for _, tt := range tests {
+	for _, tt := range testCases {
 		s.Run(tt.name, func() {
 			trigger := tt.setupTrigger()
 
