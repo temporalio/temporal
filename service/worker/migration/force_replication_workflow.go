@@ -399,7 +399,6 @@ func enqueueReplicationTasks(ctx workflow.Context, workflowExecutionsCh workflow
 	}
 
 	actx := workflow.WithActivityOptions(ctx, ao)
-	var futures []workflow.Future
 	var workflowExecutions []*commonpb.WorkflowExecution
 	var lastActivityErr error
 	var a *activities
@@ -429,7 +428,6 @@ func enqueueReplicationTasks(ctx workflow.Context, workflowExecutionsCh workflow
 				lastActivityErr = err
 			}
 		})
-		futures = append(futures, generateTaskFuture)
 
 		if params.EnableVerification {
 			verifyTaskFuture := workflow.ExecuteActivity(
@@ -448,11 +446,12 @@ func enqueueReplicationTasks(ctx workflow.Context, workflowExecutionsCh workflow
 			selector.AddFuture(verifyTaskFuture, func(f workflow.Future) {
 				pendingVerifyTasks--
 
-				if err := f.Get(ctx, nil); err != nil {
+				var verifyTaskResponse verifyReplicationTasksResponse
+				if err := f.Get(ctx, &verifyTaskResponse); err != nil {
 					lastActivityErr = err
 				} else {
 					// Update replication status
-					params.ReplicatedWorkflowCount += int64(len(workflowExecutions))
+					params.ReplicatedWorkflowCount += int64(verifyTaskResponse.VerifiedWorkflowCount)
 					params.QPSQueue.Enqueue(ctx, params.ReplicatedWorkflowCount)
 					params.ReplicatedWorkflowCountPerSecond = params.QPSQueue.CalculateQPS()
 
@@ -464,8 +463,6 @@ func enqueueReplicationTasks(ctx workflow.Context, workflowExecutionsCh workflow
 					workflow.GetMetricsHandler(ctx).WithTags(tags).Gauge(ForceReplicationRpsTagName).Update(params.ReplicatedWorkflowCountPerSecond)
 				}
 			})
-
-			futures = append(futures, verifyTaskFuture)
 		}
 
 		for pendingGenerateTasks >= params.ConcurrentActivityCount || pendingVerifyTasks >= params.ConcurrentActivityCount {
@@ -476,9 +473,10 @@ func enqueueReplicationTasks(ctx workflow.Context, workflowExecutionsCh workflow
 		}
 	}
 
-	for _, future := range futures {
-		if err := future.Get(ctx, nil); err != nil {
-			return err
+	for pendingGenerateTasks > 0 || pendingVerifyTasks > 0 {
+		selector.Select(ctx)
+		if lastActivityErr != nil {
+			return lastActivityErr
 		}
 	}
 
