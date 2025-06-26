@@ -227,6 +227,7 @@ func (db *taskQueueDB) OldUpdateState(
 	maxReadLevel := db.getMaxReadLevelLocked(subqueueZero)
 	if ackLevel == maxReadLevel {
 		db.subqueues[subqueueZero].ApproximateBacklogCount = 0
+		db.subqueues[subqueueZero].oldestTime = time.Time{} // zero time means no backlog
 	}
 
 	queueInfo := db.cachedQueueInfo()
