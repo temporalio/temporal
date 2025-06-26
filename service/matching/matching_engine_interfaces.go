@@ -44,5 +44,6 @@ type (
 		ListNexusEndpoints(ctx context.Context, request *matchingservice.ListNexusEndpointsRequest) (*matchingservice.ListNexusEndpointsResponse, error)
 		UpdateWorkerVersioningRules(ctx context.Context, request *matchingservice.UpdateWorkerVersioningRulesRequest) (*matchingservice.UpdateWorkerVersioningRulesResponse, error)
 		GetWorkerVersioningRules(ctx context.Context, request *matchingservice.GetWorkerVersioningRulesRequest) (*matchingservice.GetWorkerVersioningRulesResponse, error)
+		UpdateTaskQueueConfig(ctx context.Context, request *matchingservice.UpdateTaskQueueConfigRequest) (*matchingservice.UpdateTaskQueueConfigResponse, error)
 	}
 )

@@ -567,6 +567,13 @@ func (h *Handler) ListWorkers(
 	}, nil
 }
 
+func (h *Handler) UpdateTaskQueueConfig(
+	ctx context.Context, request *matchingservice.UpdateTaskQueueConfigRequest,
+) (*matchingservice.UpdateTaskQueueConfigResponse, error) {
+	updateTaskQueueConfig, err := h.engine.UpdateTaskQueueConfig(ctx, request)
+	return updateTaskQueueConfig, err
+}
+
 func (h *Handler) namespaceName(id namespace.ID) namespace.Name {
 	entry, err := h.namespaceRegistry.GetNamespaceByID(id)
 	if err != nil {

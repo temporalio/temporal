@@ -130,6 +130,7 @@ var (
 		"TriggerWorkflowRule":   func() any { return &workflowservice.TriggerWorkflowRuleResponse{} },
 		"RecordWorkerHeartbeat": func() any { return &workflowservice.RecordWorkerHeartbeatResponse{} },
 		"ListWorkers":           func() any { return &workflowservice.ListWorkersResponse{} },
+		"UpdateTaskQueueConfig": func() any { return &workflowservice.UpdateTaskQueueConfigResponse{} },
 	}
 )
 
