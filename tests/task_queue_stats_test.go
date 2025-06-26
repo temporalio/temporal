@@ -2,7 +2,6 @@ package tests
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -159,8 +158,6 @@ func (s *TaskQueueStatsSuite) publishConsumeWorkflowTasksValidateStats(workflows
 		s.T().Fatal("workflows must be an even number to ensure half of them are versioned and half are unversioned")
 	}
 
-	fmt.Println("0", time.Now())
-
 	tqName := testcore.RandomizeStr("backlog-counter-task-queue")
 	s.createDeploymentInTaskQueue(tqName)
 
@@ -180,11 +177,7 @@ func (s *TaskQueueStatsSuite) publishConsumeWorkflowTasksValidateStats(workflows
 		},
 	}
 
-	fmt.Println("1", time.Now())
-
 	s.validateAllTaskQueueStats(tqName, expectations, singlePartition)
-
-	fmt.Println("2", time.Now())
 
 	// Actual counter can be greater than the expected due to History->Matching retries.
 	// We make sure the counter is in range [expected, expected+maxExtraTasksAllowed].
