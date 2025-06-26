@@ -331,6 +331,14 @@ func (h *Handler) DescribeTaskQueue(
 	return resp, nil
 }
 
+func (h *Handler) DescribeVersionedTaskQueues(
+	ctx context.Context,
+	request *matchingservice.DescribeVersionedTaskQueuesRequest,
+) (_ *matchingservice.DescribeVersionedTaskQueuesResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+	return h.engine.DescribeVersionedTaskQueues(ctx, request)
+}
+
 // DescribeTaskQueuePartition returns information about the target task queue partition.
 func (h *Handler) DescribeTaskQueuePartition(
 	ctx context.Context,

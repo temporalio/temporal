@@ -29,6 +29,7 @@ import (
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/cluster"
@@ -134,6 +135,7 @@ type (
 		gaugeMetrics                  gaugeMetrics // per-namespace task queue counters
 		config                        *Config
 		versionChecker                headers.VersionChecker
+		cache                         cache.Cache
 		testHooks                     testhooks.TestHooks
 		// queryResults maps query TaskID (which is a UUID generated in QueryWorkflow() call) to a channel
 		// that QueryWorkflow() will block on. The channel is unblocked either by worker sending response through
@@ -1303,19 +1305,26 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 		} else {
 			taskQueueStats := &taskqueuepb.TaskQueueStats{}
 
-			// find all buildIds
+			// determine versions to query
 			var buildIds []string
-			userData, _, err := pm.GetUserDataManager().GetUserData()
-			if err != nil {
-				return nil, err
+			if request.Version != nil {
+				// A particular version was requested.
+				buildIds = []string{worker_versioning.WorkerDeploymentVersionToStringV31(request.Version)}
 			}
-			typedUserData := userData.GetData().GetPerType()[int32(pm.Partition().TaskType())]
-			for _, v := range typedUserData.GetDeploymentData().GetVersions() {
-				if v.GetVersion() == nil || v.GetVersion().GetDeploymentName() == "" || v.GetVersion().GetBuildId() == "" {
-					continue
+			if len(buildIds) == 0 {
+				// No version was requested, so we need to query all versions.
+				userData, _, err := pm.GetUserDataManager().GetUserData()
+				if err != nil {
+					return nil, err
 				}
-				buildId := worker_versioning.WorkerDeploymentVersionToStringV32(v.GetVersion())
-				buildIds = append(buildIds, buildId)
+				typedUserData := userData.GetData().GetPerType()[int32(pm.Partition().TaskType())]
+				for _, v := range typedUserData.GetDeploymentData().GetVersions() {
+					if v.GetVersion() == nil || v.GetVersion().GetDeploymentName() == "" || v.GetVersion().GetBuildId() == "" {
+						continue
+					}
+					buildId := worker_versioning.WorkerDeploymentVersionToStringV32(v.GetVersion())
+					buildIds = append(buildIds, buildId)
+				}
 			}
 
 			// query each partition for stats
@@ -1352,6 +1361,56 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 	}
 
 	return descrResp, nil
+}
+
+func (e *matchingEngineImpl) DescribeVersionedTaskQueues(
+	ctx context.Context,
+	request *matchingservice.DescribeVersionedTaskQueuesRequest,
+) (*matchingservice.DescribeVersionedTaskQueuesResponse, error) {
+	partition, err := tqid.PartitionFromProto(request.TaskQueue, request.GetNamespaceId(), request.TaskQueueType)
+	if err != nil {
+		return nil, err
+	}
+
+	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, true, loadCauseDescribe)
+	if err != nil {
+		return nil, err
+	}
+
+	cacheKey := worker_versioning.WorkerDeploymentVersionToStringV31(request.Version)
+	if cached := pm.GetCache(cacheKey); cached != nil {
+		//revive:disable-next-line:unchecked-type-assertion
+		return cached.(*matchingservice.DescribeVersionedTaskQueuesResponse), nil
+	}
+
+	resp := &matchingservice.DescribeVersionedTaskQueuesResponse{}
+	for _, tq := range request.VersionTaskQueues {
+		tqResp, err := e.DescribeTaskQueue(ctx,
+			&matchingservice.DescribeTaskQueueRequest{
+				NamespaceId: request.GetNamespaceId(),
+				DescRequest: &workflowservice.DescribeTaskQueueRequest{
+					TaskQueue: &taskqueuepb.TaskQueue{
+						Name: tq.Name,
+						Kind: enumspb.TaskQueueKind(tq.Type),
+					},
+					TaskQueueType: enumspb.TaskQueueType(tq.Type),
+					ReportStats:   true,
+				},
+				Version: request.Version,
+			})
+		if err != nil {
+			return nil, err
+		}
+		resp.VersionTaskQueues = append(resp.VersionTaskQueues,
+			&matchingservice.DescribeVersionedTaskQueuesResponse_VersionTaskQueue{
+				Name:  tq.Name,
+				Type:  tq.Type,
+				Stats: tqResp.DescResponse.Stats,
+			})
+	}
+
+	pm.PutCache(cacheKey, resp)
+	return resp, nil
 }
 
 func dedupPollers(pollerInfos []*taskqueuepb.PollerInfo) []*taskqueuepb.PollerInfo {

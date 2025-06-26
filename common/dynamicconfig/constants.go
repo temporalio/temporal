@@ -1241,7 +1241,7 @@ these log lines can be noisy, we want to be able to turn on and sample selective
 	)
 	TaskQueueInfoByBuildIdTTL = NewTaskQueueDurationSetting(
 		"matching.TaskQueueInfoByBuildIdTTL",
-		time.Second,
+		5*time.Second,
 		`TaskQueueInfoByBuildIdTTL serves as a TTL for the cache holding DescribeTaskQueue partition results`,
 	)
 	MatchingDropNonRetryableTasks = NewGlobalBoolSetting(
