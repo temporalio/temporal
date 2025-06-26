@@ -98,6 +98,8 @@ type MatchingServiceClient interface {
 	DescribeTaskQueue(ctx context.Context, in *DescribeTaskQueueRequest, opts ...grpc.CallOption) (*DescribeTaskQueueResponse, error)
 	// DescribeTaskQueuePartition returns information about the target task queue partition.
 	DescribeTaskQueuePartition(ctx context.Context, in *DescribeTaskQueuePartitionRequest, opts ...grpc.CallOption) (*DescribeTaskQueuePartitionResponse, error)
+	// DescribeVersionedTaskQueues returns details about the requested versioned task queues.
+	// It is an internal API; there is no direct user-facing equivalent.
 	DescribeVersionedTaskQueues(ctx context.Context, in *DescribeVersionedTaskQueuesRequest, opts ...grpc.CallOption) (*DescribeVersionedTaskQueuesResponse, error)
 	// ListTaskQueuePartitions returns a map of partitionKey and hostAddress for a task queue.
 	ListTaskQueuePartitions(ctx context.Context, in *ListTaskQueuePartitionsRequest, opts ...grpc.CallOption) (*ListTaskQueuePartitionsResponse, error)
@@ -567,6 +569,8 @@ type MatchingServiceServer interface {
 	DescribeTaskQueue(context.Context, *DescribeTaskQueueRequest) (*DescribeTaskQueueResponse, error)
 	// DescribeTaskQueuePartition returns information about the target task queue partition.
 	DescribeTaskQueuePartition(context.Context, *DescribeTaskQueuePartitionRequest) (*DescribeTaskQueuePartitionResponse, error)
+	// DescribeVersionedTaskQueues returns details about the requested versioned task queues.
+	// It is an internal API; there is no direct user-facing equivalent.
 	DescribeVersionedTaskQueues(context.Context, *DescribeVersionedTaskQueuesRequest) (*DescribeVersionedTaskQueuesResponse, error)
 	// ListTaskQueuePartitions returns a map of partitionKey and hostAddress for a task queue.
 	ListTaskQueuePartitions(context.Context, *ListTaskQueuePartitionsRequest) (*ListTaskQueuePartitionsResponse, error)
