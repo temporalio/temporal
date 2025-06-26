@@ -9,12 +9,14 @@ import (
 	"os"
 	"strings"
 
+	"github.com/emirpasic/gods/trees/redblacktree"
 	"github.com/jstemmer/go-junit-report/v2/junit"
 )
 
 type junitReport struct {
 	path string
 	junit.Testsuites
+	reportingErrs []error
 }
 
 func (j *junitReport) read() error {
@@ -119,16 +121,26 @@ func mergeReports(reports []*junitReport) (*junitReport, error) {
 	if len(reports) == 0 {
 		return nil, errors.New("no reports to merge")
 	}
-	if len(reports) == 1 {
-		return reports[0], nil
-	}
 
 	var combined junit.Testsuites
-	combined.XMLName = reports[0].Testsuites.XMLName
-	combined.Name = reports[0].Testsuites.Name
-	combined.Suites = reports[0].Testsuites.Suites
+	var reportingErrs []error
+
+	// Collect all test case names into the tree
+	testNameTree := redblacktree.NewWithStringComparator()
+	for _, report := range reports {
+		for _, suite := range report.Testsuites.Suites {
+			for _, tc := range suite.Testcases {
+				testNameTree.Put(tc.Name, struct{}{})
+			}
+		}
+	}
 
 	for i, report := range reports {
+		if i == 0 {
+			combined.XMLName = report.Testsuites.XMLName
+			combined.Name = report.Testsuites.Name
+		}
+
 		combined.Tests += report.Testsuites.Tests
 		combined.Errors += report.Testsuites.Errors
 		combined.Failures += report.Testsuites.Failures
@@ -138,36 +150,56 @@ func mergeReports(reports []*junitReport) (*junitReport, error) {
 
 		// If the report is for a retry ...
 		if i > 0 {
-			// Run sanity check to make sure we rerun what we expect.
-			casesTested := report.collectTestCases()
-			casesMissing := make([]string, 0)
-			previousReport := reports[i-1]
-			for _, f := range previousReport.collectTestCaseFailures() {
-				if _, ok := casesTested[f]; !ok {
-					casesMissing = append(casesMissing, f)
+			prevFailures := reports[i-1].collectTestCaseFailures()
+			currCases := report.collectTestCases()
+
+			var missing []string
+			for _, f := range prevFailures {
+				if _, ok := currCases[f]; !ok {
+					missing = append(missing, f)
 				}
 			}
-			if len(casesMissing) > 0 {
-				return nil,
-					fmt.Errorf("expected a rerun of all failures from the previous attempt, missing: %v", casesMissing)
+			if len(missing) > 0 {
+				reportingErrs = append(reportingErrs, fmt.Errorf(
+					"expected rerun of all failures from previous attempt, missing: %v", missing))
+			}
+		}
+
+		suffix := fmt.Sprintf(" (retry %d)", i)
+		for _, suite := range report.Testsuites.Suites {
+			newSuite := suite // shallow copy
+			if i > 0 {
+				newSuite.Name += suffix
+			}
+			newSuite.Testcases = make([]junit.Testcase, 0, len(suite.Testcases))
+
+			for _, test := range suite.Testcases {
+				if isLeaf(test.Name, testNameTree) {
+					testCopy := test
+					if i > 0 {
+						testCopy.Name += suffix
+					}
+					newSuite.Testcases = append(newSuite.Testcases, testCopy)
+				}
 			}
 
-			// Append the test cases from the retry.
-			for _, suite := range report.Testsuites.Suites {
-				cpy := suite
-				cpy.Name += fmt.Sprintf(" (retry %d)", i)
-				cpy.Testcases = make([]junit.Testcase, 0, len(suite.Testcases))
-				for _, test := range suite.Testcases {
-					tcpy := test
-					tcpy.Name += fmt.Sprintf(" (retry %d)", i)
-					cpy.Testcases = append(cpy.Testcases, tcpy)
-				}
-				combined.Suites = append(combined.Suites, cpy)
-			}
+			combined.Suites = append(combined.Suites, newSuite)
 		}
 	}
 
-	return &junitReport{Testsuites: combined}, nil
+	return &junitReport{
+		Testsuites:    combined,
+		reportingErrs: reportingErrs,
+	}, nil
+}
+
+func isLeaf(name string, tree *redblacktree.Tree) bool {
+	prefix := name + "/"
+	node, _ := tree.Ceiling(prefix)
+	if node != nil && strings.HasPrefix(node.Key.(string), prefix) {
+		return false
+	}
+	return true
 }
 
 type node struct {

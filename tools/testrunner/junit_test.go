@@ -1,10 +1,12 @@
 package testrunner
 
 import (
+	"errors"
 	"os"
 	"slices"
 	"testing"
 
+	"github.com/jstemmer/go-junit-report/v2/junit"
 	"github.com/stretchr/testify/require"
 )
 
@@ -59,7 +61,20 @@ func TestNode(t *testing.T) {
 	require.Equal(t, []string{"a", "a/b", "b"}, paths)
 }
 
-func TestMergeReports(t *testing.T) {
+func TestMergeReports_SingleReport(t *testing.T) {
+	j1 := &junitReport{path: "testdata/junit-attempt-1.xml"}
+	require.NoError(t, j1.read())
+
+	report, err := mergeReports([]*junitReport{j1})
+	require.NoError(t, err)
+
+	suites := report.Testsuites.Suites
+	require.Len(t, suites, 1)
+	require.Equal(t, 2, report.Testsuites.Failures)
+	require.NotContains(t, collectTestNames(suites), "TestCallbacksSuite")
+}
+
+func TestMergeReports_MultipleReports(t *testing.T) {
 	j1 := &junitReport{path: "testdata/junit-attempt-1.xml"}
 	require.NoError(t, j1.read())
 	j2 := &junitReport{path: "testdata/junit-attempt-2.xml"}
@@ -72,6 +87,33 @@ func TestMergeReports(t *testing.T) {
 	require.Len(t, suites, 2)
 	require.Equal(t, 4, report.Testsuites.Failures)
 	require.Equal(t, "go.temporal.io/server/tests (retry 1)", suites[1].Name)
-	require.Len(t, suites[1].Testcases, 2)
+	require.NotContains(t, collectTestNames(suites), "TestCallbacksSuite")
 	require.Equal(t, "TestCallbacksSuite/TestWorkflowCallbacks_InvalidArgument (retry 1)", suites[1].Testcases[0].Name)
+}
+
+func TestMergeReports_MissingRerun(t *testing.T) {
+	j1 := &junitReport{path: "testdata/junit-attempt-1.xml"}
+	require.NoError(t, j1.read())
+	j2 := &junitReport{path: "testdata/junit-empty.xml"}
+	require.NoError(t, j2.read())
+	j3 := &junitReport{path: "testdata/junit-attempt-2.xml"}
+	require.NoError(t, j3.read())
+	j4 := &junitReport{path: "testdata/junit-empty.xml"}
+	require.NoError(t, j4.read())
+
+	report, err := mergeReports([]*junitReport{j1, j2, j3, j4})
+	require.NoError(t, err)
+	require.Len(t, report.reportingErrs, 2)
+	require.Equal(t, errors.New("expected rerun of all failures from previous attempt, missing: [TestCallbacksSuite/TestWorkflowCallbacks_InvalidArgument]"), report.reportingErrs[0])
+	require.Equal(t, errors.New("expected rerun of all failures from previous attempt, missing: [TestCallbacksSuite/TestWorkflowCallbacks_InvalidArgument]"), report.reportingErrs[1])
+}
+
+func collectTestNames(suites []junit.Testsuite) []string {
+	var testNames []string
+	for _, suite := range suites {
+		for _, test := range suite.Testcases {
+			testNames = append(testNames, test.Name)
+		}
+	}
+	return testNames
 }
