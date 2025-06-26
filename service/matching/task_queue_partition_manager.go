@@ -61,7 +61,8 @@ type (
 		throttledLogger     log.ThrottledLogger
 		matchingClient      matchingservice.MatchingServiceClient
 		metricsHandler      metrics.Handler // namespace/taskqueue tagged metric scope
-		cache               cache.Cache     // non-nil for root-partition
+		// TODO(stephanos): move cache out of partition manager
+		cache cache.Cache // non-nil for root-partition
 
 		// dynamicRate is the dynamic rate & burst for rate limiter
 		dynamicRateBurst quotas.MutableRateBurst

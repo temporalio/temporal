@@ -33,12 +33,21 @@ type (
 		MaxExtraTasks    int
 		ExpectedAddRate  bool
 		ExpectedDispatch bool
+		Cached           bool
 	}
 
 	// TaskQueueExpectationsByType maps task queue types to their expectations
 	TaskQueueExpectationsByType map[enumspb.TaskQueueType]TaskQueueExpectations
 )
 
+// TestTaskQueueStatsSuite tests querying task queue stats.
+//
+// There are currently three ways to do that:
+// 1. DescribeTaskQueue with ReportStats=true
+// 2. DescribeTaskQueue with ApiMode=ENHANCED and ReportStats=true [deprecated]
+// 3. DescribeWorkerDeploymentVersion with ReportTaskQueueStats=true
+//
+// Unless a test calls out a specific methods, all three methods are tested in each test case.
 func TestTaskQueueStatsSuite(t *testing.T) {
 	t.Parallel()
 	suite.Run(t, new(TaskQueueStatsSuite))
@@ -50,7 +59,7 @@ func (s *TaskQueueStatsSuite) SetupTest() {
 	s.OverrideDynamicConfig(dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs, true)
 }
 
-func (s *TaskQueueStatsSuite) TestNonRoot() {
+func (s *TaskQueueStatsSuite) TestDescribeTaskQueue_NonRoot() {
 	resp, err := s.FrontendClient().DescribeTaskQueue(context.Background(), &workflowservice.DescribeTaskQueueRequest{
 		Namespace: s.Namespace().String(),
 		TaskQueue: &taskqueuepb.TaskQueue{Name: "/_sys/foo/1", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -67,29 +76,29 @@ func (s *TaskQueueStatsSuite) TestNonRoot() {
 	s.ErrorContains(err, "DescribeTaskQueue stats are only supported for the root partition")
 }
 
-func (s *TaskQueueStatsSuite) TestAddNoTasks_ValidateStats() {
+func (s *TaskQueueStatsSuite) TestNoTasks_ValidateStats() {
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 4)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 4)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
-	s.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond)
+	s.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond) // zero means no TTL
 
 	s.publishConsumeWorkflowTasksValidateStats(0, false)
 }
 
-func (s *TaskQueueStatsSuite) TestAddSingleTask_SinglePartition_ValidateStats() {
+func (s *TaskQueueStatsSuite) TestSingleTask_SinglePartition_ValidateStats() {
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingUpdateAckInterval, 5*time.Second)
-	s.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond)
+	s.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond) // zero means no TTL
 
 	s.publishConsumeWorkflowTasksValidateStats(2, true) // 1 unversioned, 1 versioned
 }
 
-func (s *TaskQueueStatsSuite) TestAddMultipleTasks_MultiplePartitions_ValidateStats() {
+func (s *TaskQueueStatsSuite) TestMultipleTasks_MultiplePartitions_WithMatchingBehavior_ValidateStats() {
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 4)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 4)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
-	s.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond)
+	s.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond) // zero means no TTL
 
 	s.RunTestWithMatchingBehavior(func() {
 		s.publishConsumeWorkflowTasksValidateStats(50, false) // 25 unversioned, 25 versioned
@@ -111,6 +120,7 @@ func (s *TaskQueueStatsSuite) TestAddMultipleTasks_MultiplePartitions_ValidateSt
 		MaxExtraTasks:    workflows, // ie at most all tasks can be in the backlog
 		ExpectedAddRate:  true,
 		ExpectedDispatch: true,
+		Cached:           true,
 	}
 
 	// Enqueue all workflows, 50/50 split between unversioned and versioned.
@@ -121,7 +131,7 @@ func (s *TaskQueueStatsSuite) TestAddMultipleTasks_MultiplePartitions_ValidateSt
 
 	// Expect the workflow backlog to be non-empty now.
 	// This query will cache the stats for the remainder of the test.
-	s.validateDescribeTaskQueueByType(tqName, enumspb.TASK_QUEUE_TYPE_WORKFLOW, expectations, false)
+	s.validateTaskQueueStatsByType(tqName, enumspb.TASK_QUEUE_TYPE_WORKFLOW, expectations, false)
 
 	// Enqueue remaining activities.
 	s.enqueueActivitiesForEachWorkflow(workflows-2, tqName)
@@ -131,14 +141,14 @@ func (s *TaskQueueStatsSuite) TestAddMultipleTasks_MultiplePartitions_ValidateSt
 
 	// Expect the activity backlog to be non-empty now.
 	// This query will cache the stats for the remainder of the test.
-	s.validateDescribeTaskQueueByType(tqName, enumspb.TASK_QUEUE_TYPE_ACTIVITY, expectations, false)
+	s.validateTaskQueueStatsByType(tqName, enumspb.TASK_QUEUE_TYPE_ACTIVITY, expectations, false)
 
 	// Poll remaining activities.
 	s.pollActivities(workflows-2, tqName)
 
 	// Despite having polled all the workflows/activies; the stats won't have changed at all since they were cached.
-	s.validateDescribeTaskQueueByType(tqName, enumspb.TASK_QUEUE_TYPE_WORKFLOW, expectations, false)
-	s.validateDescribeTaskQueueByType(tqName, enumspb.TASK_QUEUE_TYPE_ACTIVITY, expectations, false)
+	s.validateTaskQueueStatsByType(tqName, enumspb.TASK_QUEUE_TYPE_WORKFLOW, expectations, false)
+	s.validateTaskQueueStatsByType(tqName, enumspb.TASK_QUEUE_TYPE_ACTIVITY, expectations, false)
 }
 
 // publish 50% to default/unversioned task queue and 50% to versioned task queue
@@ -165,7 +175,7 @@ func (s *TaskQueueStatsSuite) publishConsumeWorkflowTasksValidateStats(workflows
 			ExpectedDispatch: false,
 		},
 	}
-	s.validateDescribeTaskQueue(tqName, expectations, singlePartition)
+	s.validateAllTaskQueueStats(tqName, expectations, singlePartition)
 
 	// Actual counter can be greater than the expected due to History->Matching retries.
 	// We make sure the counter is in range [expected, expected+maxExtraTasksAllowed].
@@ -185,7 +195,7 @@ func (s *TaskQueueStatsSuite) publishConsumeWorkflowTasksValidateStats(workflows
 		ExpectedDispatch: false,
 	}
 
-	s.validateDescribeTaskQueue(tqName, expectations, singlePartition)
+	s.validateAllTaskQueueStats(tqName, expectations, singlePartition)
 
 	// poll all workflow tasks and enqueue one activity task for each workflow
 	s.enqueueActivitiesForEachWorkflow(workflows, tqName)
@@ -204,7 +214,7 @@ func (s *TaskQueueStatsSuite) publishConsumeWorkflowTasksValidateStats(workflows
 		ExpectedDispatch: false,
 	}
 
-	s.validateDescribeTaskQueue(tqName, expectations, singlePartition)
+	s.validateAllTaskQueueStats(tqName, expectations, singlePartition)
 
 	// poll all activity tasks
 	s.pollActivities(workflows, tqName)
@@ -217,10 +227,11 @@ func (s *TaskQueueStatsSuite) publishConsumeWorkflowTasksValidateStats(workflows
 		ExpectedDispatch: workflows > 0,
 	}
 
-	s.validateDescribeTaskQueue(tqName, expectations, singlePartition)
+	s.validateAllTaskQueueStats(tqName, expectations, singlePartition)
 }
 
 func (s *TaskQueueStatsSuite) enqueueWorkflows(count int, tqName string) {
+	s.T().Logf("Enqueuing %d workflows", count)
 	deploymentOpts := s.deploymentOptions()
 
 	tq := &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
@@ -274,6 +285,7 @@ func (s *TaskQueueStatsSuite) createDeploymentInTaskQueue(tqName string) {
 }
 
 func (s *TaskQueueStatsSuite) enqueueActivitiesForEachWorkflow(count int, tqName string) {
+	s.T().Logf("Enqueuing %d activities", count)
 	deploymentOpts := s.deploymentOptions()
 
 	for i := 0; i < count; {
@@ -320,8 +332,9 @@ func (s *TaskQueueStatsSuite) enqueueActivitiesForEachWorkflow(count int, tqName
 	}
 }
 
-func (s *TaskQueueStatsSuite) pollActivities(activities int, tqName string) {
-	for i := 0; i < activities; {
+func (s *TaskQueueStatsSuite) pollActivities(count int, tqName string) {
+	s.T().Logf("Polling %d activities", count)
+	for i := 0; i < count; {
 		pollReq := &workflowservice.PollActivityTaskQueueRequest{
 			Namespace: s.Namespace().String(),
 			TaskQueue: &taskqueuepb.TaskQueue{
@@ -344,22 +357,17 @@ func (s *TaskQueueStatsSuite) pollActivities(activities int, tqName string) {
 	}
 }
 
-func (s *TaskQueueStatsSuite) validateDescribeTaskQueue(
+func (s *TaskQueueStatsSuite) validateAllTaskQueueStats(
 	tqName string,
 	expectations TaskQueueExpectationsByType,
 	singlePartition bool,
 ) {
 	for tqType, expectation := range expectations {
-		s.validateDescribeTaskQueueByType(
-			tqName,
-			tqType,
-			expectation,
-			singlePartition,
-		)
+		s.validateTaskQueueStatsByType(tqName, tqType, expectation, singlePartition)
 	}
 }
 
-func (s *TaskQueueStatsSuite) validateDescribeTaskQueueByType(
+func (s *TaskQueueStatsSuite) validateTaskQueueStatsByType(
 	tqName string,
 	tqType enumspb.TaskQueueType,
 	expectation TaskQueueExpectations,
@@ -368,28 +376,45 @@ func (s *TaskQueueStatsSuite) validateDescribeTaskQueueByType(
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	s.validateDescribeWorkerDeploymentVersion(ctx, tqName, tqType, expectation)
-	s.validateDescribeTaskQueueWithEnhancedModeByType(ctx, tqName, tqType, expectation)
-	s.validateDescribeTaskQueueWithDefaultModeByType(ctx, tqName, tqType, expectation, singlePartition)
+	s.validateDescribeTaskQueueWithDefaultMode(ctx, tqName, tqType, expectation, singlePartition)
+
+	// The other two methods report *either* versioned or unversioned stats, so we need to
+	// half the expectations to account for that.
+	halfExpectation := expectation
+	halfExpectation.BacklogCount /= 2
+	halfExpectation.MaxExtraTasks /= 2
+
+	s.validateDescribeTaskQueueWithEnhancedMode(ctx, tqName, tqType, halfExpectation)
+	s.validateDescribeWorkerDeploymentVersion(ctx, tqName, tqType, halfExpectation)
 }
 
-func (s *TaskQueueStatsSuite) validateDescribeTaskQueueWithDefaultModeByType(
+func (s *TaskQueueStatsSuite) validateDescribeTaskQueueWithDefaultMode(
 	ctx context.Context,
 	tqName string,
 	tqType enumspb.TaskQueueType,
 	expectation TaskQueueExpectations,
 	singlePartition bool,
 ) {
+	req := &workflowservice.DescribeTaskQueueRequest{
+		Namespace:     s.Namespace().String(),
+		TaskQueue:     &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		TaskQueueType: tqType,
+	}
+
+	if !expectation.Cached { // skip if testing caching; as this would pin the result to the cache
+		resp, err := s.FrontendClient().DescribeTaskQueue(ctx, req)
+		s.NoError(err)
+		s.NotNil(resp)
+		s.Nil(resp.Stats, "stats should not be reported by default")
+		s.Nil(resp.TaskQueueStatus, "status should not be reported by default")
+	}
+
 	s.EventuallyWithT(func(c *assert.CollectT) {
 		a := require.New(c)
 
-		resp, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
-			Namespace:              s.Namespace().String(),
-			TaskQueue:              &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-			TaskQueueType:          tqType,
-			IncludeTaskQueueStatus: true,
-			ReportStats:            true,
-		})
+		req.ReportStats = true
+		req.IncludeTaskQueueStatus = true
+		resp, err := s.FrontendClient().DescribeTaskQueue(ctx, req)
 		a.NoError(err)
 		a.NotNil(resp)
 
@@ -399,37 +424,47 @@ func (s *TaskQueueStatsSuite) validateDescribeTaskQueueWithDefaultModeByType(
 				resp.TaskQueueStatus.GetBacklogCountHint())
 		}
 
-		validateTaskQueueStats("DescribeTaskQueueWithDefaultModeByType["+tqType.String()+"]", a, resp.Stats, expectation)
+		validateTaskQueueStats("DescribeTaskQueue_DefaultMode["+tqType.String()+"]",
+			a, resp.Stats, expectation)
 	}, 5*time.Second, 100*time.Millisecond)
 }
 
-func (s *TaskQueueStatsSuite) validateDescribeTaskQueueWithEnhancedModeByType(
+func (s *TaskQueueStatsSuite) validateDescribeTaskQueueWithEnhancedMode(
 	ctx context.Context,
 	tqName string,
 	tqType enumspb.TaskQueueType,
 	expectation TaskQueueExpectations,
 ) {
+	deploymentOpts := s.deploymentOptions()
+	req := &workflowservice.DescribeTaskQueueRequest{
+		Namespace: s.Namespace().String(),
+		TaskQueue: &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		ApiMode:   enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED,
+		Versions: &taskqueuepb.TaskQueueVersionSelection{
+			BuildIds: []string{worker_versioning.WorkerDeploymentVersionToStringV32(
+				&deploymentspb.WorkerDeploymentVersion{
+					BuildId:        deploymentOpts.BuildId,
+					DeploymentName: deploymentOpts.DeploymentName,
+				})},
+			Unversioned: true,
+		},
+		TaskQueueTypes: []enumspb.TaskQueueType{tqType},
+		ReportPollers:  true,
+	}
+
+	if !expectation.Cached { // skip if testing caching; as this would pin the result to the cache
+		resp, err := s.FrontendClient().DescribeTaskQueue(ctx, req)
+		s.NoError(err)
+		s.NotNil(resp)
+		s.Nil(resp.Stats, "stats should not be reported by default")
+		s.Nil(resp.TaskQueueStatus, "status should not be reported")
+	}
+
 	s.EventuallyWithT(func(c *assert.CollectT) {
 		a := require.New(c)
 
-		deploymentOpts := s.deploymentOptions()
-		resp, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
-			Namespace: s.Namespace().String(),
-			TaskQueue: &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-			ApiMode:   enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED,
-			Versions: &taskqueuepb.TaskQueueVersionSelection{
-				BuildIds: []string{worker_versioning.WorkerDeploymentVersionToStringV32(
-					&deploymentspb.WorkerDeploymentVersion{
-						BuildId:        deploymentOpts.BuildId,
-						DeploymentName: deploymentOpts.DeploymentName,
-					})},
-				Unversioned: true,
-			},
-			TaskQueueTypes:         []enumspb.TaskQueueType{tqType},
-			ReportPollers:          true,
-			ReportTaskReachability: false,
-			ReportStats:            true,
-		})
+		req.ReportStats = true
+		resp, err := s.FrontendClient().DescribeTaskQueue(ctx, req)
 		a.NoError(err)
 		a.NotNil(resp)
 
@@ -441,13 +476,11 @@ func (s *TaskQueueStatsSuite) validateDescribeTaskQueueWithEnhancedModeByType(
 
 			info := v.GetTypesInfo()[int32(tqType)]
 			a.NotNil(info, "should have info for task queue type %s", tqType)
-			stats := info.Stats
 
-			// only expecting half of the backlog count for each version
-			validateTaskQueueStats("DescribeTaskQueueWithEnhancedModeByType["+tqType.String()+"]",
-				a, stats, TaskQueueExpectations{
-					BacklogCount:     expectation.BacklogCount / 2,
-					MaxExtraTasks:    expectation.MaxExtraTasks / 2,
+			validateTaskQueueStats("DescribeTaskQueue_EnhancedMode["+tqType.String()+"]",
+				a, info.Stats, TaskQueueExpectations{
+					BacklogCount:     expectation.BacklogCount,
+					MaxExtraTasks:    expectation.MaxExtraTasks,
 					ExpectedAddRate:  expectation.ExpectedAddRate,
 					ExpectedDispatch: expectation.ExpectedDispatch,
 				})
@@ -461,27 +494,37 @@ func (s *TaskQueueStatsSuite) validateDescribeWorkerDeploymentVersion(
 	tqType enumspb.TaskQueueType,
 	expectation TaskQueueExpectations,
 ) {
+	deploymentOpts := s.deploymentOptions()
+	req := &workflowservice.DescribeWorkerDeploymentVersionRequest{
+		Namespace: s.Namespace().String(),
+		DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
+			BuildId:        deploymentOpts.BuildId,
+			DeploymentName: deploymentOpts.DeploymentName,
+		},
+	}
+
+	if !expectation.Cached { // skip if testing caching; as this would pin the result to the cache
+		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, req)
+		s.NoError(err)
+		s.NotNil(resp)
+		for _, info := range resp.VersionTaskQueues {
+			s.Nil(info.Stats, "stats should not be reported by default")
+		}
+	}
+
 	s.EventuallyWithT(func(c *assert.CollectT) {
 		a := require.New(c)
 
-		deploymentOpts := s.deploymentOptions()
-		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
-			Namespace: s.Namespace().String(),
-			DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
-				BuildId:        deploymentOpts.BuildId,
-				DeploymentName: deploymentOpts.DeploymentName,
-			},
-			ReportTaskQueueStats: true,
-		})
+		req.ReportTaskQueueStats = true
+		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, req)
 		s.NoError(err)
 
 		for _, info := range resp.VersionTaskQueues {
 			if info.Name == tqName || info.Type == tqType {
-				// only expecting half of the backlog count since the other half is unversioned
 				validateTaskQueueStats("DescribeWorkerDeploymentVersion["+tqType.String()+"]",
 					a, info.Stats, TaskQueueExpectations{
-						BacklogCount:     expectation.BacklogCount / 2,
-						MaxExtraTasks:    expectation.MaxExtraTasks / 2,
+						BacklogCount:     expectation.BacklogCount,
+						MaxExtraTasks:    expectation.MaxExtraTasks,
 						ExpectedAddRate:  expectation.ExpectedAddRate,
 						ExpectedDispatch: expectation.ExpectedDispatch,
 					})
@@ -503,15 +546,20 @@ func validateTaskQueueStats(
 	a.GreaterOrEqual(stats.ApproximateBacklogCount, int64(expectation.BacklogCount),
 		"%s: ApproximateBacklogCount should be at least %d, got %d",
 		label, expectation.BacklogCount, stats.ApproximateBacklogCount)
-	a.LessOrEqual(stats.ApproximateBacklogCount, int64(expectation.BacklogCount+expectation.MaxExtraTasks),
+
+	maxApproximateBacklogCount := int64(expectation.BacklogCount + expectation.MaxExtraTasks)
+	a.LessOrEqual(stats.ApproximateBacklogCount, maxApproximateBacklogCount,
 		"%s: ApproximateBacklogCount should be at most %d, got %d",
-		label, expectation.BacklogCount+expectation.MaxExtraTasks, stats.ApproximateBacklogCount)
+		label, maxApproximateBacklogCount, stats.ApproximateBacklogCount)
+
 	a.Equal(stats.ApproximateBacklogCount == 0, stats.ApproximateBacklogAge.AsDuration() == time.Duration(0),
 		"%s: ApproximateBacklogAge should be 0 when ApproximateBacklogCount is 0, got %s",
 		label, stats.ApproximateBacklogAge.AsDuration())
+
 	a.Equal(expectation.ExpectedAddRate, stats.TasksAddRate > 0,
 		"%s: TasksAddRate should be greater than 0 when ExpectedAddRate is true, got %f",
 		label, stats.TasksAddRate)
+
 	a.Equal(expectation.ExpectedDispatch, stats.TasksDispatchRate > 0,
 		"%s: TasksDispatchRate should be greater than 0 when ExpectedDispatch is true, got %f",
 		label, stats.TasksDispatchRate)

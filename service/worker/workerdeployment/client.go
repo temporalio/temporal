@@ -1464,8 +1464,8 @@ func (d *ClientImpl) getTaskQueueDetails(
 			if tqRespTQ, ok := tqRespMap[tqKey(tq.Name, tq.Type)]; ok {
 				tqOutputs[i].Stats = tqRespTQ.Stats
 			} else {
-				// Setting empty stats instead of leaving nil (which is only used when not querying for stats).
-				tqOutputs[i].Stats = &taskqueuepb.TaskQueueStats{}
+				// This *should* never happen, but in case it does, we should error instead of returning partial results.
+				return nil, serviceerror.NewNotFoundf("task queue %s of type %s not found in this version", tq.Name, tq.Type)
 			}
 		}
 	}

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -1145,7 +1146,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 		// TODO bug fix: We cache the last response for each build ID. timeSinceLastFanOut is the last fan out time, that means some enteries in the cache can be more stale if
 		// user is calling this API back-to-back but with different version selection.
 		cacheKeyFunc := func(buildId string, taskQueueType enumspb.TaskQueueType) string {
-			return fmt.Sprintf("%s.%s", buildId, taskQueueType.String())
+			return fmt.Sprintf("dtq_enhanced:%s.%s", buildId, taskQueueType.String())
 		}
 		missingItemsInCache := false
 		physicalTqInfos := make(map[string]map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo)
@@ -1298,21 +1299,22 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 		if !pm.Partition().IsRoot() {
 			return nil, serviceerror.NewInvalidArgument("DescribeTaskQueue stats are only supported for the root partition")
 		}
-		cacheKey := ".taskQueueStats" // starts with `.` to prevent clashing with build ID cache keys
+
+		var buildIds []string
+		if request.Version != nil {
+			// A particular version was requested. This is only available internally; not user-facing.
+			buildIds = []string{worker_versioning.WorkerDeploymentVersionToStringV31(request.Version)}
+		}
+
+		cacheKey := "dtq_default:" + strings.Join(buildIds, ",")
 		if ts := pm.GetCache(cacheKey); ts != nil {
 			//revive:disable-next-line:unchecked-type-assertion
 			descrResp.DescResponse.Stats = ts.(*taskqueuepb.TaskQueueStats)
 		} else {
 			taskQueueStats := &taskqueuepb.TaskQueueStats{}
 
-			// determine versions to query
-			var buildIds []string
-			if request.Version != nil {
-				// A particular version was requested.
-				buildIds = []string{worker_versioning.WorkerDeploymentVersionToStringV31(request.Version)}
-			}
+			// No version was requested, so we need to query all versions.
 			if len(buildIds) == 0 {
-				// No version was requested, so we need to query all versions.
 				userData, _, err := pm.GetUserDataManager().GetUserData()
 				if err != nil {
 					return nil, err
@@ -1377,7 +1379,7 @@ func (e *matchingEngineImpl) DescribeVersionedTaskQueues(
 		return nil, err
 	}
 
-	cacheKey := worker_versioning.WorkerDeploymentVersionToStringV31(request.Version)
+	cacheKey := fmt.Sprintf("dvtq:%s", worker_versioning.WorkerDeploymentVersionToStringV31(request.Version))
 	if cached := pm.GetCache(cacheKey); cached != nil {
 		//revive:disable-next-line:unchecked-type-assertion
 		return cached.(*matchingservice.DescribeVersionedTaskQueuesResponse), nil
@@ -1385,22 +1387,32 @@ func (e *matchingEngineImpl) DescribeVersionedTaskQueues(
 
 	resp := &matchingservice.DescribeVersionedTaskQueuesResponse{}
 	for _, tq := range request.VersionTaskQueues {
-		tqResp, err := e.DescribeTaskQueue(ctx,
-			&matchingservice.DescribeTaskQueueRequest{
-				NamespaceId: request.GetNamespaceId(),
-				DescRequest: &workflowservice.DescribeTaskQueueRequest{
-					TaskQueue: &taskqueuepb.TaskQueue{
-						Name: tq.Name,
-						Kind: enumspb.TaskQueueKind(tq.Type),
-					},
-					TaskQueueType: enumspb.TaskQueueType(tq.Type),
-					ReportStats:   true,
+		tqReq := &matchingservice.DescribeTaskQueueRequest{
+			NamespaceId: request.GetNamespaceId(),
+			DescRequest: &workflowservice.DescribeTaskQueueRequest{
+				TaskQueue: &taskqueuepb.TaskQueue{
+					Name: tq.Name,
+					Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 				},
-				Version: request.Version,
-			})
-		if err != nil {
-			return nil, err
+				TaskQueueType: enumspb.TaskQueueType(tq.Type),
+				ReportStats:   true,
+			},
+			Version: request.Version,
 		}
+		var tqResp *matchingservice.DescribeTaskQueueResponse
+
+		localPM, _, _ := e.getTaskQueuePartitionManager(ctx, partition, false, 0)
+		if localPM != nil {
+			// If available, query the local partition manager to save a network call.
+			tqResp, err = e.DescribeTaskQueue(ctx, tqReq)
+		} else {
+			// Otherwise, query the other matching service instance.
+			tqResp, err = e.matchingRawClient.DescribeTaskQueue(ctx, tqReq)
+		}
+		if err != nil {
+			return nil, err // some other error, return it
+		}
+
 		resp.VersionTaskQueues = append(resp.VersionTaskQueues,
 			&matchingservice.DescribeVersionedTaskQueuesResponse_VersionTaskQueue{
 				Name:  tq.Name,
