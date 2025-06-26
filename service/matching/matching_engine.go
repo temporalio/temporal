@@ -2885,18 +2885,17 @@ func largerBacklogAge(rootBacklogAge *durationpb.Duration, currentPartitionAge *
 	return currentPartitionAge
 }
 
-func buildQueueRateLimitConfig(update *workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate, ts *timestamppb.Timestamp, src enumspb.Source) *taskqueuepb.RateLimitConfig {
+func buildQueueRateLimitConfig(update *workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate, ts *timestamppb.Timestamp) *taskqueuepb.RateLimitConfig {
 	if update == nil {
 		return nil
 	}
 
 	return &taskqueuepb.RateLimitConfig{
 		RateLimit: &taskqueuepb.RateLimit{
-			RequestsPerSecond: update.GetRequestsPerSecond(),
+			RequestsPerSecond: update.GetRateLimit().GetRequestsPerSecond(),
 		},
 		Metadata: &taskqueuepb.ConfigMetadata{
 			Reason:     update.GetReason(),
-			Source:     src,
 			UpdateTime: ts,
 		},
 	}
@@ -2969,7 +2968,7 @@ func (e *matchingEngineImpl) UpdateTaskQueueConfig(ctx context.Context, request 
 			updateTaskQueueConfig := request.GetUpdateTaskqueueConfig()
 			queueRateLimit := updateTaskQueueConfig.GetUpdateQueueRateLimit()
 			if queueRateLimit != nil {
-				cfg.QueueRateLimit = buildQueueRateLimitConfig(queueRateLimit.GetRateLimit(), protoTs, enumspb.SOURCE_API)
+				cfg.QueueRateLimit = buildQueueRateLimitConfig(queueRateLimit, protoTs)
 				changed = true
 			} else {
 				queueRateLimitConfig := &taskqueuepb.RateLimitConfig{
@@ -2988,7 +2987,7 @@ func (e *matchingEngineImpl) UpdateTaskQueueConfig(ctx context.Context, request 
 			// Fairness Queue Rate Limit
 			fairnessQueueRateLimit := updateTaskQueueConfig.GetUpdateFairnessKeyRateLimitDefault()
 			if fairnessQueueRateLimit != nil {
-				cfg.FairnessKeysRateLimitDefault = buildQueueRateLimitConfig(fairnessQueueRateLimit.GetRateLimit(), protoTs, enumspb.SOURCE_API)
+				cfg.FairnessKeysRateLimitDefault = buildQueueRateLimitConfig(fairnessQueueRateLimit, protoTs)
 				changed = true
 			}
 
