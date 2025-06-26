@@ -1463,10 +1463,10 @@ func (d *ClientImpl) getTaskQueueDetails(
 		for i, tq := range tqOutputs {
 			if tqRespTQ, ok := tqRespMap[tqKey(tq.Name, tq.Type)]; ok {
 				tqOutputs[i].Stats = tqRespTQ.Stats
-			} else {
-				// This *should* never happen, but in case it does, we should error instead of returning partial results.
-				return nil, serviceerror.NewNotFoundf("task queue %s of type %s not found in this version", tq.Name, tq.Type)
+				continue
 			}
+			// This *should* never happen, but in case it does, we should error instead of returning partial results.
+			return nil, serviceerror.NewNotFoundf("task queue %s of type %s not found in this version", tq.Name, tq.Type)
 		}
 	}
 

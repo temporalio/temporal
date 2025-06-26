@@ -406,6 +406,7 @@ func (s *TaskQueueStatsSuite) validateDescribeTaskQueueWithDefaultMode(
 		s.NoError(err)
 		s.NotNil(resp)
 		s.Nil(resp.Stats, "stats should not be reported by default")
+		//nolint:staticcheck // SA1019 deprecated
 		s.Nil(resp.TaskQueueStatus, "status should not be reported by default")
 	}
 
@@ -413,6 +414,7 @@ func (s *TaskQueueStatsSuite) validateDescribeTaskQueueWithDefaultMode(
 		a := require.New(c)
 
 		req.ReportStats = true
+		//nolint:staticcheck // SA1019 deprecated
 		req.IncludeTaskQueueStatus = true
 		resp, err := s.FrontendClient().DescribeTaskQueue(ctx, req)
 		a.NoError(err)
@@ -457,6 +459,7 @@ func (s *TaskQueueStatsSuite) validateDescribeTaskQueueWithEnhancedMode(
 		s.NoError(err)
 		s.NotNil(resp)
 		s.Nil(resp.Stats, "stats should not be reported by default")
+		//nolint:staticcheck // SA1019 deprecated
 		s.Nil(resp.TaskQueueStatus, "status should not be reported")
 	}
 
