@@ -97,6 +97,9 @@ func (e *outboundQueueActiveTaskExecutor) executeChasmSideEffectTask(
 	ctx context.Context,
 	task *tasks.ChasmTask,
 ) error {
+	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
+	defer cancel()
+
 	weContext, release, err := getWorkflowExecutionContextForTask(ctx, e.shardContext, e.cache, task)
 	if err != nil {
 		return err

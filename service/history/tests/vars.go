@@ -164,6 +164,5 @@ func NewDynamicConfig() *configs.Config {
 	config.ReplicationEnableUpdateWithNewTaskMerge = dynamicconfig.GetBoolPropertyFn(true)
 	config.EnableWorkflowIdReuseStartTimeValidation = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
 	config.EnableTransitionHistory = dynamicconfig.GetBoolPropertyFn(true)
-	config.OutboundStandbyTaskMissingEventsDiscardDelay = dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Duration(math.MaxInt64))
 	return config
 }
