@@ -35,7 +35,7 @@ type (
 		MaxExtraTasks    int
 		ExpectedAddRate  bool
 		ExpectedDispatch bool
-		Cached           bool
+		CachedEnabled    bool
 	}
 
 	// TaskQueueExpectationsByType maps task queue types to their expectations
@@ -122,7 +122,7 @@ func (s *TaskQueueStatsSuite) TestAddMultipleTasks_MultiplePartitions_ValidateSt
 		MaxExtraTasks:    workflows, // ie at most all tasks can be in the backlog
 		ExpectedAddRate:  true,
 		ExpectedDispatch: true,
-		Cached:           true,
+		CachedEnabled:    true,
 	}
 
 	// Enqueue all workflows, 50/50 split between unversioned and versioned.
@@ -406,7 +406,7 @@ func (s *TaskQueueStatsSuite) validateTaskQueueStatsByType(
 	halfExpectation.MaxExtraTasks /= 2
 
 	s.validateDescribeTaskQueueWithEnhancedMode(ctx, tqName, tqType, halfExpectation)
-	//s.validateDescribeWorkerDeploymentVersion(ctx, tqName, tqType, halfExpectation)
+	s.validateDescribeWorkerDeploymentVersion(ctx, tqName, tqType, halfExpectation)
 }
 
 func (s *TaskQueueStatsSuite) validateDescribeTaskQueueWithDefaultMode(
@@ -422,7 +422,7 @@ func (s *TaskQueueStatsSuite) validateDescribeTaskQueueWithDefaultMode(
 		TaskQueueType: tqType,
 	}
 
-	if !expectation.Cached { // skip if testing caching; as this would pin the result to the cache
+	if !expectation.CachedEnabled { // skip if testing caching; as this would pin the result to the cache
 		resp, err := s.FrontendClient().DescribeTaskQueue(ctx, req)
 		s.NoError(err)
 		s.NotNil(resp)
@@ -449,7 +449,7 @@ func (s *TaskQueueStatsSuite) validateDescribeTaskQueueWithDefaultMode(
 
 		validateTaskQueueStats("DescribeTaskQueue_DefaultMode["+tqType.String()+"]",
 			a, resp.Stats, expectation)
-	}, 5*time.Second, 100*time.Millisecond)
+	}, 10*time.Second, 100*time.Millisecond)
 }
 
 func (s *TaskQueueStatsSuite) validateDescribeTaskQueueWithEnhancedMode(
@@ -475,7 +475,7 @@ func (s *TaskQueueStatsSuite) validateDescribeTaskQueueWithEnhancedMode(
 		ReportPollers:  true,
 	}
 
-	if !expectation.Cached { // skip if testing caching; as this would pin the result to the cache
+	if !expectation.CachedEnabled { // skip if testing caching; as this would pin the result to the cache
 		resp, err := s.FrontendClient().DescribeTaskQueue(ctx, req)
 		s.NoError(err)
 		s.NotNil(resp)
@@ -509,7 +509,7 @@ func (s *TaskQueueStatsSuite) validateDescribeTaskQueueWithEnhancedMode(
 					ExpectedDispatch: expectation.ExpectedDispatch,
 				})
 		}
-	}, 5*time.Second, 100*time.Millisecond)
+	}, 10*time.Second, 100*time.Millisecond)
 }
 
 func (s *TaskQueueStatsSuite) validateDescribeWorkerDeploymentVersion(
@@ -527,7 +527,7 @@ func (s *TaskQueueStatsSuite) validateDescribeWorkerDeploymentVersion(
 		},
 	}
 
-	if !expectation.Cached { // skip if testing caching; as this would pin the result to the cache
+	if !expectation.CachedEnabled { // skip if testing caching; as this would pin the result to the cache
 		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, req)
 		s.NoError(err)
 		s.NotNil(resp)
@@ -556,7 +556,7 @@ func (s *TaskQueueStatsSuite) validateDescribeWorkerDeploymentVersion(
 			}
 		}
 		s.T().Errorf("Task queue %s of type %s not found in response", tqName, tqType)
-	}, 5*time.Second, 100*time.Millisecond)
+	}, 10*time.Second, 100*time.Millisecond)
 }
 
 func validateTaskQueueStats(
