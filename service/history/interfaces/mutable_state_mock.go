@@ -3222,6 +3222,18 @@ func (mr *MockMutableStateMockRecorder) SetStickyTaskQueue(name, scheduleToStart
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetStickyTaskQueue", reflect.TypeOf((*MockMutableState)(nil).SetStickyTaskQueue), name, scheduleToStartTimeout)
 }
 
+// SetSuccessorRunID mocks base method.
+func (m *MockMutableState) SetSuccessorRunID(runID string) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetSuccessorRunID", runID)
+}
+
+// SetSuccessorRunID indicates an expected call of SetSuccessorRunID.
+func (mr *MockMutableStateMockRecorder) SetSuccessorRunID(runID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetSuccessorRunID", reflect.TypeOf((*MockMutableState)(nil).SetSuccessorRunID), runID)
+}
+
 // SetUpdateCondition mocks base method.
 func (m *MockMutableState) SetUpdateCondition(arg0, arg1 int64) {
 	m.ctrl.T.Helper()

@@ -614,6 +614,101 @@ func (s *FunctionalClustersTestSuite) TestStartWorkflowExecution_Failover_Workfl
 	s.Equal(2, workflowCompleteTimes)
 }
 
+func (s *FunctionalClustersTestSuite) TestStartWorkflowExecution_Failover_WorkflowIDConflictPolicy_TerminateExisting() {
+	namespaceName := s.createGlobalNamespace()
+	client0 := s.clusters[0].FrontendClient() // active
+	client1 := s.clusters[1].FrontendClient() // standby
+
+	// start a workflow
+	id := "functional-start-workflow-failover-ID-conflict-policy-test"
+	wt := "functional-start-workflow-failover-ID-conflict-policy-test-type"
+	tl := "functional-start-workflow-failover-ID-conflict-policy-test-taskqueue"
+	identity := "worker1"
+	workflowType := &commonpb.WorkflowType{Name: wt}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	startReq := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:             uuid.New(),
+		Namespace:             namespaceName,
+		WorkflowId:            id,
+		WorkflowType:          workflowType,
+		TaskQueue:             taskQueue,
+		Input:                 nil,
+		WorkflowRunTimeout:    durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout:   durationpb.New(1 * time.Second),
+		Identity:              identity,
+		WorkflowIdReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+	}
+	we, err := client0.StartWorkflowExecution(testcore.NewContext(), startReq)
+	s.NoError(err)
+	s.NotNil(we.GetRunId())
+	s.logger.Info("StartWorkflowExecution in cluster0: ", tag.WorkflowRunID(we.GetRunId()))
+
+	workflowCompleteTimes := 0
+	firstCommandMade := false
+	var executions []*commonpb.WorkflowExecution
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+		executions = append(executions, task.WorkflowExecution)
+		if !firstCommandMade {
+			firstCommandMade = true
+			return []*commandpb.Command{}, nil
+		}
+
+		workflowCompleteTimes++
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+				Result: payloads.EncodeString("Done"),
+			}},
+		}}, nil
+	}
+
+	// nolint
+	poller0 := testcore.TaskPoller{
+		Client:              client0,
+		Namespace:           namespaceName,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: nil,
+		Logger:              s.logger,
+		T:                   s.T(),
+	}
+
+	// nolint
+	poller1 := testcore.TaskPoller{
+		Client:              client1,
+		Namespace:           namespaceName,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: nil,
+		Logger:              s.logger,
+		T:                   s.T(),
+	}
+
+	// keep the workflow in cluster0 running
+	_, err = poller0.PollAndProcessWorkflowTask()
+	s.logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
+	s.NoError(err)
+
+	// start the same workflow in cluster0 and terminate the existing workflow
+	startReq.RequestId = uuid.New()
+	startReq.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING
+	we, err = client0.StartWorkflowExecution(testcore.NewContext(), startReq)
+	s.NoError(err)
+	s.NotNil(we.GetRunId())
+	s.logger.Info("StartWorkflowExecution in cluster0: ", tag.WorkflowRunID(we.GetRunId()))
+
+	s.failover(namespaceName, 0, s.clusters[1].ClusterName(), 2)
+
+	_, err = poller1.PollAndProcessWorkflowTask()
+	s.logger.Info("PollAndProcessWorkflowTask 2", tag.Error(err))
+	s.NoError(err)
+	s.Equal(1, workflowCompleteTimes)
+	s.Equal(2, len(executions))
+	s.Equal(executions[1].GetRunId(), we.GetRunId())
+}
+
 func (s *FunctionalClustersTestSuite) TestTerminateFailover() {
 	namespace := s.createGlobalNamespace()
 	client0 := s.clusters[0].FrontendClient() // active

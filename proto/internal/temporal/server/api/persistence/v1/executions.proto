@@ -270,6 +270,9 @@ message WorkflowExecutionInfo {
     // Priority contains metadata that controls relative ordering of task processing
     // when tasks are backed up in a queue.
     temporal.api.common.v1.Priority priority = 104;
+
+    // Run ID of the execution that supersedes this one (via terminate or continue-as-new).
+    string successor_run_id = 105;
 }
 
 message ExecutionStats {

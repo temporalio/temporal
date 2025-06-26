@@ -8249,6 +8249,10 @@ func (ms *MutableStateImpl) IsSubStateMachineDeleted() bool {
 	return ms.subStateMachineDeleted
 }
 
+func (ms *MutableStateImpl) SetSuccessorRunID(runID string) {
+	ms.executionInfo.SuccessorRunId = runID
+}
+
 // ActivityMatchWorkflowRules checks if the activity matches any of the workflow rules
 // and takes action based on the matched rule.
 // If activity is changed in the result, it should be updated in the mutable state.
