@@ -122,9 +122,11 @@ func mergeReports(reports []*junitReport) (*junitReport, error) {
 		return nil, errors.New("no reports to merge")
 	}
 
-	var combined junit.Testsuites
 	var reportingErrs []error
-
+	var combined junit.Testsuites
+	combined.XMLName = reports[0].Testsuites.XMLName
+	combined.Name = reports[0].Testsuites.Name
+	
 	// Collect all test case names into the tree
 	testNameTree := redblacktree.NewWithStringComparator()
 	for _, report := range reports {
@@ -136,11 +138,6 @@ func mergeReports(reports []*junitReport) (*junitReport, error) {
 	}
 
 	for i, report := range reports {
-		if i == 0 {
-			combined.XMLName = report.Testsuites.XMLName
-			combined.Name = report.Testsuites.Name
-		}
-
 		combined.Tests += report.Testsuites.Tests
 		combined.Errors += report.Testsuites.Errors
 		combined.Failures += report.Testsuites.Failures
