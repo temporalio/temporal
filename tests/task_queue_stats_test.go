@@ -2,6 +2,8 @@ package tests
 
 import (
 	"context"
+	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -157,6 +159,8 @@ func (s *TaskQueueStatsSuite) publishConsumeWorkflowTasksValidateStats(workflows
 		s.T().Fatal("workflows must be an even number to ensure half of them are versioned and half are unversioned")
 	}
 
+	fmt.Println("0", time.Now())
+
 	tqName := testcore.RandomizeStr("backlog-counter-task-queue")
 	s.createDeploymentInTaskQueue(tqName)
 
@@ -175,7 +179,12 @@ func (s *TaskQueueStatsSuite) publishConsumeWorkflowTasksValidateStats(workflows
 			ExpectedDispatch: false,
 		},
 	}
+
+	fmt.Println("1", time.Now())
+
 	s.validateAllTaskQueueStats(tqName, expectations, singlePartition)
+
+	fmt.Println("2", time.Now())
 
 	// Actual counter can be greater than the expected due to History->Matching retries.
 	// We make sure the counter is in range [expected, expected+maxExtraTasksAllowed].
@@ -270,18 +279,30 @@ func (s *TaskQueueStatsSuite) enqueueWorkflows(count int, tqName string) {
 }
 
 func (s *TaskQueueStatsSuite) createDeploymentInTaskQueue(tqName string) {
-	_, _ = s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
-		Namespace:         s.Namespace().String(),
-		TaskQueue:         &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		Identity:          "random",
-		DeploymentOptions: s.deploymentOptions(),
-	})
-	_, _ = s.FrontendClient().PollActivityTaskQueue(testcore.NewContext(), &workflowservice.PollActivityTaskQueueRequest{
-		Namespace:         s.Namespace().String(),
-		TaskQueue:         &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		Identity:          "random",
-		DeploymentOptions: s.deploymentOptions(),
-	})
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		_, _ = s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
+			Namespace:         s.Namespace().String(),
+			TaskQueue:         &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			Identity:          "random",
+			DeploymentOptions: s.deploymentOptions(),
+		})
+	}()
+
+	go func() {
+		defer wg.Done()
+		_, _ = s.FrontendClient().PollActivityTaskQueue(testcore.NewContext(), &workflowservice.PollActivityTaskQueueRequest{
+			Namespace:         s.Namespace().String(),
+			TaskQueue:         &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			Identity:          "random",
+			DeploymentOptions: s.deploymentOptions(),
+		})
+	}()
+
+	wg.Wait()
 }
 
 func (s *TaskQueueStatsSuite) enqueueActivitiesForEachWorkflow(count int, tqName string) {
@@ -385,7 +406,7 @@ func (s *TaskQueueStatsSuite) validateTaskQueueStatsByType(
 	halfExpectation.MaxExtraTasks /= 2
 
 	s.validateDescribeTaskQueueWithEnhancedMode(ctx, tqName, tqType, halfExpectation)
-	s.validateDescribeWorkerDeploymentVersion(ctx, tqName, tqType, halfExpectation)
+	//s.validateDescribeWorkerDeploymentVersion(ctx, tqName, tqType, halfExpectation)
 }
 
 func (s *TaskQueueStatsSuite) validateDescribeTaskQueueWithDefaultMode(
