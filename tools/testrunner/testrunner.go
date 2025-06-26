@@ -208,6 +208,9 @@ func Main() {
 	if err = mergedReport.write(); err != nil {
 		log.Fatal(err)
 	}
+	if len(mergedReport.reportingErrs) > 0 {
+		log.Fatal(mergedReport.reportingErrs)
+	}
 
 	// Exit with the exit code of the last attempt.
 	if currentAttempt.exitErr != nil {
