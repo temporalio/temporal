@@ -423,6 +423,11 @@ func (s *FunctionalTestBase) TearDownTest() {
 	s.testCluster.host.grpcClientInterceptor.Set(nil)
 }
 
+// **IMPORTANT**: When overridding this, make sure to invoke `s.FunctionalTestBase.TearDownSubTest()`.
+func (s *FunctionalTestBase) TearDownSubTest() {
+	s.exportOTELTraces()
+}
+
 func (s *FunctionalTestBase) tearDownSdk() {
 	if s.worker != nil {
 		s.worker.Stop()

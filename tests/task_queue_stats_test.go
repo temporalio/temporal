@@ -234,7 +234,7 @@ func (s *TaskQueueStatsSuite) publishConsumeWorkflowTasksValidateStats(workflows
 
 func (s *TaskQueueStatsSuite) enqueueWorkflows(count int, tqName string) {
 	s.T().Logf("Enqueuing %d workflows", count)
-	deploymentOpts := s.deploymentOptions()
+	deploymentOpts := s.deploymentOptions(tqName)
 
 	tq := &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 	for i := 0; i < count; i++ {
@@ -281,7 +281,7 @@ func (s *TaskQueueStatsSuite) createDeploymentInTaskQueue(tqName string) {
 			Namespace:         s.Namespace().String(),
 			TaskQueue:         &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 			Identity:          "random",
-			DeploymentOptions: s.deploymentOptions(),
+			DeploymentOptions: s.deploymentOptions(tqName),
 		})
 	}()
 
@@ -291,7 +291,7 @@ func (s *TaskQueueStatsSuite) createDeploymentInTaskQueue(tqName string) {
 			Namespace:         s.Namespace().String(),
 			TaskQueue:         &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 			Identity:          "random",
-			DeploymentOptions: s.deploymentOptions(),
+			DeploymentOptions: s.deploymentOptions(tqName),
 		})
 	}()
 
@@ -300,7 +300,7 @@ func (s *TaskQueueStatsSuite) createDeploymentInTaskQueue(tqName string) {
 
 func (s *TaskQueueStatsSuite) enqueueActivitiesForEachWorkflow(count int, tqName string) {
 	s.T().Logf("Enqueuing %d activities", count)
-	deploymentOpts := s.deploymentOptions()
+	deploymentOpts := s.deploymentOptions(tqName)
 
 	for i := 0; i < count; {
 		pollReq := &workflowservice.PollWorkflowTaskQueueRequest{
@@ -357,7 +357,7 @@ func (s *TaskQueueStatsSuite) pollActivities(count int, tqName string) {
 			},
 		}
 		if i%2 == 0 {
-			pollReq.DeploymentOptions = s.deploymentOptions()
+			pollReq.DeploymentOptions = s.deploymentOptions(tqName)
 		}
 
 		resp, err := s.FrontendClient().PollActivityTaskQueue(
@@ -442,7 +442,7 @@ func (s *TaskQueueStatsSuite) validateDescribeTaskQueueWithDefaultMode(
 
 		validateTaskQueueStats("DescribeTaskQueue_DefaultMode["+tqType.String()+"]",
 			a, resp.Stats, expectation)
-	}, 10*time.Second, 100*time.Millisecond)
+	}, 5*time.Second, 100*time.Millisecond)
 }
 
 func (s *TaskQueueStatsSuite) validateDescribeTaskQueueWithEnhancedMode(
@@ -451,7 +451,7 @@ func (s *TaskQueueStatsSuite) validateDescribeTaskQueueWithEnhancedMode(
 	tqType enumspb.TaskQueueType,
 	expectation TaskQueueExpectations,
 ) {
-	deploymentOpts := s.deploymentOptions()
+	deploymentOpts := s.deploymentOptions(tqName)
 	req := &workflowservice.DescribeTaskQueueRequest{
 		Namespace: s.Namespace().String(),
 		TaskQueue: &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -502,7 +502,7 @@ func (s *TaskQueueStatsSuite) validateDescribeTaskQueueWithEnhancedMode(
 					ExpectedDispatch: expectation.ExpectedDispatch,
 				})
 		}
-	}, 10*time.Second, 100*time.Millisecond)
+	}, 5*time.Second, 100*time.Millisecond)
 }
 
 func (s *TaskQueueStatsSuite) validateDescribeWorkerDeploymentVersion(
@@ -511,7 +511,7 @@ func (s *TaskQueueStatsSuite) validateDescribeWorkerDeploymentVersion(
 	tqType enumspb.TaskQueueType,
 	expectation TaskQueueExpectations,
 ) {
-	deploymentOpts := s.deploymentOptions()
+	deploymentOpts := s.deploymentOptions(tqName)
 	req := &workflowservice.DescribeWorkerDeploymentVersionRequest{
 		Namespace: s.Namespace().String(),
 		DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
@@ -535,6 +535,7 @@ func (s *TaskQueueStatsSuite) validateDescribeWorkerDeploymentVersion(
 		req.ReportTaskQueueStats = true
 		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, req)
 		s.NoError(err)
+		a.Len(resp.VersionTaskQueues, 2, "should be 1 task queue for Workflows and 1 for Activities")
 
 		for _, info := range resp.VersionTaskQueues {
 			if info.Name == tqName || info.Type == tqType {
@@ -549,7 +550,7 @@ func (s *TaskQueueStatsSuite) validateDescribeWorkerDeploymentVersion(
 			}
 		}
 		s.T().Errorf("Task queue %s of type %s not found in response", tqName, tqType)
-	}, 10*time.Second, 100*time.Millisecond)
+	}, 5*time.Second, 100*time.Millisecond)
 }
 
 func validateTaskQueueStats(
@@ -582,9 +583,9 @@ func validateTaskQueueStats(
 		label, stats.TasksDispatchRate)
 }
 
-func (s *TaskQueueStatsSuite) deploymentOptions() *deploymentpb.WorkerDeploymentOptions {
+func (s *TaskQueueStatsSuite) deploymentOptions(tqName string) *deploymentpb.WorkerDeploymentOptions {
 	return &deploymentpb.WorkerDeploymentOptions{
-		DeploymentName:       "describe-task-queue-test",
+		DeploymentName:       tqName + "-deployment",
 		BuildId:              "build-id",
 		WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_VERSIONED,
 	}
