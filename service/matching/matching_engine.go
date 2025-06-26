@@ -1307,6 +1307,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 			buildIds = []string{worker_versioning.WorkerDeploymentVersionToStringV31(request.Version)}
 		}
 
+		// TODO(stephan): cache each version separately to allow re-use of cached stats
 		cacheKey := "dtq_default:" + strings.Join(buildIds, ",")
 		if ts := pm.GetCache(cacheKey); ts != nil {
 			//revive:disable-next-line:unchecked-type-assertion
