@@ -227,6 +227,7 @@ func (db *taskQueueDB) OldUpdateState(
 	maxReadLevel := db.getMaxReadLevelLocked(subqueueZero)
 	if ackLevel == maxReadLevel {
 		db.subqueues[subqueueZero].ApproximateBacklogCount = 0
+		db.subqueues[subqueueZero].oldestTime = time.Time{} // zero time means no backlog
 	}
 
 	queueInfo := db.cachedQueueInfo()
@@ -275,7 +276,7 @@ func (db *taskQueueDB) updateAckLevelAndBacklogStats(subqueue int, newAckLevel i
 	if newAckLevel == db.getMaxReadLevelLocked(subqueue) {
 		// Reset approximateBacklogCount to fix the count divergence issue
 		dbQueue.ApproximateBacklogCount = 0
-		dbQueue.oldestTime = time.Time{} // zero time means no backlog
+		dbQueue.oldestTime = oldestTime
 	} else if countDelta != 0 {
 		db.updateBacklogStatsLocked(subqueue, countDelta, oldestTime)
 	}
