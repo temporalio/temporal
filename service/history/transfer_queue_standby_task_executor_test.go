@@ -770,7 +770,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCancelExecution_Pendi
 	event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
 	taskID := s.mustGenerateTaskID()
-	event, _ = addRequestCancelInitiatedEvent(mutableState, event.GetEventId(), uuid.New(), tests.TargetNamespace, tests.TargetNamespaceID, targetExecution.GetWorkflowId(), targetExecution.GetRunId())
+	event, _ = addRequestCancelInitiatedEvent(mutableState, event.GetEventId(), uuid.New(), tests.TargetNamespace, tests.TargetNamespaceID, targetExecution.GetWorkflowId(), targetExecution.GetRunId(), true)
 
 	now := time.Now().UTC()
 	transferTask := &tasks.CancelExecutionTask{
@@ -779,14 +779,10 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCancelExecution_Pendi
 			execution.GetWorkflowId(),
 			execution.GetRunId(),
 		),
-		Version:                 s.version,
-		VisibilityTimestamp:     now,
-		TargetNamespaceID:       tests.TargetNamespaceID.String(),
-		TargetWorkflowID:        targetExecution.GetWorkflowId(),
-		TargetRunID:             targetExecution.GetRunId(),
-		TargetChildWorkflowOnly: true,
-		TaskID:                  taskID,
-		InitiatedEventID:        event.GetEventId(),
+		Version:             s.version,
+		VisibilityTimestamp: now,
+		TaskID:              taskID,
+		InitiatedEventID:    event.GetEventId(),
 	}
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
@@ -840,7 +836,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCancelExecution_Succe
 	event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
 	taskID := s.mustGenerateTaskID()
-	event, _ = addRequestCancelInitiatedEvent(mutableState, event.GetEventId(), uuid.New(), tests.TargetNamespace, tests.TargetNamespaceID, targetExecution.GetWorkflowId(), targetExecution.GetRunId())
+	event, _ = addRequestCancelInitiatedEvent(mutableState, event.GetEventId(), uuid.New(), tests.TargetNamespace, tests.TargetNamespaceID, targetExecution.GetWorkflowId(), targetExecution.GetRunId(), false)
 
 	now := time.Now().UTC()
 	transferTask := &tasks.CancelExecutionTask{
@@ -851,9 +847,6 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCancelExecution_Succe
 		),
 		Version:             s.version,
 		VisibilityTimestamp: now,
-		TargetNamespaceID:   tests.TargetNamespaceID.String(),
-		TargetWorkflowID:    targetExecution.GetWorkflowId(),
-		TargetRunID:         targetExecution.GetRunId(),
 		TaskID:              taskID,
 		InitiatedEventID:    event.GetEventId(),
 	}
@@ -907,7 +900,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessSignalExecution_Pendi
 
 	taskID := s.mustGenerateTaskID()
 	event, _ = addRequestSignalInitiatedEvent(mutableState, event.GetEventId(), uuid.New(),
-		tests.TargetNamespace, tests.TargetNamespaceID, targetExecution.GetWorkflowId(), targetExecution.GetRunId(), signalName, nil, "", nil)
+		tests.TargetNamespace, tests.TargetNamespaceID, targetExecution.GetWorkflowId(), targetExecution.GetRunId(), false, signalName, nil, "", nil)
 
 	now := time.Now().UTC()
 	transferTask := &tasks.SignalExecutionTask{
@@ -918,9 +911,6 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessSignalExecution_Pendi
 		),
 		Version:             s.version,
 		VisibilityTimestamp: now,
-		TargetNamespaceID:   tests.TargetNamespaceID.String(),
-		TargetWorkflowID:    targetExecution.GetWorkflowId(),
-		TargetRunID:         targetExecution.GetRunId(),
 		TaskID:              taskID,
 		InitiatedEventID:    event.GetEventId(),
 	}
@@ -978,7 +968,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessSignalExecution_Succe
 
 	taskID := s.mustGenerateTaskID()
 	event, _ = addRequestSignalInitiatedEvent(mutableState, event.GetEventId(), uuid.New(),
-		tests.TargetNamespace, tests.TargetNamespaceID, targetExecution.GetWorkflowId(), targetExecution.GetRunId(), signalName, nil, "", nil)
+		tests.TargetNamespace, tests.TargetNamespaceID, targetExecution.GetWorkflowId(), targetExecution.GetRunId(), false, signalName, nil, "", nil)
 
 	now := time.Now().UTC()
 	transferTask := &tasks.SignalExecutionTask{
@@ -989,9 +979,6 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessSignalExecution_Succe
 		),
 		Version:             s.version,
 		VisibilityTimestamp: now,
-		TargetNamespaceID:   tests.TargetNamespaceID.String(),
-		TargetWorkflowID:    targetExecution.GetWorkflowId(),
-		TargetRunID:         targetExecution.GetRunId(),
 		TaskID:              taskID,
 		InitiatedEventID:    event.GetEventId(),
 	}
@@ -1054,8 +1041,6 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_P
 		),
 		Version:             s.version,
 		VisibilityTimestamp: now,
-		TargetNamespaceID:   tests.ChildNamespaceID.String(),
-		TargetWorkflowID:    childWorkflowID,
 		TaskID:              taskID,
 		InitiatedEventID:    event.GetEventId(),
 	}
@@ -1164,8 +1149,6 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_S
 		),
 		Version:             s.version,
 		VisibilityTimestamp: now,
-		TargetNamespaceID:   tests.ChildNamespaceID.String(),
-		TargetWorkflowID:    childWorkflowID,
 		TaskID:              taskID,
 		InitiatedEventID:    event.GetEventId(),
 	}
