@@ -1611,7 +1611,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeStartChildWorkflowExecution
 	).Return(ci, nil)
 	s.mockUpdateVersion(event)
 	s.mockTaskGenerator.EXPECT().GenerateChildWorkflowTasks(
-		protomock.Eq(event),
+		event.GetEventId(),
 	).Return(nil)
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 

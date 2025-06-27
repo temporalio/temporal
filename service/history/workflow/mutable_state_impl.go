@@ -5280,7 +5280,7 @@ func (ms *MutableStateImpl) AddStartChildWorkflowExecutionInitiatedEvent(
 	}
 	// TODO merge active & passive task generation
 	if err := ms.taskGenerator.GenerateChildWorkflowTasks(
-		event,
+		event.GetEventId(),
 	); err != nil {
 		return nil, nil, err
 	}

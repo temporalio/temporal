@@ -145,7 +145,6 @@ func (r *TaskRefresherImpl) PartialRefresh(
 	}
 
 	if err := r.refreshTasksForChildWorkflow(
-		ctx,
 		mutableState,
 		taskGenerator,
 		minVersionedTransition,
@@ -448,7 +447,6 @@ func (r *TaskRefresherImpl) refreshTasksForTimer(
 }
 
 func (r *TaskRefresherImpl) refreshTasksForChildWorkflow(
-	ctx context.Context,
 	mutableState historyi.MutableState,
 	taskGenerator TaskGenerator,
 	minVersionedTransition *persistencespb.VersionedTransition,
@@ -477,13 +475,8 @@ func (r *TaskRefresherImpl) refreshTasksForChildWorkflow(
 			continue
 		}
 
-		scheduleEvent, err := mutableState.GetChildExecutionInitiatedEvent(ctx, childWorkflowInfo.InitiatedEventId)
-		if err != nil {
-			return err
-		}
-
 		if err := taskGenerator.GenerateChildWorkflowTasks(
-			scheduleEvent,
+			childWorkflowInfo.InitiatedEventId,
 		); err != nil {
 			return err
 		}
