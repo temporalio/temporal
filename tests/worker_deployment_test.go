@@ -2438,6 +2438,8 @@ func (s *WorkerDeploymentSuite) verifyWorkerDeploymentSummary(
 
 	// Ramping version summary checks
 	s.verifyVersionSummary(expectedSummary.RampingVersionSummary, actualSummary.RampingVersionSummary, maxDurationBetweenTimeStamps)
+
+	return true
 }
 
 func (s *WorkerDeploymentSuite) listWorkerDeployments(ctx context.Context, request *workflowservice.ListWorkerDeploymentsRequest) ([]*workflowservice.ListWorkerDeploymentsResponse_WorkerDeploymentSummary, error) {
