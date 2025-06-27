@@ -1130,6 +1130,10 @@ func (s *workflowSuite) TestCompileError() {
 }
 
 func (s *workflowSuite) TestTriggerImmediate() {
+	currentVersion := CurrentTweakablePolicies.Version
+	CurrentTweakablePolicies.Version = 12
+	defer func() { CurrentTweakablePolicies.Version = currentVersion }()
+
 	s.runAcrossContinue(
 		[]workflowRun{
 			{

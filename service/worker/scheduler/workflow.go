@@ -411,14 +411,12 @@ func (s *scheduler) processPatch(patch *schedulepb.SchedulePatch) {
 	s.logger.Debug("Schedule patch")
 
 	if trigger := patch.TriggerImmediately; trigger != nil {
-		var now time.Time
+		now := s.now()
 		if s.hasMinVersion(TriggerImmediatelyTimestamp) {
 			now = timestamp.TimeValue(trigger.ScheduledTime)
 			if now.IsZero() {
 				now = s.now()
 			}
-		} else {
-			now = s.now()
 		}
 		s.addStart(now, now, trigger.OverlapPolicy, true)
 	}
