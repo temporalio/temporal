@@ -1397,7 +1397,7 @@ func (e *matchingEngineImpl) DescribeVersionedTaskQueues(
 						Name: tq.Name,
 						Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 					},
-					TaskQueueType: enumspb.TaskQueueType(tq.Type),
+					TaskQueueType: tq.Type,
 					ReportStats:   true,
 				},
 				Version: request.Version,
