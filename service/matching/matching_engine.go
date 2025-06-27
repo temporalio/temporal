@@ -1389,32 +1389,22 @@ func (e *matchingEngineImpl) DescribeVersionedTaskQueues(
 
 	resp := &matchingservice.DescribeVersionedTaskQueuesResponse{}
 	for _, tq := range request.VersionTaskQueues {
-		tqReq := &matchingservice.DescribeTaskQueueRequest{
-			NamespaceId: request.GetNamespaceId(),
-			DescRequest: &workflowservice.DescribeTaskQueueRequest{
-				TaskQueue: &taskqueuepb.TaskQueue{
-					Name: tq.Name,
-					Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		tqResp, err := e.matchingRawClient.DescribeTaskQueue(ctx,
+			&matchingservice.DescribeTaskQueueRequest{
+				NamespaceId: request.GetNamespaceId(),
+				DescRequest: &workflowservice.DescribeTaskQueueRequest{
+					TaskQueue: &taskqueuepb.TaskQueue{
+						Name: tq.Name,
+						Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+					},
+					TaskQueueType: enumspb.TaskQueueType(tq.Type),
+					ReportStats:   true,
 				},
-				TaskQueueType: enumspb.TaskQueueType(tq.Type),
-				ReportStats:   true,
-			},
-			Version: request.Version,
-		}
-		var tqResp *matchingservice.DescribeTaskQueueResponse
-
-		localPM, _, _ := e.getTaskQueuePartitionManager(ctx, partition, false, 0)
-		if localPM != nil {
-			// If available, query the local partition manager to save a network call.
-			tqResp, err = e.DescribeTaskQueue(ctx, tqReq)
-		} else {
-			// Otherwise, query the other matching service instance.
-			tqResp, err = e.matchingRawClient.DescribeTaskQueue(ctx, tqReq)
-		}
+				Version: request.Version,
+			})
 		if err != nil {
-			return nil, err // some other error, return it
+			return nil, err
 		}
-
 		resp.VersionTaskQueues = append(resp.VersionTaskQueues,
 			&matchingservice.DescribeVersionedTaskQueuesResponse_VersionTaskQueue{
 				Name:  tq.Name,
