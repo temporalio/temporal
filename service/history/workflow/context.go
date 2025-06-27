@@ -487,6 +487,10 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 		}
 	}()
 
+	if newContext != nil && newMutableState != nil && newWorkflowTransactionPolicy != nil {
+		c.MutableState.SetSuccessorRunID(newMutableState.GetExecutionState().RunId)
+	}
+
 	updateWorkflow, updateWorkflowEventsSeq, err := c.MutableState.CloseTransactionAsMutation(
 		updateWorkflowTransactionPolicy,
 	)
@@ -547,7 +551,6 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 	if _, _, err := NewTransaction(shardContext).UpdateWorkflowExecution(
 		ctx,
 		updateMode,
-
 		c.MutableState.GetCurrentVersion(),
 		updateWorkflow,
 		updateWorkflowEventsSeq,

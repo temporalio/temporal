@@ -46,7 +46,7 @@ func (a *Activities) SyncUnversionedRamp(
 ) (*deploymentspb.SyncDeploymentVersionUserDataResponse, error) {
 	logger := activity.GetLogger(ctx)
 	// Get all the task queues in the current version and put them into SyncUserData format
-	currVersionInfo, err := a.deploymentClient.DescribeVersion(ctx, a.namespace, input.CurrentVersion)
+	currVersionInfo, _, err := a.deploymentClient.DescribeVersion(ctx, a.namespace, input.CurrentVersion, false)
 	if err != nil {
 		return nil, err
 	}
@@ -170,7 +170,7 @@ func (a *Activities) RegisterWorkerInVersion(ctx context.Context, args *deployme
 }
 
 func (a *Activities) DescribeVersionFromWorkerDeployment(ctx context.Context, args *deploymentspb.DescribeVersionFromWorkerDeploymentActivityArgs) (*deploymentspb.DescribeVersionFromWorkerDeploymentActivityResult, error) {
-	res, err := a.deploymentClient.DescribeVersion(ctx, a.namespace, args.Version)
+	res, _, err := a.deploymentClient.DescribeVersion(ctx, a.namespace, args.Version, false)
 	if err != nil {
 		return nil, err
 	}

@@ -361,5 +361,6 @@ type (
 		IsSubStateMachineDeleted() bool
 
 		HasRequestID(requestID string) bool
+		SetSuccessorRunID(runID string)
 	}
 )
