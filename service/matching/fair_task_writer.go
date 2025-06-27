@@ -28,7 +28,7 @@ type (
 		backlogMgr         *fairBacklogManagerImpl
 		config             *taskQueueConfig
 		db                 *taskQueueDB
-		counter            counter.Counter
+		counter            counter.Counter // only used in taskWriterLoop
 		logger             log.Logger
 		appendCh           chan *writeTaskRequest
 		taskIDBlock        taskIDBlock
@@ -171,6 +171,8 @@ func (w *fairTaskWriter) taskWriterLoop() {
 			reqs = append(reqs, req)
 			reqs = w.getWriteBatch(reqs)
 		}
+
+		w.counter.Reseed(time.Now())
 
 		err := w.allocTaskIDs(reqs)
 		if err == nil {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/rand/v2"
 	"sync/atomic"
 	"time"
 
@@ -187,7 +188,8 @@ func newPhysicalTaskQueueManager(
 		pqMgr.logger = log.With(partitionMgr.logger, buildIdTag, backlogTagFairness)
 		pqMgr.throttledLogger = log.With(partitionMgr.throttledLogger, buildIdTag, backlogTagFairness)
 
-		cntr := counter.NewMapCounter() // TODO(fairness): make this configurable
+		src := rand.NewPCG(rand.Uint64(), rand.Uint64())
+		cntr := counter.NewHybridCounter(config.FairnessCounter(), src)
 
 		pqMgr.backlogMgr = newFairBacklogManager(
 			tqCtx,
