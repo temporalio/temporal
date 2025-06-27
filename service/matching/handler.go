@@ -547,10 +547,10 @@ func (h *Handler) ListWorkers(
 	return nil, serviceerror.NewUnimplemented("ListWorkers is not implemented")
 }
 
-func (h *Handler) UpdateTaskQueueConfig(
+func (h *Handler) ConfigureTaskQueue(
 	ctx context.Context, request *matchingservice.UpdateTaskQueueConfigRequest,
 ) (*matchingservice.UpdateTaskQueueConfigResponse, error) {
-	return h.engine.UpdateTaskQueueConfig(ctx, request)
+	return h.engine.ConfigureTaskQueue(ctx, request)
 }
 
 func (h *Handler) namespaceName(id namespace.ID) namespace.Name {
