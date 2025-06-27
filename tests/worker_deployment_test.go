@@ -2407,37 +2407,27 @@ func (s *WorkerDeploymentSuite) verifyWorkerDeploymentSummary(
 	actualSummary *workflowservice.ListWorkerDeploymentsResponse_WorkerDeploymentSummary,
 ) bool {
 	maxDurationBetweenTimeStamps := 5 * time.Second
-	if expectedSummary.Name != actualSummary.Name {
-		s.Logger.Info("Name mismatch")
-		return false
-	}
 	if expectedSummary.CreateTime.AsTime().Sub(actualSummary.CreateTime.AsTime()) > maxDurationBetweenTimeStamps {
-		s.Logger.Info("Create time mismatch")
-		return false
+		s.Fail("Create time mismatch")
 	}
 
 	// Current version checks
 	if expectedSummary.RoutingConfig.GetCurrentVersion() != actualSummary.RoutingConfig.GetCurrentVersion() { //nolint:staticcheck // SA1019: old worker versioning
-		s.Logger.Info("Current version mismatch")
-		return false
+		s.Fail("Current version mismatch")
 	}
 	if expectedSummary.RoutingConfig.GetCurrentVersionChangedTime().AsTime().Sub(actualSummary.RoutingConfig.GetCurrentVersionChangedTime().AsTime()) > maxDurationBetweenTimeStamps {
-		s.Logger.Info("Current version update time mismatch")
-		return false
+		s.Fail("Current version update time mismatch")
 	}
 
 	// Ramping version checks
 	if expectedSummary.RoutingConfig.GetRampingVersion() != actualSummary.RoutingConfig.GetRampingVersion() { //nolint:staticcheck // SA1019: old worker versioning
-		s.Logger.Info("Ramping version mismatch")
-		return false
+		s.Fail("Ramping version mismatch")
 	}
 	if expectedSummary.RoutingConfig.GetRampingVersionPercentage() != actualSummary.RoutingConfig.GetRampingVersionPercentage() {
-		s.Logger.Info("Ramping version percentage mismatch")
-		return false
+		s.Fail("Ramping version percentage mismatch")
 	}
 	if expectedSummary.RoutingConfig.GetRampingVersionChangedTime().AsTime().Sub(actualSummary.RoutingConfig.GetRampingVersionChangedTime().AsTime()) > maxDurationBetweenTimeStamps {
-		s.Logger.Info("Ramping version update time mismatch")
-		return false
+		s.Fail("Ramping version update time mismatch")
 	}
 
 	// Latest version summary checks
@@ -2448,8 +2438,6 @@ func (s *WorkerDeploymentSuite) verifyWorkerDeploymentSummary(
 
 	// Ramping version summary checks
 	s.verifyVersionSummary(expectedSummary.RampingVersionSummary, actualSummary.RampingVersionSummary, maxDurationBetweenTimeStamps)
-
-	return true
 }
 
 func (s *WorkerDeploymentSuite) listWorkerDeployments(ctx context.Context, request *workflowservice.ListWorkerDeploymentsRequest) ([]*workflowservice.ListWorkerDeploymentsResponse_WorkerDeploymentSummary, error) {
@@ -2483,12 +2471,16 @@ func (s *WorkerDeploymentSuite) startAndValidateWorkerDeployments(
 		}
 
 		for _, expectedDeploymentSummary := range expectedDeploymentSummaries {
-			deploymentSummaryValidated := false
+			deploymentSummaryFound := false
 			for _, actualDeploymentSummary := range actualDeploymentSummaries {
-				deploymentSummaryValidated = deploymentSummaryValidated ||
-					s.verifyWorkerDeploymentSummary(expectedDeploymentSummary, actualDeploymentSummary)
+				if actualDeploymentSummary.Name != expectedDeploymentSummary.Name {
+					continue
+				}
+				s.verifyWorkerDeploymentSummary(expectedDeploymentSummary, actualDeploymentSummary)
+				deploymentSummaryFound = true
+				break
 			}
-			a.True(deploymentSummaryValidated)
+			a.True(deploymentSummaryFound)
 		}
 	}, time.Second*10, time.Millisecond*1000)
 }
