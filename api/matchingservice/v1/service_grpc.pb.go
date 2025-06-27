@@ -33,6 +33,7 @@ const (
 	MatchingService_CancelOutstandingPoll_FullMethodName                  = "/temporal.server.api.matchingservice.v1.MatchingService/CancelOutstandingPoll"
 	MatchingService_DescribeTaskQueue_FullMethodName                      = "/temporal.server.api.matchingservice.v1.MatchingService/DescribeTaskQueue"
 	MatchingService_DescribeTaskQueuePartition_FullMethodName             = "/temporal.server.api.matchingservice.v1.MatchingService/DescribeTaskQueuePartition"
+	MatchingService_DescribeVersionedTaskQueues_FullMethodName            = "/temporal.server.api.matchingservice.v1.MatchingService/DescribeVersionedTaskQueues"
 	MatchingService_ListTaskQueuePartitions_FullMethodName                = "/temporal.server.api.matchingservice.v1.MatchingService/ListTaskQueuePartitions"
 	MatchingService_UpdateWorkerBuildIdCompatibility_FullMethodName       = "/temporal.server.api.matchingservice.v1.MatchingService/UpdateWorkerBuildIdCompatibility"
 	MatchingService_GetWorkerBuildIdCompatibility_FullMethodName          = "/temporal.server.api.matchingservice.v1.MatchingService/GetWorkerBuildIdCompatibility"
@@ -97,6 +98,9 @@ type MatchingServiceClient interface {
 	DescribeTaskQueue(ctx context.Context, in *DescribeTaskQueueRequest, opts ...grpc.CallOption) (*DescribeTaskQueueResponse, error)
 	// DescribeTaskQueuePartition returns information about the target task queue partition.
 	DescribeTaskQueuePartition(ctx context.Context, in *DescribeTaskQueuePartitionRequest, opts ...grpc.CallOption) (*DescribeTaskQueuePartitionResponse, error)
+	// DescribeVersionedTaskQueues returns details about the requested versioned task queues.
+	// It is an internal API; there is no direct user-facing equivalent.
+	DescribeVersionedTaskQueues(ctx context.Context, in *DescribeVersionedTaskQueuesRequest, opts ...grpc.CallOption) (*DescribeVersionedTaskQueuesResponse, error)
 	// ListTaskQueuePartitions returns a map of partitionKey and hostAddress for a task queue.
 	ListTaskQueuePartitions(ctx context.Context, in *ListTaskQueuePartitionsRequest, opts ...grpc.CallOption) (*ListTaskQueuePartitionsResponse, error)
 	// (-- api-linter: core::0134::response-message-name=disabled
@@ -320,6 +324,15 @@ func (c *matchingServiceClient) DescribeTaskQueue(ctx context.Context, in *Descr
 func (c *matchingServiceClient) DescribeTaskQueuePartition(ctx context.Context, in *DescribeTaskQueuePartitionRequest, opts ...grpc.CallOption) (*DescribeTaskQueuePartitionResponse, error) {
 	out := new(DescribeTaskQueuePartitionResponse)
 	err := c.cc.Invoke(ctx, MatchingService_DescribeTaskQueuePartition_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *matchingServiceClient) DescribeVersionedTaskQueues(ctx context.Context, in *DescribeVersionedTaskQueuesRequest, opts ...grpc.CallOption) (*DescribeVersionedTaskQueuesResponse, error) {
+	out := new(DescribeVersionedTaskQueuesResponse)
+	err := c.cc.Invoke(ctx, MatchingService_DescribeVersionedTaskQueues_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -556,6 +569,9 @@ type MatchingServiceServer interface {
 	DescribeTaskQueue(context.Context, *DescribeTaskQueueRequest) (*DescribeTaskQueueResponse, error)
 	// DescribeTaskQueuePartition returns information about the target task queue partition.
 	DescribeTaskQueuePartition(context.Context, *DescribeTaskQueuePartitionRequest) (*DescribeTaskQueuePartitionResponse, error)
+	// DescribeVersionedTaskQueues returns details about the requested versioned task queues.
+	// It is an internal API; there is no direct user-facing equivalent.
+	DescribeVersionedTaskQueues(context.Context, *DescribeVersionedTaskQueuesRequest) (*DescribeVersionedTaskQueuesResponse, error)
 	// ListTaskQueuePartitions returns a map of partitionKey and hostAddress for a task queue.
 	ListTaskQueuePartitions(context.Context, *ListTaskQueuePartitionsRequest) (*ListTaskQueuePartitionsResponse, error)
 	// (-- api-linter: core::0134::response-message-name=disabled
@@ -703,6 +719,9 @@ func (UnimplementedMatchingServiceServer) DescribeTaskQueue(context.Context, *De
 }
 func (UnimplementedMatchingServiceServer) DescribeTaskQueuePartition(context.Context, *DescribeTaskQueuePartitionRequest) (*DescribeTaskQueuePartitionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DescribeTaskQueuePartition not implemented")
+}
+func (UnimplementedMatchingServiceServer) DescribeVersionedTaskQueues(context.Context, *DescribeVersionedTaskQueuesRequest) (*DescribeVersionedTaskQueuesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DescribeVersionedTaskQueues not implemented")
 }
 func (UnimplementedMatchingServiceServer) ListTaskQueuePartitions(context.Context, *ListTaskQueuePartitionsRequest) (*ListTaskQueuePartitionsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListTaskQueuePartitions not implemented")
@@ -1010,6 +1029,24 @@ func _MatchingService_DescribeTaskQueuePartition_Handler(srv interface{}, ctx co
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(MatchingServiceServer).DescribeTaskQueuePartition(ctx, req.(*DescribeTaskQueuePartitionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MatchingService_DescribeVersionedTaskQueues_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DescribeVersionedTaskQueuesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MatchingServiceServer).DescribeVersionedTaskQueues(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MatchingService_DescribeVersionedTaskQueues_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MatchingServiceServer).DescribeVersionedTaskQueues(ctx, req.(*DescribeVersionedTaskQueuesRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1450,6 +1487,10 @@ var MatchingService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DescribeTaskQueuePartition",
 			Handler:    _MatchingService_DescribeTaskQueuePartition_Handler,
+		},
+		{
+			MethodName: "DescribeVersionedTaskQueues",
+			Handler:    _MatchingService_DescribeVersionedTaskQueues_Handler,
 		},
 		{
 			MethodName: "ListTaskQueuePartitions",
