@@ -92,7 +92,7 @@
 			"cwd": "${workspaceFolder}",
 			"args": [
 				"--env",
-				"development-sqlite-file2",
+				"development-sqlite-file",
 				"start",
 			]
 		},

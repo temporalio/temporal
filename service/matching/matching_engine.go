@@ -2928,14 +2928,14 @@ func prepareTaskQueueUserData(
 	return data, tqType
 }
 
-func (e *matchingEngineImpl) ConfigureTaskQueue(ctx context.Context, request *matchingservice.UpdateTaskQueueConfigRequest) (*matchingservice.UpdateTaskQueueConfigResponse, error) {
+func (e *matchingEngineImpl) ConfigureTaskQueue(ctx context.Context, request *matchingservice.ConfigureTaskQueueRequest) (*matchingservice.ConfigureTaskQueueResponse, error) {
 	taskQueueFamily, err := tqid.NewTaskQueueFamily(request.NamespaceId, request.UpdateTaskqueueConfig.GetTaskQueueName())
 	if err != nil {
 		return nil, err
 	}
 
 	if request.GetUpdateTaskqueueConfig() == nil {
-		return &matchingservice.UpdateTaskQueueConfigResponse{}, err
+		return &matchingservice.ConfigureTaskQueueResponse{}, err
 	}
 
 	taskQueueType := request.UpdateTaskqueueConfig.TaskQueueType
@@ -3010,7 +3010,7 @@ func (e *matchingEngineImpl) ConfigureTaskQueue(ctx context.Context, request *ma
 	}
 	taskQueueUserData := userData.GetData().GetPerType()[int32(taskQueueType)]
 
-	return &matchingservice.UpdateTaskQueueConfigResponse{
+	return &matchingservice.ConfigureTaskQueueResponse{
 		UpdatedTaskqueueConfig: taskQueueUserData.TaskQueueConfig,
 	}, err
 }

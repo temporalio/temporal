@@ -565,7 +565,8 @@ message ListWorkersResponse {
 
 message ConfigureTaskQueueRequest {
     string namespace_id = 1;
-    temporal.api.workflowservice.v1.UpdateTaskQueueConfigRequest update_taskqueue_config = 2;
+    temporal.api.taskqueue.v1.TaskQueue task_queue = 2;
+    temporal.api.workflowservice.v1.UpdateTaskQueueConfigRequest update_taskqueue_config = 3;
 }
 
 message ConfigureTaskQueueResponse {

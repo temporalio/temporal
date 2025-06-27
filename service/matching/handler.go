@@ -548,8 +548,8 @@ func (h *Handler) ListWorkers(
 }
 
 func (h *Handler) ConfigureTaskQueue(
-	ctx context.Context, request *matchingservice.UpdateTaskQueueConfigRequest,
-) (*matchingservice.UpdateTaskQueueConfigResponse, error) {
+	ctx context.Context, request *matchingservice.ConfigureTaskQueueRequest,
+) (*matchingservice.ConfigureTaskQueueResponse, error) {
 	return h.engine.ConfigureTaskQueue(ctx, request)
 }
 

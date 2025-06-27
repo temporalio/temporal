@@ -51,6 +51,20 @@ func (c *metricClient) CheckTaskQueueUserDataPropagation(
 	return c.client.CheckTaskQueueUserDataPropagation(ctx, request, opts...)
 }
 
+func (c *metricClient) ConfigureTaskQueue(
+	ctx context.Context,
+	request *matchingservice.ConfigureTaskQueueRequest,
+	opts ...grpc.CallOption,
+) (_ *matchingservice.ConfigureTaskQueueResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "MatchingClientConfigureTaskQueue")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.ConfigureTaskQueue(ctx, request, opts...)
+}
+
 func (c *metricClient) CreateNexusEndpoint(
 	ctx context.Context,
 	request *matchingservice.CreateNexusEndpointRequest,
@@ -371,20 +385,6 @@ func (c *metricClient) UpdateNexusEndpoint(
 	}()
 
 	return c.client.UpdateNexusEndpoint(ctx, request, opts...)
-}
-
-func (c *metricClient) UpdateTaskQueueConfig(
-	ctx context.Context,
-	request *matchingservice.UpdateTaskQueueConfigRequest,
-	opts ...grpc.CallOption,
-) (_ *matchingservice.UpdateTaskQueueConfigResponse, retError error) {
-
-	metricsHandler, startTime := c.startMetricsRecording(ctx, "MatchingClientUpdateTaskQueueConfig")
-	defer func() {
-		c.finishMetricsRecording(metricsHandler, startTime, retError)
-	}()
-
-	return c.client.UpdateTaskQueueConfig(ctx, request, opts...)
 }
 
 func (c *metricClient) UpdateTaskQueueUserData(
