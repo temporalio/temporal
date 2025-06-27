@@ -62,6 +62,8 @@ const (
 	ActionResultIncludesStatus = 10
 	// limit the ScheduleSpec specs and exclusions to only 10 entries
 	LimitMemoSpecSize = 11
+	// trigger immediately timestamp is added to the PatchRequest
+	TriggerImmediatelyTimestamp = 12
 )
 
 const (
@@ -409,8 +411,13 @@ func (s *scheduler) processPatch(patch *schedulepb.SchedulePatch) {
 	s.logger.Debug("Schedule patch")
 
 	if trigger := patch.TriggerImmediately; trigger != nil {
-		now := timestamp.TimeValue(trigger.ScheduledTime)
-		if now.IsZero() {
+		var now time.Time
+		if s.hasMinVersion(TriggerImmediatelyTimestamp) {
+			now = timestamp.TimeValue(trigger.ScheduledTime)
+			if now.IsZero() {
+				now = s.now()
+			}
+		} else {
 			now = s.now()
 		}
 		s.addStart(now, now, trigger.OverlapPolicy, true)
