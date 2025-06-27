@@ -4334,18 +4334,7 @@ func (x *ListWorkersResponse) GetNextPageToken() []byte {
 	return nil
 }
 
-// (-- api-linter: core::0134::request-resource-required=disabled
-//
-//	aip.dev/not-precedent: UpdateTaskQueueConfigRequest RPC doesn't follow Google API format. --)
-//
-// (-- api-linter: core::0134::request-mask-required=disabled
-//
-//	aip.dev/not-precedent: UpdateTaskQueueConfigRequest RPC doesn't follow Google API format. --)
-//
-// (-- api-linter: core::0134::method-signature=disabled
-//
-//	aip.dev/not-precedent: UpdateTaskQueueConfigRequest RPC doesn't follow Google API format. --)
-type UpdateTaskQueueConfigRequest struct {
+type ConfigureTaskQueueRequest struct {
 	state                 protoimpl.MessageState           `protogen:"open.v1"`
 	NamespaceId           string                           `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
 	UpdateTaskqueueConfig *v1.UpdateTaskQueueConfigRequest `protobuf:"bytes,2,opt,name=update_taskqueue_config,json=updateTaskqueueConfig,proto3" json:"update_taskqueue_config,omitempty"`
@@ -4353,20 +4342,20 @@ type UpdateTaskQueueConfigRequest struct {
 	sizeCache             protoimpl.SizeCache
 }
 
-func (x *UpdateTaskQueueConfigRequest) Reset() {
-	*x = UpdateTaskQueueConfigRequest{}
+func (x *ConfigureTaskQueueRequest) Reset() {
+	*x = ConfigureTaskQueueRequest{}
 	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[68]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *UpdateTaskQueueConfigRequest) String() string {
+func (x *ConfigureTaskQueueRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*UpdateTaskQueueConfigRequest) ProtoMessage() {}
+func (*ConfigureTaskQueueRequest) ProtoMessage() {}
 
-func (x *UpdateTaskQueueConfigRequest) ProtoReflect() protoreflect.Message {
+func (x *ConfigureTaskQueueRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[68]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -4378,46 +4367,46 @@ func (x *UpdateTaskQueueConfigRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use UpdateTaskQueueConfigRequest.ProtoReflect.Descriptor instead.
-func (*UpdateTaskQueueConfigRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use ConfigureTaskQueueRequest.ProtoReflect.Descriptor instead.
+func (*ConfigureTaskQueueRequest) Descriptor() ([]byte, []int) {
 	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{68}
 }
 
-func (x *UpdateTaskQueueConfigRequest) GetNamespaceId() string {
+func (x *ConfigureTaskQueueRequest) GetNamespaceId() string {
 	if x != nil {
 		return x.NamespaceId
 	}
 	return ""
 }
 
-func (x *UpdateTaskQueueConfigRequest) GetUpdateTaskqueueConfig() *v1.UpdateTaskQueueConfigRequest {
+func (x *ConfigureTaskQueueRequest) GetUpdateTaskqueueConfig() *v1.UpdateTaskQueueConfigRequest {
 	if x != nil {
 		return x.UpdateTaskqueueConfig
 	}
 	return nil
 }
 
-type UpdateTaskQueueConfigResponse struct {
+type ConfigureTaskQueueResponse struct {
 	state                  protoimpl.MessageState `protogen:"open.v1"`
 	UpdatedTaskqueueConfig *v14.TaskQueueConfig   `protobuf:"bytes,1,opt,name=updated_taskqueue_config,json=updatedTaskqueueConfig,proto3" json:"updated_taskqueue_config,omitempty"`
 	unknownFields          protoimpl.UnknownFields
 	sizeCache              protoimpl.SizeCache
 }
 
-func (x *UpdateTaskQueueConfigResponse) Reset() {
-	*x = UpdateTaskQueueConfigResponse{}
+func (x *ConfigureTaskQueueResponse) Reset() {
+	*x = ConfigureTaskQueueResponse{}
 	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[69]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *UpdateTaskQueueConfigResponse) String() string {
+func (x *ConfigureTaskQueueResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*UpdateTaskQueueConfigResponse) ProtoMessage() {}
+func (*ConfigureTaskQueueResponse) ProtoMessage() {}
 
-func (x *UpdateTaskQueueConfigResponse) ProtoReflect() protoreflect.Message {
+func (x *ConfigureTaskQueueResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[69]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -4429,12 +4418,12 @@ func (x *UpdateTaskQueueConfigResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use UpdateTaskQueueConfigResponse.ProtoReflect.Descriptor instead.
-func (*UpdateTaskQueueConfigResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use ConfigureTaskQueueResponse.ProtoReflect.Descriptor instead.
+func (*ConfigureTaskQueueResponse) Descriptor() ([]byte, []int) {
 	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{69}
 }
 
-func (x *UpdateTaskQueueConfigResponse) GetUpdatedTaskqueueConfig() *v14.TaskQueueConfig {
+func (x *ConfigureTaskQueueResponse) GetUpdatedTaskqueueConfig() *v14.TaskQueueConfig {
 	if x != nil {
 		return x.UpdatedTaskqueueConfig
 	}
@@ -4858,11 +4847,11 @@ const file_temporal_server_api_matchingservice_v1_request_response_proto_rawDesc
 	"\flist_request\x18\x02 \x01(\v23.temporal.api.workflowservice.v1.ListWorkersRequestR\vlistRequest\"\x84\x01\n" +
 	"\x13ListWorkersResponse\x12E\n" +
 	"\fworkers_info\x18\x01 \x03(\v2\".temporal.api.worker.v1.WorkerInfoR\vworkersInfo\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\fR\rnextPageToken\"\xb8\x01\n" +
-	"\x1cUpdateTaskQueueConfigRequest\x12!\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\fR\rnextPageToken\"\xb5\x01\n" +
+	"\x19ConfigureTaskQueueRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12u\n" +
-	"\x17update_taskqueue_config\x18\x02 \x01(\v2=.temporal.api.workflowservice.v1.UpdateTaskQueueConfigRequestR\x15updateTaskqueueConfig\"\x85\x01\n" +
-	"\x1dUpdateTaskQueueConfigResponse\x12d\n" +
+	"\x17update_taskqueue_config\x18\x02 \x01(\v2=.temporal.api.workflowservice.v1.UpdateTaskQueueConfigRequestR\x15updateTaskqueueConfig\"\x82\x01\n" +
+	"\x1aConfigureTaskQueueResponse\x12d\n" +
 	"\x18updated_taskqueue_config\x18\x01 \x01(\v2*.temporal.api.taskqueue.v1.TaskQueueConfigR\x16updatedTaskqueueConfigB>Z<go.temporal.io/server/api/matchingservice/v1;matchingserviceb\x06proto3"
 
 var (
@@ -4947,8 +4936,8 @@ var file_temporal_server_api_matchingservice_v1_request_response_proto_goTypes =
 	(*RecordWorkerHeartbeatResponse)(nil),                              // 65: temporal.server.api.matchingservice.v1.RecordWorkerHeartbeatResponse
 	(*ListWorkersRequest)(nil),                                         // 66: temporal.server.api.matchingservice.v1.ListWorkersRequest
 	(*ListWorkersResponse)(nil),                                        // 67: temporal.server.api.matchingservice.v1.ListWorkersResponse
-	(*UpdateTaskQueueConfigRequest)(nil),                               // 68: temporal.server.api.matchingservice.v1.UpdateTaskQueueConfigRequest
-	(*UpdateTaskQueueConfigResponse)(nil),                              // 69: temporal.server.api.matchingservice.v1.UpdateTaskQueueConfigResponse
+	(*ConfigureTaskQueueRequest)(nil),                                  // 68: temporal.server.api.matchingservice.v1.ConfigureTaskQueueRequest
+	(*ConfigureTaskQueueResponse)(nil),                                 // 69: temporal.server.api.matchingservice.v1.ConfigureTaskQueueResponse
 	nil,                                                                // 70: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse.QueriesEntry
 	nil,                                                                // 71: temporal.server.api.matchingservice.v1.DescribeTaskQueuePartitionResponse.VersionsInfoInternalEntry
 	(*UpdateWorkerBuildIdCompatibilityRequest_ApplyPublicRequest)(nil), // 72: temporal.server.api.matchingservice.v1.UpdateWorkerBuildIdCompatibilityRequest.ApplyPublicRequest
@@ -5114,8 +5103,8 @@ var file_temporal_server_api_matchingservice_v1_request_response_proto_depIdxs =
 	124, // 99: temporal.server.api.matchingservice.v1.RecordWorkerHeartbeatRequest.heartbeart_request:type_name -> temporal.api.workflowservice.v1.RecordWorkerHeartbeatRequest
 	125, // 100: temporal.server.api.matchingservice.v1.ListWorkersRequest.list_request:type_name -> temporal.api.workflowservice.v1.ListWorkersRequest
 	126, // 101: temporal.server.api.matchingservice.v1.ListWorkersResponse.workers_info:type_name -> temporal.api.worker.v1.WorkerInfo
-	127, // 102: temporal.server.api.matchingservice.v1.UpdateTaskQueueConfigRequest.update_taskqueue_config:type_name -> temporal.api.workflowservice.v1.UpdateTaskQueueConfigRequest
-	128, // 103: temporal.server.api.matchingservice.v1.UpdateTaskQueueConfigResponse.updated_taskqueue_config:type_name -> temporal.api.taskqueue.v1.TaskQueueConfig
+	127, // 102: temporal.server.api.matchingservice.v1.ConfigureTaskQueueRequest.update_taskqueue_config:type_name -> temporal.api.workflowservice.v1.UpdateTaskQueueConfigRequest
+	128, // 103: temporal.server.api.matchingservice.v1.ConfigureTaskQueueResponse.updated_taskqueue_config:type_name -> temporal.api.taskqueue.v1.TaskQueueConfig
 	77,  // 104: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse.QueriesEntry.value:type_name -> temporal.api.query.v1.WorkflowQuery
 	129, // 105: temporal.server.api.matchingservice.v1.DescribeTaskQueuePartitionResponse.VersionsInfoInternalEntry.value:type_name -> temporal.server.api.taskqueue.v1.TaskQueueVersionInfoInternal
 	130, // 106: temporal.server.api.matchingservice.v1.UpdateWorkerBuildIdCompatibilityRequest.ApplyPublicRequest.request:type_name -> temporal.api.workflowservice.v1.UpdateWorkerBuildIdCompatibilityRequest

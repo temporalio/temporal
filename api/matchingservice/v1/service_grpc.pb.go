@@ -54,7 +54,7 @@ const (
 	MatchingService_ListNexusEndpoints_FullMethodName                     = "/temporal.server.api.matchingservice.v1.MatchingService/ListNexusEndpoints"
 	MatchingService_RecordWorkerHeartbeat_FullMethodName                  = "/temporal.server.api.matchingservice.v1.MatchingService/RecordWorkerHeartbeat"
 	MatchingService_ListWorkers_FullMethodName                            = "/temporal.server.api.matchingservice.v1.MatchingService/ListWorkers"
-	MatchingService_UpdateTaskQueueConfig_FullMethodName                  = "/temporal.server.api.matchingservice.v1.MatchingService/UpdateTaskQueueConfig"
+	MatchingService_ConfigureTaskQueue_FullMethodName                     = "/temporal.server.api.matchingservice.v1.MatchingService/ConfigureTaskQueue"
 )
 
 // MatchingServiceClient is the client API for MatchingService service.
@@ -200,18 +200,9 @@ type MatchingServiceClient interface {
 	// Supports pagination for large result sets. Returns an empty list if no workers match the criteria.
 	// Returns an error if the namespace doesn't exist.
 	ListWorkers(ctx context.Context, in *ListWorkersRequest, opts ...grpc.CallOption) (*ListWorkersResponse, error)
-	// (-- api-linter: core::0134::method-signature=disabled
-	//
-	//	aip.dev/not-precedent: UpdateTaskQueueConfig RPC doesn't follow Google API format. --)
-	//
-	// (-- api-linter: core::0134::response-message-name=disabled
-	//
-	//	aip.dev/not-precedent: UpdateTaskQueueConfig RPC doesn't follow Google API format. --)
-	//
-	// (-- api-linter: core::0134::request-resource-required=disabled
-	//
-	//	aip.dev/not-precedent: UpdateTaskQueueConfig RPC doesn't follow Google API format. --)
-	UpdateTaskQueueConfig(ctx context.Context, in *UpdateTaskQueueConfigRequest, opts ...grpc.CallOption) (*UpdateTaskQueueConfigResponse, error)
+	// ConfigureTaskQueue recieves TaskQueue specific config updates via api.
+	// Persists the TaskQueue configs.
+	ConfigureTaskQueue(ctx context.Context, in *ConfigureTaskQueueRequest, opts ...grpc.CallOption) (*ConfigureTaskQueueResponse, error)
 }
 
 type matchingServiceClient struct {
@@ -528,9 +519,9 @@ func (c *matchingServiceClient) ListWorkers(ctx context.Context, in *ListWorkers
 	return out, nil
 }
 
-func (c *matchingServiceClient) UpdateTaskQueueConfig(ctx context.Context, in *UpdateTaskQueueConfigRequest, opts ...grpc.CallOption) (*UpdateTaskQueueConfigResponse, error) {
-	out := new(UpdateTaskQueueConfigResponse)
-	err := c.cc.Invoke(ctx, MatchingService_UpdateTaskQueueConfig_FullMethodName, in, out, opts...)
+func (c *matchingServiceClient) ConfigureTaskQueue(ctx context.Context, in *ConfigureTaskQueueRequest, opts ...grpc.CallOption) (*ConfigureTaskQueueResponse, error) {
+	out := new(ConfigureTaskQueueResponse)
+	err := c.cc.Invoke(ctx, MatchingService_ConfigureTaskQueue_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -680,18 +671,9 @@ type MatchingServiceServer interface {
 	// Supports pagination for large result sets. Returns an empty list if no workers match the criteria.
 	// Returns an error if the namespace doesn't exist.
 	ListWorkers(context.Context, *ListWorkersRequest) (*ListWorkersResponse, error)
-	// (-- api-linter: core::0134::method-signature=disabled
-	//
-	//	aip.dev/not-precedent: UpdateTaskQueueConfig RPC doesn't follow Google API format. --)
-	//
-	// (-- api-linter: core::0134::response-message-name=disabled
-	//
-	//	aip.dev/not-precedent: UpdateTaskQueueConfig RPC doesn't follow Google API format. --)
-	//
-	// (-- api-linter: core::0134::request-resource-required=disabled
-	//
-	//	aip.dev/not-precedent: UpdateTaskQueueConfig RPC doesn't follow Google API format. --)
-	UpdateTaskQueueConfig(context.Context, *UpdateTaskQueueConfigRequest) (*UpdateTaskQueueConfigResponse, error)
+	// ConfigureTaskQueue recieves TaskQueue specific config updates via api.
+	// Persists the TaskQueue configs.
+	ConfigureTaskQueue(context.Context, *ConfigureTaskQueueRequest) (*ConfigureTaskQueueResponse, error)
 	mustEmbedUnimplementedMatchingServiceServer()
 }
 
@@ -801,8 +783,8 @@ func (UnimplementedMatchingServiceServer) RecordWorkerHeartbeat(context.Context,
 func (UnimplementedMatchingServiceServer) ListWorkers(context.Context, *ListWorkersRequest) (*ListWorkersResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListWorkers not implemented")
 }
-func (UnimplementedMatchingServiceServer) UpdateTaskQueueConfig(context.Context, *UpdateTaskQueueConfigRequest) (*UpdateTaskQueueConfigResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method UpdateTaskQueueConfig not implemented")
+func (UnimplementedMatchingServiceServer) ConfigureTaskQueue(context.Context, *ConfigureTaskQueueRequest) (*ConfigureTaskQueueResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ConfigureTaskQueue not implemented")
 }
 func (UnimplementedMatchingServiceServer) mustEmbedUnimplementedMatchingServiceServer() {}
 
@@ -1429,20 +1411,20 @@ func _MatchingService_ListWorkers_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
-func _MatchingService_UpdateTaskQueueConfig_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(UpdateTaskQueueConfigRequest)
+func _MatchingService_ConfigureTaskQueue_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ConfigureTaskQueueRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(MatchingServiceServer).UpdateTaskQueueConfig(ctx, in)
+		return srv.(MatchingServiceServer).ConfigureTaskQueue(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: MatchingService_UpdateTaskQueueConfig_FullMethodName,
+		FullMethod: MatchingService_ConfigureTaskQueue_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(MatchingServiceServer).UpdateTaskQueueConfig(ctx, req.(*UpdateTaskQueueConfigRequest))
+		return srv.(MatchingServiceServer).ConfigureTaskQueue(ctx, req.(*ConfigureTaskQueueRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1591,8 +1573,8 @@ var MatchingService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _MatchingService_ListWorkers_Handler,
 		},
 		{
-			MethodName: "UpdateTaskQueueConfig",
-			Handler:    _MatchingService_UpdateTaskQueueConfig_Handler,
+			MethodName: "ConfigureTaskQueue",
+			Handler:    _MatchingService_ConfigureTaskQueue_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
