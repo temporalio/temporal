@@ -563,11 +563,11 @@ message ListWorkersResponse {
     bytes next_page_token = 2;
 }
 
-message UpdateTaskQueueConfigRequest {
+message ConfigureTaskQueueRequest {
     string namespace_id = 1;
     temporal.api.workflowservice.v1.UpdateTaskQueueConfigRequest update_taskqueue_config = 2;
 }
 
-message UpdateTaskQueueConfigResponse {
+message ConfigureTaskQueueResponse {
     temporal.api.taskqueue.v1.TaskQueueConfig updated_taskqueue_config = 1;
 }

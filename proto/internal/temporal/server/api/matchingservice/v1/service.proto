@@ -174,5 +174,5 @@ service MatchingService {
 
     // ConfigureTaskQueue recieves TaskQueue specific config updates via api.
     // Persists the TaskQueue configs.
-    rpc ConfigureTaskQueue (UpdateTaskQueueConfigRequest) returns (UpdateTaskQueueConfigResponse) {} 
+    rpc ConfigureTaskQueue (ConfigureTaskQueueRequest) returns (ConfigureTaskQueueResponse) {} 
 }
