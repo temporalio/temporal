@@ -31,6 +31,7 @@ var (
 	StandbyWithVisibilityArchivalNamespaceID = namespace.ID("deadbeef-0123-4567-890a-bcdef0123461")
 	StandbyWithVisibilityArchivalNamespace   = namespace.Name("mock standby with visibility archival namespace name")
 	MissedNamespaceID                        = namespace.ID("missed-namespace-id")
+	MissedNamespace                          = namespace.Name("missed-namespace-name")
 	WorkflowID                               = "mock-workflow-id"
 	RunID                                    = "0d00698f-08e1-4d36-a3e2-3bf109f5d2d6"
 	WorkflowKey                              = definition.NewWorkflowKey(NamespaceID.String(), WorkflowID, RunID)

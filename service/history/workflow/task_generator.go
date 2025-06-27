@@ -580,6 +580,9 @@ func (r *TaskGeneratorImpl) GenerateChildWorkflowTasks(
 	return nil
 }
 
+// TODO: Take in scheduledEventID instead of event once
+// TargetNamespaceID, TargetWorkflowID, TargetRunID & TargetChildWorkflowOnly
+// are removed from CancelExecutionTask.
 func (r *TaskGeneratorImpl) GenerateRequestCancelExternalTasks(
 	event *historypb.HistoryEvent,
 ) error {
@@ -615,6 +618,9 @@ func (r *TaskGeneratorImpl) GenerateRequestCancelExternalTasks(
 	return nil
 }
 
+// TODO: Take in scheduledEventID instead of event once
+// TargetNamespaceID, TargetWorkflowID, TargetRunID & TargetChildWorkflowOnly
+// are removed from SignalExecutionTask.
 func (r *TaskGeneratorImpl) GenerateSignalExternalTasks(
 	event *historypb.HistoryEvent,
 ) error {
