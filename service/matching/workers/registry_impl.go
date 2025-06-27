@@ -285,8 +285,18 @@ func (m *registryImpl) RecordWorkerHeartbeat(nsID namespace.ID, workerHeartbeat 
 	m.upsertHeartbeat(nsID, workerHeartbeat)
 }
 
-func (m *registryImpl) ListWorkers(nsID namespace.ID, _ string, _ []byte) ([]*workerpb.WorkerHeartbeat, error) {
-	return m.filterWorkers(nsID, func(heartbeat *workerpb.WorkerHeartbeat) bool {
-		return true
-	}), nil
+func (m *registryImpl) ListWorkers(nsID namespace.ID, query string, _ []byte) ([]*workerpb.WorkerHeartbeat, error) {
+	predicate := func(_ *workerpb.WorkerHeartbeat) bool { return true }
+	if query != "" {
+		queryEngine, err := newWorkerQueryEngine(nsID.String(), query)
+		if err != nil {
+			return nil, err
+		}
+
+		predicate = func(heartbeat *workerpb.WorkerHeartbeat) bool {
+			result, err := queryEngine.EvaluateWorker(heartbeat)
+			return err == nil && result
+		}
+	}
+	return m.filterWorkers(nsID, predicate), nil
 }
