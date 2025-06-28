@@ -61,6 +61,7 @@ type (
 		// it should adjust its poller count
 		pollerScalingDecision *taskqueuepb.PollerScalingDecision
 		recycleToken          func(*internalTask)
+		removeFromMatcher     func()
 
 		// These fields are for use by matcherData:
 		waitableMatchResult
