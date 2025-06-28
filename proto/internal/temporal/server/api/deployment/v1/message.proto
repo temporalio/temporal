@@ -42,6 +42,9 @@ message DeploymentVersionData {
     // Range: [0, 100]. Must be zero if the version is not ramping (i.e. `ramping_since_time` is nil).
     // Can be in the range [0, 100] if the version is ramping.
     float ramp_percentage = 5;
+
+    // Status of the Worker Deployment Version.
+    temporal.api.enums.v1.WorkerDeploymentVersionStatus status = 6;
 }
 
 // Local state for Worker Deployment Version
