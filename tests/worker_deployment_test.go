@@ -2230,8 +2230,7 @@ func (s *WorkerDeploymentSuite) verifyTimestampEquality(expected, actual *timest
 	if expected == nil {
 		return
 	}
-	fmt.Println(expected.AsTime(), actual.AsTime())
-	fmt.Println(expected.AsTime().Equal(actual.AsTime()) || (actual.AsTime().After(expected.AsTime()) && actual.AsTime().Before(time.Now())))
+
 	s.True(expected.AsTime().Equal(actual.AsTime()) || (actual.AsTime().After(expected.AsTime()) && actual.AsTime().Before(time.Now())))
 }
 
@@ -2412,29 +2411,20 @@ func (s *WorkerDeploymentSuite) createVersionsInDeployments(ctx context.Context,
 }
 
 func (s *WorkerDeploymentSuite) verifyWorkerDeploymentSummary(
+	a *require.Assertions,
 	expectedSummary *workflowservice.ListWorkerDeploymentsResponse_WorkerDeploymentSummary,
 	actualSummary *workflowservice.ListWorkerDeploymentsResponse_WorkerDeploymentSummary,
 ) bool {
 
-	// To check if timestamps are correctly set, we need to check if:
-	// expectedSummary.CreateTime >= actualSummary.CreateTime && expectedSummary.CreateTime <= time.Now()
-
-	// Deployment create time
 	s.verifyTimestampEquality(expectedSummary.CreateTime, actualSummary.CreateTime)
 
 	// Current version checks
-	if expectedSummary.RoutingConfig.GetCurrentVersion() != actualSummary.RoutingConfig.GetCurrentVersion() { //nolint:staticcheck // SA1019: old worker versioning
-		s.Fail("Current version mismatch")
-	}
+	a.Equal(expectedSummary.RoutingConfig.GetCurrentVersion(), actualSummary.RoutingConfig.GetCurrentVersion(), "Current version mismatch") //nolint:staticcheck // SA1019: old worker versioning
 	s.verifyTimestampEquality(expectedSummary.RoutingConfig.GetCurrentVersionChangedTime(), actualSummary.RoutingConfig.GetCurrentVersionChangedTime())
 
 	// Ramping version checks
-	if expectedSummary.RoutingConfig.GetRampingVersion() != actualSummary.RoutingConfig.GetRampingVersion() { //nolint:staticcheck // SA1019: old worker versioning
-		s.Fail("Ramping version mismatch")
-	}
-	if expectedSummary.RoutingConfig.GetRampingVersionPercentage() != actualSummary.RoutingConfig.GetRampingVersionPercentage() {
-		s.Fail("Ramping version percentage mismatch")
-	}
+	a.Equal(expectedSummary.RoutingConfig.GetRampingVersion(), actualSummary.RoutingConfig.GetRampingVersion(), "Ramping version mismatch") //nolint:staticcheck // SA1019: old worker versioning
+	a.Equal(expectedSummary.RoutingConfig.GetRampingVersionPercentage(), actualSummary.RoutingConfig.GetRampingVersionPercentage(), "Ramping version percentage mismatch")
 
 	s.verifyTimestampEquality(expectedSummary.RoutingConfig.GetRampingVersionChangedTime(), actualSummary.RoutingConfig.GetRampingVersionChangedTime())
 
@@ -2483,10 +2473,11 @@ func (s *WorkerDeploymentSuite) startAndValidateWorkerDeployments(
 		for _, expectedDeploymentSummary := range expectedDeploymentSummaries {
 			deploymentSummaryFound := false
 			for _, actualDeploymentSummary := range actualDeploymentSummaries {
+				// our assumption is that deployment summaries with the same name are fully ready for checks. May not be true since visibility might take time to update other fields.
 				if actualDeploymentSummary.Name != expectedDeploymentSummary.Name {
 					continue
 				}
-				s.verifyWorkerDeploymentSummary(expectedDeploymentSummary, actualDeploymentSummary)
+				s.verifyWorkerDeploymentSummary(a, expectedDeploymentSummary, actualDeploymentSummary)
 				deploymentSummaryFound = true
 				break
 			}
