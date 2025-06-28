@@ -15,6 +15,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -597,7 +598,7 @@ func (s *chasmEngineSuite) buildPersistenceMutableState(
 func (s *chasmEngineSuite) serializeComponentState(
 	state proto.Message,
 ) *commonpb.DataBlob {
-	blob, err := serialization.ProtoEncodeBlob(state, enumspb.ENCODING_TYPE_PROTO3)
+	blob, err := codec.ProtoEncodeBlob(state, enumspb.ENCODING_TYPE_PROTO3)
 	s.NoError(err)
 	return blob
 }
