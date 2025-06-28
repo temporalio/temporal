@@ -180,10 +180,6 @@ func (db *taskQueueDB) takeOverTaskQueueLocked(
 		}
 		// We took over the task queue and are not sure what tasks may have been written
 		// before. Set max read level id of all subqueues to just before our new block.
-		//
-		// Leave MaxReadLevelPass as it was. This works for both fifo queues (which don't use
-		// pass) and fair queues. Note that for fair queues, MaxReadLevel will not correspond
-		// to any task that has been written.
 		maxReadLevel := rangeIDToTaskIDBlock(db.rangeID, db.config.RangeSize).start - 1
 		for _, s := range db.subqueues {
 			s.maxReadLevel = maxReadLevel
@@ -332,6 +328,9 @@ func (db *taskQueueDB) setKnownFairBacklogCount(subqueue int, count int64) {
 	if db.subqueues[subqueue].ApproximateBacklogCount != count {
 		db.lastChange = time.Now()
 		db.subqueues[subqueue].ApproximateBacklogCount = count
+		if count == 0 {
+			db.subqueues[subqueue].oldestTime = time.Time{}
+		}
 	}
 }
 
@@ -473,13 +472,14 @@ func (db *taskQueueDB) CreateFairTasks(
 		allTasks[i] = task
 		allSubqueues[i] = req.subqueue
 		newTasks[req.subqueue] = append(newTasks[req.subqueue], task)
-		newMaxLevel[req.subqueue] = newMaxLevel[req.subqueue].max(fairLevelFromAllocatedTask(task))
+		newMaxLevel[req.subqueue] = newMaxLevel[req.subqueue].max(req.fairLevel)
 	}
 
 	for sq, tasks := range newTasks {
 		db.subqueues[sq].ApproximateBacklogCount += int64(len(tasks))
 	}
 
+	// FIXME: comment
 	for sq, level := range newMaxLevel {
 		db.subqueues[sq].FairMaxReadLevel = fairLevelFromProto(db.subqueues[sq].FairMaxReadLevel).max(level).toProto()
 	}
