@@ -86,25 +86,10 @@ func NewHostLevelCache(
 	if config.HistoryCacheLimitSizeBased {
 		maxSize = config.HistoryHostLevelCacheMaxSizeBytes()
 	}
-	return newCache(
-		maxSize,
-		config.HistoryCacheTTL(),
-		config.HistoryCacheNonUserContextLockTimeout(),
-		logger,
-		handler,
-	)
-}
-
-func newCache(
-	size int,
-	ttl time.Duration,
-	nonUserContextLockTimeout time.Duration,
-	logger log.Logger,
-	handler metrics.Handler,
-) Cache {
 	opts := &cache.Options{
-		TTL: ttl,
-		Pin: true,
+		TTL:          config.HistoryCacheTTL(),
+		Pin:          true,
+		ActiveExpiry: config.HistoryCacheActiveExpiry,
 		OnPut: func(val any) {
 			//revive:disable-next-line:unchecked-type-assertion
 			item := val.(*cacheItem)
@@ -142,11 +127,10 @@ func newCache(
 		},
 	}
 
-	withMetrics := cache.NewWithMetrics(size, opts, handler.WithTags(metrics.CacheTypeTag(metrics.MutableStateCacheTypeTagValue)))
-
+	taggedHandler := handler.WithTags(metrics.CacheTypeTag(metrics.MutableStateCacheTypeTagValue))
 	return &cacheImpl{
-		Cache:                     withMetrics,
-		nonUserContextLockTimeout: nonUserContextLockTimeout,
+		Cache:                     cache.NewWithMetrics(maxSize, opts, taggedHandler),
+		nonUserContextLockTimeout: config.HistoryCacheNonUserContextLockTimeout(),
 	}
 }
 
