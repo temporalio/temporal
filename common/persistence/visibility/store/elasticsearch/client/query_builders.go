@@ -157,6 +157,7 @@ func (q *V8RangeQuery) Lt(value interface{}) *V8RangeQuery {
 func (q *V8RangeQuery) Source() (interface{}, error) {
 	rangeQuery := make(map[string]interface{})
 
+	// Use v8-style range query format
 	if q.gte != nil {
 		rangeQuery["gte"] = q.gte
 	}
