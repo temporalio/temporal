@@ -222,6 +222,26 @@ func (mr *MockMatchingServiceClientMockRecorder) DescribeTaskQueuePartition(ctx,
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeTaskQueuePartition", reflect.TypeOf((*MockMatchingServiceClient)(nil).DescribeTaskQueuePartition), varargs...)
 }
 
+// DescribeVersionedTaskQueues mocks base method.
+func (m *MockMatchingServiceClient) DescribeVersionedTaskQueues(ctx context.Context, in *matchingservice.DescribeVersionedTaskQueuesRequest, opts ...grpc.CallOption) (*matchingservice.DescribeVersionedTaskQueuesResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "DescribeVersionedTaskQueues", varargs...)
+	ret0, _ := ret[0].(*matchingservice.DescribeVersionedTaskQueuesResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DescribeVersionedTaskQueues indicates an expected call of DescribeVersionedTaskQueues.
+func (mr *MockMatchingServiceClientMockRecorder) DescribeVersionedTaskQueues(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeVersionedTaskQueues", reflect.TypeOf((*MockMatchingServiceClient)(nil).DescribeVersionedTaskQueues), varargs...)
+}
+
 // DispatchNexusTask mocks base method.
 func (m *MockMatchingServiceClient) DispatchNexusTask(ctx context.Context, in *matchingservice.DispatchNexusTaskRequest, opts ...grpc.CallOption) (*matchingservice.DispatchNexusTaskResponse, error) {
 	m.ctrl.T.Helper()
@@ -879,6 +899,21 @@ func (m *MockMatchingServiceServer) DescribeTaskQueuePartition(arg0 context.Cont
 func (mr *MockMatchingServiceServerMockRecorder) DescribeTaskQueuePartition(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeTaskQueuePartition", reflect.TypeOf((*MockMatchingServiceServer)(nil).DescribeTaskQueuePartition), arg0, arg1)
+}
+
+// DescribeVersionedTaskQueues mocks base method.
+func (m *MockMatchingServiceServer) DescribeVersionedTaskQueues(arg0 context.Context, arg1 *matchingservice.DescribeVersionedTaskQueuesRequest) (*matchingservice.DescribeVersionedTaskQueuesResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DescribeVersionedTaskQueues", arg0, arg1)
+	ret0, _ := ret[0].(*matchingservice.DescribeVersionedTaskQueuesResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DescribeVersionedTaskQueues indicates an expected call of DescribeVersionedTaskQueues.
+func (mr *MockMatchingServiceServerMockRecorder) DescribeVersionedTaskQueues(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeVersionedTaskQueues", reflect.TypeOf((*MockMatchingServiceServer)(nil).DescribeVersionedTaskQueues), arg0, arg1)
 }
 
 // DispatchNexusTask mocks base method.

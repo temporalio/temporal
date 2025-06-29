@@ -4,7 +4,6 @@ import (
 	"context"
 
 	commonpb "go.temporal.io/api/common/v1"
-	enumspb "go.temporal.io/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -45,7 +44,7 @@ func (m *shardManagerImpl) GetOrCreateShard(
 		}
 		shardInfo.ShardId = request.ShardID
 		shardInfo.UpdateTime = timestamp.TimeNowPtrUtc()
-		data, err := m.serializer.ShardInfoToBlob(shardInfo, enumspb.ENCODING_TYPE_PROTO3)
+		data, err := m.serializer.ShardInfoToBlob(shardInfo)
 		if err != nil {
 			return 0, nil, err
 		}
@@ -75,7 +74,7 @@ func (m *shardManagerImpl) UpdateShard(
 	shardInfo := request.ShardInfo
 	shardInfo.UpdateTime = timestamp.TimeNowPtrUtc()
 
-	shardInfoBlob, err := m.serializer.ShardInfoToBlob(shardInfo, enumspb.ENCODING_TYPE_PROTO3)
+	shardInfoBlob, err := m.serializer.ShardInfoToBlob(shardInfo)
 	if err != nil {
 		return err
 	}

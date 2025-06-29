@@ -5700,6 +5700,7 @@ func (ms *MutableStateImpl) RetryActivity(
 			activityInfo.StartedTime = nil
 			activityInfo.RequestId = ""
 			activityInfo.RetryLastFailure = ms.truncateRetryableActivityFailure(activityFailure)
+			activityInfo.Attempt++
 			return nil
 		}); err != nil {
 			return enumspb.RETRY_STATE_INTERNAL_SERVER_ERROR, err
@@ -8246,6 +8247,10 @@ func (ms *MutableStateImpl) GetReapplyCandidateEvents() []*historypb.HistoryEven
 
 func (ms *MutableStateImpl) IsSubStateMachineDeleted() bool {
 	return ms.subStateMachineDeleted
+}
+
+func (ms *MutableStateImpl) SetSuccessorRunID(runID string) {
+	ms.executionInfo.SuccessorRunId = runID
 }
 
 // ActivityMatchWorkflowRules checks if the activity matches any of the workflow rules

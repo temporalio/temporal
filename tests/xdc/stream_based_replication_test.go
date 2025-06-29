@@ -327,7 +327,7 @@ func (s *streamBasedReplicationTestSuite) importEvents(
 	)
 	var token []byte
 	for _, batch := range eventBatches {
-		blob, err := s.serializer.SerializeEvents(batch.Events, enumspb.ENCODING_TYPE_PROTO3)
+		blob, err := s.serializer.SerializeEvents(batch.Events)
 		s.NoError(err)
 		req := &historyservice.ImportWorkflowExecutionRequest{
 			NamespaceId: s.namespaceID,

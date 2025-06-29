@@ -74,6 +74,11 @@ service MatchingService {
     rpc DescribeTaskQueuePartition (DescribeTaskQueuePartitionRequest) returns (DescribeTaskQueuePartitionResponse) {
     }
 
+    // DescribeVersionedTaskQueues returns details about the requested versioned task queues.
+    // It is an internal API; there is no direct user-facing equivalent.
+    rpc DescribeVersionedTaskQueues (DescribeVersionedTaskQueuesRequest) returns (DescribeVersionedTaskQueuesResponse) {
+    }
+
     // ListTaskQueuePartitions returns a map of partitionKey and hostAddress for a task queue.
     rpc  ListTaskQueuePartitions(ListTaskQueuePartitionsRequest) returns (ListTaskQueuePartitionsResponse){
     }

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -1118,6 +1119,8 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 	request *matchingservice.DescribeTaskQueueRequest,
 ) (*matchingservice.DescribeTaskQueueResponse, error) {
 	req := request.GetDescRequest()
+
+	// This has been deprecated.
 	if req.ApiMode == enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED {
 		rootPartition, err := tqid.PartitionFromProto(req.GetTaskQueue(), request.GetNamespaceId(), req.GetTaskQueueType())
 		if err != nil {
@@ -1143,7 +1146,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 		// TODO bug fix: We cache the last response for each build ID. timeSinceLastFanOut is the last fan out time, that means some enteries in the cache can be more stale if
 		// user is calling this API back-to-back but with different version selection.
 		cacheKeyFunc := func(buildId string, taskQueueType enumspb.TaskQueueType) string {
-			return fmt.Sprintf("%s.%s", buildId, taskQueueType.String())
+			return fmt.Sprintf("dtq_enhanced:%s.%s", buildId, taskQueueType.String())
 		}
 		missingItemsInCache := false
 		physicalTqInfos := make(map[string]map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo)
@@ -1277,7 +1280,6 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 		}, nil
 	}
 
-	// Otherwise, do legacy DescribeTaskQueue
 	partition, err := tqid.PartitionFromProto(req.TaskQueue, request.GetNamespaceId(), req.TaskQueueType)
 	if err != nil {
 		return nil, err
@@ -1296,26 +1298,35 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 		if !pm.Partition().IsRoot() {
 			return nil, serviceerror.NewInvalidArgument("DescribeTaskQueue stats are only supported for the root partition")
 		}
-		cacheKey := ".taskQueueStats" // starts with `.` to prevent clashing with build ID cache keys
+
+		var buildIds []string
+		if request.Version != nil {
+			// A particular version was requested. This is only available internally; not user-facing.
+			buildIds = []string{worker_versioning.WorkerDeploymentVersionToStringV31(request.Version)}
+		}
+
+		// TODO(stephan): cache each version separately to allow re-use of cached stats
+		cacheKey := "dtq_default:" + strings.Join(buildIds, ",")
 		if ts := pm.GetCache(cacheKey); ts != nil {
 			//revive:disable-next-line:unchecked-type-assertion
 			descrResp.DescResponse.Stats = ts.(*taskqueuepb.TaskQueueStats)
 		} else {
 			taskQueueStats := &taskqueuepb.TaskQueueStats{}
 
-			// find all buildIds
-			var buildIds []string
-			userData, _, err := pm.GetUserDataManager().GetUserData()
-			if err != nil {
-				return nil, err
-			}
-			typedUserData := userData.GetData().GetPerType()[int32(pm.Partition().TaskType())]
-			for _, v := range typedUserData.GetDeploymentData().GetVersions() {
-				if v.GetVersion() == nil || v.GetVersion().GetDeploymentName() == "" || v.GetVersion().GetBuildId() == "" {
-					continue
+			// No version was requested, so we need to query all versions.
+			if len(buildIds) == 0 {
+				userData, _, err := pm.GetUserDataManager().GetUserData()
+				if err != nil {
+					return nil, err
 				}
-				buildId := worker_versioning.WorkerDeploymentVersionToStringV32(v.GetVersion())
-				buildIds = append(buildIds, buildId)
+				typedUserData := userData.GetData().GetPerType()[int32(pm.Partition().TaskType())]
+				for _, v := range typedUserData.GetDeploymentData().GetVersions() {
+					if v.GetVersion() == nil || v.GetVersion().GetDeploymentName() == "" || v.GetVersion().GetBuildId() == "" {
+						continue
+					}
+					buildId := worker_versioning.WorkerDeploymentVersionToStringV32(v.GetVersion())
+					buildIds = append(buildIds, buildId)
+				}
 			}
 
 			// query each partition for stats
@@ -1352,6 +1363,56 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 	}
 
 	return descrResp, nil
+}
+
+func (e *matchingEngineImpl) DescribeVersionedTaskQueues(
+	ctx context.Context,
+	request *matchingservice.DescribeVersionedTaskQueuesRequest,
+) (*matchingservice.DescribeVersionedTaskQueuesResponse, error) {
+	partition, err := tqid.PartitionFromProto(request.TaskQueue, request.GetNamespaceId(), request.TaskQueueType)
+	if err != nil {
+		return nil, err
+	}
+
+	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, true, loadCauseDescribe)
+	if err != nil {
+		return nil, err
+	}
+
+	cacheKey := fmt.Sprintf("dvtq:%s", worker_versioning.WorkerDeploymentVersionToStringV31(request.Version))
+	if cached := pm.GetCache(cacheKey); cached != nil {
+		//revive:disable-next-line:unchecked-type-assertion
+		return cached.(*matchingservice.DescribeVersionedTaskQueuesResponse), nil
+	}
+
+	resp := &matchingservice.DescribeVersionedTaskQueuesResponse{}
+	for _, tq := range request.VersionTaskQueues {
+		tqResp, err := e.matchingRawClient.DescribeTaskQueue(ctx,
+			&matchingservice.DescribeTaskQueueRequest{
+				NamespaceId: request.GetNamespaceId(),
+				DescRequest: &workflowservice.DescribeTaskQueueRequest{
+					TaskQueue: &taskqueuepb.TaskQueue{
+						Name: tq.Name,
+						Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+					},
+					TaskQueueType: tq.Type,
+					ReportStats:   true,
+				},
+				Version: request.Version,
+			})
+		if err != nil {
+			return nil, err
+		}
+		resp.VersionTaskQueues = append(resp.VersionTaskQueues,
+			&matchingservice.DescribeVersionedTaskQueuesResponse_VersionTaskQueue{
+				Name:  tq.Name,
+				Type:  tq.Type,
+				Stats: tqResp.DescResponse.Stats,
+			})
+	}
+
+	pm.PutCache(cacheKey, resp)
+	return resp, nil
 }
 
 func dedupPollers(pollerInfos []*taskqueuepb.PollerInfo) []*taskqueuepb.PollerInfo {

@@ -78,6 +78,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 var _ Handler = (*WorkflowHandler)(nil)
@@ -3372,14 +3373,17 @@ func (wh *WorkflowHandler) DescribeWorkerDeploymentVersion(ctx context.Context, 
 		versionStr = worker_versioning.ExternalWorkerDeploymentVersionToStringV31(request.GetDeploymentVersion())
 	}
 
-	info, err := wh.workerDeploymentClient.DescribeVersion(ctx, namespaceEntry, versionStr)
+	versionInfo, vtq, err := wh.workerDeploymentClient.DescribeVersion(ctx, namespaceEntry, versionStr, request.ReportTaskQueueStats)
 	if err != nil {
 		return nil, err
 	}
 
 	//nolint:staticcheck // SA1019: worker versioning v0.31
-	info.DeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(info.Version)
-	return &workflowservice.DescribeWorkerDeploymentVersionResponse{WorkerDeploymentVersionInfo: info}, nil
+	versionInfo.DeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(versionInfo.Version)
+	return &workflowservice.DescribeWorkerDeploymentVersionResponse{
+		WorkerDeploymentVersionInfo: versionInfo,
+		VersionTaskQueues:           vtq,
+	}, nil
 }
 
 func (wh *WorkflowHandler) SetWorkerDeploymentCurrentVersion(ctx context.Context, request *workflowservice.SetWorkerDeploymentCurrentVersionRequest) (_ *workflowservice.SetWorkerDeploymentCurrentVersionResponse, retError error) {
@@ -3976,6 +3980,10 @@ func (wh *WorkflowHandler) PatchSchedule(ctx context.Context, request *workflows
 	if len(request.Patch.Pause) > common.ScheduleNotesSizeLimit ||
 		len(request.Patch.Unpause) > common.ScheduleNotesSizeLimit {
 		return nil, errNotesTooLong
+	}
+
+	if trigger := request.Patch.GetTriggerImmediately(); trigger != nil && trigger.ScheduledTime == nil {
+		trigger.ScheduledTime = timestamppb.Now()
 	}
 
 	inputPayloads, err := sdk.PreferProtoDataConverter.ToPayloads(request.Patch)

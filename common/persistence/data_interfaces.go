@@ -614,12 +614,6 @@ type (
 		NextPageToken []byte
 	}
 
-	// CompleteTaskRequest is used to complete a task
-	CompleteTaskRequest struct {
-		TaskQueue *TaskQueueKey
-		TaskID    int64
-	}
-
 	// CompleteTasksLessThanRequest contains the request params needed to invoke CompleteTasksLessThan API
 	CompleteTasksLessThanRequest struct {
 		NamespaceID        string

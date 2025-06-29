@@ -93,7 +93,13 @@ func TestDefaultLogger(t *testing.T) {
 	preCaller := caller(1)
 	logger.With(tag.Error(fmt.Errorf("test error"))).Info("test info", tag.WorkflowActionWorkflowStarted)
 
-	// back to normal state
+	// Test tags with duplicate keys are replaced
+	withLogger := With(logger,
+		tag.NewStringTag("xray", "alpha"), tag.NewStringTag("xray", "yankee")) // alpha will never be seen
+	withLogger = With(withLogger, tag.NewStringTag("xray", "zulu"))
+	withLogger.Info("Log message with tag")
+
+	// put Stdout back to normal state
 	require.Nil(t, w.Close())
 	os.Stdout = old // restoring the real stdout
 	out := <-outC
@@ -102,6 +108,11 @@ func TestDefaultLogger(t *testing.T) {
 	assert.Nil(t, err)
 	lineNum := fmt.Sprintf("%v", par+1)
 	assert.Regexp(t, `{"level":"info","msg":"test info","error":"test error","wf-action":"add-workflow-started-event","logging-call-at":".*zap_logger_test.go:`+lineNum+`"}`+"\n", out)
+
+	assert.NotRegexp(t, `alpha`, out)  // replaced value
+	assert.Regexp(t, `xray`, out)      // key
+	assert.NotRegexp(t, `yankee`, out) // replaced value
+	assert.Regexp(t, `zulu`, out)      // override value
 }
 
 func TestThrottleLogger(t *testing.T) {

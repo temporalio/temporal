@@ -328,9 +328,11 @@ type WorkflowExecutionInfo struct {
 	WorkerDeploymentName string `protobuf:"bytes,103,opt,name=worker_deployment_name,json=workerDeploymentName,proto3" json:"worker_deployment_name,omitempty"`
 	// Priority contains metadata that controls relative ordering of task processing
 	// when tasks are backed up in a queue.
-	Priority      *v12.Priority `protobuf:"bytes,104,opt,name=priority,proto3" json:"priority,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Priority *v12.Priority `protobuf:"bytes,104,opt,name=priority,proto3" json:"priority,omitempty"`
+	// Run ID of the execution that supersedes this one (via terminate or continue-as-new).
+	SuccessorRunId string `protobuf:"bytes,105,opt,name=successor_run_id,json=successorRunId,proto3" json:"successor_run_id,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *WorkflowExecutionInfo) Reset() {
@@ -1019,6 +1021,13 @@ func (x *WorkflowExecutionInfo) GetPriority() *v12.Priority {
 		return x.Priority
 	}
 	return nil
+}
+
+func (x *WorkflowExecutionInfo) GetSuccessorRunId() string {
+	if x != nil {
+		return x.SuccessorRunId
+	}
+	return ""
 }
 
 type ExecutionStats struct {
@@ -4290,7 +4299,7 @@ const file_temporal_server_api_persistence_v1_executions_proto_rawDesc = "" +
 	"\x03key\x18\x01 \x01(\x05R\x03key\x12D\n" +
 	"\x05value\x18\x02 \x01(\v2..temporal.server.api.persistence.v1.QueueStateR\x05value:\x028\x01J\x04\b\x04\x10\x05J\x04\b\x05\x10\x06J\x04\b\b\x10\tJ\x04\b\t\x10\n" +
 	"J\x04\b\n" +
-	"\x10\vJ\x04\b\v\x10\fJ\x04\b\f\x10\rJ\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11\"\xc7:\n" +
+	"\x10\vJ\x04\b\v\x10\fJ\x04\b\f\x10\rJ\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11\"\xf1:\n" +
 	"\x15WorkflowExecutionInfo\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
@@ -4391,7 +4400,8 @@ const file_temporal_server_api_persistence_v1_executions_proto_rawDesc = "" +
 	"#last_transition_history_break_point\x18e \x01(\v27.temporal.server.api.persistence.v1.VersionedTransitionR\x1flastTransitionHistoryBreakPoint\x12\xb2\x01\n" +
 	"%children_initialized_post_reset_point\x18f \x03(\v2`.temporal.server.api.persistence.v1.WorkflowExecutionInfo.ChildrenInitializedPostResetPointEntryR!childrenInitializedPostResetPoint\x124\n" +
 	"\x16worker_deployment_name\x18g \x01(\tR\x14workerDeploymentName\x12<\n" +
-	"\bpriority\x18h \x01(\v2 .temporal.api.common.v1.PriorityR\bpriority\x1ad\n" +
+	"\bpriority\x18h \x01(\v2 .temporal.api.common.v1.PriorityR\bpriority\x12(\n" +
+	"\x10successor_run_id\x18i \x01(\tR\x0esuccessorRunId\x1ad\n" +
 	"\x15SearchAttributesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x125\n" +
 	"\x05value\x18\x02 \x01(\v2\x1f.temporal.api.common.v1.PayloadR\x05value:\x028\x01\x1aX\n" +

@@ -150,6 +150,26 @@ func (c *clientImpl) DescribeTaskQueuePartition(
 	return client.DescribeTaskQueuePartition(ctx, request, opts...)
 }
 
+func (c *clientImpl) DescribeVersionedTaskQueues(
+	ctx context.Context,
+	request *matchingservice.DescribeVersionedTaskQueuesRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.DescribeVersionedTaskQueuesResponse, error) {
+
+	p, err := tqid.PartitionFromProto(request.GetTaskQueue(), request.GetNamespaceId(), request.GetTaskQueueType())
+	if err != nil {
+		return nil, err
+	}
+
+	client, err := c.getClientForTaskQueuePartition(p)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.DescribeVersionedTaskQueues(ctx, request, opts...)
+}
+
 func (c *clientImpl) DispatchNexusTask(
 	ctx context.Context,
 	request *matchingservice.DispatchNexusTaskRequest,

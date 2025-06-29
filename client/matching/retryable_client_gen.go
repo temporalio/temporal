@@ -146,6 +146,21 @@ func (c *retryableClient) DescribeTaskQueuePartition(
 	return resp, err
 }
 
+func (c *retryableClient) DescribeVersionedTaskQueues(
+	ctx context.Context,
+	request *matchingservice.DescribeVersionedTaskQueuesRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.DescribeVersionedTaskQueuesResponse, error) {
+	var resp *matchingservice.DescribeVersionedTaskQueuesResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.DescribeVersionedTaskQueues(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) DispatchNexusTask(
 	ctx context.Context,
 	request *matchingservice.DispatchNexusTaskRequest,
