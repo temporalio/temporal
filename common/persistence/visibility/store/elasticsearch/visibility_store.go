@@ -41,7 +41,8 @@ const (
 
 type (
 	VisibilityStore struct {
-		esClient                       client.Client
+		esClient                       client.Client        // Legacy client (will be deprecated)
+		esClientV8                     client.ElasticClient // New simplified client interface
 		index                          string
 		searchAttributesProvider       searchattribute.Provider
 		searchAttributesMapperProvider searchattribute.MapperProvider
@@ -130,6 +131,13 @@ func NewVisibilityStore(
 		return nil, fmt.Errorf("unable to create Elasticsearch client (URL = %v, username = %q): %w",
 			cfg.URL.Redacted(), cfg.Username, err)
 	}
+
+	// Also create the new v8 client for migrated operations
+	esClientV8, err := client.NewV8ElasticClient(cfg, esHttpClient, logger)
+	if err != nil {
+		return nil, fmt.Errorf("unable to create Elasticsearch v8 client (URL = %v, username = %q): %w",
+			cfg.URL.Redacted(), cfg.Username, err)
+	}
 	var (
 		processor           Processor
 		processorAckTimeout dynamicconfig.DurationPropertyFn
@@ -141,6 +149,7 @@ func NewVisibilityStore(
 	}
 	return &VisibilityStore{
 		esClient:                       esClient,
+		esClientV8:                     esClientV8,
 		index:                          cfg.GetVisibilityIndex(),
 		searchAttributesProvider:       searchAttributesProvider,
 		searchAttributesMapperProvider: searchAttributesMapperProvider,
@@ -523,7 +532,9 @@ func (s *VisibilityStore) GetWorkflowExecution(
 	request *manager.GetWorkflowExecutionRequest,
 ) (*store.InternalGetWorkflowExecutionResponse, error) {
 	docID := GetDocID(request.WorkflowID, request.RunID)
-	result, err := s.esClient.Get(ctx, s.index, docID)
+
+	// Use the v8 client for consistency with other methods
+	result, err := s.esClientV8.GetDocument(ctx, s.index, docID)
 	if err != nil {
 		return nil, ConvertElasticsearchClientError("GetWorkflowExecution failed", err)
 	}
@@ -541,7 +552,8 @@ func (s *VisibilityStore) GetWorkflowExecution(
 		)
 	}
 
-	workflowExecutionInfo, err := s.ParseESDoc(result.Id, result.Source, typeMap, request.Namespace)
+	// Use the v8 client field names: Id_ and Source_
+	workflowExecutionInfo, err := s.ParseESDoc(result.Id_, result.Source_, typeMap, request.Namespace)
 	if err != nil {
 		return nil, err
 	}
