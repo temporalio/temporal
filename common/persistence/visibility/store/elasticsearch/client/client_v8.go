@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/elastic/go-elasticsearch/v8"
@@ -48,11 +49,14 @@ func newClientV8(cfg *Config, httpClient *http.Client, logger log.Logger) (*clie
 	}
 
 	esConfig := elasticsearch.Config{
-		Addresses: urls,
-		Username:  cfg.Username,
-		Password:  cfg.Password,
-		Transport: httpClient.Transport,
-		Header:    make(http.Header),
+		Addresses:           urls,
+		Username:            cfg.Username,
+		Password:            cfg.Password,
+		Transport:           httpClient.Transport,
+		Header:              make(http.Header),
+		CompressRequestBody: true,
+		MaxRetries:          3,
+		EnableDebugLogger:   strings.EqualFold(cfg.LogLevel, "trace") || strings.EqualFold(cfg.LogLevel, "debug"),
 	}
 
 	if cfg.EnableSniff {
