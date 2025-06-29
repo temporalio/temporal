@@ -14,6 +14,7 @@ require (
 	github.com/blang/semver/v4 v4.0.0
 	github.com/cactus/go-statsd-client/v5 v5.1.0
 	github.com/dgryski/go-farm v0.0.0-20240924180020-3414d57e47da
+	github.com/elastic/go-elasticsearch/v8 v8.18.1
 	github.com/emirpasic/gods v1.18.1
 	github.com/fatih/color v1.18.0
 	github.com/go-faker/faker/v4 v4.6.0
@@ -79,6 +80,8 @@ require (
 	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.34.1
 )
+
+require github.com/elastic/elastic-transport-go/v8 v8.7.0 // indirect
 
 require (
 	cel.dev/expr v0.20.0 // indirect
