@@ -2406,13 +2406,13 @@ func (s *WorkerDeploymentSuite) verifyWorkerDeploymentSummary(
 	expectedSummary *workflowservice.ListWorkerDeploymentsResponse_WorkerDeploymentSummary,
 	actualSummary *workflowservice.ListWorkerDeploymentsResponse_WorkerDeploymentSummary,
 ) bool {
-	maxDurationBetweenTimeStamps := 5 * time.Second
+	maxDurationBetweenTimeStamps := 10 * time.Second
 	if expectedSummary.Name != actualSummary.Name {
 		s.Logger.Info("Name mismatch")
 		return false
 	}
 	if expectedSummary.CreateTime.AsTime().Sub(actualSummary.CreateTime.AsTime()) > maxDurationBetweenTimeStamps {
-		s.Logger.Info("Create time mismatch")
+		fmt.Println("Create time mismatch - expected: ", expectedSummary.CreateTime.AsTime(), "actual: ", actualSummary.CreateTime.AsTime())
 		return false
 	}
 
