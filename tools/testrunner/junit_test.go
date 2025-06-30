@@ -71,7 +71,11 @@ func TestMergeReports_SingleReport(t *testing.T) {
 	suites := report.Testsuites.Suites
 	require.Len(t, suites, 1)
 	require.Equal(t, 2, report.Testsuites.Failures)
-	require.NotContains(t, collectTestNames(suites), "TestCallbacksSuite")
+
+	testNames := collectTestNames(suites)
+	require.Len(t, testNames, 5)
+	require.NotContains(t, testNames, "TestCallbacksSuite")
+	require.NotContains(t, testNames, "TestCallbacksSuite/TestWorkflowNexusCallbacks_CarriedOver")
 }
 
 func TestMergeReports_MultipleReports(t *testing.T) {
@@ -82,13 +86,20 @@ func TestMergeReports_MultipleReports(t *testing.T) {
 
 	report, err := mergeReports([]*junitReport{j1, j2})
 	require.NoError(t, err)
+	require.Empty(t, report.reportingErrs)
 
 	suites := report.Testsuites.Suites
 	require.Len(t, suites, 2)
 	require.Equal(t, 4, report.Testsuites.Failures)
+	require.Equal(t, "go.temporal.io/server/tests", suites[0].Name)
 	require.Equal(t, "go.temporal.io/server/tests (retry 1)", suites[1].Name)
-	require.NotContains(t, collectTestNames(suites), "TestCallbacksSuite")
-	require.Equal(t, "TestCallbacksSuite/TestWorkflowCallbacks_InvalidArgument (retry 1)", suites[1].Testcases[0].Name)
+
+	testNames := collectTestNames(suites)
+	require.Len(t, testNames, 6)
+	require.NotContains(t, testNames, "TestCallbacksSuite")
+	require.NotContains(t, testNames, "TestCallbacksSuite/TestWorkflowNexusCallbacks_CarriedOver")
+	require.Contains(t, testNames, "TestCallbacksSuite/TestWorkflowCallbacks_InvalidArgument")
+	require.Contains(t, testNames, "TestCallbacksSuite/TestWorkflowCallbacks_InvalidArgument (retry 1)")
 }
 
 func TestMergeReports_MissingRerun(t *testing.T) {
