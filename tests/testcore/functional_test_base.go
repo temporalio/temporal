@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"maps"
 	"os"
+	"regexp"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/dgryski/go-farm"
@@ -393,10 +393,9 @@ func (s *FunctionalTestBase) exportOTELTraces() {
 		return
 	}
 	if s.T().Failed() {
+		var validFilenameChars = regexp.MustCompile(`[^a-zA-Z0-9._-]+`)
 		fileName := s.T().Name()
-		fileName = strings.ReplaceAll(fileName, "/", "-")
-		fileName = strings.ReplaceAll(fileName, " ", "-")
-		fileName = strings.ReplaceAll(fileName, "#", "-")
+		fileName = validFilenameChars.ReplaceAllString(fileName, "-") // remove invalid characters
 		fileName = fmt.Sprintf("traces.%s_%d.json", fileName, time.Now().Unix())
 		if filePath, err := s.otelExporter.Write(fileName); err != nil {
 			s.T().Logf("unable to write OTEL traces: %v", err)
