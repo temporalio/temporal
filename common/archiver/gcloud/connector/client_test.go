@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -316,7 +315,7 @@ func (s *clientSuite) TestNoGRPCUsage() {
 		if strings.HasSuffix(file, "_test.go") {
 			continue
 		}
-		content, err := ioutil.ReadFile(file)
+		content, err := os.ReadFile(file)
 		s.NoError(err)
 
 		if strings.Contains(string(content), "NewGRPCClient") {
