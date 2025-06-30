@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"io/ioutil"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -243,7 +245,6 @@ func (s *clientSuite) TestQuery() {
 }
 
 func (s *clientSuite) TestQueryWithFilter() {
-
 	ctx := context.Background()
 	mockBucketHandleClient := connector.NewMockBucketHandleWrapper(s.controller)
 	mockStorageClient := connector.NewMockGcloudStorageClient(s.controller)
@@ -302,4 +303,26 @@ func newWorkflowIDPrecondition(workflowID string) connector.Precondition {
 
 		return false
 	}
+}
+
+// Ensures that no code in this package accidentally uses gRPC functions since they are stripped from
+// the binary via `disable_grpc_modules`. This is crude but effective.
+func (s *clientSuite) TestNoGRPCUsage() {
+	packageFiles, err := filepath.Glob("*.go")
+	s.NoError(err)
+
+	var checkedFile bool
+	for _, file := range packageFiles {
+		if strings.HasSuffix(file, "_test.go") {
+			continue
+		}
+		content, err := ioutil.ReadFile(file)
+		s.NoError(err)
+
+		if strings.Contains(string(content), "NewGRPCClient") {
+			s.T().Errorf("❌ Found forbidden gRPC usage in file: %s", file)
+		}
+		checkedFile = true
+	}
+	s.True(checkedFile, "checked at least one file")
 }
