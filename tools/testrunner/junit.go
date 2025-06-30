@@ -7,9 +7,9 @@ import (
 	"iter"
 	"log"
 	"os"
+	"slices"
 	"strings"
 
-	"github.com/emirpasic/gods/trees/redblacktree"
 	"github.com/jstemmer/go-junit-report/v2/junit"
 )
 
@@ -80,38 +80,30 @@ func (j *junitReport) collectTestCases() map[string]struct{} {
 }
 
 func (j *junitReport) collectTestCaseFailures() []string {
-	root := node{children: make(map[string]node)}
-
+	var failures []string
 	for _, suite := range j.Testsuites.Suites {
 		if suite.Failures == 0 {
 			continue
 		}
 		for _, tc := range suite.Testcases {
-			if tc.Failure == nil {
-				continue
-			}
-			n := root
-			for _, part := range strings.Split(tc.Name, "/") {
-				child, ok := n.children[part]
-				if !ok {
-					child = node{children: make(map[string]node)}
-					n.children[part] = child
-				}
-				n = child
+			if tc.Failure != nil {
+				failures = append(failures, tc.Name)
 			}
 		}
 	}
 
-	leafFailures := make([]string, 0)
+	// Sort lexicographically
+	slices.Sort(failures)
 
-	// Walk the tree and find all leaf failures. The way Go test failures are reported in junit is that there's a
-	// test case per suite and per test in that suite. Filter out any nodes that have children to find the most
-	// specific failures to rerun.
-	for path, n := range root.walk() {
-		if len(n.children) > 0 {
-			continue
+	// Find leaf failures using the simplified algorithm
+	var leafFailures []string
+	for i := 0; i < len(failures)-1; i++ {
+		if !strings.HasPrefix(failures[i+1], failures[i]+"/") {
+			leafFailures = append(leafFailures, failures[i])
 		}
-		leafFailures = append(leafFailures, path)
+	}
+	if len(failures) > 0 {
+		leafFailures = append(leafFailures, failures[len(failures)-1])
 	}
 
 	return leafFailures
@@ -127,16 +119,6 @@ func mergeReports(reports []*junitReport) (*junitReport, error) {
 	combined.XMLName = reports[0].Testsuites.XMLName
 	combined.Name = reports[0].Testsuites.Name
 
-	// Collect all test case names into the tree
-	testNameTree := redblacktree.NewWithStringComparator()
-	for _, report := range reports {
-		for _, suite := range report.Testsuites.Suites {
-			for _, tc := range suite.Testcases {
-				testNameTree.Put(tc.Name, struct{}{})
-			}
-		}
-	}
-
 	for i, report := range reports {
 		combined.Tests += report.Testsuites.Tests
 		combined.Errors += report.Testsuites.Errors
@@ -146,7 +128,9 @@ func mergeReports(reports []*junitReport) (*junitReport, error) {
 		combined.Time += report.Testsuites.Time
 
 		// If the report is for a retry ...
+		var suffix string
 		if i > 0 {
+			suffix = fmt.Sprintf(" (retry %d)", i)
 			prevFailures := reports[i-1].collectTestCaseFailures()
 			currCases := report.collectTestCases()
 
@@ -162,24 +146,31 @@ func mergeReports(reports []*junitReport) (*junitReport, error) {
 			}
 		}
 
-		suffix := fmt.Sprintf(" (retry %d)", i)
 		for _, suite := range report.Testsuites.Suites {
-			newSuite := suite // shallow copy
-			if i > 0 {
-				newSuite.Name += suffix
+			if len(suite.Testcases) == 0 {
+				continue
 			}
+
+			newSuite := suite // shallow copy
+			newSuite.Name += suffix
 			newSuite.Testcases = make([]junit.Testcase, 0, len(suite.Testcases))
 
-			for _, test := range suite.Testcases {
-				if isLeaf(test.Name, testNameTree) {
-					testCopy := test
-					if i > 0 {
-						testCopy.Name += suffix
-					}
-					newSuite.Testcases = append(newSuite.Testcases, testCopy)
-				}
-			}
+			// Sort test cases by name.
+			slices.SortFunc(suite.Testcases, func(a, b junit.Testcase) int {
+				return strings.Compare(a.Name, b.Name)
+			})
 
+			// Collect test cases.
+			for j := range len(suite.Testcases) {
+				testCase := suite.Testcases[j]
+				// Check if this is a parent test case (ie prefix of next test).
+				if j != len(suite.Testcases)-1 && strings.HasPrefix(suite.Testcases[j+1].Name, testCase.Name) {
+					// Discard test case parents since they provide no value.
+					continue
+				}
+				testCase.Name += suffix
+				newSuite.Testcases = append(newSuite.Testcases, testCase)
+			}
 			combined.Suites = append(combined.Suites, newSuite)
 		}
 	}
@@ -188,15 +179,6 @@ func mergeReports(reports []*junitReport) (*junitReport, error) {
 		Testsuites:    combined,
 		reportingErrs: reportingErrs,
 	}, nil
-}
-
-func isLeaf(name string, tree *redblacktree.Tree) bool {
-	prefix := name + "/"
-	node, _ := tree.Ceiling(prefix)
-	if node != nil && strings.HasPrefix(node.Key.(string), prefix) {
-		return false
-	}
-	return true
 }
 
 type node struct {
