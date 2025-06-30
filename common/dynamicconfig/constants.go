@@ -1246,7 +1246,7 @@ these log lines can be noisy, we want to be able to turn on and sample selective
 	)
 	MatchingDropNonRetryableTasks = NewGlobalBoolSetting(
 		"matching.dropNonRetryableTasks",
-		false,
+		true,
 		`MatchingDropNonRetryableTasks states if we should drop matching tasks with Internal/Dataloss errors`,
 	)
 	MatchingMaxTaskQueuesInDeployment = NewNamespaceIntSetting(
