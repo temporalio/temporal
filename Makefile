@@ -45,7 +45,7 @@ TEMPORAL_DB ?= temporal
 VISIBILITY_DB ?= temporal_visibility
 
 # The `disable_grpc_modules` build tag excludes gRPC dependencies from cloud.google.com/go/storage,
-# reducing binary size by ~20MB since we only use the REST client (storage.NewClient), not the
+# reducing binary size by 16MB since we only use the REST client (storage.NewClient), not the
 # gRPC client (storage.NewGRPCClient). Related issue: https://github.com/googleapis/google-cloud-go/issues/12343
 ALL_BUILD_TAGS := disable_grpc_modules,$(BUILD_TAG)
 ALL_TEST_TAGS := $(ALL_BUILD_TAGS),test_dep,$(TEST_TAG)
