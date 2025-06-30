@@ -13,7 +13,6 @@ import (
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/gcloud/connector"
 	"go.temporal.io/server/common/codec"
-	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -54,20 +53,6 @@ type getHistoryToken struct {
 	HighestPart          int
 	CurrentPart          int
 	BatchIdxOffset       int
-}
-
-// NewHistoryArchiver creates a new gcloud storage HistoryArchiver
-func NewHistoryArchiver(
-	executionManager persistence.ExecutionManager,
-	logger log.Logger,
-	metricsHandler metrics.Handler,
-	config *config.GstorageArchiver,
-) (archiver.HistoryArchiver, error) {
-	storage, err := connector.NewClient(context.Background(), config)
-	if err == nil {
-		return newHistoryArchiver(executionManager, logger, metricsHandler, nil, storage), nil
-	}
-	return nil, err
 }
 
 func newHistoryArchiver(executionManager persistence.ExecutionManager, logger log.Logger, metricsHandler metrics.Handler, historyIterator archiver.HistoryIterator, storage connector.Client) archiver.HistoryArchiver {
