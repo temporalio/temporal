@@ -310,7 +310,7 @@ func (s *clientSuite) TestNoGRPCUsage() {
 	packageFiles, err := filepath.Glob("*.go")
 	s.NoError(err)
 
-	var checkedFile bool
+	var checkedClientFile bool
 	for _, file := range packageFiles {
 		if strings.HasSuffix(file, "_test.go") {
 			continue
@@ -321,7 +321,8 @@ func (s *clientSuite) TestNoGRPCUsage() {
 		if strings.Contains(string(content), "NewGRPCClient") {
 			s.T().Errorf("❌ Found forbidden gRPC usage in file: %s", file)
 		}
-		checkedFile = true
+
+		checkedClientFile = checkedClientFile || strings.HasSuffix(file, "client.go")
 	}
-	s.True(checkedFile, "checked at least one file")
+	s.True(checkedClientFile, "checked client.go file")
 }
