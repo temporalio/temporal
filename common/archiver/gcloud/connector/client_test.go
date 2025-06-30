@@ -324,5 +324,5 @@ func (s *clientSuite) TestNoGRPCUsage() {
 
 		checkedClientFile = checkedClientFile || strings.HasSuffix(file, "client.go")
 	}
-	s.True(checkedClientFile, "checked client.go file")
+	s.True(checkedClientFile, "should have checked client.go for gRPC usage")
 }
