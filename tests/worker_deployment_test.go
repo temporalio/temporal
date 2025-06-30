@@ -2222,10 +2222,10 @@ func (s *WorkerDeploymentSuite) tryDeleteVersion(
 	}
 }
 
-// verifyTimestampEquality asserts if the actual timestamp is set to an appropriate value. It
+// verifyTimestampWithinRange asserts if the actual timestamp is set to an appropriate value. It
 // does this check by checking if the timestamp set is within respectable bounds or is equal to the
 // expected timestamp.
-func (s *WorkerDeploymentSuite) verifyTimestampEquality(a *require.Assertions, expected, actual *timestamppb.Timestamp) {
+func (s *WorkerDeploymentSuite) verifyTimestampWithinRange(a *require.Assertions, expected, actual *timestamppb.Timestamp) {
 	a.True((expected == nil) == (actual == nil))
 	if expected == nil {
 		return
@@ -2239,12 +2239,12 @@ func (s *WorkerDeploymentSuite) verifyVersionSummary(a *require.Assertions, expe
 	a.Equal(expected.GetDrainageInfo().GetStatus(), actual.GetDrainageInfo().GetStatus())
 	a.Equal(expected.GetStatus(), actual.GetStatus())
 
-	s.verifyTimestampEquality(a, expected.GetCreateTime(), actual.GetCreateTime())
-	s.verifyTimestampEquality(a, expected.GetRoutingUpdateTime(), actual.GetRoutingUpdateTime())
-	s.verifyTimestampEquality(a, expected.GetCurrentSinceTime(), actual.GetCurrentSinceTime())
-	s.verifyTimestampEquality(a, expected.GetRampingSinceTime(), actual.GetRampingSinceTime())
-	s.verifyTimestampEquality(a, expected.GetFirstActivationTime(), actual.GetFirstActivationTime())
-	s.verifyTimestampEquality(a, expected.GetLastDeactivationTime(), actual.GetLastDeactivationTime())
+	s.verifyTimestampWithinRange(a, expected.GetCreateTime(), actual.GetCreateTime())
+	s.verifyTimestampWithinRange(a, expected.GetRoutingUpdateTime(), actual.GetRoutingUpdateTime())
+	s.verifyTimestampWithinRange(a, expected.GetCurrentSinceTime(), actual.GetCurrentSinceTime())
+	s.verifyTimestampWithinRange(a, expected.GetRampingSinceTime(), actual.GetRampingSinceTime())
+	s.verifyTimestampWithinRange(a, expected.GetFirstActivationTime(), actual.GetFirstActivationTime())
+	s.verifyTimestampWithinRange(a, expected.GetLastDeactivationTime(), actual.GetLastDeactivationTime())
 }
 
 func (s *WorkerDeploymentSuite) verifyRoutingConfig(a *require.Assertions, expected, actual *deploymentpb.RoutingConfig) {
@@ -2252,18 +2252,17 @@ func (s *WorkerDeploymentSuite) verifyRoutingConfig(a *require.Assertions, expec
 	a.Equal(expected.GetRampingVersionPercentage(), actual.GetRampingVersionPercentage())
 	a.Equal(expected.GetCurrentVersion(), actual.GetCurrentVersion()) //nolint:staticcheck // SA1019: old worker versioning
 
-	s.verifyTimestampEquality(a, expected.GetRampingVersionChangedTime(), actual.GetRampingVersionChangedTime())
-	s.verifyTimestampEquality(a, expected.GetCurrentVersionChangedTime(), actual.GetCurrentVersionChangedTime())
+	s.verifyTimestampWithinRange(a, expected.GetRampingVersionChangedTime(), actual.GetRampingVersionChangedTime())
+	s.verifyTimestampWithinRange(a, expected.GetCurrentVersionChangedTime(), actual.GetCurrentVersionChangedTime())
 }
 
 func (s *WorkerDeploymentSuite) verifyWorkerDeploymentInfo(a *require.Assertions, expected, actual *deploymentpb.WorkerDeploymentInfo) {
-
 	a.True((actual == nil) == (expected == nil))
 	a.Equal(expected.GetName(), actual.GetName())
 	a.True((actual.GetRoutingConfig() == nil) == (expected.GetRoutingConfig() == nil))
 	a.Equal(expected.GetLastModifierIdentity(), actual.GetLastModifierIdentity())
 
-	s.verifyTimestampEquality(a, expected.GetCreateTime(), actual.GetCreateTime())
+	s.verifyTimestampWithinRange(a, expected.GetCreateTime(), actual.GetCreateTime())
 	s.verifyRoutingConfig(a, expected.GetRoutingConfig(), actual.GetRoutingConfig())
 
 	// Verify version summaries
@@ -2417,17 +2416,17 @@ func (s *WorkerDeploymentSuite) verifyWorkerDeploymentSummary(
 	actualSummary *workflowservice.ListWorkerDeploymentsResponse_WorkerDeploymentSummary,
 ) bool {
 
-	s.verifyTimestampEquality(a, expectedSummary.CreateTime, actualSummary.CreateTime)
+	s.verifyTimestampWithinRange(a, expectedSummary.CreateTime, actualSummary.CreateTime)
 
 	// Current version checks
 	a.Equal(expectedSummary.RoutingConfig.GetCurrentVersion(), actualSummary.RoutingConfig.GetCurrentVersion(), "Current version mismatch") //nolint:staticcheck // SA1019: old worker versioning
-	s.verifyTimestampEquality(a, expectedSummary.RoutingConfig.GetCurrentVersionChangedTime(), actualSummary.RoutingConfig.GetCurrentVersionChangedTime())
+	s.verifyTimestampWithinRange(a, expectedSummary.RoutingConfig.GetCurrentVersionChangedTime(), actualSummary.RoutingConfig.GetCurrentVersionChangedTime())
 
 	// Ramping version checks
 	a.Equal(expectedSummary.RoutingConfig.GetRampingVersion(), actualSummary.RoutingConfig.GetRampingVersion(), "Ramping version mismatch") //nolint:staticcheck // SA1019: old worker versioning
 	a.Equal(expectedSummary.RoutingConfig.GetRampingVersionPercentage(), actualSummary.RoutingConfig.GetRampingVersionPercentage(), "Ramping version percentage mismatch")
 
-	s.verifyTimestampEquality(a, expectedSummary.RoutingConfig.GetRampingVersionChangedTime(), actualSummary.RoutingConfig.GetRampingVersionChangedTime())
+	s.verifyTimestampWithinRange(a, expectedSummary.RoutingConfig.GetRampingVersionChangedTime(), actualSummary.RoutingConfig.GetRampingVersionChangedTime())
 
 	// Latest version summary checks
 	s.verifyVersionSummary(a, expectedSummary.LatestVersionSummary, actualSummary.LatestVersionSummary)
@@ -2474,7 +2473,8 @@ func (s *WorkerDeploymentSuite) startAndValidateWorkerDeployments(
 		for _, expectedDeploymentSummary := range expectedDeploymentSummaries {
 			deploymentSummaryFound := false
 			for _, actualDeploymentSummary := range actualDeploymentSummaries {
-				// our assumption is that deployment summaries with the same name are fully ready for checks. May not be true since visibility might take time to update other fields.
+				// Our assumption that deployment summaries with the same name are fully ready for checks
+				// may not be true since visibility might take time to update other fields.
 				if actualDeploymentSummary.Name != expectedDeploymentSummary.Name {
 					continue
 				}
