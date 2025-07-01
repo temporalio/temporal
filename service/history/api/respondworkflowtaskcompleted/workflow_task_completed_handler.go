@@ -1,9 +1,11 @@
 package respondworkflowtaskcompleted
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -422,6 +424,13 @@ func (handler *workflowTaskCompletedHandler) handleCommandScheduleActivity(
 ) (*historypb.HistoryEvent, *handleCommandResponse, error) {
 	executionInfo := handler.mutableState.GetExecutionInfo()
 	namespaceID := namespace.ID(executionInfo.NamespaceId)
+
+	// TODO(fairness): remove this again once the SDK allows setting the fairness key
+	fairnessKeyPrefix := "x-temporal-internal-fairness-key-"
+	if strings.HasPrefix(attr.GetActivityId(), fairnessKeyPrefix) {
+		attr.Priority = cmp.Or(attr.Priority, &commonpb.Priority{})
+		attr.Priority.FairnessKey = strings.TrimPrefix(attr.GetActivityId(), fairnessKeyPrefix)
+	}
 
 	if err := handler.validateCommandAttr(
 		func() (enumspb.WorkflowTaskFailedCause, error) {
