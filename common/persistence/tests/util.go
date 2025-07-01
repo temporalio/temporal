@@ -2,7 +2,6 @@ package tests
 
 import (
 	"math/rand"
-	"strings"
 	"testing"
 	"time"
 
@@ -46,12 +45,6 @@ func RandomSnapshot(
 	dbRecordVersion int64,
 	branchToken []byte,
 ) (*p.WorkflowSnapshot, []*p.WorkflowEvents) {
-	// TODO - remove this branching when other persistence implementations land for CHASM
-	var chasmNodes map[string]*persistencespb.ChasmNode
-	if !strings.HasPrefix(t.Name(), "TestCDS") {
-		chasmNodes = RandomChasmNodeMap()
-	}
-
 	snapshot := &p.WorkflowSnapshot{
 		ExecutionInfo:  RandomExecutionInfo(namespaceID, workflowID, eventID, lastWriteVersion, branchToken),
 		ExecutionState: RandomExecutionState(runID, state, status),
@@ -64,7 +57,7 @@ func RandomSnapshot(
 		RequestCancelInfos:  RandomInt64RequestCancelInfoMap(),
 		SignalInfos:         RandomInt64SignalInfoMap(),
 		SignalRequestedIDs:  map[string]struct{}{uuid.New().String(): {}},
-		ChasmNodes:          chasmNodes,
+		ChasmNodes:          RandomChasmNodeMap(),
 
 		Tasks: map[tasks.Category][]tasks.Task{
 			tasks.CategoryTransfer:    {},
@@ -99,12 +92,6 @@ func RandomMutation(
 	dbRecordVersion int64,
 	branchToken []byte,
 ) (*p.WorkflowMutation, []*p.WorkflowEvents) {
-	// TODO - remove this branching when other persistence implementations land for CHASM
-	var chasmNodes map[string]*persistencespb.ChasmNode
-	if !strings.HasPrefix(t.Name(), "TestCDS") {
-		chasmNodes = RandomChasmNodeMap()
-	}
-
 	mutation := &p.WorkflowMutation{
 		ExecutionInfo:  RandomExecutionInfo(namespaceID, workflowID, eventID, lastWriteVersion, branchToken),
 		ExecutionState: RandomExecutionState(runID, state, status),
@@ -123,7 +110,7 @@ func RandomMutation(
 		DeleteSignalInfos:         map[int64]struct{}{rand.Int63(): {}},
 		UpsertSignalRequestedIDs:  map[string]struct{}{uuid.New().String(): {}},
 		DeleteSignalRequestedIDs:  map[string]struct{}{uuid.New().String(): {}},
-		UpsertChasmNodes:          chasmNodes,
+		UpsertChasmNodes:          RandomChasmNodeMap(),
 		DeleteChasmNodes:          map[string]struct{}{uuid.New().String(): {}},
 		// NewBufferedEvents: see below
 		// ClearBufferedEvents: see below
