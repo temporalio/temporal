@@ -6552,14 +6552,14 @@ func addRequestCancelInitiatedEvent(
 	ms historyi.MutableState,
 	workflowTaskCompletedEventID int64,
 	cancelRequestID string,
-	namespace namespace.Name,
+	namespaceName namespace.Name,
 	namespaceID namespace.ID,
 	workflowID, runID string,
 	childWorkflowOnly bool,
 ) (*historypb.HistoryEvent, *persistencespb.RequestCancelInfo) {
 	event, rci, _ := ms.AddRequestCancelExternalWorkflowExecutionInitiatedEvent(workflowTaskCompletedEventID,
 		cancelRequestID, &commandpb.RequestCancelExternalWorkflowExecutionCommandAttributes{
-			Namespace:         namespace.String(),
+			Namespace:         namespaceName.String(),
 			WorkflowId:        workflowID,
 			RunId:             runID,
 			ChildWorkflowOnly: childWorkflowOnly,
@@ -6586,7 +6586,7 @@ func addRequestSignalInitiatedEvent(
 	ms historyi.MutableState,
 	workflowTaskCompletedEventID int64,
 	signalRequestID string,
-	namespace namespace.Name,
+	namespaceName namespace.Name,
 	namespaceID namespace.ID,
 	workflowID, runID string,
 	childWorkflowOnly bool,
@@ -6597,7 +6597,7 @@ func addRequestSignalInitiatedEvent(
 ) (*historypb.HistoryEvent, *persistencespb.SignalInfo) {
 	event, si, _ := ms.AddSignalExternalWorkflowExecutionInitiatedEvent(workflowTaskCompletedEventID, signalRequestID,
 		&commandpb.SignalExternalWorkflowExecutionCommandAttributes{
-			Namespace: namespace.String(),
+			Namespace: namespaceName.String(),
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: workflowID,
 				RunId:      runID,
