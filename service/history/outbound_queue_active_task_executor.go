@@ -80,9 +80,6 @@ func (e *outboundQueueActiveTaskExecutor) Execute(
 		return respond(err)
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
-	defer cancel()
-
 	switch task := task.(type) {
 	case *tasks.StateMachineOutboundTask:
 		return respond(e.executeStateMachineTask(ctx, task))

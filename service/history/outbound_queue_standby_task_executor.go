@@ -91,9 +91,6 @@ func (e *outboundQueueStandbyTaskExecutor) Execute(
 		return respond(err)
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
-	defer cancel()
-
 	nsName := nsRecord.Name().String()
 
 	switch task := task.(type) {
