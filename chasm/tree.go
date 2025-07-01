@@ -344,7 +344,7 @@ func (n *Node) validateAccess(ctx Context) error {
 	if err != nil {
 		return err
 	}
-	componentValue, _ := n.value.(Component)
+	componentValue, _ := n.value.(Component) //nolint:revive // unchecked-type-assertion
 
 	if componentValue.LifecycleState(ctx).IsClosed() {
 		return errAccessCheckFailed
