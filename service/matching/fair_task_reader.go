@@ -104,7 +104,7 @@ func (tr *fairTaskReader) getOldestBacklogTime() time.Time {
 func (tr *fairTaskReader) completeTask(task *internalTask, res taskResponse) {
 	tr.lock.Lock()
 
-	// We might have a race where mergeTasks tries to a task from matcher (because new tasks
+	// We might have a race where mergeTasks tries to read a task from matcher (because new tasks
 	// came in under it), but it had already been matched and removed. In that case the
 	// removeFromMatcher will be a no-op, and we'll eventually end up here. We can tell because
 	// the task won't be present in outstandingTasks.
@@ -280,7 +280,7 @@ func (tr *fairTaskReader) retryAddAfterError(task *internalTask) {
 	metrics.BufferThrottlePerTaskQueueCounter.With(tr.backlogMgr.metricsHandler).Record(1)
 
 	// initial sleep since we just tried once
-	util.InterruptibleSleep(tr.backlogMgr.tqCtx, time.Second)
+	_ = util.InterruptibleSleep(tr.backlogMgr.tqCtx, time.Second)
 
 	_ = backoff.ThrottleRetryContext(
 		tr.backlogMgr.tqCtx,

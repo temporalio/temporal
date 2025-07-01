@@ -2,7 +2,6 @@ package matching
 
 import (
 	"context"
-	"math/rand"
 	"sync/atomic"
 	"time"
 
@@ -126,15 +125,13 @@ func (w *fairTaskWriter) pickPasses(tasks []*writeTaskRequest, bases []fairLevel
 		}
 		if weight <= 0.0 {
 			weight = 1.0
-		} else if weight < minWeight {
-			weight = minWeight
+		} else {
+			weight = max(weight, minWeight)
 		}
 
 		inc := max(1, int64(strideFactor/weight))
 
 		base := bases[task.subqueue].pass
-		base += int64(rand.Float64() * float64(inc)) // randomize keys within "initial" pass
-
 		tasks[i].pass = w.counter.GetPass(key, base, inc)
 	}
 }
@@ -164,32 +161,24 @@ func (w *fairTaskWriter) taskWriterLoop() {
 		atomic.StoreInt64(&w.currentTaskIDBlock.start, w.taskIDBlock.start)
 		atomic.StoreInt64(&w.currentTaskIDBlock.end, w.taskIDBlock.end)
 
-		var req *writeTaskRequest
+		// prepare slice for reuse
+		clear(reqs)
+		reqs = reqs[:0]
+
 		select {
 		case <-w.backlogMgr.tqCtx.Done():
 			return
-		case req = <-w.appendCh:
+		case req := <-w.appendCh:
+			// read a batch of requests from the channel
+			reqs = append(reqs, req)
+			reqs = w.getWriteBatch(reqs)
 		}
-
-		// read a batch of requests from the channel
-		reqs = append(reqs[:0], req)
-		reqs = w.getWriteBatch(reqs)
 
 		err := w.allocTaskIDs(reqs)
-
 		if err == nil {
-			bases, unpin := w.backlogMgr.getAndPinAckLevels()
-			w.pickPasses(reqs, bases)
-			var resp createFairTasksResponse
-			resp, err = w.db.CreateFairTasks(w.backlogMgr.tqCtx, reqs)
-			if err == nil {
-				w.backlogMgr.wroteNewTasks(resp)
-			} else {
-				w.logger.Error("Persistent store operation failure", tag.StoreOperationCreateTask, tag.Error(err))
-				w.backlogMgr.signalIfFatal(err)
-			}
-			unpin(err) // note this must be called after wroteNewTasks!
+			err = w.writeBatch(reqs)
 		}
+
 		for _, req := range reqs {
 			req.responseCh <- err
 		}
@@ -206,6 +195,21 @@ func (w *fairTaskWriter) getWriteBatch(reqs []*writeTaskRequest) []*writeTaskReq
 		}
 	}
 	return reqs
+}
+
+func (w *fairTaskWriter) writeBatch(reqs []*writeTaskRequest) (retErr error) {
+	bases, unpin := w.backlogMgr.getAndPinAckLevels()
+	defer func() { unpin(retErr) }()
+
+	w.pickPasses(reqs, bases)
+	resp, err := w.db.CreateFairTasks(w.backlogMgr.tqCtx, reqs)
+	if err == nil {
+		w.backlogMgr.wroteNewTasks(resp) // must be called before unpin()
+	} else {
+		w.logger.Error("Persistent store operation failure", tag.StoreOperationCreateTask, tag.Error(err))
+		w.backlogMgr.signalIfFatal(err)
+	}
+	return err
 }
 
 func (w *fairTaskWriter) renewLeaseWithRetry(

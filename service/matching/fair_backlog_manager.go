@@ -59,7 +59,7 @@ func newFairBacklogManager(
 	cntr counter.Counter,
 ) *fairBacklogManagerImpl {
 	// For the purposes of taskQueueDB, call this just a TaskManager. It'll return errors if we
-	// use it incorectly. TODO: this is not the cleanest way to do this...
+	// use it incorectly. TODO(fairness): consider a cleaner way of doing this.
 	taskManager := persistence.TaskManager(fairTaskManager)
 
 	bmg := &fairBacklogManagerImpl{

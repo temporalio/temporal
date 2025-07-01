@@ -479,7 +479,10 @@ func (db *taskQueueDB) CreateFairTasks(
 		db.subqueues[sq].ApproximateBacklogCount += int64(len(tasks))
 	}
 
-	// FIXME: comment
+	// Unlike in CreateTasks, we can set the persisted FairMaxReadLevel before persisting.
+	// This means that for stores that update metadata along with writing tasks (i.e. Cassandra),
+	// the FairMaxReadLevel will be more up-to-date. The max read level is not used by
+	// fairTaskReader, so there's no correctness issue with doing this.
 	for sq, level := range newMaxLevel {
 		db.subqueues[sq].FairMaxReadLevel = fairLevelFromProto(db.subqueues[sq].FairMaxReadLevel).max(level).toProto()
 	}
