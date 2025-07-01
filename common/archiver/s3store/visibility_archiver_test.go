@@ -97,7 +97,7 @@ func (s *visibilityArchiverSuite) newTestVisibilityArchiver() *visibilityArchive
 		logger:         s.logger,
 		metricsHandler: s.metricsHandler,
 		s3cli:          s.s3cli,
-		queryParser:    NewQueryParser(),
+		queryParser:    NewQueryParser(false),
 	}
 }
 
