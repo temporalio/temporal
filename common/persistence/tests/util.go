@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/common"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/testing/fakedata"
 	"go.temporal.io/server/service/history/tasks"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -76,15 +77,18 @@ func RandomSnapshot(
 		Condition:       rand.Int63(),
 		DBRecordVersion: dbRecordVersion,
 	}
-	history := snapshot.ExecutionInfo.VersionHistories.Histories[0]
-	events := &p.WorkflowEvents{
+
+	if branchToken == nil {
+		return snapshot, nil
+	}
+
+	return snapshot, []*p.WorkflowEvents{{
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
-		BranchToken: history.BranchToken,
+		BranchToken: branchToken,
 		Events:      []*historypb.HistoryEvent{RandomHistoryEvent(eventID, lastWriteVersion)},
-	}
-	return snapshot, []*p.WorkflowEvents{events}
+	}}
 }
 
 func RandomMutation(
@@ -139,6 +143,10 @@ func RandomMutation(
 		DBRecordVersion: dbRecordVersion,
 	}
 
+	if branchToken == nil {
+		return mutation, nil
+	}
+
 	switch rand.Int63() % 3 {
 	case 0:
 		mutation.ClearBufferedEvents = true
@@ -153,16 +161,13 @@ func RandomMutation(
 		panic("broken test")
 	}
 
-	history := mutation.ExecutionInfo.VersionHistories.Histories[0]
-	events := &p.WorkflowEvents{
+	return mutation, []*p.WorkflowEvents{{
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
-		BranchToken: history.BranchToken,
+		BranchToken: branchToken,
 		Events:      []*historypb.HistoryEvent{RandomHistoryEvent(eventID, lastWriteVersion)},
-	}
-
-	return mutation, []*p.WorkflowEvents{events}
+	}}
 }
 
 func RandomChasmNodeMap() map[string]*persistencespb.ChasmNode {
@@ -201,7 +206,16 @@ func RandomExecutionInfo(
 	_ = fakedata.FakeStruct(&executionInfo)
 	executionInfo.NamespaceId = namespaceID
 	executionInfo.WorkflowId = workflowID
-	executionInfo.VersionHistories = RandomVersionHistory(eventID, lastWriteVersion, branchToken)
+
+	if branchToken != nil {
+		executionInfo.VersionHistories = RandomVersionHistory(eventID, lastWriteVersion, branchToken)
+	} else {
+		executionInfo.VersionHistories = versionhistory.NewVersionHistories(&historyspb.VersionHistory{})
+	}
+	executionInfo.TransitionHistory = []*persistencespb.VersionedTransition{{
+		NamespaceFailoverVersion: lastWriteVersion,
+		TransitionCount:          rand.Int63(),
+	}}
 	return &executionInfo
 }
 
