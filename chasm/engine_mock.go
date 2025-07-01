@@ -40,8 +40,8 @@ func (m *MockEngine) EXPECT() *MockEngineMockRecorder {
 	return m.recorder
 }
 
-// newEntity mocks base method.
-func (m *MockEngine) newEntity(arg0 context.Context, arg1 ComponentRef, arg2 func(MutableContext) (Component, error), arg3 ...TransitionOption) (EntityKey, []byte, error) {
+// NewEntity mocks base method.
+func (m *MockEngine) NewEntity(arg0 context.Context, arg1 ComponentRef, arg2 func(MutableContext) (Component, error), arg3 ...TransitionOption) (EntityKey, []byte, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1, arg2}
 	for _, a := range arg3 {
@@ -58,11 +58,11 @@ func (m *MockEngine) newEntity(arg0 context.Context, arg1 ComponentRef, arg2 fun
 func (mr *MockEngineMockRecorder) newEntity(arg0, arg1, arg2 any, arg3 ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]any{arg0, arg1, arg2}, arg3...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "newEntity", reflect.TypeOf((*MockEngine)(nil).newEntity), varargs...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "newEntity", reflect.TypeOf((*MockEngine)(nil).NewEntity), varargs...)
 }
 
-// pollComponent mocks base method.
-func (m *MockEngine) pollComponent(arg0 context.Context, arg1 ComponentRef, arg2 func(Context, Component) (any, bool, error), arg3 func(MutableContext, Component, any) error, arg4 ...TransitionOption) ([]byte, error) {
+// PollComponent mocks base method.
+func (m *MockEngine) PollComponent(arg0 context.Context, arg1 ComponentRef, arg2 func(Context, Component) (any, bool, error), arg3 func(MutableContext, Component, any) error, arg4 ...TransitionOption) ([]byte, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1, arg2, arg3}
 	for _, a := range arg4 {
@@ -78,11 +78,11 @@ func (m *MockEngine) pollComponent(arg0 context.Context, arg1 ComponentRef, arg2
 func (mr *MockEngineMockRecorder) pollComponent(arg0, arg1, arg2, arg3 any, arg4 ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]any{arg0, arg1, arg2, arg3}, arg4...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "pollComponent", reflect.TypeOf((*MockEngine)(nil).pollComponent), varargs...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "pollComponent", reflect.TypeOf((*MockEngine)(nil).PollComponent), varargs...)
 }
 
-// readComponent mocks base method.
-func (m *MockEngine) readComponent(arg0 context.Context, arg1 ComponentRef, arg2 func(Context, Component) error, arg3 ...TransitionOption) error {
+// ReadComponent mocks base method.
+func (m *MockEngine) ReadComponent(arg0 context.Context, arg1 ComponentRef, arg2 func(Context, Component) error, arg3 ...TransitionOption) error {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1, arg2}
 	for _, a := range arg3 {
@@ -97,11 +97,11 @@ func (m *MockEngine) readComponent(arg0 context.Context, arg1 ComponentRef, arg2
 func (mr *MockEngineMockRecorder) readComponent(arg0, arg1, arg2 any, arg3 ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]any{arg0, arg1, arg2}, arg3...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "readComponent", reflect.TypeOf((*MockEngine)(nil).readComponent), varargs...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "readComponent", reflect.TypeOf((*MockEngine)(nil).ReadComponent), varargs...)
 }
 
-// updateComponent mocks base method.
-func (m *MockEngine) updateComponent(arg0 context.Context, arg1 ComponentRef, arg2 func(MutableContext, Component) error, arg3 ...TransitionOption) ([]byte, error) {
+// UpdateComponent mocks base method.
+func (m *MockEngine) UpdateComponent(arg0 context.Context, arg1 ComponentRef, arg2 func(MutableContext, Component) error, arg3 ...TransitionOption) ([]byte, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1, arg2}
 	for _, a := range arg3 {
@@ -117,11 +117,11 @@ func (m *MockEngine) updateComponent(arg0 context.Context, arg1 ComponentRef, ar
 func (mr *MockEngineMockRecorder) updateComponent(arg0, arg1, arg2 any, arg3 ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]any{arg0, arg1, arg2}, arg3...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "updateComponent", reflect.TypeOf((*MockEngine)(nil).updateComponent), varargs...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "updateComponent", reflect.TypeOf((*MockEngine)(nil).UpdateComponent), varargs...)
 }
 
-// updateWithNewEntity mocks base method.
-func (m *MockEngine) updateWithNewEntity(arg0 context.Context, arg1 ComponentRef, arg2 func(MutableContext) (Component, error), arg3 func(MutableContext, Component) error, arg4 ...TransitionOption) (EntityKey, []byte, error) {
+// UpdateWithNewEntity mocks base method.
+func (m *MockEngine) UpdateWithNewEntity(arg0 context.Context, arg1 ComponentRef, arg2 func(MutableContext) (Component, error), arg3 func(MutableContext, Component) error, arg4 ...TransitionOption) (EntityKey, []byte, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1, arg2, arg3}
 	for _, a := range arg4 {
@@ -138,5 +138,5 @@ func (m *MockEngine) updateWithNewEntity(arg0 context.Context, arg1 ComponentRef
 func (mr *MockEngineMockRecorder) updateWithNewEntity(arg0, arg1, arg2, arg3 any, arg4 ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]any{arg0, arg1, arg2, arg3}, arg4...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "updateWithNewEntity", reflect.TypeOf((*MockEngine)(nil).updateWithNewEntity), varargs...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "updateWithNewEntity", reflect.TypeOf((*MockEngine)(nil).UpdateWithNewEntity), varargs...)
 }

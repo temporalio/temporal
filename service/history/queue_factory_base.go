@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"go.opentelemetry.io/otel/trace"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -54,6 +55,7 @@ type (
 		ExecutorWrapper      queues.ExecutorWrapper `optional:"true"`
 		Serializer           serialization.Serializer
 		RemoteHistoryFetcher eventhandler.HistoryPaginatedFetcher
+		ChasmEngine          chasm.Engine
 	}
 
 	QueueFactoryBase struct {
