@@ -1200,6 +1200,120 @@ func (s *nodeSuite) TestCarryOverTaskStatus() {
 	s.Equal(expectedNodes, root.Snapshot(nil).Nodes)
 }
 
+func (s *nodeSuite) TestValidateAccess() {
+	closeRootComponent := func(root *Node, ctx Context) error {
+		err := root.prepareComponentValue(ctx)
+		if err != nil {
+			return err
+		}
+
+		component, _ := root.value.(*TestComponent)
+		component.ComponentData.Status = enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+
+		return nil
+	}
+
+	testCases := []struct {
+		name            string
+		valid           bool
+		chasmContext    OperationIntent
+		lifecycleStatus enumspb.WorkflowExecutionStatus // TestComponent borrows the WorkflowExecutionStatus struct
+		terminated      bool
+		nodePath        []string
+
+		setup func(*Node, Context) error
+	}{
+		{
+			name:            "read-only always succeeds",
+			chasmContext:    OperationIntentObserve,
+			lifecycleStatus: enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+			terminated:      true,
+			nodePath:        []string{},
+			valid:           true,
+		},
+		{
+			name:            "valid write access",
+			chasmContext:    OperationIntentProgress,
+			lifecycleStatus: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			terminated:      false,
+			nodePath:        []string{},
+			valid:           true,
+		},
+		{
+			name:            "invalid write access (closed)",
+			chasmContext:    OperationIntentProgress,
+			lifecycleStatus: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			terminated:      false,
+			nodePath:        []string{},
+			valid:           false,
+		},
+		{
+			name:            "invalid write access (component terminated)",
+			chasmContext:    OperationIntentProgress,
+			lifecycleStatus: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			terminated:      true,
+			nodePath:        []string{},
+			valid:           false,
+		},
+		{
+			name:            "invalid write access (parent closed)",
+			chasmContext:    OperationIntentProgress,
+			lifecycleStatus: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			terminated:      false,
+			nodePath:        []string{"SubComponent1"},
+			valid:           false,
+			setup:           closeRootComponent,
+		},
+		{
+			name:            "valid read access (parent closed)",
+			chasmContext:    OperationIntentObserve,
+			lifecycleStatus: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			terminated:      false,
+			nodePath:        []string{"SubComponent1"},
+			valid:           true,
+			setup:           closeRootComponent,
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			root, err := s.newTestTree(testComponentSerializedNodes())
+			s.NoError(err)
+
+			ctx := NewContext(
+				newContextWithOperationIntent(context.Background(), tc.chasmContext),
+				root,
+			)
+
+			if tc.setup != nil {
+				s.NoError(tc.setup(root, ctx))
+			}
+
+			node, ok := root.findNode(tc.nodePath)
+			s.True(ok)
+			err = node.prepareComponentValue(ctx)
+			s.NoError(err)
+
+			// Set fields on target node component, if we can
+			node.terminated = tc.terminated
+			component, ok := node.value.(*TestComponent)
+			if ok {
+				component.ComponentData.Status = tc.lifecycleStatus
+			}
+
+			// Validate
+			err = node.validateAccess(ctx)
+			if tc.valid {
+				s.NoError(err)
+			} else {
+				s.Error(err)
+				s.ErrorIs(errAccessCheckFailed, err)
+			}
+		})
+	}
+
+}
+
 func (s *nodeSuite) TestGetComponent() {
 	root, err := s.newTestTree(testComponentSerializedNodes())
 	s.NoError(err)
