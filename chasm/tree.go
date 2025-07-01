@@ -922,9 +922,6 @@ func (n *Node) deserializeComponentNode(
 		case fieldKindUnspecified:
 			softassert.Fail(n.logger, "field.kind can be unspecified only if err is not nil, and there is a check for it above")
 		case fieldKindData:
-			if n.serializedNode.GetData() == nil {
-				continue
-			}
 			value, err := unmarshalProto(n.serializedNode.GetData(), field.typ)
 			if err != nil {
 				return err
@@ -994,6 +991,16 @@ func unmarshalProto(
 	}
 
 	value := reflect.New(valueT.Elem())
+
+	if dataBlob == nil {
+		// If the original data is the zero value of its type, the dataBlob loaded from persistence layer will be nil.
+		// But we know for component & data nodes, they won't get persisted in the first place if there's no data,
+		// so it must be a zero value.
+		dataBlob = &commonpb.DataBlob{
+			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
+			Data:         []byte{},
+		}
+	}
 
 	if err := serialization.ProtoDecodeBlob(dataBlob, value.Interface().(proto.Message)); err != nil {
 		return reflect.Value{}, err
@@ -1619,7 +1626,9 @@ func (n *Node) applyUpdates(
 			continue
 		}
 
-		if transitionhistory.Compare(
+		// An empty node may be created when child update is applied before the parent,
+		// in which case node.serializedNode will be nil.
+		if node.serializedNode == nil || transitionhistory.Compare(
 			node.serializedNode.Metadata.LastUpdateVersionedTransition,
 			updatedNode.Metadata.LastUpdateVersionedTransition,
 		) != 0 {

@@ -107,7 +107,9 @@ func GetTimerTaskEventID(
 	case *WorkflowExecutionTimeoutTask:
 		eventID = common.FirstEventID
 	case *DeleteHistoryEventTask:
-		eventID = common.FirstEventID
+		// Retention task will be used by chasm framework as well,
+		// and it doesn't depend on any particular state (thus eventID) of the run.
+		return getChasmTaskEventID()
 	case *StateMachineTimerTask:
 		eventID = common.FirstEventID
 	case *ChasmTaskPure:

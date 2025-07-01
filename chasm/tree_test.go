@@ -573,7 +573,10 @@ func (s *nodeSuite) TestDeserializeNode_EmptyPersistence() {
 	s.Equal(valueStateSynced, node.valueState)
 	s.Nil(tc.SubComponent1.Internal.node)
 	s.Nil(tc.SubComponent1.Internal.value())
-	s.Nil(tc.ComponentData)
+
+	// nil component data should decode into zero value
+	s.NotNil(tc.ComponentData)
+	s.ProtoEqual(&protoMessageType{}, tc.ComponentData)
 }
 
 func (s *nodeSuite) TestDeserializeNode_ComponentAttributes() {
@@ -908,6 +911,49 @@ func (s *nodeSuite) TestApplySnapshot() {
 		},
 	}
 	s.Equal(expectedMutation, root.mutation)
+}
+
+func (s *nodeSuite) TestApply_OutOfOrder() {
+	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(1)).AnyTimes()
+	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(0)).AnyTimes()
+
+	root, err := s.newTestTree(nil)
+	s.NoError(err)
+
+	// Test the case where child node is applied before parent node.
+	err = root.ApplySnapshot(NodesSnapshot{
+		Nodes: map[string]*persistencespb.ChasmNode{
+			"child/grandchild": {
+				Metadata: &persistencespb.ChasmNodeMetadata{
+					InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 2},
+					LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 20},
+				},
+			},
+		},
+	})
+	s.NoError(err)
+
+	err = root.ApplyMutation(NodesMutation{
+		UpdatedNodes: map[string]*persistencespb.ChasmNode{
+			"": {
+				Metadata: &persistencespb.ChasmNodeMetadata{
+					InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
+					LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+				},
+			},
+			"child": {
+				Metadata: &persistencespb.ChasmNodeMetadata{
+					InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
+					LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+				},
+			},
+		},
+	})
+	s.NoError(err)
+
+	snapshot := root.Snapshot(nil)
+	s.Len(snapshot.Nodes, 3)
+	s.Len(root.mutation.UpdatedNodes, 3)
 }
 
 func (s *nodeSuite) TestRefreshTasks() {
