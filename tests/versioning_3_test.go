@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
+	"go.temporal.io/server/service/matching"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -230,6 +231,117 @@ func (s *Versioning3Suite) TestQueryWithPinnedOverride_Sticky() {
 			s.testQueryWithPinnedOverride(true)
 		},
 	)
+}
+
+func (s *Versioning3Suite) TestPinnedQuery_DrainedVersion_PollersAbsent() {
+	s.RunTestWithMatchingBehavior(
+		func() {
+			s.testPinnedQuery_DrainedVersion(false, false)
+		},
+	)
+}
+
+func (s *Versioning3Suite) TestPinnedQuery_DrainedVersion_PollersPresent() {
+	s.RunTestWithMatchingBehavior(
+		func() {
+			s.testPinnedQuery_DrainedVersion(true, false)
+		},
+	)
+}
+
+func (s *Versioning3Suite) TestPinnedQuery_RollbackDrainedVersion() {
+	s.RunTestWithMatchingBehavior(
+		func() {
+			s.testPinnedQuery_DrainedVersion(true, true)
+		},
+	)
+}
+
+func (s *Versioning3Suite) testPinnedQuery_DrainedVersion(pollersPresent bool, rollback bool) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	s.OverrideDynamicConfig(dynamicconfig.VersionDrainageStatusRefreshInterval, 1*time.Second)
+	s.OverrideDynamicConfig(dynamicconfig.VersionDrainageStatusVisibilityGracePeriod, 1*time.Second)
+	if !pollersPresent {
+		s.OverrideDynamicConfig(dynamicconfig.PollerHistoryTTL, 500*time.Millisecond)
+	}
+
+	tv := testvars.New(s)
+
+	// create version v1 and make it current
+	idlePollerDone := make(chan struct{})
+	go func() {
+		s.idlePollWorkflow(tv, true, ver3MinPollTime, "should not have gotten any tasks since there are none")
+		close(idlePollerDone)
+	}()
+	s.setCurrentDeployment(tv)
+	s.WaitForChannel(ctx, idlePollerDone)
+
+	wftCompleted := make(chan struct{})
+	s.pollWftAndHandle(tv, false, wftCompleted,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			return respondCompleteWorkflow(tv, vbPinned), nil
+		})
+
+	s.startWorkflow(tv, tv.VersioningOverridePinned(s.useV32))
+	s.WaitForChannel(ctx, wftCompleted)
+	s.verifyWorkflowVersioning(tv, vbPinned, tv.Deployment(), tv.VersioningOverridePinned(s.useV32), nil)
+
+	// create version v2 and make it current which shall make v1 go from current -> draining/drained
+	idlePollerDone = make(chan struct{})
+	tv2 := tv.WithBuildIDNumber(2)
+	go func() {
+		s.idlePollWorkflow(tv2, true, ver3MinPollTime, "should not have gotten any tasks since there are none")
+		close(idlePollerDone)
+	}()
+	s.setCurrentDeployment(tv2)
+	s.WaitForChannel(ctx, idlePollerDone)
+
+	// wait for v1 to become drained
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := require.New(t)
+		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
+			Namespace: s.Namespace().String(),
+			Version:   tv.DeploymentVersionString(),
+		})
+		a.NoError(err)
+		a.Equal(enumspb.VERSION_DRAINAGE_STATUS_DRAINED, resp.GetWorkerDeploymentVersionInfo().GetDrainageInfo().GetStatus())
+	}, time.Second*10, time.Millisecond*1000)
+
+	if !pollersPresent {
+		// simulate the pollers going away, which should make the query fail as now the version is drained + has no pollers polling it
+		time.Sleep(1 * time.Second) //nolint:forbidigo
+		versionStr := worker_versioning.ExternalWorkerDeploymentVersionToString(worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(tv.Deployment()))
+
+		_, err := s.queryWorkflow(tv)
+		s.Error(err)
+		s.ErrorContains(err, fmt.Sprintf(matching.ErrBlackholedQuery, versionStr, versionStr))
+	} else {
+		// since the version still has pollers, the query should succeed
+		s.pollAndQueryWorkflow(tv, false)
+	}
+
+	if rollback {
+		// ramp traffic back to v1 to remove it from drained state
+		s.setRampingDeployment(tv, 50, false)
+
+		// wait for v1 to become ramping
+		s.EventuallyWithT(func(t *assert.CollectT) {
+			a := require.New(t)
+			resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
+				Namespace: s.Namespace().String(),
+				Version:   tv.DeploymentVersionString(),
+			})
+			a.NoError(err)
+			a.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING, resp.GetWorkerDeploymentVersionInfo().GetStatus())
+		}, time.Second*10, time.Millisecond*1000)
+
+		// the version has pollers and is ramping making the query succeed
+		s.pollAndQueryWorkflow(tv, false)
+
+	}
 }
 
 func (s *Versioning3Suite) testQueryWithPinnedOverride(sticky bool) {
