@@ -874,6 +874,22 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 	pollerID := uuid.New()
 	childCtx := wh.registerOutstandingPollContext(ctx, pollerID, namespaceID.String())
 	defer wh.unregisterOutstandingPollContext(pollerID, namespaceID.String())
+
+	// route heartbeat to the matching service only if the request is valid (all validation checks passed)
+	if request.WorkerHeartbeat != nil {
+		_, err = wh.matchingClient.RecordWorkerHeartbeat(ctx, &matchingservice.RecordWorkerHeartbeatRequest{
+			NamespaceId: namespaceID.String(),
+			HeartbeartRequest: &workflowservice.RecordWorkerHeartbeatRequest{
+				Namespace:       request.GetNamespace(),
+				Identity:        request.GetIdentity(),
+				WorkerHeartbeat: request.WorkerHeartbeat,
+			},
+		})
+
+		// drop the heartbeat, it is not needed to process the poll request
+		request.WorkerHeartbeat = nil
+	}
+
 	matchingResp, err := wh.matchingClient.PollWorkflowTaskQueue(childCtx, &matchingservice.PollWorkflowTaskQueueRequest{
 		NamespaceId: namespaceID.String(),
 		PollerId:    pollerID,
@@ -2679,6 +2695,21 @@ func (wh *WorkflowHandler) ShutdownWorker(ctx context.Context, request *workflow
 	namespaceId, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
 	if err != nil {
 		return nil, err
+	}
+
+	// route heartbeat to the matching service
+	if request.WorkerHeartbeat != nil {
+		_, err = wh.matchingClient.RecordWorkerHeartbeat(ctx, &matchingservice.RecordWorkerHeartbeatRequest{
+			NamespaceId: namespaceId.String(),
+			HeartbeartRequest: &workflowservice.RecordWorkerHeartbeatRequest{
+				Namespace:       request.GetNamespace(),
+				Identity:        request.GetIdentity(),
+				WorkerHeartbeat: request.WorkerHeartbeat,
+			},
+		})
+
+		// drop the heartbeat, it is not needed to process the poll request
+		request.WorkerHeartbeat = nil
 	}
 
 	// TODO: update poller info to indicate poller was shut down (pass identity/reason along)
